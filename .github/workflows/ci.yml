@@ -1,0 +1,224 @@
+# Merge-request gates on GitHub-hosted runners: the same checks as the core
+# stage of .gitlab-ci.yml (UI build and tests, unit suite, vet, the strict
+# L2/L3 Docker suites and the offline CompShare contracts). Hosted runners
+# reach Docker Hub, quay.io, proxy.golang.org and npmjs directly, so none of
+# the mainland mirrors or host-side caches the GitLab runners need apply.
+#
+# Nothing here uses a secret or a self-hosted runner, so a pull request from a
+# fork runs with the same read-only token as any other. Cloud and hardware
+# acceptance (L4), release publishing and the docs build stay in GitLab.
+name: ci
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+  # Servers started by CI jobs never send usage reports (ADR 0054).
+  GPUWORKS_USAGE_REPORT: "off"
+
+jobs:
+  ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: node scripts/i18n-check.mjs
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - run: npm run lint:i18n
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
+      - uses: actions/upload-artifact@v5
+        with:
+          name: webui-dist
+          # Vite writes directly to the directory embedded by the Go server.
+          path: internal/server/webui/dist/
+          retention-days: 1
+
+  # The suite runs one test file at a time on a 2-core runner and takes
+  # over an hour unsplit; four shards each finish in about a quarter.
+  ui-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      # The macOS serve adapters' tests need only python3.
+      - run: make test-host-env-adapters
+        if: matrix.shard == 1
+      - run: make test-strata-queue-assets
+        if: matrix.shard == 1
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - run: npm run test:coverage
+        working-directory: ui
+        env:
+          TEST_SHARD: ${{ matrix.shard }}/4
+
+  test:
+    needs: ui
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # check_architecture.sh compares scripts/arch-constraints.txt with
+          # its copy at the merge base with origin/master.
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          name: webui-dist
+          path: internal/server/webui/dist/
+      - run: ./scripts/check_time_policy.sh
+      - run: ./scripts/check_architecture.sh
+      - run: ./scripts/check_ci_yaml.sh
+      - run: CGO_ENABLED=0 go run ./scripts/artifactsindex
+      - run: make test-e2e-coverage-check
+      - run: (cd build/runtime-assets/hygon-vdev-helper && CGO_ENABLED=0 go test -timeout 5m ./...)
+      - run: CGO_ENABLED=0 go test -timeout 30m -coverprofile=coverage-core.out ./...
+      # Build-tag suites run in their own jobs; compile them here so a
+      # refactor cannot silently break an opt-in lane.
+      - run: make check-tagged-build
+
+  vet:
+    needs: ui
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          name: webui-dist
+          path: internal/server/webui/dist/
+      - run: CGO_ENABLED=0 go vet ./...
+
+  compshare-offline-contracts:
+    needs: ui
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          name: webui-dist
+          path: internal/server/webui/dist/
+      - run: make test-l4-compshare-offline-contracts
+
+  # Same shape as .docker-core in .gitlab-ci.yml: a per-job DinD daemon
+  # exposed on a dedicated gpuworks-e2e socket (the real terminal cases refuse
+  # any other daemon) and the suite in a golang container, which also keeps
+  # the upgrade cases off the runner VM's systemd.
+  docker-suite:
+    needs: ui
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [l2, l3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DOCKER_DIND_IMAGE: "docker:29-dind@sha256:12e683a161823b2a839aeea999b9d960e6e1f9a97b1679ad6b441982e2d9cf07"
+      DOCKER_GO_IMAGE: "golang:1.26@sha256:d7722066f0b60ceccb6c0643cbed1f5f9e15506ac237146c95333504d7805d89"
+      DIND: gpuworks-docker-core-dind
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: webui-dist
+          path: internal/server/webui/dist/
+      - name: Start the isolated Docker daemon
+        run: |
+          mkdir -p .tmp/gpuworks-e2e .cache/home .cache/go-mod .cache/go-build
+          docker run -d --privileged --name "$DIND" \
+            -e DOCKER_TLS_CERTDIR= \
+            -v "$PWD:$PWD" \
+            -v "$PWD/.tmp/gpuworks-e2e:/run/gpuworks-e2e" \
+            "$DOCKER_DIND_IMAGE" \
+            --host=tcp://0.0.0.0:2375 \
+            --host=unix:///var/run/docker.sock \
+            --host=unix:///run/gpuworks-e2e/docker.sock
+          for attempt in $(seq 1 60); do
+            if docker exec "$DIND" docker --host unix:///run/gpuworks-e2e/docker.sock info >/dev/null 2>&1; then
+              docker exec "$DIND" chown "$(id -u):$(id -g)" /run/gpuworks-e2e/docker.sock
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$DIND"
+          echo "isolated Docker test daemon did not become ready" >&2
+          exit 1
+      # The fixtures expect their base images already present (the GitLab
+      # lanes seed them from a host cache): `docker run -d` output is read as
+      # the container ID, so an in-test pull's progress lines corrupt it.
+      - name: Seed the fixture base images
+        run: |
+          for image in busybox:1.36 python:3.12 alpine:3.20 quay.io/libpod/registry:2.8.2; do
+            docker exec "$DIND" docker pull -q "$image"
+          done
+      - name: make test-${{ matrix.suite }}
+        run: |
+          docker run --rm \
+            --network "container:$DIND" \
+            --user "$(id -u):$(id -g)" \
+            -v /usr/bin/docker:/usr/bin/docker:ro \
+            -v "$PWD:$PWD" \
+            -v "$PWD/.tmp/gpuworks-e2e:/run/gpuworks-e2e" \
+            -w "$PWD" \
+            -e DOCKER_HOST=unix:///run/gpuworks-e2e/docker.sock \
+            -e HOME="$PWD/.cache/home" \
+            -e TMPDIR="$PWD/.tmp" \
+            -e GOMODCACHE="$PWD/.cache/go-mod" \
+            -e GOCACHE="$PWD/.cache/go-build" \
+            -e GOFLAGS=-modcacherw \
+            -e GOTOOLCHAIN=local \
+            -e GPUWORKS_USAGE_REPORT=off \
+            -e GPUWORKS_TEST_STRICT=1 \
+            -e GPUWORKS_L3_RUNTIME_BASE_IMAGE=python:3.12 \
+            -e GPUWORKS_L3_SHELL_BASE_IMAGE=busybox:1.36 \
+            -e GPUWORKS_L3_NO_PYTHON_IMAGE=alpine:3.20 \
+            "$DOCKER_GO_IMAGE" \
+            make test-${{ matrix.suite }} GO_TEST_FLAGS=-v COVERPROFILE=coverage-${{ matrix.suite }}.out
+      - name: Count skipped cases
+        if: always()
+        run: grep -c -- '--- SKIP' .testlogs/${{ matrix.suite }}.log || true
+      - name: Inner dockerd log
+        if: failure()
+        run: docker logs --timestamps --tail 300 "$DIND" 2>&1 || true
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: ${{ matrix.suite }}-log
+          path: .testlogs/
+          retention-days: 14
