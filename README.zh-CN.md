@@ -181,6 +181,8 @@ flowchart LR
 
 全部文档见[文档索引](docs/README.md)。
 
+[文档站](https://gpuworks.readthedocs.io/)
+
 ## 从源码构建
 
 需要 Go 1.26 和 Node.js。
@@ -200,6 +202,10 @@ make test-l2    # 多进程测试：真实二进制 + 假 GPU
 
 正式安装的 server 每天发送一份匿名使用报告（硬件与引擎构成、任务计数、错误类别；不含主机名、模型输入输出等任何敏感信息）。
 可在**设置 → 通用**里关闭，或在 `server.yaml` 里写 `usage_report: false`。全部字段见[用户体验改进计划](docs/reference/usage-report.md)。
+
+加入技术交流群：
+
+![community qccode](docs/assets/screenshots/readme/mmexport1792757893017.jpg)
 
 ## 许可证
 
