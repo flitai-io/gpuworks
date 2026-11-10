@@ -252,12 +252,17 @@ var unitServerCommand = agentconf.ShellFuncs + `gw_unit_value SERVER`
 // agentRecoveryProbeCommand identifies the node by token before reporting
 // its service or process state. A shared unit for another node is ignored.
 func agentRecoveryProbeCommand(installDir, serverURL, token string) string {
+	return "token=" + shellQuote(strings.TrimSpace(token)) + "\n" + agentProcessProbeCommand(installDir, serverURL)
+}
+
+// agentProcessProbeCommand reads the node token from its caller's shell scope.
+// Diagnostics supply it over stdin instead of embedding it in the SSH command.
+func agentProcessProbeCommand(installDir, serverURL string) string {
 	needle := strings.TrimRight(strings.TrimSpace(serverURL), "/")
 	dir := strings.TrimRight(installDir, "/")
 	return fmt.Sprintf(`set +e
 want=%s
 dir=%s
-token=%s
 bin="$dir/gpuworks-agent"
 %s
 [ -n "$token" ] || { echo 'node token is required to identify the agent' >&2; exit 1; }
@@ -276,10 +281,11 @@ if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet gpuworks-
   fi
 fi
 processes=$(ps axww -o args= 2>/dev/null || ps axww 2>/dev/null) || { echo 'cannot list agent processes' >&2; exit 1; }
-result=$(printf '%%s\n' "$processes" | awk -v bin="$bin" '
+processes=$(printf '%%s\n' "$processes" | awk -v bin="$bin" '
   { pos=index($0, bin " run "); prefix=substr($0, 1, pos-1) }
   pos && (prefix ~ /^[[:space:]]*$/ || prefix ~ /^[[:space:]]*[0-9]+[[:space:]][^\/]*[[:space:]]$/) { print substr($0, pos) }
-' | while IFS= read -r line; do
+') || { echo 'cannot filter agent processes' >&2; exit 1; }
+result=$(printf '%%s\n' "$processes" | while IFS= read -r line; do
   state=$(printf '%%s\n' "$line" | gw_arg state)
   [ "$state" = "$dir" ] || continue
   if [ "$(gw_line_value "$line" TOKEN)" != "$token" ]; then
@@ -291,7 +297,7 @@ result=$(printf '%%s\n' "$processes" | awk -v bin="$bin" '
   fi
   echo process; break
 done) || exit 1
-if [ "$result" = process ]; then echo process; else echo not-running; fi`, shellQuote(needle), shellQuote(dir), shellQuote(strings.TrimSpace(token)), agentconf.ShellFuncs)
+if [ "$result" = process ]; then echo process; else echo not-running; fi`, shellQuote(needle), shellQuote(dir), agentconf.ShellFuncs)
 }
 
 // foreignUnitServer returns the server the gpuworks-agent unit was installed

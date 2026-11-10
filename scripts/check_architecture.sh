@@ -155,7 +155,7 @@ measure() {
     awk '/^type Deps struct/ {inside=1; next}
          inside && /^}/ {exit}
          inside && /^\t[A-Z]/ {n++}
-         END {print n+0}' internal/server/api/api.go
+         END {print n+0}' internal/server/api/dependencies.go
     ;;
   api_opaque_response_fields)
     CGO_ENABLED=0 go run ./scripts/apiconv -opaque 2>/dev/null || echo 999

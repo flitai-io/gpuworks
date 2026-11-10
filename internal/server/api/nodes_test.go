@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -612,9 +613,8 @@ const stateUntraversableReport = `{"report":"text\n","host":{"hostname":"gpu1","
 	`"evidence":[{"name":"directory","value":"/root"},{"name":"mode","value":"0700"},{"name":"owner","value":"0:0"},{"name":"user","value":"udocker"},{"name":"state_dir","value":"/root/gpuworks"},{"name":"fix","value":"chmod o+x /root"}],` +
 	`"recheck":"namei -m /root/gpuworks"}]}`
 
-// The structured report reaches the client as the agent sent it, and a report
-// from an agent that predates it still carries its text.
-func TestNodeDoctorEndpointPassesStructuredReportThrough(t *testing.T) {
+// Unified checks preserve the Agent's detailed evidence, including legacy text.
+func TestNodeDoctorEndpointPreservesStructuredEvidence(t *testing.T) {
 	const structured = `{"report":"text\n","host":{"hostname":"172-24-0-210","os":"linux","arch":"amd64","kernel":"4.19","cpu_model":"Xeon","cpu_cores":192,"mem_total_bytes":1,"mem_avail_bytes":1,"disks":[{"kind":"root","path":"/","total_bytes":100,"avail_bytes":5}]},` +
 		`"runtimes":[{"name":"docker","status":"ok","version":"26.1.3","selected":true,"command":"docker version --format {{.Server.Version}}"}],` +
 		`"accelerators":{"vendor":"ppu","driver":"1.6.1","gpus":[{"index":5,"name":"PPU-ZW810E","memory_bytes":103079215104,"pcie_bdf":"0000:7e:00.0","numa_node":0,"health_status":"Warning","health_code":"memory_repair_pending"}]},` +
@@ -635,8 +635,35 @@ func TestNodeDoctorEndpointPassesStructuredReportThrough(t *testing.T) {
 			req = req.WithContext(chiRouteContext(req.Context(), map[string]string{"uuid": "node-doctor"}))
 			rec := httptest.NewRecorder()
 			h.nodeDoctor(rec, req)
-			if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != tc.want {
+			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d body =\n%s\nwant\n%s", rec.Code, rec.Body.String(), tc.want)
+			}
+			var got, want map[string]any
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal([]byte(tc.want), &want); err != nil {
+				t.Fatal(err)
+			}
+			checks, ok := got["checks"].([]any)
+			if !ok || len(checks) < 3 || got["checked_at"] == nil || got["summary"] == nil || got["access"] != nil {
+				t.Fatalf("missing unified report: %s", rec.Body)
+			}
+			var findings []any
+			for _, raw := range checks {
+				check := raw.(map[string]any)
+				if finding, ok := check["finding"]; ok {
+					findings = append(findings, finding)
+				}
+			}
+			delete(got, "checks")
+			delete(got, "checked_at")
+			delete(got, "summary")
+			if (len(findings) > 0 || want["findings"] != nil) && !reflect.DeepEqual(findings, want["findings"]) {
+				t.Fatalf("unified checks changed findings: got=%v want=%v", findings, want["findings"])
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("legacy response fields changed: got=%v want=%v", got, want)
 			}
 		})
 	}

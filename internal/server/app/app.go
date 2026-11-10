@@ -317,6 +317,8 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 
 	metadataClient := &http.Client{Transport: outbound.TransportWithPrivateHosts(func() (proto.NetworkConfig, error) { return planning.ControlPlaneNetwork(st) }, readPrivateHosts)}
 	apiDeps := api.Deps{
+		NodeDoctor: newNodeDoctor(st, h, nodeInstaller),
+
 		Store:         st,
 		Bus:           b,
 		Log:           log,

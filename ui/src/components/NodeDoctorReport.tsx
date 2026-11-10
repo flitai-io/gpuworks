@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { DoctorDisk, DoctorFact, DoctorFinding, DoctorMount, DoctorRunIdentity, DoctorTarget, NodeDoctorReport as Report } from "../api";
 import { GPUHealthDetail, GPUHealthSummary, HealthCommand, HealthEvidence, gpuHealthLabel } from "./GPUHealth";
+import NodeDoctorChecks from "./NodeDoctorChecks";
 import { runtimeLabel } from "../nodeDisplay";
 
 const rawStyle = {
@@ -171,14 +172,13 @@ function networkFilesystemText(t: TFunction<"nodes">, disks: DoctorDisk[]): stri
 }
 
 /**
- * NodeDoctorReport renders the agent's structured self-check in the reader's
- * locale. An agent that predates the structured form sends only the text
- * report, which is shown verbatim.
+ * NodeDoctorReport renders the unified check list and hardware details.
+ * Reports from older Servers still render their original findings or text.
  */
 export default function NodeDoctorReport({ report }: { report: Report }) {
   const { t } = useTranslation("nodes");
   const { t: tc } = useTranslation("common");
-  if (!report.host) {
+  if (!report.host && !report.checks) {
     return (
       <Space direction="vertical" style={{ display: "flex" }}>
         <Alert type="info" showIcon message={t("doctor.legacy")} />
@@ -193,7 +193,9 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
   for (const gpu of accel?.gpus ?? []) counts[gpu.health_status] = (counts[gpu.health_status] ?? 0) + 1;
   return (
     <Space direction="vertical" size={16} style={{ display: "flex" }}>
-      <section aria-label={t("doctor.overview")}>
+      {report.checks && <NodeDoctorChecks report={report} renderFinding={(finding) => finding.targets?.length
+        ? <AcceleratorFinding finding={finding} /> : <NodeFinding finding={finding} />} />}
+      {host && <section aria-label={t("doctor.overview")}>
         <Typography.Title level={5}>{t("doctor.overview")}</Typography.Title>
         <Descriptions size="small" column={1} bordered>
           <Descriptions.Item label={t("doctor.host")}>{`${host.hostname} · ${host.os}/${host.arch} · kernel ${host.kernel}`}</Descriptions.Item>
@@ -212,9 +214,9 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
             </Space>
           </Descriptions.Item>
         </Descriptions>
-      </section>
+      </section>}
 
-      <section aria-label={t("doctor.runtimes")}>
+      {(host || report.runtimes?.length) && <section aria-label={t("doctor.runtimes")}>
         <Typography.Title level={5}>{t("doctor.runtimes")}</Typography.Title>
         <Descriptions size="small" column={1} bordered>
           {(report.runtimes ?? []).map((runtime) => (
@@ -228,9 +230,9 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
             </Descriptions.Item>
           ))}
         </Descriptions>
-      </section>
+      </section>}
 
-      <section aria-label={t("doctor.accelerators")}>
+      {(host || accel) && <section aria-label={t("doctor.accelerators")}>
         <Typography.Title level={5}>{t("doctor.accelerators")}</Typography.Title>
         {!accel ? (
           <Typography.Text type="secondary">{t("doctor.noAccelerator")}</Typography.Text>
@@ -261,9 +263,9 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
             />
           </Space>
         )}
-      </section>
+      </section>}
 
-      <section aria-label={t("doctor.findings")}>
+      {!report.checks && <section aria-label={t("doctor.findings")}>
         <Typography.Title level={5}>{t("doctor.findings")}</Typography.Title>
         {findings.length === 0 ? (
           <Typography.Text type="secondary">{t("doctor.noFindings")}</Typography.Text>
@@ -274,7 +276,7 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
               : <NodeFinding key={`${finding.code}-${i}`} finding={finding} />)}
           </Space>
         )}
-      </section>
+      </section>}
 
       {!!report.facts?.length && (
         <section aria-label={t("doctor.facts")}>

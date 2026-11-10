@@ -817,3 +817,21 @@ test("a node-list refresh failure preserves an open upgrade preview and its retr
   assert.deepEqual(submitted[1].node_uuids, [onlineNode.uuid]);
   assert.ok(screen.getByRole("button", { name: "Recent Agent upgrades" }));
 });
+
+test("an offline node uses doctor and reruns replace the partial report", async () => {
+  let calls = 0;
+  api.nodeDoctor = async () => {
+    calls++;
+    return { report: "", checked_at: "2026-11-09T10:00:00Z", summary: "incomplete", checks: [
+      { stage: "connection", status: "unavailable", reason: calls === 1 ? "credentials_unavailable" : "not_observed", vantage: "node" },
+      { stage: "accelerators", status: "unavailable", reason: "requires_agent", vantage: "node" } ] } as never;
+  };
+  const drawer = await openDrawer({ ...offlineNode, gpus: [] });
+  fireEvent.click(drawer.getByRole("button", { name: "Diagnose" }));
+  await waitFor(() => assert.ok(drawer.getByText(/No SSH credentials/)));
+  assert.ok(drawer.getByText("This check requires a connected Agent."));
+  fireEvent.click(await drawer.findByRole("button", { name: "Run diagnosis again" }));
+  await waitFor(() => assert.ok(drawer.getByText(/No reliable evidence/)));
+  assert.equal(drawer.queryByText(/No SSH credentials/), null);
+  assert.equal(calls, 2);
+});

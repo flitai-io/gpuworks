@@ -542,8 +542,22 @@ export interface DoctorFinding {
   recheck?: string;
 }
 
-/** The node.doctor result. Agents that predate the structured form send only `report`. */
+/** A check in the Server's unified node diagnosis. */
+export interface NodeDoctorCheck {
+  stage: string;
+  status: "passed" | "failed" | "warning" | "info" | "unavailable";
+  reason: string;
+  vantage: string;
+  target?: string;
+  source?: string;
+  observed_at?: string;
+  finding?: DoctorFinding;
+}
+
 export interface NodeDoctorReport {
+  checked_at?: string;
+  summary?: string;
+  checks?: NodeDoctorCheck[];
   report: string;
   host?: {
     hostname: string;

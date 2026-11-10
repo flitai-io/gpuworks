@@ -16,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/diagnostics"
 	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/community"
@@ -102,7 +103,13 @@ type NodeStreams interface {
 	OpenStorageDownload(ctx context.Context, nodeUUID string, hdr proto.StreamHeader) (proto.StorageDownloadHead, io.ReadCloser, error)
 }
 
+type NodeDoctor interface {
+	Diagnose(context.Context, string, bool) (diagnostics.DoctorReport, error)
+}
+
 type Deps struct {
+	NodeDoctor NodeDoctor
+
 	Store         *store.Store
 	Bus           *bus.Bus
 	Log           *slog.Logger
