@@ -405,6 +405,11 @@ func TestNonNVIDIAChatSpecsInheritModelFunctionalArgs(t *testing.T) {
 				continue
 			}
 			for flag, values := range want {
+				// A disabled vision tower has no encoder to distribute. Keep
+				// checking every other functional flag for text-only profiles.
+				if flag == "--mm-encoder-tp-mode" && slices.Contains(spec.Args, "--language-model-only") {
+					continue
+				}
 				if len(values) == 0 {
 					if !slices.Contains(spec.Args, flag) {
 						t.Errorf("%s/%s %s spec %s misses %s", key.model, key.engine, spec.GPUs.Vendor, spec.Name, flag)

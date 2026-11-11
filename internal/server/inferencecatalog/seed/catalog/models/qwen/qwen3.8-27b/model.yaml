@@ -664,4 +664,99 @@ specs:
     - type: openai.chat
       endpoint: /v1/chat/completions
       mode: stream
+- name: bf16-vllm-kunlun-p800-xre502146
+  display_name_zh_cn: 昆仑 P800 · 单卡 · 纯文本 · BF16 权重 / FP16 计算
+  display_name_en: Kunlun P800 · Single GPU · Text · BF16 weights / FP16 compute
+  scenario: balanced
+  engine: vllm
+  image: gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: Qwen/Qwen3.8-27B
+        revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+    - modelscope:
+        repo_id: Qwen/Qwen3.8-27B
+        revision: e823e888ae179eb3be02c1a48899c4f828371376
+  weight_bytes: 55586114863
+  gpus:
+    vendor: kunlunxin
+    name: ^(Kunlunxin )?P800 PCIe$
+  entrypoint:
+  - /opt/vllm025-venv/bin/vllm
+  - serve
+  args:
+  # Preserve the model-level parsers; this runner profile disables the vision tower.
+  - --enable-auto-tool-choice
+  - --tool-call-parser
+  - qwen3_coder
+  - --reasoning-parser
+  - qwen3
+  - --dtype
+  - float16
+  - --max-model-len
+  - '8192'
+  - --max-num-seqs
+  - '1'
+  - --max-num-batched-tokens
+  - '256'
+  - --gpu-memory-utilization
+  - '0.7'
+  - --enable-chunked-prefill
+  - --no-enable-prefix-caching
+  - --language-model-only
+  # Keep this runner's stateful Gated DeltaNet and KV updates outside graphs.
+  # backend=eager is the torch.compile backend; it does not disable graph replay.
+  # Capture batch 1 matches the single-sequence default above.
+  - --compilation-config
+  - |-
+    {
+      "mode": 3,
+      "cudagraph_mode": "PIECEWISE",
+      "backend": "eager",
+      "cudagraph_capture_sizes": [
+        1
+      ],
+      "pass_config": {
+        "fuse_norm_quant": false,
+        "fuse_act_quant": false
+      },
+      "splitting_ops": [
+        "vllm::unified_attention_with_output",
+        "vllm::unified_mla_attention_with_output",
+        "vllm::mamba_mixer2",
+        "vllm::mamba_mixer",
+        "vllm::short_conv",
+        "vllm::linear_attention",
+        "vllm::plamo2_mamba_mixer",
+        "vllm::qwen_gdn_attention_core",
+        "vllm::gdn_attention_core_xpu",
+        "vllm::olmo_hybrid_gdn_full_forward",
+        "vllm::kda_attention",
+        "vllm::sparse_attn_indexer",
+        "vllm::rocm_aiter_sparse_attn_indexer",
+        "vllm::deepseek_v4_attention",
+        "vllm::hpc_rope_norm_forward",
+        "vllm::unified_kv_cache_update",
+        "vllm::unified_mla_kv_cache_update",
+        "vllm::gdn_attention_core"
+      ]
+    }
+  env:
+    BKCL_CHECK_AW: '0'
+    CUDA_VISIBLE_DEVICES: ${LOCAL_VISIBLE_DEVICES}
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.min_memory_gib < 90: return reject("requires 96 GiB P800 cards")
+          if gpu.count != 1: return reject("this profile requires one whole P800 GPU")
+          return {"LOCAL_VISIBLE_DEVICES": "0"}
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.chat
+      endpoint: /v1/chat/completions
+      mode: stream
 input_modalities: [text, image]

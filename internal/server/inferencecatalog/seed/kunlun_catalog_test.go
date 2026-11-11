@@ -143,3 +143,67 @@ func TestImportableP800PackageMatchesImageLock(t *testing.T) {
 		}
 	}
 }
+
+// Fresh installations must offer a real P800 profile without importing a user
+// package. Keep repository identity and precision distinct from display names.
+func TestBuiltinKunlunQwenProfiles(t *testing.T) {
+	catalog, err := Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"qwen/qwen3-0.6b": "Qwen/Qwen3-0.6B", "qwen/qwen3.8-27b": "Qwen/Qwen3.8-27B"}
+	seen := map[string]bool{}
+	for _, model := range catalog.Models {
+		for _, spec := range model.Specs {
+			if spec.GPUs.Vendor != accelerator.VendorKunlunxin {
+				continue
+			}
+			repo, ok := want[model.ModelID]
+			if !ok || seen[model.ModelID] {
+				t.Fatalf("unexpected or duplicate built-in Kunlun model %s", model.ModelID)
+			}
+			seen[model.ModelID] = true
+			if spec.Image != "gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1" || spec.Weights.Quantization != "bf16" || len(spec.Weights.Sources) == 0 || spec.Weights.Sources[0].RepoID != repo {
+				t.Fatalf("%s: inconsistent image/weight identity", model.ModelID)
+			}
+			if !reflect.DeepEqual(spec.Entrypoint, []string{"/opt/vllm025-venv/bin/vllm", "serve"}) || !strings.Contains(strings.Join(spec.Args, " "), "--dtype float16") {
+				t.Fatalf("%s: wrong interpreter or compute precision", model.ModelID)
+			}
+			// The agent reports the normalized name, while Add Chip uses the
+			// branded hardware-catalog label. Both identify the same PCIe card.
+			for _, card := range []struct {
+				name string
+				want bool
+			}{{"P800 PCIe", true}, {"Kunlunxin P800 PCIe", true}, {"P800 OAM", false}, {"Kunlunxin P800 OAM", false}, {"P800 PCIe-compatible", false}} {
+				match := chipmatch.Evaluate(chipmatch.GPU{Vendor: accelerator.VendorKunlunxin, Name: card.name}, chipmatch.Predicate{Vendor: spec.GPUs.Vendor, Name: spec.GPUs.Name})
+				if match.Matched != card.want {
+					t.Fatalf("%s match %q = %v, want %v", model.ModelID, card.name, match.Matched, card.want)
+				}
+			}
+			resolved, err := placement.Resolve(context.Background(), spec.Placement.Resolver, placement.GPU{Count: 1, MinMemoryGiB: 96})
+			if err != nil || resolved.Reason != "" {
+				t.Fatalf("%s: %v %+v", model.ModelID, err, resolved)
+			}
+			for _, count := range []int{0, 2, 4, 8} {
+				rejected, err := placement.Resolve(context.Background(), spec.Placement.Resolver, placement.GPU{Count: count, MinMemoryGiB: 96})
+				if err != nil || rejected.Reason == "" {
+					t.Fatalf("%s accepted unverified %d-GPU topology: %+v %v", model.ModelID, count, rejected, err)
+				}
+			}
+			providers := map[string]bool{}
+			for _, source := range spec.Weights.Sources {
+				if source.RepoID != repo || source.Revision == "" {
+					t.Fatal("weight source must retain pinned original identity")
+				}
+				providers[source.Provider] = true
+			}
+			if !providers["huggingface"] || !providers["modelscope"] {
+				t.Fatalf("%s missing provider: %v", model.ModelID, providers)
+			}
+
+		}
+	}
+	if len(seen) != len(want) {
+		t.Fatalf("built-in Kunlun profiles = %v", seen)
+	}
+}
