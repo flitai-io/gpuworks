@@ -222,6 +222,8 @@ export default function useTemplateWeightSource({
     if (model) {
       if (!engineProfile || engineProfile.name !== selection.spec.engine)
         return;
+      // Template environment belongs to the server expansion layer. Copying
+      // it into user overrides freezes ${...} values and overwrites edits.
       form.setFieldsValue({
         model_id: model.id,
         template_id: template.id,
@@ -231,9 +233,6 @@ export default function useTemplateWeightSource({
         engine: selection.spec.engine,
         image: selection.spec.image,
         image_mode: "custom",
-        container_env_rows: Object.entries(selection.spec.env || {}).map(
-          ([envKey, value]) => ({ key: envKey, value }),
-        ),
       });
       setAppliedModel(model);
       stateRef.current.applied = key;

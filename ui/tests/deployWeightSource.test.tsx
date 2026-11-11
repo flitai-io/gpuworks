@@ -131,7 +131,7 @@ const twoSources = spec([
 ]);
 const oneSource = spec([{ provider: "modelscope", repo_id: "Org/Model" }]);
 
-function Host({ selection, engine = "vllm", initialSource }: { selection: unknown; engine?: string; initialSource?: Record<string, unknown> }) {
+function Host({ selection, engine = "vllm", initialSource, initialEnv }: { selection: unknown; engine?: string; initialSource?: Record<string, unknown>; initialEnv?: { key: string; value: string }[] }) {
   const [form] = Form.useForm();
   if (selection) declared = (selection as { spec: typeof declared }).spec;
   const state = useTemplateWeightSource({
@@ -142,10 +142,11 @@ function Host({ selection, engine = "vllm", initialSource }: { selection: unknow
   });
   const values = Form.useWatch([], { form, preserve: true }) as Record<string, unknown> | undefined;
   return (
-    <Form form={form} initialValues={{ model_source: initialSource }}>
+    <Form form={form} initialValues={{ model_source: initialSource, container_env_rows: initialEnv }}>
       <span data-testid="modal-state">
         {state.modalOpen ? "open" : "closed"}
       </span>
+      <span data-testid="user-env">{JSON.stringify(values?.container_env_rows ?? [])}</span>
       <span data-testid="source-choice">{JSON.stringify(values?.model_source ?? {})}</span>
       <span data-testid="model-id">{String(values?.model_id ?? "")}</span>
       <span data-testid="template-id">{String(values?.template_id ?? "")}</span>
@@ -498,3 +499,18 @@ test("same-name matches distinguish revisions and select the registration alread
   assert.equal(fake.listedAll, 0);
   assert.deepEqual(fake.pages, [], "the form does not page through the model list itself");
 });
+
+for (const initialEnv of [undefined, [{ key: "MODEL_ROOT", value: "/operator/model" }]]) {
+  test(`confirming registered weights keeps template env out of user overrides (${initialEnv ? "explicit" : "empty"})`, async () => {
+    serve([{ id: 7, source: "huggingface", source_id: "org/model", name: "Local copy" }]);
+    const selection = { spec: { name: "balanced", source: "upstream", engine: "vllm", image: "img/vllm",
+      weight_sources: [{ provider: "huggingface", repo_id: "org/model" }],
+      env: { MODEL_ROOT: "${MODEL_PATH}", SELECTED: "${GPU_COUNT}", CONSTANT: "one" } } };
+    render(<I18nextProvider i18n={i18n}><Host selection={selection} initialEnv={initialEnv} /></I18nextProvider>);
+    await waitFor(() => assert.equal(text("modal-state"), "open"));
+    fireEvent.click(okButton(useModelLabel));
+    await waitFor(() => assert.equal(text("template-id"), "3"));
+    assert.equal(text("user-env"), JSON.stringify(initialEnv ?? []),
+      "the server expands template values; only the operator owns user overrides");
+  });
+}
