@@ -183,6 +183,7 @@ export default function ImageImportDrawer({
                     { value: "hggc", label: "HGGC" },
                     { value: "dtk", label: "DTK" },
                     { value: "metal", label: "Metal" },
+                    { value: "xre", label: "XRE" },
                   ]}
                 />
               </Form.Item>

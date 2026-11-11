@@ -163,7 +163,7 @@ def test_image_series_filters(page, server, artifacts, report, locale):
     prefix = "e2e-" + report["run_id"] + "-"
     engines = sorted(item["name"] for item in collection(page.request.get(server.base + "/api/v1/images/engines")))
     check(len(engines) >= 2, "fixture needs two real engines for OR/empty intersection")
-    frameworks = ["cann", "cuda", "dtk", "hggc", "metal", "rocm"]
+    frameworks = ["cann", "cuda", "dtk", "hggc", "metal", "rocm", "xre"]
     fixture = []
     # Each engine has a CUDA row, each framework a row under engine A. Engine B
     # thus has CUDA but no CANN: both individual facets match, their AND is empty.

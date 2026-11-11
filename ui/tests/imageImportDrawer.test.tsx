@@ -28,7 +28,7 @@ await i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, render, screen } = await import("@testing-library/react");
+const { cleanup, fireEvent, render, screen } = await import("@testing-library/react");
 const { Form } = await import("antd");
 const ImageImportDrawer = (await import("../src/pages/images/ImageImportDrawer.tsx")).default;
 
@@ -81,7 +81,19 @@ test("the custom image form offers no adapted model fields", () => {
 test("the image reference uses a human-readable label instead of its wire key", () => {
   render(React.createElement(I18nextProvider, { i18n }, React.createElement(Harness)));
   assert.ok(screen.getByRole("textbox", { name: "Image Reference", exact: true }));
-  assert.equal(screen.queryByText("image_ref"), null);
+  assert.equal(screen.queryByText("image_ref") === null, true);
   assert.equal(screen.queryByText(/registry_sources/) === null, true, "help text must use the acquisition-address label");
   assert.ok(screen.getByPlaceholderText("Leave blank to group automatically by the image repository"));
+});
+
+test("the custom image form can select Kunlun XRE without losing existing frameworks", async () => {
+  render(React.createElement(I18nextProvider, { i18n }, React.createElement(Harness)));
+
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Framework", exact: true }));
+  for (const framework of ["CUDA", "CANN", "ROCm", "HGGC", "DTK", "Metal", "XRE"]) {
+    assert.equal((await screen.findByText(framework, { exact: true }, { timeout: 1000 })) !== null, true);
+  }
+  fireEvent.click(screen.getByText("XRE", { exact: true }));
+  const selected = document.querySelector(".ant-select-selection-item[title='XRE']");
+  assert.equal(selected?.textContent, "XRE");
 });

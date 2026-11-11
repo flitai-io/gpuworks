@@ -36,7 +36,8 @@
       "rocm",
       "hggc",
       "dtk",
-      "metal"
+      "metal",
+      "xre"
     ],
     "checklist": [
       "5.1",

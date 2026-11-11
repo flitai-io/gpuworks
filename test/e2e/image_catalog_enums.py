@@ -22,7 +22,7 @@ from platform_token_read_revoke import check, collection
 
 
 FRAMEWORKS = [("cuda", "CUDA"), ("cann", "CANN"), ("rocm", "ROCm"),
-              ("hggc", "HGGC"), ("dtk", "DTK"), ("metal", "Metal")]
+              ("hggc", "HGGC"), ("dtk", "DTK"), ("metal", "Metal"), ("xre", "XRE")]
 ARCHITECTURES = [(value, value) for value in ("multi", "amd64", "arm64")]
 
 
@@ -59,7 +59,7 @@ def option_labels(control, count):
 # Contracts: gpuworks/image-catalog/engine-options, gpuworks/image-catalog/framework-options,
 #            gpuworks/image-catalog/architecture-options
 # Mainline (engines): 空自定义目录与真实引擎字典 → UI逐项选择字典中所有引擎并创建 → 精确POST、独立GET和刷新详情一致 → 清理自有系列；不声明引擎执行。
-# Mainline (frameworks): 空自定义目录 → UI分别选择CUDA/CANN/ROCm/HGGC/DTK/Metal并创建 → 精确POST、独立GET和刷新详情一致 → 清理自有系列；不声明框架兼容性。
+# Mainline (frameworks): 空自定义目录 → UI分别选择CUDA/CANN/ROCm/HGGC/DTK/Metal/XRE并创建 → 精确POST、独立GET和刷新详情一致 → 清理自有系列；不声明框架兼容性。
 # Mainline (architectures): 空自定义目录 → UI分别选择multi/amd64/arm64、双向切换rolling并创建 → 精确POST、独立GET和刷新详情一致 → 清理自有系列；不声明对应架构执行。
 def test_image_enum_options(page, server, artifacts, report, locale):
     dimension = {"gpuworks/image-catalog/engine-options": "engines",
