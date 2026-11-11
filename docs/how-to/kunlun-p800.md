@@ -14,9 +14,58 @@ GPUWorks 单机设备接入只核对并注入所选 XPU 和控制设备，不要
 
 ## 镜像与模型档位
 
-支持芯片并不自动提供任意模型的推理档位。当前仓库未发布默认昆仑 runner 镜像；使用现有镜像和推理模板导入 API 提供已经验证的镜像与用户 spec。
+“镜像 → 系统”提供 `vLLM · XRE`，框架版本 `5.0.21.46`、vLLM `0.25.1`、Linux amd64。内置档位使用不可变引用 `gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1`，通过镜像目录的公共副本获取；模板不依赖私有仓库登录。发布该档位前须完成[镜像发布条件](../../build/runner-images/xre/README.md)。
 
-Qwen3-0.6B 和 Qwen3.8-27B 可使用仓库内的[可导入模板包](../../build/inference-templates/kunlun-p800/README.zh-CN.md)。它只添加用户档位；包内 spec 直接锁定已审核的私有仓库 manifest digest，不附带第二个可变 tag 镜像目录权威。双机时按包说明配置原生通信环境。
+“推理模板”内置 Qwen3-0.6B 和 Qwen3.8-27B 的 P800 档位。搜索模型并选择 Qwen 组织，即可查看“昆仑 P800 · BF16 权重 / FP16 计算”。这两个档位保留官方 BF16 权重，加载时使用 FP16 计算，不是量化权重，也不表示镜像中的所有算子支持 BF16。选择其他计算精度前须验证对应模型和镜像。27B 档位标注“纯文本”，使用 `--language-model-only`，不表示视觉路径已验证。
+
+这两个内置档位仅接受一张 96 GiB `P800 PCIe`，不将通用 TP/PP/DP 能力当作这两条模型配置的多卡验收；P800 OAM 尚未验证，不能通过修改卡名或放宽谓词视为兼容。
+
+27B 的默认上下文为 8192 token（输入与输出合计），最多并发一个序列；更长上下文需重新评估显存并验证。权重来源可选固定 revision 的 Hugging Face 或 ModelScope 原版。
+
+该配方将 `--max-num-batched-tokens` 设为 256，长输入需要多轮分块预填充，因此首字等待会随输入长度增加。8192 的上下文上限不代表长输入能一次完成预填充；提高分块预算前需重新验证显存及图配置。
+
+新部署的 Qwen3.8-27B r1 档位默认关闭 `enforce_eager`，使用下面的 PIECEWISE 配置，包含 18 个 `splitting_ops`。该默认配置面向单张 96 GiB P800 PCIe、8192 token 上下文、最多 1 个序列，capture size 固定为 `[1]`。`backend: eager` 是编译配置中的后端名称，不表示 `enforce_eager` 已打开。
+
+Qwen3-0.6B 的 eager 默认不变；这不是所有昆仑部署的全局默认。模板更新不自动修改已有部署。若需回退 eager 模式，须恢复完整旧 eager 配置并重新评估；仅将 `enforce_eager` 设为 On，不代表它与下面的 Graph 配置组合已验证。
+
+```json
+{
+  "mode": 3,
+  "cudagraph_mode": "PIECEWISE",
+  "backend": "eager",
+  "cudagraph_capture_sizes": [
+    1
+  ],
+  "pass_config": {
+    "fuse_norm_quant": false,
+    "fuse_act_quant": false
+  },
+  "splitting_ops": [
+    "vllm::unified_attention_with_output",
+    "vllm::unified_mla_attention_with_output",
+    "vllm::mamba_mixer2",
+    "vllm::mamba_mixer",
+    "vllm::short_conv",
+    "vllm::linear_attention",
+    "vllm::plamo2_mamba_mixer",
+    "vllm::qwen_gdn_attention_core",
+    "vllm::gdn_attention_core_xpu",
+    "vllm::olmo_hybrid_gdn_full_forward",
+    "vllm::kda_attention",
+    "vllm::sparse_attn_indexer",
+    "vllm::rocm_aiter_sparse_attn_indexer",
+    "vllm::deepseek_v4_attention",
+    "vllm::hpc_rope_norm_forward",
+    "vllm::unified_kv_cache_update",
+    "vllm::unified_mla_kv_cache_update",
+    "vllm::gdn_attention_core"
+  ]
+}
+```
+
+登记本地权重时选择包含 `config.json` 和权重分片的模型目录，填写与档位相同的仓库身份 `Qwen/Qwen3-0.6B` 或 `Qwen/Qwen3.8-27B`；注册不会解压 `tar` 或复制权重。部署时选择已登记模型与昆仑芯目标，确认档位、镜像和计算精度，再评估、创建。内置目录不包含模型权重或镜像文件，离线节点须预先准备两者。
+
+已有私有环境仍可使用[可导入模板包](../../build/inference-templates/kunlun-p800/README.zh-CN.md)。在“推理模板 → 导入模板”上传该包；不要上传 `docker save` 镜像归档。导入包只添加用户档位，直接锁定私有镜像摘要，不替换内置档位，也不会自动新增镜像系列。需要登记其他已验证镜像时，在“镜像 → 自定义 → 添加自定义镜像”选择 vLLM、XRE、实际框架版本及 amd64。系统目录和自定义目录分别展示。
 
 1. 在两节点准备相同的已验证镜像。记录不可变摘要、引擎版本及镜像中的实际 Python/入口路径，不以同名 CUDA 兼容字段判断原生运行能力。
 2. 登记本地权重时填写完整仓库标识，例如 `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`。目录短名不是仓库标识；已有相同文件可以登记规范身份，无需复制或下载。
@@ -43,12 +92,12 @@ DP 镜像必须正确处理每个 rank 已分片的设备映射：当 `assigned_
 
 ## 验证与边界
 
-2026-11-10 的验收仅覆盖双 P800 宿主上的单卡生产 evaluate/create、网关 chat、旧设备映射清理和 agent 重启，这些检查均通过。单机多卡越过 loopback 接口问题后，仍被该环境的 XRE OAM/XLink 初始化错误阻断；跨机未测。PP 和引擎 DP 是已开放能力，不代表这些多卡拓扑已完成真机验收。
-
-2026-11-11 使用最终 `33d947…` 镜像再次通过 Docker 和 nerdctl 的单卡 evaluate/create、health 和 chat。该镜像的昆仑 vLLM 平台在模型加载前明确拒绝 `--enable-sleep-mode`，因此 sleep/wake 仍不可用。补入 NIXL 后，UCX agent 虽能初始化，但在注册 P800 KV 显存时将 VRAM 识别为 host memory 并返回 `NIXL_ERR_BACKEND`，因此 PD 也不可用；不能靠放开 GPUWorks 门禁绕过这些引擎限制。runveil 能完成选卡和模型加载，但当前镜像缺少 JITC 所需的昆仑 XTDK/`CLANG_PATH` 工具链，默认制品尚不能完成推理，故未开放。
+内置单卡配置不代表多卡或跨节点的模型与通信组合已验证。PP 和引擎 DP 是已开放能力，使用前仍须验证所选拓扑；PD、sleep/wake 和 runveil 当前不在该镜像的可用范围内。
 
 真实硬件验收应先验证每机单卡，再验证集体通信和双机部署。Web 创建时选择正确档位、两个节点和 TP=4/PP=1；核对每 rank 命令、模型/镜像获取来源，再验证 health、普通 HTTP、SSE DONE 和网页文本。仅握手成功或收到 HTTP 200 不等于返回有效文本。
 
 相关支持边界见 [厂商支持矩阵](../reference/support-matrix.md)。
 
 硬件目录显示 `Kunlunxin P800 PCIe`，厂商存为 `kunlunxin`；spec 匹配前 `NormalizeGPUName` 去掉品牌前缀，因此已审核的 `^P800 PCIe$` 谓词仍可匹配。硬件身份随运行时与模型组合的验证进入能力选择。Partition 可用性由动态分区能力检查给出，不设静态 Partition 功能轴。引擎 PD 模式仍由引擎 Profile 定义；厂商限制只定义在 accelerator 能力表，`ProfileForTarget` 根据它派生该目标可用的 PD 模式。
+
+模型目录保留 Qwen3.8-27B 的多模态元数据；试验场根据正在服务的实例启动参数识别 `--language-model-only`，该部署只显示文本输入，同一权重的其他视觉部署不受影响。

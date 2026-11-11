@@ -14,9 +14,56 @@ GPUWorks single-node device injection verifies and exposes only the selected XPU
 
 ## Images and Model Profiles
 
-Hardware support does not automatically supply an inference profile for every model. The repository has no default published Kunlun runner matrix entry; use the existing image and template import APIs to supply verified images and user specs.
+The **Images → System** catalog provides **vLLM · XRE**, with XRE `5.0.21.46`, vLLM `0.25.1`, and Linux amd64. Its immutable reference is `gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1`; the catalog lists public copies, so these profiles do not require private-registry credentials. Complete the [image release requirements](../../build/runner-images/xre/README.md) before publishing this tier.
 
-Qwen3-0.6B and Qwen3.8-27B are available as an [importable template package](../../build/inference-templates/kunlun-p800/README.md). It adds only user profiles. The package specs pin the reviewed private-registry manifest digest, with no second mutable-tag image-catalog authority. Configure native communication as described in the package for two-node launches.
+The built-in catalog includes P800 profiles for Qwen3-0.6B and Qwen3.8-27B. Search for the model and select Qwen to see **Kunlun P800 single GPU · BF16 weights / FP16 compute**. These profiles retain original BF16 weights and load them for FP16 computation. This is not weight quantization and does not claim that every operator supports BF16. Validate the model/image combination before changing precision. The 27B profile is marked **Text** and uses `--language-model-only`; it does not claim a verified vision path.
+
+Both built-in profiles accept exactly one 96 GiB `P800 PCIe`; general TP/PP/DP support is not acceptance for these model recipes. P800 OAM is unverified; changing the card name or widening the predicate does not establish compatibility.
+
+The recipe sets `--max-num-batched-tokens` to 256. Long inputs require multiple chunked-prefill iterations, so time to the first token grows with input length. An 8192-token context limit does not mean that a long prompt is processed in one iteration; revalidate memory and graph settings before increasing the batch budget.
+
+For new deployments, the Qwen3.8-27B r1 profile defaults to `enforce_eager` Off and uses the PIECEWISE configuration below, including 18 `splitting_ops`. This default targets one 96 GiB P800 PCIe, an 8192-token context, at most one sequence, and capture size `[1]`. The compilation backend named `eager` does not mean that `enforce_eager` is On.
+
+Qwen3-0.6B retains its existing eager default; this is not a global default for Kunlun deployments. Updating the catalog does not change existing deployments automatically. To revert to eager mode, restore the complete previous eager configuration and evaluate it again. Setting `enforce_eager` to On alone does not establish validation of its combination with the Graph configuration below.
+
+```json
+{
+  "mode": 3,
+  "cudagraph_mode": "PIECEWISE",
+  "backend": "eager",
+  "cudagraph_capture_sizes": [
+    1
+  ],
+  "pass_config": {
+    "fuse_norm_quant": false,
+    "fuse_act_quant": false
+  },
+  "splitting_ops": [
+    "vllm::unified_attention_with_output",
+    "vllm::unified_mla_attention_with_output",
+    "vllm::mamba_mixer2",
+    "vllm::mamba_mixer",
+    "vllm::short_conv",
+    "vllm::linear_attention",
+    "vllm::plamo2_mamba_mixer",
+    "vllm::qwen_gdn_attention_core",
+    "vllm::gdn_attention_core_xpu",
+    "vllm::olmo_hybrid_gdn_full_forward",
+    "vllm::kda_attention",
+    "vllm::sparse_attn_indexer",
+    "vllm::rocm_aiter_sparse_attn_indexer",
+    "vllm::deepseek_v4_attention",
+    "vllm::hpc_rope_norm_forward",
+    "vllm::unified_kv_cache_update",
+    "vllm::unified_mla_kv_cache_update",
+    "vllm::gdn_attention_core"
+  ]
+}
+```
+
+Register the model directory containing `config.json` and weight shards, using the profile's repository identity: `Qwen/Qwen3-0.6B` or `Qwen/Qwen3.8-27B`. Registration does not extract archives or copy weights. In Deploy, select that model and Kunlunxin, confirm the profile, image and precision, then evaluate and create. The catalog does not bundle image layers or weights; offline nodes must prepare both.
+
+Existing private environments can still use the [importable package](../../build/inference-templates/kunlun-p800/README.md) through **Inference Templates → Import Templates**. Do not upload a Docker image archive there. The package adds user profiles pinned to a private image digest; it neither replaces built-in profiles nor registers an image series. To register another validated image, use **Images → Custom → Add Custom Image** and select vLLM, XRE, its actual framework version, and amd64. System and custom catalogs have separate tabs.
 
 1. Prepare the same verified image on both nodes. Record immutable digests, engine version and the actual Python/entrypoint paths. CUDA-compatible fields do not establish native runtime support.
 2. Register local weights with their full repository identity, such as `deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`. A short directory name is not a repository identity. Existing files can be registered correctly without copying or downloading them.
@@ -43,9 +90,7 @@ Images must supply the corresponding RDMA userspace libraries and verified commu
 
 ## Validation and Boundaries
 
-Acceptance on 2026-11-10 covered only production single-GPU evaluate/create on two P800 hosts, gateway chat, stale-device cleanup and agent restart; all of these checks passed. Single-node multi-GPU moved past the loopback-interface failure but remains blocked by that environment's XRE OAM/XLink initialization error. Cross-node operation was not tested. PP and engine DP are enabled capabilities, not evidence that these multi-GPU topologies have completed hardware acceptance.
-
-On 2026-11-11, single-GPU evaluate/create, health and chat passed with the final `33d947…` image on both Docker and nerdctl. Its Kunlun vLLM platform rejects `--enable-sleep-mode` before loading the model, so sleep/wake remains unavailable. With NIXL added experimentally, the UCX agent initialized but identified P800 KV VRAM as host memory and returned `NIXL_ERR_BACKEND` during registration, so PD is also unavailable. Opening GPUWorks gates cannot bypass these engine limitations. Runveil completed device selection and model loading, but the current image lacks the Kunlun XTDK/`CLANG_PATH` toolchain required by JITC, so inference does not complete with the default artifacts and runveil remains disabled.
+The built-in single-GPU configuration does not establish validation of multi-GPU or cross-node model and communication combinations. PP and engine DP are enabled capabilities, but the selected topology still requires validation. PD, sleep/wake and runveil are currently outside this image's supported scope.
 
 For real-hardware acceptance, verify each node on one card first, then collective communication and two-node deployment. In Web, choose the correct profile, two nodes and TP=4/PP=1; check each rank’s command and model/image acquisition source, then health, ordinary HTTP, SSE DONE and visible response text. A handshake or HTTP 200 alone does not prove a valid text response.
 
@@ -53,4 +98,6 @@ See the [vendor support matrix](../reference/support-matrix.md) for related boun
 
 The hardware catalog displays `Kunlunxin P800 PCIe` and stores vendor `kunlunxin`; `NormalizeGPUName` removes the brand before spec matching, so the reviewed `^P800 PCIe$` predicate still matches. Hardware identity feeds capability selection as runtime and model combinations are validated. Partition availability comes from the dynamic partition capability check; there is no static Partition feature axis. The engine Profile still defines engine PD modes. Vendor restrictions are defined only in the accelerator capability table; `ProfileForTarget` derives the modes available on that target from it.
 
-<!-- translation-source-sha256: be74f42353132c9cf644ab0fadf965b3e39719b3f28863566b87c5b25dafb802 -->
+The 27B profile defaults to an 8192-token input/output budget and one concurrent sequence. Longer contexts require memory evaluation and validation. Both Hugging Face and ModelScope sources pin original, unquantized weights to a revision. The shared model retains its multimodal metadata; Playground reads serving launch arguments and offers only text input for a `--language-model-only` deployment, without changing other deployments of those weights.
+
+<!-- translation-source-sha256: 063d055b42c3ec8c1f831c3e9cbf36c47eeb2f40cdfe54d113a4bc7f1ec03007 -->
