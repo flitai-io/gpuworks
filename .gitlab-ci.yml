@@ -253,9 +253,9 @@ core-ui-test:
     - job: change-record
       artifacts: false
   script:
-    # The macOS serve adapters' tests need only the image's python3. They are
+    # These script tests need only the image's python3. They are
     # not part of the UI suite, so only the first shard runs them.
-    - if [ "$CI_NODE_INDEX" = 1 ]; then make test-host-env-adapters && make test-strata-queue-assets; fi
+    - if [ "$CI_NODE_INDEX" = 1 ]; then make test-host-env-adapters test-strata-queue-assets test-runner-image-scripts; fi
     - cd ui
     # See core-ui: registry.npmmirror.com occasionally stalls mid-transfer and
     # resets the connection instead of failing fast, so retry the install.

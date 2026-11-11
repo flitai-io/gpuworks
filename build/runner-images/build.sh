@@ -55,6 +55,9 @@ default_platforms = (m.get("defaults") or {}).get("platforms") or ["linux/amd64"
 for it in m["items"]:
     if it.get("builder") == "host-env":
         continue  # macOS host environment packages: build/host-envs/build.sh
+    if it.get("builder") == "prebuilt":
+        print("prebuilt %s: pinned artifact; see %s/README.md" % (it["id"], it["backend"]), file=sys.stderr)
+        continue
     platforms = it.get("platforms") or default_platforms
     print("\t".join([
         it["id"], it.get("revision", "r1"), it["backend"], it["engine"],

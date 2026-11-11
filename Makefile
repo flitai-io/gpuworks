@@ -183,7 +183,7 @@ test-unit: check-change-record
 # A recursive boundary keeps even make -j from starting UI or tests before
 # the change-record gate succeeds.
 .PHONY: test-unit-checked
-test-unit-checked: ui check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets test-sglang-video-cancel-assets
+test-unit-checked: ui check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets test-sglang-video-cancel-assets test-runner-image-scripts
 	CGO_ENABLED=0 $(GO) test -timeout $(UNIT_TIMEOUT) $(GO_TEST_FLAGS) ./...
 	cd build/runtime-assets/hygon-vdev-helper && CGO_ENABLED=0 $(GO) test $(GO_TEST_FLAGS) ./...
 	$(MAKE) check-tagged-build
@@ -192,6 +192,10 @@ test-unit-checked: ui check-time-policy check-architecture check-api-conventions
 ## (build/host-envs/adapters); standard library only, so no install step
 test-host-env-adapters:
 	cd build/host-envs/adapters && python3 -B -m unittest discover -p 'test_*.py'
+
+.PHONY: test-runner-image-scripts
+test-runner-image-scripts:
+	python3 -B build/runner-images/test_prebuilt.py
 
 .PHONY: test-inference-template-assets
 test-inference-template-assets:

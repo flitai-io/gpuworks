@@ -250,6 +250,11 @@
           "image": "gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1",
           "reason": "catalog_match",
           "compatible": true
+        },
+        {
+          "image": "gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1",
+          "reason": "catalog_match",
+          "compatible": true
         }
       ]
     }

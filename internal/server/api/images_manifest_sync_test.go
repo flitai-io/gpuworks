@@ -76,6 +76,7 @@ func TestCheckForUpdatesReadsTheChannel(t *testing.T) {
 	channel := newTestChannel(t)
 	channel.publishImageCatalog([]byte(upstreamManifest))
 	run.useChannel(channel)
+	initialVersions := run.versionCount()
 	// A body naming another URL is ignored: the catalog comes from the channel.
 	rec := run.do(http.MethodPost, "/api/v1/images/sync", "application/json", `{"url":"http://127.0.0.1:9/evil.json"}`)
 	if rec.Code != http.StatusOK {
@@ -88,9 +89,9 @@ func TestCheckForUpdatesReadsTheChannel(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	// The embedded seed has 35 rows; the published catalog keeps one and adds
-	// one, so 34 unreferenced system rows are removed.
-	if result["catalog_version"] != "2026-10-09.abcdef12" || result["created"] != float64(1) || result["updated"] != float64(1) || result["deleted"] != float64(34) || result["deprecated"] != float64(0) {
+	// The published catalog keeps one seeded row and adds one; all other
+	// unreferenced system rows are removed, regardless of seed growth.
+	if result["catalog_version"] != "2026-10-09.abcdef12" || result["created"] != float64(1) || result["updated"] != float64(1) || result["deleted"] != float64(initialVersions-1) || result["deprecated"] != float64(0) {
 		t.Fatalf("result = %v", result)
 	}
 	if skipped, ok := result["skipped"].([]any); !ok || len(skipped) != 0 {

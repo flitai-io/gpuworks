@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
-  "catalog_version": "2026-11-12.f850027d",
-  "sha256": "5debd2eb5f809f610137273bdeec197b431fdd42aa0a219e47f7e813faf1e43f",
+  "catalog_version": "2026-11-17.4962cc81",
+  "sha256": "72659de930624e7f3a73ee2931807a4588fc6525549baefc39cd29b74916e29e",
   "series": [
     {
       "name": "MLX Audio · Metal",
@@ -540,6 +540,26 @@
             "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1"
           ],
           "notes": "vLLM 0.30.0 on ROCm 7.2.3 (upstream vllm-openai-rocm); tested on MI325X (gfx942) and AMD395 (gfx1151).\nrequires: engine"
+        }
+      ]
+    },
+    {
+      "name": "vLLM · XRE",
+      "engine": "vllm",
+      "purpose": "inference",
+      "framework": "xre",
+      "versions": [
+        {
+          "name": "xre5.0.21.46-vllm0.25.1-r1",
+          "image_ref": "gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1",
+          "engine_version": "0.25.1",
+          "framework_version": "5.0.21.46",
+          "arch": "amd64",
+          "registry_sources": [
+            "quay.io/gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1",
+            "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:xre5.0.21.46-vllm0.25.1-r1"
+          ],
+          "notes": "Kunlunxin P800 PCIe / KL3, Linux amd64; native XRE inference with RDMA userspace libraries. The runtime entrypoint is /opt/vllm025-venv/bin/vllm. Qwen profiles load original BF16 weights with FP16 computation. Single-node inference does not require XDR; cross-node inference requires the validated host XDR/RDMA stack."
         }
       ]
     }

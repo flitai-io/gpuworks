@@ -76,12 +76,12 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 			seriesOf[version.Name] = series
 		}
 	}
-	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm"
+	wantSeries := "MLX Audio · Metal,MLX-VLM · Metal,SGLang · CANN,SGLang · CUDA,SGLang · DTK,SGLang · HGGC,llama.cpp · Metal,vLLM Omni · CANN,vLLM Omni · CUDA,vLLM · CANN,vLLM · CUDA,vLLM · DTK,vLLM · HGGC,vLLM · Metal,vLLM · ROCm,vLLM · XRE"
 	if strings.Join(names, ",") != wantSeries {
 		t.Fatalf("series = %v", names)
 	}
-	if len(versions) != 35 {
-		t.Fatalf("versions = %d, want 35", len(versions))
+	if len(versions) != 36 {
+		t.Fatalf("versions = %d, want 36", len(versions))
 	}
 	// The Apple silicon environment package: framework metal, its version the
 	// minimum macOS, its arch the CPU's.
@@ -94,6 +94,11 @@ func TestGenerateMapsMatrixItems(t *testing.T) {
 	}
 	if audio := seriesOf["metal15.0-mlx-audio0.5.9-r1"]; audio.Engine != "callable" || audio.Framework != "metal" || versions["metal15.0-mlx-audio0.5.9-r1"].EngineVersion != "0.5.9" {
 		t.Fatalf("mlx-audio series = %+v", audio)
+	}
+
+	xre := versions["xre5.0.21.46-vllm0.25.1-r1"]
+	if xre.FrameworkVersion != "5.0.21.46" || xre.EngineVersion != "0.25.1" || xre.Arch != "amd64" || seriesOf[xre.Name].Framework != "xre" || len(xre.RegistrySources) != 2 {
+		t.Fatalf("Kunlun release = %+v in %+v", xre, seriesOf[xre.Name])
 	}
 
 	omni := versions["cann9.1-910b-vllm-omni0.30.0-r3"]

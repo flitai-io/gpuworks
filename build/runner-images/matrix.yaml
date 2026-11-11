@@ -13,10 +13,14 @@
 #   id          矩阵项 ID，同时就是裸 tag 名
 #   revision    构建版次（r1、r2…）。配方变了必须 +1，不许原地覆盖同名 tag：
 #               节点上已有同名镜像时不会重拉，覆盖等于改了没生效
-#   backend     cuda | cann | dtk | hggc | metal | rocm
+#   backend     cuda | cann | dtk | hggc | metal | rocm | xre
 #   builder     缺省为本目录的 buildx 构建。host-env 表示 macOS 宿主环境包：由
 #               build/host-envs/build.sh 构建（框架档 = 最低 macOS），本目录的
 #               build.sh / verify.sh 跳过它，push.sh / publish.py 照常分发
+#               prebuilt = an existing, digest-pinned published artifact; its
+#               release recipe and gates live in the backend README. build.sh
+#               does not rebuild it from a company image as a vendor base.
+#   artifact    prebuilt source, pinned by digest; never a mutable base
 #   engine      vllm | sglang | callable（目录引擎；仅作说明，generate() 按 id 解析）。
 #               build.sh 用它选 Dockerfile（<backend>/Dockerfile.<engine>）：非常规的
 #               构建配方（如 vllm-v100）用带后缀的值指到自己的 Dockerfile；
@@ -85,6 +89,23 @@ defaults:
   platforms: [linux/amd64, linux/arm64]
 
 items:
+
+  # Kunlun P800: promote the digest-pinned artifact without rebuilding its layers.
+  # build.sh, verify.sh --all and push.sh --tags-from matrix skip prebuilt entries.
+  # These artifacts use the publication and verification contract in xre/README.md.
+  - id: xre5.0.21.46-vllm0.25.1
+    revision: r1
+    backend: xre
+    builder: prebuilt
+    engine: vllm
+    platforms: [linux/amd64]
+    artifact: quay.io/gpuworks/gpuworks-runner@sha256:33d94768ff9a895bdc8874cae09940aede1b0e88218e52ed52231b8f86a91beb
+    args: {ENGINE_VERSION: "0.25.1", FRAMEWORK_VERSION: "5.0.21.46"}
+    note: >-
+      Kunlunxin P800 PCIe / KL3, Linux amd64; native XRE inference with RDMA userspace libraries.
+      The runtime entrypoint is /opt/vllm025-venv/bin/vllm. Qwen profiles load original BF16 weights
+      with FP16 computation. Single-node inference does not require XDR;
+      cross-node inference requires the validated host XDR/RDMA stack.
 
   # =======================================================================
   # AMD ROCm

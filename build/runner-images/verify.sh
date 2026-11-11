@@ -114,8 +114,9 @@ if [ "${1:-}" = "--all" ]; then
 import sys, yaml
 m = yaml.safe_load(open(sys.argv[1]))
 for it in m["items"]:
-    if it.get("builder") == "host-env":
-        continue  # not a container image; build/host-envs verifies on a Mac
+    if it.get("builder") in ("host-env", "prebuilt"):
+        print("SKIP %s: %s has its own verification contract" % (it["id"], it["builder"]), file=sys.stderr)
+        continue
     print("%s:%s-%s" % (sys.argv[2], it["id"], it.get("revision", "r1")))
 PY
 )

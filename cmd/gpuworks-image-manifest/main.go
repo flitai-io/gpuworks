@@ -31,7 +31,7 @@ const DefaultRegistry = "gpuworks/gpuworks-runner"
 // vllm-omni must precede vllm in the alternation, or the omni ids would split
 // into engine=vllm with an engine version of "-omni…". llama.cpp numbers its
 // releases b<build> and is written llama.cpp-b<build>.
-var tagPattern = regexp.MustCompile(`^(?P<backend>cuda|cann|dtk|hggc|metal|rocm)(?P<fwver>[0-9]+(\.[0-9]+)*)(-(?P<model>910b|a3|310p|950|v100|gfx1151))?-(?:(?P<engine>` +
+var tagPattern = regexp.MustCompile(`^(?P<backend>cuda|cann|dtk|hggc|metal|rocm|xre)(?P<fwver>[0-9]+(\.[0-9]+)*)(-(?P<model>910b|a3|310p|950|v100|gfx1151))?-(?:(?P<engine>` +
 	regexp.QuoteMeta(engines.VLLMOmni) + `|` + regexp.QuoteMeta(engines.VLLM) + `|` + regexp.QuoteMeta(engines.SGLang) +
 	`|mlx-vlm|mlx-audio|systemone)(?P<engver>[0-9][0-9A-Za-z.]*)|(?P<llamacpp>llama\.cpp)-(?P<llamabuild>b[0-9]+))$`)
 

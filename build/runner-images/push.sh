@@ -48,6 +48,9 @@ elif [[ "$TAGS_FROM" == "matrix" ]]; then
 import sys, yaml
 m = yaml.safe_load(open(sys.argv[1]))
 for it in m["items"]:
+    if it.get("builder") == "prebuilt":
+        print("SKIP %s: %s is not built into SRC" % (it["id"], it["builder"]), file=sys.stderr)
+        continue
     print("%s-%s" % (it["id"], it.get("revision", "r1")))
 PY
 )
@@ -57,6 +60,7 @@ else
 fi
 
 echo "src=$SRC dest=$DEST tags=${#TAGS[@]} jobs=$JOBS"
+[[ ${#TAGS[@]} -gt 0 ]] || exit 0
 args=(copy --all --preserve-digests)
 [[ $SRC_INSECURE -eq 1 ]] && args+=(--src-tls-verify=false)
 [[ $DEST_INSECURE -eq 1 ]] && args+=(--dest-tls-verify=false)
