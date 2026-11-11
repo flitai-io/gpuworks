@@ -152,7 +152,7 @@ func (sglangEngine) Build(p Params) ResolvedLaunch {
 	// own negative-sounding flag.
 	b.injectDictionaryBool("enable_prefix_caching", q.EnablePrefixCaching)
 	b.injectDictionaryBool("enable_cache_report", q.EnableCacheReport)
-	if q.EnforceEager {
+	if q.EnforceEager != nil && *q.EnforceEager {
 		b.injectDictionary("enforce_eager", true)
 	}
 	if q.SpeculativeAlgorithm != "" {

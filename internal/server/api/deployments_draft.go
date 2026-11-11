@@ -207,12 +207,7 @@ func gibBytes(gib float64) int64 {
 
 // storedLaunchConfig decodes a deployment's stored launch configuration.
 func storedLaunchConfig(dep *store.Deployment) (deploy.LaunchConfig, error) {
-	var quick deploy.LaunchConfig
-	if strings.TrimSpace(dep.QuickParams) == "" {
-		return quick, nil
-	}
-	err := json.Unmarshal([]byte(dep.QuickParams), &quick)
-	return quick, err
+	return deployment.StoredLaunchConfig(dep)
 }
 
 // draftWeightProvider is the weight source a draft states as chosen: the

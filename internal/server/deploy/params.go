@@ -101,7 +101,7 @@ type LaunchConfig struct {
 	MMEncoderTPMode         string  `json:"mm_encoder_tp_mode,omitempty"`
 	Quantization            string  `json:"quantization,omitempty"`
 	TrustRemote             bool    `json:"trust_remote_code,omitempty"`
-	EnforceEager            bool    `json:"enforce_eager,omitempty"`
+	EnforceEager            *bool   `json:"enforce_eager,omitempty"`
 	ReasoningParser         string  `json:"reasoning_parser,omitempty"`
 	ToolCallParser          string  `json:"tool_call_parser,omitempty"`
 	EnableAutoToolChoice    bool    `json:"enable_auto_tool_choice,omitempty"`
@@ -328,7 +328,7 @@ func PerformanceWarnings(q LaunchConfig, extraArgs, modelArch string, gpuCount i
 	if q.PerformanceMode == "throughput" && (q.MaxNumBatchedTokens > 0 || q.MaxNumSeqs > 0) {
 		out = append(out, messages.NewWarning("W5", nil))
 	}
-	if q.EnforceEager && strings.Contains(strings.ToLower(extraArgs), "cudagraph") {
+	if q.EnforceEager != nil && *q.EnforceEager && strings.Contains(strings.ToLower(extraArgs), "cudagraph") {
 		out = append(out, messages.NewWarning("W6", nil))
 	}
 	if q.SharedKVDir != "" && strings.Contains(strings.ToLower(q.PrefixCachingHashAlgo), "xxhash") && q.PythonHashSeed == "" {

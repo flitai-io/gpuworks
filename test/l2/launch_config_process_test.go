@@ -124,7 +124,7 @@ func TestLaunchConfigMaterializedThroughRealServer(t *testing.T) {
 	createBody, _ := json.Marshal(map[string]any{
 		"model_id": model.ID, "node_uuid": node.UUID, "name": "launch-config", "served_name": "launch-config",
 		"engine": "vllm", "image": "gpuworks/fake-engine:test",
-		"quick_params": map[string]any{"max_model_len": 4096, "gpu_memory_utilization": 0.9},
+		"quick_params": map[string]any{"max_model_len": 4096, "gpu_memory_utilization": 0.9, "enforce_eager": false},
 		"extra_args":   "--max-model-len 4096 --foo",
 		// Each deployment is pinned to its own card: both stay running at the
 		// same time so the two command lines can be compared side by side.
@@ -148,6 +148,11 @@ func TestLaunchConfigMaterializedThroughRealServer(t *testing.T) {
 	}
 	if got := fmt.Sprint(created.QuickParams["max_model_len"]); got != "4096" {
 		t.Errorf("stored max_model_len=%v, want 4096: %v", got, created.QuickParams)
+	}
+	// Explicit Off must survive persistence as a boolean, unlike an unstated
+	// dictionary default in the second request below.
+	if eager, ok := created.QuickParams["enforce_eager"].(bool); !ok || eager {
+		t.Errorf("stored enforce_eager=%v, want the boolean false", created.QuickParams["enforce_eager"])
 	}
 	if strings.TrimSpace(created.ExtraArgs) != "--foo" {
 		t.Errorf("extra_args=%q, want only the residual --foo: the dictionary flag must be absorbed, not duplicated", created.ExtraArgs)
@@ -210,9 +215,12 @@ func TestLaunchConfigMaterializedThroughRealServer(t *testing.T) {
 			t.Errorf("bare %s=%v, want %v: %v", key, got, want, bare.QuickParams)
 		}
 	}
+	if eager, present := bare.QuickParams["enforce_eager"]; present {
+		t.Errorf("unstated eager default became an explicit choice: %v", eager)
+	}
 	bareInstance := waitLaunchConfigInstance(t, base, adminToken, bare.ID)
 	bareArgv := append(append([]string(nil), bareInstance.Entrypoint...), bareInstance.Argv...)
-	for _, flag := range []string{"--dtype", "--kv-cache-dtype", "--enable-prefix-caching", "--enable-chunked-prefill"} {
+	for _, flag := range []string{"--dtype", "--kv-cache-dtype", "--enable-prefix-caching", "--enable-chunked-prefill", "--enforce-eager"} {
 		if got := len(launchConfigFlagValues(bareArgv, flag)); got != 0 {
 			t.Errorf("a deployment that stated nothing carries %s; argv=%v", flag, bareArgv)
 		}

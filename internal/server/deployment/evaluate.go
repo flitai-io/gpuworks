@@ -242,10 +242,15 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	if strings.Contains(strings.ToLower(strings.TrimSpace(req.Image)), "@sha256:") {
 		resp.Warnings = append(resp.Warnings, messages.NewWarning(messages.WarningImageDigestUnverified, map[string]any{"image": req.Image}))
 	}
+	base, err := s.evaluationLaunchBase(evaluateReq.DeploymentID)
+	if err != nil {
+		out.err = internal(err)
+		return
+	}
 	// One materialization decides this deployment's launch configuration. The
 	// preview below, the estimate, and a create submitted from this form all
 	// read the same object.
-	launch, err := materializeDeployRequest(eng.Name(), req, selection, DeployTargetCards(profileNode, req.Placement), s.requestEngineVersion(eng.Name(), req, selection, targetVendor, profileNode))
+	launch, err := materializeDeployRequestWithBase(eng.Name(), req, selection, DeployTargetCards(profileNode, req.Placement), s.requestEngineVersion(eng.Name(), req, selection, targetVendor, profileNode), base)
 	if err != nil {
 		// ProductErrors that name a key land on that key's control; the
 		// extra-args parse error is the one that starts on the text box.
@@ -516,7 +521,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// memory-limited draft can get fewer cards than it states. The same
 	// preflight here makes what the create would refuse a blocking error.
 	if errs.empty() {
-		if err := s.evaluateLaunchPreflight(eng, req, preflightSelection, targetVendor, profileNode, rankNodes, &resp); err != nil {
+		if err := s.evaluateLaunchPreflight(eng, req, preflightSelection, targetVendor, profileNode, rankNodes, &resp, base); err != nil {
 			errs.add("", err)
 			writeFieldErrors()
 			return

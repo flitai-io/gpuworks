@@ -23,8 +23,9 @@ import (
 // can still tell an engine parameter from one the platform consumes.
 type engineParam struct {
 	ParamDefinition
-	Default  any
-	Platform bool
+	Default     any
+	Platform    bool
+	OmitDefault bool
 	// Composed repeats flagPair.Composed for readers that only hold the
 	// resolved row: the adapter writes this flag itself (see flagPair).
 	Composed bool
@@ -74,7 +75,7 @@ func engineParams(engine string) map[string]engineParam {
 		if override, ok := definition.DefaultByEngine[engine]; ok {
 			value = override
 		}
-		out[definition.Key] = engineParam{ParamDefinition: spec, Default: value, Platform: definition.Platform, Composed: flags.Composed}
+		out[definition.Key] = engineParam{ParamDefinition: spec, Default: value, OmitDefault: definition.OmitDefault, Platform: definition.Platform, Composed: flags.Composed}
 	}
 	return out
 }

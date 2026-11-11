@@ -256,7 +256,7 @@ func (in Input) Evaluate(st *store.Store) Output {
 	// scheduler and the breakdown: the number a user is shown and the number
 	// admission enforces have to be the same one.
 	reserveBase := engineReserveBase(in.Engine)
-	reserve := estimate.ReserveBytes(reserveBase, arch, !in.Quick.EnforceEager, util)
+	reserve := estimate.ReserveBytes(reserveBase, arch, in.Quick.EnforceEager == nil || !*in.Quick.EnforceEager, util)
 	req := scheduler.Request{
 		ReserveBytes:         reserve,
 		ReserveBase:          reserveBase,

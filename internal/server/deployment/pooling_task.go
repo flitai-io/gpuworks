@@ -9,6 +9,10 @@ import (
 // contract-derived defaults until the existing resolver has selected the actual
 // model (including ready mirrors and primary component substitutions).
 func (s *Service) materializeCreateLaunch(engine string, req *dto.DeployRequest, selection templateSelection, cards []deploy.CardFacts, version string) (deploy.Materialized, error) {
+	return s.materializeCreateLaunchWithBase(engine, req, selection, cards, version, nil)
+}
+
+func (s *Service) materializeCreateLaunchWithBase(engine string, req *dto.DeployRequest, selection templateSelection, cards []deploy.CardFacts, version string, base *deploy.LaunchConfig) (deploy.Materialized, error) {
 	selection.APIContract = nil
-	return materializeDeployRequest(engine, req, selection, cards, version)
+	return materializeDeployRequestWithBase(engine, req, selection, cards, version, base)
 }

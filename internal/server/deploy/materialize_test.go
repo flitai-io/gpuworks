@@ -32,7 +32,7 @@ func TestMaterializeLeavesUnstatedKeysUnset(t *testing.T) {
 	if q.EnableChunkedPrefill != nil || q.EnablePrefixCaching != nil {
 		t.Fatalf("rows without a default must stay unset: chunked=%v prefix=%v", q.EnableChunkedPrefill, q.EnablePrefixCaching)
 	}
-	if q.EnforceEager || q.EnableMetrics || q.MaxModelLen != 0 {
+	if q.EnforceEager != nil || q.EnableMetrics || q.MaxModelLen != 0 {
 		t.Fatalf("rows whose default is silence or automatic must stay unset: %+v", q)
 	}
 	// Tier companions stay unset while their tier is off, even though they have
@@ -101,7 +101,7 @@ func TestMaterializeMovesExtraArgsIntoFieldsWithAliases(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := out.Quick
-	if q.MaxModelLen != 8192 || q.Dtype != "float16" || !q.EnforceEager {
+	if q.MaxModelLen != 8192 || q.Dtype != "float16" || q.EnforceEager == nil || !*q.EnforceEager {
 		t.Fatalf("extra_args values did not reach the fields (alias half→float16 expected): %+v", q)
 	}
 	if !reflect.DeepEqual(out.UserResidual, []string{"--foo", "bar"}) {

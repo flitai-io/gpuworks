@@ -207,6 +207,13 @@ func materialize(in MaterializeInput, legacy bool) (Materialized, error) {
 	var moved []MovedFlag
 	for key, extraValue := range extraParams {
 		fieldValue, isExplicit := explicit[key]
+		if stored, kept := base[key]; isExplicit && kept && sameValue(fieldValue, stored) {
+			// An edit submits the complete draft, including untouched fields.
+			// Those belong to Base, below newly typed extra_args, rather than
+			// being a second, conflicting statement by the operator.
+			delete(explicit, key)
+			isExplicit = false
+		}
 		if !isExplicit {
 			moved = append(moved, MovedFlag{Key: key, Flag: extraFlags[key], Value: wireValue(params[key], extraValue), Source: movedFromExtraArgs})
 			continue
@@ -331,6 +338,9 @@ func applyDictionaryDefaults(params map[string]engineParam, unset map[string]str
 			}
 			canonical, ok := canonicalValue(spec, spec.Default)
 			if !ok {
+				continue
+			}
+			if spec.OmitDefault {
 				continue
 			}
 			values[key] = wireValue(spec, canonical)

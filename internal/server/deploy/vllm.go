@@ -270,7 +270,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 	if q.TrustRemote {
 		b.injectDictionary("trust_remote_code", true)
 	}
-	if q.EnforceEager {
+	if q.EnforceEager != nil && *q.EnforceEager {
 		b.injectDictionary("enforce_eager", true)
 	}
 	if q.ReasoningParser != "" {

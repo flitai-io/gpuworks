@@ -389,7 +389,7 @@ func TestSGLangPerformanceAndSpeculativeMappings(t *testing.T) {
 	engine, _ := SelectEngine("sglang")
 	res := engine.Build(Params{ModelPath: "/model", APIPort: 30000, Quick: LaunchConfig{
 		GPUMemUtil: 0.92, MaxNumBatchedTokens: 4096, MaxNumSeqs: 128, EnablePrefixCaching: boolp(false),
-		EnforceEager: true, SpeculativeAlgorithm: "eagle3", SpeculativeDraftModel: "/draft",
+		EnforceEager: boolp(true), SpeculativeAlgorithm: "eagle3", SpeculativeDraftModel: "/draft",
 		SpeculativeNumSteps: 3, SpeculativeEagleTopK: 4, SpeculativeTokens: 5,
 		ReasoningParser: "qwen3", ToolCallParser: "hermes", EnableAutoToolChoice: true,
 	}})
@@ -473,7 +473,7 @@ func TestValidatePerformanceRules(t *testing.T) {
 }
 
 func TestPerformanceWarningsCoverW1ToW10(t *testing.T) {
-	w := PerformanceWarnings(LaunchConfig{MaxNumBatchedTokens: 100, MaxNumSeqs: 1, MaxModelLen: 10, KVOffloadingSize: 1, EstimatedGPUKVGiB: 2, KVCacheMemoryBytes: 1, PerformanceMode: "throughput", EnforceEager: true, SharedKVDir: "/kv", PrefixCachingHashAlgo: "xxhash", AsyncScheduling: true, SpeculativeAlgorithm: "draft_model", APIServerCount: 4, DP: 2, CPUCores: 1}, "--kv-transfer-config cudagraph", "encoder-decoder", 2)
+	w := PerformanceWarnings(LaunchConfig{MaxNumBatchedTokens: 100, MaxNumSeqs: 1, MaxModelLen: 10, KVOffloadingSize: 1, EstimatedGPUKVGiB: 2, KVCacheMemoryBytes: 1, PerformanceMode: "throughput", EnforceEager: boolp(true), SharedKVDir: "/kv", PrefixCachingHashAlgo: "xxhash", AsyncScheduling: true, SpeculativeAlgorithm: "draft_model", APIServerCount: 4, DP: 2, CPUCores: 1}, "--kv-transfer-config cudagraph", "encoder-decoder", 2)
 	for _, code := range []string{"W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10"} {
 		found := false
 		for _, item := range w {

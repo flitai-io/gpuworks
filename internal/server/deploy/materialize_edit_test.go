@@ -81,6 +81,31 @@ func TestMaterializeBasePrecedence(t *testing.T) {
 	}
 }
 
+func TestMaterializeEditRestatedEagerOffAllowsNewExtraArgs(t *testing.T) {
+	base := LaunchConfig{EnforceEager: boolp(false)}
+	out, err := Materialize(MaterializeInput{
+		Engine: EngineVLLM, Base: &base,
+		Raw:       map[string]any{"enforce_eager": false},
+		ExtraArgs: []string{"--enforce-eager"},
+	})
+	if err != nil {
+		t.Fatalf("unchanged draft Off conflicted with newly typed On: %v", err)
+	}
+	if out.Quick.EnforceEager == nil || !*out.Quick.EnforceEager || len(out.Moved) != 1 || out.Moved[0].Key != "enforce_eager" {
+		t.Fatalf("new extra_args did not replace stored Off: %+v", out)
+	}
+	// A field the edit actually changes remains explicit, and a different
+	// extra_args value must still be rejected rather than silently winning.
+	base.EnforceEager = boolp(true)
+	if _, err := Materialize(MaterializeInput{
+		Engine: EngineVLLM, Base: &base,
+		Raw:       map[string]any{"enforce_eager": false},
+		ExtraArgs: []string{"--enforce-eager"},
+	}); err == nil || !strings.Contains(err.Error(), "enforce_eager") {
+		t.Fatalf("changed Off and extra_args On = %v, want conflict", err)
+	}
+}
+
 func TestEditedParams(t *testing.T) {
 	base := LaunchConfig{MaxModelLen: 8192, GPUMemUtil: 0.9, KVOffloadingSize: 8}
 	edited, removed, err := EditedParams(EngineVLLM, base, map[string]any{

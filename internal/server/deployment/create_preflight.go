@@ -82,10 +82,12 @@ func (p launchPreflight) run(req *dto.DeployRequest, selection templateSelection
 // for a multi-node draft. selection is the template selection as the create
 // sees it at this step, before the model binds its components and API
 // contract. The rank images are the ones the evaluation already resolved
-// (resp.RankCommands), so this step reads no image catalog of its own.
-func (s *Service) evaluateLaunchPreflight(eng deploy.Engine, req *dto.DeployRequest, selection templateSelection, targetVendor string, profileNode *store.Node, rankNodes []*store.Node, resp *dto.EvaluateResponse) error {
+// (resp.RankCommands), so this step reads no image catalog of its own. An edit
+// uses the same stored base as the earlier preview; otherwise unchanged form
+// fields would conflict with newly supplied extra_args in this final check.
+func (s *Service) evaluateLaunchPreflight(eng deploy.Engine, req *dto.DeployRequest, selection templateSelection, targetVendor string, profileNode *store.Node, rankNodes []*store.Node, resp *dto.EvaluateResponse, base *deploy.LaunchConfig) error {
 	draft := cloneRequest(*req)
-	launch, err := s.materializeCreateLaunch(eng.Name(), &draft, selection, DeployTargetCards(profileNode, draft.Placement), s.requestEngineVersion(eng.Name(), &draft, selection, targetVendor, profileNode))
+	launch, err := s.materializeCreateLaunchWithBase(eng.Name(), &draft, selection, DeployTargetCards(profileNode, draft.Placement), s.requestEngineVersion(eng.Name(), &draft, selection, targetVendor, profileNode), base)
 	if err != nil {
 		return err
 	}

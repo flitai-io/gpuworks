@@ -91,6 +91,9 @@ type flagPair struct {
 // an enum, a bound or a key-to-flag mapping is written down.
 type paramDefinition struct {
 	ParamDefinition
+	// OmitDefault preserves an unstated option without turning a display default
+	// into an explicit persisted edit. Explicit values still round-trip.
+	OmitDefault bool
 	// Platform marks a row the platform itself consumes. It has no engine flag
 	// by construction and never reaches argv, the command preview or
 	// ReverseArgs (ADR 0021); the engines it applies to are listed in the
@@ -258,7 +261,7 @@ var parameterDefinitions = []paramDefinition{
 	{ParamDefinition: ParamDefinition{Key: "kv_offload_backend", Type: "enum", Control: "select", Group: "performance"}, Selector: true},
 	// --disable-cuda-graph is SGLang's spelling of enforce_eager=true, not an off
 	// form: turning it off means emitting nothing.
-	{ParamDefinition: ParamDefinition{Key: "enforce_eager", Type: "boolean", Control: "switch", Group: "performance", Default: false, Layout: "quick", Order: 35}, Flags: map[string]flagPair{EngineVLLM: {On: "--enforce-eager"}, EngineSGLang: {On: "--disable-cuda-graph"}}},
+	{OmitDefault: true, ParamDefinition: ParamDefinition{Key: "enforce_eager", Type: "boolean", Control: "switch", Group: "performance", Default: false, Layout: "quick", Order: 35}, Flags: map[string]flagPair{EngineVLLM: {On: "--enforce-eager"}, EngineSGLang: {On: "--disable-cuda-graph"}}},
 
 	{ParamDefinition: ParamDefinition{Key: "speculative_algorithm", Type: "string", Control: "combobox", Group: "speculative", Options: options(vllmSpeculativeMethods...), Layout: "quick", Order: 32}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-algorithm"}}, Options: map[string][]ParamOption{EngineSGLang: sglangSpeculativeAlgorithms}, ClosedFor: []string{EngineSGLang}},
 	{ParamDefinition: ParamDefinition{Key: "speculative_draft_model", Type: "string", Control: "text", Group: "speculative"}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-draft-model-path"}}},
