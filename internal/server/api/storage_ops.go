@@ -15,6 +15,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/version"
 )
@@ -138,39 +139,14 @@ func (a *apiHandlers) probeNode(nodeUUID string, row *store.Storage, targets []s
 
 // onlineStorageNodes are the connected nodes a storage is ready on - the ones
 // it is writable from when write is set - in node id order: the nodes an
-// action on a shared storage can run through.
+// action on a shared storage can run through (planning.OnlineStorageNodes).
 func (a *apiHandlers) onlineStorageNodes(row *store.Storage, write bool) ([]*store.Node, error) {
-	ids, err := a.d.Store.ReadyStorageNodes(row.ID, write)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*store.Node, 0, len(ids))
-	for _, id := range ids {
-		node, err := a.d.Store.NodeByID(id)
-		if err != nil || (a.d.Online != nil && !a.d.Online(node.UUID)) {
-			continue
-		}
-		out = append(out, node)
-	}
-	return out, nil
+	return planning.OnlineStorageNodes(a.d.Store, a.d.Online, row, write)
 }
 
-// pickStorageNode is the first of onlineStorageNodes that accept takes (nil
-// takes any), or the product error that says none can serve the storage.
+// pickStorageNode is planning.PickStorageNode over the connected nodes.
 func (a *apiHandlers) pickStorageNode(row *store.Storage, write bool, accept func(*store.Node) bool) (*store.Node, error) {
-	nodes, err := a.onlineStorageNodes(row, write)
-	if err != nil {
-		return nil, err
-	}
-	for _, node := range nodes {
-		if accept == nil || accept(node) {
-			return node, nil
-		}
-	}
-	if write {
-		return nil, productError(ErrorStorageNotWritable, "no online node can write to storage "+row.Name, map[string]any{"storage": row.Name})
-	}
-	return nil, productError(ErrorStorageUnavailableOnNode, "the storage is not ready on any online node", map[string]any{"storage": row.Name})
+	return planning.PickStorageNode(a.d.Store, a.d.Online, row, write, accept)
 }
 
 // storagePeers refreshes this control plane's heartbeat on a shared storage

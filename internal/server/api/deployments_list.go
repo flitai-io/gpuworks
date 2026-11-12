@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -38,7 +39,7 @@ func (a *apiHandlers) listDeployments(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	rows, err := newListLookup(a.d.Store, a.d.Preparation, deps, instances)
+	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, instances)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -77,9 +78,9 @@ var deploymentListSorts = deploymentListSorters(nil)
 // deploymentListSorters are the orders GET /deployments offers, by the
 // deployment list's column keys. A state is worked out once per deployment
 // and only when the list is sorted by it.
-func deploymentListSorters(rows dtoLookup) listSorters[*store.Deployment] {
+func deploymentListSorters(rows deployment.Rows) listSorters[*store.Deployment] {
 	modelName := func(d *store.Deployment) string {
-		if model := rows.model(d.ModelID); model != nil {
+		if model := rows.Model(d.ModelID); model != nil {
 			return model.Name
 		}
 		return ""
@@ -89,8 +90,8 @@ func deploymentListSorters(rows dtoLookup) listSorters[*store.Deployment] {
 		if s, ok := states[d.ID]; ok {
 			return s
 		}
-		insts := rows.instances(d.ID)
-		runtime := deploymentRuntimeState(rows, d, insts, recordedModelProgress(rows, d))
+		insts := rows.Instances(d.ID)
+		runtime := deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d))
 		states[d.ID] = effectiveDeploymentState(d, runtime, deploymentFactsFor(rows, d, insts))
 		return states[d.ID]
 	}
@@ -115,9 +116,9 @@ func deploymentListReplicas(d *store.Deployment) int {
 }
 
 // deploymentMatches applies a list query's filters to one deployment.
-func deploymentMatches(rows dtoLookup, d *store.Deployment, query listQuery) bool {
+func deploymentMatches(rows deployment.Rows, d *store.Deployment, query listQuery) bool {
 	modelName := ""
-	if model := rows.model(d.ModelID); model != nil {
+	if model := rows.Model(d.ModelID); model != nil {
 		modelName = model.Name
 	}
 	if !query.matchesSearch(d.Name, d.ServedName, modelName) {
@@ -126,8 +127,8 @@ func deploymentMatches(rows dtoLookup, d *store.Deployment, query listQuery) boo
 	if len(query.states) == 0 {
 		return true
 	}
-	insts := rows.instances(d.ID)
-	runtime := deploymentRuntimeState(rows, d, insts, recordedModelProgress(rows, d))
+	insts := rows.Instances(d.ID)
+	runtime := deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d))
 	return query.matchesState(effectiveDeploymentState(d, runtime, deploymentFactsFor(rows, d, insts)))
 }
 

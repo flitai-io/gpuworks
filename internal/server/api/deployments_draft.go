@@ -13,6 +13,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -237,7 +238,7 @@ func (a *apiHandlers) draftWeightProvider(snapshot deploy.CatalogSelection) stri
 		if spec.Name != snapshot.SpecName || spec.Source != snapshot.SpecSource {
 			continue
 		}
-		for _, source := range specWeightSources(spec) {
+		for _, source := range deployment.SpecWeightSources(spec) {
 			if strings.EqualFold(source.Provider, provider) {
 				return provider
 			}

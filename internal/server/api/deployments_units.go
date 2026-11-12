@@ -8,6 +8,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/pdmode"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -37,11 +38,11 @@ type replicaView struct {
 	mode pdmode.Mode
 }
 
-func newReplicaView(rows dtoLookup, d *store.Deployment, insts []store.Instance) (replicaView, error) {
+func newReplicaView(rows deployment.Rows, d *store.Deployment, insts []store.Instance) (replicaView, error) {
 	view := replicaView{names: map[string]string{}}
 	uuids := map[uint]string{}
 	for _, id := range d.NodeIDList() {
-		if n := rows.node(id); n != nil {
+		if n := rows.Node(id); n != nil {
 			view.names[n.UUID] = nodeDisplayName(n)
 			view.ordered = append(view.ordered, n.UUID)
 			uuids[n.ID] = n.UUID
@@ -61,7 +62,7 @@ func newReplicaView(rows dtoLookup, d *store.Deployment, insts []store.Instance)
 
 // deploymentUnitMatch is how a deployment's instances fill its replicas.
 func (a *apiHandlers) deploymentUnitMatch(dep *store.Deployment, insts []store.Instance) (planning.UnitMatch, error) {
-	view, err := newReplicaView(storeLookup{a.d.Store, preparationReads{a.d.Preparation}}, dep, insts)
+	view, err := newReplicaView(deployment.NewStoreRows(a.d.Store, a.d.Preparation), dep, insts)
 	return view.match, err
 }
 
@@ -143,19 +144,19 @@ type replicaAttempts struct {
 // spentAttempts reads a replica's failed attempts: how many there are, the
 // newest one's message, and whether the controller gave up on the replica
 // (it has no instance and its newest attempt carries the give-up record).
-func spentAttempts(rows dtoLookup, slot planning.UnitSlot, attempts []store.Instance) replicaAttempts {
+func spentAttempts(rows deployment.Rows, slot planning.UnitSlot, attempts []store.Instance) replicaAttempts {
 	if len(attempts) == 0 {
 		return replicaAttempts{}
 	}
 	newest := planning.NewestAttempt(attempts)
-	return replicaAttempts{count: len(attempts), lastFailure: newest.Message, exhausted: slot.Inst == nil && rows.retryExhausted(newest.UUID)}
+	return replicaAttempts{count: len(attempts), lastFailure: newest.Message, exhausted: slot.Inst == nil && rows.RetryExhausted(newest.UUID)}
 }
 
 // ordinaryRetryExhausted finds the replica of an ordinary deployment that
 // gave up, so the response can offer its retry. Single-node replicas share
 // one retry budget, so any empty one names the same attempts; the first is
 // reported because a retry of a filled replica is refused.
-func ordinaryRetryExhausted(rows dtoLookup, view replicaView) *dto.DeploymentRetryExhausted {
+func ordinaryRetryExhausted(rows deployment.Rows, view replicaView) *dto.DeploymentRetryExhausted {
 	for _, slot := range view.match.Slots {
 		spent := spentAttempts(rows, slot, view.match.Failed[slot.Key])
 		if spent.exhausted {
@@ -163,14 +164,4 @@ func ordinaryRetryExhausted(rows dtoLookup, view replicaView) *dto.DeploymentRet
 		}
 	}
 	return nil
-}
-
-// Read connection facts separately from the agent's last runtime observation.
-func instanceNodeOnline(rows dtoLookup, nodeID uint) bool {
-	n := rows.node(nodeID)
-	return n != nil && n.State == store.NodeStateOnline
-}
-
-func onlineInstances(rows dtoLookup, instances []store.Instance) []store.Instance {
-	return planning.OnlineInstances(instances, func(id uint) bool { return instanceNodeOnline(rows, id) })
 }

@@ -151,20 +151,3 @@ func TestSetRoutingPolicyHTTPContract(t *testing.T) {
 		})
 	}
 }
-
-func TestValidateReplicaShapeNormalizesRoutingPolicy(t *testing.T) {
-	req := &dto.DeployRequest{RoutingPolicy: " failover "}
-	if err := validateReplicaShape(req); err != nil {
-		t.Fatal(err)
-	}
-	if req.RoutingPolicy != deploy.Failover {
-		t.Fatalf("routing policy=%q, want %q", req.RoutingPolicy, deploy.Failover)
-	}
-	defaultReq := &dto.DeployRequest{}
-	if err := validateReplicaShape(defaultReq); err != nil {
-		t.Fatal(err)
-	}
-	if defaultReq.RoutingPolicy != deploy.LeastRequest {
-		t.Fatalf("empty routing policy=%q, want %q", defaultReq.RoutingPolicy, deploy.LeastRequest)
-	}
-}

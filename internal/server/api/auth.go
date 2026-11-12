@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/server/usagereport"
 )
@@ -40,7 +41,7 @@ func (a *apiHandlers) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req loginRequest
-	if !decodeJSONBody(w, r, &req) || !validateTextField(w, "username", req.Username, maxNameRunes) {
+	if !decodeJSONBody(w, r, &req) || !validateTextField(w, "username", req.Username, deployment.MaxNameRunes) {
 		return
 	}
 	finish, wait := a.loginThrottle.begin(time.Now().UTC(), a.loginClientIP(r), req.Username)

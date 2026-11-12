@@ -14,6 +14,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/seed"
 	"gpuworks.ai/gpuworks/internal/server/network"
@@ -109,12 +110,7 @@ func testBenchmarkGGUFTokenizerViaAPI(t *testing.T, tc ggufTokenizerCase) {
 		// Exercise the production snapshot writer, including the merge with
 		// model-level operations. A hand-built API document would hide a lost
 		// tokenizer field behind the current-catalog compatibility fallback.
-		live := templateSelection{
-			Model: template, Spec: &spec, APIContract: json.RawMessage(spec.APIContract),
-			Weight: weightSource{Provider: model.Source, RepoID: model.SourceID, Revision: model.Revision, Subfolder: model.ArtifactSubfolder},
-		}
-		applyCurrentModelAPIContract(&live, model)
-		selection = snapshotTemplateSelection(live, spec.Image)
+		selection = deployment.SpecCatalogSelection(template, &spec, model)
 	}
 	switch tc.mismatch {
 	case "snapshot revision":

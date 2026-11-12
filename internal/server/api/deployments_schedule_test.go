@@ -152,23 +152,16 @@ func TestScheduleReplicasOrderOnASingleNodeDeployment(t *testing.T) {
 	}
 }
 
-// A stored order is read as the automation runs it: in its zone, or the
-// server's own when it names none; one in a zone the server lost since is
-// skipped by the automation, so the API shows no next run for it either.
-func TestAStoredOrderReadsAsTheAutomationRunsIt(t *testing.T) {
+// A stored order shows the next run the automation will make: in its zone,
+// and none for an order in a zone the server lost since, which the automation
+// skips (deployment.AutomationSchedule).
+func TestAStoredOrderShowsTheAutomationsNextRun(t *testing.T) {
 	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
 	row := store.LifecycleSchedule{ID: 4, DeploymentID: 9, Action: store.ScheduleActionSleep, Weekdays: 1<<7 - 1, Minute: 60, Timezone: "Asia/Shanghai", Enabled: true}
-	s, err := AutomationSchedule(row)
-	if err != nil || s.Location.String() != "Asia/Shanghai" || s.ID != 4 || s.DeploymentID != 9 || s.Minute != 60 {
-		t.Fatalf("schedule = %+v err=%v", s, err)
-	}
 	if out := scheduleDTO(row, now); out.NextAt == nil || !out.NextAt.Equal(time.Date(2026, 10, 30, 17, 0, 0, 0, time.UTC)) {
 		t.Fatalf("next run = %v, want 01:00 Shanghai", out.NextAt)
 	}
 	row.Timezone = "Nowhere/Never"
-	if _, err := AutomationSchedule(row); err == nil {
-		t.Fatal("an order in an unknown zone reads as runnable")
-	}
 	if out := scheduleDTO(row, now); out.NextAt != nil {
 		t.Fatalf("an order the automation skips shows a next run at %v", out.NextAt)
 	}

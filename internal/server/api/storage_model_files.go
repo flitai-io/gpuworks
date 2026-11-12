@@ -8,6 +8,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -58,7 +59,7 @@ func (a *apiHandlers) storageModelFiles(w http.ResponseWriter, r *http.Request) 
 		item := dto.StorageModelFile{
 			ID: mf.ID, ModelID: mf.ModelID, Path: mf.Path, State: mf.State, Message: mf.Message,
 			Acquisition: mf.Acquisition, SizeBytes: mf.SizeBytes, Downloaded: mf.Downloaded,
-			Progress: transferProgress(mf.Downloaded, mf.SizeBytes), LastUsedAt: mf.LastUsedAt,
+			Progress: deployment.TransferProgress(mf.Downloaded, mf.SizeBytes), LastUsedAt: mf.LastUsedAt,
 			Cache:         mf.NodeID != 0 && row.Type == proto.StorageNFSCache,
 			DeploymentIDs: append([]uint{}, deployments[mf.ID]...),
 		}

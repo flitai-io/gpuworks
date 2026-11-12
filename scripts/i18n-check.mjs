@@ -290,7 +290,11 @@ for (const [index, source] of productErrorSources.entries()) {
 // messages, CJK fallbacks, and unregistered raw string codes.
 const productionAPIFiles = filesUnder(path.join(root, "internal/server/api"), ".go")
   .filter((file) => !file.endsWith("_test.go"));
-for (const file of productionAPIFiles) {
+// The deployment use cases build the same product errors without HTTP; the
+// CJK and raw-code rules hold for them too (writeErr does not occur there).
+const productionUseCaseFiles = filesUnder(path.join(root, "internal/server/deployment"), ".go")
+  .filter((file) => !file.endsWith("_test.go"));
+for (const file of [...productionAPIFiles, ...productionUseCaseFiles]) {
   const source = fs.readFileSync(file, "utf8");
   const relative = path.relative(root, file);
   for (const [lineIndex, line] of source.split("\n").entries()) {

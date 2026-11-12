@@ -5,18 +5,17 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-)
 
-const maxNameRunes = 256
+	"gpuworks.ai/gpuworks/internal/server/deployment"
+)
 
 // Display names allow all languages and punctuation, but not control bytes
 // or unbounded text. Required/default semantics remain with each endpoint.
 func validateName(w http.ResponseWriter, name string) bool {
-	return validateTextField(w, "name", name, maxNameRunes)
+	return validateTextField(w, "name", name, deployment.MaxNameRunes)
 }
 
 // Node display names retain the store's 255-byte limit after trimming.
@@ -36,9 +35,8 @@ func validateNodeName(w http.ResponseWriter, name string) bool {
 }
 
 func validateTextField(w http.ResponseWriter, field, value string, maximum int) bool {
-	if !utf8.ValidString(value) || utf8.RuneCountInString(value) > maximum || containsControl(value) {
-		detail := "must contain valid text without control characters and at most " + strconv.Itoa(maximum) + " characters"
-		writeProductError(w, http.StatusBadRequest, ErrorFieldInvalid, field+" "+detail, map[string]any{"field": field, "detail": detail})
+	if err := deployment.TextFieldError(field, value, maximum); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
 		return false
 	}
 	return true

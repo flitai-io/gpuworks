@@ -18,8 +18,8 @@
     "ui/src/pages/deploy/DeployNodeSection.tsx",
     "ui/src/pages/deploy/DeployNodeAcquisition.tsx",
     "ui/src/pages/deploy/useDeploySubmit.ts",
-    "internal/server/api/deployments_acquisition.go",
-    "internal/server/api/deployments_weight_sources.go",
+    "internal/server/deployment/acquisition.go",
+    "internal/server/deployment/weight_sources.go",
     "internal/server/deploy/sglang_logging.go",
     "test/fake-engine/main.go"
   ],

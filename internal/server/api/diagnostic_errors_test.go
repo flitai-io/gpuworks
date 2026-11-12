@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
@@ -19,7 +20,7 @@ func TestWriteErrorPreservesAdmissionDiagnosticsAndCause(t *testing.T) {
 			Code: "MODEL_SOURCE_UNAVAILABLE", Params: map[string]any{"node_id": 7, "reason": "model_not_on_node"}, Message: "No complete model record on node",
 		},
 	}}}
-	err := withDiagnostics(messages.WrapProductError("MODEL_SOURCE_UNAVAILABLE", "Model unavailable", map[string]any{"model_id": 42}, cause), report)
+	err := deployment.WithDiagnostics(messages.WrapProductError("MODEL_SOURCE_UNAVAILABLE", "Model unavailable", map[string]any{"model_id": 42}, cause), report)
 	err = fmt.Errorf("admission: %w", err)
 	if !errors.Is(err, cause) {
 		t.Fatal("diagnostics replaced the underlying cause")

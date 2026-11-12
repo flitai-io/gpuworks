@@ -8,6 +8,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/chipmatch"
@@ -31,7 +32,7 @@ func matchingTemplateSpecs(model store.InferenceModel, gpu chipmatch.GPU) ([]sto
 		seen := map[string]bool{}
 		vendors = nil
 		for _, row := range model.Specs {
-			predicate, err := decodeSpecPredicate(row)
+			predicate, err := deployment.DecodeSpecPredicate(row)
 			if err != nil {
 				return nil, err
 			}
@@ -46,7 +47,7 @@ func matchingTemplateSpecs(model store.InferenceModel, gpu chipmatch.GPU) ([]sto
 		candidates = candidates[:0]
 		rows = rows[:0]
 		for _, row := range model.Specs {
-			predicate, err := decodeSpecPredicate(row)
+			predicate, err := deployment.DecodeSpecPredicate(row)
 			if err != nil {
 				return nil, err
 			}
@@ -184,7 +185,7 @@ func compatibleTemplateProfiles(model store.InferenceModel, gpus []chipmatch.GPU
 		return nil, err
 	}
 	for _, row := range model.Specs {
-		predicate, err := decodeSpecPredicate(row)
+		predicate, err := deployment.DecodeSpecPredicate(row)
 		if err != nil {
 			return nil, err
 		}

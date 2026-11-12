@@ -107,7 +107,7 @@ func (a *apiHandlers) setDeploymentDGPUQuota(w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := a.checkStoredCanEverFit(r.Context(), &next, reqs); err != nil {
+	if err := a.deployments().CheckStoredCanEverFit(r.Context(), &next, reqs); err != nil {
 		status := http.StatusInternalServerError
 		var refused *messages.ProductError
 		if errors.As(err, &refused) {

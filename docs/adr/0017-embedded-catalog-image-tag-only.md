@@ -22,7 +22,7 @@ all image sources failed: vllm/vllm-openai:latest@sha256:2286e8533ca8b6bc777594b
 
 - 权重来源的 revision 不可变性(HF/ModelScope commit sha,`catalog_contract_test.go` 的 `immutableCatalogRevision` 校验)照旧;
 - 目录包整体的 `PackageDigest` 内容寻址(`seed.go`)照旧;
-- 部署/试验场路径对"调用方自己传入 digest 镜像"的软告警机制(`api/deployments_templates.go` 的 `rejectsDigestImage`/`ImageDigestWarning`、`api/deployments_evaluate.go` 的 `WarningImageDigestUnverified`、`agent/runtime/udocker` 拉取后按 digest 校验本地镜像)是通用兜底能力,不专属于内置目录的不可变性保证,继续保留,用于覆盖手工传参或外部导入目录包仍携带 digest 镜像的场景。
+- 部署/试验场路径对"调用方自己传入 digest 镜像"的软告警机制(`deployment/templates.go` 的 `rejectsDigestImage`/`ImageDigestWarning`、`deployment/evaluate.go` 的 `WarningImageDigestUnverified`、`agent/runtime/udocker` 拉取后按 digest 校验本地镜像)是通用兜底能力,不专属于内置目录的不可变性保证,继续保留,用于覆盖手工传参或外部导入目录包仍携带 digest 镜像的场景。
 
 ## 取舍
 

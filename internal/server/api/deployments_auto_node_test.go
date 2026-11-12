@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -130,7 +131,7 @@ func TestAutomaticCreateWithoutANodePicksAgainWhenThePickIsTaken(t *testing.T) {
 }
 
 // Picking again is bounded: when every pick is taken, the create gives up
-// after automaticPickAttempts and stores nothing.
+// after deployment.AutomaticPickAttempts and stores nothing.
 func TestAutomaticCreateWithoutANodeStopsPickingAgain(t *testing.T) {
 	h, st := automaticPlacementFixture(t)
 	big, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/auto-big", Revision: "main", Name: "auto-big", WeightBytes: 40 << 30})
@@ -159,8 +160,8 @@ func TestAutomaticCreateWithoutANodeStopsPickingAgain(t *testing.T) {
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d body = %s, want a conflict once no pick holds", rec.Code, rec.Body.String())
 	}
-	if picks > automaticPickAttempts {
-		t.Fatalf("picked %d times, want at most %d", picks, automaticPickAttempts)
+	if picks > deployment.AutomaticPickAttempts {
+		t.Fatalf("picked %d times, want at most %d", picks, deployment.AutomaticPickAttempts)
 	}
 	deps, err := st.ListDeployments()
 	if err != nil || len(deps) != 1 {

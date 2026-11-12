@@ -26,6 +26,7 @@ yamux 流：`ctrl`（双向 JSON Lines 控制面）、`metrics`、`logtail`、`t
 - `imagecatalog/pullref` 是纯叶子包，拉取候选顺序的唯一实现，store 与 imagecatalog 共用。
 - `acquisition` 只产候选、不做选择、不做 I/O；服务端校验用户所选候选是否仍有效，不替换（ADR 0018）。
 - `partitioncap` 是 dGPU 能力推导 status/reason 文本的唯一产地。
+- `internal/server/deployment` 是部署创建/评估与部署读模型的唯一入口（纯状态推导在 `planning`），不依赖 `net/http` 与 `api`（`make check-architecture` 守护）；api 的 handler 只做解码、调用、按 `Kind` 映射 HTTP 状态，新的部署业务逻辑写进 `deployment`。
 - `messages` 产语言中立 ProductError（稳定 code + 插值参数 + 英文 fallback），人类可读文本归客户端 locale。
 - `selfinstall` / `installcred` 是叶子包，install 与 server 两端共用，不得反向依赖 server。
 - agent `gpu` 不用 NVML cgo，走 `nvidia-smi` + `/proc` + sysfs；`gpu.Prober` 可注入做 hermetic 测试。

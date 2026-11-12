@@ -42,11 +42,11 @@ func TestSharedModelPathConflict(t *testing.T) {
 				ctx.URLParams.Add("id", fmt.Sprint(r.model.ID))
 				r.h.downloadModel(rec, req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx)))
 			case "deployment":
-				status, err := r.h.startSharedModelDownload(r.model, r.nfs, []*store.Node{r.node})
+				_, err := r.h.deployments().StartSharedDownloadOn(r.model, r.nfs, "")
 				if err == nil {
 					t.Fatal("deployment accepted occupied path")
 				}
-				writeErr(rec, status, err)
+				writeUseCaseErr(rec, err)
 			case "copy":
 				r.h.d.PeerSync.CopyModel = func(_ context.Context, modelID uint, _, dst store.FileRef, _ int) (*store.ModelFile, error) {
 					return r.st.PrepareModelCopy(store.FileRef{ModelID: modelID, StorageID: dst.StorageID}, path)

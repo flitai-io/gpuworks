@@ -12,7 +12,6 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
-	"gpuworks.ai/gpuworks/internal/server/chipmatch"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -259,112 +258,5 @@ func TestCreateWithAnImageOverrideDoesNotRecordTemplateSources(t *testing.T) {
 	plan, err := planning.ImagePullPlanFor(rig.st, nil, planning.LaunchSourceFromDeployment(dep), node, selection)
 	if err != nil || !reflect.DeepEqual(plan.Refs(), []string{"custom/vllm:cuda"}) {
 		t.Fatalf("plan = %+v, %v", plan, err)
-	}
-}
-
-// The pull forecast of an image that is also an image-catalog row: the
-// template's sources, then the row's registry sources, then the canonical ref,
-// without repeats; an archive URL is not a registry reference to pull.
-func TestForecastPullRefsOrderTemplateThenCatalogThenCanonical(t *testing.T) {
-	st := newAcquisitionStore(t)
-	node, err := st.RegisterNode("catalog-order-node", store.HashToken("token"), "catalog-order-node")
-	if err != nil {
-		t.Fatal(err)
-	}
-	registry, _ := json.Marshal([]string{"registry.example/gpustack/runner:v1", "https://files.example/runner.tar", "mirror.example/gpustack/runner:v1"})
-	if _, err := st.UpsertImage(&store.Image{ImageRef: "gpustack/runner:v1", Name: "runner", Engine: "vllm", Enabled: true, RegistrySources: string(registry)}); err != nil {
-		t.Fatal(err)
-	}
-	h := &apiHandlers{d: Deps{Store: st}}
-	templateSources := []string{"team.example/gpustack/runner:v1", " mirror.example/gpustack/runner:v1 ", "team.example/gpustack/runner:v1", ""}
-
-	facts := h.evaluateNodeAcquisition(context.Background(), []string{node.UUID}, "gpustack/runner:v1", templateSources, nil, store.SourceRules{}, nil)
-	if len(facts) != 1 || facts[0].ImagePlan != "pull" {
-		t.Fatalf("forecast = %+v", facts)
-	}
-	want := []string{"team.example/gpustack/runner:v1", "mirror.example/gpustack/runner:v1", "registry.example/gpustack/runner:v1", "gpustack/runner:v1"}
-	if !reflect.DeepEqual(facts[0].ImagePullRefs, want) {
-		t.Fatalf("pull refs = %v, want %v", facts[0].ImagePullRefs, want)
-	}
-}
-
-// The refs the evaluation forecasts and the chain a deployment falls back to
-// are one ordering: for an image the catalog does not know, both are the
-// template's sources, then the image, with a reference repeated in another
-// spelling (Docker Hub default, host case) tried once, where it first
-// appeared.
-func TestForecastPullRefsAndFallbackChainShareOneOrdering(t *testing.T) {
-	st := newAcquisitionStore(t)
-	node, err := st.RegisterNode("ordering-node", store.HashToken("token"), "ordering-node")
-	if err != nil {
-		t.Fatal(err)
-	}
-	const image = "org/runner:v1"
-	sources := []string{"Team.Example/org/runner:v1", "team.example/org/runner:v1", "docker.io/org/runner:v1", "ghcr.io/org/runner:V1"}
-	h := &apiHandlers{d: Deps{Store: st}}
-	facts := h.evaluateNodeAcquisition(context.Background(), []string{node.UUID}, image, sources, nil, store.SourceRules{}, nil)
-	plan, err := planning.ImagePullPlanFor(st, nil, planning.LaunchSourceFromDeployment(&store.Deployment{ID: 1, Image: image}), node,
-		deploy.CatalogSelection{Image: image, ImageSources: sources})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"Team.Example/org/runner:v1", "docker.io/org/runner:v1", "ghcr.io/org/runner:V1"}
-	if len(facts) != 1 || !reflect.DeepEqual(facts[0].ImagePullRefs, want) || !reflect.DeepEqual(plan.Refs(), want) {
-		t.Fatalf("forecast = %+v, fallback chain = %v, want both %v", facts, plan.Refs(), want)
-	}
-}
-
-// The ownership rule: only the template's own image gets its sources.
-func TestTemplateImageSourcesBelongToTheTemplateImageOnly(t *testing.T) {
-	spec := store.InferenceSpecRow{Image: imageSourcesUpstream}
-	selection := templateSelection{Spec: &spec, ImageSources: []string{imageSourcesSWR}}
-	if got := templateImageSources(selection, imageSourcesUpstream); !reflect.DeepEqual(got, []string{imageSourcesSWR}) {
-		t.Fatalf("sources of the template image = %v", got)
-	}
-	if got := templateImageSources(selection, strings.ToUpper(imageSourcesUpstream[:4])+imageSourcesUpstream[4:]); len(got) != 1 {
-		t.Fatalf("the image is compared case-insensitively like the trusted override: %v", got)
-	}
-	for _, image := range []string{"", "custom/vllm:cuda", "ghcr.io/org/runner@sha256:bbbb"} {
-		if got := templateImageSources(selection, image); got != nil {
-			t.Errorf("sources of %q = %v, want none", image, got)
-		}
-	}
-	if got := templateImageSources(templateSelection{ImageSources: []string{"x"}}, "x"); got != nil {
-		t.Fatalf("no template, no sources: %v", got)
-	}
-}
-
-// The selection the template defaults produce carries the spec's sources and
-// leaves an unrelated request alone: the template identity stays the image.
-func TestApplyTemplateDefaultsReadsTheSpecsImageSources(t *testing.T) {
-	rig := newImageSourcesRig(t, "defaults")
-	req := dto.DeployRequest{TemplateID: rig.template.ID}
-	selection, err := rig.h.applyTemplateDefaults(&req, templateHardware{GPU: chipmatch.GPU{Name: "H100", Vendor: "nvidia", CC: 9.0}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if req.Image != imageSourcesUpstream || !reflect.DeepEqual(selection.ImageSources, []string{imageSourcesSWR, imageSourcesNJU}) || selection.Deviated {
-		t.Fatalf("image=%q sources=%v deviated=%v", req.Image, selection.ImageSources, selection.Deviated)
-	}
-	snapshot := snapshotTemplateSelection(selection, req.Image)
-	if !reflect.DeepEqual(snapshot.ImageSources, selection.ImageSources) {
-		t.Fatalf("snapshot sources = %v", snapshot.ImageSources)
-	}
-	if overridden := snapshotTemplateSelection(selection, "custom/vllm:cuda"); overridden.ImageSources != nil {
-		t.Fatalf("an overridden image snapshotted the template's sources: %v", overridden.ImageSources)
-	}
-}
-
-// A stored image_sources column that does not decode is reported with the spec's
-// name rather than silently dropping the sources.
-func TestApplyTemplateDefaultsRefusesUndecodableImageSources(t *testing.T) {
-	rig := newImageSourcesRig(t, "defaults_corrupt")
-	if err := rig.st.DB().Model(&store.InferenceSpecRow{}).Where("name = ?", "fp8-balanced").Update("image_sources", "not json").Error; err != nil {
-		t.Fatal(err)
-	}
-	req := dto.DeployRequest{TemplateID: rig.template.ID}
-	_, err := rig.h.applyTemplateDefaults(&req, templateHardware{GPU: chipmatch.GPU{Name: "H100", Vendor: "nvidia", CC: 9.0}})
-	if err == nil || !strings.Contains(err.Error(), "inference spec fp8-balanced image_sources") {
-		t.Fatalf("error = %v", err)
 	}
 }

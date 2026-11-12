@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -16,7 +17,6 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
-	"gpuworks.ai/gpuworks/internal/server/chipmatch"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/packages"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -267,13 +267,14 @@ func TestSameNamedBuiltInAndUserSpecsReadAssetsFromTheirOwnPackages(t *testing.T
 			t.Fatalf("%s asset=%q want=%q err=%v", source, got, want, err)
 		}
 	}
-	req := dto.DeployRequest{TemplateID: stored.ID, TemplateSpecSource: "user", TemplateSpecName: "general"}
-	selection, err := handler.applyTemplateDefaults(&req, templateHardware{GPU: chipmatch.GPU{Name: "H100", Vendor: "nvidia", CC: 9.0}})
+	// A deployment naming the user spec runs the user spec, whose assets are
+	// the ones its own package holds (read above).
+	evaluated, err := handler.deployments().Evaluate(context.Background(), dto.EvaluateRequest{DeployRequest: dto.DeployRequest{TemplateID: stored.ID, TemplateSpecSource: "user", TemplateSpecName: "general"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if selection.Spec.Source != "user" || selection.Spec.Image != "user/vllm:v1" || len(selection.Assets) != 1 || selection.Assets[0].PackageDigest != imported.PackageDigest {
-		t.Fatalf("selection=%+v req=%+v", selection, req)
+	if evaluated.TemplateSpecSource != "user" || evaluated.TemplateSpecName != "general" || evaluated.Image != "user/vllm:v1" {
+		t.Fatalf("evaluated spec=%s/%s image=%q", evaluated.TemplateSpecSource, evaluated.TemplateSpecName, evaluated.Image)
 	}
 }
 

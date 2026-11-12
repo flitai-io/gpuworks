@@ -19,6 +19,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/chipmatch"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/hardwarecatalog"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
@@ -464,7 +465,7 @@ func (a *apiHandlers) backfillInferenceCatalogWeightBytes(r *http.Request, catal
 			}
 			sources := append([]inferencecatalog.WeightSource(nil), spec.Weights.Sources...)
 			for _, source := range sources {
-				meta, err := a.fetchModelMeta(r.Context(), source.Provider, source.RepoID, source.Revision, source.Subfolder, "")
+				meta, err := a.deployments().FetchModelMeta(r.Context(), source.Provider, source.RepoID, source.Revision, source.Subfolder, "")
 				if err == nil && meta != nil && meta.WeightBytes > 0 {
 					spec.WeightBytes = meta.WeightBytes
 					break
@@ -549,7 +550,7 @@ func inferenceTemplateView(model store.InferenceModel) dto.InferenceTemplate {
 			Entrypoint: view.Entrypoint, Args: view.Args, EngineVersion: deploy.ImageEngineVersion(spec.Engine, spec.Image, ""),
 		})
 		_ = json.Unmarshal([]byte(spec.Placement), &view.Placement)
-		if raw, err := effectiveTemplateAPIContract(model, spec); err == nil {
+		if raw, err := deployment.EffectiveTemplateAPIContract(model, spec); err == nil {
 			_ = json.Unmarshal(raw, &view.API)
 			enrichTemplateAPIContract(view.API, raw)
 		}

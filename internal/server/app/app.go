@@ -475,7 +475,7 @@ func (a *App) Run(ctx context.Context) error {
 	// Background: schedules, waiting wakes, residency.
 	waits := a.ctrl.PlacementWaits()
 	goBG(func() {
-		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, api.HostMemory(a.obs.latestMetrics), a.scaleReplicas, waits, a.log)
+		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, a.obs.hostMemory(), a.scaleReplicas, waits, a.log)
 	}) // Background: schedules, waiting wakes, residency.
 	goBG(func() { a.health.Run(ctx) }) // Background: the deployments' health checks.
 	goBG(func() { a.cards.run(ctx) })  // Background: the cards' failure records.

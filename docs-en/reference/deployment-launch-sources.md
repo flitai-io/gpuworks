@@ -36,9 +36,9 @@ The layers are listed in merge order. Later layers generally override earlier on
 | 3 | GPU/chip dialect | A few vLLM compatibility fixes | **Fills in missing values**: has no effect when fields, templates, or users have already set the value | `deploy/quirks.go` |
 | 4 | Scheduler-derived values | Allocated GPU count → TP; placement variables | Estimator values **do not enter** argv | `planning/launch_plan.go` |
 | 5 | Inference template spec | Non-dictionary args, env, entrypoint, preparation scripts, assets, components, API contract, `/dev/shm` minimum (`shm_bytes`), and unlimited locked memory (`memlock_unlimited`) | Overrides engine-injected values; user input can override this layer in turn | `inferencecatalog/flat.go`, `deploy/catalog_selection.go` |
-| 6 | Topology | Multi-node and PD role arguments and env; RDMA docker arguments | Platform-owned; neither templates nor user input can override the PD connector | `deploy/pd.go`, `compute_network.go` |
+| 6 | Topology | Multi-node and PD role arguments and env; RDMA docker arguments | Platform-owned; neither templates nor user input can override the PD connector | `deploy/pd.go`, `deploy/compute_network.go` |
 | 7 | Engine finalization | For example, SGLang logging configuration | **Fills in missing values** | `deploy/sglang_logging.go` |
-| 8 | User input | Dictionary fields, `extra_args` | Overrides the template | `api/deployments_launch_config.go` |
+| 8 | User input | Dictionary fields, `extra_args` | Overrides the template | `deployment/launch_config.go` |
 | 9 | Container overrides | env, env_unset, mounts, docker arguments, `/dev/shm` (when unspecified, derived from the engine baseline plus the CPU memory tier; see "`/dev/shm` Size"), model mount path, entrypoint, command, and command mode | Final deployment-level layer | `deploy/assemble.go`, `kv_cpu_tier.go`, `effective_command.go` |
 | 10 | Agent injection | Model directory mount, preparation script wrapper, devices, and dGPU partitions | Device and dGPU env **override everything** | `agent/engine/engine.go`, `agent/gpu/*.go`, `agent/engine/partition*.go` |
 | 11 | Runtime assembly | Fixed parts of `docker run`: name, `-d`, `--restart no`, network, and `--shm-size` | Platform-owned; specifying these in docker arguments is rejected | `agent/runtime/docker/docker.go`, `nerdctl/nerdctl.go` |

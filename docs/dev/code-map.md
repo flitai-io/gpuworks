@@ -17,7 +17,7 @@
 ## server 侧（`internal/server/`）
 
 - `app`：装配根（config/store/bus/hub/HTTP 接线、启动与优雅关停、accesslog、admin bootstrap）。
-- `api`（+`api/dto`）：REST 层，按域拆分为数十个文件，DTO 与 entity 严格分离；`auth` JWT 登录鉴权。
+- `api`（+`api/dto`）：REST 层，按域拆分为数十个文件，DTO 与 entity 严格分离；部署创建/评估委托 `deployment`，handler 只做解码与映射；`auth` JWT 登录鉴权。
 - `hub`：agent 会话管理、desired state 推送（含来源规则、代理、同步组成员与凭据，凭据只随 state.sync 下发）、server_dial。
 - 拉取设置（ADR 0048、[ADR 0050](../adr/0050-model-pull-sources-and-proxies.md)）：规则（镜像规则与模型站点规则同表，种类由 `match` 是否带 `http(s)://` 决定）、代理、同步组、凭据带类型的表在 `store`（迁移见 `migration_pull_settings.go`），API 在 `api/pull*.go`。
 
@@ -39,6 +39,7 @@
 - `automation`：调度分析的执行者，评估器按 10 秒 tick 执行定时计划与唤醒等位，驻留仲裁在让卡到期时（闲置时间满、一轮服务结束、等待完成的上限到）由一个定时器触发，只通过 `Source` / `Actions` 接口读写，动作经与 API 相同的生命周期锁；由 `app` 接线（`automation_adapter.go`）。
 - `yieldpolicy`：叶子包（仅标准库），部署的出让策略（`never` / `idle` / `timeslice` / `anytime`）及其参数的唯一产地：取值范围、默认值与归一、让卡规则 `Yields` 与让卡条件 `TermsOf`；store（列值）、网关（唤醒时请求最多等多久）、放置与驻留仲裁（谁可以让谁休眠）共用，见 [出让策略](../explanation/service-levels.md)。
 - `deploy`：引擎参数组装、instance 状态机（含 `optimizing`、sleep/wake；状态枚举定义在 `internal/proto`）。
+- `deployment`：部署用例层。创建与评估一个部署（请求类型进，部署行、预览或 ProductError 出；`Kind` 区分请求错误、集群当前状态的冲突与服务端故障，api 映射成 HTTP 状态）以及部署的读模型（`StoreRows`/`ListRows` 行查找、`RuntimeStates` 运行时状态推导、`ModelPreparation` 模型准备观测）。不依赖 `net/http` 与 `api`（`make check-architecture` 守护），api 的 handler 只做解码、调用、映射；自动化、批处理、MCP 复用同一实现。编辑、节点删除、存储移除与评测执行器尚在 api，按组迁入。
 - `proxy`：`/v1` OpenAI 兼容反代 + API key；睡眠实例返回 503。PD 交接在 `pd_sequential.go` / `pd_concurrent.go`，请求的 prefill 阶段（实例、等待、prefill 实例自报的排队与 Prefill、降级原因、`pd.prefill` span）由 `pd_stage.go` 记下，进请求记录与在途表。
 - `inferenceapi`：稳定的推理操作词表与 Contract（openai.chat/embeddings/rerank 等），被目录、部署快照、proxy、Playground 共享。
 - `aihelper`：AI 助手的 agent 循环（流式、并行工具、步数预算）、任务种子与已知故障表；工具以提问用户的身份在进程内读本平台 API（`APIReader`，由 `api` 按请求提供，复用同一路由与鉴权）：`cluster_overview`、`search_api`（目录 `apidocs_gen.go` 由 `docs/reference/api.md` 生成并由测试守护）、`call_api`（jq、条数与长度上限、敏感字段脱敏、时间换算）、`search_metrics`；不可读的 GET 路由及原因在 `apiread.go`。`app/aiservice.go` 组装每次请求。
@@ -76,7 +77,7 @@
 - `internal/server/sourceurl`：纯叶子包（仅标准库），站点规则的语法、匹配与 `Plan`（叠加、去重、回源判定）的唯一实现；`store` 按种类分派校验，`planning` 与 `modelmeta` 调用。
 - `nodeaddr`：节点地址校验。
 - `modelcache`：叶子包，`nfs_cache` 存储节点缓存的淘汰计划（纯函数：上限、保留空间、按最近使用从旧到新、只淘汰未被引用且有共享副本兜底的缓存）；调度准入（`planning.CachePlan`）与 controller 淘汰共用。存储与模型文件的数据结构、位置查询（`store.ModelLocation`，宿主机路径的唯一产地）在 `store/storage*.go`、`model_files.go`、`model_location.go`，见 ADR 0034。
-- `prepobs`：叶子包，模型准备的内存观测（有界、过期、不落库）：hub 持有 agent 复制进度帧（`Copies`，按会话作废、按节点反向索引），controller 持有缓存淘汰阶段（`Phases`）。controller 另记实际选中的准备节点（`controller/preparation_view.go`）；`planning.PrepareModelView` 把这些与持久化的模型文件状态归约成部署的准备视图，API 经 `api.ModelPreparation` 读取。失败缓存复制的重试由 `controller.RetryCacheCopy` 编排。
+- `prepobs`：叶子包，模型准备的内存观测（有界、过期、不落库）：hub 持有 agent 复制进度帧（`Copies`，按会话作废、按节点反向索引），controller 持有缓存淘汰阶段（`Phases`）。controller 另记实际选中的准备节点（`controller/preparation_view.go`）；`planning.PrepareModelView` 把这些与持久化的模型文件状态归约成部署的准备视图，API 经 `Deps.Preparation`（`deployment.ModelPreparation`） 读取。失败缓存复制的重试由 `controller.RetryCacheCopy` 编排。
 - `acquisition`：部署页展示用的纯函数 resolver，只列出已持有模型的存储（`present`）、节点取模型时可保存到的存储（`targets`）与模板的权重来源（`providers`），不做选择、不做 I/O；镜像和模型怎么到达节点由节点启动时按拉取设置决定，不在这里（ADR 0048）。逐节点预估（`nodes`）在 evaluate 里由 `planning` 算出。
 - `inferencecatalog`：ADR 0009 扁平目录（原始模型 + 可执行 spec 列表）、`inferencecatalog/seed`（内置包）、`inferencecatalog/packages`（内容寻址包仓库，DB 只存 digest/投影）。
 - `chipmatch` / `hardwarecatalog` / `placement` / `partitioncap`：spec GPU 谓词与上报硬件事实匹配、假想规划用静态加速卡目录、spec 内嵌 Starlark 拓扑 resolver（确定性、无 I/O、硬限额）、dGPU 能力推导（status/reason 文本唯一产地）。

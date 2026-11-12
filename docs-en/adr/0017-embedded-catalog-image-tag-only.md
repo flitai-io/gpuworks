@@ -22,7 +22,7 @@ Unaffected parts:
 
 - Weight source revision immutability (HF/ModelScope commit sha, the `immutableCatalogRevision` validation in `catalog_contract_test.go`) remains unchanged;
 - Content addressing of the whole catalog package through `PackageDigest` (`seed.go`) remains unchanged;
-- The soft warning mechanism for caller-supplied digest images in deployment/Playground paths (`rejectsDigestImage`/`ImageDigestWarning` in `api/deployments_templates.go`, `WarningImageDigestUnverified` in `api/deployments_evaluate.go`, and post-pull local image digest verification in `agent/runtime/udocker`) is a general fallback capability, not an immutability guarantee specific to the built-in catalog. It remains to cover manually supplied arguments and externally imported catalog packages that still contain digest images.
+- The soft warning mechanism for caller-supplied digest images in deployment/Playground paths (`rejectsDigestImage`/`ImageDigestWarning` in `deployment/templates.go`, `WarningImageDigestUnverified` in `deployment/evaluate.go`, and post-pull local image digest verification in `agent/runtime/udocker`) is a general fallback capability, not an immutability guarantee specific to the built-in catalog. It remains to cover manually supplied arguments and externally imported catalog packages that still contain digest images.
 
 ## Trade-Offs
 

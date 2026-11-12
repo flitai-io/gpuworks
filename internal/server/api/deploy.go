@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -25,7 +26,7 @@ func (a *apiHandlers) listInstances(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	rows, err := newListLookup(a.d.Store, a.d.Preparation, deps, insts)
+	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, insts)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

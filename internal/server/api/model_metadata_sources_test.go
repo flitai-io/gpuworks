@@ -146,32 +146,6 @@ func TestRefreshThatReadsNothingSaysWhy(t *testing.T) {
 	}
 }
 
-// Admission reads the source once per model, however many nodes will have to
-// fetch it.
-func TestAdmissionReadsTheSourceOncePerModel(t *testing.T) {
-	st := metadataSourcesStore(t, "api_admission_once")
-	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/model", Revision: "main"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var nodes []*store.Node
-	for i := 0; i < 3; i++ {
-		node, err := st.RegisterNode(fmt.Sprintf("admit-once-%d", i), store.HashToken("t"), fmt.Sprintf("admit-once-%d", i))
-		if err != nil {
-			t.Fatal(err)
-		}
-		nodes = append(nodes, node)
-	}
-	reads := &metadataReads{}
-	h := &apiHandlers{d: Deps{Store: st, FetchModelMeta: reads.hook(&modelmeta.Meta{})}}
-	if err := h.admitDeploymentModel(context.Background(), model, store.SourceRules{}, nodes); err != nil {
-		t.Fatal(err)
-	}
-	if len(reads.calls) != 1 {
-		t.Fatalf("source read %d times for %d nodes, want once", len(reads.calls), len(nodes))
-	}
-}
-
 // The console's browser reads metadata at the addresses the rules chosen for
 // the management node give, and at none when they forbid every one.
 func TestMetadataSourcesFollowTheManagementNodesRules(t *testing.T) {

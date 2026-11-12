@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
@@ -72,7 +73,7 @@ func TestEvaluatePDRefusesShmBelowThePrefillTier(t *testing.T) {
 		t.Fatalf("evaluate = %d %s", status, raw)
 	}
 	errs := fieldErrorsOf(t, raw)
-	if len(errs) != 1 || errs[0].Field != fieldContainerShm || errs[0].Code != messages.ErrorShmBelowKVCPUTier {
+	if len(errs) != 1 || errs[0].Field != deployment.FieldContainerShm || errs[0].Code != messages.ErrorShmBelowKVCPUTier {
 		t.Fatalf("errors = %+v", errs)
 	}
 	if fmt.Sprint(errs[0].Params["shm_gib"]) != "8" || fmt.Sprint(errs[0].Params["tier_gib"]) != "19" {

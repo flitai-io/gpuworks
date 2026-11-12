@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
-	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -64,7 +64,7 @@ func TestMonitorServiceStateStartsWhileModelIsDownloadingWithoutInstances(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	read := func(preparation api.ModelPreparation) dto.MonitorServiceRow {
+	read := func(preparation deployment.ModelPreparation) dto.MonitorServiceRow {
 		t.Helper()
 		svc := newMonitorAPIService(fx.st, fx.ts, func() time.Time { return fx.now }, nil, nil, preparation)
 		out, err := svc.Overview(context.Background(), time.Hour)

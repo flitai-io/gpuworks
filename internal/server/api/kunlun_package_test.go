@@ -100,9 +100,10 @@ func TestKunlunQwenPackageImportsAndResolvesLaunches(t *testing.T) {
 			if spec.Image != "registry.zstack.ai/gpuworks/gpuworks-runner@sha256:33d94768ff9a895bdc8874cae09940aede1b0e88218e52ed52231b8f86a91beb" {
 				t.Fatalf("image %q must be the reviewed PP/DP r4 private-registry manifest digest", spec.Image)
 			}
-			// Template-owned digest refs do not need a mutable image-catalog row.
+			// Template-owned digest refs do not need a mutable image-catalog row:
+			// a deployment trusts the image its own template names.
 			target := deploy.ImageTarget{Engine: spec.Engine, Vendor: "kunlunxin", PlatformArch: "amd64", Override: spec.Image,
-				TrustedOverride: templateOwnsImage(templateSelection{Spec: &store.InferenceSpecRow{Image: spec.Image}}, spec.Image)}
+				TrustedOverride: true}
 			resolvedImage := deploy.ResolveImageCatalog(target, nil)
 			if resolvedImage.Blocking || resolvedImage.Image != spec.Image {
 				t.Fatalf("template digest unavailable: %+v", resolvedImage)

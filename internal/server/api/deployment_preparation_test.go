@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -69,11 +70,11 @@ func TestDeploymentPreparationUsesActualNodeComponentsAndChosenStorage(t *testin
 	if summary == nil || summary.ModelID != component.ID || summary.Downloaded != 40 || summary.Preparation.Phase != "copying" {
 		t.Fatalf("summary=%+v", summary)
 	}
-	list, err := newListLookup(st, prep, []store.Deployment{*dep}, nil)
+	list, err := deployment.NewListRows(st, prep, []store.Deployment{*dep}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := deploymentModelProgress(list, dep); !reflect.DeepEqual(got, detail.ModelProgress) {
+	if got, _ := deployment.ModelProgress(list, dep); !reflect.DeepEqual(got, detail.ModelProgress) {
 		t.Fatalf("list=%+v detail=%+v", got, detail.ModelProgress)
 	}
 	wire, err := json.Marshal(summary)
@@ -103,20 +104,20 @@ func TestDeploymentProgressWithoutRowsLeavesRuntimeStateToScheduling(t *testing.
 		t.Fatalf("fixture has rows: %+v", rows)
 	}
 	prep := newTestPreparation()
-	lookup := storeLookup{st, preparationReads{prep}}
-	shown, recorded := deploymentModelProgress(lookup, dep)
+	lookup := deployment.NewStoreRows(st, prep)
+	shown, recorded := deployment.ModelProgress(lookup, dep)
 	if len(shown) != 1 || shown[0].ModelID != model.ID || shown[0].Preparation == nil || shown[0].Preparation.Phase != "waiting" {
 		t.Fatalf("shown=%+v", shown)
 	}
 	if len(recorded) != 0 {
 		t.Fatalf("an absent row was recorded: %+v", recorded)
 	}
-	if got := deriveRuntimeState(store.DeployActive, nil, recorded, true); got != "failed" {
+	if got := deployment.DeriveRuntimeState(store.DeployActive, nil, recorded, true); got != "failed" {
 		t.Fatalf("refused schedule without rows reads %q", got)
 	}
 	ref := store.FileRef{ModelID: model.ID, NodeID: node.ID, StorageID: shown[0].StorageID}
 	prep.phases[ref] = "evicting"
-	if shown, _ := deploymentModelProgress(lookup, dep); shown[0].Preparation.Phase != "evicting" {
+	if shown, _ := deployment.ModelProgress(lookup, dep); shown[0].Preparation.Phase != "evicting" {
 		t.Fatalf("eviction phase not shown before the row exists: %+v", shown[0].Preparation)
 	}
 }
