@@ -5,5 +5,5 @@ package accelerator
 var kunlunTargetConstraint = targetConstraint{
 	unsupported:     []Feature{FeatureEngineSleep, FeaturePD},
 	explicitDevices: true,
-	runtime:         hostRequirements{os: "linux", arch: "amd64", drivers: []string{"docker", "nerdctl"}},
+	runtime:         hostRequirements{os: "linux", arch: "amd64", drivers: []string{"docker", "nerdctl", "kube"}},
 }

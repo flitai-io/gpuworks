@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -152,4 +153,45 @@ func (p devicePlan) has(name string) bool {
 		}
 	}
 	return false
+}
+
+// devicePlan splits the node's card devices between the plugin's resources;
+// it is worked out once, from the first answer.
+func (d *Driver) devicePlan(ctx context.Context) (devicePlan, error) {
+	d.planMu.Lock()
+	defer d.planMu.Unlock()
+	if d.plan != nil {
+		return *d.plan, nil
+	}
+	if d.o.CardDevices == nil {
+		return devicePlan{byPath: map[string]string{}}, nil
+	}
+	perCard, err := d.o.CardDevices(ctx)
+	if err != nil {
+		return devicePlan{}, err
+	}
+	plan, err := planDevices(perCard)
+	if err != nil {
+		return devicePlan{}, err
+	}
+	d.plan = &plan
+	return plan, nil
+}
+
+// servePlugin registers the agent's device plugin when the node's cards
+// have device nodes to hand out (NVIDIA's come through its runtime class).
+func (d *Driver) servePlugin(ctx context.Context) {
+	if d.o.PluginDir == "" {
+		return
+	}
+	plan, err := d.devicePlan(ctx)
+	if err != nil {
+		d.o.Log.Warn("the cards' device nodes are unknown; instances that need them cannot start", "err", err)
+		return
+	}
+	if len(plan.byPath) == 0 {
+		return
+	}
+	p := &deviceplugin.Plugin{Dir: d.o.PluginDir, Log: d.o.Log}
+	go p.Run(ctx, plan.resources)
 }

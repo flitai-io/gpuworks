@@ -47,7 +47,7 @@ func TestKunlunLaunchRestrictionsAreRefusals(t *testing.T) {
 					t.Fatalf("plan=%+v reason=%+v err=%v", plan.Output.Result, reason, err)
 				}
 				if tc.code == "runtime_unsupported" {
-					if reason.Params["required_os"] != "linux" || reason.Params["required_arch"] != "amd64" || reason.Params["required_runtime"] != "docker/nerdctl" {
+					if reason.Params["required_os"] != "linux" || reason.Params["required_arch"] != "amd64" || reason.Params["required_runtime"] != "docker/nerdctl/kube" {
 						t.Fatal(reason)
 					}
 				}

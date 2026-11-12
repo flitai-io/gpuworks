@@ -10,7 +10,7 @@ import (
 // node. It needs no vendor's mounts or runtime for any of them: it reads
 // the host's files through the host's root and runs the vendor's CLIs in
 // the host's mount namespace. A node with no card of these stands by.
-var kubeVendors = map[string]bool{VendorNVIDIA: true, VendorAscend: true, VendorHygon: true, VendorPPU: true}
+var kubeVendors = map[string]bool{VendorNVIDIA: true, VendorAscend: true, VendorHygon: true, VendorPPU: true, VendorAMD: true, VendorKunlunxin: true}
 
 // RunsOnKube reports whether the agent runs the vendor's cards on
 // Kubernetes.
@@ -45,7 +45,8 @@ var ascendSlice = regexp.MustCompile(`^Ascend[0-9A-Za-z]*-\d+c`)
 // ClassifyKubeResource classifies an extended resource a device plugin
 // advertises. The vendors' own plugins name whole cards nvidia.com/gpu,
 // huawei.com/Ascend910 (or Ascend310P, npu…), hygon.com/dcu, amd.com/gpu and
-// alibabacloud.com/ppu; the names below them are partitions or shares of a
+// alibabacloud.com/ppu, and Kunlun's kunlunxin.com/xpu (baidu.com/xpu on
+// Baidu CCE); the names below them are partitions or shares of a
 // card, and so is any ".shared", ".sliced" or ".partitioned" variant.
 func ClassifyKubeResource(resource string) (KubeResourceKind, string) {
 	domain, name, ok := strings.Cut(resource, "/")
@@ -64,6 +65,8 @@ func ClassifyKubeResource(resource string) (KubeResourceKind, string) {
 		vendor = VendorAMD
 	case "alibabacloud.com":
 		vendor = VendorPPU
+	case "kunlunxin.com", "baidu.com":
+		vendor = VendorKunlunxin
 	case "aliyun.com":
 		// ACK's GPU sharing counts GiB of card memory, a card count and a
 		// compute share, never cards.
@@ -85,6 +88,7 @@ func ClassifyKubeResource(resource string) (KubeResourceKind, string) {
 		vendor == VendorAMD && name == "gpu",
 		vendor == VendorHygon && name == "dcu",
 		vendor == VendorPPU && name == "ppu",
+		vendor == VendorKunlunxin && name == "xpu",
 		vendor == VendorAscend && (name == "npu" || (strings.HasPrefix(name, "Ascend") && !ascendSlice.MatchString(name))):
 		return KubeResourceCard, vendor
 	case vendor == VendorNVIDIA && (strings.HasPrefix(name, "mig-") || strings.HasPrefix(name, "gpumem") || strings.HasPrefix(name, "gpucores")),

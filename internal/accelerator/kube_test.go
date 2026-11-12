@@ -25,6 +25,13 @@ func TestClassifyKubeResource(t *testing.T) {
 		{"hygon.com/dcu", KubeResourceCard, VendorHygon},
 		{"hygon.com/dcunum", KubeResourceShared, VendorHygon},
 		{"amd.com/gpu", KubeResourceCard, VendorAMD},
+		{"amd.com/gpu.partitioned.cpx", KubeResourceShared, VendorAMD},
+		{"kunlunxin.com/xpu", KubeResourceCard, VendorKunlunxin},
+		{"baidu.com/xpu", KubeResourceCard, VendorKunlunxin},
+		{"kunlunxin.com/xpu.shared", KubeResourceShared, VendorKunlunxin},
+		{"baidu.com/xpu.shared", KubeResourceShared, VendorKunlunxin},
+		{"kunlunxin.com/other", KubeResourceOther, ""},
+		{"baidu.com/other", KubeResourceOther, ""},
 		{"aliyun.com/gpu-mem", KubeResourceShared, VendorNVIDIA},
 		{"aliyun.com/gpu-count", KubeResourceShared, VendorNVIDIA},
 		{"aliyun.com/gpu-core.percentage", KubeResourceShared, VendorNVIDIA},
@@ -43,10 +50,10 @@ func TestClassifyKubeResource(t *testing.T) {
 }
 
 func TestKubeVendors(t *testing.T) {
-	if got := strings.Join(KubeVendors(), ","); got != "ascend,hygon,nvidia,ppu" {
+	if got := strings.Join(KubeVendors(), ","); got != "amd,ascend,hygon,kunlunxin,nvidia,ppu" {
 		t.Fatalf("KubeVendors = %s", got)
 	}
-	for v, want := range map[string]bool{"NVIDIA": true, "ascend": true, "amd": false, "kunlun": false, "": false} {
+	for v, want := range map[string]bool{"NVIDIA": true, "ascend": true, "amd": true, "kunlunxin": true, "apple": false, "": false} {
 		if RunsOnKube(v) != want {
 			t.Fatalf("RunsOnKube(%q) = %v", v, !want)
 		}

@@ -13,8 +13,9 @@ import (
 
 // RuntimeInjectionForDriver implements DriverAwareInjector. The selection
 // variables must count cards the way HIP inside the container counts them.
-// Docker and nerdctl pass only the selected cards' DRM nodes, so HIP sees a
-// compact 0..N-1 list there: host index 2 is HIP device 0, and naming it "2"
+// Docker, nerdctl and a Kubernetes pod (which gets only its cards' nodes
+// through the agent's device plugin) pass only the selected cards' DRM
+// nodes, so HIP sees a compact 0..N-1 list there: host index 2 is HIP device 0, and naming it "2"
 // hides every card ("No HIP GPUs are available"). runveil binds the host's
 // whole /dev and /sys, so HIP enumerates every card and the host indexes stay.
 func (p *HygonProber) RuntimeInjectionForDriver(indexes []int, driverName string) RuntimeInjection {
@@ -23,7 +24,7 @@ func (p *HygonProber) RuntimeInjectionForDriver(indexes []int, driverName string
 		return inj
 	}
 	switch driverName {
-	case "docker", "nerdctl":
+	case "docker", "nerdctl", "kube":
 		visible := compactVisibleDevices(len(indexes))
 		inj.Env = map[string]string{
 			"HYGON_VISIBLE_DEVICES": visible,

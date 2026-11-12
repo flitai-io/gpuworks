@@ -4,7 +4,7 @@ import "testing"
 
 func TestAMDHostRequirementsPreserveBothDeviceRuntimes(t *testing.T) {
 
-	for _, driver := range []string{"docker", "nerdctl", "Docker"} {
+	for _, driver := range []string{"docker", "nerdctl", "Docker", "kube"} {
 		for _, arch := range []string{"amd64", "x86_64"} {
 			if got := RuntimeMismatchParams("AMD", HostRuntime{OS: "linux", Arch: arch, Driver: driver}); got != nil {
 				t.Fatalf("supported host rejected: %v", got)
@@ -18,7 +18,7 @@ func TestAMDHostRequirementsPreserveBothDeviceRuntimes(t *testing.T) {
 		{OS: "linux", Arch: "amd64", Driver: ""},
 	} {
 		got := RuntimeMismatchParams(VendorAMD, host)
-		if got == nil || got["required_runtime"] != "docker/nerdctl/udocker" || got["required_os"] != "linux" || got["runtime"] != host.Driver {
+		if got == nil || got["required_runtime"] != "docker/nerdctl/udocker/kube" || got["required_os"] != "linux" || got["runtime"] != host.Driver {
 			t.Fatalf("missing host refusal facts: %v", got)
 		}
 	}

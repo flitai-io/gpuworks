@@ -314,7 +314,7 @@ func TestDeploymentCandidatesWireAcceleratorRefusal(t *testing.T) {
 		t.Fatalf("status = %d %s", status, body)
 	}
 	const wantKeys = `"unmet_by_key":{"accelerator":1,"gpuworks.ai/vendor":5}`
-	const wantItem = `{"uuid":"n-amd","name":"n-amd","status":"unmet","reason":{"code":"runtime_unsupported","params":{"arch":"amd64","missing_facts":false,"os":"linux","required_arch":"amd64","required_os":"linux","required_runtime":"docker/nerdctl/udocker","runtime":"host","vendor":"AMD"}},"replicas":0,"free_gpus":1,"gpus":1,"model":"absent"}`
+	const wantItem = `{"uuid":"n-amd","name":"n-amd","status":"unmet","reason":{"code":"runtime_unsupported","params":{"arch":"amd64","missing_facts":false,"os":"linux","required_arch":"amd64","required_os":"linux","required_runtime":"docker/nerdctl/udocker/kube","runtime":"host","vendor":"AMD"}},"replicas":0,"free_gpus":1,"gpus":1,"model":"absent"}`
 	if !strings.Contains(string(body), wantKeys) || !strings.Contains(string(body), wantItem) {
 		t.Fatalf("wire = %s\nwant %s and %s", body, wantKeys, wantItem)
 	}

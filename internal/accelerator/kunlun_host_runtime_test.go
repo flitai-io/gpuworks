@@ -16,14 +16,14 @@ func TestKunlunCapabilitiesAndHostRequirements(t *testing.T) {
 	if !Supports(VendorKunlunxin, FeatureMultiNode) || !RequiresDeviceSelection(VendorKunlunxin) {
 		t.Fatal("whole-card multi-node contract lost")
 	}
-	for _, host := range []HostRuntime{{OS: "linux", Arch: "amd64", Driver: "docker"}, {OS: "Linux", Arch: "x86_64", Driver: "Docker"}, {OS: "linux", Arch: "amd64", Driver: "nerdctl"}} {
+	for _, host := range []HostRuntime{{OS: "linux", Arch: "amd64", Driver: "docker"}, {OS: "Linux", Arch: "x86_64", Driver: "Docker"}, {OS: "linux", Arch: "amd64", Driver: "nerdctl"}, {OS: "linux", Arch: "amd64", Driver: "kube"}} {
 		if params := RuntimeMismatchParams(VendorKunlunxin, host); params != nil {
 			t.Fatal(params)
 		}
 	}
 	for _, host := range []HostRuntime{{OS: "linux", Arch: "arm64", Driver: "docker"}, {OS: "windows", Arch: "amd64", Driver: "docker"}, {OS: "linux", Arch: "amd64", Driver: "udocker"}, {}} {
 		params := RuntimeMismatchParams(VendorKunlunxin, host)
-		if params == nil || params["required_os"] != "linux" || params["required_arch"] != "amd64" || params["required_runtime"] != "docker/nerdctl" || params["os"] != host.OS || params["arch"] != host.Arch || params["runtime"] != host.Driver {
+		if params == nil || params["required_os"] != "linux" || params["required_arch"] != "amd64" || params["required_runtime"] != "docker/nerdctl/kube" || params["os"] != host.OS || params["arch"] != host.Arch || params["runtime"] != host.Driver {
 			t.Fatal(params)
 		}
 		if RuntimeMismatchParams(VendorNVIDIA, host) != nil {
