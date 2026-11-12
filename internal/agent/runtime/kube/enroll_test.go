@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -73,5 +74,60 @@ func TestARevokedTokenKeepsEnrolledNodes(t *testing.T) {
 	}
 	if (Identity{IdleReturnSeconds: 600}).IdleReturn() != 10*time.Minute {
 		t.Fatal("IdleReturn")
+	}
+}
+
+// TestEnrollRefusalsNamingAnotherEntryAreNeverPaperedOverBySavedIdentity:
+// other_cluster and node_taken are facts about this node's own identity,
+// not about the server being unreachable or the token having gone stale,
+// so a saved identity must never mask them, with or without one on disk.
+func TestEnrollRefusalsNamingAnotherEntryAreNeverPaperedOverBySavedIdentity(t *testing.T) {
+	for _, reason := range []string{"other_cluster", "node_taken"} {
+		t.Run(reason, func(t *testing.T) {
+			k := kubefake.New(t, testNS, testNode)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":"refused","code":"KUBE_ENROLL_REFUSED","params":{"reason":"` + reason + `"}}`))
+			}))
+			defer srv.Close()
+
+			// With a saved identity from an earlier, different node: the
+			// refusal still wins.
+			state := t.TempDir()
+			if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "n", NodeToken: "old"}); err != nil {
+				t.Fatal(err)
+			}
+			id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, state)
+			var refusal *EnrollRefusal
+			if err == nil || id.NodeToken != "" || !errors.As(err, &refusal) || refusal.Reason != reason {
+				t.Fatalf("Enroll refused as %s with a saved identity = %+v, %v, want an EnrollRefusal naming %s", reason, id, err, reason)
+			}
+
+			// Without any saved identity: the same refusal, the same way.
+			if _, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, t.TempDir()); !errors.As(err, &refusal) || refusal.Reason != reason {
+				t.Fatalf("Enroll refused as %s without a saved identity = %v", reason, err)
+			}
+		})
+	}
+}
+
+// TestEnrollTreatsAnUnrecognizedRefusalBodyAsAFallbackCase: a 403 from
+// something other than the server's own ErrorKubeEnrollRefused handler (a
+// proxy, an old server) is not a refusal this build understands, so it must
+// not be read as a hard refusal of this node's own identity.
+func TestEnrollTreatsAnUnrecognizedRefusalBodyAsAFallbackCase(t *testing.T) {
+	k := kubefake.New(t, testNS, testNode)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("403 Forbidden"))
+	}))
+	defer srv.Close()
+	state := t.TempDir()
+	if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "n", NodeToken: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, state)
+	if err != nil || id.NodeToken != "old" {
+		t.Fatalf("Enroll against an unrecognized 403 with a saved identity = %+v, %v", id, err)
 	}
 }

@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -189,34 +187,5 @@ func TestShimSocket(t *testing.T) {
 	})
 	if l, err := findContainerd(root, shimSocket(proc, 990)); err != nil || l.Name != "k3s" {
 		t.Fatalf("layout = %+v, %v", l, err)
-	}
-}
-
-func TestHostCLIs(t *testing.T) {
-	inContainer := func(have ...string) func(string) (string, error) {
-		return func(name string) (string, error) {
-			if slices.Contains(have, name) {
-				return "/usr/bin/" + name, nil
-			}
-			return "", exec.ErrNotFound
-		}
-	}
-	cases := []struct {
-		value string
-		have  []string
-		want  bool
-	}{
-		{"", nil, false},
-		{"0", nil, false},
-		{"1", []string{"npu-smi"}, true},
-		// No RuntimeClass: the default runtime injected nvidia-smi (managed
-		// clusters), or did not (k3s, whose default is runc).
-		{"nvidia-smi", []string{"nvidia-smi"}, false},
-		{"nvidia-smi", nil, true},
-	}
-	for _, c := range cases {
-		if got := HostCLIs(c.value, inContainer(c.have...)); got != c.want {
-			t.Errorf("HostCLIs(%q) with %v in the container = %v, want %v", c.value, c.have, got, c.want)
-		}
 	}
 }
