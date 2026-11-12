@@ -334,7 +334,7 @@ func TestCommunityReposOverlayAndValidation(t *testing.T) {
 	for _, row := range repos {
 		names = append(names, row.Repo+"="+row.Registry)
 	}
-	want := "vllm/vllm-openai=docker-hub,vllm/vllm-omni=docker-hub,lmsysorg/sglang=docker-hub,quay.io/ascend/vllm-ascend=quay,quay.io/ascend/sglang=quay,harbor.sourcefind.cn:5443/dcu/admin/base/vllm=oci,registry.example.com/team/runner=oci"
+	want := "vllm/vllm-openai=docker-hub,vllm/vllm-omni=docker-hub,lmsysorg/sglang=docker-hub,quay.io/ascend/vllm-ascend=quay,quay.io/ascend/sglang=quay,harbor.sourcefind.cn:5443/dcu/admin/base/vllm=oci,quay.io/gpuworks/gpuworks-runner=quay,registry.example.com/team/runner=oci"
 	if strings.Join(names, ",") != want {
 		t.Fatalf("repos = %v", names)
 	}

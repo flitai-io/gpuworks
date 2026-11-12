@@ -1,12 +1,38 @@
 package community
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+func TestGPUWorksRunnerRepositoriesRemainMixed(t *testing.T) {
+	repos, err := Repos(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, repo := range repos {
+		if repo.Repo != "quay.io/gpuworks/gpuworks-runner" {
+			continue
+		}
+		if repo.Engine != "" || repo.Framework != "" || repo.Registry != RegistryQuay ||
+			!reflect.DeepEqual(repo.Siblings, []string{"registry.zstack.ai/gpuworks/gpuworks-runner"}) {
+			t.Fatal("mixed runner repositories must use per-tag metadata and verified sibling repositories")
+		}
+		return
+	}
+	t.Fatal("published GPUWorks runner repository is missing from the community browser")
+}
 
 func TestCommunityTagMetadata(t *testing.T) {
 	for _, tc := range []struct {
 		tag, engine, engineVersion, framework, frameworkVersion, arch string
 	}{
 		{"cuda13.0-vllm0.29.0-arm64-slot01", "vllm", "0.29.0", "cuda", "13.0", "arm64"},
+		{"cuda13.0-strata0.1.38-r5", "callable", "0.1.38", "cuda", "13.0", ""},
+		{"cuda13.0-strata0.1.38-amd64-slot31-r5", "callable", "0.1.38", "cuda", "13.0", "amd64"},
+		{"cuda13.0-stratagem0.1.38-r5", "", "", "cuda", "13.0", ""},
+		{"cuda13.0-strata-r5", "", "", "cuda", "13.0", ""},
+		{"cuda13.0-strata", "", "", "cuda", "13.0", ""},
 		{"cann9.0-sglang0.5.15.post1-amd64-diffusion-slot16", "sglang", "0.5.15.post1", "cann", "9.0", "amd64"},
 		{"cuda13.0-vllm-omni0.30.0-r3", "vllm-omni", "0.30.0", "cuda", "13.0", ""},
 		{"cann8.5-vllm0.18.0-arm64-omni-slot14", "vllm-omni", "0.18.0", "cann", "8.5", "arm64"},

@@ -104,8 +104,13 @@ func TestEditableYAMLKeepsStrataAdmissionContract(t *testing.T) {
 	if !strings.Contains(text, "accept(gpu_memory_mib_per_device=12288)") {
 		t.Fatalf("editor YAML lost the admission contract:\n%s", text)
 	}
-	if len(got.Specs) != 1 || got.Specs[0].Placement != rows[index].Specs[0].Placement || got.Specs[0].WeightBytes != 68026093024 {
-		t.Fatalf("stored specs after round trip: %+v", got.Specs)
+	if len(got.Specs) != len(rows[index].Specs) {
+		t.Fatal("editor round trip changed the number of Strata specs")
+	}
+	for i, spec := range got.Specs {
+		if spec.Placement != rows[index].Specs[i].Placement || spec.WeightBytes != rows[index].Specs[i].WeightBytes {
+			t.Errorf("editor round trip changed %s admission or weight bytes", spec.Name)
+		}
 	}
 	// The declared metrics mapping and placement resolver travel as written.
 	for _, want := range []string{"format: json", "live.state!=idle: requests_running", "resolver: |"} {
