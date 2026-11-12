@@ -9,7 +9,7 @@ set -u
 cd /tmp/calib
 mkdir -p logs-dbg
 
-IMAGE=quay.io/gpustack/runner:cuda13.0-vllm0.25.1
+IMAGE=gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4
 
 run() { # tag model util [extra...]
   local tag="$1" model="$2" util="$3"; shift 3
@@ -19,7 +19,7 @@ run() { # tag model util [extra...]
     -v /opt/gpuworks/models:/models -v /tmp/calib:/calib \
     -v /tmp/calib/torchcache:/root/.cache/vllm \
     -e VLLM_LOGGING_LEVEL=DEBUG \
-    "$IMAGE" vllm serve "$model" \
+    --entrypoint vllm "$IMAGE" serve "$model" \
     --load-format dummy --gpu-memory-utilization "$util" --max-model-len 4096 \
     --port 19502 "$@" >/dev/null
   local deadline=$(( $(date +%s) + 1200 ))

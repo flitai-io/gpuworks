@@ -87,6 +87,16 @@ NVIDIA/vLLM template or a ModelScope source.
 `internal/server/estimate.Compute` directly, so the table is the product's answer
 rather than a re-implementation of it.
 
+### Runner image
+
+The scripts default to the platform's own runner images
+(`gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4`, and
+`cuda13.0-sglang0.5.21-r3` for `run_sglang.sh`); set `IMAGE` (or `--image` for
+`validate_catalog_dummy.py`) to measure another engine version. They start the
+engine with an explicit `--entrypoint`, so an image with or without its own
+entrypoint works. The recorded results below and under `results/` name the
+image each was measured with.
+
 ### Mirror1 vLLM 0.25.1 check (2026-09-14)
 
 The existing `gpustack/runner:cuda13.0-vllm0.25.1` image was run on mirror1's
