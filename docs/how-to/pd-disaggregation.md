@@ -126,13 +126,13 @@ P 与 D 要交换 KV，所以整个 PD 部署的实例都在同一张计算网�
 
 `vllm-mooncake` 使用 vLLM 自带的 MooncakeConnector，KV 由海光为 DTK 编译的 Mooncake 传输引擎搬运。
 
-- **镜像**：必须是 vLLM 0.21 的海光内置镜像 `gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r3`，内置模板的 K100 / BW 启动规格用的就是它。
+- **镜像**：必须是 vLLM 0.21 的海光内置镜像 `gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r4`，内置模板的 K100 / BW 启动规格用的就是它。
   `-r1` 的连接器拉取 KV 失败时不报错：decode 仍返回 200 且内容是错的，`kv_load_failure` 不生效，失败的块还会留在前缀缓存里；r2 修复了这一点，PD 部署不要再用 r1。
-  `-r2` 不支持下面的混合模型。
+  `-r2` 不支持下面的混合模型；`-r3` 能跑，但偶尔会把正在接收远端 KV 的块清零，导致 decode 回答错误，混合模型请用 r4。
   vLLM 0.18.1 的海光镜像没有 Mooncake，不能用于 PD。
 - **传输协议**：平台按 P、D 共用的参数网络选择：主机 RDMA 网络用 `rdma`，以太网、管理网络或同机用 `tcp`。
 - **TP**：prefill 与 decode 必须相等。
-- **GDN 混合模型**（Qwen3.5、Qwen3.6、Qwen3.8 等含线性注意力或 Mamba 层的模型）：需要 r3 镜像。
+- **GDN 混合模型**（Qwen3.5、Qwen3.6、Qwen3.8 等含线性注意力或 Mamba 层的模型）：需要 r4 镜像。
   vLLM 配了 KV 连接器就会关掉混合 KV cache 管理器，这类模型没有它起不来，平台按模型 `config.json` 的 `layer_types` 自动加
   `--no-disable-hybrid-kv-cache-manager`；部署自己写了 `--disable-hybrid-kv-cache-manager` 或 `--no-disable-hybrid-kv-cache-manager` 时以部署为准。
   KV 按页整页传输，prefill 只算到倒数第二个 prompt token，最后一个由 decode 重算，所以 decode 的 `local_compute` 每个请求多 1 个 token。

@@ -13,9 +13,10 @@ var vllmMooncakeImageRevision = regexp.MustCompile(`^gpuworks/gpuworks-runner:dt
 // TestEveryVLLMMooncakeSpecRunsAnImageThatCarriesItsModel sweeps the built-in
 // vllm-mooncake PD specs. They run the DTK vLLM 0.21 runner, whose r2 makes a
 // failed pull follow kv_load_failure_policy; a model with gated delta net or
-// Mamba layers also needs r3, without which its engines do not start (the
-// connector cannot register the recurrent state) or crash on the first failed
-// pull. The count guard keeps the sweep from going green on nothing.
+// Mamba layers needs r4: before r3 its engines do not start (the connector
+// cannot register the recurrent state) or crash on the first failed pull, and
+// r3 can zero blocks the async KV load is writing, corrupting the answer. The
+// count guard keeps the sweep from going green on nothing.
 func TestEveryVLLMMooncakeSpecRunsAnImageThatCarriesItsModel(t *testing.T) {
 	catalog, err := Catalog()
 	if err != nil {
@@ -36,7 +37,7 @@ func TestEveryVLLMMooncakeSpecRunsAnImageThatCarriesItsModel(t *testing.T) {
 			revision, _ := strconv.Atoi(match[1])
 			want := 2
 			if recurrent {
-				want = 3
+				want = 4
 				hybrids++
 			}
 			if revision < want {

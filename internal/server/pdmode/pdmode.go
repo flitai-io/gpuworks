@@ -376,9 +376,10 @@ var modes = map[string]Mode{
 	// needs the image's r2 or later: r1's connector reported a failed pull as
 	// finished, so the decoder answered from KV it never received and the
 	// load failure policy did not apply. Hybrid models with gated delta net
-	// layers (Qwen3.5/3.6/3.8) need r3, whose connector moves their KV pages
-	// whole at equal TP and whose scheduler survives their failed pulls, and
-	// the hybrid KV cache manager (verified on K100 with Qwen3.5-0.8B and
+	// layers (Qwen3.5/3.6/3.8) need r4, whose connector moves their KV pages
+	// whole at equal TP and whose scheduler survives their failed pulls and
+	// does not zero blocks a pull is writing (r3 can), and the hybrid KV cache
+	// manager (verified on K100 with Qwen3.5-0.8B and
 	// hygon/Qwen3.8-27B-Channel-INT8-w8a8).
 	"vllm-mooncake": {
 		Name:                 "vllm-mooncake",
