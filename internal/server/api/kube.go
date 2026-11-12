@@ -61,6 +61,7 @@ func kubeClusterDTO(c store.KubeCluster, v kubeEntryView) dto.KubeCluster {
 		Priority: c.Priority, AllowPreemption: c.AllowPreemption,
 		Revoked: c.RevokedAt != nil, NodeCount: v.nodes, Vendors: v.vendors, Source: v.source, CreatedAt: c.CreatedAt.UTC(),
 		Stalled: kubeClusterStalled(c, time.Now().UTC()), PoolIDs: append([]string{}, v.poolIDs...),
+		NamespaceSharedWith: append([]string{}, v.sharedNS...),
 	}
 	out.CanApply, out.CanRemove, out.OperationBlocked = kubeClusterOperations(c, v.privateAPI)
 	if v.admin && c.RevokedAt == nil {

@@ -157,3 +157,51 @@ func TestEditingACloudEntryKeepsItsPoolsAndSelector(t *testing.T) {
 		t.Fatalf("apply after edit = %d %s", applied.Code, applied.Body)
 	}
 }
+
+// Entries that may be of one cluster and share a namespace name each
+// other: in one cluster the one applied later takes the other's agents.
+func TestEntriesSharingANamespaceAreNamed(t *testing.T) {
+	rig := newTokenRig(t)
+	create := func(body string) map[string]any {
+		rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create = %d %s", rec.Code, rec.Body)
+		}
+		return decodeKube[map[string]any](t, rec)
+	}
+	create(`{"name":"a","server_url":"https://gw"}`)
+	b := create(`{"name":"b","server_url":"https://gw"}`)
+	if fmt.Sprint(b["namespace_shared_with"]) != "[a]" {
+		t.Fatalf("b = %v", b["namespace_shared_with"])
+	}
+	if c := create(`{"name":"c","server_url":"https://gw","namespace":"gw-c"}`); fmt.Sprint(c["namespace_shared_with"]) != "[]" {
+		t.Fatalf("c = %v", c["namespace_shared_with"])
+	}
+	// Once nodes of different clusters joined a and b, they no longer clash.
+	for name, uid := range map[string]string{"a": "uid-1", "b": "uid-2"} {
+		if err := rig.st.DB().Exec("UPDATE kube_clusters SET cluster_uid = ? WHERE name = ?", uid, name).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	list := decodeKube[struct {
+		Items []map[string]any `json:"items"`
+	}](t, rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters", ""))
+	for _, it := range list.Items {
+		if fmt.Sprint(it["namespace_shared_with"]) != "[]" {
+			t.Fatalf("%s after its cluster is known = %v", it["name"], it["namespace_shared_with"])
+		}
+	}
+	// Of the same cluster: they do.
+	if err := rig.st.DB().Exec("UPDATE kube_clusters SET cluster_uid = 'uid-1' WHERE name = 'b'").Error; err != nil {
+		t.Fatal(err)
+	}
+	list = decodeKube[struct {
+		Items []map[string]any `json:"items"`
+	}](t, rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters", ""))
+	for _, it := range list.Items {
+		want := map[string]string{"a": "[b]", "b": "[a]", "c": "[]"}[it["name"].(string)]
+		if fmt.Sprint(it["namespace_shared_with"]) != want {
+			t.Fatalf("%s of the same cluster = %v, want %s", it["name"], it["namespace_shared_with"], want)
+		}
+	}
+}

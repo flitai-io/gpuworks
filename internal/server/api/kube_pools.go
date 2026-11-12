@@ -27,6 +27,9 @@ type kubeEntryView struct {
 	source     *dto.KubeClusterSource
 	privateAPI bool
 	poolIDs    []string
+	// sharedNS names the other entries that may be of the same cluster and
+	// use the same namespace (kubeNamespaceShared).
+	sharedNS []string
 }
 
 // kubeEntryViews gathers the views of the given entries in one pass: node
@@ -47,12 +50,38 @@ func (a *apiHandlers) kubeEntryViews(ctx context.Context, rows []store.KubeClust
 	}
 	sources := a.kubeClusterSources(rows)
 	private := a.kubePrivateAPIClusters(ctx, rows)
+	all, err := a.d.Store.KubeClusters()
+	if err != nil {
+		return nil, err
+	}
 	out := make(map[uint]kubeEntryView, len(rows))
 	for _, c := range rows {
 		nodes, vendors := kubeVendorNodes(byVendor[c.ID])
-		out[c.ID] = kubeEntryView{nodes: nodes, vendors: vendors, admin: admin, source: sources[c.ID], privateAPI: private[c.ID], poolIDs: kubePoolIDs(pools[c.ID])}
+		out[c.ID] = kubeEntryView{nodes: nodes, vendors: vendors, admin: admin, source: sources[c.ID], privateAPI: private[c.ID],
+			poolIDs: kubePoolIDs(pools[c.ID]), sharedNS: kubeNamespaceShared(c, all)}
 	}
 	return out, nil
+}
+
+// kubeNamespaceShared names the other entries with c's namespace that may
+// be of the same Kubernetes cluster: the manifest names its objects by
+// namespace, so in one cluster the entry applied later takes the other's
+// agents over. Entries whose clusters are known to differ (different
+// kube-system UIDs, or different cloud clusters) are left out; an entry no
+// node has joined yet may be of any cluster.
+func kubeNamespaceShared(c store.KubeCluster, all []store.KubeCluster) []string {
+	out := []string{}
+	for _, o := range all {
+		switch {
+		case o.ID == c.ID || o.Namespace != c.Namespace:
+		case o.ClusterUID != "" && c.ClusterUID != "" && o.ClusterUID != c.ClusterUID:
+		case o.ProviderID != nil && c.ProviderID != nil && (*o.ProviderID != *c.ProviderID || o.ProviderClusterID != c.ProviderClusterID):
+		default:
+			out = append(out, o.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // kubeVendorNodes is an entry's node total and its nodes by vendor, most

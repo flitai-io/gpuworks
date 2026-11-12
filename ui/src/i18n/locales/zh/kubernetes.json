@@ -254,5 +254,9 @@
     "intro": "gpuworks 够不到这个集群，请按顺序在集群里执行下面的命令。它们会把 agent 以及 agent 启动的推理 Pod 和占位 Pod 从集群里清除，卡还给 Kubernetes。",
     "next": "之后这些节点会离线，由平台从节点列表里清理；等节点都消失后，再删除这个集群条目。",
     "close": "关闭"
+  },
+  "namespaceShared": {
+    "badge": "命名空间重复",
+    "hint": "与 {{names}} 同用命名空间 {{namespace}}。它们接入的是同一个 Kubernetes 集群时，后应用的 manifest 会接管先应用的那个条目的 agent。命名空间创建后不能改：删掉其中一个条目，换个命名空间重建。"
   }
 }

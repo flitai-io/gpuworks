@@ -77,7 +77,23 @@ export default function KubernetesPage() {
   );
 
   const columns: ResourceColumn<KubeCluster>[] = [
-    { key: "name", role: "name", title: t("column.name"), width: 160, sortValue: (c) => c.name, render: (_, c) => c.name },
+    {
+      key: "name",
+      role: "name",
+      title: t("column.name"),
+      width: 160,
+      sortValue: (c) => c.name,
+      // The server names the entries that may be of the same cluster and use
+      // the same namespace: the one applied later takes the other's agents.
+      render: (_, c) => c.namespace_shared_with.length === 0 ? c.name : (
+        <div className="flex min-w-0 items-center gap-1">
+          <span className="truncate">{c.name}</span>
+          <Tooltip content={t("namespaceShared.hint", { names: c.namespace_shared_with.join(", "), namespace: c.namespace })}>
+            <Badge status="warning">{t("namespaceShared.badge")}</Badge>
+          </Tooltip>
+        </div>
+      ),
+    },
     {
       key: "source",
       title: t("column.source"),
