@@ -267,8 +267,8 @@ suite 相差约 4 倍），job 落在哪台机器取决于哪里有空位。所�
 untagged Go suite 与各 check 脚本、`go vet`、`make lint`、CompShare 离线契约、严格模式的 L2/L3。权威流水线仍是 GitLab；
 GitHub 镜像只收到 master，所以这条 workflow 由 PR、手动触发与每晚 03:07（Asia/Shanghai，紧随 GitLab 的
 nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。它不使用任何 secret 或自托管 runner。
-另外三条 workflow 对应 GitLab 的其余非 L4 job：`docs.yml`（文档站构建，改到文档的 PR 触发，需要 `WEBSITE_REPO`
-secret 拉 OINK 主题）、`ui-check.yml`（UI 巡检，改到 UI 的 PR 与每晚触发，报告作为 artifact 上传）、
+另外三条 workflow 对应 GitLab 的其余非 L4 job：`docs.yml`（文档站构建，改到文档的 PR 触发，从公开的
+`gpuworks_website` 仓库拉 OINK 主题）、`ui-check.yml`（UI 巡检，改到 UI 的 PR 与每晚触发，报告作为 artifact 上传）、
 `release.yml`（发布包，见[发布指南](release.md#github-actions-发布)）。L4 仍只在 GitLab 跑。
 
 脚本只读与 CI 无关的变量名：`GPUWORKS_BUILD_COMMIT`（构建提交）、`GPUWORKS_BUILT_AT`（同一次运行所有 job

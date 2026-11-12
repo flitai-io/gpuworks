@@ -274,7 +274,7 @@ contracts, and strict L2/L3. GitLab remains the authoritative pipeline; the GitH
 so this workflow runs on pull requests, on manual dispatch, and nightly at 03:07 (Asia/Shanghai, just after
 GitLab's nightly) on master, for comparison with GitLab's result for the same commit. It uses no secret or
 self-hosted runner. Three more workflows cover GitLab's other non-L4 jobs: `docs.yml` (the docs site build,
-triggered by pull requests that touch the docs; it needs the `WEBSITE_REPO` secret to fetch the OINK theme),
+triggered by pull requests that touch the docs; it fetches the OINK theme from the public `gpuworks_website` repository),
 `ui-check.yml` (the UI walk, triggered by pull requests that touch the UI and nightly, with the report
 uploaded as an artifact) and `release.yml` (release packages, see the
 [release guide](release.md#github-actions-releases)). L4 still runs only in GitLab.

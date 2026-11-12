@@ -103,8 +103,6 @@ jobs:
   docs:
     if: github.ref_type == 'tag'
     uses: ./.github/workflows/docs.yml
-    secrets:
-      WEBSITE_REPO: ${{ secrets.WEBSITE_REPO }}
 
   # Versioned Chinese and English handbooks; only a formal release carries them.
   docs-pdf:

@@ -2,9 +2,8 @@
 # .gitlab-ci.yml: pull requests that touch the docs, and the release workflow
 # (which prints the handbooks from this tree) through workflow_call.
 #
-# The OINK theme lives in a private repository. The WEBSITE_REPO secret holds
-# a clone URL carrying a read-only token; secrets do not reach pull requests
-# from forks, so their docs builds fail at the clone until the theme is public.
+# The OINK theme comes from the public gpuworks_website repository, so the
+# build needs no secret and pull requests from forks build the site too.
 name: docs
 
 on:
@@ -17,9 +16,6 @@ on:
       - .github/workflows/docs.yml
   workflow_dispatch:
   workflow_call:
-    secrets:
-      WEBSITE_REPO:
-        required: false
 
 permissions:
   contents: read
@@ -47,14 +43,7 @@ jobs:
           tar -xzf "$name" hugo
           echo "HUGO_BIN=$RUNNER_TEMP/hugo" >> "$GITHUB_ENV"
       - name: Build the site
-        env:
-          WEBSITE_REPO: ${{ secrets.WEBSITE_REPO }}
-        run: |
-          test -n "$WEBSITE_REPO" || {
-            echo "the WEBSITE_REPO secret (the OINK theme's clone URL) is not available to this run" >&2
-            exit 1
-          }
-          docs-site/build.sh
+        run: docs-site/build.sh
       - uses: actions/upload-artifact@v5
         with:
           name: docs-site-public

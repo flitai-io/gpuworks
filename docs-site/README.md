@@ -26,7 +26,7 @@ HUGO_BIN=/path/to/hugo python3 -m unittest discover -s docs-site -p 'test_*.py'
 HUGO_BIN=/path/to/hugo bash docs-site/build.sh
 ```
 
-构建会执行站点测试、完整翻译检查和 Hugo 生产构建，并检查中英文首页与搜索索引。首次构建还需从私有主题仓库下载 OINK：本地使用 Git 凭据，CI 使用 `WEBSITE_REPO` 变量中的只读部署令牌 URL；不要把令牌写入仓库。CI 的 `docs-build` 覆盖 `docs/`、`docs-en/`、`docs-site/` 和 CI 配置的变更。
+构建会执行站点测试、完整翻译检查和 Hugo 生产构建，并检查中英文首页与搜索索引。首次构建会从公开的 `gpuworks_website` 仓库下载 OINK 主题；访问不到 github.com 的环境用 `WEBSITE_REPO` 指向可访问的副本（内网 GitLab CI 用该变量中的只读部署令牌 URL），不要把令牌写入仓库。CI 的 `docs-build` 覆盖 `docs/`、`docs-en/`、`docs-site/` 和 CI 配置的变更。
 
 提交时必须包含新增的英文稿、图片、下载文件、模板、脚本及翻译登记 JSON；只提交已跟踪文件的修改会漏掉这些构建输入。`content/`、`public/`、`resources/`、`themes/` 和 `static/assets/` 是生成或下载目录，不应提交。验证首次构建时使用独立 Git checkout，不复制这些目录或 Hugo 缓存。
 
@@ -57,7 +57,7 @@ Mermaid 图的可见文字、纯文本公式、写作模板和目录说明也可
 
 ## Read the Docs 私有托管
 
-仓库根目录的 `.readthedocs.yaml` 让 readthedocs.com 上的私有项目复用 `build.sh` 构建：下载 Hugo extended 0.165.0，用 `DOCS_BASE_URL` 把 baseURL 换成项目根地址（`hugo.yaml` 中的 `/docs/` 不变），输出到 `$READTHEDOCS_OUTPUT/html`。Read the Docs 访问不到内网主题仓库，需要在项目环境变量中设置私有的 `WEBSITE_REPO`，值为它能访问的只读克隆地址；本地验证同样的构建：
+仓库根目录的 `.readthedocs.yaml` 让 readthedocs.com 上的私有项目复用 `build.sh` 构建：下载 Hugo extended 0.165.0，用 `DOCS_BASE_URL` 把 baseURL 换成项目根地址（`hugo.yaml` 中的 `/docs/` 不变），输出到 `$READTHEDOCS_OUTPUT/html`。主题默认从公开的 GitHub 仓库下载，不需要设置 `WEBSITE_REPO`；本地验证同样的构建：
 
 ```bash
 DOCS_BASE_URL=https://<项目>.readthedocs-hosted.com/ HUGO_BIN=/path/to/hugo bash docs-site/build.sh
