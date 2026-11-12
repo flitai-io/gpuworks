@@ -276,10 +276,11 @@ func (n *NodeRuntime) StatusSnapshot(ctx context.Context, refs []string) ([]prot
 	if d := n.runtimeDriver(); d != nil {
 		for _, ref := range refs {
 			var present bool
+			var imageID string
 			var size *int64
 			var err error
 			if reporter, ok := d.(runtime.ImagePresenceReporter); ok {
-				present, size, err = reporter.ImagePresence(ctx, ref)
+				present, imageID, size, err = reporter.ImagePresence(ctx, ref)
 			} else {
 				present, err = d.ImageExists(ctx, ref)
 			}
@@ -288,7 +289,7 @@ func (n *NodeRuntime) StatusSnapshot(ctx context.Context, refs []string) ([]prot
 				continue
 			}
 			n.imageSeen.observe(ctx, n.log, d, ref, present)
-			images = append(images, proto.ImagePresence{ImageRef: ref, Present: present, RuntimeSizeBytes: size})
+			images = append(images, proto.ImagePresence{ImageRef: ref, Present: present, ImageID: imageID, RuntimeSizeBytes: size})
 		}
 	}
 	return images, n.pathUsage()
