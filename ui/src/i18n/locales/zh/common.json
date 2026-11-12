@@ -304,6 +304,7 @@
     "IMAGE_ENGINE_REQUIRED": "请选择镜像使用的推理引擎。",
     "STORAGE_ENABLED_REQUIRED": "请指定是否启用该存储。",
     "STORAGE_IN_USE": "该存储正被部署或运行中的实例使用，请先停止或迁移它们。",
+    "STORAGE_CACHE_NOT_EMPTY": "节点缓存里还有 {{entries}} 项，分布在 {{nodes}} 个节点上（其中 {{transferring}} 项还在复制或下载）。先清理缓存或等传输完成，再切换。",
     "STORAGE_IS_DEFAULT": "默认存储不能删除，请先把其它存储设为默认。",
     "STORAGE_EXPORT_ALREADY_REGISTERED": "这个导出已经登记为另一个存储。",
     "STORAGE_NAME_TAKEN": "已有同名的存储，请换一个名称。",

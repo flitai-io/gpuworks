@@ -152,6 +152,10 @@ After saving, check the cleanup status. Cleanup reclaims only copies that are sa
 
 To reclaim space manually, click **Clear cache** on the storage card to evict all eligible caches. To reclaim only eligible data on specific nodes, select those nodes in the details and clear their caches. This does not guarantee removal of data that is in use, being transferred, or lacks an authoritative copy.
 
+### Switch between NFS and NFS with local cache
+
+**More → Switch to …** in the storage details switches only between these two types; the files on the NFS stay. Switching from **NFS with local cache** to **NFS** first removes the caches on each node, as **Clear cache** does, and changes the type only once they are all gone: after the switch the nodes no longer manage the cache directories, so anything left there could not be removed any more. While any node cache remains the switch is refused, saying how many entries remain, on how many nodes, and how many are still copying or downloading. The usual causes are an offline node, a model in use by an instance, a copy or download still running, or a model kept only in a node cache with no authoritative copy on the NFS; deal with those and switch again. The cache directory and limit settings are kept and apply again if you switch back to **NFS with local cache**.
+
 ### Handle Blocked Cleanup and Pending Deletion Confirmation
 
 **Cache is full of models in use**: if the disk has enough space but in-use models fill the cache limit, deployment events state this reason. Raise the limit or stop the deployments that use those models.

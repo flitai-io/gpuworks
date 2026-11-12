@@ -60,8 +60,13 @@ export default function StorageDetailActions({ storage, runner, onEdit, onScan, 
         void run("default", () => api.updateStorage(storage.id, { is_default: true }), t("actions.defaultSet", { name: storage.name }));
         break;
       case "type":
-        confirm(t("actions.switchConfirm", { type: otherLabel }), t("actions.switchHelp"), t("actions.switch"),
-          () => void run("type", () => api.updateStorage(storage.id, { type: switchTo }), t("actions.switched", { name: storage.name, type: otherLabel })));
+        // Leaving nfs_cache first removes the node caches, which nfs no longer
+        // manages; the server refuses the switch while any remain.
+        confirm(t("actions.switchConfirm", { type: otherLabel }), t(cache ? "actions.switchFromCacheHelp" : "actions.switchHelp"), t("actions.switch"),
+          () => void run("type", async () => {
+            if (cache) await api.clearStorageCache(storage.id);
+            await api.updateStorage(storage.id, { type: switchTo });
+          }, t("actions.switched", { name: storage.name, type: otherLabel })));
         break;
       case "cache":
         confirm(t("actions.clearCacheConfirm"), t("actions.clearCacheHelp"), t("actions.clearCache"),
