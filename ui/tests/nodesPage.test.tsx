@@ -483,6 +483,23 @@ test("the detail drawer renders identity rows and the accelerator table", async 
   assert.ok(screen.queryByRole("button", { name: /regenerate/i }) === null, "Expected the element to be absent");
 });
 
+test("ordinary node detail shows its last report without administrator diagnostics", async () => {
+  for (const last_seen_at of [new Date(2026, 10, 12, 8, 15).toISOString(), undefined]) {
+    const node = { ...onlineNode, last_seen_at };
+    stubApi([node]);
+    api.me = async () => ({ role: "member" }) as never;
+    renderPage();
+    await screen.findByRole("button", { name: node.name });
+    fireEvent.click(screen.getByRole("button", { name: node.name }));
+    await screen.findByText(node.uuid);
+    const drawer = screen.getByRole("dialog");
+    const report = within(drawer).getByRole("row", { name: /Last successful report/ });
+    assert.match(report.textContent ?? "", last_seen_at ? /2026-11-12 08:15/ : /Not observed/);
+    assert.equal(within(drawer).queryByRole("button", { name: "Check connection" }), null);
+    await act(async () => cleanup());
+  }
+});
+
 test("the label filter ORs values of one key, ANDs across keys, and explains an empty match", async () => {
   const user = userEvent.setup({ document: dom.window.document });
   const nodeA = { ...onlineNode, labels: { pool: "a", zone: "x" } };

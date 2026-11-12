@@ -56,6 +56,9 @@ export default function NodeBasicTab({
               <NodeConnectionBadge node={node} />
               <GPUProbeFailedTag node={node} />
             </Space>
+            <div>
+              {t("connectionDiagnostics.lastSeen")}: {formatTime(node.last_seen_at, t("connectionDiagnostics.unknown"))}
+            </div>
           </Descriptions.Item>
           <Descriptions.Item label="UUID">{node.uuid}</Descriptions.Item>
           <Descriptions.Item label={t("detail.agentVersion")}>
