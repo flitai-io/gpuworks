@@ -203,7 +203,7 @@
 |---|---|---|---|
 | `vllm-nixl` | vLLM / NVIDIA | UCX（走参数网络） | 已验证：同机、跨机以太、角色内跨机 |
 | `vllm-ascend-mooncake` | vLLM / 昇腾 | NPU 自带 RoCE 口（HCCL） | 已验证：两台 910B4 跨机；P、D 的 NPU 必须在 NPU 网络上互通 |
-| `vllm-mooncake` | vLLM 0.21 / 海光 | Mooncake 传输引擎（走参数网络，RDMA 或 TCP） | 已验证：海光 K100 同机两卡、TP 1；跨机与 RDMA 未验证 |
+| `vllm-mooncake` | vLLM 0.21 / 海光 | Mooncake 传输引擎（走参数网络，RDMA 或 TCP） | 已验证：海光 K100 同机两卡、TP 1，含 GDN 混合模型（需 r4 镜像）；跨机与 RDMA 未验证 |
 | `sglang-nixl` | SGLang / NVIDIA | UCX | **未验证** |
 | `sglang-ppu-ipc` | SGLang / PPU | 同机卡间 IPC（Mooncake NVLink 传输） | 已验证：PPU ZW810E 同机两卡、TP 1；P、D 必须在同一节点 |
 | `sglang-ppu-mooncake` | SGLang / PPU | Mooncake RDMA（走主机 RDMA 参数网络） | 已验证：PPU ZW810E 经 RoCE 网卡，TP 1；节点须加载 `alixpu_peermem` |

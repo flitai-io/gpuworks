@@ -119,7 +119,7 @@ dtype 兼容矩阵只用于准入与告警，不改写 argv。
 
 - **多机**：rank 0 为 leader，其余为 headless follower。vLLM 注入 `--distributed-executor-backend mp --nnodes --node-rank --headless --master-addr --master-port`（端口默认 29500），`VLLM_HOST_IP` 取节点的参数网络地址；SGLang 注入 `--nnodes --node-rank --dist-init-addr`。
 - **参数网络**：注入 `NCCL_SOCKET_IFNAME`、`GLOO_SOCKET_IFNAME`、`NCCL_IB_*`、`UCX_NET_DEVICES` 等系统层 env；使用 RDMA 时追加 docker 参数 `--device /dev/infiniband --ulimit memlock=-1 --cap-add IPC_LOCK`（ADR 0027）；部署自己的 docker 参数已写 `memlock` 时不再追加这一项，见「锁定内存」。
-- **PD 分离**：按角色生成 vLLM `--kv-transfer-config` 或 SGLang `--disaggregation-*`，以及 NIXL/UCX 相关 env 与主机挂载；`vllm-mooncake` 另在 `kv_connector_extra_config` 写 `mooncake_protocol`（主机 RDMA 网络为 `rdma`，否则 `tcp`），并给 prefill 设 `VLLM_MOONCAKE_BOOTSTRAP_PORT`、给所有实例设 `VLLM_HOST_IP`；模板或用户写 connector 参数会被拒绝（ADR 0028）。
+- **PD 分离**：按角色生成 vLLM `--kv-transfer-config` 或 SGLang `--disaggregation-*`，以及 NIXL/UCX 相关 env 与主机挂载；`vllm-mooncake` 另在 `kv_connector_extra_config` 写 `mooncake_protocol`（主机 RDMA 网络为 `rdma`，否则 `tcp`），并给 prefill 设 `VLLM_MOONCAKE_BOOTSTRAP_PORT`、给所有实例设 `VLLM_HOST_IP`，模型含线性注意力或 Mamba 层（`config.json` 的 `layer_types`）时再加 `--no-disable-hybrid-kv-cache-manager`（模板或用户写了任一极性时不加）；模板或用户写 connector 参数会被拒绝（ADR 0028）。
 
 sleep、LoRA、投机解码、KV 卸载等特性只在对应字典字段被声明时注入参数，例如 vLLM sleep 注入
 `--enable-sleep-mode` 与 `VLLM_SERVER_DEV_MODE=1`。

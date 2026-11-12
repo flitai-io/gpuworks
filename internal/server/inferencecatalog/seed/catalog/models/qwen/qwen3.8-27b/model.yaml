@@ -520,6 +520,44 @@ specs:
     - type: openai.chat
       endpoint: /v1/chat/completions
       mode: stream
+- name: int8-vllm-hygon-pd-a2189a85
+  display_name_zh_cn: K100 / BW · INT8 W8A8 · PD 分离
+  display_name_en: K100 / BW · INT8 W8A8 · PD
+  scenario: balanced
+  engine: vllm
+  pd_mode: vllm-mooncake
+  image: gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r4
+  weights:
+    quantization: int8
+    sources:
+    - modelscope:
+        repo_id: hygon/Qwen3.8-27B-Channel-INT8-w8a8
+        revision: c4a144e692945fdff66e1040cc1efaa69e0eeac1
+  weight_bytes: 30902757820
+  gpus:
+    vendor: hygon
+    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9_-]|$)
+  args:
+  - --dtype
+  - auto
+  - --trust-remote-code
+  - --enable-auto-tool-choice
+  - --tool-call-parser
+  - qwen3_coder
+  - --reasoning-parser
+  - qwen3
+  - --mm-encoder-tp-mode
+  - data
+  env:
+    VLLM_HCU_USE_CUSTOM_QUANTIZATION_GEMM: 'false'
+  pre_start_argv:
+  - vllm-hcu-apply-patches
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.chat
+      endpoint: /v1/chat/completions
+      mode: stream
 - name: nvfp4-vllm-nvidia-cc100
   display_name_zh_cn: Blackwell · NVFP4
   display_name_en: Blackwell · NVFP4

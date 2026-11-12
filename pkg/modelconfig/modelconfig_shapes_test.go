@@ -228,3 +228,37 @@ func TestParseAcceptsPythonNonFiniteLiterals(t *testing.T) {
 		t.Fatal("a malformed non-finite spelling must still fail")
 	}
 }
+
+func TestHasRecurrentLayers(t *testing.T) {
+	tests := []struct {
+		name string
+		json string
+		want bool
+	}{
+		// Qwen3.5/3.6/3.8 (Qwen3_5ForConditionalGeneration): gated delta net
+		// layers under text_config, three to every full attention layer.
+		{"qwen3_5 nested", `{"model_type":"qwen3_5","text_config":{"model_type":"qwen3_5_text",
+			"num_hidden_layers":4,"hidden_size":1024,"num_attention_heads":8,"num_key_value_heads":2,"head_dim":256,
+			"layer_types":["linear_attention","linear_attention","linear_attention","full_attention"]}}`, true},
+		{"jamba pattern", `{"model_type":"jamba","hybrid_override_pattern":"M-*","num_hidden_layers":3,
+			"num_attention_heads":32,"hidden_size":4096}`, true},
+		{"kimi linear index list", `{"model_type":"kimi_linear","num_hidden_layers":4,"num_attention_heads":32,
+			"hidden_size":2048,"linear_attn_config":{"full_attn_layers":[4]}}`, true},
+		{"sliding window only", `{"model_type":"gemma3_text","num_hidden_layers":2,"num_attention_heads":8,
+			"hidden_size":1024,"layer_types":["sliding_attention","full_attention"]}`, false},
+		{"dense without layer_types", `{"model_type":"qwen3","num_hidden_layers":28,"num_attention_heads":16,
+			"num_key_value_heads":8,"hidden_size":1024,"head_dim":128}`, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := parse(t, test.json)
+			if got := cfg.HasRecurrentLayers(); got != test.want {
+				t.Fatalf("HasRecurrentLayers() = %v, want %v (layer_types %v)", got, test.want, cfg.LayerTypes)
+			}
+		})
+	}
+	var missing *Config
+	if missing.HasRecurrentLayers() {
+		t.Fatal("a nil config has no recurrent layers")
+	}
+}

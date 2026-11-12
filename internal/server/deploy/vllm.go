@@ -210,6 +210,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 		// The disk tier and the PD connector are composite flags: one JSON
 		// object carries them, so the adapter composes it in one place.
 		b.injectKV("--kv-transfer-config", config)
+		vllmHybridKVCacheManager(b, p)
 	} else if q.KVOffloadingSize > 0 {
 		b.injectDictionary("kv_offloading_size", q.KVOffloadingSize)
 		b.injectKV("--kv-offloading-backend", "native")

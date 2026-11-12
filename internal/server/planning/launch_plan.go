@@ -209,6 +209,12 @@ func launchParams(req LaunchRequest, gpu store.GPU, assigned int, parallel paral
 		Host:           deploy.RuntimeBindHost(req.Node.RuntimeDriver),
 		RuntimeDriver:  req.Node.RuntimeDriver, VRAMLimitBytes: req.VRAMLimitBytes, Partitioned: req.PartitionBackend != "", PartitionBackend: req.PartitionBackend,
 	}
+	if params.PD != nil && LoadConfig(req.Model).HasRecurrentLayers() {
+		// A copy: the PD launch is the rank's, shared with the request.
+		pd := *params.PD
+		pd.RecurrentLayers = true
+		params.PD = &pd
+	}
 	if params.NNodes <= 1 && params.ComputeNetwork.Type == "" && deploy.RequiresCollectiveInterface(params) {
 		if management, ok := network.ManagementAddress(*req.Node); ok {
 			params.ComputeNetwork = deploy.ComputeNetwork{Type: netplan.TypeHostEthernet, Interface: management.Interface}
