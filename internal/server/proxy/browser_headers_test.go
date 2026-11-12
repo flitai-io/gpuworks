@@ -54,6 +54,7 @@ func TestEngineRequestsCarryNoBrowserContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstreamServer.URL, "http://")}, nil, 0)
+	defer p.Close()
 
 	const body = `{"model":"omni","messages":[{"role":"user","content":"hi"}]}`
 	for _, tc := range []struct {

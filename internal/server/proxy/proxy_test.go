@@ -200,40 +200,41 @@ func (r *flushingRecorder) Flush() {
 func newProxyE2E(t *testing.T, upstream http.Handler) (*Proxy, string, func()) {
 	t.Helper()
 	upstreamServer := httptest.NewServer(upstream)
+	t.Cleanup(upstreamServer.Close)
 	st, err := store.Open("file:proxy_omni_e2e_"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared", bus.New())
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/omni", Revision: "main", Name: "omni"})
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	node, err := st.RegisterNode("node-omni", store.HashToken("node"), "node-omni")
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	dep, err := st.CreateDeployment(&store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: "omni", Engine: "vllm", State: "active"})
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	if _, err := st.CreateInstance(&store.Instance{
 		UUID: "omni-instance", DeploymentID: dep.ID, NodeID: node.ID,
 		State: proto.InstRunning, APIPort: 30000, Ports: "[30000]",
 	}); err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	apiKey, err := st.CreateAPIKey("proxy-test", 0)
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	addr := strings.TrimPrefix(upstreamServer.URL, "http://")
 	p := New(st, storeNetworks(st), dialTestHub{addr: addr}, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(p.Close)
 	return p, apiKey, upstreamServer.Close
 }
 
@@ -377,12 +378,17 @@ func TestPlaygroundExternalEndpointRewritesModelAndStreams(t *testing.T) {
 		w.(http.Flusher).Flush()
 		_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	}))
-	defer upstream.Close()
+	t.Cleanup(upstream.Close)
 
 	st, err := store.Open("file:playground_external_test?mode=memory&cache=shared", bus.New())
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	box, err := auth.NewSecretbox("playground-test-master")
 	if err != nil {
 		t.Fatal(err)
@@ -396,6 +402,7 @@ func TestPlaygroundExternalEndpointRewritesModelAndStreams(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{}, nil, 0)
+	t.Cleanup(p.Close)
 	body := fmt.Sprintf(`{"model":"external:%d:GPT-5","messages":[{"role":"user","content":"hi"}],"stream":true}`, config.ID)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/playground/v1/chat/completions", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -421,7 +428,13 @@ func TestPlaygroundExternalEndpointRejectsOtherPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	p := New(st, storeNetworks(st), readinessTestHub{}, nil, 0)
+	t.Cleanup(p.Close)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/playground/v1/audio/transcriptions", strings.NewReader(`{"model":"external:1:GPT-5"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -443,12 +456,17 @@ func TestPlaygroundProxyAuthorizesVideoLifecycleFromDeploymentContract(t *testin
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"id":"job-1","status":"completed"}`)
 	}))
-	defer upstream.Close()
+	t.Cleanup(upstream.Close)
 
 	st, err := store.Open("file:playground_video_contract_test?mode=memory&cache=shared", bus.New())
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, _ := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "acme/video", Revision: "main", Name: "video", Operations: `[{"type":"openai.video.generate","endpoint":"/v1/videos","mode":"async"}]`})
 	node, _ := st.RegisterNode("video-node", store.HashToken("node"), "video-node")
 	dep, _ := st.CreateDeployment(&store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: "video-model", Engine: "sglang", State: "active"})
@@ -458,6 +476,7 @@ func TestPlaygroundProxyAuthorizesVideoLifecycleFromDeploymentContract(t *testin
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstream.URL, "http://")}, nil, 0)
+	t.Cleanup(p.Close)
 	handler := p.PlaygroundHandler(nil)
 
 	tests := []struct {
@@ -578,6 +597,11 @@ func TestDistributedSelectionRequiresEveryRankAndRoutesOnlyLeader(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "Qwen/Qwen3-72B", Revision: "main", Name: "Qwen72B"})
 	if err != nil {
 		t.Fatal(err)
@@ -603,6 +627,7 @@ func TestDistributedSelectionRequiresEveryRankAndRoutesOnlyLeader(t *testing.T) 
 		Headless: true, DistAttempt: 1,
 	})
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"node-a": true, "node-b": true}}, nil, 0)
+	t.Cleanup(p.Close)
 
 	_, _, status, message, _ := p.selectDeploymentInstance("qwen-72b")
 	if status != http.StatusServiceUnavailable || !strings.Contains(message, "every rank running") {
@@ -655,6 +680,11 @@ func TestSelectInstanceReturns503ForAsleepOrNonRoutableSingleInstance(t *testing
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Cleanup(func() {
+				if err := st.Close(); err != nil {
+					t.Error(err)
+				}
+			})
 			model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/model", Revision: "main", Name: "model"})
 			if err != nil {
 				t.Fatal(err)
@@ -674,6 +704,7 @@ func TestSelectInstanceReturns503ForAsleepOrNonRoutableSingleInstance(t *testing
 				t.Fatal(err)
 			}
 			p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"single-node": true}}, nil, 0)
+			t.Cleanup(p.Close)
 			_, _, status, msg, asleep := p.selectDeploymentInstance("model")
 			if status != http.StatusServiceUnavailable || !strings.Contains(msg, tc.wantMsg) || asleep != tc.wantAsleep {
 				t.Fatalf("selection status=%d message=%q asleep=%v, want 503 containing %q asleep=%v", status, msg, asleep, tc.wantMsg, tc.wantAsleep)
@@ -687,6 +718,11 @@ func TestSelectDeploymentInstanceSkipsNewerPendingRollout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/model", Revision: "main", Name: "model"})
 	if err != nil {
 		t.Fatal(err)
@@ -708,6 +744,7 @@ func TestSelectDeploymentInstanceSkipsNewerPendingRollout(t *testing.T) {
 	}
 
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"rollout-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	selected, target, status, message, asleep := p.selectDeploymentInstance("stable-name")
 	if status != 0 || message != "" || asleep || selected == nil || selected.ID != serving.ID || target.nodeUUID != "rollout-node" || target.port != 30001 {
 		t.Fatalf("selection deployment=%+v target=%+v status=%d message=%q asleep=%v", selected, target, status, message, asleep)
@@ -722,6 +759,11 @@ func TestSelectInstanceReturns503OnceSleepIsOrdered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/model", Revision: "main", Name: "model"})
 	if err != nil {
 		t.Fatal(err)
@@ -739,6 +781,7 @@ func TestSelectInstanceReturns503OnceSleepIsOrdered(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"ordered-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	if _, _, status, msg, asleep := p.selectDeploymentInstance("model"); status != 0 || asleep {
 		t.Fatalf("awake instance not routable: %d %q", status, msg)
 	}

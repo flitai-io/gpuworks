@@ -27,6 +27,11 @@ func TestSelectInstanceSaysDeploymentFailedWhenRetriesStopped(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Cleanup(func() {
+				if err := st.Close(); err != nil {
+					t.Error(err)
+				}
+			})
 			model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/failed", Revision: "main", Name: "failed"})
 			if err != nil {
 				t.Fatal(err)
@@ -47,6 +52,7 @@ func TestSelectInstanceSaysDeploymentFailedWhenRetriesStopped(t *testing.T) {
 				}
 			}
 			p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"failed-node": true}}, nil, 0)
+			t.Cleanup(p.Close)
 			_, _, status, msg, asleep := p.selectDeploymentInstance("failed-model")
 			if status != http.StatusServiceUnavailable || asleep || !strings.Contains(msg, tc.wantSub) {
 				t.Fatalf("status=%d message=%q asleep=%v, want 503 containing %q", status, msg, asleep, tc.wantSub)

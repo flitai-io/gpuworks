@@ -36,6 +36,7 @@ func TestSharedServedNameRoutesToTheNewestDeploymentThatCanAnswer(t *testing.T) 
 		}
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"shared-name-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	// Each step rebuilds the route snapshot first, so the assertion is about
 	// the ordering and not about how soon an asynchronous refresh lands.
 	want := func(phase, uuid string) {

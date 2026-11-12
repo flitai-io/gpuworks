@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,8 +23,8 @@ func newFront(t *testing.T, p *Proxy) *httptest.Server {
 
 // postChatNoCleanup is postChat for a goroutine: it reports its error rather
 // than failing the test, and closes the response itself.
-func postChatNoCleanup(url, key string) error {
-	req, err := http.NewRequest(http.MethodPost, url+"/v1/chat/completions", strings.NewReader(`{"model":"omni"}`))
+func postChatNoCleanup(ctx context.Context, url, key string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url+"/v1/chat/completions", strings.NewReader(`{"model":"omni"}`))
 	if err != nil {
 		return err
 	}
@@ -43,7 +44,6 @@ func postChatNoCleanup(url, key string) error {
 func TestADrainingReplicaLeavesItsSiblingServing(t *testing.T) {
 	release := make(chan struct{})
 	var once sync.Once
-	t.Cleanup(func() { once.Do(func() { close(release) }) })
 	upstream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-release
 		_, _ = w.Write([]byte(`{"ok":true}`))
@@ -59,6 +59,11 @@ func TestADrainingReplicaLeavesItsSiblingServing(t *testing.T) {
 		t.Fatal(err)
 	}
 	front := newFront(t, p)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		once.Do(func() { close(release) })
+	})
 	both := []string{"omni-instance", "omni-2"}
 
 	// send starts a request and waits until the gateway has leased it to a
@@ -66,7 +71,7 @@ func TestADrainingReplicaLeavesItsSiblingServing(t *testing.T) {
 	send := func(want string) {
 		t.Helper()
 		before := p.InstancesInFlight([]string{want})
-		go func() { _ = postChatNoCleanup(front.URL, key) }()
+		go func() { _ = postChatNoCleanup(ctx, front.URL, key) }()
 		deadline := time.Now().Add(10 * time.Second)
 		for p.InstancesInFlight([]string{want}) == before {
 			if time.Now().After(deadline) {
@@ -92,7 +97,7 @@ func TestADrainingReplicaLeavesItsSiblingServing(t *testing.T) {
 	// Both draining: a new request is held, not routed.
 	p.SetWakeDemand(func(uint) {})
 	p.SetDraining(depID, []string{"omni-2"}, true)
-	go func() { _ = postChatNoCleanup(front.URL, key) }()
+	go func() { _ = postChatNoCleanup(ctx, front.URL, key) }()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if n, _ := p.HeldRequests(depID); n == 1 {
