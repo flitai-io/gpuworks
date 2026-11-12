@@ -11,6 +11,7 @@
 |---|---|
 | 第一次接触 GPUWorks | [从零启动并部署第一个模型](tutorials/getting-started.md)，再看[控制台页面导览](reference/web-ui-tour.md) |
 | 在 Mac 上本地试用 | [在 Mac 上运行第一个本地模型](tutorials/mac-local-model.md) |
+| 在 Windows WSL2 上本机试用 | [在 Windows WSL2 上用 Docker 运行 GPUWorks](how-to/wsl2-with-docker.md) |
 | 要在生产上线 | [安装和升级控制面](how-to/install-server.md) → [生产环境部署](how-to/deploy-production.md) → [升级与版本兼容](how-to/upgrade-and-compatibility.md) |
 | 要升级到新版本 | [发布说明](releases/README.md) → [升级与版本兼容](how-to/upgrade-and-compatibility.md) |
 | 遇到问题 | [排障指南](how-to/troubleshooting.md) |
@@ -35,6 +36,7 @@
 **安装与接入**
 
 - [安装和升级控制面](how-to/install-server.md)
+- [在 Windows WSL2 上用 Docker 运行 GPUWorks](how-to/wsl2-with-docker.md)
 - [升级与版本兼容](how-to/upgrade-and-compatibility.md)
 - [接入节点、升级与卸载 agent](how-to/connect-nodes.md)
 - [租用云 GPU](how-to/rent-cloud-gpus.md)
