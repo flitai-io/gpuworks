@@ -106,6 +106,39 @@ func TestKubeSupportedAccelerator(t *testing.T) {
 	}
 }
 
+// TestKubeCensusReadsTheNodesBusFromAPod: in the agent pod the census
+// counts /sys as a container's and lists nothing, so the real census reads
+// the node's bus through the host's root; a node with a supported card must
+// not stand by.
+func TestKubeCensusReadsTheNodesBusFromAPod(t *testing.T) {
+	t.Setenv("KUBERNETES_SERVICE_HOST", "10.0.0.1") // what every pod's environment carries
+	root := t.TempDir()
+	dir := filepath.Join(root, "sys/bus/pci/devices", "0000:01:00.0")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, value := range map[string]string{"vendor": "0x10de", "device": "0x26b9", "class": "0x030200", "numa_node": "0"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("../../../../bus/pci/drivers/nvidia", filepath.Join(dir, "driver")); err != nil {
+		t.Fatal(err)
+	}
+	if got := (&gpu.VendorCensus{}).Vendors(); len(got) != 0 {
+		t.Fatalf("the pod's own view of the bus = %v; the census is expected to leave a container's bus out", got)
+	}
+	old := kubeHostRoot
+	kubeHostRoot = root
+	t.Cleanup(func() { kubeHostRoot = old })
+	if vendor, ok := kubeSupportedAccelerator(kubeCensusFor(nil)); !ok || vendor != "nvidia" {
+		t.Fatalf("census through the host root = %q, %v; want nvidia", vendor, ok)
+	}
+	if old != "/proc/1/root" {
+		t.Fatalf("kubeHostRoot = %q; the agent pod runs with hostPID, so PID 1's root is the node's", old)
+	}
+}
+
 // TestKubeStandByWithNoAcceleratorWaitsAndNeverEnrolls: the first thing a
 // node with no accelerator on the bus yet does must not be an enrollment
 // request — it stands by instead.

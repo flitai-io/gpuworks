@@ -168,12 +168,19 @@ type kubeAcceleratorCensus interface {
 
 // kubeCensusFor is the real PCI bus census, unless host (a process test's
 // GPUWORKS_FAKE_GPU_VENDORS substitute, cfg.AcceleratorHost) overrides it.
+// It reads the node's bus through the host's root: the agent pod's own view
+// of /sys counts as a container's, which the census leaves out (it would
+// be another host's cards for an agent given part of a machine), while the
+// agent pod runs with hostPID, so PID 1's root is the node's.
 func kubeCensusFor(host kubeAcceleratorCensus) kubeAcceleratorCensus {
 	if host != nil {
 		return host
 	}
-	return &gpu.VendorCensus{}
+	return &gpu.VendorCensus{HostRoot: kubeHostRoot}
 }
+
+// kubeHostRoot is the node's root as the agent pod sees it (hostPID).
+var kubeHostRoot = "/proc/1/root"
 
 // kubeStandByPoll is how often a node with no supported accelerator yet
 // re-checks the PCI bus, before its first enrollment.
