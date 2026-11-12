@@ -224,4 +224,41 @@ specs:
     - type: openai.chat
       endpoint: /v1/chat/completions
       mode: stream
+- name: bf16-vllm-hygon-pd-2fc06364
+  display_name_zh_cn: K100 / BW · BF16 · PD 分离
+  display_name_en: K100 / BW · BF16 · PD
+  scenario: balanced
+  engine: vllm
+  pd_mode: vllm-mooncake
+  image: gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r3
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: Qwen/Qwen3.5-0.8B
+        revision: 2fc06364715b967f1860aea9cf38778875588b17
+    - modelscope:
+        repo_id: Qwen/Qwen3.5-0.8B
+        revision: 4d58a7b524cd33ed843d5125be8cd8f0a452d9bf
+  weight_bytes: 1746942600
+  gpus:
+    vendor: hygon
+    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9_-]|$)
+  args:
+  - --dtype
+  - auto
+  - --trust-remote-code
+  - --enable-auto-tool-choice
+  - --tool-call-parser
+  - qwen3_coder
+  - --reasoning-parser
+  - qwen3
+  pre_start_argv:
+  - vllm-hcu-apply-patches
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.chat
+      endpoint: /v1/chat/completions
+      mode: stream
 input_modalities: [text, image]

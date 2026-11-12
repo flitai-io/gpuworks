@@ -78,3 +78,51 @@ func TestMooncakeProtocol(t *testing.T) {
 		}
 	}
 }
+
+// A model with recurrent layers (Qwen3.5's gated delta net) under
+// vllm-mooncake needs vLLM's hybrid KV cache manager on, which vLLM turns off
+// whenever a connector is set: both roles get the flag, a model without such
+// layers and a mode that does not ask get none, and a deployment that states
+// either polarity keeps it.
+func TestVLLMMooncakeHybridKVCacheManager(t *testing.T) {
+	const flag = "--no-disable-hybrid-kv-cache-manager"
+	count := func(argv []string, want string) int {
+		n := 0
+		for _, arg := range argv {
+			if arg == want {
+				n++
+			}
+		}
+		return n
+	}
+	for _, c := range []struct {
+		name      string
+		mode      string
+		recurrent bool
+		extra     []string
+		want      int
+	}{
+		{"hybrid prefill", "vllm-mooncake", true, nil, 1},
+		{"full attention model", "vllm-mooncake", false, nil, 0},
+		{"mode without the requirement", "vllm-nixl", true, nil, 0},
+		{"user disables it", "vllm-mooncake", true, []string{"--disable-hybrid-kv-cache-manager"}, 0},
+		{"user enables it", "vllm-mooncake", true, []string{flag}, 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			for _, role := range []string{"prefill", "decode"} {
+				p := pdParams(role, LaunchConfig{}, ComputeNetwork{})
+				p.Vendor = "hygon"
+				p.PD.Mode = c.mode
+				p.PD.RecurrentLayers = c.recurrent
+				p.ExtraArgs = c.extra
+				argv := BuildVLLM(p).Argv
+				if got := count(argv, flag); got != c.want {
+					t.Fatalf("%s: %s appears %d times, want %d: %v", role, flag, got, c.want, argv)
+				}
+				if c.name == "user disables it" && count(argv, "--disable-hybrid-kv-cache-manager") != 1 {
+					t.Fatalf("%s: the user's --disable-hybrid-kv-cache-manager is gone: %v", role, argv)
+				}
+			}
+		})
+	}
+}

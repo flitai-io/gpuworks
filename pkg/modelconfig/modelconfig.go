@@ -17,6 +17,7 @@ package modelconfig
 import (
 	"encoding/json"
 	"io"
+	"strings"
 )
 
 // Config is the normalized subset needed for estimation. Fields not present in a
@@ -145,6 +146,30 @@ func (c *Config) IsMLA() bool {
 func (c *Config) HasMultimodalTower() bool {
 	return c != nil && (c.VisionConfig != nil || c.AudioConfig != nil)
 }
+
+// HasRecurrentLayers reports whether any layer keeps a recurrent state instead
+// of a token-indexed KV cache: linear attention (gated delta net, KDA), Mamba,
+// short convolutions. Such hybrids need the engine's hybrid KV cache manager
+// to give those layers their own block groups.
+func (c *Config) HasRecurrentLayers() bool {
+	if c == nil {
+		return false
+	}
+	for _, kind := range c.LayerTypes {
+		kind = strings.ToLower(kind)
+		for _, marker := range recurrentLayerMarkers {
+			if strings.Contains(kind, marker) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// recurrentLayerMarkers are the substrings that name a recurrent layer kind in
+// normalized layer_types (layerTypes): linear_attention, mamba/mamba2,
+// short_conv, and the gated-delta spellings some configs use.
+var recurrentLayerMarkers = []string{"linear", "mamba", "conv", "delta", "kda", "ssm"}
 
 // CachesKVTokens reports whether the model keeps a token-indexed KV cache. A
 // config that declares kv_cache: false (the inference catalog's statement for

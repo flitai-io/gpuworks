@@ -126,11 +126,17 @@ P 与 D 要交换 KV，所以整个 PD 部署的实例都在同一张计算网�
 
 `vllm-mooncake` 使用 vLLM 自带的 MooncakeConnector，KV 由海光为 DTK 编译的 Mooncake 传输引擎搬运。
 
-- **镜像**：必须是 vLLM 0.21 的海光内置镜像 `gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r2`，内置模板的 K100 / BW 启动规格用的就是它。
-  上一版 `-r1` 的连接器拉取 KV 失败时不报错：decode 仍返回 200 且内容是错的，`kv_load_failure` 不生效，失败的块还会留在前缀缓存里；r2 修复了这一点，PD 部署不要再用 r1。
+- **镜像**：必须是 vLLM 0.21 的海光内置镜像 `gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r3`，内置模板的 K100 / BW 启动规格用的就是它。
+  `-r1` 的连接器拉取 KV 失败时不报错：decode 仍返回 200 且内容是错的，`kv_load_failure` 不生效，失败的块还会留在前缀缓存里；r2 修复了这一点，PD 部署不要再用 r1。
+  `-r2` 不支持下面的混合模型。
   vLLM 0.18.1 的海光镜像没有 Mooncake，不能用于 PD。
 - **传输协议**：平台按 P、D 共用的参数网络选择：主机 RDMA 网络用 `rdma`，以太网、管理网络或同机用 `tcp`。
 - **TP**：prefill 与 decode 必须相等。
+- **GDN 混合模型**（Qwen3.5、Qwen3.6、Qwen3.8 等含线性注意力或 Mamba 层的模型）：需要 r3 镜像。
+  vLLM 配了 KV 连接器就会关掉混合 KV cache 管理器，这类模型没有它起不来，平台按模型 `config.json` 的 `layer_types` 自动加
+  `--no-disable-hybrid-kv-cache-manager`；部署自己写了 `--disable-hybrid-kv-cache-manager` 或 `--no-disable-hybrid-kv-cache-manager` 时以部署为准。
+  KV 按页整页传输，prefill 只算到倒数第二个 prompt token，最后一个由 decode 重算，所以 decode 的 `local_compute` 每个请求多 1 个 token。
+  r2 上这类模型 P、D 两端都启动失败（`Hybrid KV cache manager is disabled but failed to convert the KV cache specs to one unified type`）。
 - **交接**：prefill 实例启动一个 bootstrap 服务（占该实例的一个额外端口），各 TP rank 把自己的地址登记在那里。
   网关第一次用某个 prefill 实例前，先向这个服务查询它的 engine id 并缓存；每个请求再生成一个 transfer id，
   分别写进发给 prefill 与 decode 的 `kv_transfer_params`，decode 据此到 prefill 拉取 KV。
@@ -138,6 +144,8 @@ P 与 D 要交换 KV，所以整个 PD 部署的实例都在同一张计算网�
 - **自检**：连接器不导出传输字节数，交接自检只根据 decode 是否正常回答判断，传输方式记 `unmeasured`。
 - **休眠**：与 NIXL 一样，可休眠的部署不能使用主机 RDMA 参数网络。
 - **验证状态**：已在海光 K100 上验证（同机两卡、TP 1，Docker 与 runveil）；跨机、`rdma` 协议与 TP > 1 未验证。
+  GDN 混合模型在 K100 上用 Qwen3.5-0.8B 与 `hygon/Qwen3.8-27B-Channel-INT8-w8a8` 验证（同机两卡、TP 1、`tcp`）：输出与不开 PD 的部署逐字一致，
+  拉取失败时 `fail` 返回 500 且 decode 继续服务，`recompute` 重算出正确结果；BW 上未验证。
 
 ## 运行中
 

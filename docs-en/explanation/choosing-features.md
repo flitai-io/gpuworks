@@ -203,7 +203,7 @@ the two groups in sequence. The greatest benefit appears with long prompts (thou
 |---|---|---|---|
 | `vllm-nixl` | vLLM / NVIDIA | UCX (over the compute network) | Validated: same machine, cross-machine Ethernet, and multi-node within a role |
 | `vllm-ascend-mooncake` | vLLM / Ascend | NPU's built-in RoCE ports (HCCL) | Validated: across two 910B4 machines; P and D NPUs must be mutually reachable on the NPU network |
-| `vllm-mooncake` | vLLM 0.21 / Hygon | Mooncake transfer engine (over the compute network, RDMA or TCP) | Verified: Hygon K100, two cards in one node, TP 1; cross-node and RDMA not verified |
+| `vllm-mooncake` | vLLM 0.21 / Hygon | Mooncake transfer engine (over the compute network, RDMA or TCP) | Verified: Hygon K100, two cards in one node, TP 1, including GDN hybrid models (r3 image required); cross-node and RDMA not verified |
 | `sglang-nixl` | SGLang / NVIDIA | UCX | **Unverified** |
 | `sglang-ppu-ipc` | SGLang / PPU | Card-to-card IPC within one host (Mooncake NVLink transport) | Validated: two PPU ZW810E cards on one host, TP 1; P and D must be on the same node |
 | `sglang-ppu-mooncake` | SGLang / PPU | Mooncake RDMA (over a host RDMA compute network) | Validated: PPU ZW810E over RoCE NICs, TP 1; nodes need `alixpu_peermem` loaded |

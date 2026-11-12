@@ -128,11 +128,17 @@ When the cards a manual placement pins are held by other deployments, the instan
 
 `vllm-mooncake` uses vLLM's built-in MooncakeConnector, and the KV is moved by the Mooncake transfer engine that Hygon builds for DTK.
 
-- **Image**: It must be the built-in Hygon vLLM 0.21 image `gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r2`, which the built-in templates' K100 / BW launch specs use.
-  In the previous `-r1`, the connector did not report failed KV pulls: decode still returned 200 with wrong content, `kv_load_failure` did not take effect, and the failed blocks stayed in the prefix cache; r2 fixes this, so do not use r1 for PD deployments.
+- **Image**: It must be the built-in Hygon vLLM 0.21 image `gpuworks/gpuworks-runner:dtk26.04-vllm0.21.0-r3`, which the built-in templates' K100 / BW launch specs use.
+  In `-r1`, the connector did not report failed KV pulls: decode still returned 200 with wrong content, `kv_load_failure` did not take effect, and the failed blocks stayed in the prefix cache; r2 fixes this, so do not use r1 for PD deployments.
+  `-r2` does not support the hybrid models below.
   The Hygon vLLM 0.18.1 image does not include Mooncake and cannot be used for PD.
 - **Transfer protocol**: The platform chooses it from the compute network shared by P and D: `rdma` on a host RDMA network, and `tcp` on Ethernet, the management network, or a single host.
 - **TP**: Prefill and decode must be equal.
+- **GDN hybrid models** (models with linear attention or Mamba layers, such as Qwen3.5, Qwen3.6 and Qwen3.8): They need the r3 image.
+  vLLM turns off its hybrid KV cache manager whenever a KV connector is configured, and these models cannot start without it, so the platform adds
+  `--no-disable-hybrid-kv-cache-manager` based on the `layer_types` in the model's `config.json`; a deployment that states `--disable-hybrid-kv-cache-manager` or `--no-disable-hybrid-kv-cache-manager` itself keeps its choice.
+  The KV moves as whole pages, and prefill computes up to the second-to-last prompt token while decode recomputes the last one, so decode's `local_compute` counts 1 more token per request.
+  On r2 both P and D fail to start with these models (`Hybrid KV cache manager is disabled but failed to convert the KV cache specs to one unified type`).
 - **Handoff**: The prefill instance starts a bootstrap server (one extra port of that instance), where each TP rank registers its address.
   Before the gateway first uses a prefill instance, it queries that server for the instance's engine id and caches it; for each request it then generates a transfer id
   and writes it into the `kv_transfer_params` sent to prefill and to decode, and decode pulls the KV from prefill accordingly.
@@ -140,6 +146,8 @@ When the cards a manual placement pins are held by other deployments, the instan
 - **Self-check**: The connector does not export transferred bytes, so the handoff self-check judges only whether decode answers normally, and records the transport as `unmeasured`.
 - **Sleep**: As with NIXL, a sleepable deployment cannot use a host RDMA compute network.
 - **Verification status**: Verified on Hygon K100 (two cards in one node, TP 1, Docker and runveil); cross-node, the `rdma` protocol and TP > 1 are not verified.
+  GDN hybrid models are verified on K100 with Qwen3.5-0.8B and `hygon/Qwen3.8-27B-Channel-INT8-w8a8` (two cards in one node, TP 1, `tcp`): the output is identical to a deployment without PD,
+  and on a failed pull `fail` returns 500 while decode keeps serving and `recompute` recomputes the correct result; not verified on BW.
 
 ## During Operation
 
