@@ -66,7 +66,7 @@
     "nameTooLong": "Name must not exceed 128 UTF-8 bytes (Chinese characters usually use 3 bytes each)"
   },
   "revoke": {
-    "confirm": "Revoke “{{name}}”? Programs using it lose access at once; its past usage stays in Usage analytics. If no active tokens remain, the gateway allows anonymous access (development mode).",
+    "confirm": "Revoke “{{name}}”? Programs using it lose access at once; its past usage stays in Usage analytics. If no active tokens remain, the gateway refuses every /v1 request until another token is created, unless an administrator turned on keyless access under Settings > Security.",
     "failed": "Failed to revoke token: {{detail}}",
     "success": "Token revoked"
   },

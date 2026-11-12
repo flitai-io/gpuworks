@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Button, Card, Form, Space, Switch, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
-import { api } from "../../api";
+import { api, type SecuritySettings } from "../../api";
 import { apiErrorText } from "../../apiError";
 import { useIsAdmin } from "../../components/useIsAdmin";
 
@@ -18,6 +18,11 @@ export default function SecurityCard() {
   const { t: tCommon } = useTranslation("common");
   const isAdmin = useIsAdmin();
   const [previewNetwork, setPreviewNetwork] = useState<boolean>();
+  const [openAccess, setOpenAccess] = useState<boolean>();
+  // The policy as last read from (or written to) the server. Comparing against
+  // it keeps a save to the switches the administrator actually moved, so the
+  // partial PATCH never carries a stale value for the other one.
+  const [stored, setStored] = useState<SecuritySettings>();
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -25,6 +30,8 @@ export default function SecurityCard() {
   const load = useCallback(() => api.securitySettings()
     .then((settings) => {
       setPreviewNetwork(settings.playground_preview_network);
+      setOpenAccess(settings.inference_open_access);
+      setStored(settings);
       setLoadError("");
     })
     .catch((error) => setLoadError(apiErrorText(tCommon, error))), [tCommon]);
@@ -58,12 +65,27 @@ export default function SecurityCard() {
     };
   }, []);
 
+  // The backend patches only the fields it is given; send exactly the ones the
+  // administrator changed since the last load or save.
+  const pending: Partial<SecuritySettings> = {};
+  if (stored) {
+    if (previewNetwork !== undefined && previewNetwork !== stored.playground_preview_network) {
+      pending.playground_preview_network = previewNetwork;
+    }
+    if (openAccess !== undefined && openAccess !== stored.inference_open_access) {
+      pending.inference_open_access = openAccess;
+    }
+  }
+  const dirty = Object.keys(pending).length > 0;
+
   const save = async () => {
-    if (previewNetwork === undefined) return;
+    if (!dirty) return;
     setSaving(true);
     try {
-      const saved = await api.updateSecuritySettings({ playground_preview_network: previewNetwork });
+      const saved = await api.updateSecuritySettings(pending);
       setPreviewNetwork(saved.playground_preview_network);
+      setOpenAccess(saved.inference_open_access);
+      setStored(saved);
       message.success(t("security.saved"));
     } catch (error) {
       message.error(t("error.save", { detail: apiErrorText(tCommon, error) }));
@@ -72,12 +94,12 @@ export default function SecurityCard() {
     }
   };
 
-  const loaded = previewNetwork !== undefined;
+  const loaded = previewNetwork !== undefined && openAccess !== undefined;
   return (
     <div id={SECURITY_ANCHOR} ref={cardRef}>
       <Card
         title={t("security.title")}
-        extra={<Button type="primary" loading={saving} disabled={!isAdmin || !loaded} onClick={() => void save()}>{t("common.save")}</Button>}
+        extra={<Button type="primary" loading={saving} disabled={!isAdmin || !loaded || !dirty} onClick={() => void save()}>{t("common.save")}</Button>}
       >
         <Space direction="vertical" size={8} style={{ width: "100%", maxWidth: 720 }}>
           <Text type="secondary">{t("security.description")}</Text>
@@ -91,6 +113,15 @@ export default function SecurityCard() {
                 disabled={!isAdmin || !loaded}
                 onChange={setPreviewNetwork}
                 aria-label={t("security.previewNetwork")}
+              />
+            </Form.Item>
+            <Form.Item label={t("security.inferenceOpenAccess")} extra={t("security.inferenceOpenAccessHelp")} style={{ marginTop: 8, marginBottom: 0 }}>
+              <Switch
+                checked={openAccess ?? false}
+                loading={!loaded && !loadError}
+                disabled={!isAdmin || !loaded}
+                onChange={setOpenAccess}
+                aria-label={t("security.inferenceOpenAccess")}
               />
             </Form.Item>
           </Form>

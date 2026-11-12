@@ -69,6 +69,7 @@
     "ANALYTICS_TOO_MANY_CARDS": "卡太多，无法逐卡显示（{{detail}}）。请先按节点或卡型筛选，或改为按节点、按卡型分组。",
     "ANALYTICS_VALUE_INVALID": "参数 {{field}} 无效：{{detail}}。",
     "SETTING_HAS_OWN_ROUTE": "这个设置有自己的设置项，请在对应的设置卡片里修改。",
+    "SECURITY_SETTINGS_UNAVAILABLE": "无法读取安全设置，请重试或查看服务端日志。",
     "TELEMETRY_ENDPOINT_INVALID": "Collector 地址无效：请填写 http(s) 地址，例如 http://otel-collector:4318（不含用户名密码、查询参数）。",
     "TELEMETRY_HEADER_INVALID": "请求头 {{name}} 不可用：名称不合法、重复，或是导出时自动设置的头（Content-Type 等）。",
     "TELEMETRY_HEADER_VALUE_REQUIRED": "请求头 {{name}} 还没有值，请填写。",

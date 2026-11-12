@@ -106,7 +106,7 @@ func TestNewRefusesWeakBootstrapBeforeCreatingUsersOrAPIKeys(t *testing.T) {
 	if err := st.DB().Model(&store.User{}).Count(&users).Error; err != nil {
 		t.Fatal(err)
 	}
-	if users != 0 || st.HasAnyAPIKey() {
+	if users != 0 || countLiveAPIKeys(t, st) != 0 {
 		t.Fatalf("weak bootstrap left users=%d or an API key", users)
 	}
 }

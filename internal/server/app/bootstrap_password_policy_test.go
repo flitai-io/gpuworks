@@ -75,7 +75,7 @@ func TestBootstrapRejectsWeakPasswordBeforeCreatingDefaultKey(t *testing.T) {
 				t.Fatalf("weak %s password error = %v", source, err)
 			}
 			var users int64
-			if err := st.DB().Model(&store.User{}).Count(&users).Error; err != nil || users != 0 || st.HasAnyAPIKey() {
+			if err := st.DB().Model(&store.User{}).Count(&users).Error; err != nil || users != 0 || countLiveAPIKeys(t, st) != 0 {
 				t.Fatalf("rejected credentials left authentication state: users=%d err=%v", users, err)
 			}
 		})
@@ -97,7 +97,7 @@ func TestBootstrapCredentialsWriteFailureFailsClosedAndKeepsExistingAccountOnRet
 	if err == nil || !strings.Contains(err.Error(), "reset-password") {
 		t.Fatalf("credentials write error lacks recovery instructions: %v", err)
 	}
-	if st.HasAnyAPIKey() || strings.Contains(out.String(), password) {
+	if countLiveAPIKeys(t, st) != 0 || strings.Contains(out.String(), password) {
 		t.Fatal("failed bootstrap created an API key or logged a password")
 	}
 	user, valid := st.VerifyUser("admin", password)
@@ -123,4 +123,21 @@ func TestBootstrapCredentialsWriteFailureFailsClosedAndKeepsExistingAccountOnRet
 	if strings.Contains(out.String(), password) {
 		t.Fatal("retry exposed the account password in the log")
 	}
+}
+
+// countLiveAPIKeys counts unrevoked API keys. Bootstrap must never create one:
+// its secret would be discarded, so nothing could authenticate with it.
+func countLiveAPIKeys(t *testing.T, st *store.Store) int {
+	t.Helper()
+	keys, err := st.ListAPIKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := 0
+	for i := range keys {
+		if keys[i].RevokedAt == nil {
+			live++
+		}
+	}
+	return live
 }

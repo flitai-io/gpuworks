@@ -196,19 +196,3 @@ func (s *Store) touchAPIKey(id uint) {
 		s.db.Model(&APIKey{}).Where("id = ?", id).Update("last_used", now)
 	}
 }
-
-// HasAnyAPIKey reports whether at least one unrevoked API key exists. The
-// answer is cached until a key is created or revoked through this store.
-func (s *Store) HasAnyAPIKey() bool {
-	some, known, generation := s.apiKeys.cachedHasAny()
-	if known {
-		return some
-	}
-	var count int64
-	if err := s.db.Model(&APIKey{}).Where("revoked_at IS NULL").Count(&count).Error; err != nil {
-		// A failed read is not cached, so it cannot pin the answer.
-		return count > 0
-	}
-	s.apiKeys.setHasAny(generation, count > 0)
-	return count > 0
-}

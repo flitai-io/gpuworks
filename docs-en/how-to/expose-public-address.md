@@ -92,7 +92,7 @@ around 320 KB/s) represent only that measurement, not a guarantee for other netw
 
 ## Security Boundaries
 
-The endpoint exposes the entire server: UI/API access still requires a login session, and `/v1` still requires an API key, just as on the internal network. There is **no**
+The endpoint exposes the entire server: UI/API access still requires a login session, and `/v1` still requires an API key by default (only an administrator explicitly turning on `inference_open_access` in the security settings accepts a request without one, see [Gateway Authentication](../reference/openai-gateway.md#authentication)), just as on the internal network. There is **no**
 path filtering, and Cloudflare Access is not configured. The server itself rate-limits failed logins; configure any additional endpoint policies separately. When adding nodes to your team,
 the UI warns you that a quick address is temporary if you enter one.
 

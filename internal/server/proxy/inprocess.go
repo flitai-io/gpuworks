@@ -44,7 +44,7 @@ type InProcessReply struct {
 }
 
 // Identify names the caller of a request from its API key, as the /v1 entry
-// does: with no key configured yet every request is allowed, anonymously.
+// does: a key is required unless an administrator turned open access on.
 // False when the key is missing or invalid.
 func (p *Proxy) Identify(r *http.Request) (uxrecord.Caller, bool) {
 	caller, _, ok := p.identifyKey(r)
@@ -53,14 +53,19 @@ func (p *Proxy) Identify(r *http.Request) (uxrecord.Caller, bool) {
 
 // identifyKey is Identify that also returns the key's identity, whose scope
 // limits the deployments the request may reach.
+//
+// A presented key is always verified, even when open access is on: open access
+// answers "may a request arrive without a key", not "is every key accepted".
+// A request without a key is refused unless an administrator explicitly opened
+// the gateway, and an unreadable setting counts as closed.
 func (p *Proxy) identifyKey(r *http.Request) (uxrecord.Caller, store.APIKeyIdentity, bool) {
 	caller := uxrecord.Caller{Source: uxrecord.SourceAPI, ReceivedMS: time.Now().UnixMilli()}
-	if !p.store.HasAnyAPIKey() {
-		return caller, store.APIKeyIdentity{}, true
-	}
 	key := auth.BearerToken(r.Header.Get("Authorization"))
 	if key == "" {
-		return caller, store.APIKeyIdentity{}, false
+		if !p.inferenceOpenAccess() {
+			return caller, store.APIKeyIdentity{}, false
+		}
+		return caller, store.APIKeyIdentity{}, true
 	}
 	identity, ok := p.store.ResolveAPIKey(key)
 	if !ok {

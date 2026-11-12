@@ -18,7 +18,7 @@
     "Dropdown": 8,
     "Empty": 32,
     "Flex": 7,
-    "Form": 474,
+    "Form": 475,
     "Input": 163,
     "InputNumber": 56,
     "List": 6,
@@ -38,7 +38,7 @@
     "Spin": 46,
     "Statistic": 9,
     "Steps": 2,
-    "Switch": 39,
+    "Switch": 40,
     "Table": 52,
     "Tabs": 12,
     "Tag": 315,
@@ -379,7 +379,7 @@
     "ui/src/pages/settings/MCPCard.tsx": {"components":{"Alert":2,"Button":1,"Card":1,"Collapse":1,"Descriptions":4,"Space":3,"Switch":1,"Typography":8,"message":2},"icons":0,"imports":["Alert","Button","Card","Collapse","Descriptions","Space","Switch","Typography","message"],"sites":23,"types":[]},
     "ui/src/pages/settings/OutboundPolicyCard.tsx": {"components":{"Alert":5,"Button":2,"Card":1,"Form":3,"Input":1,"Skeleton":1,"Space":1,"Switch":1,"Typography":3},"icons":0,"imports":["Alert","Button","Card","Form","Input","Skeleton","Space","Switch","Typography"],"sites":18,"types":[]},
     "ui/src/pages/settings/PlatformSSHKeyCard.tsx": {"components":{"Alert":1,"Button":2,"Card":1,"Descriptions":5,"Input":1,"Modal":1,"Popconfirm":1,"Space":1,"Spin":1,"Typography":4,"message":4},"icons":0,"imports":["Alert","Button","Card","Descriptions","Input","Modal","Popconfirm","Space","Spin","Typography","message"],"sites":22,"types":[]},
-    "ui/src/pages/settings/SecurityCard.tsx": {"components":{"Alert":2,"Button":2,"Card":1,"Form":2,"Space":1,"Switch":1,"Typography":1,"message":2},"icons":0,"imports":["Alert","Button","Card","Form","Space","Switch","Typography","message"],"sites":12,"types":[]},
+    "ui/src/pages/settings/SecurityCard.tsx": {"components":{"Alert":2,"Button":2,"Card":1,"Form":3,"Space":1,"Switch":2,"Typography":1,"message":2},"icons":0,"imports":["Alert","Button","Card","Form","Space","Switch","Typography","message"],"sites":14,"types":[]},
     "ui/src/pages/settings/ServerListenCard.tsx": {"components":{"Alert":3,"Button":2,"Card":1,"Collapse":1,"Form":4,"Input":3,"Space":1,"Tag":1,"Typography":3,"message":4},"icons":0,"imports":["Alert","Button","Card","Collapse","Form","Input","Space","Tag","Typography","message"],"sites":23,"types":[]},
     "ui/src/pages/settings/TelemetryCard.tsx": {"components":{"Alert":4,"Button":5,"Card":1,"Descriptions":5,"Form":6,"Input":4,"InputNumber":1,"Space":5,"Switch":1,"Tag":4,"Typography":7,"message":2},"icons":2,"imports":["Alert","Button","Card","Descriptions","Form","Input","InputNumber","Space","Switch","Tag","Typography","message"],"sites":45,"types":[]},
     "ui/src/pages/settings/UpdatesCard.tsx": {"components":{"Alert":6,"Button":5,"Card":1,"Modal":1,"Select":1,"Space":8,"Switch":1,"Table":0,"Tag":3,"Typography":22,"Upload":2,"message":7},"icons":2,"imports":["Alert","Button","Card","Modal","Select","Space","Switch","Table","Tag","Typography","Upload","message"],"sites":57,"types":["ColumnsType"]},
@@ -429,5 +429,5 @@
     "ui/src/ui-kit/Spinner.tsx": {"components":{},"icons":1,"imports":[],"sites":0,"types":[]},
     "ui/src/ui-kit/feedback/index.tsx": {"components":{},"icons":1,"imports":[],"sites":0,"types":[]}
   },
-  "summary": {"antRules":202,"antdFiles":354,"cssFilesWithAntRules":13,"iconFiles":104,"iconImports":248,"sites":5350}
+  "summary": {"antRules":202,"antdFiles":354,"cssFilesWithAntRules":13,"iconFiles":104,"iconImports":248,"sites":5352}
 }

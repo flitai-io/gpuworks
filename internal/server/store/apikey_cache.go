@@ -57,13 +57,10 @@ type apiKeyCache struct {
 	// scopes caches APIKeyScopeByID by key ID, for requests sent on a key's
 	// behalf without its secret (a batch's).
 	scopes map[uint]verifiedAPIKey
-	// hasAny caches HasAnyAPIKey: 0 unknown, 1 none, 2 some.
-	hasAny int
 	// generation advances on every key create/delete. A reader samples it
 	// before its database read and may only publish what it read if nothing
 	// changed meanwhile; otherwise a read that raced a delete could cache the
-	// deleted key, or a count that raced a create could cache "no keys" and
-	// leave the gateway open.
+	// deleted key.
 	generation uint64
 	now        func() time.Time
 }
@@ -163,7 +160,6 @@ func (c *apiKeyCache) forget(prefix string) {
 			delete(c.scopes, id)
 		}
 	}
-	c.hasAny = 0
 	c.generation++
 	// Existing requests can finish, but later requests must not join a
 	// verification that read permissions before this change. The generation
@@ -187,32 +183,10 @@ func (c *apiKeyCache) dueLastUsed(id uint) (time.Time, bool) {
 	return now, true
 }
 
-// cachedHasAny returns the cached answer, whether it is known, and the
-// generation to hand back to setHasAny when it is not.
-func (c *apiKeyCache) cachedHasAny() (bool, bool, uint64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.hasAny == 2, c.hasAny != 0, c.generation
-}
-
-func (c *apiKeyCache) setHasAny(generation uint64, some bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if generation != c.generation {
-		return
-	}
-	if some {
-		c.hasAny = 2
-	} else {
-		c.hasAny = 1
-	}
-}
-
-// changed records a key create: the cached count is stale and any read that
-// started before it must not be published.
+// changed records a key create: any verification that started before it must
+// not be published.
 func (c *apiKeyCache) changed() {
 	c.mu.Lock()
-	c.hasAny = 0
 	c.generation++
 	clear(c.inflight)
 	c.mu.Unlock()

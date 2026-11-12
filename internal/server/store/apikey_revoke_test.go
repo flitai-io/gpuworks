@@ -28,7 +28,7 @@ func TestRevokeAPIKeyUnknownTargetDoesNotChangeExistingKey(t *testing.T) {
 		}
 	}
 	keys, err := st.ListAPIKeys()
-	if err != nil || len(keys) != 1 || keys[0].RevokedAt != nil || !st.HasAnyAPIKey() || !st.VerifyAPIKey(key) {
+	if err != nil || len(keys) != 1 || keys[0].RevokedAt != nil || !st.VerifyAPIKey(key) {
 		t.Fatalf("unknown target changed the existing key: rows=%d err=%v", len(keys), err)
 	}
 	select {
