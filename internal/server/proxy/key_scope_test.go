@@ -65,6 +65,7 @@ func newKeyScopeRig(t *testing.T) *keyScopeRig {
 	}
 	addr := strings.TrimPrefix(upstream.URL, "http://")
 	rig.p = New(st, storeNetworks(st), dialTestHub{addr: addr}, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(rig.p.Close)
 	return rig
 }
 
@@ -219,6 +220,7 @@ func TestScopedSelectionAmongDeploymentsSharingAName(t *testing.T) {
 	}
 	pending := legacySharedNameDeployment(t, st, &store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: "shared", Engine: "vllm", State: "active"})
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"shared-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 
 	onlyPending := &store.APIKeyIdentity{Restricted: true, Deployments: map[uint]struct{}{pending.ID: {}}}
 	dep, _, status, _, _ := p.selectScopedDeploymentInstance(onlyPending, "shared", "")

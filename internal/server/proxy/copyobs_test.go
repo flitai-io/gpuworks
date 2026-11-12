@@ -45,40 +45,41 @@ func (s *syncBuffer) String() string {
 func newObservedProxy(t *testing.T, upstream http.Handler, buf *syncBuffer) (*Proxy, string, func()) {
 	t.Helper()
 	upstreamServer := httptest.NewServer(upstream)
+	t.Cleanup(upstreamServer.Close)
 	st, err := store.Open("file:proxy_obs_"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared", bus.New())
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/omni", Revision: "main", Name: "omni"})
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	node, err := st.RegisterNode("node-omni", store.HashToken("node"), "node-omni")
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	dep, err := st.CreateDeployment(&store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: "omni", Engine: "vllm", State: "active"})
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	if _, err := st.CreateInstance(&store.Instance{
 		UUID: "omni-instance", DeploymentID: dep.ID, NodeID: node.ID,
 		State: proto.InstRunning, APIPort: 30000, Ports: "[30000]",
 	}); err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	apiKey, err := st.CreateAPIKey("proxy-obs", 0)
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	p := New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstreamServer.URL, "http://")}, log, 0)
+	t.Cleanup(p.Close)
 	return p, apiKey, upstreamServer.Close
 }
 

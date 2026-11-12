@@ -20,6 +20,7 @@ func TestDistributedSelectionDoesNotReadTheNodeSet(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{}}, nil, 0)
+	t.Cleanup(p.Close)
 	const notReady = "distributed model qwen-72b is not ready: no replica has every rank running on an online node"
 	for _, tc := range []struct {
 		nodeIDs string

@@ -42,8 +42,6 @@ func TestKnownInstanceFailureEndsWaitingRequest(t *testing.T) {
 				}
 			}), &logs)
 			defer closeUpstream()
-			defer p.Close()
-			defer p.store.Close()
 			records := make(chan uxrecord.Request, 1)
 			p.SetRequestSink(func(r uxrecord.Request) { records <- r })
 			server := httptest.NewServer(p.Handler())
@@ -134,8 +132,6 @@ func TestInstanceGuardPreservesHealthyDrainingAndSleep(t *testing.T) {
 	var logs syncBuffer
 	p, _, closeUpstream := newObservedProxy(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), &logs)
 	defer closeUpstream()
-	defer p.Close()
-	defer p.store.Close()
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 	call := &guardedCall{port: 30000, cancel: cancel}
@@ -171,8 +167,6 @@ func TestInstanceGuardChecksDeletionAndPortChanges(t *testing.T) {
 			var logs syncBuffer
 			p, _, closeUpstream := newObservedProxy(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), &logs)
 			defer closeUpstream()
-			defer p.Close()
-			defer p.store.Close()
 			oldCtx, oldCancel := context.WithCancelCause(context.Background())
 			defer oldCancel(nil)
 			oldCall := &guardedCall{port: 30000, cancel: oldCancel}
@@ -207,8 +201,6 @@ func TestInstanceGuardReleasesFailedAttemptsAndIsConcurrentSafe(t *testing.T) {
 	var logs syncBuffer
 	p, _, closeUpstream := newObservedProxy(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), &logs)
 	defer closeUpstream()
-	defer p.Close()
-	defer p.store.Close()
 	var wg sync.WaitGroup
 	for index := 0; index < 8; index++ {
 		wg.Add(1)

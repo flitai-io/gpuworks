@@ -414,6 +414,11 @@ func TestProxyDataLaneUnavailableReturns503WithRetryAfter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/lane", Revision: "main", Name: "lane"})
 	if err != nil {
 		t.Fatal(err)
@@ -434,6 +439,7 @@ func TestProxyDataLaneUnavailableReturns503WithRetryAfter(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), dataLaneUnavailableHub{}, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 
