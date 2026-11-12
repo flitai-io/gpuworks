@@ -376,7 +376,7 @@ func (s *Store) EnrollKubeNode(token, clusterUID, nodeName string) (*Node, *Kube
 		}
 		// Another entry holding the node refuses it even when this entry has
 		// a row for it from before: two agents would manage one node's cards.
-		if holder, err := kubeNodeHolder(tx, cluster, nodeName, time.Now()); err != nil || holder != "" {
+		if holder, err := kubeNodeHolder(tx, cluster, nodeName, time.Now().UTC()); err != nil || holder != "" {
 			if err != nil {
 				return err
 			}
