@@ -32,7 +32,7 @@ func doctorReportForState(ctx context.Context, p gpu.Prober, stateDir string) pr
 	if info, err := os.Stat(filepath.Join(stateDir, "udocker")); err == nil && info.IsDir() {
 		access = doctorRuntimeAccess(stateDir)
 	}
-	return buildDoctorReportWith(ctx, p, nil, access)
+	return buildDoctorReportWith(ctx, p, nil, access, stateDir)
 }
 
 // doctorStateAccess reports an operator directory above the agent's state

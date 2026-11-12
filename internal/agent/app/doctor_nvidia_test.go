@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -66,7 +67,7 @@ func TestDoctorNVIDIAChecksSpareASlowBrokenDriver(t *testing.T) {
 	stubCUDACheck(t, "FAIL: cuInit=101")
 	r := proto.DoctorReport{Accelerators: &proto.DoctorAccelerators{Vendor: "nvidia", Driver: "580.126.09"}}
 
-	doctorNVIDIAChecks(context.Background(), &r, 4)
+	doctorNVIDIAChecks(context.Background(), &r, 4, t.TempDir())
 
 	if calls := readCalls(t, log); len(calls) != 0 {
 		t.Fatalf("doctor ran %v; want neither nvidia-smi nor the python checks", calls)
@@ -94,7 +95,7 @@ func TestDoctorNVIDIAChecksRunMultiGPUChecksAfterCUDAPasses(t *testing.T) {
 	log := fakeDiagnosticTools(t)
 	stubCUDACheck(t, "PASS cuInit=ok")
 	r := proto.DoctorReport{Accelerators: &proto.DoctorAccelerators{Vendor: "nvidia", Driver: "580.126.09"}}
-	doctorNVIDIAChecks(context.Background(), &r, 2)
+	doctorNVIDIAChecks(context.Background(), &r, 2, t.TempDir())
 	if calls := readCalls(t, log); len(calls) != 2 || calls[0] != "python3" || calls[1] != "python3" {
 		t.Fatalf("calls = %v, want the peer access and NCCL checks", calls)
 	}
@@ -104,10 +105,83 @@ func TestDoctorNVIDIAChecksRunMultiGPUChecksAfterCUDAPasses(t *testing.T) {
 
 	stubCUDACheck(t, "FAIL: cuInit=101")
 	r = proto.DoctorReport{Accelerators: &proto.DoctorAccelerators{Vendor: "nvidia"}}
-	doctorNVIDIAChecks(context.Background(), &r, 1)
+	doctorNVIDIAChecks(context.Background(), &r, 1, t.TempDir())
 	if got := fact(r, proto.DoctorFactPeerAccess); got != "SKIP (fewer than 2 GPUs)" {
 		t.Fatalf("one-card peer access = %q", got)
 	}
+}
+
+// TestRunPythonDiagnosticUsesTheHostCommandBuilder: the doctor's python3
+// diagnostics must be placed the same way a vendor CLI runs (gpu.HostCommand),
+// not a raw exec.CommandContext, because a Kubernetes DaemonSet pod's image
+// has no python3 of its own.
+func TestRunPythonDiagnosticUsesTheHostCommandBuilder(t *testing.T) {
+	var gotName string
+	var gotArgs []string
+	old := pythonCommand
+	pythonCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		gotName, gotArgs = name, args
+		return exec.CommandContext(ctx, "true")
+	}
+	t.Cleanup(func() { pythonCommand = old })
+
+	runPythonDiagnostic(context.Background(), "print(1)")
+	if gotName != "python3" || len(gotArgs) != 2 || gotArgs[0] != "-c" || gotArgs[1] != "print(1)" {
+		t.Fatalf("pythonCommand called with %q %v, want python3 -c <script>", gotName, gotArgs)
+	}
+}
+
+// TestRunPythonFileDiagnosticChoosesItsDirectory: the NCCL check's script
+// file goes under the state directory when CLIs run on the host (the same
+// path there as in the agent's own container, which os.TempDir() is not),
+// and under os.TempDir() otherwise or when no state directory is offered.
+func TestRunPythonFileDiagnosticChoosesItsDirectory(t *testing.T) {
+	var gotDir string
+	oldCreate := createDiagnosticScript
+	createDiagnosticScript = func(dir, pattern string) (*os.File, error) {
+		gotDir = dir
+		return os.CreateTemp(dir, pattern)
+	}
+	t.Cleanup(func() { createDiagnosticScript = oldCreate })
+	oldPython := pythonCommand
+	pythonCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		return exec.CommandContext(ctx, "true")
+	}
+	t.Cleanup(func() { pythonCommand = oldPython })
+
+	t.Run("off the host: os.TempDir() regardless of a given state dir", func(t *testing.T) {
+		gotDir = ""
+		oldOnHost := cliOnHostForDoctor
+		cliOnHostForDoctor = func() bool { return false }
+		t.Cleanup(func() { cliOnHostForDoctor = oldOnHost })
+		runPythonFileDiagnostic(context.Background(), t.TempDir(), "print(1)")
+		if gotDir != os.TempDir() {
+			t.Fatalf("dir = %q, want os.TempDir() (%q)", gotDir, os.TempDir())
+		}
+	})
+
+	t.Run("on the host with no state dir offered: os.TempDir()", func(t *testing.T) {
+		gotDir = ""
+		oldOnHost := cliOnHostForDoctor
+		cliOnHostForDoctor = func() bool { return true }
+		t.Cleanup(func() { cliOnHostForDoctor = oldOnHost })
+		runPythonFileDiagnostic(context.Background(), "", "print(1)")
+		if gotDir != os.TempDir() {
+			t.Fatalf("dir = %q, want os.TempDir() (%q)", gotDir, os.TempDir())
+		}
+	})
+
+	t.Run("on the host with a state dir: the state dir itself", func(t *testing.T) {
+		gotDir = ""
+		oldOnHost := cliOnHostForDoctor
+		cliOnHostForDoctor = func() bool { return true }
+		t.Cleanup(func() { cliOnHostForDoctor = oldOnHost })
+		state := t.TempDir()
+		runPythonFileDiagnostic(context.Background(), state, "print(1)")
+		if gotDir != state {
+			t.Fatalf("dir = %q, want the state directory %q", gotDir, state)
+		}
+	})
 }
 
 // deadlineProber records the deadline doctor probes under.
