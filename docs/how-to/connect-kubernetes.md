@@ -50,7 +50,11 @@ agent 没有厂商挂载也能用到厂商工具：它以 privileged、hostPID �
 **一个 Kubernetes 节点同一时间只属于一个条目。** 同一个集群的两个条目选中了同一个节点时，后来的那个条目的 agent 注册被拒绝
 （`KUBE_ENROLL_REFUSED`，原因 `node_taken`，并指出占着它的条目名），直到第一个条目在这个节点上的 agent 离线超过 15 分钟；
 之后节点可以转到另一个条目（例如改了节点选择器之后）。其他拒绝原因：`unknown_token`（接入令牌未知或已吊销；已经注册过的 agent 保留自己保存的身份，
-不受影响）、`other_cluster`（令牌属于另一个 Kubernetes 集群）。
+不受影响）、`other_cluster`（令牌属于另一个 Kubernetes 集群）。保存的身份记着发给它的条目，agent 只用自己条目发的那份：
+几个条目共用默认的状态目录时，节点从一个条目转到另一个条目不会顶着前一个条目的身份连上来。
+
+同一个 Kubernetes 集群接入两个条目时，**两个条目要用不同的命名空间**：manifest 里的对象按命名空间命名，同名命名空间下后应用的
+会覆盖先应用的，前一个条目的节点就悄悄转到了后一个条目。
 
 ## 集群用 HAMi、ACK 共享 GPU 或其他切分时
 
@@ -156,16 +160,17 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
 
 保存只改 gpuworks 里的记录，manifest 随即按新设置渲染，**集群里跑的仍是旧的，直到再应用一次**：
 
-- 手动接入的条目（没有吊销）：保存后页面给出要按顺序执行的 `kubectl` 命令。改了优先级或允许抢占时，先执行
-  `kubectl delete priorityclass gpuworks-inference-<命名空间> --ignore-not-found`，再执行 apply 命令：Kubernetes 不能原地修改
-  PriorityClass 的数值与 `preemptionPolicy`，只能删了重建。其他设置只需要 apply 命令。
+- 手动接入的条目（没有吊销）：保存后页面给出一行 `kubectl` 命令，先删条目的 PriorityClass 再应用 manifest
+  （`kubectl delete priorityclass gpuworks-inference-<命名空间> --ignore-not-found && kubectl apply -f ...`）：Kubernetes 不能原地修改
+  PriorityClass 的数值与 `preemptionPolicy`，只能删了重建；之前改过优先级却没应用时，单独的 `kubectl apply` 会因此失败，
+  所以每次都带上删除。写成一行是为了两步之间不留没有 PriorityClass 的空档。
 - 从云账号接入的条目：点「应用到集群」，server 自己应用；PriorityClass 变了时由 server 先删后建（应用结果里这一项的动作是 `replace`）。
 - 空闲归还时间也写在 manifest 里（DaemonSet 的 Pod 模板带注解 `gpuworks.ai/idle-return-seconds`），所以改了它同样要重新应用：
   agent 随之重启，在启动注册时取到新值。agent 重启不会重启实例 Pod。
 
 **改节点选择器（云条目是节点池）**：重新应用后，DaemonSet 不再在不被选中的节点上运行，这些节点的 agent 退出，节点离线；
 离线 15 分钟后，平台请同一个条目里另一个在线的 agent 确认：该节点在 Kubernetes 里是否还在、是否还运行着本条目的 agent Pod。
-都不是、且节点上没有实例时，节点记录自动删除。条目里没有别的在线节点时没有谁可问，不自动删除，需要在节点页手动删除这个节点
+连续两次确认（约隔 5 分钟，避开滚动更新时 agent Pod 删了还没重建的空档）都不是、且节点上没有实例时，节点记录自动删除。条目里没有别的在线节点时没有谁可问，不自动删除，需要在节点页手动删除这个节点
 （删除 Kubernetes 节点不需要 SSH）。新选中的节点自己加入。
 
 ## 卸载

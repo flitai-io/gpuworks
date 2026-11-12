@@ -28,12 +28,13 @@ const (
 func (a *App) kubeNodeLoop(ctx context.Context) {
 	t := time.NewTicker(kubeNodeSweepInterval)
 	defer t.Stop()
+	strikes := map[string]bool{}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			sweepGoneKubeNodes(ctx, a.log, a.store, a.hub.CallNode, a.hub.Kick, time.Now().Add(-kubeNodeGoneAfter))
+			sweepGoneKubeNodes(ctx, a.log, a.store, a.hub.CallNode, a.hub.Kick, time.Now().Add(-kubeNodeGoneAfter), strikes)
 		}
 	}
 }
@@ -41,12 +42,24 @@ func (a *App) kubeNodeLoop(ctx context.Context) {
 // nodeCaller is the hub's RPC to a node's agent.
 type nodeCaller func(ctx context.Context, uuid, method string, params any) (json.RawMessage, error)
 
-func sweepGoneKubeNodes(ctx context.Context, log *slog.Logger, st *store.Store, call nodeCaller, kick func(string), cutoff time.Time) {
+// sweepGoneKubeNodes removes a node only when two sweeps in a row find it
+// gone: one answer can catch an agent pod between the deletion and the
+// re-creation of a rolling update. strikes holds the nodes the last sweep
+// found gone.
+func sweepGoneKubeNodes(ctx context.Context, log *slog.Logger, st *store.Store, call nodeCaller, kick func(string), cutoff time.Time, strikes map[string]bool) {
 	nodes, err := st.OfflineKubeNodes(cutoff)
 	if err != nil {
 		log.Warn("kubernetes node sweep failed", "err", err)
 		return
 	}
+	found := map[string]bool{}
+	defer func() {
+		for uuid := range strikes {
+			if !found[uuid] {
+				delete(strikes, uuid)
+			}
+		}
+	}()
 	for _, node := range nodes {
 		if instances, err := st.InstancesForNode(node.ID); err != nil || len(instances) > 0 {
 			continue // its instances are the controller's to settle first
@@ -70,6 +83,12 @@ func sweepGoneKubeNodes(ctx context.Context, log *slog.Logger, st *store.Store, 
 		if !asked || !left {
 			continue
 		}
+		found[node.UUID] = true
+		if !strikes[node.UUID] {
+			strikes[node.UUID] = true
+			continue
+		}
+		delete(strikes, node.UUID)
 		if err := st.DeleteNode(node.UUID); err != nil {
 			log.Warn("removing a node that left its Kubernetes cluster failed", "node", node.UUID, "err", err)
 			continue

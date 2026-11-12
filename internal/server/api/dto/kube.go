@@ -265,10 +265,11 @@ type KubeClusterEdit struct {
 	// until it is applied again (POST …/apply for an entry the server can
 	// apply, the commands below otherwise).
 	Reapply bool `json:"reapply"`
-	// Commands bring a cluster the server cannot reach in line, in order:
-	// replacing the PriorityClass first when its value or preemption policy
-	// changed (Kubernetes does not change them in place), then applying the
-	// manifest. Only for administrators of an entry made by hand that is not
-	// revoked; empty when nothing needs applying.
+	// Commands bring a cluster the server cannot reach in line: one line
+	// that deletes the entry's PriorityClass and applies the manifest, since
+	// Kubernetes does not change a class's value or preemption policy in
+	// place and an earlier edit of them may not have been applied. Only for
+	// administrators of an entry made by hand that is not revoked; empty
+	// when the manifest did not change.
 	Commands []string `json:"commands"`
 }

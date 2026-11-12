@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -82,8 +83,13 @@ func enrollKubeNodeWith(ctx context.Context, log *slog.Logger, cfg agentapp.Conf
 	previous := kube.ReadIdentity(cfg.StateDir)
 	httpc := &http.Client{Timeout: 30 * time.Second}
 	delay := 2 * time.Second
+	fallback := true
 	for {
-		id, err := kube.Enroll(ctx, api, httpc, cfg.ServerURL, enrollToken, nodeName, cfg.StateDir)
+		id, err := kube.Enroll(ctx, api, httpc, cfg.ServerURL, enrollToken, nodeName, cfg.StateDir, fallback)
+		var refusal *kube.EnrollRefusal
+		if errors.As(err, &refusal) {
+			fallback = false // a refusal of this node's identity is not undone by a later outage
+		}
 		if err == nil {
 			log.Info("enrolled as a Kubernetes node", "node", nodeName, "uuid", id.NodeUUID)
 			if previous.NodeUUID != "" && previous.NodeUUID != id.NodeUUID {
@@ -196,7 +202,8 @@ func kubeSupportedAccelerator(census kubeAcceleratorCensus) (vendor string, ok b
 }
 
 // kubeStandBy decides, before a node's first enrollment, whether to stand by
-// instead of enrolling. A node that already has an identity on disk behaves
+// instead of enrolling. A node that already has an identity of its own
+// entry on disk behaves
 // as it always did — (false, nil), whatever the bus shows right now: a
 // card going missing, or a vendor this build no longer supports, must not
 // revert an already-enrolled node to stand-by. A fresh node with no
@@ -205,7 +212,7 @@ func kubeSupportedAccelerator(census kubeAcceleratorCensus) (vendor string, ok b
 // kubeReexec restarts the process to enroll clean, as a self-upgrade or an
 // accelerator-preference switch does) or ctx ends.
 func kubeStandBy(ctx context.Context, log *slog.Logger, stateDir string, census kubeAcceleratorCensus) (stoodBy bool, err error) {
-	if kube.ReadIdentity(stateDir).NodeToken != "" {
+	if kube.ReadOwnIdentity(stateDir, os.Getenv("GPUWORKS_KUBE_ENROLL_TOKEN")).NodeToken != "" {
 		return false, nil
 	}
 	if vendor, ok := kubeSupportedAccelerator(census); ok {
@@ -219,7 +226,7 @@ func kubeStandBy(ctx context.Context, log *slog.Logger, stateDir string, census 
 	for {
 		select {
 		case <-ctx.Done():
-			return true, ctx.Err()
+			return true, nil // the pod is going away: a clean exit, not a failure
 		case <-t.C:
 			if vendor, ok := kubeSupportedAccelerator(census); ok {
 				log.Info("a supported accelerator appeared; restarting to enroll", "vendor", vendor)

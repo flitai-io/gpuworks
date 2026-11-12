@@ -51,6 +51,7 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 	text(&c.ContainerdSocket, req.ContainerdSocket)
 	text(&c.APIServer, req.APIServer)
 	text(&c.EnginePorts, req.EnginePorts)
+	c.EnginePorts = firstNonEmpty(c.EnginePorts, kubeDefaultEnginePorts)
 	if req.IdleReturnSeconds != nil {
 		c.IdleReturnSeconds = *req.IdleReturnSeconds
 	}
@@ -105,10 +106,11 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 	}
 	out := dto.KubeClusterEdit{Cluster: kubeClusterDTO(*updated, views[updated.ID]), Changed: changed, Reapply: before != after, Commands: []string{}}
 	if out.Reapply && updated.ProviderID == nil && updated.RevokedAt == nil {
-		if old.Priority != updated.Priority || old.AllowPreemption != updated.AllowPreemption {
-			out.Commands = append(out.Commands, "kubectl delete priorityclass "+kubemanifest.PriorityClass(updated.Namespace)+" --ignore-not-found")
-		}
-		out.Commands = append(out.Commands, out.Cluster.ApplyCommand)
+		// The PriorityClass goes first whatever this edit changed: an earlier
+		// edit of its value may not have been applied, and Kubernetes does not
+		// change it in place. One line, so no time passes without the class
+		// between the two.
+		out.Commands = append(out.Commands, "kubectl delete priorityclass "+kubemanifest.PriorityClass(updated.Namespace)+" --ignore-not-found && "+out.Cluster.ApplyCommand)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

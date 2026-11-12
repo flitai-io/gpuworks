@@ -309,6 +309,7 @@ func (a *apiHandlers) kubeEnroll(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, store.ErrKubeClusterMismatch):
 		writeProductError(w, http.StatusForbidden, ErrorKubeEnrollRefused, err.Error(), map[string]any{"reason": "other_cluster"})
+		return
 	case errors.Is(err, store.ErrKubeNodeTaken):
 		// Two agents on one node would share its state directory; the agent
 		// stops rather than take another entry's identity.

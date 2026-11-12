@@ -486,4 +486,30 @@ func TestAChangedPriorityClassIsReplaced(t *testing.T) {
 			t.Fatalf("unchanged class: %v", actions(again))
 		}
 	}
+
+	// Deleted but refused the new one: reported failed, not replaced, and
+	// the next apply creates it.
+	f.forbidden["PATCH "+pc] = true
+	failed, err := c.Apply(ctx, manifestWith(t, func(p *kubemanifest.Params) { p.Priority = 7 }), false)
+	if err == nil {
+		t.Fatal("a refused create was reported as done")
+	}
+	for _, r := range failed {
+		if r.Kind == "PriorityClass" && r.Action != ActionFailed {
+			t.Fatalf("refused re-create: %v", actions(failed))
+		}
+	}
+	if _, ok := f.objects[pc]; ok {
+		t.Fatal("the old class is still there")
+	}
+	delete(f.forbidden, "PATCH "+pc)
+	created, err := c.Apply(ctx, manifestWith(t, func(p *kubemanifest.Params) { p.Priority = 7 }), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range created {
+		if r.Kind == "PriorityClass" && r.Action != ActionCreate {
+			t.Fatalf("after a failed replace: %v", actions(created))
+		}
+	}
 }

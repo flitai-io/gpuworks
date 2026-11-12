@@ -14,7 +14,7 @@ func TestEditingAnEntryMadeByHandOverTheWire(t *testing.T) {
 	rig := newTokenRig(t)
 	created := decodeKube[map[string]any](t, rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", kubeCreateBody))
 	base := "/api/v1/kube/clusters/" + created["uuid"].(string)
-	apply := created["apply_command"].(string)
+	apply := "kubectl delete priorityclass gpuworks-inference-gpuworks-system --ignore-not-found && " + created["apply_command"].(string)
 
 	// Nothing changed: nothing to apply.
 	rec := rig.do(rig.session, http.MethodPut, base, `{"name":"prod"}`)
@@ -35,14 +35,18 @@ func TestEditingAnEntryMadeByHandOverTheWire(t *testing.T) {
 		t.Fatalf("omitted fields changed: %v", cluster)
 	}
 
-	// Priority and preemption: the PriorityClass is replaced first, since
-	// Kubernetes does not change its value in place.
+	// Priority and preemption: the same line, which replaces the class
+	// Kubernetes does not change in place.
 	rec = rig.do(rig.session, http.MethodPut, base, `{"priority":500,"allow_preemption":true}`)
 	got = decodeKube[map[string]any](t, rec)
-	cmds := got["commands"].([]any)
-	if rec.Code != http.StatusOK || fmt.Sprint(got["changed"]) != "[allow_preemption priority]" || len(cmds) != 2 ||
-		cmds[0] != "kubectl delete priorityclass gpuworks-inference-gpuworks-system --ignore-not-found" || cmds[1] != apply {
+	if rec.Code != http.StatusOK || fmt.Sprint(got["changed"]) != "[allow_preemption priority]" || fmt.Sprint(got["commands"]) != "["+apply+"]" {
 		t.Fatalf("priority edit = %d %s", rec.Code, rec.Body)
+	}
+
+	// An empty engine port range takes the default, as on create.
+	rec = rig.do(rig.session, http.MethodPut, base, `{"engine_ports":""}`)
+	if rec.Code != http.StatusOK || decodeKube[map[string]any](t, rec)["cluster"].(map[string]any)["engine_ports"] != "40000-42767" {
+		t.Fatalf("empty engine ports = %d %s", rec.Code, rec.Body)
 	}
 
 	// The grace period only reaches the agents when they enroll, on start:

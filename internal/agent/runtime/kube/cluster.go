@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"net/url"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime/kube/kubeapi"
 )
@@ -30,15 +31,21 @@ func (d *Driver) NodeExists(ctx context.Context, name string) (bool, error) {
 }
 
 // AgentOn reports whether an agent pod of this agent's DaemonSet is on the
-// named node, in any phase: a node the DaemonSet no longer selects has none,
-// while one whose agent is crashing or pulling still has its pod.
+// named node, in any phase and bound or not yet: a node the DaemonSet no
+// longer selects has none, while one whose agent is crashing, pulling or
+// waiting for the scheduler still has its pod.
 func (d *Driver) AgentOn(ctx context.Context, name string) (bool, error) {
 	var list kubeapi.PodList
-	q := kubeapi.ListQuery(agentPodLabel+"="+DaemonSetName, map[string]string{"spec.nodeName": name})
+	q := "?labelSelector=" + url.QueryEscape(agentPodLabel+"="+DaemonSetName)
 	if err := d.o.API.Get(ctx, kubeapi.PodsPath(d.o.Namespace)+q, &list); err != nil {
 		return false, err
 	}
-	return len(list.Items) > 0, nil
+	for _, p := range list.Items {
+		if p.TargetNode() == name {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // agentPodLabel is the label the manifest gives the agent pods.

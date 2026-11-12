@@ -33,7 +33,7 @@ func TestEnrollSavesTheIdentityAndFallsBackToIt(t *testing.T) {
 	}))
 	defer srv.Close()
 	state := t.TempDir()
-	id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL+"/", "enroll-tok", testNode, state)
+	id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL+"/", "enroll-tok", testNode, state, true)
 	if err != nil || id.NodeToken != "tok-1" || id.IdleReturn() != -1 {
 		t.Fatalf("Enroll = %+v, %v", id, err)
 	}
@@ -46,11 +46,11 @@ func TestEnrollSavesTheIdentityAndFallsBackToIt(t *testing.T) {
 	}
 	// The server is down: the saved identity serves.
 	srv.Close()
-	if id, err := Enroll(context.Background(), k.Client(), http.DefaultClient, srv.URL, "enroll-tok", testNode, state); err != nil || id.NodeToken != "tok-1" {
+	if id, err := Enroll(context.Background(), k.Client(), http.DefaultClient, srv.URL, "enroll-tok", testNode, state, true); err != nil || id.NodeToken != "tok-1" {
 		t.Fatalf("Enroll with the server down = %+v, %v", id, err)
 	}
 	// Never enrolled and the server is down: an error.
-	if _, err := Enroll(context.Background(), k.Client(), http.DefaultClient, srv.URL, "enroll-tok", testNode, t.TempDir()); err == nil {
+	if _, err := Enroll(context.Background(), k.Client(), http.DefaultClient, srv.URL, "enroll-tok", testNode, t.TempDir(), true); err == nil {
 		t.Fatal("enrolled without a server")
 	}
 }
@@ -63,13 +63,13 @@ func TestARevokedTokenKeepsEnrolledNodes(t *testing.T) {
 	}))
 	defer srv.Close()
 	state := t.TempDir()
-	if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "n", NodeToken: "old"}); err != nil {
+	if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "n", NodeToken: "old", Entry: EntryOf("revoked")}); err != nil {
 		t.Fatal(err)
 	}
-	if id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "revoked", testNode, state); err != nil || id.NodeToken != "old" {
+	if id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "revoked", testNode, state, true); err != nil || id.NodeToken != "old" {
 		t.Fatalf("Enroll of an enrolled node after revocation = %+v, %v", id, err)
 	}
-	if _, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "revoked", testNode, t.TempDir()); err == nil || !strings.Contains(err.Error(), "refused") {
+	if _, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "revoked", testNode, t.TempDir(), true); err == nil || !strings.Contains(err.Error(), "refused") {
 		t.Fatalf("Enroll of a new node after revocation = %v", err)
 	}
 	if (Identity{IdleReturnSeconds: 600}).IdleReturn() != 10*time.Minute {
@@ -97,14 +97,14 @@ func TestEnrollRefusalsNamingAnotherEntryAreNeverPaperedOverBySavedIdentity(t *t
 			if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "n", NodeToken: "old"}); err != nil {
 				t.Fatal(err)
 			}
-			id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, state)
+			id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, state, true)
 			var refusal *EnrollRefusal
 			if err == nil || id.NodeToken != "" || !errors.As(err, &refusal) || refusal.Reason != reason {
 				t.Fatalf("Enroll refused as %s with a saved identity = %+v, %v, want an EnrollRefusal naming %s", reason, id, err, reason)
 			}
 
 			// Without any saved identity: the same refusal, the same way.
-			if _, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, t.TempDir()); !errors.As(err, &refusal) || refusal.Reason != reason {
+			if _, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, t.TempDir(), true); !errors.As(err, &refusal) || refusal.Reason != reason {
 				t.Fatalf("Enroll refused as %s without a saved identity = %v", reason, err)
 			}
 		})
@@ -123,11 +123,45 @@ func TestEnrollTreatsAnUnrecognizedRefusalBodyAsAFallbackCase(t *testing.T) {
 	}))
 	defer srv.Close()
 	state := t.TempDir()
-	if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "n", NodeToken: "old"}); err != nil {
+	if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "n", NodeToken: "old", Entry: EntryOf("tok")}); err != nil {
 		t.Fatal(err)
 	}
-	id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, state)
+	id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "tok", testNode, state, true)
 	if err != nil || id.NodeToken != "old" {
 		t.Fatalf("Enroll against an unrecognized 403 with a saved identity = %+v, %v", id, err)
+	}
+}
+
+// TestEnrollFallsBackOnlyToItsOwnEntrysIdentity: entries of one cluster
+// share the default state directory, so an identity another entry issued is
+// never run on, and none at all once the caller has seen a refusal.
+func TestEnrollFallsBackOnlyToItsOwnEntrysIdentity(t *testing.T) {
+	k := kubefake.New(t, testNS, testNode)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	state := t.TempDir()
+	if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "a-node", NodeToken: "a-tok", Entry: EntryOf("entry-a")}); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "entry-b", testNode, state, true); err == nil || id.NodeToken != "" {
+		t.Fatalf("entry b ran on entry a's identity: %+v, %v", id, err)
+	}
+	if id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "entry-a", testNode, state, true); err != nil || id.NodeToken != "a-tok" {
+		t.Fatalf("entry a's own identity = %+v, %v", id, err)
+	}
+	if id, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "entry-a", testNode, state, false); err == nil || id.NodeToken != "" {
+		t.Fatalf("fell back although told not to: %+v, %v", id, err)
+	}
+	// An identity saved before entries were recorded is no entry's.
+	if err := writeIdentity(filepath.Join(state, IdentityFile), Identity{NodeUUID: "old", NodeToken: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Enroll(context.Background(), k.Client(), srv.Client(), srv.URL, "entry-a", testNode, state, true); err == nil {
+		t.Fatal("fell back to an identity of no entry")
+	}
+	if ReadOwnIdentity(state, "entry-a").NodeToken != "" {
+		t.Fatal("ReadOwnIdentity returned an identity of no entry")
 	}
 }

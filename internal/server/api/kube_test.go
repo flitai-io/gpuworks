@@ -70,8 +70,11 @@ func TestKubeClusterLifecycleOverTheWire(t *testing.T) {
 	// Enrollment: idempotent per node, bound to the first cluster UID.
 	enroll := func(body string) (int, map[string]any) {
 		rec := rig.do("", http.MethodPost, "/api/v1/kube/enroll", body)
+		// Exactly one JSON value: a refusal must not be followed by an answer.
 		var out map[string]any
-		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("enroll body %q: %v", rec.Body, err)
+		}
 		return rec.Code, out
 	}
 	tok, _ := json.Marshal(token)
@@ -82,7 +85,7 @@ func TestKubeClusterLifecycleOverTheWire(t *testing.T) {
 	if code, again := enroll(`{"token":` + string(tok) + `,"cluster_uid":"uid-a","node_name":"gpu-1"}`); code != http.StatusOK || again["node_uuid"] != first["node_uuid"] || again["node_token"] != first["node_token"] {
 		t.Fatalf("re-enroll = %d %v", code, again)
 	}
-	if code, out := enroll(`{"token":` + string(tok) + `,"cluster_uid":"uid-b","node_name":"gpu-2"}`); code != http.StatusForbidden || out["code"] != ErrorKubeEnrollRefused || out["params"].(map[string]any)["reason"] != "other_cluster" {
+	if code, out := enroll(`{"token":` + string(tok) + `,"cluster_uid":"uid-b","node_name":"gpu-2"}`); code != http.StatusForbidden || out["code"] != ErrorKubeEnrollRefused || out["params"].(map[string]any)["reason"] != "other_cluster" || out["node_token"] != nil {
 		t.Fatalf("other cluster = %d %v", code, out)
 	}
 	if code, out := enroll(`{"token":"nope","cluster_uid":"uid-a","node_name":"gpu-2"}`); code != http.StatusForbidden || out["params"].(map[string]any)["reason"] != "unknown_token" {

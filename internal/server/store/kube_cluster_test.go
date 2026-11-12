@@ -300,6 +300,10 @@ func TestAKubeNodeHeldByAnotherEntryIsRefused(t *testing.T) {
 	if _, _, err := st.EnrollKubeNode(b.Token, "uid-1", "gpu-1"); err != nil {
 		t.Fatalf("a node whose holder is long gone: %v", err)
 	}
+	// Now b holds it: a's stale row for the node does not let a take it back.
+	if _, _, err := st.EnrollKubeNode(a.Token, "uid-1", "gpu-1"); !errors.Is(err, ErrKubeNodeTaken) {
+		t.Fatalf("the former holder re-enrolling a node another entry holds: %v", err)
+	}
 	// Recently seen though offline still holds.
 	c, err := st.CreateKubeCluster(KubeCluster{Name: "c", Namespace: "gw-c"})
 	if err != nil {

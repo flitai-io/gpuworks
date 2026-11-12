@@ -116,7 +116,7 @@ func TestKubeStandByWithNoAcceleratorWaitsAndNeverEnrolls(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	stoodBy, err := kubeStandBy(ctx, discardLog(), t.TempDir(), fakeCensus(nil))
-	if !stoodBy || !errors.Is(err, context.DeadlineExceeded) {
+	if !stoodBy || err != nil || ctx.Err() == nil {
 		t.Fatalf("kubeStandBy with no accelerator = %v, %v, want stood by until the deadline", stoodBy, err)
 	}
 }
@@ -130,7 +130,7 @@ func TestKubeStandByWithAnUnsupportedVendorWaits(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	stoodBy, err := kubeStandBy(ctx, discardLog(), t.TempDir(), fakeCensus{{Vendor: "apple", Cards: 1}})
-	if !stoodBy || !errors.Is(err, context.DeadlineExceeded) {
+	if !stoodBy || err != nil || ctx.Err() == nil {
 		t.Fatalf("kubeStandBy with an unsupported vendor = %v, %v, want stood by until the deadline", stoodBy, err)
 	}
 }
@@ -151,7 +151,8 @@ func TestKubeStandByWithASupportedAcceleratorEnrollsImmediately(t *testing.T) {
 // applies before a state directory's first enrollment.
 func TestKubeStandByWithAnExistingIdentityEnrollsImmediately(t *testing.T) {
 	state := t.TempDir()
-	raw, _ := json.Marshal(kube.Identity{NodeUUID: "n-1", NodeToken: "tok-1"})
+	t.Setenv("GPUWORKS_KUBE_ENROLL_TOKEN", "entry-tok")
+	raw, _ := json.Marshal(kube.Identity{NodeUUID: "n-1", NodeToken: "tok-1", Entry: kube.EntryOf("entry-tok")})
 	if err := os.WriteFile(filepath.Join(state, kube.IdentityFile), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}

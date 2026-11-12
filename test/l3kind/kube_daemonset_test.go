@@ -182,6 +182,18 @@ func TestKubeDaemonSetDeployChatKind(t *testing.T) {
 	k.mustShell(2*time.Minute, created.ApplyCommand)
 	k.waitDaemonSetReady("after the first apply")
 
+	// The kind node has no card: its agent stays up, standing by, and does
+	// not join.
+	eventually(t, "the agent stands by on a node without a card", 2*time.Minute, time.Second, func() (bool, string) {
+		logs, _ := k.run(30*time.Second, "-n", kubeNamespace, "logs", "ds/gpuworks-agent")
+		return strings.Contains(logs, "standing by"), lastLine(logs)
+	})
+	for _, n := range api.nodes() {
+		if n.label(labelKubeNode) == node {
+			t.Fatalf("a node without a card joined: %+v", n)
+		}
+	}
+
 	// ---- 6. fake GPU on the DaemonSet (the kind node has no GPU).
 	step(t, "set the fake GPU environment on the DaemonSet")
 	k.mustRun(time.Minute, "-n", kubeNamespace, "set", "env", "ds/gpuworks-agent", fakeGPUEnv, "GPUWORKS_FAKE_GPU_NO_INJECT=1")
@@ -846,4 +858,12 @@ func (c *apiClient) chat(apiKey, prompt string) {
 		}
 		return true, ""
 	})
+}
+
+func lastLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
+		return s[i+1:]
+	}
+	return s
 }

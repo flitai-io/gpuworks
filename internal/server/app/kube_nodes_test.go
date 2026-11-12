@@ -59,7 +59,18 @@ func TestSweepRemovesOnlyNodesTheirClusterNoLongerHas(t *testing.T) {
 		return json.Marshal(proto.KubeNodeExistsResult{Exists: true, Agent: &yes})
 	}
 	var kicked []string
-	sweepGoneKubeNodes(context.Background(), slog.New(slog.DiscardHandler), st, call, func(u string) { kicked = append(kicked, u) }, now.Add(-15*time.Minute))
+	strikes := map[string]bool{}
+	sweep := func() {
+		sweepGoneKubeNodes(context.Background(), slog.New(slog.DiscardHandler), st, call, func(u string) { kicked = append(kicked, u) }, now.Add(-15*time.Minute), strikes)
+	}
+	// The first answer only marks them: a rolling update can be between
+	// deleting and re-creating a node's agent pod.
+	sweep()
+	if len(kicked) != 0 || len(strikes) != 2 {
+		t.Fatalf("first sweep removed %v, marked %v", kicked, strikes)
+	}
+	asked = nil
+	sweep()
 	if len(asked) != 4 {
 		t.Fatalf("asked about %v; want the long-offline nodes only", asked)
 	}
@@ -78,8 +89,54 @@ func TestSweepRemovesOnlyNodesTheirClusterNoLongerHas(t *testing.T) {
 	}
 	// Nobody to ask, or an agent that cannot answer: nothing is removed.
 	failing := func(context.Context, string, string, any) (json.RawMessage, error) { return nil, errors.New("offline") }
-	sweepGoneKubeNodes(context.Background(), slog.New(slog.DiscardHandler), st, failing, func(string) {}, now.Add(-15*time.Minute))
+	for range 2 {
+		sweepGoneKubeNodes(context.Background(), slog.New(slog.DiscardHandler), st, failing, func(string) {}, now.Add(-15*time.Minute), strikes)
+	}
 	if _, err := st.NodeByUUID(stillThere.UUID); err != nil {
 		t.Fatalf("a node was removed without an answer: %v", err)
+	}
+	if len(strikes) != 0 {
+		t.Fatalf("marks kept for nodes no sweep found gone: %v", strikes)
+	}
+}
+
+// A node found gone once and then back is not removed by the next answer
+// that it is gone again: the two must be in a row.
+func TestSweepNeedsTwoAnswersInARow(t *testing.T) {
+	st, err := store.Open("file:"+t.Name()+"?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	c, err := st.CreateKubeCluster(store.KubeCluster{Name: "c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	for _, n := range []struct{ name, state string }{{"peer", store.NodeStateOnline}, {"flaky", store.NodeStateOffline}} {
+		node, _, err := st.EnrollKubeNode(c.Token, "uid", n.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := now
+		if n.state == store.NodeStateOffline {
+			seen = now.Add(-time.Hour)
+		}
+		if err := st.DB().Model(&store.Node{}).Where("id = ?", node.ID).Updates(map[string]any{"state": n.state, "last_seen_at": seen}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	answers := []bool{false, true, false}
+	call := func(context.Context, string, string, any) (json.RawMessage, error) {
+		agent := answers[0]
+		answers = answers[1:]
+		return json.Marshal(proto.KubeNodeExistsResult{Exists: true, Agent: &agent})
+	}
+	strikes := map[string]bool{}
+	for range 3 {
+		sweepGoneKubeNodes(context.Background(), slog.New(slog.DiscardHandler), st, call, func(string) { t.Fatal("removed") }, now.Add(-15*time.Minute), strikes)
+	}
+	if len(strikes) != 1 {
+		t.Fatalf("strikes = %v, want the last answer's mark", strikes)
 	}
 }

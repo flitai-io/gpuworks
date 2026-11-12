@@ -374,18 +374,20 @@ func (s *Store) EnrollKubeNode(token, clusterUID, nodeName string) (*Node, *Kube
 		case cluster.ClusterUID != clusterUID:
 			return ErrKubeClusterMismatch
 		}
+		// Another entry holding the node refuses it even when this entry has
+		// a row for it from before: two agents would manage one node's cards.
+		if holder, err := kubeNodeHolder(tx, cluster, nodeName, time.Now()); err != nil || holder != "" {
+			if err != nil {
+				return err
+			}
+			return &KubeNodeTakenError{Entry: holder}
+		}
 		err := tx.Where("kube_cluster_id = ? AND kube_node_name = ?", cluster.ID, nodeName).First(&node).Error
 		if err == nil {
 			return nil
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
-		}
-		if holder, err := kubeNodeHolder(tx, cluster, nodeName, time.Now()); err != nil || holder != "" {
-			if err != nil {
-				return err
-			}
-			return &KubeNodeTakenError{Entry: holder}
 		}
 		nodeToken := auth.NewToken(24)
 		if nodeToken == "" {

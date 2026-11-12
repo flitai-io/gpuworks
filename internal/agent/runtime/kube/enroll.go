@@ -3,6 +3,8 @@ package kube
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +27,17 @@ type Identity struct {
 	NodeUUID          string `json:"node_uuid"`
 	NodeToken         string `json:"node_token"`
 	IdleReturnSeconds int    `json:"idle_return_seconds"`
+	// Entry names the cluster entry that issued the identity, by its
+	// enrollment token (EntryOf): entries of one cluster share the default
+	// state directory, and an identity is only this agent's when its own
+	// entry issued it.
+	Entry string `json:"entry,omitempty"`
+}
+
+// EntryOf names an entry by its enrollment token without keeping the token.
+func EntryOf(enrollToken string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(enrollToken)))
+	return hex.EncodeToString(sum[:16])
 }
 
 // IdleReturn is the cluster's grace period for borrowed cards; negative
@@ -40,6 +53,17 @@ func (id Identity) IdleReturn() time.Duration {
 // Identity when there is none yet (never enrolled, or an unreadable file).
 func ReadIdentity(stateDir string) Identity {
 	id, _ := readIdentity(filepath.Join(stateDir, IdentityFile))
+	return id
+}
+
+// ReadOwnIdentity is the saved identity when the entry with enrollToken
+// issued it, else a zero Identity: another entry's identity is not this
+// agent's to run on.
+func ReadOwnIdentity(stateDir, enrollToken string) Identity {
+	id := ReadIdentity(stateDir)
+	if id.Entry != EntryOf(enrollToken) {
+		return Identity{}
+	}
 	return id
 }
 
@@ -109,20 +133,27 @@ func parseEnrollRefusal(raw []byte) error {
 // what the server checks. A refusal naming this node's name as another
 // entry's is never papered over by an old token, with or without a saved
 // identity. Only a node that never enrolled needs the server to say yes.
-func Enroll(ctx context.Context, api *kubeapi.Client, httpc *http.Client, serverURL, enrollToken, nodeName, stateDir string) (Identity, error) {
+//
+// Only an identity this entry issued is fallen back to (Identity.Entry), and
+// not at all when fallback is false: the caller passes false once the
+// server has refused this node's identity, so a later network failure does
+// not hide that refusal behind the saved identity.
+func Enroll(ctx context.Context, api *kubeapi.Client, httpc *http.Client, serverURL, enrollToken, nodeName, stateDir string, fallback bool) (Identity, error) {
 	path := filepath.Join(stateDir, IdentityFile)
 	saved, savedErr := readIdentity(path)
+	entry := EntryOf(enrollToken)
 	id, err := enroll(ctx, api, httpc, serverURL, enrollToken, nodeName)
 	if err != nil {
 		var refusal *EnrollRefusal
 		if errors.As(err, &refusal) && !refusal.fallsBack() {
 			return Identity{}, err
 		}
-		if savedErr == nil {
+		if fallback && savedErr == nil && saved.Entry == entry && saved.NodeToken != "" {
 			return saved, nil
 		}
 		return Identity{}, err
 	}
+	id.Entry = entry
 	if id != saved {
 		if err := writeIdentity(path, id); err != nil {
 			return Identity{}, err
