@@ -6,11 +6,17 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/agentupgrade"
 	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 type agentUpgradeAPI struct{ service *agentupgrade.Service }
 
 var _ api.AgentUpgradeService = agentUpgradeAPI{}
+
+func (a agentUpgradeAPI) Fleet(ctx context.Context, nodes []store.Node) (api.AgentFleetStatus, error) {
+	f, err := a.service.Fleet(ctx, nodes)
+	return api.AgentFleetStatus(f), err
+}
 
 func (a agentUpgradeAPI) Preview(ctx context.Context, uuids []string) (dto.AgentUpgradePreview, error) {
 	p, err := a.service.Preview(ctx, uuids)

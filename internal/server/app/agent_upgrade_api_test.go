@@ -102,3 +102,17 @@ func TestAgentUpgradeAPIAdapterPreservesScopeAuditAndWire(t *testing.T) {
 		t.Fatalf("missing run: %v", err)
 	}
 }
+
+func TestUpgradePreviewFlagsOnlyKnownReleaseDowngrades(t *testing.T) {
+	p := agentupgrade.Preview{TargetVersion: "v26.11.2"}
+	for _, v := range []string{"v26.11.10", "v26.11.1", "b913427a"} {
+		p.Nodes = append(p.Nodes, agentupgrade.Candidate{FromVersion: v, Eligibility: "eligible"})
+	}
+	got := toAgentUpgradePreview(p)
+	if got.Nodes[0].VersionChange != "downgrade" || got.Nodes[1].VersionChange != "upgrade" || got.Nodes[2].VersionChange != "different_build" {
+		t.Fatal(got.Nodes)
+	}
+	if !got.Nodes[0].Downgrade || got.Nodes[1].Downgrade || got.Nodes[2].Downgrade {
+		t.Fatal(got.Nodes)
+	}
+}

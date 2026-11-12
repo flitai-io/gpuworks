@@ -721,6 +721,36 @@
       "ephemeral": "Container layer"
     }
   },
+  "fleet": {
+    "notReported": "Not reported",
+    "beforeOffline": "Last known version",
+    "inBatch": "In upgrade batch",
+    "loadError": "Could not load node version information",
+    "retry": "Retry",
+    "noTarget": "The running server has no identifiable Agent target version",
+    "target": "Agent target {{target}}",
+    "progress": "View upgrade progress",
+    "filter": "Agent status",
+    "ignore": "Dismiss this notice",
+    "versionChange": "Current → target",
+    "willUpgrade": "Will upgrade",
+    "replaceBuild": "Replace with target build",
+    "status": {
+      "upgrade": "Upgrade available",
+      "downgrade": "Pending alignment",
+      "different_build": "Different build",
+      "check": "Currently unavailable for upgrade",
+      "all": "All",
+      "align": "Different version"
+    },
+    "count": {
+      "check": "Currently unavailable for upgrade ({{count}})",
+      "upgrade": "Agents to upgrade ({{count}})",
+      "downgrade": "Pending alignment ({{count}})",
+      "different_build": "Different builds ({{count}})",
+      "align": "Different versions ({{count}})"
+    }
+  },
   "batchUpgrade": {
     "targetHeading": "Target for this update",
     "targetSource": "Provided by the current control plane. After updating, Agent versions will match the control plane.",
@@ -733,7 +763,7 @@
     "target": "Target version: {{version}}",
     "previewCounts": "{{eligible}} eligible of {{total}} nodes; {{skipped}} will be skipped.",
     "disruption": "Agents will restart one at a time. Connections may be briefly interrupted.",
-    "versionWarning": "Updating replaces Agents with the target shown above and can downgrade them. Multi-node and PD inference can fail if a node remains offline.",
+    "versionWarning": "Updating replaces Agents with the target shown above. In-flight requests and long-running tasks may be interrupted. For multi-node or PD inference, select one node at a time and verify the model service before upgrading the next.",
     "acknowledge": "I have arranged a maintenance window or confirmed that the affected workloads can be interrupted.",
     "start": "Update to this version",
     "refreshPreview": "Refresh preview",

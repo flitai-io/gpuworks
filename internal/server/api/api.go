@@ -91,6 +91,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.With(a.managementAdmin).Post("/agent-upgrades/preview", a.previewAgentUpgrade)
 			r.With(a.managementAdmin).Post("/agent-upgrades", a.createAgentUpgrade)
 			r.Get("/agent-upgrades", a.listAgentUpgrades)
+			r.Get("/agent-upgrades/summary", a.agentFleetSummary)
 			r.Get("/agent-upgrades/{id}", a.getAgentUpgrade)
 			r.Get("/agent-upgrades/{id}/items", a.agentUpgradeItems)
 			r.With(a.managementAdmin).Post("/agent-upgrades/{id}/stop", a.stopAgentUpgrade)

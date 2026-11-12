@@ -23,12 +23,12 @@ const i18n = createInstance();
 await i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  resources: { en: { settings: settingsLocale, common: commonLocale } },
+  resources: { en: { nodes: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/nodes.json", import.meta.url), "utf8")), settings: settingsLocale, common: commonLocale } },
   defaultNS: "settings",
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, render, screen, waitFor, within } = await import("@testing-library/react");
+const { act, cleanup, render, screen, waitFor, within } = await import("@testing-library/react");
 const userEventModule = await import("@testing-library/user-event");
 const userEvent = userEventModule.default ?? userEventModule;
 const apiModule = await import("../src/api.ts");
@@ -36,7 +36,11 @@ const { APIError } = await import("../src/apiError.ts");
 const UpdatesCard = (await import("../src/pages/settings/UpdatesCard.tsx")).default;
 type UpdateStatus = import("../src/api.ts").UpdateStatus;
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  dom.window.sessionStorage.clear();
+  Reflect.deleteProperty(dom.window.performance, "getEntriesByType");
+});
 after(() => closeChannels());
 
 const u = settingsLocale.updates;
@@ -58,12 +62,13 @@ function statusFixture(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
 
 function stub(answers: Array<UpdateStatus | Error>) {
   const original = {
-    updates: apiModule.api.updates, syncImages: apiModule.api.syncImages, syncInferenceTemplates: apiModule.api.syncInferenceTemplates,
+    agentFleetSummary: apiModule.api.agentFleetSummary, updates: apiModule.api.updates, syncImages: apiModule.api.syncImages, syncInferenceTemplates: apiModule.api.syncInferenceTemplates,
     uploadOfficialInferenceCatalog: apiModule.api.uploadOfficialInferenceCatalog, importImageCatalogFile: apiModule.api.importImageCatalogFile,
     setUpdateChannel: apiModule.api.setUpdateChannel, setUpdateAutoCheck: apiModule.api.setUpdateAutoCheck,
   };
   const calls: string[] = [];
   const refreshes: boolean[] = [];
+  apiModule.api.agentFleetSummary = async () => ({target: "v26.11.2", align: 0, check: 0});
   let checks = 0;
   apiModule.api.setUpdateChannel = async (channel: string) => { calls.push(`channel:${channel}`); return { channel }; };
   apiModule.api.setUpdateAutoCheck = async (enabled: boolean) => { calls.push(`autoCheck:${enabled}`); return { enabled }; };
@@ -230,17 +235,31 @@ test("the console upgrades the server after confirming and waits for the new ver
   const after = statusFixture({ server: { ...selfUpgradable, current: "f90e474e", update_available: false } });
   const s = stubServerUpgrade([statusFixture({ server: selfUpgradable }), after], ["f90e474e"]);
   try {
+    apiModule.api.agentFleetSummary = async () => ({ target: "f90e474e", align: 3, upgrade: 0, downgrade: 1, different_build: 2, check: 1, offline: 1 });
     renderCard();
     const upgrade = await readyServerUpgrade();
     await userEvent.click(upgrade);
     const dialog = await screen.findByRole("dialog");
     assert.ok(within(dialog).getAllByText("Upgrade the server to f90e474e?").length > 0);
     assert.deepEqual(s.calls, [], "nothing happens before the confirmation");
+    assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
     await userEvent.click(within(dialog).getByRole("button", { name: u.upgrade }));
     await waitFor(() => assert.deepEqual(s.calls, ["upgradeServer"]));
     await waitFor(() => assert.ok(s.probes() >= 1));
     await waitFor(() => assert.equal(s.checks(), 2));
     await waitFor(() => assert.ok(within(row(u.server)).getByText(u.upToDate)));
+    const notice = (await screen.findByRole("link", { name: u.viewNodes })).closest("tr")!;
+    assert.equal(notice.previousElementSibling, row(u.server));
+    assert.equal(notice.nextElementSibling, row(u.images));
+    assert.match(notice.textContent ?? "", /Different builds \(2\)/);
+    assert.match(notice.textContent ?? "", /Pending alignment \(1\)/);
+    assert.doesNotMatch(notice.textContent ?? "", /downgrade/i);
+    assert.match(notice.textContent ?? "", /Currently unavailable for upgrade \(1\)/);
+    assert.doesNotMatch(notice.textContent ?? "", /offline/i);
+    assert.deepEqual(within(notice).getAllByRole("link").map(link => link.getAttribute("href")), ["/nodes"]);
+    within(notice).getByRole("button", { name: "Close" }).focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden"));
   } finally {
     s.restore();
   }
@@ -277,13 +296,16 @@ test("a held update check keeps the upgrade behind the loading veil until its an
 test("an uploaded release goes to the server upload endpoint", async () => {
   const s = stubServerUpgrade([statusFixture({ available: false, server: { ...selfUpgradable, latest: undefined, update_available: false } })], ["f90e474e"]);
   try {
+    apiModule.api.agentFleetSummary = async () => ({ target: "f90e474e", align: 0, check: 2 });
     const { container } = renderCard();
     await waitFor(() => assert.ok(within(row(u.server)).getByRole("button", { name: new RegExp(u.uploadServer) })));
     const inputs = container.querySelectorAll<HTMLInputElement>("input[type=file]");
     assert.equal(inputs.length, 3, "server, image catalog and template catalog each take an upload");
     await userEvent.upload(inputs[0], new File([new Uint8Array([0x1f, 0x8b])], "gpuworks-f90e474e-linux-amd64.tar.gz", { type: "application/gzip" }));
     await waitFor(() => assert.deepEqual(s.calls, ["uploadServer:gpuworks-f90e474e-linux-amd64.tar.gz"]));
-    await waitFor(() => assert.ok(s.probes() >= 1));
+    const notice = (await screen.findByRole("link", { name: u.viewNodes })).closest("tr")!;
+    assert.match(notice.textContent ?? "", /Currently unavailable for upgrade \(2\)/);
+    assert.deepEqual(within(notice).getAllByRole("link").map(link => link.getAttribute("href")), ["/nodes"]);
   } finally {
     s.restore();
   }
@@ -337,7 +359,7 @@ test("switching the channel shows it at once, checks it, and says when it is emp
     // The check of the new channel is held until the test answers it.
     apiModule.api.updates = (refresh = false) => { s.refreshes.push(refresh); return new Promise((resolve) => { answer = resolve; }); };
     await userEvent.click(screen.getByRole("combobox"));
-    await userEvent.click(await screen.findByText(u.channelRelease));
+    await userEvent.click(await screen.findByRole("option", { name: u.channelRelease }));
     // Before any answer: the new channel, its help and "checking" are shown.
     await waitFor(() => assert.ok(screen.getByText(u.channelReleaseHelp)));
     assert.ok(screen.getByText(u.checking));
@@ -360,7 +382,7 @@ test("a channel that cannot be saved goes back to the one in use", async () => {
     renderCard();
     await waitFor(() => assert.ok(screen.getByText(u.channelNightlyHelp)));
     await userEvent.click(screen.getByRole("combobox"));
-    await userEvent.click(await screen.findByText(u.channelRelease));
+    await userEvent.click(await screen.findByRole("option", { name: u.channelRelease }));
     await waitFor(() => assert.ok(screen.getByText(u.channelNightlyHelp)));
     assert.equal(screen.queryByText(u.checking), null);
     assert.deepEqual(s.refreshes, [false], "nothing is checked for a channel that was not saved");
@@ -395,7 +417,7 @@ test("the check button asks the channel again and a read-only channel cannot be 
   try {
     renderCard();
     await waitFor(() => assert.ok(screen.getByText("f90e474e")));
-    assert.ok(screen.getByRole("combobox").closest(".ant-select-disabled"), "the channel select is disabled");
+    assert.ok((screen.getByRole("combobox", { name: u.channel }) as HTMLButtonElement).disabled, "the channel select is disabled");
     await userEvent.click(screen.getByRole("button", { name: new RegExp(u.check) }));
     await waitFor(() => assert.deepEqual(s.refreshes, [false, true]));
   } finally {
@@ -466,4 +488,110 @@ test("the running build keeps its own label when the selected update channel off
     assert.equal(within(summary).queryByText(/2099/), null);
     assert.equal(within(summary).queryByText(commonLocale.buildInfo.kind.stable), null);
   } finally { backend.restore(); }
+});
+
+test("opening settings after a CLI upgrade never queries the fleet, even with an offline node", async () => {
+  const s = stub([statusFixture()]);
+  let requests = 0;
+  try {
+    apiModule.api.agentFleetSummary = async () => { requests++; return { target: "f90e474e", align: 1, check: 1, offline: 1 }; };
+    renderCard();
+    await screen.findByText(u.server);
+    assert.equal(requests, 0);
+    assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
+  } finally { s.restore(); }
+});
+
+function reloadAttempt(deadline: number, phase: "restored" | "restarting" = "restored") {
+  Object.defineProperty(dom.window.performance, "getEntriesByType", { configurable: true, value: () => [{ type: "reload", name: dom.window.location.href }] });
+  dom.window.sessionStorage.setItem("gpuworks.console-upgrade", JSON.stringify({
+    url: dom.window.location.href, session: null, attempt: { from: "old", to: "f90e474e", phase, deadline },
+  }));
+}
+
+test("refresh preserves the deadline and cannot revive an expired follow-up", async () => {
+  const s = stub([statusFixture()]);
+  try {
+    apiModule.api.agentFleetSummary = async () => ({ target: "f90e474e", align: 1, check: 0 });
+    reloadAttempt(Date.now() + 900);
+    const view = renderCard();
+    await screen.findByRole("link", { name: u.viewNodes });
+    await waitFor(() => assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden"), { timeout: 2500 });
+    view.unmount();
+    renderCard();
+    await screen.findByText(u.server);
+    assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
+  } finally { s.restore(); }
+});
+
+test("offline Agents stay silent until a reconnect reports an actionable difference", async () => {
+  const s = stub([statusFixture()]);
+  let connected = false;
+  let requests = 0;
+  try {
+    apiModule.api.agentFleetSummary = async () => {
+      requests++;
+      return { target: "f90e474e", align: Number(connected), upgrade: Number(connected), check: 0, offline: Number(!connected) };
+    };
+    reloadAttempt(Date.now() + 60000);
+    renderCard();
+    await waitFor(() => assert.ok(requests > 0));
+    assert.equal(screen.queryByRole("link", { name: u.viewNodes }), null);
+    connected = true;
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    await act(() => { document.dispatchEvent(new dom.window.Event("visibilitychange")); });
+    await screen.findByRole("link", { name: u.viewNodes });
+  } finally { Reflect.deleteProperty(document, "hidden"); s.restore(); }
+});
+
+test("a failed fleet read retries locally, and a confirmed empty result ends the notice", async () => {
+  const s = stub([statusFixture()]);
+  let calls = 0;
+  try {
+    apiModule.api.agentFleetSummary = async () => {
+      calls++;
+      if (calls === 1) throw new Error("temporarily unavailable");
+      return { target: "f90e474e", align: 0, check: calls === 2 ? 1 : 0 };
+    };
+    reloadAttempt(Date.now() + 60000);
+    renderCard();
+    await screen.findByText(u.server);
+    assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    const tick = () => act(() => { document.dispatchEvent(new dom.window.Event("visibilitychange")); });
+    await tick();
+    await screen.findByRole("link", { name: u.viewNodes });
+    await tick();
+    await waitFor(() => assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden"));
+    await tick();
+    assert.equal(calls, 3, "a new node after the terminal empty result belongs on the node list");
+  } finally { Reflect.deleteProperty(document, "hidden"); s.restore(); }
+});
+
+test("a restart which returns the old release never opens the follow-up", async () => {
+  const s = stubServerUpgrade([statusFixture()], ["old"]);
+  let calls = 0;
+  try {
+    apiModule.api.agentFleetSummary = async () => { calls++; return { target: "old", align: 1, check: 0 }; };
+    reloadAttempt(Date.now() + 650, "restarting");
+    renderCard();
+    await waitFor(() => assert.ok(s.probes() > 0));
+    await waitFor(() => assert.ok(screen.getByText(u.serverNotBack.replace("{{version}}", "f90e474e"))), { timeout: 2500 });
+    assert.equal(calls, 0);
+    assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
+  } finally { s.restore(); }
+});
+
+test("logging in again cannot restore the previous session's upgrade", async () => {
+  const s = stub([statusFixture()]);
+  let requests = 0;
+  try {
+    reloadAttempt(Date.now() + 60000);
+    dom.window.localStorage.setItem("gpuworks.session", JSON.stringify({ type: "authenticated", nonce: "next-login" }));
+    apiModule.api.agentFleetSummary = async () => { requests++; return { target: "f90e474e", align: 1, check: 0 }; };
+    renderCard();
+    await screen.findByText(u.server);
+    assert.equal(requests, 0);
+    assert.ok(!screen.queryByRole("link", { name: u.viewNodes }));
+  } finally { dom.window.localStorage.removeItem("gpuworks.session"); s.restore(); }
 });

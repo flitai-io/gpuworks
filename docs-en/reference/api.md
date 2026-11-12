@@ -218,6 +218,7 @@ Login, logout, and management write requests using login sessions check the requ
 | GET | `/api/v1/agent/upgrade-errors` | Recent agent upgrade failures | JWT |
 | POST | `/api/v1/agent-upgrades/preview` | Preview eligibility and target for all or selected nodes | JWT(admin) |
 | POST | `/api/v1/agent-upgrades` | Create a run using the preview UUID snapshot, target, manifest fingerprint, and idempotency key | JWT(admin) |
+| GET | `/api/v1/agent-upgrades/summary` | Read the running server’s Agent target version, group counts and the active batch ID. The eligible total `align` is the sum of `upgrade` (older Agent), `downgrade` (newer Agent) and `different_build` (unknown order). The `check` count covers online Agents currently unavailable for upgrade. Offline Agents are counted separately in `offline`. Paged node queries accept `align`, its three eligible groups, `check`, or `all` for `agent_upgrade` before pagination and return the fleet-wide `agent_fleet`, per-row `agent_eligibility`, and `agent_version_change` on eligible rows | JWT |
 | GET | `/api/v1/agent-upgrades` | List paginated runs and the global blocking item | JWT |
 | GET | `/api/v1/agent-upgrades/{id}` | Read run progress and counts | JWT |
 | GET | `/api/v1/agent-upgrades/{id}/items` | Read paginated node outcomes, optionally filtered by state | JWT |

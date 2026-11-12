@@ -516,7 +516,7 @@ agent 重启无效或安装环境丢失时，经 SSH 重新安装 agent 并沿�
 _Avoid_: 重新纳管（会创建新的节点身份）
 
 **AgentVersion / 可升级 — Agent Version / Upgrade Available**:
-节点连接时自报并落库的 agent 版本；“最新版”即 server 自身版本（agent 内嵌于 server，同次构建），二者不等即标“可升级”。
+节点连接时自报并落库的 agent 版本；“最新版”即 server 自身版本（agent 内嵌于 server，同次构建），计算节点按当前连接、版本、升级能力和本地包情况展示待升级（较低正式版）、待对齐（较高正式版）、构建不同（先后未知）或暂不可升级。离线 Agent 单独展示离线前版本，重连后重新分类。预览确认后按 server 目标版本执行。
 _Avoid_: manifest 版本（不存在独立版本清单）
 
 **name / hostname — Name / Hostname**:

@@ -16,7 +16,7 @@ import type {
   StorageDownloadFormat, StorageFileList,
 } from "./storageTypes";
 export type * from "./storageTypes";
-import type { AgentUpgradeCreate, AgentUpgradeItem, AgentUpgradePage, AgentUpgradePreview, AgentUpgradeRun } from "./agentUpgradesTypes";
+import type { AgentVersionChange, AgentUpgradeCreate, AgentUpgradeItem, AgentUpgradePage, AgentUpgradePreview, AgentUpgradeRun } from "./agentUpgradesTypes";
 export type * from "./agentUpgradesTypes";
 import i18n from "./i18n";
 import { APIError, apiErrorText, apiResponseError, ProxyErrorPage, type ProductMessage } from "./apiError";
@@ -256,6 +256,8 @@ export interface Node {
   server_dial_address?: string;
   server_dial_listen?: string;
   agent_version?: string;
+  agent_eligibility?: string;
+  agent_version_change?: AgentVersionChange;
   caps?: string[];
   last_remote_addr?: string;
   last_reject_reason?: string;
@@ -1290,8 +1292,20 @@ export type DeploymentListItem = Pick<
 export type DeploymentPage = ListPage<DeploymentListItem>;
 
 
+export interface AgentFleetSummary {
+  target: string;
+  align: number;
+  upgrade?: number;
+  downgrade?: number;
+  different_build?: number;
+  check: number;
+  offline?: number;
+  run_id?: number;
+}
+
 /** A node page row omits topology and path usage (GET /nodes/{uuid} has them). */
 export interface NodePage extends ListPage<Node> {
+  agent_fleet?: AgentFleetSummary;
   /** Every node, whatever the filters; total counts the matches. */
   all: number;
   /** Every user label key=value across all nodes, whatever the filters. */
@@ -4345,6 +4359,7 @@ export const api = {
     sendJSON<AgentUpgradePreview>("POST", "/api/v1/agent-upgrades/preview", body),
   createAgentUpgrade: (body: AgentUpgradeCreate) =>
     sendJSON<AgentUpgradeRun>("POST", "/api/v1/agent-upgrades", body),
+  agentFleetSummary: () => getJSON<AgentFleetSummary>("/api/v1/agent-upgrades/summary"),
   agentUpgradeRuns: (page = 1, pageSize = 20) =>
     getJSON<AgentUpgradePage<AgentUpgradeRun>>(`/api/v1/agent-upgrades?page=${page}&page_size=${pageSize}`),
   agentUpgradeRun: (id: number) => getJSON<AgentUpgradeRun>(`/api/v1/agent-upgrades/${id}`),

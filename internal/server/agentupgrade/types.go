@@ -10,6 +10,7 @@ import (
 type Config struct {
 	TargetVersion   string
 	ArtifactDir     string
+	BinaryAvailable func(name string) bool
 	ReadBinary      func(name string) ([]byte, error)
 	Transport       Transport
 	Logger          *slog.Logger

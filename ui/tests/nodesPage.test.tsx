@@ -81,6 +81,7 @@ const { default: requestI18n } = await import("../src/i18n/index.ts");
 requestI18n.addResourceBundle("en", "common", i18n.getResourceBundle("en", "common"), true, true);
 await requestI18n.changeLanguage("en");
 const originalFetch = globalThis.fetch;
+const { SessionUserContext } = await import("../src/components/sessionUser.ts");
 const { default: NodesPage } = await import("../src/pages/NodesPage.tsx");
 const { DETAIL_DRAWER_WIDTH } = await import("../src/components/detail/DetailDrawer.tsx");
 const { runtimeLabel } = await import("../src/nodeDisplay.ts");
@@ -166,6 +167,7 @@ function nodesServer(nodes: Node[]) {
     for (const node of nodes) for (const [key, value] of Object.entries(node.labels ?? {})) facets.set(key, (facets.get(key) ?? new Set()).add(value));
     const start = (query.page - 1) * query.page_size;
     return {
+      agent_fleet: { target: "0.9.7", align: 0, check: 0 },
       items: matched.slice(start, start + query.page_size),
       page: query.page, page_size: query.page_size, total: matched.length, all: nodes.length,
       labels: [...facets].sort(([a], [b]) => a.localeCompare(b)).map(([key, values]) => ({ key, values: [...values].sort() })),
@@ -204,11 +206,13 @@ afterEach(async () => {
   globalThis.fetch = originalFetch;
 });
 
-function renderPage() {
+function renderPage(userID?: number) {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={["/nodes"]}>
-        <NodesPage />
+        <SessionUserContext.Provider value={userID === undefined ? undefined : { id: userID, username: "preview", role: "admin" }}>
+          <NodesPage />
+        </SessionUserContext.Provider>
       </MemoryRouter>
     </I18nextProvider>,
   );
@@ -221,6 +225,48 @@ test("renders each node with its name and hostname in the node column", async ()
   assert.ok(screen.getByText("192.168.10.11"));
   assert.ok(screen.getByText("k8s-3-910c-host"));
   assert.ok(screen.getByText("192.0.2.129"));
+});
+
+test("offline Agent versions are historical, including when the session closed before the node state updated", async () => {
+  const restarting: Node = { ...offlineNode, uuid: "restarting", name: "restarting", agent_version: "0.9.6", agent_eligibility: "busy" };
+  stubApi([offlineNode, { ...onlineNode, agent_eligibility: "offline" }, restarting]);
+  renderPage();
+  await screen.findByText(onlineNode.name!);
+  const versionCell = rowOf(onlineNode.name!).getByText("0.9.7").closest("td")!;
+  assert.ok(within(versionCell).getByText("Last known version").closest('[data-slot="badge"]'));
+  const restartingRow = rowOf("restarting");
+  assert.ok(restartingRow.getByText("In upgrade batch"));
+  assert.ok(restartingRow.getByText("Last known version"));
+  const unreported = rowOf(offlineNode.name!);
+  assert.ok(unreported.getByText("Not reported").closest('[data-slot="badge"]'));
+  assert.equal(unreported.queryByText("Last known version"), null);
+  assert.equal(screen.queryByText("Upgrade available"), null);
+});
+
+test("dismissing the fleet notice follows the account and target while leaving the table available", async () => {
+  stubApi([onlineNode]);
+  const nodes = api.nodesPage;
+  let target = "v1.2.0";
+  api.nodesPage = async query => ({
+    ...await nodes(query),
+    agent_fleet: { target, align: 1, upgrade: 1, check: 0 },
+  });
+  const ignore = { name: "Dismiss this notice" };
+  const first = renderPage(101);
+  fireEvent.click(await screen.findByRole("button", ignore));
+  assert.ok(screen.getByRole("combobox", { name: "Agent status" }));
+  assert.ok(screen.getByText(onlineNode.name!));
+  first.unmount();
+  const same = renderPage(101);
+  await screen.findByText(onlineNode.name!);
+  assert.equal(screen.queryByRole("button", ignore), null);
+  same.unmount();
+  const other = renderPage(102);
+  await screen.findByRole("button", ignore);
+  other.unmount();
+  target = "v1.3.0";
+  renderPage(101);
+  await screen.findByRole("button", ignore);
 });
 
 test("the latest-rejection column is gone from the table; the drawer keeps the detail", async () => {
@@ -241,8 +287,8 @@ test("the table uses a fixed layout with explicit widths; the name leads frozen 
   const table = container.querySelector("table") as HTMLTableElement;
   assert.equal(table.style.tableLayout, "fixed");
   const cols = Array.from(table.querySelectorAll("thead th"));
-  // A selection column plus 10 shown columns; the agent version and creation time are offered but hidden by default.
-  assert.equal(cols.length, 11);
+  assert.ok(screen.getByRole("columnheader", { name: /Agent version/i }));
+  assert.equal(cols.length, 12);
   assert.equal((cols[1] as HTMLElement).style.width, "220px");
   assert.equal((cols[cols.length - 1] as HTMLElement).style.width, "110px");
   const headers = screen.getAllByRole("columnheader");
@@ -534,7 +580,7 @@ test("the node list asks the server for one page and counts matches against the 
   stubApi(fleet);
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("node-00")));
-  assert.deepEqual(pageQueries[0], { page: 1, page_size: 20, q: "", label: [], state: [] });
+  assert.deepEqual(pageQueries[0], { extra: { agent_upgrade: ["all"] }, page: 1, page_size: 20, q: "", label: [], state: [] });
   assert.ok(screen.getByText("23/23 nodes"));
   assert.ok(!screen.queryByText("node-20"), `"node-20" is still shown`);
 
@@ -899,7 +945,7 @@ test("a node-list refresh failure preserves an open upgrade preview and its retr
   fireEvent.click(rowOf(onlineNode.name!).getByRole("checkbox"));
   fireEvent.click(screen.getByRole("button", { name: "Upgrade selected Agents" }));
   const modal = await screen.findByRole("dialog", { name: "Review Agent upgrade" });
-  await within(modal).findByText("0.9.7");
+  await within(modal).findByText("0.9.7 → 0.9.8");
   fireEvent.click(within(modal).getByRole("checkbox"));
   fireEvent.click(within(modal).getByRole("button", { name: "Update to this version" }));
   await within(modal).findByText("create response lost");

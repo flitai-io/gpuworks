@@ -118,38 +118,7 @@ func (s *Service) preview(ctx context.Context, uuids []string, seal bool) (Previ
 			continue
 		}
 		found[n.UUID] = true
-		c := Candidate{NodeUUID: n.UUID, Name: n.Name, FromVersion: n.AgentVersion, OS: n.OS, Arch: n.Arch, Eligibility: "eligible"}
-		if c.Name == "" {
-			c.Name = n.Hostname
-		}
-		if c.Name == "" {
-			c.Name = n.UUID
-		}
-		conn, online := s.cfg.Transport.AgentUpgradeConnection(n.UUID)
-		switch {
-		case !online:
-			c.Eligibility, c.Reason = "offline", "node is offline"
-		case n.AgentVersion == s.cfg.TargetVersion:
-			c.Eligibility, c.Reason = "already_current", "agent already matches the target"
-		case strings.TrimSpace(n.AgentVersion) == "" || n.AgentVersion == "dev":
-			c.Eligibility, c.Reason = "unknown_version", "the agent version cannot be identified"
-		case n.KubeClusterID != 0 && !slices.Contains(conn.Caps, proto.CapKubeBinaryUpgrade):
-			// An agent of a DaemonSet that could not hand over to the
-			// node's state directory (kubeboot; a noexec mount, say) runs
-			// its image's own binary, and a binary pushed into the pod is
-			// gone at its next restart.
-			c.Eligibility, c.Reason = "kubernetes", "the agent could not start from the node's state directory and runs its image's own binary, which an upgrade cannot replace"
-		case n.Arch == "" || (n.OS != "" && n.OS != "linux" && n.OS != "darwin"):
-			c.Eligibility, c.Reason = "unsupported", "agent platform is unsupported or unknown"
-		default:
-			if slices.Contains(conn.Caps, proto.CapUpgradePush) {
-				c.Transport = "push"
-			} else if n.ConnectMode == "server_dial" {
-				c.Eligibility, c.Reason = "legacy_unverified", "this older server-dial agent cannot prove a download address"
-			} else {
-				c.Transport = "pull"
-			}
-		}
+		c := s.candidate(n)
 		if n.Arch != "" && (n.OS == "" || n.OS == "linux" || n.OS == "darwin") {
 			name := proto.AgentBinaryName(n.OS, n.Arch)
 			if _, ok := m[name]; !ok && artifactErrors[name] == nil {

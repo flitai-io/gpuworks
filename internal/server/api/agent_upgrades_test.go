@@ -32,6 +32,11 @@ func (*upgradeAPITransport) RequestAgentUpgrade(context.Context, string, string)
 
 func newAgentUpgradeAPIRig(t *testing.T) (*imageManifestRun, *agentupgrade.Service) {
 	t.Helper()
+	return newAgentUpgradeAPIRigForTarget(t, "target-build")
+}
+
+func newAgentUpgradeAPIRigForTarget(t *testing.T, target string) (*imageManifestRun, *agentupgrade.Service) {
+	t.Helper()
 	r := newImageManifestRun(t)
 	tr := &upgradeAPITransport{connections: map[string]agentupgrade.Connection{}}
 	for _, uuid := range []string{"upgrade-a", "upgrade-b", "upgrade-offline"} {
@@ -48,7 +53,7 @@ func newAgentUpgradeAPIRig(t *testing.T) (*imageManifestRun, *agentupgrade.Servi
 			tr.connections[uuid] = agentupgrade.Connection{SessionID: "old-" + uuid, Version: "old-build", Caps: []string{proto.CapUpgradePush}, Ready: true}
 		}
 	}
-	svc, err := agentupgrade.New(r.store, agentupgrade.Config{TargetVersion: "target-build", ArtifactDir: t.TempDir(), Transport: tr, ReadBinary: func(name string) ([]byte, error) {
+	svc, err := agentupgrade.New(r.store, agentupgrade.Config{TargetVersion: target, ArtifactDir: t.TempDir(), Transport: tr, BinaryAvailable: func(name string) bool { return name == "gpuworks-agent-linux-amd64" }, ReadBinary: func(name string) ([]byte, error) {
 		if name != "gpuworks-agent-linux-amd64" {
 			return nil, fmt.Errorf("no artifact %s", name)
 		}
@@ -154,6 +159,7 @@ func TestAgentUpgradeRoutesAuthAndValidation(t *testing.T) {
 		{"POST", "/api/v1/agent-upgrades/preview", `{"scope":"all"}`},
 		{"POST", "/api/v1/agent-upgrades", `{}`},
 		{"GET", "/api/v1/agent-upgrades", ""},
+		{"GET", "/api/v1/agent-upgrades/summary", ""},
 		{"GET", "/api/v1/agent-upgrades/1", ""},
 		{"GET", "/api/v1/agent-upgrades/1/items", ""},
 		{"POST", "/api/v1/agent-upgrades/1/stop", ""},
@@ -177,6 +183,10 @@ func TestAgentUpgradeRoutesAuthAndValidation(t *testing.T) {
 				t.Fatalf("viewer %s=%d %s", tc.path, rec.Code, rec.Body)
 			}
 		}
+	}
+	r.admin = viewer
+	if rec := r.do("GET", "/api/v1/agent-upgrades/summary", "", ""); rec.Code != http.StatusOK {
+		t.Fatalf("viewer summary: %d", rec.Code)
 	}
 	r.admin = admin
 	for _, tc := range []struct {
@@ -281,4 +291,83 @@ func TestServerUpgradeUsesAgentUpgradeGate(t *testing.T) {
 			t.Fatalf("new task during server restart=%d %s", got.Code, got.Body)
 		}
 	})
+}
+
+func TestNodeAgentFleetCountsBeforeFilteringAndPaging(t *testing.T) {
+	r, _ := newAgentUpgradeAPIRig(t)
+	get := func(query string) dto.NodePage {
+		t.Helper()
+		rec := r.do(http.MethodGet, "/api/v1/nodes?"+query, "", "")
+		var p dto.NodePage
+		if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &p) != nil || p.AgentFleet == nil {
+			t.Fatalf("fleet response: %d %s", rec.Code, rec.Body)
+		}
+		return p
+	}
+	summary := r.do(http.MethodGet, "/api/v1/agent-upgrades/summary", "", "")
+	if summary.Code != 200 || strings.TrimSpace(summary.Body.String()) != `{"target":"target-build","align":2,"upgrade":0,"downgrade":0,"different_build":2,"check":0,"offline":1}` {
+		t.Fatalf("independent fleet summary: %d %s", summary.Code, summary.Body)
+	}
+	p := get("page=2&page_size=1&agent_upgrade=align")
+	if p.Total != 2 || len(p.Items) != 1 || p.Items[0].AgentEligibility != "eligible" || *p.AgentFleet != (dto.AgentFleetSummary{Target: "target-build", Align: 2, DifferentBuild: 2, Offline: 1}) {
+		t.Fatalf("second eligible page: %+v", p)
+	}
+	if err := r.store.SetNodeAgentInfo("upgrade-a", "target-build", ""); err != nil {
+		t.Fatal(err)
+	}
+	p = get("page=1&q=offline&agent_upgrade=all")
+	if p.Total != 1 || p.Items[0].AgentEligibility != "offline" || p.AgentFleet.Align != 1 || p.AgentFleet.Check != 0 || p.AgentFleet.Offline != 1 {
+		t.Fatalf("offline view lost fleet counts: %+v", p)
+	}
+	_, body := previewUpgradeRequest(t, r)
+	rec := r.do(http.MethodPost, "/api/v1/agent-upgrades", "application/json", body)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("create: %s", rec.Body)
+	}
+	p = get("page=1&agent_upgrade=align")
+	if p.AgentFleet.RunID == 0 || p.Total != 0 || p.AgentFleet.Align != 0 || p.AgentFleet.Check != 0 || p.AgentFleet.Offline != 1 {
+		t.Fatalf("reserved node counted again: %+v", p)
+	}
+	for _, query := range []string{"agent_upgrade=align", "page=1&agent_upgrade=invalid"} {
+		if rec := r.do(http.MethodGet, "/api/v1/nodes?"+query, "", ""); rec.Code != 400 {
+			t.Fatalf("%s: %d", query, rec.Code)
+		}
+	}
+}
+
+func TestNodeUpgradeFiltersRespectReleaseDirection(t *testing.T) {
+	r, _ := newAgentUpgradeAPIRigForTarget(t, "v26.11.2")
+	for uuid, version := range map[string]string{"upgrade-a": "v26.11.1", "upgrade-b": "v26.11.10", "upgrade-offline": "v26.11.1"} {
+		if err := r.store.SetNodeAgentInfo(uuid, version, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for group, uuid := range map[string]string{"upgrade": "upgrade-a", "downgrade": "upgrade-b"} {
+		rec := r.do(http.MethodGet, "/api/v1/nodes?page=1&agent_upgrade="+group, "", "")
+		var p dto.NodePage
+		if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &p) != nil || p.Total != 1 || len(p.Items) != 1 || p.Items[0].UUID != uuid {
+			t.Fatalf("filter %s: %s", group, rec.Body)
+		}
+		if p.AgentFleet == nil || p.AgentFleet.Upgrade != 1 || p.AgentFleet.Downgrade != 1 || p.AgentFleet.DifferentBuild != 0 || p.AgentFleet.Check != 0 || p.AgentFleet.Offline != 1 {
+			t.Fatalf("filter %s lost fleet totals: %+v", group, p.AgentFleet)
+		}
+		if p.Items[0].AgentVersionChange != group {
+			t.Fatalf("filter %s returned change %q", group, p.Items[0].AgentVersionChange)
+		}
+	}
+	if err := r.store.SetNodeAgentInfo("upgrade-a", "a1ca4518", ""); err != nil {
+		t.Fatal(err)
+	}
+	rec := r.do(http.MethodGet, "/api/v1/nodes?page=1&agent_upgrade=different_build", "", "")
+	var p dto.NodePage
+	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &p) != nil || p.Total != 1 || len(p.Items) != 1 || p.Items[0].AgentVersionChange != "different_build" || p.AgentFleet == nil || p.AgentFleet.Upgrade != 0 || p.AgentFleet.DifferentBuild != 1 {
+		t.Fatalf("unordered build classified as ordered: %s", rec.Body)
+	}
+	if err := r.store.SetNodeAgentInfo("upgrade-a", "dev", ""); err != nil {
+		t.Fatal(err)
+	}
+	rec = r.do(http.MethodGet, "/api/v1/nodes?page=1&agent_upgrade=check", "", "")
+	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &p) != nil || p.Total != 1 || len(p.Items) != 1 || p.Items[0].UUID != "upgrade-a" || p.Items[0].AgentEligibility != "unknown_version" || p.AgentFleet.Check != 1 || p.AgentFleet.Offline != 1 {
+		t.Fatalf("only an online Agent can need attention: %s", rec.Body)
+	}
 }

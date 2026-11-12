@@ -4,6 +4,7 @@ package aihelper
 
 var routeDocs = map[string]string{
 	"/api/v1/agent-upgrades":                    "分页列出升级批次与全局阻塞项",
+	"/api/v1/agent-upgrades/summary":            "读取运行中 Server 的 Agent 目标版本、各组计数及活动批次 ID。可执行集合 `align` 为 `upgrade`（较低）、`downgrade`（较高）、`different_build`（先后未知）之和。`check` 统计暂不可升级的在线 Agent，`offline` 单独统计离线 Agent。节点分页支持以 `align`、三个可执行分组、`check` 或 `all` 作为 `agent_upgrade` 筛选，先筛选再分页，返回全局 `agent_fleet`、行级 `agent_eligibility` 及可执行行的 `agent_version_change`",
 	"/api/v1/agent-upgrades/{}":                 "获取批次进度和计数",
 	"/api/v1/agent-upgrades/{}/items":           "分页查询逐节点结果，可按 state 筛选",
 	"/api/v1/agent/connect":                     "agent 长连接 WS upgrade 入口",
