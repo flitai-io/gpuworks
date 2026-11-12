@@ -6,55 +6,20 @@ import (
 	"strings"
 )
 
-// KubeProfile is what running a vendor's cards on a Kubernetes node takes:
-// the host paths the agent pod mounts so its probe finds the vendor's CLI
-// and driver libraries where the host has them, the environment those need,
-// and whether the agent itself runs under the vendor's RuntimeClass.
-type KubeProfile struct {
-	Vendor string
-	// RuntimeClass: the agent pod runs under the cluster's RuntimeClass,
-	// which injects the CLI and devices (NVIDIA's runtime does). A cluster
-	// without one leaves it to the node's default runtime, which injects
-	// them on managed clusters; elsewhere the agent runs CLI on the host.
-	RuntimeClass bool
-	// CLI is the vendor's probe CLI that RuntimeClass injects.
-	CLI string
-	// HostDirs and HostFiles are mounted read-only at the same path.
-	HostDirs  []string
-	HostFiles []string
-	// Env is set on the agent container.
-	Env map[string]string
-	// HostCLIs: the agent runs the vendor's CLIs in the host's mount
-	// namespace, with the host's C library and driver libraries, which a
-	// container of another distribution cannot load. The mounts then only
-	// serve the files the probe reads.
-	HostCLIs bool
-}
+// kubeVendors are the vendors whose cards the agent runs on a Kubernetes
+// node. It needs no vendor's mounts or runtime for any of them: it reads
+// the host's files through the host's root and runs the vendor's CLIs in
+// the host's mount namespace. A node with no card of these stands by.
+var kubeVendors = map[string]bool{VendorNVIDIA: true, VendorAscend: true, VendorHygon: true, VendorPPU: true}
 
-var kubeProfiles = map[string]KubeProfile{
-	VendorNVIDIA: {Vendor: VendorNVIDIA, RuntimeClass: true, CLI: "nvidia-smi",
-		Env: map[string]string{"NVIDIA_VISIBLE_DEVICES": "all", "NVIDIA_DRIVER_CAPABILITIES": "compute,utility"}},
-	// The probes read the driver's version files under /usr/local; the CLIs
-	// themselves run on the host.
-	VendorAscend: {Vendor: VendorAscend, HostCLIs: true,
-		HostDirs:  []string{"/usr/local"},
-		HostFiles: []string{"/etc/ascend_install.info"}},
-	VendorHygon: {Vendor: VendorHygon, HostCLIs: true,
-		HostDirs: []string{"/opt/hyhal", "/opt/dtk"}},
-	VendorPPU: {Vendor: VendorPPU, HostCLIs: true,
-		HostDirs: []string{"/usr/local"}},
-}
+// RunsOnKube reports whether the agent runs the vendor's cards on
+// Kubernetes.
+func RunsOnKube(vendor string) bool { return kubeVendors[NormalizeVendor(vendor)] }
 
-// KubeProfileFor returns the profile of a vendor that can run on Kubernetes.
-func KubeProfileFor(vendor string) (KubeProfile, bool) {
-	p, ok := kubeProfiles[NormalizeVendor(vendor)]
-	return p, ok
-}
-
-// KubeVendors lists the vendors with a Kubernetes profile.
+// KubeVendors lists the vendors that run on Kubernetes, sorted.
 func KubeVendors() []string {
-	out := make([]string, 0, len(kubeProfiles))
-	for v := range kubeProfiles {
+	out := make([]string, 0, len(kubeVendors))
+	for v := range kubeVendors {
 		out = append(out, v)
 	}
 	sort.Strings(out)

@@ -40,8 +40,12 @@ func kubeAcquireTokenOrStandBy(log *slog.Logger, conf *agentconf.Config, cfg *ag
 	}
 	ectx, estop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer estop()
-	if stoodBy, err := kubeStandBy(ectx, log, stateDir, kubeCensusFor(cfg.AcceleratorHost)); stoodBy {
-		return true, err
+	// An injected prober (GPUWORKS_FAKE_GPU) stands for the node's cards:
+	// the bus is not what the agent will probe.
+	if cfg.Prober == nil {
+		if stoodBy, err := kubeStandBy(ectx, log, stateDir, kubeCensusFor(cfg.AcceleratorHost)); stoodBy {
+			return true, err
+		}
 	}
 	id, err := enrollKubeNode(ectx, log, agentapp.Config{ServerURL: conf.Server, StateDir: stateDir})
 	if err != nil {
@@ -175,7 +179,7 @@ var kubeStandByPoll = 60 * time.Second
 var kubeReexec = reexecKubeAgent
 
 // kubeSupportedAccelerator is a census's first vendor this build can run on
-// Kubernetes (accelerator.KubeProfileFor), or "", false when census is nil
+// Kubernetes (accelerator.RunsOnKube), or "", false when census is nil
 // or shows none. It does not touch any CLI: a card whose CLI does not
 // answer is still this vendor's, and must still enroll and report the
 // failure, not stand by forever.
@@ -184,7 +188,7 @@ func kubeSupportedAccelerator(census kubeAcceleratorCensus) (vendor string, ok b
 		return "", false
 	}
 	for _, v := range census.Vendors() {
-		if _, known := accelerator.KubeProfileFor(v.Vendor); known {
+		if accelerator.RunsOnKube(v.Vendor) {
 			return v.Vendor, true
 		}
 	}

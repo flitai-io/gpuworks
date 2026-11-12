@@ -36,6 +36,8 @@ import Add01 from "@hugeicons/core-free-icons/Add01Icon";
 import Blocked from "@hugeicons/core-free-icons/BlockedIcon";
 import CloudUpload from "@hugeicons/core-free-icons/CloudUploadIcon";
 import Delete02 from "@hugeicons/core-free-icons/Delete02Icon";
+import ComputerTerminal01 from "@hugeicons/core-free-icons/ComputerTerminal01Icon";
+import PencilEdit01 from "@hugeicons/core-free-icons/PencilEdit01Icon";
 import File02 from "@hugeicons/core-free-icons/File02Icon";
 import Unlink01 from "@hugeicons/core-free-icons/Unlink01Icon";
 
@@ -85,4 +87,6 @@ export const ConsoleIcon = {
   upload: createHugeIcon(CloudUpload),
   unlink: createHugeIcon(Unlink01),
   manifest: createHugeIcon(File02),
+  edit: createHugeIcon(PencilEdit01),
+  terminal: createHugeIcon(ComputerTerminal01),
 };

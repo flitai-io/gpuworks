@@ -17,9 +17,8 @@ import type { KubeCluster, KubeDefaults } from "../src/api";
 
 // What GET /api/v1/kube/defaults answers: the drawer shows these as hints and sends only what was typed.
 const DEFAULTS: KubeDefaults = {
-  vendor: "nvidia", namespace: "gpuworks-system", state_dir: "/opt/gpuworks", engine_ports: "40000-42767", idle_return_seconds: 60, idle_return_keep: -1,
+  namespace: "gpuworks-system", state_dir: "/opt/gpuworks", engine_ports: "40000-42767", idle_return_seconds: 60, idle_return_keep: -1,
   agent_image: "gpuworks/gpuworks-agent:r1", stalled_after_seconds: 300,
-  vendors: [{ id: "nvidia", runtime_class: true }, { id: "ascend", runtime_class: false }, { id: "hygon", runtime_class: false }, { id: "ppu", runtime_class: false }],
   agent_image_source: "dockerhub",
   agent_image_sources: [
     { id: "dockerhub", image: "gpuworks/gpuworks-agent:r1" },
@@ -38,7 +37,7 @@ const APPLY = "kubectl apply -f 'https://gpuworks.example/kube/manifest.yaml?tok
 function cluster(overrides: Partial<KubeCluster> = {}): KubeCluster {
   return {
     id: 1, uuid: "c-1", name: "prod-gpu", namespace: "gpuworks-system", server_url: "https://gpuworks.example",
-    vendor: "nvidia", state_dir: "/opt/gpuworks", agent_image: "", agent_image_source: "dockerhub", effective_agent_image: "gpuworks/gpuworks-agent:r1",
+    vendors: [{ vendor: "nvidia", nodes: 3 }], state_dir: "/opt/gpuworks", agent_image: "", agent_image_source: "dockerhub", effective_agent_image: "gpuworks/gpuworks-agent:r1",
     node_selector: "nvidia.com/gpu.present=true", runtime_class: "", image_pull_secret: "",
     containerd_socket: "", api_server: "", engine_ports: "40000-42767", idle_return_seconds: 600, priority: 10000, allow_preemption: false,
     cluster_uid: "7f3c2a10-aaaa-bbbb-cccc-0123456789ab", revoked: false, node_count: 3,
@@ -46,8 +45,8 @@ function cluster(overrides: Partial<KubeCluster> = {}): KubeCluster {
   };
 }
 const prod = cluster();
-const lab = cluster({ id: 2, uuid: "c-2", name: "lab", namespace: "gpu-lab", cluster_uid: "", node_count: 0, created_at: new Date(Date.now() - 60_000).toISOString(), idle_return_seconds: -1, apply_command: "kubectl apply -f 'https://gpuworks.example/kube/manifest.yaml?token=lab-token'" });
-const old = cluster({ id: 3, uuid: "c-3", name: "retired", revoked: true, idle_return_seconds: 7200, vendor: "ascend", runtime_class: "" });
+const lab = cluster({ id: 2, uuid: "c-2", name: "lab", namespace: "gpu-lab", cluster_uid: "", node_count: 0, vendors: [], created_at: new Date(Date.now() - 60_000).toISOString(), idle_return_seconds: -1, apply_command: "kubectl apply -f 'https://gpuworks.example/kube/manifest.yaml?token=lab-token'" });
+const old = cluster({ id: 3, uuid: "c-3", name: "retired", revoked: true, idle_return_seconds: 7200, vendors: [{ vendor: "ascend", nodes: 2 }, { vendor: "", nodes: 1 }], runtime_class: "" });
 
 type Calls = Record<string, unknown[][]>;
 function stubApi(options: { clusters?: KubeCluster[] | Error; admin?: boolean; defaults?: KubeDefaults | Error } = {}) {
@@ -120,13 +119,14 @@ test("the header explains how a cluster joins", async () => {
   assert.ok(await screen.findByText(k.page.description));
 });
 
-test("one row per cluster: vendor, node count, card return policy and status; namespace, cluster UID and creation time are off by default", async () => {
+test("one row per cluster: node count, the vendors of its nodes, card return policy and status; namespace, cluster UID and creation time are off by default", async () => {
   stubApi();
   renderPage();
   const row = await rowOf("prod-gpu");
   assert.equal(screen.getAllByRole("row").length, 1 + 3, "header plus a row per cluster");
-  assert.ok(within(row).getByText(locale.common.vendor.nvidia), "the cluster's accelerator vendor");
-  assert.ok(within(await rowOf("retired")).getByText(locale.common.vendor.ascend));
+  assert.ok(within(row).getByText(`${locale.common.vendor.nvidia} ×3`), "the vendors of the cluster's nodes");
+  assert.ok(within(await rowOf("retired")).getByText(`${locale.common.vendor.ascend} ×2 · ${k.vendors.none} ×1`), "nodes that reported no cards are counted too");
+  assert.ok(within(await rowOf("lab")).getByText("—"), "no node, no vendor");
   assert.ok(within(row).getByText("3"));
   assert.ok(within(row).getByText("Returned after 10 min idle"));
   assert.ok(within(row).getByText(k.status.active));
@@ -265,7 +265,7 @@ test("connecting opens a form with the server address prefilled and the server's
   assert.equal(socket.placeholder, k.drawer.containerdSocketPlaceholder);
   assert.equal((form.getByLabelText(field(k.drawer.stateDir)) as HTMLInputElement).placeholder, "/opt/gpuworks");
   assert.ok(form.getByText(k.drawer.stateDirHelp));
-  await waitFor(() => assert.equal(form.getByRole("combobox", { name: field(k.drawer.vendor) }).textContent, locale.common.vendor.nvidia, "the server's default vendor is shown"));
+  assert.equal(form.queryByRole("combobox", { name: /vendor|厂商/i }), null, "no vendor is asked: each agent detects its own node's cards");
   const ports = form.getByLabelText(field(k.drawer.enginePorts)) as HTMLInputElement;
   assert.deepEqual([ports.value, ports.placeholder], ["", "40000-42767"]);
   const idle = form.getByLabelText(field(k.drawer.idleReturnSeconds)) as HTMLInputElement;
@@ -384,37 +384,6 @@ test("Escape closes the form without sending anything", async () => {
   assert.equal(calls.createKubeCluster, undefined);
 });
 
-async function selectVendor(user: ReturnType<typeof userEvent.setup>, form: ReturnType<typeof dialog>, label: string) {
-  const trigger = form.getByRole("combobox", { name: field(k.drawer.vendor) });
-  trigger.focus();
-  await user.keyboard("{Enter}");
-  await waitFor(() => assert.equal(trigger.getAttribute("aria-expanded"), "true"));
-  await user.click(await screen.findByRole("option", { name: label }));
-  await waitFor(() => assert.ok(!screen.queryByRole("listbox"), "the options closed"));
-}
-
-test("the vendor choice offers the four vendors; an Ascend cluster sends its vendor and state directory, and no RuntimeClass or socket", async () => {
-  const calls = stubApi();
-  const { user } = renderPage();
-  await user.click((await screen.findAllByRole("button", { name: new RegExp(`${add}$`) }))[0]);
-  const form = dialog();
-  await user.type(await form.findByLabelText(field(k.drawer.name)), "npu");
-  await user.click(form.getByText(k.drawer.advanced));
-  assert.ok(form.getByLabelText(field(k.drawer.runtimeClass)), "NVIDIA clusters pick a RuntimeClass");
-  const vendors = form.getByRole("combobox", { name: field(k.drawer.vendor) });
-  vendors.focus();
-  await user.keyboard("{Enter}");
-  assert.deepEqual((await screen.findAllByRole("option")).map((option) => option.textContent), ["nvidia", "ascend", "hygon", "ppu"].map((v) => locale.common.vendor[v as "nvidia"]));
-  await user.keyboard("{Escape}");
-  await waitFor(() => assert.ok(!screen.queryByRole("listbox"), "the options closed"));
-  await selectVendor(user, form, locale.common.vendor.ascend);
-  await waitFor(() => assert.ok(form.queryByLabelText(k.drawer.runtimeClass) === null, "devices come through CDI, so no RuntimeClass"));
-  await user.type(form.getByLabelText(field(k.drawer.stateDir)), "/opt/gpuworks-k8s");
-  await user.click(form.getByRole("button", { name: k.drawer.submit }));
-  await waitFor(() => assert.equal(calls.createKubeCluster?.length, 1));
-  assert.deepEqual(calls.createKubeCluster[0], [{ name: "npu", server_url: "http://localhost", vendor: "ascend", state_dir: "/opt/gpuworks-k8s" }]);
-});
-
 test("the agent image registry offers what the server publishes to; choosing SWR shows its image and sends the choice", async () => {
   const calls = stubApi();
   const { user } = renderPage();
@@ -467,20 +436,16 @@ test("a priority and preemption the operator sets are sent", async () => {
   assert.deepEqual(calls.createKubeCluster[0], [{ name: "pri2", server_url: "http://localhost", priority: 0, allow_preemption: true }]);
 });
 
-test("every vendor can be chosen, and going back to NVIDIA brings the RuntimeClass field back", async () => {
+test("the RuntimeClass field is always offered and says it only affects NVIDIA nodes' instance pods", async () => {
   stubApi();
   const { user } = renderPage();
   await user.click((await screen.findAllByRole("button", { name: new RegExp(`${add}$`) }))[0]);
   const form = dialog();
   await form.findByLabelText(field(k.drawer.name));
   await user.click(form.getByText(k.drawer.advanced));
-  for (const vendor of ["hygon", "ppu"] as const) {
-    await selectVendor(user, form, locale.common.vendor[vendor]);
-    await waitFor(() => assert.equal(form.getByRole("combobox", { name: field(k.drawer.vendor) }).textContent, locale.common.vendor[vendor]));
-    assert.ok(form.queryByLabelText(k.drawer.runtimeClass) === null);
-  }
-  await selectVendor(user, form, locale.common.vendor.nvidia);
-  assert.equal((await form.findByLabelText(field(k.drawer.runtimeClass)) as HTMLInputElement).value, "");
+  assert.ok(form.getByLabelText(field(k.drawer.runtimeClass)), "offered whatever the nodes' vendors");
+  assert.ok(form.getByText(k.drawer.runtimeClassHelp));
+  assert.ok(k.drawer.runtimeClassHelp.includes("NVIDIA"));
 });
 
 test("a cluster the server calls stalled offers the commands and causes to look at; one it does not, does not, whatever its age", async () => {
@@ -496,25 +461,6 @@ test("a cluster the server calls stalled offers the commands and causes to look 
   assert.ok(commands.includes("kubectl -n gpuworks-system describe daemonset gpuworks-agent"), commands);
   await user.click(screen.getByRole("button", { name: k.stalled.copy }));
   assert.equal(await navigator.clipboard.readText(), commands);
-});
-
-test("the vendor list and which vendor takes a RuntimeClass come from the server's dictionary, not from the page", async () => {
-  stubApi({ defaults: { ...DEFAULTS, vendor: "ascend", vendors: [{ id: "ascend", runtime_class: false }, { id: "nvidia", runtime_class: true }, { id: "hygon", runtime_class: true }] } });
-  const { user } = renderPage();
-  await user.click((await screen.findAllByRole("button", { name: new RegExp(`${add}$`) }))[0]);
-  const form = dialog();
-  await form.findByLabelText(field(k.drawer.name));
-  await user.click(form.getByText(k.drawer.advanced));
-  await waitFor(() => assert.equal(form.getByRole("combobox", { name: field(k.drawer.vendor) }).textContent, locale.common.vendor.ascend, "the server's default vendor leads"));
-  assert.ok(form.queryByLabelText(k.drawer.runtimeClass) === null, "the dictionary says the default vendor takes none");
-  const vendors = form.getByRole("combobox", { name: field(k.drawer.vendor) });
-  vendors.focus();
-  await user.keyboard("{Enter}");
-  assert.deepEqual((await screen.findAllByRole("option")).map((option) => option.textContent), [locale.common.vendor.ascend, locale.common.vendor.nvidia, locale.common.vendor.hygon]);
-  await user.keyboard("{Escape}");
-  await waitFor(() => assert.ok(!screen.queryByRole("listbox"), "the options closed"));
-  await selectVendor(user, form, locale.common.vendor.hygon);
-  assert.ok(await form.findByLabelText(field(k.drawer.runtimeClass)), "the dictionary says hygon takes one");
 });
 
 test("the idle-return switch sends the server's own keep value", async () => {

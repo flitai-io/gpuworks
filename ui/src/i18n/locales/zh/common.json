@@ -593,7 +593,6 @@
     "ACCELERATOR_RESOURCE_UNAVAILABLE": "本次 {{vendor}} 启动所需的 {{resource}} 不可用，请检查宿主设备和容器资源配置。",
     "KUBE_CLUSTER_SOURCE_TAKEN": "账号下的集群 {{cluster}} 已经接入过，一个集群只有一个条目；要用它的更多节点池，请修改那个条目的节点池。",
     "KUBE_CLUSTER_NO_SOURCE": "这个集群不是从云账号接入的（或云账号已删除），gpuworks 无法访问它；请在集群里执行 kubectl 命令。",
-    "KUBE_CLUSTER_MIXED_VENDORS": "同一个集群条目的节点池必须是同一厂商，而选中的是 {{vendors}}。请只选一个厂商的节点池；暂不支持在一个条目里混合厂商。",
     "KUBE_CLUSTER_OPERATION_FAILED": "操作集群失败（{{step}}）：{{reason}}",
     "PROVIDER_INSTANCE_IN_CLUSTER": "这台实例是 Kubernetes 集群 {{cluster}} 的节点，由集群管理：不能单独安装 agent，也不能在这里开关机、释放或调整规格。请在「Kubernetes 集群」页签接入并管理该集群。",
     "PEER_TRANSFER_OBSERVATION_UNAVAILABLE": "节点传输观测暂时不可用。",

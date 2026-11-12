@@ -97,10 +97,7 @@ func writeNodeLookupError(w http.ResponseWriter, err error) {
 }
 
 // kubeManages says whether a vendor's cards run on Kubernetes nodes.
-func kubeManages(vendor string) bool {
-	_, ok := accelerator.KubeProfileFor(vendor)
-	return ok
-}
+func kubeManages(vendor string) bool { return accelerator.RunsOnKube(vendor) }
 
 // acceleratorChoices are the vendors a node can be told to manage: every
 // vendor on its host's bus, and on a Kubernetes node only those that run
