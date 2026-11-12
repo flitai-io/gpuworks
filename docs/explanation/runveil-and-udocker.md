@@ -52,6 +52,30 @@ runveil 和 udocker CLI 读写同一棵目录，都在 agent 的 state 目录（
 `/var/lib/dpkg/info/<包>:amd64.list`），最好允许改属主，速度取决于这块存储。详见
 [为什么 udocker 节点的安装目录不能放在网络卷上](../how-to/connect-nodes.md#为什么-udockerrunveil节点的安装目录不能放在网络卷上)。
 
+## 容器里会看到宿主路径
+
+PRoot 只翻译路径类系统调用，`/proc/self/maps` 由内核生成，里面登记的已加载库是**宿主路径**，
+例如 `<state>/udocker/containers/<name>/ROOT/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_hip.so`。
+有些运行库会按这个路径重新打开自己：HIP 在第一次启动 kernel 时据此读出 fat binary 里的代码对象，
+FlashInfer、DeepEP、vLLM 等 CUDA 组件用它定位 `libcudart`。在容器里，这个宿主路径会被当作容器内路径再翻译一次，
+文件不存在，于是海光 DCU 上第一个 kernel 报 `HIP error: invalid device function`，CUDA 上则是找不到库。
+
+所以创建容器时，agent 会在 ROOT 里放一个回环符号链接，让宿主路径在容器里也能打开（`$ROOT` 是 ROOT 的宿主绝对路径）：
+
+```text
+${ROOT}${ROOT}  ->  ${ROOT}
+```
+
+它在启动阶段的「应用 GPU 运行时兼容修补」一步建立（`ensureHostRootLoopback`）。经 agent 和
+`gpuworks-agent runveil exec` 启动的进程都已具备。**脱离 agent、手工用 PRoot 跑同一个 rootfs 时**，要自己补上这一项，
+最简单的是把 rootfs 绑定到它自己的宿主路径：
+
+```bash
+proot -r "$ROOT" -b "$ROOT:$ROOT" ...
+```
+
+缺了它，`torch.cuda.get_arch_list()`、设备属性这类不经代码对象的查询仍然正常，只有真正启动 kernel 时才失败，容易误判成驱动或架构不兼容。
+
 ## 运行身份
 
 udocker 拒绝以 root 运行，runveil 沿用这个约定：root 运行的 agent 会创建专用账号 `udocker`，把运行时目录交给它，
