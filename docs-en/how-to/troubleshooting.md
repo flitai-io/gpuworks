@@ -1034,7 +1034,7 @@ The gateway error body differs from the management API: `{"error":{"message":"â€
 
 | Status | message | Cause and action |
 |---|---|---|
-| 401 | `invalid or missing API key` | `Authorization: Bearer <key>` is missing or the key was deleted. The gateway does not authenticate requests when the database contains **no keys at all** |
+| 401 | `invalid or missing API key` | `Authorization: Bearer <key>` is missing, or the key was deleted or is invalid. `/v1` requires a key by default and refuses every request even when the database contains **no keys at all**; for genuinely keyless access an administrator turns on "Accept /v1 inference requests without a token" (`inference_open_access`) under **Settings â†’ Security** |
 | 400 | `request body must specify a model` | The request body has no `model` |
 | 404 | `no deployment serves model <name>` | The model name is not the deployment's served name (list names with `GET /v1/models`), or the deployment has stopped |
 | 404 | `deployment <name> does not expose <METHOD> <path>` | Only the playground (`/api/v1/playground/v1/*`) performs contract checks and returns this error: the deployment's API contract does not include this endpoint (for example, calling `/v1/embeddings` on a Chat model). Use `GET /api/v1/playground/openapi.json` to view its declared endpoints. The public `/v1` does not perform this check; it forwards the request unchanged to the engine, which returns its own 404 or other response |

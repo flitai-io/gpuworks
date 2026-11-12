@@ -69,6 +69,7 @@
     "ANALYTICS_TOO_MANY_CARDS": "Too many cards to show one by one ({{detail}}). Filter by node or model first, or group by node or model.",
     "ANALYTICS_VALUE_INVALID": "Invalid {{field}}: {{detail}}.",
     "SETTING_HAS_OWN_ROUTE": "This setting has a card of its own; change it there.",
+    "SECURITY_SETTINGS_UNAVAILABLE": "Security settings could not be read. Retry or inspect the server log.",
     "TELEMETRY_ENDPOINT_INVALID": "Invalid collector address: give an http(s) URL such as http://otel-collector:4318, without credentials or a query.",
     "TELEMETRY_HEADER_INVALID": "Header {{name}} cannot be used: the name is invalid, given twice, or one the exporter sets itself (Content-Type and the like).",
     "TELEMETRY_HEADER_VALUE_REQUIRED": "Header {{name}} has no value yet; fill it in.",

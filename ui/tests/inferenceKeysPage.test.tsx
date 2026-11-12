@@ -104,14 +104,16 @@ test("server refusal preserves the inference token draft and allows a corrected 
   assert.ok(await screen.findByText("gw-RETRIED_SECRET"));
 });
 
-test("revoke confirmation names the token and explains the last-key anonymous-mode exception", async () => {
+test("revoke confirmation names the token and warns that the last token closes the gateway", async () => {
   const { user } = setup([{ name: "production-app", prefix: "gw-production", created_at: "2026-10-13T00:00:00Z", ...all }]);
   const row = (await screen.findByText("production-app")).closest("tr")!;
   await user.click(within(row).getByRole("button", { name: k.actions.revoke }));
   const text = i18n.t("apikeys:revoke.confirm", { name: "production-app" });
   assert.match(text, /production-app/);
   assert.match(text, /lose access/);
-  assert.match(text, /no active tokens remain.*anonymous access/);
+  // Revoking the last token closes /v1; it does not open it to anonymous callers.
+  assert.match(text, /no active tokens remain.*refuses every \/v1 request/);
+  assert.doesNotMatch(text, /anonymous access/);
   assert.ok(await screen.findByText(text));
 });
 

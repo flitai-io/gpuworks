@@ -106,7 +106,7 @@ Figure: Confirm that the model files on host3 are “Available”.
 3. In the **Save this API token now** page, click **Copy API token**, save the full value securely, then click **I have saved it**.
 
 **Completion criteria**: `tutorial-qwen3-17b` appears in the list, and you have saved the full token beginning with `gw-`. The list only shows a prefix, which cannot be used for requests.
-You also cannot recover the full value of an existing `default` token from the list, so this tutorial creates a new token. Tokens beginning with `gwp_` are **Platform API tokens** for management APIs and are not used in this tutorial.
+A fresh server ships with no token at all, so you have to create one here: `/v1` requires a key by default and refuses every inference request until the first token exists. Tokens beginning with `gwp_` are **Platform API tokens** for management APIs and are not used in this tutorial.
 
 ## 5. Deploy the Model
 

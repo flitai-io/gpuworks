@@ -156,7 +156,7 @@ See [Configure Image and Model Pulls](../how-to/configure-pull-settings.md).
 
 #### Security & Access
 
-- **Security**: Whether Playground HTML previews may make network requests. Only administrators can change this.
+- **Security**: two switches, both administrator-only. One allows Playground HTML previews to make network requests; the other, "Accept /v1 inference requests without a token" (`inference_open_access`, off by default), lets `/v1` accept requests that carry no inference token while a request that presents one is still verified. See [Gateway Authentication](openai-gateway.md#authentication).
 - **Web Terminal**: Enable/disable, idle timeout, and concurrency limit.
 - **MCP service**: Enable/disable, endpoint, and connection examples. Only administrators can change the toggle.
 

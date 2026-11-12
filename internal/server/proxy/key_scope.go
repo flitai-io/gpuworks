@@ -19,7 +19,8 @@ func withKeyScope(ctx context.Context, identity store.APIKeyIdentity) context.Co
 }
 
 // keyScopeFrom is the request's key scope; nil when it may call every
-// deployment (an unrestricted key, the playground, or no keys configured).
+// deployment (an unrestricted key, the playground, or a request the gateway
+// accepted without a key because an administrator opened it).
 func keyScopeFrom(ctx context.Context) *store.APIKeyIdentity {
 	identity, _ := ctx.Value(keyScopeKey{}).(*store.APIKeyIdentity)
 	return identity

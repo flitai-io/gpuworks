@@ -86,6 +86,9 @@ type Proxy struct {
 	// sampleRoot decides whether a trace the gateway starts is sampled
 	// (request_identity.go); nil samples none.
 	sampleRoot func(tracecontext.TraceID) bool
+	// openAccess caches the security switch that lets /v1 accept a request
+	// with no API key (open_access.go); the zero value reads as closed.
+	openAccess inferenceOpenAccessCache
 }
 
 // SetRequestSink wires where each forwarded request's record goes. It must
@@ -557,8 +560,9 @@ func (p *Proxy) serveSelectedTarget(w http.ResponseWriter, r *http.Request, publ
 }
 
 // authenticate checks the platform API key and names the caller: the key
-// and its owner, received now. With no keys configured yet every request is
-// allowed (dev) and the caller is anonymous.
+// and its owner, received now. A request without a key is refused unless an
+// administrator turned open access on (open_access.go), in which case the
+// caller is anonymous.
 func (p *Proxy) authenticate(w http.ResponseWriter, r *http.Request) (uxrecord.Caller, store.APIKeyIdentity, bool) {
 	caller, identity, ok := p.identifyKey(r)
 	if !ok {

@@ -395,6 +395,13 @@ func (a *apiHandlers) putSetting(w http.ResponseWriter, r *http.Request) {
 		writeProductError(w, http.StatusBadRequest, ErrorSettingHasOwnRoute, "data_retention is set through PUT /api/v1/data-retention", map[string]any{"setting": key, "route": "/api/v1/data-retention"})
 		return
 	}
+	if key == store.SettingSecurityPolicy.String() {
+		// A whole-object replace here would silently clear switches the body
+		// does not name — including the one that decides whether /v1 asks for
+		// a key — so the partial patch on its own route is the only way in.
+		writeProductError(w, http.StatusBadRequest, ErrorSettingHasOwnRoute, "security is set through PATCH /api/v1/security/settings", map[string]any{"setting": key, "route": "/api/v1/security/settings"})
+		return
+	}
 	body, err := readAll(r)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)

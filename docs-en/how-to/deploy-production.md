@@ -182,6 +182,12 @@ API keys: the gateway caches validated keys in memory for 5 minutes. Revoking a 
 made directly to the database, bypassing the server, need to wait for cache expiry. Use a separate key for each caller to simplify revocation and troubleshooting with `last_used`
 (at minute granularity).
 
+`/v1` requires an API key by default, and production should keep that default. Keyless access is an exception an administrator turns on explicitly:
+"Accept /v1 inference requests without a token" (`inference_open_access`, off by default) under **Settings → Security**. With it on, anyone who can
+reach the inference listener can call the deployed models anonymously and consume their GPUs, so turn it on only when you really need it (a fully
+controlled intranet trial, say) and review what `listen.gateway` exposes in the same change. Do not add a "pass requests without a key" rule in a
+reverse proxy or firewall instead of this switch. For the rule and the 401 shapes see [Gateway Authentication](../reference/openai-gateway.md#authentication).
+
 Long requests and upgrades: a server restart or upgrade disconnects all in-flight streams, and responses that have already started are not retried; a node agent
 disconnection interrupts all streams on that node. Schedule upgrades for long-generation workloads during off-peak hours, or implement retries for interrupted streams in the caller first.
 
@@ -193,7 +199,7 @@ Gateway metrics (available in the Monitor Center and `/api/v1/metrics/query`): `
 
 Protect `master.key` and the database in the actual data directory, and keep both in backups. The database alone cannot restore the encrypted credentials it contains. Sensitive files default to owner-only access (`0600`). A Linux systemd installation explicitly bound to this binary and a non-root service account may use its trusted service group (`0660`); group membership grants access to platform credentials. macOS and standalone servers do not implicitly trust ordinary primary groups. Startup, install and upgrade harden existing credentials, databases and sidecars, and recognized backups; temporary database snapshots are owner-only. Failure to protect a file stops the operation: repair the reported owner/service-group permissions and retry. Generated passwords are not written to service logs.
 
-After the first login, change the initial password using the [password change steps in the installation guide](install-server.md#验证与首次登录). Verify the new password, then delete `<data>/initial-credentials`. Create separate inference API keys for each caller, and revoke old keys through the management API or console when they are no longer needed. For upgrade backup coverage and restore limitations, see [Upgrades and Version Compatibility](upgrade-and-compatibility.md).
+After the first login, change the initial password using the [password change steps in the installation guide](install-server.md#验证与首次登录). Verify the new password, then delete `<data>/initial-credentials`. Create separate inference API keys for each caller, and revoke old keys through the management API or console when they are no longer needed. Revoking the last key does not return the gateway to an unauthenticated state: `/v1` refuses every request until another key is created or an administrator explicitly turns on `inference_open_access`. For upgrade backup coverage and restore limitations, see [Upgrades and Version Compatibility](upgrade-and-compatibility.md).
 
 ## Operation and Upgrades
 

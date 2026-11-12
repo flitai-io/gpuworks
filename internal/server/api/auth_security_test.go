@@ -121,7 +121,9 @@ func TestPrivilegedMutationsCannotBypassAdministratorRoutes(t *testing.T) {
 			method, path, body string
 			adminStatus        int
 		}{
-			{http.MethodPut, "/api/v1/settings/security", `{"playground_preview_network":true}`, http.StatusOK},
+			// The security switches have their own route; the generic settings
+			// write refuses the key outright (see security_settings_test.go).
+			{http.MethodPut, "/api/v1/settings/security", `{"playground_preview_network":true}`, http.StatusBadRequest},
 			{http.MethodPut, "/api/v1/settings/storage_policy", `{}`, http.StatusOK},
 			{http.MethodPut, "/api/v1/settings/mcp.enabled", `true`, http.StatusOK},
 			{http.MethodPost, "/api/v1/nodes/install", `{}`, http.StatusServiceUnavailable},

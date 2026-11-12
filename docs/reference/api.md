@@ -1616,7 +1616,7 @@ extra_args 解析（`EXTRA_ARGS_INVALID`）、挂载（`MOUNT_CONTAINER_PATH`/`M
 | GET | `/api/v1/apikeys` | API key 列表（不含明文），含已吊销的 key：已吊销的带 `revoked_at`（UTC 时间），未吊销的不出现该字段。`all_deployments` 为 true 时可调用全部模型服务；为 false 时只能调用 `deployments`（`[{id,name,served_name}]`）中的部署，这些部署全被删除后列表为空、key 什么都调用不了 | JWT |
 | POST | `/api/v1/apikeys` | 创建 API key；`name` 去除首尾空白后不能为空，否则返回 400 `API_KEY_NAME_REQUIRED`；明文仅创建响应中返回一次。可选 `all_deployments` 与 `deployment_ids` 限定可调用的部署：省略 `all_deployments` 时，`deployment_ids` 为空即全部部署、非空即仅这些部署；`all_deployments` 与 `deployment_ids` 矛盾（true 且非空，或 false 且为空）返回 400 `API_KEY_SCOPE_INVALID`，不存在的部署返回 400 `API_KEY_DEPLOYMENT_UNKNOWN`（`params.ids`） | JWT |
 | PUT | `/api/v1/apikeys/{prefix}/scope` | 修改未吊销 key 的可调用范围，`{"all_deployments":bool,"deployment_ids":[...]}`，`all_deployments` 必填，校验同创建；返回更新后的 key（同列表项）。下一次请求起生效；未知或已吊销的前缀返回 404 `API_KEY_NOT_FOUND` | JWT |
-| DELETE | `/api/v1/apikeys/{prefix}` | 按列表中的 12 字符 `prefix`（完整 key 的前 12 个字符，不是完整密钥）吊销 API key：吊销完成后的新请求不能再以该 key 认证，记录保留（名字留给它的历史用量），前缀不复用；成功返回 `{"status":"revoked"}`。未知前缀返回 404 `API_KEY_NOT_FOUND`；重复吊销已吊销的前缀仍返回 200，不改动原 `revoked_at`。所有 key 都吊销后网关回到匿名访问（与没有 key 时相同） | JWT |
+| DELETE | `/api/v1/apikeys/{prefix}` | 按列表中的 12 字符 `prefix`（完整 key 的前 12 个字符，不是完整密钥）吊销 API key：吊销完成后的新请求不能再以该 key 认证，记录保留（名字留给它的历史用量），前缀不复用；成功返回 `{"status":"revoked"}`。未知前缀返回 404 `API_KEY_NOT_FOUND`；重复吊销已吊销的前缀仍返回 200，不改动原 `revoked_at`。所有 key 都吊销后网关**不**回到匿名访问：`/v1` 仍要求 key，会拒绝所有请求，直到再创建一个 key，或管理员打开安全设置里的 `inference_open_access`（见[OpenAI 兼容网关的认证](openai-gateway.md#认证)） | JWT |
 
 ## Platform Tokens（平台 API 令牌）
 
@@ -1723,9 +1723,9 @@ RunPod 需要开放端口或补平台公钥时，先返回 409 `INSTANCE_RESTART
 | POST | `/api/v1/updates/server` | 下载发布包，备份并替换服务端后重启；接受返回 202 `{from,to,backup}`，下一次启动确认或回滚；见[服务端升级限制](#服务端升级限制) | JWT(admin) |
 | POST | `/api/v1/updates/server/upload` | 同上，但请求体是上传的发布压缩包（上限 512 MiB）；不是可用的发布包时 400 `SERVER_UPGRADE_ARCHIVE_INVALID`（含控制台升级之前的版本：它们不会确认或回滚自己的启动，`detail` 提示改用 `gpuworks upgrade --archive`） | JWT(admin) |
 | GET | `/api/v1/settings` | 全部设置项当前值（不含 `telemetry_export` 与 `branding`，它们只经各自的专用接口读写） | JWT |
-| PUT | `/api/v1/settings/{key}` | 修改单个设置项；`telemetry_export`、`branding` 回 400 `SETTING_HAS_OWN_ROUTE`。`deployment`（待调度超时、实例启动超时、事件保留）只有管理员可改（否则 403 `ADMINISTRATOR_REQUIRED`）：请求体叠加在当前值上，只改其中出现的键，叠加后越界回 400 `FIELD_INVALID` 且不写入 | JWT(admin) |
-| GET | `/api/v1/security/settings` | 安全开关：`playground_preview_network`（试验场 HTML 预览是否允许发起网络请求，默认 `false`） | JWT |
-| PATCH | `/api/v1/security/settings` | 修改上述开关，只改 body 里出现的字段 | admin |
+| PUT | `/api/v1/settings/{key}` | 修改单个设置项；`telemetry_export`、`branding`、`security` 回 400 `SETTING_HAS_OWN_ROUTE`（`security` 走 `PATCH /api/v1/security/settings`，整体替换会静默清掉请求体没提到的开关）。`deployment`（待调度超时、实例启动超时、事件保留）只有管理员可改（否则 403 `ADMINISTRATOR_REQUIRED`）：请求体叠加在当前值上，只改其中出现的键，叠加后越界回 400 `FIELD_INVALID` 且不写入 | JWT(admin) |
+| GET | `/api/v1/security/settings` | 安全开关：`playground_preview_network`（试验场 HTML 预览是否允许发起网络请求，默认 `false`）与 `inference_open_access`（是否接受不带 API key 的 `/v1` 请求，默认 `false`；打开后不带 key 的请求被匿名放行，带了 key 的仍照常校验，网关读不到设置按关闭处理），见[OpenAI 兼容网关的认证](openai-gateway.md#认证)；设置读取失败时接口返回 500 `SECURITY_SETTINGS_UNAVAILABLE`，不返回伪造的默认值 | JWT |
+| PATCH | `/api/v1/security/settings` | 修改上述开关，只改 body 里出现的字段；读取现有策略失败时返回 500 `SECURITY_SETTINGS_UNAVAILABLE` 且不写入；成功响应为已提交的策略 | admin |
 | GET | `/api/v1/branding` | 品牌外观：`product_name`、`console_title`、`login_description`、`logo`（base64 `data:` URL，PNG/JPEG/WebP/SVG），四个字段总是出现，空串表示用内置默认值（默认文案由客户端按界面语言渲染）。登录页在登录前就要显示，所以不需登录 | 无 |
 | PATCH | `/api/v1/branding` | 修改品牌外观，只改 body 里出现的字段，空串恢复该项默认；文字去掉首尾空白后 `product_name` 最多 32 字、`console_title` 最多 64 字、`login_description` 最多 200 字（只有它允许换行），不得含控制字符；`logo` 解码后最多 128 KiB。不合法时 400 `FIELD_INVALID`（`field`、`detail`）且不写入；返回保存后的完整值 | admin |
 | GET | `/api/v1/telemetry/export` | 网关 trace 的 OTLP 导出配置与状态：`enabled/endpoint/headers/sample_ratio/trace_link`，header 仅返回名称。`status` 含自 server 启动累计的 `exported/dropped/failed`、当前 `queued`、最近错误 `last_error` 和配置错误 `setting_error`。见[Trace 导出设置与状态](#trace-导出设置与状态) | JWT |
@@ -2024,7 +2024,7 @@ Playground 与 `/v1` 网关的边界、外部模型命名 `external:<config-id>:
 批处理任务把一个 JSONL 文件里的请求异步交给网关执行，结果写成输出文件和错误文件。它有两组接口：
 
 - 控制台用的管理接口 `/api/v1/batches`，鉴权同本文其他路由。
-- OpenAI 兼容接口 `/v1/files` 与 `/v1/batches`，用推理 API key 鉴权，官方 SDK 可直接使用。
+- OpenAI 兼容接口 `/v1/files` 与 `/v1/batches`，默认要求推理 API key（server 没有 key 时也照旧拒绝，除非管理员打开 `inference_open_access`），官方 SDK 可直接使用。
 
 操作步骤、结果文件格式和重试规则见[运行批处理任务](../how-to/batch-api.md)。
 
@@ -2084,7 +2084,7 @@ Playground 与 `/v1` 网关的边界、外部模型命名 `external:<config-id>:
 
 ### OpenAI 兼容的 Files 与 Batches 接口
 
-这些路由与 `/v1/chat/completions` 等网关接口一起挂在 `/v1` 下，用推理 API key（`Authorization: Bearer <key>`）鉴权；server 没有配置任何推理令牌时与其余 `/v1` 路由一样不要求鉴权。鉴权失败返回 401，错误码 `invalid_api_key`。文件和任务属于创建它们的 API key 所属用户：同一用户的任意 key 都能访问，其他用户得到 404。
+这些路由与 `/v1/chat/completions` 等网关接口一起挂在 `/v1` 下，默认用推理 API key（`Authorization: Bearer <key>`）鉴权，server 一个推理令牌都没有时也一样；只有管理员在安全设置里打开 `inference_open_access` 后才接受不带令牌的请求（见[OpenAI 兼容网关的认证](openai-gateway.md#认证)）。鉴权失败返回 401，错误码 `invalid_api_key`。文件和任务属于创建它们的 API key 所属用户：同一用户的任意 key 都能访问，其他用户得到 404。
 
 | Method | Path | 说明 |
 |---|---|---|
@@ -2166,7 +2166,7 @@ Playground 与 `/v1` 网关的边界、外部模型命名 `external:<config-id>:
 | 状态 | `code` | 场景 |
 |---|---|---|
 | 400 | `invalid_json`、`invalid_limit`、`invalid_order`、`invalid_endpoint`、`invalid_completion_window`、`invalid_metadata`、`endpoint_mismatch`、`file_not_found`、`invalid_purpose`、`model_not_found`、`model_endpoint_unsupported` | 创建任务或列表参数不合法；输入文件校验的错误码见上 |
-| 401 | `invalid_api_key` | 缺少或无效的 API key |
+| 401 | `invalid_api_key` | 缺少或无效的 API key；`/v1` 默认要求 key，不带 key 的请求只有在管理员打开 `inference_open_access` 后才放行 |
 | 404 | `file_not_found`、`batch_not_found`、`not_found` | 对象不存在或不属于调用者；未知路径 |
 | 405 | `method_not_allowed` | 方法不被该路径支持 |
 | 409 | `file_in_use`、`batch_not_cancellable` | 删除正被未结束任务读取的文件；取消已结束的任务 |

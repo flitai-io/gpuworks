@@ -4312,6 +4312,11 @@ export interface Branding {
 export interface SecuritySettings {
   /** Lets the playground HTML preview make network requests; off by default. */
   playground_preview_network: boolean;
+  /**
+   * Accepts /v1 requests that present no API key, anonymously; off by default.
+   * A request that does present a key is still verified either way.
+   */
+  inference_open_access: boolean;
 }
 
 export interface ServerListenUpdate {

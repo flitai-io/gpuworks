@@ -1035,7 +1035,7 @@ agent 每 15 秒检查一次运行中实例的容器。被 `docker stop`、进�
 
 | 状态 | message | 原因与处理 |
 |---|---|---|
-| 401 | `invalid or missing API key` | 缺 `Authorization: Bearer <key>` 或 key 已删。库里**一个 key 都没有**时网关不鉴权 |
+| 401 | `invalid or missing API key` | 缺 `Authorization: Bearer <key>`、key 已删或无效。`/v1` 默认要求 key，库里**一个 key 都没有**时同样拒绝所有请求；确实需要无 key 访问时，由管理员在**设置 → 安全**打开「接受不带令牌的 /v1 推理请求」（`inference_open_access`） |
 | 400 | `request body must specify a model` | 请求体没有 `model` |
 | 404 | `no deployment serves model <name>` | 模型名不是部署的 served name（`GET /v1/models` 可列出），或部署已停止 |
 | 404 | `deployment <name> does not expose <METHOD> <path>` | 只有试验场（`/api/v1/playground/v1/*`）会做 contract 检查并返回它：该部署的 API contract 不包含这个接口（比如对 Chat 模型调 `/v1/embeddings`）；`GET /api/v1/playground/openapi.json` 可查看它声明了哪些接口。公网 `/v1` 不做这项检查，请求原样转给引擎，由引擎自己返回 404 等 |

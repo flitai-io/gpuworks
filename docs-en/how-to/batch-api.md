@@ -7,7 +7,7 @@ This guide explains how to hand a large set of inference requests to the platfor
 **Prerequisites**:
 
 - A running deployment whose served model name you know. A batch routes by the `model` in each request line, exactly as a direct gateway call does; you can also choose one model when creating the batch so that all requests go to it, see [Choosing the Model](#指定模型).
-- An inference token (starting with `gw-`), created on the **Inference tokens** card of the **API Tokens** page; the plaintext is shown only once. When the server has no inference token configured, the `/v1` routes need no authentication, like the rest of the gateway.
+- An inference token (starting with `gw-`), created on the **Inference tokens** card of the **API Tokens** page; the plaintext is shown only once. The `/v1` routes require it by default, including when the server has no inference token at all; only after an administrator turns on "Accept /v1 inference requests without a token" under **Settings → Security** does `/v1` accept requests without one, see [Gateway Authentication](../reference/openai-gateway.md#authentication).
 - Creating or cancelling a batch in the console requires an administrator (the create button is disabled for other roles); other users can view their own batches in the console.
 - For the interface specification (object fields, error codes, limits), see [Complete REST API Routes](../reference/api.md#batches批处理任务).
 

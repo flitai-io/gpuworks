@@ -166,7 +166,8 @@ const (
 	ErrorWeightsFetchForbidden = messages.ErrorWeightsFetchForbidden
 	// ErrorSettingHasOwnRoute refuses the generic settings route for a
 	// setting with a route of its own.
-	ErrorSettingHasOwnRoute = "SETTING_HAS_OWN_ROUTE"
+	ErrorSettingHasOwnRoute          = "SETTING_HAS_OWN_ROUTE"
+	ErrorSecuritySettingsUnavailable = "SECURITY_SETTINGS_UNAVAILABLE"
 	// Telemetry export setting (telemetry_export.go).
 	ErrorTelemetryEndpointInvalid         = "TELEMETRY_ENDPOINT_INVALID"
 	ErrorTelemetryHeaderInvalid           = "TELEMETRY_HEADER_INVALID"

@@ -1,6 +1,19 @@
 # OpenAI 兼容网关
 
-server 的 `/v1/*` 使用 API key 鉴权。请求体中的 `model` 指定对外提供推理服务的模型名称（served model）；server 据此找到部署、实例和节点，通过 agent tunnel（agent 隧道）转发到本地端口。管理 API 使用 JWT，不能用管理 JWT 代替网关 key。
+server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证)。请求体中的 `model` 指定对外提供推理服务的模型名称（served model）；server 据此找到部署、实例和节点，通过 agent tunnel（agent 隧道）转发到本地端口。管理 API 使用 JWT，不能用管理 JWT 代替网关 key。
+
+## 认证
+
+`/v1` 默认要求 API key：请求不带 `Authorization: Bearer <key>`，或带的 key 不存在、已吊销，都返回 401。
+
+唯一例外由管理员显式打开，开关是安全设置里的 `inference_open_access`（默认 `false`），在控制台**设置 → 安全**的「安全」卡片里改，也可以用 `PATCH /api/v1/security/settings` 修改，见 [REST API 全量路由](api.md#settings--network-presets)。
+
+- 关闭（默认）：每个请求都要带有效 key。库里没有任何 key 时也一样：新装的 server 不再自动创建 `default` 令牌，在操作员创建第一个 key 之前，`/v1` 拒绝所有请求。
+- 打开：不带 key 的请求被匿名接受，能访问全部已部署模型；带了 key 的请求仍照常校验，key 无效照样返回 401。此时任何能访问这个监听地址的人都能调用已部署模型、占用它们的 GPU。
+- 读不到设置时按关闭处理：设置读取失败不会放行不带 key 的请求，只按「要求 key」处理。
+- 吊销 key 不改变这个判定：吊销最后一个 key 不会重新打开网关，`/v1` 会拒绝所有请求，直到再创建一个 key，或管理员打开上面这个开关。
+
+这条规则覆盖全部 `/v1` 路由，包括 `/v1/models`、`/v1/files`、`/v1/batches`、`/v1/tokenize` 与 `/v1/detokenize`。401 的响应形态按入口不同：网关路由返回 `{"error":{"message":"invalid or missing API key","type":"gpuworks_proxy"}}`，Files 与 Batches 返回 OpenAI 格式的 `invalid_api_key`，见[差异与排查](#差异与排查)。
 
 ## 支持的操作
 
@@ -170,7 +183,7 @@ PD 分离将输入提示词计算和后续生成交给不同实例。vLLM 顺序
 
 | 状态码 | 检查项 |
 |---|---|
-| 401 | 先检查 `Authorization: Bearer <key>` |
+| 401 | 先检查 `Authorization: Bearer <key>`。完全不带 key 时，确认是否真的需要匿名访问（见[认证](#认证)）；`/v1` 默认拒绝一切不带 key 的请求 |
 | 404 | 检查 `model` 名称；试验场还要看 contract |
 | 503 | 检查实例状态、sleep/wake 和节点是否在线 |
 | 502 | 查看 tunnel 和引擎日志 |

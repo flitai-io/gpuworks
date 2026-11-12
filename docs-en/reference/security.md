@@ -14,7 +14,7 @@ Session invalidation is handled as follows:
 
 The credentials accepted by each entry point and their uses are:
 
-- `/v1` uses a separate API key.
+- `/v1` requires a separate API key by default: a request without a key, or with an invalid or revoked one, returns 401, and that holds when the database contains no keys at all. Keyless access exists only when an administrator explicitly turns on the `inference_open_access` security setting (off by default); with it on, a request without a key is served anonymously, a request that presents a key is still verified, and an unreadable setting counts as off. See [OpenAI-Compatible Gateway](openai-gateway.md#authentication).
 - A per-node token (a separate token for each node) is used only for that node's connection and bootstrap (initial onboarding). It is not injected into the public `/install.sh`.
 - The management API and MCP also accept platform API tokens (`gwp_`): only SHA-256 hashes are stored, and operations use the owning user's current role with the token's scope applied on top (read-only by default). Tokens can have an expiration and can be revoked; no token can manage tokens. MCP is disabled by default and must be enabled by an administrator.
 
