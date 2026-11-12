@@ -14,6 +14,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -141,6 +142,7 @@ func fillStorageNodeCapacity(status *dto.StorageNodeStatus, node *store.Node, st
 
 func writeStoreErr(w http.ResponseWriter, err error) {
 	var inUse *store.StorageInUseError
+	var cacheNotEmpty *store.StorageCacheNotEmptyError
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, err)
@@ -149,6 +151,10 @@ func writeStoreErr(w http.ResponseWriter, err error) {
 	case errors.As(err, &inUse):
 		writeProductError(w, http.StatusConflict, ErrorStorageInUse, err.Error(), map[string]any{
 			"deployment_ids": inUse.DeploymentIDs, "instance_uuids": inUse.InstanceUUIDs,
+		})
+	case errors.As(err, &cacheNotEmpty):
+		writeProductError(w, http.StatusConflict, messages.ErrorStorageCacheNotEmpty, err.Error(), map[string]any{
+			"nodes": len(cacheNotEmpty.NodeIDs), "entries": cacheNotEmpty.Entries, "transferring": cacheNotEmpty.Transferring,
 		})
 	case errors.Is(err, store.ErrStorageIsDefault):
 		writeProductError(w, http.StatusConflict, ErrorStorageIsDefault, "the default storage cannot be deleted until another storage is set as the default", nil)

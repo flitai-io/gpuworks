@@ -193,8 +193,10 @@ test("only an NFS cache has Clear cache, and only NFS types switch into each oth
   await confirmDialog(s.actions.clearCache);
   await waitFor(() => assert.deepEqual(calls.clearStorageCache, [[3]]));
   await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  assert.ok(await screen.findByText(s.actions.switchFromCacheHelp), "leaving the cache type says the node caches go first");
   await confirmDialog(s.actions.switch);
   await waitFor(() => assert.deepEqual(calls.updateStorage.at(-1), [3, { type: "nfs" }]));
+  assert.deepEqual(calls.clearStorageCache, [[3], [3]], "the node caches are cleared again before the switch");
   // The confirmations above are Modal.confirm portals; clear them as afterEach does.
   Modal.destroyAll();
   cleanup();
@@ -276,6 +278,40 @@ test("cancelling the storage editor returns focus to Edit without saving", async
   await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: title })));
   await waitFor(() => assert.ok(document.activeElement === trigger, "closing the modal must restore its trigger focus"));
   assert.equal(calls.updateStorage, undefined);
+});
+
+test("leaving an NFS cache stops when its caches cannot all be cleared", async () => {
+  const order: string[] = [];
+  const calls = stubDetail({ storage: cache });
+  api.clearStorageCache = (async () => {
+    order.push("clear");
+    throw new APIError("", undefined, "cache is being prepared for a launch; retry later", 409);
+  }) as never;
+  const update = api.updateStorage;
+  api.updateStorage = (async (...args: Parameters<typeof update>) => {
+    order.push("switch");
+    return update(...args);
+  }) as never;
+  renderDetail("/storage/3");
+  await screen.findByRole("heading", { name: /team-cache/ });
+  await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  await confirmDialog(s.actions.switch);
+  await screen.findByText(s.actions.failed);
+  assert.deepEqual(order, ["clear"], "a failed clear must not be followed by the switch");
+  assert.equal(calls.updateStorage, undefined);
+});
+
+test("a switch refused because node caches remain explains it in the person's language", async () => {
+  stubDetail({ storage: cache });
+  api.updateStorage = (async () => {
+    throw new APIError("STORAGE_CACHE_NOT_EMPTY", { entries: 2, nodes: 2, transferring: 1 }, "2 node cache entries on 2 nodes (1 still transferring) must be cleared before switching to nfs", 409);
+  }) as never;
+  renderDetail("/storage/3");
+  await screen.findByRole("heading", { name: /team-cache/ });
+  await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  await confirmDialog(s.actions.switch);
+  const want = locale.common.apiError.STORAGE_CACHE_NOT_EMPTY.replace("{{entries}}", "2").replace("{{nodes}}", "2").replace("{{transferring}}", "1");
+  assert.ok(await screen.findByText(want));
 });
 
 test("switching storage hides the previous resource's cached models until its own files arrive", async () => {
