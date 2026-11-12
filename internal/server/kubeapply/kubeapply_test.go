@@ -98,6 +98,13 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			status(w, 400, "BadRequest", err.Error())
 			return
 		}
+		// As the API server: a PriorityClass's value and preemption policy
+		// cannot change once it exists.
+		if have, ok := f.objects[r.URL.Path]; ok && o["kind"] == "PriorityClass" &&
+			(fmt.Sprint(have["value"]) != fmt.Sprint(o["value"]) || fmt.Sprint(have["preemptionPolicy"]) != fmt.Sprint(o["preemptionPolicy"])) {
+			status(w, 422, "Invalid", `PriorityClass.scheduling.k8s.io is invalid: value: Forbidden: may not be changed in an update.`)
+			return
+		}
 		if r.URL.Query().Get("dryRun") != "All" {
 			f.objects[r.URL.Path] = o
 		}
@@ -167,8 +174,15 @@ users:
 
 func manifest(t *testing.T) []Object {
 	t.Helper()
-	m, err := kubemanifest.Render(kubemanifest.Params{ClusterName: "ack", Namespace: "gpuworks-system", ServerURL: "https://gw.example",
-		Token: "enroll", AgentImage: "gpuworks/gpuworks-agent:v1", Vendor: "nvidia"})
+	return manifestWith(t, func(*kubemanifest.Params) {})
+}
+
+func manifestWith(t *testing.T, edit func(*kubemanifest.Params)) []Object {
+	t.Helper()
+	p := kubemanifest.Params{ClusterName: "ack", Namespace: "gpuworks-system", ServerURL: "https://gw.example",
+		Token: "enroll", AgentImage: "gpuworks/gpuworks-agent:v1", Priority: 10000}
+	edit(&p)
+	m, err := kubemanifest.Render(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,5 +441,49 @@ func TestDeleteGoesOnPastARefusal(t *testing.T) {
 	// The entry's priority class goes with it.
 	if f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference-gpuworks-system") {
 		t.Fatal("the entry's priority class kept")
+	}
+}
+
+// An entry's edited priority or preemption cannot be patched into its
+// PriorityClass (the API server refuses): the dry run reports a replacement
+// and the apply deletes the class and creates it again; unchanged, it is an
+// ordinary update.
+func TestAChangedPriorityClassIsReplaced(t *testing.T) {
+	f := newFakeAPI()
+	c, _ := NewClient(serve(t, f, "    token: tok"))
+	ctx := context.Background()
+	if _, err := c.Apply(ctx, manifest(t), false); err != nil {
+		t.Fatal(err)
+	}
+	const pc = "/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference-gpuworks-system"
+	before := f.objects[pc]["value"]
+	edited := manifestWith(t, func(p *kubemanifest.Params) { p.Priority, p.AllowPreemption = 42, true })
+	dry, err := c.Apply(ctx, edited, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range dry {
+		if r.Kind == "PriorityClass" && r.Action != ActionReplace {
+			t.Fatalf("dry run: %v", actions(dry))
+		}
+	}
+	if f.objects[pc]["value"] != before {
+		t.Fatal("a dry run replaced the class")
+	}
+	rs, err := c.Apply(ctx, edited, false)
+	if err != nil {
+		t.Fatalf("apply: %v (%v)", err, actions(rs))
+	}
+	if v, ok := f.objects[pc]["value"].(float64); !ok || v != 42 || f.objects[pc]["preemptionPolicy"] != nil {
+		t.Fatalf("class after the apply = %v", f.objects[pc])
+	}
+	again, err := c.Apply(ctx, edited, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range again {
+		if r.Kind == "PriorityClass" && r.Action != ActionUpdate {
+			t.Fatalf("unchanged class: %v", actions(again))
+		}
 	}
 }

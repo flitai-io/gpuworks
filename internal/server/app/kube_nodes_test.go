@@ -38,6 +38,8 @@ func TestSweepRemovesOnlyNodesTheirClusterNoLongerHas(t *testing.T) {
 	gone := enroll("gone", store.NodeStateOffline, now.Add(-time.Hour))
 	stillThere := enroll("rebooting", store.NodeStateOffline, now.Add(-time.Hour))
 	recent := enroll("blip", store.NodeStateOffline, now)
+	unselected := enroll("unselected", store.NodeStateOffline, now.Add(-time.Hour))
+	oldPeer := enroll("old-peer-answer", store.NodeStateOffline, now.Add(-time.Hour))
 	var asked []string
 	call := func(_ context.Context, uuid, method string, params any) (json.RawMessage, error) {
 		if uuid != peer.UUID || method != proto.RPCKubeNodeExists {
@@ -45,22 +47,33 @@ func TestSweepRemovesOnlyNodesTheirClusterNoLongerHas(t *testing.T) {
 		}
 		name := params.(proto.KubeNodeExistsParams).NodeName
 		asked = append(asked, name)
-		return json.Marshal(proto.KubeNodeExistsResult{Exists: name != "gone"})
+		no, yes := false, true
+		switch name {
+		case "gone":
+			return json.Marshal(proto.KubeNodeExistsResult{})
+		case "unselected":
+			return json.Marshal(proto.KubeNodeExistsResult{Exists: true, Agent: &no})
+		case "old-peer-answer":
+			return json.RawMessage(`{"exists":true}`), nil // an agent that predates the agent field
+		}
+		return json.Marshal(proto.KubeNodeExistsResult{Exists: true, Agent: &yes})
 	}
 	var kicked []string
 	sweepGoneKubeNodes(context.Background(), slog.New(slog.DiscardHandler), st, call, func(u string) { kicked = append(kicked, u) }, now.Add(-15*time.Minute))
-	if len(asked) != 2 {
-		t.Fatalf("asked about %v; want the two long-offline nodes only", asked)
+	if len(asked) != 4 {
+		t.Fatalf("asked about %v; want the long-offline nodes only", asked)
 	}
-	if _, err := st.NodeByUUID(gone.UUID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("gone node remains: %v", err)
+	for _, n := range []store.Node{gone, unselected} {
+		if _, err := st.NodeByUUID(n.UUID); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("node %s remains: %v", n.KubeNodeName, err)
+		}
 	}
-	for _, n := range []store.Node{peer, stillThere, recent} {
+	for _, n := range []store.Node{peer, stillThere, recent, oldPeer} {
 		if _, err := st.NodeByUUID(n.UUID); err != nil {
 			t.Fatalf("node %s removed: %v", n.KubeNodeName, err)
 		}
 	}
-	if len(kicked) != 1 || kicked[0] != gone.UUID {
+	if len(kicked) != 2 || kicked[0] != gone.UUID || kicked[1] != unselected.UUID {
 		t.Fatalf("kicked %v", kicked)
 	}
 	// Nobody to ask, or an agent that cannot answer: nothing is removed.

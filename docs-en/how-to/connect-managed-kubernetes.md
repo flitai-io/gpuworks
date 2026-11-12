@@ -71,7 +71,7 @@ When the cloud account has already been added on the “Public Cloud” page, yo
 
    ![The “Kubernetes clusters” tab of a cloud account](../assets/screenshots/k8s-cloud-clusters.png)
 
-2. Tick the GPU node pools you want (a cluster may have several ticked, of one vendor) and click “Connect” on that cluster. In the drawer, the name and vendor are already filled in from the node pools and the selected pools are listed, which you can change; the Server address requirement is the same as in step 0 below, and “Agent image registry” is preselected by the cluster's region (an ACK cluster in mainland China gets “Huawei Cloud SWR”) and can be changed under “Advanced”. Click “Connect”. A cloud cluster has only one entry: to use more of its node pools later, edit that entry's node pools instead of connecting again, and node pools of different vendors cannot be mixed in one entry.
+2. Tick the GPU node pools you want (a cluster may have several ticked, and node pools of different vendors may share one entry) and click “Connect” on that cluster. In the drawer, the name is already filled in from the node pools and the selected pools are listed, which you can change; the Server address requirement is the same as in step 0 below, and “Agent image registry” is preselected by the cluster's region (an ACK cluster in mainland China gets “Huawei Cloud SWR”) and can be changed under “Advanced”. Click “Connect”. A cloud cluster has only one entry: to use more of its node pools later, edit that entry's node pools instead of connecting again. An entry has no vendor setting; the agent on each node detects its accelerator itself.
 3. The drawer offers two choices:
    - **Check and apply**: gpuworks uses temporary cluster credentials it fetches from the cloud account on the spot (valid for 15 minutes, discarded after use, never stored) to first have the cluster run a check (dry run), lists each object to be created or updated, and applies for real only after you click “Apply”:
 
@@ -84,7 +84,9 @@ When the cloud account has already been added on the “Public Cloud” page, yo
 
    Removal deletes the whole `gpuworks-system` namespace, including an image pull secret created in it beforehand if you use your own registry, so it must be created again before reconnecting.
 
-5. To add or remove node pools later, change the ticks on the cluster's row on the “Public Cloud” page and click “Save node pools”, or use the entry's “Node pools” action on the “Kubernetes” page. Saving changes only gpuworks's record: click “Apply to the cluster” again (or re-run `kubectl apply`) for the DaemonSet to follow. Agents on node pools taken away exit, and their nodes stay on the nodes page and are cleaned up like any offline Kubernetes node. The cluster's row shows whether each node pool is already in the entry.
+5. To add or remove node pools later, change the ticks on the cluster's row on the “Public Cloud” page and click “Save node pools”, or use the entry's “Node pools” action on the “Kubernetes” page. Saving changes only gpuworks's record: click “Apply to the cluster” again (or re-run `kubectl apply`) for the DaemonSet to follow. Agents on node pools taken away exit and their nodes go offline; after 15 minutes offline, the platform asks another online agent of the same entry whether the node still exists and still runs one of the entry's agent Pods, and when not, and the node has no instances, the node record is removed automatically (when the entry has no other online node, nothing is removed automatically; delete the node by hand on the Nodes page). The cluster's row shows whether each node pool is already in the entry.
+
+   The entry's other settings (RuntimeClass, priority, allow preemption, idle return, and so on) are changed with “Edit” on the “Kubernetes” page and likewise take effect in the cluster only after another apply; when priority or allow preemption changed, the server deletes and recreates the PriorityClass itself (the action of that item in the apply result is `replace`). Which settings can change and which are fixed at creation is in [Connect a Kubernetes Cluster](connect-kubernetes.md#edit-a-cluster-entry).
 
 Prerequisite: the cluster's API Server has a public address (the list shows “Public API”); a cluster showing “Private API only” can only use the copied command, run from inside the cluster's network. Nodes that belong to a managed cluster are marked “Cluster node” in the “Instances” tab and cannot have an agent installed individually, nor be powered, released or resized there (the cluster scales its node pools). Nebius has no cloud account connection yet; connect it manually as described below.
 
@@ -97,7 +99,7 @@ Prerequisite: the cluster's API Server has a public address (the list shows “P
 | `nvidia` RuntimeClass | None; the default runtime is NVIDIA's | None | None |
 | GPU node label (used as the node selector) | `ack.node.gpu.schedule=default` | `doks.digitalocean.com/gpu-brand=nvidia` | `nebius.com/gpu=true` |
 
-So the cluster entry for all three is: vendor NVIDIA, **RuntimeClass empty**, node selector set to the label in the table above; the agent image and image pull secret are left empty, and “Agent image registry” is chosen as in each cloud's “Connect in gpuworks” table below.
+So the cluster entry for all three is: **RuntimeClass empty**, node selector set to the label in the table above (not needed when connecting from a cloud account, which selects nodes by node pool); the agent image and image pull secret are left empty, and “Agent image registry” is chosen as in each cloud's “Connect in gpuworks” table below.
 
 ## Step 0: Prepare (Same for All Three)
 
@@ -134,7 +136,6 @@ For the UI, see [Create the Cluster in gpuworks and Apply](#在-gpuworks-里创�
 
 | Field | Value |
 |---|---|
-| Vendor | NVIDIA |
 | Node selector | `ack.node.gpu.schedule=default` |
 | Advanced → Agent image registry | Huawei Cloud SWR (mainland China regions; Docker Hub for Hong Kong and overseas regions) |
 | Advanced → RuntimeClass | Empty |
@@ -183,7 +184,6 @@ For the UI, see [Create the Cluster in gpuworks and Apply](#在-gpuworks-里创�
 
 | Field | Value |
 |---|---|
-| Vendor | NVIDIA |
 | Node selector | `doks.digitalocean.com/gpu-brand=nvidia` |
 | Advanced → Agent image registry | Docker Hub |
 | Advanced → RuntimeClass | Empty |
@@ -227,7 +227,6 @@ For the UI, see [Create the Cluster in gpuworks and Apply](#在-gpuworks-里创�
 
 | Field | Value |
 |---|---|
-| Vendor | NVIDIA |
 | Node selector | `nebius.com/gpu=true` |
 | Advanced → Agent image registry | Docker Hub |
 | Advanced → RuntimeClass | Empty |
@@ -340,7 +339,6 @@ This section corresponds to steps 2 to 4 of the overview and moves back and fort
    |---|---|
    | Name | Any, for example `ack-shanghai` |
    | Server address | The public address from step 0, for example `https://gpuworks.example.com` |
-   | Accelerator vendor | NVIDIA |
    | Node selector | The label in each cloud's “Connect in gpuworks” table |
    | Advanced → Namespace | Keep `gpuworks-system` |
    | Advanced → Agent image registry | The value in each cloud's “Connect in gpuworks” table |
@@ -386,11 +384,11 @@ flowchart TD
   start["kubectl -n gpuworks-system<br/>get daemonset,pods -o wide"]
   q1{"DaemonSet desired<br/>count is 0?"}
   q2{"agent Pod<br/>ImagePullBackOff?"}
-  q3{"DaemonSet event reports<br/>RuntimeClass nvidia not found?"}
+  q3{"The node has no supported accelerator,<br/>or is held by another entry?"}
   q4{"Pod is running,<br/>but no node appears?"}
   f1["The node selector selects no node<br/>check labels with kubectl get nodes --show-labels"]
   f2["The nodes cannot reach the chosen registry<br/>choose a reachable one; for your own private image, check the pull credentials"]
-  f3["The cluster entry has a RuntimeClass<br/>delete the entry and recreate it, leaving it empty"]
+  f3["The node stays in stand-by, or enrollment is refused (node_taken)<br/>see vendor auto-detection in “Connect a Kubernetes Cluster”"]
   f4["The agent cannot reach the server<br/>read the agent log, confirm the node can reach the Server address"]
   start --> q1
   q1 -- Yes --> f1
@@ -406,16 +404,17 @@ Cause and fix for each symptom:
 
 | Symptom | Cause and fix |
 |---|---|
-| agent Pod `ImagePullBackOff` | The nodes cannot reach the chosen image registry: when a cluster in mainland China chose Docker Hub, switch to “Huawei Cloud SWR” — delete the cluster entry and connect again choosing SWR; for a cluster that is already applied you can also run `kubectl -n gpuworks-system set image ds/gpuworks-agent agent=swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1`. If you use your own image in a private registry, 401 / 403 in the events means the pull credentials are missing or wrong: the Secret must be in `gpuworks-system`, its name must match the cluster entry, and `--docker-server` must match the image domain; after fixing, run `kubectl -n gpuworks-system delete pod --all` so the Pods pull again |
-| DaemonSet event `RuntimeClass "nvidia" not found` | The cluster entry has a RuntimeClass. Managed clusters have none; delete the cluster entry, recreate it, and leave it empty |
+| agent Pod `ImagePullBackOff` | The nodes cannot reach the chosen image registry: when a cluster in mainland China chose Docker Hub, switch to “Huawei Cloud SWR” — edit the cluster entry, change the agent image registry to SWR, and apply again; for a cluster that is already applied you can also run `kubectl -n gpuworks-system set image ds/gpuworks-agent agent=swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1`. If you use your own image in a private registry, 401 / 403 in the events means the pull credentials are missing or wrong: the Secret must be in `gpuworks-system`, its name must match the cluster entry, and `--docker-server` must match the image domain; after fixing, run `kubectl -n gpuworks-system delete pod --all` so the Pods pull again |
+| Instance Pod event `RuntimeClass "nvidia" not found` | The cluster entry has a RuntimeClass the cluster does not have (managed clusters have none). Edit the cluster entry, leave RuntimeClass empty, and apply again |
 | DaemonSet desired count is 0 | The node selector selects no node; check labels with `kubectl get nodes --show-labels` |
-| Pod is running, but no node appears | The agent cannot reach the server: read the error with `kubectl -n gpuworks-system logs ds/gpuworks-agent` and confirm the node can reach the Server address |
+| Pod is running, but no node appears (the agent can reach the server) | A node with no supported accelerator (other than NVIDIA, Ascend, Hygon, PPU) stays in stand-by and does not enroll; or the node is already held by another entry of the same cluster (enrollment refused, reason `node_taken`); see [Connect a Kubernetes Cluster](connect-kubernetes.md#accelerator-vendor-detected-automatically) |
+| Pod is running, but no node appears (the agent cannot reach the server) | The agent cannot reach the server: read the error with `kubectl -n gpuworks-system logs ds/gpuworks-agent` and confirm the node can reach the Server address |
 
 ## Clean Up When Done
 
 When you finish, clean up in this order:
 
 1. Delete the deployments in gpuworks;
-2. For a cluster connected from a cloud account, click “Remove from the cluster” on the “Kubernetes” page (checks first, deletes after confirmation); for other clusters run `kubectl delete -f '<the same manifest address>'`. Both delete the DaemonSet, placeholder Pods, and instance Pods, and the cards go back to the cluster;
+2. For a cluster connected from a cloud account, click “Remove from the cluster” on the “Kubernetes” page (checks first, deletes after confirmation); for other clusters click “Uninstall” on the entry and run the `kubectl` commands it gives, in order (see [Connect a Kubernetes Cluster](connect-kubernetes.md#uninstall); no connect token is needed). Both delete the DaemonSet, placeholder Pods, and instance Pods, and the cards go back to the cluster;
 3. Delete these nodes on the gpuworks Nodes page and delete the cluster entry on the “Kubernetes” page;
 4. In the cloud console, delete the cluster (together with node pools, load balancers, and EIPs) to avoid further charges.

@@ -17,7 +17,7 @@ kubeconfig。
    只认 kubeconfig 里自带的证书或 token，要运行程序（exec、auth-provider）的 kubeconfig 拒绝。
 3. **只应用 gpuworks 自己的 manifest**：server-side apply（`fieldManager=gpuworks`）`kubemanifest.Render` 渲染出的固定几种对象，
    其他 kind 一律拒绝。卸载先删 DaemonSet（agent、占位 Pod、实例 Pod 随之删除），同一集群里其他 gpuworks namespace 还在用的
-   集群级对象（PriorityClass）保留。
+   集群级对象（PriorityClass）保留（已由 2026-11-12 修订取代：PriorityClass 按命名空间命名，卸载时删除条目自己的那个）。
 4. **手动路径照旧**：每个条目仍有 `kubectl apply` 命令；API Server 没有公网地址的集群只能这样接入。手动建的条目没有来源，
    server 不会去连它。
 5. **托管集群的节点归集群管**：云主机列表标出所属集群，安装 agent、开关机、释放与调整规格都被拒绝
@@ -33,12 +33,18 @@ kubeconfig。
    `alibabacloud.com/nodepool-id`，DOKS 是 `doks.digitalocean.com/node-pool-id`。标签键随池一起存，云账号删除后 manifest 仍能渲染。
 2. **一个集群仍只有一个条目**（决策不变）。要用它的更多节点池，改这个条目的节点池（`PUT /kube/clusters/{uuid}/pools`），再重新应用 manifest
    才在集群里生效；去掉的池上的 agent 随 DaemonSet 收缩而退出，其节点按 Kubernetes 节点的常规规则留在节点页、离线后清理。
-3. **一个条目的节点池必须同一厂商**（厂商决定 agent 挂载哪些宿主机路径），混选返回 `KUBE_CLUSTER_MIXED_VENDORS`。同一个云集群里两种厂商的卡
-   要同时接入，需要先让一个条目能含多个厂商，这是后面的事，现在不支持。
+3. ~~**一个条目的节点池必须同一厂商**（厂商决定 agent 挂载哪些宿主机路径），混选返回 `KUBE_CLUSTER_MIXED_VENDORS`。~~ 已由 2026-11-12 修订取代：条目没有厂商，节点池可以混选任意厂商。
 4. **手动条目照旧**用自由格式的节点选择器，没有节点池记录；云条目不再接受节点选择器。
 5. **旧条目迁移**（迁移 204）：来源是云账号集群、节点选择器恰好是一对 `key=value` 的条目，把这一对转成一条节点池记录并清空选择器；
    选择器是别的形状的条目保持原样，仍按选择器选节点，直到改它的节点池（改后只按节点池选节点）。
    因为改成了 `nodeAffinity`，旧条目下一次重新应用时 DaemonSet 的 Pod 模板会变，agent 滚动重启一次。
+
+## 修订（2026-11-12）：条目没有厂商，节点池可以混选，应用时替换变了的 PriorityClass
+
+1. **节点池不再限定同一厂商。** [ADR 0052](0052-kubernetes-nodes.md) 的 2026-11-12 修订取消了条目的厂商（每个 agent 自己识别节点的加速卡，不支持的节点待命），"厂商决定 agent 挂载哪些宿主机路径"的前提不再成立，所以创建与 `PUT …/pools` 不再检查厂商，`KUBE_CLUSTER_MIXED_VENDORS` 错误取消。一个云集群里不同厂商的节点池可以放进同一个条目。
+2. **应用时替换变了的 PriorityClass。** PriorityClass 的数值与 `preemptionPolicy` 在 Kubernetes 里不可修改，server-side apply 会被拒绝。条目的优先级或允许抢占改了以后，"应用到集群"由 server 先删后建这个对象，应用结果里这一项的动作是 `replace`，dry run 同样列出。
+3. **卸载删除条目自己的 PriorityClass。** PriorityClass 按命名空间命名（`gpuworks-inference-<命名空间>`），同一集群的其他条目不共用它，所以卸载把它与 DaemonSet、RBAC 对象、命名空间一起删掉；此前"其他 namespace 还在用的集群级对象保留"的规则不再需要。
+4. **卸载有不依赖令牌的手动命令。** 条目 DTO 的 `remove_commands` 给出 kubectl 命令（删 DaemonSet、ClusterRoleBinding、ClusterRole、PriorityClass、命名空间），供 server 够不着的条目使用；云条目由 server 执行同样的删除。
 
 ## 取舍
 

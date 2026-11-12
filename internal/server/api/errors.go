@@ -590,10 +590,6 @@ const (
 	// ErrorKubeClusterOperationFailed: applying to or removing from the
 	// cluster failed at {step} (kubeconfig | api_server): {reason}.
 	ErrorKubeClusterOperationFailed = "KUBE_CLUSTER_OPERATION_FAILED"
-	// ErrorKubeClusterMixedVendors: the node pools chosen for one entry are
-	// of more than one vendor ({vendors}). An entry holds pools of one vendor
-	// for now; mixing vendors in one entry is a later step.
-	ErrorKubeClusterMixedVendors = "KUBE_CLUSTER_MIXED_VENDORS"
 	// ErrorProviderInstanceInCluster: the instance is a node of the
 	// account's Kubernetes cluster {cluster}; connect the cluster instead.
 	ErrorProviderInstanceInCluster = "PROVIDER_INSTANCE_IN_CLUSTER"

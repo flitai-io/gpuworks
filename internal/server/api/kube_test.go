@@ -33,7 +33,7 @@ func TestKubeClusterLifecycleOverTheWire(t *testing.T) {
 		"agent_image": "reg.example/gpuworks-agent:v1", "node_selector": "gpuworks.ai/pool=a",
 		"agent_image_source": "dockerhub", "effective_agent_image": "reg.example/gpuworks-agent:v1",
 		"priority": float64(10000), "allow_preemption": false,
-		"vendor": "nvidia", "runtime_class": "", "image_pull_secret": "", "containerd_socket": "", "state_dir": "/opt/gpuworks", "api_server": "",
+		"runtime_class": "", "image_pull_secret": "", "containerd_socket": "", "state_dir": "/opt/gpuworks", "api_server": "",
 		"engine_ports": "40000-42767", "idle_return_seconds": float64(60), "cluster_uid": "",
 		"revoked": false, "node_count": float64(0),
 	} {
@@ -130,8 +130,6 @@ func TestKubeClusterValidation(t *testing.T) {
 		{`{"name":"a","server_url":"https://gw","idle_return_seconds":-2}`, "idle_return_seconds"},
 		{`{"name":"a","server_url":"https://gw","namespace":"Bad_NS"}`, "manifest"},
 		{`{"name":"a","server_url":"https://gw","node_selector":"novalue"}`, "manifest"},
-		{`{"name":"a","server_url":"https://gw","vendor":"apple"}`, "vendor"},
-		{`{"name":"a","server_url":"https://gw","vendor":"bogus"}`, "vendor"},
 		{`{"name":"a","server_url":"https://gw","state_dir":"opt/x"}`, "manifest"},
 		{`{"name":"a","server_url":"https://gw","containerd_socket":"run/x.sock"}`, "manifest"},
 		{`{"name":"a","server_url":"https://gw","api_server":"http://10.0.0.5:6443"}`, "manifest"},
@@ -147,14 +145,16 @@ func TestKubeClusterValidation(t *testing.T) {
 	if rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", kubeCreateBody); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), ErrorKubeClusterNameTaken) {
 		t.Fatalf("duplicate = %d %s", rec.Code, rec.Body)
 	}
-	rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"b","server_url":"https://gw","runtime_class":"nvidia","image_pull_secret":"regcred","vendor":"nvidia","idle_return_seconds":-1}`)
+	rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"b","server_url":"https://gw","runtime_class":"nvidia","image_pull_secret":"regcred","idle_return_seconds":-1}`)
 	var b map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &b)
 	if rec.Code != http.StatusCreated || b["runtime_class"] != "nvidia" || b["image_pull_secret"] != "regcred" || b["idle_return_seconds"] != float64(-1) {
 		t.Fatalf("named runtime class, pull secret and keep = %d %s", rec.Code, rec.Body)
 	}
 	manifest := rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters/"+b["uuid"].(string)+"/manifest", "").Body.String()
-	for _, want := range []string{"imagePullSecrets:\n        - name: \"regcred\"", `runtimeClassName: "nvidia"`} {
+	// The RuntimeClass is the NVIDIA instance pods'; the agent runs under the
+	// default runtime and passes it on.
+	for _, want := range []string{"imagePullSecrets:\n        - name: \"regcred\"", "- name: GPUWORKS_KUBE_RUNTIME_CLASS\n              value: \"nvidia\""} {
 		if !strings.Contains(manifest, want) {
 			t.Fatalf("manifest lacks %s:\n%s", want, manifest)
 		}
@@ -163,20 +163,23 @@ func TestKubeClusterValidation(t *testing.T) {
 		!strings.Contains(rec.Body.String(), ErrorKubeClusterInvalid) || !strings.Contains(rec.Body.String(), "image_pull_secret") {
 		t.Fatalf("bad pull secret = %d %s", rec.Code, rec.Body)
 	}
-	// An Ascend cluster needs no RuntimeClass, and its manifest mounts the
-	// host's driver tree into the agents under its own state directory.
-	rec = rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"npu","server_url":"https://gw","vendor":"Ascend","state_dir":"/opt/gpuworks-kube","containerd_socket":"/run/k3s/containerd/containerd.sock","api_server":"https://10.0.0.5:6443"}`)
+	// A k3s cluster's own state directory, socket and API server reach the
+	// agents; no vendor's driver tree is mounted, whatever the nodes have.
+	rec = rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"npu","server_url":"https://gw","state_dir":"/opt/gpuworks-kube","containerd_socket":"/run/k3s/containerd/containerd.sock","api_server":"https://10.0.0.5:6443"}`)
 	var npu map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &npu)
-	if rec.Code != http.StatusCreated || npu["vendor"] != "ascend" || npu["runtime_class"] != "" || npu["state_dir"] != "/opt/gpuworks-kube" ||
+	if rec.Code != http.StatusCreated || npu["runtime_class"] != "" || npu["state_dir"] != "/opt/gpuworks-kube" ||
 		npu["containerd_socket"] != "/run/k3s/containerd/containerd.sock" || npu["api_server"] != "https://10.0.0.5:6443" {
 		t.Fatalf("ascend cluster = %d %s", rec.Code, rec.Body)
 	}
 	manifest = rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters/"+npu["uuid"].(string)+"/manifest", "").Body.String()
-	for _, want := range []string{`"--state=/opt/gpuworks-kube"`, `path: "/usr/local"`, "GPUWORKS_KUBE_CONTAINERD_SOCKET", `value: "10.0.0.5"`, `value: "6443"`} {
+	for _, want := range []string{`"--state=/opt/gpuworks-kube"`, "GPUWORKS_KUBE_CONTAINERD_SOCKET", `value: "10.0.0.5"`, `value: "6443"`} {
 		if !strings.Contains(manifest, want) {
-			t.Fatalf("ascend manifest lacks %s:\n%s", want, manifest)
+			t.Fatalf("k3s manifest lacks %s:\n%s", want, manifest)
 		}
+	}
+	if strings.Contains(manifest, `"/usr/local"`) {
+		t.Fatalf("a vendor's directory is mounted:\n%s", manifest)
 	}
 	if strings.Contains(manifest, "runtimeClassName") {
 		t.Fatal("ascend manifest names a RuntimeClass")
@@ -349,5 +352,32 @@ func TestKubeNodeOffersNoRuntimeChoiceAndRefusesTheSwitch(t *testing.T) {
 	}
 	if got := nodeDTORuntimeChoices(&store.Node{OS: "darwin"}); len(got) != 1 || got[0] != proto.RuntimePreferenceAuto {
 		t.Fatalf("a Mac's runtime choices = %v", got)
+	}
+}
+
+// A node another entry of the same cluster holds is refused with its own
+// reason, which the agent does not answer by falling back to a saved
+// identity.
+func TestKubeEnrollRefusesANodeAnotherEntryHolds(t *testing.T) {
+	rig := newTokenRig(t)
+	a, err := rig.st.CreateKubeCluster(store.KubeCluster{Name: "a", Namespace: "gw-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := rig.st.CreateKubeCluster(store.KubeCluster{Name: "b", Namespace: "gw-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := rig.do("", http.MethodPost, "/api/v1/kube/enroll", `{"token":"`+a.Token+`","cluster_uid":"uid","node_name":"gpu-1"}`); rec.Code != http.StatusOK {
+		t.Fatalf("first entry = %d %s", rec.Code, rec.Body)
+	}
+	rec := rig.do("", http.MethodPost, "/api/v1/kube/enroll", `{"token":"`+b.Token+`","cluster_uid":"uid","node_name":"gpu-1"}`)
+	var body struct {
+		Code   string         `json:"code"`
+		Params map[string]any `json:"params"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &body)
+	if rec.Code != http.StatusForbidden || body.Code != ErrorKubeEnrollRefused || body.Params["reason"] != "node_taken" || body.Params["entry"] != "a" {
+		t.Fatalf("second entry = %d %s", rec.Code, rec.Body)
 	}
 }

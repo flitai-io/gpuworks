@@ -73,9 +73,9 @@ flowchart LR
 
    ![云账号的「Kubernetes 集群」页签](../assets/screenshots/k8s-cloud-clusters.png)
 
-2. 勾选要用的 GPU 节点池（一个集群可以勾几个，需要同一厂商），点该集群的「接入」。抽屉里名称、厂商已按节点池填好，选中的节点池
+2. 勾选要用的 GPU 节点池（一个集群可以勾几个，不同厂商的节点池也可以在同一个条目里），点该集群的「接入」。抽屉里名称已按节点池填好，选中的节点池
    列在里面，可以再改。Server 地址的要求与下文第 0 步相同；「agent 镜像仓库」按集群所在地域预选（中国大陆的 ACK 集群选「华为云 SWR」），可以在「高级」里改。点「接入」。
-   一个云集群只有一个条目：之后要用它的更多节点池，改这个条目的节点池，不是再接入一次；同一个条目里不能混用不同厂商的节点池。
+   一个云集群只有一个条目：之后要用它的更多节点池，改这个条目的节点池，不是再接入一次。条目没有厂商这一项，每个节点上的 agent 自己识别加速卡。
 3. 抽屉给出两个选择：
    - **检查并应用**：gpuworks 用云账号现取的临时集群凭据（15 分钟有效，用完即弃，不保存）先让集群做一次检查（dry run），
      列出要创建或更新的每个对象，你点「确认应用」后才真正应用：
@@ -92,8 +92,13 @@ flowchart LR
 
 5. 之后想增减节点池：在「公有云」页的集群行里改勾选，点「保存节点池」；或在「Kubernetes」页这个条目的「节点池」操作里改。
    保存只改 gpuworks 里的记录，要再点一次「应用到集群」（或重新执行 `kubectl apply`）DaemonSet 才跟着变；
-   去掉的节点池上的 agent 会退出，对应节点留在节点页，离线后按 Kubernetes 节点的常规规则清理。
+   去掉的节点池上的 agent 会退出，对应节点离线；离线 15 分钟后，平台请同一个条目里另一个在线的 agent 确认该节点是否还在、是否还运行着条目的 agent Pod，
+   都不是且节点上没有实例时，节点记录自动删除（条目里没有别的在线节点时不自动删除，手动在节点页删除）。
    集群行里每个节点池标明是否已在条目里。
+
+   条目的其他设置（RuntimeClass、优先级、允许抢占、空闲归还等）在「Kubernetes」页点「编辑」修改，同样要再应用一次才在集群里生效；
+   优先级或允许抢占变了时，PriorityClass 由 server 先删后建（应用结果里这一项的动作是 `replace`）。
+   各设置哪些可改、哪些创建后固定，见[接入 Kubernetes 集群](connect-kubernetes.md#修改集群条目)。
 
 前提：集群的 API Server 有公网地址（列表里显示「公网 API」）；显示「仅内网 API」的集群只能复制命令、在集群内网里执行。
 属于托管集群的节点在「实例」页签里标为「集群节点」，不能单独安装 agent，也不能在这里开关机、释放或调整规格（节点池的扩缩由集群管）。Nebius 还没有云账号接入，按下文手动接入。
@@ -107,7 +112,7 @@ flowchart LR
 | `nvidia` RuntimeClass | 没有，默认运行时就是 NVIDIA 的 | 没有 | 没有 |
 | GPU 节点的标签（作节点选择器） | `ack.node.gpu.schedule=default` | `doks.digitalocean.com/gpu-brand=nvidia` | `nebius.com/gpu=true` |
 
-所以三家的集群条目都是：厂商 NVIDIA，**RuntimeClass 留空**，节点选择器填上表的标签；agent 镜像与镜像拉取凭据都不用填，
+所以三家的集群条目都是：**RuntimeClass 留空**，节点选择器填上表的标签（从云账号接入时按节点池选节点，不用填）；agent 镜像与镜像拉取凭据都不用填，
 「agent 镜像仓库」按下文各云「在 gpuworks 里接入」表里的值选。
 
 ## 第 0 步：准备（三家相同）
@@ -150,7 +155,6 @@ GPU 节点带 `ack.node.gpu.schedule=default`（独占整卡）。
 
 | 字段 | 值 |
 |---|---|
-| 厂商 | NVIDIA |
 | 节点选择器 | `ack.node.gpu.schedule=default` |
 | 高级 → agent 镜像仓库 | 华为云 SWR（中国大陆地域；中国香港和海外地域选 Docker Hub） |
 | 高级 → RuntimeClass | 留空 |
@@ -204,7 +208,6 @@ curl -X PUT -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" -H "Content-Type: app
 
 | 字段 | 值 |
 |---|---|
-| 厂商 | NVIDIA |
 | 节点选择器 | `doks.digitalocean.com/gpu-brand=nvidia` |
 | 高级 → agent 镜像仓库 | Docker Hub |
 | 高级 → RuntimeClass | 留空 |
@@ -249,7 +252,6 @@ nebius mk8s node-group create -f gpu-node-group.json
 
 | 字段 | 值 |
 |---|---|
-| 厂商 | NVIDIA |
 | 节点选择器 | `nebius.com/gpu=true` |
 | 高级 → agent 镜像仓库 | Docker Hub |
 | 高级 → RuntimeClass | 留空 |
@@ -369,7 +371,6 @@ kubectl -n gpuworks-system create secret docker-registry nebius-cred \
    |---|---|
    | 名称 | 随意，例如 `ack-shanghai` |
    | Server 地址 | 第 0 步的公网地址，例如 `https://gpuworks.example.com` |
-   | 加速卡厂商 | NVIDIA |
    | 节点选择器 | 各云「在 gpuworks 里接入」表里的标签 |
    | 高级 → 命名空间 | 保持 `gpuworks-system` |
    | 高级 → agent 镜像仓库 | 各云「在 gpuworks 里接入」表里的值 |
@@ -417,11 +418,11 @@ flowchart TD
   start["kubectl -n gpuworks-system<br/>get daemonset,pods -o wide"]
   q1{"DaemonSet 期望数<br/>是 0？"}
   q2{"agent Pod<br/>ImagePullBackOff？"}
-  q3{"DaemonSet 事件报<br/>RuntimeClass nvidia not found？"}
+  q3{"节点没有受支持的加速卡，<br/>或已被另一个条目占着？"}
   q4{"Pod 在运行，<br/>但节点没出现？"}
   f1["节点选择器没选中节点<br/>kubectl get nodes --show-labels 核对标签"]
   f2["节点连不上所选的镜像仓库<br/>改选能访问的仓库；自己的私有镜像则核对拉取凭据"]
-  f3["集群条目填了 RuntimeClass<br/>删除条目重建，留空"]
+  f3["节点保持待命，或注册被拒绝（node_taken）<br/>见「接入 Kubernetes 集群」的厂商自动识别"]
   f4["agent 连不上 server<br/>看 agent 日志，确认节点能访问 Server 地址"]
   start --> q1
   q1 -- 是 --> f1
@@ -437,17 +438,18 @@ flowchart TD
 
 | 现象 | 原因与处理 |
 |---|---|
-| agent Pod `ImagePullBackOff` | 节点连不上所选的镜像仓库：中国大陆的集群选了 Docker Hub 时，改用「华为云 SWR」——删除集群条目，接入时选 SWR 重新接入；已经 apply 的集群也可以直接执行 `kubectl -n gpuworks-system set image ds/gpuworks-agent agent=swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1`。如果用的是私有仓库里自己的镜像，事件里 401 / 403 是拉取凭据缺失或不对：Secret 要在 `gpuworks-system` 里、名称与集群条目一致、`--docker-server` 与镜像域名一致；改好后 `kubectl -n gpuworks-system delete pod --all` 让 Pod 重新拉取 |
-| DaemonSet 事件 `RuntimeClass "nvidia" not found` | 集群条目填了 RuntimeClass。托管集群都没有它，删除集群条目重建并留空 |
+| agent Pod `ImagePullBackOff` | 节点连不上所选的镜像仓库：中国大陆的集群选了 Docker Hub 时，改用「华为云 SWR」——编辑集群条目，把 agent 镜像仓库改成 SWR 并重新应用；已经 apply 的集群也可以直接执行 `kubectl -n gpuworks-system set image ds/gpuworks-agent agent=swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1`。如果用的是私有仓库里自己的镜像，事件里 401 / 403 是拉取凭据缺失或不对：Secret 要在 `gpuworks-system` 里、名称与集群条目一致、`--docker-server` 与镜像域名一致；改好后 `kubectl -n gpuworks-system delete pod --all` 让 Pod 重新拉取 |
+| 实例 Pod 事件 `RuntimeClass "nvidia" not found` | 集群条目填了 RuntimeClass，集群里却没有它（托管集群都没有）。编辑集群条目，把 RuntimeClass 留空并重新应用 |
 | DaemonSet 期望数为 0 | 节点选择器没有选中节点，用 `kubectl get nodes --show-labels` 核对标签 |
-| Pod 在运行，节点不出现 | agent 连不上 server：`kubectl -n gpuworks-system logs ds/gpuworks-agent` 看报错，确认节点能访问 Server 地址 |
+| Pod 在运行，节点不出现（agent 连得上 server） | 节点上没有受支持的加速卡（NVIDIA、昇腾、海光、PPU 之外）时节点保持待命，不注册；或节点已被同集群的另一个条目占着（注册被拒绝，原因 `node_taken`），见[接入 Kubernetes 集群](connect-kubernetes.md#加速卡厂商自动识别) |
+| Pod 在运行，节点不出现（agent 连不上 server） | agent 连不上 server：`kubectl -n gpuworks-system logs ds/gpuworks-agent` 看报错，确认节点能访问 Server 地址 |
 
 ## 用完清理
 
 用完按顺序清理：
 
 1. gpuworks 里删除部署；
-2. 从云账号接入的集群在「Kubernetes」页点「从集群卸载」（先检查、确认后删除）；其他集群执行
-   `kubectl delete -f '<同一个 manifest 地址>'`。两者都删除 DaemonSet、占位 Pod、实例 Pod，卡还给集群；
+2. 从云账号接入的集群在「Kubernetes」页点「从集群卸载」（先检查、确认后删除）；其他集群点条目的「卸载」，按它给出的
+   `kubectl` 命令依次执行（见[接入 Kubernetes 集群](connect-kubernetes.md#卸载)，不需要接入令牌）。两者都删除 DaemonSet、占位 Pod、实例 Pod，卡还给集群；
 3. gpuworks 节点页删除这些节点，「Kubernetes」页删除集群条目；
 4. 在云控制台删除集群（连同节点池、负载均衡、EIP），避免继续计费。

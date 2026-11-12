@@ -57,9 +57,13 @@ type KubeNodeExistsParams struct {
 	NodeName string `json:"node_name"`
 }
 
-// KubeNodeExistsResult is RPCKubeNodeExists's answer.
+// KubeNodeExistsResult is RPCKubeNodeExists's answer. Agent says whether
+// an agent pod of the asking agent's entry is on that node: none means the
+// entry no longer selects it (its node selector or node pools changed).
+// Agents that predate it leave it out.
 type KubeNodeExistsResult struct {
-	Exists bool `json:"exists"`
+	Exists bool  `json:"exists"`
+	Agent  *bool `json:"agent,omitempty"`
 }
 
 type ImagePullParams struct {

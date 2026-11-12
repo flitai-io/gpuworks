@@ -18,9 +18,8 @@ import (
 func TestKubeDefaultsDictionaryOnTheWire(t *testing.T) {
 	rig := newTokenRig(t)
 	rec := rig.do(rig.session, http.MethodGet, "/api/v1/kube/defaults", "")
-	want := `{"vendor":"nvidia","namespace":"gpuworks-system","state_dir":"/opt/gpuworks","engine_ports":"40000-42767",` +
+	want := `{"namespace":"gpuworks-system","state_dir":"/opt/gpuworks","engine_ports":"40000-42767",` +
 		`"idle_return_seconds":60,"idle_return_keep":-1,"agent_image":"gpuworks/gpuworks-agent:r1","stalled_after_seconds":300,` +
-		`"vendors":[{"id":"nvidia","runtime_class":true},{"id":"ascend","runtime_class":false},{"id":"hygon","runtime_class":false},{"id":"ppu","runtime_class":false}],` +
 		`"agent_image_source":"dockerhub","agent_image_sources":[{"id":"dockerhub","image":"gpuworks/gpuworks-agent:r1"},` +
 		`{"id":"swr","image":"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1"},{"id":"quay","image":"quay.io/gpuworks/gpuworks-agent:r1"}],"priority":10000,"priority_max":1000000000,"allow_preemption":false}`
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
@@ -43,7 +42,7 @@ func TestKubeDefaultsAreWhatAnEmptyRequestTakes(t *testing.T) {
 	}
 	got := decodeKube[map[string]any](t, rec)
 	dict := decodeKube[map[string]any](t, rig.do(rig.session, http.MethodGet, "/api/v1/kube/defaults", ""))
-	for _, key := range []string{"vendor", "namespace", "state_dir", "engine_ports", "idle_return_seconds", "priority", "allow_preemption"} {
+	for _, key := range []string{"namespace", "state_dir", "engine_ports", "idle_return_seconds", "priority", "allow_preemption"} {
 		if got[key] != dict[key] {
 			t.Errorf("%s: a bare request got %v, the dictionary says %v", key, got[key], dict[key])
 		}
@@ -60,15 +59,18 @@ func TestKubeDefaultsAreWhatAnEmptyRequestTakes(t *testing.T) {
 	if manifest.Code != http.StatusOK || !strings.Contains(manifest.Body.String(), fmt.Sprintf("image: %q", dict["agent_image"])) {
 		t.Errorf("manifest of a bare entry = %d, want it to run %v:\n%s", manifest.Code, dict["agent_image"], manifest.Body)
 	}
-	// The vendors that take no RuntimeClass drop one; the dictionary names
-	// which they are.
-	for _, v := range dict["vendors"].([]any) {
-		vendor := v.(map[string]any)
-		body := fmt.Sprintf(`{"name":"rc-%s","server_url":"https://gw.example","vendor":%q,"runtime_class":"special"}`, vendor["id"], vendor["id"])
-		created := decodeKube[map[string]any](t, rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", body))
-		if applies := vendor["runtime_class"].(bool); applies != (created["runtime_class"] == "special") {
-			t.Errorf("%v: dictionary runtime_class=%v but the cluster kept %q", vendor["id"], applies, created["runtime_class"])
-		}
+	// An entry names no vendor: a RuntimeClass is kept for whichever of its
+	// nodes are NVIDIA's, and a vendor in the request is ignored.
+	created := decodeKube[map[string]any](t, rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters",
+		`{"name":"rc","server_url":"https://gw.example","vendor":"ascend","runtime_class":"special"}`))
+	if created["runtime_class"] != "special" {
+		t.Errorf("runtime_class = %v, want it kept", created["runtime_class"])
+	}
+	if _, ok := created["vendor"]; ok {
+		t.Errorf("the entry names a vendor: %v", created)
+	}
+	if vendors, ok := created["vendors"].([]any); !ok || len(vendors) != 0 {
+		t.Errorf("vendors of an entry no node joined = %v, want []", created["vendors"])
 	}
 }
 

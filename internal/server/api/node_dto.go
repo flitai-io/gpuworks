@@ -90,7 +90,7 @@ func nodeDTO(n *store.Node, includeToken bool) dto.Node {
 		d.RuntimeFallbackPlugin = accelerator.RuntimeGPUPlugin(n.GPUVendor, n.RuntimeFallbackFrom)
 	}
 	d.AcceleratorPreference = n.AcceleratorPreference
-	d.AcceleratorVendors = n.AcceleratorVendorList()
+	d.AcceleratorVendors = acceleratorChoices(n)
 	d.GPUProbeError = n.GPUProbeError
 	d.GPUProbeFailedAt = utcTimePtr(n.GPUProbeFailedAt)
 	if n.TopoJSON != "" {

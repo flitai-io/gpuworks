@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -37,6 +38,11 @@ func (a *apiHandlers) updateNodeAccelerator(w http.ResponseWriter, r *http.Reque
 	node, err := a.d.Store.NodeByUUID(uuid)
 	if err != nil {
 		writeNodeLookupError(w, err)
+		return
+	}
+	// A Kubernetes node's agent manages only the vendors that run there.
+	if preference != proto.AcceleratorPreferenceAuto && node.KubeClusterID != 0 && !kubeManages(preference) {
+		writeProductError(w, http.StatusBadRequest, ErrorNodeAcceleratorInvalid, "that vendor's cards do not run on Kubernetes nodes", map[string]any{"accelerator": preference})
 		return
 	}
 	if preference != proto.AcceleratorPreferenceAuto && !node.HostHasAcceleratorVendor(preference) {
@@ -88,4 +94,27 @@ func writeNodeLookupError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeErr(w, http.StatusInternalServerError, err)
+}
+
+// kubeManages says whether a vendor's cards run on Kubernetes nodes.
+func kubeManages(vendor string) bool {
+	_, ok := accelerator.KubeProfileFor(vendor)
+	return ok
+}
+
+// acceleratorChoices are the vendors a node can be told to manage: every
+// vendor on its host's bus, and on a Kubernetes node only those that run
+// there.
+func acceleratorChoices(n *store.Node) []proto.AcceleratorPresence {
+	all := n.AcceleratorVendorList()
+	if n.KubeClusterID == 0 {
+		return all
+	}
+	out := make([]proto.AcceleratorPresence, 0, len(all))
+	for _, v := range all {
+		if kubeManages(v.Vendor) {
+			out = append(out, v)
+		}
+	}
+	return out
 }

@@ -11,10 +11,12 @@ import (
 )
 
 // Kubernetes nodes come and go with their cluster: a node scaled away or
-// replaced leaves its row offline here for good. kubeNodeLoop asks another
-// online agent of the same cluster whether such a node still exists there,
-// and removes the ones that do not and run nothing. The server holds no
-// cluster credentials, so the question goes through an agent.
+// replaced, or one its entry no longer selects (a changed node selector or
+// set of node pools), leaves its row offline here for good. kubeNodeLoop
+// asks another online agent of the same entry whether such a node still
+// exists there and runs one of the entry's agents, and removes the ones that
+// do not and run nothing. The server holds no cluster credentials, so the
+// question goes through an agent.
 
 const (
 	kubeNodeSweepInterval = 5 * time.Minute
@@ -64,7 +66,8 @@ func sweepGoneKubeNodes(ctx context.Context, log *slog.Logger, st *store.Store, 
 				break
 			}
 		}
-		if !asked || answer.Exists {
+		left := !answer.Exists || (answer.Agent != nil && !*answer.Agent)
+		if !asked || !left {
 			continue
 		}
 		if err := st.DeleteNode(node.UUID); err != nil {

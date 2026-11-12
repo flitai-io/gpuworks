@@ -151,3 +151,48 @@ func TestPriorityMigrationRollsBack(t *testing.T) {
 		t.Fatalf("retry: %v", err)
 	}
 }
+
+func TestDropVendorMigrationKeepsEntries(t *testing.T) {
+	db := nodesOnlyDB(t, "")
+	for _, ddl := range []string{kubeClustersV206,
+		`ALTER TABLE kube_clusters ADD COLUMN priority integer`, `ALTER TABLE kube_clusters ADD COLUMN allow_preemption numeric`,
+		`INSERT INTO kube_clusters (id, uuid, name, vendor, node_selector) VALUES (1, 'c-1', 'ascend', 'ascend', 'npu=yes')`} {
+		if err := db.Exec(ddl).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := migrationByName(t, "kube_cluster_drop_vendor")
+	if m.Version != 210 {
+		t.Fatalf("migration version = %d, want 210", m.Version)
+	}
+	if err := migrateDB(db, []migration{m}); err != nil {
+		t.Fatal(err)
+	}
+	if db.Migrator().HasColumn("kube_clusters", "vendor") {
+		t.Fatal("vendor column survived")
+	}
+	var row struct{ Name, NodeSelector string }
+	if err := db.Raw(`SELECT name, node_selector FROM kube_clusters WHERE id = 1`).Scan(&row).Error; err != nil || row.Name != "ascend" || row.NodeSelector != "npu=yes" {
+		t.Fatalf("entry after the migration: %+v %v", row, err)
+	}
+	if err := m.Apply(db); err != nil {
+		t.Fatalf("second application: %v", err)
+	}
+}
+
+func TestDropVendorMigrationRollsBack(t *testing.T) {
+	db := nodesOnlyDB(t, "")
+	if err := db.Exec(kubeClustersV206).Error; err != nil {
+		t.Fatal(err)
+	}
+	m := migrationByName(t, "kube_cluster_drop_vendor")
+	if err := db.Exec(fmt.Sprintf(`CREATE TRIGGER fail_drop_vendor BEFORE INSERT ON schema_migrations WHEN NEW.version=%d BEGIN SELECT RAISE(ABORT, 'injected'); END`, m.Version)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDB(db, []migration{m}); err == nil {
+		t.Fatal("injected marker failure did not fail the migration")
+	}
+	if !db.Migrator().HasColumn("kube_clusters", "vendor") {
+		t.Fatal("the column was dropped by a failed migration")
+	}
+}

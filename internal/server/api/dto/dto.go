@@ -145,7 +145,8 @@ type Node struct {
 	// cards the node manages: auto, a vendor, or absent when never chosen
 	// (which is automatic). AcceleratorVendors is every vendor whose cards
 	// the agent last saw on the host's bus, the managed one (GPUVendor)
-	// included; a client offers the choice only when it lists more than one.
+	// included, and on a Kubernetes node only the vendors that run there;
+	// a client offers the choice only when it lists more than one.
 	AcceleratorPreference string                      `json:"accelerator_preference,omitempty"`
 	AcceleratorVendors    []proto.AcceleratorPresence `json:"accelerator_vendors,omitempty"`
 	Runtimes              []string                    `json:"runtimes,omitempty"`

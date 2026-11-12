@@ -15,8 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
-
-	"gpuworks.ai/gpuworks/internal/accelerator"
 )
 
 // Names every rendered object uses. The agent finds its own DaemonSet by
@@ -46,9 +44,8 @@ type Params struct {
 	ServerURL   string
 	Token       string
 	AgentImage  string
-	// Vendor is the accelerator vendor of the cluster's selected nodes; it
-	// decides which host paths the agent mounts (accelerator.KubeProfile).
-	Vendor       string
+	// NodeSelector narrows the nodes the agents run on; every agent finds
+	// out for itself which accelerator its node has.
 	NodeSelector map[string]string
 	// PoolLabel and PoolIDs select the nodes of the node pools an entry made
 	// from a cloud cluster holds: the DaemonSet requires the node's PoolLabel
@@ -56,10 +53,10 @@ type Params struct {
 	// Both or neither.
 	PoolLabel string
 	PoolIDs   []string
-	// RuntimeClass is the class that injects NVIDIA devices; empty lets each
-	// agent decide (the cluster's "nvidia" class when there is one, the
-	// node's default runtime otherwise) and run nvidia-smi on the host when
-	// its own container has none.
+	// RuntimeClass is the class that injects NVIDIA devices into the
+	// instance pods of NVIDIA nodes; empty lets each agent decide (the
+	// cluster's "nvidia" class when there is one, the node's default runtime
+	// otherwise). The agents themselves run under the default runtime.
 	RuntimeClass string
 	// ImagePullSecret names a docker-registry Secret in Namespace the agent
 	// image is pulled with; the agents hand it on to the pods they start
@@ -81,12 +78,43 @@ type Params struct {
 	// pod, and off renders preemptionPolicy: Never.
 	Priority        int
 	AllowPreemption bool
+	// IdleReturnSeconds is the entry's grace period for borrowed cards. The
+	// agents learn it when they enroll, on start; the pod template carries
+	// it so that changing it restarts them.
+	IdleReturnSeconds int
 }
 
 // PriorityClass names the PriorityClass of the hold and instance pods of the
 // agents in namespace: PriorityClasses are cluster-wide, and two entries of
-// one cluster (one per vendor) each have a namespace of their own.
+// one cluster (on different nodes) each have a namespace of their own.
 func PriorityClass(namespace string) string { return PriorityClassPrefix + "-" + namespace }
+
+// RemoveCommands take an entry's agents out of a cluster with kubectl, in
+// order, as the server does for a cluster it can reach: the DaemonSet first
+// (the hold and instance pods go with their agents), then the cluster-wide
+// objects named for the namespace, then the namespace with all that is left
+// in it. They need no enrollment token, so they work for a revoked entry.
+func RemoveCommands(namespace string) []string {
+	ns := quoteShell(namespace)
+	role := quoteShell(AgentName + "-" + namespace)
+	return []string{
+		"kubectl -n " + ns + " delete daemonset " + AgentName + " --ignore-not-found --wait",
+		"kubectl delete clusterrolebinding " + role + " --ignore-not-found",
+		"kubectl delete clusterrole " + role + " --ignore-not-found",
+		"kubectl delete priorityclass " + quoteShell(PriorityClass(namespace)) + " --ignore-not-found",
+		"kubectl delete namespace " + ns + " --ignore-not-found",
+	}
+}
+
+// quoteShell quotes s for a POSIX shell when it is more than a DNS name.
+func quoteShell(s string) string {
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '.') {
+			return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+		}
+	}
+	return s
+}
 
 // PriorityMax is the largest priority a user's PriorityClass may have;
 // Kubernetes keeps the values above it for its own system classes.
@@ -185,9 +213,6 @@ func (p Params) Validate() error {
 			return fmt.Errorf("node pool id %q cannot be a label value", id)
 		}
 	}
-	if _, ok := accelerator.KubeProfileFor(p.Vendor); !ok {
-		return fmt.Errorf("vendor %q cannot run on Kubernetes (supported: %s)", p.Vendor, strings.Join(accelerator.KubeVendors(), ", "))
-	}
 	return nil
 }
 
@@ -227,32 +252,11 @@ func Render(p Params) (string, error) {
 	}
 	poolIDs := append([]string(nil), p.PoolIDs...)
 	sort.Strings(poolIDs)
-	profile, _ := accelerator.KubeProfileFor(p.Vendor)
-	env := make([]kv, 0, len(profile.Env))
-	for k, v := range profile.Env {
-		env = append(env, kv{k, v})
-	}
-	sort.Slice(env, func(i, j int) bool { return env[i].K < env[j].K })
-	type hostPath struct{ Name, Path, Type string }
-	var hostPaths []hostPath
-	for i, d := range profile.HostDirs {
-		hostPaths = append(hostPaths, hostPath{fmt.Sprintf("host-dir-%d", i), d, "Directory"})
-	}
-	for i, f := range profile.HostFiles {
-		hostPaths = append(hostPaths, hostPath{fmt.Sprintf("host-file-%d", i), f, "File"})
-	}
-	// The agent runs under the vendor's RuntimeClass when the cluster names
-	// one; without it, it runs the vendor CLI on the host unless the node's
-	// default runtime put one in its container (hostCLIs names that CLI).
-	runtimeClass, hostCLIs := "", ""
-	switch {
-	case profile.HostCLIs:
-		hostCLIs = "1"
-	case profile.RuntimeClass && p.RuntimeClass != "":
-		runtimeClass = p.RuntimeClass
-	case profile.RuntimeClass:
-		hostCLIs = profile.CLI
-	}
+	// The agent carries no vendor's mounts: it reads the host's files
+	// through the host's root and runs vendor CLIs there (hostPID). The
+	// NVIDIA variables only take effect under NVIDIA's runtime, where they
+	// put the driver's nvidia-smi into the agent's container.
+	env := []kv{{"NVIDIA_DRIVER_CAPABILITIES", "compute,utility"}, {"NVIDIA_VISIBLE_DEVICES", "all"}}
 	apiHost, apiPort := "", ""
 	if p.APIServer != "" {
 		apiHost, apiPort, _ = ParseAPIServer(p.APIServer)
@@ -262,7 +266,7 @@ func Render(p Params) (string, error) {
 		"APIHost": apiHost, "APIPort": apiPort,
 		"P": p, "Selector": selector, "PoolIDs": poolIDs, "Agent": AgentName, "Secret": EnrollSecret,
 		"Priority": PriorityClass(p.Namespace), "StateDir": p.stateDir(), "PodResources": PodResourcesDir,
-		"DevicePlugins": DevicePluginDir, "Env": env, "HostPaths": hostPaths, "AgentRuntimeClass": runtimeClass, "HostCLIs": hostCLIs,
+		"DevicePlugins": DevicePluginDir, "Env": env,
 	})
 	return buf.String(), err
 }
@@ -394,6 +398,8 @@ spec:
       labels:
         app.kubernetes.io/name: {{.Agent}}
         app.kubernetes.io/managed-by: gpuworks
+      annotations:
+        gpuworks.ai/idle-return-seconds: {{q (printf "%d" .P.IdleReturnSeconds)}}
     spec:
       serviceAccountName: {{.Agent}}
 {{- if .P.ImagePullSecret}}
@@ -407,9 +413,6 @@ spec:
       # the API server by address.
       dnsPolicy: Default
       priorityClassName: system-node-critical
-{{- if .AgentRuntimeClass}}
-      runtimeClassName: {{q .AgentRuntimeClass}}
-{{- end}}
 {{- if .Selector}}
       nodeSelector:
 {{- range .Selector}}
@@ -476,10 +479,6 @@ spec:
             - name: GPUWORKS_KUBE_CONTAINERD_SOCKET
               value: {{q .P.ContainerdSocket}}
 {{- end}}
-{{- if .HostCLIs}}
-            - name: GPUWORKS_KUBE_HOST_CLIS
-              value: {{q .HostCLIs}}
-{{- end}}
 {{- range .Env}}
             - name: {{q .K}}
               value: {{q .V}}
@@ -495,11 +494,6 @@ spec:
               readOnly: true
             - name: device-plugins
               mountPath: {{.DevicePlugins}}
-{{- range .HostPaths}}
-            - name: {{.Name}}
-              mountPath: {{q .Path}}
-              readOnly: true
-{{- end}}
       volumes:
         - name: state
           hostPath:
@@ -513,10 +507,4 @@ spec:
           hostPath:
             path: {{.DevicePlugins}}
             type: DirectoryOrCreate
-{{- range .HostPaths}}
-        - name: {{.Name}}
-          hostPath:
-            path: {{q .Path}}
-            type: {{.Type}}
-{{- end}}
 `))

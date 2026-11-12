@@ -189,8 +189,11 @@ func TestAClusterOfACloudAccountBecomesAnEntryOnce(t *testing.T) {
 	if rec.Code != http.StatusCreated || src["provider_id"] != float64(rig.provider) || src["provider_name"] != "ali" || src["provider_kind"] != "api-cluster-provider" || src["cluster_id"] != "c-gpu" {
 		t.Fatalf("create from a cluster = %d %s", rec.Code, rec.Body)
 	}
-	if pools, _ := json.Marshal(created["pool_ids"]); string(pools) != `["np-1","np-2"]` || created["vendor"] != "nvidia" || created["node_selector"] != "" {
-		t.Fatalf("the entry holds pools %s, vendor %v, selector %q", pools, created["vendor"], created["node_selector"])
+	if pools, _ := json.Marshal(created["pool_ids"]); string(pools) != `["np-1","np-2"]` || created["node_selector"] != "" {
+		t.Fatalf("the entry holds pools %s, selector %q", pools, created["node_selector"])
+	}
+	if _, has := created["vendor"]; has {
+		t.Fatalf("an entry has no vendor: %s", rec.Body)
 	}
 	after := rig.do(rig.session, http.MethodGet, path, "")
 	if !strings.Contains(after.Body.String(), `"entry":{"uuid":"`+created["uuid"].(string)+`","name":"ack-gpu"}`) {
@@ -227,7 +230,6 @@ func TestAClusterOfACloudAccountBecomesAnEntryOnce(t *testing.T) {
 		"a cluster the account lacks":       fmt.Sprintf(`{"name":"x","server_url":"https://gw","provider_id":%d,"provider_cluster_id":"c-nope","provider_pool_ids":["np-1"]}`, rig.provider),
 		"pools without a source":            `{"name":"x","server_url":"https://gw","provider_pool_ids":["np-1"]}`,
 		"a free-form selector beside pools": fmt.Sprintf(`{"name":"x","server_url":"https://gw","node_selector":"a=b","provider_id":%d,"provider_cluster_id":"c-other","provider_pool_ids":["np-o"]}`, rig.provider),
-		"a vendor other than the pools'":    fmt.Sprintf(`{"name":"x","server_url":"https://gw","vendor":"ppu","provider_id":%d,"provider_cluster_id":"c-other","provider_pool_ids":["np-o"]}`, rig.provider),
 	} {
 		if rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", bad); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), ErrorKubeClusterInvalid) {
 			t.Fatalf("%s = %d %s", name, rec.Code, rec.Body)

@@ -47,9 +47,13 @@ func (n *NodeRuntime) kubeRPC(ctx context.Context, method string, params json.Ra
 			return nil, fmt.Errorf("decode %s: %w", method, err)
 		}
 		exists, err := d.NodeExists(ctx, req.NodeName)
+		if err != nil || !exists {
+			return proto.KubeNodeExistsResult{Exists: exists}, err
+		}
+		agent, err := d.AgentOn(ctx, req.NodeName)
 		if err != nil {
 			return nil, err
 		}
-		return proto.KubeNodeExistsResult{Exists: exists}, nil
+		return proto.KubeNodeExistsResult{Exists: true, Agent: &agent}, nil
 	}
 }

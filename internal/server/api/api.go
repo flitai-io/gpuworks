@@ -83,6 +83,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.With(a.managementAdmin).Post("/kube/clusters", a.createKubeCluster)
 			r.With(a.managementAdmin).Get("/kube/clusters/{uuid}/manifest", a.kubeClusterManifest)
 			r.With(a.managementAdmin).Post("/kube/clusters/{uuid}/revoke", a.revokeKubeCluster)
+			r.With(a.managementAdmin).Put("/kube/clusters/{uuid}", a.updateKubeCluster)
 			r.With(a.managementAdmin).Put("/kube/clusters/{uuid}/pools", a.setKubeClusterPools)
 			r.With(a.managementAdmin).Delete("/kube/clusters/{uuid}", a.deleteKubeCluster)
 			r.With(a.managementAdmin).Post("/kube/clusters/{uuid}/apply", a.applyKubeCluster)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
@@ -97,9 +98,12 @@ func TestEnrollKubeNodeIsIdempotentAndBindsTheCluster(t *testing.T) {
 	if _, _, err := st.EnrollKubeNode(c.Token, "", "gpu-3"); err == nil {
 		t.Fatal("empty cluster uid accepted")
 	}
-	counts, err := st.KubeClusterNodeCounts()
-	if err != nil || counts[c.ID] != 2 {
-		t.Fatalf("node counts = %v, %v", counts, err)
+	if err := st.DB().Model(&Node{}).Where("kube_cluster_id = ? AND kube_node_name = ?", c.ID, "gpu-1").Update("gpu_vendor", "nvidia").Error; err != nil {
+		t.Fatal(err)
+	}
+	byVendor, err := st.KubeClusterNodeVendors()
+	if err != nil || byVendor[c.ID]["nvidia"] != 1 || byVendor[c.ID][""] != 1 || len(byVendor[c.ID]) != 2 {
+		t.Fatalf("nodes by vendor = %v, %v", byVendor, err)
 	}
 	if err := st.DeleteKubeCluster(c.UUID); !errors.Is(err, ErrKubeClusterHasNodes) {
 		t.Fatalf("delete with nodes: %v", err)
@@ -258,5 +262,58 @@ func TestKubeClusterRefsReadsOnlyTheRequestedIdentities(t *testing.T) {
 	}
 	if got, err := st.KubeClusterRefs(nil); err != nil || len(got) != 0 {
 		t.Fatalf("refs of no ids = %+v, %v", got, err)
+	}
+}
+
+// A Kubernetes node another entry of the same cluster has, online or seen
+// lately, is refused to a second entry (both agents would share its state
+// directory); once its holder has been gone long enough it can move. Another
+// cluster's node of the same name is a different node.
+func TestAKubeNodeHeldByAnotherEntryIsRefused(t *testing.T) {
+	st := openKubeStore(t)
+	a, err := st.CreateKubeCluster(KubeCluster{Name: "a", Namespace: "gw-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := st.CreateKubeCluster(KubeCluster{Name: "b", Namespace: "gw-b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, _, err := st.EnrollKubeNode(a.Token, "uid-1", "gpu-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = st.EnrollKubeNode(b.Token, "uid-1", "gpu-1")
+	var taken *KubeNodeTakenError
+	if !errors.As(err, &taken) || taken.Entry != "a" || !errors.Is(err, ErrKubeNodeTaken) {
+		t.Fatalf("second entry enrolling a held node: %v", err)
+	}
+	// Another node of b's is fine.
+	if _, _, err := st.EnrollKubeNode(b.Token, "uid-1", "gpu-2"); err != nil {
+		t.Fatalf("a free node: %v", err)
+	}
+	// The holder went offline a while ago: the node can move.
+	old := time.Now().Add(-KubeNodeTakenFor - time.Minute)
+	if err := st.DB().Model(&Node{}).Where("id = ?", held.ID).Updates(map[string]any{"state": NodeStateOffline, "last_seen_at": old}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.EnrollKubeNode(b.Token, "uid-1", "gpu-1"); err != nil {
+		t.Fatalf("a node whose holder is long gone: %v", err)
+	}
+	// Recently seen though offline still holds.
+	c, err := st.CreateKubeCluster(KubeCluster{Name: "c", Namespace: "gw-c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recent := time.Now().Add(-time.Minute)
+	if err := st.DB().Model(&Node{}).Where("kube_cluster_id = ? AND kube_node_name = ?", b.ID, "gpu-2").Updates(map[string]any{"state": NodeStateOffline, "last_seen_at": recent}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.EnrollKubeNode(c.Token, "uid-1", "gpu-2"); !errors.Is(err, ErrKubeNodeTaken) {
+		t.Fatalf("a node seen a minute ago: %v", err)
+	}
+	// Another cluster's node of the same name is a different node.
+	if _, _, err := st.EnrollKubeNode(c.Token, "uid-2", "gpu-1"); !errors.Is(err, ErrKubeClusterMismatch) && err != nil {
+		t.Fatalf("other cluster: %v", err)
 	}
 }

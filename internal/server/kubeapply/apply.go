@@ -30,6 +30,7 @@ const (
 	ActionCreate    = "create"    // the object did not exist and is (or would be) created
 	ActionUpdate    = "update"    // the object exists and is (or would be) brought to the manifest
 	ActionDelete    = "delete"    // the object is (or would be) deleted
+	ActionReplace   = "replace"   // a field that cannot change did: deleted and created again
 	ActionAbsent    = "absent"    // nothing to delete
 	ActionFailed    = "failed"    // the API server refused; Result.Error says why
 	ActionNotTried  = "not_tried" // an earlier object failed
@@ -163,11 +164,55 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 }
 
 func (c *Client) exists(ctx context.Context, o Object) (bool, error) {
-	_, err := c.do(ctx, http.MethodGet, o.path(), nil, "", nil)
+	_, found, err := c.current(ctx, o)
+	return found, err
+}
+
+// current reads the object as the API server has it.
+func (c *Client) current(ctx context.Context, o Object) (map[string]any, bool, error) {
+	raw, err := c.do(ctx, http.MethodGet, o.path(), nil, "", nil)
 	if isNotFound(err) {
-		return false, nil
+		return nil, false, nil
 	}
-	return err == nil, err
+	if err != nil {
+		return nil, false, err
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, true, err
+	}
+	return doc, true, nil
+}
+
+// needsReplace says whether have cannot be brought to want in place: a
+// PriorityClass's value and preemption policy cannot change once it exists
+// (an entry's priority or preemption was edited).
+func needsReplace(o Object, have map[string]any) bool {
+	if o.Kind != "PriorityClass" || have == nil {
+		return false
+	}
+	// The manifest's numbers come from YAML (ints), the API server's from
+	// JSON (float64s).
+	num := func(v any) float64 {
+		switch n := v.(type) {
+		case float64:
+			return n
+		case int:
+			return float64(n)
+		case int64:
+			return float64(n)
+		case uint64:
+			return float64(n)
+		}
+		return 0
+	}
+	policy := func(v any) string {
+		if s, _ := v.(string); s != "" {
+			return s
+		}
+		return "PreemptLowerPriority"
+	}
+	return num(have["value"]) != num(o.body["value"]) || policy(have["preemptionPolicy"]) != policy(o.body["preemptionPolicy"])
 }
 
 // Apply brings each object to the manifest with server-side apply, in
@@ -184,7 +229,7 @@ func (c *Client) Apply(ctx context.Context, objs []Object, dryRun bool) ([]Resul
 			results = append(results, Result{Object: o, Action: ActionNotTried})
 			continue
 		}
-		found, err := c.exists(ctx, o)
+		have, found, err := c.current(ctx, o)
 		if err != nil {
 			failed = err
 			results = append(results, Result{Object: o, Action: ActionFailed, Error: err.Error()})
@@ -193,6 +238,23 @@ func (c *Client) Apply(ctx context.Context, objs []Object, dryRun bool) ([]Resul
 		action := ActionUpdate
 		if !found {
 			action = ActionCreate
+		}
+		if needsReplace(o, have) {
+			action = ActionReplace
+			if !dryRun {
+				// Pods that run under it keep their priority; new ones take the
+				// new value once it is created again below.
+				if _, err := c.do(ctx, http.MethodDelete, o.path(), nil, "application/json", nil); err != nil && !isNotFound(err) {
+					failed = err
+					results = append(results, Result{Object: o, Action: ActionFailed, Error: err.Error()})
+					continue
+				}
+			} else {
+				// The API server would refuse the changed fields: report the
+				// replacement without asking it to check an update.
+				results = append(results, Result{Object: o, Action: action})
+				continue
+			}
 		}
 		if dryRun && newNamespaces[o.Namespace] {
 			results = append(results, Result{Object: o, Action: ActionDependent})

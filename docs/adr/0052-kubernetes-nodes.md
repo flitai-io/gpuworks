@@ -30,8 +30,8 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
    在节点自己的路径与版本上（PPU SDK 需要 glibc 2.38，agent 镜像是 2.36）。NVIDIA 的 CLI 由 NVIDIA 运行时注入：集群
    条目指定 RuntimeClass 时 agent 在其下运行；不指定时（默认）agent 容器用节点的默认运行时，托管 Kubernetes 的默认运行时就是
    NVIDIA 的，注入了 `nvidia-smi`，没注入时（k3s 默认 runc）agent 在节点上运行它；实例 Pod 用集群的 `nvidia` RuntimeClass，
-   没有就用默认运行时。kubelet 用的 containerd 按 agent 容器的 shim 的 `-address` 认定，不按 socket 位置猜。
-   一个集群条目一个厂商。device plugin 以非整卡分配（time-slicing、MIG、没有 HAMi 登记的 vNPU）时不借卡，卡报为外部占用并带原因；HAMi 与 ACK 共享 GPU 见第 7 条。
+   没有就用默认运行时（这几句关于 agent 运行时与 `nvidia-smi` 的做法已由 2026-11-12 修订取代：agent 一律在默认运行时下运行，`nvidia-smi` 的查找见修订）。kubelet 用的 containerd 按 agent 容器的 shim 的 `-address` 认定，不按 socket 位置猜。
+   一个集群条目一个厂商（已由 2026-11-12 修订取代：条目没有厂商）。device plugin 以非整卡分配（time-slicing、MIG、没有 HAMi 登记的 vNPU）时不借卡，卡报为外部占用并带原因；HAMi 与 ACK 共享 GPU 见第 7 条。
 6. **生命周期跟随 Kubernetes**：节点 cordon 时平台同样 cordon；离线 15 分钟的节点经同集群在线 agent 确认已不存在且无实例时
    移除；节点自报引擎端口段，避开 NodePort 范围。升级见第 8 条（2026-11-12 修订，此前是把 DaemonSet 换到与 server 同版本的镜像）。
 7. **借卡方式随节点上的分配者而定**（2026-11-10 补充）：HAMi 与 ACK 共享 GPU 不是"一份一张卡"，按下面的办法借整卡，其余切分仍拒绝并写明原因（MIG、time-slicing、没有 HAMi 登记的 vNPU 模板）。
@@ -73,6 +73,22 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
   程序；只 COPY，amd64 与 arm64 都不需要模拟即可构建）。发布 tag 为运行环境版本 `rN` 与 `rN-<server 版本>`。
 - 新包：`internal/agent/kubeboot`（第 8 条的交接与对齐）；新增持久化事实：`kube_clusters` 的 `agent_image_source`（渲染时无从得知节点能访问哪个仓库）。
 - 新增持久化事实：`kube_clusters` 的 `priority`、`allow_preemption`（第 9 条）。
-- 新增持久化事实：`kube_clusters` 的 `vendor`、`state_dir`、`api_server`（manifest 参数）。agent 用节点的 DNS
+- 新增持久化事实：`kube_clusters` 的 `vendor`（2026-11-12 修订后已移除）、`state_dir`、`api_server`（manifest 参数）。agent 用节点的 DNS
   （`dnsPolicy: Default`），不依赖集群 DNS；没有组件提供 Service 地址的节点（KubeEdge、OpenYurt 边缘节点）用
   `api_server` 直连 API server。
+
+## 修订（2026-11-12）：零厂商配置
+
+集群条目不再有厂商。此前的条目要选厂商，manifest 据此给 agent 挂载厂商专用的宿主机路径（驱动目录、厂商 CLI、设备节点）；这一修订取消该字段，由 agent 自己识别：
+
+1. **条目没有厂商。** 创建请求没有 `vendor`，条目 DTO 没有 `vendor`（改为 `vendors:[{vendor, nodes}]`，已接入节点按厂商的计数，没有上报加速卡的节点 `vendor` 为空），表单字典没有厂商列表；`kube_clusters.vendor` 列删除。一个条目一个 DaemonSet，没有厂商专用挂载，agent Pod 在默认运行时下运行（不再有 agent 的 RuntimeClass）。RuntimeClass 设置只影响 NVIDIA 的实例 Pod；其他厂商的设备经 agent 自带的 device plugin 交给实例，不受它影响。
+2. **agent 经宿主机根目录和宿主机挂载命名空间用厂商工具，不靠挂载。** agent 以 privileged、hostPID 运行，经 `/proc/1/root` 读宿主机的文件，用 nsenter 在宿主机的挂载命名空间里运行 `npu-smi`、`hy-smi`、`ppu-smi` 与 `nvidia-smi`，用宿主机自己的 C 库与驱动库。`nvidia-smi` 的查找顺序：宿主机根目录，`/run/nvidia/driver`（NVIDIA GPU Operator 的驱动容器），最后是 NVIDIA 运行时放进 agent 容器的那份（manifest 固定设 `NVIDIA_VISIBLE_DEVICES=all`、`NVIDIA_DRIVER_CAPABILITIES=compute,utility`，只在 NVIDIA 运行时下生效）。设备节点检查看宿主机实时的 `/dev`。
+3. **不支持的节点待命。** Kubernetes 上支持 NVIDIA、昇腾、海光与 PPU。没有加速卡或是别家的卡（AMD、昆仑芯等）的节点上，agent Pod 照常运行但不注册，所以不会成为平台节点。选择器仍可选，只用来收窄平台使用的节点。
+4. **一个节点只属于一个条目。** 同一个集群的两个条目选中同一个节点时，后来者注册被拒绝（403 `KUBE_ENROLL_REFUSED`，`reason: node_taken`，`entry` 为占着节点的条目名），直到先到者在该节点的 agent 离线超过 15 分钟，之后节点可以转到另一个条目。这条规则让改节点选择器可以安全地把节点从一个条目挪到另一个条目，也避免两个 DaemonSet 的 agent 争同一个节点的卡与状态目录。
+5. **条目可编辑、可卸载。** `PUT /kube/clusters/{uuid}` 改除命名空间、server 地址与状态目录之外的设置；manifest 变了而集群里还是旧的，响应的 `reapply` 与（手动条目的）`commands` 说明怎么追上。空闲归还写进 DaemonSet 的 Pod 模板注解，改它会让 agent 重启后取新值。卸载给出不依赖接入令牌的 `kubectl` 命令（`remove_commands`），云条目由 server 执行。改节点选择器后不再被选中的节点离线，15 分钟后由同条目另一个在线 agent 确认并自动删除记录。
+
+原因：同一个集群常有多个厂商的节点，一个条目一个厂商迫使用户建多个条目并各配选择器与命名空间；厂商专用挂载（驱动库目录、CLI 路径、设备节点）随节点的发行版与驱动安装方式变化，错配时 agent 起得来却探测不到卡，是接入失败最常见的来源；让 agent 在宿主机上直接运行宿主机自己的工具，减少了这一类配置与失败面。
+
+取舍：agent 对宿主机的依赖更重（hostPID、读宿主机根），但它本来就是 privileged；`nvidia-smi` 在容器里没有注入时多一层查找。
+
+后果：持久化事实减少 `kube_clusters.vendor`（迁移删除该列）；`KUBE_CLUSTER_MIXED_VENDORS` 错误与云条目节点池须同一厂商的规则（ADR 0063）同时取消；节点页对 Kubernetes 节点只提供 Kubernetes 上支持的厂商切换。

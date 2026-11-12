@@ -8,7 +8,7 @@ For step-by-step instructions for managed public cloud clusters (Alibaba Cloud A
 
 - The server is running, and the cluster nodes can reach the server address (the agent connects outbound; no inbound node port is needed).
 - The cluster uses containerd (kubeadm, k3s, RKE2, microk8s, and GPU Operator environments all do). CRI-O (OpenShift) and Docker nodes are not supported; the agent refuses to start and states the reason.
-- One cluster entry corresponds to nodes of one vendor: NVIDIA, Ascend, Hygon, or PPU. On NVIDIA nodes, the NVIDIA container runtime must be available: either as containerd's default runtime (as on managed Kubernetes such as DOKS, Nebius, and ACK), or through a RuntimeClass named `nvidia` (k3s creates it automatically). Other vendors only require the vendor driver on the node; they need neither the vendor container runtime nor the vendor device plugin.
+- The vendor driver is installed on the node. Kubernetes supports NVIDIA, Ascend, Hygon (DCU), and PPU, and one cluster entry can cover nodes of all of these vendors; you do not need one entry per vendor (see the next section). On NVIDIA nodes, the NVIDIA container runtime must be available: either as containerd's default runtime (as on managed Kubernetes such as DOKS, Nebius, and ACK), or through a RuntimeClass named `nvidia` (k3s creates it automatically). Other vendors only require the vendor driver on the node; they need neither the vendor container runtime nor the vendor device plugin.
 - Nodes that mount NFS storage have `mount.nfs` installed (nfs-utils / nfs-common): the agent uses it in the node's mount namespace.
 - You can run `kubectl apply` in the cluster, and a `privileged` namespace is allowed (the manifest labels the namespace with the Pod Security Admission `privileged` label; policies such as Kyverno or Gatekeeper must be relaxed separately).
 
@@ -17,6 +17,18 @@ For step-by-step instructions for managed public cloud clusters (Alibaba Cloud A
 A cluster joins as one DaemonSet. One agent runs on each selected node and exchanges the cluster's connect token for its own node token; from then on it is exactly like an ordinary node: scheduling, deployment, gateway, logs, and terminals make no distinction. An instance becomes a Pod pinned to that node (`restartPolicy: Never`, host network, model directories mounted by hostPath at the same path), and `kubectl get pods -n gpuworks-system` shows every instance. Retries and rebuilds remain gpuworks's responsibility; Kubernetes does not restart failed instances.
 
 Each card has only one allocator at a time. When a device plugin (`nvidia.com/gpu` and similar) is installed on the node, the cards belong to the kubelet: for each card gpuworks wants to use, it starts a placeholder Pod (`gpuworks-hold-*`) that requests only one card. After all instances have stopped and the cluster's “Idle return” time has elapsed, the placeholder Pods are deleted and the cards go back to Kubernetes. Cards held by other Pods appear in gpuworks as externally occupied and are not scheduled. When the node has no device plugin, gpuworks uses the node's cards directly. When the cluster uses HAMi, ACK GPU sharing, or another way of splitting a card into several shares, borrowing works differently; see the next section.
+
+## Accelerator Vendor: Detected Automatically
+
+A cluster entry has no vendor setting. An entry has one DaemonSet and no vendor-specific mounts, and the agent Pods run under the default runtime (no RuntimeClass is set for the agent). Each agent detects the accelerator of its own node:
+
+- Vendors supported on Kubernetes: NVIDIA, Ascend, Hygon (DCU), PPU.
+- A node with no accelerator, or with another vendor's card (AMD, Kunlunxin, and others are not supported on Kubernetes yet), stays in stand-by: the agent Pod runs but does not enroll with the server, so such a node never appears on the platform's Nodes page.
+- So one entry can cover a cluster whose nodes come from several vendors, and there is no longer a need for one entry per vendor. The node selector remains optional, for narrowing which nodes the platform uses (for example only part of the GPU nodes).
+
+The agent reaches vendor tools without vendor mounts: it runs privileged with hostPID, reads the host's files through the host root (`/proc/1/root`), and runs the vendor command-line tools `npu-smi`, `hy-smi`, `ppu-smi`, and `nvidia-smi` in the host's mount namespace (nsenter), using the host's own C libraries and driver libraries. `nvidia-smi` is looked up in this order: the host root; `/run/nvidia/driver` (the NVIDIA GPU Operator's driver container); the copy NVIDIA's runtime puts in the agent container (the manifest always sets `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=compute,utility`, which only take effect under NVIDIA's runtime). Device-node checks use the host's live `/dev`.
+
+**One Kubernetes node belongs to only one entry at a time.** When two entries of the same cluster select the same node, the agent of the second entry is refused enrollment (`KUBE_ENROLL_REFUSED`, reason `node_taken`, naming the entry that holds the node) until the first entry's agent on that node has been offline for more than 15 minutes; after that the node can move to the other entry (for example after changing selectors). Other refusal reasons: `unknown_token` (the connect token is unknown or revoked; an agent that has enrolled before keeps its saved identity and is unaffected) and `other_cluster` (the token belongs to another Kubernetes cluster).
 
 ## When the Cluster Uses HAMi, ACK GPU Sharing, or Other Splits
 
@@ -49,7 +61,7 @@ The agent uses the node's own DNS (`dnsPolicy: Default`), like an agent installe
 
 ## Connect
 
-1. On the “Kubernetes” page, click “Connect cluster”, fill in the name, the server address (the address cluster nodes use to reach the server), and the vendor, and optionally the node selector (for example `nvidia.com/gpu.present=true`; empty means all nodes). When one Kubernetes cluster has nodes from two vendors, create two entries, one per vendor, each with a different namespace and node selector.
+1. On the “Kubernetes” page, click “Connect cluster”, fill in the name and the server address (the address cluster nodes use to reach the server), and optionally the node selector (for example `nvidia.com/gpu.present=true`; empty means all nodes). There is no vendor field: the agent on each node detects its accelerator itself, so one entry is enough for a cluster with nodes from several vendors; nodes with no accelerator, or one of an unsupported vendor, stay in stand-by and do not become platform nodes.
 2. Options under “Advanced”:
    - State directory: the agent's directory on the node, `/opt/gpuworks` by default. When a gpuworks agent is already installed on the node, use a different directory (for example `/opt/gpuworks-kube`) so the two do not interfere.
    - containerd socket: when empty, the agent finds it itself (the default locations of containerd, k3s, RKE2, and microk8s); fill it in if it is installed elsewhere.
@@ -57,7 +69,7 @@ The agent uses the node's own DNS (`dnsPolicy: Default`), like an agent installe
    - Agent image registry: where the nodes pull the agent image from: Docker Hub (the default), Huawei Cloud SWR or quay.io. Clusters in mainland China usually cannot reach Docker Hub; choose Huawei Cloud SWR. The image's tag is the version of the agent's runtime (such as `r1`) and does not follow the server's version; see "Upgrade the agent" below.
    - Agent image: when filled in, your own image runs instead of one from the registry above. For nodes without internet access, push `gpuworks/gpuworks-agent:r1` to a private registry the cluster reaches (or import it on each node with `ctr -n k8s.io images import`) and enter that address; nothing needs to be pushed again until the runtime version changes. For the image archive in offline environments, see [Deploy in an Offline Environment](deploy-offline.md#agent-image-for-kubernetes-clusters).
    - Image pull secret: when the agent image is in a registry that needs a login (an enterprise Harbor or a cloud provider's private registry), first create a docker-registry Secret in the namespace (`kubectl -n gpuworks-system create secret docker-registry regcred …`; create the namespace first if it does not exist), then enter its name here. The agent Pod uses it to pull the image, and the placeholder Pods the agent starts reuse it.
-   - RuntimeClass: NVIDIA only: the RuntimeClass instance Pods use to reach the GPUs. When empty (the default), the agent on each node decides: it uses the cluster's `nvidia` RuntimeClass if there is one, otherwise the node's default runtime; when `nvidia-smi` is not present in the agent's own container, it runs it on the node. Fill it in only when the RuntimeClass has a different name.
+   - RuntimeClass: affects only NVIDIA instance Pods, the RuntimeClass they use to reach the GPUs; other vendors' devices come through the agent's own device plugin and ignore it. When empty (the default), each node decides: it uses the cluster's `nvidia` RuntimeClass if there is one, otherwise the node's default runtime. Fill it in only when the RuntimeClass has a different name.
    - Engine port range: `40000-42767` by default. Do not overlap the cluster's NodePort range (`30000-32767` by default): kube-proxy diverts NodePort traffic sent to local addresses.
    - Idle return: how long a borrowed card is kept after the last instance stops, 60 seconds by default (checked every 30 seconds, so the actual return happens between 60 and 90 seconds); “Keep borrowed cards” means never return them, handing the whole node pool to gpuworks.
    - Priority: the value of the PriorityClass (`gpuworks-inference-<namespace>`) of gpuworks hold and instance Pods, 10000 by default, from 0 to 1000000000; larger runs first, and ordinary Pods are 0. It also sets the eviction order when a node runs short of memory or disk: lower priority is evicted first.
@@ -72,6 +84,34 @@ The agent uses the node's own DNS (`dnsPolicy: Default`), like an agent installe
 
 The command contains the cluster's connect token and is shown only to administrators. After the connect token is revoked, new nodes can no longer join, and nodes already joined are unaffected.
 
+The list shows, for each entry, the joined nodes by vendor (the vendor with the most nodes first; nodes that reported no cards are counted as a group of their own).
+
+## Edit a Cluster Entry
+
+Click “Edit” on the entry on the “Kubernetes” page (administrators; the endpoint is `PUT /api/v1/kube/clusters/{uuid}`). You can change: the name, node selector, agent image and image registry, image pull secret, RuntimeClass, containerd socket, API server address, engine port range, idle return, priority, and allow preemption, validated as on creation. The namespace, server address, and state directory are fixed at creation; to change them, delete the entry and create it again. An entry connected from a cloud account selects nodes by node pool and cannot change the node selector; change its node pools instead (see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md)).
+
+Saving changes only the record in gpuworks. The manifest is rendered from the new settings at once, but **the cluster keeps running the old one until it is applied again**:
+
+- An entry made by hand (not revoked): after saving, the page gives the `kubectl` commands to run in order. When priority or allow preemption changed, first run `kubectl delete priorityclass gpuworks-inference-<namespace> --ignore-not-found`, then the apply command: Kubernetes cannot change a PriorityClass's value or `preemptionPolicy` in place, only delete and recreate it. Other settings need only the apply command.
+- An entry connected from a cloud account: click “Apply to the cluster” and the server applies it; when the PriorityClass changed, the server deletes and recreates it itself (the action of that item in the apply result is `replace`).
+- The idle return time is also part of the manifest (the DaemonSet's Pod template carries the annotation `gpuworks.ai/idle-return-seconds`), so changing it also needs the manifest applied again: the agents restart and pick up the new value when they enroll at start. An agent restart does not restart instance Pods.
+
+**Changing the node selector (for a cloud entry, the node pools)**: after the manifest is applied again, the DaemonSet stops running on nodes that are no longer selected; their agents exit and the nodes go offline. After 15 minutes offline, the platform asks another online agent of the same entry whether the node still exists in Kubernetes and still runs one of the entry's agent Pods. If not, and the node has no instances, the node record is removed automatically. When the entry has no other online node there is nobody to ask, and nothing is removed automatically: delete the node by hand on the Nodes page (deleting a Kubernetes node needs no SSH). Newly selected nodes join by themselves.
+
+## Uninstall
+
+“Uninstall” on the entry gives the `kubectl` commands that remove its agents from the cluster (visible to administrators, also for revoked entries); run them in order:
+
+```bash
+kubectl -n <namespace> delete daemonset gpuworks-agent --ignore-not-found --wait
+kubectl delete clusterrolebinding gpuworks-agent-<namespace> --ignore-not-found
+kubectl delete clusterrole gpuworks-agent-<namespace> --ignore-not-found
+kubectl delete priorityclass gpuworks-inference-<namespace> --ignore-not-found
+kubectl delete namespace <namespace> --ignore-not-found
+```
+
+Deleting the DaemonSet deletes the instance Pods and placeholder Pods with it, and the cards go back to Kubernetes. These commands do not need the connect token, whereas `kubectl delete -f <manifest address>` fetches the manifest with the token and stops working once the token is revoked. For an entry the server can reach (one connected from a cloud account) the server does it for you (“Remove from the cluster”, which checks first and deletes after you confirm). Once the nodes have disappeared from the Nodes page, the entry can be deleted (it is refused while nodes remain, `KUBE_CLUSTER_HAS_NODES`).
+
 ## Day-to-Day Operations
 
 | Scenario | What to do |
@@ -80,11 +120,13 @@ The command contains the cluster's connect token and is shown only to administra
 | Upgrade the agent | As for any node: select nodes on the Nodes page and click “Upgrade selected Agents”, or click “Upgrade Agent” in the node details. The agent runs from `agent/gpuworks-agent` in the node's state directory, and an upgrade replaces that program in place, without changing the DaemonSet or reaching a registry; instance Pods are unaffected, and the upgraded program outlives the Pod. The runtime version (the image tag) rarely changes; when a release raises it, its release notes say so, and applying the manifest once more (`kubectl apply` or “Apply to the cluster”) is enough. The image tag `kubectl` shows is the runtime version, not the agent's; the Nodes page shows the agent version |
 | A node is deleted or scaled in | After a node has been offline for 15 minutes, gpuworks asks another online node of the same cluster to confirm; when the node no longer exists in Kubernetes and has no instances, it is removed automatically |
 | Delete a node from gpuworks | Only the record is deleted and the agent is not uninstalled; if the DaemonSet still selects the node, it rejoins, so adjust the node selector first |
-| Uninstall | Run `kubectl delete -f` on the same manifest address: the DaemonSet, instance Pods, and placeholder Pods are all deleted, and the cards go back to Kubernetes |
+| Change the node selector or node pools | See “Edit a Cluster Entry” above: after the manifest is applied again, nodes no longer selected go offline and are cleaned up after 15 minutes; newly selected nodes join by themselves |
+| Uninstall | “Uninstall” on the entry gives the `kubectl` commands (see “Uninstall” above): the DaemonSet, instance Pods, and placeholder Pods are all deleted, and the cards go back to Kubernetes |
 
 ## Limitations
 
 - Only containerd is supported: images are pulled and imported by the agent through the node's containerd (the kubelet's `k8s.io` namespace), not through the kubelet, so instance images do not use the Pod's `imagePullSecrets`; credentials for private registries are configured in gpuworks's image sources (the cluster entry's image pull secret covers only the agent image).
 - Instances use host network and create no Service / Ingress; they are accessed through the gpuworks gateway.
-- Vendor command-line tools (`npu-smi`, `hy-smi`, `ppu-smi`) run in the node's mount namespace and use the node's own C libraries and driver libraries, so the agent image is independent of the node's distribution.
+- Vendor command-line tools (`npu-smi`, `hy-smi`, `ppu-smi`, `nvidia-smi`) run in the node's mount namespace and use the node's own C libraries and driver libraries, so the agent image is independent of the node's distribution; the lookup order is in “Accelerator Vendor: Detected Automatically”.
+- Only NVIDIA, Ascend, Hygon, and PPU nodes are supported; nodes of other vendors (AMD, Kunlunxin, and others) stay in stand-by and do not become platform nodes.
 - The agent runs privileged with hostNetwork and hostPID (required for probing and for running nerdctl and mount through the node's mount namespace).
