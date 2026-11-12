@@ -399,6 +399,9 @@ func (s *Store) prepareModelFile(ref FileRef, path string, updates map[string]an
 		if err := sharedModelPathConflict(tx, ref, path); err != nil {
 			return err
 		}
+		if err := checkNodeRowAllowed(tx, ref); err != nil {
+			return err
+		}
 		var err error
 		mf, err = ensureModelFile(tx, ref, path)
 		if err != nil {

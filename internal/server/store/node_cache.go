@@ -41,27 +41,12 @@ func (s *Store) NodeCacheEntriesForNodes(storageID uint, nodeIDs []uint) (map[ui
 	if err != nil {
 		return nil, err
 	}
-	paths := make(map[uint]string)
-	for _, target := range targets {
-		if target.NodeID != 0 && target.CachePath != "" {
-			paths[target.NodeID] = target.CachePath
-		}
-	}
 	// A directory change leaves historical files in place. They are neither
 	// charged to the new directory's budget nor candidates for its cleanup.
+	dirs := nodeCacheDirs(storage, targets)
 	current := rows[:0]
 	for _, row := range rows {
-		dir := storage.CachePath
-		if override := paths[row.NodeID]; override != "" {
-			dir = override
-		}
-		filePath := row.Path
-		// PrepareModelCopy records a relative destination until the agent
-		// reports its absolute path. Keep that transfer's protected budget.
-		if !row.Ready() && !filepath.IsAbs(filePath) {
-			filePath, _ = SharedHostPath(dir, filePath)
-		}
-		if cacheDirectoryContains(dir, filePath) {
+		if dirs.holds(&row) {
 			current = append(current, row)
 		}
 	}
@@ -142,6 +127,38 @@ func (s *Store) CacheEvictionFile(storageID, nodeID, id uint, expectedPath strin
 		}
 	}
 	return nil, errors.New("cache entry is protected")
+}
+
+// cacheDirs is each node's current cache directory: its own override,
+// otherwise the storage's.
+type cacheDirs struct {
+	shared string
+	byNode map[uint]string
+}
+
+func nodeCacheDirs(storage *Storage, targets []StorageNode) cacheDirs {
+	dirs := cacheDirs{shared: storage.CachePath, byNode: map[uint]string{}}
+	for _, target := range targets {
+		if target.NodeID != 0 && target.CachePath != "" {
+			dirs.byNode[target.NodeID] = target.CachePath
+		}
+	}
+	return dirs
+}
+
+// holds reports whether row lies in its node's current cache directory.
+func (d cacheDirs) holds(row *ModelFile) bool {
+	dir := d.shared
+	if override := d.byNode[row.NodeID]; override != "" {
+		dir = override
+	}
+	filePath := row.Path
+	// PrepareModelCopy records a relative destination until the agent
+	// reports its absolute path. Keep that transfer's protected budget.
+	if !row.Ready() && !filepath.IsAbs(filePath) {
+		filePath, _ = SharedHostPath(dir, filePath)
+	}
+	return cacheDirectoryContains(dir, filePath)
 }
 
 func cacheDirectoryContains(dir, file string) bool {

@@ -234,7 +234,9 @@ func (s *Store) UpdateStorage(id uint, patch StoragePatch) (*Storage, error) {
 			}
 		}
 		if patch.Type != nil && *patch.Type == proto.StorageNFS && out.Type == proto.StorageNFSCache {
-			if err := checkNodeCachesEmpty(tx, id); err != nil {
+			// After checkStorageIdle: a pending deletion or a live reader is
+			// reported as such, not as a cache entry.
+			if err := settleNodeCachesForSwitch(tx, &out); err != nil {
 				return err
 			}
 		}

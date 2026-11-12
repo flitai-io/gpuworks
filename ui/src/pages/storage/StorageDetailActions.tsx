@@ -22,7 +22,7 @@ export default function StorageDetailActions({ storage, runner, onEdit, onScan, 
   onDeleted: () => void;
 }) {
   const { t } = useTranslation("storage");
-  const { busy, run } = runner;
+  const { busy, run, reload } = runner;
   const shared = storageTypeInfo(storage.type).shared;
   const { cache, switchTo } = storageTypeInfo(storage.type);
   const otherLabel = switchTo ? storageTypeLabel(t, switchTo) : "";
@@ -64,8 +64,16 @@ export default function StorageDetailActions({ storage, runner, onEdit, onScan, 
         // manages; the server refuses the switch while any remain.
         confirm(t("actions.switchConfirm", { type: otherLabel }), t(cache ? "actions.switchFromCacheHelp" : "actions.switchHelp"), t("actions.switch"),
           () => void run("type", async () => {
-            if (cache) await api.clearStorageCache(storage.id);
-            await api.updateStorage(storage.id, { type: switchTo });
+            if (!cache) return api.updateStorage(storage.id, { type: switchTo });
+            try {
+              await api.clearStorageCache(storage.id);
+              await api.updateStorage(storage.id, { type: switchTo });
+            } catch (e) {
+              // Some caches may be gone even though the switch did not
+              // happen; show what is left.
+              reload();
+              throw e;
+            }
           }, t("actions.switched", { name: storage.name, type: otherLabel })));
         break;
       case "cache":

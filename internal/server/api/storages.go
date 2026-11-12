@@ -154,8 +154,11 @@ func writeStoreErr(w http.ResponseWriter, err error) {
 		})
 	case errors.As(err, &cacheNotEmpty):
 		writeProductError(w, http.StatusConflict, messages.ErrorStorageCacheNotEmpty, err.Error(), map[string]any{
-			"nodes": len(cacheNotEmpty.NodeIDs), "entries": cacheNotEmpty.Entries, "transferring": cacheNotEmpty.Transferring,
+			"entries": cacheNotEmpty.Entries, "nodes": len(cacheNotEmpty.NodeUUIDs), "transferring": cacheNotEmpty.Transferring,
+			"node_uuids": cacheNotEmpty.NodeUUIDs,
 		})
+	case errors.Is(err, store.ErrNoNodeCache):
+		writeProductError(w, http.StatusConflict, ErrorStorageTypeInvalid, err.Error(), nil)
 	case errors.Is(err, store.ErrStorageIsDefault):
 		writeProductError(w, http.StatusConflict, ErrorStorageIsDefault, "the default storage cannot be deleted until another storage is set as the default", nil)
 	case errors.Is(err, store.ErrStorageExportTaken):

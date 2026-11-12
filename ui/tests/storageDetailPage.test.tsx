@@ -4,7 +4,7 @@ import { api, chooseMore, confirmDialog, localStorage, moreItems, locale, nodeSt
 import { nfsStorage } from "./helpers/storageFixtures.ts";
 
 const { cleanup, fireEvent, screen, waitFor, within } = rtl;
-const { APIError } = await import("../src/apiError.ts");
+const { APIError, apiResponseError } = await import("../src/apiError.ts");
 const { Modal } = await import("antd");
 // Confirmation dialogs live outside the rendered tree; close them between tests.
 afterEach(() => { Modal.destroyAll(); cleanup(); restoreApi(); });
@@ -280,12 +280,21 @@ test("cancelling the storage editor returns focus to Edit without saving", async
   assert.equal(calls.updateStorage, undefined);
 });
 
-test("leaving an NFS cache stops when its caches cannot all be cleared", async () => {
+// The errors below come from the exact bodies the server answers with,
+// decoded by the same client code the console uses.
+const wireError = (body: unknown) =>
+  apiResponseError(new Response(JSON.stringify(body), { status: 409, headers: { "Content-Type": "application/json" } }), "request failed");
+
+test("leaving an NFS cache stops when its caches cannot all be cleared, and says on which node", async () => {
   const order: string[] = [];
   const calls = stubDetail({ storage: cache });
+  const refusal = await wireError({
+    code: "STORAGE_CACHE_CLEAR_FAILED", error: "cache could not be cleared on 1 node(s); first gpu-07: node is offline",
+    failed: [{ message: "node is offline", node_name: "gpu-07", node_uuid: "n7" }], freed_bytes: 0, params: { failed: 1, node: "gpu-07" }, removed: 0,
+  });
   api.clearStorageCache = (async () => {
     order.push("clear");
-    throw new APIError("", undefined, "cache is being prepared for a launch; retry later", 409);
+    throw refusal;
   }) as never;
   const update = api.updateStorage;
   api.updateStorage = (async (...args: Parameters<typeof update>) => {
@@ -296,15 +305,35 @@ test("leaving an NFS cache stops when its caches cannot all be cleared", async (
   await screen.findByRole("heading", { name: /team-cache/ });
   await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
   await confirmDialog(s.actions.switch);
-  await screen.findByText(s.actions.failed);
+  assert.ok(await screen.findByText(locale.common.apiError.STORAGE_CACHE_CLEAR_FAILED.replace("{{failed}}", "1").replace("{{node}}", "gpu-07")));
   assert.deepEqual(order, ["clear"], "a failed clear must not be followed by the switch");
   assert.equal(calls.updateStorage, undefined);
 });
 
+test("a refused switch after a partial clear reloads the storage so the remaining caches show", async () => {
+  const calls = stubDetail({ storage: cache });
+  const refusal = await wireError({
+    code: "STORAGE_CACHE_NOT_EMPTY", error: "node caches still hold entries (entries: 1, nodes: 1, transferring: 1); clear them before switching to nfs",
+    params: { entries: 1, node_uuids: ["n1"], nodes: 1, transferring: 1 },
+  });
+  api.updateStorage = (async () => { throw refusal; }) as never;
+  renderDetail("/storage/3");
+  await screen.findByRole("heading", { name: /team-cache/ });
+  const loadsBefore = calls.storage.length;
+  await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  await confirmDialog(s.actions.switch);
+  await screen.findByText(locale.common.apiError.STORAGE_CACHE_NOT_EMPTY.replace("{{entries}}", "1").replace("{{nodes}}", "1").replace("{{transferring}}", "1"));
+  await waitFor(() => assert.ok(calls.storage.length > loadsBefore, "the storage is read again after the clear"));
+});
+
 test("a switch refused because node caches remain explains it in the person's language", async () => {
   stubDetail({ storage: cache });
+  const refusal = await wireError({
+    code: "STORAGE_CACHE_NOT_EMPTY", error: "node caches still hold entries (entries: 2, nodes: 2, transferring: 1); clear them before switching to nfs",
+    params: { entries: 2, node_uuids: ["n1", "n2"], nodes: 2, transferring: 1 },
+  });
   api.updateStorage = (async () => {
-    throw new APIError("STORAGE_CACHE_NOT_EMPTY", { entries: 2, nodes: 2, transferring: 1 }, "2 node cache entries on 2 nodes (1 still transferring) must be cleared before switching to nfs", 409);
+    throw refusal;
   }) as never;
   renderDetail("/storage/3");
   await screen.findByRole("heading", { name: /team-cache/ });
