@@ -359,6 +359,23 @@ assert "self._invalid_block_ids.update(group)" in src
 PY
 }
 
+check_mooncake_hybrid() {
+    # GDN/Mamba 混合模型（Qwen3.5/3.6/3.8）的 vllm-mooncake PD（patches/vllm_dtk/002、003）：
+    # 连接器按整页传混合 KV、prefill 只算 N-1，调度器在多 KV 组上处理拉取失败而不让 EngineCore 崩。
+    # 只读源码，理由同上。
+    check_mooncake_load_errors
+    python3 - <<'PY' >/dev/null 2>&1 || FAILED+=("mooncake_hybrid: MooncakeConnector or the scheduler lacks the GDN hybrid PD patches (patches/vllm_dtk/002, 003)")
+import importlib.util, pathlib
+root = pathlib.Path(importlib.util.find_spec("vllm").origin).parent
+src = (root / "distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py").read_text()
+assert "def _register_hybrid_page_caches" in src
+assert "def _truncate_mamba_request_for_prefill" in src
+assert "is_mamba=self._has_mamba," in src
+sched = (root / "v1/core/sched/scheduler.py").read_text()
+assert "block_ids_per_group = self.kv_cache_manager.get_block_ids(req_id)" in sched
+PY
+}
+
 check_ppu_pd() {
     # PPU 同机 PD（pdmode sglang-ppu-ipc）：hggc/ppu-pd 的补丁装进了 sglang，
     # 且 mooncake 可用。补丁只在 SGLANG_PPU_PD_IPC=1 时生效。
@@ -394,6 +411,7 @@ for item in ${REQUIRES}; do
         hcu_patches)  check_hcu_patches ;;
         ppu_pd)       check_ppu_pd ;;
         mooncake_load_errors) check_mooncake_load_errors ;;
+        mooncake_hybrid) check_mooncake_hybrid ;;
         *) FAILED+=("unknown requirement '${item}'") ;;
     esac
 done

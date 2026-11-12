@@ -79,6 +79,8 @@ RUN <<EOF
             bash /opt/gpuworks/shared/apply_patches.sh
         bash -c "source /opt/dtk/env.sh >/dev/null 2>&1 || true; vllm-hcu-apply-patches"
         grep -q "def get_block_ids_with_load_errors" "${SITE}/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py"
+        grep -q "def _register_hybrid_page_caches" "${SITE}/vllm/distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py"
+        grep -q "block_ids_per_group = self.kv_cache_manager.get_block_ids(req_id)" "${SITE}/vllm/v1/core/sched/scheduler.py"
         find "${SITE}" -name '*.rej' -o -name '*.orig' | head -50 | xargs -r rm -f
     fi
     rm -rf /tmp/patches-vllm-dtk
