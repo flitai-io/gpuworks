@@ -20,7 +20,7 @@ import {
   type Node,
   type TopoHighlight,
 } from "../api";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import ResourceTable, { storedPageSize, type ServerSort } from "../components/resourceTable/ResourceTable";
 import { NODE_TABLE_ID, nodeColumns } from "./nodes/nodeColumns";
@@ -33,20 +33,34 @@ import NodeLabelsModal from "../components/NodeLabelsModal";
 import { NodeSchedulingModal } from "../components/NodeSchedulingModal";
 import { labelPair } from "../nodeLabels";
 import { useIsAdmin } from "../components/useIsAdmin";
+import AgentFleetNotice from "../components/agentUpgrades/AgentFleetNotice";
 import AgentUpgradeManager from "../components/agentUpgrades/AgentUpgradeManager";
 import {
   useAgentUpgrades,
   type UpgradeEvent,
 } from "../agentUpgrade";
 
+import { OptionSelect } from "../ui-kit/OptionSelect";
+
 const NODE_PAGE_SIZE = 20;
+const fleetGroups = ["all", "upgrade", "downgrade", "different_build", "check"] as const;
 
 export default function NodesPage() {
   const { t } = useTranslation("nodes");
   const isAdmin = useIsAdmin();
   const [selectedNodeUUIDs, setSelectedNodeUUIDs] = useState<string[]>([]);
-  const [upgradeRunID, setUpgradeRunID] = useState<number>();
   const location = useLocation();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(location.search);
+  const requestedGroup = params.get("agent_upgrade");
+  const fleetGroup = requestedGroup === "align" ? "align" : fleetGroups.find(group => group === requestedGroup) ?? "all";
+  const fleetSearch = (group: string) => {
+    const next = new URLSearchParams(location.search);
+    if (group === "all") next.delete("agent_upgrade");
+    else next.set("agent_upgrade", group);
+    return next.toString();
+  };
+  const [upgradeRunID, setUpgradeRunID] = useState<number>(() => Number(params.get("agent_run")) || 0);
   const incoming = location.state as {
     nodeUUID?: string;
     tab?: NodeDetailTab;
@@ -60,11 +74,11 @@ export default function NodesPage() {
   const [states, setStates] = useState<string[]>([]);
   const [sort, setSort] = useState<ServerSort | null>(null);
   const { data, refetch, refresh, loading, error, updatedAt, pagination } = usePagedList(api.nodesPage, {
-    filters: { q: search, label: labelFilter, state: states, ...(sort ? { sort: `${sort.order === "desc" ? "-" : ""}${sort.key}` } : {}) },
+    filters: { extra: { agent_upgrade: [fleetGroup] }, q: search, label: labelFilter, state: states, ...(sort ? { sort: `${sort.order === "desc" ? "-" : ""}${sort.key}` } : {}) },
     pageSize: storedPageSize(NODE_TABLE_ID, NODE_PAGE_SIZE),
     intervalMs: 8000,
   });
-  const filtering = search !== "" || labelFilter.length > 0 || states.length > 0;
+  const filtering = fleetGroup !== "all" || search !== "" || labelFilter.length > 0 || states.length > 0;
   const serverHealth = usePolling(api.health, 30000);
   const upgradeErrors = usePolling(api.agentUpgradeErrors, 8000);
   // Engine profiles are static server configuration; one load feeds the detail
@@ -73,6 +87,7 @@ export default function NodesPage() {
   // Node events refresh in the background: with a fleet reporting status
   // every minute a foreground reload would keep the table spinning.
   useEvents("node", refresh);
+  useEvents("agent_upgrade", refresh);
   const [detail, setDetail] = useState<Node | null>(null);
   const [scheduling, setScheduling] = useState<Node | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<Node | null>(null);
@@ -179,7 +194,7 @@ export default function NodesPage() {
   const columns = nodeColumns({
     t,
     states,
-    serverVersion: serverHealth.data?.version,
+    showCheckReason: fleetGroup === "check",
     upgradeErrors: upgradeErrors.data,
     upgradePhase: upgrades.phaseOf,
     onOpen: setDetail,
@@ -211,6 +226,7 @@ export default function NodesPage() {
           </Space>
         }
       />
+      {!error && <div className="empty:hidden mb-4"><AgentFleetNotice summary={data?.agent_fleet} failed={!!data && !data.agent_fleet} retry={refetch} fleetSearch={fleetSearch} /></div>}
       <Card>
         <ResourceTable<Node>
           tableId={NODE_TABLE_ID}
@@ -245,6 +261,13 @@ export default function NodesPage() {
                 placeholder={t("page.search")}
                 aria-label={t("page.search")}
                 onSearch={(value) => setSearch(value.trim())}
+              />
+              <OptionSelect
+                prefix={<span className="text-body">{t("fleet.filter")}</span>}
+                aria-label={t("fleet.filter")}
+                value={fleetGroup}
+                options={(fleetGroup === "align" ? [...fleetGroups, "align"] : fleetGroups).map(value => ({ value, label: t(`fleet.status.${value}`) }))}
+                onChange={group => navigate({ search: fleetSearch(group) })}
               />
               <Select
                 mode="multiple"

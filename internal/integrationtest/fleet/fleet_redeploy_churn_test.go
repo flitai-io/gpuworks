@@ -45,7 +45,6 @@ func TestFleet1000NodesRedeployChurn(t *testing.T) {
 	skipUnlessPerf(t)
 	nodeCount := EnvInt("GPUWORKS_FLEET_NODES", 1000)
 	churnCount := EnvInt("GPUWORKS_FLEET_CHURN_NODES", nodeCount/2)
-	rounds := EnvInt("GPUWORKS_FLEET_ROUNDS", 2)
 	if churnCount > nodeCount {
 		churnCount = nodeCount
 	}
@@ -123,6 +122,7 @@ func TestFleet1000NodesRedeployChurn(t *testing.T) {
 		OnStall:      dump.onStall(),
 		StallTrigger: dump.trigger(),
 	}
+	rounds := EnvInt("GPUWORKS_FLEET_ROUNDS", 2)
 	report, err := Churn{
 		Client: client, ModelID: model.ID, ChurnNodes: churnUUIDs,
 		Rounds: rounds, Reads: ReadsEnabled(), Watch: watch,

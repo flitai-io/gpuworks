@@ -223,6 +223,22 @@ func (r ServerRelease) OlderThan(releaseID, builtAt string) bool {
 	return ok && order < 0
 }
 
+// VersionChange classifies a replacement using only the two reported IDs.
+func VersionChange(current, target string) string {
+	if current == target {
+		return ""
+	}
+	order, known := compareBuilds(target, "", current, "")
+	switch {
+	case known && order > 0:
+		return "upgrade"
+	case known && order < 0:
+		return "downgrade"
+	default:
+		return "different_build"
+	}
+}
+
 // compareBuilds orders two builds. Two version tags (vYY.M.PATCH, see
 // docs/dev/release.md#版本号) order by version, so a patch to an older
 // release line built after a newer line is still older. Anything else, such

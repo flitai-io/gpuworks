@@ -47,6 +47,8 @@
     "serverConfirm": "服务端会先备份数据库、主密钥与当前二进制，再替换二进制并重启，期间控制台与 /v1 网关大约中断一分钟，节点上的推理服务不受影响。新版本起不来时会自动恢复备份、换回当前版本。",
     "serverUpgrading": "正在从 {{from}} 升级到 {{to}}，服务端正在重启…",
     "serverUpgradingHelp": "页面会等新版本应答后自动刷新；新版本起不来时服务端会自动回滚到原版本。",
+    "agentFollowup": "服务端已升级，Agent 目标版本 {{version}}",
+    "viewNodes": "查看计算节点",
     "serverUpgraded": "服务端已升级到 {{version}}",
     "serverNotBack": "5 分钟内没有看到 {{version}} 应答，可能已回滚，请查看服务端日志与安装目录下的 install-history.jsonl。",
     "superviseHost": "在主机上执行下面的命令，改由守护进程运行后就能在这里升级：",

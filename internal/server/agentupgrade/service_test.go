@@ -551,3 +551,57 @@ func TestKubernetesAgentsOnTheStateDirectoryAreUpgradedInPlace(t *testing.T) {
 		t.Fatalf("upgrades sent = %d, want 1", f.tr.count())
 	}
 }
+
+func TestFleetNoticeUsesPackageMetadataAndCountsUntilRealignment(t *testing.T) {
+	f := newFixture(t, 3, true)
+	nodes, err := f.st.ListNodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes[0].AgentVersion = "target"
+	f.s.cfg.ReadBinary = func(string) ([]byte, error) { t.Fatal("listing nodes read an upgrade binary"); return nil, nil }
+	checks := 0
+	f.s.cfg.BinaryAvailable = func(name string) bool { checks++; return false }
+	result, err := f.s.Fleet(context.Background(), nodes)
+	if err != nil || checks != 1 || result.Eligibility[nodes[0].UUID] != "already_current" || result.Eligibility[nodes[1].UUID] != "artifact_missing" || result.Eligibility[nodes[2].UUID] != "artifact_missing" {
+		t.Fatalf("missing local package: %+v, checks %d error %v", result, checks, err)
+	}
+	f.s.cfg.TargetVersion = "dev"
+	result, err = f.s.Fleet(context.Background(), nodes)
+	if err != nil || len(result.Eligibility) != 0 || result.Target != "dev" || checks != 1 {
+		t.Fatalf("development target: %+v, checks %d error %v", result, checks, err)
+	}
+}
+
+func TestMixedBatchSkipsNodesAlignedBeforePreviewOrWhileQueued(t *testing.T) {
+	f := newFixture(t, 10, true)
+	for _, uuid := range []string{"n1", "n2", "n3"} {
+		if err := f.st.SetNodeAgentInfo(uuid, "target", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := f.create(t, "mixed", nil, 0)
+	if r.Counts.Skipped != 3 || r.Counts.Queued != 7 {
+		t.Fatal(r.Counts)
+	}
+	f.tr.set("n10", Connection{SessionID: "other-upgrade", Version: "target", Ready: true, Caps: []string{proto.CapUpgradePush}})
+	for i := 0; i < 12; i++ {
+		f.tick(t)
+		pending, err := f.st.AgentUpgradePendingItems()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range pending {
+			if activePhase(item.Phase) {
+				f.tr.set(item.NodeUUID, Connection{SessionID: "confirmed-" + item.NodeUUID, Version: "target", Ready: true, Caps: []string{proto.CapUpgradePush}})
+			}
+		}
+		if len(pending) == 0 {
+			break
+		}
+	}
+	done, err := f.s.Get(context.Background(), r.Record.ID)
+	if err != nil || done.Counts.Skipped != 4 || done.Counts.Succeeded != 6 || f.tr.count() != 6 {
+		t.Fatalf("dispatches=%d result=%+v err=%v", f.tr.count(), done.Counts, err)
+	}
+}

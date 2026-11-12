@@ -16,6 +16,7 @@ import (
 // AgentUpgradeService is the HTTP boundary for durable agent upgrades.
 // The app adapter owns conversion from domain records to these wire DTOs.
 type AgentUpgradeService interface {
+	Fleet(context.Context, []store.Node) (AgentFleetStatus, error)
 	Preview(context.Context, []string) (dto.AgentUpgradePreview, error)
 	Create(context.Context, dto.AgentUpgradeCreateRequest, string) (dto.AgentUpgradeRun, error)
 	List(context.Context, int, int) (dto.AgentUpgradeRunPage, error)
@@ -32,6 +33,12 @@ type agentUpgradeRequestError string
 
 func (e agentUpgradeRequestError) Error() string          { return string(e) }
 func (agentUpgradeRequestError) UpgradeErrorCode() string { return "AGENT_UPGRADE_INVALID_REQUEST" }
+
+type AgentFleetStatus struct {
+	Target      string
+	RunID       uint
+	Eligibility map[string]string
+}
 
 // AgentUpgradeHooks groups durable execution and the legacy error view of the same domain.
 type AgentUpgradeHooks struct {

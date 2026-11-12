@@ -721,6 +721,36 @@
       "ephemeral": "容器层"
     }
   },
+  "fleet": {
+    "notReported": "未上报",
+    "beforeOffline": "离线前版本",
+    "inBatch": "批次处理中",
+    "loadError": "节点版本信息获取失败",
+    "retry": "重试",
+    "noTarget": "无法识别当前 Server 的 Agent 目标版本",
+    "target": "Agent 目标版本 {{target}}",
+    "progress": "查看升级进度",
+    "filter": "Agent 状态",
+    "ignore": "忽略本次提示",
+    "versionChange": "当前 → 目标",
+    "willUpgrade": "将升级",
+    "replaceBuild": "替换为目标构建",
+    "status": {
+      "upgrade": "待升级",
+      "downgrade": "待对齐",
+      "different_build": "构建不同",
+      "check": "暂不可升级",
+      "all": "全部",
+      "align": "版本不同"
+    },
+    "count": {
+      "check": "暂不可升级 {{count}} 台",
+      "upgrade": "待升级 {{count}} 台",
+      "downgrade": "待对齐 {{count}} 台",
+      "different_build": "构建不同 {{count}} 台",
+      "align": "版本不同 {{count}} 台"
+    }
+  },
   "batchUpgrade": {
     "targetHeading": "本次目标",
     "targetSource": "由当前控制面提供。更新后，Agent 版本将与控制面一致。",
@@ -733,7 +763,7 @@
     "target": "目标版本：{{version}}",
     "previewCounts": "共 {{total}} 个节点，可执行 {{eligible}} 个，跳过 {{skipped}} 个。",
     "disruption": "Agent 将逐台重启，连接可能短暂中断。",
-    "versionWarning": "更新会将 Agent 替换为所示目标版本，也可能降级。多机及 PD 推理在节点持续离线时可能失败。",
+    "versionWarning": "Agent 将替换为所示目标版本。在途请求和长任务可能中断。多机推理和 PD 分离节点请一次选择一台，确认模型服务恢复后再升级下一台。",
     "acknowledge": "我已安排维护窗口，或确认受影响的业务允许中断。",
     "start": "更新到此版本",
     "refreshPreview": "重新预览",

@@ -3,6 +3,7 @@ package app
 import (
 	"gpuworks.ai/gpuworks/internal/server/agentupgrade"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/distribution"
 )
 
 func toAgentUpgradeBlocker(b *agentupgrade.Blocker) *dto.AgentUpgradeBlocker {
@@ -17,7 +18,11 @@ func toAgentUpgradePreview(p agentupgrade.Preview) dto.AgentUpgradePreview {
 		out.Counts = map[string]int{}
 	}
 	for _, n := range p.Nodes {
-		out.Nodes = append(out.Nodes, dto.AgentUpgradeCandidate{NodeUUID: n.NodeUUID, Name: n.Name, FromVersion: n.FromVersion, OS: n.OS, Arch: n.Arch, Transport: n.Transport, Eligibility: n.Eligibility, Reason: n.Reason})
+		change := ""
+		if n.Eligibility == "eligible" {
+			change = distribution.VersionChange(n.FromVersion, p.TargetVersion)
+		}
+		out.Nodes = append(out.Nodes, dto.AgentUpgradeCandidate{VersionChange: change, Downgrade: change == "downgrade", NodeUUID: n.NodeUUID, Name: n.Name, FromVersion: n.FromVersion, OS: n.OS, Arch: n.Arch, Transport: n.Transport, Eligibility: n.Eligibility, Reason: n.Reason})
 	}
 	return out
 }

@@ -31,47 +31,9 @@ type ManifestBinary struct {
 // ReadVerified reads from the same source as Read, but requires its release
 // manifest to name the requested target and the actual bytes being returned.
 func ReadVerified(overrideDir, name, targetVersion string) ([]byte, error) {
-	if !validName(name) || !strings.HasPrefix(name, "gpuworks-agent-") {
-		return nil, fs.ErrNotExist
-	}
-	targetVersion = strings.TrimSpace(targetVersion)
-	if targetVersion == "" {
-		return nil, errors.New("agent target version is empty")
-	}
-	var manifestRaw []byte
-	var err error
-	source := ""
-	if overrideDir != "" {
-		st, statErr := os.Stat(filepath.Join(overrideDir, name))
-		switch {
-		case statErr == nil && !st.IsDir():
-			source = overrideDir
-		case statErr != nil && !errors.Is(statErr, fs.ErrNotExist):
-			return nil, fmt.Errorf("read agent override: %w", statErr)
-		}
-	}
-	if source != "" {
-		manifestRaw, err = os.ReadFile(filepath.Join(source, ManifestName))
-	} else {
-		manifestRaw, err = fs.ReadFile(binaries, "dl/"+ManifestName)
-	}
+	source, entry, err := manifestEntry(overrideDir, name, targetVersion)
 	if err != nil {
-		return nil, fmt.Errorf("read agent build manifest: %w", err)
-	}
-	var manifest Manifest
-	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
-		return nil, fmt.Errorf("decode agent build manifest: %w", err)
-	}
-	if manifest.Version != targetVersion {
-		return nil, fmt.Errorf("agent build manifest version %q does not match target %q", manifest.Version, targetVersion)
-	}
-	entry, ok := manifest.Binaries[name]
-	if !ok || entry.Size <= 0 || entry.Size > 1<<30 {
-		return nil, fmt.Errorf("agent build manifest has no valid entry for %s", name)
-	}
-	want, err := hex.DecodeString(entry.SHA256)
-	if err != nil || len(want) != sha256.Size {
-		return nil, fmt.Errorf("agent build manifest has no valid SHA256 for %s", name)
+		return nil, err
 	}
 	raw, err := Read(source, name)
 	if err != nil {
@@ -82,6 +44,65 @@ func ReadVerified(overrideDir, name, targetVersion string) ([]byte, error) {
 		return nil, fmt.Errorf("agent binary %s does not match its build manifest", name)
 	}
 	return raw, nil
+}
+
+// Available checks release metadata and file presence without expanding or hashing the binary.
+func Available(dir, name, target string) bool {
+	source, entry, err := manifestEntry(dir, name, target)
+	if err != nil {
+		return false
+	}
+	if source == "" {
+		return Has(name)
+	}
+	info, err := os.Stat(filepath.Join(source, name))
+	return err == nil && info.Mode().IsRegular() && info.Size() == entry.Size
+}
+
+func manifestEntry(overrideDir, name, targetVersion string) (string, ManifestBinary, error) {
+	if !validName(name) || !strings.HasPrefix(name, "gpuworks-agent-") {
+		return "", ManifestBinary{}, fs.ErrNotExist
+	}
+	targetVersion = strings.TrimSpace(targetVersion)
+	if targetVersion == "" {
+		return "", ManifestBinary{}, errors.New("agent target version is empty")
+	}
+	var manifestRaw []byte
+	var err error
+	source := ""
+	if overrideDir != "" {
+		st, statErr := os.Stat(filepath.Join(overrideDir, name))
+		switch {
+		case statErr == nil && !st.IsDir():
+			source = overrideDir
+		case statErr != nil && !errors.Is(statErr, fs.ErrNotExist):
+			return "", ManifestBinary{}, fmt.Errorf("read agent override: %w", statErr)
+		}
+	}
+	if source != "" {
+		manifestRaw, err = os.ReadFile(filepath.Join(source, ManifestName))
+	} else {
+		manifestRaw, err = fs.ReadFile(binaries, "dl/"+ManifestName)
+	}
+	if err != nil {
+		return "", ManifestBinary{}, fmt.Errorf("read agent build manifest: %w", err)
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+		return "", ManifestBinary{}, fmt.Errorf("decode agent build manifest: %w", err)
+	}
+	if manifest.Version != targetVersion {
+		return "", ManifestBinary{}, fmt.Errorf("agent build manifest version %q does not match target %q", manifest.Version, targetVersion)
+	}
+	entry, ok := manifest.Binaries[name]
+	if !ok || entry.Size <= 0 || entry.Size > 1<<30 {
+		return "", ManifestBinary{}, fmt.Errorf("agent build manifest has no valid entry for %s", name)
+	}
+	want, err := hex.DecodeString(entry.SHA256)
+	if err != nil || len(want) != sha256.Size {
+		return "", ManifestBinary{}, fmt.Errorf("agent build manifest has no valid SHA256 for %s", name)
+	}
+	return source, entry, nil
 }
 
 // WriteManifest records only the explicitly built files: scanning the output

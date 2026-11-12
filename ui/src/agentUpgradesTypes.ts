@@ -20,10 +20,14 @@ export interface AgentUpgradeBlocker {
   reason: string;
 }
 
+export type AgentVersionChange = "upgrade" | "downgrade" | "different_build";
+
 export interface AgentUpgradeCandidate {
   node_uuid: string;
   name: string;
   from_version: string;
+  version_change?: AgentVersionChange;
+  downgrade?: boolean;
   os: string;
   arch: string;
   transport: string;

@@ -108,8 +108,9 @@ type DeploymentListItem struct {
 // label filter can offer them.
 type NodePage struct {
 	ListPage[Node]
-	All    int               `json:"all"`
-	Labels []NodeLabelValues `json:"labels"`
+	AgentFleet *AgentFleetSummary `json:"agent_fleet,omitempty"`
+	All        int                `json:"all"`
+	Labels     []NodeLabelValues  `json:"labels"`
 }
 
 // NodeLabelValues is one user label key and the values nodes give it, both

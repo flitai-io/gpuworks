@@ -161,26 +161,28 @@ type Node struct {
 	// ComputeNetwork / ComputeAddress name the network the node would use
 	// for compute traffic on its own (its compute network, else the
 	// management network) and its address there.
-	ComputeNetwork    string        `json:"compute_network,omitempty"`
-	ComputeAddress    string        `json:"compute_address,omitempty"`
-	ServerURL         string        `json:"server_url,omitempty"`
-	ConnectMode       string        `json:"connect_mode,omitempty"`
-	ServerDialAddress string        `json:"server_dial_address,omitempty"`
-	ServerDialListen  string        `json:"server_dial_listen,omitempty"`
-	AgentVersion      string        `json:"agent_version,omitempty"`
-	Caps              []string      `json:"caps,omitempty"`
-	LastRemoteAddr    string        `json:"last_remote_addr,omitempty"`
-	LastRejectReason  string        `json:"last_reject_reason,omitempty"`
-	LastRejectAt      *time.Time    `json:"last_reject_at,omitempty"`
-	LastSeenAt        *time.Time    `json:"last_seen_at,omitempty"`
-	RecoveryPhase     string        `json:"recovery_phase,omitempty"`
-	RecoveryAttempts  int           `json:"recovery_attempts,omitempty"`
-	LastProbeAt       *time.Time    `json:"last_probe_at,omitempty"`
-	LastRecoveryError string        `json:"last_recovery_error,omitempty"`
-	HasSSHCredential  bool          `json:"has_ssh_credential"`
-	CreatedAt         time.Time     `json:"created_at"`
-	GPUs              []GPU         `json:"gpus"`
-	Topology          *NodeTopology `json:"topology,omitempty"`
+	ComputeNetwork     string        `json:"compute_network,omitempty"`
+	ComputeAddress     string        `json:"compute_address,omitempty"`
+	ServerURL          string        `json:"server_url,omitempty"`
+	ConnectMode        string        `json:"connect_mode,omitempty"`
+	ServerDialAddress  string        `json:"server_dial_address,omitempty"`
+	ServerDialListen   string        `json:"server_dial_listen,omitempty"`
+	AgentVersionChange string        `json:"agent_version_change,omitempty"`
+	AgentEligibility   string        `json:"agent_eligibility,omitempty"`
+	AgentVersion       string        `json:"agent_version,omitempty"`
+	Caps               []string      `json:"caps,omitempty"`
+	LastRemoteAddr     string        `json:"last_remote_addr,omitempty"`
+	LastRejectReason   string        `json:"last_reject_reason,omitempty"`
+	LastRejectAt       *time.Time    `json:"last_reject_at,omitempty"`
+	LastSeenAt         *time.Time    `json:"last_seen_at,omitempty"`
+	RecoveryPhase      string        `json:"recovery_phase,omitempty"`
+	RecoveryAttempts   int           `json:"recovery_attempts,omitempty"`
+	LastProbeAt        *time.Time    `json:"last_probe_at,omitempty"`
+	LastRecoveryError  string        `json:"last_recovery_error,omitempty"`
+	HasSSHCredential   bool          `json:"has_ssh_credential"`
+	CreatedAt          time.Time     `json:"created_at"`
+	GPUs               []GPU         `json:"gpus"`
+	Topology           *NodeTopology `json:"topology,omitempty"`
 }
 
 // SystemLabel is one generated node label: a key in the reserved
