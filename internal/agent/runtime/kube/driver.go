@@ -98,7 +98,14 @@ type Options struct {
 	// HAMiScheduler is the name of HAMi's scheduler, which the hold pods of a
 	// node served by HAMi go through; "" is DefaultHAMiScheduler.
 	HAMiScheduler string
+	// PriorityClass is the PriorityClass of the hold and instance pods, the
+	// one the cluster's manifest renders; "" is DefaultPriorityClass.
+	PriorityClass string
 }
+
+// DefaultPriorityClass is the hold and instance pods' PriorityClass when the
+// manifest names none.
+const DefaultPriorityClass = "gpuworks-inference"
 
 // Driver implements runtime.Driver on Kubernetes.
 type Driver struct {
@@ -124,6 +131,7 @@ func FromEnvironment(stateDir string, cards func(context.Context) (map[int]strin
 		HostRoot: HostRoot, StateDir: stateDir, ContainerdSocket: os.Getenv("GPUWORKS_KUBE_CONTAINERD_SOCKET"),
 		CardDevices: cardDevices, PluginDir: deviceplugin.DefaultDir,
 		HAMiScheduler: os.Getenv("GPUWORKS_KUBE_HAMI_SCHEDULER"),
+		PriorityClass: os.Getenv("GPUWORKS_KUBE_PRIORITY_CLASS"),
 	}
 	if o.Namespace == "" || o.NodeName == "" || o.PodName == "" {
 		return nil, errors.New("GPUWORKS_KUBE_NAMESPACE, GPUWORKS_KUBE_NODE_NAME and GPUWORKS_KUBE_POD_NAME must be set (the DaemonSet manifest sets them)")
@@ -142,8 +150,9 @@ func New(o Options) *Driver {
 	if o.StartTimeout <= 0 {
 		o.StartTimeout = 3 * time.Minute
 	}
+	o.PriorityClass = cmp.Or(o.PriorityClass, DefaultPriorityClass)
 	d := &Driver{o: o}
-	d.cards = &cardPool{
+	d.cards = &cardPool{priorityClass: o.PriorityClass,
 		api: o.API, kubelet: o.Kubelet, ns: o.Namespace, node: o.NodeName, cards: o.Cards,
 		idleReturn: o.IdleReturn, now: time.Now, log: o.Log, poll: o.Poll,
 		hamiScheduler: cmp.Or(o.HAMiScheduler, DefaultHAMiScheduler), podsTTL: 10 * time.Second,
@@ -368,7 +377,7 @@ func (d *Driver) Run(ctx context.Context, spec runtime.WorkloadSpec) (string, er
 	if err != nil {
 		return "", err
 	}
-	opts := podOptions{Namespace: d.o.Namespace, NodeName: d.o.NodeName, RuntimeClass: d.o.RuntimeClass, Owner: d.cards.owner, Cards: cards,
+	opts := podOptions{Namespace: d.o.Namespace, NodeName: d.o.NodeName, RuntimeClass: d.o.RuntimeClass, PriorityClass: d.o.PriorityClass, Owner: d.cards.owner, Cards: cards,
 		Group: func(name string) (int64, error) { return groupID(firstNonEmpty(d.o.HostRoot, "/"), name) }}
 	if len(devices) > 0 {
 		plan, err := d.devicePlan(ctx)

@@ -98,6 +98,10 @@ func TestKubeDaemonSetDeployChatKind(t *testing.T) {
 		t.Fatalf("go build ./cmd/gpuworks: %v\n%s", err, out)
 	}
 	dataDir := t.TempDir()
+	// A new node's agent takes the server's own agent before it registers
+	// (kubeboot): serve the one built from this tree rather than whatever
+	// agents an earlier build left embedded.
+	stageAgent(t, root, filepath.Join(dataDir, "dl"))
 	// The first start creates the admin account from initial-credentials, the
 	// way an installed server receives it.
 	if err := installcred.WriteInitialCredentials(dataDir, "admin", adminPassword); err != nil {
@@ -238,6 +242,14 @@ func TestKubeDaemonSetDeployChatKind(t *testing.T) {
 	if len(pod.Metadata.OwnerReferences) != 1 || pod.Metadata.OwnerReferences[0].Kind != "DaemonSet" ||
 		pod.Metadata.OwnerReferences[0].Name != "gpuworks-agent" {
 		t.Fatalf("instance pod %s ownerReferences = %+v, want the gpuworks-agent DaemonSet", podName, pod.Metadata.OwnerReferences)
+	}
+	// The entry's PriorityClass, named for its namespace, with the default
+	// priority and no preemption.
+	if pod.Spec.PriorityClassName != "gpuworks-inference-"+kubeNamespace {
+		t.Fatalf("instance pod %s priorityClassName = %q", podName, pod.Spec.PriorityClassName)
+	}
+	if pc := strings.TrimSpace(k.mustRun(time.Minute, "get", "priorityclass", pod.Spec.PriorityClassName, "-o", "jsonpath={.value} {.preemptionPolicy}")); pc != "10000 Never" {
+		t.Fatalf("PriorityClass %s = %q, want \"10000 Never\"", pod.Spec.PriorityClassName, pc)
 	}
 	instancePodUID := pod.Metadata.UID
 	if instancePodUID == "" {
@@ -596,9 +608,10 @@ type kubePod struct {
 		} `json:"ownerReferences"`
 	} `json:"metadata"`
 	Spec struct {
-		NodeName      string `json:"nodeName"`
-		RestartPolicy string `json:"restartPolicy"`
-		HostNetwork   bool   `json:"hostNetwork"`
+		NodeName          string `json:"nodeName"`
+		RestartPolicy     string `json:"restartPolicy"`
+		HostNetwork       bool   `json:"hostNetwork"`
+		PriorityClassName string `json:"priorityClassName"`
 	} `json:"spec"`
 	Status struct {
 		Phase      string `json:"phase"`

@@ -32,6 +32,7 @@ func TestKubeClusterLifecycleOverTheWire(t *testing.T) {
 		"name": "prod", "namespace": "gpuworks-system", "server_url": "https://gw.example:8800",
 		"agent_image": "reg.example/gpuworks-agent:v1", "node_selector": "gpuworks.ai/pool=a",
 		"agent_image_source": "dockerhub", "effective_agent_image": "reg.example/gpuworks-agent:v1",
+		"priority": float64(10000), "allow_preemption": false,
 		"vendor": "nvidia", "runtime_class": "", "image_pull_secret": "", "containerd_socket": "", "state_dir": "/opt/gpuworks", "api_server": "",
 		"engine_ports": "40000-42767", "idle_return_seconds": float64(60), "cluster_uid": "",
 		"revoked": false, "node_count": float64(0),

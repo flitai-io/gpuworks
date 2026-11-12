@@ -32,6 +32,7 @@ const DEFAULTS: KubeDefaults = {
     { id: "swr", image: "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1" },
     { id: "quay", image: "quay.io/gpuworks/gpuworks-agent:r1" },
   ],
+  priority: 10000, priority_max: 1000000000, allow_preemption: false,
 };
 
 const gpuCluster: ProviderCluster = {
@@ -47,7 +48,7 @@ function entry(overrides: Partial<KubeCluster> = {}): KubeCluster {
     id: 5, uuid: "e-5", name: "ack-gpu", namespace: "gpuworks-system", server_url: "http://localhost", agent_image: "", node_selector: "",
     agent_image_source: "swr", effective_agent_image: "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1",
     vendor: "nvidia", state_dir: "/opt/gpuworks", runtime_class: "", image_pull_secret: "", containerd_socket: "", api_server: "", engine_ports: "40000-42767",
-    idle_return_seconds: 60, cluster_uid: "", revoked: false, node_count: 0, created_at: new Date().toISOString(), pool_ids: ["np-l20"],
+    idle_return_seconds: 60, priority: 10000, allow_preemption: false, cluster_uid: "", revoked: false, node_count: 0, created_at: new Date().toISOString(), pool_ids: ["np-l20"],
     apply_command: "kubectl apply -f 'http://localhost/kube/manifest.yaml?token=t'", stalled: false, can_apply: true, can_remove: true,
     source: { provider_id: 3, provider_name: "ali-prod", provider_kind: "aliyun", cluster_id: "c-gpu" }, ...overrides,
   };

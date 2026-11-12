@@ -47,6 +47,7 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
    - 之后的升级就是普通节点的原地升级（推送或拉取二进制、exec、注册后确认、不确认就回滚到上一份），容器重启替代 systemd 当守护者；批量升级不再跳过这样的节点（agent 以能力 `upgrade.kube_binary` 声明）。
    - 运行环境版本变化时，manifest 渲染出新 tag，重新 apply 一次 DaemonSet 就换到新镜像；agent 不再有修改自己 DaemonSet 的权限（Role 对 DaemonSet 只有 get）。状态目录挂成 noexec 时 agent 继续运行镜像自带的程序、不声明这个能力，升级跳过它并说明原因。
    - 镜像发布到 Docker Hub、quay.io 与华为云 SWR；条目记录从哪个仓库拉（`agent_image_source`），从云账号接入时按地域预选（阿里云中国内地地域选 SWR），手动接入时由用户选，填了自己的镜像则以它为准。
+9. **占位 Pod 与实例 Pod 的优先级由条目决定，默认不抢占**（2026-11-12 补充）：PriorityClass 按命名空间命名（`gpuworks-inference-<命名空间>`，同一集群的多个条目互不覆盖），agent 从 DaemonSet 的环境变量得知名字；数值默认 10000（此前固定 100000），默认 `preemptionPolicy: Never`。HAMi 与 ACK 共享 GPU 模式下占位 Pod 经调度器，平台看到的卡与调度器的账不一致时（例如读完分配到建占位 Pod 之间有 Pod 被调度上来），原先的默认会让调度器驱逐优先级更低的普通 Pod；现在只会等待并判借卡失败。PriorityClass 的数值与抢占策略在 Kubernetes 里不可修改，改了要删掉重建。
 
 ## 取舍
 
@@ -71,6 +72,7 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
 - agent 镜像（`build/agent-image`，debian-slim：NVIDIA 运行时挂进来的 `nvidia-smi`、宿主机的 `npu-smi` 都是 glibc
   程序；只 COPY，amd64 与 arm64 都不需要模拟即可构建）。发布 tag 为运行环境版本 `rN` 与 `rN-<server 版本>`。
 - 新包：`internal/agent/kubeboot`（第 8 条的交接与对齐）；新增持久化事实：`kube_clusters` 的 `agent_image_source`（渲染时无从得知节点能访问哪个仓库）。
+- 新增持久化事实：`kube_clusters` 的 `priority`、`allow_preemption`（第 9 条）。
 - 新增持久化事实：`kube_clusters` 的 `vendor`、`state_dir`、`api_server`（manifest 参数）。agent 用节点的 DNS
   （`dnsPolicy: Default`），不依赖集群 DNS；没有组件提供 Service 地址的节点（KubeEdge、OpenYurt 边缘节点）用
   `api_server` 直连 API server。

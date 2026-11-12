@@ -235,3 +235,18 @@ func startVersionedServer(t *testing.T, root, dataDir, port, version string) *ex
 	})
 	return server
 }
+
+// stageAgent builds the node's agent from this tree into dl, where the
+// server serves /dl/ from.
+func stageAgent(t *testing.T, root, dl string) {
+	t.Helper()
+	if err := os.MkdirAll(dl, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "build", "-trimpath", "-o", filepath.Join(dl, proto.AgentBinaryName("linux", runtime.GOARCH)), "./cmd/gpuworks-agent")
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build ./cmd/gpuworks-agent: %v\n%s", err, out)
+	}
+}

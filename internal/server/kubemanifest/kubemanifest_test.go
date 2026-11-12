@@ -21,6 +21,7 @@ func sample() Params {
 		Token: "enroll-token", AgentImage: "registry.example/gpuworks/gpuworks-agent:v1.2.3",
 		NodeSelector: map[string]string{"nvidia.com/gpu.present": "true", "gpuworks.ai/pool": "a"},
 		Vendor:       "nvidia", RuntimeClass: "nvidia", EnginePorts: "40000-42767",
+		Priority: 10000,
 	}
 }
 
@@ -468,5 +469,47 @@ func TestRenderedRBACLetsTheAgentReadPodsClusterWideButWriteOnlyItsOwn(t *testin
 	}
 	if got := strings.Join(role["pods"], ","); got != "get,list,watch,create,delete,patch" {
 		t.Fatalf("namespaced pod verbs = %s", got)
+	}
+}
+
+// The hold and instance pods' PriorityClass is named per namespace, carries
+// the entry's priority, and does not preempt unless the entry allows it; the
+// agent learns its name from the DaemonSet.
+func TestPriorityClassFollowsTheEntry(t *testing.T) {
+	find := func(ds []map[string]any, kind string) map[string]any {
+		for _, d := range ds {
+			if d["kind"] == kind {
+				return d
+			}
+		}
+		t.Fatalf("no %s", kind)
+		return nil
+	}
+	p := sample()
+	p.Namespace, p.Priority = "gw-ascend", 42
+	out, err := Render(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc := find(docs(t, out), "PriorityClass")
+	if pc["metadata"].(map[string]any)["name"] != "gpuworks-inference-gw-ascend" || pc["value"] != 42 || pc["preemptionPolicy"] != "Never" {
+		t.Fatalf("PriorityClass = %v", pc)
+	}
+	if !strings.Contains(out, "- name: GPUWORKS_KUBE_PRIORITY_CLASS\n              value: \"gpuworks-inference-gw-ascend\"") {
+		t.Fatal("the agent is not told the PriorityClass")
+	}
+	p.AllowPreemption = true
+	out, err = Render(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc := find(docs(t, out), "PriorityClass"); pc["preemptionPolicy"] != nil {
+		t.Fatalf("preemption allowed, but preemptionPolicy = %v", pc["preemptionPolicy"])
+	}
+	for _, bad := range []int{-1, PriorityMax + 1} {
+		p.Priority = bad
+		if _, err := Render(p); err == nil {
+			t.Fatalf("priority %d rendered", bad)
+		}
 	}
 }

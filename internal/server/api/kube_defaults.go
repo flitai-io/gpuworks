@@ -58,6 +58,7 @@ func (a *apiHandlers) kubeDefaults(w http.ResponseWriter, r *http.Request) {
 		IdleReturnKeep: store.KubeKeepCards, AgentImage: kubemanifest.AgentImage(kubemanifest.AgentImageDockerHub),
 		StalledAfterSeconds: int(kubeStalledAfter / time.Second), Vendors: kubeVendorList(),
 		AgentImageSource: kubemanifest.AgentImageDockerHub, AgentImageSources: kubeAgentImageSourceList(),
+		Priority: store.KubeDefaultPriority, PriorityMax: kubemanifest.PriorityMax, AllowPreemption: false,
 	})
 }
 

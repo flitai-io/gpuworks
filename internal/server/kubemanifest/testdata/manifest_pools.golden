@@ -94,10 +94,11 @@ subjects:
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: gpuworks-inference
-value: 100000
+  name: "gpuworks-inference-gpuworks-system"
+value: 10000
+preemptionPolicy: Never
 globalDefault: false
-description: "GPUWorks inference instances: evicted after ordinary workloads."
+description: "GPUWorks hold and inference pods of namespace gpuworks-system."
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -172,6 +173,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: GPUWORKS_KUBE_RUNTIME_CLASS
               value: "nvidia"
+            - name: GPUWORKS_KUBE_PRIORITY_CLASS
+              value: "gpuworks-inference-gpuworks-system"
             - name: "NVIDIA_DRIVER_CAPABILITIES"
               value: "compute,utility"
             - name: "NVIDIA_VISIBLE_DEVICES"

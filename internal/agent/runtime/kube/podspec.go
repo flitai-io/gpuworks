@@ -33,8 +33,10 @@ type podOptions struct {
 	Namespace    string
 	NodeName     string
 	RuntimeClass string // the RuntimeClass that injects NVIDIA devices; "" uses the default runtime
-	Owner        *kubeapi.OwnerReference
-	Cards        []string // card UUIDs, recorded on the pod
+	// PriorityClass is the instance pod's PriorityClass (Options.PriorityClass).
+	PriorityClass string
+	Owner         *kubeapi.OwnerReference
+	Cards         []string // card UUIDs, recorded on the pod
 	// DeviceRequests are the agent's device plugin resources holding the
 	// workload's --device nodes (devices.go); UncoveredDevices: some node
 	// is not the plugin's, so the pod runs privileged.
@@ -246,7 +248,7 @@ func instancePod(spec runtime.WorkloadSpec, o podOptions) (kubeapi.Pod, error) {
 		},
 		Spec: kubeapi.PodSpec{
 			NodeName: o.NodeName, RestartPolicy: "Never", HostIPC: tr.HostIPC, HostPID: tr.HostPID,
-			PriorityClassName: "gpuworks-inference", TerminationGracePeriodSeconds: &grace,
+			PriorityClassName: o.PriorityClass, TerminationGracePeriodSeconds: &grace,
 			Tolerations: []kubeapi.Toleration{{Operator: "Exists"}},
 			Containers:  []kubeapi.Container{c}, Volumes: volumes,
 		},

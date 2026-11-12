@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -59,6 +60,7 @@ func kubeClusterDTO(c store.KubeCluster, v kubeEntryView) dto.KubeCluster {
 		Vendor: c.Vendor, NodeSelector: c.NodeSelector, RuntimeClass: c.RuntimeClass, ImagePullSecret: c.ImagePullSecret,
 		ContainerdSocket: c.ContainerdSocket, StateDir: c.StateDir, APIServer: c.APIServer,
 		EnginePorts: c.EnginePorts, IdleReturnSeconds: c.IdleReturnSeconds, ClusterUID: c.ClusterUID,
+		Priority: c.Priority, AllowPreemption: c.AllowPreemption,
 		Revoked: c.RevokedAt != nil, NodeCount: v.nodes, Source: v.source, CreatedAt: c.CreatedAt.UTC(),
 		Stalled: kubeClusterStalled(c, time.Now().UTC()), PoolIDs: append([]string{}, v.poolIDs...),
 	}
@@ -85,6 +87,7 @@ func kubeManifestParams(c store.KubeCluster, pools []store.KubeClusterPool) (kub
 		ClusterName: c.Name, Namespace: c.Namespace, ServerURL: c.ServerURL, Token: c.Token,
 		AgentImage: kubeAgentImage(c), Vendor: firstNonEmpty(c.Vendor, kubeDefaultVendor), NodeSelector: sel, RuntimeClass: c.RuntimeClass,
 		ImagePullSecret: c.ImagePullSecret, ContainerdSocket: c.ContainerdSocket, EnginePorts: c.EnginePorts, StateDir: c.StateDir, APIServer: c.APIServer,
+		Priority: c.Priority, AllowPreemption: c.AllowPreemption,
 	}, nil
 }
 
@@ -135,6 +138,13 @@ func (a *apiHandlers) createKubeCluster(w http.ResponseWriter, r *http.Request) 
 		APIServer:         strings.TrimSpace(req.APIServer),
 		EnginePorts:       firstNonEmpty(strings.TrimSpace(req.EnginePorts), kubeDefaultEnginePorts),
 		IdleReturnSeconds: store.KubeDefaultIdleReturnSeconds,
+		Priority:          store.KubeDefaultPriority,
+	}
+	if req.Priority != nil {
+		c.Priority = *req.Priority
+	}
+	if req.AllowPreemption != nil {
+		c.AllowPreemption = *req.AllowPreemption
 	}
 	// An empty RuntimeClass is decided on each node: managed clusters make
 	// NVIDIA's runtime the default and define no class, k3s defines
@@ -151,6 +161,10 @@ func (a *apiHandlers) createKubeCluster(w http.ResponseWriter, r *http.Request) 
 	}
 	if c.ProviderID == nil && len(req.ProviderPoolIDs) > 0 {
 		kubeInvalid(w, "provider_pool_ids", "node pools belong to a cluster of a cloud account; give provider_id and provider_cluster_id")
+		return
+	}
+	if c.Priority < 0 || c.Priority > kubemanifest.PriorityMax {
+		kubeInvalid(w, "priority", fmt.Sprintf("must be between 0 and %d", kubemanifest.PriorityMax))
 		return
 	}
 	if !kubemanifest.ValidAgentImageSource(c.AgentImageSource) {

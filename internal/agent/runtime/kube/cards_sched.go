@@ -24,7 +24,7 @@ func (p *cardPool) baseHoldPod(name string) kubeapi.Pod {
 			Labels: map[string]string{LabelManagedBy: "gpuworks", LabelRole: RoleHold, LabelNode: p.node}},
 		Spec: kubeapi.PodSpec{
 			RestartPolicy: "Always", TerminationGracePeriodSeconds: &grace, ImagePullSecrets: p.pullSecrets,
-			PriorityClassName: "gpuworks-inference", Tolerations: []kubeapi.Toleration{{Operator: "Exists"}},
+			PriorityClassName: p.priorityClass, Tolerations: []kubeapi.Toleration{{Operator: "Exists"}},
 			Containers: []kubeapi.Container{{
 				Name: "hold", Image: p.holdImage, ImagePullPolicy: "IfNotPresent", Command: p.holdCmd,
 				Resources: &kubeapi.Resources{Requests: map[string]string{"cpu": "10m", "memory": "16Mi"}},
