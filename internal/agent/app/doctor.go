@@ -49,15 +49,24 @@ const diskLowPercent = 10
 // buildDoctorReport runs every check and returns the structured report with
 // its English text rendering. disks are the paths beyond the root filesystem
 // the node depends on (models root, container data, storages); the CLI has
-// none to offer.
+// none to offer. It offers doctorNVIDIAChecks no state directory (""):
+// callers that have a running node's own use buildDoctorReportForNode.
 func buildDoctorReport(ctx context.Context, p gpu.Prober, disks []proto.PathUsage, drivers ...runtime.Driver) proto.DoctorReport {
-	return buildDoctorReportWith(ctx, p, disks, nil, drivers...)
+	return buildDoctorReportWith(ctx, p, disks, nil, "", drivers...)
+}
+
+// buildDoctorReportForNode is buildDoctorReport with the running node's own
+// state directory, so the NCCL check's script file lands under it (the same
+// path on the host and in the agent's own container) rather than
+// os.TempDir() when CLIs run on the host.
+func buildDoctorReportForNode(ctx context.Context, p gpu.Prober, disks []proto.PathUsage, stateDir string, drivers ...runtime.Driver) proto.DoctorReport {
+	return buildDoctorReportWith(ctx, p, disks, nil, stateDir, drivers...)
 }
 
 // buildDoctorReportWith is buildDoctorReport with an explicit source for the
 // state-directory access check, for callers that have no running driver (the
 // CLI): nil means the selected driver is asked.
-func buildDoctorReportWith(ctx context.Context, p gpu.Prober, disks []proto.PathUsage, access runtime.StateAccessReporter, drivers ...runtime.Driver) proto.DoctorReport {
+func buildDoctorReportWith(ctx context.Context, p gpu.Prober, disks []proto.PathUsage, access runtime.StateAccessReporter, stateDir string, drivers ...runtime.Driver) proto.DoctorReport {
 	var r proto.DoctorReport
 	var driver runtime.Driver
 	if len(drivers) > 0 {
@@ -90,7 +99,7 @@ func buildDoctorReportWith(ctx context.Context, p gpu.Prober, disks []proto.Path
 			idents = append(idents, accelerator.CardIdent(g.UUID, g.PCIeBDF))
 		}
 		end := doctorBeginAttempt(ctx, idents...)
-		doctorNVIDIAChecks(ctx, &r, len(gpus))
+		doctorNVIDIAChecks(ctx, &r, len(gpus), stateDir)
 		end()
 	}
 	// Dies that exist only in a fixture say nothing about the host's CANN.

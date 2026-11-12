@@ -94,6 +94,17 @@ func readAcceleratorPreference(stateDir string) string {
 	return proto.AcceleratorPreferenceAuto
 }
 
+// ClearAcceleratorPreference resets a node's saved accelerator choice to
+// automatic. A Kubernetes node's preference file is keyed by state
+// directory (a hostPath), not by cluster entry: reusing the same directory
+// under another entry (a reinstall, or the node moved to a different
+// entry) must not carry over the old entry's choice. main.go calls this
+// when a kube enrollment's identity gets a new node UUID for this state
+// directory.
+func ClearAcceleratorPreference(stateDir string) error {
+	return writeAcceleratorPreference(stateDir, proto.AcceleratorPreferenceAuto)
+}
+
 // writeAcceleratorPreference stores a choice for the next start: automatic
 // removes the file, anything else replaces it in one rename.
 func writeAcceleratorPreference(stateDir, preference string) error {

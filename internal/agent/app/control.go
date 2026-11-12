@@ -335,7 +335,7 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 		ctx = withDoctorAttempts(ctx, n.cardSmoke.Begin)
 		ctx = withDoctorOutcomes(ctx, n.cardSmoke.Record)
 		ctx = withDoctorHeldFindings(ctx, n.applyHeldHardwareFindings)
-		return buildDoctorReport(ctx, n.prober, n.doctorPathUsage(), n.runtimeDriver()), nil
+		return buildDoctorReportForNode(ctx, n.prober, n.doctorPathUsage(), n.stateDir, n.runtimeDriver()), nil
 	case proto.RPCNodeCardCheckDetail:
 		var req proto.CardCheckDetailRequest
 		if err := json.Unmarshal(params, &req); err != nil {

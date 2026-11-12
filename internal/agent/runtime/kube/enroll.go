@@ -36,18 +36,88 @@ func (id Identity) IdleReturn() time.Duration {
 	return time.Duration(id.IdleReturnSeconds) * time.Second
 }
 
+// ReadIdentity is the node identity this state directory saved, or a zero
+// Identity when there is none yet (never enrolled, or an unreadable file).
+func ReadIdentity(stateDir string) Identity {
+	id, _ := readIdentity(filepath.Join(stateDir, IdentityFile))
+	return id
+}
+
+// kubeEnrollRefusedCode is the server's product-error code for a refused
+// enrollment (internal/server/api.ErrorKubeEnrollRefused); the agent must
+// not import server packages, so this wire contract is duplicated here
+// rather than shared.
+const kubeEnrollRefusedCode = "KUBE_ENROLL_REFUSED"
+
+// EnrollRefusal is why the server refused this node's enrollment, named by
+// {"code":"KUBE_ENROLL_REFUSED","params":{"reason":...}}'s reason: an
+// enrollment token it does not know or that was revoked ("unknown_token"),
+// a node name that belongs to another cluster ("other_cluster"), or a node
+// name already held by another entry of this cluster ("node_taken"). Only
+// "unknown_token" still lets a node that enrolled earlier keep running on
+// the identity it saved — the other two describe this node's own identity
+// clashing with another entry's, which an old token does not excuse away.
+type EnrollRefusal struct {
+	// Reason is the server's reason code, or "" when the 403 body carries
+	// none (an older server, from before this field existed, whose only
+	// refusal was always an unknown or revoked token; treated the same
+	// way).
+	Reason string
+	// Message is the server's own English text, when it sent one.
+	Message string
+}
+
+func (e *EnrollRefusal) Error() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	return "the server refused this node's enrollment: " + e.Reason
+}
+
+// fallsBack is whether a refusal with this reason still lets a node that
+// enrolled earlier run on the identity it saved.
+func (e *EnrollRefusal) fallsBack() bool {
+	return e.Reason == "" || e.Reason == "unknown_token"
+}
+
+// parseEnrollRefusal reads a 403 response body for the server's reason.
+// Anything that does not parse as the expected product error (a proxy's
+// own 403, or a server that predates ErrorKubeEnrollRefused entirely) is
+// folded into a plain error, which Enroll treats exactly like a network
+// failure: this response is not a refusal this build understands, so it
+// must not be read as one naming this node's identity as another entry's.
+func parseEnrollRefusal(raw []byte) error {
+	var body struct {
+		Error  string `json:"error"`
+		Code   string `json:"code"`
+		Params struct {
+			Reason string `json:"reason"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil || body.Code != kubeEnrollRefusedCode {
+		return errors.New("the server refused this cluster's enrollment token: " + strings.TrimSpace(string(raw)))
+	}
+	return &EnrollRefusal{Reason: body.Params.Reason, Message: body.Error}
+}
+
 // Enroll trades the cluster's enrollment token for this node's identity.
 // The server answers the same node every time, so it asks on every start
 // (picking up a changed cluster setting) and falls back to the identity it
-// saved when it gets no answer — or a refusal: a revoked enrollment token
-// stops new nodes joining, not the ones that already did, whose own node
-// token is what the server checks. Only a node that never enrolled needs
-// the server to say yes.
+// saved when it gets no answer, or a refusal that is not about this node's
+// own identity (EnrollRefusal.fallsBack): a revoked enrollment token stops
+// new nodes joining, not the ones that already did, whose own node token is
+// what the server checks. A refusal naming this node's name as another
+// entry's is never papered over by an old token, with or without a saved
+// identity. Only a node that never enrolled needs the server to say yes.
 func Enroll(ctx context.Context, api *kubeapi.Client, httpc *http.Client, serverURL, enrollToken, nodeName, stateDir string) (Identity, error) {
 	path := filepath.Join(stateDir, IdentityFile)
 	saved, savedErr := readIdentity(path)
 	id, err := enroll(ctx, api, httpc, serverURL, enrollToken, nodeName)
 	if err != nil {
+		var refusal *EnrollRefusal
+		if errors.As(err, &refusal) && !refusal.fallsBack() {
+			return Identity{}, err
+		}
 		if savedErr == nil {
 			return saved, nil
 		}
@@ -82,7 +152,7 @@ func enroll(ctx context.Context, api *kubeapi.Client, httpc *http.Client, server
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if resp.StatusCode == http.StatusForbidden {
-		return Identity{}, errors.New("the server refused this cluster's enrollment token: " + strings.TrimSpace(string(raw)))
+		return Identity{}, parseEnrollRefusal(raw)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return Identity{}, fmt.Errorf("enroll with %s: HTTP %d: %s", serverURL, resp.StatusCode, strings.TrimSpace(string(raw)))

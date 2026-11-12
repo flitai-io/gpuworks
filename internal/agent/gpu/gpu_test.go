@@ -14,6 +14,30 @@ import (
 	"gpuworks.ai/gpuworks/internal/accelerator"
 )
 
+// TestDeviceExistsSeesTheLiveHostDev: a privileged container's own /dev is
+// a copy made at container start, so a control device a driver creates
+// after the agent started (fallbackProber's evidence of a vendor whose CLI
+// does not yet answer) is missing there; deviceExists must check the
+// host's live /dev through hostRoot when CLIs run there.
+func TestDeviceExistsSeesTheLiveHostDev(t *testing.T) {
+	root := withHostRoot(t)
+	const path = "/dev/nvidiactl"
+	full := filepath.Join(root, path)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !deviceExists(path) {
+		t.Fatal("deviceExists did not see a node that only exists under hostRoot")
+	}
+	cliOnHost.Store(false)
+	if deviceExists(path) {
+		t.Fatal("deviceExists off the host found a node that only exists under hostRoot")
+	}
+}
+
 func TestNVIDIAMetricsAndTopologySkipAvailabilityQuery(t *testing.T) {
 	var calls [][]string
 	p := &SMIProber{runner: func(_ context.Context, args ...string) (string, error) {
