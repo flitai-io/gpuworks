@@ -93,3 +93,8 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
 取舍：agent 对宿主机的依赖更重（hostPID、读宿主机根），但它本来就是 privileged；`nvidia-smi` 在容器里没有注入时多一层查找。
 
 后果：持久化事实减少 `kube_clusters.vendor`（迁移删除该列）；`KUBE_CLUSTER_MIXED_VENDORS` 错误与云条目节点池须同一厂商的规则（ADR 0063）同时取消；节点页对 Kubernetes 节点只提供 Kubernetes 上支持的厂商切换。
+
+
+## 修订（2026-11-12）：AMD 与昆仑芯
+
+Kubernetes 上的厂商由 `accelerator.RunsOnKube` 决定，加入 AMD 与昆仑芯（整卡）。第 3 条的“待命”因此只对这几家之外的卡成立。做法沿用上一修订：设备节点经宿主机根目录（`lstat`、glob）检查宿主机实时的 `/dev`，`xpu-smi` 在宿主机的 `PATH` 目录与 `/usr/local/xpu/bin` 里找，AMD 的 ROCm 版本文件读宿主机根；昆仑芯的注入在驱动为 `kube` 时不写 `--runtime runc`（Pod 没有这个选项，它会变成不存在的 RuntimeClass `runc`）。AMD 的 device plugin 用卡的 PCI 地址给设备命名，所以 kube 运行时除 UUID 外也按 PCI 地址把设备 ID 对到卡。AMD 的 dGPU 切分不开放给 Kubernetes（它的运行时约束仍只有 Docker、nerdctl 与 udocker）。某张卡的设备注入失败时，该卡不提供，不再让整个节点的设备计划失败。

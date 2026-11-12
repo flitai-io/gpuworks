@@ -61,3 +61,8 @@ Why: a cluster often has nodes of several vendors, and one vendor per entry forc
 Trade-offs: the agent depends more heavily on the host (hostPID, reading the host root), but it was already privileged; `nvidia-smi` takes one more lookup step when the container has none injected.
 
 Consequences: one persisted fact fewer, `kube_clusters.vendor` (a migration drops the column); the `KUBE_CLUSTER_MIXED_VENDORS` error and the rule that a cloud entry's node pools must be of one vendor (ADR 0063) are removed together; the Nodes page offers a Kubernetes node only the vendor switches supported on Kubernetes.
+
+
+## Amendment (2026-11-12): AMD and Kunlunxin
+
+The vendors that run on Kubernetes are decided by `accelerator.RunsOnKube`; AMD and Kunlunxin (whole cards) join them, so the "stand by" of item 3 holds only for cards of other vendors. The method follows the previous amendment: device nodes are checked on the host's live `/dev` through the host root (`lstat`, glob), `xpu-smi` is looked up in the host's `PATH` directories and `/usr/local/xpu/bin`, and AMD's ROCm version file is read from the host root. Kunlunxin's injection writes no `--runtime runc` when the driver is `kube` (a Pod has no such option; it would become a RuntimeClass `runc` that does not exist). AMD's device plugin names its devices by the card's PCI address, so the kube runtime also matches a device ID to a card by PCI address, besides by UUID. AMD dGPU slicing is not opened to Kubernetes (its runtime constraint is still Docker, nerdctl, and udocker only). When one card's device injection fails, that card is not offered, instead of failing the whole node's device plan.
