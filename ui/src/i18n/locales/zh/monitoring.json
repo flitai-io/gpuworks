@@ -105,7 +105,8 @@
       "engine": "推理引擎",
       "gateway": "网关",
       "kv_disk": "KV 缓存盘",
-      "benchmark": "评测"
+      "benchmark": "评测",
+      "peer_transfer": "节点间传输"
     },
     "requestUrl": "请求：{{url}}",
     "empty": "该选择暂无数据",

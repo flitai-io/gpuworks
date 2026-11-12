@@ -88,7 +88,7 @@ func (c *Conn) Run(ctx context.Context) (err error) {
 
 // wantsDataLane reports whether this connection should open a dedicated data
 // lane: the escape hatch is on, it is not a smoke probe, and it is an agent_dial
-// connection (server_dial keeps a single lane in the first phase).
+// connection; server_dial negotiates its data lane at the TCP listener.
 func (c *Conn) wantsDataLane() bool {
 	return c.creds.DataLane && !c.creds.Smoke && c.creds.ConnectMode != "server_dial"
 }
@@ -96,26 +96,30 @@ func (c *Conn) wantsDataLane() bool {
 // RunAccepted authenticates a server-initiated raw TCP connection, then serves
 // the same yamux ctrl protocol used by the normal agent_dial WebSocket path.
 func (c *Conn) RunAccepted(ctx context.Context, netConn net.Conn) (err error) {
-	defer func() { err = c.finishConnection(ctx, err) }()
-	c.observationFact("connect_mode", "server_dial")
-	c.observationFact("data_lane", "not_applicable")
-	for _, stage := range []string{"dial", "dns", "connect", "proxy_connect", "tls", "ws_upgrade"} {
-		c.observationPhaseState(stage, "not_applicable")
-	}
 	defer netConn.Close()
-	c.setLocal(netConn.LocalAddr(), false)
-	// hello is the identity-handshake observation in both directions. Here
-	// it first covers inbound HMAC auth; later AgentHello records its own clock.
-	c.beginConnectionPhase("hello", true)
-	if err := c.serverDialAgentAuth(netConn); err != nil {
+	stop := context.AfterFunc(ctx, func() { _ = netConn.Close() })
+	defer stop()
+	proof, err := c.authenticateServerDial(netConn)
+	if err != nil {
 		c.endConnectionPhase("hello", err)
-		return err
+		return c.finishConnection(ctx, err)
 	}
-	c.endConnectionPhase("hello", nil)
-	// server_dial keeps a single adaptive data-profile lane and opens no data
-	// lane; the server's dataLaneRoute "none" state routes every kind over
-	// it — this is server_dial's permanent shape, not a failure fallback.
-	return c.runYamuxClient(ctx, netConn, proto.LaneData, false)
+	if proof.Lane == proto.LaneData {
+		return errors.New("data lane requires an active parent control session")
+	}
+	return c.runAcceptedControl(ctx, netConn, proof)
+}
+
+func (c *Conn) runAcceptedControl(ctx context.Context, netConn net.Conn, proof proto.ServerDialProof) (err error) {
+	defer func() { err = c.finishConnection(ctx, err) }()
+	defer c.closeDataLane()
+	c.observationFact("connect_mode", "server_dial")
+	c.setLocal(netConn.LocalAddr(), false)
+	lane := proto.LaneData
+	if proof.Lane == proto.LaneCtrl {
+		lane = proto.LaneCtrl
+	}
+	return c.runYamuxClient(ctx, netConn, lane, false)
 }
 
 func (c *Conn) runYamuxClient(ctx context.Context, netConn net.Conn, lane string, wantData bool) error {
@@ -244,7 +248,9 @@ func (c *Conn) handshake() error {
 		if strings.TrimSpace(reg.NodeToken) != "" {
 			c.creds.NodeToken = reg.NodeToken
 		}
+		c.dataMu.Lock()
 		c.sessionID = reg.SessionID
+		c.dataMu.Unlock()
 		if c.onReg != nil {
 			if err := c.onReg(reg.NodeUUID, strings.TrimSpace(reg.NodeToken)); err != nil {
 				return err

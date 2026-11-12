@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -14,6 +15,10 @@ import (
 )
 
 const dialParallelism = 8
+
+// ErrDirectUnavailable marks exhaustion of TCP connection candidates before
+// any TLS handshake or archive write. Only this failure permits relay fallback.
+var ErrDirectUnavailable = errors.New("direct peer connection unavailable")
 
 type dialResult struct {
 	endpoint string
@@ -68,6 +73,7 @@ func dialPinned(ctx context.Context, endpoints []string, localIP net.IP, fingerp
 	}()
 
 	var errs []string
+	allConnectFailures := true
 	var winner *tls.Conn
 	for result := range results {
 		if result.conn != nil {
@@ -79,8 +85,11 @@ func dialPinned(ctx context.Context, endpoints []string, localIP net.IP, fingerp
 			}
 			continue
 		}
-		if result.err != nil && !errors.Is(result.err, context.Canceled) && !errors.Is(result.err, context.DeadlineExceeded) {
+		if result.err != nil {
 			errs = append(errs, result.endpoint+": "+result.err.Error())
+			if !errors.Is(result.err, ErrDirectUnavailable) {
+				allConnectFailures = false
+			}
 		}
 	}
 	if winner != nil {
@@ -88,6 +97,9 @@ func dialPinned(ctx context.Context, endpoints []string, localIP net.IP, fingerp
 	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+	if allConnectFailures && len(errs) > 0 {
+		return nil, fmt.Errorf("dial model sync target: %w: %s", ErrDirectUnavailable, strings.Join(errs, "; "))
 	}
 	return nil, errors.New("dial model sync target: " + strings.Join(errs, "; "))
 }
@@ -97,6 +109,25 @@ func dialEndpoint(ctx context.Context, endpoint string, localIP net.IP, want []b
 	if localIP != nil {
 		dialer.LocalAddr = &net.TCPAddr{IP: localIP}
 	}
+	raw, err := dialer.DialContext(ctx, "tcp", endpoint)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrDirectUnavailable, err)
+	}
+	return handshakePinned(ctx, raw, want)
+}
+
+func pinnedConn(ctx context.Context, raw net.Conn, fingerprint string) (*tls.Conn, error) {
+	want, err := hex.DecodeString(strings.TrimSpace(fingerprint))
+	if err != nil || len(want) != sha256.Size {
+		return nil, errors.New("invalid model sync certificate fingerprint")
+	}
+	return handshakePinned(ctx, raw, want)
+}
+
+func handshakePinned(ctx context.Context, raw net.Conn, want []byte) (*tls.Conn, error) {
 	cfg := &tls.Config{
 		InsecureSkipVerify: true, // verified by the one-time pinned fingerprint below
 		MinVersion:         tls.VersionTLS13,
@@ -111,12 +142,10 @@ func dialEndpoint(ctx context.Context, endpoint string, localIP net.IP, want []b
 			return nil
 		},
 	}
-	raw, err := dialer.DialContext(ctx, "tcp", endpoint)
-	if err != nil {
-		return nil, err
-	}
 	conn := tls.Client(raw, cfg)
-	if err := conn.HandshakeContext(ctx); err != nil {
+	handshakeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := conn.HandshakeContext(handshakeCtx); err != nil {
 		_ = raw.Close()
 		return nil, err
 	}

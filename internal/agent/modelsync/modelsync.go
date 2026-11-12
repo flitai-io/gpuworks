@@ -1,6 +1,6 @@
-// Package modelsync implements authenticated, node-to-node model transfer.
-// The server coordinates endpoints and one-time credentials but never relays
-// model bytes through the management connection.
+// Package modelsync implements authenticated archive transfer between nodes.
+// Direct and caller-provided transports share the same end-to-end TLS and
+// receiver-confirmed archive protocol.
 package modelsync
 
 import (
@@ -282,13 +282,13 @@ func writeAckError(w io.Writer, cause error) error {
 
 // Send dials the first reachable endpoint, pins the target certificate, and
 // streams a framed archive produced by writeArchive.
-func Send(ctx context.Context, endpoints []string, localIP net.IP, token, fingerprint string, writeArchive func(io.Writer) error) (Result, error) {
-	return SendWithMagic(ctx, endpoints, localIP, token, fingerprint, protocolMagic, writeArchive)
+func Send(ctx context.Context, endpoints []string, localIP net.IP, token, fingerprint string, writeArchive func(io.Writer) error, observe ...func(string)) (Result, error) {
+	return SendWithMagic(ctx, endpoints, localIP, token, fingerprint, protocolMagic, writeArchive, observe...)
 }
 
 // SendWithMagic is Send with an explicit archive protocol name. It is used by
 // image peer sync while keeping the model API source compatible.
-func SendWithMagic(ctx context.Context, endpoints []string, localIP net.IP, token, fingerprint, magic string, writeArchive func(io.Writer) error) (Result, error) {
+func SendWithMagic(ctx context.Context, endpoints []string, localIP net.IP, token, fingerprint, magic string, writeArchive func(io.Writer) error, observe ...func(string)) (Result, error) {
 	slog.Info("model sync send started", "endpoints", endpoints)
 	if len(endpoints) == 0 {
 		return Result{}, errors.New("model sync endpoints are required")
@@ -308,76 +308,33 @@ func SendWithMagic(ctx context.Context, endpoints []string, localIP net.IP, toke
 		return Result{}, err
 	}
 	defer conn.Close()
-	connectionDone := make(chan struct{})
-	defer close(connectionDone)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = conn.Close()
-		case <-connectionDone:
-		}
-	}()
-	if err := writeJSONLine(conn, header{Magic: magic, Token: token}); err != nil {
-		return Result{}, fmt.Errorf("write model sync header: %w", err)
-	}
-	cw := newChunkWriter(conn)
-	if err := writeArchive(cw); err != nil {
-		slog.Warn("model sync archive stream failed", "err", err)
-		return Result{}, fmt.Errorf("stream model archive: %w", err)
-	}
-	if err := cw.Finish(); err != nil {
-		return Result{}, fmt.Errorf("finish model archive: %w", err)
-	}
-	var ack acknowledgement
-	if err := json.NewDecoder(conn).Decode(&ack); err != nil {
-		return Result{}, fmt.Errorf("read model sync acknowledgement: %w", err)
-	}
-	if !ack.OK {
-		return Result{}, fmt.Errorf("target rejected model archive: %s", ack.Error)
-	}
-	digest := hex.EncodeToString(cw.hash.Sum(nil))
-	if ack.Bytes != cw.bytes || !secureEqual(ack.SHA256, digest) {
-		return Result{}, fmt.Errorf("model sync confirmation mismatch: sent %d/%s, target %d/%s", cw.bytes, digest, ack.Bytes, ack.SHA256)
-	}
-	slog.Info("model sync send completed", "bytes", ack.Bytes)
-	return Result{Bytes: ack.Bytes, SHA256: ack.SHA256}, nil
+	return sendArchive(ctx, conn, token, magic, writeArchive, false, observe...)
 }
 
 // Probe performs the authenticated TLS and token handshake without sending an
 // archive. The receiver remains available for the subsequent real transfer.
 func Probe(ctx context.Context, endpoints []string, localIP net.IP, token, fingerprint, magic string) error {
-	if strings.TrimSpace(magic) == "" {
-		magic = protocolMagic
-	}
 	conn, err := dialPinned(ctx, endpoints, localIP, fingerprint)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	if err := writeJSONLine(conn, header{Magic: magic, Token: token, Probe: true}); err != nil {
-		return fmt.Errorf("write archive probe header: %w", err)
-	}
-	var ack acknowledgement
-	if err := json.NewDecoder(conn).Decode(&ack); err != nil {
-		return fmt.Errorf("read archive probe acknowledgement: %w", err)
-	}
-	if !ack.OK {
-		return errors.New(ack.Error)
-	}
-	return nil
+	return probeArchive(ctx, conn, token, magic)
 }
 
 // RateLimitedWriter applies a per-transfer KiB/s cap. A non-positive cap is
 // unlimited. It deliberately lives beside the wire implementation so model
-// and image sends account for actual socket bytes in the same way.
-func RateLimitedWriter(w io.Writer, kibPerSecond int) io.Writer {
+// and image sends account for actual socket bytes in the same way. Waiting
+// for the next allowance is canceled with the transfer context.
+func RateLimitedWriter(ctx context.Context, w io.Writer, kibPerSecond int) io.Writer {
 	if kibPerSecond <= 0 {
 		return w
 	}
-	return &rateLimitedWriter{w: w, bytesPerSecond: int64(kibPerSecond) * 1024}
+	return &rateLimitedWriter{ctx: ctx, w: w, bytesPerSecond: int64(kibPerSecond) * 1024}
 }
 
 type rateLimitedWriter struct {
+	ctx            context.Context
 	w              io.Writer
 	bytesPerSecond int64
 	started        time.Time
@@ -385,14 +342,26 @@ type rateLimitedWriter struct {
 }
 
 func (w *rateLimitedWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
 	if w.started.IsZero() {
 		w.started = time.Now()
 	}
 	if w.written > 0 {
 		want := time.Duration(float64(w.written+int64(len(p))) / float64(w.bytesPerSecond) * float64(time.Second))
 		if wait := want - time.Since(w.started); wait > 0 {
-			time.Sleep(wait)
+			timer := time.NewTimer(wait)
+			select {
+			case <-w.ctx.Done():
+				timer.Stop()
+				return 0, w.ctx.Err()
+			case <-timer.C:
+			}
 		}
+	}
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
 	}
 	n, err := w.w.Write(p)
 	w.written += int64(n)

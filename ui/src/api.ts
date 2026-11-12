@@ -1,3 +1,5 @@
+import type { PeerTransferSnapshot } from "./peerTransferTypes";
+export type * from "./peerTransferTypes";
 import type { ServerBuildInfo } from "./serverBuildInfo";
 import type { BenchmarkPointEvidence } from "./benchmarkEvidenceTypes";
 export type * from "./benchmarkEvidenceTypes";
@@ -791,6 +793,7 @@ export interface ModelNodePresence {
   last_rate_limit_kib_s?: number;
   acquisition: "auto" | "peer" | "download" | "registered" | string;
   transfer_id?: string;
+  transfer_error_code?: string;
   source_node_uuid?: string;
   message?: string;
   /** The storage the files are in; cache marks an nfs_cache storage's copy on this node. */
@@ -872,6 +875,7 @@ export interface ImageNode {
   transferred_bytes?: number;
   rate_bps?: number;
   transfer_id?: string;
+  transfer_error_code?: string;
   source_node_uuid?: string;
   source_node_name?: string;
   source?: "peer" | "offline" | "quay" | "huaweicloud" | "direct" | string;
@@ -4097,7 +4101,7 @@ export function engineReportsNoMetrics(sources: MonitorDeployment["sources"]): b
 // One stored series from the metric catalog GET /api/v1/monitor/metrics. An
 // inference histogram contributes its quantile gauges (quantiles: true) and
 // its _sum/_count.
-export type MonitorMetricSource = "gpu" | "dgpu" | "node" | "network" | "engine" | "gateway" | "kv_disk" | "benchmark";
+export type MonitorMetricSource = "gpu" | "dgpu" | "node" | "network" | "engine" | "gateway" | "kv_disk" | "benchmark" | "peer_transfer";
 export interface MonitorMetricSeriesInfo {
   series: string;
   name: string;
@@ -4341,6 +4345,7 @@ export interface ServerListenUpdate {
 
 export const api = {
   health: () => getJSON<Health>("/api/v1/healthz"),
+  peerTransfers: (transferId?: string) => getJSON<PeerTransferSnapshot>(`/api/v1/peer-transfers${transferId ? `?transfer_id=${encodeURIComponent(transferId)}` : ""}`),
   engines: (targetVendor?: string) => getJSON<List<EngineProfile>>(`/api/v1/engines${targetVendor ? `?target_vendor=${encodeURIComponent(targetVendor)}` : ""}`),
   nodes: () => getJSON<List<Node>>("/api/v1/nodes"),
   nodesPage: (query: ListQuery) => getJSON<NodePage>(`/api/v1/nodes?${listQueryString(query)}`),
@@ -4804,7 +4809,7 @@ export const api = {
       imageFetchBody(source, fetch),
     ),
   probeImage: (id: number, nodeUuid: string, sourceNode: string) =>
-    sendJSON<{ state: string }>("POST", `/api/v1/images/${id}/nodes/${nodeUuid}/sync/probe`, { source_node: sourceNode }),
+    sendJSON<{ state: string; transport?: "direct" | "relay" }>("POST", `/api/v1/images/${id}/nodes/${nodeUuid}/sync/probe`, { source_node: sourceNode }),
   retryImage: (
     id: number,
     nodeUuid: string,

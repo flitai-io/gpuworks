@@ -469,6 +469,8 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 			return nil, err
 		}
 		return proto.BenchmarkCancelResult{ID: p.ID, State: "canceled", Running: false}, nil
+	case proto.RPCPeerRelayWaitClosed:
+		return n.rpcPeerRelayWaitClosed(ctx, params)
 	case proto.RPCModelSyncListen:
 		return n.rpcModelSyncListen(params)
 	case proto.RPCModelSyncSend:

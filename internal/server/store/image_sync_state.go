@@ -31,7 +31,7 @@ func (s *Store) BeginDirectImageSync(imageID, nodeID, sourceNodeID uint, transfe
 	updates := map[string]any{
 		"state": ImageStateSyncing, "transfer_id": transferID, "source_node_id": sourceNodeID,
 		"source": "peer", "transferred_bytes": int64(0), "rate_bps": int64(0),
-		"rate_limit_kib": rateLimitKiB, "message": "starting direct peer sync",
+		"rate_limit_kib": rateLimitKiB, "message": "starting direct peer sync", "transfer_error_code": "",
 	}
 	if sizeBytes > 0 {
 		updates["size_bytes"] = sizeBytes

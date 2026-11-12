@@ -37,10 +37,27 @@ func (h *Hub) cancelImageTransferRow(ctx context.Context, image *store.Image, ta
 	if row.State != store.ImageStatePulling && row.State != store.ImageStateSyncing {
 		return row, nil // nothing is running; there is nothing to stop
 	}
-	h.stopImageTransfer(ctx, image, target, row)
-	if _, failErr := h.store.CancelImageNodeTransfer(image.ID, target.ID, message); failErr != nil {
+	h.imageSyncMu.Lock()
+	current, err := h.store.ImageNode(image.ID, target.ID)
+	if err != nil {
+		h.imageSyncMu.Unlock()
+		return nil, err
+	}
+	if current.TransferID != row.TransferID {
+		h.imageSyncMu.Unlock()
+		return current, nil
+	}
+	if cancel := h.imageSyncOwners[row.TransferID]; cancel != nil {
+		cancel()
+		delete(h.imageSyncOwners, row.TransferID)
+	}
+	_, failErr := h.store.CancelImageNodeTransferIfActive(image.ID, target.ID, row.TransferID, message)
+	h.imageSyncMu.Unlock()
+	if failErr != nil {
 		return nil, failErr
 	}
+	h.CancelPeerTransfer(row.TransferID)
+	h.stopImageTransfer(ctx, image, target, row)
 	return h.store.ImageNode(image.ID, target.ID)
 }
 

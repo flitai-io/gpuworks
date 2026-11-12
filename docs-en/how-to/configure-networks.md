@@ -127,6 +127,12 @@ The receiver listens only on the selected network's IP, and the sender connects 
 
 If the two ends have no usable common path, no direct node-to-node connection is made. Automatic copying skips that source, and the replica pulls the image or downloads the model itself. Manually selecting that source returns `NO_STORAGE_PATH`.
 
+When every direct candidate fails to establish a TCP connection, the server may relay models or images if both nodes allow **storage sync** on the management network and upgraded agents have independent data connections available. For upgraded agent-initiated connections and server-initiated enrollment over SSH, relay uses a data connection separate from the control connection. Private addresses need not be mutually reachable, and random ports need not be individually mapped. Older agents and nodes using a single connection support direct transfer only. Upgrade and enable independent data connections for relay; unavailable data connections never cause archive traffic to fall back to the control connection. Disabling management-network storage sync on either node denies relay. For direct-only operation, keep a shared dedicated storage-sync network and disable that permission.
+
+Relay is only a fallback for TCP connection failure before transfer begins. TLS, token, and transfer-verification failures do not trigger a switch. Disconnected transfers must retry the whole task from the beginning; resume is not supported. Relay retains end-to-end encryption and rate limits. It permits one active task per node and two per server process, sharing an aggregate 64 MiB/s budget per process; lower operator or sync-group limits still apply. **Test transfer connection** for images identifies the direct or relay probe path; server sync logs record the actual model path. See [Peer Sync](peer-sync-models.md).
+
+TCP internal tests below always check real direct connectivity between the selected addresses. Successful relay does not change a failed TCP test. Archive relay does not provide NCCL/Gloo or RDMA connectivity. Compute- and serving-network requirements also remain unchanged.
+
 **Compute: check the network actually used by the entire group**
 
 If all nodes in a multi-node deployment share one compute network, they use it. If there is no compute network shared by all nodes (none are attached, only some are attached, or nodes belong to different compute networks):

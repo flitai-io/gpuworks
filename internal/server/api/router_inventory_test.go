@@ -222,6 +222,7 @@ GET /api/v1/nodes/{uuid}/ssh
 GET /api/v1/nodes/{uuid}/terminal
 GET /api/v1/nodes/{uuid}/terminal/settings
 GET /api/v1/notices
+GET /api/v1/peer-transfers
 GET /api/v1/platform-tokens
 GET /api/v1/playground/models
 GET /api/v1/playground/openapi.json

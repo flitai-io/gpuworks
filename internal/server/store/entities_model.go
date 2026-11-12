@@ -76,6 +76,7 @@ type ModelFile struct {
 	Message              string `gorm:"size:512"`
 	Acquisition          string `gorm:"size:16;index"`
 	TransferID           string `gorm:"size:64;index"`
+	TransferErrorCode    string `gorm:"size:64;not null;default:''"`
 	TransferSourceNodeID uint   `gorm:"index"`
 	// TransferSourceStorageID is the storage a copy reads from, with
 	// TransferSourceNodeID naming the node for a local source storage.

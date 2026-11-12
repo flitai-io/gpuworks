@@ -57,6 +57,8 @@ type Config struct {
 	// UsageReportOff is server.yaml's usage_report: false. The zero value
 	// takes part in the user experience improvement program.
 	UsageReportOff bool
+	// PeerRelay is machine-scoped archive relay policy, resolved at startup.
+	PeerRelay serverconfig.PeerRelay
 	// Experience, when set, makes this server the experience environment's
 	// console (experience.go).
 	Experience *ExperienceConsole

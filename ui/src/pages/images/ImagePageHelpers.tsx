@@ -145,11 +145,11 @@ export function upstreamGoneTag(t: TFunction, row: ImageCatalogEntry) {
 }
 
 /**
- * Nodes that can serve a direct peer copy of this image to `target`: any
+ * Nodes that can serve a peer copy of this image to `target`: any
  * other connected node that has it. Only the agent's connection matters: a
  * node whose vendor tool has stopped answering is still connected, and
- * serving a copy needs no GPU. Whether the two can reach
- * each other is not guessed from an address; the probe proves it before
+ * serving a copy needs no GPU. Whether a direct or relayed path is available
+ * is not guessed from an address; the probe proves it before
  * sync unlocks.
  */
 export function peerSources(version: ImageCatalogEntry, target: ImageNode) {

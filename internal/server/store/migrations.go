@@ -1339,6 +1339,7 @@ var migrations = []migration{
 	{Version: 205, Name: "kube_cluster_pools", Apply: createKubeClusterPools},
 	{Version: 206, Name: "kube_cluster_agent_image_source", Apply: addKubeClusterAgentImageSource},
 	{Version: 207, Name: "legacy_column_and_index_leftovers", Apply: repairLegacyColumnAndIndexLeftovers},
+	{Version: 208, Name: "peer_transfer_ownership", Apply: addPeerTransferOwnership},
 }
 
 // modelFileNetworkColumns are the columns migrations 76 and 77 added to

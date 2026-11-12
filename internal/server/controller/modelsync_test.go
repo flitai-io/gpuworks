@@ -24,6 +24,7 @@ type modelSyncHub struct {
 	requests   []proto.ModelSyncCopyRequest
 	called     chan struct{}
 	release    chan struct{}
+	copyFn     func(context.Context, proto.ModelSyncCopyRequest) (proto.ModelSyncCopyResult, error)
 	copyErr    error
 	copyResult *proto.ModelSyncCopyResult
 	stops      int
@@ -62,7 +63,11 @@ func (h *modelSyncHub) CopyModelPath(ctx context.Context, req proto.ModelSyncCop
 	if len(h.requests) == 1 && h.called != nil {
 		close(h.called)
 	}
+	copyFn := h.copyFn
 	h.mu.Unlock()
+	if copyFn != nil {
+		return copyFn(ctx, req)
+	}
 	if h.release != nil {
 		select {
 		case <-ctx.Done():
@@ -671,7 +676,7 @@ func TestProbeModelSyncAsksForTheCopysTargetPath(t *testing.T) {
 	if err := c.ProbeModelSync(context.Background(), model.ID, dst.UUID, "src"); err != nil {
 		t.Fatal(err)
 	}
-	if len(hub.probed) != 1 || hub.probed[0].TargetPath != relModelPath(model) {
+	if len(hub.probed) != 1 || hub.probed[0].TargetPath != relModelPath(model) || !hub.probed[0].AllowRelay {
 		t.Fatalf("probe = %+v, want target path %q", hub.probed, relModelPath(model))
 	}
 }

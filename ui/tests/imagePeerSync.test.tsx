@@ -91,7 +91,7 @@ function startButton() {
 }
 
 test("peer sync is chosen, probed and rate limited in a dialog", async () => {
-  const { syncs, probes } = renderTable({ state: "absent" }, async () => ({ state: "ready" }));
+  const { syncs, probes } = renderTable({ state: "absent" }, async () => ({ state: "ready", transport: "direct" }));
   const user = userEvent.setup({ document: dom.window.document });
   await user.click(screen.getByRole("button", { name: imagesLocale.nodeTable.peerAction }));
   await screen.findByText(dialogText.description);
@@ -104,8 +104,8 @@ test("peer sync is chosen, probed and rate limited in a dialog", async () => {
   await user.click(screen.getAllByText("src-host").at(-1)!);
   assert.equal(startButton().disabled, true, "a chosen but unprobed source is still locked");
 
-  await user.click(screen.getByRole("button", { name: imagesLocale.nodeTable.testDirect }));
-  await screen.findByText(dialogText.probeOk);
+  await user.click(screen.getByRole("button", { name: imagesLocale.nodeTable.testTransport }));
+  await screen.findByText(dialogText.probeDirect);
   assert.deepEqual(probes, [{ node: "dst", source: "src" }]);
 
   await user.type(screen.getByRole("spinbutton", { name: imagesLocale.nodeTable.rateLimit }), "2");
@@ -124,11 +124,24 @@ test("a failed peer sync reopens with its source and limit, and a failed probe k
   await screen.findByText(dialogText.description);
   assert.equal((screen.getByRole("spinbutton", { name: imagesLocale.nodeTable.rateLimit }) as HTMLInputElement).value, "1", "the last limit is prefilled");
 
-  await user.click(screen.getByRole("button", { name: imagesLocale.nodeTable.testDirect }));
+  await user.click(screen.getByRole("button", { name: imagesLocale.nodeTable.testTransport }));
   await screen.findByText(dialogText.probeFailed);
   assert.ok(screen.getByText(/cannot connect to target direct address/), "the server's reason is shown");
   assert.deepEqual(probes, [{ node: "dst", source: "src" }], "the recorded source is preselected");
   assert.equal(startButton().disabled, true);
   await user.click(startButton());
   assert.deepEqual(syncs, []);
+});
+
+
+test("a relayed transport probe unlocks peer sync and identifies the path", async () => {
+  const { syncs } = renderTable({ state: "failed", source: "peer", source_node_uuid: "src" }, async () => ({ state: "ready", transport: "relay" }));
+  const user = userEvent.setup({ document: dom.window.document });
+  await user.click(screen.getByRole("button", { name: imagesLocale.nodeTable.peerAction }));
+  assert.equal(startButton().disabled, true);
+  await user.click(screen.getByRole("button", { name: "Test transfer connection" }));
+  await screen.findByText("Connection verified via the management server relay.");
+  assert.equal(startButton().disabled, false);
+  await user.click(startButton());
+  await waitFor(() => assert.deepEqual(syncs, [{ node: "dst", source: "src", rate: 0 }]));
 });

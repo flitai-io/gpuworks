@@ -251,7 +251,7 @@ func helloCapabilities(prober gpu.Prober) []string {
 // PTYExecer implementation and are validated against the runtime name below.
 func helloCapabilitiesForRuntime(prober gpu.Prober, runtimeDriver string) []string {
 	_ = runtimeDriver // runtime-specific container bits come from the handler
-	caps := []string{"sysinfo", proto.CapConnectionDiagnostics}
+	caps := []string{"sysinfo", proto.CapConnectionDiagnostics, proto.CapPeerRelayV1}
 	// Terminal support is platform-gated rather than GPU-gated, so it is
 	// advertised independently of the prober. The server greys out the terminal
 	// entry point for agents that do not claim it, instead of opening a session

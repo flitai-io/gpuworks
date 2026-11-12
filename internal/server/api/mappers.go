@@ -552,7 +552,7 @@ func modelNodePresence(mf *store.ModelFile, node *store.Node) dto.ModelNodePrese
 	if node != nil {
 		nodeUUID = node.UUID
 	}
-	return dto.ModelNodePresence{NodeUUID: nodeUUID, NodeName: nodeDisplayName(node), State: mf.State, Path: mf.Path, Progress: progress, SizeBytes: mf.SizeBytes, Downloaded: mf.Downloaded, TransferredBytes: mf.TransferredBytes, RateBps: mf.RateBPS, RateLimitKiB: mf.RateLimit, LastRateLimitKiB: mf.LastRateLimit, Acquisition: mf.Acquisition, TransferID: mf.TransferID, Message: mf.Message}
+	return dto.ModelNodePresence{NodeUUID: nodeUUID, NodeName: nodeDisplayName(node), State: mf.State, Path: mf.Path, Progress: progress, SizeBytes: mf.SizeBytes, Downloaded: mf.Downloaded, TransferredBytes: mf.TransferredBytes, RateBps: mf.RateBPS, RateLimitKiB: mf.RateLimit, LastRateLimitKiB: mf.LastRateLimit, Acquisition: mf.Acquisition, TransferID: mf.TransferID, TransferErrorCode: mf.TransferErrorCode, Message: mf.Message}
 }
 
 func parseIntSlice(s string) []int {

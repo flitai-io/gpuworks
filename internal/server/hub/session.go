@@ -84,19 +84,19 @@ type Session struct {
 	closeOnce sync.Once
 
 	// sessionID is a per-ctrl-handshake random token returned in Registered for
-	// lane=ctrl connections. A data lane must present the current ctrl session's
-	// id to attach; it is empty for legacy/single-lane and server_dial sessions,
-	// which never open a data lane. Set once during handshake before register.
+	// dual-lane connections. A data lane must present the current ctrl session's
+	// id to attach; it is empty for legacy/single-lane sessions. Set once during
+	// handshake before register.
 	sessionID string
 	// Upgrade identity is also present for legacy and server_dial sessions;
-	// the data-lane sessionID deliberately stays empty for those transports.
+	// upgrade identity remains available independently of data-lane negotiation.
 	upgradeSessionID         string
 	upgradeVersion           string
 	upgradeHandshakeComplete atomic.Bool
 	upgradeReady             atomic.Bool
 
 	// data is the optional dedicated high-throughput lane (a second yamux session
-	// over its own WebSocket). It carries the data-plane stream kinds
+	// over its own WebSocket or reverse TCP connection). It carries the data-plane stream kinds
 	// (tunnel/logtail/model/image) while ctrl/metrics/terminal stay on s.ysess.
 	// Guarded by dataMu; nil when detached. dataEver records whether a data lane
 	// was ever attached so DataLaneState can distinguish detached from none.
@@ -111,7 +111,7 @@ type Session struct {
 	// ctrlDataPlaneStreams is a diagnostics-only counter: it counts every
 	// data-plane-kind stream opened on s.ysess (the ctrl session), which only
 	// ever happens in the "none" state (no data lane was ever attached — a
-	// legacy agent, --data-lane=false, or server_dial). For a session that has
+	// legacy agent or --data-lane=false). For a session that has
 	// attached a data lane at least once, this must stay 0 for its whole
 	// lifetime, detached periods included: that is the property the no-
 	// ctrl-fallback design exists to guarantee, and tests assert it directly
@@ -272,6 +272,11 @@ func (s *Session) handle(env proto.Envelope) {
 		if accepted {
 			s.rememberAssetDigests(st.RuntimeAssetDigests)
 		}
+	case proto.TPeerTransferPhase:
+		var phase proto.PeerTransferPhase
+		if json.Unmarshal(env.D, &phase) == nil && s.hub.recordPeerTransferPhase(s, phase) {
+			s.hub.peerTransferEvent(phase.TransferID, "source_phase", "")
+		}
 	case proto.TStatusModelFile:
 		var st proto.ModelFileStatus
 		if err := json.Unmarshal(env.D, &st); err != nil {
@@ -382,7 +387,7 @@ func (s *Session) send(t string, id uint64, d any) error {
 //
 // Ctrl-plane kinds always use s.ysess. Data-plane kinds use the attached data
 // lane, or s.ysess when no data lane was ever attached (legacy/single-lane and
-// server_dial keep one physical connection). A detached data lane is never
+// older server_dial peers keep one physical connection). A detached data lane is never
 // silently replaced by ctrl: see dataLaneRoute and docs/adr for why the two
 // planes must not share a connection.
 func (s *Session) openStream(ctx context.Context, hdr proto.StreamHeader) (net.Conn, error) {

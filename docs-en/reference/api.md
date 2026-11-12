@@ -208,6 +208,7 @@ Login, logout, and management write requests using login sessions check the requ
 | GET | `/api/v1/agent/connect` | WS upgrade entry point for persistent agent connections | Node token (not a management JWT) |
 | GET | `/install.sh` | curl\|sh installation script | None |
 | GET | `/api/v1/healthz` | Health check (control plane) | JWT |
+| GET | `/api/v1/peer-transfers` | Peer transfer observations for this management-server process. Optional single `transfer_id`; returns effective relay policy, active relay count, bandwidth waiting count, cumulative results, and bounded runtime observations. Missing observations return an empty list; unavailable capability returns 503, invalid filters 400. Counters measure inner TLS stream bytes, not verified file progress. | JWT |
 | GET | `/healthz` | Health check (no login required, for liveness/load balancing) | None |
 | GET | `/api/v1/engines?target_vendor=amd` | Engine parameter dictionary for a target vendor (uses the general profile when `target_vendor` is omitted); the AMD profile describes implementation admission scope, not validation on a specific GPU/ROCm version | JWT |
 | GET | `/api/v1/nodes` | List nodes; paginate with `page`/`page_size` and filter by `q`/`state`/`label` (see “Error and Response Conventions”); nodes connected from a Kubernetes cluster carry the system labels `gpuworks.ai/kubernetes-cluster` and `gpuworks.ai/kubernetes-node` (see “Node Labels: Written and Generated”), and `cordon_reason` is `kube_unschedulable` while Kubernetes has them cordoned | JWT |

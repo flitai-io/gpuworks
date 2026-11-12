@@ -1182,6 +1182,93 @@
       "description": "Traffic sent on the network a role is bound to."
     },
     {
+      "series": "gpuworks_peer_probes_total",
+      "name": "peer_probes_total",
+      "source": "peer_transfer",
+      "kind": "counter",
+      "unit": "probes",
+      "quantiles": false,
+      "labels": [
+        "node",
+        "outcome"
+      ],
+      "description": "Connectivity probes, separate from archive transfers."
+    },
+    {
+      "series": "gpuworks_peer_relay_active",
+      "name": "peer_relay_active",
+      "source": "peer_transfer",
+      "kind": "gauge",
+      "unit": "transfers",
+      "quantiles": false,
+      "labels": [
+        "node"
+      ],
+      "description": "Active relay leases in this server process."
+    },
+    {
+      "series": "gpuworks_peer_relay_bytes_total",
+      "name": "peer_relay_bytes_total",
+      "source": "peer_transfer",
+      "kind": "counter",
+      "unit": "bytes",
+      "quantiles": false,
+      "labels": [
+        "node",
+        "direction"
+      ],
+      "description": "Actual encrypted bytes written by this server, counted once per direction."
+    },
+    {
+      "series": "gpuworks_peer_relay_rate_limit_bytes_per_second",
+      "name": "peer_relay_rate_limit_bytes_per_second",
+      "source": "peer_transfer",
+      "kind": "gauge",
+      "unit": "bytes_per_second",
+      "quantiles": false,
+      "labels": [
+        "node"
+      ],
+      "description": "Server process aggregate encrypted relay byte limit."
+    },
+    {
+      "series": "gpuworks_peer_relay_rate_wait_seconds_total",
+      "name": "peer_relay_rate_wait_seconds_total",
+      "source": "peer_transfer",
+      "kind": "counter",
+      "unit": "seconds",
+      "quantiles": false,
+      "labels": [
+        "node"
+      ],
+      "description": "Union of concurrent byte-budget wait times per relay, summed across transfers."
+    },
+    {
+      "series": "gpuworks_peer_relay_rate_waiting",
+      "name": "peer_relay_rate_waiting",
+      "source": "peer_transfer",
+      "kind": "gauge",
+      "unit": "transfers",
+      "quantiles": false,
+      "labels": [
+        "node"
+      ],
+      "description": "Active relay transfers currently waiting for byte budget."
+    },
+    {
+      "series": "gpuworks_peer_transfers_total",
+      "name": "peer_transfers_total",
+      "source": "peer_transfer",
+      "kind": "counter",
+      "unit": "transfers",
+      "quantiles": false,
+      "labels": [
+        "node",
+        "outcome"
+      ],
+      "description": "Peer copy attempts by coordinator outcome; peer_confirmed requires validated archive confirmation."
+    },
+    {
       "series": "gpuworks_proxy_accounting_dropped_total",
       "name": "proxy_accounting_dropped_total",
       "source": "gateway",
@@ -1262,5 +1349,5 @@
       "description": "Requests the gateway routed to each replica."
     }
   ],
-  "total": 124
+  "total": 131
 }

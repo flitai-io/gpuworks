@@ -262,21 +262,11 @@ func (a *Agent) runServerDial(ctx context.Context, serverURL, nodeToken string, 
 		return err
 	}
 	defer ln.Close()
-	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-	}()
 	a.log.Info("agent listening for server_dial", "addr", listenAddr)
 	connectionLog := connectionDiagnosticLogger(a.log)
-	for {
-		netConn, err := ln.Accept()
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			a.log.Warn("server_dial accept failed", "err", err)
-			continue
-		}
+	var identityMu sync.Mutex
+	factory := func() *conn.Conn {
+		identityMu.Lock()
 		creds := conn.Credentials{
 			ServerURL:   serverURL,
 			NodeUUID:    *nodeUUID,
@@ -284,21 +274,27 @@ func (a *Agent) runServerDial(ctx context.Context, serverURL, nodeToken string, 
 			ConnectMode: "server_dial",
 			Simulated:   a.cfg.SimulatedHost,
 			EnginePorts: a.cfg.EnginePorts,
+			DataLane:    a.cfg.DataLane,
 		}
+		identityMu.Unlock()
 		onReg := func(uuid, issuedToken string) error {
+			identityMu.Lock()
 			*nodeUUID = uuid
 			if strings.TrimSpace(issuedToken) != "" {
 				nodeToken = issuedToken
 				node.SetNodeToken(issuedToken)
 			}
+			identityMu.Unlock()
 			startBG(uuid)
 			return nil
 		}
-		c := conn.New(creds, onReg, a.handlers(node), prober, connectionLog)
-		if err := c.RunAccepted(ctx, netConn); err != nil && ctx.Err() == nil {
+		return conn.New(creds, onReg, a.handlers(node), prober, connectionLog)
+	}
+	return conn.ServeServerDial(ctx, ln, factory, func(c *conn.Conn, _ error) {
+		if ctx.Err() == nil {
 			logConnectionFailure(a.log, c, false)
 		}
-	}
+	})
 }
 
 func connectMode(mode string) string {

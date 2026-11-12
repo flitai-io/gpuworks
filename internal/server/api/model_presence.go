@@ -91,7 +91,7 @@ func (l presenceLookup) fill(d *dto.Model, modelID uint) {
 			NodeUUID: node.UUID, NodeName: nodeDisplayName(node), State: mf.State, Path: mf.Path, Revision: mf.Revision,
 			Progress: transferProgress(mf.Downloaded, mf.SizeBytes), SizeBytes: mf.SizeBytes, Downloaded: mf.Downloaded,
 			TransferredBytes: mf.TransferredBytes, RateBps: mf.RateBPS, RateLimitKiB: mf.RateLimit, LastRateLimitKiB: mf.LastRateLimit,
-			Acquisition: mf.Acquisition, TransferID: mf.TransferID, Message: mf.Message, LastUsedAt: utcTimePtr(mf.LastUsedAt),
+			Acquisition: mf.Acquisition, TransferID: mf.TransferID, TransferErrorCode: mf.TransferErrorCode, Message: mf.Message, LastUsedAt: utcTimePtr(mf.LastUsedAt),
 		}
 		if st != nil {
 			presence.StorageID, presence.StorageName, presence.StorageType = st.ID, st.Name, st.Type

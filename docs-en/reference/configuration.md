@@ -84,6 +84,33 @@ When a reverse proxy terminates HTTPS, configure its actual address in `trusted_
 
 Login is rate-limited separately by client address and account: after 5 failures are recorded, it returns 429 `LOGIN_THROTTLED`, with `Retry-After` indicating the number of seconds before the next attempt is allowed. Subsequent failures use exponential backoff from 1 second to 15 minutes; failure records expire after 30 minutes of inactivity. A successful login clears only that account's records, not failures for other accounts sharing the client address. Unknown accounts receive the same treatment, and forged untrusted forwarding headers cannot change the source address. Both the number of records and concurrent password checks are capped. State is kept in the current server process; endpoints with multiple replicas should also configure shared rate limiting at the reverse proxy.
 
+### Peer Relay Resource Limits
+
+Model and image relays share the current server process budget. Configure it in `server.yaml` and restart to apply:
+
+```yaml
+peer_relay:
+  rate_limit_kib_s: 65536
+  burst_kib: 64
+  no_progress_timeout: 2m
+  confirmation_timeout: 5m
+```
+
+Rate and burst values are integer KiB (1 KiB = 1024 bytes). Omitted values or `0` select safe defaults, rather than unlimited bandwidth.
+The defaults are 64 MiB/s aggregate, a 64 KiB burst, two concurrent relays per process, and one relay per participating node.
+A lower task limit still applies; direct transfers retain their task limit. The server charges actual writes of the inner TLS stream,
+sharing the budget across both directions. Receiving and forwarding the same bytes do not count as two copies of model progress.
+
+Timeouts use Go durations such as `30s` or `2m`; omitted, empty, or `0` values use defaults.
+The no-progress clock excludes time spent waiting for the relay's own bandwidth budget. The confirmation deadline starts after
+the server has drained source output and observed EOF, while waiting for target validation and its ACK.
+A source “sending finished” report alone does not start this deadline.
+Negative values, fractional capacities, overflow, invalid durations, unknown keys, and duplicate keys reject startup.
+
+When the relay is busy, tasks queue in arrival order for up to one minute at a time; a task not yet admitted retries with the selected source and keeps its place. Model and image transfer details show the observed route, stage,
+encrypted bytes, and forwarding rate. Historical events enter the log center; aggregate series appear in the existing metric catalog.
+Budgets and runtime counters belong to this server process; multiple management servers do not share a global bandwidth pool.
+
 ### Listen Rules
 
 - Addresses must be `IP:port` literals (hostnames are not accepted); unknown keys in `server.yaml` cause the server to refuse to start, preventing misspelled keys from being silently ignored.
