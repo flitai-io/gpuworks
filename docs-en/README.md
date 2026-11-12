@@ -11,6 +11,7 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 |---|---|
 | New to GPUWorks | [Install GPUWorks and Deploy Your First Model](tutorials/getting-started.md), then [Console Page Tour](reference/web-ui-tour.md) |
 | Trying it locally on a Mac | [Run Your First Local Model on a Mac](tutorials/mac-local-model.md) |
+| Trying it locally on Windows WSL2 | [Run GPUWorks on Windows WSL2 with Docker](how-to/wsl2-with-docker.md) |
 | Going to production | [Install and Upgrade the Control Plane](how-to/install-server.md) → [Production Deployment](how-to/deploy-production.md) → [Upgrades and Version Compatibility](how-to/upgrade-and-compatibility.md) |
 | Upgrading to a new version | [Release Notes](releases/README.md) → [Upgrades and Version Compatibility](how-to/upgrade-and-compatibility.md) |
 | Having a problem | [Troubleshooting](how-to/troubleshooting.md) |
@@ -35,6 +36,7 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 **Installation and Onboarding**
 
 - [Install and Upgrade the Control Plane](how-to/install-server.md)
+- [Run GPUWorks on Windows WSL2 with Docker](how-to/wsl2-with-docker.md)
 - [Upgrades and Version Compatibility](how-to/upgrade-and-compatibility.md)
 - [Connect Nodes and Upgrade or Uninstall the Agent](how-to/connect-nodes.md)
 - [Rent Cloud GPUs](how-to/rent-cloud-gpus.md)

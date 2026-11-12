@@ -1,5 +1,5 @@
 {
-  "README.md": "c8a412eaa68c222a33675d999b814ced373ebf10697774a7f2fd5830cfc7f800",
+  "README.md": "7273b5b5881aec35613989b23a03d40a7481c79b355bd7cc8feab27c7bc68ac4",
   "adr/0001-image-digest-tag-pull-verify-after.md": "a6510eb2e98dba9d784c1596acd0e17ed42dcd27d3b29a988238d275ee128c54",
   "adr/0003-benchmark-engine-embedded-no-containers.md": "22f9a7a4ae72120a531c94f745d1153d159a4dfe8c3ed41e03c12b64d1bfffe8",
   "adr/0004-empty-revision-default-branch.md": "7c6bbbb35d79d97b297cf6dab71c5765c05c90a4be287e99d0efafc76c6dfd9c",
@@ -120,6 +120,7 @@
   "how-to/use-ai-helper.md": "70fbf2cfd87daec3e3e9c65dc1fd939fc6195163906f00529f10000cbfcdb361",
   "how-to/use-mcp.md": "be5232f32da10ac3b92736b326a8fb03c7f465dd4c839e28d6701b99c12de9c6",
   "how-to/use-mineru.md": "d15ff3f71b23cc9eb22ae3c970eb5cbfcb743fdd644d5dd10e8a0f179d03228c",
+  "how-to/wsl2-with-docker.md": "9da9306d2a5bbcf190f91f1481899ce34b0bdf48e73a6cd55ec2daa2501ec851",
   "reference/api-conventions.md": "be9237a197c811a623e5bd4e1aba875de5a46b333c3def6b5ac223b7a125a551",
   "reference/api.md": "f2790ad0fcfcd1585c9fdf5f24433892fd047c789ed00b7f6412140d62d55c2e",
   "reference/ascend-support-matrix.md": "fdb5b01bad77f72e34cceebdacaf723d79cb162ddce62fcc06b7d2c4b493e665",
