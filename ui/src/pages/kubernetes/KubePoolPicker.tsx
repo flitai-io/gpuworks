@@ -10,8 +10,8 @@ export function poolText(t: (key: string, options?: Record<string, unknown>) => 
 
 /**
  * The GPU node pools of one cloud cluster, each with a checkbox: the pools an
- * entry holds (or will hold). A pool the entry already holds says so. Which
- * selections are allowed (one vendor) is the server's to say; it refuses the
+ * entry holds (or will hold), of any vendors. A pool the entry already holds
+ * says so. Which selections are allowed is the server's to say; it refuses the
  * rest with a product error the caller shows.
  */
 export default function KubePoolPicker({ pools, selected, onChange, disabled = false, label }: {

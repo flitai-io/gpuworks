@@ -125,11 +125,10 @@ func (p *AscendProber) Framework(ctx context.Context) (string, string) {
 		"/usr/local/Ascend/cann-*/aarch64-linux/ascend_toolkit_install.info",
 		"/usr/local/Ascend/cann-*/x86_64-linux/ascend_toolkit_install.info",
 	} {
-		matches, _ := filepath.Glob(pattern)
-		paths = append(paths, matches...)
+		paths = append(paths, globTool(pattern)...)
 	}
 	for _, path := range paths {
-		if raw, err := os.ReadFile(path); err == nil {
+		if raw, err := readTool(path); err == nil {
 			if version := parseCANNFrameworkVersion(string(raw)); version != "" {
 				return "cann", version
 			}
@@ -285,9 +284,13 @@ var ascendSharedDeviceNodes = []string{
 }
 
 // deviceNodeExists is the test seam for the check above; the offline suite
-// must not depend on what the build host happens to have under /dev.
+// must not depend on what the build host happens to have under /dev. A
+// privileged container's own /dev is a copy made at container start, so a
+// device node created later (the driver finishing its init after the agent
+// started) is missing there; statTool checks the host's live /dev instead
+// when CLIs run on it.
 var deviceNodeExists = func(path string) bool {
-	_, err := os.Stat(path)
+	_, err := statTool(path)
 	return err == nil
 }
 

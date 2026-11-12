@@ -20,7 +20,7 @@ func sample() Params {
 		ClusterName: "prod", Namespace: "gpuworks-system", ServerURL: "https://gw.example:8800",
 		Token: "enroll-token", AgentImage: "registry.example/gpuworks/gpuworks-agent:v1.2.3",
 		NodeSelector: map[string]string{"nvidia.com/gpu.present": "true", "gpuworks.ai/pool": "a"},
-		Vendor:       "nvidia", RuntimeClass: "nvidia", EnginePorts: "40000-42767",
+		RuntimeClass: "nvidia", EnginePorts: "40000-42767",
 		Priority: 10000,
 	}
 }
@@ -102,7 +102,7 @@ func TestRenderedObjects(t *testing.T) {
 	}
 	ds := kinds["DaemonSet"]
 	spec := dig(t, ds, "spec", "template", "spec")
-	if dig(t, spec, "hostNetwork") != true || dig(t, spec, "dnsPolicy") != "Default" || dig(t, spec, "runtimeClassName") != "nvidia" ||
+	if dig(t, spec, "hostNetwork") != true || dig(t, spec, "dnsPolicy") != "Default" || spec.(map[string]any)["runtimeClassName"] != nil ||
 		dig(t, spec, "nodeSelector", "gpuworks.ai/pool") != "a" || dig(t, spec, "serviceAccountName") != AgentName {
 		t.Fatalf("daemonset pod spec = %#v", spec)
 	}
@@ -146,9 +146,8 @@ func TestRenderWithoutOptionalFields(t *testing.T) {
 		if _, ok := spec["imagePullSecrets"]; ok {
 			t.Fatal("imagePullSecrets rendered without one")
 		}
-		// No RuntimeClass: nvidia-smi from the default runtime if it put one
-		// in the container, from the host otherwise.
-		if env := envOf(t, spec); env["GPUWORKS_KUBE_HOST_CLIS"] != "nvidia-smi" || env["GPUWORKS_KUBE_RUNTIME_CLASS"] != "" {
+		// No RuntimeClass: each agent picks the instance pods' own.
+		if env := envOf(t, spec); env["GPUWORKS_KUBE_RUNTIME_CLASS"] != "" {
 			t.Fatalf("agent env without a RuntimeClass = %v", env)
 		}
 	}
@@ -186,12 +185,14 @@ func TestRenderImagePullSecret(t *testing.T) {
 	}
 }
 
-// TestRenderAscend: an Ascend cluster's agents run without the NVIDIA
-// RuntimeClass (even if one is named) and mount the host's /usr/local, where
-// npu-smi and the driver live, plus the install record the probe reads.
-func TestRenderAscend(t *testing.T) {
+// TestRenderCarriesNoVendor: one manifest serves every vendor. The agent
+// runs under the default runtime even when the entry names a RuntimeClass
+// (that is for NVIDIA instance pods, and the agent passes it on), mounts no
+// vendor's directories, and runs vendor CLIs on the host by itself; only
+// NVIDIA's variables are set, which act only under NVIDIA's runtime.
+func TestRenderCarriesNoVendor(t *testing.T) {
 	p := sample()
-	p.Vendor, p.StateDir, p.ContainerdSocket = "ascend", "/opt/gpuworks-kube", "/run/k3s/containerd/containerd.sock"
+	p.StateDir, p.ContainerdSocket = "/opt/gpuworks-kube", "/run/k3s/containerd/containerd.sock"
 	p.APIServer = "https://10.0.0.5:6443"
 	out, err := Render(p)
 	if err != nil {
@@ -205,7 +206,7 @@ func TestRenderAscend(t *testing.T) {
 	}
 	spec := dig(t, ds, "spec", "template", "spec").(map[string]any)
 	if _, ok := spec["runtimeClassName"]; ok {
-		t.Fatal("an Ascend agent must not run under the NVIDIA RuntimeClass")
+		t.Fatal("the agent must run under the node's default runtime")
 	}
 	c := dig(t, spec, "containers", 0).(map[string]any)
 	if dig(t, c, "args", 2) != "--state=/opt/gpuworks-kube" {
@@ -215,10 +216,11 @@ func TestRenderAscend(t *testing.T) {
 	for _, e := range c["env"].([]any) {
 		env[dig(t, e, "name").(string)] = e.(map[string]any)["value"]
 	}
-	if _, ok := env["NVIDIA_VISIBLE_DEVICES"]; ok {
-		t.Fatal("NVIDIA env on an Ascend agent")
+	if _, ok := env["GPUWORKS_KUBE_HOST_CLIS"]; ok {
+		t.Fatal("the manifest still decides where vendor CLIs run")
 	}
-	if env["GPUWORKS_KUBE_HOST_CLIS"] != "1" || env["GPUWORKS_KUBE_CONTAINERD_SOCKET"] != "/run/k3s/containerd/containerd.sock" ||
+	if env["NVIDIA_VISIBLE_DEVICES"] != "all" || env["NVIDIA_DRIVER_CAPABILITIES"] != "compute,utility" ||
+		env["GPUWORKS_KUBE_RUNTIME_CLASS"] != "nvidia" || env["GPUWORKS_KUBE_CONTAINERD_SOCKET"] != "/run/k3s/containerd/containerd.sock" ||
 		env["KUBERNETES_SERVICE_HOST"] != "10.0.0.5" || env["KUBERNETES_SERVICE_PORT"] != "6443" {
 		t.Fatalf("env = %v", env)
 	}
@@ -226,20 +228,11 @@ func TestRenderAscend(t *testing.T) {
 	for _, m := range c["volumeMounts"].([]any) {
 		mounts[dig(t, m, "mountPath").(string)] = m.(map[string]any)
 	}
-	for _, path := range []string{"/opt/gpuworks-kube", "/usr/local", "/etc/ascend_install.info", DevicePluginDir, PodResourcesDir} {
-		if mounts[path] == nil {
-			t.Fatalf("no mount at %s: %v", path, mounts)
-		}
+	if len(mounts) != 3 || mounts["/opt/gpuworks-kube"] == nil || mounts[DevicePluginDir] == nil || mounts[PodResourcesDir] == nil {
+		t.Fatalf("mounts = %v, want only the state, device plugin and pod resources directories", mounts)
 	}
-	if mounts["/usr/local"]["readOnly"] != true || mounts[DevicePluginDir]["readOnly"] == true {
-		t.Fatalf("mount modes: /usr/local %v, device plugins %v", mounts["/usr/local"], mounts[DevicePluginDir])
-	}
-	types := map[string]any{}
-	for _, v := range spec["volumes"].([]any) {
-		types[dig(t, v, "hostPath", "path").(string)] = dig(t, v, "hostPath", "type")
-	}
-	if types["/usr/local"] != "Directory" || types["/etc/ascend_install.info"] != "File" || types["/opt/gpuworks-kube"] != "DirectoryOrCreate" {
-		t.Fatalf("volume types = %v", types)
+	if len(spec["volumes"].([]any)) != 3 {
+		t.Fatalf("volumes = %v", spec["volumes"])
 	}
 }
 
@@ -275,10 +268,8 @@ func TestValidate(t *testing.T) {
 		"state":        func(p *Params) { p.StateDir = "/" },
 		"state-rel":    func(p *Params) { p.StateDir = "opt/x" },
 		"state-dirty":  func(p *Params) { p.StateDir = "/opt/../x" },
-		"vendor":       func(p *Params) { p.Vendor = "apple" },
 		"apiserver":    func(p *Params) { p.APIServer = "http://10.0.0.5:6443" },
 		"apiserver-np": func(p *Params) { p.APIServer = "10.0.0.5" },
-		"no-vendor":    func(p *Params) { p.Vendor = "" },
 	} {
 		p := sample()
 		mut(&p)
@@ -511,5 +502,35 @@ func TestPriorityClassFollowsTheEntry(t *testing.T) {
 		if _, err := Render(p); err == nil {
 			t.Fatalf("priority %d rendered", bad)
 		}
+	}
+}
+
+// The removal commands name exactly the objects the manifest makes outside
+// the namespace, and the namespace last.
+func TestRemoveCommandsNameTheManifestsClusterWideObjects(t *testing.T) {
+	p := sample()
+	p.Namespace = "gpuworks-a"
+	out, err := Render(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmds := RemoveCommands(p.Namespace)
+	want := []string{
+		"kubectl -n gpuworks-a delete daemonset gpuworks-agent --ignore-not-found --wait",
+		"kubectl delete clusterrolebinding gpuworks-agent-gpuworks-a --ignore-not-found",
+		"kubectl delete clusterrole gpuworks-agent-gpuworks-a --ignore-not-found",
+		"kubectl delete priorityclass gpuworks-inference-gpuworks-a --ignore-not-found",
+		"kubectl delete namespace gpuworks-a --ignore-not-found",
+	}
+	if strings.Join(cmds, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("commands:\n%s", strings.Join(cmds, "\n"))
+	}
+	for _, name := range []string{`name: "gpuworks-agent-gpuworks-a"`, `name: "gpuworks-inference-gpuworks-a"`, `name: gpuworks-agent`} {
+		if !strings.Contains(out, name) {
+			t.Fatalf("manifest has no %s", name)
+		}
+	}
+	if q := quoteShell("a b'c"); q != `'a b'\''c'` {
+		t.Fatalf("quote: %s", q)
 	}
 }

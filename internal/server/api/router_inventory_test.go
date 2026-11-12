@@ -416,6 +416,7 @@ PUT /api/v1/deployments/{id}/schedule/{sid}
 PUT /api/v1/deployments/{id}/tokenize
 PUT /api/v1/deployments/{id}/yield-policy
 PUT /api/v1/experience/enabled
+PUT /api/v1/kube/clusters/{uuid}
 PUT /api/v1/kube/clusters/{uuid}/pools
 PUT /api/v1/mcp/settings
 PUT /api/v1/networks/{id}

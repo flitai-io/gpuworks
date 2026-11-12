@@ -92,34 +92,33 @@ func TestAnEntryHoldsSeveralPoolsAndTheManifestSelectsThem(t *testing.T) {
 	}
 }
 
-// Pools of different vendors cannot share an entry, on create or on edit.
-func TestAnEntryRefusesPoolsOfMoreThanOneVendor(t *testing.T) {
+// Pools of different vendors share one entry: each agent finds out which
+// accelerator its node has, so the manifest selects the pools and nothing
+// else, on create and on edit.
+func TestAnEntryHoldsPoolsOfSeveralVendors(t *testing.T) {
 	rig := newKubeSourceRig(t)
 	rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters",
 		fmt.Sprintf(`{"name":"mixed","server_url":"https://gw.example","provider_id":%d,"provider_cluster_id":"c-gpu","provider_pool_ids":["np-1","np-ppu"]}`, rig.provider))
-	body := decodeKube[map[string]any](t, rec)
-	params, _ := body["params"].(map[string]any)
-	if rec.Code != http.StatusBadRequest || body["code"] != ErrorKubeClusterMixedVendors || params["vendors"] != "nvidia, ppu" {
+	if rec.Code != http.StatusCreated {
 		t.Fatalf("mixed create = %d %s", rec.Code, rec.Body)
 	}
-	if rows, _ := rig.st.KubeClusters(); len(rows) != 0 {
-		t.Fatalf("a refused entry was stored: %d", len(rows))
+	created := decodeKube[map[string]any](t, rec)
+	if _, ok := created["vendor"]; ok {
+		t.Fatalf("an entry still names a vendor: %s", rec.Body)
 	}
-
-	uuid, token := rig.createFromPools("ack", "np-1")
-	before := rig.manifest(token)
-	edit := rig.do(rig.session, http.MethodPut, "/api/v1/kube/clusters/"+uuid+"/pools", `{"provider_pool_ids":["np-1","np-ppu"]}`)
-	body = decodeKube[map[string]any](t, edit)
-	if edit.Code != http.StatusBadRequest || body["code"] != ErrorKubeClusterMixedVendors {
-		t.Fatalf("mixed edit = %d %s", edit.Code, edit.Body)
+	uuid := created["uuid"].(string)
+	if got := rig.poolsOf(uuid); got != `["np-1","np-ppu"]` {
+		t.Fatalf("pools = %s", got)
 	}
-	// A PPU pool alone is no better: the entry is NVIDIA's.
-	if edit := rig.do(rig.session, http.MethodPut, "/api/v1/kube/clusters/"+uuid+"/pools", `{"provider_pool_ids":["np-ppu"]}`); edit.Code != http.StatusBadRequest ||
-		!strings.Contains(edit.Body.String(), ErrorKubeClusterMixedVendors) {
-		t.Fatalf("other vendor's pool = %d %s", edit.Code, edit.Body)
+	apply := created["apply_command"].(string)
+	token, _ := url.QueryUnescape(strings.TrimSuffix(apply[strings.Index(apply, "token=")+6:], "'"))
+	m := rig.manifest(token)
+	if !strings.Contains(m, `- "np-1"`) || !strings.Contains(m, `- "np-ppu"`) || strings.Contains(m, "/usr/local") {
+		t.Fatalf("manifest of a mixed entry:\n%s", m)
 	}
-	if rig.poolsOf(uuid) != `["np-1"]` || rig.manifest(token) != before {
-		t.Fatal("a refused edit changed the entry")
+	edit := rig.do(rig.session, http.MethodPut, "/api/v1/kube/clusters/"+uuid+"/pools", `{"provider_pool_ids":["np-ppu"]}`)
+	if edit.Code != http.StatusOK || rig.poolsOf(uuid) != `["np-ppu"]` {
+		t.Fatalf("edit to another vendor's pool = %d %s", edit.Code, edit.Body)
 	}
 }
 
@@ -238,7 +237,7 @@ func TestAnEntrysPoolsOutliveItsAccount(t *testing.T) {
 func TestEditingThePoolsOfAnEntryWithALegacySelectorReplacesIt(t *testing.T) {
 	rig := newKubeSourceRig(t)
 	provider := rig.provider
-	c, err := rig.st.CreateKubeCluster(store.KubeCluster{Name: "legacy", Namespace: "gpuworks-system", ServerURL: "https://gw.example", AgentImage: "a:1", Vendor: "nvidia",
+	c, err := rig.st.CreateKubeCluster(store.KubeCluster{Name: "legacy", Namespace: "gpuworks-system", ServerURL: "https://gw.example", AgentImage: "a:1",
 		NodeSelector: "alibabacloud.com/nodepool-id=np-1,gpu=l20", EnginePorts: "40000-42767", ProviderID: &provider, ProviderClusterID: "c-gpu"})
 	if err != nil {
 		t.Fatal(err)

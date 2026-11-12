@@ -16,11 +16,12 @@ import { Notice } from "../ui-kit/Notice";
 import { api, usePolling, type KubeCluster, type List } from "../api";
 import { apiErrorText } from "../apiError";
 import { formatTime } from "../i18n/datetime";
-import { cardReturnText, kubeTroubleshootCommands } from "../kubeClusters";
+import { cardReturnText, kubeTroubleshootCommands, vendorsText } from "../kubeClusters";
 import KubeClusterDrawer from "./kubernetes/KubeClusterDrawer";
 import KubeManifestModal from "./kubernetes/KubeManifestModal";
 import KubePoolsDrawer from "./kubernetes/KubePoolsDrawer";
 import KubeClusterOperationModal from "./kubernetes/KubeClusterOperationModal";
+import KubeUninstallModal from "./kubernetes/KubeUninstallModal";
 
 /** Why a cluster's agents may not have joined, and the commands that tell which. */
 function StalledHelp({ cluster }: { cluster: KubeCluster }) {
@@ -51,6 +52,8 @@ export default function KubernetesPage() {
   const [adding, setAdding] = useState(false);
   const [manifestOf, setManifestOf] = useState<KubeCluster | null>(null);
   const [poolsOf, setPoolsOf] = useState<KubeCluster | null>(null);
+  const [editing, setEditing] = useState<KubeCluster | null>(null);
+  const [uninstalling, setUninstalling] = useState<KubeCluster | null>(null);
   const [operation, setOperation] = useState<{ cluster: KubeCluster; op: "apply" | "remove" } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +78,6 @@ export default function KubernetesPage() {
 
   const columns: ResourceColumn<KubeCluster>[] = [
     { key: "name", role: "name", title: t("column.name"), width: 160, sortValue: (c) => c.name, render: (_, c) => c.name },
-    { key: "vendor", title: t("column.vendor"), width: 110, sortValue: (c) => c.vendor, render: (_, c) => c.vendor ? tCommon(`vendor.${c.vendor}`, { defaultValue: c.vendor }) : "-" },
     {
       key: "source",
       title: t("column.source"),
@@ -92,6 +94,7 @@ export default function KubernetesPage() {
     },
     { key: "namespace", title: t("column.namespace"), width: 160, defaultHidden: true, sortValue: (c) => c.namespace, render: (_, c) => <code>{c.namespace}</code> },
     { key: "nodes", title: t("column.nodes"), width: 90, align: "right", sortValue: (c) => c.node_count, render: (_, c) => c.node_count },
+    { key: "vendors", title: t("column.vendors"), width: 200, sortValue: (c) => vendorsText(t, tCommon, c.vendors), render: (_, c) => vendorsText(t, tCommon, c.vendors) },
     {
       key: "cluster_uid",
       defaultHidden: true,
@@ -134,9 +137,12 @@ export default function KubernetesPage() {
       key: "actions",
       role: "actions",
       title: t("column.actions"),
-      width: 240,
+      width: 300,
       render: (_, c) => (
         <div className="flex items-center gap-0.5">
+          {rowAction(t("actions.edit"), (
+            <Button variant="ghost" size="sm" iconOnly aria-label={t("actions.edit")} onClick={() => setEditing(c)}><ConsoleIcon.edit size={16} /></Button>
+          ))}
           {c.source && (
             <>
               {rowAction(t("actions.pools"), (
@@ -150,6 +156,9 @@ export default function KubernetesPage() {
               ))}
             </>
           )}
+          {!c.can_remove && (c.remove_commands?.length ?? 0) > 0 && rowAction(t("actions.uninstall"), (
+            <Button variant="ghost" size="sm" iconOnly className="text-fg-danger hover:text-fg-danger" aria-label={t("actions.uninstall")} onClick={() => setUninstalling(c)}><ConsoleIcon.terminal size={16} /></Button>
+          ))}
           {c.apply_command && <CopyButton size="small" label={t("actions.copyCommand")} text={c.apply_command} disabled={c.revoked} />}
           {rowAction(t("actions.manifest"), (
             <Button variant="ghost" size="sm" iconOnly aria-label={t("actions.manifest")} onClick={() => setManifestOf(c)}><ConsoleIcon.manifest size={16} /></Button>
@@ -172,7 +181,19 @@ export default function KubernetesPage() {
               cancelText={t("actions.cancel")}
               onConfirm={() => run(`delete-${c.uuid}`, () => api.deleteKubeCluster(c.uuid), t("actions.deleted", { name: c.name }))}
               trigger={<Button variant="ghost" size="sm" iconOnly className="text-fg-danger hover:text-fg-danger" aria-label={t("actions.delete")} loading={busy === `delete-${c.uuid}`}><ConsoleIcon.delete size={16} /></Button>}
-            ><p className="text-fg-muted">{t("actions.deleteHelp")}</p></ConfirmPopover>
+            >
+              <p className="text-fg-muted">{t("actions.deleteHelp")}</p>
+              {c.node_count > 0 && (
+                <div className="mt-2 flex flex-col items-start gap-2">
+                  <p className="text-fg-danger">{t("actions.deleteHasNodes", { count: c.node_count })}</p>
+                  {(c.can_remove || (c.remove_commands?.length ?? 0) > 0) && (
+                    <Button variant="secondary" size="sm" onClick={() => (c.can_remove ? setOperation({ cluster: c, op: "remove" }) : setUninstalling(c))}>
+                      {t(c.can_remove ? "actions.remove" : "actions.uninstall")}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </ConfirmPopover>
           ))}
         </div>
       ),
@@ -208,7 +229,9 @@ export default function KubernetesPage() {
         </div>
       </PageBody></PageContent>
       <KubeClusterDrawer open={adding} onClose={() => setAdding(false)} onCreated={() => void clusters.refetch()} />
+      {editing && <KubeClusterDrawer key={editing.uuid} open edit={editing} onClose={() => setEditing(null)} onCreated={() => void clusters.refetch()} onEdited={() => void clusters.refetch()} />}
       <KubePoolsDrawer cluster={poolsOf} onClose={() => setPoolsOf(null)} onSaved={() => void clusters.refetch()} />
+      {uninstalling && <KubeUninstallModal cluster={uninstalling} onClose={() => setUninstalling(null)} />}
       {manifestOf && <KubeManifestModal cluster={manifestOf} onClose={() => setManifestOf(null)} />}
       {operation && <KubeClusterOperationModal cluster={operation.cluster} op={operation.op} onClose={() => setOperation(null)} onDone={() => void clusters.refetch()} />}
     </PageLayout>

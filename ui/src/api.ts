@@ -1006,8 +1006,14 @@ export interface ImageSeries {
   versions?: ImageCatalogEntry[];
 }
 
-/** The accelerator vendors a Kubernetes cluster's nodes can have. */
+/** The accelerator vendor of a cloud node pool (ProviderClusterPool.vendor). */
 export type KubeVendor = "nvidia" | "ascend" | "hygon" | "ppu";
+
+/** How many of an entry's nodes have one vendor's cards (dto.KubeVendorNodes); vendor "" is nodes that reported no cards. */
+export interface KubeVendorNodes {
+  vendor: string;
+  nodes: number;
+}
 
 /** A Kubernetes cluster whose GPU nodes join through one DaemonSet (dto.KubeCluster). */
 export interface KubeCluster {
@@ -1023,13 +1029,11 @@ export interface KubeCluster {
   /** The image the entry's manifest names. */
   effective_agent_image: string;
   node_selector: string;
-  /** Accelerator vendor of the cluster's nodes: nvidia, ascend, hygon or ppu. */
-  vendor: KubeVendor;
   /** The agent's directory on the host. */
   state_dir: string;
   /**
-   * Empty for any vendor but nvidia (devices come through the agent's device plugin); for nvidia, empty uses the
-   * cluster's "nvidia" RuntimeClass when it has one and the node's default runtime otherwise.
+   * Applies to the instance pods of NVIDIA nodes only (other vendors ignore it); empty uses the cluster's "nvidia"
+   * RuntimeClass when it has one and the node's default runtime otherwise.
    */
   runtime_class: string;
   /** A docker-registry Secret in the namespace the agent image is pulled with; empty pulls without one. */
@@ -1049,9 +1053,13 @@ export interface KubeCluster {
   cluster_uid: string;
   revoked: boolean;
   node_count: number;
+  /** The joined nodes by the vendor of their cards, most first; each agent detects its own node's. */
+  vendors: KubeVendorNodes[];
   created_at: string;
   /** Carries the enrollment token; administrators only. */
   apply_command?: string;
+  /** kubectl commands, in order, that uninstall the entry's agents and the pods they started from the cluster; administrators only, also for a revoked entry. */
+  remove_commands?: string[];
   /** No node joined for longer than the dictionary's stalled_after_seconds: worth troubleshooting. */
   stalled: boolean;
   /** The cloud node pools a cloud entry holds, ascending; empty for an entry made by hand. */
@@ -1067,7 +1075,6 @@ export interface KubeCluster {
 
 /** What the cluster form takes from the server (dto.KubeDefaults); every value is a hint, a field left empty takes it. */
 export interface KubeDefaults {
-  vendor: KubeVendor;
   namespace: string;
   state_dir: string;
   engine_ports: string;
@@ -1076,8 +1083,6 @@ export interface KubeDefaults {
   idle_return_keep: number;
   agent_image: string;
   stalled_after_seconds: number;
-  /** The vendors a cluster can be connected for, the default first. */
-  vendors: KubeVendorInfo[];
   /** The registry an entry made by hand pulls the published agent image from. */
   agent_image_source: string;
   /** The registries the agent image is published to, the default first. */
@@ -1093,12 +1098,6 @@ export interface KubeAgentImageSource {
   id: string;
   /** The image there, at the server's runtime revision. */
   image: string;
-}
-
-export interface KubeVendorInfo {
-  id: KubeVendor;
-  /** The cluster may name a RuntimeClass for this vendor; for the others the server ignores one. */
-  runtime_class: boolean;
 }
 
 /** Where a cluster entry came from (dto.KubeClusterSource). */
@@ -1120,7 +1119,7 @@ export interface KubeClusterOperation {
   params?: { step: "kubeconfig" | "api_server"; reason: string };
 }
 
-export type KubeObjectAction = "create" | "update" | "delete" | "absent" | "failed" | "not_tried" | "dependent";
+export type KubeObjectAction = "create" | "update" | "replace" | "delete" | "absent" | "failed" | "not_tried" | "dependent";
 
 export interface KubeObjectResult {
   kind: string;
@@ -1140,11 +1139,9 @@ export interface KubeClusterRequest {
   /** Omitted: Docker Hub for an entry made by hand, the registry its region reaches for one from a cloud cluster. */
   agent_image_source?: string;
   node_selector?: string;
-  /** Omitted means nvidia. */
-  vendor?: KubeVendor;
   /** The agent's directory on the host; omitted means /opt/gpuworks. */
   state_dir?: string;
-  /** NVIDIA only; omitted lets the agents decide on each node. */
+  /** Applies to NVIDIA nodes' instance pods only; omitted lets the agents decide on each node. */
   runtime_class?: string;
   /** Omitted pulls the agent image without credentials. */
   image_pull_secret?: string;
@@ -1160,8 +1157,36 @@ export interface KubeClusterRequest {
   /** The cloud account cluster the entry is made from; both or neither. */
   provider_id?: number;
   provider_cluster_id?: string;
-  /** The cluster's GPU node pools the entry holds (required with a source, one vendor). */
+  /** The cluster's GPU node pools the entry holds (required with a source; pools of any vendors). */
   provider_pool_ids?: string[];
+}
+
+/** Edits an entry (dto.KubeClusterUpdate): a field omitted keeps the entry's value, an empty string clears an optional one. The namespace, server URL and state directory are fixed at creation. */
+export interface KubeClusterUpdate {
+  name?: string;
+  /** Refused for an entry made from a cloud cluster: its nodes are chosen by node pool. */
+  node_selector?: string;
+  agent_image?: string;
+  agent_image_source?: string;
+  image_pull_secret?: string;
+  runtime_class?: string;
+  containerd_socket?: string;
+  api_server?: string;
+  engine_ports?: string;
+  idle_return_seconds?: number;
+  priority?: number;
+  allow_preemption?: boolean;
+}
+
+/** The answer to an edit (dto.KubeClusterEdit). */
+export interface KubeClusterEdit {
+  cluster: KubeCluster;
+  /** The JSON names of the fields that changed, sorted. */
+  changed: string[];
+  /** The cluster still runs the old manifest until it is applied again. */
+  reapply: boolean;
+  /** For an entry the server cannot apply: the kubectl commands, in order, that bring the cluster in line. */
+  commands: string[];
 }
 
 // Every collection endpoint answers an envelope, never a bare array
@@ -5112,6 +5137,7 @@ export const api = {
   setKubeClusterPools: (uuid: string, poolIds: string[]) =>
     sendJSON<KubeCluster>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`, { provider_pool_ids: poolIds }),
   createKubeCluster: (body: KubeClusterRequest) => sendJSON<KubeCluster>("POST", "/api/v1/kube/clusters", body),
+  updateKubeCluster: (uuid: string, body: KubeClusterUpdate) => sendJSON<KubeClusterEdit>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}`, body),
   kubeManifest: (uuid: string) => getText(`/api/v1/kube/clusters/${encodeURIComponent(uuid)}/manifest`),
   revokeKubeCluster: (uuid: string) => sendJSON<KubeCluster>("POST", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/revoke`),
   deleteKubeCluster: (uuid: string) => sendJSON<void>("DELETE", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}`),

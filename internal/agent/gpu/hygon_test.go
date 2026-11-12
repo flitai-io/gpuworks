@@ -14,6 +14,35 @@ import (
 	"time"
 )
 
+// TestHygonInspectAndRequireDeviceSeeTheLiveHostDev: a privileged
+// container's own /dev is a copy made at container start, so a device node
+// the driver creates afterward (/opt/hyhal, /dev/kfd, /dev/mkfd) is missing
+// there; the default inspect (no injected p.stat) must check the host's
+// live file system through hostRoot when CLIs run there.
+func TestHygonInspectAndRequireDeviceSeeTheLiveHostDev(t *testing.T) {
+	withHostRoot(t)
+	root := hostRoot
+	if err := os.MkdirAll(filepath.Join(root, "opt/hyhal"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := &HygonProber{}
+	if info, err := p.inspect("/opt/hyhal"); err != nil || !info.IsDir() {
+		t.Fatalf("inspect(/opt/hyhal) = %+v, %v", info, err)
+	}
+	if _, err := p.inspect("/opt/hyhal-missing"); err == nil {
+		t.Fatal("inspect found a directory that does not exist under hostRoot")
+	}
+	// requireDevice wants a device node, not a plain directory.
+	if err := p.requireDevice("/opt/hyhal"); err == nil || !strings.Contains(err.Error(), "not a device node") {
+		t.Fatalf("requireDevice(a directory) = %v", err)
+	}
+	// Off the host the same tree, visible only under hostRoot, is not found.
+	cliOnHost.Store(false)
+	if _, err := p.inspect("/opt/hyhal"); err == nil {
+		t.Fatal("inspect off the host found a directory that only exists under hostRoot")
+	}
+}
+
 func TestHygonProbeLibrariesResolveHostDTKClosure(t *testing.T) {
 	dir := t.TempDir()
 	names := []string{"libz.so.1", "libtinfo.so.5", "libtinfo.so.6", "libelf.so.1"}

@@ -9,7 +9,8 @@
 - server 已经启动，集群节点能访问 server 地址（agent 主动外连，不需要节点入站端口）。
 - 集群使用 containerd（kubeadm、k3s、RKE2、microk8s、GPU Operator 环境都是）。CRI-O（OpenShift）与 Docker 节点不支持，
   agent 启动时会拒绝并写明原因。
-- 一个集群条目对应一个厂商的节点：NVIDIA、昇腾、海光或 PPU。NVIDIA 节点的 NVIDIA 容器运行时可用：或者是 containerd 的
+- 节点上装好厂商驱动：Kubernetes 上支持 NVIDIA、昇腾、海光（DCU）与 PPU，一个集群条目可以同时覆盖这几种厂商的节点，
+  不需要按厂商各建一个条目（见下一节）。NVIDIA 节点的 NVIDIA 容器运行时可用：或者是 containerd 的
   默认运行时（托管 Kubernetes 如 DOKS、Nebius、ACK 都是），或者有名为 `nvidia` 的 RuntimeClass（k3s 会自动创建）；
   其他厂商只要求节点上装好厂商驱动，不需要厂商的容器运行时，也不需要厂商的 device plugin。
 - 要挂 NFS 存储的节点装有 `mount.nfs`（nfs-utils / nfs-common）：agent 在节点的挂载命名空间里用它挂载。
@@ -28,6 +29,32 @@ gpuworks 负责，Kubernetes 不会把失败的实例拉起来。
 占位 Pod，把卡还给 Kubernetes。被其他 Pod 占着的卡在 gpuworks 里显示为外部占用，不会被调度。节点没有 device
 plugin 时，gpuworks 直接使用节点上的卡。集群用 HAMi、ACK 共享 GPU 或其他方式把一张卡分成多份时，借卡的办法随之不同，
 见下一节。
+
+## 加速卡厂商：自动识别
+
+集群条目没有厂商这一项。一个条目只有一个 DaemonSet，没有厂商专用的挂载，agent Pod 在默认运行时下运行（不给 agent 指定
+RuntimeClass）；每个 agent 自己探测所在节点的加速卡：
+
+- Kubernetes 上支持的厂商：NVIDIA、昇腾、海光（DCU）、PPU。
+- 节点没有加速卡，或者是别家的卡（AMD、昆仑芯等暂不支持 Kubernetes）时，节点处于待命状态：agent Pod 照常运行，但不向
+  server 注册，这样的节点不会出现在平台的节点页。
+- 所以同一个条目可以覆盖含多个厂商节点的集群，不再需要一个厂商一个条目。节点选择器仍是可选项，用来只让平台使用其中一部分节点
+  （例如只用部分 GPU 节点）。
+
+agent 没有厂商挂载也能用到厂商工具：它以 privileged、hostPID 运行，经宿主机根目录（`/proc/1/root`）读宿主机的文件，并在宿主机的
+挂载命名空间里（nsenter）运行厂商命令行工具 `npu-smi`、`hy-smi`、`ppu-smi` 与 `nvidia-smi`，用宿主机自己的 C 库与驱动库。
+`nvidia-smi` 按这个顺序查找：宿主机根目录；`/run/nvidia/driver`（NVIDIA GPU Operator 的驱动容器）；NVIDIA 运行时放进 agent 容器的那一份
+（manifest 固定设置 `NVIDIA_VISIBLE_DEVICES=all` 与 `NVIDIA_DRIVER_CAPABILITIES=compute,utility`，这两个变量只在 NVIDIA 的运行时下生效）。
+设备节点是否存在，看的是宿主机实时的 `/dev`。
+
+**一个 Kubernetes 节点同一时间只属于一个条目。** 同一个集群的两个条目选中了同一个节点时，后来的那个条目的 agent 注册被拒绝
+（`KUBE_ENROLL_REFUSED`，原因 `node_taken`，并指出占着它的条目名），直到第一个条目在这个节点上的 agent 离线超过 15 分钟；
+之后节点可以转到另一个条目（例如改了节点选择器之后）。其他拒绝原因：`unknown_token`（接入令牌未知或已吊销；已经注册过的 agent 保留自己保存的身份，
+不受影响）、`other_cluster`（令牌属于另一个 Kubernetes 集群）。保存的身份记着发给它的条目，agent 只用自己条目发的那份：
+几个条目共用默认的状态目录时，节点从一个条目转到另一个条目不会顶着前一个条目的身份连上来。
+
+同一个 Kubernetes 集群接入两个条目时，**两个条目要用不同的命名空间**：manifest 里的对象按命名空间命名，同名命名空间下后应用的
+会覆盖先应用的，前一个条目的节点就悄悄转到了后一个条目。
 
 ## 集群用 HAMi、ACK 共享 GPU 或其他切分时
 
@@ -85,9 +112,9 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
 
 ## 接入
 
-1. 在「Kubernetes」页点「接入集群」，填名称、server 地址（集群节点访问 server 用的地址）和厂商，按需填节点选择器
-   （例如 `nvidia.com/gpu.present=true`，留空表示所有节点）。同一个 Kubernetes 集群里有两个厂商的节点时，按厂商建两个
-   条目，各用不同的 namespace 与节点选择器。
+1. 在「Kubernetes」页点「接入集群」，填名称、server 地址（集群节点访问 server 用的地址），按需填节点选择器
+   （例如 `nvidia.com/gpu.present=true`，留空表示所有节点）。没有厂商这一项：每个节点上的 agent 自己识别加速卡，集群里
+   有多个厂商的节点时一个条目就够了；没有加速卡或厂商暂不支持的节点保持待命，不会成为平台的节点。
 2. 「高级」里的选项：
    - 状态目录：agent 在节点上的目录，默认 `/opt/gpuworks`。节点上已经装着一个 gpuworks agent 时换一个目录（例如
      `/opt/gpuworks-kube`），两者互不干扰。
@@ -102,8 +129,8 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
    - 镜像拉取凭据：agent 镜像放在需要登录的仓库（企业 Harbor、云厂商的私有仓库）时，先在命名空间里建一个
      docker-registry 类型的 Secret（`kubectl -n gpuworks-system create secret docker-registry regcred …`，namespace 不存在时
      先建），再在这里填它的名称。agent Pod 用它拉镜像，agent 起的占位 Pod 也沿用它。
-   - RuntimeClass：只对 NVIDIA：实例 Pod 访问 GPU 用的 RuntimeClass。留空（默认）时每个节点的 agent 自己判断：集群里有
-     `nvidia` RuntimeClass 就用它，没有就用节点的默认运行时；agent 自己的容器里没有 `nvidia-smi` 时在节点上运行它。
+   - RuntimeClass：只影响 NVIDIA 的实例 Pod，它们访问 GPU 用的 RuntimeClass；其他厂商的设备由 agent 自带的 device plugin
+     交给实例，不受它影响。留空（默认）时每个节点自己判断：集群里有 `nvidia` RuntimeClass 就用它，没有就用节点的默认运行时。
      只有 RuntimeClass 叫别的名字时才需要填写。
    - 引擎端口段：默认 `40000-42767`。不要与集群的 NodePort 范围（默认 `30000-32767`）重叠：kube-proxy 会把发往本机
      地址的 NodePort 流量转走。
@@ -122,6 +149,46 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
 
 命令里带着集群的接入令牌，只给管理员看。吊销接入令牌后新节点不能再加入，已加入的节点不受影响。
 
+列表里每个条目按厂商列出已加入的节点数（节点最多的厂商在前；没有上报加速卡的节点单独归为一类）。
+
+## 修改集群条目
+
+在「Kubernetes」页点条目的「编辑」（管理员，接口是 `PUT /api/v1/kube/clusters/{uuid}`）。可以改：名称、节点选择器、agent 镜像与镜像仓库、
+镜像拉取凭据、RuntimeClass、containerd socket、API server 地址、引擎端口段、空闲归还、优先级与允许抢占，校验规则与创建时一致。
+命名空间、server 地址与状态目录创建后固定，要改就删掉条目重建。从云账号接入的条目按节点池选节点，不能改节点选择器，
+改它的节点池（见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)）。
+
+保存只改 gpuworks 里的记录，manifest 随即按新设置渲染，**集群里跑的仍是旧的，直到再应用一次**：
+
+- 手动接入的条目（没有吊销）：保存后页面给出一行 `kubectl` 命令，先删条目的 PriorityClass 再应用 manifest
+  （`kubectl delete priorityclass gpuworks-inference-<命名空间> --ignore-not-found && kubectl apply -f ...`）：Kubernetes 不能原地修改
+  PriorityClass 的数值与 `preemptionPolicy`，只能删了重建；之前改过优先级却没应用时，单独的 `kubectl apply` 会因此失败，
+  所以每次都带上删除。写成一行是为了两步之间不留没有 PriorityClass 的空档。
+- 从云账号接入的条目：点「应用到集群」，server 自己应用；PriorityClass 变了时由 server 先删后建（应用结果里这一项的动作是 `replace`）。
+- 空闲归还时间也写在 manifest 里（DaemonSet 的 Pod 模板带注解 `gpuworks.ai/idle-return-seconds`），所以改了它同样要重新应用：
+  agent 随之重启，在启动注册时取到新值。agent 重启不会重启实例 Pod。
+
+**改节点选择器（云条目是节点池）**：重新应用后，DaemonSet 不再在不被选中的节点上运行，这些节点的 agent 退出，节点离线；
+离线 15 分钟后，平台请同一个条目里另一个在线的 agent 确认：该节点在 Kubernetes 里是否还在、是否还运行着本条目的 agent Pod。
+连续两次确认（约隔 5 分钟，避开滚动更新时 agent Pod 删了还没重建的空档）都不是、且节点上没有实例时，节点记录自动删除。条目里没有别的在线节点时没有谁可问，不自动删除，需要在节点页手动删除这个节点
+（删除 Kubernetes 节点不需要 SSH）。新选中的节点自己加入。
+
+## 卸载
+
+条目的「卸载」给出把它的 agent 从集群里移走的 `kubectl` 命令（管理员可见，吊销过的条目也有），按顺序执行：
+
+```bash
+kubectl -n <namespace> delete daemonset gpuworks-agent --ignore-not-found --wait
+kubectl delete clusterrolebinding gpuworks-agent-<namespace> --ignore-not-found
+kubectl delete clusterrole gpuworks-agent-<namespace> --ignore-not-found
+kubectl delete priorityclass gpuworks-inference-<namespace> --ignore-not-found
+kubectl delete namespace <namespace> --ignore-not-found
+```
+
+删 DaemonSet 时实例 Pod 与占位 Pod 一起被删除，卡还给 Kubernetes。这些命令不需要接入令牌；`kubectl delete -f <manifest 地址>`
+则要用令牌取 manifest，吊销令牌后就不能用了。server 够得着集群的条目（从云账号接入）由 server 代为执行（「从集群卸载」，先检查、确认后删除）。
+节点都从节点页消失后才能删除条目（还有节点时拒绝，`KUBE_CLUSTER_HAS_NODES`）。
+
 ## 日常运维
 
 | 场景 | 做法 |
@@ -130,7 +197,8 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
 | 升级 agent | 与普通节点一样：节点页勾选后点「批量升级 Agent」，或在节点详情里点「升级 Agent」。agent 运行在节点状态目录里的 `agent/gpuworks-agent`，升级原地替换这份程序，不改 DaemonSet、不访问镜像仓库，实例 Pod 不受影响；升级后的程序在 Pod 重建后仍在。运行环境版本（镜像 tag）很少变化；某个版本升了它时，发布说明会写明，重新 apply 一次 manifest（`kubectl apply` 或「应用到集群」）即可。`kubectl` 里看到的镜像 tag 是运行环境版本，不代表 agent 版本，以节点页为准 |
 | 节点被删除或缩容 | 节点离线 15 分钟后，gpuworks 请同集群另一台在线节点确认；Kubernetes 里已没有该节点且其上没有实例时自动移除 |
 | 从 gpuworks 删除节点 | 只删除记录，不卸载 agent；DaemonSet 仍选中该节点时它会重新加入，需要先调整节点选择器 |
-| 卸载 | `kubectl delete -f` 同一个 manifest 地址：DaemonSet、实例 Pod、占位 Pod 一起删除，卡还给 Kubernetes |
+| 修改节点选择器或节点池 | 见上文「修改集群条目」：重新应用后，不再被选中的节点离线，15 分钟后自动清理；新选中的节点自己加入 |
+| 卸载 | 条目的「卸载」给出 `kubectl` 命令（见上文「卸载」）：DaemonSet、实例 Pod、占位 Pod 一起删除，卡还给 Kubernetes |
 
 ## 限制
 
@@ -138,6 +206,7 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
   所以实例镜像不用 Pod 的 `imagePullSecrets`，私有仓库的凭据配在 gpuworks 的镜像来源里（集群条目的镜像拉取凭据只管
   agent 镜像）。
 - 实例使用 host 网络，不创建 Service / Ingress，经 gpuworks 网关访问。
-- 厂商的命令行工具（`npu-smi`、`hy-smi`、`ppu-smi`）在节点的挂载命名空间里运行，用节点自己的 C 库与驱动库，所以 agent
-  镜像与节点的发行版无关。
+- 厂商的命令行工具（`npu-smi`、`hy-smi`、`ppu-smi`、`nvidia-smi`）在节点的挂载命名空间里运行，用节点自己的 C 库与驱动库，所以 agent
+  镜像与节点的发行版无关；查找顺序见「加速卡厂商：自动识别」。
+- 只支持 NVIDIA、昇腾、海光与 PPU 的节点；其他厂商（AMD、昆仑芯等）的节点保持待命，不成为平台节点。
 - agent 以 privileged、hostNetwork、hostPID 运行（探测、经节点挂载命名空间运行 nerdctl 与 mount 需要）。

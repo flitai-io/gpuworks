@@ -8,7 +8,6 @@ package gpu
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"time"
 
@@ -256,8 +255,12 @@ var vendorCommands = []struct{ vendor, command string }{
 	{accelerator.VendorNVIDIA, "nvidia-smi"},
 }
 
+// deviceExists checks the host's live /dev when CLIs run there: a
+// privileged container's own /dev is a copy made at container start, so a
+// device node created afterward (a driver still initializing) would
+// otherwise be reported missing.
 func deviceExists(path string) bool {
-	_, err := os.Stat(path)
+	_, err := statTool(path)
 	return err == nil
 }
 

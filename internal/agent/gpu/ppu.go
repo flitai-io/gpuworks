@@ -142,19 +142,12 @@ func sharedLibraryPath(ctx context.Context, name string) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		resolved, err := filepath.EvalSymlinks(candidate)
+		resolved, info, err := resolveLibraryCandidate(candidate)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return "", fmt.Errorf("resolve probe dependency %s at %s: %w", name, candidate, err)
-		}
-		info, err := os.Stat(resolved)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return "", fmt.Errorf("inspect probe dependency %s at %s: %w", name, resolved, err)
 		}
 		if !info.Mode().IsRegular() {
 			return "", fmt.Errorf("probe dependency %s at %s is not a regular file", name, resolved)
@@ -162,6 +155,24 @@ func sharedLibraryPath(ctx context.Context, name string) (string, error) {
 		return resolved, nil
 	}
 	return "", fmt.Errorf("probe dependency %s was not found on the host: %w", name, os.ErrNotExist)
+}
+
+// resolveLibraryCandidate resolves a shared-library candidate's symlinks
+// and stats it, on the host when CLIs run there (through hostRoot, so an
+// absolute symlink target is resolved against the host's own root, not the
+// agent's /proc/1/root view of it) and locally otherwise. The returned path
+// is always the host's own, never one prefixed with hostRoot, because it
+// becomes a mount source for an instance container.
+func resolveLibraryCandidate(candidate string) (string, os.FileInfo, error) {
+	if cliOnHost.Load() {
+		return resolveOnHost(candidate)
+	}
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", nil, err
+	}
+	info, err := os.Stat(resolved)
+	return resolved, info, err
 }
 
 func parseLdconfigLibraryPath(output, name string) string {
@@ -371,8 +382,12 @@ func parsePPUProcInfo(out string) map[string]string {
 	return fields
 }
 
+// verifyPPUDeviceNode checks the host's live /dev when CLIs run there: a
+// privileged container's own /dev is a copy made at container start, so a
+// device node created afterward (the driver finishing its init) would
+// otherwise be reported missing.
 func verifyPPUDeviceNode(index int, path string, expected int) error {
-	info, err := os.Stat(path)
+	info, err := statTool(path)
 	if err != nil {
 		return fmt.Errorf("PPU device %d is unavailable: %s: %w", index, path, err)
 	}

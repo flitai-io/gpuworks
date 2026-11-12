@@ -1341,6 +1341,7 @@ var migrations = []migration{
 	{Version: 207, Name: "legacy_column_and_index_leftovers", Apply: repairLegacyColumnAndIndexLeftovers},
 	{Version: 208, Name: "peer_transfer_ownership", Apply: addPeerTransferOwnership},
 	{Version: 209, Name: "kube_cluster_priority", Apply: addKubeClusterPriority},
+	{Version: 210, Name: "kube_cluster_drop_vendor", Apply: dropKubeClusterVendor},
 }
 
 // modelFileNetworkColumns are the columns migrations 76 and 77 added to

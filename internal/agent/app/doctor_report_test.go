@@ -308,7 +308,7 @@ func TestDoctorNCCLCheckSkipsWithoutTorch(t *testing.T) {
 	if exec.Command("python3", "-c", "import torch").Run() == nil {
 		t.Skip("torch is installed here; the skip path cannot be exercised")
 	}
-	if got := diagnosticNCCL(context.Background(), 2); got != "SKIP (torch is not installed)" {
+	if got := diagnosticNCCL(context.Background(), 2, t.TempDir()); got != "SKIP (torch is not installed)" {
 		t.Fatalf("diagnosticNCCL = %q", got)
 	}
 	if diagnosticFailed("SKIP (torch is not installed)") {

@@ -86,6 +86,9 @@ func TestKubeAgentUpgradesInPlaceKind(t *testing.T) {
 		"name": "l3up", "server_url": serverURL, "agent_image": agentImage,
 	}, http.StatusCreated, &created)
 	k.mustShell(2*time.Minute, created.ApplyCommand)
+	// The kind node has no card: without one the agent stands by and never
+	// joins, so it is given a fake one, as in the deploy case.
+	k.mustRun(time.Minute, "-n", kubeNamespace, "set", "env", "ds/gpuworks-agent", fakeGPUEnv, "GPUWORKS_FAKE_GPU_NO_INJECT=1")
 	k.waitDaemonSetReady("after the apply")
 
 	// ---- the image's agent hands over and takes the server's binary.

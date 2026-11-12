@@ -119,6 +119,8 @@ spec:
       labels:
         app.kubernetes.io/name: gpuworks-agent
         app.kubernetes.io/managed-by: gpuworks
+      annotations:
+        gpuworks.ai/idle-return-seconds: "0"
     spec:
       serviceAccountName: gpuworks-agent
       hostNetwork: true
@@ -128,7 +130,6 @@ spec:
       # the API server by address.
       dnsPolicy: Default
       priorityClassName: system-node-critical
-      runtimeClassName: "nvidia"
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

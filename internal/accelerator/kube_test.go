@@ -1,6 +1,9 @@
 package accelerator
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestClassifyKubeResource(t *testing.T) {
 	for _, c := range []struct {
@@ -39,22 +42,13 @@ func TestClassifyKubeResource(t *testing.T) {
 	}
 }
 
-func TestKubeProfiles(t *testing.T) {
-	for _, v := range KubeVendors() {
-		p, ok := KubeProfileFor(v)
-		if !ok || p.Vendor != v {
-			t.Fatalf("profile %q = %+v", v, p)
-		}
-		for _, d := range append(append([]string{}, p.HostDirs...), p.HostFiles...) {
-			if d == "" || d[0] != '/' {
-				t.Fatalf("%s: host path %q is not absolute", v, d)
-			}
-		}
+func TestKubeVendors(t *testing.T) {
+	if got := strings.Join(KubeVendors(), ","); got != "ascend,hygon,nvidia,ppu" {
+		t.Fatalf("KubeVendors = %s", got)
 	}
-	if _, ok := KubeProfileFor("apple"); ok {
-		t.Fatal("apple has no Kubernetes profile")
-	}
-	if p, _ := KubeProfileFor("NVIDIA"); !p.RuntimeClass {
-		t.Fatal("NVIDIA agents run under the NVIDIA RuntimeClass")
+	for v, want := range map[string]bool{"NVIDIA": true, "ascend": true, "amd": false, "kunlun": false, "": false} {
+		if RunsOnKube(v) != want {
+			t.Fatalf("RunsOnKube(%q) = %v", v, !want)
+		}
 	}
 }

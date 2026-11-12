@@ -17,7 +17,6 @@ type KubeCluster struct {
 	// image its manifest names.
 	AgentImageSource    string `json:"agent_image_source"`
 	EffectiveAgentImage string `json:"effective_agent_image"`
-	Vendor              string `json:"vendor"`
 	NodeSelector        string `json:"node_selector"`
 	RuntimeClass        string `json:"runtime_class"`     // empty: the cluster's "nvidia" class when it has one, else the default runtime
 	ImagePullSecret     string `json:"image_pull_secret"` // empty: the agent image is pulled without credentials
@@ -34,7 +33,14 @@ type KubeCluster struct {
 	ClusterUID      string `json:"cluster_uid"` // empty until the first node enrolls
 	Revoked         bool   `json:"revoked"`
 	NodeCount       int    `json:"node_count"`
-	ApplyCommand    string `json:"apply_command,omitempty"`
+	// Vendors counts the joined nodes by the vendor of their cards, most
+	// first; every agent finds out its own node's.
+	Vendors      []KubeVendorNodes `json:"vendors"`
+	ApplyCommand string            `json:"apply_command,omitempty"`
+	// RemoveCommands take the entry's agents, and the pods they started, out
+	// of the cluster with kubectl, in order; for administrators. The server
+	// does the same itself for an entry it can reach (POST …/remove).
+	RemoveCommands []string `json:"remove_commands,omitempty"`
 	// Stalled: no node has joined for longer than the dictionary's
 	// stalled_after_seconds (GET /kube/defaults), so it is worth looking at
 	// why. Never for a revoked cluster or one a node joined.
@@ -63,7 +69,6 @@ type KubeCluster struct {
 // vendors with what applies to each. A client shows the defaults as hints and
 // sends only what the user typed.
 type KubeDefaults struct {
-	Vendor              string `json:"vendor"`
 	Namespace           string `json:"namespace"`
 	StateDir            string `json:"state_dir"`
 	EnginePorts         string `json:"engine_ports"`
@@ -71,9 +76,6 @@ type KubeDefaults struct {
 	IdleReturnKeep      int    `json:"idle_return_keep"` // the idle_return_seconds value that keeps borrowed cards
 	AgentImage          string `json:"agent_image"`
 	StalledAfterSeconds int    `json:"stalled_after_seconds"`
-	// Vendors lists the vendors a cluster can be connected for, the default
-	// first.
-	Vendors []KubeVendor `json:"vendors"`
 	// AgentImageSource is the registry an entry made by hand pulls the
 	// published agent image from when it names no image of its own;
 	// AgentImageSources lists them all, the default first.
@@ -93,13 +95,10 @@ type KubeAgentImageSource struct {
 	Image string `json:"image"` // the image there, at the server's runtime revision
 }
 
-// KubeVendor is one accelerator vendor of a cluster.
-type KubeVendor struct {
-	ID string `json:"id"`
-	// RuntimeClass: the agent pod of this vendor runs under a RuntimeClass,
-	// so the cluster may name one. For the others the field does not apply
-	// and the server ignores it.
-	RuntimeClass bool `json:"runtime_class"`
+// KubeVendorNodes is how many of an entry's nodes have one vendor's cards.
+type KubeVendorNodes struct {
+	Vendor string `json:"vendor"` // "" for nodes that reported no cards
+	Nodes  int    `json:"nodes"`
 }
 
 // KubeClusterRequest creates a cluster. Empty optional fields take the
@@ -113,7 +112,6 @@ type KubeClusterRequest struct {
 	// AgentImage is empty; empty is Docker Hub for an entry made by hand, and
 	// for one made from a cloud cluster the registry its region reaches.
 	AgentImageSource  string `json:"agent_image_source,omitempty"`
-	Vendor            string `json:"vendor,omitempty"`
 	NodeSelector      string `json:"node_selector,omitempty"`
 	RuntimeClass      string `json:"runtime_class,omitempty"`
 	ImagePullSecret   string `json:"image_pull_secret,omitempty"`
@@ -236,4 +234,42 @@ type KubeObjectResult struct {
 	Action string `json:"action"`
 	Reason string `json:"reason,omitempty"`
 	Error  string `json:"error,omitempty"`
+}
+
+// KubeClusterUpdate edits an entry (PUT /kube/clusters/{uuid}): each field
+// given replaces the entry's, omitted ones keep it, and an empty string
+// clears an optional one. The namespace, server URL and state directory are
+// fixed when the entry is made; an entry made from a cloud cluster selects
+// its nodes by node pool (PUT …/pools), not by node selector.
+type KubeClusterUpdate struct {
+	Name              *string `json:"name,omitempty"`
+	NodeSelector      *string `json:"node_selector,omitempty"`
+	AgentImage        *string `json:"agent_image,omitempty"`
+	AgentImageSource  *string `json:"agent_image_source,omitempty"`
+	ImagePullSecret   *string `json:"image_pull_secret,omitempty"`
+	RuntimeClass      *string `json:"runtime_class,omitempty"`
+	ContainerdSocket  *string `json:"containerd_socket,omitempty"`
+	APIServer         *string `json:"api_server,omitempty"`
+	EnginePorts       *string `json:"engine_ports,omitempty"`
+	IdleReturnSeconds *int    `json:"idle_return_seconds,omitempty"`
+	Priority          *int    `json:"priority,omitempty"`
+	AllowPreemption   *bool   `json:"allow_preemption,omitempty"`
+}
+
+// KubeClusterEdit is the answer to an edit: the entry as stored, the fields
+// that changed (their JSON names, sorted) and how the cluster catches up.
+type KubeClusterEdit struct {
+	Cluster KubeCluster `json:"cluster"`
+	Changed []string    `json:"changed"`
+	// Reapply: the entry's manifest changed, so the cluster runs the old one
+	// until it is applied again (POST …/apply for an entry the server can
+	// apply, the commands below otherwise).
+	Reapply bool `json:"reapply"`
+	// Commands bring a cluster the server cannot reach in line: one line
+	// that deletes the entry's PriorityClass and applies the manifest, since
+	// Kubernetes does not change a class's value or preemption policy in
+	// place and an earlier edit of them may not have been applied. Only for
+	// administrators of an entry made by hand that is not revoked; empty
+	// when the manifest did not change.
+	Commands []string `json:"commands"`
 }

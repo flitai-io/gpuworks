@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/kubemanifest"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -31,33 +30,15 @@ const (
 	kubeBlockedRevoked    = "revoked"
 )
 
-// kubeVendorList is the vendors a cluster can be connected for, the default
-// first, then the rest in name order, each with what applies to it.
-func kubeVendorList() []dto.KubeVendor {
-	out := []dto.KubeVendor{}
-	add := func(vendor string) {
-		if profile, ok := accelerator.KubeProfileFor(vendor); ok {
-			out = append(out, dto.KubeVendor{ID: profile.Vendor, RuntimeClass: profile.RuntimeClass})
-		}
-	}
-	add(kubeDefaultVendor)
-	for _, vendor := range accelerator.KubeVendors() {
-		if vendor != kubeDefaultVendor {
-			add(vendor)
-		}
-	}
-	return out
-}
-
 // kubeDefaults answers what a new cluster takes for the fields its request
 // leaves empty, so the form can show them as hints without a copy of them.
 func (a *apiHandlers) kubeDefaults(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.KubeDefaults{
-		Vendor: kubeDefaultVendor, Namespace: kubeDefaultNamespace, StateDir: kubeDefaultStateDir,
+		Namespace: kubeDefaultNamespace, StateDir: kubeDefaultStateDir,
 		EnginePorts: kubeDefaultEnginePorts, IdleReturnSeconds: store.KubeDefaultIdleReturnSeconds,
 		IdleReturnKeep: store.KubeKeepCards, AgentImage: kubemanifest.AgentImage(kubemanifest.AgentImageDockerHub),
-		StalledAfterSeconds: int(kubeStalledAfter / time.Second), Vendors: kubeVendorList(),
-		AgentImageSource: kubemanifest.AgentImageDockerHub, AgentImageSources: kubeAgentImageSourceList(),
+		StalledAfterSeconds: int(kubeStalledAfter / time.Second),
+		AgentImageSource:    kubemanifest.AgentImageDockerHub, AgentImageSources: kubeAgentImageSourceList(),
 		Priority: store.KubeDefaultPriority, PriorityMax: kubemanifest.PriorityMax, AllowPreemption: false,
 	})
 }

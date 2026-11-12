@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -58,10 +59,6 @@ type KubeCluster struct {
 	// nodes can pull from, so it is chosen when the entry is made (for a
 	// cloud cluster from its region).
 	AgentImageSource string `gorm:"size:16"`
-	// Vendor is the accelerator vendor of the selected nodes; it decides the
-	// host paths the agents mount. A cluster with cards of two vendors joins
-	// as two clusters, each selecting its own nodes.
-	Vendor string `gorm:"size:16"`
 	// NodeSelector is the DaemonSet's node selector, "key=value" pairs joined
 	// by commas; empty selects every node.
 	NodeSelector string `gorm:"size:512"`
@@ -109,7 +106,24 @@ type KubeCluster struct {
 var (
 	ErrKubeTokenUnknown    = errors.New("unknown or revoked enrollment token")
 	ErrKubeClusterMismatch = errors.New("the enrollment token belongs to another cluster")
+	ErrKubeNodeTaken       = errors.New("another entry of the cluster holds this node")
 )
+
+// KubeNodeTakenFor is how long after its agent was last seen a node keeps
+// belonging to the entry that has it: within it another entry of the same
+// cluster cannot enroll the same Kubernetes node (two agents would share its
+// state directory). Past it the node can move, as when an operator changes
+// which nodes each entry selects.
+const KubeNodeTakenFor = 15 * time.Minute
+
+// KubeNodeTakenError names the entry that holds the node.
+type KubeNodeTakenError struct{ Entry string }
+
+func (e *KubeNodeTakenError) Error() string {
+	return fmt.Sprintf("%s: %s", ErrKubeNodeTaken, e.Entry)
+}
+
+func (e *KubeNodeTakenError) Unwrap() error { return ErrKubeNodeTaken }
 
 func createKubeClusters(db *gorm.DB) error {
 	if err := db.AutoMigrate(&KubeCluster{}); err != nil {
@@ -171,6 +185,15 @@ func addKubeClusterPriority(db *gorm.DB) error {
 		return nil
 	}
 	return db.Exec("UPDATE kube_clusters SET priority = ?, allow_preemption = ?", KubeDefaultPriority, false).Error
+}
+
+// dropKubeClusterVendor removes KubeCluster.Vendor: an entry no longer
+// names its nodes' vendor, each agent finds out its own.
+func dropKubeClusterVendor(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&KubeCluster{}) || !db.Migrator().HasColumn("kube_clusters", "vendor") {
+		return nil
+	}
+	return db.Exec("ALTER TABLE kube_clusters DROP COLUMN vendor").Error
 }
 
 // CreateKubeCluster stores a cluster with a fresh enrollment token, and the
@@ -258,17 +281,22 @@ func (s *Store) KubeClusterByToken(token string) (*KubeCluster, error) {
 	return &c, err
 }
 
-// KubeClusterNodeCounts maps cluster ID to how many nodes joined from it.
-func (s *Store) KubeClusterNodeCounts() (map[uint]int, error) {
+// KubeClusterNodeVendors counts each entry's nodes by the vendor of their
+// cards, in one query; a node that reported none counts under "".
+func (s *Store) KubeClusterNodeVendors() (map[uint]map[string]int, error) {
 	var rows []struct {
 		KubeClusterID uint
+		GPUVendor     string
 		N             int
 	}
-	err := s.db.Model(&Node{}).Select("kube_cluster_id, count(*) AS n").
-		Where("kube_cluster_id > 0").Group("kube_cluster_id").Scan(&rows).Error
-	out := make(map[uint]int, len(rows))
+	err := s.db.Model(&Node{}).Select("kube_cluster_id, gpu_vendor, count(*) AS n").
+		Where("kube_cluster_id > 0").Group("kube_cluster_id, gpu_vendor").Scan(&rows).Error
+	out := map[uint]map[string]int{}
 	for _, r := range rows {
-		out[r.KubeClusterID] = r.N
+		if out[r.KubeClusterID] == nil {
+			out[r.KubeClusterID] = map[string]int{}
+		}
+		out[r.KubeClusterID][r.GPUVendor] += r.N
 	}
 	return out, err
 }
@@ -346,6 +374,14 @@ func (s *Store) EnrollKubeNode(token, clusterUID, nodeName string) (*Node, *Kube
 		case cluster.ClusterUID != clusterUID:
 			return ErrKubeClusterMismatch
 		}
+		// Another entry holding the node refuses it even when this entry has
+		// a row for it from before: two agents would manage one node's cards.
+		if holder, err := kubeNodeHolder(tx, cluster, nodeName, time.Now().UTC()); err != nil || holder != "" {
+			if err != nil {
+				return err
+			}
+			return &KubeNodeTakenError{Entry: holder}
+		}
 		err := tx.Where("kube_cluster_id = ? AND kube_node_name = ?", cluster.ID, nodeName).First(&node).Error
 		if err == nil {
 			return nil
@@ -372,6 +408,30 @@ func (s *Store) EnrollKubeNode(token, clusterUID, nodeName string) (*Node, *Kube
 		s.publishNode(node.UUID, "pending")
 	}
 	return &node, &cluster, nil
+}
+
+// kubeNodeHolder names another entry of cluster's Kubernetes cluster whose
+// agent on nodeName is online or was seen within KubeNodeTakenFor; "" when
+// none. The same cluster is the same kube-system UID.
+func kubeNodeHolder(tx *gorm.DB, cluster KubeCluster, nodeName string, now time.Time) (string, error) {
+	var rows []struct {
+		Name       string
+		State      string
+		LastSeenAt *time.Time
+	}
+	err := tx.Table("nodes").Select("kube_clusters.name AS name, nodes.state AS state, nodes.last_seen_at AS last_seen_at").
+		Joins("JOIN kube_clusters ON kube_clusters.id = nodes.kube_cluster_id").
+		Where("kube_clusters.cluster_uid = ? AND kube_clusters.id <> ? AND nodes.kube_node_name = ?", cluster.ClusterUID, cluster.ID, nodeName).
+		Scan(&rows).Error
+	if err != nil {
+		return "", err
+	}
+	for _, r := range rows {
+		if r.State != NodeStateOffline || (r.LastSeenAt != nil && now.Sub(*r.LastSeenAt) < KubeNodeTakenFor) {
+			return r.Name, nil
+		}
+	}
+	return "", nil
 }
 
 // OfflineKubeNodes lists the Kubernetes nodes whose agents have been gone

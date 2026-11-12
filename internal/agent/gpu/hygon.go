@@ -464,11 +464,15 @@ func (p *HygonProber) match(pattern string) ([]string, error) {
 	return filepath.Glob(pattern)
 }
 
+// inspect stats path where CLIs run (statTool): a privileged container's
+// own /dev and /opt/hyhal are copies made at container start, so a device
+// node or driver directory that appears afterward is found only on the
+// host's live file system.
 func (p *HygonProber) inspect(path string) (os.FileInfo, error) {
 	if p.stat != nil {
 		return p.stat(path)
 	}
-	return os.Stat(path)
+	return statTool(path)
 }
 
 func (p *HygonProber) requireDevice(path string) error {

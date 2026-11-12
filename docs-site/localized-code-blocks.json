@@ -541,8 +541,8 @@
   {
     "path": "how-to/connect-managed-kubernetes.md",
     "block_index": 18,
-    "source_sha256": "f0fbebb46ebb9a25195f53c17bab74542323aa9f096a0430dd7f22414ef2cedc",
-    "translation_sha256": "aff226f82555e0c8ec0f649f2fa8813cd5f46a38041e2df4008b3ade74cc41d9",
+    "source_sha256": "0f99cdeebc846d77a66623b709f47c053efe1a628ca4a434dacb5732dc957514",
+    "translation_sha256": "4bd9458da492df3691e5f6f4f785e09b2dedc28398eb2af31528495e170af09c",
     "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
   }
 ]

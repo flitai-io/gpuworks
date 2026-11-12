@@ -11,6 +11,7 @@ import { Notice } from "../../ui-kit/Notice";
 const ACTION_STATUS: Record<KubeObjectAction, BadgeStatus> = {
   create: "success",
   update: "info",
+  replace: "warning",
   delete: "danger",
   absent: "neutral",
   failed: "danger",

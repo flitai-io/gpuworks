@@ -54,6 +54,55 @@ type PodSpec struct {
 	Containers                    []Container       `json:"containers"`
 	Volumes                       []Volume          `json:"volumes,omitempty"`
 	SecurityContext               *PodSecurity      `json:"securityContext,omitempty"`
+	// Affinity is only read: the DaemonSet controller pins each of its
+	// pods to a node by a matchFields term before the scheduler binds it.
+	Affinity *Affinity `json:"affinity,omitempty"`
+}
+
+// Affinity is the part of a pod's affinity the agent reads.
+type Affinity struct {
+	NodeAffinity *NodeAffinity `json:"nodeAffinity,omitempty"`
+}
+
+// NodeAffinity holds the required node selector terms.
+type NodeAffinity struct {
+	Required *NodeSelector `json:"requiredDuringSchedulingIgnoredDuringExecution,omitempty"`
+}
+
+// NodeSelector is a list of node selector terms, any of which matches.
+type NodeSelector struct {
+	Terms []NodeSelectorTerm `json:"nodeSelectorTerms"`
+}
+
+// NodeSelectorTerm is one term; the agent reads its field requirements.
+type NodeSelectorTerm struct {
+	MatchFields []NodeSelectorRequirement `json:"matchFields,omitempty"`
+}
+
+// NodeSelectorRequirement is "Key Operator Values".
+type NodeSelectorRequirement struct {
+	Key      string   `json:"key"`
+	Operator string   `json:"operator"`
+	Values   []string `json:"values,omitempty"`
+}
+
+// TargetNode is the node a pod is bound to, or for a pod the scheduler has
+// not bound yet the node a DaemonSet pinned it to ("" when neither).
+func (p Pod) TargetNode() string {
+	if p.Spec.NodeName != "" {
+		return p.Spec.NodeName
+	}
+	if p.Spec.Affinity == nil || p.Spec.Affinity.NodeAffinity == nil || p.Spec.Affinity.NodeAffinity.Required == nil {
+		return ""
+	}
+	for _, term := range p.Spec.Affinity.NodeAffinity.Required.Terms {
+		for _, f := range term.MatchFields {
+			if f.Key == "metadata.name" && f.Operator == "In" && len(f.Values) == 1 {
+				return f.Values[0]
+			}
+		}
+	}
+	return ""
 }
 
 // LocalRef names an object in the pod's namespace.

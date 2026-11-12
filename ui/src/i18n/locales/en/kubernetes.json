@@ -13,8 +13,8 @@
   "column": {
     "name": "Name",
     "namespace": "Namespace",
-    "vendor": "Vendor",
     "nodes": "Nodes",
+    "vendors": "Accelerators",
     "clusterUid": "Cluster UID",
     "cardReturn": "Card return",
     "status": "Status",
@@ -50,12 +50,16 @@
     "revoked": "Cluster {{name}} revoked",
     "delete": "Delete",
     "deleteConfirm": "Delete cluster {{name}}?",
-    "deleteHelp": "Only the cluster record here is removed. Delete the DaemonSet in Kubernetes yourself. A cluster that still has nodes cannot be deleted.",
+    "deleteHelp": "Only the cluster record here is removed. A cluster that still has nodes cannot be deleted: uninstall it from the Kubernetes cluster first and delete it once its nodes are gone.",
     "deleted": "Cluster {{name}} deleted",
     "cancel": "Cancel",
     "failed": "The action failed",
     "apply": "Apply to the cluster",
-    "remove": "Remove from the cluster"
+    "remove": "Remove from the cluster",
+    "edit": "Edit",
+    "uninstall": "Uninstall",
+    "deleteHasNodes_one": "This cluster still has {{count}} node, so it cannot be deleted yet. Uninstall it from the cluster first.",
+    "deleteHasNodes_other": "This cluster still has {{count}} nodes, so it cannot be deleted yet. Uninstall them from the cluster first."
   },
   "manifest": {
     "title": "Manifest of {{name}}",
@@ -65,6 +69,7 @@
   },
   "drawer": {
     "title": "Connect a Kubernetes cluster",
+    "editTitle": "Edit cluster",
     "name": "Name",
     "nameRequired": "Enter a name for the cluster",
     "namePlaceholder": "prod-gpu",
@@ -72,10 +77,8 @@
     "serverUrlHelp": "The address the agents in the cluster reach this server at. It must be reachable from the cluster's Pods.",
     "serverUrlRequired": "Enter the server address",
     "serverUrlInvalid": "Enter an http:// or https:// address",
-    "vendor": "Accelerator vendor",
-    "vendorHelp": "The vendor of the cards on the cluster's GPU nodes. A cluster has one.",
     "pools": "GPU node pools",
-    "poolsHelp": "The entry runs on the nodes of the pools ticked here, which must all be of one vendor; the entry takes their vendor.",
+    "poolsHelp": "The entry runs on the nodes of the pools ticked here. Pools of different vendors may be ticked together; each node's agent detects its own cards.",
     "nodeSelector": "Node selector",
     "nodeSelectorPlaceholder": "nvidia.com/gpu.present=true",
     "nodeSelectorHelp": "Optional. Comma-separated key=value pairs; only Kubernetes nodes with all of these labels join. Empty means every node.",
@@ -94,14 +97,14 @@
     "agentImage": "Agent image",
     "agentImagePlaceholder": "Default image",
     "defaultsFailed": "The defaults could not be loaded",
-    "defaultsFailedHelp": "Fields left empty still take the server's defaults; the hints and the vendor list are missing.",
+    "defaultsFailedHelp": "Fields left empty still take the server's defaults; the hints are missing.",
     "agentImageHelp": "Runs your own image instead (for example a copy in a private registry) rather than pulling from the registry above.",
     "imagePullSecret": "Image pull secret",
     "imagePullSecretPlaceholder": "None",
     "imagePullSecretHelp": "For an agent image in a registry that needs a login: the name of a docker-registry Secret in the namespace, created before applying.",
     "runtimeClass": "RuntimeClass",
     "runtimeClassPlaceholder": "Automatic",
-    "runtimeClassHelp": "NVIDIA only: the RuntimeClass instance Pods reach the GPUs with. Empty decides on each node: the cluster's nvidia RuntimeClass when it has one (k3s), the node's default runtime otherwise (as on managed Kubernetes).",
+    "runtimeClassHelp": "Only affects the instance Pods on NVIDIA nodes (other vendors ignore it): the RuntimeClass they reach the GPUs with. Empty decides on each node: the cluster's nvidia RuntimeClass when it has one (k3s), the node's default runtime otherwise (as on managed Kubernetes).",
     "containerdSocket": "containerd socket",
     "containerdSocketHelp": "Path on the node. Empty lets the agents find it themselves; set it only for an unusual location.",
     "containerdSocketPlaceholder": "Auto-detect (containerd, k3s, RKE2, microk8s)",
@@ -122,9 +125,12 @@
     "keepCards": "Keep borrowed cards",
     "keepCardsHelp": "Never hand borrowed cards back to Kubernetes.",
     "submit": "Connect",
+    "save": "Save",
     "cancel": "Cancel",
     "close": "Close",
-    "fromSource": "From {{source}}: the node selector is set for the chosen node pool."
+    "fromSource": "From {{source}}: the entry runs on the node pools chosen below.",
+    "nodeSelectorCloud": "This entry is made from a cloud cluster: its nodes are chosen by node pool. Use the Node pools action in the list to change them.",
+    "fixedAfterCreate": "Fixed once the cluster entry is created."
   },
   "created": {
     "title": "Cluster {{name}} is ready",
@@ -162,7 +168,7 @@
   "pools": {
     "title": "Node pools of {{name}}",
     "group": "GPU node pools",
-    "intro": "The entry runs on the nodes of the ticked GPU node pools of its cloud cluster. Saving changes gpuworks's record; the cluster follows when the manifest is applied again.",
+    "intro": "The entry runs on the nodes of the ticked GPU node pools of its cloud cluster, of any vendors. Saving changes gpuworks's record; the cluster follows when the manifest is applied again.",
     "legacy": "This entry selects nodes by a node selector",
     "legacyHelp": "It was made before node pools were chosen: it selects nodes with \"{{selector}}\". Saving node pools replaces that selector, and the entry then runs on those pools alone.",
     "loading": "Loading the cluster's node pools",
@@ -211,7 +217,8 @@
       "absent": "absent",
       "failed": "refused",
       "not_tried": "not tried",
-      "dependent": "created with its namespace"
+      "dependent": "created with its namespace",
+      "replace": "will delete and create again"
     },
     "done": {
       "create": "created",
@@ -220,7 +227,32 @@
       "absent": "absent",
       "failed": "refused",
       "not_tried": "not tried",
-      "dependent": "created with its namespace"
+      "dependent": "created with its namespace",
+      "replace": "deleted and created again"
     }
+  },
+  "vendors": {
+    "entry": "{{vendor}} ×{{count}}",
+    "separator": " · ",
+    "none": "No accelerator"
+  },
+  "edit": {
+    "saved": "Cluster {{name}} saved",
+    "savedTitle": "Cluster {{name}} saved",
+    "savedHelp": "The cluster still runs the previous manifest until it is applied again.",
+    "applyNow": "Check and apply…",
+    "commandsTitle": "Run these in the cluster, in order",
+    "commandsHelp": "gpuworks cannot reach this cluster, so bring it in line yourself. Kubernetes cannot change a PriorityClass in place, so the first command deletes it when its value or preemption changed; the apply command creates it again."
+  },
+  "commands": {
+    "command": "Command {{n}}",
+    "copy": "Copy command {{n}}",
+    "copyAll": "Copy all commands"
+  },
+  "uninstall": {
+    "title": "Uninstall from the cluster · {{name}}",
+    "intro": "gpuworks cannot reach this cluster, so run these commands in it, in order. They remove the agents and the inference and hold pods the agents started from the cluster, and the cards go back to Kubernetes.",
+    "next": "Afterwards the nodes go offline and gpuworks removes them from the node list. Once they are gone, delete this cluster entry.",
+    "close": "Close"
   }
 }

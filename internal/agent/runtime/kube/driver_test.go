@@ -419,6 +419,32 @@ func TestUnschedulableReadsTheNode(t *testing.T) {
 	}
 }
 
+func TestAgentOnFindsTheEntrysAgentPodOnANode(t *testing.T) {
+	r := newRig(t, 0)
+	ctx := context.Background()
+	api := r.srv.Client()
+	for _, p := range []kubeapi.Pod{
+		{Metadata: kubeapi.ObjectMeta{Name: "agent-a", Namespace: testNS, Labels: map[string]string{"app.kubernetes.io/name": DaemonSetName}}, Spec: kubeapi.PodSpec{NodeName: "node-a", Containers: []kubeapi.Container{{Name: "agent", Image: "agent"}}}},
+		{Metadata: kubeapi.ObjectMeta{Name: "other", Namespace: testNS, Labels: map[string]string{"app.kubernetes.io/name": "else"}}, Spec: kubeapi.PodSpec{NodeName: "node-b", Containers: []kubeapi.Container{{Name: "x", Image: "x"}}}},
+		{Metadata: kubeapi.ObjectMeta{Name: "agent-d", Namespace: testNS, Labels: map[string]string{"app.kubernetes.io/name": DaemonSetName}}, Spec: kubeapi.PodSpec{Containers: []kubeapi.Container{{Name: "agent", Image: "agent"}},
+			Affinity: &kubeapi.Affinity{NodeAffinity: &kubeapi.NodeAffinity{Required: &kubeapi.NodeSelector{Terms: []kubeapi.NodeSelectorTerm{{MatchFields: []kubeapi.NodeSelectorRequirement{{Key: "metadata.name", Operator: "In", Values: []string{"node-d"}}}}}}}}}},
+		{Metadata: kubeapi.ObjectMeta{Name: "agent-c", Namespace: "another-entry", Labels: map[string]string{"app.kubernetes.io/name": DaemonSetName}}, Spec: kubeapi.PodSpec{NodeName: "node-c", Containers: []kubeapi.Container{{Name: "agent", Image: "agent"}}}},
+	} {
+		if err := api.Create(ctx, kubeapi.PodsPath(p.Metadata.Namespace), p, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for node, want := range map[string]bool{"node-a": true, "node-b": false, "node-c": false, "node-d": true} {
+		if got, err := r.d.AgentOn(ctx, node); err != nil || got != want {
+			t.Fatalf("AgentOn(%s) = %v, %v; want %v", node, got, err, want)
+		}
+	}
+	r.srv.FailNext["GET /api/v1/namespaces/"] = 500
+	if _, err := r.d.AgentOn(ctx, "node-a"); err == nil {
+		t.Fatal("an API failure read as an answer")
+	}
+}
+
 func TestNodeExists(t *testing.T) {
 	r := newRig(t, 0)
 	if ok, err := r.d.NodeExists(context.Background(), testNode); !ok || err != nil {

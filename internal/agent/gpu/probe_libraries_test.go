@@ -78,6 +78,36 @@ func TestHygonProbeLibrariesDoNotMountStaleTinfo(t *testing.T) {
 	}
 }
 
+// TestSharedLibraryPathOnHostResolvesAgainstTheHostRoot: a candidate's
+// symlink chain (ldconfig's /usr/lib64/libhgml.so -> ../lib/libhgml.so.1,
+// an absolute target) must resolve against the host's own root when CLIs
+// run there, and the path returned must be the host's own path (it becomes
+// a mount source), never one prefixed with hostRoot.
+func TestSharedLibraryPathOnHostResolvesAgainstTheHostRoot(t *testing.T) {
+	const name = "libhgml.so"
+	root := withHostRoot(t)
+	real := filepath.Join(root, "usr/lib64", name+".1")
+	if err := os.MkdirAll(filepath.Dir(real), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(real, []byte("library fixture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "usr/lib64", name)
+	// The link target is absolute, as a real ldconfig-managed library link
+	// is: under /proc/1/root this must resolve against the host's root,
+	// not the agent's own (where "/usr/lib64/libhgml.so.1" does not exist).
+	if err := os.Symlink("/usr/lib64/"+name+".1", link); err != nil {
+		t.Fatal(err)
+	}
+	fakeCLI(t, "ldconfig", fmt.Sprintf("printf '%%s\\n' '%s (libc6,x86-64) => /usr/lib64/%s'\n", name, name))
+	got, err := sharedLibraryPath(t.Context(), name)
+	want := "/usr/lib64/" + name + ".1"
+	if err != nil || got != want {
+		t.Fatalf("library path=%q err=%v, want the host path %q (not one prefixed with hostRoot)", got, err, want)
+	}
+}
+
 func TestSharedLibraryPathPreservesPermissionAndCancellation(t *testing.T) {
 	root := t.TempDir()
 	const name = "libgpuworks-test-permission.so"

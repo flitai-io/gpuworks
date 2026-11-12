@@ -225,16 +225,11 @@ func run(log *slog.Logger, args []string) error {
 	if err != nil {
 		return safeAgentConfigurationError(err)
 	}
-	if strings.TrimSpace(conf.Token) == "" && strings.EqualFold(conf.RuntimeDriver, kube.DriverName) {
-		// An agent of a cluster's DaemonSet starts without a node token and
-		// trades the cluster's enrollment token for one.
-		ectx, estop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		id, err := enrollKubeNode(ectx, log, agentapp.Config{ServerURL: conf.Server, StateDir: stateDir})
-		estop()
-		if err != nil {
+	if strings.EqualFold(conf.RuntimeDriver, kube.DriverName) {
+		stoodBy, err := kubeAcquireTokenOrStandBy(log, &conf, &cfg, stateDir)
+		if stoodBy || err != nil {
 			return err
 		}
-		conf.Token, cfg.KubeIdleReturn = id.NodeToken, id.IdleReturn()
 	}
 	if err := conf.Validate(); err != nil {
 		return safeAgentConfigurationError(err)
@@ -287,12 +282,6 @@ func run(log *slog.Logger, args []string) error {
 	cfg.DebugLog = tee
 	slog.SetDefault(log)
 
-	if strings.EqualFold(cfg.ForceDriver, kube.DriverName) && kube.HostCLIs(os.Getenv(kube.EnvHostCLIs), exec.LookPath) {
-		// The DaemonSet's CLIs are the host's (the manifest says when;
-		// kube.EnvHostCLIs). Before New: the prober it builds runs them.
-		log.Info("vendor CLIs run on the host")
-		gpu.RunCLIsOnHost()
-	}
 	a := agentapp.New(cfg, log)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

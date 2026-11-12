@@ -37,7 +37,7 @@ func (*clusterTestDriver) ListInstances(context.Context, Credentials) ([]Instanc
 
 func (*clusterTestDriver) ListClusters(context.Context, Credentials) ([]Cluster, error) {
 	return []Cluster{{ExternalID: "c-1", Name: "ack", Region: "cn-shanghai", Running: true, PublicAPI: true,
-		GPUPools: []ClusterPool{{ID: "np-1", Name: "gpu", GPUModel: "L20", GPUCount: 1, Nodes: 1, Vendor: "nvidia", LabelKey: "alibabacloud.com/nodepool-id"}}}}, nil
+		GPUPools: []ClusterPool{{ID: "np-1", Name: "gpu", GPUModel: "L20", GPUCount: 1, Nodes: 1, LabelKey: "alibabacloud.com/nodepool-id"}}}}, nil
 }
 
 func (d *clusterTestDriver) ClusterKubeconfig(_ context.Context, _ Credentials, id string) ([]byte, error) {
@@ -94,7 +94,7 @@ func acceptingAPI(t *testing.T, refuse string) []byte {
 
 func joinManifest(t *testing.T) string {
 	t.Helper()
-	m, err := kubemanifest.Render(kubemanifest.Params{ClusterName: "ack", Namespace: "gpuworks-system", ServerURL: "https://gw.example", Token: "x", AgentImage: "a:1", Vendor: "nvidia"})
+	m, err := kubemanifest.Render(kubemanifest.Params{ClusterName: "ack", Namespace: "gpuworks-system", ServerURL: "https://gw.example", Token: "x", AgentImage: "a:1"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,9 +23,8 @@ afterEach(() => { cleanup(); Object.assign(api, originals); });
 // The drawer asks the server for its defaults when it opens.
 beforeEach(() => { api.kubeDefaults = (async () => DEFAULTS) as never; });
 const DEFAULTS: KubeDefaults = {
-  vendor: "nvidia", namespace: "gpuworks-system", state_dir: "/opt/gpuworks", engine_ports: "40000-42767", idle_return_seconds: 60, idle_return_keep: -1,
+  namespace: "gpuworks-system", state_dir: "/opt/gpuworks", engine_ports: "40000-42767", idle_return_seconds: 60, idle_return_keep: -1,
   agent_image: "gpuworks/gpuworks-agent:r1", stalled_after_seconds: 300,
-  vendors: [{ id: "nvidia", runtime_class: true }, { id: "ascend", runtime_class: false }],
   agent_image_source: "dockerhub",
   agent_image_sources: [
     { id: "dockerhub", image: "gpuworks/gpuworks-agent:r1" },
@@ -47,7 +46,7 @@ function entry(overrides: Partial<KubeCluster> = {}): KubeCluster {
   return {
     id: 5, uuid: "e-5", name: "ack-gpu", namespace: "gpuworks-system", server_url: "http://localhost", agent_image: "", node_selector: "",
     agent_image_source: "swr", effective_agent_image: "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1",
-    vendor: "nvidia", state_dir: "/opt/gpuworks", runtime_class: "", image_pull_secret: "", containerd_socket: "", api_server: "", engine_ports: "40000-42767",
+    vendors: [], state_dir: "/opt/gpuworks", runtime_class: "", image_pull_secret: "", containerd_socket: "", api_server: "", engine_ports: "40000-42767",
     idle_return_seconds: 60, priority: 10000, allow_preemption: false, cluster_uid: "", revoked: false, node_count: 0, created_at: new Date().toISOString(), pool_ids: ["np-l20"],
     apply_command: "kubectl apply -f 'http://localhost/kube/manifest.yaml?token=t'", stalled: false, can_apply: true, can_remove: true,
     source: { provider_id: 3, provider_name: "ali-prod", provider_kind: "aliyun", cluster_id: "c-gpu" }, ...overrides,
@@ -122,7 +121,7 @@ test("connecting a pool opens the form filled from the cluster, records the sour
   assert.ok(await drawer.findByText(k.drawer.fromSource.replace("{{source}}", "ali-prod · ack-gpu (c-gpu)")));
   assert.equal((drawer.getByLabelText(field(k.drawer.name)) as HTMLInputElement).value, "ack-gpu");
   assert.equal(drawer.queryByPlaceholderText("nvidia.com/gpu.present=true"), null, "an entry from a cloud cluster selects by node pool, not by a selector");
-  assert.equal(drawer.queryByRole("combobox", { name: field(k.drawer.vendor) }), null, "and has the vendor of its pools");
+  assert.equal(drawer.queryByRole("combobox", { name: /vendor|厂商/i }), null, "no vendor is asked either: each agent detects its own node's cards");
   assert.equal((drawer.getByRole("checkbox", { name: "l20 · NVIDIA L20 ×1 · 2 nodes" }) as HTMLElement).getAttribute("aria-checked"), "true");
   await u.click(drawer.getByText(k.drawer.advanced));
   assert.equal(drawer.getByRole("combobox", { name: field(k.drawer.agentImageSource) }).textContent, k.drawer.agentImageSources.swr,
@@ -295,15 +294,12 @@ const A10 = "a10 · NVIDIA A10 ×1 · 2 nodes";
 const L20 = "l20 · NVIDIA L20 ×1 · 1 nodes";
 const PPU = "ppu · PPU-ZW810E ×1 · 1 nodes";
 
-test("several pools of one cluster are ticked and connected as one entry; connecting waits for a pool; the server's refusal of mixed vendors is shown", async () => {
+test("several pools of one cluster are ticked and connected as one entry; connecting waits for a pool; pools of different vendors go together", async () => {
   api.providerClusters = (async () => list([multiCluster])) as never;
   const created: unknown[] = [];
   api.createKubeCluster = (async (body: unknown) => {
     created.push(body);
-    if ((body as { provider_pool_ids: string[] }).provider_pool_ids.includes("np-p")) {
-      throw new APIError("KUBE_CLUSTER_MIXED_VENDORS", { vendors: "nvidia, ppu" }, "mixed", 400);
-    }
-    return entry({ name: "ack-multi", pool_ids: ["np-a", "np-l"] });
+    return entry({ name: "ack-multi", pool_ids: (body as { provider_pool_ids: string[] }).provider_pool_ids });
   }) as never;
   const u = user();
   wrap(<ProviderClustersTable providerId={3} providerName="ali-prod" />);
@@ -324,7 +320,7 @@ test("several pools of one cluster are ticked and connected as one entry; connec
   assert.ok(await drawer.findByText(k.created.byGpuworks));
   await u.click(drawer.getAllByRole("button", { name: k.drawer.close }).at(-1) as HTMLElement);
 
-  // Changing the choice in the drawer is allowed; the server judges the mix.
+  // Changing the choice in the drawer is allowed, and pools of another vendor can join: the entry is not of one vendor.
   api.providerClusters = (async () => list([multiCluster])) as never;
   await u.click(within(document.body).getByRole("button", { name: p.clusters.refresh }));
   const again = (await screen.findByText("c-multi")).closest("tr") as HTMLElement;
@@ -333,8 +329,9 @@ test("several pools of one cluster are ticked and connected as one entry; connec
   const second = within(await screen.findByRole("dialog"));
   await u.click(poolBox(second, PPU));
   await u.click(second.getByRole("button", { name: k.drawer.submit }));
-  assert.ok(await second.findByText(locale.common.apiError.KUBE_CLUSTER_MIXED_VENDORS.replace("{{vendors}}", "nvidia, ppu")));
+  assert.ok(await second.findByText(k.created.byGpuworks));
   assert.deepEqual((created[1] as { provider_pool_ids: string[] }).provider_pool_ids.sort(), ["np-a", "np-p"]);
+  assert.equal(second.queryByRole("alert"), null, "no vendor refusal");
 });
 
 test("an entry's pools are edited in the cloud row: the held ones are ticked and marked, saving sends the set, and applying again is offered", async () => {
@@ -375,13 +372,13 @@ test("an entry's pools are edited in the cloud row: the held ones are ticked and
 test("a refused pool edit shows the server's reason and nothing is offered to apply", async () => {
   const held: ProviderCluster = { ...multiCluster, entry: { uuid: "e-5", name: "ack-multi" }, gpu_pools: multiCluster.gpu_pools.map((q) => ({ ...q, in_entry: q.id === "np-a" })) };
   api.providerClusters = (async () => list([held])) as never;
-  api.setKubeClusterPools = (async () => { throw new APIError("KUBE_CLUSTER_MIXED_VENDORS", { vendors: "nvidia, ppu" }, "mixed", 400); }) as never;
+  api.setKubeClusterPools = (async () => { throw new APIError("KUBE_CLUSTER_SOURCE_TAKEN", { cluster: "c-multi" }, "taken", 409); }) as never;
   const u = user();
   wrap(<ProviderClustersTable providerId={3} providerName="ali-prod" />);
   const row = (await screen.findByText("c-multi")).closest("tr") as HTMLElement;
   await u.click(poolBox(row, PPU));
   await u.click(within(row).getByRole("button", { name: p.clusters.savePools }));
-  assert.ok(await screen.findByText(locale.common.apiError.KUBE_CLUSTER_MIXED_VENDORS.replace("{{vendors}}", "nvidia, ppu")));
+  assert.ok(await screen.findByText(locale.common.apiError.KUBE_CLUSTER_SOURCE_TAKEN.replace("{{cluster}}", "c-multi")));
   assert.equal(screen.queryByRole("button", { name: k.pools.applyNow }), null);
 });
 

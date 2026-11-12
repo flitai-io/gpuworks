@@ -146,6 +146,29 @@ func TestTheAcceleratorChoiceSurvivesARestartInTheStateDirectory(t *testing.T) {
 	}
 }
 
+// ClearAcceleratorPreference is what a kube node's enrollment calls when
+// its identity's node UUID changes: the saved choice belonged to whichever
+// cluster entry last enrolled this state directory.
+func TestClearAcceleratorPreferenceResetsToAutomatic(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeAcceleratorPreference(dir, "nvidia"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ClearAcceleratorPreference(dir); err != nil {
+		t.Fatal(err)
+	}
+	if got := readAcceleratorPreference(dir); got != proto.AcceleratorPreferenceAuto {
+		t.Fatalf("after ClearAcceleratorPreference = %q, want automatic", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, acceleratorPreferenceFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ClearAcceleratorPreference left the file behind: %v", err)
+	}
+	// Already automatic: no error.
+	if err := ClearAcceleratorPreference(dir); err != nil {
+		t.Fatalf("clearing an already-automatic preference: %v", err)
+	}
+}
+
 // An idle node switches: it stores the choice and restarts to manage the
 // other vendor's cards. Choosing what it already manages does neither.
 func TestAnIdleNodeStoresTheChoiceAndRestarts(t *testing.T) {

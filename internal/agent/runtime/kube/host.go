@@ -26,27 +26,6 @@ import (
 // HostRoot is the host's root as the agent sees it.
 const HostRoot = "/proc/1/root"
 
-// EnvHostCLIs makes the agent run the vendor's CLIs in the host's mount
-// namespace. The manifest sets it to "1" for vendors whose CLIs are always
-// the host's (accelerator.KubeProfile.HostCLIs), and to a CLI's name when
-// the agent runs under no RuntimeClass: the host's then, unless the node's
-// default runtime put that CLI in the container (it does on managed
-// clusters, whose default runtime is NVIDIA's).
-const EnvHostCLIs = "GPUWORKS_KUBE_HOST_CLIS"
-
-// HostCLIs says whether the agent should run the vendor's CLIs on the host,
-// from EnvHostCLIs; lookPath finds a program in the container.
-func HostCLIs(value string, lookPath func(string) (string, error)) bool {
-	switch value {
-	case "", "0":
-		return false
-	case "1":
-		return true
-	}
-	_, err := lookPath(value)
-	return err != nil
-}
-
 // containerdLayout is where one distribution keeps containerd's socket,
 // configuration and per-registry hosts directory.
 type containerdLayout struct {

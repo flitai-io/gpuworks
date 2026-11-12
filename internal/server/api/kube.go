@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/kubemanifest"
@@ -26,7 +25,6 @@ import (
 // Defaults a new cluster takes for the fields its request leaves empty.
 const (
 	kubeDefaultNamespace   = "gpuworks-system"
-	kubeDefaultVendor      = accelerator.VendorNVIDIA
 	kubeDefaultStateDir    = kubemanifest.DefaultStateDir
 	kubeDefaultEnginePorts = "40000-42767"
 )
@@ -57,16 +55,19 @@ func kubeClusterDTO(c store.KubeCluster, v kubeEntryView) dto.KubeCluster {
 	out := dto.KubeCluster{
 		ID: c.ID, UUID: c.UUID, Name: c.Name, Namespace: c.Namespace, ServerURL: c.ServerURL, AgentImage: c.AgentImage,
 		AgentImageSource: firstNonEmpty(c.AgentImageSource, kubemanifest.AgentImageDockerHub), EffectiveAgentImage: kubeAgentImage(c),
-		Vendor: c.Vendor, NodeSelector: c.NodeSelector, RuntimeClass: c.RuntimeClass, ImagePullSecret: c.ImagePullSecret,
+		NodeSelector: c.NodeSelector, RuntimeClass: c.RuntimeClass, ImagePullSecret: c.ImagePullSecret,
 		ContainerdSocket: c.ContainerdSocket, StateDir: c.StateDir, APIServer: c.APIServer,
 		EnginePorts: c.EnginePorts, IdleReturnSeconds: c.IdleReturnSeconds, ClusterUID: c.ClusterUID,
 		Priority: c.Priority, AllowPreemption: c.AllowPreemption,
-		Revoked: c.RevokedAt != nil, NodeCount: v.nodes, Source: v.source, CreatedAt: c.CreatedAt.UTC(),
+		Revoked: c.RevokedAt != nil, NodeCount: v.nodes, Vendors: v.vendors, Source: v.source, CreatedAt: c.CreatedAt.UTC(),
 		Stalled: kubeClusterStalled(c, time.Now().UTC()), PoolIDs: append([]string{}, v.poolIDs...),
 	}
 	out.CanApply, out.CanRemove, out.OperationBlocked = kubeClusterOperations(c, v.privateAPI)
 	if v.admin && c.RevokedAt == nil {
 		out.ApplyCommand = "kubectl apply -f '" + kubeManifestURL(c) + "'"
+	}
+	if v.admin {
+		out.RemoveCommands = kubemanifest.RemoveCommands(c.Namespace)
 	}
 	return out
 }
@@ -85,9 +86,9 @@ func kubeManifestParams(c store.KubeCluster, pools []store.KubeClusterPool) (kub
 	return kubemanifest.Params{
 		PoolLabel: poolLabel, PoolIDs: kubePoolIDs(pools),
 		ClusterName: c.Name, Namespace: c.Namespace, ServerURL: c.ServerURL, Token: c.Token,
-		AgentImage: kubeAgentImage(c), Vendor: firstNonEmpty(c.Vendor, kubeDefaultVendor), NodeSelector: sel, RuntimeClass: c.RuntimeClass,
+		AgentImage: kubeAgentImage(c), NodeSelector: sel, RuntimeClass: c.RuntimeClass,
 		ImagePullSecret: c.ImagePullSecret, ContainerdSocket: c.ContainerdSocket, EnginePorts: c.EnginePorts, StateDir: c.StateDir, APIServer: c.APIServer,
-		Priority: c.Priority, AllowPreemption: c.AllowPreemption,
+		Priority: c.Priority, AllowPreemption: c.AllowPreemption, IdleReturnSeconds: c.IdleReturnSeconds,
 	}, nil
 }
 
@@ -129,7 +130,6 @@ func (a *apiHandlers) createKubeCluster(w http.ResponseWriter, r *http.Request) 
 		ServerURL:         strings.TrimRight(strings.TrimSpace(req.ServerURL), "/"),
 		AgentImage:        strings.TrimSpace(req.AgentImage),
 		AgentImageSource:  strings.TrimSpace(req.AgentImageSource),
-		Vendor:            accelerator.NormalizeVendor(firstNonEmpty(strings.TrimSpace(req.Vendor), kubeDefaultVendor)),
 		NodeSelector:      strings.TrimSpace(req.NodeSelector),
 		RuntimeClass:      strings.TrimSpace(req.RuntimeClass),
 		ImagePullSecret:   strings.TrimSpace(req.ImagePullSecret),
@@ -146,13 +146,10 @@ func (a *apiHandlers) createKubeCluster(w http.ResponseWriter, r *http.Request) 
 	if req.AllowPreemption != nil {
 		c.AllowPreemption = *req.AllowPreemption
 	}
-	// An empty RuntimeClass is decided on each node: managed clusters make
-	// NVIDIA's runtime the default and define no class, k3s defines
-	// "nvidia" beside a default runc. Other vendors' devices come through the
-	// agent's device plugin and need none (GET /kube/defaults says which).
-	if profile, ok := accelerator.KubeProfileFor(c.Vendor); ok && !profile.RuntimeClass {
-		c.RuntimeClass = ""
-	}
+	// RuntimeClass is the NVIDIA instance pods' class; empty is decided on
+	// each node: managed clusters make NVIDIA's runtime the default and
+	// define no class, k3s defines "nvidia" beside a default runc. Other
+	// vendors' devices come through the agent's device plugin and ignore it.
 	if req.IdleReturnSeconds != nil {
 		c.IdleReturnSeconds = *req.IdleReturnSeconds
 	}
@@ -163,70 +160,30 @@ func (a *apiHandlers) createKubeCluster(w http.ResponseWriter, r *http.Request) 
 		kubeInvalid(w, "provider_pool_ids", "node pools belong to a cluster of a cloud account; give provider_id and provider_cluster_id")
 		return
 	}
-	if c.Priority < 0 || c.Priority > kubemanifest.PriorityMax {
-		kubeInvalid(w, "priority", fmt.Sprintf("must be between 0 and %d", kubemanifest.PriorityMax))
-		return
-	}
-	if !kubemanifest.ValidAgentImageSource(c.AgentImageSource) {
-		kubeInvalid(w, "agent_image_source", "must be one of "+strings.Join(kubemanifest.AgentImageSources, ", "))
-		return
-	}
 	if c.Name == "" || len(c.Name) > 128 {
 		kubeInvalid(w, "name", "must be 1 to 128 bytes")
 		return
 	}
 	var pools []store.KubeClusterPool
 	if c.ProviderID != nil {
-		// The entry selects nodes by the node pools it holds, and has the
-		// vendor they have.
+		// The entry selects nodes by the node pools it holds, of any vendors:
+		// each agent finds out which accelerator its node has.
 		if c.NodeSelector != "" {
 			kubeInvalid(w, "node_selector", "an entry made from a cloud cluster selects its nodes by node pool")
 			return
 		}
-		selected, vendor, cluster, ok := a.kubePoolSelection(w, r, *c.ProviderID, c.ProviderClusterID, req.ProviderPoolIDs, "")
+		selected, cluster, ok := a.kubePoolSelection(w, r, *c.ProviderID, c.ProviderClusterID, req.ProviderPoolIDs)
 		if !ok {
 			return
 		}
-		if given := strings.TrimSpace(req.Vendor); given != "" && accelerator.NormalizeVendor(given) != vendor {
-			kubeInvalid(w, "vendor", "the selected node pools are "+vendor)
-			return
-		}
-		pools, c.Vendor = selected, vendor
+		pools = selected
 		if c.AgentImageSource == "" {
 			if p, err := a.d.Store.GetProvider(*c.ProviderID); err == nil {
 				c.AgentImageSource = kubeAgentImageSourceFor(p.Kind, cluster.Region)
 			}
 		}
-		if profile, ok := accelerator.KubeProfileFor(c.Vendor); ok && !profile.RuntimeClass {
-			c.RuntimeClass = ""
-		}
 	}
-	if _, ok := accelerator.KubeProfileFor(c.Vendor); !ok {
-		kubeInvalid(w, "vendor", "must be one of "+strings.Join(accelerator.KubeVendors(), ", "))
-		return
-	}
-	if c.IdleReturnSeconds < store.KubeKeepCards {
-		kubeInvalid(w, "idle_return_seconds", "must be -1 (keep) or at least 0")
-		return
-	}
-	if c.ImagePullSecret != "" && !kubemanifest.ValidSecretName(c.ImagePullSecret) {
-		kubeInvalid(w, "image_pull_secret", "must be the name of a Secret in the namespace")
-		return
-	}
-	if _, err := proto.ParsePortRange(c.EnginePorts); err != nil {
-		kubeInvalid(w, "engine_ports", "must be START-END")
-		return
-	}
-	// Render once so every parameter the manifest needs is checked before
-	// the cluster exists.
-	probe := c
-	probe.Token = "x"
-	params, err := kubeManifestParams(probe, pools)
-	if err == nil {
-		_, err = kubemanifest.Render(params)
-	}
-	if err != nil {
-		kubeInvalid(w, "manifest", err.Error())
+	if !kubeValid(w, c, pools) {
 		return
 	}
 	if rows, err := a.d.Store.KubeClusters(); err == nil {
@@ -353,6 +310,13 @@ func (a *apiHandlers) kubeEnroll(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, store.ErrKubeClusterMismatch):
 		writeProductError(w, http.StatusForbidden, ErrorKubeEnrollRefused, err.Error(), map[string]any{"reason": "other_cluster"})
 		return
+	case errors.Is(err, store.ErrKubeNodeTaken):
+		// Two agents on one node would share its state directory; the agent
+		// stops rather than take another entry's identity.
+		var taken *store.KubeNodeTakenError
+		errors.As(err, &taken)
+		writeProductError(w, http.StatusForbidden, ErrorKubeEnrollRefused, err.Error(), map[string]any{"reason": "node_taken", "entry": taken.Entry})
+		return
 	case err != nil:
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -361,4 +325,47 @@ func (a *apiHandlers) kubeEnroll(w http.ResponseWriter, r *http.Request) {
 		a.d.Log.Info("kubernetes node enrolled", "cluster", cluster.Name, "node", node.KubeNodeName, "uuid", node.UUID)
 	}
 	writeJSON(w, http.StatusOK, dto.KubeEnrollResponse{NodeUUID: node.UUID, NodeToken: node.Token, IdleReturnSeconds: cluster.IdleReturnSeconds})
+}
+
+// kubeValid checks an entry's parameters, creating or editing it, and
+// answers the request itself when one is wrong: the fields the manifest does
+// not check, then a render with every parameter the manifest needs.
+func kubeValid(w http.ResponseWriter, c store.KubeCluster, pools []store.KubeClusterPool) bool {
+	if c.Priority < 0 || c.Priority > kubemanifest.PriorityMax {
+		kubeInvalid(w, "priority", fmt.Sprintf("must be between 0 and %d", kubemanifest.PriorityMax))
+		return false
+	}
+	if !kubemanifest.ValidAgentImageSource(c.AgentImageSource) {
+		kubeInvalid(w, "agent_image_source", "must be one of "+strings.Join(kubemanifest.AgentImageSources, ", "))
+		return false
+	}
+	if c.Name == "" || len(c.Name) > 128 {
+		kubeInvalid(w, "name", "must be 1 to 128 bytes")
+		return false
+	}
+	if c.IdleReturnSeconds < store.KubeKeepCards {
+		kubeInvalid(w, "idle_return_seconds", "must be -1 (keep) or at least 0")
+		return false
+	}
+	if c.ImagePullSecret != "" && !kubemanifest.ValidSecretName(c.ImagePullSecret) {
+		kubeInvalid(w, "image_pull_secret", "must be the name of a Secret in the namespace")
+		return false
+	}
+	if _, err := proto.ParsePortRange(c.EnginePorts); err != nil {
+		kubeInvalid(w, "engine_ports", "must be START-END")
+		return false
+	}
+	// Render once so every parameter the manifest needs is checked before
+	// the cluster exists.
+	probe := c
+	probe.Token = "x"
+	params, err := kubeManifestParams(probe, pools)
+	if err == nil {
+		_, err = kubemanifest.Render(params)
+	}
+	if err != nil {
+		kubeInvalid(w, "manifest", err.Error())
+		return false
+	}
+	return true
 }
