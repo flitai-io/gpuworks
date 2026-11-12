@@ -22,7 +22,7 @@ func TestKubeDefaultsDictionaryOnTheWire(t *testing.T) {
 		`"idle_return_seconds":60,"idle_return_keep":-1,"agent_image":"gpuworks/gpuworks-agent:r1","stalled_after_seconds":300,` +
 		`"vendors":[{"id":"nvidia","runtime_class":true},{"id":"ascend","runtime_class":false},{"id":"hygon","runtime_class":false},{"id":"ppu","runtime_class":false}],` +
 		`"agent_image_source":"dockerhub","agent_image_sources":[{"id":"dockerhub","image":"gpuworks/gpuworks-agent:r1"},` +
-		`{"id":"swr","image":"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1"},{"id":"quay","image":"quay.io/gpuworks/gpuworks-agent:r1"}]}`
+		`{"id":"swr","image":"swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1"},{"id":"quay","image":"quay.io/gpuworks/gpuworks-agent:r1"}],"priority":10000,"priority_max":1000000000,"allow_preemption":false}`
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
 		t.Fatalf("defaults = %d %s\nwant %s", rec.Code, rec.Body, want)
 	}
@@ -43,7 +43,7 @@ func TestKubeDefaultsAreWhatAnEmptyRequestTakes(t *testing.T) {
 	}
 	got := decodeKube[map[string]any](t, rec)
 	dict := decodeKube[map[string]any](t, rig.do(rig.session, http.MethodGet, "/api/v1/kube/defaults", ""))
-	for _, key := range []string{"vendor", "namespace", "state_dir", "engine_ports", "idle_return_seconds"} {
+	for _, key := range []string{"vendor", "namespace", "state_dir", "engine_ports", "idle_return_seconds", "priority", "allow_preemption"} {
 		if got[key] != dict[key] {
 			t.Errorf("%s: a bare request got %v, the dictionary says %v", key, got[key], dict[key])
 		}
@@ -277,6 +277,35 @@ func TestKubeAgentImageSourceForACloudClusterFollowsItsRegion(t *testing.T) {
 	} {
 		if got := kubeAgentImageSourceFor(tc.kind, tc.region); got != tc.want {
 			t.Errorf("kubeAgentImageSourceFor(%q, %q) = %q, want %q", tc.kind, tc.region, got, tc.want)
+		}
+	}
+}
+
+// The priority and preemption the request names reach the manifest; a
+// priority out of range is refused at its field.
+func TestKubePriorityAndPreemptionReachTheManifest(t *testing.T) {
+	rig := newTokenRig(t)
+	rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"pri","server_url":"https://gw.example","priority":0,"allow_preemption":true}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", rec.Code, rec.Body)
+	}
+	got := decodeKube[map[string]any](t, rec)
+	if got["priority"] != float64(0) || got["allow_preemption"] != true {
+		t.Fatalf("entry = priority %v allow_preemption %v", got["priority"], got["allow_preemption"])
+	}
+	m := rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters/"+got["uuid"].(string)+"/manifest", "").Body.String()
+	if !strings.Contains(m, `name: "gpuworks-inference-gpuworks-system"`+"\nvalue: 0\nglobalDefault") {
+		t.Fatalf("manifest PriorityClass:\n%s", m)
+	}
+	bare := decodeKube[map[string]any](t, rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"bare-pri","server_url":"https://gw.example","namespace":"gw-b"}`))
+	m = rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters/"+bare["uuid"].(string)+"/manifest", "").Body.String()
+	if !strings.Contains(m, "value: 10000\npreemptionPolicy: Never") {
+		t.Fatalf("a bare entry's PriorityClass:\n%s", m)
+	}
+	for _, bad := range []string{"-1", "1000000001"} {
+		rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"bad-`+bad+`","server_url":"https://gw.example","priority":`+bad+`}`)
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"field":"priority"`) {
+			t.Fatalf("priority %s = %d %s", bad, rec.Code, rec.Body)
 		}
 	}
 }

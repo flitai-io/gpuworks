@@ -85,3 +85,69 @@ func TestAnEntryKeepsItsAgentImageSource(t *testing.T) {
 		t.Fatalf("stored entry = %+v, %v", got, err)
 	}
 }
+
+// kube_clusters as migrations 202 to 206 left it.
+const kubeClustersV206 = kubeClustersV166Body + `, provider_id integer, provider_cluster_id text, agent_image_source text)`
+
+func priorityDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := nodesOnlyDB(t, "")
+	for _, ddl := range []string{kubeClustersV206,
+		`INSERT INTO kube_clusters (id, uuid, name) VALUES (1, 'c-1', 'before')`} {
+		if err := db.Exec(ddl).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	return db
+}
+
+func TestPriorityMigrationGivesEntriesTheDefaultAndNoPreemption(t *testing.T) {
+	db := priorityDB(t)
+	m := migrationByName(t, "kube_cluster_priority")
+	if m.Version != 209 {
+		t.Fatalf("migration version = %d, want 209", m.Version)
+	}
+	if err := migrateDB(db, []migration{m}); err != nil {
+		t.Fatal(err)
+	}
+	var row struct {
+		Priority        int
+		AllowPreemption bool
+	}
+	if err := db.Raw(`SELECT priority, allow_preemption FROM kube_clusters WHERE id = 1`).Scan(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.Priority != KubeDefaultPriority || row.AllowPreemption {
+		t.Fatalf("existing entry after the migration: %+v", row)
+	}
+	// Applying it again leaves a changed value alone.
+	if err := db.Exec(`UPDATE kube_clusters SET priority = 5 WHERE id = 1`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Apply(db); err != nil {
+		t.Fatalf("second application: %v", err)
+	}
+	if err := db.Raw(`SELECT priority, allow_preemption FROM kube_clusters WHERE id = 1`).Scan(&row).Error; err != nil || row.Priority != 5 {
+		t.Fatalf("second application changed the entry: %+v %v", row, err)
+	}
+}
+
+func TestPriorityMigrationRollsBack(t *testing.T) {
+	db := priorityDB(t)
+	m := migrationByName(t, "kube_cluster_priority")
+	if err := db.Exec(fmt.Sprintf(`CREATE TRIGGER fail_priority_marker BEFORE INSERT ON schema_migrations WHEN NEW.version=%d BEGIN SELECT RAISE(ABORT, 'injected'); END`, m.Version)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDB(db, []migration{m}); err == nil {
+		t.Fatal("injected marker failure did not fail the migration")
+	}
+	if db.Migrator().HasColumn("kube_clusters", "priority") || db.Migrator().HasColumn("kube_clusters", "allow_preemption") {
+		t.Fatal("columns survived a failed migration")
+	}
+	if err := db.Exec(`DROP TRIGGER fail_priority_marker`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDB(db, []migration{m}); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+}

@@ -26,6 +26,7 @@ const DEFAULTS: KubeDefaults = {
     { id: "swr", image: "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1" },
     { id: "quay", image: "quay.io/gpuworks/gpuworks-agent:r1" },
   ],
+  priority: 10000, priority_max: 1000000000, allow_preemption: false,
 };
 
 
@@ -39,7 +40,7 @@ function cluster(overrides: Partial<KubeCluster> = {}): KubeCluster {
     id: 1, uuid: "c-1", name: "prod-gpu", namespace: "gpuworks-system", server_url: "https://gpuworks.example",
     vendor: "nvidia", state_dir: "/opt/gpuworks", agent_image: "", agent_image_source: "dockerhub", effective_agent_image: "gpuworks/gpuworks-agent:r1",
     node_selector: "nvidia.com/gpu.present=true", runtime_class: "", image_pull_secret: "",
-    containerd_socket: "", api_server: "", engine_ports: "40000-42767", idle_return_seconds: 600,
+    containerd_socket: "", api_server: "", engine_ports: "40000-42767", idle_return_seconds: 600, priority: 10000, allow_preemption: false,
     cluster_uid: "7f3c2a10-aaaa-bbbb-cccc-0123456789ab", revoked: false, node_count: 3,
     created_at: "2026-10-19T08:30:00Z", apply_command: APPLY, stalled: false, pool_ids: [], can_apply: false, can_remove: false, operation_blocked: "no_source", ...overrides,
   };
@@ -432,6 +433,38 @@ test("the agent image registry offers what the server publishes to; choosing SWR
   await user.click(form.getByRole("button", { name: k.drawer.submit }));
   await waitFor(() => assert.equal(calls.createKubeCluster?.length, 1));
   assert.deepEqual(calls.createKubeCluster[0], [{ name: "cn", server_url: "http://localhost", agent_image_source: "swr" }]);
+});
+
+test("priority and preemption show the server's defaults and are not sent untouched", async () => {
+  const calls = stubApi();
+  const { user } = renderPage();
+  await user.click((await screen.findAllByRole("button", { name: new RegExp(`${add}$`) }))[0]);
+  const form = dialog();
+  await user.type(await form.findByLabelText(field(k.drawer.name)), "pri");
+  await user.click(form.getByText(k.drawer.advanced));
+  const priority = form.getByLabelText(field(k.drawer.priority)) as HTMLInputElement;
+  await waitFor(() => assert.equal(priority.placeholder, "10000", "the server's default, as a hint"));
+  const preempt = form.getByRole("switch", { name: k.drawer.allowPreemptionSwitch });
+  assert.equal(preempt.getAttribute("aria-checked"), "false", "off by default");
+  await user.click(form.getByRole("button", { name: k.drawer.submit }));
+  await waitFor(() => assert.equal(calls.createKubeCluster?.length, 1));
+  assert.deepEqual(calls.createKubeCluster[0], [{ name: "pri", server_url: "http://localhost" }], "untouched fields take the server's defaults");
+});
+
+test("a priority and preemption the operator sets are sent", async () => {
+  const calls = stubApi();
+  const { user } = renderPage();
+  await user.click((await screen.findAllByRole("button", { name: new RegExp(`${add}$`) }))[0]);
+  const form = dialog();
+  await user.type(await form.findByLabelText(field(k.drawer.name)), "pri2");
+  await user.click(form.getByText(k.drawer.advanced));
+  await user.type(form.getByLabelText(field(k.drawer.priority)), "0");
+  const preempt = form.getByRole("switch", { name: k.drawer.allowPreemptionSwitch });
+  await waitFor(() => assert.equal(preempt.hasAttribute("disabled"), false));
+  await user.click(preempt);
+  await user.click(form.getByRole("button", { name: k.drawer.submit }));
+  await waitFor(() => assert.equal(calls.createKubeCluster?.length, 1));
+  assert.deepEqual(calls.createKubeCluster[0], [{ name: "pri2", server_url: "http://localhost", priority: 0, allow_preemption: true }]);
 });
 
 test("every vendor can be chosen, and going back to NVIDIA brings the RuntimeClass field back", async () => {

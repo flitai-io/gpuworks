@@ -186,7 +186,7 @@ func TestObjectsOfTheJoinManifest(t *testing.T) {
 	}
 	want := []string{"Namespace//gpuworks-system", "ServiceAccount/gpuworks-system/gpuworks-agent", "Secret/gpuworks-system/gpuworks-enroll",
 		"Role/gpuworks-system/gpuworks-agent", "RoleBinding/gpuworks-system/gpuworks-agent", "ClusterRole//gpuworks-agent-gpuworks-system",
-		"ClusterRoleBinding//gpuworks-agent-gpuworks-system", "PriorityClass//gpuworks-inference", "DaemonSet/gpuworks-system/gpuworks-agent"}
+		"ClusterRoleBinding//gpuworks-agent-gpuworks-system", "PriorityClass//gpuworks-inference-gpuworks-system", "DaemonSet/gpuworks-system/gpuworks-agent"}
 	if !slices.Equal(kinds, want) {
 		t.Fatalf("objects = %v", kinds)
 	}
@@ -301,7 +301,7 @@ func TestDryRunChangesNothingAndApplyCreatesThenUpdates(t *testing.T) {
 			t.Fatalf("first apply: %v", actions(applied))
 		}
 	}
-	if !f.has("/apis/apps/v1/namespaces/gpuworks-system/daemonsets/gpuworks-agent") || !f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference") {
+	if !f.has("/apis/apps/v1/namespaces/gpuworks-system/daemonsets/gpuworks-agent") || !f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference-gpuworks-system") {
 		t.Fatalf("objects after apply: %v", f.objects)
 	}
 	if got := f.objects["/api/v1/namespaces/gpuworks-system/secrets/gpuworks-enroll"]["stringData"].(map[string]any)["token"]; got != "enroll" {
@@ -347,7 +347,7 @@ func TestARefusalStopsTheApplyAndSaysWhy(t *testing.T) {
 	}
 }
 
-func TestDeleteRemovesTheDaemonSetFirstAndKeepsWhatOthersShare(t *testing.T) {
+func TestDeleteRemovesTheDaemonSetFirstAndLeavesOtherEntriesAlone(t *testing.T) {
 	f := newFakeAPI()
 	c, err := NewClient(serve(t, f, "    token: tok"))
 	if err != nil {
@@ -358,9 +358,11 @@ func TestDeleteRemovesTheDaemonSetFirstAndKeepsWhatOthersShare(t *testing.T) {
 	if _, err := c.Apply(ctx, objs, false); err != nil {
 		t.Fatal(err)
 	}
-	// A second gpuworks entry of the same cluster, in another namespace.
+	// A second gpuworks entry of the same cluster, in another namespace, with
+	// its own cluster-wide objects.
 	f.objects["/api/v1/namespaces/gpuworks-npu"] = map[string]any{"metadata": map[string]any{"name": "gpuworks-npu"}}
 	f.objects["/apis/apps/v1/namespaces/gpuworks-npu/daemonsets/gpuworks-agent"] = map[string]any{"metadata": map[string]any{"name": "gpuworks-agent", "namespace": "gpuworks-npu"}}
+	f.objects["/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference-gpuworks-npu"] = map[string]any{"metadata": map[string]any{"name": "gpuworks-inference-gpuworks-npu"}}
 
 	dry, err := c.Delete(ctx, objs, true)
 	if err != nil || dry[0].Kind != "DaemonSet" || dry[0].Action != ActionDelete || !f.has("/apis/apps/v1/namespaces/gpuworks-system/daemonsets/gpuworks-agent") {
@@ -381,12 +383,15 @@ func TestDeleteRemovesTheDaemonSetFirstAndKeepsWhatOthersShare(t *testing.T) {
 		t.Fatalf("deletes = %v", deletes)
 	}
 	for _, r := range rs {
-		if r.Kind == "PriorityClass" && (r.Action != ActionKept || !strings.Contains(r.Reason, "gpuworks-npu")) {
-			t.Fatalf("shared priority class: %+v", r)
+		if r.Action != ActionDelete {
+			t.Fatalf("%s/%s: %s, want delete", r.Kind, r.Name, r.Action)
 		}
 	}
-	if !f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference") || f.has("/api/v1/namespaces/gpuworks-system") {
-		t.Fatal("wrong objects removed")
+	if f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference-gpuworks-system") || f.has("/api/v1/namespaces/gpuworks-system") {
+		t.Fatal("the entry's own objects survived")
+	}
+	if !f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference-gpuworks-npu") || !f.has("/apis/apps/v1/namespaces/gpuworks-npu/daemonsets/gpuworks-agent") {
+		t.Fatal("the other entry's objects were removed")
 	}
 	// Removed again: everything is already gone.
 	rs, err = c.Delete(ctx, objs, false)
@@ -394,7 +399,7 @@ func TestDeleteRemovesTheDaemonSetFirstAndKeepsWhatOthersShare(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range rs {
-		if r.Kind != "PriorityClass" && r.Action != ActionAbsent {
+		if r.Action != ActionAbsent {
 			t.Fatalf("second delete: %v", actions(rs))
 		}
 	}
@@ -419,8 +424,8 @@ func TestDeleteGoesOnPastARefusal(t *testing.T) {
 	if !f.has("/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/gpuworks-agent-gpuworks-system") {
 		t.Fatal("refused object deleted")
 	}
-	// No other gpuworks namespace: the priority class goes too.
-	if f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference") {
-		t.Fatal("unshared priority class kept")
+	// The entry's priority class goes with it.
+	if f.has("/apis/scheduling.k8s.io/v1/priorityclasses/gpuworks-inference-gpuworks-system") {
+		t.Fatal("the entry's priority class kept")
 	}
 }

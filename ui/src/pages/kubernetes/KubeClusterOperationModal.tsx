@@ -13,7 +13,6 @@ const ACTION_STATUS: Record<KubeObjectAction, BadgeStatus> = {
   update: "info",
   delete: "danger",
   absent: "neutral",
-  kept: "warning",
   failed: "danger",
   not_tried: "neutral",
   dependent: "neutral",

@@ -31,7 +31,6 @@ const (
 	ActionUpdate    = "update"    // the object exists and is (or would be) brought to the manifest
 	ActionDelete    = "delete"    // the object is (or would be) deleted
 	ActionAbsent    = "absent"    // nothing to delete
-	ActionKept      = "kept"      // left in place on purpose; Result.Reason says why
 	ActionFailed    = "failed"    // the API server refused; Result.Error says why
 	ActionNotTried  = "not_tried" // an earlier object failed
 	ActionDependent = "dependent" // a dry run cannot check it before its namespace exists
@@ -220,39 +219,11 @@ func (c *Client) Apply(ctx context.Context, objs []Object, dryRun bool) ([]Resul
 	return results, failed
 }
 
-// sharedKinds are cluster-wide objects every gpuworks namespace in a
-// cluster uses alike: deleting one would break the others' new pods.
-var sharedKinds = map[string]bool{"PriorityClass": true}
-
-// managedDaemonSets lists the DaemonSets gpuworks manifests created, in
-// any namespace.
-func (c *Client) managedDaemonSets(ctx context.Context) ([]Object, error) {
-	body, err := c.do(ctx, http.MethodGet, "/apis/apps/v1/daemonsets", url.Values{"labelSelector": {"app.kubernetes.io/managed-by=gpuworks"}}, "", nil)
-	if err != nil {
-		return nil, err
-	}
-	var list struct {
-		Items []struct {
-			Metadata struct {
-				Name      string `json:"name"`
-				Namespace string `json:"namespace"`
-			} `json:"metadata"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(body, &list); err != nil {
-		return nil, err
-	}
-	out := make([]Object, 0, len(list.Items))
-	for _, it := range list.Items {
-		out = append(out, Object{Kind: "DaemonSet", Name: it.Metadata.Name, Namespace: it.Metadata.Namespace})
-	}
-	return out, nil
-}
-
 // Delete removes the manifest's objects: the DaemonSet first (its pods,
 // instance and hold pods alike, go with it), then everything else in
-// reverse order. A cluster-wide object another gpuworks namespace still
-// relies on is kept. A dry run reports what would happen. It continues past
+// reverse order. Its cluster-wide objects are named for its namespace
+// (ClusterRole, PriorityClass), so another gpuworks namespace of the
+// cluster keeps its own. A dry run reports what would happen. It continues past
 // a refusal, so one forbidden object does not leave the rest behind, and
 // returns the first refusal.
 func (c *Client) Delete(ctx context.Context, objs []Object, dryRun bool) ([]Result, error) {
@@ -267,29 +238,9 @@ func (c *Client) Delete(ctx context.Context, objs []Object, dryRun bool) ([]Resu
 			ordered = append(ordered, objs[i])
 		}
 	}
-	ours := map[string]bool{}
-	for _, o := range objs {
-		if o.Kind == "Namespace" {
-			ours[o.Name] = true
-		}
-	}
-	var others []string
-	if ds, err := c.managedDaemonSets(ctx); err == nil {
-		for _, d := range ds {
-			if !ours[d.Namespace] {
-				others = append(others, d.Namespace)
-			}
-		}
-	} else {
-		others = append(others, "(unknown: "+err.Error()+")")
-	}
 	results := make([]Result, 0, len(ordered))
 	var first error
 	for _, o := range ordered {
-		if sharedKinds[o.Kind] && len(others) > 0 {
-			results = append(results, Result{Object: o, Action: ActionKept, Reason: "used by gpuworks in namespace " + strings.Join(others, ", ")})
-			continue
-		}
 		found, err := c.exists(ctx, o)
 		if err == nil && !found {
 			results = append(results, Result{Object: o, Action: ActionAbsent})

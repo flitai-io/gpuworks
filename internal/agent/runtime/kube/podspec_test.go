@@ -40,7 +40,7 @@ func TestInstancePod(t *testing.T) {
 		DockerArgs: []string{"--gpus", `"device=2"`}, HostNetwork: true, ShmBytes: 1 << 30,
 	}
 	owner := &kubeapi.OwnerReference{APIVersion: "apps/v1", Kind: "DaemonSet", Name: DaemonSetName, UID: "ds"}
-	pod, err := instancePod(spec, podOptions{Namespace: "gw", NodeName: "n1", RuntimeClass: "nvidia-cdi", Owner: owner, Cards: []string{"GPU-2"}})
+	pod, err := instancePod(spec, podOptions{Namespace: "gw", NodeName: "n1", RuntimeClass: "nvidia-cdi", PriorityClass: "gpuworks-inference", Owner: owner, Cards: []string{"GPU-2"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,5 +124,22 @@ func TestInstancePodHygonShape(t *testing.T) {
 	spec.DockerArgs = []string{"--privileged", "--device", "/dev/kfd"}
 	if pod, err := instancePod(spec, podOptions{DeviceRequests: reqs}); err != nil || pod.Spec.Containers[0].Resources.Limits != nil {
 		t.Fatalf("privileged = %+v, %v", pod.Spec.Containers[0].Resources, err)
+	}
+}
+
+// The hold and instance pods take the PriorityClass the manifest renders for
+// the cluster's namespace; a manifest that names none leaves the default.
+func TestPodsTakeTheManifestsPriorityClass(t *testing.T) {
+	for _, tc := range []struct{ given, want string }{
+		{"gpuworks-inference-gw", "gpuworks-inference-gw"},
+		{"", DefaultPriorityClass},
+	} {
+		d := New(Options{Namespace: "gw", NodeName: "n1", PodName: "agent-x", PriorityClass: tc.given})
+		if got := d.cards.baseHoldPod("hold-0").Spec.PriorityClassName; got != tc.want {
+			t.Errorf("hold pod with %q = %q, want %q", tc.given, got, tc.want)
+		}
+		if d.o.PriorityClass != tc.want {
+			t.Errorf("instance pods with %q get %q, want %q", tc.given, d.o.PriorityClass, tc.want)
+		}
 	}
 }

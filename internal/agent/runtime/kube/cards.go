@@ -40,11 +40,13 @@ type allocationLister interface {
 }
 
 type cardPool struct {
-	api       *kubeapi.Client
-	kubelet   allocationLister
-	ns, node  string
-	holdImage string
-	holdCmd   []string
+	// priorityClass is the hold pods' PriorityClass (Options.PriorityClass).
+	priorityClass string
+	api           *kubeapi.Client
+	kubelet       allocationLister
+	ns, node      string
+	holdImage     string
+	holdCmd       []string
 	// pullSecrets are the agent pod's image pull secrets, for holdImage.
 	pullSecrets []kubeapi.LocalRef
 	owner       *kubeapi.OwnerReference

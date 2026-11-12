@@ -1041,6 +1041,10 @@ export interface KubeCluster {
   engine_ports: string;
   /** Seconds a borrowed card may sit idle before it goes back; -1 keeps it. */
   idle_return_seconds: number;
+  /** PriorityClass value of the hold and instance pods (larger first; ordinary pods are 0). */
+  priority: number;
+  /** Whether the scheduler may evict lower-priority pods for a hold pod. */
+  allow_preemption: boolean;
   /** Empty until the first node enrolled. */
   cluster_uid: string;
   revoked: boolean;
@@ -1078,6 +1082,10 @@ export interface KubeDefaults {
   agent_image_source: string;
   /** The registries the agent image is published to, the default first. */
   agent_image_sources: KubeAgentImageSource[];
+  /** Default PriorityClass value and its upper bound (the lower bound is 0). */
+  priority: number;
+  priority_max: number;
+  allow_preemption: boolean;
 }
 
 /** A registry the agent image is published to (dto.KubeAgentImageSource). */
@@ -1112,7 +1120,7 @@ export interface KubeClusterOperation {
   params?: { step: "kubeconfig" | "api_server"; reason: string };
 }
 
-export type KubeObjectAction = "create" | "update" | "delete" | "absent" | "kept" | "failed" | "not_tried" | "dependent";
+export type KubeObjectAction = "create" | "update" | "delete" | "absent" | "failed" | "not_tried" | "dependent";
 
 export interface KubeObjectResult {
   kind: string;
@@ -1146,6 +1154,9 @@ export interface KubeClusterRequest {
   api_server?: string;
   engine_ports?: string;
   idle_return_seconds?: number;
+  /** Omitted take GET /kube/defaults. */
+  priority?: number;
+  allow_preemption?: boolean;
   /** The cloud account cluster the entry is made from; both or neither. */
   provider_id?: number;
   provider_cluster_id?: string;

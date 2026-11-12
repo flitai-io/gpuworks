@@ -60,6 +60,8 @@ The agent uses the node's own DNS (`dnsPolicy: Default`), like an agent installe
    - RuntimeClass: NVIDIA only: the RuntimeClass instance Pods use to reach the GPUs. When empty (the default), the agent on each node decides: it uses the cluster's `nvidia` RuntimeClass if there is one, otherwise the node's default runtime; when `nvidia-smi` is not present in the agent's own container, it runs it on the node. Fill it in only when the RuntimeClass has a different name.
    - Engine port range: `40000-42767` by default. Do not overlap the cluster's NodePort range (`30000-32767` by default): kube-proxy diverts NodePort traffic sent to local addresses.
    - Idle return: how long a borrowed card is kept after the last instance stops, 60 seconds by default (checked every 30 seconds, so the actual return happens between 60 and 90 seconds); “Keep borrowed cards” means never return them, handing the whole node pool to gpuworks.
+   - Priority: the value of the PriorityClass (`gpuworks-inference-<namespace>`) of gpuworks hold and instance Pods, 10000 by default, from 0 to 1000000000; larger runs first, and ordinary Pods are 0. It also sets the eviction order when a node runs short of memory or disk: lower priority is evicted first.
+   - Allow preemption: off by default (the PriorityClass says `preemptionPolicy: Never`): a hold Pod that does not fit only waits, and the scheduler never evicts your other Pods for it. On, with HAMi or ACK GPU sharing (where hold Pods go through the scheduler) the scheduler may evict lower-priority Pods; with a plain device plugin the hold Pods, like all instance Pods, are bound to the node without the scheduler and the switch makes no difference.
 3. Copy the generated command and run it in the cluster:
 
    ```bash

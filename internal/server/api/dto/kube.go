@@ -26,10 +26,15 @@ type KubeCluster struct {
 	APIServer           string `json:"api_server"` // empty: the agents use the cluster's "kubernetes" Service
 	EnginePorts         string `json:"engine_ports"`
 	IdleReturnSeconds   int    `json:"idle_return_seconds"` // -1 keeps borrowed cards
-	ClusterUID          string `json:"cluster_uid"`         // empty until the first node enrolls
-	Revoked             bool   `json:"revoked"`
-	NodeCount           int    `json:"node_count"`
-	ApplyCommand        string `json:"apply_command,omitempty"`
+	// Priority and AllowPreemption are the hold and instance pods'
+	// PriorityClass value and whether the scheduler may evict lower-priority
+	// pods for them.
+	Priority        int    `json:"priority"`
+	AllowPreemption bool   `json:"allow_preemption"`
+	ClusterUID      string `json:"cluster_uid"` // empty until the first node enrolls
+	Revoked         bool   `json:"revoked"`
+	NodeCount       int    `json:"node_count"`
+	ApplyCommand    string `json:"apply_command,omitempty"`
 	// Stalled: no node has joined for longer than the dictionary's
 	// stalled_after_seconds (GET /kube/defaults), so it is worth looking at
 	// why. Never for a revoked cluster or one a node joined.
@@ -74,6 +79,12 @@ type KubeDefaults struct {
 	// AgentImageSources lists them all, the default first.
 	AgentImageSource  string                 `json:"agent_image_source"`
 	AgentImageSources []KubeAgentImageSource `json:"agent_image_sources"`
+	// Priority is the PriorityClass value of the hold and instance pods (0 to
+	// PriorityMax, larger first; ordinary pods are 0); AllowPreemption lets
+	// the scheduler evict lower-priority pods for them, off by default.
+	Priority        int  `json:"priority"`
+	PriorityMax     int  `json:"priority_max"`
+	AllowPreemption bool `json:"allow_preemption"`
 }
 
 // KubeAgentImageSource is a registry the agent image is published to.
@@ -111,6 +122,10 @@ type KubeClusterRequest struct {
 	APIServer         string `json:"api_server,omitempty"`
 	EnginePorts       string `json:"engine_ports,omitempty"`
 	IdleReturnSeconds *int   `json:"idle_return_seconds,omitempty"`
+	// Priority and AllowPreemption set the hold and instance pods'
+	// PriorityClass; omitted take GET /kube/defaults.
+	Priority        *int  `json:"priority,omitempty"`
+	AllowPreemption *bool `json:"allow_preemption,omitempty"`
 	// ProviderID and ProviderClusterID name the cloud account cluster the
 	// entry is made from (GET /providers/{id}/clusters); both or neither.
 	ProviderID        *uint  `json:"provider_id,omitempty"`

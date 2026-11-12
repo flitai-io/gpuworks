@@ -19,12 +19,13 @@ import (
 	"gpuworks.ai/gpuworks/internal/accelerator"
 )
 
-// Names every rendered object uses. The agent finds its own DaemonSet and
-// the instance pods' PriorityClass by them.
+// Names every rendered object uses. The agent finds its own DaemonSet by
+// them; the instance pods' PriorityClass, a cluster-wide object, is named
+// per namespace (PriorityClass) and handed to the agent.
 const (
-	AgentName         = "gpuworks-agent"
-	EnrollSecret      = "gpuworks-enroll"
-	PriorityClassName = "gpuworks-inference"
+	AgentName           = "gpuworks-agent"
+	EnrollSecret        = "gpuworks-enroll"
+	PriorityClassPrefix = "gpuworks-inference"
 	// DefaultStateDir is where the agent keeps its state on the host unless
 	// the cluster names another directory (a host that already runs an agent
 	// of its own keeps that one's). It is mounted at the same path inside the
@@ -75,7 +76,21 @@ type Params struct {
 	// addresses (no kube-proxy or replacement, as on KubeEdge or OpenYurt
 	// edge nodes). "https://host:port" or "host:port"; empty uses the Service.
 	APIServer string
+	// Priority is the value of the hold and instance pods' PriorityClass;
+	// AllowPreemption lets the scheduler evict lower-priority pods for a hold
+	// pod, and off renders preemptionPolicy: Never.
+	Priority        int
+	AllowPreemption bool
 }
+
+// PriorityClass names the PriorityClass of the hold and instance pods of the
+// agents in namespace: PriorityClasses are cluster-wide, and two entries of
+// one cluster (one per vendor) each have a namespace of their own.
+func PriorityClass(namespace string) string { return PriorityClassPrefix + "-" + namespace }
+
+// PriorityMax is the largest priority a user's PriorityClass may have;
+// Kubernetes keeps the values above it for its own system classes.
+const PriorityMax = 1000000000
 
 // ParseAPIServer splits an API server address into host and port.
 func ParseAPIServer(s string) (host, port string, err error) {
@@ -157,6 +172,8 @@ func (p Params) Validate() error {
 		return fmt.Errorf("containerd socket %q must be an absolute path", p.ContainerdSocket)
 	case p.StateDir != "" && (!cleanAbs(p.StateDir) || p.StateDir == "/"):
 		return fmt.Errorf("state directory %q must be an absolute path below /", p.StateDir)
+	case p.Priority < 0 || p.Priority > PriorityMax:
+		return fmt.Errorf("priority %d must be between 0 and %d", p.Priority, PriorityMax)
 	}
 	if p.APIServer != "" {
 		if _, _, err := ParseAPIServer(p.APIServer); err != nil {
@@ -244,7 +261,7 @@ func Render(p Params) (string, error) {
 	err := manifest.Execute(&buf, map[string]any{
 		"APIHost": apiHost, "APIPort": apiPort,
 		"P": p, "Selector": selector, "PoolIDs": poolIDs, "Agent": AgentName, "Secret": EnrollSecret,
-		"Priority": PriorityClassName, "StateDir": p.stateDir(), "PodResources": PodResourcesDir,
+		"Priority": PriorityClass(p.Namespace), "StateDir": p.stateDir(), "PodResources": PodResourcesDir,
 		"DevicePlugins": DevicePluginDir, "Env": env, "HostPaths": hostPaths, "AgentRuntimeClass": runtimeClass, "HostCLIs": hostCLIs,
 	})
 	return buf.String(), err
@@ -350,10 +367,13 @@ subjects:
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
-  name: {{.Priority}}
-value: 100000
+  name: {{q .Priority}}
+value: {{.P.Priority}}
+{{- if not .P.AllowPreemption}}
+preemptionPolicy: Never
+{{- end}}
 globalDefault: false
-description: "GPUWorks inference instances: evicted after ordinary workloads."
+description: "GPUWorks hold and inference pods of namespace {{.P.Namespace}}."
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -444,6 +464,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: GPUWORKS_KUBE_RUNTIME_CLASS
               value: {{q .P.RuntimeClass}}
+            - name: GPUWORKS_KUBE_PRIORITY_CLASS
+              value: {{q .Priority}}
 {{- if .APIHost}}
             - name: KUBERNETES_SERVICE_HOST
               value: {{q .APIHost}}

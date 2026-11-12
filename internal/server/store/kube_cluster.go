@@ -91,6 +91,12 @@ type KubeCluster struct {
 	// ProviderID is cleared when the account is deleted.
 	ProviderID        *uint  `gorm:"index:idx_kube_cluster_source,priority:1"`
 	ProviderClusterID string `gorm:"size:128;index:idx_kube_cluster_source,priority:2"`
+	// Priority is the value of the PriorityClass the entry's hold and instance
+	// pods run under (larger runs first and is evicted later; ordinary pods
+	// are 0). AllowPreemption lets the scheduler evict lower-priority pods
+	// for a hold pod; off renders preemptionPolicy: Never.
+	Priority        int
+	AllowPreemption bool
 	// IdleReturnSeconds is how long a borrowed card stays the platform's after
 	// the last instance on it stopped; KubeKeepCards keeps it.
 	IdleReturnSeconds int
@@ -140,6 +146,31 @@ func addKubeClusterAgentImageSource(db *gorm.DB) error {
 		return nil
 	}
 	return db.Migrator().AddColumn(&KubeCluster{}, "AgentImageSource")
+}
+
+// KubeDefaultPriority is the PriorityClass value of an entry that names none,
+// and of the entries made before the field existed.
+const KubeDefaultPriority = 10000
+
+// addKubeClusterPriority adds KubeCluster.Priority and AllowPreemption. The
+// existing entries take the default priority and do not preempt.
+func addKubeClusterPriority(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&KubeCluster{}) {
+		return nil
+	}
+	added := false
+	for _, col := range []string{"Priority", "AllowPreemption"} {
+		if !db.Migrator().HasColumn(&KubeCluster{}, col) {
+			if err := db.Migrator().AddColumn(&KubeCluster{}, col); err != nil {
+				return err
+			}
+			added = added || col == "Priority"
+		}
+	}
+	if !added {
+		return nil
+	}
+	return db.Exec("UPDATE kube_clusters SET priority = ?, allow_preemption = ?", KubeDefaultPriority, false).Error
 }
 
 // CreateKubeCluster stores a cluster with a fresh enrollment token, and the

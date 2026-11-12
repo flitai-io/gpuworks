@@ -61,6 +61,8 @@ function formSchema(t: (key: string) => string) {
     engine_ports: z.string(),
     keep_cards: z.boolean(),
     idle_return_seconds: z.number().nullable(),
+    priority: z.number().nullable(),
+    allow_preemption: z.boolean().nullable(),
   });
 }
 type FormValues = z.infer<ReturnType<typeof formSchema>>;
@@ -83,11 +85,12 @@ const FIELD_OF: Record<string, FormField_> = {
   api_server: "api_server",
   engine_ports: "engine_ports",
   idle_return_seconds: "idle_return_seconds",
+  priority: "priority",
 };
 
 // The fields inside the collapsed "Advanced" section: a refusal naming one opens it.
 const ADVANCED_FIELDS: ReadonlySet<FormField_> = new Set<FormField_>([
-  "namespace", "agent_image_source", "agent_image", "image_pull_secret", "state_dir", "runtime_class", "containerd_socket", "api_server", "engine_ports", "keep_cards", "idle_return_seconds",
+  "namespace", "agent_image_source", "agent_image", "image_pull_secret", "state_dir", "runtime_class", "containerd_socket", "api_server", "engine_ports", "keep_cards", "idle_return_seconds", "priority", "allow_preemption",
 ]);
 
 /**
@@ -112,6 +115,8 @@ function defaultsOf(prefill?: KubeClusterPrefill): FormValues {
     engine_ports: "",
     keep_cards: false,
     idle_return_seconds: null,
+    priority: null,
+    allow_preemption: null,
   };
 }
 
@@ -125,6 +130,9 @@ function requestOf(values: FormValues, defaults: KubeDefaults | null, poolIds: s
   // A cleared number takes the server's default, like every other empty field.
   if (values.keep_cards && defaults) request.idle_return_seconds = defaults.idle_return_keep;
   else if (values.idle_return_seconds !== null) request.idle_return_seconds = values.idle_return_seconds;
+  // Untouched, both take the server's defaults.
+  if (values.priority !== null) request.priority = values.priority;
+  if (values.allow_preemption !== null) request.allow_preemption = values.allow_preemption;
   if (prefill) {
     request.provider_id = prefill.provider_id;
     request.provider_cluster_id = prefill.provider_cluster_id;
@@ -167,7 +175,7 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, prefill }:
   const { t: tCommon } = useTranslation("common");
   const schema = useMemo(() => formSchema(t), [t]);
   const form = useForm<FormValues>({ resolver: zodResolver(schema), shouldFocusError: false, defaultValues: defaultsOf(prefill) });
-  const [keepCards, vendor, imageSource] = useWatch({ control: form.control, name: ["keep_cards", "vendor", "agent_image_source"] });
+  const [keepCards, vendor, imageSource, allowPreemption] = useWatch({ control: form.control, name: ["keep_cards", "vendor", "agent_image_source", "allow_preemption"] });
   const { defaults, error: defaultsError } = useKubeDefaults(open);
   const formRef = useRef<HTMLFormElement>(null);
   const nameInput = useRef<HTMLInputElement | null>(null);
@@ -246,6 +254,12 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, prefill }:
       </FormField>
       <FormField control={form.control} name="engine_ports" label={t("drawer.enginePorts")} description={t("drawer.enginePortsHelp")}>
         {(binding) => <Input {...binding} placeholder={defaults?.engine_ports} />}
+      </FormField>
+      <FormField control={form.control} name="priority" label={t("drawer.priority")} description={t("drawer.priorityHelp")}>
+        {(binding) => <NumberInput {...binding} min={0} max={defaults?.priority_max} precision={0} placeholder={defaults ? String(defaults.priority) : undefined} className="w-40" />}
+      </FormField>
+      <FormField control={form.control} name="allow_preemption" label={t("drawer.allowPreemption")} description={t("drawer.allowPreemptionHelp")}>
+        {() => <Switch label={t("drawer.allowPreemptionSwitch")} checked={allowPreemption ?? defaults?.allow_preemption ?? false} disabled={!defaults} onCheckedChange={(checked) => form.setValue("allow_preemption", checked)} />}
       </FormField>
       <FormField control={form.control} name="idle_return_seconds" label={t("drawer.idleReturn")} description={keepCards ? t("drawer.keepCardsHelp") : t("drawer.idleReturnHelp")}>
         {(binding) => (

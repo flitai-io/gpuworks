@@ -110,6 +110,11 @@
     "apiServerPlaceholder": "https://host:6443",
     "enginePorts": "引擎端口段",
     "enginePortsHelp": "推理引擎监听的主机端口，须避开集群的 NodePort 端口段（默认 30000-32767）。",
+    "priority": "优先级",
+    "priorityHelp": "gpuworks 占位 Pod 与实例 Pod 的 PriorityClass 数值，越大越优先，普通 Pod 是 0。节点内存或磁盘紧张时，Kubernetes 先驱逐优先级低的 Pod。",
+    "allowPreemption": "允许抢占",
+    "allowPreemptionHelp": "关闭时（默认）gpuworks 借卡放不下就等待，不会让调度器驱逐你的其他 Pod。开启后，HAMi 与 ACK 共享 GPU 模式下调度器可能为占位 Pod 驱逐优先级更低的 Pod。",
+    "allowPreemptionSwitch": "允许驱逐优先级更低的 Pod",
     "idleReturn": "空闲归还",
     "secondsUnit": "s",
     "idleReturnSeconds": "空闲多少秒后归还卡",
@@ -204,7 +209,6 @@
       "update": "将更新",
       "delete": "将删除",
       "absent": "不存在",
-      "kept": "保留",
       "failed": "被拒绝",
       "not_tried": "未执行",
       "dependent": "随命名空间创建"
@@ -214,7 +218,6 @@
       "update": "已更新",
       "delete": "已删除",
       "absent": "不存在",
-      "kept": "保留",
       "failed": "被拒绝",
       "not_tried": "未执行",
       "dependent": "随命名空间创建"
