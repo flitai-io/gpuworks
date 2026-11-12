@@ -437,6 +437,9 @@ type ImagePresence struct {
 	ImageRef         string `json:"image_ref"`
 	Present          bool   `json:"present"`
 	SizeBytes        int64  `json:"size_bytes,omitempty"`
+	// ImageID is the runtime's immutable identity. Empty means this report
+	// did not observe one, so a digest already stored is left as it is.
+	ImageID string `json:"image_id,omitempty"`
 }
 
 // ImageNodeStatus is an explicit image distribution progress update.

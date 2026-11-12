@@ -489,8 +489,9 @@ func loadedImageRefName(ref string) string {
 	return host + "/" + path
 }
 
-// ImagePresenceReporter reads presence and size in one runtime operation.
-// A nil size means this runtime cannot measure it. Errors are not absence.
+// ImagePresenceReporter reads presence, identity and size in one runtime
+// operation. A nil size means this runtime cannot measure it. An empty
+// identity means it was not observed. Errors are not absence.
 type ImagePresenceReporter interface {
-	ImagePresence(context.Context, string) (bool, *int64, error)
+	ImagePresence(context.Context, string) (bool, string, *int64, error)
 }

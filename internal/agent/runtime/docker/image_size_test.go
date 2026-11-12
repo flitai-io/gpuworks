@@ -39,9 +39,10 @@ func TestImagePresenceUsesOneInspectionAndDistinguishesFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name, body       string
 		present, wantErr bool
+		id               string
 		size             *int64
 	}{
-		{name: "present", body: `printf '%s\n' '{"Id":"sha256:one","Size":8192,"Config":{}}'`, present: true, size: func() *int64 { v := int64(8192); return &v }()},
+		{name: "present", body: `printf '%s\n' '{"Id":"sha256:one","Size":8192,"Config":{}}'`, present: true, id: "sha256:one", size: func() *int64 { v := int64(8192); return &v }()},
 		{name: "missing", body: `echo 'Error response from daemon: No such image: image:v1' >&2; exit 1`},
 		{name: "daemon error", body: `echo 'Cannot connect to the Docker daemon' >&2; exit 1`, wantErr: true},
 		{name: "malformed", body: `echo '{'`, wantErr: true},
@@ -52,9 +53,9 @@ func TestImagePresenceUsesOneInspectionAndDistinguishesFailure(t *testing.T) {
 			installFakeDocker(t, `echo call >> "$INSPECTION_CALLS"
 test "$1 $2 $3 $4 $5" = 'image inspect --format {{json .}} image:v1' || exit 9
 `+tc.body)
-			present, size, err := New().ImagePresence(context.Background(), "image:v1")
-			if present != tc.present || (err != nil) != tc.wantErr || (size == nil) != (tc.size == nil) || size != nil && *size != *tc.size {
-				t.Fatalf("present=%v size=%v err=%v", present, size, err)
+			present, id, size, err := New().ImagePresence(context.Background(), "image:v1")
+			if present != tc.present || id != tc.id || (err != nil) != tc.wantErr || (size == nil) != (tc.size == nil) || size != nil && *size != *tc.size {
+				t.Fatalf("present=%v id=%q size=%v err=%v", present, id, size, err)
 			}
 			raw, err := os.ReadFile(calls)
 			if err != nil || string(raw) != "call\n" {
@@ -81,7 +82,7 @@ func TestImageInspectLogsAbsenceBelowWarn(t *testing.T) {
 			slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})))
 			t.Cleanup(func() { slog.SetDefault(previous) })
 			installFakeDocker(t, tc.body)
-			_, _, _ = New().ImagePresence(context.Background(), "image:v1")
+			_, _, _, _ = New().ImagePresence(context.Background(), "image:v1")
 			line := logged.String()
 			if !strings.Contains(line, `msg="runtime command failed"`) || strings.Contains(line, "level=WARN") != tc.warn {
 				t.Fatalf("logged:\n%s", line)

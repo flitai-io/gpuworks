@@ -9,6 +9,37 @@ GPUWorks 自己组装完整引擎命令，不依赖镜像默认 entrypoint。镜
 | 社区镜像 | `community` | 用户在社区仓库里挑 tag 添加 | 可编辑；删除在详情抽屉里 |
 | 自定义镜像 | `custom` | 用户填任意引用添加 | 同上 |
 
+## 节点镜像身份与周期盘点
+
+镜像系列详情 `GET /api/v1/images/{id}` 中，版本节点行的 `image_digest_id` 是节点最近上报的**运行时镜像 ID**。
+Docker 从 `docker image inspect` 的同一份结果读取 `Id` 与运行时大小；其中 `Id` 是镜像 config 的 digest，
+不是 registry manifest/index digest，也不是镜像目录的整数 ID。离线 `docker load` 后也可以取得这个 ID；
+不能把它当成 registry digest 来拼拉取地址、校验 manifest 或推断下载包字节。
+
+Agent 的周期 `status.node` 消息在 `images[]` 中上报以下字段（仅节选镜像部分）：
+
+```json
+{"images":[{"image_ref":"registry.example/team/runner:v1","present":true,"image_id":"sha256:1111111111111111111111111111111111111111111111111111111111111111","runtime_size_bytes":8192}]}
+```
+
+`image_id` 是可选字符串，空值编码时省略；未观测到身份的运行时和旧 Agent 可以只上报存在性。
+服务端去除 ID 的首尾空白，结果为空时也按未观测处理。
+`runtime_size_bytes` 是独立的运行时测量，省略表示未知；旧 `size_bytes` 或传输进度字节不能代替它。
+运行时检查失败时跳过该条报告，不把失败或缺少报告解释为镜像不存在。
+
+服务端仅对目录已知的 `image_ref` 对账，身份更新规则如下：
+
+| 盘点结果与当前状态 | `image_digest_id` 的处理 |
+|---|---|
+| 存在，带非空 `image_id`，且没有进行中的拉取或同步 | 采纳去除首尾空白后的运行时 ID；同一引用的 ID 改变时更新 |
+| 存在，但 `image_id` 省略或为空 | 保留已有 ID；新节点行的身份仍为未知，兼容旧 Agent |
+| 拉取或同步中收到存在报告 | 不采纳盘点的新 ID，保留传输状态；完成与失败仍由显式传输结果决定 |
+| 明确报告 `present: false` | 清空旧 ID，包括拉取、同步中或失败的行；进行中的传输状态或已记录失败仍保留 |
+
+因此，进行中的传输不会被一次存在性盘点判为完成；明确不存在时清除的身份也不会被当成传输失败。
+`present: true` 只说明该引用存在；没有新 ID 时保留的值可能来自之前的观察，不能据此声称本次重新核实了身份。
+已稳定的节点行在状态、身份和大小均未改变时不重复写入。
+
 ## 系统镜像
 
 内置目录 `internal/server/imagecatalog/catalog-seed.json` 由 [`gpuworks-image-manifest`](cli.md#gpuworks-image-manifest)
