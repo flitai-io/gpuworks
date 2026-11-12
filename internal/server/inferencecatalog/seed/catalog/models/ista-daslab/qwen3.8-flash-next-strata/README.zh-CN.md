@@ -19,17 +19,17 @@
 这四个模板提供原版 Qwen3.8-Flash-Next 的四种 **ISTA-DASLab GSQ-RCO GGUF** 量化。选择与已登记模型的量化目录对应的规格。gw6 的既有规格 ID 与默认参数保持不变。
 
 | 量化 | 权重字节数（两个分片） | 上游 setup 的内存建议 |
-|---|---:|---: |
+|---|---:|---:|
 | IQ2_XS | 68,026,093,024 | 48 GB |
 | Q2_0 | 66,423,878,624 | 48 GB |
 | IQ3_XXS | 75,839,998,528 | 60 GB |
 | IQ3_S | 83,617,662,656 | 62 GB |
 
-字节数取自[固定权重 revision](https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/tree/ed59f92082b1e93c0e96d60a8b11aab089b52f09)的文件大小之和。新增规格声明了 Hugging Face 与 ModelScope 的固定 revision，已核对两边公布的分片大小与 SHA-256 元数据一致；原有 IQ2_XS 来源不变。内存数字是镜像内 setup 的建议，不是 GPUWorks 的内存准入条件或实测峰值；还要为上下文、准备过程和其他进程预留余量。每张分配的 GPU 仍至少需要 12 GiB 显存。宿主机内存目前不参与准入，低内存节点可能通过显存检查后在 setup 阶段失败；请按[已知问题 T109](../../../../../../../../known-issues.md#t109-strata-的宿主机内存不参与准入)选择有足够内存的节点。
+字节数取自[固定权重 revision](https://huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF/tree/ed59f92082b1e93c0e96d60a8b11aab089b52f09)的文件大小之和。新增规格声明了 Hugging Face 与 ModelScope 的固定 revision，已核对两边公布的分片大小与 SHA-256 元数据一致；原有 IQ2_XS 来源不变。内存数字是镜像内 setup 的建议，不是 GPUWorks 的内存准入条件或实测峰值；还要为上下文、准备过程和其他进程预留余量。每张分配的 GPU 仍至少需要 12 GiB 显存。宿主机内存目前不参与准入，低内存节点可能通过显存检查后在 setup 阶段失败；请按[已知问题 T109](https://github.com/flitai-io/gpuworks/blob/master/known-issues.md#t109-strata-的宿主机内存不参与准入)选择有足够内存的节点。
 
 非默认规格追加 `--model=Q2_0`、`--model=IQ3_XXS` 或 `--model=IQ3_S`。等号不能省略：镜像将 `--model 路径` 解释成 GPUWorks 的模型挂载，而等号形式会到达 Strata setup，覆盖写死的 IQ2_XS 默认值。只改权重目录会让 setup 查找错误的分片。应选择对应规格，不要脱离权重来源单独修改这个参数；模型来源的一致性校验继续生效。
 
-**当前镜像不支持原版 BF16/FP8 safetensors。** 固定版本的 [Strata setup](https://github.com/Niko1221/Strata/blob/09817da3979abfeb5fbdef7c8f1223d120c1ad39/setup.py)准备的是 GGUF 输入，GPUWorks 镜像会拒绝没有 GGUF 文件的目录。上游 safetensors 工具只提取 token embedding、PLE 表或 MTP 草稿层，不负责加载原版整模型；FP8 PLE 表也不等于 FP8 专家模型。删除模板来源检查无法补齐 checkpoint 加载和专家执行能力，因此这里没有宣称可用的 BF16/FP8 规格，也不自动进行有损转换。GPUWorks 已在独立的 [Qwen3.8-Flash-Next 目录条目](../../qwen/qwen3.8-flash-next/model.yaml)中提供原版权重的 vLLM/SGLang 规格，应按其硬件与资源条件选择。
+**当前镜像不支持原版 BF16/FP8 safetensors。** 固定版本的 [Strata setup](https://github.com/Niko1221/Strata/blob/09817da3979abfeb5fbdef7c8f1223d120c1ad39/setup.py)准备的是 GGUF 输入，GPUWorks 镜像会拒绝没有 GGUF 文件的目录。上游 safetensors 工具只提取 token embedding、PLE 表或 MTP 草稿层，不负责加载原版整模型；FP8 PLE 表也不等于 FP8 专家模型。删除模板来源检查无法补齐 checkpoint 加载和专家执行能力，因此这里没有宣称可用的 BF16/FP8 规格，也不自动进行有损转换。GPUWorks 已在推理模板中独立的「Qwen3.8-Flash-Next」条目提供原版权重的 vLLM/SGLang 规格，应按其硬件与资源条件选择。
 
 其他仓库与量化（包括 Unsloth 实验性的 UD-Q4_K_XL）需要各自的 family、准备流程和能力设置；模型名称相同不代表可以互换。Q2_0/IQ3_XXS/IQ3_S 属于固定引擎明确列出的格式。模板及镜像参数检查不代表新增规格已完成真权重生成或性能验收；既有端到端实测证据适用于 r4 镜像的 IQ2_XS，不代表 r5 或其他量化已完成真权重推理验收。
 
@@ -53,7 +53,7 @@ Strata 使用平台分配给这次部署的卡：自动放置时用一张；在�
 
 卡号不做成模板变量，是因为它取决于节点的容器运行时，只有 agent 知道；模板变量在 server 上展开，那时还确定不了。因此不要在「自定义参数」里手写 `--gpu`/`--gpus`，写死的卡号可能指向分给别的部署的卡。
 
-想确认实际用了哪几张卡，可以看容器内 Strata 安装配置 `/opt/strata/strata-<quant>.json` 里的 `gpu` 字段（`<quant>` 为小写量化名：`iq2_xs`、`q2_0`、`iq3_xxs` 或 `iq3_s`）（部署详情的实例终端里可以直接查看），或在节点上运行 `nvidia-smi`，看占用显存的是不是分配给这个部署的卡。
+想确认实际用了哪几张卡，可以看容器内 Strata 安装配置 `/opt/strata/strata-<quant>.json` 里的 `gpu` 字段（`<quant>` 为小写量化名：`iq2_xs`、`q2_0`、`iq3_xxs` 或 `iq3_s`；部署详情的实例终端里可以直接查看），或在节点上运行 `nvidia-smi`，看占用显存的是不是分配给这个部署的卡。
 
 ## 可配置的参数
 
