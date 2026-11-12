@@ -15,7 +15,7 @@ import (
 
 func TestL3HarnessUsesRealDeploymentControllerAndGateway(t *testing.T) {
 	env := testenv.New(t)
-	env.AddNode("l3-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
+	node := env.AddNode("l3-node", testenv.WithGPUs(1, testenv.GPUSpec{Model: "A100", VRAMMB: 24576}), testenv.WithDriverName("fake"))
 	env.WaitNodeOnline(t, "l3-node")
 	nodes, err := env.Store().ListNodes()
 	if err != nil || len(nodes) != 1 {
@@ -34,8 +34,13 @@ func TestL3HarnessUsesRealDeploymentControllerAndGateway(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	const runtimeImage = "gpuworks.test/l3-runtime:v1"
+	// Match the present ledger row to the runtime before publishing the ref triggers inventory.
+	if err := node.Driver.PullImage(context.Background(), runtimeImage, nil); err != nil {
+		t.Fatal(err)
+	}
 	image, err := env.Store().UpsertImage(&store.Image{
-		ImageRef: "gpuworks.test/l3-runtime:v1", Engine: "vllm", Source: "community",
+		ImageRef: runtimeImage, Engine: "vllm", Source: "community",
 		Framework: "cuda", Enabled: true,
 	})
 	if err != nil {
