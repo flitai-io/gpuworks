@@ -26,11 +26,8 @@ type Props = {
 };
 
 /**
- * ImagePeerSyncDialog copies one image from a node that has it straight to
- * another node. The source is always the operator's explicit choice, and the
- * start button stays locked until a real probe from that source to this
- * target has passed: the server only coordinates, so a path it cannot see is
- * proven here before any bytes move.
+ * ImagePeerSyncDialog copies an image from the chosen source. The start
+ * button stays locked until a real direct or relayed transport probe passes.
  */
 export default function ImagePeerSyncDialog({
   open,
@@ -46,7 +43,7 @@ export default function ImagePeerSyncDialog({
   const { t } = useTranslation("images");
   const [source, setSource] = useState<string>();
   const [rateMiB, setRateMiB] = useState<number | null>(null);
-  const [probe, setProbe] = useState<{ state: "idle" | "running" | "ok" | "failed"; error?: string }>({ state: "idle" });
+  const [probe, setProbe] = useState<{ state: "idle" | "running" | "ok" | "failed"; error?: string; transport?: "direct" | "relay" }>({ state: "idle" });
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -65,8 +62,10 @@ export default function ImagePeerSyncDialog({
     setProbe({ state: "running" });
     setStartError(null);
     try {
-      await onProbe(source);
-      setProbe({ state: "ok" });
+      const result = await onProbe(source);
+      const transport = result && typeof result === "object" && "transport" in result
+        && (result.transport === "direct" || result.transport === "relay") ? result.transport : undefined;
+      setProbe({ state: "ok", transport });
     } catch (e) {
       setProbe({ state: "failed", error: e instanceof Error ? e.message : String(e) });
     }
@@ -138,11 +137,11 @@ export default function ImagePeerSyncDialog({
         </Form>
         <Space align="center" wrap>
           <Button disabled={!source} loading={probe.state === "running"} onClick={() => void runProbe()}>
-            {t("nodeTable.testDirect")}
+            {t("nodeTable.testTransport")}
           </Button>
           {probe.state === "idle" ? <Text type="secondary">{t("nodeTable.peerDialog.probeHint")}</Text> : null}
         </Space>
-        {probe.state === "ok" ? <Alert type="success" showIcon message={t("nodeTable.peerDialog.probeOk")} /> : null}
+        {probe.state === "ok" ? <Alert type="success" showIcon message={t(probe.transport === "relay" ? "nodeTable.peerDialog.probeRelay" : probe.transport === "direct" ? "nodeTable.peerDialog.probeDirect" : "nodeTable.peerDialog.probeOk")} /> : null}
         {probe.state === "failed" ? (
           <Alert type="error" showIcon message={t("nodeTable.peerDialog.probeFailed")} description={probe.error} />
         ) : null}

@@ -167,10 +167,21 @@ func TestLineageV40UpgradeMatchesFreshSchema(t *testing.T) {
 // be written, and a later start completes it.
 func TestLegacyLeftoversMigrationRollsBackAndRetries(t *testing.T) {
 	m := migrationByName(t, "legacy_column_and_index_leftovers")
-	if m.Version != migrations[len(migrations)-1].Version {
-		t.Fatalf("leftover repair is migration %d; it must stay after every migration that created the leftovers", m.Version)
+	// The repair must run after every migration that left these pieces
+	// behind; later, unrelated migrations may follow it.
+	for _, name := range []string{"model_source_id_casefold_identity", "instance_desired_state_launch_snapshot", "model_artifact_subfolder_identity",
+		"deployment_desired_state_column", "image_catalog_launch_config_removed", "legacy_instance_role_and_deployment_state"} {
+		if earlier := migrationByName(t, name); earlier.Version >= m.Version {
+			t.Fatalf("leftover repair is migration %d but %s is %d", m.Version, name, earlier.Version)
+		}
 	}
-	earlier := migrations[:len(migrations)-1]
+	index := -1
+	for i, candidate := range migrations {
+		if candidate.Version == m.Version {
+			index = i
+		}
+	}
+	earlier := migrations[:index]
 	failures := map[string]func(*testing.T, *gorm.DB) migration{
 		"change": func(t *testing.T, db *gorm.DB) migration {
 			failing := m

@@ -226,7 +226,7 @@ type Deps struct {
 	BenchmarkArtifactDir string
 }
 
-// PeerSyncHooks groups the direct, explicitly sourced model/image operations
+// PeerSyncHooks groups explicitly sourced model/image operations
 // so the API dependency surface remains stable as the peer protocol grows.
 type PeerSyncHooks struct {
 	RetryImage           func(ctx context.Context, imageID uint, nodeUUID string) (*store.ImageNode, error)
@@ -234,6 +234,7 @@ type PeerSyncHooks struct {
 	ProbeModel           func(ctx context.Context, modelID uint, targetNodeUUID, sourceNodeUUID string) error
 	SyncImageWithRate    func(ctx context.Context, imageID uint, nodeUUID, sourceNodeUUID string, rateLimitKiB int64) (*store.ImageNode, error)
 	ProbeImage           func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) error
+	ProbeImageResult     func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) (proto.ImageSyncCopyResult, error)
 	// CopyModel copies a model's files between two locations (storage, and
 	// node for a local storage); see controller.CopyModelFile.
 	CopyModel func(ctx context.Context, modelID uint, src, dst store.FileRef, rateLimitKiB int) (*store.ModelFile, error)

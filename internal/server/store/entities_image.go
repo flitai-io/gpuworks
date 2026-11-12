@@ -82,10 +82,13 @@ type ImageNode struct {
 	RateLimitKiB     int64  `gorm:"column:rate_limit_kib"`
 	LastRateLimitKiB int64  `gorm:"column:last_rate_limit_kib"`
 	TransferID       string `gorm:"size:64;index"`
-	SourceNodeID     uint   `gorm:"index"`
-	Source           string `gorm:"size:32"` // peer | offline | quay | huaweicloud | direct
-	Message          string `gorm:"size:512"`
-	ImageDigestID    string `gorm:"size:128"`
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// LastTransferID fences delayed terminal reports after the active ID clears.
+	LastTransferID    string `gorm:"size:64;not null;default:''"`
+	TransferErrorCode string `gorm:"size:64;not null;default:''"`
+	SourceNodeID      uint   `gorm:"index"`
+	Source            string `gorm:"size:32"` // peer | offline | quay | huaweicloud | direct
+	Message           string `gorm:"size:512"`
+	ImageDigestID     string `gorm:"size:128"`
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }

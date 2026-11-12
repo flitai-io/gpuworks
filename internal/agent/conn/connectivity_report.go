@@ -179,7 +179,7 @@ func (c *Conn) ConnectionReport() proto.DoctorReport {
 		values[k] = v
 	}
 	values["checked_at"] = time.Now().UTC().Format(time.RFC3339Nano)
-	if values["source"] == "agent_runtime" && values["connect_mode"] != "server_dial" {
+	if values["source"] == "agent_runtime" && (values["connect_mode"] != "server_dial" || o.dataEnabled) {
 		switch {
 		case !o.dataEnabled:
 			values["data_lane"] = "disabled"
@@ -284,8 +284,16 @@ func (c *Conn) RecordReconnect(delay time.Duration) {
 }
 
 func (c *Conn) connectionLane() string {
-	if c.creds.ConnectMode == agentconf.ServerDial || !c.creds.DataLane {
+	if !c.creds.DataLane {
 		return "single"
+	}
+	if c.creds.ConnectMode == agentconf.ServerDial {
+		c.observation.mu.Lock()
+		negotiated := c.observation.negotiated
+		c.observation.mu.Unlock()
+		if !negotiated {
+			return "single"
+		}
 	}
 	return "ctrl"
 }

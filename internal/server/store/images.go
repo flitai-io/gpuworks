@@ -575,7 +575,7 @@ func (s *Store) UpsertImageNode(row *ImageNode) (*ImageNode, error) {
 		Columns: []clause.Column{{Name: "image_version_id"}, {Name: "node_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"state", "size_bytes", "runtime_size_bytes", "transferred_bytes", "rate_bps",
-			"transfer_id", "source_node_id", "source", "message", "rate_limit_kib", "updated_at",
+			"transfer_id", "source_node_id", "source", "message", "rate_limit_kib", "transfer_error_code", "updated_at",
 		}),
 	}).Create(row).Error
 	if err != nil {
@@ -591,14 +591,7 @@ func (s *Store) UpsertImageNode(row *ImageNode) (*ImageNode, error) {
 }
 
 func (s *Store) FailImageSyncIfActive(imageID, nodeID uint, transferID, message string) error {
-	res := s.db.Model(&ImageNode{}).Where("image_version_id = ? AND node_id = ? AND state = ? AND transfer_id = ?", imageID, nodeID, ImageStateSyncing, transferID).Updates(map[string]any{"state": ImageStateFailed, "transfer_id": "", "rate_bps": int64(0), "last_rate_limit_kib": gorm.Expr("CASE WHEN rate_limit_kib > 0 THEN rate_limit_kib ELSE last_rate_limit_kib END"), "rate_limit_kib": int64(0), "message": message})
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected > 0 {
-		s.Bus.PublishChange("image", uintKey(imageID), "node")
-	}
-	return nil
+	return s.FailImageSyncIfActiveCode(imageID, nodeID, transferID, message, "")
 }
 
 // FailImageNodeIfUnchanged fails a transfer that stopped reporting.
@@ -613,7 +606,7 @@ func (s *Store) FailImageSyncIfActive(imageID, nodeID uint, transferID, message 
 func (s *Store) FailImageNodeIfUnchanged(imageID, nodeID uint, transferID string, observed time.Time, message string) (bool, error) {
 	res := s.db.Model(&ImageNode{}).
 		Where("image_version_id = ? AND node_id = ? AND transfer_id = ? AND state IN ? AND updated_at <= ?", imageID, nodeID, transferID, []string{ImageStatePulling, ImageStateSyncing}, observed).
-		Updates(map[string]any{"state": ImageStateFailed, "transfer_id": "", "rate_bps": int64(0), "last_rate_limit_kib": gorm.Expr("CASE WHEN rate_limit_kib > 0 THEN rate_limit_kib ELSE last_rate_limit_kib END"), "rate_limit_kib": int64(0), "message": message})
+		Updates(map[string]any{"state": ImageStateFailed, "last_transfer_id": gorm.Expr("CASE WHEN COALESCE(transfer_id, '') <> '' THEN transfer_id ELSE last_transfer_id END"), "transfer_id": "", "rate_bps": int64(0), "last_rate_limit_kib": gorm.Expr("CASE WHEN rate_limit_kib > 0 THEN rate_limit_kib ELSE last_rate_limit_kib END"), "rate_limit_kib": int64(0), "message": message})
 	if res.Error != nil {
 		return false, res.Error
 	}
@@ -632,7 +625,7 @@ func (s *Store) MarkImageNodeAbsent(imageID, nodeID uint, message string) error 
 		Updates(map[string]any{
 			"state": ImageStateAbsent, "size_bytes": int64(0), "runtime_size_bytes": nil,
 			"transferred_bytes": int64(0), "rate_bps": int64(0),
-			"transfer_id": "", "message": message,
+			"last_transfer_id": gorm.Expr("CASE WHEN COALESCE(transfer_id, '') <> '' THEN transfer_id ELSE last_transfer_id END"), "transfer_id": "", "message": message,
 		})
 	if res.Error != nil {
 		return res.Error
@@ -652,7 +645,7 @@ func (s *Store) MarkImageNodeAbsent(imageID, nodeID uint, message string) error 
 func (s *Store) CancelImageNodeTransfer(imageID, nodeID uint, message string) (bool, error) {
 	res := s.db.Model(&ImageNode{}).
 		Where("image_version_id = ? AND node_id = ? AND state IN ?", imageID, nodeID, []string{ImageStatePulling, ImageStateSyncing}).
-		Updates(map[string]any{"state": ImageStateFailed, "transfer_id": "", "rate_bps": int64(0), "last_rate_limit_kib": gorm.Expr("CASE WHEN rate_limit_kib > 0 THEN rate_limit_kib ELSE last_rate_limit_kib END"), "rate_limit_kib": int64(0), "message": message})
+		Updates(map[string]any{"state": ImageStateFailed, "last_transfer_id": gorm.Expr("CASE WHEN COALESCE(transfer_id, '') <> '' THEN transfer_id ELSE last_transfer_id END"), "transfer_id": "", "rate_bps": int64(0), "last_rate_limit_kib": gorm.Expr("CASE WHEN rate_limit_kib > 0 THEN rate_limit_kib ELSE last_rate_limit_kib END"), "rate_limit_kib": int64(0), "message": message})
 	if res.Error != nil {
 		return false, res.Error
 	}
@@ -729,11 +722,17 @@ func (s *Store) ApplyImageNodeStatus(imageID, nodeID uint, st proto.ImageNodeSta
 	if st.TransferID != "" && current.TransferID != "" && st.TransferID != current.TransferID {
 		return nil
 	}
+	if st.TransferID != "" && current.TransferID == "" && current.LastTransferID != "" && st.TransferID != current.LastTransferID {
+		return nil
+	}
 	// A finished row has no active transfer id. A progress frame that still
 	// names a transfer arrived after that transfer ended and must not reopen it.
 	if st.TransferID != "" && current.TransferID == "" &&
 		(current.State == ImageStatePresent || current.State == ImageStateFailed) &&
 		st.State != ImageStatePresent && st.State != ImageStateFailed {
+		return nil
+	}
+	if current.TransferErrorCode == "PEER_RELAY_BUSY" && st.State != ImageStatePresent {
 		return nil
 	}
 	updates := map[string]any{"state": st.State, "message": st.Message, "runtime_size_bytes": nil}
@@ -758,18 +757,32 @@ func (s *Store) ApplyImageNodeStatus(imageID, nodeID uint, st proto.ImageNodeSta
 		// measured independently by the node's inventory.
 		updates["size_bytes"], updates["transferred_bytes"] = int64(0), int64(0)
 	}
+	if st.State == ImageStatePresent {
+		updates["transfer_error_code"] = ""
+	}
 	if st.State == ImageStatePresent || st.State == ImageStateFailed {
 		updates["transfer_id"] = ""
+		completedID := st.TransferID
+		if completedID == "" {
+			completedID = current.TransferID
+		}
+		if completedID != "" {
+			updates["last_transfer_id"] = completedID
+		}
 		updates["rate_bps"] = int64(0)
-		if current.RateLimitKiB > 0 {
+		if current.RateLimitKiB > 0 || (current.State == ImageStateSyncing && current.Source == "peer") {
 			updates["last_rate_limit_kib"] = current.RateLimitKiB
 		}
 		updates["rate_limit_kib"] = int64(0)
 	} else if st.TransferID != "" {
 		updates["transfer_id"] = st.TransferID
 	}
-	if err := s.db.Model(&current).Updates(updates).Error; err != nil {
-		return err
+	res := s.db.Model(&ImageNode{}).Where("id = ? AND state = ? AND COALESCE(transfer_id, '') = ? AND transfer_error_code = ? AND last_transfer_id = ?", current.ID, current.State, current.TransferID, current.TransferErrorCode, current.LastTransferID).Updates(updates)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil
 	}
 	// A rolling tag resolves to a concrete runtime image only after pull or
 	// inspect. Fill snapshots created before that observation, without

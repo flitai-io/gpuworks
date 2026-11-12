@@ -295,6 +295,7 @@ func (a *apiHandlers) imageNodeDTOs(rows []store.ImageNode, nodes []store.Node) 
 		if ok {
 			item.State, item.SizeBytes, item.TransferredBytes, item.RateBPS, item.RateLimitKiB, item.LastRateLimitKiB, item.TransferID, item.Source, item.Message = row.State, row.SizeBytes, row.TransferredBytes, row.RateBPS, row.RateLimitKiB, row.LastRateLimitKiB, row.TransferID, row.Source, row.Message
 			item.ImageDigestID = row.ImageDigestID
+			item.TransferErrorCode = row.TransferErrorCode
 			if !row.UpdatedAt.IsZero() {
 				item.UpdatedAt = row.UpdatedAt.UTC().Format(time.RFC3339)
 			}

@@ -110,6 +110,7 @@ var routeDocs = map[string]string{
 	"/api/v1/nodes/{}/terminal":                 "打开 Web 终端会话（WS upgrade；host 或 container target）",
 	"/api/v1/nodes/{}/terminal/settings":        "该节点终端能力与限制（kill switch、并发上限等）",
 	"/api/v1/notices":                           "页头通知铃铛 `{notices: [{id, severity, kind, title?, body?, url?, published_at, read}], unread}`：发布方签名发布的、适用于本安装的通知（`kind` 为 `security` / `release` / `event`，`title`/`body` 按语言给出纯文本）；按紧急程度、再按时间排序，`read` 与 `unread` 按调用者计算",
+	"/api/v1/peer-transfers":                    "当前管理节点进程的 peer 传输观测；可选单个 `transfer_id`，返回有效中继预算、活动中继数、带宽额度等待数、累计结果及有界运行观测。无对应观测返回空列表，未接入观测能力返回 503；非法筛选返回 400。计数为内层 TLS 流字节，不代表文件校验进度。",
 	"/api/v1/platform-tokens":                   "当前用户的令牌：`{items:[{id,name,prefix,scope,created_at,expires_at,last_used_at}], total}`；`last_used_at` 每分钟最多更新一次",
 	"/api/v1/playground/models":                 "可在 Playground 调用的已部署模型列表，不包含全局设置中的 AI 助手外部模型；`html_preview.allow_network` 是 HTML 预览的网络策略（来自安全设置）；每项模型有 `sleeping`（布尔），休眠中且请求能唤醒它（部署可休眠、有一个休眠实例不是运维或定时计划下的保持休眠）时另有 `wakes_on_request: true`（否则省略）：这样的模型收到请求会由网关挂起、唤醒后放行，没有它的休眠模型请求回 503，须先唤醒；试验场据此提示",
 	"/api/v1/playground/openapi.json":           "Playground 代理的 OpenAPI 描述",

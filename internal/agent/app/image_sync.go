@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ type activeImageSync struct {
 	imageRef   string
 	receiver   *agentmodelsync.Receiver
 	reported   bool
+	relayDone  chan struct{}
 }
 
 type readWriteReader struct{ io.Reader }
@@ -128,6 +130,10 @@ func (n *NodeRuntime) waitImageSync(active *activeImageSync, p proto.ImageSyncLi
 }
 
 func (n *NodeRuntime) rpcImageSyncSend(ctx context.Context, params json.RawMessage) (any, error) {
+	return n.imageSyncSend(ctx, params, nil)
+}
+
+func (n *NodeRuntime) imageSyncSend(ctx context.Context, params json.RawMessage, raw net.Conn) (any, error) {
 	var p proto.ImageSyncSendParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
@@ -169,10 +175,24 @@ func (n *NodeRuntime) rpcImageSyncSend(ctx context.Context, params json.RawMessa
 	if err != nil {
 		return nil, err
 	}
-	result, err := agentmodelsync.SendWithMagic(ctx, p.Endpoints, localIP, p.Token, p.Fingerprint, imageSyncMagic, func(w io.Writer) error {
-		return d.SaveImage(ctx, p.ImageRef, agentmodelsync.RateLimitedWriter(w, p.RateLimitKBs))
-	})
+	transport := "direct"
+	if raw != nil {
+		transport = "relay"
+	}
+	observe := n.peerTransferPhaseReporter(p.ReportPhase, p.TransferID, transport)
+	writeArchive := func(w io.Writer) error {
+		return d.SaveImage(ctx, p.ImageRef, agentmodelsync.RateLimitedWriter(ctx, w, p.RateLimitKBs))
+	}
+	var result agentmodelsync.Result
+	if raw != nil {
+		result, err = agentmodelsync.SendOnConnWithMagic(ctx, raw, p.Token, p.Fingerprint, imageSyncMagic, writeArchive, observe)
+	} else {
+		result, err = agentmodelsync.SendWithMagic(ctx, p.Endpoints, localIP, p.Token, p.Fingerprint, imageSyncMagic, writeArchive, observe)
+	}
 	if err != nil {
+		if p.AllowRelay && errors.Is(err, agentmodelsync.ErrDirectUnavailable) {
+			return proto.ImageSyncTransferResult{DirectDialError: err.Error()}, nil
+		}
 		return nil, err
 	}
 	return proto.ImageSyncTransferResult{Bytes: result.Bytes, SHA256: result.SHA256}, nil
@@ -191,6 +211,9 @@ func (n *NodeRuntime) rpcImageSyncProbe(ctx context.Context, params json.RawMess
 		return nil, err
 	}
 	if err := agentmodelsync.Probe(ctx, p.Endpoints, localIP, p.Token, p.Fingerprint, imageSyncMagic); err != nil {
+		if p.AllowRelay && errors.Is(err, agentmodelsync.ErrDirectUnavailable) {
+			return proto.ImageSyncTransferResult{DirectDialError: err.Error()}, nil
+		}
 		return nil, fmt.Errorf("source node cannot connect to target direct address: %w", err)
 	}
 	return map[string]string{"state": "ready"}, nil
@@ -221,6 +244,9 @@ func (n *NodeRuntime) rpcImageSyncStop(_ context.Context, params json.RawMessage
 	if active == nil {
 		return map[string]string{"status": "not_running"}, nil
 	}
+	n.imageSyncMu.Lock()
+	active.reported = true
+	n.imageSyncMu.Unlock()
 	active.receiver.Stop()
 	return map[string]string{"status": "stopping"}, nil
 }

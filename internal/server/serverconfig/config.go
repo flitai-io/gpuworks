@@ -59,6 +59,8 @@ type File struct {
 	StorageDeniedPaths *[]string `yaml:"storage_denied_paths,omitempty"`
 	// MetricsRetention bounds raw metric and log samples (a Go duration).
 	MetricsRetention string `yaml:"metrics_retention,omitempty"`
+	// PeerRelay bounds archive forwarding on this server process.
+	PeerRelay PeerRelay `yaml:"peer_relay,omitempty"`
 	// Management session deadlines (Go durations).
 	SessionIdleTimeout string `yaml:"session_idle_timeout,omitempty"`
 	SessionMaxLifetime string `yaml:"session_max_lifetime,omitempty"`
@@ -117,6 +119,9 @@ func decodeFile(path string, raw []byte) (File, error) {
 		return File{}, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if err := f.Listen.Validate(); err != nil {
+		return File{}, fmt.Errorf("%s: %w", path, err)
+	}
+	if _, err := f.PeerRelay.Policy(); err != nil {
 		return File{}, fmt.Errorf("%s: %w", path, err)
 	}
 	if err := ValidateUpdateChannel(f.UpdateChannel); err != nil {

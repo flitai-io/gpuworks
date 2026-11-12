@@ -2,9 +2,11 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
@@ -128,6 +130,15 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 			c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonImageDeliveryWaiting, Params: map[string]any{"node": node.DisplayName(), "image": image.ImageRef}})
 			return imageDelivery{}
 		case store.ImageStateFailed:
+			if row.Source == "peer" && row.TransferErrorCode == messages.ErrorPeerRelayBusy {
+				if syncer, ok := c.hub.(imagePeerSyncer); ok {
+					if source, e := c.store.NodeByID(row.SourceNodeID); e == nil {
+						_, _ = syncer.SyncImageFromRate(ctx, image.ID, node.UUID, source.UUID, row.LastRateLimitKiB)
+					}
+				}
+				c.imageWaits.set(dep.ID, image.ID)
+				return imageDelivery{}
+			}
 			if row.Source == "peer" && row.SourceNodeID != 0 {
 				c.peerCool.cool(row.SourceNodeID, node.ID, now)
 			}
@@ -140,6 +151,10 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 		return imageDelivery{present: true}
 	}
 	if _, err := syncer.SyncImageFromRate(ctx, image.ID, node.UUID, source.UUID, rate); err != nil {
+		if errors.Is(err, messages.ErrPeerRelayBusy) {
+			c.imageWaits.set(dep.ID, image.ID)
+			return imageDelivery{}
+		}
 		c.log.Info("image copy not started; the replica pulls the image itself", "dep", dep.ID, "image", image.ImageRef, "node", node.UUID, "source", source.UUID, "err", err)
 		c.peerCool.cool(source.ID, node.ID, now)
 		c.imageWaits.clear(dep.ID)

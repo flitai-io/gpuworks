@@ -472,3 +472,11 @@ test("disk-space rows do not invent a cache, unknown-source or ambiguous-target 
   ] }));
   assert.equal(screen.queryAllByRole("button", { name: models.action.retry }).length, 0, "an unknown or ambiguous target must not expose Retry");
 });
+
+test("relay capacity refusal keeps its localized retry guidance in the task details", () => {
+  stubMe("admin");
+  renderSection(modelWith({ nodes: [row({ state: "download_required", acquisition: "peer", source_node_uuid: "source", transfer_error_code: "PEER_RELAY_BUSY", message: "raw server capacity message" })] }));
+  const details = expandFile("gpu3");
+  assert.ok(details.getByText(locale.common.apiError.PEER_RELAY_BUSY));
+  assert.equal(details.queryByText("raw server capacity message"), null);
+});

@@ -175,9 +175,10 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	// the same catalog: every network declared in the store.
 	networks := network.New(st, network.StoreCatalog{Store: st})
 	readPrivateHosts := privateHostPermissions(cfg, log)
-	h := hub.New(st, log)
-	h.SetOutboundPrivateHostsReader(readPrivateHosts)
-	h.SetNetworks(networks)
+	h, err := newPolicyHub(st, log, cfg.PeerRelay, networks, readPrivateHosts)
+	if err != nil {
+		return nil, err
+	}
 	// Besides the listed proxies, the public entry point's connector on this
 	// host while `gpuworks expose` has it enabled (ADR 0049).
 	proxies, invalidProxies := auth.NewProxyTrust(cfg.TrustedProxies, expose.NewStore(cfg.DataDir).WatchEnabled().Enabled)
@@ -335,6 +336,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 			ProbeModel:           ctrl.ProbeModelSync,
 			SyncImageWithRate:    h.SyncImageFromRate,
 			ProbeImage:           h.ProbeImagePath,
+			ProbeImageResult:     h.ProbeImagePathResult,
 			RetryImage:           h.RetryImageSync,
 			CopyModel:            ctrl.CopyModelFile,
 		},
@@ -356,7 +358,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 			return modelmeta.FetchFrom(ctx, source, repo, revision, subfolder, candidates, metadataClient, planning.ModelLogins(st))
 		},
 		ServerDialAgent:      h.DialAgentWithSecret,
-		NodeStreams:          h,
+		NodeStreams:          peerTransferStreams{h},
 		OpenTerminal:         h.OpenTerminal,
 		NodeCaps:             h.NodeCaps,
 		Terminal:             webterm.New(st),

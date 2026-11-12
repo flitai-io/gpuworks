@@ -72,6 +72,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.Use(a.managementAuth, readTokensRead)
 			r.Use(compressJSON)
 			r.Get("/healthz", a.health)
+			r.Get("/peer-transfers", a.peerTransferSnapshot)
 			r.Get("/engines", a.engines)
 			r.Get("/nodes", a.listNodes)
 			r.Get("/nodes/facets", a.nodeFacets)

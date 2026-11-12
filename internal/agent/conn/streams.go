@@ -42,6 +42,10 @@ func (c *Conn) handleStream(ctx context.Context, stream *yamux.Stream) {
 		return
 	}
 	switch hdr.Kind {
+	case proto.StreamPeerRelaySend:
+		c.handlePeerRelaySend(ctx, stream)
+	case proto.StreamPeerRelayReceive:
+		c.handlePeerRelayReceive(ctx, hdr, stream)
 	case proto.StreamTunnel:
 		c.handleTunnel(hdr.Dst, stream)
 	case proto.StreamLogtail:

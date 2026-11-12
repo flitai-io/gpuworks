@@ -1,6 +1,10 @@
 package messages
 
-import "gpuworks.ai/gpuworks/internal/proto"
+import (
+	"errors"
+
+	"gpuworks.ai/gpuworks/internal/proto"
+)
 
 // ProductError is a language-neutral API error. Fallback is an English message
 // retained for older clients and scripts that only read the error field.
@@ -177,4 +181,13 @@ func NoStoragePath(source, target string) *ProductError {
 	return NewProductError(ErrorNoStoragePath,
 		"The source and target nodes share no network that may carry storage sync; download from the source instead, or let the management network carry storage sync on both nodes.",
 		map[string]any{"source": source, "target": target})
+}
+
+// ErrPeerRelayBusy is temporary server admission pressure, never peer failure.
+var ErrPeerRelayBusy = errors.New("peer relay is busy")
+
+const ErrorPeerRelayBusy = "PEER_RELAY_BUSY"
+
+func PeerRelayBusy() *ProductError {
+	return WrapProductError(ErrorPeerRelayBusy, "Peer relay is busy; retry this transfer from the same source.", nil, ErrPeerRelayBusy)
 }

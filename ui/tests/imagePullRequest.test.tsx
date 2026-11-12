@@ -235,7 +235,7 @@ test("a manual copy from a node still names source_node and its rate", async () 
   fireEvent.mouseDown(screen.getByRole("combobox", { name: dialog.source }));
   await waitFor(() => assert.ok(screen.getAllByText("gpu-01").length > 1));
   await user.click(screen.getAllByText("gpu-01").at(-1)!);
-  await user.click(screen.getByRole("button", { name: z.nodeTable.testDirect }));
+  await user.click(screen.getByRole("button", { name: z.nodeTable.testTransport }));
   await screen.findByText(dialog.probeOk);
   await user.click(screen.getByRole("button", { name: dialog.start }));
   await waitFor(() => assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync").length, 1));

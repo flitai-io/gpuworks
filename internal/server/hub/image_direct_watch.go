@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -75,7 +76,7 @@ func (h *Hub) watchDirectImageTransfer(imageID, nodeID uint) {
 			if row.State != store.ImageStateSyncing || row.TransferID != transferID {
 				return // finished, or something else already moved it on
 			}
-			if time.Since(row.UpdatedAt) < silentAfter {
+			if (row.TransferErrorCode == messages.ErrorPeerRelayBusy && h.ownsImageSync(transferID)) || time.Since(row.UpdatedAt) < silentAfter {
 				continue
 			}
 			h.abandonDirectImageTransfer(imageID, nodeID, row)
@@ -136,5 +137,19 @@ func (h *Hub) abandonDirectImageTransfer(imageID, nodeID uint, row *store.ImageN
 // WatchImageTransfer restores monitoring for a persisted transfer after a
 // server restart. Repeated reconciles share one watcher for the same attempt.
 func (h *Hub) WatchImageTransfer(imageID, nodeID uint) {
+	row, err := h.store.ImageNode(imageID, nodeID)
+	if err == nil && row.State == store.ImageStateSyncing && row.TransferErrorCode == messages.ErrorPeerRelayBusy && !h.ownsImageSync(row.TransferID) {
+		source, e := h.store.NodeByID(row.SourceNodeID)
+		target, te := h.store.NodeByID(nodeID)
+		if e == nil && te == nil {
+			_, _ = h.syncImageDirect(context.Background(), imageID, target.UUID, source.UUID, row.RateLimitKiB, false)
+		}
+	}
 	h.watchDirectImageTransfer(imageID, nodeID)
+}
+
+func (h *Hub) ownsImageSync(id string) bool {
+	h.imageSyncMu.Lock()
+	defer h.imageSyncMu.Unlock()
+	return h.imageSyncOwners[id] != nil
 }

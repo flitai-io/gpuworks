@@ -30,7 +30,7 @@ func TestModelSyncFailureDiagnosticNamesAttemptEndpoints(t *testing.T) {
 	var record map[string]any
 	for _, line := range strings.Split(logs.String(), "\n") {
 		var item map[string]any
-		if json.Unmarshal([]byte(line), &item) == nil && item["msg"] == "direct model sync failed" {
+		if json.Unmarshal([]byte(line), &item) == nil && item["msg"] == "peer model sync failed" {
 			record = item
 		}
 	}

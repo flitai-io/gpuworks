@@ -8,7 +8,7 @@ import { explorerSeriesName } from "./monitorSeries";
 // The explorer lists the server's metric catalog (GET /api/v1/monitor/metrics)
 // grouped by what measures each series, in this order; it spells no metric
 // names itself.
-const SOURCE_ORDER: MonitorMetricSource[] = ["gpu", "dgpu", "node", "network", "engine", "gateway", "kv_disk", "benchmark"];
+const SOURCE_ORDER: MonitorMetricSource[] = ["gpu", "dgpu", "node", "network", "engine", "gateway", "kv_disk", "benchmark", "peer_transfer"];
 const DEFAULT_METRIC = "gpuworks_gpu_utilization";
 
 const BY_OPTIONS: NonNullable<MonitorSeriesParams["by"]>[] = ["node", "deployment", "instance", "gpu"];

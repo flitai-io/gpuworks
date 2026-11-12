@@ -40,22 +40,23 @@ type ModelNodePresence struct {
 	NodeUUID    string            `json:"node_uuid"`
 	// NodeName and SourceNodeName name the nodes for display; the uuids remain
 	// the identifiers.
-	NodeName         string  `json:"node_name,omitempty"`
-	SourceNodeName   string  `json:"source_node_name,omitempty"`
-	State            string  `json:"state"`
-	Path             string  `json:"path"`
-	Revision         string  `json:"revision,omitempty"`
-	Progress         float64 `json:"progress"` // 0..1
-	SizeBytes        int64   `json:"size_bytes"`
-	Downloaded       int64   `json:"downloaded"`
-	TransferredBytes int64   `json:"transferred_bytes"`
-	RateBps          int64   `json:"rate_bps"`
-	RateLimitKiB     int     `json:"rate_limit_kib_s,omitempty"`
-	LastRateLimitKiB int     `json:"last_rate_limit_kib_s,omitempty"`
-	Acquisition      string  `json:"acquisition"`
-	TransferID       string  `json:"transfer_id,omitempty"`
-	SourceNodeUUID   string  `json:"source_node_uuid,omitempty"`
-	Message          string  `json:"message,omitempty"`
+	NodeName          string  `json:"node_name,omitempty"`
+	SourceNodeName    string  `json:"source_node_name,omitempty"`
+	State             string  `json:"state"`
+	Path              string  `json:"path"`
+	Revision          string  `json:"revision,omitempty"`
+	Progress          float64 `json:"progress"` // 0..1
+	SizeBytes         int64   `json:"size_bytes"`
+	Downloaded        int64   `json:"downloaded"`
+	TransferredBytes  int64   `json:"transferred_bytes"`
+	RateBps           int64   `json:"rate_bps"`
+	RateLimitKiB      int     `json:"rate_limit_kib_s,omitempty"`
+	LastRateLimitKiB  int     `json:"last_rate_limit_kib_s,omitempty"`
+	Acquisition       string  `json:"acquisition"`
+	TransferID        string  `json:"transfer_id,omitempty"`
+	TransferErrorCode string  `json:"transfer_error_code,omitempty"`
+	SourceNodeUUID    string  `json:"source_node_uuid,omitempty"`
+	Message           string  `json:"message,omitempty"`
 	// StorageID and StorageName name the storage the files are in; Cache marks
 	// an nfs_cache storage's copy on this node.
 	StorageID   uint       `json:"storage_id,omitempty"`

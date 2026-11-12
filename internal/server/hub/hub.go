@@ -9,7 +9,6 @@ package hub
 import (
 	"context"
 	"crypto/hmac"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -73,16 +72,20 @@ type Hub struct {
 	// not yet reported.
 	pushLimiter chan struct{}
 
-	mu              sync.RWMutex
-	sessions        map[string]*Session             // keyed by node UUID
-	imageWatches    map[[2]uint]map[string]struct{} // active image/node watchers, owned by transfer id
-	rejectMu        sync.Mutex
-	rejects         []RejectEvent
-	upgradeMu       sync.RWMutex
-	upgradeErrors   map[string]string
-	upgradeObserver func(agentupgrade.Observation)
-	reconnectMu     sync.Mutex
-	reconnect       map[string]reconnectState
+	mu               sync.RWMutex
+	peerRelayMu      sync.Mutex
+	peerRelayManager *peerRelayManager
+	imageSyncMu      sync.Mutex
+	imageSyncOwners  map[string]context.CancelFunc
+	sessions         map[string]*Session             // keyed by node UUID
+	imageWatches     map[[2]uint]map[string]struct{} // active image/node watchers, owned by transfer id
+	rejectMu         sync.Mutex
+	rejects          []RejectEvent
+	upgradeMu        sync.RWMutex
+	upgradeErrors    map[string]string
+	upgradeObserver  func(agentupgrade.Observation)
+	reconnectMu      sync.Mutex
+	reconnect        map[string]reconnectState
 
 	reconnectAttempts map[string]*serverDialReconnectAttempt
 
@@ -160,9 +163,10 @@ func New(st *store.Store, log *slog.Logger) *Hub {
 // write in flight.
 func (h *Hub) RunNodeQueues(ctx context.Context) {
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() { defer wg.Done(); h.statusQ.run(ctx) }()
 	go func() { defer wg.Done(); h.touchQ.run(ctx) }()
+	go func() { defer wg.Done(); h.RunPeerTransferMetrics(ctx) }()
 	wg.Wait()
 }
 
@@ -326,7 +330,8 @@ func (h *Hub) dialAgentWithSecret(ctx context.Context, addr, secret string, tcpT
 		_ = netConn.Close()
 		return err
 	}
-	if err := h.serverDialServerAuth(netConn, secret); err != nil {
+	dualLane, err := h.serverDialServerAuthLane(netConn, secret, proto.LaneCtrl, "", "")
+	if err != nil {
 		_ = netConn.Close()
 		return err
 	}
@@ -334,10 +339,11 @@ func (h *Hub) dialAgentWithSecret(ctx context.Context, addr, secret string, tcpT
 		_ = netConn.Close()
 		return err
 	}
-	// server_dial keeps the single data-profile lane (no SessionID, no data
-	// lane); dataLaneRoute's "none" state routes every kind over it — this is
-	// its permanent shape, not a fallback from a failure.
-	sess, cleanup, err := h.acceptYamuxServer(netConn, "", addr)
+	lane := ""
+	if dualLane {
+		lane = proto.LaneCtrl
+	}
+	sess, cleanup, err := h.acceptYamuxServer(netConn, lane, addr)
 	if err != nil {
 		_ = netConn.Close()
 		return err
@@ -351,6 +357,14 @@ func (h *Hub) dialAgentWithSecret(ctx context.Context, addr, secret string, tcpT
 		if err := h.store.SetNodeServerDialAddress(sess.NodeUUID, addr); err != nil {
 			h.log.Warn("persist server_dial address failed", "node", sess.NodeUUID, "addr", addr, "err", err)
 		}
+	}
+	if dualLane && sess.HasCap(proto.CapPeerRelayV1) {
+		// Negotiated data traffic waits for its physical lane even before the
+		// first successful attach; it must never borrow the control connection.
+		sess.dataMu.Lock()
+		sess.dataEver = true
+		sess.dataMu.Unlock()
+		go h.runServerDialDataLane(sess, addr, secret)
 	}
 	go h.serveSession(sess, cleanup, addr)
 	return nil
@@ -411,39 +425,11 @@ func (h *Hub) ServerDialRecoveryReady(uuid string) bool {
 	return ok && serverDialReconnectDelay(state.failures) >= 5*time.Minute
 }
 
-func (h *Hub) serverDialServerAuth(netConn net.Conn, secret string) error {
-	line, err := readLine(netConn)
-	if err != nil {
-		return fmt.Errorf("read server_dial challenge: %w", err)
-	}
-	var challenge proto.ServerDialChallenge
-	if err := json.Unmarshal(line, &challenge); err != nil {
-		return fmt.Errorf("decode server_dial challenge: %w", err)
-	}
-	if strings.TrimSpace(challenge.Nonce) == "" {
-		return errors.New("server_dial challenge missing nonce")
-	}
-	proofSecret := secret
-	if n, lookupErr := h.store.NodeByUUID(challenge.NodeUUID); lookupErr == nil && n.Token != "" && hmac.Equal([]byte(secret), []byte(n.Token)) {
-		proofSecret = proto.ServerDialNodeSecret(secret)
-	}
-	proof := proto.ServerDialProof{HMAC: proto.ServerDialHMAC(proofSecret, challenge.Nonce)}
-	resp, err := json.Marshal(proof)
-	if err != nil {
-		return err
-	}
-	resp = append(resp, '\n')
-	if _, err := netConn.Write(resp); err != nil {
-		return fmt.Errorf("write server_dial proof: %w", err)
-	}
-	return nil
-}
-
 // acceptYamuxServer builds the ctrl-side yamux session. lane selects the yamux
 // profile: proto.LaneCtrl uses the fixed 256 KiB control profile and issues a
 // random SessionID (returned in Registered) so the agent may open a data lane;
 // an empty lane keeps the single adaptive data profile (legacy/single-lane and
-// server_dial), which never issues a SessionID or opens a data lane.
+// older server_dial agents), which never issues a SessionID or opens a data lane.
 func (h *Hub) acceptYamuxServer(netConn net.Conn, lane string, remoteOpt ...string) (*Session, func(), error) {
 	profile := proto.LaneData
 	if lane == proto.LaneCtrl {

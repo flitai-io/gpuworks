@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -209,7 +210,9 @@ func TestServerDialReconnectCancellationCoversHandshake(t *testing.T) {
 				}
 				defer conn.Close()
 				if stage == "yamux" {
-					_ = json.NewEncoder(conn).Encode(proto.ServerDialChallenge{NodeUUID: node.UUID, Nonce: "test-challenge"})
+					// A real agent's nonce: 32 random bytes in hex. The server
+					// refuses to sign any other shape.
+					_ = json.NewEncoder(conn).Encode(proto.ServerDialChallenge{NodeUUID: node.UUID, Nonce: strings.Repeat("5a", 32)})
 					var proof proto.ServerDialProof
 					if err := json.NewDecoder(conn).Decode(&proof); err != nil {
 						return

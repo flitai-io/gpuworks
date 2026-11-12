@@ -208,6 +208,7 @@ Cookie 设置为 `HttpOnly`、`SameSite=Lax`，其中保存的是不透明会话
 | GET | `/api/v1/agent/connect` | agent 长连接 WS upgrade 入口 | 节点 token（非管理 JWT） |
 | GET | `/install.sh` | curl\|sh 安装脚本 | 无 |
 | GET | `/api/v1/healthz` | 健康检查（管理面） | JWT |
+| GET | `/api/v1/peer-transfers` | 当前管理节点进程的 peer 传输观测；可选单个 `transfer_id`，返回有效中继预算、活动中继数、带宽额度等待数、累计结果及有界运行观测。无对应观测返回空列表，未接入观测能力返回 503；非法筛选返回 400。计数为内层 TLS 流字节，不代表文件校验进度。 | JWT |
 | GET | `/healthz` | 健康检查（无需登录，供探活/负载均衡） | 无 |
 | GET | `/api/v1/engines?target_vendor=amd` | 面向指定厂商的引擎参数字典（省略 `target_vendor` 时使用通用 profile，未知厂商返回 400）；AMD profile 只表示实现准入范围，不证明特定 GPU/ROCm 版本已通过真机验收 | JWT |
 | GET | `/api/v1/nodes` | 节点列表；带 `page`/`page_size` 时分页并可按 `q`/`state`/`label` 筛选（见“错误与响应约定”）；从 Kubernetes 集群接入的节点带系统标签 `gpuworks.ai/kubernetes-cluster` 与 `gpuworks.ai/kubernetes-node`（见“节点标签：写入的与生成的”），被 Kubernetes cordon 时 `cordon_reason` 为 `kube_unschedulable` | JWT |

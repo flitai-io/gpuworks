@@ -221,3 +221,20 @@ func TestServerYAMLAutoCheckUpdatesReachesTheConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestPeerRelayHostConfigurationReachesStartup(t *testing.T) {
+	raw := serverconfig.PeerRelay{RateLimitKiBPerSecond: 8192, BurstKiB: 32, NoProgressTimeout: "3m", ConfirmationTimeout: "7m"}
+	cfg := app.DefaultConfig()
+	applyServerConfig(&cfg, serverconfig.File{PeerRelay: raw}, nil)
+	if !reflect.DeepEqual(cfg.PeerRelay, raw) {
+		t.Fatalf("relay host config lost: %+v", cfg.PeerRelay)
+	}
+	applyServerConfig(&cfg, serverconfig.File{}, nil)
+	if !reflect.DeepEqual(cfg.PeerRelay, serverconfig.PeerRelay{}) {
+		t.Fatalf("omitted file policy retained previous settings: %+v", cfg.PeerRelay)
+	}
+	got, err := cfg.PeerRelay.Policy()
+	if err != nil || got.RateLimitBytesPerSecond != 64<<20 {
+		t.Fatalf("omitted host config no safe default: %+v %v", got, err)
+	}
+}

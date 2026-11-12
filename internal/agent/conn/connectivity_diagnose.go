@@ -121,7 +121,7 @@ func (c *Conn) finishConnection(ctx context.Context, err error) error {
 	accepted := o.facts["connect_mode"] == agentconf.ServerDial && err != nil
 	o.mu.Unlock()
 	if accepted {
-		c.emitConnectionEvent("single")
+		c.emitConnectionEvent(c.connectionLane())
 	}
 	return safeConnectionError(err)
 }
