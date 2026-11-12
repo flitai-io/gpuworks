@@ -75,6 +75,10 @@ type Options struct {
 	RuntimeClass string
 	// Cards maps device index to card UUID (the node's probe).
 	Cards func(context.Context) (map[int]string, error)
+	// CardBDFs maps device index to the card's PCI address. A device plugin
+	// that names its devices by PCI address (AMD's) is matched to a card by
+	// it; nil leaves such devices unmatched.
+	CardBDFs func(context.Context) (map[int]string, error)
 	// IdleReturn is how long a borrowed, unused card is kept; negative keeps it.
 	IdleReturn time.Duration
 	Log        *slog.Logger
@@ -118,7 +122,7 @@ type Driver struct {
 
 // FromEnvironment builds the driver from the pod's environment (the
 // DaemonSet manifest sets it).
-func FromEnvironment(stateDir string, cards func(context.Context) (map[int]string, error), cardDevices func(context.Context) (map[int][]string, error), log *slog.Logger) (*Driver, error) {
+func FromEnvironment(stateDir string, cards, cardBDFs func(context.Context) (map[int]string, error), cardDevices func(context.Context) (map[int][]string, error), log *slog.Logger) (*Driver, error) {
 	api, err := kubeapi.InCluster()
 	if err != nil {
 		return nil, err
@@ -127,7 +131,7 @@ func FromEnvironment(stateDir string, cards func(context.Context) (map[int]strin
 		API: api, Kubelet: podresources.New(podresources.DefaultSocket), Images: newImageStore(stateDir),
 		Namespace: os.Getenv("GPUWORKS_KUBE_NAMESPACE"), NodeName: os.Getenv("GPUWORKS_KUBE_NODE_NAME"),
 		PodName: os.Getenv("GPUWORKS_KUBE_POD_NAME"), RuntimeClass: os.Getenv("GPUWORKS_KUBE_RUNTIME_CLASS"),
-		Cards: cards, IdleReturn: time.Minute, Log: log,
+		Cards: cards, CardBDFs: cardBDFs, IdleReturn: time.Minute, Log: log,
 		HostRoot: HostRoot, StateDir: stateDir, ContainerdSocket: os.Getenv("GPUWORKS_KUBE_CONTAINERD_SOCKET"),
 		CardDevices: cardDevices, PluginDir: deviceplugin.DefaultDir,
 		HAMiScheduler: os.Getenv("GPUWORKS_KUBE_HAMI_SCHEDULER"),
@@ -153,7 +157,7 @@ func New(o Options) *Driver {
 	o.PriorityClass = cmp.Or(o.PriorityClass, DefaultPriorityClass)
 	d := &Driver{o: o}
 	d.cards = &cardPool{priorityClass: o.PriorityClass,
-		api: o.API, kubelet: o.Kubelet, ns: o.Namespace, node: o.NodeName, cards: o.Cards,
+		api: o.API, kubelet: o.Kubelet, ns: o.Namespace, node: o.NodeName, cards: o.Cards, cardBDFs: o.CardBDFs,
 		idleReturn: o.IdleReturn, now: time.Now, log: o.Log, poll: o.Poll,
 		hamiScheduler: cmp.Or(o.HAMiScheduler, DefaultHAMiScheduler), podsTTL: 10 * time.Second,
 	}
@@ -554,44 +558,3 @@ var (
 	_ runtime.StreamedRefReporter = (*Driver)(nil)
 	_ ImageStore                  = (*nerdctl.Driver)(nil)
 )
-
-// devicePlan splits the node's card devices between the plugin's resources;
-// it is worked out once, from the first answer.
-func (d *Driver) devicePlan(ctx context.Context) (devicePlan, error) {
-	d.planMu.Lock()
-	defer d.planMu.Unlock()
-	if d.plan != nil {
-		return *d.plan, nil
-	}
-	if d.o.CardDevices == nil {
-		return devicePlan{byPath: map[string]string{}}, nil
-	}
-	perCard, err := d.o.CardDevices(ctx)
-	if err != nil {
-		return devicePlan{}, err
-	}
-	plan, err := planDevices(perCard)
-	if err != nil {
-		return devicePlan{}, err
-	}
-	d.plan = &plan
-	return plan, nil
-}
-
-// servePlugin registers the agent's device plugin when the node's cards
-// have device nodes to hand out (NVIDIA's come through its runtime class).
-func (d *Driver) servePlugin(ctx context.Context) {
-	if d.o.PluginDir == "" {
-		return
-	}
-	plan, err := d.devicePlan(ctx)
-	if err != nil {
-		d.o.Log.Warn("the cards' device nodes are unknown; instances that need them cannot start", "err", err)
-		return
-	}
-	if len(plan.byPath) == 0 {
-		return
-	}
-	p := &deviceplugin.Plugin{Dir: d.o.PluginDir, Log: d.o.Log}
-	go p.Run(ctx, plan.resources)
-}

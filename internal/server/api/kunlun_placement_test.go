@@ -63,7 +63,7 @@ func TestKunlunDefaultPlacementSkipsIncompatibleRuntime(t *testing.T) {
 		if node.Eligible || len(node.Reasons) == 0 || node.Reasons[0].Code != "runtime_unsupported" {
 			t.Fatalf("unsupported runtime offered: %+v", node)
 		}
-		if node.Reasons[0].Params["required_runtime"] != "docker/nerdctl" || node.Reasons[0].Params["os"] != "linux" || node.Reasons[0].Params["arch"] != "amd64" || node.Reasons[0].Params["runtime"] != "containerd" {
+		if node.Reasons[0].Params["required_runtime"] != "docker/nerdctl/kube" || node.Reasons[0].Params["os"] != "linux" || node.Reasons[0].Params["arch"] != "amd64" || node.Reasons[0].Params["runtime"] != "containerd" {
 			t.Fatalf("runtime reason params = %+v", node.Reasons[0])
 		}
 	}

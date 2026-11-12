@@ -103,7 +103,7 @@ func (p *cardPool) scan(ctx context.Context, v cardView) (holdScan, error) {
 			seen := map[string]bool{}
 			for _, a := range allocs {
 				if a.Namespace == pod.Metadata.Namespace && a.Pod == name {
-					if card := cardOf(a.DeviceID, byIndex); card != "" && !seen[card] {
+					if card := p.cardOf(ctx, a.DeviceID, byIndex); card != "" && !seen[card] {
 						seen[card] = true
 						cards = append(cards, card)
 					}

@@ -33,7 +33,7 @@ var targetConstraints = map[string]targetConstraint{
 	// NIXL over UCX. What remains AMD-specific is the host runtime and the
 	// explicit device selection below.
 	VendorAMD: {
-		runtime:         hostRequirements{os: "linux", arch: "amd64", drivers: []string{"docker", "nerdctl", "udocker"}},
+		runtime:         hostRequirements{os: "linux", arch: "amd64", drivers: []string{"docker", "nerdctl", "udocker", "kube"}},
 		explicitDevices: true,
 	},
 }

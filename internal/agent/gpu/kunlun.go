@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"math"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -80,7 +79,9 @@ func (p *KunlunProber) executable() (string, error) {
 	if p.lookPath != nil {
 		return p.lookPath("xpu-smi")
 	}
-	return exec.LookPath("xpu-smi")
+	// On Kubernetes the CLI is the host's (lookCLI searches its install
+	// directories through the host root).
+	return lookCLI("xpu-smi")
 }
 func (p *KunlunProber) run(ctx context.Context, args ...string) (string, error) {
 	if p.command != nil {
@@ -104,7 +105,9 @@ func (p *KunlunProber) inspect(path string) (os.FileInfo, error) {
 	if p.stat != nil {
 		return p.stat(path)
 	}
-	return os.Lstat(path)
+	// A privileged pod's /dev is a copy made at container start; lstatTool
+	// checks the host's live /dev when CLIs run on the host.
+	return lstatTool(path)
 }
 
 var kunlunNumberUnit = regexp.MustCompile(`^([0-9]+(?:\.[0-9]+)?)\s*([A-Za-z%]+)$`)

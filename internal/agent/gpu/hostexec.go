@@ -30,7 +30,10 @@ var hostRoot = "/proc/1/root"
 // hostCLIDirs are searched for a CLI on the host: the usual PATH plus the
 // vendor directories the drivers install their tools in.
 var hostCLIDirs = []string{"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin",
-	"/usr/local/Ascend/driver/tools", "/opt/hyhal/bin", "/opt/dtk/bin"}
+	"/usr/local/Ascend/driver/tools", "/opt/hyhal/bin", "/opt/dtk/bin",
+	// Kunlun's XRE SDK installs under /usr/local/xpu (its version.txt sits
+	// there); xpu-smi is also commonly linked into /usr/bin.
+	"/usr/local/xpu/bin"}
 
 // RunCLIsOnHost makes every vendor CLI the probes run execute in the host's
 // mount namespace (the agent must share the host's PID namespace).
@@ -84,6 +87,16 @@ func statTool(path string) (os.FileInfo, error) {
 		return statOnHost(path)
 	}
 	return os.Stat(path)
+}
+
+// lstatTool is statTool without following a final symbolic link: a check
+// that must reject a device path that is itself a link (Kunlun's
+// /dev/xdrdrv), or read a node's own mode and device number, uses it.
+func lstatTool(path string) (os.FileInfo, error) {
+	if cliOnHost.Load() {
+		return os.Lstat(filepath.Join(hostRoot, path))
+	}
+	return os.Lstat(path)
 }
 
 // globTool is filepath.Glob where the check will run.

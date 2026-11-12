@@ -441,7 +441,7 @@ flowchart TD
 | agent Pod `ImagePullBackOff` | 节点连不上所选的镜像仓库：中国大陆的集群选了 Docker Hub 时，改用「华为云 SWR」——编辑集群条目，把 agent 镜像仓库改成 SWR 并重新应用；已经 apply 的集群也可以直接执行 `kubectl -n gpuworks-system set image ds/gpuworks-agent agent=swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent:r1`。如果用的是私有仓库里自己的镜像，事件里 401 / 403 是拉取凭据缺失或不对：Secret 要在 `gpuworks-system` 里、名称与集群条目一致、`--docker-server` 与镜像域名一致；改好后 `kubectl -n gpuworks-system delete pod --all` 让 Pod 重新拉取 |
 | 实例 Pod 事件 `RuntimeClass "nvidia" not found` | 集群条目填了 RuntimeClass，集群里却没有它（托管集群都没有）。编辑集群条目，把 RuntimeClass 留空并重新应用 |
 | DaemonSet 期望数为 0 | 节点选择器没有选中节点，用 `kubectl get nodes --show-labels` 核对标签 |
-| Pod 在运行，节点不出现（agent 连得上 server） | 节点上没有受支持的加速卡（NVIDIA、昇腾、海光、PPU 之外）时节点保持待命，不注册；或节点已被同集群的另一个条目占着（注册被拒绝，原因 `node_taken`），见[接入 Kubernetes 集群](connect-kubernetes.md#加速卡厂商自动识别) |
+| Pod 在运行，节点不出现（agent 连得上 server） | 节点上没有受支持的加速卡（NVIDIA、昇腾、海光、PPU、AMD、昆仑芯之外）时节点保持待命，不注册；或节点已被同集群的另一个条目占着（注册被拒绝，原因 `node_taken`），见[接入 Kubernetes 集群](connect-kubernetes.md#加速卡厂商自动识别) |
 | Pod 在运行，节点不出现（agent 连不上 server） | agent 连不上 server：`kubectl -n gpuworks-system logs ds/gpuworks-agent` 看报错，确认节点能访问 Server 地址 |
 
 ## 用完清理

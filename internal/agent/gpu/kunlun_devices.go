@@ -69,7 +69,15 @@ func (p *KunlunProber) runtimeInjectionForDriver(ctx context.Context, indexes []
 	p.mu.RLock()
 	previous := p.lastSeen
 	p.mu.RUnlock()
-	args := []string{"--runtime", "runc"}
+	// Docker and nerdctl name runc so a node whose default runtime injects
+	// another vendor's devices cannot add them. A pod has no such option: its
+	// --runtime would become a RuntimeClass named "runc", which no cluster
+	// defines, so the pod could not be created; the kubelet's default runtime
+	// is already the plain one.
+	var args []string
+	if driver != "kube" {
+		args = []string{"--runtime", "runc"}
+	}
 	logical := make([]string, 0, len(indexes))
 	seen := map[int]bool{}
 	for _, n := range indexes {

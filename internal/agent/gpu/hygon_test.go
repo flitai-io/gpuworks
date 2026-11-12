@@ -244,8 +244,8 @@ func TestHygonRuntimeInjectionResolvesDRMFromPCI(t *testing.T) {
 	}
 }
 
-// Docker and nerdctl hand the container only the selected cards' DRM nodes,
-// so HIP numbers them 0..N-1 there; a host index past the first card would
+// Docker, nerdctl and a Kubernetes pod hand the container only the selected
+// cards' DRM nodes, so HIP numbers them 0..N-1 there; a host index past the first card would
 // hide every card. runveil binds the whole host /dev and keeps host indexes.
 func TestHygonRuntimeInjectionForDriverNumbersCardsAsHIPSeesThem(t *testing.T) {
 	for _, tc := range []struct {
@@ -255,8 +255,10 @@ func TestHygonRuntimeInjectionForDriverNumbersCardsAsHIPSeesThem(t *testing.T) {
 	}{
 		{"docker", []int{1}, "0"},
 		{"nerdctl", []int{1}, "0"},
+		{"kube", []int{1}, "0"},
 		{"udocker", []int{1}, "1"},
 		{"docker", []int{1, 0}, "0,1"},
+		{"kube", []int{1, 0}, "0,1"},
 		{"nerdctl", []int{1, 0}, "0,1"},
 		{"udocker", []int{1, 0}, "1,0"},
 	} {

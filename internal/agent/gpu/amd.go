@@ -95,7 +95,30 @@ func (p *AMDProber) inspect(path string) (os.FileInfo, error) {
 	if p.stat != nil {
 		return p.stat(path)
 	}
+	if p.hostRoot == "" {
+		// A privileged pod's /dev is a copy made at container start;
+		// lstatTool checks the host's live /dev when CLIs run on the host.
+		return lstatTool(path)
+	}
 	return os.Lstat(p.hostPath(path))
+}
+
+// matchDev globs /dev, where a privileged pod's own copy of the host's
+// device nodes is stale: it goes through the host when CLIs run there.
+func (p *AMDProber) matchDev(path string) ([]string, error) {
+	if p.glob != nil || p.hostRoot != "" {
+		return p.match(path)
+	}
+	return globTool(path), nil
+}
+
+// readHostFile reads a host file that is not in sysfs (a ROCm install's
+// version marker): through the host's root when CLIs run on the host.
+func (p *AMDProber) readHostFile(path string) ([]byte, error) {
+	if p.readFile != nil || p.hostRoot != "" {
+		return p.read(path)
+	}
+	return readTool(path)
 }
 func (p *AMDProber) text(path string) string {
 	b, _ := p.read(path)
@@ -340,8 +363,10 @@ func (p *AMDProber) DriverVersion(context.Context) string {
 }
 func (p *AMDProber) Framework(context.Context) (string, string) {
 	for _, path := range []string{"/opt/rocm/.info/version", "/opt/rocm/.info/version-dev"} {
-		if v := p.text(path); v != "" {
-			return "rocm", v
+		if raw, err := p.readHostFile(path); err == nil {
+			if v := strings.TrimSpace(string(raw)); v != "" {
+				return "rocm", v
+			}
 		}
 	}
 	return "rocm", ""

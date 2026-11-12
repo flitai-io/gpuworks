@@ -1007,7 +1007,7 @@ export interface ImageSeries {
 }
 
 /** The accelerator vendor of a cloud node pool (ProviderClusterPool.vendor). */
-export type KubeVendor = "nvidia" | "ascend" | "hygon" | "ppu";
+export type KubeVendor = "nvidia" | "ascend" | "hygon" | "ppu" | "amd" | "kunlunxin";
 
 /** How many of an entry's nodes have one vendor's cards (dto.KubeVendorNodes); vendor "" is nodes that reported no cards. */
 export interface KubeVendorNodes {

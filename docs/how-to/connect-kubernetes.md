@@ -9,7 +9,7 @@
 - server 已经启动，集群节点能访问 server 地址（agent 主动外连，不需要节点入站端口）。
 - 集群使用 containerd（kubeadm、k3s、RKE2、microk8s、GPU Operator 环境都是）。CRI-O（OpenShift）与 Docker 节点不支持，
   agent 启动时会拒绝并写明原因。
-- 节点上装好厂商驱动：Kubernetes 上支持 NVIDIA、昇腾、海光（DCU）与 PPU，一个集群条目可以同时覆盖这几种厂商的节点，
+- 节点上装好厂商驱动：Kubernetes 上支持 NVIDIA、昇腾、海光（DCU）、PPU、AMD 与昆仑芯，一个集群条目可以同时覆盖这几种厂商的节点，
   不需要按厂商各建一个条目（见下一节）。NVIDIA 节点的 NVIDIA 容器运行时可用：或者是 containerd 的
   默认运行时（托管 Kubernetes 如 DOKS、Nebius、ACK 都是），或者有名为 `nvidia` 的 RuntimeClass（k3s 会自动创建）；
   其他厂商只要求节点上装好厂商驱动，不需要厂商的容器运行时，也不需要厂商的 device plugin。
@@ -49,14 +49,14 @@ gpuworks 不接管集群的 GPU，只借用要用的卡，集群里原有的业�
 集群条目没有厂商这一项。一个条目只有一个 DaemonSet，没有厂商专用的挂载，agent Pod 在默认运行时下运行（不给 agent 指定
 RuntimeClass）；每个 agent 自己探测所在节点的加速卡：
 
-- Kubernetes 上支持的厂商：NVIDIA、昇腾、海光（DCU）、PPU。
-- 节点没有加速卡，或者是别家的卡（AMD、昆仑芯等暂不支持 Kubernetes）时，节点处于待命状态：agent Pod 照常运行，但不向
+- Kubernetes 上支持的厂商：NVIDIA、昇腾、海光（DCU）、PPU、AMD、昆仑芯（整卡；AMD 的 dGPU 切分在 Kubernetes 上不可用，见下文）。
+- 节点没有加速卡，或者是别家的卡（上述以外的厂商暂不支持 Kubernetes）时，节点处于待命状态：agent Pod 照常运行，但不向
   server 注册，这样的节点不会出现在平台的节点页。
 - 所以同一个条目可以覆盖含多个厂商节点的集群，不再需要一个厂商一个条目。节点选择器仍是可选项，用来只让平台使用其中一部分节点
   （例如只用部分 GPU 节点）。
 
 agent 没有厂商挂载也能用到厂商工具：它以 privileged、hostPID 运行，经宿主机根目录（`/proc/1/root`）读宿主机的文件，并在宿主机的
-挂载命名空间里（nsenter）运行厂商命令行工具 `npu-smi`、`hy-smi`、`ppu-smi` 与 `nvidia-smi`，用宿主机自己的 C 库与驱动库。
+挂载命名空间里（nsenter）运行厂商命令行工具 `npu-smi`、`hy-smi`、`ppu-smi`、`xpu-smi` 与 `nvidia-smi`，用宿主机自己的 C 库与驱动库。`xpu-smi`（昆仑芯）在 `PATH` 的常见目录与 `/usr/local/xpu/bin` 里找。AMD 不需要命令行工具：agent 读宿主机的 amdgpu sysfs 与 KFD，ROCm 版本读宿主机的 `/opt/rocm/.info/version`。
 `nvidia-smi` 按这个顺序查找：宿主机根目录；`/run/nvidia/driver`（NVIDIA GPU Operator 的驱动容器）；NVIDIA 运行时放进 agent 容器的那一份
 （manifest 固定设置 `NVIDIA_VISIBLE_DEVICES=all` 与 `NVIDIA_DRIVER_CAPABILITIES=compute,utility`，这两个变量只在 NVIDIA 的运行时下生效）。
 设备节点是否存在，看的是宿主机实时的 `/dev`。
@@ -82,8 +82,8 @@ agent 没有厂商挂载也能用到厂商工具：它以 privileged、hostPID �
 | ACK 共享 GPU（节点有 `aliyun.com/gpu-mem` 资源，或 `ack.node.gpu.schedule` 标签为 `share` / `cgpu` / `core_mem`） | 占位 Pod 申请一整张卡的显存，借到哪张读调度器写在 Pod 上的分配注解 |
 | MIG、time-slicing / MPS、没有 HAMi 登记的昇腾 vNPU 模板等其他切分 | 不借卡：节点的卡全部显示为外部占用，原因（MIG、time-slicing、vNPU 模板……）写在卡的占用信息里，不会在上面放实例；集群改回整卡分配后自动恢复 |
 
-三种模式借到整卡以后，卡上的 dGPU 切分（NVIDIA HAMi-core、昇腾 vCANN、PPU HGGC）与普通节点完全一致：实例 Pod 不申请 HAMi
-或 ACK 的资源，由 gpuworks 自己的 dGPU 把一张卡切给多个实例。
+三种模式借到整卡以后，卡上的 dGPU 切分（NVIDIA HAMi-core、昇腾 vCANN）与普通节点完全一致：实例 Pod 不申请 HAMi
+或 ACK 的资源，由 gpuworks 自己的 dGPU 把一张卡切给多个实例。PPU、海光与 AMD 的 dGPU 切分目前只在 Docker 等运行时上验证（PPU 仅 Docker；海光 Docker 与 udocker；AMD Docker、nerdctl 与 udocker），在 Kubernetes 节点上不可用，这些卡只做整卡部署。
 
 **HAMi**：占位 Pod 不绑定节点，而是写 `schedulerName: hami-scheduler`、`nodeSelector: kubernetes.io/hostname=<节点>`，
 申请 `nvidia.com/gpu: 1`、`nvidia.com/gpucores: 100`、`nvidia.com/gpumem-percentage: 100`，并用注解
@@ -114,11 +114,13 @@ manifest 的 ClusterRole 里的 `pods` 的 `get` / `list`）。用旧 manifest �
 Kubernetes 可能把卡分给别的 Pod」，不再按旧模式借卡，也不在这些卡上放新实例；已经在卡上的实例不受影响，卡上没有实例后旧的占位 Pod 会被删除。
 节点改回原来的模式后卡自动恢复。
 
-实例要的设备节点（昇腾的 `/dev/davinci*`、海光的 `/dev/kfd`、`/dev/dri/*`、PPU 的 `/dev/alixpu*` 等）由 agent 自带的
+实例要的设备节点（昇腾的 `/dev/davinci*`、海光的 `/dev/kfd`、`/dev/dri/*`、PPU 的 `/dev/alixpu*`、AMD 的 `/dev/kfd` 与 `/dev/dri/renderD*`、昆仑芯的 `/dev/xpu*` 与 `/dev/xpuctrl` 等）由 agent 自带的
 device plugin 交给实例：每张卡一个扩展资源 `gpuworks.ai/accelerator-<卡号>`，各卡共用的控制节点是 `gpuworks.ai/accelerator-shared`，
 实例 Pod 申请它用的卡与共用资源，kubelet 只把这几个设备节点给容器，实例不需要 privileged。哪些节点属于哪张卡取自厂商
 本身的设备注入，与普通节点上的 docker / nerdctl 实例一致。需要插件之外设备的实例（例如 InfiniBand 的
 `/dev/infiniband`）以 privileged 运行。
+
+借卡用的资源按厂商不同：NVIDIA `nvidia.com/gpu`、昇腾 `huawei.com/Ascend910` 等、海光 `hygon.com/dcu`、PPU `alibabacloud.com/ppu`、AMD `amd.com/gpu`、昆仑芯 `kunlunxin.com/xpu`（百度智能云 CCE 上是 `baidu.com/xpu`）。AMD 的 device plugin 用卡的 PCI 地址（如 `0000:43:00.0`）给设备命名，gpuworks 按卡的 PCI 地址（不区分大小写，忽略 `0000:` 域前缀）把它对到卡上；昆仑芯的设备 ID 与卡的对应只在名字里带有卡的 UUID 或以卡号结尾时成立（目前只用测试夹具验证，没有在带 device plugin 的真机上验证）。某张卡的设备注入校验失败（设备节点不在、卡不健康）时，agent 在日志里记下原因并不提供这张卡，节点上其余的卡照常可用。
 
 agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机上的 agent 一样，不依赖集群 DNS；server 地址因此要是
 节点能解析的地址，不能写集群内的 Service 名。agent 在节点的挂载命名空间里运行 nerdctl（拉取镜像、导入、终端）和 `mount`（NFS），所以 containerd 的 socket 与
@@ -221,7 +223,7 @@ kubectl delete namespace <namespace> --ignore-not-found
   所以实例镜像不用 Pod 的 `imagePullSecrets`，私有仓库的凭据配在 gpuworks 的镜像来源里（集群条目的镜像拉取凭据只管
   agent 镜像）。
 - 实例使用 host 网络，不创建 Service / Ingress，经 gpuworks 网关访问。
-- 厂商的命令行工具（`npu-smi`、`hy-smi`、`ppu-smi`、`nvidia-smi`）在节点的挂载命名空间里运行，用节点自己的 C 库与驱动库，所以 agent
+- 厂商的命令行工具（`npu-smi`、`hy-smi`、`ppu-smi`、`xpu-smi`、`nvidia-smi`）在节点的挂载命名空间里运行，用节点自己的 C 库与驱动库，所以 agent
   镜像与节点的发行版无关；查找顺序见「加速卡厂商：自动识别」。
-- 只支持 NVIDIA、昇腾、海光与 PPU 的节点；其他厂商（AMD、昆仑芯等）的节点保持待命，不成为平台节点。
+- 只支持 NVIDIA、昇腾、海光、PPU、AMD 与昆仑芯的节点；其他厂商的节点保持待命，不成为平台节点。AMD 与昆仑芯只做整卡部署：AMD 的 dGPU 显存切分在 Kubernetes 上不可用，昆仑芯本来就没有 dGPU。
 - agent 以 privileged、hostNetwork、hostPID 运行（探测、经节点挂载命名空间运行 nerdctl 与 mount 需要）。

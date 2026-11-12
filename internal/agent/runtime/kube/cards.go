@@ -52,6 +52,9 @@ type cardPool struct {
 	owner       *kubeapi.OwnerReference
 	// cards maps device index to card UUID, from the node's own probe.
 	cards func(context.Context) (map[int]string, error)
+	// cardBDFs maps device index to PCI address, for the device plugins that
+	// name their devices that way (cardPool.cardOf); nil when the node has none.
+	cardBDFs func(context.Context) (map[int]string, error)
 	// idleReturn is how long an unused borrowed card is kept; negative keeps
 	// it for good.
 	idleReturn time.Duration
@@ -129,6 +132,39 @@ func cardOf(id string, byIndex map[int]string) string {
 		}
 		if n, err := strconv.Atoi(m[1]); err == nil {
 			return byIndex[n]
+		}
+	}
+	return ""
+}
+
+// pciAddress is a device ID that is a PCI address, with or without the
+// domain.
+var pciAddress = regexp.MustCompile(`^([0-9a-fA-F]{4,8}:)?[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7]$`)
+
+// normalizePCI lower-cases a PCI address and drops the all-zero domain, so
+// "0000:43:00.0" and "43:00.0" name the same function.
+func normalizePCI(addr string) string {
+	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(addr)), "0000:")
+}
+
+// cardOf is the package's cardOf, which also knows the cards by PCI
+// address: AMD's device plugin names each device by it ("0000:43:00.0").
+func (p *cardPool) cardOf(ctx context.Context, id string, byIndex map[int]string) string {
+	if card := cardOf(id, byIndex); card != "" {
+		return card
+	}
+	if p.cardBDFs == nil || !pciAddress.MatchString(id) {
+		return ""
+	}
+	bdfs, err := p.cardBDFs(ctx)
+	if err != nil {
+		p.log.Warn("cannot read the cards' PCI addresses to match a device plugin's devices", "err", err)
+		return ""
+	}
+	want := normalizePCI(id)
+	for index, bdf := range bdfs {
+		if normalizePCI(bdf) == want {
+			return byIndex[index]
 		}
 	}
 	return ""
@@ -227,7 +263,7 @@ func (p *cardPool) listHeld(ctx context.Context, resource string) (map[string]st
 		if a.Namespace != p.ns || !strings.HasPrefix(a.Pod, holdPrefix) || a.Resource != resource {
 			continue
 		}
-		if card := cardOf(a.DeviceID, byIndex); card != "" {
+		if card := p.cardOf(ctx, a.DeviceID, byIndex); card != "" {
 			held[card] = a.Pod
 		}
 	}

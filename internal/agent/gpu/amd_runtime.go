@@ -119,7 +119,7 @@ func (p *AMDProber) dockerDevicePathsUnset(inventory []proto.GPUInfo) []string {
 	// by-path entries are symlinks to DRM card/render nodes. Removing the
 	// directory mount alone does not remove an individual --device mapping to
 	// one of those aliases, so include the aliases themselves as managed paths.
-	if aliases, err := p.match("/dev/dri/by-path/*"); err == nil {
+	if aliases, err := p.matchDev("/dev/dri/by-path/*"); err == nil {
 		for _, alias := range aliases {
 			name := filepath.Base(alias)
 			if name != "." && name != string(filepath.Separator) {

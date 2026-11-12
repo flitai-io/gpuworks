@@ -85,7 +85,7 @@ func (p *cardPool) externalHolderSet(ctx context.Context, v cardView, fresh bool
 			if kind, _ := accelerator.ClassifyKubeResource(a.Resource); kind == accelerator.KubeResourceOther || (a.Namespace == p.ns && strings.HasPrefix(a.Pod, holdPrefix)) {
 				continue
 			}
-			if card := cardOf(a.DeviceID, byIndex); card != "" {
+			if card := p.cardOf(ctx, a.DeviceID, byIndex); card != "" {
 				put(byCard, card, kubeapi.Pod{Metadata: kubeapi.ObjectMeta{Namespace: a.Namespace, Name: a.Pod}},
 					proto.CardProcess{Name: "Pod " + a.Namespace + "/" + a.Pod})
 			}
