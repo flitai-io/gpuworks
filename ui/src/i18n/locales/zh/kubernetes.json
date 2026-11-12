@@ -209,7 +209,6 @@
       "update": "将更新",
       "delete": "将删除",
       "absent": "不存在",
-      "kept": "保留",
       "failed": "被拒绝",
       "not_tried": "未执行",
       "dependent": "随命名空间创建"
@@ -219,7 +218,6 @@
       "update": "已更新",
       "delete": "已删除",
       "absent": "不存在",
-      "kept": "保留",
       "failed": "被拒绝",
       "not_tried": "未执行",
       "dependent": "随命名空间创建"

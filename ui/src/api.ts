@@ -1120,7 +1120,7 @@ export interface KubeClusterOperation {
   params?: { step: "kubeconfig" | "api_server"; reason: string };
 }
 
-export type KubeObjectAction = "create" | "update" | "delete" | "absent" | "kept" | "failed" | "not_tried" | "dependent";
+export type KubeObjectAction = "create" | "update" | "delete" | "absent" | "failed" | "not_tried" | "dependent";
 
 export interface KubeObjectResult {
   kind: string;

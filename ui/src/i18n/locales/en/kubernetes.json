@@ -209,7 +209,6 @@
       "update": "will update",
       "delete": "will delete",
       "absent": "absent",
-      "kept": "kept",
       "failed": "refused",
       "not_tried": "not tried",
       "dependent": "created with its namespace"
@@ -219,7 +218,6 @@
       "update": "updated",
       "delete": "deleted",
       "absent": "absent",
-      "kept": "kept",
       "failed": "refused",
       "not_tried": "not tried",
       "dependent": "created with its namespace"

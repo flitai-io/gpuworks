@@ -59,7 +59,7 @@ const plan: KubeClusterOperation = {
   results: [
     { kind: "Namespace", name: "gpuworks-system", action: "create" },
     { kind: "DaemonSet", name: "gpuworks-agent", namespace: "gpuworks-system", action: "dependent" },
-    { kind: "PriorityClass", name: "gpuworks-inference", action: "update" },
+    { kind: "PriorityClass", name: "gpuworks-inference-gpuworks-system", action: "update" },
   ],
 };
 
@@ -183,7 +183,7 @@ test("removing from the cluster checks first, then deletes on confirmation; an e
   api.kubeClusterOperation = (async (uuid: string, op: string, dryRun: boolean) => {
     ops.push([uuid, op, dryRun]);
     return { dry_run: dryRun, results: [{ kind: "DaemonSet", name: "gpuworks-agent", namespace: "gpuworks-system", action: "delete" },
-      { kind: "PriorityClass", name: "gpuworks-inference", action: "kept", reason: "used by gpuworks in namespace gpuworks-npu" }] };
+      { kind: "PriorityClass", name: "gpuworks-inference-gpuworks-system", action: "delete" }] };
   }) as never;
   const u = user();
   wrap(<KubernetesPage />);
@@ -194,7 +194,7 @@ test("removing from the cluster checks first, then deletes on confirmation; an e
   const row = screen.getByText("ack-gpu").closest("tr") as HTMLElement;
   await u.click(within(row).getByRole("button", { name: k.actions.remove }));
   assert.ok(await modal().findByText(k.operation.checkedRemove));
-  assert.ok(modal().getByText("used by gpuworks in namespace gpuworks-npu"));
+  assert.ok(modal().getByText("gpuworks-inference-gpuworks-system"));
   await u.click(modal().getByRole("button", { name: k.operation.confirmRemove }));
   assert.ok(await modal().findByText(k.operation.removed));
   assert.deepEqual(ops, [["e-5", "remove", true], ["e-5", "remove", false]]);
