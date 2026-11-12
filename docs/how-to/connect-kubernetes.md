@@ -30,6 +30,20 @@ gpuworks 负责，Kubernetes 不会把失败的实例拉起来。
 plugin 时，gpuworks 直接使用节点上的卡。集群用 HAMi、ACK 共享 GPU 或其他方式把一张卡分成多份时，借卡的办法随之不同，
 见下一节。
 
+## 与集群里的其他业务共存
+
+gpuworks 不接管集群的 GPU，只借用要用的卡，集群里原有的业务照常运行：
+
+- **不改动集群已有的 GPU 组件。** 沿用集群已装的 device plugin、HAMi 或 ACK 共享 GPU，不需要关闭、替换或卸载它们。
+- **两边的调度互相看得见。** gpuworks 用着的卡在 Kubernetes 里由占位 Pod 占着，kube-scheduler 不会再把它分给别的 Pod；
+  别的 Pod 占着的卡在 gpuworks 里显示为外部占用，gpuworks 不会在上面放实例。
+- **借卡只涉及实例所在的那个节点。** 占位 Pod 钉在该节点上，其他节点的卡不受影响。普通 device plugin 与 ACK 共享 GPU
+  不接受指定哪一张卡，所以借卡时 gpuworks 为该节点当时空闲的每张卡各起一个占位 Pod，认出要的那张后立即退回其余的；
+  这期间该节点上新来的 GPU Pod 会短暂 Pending。HAMi 可以指定卡，要哪张借哪张，没有这个过程。
+- **借到的是整卡，卡上仍可用 gpuworks 自己的 dGPU 切分。** 一张借来的卡可以切给多个实例，与普通节点一致。不能用的是集群
+  自己已经切分的节点（MIG、time-slicing 等，见下文的表）。
+- **不用的卡会还回去。** 卡上最后一个实例停止并超过条目的「空闲归还」时间后，占位 Pod 被删除，卡回到 Kubernetes。
+
 ## 加速卡厂商：自动识别
 
 集群条目没有厂商这一项。一个条目只有一个 DaemonSet，没有厂商专用的挂载，agent Pod 在默认运行时下运行（不给 agent 指定

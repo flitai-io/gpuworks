@@ -30,8 +30,8 @@ an inference template defines (Strata, ninfer, …), and serves it behind one Op
 NVIDIA, AMD Instinct and Ryzen AI Max, Huawei Ascend, T-Head PPU, Hygon DCU and Apple Silicon run side by side in the
 same cluster.
 
-The pool of capacity is the core: bare-metal servers, public cloud instances and private cloud VMs today, with
-Kubernetes clusters and Slurm partitions joining next. On top of it, GPUWorks serves models now and will run
+The pool of capacity is the core: bare-metal servers, public cloud instances, private cloud VMs and existing
+Kubernetes clusters today, with Slurm partitions joining next. On top of it, GPUWorks serves models now and will run
 fine-tuning and training jobs on the same accelerators.
 
 ## Highlights
@@ -45,6 +45,10 @@ fine-tuning and training jobs on the same accelerators.
   cluster; the scheduler matches each deployment to hardware its launch spec supports.
 - **Public and private cloud in one pool.** Sync instances from RunPod, CompShare, AutoDL, Vast.ai and Alibaba Cloud,
   or VMs from ZStack Cloud, install the agent in one click, and schedule them together with your own servers.
+- **Joins an existing Kubernetes cluster and coexists with its other workloads.** Apply one manifest to connect a
+  cluster. GPUWorks keeps the device plugin the cluster already runs and works with HAMi and ACK GPU sharing. It
+  borrows only the cards it uses and returns them when idle, and the two schedulers see each other: Kubernetes does
+  not hand a card GPUWorks holds to another Pod, and GPUWorks does not schedule onto a card another Pod holds.
 - **Ultra-lightweight.** The server and the agent are each one static binary (`CGO_ENABLED=0`); the server embeds the
   web UI (English / 中文) and the agents for every platform, and keeps its state in one SQLite file. The agent dials
   out over WebSocket, so nodes need no inbound ports (or the server dials in, for nodes that cannot reach out). In a
