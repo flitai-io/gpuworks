@@ -646,7 +646,25 @@ func hostedImportRunnerImageFromArchive(t *testing.T, harness *hostedControlPlan
 	// What an operator does in the console: paste each address and read what
 	// the archive carries, then record the addresses on the image.
 	for rank, archive := range urls {
-		preview, err := hostedPreviewArchive(t.Context(), harness.API, archive)
+		// The first API call after the VMs wrote the archives can outlast the
+		// client's timeout; each attempt's duration is logged so a slow answer
+		// and one that never comes are told apart.
+		var preview dto.ImageArchivePreview
+		var err error
+		for attempt := 1; attempt <= 4; attempt++ {
+			started := time.Now()
+			preview, err = hostedPreviewArchive(t.Context(), harness.API, archive)
+			if err == nil {
+				if attempt > 1 {
+					t.Logf("rank %d preview answered on attempt %d in %s", rank, attempt, time.Since(started).Round(time.Millisecond))
+				}
+				break
+			}
+			t.Logf("rank %d preview attempt %d failed after %s: %v", rank, attempt, time.Since(started).Round(time.Millisecond), err)
+			if hostedAPIErrorCode(err) != "" {
+				break
+			}
+		}
 		if err != nil {
 			t.Fatalf("rank %d preview %s: %v", rank, archive, err)
 		}

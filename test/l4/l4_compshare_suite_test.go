@@ -85,7 +85,7 @@ func runSingleVMTensorParallelAndDGPU(t *testing.T, b *vmBackend) {
 	// silently fall back to a multi-gigabyte registry pull. The shared helper
 	// may load a docker-save archive already present on the VM, but never pulls.
 	b.EnsureEngineImage(t, env, gpuModel)
-	model := cloudTestModelSource(t, env, "modelscope", "Qwen/Qwen2-0.5B-Instruct", "master")
+	model := b.registerModel(t, env)
 	registerPreloadedModel(t, b, env, model)
 	if !t.Run("VLLMTensorParallel2", func(t *testing.T) {
 		// The suite-level timeout covers engine startup and inference; image
@@ -607,7 +607,7 @@ func testDockerNCCL(t *testing.T, env *cloudTestEnv, image string) {
 	}
 	for rank := 0; rank < 2; rank++ {
 		name := fmt.Sprintf("%s-rank%d", network, rank)
-		out, err := runCloudCommand(t.Context(), env.Instance, fmt.Sprintf("%s exec %s python -c %s", dockerCLI, shellQuoteForTest(name), shellQuoteForTest("import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))")))
+		out, err := runCloudCommand(t.Context(), env.Instance, fmt.Sprintf("%s exec %s python3 -c %s", dockerCLI, shellQuoteForTest(name), shellQuoteForTest("import torch; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))")))
 		if err != nil || strings.TrimSpace(out) == "" {
 			t.Fatalf("Docker rank %d GPU check err=%v output=%q", rank, err, strings.TrimSpace(out))
 		}
@@ -625,7 +625,7 @@ func testDockerNCCL(t *testing.T, env *cloudTestEnv, image string) {
 	var rank1Output string
 	for rank := 0; rank < 2; rank++ {
 		name := fmt.Sprintf("%s-rank%d", network, rank)
-		cmd := fmt.Sprintf("timeout 180 %s exec -e RANK=%d %s sh -c 'echo %s | base64 -d > /tmp/gpuworks-dist.py && NCCL_DEBUG=INFO NCCL_IB_DISABLE=1 NCCL_SOCKET_IFNAME=eth0 python /tmp/gpuworks-dist.py'", dockerCLI, rank, shellQuoteForTest(name), encoded)
+		cmd := fmt.Sprintf("timeout 180 %s exec -e RANK=%d %s sh -c 'echo %s | base64 -d > /tmp/gpuworks-dist.py && NCCL_DEBUG=INFO NCCL_IB_DISABLE=1 NCCL_SOCKET_IFNAME=eth0 python3 /tmp/gpuworks-dist.py'", dockerCLI, rank, shellQuoteForTest(name), encoded)
 		if rank == 0 {
 			cmd = "nohup sh -c " + shellQuoteForTest(cmd) + " >/tmp/gpuworks-rank0.log 2>&1 </dev/null &"
 		}

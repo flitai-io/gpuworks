@@ -463,7 +463,7 @@ func TestHostedActiveInstancesIgnoreDeadAttempts(t *testing.T) {
 func TestGPUWarmupCommandUsesTheAgentsLaunchShape(t *testing.T) {
 	command := gpuWarmupCommand("gpustack/runner:cuda12.8-vllm0.17.1")
 	for _, want := range []string{
-		`--gpus "\"device=$i\""`, "CUDA_VISIBLE_DEVICES=0", "--entrypoint python", "'gpustack/runner:cuda12.8-vllm0.17.1'",
+		`--gpus "\"device=$i\""`, "CUDA_VISIBLE_DEVICES=0", "--entrypoint python3", "'gpustack/runner:cuda12.8-vllm0.17.1'",
 		"torch.cuda.is_available()", "GPUWORKS_GPU_READY", "GPUWORKS_GPUS_READY $n", "nvidia-smi -L",
 	} {
 		if !strings.Contains(command, want) {
