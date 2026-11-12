@@ -41,7 +41,7 @@ function cluster(overrides: Partial<KubeCluster> = {}): KubeCluster {
     node_selector: "nvidia.com/gpu.present=true", runtime_class: "", image_pull_secret: "",
     containerd_socket: "", api_server: "", engine_ports: "40000-42767", idle_return_seconds: 600, priority: 10000, allow_preemption: false,
     cluster_uid: "7f3c2a10-aaaa-bbbb-cccc-0123456789ab", revoked: false, node_count: 3,
-    created_at: "2026-10-19T08:30:00Z", apply_command: APPLY, stalled: false, pool_ids: [], can_apply: false, can_remove: false, operation_blocked: "no_source", ...overrides,
+    created_at: "2026-10-19T08:30:00Z", apply_command: APPLY, stalled: false, pool_ids: [], namespace_shared_with: [], can_apply: false, can_remove: false, operation_blocked: "no_source", ...overrides,
   };
 }
 const prod = cluster();
@@ -141,6 +141,14 @@ test("one row per cluster: node count, the vendors of its nodes, card return pol
   assert.ok(within(fresh).getByText(k.returnPolicy.keep));
   assert.ok(within(await rowOf("retired")).getByText(k.status.revoked));
   assert.ok(within(await rowOf("retired")).getByText("Returned after 2 h idle"));
+});
+
+test("an entry the server says shares its namespace with another of maybe the same cluster carries a warning", async () => {
+  stubApi({ clusters: [cluster({ namespace_shared_with: ["lab", "west"] }), lab] });
+  renderPage();
+  const row = await rowOf("prod-gpu");
+  assert.ok(within(row).getByText(k.namespaceShared.badge));
+  assert.ok(!within(await rowOf("lab")).queryByText(k.namespaceShared.badge), "only where the server names a clash");
 });
 
 test("the return policy reads in seconds, minutes or hours, whichever divides evenly", () => {

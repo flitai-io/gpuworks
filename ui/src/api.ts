@@ -1064,6 +1064,8 @@ export interface KubeCluster {
   stalled: boolean;
   /** The cloud node pools a cloud entry holds, ascending; empty for an entry made by hand. */
   pool_ids: string[];
+  /** Other entries that use this namespace and may be of the same cluster (server-computed). */
+  namespace_shared_with: string[];
   /** Whether the server can apply the manifest to the source cluster, or delete it from there. */
   can_apply: boolean;
   can_remove: boolean;

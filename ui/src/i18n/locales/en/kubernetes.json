@@ -254,5 +254,9 @@
     "intro": "gpuworks cannot reach this cluster, so run these commands in it, in order. They remove the agents and the inference and hold pods the agents started from the cluster, and the cards go back to Kubernetes.",
     "next": "Afterwards the nodes go offline and gpuworks removes them from the node list. Once they are gone, delete this cluster entry.",
     "close": "Close"
+  },
+  "namespaceShared": {
+    "badge": "Shared namespace",
+    "hint": "Uses namespace {{namespace}} like {{names}}. If they connect the same Kubernetes cluster, the manifest applied later takes over the other entry's agents. The namespace cannot change after creation: delete one entry and create it again with another namespace."
   }
 }

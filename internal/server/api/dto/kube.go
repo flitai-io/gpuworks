@@ -54,10 +54,17 @@ type KubeCluster struct {
 	// PoolIDs are the cloud node pools an entry made from a cloud cluster
 	// holds, sorted; the DaemonSet runs on the nodes of those pools. Empty for
 	// an entry made by hand, which selects nodes by NodeSelector.
-	PoolIDs          []string `json:"pool_ids"`
-	CanApply         bool     `json:"can_apply"`
-	CanRemove        bool     `json:"can_remove"`
-	OperationBlocked string   `json:"operation_blocked,omitempty"`
+	PoolIDs []string `json:"pool_ids"`
+	// NamespaceSharedWith names the other entries, sorted, that use this
+	// entry's namespace and may be of the same Kubernetes cluster (no node
+	// has joined one of them yet, or both are of the same cluster). In one
+	// cluster the entry applied later takes the other's agents over, so the
+	// console warns; entries known to be of different clusters are not
+	// listed.
+	NamespaceSharedWith []string `json:"namespace_shared_with"`
+	CanApply            bool     `json:"can_apply"`
+	CanRemove           bool     `json:"can_remove"`
+	OperationBlocked    string   `json:"operation_blocked,omitempty"`
 	// Source is the cloud account cluster the entry was made from; the
 	// server can then apply the manifest itself (POST …/apply).
 	Source    *KubeClusterSource `json:"source,omitempty"`

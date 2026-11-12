@@ -35,7 +35,7 @@ function cluster(overrides: Partial<KubeCluster> = {}): KubeCluster {
     effective_agent_image: "gpuworks/gpuworks-agent:r1", node_selector: "gpu=a100", runtime_class: "", image_pull_secret: "", containerd_socket: "", api_server: "",
     engine_ports: "40000-42767", idle_return_seconds: 600, priority: 10000, allow_preemption: false, cluster_uid: "uid-1", revoked: false, node_count: 4,
     created_at: "2026-10-19T08:30:00Z", apply_command: "kubectl apply -f 'https://gpuworks.example/m.yaml'", remove_commands: REMOVE,
-    stalled: false, pool_ids: [], can_apply: false, can_remove: false, operation_blocked: "no_source", ...overrides,
+    stalled: false, pool_ids: [], namespace_shared_with: [], can_apply: false, can_remove: false, operation_blocked: "no_source", ...overrides,
   };
 }
 const cloud = (overrides: Partial<KubeCluster> = {}) => cluster({
