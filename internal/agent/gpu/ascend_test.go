@@ -155,6 +155,32 @@ func TestAscendFrameworkUsesASCENDHomePath(t *testing.T) {
 	}
 }
 
+// TestAscendFrameworkReadsHostCANNFilesOnKubernetes: the manifest mounts no
+// vendor paths into the agent container, so Framework's glob and read of
+// /usr/local/Ascend/... must go through the host root when CLIs run there,
+// exactly as the version file a bare ASCEND_HOME_PATH names does.
+func TestAscendFrameworkReadsHostCANNFilesOnKubernetes(t *testing.T) {
+	withHostRoot(t)
+	root := hostRoot
+	installInfo := filepath.Join(root, "usr/local/Ascend/cann-8.0.0/version.info")
+	if err := os.MkdirAll(filepath.Dir(installInfo), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(installInfo, []byte("CANN Version = 8.0.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	framework, version := (&AscendProber{}).Framework(context.Background())
+	if framework != "cann" || version != "8.0.0" {
+		t.Fatalf("framework/version = %q/%q, want the host's cann-8.0.0", framework, version)
+	}
+	// Off the host the same tree, visible only under hostRoot, is not found:
+	// Framework still names the framework ("cann") but reports no version.
+	cliOnHost.Store(false)
+	if _, version := (&AscendProber{}).Framework(context.Background()); version != "" {
+		t.Fatalf("version off the host = %q, want none (the file is only under hostRoot)", version)
+	}
+}
+
 func TestRunNPUQuietConfirmsSetPrompt(t *testing.T) {
 	bin := t.TempDir()
 	script := filepath.Join(bin, "npu-smi")

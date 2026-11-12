@@ -10,13 +10,17 @@ import (
 	"sync/atomic"
 )
 
-// An agent running in a container (a Kubernetes DaemonSet) can run the
-// vendor's CLIs in the host's mount namespace instead of its own: they are
-// the host's programs, linked against the host's C library and driver
+// An agent running in a container (a Kubernetes DaemonSet) runs the vendor's
+// CLIs in the host's mount namespace instead of its own: they are the
+// host's programs, linked against the host's C library and driver
 // libraries, which a container of another distribution cannot load (the PPU
-// SDK on Ubuntu 24.04 needs glibc 2.38; the agent image has 2.36). NVIDIA's
-// runtime injects nvidia-smi into the container instead, so the switch is per
-// vendor (accelerator.KubeProfile.HostCLIs) and set once at startup.
+// SDK on Ubuntu 24.04 needs glibc 2.38; the agent image has 2.36). The
+// manifest grants no vendor mounts, so every vendor's CLIs and driver
+// libraries are found by walking the host's own file system through
+// hostRoot; RunCLIsOnHost switches every probe to do so, once at startup
+// (cmd/gpuworks-agent sets it unconditionally for --driver=kube).
+// nvidia-smi alone also has a container-local fallback: see
+// nvidiaSMICommand.
 
 var cliOnHost atomic.Bool
 
@@ -32,10 +36,31 @@ var hostCLIDirs = []string{"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/u
 // mount namespace (the agent must share the host's PID namespace).
 func RunCLIsOnHost() { cliOnHost.Store(true) }
 
-// lookCLI finds a CLI where it will run: in PATH, or on the host.
+// CLIsOnHost reports whether RunCLIsOnHost was called: callers outside this
+// package that also have to place a process the way a vendor CLI runs (the
+// doctor's NVIDIA diagnostics, which run python3) ask this instead of
+// duplicating the switch.
+func CLIsOnHost() bool { return cliOnHost.Load() }
+
+// HostCommand builds a command for name the same way cliCommand places a
+// vendor CLI, for callers outside this package that run a program alongside
+// one (the doctor's python3 diagnostics).
+func HostCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
+	return cliCommand(ctx, name, args...)
+}
+
+// lookCLI finds a CLI where it will run: in PATH, or on the host. nvidia-smi
+// is special: see lookNVIDIASMI.
 func lookCLI(name string) (string, error) {
 	if !cliOnHost.Load() {
 		return exec.LookPath(name)
+	}
+	if name == "nvidia-smi" {
+		loc, err := locateNVIDIASMI()
+		if err != nil {
+			return "", err
+		}
+		return loc.path, nil
 	}
 	if filepath.IsAbs(name) {
 		if fi, err := statOnHost(name); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 {
@@ -75,33 +100,64 @@ func globTool(pattern string) []string {
 	return out
 }
 
+// readTool reads a file a probe needs (a version file, an install marker),
+// where the check will run: on the host when the CLIs do.
+func readTool(path string) ([]byte, error) {
+	if !cliOnHost.Load() {
+		return os.ReadFile(path)
+	}
+	return os.ReadFile(filepath.Join(hostRoot, path))
+}
+
 // statOnHost stats a host path, following its symbolic links on the host:
 // through /proc/1/root the kernel resolves an absolute link target against
 // the agent's own root (Hygon's /usr/local/bin/hy-smi links to
 // /usr/local/hyhal/bin/hy-smi, which the container does not have).
 func statOnHost(path string) (os.FileInfo, error) {
+	_, fi, err := resolveUnderRoot("", path)
+	return fi, err
+}
+
+// resolveOnHost is statOnHost, also returning the fully-resolved host path
+// (never one prefixed with hostRoot): a caller that turns the result into a
+// mount source, or passes it to a command that itself runs on the host,
+// needs the path as the host sees it, not as this process does.
+func resolveOnHost(path string) (string, os.FileInfo, error) {
+	return resolveUnderRoot("", path)
+}
+
+// resolveUnderRoot stats path as it would resolve under root on the host
+// (root "" is the host's own root; a non-empty root is a chroot the host
+// keeps elsewhere, such as the GPU Operator's driver container at
+// nvidiaDriverContainerRoot): an absolute symlink target is resolved
+// against root, exactly as a process chrooted (or nsentered and chrooted)
+// there would see it, not against the host's real root.
+func resolveUnderRoot(root, path string) (string, os.FileInfo, error) {
 	for i := 0; i < 16; i++ {
-		fi, err := os.Lstat(filepath.Join(hostRoot, path))
+		fi, err := os.Lstat(filepath.Join(hostRoot, root, path))
 		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
-			return fi, err
+			return path, fi, err
 		}
-		target, err := os.Readlink(filepath.Join(hostRoot, path))
+		target, err := os.Readlink(filepath.Join(hostRoot, root, path))
 		if err != nil {
-			return nil, err
+			return path, nil, err
 		}
 		if !filepath.IsAbs(target) {
 			target = filepath.Join(filepath.Dir(path), target)
 		}
 		path = filepath.Clean(target)
 	}
-	return nil, &os.PathError{Op: "stat", Path: path, Err: errors.New("too many levels of symbolic links")}
+	return path, nil, &os.PathError{Op: "stat", Path: path, Err: errors.New("too many levels of symbolic links")}
 }
 
 // cliCommand builds the command for a vendor CLI, on the host when CLIs run
-// there.
+// there. nvidia-smi is special: see nvidiaSMICommand.
 func cliCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 	if !cliOnHost.Load() {
 		return exec.CommandContext(ctx, name, args...)
+	}
+	if name == "nvidia-smi" {
+		return nvidiaSMICommand(ctx, args...)
 	}
 	path := name
 	if found, err := lookCLI(name); err == nil {

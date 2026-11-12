@@ -10,6 +10,69 @@ import (
 	"testing"
 )
 
+// withHostRoot points hostRoot at a fresh directory holding files (each
+// created empty and executable) and switches cliOnHost on for the test's
+// duration, returning the directory.
+func withHostRoot(t *testing.T, files ...string) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, f := range files {
+		full := filepath.Join(root, f)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	oldRoot := hostRoot
+	hostRoot = root
+	cliOnHost.Store(true)
+	t.Cleanup(func() { hostRoot = oldRoot; cliOnHost.Store(false) })
+	return root
+}
+
+func TestReadToolReadsOnTheHost(t *testing.T) {
+	root := withHostRoot(t)
+	path := "/usr/local/Ascend/driver/version.info"
+	full := filepath.Join(root, path)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte("host content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readTool(path)
+	if err != nil || string(got) != "host content" {
+		t.Fatalf("readTool(on host) = %q, %v", got, err)
+	}
+	cliOnHost.Store(false)
+	if _, err := readTool(path); err == nil {
+		t.Fatal("readTool off the host found a file that only exists under hostRoot")
+	}
+}
+
+// TestHostCommandRoutesThroughCliCommand: HostCommand is what callers
+// outside this package (the doctor's python3 diagnostics) use to place a
+// process the way a vendor CLI runs; it must agree with cliCommand both on
+// and off the host.
+func TestHostCommandRoutesThroughCliCommand(t *testing.T) {
+	withHostRoot(t, "/usr/bin/python3")
+	if !CLIsOnHost() {
+		t.Fatal("CLIsOnHost did not reflect cliOnHost after withHostRoot turned it on")
+	}
+	if got := strings.Join(HostCommand(context.Background(), "python3", "-c", "1").Args, " "); got != "nsenter -t 1 -m -- /usr/bin/python3 -c 1" {
+		t.Fatalf("HostCommand on the host = %s", got)
+	}
+	cliOnHost.Store(false)
+	if CLIsOnHost() {
+		t.Fatal("CLIsOnHost did not reflect cliOnHost after it was turned off")
+	}
+	if got := strings.Join(HostCommand(context.Background(), "python3", "-c", "1").Args, " "); got != "python3 -c 1" {
+		t.Fatalf("HostCommand off the host = %s", got)
+	}
+}
+
 func TestCLIsOnHost(t *testing.T) {
 	root := t.TempDir()
 	for path, mode := range map[string]os.FileMode{
