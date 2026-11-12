@@ -154,8 +154,9 @@ docs-build:
   variables:
     # Nothing in this job reaches a public host: the Hugo binary comes from
     # the rustfs mirror on mirror1 and the oink theme is cloned by
-    # docs-site/build.sh from the gpuworks_website repository, authenticated
-    # by the WEBSITE_REPO project variable (a read-only deploy-token URL).
+    # docs-site/build.sh from the internal copy of the gpuworks_website
+    # repository named by the WEBSITE_REPO project variable (a read-only
+    # deploy-token URL).
     # No Go toolchain or module proxy is involved at all.
     HUGO_VERSION: "0.165.0"
     # The runners have no egress to github.com, so Hugo comes from the rustfs

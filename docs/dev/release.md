@@ -179,8 +179,8 @@ Cloudflare 区域 `gpuworks.ai` 上为 `dl.gpuworks.ai` 配了两条缓存规则
 GitLab 仍是发布源的唯一发布者。`publish` job 只在仓库变量 `GPUWORKS_DIST_PUBLISH` 为 `true` 时运行，切换时先关掉 GitLab
 的 `release-publish`，再打开这个变量，两边不会同时往同一渠道发布。发布凭据与签名私钥是 `distribution` environment 的
 secret（名字与上面的 CI 变量相同），该 environment 的部署规则只放行 master 与 `v*` tag；`v*` tag 还要用 tag ruleset 限制
-只有维护者能推送，作用相当于 GitLab 的 protected tag。文档站构建需要仓库 secret `WEBSITE_REPO`（OINK 主题仓库带只读令牌的
-克隆地址）。
+只有维护者能推送，作用相当于 GitLab 的 protected tag。文档站构建从公开的 `gpuworks_website` 仓库拉 OINK 主题，不需要
+secret。
 
 ### Kubernetes agent 镜像
 

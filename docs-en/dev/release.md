@@ -187,8 +187,8 @@ repository variable `GPUWORKS_DIST_PUBLISH` is `true`; at the switch, turn off G
 first and then set the variable, so the two never publish the same channel at once. The publish
 credentials and the signing key are secrets of the `distribution` environment (named as the CI variables
 above), whose deployment rules admit only master and `v*` tags; a tag ruleset must also restrict pushing
-`v*` tags to maintainers, the counterpart of GitLab's protected tags. The docs site build needs the
-repository secret `WEBSITE_REPO` (a clone URL of the OINK theme repository carrying a read-only token).
+`v*` tags to maintainers, the counterpart of GitLab's protected tags. The docs site build fetches the OINK
+theme from the public `gpuworks_website` repository and needs no secret.
 
 ### Kubernetes Agent Image
 
