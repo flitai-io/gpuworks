@@ -313,12 +313,15 @@ func TestCommunityReposListsBuiltInCards(t *testing.T) {
 	for _, repo := range repos {
 		names = append(names, fmt.Sprintf("%s/%s/%s/%s", repo.Repo, repo.Registry, repo.Engine, repo.Framework))
 	}
-	want := "vllm/vllm-openai/docker-hub/vllm/cuda,vllm/vllm-omni/docker-hub/vllm-omni/cuda,lmsysorg/sglang/docker-hub/sglang/cuda,quay.io/ascend/vllm-ascend/quay/vllm/cann,quay.io/ascend/sglang/quay/sglang/cann,harbor.sourcefind.cn:5443/dcu/admin/base/vllm/oci/vllm/dtk"
+	want := "vllm/vllm-openai/docker-hub/vllm/cuda,vllm/vllm-omni/docker-hub/vllm-omni/cuda,lmsysorg/sglang/docker-hub/sglang/cuda,quay.io/ascend/vllm-ascend/quay/vllm/cann,quay.io/ascend/sglang/quay/sglang/cann,harbor.sourcefind.cn:5443/dcu/admin/base/vllm/oci/vllm/dtk,quay.io/gpuworks/gpuworks-runner/quay//"
 	if strings.Join(names, ",") != want {
 		t.Fatalf("repos = %v", names)
 	}
 	if len(repos[5].Siblings) != 2 || strings.Contains(rec.Body.String(), `"tags"`) {
 		t.Fatalf("dcu card = %+v body=%s", repos[5], rec.Body.String())
+	}
+	if siblings := repos[6].Siblings; len(siblings) != 1 || siblings[0] != "registry.zstack.ai/gpuworks/gpuworks-runner" {
+		t.Fatalf("gpuworks runner siblings = %v, want the published ZStack repository", siblings)
 	}
 }
 

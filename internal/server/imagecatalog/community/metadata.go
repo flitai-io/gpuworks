@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	engineTagPattern      = regexp.MustCompile(`(?:^|[-_])(vllm-omni|vllm|sglang)[-_]?v?([0-9][0-9A-Za-z]*(?:\.[0-9A-Za-z]+)+)(?:$|[-_])`)
+	engineTagPattern      = regexp.MustCompile(`(?:^|[-_])(vllm-omni|vllm|sglang|strata)[-_]?v?([0-9][0-9A-Za-z]*(?:\.[0-9A-Za-z]+)+)(?:$|[-_])`)
 	frameworkTagPattern   = regexp.MustCompile(`(?:^|[-_])(cuda|cann|rocm|dtk|hggc|metal|xre)[-_]?v?([0-9]+(?:\.[0-9]+)*)(?:$|[-_])`)
 	archTagPattern        = regexp.MustCompile(`(?:^|[-_])(amd64|arm64)(?:$|[-_])`)
 	omniTagPattern        = regexp.MustCompile(`(?:^|[-_])omni(?:$|[-_])`)
@@ -30,6 +30,9 @@ func inferTagMetadata(name string) Tag {
 	}
 	if match := engineTagPattern.FindStringSubmatch(value); len(match) == 3 {
 		tag.Engine, tag.EngineVersion = match[1], match[2]
+		if tag.Engine == "strata" {
+			tag.Engine = engines.Callable
+		}
 		if tag.Engine == engines.VLLM && omniTagPattern.MatchString(value) {
 			tag.Engine = engines.VLLMOmni
 		}
