@@ -153,6 +153,11 @@ func TestProxyAccountingAsleepInstanceCountedAsAsleep503(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/sleepy", Revision: "main", Name: "sleepy"})
 	if err != nil {
 		t.Fatal(err)
@@ -176,6 +181,7 @@ func TestProxyAccountingAsleepInstanceCountedAsAsleep503(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"sleepy-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 
@@ -346,6 +352,11 @@ func TestProxyAccountingUpstreamConnectionErrorCountedAs5xx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/dial", Revision: "main", Name: "dial"})
 	if err != nil {
 		t.Fatal(err)
@@ -366,6 +377,7 @@ func TestProxyAccountingUpstreamConnectionErrorCountedAs5xx(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), dialErrorHub{}, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 
@@ -549,6 +561,11 @@ func TestProxyAccountingContractMismatchCountedForResolvedDeployment(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	node, err := st.RegisterNode("contract-node", store.HashToken("node"), "contract-node")
 	if err != nil {
 		t.Fatal(err)
@@ -566,6 +583,7 @@ func TestProxyAccountingContractMismatchCountedForResolvedDeployment(t *testing.
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"contract-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 
