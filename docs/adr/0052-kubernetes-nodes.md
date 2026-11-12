@@ -62,7 +62,8 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
   入口与普通节点统一；代价是 `kubectl` 里看到的镜像 tag 不说明 agent 版本（以平台显示为准），集群新加的节点仍要从仓库拉一次运行环境镜像。
   也考虑过由 server 经 agent 连接把新版本镜像分发进各节点的 containerd，再改 DaemonSet：同样不碰仓库，但每次升级要给每个节点传一份镜像，比只传二进制重。
 - **复用厂商 device plugin 而不是自带**：gpustack 自带各厂商的 device plugin 并要求关掉厂商的；gpuworks 是集群的客人，
-  沿用用户已装的插件，代价是只能按整卡借，切分资源的节点不能用。
+  沿用用户已装的插件，代价是只能按整卡借，集群自己已切分（MIG、time-slicing 等）的节点不能用；
+  借到整卡后，gpuworks 自己的 dGPU 切分照常可用。
 
 ## 后果
 

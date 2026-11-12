@@ -18,6 +18,16 @@ A cluster joins as one DaemonSet. One agent runs on each selected node and excha
 
 Each card has only one allocator at a time. When a device plugin (`nvidia.com/gpu` and similar) is installed on the node, the cards belong to the kubelet: for each card gpuworks wants to use, it starts a placeholder Pod (`gpuworks-hold-*`) that requests only one card. After all instances have stopped and the cluster's “Idle return” time has elapsed, the placeholder Pods are deleted and the cards go back to Kubernetes. Cards held by other Pods appear in gpuworks as externally occupied and are not scheduled. When the node has no device plugin, gpuworks uses the node's cards directly. When the cluster uses HAMi, ACK GPU sharing, or another way of splitting a card into several shares, borrowing works differently; see the next section.
 
+## Coexisting with Other Workloads in the Cluster
+
+gpuworks does not take over the cluster's GPUs. It borrows only the cards it uses, and the cluster's existing workloads keep running:
+
+- **The cluster's GPU components stay as they are.** gpuworks works with the device plugin, HAMi, or ACK GPU sharing already installed; none of them has to be turned off, replaced, or uninstalled.
+- **Each scheduler sees what the other holds.** A card gpuworks uses is held by a placeholder Pod in Kubernetes, so kube-scheduler does not hand it to another Pod; a card held by another Pod appears in gpuworks as externally occupied, and gpuworks places no instance on it.
+- **Borrowing involves only the node the instance runs on.** The placeholder Pod is pinned to that node, and cards on other nodes are unaffected. An ordinary device plugin and ACK GPU sharing do not accept a request for a specific card, so gpuworks starts one placeholder Pod for each card that is idle on that node at that moment, identifies the one it wants, and returns the rest at once; a new GPU Pod arriving on that node in the meantime stays Pending briefly. HAMi accepts a specific card, so only the wanted card is borrowed.
+- **Whole cards are borrowed, and gpuworks' own dGPU slicing still works on them.** A borrowed card can be sliced among several instances, as on an ordinary node. What cannot be used is a node the cluster itself has already split (MIG, time-slicing, and so on; see the table below).
+- **Unused cards go back.** After the last instance on a card has stopped and the entry's “Idle return” time has elapsed, the placeholder Pod is deleted and the card returns to Kubernetes.
+
 ## Accelerator Vendor: Detected Automatically
 
 A cluster entry has no vendor setting. An entry has one DaemonSet and no vendor-specific mounts, and the agent Pods run under the default runtime (no RuntimeClass is set for the agent). Each agent detects the accelerator of its own node:

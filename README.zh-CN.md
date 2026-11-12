@@ -27,7 +27,7 @@ GPUWorks 是一个超轻量的 GPU 管理和模型即服务（MaaS）平台，�
 租来的云主机或容器或一台 Mac，选一个模型，GPUWorks 会估算它需要多少显存、选好卡、启动 vLLM 或 SGLang 或推理模板定义好的 Strata、ninfer、……，并通过统一的 OpenAI 兼容入口对外提供服务。
 NVIDIA、AMD Instinct 与 Ryzen AI Max、华为昇腾、平头哥 PPU、海光 DCU 和 Apple Silicon 可以在同一个集群里并存。
 
-平台的核心是统一的算力池：今天接入裸机、公有云主机和私有云虚拟机，接下来还会接入 Kubernetes 集群和 Slurm 分区；
+平台的核心是统一的算力池：今天接入裸机、公有云主机、私有云虚拟机和已有的 Kubernetes 集群，接下来还会接入 Slurm 分区；
 在这个算力池之上，GPUWorks 现在提供模型服务，之后也会在同一批加速器上运行微调与训练任务。
 
 ## 亮点
@@ -38,6 +38,9 @@ NVIDIA、AMD Instinct 与 Ryzen AI Max、华为昇腾、平头哥 PPU、海光 D
 - **异构加速器，统一调度。** NVIDIA、AMD、昇腾、PPU、海光和 Apple Silicon 节点接入同一个集群，调度器把每个部署放到其启动规格支持的硬件上。
 - **公有云与私有云混合调度。** 从 RunPod、优云智算（CompShare）、AutoDL、Vast.ai、阿里云同步云主机，或从 ZStack Cloud 同步虚拟机，
   一键安装 agent，和自有服务器放在同一个资源池里调度。
+- **接入已有的 Kubernetes 集群，与集群里的其他业务共存。** 应用一份 manifest 即可接入，不替换集群已装的 device plugin，
+  也兼容 HAMi 与 ACK 共享 GPU。GPUWorks 只借用要用的卡，用完归还，两边的调度互相感知：GPUWorks 占用的卡 Kubernetes
+  不会再分给别的 Pod，别的 Pod 占着的卡 GPUWorks 也不会调度。
 - **超轻量。** server 和 agent 各是一个静态二进制（`CGO_ENABLED=0`），server 内嵌 Web 界面（中文 / English）和各平台的 agent，
   状态存在一个 SQLite 文件里。agent 通过 WebSocket 主动外连，节点不用开入站端口（出不去的节点也可以由 server 反向直连）。
   在阿里云的一次演练中，一个 server 纳管了 7 个地域租来的 1,003 台 GPU 机器：500 多个副本在 4 分钟内放置并全部跑起来，
