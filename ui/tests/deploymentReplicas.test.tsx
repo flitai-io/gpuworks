@@ -446,6 +446,16 @@ test("a suggested multi-node replica is appended for the operator to check, and 
   fireEvent.click(within(again).getByRole("button", { name: locale.replica.suggestUnit }));
   await within(again).findByText(i18n.t("replica.suggest.noFit", { node: "Node C", reason: i18n.t("deploy:schedule.no_free_gpu") }));
   assert.equal(within(again).queryByText("Replica 2"), null, "nothing is appended when nothing fits");
+
+  // No group at all lists only the checks that left nodes out, on one line.
+  cleanup();
+  answer = { unit: null, reason: { code: "unit_none", params: { ranks: 2, per_rank: 4, nodes: 6, unmet: 0, cordoned: 1, offline: 0, busy: 3, no_network: 0, largest: 1 } } };
+  await openDetail();
+  fireEvent.click(screen.getByRole("button", { name: locale.replica.editUnits }));
+  const none = (await screen.findByText(locale.replica.unitsTitle)).closest(".ant-modal") as HTMLElement;
+  fireEvent.click(within(none).getByRole("button", { name: locale.replica.suggestUnit }));
+  await within(none).findByText("No group of 2 nodes can take another replica (of 6 nodes): 1 cordoned · 3 lack 4 free GPU(s) · largest group sharing a network and GPU architecture: 1");
+  assert.equal(within(none).queryByText("Replica 2"), null);
 });
 
 

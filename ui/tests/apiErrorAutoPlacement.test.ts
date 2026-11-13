@@ -20,10 +20,19 @@ const none = { nodes: 12, unmet: 3, cordoned: 1, offline: 2, busy: 4, no_network
 test("nothing to place on says how many nodes each check left out", async () => {
   assert.equal(
     await textFor("en", "UNIT_PLACEMENT_NONE", none),
-    "No group of nodes can take this deployment now: of 12 nodes, 3 do not satisfy the requirements, 1 are cordoned, 2 are offline, 4 lack free GPUs, 1 have no compute network; the largest group sharing a network and GPU architecture has 1 nodes.",
+    "No group of nodes can take this deployment (of 12 nodes): 3 do not satisfy the requirements · 1 cordoned · 2 offline · 4 lack free GPUs · 1 without a compute network · largest group sharing a network and GPU architecture: 1",
   );
-  const zh = await textFor("zh", "UNIT_PLACEMENT_NONE", none);
-  for (const figure of ["共 12 个节点", "3 个不满足条件", "1 个已停止调度", "2 个离线", "4 个空闲 GPU 不够", "1 个没有参数网络", "只有 1 个节点"]) assert.ok(zh.includes(figure), `${figure} in ${zh}`);
+  assert.equal(
+    await textFor("zh", "UNIT_PLACEMENT_NONE", none),
+    "没有能放下该部署的节点组（共 12 个节点）：3 个不满足条件 · 1 个已停止调度 · 2 个离线 · 4 个空闲 GPU 不够 · 1 个没有参数网络 · 同网络同架构最多 1 个节点",
+  );
+});
+
+test("a check that left no node out is not listed", async () => {
+  assert.equal(
+    await textFor("zh", "UNIT_PLACEMENT_NONE", { nodes: 4, unmet: 0, cordoned: 0, offline: 1, busy: 3, no_network: 0, largest: 1 }),
+    "没有能放下该部署的节点组（共 4 个节点）：1 个离线 · 3 个空闲 GPU 不够 · 同网络同架构最多 1 个节点",
+  );
 });
 
 test("the shape errors of automatic placement are worded, not left as codes", async () => {

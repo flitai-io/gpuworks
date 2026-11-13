@@ -36,11 +36,15 @@ test("old agent, unknown total and checking have no invented percentage", () => 
     assert.ok(screen.getByText(labels.phase.waiting));
     assert.equal(screen.queryByRole("progressbar"), null);
 });
-test("stall and disconnection show no speed or ETA once the server zeroes them", () => {
+test("stall and disconnection show no speed or ETA once the server zeroes them", async () => {
     show([row({ rate_bps: 0, preparation: { phase: "copying", reason: "MODEL_COPY_STALLED", total_known: true, idle_seconds: 120 } })]);
     assert.ok(screen.getByText(labels.reason.MODEL_COPY_STALLED));
-    assert.ok(screen.getByText(labels.waitForIO, { exact: false }));
-    assert.equal(screen.queryByRole("button"), null);
+    assert.ok(screen.getByText(`${i18n.t("deployments:preparation.idle", { seconds: 120 })} · ${labels.waitForIO}`));
+    assert.equal(screen.queryByRole("button", { name: labels.retry }), null);
+    // Why the copy waits is behind the help mark, not a second line.
+    assert.equal(screen.queryByText(labels.waitForIOHelp), null);
+    await userEvent.setup({ document: dom.window.document }).hover(screen.getByRole("button", { name: locale.common.helpTip.label }));
+    assert.equal((await screen.findByRole("tooltip")).textContent, labels.waitForIOHelp);
     cleanup();
     show([row({ rate_bps: 0, preparation: { phase: "waiting", reason: "MODEL_NODE_OFFLINE", total_known: false, idle_seconds: 0 } })]);
     assert.ok(screen.getByText(labels.reason.MODEL_NODE_OFFLINE));

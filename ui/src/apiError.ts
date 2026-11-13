@@ -44,6 +44,7 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
   if (error.code === "ACCELERATOR_FEATURE_UNSUPPORTED") {
     return t("acceleratorFeature.unsupported", { ...acceleratorMessageParams(t, params), defaultValue: error.fallback || error.code });
   }
+  if (error.code === "UNIT_PLACEMENT_NONE") params.reasons = placementShortfall(t, params);
   if (error.code === "SERVER_STORAGE_FULL" && typeof params.path === "string" && typeof params.available_bytes === "number" && typeof params.total_bytes === "number") {
     return t("serverStorageFull.at", { path: params.path, available: formatBytes(params.available_bytes), total: formatBytes(params.total_bytes), defaultValue: error.fallback || error.code });
   }
@@ -51,6 +52,20 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
     ...params,
     defaultValue: error.fallback || error.code,
   });
+}
+
+const placementChecks = ["unmet", "cordoned", "offline", "busy", "no_network"] as const;
+
+/** The node counts of a placement refusal, joined with " · ": only the checks
+ * that left nodes out, then the largest group sharing a network and GPU
+ * architecture. busy names the GPUs each node lacks when the server sends
+ * per_rank. */
+export function placementShortfall(t: APIErrorTranslator, params: Record<string, unknown>): string {
+  const parts = placementChecks
+    .filter((check) => Number(params[check]) > 0)
+    .map((check) => t(`placementShortfall.${check === "busy" && params.per_rank != null ? "busyPerRank" : check}`, { n: params[check], per_rank: params.per_rank }));
+  if (params.largest != null) parts.push(t("placementShortfall.largest", { n: params.largest }));
+  return parts.join(" · ");
 }
 
 const pullSettingReasons = new Set(["name_required", "name_duplicate", "max_bytes", "nonnegative", "invalid_text", "requirements_invalid"]);

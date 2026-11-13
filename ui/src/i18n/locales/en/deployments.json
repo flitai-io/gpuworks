@@ -229,7 +229,6 @@
       "closest": "Closest nodes",
       "recorded": "Recorded {{time}}",
       "view": "View candidate nodes",
-      "summary": "{{nodes}} nodes: {{room}} look free, {{busy}} busy, {{unmet}} do not satisfy the requirements, {{cordoned}} cordoned, {{offline}} offline",
       "status": {
         "all": "All",
         "room": "Looks free",
@@ -257,14 +256,15 @@
       "edit": {
         "open": "Edit",
         "title": "Edit node requirements",
-        "help": "Applies to replicas started from now on. Running replicas stay where they are; restart one to move it.",
+        "intro": "Applies to replicas started from now on; restart a running replica to move it.",
         "vendor": "Vendor",
         "vendorFixed": "Fixed by the deployment's image",
         "nodes": "Nodes",
-        "nodesHelp": "Leave empty to let any matching node run a replica. One node also keeps the GPU indexes the deployment was created with.",
+        "nodesHint": "Leave empty for any matching node",
+        "nodesHelp": "With one node, the deployment keeps the GPU indexes it was created with.",
         "nodesPlaceholder": "Any node",
         "labels": "Node labels",
-        "labelsHelp": "key=value; several values of one key are alternatives.",
+        "labelsHint": "key=value; several values of one key are alternatives.",
         "labelsPlaceholder": "e.g. pool=inference",
         "strategy": "Strategy",
         "matches": "{{count}} of {{total}} nodes satisfy these requirements",
@@ -344,7 +344,7 @@
     "editUnits": "Edit replicas",
     "unitsTitle": "Multi-node replicas",
     "autoTitle": "Scale replicas",
-    "autoHint": "The platform picks every replica's {{nnodes}} nodes. Set the count; for new replicas you may name the nodes to start on first, and the rest are scheduled automatically. Shrinking removes the newest replicas first.",
+    "autoHint": "The platform picks every replica's {{nnodes}} nodes, and you may name nodes for new ones; shrinking removes the newest replicas first.",
     "unitsHint": "Each replica runs on {{nnodes}} nodes: the leader serves, the others are followers. Two replicas cannot be led from one node.",
     "unitLabel": "Replica {{index}}",
     "leaderNode": "Leader node",
@@ -355,7 +355,7 @@
     "suggestUnit": "Add a suggested replica",
     "suggest": {
       "added": "Suggested on {{network}} ({{arch}}): {{nodes}}. Check it, then save.",
-      "none": "No group of {{ranks}} nodes can take another replica: of {{nodes}} nodes, {{busy}} lack {{per_rank}} free GPU(s), {{unmet}} do not satisfy the requirements, {{cordoned}} are cordoned, {{offline}} are offline, {{no_network}} have no compute network; the largest group sharing a network and GPU architecture has {{largest}}.",
+      "none": "No group of {{ranks}} nodes can take another replica (of {{nodes}} nodes): {{reasons}}",
       "noFit": "The best groups were refused: {{node}} — {{reason}}",
       "failed": "Could not suggest a replica: {{detail}}"
     },
@@ -814,10 +814,11 @@
     "unknownTotal": "Total size not yet confirmed",
     "eta": "About {{seconds}} seconds remaining",
     "idle": "No progress for {{seconds}} seconds",
-    "waitForIO": "The current I/O must return before another writer can start. Restore storage connectivity to resume safely.",
+    "waitForIO": "Restore storage connectivity to resume safely",
+    "waitForIOHelp": "The current I/O must return before another writer can start.",
     "retry": "Retry cache copy",
     "noAutoRetry": "Nothing retries this copy automatically; start it again when the cause is fixed.",
-    "retryUnavailable": "This failure cannot be retried from here: only a failed copy into a node cache can be restarted. Fix the source or the storage, then deploy again.",
+    "retryUnavailable": "Only a failed copy into a node cache can be retried here; fix the source or the storage, then deploy again.",
     "retryUnavailableShort": "Cannot be retried here"
   },
   "unitsPlacement": {
@@ -843,7 +844,7 @@
       "rankSlot": "Rank {{rank}} node",
       "rankSlotAria": "Node of rank {{rank}} of new replica {{index}}",
       "preferPlaceholder": "Prefer a node (optional)",
-      "prefixHint": "Name nodes from the first rank on: a rank can be named only after the ranks before it."
+      "prefixHelp": "Name nodes from the first rank on: a rank can be named only after the ranks before it."
     }
   },
   "operator": {

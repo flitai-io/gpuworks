@@ -105,6 +105,12 @@ test("the editor opens on the stored requirements, counts matches live and saves
   const modal = (await screen.findByText(edit.title)).closest(".ant-modal") as HTMLElement;
   // The vendor is shown, translated, and is not a control.
   assert.ok(within(modal).getByText(edit.vendorFixed));
+  // One helper line under the node picker; the GPU index rule is behind its help mark.
+  assert.ok(within(modal).getByText(edit.intro) && within(modal).getByText(edit.nodesHint));
+  assert.equal(within(modal).queryByText(edit.nodesHelp), null);
+  await user.hover(within(modal).getByRole("button", { name: i18n.t("common:helpTip.label") }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, edit.nodesHelp);
+  await user.unhover(within(modal).getByRole("button", { name: i18n.t("common:helpTip.label") }));
   // Pinned to gpu-b, which is not in pool=inference: nothing matches, as the
   // server counts it.
   assert.ok(await within(modal).findByText(edit.noMatch));

@@ -113,8 +113,10 @@ test("the candidate table pages and filters on the server, from the keyboard", a
   const modal = (await screen.findByText(locale.candidates)).closest(".ant-modal") as HTMLElement;
   await within(modal).findByText("gpu-1");
   assert.deepEqual(asked[0], { status: undefined, offset: 0, limit: 50 });
-  // The counts cover the whole cluster, not the page.
-  assert.ok(within(modal).getByText(i18n.t("detail.placement.summary", { nodes: 1000, room: 3, busy: 895, unmet: 90, cordoned: 5, offline: 7 })));
+  // The counts cover the whole cluster, not the page, and are read once: on the filter tabs.
+  for (const [status, count] of [["all", 1000], ["room", 3], ["busy", 895], ["unmet", 90], ["cordoned", 5], ["offline", 7]] as const) {
+    assert.ok(within(modal).getByRole("tab", { name: `${locale.status[status]} ${count}` }));
+  }
   assert.ok(within(modal).getByText("gpuworks.ai/vendor=nvidia") && within(modal).getByText("pool=a | b"));
 
   await user.click(within(modal).getByTitle("2"));

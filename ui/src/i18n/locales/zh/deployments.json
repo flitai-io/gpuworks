@@ -229,7 +229,6 @@
       "closest": "最接近的节点",
       "recorded": "记录于 {{time}}",
       "view": "查看候选节点",
-      "summary": "共 {{nodes}} 台节点：{{room}} 台看上去有空卡，{{busy}} 台卡被占用，{{unmet}} 台不满足节点条件，{{cordoned}} 台已停止调度，{{offline}} 台离线",
       "status": {
         "all": "全部",
         "room": "看上去有空卡",
@@ -257,14 +256,15 @@
       "edit": {
         "open": "编辑",
         "title": "编辑节点条件",
-        "help": "只影响此后启动的副本；运行中的副本留在原节点，重启副本即可按新条件重新放置。",
+        "intro": "只影响此后启动的副本；重启运行中的副本即可按新条件放置。",
         "vendor": "厂商",
         "vendorFixed": "由部署镜像决定，不可修改",
         "nodes": "节点",
-        "nodesHelp": "留空表示任意满足条件的节点都可运行副本。只选一台时，沿用创建时指定的 GPU 序号。",
+        "nodesHint": "留空表示任意满足条件的节点",
+        "nodesHelp": "只选一台节点时，沿用创建时指定的 GPU 序号。",
         "nodesPlaceholder": "任意节点",
         "labels": "节点标签",
-        "labelsHelp": "key=value；同一个键的多个值为“其中之一”。",
+        "labelsHint": "key=value；同一个键的多个值为“其中之一”。",
         "labelsPlaceholder": "例如 pool=inference",
         "strategy": "放置策略",
         "matches": "共 {{total}} 台节点，{{count}} 台满足这些条件",
@@ -344,7 +344,7 @@
     "editUnits": "调整副本",
     "unitsTitle": "多机副本",
     "autoTitle": "调整副本数",
-    "autoHint": "每个副本的 {{nnodes}} 个节点由平台挑选。设置副本数；新增的副本可以指定先放在哪些节点，其余的自动调度。缩容时先移除最新的副本。",
+    "autoHint": "每个副本的 {{nnodes}} 个节点由平台挑选，新副本可以指定节点；缩容时先移除最新的副本。",
     "unitsHint": "每个副本占 {{nnodes}} 台节点：leader 对外服务，其余是 follower。不同副本的 leader 不能在同一台节点。",
     "unitLabel": "副本 {{index}}",
     "leaderNode": "leader 节点",
@@ -355,7 +355,7 @@
     "suggestUnit": "添加推荐副本",
     "suggest": {
       "added": "推荐放在 {{network}}（{{arch}}）：{{nodes}}。确认无误后保存。",
-      "none": "没有 {{ranks}} 台节点能再组成一个副本：共 {{nodes}} 台节点，{{busy}} 台空闲 GPU 不足 {{per_rank}} 张，{{unmet}} 台不满足节点条件，{{cordoned}} 台已停止调度，{{offline}} 台离线，{{no_network}} 台没有计算网络；共享同一网络与 GPU 架构的节点最多 {{largest}} 台。",
+      "none": "凑不出由 {{ranks}} 个节点组成的新副本（共 {{nodes}} 个节点）：{{reasons}}",
       "noFit": "最合适的节点组都被拒绝：{{node}}——{{reason}}",
       "failed": "无法推荐副本：{{detail}}"
     },
@@ -814,10 +814,11 @@
     "unknownTotal": "总大小尚未确认",
     "eta": "预计剩余 {{seconds}} 秒",
     "idle": "已 {{seconds}} 秒无进展",
-    "waitForIO": "当前 I/O 返回前不能启动另一个写入任务。恢复存储连接后可安全续传。",
+    "waitForIO": "恢复存储连接后可安全续传",
+    "waitForIOHelp": "当前 I/O 返回前不能启动另一个写入任务。",
     "retry": "重试缓存复制",
     "noAutoRetry": "系统不会自动重试这次复制；请排除原因后手动重试。",
-    "retryUnavailable": "这里不能重试这次失败：只有复制到节点缓存失败的任务可以重试。请修复来源或存储后重新部署。",
+    "retryUnavailable": "只有复制到节点缓存失败才能在此重试；请修复来源或存储后重新部署。",
     "retryUnavailableShort": "此处不可重试"
   },
   "unitsPlacement": {
@@ -843,7 +844,7 @@
       "rankSlot": "Rank {{rank}} 的节点",
       "rankSlotAria": "新副本 {{index}} 的 rank {{rank}} 节点",
       "preferPlaceholder": "优先放在（可留空）",
-      "prefixHint": "请从第一个 rank 起依次指定：前面的 rank 指定后才能指定后面的。"
+      "prefixHelp": "请从第一个 rank 起依次指定：前面的 rank 指定后才能指定后面的。"
     }
   },
   "operator": {
