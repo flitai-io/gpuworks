@@ -328,7 +328,10 @@ nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。
   拒绝启动），而靠镜像自带的前向兼容库补差在 GeForce 卡上不可用（`Error 804`），580 是仍支持 Pascal、Volta 的最后一个分支。
   源模板里没有该 runner 时，工具按 `-pull-sources`（默认华为云 SWR、quay.io、Docker Hub）
   拉取；`-remove-images` 列出的旧 runner 会从 Docker 存储里删掉，免得留在新模板里。验证时每个卡型都在 runner 里做一次真实的
-  CUDA 调用，证明驱动带得动 runner 的 CUDA 运行时。
+  CUDA 调用，证明驱动带得动 runner 的 CUDA 运行时。工具还把 Docker 切到 cgroupfs cgroup 驱动（与阿里云模板相同）：新模板首次开机时
+  systemd 会 reload 两次，systemd 驱动下这会收回正在运行的容器的 GPU 设备权限，容器里随即报 `No CUDA GPUs are available`。
+  验证失败时加 `-keep-failed-validation` 保留验证机（登录凭据写在当前目录的 `<run-id>.ssh`，查完用 `cleanup-leaked -run-id` 删除），
+  `-revalidate-image <id>` 只对已有模板重做单机验证。
 
   工具做完模板后按 `-validate-gpus` 逐个卡型开机验证，也可用 `-validate-image <id>` 只验证已有模板；
   没货或被 CompShare 拒绝的卡型只报告不判失败。工具也会在镜像缺 nvidia-container-toolkit 时装上与华北模板相同的版本并配置 Docker 运行时

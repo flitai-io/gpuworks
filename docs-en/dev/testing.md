@@ -346,7 +346,10 @@ applies to `.gitlab-ci.yml` only.
   and bridging the gap with the image's forward-compatibility libraries does not work on GeForce cards (`Error 804`); 580 is the last branch that still supports Pascal and Volta.
   When the source template lacks that runner, the tool pulls it from `-pull-sources` (by default Huawei Cloud SWR, quay.io, Docker Hub);
   old runners listed in `-remove-images` are deleted from the Docker store so they do not stay in the new template. Validation makes one real
-  CUDA call inside the runner on every GPU model, proving the driver carries the runner's CUDA runtime.
+  CUDA call inside the runner on every GPU model, proving the driver carries the runner's CUDA runtime. The tool also switches Docker to the cgroupfs cgroup driver (as on the Aliyun template): a new template's first boot
+  reloads systemd twice, which under the systemd driver revokes the GPU device access of running containers, and they then report `No CUDA GPUs are available`.
+  When validation fails, `-keep-failed-validation` keeps the validation VM (its login credentials are written to `<run-id>.ssh` in the current directory; delete it with `cleanup-leaked -run-id` afterwards),
+  and `-revalidate-image <id>` reruns only the single-VM validation of an existing template.
 
   After creating the template, the tool boots and validates each GPU model specified by `-validate-gpus`. You can also use `-validate-image <id>` to validate only an existing template.
   GPU models that are out of stock or rejected by CompShare are reported without causing a failure. If the image lacks nvidia-container-toolkit, the tool installs the same version as the North China template and configures the Docker runtime

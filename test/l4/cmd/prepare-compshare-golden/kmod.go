@@ -61,6 +61,7 @@ func remoteKmodValidationCommand(dockerImage string) string {
 		"test -s " + shellQuote(nvidiaKmodStore+"/open/nvidia.ko") + "; test -s " + shellQuote(nvidiaKmodStore+"/proprietary/nvidia.ko") + "; " +
 		"flavour=$(cat /run/gpuworks-nvidia-kmod); case \"$flavour\" in open|proprietary) ;; *) echo \"selector state: $flavour\" >&2; journalctl -u gpuworks-nvidia-kmod --no-pager | tail -20 >&2; exit 1;; esac; " +
 		"nvidia-smi -L; " +
+		"cgroup_driver=$(docker info --format '{{.CgroupDriver}}'); [ \"$cgroup_driver\" = cgroupfs ] || { echo \"docker cgroup driver is $cgroup_driver, want cgroupfs\" >&2; exit 1; }; " +
 		// The runner's CUDA runtime is newer than the driver; minor version
 		// compatibility must carry it, which only a real CUDA call proves.
 		"docker run --rm --gpus all --entrypoint python3 " + shellQuote(dockerImage) + " -c \"import torch; torch.ones(1).cuda(); print(torch.cuda.get_device_name(0))\"; " +

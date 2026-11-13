@@ -154,6 +154,29 @@ func RemoveImagesCommand(images []string, keep, sudo string) string {
 	return b.String()
 }
 
+// DockerCgroupfsCommand switches Docker to the cgroupfs cgroup driver. Under
+// the systemd driver every systemctl daemon-reload (cloud-init at boot, an
+// agent or package upgrade later) revokes the device access of running GPU
+// containers, which then fail with "Failed to initialize NVML: Unknown
+// Error"; cgroupfs containers keep their devices. Measured on Aliyun T4 and
+// A10 from the golden image, 2026-11-04, and on CompShare, whose first boot
+// reloads systemd twice. The script runs as root.
+func DockerCgroupfsCommand() string {
+	return `set -eu
+python3 - <<'PY'
+import json, os
+p = '/etc/docker/daemon.json'
+d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) else {}
+opts = [o for o in d.get('exec-opts', []) if not o.startswith('native.cgroupdriver=')]
+d['exec-opts'] = opts + ['native.cgroupdriver=cgroupfs']
+json.dump(d, open(p, 'w'), indent=4)
+PY
+systemctl restart docker
+driver="$(docker info --format '{{.CgroupDriver}}')"
+[ "$driver" = cgroupfs ] || { echo "docker cgroup driver is $driver, want cgroupfs" >&2; exit 1; }
+echo GPUWORKS_DOCKER_CGROUP_DRIVER "$driver"`
+}
+
 // ValidationCommand checks a VM carries the model (with matching checksums)
 // and the Docker image.
 func ValidationCommand(modelPath, dockerImage, sudo string) string {

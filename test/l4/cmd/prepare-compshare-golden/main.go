@@ -53,12 +53,17 @@ func main() {
 		dualKmod    = flag.Bool("dual-kmod", true, "build and store both the open and the proprietary NVIDIA kernel modules and pick one at boot")
 		gpus        = flag.String("validate-gpus", "V100S,P40,5090,A800,H20,A100,4090", "GPU types to boot the new image on after it validates; types without stock or refused by CompShare are reported, not failed")
 		checkImage  = flag.String("validate-image", "", "only boot this existing image on -validate-gpus (no new image is made)")
+		recheck     = flag.String("revalidate-image", "", "only rerun the single-VM validation of this existing image (-gpu-model, -gpu-count, -region, -zone)")
+		keep        = flag.Bool("keep-failed-validation", false, "leave a validation VM that failed running and print how to reach it; delete it with cleanup-leaked -run-id")
 	)
 	flag.Parse()
 	useDualKmod = *dualKmod
 	validateGPUs = strings.Split(*gpus, ",")
 	var err error
-	if strings.TrimSpace(*checkImage) != "" {
+	keepFailedValidation = *keep
+	if strings.TrimSpace(*recheck) != "" {
+		err = revalidate(strings.TrimSpace(*recheck), *modelPath, *dockerImage, *gpuModel, *diskGB, *region, *zone, *gpuCount)
+	} else if strings.TrimSpace(*checkImage) != "" {
 		err = checkExistingImage(strings.TrimSpace(*checkImage), *modelPath, *dockerImage, *diskGB)
 	} else if strings.TrimSpace(*resumeName) != "" {
 		err = resume(*modelPath, *dockerImage, *gpuModel, *resumeName, *resumeRunID, *sourceID, *diskGB)
@@ -136,6 +141,10 @@ func run(modelPath, dockerImage, gpuModel, imageName string, diskGB int, region,
 		if out, err := runSSH(ctx, source, remoteDualKmodCommand()); err != nil {
 			return fmt.Errorf("install dual NVIDIA kernel modules: %w: %s", err, strings.TrimSpace(out))
 		}
+	}
+	fmt.Printf("run_id=%s phase=docker-cgroupfs\n", runID)
+	if out, err := runSSH(ctx, source, "sudo -n sh -c "+shellQuote(goldenimage.DockerCgroupfsCommand())); err != nil {
+		return fmt.Errorf("switch Docker to cgroupfs: %w: %s", err, strings.TrimSpace(out))
 	}
 	fmt.Printf("run_id=%s phase=pull-runner-image image=%s\n", runID, dockerImage)
 	if out, err := runSSH(ctx, source, goldenimage.PullImageCommand(dockerImage, pullSources, "sudo -n ")); err != nil {
@@ -232,7 +241,22 @@ func validateImage(ctx context.Context, accessKey, secretKey, imageID, runID, mo
 		return fmt.Errorf("rent validation VM from new image %s: %w", imageID, err)
 	}
 	validationAlive := true
+	failed := true
 	defer func() {
+		if validationAlive && failed && keepFailedValidation {
+			// The VM's credentials exist only in this process; keep them where
+			// only this user can read them.
+			access := runID + ".ssh"
+			secret := validation.Password
+			if len(validation.PrivateKey) > 0 {
+				secret = string(validation.PrivateKey)
+			}
+			if err := os.WriteFile(access, []byte(secret), 0o600); err != nil {
+				fmt.Fprintln(os.Stderr, "save validation VM credentials:", err)
+			}
+			fmt.Printf("run_id=%s phase=kept-failed-validation instance=%s ssh=%s@%s:%d credentials=%s\n", runID, validation.InstanceID, validation.Username, validation.PublicIP, validation.SSHPort, access)
+			return
+		}
 		if validationAlive {
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cleanupCancel()
@@ -252,6 +276,7 @@ func validateImage(ctx context.Context, accessKey, secretKey, imageID, runID, mo
 			return fmt.Errorf("new image NVIDIA module validation: %w: %s", err, strings.TrimSpace(out))
 		}
 	}
+	failed = false
 	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	if err := validator.Destroy(cleanupCtx, validation.InstanceID); err != nil {
 		cleanupCancel()
@@ -269,6 +294,22 @@ func validateImage(ctx context.Context, accessKey, secretKey, imageID, runID, mo
 	return nil
 }
 
+// revalidate reruns the single-VM validation of an existing image.
+func revalidate(imageID, modelPath, dockerImage, gpuModel string, diskGB int, region, zone string, gpuCount int) error {
+	accessKey := strings.TrimSpace(os.Getenv("COMPSHARE_ACCESS_KEY"))
+	secretKey := strings.TrimSpace(os.Getenv("COMPSHARE_SECRET_KEY"))
+	if accessKey == "" || secretKey == "" {
+		return errors.New("COMPSHARE_ACCESS_KEY and COMPSHARE_SECRET_KEY are required")
+	}
+	runID, err := cloudprovider.NewRunID()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
+	defer cancel()
+	return validateImage(ctx, accessKey, secretKey, imageID, "golden-check-"+runID, modelPath, dockerImage, gpuModel, diskGB, region, zone, gpuCount)
+}
+
 // maxImageNameLen is the longest custom image name CompShare has accepted.
 const maxImageNameLen = 42
 
@@ -276,8 +317,10 @@ const maxImageNameLen = 42
 var (
 	useDualKmod  = true
 	validateGPUs []string
-	pullSources  = splitList(defaultPullSources)
-	removeImages []string
+	// keepFailedValidation leaves a failed validation VM for debugging.
+	keepFailedValidation bool
+	pullSources          = splitList(defaultPullSources)
+	removeImages         []string
 )
 
 func splitList(raw string) []string {
