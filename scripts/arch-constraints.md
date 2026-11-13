@@ -119,7 +119,7 @@ grep -rlE "['\"]antd(/[^'\"]*)?['\"]" ui/src --include='*.ts' --include='*.tsx' 
 文件数只能拦"新文件引入 antd"，拦不住已有文件里继续加 antd 用法；逐文件的棘轮由下面的
 `ui/antd-inventory.json` 负责。
 
-### ui_copy_long_strings / ui_copy_caveat_strings（基线 46 / 14，2026-11-13）
+### ui_copy_long_strings / ui_copy_caveat_strings（基线 0 / 0，2026-11-13）
 
 意图：页面只写事实和下一步，公式、口径、免责放进 `ui-kit/HelpTip` 或文档（`docs/dev/ui.md` "Copy on the page"）。
 `ui_copy_long_strings` 数中文 locale 里超过 120 字（key 以 `Help` 结尾的 HelpTip 内容放宽到 200 字）的字符串；
