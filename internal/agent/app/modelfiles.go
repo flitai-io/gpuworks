@@ -258,13 +258,10 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 
 	net := n.network()
 	// Where the files come from, as the console shows it while they arrive:
-	// the address the fetch is at, and why it left the one before.
-	var from atomic.Value
-	from.Store("")
-	say := func(message string) {
-		from.Store(message)
-		report(proto.ModelFileStatus{Key: mf.Key, State: proto.MFDownloading, Path: absTarget, Acquisition: proto.ModelAcquireDownload, Message: message})
-	}
+	// the address the fetch is at, why it left the one before, and a wait the
+	// source asked for.
+	from := newFetchMessage(proto.ModelFileStatus{Key: mf.Key, State: proto.MFDownloading, Path: absTarget, Acquisition: proto.ModelAcquireDownload}, report)
+	say := from.set
 	var cooler modelfetch.Cooler
 	if n.registries != nil {
 		cooler = n.registries
@@ -283,6 +280,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 		OnRetry: func(file string, attempt int, delay time.Duration, err error) {
 			n.log.Warn("model file download interrupted; retrying",
 				"file", file, "attempt", attempt, "retry_in", delay.String(), "err", err)
+			from.retrying(err, delay)
 		},
 	})
 	if err != nil {
@@ -374,6 +372,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 			downloadRevision = f.Revision
 		}
 		base := done.Load()
+		from.at(base, estimate.Total(), pinnedRevision)
 		err = fetcher.Fetch(ctx, modelfetch.File{
 			Path: f.Path, Revision: downloadRevision, Dest: dest,
 			Concurrency: 4, RateLimitKBs: mf.RateLimitKBs,
@@ -386,12 +385,12 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 			if approximate {
 				estimate.correct(index, p.Total)
 			}
-			report(proto.ModelFileStatus{
+			from.progress(proto.ModelFileStatus{
 				Key: mf.Key, State: proto.MFDownloading,
 				Revision:   pinnedRevision,
 				BytesTotal: estimate.Total(), BytesDone: base + p.Done,
 				RateBytesPerS: p.RateBytesPerS, Path: absTarget,
-				Acquisition: proto.ModelAcquireDownload, Message: from.Load().(string),
+				Acquisition: proto.ModelAcquireDownload,
 			})
 		})
 		if err != nil {

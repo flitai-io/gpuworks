@@ -27,6 +27,17 @@ import (
 // one address may cost a file before the fetch moves to the next address.
 const StallsBeforeSwitch = 2
 
+// ListingRetry is the file name Config.OnRetry is given for a retry of the
+// repository listing rather than of a file.
+const ListingRetry = "(file list)"
+
+// MaxThrottleWait bounds the wait one throttled answer (429/503) can ask
+// for: a Hugging Face rate-limit window is five minutes, so a reset time
+// beyond that is not one to trust. The extra second is the one
+// modelrepo.ThrottleWait adds to a reset: a quota exhausted at the start of
+// a window (t=300) must still be waited out past its reset.
+const MaxThrottleWait = 5*time.Minute + time.Second
+
 // Cooler remembers addresses that just failed; a cooled host's candidates are
 // tried after every other one. The node's registry prober
 // (registryprobe.Prober) is the one memory image pulls and model downloads
@@ -115,28 +126,69 @@ func (f *Fetcher) Host() string {
 }
 
 // List lists the repository's files at revision, from the first address that
-// answers. An address that cannot is cooled and the next one asked.
+// answers. An address that cannot is cooled and the next one asked; one that
+// asks for time (429/503) is waited for and asked again, as a file is.
 func (f *Fetcher) List(ctx context.Context, revision string) ([]modelrepo.File, error) {
 	for f.at < len(f.order) {
 		candidate := f.order[f.at]
-		client, err := f.cfg.Client(candidate.Base)
-		if err == nil {
-			var files []modelrepo.File
-			headers := modelrepo.AuthorizationHeaders(candidate.Base, f.cfg.Logins)
-			files, err = modelrepo.ListFiles(ctx, f.cfg.Source, f.cfg.Repo, revision, candidate.Base, headers, modelrepo.RequestOptions{Client: client})
+		maxAttempts := f.attempts()
+		delay := f.cfg.Retry.InitialBackoff
+		for attempt := 1; ; attempt++ {
+			client, err := f.cfg.Client(candidate.Base)
 			if err == nil {
-				return files, nil
+				var files []modelrepo.File
+				headers := modelrepo.AuthorizationHeaders(candidate.Base, f.cfg.Logins)
+				files, err = modelrepo.ListFiles(ctx, f.cfg.Source, f.cfg.Repo, revision, candidate.Base, headers, modelrepo.RequestOptions{Client: client})
+				if err == nil {
+					return files, nil
+				}
 			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			retryAfter, throttled := ThrottleWait(err)
+			if !throttled || attempt >= maxAttempts {
+				// Whatever else this address answered - a missing repository,
+				// an error status, a portal page that does not parse, no
+				// answer at all - another address may still list it.
+				f.next("failed: " + err.Error())
+				break
+			}
+			pause := min(max(delay, retryAfter), MaxThrottleWait)
+			if f.cfg.OnRetry != nil {
+				f.cfg.OnRetry(ListingRetry, attempt, pause, err)
+			}
+			if err := sleep(ctx, pause); err != nil {
+				return nil, err
+			}
+			delay = nextBackoff(delay, f.cfg.Retry.MaxBackoff)
 		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		// Whatever this address answered - a missing repository, an error
-		// status, a portal page that does not parse, no answer at all -
-		// another address may still list it.
-		f.next("failed: " + err.Error())
 	}
 	return nil, f.exhausted("list files")
+}
+
+// attempts bounds the attempts at the address the fetch is at: the last
+// address, with nothing to move to, gets the patience a single address
+// always had.
+func (f *Fetcher) attempts() int {
+	if f.at == len(f.order)-1 && f.cfg.Retry.LastAttempts > f.cfg.Retry.MaxAttempts {
+		return f.cfg.Retry.LastAttempts
+	}
+	return f.cfg.Retry.MaxAttempts
+}
+
+// ThrottleWait reports whether err is a source asking the fetch to wait (a
+// 429 or 503 on a listing or a file), and how long it asked for (zero when
+// it did not say).
+func ThrottleWait(err error) (time.Duration, bool) {
+	if wait, ok := download.IsThrottled(err); ok {
+		return wait, true
+	}
+	var status *modelrepo.StatusError
+	if errors.As(err, &status) && status.Throttled() {
+		return status.RetryAfter, true
+	}
+	return 0, false
 }
 
 // File is one repository file to fetch.
@@ -190,13 +242,8 @@ func (f *Fetcher) fetchFrom(ctx context.Context, candidate proto.ModelFetchCandi
 	if pinned {
 		options.ResumeKey = f.cfg.Source + "/" + f.cfg.Repo + "@" + file.Revision + "/" + file.Path
 	}
-	// At the last address there is nothing to move to: it gets the patience
-	// a single address always had.
 	last := f.at == len(f.order)-1
-	maxAttempts := f.cfg.Retry.MaxAttempts
-	if last && f.cfg.Retry.LastAttempts > maxAttempts {
-		maxAttempts = f.cfg.Retry.LastAttempts
-	}
+	maxAttempts := f.attempts()
 	delay := f.cfg.Retry.InitialBackoff
 	stalls := 0
 	for attempt := 1; ; attempt++ {
@@ -210,7 +257,14 @@ func (f *Fetcher) fetchFrom(ctx context.Context, candidate proto.ModelFetchCandi
 		if isLocal(err) {
 			return "", fmt.Errorf("download %s: %w", file.Path, err)
 		}
-		if errors.Is(err, download.ErrStalled) {
+		// A throttled answer is the address asking for time, not saying it
+		// cannot serve the file: wait what it asked (at least the backoff)
+		// and ask the same address again.
+		pause := delay
+		if retryAfter, throttled := ThrottleWait(err); throttled {
+			stalls = 0
+			pause = min(max(delay, retryAfter), MaxThrottleWait)
+		} else if errors.Is(err, download.ErrStalled) {
 			stalls++
 			if stalls >= StallsBeforeSwitch && !last {
 				return fmt.Sprintf("stalled %d times in a row: %s: %v", stalls, address, err), err
@@ -225,9 +279,9 @@ func (f *Fetcher) fetchFrom(ctx context.Context, candidate proto.ModelFetchCandi
 			return fmt.Sprintf("failed %d times: %s: %v", attempt, address, err), err
 		}
 		if f.cfg.OnRetry != nil {
-			f.cfg.OnRetry(file.Path, attempt, delay, err)
+			f.cfg.OnRetry(file.Path, attempt, pause, err)
 		}
-		if err := wait(ctx, delay); err != nil {
+		if err := sleep(ctx, pause); err != nil {
 			return "", err
 		}
 		delay = nextBackoff(delay, f.cfg.Retry.MaxBackoff)

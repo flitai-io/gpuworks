@@ -95,12 +95,12 @@ When you use both rented hosts outside mainland China and data centers in mainla
 
 The Models page shows the current download site, with a reason when the site changes. Models pinned to a commit can resume downloads when the address changes. Models that use a branch such as `main` start over when switching addresses.
 
-The server calculates candidates for each node, with rule alternatives first and the original site last. When retrieving the file list, an unreachable address, HTTP error, or unparseable list puts the current address in cooldown for 30 minutes and causes the node to try the next candidate.
+The server calculates candidates for each node, with rule alternatives first and the original site last. When retrieving the file list, an unreachable address, HTTP error, or unparseable list puts the current address in cooldown for 30 minutes and causes the node to try the next candidate; source rate limiting (429, 503) is instead waited out and retried at the same address, as for file downloads.
 
 When downloading individual files:
 
-- **Retryable transfer errors**: Connection refusals or resets, TLS handshake timeouts, EOF, and similar errors are retried at the same address first. Each file gets up to 6 attempts per address, or 16 at the last address, including the initial attempt. Only after all attempts fail does the node put the address in cooldown and switch.
-- **Non-retryable source errors**: HTTP error statuses (including 404, 401/403, and 429), TLS certificate verification failures, and similar errors immediately put the address in cooldown for 30 minutes and trigger a switch to the next candidate. If there is no next candidate, the download ends.
+- **Retryable transfer errors and source rate limiting**: Connection refusals or resets, TLS handshake timeouts, EOF, and similar errors, as well as 429 and 503, are retried at the same address first; when rate limited, the node waits for the reset time in the `Retry-After` or `RateLimit` header (at least the backoff interval, at most 5 minutes and 1 second). Each file gets up to 6 attempts per address, or 16 at the last address, including the initial attempt. Only after all attempts fail does the node put the address in cooldown and switch.
+- **Non-retryable source errors**: Other HTTP error statuses (including 404 and 401/403), TLS certificate verification failures, and similar errors immediately put the address in cooldown for 30 minutes and trigger a switch to the next candidate. If there is no next candidate, the download ends.
 - **Consecutive stalls**: Five consecutive minutes without response headers or new data count as one stall. The connection is terminated and a resume is attempted. Two consecutive stalls at the same address trigger cooldown and a switch if another candidate is available. The last address is not switched out and remains subject to the limit of 16 total attempts.
 
 An address in cooldown is placed last the next time, but is not removed. Cooldown is shared with image pulls.

@@ -13,7 +13,9 @@ import (
 )
 
 // RetryPolicy is how often and how patiently one address is retried after a
-// transient transport failure before the fetch moves on.
+// transient transport failure, or a throttled answer (429/503, each retried
+// after the wait it named, MaxThrottleWait at most), before the fetch moves
+// on.
 type RetryPolicy struct {
 	// MaxAttempts bounds the attempts at an address while another address
 	// remains to move to.
@@ -85,6 +87,10 @@ func isLocal(err error) bool {
 	var linkErr *os.LinkError
 	return errors.As(err, &linkErr)
 }
+
+// sleep is the wait between attempts; tests replace it to see the waits a
+// fetch asks for without spending them.
+var sleep = wait
 
 func wait(ctx context.Context, delay time.Duration) error {
 	if delay <= 0 {
