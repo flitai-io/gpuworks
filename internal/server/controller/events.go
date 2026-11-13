@@ -43,36 +43,49 @@ func (c *Controller) onEvent(ev bus.Event) {
 		if ev.Reason == bus.ReasonProgress {
 			return
 		}
-		// Instance status changed → reconcile its deployment.
-		if inst, err := c.store.InstanceByUUID(ev.Key); err == nil {
-			c.q.add(depKey(inst.DeploymentID))
+		// Instance status changed → reconcile its deployment, and retry the
+		// cache operations that were waiting for its node's readers. A
+		// deleted instance is retried by its node's next report instead
+		// (cacheReferencesChanged).
+		if depID, nodeID, err := c.store.InstanceRefs(ev.Key); err == nil {
+			c.q.add(depKey(depID))
+			c.routes.noteReaders(nodeID)
 		}
-	case "modelfile", "node", "storage":
+	case "node":
+		switch ev.Reason {
+		case bus.ReasonProgress:
+		case store.NodeChangeStatus:
+			c.nodeStatusReported() // acted on in batches (settleNodeStatus)
+		default:
+			// A node registering, reconnecting, relabelled or drained may
+			// unblock a waiting deployment, and concerns the replicas on it.
+			c.routes.noteNode(ev.Key) // acted on in batches (flushEventRoutes)
+		}
+	case "modelfile":
 		if ev.Reason == bus.ReasonProgress {
 			return
 		}
-		if ev.Topic == "node" && ev.Reason == store.NodeChangeStatus {
-			c.nodeStatusReported() // acted on in batches (settleNodeStatus)
-			return
-		}
-		if ev.Topic == "modelfile" {
-			c.releaseTerminalModelSync(ev.Key)
-		}
-		// A model becoming present, or a node reconnecting, may unblock deploys.
-		if deps, err := c.store.ListDeployments(); err == nil {
-			for _, d := range deps {
-				c.q.add(depKey(d.ID))
-			}
+		c.releaseTerminalModelSync(ev.Key)
+		// A model becoming present may unblock a deployment; one that is
+		// already running may still care that its files changed. The key is
+		// resolved at the tick, once (flushEventRoutes).
+		c.routes.noteModelFile(ev.Key)
+	case "storage":
+		switch ev.Reason {
+		case bus.ReasonProgress:
+		case "node_state":
+			// A storage turning ready on a node is what a waiting deployment
+			// may need; nodes report it on every reconnect.
+			c.routes.noteUnsettled()
+		default:
+			// An operator's storage edit is rare; it gets every deployment.
+			c.routes.noteAll()
 		}
 	case store.PullSettingsTopic:
 		// A rule change may allow a download or a pull a deployment was
 		// refused for, or forbid one; an operator's edit is rare, so every
 		// deployment gets a pass rather than an index of who was refused.
-		if deps, err := c.store.ListDeployments(); err == nil {
-			for _, d := range deps {
-				c.q.add(depKey(d.ID))
-			}
-		}
+		c.routes.noteAll()
 	case "image":
 		// Image-node progress/presence and peer-sync starts do not change catalog refs.
 		// Pushing the same full list back to every agent here creates a feedback

@@ -23,7 +23,7 @@
 
   `planning.PullCandidatesFor` 是启动、期望状态重放、镜像页拉取、多机预拉取共用的唯一镜像候选入口；`planning.PullSettingsFor` 取一台节点适用的规则与代理，模型文件任务的候选（`PlanModelFileTasks`，hub 重放与 controller 推送共用）和 server 自己读元数据的候选（`ServerFetchCandidates`）也由 `planning` 一处算出；`controller/image_acquisition.go` 决定节点缺镜像时是否从同组节点复制，并在内存里记节点对的 3 小时冷却。
 - `store`：GORM entity + 版本化迁移（`schema_migrations`），SQLite（glebarez 驱动，全仓统一，勿混用 modernc）。
-- `controller`：每资源一个 reconcile 文件，手写 workqueue（`workq.go`，不引 client-go）。部署不分形态走同一套 unit 对账（`units.go` / `unit_launch.go`，ADR 0029），PD 专属的启动与漂移检查在 `pd*.go`。
+- `controller`：每资源一个 reconcile 文件，手写 workqueue（`workq.go`，不引 client-go）。部署不分形态走同一套 unit 对账（`units.go` / `unit_launch.go`，ADR 0029），PD 专属的启动与漂移检查在 `pd*.go`。总线事件只把变化记进 `event_routes.go`，每 250 ms 按依赖入队：节点事件入队在该节点上有实例的部署，模型文件事件入队用到该模型的部署，节点存储状态变化只入队未稳定的部署，读失败或对象已不存在时退回入队全部部署；节点状态另走 2 秒一次、带池退避的合并（`node_status.go`）。
 - 多机与 PD 的自动放置（[ADR 0057](../adr/0057-units-placed-by-writing-the-pick-back.md)）：`planning/unit_choice.go` 挑节点（`ChooseReplicaNodes`、`ChoosePDUnits`，建立在 `SuggestUnitGroups` 的分组上），`planning/unit_trial.go` 是 API 与 controller 共用的单元试算；`api/deployments_auto_units.go`（创建与评估时补节点）与 `deployments_auto_scale.go`（按副本数扩缩、PD 增加单元、`PUT /placement-mode`）；`controller/unit_auto.go` 在单元要启动时只换放不下的 rank（复用换节点的候选与写回），`controller/pd_pinned.go` 给手动钉卡被占的 PD 单元写 `pinned_gpus_unavailable`；`store/units_auto.go` 是 `deployments.units_auto` 列的迁移与写入。
 - `netplan`：纯叶子包（只依赖 `proto`），节点网络的唯一决策处：角色 / 类型词表、按挂载与网卡清单解析每个节点每个角色走哪张网（RDMA 网络的 HCA 与 bootstrap 推断在 `rdma.go`）、管理网兜底、多机组共享的参数网络、两节点间的存储同步路径、能否承载服务、服务转发地址。
 - `network`：网络服务，核心流程询问“某角色走哪张网、哪个地址”的唯一入口；store 行 → netplan 模型的唯一转换（`convert.go`）；网络、挂载与管理网角色的校验和变更。

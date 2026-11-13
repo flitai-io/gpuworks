@@ -91,8 +91,11 @@ type Controller struct {
 	// nodeStatusDirty is set by routine node status reports and cleared by
 	// the settle tick that acts on them (settleNodeStatus).
 	nodeStatusDirty atomic.Bool
-	poolMu          sync.Mutex
-	poolRefused     map[uint]map[uint]time.Time
+	// routes holds what other events said changed until the next
+	// flushEventRoutes tick (event_routes.go).
+	routes      eventRoutes
+	poolMu      sync.Mutex
+	poolRefused map[uint]map[uint]time.Time
 	// dgpuPending holds the deployments whose instances' memory limits were
 	// rewritten in place and are not yet handed to their nodes
 	// (dgpu_limit.go).
@@ -262,6 +265,8 @@ func (c *Controller) Run(ctx context.Context) {
 
 	settle := time.NewTicker(nodeStatusSettle)
 	defer settle.Stop()
+	routeTick := time.NewTicker(eventRouteSettle)
+	defer routeTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -277,6 +282,8 @@ func (c *Controller) Run(ctx context.Context) {
 			c.onEvent(ev)
 		case <-settle.C:
 			c.settleNodeStatus()
+		case <-routeTick.C:
+			c.flushEventRoutes()
 		}
 	}
 }

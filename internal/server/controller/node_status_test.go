@@ -15,7 +15,8 @@ import (
 // batches and only for deployments that could gain from them: one waiting for
 // a node, one whose replica is starting, a stopped one still winding down, a
 // multi-node one. A deployment running exactly its replicas is left alone.
-// Any other node change still reconciles everything.
+// Any other node change reconciles, at the next routing tick, the
+// deployments with a replica on that node and every unsettled one.
 func TestNodeStatusReportsReconcileOnlyUnsettledDeployments(t *testing.T) {
 	st, err := store.Open("file:controller_node_status?mode=memory&cache=shared", bus.New())
 	if err != nil {
@@ -73,8 +74,9 @@ func TestNodeStatusReportsReconcileOnlyUnsettledDeployments(t *testing.T) {
 	}
 
 	c.onEvent(bus.Event{Topic: "node", Key: node.UUID, Reason: "state:online"})
+	c.flushEventRoutes()
 	if keys := pendingKeys(c); len(keys) != 8 {
-		t.Fatalf("a node coming online queued %d deployments, want all 8", len(keys))
+		t.Fatalf("a node coming online queued %d deployments, want all 8 (each has an instance on it)", len(keys))
 	}
 }
 
