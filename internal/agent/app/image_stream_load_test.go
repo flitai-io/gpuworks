@@ -136,3 +136,34 @@ func TestStreamedArchiveThatNamesNoReferenceFailsWithTheReasonSaidOutLoud(t *tes
 		}
 	}
 }
+
+// A peer stop cancels the receive context, and the runtime CLI it was running
+// dies of the signal. The node reports why it stopped, not the signal, the way
+// a cancelled pull or URL load does.
+func TestStreamedArchiveCancelledMidLoadReportsTheCancellation(t *testing.T) {
+	h := newStreamLoadHarness(t)
+	h.driver.InjectLoadFailure(errors.New("docker load: signal: killed"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := h.node.StreamImage(ctx, streamLoadCanonical, "relay-1", bytes.NewBufferString("relayed-archive"), true)
+	if err == nil || !strings.Contains(err.Error(), "signal: killed") {
+		t.Fatalf("error = %v, want the runtime failure returned to the receiver", err)
+	}
+	status := h.terminal(t)
+	if status.State != "failed" || status.TransferID != "relay-1" || status.Message != "the transfer was cancelled before it finished" {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestStreamedArchiveLoadFailureWithoutCancellationKeepsTheRuntimeError(t *testing.T) {
+	h := newStreamLoadHarness(t)
+	h.driver.InjectLoadFailure(errors.New("docker load: no space left on device"))
+
+	if err := h.load(t); err == nil {
+		t.Fatal("load failure was not returned")
+	}
+	if status := h.terminal(t); status.State != "failed" || !strings.Contains(status.Message, "no space left on device") {
+		t.Fatalf("status = %+v", status)
+	}
+}
