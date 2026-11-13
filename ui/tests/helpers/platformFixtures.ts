@@ -4,7 +4,7 @@
 // its platform type and the resources it connects; a cluster entry carries
 // its pools and what the server allows on it; an instance carries the
 // actions the server allows on it, and a cloud's cluster its GPU node pools.
-import type { CloudProvider, KubeCluster, KubeDefaults, List, ProviderCapabilities, ProviderCluster, ProviderClusterPool, ProviderInstance, ProviderKindInfo } from "../../src/api";
+import type { CloudProvider, KubeCluster, KubeClusterState, KubeDefaults, ProviderCapabilities, ProviderCategoryInfo, ProviderCluster, ProviderClusterPool, ProviderInstance, ProviderKindInfo, ProviderKindList, List } from "../../src/api";
 import { list } from "./listPage.ts";
 
 export const capabilities: ProviderCapabilities = {
@@ -27,6 +27,26 @@ export const zstackKind: ProviderKindInfo = {
 };
 export const KINDS = [aliyunKind, runpodKind, zstackKind];
 
+/** The platform type a cluster connected on its own is added and listed as (provider.Categories' kube_cluster entry). */
+export const KUBERNETES_CATEGORY: ProviderCategoryInfo = { id: "kubernetes", resources: [{ type: "kubernetes" }], kube_cluster: true, kinds: [] };
+
+/**
+ * The categories GET /api/v1/providers/kinds answers with, as
+ * providerCategories builds them: public then private cloud, each only when a
+ * kind is filed under it, then "other" for the kinds filed under none, and the
+ * Kubernetes cluster type last; each names its kinds in the order of items.
+ */
+export function kindCategories(kinds: ProviderKindInfo[]): ProviderCategoryInfo[] {
+  const of = (id: string) => kinds.filter((kind) => (kind.category || "other") === id).map((kind) => kind.kind);
+  const vendors = ["public_cloud", "private_cloud", "other"].map((id) => ({ id, kinds: of(id) })).filter((category) => category.kinds.length > 0);
+  return [...vendors, KUBERNETES_CATEGORY];
+}
+
+/** GET /api/v1/providers/kinds: the kinds, and the platform types to offer them under. */
+export function kindList(kinds: ProviderKindInfo[], categories = kindCategories(kinds)): ProviderKindList {
+  return { ...list(kinds), categories };
+}
+
 /**
  * An account as GET /api/v1/providers lists it: the resources are its kind's,
  * in the kind's order, and a kind the fixture does not know connects nothing,
@@ -44,21 +64,32 @@ export function account(id: number, name: string, kind: string, overrides: Parti
 
 export const APPLY_COMMAND = "kubectl apply -f 'https://gpuworks.example/kube/manifest.yaml?token=secret-token'";
 
+/** Where an entry stands, as kubeClusterState derives it: revoked, stalled, pending until a node joined, else active. */
+export function entryState(cluster: Pick<KubeCluster, "revoked" | "stalled" | "cluster_uid">): KubeClusterState {
+  if (cluster.revoked) return "revoked";
+  if (cluster.stalled) return "stalled";
+  return cluster.cluster_uid ? "active" : "pending";
+}
+
 /**
  * A cluster entry as GET /api/v1/kube/clusters lists it to an administrator:
  * made by hand unless a source is given. Its joined nodes are counted by the
- * vendor of their cards (each agent reports its own node's), most first.
+ * vendor of their cards (each agent reports its own node's), most first. Its
+ * state is the server's, derived from the other fields unless given; its
+ * category and resources are the Kubernetes platform type's.
  */
 export function kubeEntry(overrides: Partial<KubeCluster> = {}): KubeCluster {
-  return {
+  const entry: Omit<KubeCluster, "state"> = {
     id: 1, uuid: "c-1", name: "prod-gpu", namespace: "gpuworks-system", server_url: "https://gpuworks.example",
     state_dir: "/opt/gpuworks", agent_image: "", agent_image_source: "dockerhub", effective_agent_image: "gpuworks/gpuworks-agent:v1",
     node_selector: "nvidia.com/gpu.present=true", runtime_class: "", image_pull_secret: "",
     containerd_socket: "", api_server: "", engine_ports: "40000-42767", idle_return_seconds: 600, priority: 10000, allow_preemption: false,
     cluster_uid: "7f3c2a10-aaaa-bbbb-cccc-0123456789ab", revoked: false, node_count: 3, vendors: [{ vendor: "nvidia", nodes: 3 }],
     created_at: "2026-10-19T08:30:00Z", apply_command: APPLY_COMMAND, stalled: false, pool_ids: [], namespace_shared_with: [],
-    can_apply: false, can_remove: false, operation_blocked: "no_source", ...overrides,
+    can_apply: false, can_remove: false, operation_blocked: "no_source",
+    category: KUBERNETES_CATEGORY.id, resources: [{ type: "kubernetes" }], ...overrides,
   };
+  return { ...entry, state: overrides.state ?? entryState(entry) };
 }
 
 /** An entry made from a cluster of an account: it holds node pools and the server may apply to it. */
@@ -88,18 +119,22 @@ export function instance(overrides: Partial<ProviderInstance> = {}): ProviderIns
 /** A GPU node pool of a cloud's cluster, held by no entry. */
 export const l20Pool: ProviderClusterPool = { id: "np-l20", name: "l20", gpu_model: "NVIDIA L20", gpu_count: 1, nodes: 2, vendor: "nvidia", in_entry: false };
 
-/** A managed cluster as GET /api/v1/providers/{id}/clusters lists it, read live: ready, publicly reachable, one GPU pool, no entry made from it. */
+/**
+ * A managed cluster as GET /api/v1/providers/{id}/clusters lists it, read live: ready, publicly reachable, one GPU pool, no entry made from it.
+ * connectable is the server's word, as it derives it (running, a GPU pool, no entry) unless given.
+ */
 export function cloudCluster(id: string, name: string, overrides: Partial<ProviderCluster> = {}): ProviderCluster {
-  return {
+  const cluster: Omit<ProviderCluster, "connectable"> = {
     external_id: id, name, region: "cn-shanghai", version: "1.35.7-aliyun.1", type: "ack_managed", type_label: { en: "ACK managed", zh: "ACK 托管版" },
     state: "running", running: true, public_api: true, gpu_pools: [l20Pool], agent_image_source: "dockerhub", ...overrides,
   };
+  return { ...cluster, connectable: overrides.connectable ?? (cluster.running && cluster.gpu_pools.length > 0 && !cluster.entry) };
 }
 
-/** The same cluster once an entry was made from it: the entry is named and holds the given pools (every pool by default). */
+/** The same cluster once an entry was made from it: the entry is named and holds the given pools (every pool by default); it can no longer be connected. */
 export function connectedCluster(id: string, name: string, entryUUID: string, overrides: Partial<ProviderCluster> = {}, heldPools?: string[]): ProviderCluster {
   const cluster = cloudCluster(id, name, overrides);
-  return { ...cluster, entry: { uuid: entryUUID, name }, gpu_pools: cluster.gpu_pools.map((pool) => ({ ...pool, in_entry: heldPools ? heldPools.includes(pool.id) : true })) };
+  return { ...cluster, connectable: false, entry: { uuid: entryUUID, name }, gpu_pools: cluster.gpu_pools.map((pool) => ({ ...pool, in_entry: heldPools ? heldPools.includes(pool.id) : true })) };
 }
 
 // GET /api/v1/kube/defaults.
@@ -125,7 +160,7 @@ export interface PlatformServer {
  * the next read answers with them. `api` is the client under test (imported
  * by the test after its DOM globals exist); the test restores it afterwards.
  */
-export function servePlatforms(api: object, options: { providers?: CloudProvider[] | Error; clusters?: KubeCluster[] | Error; kinds?: ProviderKindInfo[] | Error; admin?: boolean } = {}): PlatformServer {
+export function servePlatforms(api: object, options: { providers?: CloudProvider[] | Error; clusters?: KubeCluster[] | Error; kinds?: ProviderKindInfo[] | Error; categories?: ProviderCategoryInfo[]; admin?: boolean } = {}): PlatformServer {
   const admin = options.admin !== false;
   const server: PlatformServer = { reads: { providers: 0, clusters: 0 }, providers: options.providers ?? [], clusters: options.clusters ?? [] };
   const kinds = options.kinds ?? KINDS;
@@ -143,7 +178,7 @@ export function servePlatforms(api: object, options: { providers?: CloudProvider
     },
     providerKinds: async () => {
       if (kinds instanceof Error) throw kinds;
-      return list(kinds);
+      return kindList(kinds, options.categories);
     },
     // What an opened account reads: no instance synchronized, no managed cluster in the cloud.
     providerInstances: async () => list([]),

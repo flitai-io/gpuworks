@@ -319,7 +319,7 @@ const kubeEntry = {
   engine_ports: "40000-42767", idle_return_seconds: 60, priority: 10000, allow_preemption: false, cluster_uid: "0f7d2c1a-0000-4000-8000-00000000000a", revoked: false,
   node_count: 2, vendors: [{ vendor: "nvidia", nodes: 2 }],
   created_at: "2026-11-01T08:00:00Z", apply_command: "kubectl apply -f 'http://localhost/kube/manifest.yaml?token=t'", stalled: false, pool_ids: [], namespace_shared_with: [],
-  can_apply: false, can_remove: false, operation_blocked: "no_source",
+  can_apply: false, can_remove: false, operation_blocked: "no_source", state: "active", category: "kubernetes", resources: [{ type: "kubernetes" }],
 };
 const platforms = {
   "/api/v1/providers": () => Response.json({ items: [
@@ -327,7 +327,7 @@ const platforms = {
     { id: 2, name: "Hosts", kind: "zstack", category: "private_cloud", state: "valid", instance_count: 2, resources: [{ type: "host" }], node_count: 0, created_at: "2026-11-01T08:00:00Z", updated_at: "2026-11-01T08:00:00Z" },
     { id: 3, name: "Ali", kind: "aliyun", category: "public_cloud", state: "valid", instance_count: 5, resources: [{ type: "vm", product: "ECS" }, { type: "kubernetes", product: "ACK" }], node_count: 4, created_at: "2026-11-01T08:00:00Z", updated_at: "2026-11-01T08:00:00Z" },
   ], total: 3 }),
-  "/api/v1/providers/kinds": () => Response.json({ items: [], total: 0 }),
+  "/api/v1/providers/kinds": () => Response.json({ items: [], total: 0, categories: [{ id: "kubernetes", resources: [{ type: "kubernetes" }], kube_cluster: true, kinds: [] }] }),
   "/api/v1/kube/clusters": () => Response.json({ items: [
     kubeEntry,
     { ...kubeEntry, id: 2, uuid: "7c1b6f0e-0000-4000-8000-000000000002", name: "ack-prod", node_count: 4, pool_ids: ["np-l20"], can_apply: true, can_remove: true, operation_blocked: undefined,

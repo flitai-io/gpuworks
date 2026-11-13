@@ -3,12 +3,12 @@ import { afterEach, test } from "node:test";
 import React from "react";
 import { I18nextProvider } from "react-i18next";
 import { createI18n, dom } from "./helpers/dom.ts";
-import { aliyunKind, capabilities, runpodKind, zstackKind, KUBE_DEFAULTS } from "./helpers/platformFixtures.ts";
+import { aliyunKind, capabilities, kindCategories, runpodKind, zstackKind, KUBE_DEFAULTS } from "./helpers/platformFixtures.ts";
 import { describedBy, fieldLabels as labelsIn, footerButtons as buttonsIn, freshPopupFramesPerTest, platformChoice } from "./helpers/platformDialog.ts";
 
 // The Add External Platform dialog's choice of platform
 // (ui/src/components/ProviderConfigModal.tsx): the platform types the server
-// files the kinds under as tabs, a local Kubernetes cluster among them for
+// files the kinds under as tabs, a Kubernetes cluster among them for
 // whoever may connect one, then the vendors of the chosen type in a list, and
 // what the chosen platform connects. The Kubernetes tab puts the cluster form
 // in place of the vendor's; what that form does is in
@@ -22,6 +22,7 @@ const { default: userEvent } = await import("@testing-library/user-event");
 const { default: ProviderConfigModal } = await import("../src/components/ProviderConfigModal.tsx");
 const { api } = await import("../src/api.ts");
 type KindInfo = import("../src/api.ts").ProviderKindInfo;
+type CategoryInfo = import("../src/api.ts").ProviderCategoryInfo;
 type Provider = import("../src/api.ts").CloudProvider;
 type Config = import("../src/api.ts").ProviderEditConfig;
 
@@ -43,12 +44,13 @@ const digitalocean: KindInfo = {
 const newcloud: KindInfo = { kind: "newcloud", label: { en: "New Cloud", zh: "新云" }, category: "", capabilities, credential_fields, server_dial_supported: false, resources: [] };
 const kindInfos = [zstack, aliyun, newcloud, runpod, digitalocean];
 
-function mount(options: { language?: keyof typeof languages; defaultKind?: string; provider?: Provider; kinds?: KindInfo[]; canConnectCluster?: boolean; onClose?: () => void } = {}) {
+// The platform types come with the kinds, in GET /api/v1/providers/kinds' categories; a test may give its own.
+function mount(options: { language?: keyof typeof languages; defaultKind?: string; provider?: Provider; kinds?: KindInfo[]; categories?: CategoryInfo[]; canConnectCluster?: boolean; onClose?: () => void } = {}) {
   // The cluster form asks the server for its defaults when Kubernetes is chosen.
   api.kubeDefaults = async () => KUBE_DEFAULTS;
   render(
     <I18nextProvider i18n={languages[options.language ?? "en"].i18n}>
-      <ProviderConfigModal open provider={options.provider} defaultKind={options.defaultKind ?? null} kindInfos={options.kinds ?? kindInfos} providerLabel="External Platform"
+      <ProviderConfigModal open provider={options.provider} defaultKind={options.defaultKind ?? null} kindInfos={options.kinds ?? kindInfos} categories={options.categories ?? kindCategories(options.kinds ?? kindInfos)} providerLabel="External Platform"
         onClose={options.onClose ?? (() => {})} onSaved={() => {}} canConnectCluster={options.canConnectCluster} />
     </I18nextProvider>,
   );
@@ -59,8 +61,8 @@ function mount(options: { language?: keyof typeof languages; defaultKind?: strin
 // field's label ("External platform", 外部平台); closed, it shows the chosen platform.
 const zhp = languages.zh.locale.providers;
 // The tab that is not a vendors' type: a cluster connected on its own, with kubectl.
-const K8S = "Local Kubernetes cluster";
-const K8S_ZH = "本地 Kubernetes 集群";
+const K8S = "Kubernetes cluster";
+const K8S_ZH = "Kubernetes 集群";
 const choice = { en: platformChoice(p.config.type, p.table.column.category), zh: platformChoice(zhp.config.type, zhp.table.column.category) };
 const selectedLabel = () => screen.getByRole("combobox", { name: /^(External platform|外部平台)$/ }).textContent ?? "";
 /** The tabs of the platform types, each with whether it is the selected one. */
@@ -109,7 +111,7 @@ test("adding a platform lists what its kind connects, one tag per resource named
   assert.deepEqual(tagTitles("It connects"), ["Container"]);
 });
 
-test("the platform types are tabs in a fixed order: public clouds, then private clouds, then the kinds that declare none under Other; a tab is its type's first platform", async () => {
+test("the platform types are tabs in the order the server lists them: public clouds, then private clouds, then the kinds that declare none under Other; a tab is its type's first platform", async () => {
   const user = mount();
   // Opened on no kind in particular, the dialog is on the first kind the server lists, and on the tab of its type.
   await waitFor(() => assert.equal(selectedLabel(), "ZStack Cloud"));
@@ -208,7 +210,7 @@ test("the dialog opens on the tab of the platform it was opened for: a vendor's 
   api.kubeDefaults = async () => KUBE_DEFAULTS;
   const view = (kinds: KindInfo[], defaultKind: string) => (
     <I18nextProvider i18n={languages.en.i18n}>
-      <ProviderConfigModal open defaultKind={defaultKind} kindInfos={kinds} providerLabel="External Platform" onClose={() => {}} onSaved={() => {}} canConnectCluster />
+      <ProviderConfigModal open defaultKind={defaultKind} kindInfos={kinds} categories={kindCategories(kinds)} providerLabel="External Platform" onClose={() => {}} onSaved={() => {}} canConnectCluster />
     </I18nextProvider>
   );
   const rendered = render(view(kindInfos, "runpod"));
@@ -262,7 +264,7 @@ for (const who of ["a viewer", "an administrator"] as const) {
     api.kubeDefaults = async () => KUBE_DEFAULTS;
     render(
       <I18nextProvider i18n={languages.en.i18n}>
-        <ProviderConfigModal open defaultKind={null} kindInfos={[]} providerLabel="External Platform" onClose={() => {}} onSaved={() => { saved += 1; }} canConnectCluster={who === "an administrator"} />
+        <ProviderConfigModal open defaultKind={null} kindInfos={[]} categories={[]} providerLabel="External Platform" onClose={() => {}} onSaved={() => { saved += 1; }} canConnectCluster={who === "an administrator"} />
       </I18nextProvider>,
     );
     const user = userEvent.setup({ document: dom.window.document });
@@ -280,7 +282,7 @@ for (const who of ["a viewer", "an administrator"] as const) {
   });
 }
 
-test("whoever may connect a cluster is offered Local Kubernetes cluster as the last tab; nobody else is", async () => {
+test("whoever may connect a cluster is offered Kubernetes cluster as the last tab; nobody else is", async () => {
   mount({ canConnectCluster: true });
   await waitFor(() => assert.equal(selectedLabel(), "ZStack Cloud"));
   assert.deepEqual(await choice.en.types(), ["Public cloud", "Private cloud", "Other", K8S]);
@@ -356,7 +358,7 @@ test("the vendor is chosen from the keyboard within its type: Enter opens the li
   assert.equal(screen.queryAllByRole("dialog").length, 1);
 });
 
-test("the Local Kubernetes cluster tab is reached with the arrows like any other and shows the cluster form; from that form Shift+Tab is back on the tab, and the arrows lead to the vendors again", async () => {
+test("the Kubernetes cluster tab is reached with the arrows like any other and shows the cluster form; from that form Shift+Tab is back on the tab, and the arrows lead to the vendors again", async () => {
   const user = mount({ defaultKind: "newcloud", canConnectCluster: true });
   await waitFor(() => assert.equal(selectedLabel(), "New Cloud"));
   const tab = (name: string) => screen.getByRole("tab", { name });
@@ -376,7 +378,7 @@ test("the Local Kubernetes cluster tab is reached with the arrows like any other
   assert.ok(document.activeElement === tab("Other"));
 });
 
-test("the Local Kubernetes cluster tab puts the cluster form in place of the vendor's, with no vendor left to choose, says what it connects, and swaps the buttons; a vendors' tab brings its form back", async () => {
+test("the Kubernetes cluster tab puts the cluster form in place of the vendor's, with no vendor left to choose, says what it connects, and swaps the buttons; a vendors' tab brings its form back", async () => {
   const user = mount({ defaultKind: "runpod", canConnectCluster: true });
   await waitFor(() => assert.equal(selectedLabel(), "RunPod"));
   assert.deepEqual(fieldLabels(), [p.config.type, p.config.name, "API Key"]);
@@ -419,7 +421,7 @@ test("the Local Kubernetes cluster tab puts the cluster form in place of the ven
   assert.deepEqual(connects("It connects").map(([tag]) => tag), ["ECS", "ACK"]);
 });
 
-test("a local Kubernetes cluster says only what it connects, in one line, whichever vendors the server knows", async () => {
+test("a Kubernetes cluster says only what it connects, in one line, whichever vendors the server knows", async () => {
   for (const kinds of [[runpod, zstack], kindInfos, []]) {
     mount({ defaultKind: "kubernetes", canConnectCluster: true, kinds });
     await waitFor(() => assert.deepEqual(connects("It connects"), [["Kubernetes", p.config.howOwnCluster]]));
@@ -428,7 +430,7 @@ test("a local Kubernetes cluster says only what it connects, in one line, whiche
   }
 });
 
-test("opened on Kubernetes the dialog is on the cluster form even when the vendors' schema could not be loaded: its tab is the only one; for someone who may not connect a cluster it is not", async () => {
+test("opened on Kubernetes the dialog is on the cluster form even when the server offers no vendor: its tab is the only one; for someone who may not connect a cluster it is not", async () => {
   mount({ defaultKind: "kubernetes", canConnectCluster: true, kinds: [] });
   await waitFor(() => assert.deepEqual(fieldLabels().slice(0, 4), [p.config.type, ...CLUSTER_FIELDS]));
   // One type is still shown as a tab: it says what the form below is for.
@@ -494,4 +496,43 @@ test("editing an account shows its platform as a fixed field: no tabs, nothing t
   assert.deepEqual(fieldLabels(), [p.config.type, p.config.name, "API Key"]);
   assert.deepEqual(footerButtons(), ["Cancel", "Save"]);
   assert.equal(dialog().querySelectorAll("form").length, 1);
+});
+
+// The platform types, their order and what each offers are the server's (GET /api/v1/providers/kinds categories), not the
+// console's: these cases give categories that differ from what the kinds' own fields or a fixed order would make.
+test("the tabs are the server's categories in the server's order, each offering the kinds it names in its order", async () => {
+  const categories: CategoryInfo[] = [
+    { id: "private_cloud", kinds: ["zstack"] },
+    { id: "public_cloud", kinds: ["runpod", "aliyun"] },
+    { id: "kubernetes", resources: [{ type: "kubernetes" }], kube_cluster: true, kinds: [] },
+  ];
+  const user = mount({ kinds: [zstack, aliyun, runpod], categories, canConnectCluster: true });
+  await waitFor(() => assert.equal(selectedLabel(), "ZStack Cloud"));
+  assert.deepEqual(await choice.en.types(), ["Private cloud", "Public cloud", K8S]);
+  await choice.en.pickType(user, "Public cloud");
+  assert.equal(selectedLabel(), "RunPod", "the tab's first platform is the category's first");
+  assert.deepEqual(await choice.en.choices(user), ["RunPod", "Alibaba Cloud"]);
+});
+
+test("without a cluster category from the server nobody is offered Kubernetes, not even whoever may connect a cluster; opened on it, the dialog falls back to the first vendor", async () => {
+  const categories = kindCategories([runpod, zstack]).filter((category) => !category.kube_cluster);
+  mount({ kinds: [runpod, zstack], categories, canConnectCluster: true, defaultKind: "kubernetes" });
+  await waitFor(() => assert.equal(selectedLabel(), "RunPod"));
+  assert.deepEqual(await choice.en.types(), ["Public cloud", "Private cloud"]);
+  assert.equal(screen.queryAllByRole("tab", { name: /Kubernetes/ }).length, 0);
+  assert.deepEqual(footerButtons(), ["Cancel", "Add"]);
+});
+
+test("the Kubernetes tab is the category the server marks as added with the cluster form, whatever its id, and says what that category connects; an empty one is no tab", async () => {
+  const categories: CategoryInfo[] = [
+    { id: "public_cloud", kinds: ["runpod"] },
+    // A type of no kind and no cluster form has nothing to offer.
+    { id: "kubernetes", kinds: [] },
+    { id: "own_cluster", resources: [{ type: "kubernetes" }], kube_cluster: true, kinds: [] },
+  ];
+  mount({ kinds: [runpod], categories, canConnectCluster: true, defaultKind: "own_cluster" });
+  await waitFor(() => assert.deepEqual(fieldLabels().slice(0, 4), [p.config.type, ...CLUSTER_FIELDS]));
+  assert.deepEqual(typeTabs(), [["Public cloud", false], [K8S, true]]);
+  assert.deepEqual(connects("It connects"), [["Kubernetes", p.config.howOwnCluster]]);
+  assert.deepEqual(footerButtons(), [k.drawer.cancel, k.drawer.submit]);
 });

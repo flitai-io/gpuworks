@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ProviderCluster } from "../../api";
 import type { KubeClusterPrefill } from "../kubernetes/kubeClusterForm";
 
@@ -15,20 +15,26 @@ export function useAccountClusters({ providerId, providerName, enabled, onChange
   /** A cluster entry was made, changed or deleted. */
   onChanged?: () => void;
 }) {
-  // null while the cloud is being read.
+  // null until the cloud is first read. A later read keeps the clusters listed
+  // meanwhile, so a drawer or dialog open on one of them stays open.
   const [clusters, setClusters] = useState<ProviderCluster[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<KubeClusterPrefill | null>(null);
+  // Only the latest read lands: an earlier one answering late is dropped.
+  const readRef = useRef(0);
 
   const load = useCallback(() => {
     if (!enabled) return;
-    setClusters(null);
-    setLoadError(null);
+    const read = ++readRef.current;
     api.providerClusters(providerId)
-      .then((list) => setClusters(list.items ?? []))
-      .catch((e: Error) => { setClusters([]); setLoadError(e.message); });
+      .then((list) => { if (read !== readRef.current) return; setClusters(list.items ?? []); setLoadError(null); })
+      .catch((e: Error) => { if (read !== readRef.current) return; setClusters((current) => current ?? []); setLoadError(e.message); });
   }, [providerId, enabled]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    load();
+    // A read still out when the account changes or the list goes away is not applied.
+    return () => { readRef.current++; };
+  }, [load]);
 
   const reload = () => { load(); onChanged?.(); };
 

@@ -5,13 +5,13 @@ import {
   api,
   type CloudProvider,
   type KindResource,
+  type ProviderCategoryInfo,
   type ProviderCredentialField,
   type ProviderKindInfo,
 } from "../api";
 import { localizedText } from "../i18n/localizedText";
 import { useKubeClusterForm } from "../pages/kubernetes/useKubeClusterForm";
 import { PlatformResourceBadge } from "../pages/platforms/PlatformResourceBadge";
-import { KUBERNETES_KIND } from "../pages/platforms/platformRows";
 import { FormField } from "../ui-kit/form/FormField";
 import { formSubmit } from "../ui-kit/form/submit";
 import { Notice } from "../ui-kit/Notice";
@@ -37,7 +37,7 @@ type CredentialPath = "endpoint" | "api_key" | "public_key" | "private_key" | `e
 
 /**
  * Adds an external platform, or edits a cloud account. The platform type is
- * chosen first (public cloud, private cloud, a local Kubernetes cluster), then the
+ * chosen first (public cloud, private cloud, a Kubernetes cluster), then the
  * vendor among that type's; a cloud vendor's account asks for its
  * credentials, and Kubernetes, which is no vendor's account, for the cluster
  * form, followed by the command to run in the cluster.
@@ -47,6 +47,7 @@ export default function ProviderConfigModal({
   provider,
   defaultKind,
   kindInfos,
+  categories = [],
   providerLabel,
   onClose,
   onSaved,
@@ -57,6 +58,8 @@ export default function ProviderConfigModal({
   provider?: CloudProvider | null;
   defaultKind?: string | null;
   kindInfos: ProviderKindInfo[];
+  /** The platform types to offer, in order, each naming its kinds (GET /providers/kinds categories). */
+  categories?: ProviderCategoryInfo[];
   providerLabel: string;
   onClose: () => void;
   /** The account was saved; a new one is named, so its row can be opened. */
@@ -82,7 +85,9 @@ export default function ProviderConfigModal({
   const [loadError, setLoadError] = useState(false);
   const editing = !!provider;
   // Kubernetes is the one platform that is not a cloud vendor's account: its form is the cluster form, below the choice.
-  const kubernetes = !provider && canConnectCluster && kind === KUBERNETES_KIND;
+  // It is offered as the platform type the server marks as added with the cluster form; its id is also the choice's.
+  const clusterCategory = canConnectCluster ? categories.find((category) => category.kube_cluster) : undefined;
+  const kubernetes = !provider && !!clusterCategory && kind === clusterCategory.id;
   const cluster = useKubeClusterForm({ open: open && kubernetes, onCreated: () => onClusterCreated?.() });
   const busy = submitting || cluster.saving;
   const close = () => {
@@ -98,11 +103,13 @@ export default function ProviderConfigModal({
   const selectedKind = kindInfos.find((k) => k.kind === kind);
   const requirement = t(`config.requirements.${provider?.kind ?? kind}`, { defaultValue: "" });
   // What the chosen platform connects: the vendor's resources, or for Kubernetes the cluster itself.
-  const connects: KindResource[] = kubernetes ? KUBERNETES_RESOURCES : selectedKind?.resources ?? [];
-  // The platform types to choose among, and the one the chosen platform is of.
-  const groups = kindGroups(kindInfos, canConnectCluster);
+  const connects: KindResource[] = kubernetes ? clusterCategory?.resources ?? [] : selectedKind?.resources ?? [];
+  // The platform types to choose among, in the server's order, and the one the chosen platform is of.
+  const groups = categories
+    .filter((category) => category.kube_cluster ? category === clusterCategory : category.kinds.length > 0)
+    .map((category) => ({ category: category.id, kubeCluster: !!category.kube_cluster, kinds: category.kube_cluster ? [category.id] : category.kinds }));
   const group = groups.find((g) => g.kinds.includes(kind)) ?? groups[0];
-  const groupLabel = (category: string) => category === KUBERNETES_KIND ? t("config.kubernetesGroup") : t(`category.${category}`, { defaultValue: t("config.otherCategory") });
+  const groupLabel = (g: { category: string; kubeCluster: boolean }) => g.kubeCluster ? t("config.kubernetesGroup") : t(`category.${g.category}`, { defaultValue: t("config.otherCategory") });
 
   // The initial kind is applied once per open (and again when the provider or
   // the preselected kind changes), never in reaction to the user's own pick:
@@ -114,7 +121,7 @@ export default function ProviderConfigModal({
       seededRef.current = "";
       return;
     }
-    const forCluster = !provider && canConnectCluster && defaultKind === KUBERNETES_KIND;
+    const forCluster = !provider && !!clusterCategory && defaultKind === clusterCategory.id;
     // The cluster form needs nothing from the vendors' schema; every other choice waits for it.
     if (kindInfos.length === 0 && !forCluster) return;
     const seed = `${provider?.id ?? ""}|${provider?.kind ?? ""}|${defaultKind ?? ""}`;
@@ -133,7 +140,7 @@ export default function ProviderConfigModal({
     } else {
       form.reset({ ...BLANK, ...credentialDefaults(kindInfos.find((info) => info.kind === next)) });
     }
-  }, [open, provider, defaultKind, kindInfos, form, loadedProviderID, canConnectCluster]);
+  }, [open, provider, defaultKind, kindInfos, form, loadedProviderID, clusterCategory]);
 
   // Fetch on every edit opening so refreshes and other sessions cannot leave
   // stale overrides in the form. A closed/replaced dialog ignores late replies.
@@ -210,11 +217,11 @@ export default function ProviderConfigModal({
                   <Tabs
                     variant="pill"
                     color="default"
-                    value={group.category || OTHER_CATEGORY}
-                    onValueChange={(next) => chooseKind(groups.find((g) => (g.category || OTHER_CATEGORY) === next)?.kinds[0] ?? kind)}
+                    value={group.category}
+                    onValueChange={(next) => chooseKind(groups.find((g) => g.category === next)?.kinds[0] ?? kind)}
                   >
                     <TabsList aria-label={t("table.column.category")} className="self-start">
-                      {groups.map((g) => <TabItem key={g.category} value={g.category || OTHER_CATEGORY} label={groupLabel(g.category)} disabled={busy} />)}
+                      {groups.map((g) => <TabItem key={g.category} value={g.category} label={groupLabel(g)} disabled={busy} />)}
                     </TabsList>
                   </Tabs>
                   {/* Then the vendor among that type's. Kubernetes is one platform: there is nothing more to pick. */}
@@ -343,23 +350,4 @@ function requestOf(values: FormValues, fields: ProviderCredentialField[]) {
   }
   if (Object.keys(extra).length > 0) body.extra = extra;
   return body;
-}
-
-const KUBERNETES_RESOURCES: KindResource[] = [{ type: "kubernetes" }];
-// The tab of the kinds the server files under no platform type.
-const OTHER_CATEGORY = "other";
-// The order the platform types are offered in; a type the server adds later follows them.
-const CATEGORY_ORDER = ["public_cloud", "private_cloud"];
-
-/** The platforms to choose from, grouped by the platform type the server files each kind under; Kubernetes, which is no vendor's kind, comes last. */
-function kindGroups(kindInfos: ProviderKindInfo[], withKubernetes: boolean): Array<{ category: string; kinds: string[] }> {
-  const byCategory = new Map<string, string[]>();
-  for (const info of kindInfos) {
-    const category = info.category || "";
-    byCategory.set(category, [...(byCategory.get(category) ?? []), info.kind]);
-  }
-  const rank = (category: string) => { const at = CATEGORY_ORDER.indexOf(category); return at < 0 ? CATEGORY_ORDER.length : at; };
-  const groups = [...byCategory.entries()].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b)).map(([category, kinds]) => ({ category, kinds }));
-  if (withKubernetes) groups.push({ category: KUBERNETES_KIND, kinds: [KUBERNETES_KIND] });
-  return groups;
 }

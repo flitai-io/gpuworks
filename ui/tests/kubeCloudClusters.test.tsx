@@ -350,7 +350,7 @@ test("a cluster not yet connected lists all its GPU pools; the connect form open
   assert.equal(drawer.queryAllByRole("alert").length, 0, "no vendor refusal");
 });
 
-const heldMulti: ProviderCluster = { ...multiCluster, entry: { uuid: "e-5", name: "ack-multi" }, gpu_pools: multiCluster.gpu_pools.map((q) => ({ ...q, in_entry: q.id === "np-a" })) };
+const heldMulti: ProviderCluster = { ...multiCluster, connectable: false, entry: { uuid: "e-5", name: "ack-multi" }, gpu_pools: multiCluster.gpu_pools.map((q) => ({ ...q, in_entry: q.id === "np-a" })) };
 const heldEntry = entry({ uuid: "e-5", name: "ack-multi", pool_ids: ["np-a"], source: { provider_id: 3, provider_name: "ali-prod", provider_kind: "aliyun", cluster_id: "c-multi" } });
 
 test("a connected cluster lists only the pools its entry holds; an administrator's Change opens the pools drawer, where saving sends the set and offers to apply again", async () => {
@@ -416,7 +416,7 @@ test("a viewer sees the pools a connected cluster's entry holds, but no Change",
 test("an entry from before node pools says under its pools that it selects by a node selector; its pools drawer says so too and starts with none chosen, every pool to add", async () => {
   const selector = "alibabacloud.com/nodepool-id=np-a,gpu=a10";
   // The cloud lists the cluster with its entry, which holds none of the pools.
-  const legacy: ProviderCluster = { ...multiCluster, entry: { uuid: "e-5", name: "ack-multi" } };
+  const legacy: ProviderCluster = { ...multiCluster, connectable: false, entry: { uuid: "e-5", name: "ack-multi" } };
   serveClusters([legacy, connectedCluster("c-done", "ack-done", "e-6")]);
   const user = mount({ entries: [
     { ...heldEntry, pool_ids: [], node_selector: selector },
@@ -436,7 +436,7 @@ test("an entry from before node pools says under its pools that it selects by a 
   assert.equal(save.disabled, false, "one pool chosen replaces the selector");
 });
 
-const twoHeld: ProviderCluster = { ...multiCluster, entry: { uuid: "e-5", name: "ack-multi" }, gpu_pools: multiCluster.gpu_pools.map((q) => ({ ...q, in_entry: q.id !== "np-p" })) };
+const twoHeld: ProviderCluster = { ...multiCluster, connectable: false, entry: { uuid: "e-5", name: "ack-multi" }, gpu_pools: multiCluster.gpu_pools.map((q) => ({ ...q, in_entry: q.id !== "np-p" })) };
 const twoHeldEntry = { ...heldEntry, pool_ids: ["np-a", "np-l"] };
 
 test("in the pools drawer, taking out a pool the entry holds warns that its nodes leave; adding it back takes the warning away; Save sends the set chosen", async () => {
@@ -536,3 +536,109 @@ for (const verified of [true, false]) {
     assert.ok(screen.getByText(k.stopped.item.replace("{{deployment}}", "chat").replace("{{instance}}", "i-1")));
   });
 }
+
+// Whether an entry can be made from a cluster is the server's word (dto.ProviderCluster connectable).
+test("Connect is offered for a cluster the server calls connectable and not for one it does not, though that one runs with a GPU pool and no entry", async () => {
+  serveClusters([cloudCluster("c-yes", "ack-yes"), cloudCluster("c-no", "ack-no", { connectable: false })]);
+  mount();
+  assert.ok(within(await groupOf("ack-yes")).getByRole("button", { name: p.clusters.connect }));
+  const no = await groupOf("ack-no");
+  assert.equal(within(no).queryAllByRole("button", { name: p.clusters.connect }).length, 0);
+  assert.equal((await facts(no))[POOLS], L20_2, "its pools are still shown");
+});
+
+/** Holds every read of the account's clusters until the test answers it, in whatever order. */
+function heldClusterReads() {
+  const reads: Array<{ resolve: (clusters: unknown) => void; reject: (error: Error) => void }> = [];
+  api.providerClusters = (() => new Promise((resolve, reject) => { reads.push({ resolve, reject }); })) as never;
+  return reads;
+}
+const poolsDrawer = () => screen.queryAllByRole("dialog", { name: k.pools.title.replace("{{name}}", "ack-multi") });
+/** The groups of the account's table, by name, top to bottom, whether or not a modal drawer hides the table. */
+const groupsBehind = () => [...document.querySelectorAll("tbody[aria-label]")].map((group) => group.getAttribute("aria-label"));
+const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+
+test("reading the clusters again keeps the groups, and a pools drawer open in one, until the cloud answers; a read answered after a newer one is dropped; a failed read keeps what was listed and says why", async () => {
+  const reads = heldClusterReads();
+  const user = mount({ entries: [heldEntry] });
+  await waitFor(() => assert.equal(reads.length, 1));
+  await act(async () => reads[0].resolve(list([heldMulti])));
+  await user.click(within(await factValue(await groupOf("ack-multi"), POOLS)).getByRole("button", { name: p.clusters.editPools }));
+  // The drawer reads the cloud's pools of its own.
+  await waitFor(() => assert.equal(reads.length, 2));
+  await act(async () => reads[1].resolve(list([heldMulti])));
+  // The drawer is modal: the table behind it is out of the accessibility tree, so its groups are read from the document.
+  await waitFor(async () => assert.deepEqual(await editPools.chosen(), [A10]));
+
+  // A sync hands a new refresh key: the clusters are read again, and again before the first of those answers.
+  rerenderView({ entries: [heldEntry], refreshKey: "2" });
+  await waitFor(() => assert.equal(reads.length, 3));
+  await settle();
+  assert.deepEqual(groupsBehind(), ["Standalone instances", "ack-multi"], "the group stays while the cloud is read");
+  assert.equal(screen.queryAllByText(p.detail.loadingClusters).length, 0, "nothing says the clusters are being read in its place");
+  assert.equal(poolsDrawer().length, 1, "and the drawer open in it stays open");
+  rerenderView({ entries: [heldEntry], refreshKey: "3" });
+  await waitFor(() => assert.equal(reads.length, 4));
+
+  await act(async () => reads[3].resolve(list([heldMulti, cloudCluster("c-two", "ack-two")])));
+  await waitFor(() => assert.deepEqual(groupsBehind(), ["Standalone instances", "ack-multi", "ack-two"]));
+  await act(async () => reads[2].resolve(list([heldMulti])));
+  await settle();
+  assert.deepEqual(groupsBehind(), ["Standalone instances", "ack-multi", "ack-two"], "the earlier read, answered late, does not undo the later one");
+  assert.equal(poolsDrawer().length, 1);
+  assert.deepEqual(await editPools.chosen(), [A10], "what the drawer shows is untouched");
+
+  rerenderView({ entries: [heldEntry], refreshKey: "4" });
+  await waitFor(() => assert.equal(reads.length, 5));
+  await act(async () => reads[4].reject(new Error("aliyun: Throttling.User")));
+  const failed = (await screen.findByText(p.clusters.loadFailed)).closest('[role="alert"]') as HTMLElement;
+  assert.ok(failed.textContent?.includes("aliyun: Throttling.User"));
+  assert.deepEqual(groupsBehind(), ["Standalone instances", "ack-multi", "ack-two"], "the clusters already listed stay listed");
+  assert.equal(poolsDrawer().length, 1);
+  assert.equal(screen.queryAllByText(p.clusters.empty).length, 0, "nor is the account called empty");
+
+  // The next read that answers takes the error away.
+  rerenderView({ entries: [heldEntry], refreshKey: "5" });
+  await waitFor(() => assert.equal(reads.length, 6));
+  await act(async () => reads[5].resolve(list([heldMulti])));
+  await waitFor(() => assert.equal(screen.queryAllByText(p.clusters.loadFailed).length, 0));
+  assert.deepEqual(groupsBehind(), ["Standalone instances", "ack-multi"]);
+});
+
+test("reading the instances again keeps them listed; a read answered after a newer one is dropped, and a failed one keeps the list and says why", async () => {
+  serveClusters([]);
+  const reads: Array<{ resolve: (instances: unknown) => void; reject: (error: Error) => void }> = [];
+  api.providerInstances = (() => new Promise((resolve, reject) => { reads.push({ resolve, reject }); })) as never;
+  mount();
+  await waitFor(() => assert.equal(reads.length, 1));
+  await act(async () => reads[0].resolve(list([instance()])));
+  assert.ok(await screen.findByText("train-01"));
+
+  rerenderView({ refreshKey: "2" });
+  rerenderView({ refreshKey: "3" });
+  await waitFor(() => assert.equal(reads.length, 3));
+  await act(async () => reads[2].resolve(list([instance(), instance({ external_id: "i-uf6train02", name: "train-02" })])));
+  assert.ok(await screen.findByText("train-02"));
+  await act(async () => reads[1].resolve(list([])));
+  await settle();
+  assert.ok(screen.getByText("train-02"), "the late answer of the earlier read is dropped");
+  assert.equal(screen.queryAllByText(p.instances.empty).length, 0);
+
+  rerenderView({ refreshKey: "4" });
+  await waitFor(() => assert.equal(reads.length, 4));
+  await act(async () => reads[3].reject(new Error("aliyun: Throttling.User")));
+  assert.ok(await screen.findByText(p.instances.loadFailed));
+  assert.ok(screen.getByText("aliyun: Throttling.User"));
+  assert.ok(screen.getByText("train-01") && screen.getByText("train-02"), "the instances already listed stay listed");
+});
+
+test("an account whose row does not say it connects Kubernetes is not asked for clusters, though its kind can list them", async () => {
+  const state = serveClusters([gpuCluster]);
+  // The server leaves Kubernetes out of the account's resources (dto.CloudProvider resources); the kind schema still says ACK.
+  mount({ provider: account(3, "ali-prod", "aliyun", { resources: [{ type: "vm", product: "ECS" }] }) });
+  assert.ok(await screen.findByText(p.instances.empty));
+  await settle();
+  assert.equal(state.reads, 0);
+  assert.equal(screen.queryAllByRole("rowgroup", { name: "ack-gpu" }).length, 0);
+  assert.equal(screen.queryAllByText(p.clusters.empty).length, 0, "nor is it said to have no cluster");
+});

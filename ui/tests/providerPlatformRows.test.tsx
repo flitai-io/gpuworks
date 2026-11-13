@@ -128,20 +128,32 @@ for (const language of ["en", "zh"] as const) {
   });
 }
 
-test("a cluster connected on its own is filed as Kubernetes under both External platform and Platform type", async () => {
+test("a cluster connected on its own is no vendor's: — under Vendor, and the platform type the server files it under, Kubernetes", async () => {
   servePlatforms(api, everything);
   renderPage();
   await screen.findByText("prod-gpu");
-  assert.equal(cell("prod-gpu", "External platform").textContent, "Kubernetes");
+  assert.deepEqual(["ali-prod", "Pods", "Hosts", "prod-gpu", "lab"].map((name) => cell(name, "Vendor").textContent), ["Alibaba Cloud", "RunPod", "ZStack Cloud", "—", "—"]);
   assert.equal(cell("prod-gpu", "Platform type").textContent, "Kubernetes");
   assert.equal(cell("ali-prod", "Platform type").textContent, "Public cloud");
+});
+
+test("the vendor filter offers the accounts' vendors only, and choosing one leaves that vendor's accounts and no cluster connected on its own", async () => {
+  servePlatforms(api, { ...everything, providers: [ali, pods, hosts, account(4, "ali-dev", "aliyun")] });
+  renderPage();
+  await screen.findByText("prod-gpu");
+  const options = await filterOptions("Vendor");
+  assert.deepEqual(names(options), ["Alibaba Cloud", "RunPod", "ZStack Cloud"], "each vendor once; Kubernetes is no vendor");
+  fireEvent.click(options[0]);
+  await waitFor(() => assert.deepEqual(listed(), ["ali-prod", "ali-dev"]));
+  fireEvent.click(options[0]);
+  await waitFor(() => assert.deepEqual(listed(), ["ali-prod", "Pods", "Hosts", "ali-dev", "prod-gpu", "lab"]));
 });
 
 test("the update time is offered as a column but not shown by default", async () => {
   servePlatforms(api, everything);
   renderPage();
   await screen.findByText("prod-gpu");
-  assert.deepEqual(screen.getAllByRole("columnheader").slice(1).map((header) => header.textContent), ["Name", "External platform", "Platform type", "Connects", "Nodes joined", "Status", "Actions"]);
+  assert.deepEqual(screen.getAllByRole("columnheader").slice(1).map((header) => header.textContent), ["Name", "Vendor", "Platform type", "Connects", "Nodes joined", "Status", "Actions"]);
 
   fireEvent.click(screen.getByRole("button", { name: "Customize columns" }));
   const offered = within(await screen.findByRole("dialog")).getByRole("checkbox", { name: "Updated" });
@@ -239,20 +251,43 @@ test("the status filter offers the states in the list in the words of the rows' 
   await screen.findByText("prod-gpu");
 
   const options = await filterOptions("Status");
-  assert.deepEqual(names(options), ["Valid", "Error", "Active", "Not connected yet", "Revoked"]);
-  // Each choice is the word its rows show.
+  assert.deepEqual(names(options), ["Valid", "Error", "Active", "Not connected yet", "Not connected for long", "Revoked"]);
+  // Each choice is the word its rows show; a cluster waiting too long has its badge and a way to troubleshoot.
   assert.deepEqual(["ali-prod", "Broken", "prod-gpu", "lab", "retired"].map((name) => cell(name, "Status").textContent), ["Valid", "Error", "Active", "Not connected yet", "Revoked"]);
+  assert.ok(within(cell("doks", "Status")).getByRole("button", { name: "Troubleshoot" }));
   fireEvent.click(options[3]);
-  await waitFor(() => assert.deepEqual(listed(), ["lab", "doks"]));
+  await waitFor(() => assert.deepEqual(listed(), ["lab"], "waiting, not yet for long"));
   fireEvent.click(options[3]);
   fireEvent.click(options[4]);
+  await waitFor(() => assert.deepEqual(listed(), ["doks"]));
+  fireEvent.click(options[4]);
+  fireEvent.click(options[5]);
   await waitFor(() => assert.deepEqual(listed(), ["retired"]));
-  fireEvent.click(options[4]);
+  fireEvent.click(options[5]);
   fireEvent.click(options[2]);
   await waitFor(() => assert.deepEqual(listed(), ["prod-gpu"], "a cluster a node joined from; a valid account is not one"));
   fireEvent.click(options[2]);
   fireEvent.click(options[0]);
   await waitFor(() => assert.deepEqual(listed(), ["ali-prod"]));
+});
+
+// The server says where an entry stands (dto.KubeCluster state); the console does not work it out from the entry's other
+// fields. These two entries are made to disagree with their own fields, so only the state can explain what the row shows.
+test("a cluster's status and the status filter follow the state the server sends, whatever the entry's other fields suggest", async () => {
+  const late = kubeEntry({ id: 6, uuid: "c-6", name: "late", cluster_uid: "7f3c2a10-0000-4000-8000-000000000006", node_count: 2, stalled: false, revoked: false, state: "stalled" });
+  const early = kubeEntry({ id: 7, uuid: "c-7", name: "early", cluster_uid: "", node_count: 0, state: "active" });
+  servePlatforms(api, { providers: [], clusters: [late, early] });
+  renderPage();
+  await screen.findByText("late");
+  const status = within(cell("late", "Status"));
+  // The badge reads as the status filter names it.
+  assert.ok(status.getByText("Not connected for long"));
+  assert.ok(status.getByRole("button", { name: "Troubleshoot" }), "stalled, with the way to find out why");
+  assert.equal(cell("early", "Status").textContent, "Active");
+  const options = await filterOptions("Status");
+  assert.deepEqual(names(options), ["Not connected for long", "Active"]);
+  fireEvent.click(options[0]);
+  await waitFor(() => assert.deepEqual(listed(), ["late"]));
 });
 
 test("a list without a revoked or waiting cluster does not offer those states", async () => {

@@ -27,19 +27,19 @@ function StalledHelp({ cluster }: { cluster: KubeCluster }) {
 }
 
 /**
- * Where a cluster entry stands: revoked, waiting for its first node (with how
- * to find out why once the server calls it stalled), or joined.
+ * Where a cluster entry stands, as the server says: revoked, waiting for its
+ * first node (with how to find out why once it is stalled), or joined.
  */
 export default function KubeEntryStatus({ cluster }: { cluster: KubeCluster }) {
   const { t } = useTranslation("kubernetes");
-  if (cluster.revoked) return <Badge status="danger">{t("status.revoked")}</Badge>;
+  if (cluster.state === "revoked") return <Badge status="danger">{t("status.revoked")}</Badge>;
   // No node has joined for longer than the server allows: say how to find
   // out why, here where the cluster's state is read.
-  if (cluster.stalled) {
+  if (cluster.state === "stalled") {
     return (
       // Wraps under the badge where the column is narrow.
       <span className="flex flex-wrap items-center gap-x-1 whitespace-normal">
-        <Badge status="warning">{t("clusterUid.notEnrolled")}</Badge>
+        <Badge status="warning">{t("clusterUid.stalled")}</Badge>
         <Popover>
           <PopoverTrigger render={<Button variant="link" size="sm">{t("clusterUid.troubleshoot")}</Button>} />
           <PopoverContent align="end" className="w-[560px] max-w-[calc(100vw-32px)]">
@@ -50,6 +50,6 @@ export default function KubeEntryStatus({ cluster }: { cluster: KubeCluster }) {
       </span>
     );
   }
-  if (!cluster.cluster_uid) return <Tooltip content={t("clusterUid.notEnrolledHint")}><Badge status="neutral">{t("clusterUid.notEnrolled")}</Badge></Tooltip>;
+  if (cluster.state === "pending") return <Tooltip content={t("clusterUid.notEnrolledHint")}><Badge status="neutral">{t("clusterUid.notEnrolled")}</Badge></Tooltip>;
   return <Badge status="success">{t("status.active")}</Badge>;
 }

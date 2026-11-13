@@ -84,7 +84,7 @@ export function compareSortValues(a: SortValue, b: SortValue): number {
 const EMPTY_ROWS: never[] = [];
 export default function ResourceTable<T extends object>({ tableId, columns, data, rowKey, loading, error, onRefresh, updatedAt,
   toolbar, toolbarExtra, pagination, sort, onSortChange, onFiltersChange, rowSelection, expandable, onRow,
-  emptyDescription, emptyKind = "data", emptyAction, columnSettings = true,
+  emptyDescription, emptyKind = "data", emptyAction, filteredEmptyDescription, columnSettings = true,
 }: {
   tableId: string; columns: ResourceColumn<T>[]; data?: T[]; rowKey: TableProps<T>["rowKey"];
   loading?: boolean; error?: Error | null; onRefresh?: () => void; updatedAt?: Date | null;
@@ -92,7 +92,10 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
   sort?: ServerSort | null; onSortChange?: (sort: ServerSort | null) => void;
   onFiltersChange?: (filters: Record<string, string[]>) => void;
   rowSelection?: TableProps<T>["rowSelection"]; expandable?: TableProps<T>["expandable"]; onRow?: TableProps<T>["onRow"];
-  emptyDescription?: string; emptyKind?: EmptyStateKind; emptyAction?: ReactNode; columnSettings?: boolean;
+  emptyDescription?: string; emptyKind?: EmptyStateKind; emptyAction?: ReactNode;
+  /** What an empty list says when column filters are in effect: nothing matches them, with a way to clear them. A list
+   *  without it keeps emptyDescription, which its owner may already word for filtering. */
+  filteredEmptyDescription?: string; columnSettings?: boolean;
 }) {
   const { t } = useTranslation("common");
   const rows = data ?? EMPTY_ROWS;
@@ -276,7 +279,10 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
           })}
           {!table.getRowModel().rows.length && <TableRow><TableCell colSpan={arranged.length + (rowSelection ? 1 : 0) + (expandable ? 1 : 0)}>{/* The empty state holds to the visible part of a table wider than its container (100cqw
               is the container's width, the cell pads 12px a side), so it centers in what the user sees. */}
-            {!loading && <div className="sticky left-3 w-[calc(100cqw-1.5rem)]"><EmptyState kind={emptyKind} description={emptyDescription ?? t("dataTable.empty")} action={emptyAction} /></div>}</TableCell></TableRow>}
+            {/* Filtered down to nothing is not "no data": say the filters match nothing, and offer to clear them. */}
+            {!loading && <div className="sticky left-3 w-[calc(100cqw-1.5rem)]">{activeFilters.length > 0 && filteredEmptyDescription
+              ? <EmptyState kind={emptyKind} description={filteredEmptyDescription} action={<Button variant="secondary" onClick={() => table.resetColumnFilters()}>{t("resourceTable.clearFilters")}</Button>} />
+              : <EmptyState kind={emptyKind} description={emptyDescription ?? t("dataTable.empty")} action={emptyAction} />}</div>}</TableCell></TableRow>}
         </TableBody>
       </Table>
       {/* One footer row: the total on the left, Zeron's pager on the right, both in its 12px label size. */}

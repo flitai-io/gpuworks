@@ -57,7 +57,7 @@ function stubApi(results: { manifest?: string | Error; revoke?: KubeCluster | Er
     return now;
   };
   api.kubeManifest = record("kubeManifest", results.manifest ?? "apiVersion: apps/v1\nkind: DaemonSet\n") as never;
-  api.revokeKubeCluster = record("revokeKubeCluster", results.revoke ?? { ...prod, revoked: true }) as never;
+  api.revokeKubeCluster = record("revokeKubeCluster", results.revoke ?? { ...prod, revoked: true, state: "revoked" as const }) as never;
   api.deleteKubeCluster = record("deleteKubeCluster", results.remove) as never;
   return calls;
 }
@@ -223,7 +223,7 @@ test("cancelling the revoke dialog calls nothing; Escape cancels it too", async 
 });
 
 test("a failed revoke keeps the dialog open on the reason; it can be tried again, and cancelled", async () => {
-  const calls = stubApi({ revoke: [new Error("token store unavailable"), { ...prod, revoked: true }] });
+  const calls = stubApi({ revoke: [new Error("token store unavailable"), { ...prod, revoked: true, state: "revoked" as const }] });
   const { user, changes } = renderActions(prod);
   await choose(user, k.actions.revoke);
   await user.click((await confirmation()).getByRole("button", { name: k.actions.revoke }));
@@ -361,7 +361,7 @@ test("Uninstall lists the commands that remove the agents and the pods they star
 
 test("a revoked entry can still be uninstalled by hand", async () => {
   stubApi();
-  const { user } = renderActions({ ...byHand, revoked: true });
+  const { user } = renderActions({ ...byHand, revoked: true, state: "revoked" as const });
   const menu = await openMore();
   assert.equal(menu.getByRole("menuitem", { name: k.actions.uninstall }).getAttribute("aria-disabled"), null);
   await user.click(menu.getByRole("menuitem", { name: k.actions.uninstall }));

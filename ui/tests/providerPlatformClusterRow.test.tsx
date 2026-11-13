@@ -43,7 +43,7 @@ const retired = kubeEntry({ id: 3, uuid: "c-3", name: "retired", revoked: true, 
 const ack = cloudEntry({ node_count: 4, cluster_uid: "0b9d6c1e-0000-4000-8000-00000000000a" });
 const ackCluster: ProviderCluster = {
   external_id: "c-gpu", name: "ack-gpu", region: "cn-shanghai", version: "1.35.7-aliyun.1", type: "ack_managed", type_label: { en: "ACK managed", zh: "ACK 托管版" },
-  state: "running", running: true, public_api: true, entry: { uuid: ack.uuid, name: ack.name },
+  state: "running", running: true, public_api: true, connectable: false, entry: { uuid: ack.uuid, name: ack.name },
   gpu_pools: [{ id: "np-l20", name: "l20", gpu_model: "NVIDIA L20", gpu_count: 1, nodes: 4, vendor: "nvidia", in_entry: true }],
 };
 
@@ -67,8 +67,8 @@ const facts = (first: string = p.standalone.connectedBy) => {
 /** The opened row's detail: what follows the row. */
 const detailOf = async (name: string) => (await rowOf(name)).nextElementSibling as HTMLElement;
 const states = {
-  en: { joined: "Active", waiting: "Not connected yet", troubleshoot: "Troubleshoot", revoked: "Revoked" },
-  zh: { joined: "正常", waiting: "未接入", troubleshoot: "排查", revoked: "已吊销" },
+  en: { joined: "Active", waiting: "Not connected yet", stalled: "Not connected for long", troubleshoot: "Troubleshoot", revoked: "Revoked" },
+  zh: { joined: "正常", waiting: "未接入", stalled: "长时间未接入", troubleshoot: "排查", revoked: "已吊销" },
 };
 for (const language of ["en", "zh"] as const) {
   test(`in ${language} a cluster's row says where its entry stands: joined, waiting for its first node, waiting too long (with a way to troubleshoot), or revoked`, async () => {
@@ -81,7 +81,8 @@ for (const language of ["en", "zh"] as const) {
     assert.equal(waiting.textContent, copy.waiting);
     assert.equal(within(waiting).queryAllByRole("button").length, 0, "the server did not call it stalled");
     const stalled = await statusCell("doks");
-    assert.ok(within(stalled).getByText(copy.waiting));
+    // Named as the status filter names it.
+    assert.ok(within(stalled).getByText(copy.stalled));
     assert.ok(within(stalled).getByRole("button", { name: copy.troubleshoot }));
     assert.equal((await statusCell("retired")).textContent, copy.revoked);
   });
@@ -213,7 +214,7 @@ test("&cluster=<entry> with ?open=p<id> brings that cluster's group into view on
   // jsdom does no layout: what is asked of the browser is recorded.
   dom.window.HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) { scrolled.push(this.getAttribute("aria-label") ?? this.tagName); };
   try {
-    const other = { ...ackCluster, external_id: "c-other", name: "ack-other", entry: undefined, gpu_pools: ackCluster.gpu_pools.map((pool) => ({ ...pool, in_entry: false })) };
+    const other = { ...ackCluster, external_id: "c-other", name: "ack-other", entry: undefined, connectable: true, gpu_pools: ackCluster.gpu_pools.map((pool) => ({ ...pool, in_entry: false })) };
     let answer!: (clusters: unknown) => void;
     servePlatforms(api, { providers: [ali], clusters: [ack] });
     Object.assign(api, { providerClusters: () => new Promise((resolve) => { answer = resolve; }) });
@@ -272,7 +273,7 @@ test("a viewer sees the clusters and their state, but no actions and no enrollme
 test("an administrator's actions on a cluster row are those of an entry made by hand, and revoking one reloads the list", async () => {
   const server = servePlatforms(api, { providers: [ali], clusters: [prod, lab] });
   const revoked: string[] = [];
-  Object.assign(api, { revokeKubeCluster: async (uuid: string) => { revoked.push(uuid); server.clusters = [{ ...prod, revoked: true }, lab]; return { ...prod, revoked: true }; } });
+  Object.assign(api, { revokeKubeCluster: async (uuid: string) => { revoked.push(uuid); server.clusters = [{ ...prod, revoked: true, state: "revoked" as const }, lab]; return { ...prod, revoked: true, state: "revoked" as const }; } });
   const { user } = renderPage();
   const row = await rowOf("prod-gpu");
   await waitFor(() => assert.deepEqual(

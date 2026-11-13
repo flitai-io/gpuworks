@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import React, { useState } from "react";
 import { I18nextProvider } from "react-i18next";
+import { kindCategories } from "./helpers/platformFixtures.ts";
 import { createI18n, dom } from "./helpers/dom.ts";
 import { describedBy, field, freshPopupFramesPerTest, platformChoice } from "./helpers/platformDialog.ts";
 
@@ -48,7 +49,7 @@ const kindInfos: KindInfo[] = [
 function mount(defaultKind: string | null) {
   render(
     <I18nextProvider i18n={i18n}>
-      <ProviderConfigModal open defaultKind={defaultKind} kindInfos={kindInfos} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} />
+      <ProviderConfigModal open defaultKind={defaultKind} kindInfos={kindInfos} categories={kindCategories(kindInfos)} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} />
     </I18nextProvider>,
   );
   return userEvent.setup({ document: dom.window.document });
@@ -120,7 +121,7 @@ test("a field left empty is not sent, and extra travels only when one of its fie
     { name: "role_arn", label: { en: "Role ARN" }, secret: false, required: false, extra: true },
   ] }];
   const fill = async () => {
-    render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind={null} kindInfos={custom} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} /></I18nextProvider>);
+    render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind={null} kindInfos={custom} categories={kindCategories(custom)} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} /></I18nextProvider>);
     await waitFor(() => assert.equal(input("API Endpoint").value, "https://api.example.com"));
     fireEvent.change(input("Name"), { target: { value: "a" } });
     fireEvent.change(input("API Key"), { target: { value: "key" } });
@@ -190,7 +191,7 @@ test("an API refusal stays visible and preserves the form for a successful retry
     if (attempts === 1) throw new Error("provider credential rejected");
     return { id: 1, kind: "runpod", name: body.name };
   };
-  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="runpod" kindInfos={kindInfos} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="runpod" kindInfos={kindInfos} categories={kindCategories(kindInfos)} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
   await waitFor(() => assert.equal(chosen(), "RunPod"));
   fireEvent.change(input("Name"), { target: { value: "retry" } });
   fireEvent.change(input("RunPod API Key"), { target: { value: "key" } });
@@ -212,7 +213,7 @@ test("an API refusal stays visible and preserves the form for a successful retry
 test("a new account is named to the page once added, by its id and kind, and only once it is", async () => {
   const saved: unknown[][] = [];
   api.addProvider = async (body) => ({ id: 42, kind: "runpod", name: body.name });
-  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="runpod" kindInfos={kindInfos} providerLabel="Public Cloud" onClose={() => {}} onSaved={(...args: unknown[]) => { saved.push(args); }} /></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="runpod" kindInfos={kindInfos} categories={kindCategories(kindInfos)} providerLabel="Public Cloud" onClose={() => {}} onSaved={(...args: unknown[]) => { saved.push(args); }} /></I18nextProvider>);
   await waitFor(() => assert.equal(chosen(), "RunPod"));
   fireEvent.change(input("Name"), { target: { value: "rp" } });
   fireEvent.change(input("RunPod API Key"), { target: { value: "key" } });
@@ -250,7 +251,7 @@ function Page({ kinds }: { kinds: KindInfo[] }) {
     openEdit: (next) => { setDefaultKind(null); setProvider(next); setOpen(true); },
     close: () => { closes += 1; setOpen(false); setDefaultKind(null); setProvider(null); },
   };
-  return <ProviderConfigModal open={open} provider={provider as never} defaultKind={defaultKind} kindInfos={kinds} providerLabel="Public Cloud" onClose={controls.close} onSaved={controls.close} />;
+  return <ProviderConfigModal open={open} provider={provider as never} defaultKind={defaultKind} kindInfos={kinds} categories={kindCategories(kinds)} providerLabel="Public Cloud" onClose={controls.close} onSaved={controls.close} />;
 }
 const page = (kinds: KindInfo[]) => <I18nextProvider i18n={i18n}><Page kinds={kinds} /></I18nextProvider>;
 const user = () => userEvent.setup({ document: dom.window.document });

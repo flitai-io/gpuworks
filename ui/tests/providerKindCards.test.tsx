@@ -10,7 +10,7 @@ import { field, freshPopupFramesPerTest, platformChoice } from "./helpers/platfo
 // (ui/src/pages/CloudProvidersPage.tsx): one per vendor the server knows,
 // saying what it connects (ui/src/pages/platforms/PlatformResourceBadge.tsx)
 // and linking to the vendor's site, and for an administrator one more for a
-// Kubernetes cluster connected on its own ("Local Kubernetes cluster").
+// Kubernetes cluster connected on its own ("Kubernetes cluster").
 
 const en = await createI18n(["providers", "kubernetes"], "en");
 const zh = await createI18n(["providers", "kubernetes"], "zh");
@@ -137,7 +137,7 @@ test("the cards work from the keyboard: Tab goes from a card's button to its sit
   servePlatforms(api, { kinds: [runpodKind, newcloud, aliyunKind] });
   const { user } = renderPage();
   const runpod = await screen.findByRole("button", { name: "Add RunPod" });
-  const lastCard = await screen.findByRole("button", { name: "Add Local Kubernetes cluster" });
+  const lastCard = await screen.findByRole("button", { name: "Add Kubernetes cluster" });
   runpod.focus();
   const stops: Array<string | null> = [];
   for (let stop = 0; stop < 5; stop += 1) {
@@ -145,7 +145,7 @@ test("the cards work from the keyboard: Tab goes from a card's button to its sit
     stops.push((document.activeElement as HTMLElement).getAttribute("aria-label"));
   }
   // A card without a site has one stop; the cluster card is the last of the block.
-  assert.deepEqual(stops, ["Open www.runpod.io", "Add New Cloud", "Add Alibaba Cloud", "Open www.aliyun.com", "Add Local Kubernetes cluster"]);
+  assert.deepEqual(stops, ["Open www.runpod.io", "Add New Cloud", "Add Alibaba Cloud", "Open www.aliyun.com", "Add Kubernetes cluster"]);
   assert.ok(document.activeElement === lastCard);
   assert.equal((document.activeElement as HTMLElement).tagName, "BUTTON");
   assert.equal(screen.getByRole("link", { name: "Open www.aliyun.com" }).tabIndex, 0, "a link is a tab stop of its own");
@@ -187,36 +187,35 @@ test("in zh a card's site link is named 打开官网 with the address, its tags 
   assert.deepEqual(tagTitles(plain), [null, null]);
   assert.equal(within(plain).getByRole("link").getAttribute("aria-label"), "打开官网 cloud.example.com/console");
   assert.deepEqual(tags(cardOf(screen.getByRole("button", { name: "添加 ZStack Cloud" }))), ["物理机"]);
-  assert.deepEqual(tags(cardOf(await screen.findByRole("button", { name: "添加 本地 Kubernetes 集群" }))), ["Kubernetes"]);
+  assert.deepEqual(tags(cardOf(await screen.findByRole("button", { name: "添加 Kubernetes 集群" }))), ["Kubernetes"]);
   assert.equal(document.body.textContent?.includes("云主机"), false, "the old word for a VM is gone");
 });
 
-test("the cards sit in one tray under the Quick Connect heading; a viewer with no kind to offer gets the notice and no empty tray, an administrator still gets the cluster card", async () => {
+test("the cards sit in one tray under the Quick Connect heading; without the kinds a viewer gets the notice and no empty tray, an administrator the notice and no card", async () => {
   servePlatforms(api, { kinds: [runpodKind, zstackKind] });
   const first = renderPage();
-  await screen.findByRole("button", { name: "Add Local Kubernetes cluster" });
+  await screen.findByRole("button", { name: "Add Kubernetes cluster" });
   const block = quickConnect();
   const tray = block.querySelector('[data-slot="container"]') as HTMLElement;
-  assert.deepEqual(within(tray).getAllByRole("button").map((button) => button.getAttribute("aria-label")), ["Add RunPod", "Add ZStack Cloud", "Add Local Kubernetes cluster"], "every card is in the tray");
+  assert.deepEqual(within(tray).getAllByRole("button").map((button) => button.getAttribute("aria-label")), ["Add RunPod", "Add ZStack Cloud", "Add Kubernetes cluster"], "every card is in the tray");
   assert.equal(block.querySelectorAll('[data-slot="container"]').length, 1);
   first.unmount();
 
   // The kind schema could not be read. A viewer has nothing to pick: no tray is drawn around nothing.
   servePlatforms(api, { kinds: new Error("schema unavailable"), admin: false });
   const second = renderPage();
-  assert.ok(await screen.findByText("Provider schema was not loaded"));
+  assert.ok(await screen.findByText("The external platform types could not be loaded"));
   await settled();
   assert.equal(quickConnect().querySelectorAll('[data-slot="container"]').length, 0);
   assert.equal(within(quickConnect()).queryAllByRole("button").length, 0);
   second.unmount();
 
-  // An administrator can still connect a cluster on its own: the tray holds that one card.
+  // The platform types come with the kinds: without them an administrator is offered no card either, the cluster's included.
   servePlatforms(api, { kinds: new Error("schema unavailable") });
   renderPage();
-  const add = await screen.findByRole("button", { name: "Add Local Kubernetes cluster" });
-  assert.ok(screen.getByText("Provider schema was not loaded"));
-  assert.ok(quickConnect().querySelector('[data-slot="container"]')?.contains(add));
-  assert.deepEqual(within(quickConnect()).getAllByRole("button").map((button) => button.getAttribute("aria-label")), ["Add Local Kubernetes cluster"]);
+  assert.ok(await screen.findByText("The external platform types could not be loaded"));
+  await settled();
+  assert.equal(within(quickConnect()).queryAllByRole("button").length, 0);
 });
 
 test("public and private clouds share one list, each with its platform type, and sync together", async () => {
@@ -255,7 +254,7 @@ test("an invalid account shows in the summary and raises the warning above the l
   assert.equal(add.querySelector("img")?.getAttribute("src"), "/provider-logos/zstack.svg");
 });
 
-test("an administrator gets a last card for a local Kubernetes cluster; it opens the add dialog on Kubernetes, where the cluster is connected and joins the list behind it", async () => {
+test("an administrator gets a last card for a Kubernetes cluster; it opens the add dialog on Kubernetes, where the cluster is connected and joins the list behind it", async () => {
   const server = servePlatforms(api, { providers: [account(1, "Pods", "runpod")], kinds: [runpodKind] });
   const created: unknown[] = [];
   Object.assign(api, {
@@ -268,10 +267,10 @@ test("an administrator gets a last card for a local Kubernetes cluster; it opens
   });
   const { user } = renderPage();
 
-  const add = await screen.findByRole("button", { name: "Add Local Kubernetes cluster" });
+  const add = await screen.findByRole("button", { name: "Add Kubernetes cluster" });
   const cards = screen.getAllByRole("button", { name: /^Add (?!External Platform)/ });
   assert.ok(cards.at(-1) === add, "after the vendors");
-  assert.equal(add.textContent, "Local Kubernetes cluster", "its mark is an icon, not an initial");
+  assert.equal(add.textContent, "Kubernetes cluster", "its mark is an icon, not an initial");
   assert.deepEqual(tags(cardOf(add)), ["Kubernetes"]);
   assert.equal(within(cardOf(add)).queryAllByRole("link").length, 0, "no vendor, no site");
   assert.equal(screen.queryAllByRole("dialog").length, 0);
@@ -279,7 +278,7 @@ test("an administrator gets a last card for a local Kubernetes cluster; it opens
   await user.click(add);
   // The same dialog that adds an account, opened on Kubernetes: the cluster's form, not a vendor's credentials.
   const dialog = await screen.findByRole("dialog", { name: "Add External Platform" });
-  assert.equal(chosenType(dialog), "Local Kubernetes cluster");
+  assert.equal(chosenType(dialog), "Kubernetes cluster");
   assert.equal(within(dialog).queryAllByRole("combobox", { name: "External platform" }).length, 0, "a cluster has no vendor to choose");
   const form = within(dialog);
   await user.type(await form.findByLabelText(field(k.drawer.name)), "edge");
@@ -311,31 +310,42 @@ test("a card of a vendor opens the add dialog on that vendor, not on Kubernetes"
   assert.ok(within(dialog).getByRole("button", { name: "Add" }));
 });
 
-test("a viewer has no card for a local Kubernetes cluster and is not offered Kubernetes in the add dialog: connecting one makes an enrollment token", async () => {
+test("a viewer has no card for a Kubernetes cluster and is not offered Kubernetes in the add dialog: connecting one makes an enrollment token", async () => {
   servePlatforms(api, { kinds: [runpodKind], admin: false });
   const { user } = renderPage();
   await screen.findByRole("button", { name: "Add RunPod" });
   await settled();
-  assert.equal(screen.queryAllByRole("button", { name: "Add Local Kubernetes cluster" }).length, 0);
-  assert.equal(screen.queryAllByText("Local Kubernetes cluster").length, 0);
+  assert.equal(screen.queryAllByRole("button", { name: "Add Kubernetes cluster" }).length, 0);
+  assert.equal(screen.queryAllByText("Kubernetes cluster").length, 0);
 
   await user.click(screen.getByRole("button", { name: "Add External Platform" }));
   await screen.findByRole("dialog", { name: "Add External Platform" });
-  assert.deepEqual(await choice.types(), ["Public cloud"], "no Local Kubernetes cluster tab");
+  assert.deepEqual(await choice.types(), ["Public cloud"], "no Kubernetes cluster tab");
   assert.deepEqual(await choice.choices(user), ["RunPod"]);
 });
 
 test("the add dialog offers an administrator Kubernetes after the vendors", async () => {
   servePlatforms(api, { kinds: [runpodKind] });
   const { user } = renderPage();
-  await screen.findByRole("button", { name: "Add Local Kubernetes cluster" });
+  await screen.findByRole("button", { name: "Add Kubernetes cluster" });
   await user.click(screen.getByRole("button", { name: "Add External Platform" }));
   const dialog = await screen.findByRole("dialog", { name: "Add External Platform" });
   await waitFor(() => assert.equal(chosenPlatform(dialog), "RunPod", "opened from the header it starts on the first vendor"));
-  assert.deepEqual(await choice.types(), ["Public cloud", "Local Kubernetes cluster"]);
+  assert.deepEqual(await choice.types(), ["Public cloud", "Kubernetes cluster"]);
   assert.equal(chosenType(dialog), "Public cloud");
   // That tab is the cluster form, the same the last card opens.
-  await choice.pickType(user, "Local Kubernetes cluster");
+  await choice.pickType(user, "Kubernetes cluster");
   assert.ok(await within(dialog).findByRole("button", { name: k.drawer.submit }));
   assert.equal(within(dialog).queryAllByRole("combobox", { name: "External platform" }).length, 0);
+});
+
+test("the cluster card is the server's cluster category: without one an administrator has no card for it and no Kubernetes tab", async () => {
+  servePlatforms(api, { kinds: [runpodKind], categories: [{ id: "public_cloud", kinds: ["runpod"] }] });
+  const { user } = renderPage();
+  await screen.findByRole("button", { name: "Add RunPod" });
+  await settled();
+  assert.deepEqual(within(quickConnect()).getAllByRole("button").map((button) => button.getAttribute("aria-label")), ["Add RunPod"]);
+  await user.click(screen.getByRole("button", { name: "Add External Platform" }));
+  await screen.findByRole("dialog", { name: "Add External Platform" });
+  assert.deepEqual(await choice.types(), ["Public cloud"]);
 });

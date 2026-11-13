@@ -5,6 +5,7 @@ import React from "react";
 import { I18nextProvider } from "react-i18next";
 import "./helpers/dom.ts";
 import { describedBy, field } from "./helpers/platformDialog.ts";
+import { kindCategories } from "./helpers/platformFixtures.ts";
 
 // A ZStack account in the Add / Edit External Platform dialog
 // (ui/src/components/ProviderConfigModal.tsx), through the real client: the
@@ -52,7 +53,7 @@ for (const language of ["en", "zh"] as const) {
       requests.push(JSON.parse(String(init?.body)));
       return new Response('{"id":1,"kind":"zstack","name":"cloud"}', { status: 201 });
     };
-    render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="zstack" kindInfos={kindInfos} providerLabel="ZStack" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
+    render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="zstack" kindInfos={kindInfos} categories={kindCategories(kindInfos)} providerLabel="ZStack" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
     await waitFor(() => assert.equal(input("endpoint")?.value, endpointTemplate));
     // What the vendor's version must be is a notice at the head of the form, not a refusal.
     assert.deepEqual(within(screen.getByRole("dialog")).getAllByRole("status").map((notice) => notice.textContent), [language === "zh" ? "需要 ZStack Cloud 5.4.2 或更高版本。" : "Requires ZStack Cloud 5.4.2 or later."]);
@@ -105,7 +106,7 @@ for (const language of ["en", "zh"] as const) {
         ? new Response(JSON.stringify({ code, error: "English server fallback" }), { status: 400 })
         : new Response('{"id":1,"kind":"zstack","name":"cloud"}', { status: 201 });
     };
-    render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="zstack" kindInfos={kindInfos} providerLabel="ZStack" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
+    render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="zstack" kindInfos={kindInfos} categories={kindCategories(kindInfos)} providerLabel="ZStack" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
     await waitFor(() => assert.ok(input("endpoint")));
     for (const [name, value] of Object.entries({ name: "cloud", endpoint: "http://cloud.example.test:8080/zstack", public_key: "entered-ak", private_key: "entered-sk" })) {
       fireEvent.change(input(name as keyof typeof LABELS), { target: { value } });
@@ -143,7 +144,7 @@ for (const language of ["en", "zh"] as const) {
 
 test("language changes keep the English template and preserve a replaced address", async () => {
   await i18n.changeLanguage("en");
-  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="zstack" kindInfos={kindInfos} providerLabel="ZStack" onClose={() => {}} onSaved={() => {}} /></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open defaultKind="zstack" kindInfos={kindInfos} categories={kindCategories(kindInfos)} providerLabel="ZStack" onClose={() => {}} onSaved={() => {}} /></I18nextProvider>);
   await waitFor(() => assert.equal(input("endpoint")?.value, endpointTemplate));
   await act(async () => { await i18n.changeLanguage("zh"); });
   assert.equal(input("endpoint").value, endpointTemplate);
@@ -168,7 +169,7 @@ test("ZStack editing loads and submits the saved endpoint without applying the c
     return new Response('{"id":1,"kind":"zstack","name":"cloud"}');
   };
   const provider = { id: 1, kind: "zstack", name: "cloud", category: "private_cloud" as const, state: "valid", instance_count: 0, resources: [{ type: "host" as const }], node_count: 0, created_at: "", updated_at: "" };
-  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open provider={provider} kindInfos={kindInfos} providerLabel="ZStack" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><ProviderConfigModal open provider={provider} kindInfos={kindInfos} categories={kindCategories(kindInfos)} providerLabel="ZStack" onClose={() => {}} onSaved={() => { saved++; }} /></I18nextProvider>);
   await waitFor(() => assert.equal(input("endpoint")?.value, endpoint));
   assert.equal(input("private_key").value, "");
   assert.ok(within(screen.getByRole("dialog")).getByText("Requires ZStack Cloud 5.4.2 or later."), "an edit states the requirement of the account's kind too");

@@ -1,7 +1,7 @@
 {
   "column": {"namespace": "Namespace", "cardReturn": "Card return", "createdAt": "Created"},
   "clusterUid": {
-    "notEnrolled": "Not connected yet",
+    "notEnrolled": "Not connected yet", "stalled": "Not connected for long",
     "notEnrolledHint": "No node has joined from this cluster yet.",
     "troubleshoot": "Troubleshoot"
   },

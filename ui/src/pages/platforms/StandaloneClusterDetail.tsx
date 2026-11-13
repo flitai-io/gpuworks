@@ -10,7 +10,7 @@ import FactList from "./FactList";
 import { joinedText } from "./joinedText";
 
 /**
- * A local Kubernetes cluster (connected on its own, not from a cloud
+ * A Kubernetes cluster connected on its own (not from a cloud
  * account), under its row: how it was connected and what it selects, laid out
  * flat as "label value" pairs, then, until a node has joined, the command that
  * connects it.

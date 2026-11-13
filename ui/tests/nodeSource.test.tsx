@@ -188,6 +188,22 @@ test("a node added by hand says so; one that joined through an external platform
   assert.ok(container.getByText("RunPod · Container"));
 });
 
+// The server could not read where this node came from (dto.Node source_unknown): it has no source, yet was not added by hand.
+const unread: Node = { ...node("lost-1"), source_unknown: true };
+
+for (const [language, copy] of [["en", { unread: "Source could not be read", manual: "Added by hand", title: "Source" }], ["zh", { unread: "来源读取失败", manual: "手动添加", title: "来源" }]] as const) {
+  test(`in ${language} a node whose source the server could not read says so, not that it was added by hand, and links nowhere`, async () => {
+    stubApi([byHand, unread, instance]);
+    renderAt("/nodes", language);
+    const cell = await sourceCell("lost-1", copy.title);
+    assert.ok(cell.getByText(copy.unread));
+    assert.equal(cell.queryAllByText(copy.manual).length, 0);
+    assert.equal(cell.queryAllByRole("link").length, 0, "no platform to open");
+    // A node added by hand, which the server sends without the flag, still says so.
+    assert.ok((await sourceCell("by-hand", copy.title)).getByText(copy.manual));
+  });
+}
+
 test("a source that lacks a name, a resource or a known kind still shows what is known", async () => {
   stubApi([
     // The account is no longer listed, so it has no name: the vendor stands in for it.
@@ -301,22 +317,14 @@ for (const [what, path, name, nodes] of landings) {
   });
 }
 
-test("values of no known form in the address are dropped and the well-formed ones kept; an address of only such values opens the whole list", async () => {
+test("source values the console does not know are sent as written, beside the well-formed ones, and the server's refusal names the one it refused; nothing is listed as if unfiltered", async () => {
   stubApi();
-  renderAt("/nodes?source=provider:abc,manual,provider:0,cluster:,nonsense,%20provider:5%20,manual");
-  await screen.findByRole("button", { name: "pod-1" });
-  // The fake server refuses a malformed value as the real one does, so listing at all means none was sent.
-  assert.deepEqual(asked(), queries.map(() => ["manual", "provider:5"]));
-  assert.deepEqual(listed(), ["by-hand", "pod-1"]);
-  assert.deepEqual(chips(), ["Source: Added by hand, pods"]);
-  await act(async () => { cleanup(); });
-
-  stubApi();
-  renderAt("/nodes?source=platform:3,provider:-1");
-  await screen.findByRole("button", { name: "by-hand" });
-  assert.deepEqual(queries.map((query) => query.extra?.source !== undefined), queries.map(() => false));
-  assert.deepEqual(listed(), everyNode);
-  assert.deepEqual(chips(), []);
+  renderAt("/nodes?source=provider:abc,%20manual%20,manual,,nonsense");
+  // The fake server refuses a malformed value with 400 as the real one does: the console does not judge the values itself.
+  assert.ok((await screen.findByRole("alert")).textContent?.includes('unknown source filter "provider:abc"'));
+  assert.deepEqual(asked(), queries.map(() => ["provider:abc", "manual", "nonsense"]), "each once, without its spaces, the empty one left out");
+  assert.equal(screen.queryAllByRole("button", { name: "by-hand" }).length, 0, "the whole fleet is not shown in place of the refused filter");
+  assert.ok(screen.getByRole("button", { name: "Retry" }));
 });
 
 test("a source the address names but no node came from is still offered, as the chosen source, says the list is filtered, and unticking it brings the fleet back", async () => {
@@ -386,16 +394,16 @@ test("the node-list address of an account or a cluster names it as one source va
   assert.deepEqual(read(kubeClusterNodesPath("u-1&source=manual")), ["cluster:u-1&source=manual"]);
 });
 
-test("only the nodes added by hand, an account by a positive id and a cluster by a name are sources; each is read once, without the spaces around it", () => {
+test("the address's sources are read as written, each once, without the spaces around it and without empty ones; which are valid is the server's to say", () => {
   const read = (search: string) => nodeSourcesOf(new URLSearchParams(search));
   assert.deepEqual(read(""), []);
   assert.deepEqual(read("source="), []);
+  assert.deepEqual(read("source=%20,,"), [], "spaces and empty values are no source");
   assert.deepEqual(read("source=cluster:u-1,manual,provider:12"), ["cluster:u-1", "manual", "provider:12"], "in the order asked");
   assert.deepEqual(read("source=manual,provider:3,manual,provider:3"), ["manual", "provider:3"]);
   assert.deepEqual(read("source=%20manual%20,%20provider:7"), ["manual", "provider:7"]);
-  for (const value of ["provider:0", "provider:-1", "provider:1.5", "provider:abc", "provider:", "cluster:", "platform:3", "Manual", "3"]) {
-    assert.deepEqual(read(`source=${value}`), [], `${value} is no source`);
-  }
+  // Values of no form the console knows go to the server, which refuses them by name, rather than being dropped unseen.
+  assert.deepEqual(read("source=provider:0,provider:-1,provider:abc,cluster:,platform:3,Manual,3"), ["provider:0", "provider:-1", "provider:abc", "cluster:", "platform:3", "Manual", "3"]);
 });
 
 test("a source that names neither an account nor a cluster opens the external platforms list itself", () => {

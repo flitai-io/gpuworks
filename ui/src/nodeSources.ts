@@ -23,9 +23,7 @@ export function platformPath(row: { provider_id?: number; cluster_uuid?: string 
   return row.cluster_uuid ? `/providers?open=k${row.cluster_uuid}` : "/providers";
 }
 
-const SOURCE_VALUE = /^(manual|provider:[1-9]\d*|cluster:\S+)$/;
-
-/** The sources a node list address asks for (?source=a,b). A value of no known form is dropped rather than sent: the server would refuse the whole list. */
+/** The sources a node list address asks for (?source=a,b), as written: which values are valid is the server's to say (it answers 400 with the value it refused). */
 export function nodeSourcesOf(params: URLSearchParams): string[] {
-  return [...new Set((params.get("source") ?? "").split(",").map((value) => value.trim()).filter((value) => SOURCE_VALUE.test(value)))];
+  return [...new Set((params.get("source") ?? "").split(",").map((value) => value.trim()).filter(Boolean))];
 }

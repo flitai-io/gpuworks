@@ -272,6 +272,8 @@ export interface Node {
   system_labels?: SystemLabel[];
   /** The external platform the node joined through; absent for a node added by hand. */
   source?: NodeSource;
+  /** Where the node came from could not be read: no source without the node having been added by hand. */
+  source_unknown?: boolean;
   // The address the node's agent reaches the server from: its address on the
   // management network.
   management_address?: string;
@@ -1098,6 +1100,11 @@ export interface KubeCluster {
   remove_commands?: string[];
   /** No node joined for longer than the dictionary's stalled_after_seconds: worth troubleshooting. */
   stalled: boolean;
+  /** Where the entry stands, the one value the console shows and filters by. */
+  state: KubeClusterState;
+  /** The platform type the entry is listed under when connected on its own, and what it connects. */
+  category: string;
+  resources: KindResource[];
   /** The cloud node pools a cloud entry holds, ascending; empty for an entry made by hand. */
   pool_ids: string[];
   /** Other entries that use this namespace and may be of the same cluster (server-computed). */
@@ -2659,10 +2666,31 @@ export interface ProviderKindInfo {
   category: ProviderCategory | "";
 }
 
+/** Where a cluster entry stands: revoked, stalled (no node joined for too long), pending (no node yet) or active. */
+export type KubeClusterState = "revoked" | "stalled" | "pending" | "active";
+
+/** A platform type as the platform choice offers it (GET /providers/kinds categories), in order. */
+export interface ProviderCategoryInfo {
+  id: string;
+  /** What the type connects, for a type that is no vendor's (Kubernetes). */
+  resources?: KindResource[];
+  /** Added as a Kubernetes cluster entry, with the cluster form, not as an account. */
+  kube_cluster?: boolean;
+  /** The kinds filed under the type, in the order of items. */
+  kinds: string[];
+}
+
+/** GET /providers/kinds: the kinds an account can be added for, and the platform types to offer them under. */
+export interface ProviderKindList extends List<ProviderKindInfo> {
+  categories: ProviderCategoryInfo[];
+}
+
 /** A managed Kubernetes cluster of a cloud account (dto.ProviderCluster), listed live. */
 export interface ProviderCluster {
   external_id: string;
   name: string;
+  /** The cluster runs, has GPU node pools and no entry yet, so an entry can be made from it. */
+  connectable: boolean;
   region: string;
   version: string;
   /** The vendor's product the cluster is (ack_managed, doks…) and its name; absent when the driver cannot tell. */
@@ -5327,7 +5355,7 @@ export const api = {
   kubeClusterOperation: (uuid: string, op: "apply" | "remove", dryRun: boolean) => kubeClusterOperation(uuid, op, dryRun),
   providerClusters: (id: number) => getJSON<List<ProviderCluster>>(`/api/v1/providers/${id}/clusters`),
 
-  providerKinds: () => getJSON<List<ProviderKindInfo>>("/api/v1/providers/kinds"),
+  providerKinds: () => getJSON<ProviderKindList>("/api/v1/providers/kinds"),
   providers: () => getJSON<List<CloudProvider>>("/api/v1/providers"),
   provider: (id: number) => getJSON<ProviderEditConfig>(`/api/v1/providers/${id}`),
   addProvider: (body: {

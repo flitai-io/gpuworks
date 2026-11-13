@@ -59,9 +59,8 @@ export default function ClusterGroup({ cluster, entry, unread = false, colSpan, 
   else if (cluster?.entry) status = <Badge status="success">{t("clusters.connected")}</Badge>;
   else if (cluster && !cluster.running) status = <Badge status="neutral">{cluster.state}</Badge>;
   else status = <Badge status="neutral">{t("table.state.pending")}</Badge>;
-  // A running cluster with GPU node pools and no entry yet can be connected.
-  // Connecting makes an enrollment token, which only an administrator may.
-  const connectable = admin && !!cluster && !cluster.entry && cluster.running && cluster.gpu_pools.length > 0;
+  // Whether an entry can be made from the cluster is the server's word; making one takes an administrator.
+  const connectable = admin && !!cluster?.connectable;
 
   // The GPU node pools: those the entry holds once connected, all of the cluster's until then.
   let pools: ReactNode;

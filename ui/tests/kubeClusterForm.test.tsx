@@ -14,7 +14,7 @@ import React from "react";
 import { createI18n, dom } from "./helpers/dom.ts";
 import { I18nextProvider } from "react-i18next";
 import { describedBy, field, footerButtons as buttonsIn, freshPopupFramesPerTest } from "./helpers/platformDialog.ts";
-import { APPLY_COMMAND as APPLY, kubeEntry as cluster } from "./helpers/platformFixtures.ts";
+import { APPLY_COMMAND as APPLY, KUBERNETES_CATEGORY, kubeEntry as cluster } from "./helpers/platformFixtures.ts";
 import { poolPicker } from "./helpers/poolPicker.ts";
 
 const { i18n, locale } = await createI18n(["kubernetes", "providers"]);
@@ -67,7 +67,7 @@ function Harness({ seen, language }: { seen: { closed: number; created: number; 
   const [open, setOpen] = React.useState(true);
   return (
     <I18nextProvider i18n={language}>
-      <ProviderConfigModal open={open} defaultKind="kubernetes" kindInfos={[]} providerLabel={language.t("platforms.label", { ns: "providers" })} canConnectCluster
+      <ProviderConfigModal open={open} defaultKind="kubernetes" kindInfos={[]} categories={[KUBERNETES_CATEGORY]} providerLabel={language.t("platforms.label", { ns: "providers" })} canConnectCluster
         onClose={() => { seen.closed += 1; setOpen(false); }} onSaved={() => { seen.saved += 1; }} onClusterCreated={() => { seen.created += 1; }} />
     </I18nextProvider>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   api,
   usePolling,
@@ -6,6 +6,7 @@ import {
   type KindResource,
   type KubeCluster,
   type List,
+  type ProviderCategoryInfo,
   type ProviderKindInfo,
 } from "../api";
 import PageHeader from "../components/PageHeader";
@@ -16,9 +17,8 @@ import { Button } from "../components/ui/button";
 import { Container } from "../components/ui/container";
 import { Tooltip } from "../components/ui/tooltip";
 import { useIsAdmin } from "../components/useIsAdmin";
-import { ConfirmPopover } from "../ui-kit/ConfirmPopover";
 import { ConsoleIcon } from "../ui-kit/consoleIcons";
-import { message } from "../ui-kit/feedback";
+import { confirm, message } from "../ui-kit/feedback";
 import { Notice } from "../ui-kit/Notice";
 import { formatTime } from "../i18n/datetime";
 import { useTranslation } from "react-i18next";
@@ -33,13 +33,13 @@ import KubeNamespaceShared from "./kubernetes/KubeNamespaceShared";
 import { PlatformResourceBadges, resourceTypeLabel } from "./platforms/PlatformResourceBadge";
 import ProviderKindLogo from "./platforms/ProviderKindLogo";
 import ProviderResources from "./platforms/ProviderResources";
+import RowActions from "./platforms/RowActions";
 import StandaloneClusterDetail from "./platforms/StandaloneClusterDetail";
 import {
-  KUBERNETES_KIND, platformRows, providerRowKey, rowCategory, rowKind, rowName, rowNodeCount, rowResources, rowState, rowUpdatedAt,
+  platformRows, providerRowKey, rowCategory, rowKind, rowName, rowNodeCount, rowResources, rowState, rowUpdatedAt,
   type PlatformRow,
 } from "./platforms/platformRows";
 
-const KUBERNETES_RESOURCES: KindResource[] = [{ type: "kubernetes" }];
 const PROVIDER_STATES: Record<string, "success" | "danger"> = { valid: "success", invalid: "danger" };
 
 // One list for everything that hands machines over: the accounts of cloud
@@ -77,13 +77,19 @@ export default function CloudProvidersPage() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [instanceRefreshVersion, setInstanceRefreshVersion] = useState(0);
   const [kindInfos, setKindInfos] = useState<ProviderKindInfo[]>([]);
+  const [categories, setCategories] = useState<ProviderCategoryInfo[]>([]);
+  // The platform type a cluster connected on its own is added as, as the server offers it.
+  const clusterCategory = categories.find((category) => category.kube_cluster);
 
   useEffect(() => {
     api
       .providerKinds()
-      .then((infos) => setKindInfos(infos.items))
-      .catch(() => setKindInfos([]));
+      .then((infos) => { setKindInfos(infos.items); setCategories(infos.categories ?? []); })
+      .catch(() => { setKindInfos([]); setCategories([]); });
   }, []);
+  const kindInfoOf = (kind: string) => kindInfos.find((info) => info.kind === kind);
+  // An account is synced when its kind lists instances; a kind the server does not say otherwise of can be.
+  const canSync = (kind: string) => kindInfoOf(kind)?.capabilities.can_list_instances !== false;
 
   const openAdd = (kind?: string) => {
     setEditingProvider(null);
@@ -118,10 +124,7 @@ export default function CloudProvidersPage() {
   };
 
   const doSyncAll = async () => {
-    const providers = data.filter((provider) => {
-      const kindInfo = kindInfos.find((kind) => kind.kind === provider.kind);
-      return kindInfo?.capabilities.can_list_instances !== false;
-    });
+    const providers = data.filter((provider) => canSync(provider.kind));
     if (providers.length === 0) return;
     setSyncingAll(true);
     try {
@@ -154,19 +157,15 @@ export default function CloudProvidersPage() {
   };
   // The latest of the accounts' syncs, beside the button that syncs them all.
   const lastSynced = data.reduce<string | undefined>((latest, provider) => provider.synced_at && (!latest || provider.synced_at > latest) ? provider.synced_at : latest, undefined);
-  const syncableCount = data.filter((provider) => {
-    const kindInfo = kindInfos.find((kind) => kind.kind === provider.kind);
-    return kindInfo?.capabilities.can_list_instances !== false;
-  }).length;
+  const syncableCount = data.filter((provider) => canSync(provider.kind)).length;
 
-  const kindLabel = (kind: string) => providerKindLabel(t, kind, kindInfos.find((info) => info.kind === kind)?.label, language);
+  const kindLabel = (kind: string) => providerKindLabel(t, kind, kindInfoOf(kind)?.label, language);
   // No rows, no choices: a filter appears with the first platform. A filter the address opened is offered even before a row has it.
   const present = (values: string[], opened: string | null) => [...new Set([...values.filter(Boolean), ...(opened ? [opened] : [])])];
   const kindsPresent = present(rows.map(rowKind), null);
   const categoriesPresent = present(rows.map(rowCategory), openedCategory);
   const resourcesPresent = present(rows.flatMap((row) => rowResources(row).map((resource) => resource.type)), openedResource);
   const statesPresent = present(rows.map(rowState), null);
-  const withTip = (label: string, button: ReactElement) => <Tooltip content={label}><span className="inline-flex">{button}</span></Tooltip>;
   const deleteProvider = async (provider: CloudProvider) => {
     try {
       await api.deleteProvider(provider.id);
@@ -175,6 +174,24 @@ export default function CloudProvidersPage() {
     } catch (e) {
       message.error(t("message.deleteFailed", { detail: (e as Error).message }));
     }
+  };
+  // Deleting an account says what becomes of what came through it: nothing in the cloud is released, and the
+  // clusters connected from it stay as entries made by hand (the server keeps them so, see DELETE /providers/{id}).
+  const confirmDelete = (provider: CloudProvider) => {
+    const fromIt = (clusters.data?.items ?? []).filter((cluster) => cluster.source?.provider_id === provider.id).length;
+    confirm({
+      title: t("table.deleteConfirm", { name: provider.name }),
+      okText: t("table.delete"),
+      cancelText: t("table.cancel"),
+      okButtonProps: { danger: true },
+      content: (
+        <div className="flex flex-col gap-2">
+          <p className="m-0 text-fg-muted">{t("table.deleteConsequence")}</p>
+          {fromIt > 0 && <p className="m-0 text-fg-muted">{t("table.deleteClusterConsequence", { count: fromIt })}</p>}
+        </div>
+      ),
+      onOk: () => deleteProvider(provider),
+    });
   };
   const columns: ResourceColumn<PlatformRow>[] = [
     // The name is the row's name and nothing else: editing is the pencil in the row's actions. A local cluster that may
@@ -191,7 +208,8 @@ export default function CloudProvidersPage() {
       width: 132,
       filters: kindsPresent.length ? kindsPresent.map((kind) => ({ value: kind, text: kindLabel(kind) })) : undefined,
       onFilter: (value, row) => rowKind(row) === value,
-      render: (_: unknown, row: PlatformRow) => <Badge color="blue">{kindLabel(rowKind(row))}</Badge>,
+      // A cluster connected on its own is no vendor's; the vendor filter is the accounts'.
+      render: (_: unknown, row: PlatformRow) => rowKind(row) ? <Badge color="blue">{kindLabel(rowKind(row))}</Badge> : "—",
     },
     {
       key: "category",
@@ -251,27 +269,13 @@ export default function CloudProvidersPage() {
       render: (_: unknown, row: PlatformRow) => {
         if (row.type === "cluster") return isAdmin ? <KubeEntryActions cluster={row.cluster} onChanged={() => void clusters.refetch()} /> : null;
         const p = row.provider;
-        const kindInfo = kindInfos.find((k) => k.kind === p.kind);
-        const syncable = kindInfo?.capabilities.can_list_instances !== false;
+        const syncable = canSync(p.kind);
         return (
-          <div className="flex items-center gap-0.5">
-            {withTip(t("table.edit"), (
-              <Button variant="ghost" size="sm" iconOnly aria-label={t("table.edit")} onClick={() => openEdit(p)}><ConsoleIcon.edit size={16} /></Button>
-            ))}
-            {withTip(syncable ? t("table.sync") : t("table.comingSoon"), (
-              <Button variant="ghost" size="sm" iconOnly aria-label={t("table.sync")} disabled={!syncable} loading={syncing === p.id} onClick={() => void doSync(p.id)}><ConsoleIcon.refresh size={16} /></Button>
-            ))}
-            {withTip(t("table.delete"), (
-              <ConfirmPopover
-                destructive
-                title={t("table.deleteConfirm")}
-                confirmText={t("table.delete")}
-                cancelText={t("table.cancel")}
-                onConfirm={() => deleteProvider(p)}
-                trigger={<Button variant="ghost" size="sm" iconOnly className="text-fg-danger hover:text-fg-danger" aria-label={t("table.delete")}><ConsoleIcon.delete size={16} /></Button>}
-              />
-            ))}
-          </div>
+          <RowActions label={p.name} actions={[
+            { key: "edit", label: t("table.edit"), icon: ConsoleIcon.edit, common: true, onSelect: () => openEdit(p) },
+            { key: "sync", label: t("table.sync"), icon: ConsoleIcon.refresh, common: true, disabled: !syncable, hint: syncable ? undefined : t("table.comingSoon"), loading: syncing === p.id, onSelect: () => void doSync(p.id) },
+            { key: "delete", label: t("table.delete"), icon: ConsoleIcon.delete, danger: true, onSelect: () => confirmDelete(p) },
+          ]} />
         );
       },
     },
@@ -320,12 +324,12 @@ export default function CloudProvidersPage() {
         {kindInfos.length === 0 && !error && (
           <div className="mb-3"><Notice tone="info" title={t("page.schemaMissing")} children={t("page.schemaMissingDescription")} /></div>
         )}
-        {(kindInfos.length > 0 || isAdmin) && (
+        {(kindInfos.length > 0 || (isAdmin && clusterCategory)) && (
           <Container className="rounded-2xl">
             <div className="provider-kind-grid">
               {kindInfos.map((kind) => kindCard(kind.kind, providerKindLabel(t, kind.kind, kind.label, language), kind.resources ?? [], () => openAdd(kind.kind), kind.homepage))}
               {/* Connecting a cluster makes an enrollment token, which only an administrator may. */}
-              {isAdmin && kindCard(KUBERNETES_KIND, t("page.otherKubernetes"), KUBERNETES_RESOURCES, () => openAdd(KUBERNETES_KIND))}
+              {isAdmin && clusterCategory && kindCard(clusterCategory.id, t("page.otherKubernetes"), clusterCategory.resources ?? [], () => openAdd(clusterCategory.id))}
             </div>
           </Container>
         )}
@@ -365,6 +369,7 @@ export default function CloudProvidersPage() {
             // The list keeps itself current; syncing is what brings the vendors' side in. A failed read can still be retried.
             onRefresh={error ? refetchAll : undefined}
             emptyDescription={t("platforms.empty")}
+            filteredEmptyDescription={t("platforms.filteredEmpty")}
             emptyKind="data"
             toolbar={
               <div className="flex flex-wrap items-center gap-2 text-body text-fg-muted">
@@ -379,13 +384,13 @@ export default function CloudProvidersPage() {
                 : (
                   <ProviderResources
                     provider={row.provider}
-                    kindInfo={kindInfos.find((k) => k.kind === row.provider.kind)}
+                    kindInfo={kindInfoOf(row.provider.kind)}
                     refreshKey={`${row.provider.updated_at}:${instanceRefreshVersion}`}
                     entries={entries}
                     onEntriesChanged={refetchAll}
                     admin={isAdmin}
                     focusCluster={row.key === openedRow ? openedCluster : null}
-                    onSync={kindInfos.find((k) => k.kind === row.provider.kind)?.capabilities.can_list_instances !== false ? () => void doSync(row.provider.id) : undefined}
+                    onSync={canSync(row.provider.kind) ? () => void doSync(row.provider.id) : undefined}
                     syncing={syncing === row.provider.id}
                   />
                 ),
@@ -399,6 +404,7 @@ export default function CloudProvidersPage() {
         provider={editingProvider}
         defaultKind={defaultKind}
         kindInfos={kindInfos}
+        categories={categories}
         providerLabel={t("platforms.label")}
         onClose={closeModal}
         onSaved={(added) => {
@@ -408,7 +414,7 @@ export default function CloudProvidersPage() {
           // A new account opens on what it holds: its row is expanded, and its instances are listed by a first sync
           // (its clusters are read when the row opens). Everything is then connected from there, one by one.
           setSearchParams({ open: providerRowKey(added.id) }, { replace: true });
-          if (kindInfos.find((info) => info.kind === added.kind)?.capabilities.can_list_instances !== false) void doSync(added.id);
+          if (canSync(added.kind)) void doSync(added.id);
         }}
         // Kubernetes is offered among the platforms to whoever may make an enrollment token.
         canConnectCluster={isAdmin}

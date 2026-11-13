@@ -1473,11 +1473,6 @@
       "translations": { "zh": "平台资源" }
     },
     {
-      "term_en": "Local Kubernetes Cluster",
-      "translations": { "zh": "本地 Kubernetes 集群" },
-      "forbidden": { "zh": ["其他 Kubernetes 集群"] }
-    },
-    {
       "term_en": "Node Source",
       "translations": { "zh": "节点来源" }
     },
@@ -1574,7 +1569,8 @@
     { "term_en": "Batch", "translations": { "zh": "批处理任务" } },
     {
       "term_en": "Kubernetes Cluster",
-      "translations": { "zh": "Kubernetes 集群" }
+      "translations": { "zh": "Kubernetes 集群" },
+      "forbidden": { "zh": ["本地 Kubernetes 集群", "其他 Kubernetes 集群"] }
     },
     {
       "term_en": "Enrollment Token",

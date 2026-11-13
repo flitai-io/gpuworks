@@ -1,7 +1,7 @@
 {
   "column": {"namespace": "命名空间", "cardReturn": "卡归还", "createdAt": "创建时间"},
   "clusterUid": {
-    "notEnrolled": "未接入",
+    "notEnrolled": "未接入", "stalled": "长时间未接入",
     "notEnrolledHint": "还没有节点从这个集群接入。",
     "troubleshoot": "排查"
   },

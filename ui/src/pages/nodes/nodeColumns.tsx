@@ -138,7 +138,7 @@ export function nodeColumns({ t, states, showCheckReason, sources, sourceOptions
       ],
       filterSearch: true,
       filteredValue: sources,
-      render: (_: unknown, node: Node) => <NodeSourceCell source={node.source} />,
+      render: (_: unknown, node: Node) => <NodeSourceCell source={node.source} unknown={node.source_unknown} />,
     },
     {
       key: "system_labels",

@@ -343,7 +343,7 @@ test("revoking an entry from its cluster's header reloads the page's two lists a
   let listings = 0;
   Object.assign(api, {
     providerClusters: async () => { listings += 1; return list([connectedCluster("c-gpu", "ack-gpu", "e-1")]); },
-    revokeKubeCluster: async (uuid: string) => { revoked.push(uuid); server.clusters = [{ ...joined, revoked: true, can_apply: false, operation_blocked: "revoked" }]; return server.clusters[0]; },
+    revokeKubeCluster: async (uuid: string) => { revoked.push(uuid); server.clusters = [{ ...joined, revoked: true, state: "revoked" as const, can_apply: false, operation_blocked: "revoked" }]; return server.clusters[0]; },
   });
   const u = user();
   renderPage("/providers?open=p3");

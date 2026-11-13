@@ -308,3 +308,65 @@ test("a client-side filter keeps applying while its column is hidden", async () 
   assert.ok(screen.getByRole("button", { name: "Clear filter: State Offline" }));
   assert.deepEqual(firstCells().sort(), ["node-01", "node-04"], "the listed filter still applies");
 });
+
+// Filtered down to nothing is not "no data": the empty row says the filters match nothing, in the owner's words when it
+// gives them, and offers to clear them; the owner's "no data" text and action are for a list with nothing in it.
+const onlineRows = rows.filter((row) => row.state === "online").slice(0, 4);
+/** The table's empty row: the one cell that spans the columns when no row is listed. */
+const emptyCell = () => {
+  const cells = screen.getAllByRole("row").slice(1).flatMap((row) => within(row).getAllByRole("cell"));
+  assert.equal(cells.length, 1, "no row is listed, only the empty one");
+  return cells[0];
+};
+const filterOffline = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole("button", { name: "Filter by State" }));
+  await user.click(await screen.findByRole("checkbox", { name: /Offline/ }));
+  await user.keyboard("{Escape}");
+};
+
+test("a filter that matches nothing says so instead of the list's empty text, and its Clear filters brings every row back", async () => {
+  const user = userEvent.setup();
+  renderTable({ data: onlineRows, emptyDescription: "No nodes yet", filteredEmptyDescription: "Nothing matches the filters", emptyAction: <button type="button">Add node</button> });
+  assert.equal(firstCells().length, 4);
+  await filterOffline(user);
+  await waitFor(() => assert.equal(within(emptyCell()).queryAllByText("Nothing matches the filters").length, 1));
+  const cell = emptyCell();
+  assert.equal(within(cell).queryAllByText("No nodes yet").length, 0, "the list is not empty, only filtered");
+  assert.equal(within(cell).queryAllByRole("button", { name: "Add node" }).length, 0, "nor is adding the way out");
+  assert.deepEqual(within(cell).getAllByRole("button").map((button) => button.textContent), ["Clear filters"]);
+
+  await user.click(within(cell).getByRole("button", { name: "Clear filters" }));
+  await waitFor(() => assert.equal(firstCells().length, 4, "every row is back"));
+  assert.equal(screen.queryByRole("group", { name: "Filtered" }), null, "and no filter is left in effect");
+});
+
+test("the owner names what matches nothing; a list that is empty unfiltered, or that names no filtered case, keeps its own text and action", async () => {
+  const user = userEvent.setup();
+  renderTable({ data: onlineRows, emptyDescription: "No nodes yet", filteredEmptyDescription: "No node matches the filters" });
+  await filterOffline(user);
+  await waitFor(() => assert.ok(within(emptyCell()).getByText("No node matches the filters")));
+  cleanup();
+
+  // A list that does not word the filtered case keeps its own text, which its owner may already word for filtering.
+  renderTable({ data: onlineRows, emptyDescription: "No nodes match the search" });
+  await filterOffline(user);
+  await waitFor(() => assert.ok(within(emptyCell()).getByText("No nodes match the search")));
+  assert.equal(within(emptyCell()).queryAllByRole("button", { name: "Clear filters" }).length, 0);
+  cleanup();
+
+  renderTable({ data: [], emptyDescription: "No nodes yet", filteredEmptyDescription: "No node matches the filters", emptyAction: <button type="button">Add node</button> });
+  assert.deepEqual(within(emptyCell()).getAllByRole("button").map((button) => button.textContent), ["Add node"]);
+  assert.ok(within(emptyCell()).getByText("No nodes yet"));
+  assert.equal(screen.queryAllByText("No node matches the filters").length, 0);
+});
+
+test("a list its owner filters says the filters match nothing, and Clear filters hands the owner no filter at all", async () => {
+  const seen: Array<Record<string, string[]>> = [];
+  const filtered = columns().map((column) => column.key === "state" ? { ...column, defaultFilteredValue: ["offline"] } : column);
+  renderTable({ data: [], columns: filtered, filteredEmptyDescription: "Nothing matches the filters", onFiltersChange: (filters) => seen.push(filters) });
+  const cell = emptyCell();
+  assert.ok(within(cell).getByText("Nothing matches the filters"));
+  await userEvent.setup().click(within(cell).getByRole("button", { name: "Clear filters" }));
+  await waitFor(() => assert.deepEqual(seen.at(-1), { state: [] }));
+  assert.equal(screen.queryByRole("group", { name: "Filtered" }), null);
+});

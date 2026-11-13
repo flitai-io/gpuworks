@@ -3,8 +3,8 @@ import { afterEach, test } from "node:test";
 import React from "react";
 import { I18nextProvider } from "react-i18next";
 import { createI18n, dom } from "./helpers/dom.ts";
-import { account, capabilities, runpodKind as runpod, servePlatforms, zstackKind as zstack } from "./helpers/platformFixtures.ts";
-import { field, freshPopupFramesPerTest } from "./helpers/platformDialog.ts";
+import { account, capabilities, cloudEntry, kubeEntry, runpodKind as runpod, servePlatforms, zstackKind as zstack } from "./helpers/platformFixtures.ts";
+import { field, footerButtons, freshPopupFramesPerTest } from "./helpers/platformDialog.ts";
 
 // The External Platforms page (ui/src/pages/CloudProvidersPage.tsx) as one
 // list of public and private clouds: its wording in both languages, its
@@ -13,7 +13,9 @@ import { field, freshPopupFramesPerTest } from "./helpers/platformDialog.ts";
 // follow the category the server sends with each platform, and the
 // ?category= address that opens it filtered.
 
-const languages = { en: (await createI18n(["providers"], "en")).i18n, zh: (await createI18n(["providers"], "zh")).i18n };
+const locales = { en: await createI18n(["providers"], "en"), zh: await createI18n(["providers"], "zh") };
+const languages = { en: locales.en.i18n, zh: locales.zh.i18n };
+const p = locales.en.locale.providers;
 const { MemoryRouter } = await import("react-router-dom");
 const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const { default: userEvent } = await import("@testing-library/user-event");
@@ -27,7 +29,16 @@ type ProviderKindInfo = import("../src/api.ts").ProviderKindInfo;
 
 const original = { ...api };
 await freshPopupFramesPerTest();
-afterEach(() => { message.destroy(); cleanup(); Object.assign(api, original); });
+// The confirmations are queued outside the tree: one a failing test leaves open would open in the next.
+afterEach(async () => {
+  for (let open = screen.queryByRole("dialog"); open; open = screen.queryByRole("dialog")) {
+    const cancel = within(open).queryAllByRole("button", { name: /^(Cancel|取消)$/ }).at(-1) as HTMLButtonElement | undefined;
+    if (!cancel || cancel.disabled) break;
+    cancel.click();
+    await waitFor(() => assert.notEqual(screen.queryByRole("dialog"), open));
+  }
+  message.destroy(); cleanup(); Object.assign(api, original);
+});
 
 // As the server answers: each platform carries the category, resources and node count of its kind.
 const pods = account(1, "Pods", "runpod", { instance_count: 1 });
@@ -47,8 +58,10 @@ function renderPage(language: keyof typeof languages = "en", address = "/provide
 const rowOf = (name: string) => screen.getAllByRole("row").find((row) => within(row).queryAllByRole("cell")[1]?.textContent === name) as HTMLElement;
 /** A row's action button, by its name. */
 const action = (name: string, label: string) => within(rowOf(name)).getByRole("button", { name: label }) as HTMLButtonElement;
-/** The delete confirmation: a small dialog beside the row's button, named by its question. */
-const confirmation = (question = "Delete this external platform?") => screen.findByRole("dialog", { name: question });
+/** The delete confirmation: a dialog named by its question, which names the account. */
+const confirmation = (name: string, language: keyof typeof languages = "en") => screen.findByRole("dialog", { name: languages[language].t("table.deleteConfirm", { ns: "providers", name }) });
+/** What the confirmation says below its question, paragraph by paragraph. */
+const consequences = (dialog: HTMLElement) => [...dialog.querySelectorAll("p")].map((paragraph) => paragraph.textContent);
 const noConfirmation = () => waitFor(() => assert.equal(screen.queryAllByRole("dialog").length, 0, "the confirmation closed"));
 /** The toasts on screen, as they read. */
 const toasts = () => [...screen.getByRole("list", { name: "Notices" }).children].map((toast) => toast.textContent);
@@ -59,8 +72,8 @@ const listed = () => screen.getAllByRole("row").slice(1).map((row) => within(row
 const emptyText = "No external platform yet. Pick one above to connect it.";
 
 const wording = {
-  en: { title: "External Platforms", count: "External platforms: 2", quick: "Quick Connect", connected: "Connected external platforms", add: "Add External Platform", remove: "Delete", cancel: "Cancel", confirm: "Delete this external platform?" },
-  zh: { title: "外部平台", count: "2 个外部平台", quick: "快速接入", connected: "已接入的外部平台", add: "添加外部平台", remove: "删除", cancel: "取消", confirm: "确认删除该外部平台？" },
+  en: { title: "External Platforms", count: "External platforms: 2", quick: "Quick Connect", connected: "Connected external platforms", add: "Add External Platform", remove: "Delete", cancel: "Cancel", confirm: "Delete external platform \"Pods\"?" },
+  zh: { title: "外部平台", count: "2 个外部平台", quick: "快速接入", connected: "已接入的外部平台", add: "添加外部平台", remove: "删除", cancel: "取消", confirm: "确认删除外部平台「Pods」？" },
 };
 for (const language of ["en", "zh"] as const) {
   test(`in ${language} the page, its delete confirmation and its add dialog speak of external platforms`, async () => {
@@ -78,8 +91,8 @@ for (const language of ["en", "zh"] as const) {
     assert.equal(document.querySelectorAll("section").length, 2);
 
     await user.click(screen.getAllByRole("button", { name: copy.remove })[0]);
-    const asking = await confirmation(copy.confirm);
-    assert.deepEqual(within(asking).getAllByRole("button").map((button) => button.textContent), [copy.cancel, copy.remove]);
+    const asking = await screen.findByRole("dialog", { name: copy.confirm });
+    assert.deepEqual(footerButtons(asking), [copy.cancel, copy.remove]);
     assert.deepEqual(deleted, [], "asking is not deleting");
     await user.click(within(asking).getByRole("button", { name: copy.cancel }));
     await noConfirmation();
@@ -177,7 +190,7 @@ test("when the kind schema cannot be loaded the platforms are still listed with 
   });
   const { user } = renderPage();
   await screen.findByText("Pods");
-  assert.ok(await screen.findByText("Provider schema was not loaded"));
+  assert.ok(await screen.findByText("The external platform types could not be loaded"));
 
   const column = screen.getAllByRole("columnheader").findIndex((header) => header.textContent === "Platform type");
   const rows = screen.getAllByRole("row").slice(1);
@@ -322,20 +335,20 @@ test("deleting asks first: Cancel and Escape delete nothing; confirming deletes 
   await screen.findByText("Hosts");
 
   await user.click(action("Hosts", "Delete"));
-  let asking = await confirmation();
-  assert.deepEqual(within(asking).getAllByRole("button").map((button) => button.textContent), ["Cancel", "Delete"]);
+  let asking = await confirmation("Hosts");
+  assert.deepEqual(footerButtons(asking), ["Cancel", "Delete"]);
   await user.click(within(asking).getByRole("button", { name: "Cancel" }));
   await noConfirmation();
 
   await user.click(action("Hosts", "Delete"));
-  await confirmation();
+  await confirmation("Hosts");
   await user.keyboard("{Escape}");
   await noConfirmation();
   assert.deepEqual(deleted, [], "neither Cancel nor Escape deletes");
   assert.deepEqual(listed(), ["Pods", "Hosts"]);
 
   await user.click(action("Hosts", "Delete"));
-  asking = await confirmation();
+  asking = await confirmation("Hosts");
   const before = { ...server.reads };
   await user.click(within(asking).getByRole("button", { name: "Delete" }));
   await waitFor(() => assert.deepEqual(deleted, [2], "the account of the row that was asked about"));
@@ -355,7 +368,7 @@ test("a refused delete says so with the server's reason, and the account stays l
   await screen.findByText("Pods");
   await user.click(action("Pods", "Delete"));
   const before = { ...server.reads };
-  await user.click(within(await confirmation()).getByRole("button", { name: "Delete" }));
+  await user.click(within(await confirmation("Pods")).getByRole("button", { name: "Delete" }));
   assert.equal((await screen.findByRole("alert")).textContent, "Delete failed: 2 nodes still joined through it");
   assert.deepEqual(listed(), ["Pods", "Hosts"]);
   assert.deepEqual(server.reads, before, "nothing changed, nothing is read again");
@@ -364,7 +377,7 @@ test("a refused delete says so with the server's reason, and the account stays l
   refuse = false;
   await noConfirmation();
   await user.click(action("Pods", "Delete"));
-  await user.click(within(await confirmation()).getByRole("button", { name: "Delete" }));
+  await user.click(within(await confirmation("Pods")).getByRole("button", { name: "Delete" }));
   await waitFor(() => assert.deepEqual(listed(), ["Hosts"]));
   assert.deepEqual(attempts, [1, 1]);
 });
@@ -377,7 +390,7 @@ test("while a delete is on its way its confirmation stays and cannot be sent twi
   const { user } = renderPage();
   await screen.findByText("Pods");
   await user.click(action("Pods", "Delete"));
-  const asking = await confirmation();
+  const asking = await confirmation("Pods");
   const confirm = within(asking).getByRole("button", { name: "Delete" }) as HTMLButtonElement;
   await user.click(confirm);
   await waitFor(() => assert.equal(confirm.disabled, true));
@@ -389,6 +402,57 @@ test("while a delete is on its way its confirmation stays and cannot be sent twi
   await act(async () => answer());
   await noConfirmation();
   assert.ok(await screen.findByText("Deleted"));
+});
+
+// Deleting an account says what becomes of what came through it: always that nothing in the cloud is released, and
+// when entries were made from its clusters (KubeCluster.source.provider_id), how many and what they become.
+test("deleting an account says nothing in the cloud is released; one clusters were connected from also says how many become clusters of their own; confirming deletes that account", async () => {
+  const ali = account(3, "ali-prod", "aliyun");
+  const fromAli = [cloudEntry(), cloudEntry({ id: 6, uuid: "e-6", name: "ack-lab", source: { provider_id: 3, provider_name: "ali-prod", provider_kind: "aliyun", cluster_id: "c-lab" } })];
+  // Neither is ali-prod's: one of another account, one made by hand.
+  const others = [cloudEntry({ id: 7, uuid: "e-7", name: "do-prod", source: { provider_id: 8, provider_name: "do", provider_kind: "digitalocean", cluster_id: "c-do" } }), kubeEntry()];
+  servePlatforms(api, { providers: [pods, ali], clusters: [...fromAli, ...others] });
+  const deleted: number[] = [];
+  Object.assign(api, { deleteProvider: async (id: number) => { deleted.push(id); } });
+  const { user } = renderPage();
+  await screen.findByText("prod-gpu");
+
+  await user.click(action("Pods", "Delete"));
+  let asking = await confirmation("Pods");
+  assert.deepEqual(consequences(asking), [p.table.deleteConsequence], "no cluster came through it");
+  await user.click(within(asking).getByRole("button", { name: "Cancel" }));
+  await noConfirmation();
+
+  await user.click(action("ali-prod", "Delete"));
+  asking = await confirmation("ali-prod");
+  assert.deepEqual(consequences(asking), [p.table.deleteConsequence, p.table.deleteClusterConsequence.replace("{{count}}", "2")]);
+  assert.deepEqual(deleted, [], "asking is not deleting");
+  await user.click(within(asking).getByRole("button", { name: "Delete" }));
+  await waitFor(() => assert.deepEqual(deleted, [3]));
+  await noConfirmation();
+});
+
+test("in zh the confirmation names the account and counts the clusters connected from it", async () => {
+  const ali = account(3, "ali-prod", "aliyun");
+  servePlatforms(api, { providers: [ali], clusters: [cloudEntry()] });
+  const { user } = renderPage("zh");
+  await screen.findByText("ali-prod");
+  await user.click(action("ali-prod", "删除"));
+  const asking = await screen.findByRole("dialog", { name: "确认删除外部平台「ali-prod」？" });
+  const zhp = locales.zh.locale.providers;
+  assert.deepEqual(consequences(asking), [zhp.table.deleteConsequence, zhp.table.deleteClusterConsequence.replace("{{count}}", "1")]);
+  assert.deepEqual(footerButtons(asking), ["取消", "删除"]);
+});
+
+test("filters that match no platform say so in place of the empty list, and Clear filters brings every platform back", async () => {
+  serve([pods, account(3, "More pods", "runpod")]);
+  const { user } = renderPage("en", "/providers?category=private_cloud");
+  await screen.findByRole("button", { name: "Add RunPod" });
+  assert.ok(await screen.findByText(p.platforms.filteredEmpty));
+  assert.equal(screen.queryAllByText(emptyText).length, 0, "the list is not empty, only filtered");
+  await user.click(screen.getByRole("button", { name: "Clear filters" }));
+  await waitFor(() => assert.deepEqual(listed(), ["Pods", "More pods"]));
+  assert.equal(screen.queryAllByText(p.platforms.filteredEmpty).length, 0);
 });
 
 const typeOptions = async () => {

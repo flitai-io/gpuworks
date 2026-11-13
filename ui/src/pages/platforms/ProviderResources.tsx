@@ -55,19 +55,24 @@ export default function ProviderResources({ provider, kindInfo, refreshKey, entr
 
   const resources = provider.resources ?? [];
   const instanceResources = resources.filter((resource) => resource.type !== "kubernetes");
-  // The account has clusters when its kind lists them. The kind schema says so, and so does the account's own row
-  // when the schema could not be loaded; an account that already holds entries always shows them.
-  const hasClusters = !!kindInfo?.can_list_clusters || resources.some((resource) => resource.type === "kubernetes")
+  // The account has clusters when the server says it connects them (its row's resources); an account that already
+  // holds entries always shows them.
+  const hasClusters = resources.some((resource) => resource.type === "kubernetes")
     || Object.values(entries).some((entry) => entry.source?.provider_id === provider.id);
   const clusters = useAccountClusters({ providerId: provider.id, providerName: provider.name, enabled: hasClusters, onChanged: onEntriesChanged });
 
+  // Only the latest read lands: one that answers after a newer one started, or after the row closed, is dropped.
+  const readRef = useRef(0);
   const load = () => {
-    setLoadError(null);
+    const read = ++readRef.current;
     api.providerInstances(provider.id)
-      .then((list) => setInstances(list.items))
-      .catch((error: Error) => { setInstances([]); setLoadError(error.message); });
+      .then((list) => { if (read !== readRef.current) return; setInstances(list.items); setLoadError(null); })
+      .catch((error: Error) => { if (read !== readRef.current) return; setInstances((current) => current ?? []); setLoadError(error.message); });
   };
-  useEffect(load, [provider.id, refreshKey]);
+  useEffect(() => {
+    load();
+    return () => { readRef.current++; };
+  }, [provider.id, refreshKey]);
   // A sync changes the refresh key: the clusters are read from the cloud again with it, so one sync brings both up to date.
   const firstKey = useRef(refreshKey);
   useEffect(() => {
