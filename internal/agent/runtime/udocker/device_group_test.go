@@ -45,7 +45,6 @@ func TestRootOnlyDeviceMatchesOnlyRootRootWithoutGroupOrOtherBits(t *testing.T) 
 type fakeDeviceHost struct {
 	nodes      map[string]deviceInfo
 	groups     map[string]string
-	nextGID    int
 	addCalls   int
 	lookups    int
 	addErr     error
