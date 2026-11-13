@@ -101,14 +101,14 @@ test("resource planning failures show their zero without counting untried nodes 
   noFit.eligible_nodes[13].reasons = [];
   noFit.candidates[13].reason = { code: "no_fit", params: { gpus: 1, tp: 1, pp: 1, gpu_count: 1, required_gib: 20, available_gib: 11 } } as never;
   await renderCard(noFit);
-  assert.ok(screen.getByText(/Hardware and scheduling conditions: 1/));
-  assert.ok(screen.getByText("Resource planning: 0 passed / 1 evaluated; 0 not evaluated"));
+  // The node funnel and the planning funnel are one line of facts.
+  assert.ok(screen.getByText(/^Cluster: 14 → .* → Hardware and scheduling conditions: 1 · Resource planning: 0 passed \/ 1 evaluated; 0 not evaluated$/));
   cleanup();
   const budget = structuredClone(evaluation);
   budget.eligible_nodes.forEach((node) => { node.eligible = true; node.requirements_match = true; node.reasons = []; });
   budget.candidates = budget.candidates.slice(0, 8).map((candidate) => ({ ...candidate, reason: { code: "no_fit", params: { gpus: 1, tp: 1, pp: 1, gpu_count: 1, required_gib: 20, available_gib: 11 } } as never }));
   await renderCard(budget);
-  assert.ok(screen.getByText("Resource planning: 0 passed / 8 evaluated; 6 not evaluated"));
+  assert.ok(screen.getByText(/ · Resource planning: 0 passed \/ 8 evaluated; 6 not evaluated$/));
   assert.equal(screen.queryByText("selected-turing", { selector: ".deploy-node-refusals strong" }), null);
   const { nodeConditionSummary } = await import("../src/pages/deploy/deployPlacementRefusal.ts");
   budget.candidates = [{ ...budget.candidates[0], ok: true }];

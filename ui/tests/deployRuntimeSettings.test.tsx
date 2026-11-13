@@ -83,7 +83,7 @@ await i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, fireEvent, render, screen, waitFor } =
+const { cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { Form } = await import("antd");
@@ -460,7 +460,7 @@ test("the start timeout field shows the cluster default and sends only a stated 
   assert.equal(field.placeholder, "1800", "the cluster default is the placeholder");
   assert.ok(
     screen.getByText(
-      deployLocale.containerOverrides.startTimeoutHelpDefault.replace("{{seconds}}", "1800"),
+      deployLocale.containerOverrides.startTimeoutEmptyDefault.replace("{{seconds}}", "1800"),
     ),
   );
   assert.equal(
@@ -522,9 +522,21 @@ test("the /dev/shm field shows the engine default and sends only a stated size",
   assert.equal(shm.placeholder, "16", "the engine default is the placeholder");
   assert.ok(
     screen.getByText(
-      deployLocale.containerOverrides.shmHelpDefault.replace("{{size}}", "16"),
+      deployLocale.containerOverrides.shmEmptyDefault.replace("{{size}}", "16"),
     ),
   );
+  // What /dev/shm is and how the CPU memory tier adds to it sits behind the
+  // help mark beside that line, not on the page.
+  assert.equal(screen.queryByText(deployLocale.containerOverrides.shmHelp), null);
+  const shmLine = screen.getByText(
+    deployLocale.containerOverrides.shmEmptyDefault.replace("{{size}}", "16"),
+  );
+  await user.hover(within(shmLine).getByRole("button", { name: commonLocale.helpTip.label }));
+  assert.equal(
+    (await screen.findByRole("tooltip")).textContent,
+    deployLocale.containerOverrides.shmHelp,
+  );
+  await user.unhover(within(shmLine).getByRole("button", { name: commonLocale.helpTip.label }));
   assert.equal(
     buildPayload(form!.getFieldsValue(true)).payload.container_overrides,
     undefined,
@@ -595,12 +607,12 @@ test("the /dev/shm field shows the size the evaluated draft resolves to", async 
   assert.equal(shmField().placeholder, "35", "the resolved size, not the default");
   assert.ok(
     screen.getByText(
-      deployLocale.containerOverrides.shmHelpResolved.replace("{{size}}", "35"),
+      deployLocale.containerOverrides.shmEmptyResolved.replace("{{size}}", "35"),
     ),
   );
   assert.equal(
     screen.queryByText(
-      deployLocale.containerOverrides.shmHelpDefault.replace("{{size}}", "16"),
+      deployLocale.containerOverrides.shmEmptyDefault.replace("{{size}}", "16"),
     ),
     null,
     "the 16 GiB default is not what an empty field gets",
@@ -613,7 +625,7 @@ test("the /dev/shm field shows the size the evaluated draft resolves to", async 
   await user.tab();
   assert.ok(
     screen.getByText(
-      deployLocale.containerOverrides.shmHelpDefault.replace("{{size}}", "16"),
+      deployLocale.containerOverrides.shmEmptyDefault.replace("{{size}}", "16"),
     ),
   );
   cleanup();
@@ -636,7 +648,7 @@ test("the /dev/shm field shows the size the evaluated draft resolves to", async 
   assert.equal(shmField().placeholder, "16");
   assert.ok(
     screen.getByText(
-      deployLocale.containerOverrides.shmHelpDefault.replace("{{size}}", "16"),
+      deployLocale.containerOverrides.shmEmptyDefault.replace("{{size}}", "16"),
     ),
   );
 });

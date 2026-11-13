@@ -8,6 +8,7 @@ import ModelDiskRegistrationLink from "./ModelDiskRegistrationLink";
 import EvictionSuggestionAlert from "./EvictionSuggestion";
 import { APIError } from "../../apiError";
 import DeployDiagnostics from "./DeployDiagnostics";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 export default function DeployStepSummary({
   result,
@@ -66,7 +67,7 @@ export default function DeployStepSummary({
     <Alert
       type="info"
       showIcon
-      message={t("catalog.replicaEstimate", { count: replicas })}
+      message={<span className="inline-flex items-center gap-1">{t("catalog.replicaEstimate", { count: replicas })}<HelpTip content={t("catalog.replicaEstimateHelp")} /></span>}
     />
   ) : warnings.length > 0 ? (
     <Typography.Text type="warning">{t("summary.risk")}</Typography.Text>
