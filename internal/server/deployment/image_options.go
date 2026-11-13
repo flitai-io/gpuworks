@@ -32,8 +32,9 @@ func deploymentImageTargetForGPU(engine, targetVendor string, node *store.Node, 
 		family, _, vendor = gpuEngineTarget(node, *gpu)
 	}
 	target.Vendor = vendor
-	// The card family lets the catalog skip a runner image built for another
-	// chip (an A3 build on a 910B node); a node without it excludes nothing.
+	// The card family lets the catalog rank a runner image built for the
+	// node's chip first and one for another chip (an A3 build on a 910B
+	// node) last; a node without it orders nothing.
 	target.ChipFamily = family
 	target.PlatformArch = node.Arch
 	target.PlatformOS = "linux"

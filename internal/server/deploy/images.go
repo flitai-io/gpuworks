@@ -182,12 +182,9 @@ func ResolveImageCatalog(t ImageTarget, candidates []ImageCandidate) ImageResolu
 }
 
 // ImageCandidateSelectable reports whether an enabled catalog image may be
-// offered for the target. Engine, framework, the vendor the framework implies,
-// host architecture and chip family decide it. The chip family only removes an
-// image built for a different known family (an A3 image on a 910B node); a
-// generic image, an unknown node family or an unknown image family never does,
-// so a new probe that reports an unfamiliar GPU identity does not remove a
-// manual choice.
+// offered for the target. Engine, framework, the vendor the framework implies
+// and host architecture decide it; the chip family only orders the automatic
+// pick (chipFamilyWeight), so every image stays a manual choice.
 func ImageCandidateSelectable(t ImageTarget, candidate ImageCandidate) bool {
 	return imageCandidateEligible(t, candidate)
 }
@@ -241,7 +238,8 @@ func candidateCompatible(t ImageTarget, candidate ImageCandidate) bool {
 
 // catalogCompatibility reports whether a candidate satisfies the hard runtime
 // constraints, and its ordering weight. The only weight inputs are the declared
-// framework and the driver compatibility of its framework version: every other
+// framework, the driver compatibility of its framework version and the chip
+// family the image is built for (chipFamilyWeight): every other
 // dimension (vendor labels, official source, arch specificity, engine-version
 // pinning) was either derivable from the framework or never set by a caller,
 // and their hidden bonuses made the automatic pick flip when one call site
@@ -270,16 +268,15 @@ func catalogCompatibility(t ImageTarget, targetVendor string, candidate ImageCan
 			score -= 4
 		}
 	}
-	return true, score
+	return true, score + chipFamilyWeight(candidate.ChipFamily, t.ChipFamily)
 }
 
 // imagePlatformCompatible checks binary execution facts independently of
 // engine/framework advice. Catalog Metal artifacts are macOS host environment
-// packages; the other known accelerator frameworks ship Linux containers. A
-// family-specific image is likewise tied to its chip family.
+// packages; the other known accelerator frameworks ship Linux containers.
 // Unknown frameworks and unset target facts cannot prove a mismatch.
 func imagePlatformCompatible(t ImageTarget, candidate ImageCandidate) bool {
-	if !archMatches(candidate.Arch, t.PlatformArch) || !chipFamilyMatches(candidate.ChipFamily, t.ChipFamily) {
+	if !archMatches(candidate.Arch, t.PlatformArch) {
 		return false
 	}
 	os := ""
@@ -292,15 +289,22 @@ func imagePlatformCompatible(t ImageTarget, candidate ImageCandidate) bool {
 	return os == "" || normalizeKey(t.PlatformOS) == "" || os == normalizeKey(t.PlatformOS)
 }
 
-// chipFamilyMatches reports whether an image built for one chip family can run
-// on a card of the other. The kernels of a family-specific image (the 910B and
-// A3 builds of vllm-ascend) do not run on another family's cards, so a mismatch
-// of two known families is an execution fact like the host architecture. When
-// either side is unknown nothing is proven.
-func chipFamilyMatches(candidate, target string) bool {
+// chipFamilyWeight orders images built for a chip family (the 910B and A3
+// builds of vllm-ascend): one built for the node's own family first, a generic
+// one next, and one built for another known family last, below a driver
+// warning. It only orders: no image is removed, so a manual choice of any of
+// them stands. When either family is unknown nothing is weighed.
+func chipFamilyWeight(candidate, target string) int {
 	candidate = normalizeKey(candidate)
 	target = normalizeKey(target)
-	return candidate == "" || target == "" || candidate == target
+	switch {
+	case candidate == "" || target == "":
+		return 0
+	case candidate == target:
+		return 5
+	default:
+		return -40
+	}
 }
 
 func archMatches(candidate, platform string) bool {

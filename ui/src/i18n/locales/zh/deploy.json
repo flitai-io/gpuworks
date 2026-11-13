@@ -100,7 +100,7 @@
     "W9": "W9：encoder-decoder 模型会由引擎强制关闭分块预填充与前缀缓存。",
     "W10": "W10：当前有 {{cpu_cores}} 个 CPU 物理核，API server、DP 和 GPU 工作线程至少需要 {{required_cores}} 个。",
     "MODEL_NOT_FOUND": "未找到所选模型。",
-    "IMAGE_OVERRIDE_INCOMPATIBLE": "手动指定的镜像 {{image}} 与当前节点的厂商、框架、芯片型号、操作系统或主机架构不兼容，请更换镜像或节点。",
+    "IMAGE_OVERRIDE_INCOMPATIBLE": "手动指定的镜像 {{image}} 与当前节点的厂商、框架、操作系统或主机架构不兼容，请更换镜像或节点。",
     "IMAGE_ENGINE_DEFAULT_INCOMPATIBLE": "当前引擎默认镜像 {{image}} 仅适用于 NVIDIA CUDA 节点，与所选节点不兼容，请更换镜像或节点。",
     "IMAGE_OVERRIDE_UNVERIFIED": "手动指定的镜像 {{image}} 未收录在镜像目录中，无法自动验证与当前节点的兼容性。",
     "COMPUTE_NETWORK_FALLBACK": "所选节点中有的在参数网络上，但不全在同一个参数网络上，因此本部署将走管理网。如需避免，请让所有节点加载同一个参数网络，或在这些节点上关闭管理网可承担参数同步。",
