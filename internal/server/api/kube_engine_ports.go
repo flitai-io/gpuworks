@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -25,7 +26,8 @@ func (a *apiHandlers) kubeEnginePortsWarnings(entry store.KubeCluster, skip map[
 	out := []messages.Warning{}
 	rng, err := proto.ParsePortRange(entry.EnginePorts)
 	if err != nil {
-		return out, nil
+		// kubeValid accepted the range before this runs.
+		return nil, fmt.Errorf("engine_ports %q: %w", entry.EnginePorts, err)
 	}
 	held, err := a.d.Store.KubeClusterInstancePorts(entry.ID)
 	if err != nil {
