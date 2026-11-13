@@ -397,6 +397,7 @@ Add a non-root runtime user to the groups that own accelerator device nodes so t
 
 - Detect local accelerators, determine the device nodes to inject using the same rules as deployment, and identify the owning groups that the user lacks. If no devices require authorization or the user already has read/write permissions, only print an explanation and exit successfully.
 - If groups must be added, run as root and execute `usermod -aG <group> <user>`. Restart the agent for the changes to take effect.
+- Device nodes owned by root:root that grant the group and others no access at all (some Ascend hosts ship `davinci_manager`, `devmm_svm` and `hisi_hdc` as `root:root 0600`) are first handed to the system group `gpuworks-runtime` (created when missing) with group read/write, and the user is then added to that group. Nodes that already have an owning group or any group/other permission keep the host's settings. Device nodes regain their original modes after a reboot or driver reload: an agent running as root repeats this step before every workload start, while a non-root agent needs this command again after a reboot.
 - Applies only to the runveil (`udocker`) driver. The node installation script automatically calls `grant-device-access --state <state> --user udocker --create-user` when running as non-root with available `sudo` and `--driver udocker`.
 
 ## gpuworks-agent bench

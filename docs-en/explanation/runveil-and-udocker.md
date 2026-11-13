@@ -86,6 +86,8 @@ and runs workloads under that account. In the following two cases, workloads run
 
 A non-root agent runs workloads as itself. Use `gpuworks-agent grant-device-access` to grant the required permissions on accelerator device nodes.
 
+An agent running as root gives the dedicated account access to device nodes through supplementary groups. Device nodes that only root can reach on the host (`root:root` with no group or other permission) have no usable owning group, so before every workload start the agent hands them to the system group `gpuworks-runtime` with group read/write, and the workload reaches them through that group; all other nodes keep the host's settings.
+
 ## Workloads with Many Threads
 
 PRoot is a single-threaded ptrace tracer: this one process handles every traced system call from every thread in the container. These are path-related system calls;

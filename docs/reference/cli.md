@@ -397,6 +397,7 @@ gpuworks-agent doctor --connectivity --state /opt/gpuworks --json
 
 - 探测本机加速卡，按与部署相同的规则算出要注入的设备节点，找出该用户缺少的属组；没有需要授权的设备、或已有读写权限时只打印说明并成功退出。
 - 需要补组时必须以 root 运行，执行 `usermod -aG <组> <用户>`；改动后需要重启 agent 才会生效。
+- 属主和属组都是 root、且组和其他用户都没有任何权限的设备节点（部分昇腾宿主机的 `davinci_manager`、`devmm_svm`、`hisi_hdc` 就是 `root:root 0600`），先交给系统组 `gpuworks-runtime`（不存在时创建）并加上组读写，再把用户加进该组。已有属组或已开放组/其他权限的节点保持宿主机原样。设备节点在重启或驱动重载后恢复原权限：以 root 运行的 agent 每次启动工作负载前都会重新执行这一步，非 root 的 agent 需要重启后再执行一次本命令。
 - 只作用于 runveil（`udocker`）驱动。节点安装脚本在「非 root + 可用 `sudo` + `--driver udocker`」时会自动调用 `grant-device-access --state <state> --user udocker --create-user`。
 
 ## gpuworks-agent bench

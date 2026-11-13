@@ -505,7 +505,7 @@ func TestRequiredDeviceGroupsUsesDeviceOwnershipWithoutVendorNames(t *testing.T)
 		}
 		return &user.Group{Gid: gid, Name: "accelerator-access"}, nil
 	}
-	groups, devices, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true}, stat, lookup)
+	groups, devices, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true}, stat, lookup, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +522,7 @@ func TestRequiredDeviceGroupsHonorsExistingSupplementaryMembership(t *testing.T)
 	stat := func(string) (os.FileInfo, error) {
 		return deviceInfo{name: "accelerator0", mode: os.ModeDevice | 0o660, stat: &syscall.Stat_t{Uid: 0, Gid: 1234}}, nil
 	}
-	groups, devices, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true, 1234: true}, stat, user.LookupGroupId)
+	groups, devices, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true, 1234: true}, stat, user.LookupGroupId, false)
 	if err != nil {
 		t.Fatal(err)
 	}
