@@ -117,6 +117,9 @@ func prepareHost(root, stateDir, binDir, socket, nerdctlPath string) (hostTools,
 		return hostTools{}, err
 	}
 	nerdctlCopy := filepath.Join(toolDir, "nerdctl")
+	if isScript(nerdctlPath) {
+		return hostTools{}, fmt.Errorf("install nerdctl for the node: %s is a script, not nerdctl", nerdctlPath)
+	}
 	if err := copyIfChanged(nerdctlPath, nerdctlCopy); err != nil {
 		return hostTools{}, fmt.Errorf("install nerdctl for the node: %w", err)
 	}
@@ -143,6 +146,36 @@ func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''
 
 // copyIfChanged copies src to dst unless dst already holds the same bytes
 // (a busy binary cannot be rewritten in place, so a new one is renamed in).
+// imageNerdctl finds the agent image's own nerdctl on path, skipping
+// wrapperDir: an agent restarted in its pod (an in-place upgrade) finds the
+// wrapper prepareHost wrote there first on PATH, and copying that over the
+// node's nerdctl made the wrapper exec itself forever.
+func imageNerdctl(path, wrapperDir string) (string, error) {
+	for _, dir := range filepath.SplitList(path) {
+		if dir == "" || filepath.Clean(dir) == filepath.Clean(wrapperDir) {
+			continue
+		}
+		candidate := filepath.Join(dir, "nerdctl")
+		if fi, err := os.Stat(candidate); err == nil && !fi.IsDir() && fi.Mode()&0o111 != 0 && !isScript(candidate) {
+			return candidate, nil
+		}
+	}
+	return "", exec.ErrNotFound
+}
+
+// isScript reports whether a file starts with "#!": a wrapper, not the
+// nerdctl binary itself.
+func isScript(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	head := make([]byte, 2)
+	n, _ := io.ReadFull(f, head)
+	return n == 2 && string(head) == "#!"
+}
+
 func copyIfChanged(src, dst string) error {
 	want, err := os.ReadFile(src)
 	if err != nil {

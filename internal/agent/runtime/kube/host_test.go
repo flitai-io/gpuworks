@@ -189,3 +189,45 @@ func TestShimSocket(t *testing.T) {
 		t.Fatalf("layout = %+v, %v", l, err)
 	}
 }
+
+// An agent restarted in its pod (an in-place upgrade) finds the wrapper
+// prepareHost wrote first on PATH. Taking it for the image's nerdctl copied
+// the wrapper over the node's nerdctl, which then exec'd itself forever.
+func TestARestartedAgentKeepsTheImagesNerdctl(t *testing.T) {
+	root := hostTree(t, map[string]string{"/run/k3s/containerd/containerd.sock": ""})
+	state, bin, image := t.TempDir(), t.TempDir(), t.TempDir()
+	nerdctl := filepath.Join(image, "nerdctl")
+	if err := os.WriteFile(nerdctl, []byte("\x7fELF nerdctl"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := bin + string(os.PathListSeparator) + image
+	first, err := imageNerdctl(path, bin)
+	if err != nil || first != nerdctl {
+		t.Fatalf("first start found %q, %v", first, err)
+	}
+	if _, err := prepareHost(root, state, bin, "", first); err != nil {
+		t.Fatal(err)
+	}
+	// The restart: the wrapper now sits first on PATH.
+	again, err := imageNerdctl(path, bin)
+	if err != nil || again != nerdctl {
+		t.Fatalf("restart found %q, %v; want the image's nerdctl", again, err)
+	}
+	if _, err := prepareHost(root, state, bin, "", filepath.Join(bin, "nerdctl")); err == nil {
+		t.Fatal("prepareHost copied the wrapper as nerdctl")
+	}
+	// A node the bug already broke is repaired on the next start.
+	copyPath := filepath.Join(state, "kube-tools", "nerdctl")
+	if err := os.WriteFile(copyPath, []byte("#!/bin/sh\nexec nsenter -- "+copyPath+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepareHost(root, state, bin, "", again); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(copyPath); string(got) != "\x7fELF nerdctl" {
+		t.Fatalf("node nerdctl after repair = %q", got)
+	}
+	if _, err := imageNerdctl(bin, bin); err == nil {
+		t.Fatal("only the wrapper on PATH was taken for nerdctl")
+	}
+}
