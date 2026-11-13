@@ -171,3 +171,53 @@ func TestNVIDIAProbeFindsTheHostsNvidiaSmi(t *testing.T) {
 		t.Fatal("the host's nvidia-smi was not found and run")
 	}
 }
+
+func symlinkUnder(t *testing.T, root, link, target string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(root, link)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, link)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Through /proc/1/root an absolute link anywhere in a path would point into
+// the agent's own file system; every component is resolved on the host.
+func TestHostReadsFollowLinksInTheMiddleOfAPath(t *testing.T) {
+	root := withHostRoot(t, "opt/rocm-7.2.0/.info/version", "run/cdi/a.json", "usr/lib/libx.so")
+	if err := os.WriteFile(filepath.Join(root, "opt/rocm-7.2.0/.info/version"), []byte("7.2.0-43\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// /opt/rocm -> /etc/alternatives/rocm -> /opt/rocm-7.2.0, as the ROCm
+	// packages lay it out; /var/run -> /run as on Ubuntu; a relative link.
+	symlinkUnder(t, root, "opt/rocm", "/etc/alternatives/rocm")
+	symlinkUnder(t, root, "etc/alternatives/rocm", "/opt/rocm-7.2.0")
+	symlinkUnder(t, root, "var/run", "/run")
+	symlinkUnder(t, root, "lib", "usr/lib")
+	symlinkUnder(t, root, "run/xdrdrv", "/dev/null")
+	if raw, err := readTool("/opt/rocm/.info/version"); err != nil || string(raw) != "7.2.0-43\n" {
+		t.Fatalf("readTool through two absolute links = %q, %v", raw, err)
+	}
+	if fi, err := statTool("/var/run/cdi/a.json"); err != nil || fi.IsDir() {
+		t.Fatalf("statTool under /var/run = %v, %v", fi, err)
+	}
+	if fi, err := statTool("/lib/libx.so"); err != nil || fi.IsDir() {
+		t.Fatalf("statTool through a relative link = %v, %v", fi, err)
+	}
+	if got := globTool("/var/run/cdi/*.json"); len(got) != 1 || got[0] != "/var/run/cdi/a.json" {
+		t.Fatalf("globTool under /var/run = %v", got)
+	}
+	// lstatTool resolves the directories but not the last link.
+	if fi, err := lstatTool("/var/run/xdrdrv"); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("lstatTool of a link behind /var/run = %v, %v", fi, err)
+	}
+	if _, err := readTool("/opt/rocm/.info/missing"); err == nil {
+		t.Fatal("a missing file read as present")
+	}
+	symlinkUnder(t, root, "loop/a", "/loop/b")
+	symlinkUnder(t, root, "loop/b", "/loop/a")
+	if _, err := readTool("/loop/a/x"); err == nil {
+		t.Fatal("a link loop resolved")
+	}
+}

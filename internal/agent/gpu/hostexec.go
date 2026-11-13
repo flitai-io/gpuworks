@@ -94,7 +94,11 @@ func statTool(path string) (os.FileInfo, error) {
 // /dev/xdrdrv), or read a node's own mode and device number, uses it.
 func lstatTool(path string) (os.FileInfo, error) {
 	if cliOnHost.Load() {
-		return os.Lstat(filepath.Join(hostRoot, path))
+		dir, err := resolveDirUnderRoot("", filepath.Dir(path))
+		if err != nil {
+			return nil, err
+		}
+		return os.Lstat(filepath.Join(hostRoot, dir, filepath.Base(path)))
 	}
 	return os.Lstat(path)
 }
@@ -105,12 +109,32 @@ func globTool(pattern string) []string {
 		matches, _ := filepath.Glob(pattern)
 		return matches
 	}
-	matches, _ := filepath.Glob(filepath.Join(hostRoot, pattern))
+	// The directories before the first wildcard may be links (resolved on
+	// the host); the matches are reported under the pattern's own prefix.
+	prefix, rest := globPrefix(pattern)
+	resolved, err := resolveDirUnderRoot("", prefix)
+	if err != nil {
+		return nil
+	}
+	matches, _ := filepath.Glob(filepath.Join(hostRoot, resolved, rest))
+	base := filepath.Join(strings.TrimSuffix(hostRoot, "/"), resolved)
 	out := make([]string, 0, len(matches))
 	for _, m := range matches {
-		out = append(out, strings.TrimPrefix(m, strings.TrimSuffix(hostRoot, "/")))
+		out = append(out, filepath.Join(prefix, strings.TrimPrefix(m, base)))
 	}
 	return out
+}
+
+// globPrefix splits a pattern into the directory before its first wildcard
+// and the rest.
+func globPrefix(pattern string) (string, string) {
+	i := strings.IndexAny(pattern, "*?[")
+	if i < 0 {
+		return filepath.Dir(pattern), filepath.Base(pattern)
+	}
+	dir := filepath.Dir(pattern[:i+1])
+	rel, _ := filepath.Rel(dir, pattern)
+	return dir, rel
 }
 
 // readTool reads a file a probe needs (a version file, an install marker),
@@ -119,7 +143,11 @@ func readTool(path string) ([]byte, error) {
 	if !cliOnHost.Load() {
 		return os.ReadFile(path)
 	}
-	return os.ReadFile(filepath.Join(hostRoot, path))
+	resolved, _, err := resolveUnderRoot("", path)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(filepath.Join(hostRoot, resolved))
 }
 
 // statOnHost stats a host path, following its symbolic links on the host:
@@ -146,6 +174,11 @@ func resolveOnHost(path string) (string, os.FileInfo, error) {
 // against root, exactly as a process chrooted (or nsentered and chrooted)
 // there would see it, not against the host's real root.
 func resolveUnderRoot(root, path string) (string, os.FileInfo, error) {
+	dir, err := resolveDirUnderRoot(root, filepath.Dir(filepath.Clean(path)))
+	if err != nil {
+		return path, nil, err
+	}
+	path = filepath.Join(dir, filepath.Base(path))
 	for i := 0; i < 16; i++ {
 		fi, err := os.Lstat(filepath.Join(hostRoot, root, path))
 		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
@@ -158,9 +191,53 @@ func resolveUnderRoot(root, path string) (string, os.FileInfo, error) {
 		if !filepath.IsAbs(target) {
 			target = filepath.Join(filepath.Dir(path), target)
 		}
-		path = filepath.Clean(target)
+		if dir, err = resolveDirUnderRoot(root, filepath.Dir(filepath.Clean(target))); err != nil {
+			return path, nil, err
+		}
+		path = filepath.Join(dir, filepath.Base(target))
 	}
 	return path, nil, &os.PathError{Op: "stat", Path: path, Err: errors.New("too many levels of symbolic links")}
+}
+
+// resolveDirUnderRoot resolves every link among a directory path's
+// components under root, as resolveUnderRoot does for its last one:
+// through /proc/1/root an absolute link in the middle of a path (Ubuntu's
+// /var/run -> /run, /opt/rocm -> /etc/alternatives/rocm) would otherwise
+// point into the agent's own file system.
+func resolveDirUnderRoot(root, dir string) (string, error) {
+	dir = filepath.Clean("/" + dir)
+	out := "/"
+	parts := strings.Split(strings.TrimPrefix(dir, "/"), "/")
+	for hops := 0; len(parts) > 0; {
+		part := parts[0]
+		parts = parts[1:]
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." {
+			out = filepath.Dir(out)
+			continue
+		}
+		next := filepath.Join(out, part)
+		fi, err := os.Lstat(filepath.Join(hostRoot, root, next))
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			// A missing component is left for the caller's own stat to report.
+			out = next
+			continue
+		}
+		if hops++; hops > 40 {
+			return dir, &os.PathError{Op: "stat", Path: dir, Err: errors.New("too many levels of symbolic links")}
+		}
+		target, err := os.Readlink(filepath.Join(hostRoot, root, next))
+		if err != nil {
+			return dir, err
+		}
+		if filepath.IsAbs(target) {
+			out = "/"
+		}
+		parts = append(strings.Split(strings.Trim(target, "/"), "/"), parts...)
+	}
+	return out, nil
 }
 
 // cliCommand builds the command for a vendor CLI, on the host when CLIs run
