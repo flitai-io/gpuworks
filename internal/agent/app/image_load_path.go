@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,17 +26,14 @@ func (n *NodeRuntime) rpcImageLoadPath(ctx context.Context, raw json.RawMessage)
 	if !filepath.IsAbs(p.ArchivePath) {
 		return nil, errors.New("archive_path must be an absolute file path on the target node")
 	}
-	info, err := os.Stat(p.ArchivePath)
-	if err != nil {
-		return nil, fmt.Errorf("read node image archive: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return nil, errors.New("archive_path must name a regular file, not a directory or device")
-	}
 	d := n.runtimeDriver()
 	loader, ok := d.(runtime.ImageFileLoader)
 	if !ok {
 		return nil, fmt.Errorf("runtime %s cannot load an image archive from a file", n.RuntimeDriverName())
+	}
+	size, err := runtime.CheckImageFile(ctx, loader, p.ArchivePath)
+	if err != nil {
+		return nil, fmt.Errorf("read node image archive: %w", err)
 	}
 	loadCtx := context.Background()
 	if ctx != nil {
@@ -63,7 +59,7 @@ func (n *NodeRuntime) rpcImageLoadPath(ctx context.Context, raw json.RawMessage)
 				case <-loadCtx.Done():
 					return
 				case <-ticker.C:
-					n.reportImageNode(proto.ImageNodeStatus{ImageRef: p.CanonicalRef, State: "syncing", TransferID: p.TransferID, SizeBytes: info.Size()})
+					n.reportImageNode(proto.ImageNodeStatus{ImageRef: p.CanonicalRef, State: "syncing", TransferID: p.TransferID, SizeBytes: size})
 				}
 			}
 		}()
@@ -71,7 +67,7 @@ func (n *NodeRuntime) rpcImageLoadPath(ctx context.Context, raw json.RawMessage)
 		defer n.imagePullMu.Unlock()
 		n.reportImageNode(proto.ImageNodeStatus{
 			ImageRef: p.CanonicalRef, State: "syncing", TransferID: p.TransferID,
-			SizeBytes: info.Size(), Message: "loading image archive from node file",
+			SizeBytes: size, Message: "loading image archive from node file",
 		})
 		status, err := loadImageArchive(loadCtx, d, imageArchiveLoad{
 			CanonicalRef: p.CanonicalRef,
@@ -90,10 +86,10 @@ func (n *NodeRuntime) rpcImageLoadPath(ctx context.Context, raw json.RawMessage)
 		if err != nil {
 			status = proto.ImageNodeStatus{ImageRef: p.CanonicalRef, State: "failed", Message: imageOperationError(loadCtx, err)}
 		} else {
-			status.TransferredBytes = info.Size()
+			status.TransferredBytes = size
 		}
 		status.TransferID = p.TransferID
-		status.SizeBytes = info.Size()
+		status.SizeBytes = size
 		close(stopHeartbeat)
 		<-heartbeatDone
 		n.reportImageNode(status)

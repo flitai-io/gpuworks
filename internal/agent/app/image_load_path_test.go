@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/agent/runtime/kube"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/recording"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/test/ocifixture"
 )
@@ -95,5 +97,86 @@ func TestImageLoadPathCancelledInQueueDoesNotLoad(t *testing.T) {
 	status := h.awaitTerminal(t)
 	if status.State != "failed" || !strings.Contains(status.Message, "cancel") || len(h.driver.LoadedPaths()) != 0 {
 		t.Fatalf("cancelled load = %+v, paths = %v", status, h.driver.LoadedPaths())
+	}
+}
+
+type kubeArchiveImages struct{ *recording.Driver }
+
+func (d *kubeArchiveImages) ExecPTY(context.Context, string, []string) ([]string, error) {
+	return nil, errors.New("not used by image import")
+}
+
+func TestImageLoadPathUsesKubernetesHostFilesystem(t *testing.T) {
+	for _, tc := range []struct {
+		name, hostKind string
+		podFile        bool
+	}{
+		{name: "archive outside pod mounts", hostKind: "file"},
+		{name: "same path holds different pod file", hostKind: "file", podFile: true},
+		{name: "pod file cannot substitute for missing host file", podFile: true},
+		{name: "pod file cannot substitute for host directory", hostKind: "directory", podFile: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newArchiveLoadHarness(t)
+			driver := kube.New(kube.Options{Images: &kubeArchiveImages{h.driver}})
+			node := NewNodeRuntime(h.node.log, driver, h.node.ModelsRoot())
+			node.send = h.node.send
+			h.node = node
+			path := filepath.Join(t.TempDir(), "node image.tar")
+			if tc.podFile {
+				if err := os.WriteFile(path, []byte("pod file"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			hostRoot := t.TempDir()
+			hostPath := filepath.Join(hostRoot, path)
+			original := []byte("archive on the host, outside the pod mounts")
+			if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			switch tc.hostKind {
+			case "file":
+				if err := os.WriteFile(hostPath, original, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(hostPath, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// Simulate the host mount namespace while retaining real stat results.
+			bin := t.TempDir()
+			t.Setenv("KUBE_TEST_HOST_ROOT", hostRoot)
+			script := `#!/bin/sh
+set -eu
+[ "$#" -eq 10 ] && [ "$1" = -t ] && [ "$2" = 1 ] && [ "$3" = -m ] && [ "$4" = -- ]
+[ "$5" = stat ] && [ "$6" = -L ] && [ "$7" = -c ] && [ "$8" = '%f %s' ] && [ "$9" = -- ]
+exec stat -L -c '%f %s' -- "$KUBE_TEST_HOST_ROOT${10}"
+`
+			if err := os.WriteFile(filepath.Join(bin, "nsenter"), []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			_, err := node.OnRPC(context.Background(), proto.RPCImageLoadPath, loadPathParams(path))
+			if tc.hostKind != "file" {
+				if err == nil || len(h.driver.LoadedPaths()) != 0 {
+					t.Fatalf("invalid host file accepted: err=%v paths=%v", err, h.driver.LoadedPaths())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("host archive rejected: %v", err)
+			}
+			status := h.awaitTerminal(t)
+			if status.State != "present" || status.SizeBytes != int64(len(original)) || status.TransferredBytes != status.SizeBytes {
+				t.Fatalf("host import status = %+v", status)
+			}
+			if paths := h.driver.LoadedPaths(); len(paths) != 1 || paths[0] != path {
+				t.Fatalf("runtime must receive the original host path: %v", paths)
+			}
+			if data, err := os.ReadFile(hostPath); err != nil || string(data) != string(original) {
+				t.Fatalf("host archive changed or removed: %v", err)
+			}
+		})
 	}
 }
