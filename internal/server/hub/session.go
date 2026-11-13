@@ -51,9 +51,12 @@ type Session struct {
 	reportMu sync.Mutex
 	submitMu sync.Mutex
 	reportQ  atomic.Pointer[reportQueue]
-	// Network saves coalesce independently from resource reconciliation.
-	networkSyncOnce   sync.Once
-	networkSyncNotify chan struct{}
+	// Pushes a change asks for coalesce on the session's own workers
+	// (sync_worker.go): the network policy, independently from resource
+	// reconciliation (network_sync.go), and the full desired state a
+	// fleet-wide change asks for (node_resync.go).
+	networkSync syncWorker
+	resync      syncWorker
 	// kubeSettingsMu orders the read and send of kube.settings (kube_settings.go).
 	kubeSettingsMu sync.Mutex
 	// kubeSettingsSent is set once the initial replay carried kube.settings:
