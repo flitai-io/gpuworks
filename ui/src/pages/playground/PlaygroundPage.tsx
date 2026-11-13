@@ -11,6 +11,7 @@ import ImagePage from "./ImagePage";
 import VectorPage from "./VectorPage";
 import VideoPage from "./VideoPage";
 import RealtimePage from "./RealtimePage";
+import DecisionPage from "./DecisionPage";
 import type { PlaygroundCatalog } from "./types";
 import { useTranslation } from "react-i18next";
 
@@ -23,7 +24,7 @@ export default function PlaygroundPage() {
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const requestedMode = location.pathname.split("/").filter(Boolean).pop();
-  const mode = (["chat", "completion", "audio", "vector", "image", "video", "realtime"].includes(requestedMode || "") ? requestedMode : "chat") as "chat" | "completion" | "audio" | "vector" | "image" | "video" | "realtime";
+  const mode = (["chat", "completion", "audio", "vector", "image", "video", "realtime", "decision"].includes(requestedMode || "") ? requestedMode : "chat") as "chat" | "completion" | "audio" | "vector" | "image" | "video" | "realtime" | "decision";
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -67,6 +68,7 @@ export default function PlaygroundPage() {
                 { value: "image", label: <span><FileImageOutlined /> {t("page.image")}</span> },
                 { value: "video", label: <span><VideoCameraOutlined /> {t("page.video")}</span> },
                 { value: "realtime", label: <span><ThunderboltOutlined /> {t("page.realtime")}</span> },
+                { value: "decision", label: <span>% {t("page.decision")}</span> },
               ]}
               onChange={(value) => navigate(`/playground/${value}`)}
             />
@@ -83,6 +85,7 @@ export default function PlaygroundPage() {
         image: <ImagePage catalog={catalog} />,
         video: <VideoPage catalog={catalog} />,
         realtime: <RealtimePage catalog={catalog} />,
+        decision: <DecisionPage catalog={catalog} />,
       }[mode])}
     </div>
   );

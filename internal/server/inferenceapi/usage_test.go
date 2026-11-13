@@ -10,6 +10,11 @@ func TestUsageForPathFollowsTheRegisteredEndpoints(t *testing.T) {
 	if embeddings, ok := UsageForPath("/v1/embeddings"); !ok || embeddings.Completion != "" || len(embeddings.StreamText) != 0 {
 		t.Fatalf("embeddings usage = %+v, %v", embeddings, ok)
 	}
+	// A decision generates nothing: its usage.output_tokens counts answered
+	// questions, so only the input is read.
+	if decide, ok := UsageForPath("/v1/systemone"); !ok || decide.Prompt != "input_tokens" || decide.Completion != "" || len(decide.StreamText) != 0 {
+		t.Fatalf("decision usage = %+v, %v", decide, ok)
+	}
 	for _, path := range []string{"/v1/audio/speech", "/v1/images/generations", "/v1/chat", "", "/v1/chat/completions/"} {
 		if _, ok := UsageForPath(path); ok {
 			t.Fatalf("%q has usage", path)

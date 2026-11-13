@@ -1,0 +1,70 @@
+model_id: internlm/intern-decision-0.8b
+source: upstream
+display_title: Intern-Decision-0.8B
+parameter_count: 0.9B
+architecture: Qwen3_5ForConditionalGeneration / System One decision head
+input_modalities: [text, image]
+model_config: {kv_cache: false}
+readme_zh_cn: README.zh-CN.md
+readme_en: README.en.md
+release_date: '2026-09-26'
+specs:
+- name: bf16-callable-nvidia
+  display_name_zh_cn: NVIDIA Turing 及更新 · BF16
+  display_name_en: NVIDIA Turing and newer · BF16
+  scenario: latency
+  engine: callable
+  image: gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  image_sources:
+  - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  - quay.io/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  - registry.zstack.ai/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: internlm/Intern-Decision-0.8B
+        revision: 42457fafd13d10d0b0d9be46cb30a23caa409994
+    - modelscope:
+        repo_id: Shanghai_AI_Laboratory/Intern-Decision-0.8B
+        revision: e4eed1a98e642c47477d4af09f2e1243d88ad24d
+  weight_bytes: 1734731370
+  gpus:
+    vendor: nvidia
+    cc: '>=7.5'
+  args:
+  - --model
+  - ${MODEL_PATH}
+  - --host
+  - ${API_HOST}
+  - --port
+  - ${API_PORT}
+  - --adapter
+  - systemone_adapter
+  - --operation
+  - systemone.decide
+  - --max-concurrency
+  - '8'
+  - --request-timeout
+  - '120'
+  - --adapter-config
+  - '{"device":"cuda","dtype":"bfloat16","inference_sha256":"62664f5bebb593e825370f82b2733edd13b16118b436d09db2f0c36405b9b4ea"}'
+  env:
+    PYTHONPATH: /opt/gpuworks/runtime
+    PYTHONDONTWRITEBYTECODE: '1'
+  assets:
+  - file: assets/gpuworks-systemone-runtime.tar.gz
+    sha256: ef76633c08b1811f71cd01d426e9cba0b602dadb8acd23807d16b5a993d1cfb0
+    unpack_to: /opt/gpuworks/runtime
+  entrypoint:
+  - python3
+  - /opt/gpuworks/runtime/gpuworks_serve.py
+  placement:
+    language: starlark
+    resolver: "def resolve(gpu):\n    if gpu.count != 1:\n        return reject(\"runs on one GPU\")\n    if gpu.min_memory_gib < 4:\n        return reject(\"needs a GPU with at least 4 GiB\")\n    return accept(gpu_memory_mib_per_device=4096)\n"
+  api:
+    health_endpoint: /health
+    operations:
+    - type: systemone.decide
+      endpoint: /v1/systemone
+      mode: sync

@@ -18,6 +18,11 @@ const (
 	OperationImageEdit       = "openai.image.edit"
 	OperationVideoGenerate   = "openai.video.generate"
 	OperationRealtime        = "openai.realtime"
+	// OperationDecide is a System One decision: a shared state and typed
+	// questions in, a probability distribution per question out, nothing
+	// generated. The wire format is TypeSafe's System One API (/v1/systemone),
+	// which open-weight decision models such as Intern-Decision follow.
+	OperationDecide = "systemone.decide"
 )
 
 const (
@@ -43,6 +48,7 @@ var operationOrder = []string{
 	OperationImageEdit,
 	OperationVideoGenerate,
 	OperationRealtime,
+	OperationDecide,
 }
 
 // AsyncLifecycle describes paths derived from the operation's base endpoint.
@@ -153,6 +159,12 @@ var definitions = map[string]Definition{
 		Type:          OperationRealtime, DefaultEndpoint: "/v1/realtime",
 		AllowedEndpoints: []string{"/v1/realtime"}, RequestEncodings: []string{EncodingWebSocket},
 		Modes: []string{"realtime"}, Renderer: "realtime", Response: ResponseWebSocket,
+	},
+	OperationDecide: {
+		PrimaryInputs: []string{"state", "questions"},
+		Type:          OperationDecide, DefaultEndpoint: "/v1/systemone",
+		AllowedEndpoints: []string{"/v1/systemone"}, RequestEncodings: []string{EncodingJSON},
+		Modes: []string{"sync"}, Renderer: "decision", Response: ResponseJSON,
 	},
 }
 

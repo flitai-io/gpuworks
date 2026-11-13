@@ -67,6 +67,10 @@ var usages = map[string]Usage{
 		UsageOnRequest: true,
 	},
 	OperationEmbeddings: {Prompt: "prompt_tokens"},
+	// A System One decision generates no tokens. Its usage.output_tokens is
+	// whatever the engine chooses to count (Intern-Decision counts answered
+	// questions), not generated tokens, so only the input is taken.
+	OperationDecide: {Prompt: "input_tokens"},
 }
 
 // protocolUsages are replies the gateway forwards on paths no operation

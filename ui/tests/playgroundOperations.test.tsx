@@ -75,6 +75,7 @@ const { default: CompletionPage } = await import("../src/pages/playground/Comple
 const { default: ImagePage } = await import("../src/pages/playground/ImagePage.tsx");
 const { default: VideoPage } = await import("../src/pages/playground/VideoPage.tsx");
 const { default: RealtimePage } = await import("../src/pages/playground/RealtimePage.tsx");
+const { default: DecisionPage } = await import("../src/pages/playground/DecisionPage.tsx");
 const originalFetch = globalThis.fetch;
 
 const asyncVideo = {
@@ -106,6 +107,14 @@ const catalog: PlaygroundCatalog = {
       { name: "aspect_ratio", kind: "select" as const, options: ["16:9"], default: "16:9" },
     ] }]),
     model("realtime-model", [{ ...operation("openai.realtime", "/v1/realtime", "realtime", "websocket", "realtime"), request_encodings: ["websocket"] }]),
+    { ...model("decision-model", [{ ...operation("systemone.decide", "/v1/systemone", "decision", "json"), example: { request: { method: "POST", endpoint: "/v1/systemone", content_type: "application/json", body: {
+      model: "<served-model>", state: "My order arrived broken.",
+      questions: {
+        refund: { type: "noul", instructions: "Does the customer ask for a refund?" },
+        topic: { type: "choice", instructions: "What is it about?", criteria: { billing: "Payments", shipping: "Delivery" } },
+        urgency: { type: "score", instructions: "How urgent?", criteria: ["Low", "High"] },
+      },
+    } }, curl: "", python: "" } }]), input_modalities: ["text", "image"] },
     model("translate-model", [{ ...operation("openai.completions", "/v1/completions", "completion", "sse", "stream"), request_defaults: { stop: ["<|plamo:op|>"], temperature: 0 } }]),
   ],
   parameters: [],
@@ -455,7 +464,7 @@ test("Playground never rewrites an unsupported model into another model", async 
 
 test("Every operation page preserves an unsupported model and offers its declared interfaces", async () => {
   const pages = [
-    [AudioPage, "audio"], [VectorPage, "vector"], [ImagePage, "image"], [VideoPage, "video"], [RealtimePage, "realtime"],
+    [AudioPage, "audio"], [VectorPage, "vector"], [ImagePage, "image"], [VideoPage, "video"], [RealtimePage, "realtime"], [DecisionPage, "decision"],
   ] as const;
   for (const [Page, route] of pages) {
     const view = renderAt(<Page catalog={catalog} />, `/playground/${route}?model=chat-model`);
@@ -732,4 +741,80 @@ test("Template labels own translated names and unlabeled inputs keep their API n
   } finally {
     await act(async () => { await i18n.changeLanguage(previousLanguage); });
   }
+});
+
+test("Decision page starts from the server's example, sends the System One request and shows every answer", async () => {
+  const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+  globalThis.fetch = (async (input, init) => {
+    const user = me(input);
+    if (user) return user;
+    requests.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+    return jsonResponse({ model: "decision-model", usage: { input_tokens: 42, output_tokens: 3 }, answers: {
+      refund: { type: "noul", noul: 0.9, probabilities: { no: 0.1, yes: 0.9 }, confidence: 0.9, decision: "yes" },
+      topic: { type: "choice", choice: "shipping", probabilities: { billing: 0.25, shipping: 0.75 }, confidence: 0.75, decision: "shipping" },
+      urgency: { type: "score", score: 0.4, legend: { 0: "Low", 1: "High" }, probabilities: { 0: 0.6, 1: 0.4 }, confidence: 0.6, decision: "0" },
+    } });
+  }) as typeof fetch;
+  renderAt(<DecisionPage catalog={catalog} />, "/playground/decision");
+
+  assert.equal((screen.getByRole("textbox", { name: "State" }) as HTMLTextAreaElement).value, "My order arrived broken.");
+  assert.equal((screen.getByRole("textbox", { name: "Options for question 2" }) as HTMLTextAreaElement).value, "billing: Payments\nshipping: Delivery");
+  assert.equal(screen.queryByRole("textbox", { name: "Options for question 1" }), null, "a yes/no question has no options");
+  assert.ok(screen.getByLabelText("Add images"), "an image-capable model takes images");
+  await userEvent.setup().click(screen.getByRole("button", { name: "Decide" }));
+
+  assert.ok(await screen.findByText("Probability of yes: 90%"));
+  assert.ok(screen.getByText("Decision: shipping"));
+  assert.ok(screen.getByText("Decision: 0 · Low"));
+  assert.ok(screen.getByText("Expected level: 0.40"));
+  assert.equal(screen.getByRole("progressbar", { name: "Probability of shipping" }).getAttribute("aria-valuenow"), "75");
+  assert.ok(screen.getByText("42 input tokens"));
+  assert.equal(requests[0].url, "/api/v1/playground/v1/systemone");
+  assert.deepEqual(requests[0].body, {
+    model: "decision-model", state: "My order arrived broken.",
+    questions: {
+      refund: { type: "noul", instructions: "Does the customer ask for a refund?" },
+      topic: { type: "choice", instructions: "What is it about?", criteria: { billing: "Payments", shipping: "Delivery" } },
+      urgency: { type: "score", instructions: "How urgent?", criteria: ["Low", "High"] },
+    },
+  });
+});
+
+test("Decision page edits questions, sends a JSON state from the keyboard and reports errors", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = (async (input, init) => {
+    const user = me(input);
+    if (user) return user;
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return jsonResponse({ error: { message: "Supply 1-16 questions." } }, 400);
+  }) as typeof fetch;
+  renderAt(<DecisionPage catalog={catalog} />, "/playground/decision");
+  const user = userEvent.setup();
+
+  for (const index of [3, 2]) await user.click(screen.getByRole("button", { name: `Remove question ${index}` }));
+  await user.click(screen.getByRole("tab", { name: "JSON" }));
+  const state = screen.getByRole("textbox", { name: "State" });
+  await user.clear(state);
+  await user.type(state, "{{\"ticket\": 7}");
+  await user.click(screen.getByRole("button", { name: "Add question" }));
+  await user.type(screen.getByRole("textbox", { name: "Instructions for question 2" }), "Is it urgent?");
+  screen.getByRole("button", { name: "Decide" }).focus();
+  await user.keyboard("{Enter}");
+
+  assert.ok(await screen.findByText("Decision failed"));
+  assert.match(screen.getByRole("alert").textContent || "", /Supply 1-16 questions/);
+  assert.deepEqual(bodies[0], { model: "decision-model", state: { ticket: 7 }, questions: {
+    refund: { type: "noul", instructions: "Does the customer ask for a refund?" },
+    q2: { type: "noul", instructions: "Is it urgent?" },
+  } });
+
+  await user.type(state, "{{");
+  await user.click(screen.getByRole("button", { name: "Decide" }));
+  assert.ok(await screen.findByText("The state is not valid JSON"));
+  assert.equal(bodies.length, 1, "an invalid JSON state is never sent");
+});
+
+test("Decision page without a decision model says how to get one", async () => {
+  renderAt(<DecisionPage catalog={{ ...catalog, models: catalog.models.filter((item) => item.id !== "decision-model") }} />, "/playground/decision");
+  assert.ok(screen.getByText(/No decision model is available/));
 });

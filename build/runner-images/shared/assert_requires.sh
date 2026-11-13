@@ -5,7 +5,7 @@
 # verify.sh 对成品再跑一次（registry 里的东西和当时构建的是不是一回事）。
 #
 # requires 取值：engine engine_import omni omni_no_mooncake omni_patched indextts2_frontend voxcpm decord moviepy mooncake
-# diffusion overlays audit hcu_patches ppu_pd（见 matrix.yaml 顶部说明）。
+# diffusion overlays audit hcu_patches ppu_pd systemone（见 matrix.yaml 顶部说明）。
 #
 # 用法：REQUIRES="engine omni mooncake" ENGINE=vllm [ENGINE_VERSION=0.30.0] \
 #         bash assert_requires.sh
@@ -113,6 +113,24 @@ print(','.join(sorted(set(v.values()))) if len(set(v.values())) > 1 else '')
 }
 
 # 运行期环境里不许带厂商内网的包源/地址（base 继承下来的 ENV 不会被构建仓的 ARG 覆盖）。
+# systemone：System One 决策模型线（cuda/Dockerfile.systemone）的 Python 栈。推理代码随权重仓库，
+# 镜像要保证的是它依赖的东西：Python ≥3.12（inference.py 用了 3.12 的 f-string 语法）、钉住版本的
+# torch 与 transformers，以及 Qwen3.5 的模型类能从 transformers 里取到。
+check_systemone() {
+    py "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" \
+        || FAILED+=("systemone: python $(python3 -c 'import sys; print(sys.version.split()[0])') < 3.12")
+    local torch transformers
+    torch="$(dist_version torch || true)"
+    transformers="$(dist_version transformers || true)"
+    [ -n "${TORCH_VERSION:-}" ] && [ "${torch%%+*}" != "${TORCH_VERSION}" ] \
+        && FAILED+=("systemone: torch ${torch:-absent} != expected ${TORCH_VERSION}")
+    [ -n "${TRANSFORMERS_VERSION:-}" ] && [ "${transformers}" != "${TRANSFORMERS_VERSION}" ] \
+        && FAILED+=("systemone: transformers ${transformers:-absent} != expected ${TRANSFORMERS_VERSION}")
+    py "from transformers import AutoProcessor, AutoTokenizer, Qwen3_5ForConditionalGeneration; import PIL" \
+        || FAILED+=("systemone: transformers cannot provide Qwen3_5ForConditionalGeneration / AutoProcessor, or Pillow is missing")
+    echo "  systemone: torch ${torch:-absent}, transformers ${transformers:-absent}"
+}
+
 check_no_vendor_internal_env() {
     local hit
     hit="$(env | grep -i -E 't-head\.cn|eng\.t-head|zstack\.(io|ai)|sourcefind' | sed -E 's/=.*//' | tr '\n' ' ' || true)"
@@ -414,6 +432,7 @@ for item in ${REQUIRES}; do
         ppu_pd)       check_ppu_pd ;;
         mooncake_load_errors) check_mooncake_load_errors ;;
         mooncake_hybrid) check_mooncake_hybrid ;;
+        systemone)    check_systemone ;;
         *) FAILED+=("unknown requirement '${item}'") ;;
     esac
 done

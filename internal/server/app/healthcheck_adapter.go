@@ -60,6 +60,8 @@ func healthCheckOf(model *store.Model) (healthcheck.Kind, string, bool) {
 		return healthcheck.KindEmbeddings, op.Endpoint, true
 	case inferenceapi.OperationCompletions:
 		return healthcheck.KindCompletions, op.Endpoint, true
+	case inferenceapi.OperationDecide:
+		return healthcheck.KindDecision, op.Endpoint, true
 	}
 	return healthcheck.KindChat, op.Endpoint, true
 }
