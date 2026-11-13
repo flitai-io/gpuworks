@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
 
@@ -161,7 +162,7 @@ func TestManagedBenchmarkHTTPTrustRequiresPersistedTargetAndRejectsRedirects(t *
 
 func TestBenchmarkNameRejectedBeforeProbe(t *testing.T) {
 	h := &apiHandlers{}
-	raw, _ := json.Marshal(map[string]string{"name": strings.Repeat("A", maxNameRunes+1)})
+	raw, _ := json.Marshal(map[string]string{"name": strings.Repeat("A", deployment.MaxNameRunes+1)})
 	rec := httptest.NewRecorder()
 	h.createBenchmark(rec, httptest.NewRequest(http.MethodPost, "/api/v1/benchmarks", strings.NewReader(string(raw))))
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"field":"name"`) {

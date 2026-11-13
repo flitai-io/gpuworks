@@ -36,9 +36,9 @@ controller 都经 `planning.PlanLaunch` 调它，产物是 `proto.ResolvedLaunch
 | 3 | GPU/芯片方言 | 少数 vLLM 兼容性修正 | **补缺**：字段、模板与用户已设置时不生效 | `deploy/quirks.go` |
 | 4 | 调度推导值 | 分配到的 GPU 数 → TP；放置变量 | 估算器的值**不进** argv | `planning/launch_plan.go` |
 | 5 | 推理模板档位 | 字典外的 args、env、entrypoint、准备脚本、资产、组件、API 契约、`/dev/shm` 下限（`shm_bytes`）、不限锁定内存（`memlock_unlimited`） | 覆盖引擎注入的值；用户输入可再覆盖本层 | `inferencecatalog/flat.go`、`deploy/catalog_selection.go` |
-| 6 | 拓扑 | 多机、PD 的角色参数与 env、RDMA docker 参数 | 平台所有，模板与用户不得重写 PD connector | `deploy/pd.go`、`compute_network.go` |
+| 6 | 拓扑 | 多机、PD 的角色参数与 env、RDMA docker 参数 | 平台所有，模板与用户不得重写 PD connector | `deploy/pd.go`、`deploy/compute_network.go` |
 | 7 | 引擎收尾 | 如 SGLang 日志配置 | **补缺** | `deploy/sglang_logging.go` |
-| 8 | 用户输入 | 字典字段、`extra_args` | 盖过模板 | `api/deployments_launch_config.go` |
+| 8 | 用户输入 | 字典字段、`extra_args` | 盖过模板 | `deployment/launch_config.go` |
 | 9 | 容器覆盖 | env、env_unset、挂载、docker 参数、`/dev/shm`（不填时由引擎基线加 CPU 内存层推导，见「`/dev/shm` 大小」）、模型挂载路径、entrypoint、命令、命令模式 | 部署级最终一层 | `deploy/assemble.go`、`kv_cpu_tier.go`、`effective_command.go` |
 | 10 | agent 注入 | 模型目录挂载、准备脚本包装、设备、dGPU 分区 | 设备与 dGPU 的 env **覆盖一切** | `agent/engine/engine.go`、`agent/gpu/*.go`、`agent/engine/partition*.go` |
 | 11 | 运行时拼装 | `docker run` 固定部分：名称、`-d`、`--restart no`、网络、`--shm-size` | 平台所有，docker 参数里写这些会被拒绝 | `agent/runtime/docker/docker.go`、`nerdctl/nerdctl.go` |

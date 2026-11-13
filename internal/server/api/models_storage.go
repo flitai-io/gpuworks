@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -131,7 +132,7 @@ func (a *apiHandlers) downloadModel(w http.ResponseWriter, r *http.Request) {
 			writeProductError(w, http.StatusConflict, ErrorStorageUnavailableOnNode, "storage "+storage.Name+" does not apply to node "+nodeDisplayName(node), map[string]any{"node": node.UUID, "storage": storage.Name})
 			return
 		}
-		if err := admitModelDownloadNode(m, node); err != nil {
+		if err := deployment.AdmitModelDownloadNode(m, node); err != nil {
 			writeErr(w, http.StatusConflict, err)
 			return
 		}
@@ -171,9 +172,9 @@ func (a *apiHandlers) downloadModel(w http.ResponseWriter, r *http.Request) {
 // downloadIntoShared downloads a model once into a shared storage through the
 // selected node, or the first online writer for older clients.
 func (a *apiHandlers) downloadIntoShared(w http.ResponseWriter, m *store.Model, storage *store.Storage, writerUUID string) {
-	started, status, err := a.startSharedDownloadOn(m, storage, writerUUID)
+	started, err := a.deployments().StartSharedDownloadOn(m, storage, writerUUID)
 	if err != nil {
-		writeErr(w, status, err)
+		writeUseCaseErr(w, err)
 		return
 	}
 	if started == nil {
@@ -181,85 +182,6 @@ func (a *apiHandlers) downloadIntoShared(w http.ResponseWriter, m *store.Model, 
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "downloading", "writer": started.UUID})
-}
-
-func (a *apiHandlers) startSharedDownloadOn(m *store.Model, storage *store.Storage, writerUUID string, owner ...uint) (*store.Node, int, error) {
-	deploymentID := uint(0)
-	if len(owner) > 0 {
-		deploymentID = owner[0]
-	}
-	ref := store.FileRef{ModelID: m.ID, StorageID: storage.ID}
-	current, readErr := a.d.Store.ModelFileAt(ref)
-	if readErr != nil && !errors.Is(readErr, store.ErrNotFound) {
-		return nil, http.StatusInternalServerError, readErr
-	}
-	if readErr == nil {
-		if current.Ready() {
-			return nil, http.StatusOK, nil
-		}
-		if current.State == proto.MFCanceled && current.WriterNodeID != 0 {
-			oldWriter, err := a.d.Store.NodeByID(current.WriterNodeID)
-			if err != nil {
-				return nil, http.StatusConflict, err
-			}
-			if a.d.CallNode == nil {
-				return nil, http.StatusConflict, errors.New("the previous download writer must acknowledge cancellation before retry")
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			_, err = a.d.CallNode(ctx, oldWriter.UUID, proto.RPCModelDownloadStop, proto.ModelCopyStopParams{Key: store.ModelFileKey(current.ID), TransferID: current.TransferID})
-			cancel()
-			if err != nil {
-				return nil, http.StatusConflict, err
-			}
-		}
-		if store.TransferUnderWay(current) {
-			writer, err := a.d.Store.NodeByID(current.WriterNodeID)
-			if err == nil {
-				if writerUUID != "" && writer.UUID != writerUUID {
-					return nil, http.StatusConflict, productError(ErrorFieldInvalid, "cancel the running transfer before choosing another writer", map[string]any{"field": "node_uuids", "detail": "cancel the running transfer before choosing another writer"})
-				}
-				if deploymentID == 0 {
-					if err := a.d.Store.SetDownloadDeployment(current.ID, current.TransferID, 0); err != nil {
-						return nil, http.StatusInternalServerError, err
-					}
-				}
-				return writer, http.StatusAccepted, nil
-			}
-		}
-	}
-	var writer *store.Node
-	var err error
-	if writerUUID == "" {
-		writer, err = a.sharedWriter(storage, m)
-	} else {
-		writer, err = a.selectedSharedWriter(storage, m, writerUUID)
-	}
-	if err != nil {
-		return nil, http.StatusConflict, err
-	}
-	if _, err := planning.ModelWeightsFetch(a.d.Store, a.networks().Resolve, writer, m); err != nil {
-		return nil, http.StatusConflict, err
-	}
-	_, err = a.d.Store.PrepareSharedModelDownload(ref, store.SharedModelRelPath(m), writer.ID, deploymentID, current)
-	if err != nil {
-		if errors.Is(err, store.ErrModelDownloadInactive) {
-			return nil, http.StatusConflict, productError(ErrorFieldInvalid, "the download changed; refresh before retrying", map[string]any{"field": "node_uuids", "detail": "the download changed; refresh before retrying"})
-		}
-		var occupied *store.ModelFilePathOccupiedError
-		if errors.As(err, &occupied) {
-			return nil, http.StatusConflict, modelFilePathProductError(err)
-		}
-		return nil, http.StatusInternalServerError, err
-	}
-	if a.d.NodeSync != nil {
-		_ = a.d.NodeSync.SyncNode(writer.UUID)
-	}
-	return writer, http.StatusAccepted, nil
-}
-
-// sharedWriter picks the online node that downloads into a shared storage.
-func (a *apiHandlers) sharedWriter(storage *store.Storage, m *store.Model) (*store.Node, error) {
-	return a.pickStorageNode(storage, true, func(node *store.Node) bool { return admitModelDownloadNode(m, node) == nil })
 }
 
 type locationRequest struct {
@@ -329,7 +251,7 @@ func (a *apiHandlers) copyModel(w http.ResponseWriter, r *http.Request) {
 	}
 	mf, err := a.d.PeerSync.CopyModel(r.Context(), modelID, src, dst, rate)
 	if err != nil {
-		err = modelFilePathProductError(err)
+		err = deployment.ModelFilePathProductError(err)
 		if errors.Is(err, store.ErrStorageDisabled) || errors.Is(err, store.ErrStorageNotWritable) || errors.Is(err, store.ErrNotFound) {
 			writeStoreErr(w, err)
 			return

@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/community"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -91,7 +92,7 @@ func (a *apiHandlers) importImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, input := range inputs {
-		if !validateName(w, input.Name) || !validateTextField(w, "series_name", input.SeriesName, maxNameRunes) {
+		if !validateName(w, input.Name) || !validateTextField(w, "series_name", input.SeriesName, deployment.MaxNameRunes) {
 			return
 		}
 	}

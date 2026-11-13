@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -16,7 +17,7 @@ import (
 // ?template_id=&spec_source=&spec_name=). The deploy form asks it as soon as
 // a spec is chosen, before any evaluation, to offer the matching models and
 // to know which one a choice of a declared source reuses. The match is
-// templateWeightMatchesModel, the rule the create path enforces.
+// deployment.TemplateWeightMatchesModel, the rule the create path enforces.
 func (a *apiHandlers) listTemplateWeightModels(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	templateID, err := strconv.ParseUint(strings.TrimSpace(query.Get("template_id")), 10, 64)
@@ -39,7 +40,7 @@ func (a *apiHandlers) listTemplateWeightModels(w http.ResponseWriter, r *http.Re
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	candidates, err := a.d.Store.ModelArtifactsBySourceIDs(weightSourceRepoIDs(sources)...)
+	candidates, err := a.d.Store.ModelArtifactsBySourceIDs(deployment.WeightSourceRepoIDs(sources)...)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -50,7 +51,7 @@ func (a *apiHandlers) listTemplateWeightModels(w http.ResponseWriter, r *http.Re
 		match := dto.TemplateWeightMatch{Provider: source.Provider, RepoID: source.RepoID, Revision: source.Revision, Subfolder: source.Subfolder}
 		for i := range candidates {
 			candidate := &candidates[i]
-			if !templateWeightMatchesModel(source, candidate) {
+			if !deployment.TemplateWeightMatchesModel(source, candidate) {
 				continue
 			}
 			serving[candidate.ID] = true

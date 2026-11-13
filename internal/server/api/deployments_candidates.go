@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -152,7 +153,7 @@ func candidatesPage(r *http.Request) (offset, limit int, status string, err erro
 // placementStatus counts the pool replicas no instance fills and attaches
 // the controller's latest scheduling reason. Only then is the latest event
 // read, so a list of healthy deployments costs no query for it.
-func placementStatus(rows dtoLookup, d *store.Deployment, view replicaView) *dto.DeploymentPlacementStatus {
+func placementStatus(rows deployment.Rows, d *store.Deployment, view replicaView) *dto.DeploymentPlacementStatus {
 	if d.State != store.DeployActive {
 		return nil
 	}
@@ -166,7 +167,7 @@ func placementStatus(rows dtoLookup, d *store.Deployment, view replicaView) *dto
 		return nil
 	}
 	out := &dto.DeploymentPlacementStatus{Unscheduled: unscheduled}
-	ev, found := rows.latestScheduleEvent(d.ID)
+	ev, found := rows.LatestScheduleEvent(d.ID)
 	if !found {
 		return out
 	}
@@ -184,7 +185,7 @@ func placementStatus(rows dtoLookup, d *store.Deployment, view replicaView) *dto
 // currentNodeNames shows the nodes a recorded pool reason names under their
 // current names: the record keeps each node's UUID beside the name it had
 // then, and a node renamed since would otherwise show its old name.
-func currentNodeNames(rows dtoLookup, reason *dto.ScheduleReason) {
+func currentNodeNames(rows deployment.Rows, reason *dto.ScheduleReason) {
 	closest, ok := reason.Params["closest"].([]any)
 	if !ok {
 		return
@@ -195,7 +196,7 @@ func currentNodeNames(rows dtoLookup, reason *dto.ScheduleReason) {
 			continue
 		}
 		uuid, _ := item["node"].(string)
-		node := rows.nodeByUUID(uuid)
+		node := rows.NodeByUUID(uuid)
 		if node == nil {
 			continue
 		}

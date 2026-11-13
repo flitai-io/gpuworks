@@ -206,7 +206,7 @@ measure() {
     awk '/^type Deps struct/ {inside=1; next}
          inside && /^}/ {exit}
          inside && /^\t[A-Z]/ {n++}
-         END {print n+0}' internal/server/api/api.go
+         END {print n+0}' internal/server/api/dependencies.go
     ;;
   api_opaque_response_fields)
     CGO_ENABLED=0 go run ./scripts/apiconv -opaque 2>/dev/null || echo 999
@@ -572,6 +572,25 @@ done
 forbid_import ./internal/server/api \
   'gpuworks/internal/server/controller' \
   'api does not import controller'
+
+# The deployment use cases take a request type and answer a plan, a row or a
+# ProductError; the HTTP handlers map that onto a status. They know neither
+# HTTP nor the handlers, so automation, batches and MCP can call them too.
+# Bespoke rather than forbid_import: forbid_import matches a substring, so a
+# rule against .../server/api would also refuse api/dto, the request and
+# response types the use cases take and answer.
+usecase_imports=$(pkg_imports ./internal/server/deployment)
+usecase_http=$(printf '%s\n' "$usecase_imports" | grep -xE 'net/http|gpuworks\.ai/gpuworks/internal/server/(api|hub|controller|proxy)' || true)
+if [ -z "$usecase_imports" ]; then
+  echo "  FAIL: deployment has no imports to check (package missing or broken)" >&2
+  failures=$((failures + 1))
+elif [ -n "$usecase_http" ]; then
+  echo "  FAIL: deployment imports none of net/http, api, hub, controller, proxy" >&2
+  echo "$usecase_http" | sed 's/^/    /' >&2
+  failures=$((failures + 1))
+else
+  echo "  ok: deployment imports none of net/http, api, hub, controller, proxy"
+fi
 
 # Network decisions live in netplan (pure) and the network service; the store
 # only keeps the rows, so it must not reach back for either.

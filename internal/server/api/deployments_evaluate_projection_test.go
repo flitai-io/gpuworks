@@ -134,32 +134,3 @@ func nodeStatusTwoGPUs(hostname string, index int) proto.NodeStatus {
 		GPUs: gpus,
 	}
 }
-
-// Before any model row exists, no source reports registered - the projection
-// reads the store instead of assuming the template resolves.
-func TestEvaluateWeightSourceRegistrationProjection(t *testing.T) {
-	h, _ := eligibleNodeFixture(t)
-	st := h.d.Store
-	models, err := st.ListModels()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, model := range models {
-		if model.SourceID == "Acme/Deploy-FP8" {
-			if err := st.DeleteModel(model.ID); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	spec := deploymentFlatFixture().Specs[0]
-	selection := templateSelection{Spec: &spec}
-	options := h.evaluateWeightSourceOptions(selection)
-	if len(options) == 0 {
-		t.Fatalf("options = %+v", options)
-	}
-	for _, option := range options {
-		if option.Registered {
-			t.Fatalf("no model row exists, so nothing reports registered: %+v", option)
-		}
-	}
-}

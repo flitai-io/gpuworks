@@ -328,7 +328,7 @@ func TestPrepareDistributedDeployRequestUsesComputeNetworks(t *testing.T) {
 	h := apiHandlers{d: Deps{Store: n.store}}
 	prepare := func(uuids ...string) (dto.DeployRequest, error) {
 		req := dto.DeployRequest{NodeUUIDs: uuids, NNodes: len(uuids), Placement: map[string]any{"tp": float64(len(uuids))}}
-		_, err := h.prepareDistributedDeployRequest(&req, 1)
+		_, err := h.deployments().PrepareDistributedDeployRequest(&req, 1)
 		return req, err
 	}
 	code := func(err error) any {

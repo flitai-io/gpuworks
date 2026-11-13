@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -29,7 +30,7 @@ func (a *apiHandlers) dashboardSummary(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	rows, err := newListLookup(a.d.Store, a.d.Preparation, deps, instances)
+	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, instances)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -46,8 +47,8 @@ func (a *apiHandlers) dashboardSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		// A sleeping or asleep deployment serves nothing, so it is counted as
 		// sleeping, not running; whatever no bucket names is Other.
-		insts := rows.instances(d.ID)
-		switch effectiveDeploymentState(d, deploymentRuntimeState(rows, d, insts, recordedModelProgress(rows, d)), deploymentFactsFor(rows, d, insts)) {
+		insts := rows.Instances(d.ID)
+		switch effectiveDeploymentState(d, deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d)), deploymentFactsFor(rows, d, insts)) {
 		case "running":
 			out.Deployments.Running++
 		case "pulling", "starting":

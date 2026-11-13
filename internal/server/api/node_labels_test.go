@@ -64,18 +64,25 @@ func TestNodeLabelsAPIContract(t *testing.T) {
 			}
 		})
 	}
-	reqs := map[string][]string{"pool": {"inference"}}
-	req := dto.DeployRequest{NodeUUID: "labels", PlacementMode: "manual", NodeRequirements: reqs}
-	if err := h.validateRequestNodes(&req, reqs); err != nil {
-		t.Fatal(err)
+	// A node inside the requirements is accepted: evaluate reports no
+	// requirements error for it.
+	rec := httptest.NewRecorder()
+	h.evaluate(rec, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(`{"node_uuid":"labels","placement_mode":"manual","node_requirements":{"pool":["inference"]}}`)))
+	var accepted struct {
+		Errors []dto.FieldError `json:"errors"`
 	}
-	if err := h.validateRequestNodes(&req, map[string][]string{"pool": {"wrong"}}); err == nil {
-		t.Fatal("a node outside the requirements was accepted")
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &accepted) != nil {
+		t.Fatalf("evaluate = %d %s", rec.Code, rec.Body)
+	}
+	for _, fieldErr := range accepted.Errors {
+		if fieldErr.Field == "node_requirements" {
+			t.Fatalf("a node inside the requirements was refused: %+v", fieldErr)
+		}
 	}
 	// Create keeps the 400 for a node the requirements exclude; evaluate
 	// reports the same judgement as a field error with ok=false, so the form
 	// keeps the draft while it shows what is wrong.
-	rec := httptest.NewRecorder()
+	rec = httptest.NewRecorder()
 	h.evaluate(rec, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", bytes.NewBufferString(`{"node_uuid":"labels","node_requirements":{"pool":["wrong"]}}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/api/v1/evaluate bypassed the requirements: %d %s", rec.Code, rec.Body)

@@ -14,5 +14,5 @@
 
 ## 后果（2026-09-22 补充）
 
-- **选择快照类型化**：部署的选择快照（`deployments.template_snapshot`）由 `deploy.CatalogSelection` 一个类型持有，写入方与六个读取点共用一套字段标签。此前每个读取点各自解码，新增模板字段可以落进五处而漏掉第六处；现在未知键保留在 `Extra`、已存行重新编码时保持原字节（fixture `internal/server/api/testdata/catalog_selection_snapshot.golden`）。快照仍是历史记录，不是可重算的配置。
+- **选择快照类型化**：部署的选择快照（`deployments.template_snapshot`）由 `deploy.CatalogSelection` 一个类型持有，写入方与六个读取点共用一套字段标签。此前每个读取点各自解码，新增模板字段可以落进五处而漏掉第六处；现在未知键保留在 `Extra`、已存行重新编码时保持原字节（fixture `internal/server/deployment/testdata/catalog_selection_{template,custom_model}.golden`）。快照仍是历史记录，不是可重算的配置。
 - **存量快照的 GPU 谓词复查**：带 `launch_contract` 标记的部署按本 ADR 的启动语义解释快照；但快照里的 `gpus`/`unsupported` 谓词对**所有**部署（含无标记的存量行）在每次重调度时都对照当前卡复查，失配记 `placement_rejected` 并拒绝启动。这是阶段 0 引入并保留的安全属性：标记只解释"启动配置从哪来"，不解释"硬件是否还符合模板"。它确实把无标记存量部署从"按旧快照启动"改成了"硬件换过之后拒绝启动"，特此记录。

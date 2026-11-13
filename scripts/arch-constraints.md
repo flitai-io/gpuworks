@@ -257,6 +257,10 @@ go list -e -f '{{.ImportPath}}{{"\t"}}{{join .Imports " "}}' ./... \
 `store_concrete_importers` 21→22；`api_deps_fields` 56→57（`Deps.SchedulingActivity`，调度活动路由、共卡部署统计与节点时间线
 共读的这份内存汇总，没有对应的 store 行）。
 
+2026-11-12：部署用例（用例层拆分的第一组）。新包 `internal/server/deployment` 承接部署的创建、评估与读模型（行查找、运行时状态
+推导、模型准备观测），不依赖 `net/http` 与 `api`（依赖方向检查守护）；`api` 的 handler 只做解码、调用、映射。该包按 store 写入
+与读取，`store_concrete_importers` 22→23；`api` 仍为其余 handler 依赖 store，故没有随之减少。
+
 ### api_fanout（初值 36）
 
 意图：`api` 包扇出全仓最高（计划 B1）。计数为 `api` 直接 import 的**本仓库**包数。
@@ -288,6 +292,9 @@ go list -e -f '{{join .Imports "\n"}}' ./internal/server/api \
 由纯叶子包 `internal/server/kubemanifest` 渲染（不依赖 store，参数进、YAML 出），api 直接依赖它返回 manifest；`api_deps_fields`
 不变（manifest 不经 Deps 注入）。
 
+2026-11-12：部署用例（用例层拆分的第一组）。创建与评估搬进 `internal/server/deployment`，api 改为依赖它（+1），不再直接依赖
+`acquisition` 与 `placement`（−2），`api_fanout` 49→48。
+
 ### api_opaque_response_fields（初值 40，2026-10-11）
 
 意图：API 响应里类型为 `any`、`map[string]any`、`json.RawMessage` 的字段，`scripts/apiconv` 看不到其中的字段名，
@@ -313,10 +320,13 @@ CGO_ENABLED=0 go run ./scripts/apiconv -opaque      # 加 -v 列出字段
 awk '/^type Deps struct/ {inside=1; next}
      inside && /^}/ {exit}
      inside && /^\t[A-Z]/ {n++}
-     END {print n+0}' internal/server/api/api.go
+     END {print n+0}' internal/server/api/dependencies.go
 ```
 
 排除：注释行与空行（只计一级缩进的导出字段）。
+
+2026-11-12：`Deps` 早已从 `api.go` 移到 `dependencies.go`，计数仍读 `api.go`，实测一直为 0，预算形同虚设。计数改读
+`dependencies.go`，实测 61（8ac050aa0 自身的字段数），预算 60→61 是对齐实测的一次性调整，不是新增字段；棘轮从 61 起继续只降不升。
 
 2026-09-18：`artifacts/archive/2026-09-19-monitor-center/plan.md`（监控中枢）第一期给
 `api.Deps` 加了一个 `Monitor MonitorService` 字段，服务
@@ -360,7 +370,7 @@ awk '/^type Deps struct/ {inside=1; next}
 既不属于 `server.yaml` 的 `Deps.Server`，也不属于监控读路径的 `Deps.Monitor`，所以单独成一个具名接口；
 `api` 不 import `traceexport`（`api_fanout` 不变），实现与校验在 `app`。
 
-2026-10-18：NFS Cache 准备进度把高频复制观测、实际选中的准备节点与缓存淘汰阶段放回各自的生产者（hub、controller，`internal/server/prepobs` 叶子包提供有界过期表），不再放进 store；API 经一个具名接口字段 `Deps.Preparation`（`api.ModelPreparation`：三项观测加缓存复制重试）读取，50→51。拆成四个回调会是 50→54。
+2026-10-18：NFS Cache 准备进度把高频复制观测、实际选中的准备节点与缓存淘汰阶段放回各自的生产者（hub、controller，`internal/server/prepobs` 叶子包提供有界过期表），不再放进 store；API 经一个具名接口字段 `Deps.Preparation`（`api.ModelPreparation`，现为 `deployment.ModelPreparation`：三项观测加缓存复制重试）读取，50→51。拆成四个回调会是 50→54。
 
 
 2026-10-22：51→53。`Deps.UsageReport`（改进计划的日报：状态、开关、预览与 API 写入的进程内计数）与 `Deps.Notices`

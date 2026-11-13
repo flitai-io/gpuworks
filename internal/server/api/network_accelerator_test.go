@@ -322,7 +322,7 @@ func TestDistributedDeployOnAscendNeedsAnAcceleratorNetwork(t *testing.T) {
 	prepare := func(uuids ...string) (dto.DeployRequest, string, map[string]any) {
 		t.Helper()
 		req := dto.DeployRequest{NodeUUIDs: uuids, NNodes: len(uuids), Placement: map[string]any{"tp": float64(len(uuids))}}
-		_, err := h.prepareDistributedDeployRequest(&req, 1)
+		_, err := h.deployments().PrepareDistributedDeployRequest(&req, 1)
 		var product *messages.ProductError
 		if errors.As(err, &product) {
 			return req, product.Code(), product.Params()

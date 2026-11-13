@@ -5,6 +5,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/pdmode"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -52,14 +53,14 @@ const (
 // asleep leader before it looks at its node or its other ranks), so a replica
 // whose own ranks or node are down is still asleep when the leader asks to
 // sleep: the gateway refuses it for sleep either way.
-func standingOf(rows dtoLookup, leader *store.Instance, followersComplete bool, incomplete map[string]bool) replicaStanding {
+func standingOf(rows deployment.Rows, leader *store.Instance, followersComplete bool, incomplete map[string]bool) replicaStanding {
 	if leader == nil || leader.State != proto.InstRunning {
 		return replicaNotServing
 	}
 	if planning.InstanceAsleep(leader) {
 		return replicaAsleep
 	}
-	if !instanceNodeOnline(rows, leader.NodeID) || incomplete[leader.UUID] || !followersComplete {
+	if !deployment.InstanceNodeOnline(rows, leader.NodeID) || incomplete[leader.UUID] || !followersComplete {
 		return replicaNotServing
 	}
 	return replicaAwake
@@ -141,8 +142,8 @@ func (f deploymentFacts) State() string {
 // deploymentFactsOf reads the facts out of the replica match the response
 // shows: one walk, so every number a response carries describes the same
 // replicas, judged the way the router judges them.
-func deploymentFactsOf(rows dtoLookup, view replicaView, insts []store.Instance) deploymentFacts {
-	incomplete := planning.GroupsIncomplete(onlineInstances(rows, insts))
+func deploymentFactsOf(rows deployment.Rows, view replicaView, insts []store.Instance) deploymentFacts {
+	incomplete := planning.GroupsIncomplete(deployment.OnlineInstances(rows, insts))
 	facts := deploymentFacts{Roles: map[string]replicaCounts{}}
 	refused, sleepCause := false, true
 	for _, role := range view.roles() {
@@ -170,7 +171,7 @@ func deploymentFactsOf(rows dtoLookup, view replicaView, insts []store.Instance)
 
 // replicaCountsOf counts the replicas filling one role, over the units the
 // placement has and, for an ordinary deployment, the replica that left it.
-func replicaCountsOf(rows dtoLookup, view replicaView, role string, incomplete map[string]bool) replicaCounts {
+func replicaCountsOf(rows deployment.Rows, view replicaView, role string, incomplete map[string]bool) replicaCounts {
 	var out replicaCounts
 	judge := func(leader *store.Instance, followersComplete bool) {
 		switch standingOf(rows, leader, followersComplete, incomplete) {
@@ -250,7 +251,7 @@ func (v replicaView) roleRequired(role string, counts replicaCounts) bool {
 }
 
 // deploymentFactsFor reads the facts for callers that hold no replica view.
-func deploymentFactsFor(rows dtoLookup, d *store.Deployment, insts []store.Instance) deploymentFacts {
+func deploymentFactsFor(rows deployment.Rows, d *store.Deployment, insts []store.Instance) deploymentFacts {
 	view, err := newReplicaView(rows, d, insts)
 	if err != nil {
 		return deploymentFacts{}
@@ -260,9 +261,9 @@ func deploymentFactsFor(rows dtoLookup, d *store.Deployment, insts []store.Insta
 
 // followersRunning reports every follower rank of the replica running on an
 // online node: a generation serves as a whole.
-func followersRunning(rows dtoLookup, slot planning.UnitSlot) bool {
+func followersRunning(rows deployment.Rows, slot planning.UnitSlot) bool {
 	for _, follower := range slot.Followers {
-		if follower == nil || follower.State != proto.InstRunning || !instanceNodeOnline(rows, follower.NodeID) {
+		if follower == nil || follower.State != proto.InstRunning || !deployment.InstanceNodeOnline(rows, follower.NodeID) {
 			return false
 		}
 	}

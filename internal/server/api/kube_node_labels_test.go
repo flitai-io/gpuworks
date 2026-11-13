@@ -11,6 +11,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -190,11 +191,11 @@ func TestEvaluateEligibleNodesMatchTheKubernetesCluster(t *testing.T) {
 	nodes := eligibleNodesOf(t, h, body)
 	for uuid, entry := range nodes {
 		want := uuid == inProd
-		if unmet := hasReason(entry, reasonRequirementsUnmet); unmet == want {
+		if unmet := hasReason(entry, deployment.ReasonRequirementsUnmet); unmet == want {
 			t.Errorf("%s: requirement unmet = %v, want %v (%+v)", uuid, unmet, !want, entry)
 		}
 	}
-	if _, ok := nodes[inLab]; !ok || !hasReason(nodes[inLab], reasonRequirementsUnmet) {
+	if _, ok := nodes[inLab]; !ok || !hasReason(nodes[inLab], deployment.ReasonRequirementsUnmet) {
 		t.Errorf("the node of the other cluster = %+v, want the requirement unmet", nodes[inLab])
 	}
 	if !nodes[inProd].Eligible {
@@ -205,7 +206,7 @@ func TestEvaluateEligibleNodesMatchTheKubernetesCluster(t *testing.T) {
 	body = fmt.Sprintf(`{"template_id":%d,"template_spec_name":"fp8-balanced","placement_mode":"auto","node_requirements":{"gpuworks.ai/kubernetes-node":["worker-1"]}}`, templateID)
 	for uuid, entry := range eligibleNodesOf(t, h, body) {
 		want := uuid == inProd || uuid == inLab
-		if unmet := hasReason(entry, reasonRequirementsUnmet); unmet == want {
+		if unmet := hasReason(entry, deployment.ReasonRequirementsUnmet); unmet == want {
 			t.Errorf("by node name %s: requirement unmet = %v, want %v", uuid, unmet, !want)
 		}
 	}

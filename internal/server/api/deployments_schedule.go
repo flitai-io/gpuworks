@@ -19,6 +19,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/automation"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -201,26 +202,10 @@ func parseScheduleTime(raw string) (int, bool) {
 	return h*60 + m, true
 }
 
-// AutomationSchedule is a stored order as the automation runs it, in the
-// zone it names (automation.ScheduleLocation). A zone the server does not
-// know (validated on write, so only one the server lost since) is an error:
-// the automation skips the order rather than run it in another zone.
-func AutomationSchedule(row store.LifecycleSchedule) (automation.Schedule, error) {
-	loc, err := automation.ScheduleLocation(row.Timezone)
-	if err != nil {
-		return automation.Schedule{}, err
-	}
-	s := automation.Schedule{ID: row.ID, DeploymentID: row.DeploymentID, Action: row.Action, Weekdays: row.Weekdays, Minute: row.Minute, Location: loc, SleepLevel: row.SleepLevel, Replicas: row.Replicas, Role: row.Role}
-	if row.LastFiredAt != nil {
-		s.LastFiredAt = *row.LastFiredAt
-	}
-	return s, nil
-}
-
-// automationSchedule is AutomationSchedule as the API shows an order: one the
-// automation skips names no occurrence, so it shows none either.
+// automationSchedule is deployment.AutomationSchedule as the API shows an
+// order: one the automation skips names no occurrence, so it shows none either.
 func automationSchedule(row store.LifecycleSchedule) automation.Schedule {
-	s, err := AutomationSchedule(row)
+	s, err := deployment.AutomationSchedule(row)
 	if err != nil {
 		return automation.Schedule{}
 	}

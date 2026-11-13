@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -43,7 +44,7 @@ func (a *apiHandlers) declaredBenchmarkTokenizer(dep *store.Deployment, model *s
 		if spec.Source != selected.SpecSource || spec.Name != selected.SpecName || spec.Engine != dep.Engine || spec.Image != dep.Image {
 			continue
 		}
-		for _, weight := range specWeightSources(&spec) {
+		for _, weight := range deployment.SpecWeightSources(&spec) {
 			if weight.Provider != model.Source || weight.RepoID != model.SourceID || weight.Revision != model.Revision || weight.Subfolder != model.ArtifactSubfolder {
 				continue
 			}

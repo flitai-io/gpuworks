@@ -12,6 +12,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -129,39 +130,39 @@ func TestEvaluateCollectsFieldErrorsInsteadOfRejecting(t *testing.T) {
 		},
 		"mount container path is relative": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"host_path":"/data","container_path":"data"}]}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerMounts, Code: ErrorMountContainerPath, Params: map[string]any{"target": "data"}},
+			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: ErrorMountContainerPath, Params: map[string]any{"target": "data"}},
 		},
 		"mount host path is relative": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"host_path":"data","container_path":"/data"}]}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerMounts, Code: ErrorMountHostPath, Params: map[string]any{"source": "data"}},
+			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: ErrorMountHostPath, Params: map[string]any{"source": "data"}},
 		},
 		"mount duplicates the model mount": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"host_path":"/elsewhere","container_path":"/model"}]}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerMounts, Code: "MOUNT_TARGET_DUPLICATE", Params: map[string]any{"target": "/model"}},
+			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: "MOUNT_TARGET_DUPLICATE", Params: map[string]any{"target": "/model"}},
 		},
 		"mount targets nest": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"host_path":"/a","container_path":"/a"},{"host_path":"/b","container_path":"/a/b"}]}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerMounts, Code: ErrorMountTargetNested, Params: map[string]any{"parent": "/a", "child": "/a/b"}},
+			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: ErrorMountTargetNested, Params: map[string]any{"parent": "/a", "child": "/a/b"}},
 		},
 		"mount rows do not decode": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":"not-a-list"}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerMounts, Code: ErrorFieldInvalid},
+			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: ErrorFieldInvalid},
 		},
 		"docker args restate the shared memory field": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"docker_args":["--shm-size=8g"]}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerDocker, Code: ErrorDockerArgUseShmField, Params: map[string]any{"arg": "--shm-size=8g", "option": "--shm-size"}},
+			want: dto.FieldError{Field: deployment.FieldContainerDocker, Code: ErrorDockerArgUseShmField, Params: map[string]any{"arg": "--shm-size=8g", "option": "--shm-size"}},
 		},
 		"docker args restate a platform-managed option": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"docker_args":["--network","bridge"]}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerDocker, Code: ErrorDockerArgPlatformManaged, Params: map[string]any{"arg": "--network", "option": "--network"}},
+			want: dto.FieldError{Field: deployment.FieldContainerDocker, Code: ErrorDockerArgPlatformManaged, Params: map[string]any{"arg": "--network", "option": "--network"}},
 		},
 		"shared memory size under host IPC": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"docker_args":["--ipc=host"],"shm_bytes":34359738368}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerShm, Code: ErrorShmSizeWithHostIPC, Params: map[string]any{"arg": "--ipc=host"}},
+			want: dto.FieldError{Field: deployment.FieldContainerShm, Code: ErrorShmSizeWithHostIPC, Params: map[string]any{"arg": "--ipc=host"}},
 		},
 		"shared memory size below the CPU KV tier": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","quick_params":{"kv_offloading_size":19},"container_overrides":{"shm_bytes":17179869184}}`, model.ID),
-			want: dto.FieldError{Field: fieldContainerShm, Code: "SHM_BELOW_KV_CPU_TIER", Params: map[string]any{"shm_gib": 16, "tier_gib": 19}},
+			want: dto.FieldError{Field: deployment.FieldContainerShm, Code: "SHM_BELOW_KV_CPU_TIER", Params: map[string]any{"shm_gib": 16, "tier_gib": 19}},
 		},
 		// A selector inside the placement is refused, never ignored: it
 		// moved to node_requirements, and reading past it would widen the

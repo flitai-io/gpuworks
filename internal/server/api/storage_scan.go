@@ -12,6 +12,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/rpccontext"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -215,7 +216,7 @@ func (a *apiHandlers) importStorageModels(w http.ResponseWriter, r *http.Request
 			result.Error = err.Error()
 			var productErr *messages.ProductError
 			if errors.As(err, &productErr) {
-				result.ErrorDetail = productMessage(err)
+				result.ErrorDetail = deployment.ProductMessage(err)
 			}
 			out.Failed = append(out.Failed, result)
 			continue
@@ -289,7 +290,7 @@ func (a *apiHandlers) importOne(ctx context.Context, row *store.Storage, node *s
 		ModelID: model.ID, StorageID: row.ID, NodeID: 0, Path: item.RelPath, State: proto.MFPresent,
 		Acquisition: proto.ModelAcquireImported, SizeBytes: size, Downloaded: size, Revision: item.Revision,
 	}); err != nil {
-		return result, modelFilePathProductError(err)
+		return result, deployment.ModelFilePathProductError(err)
 	}
 	if model.WeightBytes <= 0 && size > 0 {
 		_ = a.d.Store.SetModelWeightBytes(model.ID, size)

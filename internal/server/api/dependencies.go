@@ -16,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/community"
@@ -125,7 +126,7 @@ type Deps struct {
 	PeerSync        PeerSyncHooks
 	CancelModelSync func(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error)
 	// Preparation is model preparation as the hub and the controller hold it.
-	Preparation ModelPreparation
+	Preparation deployment.ModelPreparation
 	// NodeRuntime reads and restarts a node's container runtime daemon.
 	NodeRuntime     NodeRuntimeHooks
 	ImageFetch      ImageFetchHooks

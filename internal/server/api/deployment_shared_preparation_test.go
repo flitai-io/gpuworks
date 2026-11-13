@@ -9,6 +9,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -48,11 +49,11 @@ func TestDeploymentPreparationFollowsSharedStorageDownload(t *testing.T) {
 			assertProgress := func(state, phase string, known bool) dto.ModelNodePresence {
 				t.Helper()
 				detail := handler.deploymentDTO(dep, false)
-				list, err := newListLookup(st, prep, []store.Deployment{*dep}, nil)
+				list, err := deployment.NewListRows(st, prep, []store.Deployment{*dep}, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
-				shown, recorded := deploymentModelProgress(list, dep)
+				shown, recorded := deployment.ModelProgress(list, dep)
 				if len(shown) != 1 || len(recorded) != 1 || !reflect.DeepEqual(shown, detail.ModelProgress) {
 					t.Fatalf("list=%+v recorded=%+v detail=%+v", shown, recorded, detail.ModelProgress)
 				}
@@ -164,16 +165,16 @@ func TestSharedModelStatesPreserveSchedulingAndFailurePriority(t *testing.T) {
 			}
 			prep := newTestPreparation()
 			handler := &apiHandlers{d: Deps{Store: st, Preparation: prep}}
-			list, err := newListLookup(st, prep, []store.Deployment{*dep}, nil)
+			list, err := deployment.NewListRows(st, prep, []store.Deployment{*dep}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, recorded := deploymentModelProgress(list, dep)
+			_, recorded := deployment.ModelProgress(list, dep)
 			if state == proto.MFAbsent || state == proto.MFMissing {
 				if len(recorded) != 0 {
 					t.Errorf("inactive shared row is counted as a transfer: %+v", recorded)
 				}
-			} else if len(recorded) != 1 || recorded[0].State != state || deriveRuntimeState(store.DeployActive, nil, recorded, false) != "failed" {
+			} else if len(recorded) != 1 || recorded[0].State != state || deployment.DeriveRuntimeState(store.DeployActive, nil, recorded, false) != "failed" {
 				t.Errorf("shared transfer failure lost priority: %+v", recorded)
 			}
 			for _, response := range []dto.Deployment{handler.deploymentDTO(dep, false), handler.deploymentDTOFrom(list, dep, false)} {

@@ -103,7 +103,7 @@ func (a *apiHandlers) createModel(w http.ResponseWriter, r *http.Request) {
 		// Best-effort metadata fetch (config.json + weight size) so the estimator
 		// works before download. Network failures leave fields unknown, and the
 		// answer says why.
-		if meta, err := a.fetchModelMeta(r.Context(), req.Source, req.SourceID, req.Revision, "", ""); err == nil {
+		if meta, err := a.deployments().FetchModelMeta(r.Context(), req.Source, req.SourceID, req.Revision, "", ""); err == nil {
 			notice = a.metadataNotice(meta, req.Source, "")
 			a.applyFetchedMetadata(r.Context(), entity, meta)
 			// A registration without a chosen ref would otherwise follow a moving

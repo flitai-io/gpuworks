@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -250,7 +251,7 @@ func (a *apiHandlers) checkPlaceOn(w http.ResponseWriter, r *http.Request, dep *
 // replicaUnitsDTO is a multi-node deployment's replicas as the response lists
 // them: each one's leader and follower nodes, named, with its spent retry
 // budget; the shape a PD role's units take.
-func replicaUnitsDTO(rows dtoLookup, d *store.Deployment, view replicaView) []dto.DeploymentPDUnit {
+func replicaUnitsDTO(rows deployment.Rows, d *store.Deployment, view replicaView) []dto.DeploymentPDUnit {
 	replicas := planning.ReplicaUnitsOf(d, view.ordered)
 	out := make([]dto.DeploymentPDUnit, 0, len(replicas))
 	for index, unit := range replicas {

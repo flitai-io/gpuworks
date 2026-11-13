@@ -11,7 +11,7 @@
 | T41：删除节点副本不等待节点间模型同步的接收端结束 | 删除之后被取消的同步仍可能把临时目录改名回来，磁盘上留下 server 已无记录的模型目录 | 未证实、未复现；窗口是删除与 rename 之间，后果是一份孤立目录占盘，不影响正确性 |
 | T40：昇腾 vcann-rt 与分区探针拼 `LD_LIBRARY_PATH` 不去重、不丢空段 | 重复项只是冗余；空段让加载器搜当前目录 | 空段是镜像自带的，不是本仓库引入的；去掉它等于替镜像作者改写环境，需要昇腾机器实测后再决定 |
 | T53：按卡推出的显存份额进了表单草稿后会粘住 | 同一表单会话里换到大卡节点，份额仍是小卡算出的值，大卡上白留显存 | 方向安全（少用不会 OOM）；修它要新增 DTO 字段区分「平台推的值」与「用户填的值」，属 `todo.md` T6 的一部分 |
-| T54：`internal/server/api` 在 `-race` 下跑不完 `go test` 的 10m 默认超时 | 按 `CLAUDE.md` 的提交前检查逐字执行，必然看到一个长得像失败的红（超时后的 goroutine dump，不是 DATA RACE） | 先在规约里写明 race 检查要带 `-timeout`；给它一个带足超时的 target 属于另一件事 |
+| T54：`internal/server/api` 跑不完 `go test` 的 10m 默认超时（不带 race 也已到边上） | 按 `CLAUDE.md` 的提交前检查逐字执行，必然看到一个长得像失败的红（超时后的 goroutine dump，不是 DATA RACE）；不带 race 实测约 620–650s，同样会撞上 600s | 先在规约里写明 race 检查要带 `-timeout`；给它一个带足超时的 target 属于另一件事 |
 | T45：时间线折叠 SQL 只为历史事件行存在 | `instance_timeline.go` 用 `json_extract` 取旧行的 `$.state`/`$.phase`，是迁移之外唯一看进 JSON 的 SQL（`store_sql_json_lines` 为 2） | 现在无事可做：要等 2026-09-17 之前写下的事件行随保留期（默认 180 天）淘汰，约 2027-03 |
 | T61：通用 `PUT /settings/{key}` 只要求登录、不限 key | `user` 角色可以写任意设置行，包括全局网络/镜像配置、`orphan_cleanup`、有 admin 专用路由的 `storage_policy`/`control_plane` 与试验场的 `security` 策略 | 平台目前只有管理员用户，`user` 角色没有实际使用者 |
 | T66：平台因容器运行时无法使用加速卡而自动停止调度后，原因消失也不会自动恢复 | 装好插件、或 docker 重新配置 nvidia runtime 之后，节点仍是「停止调度」，要运维手动开启 | 你定过「不加锁定字段」：自动恢复要新增一个「停调来源」事实，才能只撤销平台自己设的停调而不碰运维的；偶发的 daemon 无应答已不再触发停调，误停的来源已去掉 |
@@ -36,7 +36,7 @@
 
 ### 现状
 
-- `store.Model.WeightBytes`（`internal/server/store/entities_model.go:22`）只在模型注册/绑定目录档位时写入一次：`persistCatalogWeight`（`internal/server/api/deployments_evaluate.go:73-84`）只在 `model.WeightBytes` 当前为 0 时，才把目录档位声明的 `selection.Spec.WeightBytes` 回填进去，之后不再覆盖；`model_url_register.go`、`model_local_register.go`、`model_quick_register.go` 同样只在注册时各写一次估算/声明值。
+- `store.Model.WeightBytes`（`internal/server/store/entities_model.go:22`）只在模型注册/绑定目录档位时写入一次：`persistCatalogWeight`（`internal/server/deployment/evaluate.go:37-48`，由 `evaluate_plan.go` 调用）只在 `model.WeightBytes` 当前为 0 时，才把目录档位声明的 `selection.Spec.WeightBytes` 回填进去，之后不再覆盖；`model_url_register.go`、`model_local_register.go`、`model_quick_register.go` 同样只在注册时各写一次估算/声明值。
 - 节点侧其实有更接近真实的字节数：`store.ModelFile.SizeBytes`（`entities_model.go:48`）在下载过程中随 agent 上报的 `st.BytesTotal` 更新（`internal/server/store/deploy.go:335-336`），下载完成后落在该节点该模型的 `ModelFile` 行上；但这个值只喂给该节点的磁盘占用/驱逐核算（`internal/server/store/model_eviction.go`），从未回写到全局的 `Model.WeightBytes`。
 - 结果：`Model.WeightBytes` 一旦声明错误（目录 spec 写错、HTTP 导入的目录列举估算偏差、HF/ModelScope index 与实际 shard 不一致等），会一直错下去；`internal/server/planning/planning.go:124-141` 的显存与磁盘需求估算全程读这个声明值，不会拿 `ModelFile.SizeBytes` 交叉核对，也不产生任何告警或不一致记录。
 
@@ -135,6 +135,11 @@
 
 ## T54. `internal/server/api` 在 `-race` 下跑不完默认超时
 
+**2026-11-12 更新**：同一台机器、前后相邻实测，不带 race 已是 624s（8ac050aa0）与 646s（部署创建/评估迁入
+`internal/server/deployment` 之后），都超过默认 600s；`make test` 的 Go 套件带足了超时，不受影响。迁出的约 130 个用例
+改在 `deployment` 下跑（约 30s），api 包的耗时主要在留下的 handler 测试与几个按集群规模跑的用例
+（如 `TestSchedulingActivityAtFleetScale` 约 78s）。`api_fanout` 现为 48。
+
 **搁置记录**：2026-10-03 决定暂不修。这不是竞态，是耗时：该包不带 race 实测 95s，带 race 实测 1835s
 （约 31 分钟，零 DATA RACE），而 `go test` 的默认超时是 10 分钟。所以照 `CLAUDE.md`
 「提交前检查：…相关包 `go test -race`」逐字执行，这个包必然在 601s 处超时并打印一大段 goroutine dump ——
@@ -146,7 +151,7 @@
 
 **为什么暂不做**：真正的修法有两种，都不该顺手塞进别的 MR ——
 给 race 检查一个 Makefile target（要决定覆盖哪些包、是否进 CI、CI 时长预算），
-或者拆分这个包（它已是全仓扇出最高的包，`api_fanout` 有 38 的棘轮预算盯着）。
+或者拆分这个包（它已是全仓扇出最高的包，`api_fanout` 有棘轮预算盯着，当时为 38）。
 眼下的实际影响是"执行规约的人会看到一次假红"，代价是一次困惑而不是一个缺陷。
 
 ### 要动这项时
