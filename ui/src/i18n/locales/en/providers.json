@@ -61,14 +61,20 @@
     "templateUnchanged": "Replace the placeholder in {{field}} with an actual value"
   },
   "install": {
-    "autoAuth": { "digitalocean": "The platform signs in with its own SSH key: once the DigitalOcean account is added, the platform key is an SSH key of the account, and Droplets gpuworks creates afterwards carry it. DigitalOcean cannot add an account key to an existing Droplet; for a Droplet created elsewhere, give a private key or password once under Advanced settings, and the platform key is written on sign-in.",
-      "aliyun": "GPUWorks runs the install as root through Alibaba Cloud Cloud Assistant, so no SSH credential or public address is needed. When Cloud Assistant is offline it falls back to SSH on the public address; give a password or key under Advanced for that.",
-      "runpod": "GPUWorks signs in with its platform SSH key (its public key is under Settings → Nodes & deployments → SSH Key), which it adds to your RunPod account's SSH keys when the account is added; RunPod writes account keys into a Pod when it starts, so Pods started from then on need nothing else. A Pod that was already running does not accept the key yet: the install asks whether to change the Pod's configuration to add it (which restarts the Pod), or you can give its private key under Advanced once.",
-      "vast": "GPUWorks attaches its platform SSH key (its public key is under Settings → Nodes & deployments → SSH Key) to the instance through the Vast API and signs in with it; nothing to enter here.",
-      "compshare": "CompShare instances only offer password login: GPUWorks signs in once with the password the CompShare API issued, adds its platform SSH key (its public key is under Settings → Nodes & deployments → SSH Key), and uses the key from then on. Nothing to enter here.",
-      "autodl": "GPUWorks signs in once with the root password AutoDL issued for the instance, adds its platform SSH key (its public key is under Settings → Nodes & deployments → SSH Key), and uses the key from then on. Nothing to enter here.",
-      "other": "GPUWorks signs in with its platform SSH key (its public key is under Settings → Nodes & deployments → SSH Key). If the instance does not accept it yet, give a private key or password under Advanced once; the key is added during the install."
-    },
+    "autoAuth": { "digitalocean": "Uses the platform SSH key; a Droplet created elsewhere needs a credential once (Advanced).",
+      "digitaloceanHelp": "Once the DigitalOcean account is added, the platform key is an SSH key of the account, and Droplets gpuworks creates afterwards carry it. DigitalOcean cannot add an account key to an existing Droplet; for a Droplet created elsewhere, give a private key or password once under Advanced settings, and the platform key is written on sign-in.",
+      "aliyun": "Installs as root via Cloud Assistant; no SSH credential or public IP needed.",
+      "aliyunHelp": "GPUWorks runs the install as root through Alibaba Cloud Cloud Assistant. When Cloud Assistant is offline it falls back to SSH on the public address; give a password or key under Advanced for that.",
+      "runpod": "Uses the platform SSH key; a Pod running from before needs it added, which restarts the Pod.",
+      "runpodHelp": "The public key is under Settings → Nodes & deployments → SSH Key. GPUWorks adds it to your RunPod account's SSH keys when the account is added, and RunPod writes account keys into a Pod when it starts, so Pods started from then on need nothing. A Pod already running does not accept it yet: the install asks whether to change the Pod's configuration to add it (which restarts the Pod), or you can give its private key under Advanced once.",
+      "vast": "Attaches the platform SSH key via the Vast API; nothing to enter here.",
+      "vastHelp": "The public key is under Settings → Nodes & deployments → SSH Key.",
+      "compshare": "Signs in once with the instance password, then uses the platform key; nothing to enter.",
+      "compshareHelp": "CompShare instances only offer password login: GPUWorks signs in once with the password the CompShare API issued, adds its platform SSH key (public key under Settings → Nodes & deployments → SSH Key), and uses the key from then on.",
+      "autodl": "Signs in once with AutoDL's root password, then uses the platform key; nothing to enter.",
+      "autodlHelp": "GPUWorks signs in once with the root password AutoDL issued for the instance, adds its platform SSH key (public key under Settings → Nodes & deployments → SSH Key), and uses the key from then on.",
+      "other": "Uses the platform SSH key; if the instance does not accept it, give a credential under Advanced.",
+      "otherHelp": "The public key is under Settings → Nodes & deployments → SSH Key. If the instance does not accept it yet, give a private key or password under Advanced once; the key is added during the install." },
     "details": "Install details",
     "credentialOverride": "SSH credentials (optional)",
     "credentialOverrideHelp": "Only needed when the GPUWorks platform key and the external platform's own login do not work. After a successful login the GPUWorks platform key is added and these are not kept.",
@@ -93,7 +99,7 @@
       },
       "waitingForServer": {
         "title": "Agent started, the server cannot reach it yet",
-        "description": "The agent is running on the instance, but the server cannot connect to its port yet. Usually a security group or firewall blocks the port: see the server_dial row below and the Security group and Server to agent rows of the precheck. Once the port is open the server connects on its own; there is no need to install again."
+        "description": "The agent is running on the instance, but the server cannot connect to its port yet, usually because a security group or firewall blocks it: see the server_dial row below and the precheck details. Once the port is open the server connects on its own; no need to install again."
       },
       "failed": {
         "title": "Installation failed",

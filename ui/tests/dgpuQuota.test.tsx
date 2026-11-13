@@ -40,6 +40,7 @@ const pending = fixture("dgpu-quota/pending");
 
 const { MemoryRouter } = await import("react-router-dom");
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
+const { default: userEvent } = await import("@testing-library/user-event");
 const { default: GPUPage } = await import("../src/pages/GPUPage.tsx");
 
 type Call = { method: string; url: string; body?: unknown };
@@ -74,11 +75,14 @@ function limitInput(dialog: HTMLElement) {
   return within(dialog).getByRole("spinbutton") as HTMLInputElement;
 }
 
-test("the dialog opens on the deployment's limit and says the limit takes effect at once", async () => {
+test("the dialog opens on the deployment's limit and keeps the restart rules behind the help mark", async () => {
   const { dialog } = await openQuota("qwen3-dgpu-a");
   assert.ok(within(dialog).getByText(deployment.name));
   assert.equal(limitInput(dialog).value, "8.0");
-  assert.ok(within(dialog).getByText(gpus.quota.note));
+  assert.ok(within(dialog).getByText(gpus.quota.hint));
+  assert.equal(within(dialog).queryByText(gpus.quota.noteHelp), null, "the restart rules are not on the page");
+  await userEvent.setup().hover(within(dialog).getByRole("button", { name: common.helpTip.label }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, gpus.quota.noteHelp);
   // Nothing to save until the limit changes.
   assert.equal(within(dialog).getByRole("button", { name: gpus.quota.save }).hasAttribute("disabled"), true);
 });

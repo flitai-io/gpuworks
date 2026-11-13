@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../../api";
 import type { Network, NetworkDetail, NetworkRequest, NetworkRole, NetworkType } from "../../networkTypes";
 import { isAcceleratorRDMA, usesRails } from "./networkDisplay";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 type FormValues = Required<Pick<NetworkRequest, "name" | "roles" | "type">> & Omit<NetworkRequest, "name" | "roles" | "type">;
 
@@ -99,7 +100,7 @@ export default function NetworkFormModal({
             })}
           </Checkbox.Group>
         </Form.Item>
-        <Form.Item label={t("form.type")} name="type" extra={t("form.typeHint")}>
+        <Form.Item label={t("form.type")} name="type" extra={<span className="inline-flex items-center gap-1">{t("form.typeHint")}<HelpTip content={t("form.typeHelp")} /></span>}>
           <Radio.Group optionType="button" options={typeOptions.map((value) => ({ value, label: t(`type.${value}`, { defaultValue: value }) }))} />
         </Form.Item>
         {railsType ? (

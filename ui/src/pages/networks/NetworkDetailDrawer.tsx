@@ -15,6 +15,7 @@ import NetworkMonitorPanel from "./NetworkMonitorPanel";
 import ManagementNodesTable from "./ManagementNodesTable";
 import { Endpoint, RoleTags, TypeTag, WarningMark, isAcceleratorRDMA, usesRails, sourceText } from "./networkDisplay";
 import { BootstrapCell, RailsCell } from "./RDMAEndpoints";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const tabKeys = ["overview", "monitor", "test"] as const;
 
@@ -222,8 +223,9 @@ function NetworkOverview({ detail, description, onDetail, onAttach }: {
             <Descriptions bordered size="small" column={1}>
               <Descriptions.Item label={t("selector.bootstrapCidr")}>{detail.cidr || t("selector.inferredShort")}</Descriptions.Item>
             </Descriptions>
-            <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }}>
-              {t(isAcceleratorRDMA(detail.type) ? "detail.acceleratorInferred" : "detail.rdmaInferred")}
+            <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }} className="flex items-center gap-1">
+              {t(isAcceleratorRDMA(detail.type) ? "detail.acceleratorEditHint" : "detail.rdmaEditHint")}
+              <HelpTip content={t(isAcceleratorRDMA(detail.type) ? "detail.acceleratorInferredHelp" : "detail.rdmaInferredHelp")} />
             </Typography.Paragraph>
           </>
         ) : (

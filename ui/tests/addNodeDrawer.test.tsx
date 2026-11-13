@@ -726,7 +726,7 @@ test("starting via systemd is on by default and can be switched off", async () =
     fireEvent.click(screen.getByText(nodes.add.advanced));
     const toggle = screen.getByRole("switch", { name: nodes.add.useSystemd });
     assert.equal(toggle.getAttribute("aria-checked"), "true");
-    assert.ok(screen.queryByText(nodes.add.useSystemdOffHelp) === null, "Expected the element to be absent");
+    assert.ok(screen.queryByText(nodes.add.useSystemdOff) === null, "Expected the element to be absent");
     fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
     fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
     await waitFor(() => assert.equal(install.bodies.length, 1));
@@ -735,7 +735,7 @@ test("starting via systemd is on by default and can be switched off", async () =
     // The switch works from the keyboard: the left arrow turns it off.
     fireEvent.keyDown(toggle, { key: "ArrowLeft", keyCode: 37 });
     assert.equal(toggle.getAttribute("aria-checked"), "false");
-    assert.ok(screen.getByText(nodes.add.useSystemdOffHelp));
+    assert.ok(screen.getByText(nodes.add.useSystemdOff));
     fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
     await waitFor(() => assert.equal(install.bodies.length, 2));
     assert.equal(install.bodies[1].no_systemd, true);

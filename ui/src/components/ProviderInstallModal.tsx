@@ -14,6 +14,7 @@ import { installVerdict, type InstallOutcome } from "../providerInstallOutcome";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../i18n/localizedText";
 import { DEFAULT_AGENT_LISTEN } from "../agentListen";
+import { HelpTip } from "../ui-kit/HelpTip";
 
 // AutoDL's port documentation: its Pro instances open HTTP ports only, which
 // a server-dialed agent cannot use, so the one-click install never offers it.
@@ -154,7 +155,7 @@ export default function ProviderInstallModal({
         {!installed && (
           <>
             <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              {t(autoAuthHelpKey(providerKind))}
+              {t(autoAuthKey(providerKind))} <HelpTip content={t(`${autoAuthKey(providerKind)}Help`)} />
             </Typography.Paragraph>
             <Typography.Text strong>{t("install.connection")}</Typography.Text>
             <Select
@@ -331,9 +332,10 @@ function restartConfirmContent(need: unknown): string {
   }
 }
 
-// Each provider gets the platform key onto an instance its own way; the help
-// line says which, so an operator knows what the server does on their behalf.
-function autoAuthHelpKey(providerKind?: string): string {
+// Each provider gets the platform key onto an instance its own way; the line
+// says which, so an operator knows what the server does on their behalf, and
+// its help mark (the same key + "Help") holds the details.
+function autoAuthKey(providerKind?: string): string {
   switch (providerKind) {
     case "aliyun":
     case "digitalocean":

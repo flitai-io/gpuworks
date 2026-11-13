@@ -131,8 +131,8 @@
     "installDirPlaceholder": "留空使用默认目录（/opt/gpuworks 或 ~/gpuworks）",
     "installDirTooltip": "没有 docker 的节点使用 runveil 运行时，镜像和容器根文件系统也放在这里，所以要选本地文件系统；不允许文件名带冒号的网络卷（例如 RunPod 的 /workspace）不能用。",
     "useSystemd": "通过 systemd 启动",
-    "useSystemdTooltip": "开启时把 agent 注册为 systemd 服务 gpuworks-agent：开机自启、崩溃自动拉起。关闭时 agent 以 nohup 后台运行，安装目录里的 agent-restart.sh 用于手动重启；主机上已有的 gpuworks-agent 服务和其他目录里的 agent 都不受影响，换一个安装目录即可在同一台主机上再加一个 agent。主机没有 systemd 或没有 root/免密 sudo 时总是 nohup；macOS 节点使用 launchd，不受此项影响。",
-    "useSystemdOffHelp": "agent 不随开机启动，进程退出后也不会自动拉起",
+    "useSystemdHelp": "开启：注册为 systemd 服务 gpuworks-agent，开机自启、崩溃自动拉起。关闭：以 nohup 后台运行，用安装目录里的 agent-restart.sh 手动重启，不动主机上已有的 agent 服务和其他目录的 agent（换个安装目录可在同一主机再加一个 agent）。没有 systemd 或 root/免密 sudo 时总用 nohup；macOS 用 launchd。",
+    "useSystemdOff": "agent 不随开机启动，进程退出后也不会自动拉起",
     "agentListenAddress": "Agent 监听地址",
     "agentListenAddressHelp": "agent 在这台主机（或容器）里监听的地址，即 --listen。",
     "offlineInstructions": "节点访问不到管理节点，所以从离线包安装：下载离线包，把它传到节点上（scp、Web 终端或 JupyterLab 上传均可），在它所在的目录执行下面的命令。离线包里没有 token，所有节点通用。",
@@ -482,7 +482,7 @@
       "description": "{{reason}}\n\n放到这里的部署都会在容器启动时失败。平台因此停止了该节点的调度，如果原因未解决，下一次上报时还会再次停止。",
       "reason": {
         "gpu_plugin_missing": "容器运行时 {{runtime}} 需要厂商 GPU 插件 {{plugin}}，而它没有安装，因此容器拿不到这台节点的加速卡。",
-        "gpu_runtime_unconfigured": "{{runtime}} 在运行，但没有配置 GPU 支持，因此容器拿不到这台节点的加速卡。装好厂商插件后还要让 {{runtime}} 用上它（NVIDIA：nvidia-ctk runtime configure --runtime=docker，然后重启 Docker）。"
+        "gpu_runtime_unconfigured": "{{runtime}} 没有配置 GPU 支持，容器拿不到加速卡。请让 {{runtime}} 用上厂商插件（NVIDIA：nvidia-ctk runtime configure --runtime=docker，再重启 Docker）。"
       }
     },
     "state": {
@@ -797,7 +797,16 @@
     "historyItem": "批次 {{id}} · {{version}}",
     "runTitle": "Agent 升级批次 {{id}}",
     "processed": "已处理 {{processed}} / {{total}} 个节点",
-    "results": "成功 {{succeeded}} · 失败 {{failed}} · 跳过 {{skipped}} · 已取消 {{cancelled}} · 已中断 {{interrupted}} · 未确认 {{unconfirmed}} · 等待 {{queued}} · 执行中 {{active}}",
+    "result": {
+      "succeeded": "成功 {{value}}",
+      "failed": "失败 {{value}}",
+      "skipped": "跳过 {{value}}",
+      "cancelled": "已取消 {{value}}",
+      "interrupted": "已中断 {{value}}",
+      "unconfirmed": "未确认 {{value}}",
+      "queued": "等待 {{value}}",
+      "active": "执行中 {{value}}"
+    },
     "processingNotSuccess": "处理进度包含失败和跳过的节点；100% 不表示全部升级成功。",
     "blocked": "{{name}} 的上次升级仍待核实，后续升级已阻止。",
     "unconfirmedHelp": "未确认的旧操作仍可能替换 Agent。请先检查节点及日志，再核实释放占用；新建其他批次不能绕过。",
@@ -965,7 +974,7 @@
     "removed": "已移除",
     "lastChecked": "{{ago}}检查",
     "banner": {
-      "offline": "节点离线，下面是最后已知的结果，不代表现在。",
+      "offline": "节点离线，下面是最后已知的结果。",
       "stale": "超过两个上报周期没有新的上报，下面的结果可能已过时。",
       "noReports": "该节点的 agent 版本过旧，不上报卡的健康检查。升级 agent 后可以看到全部检查。",
       "waiting": "还没有收到该节点的上报。"
@@ -985,7 +994,7 @@
       "evidence": "依据",
       "probe": "复核命令",
       "noRuns": "agent 启动后这项检查还没做过。",
-      "agentSince": "agent 自 {{time}} 启动，只知道此后的结果。",
+      "agentSinceHelp": "agent 自 {{time}} 启动，这里只有此后的结果。",
       "noEvidence": "没有问题，未记录依据。"
     },
     "records": {
@@ -1025,7 +1034,7 @@
     "attempts": "已尝试恢复 {{count}} 次",
     "recoveryError": "最近恢复错误",
     "exposure": "公网入口：最近观测",
-    "lastObserved": "观测于 {{time}}，不代表当前可用。",
+    "lastObserved": "观测于 {{time}}",
     "result": "观测结果",
     "vantage": "检查位置",
     "target": "检查地址",
@@ -1074,7 +1083,7 @@
       "offline": "当前没有 Agent 控制会话，无法请求节点当前证据。"
     },
     "guidance": {
-      "snapshot_scope": "配置快照不代表运行中进程已经采用该配置。请核对指定 state 目录、启动参数和环境变量覆盖；不要分享 TOKEN 或完整进程参数。",
+      "snapshot_scope": "运行中的进程不一定采用了这份配置快照，请核对指定的 state 目录、启动参数和环境变量覆盖；不要分享 TOKEN 或完整进程参数。",
       "http_scope": "HTTP 健康响应不能证明 WebSocket、Agent 认证、推理流式输出或用户侧网络正常。 SSH 中的 curl 使用 SSH 会话环境，可能与运行中 Agent 的代理和 NO_PROXY 设置不同。",
       "test_from_node": "在故障节点执行 gpuworks-agent smoke --state <实际 state 目录>，并查看同一目录下的 agent.log。",
       "manual_address_update": "本检查不修复地址。地址变更需要管理员核对平台记录和 Agent 配置；此诊断不提供原位地址迁移。长期连接应使用稳定地址。",
@@ -1155,7 +1164,7 @@
           "unknown": "未观测到数据通道状态"
         },
         "outcome": {
-          "ok": "所列观察已完成，不代表全链路健康",
+          "ok": "所列观察已完成",
           "failed": "记录的连接尝试失败",
           "invalid_configuration": "连接配置无效",
           "not_applicable": "此连接方向不适用",
