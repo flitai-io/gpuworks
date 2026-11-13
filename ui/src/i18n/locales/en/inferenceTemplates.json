@@ -34,8 +34,8 @@
     "title_other": "Imported, with {{count}} things to check",
     "CATALOG_CALLABLE_METRICS_UNDECLARED": "Spec \"{{spec}}\" of {{model_id}} runs the callable engine but declares no api.metrics, so the monitoring center shows no engine metrics for it unless its /metrics happens to use vLLM or SGLang metric names.",
     "CATALOG_HEALTH_ENDPOINT_UNDECLARED": "Spec \"{{spec}}\" of {{model_id}} runs the callable engine but declares no api.health_endpoint, so its readiness is probed on the default /health.",
-    "CATALOG_CALLABLE_SERVED_NAME_FIXED": "Spec \"{{spec}}\" of {{model_id}} runs the callable engine but passes --served-model-name {{name}} instead of ${SERVED_MODEL_NAME}. The gateway and the health check send the deployment's served name, so an engine that checks the model rejects requests unless you deploy it under exactly that name.",
-    "CATALOG_DISPLAY_PROFILE_RETIRED": "Spec \"{{spec}}\" of {{model_id}} still sets display_profile or gpus.display_target. Both are no longer used and were ignored on import; name the spec with display_name_zh_cn and display_name_en instead.",
+    "CATALOG_CALLABLE_SERVED_NAME_FIXED": "Spec \"{{spec}}\" of {{model_id}} runs the callable engine but hard-codes --served-model-name {{name}}, so an engine that checks the model name rejects gateway requests; use ${SERVED_MODEL_NAME} instead.",
+    "CATALOG_DISPLAY_PROFILE_RETIRED": "Spec \"{{spec}}\" of {{model_id}} still sets the retired display_profile or gpus.display_target, which was ignored on import; use display_name_zh_cn and display_name_en instead.",
     "CATALOG_ARG_PASSED_THROUGH": "Spec \"{{spec}}\" of {{model_id}} passes {{flag}} {{value}}, which the platform parameter dictionary cannot read. It goes to the engine verbatim, but the deploy form and the memory estimate do not see it."
   },
   "detail": {

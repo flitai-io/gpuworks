@@ -4,6 +4,7 @@ import PullProxies from "./PullProxies";
 import PullSourceRules from "./PullSourceRules";
 import Credentials from "./Credentials";
 import SyncGroups from "./SyncGroups";
+import { HelpTip } from "../../../ui-kit/HelpTip";
 
 /**
  * PullSettingsCard is where an operator says how nodes get images and models:
@@ -16,7 +17,7 @@ export default function PullSettingsCard() {
   const { t } = useTranslation("settings");
   return (
     <Card id="pull-settings" title={t("pull.title")}>
-      <Typography.Paragraph type="secondary">{t("pull.description")}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{t("pull.description")} <HelpTip content={t("pull.descriptionHelp")} /></Typography.Paragraph>
       <Tabs
         destroyInactiveTabPane
         items={[

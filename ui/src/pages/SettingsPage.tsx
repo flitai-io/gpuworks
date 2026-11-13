@@ -12,6 +12,7 @@ import {
   message,
 } from "antd";
 import PageHeader from "../components/PageHeader";
+import { HelpTip } from "../ui-kit/HelpTip";
 import { api } from "../api";
 import { defaultTerminalSettings, type TerminalSettings } from "../terminal";
 import { useTranslation } from "react-i18next";
@@ -131,17 +132,18 @@ function TerminalCard() {
       setSaving(false);
     }
   };
-  const field = (label: string, hint: string, value: number, min: number, max: number, set: (v: number) => void) => (
-    <Form.Item label={label} extra={hint} style={{ marginBottom: 12 }}>
+  const labelWithHelp = (label: string, help: string) => <span className="inline-flex items-center gap-1">{label}<HelpTip content={help} /></span>;
+  const field = (label: string, help: string, value: number, min: number, max: number, set: (v: number) => void) => (
+    <Form.Item label={labelWithHelp(label, help)} style={{ marginBottom: 12 }}>
       <InputNumber min={min} max={max} value={value} onChange={(v) => set(Number(v ?? min))} style={{ width: 160 }} />
     </Form.Item>
   );
   return (
     <Card title={t("terminal.title")} extra={<Button type="primary" loading={saving} onClick={save}>{t("common.save")}</Button>}>
       <Space direction="vertical" size={4} style={{ width: "100%", maxWidth: 720 }}>
-        <Text type="secondary">{t("terminal.description")} <Text strong>{t("terminal.privacy")}</Text></Text>
+        <Text type="secondary">{t("terminal.description")} <Text strong>{t("terminal.privacy")}</Text> <HelpTip content={t("terminal.auditHelp")} /></Text>
         <Form layout="vertical" style={{ marginTop: 8 }}>
-          <Form.Item label={t("terminal.enabled")} extra={t("terminal.enabledHelp")} style={{ marginBottom: 12 }}>
+          <Form.Item label={labelWithHelp(t("terminal.enabled"), t("terminal.enabledHelp"))} style={{ marginBottom: 12 }}>
             <Switch checked={cfg.enabled} onChange={(enabled) => setCfg((c) => ({ ...c, enabled }))} />
           </Form.Item>
           {field(t("terminal.idle"), t("terminal.idleHelp"), cfg.idle_timeout_min, 1, 1440, (v) => setCfg((c) => ({ ...c, idle_timeout_min: v })))}

@@ -8,6 +8,7 @@ import { apiErrorText, productMessageText, type ProductMessage } from "../../api
 import { formatTime } from "../../i18n/datetime";
 import { publishUpdateStatus } from "../../components/UpdateNotice";
 import { Badge } from "../../components/ui/badge";
+import { HelpTip } from "../../ui-kit/HelpTip";
 import { Notice } from "../../ui-kit/Notice";
 import { OptionSelect } from "../../ui-kit/OptionSelect";
 import ServerBuildSummary from "../../components/ServerBuildSummary";
@@ -261,6 +262,7 @@ export default function UpdatesCard() {
             <Switch id="update-auto-check" checked={status.auto_check} loading={savingAutoCheck}
               disabled={!status.channel_editable || busy !== "" || switchingTo !== null} onChange={(value) => void switchAutoCheck(value)} />
             <label htmlFor="update-auto-check"><Text>{t("updates.autoCheck")}</Text></label>
+            <HelpTip content={status.auto_check ? t("updates.autoCheckOnHelp") : t("updates.autoCheckOffHelp")} />
           </Space>
         )}
         <UsageReportSwitch />
@@ -281,13 +283,12 @@ export default function UpdatesCard() {
             <Text type="secondary">{channel === "release" ? t("updates.channelReleaseHelp") : t("updates.channelNightlyHelp")}</Text>
           </Space>
         )}
-        {status && <Text type="secondary">{status.auto_check ? t("updates.autoCheckOnHelp") : t("updates.autoCheckOffHelp")}</Text>}
         {loadError && <Notice tone="danger" title={loadError} />}
         {upgrading && <Notice title={t("updates.serverUpgrading", { from: upgrading.from, to: upgrading.to })}>{t("updates.serverUpgradingHelp")}</Notice>}
         {status && !notChecked && <Text type="secondary">{loading ? t("updates.checking") : t("updates.checkedAt", { time: formatTime(status.checked_at) })}</Text>}
         {status && notChecked && !loading && <Notice tone="info" title={t("updates.notChecked")}>{t("updates.notCheckedHelp")}</Notice>}
         {status && !notChecked && !status.available && !loading && <UnavailableAlert status={status} channelName={channelName(status.channel)} />}
-        {status && <section aria-label={t("updates.currentBuild")}><Text strong>{t("updates.currentBuild")}</Text><ServerBuildSummary version={status.server.current} build={status.server.current_build} /></section>}
+        {status && <section aria-label={t("updates.currentBuild")}><Text strong>{t("updates.currentBuild")}</Text> <HelpTip content={t("updates.serverHelp")} /><ServerBuildSummary version={status.server.current} build={status.server.current_build} /></section>}
         <Table<Row> rowKey="key" size="small" pagination={false} loading={loading}
           dataSource={status ? rowsOf(status, names) : []} columns={columns}
           expandable={{
@@ -296,7 +297,6 @@ export default function UpdatesCard() {
             rowExpandable: (row) => row.key === "server",
             expandedRowRender: () => summary && <ServerAgentNotice summary={summary} dismiss={dismiss} />,
           }} />
-        <Text type="secondary">{t("updates.serverHelp")}</Text>
       </Space>
     </Card>
   );

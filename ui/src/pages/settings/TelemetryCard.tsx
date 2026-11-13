@@ -9,6 +9,7 @@ import { useIsAdmin } from "../../components/useIsAdmin";
 import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
 import { resetTraceLinkCache } from "../monitor/useTraceLink";
 import type { TelemetryExport, TelemetryExportTest, TelemetryExportUpdate } from "../../telemetryApi";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const { Text, Paragraph } = Typography;
 
@@ -150,7 +151,7 @@ export default function TelemetryCard() {
         }
       >
         <Space direction="vertical" size={8} style={{ width: "100%", maxWidth: 820 }}>
-          <Text type="secondary">{t("telemetry.description")}</Text>
+          <Text type="secondary">{t("telemetry.description")} <HelpTip content={t("telemetry.descriptionHelp")} /></Text>
           {loadError && (
             <Alert type="error" showIcon message={loadError} action={<Button size="small" onClick={() => void load()}>{tCommon("actions.retry")}</Button>} />
           )}

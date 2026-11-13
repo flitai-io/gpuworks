@@ -164,3 +164,18 @@ test("a running collection blocks another; a failed one says why", async () => {
   const busy = screen.getByRole("button", { name: new RegExp(d.bundle.running) }) as HTMLButtonElement;
   assert.ok(busy.className.includes("loading"));
 });
+
+test("each card states what it does in one line and keeps the details behind the help mark", async () => {
+  stub({});
+  for (const [card, description, help] of [
+    [<DebugSessionCard />, d.debug.description, d.debug.descriptionHelp],
+    [<DiagnosticsBundleCard />, d.bundle.description.replace("{{days}}", "7"), d.bundle.descriptionHelp],
+  ] as const) {
+    const user = renderWith(card);
+    assert.ok(await screen.findByText(description));
+    assert.equal(screen.queryByText(help), null);
+    await user.hover(screen.getByRole("button", { name: locale.common.helpTip.label }));
+    assert.equal((await screen.findByRole("tooltip")).textContent, help);
+    cleanup();
+  }
+});

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { api, usePolling, type PullSourceRule } from "../../../api";
 import PullRuleDrawer from "./PullRuleDrawer";
 import { hostOf, moved, pullErrorText, requirementChips } from "./pullFormat";
+import { HelpTip } from "../../../ui-kit/HelpTip";
 
 /**
  * PullSourceRules lists the pull source rules in the order they are tried:
@@ -180,7 +181,7 @@ export default function PullSourceRules() {
 
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{t("pull.rules.intro")}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{t("pull.rules.intro")} <HelpTip content={t("pull.rules.introHelp")} /></Typography.Paragraph>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Typography.Text type="secondary">{t("pull.rules.orderHint")}</Typography.Text>
         <Button type="primary" icon={<PlusOutlined aria-hidden />} onClick={() => setEditing("new")}>{t("pull.rules.new")}</Button>

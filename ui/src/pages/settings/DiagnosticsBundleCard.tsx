@@ -9,6 +9,7 @@ import { useIsAdmin } from "../../components/useIsAdmin";
 import { formatBytes } from "../../format";
 import { nodeDisplayName } from "../../nodeDisplay";
 import { diagnosticsBundleDownloadURL, type DiagnosticsBundle, type DiagnosticsBundleItem } from "../../diagnosticsApi";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const { Paragraph } = Typography;
 
@@ -74,7 +75,7 @@ export default function DiagnosticsBundleCard() {
 
   return (
     <Card title={t("diagnostics.bundle.title")}>
-      <Paragraph type="secondary">{t("diagnostics.bundle.description", { days: limits?.keep_days ?? 7 })}</Paragraph>
+      <Paragraph type="secondary">{t("diagnostics.bundle.description", { days: limits?.keep_days ?? 7 })} <HelpTip content={t("diagnostics.bundle.descriptionHelp")} /></Paragraph>
       {bundles.error && <Alert type="error" showIcon message={apiErrorText(tCommon, bundles.error)} style={{ marginBottom: 12 }} />}
       <Form layout="vertical" disabled={!isAdmin}>
         <Space wrap size={16} align="start">

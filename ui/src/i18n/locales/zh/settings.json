@@ -18,7 +18,7 @@
   },
   "updates": {
     "title": "版本与更新",
-    "description": "服务端版本、系统镜像目录与推理模板目录都可以在这里检查和更新。开启自动检测时，打开控制台会自动检查（服务端每小时最多向外检查一次），点「检查更新」立即重新检查；不能联网时可以上传文件更新。",
+    "description": "检查并更新服务端版本、系统镜像目录与推理模板目录；不能联网时可以上传文件更新。",
     "check": "检查更新",
     "unavailable": "暂时无法检查更新",
     "unavailableHelp": "请确认服务端能访问外网（需要代理时在服务端主机上设置 HTTPS_PROXY）。不能联网时，系统镜像目录与推理模板目录可以在这里上传文件更新，服务端可以上传升级包或用 gpuworks upgrade --archive 升级。", "checking": "正在检查…", "unpublished": "{{channel}}渠道还没有发布任何版本", "unpublishedHelp": "发布源都能访问，只是这个渠道里还没有内容。可以切回另一个渠道，或等正式版本发布后再检查；系统镜像目录与推理模板目录仍可以在这里上传文件更新。", "invalidIndex": "发布源返回的内容没有通过签名校验", "invalidIndexHelp": "服务端连上了发布源，但收到的不是有效的发布索引：常见于需要登录认证的网关或代理拦截了请求。请检查服务端主机的出网代理与网关设置，稍后再检查；期间可以在这里上传文件更新。",
@@ -116,7 +116,8 @@
   "error": { "save": "保存失败：{{detail}}", "update": "更新失败：{{detail}}", "import": "导入失败：{{detail}}", "delete": "删除失败：{{detail}}", "add": "添加失败：{{detail}}" },
   "pull": {
     "title": "拉取设置",
-    "description": "节点从哪里获取镜像和模型，以及经过哪个代理出网。来源规则决定镜像仓库和模型站点先试哪些替代地址，代理为符合条件的节点指定出网代理，同步组（镜像和模型共用）决定哪些节点之间互相复制，凭据用于登录私有仓库和访问需要令牌的模型站点。部署本身不带来源，节点拉取时统一读取这里的设置。",
+    "description": "节点从哪里获取镜像和模型、经过哪个代理出网；节点拉取时统一读取这里的设置。",
+    "descriptionHelp": "来源规则决定镜像仓库和模型站点先试哪些替代地址；代理为符合条件的节点指定出网代理；同步组（镜像和模型共用）决定哪些节点之间互相复制；凭据用于登录私有仓库和访问需要令牌的模型站点。部署本身不带来源。",
     "loadFailed": "加载失败：{{detail}}",
     "invalidField": "“{{field}}”设置无效：{{detail}}",
     "tabs": {
@@ -160,7 +161,8 @@
       "countUnknown": "暂时无法获取匹配的节点数。"
     },
     "rules": {
-      "intro": "平台拉取镜像或模型时，先按匹配到的规则依次尝试替代地址，按顺序试到能用为止，最后回到原地址（除非规则关闭了回源）。镜像下载失败或 3 分钟没有新增字节就换下一个；模型下载时，出错的地址立即跳过（在该节点上冷却 30 分钟），连接 5 分钟收不到数据算一次卡住，同一地址连续卡住两次才换下一个。镜像规则匹配仓库，模型站点规则匹配 http(s) 站点根地址。没有规则时，节点自动探测各仓库，按可达性和延迟排序。",
+      "intro": "拉取时按匹配的规则依次尝试替代地址，都不可用时回到原地址（除非规则关闭了回源）。",
+      "introHelp": "镜像下载失败或 3 分钟没有新增字节就换下一个地址。模型下载时，出错的地址立即跳过（在该节点上冷却 30 分钟）；连接 5 分钟收不到数据算一次卡住，同一地址连续卡住两次才换下一个。镜像规则匹配仓库，模型站点规则匹配 http(s) 站点根地址。没有规则时，节点自动探测各仓库，按可达性和延迟排序。",
       "orderHint": "规则从上到下依次匹配。",
       "new": "新建规则",
       "tableLabel": "来源规则",
@@ -334,14 +336,15 @@
   },
   "sshKey": { "title": "SSH 密钥", "description": "平台自己的 SSH 密钥对。添加节点、预检查和带外恢复都用它登录，节点只需授权一次下面的公钥。私钥加密保存，不会显示。", "publicKey": "公钥", "fingerprint": "指纹", "createdAt": "创建时间", "authorizeCommand": "授权命令", "import": "导入密钥", "importTitle": "导入已有私钥", "importHelp": "把节点已经信任的一把密钥用作平台密钥。只接受未加密的 OpenSSH 或 PKCS#8 私钥，导入后替换当前密钥。", "privateKey": "私钥", "imported": "平台 SSH 密钥已导入", "importFailed": "导入失败：{{detail } }", "rotate": "重新生成", "rotateConfirm": "重新生成平台 SSH 密钥？", "rotateWarning": "只授权了当前公钥的节点将不再接受平台登录，带外恢复会失败，直到它们授权新公钥。", "rotated": "平台 SSH 密钥已重新生成", "rotateFailed": "重新生成失败：{{detail } }", "loadFailed": "读取平台 SSH 密钥失败：{{detail } }" },
   "deployment": {"title": "部署", "saved": "部署设置已保存", "description": "集群内所有部署的默认值；单个部署可以在部署表单的「运行环境」里另设。", "startTimeout": "启动超时（默认）", "startTimeoutHelp": "实例启动后等待引擎健康检查通过的最长时间，超时即判定这次启动失败并按重试策略重启。没有自行设置的部署使用这个值；修改只影响之后启动的实例。范围 {{min}}–{{max}} 秒。", "seconds": "秒"},
-  "terminal": { "title": "Web 终端", "saved": "Web 终端设置已保存", "description": "Web 终端在浏览器中直接打开计算节点的宿主机 shell，仅管理员可用。审计只记录元数据（操作者、节点、时长、传输字节数）。", "privacy": "不记录任何终端输入与输出内容。", "enabled": "启用 Web 终端", "enabledHelp": "关闭后所有节点的终端入口立即失效，已建立的会话也会被拒绝重连。", "idle": "空闲超时（分钟）", "idleHelp": "仅按操作者输入判定；持续输出的命令（如 watch nvidia-smi）不会续期。", "grace": "进程回收宽限（秒）", "graceHelp": "关闭会话后先发 SIGTERM，超过该时间仍未退出则 SIGKILL 整个会话，避免残留进程占用显存。", "nodeLimit": "单节点并发上限", "nodeLimitHelp": "超出后新建终端返回 429。", "globalLimit": "平台并发上限", "globalLimitHelp": "不得小于单节点上限。" },
+  "terminal": { "title": "Web 终端", "saved": "Web 终端设置已保存", "description": "在浏览器中直接打开计算节点的宿主机 shell，仅管理员可用。", "auditHelp": "审计只记录元数据：操作者、节点、时长、传输字节数。", "privacy": "不记录任何终端输入与输出内容。", "enabled": "启用 Web 终端", "enabledHelp": "关闭后所有节点的终端入口立即失效，已建立的会话也会被拒绝重连。", "idle": "空闲超时（分钟）", "idleHelp": "仅按操作者输入判定；持续输出的命令（如 watch nvidia-smi）不会续期。", "grace": "进程回收宽限（秒）", "graceHelp": "关闭会话后先发 SIGTERM，超过该时间仍未退出则 SIGKILL 整个会话，避免残留进程占用显存。", "nodeLimit": "单节点并发上限", "nodeLimitHelp": "超出后新建终端返回 429。", "globalLimit": "平台并发上限", "globalLimitHelp": "不得小于单节点上限。" },
   "orphanCleanup": { "title": "孤儿容器清理", "description": "开启后，每个 agent 在状态同步时会清除不在其期望状态内的 gpuworks 命名容器。", "enabled": "启用孤儿容器清理" },
   "security": { "title": "安全", "description": "以暴露面换取便利的全平台开关，只在清楚谁能访问到什么时再改。", "previewNetwork": "允许试验场 HTML 预览发起网络请求", "previewNetworkHelp": "关闭时：预览页可以从 HTTPS 站点加载脚本、样式和图片，但 fetch、XHR、WebSocket 请求和所有 HTTP 资源都会被拦截。开启后：不再有任何网络限制，模型生成的页面能访问查看者浏览器能到达的任何地址，包括内网服务和本控制台自身。无论开关如何，预览页都拿不到控制台的登录会话。", "inferenceOpenAccess": "接受不带令牌的 /v1 推理请求", "inferenceOpenAccessHelp": "关闭时：每个 /v1 请求都必须带推理令牌，不带令牌的请求一律拒绝。开启后：不带令牌的请求会被匿名放行，任何能访问本服务的人都能调用已部署模型、占用其 GPU；带了令牌的请求仍然照常校验。吊销最后一个令牌不再开放网关，开放与否只由这个开关决定。", "adminOnly": "只有管理员可以修改安全设置。", "saved": "安全设置已保存" },
-  "telemetry": {"title": "请求 Trace 导出（OpenTelemetry）", "description": "把网关的每个请求作为一个 OTLP span 推给你的 OpenTelemetry Collector，再由它转到 Jaeger、Tempo、Grafana Cloud、Datadog 等追踪系统。上游网关带 traceparent 时，平台的 span 接在它的 trace 下面；span 带模型、token、缓存命中、排队 / Prefill / 思考 / 回答各阶段耗时与结局。不导出提示词与回复内容。", "adminOnly": "只有管理员可以修改导出设置。", "settingError": "已保存的导出设置无法应用，导出已停止。重新保存设置即可恢复。", "enabled": "开启导出", "endpoint": "Collector 地址", "endpointHelp": "OTLP/HTTP 地址，例如 http://otel-collector:4318；路径不是 /v1/traces 时自动补上。server 要能直接访问它，节点不需要。", "headers": "请求头", "headersHelp": "随每次导出发送，例如鉴权令牌或租户 ID。值加密保存，保存后不再显示；已保存的留空表示不改。", "headerName": "第 {{n}} 个请求头的名称", "headerValue": "值", "headerValueOf": "第 {{n}} 个请求头的值", "headerKept": "已保存，留空不改", "removeHeader": "删除第 {{n}} 个请求头", "addHeader": "添加请求头", "sampleRatio": "采样比例", "sampleRatioHelp": "只作用于网关自己新起的 trace；上游已经决定采样与否的 trace 照它的决定。平台自己的请求视图不受影响。", "traceLink": "Trace 链接", "traceLinkHelp": "含 {trace_id} 的追踪系统地址，填了以后请求详情里的 trace id 可以直接打开。可留空。", "test": "发送测试 span", "testHelp": "用当前填写的内容（不必先保存）发一个名为 gpuworks test span 的 span。", "testOK": "Collector 已接收测试 span", "testFailed": "测试失败", "testTrace": "可以在追踪系统里搜索这个 trace id：", "status": "运行状态（自 server 启动以来）", "sendingTo": "发往", "notSending": "未在导出", "counts": "计数", "countsText": "已导出 {{exported}} · 丢弃 {{dropped}} · 失败 {{failed}} · 排队 {{queued}}", "lastExport": "最近一次成功", "lastError": "最近一次错误", "saved": "导出设置已保存", "state": {"on": "导出中", "off": "已关闭", "failing": "发送失败", "broken": "设置无法应用"}},
+  "telemetry": {"title": "请求 Trace 导出（OpenTelemetry）", "description": "把网关的每个请求作为 OTLP span 推给你的 OpenTelemetry Collector，不导出提示词与回复内容。", "descriptionHelp": "Collector 再把 span 转到 Jaeger、Tempo、Grafana Cloud、Datadog 等追踪系统。上游网关带 traceparent 时，平台的 span 接在它的 trace 下面。span 带模型、token、缓存命中、排队 / Prefill / 思考 / 回答各阶段耗时与结局。", "adminOnly": "只有管理员可以修改导出设置。", "settingError": "已保存的导出设置无法应用，导出已停止。重新保存设置即可恢复。", "enabled": "开启导出", "endpoint": "Collector 地址", "endpointHelp": "OTLP/HTTP 地址，例如 http://otel-collector:4318；路径不是 /v1/traces 时自动补上。server 要能直接访问它，节点不需要。", "headers": "请求头", "headersHelp": "随每次导出发送，例如鉴权令牌或租户 ID。值加密保存，保存后不再显示；已保存的留空表示不改。", "headerName": "第 {{n}} 个请求头的名称", "headerValue": "值", "headerValueOf": "第 {{n}} 个请求头的值", "headerKept": "已保存，留空不改", "removeHeader": "删除第 {{n}} 个请求头", "addHeader": "添加请求头", "sampleRatio": "采样比例", "sampleRatioHelp": "只作用于网关自己新起的 trace；上游已经决定采样与否的 trace 照它的决定。平台自己的请求视图不受影响。", "traceLink": "Trace 链接", "traceLinkHelp": "含 {trace_id} 的追踪系统地址，填了以后请求详情里的 trace id 可以直接打开。可留空。", "test": "发送测试 span", "testHelp": "用当前填写的内容（不必先保存）发一个名为 gpuworks test span 的 span。", "testOK": "Collector 已接收测试 span", "testFailed": "测试失败", "testTrace": "可以在追踪系统里搜索这个 trace id：", "status": "运行状态（自 server 启动以来）", "sendingTo": "发往", "notSending": "未在导出", "counts": "计数", "countsText": "已导出 {{exported}} · 丢弃 {{dropped}} · 失败 {{failed}} · 排队 {{queued}}", "lastExport": "最近一次成功", "lastError": "最近一次错误", "saved": "导出设置已保存", "state": {"on": "导出中", "off": "已关闭", "failing": "发送失败", "broken": "设置无法应用"}},
   "mcp": {"title": "MCP 服务", "on": "已开启", "off": "已关闭", "switch": "开启 MCP 服务", "turnedOn": "MCP 服务已开启", "turnedOff": "MCP 服务已关闭", "description": "让 Claude Code、Cursor 等 AI 工具通过 MCP 读取本平台：集群概况、API 读取与检索、指标目录、GPU 拓扑。工具与平台内的 AI 助手相同，只读，以令牌所属用户的权限读取，同样做凭证脱敏。", "adminOnly": "只有管理员可以开启或关闭。", "endpoint": "端点", "auth": "鉴权", "authText": "请求头带平台 API 令牌（只读即可）：Authorization: Bearer gwp_…", "createToken": "创建令牌", "tools": "工具", "claudeCode": "Claude Code", "otherClients": "其他支持 HTTP 传输的客户端", "dataNotice": "MCP 客户端会把读到的平台数据交给它自己配置的模型，数据去向由客户端决定，与平台的 AI 服务配置无关。"},
   "listen": {
     "title": "监听地址",
-    "description": "本服务在本机绑定的地址（另加供本机工具使用的 127.0.0.1），保存在 server.yaml。这里只决定本服务在哪些地址上应答；节点、用户和 API 客户端用什么地址访问本服务由它们各自决定，经域名、反向代理或 NAT 转发到这里同样可用。",
+    "description": "本服务在本机绑定的地址，保存在 server.yaml。",
+    "descriptionHelp": "另加 127.0.0.1 供本机工具使用。这里只决定本服务在哪些地址上应答；节点、用户和 API 客户端用什么地址访问本服务由它们各自决定，经域名、反向代理或 NAT 转发到这里同样可用。",
     "console": "控制台监听地址",
     "consoleHelp": "Web 控制台和管理 API 在本机绑定的 IP:端口，多个用逗号分隔。节点接入和推理 API 未在高级设置中单独指定时也使用它。",
     "consoleRequired": "请至少填写一个 IP:端口",
@@ -456,7 +459,8 @@
     "adminOnly": "只有管理员可以开启调试采集和收集诊断信息。",
     "bundle": {
       "title": "收集诊断信息",
-      "description": "把一段时间内的 server 日志、相关节点的 agent 日志与诊断报告、实例日志、调试采集的记录，以及相关的节点、部署、事件、镜像、存储、设置和请求记录打成一个压缩包，下载后发给技术支持。凭据只保留前 8 个字符，不含提示词与回复（调试采集记录的请求除外）。压缩包保留 {{days}} 天。",
+      "description": "把一段时间内的日志和相关记录打成压缩包，下载后发给技术支持；压缩包保留 {{days}} 天。",
+      "descriptionHelp": "包含 server 日志、相关节点的 agent 日志与诊断报告、实例日志、调试采集的记录，以及相关的节点、部署、事件、镜像、存储、设置和请求记录。凭据只保留前 8 个字符；不含提示词与回复（调试采集记录的请求除外）。",
       "window": "时间范围",
       "lastHours_one": "最近 {{count}} 小时",
       "lastHours_other": "最近 {{count}} 小时",
@@ -498,7 +502,8 @@
     },
     "debug": {
       "title": "调试采集",
-      "description": "在一段时间内把 server 与所选节点 agent 的 debug 日志写进单独的文件，并记录所选部署每个请求的原始内容（请求、引擎返回的每一帧与客户端收到的每一帧、结束方式）。不改变平时的日志级别；到时间或写满大小自动结束。收集诊断信息时，时间重叠的调试采集会一并收回。",
+      "description": "限时记录 server 与所选节点的 debug 日志和所选部署的请求原始内容，到时或写满自动结束。",
+      "descriptionHelp": "debug 日志写进单独的文件，平时的日志级别保持不变。请求原始内容包括请求、引擎返回的每一帧、客户端收到的每一帧和结束方式。收集诊断信息时，时间重叠的调试采集会一并收回。",
       "collecting": "采集中",
       "last": "上次调试采集",
       "startedAt": "开始",
