@@ -31,6 +31,9 @@ import (
 type HubPusher interface {
 	Online(uuid string) bool
 	PushToNode(uuid string, su proto.StateUpdate) error
+	// RequestImageRefs hands a node the latest image refs to send on its
+	// own, without waiting for the agent.
+	RequestImageRefs(uuid string, refs []string)
 	SyncNode(uuid string) error
 	CopyModelPath(ctx context.Context, req proto.ModelSyncCopyRequest) (proto.ModelSyncCopyResult, error)
 	StopModelSync(ctx context.Context, nodeUUID, key, transferID string) error
@@ -106,6 +109,8 @@ type Controller struct {
 	// (image_acquisition.go).
 	peerCool   pairCooldown
 	imageWaits imageWaits
+	// imageRefsNotify asks the image refs worker for a push (image_refs.go).
+	imageRefsNotify chan struct{}
 	// failover is node replacement's memory (node_failover.go).
 	failover nodeFailover
 }
@@ -159,7 +164,7 @@ func New(st *store.Store, hub HubPusher, log *slog.Logger) *Controller {
 		retryBackoff: 15 * time.Second, offlineGrace: 2 * time.Minute,
 		maxAttempts: 3, modelSyncs: map[string]*modelSyncRun{}, sleepPushed: map[uint]map[string]sleepOrder{},
 		now: time.Now, observation: newObservationRefresh(), evictions: prepobs.NewPhases[store.FileRef](),
-		waits: placewait.New(),
+		waits: placewait.New(), imageRefsNotify: make(chan struct{}, 1),
 	}
 	c.SetEnginePorts(defaultEnginePorts.Start, defaultEnginePorts.End)
 	return c
@@ -211,6 +216,10 @@ func (c *Controller) Run(ctx context.Context) {
 	cacheDone := make(chan struct{})
 	go func() { defer close(cacheDone); c.cacheWorker(ctx) }()
 	defer func() { c.cacheQ.close(); <-cacheDone }()
+	imageRefsCtx, stopImageRefs := context.WithCancel(ctx)
+	imageRefsDone := make(chan struct{})
+	go func() { defer close(imageRefsDone); c.imageRefsWorker(imageRefsCtx) }()
+	defer func() { stopImageRefs(); <-imageRefsDone }()
 	c.cacheQ.add("waiting")
 	if storages, err := c.store.ListStorages(); err == nil {
 		for _, storage := range storages {

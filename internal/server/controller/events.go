@@ -79,7 +79,7 @@ func (c *Controller) onEvent(ev bus.Event) {
 		// loop: each agent refreshes node status, which publishes another image
 		// node event. Catalog mutations still propagate the new ref set.
 		if ev.Reason != "node" && ev.Reason != "syncing" && ev.Reason != bus.ReasonProgress {
-			c.pushImageRefs()
+			c.requestImageRefsPush()
 		}
 		if ev.Reason == bus.ReasonProgress {
 			return
@@ -93,24 +93,6 @@ func (c *Controller) onEvent(ev bus.Event) {
 				}
 			}
 		}
-	}
-}
-
-func (c *Controller) pushImageRefs() {
-	images, err := c.store.ListEnabledImages()
-	if err != nil {
-		return
-	}
-	refs := make([]string, 0, len(images))
-	for _, image := range images {
-		refs = append(refs, image.ImageRef)
-	}
-	nodes, err := c.store.ListNodes()
-	if err != nil {
-		return
-	}
-	for _, node := range nodes {
-		_ = c.hub.PushToNode(node.UUID, proto.StateUpdate{ImageRefs: refs})
 	}
 }
 
