@@ -1017,7 +1017,8 @@
       "model": "Model",
       "volume": "Volume"
     },
-    "modelContainerPathPlaceholder": "Container path, e.g. /draft"
+    "modelContainerPathPlaceholder": "Container path, e.g. /draft",
+    "mountModelLabel": "Mounted model"
   },
   "edit": {
     "loading": "Loading the deployment...",

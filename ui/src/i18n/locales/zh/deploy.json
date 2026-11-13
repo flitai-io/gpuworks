@@ -1017,7 +1017,8 @@
       "model": "模型",
       "volume": "数据卷"
     },
-    "modelContainerPathPlaceholder": "容器路径，例如 /draft"
+    "modelContainerPathPlaceholder": "容器路径，例如 /draft",
+    "mountModelLabel": "挂载的模型"
   },
   "edit": {
     "loading": "正在载入部署……",

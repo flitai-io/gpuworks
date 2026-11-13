@@ -83,7 +83,7 @@ await i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, fireEvent, render, screen, waitFor, within } =
+const { cleanup, fireEvent, render, screen, waitFor } =
   await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { Form } = await import("antd");
@@ -400,11 +400,8 @@ test("a mount row can mount a registered model read-only", async () => {
       "a model row with no model picked is not sent",
     );
 
-    const row = sourceSelect.closest(".image-defaults-mount-row") as HTMLElement;
-    // The row's antd comboboxes, in order: model, purpose.
-    const picker = within(row)
-      .getAllByRole("combobox")
-      .filter((element) => element !== sourceSelect)[0];
+    // The model picker carries its own name: the row has no label above it.
+    const picker = screen.getByRole("combobox", { name: texts.mountModelLabel });
     fireEvent.mouseDown(picker);
     const option = await screen.findByText("org/target-dflash");
     await user.click(option);

@@ -422,6 +422,7 @@ function MountModelPicker({
   value?: number | null;
   onChange?: (value: number | undefined) => void;
 }) {
+  const { t } = useTranslation("deploy");
   const selected = usePolling(
     () => (value ? api.model(value) : Promise.resolve(undefined)),
     0,
@@ -432,6 +433,7 @@ function MountModelPicker({
       value={value ?? undefined}
       onChange={(next) => onChange?.(next)}
       selected={selected.data ?? undefined}
+      ariaLabel={t("containerOverrides.mountModelLabel")}
     />
   );
 }
