@@ -22,8 +22,14 @@ import (
 // The model fixture and its checks are shared with the other providers'
 // golden-image builders.
 const (
-	defaultModelPath   = goldenimage.DefaultModelPath
-	defaultDockerImage = goldenimage.DefaultDockerImage
+	defaultModelPath = goldenimage.DefaultModelPath
+	// defaultDockerImage is the CUDA 12.9 runner: the image's NVIDIA driver
+	// (nvidiaDriverVersion, R570) runs CUDA 12.x through minor version
+	// compatibility but not the CUDA 13.0 builds, which need R580.
+	defaultDockerImage = goldenimage.TuringDockerImage
+	// defaultPullSources are tried in order when the source image does not
+	// carry -docker-image yet; the final tag is -docker-image.
+	defaultPullSources = "swr.cn-southwest-2.myhuaweicloud.com/" + defaultDockerImage + ",quay.io/" + defaultDockerImage + "," + defaultDockerImage
 )
 
 type remoteFile = goldenimage.File
@@ -31,7 +37,9 @@ type remoteFile = goldenimage.File
 func main() {
 	var (
 		modelPath   = flag.String("model-path", defaultModelPath, "absolute model path stored in the custom image")
-		dockerImage = flag.String("docker-image", defaultDockerImage, "Docker image that must already exist in the source image")
+		dockerImage = flag.String("docker-image", defaultDockerImage, "runner image the new image carries; pulled from -pull-sources when the source image lacks it")
+		pull        = flag.String("pull-sources", defaultPullSources, "registry references tried in order to obtain -docker-image")
+		remove      = flag.String("remove-images", "", "comma-separated images to delete from the source image's Docker store (a runner the new image replaces)")
 		gpuModel    = flag.String("gpu-model", "RTX4090", "GPU model used by temporary validation VMs")
 		diskGB      = flag.Int("disk-gb", 160, "system disk size for temporary VMs")
 		imageName   = flag.String("name", "", "new custom image name")
@@ -55,6 +63,7 @@ func main() {
 	} else if strings.TrimSpace(*resumeName) != "" {
 		err = resume(*modelPath, *dockerImage, *gpuModel, *resumeName, *resumeRunID, *sourceID, *diskGB)
 	} else {
+		pullSources, removeImages = splitList(*pull), splitList(*remove)
 		err = run(*modelPath, *dockerImage, *gpuModel, *imageName, *diskGB, *region, *zone, *gpuCount, *sourceImg)
 	}
 	if err != nil {
@@ -77,7 +86,7 @@ func run(modelPath, dockerImage, gpuModel, imageName string, diskGB int, region,
 		return fmt.Errorf("disk-gb=%d is too small; golden image tests require at least 160 GiB", diskGB)
 	}
 	if strings.TrimSpace(imageName) == "" {
-		imageName = "gpuworks-golden-qwen2-0-5b-" + time.Now().UTC().Format("20060102-150405")
+		imageName = "gpuworks-golden-qwen3-0-6b-" + time.Now().UTC().Format("20060102-150405")
 	}
 	// CompShare answered a 50-character name with "RetCode 230: Params [Name]
 	// not available" after the source VM was fully prepared; the default
@@ -86,7 +95,7 @@ func run(modelPath, dockerImage, gpuModel, imageName string, diskGB int, region,
 		return fmt.Errorf("image name %q is %d characters; CompShare rejects long names, keep it to %d", imageName, len(imageName), maxImageNameLen)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Minute)
 	defer cancel()
 	files, err := modelFiles(ctx)
 	if err != nil {
@@ -128,6 +137,16 @@ func run(modelPath, dockerImage, gpuModel, imageName string, diskGB int, region,
 			return fmt.Errorf("install dual NVIDIA kernel modules: %w: %s", err, strings.TrimSpace(out))
 		}
 	}
+	fmt.Printf("run_id=%s phase=pull-runner-image image=%s\n", runID, dockerImage)
+	if out, err := runSSH(ctx, source, goldenimage.PullImageCommand(dockerImage, pullSources, "sudo -n ")); err != nil {
+		return fmt.Errorf("pull runner image: %w: %s", err, strings.TrimSpace(out))
+	}
+	if len(removeImages) > 0 {
+		fmt.Printf("run_id=%s phase=remove-images images=%s\n", runID, strings.Join(removeImages, ","))
+		if out, err := runSSH(ctx, source, goldenimage.RemoveImagesCommand(removeImages, dockerImage, "sudo -n ")); err != nil {
+			return fmt.Errorf("remove replaced images: %w: %s", err, strings.TrimSpace(out))
+		}
+	}
 	fmt.Printf("run_id=%s phase=prepare-model files=%d\n", runID, len(files))
 	if _, err := runSSH(ctx, source, remotePrepareCommand(modelPath, dockerImage, files)); err != nil {
 		return fmt.Errorf("prepare source VM: %w", err)
@@ -140,7 +159,7 @@ func run(modelPath, dockerImage, gpuModel, imageName string, diskGB int, region,
 	imageID, err := driver.CreateCustomImage(ctx, creds, compsharedriver.CustomImageRequest{
 		InstanceID:  source.InstanceID,
 		Name:        imageName,
-		Description: "gpuworks L4: preloaded vLLM image and Qwen2-0.5B-Instruct",
+		Description: "gpuworks L4: preloaded vLLM image and Qwen3-0.6B",
 		Region:      region,
 		Zone:        zone,
 	})
@@ -257,7 +276,19 @@ const maxImageNameLen = 42
 var (
 	useDualKmod  = true
 	validateGPUs []string
+	pullSources  = splitList(defaultPullSources)
+	removeImages []string
 )
+
+func splitList(raw string) []string {
+	var out []string
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
 
 func checkExistingImage(imageID, modelPath, dockerImage string, diskGB int) error {
 	accessKey := strings.TrimSpace(os.Getenv("COMPSHARE_ACCESS_KEY"))

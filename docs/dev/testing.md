@@ -322,6 +322,12 @@ nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。
   `gpuworks-nvidia-kmod.service` 先加载开源版（RTX 5090 等 Blackwell 卡只能用它），没有初始化出 GPU
   时换成闭源版（V100S、P40 这类没有 GSP 的卡只能用它），选中的是哪套写在 `/run/gpuworks-nvidia-kmod`。
 
+  模板里的 runner 是 `gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2`，模型是 Qwen3-0.6B（`/opt/gpuworks/test-fixtures/models/qwen3-0.6b`，
+  对应 `COMPSHARE_PRELOADED_MODEL_PATH`）。570 驱动靠 CUDA 小版本兼容能跑 CUDA 12.x 的构建，跑不了要求 580 驱动的 CUDA 13.0 构建，
+  所以这里不用阿里云模板上的 `cuda13.0` 镜像。源模板里没有该 runner 时，工具按 `-pull-sources`（默认华为云 SWR、quay.io、Docker Hub）
+  拉取；`-remove-images` 列出的旧 runner 会从 Docker 存储里删掉，免得留在新模板里。验证时每个卡型都在 runner 里做一次真实的
+  CUDA 调用，证明驱动带得动 runner 的 CUDA 运行时。
+
   工具做完模板后按 `-validate-gpus` 逐个卡型开机验证，也可用 `-validate-image <id>` 只验证已有模板；
   没货或被 CompShare 拒绝的卡型只报告不判失败。工具也会在镜像缺 nvidia-container-toolkit 时装上与华北模板相同的版本并配置 Docker 运行时
   （上海那条模板线原本没有，容器里拿不到 GPU）。

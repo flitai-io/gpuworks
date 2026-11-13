@@ -98,18 +98,7 @@ fi`
 // and tags it as image, the name the cases deploy: Docker Hub is not
 // dependable from mainland instances, so mirrors come first.
 func pullImageCommand(image string, sources []string) string {
-	var attempts strings.Builder
-	for _, source := range sources {
-		fmt.Fprintf(&attempts, "  for try in 1 2 3; do if docker pull %[1]s; then ok=%[1]s; break 2; fi; sleep 10; done\n", goldenimage.ShellQuote(source))
-	}
-	return fmt.Sprintf(`set -eu
-ok=""
-while :; do
-%s  break
-done
-[ -n "$ok" ] || { echo 'the runner image is unavailable from every source' >&2; exit 1; }
-if [ "$ok" != %[2]s ]; then docker tag "$ok" %[2]s; fi
-docker image inspect %[2]s --format 'GPUWORKS_RUNNER_IMAGE {{.Id}} {{.Size}}'`, attempts.String(), goldenimage.ShellQuote(image))
+	return goldenimage.PullImageCommand(image, sources, "")
 }
 
 // dockerCgroupfsCommand switches Docker to the cgroupfs cgroup driver. Under

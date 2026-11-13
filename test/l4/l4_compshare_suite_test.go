@@ -26,15 +26,18 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/testenv"
 	"gpuworks.ai/gpuworks/internal/testenv/cloudprovider"
+	"gpuworks.ai/gpuworks/internal/testenv/goldenimage"
 )
 
-const compshareDockerTestImage = "swr.cn-south-1.myhuaweicloud.com/gpustack/runner:cuda12.8-vllm0.17.1"
-
+// compshareTestImage is the vLLM runner the CompShare golden images carry
+// (prepare-compshare-golden's default): the CUDA 12.9 build, because their
+// R570 driver runs CUDA 12.x through minor version compatibility but not the
+// CUDA 13.0 builds. COMPSHARE_TEST_IMAGE overrides it.
 func compshareTestImage() string {
 	if image := strings.TrimSpace(os.Getenv("COMPSHARE_TEST_IMAGE")); image != "" {
 		return image
 	}
-	return "gpustack/runner:cuda12.8-vllm0.17.1"
+	return goldenimage.TuringDockerImage
 }
 
 func compshareDistributedTestImage() string {
@@ -70,14 +73,6 @@ func runSingleVMTensorParallelAndDGPU(t *testing.T, b *vmBackend) {
 	env := setupCloudNode(t, testenv.NewWithModelEndpoint(t, b.ModelEndpoint), b.Provider, cloudprovider.GPUSpec{GPUModel: gpuModel, GPUCount: gpuCount, MinVRAMMB: 10240, DiskGB: b.DiskGB})
 	logRentedInstance(t, b, env.Instance)
 	requireOnlineNode(t, env)
-	// CompShare's UAAA route is optimized for the domestic SWR mirror. Prefer
-	// it for this live suite so a fresh VM does not spend the acceptance window
-	// waiting on a multi-gigabyte quay.io pull.
-	if len(b.PullMirror) > 0 {
-		if _, err := env.Control.Store().CreatePullSourceRule(store.PullSourceRuleSpec{Match: "gpustack/", Endpoints: b.PullMirror, AllowUpstream: true}); err != nil {
-			t.Fatal(err)
-		}
-	}
 	if !t.Run("ProvisionAndRuntime", func(t *testing.T) { testVMAndRuntime(t, env, gpuCount) }) {
 		return
 	}

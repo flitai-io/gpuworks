@@ -120,6 +120,40 @@ os.replace(staging, target)
 		"rm -f /tmp/gpuworks-prepare-model.py; " + sudo + "sync"
 }
 
+// PullImageCommand obtains image on the source VM: each of sources is tried
+// in order, three times, and the first that pulls is tagged as image. sudo is
+// the privilege prefix ("sudo -n " for a login user, "" for root).
+func PullImageCommand(image string, sources []string, sudo string) string {
+	var attempts strings.Builder
+	for _, source := range sources {
+		fmt.Fprintf(&attempts, "  for try in 1 2 3; do if %[2]sdocker pull %[1]s; then ok=%[1]s; break 2; fi; sleep 10; done\n", ShellQuote(source), sudo)
+	}
+	return fmt.Sprintf(`set -eu
+ok=""
+while :; do
+%s  break
+done
+[ -n "$ok" ] || { echo 'the runner image is unavailable from every source' >&2; exit 1; }
+if [ "$ok" != %[2]s ]; then %[3]sdocker tag "$ok" %[2]s; fi
+%[3]sdocker image inspect %[2]s --format 'GPUWORKS_RUNNER_IMAGE {{.Id}} {{.Size}}'`, attempts.String(), ShellQuote(image), sudo)
+}
+
+// RemoveImagesCommand deletes images from the source VM's Docker store so a
+// replaced runner does not stay in the new golden image. An image that is
+// not there is not an error; keep is never removed even when listed.
+func RemoveImagesCommand(images []string, keep, sudo string) string {
+	var b strings.Builder
+	b.WriteString("set -eu\n")
+	for _, image := range images {
+		if image = strings.TrimSpace(image); image == "" || image == keep {
+			continue
+		}
+		fmt.Fprintf(&b, "if %[2]sdocker image inspect %[1]s >/dev/null 2>&1; then %[2]sdocker rmi %[1]s; fi\n", ShellQuote(image), sudo)
+	}
+	fmt.Fprintf(&b, "%sdocker image prune -f >/dev/null\n", sudo)
+	return b.String()
+}
+
 // ValidationCommand checks a VM carries the model (with matching checksums)
 // and the Docker image.
 func ValidationCommand(modelPath, dockerImage, sudo string) string {

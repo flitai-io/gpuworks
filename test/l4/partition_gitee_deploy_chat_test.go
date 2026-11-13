@@ -29,18 +29,18 @@ const (
 )
 
 // giteeFullDeployAppImage is the actual inference workload image, pulled at
-// deployment time by the real GPUWorks agent. Sourced from Huawei's own SWR
-// registry. Confirmed to exist and be a multi-arch (amd64+arm64) manifest
-// list via the registry's own API. The prefetch path downloads all layers
-// concurrently before udocker pull runs, so the Gitee instance only needs
-// connectivity to swr.cn-south-1.myhuaweicloud.com (no Docker Hub auth
-// needed). Layers are decompressed in-place after pull to speed up
-// udocker create; multi-stream gzip layers are handled correctly.
+// deployment time by the real GPUWorks agent: the built-in 910B vLLM runner
+// the catalog's 910B specs use, by its Huawei SWR copy, so the Gitee
+// instance only needs connectivity to SWR (no Docker Hub auth needed). The
+// manifest is multi-arch (amd64+arm64). The prefetch path downloads all
+// layers concurrently before udocker pull runs. Layers are decompressed
+// in-place after pull to speed up udocker create; multi-stream gzip layers
+// are handled correctly.
 func giteeFullDeployAppImage() string {
 	if image := strings.TrimSpace(hostEnv("GITEE_FULL_DEPLOY_APP_IMAGE", "")); image != "" {
 		return image
 	}
-	return "swr.cn-south-1.myhuaweicloud.com/gpustack/runner:cann9.0-910b-vllm0.20.2"
+	return "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2"
 }
 
 func giteeARM64FullDeployAppImage() string {
