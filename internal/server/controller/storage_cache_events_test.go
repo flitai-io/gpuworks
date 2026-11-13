@@ -51,7 +51,8 @@ func TestCacheReferenceEventsDoNotWakeUnrelatedFleet(t *testing.T) {
 			if topic == "deployment" {
 				key = strconv.FormatUint(uint64(dep.ID), 10)
 			}
-			f.c.cacheEvent(bus.Event{Topic: topic, Key: key, Reason: "state:stopped"})
+			f.c.onEvent(bus.Event{Topic: topic, Key: key, Reason: "state:stopped"})
+			f.c.flushEventRoutes()
 			keys := queuedCacheKeys(f.c)
 			if len(keys) != 1 || !keys[cacheKey(f.cached.ID, f.node.ID)] {
 				t.Fatalf("unrelated cache operations were queued: %v", keys)
@@ -74,6 +75,7 @@ func TestCacheDeploymentEventIncludesPlacementAndExistingReaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.c.cacheEvent(bus.Event{Topic: "deployment", Key: strconv.FormatUint(uint64(dep.ID), 10), Reason: "placement"})
+	f.c.flushEventRoutes()
 	keys := queuedCacheKeys(f.c)
 	if len(keys) != 3 || !keys[cacheKey(f.cached.ID, f.node.ID)] || !keys[cacheKey(f.cached.ID, f.other.ID)] || !keys[cacheKey(f.cached.ID, 3)] {
 		t.Fatalf("placement or live readers missing: %v", keys)
@@ -101,7 +103,8 @@ func TestCacheDeletedReferenceRetriesFromItsNodeReport(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			f.c.cacheEvent(bus.Event{Topic: topic, Key: key, Reason: "deleted"})
+			f.c.onEvent(bus.Event{Topic: topic, Key: key, Reason: "deleted"})
+			f.c.flushEventRoutes()
 			if keys := queuedCacheKeys(f.c); len(keys) != 0 {
 				t.Fatalf("deleted reference woke unrelated fleet: %v", keys)
 			}

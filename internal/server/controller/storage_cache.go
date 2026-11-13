@@ -39,16 +39,19 @@ func (c *Controller) cacheEvent(ev bus.Event) {
 		} else {
 			c.cacheQ.add("reported/" + ev.Key)
 		}
-	case "modelfile":
-		if row, err := c.store.ResolveModelFileKey(ev.Key); err == nil {
-			if row.NodeID != 0 {
-				c.cacheQ.add("refresh/" + cacheKey(row.StorageID, row.NodeID))
-			} else {
-				c.cacheQ.add("refresh-storage/" + strconv.FormatUint(uint64(row.StorageID), 10))
-			}
-		}
-	case "deployment", "instance":
+	case "deployment":
 		c.cacheReferencesChanged(ev)
+	}
+}
+
+// cacheModelFileChanged refreshes the cache that holds a changed model file.
+// Model-file events are resolved at the routing tick (flushEventRoutes), once
+// per key, rather than here for every event.
+func (c *Controller) cacheModelFileChanged(row *store.ModelFile) {
+	if row.NodeID != 0 {
+		c.cacheQ.add("refresh/" + cacheKey(row.StorageID, row.NodeID))
+	} else {
+		c.cacheQ.add("refresh-storage/" + strconv.FormatUint(uint64(row.StorageID), 10))
 	}
 }
 

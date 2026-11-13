@@ -33,11 +33,7 @@ func (c *Controller) settleNodeStatus() {
 	if err != nil {
 		// Unknown is unsettled: fall back to reconciling everything.
 		c.log.Warn("could not read deployment settle facts", "err", err)
-		if deps, listErr := c.store.ListDeployments(); listErr == nil {
-			for _, d := range deps {
-				c.q.add(depKey(d.ID))
-			}
-		}
+		c.enqueueAllDeployments()
 		return
 	}
 	for _, fact := range facts {

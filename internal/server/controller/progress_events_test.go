@@ -54,6 +54,7 @@ func TestProgressNotificationsDoNotQueueReconciles(t *testing.T) {
 		{Topic: "image", Key: "1", Reason: bus.ReasonProgress},
 	} {
 		c.onEvent(ev)
+		c.flushEventRoutes()
 		if keys := pendingKeys(c); len(keys) != 0 {
 			t.Fatalf("%s progress queued %v", ev.Topic, keys)
 		}
@@ -69,6 +70,7 @@ func TestProgressNotificationsDoNotQueueReconciles(t *testing.T) {
 	}
 	drainQueue(c)
 	c.onEvent(bus.Event{Topic: "modelfile", Key: "1:1", Reason: proto.MFPresent})
+	c.flushEventRoutes()
 	if keys := pendingKeys(c); len(keys) != 1 {
 		t.Fatalf("model presence queued %v, want the waiting deployment", keys)
 	}
