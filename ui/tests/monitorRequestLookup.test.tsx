@@ -100,8 +100,10 @@ test("a trace id finds the trace's requests across deployments, each naming its 
   const link = within(panel).getByRole("link", { name: "qwen" });
   assert.equal(link.getAttribute("href"), "/monitor/d/7");
   assert.ok(within(panel).queryByText("Deleted") === null);
-  assert.ok(within(panel).getByText(/finish_reason describes the model/));
-  assert.ok(within(panel).getByText(/third-party gateway/));
+  assert.ok(within(panel).getByText(/finish_reason only marks the end of generation/));
+  // The gateway boundary caveat is behind the help mark, not on the page.
+  assert.equal(within(panel).queryByText(/third-party gateway/), null);
+  assert.ok(within(panel).getByRole("button", { name: "More information" }));
   assert.equal(within(panel).getByRole("link", { name: "Collect streaming evidence" }).getAttribute("href"), "/settings#diagnostics");
   // A deleted deployment's details name it, marked deleted, still linking to
   // its page (which says it was deleted).
@@ -156,7 +158,10 @@ for (const lng of ["en", "zh"] as const) {
     render(<MemoryRouter><I18nextProvider i18n={local.i18n}><RequestDetailDrawer request={request({})} onClose={() => {}} /></I18nextProvider></MemoryRouter>);
     const t = (key: string) => local.i18n.t(`requests.drawer.${key}`, { ns: "monitoring" });
     assert.ok(await screen.findByText(t("observationTitle")));
-    assert.ok(screen.getByText(t("observationScope")));
+    // The boundary caveat sits behind the help mark beside the title, not on the page.
+    assert.equal(screen.queryByText(t("observationScopeHelp")), null);
+    await userEvent.setup().hover(screen.getByRole("button", { name: local.i18n.t("helpTip.label", { ns: "common" }) }));
+    assert.ok(within(await screen.findByRole("tooltip")).getByText(t("observationScopeHelp")));
     assert.ok(screen.getByText(t("streamingEvidence")));
     assert.equal(screen.getByRole("link", { name: t("collectEvidence") }).getAttribute("href"), "/settings#diagnostics");
   });

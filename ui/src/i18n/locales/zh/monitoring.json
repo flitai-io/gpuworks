@@ -184,18 +184,16 @@
     },
     "alignmentInFlight": "在途",
     "helpIcon": "{{title}} 说明",
-    "help": {
-      "alignment": "近 5 分钟 proxy 与引擎的对账：Proxy 请求数 = 网关转发到本部署的请求数；引擎完成数 = 引擎上报成功完成的请求数；客户端错误 = 4xx 与 429（调用方原因）；服务端错误 = 5xx 与睡眠 503；在途 = 窗口结束时 proxy 已转发、仍未结束的请求数；丢失 = Proxy 请求数减去已完成与已出错的请求数。只有当缺失的请求数超过窗口内任一时刻可能在途的最大数量时，才以红色提示。",
-      "latency": "TTFT = 请求到达至首个输出 token 的时间；端到端 = 请求到达至回复结束。p50 为窗口内每 10 秒中位数的平均值；p95/p99 为窗口内每 10 秒分位数的最大值，属保守上界，不是整个窗口的单一分位数。引擎上报了这些指标时用引擎的值；引擎没有上报时（如没有 /metrics 的引擎）用网关的统计，网关的 TTFT 和端到端从请求交给实例开始计，包含排队与网络。",
-      "tpot": "TPOT = decode 阶段每个输出 token 的时间，越小输出越快；1000 ÷ TPOT 约等于单路每秒输出 token 数。p95/p99 为窗口内每 10 秒分位数的最大值，属保守上界。引擎没有上报 TPOT 时（如 TensorFold、Strata）用网关测的：每个流式回复从网关收到第一个生成 token 到最后一个的时间，按输出 token 数平均，含网络抖动。",
-      "concurrency": "按副本：Running = 引擎正在 decode 的请求数；Waiting = 已进入引擎、尚未开始 prefill 的排队请求数。Waiting 上升而 Running 持平，说明引擎已达并发上限或 KV Cache 上限。",
-      "kv": "按副本：使用率 % = 引擎 KV Cache 块的占用比例（接近 100% 会触发抢占或排队）；命中率 % = 提示词 token 由前缀缓存直接命中、无需重算的比例。",
-      "throughput": "按副本：Prompt tok/s = prefill 阶段每秒处理的提示词（输入）token 数；Generation tok/s = decode 阶段每秒生成的输出 token 数。",
-      "stage_time": "queue = 请求进入引擎到开始 prefill 的等待；prefill = 首个 token 前处理提示词的时间；decode = 首个 token 之后生成全部输出的时长（随输出长度变化，每个 token 的时间看 TPOT）；均为单个请求的时长在窗口内每 10 秒分位数的最大值，属保守上界。引擎没有导出这些直方图时，用引擎在每个回复里自报的耗时汇总；回复里没有的阶段不画（如 TensorFold 只报 prefill 与 decode）。",
-      "preemptions": "引擎每秒因 KV Cache 压力把请求从运行集合中逐出并重新排队的次数。每次抢占都要为该请求重新 prefill，持续非零会拉高 TTFT 并浪费算力。",
-      "replicas": "本部署每个实例一行：引擎侧并发、KV Cache 与 token 吞吐，以及节点采集器上报的每张 GPU 的利用率、显存带宽、温度与功耗。点击行可在推理服务页打开该实例。",
-      "pd": "PD 有效性 = decode 实例的提示词 token 中通过 KV 传输到达（而非重新计算）的比例；降级率 = 仅由 decode 实例单独完成的请求比例，附最常见原因；Prefill 阶段（均值 / P95）是网关等待 prefill 实例的时间，Prefill 排队反映 prefill 实例是否跟得上；KV 传输取自引擎自己的传输指标，按每次传输统计（不是每个请求）：耗时、大小与速率来自 decode 实例；失败是 decode 拉取 KV 失败的次数；过期是 prefill 实例算好的 KV 在租约（vLLM 0.30 默认 30 秒，decode 收到请求后会持续续约）到期前没有被拉走、只好释放的请求数，说明 prefill 之后请求没有到达 decode（客户端断开、交给 decode 失败）或 decode 实例出了故障；平均 prompt token 数用于识别过短、分离收益不大的负载。"
-    },
+    "alignmentHelp": "近 5 分钟网关与引擎的对账。Proxy 请求数 = 网关转发到本部署的请求；引擎完成数 = 引擎上报成功完成的请求；客户端错误 = 4xx 与 429；服务端错误 = 5xx 与睡眠 503；在途 = 窗口结束时已转发、仍未结束的请求；丢失 = Proxy 请求数减去已完成与已出错的请求。缺失数超过窗口内可能的最大在途数时才标红。",
+    "latencyHelp": "TTFT = 请求到达至首个输出 token；端到端 = 请求到达至回复结束。p50 是每 10 秒中位数的平均，p95/p99 是每 10 秒分位数的最大值（保守上界）。引擎上报时用引擎的值，否则用网关统计（从请求交给实例起算，含排队与网络）。",
+    "tpotHelp": "TPOT = decode 阶段每个输出 token 的时间；1000 ÷ TPOT 约等于单路每秒输出 token 数。p95/p99 是每 10 秒分位数的最大值（保守上界）。引擎未上报时（如 TensorFold、Strata）由网关测量：流式回复从首个到最后一个生成 token 的时间按 token 数平均，含网络抖动。",
+    "concurrencyHelp": "按副本：Running = 引擎正在 decode 的请求数；Waiting = 已进入引擎、尚未开始 prefill 的排队请求数。Waiting 上升而 Running 持平，说明引擎已达并发上限或 KV Cache 上限。",
+    "kvHelp": "按副本：使用率 % = 引擎 KV Cache 块的占用比例（接近 100% 会触发抢占或排队）；命中率 % = 提示词 token 由前缀缓存直接命中、无需重算的比例。",
+    "throughputHelp": "按副本：Prompt tok/s = prefill 阶段每秒处理的提示词（输入）token 数；Generation tok/s = decode 阶段每秒生成的输出 token 数。",
+    "stage_timeHelp": "queue = 请求进入引擎到开始 prefill 的等待；prefill = 首个 token 前处理提示词的时间；decode = 首个 token 之后生成全部输出的时长（每 token 速度看 TPOT）。取每 10 秒 p95 的最大值（保守上界）。引擎未导出直方图时汇总回复里自报的耗时，没报的阶段不画。",
+    "preemptionsHelp": "引擎每秒因 KV Cache 压力把请求从运行集合中逐出并重新排队的次数。每次抢占都要为该请求重新 prefill，持续非零会拉高 TTFT 并浪费算力。",
+    "replicasHelp": "本部署每个实例一行：引擎侧并发、KV Cache 与 token 吞吐，以及节点采集器上报的每张 GPU 的利用率、显存带宽、温度与功耗。点击行可在推理服务页打开该实例。",
+    "pdHelp": "PD 有效性 = decode 实例的提示词 token 中经 KV 传输到达、无需重算的比例；降级率 = 仅由 decode 实例完成的请求比例。Prefill 阶段是网关等待 prefill 实例的时间。KV 传输按每次传输统计，取自 decode 实例；失败 = 拉取 KV 失败的次数；过期 = KV 在租约到期前没被拉走的请求数，多因客户端断开、交接失败或 decode 故障。",
     "tabs": {
       "overview": "概览"
     },
@@ -372,8 +370,8 @@
       "pdFallback": "降级原因",
       "deleted": "已删除",
       "observationTitle": "网关观测范围",
-      "observationScope": "这些记录描述 GPUWorks 观测到的情况。网关成功写出响应，不代表第三方网关已将响应送达最终客户端。",
-      "streamingEvidence": "对于流式请求，finish_reason 描述模型生成结束，不证明已收到 data: [DONE]。复现前开启调试采集，再在诊断包中对比 upstream 与 client 方向的原始数据和结束时的读写错误。",
+      "observationScopeHelp": "这些记录描述 GPUWorks 观测到的情况；网关成功写出响应，不代表第三方网关已把响应送达最终客户端。",
+      "streamingEvidence": "流式请求的 finish_reason 只说明模型生成结束，不证明已收到 data: [DONE]。请开启调试采集后复现，再在诊断包中对比 upstream 与 client 方向的原始数据和读写错误。",
       "collectEvidence": "采集流式排查证据"
     },
     "pdFallback": {
@@ -389,7 +387,7 @@
   },
   "latency": {
     "title": "端到端延迟拆解",
-    "help": "所选时间范围内完整回复（正常完成或在最大 token 处停下）的端到端时间，按请求经过的阶段拆开。条的每段是该阶段的平均时长（没有这一段的请求按 0 计），所以各段加起来正好是端到端平均。引擎自报 Prefill 时（vLLM 开逐请求耗时、TensorFold、Strata）首字前的等待会拆出 Prefill，也报了排队的（vLLM）再拆出排队，没拆开的部分合为「等首字」。「网关」是网关自身转发的实测耗时；「引擎预处理」是引擎报了排队时，首字前的等待里引擎没有计入的部分（分词、等正在跑的一步结束、首字回传，含网络），并发高时会明显变大。悬停一段看 p50 / p95 与平均速度。",
+    "help": "所选范围内完整回复（正常完成或达到最大 token）的端到端时间按阶段拆开：每段是该阶段的平均时长（没有该段的请求按 0 计），各段之和即端到端平均。引擎自报 Prefill 或排队时单独拆出，其余合为「等首字」。「网关」是网关转发的实测耗时；「引擎预处理」是首字前引擎未计入的等待（分词、等当前步结束、回传与网络），并发高时变大。悬停一段看 p50 / p95。",
     "loadFailed": "延迟拆解加载失败",
     "empty": "该时间范围内还没有完整回复",
     "total": "端到端平均 · p50 {{p50}} · p95 {{p95}} · {{count}} 个请求",

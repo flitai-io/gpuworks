@@ -68,7 +68,7 @@
     "completed": "Completed",
     "failed": "Failed",
     "pending": "Not finished (waiting or being retried)",
-    "pendingHint": "Requests the platform is retrying, for example while a deployment wakes, after a preemption by a higher-ranked deployment, or after a 429 or 5xx answer, are counted as not finished.",
+    "pendingHelp": "Requests the platform is retrying, for example while a deployment wakes, after a preemption by a higher-ranked deployment, or after a 429 or 5xx answer, are counted as not finished.",
     "waiting": {
       "title": "Requests are waiting to be retried",
       "line": "{{model}} ({{state}}): {{count}} requests waiting since {{since}}",

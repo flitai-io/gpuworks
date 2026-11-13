@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { SideDrawer } from "../../ui-kit/SideDrawer";
 import { Spinner } from "../../ui-kit/Spinner";
 import { Notice } from "../../ui-kit/Notice";
+import { HelpTip } from "../../ui-kit/HelpTip";
 import { message } from "../../ui-kit/feedback";
 import { fromAntd } from "../../ui-kit/antdIcon";
 import CopyButton from "../../components/CopyButton";
@@ -144,7 +145,7 @@ function BatchBody({ batch, canManage, onChanged }: { batch: Batch; canManage: b
         <Notice
           tone="danger"
               title={t("detail.sections.failure")}
-          children={<><div>{batch.failure.message}</div><span className="text-fg-muted">{t("detail.failureCode")}: {batch.failure.code}</span></>}
+          children={<div className="flex flex-wrap gap-x-2"><span>{batch.failure.message}</span><span className="text-fg-muted">{t("detail.failureCode")}: {batch.failure.code}</span></div>}
         />
       )}
       <section aria-label={t("detail.sections.counts")}>
@@ -154,7 +155,7 @@ function BatchBody({ batch, canManage, onChanged }: { batch: Batch; canManage: b
             { key: "total", label: t("detail.total"), value: counts.total },
             { key: "completed", label: t("detail.completed"), value: counts.completed },
             { key: "failed", label: t("detail.failed"), value: counts.failed },
-            ...(!ended ? [{ key: "pending", label: <Tooltip content={t("detail.pendingHint")}><span tabIndex={0}>{t("detail.pending")}</span></Tooltip>, value: pending }] : []),
+            ...(!ended ? [{ key: "pending", label: <span className="inline-flex items-center gap-1">{t("detail.pending")}<HelpTip content={t("detail.pendingHelp")} /></span>, value: pending }] : []),
             { key: "progress", label: t("columns.progress"), value: <BatchProgress batch={batch} /> },
           ]}
         />

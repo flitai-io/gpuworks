@@ -61,3 +61,22 @@ test("evaluation curve leaves unknown measurements empty while drawing observed 
   await waitFor(() => assert.deepEqual(values().slice(2), [0, 50]));
   assert.ok(values()[0] == null || Number.isNaN(values()[0]));
 });
+
+test("a run's data-quality warnings share one warning block, one item each", async () => {
+  api.benchmark = async () => ({
+    id: 8, name: "Warned run", target_kind: "external", model: "model", mode: "grid", state: "done",
+    created_at: "2026-10-03T00:00:00Z", dataset: { kind: "random" }, search: {},
+    warnings: ["BENCHMARK_CONFLICT_OVERRIDDEN", "BENCHMARK_WARMUP_UNSUPPORTED"],
+  }) as never;
+  api.benchmarkMeta = async () => ({ modes: [], statuses: [], datasets: [], dataset_profiles: {}, agentic_presets: [], agentic_defaults: { preset: "agentic", turns: 13, concurrency: [1], sessions_per_point: {}, sessions_per_concurrency: 2, min_sessions_per_point: 4, subsequent_turn_input_tokens: 753, output_tokens: 220 }, load_defaults: { point_duration_s: 60, ignore_eos_datasets: [] }, mode_defaults: {}, detail_cap_mb: { default: 20 }, objectives: [], sla_constraints: [], tokenizer_schemes: {} }) as never;
+  api.benchmarkCurve = async () => ({ points: [] }) as never;
+  render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/evaluations/8"]}>
+    <Routes><Route path="/evaluations/:id" element={<EvaluationDetailPage />} /></Routes>
+  </MemoryRouter></I18nextProvider>);
+  await screen.findByText("Warned run");
+  const conflict = screen.getByText(i18n.t("evaluations:benchmarkWarning.BENCHMARK_CONFLICT_OVERRIDDEN"));
+  const warmup = screen.getByText(i18n.t("evaluations:benchmarkWarning.BENCHMARK_WARMUP_UNSUPPORTED"));
+  assert.equal(conflict.tagName, "LI");
+  assert.equal(conflict.closest("ul"), warmup.closest("ul"), "both warnings sit in one list");
+  assert.equal(document.querySelectorAll(".ant-alert-warning").length, 1);
+});

@@ -113,14 +113,18 @@ function EvaluationDetail({ id }: { id: number }) {
 	const requestTotal = run.progress?.current_point?.request_total;
 	const datasetProfile = benchmarkDatasetProfile(run, meta.dataset_profiles || {});
 	const reusesSamples = benchmarkReusesSamples(run, datasetProfile);
+	// The run's data-quality warnings share one block, one item each.
+	const warnings = [
+		...(run.warnings ?? []).map((warning) => t(`benchmarkWarning.${warning}`, { defaultValue: warning })),
+		...(reusesSamples ? [t("detail.sampleReuseWarning")] : []),
+	];
 
 	return <div>
 		<div ref={reportRef} className={capturing ? "benchmark-report-export" : undefined} style={capturing ? { width: captureWidth } : undefined}>
 		<PageHeader title={run.name || `Run #${run.id}`} description={`${localizedText(meta.modes.find((item) => item.value === run.mode)?.label, language) || run.mode} · ${run.model}`} parents={[<Link key="list" to="/evaluations">{t("list.breadcrumb.evaluations")}</Link>]} extra={<Space data-report-exclude><Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/evaluations")}>{t("common.back")}</Button><BenchmarkReportMenu runID={run.id} onExportVisual={exportVisual} visualDisabled={runQuery.loading || curve.loading || timeline.loading} /><Button icon={<CopyOutlined />} onClick={() => setWizardPreset({ sourceRun: run })}>{t("detail.rerun")}</Button>{active && <Popconfirm title={t("detail.cancelTitle")} description={t("detail.cancelDescription")} onConfirm={async () => { try { await api.cancelBenchmark(run.id); await runQuery.refetch(); message.success(t("detail.canceled")); } catch (error) { message.error((error as Error).message); } }}><Button danger icon={<StopOutlined />}>{t("detail.cancel")}</Button></Popconfirm>}</Space>} />
 			<Space direction="vertical" size={16} style={{ display: "flex" }}>
 				<VerdictCard run={run} meta={meta} onRerun={(maxConcurrency) => setWizardPreset({ sourceRun: run, maxConcurrency })} />
-				{run.warnings?.map((warning) => <Alert key={warning} type="warning" showIcon message={t(`benchmarkWarning.${warning}`, { defaultValue: warning })} />)}
-				{reusesSamples && <Alert type="warning" showIcon message={t("detail.sampleReuseWarning")} />}
+				{warnings.length > 0 && <Alert type="warning" showIcon message={warnings.length === 1 ? warnings[0] : <ul className="m-0 list-disc pl-4">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>} />}
 				<BenchmarkTargetCard run={run} />
 			{run.mode === "grid" && active && <Card size="small"><Progress percent={progressPct} status="active" /><Typography.Text type="secondary">{t("detail.gridProgress", { completed, total: requestTotal ? ` / ${requestTotal}` : "" })}</Typography.Text></Card>}
 			<Card size="small" title={liveCards?.label}>

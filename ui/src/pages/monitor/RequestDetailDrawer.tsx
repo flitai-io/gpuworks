@@ -7,6 +7,7 @@ import { traceLinkFor, type MonitorLookupDeployment, type MonitorRequest } from 
 import type { MonitorRequestPD } from "../../monitorRequestsApi";
 import { callerName, replicaText, RequestDetailLines } from "./RequestRow";
 import { formatMS } from "./requestShape";
+import { HelpTip } from "../../ui-kit/HelpTip";
 import { useTraceLink } from "./useTraceLink";
 
 const { Text } = Typography;
@@ -74,9 +75,8 @@ export default function RequestDetailDrawer({
             style={{ marginTop: 16 }}
             type="info"
             showIcon
-            message={t("requests.drawer.observationTitle")}
+            message={<span className="inline-flex items-center gap-1">{t("requests.drawer.observationTitle")}<HelpTip content={t("requests.drawer.observationScopeHelp")} /></span>}
             description={<>
-              <Typography.Paragraph>{t("requests.drawer.observationScope")}</Typography.Paragraph>
               <Typography.Paragraph>{t("requests.drawer.streamingEvidence")}</Typography.Paragraph>
               <Link to="/settings#diagnostics">{t("requests.drawer.collectEvidence")}</Link>
             </>}
