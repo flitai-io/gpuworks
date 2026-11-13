@@ -78,7 +78,7 @@ func (a *monitorInventoryAdapter) inventory(ctx context.Context) (monitor.Invent
 	if err != nil {
 		return monitor.Inventory{}, err
 	}
-	states, err := deployment.RuntimeStates(a.store, a.preparation, deployments, instances)
+	states, err := deployment.EffectiveStates(a.store, a.preparation, deployments, instances)
 	if err != nil {
 		return monitor.Inventory{}, err
 	}
@@ -98,7 +98,7 @@ func (a *monitorInventoryAdapter) inventory(ctx context.Context) (monitor.Invent
 	}
 	for i := range deployments {
 		ref := deploymentRef(&deployments[i], instancesByDeployment[deployments[i].ID])
-		ref.RuntimeState = states[ref.ID]
+		ref.State = states[ref.ID]
 		inv.Deployments = append(inv.Deployments, ref)
 	}
 

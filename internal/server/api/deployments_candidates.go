@@ -158,7 +158,7 @@ func placementStatus(rows deployment.Rows, d *store.Deployment, view replicaView
 		return nil
 	}
 	unscheduled := 0
-	for _, slot := range view.match.Slots {
+	for _, slot := range view.Match.Slots {
 		if slot.Unit.Pool() && slot.Inst == nil {
 			unscheduled++
 		}

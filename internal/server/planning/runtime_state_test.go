@@ -70,3 +70,24 @@ func TestDeriveRuntimeStateAggregatesInstanceTruth(t *testing.T) {
 		}
 	}
 }
+
+// A headless rank exposes no endpoint: the gateway routes to the leader only,
+// so a running follower is neither a serving replica nor a live one that
+// makes its failed leader history.
+func TestDeriveRuntimeStateDoesNotServeFromAHeadlessRank(t *testing.T) {
+	follower := store.Instance{State: proto.InstRunning, Headless: true, NodeRank: 1}
+	for _, tc := range []struct {
+		name      string
+		instances []store.Instance
+		want      string
+	}{
+		{"failed leader beside a running follower", []store.Instance{follower, {State: proto.InstFailed}}, "failed"},
+		{"running follower alone", []store.Instance{follower}, "starting"},
+		{"running leader and follower", []store.Instance{follower, {State: proto.InstRunning}}, "running"},
+		{"starting leader beside a running follower", []store.Instance{follower, {State: proto.InstStarting}}, "starting"},
+	} {
+		if got := DeriveRuntimeState(store.DeployActive, tc.instances, nil, false); got != tc.want {
+			t.Errorf("%s: got %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}

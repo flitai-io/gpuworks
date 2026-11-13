@@ -9,7 +9,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deployment"
-	"gpuworks.ai/gpuworks/internal/server/pdmode"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -26,44 +25,30 @@ type unitRetryRequest struct {
 // names the response shows. Every handler and response reads replica
 // membership from here.
 type replicaView struct {
-	match planning.UnitMatch
+	deployment.ReplicaView
 	// names is each deployment node's display name, by UUID; ordered is the
 	// node UUIDs in the deployment's stored order.
 	names   map[string]string
 	ordered []string
-	// pd and mode are the deployment's roles: nil pd for an ordinary
-	// deployment, and mode as the placement names it (its zero value when the
-	// gateway does not know the name, which reads as no role being optional).
-	pd   *planning.PDPlacement
-	mode pdmode.Mode
 }
 
 func newReplicaView(rows deployment.Rows, d *store.Deployment, insts []store.Instance) (replicaView, error) {
 	view := replicaView{names: map[string]string{}}
-	uuids := map[uint]string{}
 	for _, id := range d.NodeIDList() {
 		if n := rows.Node(id); n != nil {
 			view.names[n.UUID] = nodeDisplayName(n)
 			view.ordered = append(view.ordered, n.UUID)
-			uuids[n.ID] = n.UUID
 		}
 	}
-	pd, err := planning.PDOf(d.Placement)
-	if err != nil {
-		return view, err
-	}
-	view.pd = pd
-	if pd != nil {
-		view.mode, _ = pdmode.Lookup(pd.Mode)
-	}
-	view.match = planning.MatchUnits(planning.UnitsOfDeployment(d, pd, uuids), insts, uuids, d.PlacementStrategy)
-	return view, nil
+	var err error
+	view.ReplicaView, err = deployment.NewReplicaView(rows, d, insts)
+	return view, err
 }
 
 // deploymentUnitMatch is how a deployment's instances fill its replicas.
 func (a *apiHandlers) deploymentUnitMatch(dep *store.Deployment, insts []store.Instance) (planning.UnitMatch, error) {
 	view, err := newReplicaView(deployment.NewStoreRows(a.d.Store, a.d.Preparation), dep, insts)
-	return view.match, err
+	return view.Match, err
 }
 
 // retryUnit gives a unit its retry budget back: its failed attempts are
@@ -157,8 +142,8 @@ func spentAttempts(rows deployment.Rows, slot planning.UnitSlot, attempts []stor
 // one retry budget, so any empty one names the same attempts; the first is
 // reported because a retry of a filled replica is refused.
 func ordinaryRetryExhausted(rows deployment.Rows, view replicaView) *dto.DeploymentRetryExhausted {
-	for _, slot := range view.match.Slots {
-		spent := spentAttempts(rows, slot, view.match.Failed[slot.Key])
+	for _, slot := range view.Match.Slots {
+		spent := spentAttempts(rows, slot, view.Match.Failed[slot.Key])
 		if spent.exhausted {
 			return &dto.DeploymentRetryExhausted{Index: slot.Unit.Index, FailedAttempts: spent.count, LastFailure: spent.lastFailure}
 		}

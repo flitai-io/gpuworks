@@ -1,11 +1,10 @@
-package api
+package deployment
 
 import (
 	"sort"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
-	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/pdmode"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -18,14 +17,14 @@ import (
 // judges a request, so what a row shows cannot disagree with what the gateway
 // answers.
 const (
-	// deploymentStateSleeping is every replica the gateway needs asleep while
+	// StateSleeping is every replica the gateway needs asleep while
 	// at least one engine still reports the level it had before the order: the
 	// order is accepted and the gateway already refuses every request, and the
 	// engines are still swapping memory out (a level-1 order takes seconds).
-	deploymentStateSleeping = "sleeping"
-	// deploymentStateAsleep is every replica the gateway needs asleep with the
+	StateSleeping = "sleeping"
+	// StateAsleep is every replica the gateway needs asleep with the
 	// level its engine reports.
-	deploymentStateAsleep = "asleep"
+	StateAsleep = "asleep"
 )
 
 // replicaStanding is how the gateway judges one replica.
@@ -53,21 +52,21 @@ const (
 // asleep leader before it looks at its node or its other ranks), so a replica
 // whose own ranks or node are down is still asleep when the leader asks to
 // sleep: the gateway refuses it for sleep either way.
-func standingOf(rows deployment.Rows, leader *store.Instance, followersComplete bool, incomplete map[string]bool) replicaStanding {
+func standingOf(rows Rows, leader *store.Instance, followersComplete bool, incomplete map[string]bool) replicaStanding {
 	if leader == nil || leader.State != proto.InstRunning {
 		return replicaNotServing
 	}
 	if planning.InstanceAsleep(leader) {
 		return replicaAsleep
 	}
-	if !deployment.InstanceNodeOnline(rows, leader.NodeID) || incomplete[leader.UUID] || !followersComplete {
+	if !InstanceNodeOnline(rows, leader.NodeID) || incomplete[leader.UUID] || !followersComplete {
 		return replicaNotServing
 	}
 	return replicaAwake
 }
 
-// replicaCounts is what one role's replicas are, as the gateway reads them.
-type replicaCounts struct {
+// ReplicaCounts is what one role's replicas are, as the gateway reads them.
+type ReplicaCounts struct {
 	Awake  int
 	Asleep int
 	// Settled is the asleep ones whose engine reports the level it was ordered
@@ -79,8 +78,8 @@ type replicaCounts struct {
 	Held int
 }
 
-// deploymentFacts is how the gateway reads a deployment's replicas now.
-type deploymentFacts struct {
+// Facts is how the gateway reads a deployment's replicas now.
+type Facts struct {
 	// Ready counts the replicas the gateway would serve a request from: this
 	// is ready_replicas.
 	Ready int
@@ -98,7 +97,7 @@ type deploymentFacts struct {
 	// request wakes none of them.
 	HeldReplicas int
 	// Roles is the same walk per role, for a PD response's role counts.
-	Roles map[string]replicaCounts
+	Roles map[string]ReplicaCounts
 	// refused is set when the gateway would answer no request at all: some
 	// role it needs has no awake replica.
 	refused bool
@@ -112,12 +111,12 @@ type deploymentFacts struct {
 // Asleep reports the gateway refusing every request because the replicas it
 // needs sleep: the condition the sleeping and asleep states describe. A
 // deployment with no serving replica is never asleep; nothing is left to wake.
-func (f deploymentFacts) Asleep() bool { return f.refused && f.sleepRefusal && f.AsleepReplicas > 0 }
+func (f Facts) Asleep() bool { return f.refused && f.sleepRefusal && f.AsleepReplicas > 0 }
 
 // SleepHold says how the asleep replicas are held (dto.SleepHold*): every
 // one by an operator's or a schedule's sleep, some, or none; empty with none
 // asleep.
-func (f deploymentFacts) SleepHold() string {
+func (f Facts) SleepHold() string {
 	switch {
 	case f.AsleepReplicas == 0:
 		return ""
@@ -132,21 +131,21 @@ func (f deploymentFacts) SleepHold() string {
 // State is the state a fully asleep deployment shows: asleep once every asleep
 // engine reports its level, sleeping while any order is still being carried
 // out. It is only meaningful when Asleep says so; callers ask for it that way.
-func (f deploymentFacts) State() string {
+func (f Facts) State() string {
 	if f.Settled >= f.AsleepReplicas {
-		return deploymentStateAsleep
+		return StateAsleep
 	}
-	return deploymentStateSleeping
+	return StateSleeping
 }
 
-// deploymentFactsOf reads the facts out of the replica match the response
+// FactsOf reads the facts out of the replica match the response
 // shows: one walk, so every number a response carries describes the same
 // replicas, judged the way the router judges them.
-func deploymentFactsOf(rows deployment.Rows, view replicaView, insts []store.Instance) deploymentFacts {
-	incomplete := planning.GroupsIncomplete(deployment.OnlineInstances(rows, insts))
-	facts := deploymentFacts{Roles: map[string]replicaCounts{}}
+func FactsOf(rows Rows, view ReplicaView, insts []store.Instance) Facts {
+	incomplete := planning.GroupsIncomplete(OnlineInstances(rows, insts))
+	facts := Facts{Roles: map[string]ReplicaCounts{}}
 	refused, sleepCause := false, true
-	for _, role := range view.roles() {
+	for _, role := range view.Roles() {
 		counts := replicaCountsOf(rows, view, role, incomplete)
 		facts.Roles[role] = counts
 		facts.Ready += counts.Awake
@@ -154,7 +153,7 @@ func deploymentFactsOf(rows deployment.Rows, view replicaView, insts []store.Ins
 		facts.Settled += counts.Settled
 		facts.HeldReplicas += counts.Held
 		facts.Level = max(facts.Level, counts.Level)
-		if counts.Awake > 0 || !view.roleRequired(role, counts) {
+		if counts.Awake > 0 || !view.RoleRequired(role, counts) {
 			continue
 		}
 		// The gateway has nothing awake to answer this role: an outage, and an
@@ -171,8 +170,8 @@ func deploymentFactsOf(rows deployment.Rows, view replicaView, insts []store.Ins
 
 // replicaCountsOf counts the replicas filling one role, over the units the
 // placement has and, for an ordinary deployment, the replica that left it.
-func replicaCountsOf(rows deployment.Rows, view replicaView, role string, incomplete map[string]bool) replicaCounts {
-	var out replicaCounts
+func replicaCountsOf(rows Rows, view ReplicaView, role string, incomplete map[string]bool) ReplicaCounts {
+	var out ReplicaCounts
 	judge := func(leader *store.Instance, followersComplete bool) {
 		switch standingOf(rows, leader, followersComplete, incomplete) {
 		case replicaAwake:
@@ -195,7 +194,7 @@ func replicaCountsOf(rows deployment.Rows, view replicaView, role string, incomp
 			}
 		}
 	}
-	for _, slot := range view.match.Slots {
+	for _, slot := range view.Match.Slots {
 		if slot.Unit.Role != role {
 			continue
 		}
@@ -206,9 +205,9 @@ func replicaCountsOf(rows deployment.Rows, view replicaView, role string, incomp
 	// to it as to any other replica. So a scale-down that leaves the awake
 	// replica excess must not read asleep. A PD deployment's excess replica
 	// does not: pdRoute.withoutUnroutable drops it from the routing set.
-	if role == "" && view.pd == nil {
-		for i := range view.match.Excess {
-			judge(&view.match.Excess[i], true)
+	if role == "" && view.PD == nil {
+		for i := range view.Match.Excess {
+			judge(&view.Match.Excess[i], true)
 		}
 	}
 	return out
@@ -217,15 +216,15 @@ func replicaCountsOf(rows deployment.Rows, view replicaView, role string, incomp
 // roles are the roles the deployment's replicas are counted by: one empty role
 // for an ordinary deployment, the mode's roles for a PD one (the placement's,
 // in the mode's order, when the mode cannot be read).
-func (v replicaView) roles() []string {
-	if v.pd == nil {
+func (v ReplicaView) Roles() []string {
+	if v.PD == nil {
 		return []string{""}
 	}
-	if len(v.mode.Roles) > 0 {
-		return v.mode.Roles
+	if len(v.Mode.Roles) > 0 {
+		return v.Mode.Roles
 	}
-	out := make([]string, 0, len(v.pd.Roles))
-	for role := range v.pd.Roles {
+	out := make([]string, 0, len(v.PD.Roles))
+	for role := range v.PD.Roles {
 		out = append(out, role)
 	}
 	sort.Strings(out)
@@ -237,35 +236,101 @@ func (v replicaView) roles() []string {
 // instead of a reduction. It mirrors the gateway's own rule: pdRoute.wantsPrefill
 // serves without prefill instances when the mode may run empty and every one of
 // them sleeps, which is an order carried out rather than a degradation.
-func (v replicaView) roleRequired(role string, counts replicaCounts) bool {
-	if v.pd == nil {
+func (v ReplicaView) RoleRequired(role string, counts ReplicaCounts) bool {
+	if v.PD == nil {
 		return role == ""
 	}
 	if role != pdmode.RolePrefill {
 		return true
 	}
-	if len(v.pd.Units(pdmode.RolePrefill)) == 0 {
+	if len(v.PD.Units(pdmode.RolePrefill)) == 0 {
 		return false
 	}
-	return !(counts.Awake == 0 && counts.Asleep > 0 && v.mode.MayBeEmpty(pdmode.RolePrefill))
+	return !(counts.Awake == 0 && counts.Asleep > 0 && v.Mode.MayBeEmpty(pdmode.RolePrefill))
 }
 
-// deploymentFactsFor reads the facts for callers that hold no replica view.
-func deploymentFactsFor(rows deployment.Rows, d *store.Deployment, insts []store.Instance) deploymentFacts {
-	view, err := newReplicaView(rows, d, insts)
+// FactsFor reads the facts for callers that hold no replica view.
+func FactsFor(rows Rows, d *store.Deployment, insts []store.Instance) Facts {
+	view, err := NewReplicaView(rows, d, insts)
 	if err != nil {
-		return deploymentFacts{}
+		return Facts{}
 	}
-	return deploymentFactsOf(rows, view, insts)
+	return FactsOf(rows, view, insts)
 }
 
 // followersRunning reports every follower rank of the replica running on an
 // online node: a generation serves as a whole.
-func followersRunning(rows deployment.Rows, slot planning.UnitSlot) bool {
+func followersRunning(rows Rows, slot planning.UnitSlot) bool {
 	for _, follower := range slot.Followers {
-		if follower == nil || follower.State != proto.InstRunning || !deployment.InstanceNodeOnline(rows, follower.NodeID) {
+		if follower == nil || follower.State != proto.InstRunning || !InstanceNodeOnline(rows, follower.NodeID) {
 			return false
 		}
 	}
 	return true
+}
+
+// ReplicaView is a deployment's replicas as the gateway and the controller
+// match them, over the deployment's own nodes: every reader of a
+// deployment's state reads replica membership from here.
+type ReplicaView struct {
+	Match planning.UnitMatch
+	// PD and Mode are the deployment's roles: nil PD for an ordinary
+	// deployment, and Mode as the placement names it (its zero value when the
+	// gateway does not know the name, which reads as no role being optional).
+	PD   *planning.PDPlacement
+	Mode pdmode.Mode
+}
+
+// NewReplicaView matches the deployment's instances to its placement's units.
+func NewReplicaView(rows Rows, d *store.Deployment, insts []store.Instance) (ReplicaView, error) {
+	var view ReplicaView
+	uuids := map[uint]string{}
+	for _, id := range d.NodeIDList() {
+		if n := rows.Node(id); n != nil {
+			uuids[n.ID] = n.UUID
+		}
+	}
+	pd, err := planning.PDOf(d.Placement)
+	if err != nil {
+		return view, err
+	}
+	view.PD = pd
+	if pd != nil {
+		view.Mode, _ = pdmode.Lookup(pd.Mode)
+	}
+	view.Match = planning.MatchUnits(planning.UnitsOfDeployment(d, pd, uuids), insts, uuids, d.PlacementStrategy)
+	return view, nil
+}
+
+// StateDeleting is a deployment whose delete is in flight.
+const StateDeleting = "deleting"
+
+// States are every state a deployment shows (EffectiveState): the runtime
+// states, the delete in flight, and the two sleep states.
+var States = []string{"pending", "pulling", "starting", "running", "offline", "failed", "stopped", StateDeleting, StateSleeping, StateAsleep}
+
+// EffectiveState is the one state a deployment shows, wherever it is shown:
+// a delete in flight outranks whatever the runtime reports, and a deployment
+// the gateway refuses every request of because the replicas it needs sleep
+// is asleep (or sleeping, while the order is still being carried out) rather
+// than the running state its engines keep reporting.
+//
+// A partly slept deployment keeps the runtime state: its awake replicas serve,
+// and asleep_replicas says how many do not, so the row shows both instead of
+// passing itself off as entirely well or entirely asleep.
+func EffectiveState(d *store.Deployment, runtimeState string, facts Facts) string {
+	if d.State == store.DeployDeleting {
+		return StateDeleting
+	}
+	if runtimeState == "running" && facts.Asleep() {
+		return facts.State()
+	}
+	return runtimeState
+}
+
+// State is EffectiveState for a caller that holds neither the runtime state
+// nor the facts.
+func State(rows Rows, d *store.Deployment, insts []store.Instance) string {
+	runtime := RuntimeState(rows, d, insts, RecordedModelProgress(rows, d))
+	return EffectiveState(d, runtime, FactsFor(rows, d, insts))
 }

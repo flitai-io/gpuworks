@@ -66,12 +66,17 @@ func DeriveRuntimeState(desired store.DeploymentState, instances []store.Instanc
 	// active. Retries deliberately use a fresh instance UUID and keep terminal
 	// rows for diagnostics, so an old failure must not hide a currently pulling,
 	// starting, or running replacement.
+	//
+	// A running headless rank is neither: it exposes no endpoint, and the
+	// gateway routes to a multi-node replica through its leader only, so a
+	// follower that outlives its failed leader keeps nothing serving.
 	hasLive, hasFailed := false, false
 	for _, instance := range instances {
-		switch instance.State {
-		case proto.InstFailed:
+		switch {
+		case instance.State == proto.InstFailed:
 			hasFailed = true
-		case proto.InstStopped, proto.InstPendingRemoval:
+		case instance.State == proto.InstStopped, instance.State == proto.InstPendingRemoval:
+		case instance.Headless && instance.State == proto.InstRunning:
 		default:
 			hasLive = true
 		}
@@ -98,7 +103,7 @@ func DeriveRuntimeState(desired store.DeploymentState, instances []store.Instanc
 		}
 	}
 	for _, instance := range instances {
-		if instance.State == proto.InstRunning || instance.State == proto.InstDraining {
+		if !instance.Headless && (instance.State == proto.InstRunning || instance.State == proto.InstDraining) {
 			return "running"
 		}
 	}

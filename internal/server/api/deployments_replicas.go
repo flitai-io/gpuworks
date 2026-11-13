@@ -256,9 +256,9 @@ func replicaUnitsDTO(rows deployment.Rows, d *store.Deployment, view replicaView
 	out := make([]dto.DeploymentPDUnit, 0, len(replicas))
 	for index, unit := range replicas {
 		item := dto.DeploymentPDUnit{NodeUUID: unit.NodeUUID, NodeName: view.names[unit.NodeUUID]}
-		if index < len(view.match.Slots) {
-			slot := view.match.Slots[index]
-			unitAttempts(rows, &item, slot, view.match.Failed[slot.Key])
+		if index < len(view.Match.Slots) {
+			slot := view.Match.Slots[index]
+			unitAttempts(rows, &item, slot, view.Match.Failed[slot.Key])
 		}
 		for _, rank := range unit.Followers {
 			item.Followers = append(item.Followers, dto.DeploymentPDRank{NodeUUID: rank.NodeUUID, NodeName: view.names[rank.NodeUUID]})

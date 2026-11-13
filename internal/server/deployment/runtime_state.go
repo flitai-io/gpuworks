@@ -87,10 +87,12 @@ func TransferProgress(done, size int64) float64 {
 	return math.Min(float64(done)/float64(size), 1)
 }
 
-// RuntimeStates applies the deployment read policy to an already
-// loaded inventory. Deployments waiting for their first instance need model
-// preparation and scheduling facts; those facts are loaded once for the batch.
-func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []store.Deployment, instances []store.Instance) (map[uint]string, error) {
+// EffectiveStates is EffectiveState over an already loaded inventory: the
+// state the deployment list shows, for each deployment. Deployments waiting
+// for their first instance need model preparation and scheduling facts; those
+// facts are loaded once for the batch. Only a running deployment can read
+// asleep, so only those are judged against their replicas.
+func EffectiveStates(st *store.Store, preparation ModelPreparation, deployments []store.Deployment, instances []store.Instance) (map[uint]string, error) {
 	byDeployment := make(map[uint][]store.Instance)
 	for _, instance := range instances {
 		byDeployment[instance.DeploymentID] = append(byDeployment[instance.DeploymentID], instance)
@@ -101,7 +103,7 @@ func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []
 	for _, deployment := range deployments {
 		current := byDeployment[deployment.ID]
 		if len(current) != 0 || deployment.State == store.DeployStopped || deployment.State == store.DeployDeleting {
-			states[deployment.ID] = DeriveRuntimeState(deployment.State, current, nil, false)
+			states[deployment.ID] = EffectiveState(&deployment, DeriveRuntimeState(deployment.State, current, nil, false), Facts{})
 			if states[deployment.ID] == "running" {
 				running = append(running, deployment)
 			}
@@ -124,7 +126,7 @@ func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []
 			d := &running[i]
 			current := byDeployment[d.ID]
 			// Runtime derivation cannot need scheduling facts when instances exist.
-			states[d.ID] = RuntimeState(rows, d, current, nil)
+			states[d.ID] = EffectiveState(d, RuntimeState(rows, d, current, nil), FactsFor(rows, d, current))
 		}
 	}
 	if len(preparing) == 0 {
@@ -136,7 +138,7 @@ func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []
 	}
 	for i := range preparing {
 		deployment := &preparing[i]
-		states[deployment.ID] = RuntimeState(rows, deployment, nil, RecordedModelProgress(rows, deployment))
+		states[deployment.ID] = EffectiveState(deployment, RuntimeState(rows, deployment, nil, RecordedModelProgress(rows, deployment)), Facts{})
 	}
 	return states, nil
 }
