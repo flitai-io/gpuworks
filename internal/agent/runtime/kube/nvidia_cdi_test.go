@@ -149,3 +149,22 @@ func TestAnInstancePodNamesItsNVIDIACardTheWayTheNodeResolvesIt(t *testing.T) {
 		t.Fatal("an unresolvable card made a pod")
 	}
 }
+
+// On Ubuntu /var/run is an absolute symlink to /run. Read through the host's
+// root it points into the agent's own file system, so the specs are found
+// under /run/cdi.
+func TestTheSpecsAreFoundWhereVarRunIsASymlinkToRun(t *testing.T) {
+	root := t.TempDir()
+	writeHostFile(t, root, "run/cdi/management.nvidia.com-gpu.yaml", cdiManagementSpec)
+	writeHostFile(t, root, "run/cdi/k8s.device-plugin.nvidia.com-gpu.json", cdiDevicePluginSpec)
+	if err := os.MkdirAll(filepath.Join(root, "var"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/run", filepath.Join(root, "var/run")); err != nil {
+		t.Fatal(err)
+	}
+	cdi := readNVIDIACDI(root)
+	if !cdi.Toolkit || cdi.Names["GPU-88e65fd5-74fb-5350-d3da-5a7bbdd4d19c"] == "" {
+		t.Fatalf("specs under /run/cdi behind a /var/run symlink = %+v", cdi)
+	}
+}
