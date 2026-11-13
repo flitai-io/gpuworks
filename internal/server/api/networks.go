@@ -203,24 +203,16 @@ func (a *apiHandlers) deleteNetwork(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// syncNodesIfOnline re-sends desired state, which carries the resolved
-// storage-sync selector, to the given online nodes, or to every online node
-// when none is named. A network change can move any node's resolution.
+// syncNodesIfOnline asks for desired state, which carries the resolved
+// storage-sync selector, to be re-sent to the given online nodes, or to every
+// online node when none is named. A network change can move any node's
+// resolution.
 func (a *apiHandlers) syncNodesIfOnline(uuids ...string) {
-	if a.d.NodeSync == nil {
+	if len(uuids) == 0 {
+		a.requestSyncAllNodes()
 		return
 	}
-	if len(uuids) == 0 {
-		nodes, _ := a.d.Store.ListNodes()
-		for _, n := range nodes {
-			uuids = append(uuids, n.UUID)
-		}
-	}
-	for _, uuid := range uuids {
-		if a.d.Online == nil || a.d.Online(uuid) {
-			_ = a.d.NodeSync.SyncNode(uuid)
-		}
-	}
+	a.requestSyncNodes(uuids)
 }
 
 // writeNetworkDetail answers a successful network mutation: it resyncs the

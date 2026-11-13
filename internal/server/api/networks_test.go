@@ -281,7 +281,7 @@ func TestNetworkChangesResyncOnlineNodes(t *testing.T) {
 	signer, _ := roleTestToken(t, n.store, "admin")
 	n.router = Router(Deps{
 		Store: n.store, AuthSigner: signer,
-		NodeSync: nodeSyncCallbacks{full: func(uuid string) error { synced = append(synced, uuid); return nil }},
+		NodeSync: nodeSyncCallbacks{request: func(uuid string) { synced = append(synced, uuid) }},
 		Online:   func(uuid string) bool { return uuid == "online" },
 	})
 	n.expect(n.admin, http.MethodPost, "/api/v1/networks", `{"name":"s","roles":["storage_sync"],"type":"host_ethernet"}`, http.StatusCreated)

@@ -35,7 +35,7 @@ func TestStorageNodeOverridesAPI(t *testing.T) {
 	signer, member := roleTestToken(t, st, "member")
 	_, admin := roleTestToken(t, st, "admin")
 	var synced []string
-	router := Router(Deps{Store: st, AuthSigner: signer, NodeSync: nodeSyncCallbacks{full: func(uuid string) error { synced = append(synced, uuid); return nil }}})
+	router := Router(Deps{Store: st, AuthSigner: signer, NodeSync: nodeSyncCallbacks{request: func(uuid string) { synced = append(synced, uuid) }}})
 	endpoint := fmt.Sprintf("/api/v1/storages/%d/node-overrides", cache.ID)
 	call := func(token, method, url, body string) *httptest.ResponseRecorder {
 		t.Helper()
