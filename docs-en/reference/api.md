@@ -1949,12 +1949,13 @@ Each range-based response includes `range`: `from_ms`, `to_ms`, `granularity`, `
 
 | Method | Path | Description | Authentication |
 |---|---|---|---|
-| GET | `/api/v1/ai/configs` | List AI Helper LLM connection configurations | JWT |
-| POST | `/api/v1/ai/configs` | Add an LLM connection configuration. `base_url` is filled up to `/v1`: trailing slashes and a pasted `/chat/completions` are dropped before storing, and an address that is not http(s) or has no host returns 400 `FIELD_INVALID` with `params.field` `base_url`. Without a `base_url`, a known `preset` supplies one; with neither, the configuration is still stored and the AI Helper reports it as unusable | JWT |
-| PATCH | `/api/v1/ai/configs/{id}` | Partially update an LLM connection configuration: only the `name`/`preset`/`base_url`/`model`/`is_default` in the request change. A missing `api_key` or an empty string keeps the stored key (including a legacy plaintext one); a non-empty one is encrypted and stored. Setting the default clears it on the others. Answers the same row the list shows (six fields, no key). 404 for a missing configuration, 400 `FIELD_INVALID` for an invalid value | JWT |
+| GET | `/api/v1/ai/configs` | List AI Helper LLM connection configurations. Each row has `proxy_mode` (`management` for the management node outbound proxy, `direct`, or `custom`), `proxy_url` (`custom` only, login masked) and `image_input` (whether the model accepts images), and no key | JWT |
+| GET | `/api/v1/ai/presets` | The preset dictionary: `presets[]{name, base_url, model, image_input}` in the console's order, ending with `custom`, and `proxy_modes`, the proxy choices. `image_input` only fills the switch of a new service | JWT |
+| POST | `/api/v1/ai/configs` | Add an LLM connection configuration. `base_url` is filled up to `/v1`: trailing slashes and a pasted `/chat/completions` are dropped before storing, and an address that is not http(s) or has no host returns 400 `FIELD_INVALID` with `params.field` `base_url`. Without a `base_url`, a known `preset` supplies one; with neither, the configuration is still stored and the AI Helper reports it as unusable. `proxy_mode` defaults to `management`; `custom` requires a `proxy_url` (http, https, socks5 or socks5h, login allowed, stored encrypted), and a `proxy_url` with any other mode returns 400 `FIELD_INVALID`. Without `image_input`, the preset's value applies when the model also comes from the preset, otherwise `false` | JWT |
+| PATCH | `/api/v1/ai/configs/{id}` | Partially update an LLM connection configuration: only the `name`/`preset`/`base_url`/`model`/`is_default`/`proxy_mode`/`proxy_url`/`image_input` in the request change. A missing `api_key` or an empty string keeps the stored key (including a legacy plaintext one); a non-empty one is encrypted and stored. `proxy_url` works the same way: empty keeps the stored proxy while the mode stays `custom`, and switching to another mode drops it. Changing only `preset` (without `model` or `image_input`) also changes the image switch to the preset's. Setting the default clears it on the others. Answers the same row the list shows (no key). 404 for a missing configuration, 400 `FIELD_INVALID` for an invalid value | JWT |
 | DELETE | `/api/v1/ai/configs/{id}` | Delete an LLM connection configuration | JWT |
-| POST | `/api/v1/ai/configs/test` | Try the unsaved `base_url`/`api_key`/`model` a form holds, storing nothing. A 10 second timeout, through the same outbound policy the assistant uses. Answers `{outcome, status, detail, base_url, latency_ms}`, where `outcome` separates `ok`, `connection` (DNS, dial or timeout), `blocked` (refused by the outbound policy), `auth` (401/403), `path` (a 404 that names no model: the wrong address), `model` (the endpoint does not serve that model) and `http` (any other status, or not a completion). `detail` is the endpoint's own words, shortened and with the key removed. An edit dialog sends its `id` with an empty `api_key` to reuse the stored key, only while `base_url` still matches the stored address | JWT |
-| GET | `/api/v1/ai/available` | Whether AI Helper is available (whether an LLM is configured) | JWT |
+| POST | `/api/v1/ai/configs/test` | Try the unsaved `base_url`/`api_key`/`model` a form holds, storing nothing. A 10 second timeout, through the same outbound policy the assistant uses. Answers `{outcome, status, detail, base_url, latency_ms}`, where `outcome` separates `ok`, `connection` (DNS, dial or timeout), `blocked` (refused by the outbound policy), `auth` (401/403), `path` (a 404 that names no model: the wrong address), `model` (the endpoint does not serve that model) and `http` (any other status, or not a completion). `detail` is the endpoint's own words, shortened and with the key removed. An edit dialog sends its `id` with an empty `api_key` to reuse the stored key, only while `base_url` still matches the stored address. The call goes through the proxy `proxy_mode`/`proxy_url` name; `custom` with an empty `proxy_url` uses the stored proxy. With `check_image: true` and a successful text call, a small image is sent as well and `image` answers `accepted` (the answer names the image's color), `ignored` (answered without seeing the image, as when the upstream drops it silently), `rejected` (refused because of the image: 400/415/422 naming no model) or `unknown` (could not tell), with `image_status` and `image_detail` | JWT |
+| GET | `/api/v1/ai/available` | Whether AI Helper is available (whether an LLM is configured): `{available, image_input, images?}`. When the AI service in use has "Accepts image input" on, `image_input` is `true` and `images:{per_message, per_request, max_bytes, max_side}` gives the images allowed per message and per request, the bytes of one image, and the longest side the console shrinks an image to | JWT |
 | POST | `/api/v1/ai/ask` | Ask AI Helper to perform a task; supports regular responses and SSE. See [AI Ask Request and Response](#ai-提问的请求与响应) for all fields and conditions | JWT |
 | GET | `/api/v1/ai/instances/{uuid}/findings` | Known failures matched in a failed instance's logs: `{items:[{code, evidence:[{line}]}], total}`; `code` is stable, and the frontend renders the text. No LLM required; returns 404 if the instance does not exist | JWT |
 | GET | `/api/v1/ai/models/{id}/fit` | Physical fit of the model on each accelerator card type in the online cluster; does not represent currently free resources. Returns `weight_bytes`, `dtype`, and `rows` per card type: `cards/unusable` (usable/faulty card counts), `dtype_supported`, `fast_link_cards` (maximum number of cards in a high-speed interconnect group such as NVLink), `fits`, minimum `tp`, and remaining `headroom_bytes`; no LLM required; returns 404 if the model does not exist. See [Model Fit Results](#模型适配结果) | JWT |
@@ -1979,9 +1980,11 @@ Returns the model's `model_id`, `weight_bytes`, `dtype`, `gpu_memory_utilization
 | `model.fit` | `model_id` |
 | `deployment.unscheduled` | `deployment_id` |
 | `node.health` | `node_uuid` |
-| `ask` | Requires `question`; optionally include one of the targets above |
+| `ask` | Requires `question` or `images`; optionally include one of the targets above |
 
-Specify targets by reference; the server assembles the context. `question` is optional except for the `ask` task, where it is required. For follow-up questions, include `history:[{role:user|assistant,content}]`, keeping at most the latest 10 rounds.
+Specify targets by reference; the server assembles the context. `question` is optional except for the `ask` task, where it is required (or images alone are sent). For follow-up questions, include `history:[{role:user|assistant,content,images?}]`, keeping at most the latest 10 rounds.
+
+`images` are the images sent with the question, each a `data:image/(png|jpeg|webp|gif);base64,…` URL; a user turn in `history` may carry its own `images`, an assistant turn may not. They go to the AI service as OpenAI multi-part `content` (text plus `image_url`). The limits are those of `GET /api/v1/ai/available`: 4 per message, 8 per request in total, 2 MiB each once decoded, with content matching the declared type. Images are accepted only when the AI service in use has "Accepts image input" on.
 
 After assembling the context, the server runs an agent loop with read-only tools. The tools read this API's GET endpoints in-process as the user asking the question; see [Use AI Helper](../how-to/use-ai-helper.md). A regular response is `{answer, steps:[{tool,args,ms,error?}], calls, usage:{prompt_tokens,completion_tokens}}`.
 
@@ -1989,7 +1992,7 @@ With the `Accept: text/event-stream` request header, the response uses SSE strea
 
 - `step`: `{id,tool,args,status:running|done|error,ms,error?}`, one event when each tool call starts and one when it ends.
 - `text` / `reasoning`: `{delta}`.
-- The final event is `done` (`{calls,usage,first_text_ms,total_ms}`) or `error` (`{error}`).
+- The final event is `done` (`{calls,usage,first_text_ms,total_ms}`) or `error` (`{error, code?}`; `code` is `AI_IMAGE_REJECTED` when the AI service refused an ask because of its images).
 - When idle, sends a `: ping` comment every 10s.
 
 Failures before the model call, such as an unconfigured LLM or a nonexistent target, still return HTTP status codes. Error conditions are:
@@ -2000,6 +2003,10 @@ Failures before the model call, such as an unconfigured LLM or a nonexistent tar
 | Invalid `task` | 400 `AI_TASK_INVALID` |
 | Missing target or multiple targets provided | 400 `AI_TARGET_REQUIRED` |
 | The same user already has 2 questions being processed | 429 `AI_ASK_BUSY`; `params.limit` gives the limit |
+| An image is not usable: wrong format, content not matching its type, too large, too many, or on an assistant turn | 400 `AI_IMAGE_INVALID`; `params.reason` is `format`/`too_large`/`too_many`/`role`, `params.where` is `question`/`history`/`request` |
+| The body exceeds every image allowed plus text | 413 |
+| Images sent while the AI service in use does not have "Accepts image input" on | 409 `AI_IMAGE_INPUT_OFF`; the AI service is not called |
+| The AI service refused the images (400/415/422 naming no model) | 422 `AI_IMAGE_REJECTED` |
 | Instance, model, deployment, or node does not exist | 404 |
 | LLM endpoint failure | 502 |
 

@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/aihelper"
 	"gpuworks.ai/gpuworks/internal/server/logstore"
+	"gpuworks.ai/gpuworks/internal/server/outbound"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -41,6 +43,12 @@ func (a *aiService) prepare(req aihelper.AskRequest) (preparedAsk, error) {
 	if err != nil {
 		return preparedAsk{}, errNoAI
 	}
+	if carriesImages(req) && !cfg.ImageInput {
+		return preparedAsk{}, aihelper.ErrImageInputOff
+	}
+	if req.Question == "" && len(req.Images) > 0 {
+		req.Question = aihelper.ImageOnlyQuestion
+	}
 	inSeed, after := req.Question, ""
 	if len(req.History) > 0 {
 		inSeed, after = "", req.Question
@@ -49,15 +57,39 @@ func (a *aiService) prepare(req aihelper.AskRequest) (preparedAsk, error) {
 	if err != nil {
 		return preparedAsk{}, err
 	}
-	client := aihelper.NewClientWithPrivateHosts(aihelper.Endpoint{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model}, a.privateHosts)
+	route, err := a.serviceRoute(cfg)
+	if err != nil {
+		return preparedAsk{}, errNoAI
+	}
+	client := aihelper.NewClientRouted(aihelper.Endpoint{BaseURL: cfg.BaseURL, APIKey: key, Model: cfg.Model}, a.privateHosts, route)
 	prompt := aihelper.WithPlatformReading(system, time.Now())
 	if req.Task == aihelper.TaskNodeHealth {
 		prompt += aihelper.NodeHealthClose
 	}
+	messages := aihelper.Conversation(aihelper.WithResponseLanguage(prompt, req.Locale, req.Task == aihelper.TaskAsk), seed, req.History, after)
+	if len(req.Images) > 0 {
+		// The last message is the user's: the seed on a first turn, which
+		// holds the question, or the question itself on a follow-up.
+		messages[len(messages)-1].Images = req.Images
+	}
 	return preparedAsk{
 		runner:   aihelper.NewRunner(client, askEnv{aiService: a, api: req.API}),
-		messages: aihelper.Conversation(aihelper.WithResponseLanguage(prompt, req.Locale, req.Task == aihelper.TaskAsk), seed, req.History, after),
+		messages: messages,
 	}, nil
+}
+
+// carriesImages reports whether an ask sends any image, in the question or
+// in the thread it carries.
+func carriesImages(req aihelper.AskRequest) bool {
+	if len(req.Images) > 0 {
+		return true
+	}
+	for _, m := range req.History {
+		if len(m.Images) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // seed picks the task's system prompt and gathers its subject's context. A
@@ -216,4 +248,21 @@ func gpuHealthLevel(g store.GPU) string {
 
 func sortLogLines(lines []aihelper.LogLine) {
 	sort.SliceStable(lines, func(i, j int) bool { return lines[i].TimeMS < lines[j].TimeMS })
+}
+
+// serviceRoute is how calls to the service leave the server: its own proxy
+// choice, with the management node's proxy read per call so a change reaches a
+// running answer's next call.
+func (a *aiService) serviceRoute(cfg *store.AIConfig) (func() (outbound.Route, error), error) {
+	proxyURL := ""
+	if cfg.ProxyMode == string(aihelper.ProxyCustom) {
+		plain, err := store.DecryptAIKey(a.box, cfg.ProxyURL)
+		if err != nil {
+			return nil, err
+		}
+		proxyURL = plain
+	}
+	return aihelper.ProxyRoute(aihelper.ProxyMode(cfg.ProxyMode), proxyURL, func() (proto.NetworkConfig, error) {
+		return planning.ControlPlaneNetwork(a.store)
+	}), nil
 }

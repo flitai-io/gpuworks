@@ -19,6 +19,8 @@ const encryptedAIKeyPrefix = "enc:v1:"
 // which one it does.
 var ErrAIDefaultRequired = errors.New("the only default AI service cannot stop being the default")
 
+// EncryptAIKey seals a secret of an AI service for storage: its API key, and
+// the custom proxy URL, which carries the proxy's login.
 func EncryptAIKey(box *auth.Secretbox, key string) (string, error) {
 	if key == "" {
 		return "", nil
@@ -136,6 +138,11 @@ type AIConfigPatch struct {
 	APIKey    *string
 	Model     *string
 	IsDefault *bool
+	// ProxyMode and ProxyURL change together: the caller clears the URL when
+	// the mode leaves custom. ProxyURL is the ciphertext to store.
+	ProxyMode  *string
+	ProxyURL   *string
+	ImageInput *bool
 }
 
 // UpdateAIConfig applies a patch and answers the row as stored. Marking one
@@ -174,6 +181,15 @@ func (s *Store) UpdateAIConfig(id uint, patch AIConfigPatch) (*AIConfig, error) 
 		}
 		if patch.Model != nil {
 			updates["model"] = *patch.Model
+		}
+		if patch.ProxyMode != nil {
+			updates["proxy_mode"] = *patch.ProxyMode
+		}
+		if patch.ProxyURL != nil {
+			updates["proxy_url"] = *patch.ProxyURL
+		}
+		if patch.ImageInput != nil {
+			updates["image_input"] = *patch.ImageInput
 		}
 		if patch.IsDefault != nil {
 			if *patch.IsDefault {

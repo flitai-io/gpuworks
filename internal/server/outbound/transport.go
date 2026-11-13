@@ -19,18 +19,50 @@ import (
 // read fails the request rather than sending it direct. The caller owns the
 // transport and its idle connections.
 func Transport(readProxy func() (proto.NetworkConfig, error), allowPrivateHosts ...string) *SafeTransport {
+	tr := routedTransport(proxyRoute(readProxy))
+	tr.policy = policy{allowed: append([]string(nil), allowPrivateHosts...)}
+	return tr
+}
+
+// Route is where one outbound request goes: through Proxy, or straight to the
+// target when Direct is set. A zero Route inherits the server process's proxy
+// environment, as an empty proxy does in Transport.
+type Route struct {
+	Proxy  proto.NetworkConfig
+	Direct bool
+}
+
+// TransportWithRoute is TransportWithPrivateHosts for a caller that picks its
+// own route per request rather than always following the management node's
+// proxy - an AI service configured to go direct or through a proxy of its own.
+// A route that cannot be read fails the request rather than sending it direct.
+func TransportWithRoute(readRoute func() (Route, error), readHosts func() []string) *SafeTransport {
+	tr := routedTransport(readRoute)
+	tr.policy.readAllowed = readHosts
+	return tr
+}
+
+func proxyRoute(readProxy func() (proto.NetworkConfig, error)) func() (Route, error) {
+	return func() (Route, error) {
+		cfg, err := readProxy()
+		return Route{Proxy: cfg}, err
+	}
+}
+
+func routedTransport(readRoute func() (Route, error)) *SafeTransport {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.Proxy = func(req *http.Request) (*url.URL, error) {
-		cfg, err := readProxy()
+		route, err := readRoute()
 		if err != nil {
-			return nil, fmt.Errorf("cannot read the management node's outbound proxy")
+			return nil, fmt.Errorf("cannot read the outbound proxy")
 		}
-		return httpproxy.Proxy(req, httpproxy.Config{HTTPProxy: cfg.HTTPProxy, HTTPSProxy: cfg.HTTPSProxy, NoProxy: cfg.NoProxy}, false)
+		cfg := route.Proxy
+		return httpproxy.Proxy(req, httpproxy.Config{HTTPProxy: cfg.HTTPProxy, HTTPSProxy: cfg.HTTPSProxy, NoProxy: cfg.NoProxy}, route.Direct)
 	}
 	tr.DialContext = pinnedDial
 	tr.DialTLSContext = nil
 	tr.DialTLS = nil //nolint:staticcheck // SA1019: clear inherited legacy TLS hooks so they cannot bypass address pinning.
-	return &SafeTransport{Transport: tr, policy: policy{allowed: append([]string(nil), allowPrivateHosts...)}}
+	return &SafeTransport{Transport: tr}
 }
 
 // TransportWithPrivateHosts reads administrator permissions for every request,

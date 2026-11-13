@@ -8,6 +8,8 @@ By the end, you can obtain evidence-based analysis for a specific object, then r
 
 - The server is running and you can sign in to the console. See [Install GPUWorks and Deploy Your First Model](../tutorials/getting-started.md).
 - Platform checks alone do not require an LLM. For AI interpretation, first save an OpenAI-compatible endpoint that the server can access under **Settings → Integrations → AI service** (base URL, model name, and API key). The server stores the key encrypted.
+- An AI service's **Outbound proxy** is one of three: **Management node outbound proxy** (the default: the proxy marked "Use for management node outbound access" under **Pull settings → Proxies**, as image catalog and model metadata requests use; without one, the server process's proxy environment variables), **Direct** (no proxy at all), or **Custom proxy** (an http/https/socks5/socks5h address for this service only, login allowed, stored encrypted). **Test connection** goes through the chosen proxy.
+- **Accepts image input** says the model can read images; a new service takes the preset's value (on for DeepSeek's `deepseek-flash`, for example). Upstream models change: **Check** next to the switch sends a small image with the current address, model and proxy, turns the switch on only when the answer names the image's color, off when the image is refused or the model answered without seeing it (some upstreams drop images silently, `deepseek-v4-pro` for one), and leaves it alone when it cannot tell.
 - AI endpoints on ordinary private networks or local loopback addresses need no allowlist by default. An allowlist is needed only in strict mode. Platform administrators can authorize the target host under **Settings → Security & access → Outbound access policy**; host administrators can also edit `outbound_restrict_private_hosts` and `outbound_allow_private_hosts` directly in `server.yaml`. Changes to either field apply to the next request after saving, without restarting the server. See [Outbound Access Configuration](../reference/configuration.md#server-配置文件-serveryaml).
 - Analysis sends the diagnostic data it reads to the configured AI service. Before configuring it, confirm the target host and permitted data use. The settings page displays a notice identifying the external service host; same-origin platform models do not show this notice.
 
@@ -27,6 +29,10 @@ You can also click **AI Assistant** in the top bar or press ⌘I / Ctrl+I to ope
 - You can ask freely in the input box below. Questions default to the first object on the page; change or clear the selection under **About**.
 
 Each answer ends with two or three suggested follow-up questions that you can click. You can also continue in the input box. Follow-ups retain the same task and object, along with the previous conversation. **New conversation** clears the current conversation.
+
+**Conversation history**: after each answer, the conversation is saved in this browser (per signed-in account, the latest 30 kept). The **Conversations** button at the top of the panel lists them to open or delete; open one and keep asking to continue it. Conversations are not stored on the server, so another browser, or clearing site data, does not show them.
+
+**Images**: when the AI service in use has **Accepts image input** on, an **Add images** button appears beside the input; you can also paste a screenshot or drop an image on the input area, up to 4 per message. Images are shrunk to a longest side of 1568 pixels before sending, and an image can be sent without text. Follow-ups carry the earlier images along (at most 8 per ask, the oldest dropped first). Without image input the button is hidden, and a pasted image brings a pointer to check and turn it on in Settings.
 
 ## Two Parts: Platform Checks and AI Analysis
 

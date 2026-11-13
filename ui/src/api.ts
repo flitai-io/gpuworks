@@ -2703,8 +2703,13 @@ export interface SSHAttempt {
 }
 
 // --- AI helper -------------------------------------------------------------
-export type AIPreset =
-  "deepseek" | "bailian" | "siliconflow" | "openrouter" | "poe" | "custom";
+/** AIPreset is a preset's stable name; the server's dictionary lists them. */
+export type AIPreset = string;
+/**
+ * AIProxyMode is how calls to an AI service leave the server: the management
+ * node's outbound proxy, no proxy, or a proxy URL of the service's own.
+ */
+export type AIProxyMode = "management" | "direct" | "custom";
 export interface AIConfig {
   id: number;
   name: string;
@@ -2712,6 +2717,10 @@ export interface AIConfig {
   base_url: string;
   model: string;
   is_default: boolean;
+  proxy_mode: AIProxyMode;
+  /** The custom proxy with its login masked; present only for custom. */
+  proxy_url?: string;
+  image_input: boolean;
 }
 export interface AIConfigInput {
   name: string;
@@ -2720,11 +2729,15 @@ export interface AIConfigInput {
   api_key: string;
   model: string;
   is_default: boolean;
+  proxy_mode: AIProxyMode;
+  proxy_url?: string;
+  image_input: boolean;
 }
 /**
  * AIConfigPatch changes a stored service in place. Only the fields present
  * change; api_key is left out to keep the stored key, which the API never
- * sends back.
+ * sends back, and an empty proxy_url keeps the stored proxy while the mode
+ * stays custom.
  */
 export interface AIConfigPatch {
   name?: string;
@@ -2733,6 +2746,18 @@ export interface AIConfigPatch {
   api_key?: string;
   model?: string;
   is_default?: boolean;
+  proxy_mode?: AIProxyMode;
+  proxy_url?: string;
+  image_input?: boolean;
+}
+/**
+ * AIPresetDictionary is the server's preset table: each provider's address,
+ * starting model and image switch, in the order offered, ending with custom;
+ * and the proxy modes a service may use.
+ */
+export interface AIPresetDictionary {
+  presets: { name: AIPreset; base_url: string; model: string; image_input: boolean }[];
+  proxy_modes: AIProxyMode[];
 }
 /**
  * AIConfigDeleteResult answers a delete. promoted_id names the service that took
@@ -2754,6 +2779,10 @@ export interface AIConfigTest {
   base_url: string;
   api_key?: string;
   model: string;
+  proxy_mode?: AIProxyMode;
+  proxy_url?: string;
+  /** Also send a small image once text works, to tell whether the model accepts images. */
+  check_image?: boolean;
 }
 /**
  * AIConfigTestResult is what a connection test established. outcome is a
@@ -2769,6 +2798,10 @@ export interface AIConfigTestResult {
   detail?: string;
   base_url: string;
   latency_ms: number;
+  /** The image check, when asked for and the text call succeeded. */
+  image?: "accepted" | "ignored" | "rejected" | "unknown";
+  image_status?: number;
+  image_detail?: string;
 }
 /**
  * One assistant task about a subject named by reference (instance_uuid,
@@ -2783,7 +2816,9 @@ export interface AIAskRequest {
   deployment_id?: number;
   node_uuid?: string;
   question?: string;
-  history?: { role: "user" | "assistant"; content: string }[];
+  /** data: URLs sent with the question, within AIAvailability.images. */
+  images?: string[];
+  history?: AIHistoryMessage[];
   locale: string;
 }
 export interface AIStep {
@@ -2822,12 +2857,34 @@ export interface AIFitRow {
   usable_bytes: number;
   headroom_bytes: number;
 }
+/** One earlier turn of a thread; only a user turn carries images. */
+export interface AIHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+  images?: string[];
+}
+/** AIImageLimit bounds the images of one ask (GET /api/v1/ai/available). */
+export interface AIImageLimit {
+  per_message: number;
+  per_request: number;
+  max_bytes: number;
+  max_side: number;
+}
+/**
+ * AIAvailability says whether the assistant answers and whether the AI
+ * service in use takes images, with the limits to keep when it does.
+ */
+export interface AIAvailability {
+  available: boolean;
+  image_input: boolean;
+  images?: AIImageLimit;
+}
 /** One event of a streamed /ai/ask answer (Accept: text/event-stream). */
 export type AIStreamEvent =
   | { type: "step"; id: number; tool: string; args: string; status: "running" | "done" | "error"; ms: number; error?: string }
   | { type: "text" | "reasoning"; delta: string }
   | { type: "done"; calls: number; usage: { prompt_tokens: number; completion_tokens: number }; first_text_ms: number; total_ms: number }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string; code?: string };
 export interface AIModelFit {
   model_id: number;
   weight_bytes: number;
@@ -5346,9 +5403,11 @@ export const api = {
   putSetting: (key: string, value: unknown) =>
     sendJSON<void>("PUT", `/api/v1/settings/${key}`, value),
 
-  aiAvailable: () => getJSON<{ available: boolean }>("/api/v1/ai/available"),
+  aiAvailable: () => getJSON<AIAvailability>("/api/v1/ai/available"),
   aiConfigs: () =>
     getJSON<List<AIConfig>>("/api/v1/ai/configs"),
+  aiPresets: () =>
+    getJSON<AIPresetDictionary>("/api/v1/ai/presets"),
   createAIConfig: (body: AIConfigInput) =>
     sendJSON<AIConfig>("POST", "/api/v1/ai/configs", body),
   updateAIConfig: (id: number, body: AIConfigPatch) =>

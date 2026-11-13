@@ -124,7 +124,21 @@
     "onThisPage": "On this page",
     "emptyTitle": "Pick a task from a page, or ask below",
     "emptyHint": "Open a deployment, node or failed instance and its tasks appear here; models, failed instances, unplaced deployments and nodes also have AI buttons.",
-    "followUps": "Suggested follow-ups"
+    "followUps": "Suggested follow-ups",
+    "history": "Conversations",
+    "historyHint": "Conversations are kept in this browser; open one to continue it.",
+    "noThreads": "No saved conversations yet",
+    "untitled": "Untitled conversation",
+    "deleteThread": "Delete conversation “{{title}}”",
+    "attachImage": "Add images",
+    "attachHint": "Add images, or paste a screenshot or drop it here",
+    "attached": "Attached images",
+    "imageAlt": "Image {{n}}",
+    "removeImage": "Remove image {{n}}",
+    "imagesOff": "The AI service in use does not have “Accepts image input” on, so images cannot be sent. Check it and turn it on under Settings → Integrations → AI services.",
+    "imagesTooMany": "At most {{count}} images per message; the rest were not added.",
+    "image_format": "“{{name}}” is not a supported image (PNG, JPEG, WebP, GIF).",
+    "image_too_large": "“{{name}}” is still over {{mb}} MB after shrinking."
   },
   "subject": {
     "instance": "Instance",

@@ -1955,12 +1955,13 @@ trace id 为 32 位十六进制、不区分大小写，查询该 trace 的全部
 
 | Method | Path | 说明 | 鉴权 |
 |---|---|---|---|
-| GET | `/api/v1/ai/configs` | AI 助手 LLM 接入配置列表 | JWT |
-| POST | `/api/v1/ai/configs` | 新增 LLM 接入配置。`base_url` 只填到 `/v1` 为止：末尾多余的 `/` 与误粘贴的 `/chat/completions` 会被裁掉后再存，非 http(s) 或没有主机名的地址 400 `FIELD_INVALID`（`params.field` 为 `base_url`）。不填 `base_url` 时若给了已知 `preset` 用预设地址，两者都没有也照存（AI 助手会报配置不可用） | JWT |
-| PATCH | `/api/v1/ai/configs/{id}` | 部分更新 LLM 接入配置：只改请求里出现的 `name`/`preset`/`base_url`/`model`/`is_default`；`api_key` 不出现或为空字符串时保留已存的密钥（旧版明文存储的也原样保留），非空则重新加密存。设为默认会同时清掉其他配置的默认。返回与列表同一行（六个字段，不含密钥）。配置不存在 404，取值不合法 400 `FIELD_INVALID` | JWT |
+| GET | `/api/v1/ai/configs` | AI 助手 LLM 接入配置列表。每行含 `proxy_mode`（`management` 管理节点出站代理 / `direct` 直连 / `custom` 自定义代理）、`proxy_url`（仅 `custom`，登录信息打码）与 `image_input`（模型是否接受图片），不含密钥 | JWT |
+| GET | `/api/v1/ai/presets` | 预设字典：`presets[]{name, base_url, model, image_input}` 按控制台的顺序排列、以 `custom` 结尾，`proxy_modes` 是可选的代理方式。`image_input` 只是新建服务时开关的初值 | JWT |
+| POST | `/api/v1/ai/configs` | 新增 LLM 接入配置。`base_url` 只填到 `/v1` 为止：末尾多余的 `/` 与误粘贴的 `/chat/completions` 会被裁掉后再存，非 http(s) 或没有主机名的地址 400 `FIELD_INVALID`（`params.field` 为 `base_url`）。不填 `base_url` 时若给了已知 `preset` 用预设地址，两者都没有也照存（AI 助手会报配置不可用）。`proxy_mode` 缺省为 `management`；`custom` 必须带 `proxy_url`（http、https、socks5 或 socks5h，可含登录信息，加密存储），其他方式带 `proxy_url` 400 `FIELD_INVALID`。不传 `image_input` 时取预设的值（模型也取自预设时），否则为 `false` | JWT |
+| PATCH | `/api/v1/ai/configs/{id}` | 部分更新 LLM 接入配置：只改请求里出现的 `name`/`preset`/`base_url`/`model`/`is_default`/`proxy_mode`/`proxy_url`/`image_input`；`api_key` 不出现或为空字符串时保留已存的密钥（旧版明文存储的也原样保留），非空则重新加密存。`proxy_url` 同理：仍为 `custom` 时为空保留已存代理，改成其他方式时清掉已存代理。只改 `preset`（不带 `model`、`image_input`）时，图片开关随预设一起改。设为默认会同时清掉其他配置的默认。返回与列表同一行（不含密钥）。配置不存在 404，取值不合法 400 `FIELD_INVALID` | JWT |
 | DELETE | `/api/v1/ai/configs/{id}` | 删除 LLM 接入配置 | JWT |
-| POST | `/api/v1/ai/configs/test` | 用表单里尚未保存的 `base_url`/`api_key`/`model` 试连一次，不落库。10 秒超时，走与 AI 助手相同的出站策略。返回 `{outcome, status, detail, base_url, latency_ms}`，`outcome` 区分 `ok`、`connection`（DNS/连接/超时）、`blocked`（被出站策略拒绝）、`auth`（401/403 鉴权失败）、`path`（404 且未提到模型，地址不对）、`model`（服务端没有该模型）、`http`（其他状态或不是补全响应）。`detail` 是服务端的原话（截短、隐去密钥）。编辑弹窗带 `id` 且 `api_key` 为空时复用已存密钥，仅当 `base_url` 与已存地址一致 | JWT |
-| GET | `/api/v1/ai/available` | AI 助手是否可用（是否已配置 LLM） | JWT |
+| POST | `/api/v1/ai/configs/test` | 用表单里尚未保存的 `base_url`/`api_key`/`model` 试连一次，不落库。10 秒超时，走与 AI 助手相同的出站策略。返回 `{outcome, status, detail, base_url, latency_ms}`，`outcome` 区分 `ok`、`connection`（DNS/连接/超时）、`blocked`（被出站策略拒绝）、`auth`（401/403 鉴权失败）、`path`（404 且未提到模型，地址不对）、`model`（服务端没有该模型）、`http`（其他状态或不是补全响应）。`detail` 是服务端的原话（截短、隐去密钥）。编辑弹窗带 `id` 且 `api_key` 为空时复用已存密钥，仅当 `base_url` 与已存地址一致。请求按 `proxy_mode`/`proxy_url` 走代理，`custom` 且 `proxy_url` 为空时用已存代理。带 `check_image: true` 且文字调用成功时再发一张小图，返回 `image`：`accepted`（回答认出了图片的颜色）、`ignored`（应答了但没有看到图片，如上游静默丢弃图片）、`rejected`（因图片被拒，400/415/422 且未提到模型）、`unknown`（无法判断），以及 `image_status`、`image_detail` | JWT |
+| GET | `/api/v1/ai/available` | AI 助手是否可用（是否已配置 LLM）：`{available, image_input, images?}`。当前使用的 AI 服务开了「支持图片输入」时 `image_input` 为 `true`，并带 `images:{per_message, per_request, max_bytes, max_side}`（每条消息、每次请求的图片数上限，单张字节上限，控制台缩图的最长边） | JWT |
 | POST | `/api/v1/ai/ask` | 让 AI 助手执行任务，支持普通响应和 SSE；完整字段与条件见[AI 提问的请求与响应](#ai-提问的请求与响应) | JWT |
 | GET | `/api/v1/ai/instances/{uuid}/findings` | 失败实例日志命中的已知故障：`{items:[{code, evidence:[{line}]}], total}`，`code` 稳定、文案由前端渲染。不需要 LLM；实例不存在 404 | JWT |
 | GET | `/api/v1/ai/models/{id}/fit` | 模型在在线集群各类加速卡上的物理适配，不代表当前空闲资源。返回 `weight_bytes`、`dtype` 与各卡型的 `rows`：`cards/unusable`（可用/故障卡数）、`dtype_supported`、`fast_link_cards`（NVLink 等高速互联组最大卡数）、`fits`、最小 `tp` 和余量 `headroom_bytes`；不需要 LLM，模型不存在 404。见[模型适配结果](#模型适配结果) | JWT |
@@ -1985,9 +1986,11 @@ trace id 为 32 位十六进制、不区分大小写，查询该 trace 的全部
 | `model.fit` | `model_id` |
 | `deployment.unscheduled` | `deployment_id` |
 | `node.health` | `node_uuid` |
-| `ask` | 必须带 `question`，可选附带上述某一个对象 |
+| `ask` | 必须带 `question` 或 `images`，可选附带上述某一个对象 |
 
-对象按引用指定，由 server 组装上下文；`question` 可选，但 `ask` 任务必须提供。追问时带 `history:[{role:user|assistant,content}]`，最多保留最近 10 轮。
+对象按引用指定，由 server 组装上下文；`question` 可选，但 `ask` 任务必须提供（或只发图片）。追问时带 `history:[{role:user|assistant,content,images?}]`，最多保留最近 10 轮。
+
+`images` 是随问题发送的图片，每张为 `data:image/(png|jpeg|webp|gif);base64,…`；`history` 里的用户轮次可以带各自的 `images`，助手轮次不能带。图片按 OpenAI 的多段 `content`（文本加 `image_url`）发给 AI 服务。上限见 `GET /api/v1/ai/available`：每条消息 4 张、每次请求合计 8 张、单张解码后不超过 2 MiB，内容必须与声明的类型一致。只有当前 AI 服务开了「支持图片输入」才接受图片。
 
 server 组装上下文后运行带只读工具的 agent 循环。工具以提问用户的身份在进程内读取本 API 的 GET 接口，见[使用 AI 助手](../how-to/use-ai-helper.md)。普通响应为 `{answer, steps:[{tool,args,ms,error?}], calls, usage:{prompt_tokens,completion_tokens}}`。
 
@@ -1995,7 +1998,7 @@ server 组装上下文后运行带只读工具的 agent 循环。工具以提问
 
 - `step`：`{id,tool,args,status:running|done|error,ms,error?}`，每次工具调用开始与结束各一条。
 - `text` / `reasoning`：`{delta}`。
-- 最后一条为 `done`（`{calls,usage,first_text_ms,total_ms}`）或 `error`（`{error}`）。
+- 最后一条为 `done`（`{calls,usage,first_text_ms,total_ms}`）或 `error`（`{error, code?}`；带图片的提问被 AI 服务因图片拒绝时 `code` 为 `AI_IMAGE_REJECTED`）。
 - 空闲时每 10s 发送一条 `: ping` 注释。
 
 在调用模型之前就失败的情况，例如未配置 LLM 或对象不存在，仍以 HTTP 状态码返回。错误条件如下：
@@ -2006,6 +2009,10 @@ server 组装上下文后运行带只读工具的 agent 循环。工具以提问
 | `task` 非法 | 400 `AI_TASK_INVALID` |
 | 缺对象或同时给了多个对象 | 400 `AI_TARGET_REQUIRED` |
 | 同一用户已有 2 个提问在处理 | 429 `AI_ASK_BUSY`，`params.limit` 给出限制 |
+| 图片不可用：格式不对、内容与类型不符、过大、数量超限或放在助手轮次 | 400 `AI_IMAGE_INVALID`，`params.reason` 为 `format`/`too_large`/`too_many`/`role`，`params.where` 为 `question`/`history`/`request` |
+| 请求体超过全部图片上限加文本 | 413 |
+| 当前 AI 服务未开「支持图片输入」却带了图片 | 409 `AI_IMAGE_INPUT_OFF`，不会调用 AI 服务 |
+| AI 服务因图片拒绝（400/415/422 且未提到模型） | 422 `AI_IMAGE_REJECTED` |
 | 实例、模型、部署或节点不存在 | 404 |
 | LLM 端点失败 | 502 |
 

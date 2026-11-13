@@ -373,7 +373,7 @@ func TestAIReadsRouteOnTheirOwnFromInsideTheAsk(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("ask = %d %s", rec.Code, rec.Body)
 	}
-	if ai.readErr != nil || ai.readStatus != http.StatusOK || strings.TrimSpace(ai.readBody) != `{"available":true}` {
+	if ai.readErr != nil || ai.readStatus != http.StatusOK || strings.TrimSpace(ai.readBody) != `{"available":true,"image_input":false}` {
 		t.Fatalf("read inside the ask = %d %q %v", ai.readStatus, ai.readBody, ai.readErr)
 	}
 }

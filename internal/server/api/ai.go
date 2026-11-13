@@ -28,9 +28,20 @@ type AIService interface {
 }
 
 func (a *apiHandlers) aiAvailable(w http.ResponseWriter, r *http.Request) {
-	avail := a.d.AI != nil && a.d.AI.Available()
-	writeJSON(w, http.StatusOK, map[string]bool{"available": avail})
+	out := dto.AIAvailability{Available: a.d.AI != nil && a.d.AI.Available()}
+	if out.Available {
+		if cfg, err := a.d.Store.DefaultAIConfig(); err == nil && cfg.ImageInput {
+			out.ImageInput = true
+			out.Images = &dto.AIImageLimit{PerMessage: aihelper.ImagesPerMessage, PerRequest: aihelper.ImagesPerRequest,
+				MaxBytes: aihelper.ImageMaxBytes, MaxSide: aihelper.ImageMaxSide}
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
+
+// aiAskMaxBytes bounds an ask's body: every image the request may carry,
+// base64-encoded, and the text around them.
+const aiAskMaxBytes = aihelper.ImagesPerRequest*aihelper.ImageMaxBytes*4/3 + 1<<20
 
 func (a *apiHandlers) listAIConfigs(w http.ResponseWriter, r *http.Request) {
 	cs, err := a.d.Store.ListAIConfigs()
@@ -41,7 +52,7 @@ func (a *apiHandlers) listAIConfigs(w http.ResponseWriter, r *http.Request) {
 	// Never return the API key: dto.AIConfigView has no field for it.
 	out := make([]dto.AIConfigView, 0, len(cs))
 	for i := range cs {
-		out = append(out, aiConfigView(&cs[i]))
+		out = append(out, a.aiConfigView(&cs[i]))
 	}
 	writeJSON(w, http.StatusOK, dto.NewList(out))
 }
@@ -63,13 +74,22 @@ func (a *apiHandlers) createAIConfig(w http.ResponseWriter, r *http.Request) {
 	// store the base address the way an edit does. An address may be left
 	// empty here: a preset fills it, and a service stored without one is a
 	// configuration the assistant reports as unusable, not a lost write.
+	imageInput := false
 	if p, ok := aihelper.Presets[req.Preset]; ok {
 		if req.BaseURL == "" {
 			req.BaseURL = p.BaseURL
 		}
 		if req.Model == "" {
 			req.Model = p.Model
+			imageInput = p.ImageInput
 		}
+	}
+	if req.ImageInput != nil {
+		imageInput = *req.ImageInput
+	}
+	proxy, ok := validateAIProxy(w, req.ProxyMode, req.ProxyURL, false)
+	if !ok {
+		return
 	}
 	base, ok := validateAIBaseURL(w, req.BaseURL, false)
 	if !ok {
@@ -84,9 +104,16 @@ func (a *apiHandlers) createAIConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	sealedProxy := ""
+	if proxy.url != "" {
+		if sealedProxy, ok = a.sealAIProxyURL(w, proxy.url); !ok {
+			return
+		}
+	}
 	c, err := a.d.Store.CreateAIConfig(&store.AIConfig{
 		Name: name, Preset: req.Preset, BaseURL: req.BaseURL, APIKey: encryptedKey,
 		Model: req.Model, IsDefault: req.IsDefault,
+		ProxyMode: proxy.mode, ProxyURL: sealedProxy, ImageInput: imageInput,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -120,8 +147,8 @@ func (a *apiHandlers) aiAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body dto.AIAskRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, aiAskMaxBytes)).Decode(&body); err != nil {
+		writeJSONBodyError(w, err)
 		return
 	}
 	req := aihelper.AskRequest{
@@ -131,7 +158,11 @@ func (a *apiHandlers) aiAsk(w http.ResponseWriter, r *http.Request) {
 		API: a.apiReaderFor(r),
 	}
 	for _, m := range body.History {
-		req.History = append(req.History, aihelper.Message{Role: m.Role, Content: m.Content})
+		req.History = append(req.History, aihelper.Message{Role: m.Role, Content: m.Content, Images: m.Images})
+	}
+	req.Images = body.Images
+	if !validateAskImages(w, body) {
+		return
 	}
 	if !aihelper.KnownTask(req.Task) {
 		writeProductError(w, http.StatusBadRequest, ErrorAITaskInvalid, "unknown assistant task", map[string]any{"task": req.Task})
@@ -159,12 +190,7 @@ func (a *apiHandlers) aiAsk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := a.d.AI.Ask(r.Context(), req)
-	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, err)
-		return
-	}
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err)
+	if !writeAskErr(w, err, req) {
 		return
 	}
 	out := dto.AIAnswer{Answer: res.Answer, Steps: make([]dto.AIStep, 0, len(res.Steps)), Calls: res.Calls,
@@ -188,12 +214,7 @@ func (a *apiHandlers) aiAskStream(w http.ResponseWriter, r *http.Request, req ai
 		return
 	}
 	events, err := a.d.AI.AskStream(r.Context(), req)
-	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, err)
-		return
-	}
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err)
+	if !writeAskErr(w, err, req) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -214,7 +235,7 @@ func (a *apiHandlers) aiAskStream(w http.ResponseWriter, r *http.Request, req ai
 			if !open {
 				return
 			}
-			writeAIEvent(w, ev)
+			writeAIEvent(w, ev, len(req.Images) > 0 || historyImages(req.History) > 0)
 			fl.Flush()
 		}
 	}
@@ -231,7 +252,7 @@ func subjects(t aihelper.Target) int {
 	return n
 }
 
-func writeAIEvent(w http.ResponseWriter, ev aihelper.Event) {
+func writeAIEvent(w http.ResponseWriter, ev aihelper.Event, withImages bool) {
 	switch ev.Kind {
 	case aihelper.EventStep:
 		status := "running"
@@ -249,7 +270,11 @@ func writeAIEvent(w http.ResponseWriter, ev aihelper.Event) {
 		writeSSE(w, "done", dto.AIStreamDone{Calls: res.Calls, Usage: dto.AIUsage{PromptTokens: res.Usage.PromptTokens, CompletionTokens: res.Usage.CompletionTokens},
 			FirstTextMS: res.FirstTextMS, TotalMS: res.TotalMS})
 	case aihelper.EventError:
-		writeSSE(w, "error", map[string]string{"error": ev.Err.Error()})
+		out := dto.AIStreamError{Error: ev.Err.Error()}
+		if withImages && aihelper.ImageRefused(ev.Err) {
+			out.Code = ErrorAIImageRejected
+		}
+		writeSSE(w, "error", out)
 	}
 }
 
