@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -192,7 +191,7 @@ func (d *Driver) Detect(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if d.o.HostRoot != "" {
-		nerdctlPath, err := exec.LookPath("nerdctl")
+		nerdctlPath, err := imageNerdctl(os.Getenv("PATH"), hostToolsBin)
 		if err != nil {
 			return false, fmt.Errorf("the agent image has no nerdctl: %w", err)
 		}

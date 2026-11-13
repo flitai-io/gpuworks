@@ -124,6 +124,15 @@ func TestKubeAgentUpgradesInPlaceKind(t *testing.T) {
 		t.Fatalf("upgrade = %d %s %v; want the in-place upgrade, not a DaemonSet roll", status, body, err)
 	}
 	waitAgent(t, api, node, "l3kind-two")
+	// The restarted agent must keep the node's nerdctl a binary: taking the
+	// wrapper on its PATH for nerdctl once made every image operation after
+	// an in-place upgrade loop forever.
+	if head := mustRun(t, time.Minute, "docker", "exec", node, "sh", "-c", "head -c 2 /opt/gpuworks/kube-tools/nerdctl | od -An -c"); strings.Contains(head, "#") {
+		t.Fatalf("the node's nerdctl became a script after the upgrade: %q", head)
+	}
+	if out, err := command(2*time.Minute, "docker", "exec", node, "timeout", "60", "/opt/gpuworks/kube-tools/nerdctl", "--address", "/run/containerd/containerd.sock", "-n", "k8s.io", "image", "ls", "-q"); err != nil {
+		t.Fatalf("nerdctl after the upgrade: %v\n%s", err, tail(out, 2000))
+	}
 	after := k.agentPods()
 	if len(after) != 1 || after[0].Metadata.UID != pod.Metadata.UID {
 		t.Fatalf("the agent pod was replaced by the upgrade: %v -> %v", pod.Metadata.UID, after)
