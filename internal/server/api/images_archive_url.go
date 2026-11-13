@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -100,15 +101,23 @@ func decodeImageNodeSyncRequest(r *http.Request) dto.ImageNodeSyncRequest {
 		req.RateLimitKiB = -1
 	}
 	req.ArchiveURL = strings.TrimSpace(req.ArchiveURL)
+	req.ArchivePath = strings.TrimSpace(req.ArchivePath)
 	return req
 }
 
 // fetchImageForNode starts one distribution request: a copy from a named node,
-// a download of an archive URL declared on the image, or else a pull from
+// a node-local file load, a download of a declared archive URL, or a pull from
 // wherever the node's pull source rules say. A registry is never named here:
 // the pull settings decide, the same way they do for a launch.
 func (a *apiHandlers) fetchImageForNode(w http.ResponseWriter, r *http.Request, req dto.ImageNodeSyncRequest) {
 	imageID := parseUint(chi.URLParam(r, "id"))
+	fetch := imagecatalog.FetchRequest{Source: req.Source, Relay: req.Relay, Force: req.Force, ArchivePath: req.ArchivePath}
+	if fetch.IsLocalFetch() || req.ArchivePath != "" {
+		if !fetch.IsLocalFetch() || !filepath.IsAbs(req.ArchivePath) || req.SourceNode != "" || req.ArchiveURL != "" || req.Relay {
+			writeErr(w, http.StatusBadRequest, errors.New("local image import requires source=local and an absolute archive_path on the target node, without another source or relay"))
+			return
+		}
+	}
 	if req.SourceNode != "" {
 		if a.d.PeerSync.SyncImageWithRate == nil {
 			writeProductError(w, http.StatusServiceUnavailable, ErrorImageSyncUnavailable, "direct image sync is not configured", nil)
@@ -126,8 +135,7 @@ func (a *apiHandlers) fetchImageForNode(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusAccepted, dto.ImageNodeSyncResponse{State: row.State, TransferID: row.TransferID, Message: row.Message})
 		return
 	}
-	fetch := imagecatalog.FetchRequest{Source: req.Source, Relay: req.Relay, Force: req.Force}
-	if req.Source != "" && !fetch.IsURLFetch() {
+	if req.Source != "" && !fetch.IsURLFetch() && !fetch.IsLocalFetch() {
 		writeProductError(w, http.StatusBadRequest, ErrorImageSourceRemoved,
 			"a registry can no longer be named for a pull; nodes pull through the pull source rules",
 			map[string]any{"source": req.Source, "route": "/api/v1/pull/source-rules"})

@@ -32,6 +32,8 @@ type ImageNodeSyncRequest struct {
 	Relay        bool   `json:"relay,omitempty"`
 	// Force pulls again even when the node already holds the image.
 	Force bool `json:"force,omitempty"`
+
+	ArchivePath string `json:"archive_path,omitempty"`
 }
 
 // ImageNodeSyncResponse acknowledges an accepted distribution request. The

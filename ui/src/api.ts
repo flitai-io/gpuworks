@@ -961,9 +961,10 @@ export interface ImageNodeSyncResult {
   message?: string;
 }
 
-/** Extra fields the "url" image source needs; ignored by every other source. */
+/** Options for archive URLs, node files, peer copies and forced pulls. */
 export interface ImageFetchOptions {
   archive_url?: string;
+  archive_path?: string;
   relay?: boolean;
   source_node?: string;
   rate_limit_kib_s?: number;
@@ -974,12 +975,13 @@ export interface ImageFetchOptions {
 /**
  * imageFetchBody builds the sync request. No source means "pull through the
  * pull settings": the body is empty (or only {force:true}). A manual copy from
- * a node names source_node; an archive URL import names source "url". The
+ * a node names source_node; archives name source "url" or "local". The
  * client never names a registry.
  */
 export function imageFetchBody(source?: string, fetch?: ImageFetchOptions) {
   if (fetch?.source_node) return { source_node: fetch.source_node, rate_limit_kib_s: fetch.rate_limit_kib_s ?? 0 };
   const force = fetch?.force ? { force: true } : {};
+  if (source === "local") return { source, archive_path: fetch?.archive_path || "" };
   if (source !== "url") return { ...force };
   return {
     source,

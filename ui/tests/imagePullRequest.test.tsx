@@ -149,7 +149,7 @@ test("retrying a failed node sends an empty request too", async () => {
   assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync").length, 0);
 });
 
-test("the source picker offers automatic, a node copy and a URL, and no registry host", async () => {
+test("the source picker offers automatic, a node copy, a URL and a node file, and no registry host", async () => {
   const { user } = renderPage({ state: "absent" });
   const { row } = await openNightly(user);
   const picker = within(row).getByRole("combobox", { name: z.nodeTable.column.source });
@@ -157,7 +157,7 @@ test("the source picker offers automatic, a node copy and a URL, and no registry
   fireEvent.mouseDown(picker);
   await waitFor(() => assert.ok(document.querySelectorAll(".ant-select-item-option-content").length >= 3));
   const labels = [...document.querySelectorAll(".ant-select-item-option-content")].map((node) => node.textContent);
-  assert.deepEqual(labels, [z.nodeTable.sourceAuto, z.nodeTable.peerOption, z.nodeTable.sourceFromURL]);
+  assert.deepEqual(labels, [z.nodeTable.sourceAuto, z.nodeTable.peerOption, z.nodeTable.sourceFromURL, z.nodeTable.localOption]);
   const shown = labels.join(" ");
   for (const host of ["Quay", "quay.io", "Huawei", "华为云", "Docker Hub", "docker.io"]) {
     assert.equal(shown.includes(host), false, `${host} is not an option`);
@@ -447,4 +447,50 @@ test("the node archive dialog hides unstructured upstream error text", async () 
   const alert = await screen.findByRole("alert");
   assert.equal(alert.textContent, "无法读取该镜像归档。");
   assert.equal(screen.queryByText(/RAW|private-query/), null);
+});
+
+test("a node file import sends the path to that node without changing the catalog", async () => {
+  const { calls, user } = renderPage({ state: "absent" }, ACCEPTED);
+  const { row } = await openNightly(user);
+  fireEvent.mouseDown(within(row).getByRole("combobox", { name: z.nodeTable.column.source }));
+  await user.click(await screen.findByText(z.nodeTable.localOption));
+  await user.click(within(row).getByRole("button", { name: z.nodeTable.localAction }));
+  const dialog = await screen.findByRole("dialog", { name: z.nodeTable.localDialog.title.replace("{{node}}", "gpu-03") });
+  const start = within(dialog).getByRole("button", { name: z.nodeTable.localDialog.start }) as HTMLButtonElement;
+  assert.equal(start.disabled, true, "a path is required before submission");
+  await user.type(within(dialog).getByRole("textbox", { name: z.nodeTable.localDialog.path }), "  /data/image with spaces.tar  ");
+  await user.click(start);
+  await waitFor(() => assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync").length, 1));
+  assert.deepEqual(JSON.parse(posts(calls, "/api/v1/images/31/nodes/n3/sync")[0].body!), {
+    source: "local", archive_path: "/data/image with spaces.tar",
+  });
+  assert.equal(calls.some((call) => call.method === "PATCH" || call.path.endsWith("/images/import") || call.path.includes("preview-archive")), false,
+    "a node-local path must not become a shared acquisition address or create a series");
+  await waitFor(() => assert.equal(screen.queryByRole("dialog", { name: z.nodeTable.localDialog.title.replace("{{node}}", "gpu-03") }), null));
+});
+
+test("a failed local import reopens the file dialog and keeps the server error visible", async () => {
+  const { calls, user } = renderPage({ state: "failed", source: "local" }, (call) =>
+    call.method === "POST" && call.path.endsWith("/nodes/n3/sync")
+      ? json(409, { error: "archive_path must name a regular file" }) : undefined);
+  const { row } = await openNightly(user);
+  await user.click(within(row).getByRole("button", { name: z.nodeTable.localAction }));
+  const dialog = await screen.findByRole("dialog", { name: z.nodeTable.localDialog.title.replace("{{node}}", "gpu-03") });
+  await user.type(within(dialog).getByRole("textbox", { name: z.nodeTable.localDialog.path }), "/data/images");
+  await user.click(within(dialog).getByRole("button", { name: z.nodeTable.localDialog.start }));
+  await within(dialog).findByText("archive_path must name a regular file");
+  assert.equal((within(dialog).getByRole("textbox", { name: z.nodeTable.localDialog.path }) as HTMLInputElement).value, "/data/images");
+  assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync").length, 1);
+  assert.equal(posts(calls, "/sync/retry").length, 0, "local failures must not fall back to a registry pull");
+});
+
+test("a failed node file import can switch explicitly to automatic pulling", async () => {
+  const { calls, user } = renderPage({ state: "failed", source: "local" }, ACCEPTED);
+  const { row } = await openNightly(user);
+  fireEvent.mouseDown(within(row).getByRole("combobox", { name: z.nodeTable.column.source }));
+  await user.click(await screen.findByText(z.nodeTable.sourceAuto));
+  await user.click(within(row).getByRole("button", { name: PULL }));
+  await waitFor(() => assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync").length, 1));
+  assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync")[0].body, "{}");
+  assert.equal(posts(calls, "/sync/retry").length, 0, "changing the source starts a fresh pull");
 });

@@ -41,6 +41,9 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 	if !h.Online(target.UUID) {
 		return nil, errors.New("target node is offline")
 	}
+	if fetch.IsLocalFetch() {
+		return h.loadImageArchivePath(ctx, image, target, fetch)
+	}
 	if fetch.IsURLFetch() {
 		// An archive URL is not a registry reference, so it never enters the
 		// candidate chain: the node downloads and loads the archive instead.
