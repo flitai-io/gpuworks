@@ -41,6 +41,11 @@ func (h *panicOnlineHub) calls(uuid string) int {
 	return h.onlineCalls[uuid]
 }
 
+// RequestImageRefs records the refs as the push the hub would send.
+func (h *panicOnlineHub) RequestImageRefs(uuid string, refs []string) {
+	_ = h.PushToNode(uuid, proto.StateUpdate{ImageRefs: refs})
+}
+
 func (h *panicOnlineHub) PushToNode(uuid string, _ proto.StateUpdate) error {
 	return fmt.Errorf("unexpected push to node %s", uuid)
 }

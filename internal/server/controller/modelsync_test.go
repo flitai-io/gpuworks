@@ -35,6 +35,12 @@ type modelSyncHub struct {
 }
 
 func (h *modelSyncHub) Online(uuid string) bool { return h.online[uuid] }
+
+// RequestImageRefs records the refs as the push the hub would send.
+func (h *modelSyncHub) RequestImageRefs(uuid string, refs []string) {
+	_ = h.PushToNode(uuid, proto.StateUpdate{ImageRefs: refs})
+}
+
 func (h *modelSyncHub) PushToNode(_ string, update proto.StateUpdate) error {
 	h.mu.Lock()
 	h.updates = append(h.updates, update)

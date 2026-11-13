@@ -64,34 +64,10 @@ func (s *Session) pushInitialState() (err error) {
 		}
 		s.finishInitialPush(baseline)
 	}()
-	// Replays from a mass (re)connect are capped: see Hub.pushLimiter. A
-	// session that dies while waiting for a slot (agents churning through a
-	// storm) gives up instead of spending one on a replay nobody reads.
-	select {
-	case s.hub.pushLimiter <- struct{}{}:
-	case <-s.closed:
-		return errSessionClosed
-	}
-	defer func() { <-s.hub.pushLimiter }()
-	node, err := s.hub.store.NodeByUUID(s.NodeUUID)
+	ds, clusterID, err := s.buildReplay()
 	if err != nil {
 		return err
 	}
-	ds, err := s.hub.store.DesiredStateForNode(node.ID)
-	if err != nil {
-		return err
-	}
-	if err := s.hub.planReplay(node, &ds); err != nil {
-		return err
-	}
-
-	if err := s.completeNetworkConfig(node, &ds.Network); err != nil {
-		return err
-	}
-	if err := s.hydrateRuntimeAssetContent(ds.Instances); err != nil {
-		return err
-	}
-	s.omitCachedAssetContent(ds.Instances)
 	if err := s.send(proto.TStateSync, 0, ds); err != nil {
 		return err
 	}
@@ -100,7 +76,7 @@ func (s *Session) pushInitialState() (err error) {
 	// updates the snapshot already contains). The next connection, or the
 	// next edit of the entry, sends them again.
 	if s.kubeSettingsSent.CompareAndSwap(false, true) {
-		if err := s.pushKubeSettings(node.KubeClusterID); err != nil {
+		if err := s.pushKubeSettings(clusterID); err != nil {
 			s.kubeSettingsSent.Store(false)
 			if !errors.Is(err, errSessionClosed) {
 				s.hub.log.Warn("kubernetes settings push failed", "node", s.NodeUUID, "err", err)
@@ -108,6 +84,42 @@ func (s *Session) pushInitialState() (err error) {
 		}
 	}
 	return nil
+}
+
+// buildReplay reads the session's full desired state, and the Kubernetes
+// cluster entry its node belongs to (0 for none), under one of the
+// fleet-wide replay slots (Hub.pushLimiter), and gives the slot back before
+// the caller writes it to the agent: the slots bound the store's work, and a
+// peer that stops reading must not hold one through its 30 s write timeout,
+// as sixteen stalled peers would otherwise hold every replay up. A session
+// that dies while waiting for a slot (agents churning through a storm) gives
+// up instead of spending one on a replay nobody reads.
+func (s *Session) buildReplay() (proto.DesiredState, uint, error) {
+	select {
+	case s.hub.pushLimiter <- struct{}{}:
+	case <-s.closed:
+		return proto.DesiredState{}, 0, errSessionClosed
+	}
+	defer func() { <-s.hub.pushLimiter }()
+	node, err := s.hub.store.NodeByUUID(s.NodeUUID)
+	if err != nil {
+		return proto.DesiredState{}, 0, err
+	}
+	ds, err := s.hub.store.DesiredStateForNode(node.ID)
+	if err != nil {
+		return proto.DesiredState{}, 0, err
+	}
+	if err := s.hub.planReplay(node, &ds); err != nil {
+		return proto.DesiredState{}, 0, err
+	}
+	if err := s.completeNetworkConfig(node, &ds.Network); err != nil {
+		return proto.DesiredState{}, 0, err
+	}
+	if err := s.hydrateRuntimeAssetContent(ds.Instances); err != nil {
+		return proto.DesiredState{}, 0, err
+	}
+	s.omitCachedAssetContent(ds.Instances)
+	return ds, node.KubeClusterID, nil
 }
 
 // errSessionClosed reports a replay abandoned because its session ended first.
@@ -120,10 +132,11 @@ var errSessionClosed = errors.New("session closed before its initial replay")
 // delay desired state behind a connect storm.
 const pendingUpdatesMax = 128
 
-// initialPushConcurrency bounds simultaneous initial replays fleet-wide.
-// Sixteen keeps the store responsive for everything else (the status worker
-// above all) while a 1000-node connect storm still finishes its replays in
-// seconds.
+// initialPushConcurrency bounds the full replays building at once fleet-wide
+// (their store reads; the write to the agent happens after the slot is given
+// back). Sixteen keeps the store responsive for everything else (the status
+// worker above all) while a 1000-node connect storm still finishes its
+// replays in seconds.
 const initialPushConcurrency = 16
 
 func (s *Session) initialPushFinished() bool {

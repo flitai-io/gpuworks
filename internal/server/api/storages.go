@@ -572,12 +572,9 @@ func (a *apiHandlers) syncStorageNodes(row *store.Storage) {
 }
 
 func (a *apiHandlers) syncNodes(nodes []store.Node) {
-	if a.d.NodeSync == nil {
-		return
-	}
+	uuids := make([]string, 0, len(nodes))
 	for _, node := range nodes {
-		if a.d.Online == nil || a.d.Online(node.UUID) {
-			_ = a.d.NodeSync.SyncNode(node.UUID)
-		}
+		uuids = append(uuids, node.UUID)
 	}
+	a.requestSyncNodes(uuids)
 }

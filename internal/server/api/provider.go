@@ -481,13 +481,8 @@ func (a *apiHandlers) putSetting(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if key == "orphan_cleanup" && a.d.NodeSync != nil {
-		nodes, _ := a.d.Store.ListNodes()
-		for i := range nodes {
-			if a.d.Online == nil || a.d.Online(nodes[i].UUID) {
-				_ = a.d.NodeSync.SyncNode(nodes[i].UUID)
-			}
-		}
+	if key == "orphan_cleanup" {
+		a.requestSyncAllNodes()
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
 }

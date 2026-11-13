@@ -3,8 +3,16 @@ package api
 // Tests supply only the sync operation their request is allowed to use.
 type nodeSyncCallbacks struct {
 	full    func(string) error
+	request func(string)
 	network func(string)
 	kube    func(uint)
+}
+
+func (c nodeSyncCallbacks) RequestSync(uuid string) {
+	if c.request == nil {
+		panic("unexpected requested full node sync")
+	}
+	c.request(uuid)
 }
 
 func (c nodeSyncCallbacks) SyncNode(uuid string) error {

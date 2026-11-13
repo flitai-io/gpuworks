@@ -271,21 +271,8 @@ func (a *apiHandlers) deleteSyncGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// syncOnlineNodes re-sends every online node its desired state.
-func (a *apiHandlers) syncOnlineNodes() {
-	if a.d.NodeSync == nil {
-		return
-	}
-	nodes, err := a.d.Store.ListNodes()
-	if err != nil {
-		return
-	}
-	for i := range nodes {
-		if a.d.Online == nil || a.d.Online(nodes[i].UUID) {
-			_ = a.d.NodeSync.SyncNode(nodes[i].UUID)
-		}
-	}
-}
+// syncOnlineNodes asks for every online node's desired state to be re-sent.
+func (a *apiHandlers) syncOnlineNodes() { a.requestSyncAllNodes() }
 
 // nodeRuntime is the node's container runtime and, for a daemon runtime, the
 // proxy it really uses against the one the node is configured with.

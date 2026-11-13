@@ -318,6 +318,12 @@ func TestMultiNodeOfflineRankGetsGraceThenFailsItsGeneration(t *testing.T) {
 }
 
 func (h *distributedTestHub) Online(uuid string) bool { return h.online[uuid] }
+
+// RequestImageRefs records the refs as the push the hub would send.
+func (h *distributedTestHub) RequestImageRefs(uuid string, refs []string) {
+	_ = h.PushToNode(uuid, proto.StateUpdate{ImageRefs: refs})
+}
+
 func (h *distributedTestHub) PushToNode(uuid string, update proto.StateUpdate) error {
 	if h.pushErr != nil {
 		return h.pushErr

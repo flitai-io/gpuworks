@@ -303,6 +303,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		_ = c.Close(websocket.StatusInternalError, "session")
 		return
 	}
+	h.sessionWork.Add(1)
+	defer h.sessionWork.Done()
 	h.serveSession(sess, cleanup, remote)
 }
 
@@ -369,7 +371,8 @@ func (h *Hub) dialAgentWithSecret(ctx context.Context, addr, secret string, tcpT
 		sess.dataMu.Unlock()
 		go h.runServerDialDataLane(sess, addr, secret)
 	}
-	go h.serveSession(sess, cleanup, addr)
+	// Counted before it starts, so a waitSessionWork that runs first waits.
+	h.trackSessionWork(func() { h.serveSession(sess, cleanup, addr) })
 	return nil
 }
 
@@ -485,9 +488,9 @@ func (h *Hub) acceptYamuxServer(netConn net.Conn, lane string, remoteOpt ...stri
 	return sess, cleanup, nil
 }
 
+// serveSession runs a session until it ends. Its caller counts it in the
+// session work, before it starts.
 func (h *Hub) serveSession(sess *Session, cleanup func(), remote string) {
-	h.sessionWork.Add(1)
-	defer h.sessionWork.Done()
 	defer cleanup()
 	h.log.Info("agent connected", "node", sess.NodeUUID, "remote", remote)
 	// Replay full desired state so the agent reconciles from a clean slate.
