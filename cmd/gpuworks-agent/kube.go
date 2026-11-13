@@ -56,6 +56,14 @@ func kubeAcquireTokenOrStandBy(log *slog.Logger, conf *agentconf.Config, cfg *ag
 	return false, nil
 }
 
+// kubeEnrollRetryDelay is the first wait between enrollment attempts (it
+// doubles up to a minute); a test shortens it.
+var kubeEnrollRetryDelay = 2 * time.Second
+
+// kubeEnrollRefusalEventInterval is how often a persisting refusal is
+// written again as an event on the agent's pod; a test shortens it.
+var kubeEnrollRefusalEventInterval = kube.EnrollRefusalEventInterval
+
 // enrollKubeNode makes an agent of a cluster's DaemonSet a node: it trades
 // the cluster's enrollment token for this node's token, retrying until the
 // server answers, since the DaemonSet may be applied before the server can
@@ -82,13 +90,20 @@ func enrollKubeNodeWith(ctx context.Context, log *slog.Logger, cfg agentapp.Conf
 	}
 	previous := kube.ReadIdentity(cfg.StateDir)
 	httpc := &http.Client{Timeout: 30 * time.Second}
-	delay := 2 * time.Second
+	delay := kubeEnrollRetryDelay
 	fallback := true
+	reporter := &kube.RefusalReporter{
+		API: api, Namespace: strings.TrimSpace(os.Getenv("GPUWORKS_KUBE_NAMESPACE")),
+		PodName: strings.TrimSpace(os.Getenv("GPUWORKS_KUBE_POD_NAME")), NodeName: nodeName, Log: log,
+		Interval: kubeEnrollRefusalEventInterval,
+	}
 	for {
 		id, err := kube.Enroll(ctx, api, httpc, cfg.ServerURL, enrollToken, nodeName, cfg.StateDir, fallback)
 		var refusal *kube.EnrollRefusal
 		if errors.As(err, &refusal) {
 			fallback = false // a refusal of this node's identity is not undone by a later outage
+			// Also show it on `kubectl describe pod`; never affects the retry.
+			reporter.Report(ctx, refusal)
 		}
 		if err == nil {
 			log.Info("enrolled as a Kubernetes node", "node", nodeName, "uuid", id.NodeUUID)

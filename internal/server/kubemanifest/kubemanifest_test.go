@@ -455,6 +455,14 @@ func TestRenderedRBACLetsTheAgentReadPodsClusterWideButWriteOnlyItsOwn(t *testin
 	if got := strings.Join(role["pods"], ","); got != "get,list,watch,create,delete,patch" {
 		t.Fatalf("namespaced pod verbs = %s", got)
 	}
+	// The agent writes an enrollment refusal as an event on its own pod; it
+	// only creates events, in its own namespace, never reads or edits any.
+	if got := strings.Join(role["events"], ","); got != "create" {
+		t.Fatalf("namespaced event verbs = %q, want create only", got)
+	}
+	if len(cluster["events"]) != 0 {
+		t.Fatalf("cluster-wide event verbs = %v, want none", cluster["events"])
+	}
 }
 
 // The hold and instance pods' PriorityClass is named per namespace, carries
