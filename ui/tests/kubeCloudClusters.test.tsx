@@ -441,3 +441,71 @@ test("when the cluster is gone from the account, or the cloud cannot be read, th
   await u.click(within((await screen.findByText("ack-gpu")).closest("tr") as HTMLElement).getByRole("button", { name: k.actions.pools }));
   assert.ok(await screen.findByText(k.pools.loadFailed));
 });
+
+// Taking pools away from nodes that still run instances is refused by the server until confirmed.
+const POOL_DROPS = { nodes: [{ node_uuid: "n-1", node_name: "gpu-a1", kube_node: "gpu-a1", deployments: ["chat"] }], verified: true };
+const refusedPools = (calls: [string, string[], boolean | undefined][], held: KubeCluster, drops: unknown = POOL_DROPS) =>
+  (async (uuid: string, ids: string[], confirm?: boolean) => {
+    calls.push([uuid, ids, confirm]);
+    if (!confirm) throw new APIError("KUBE_SELECTION_DROPS_INSTANCES", drops as Record<string, unknown>, "drops instances", 409);
+    return { ...held, pool_ids: ids };
+  }) as never;
+const askDialog = () => within(screen.getByText(k.selectionDrops.title).closest('[role="dialog"]') as HTMLElement);
+
+test("the pools drawer asks before taking pools away from nodes that still run instances: it lists them, cancel sends nothing, confirm resends with the confirmation", async () => {
+  api.me = (async () => ({ role: "admin" })) as never;
+  const held = entry({ pool_ids: ["np-a", "np-l"] });
+  api.kubeClusters = (async () => list([held])) as never;
+  api.providerClusters = (async () => list([{ ...multiCluster, external_id: "c-gpu" }])) as never;
+  const calls: [string, string[], boolean | undefined][] = [];
+  api.setKubeClusterPools = refusedPools(calls, held);
+  const u = user();
+  wrap(<KubernetesPage />);
+  const row = (await screen.findByText("ack-gpu")).closest("tr") as HTMLElement;
+  await u.click(within(row).getByRole("button", { name: k.actions.pools }));
+  const drawer = within(await screen.findByRole("dialog"));
+  await waitFor(() => assert.equal(checked(poolBox(drawer, L20)), true));
+  await u.click(poolBox(drawer, L20));
+  await u.click(drawer.getByRole("button", { name: k.pools.save }));
+
+  await screen.findByText(k.selectionDrops.title);
+  assert.ok(askDialog().getByText("gpu-a1"));
+  assert.ok(askDialog().getByText(k.selectionDrops.deployments.replace("{{names}}", "chat")));
+  assert.deepEqual(calls, [["e-5", ["np-a"], undefined]], "the first request carries no confirmation");
+
+  await u.click(askDialog().getByRole("button", { name: k.selectionDrops.cancel }));
+  await waitFor(() => assert.equal(screen.queryByText(k.selectionDrops.title), null));
+  assert.equal(calls.length, 1, "cancelling sends nothing");
+  assert.equal(drawer.queryByText(k.pools.saved.replace("{{name}}", "ack-gpu")), null, "and saves nothing");
+
+  await u.click(drawer.getByRole("button", { name: k.pools.save }));
+  await screen.findByText(k.selectionDrops.title);
+  await u.click(askDialog().getByRole("button", { name: k.selectionDrops.confirm }));
+  await waitFor(() => assert.equal(calls.length, 3));
+  assert.deepEqual(calls[2], ["e-5", ["np-a"], true]);
+  assert.ok(await drawer.findByText(k.pools.saved.replace("{{name}}", "ack-gpu")));
+});
+
+test("pools of a cloud row taken away from nodes that still run instances are confirmed the same way, with the unverified caveat when no agent answered", async () => {
+  const held: ProviderCluster = { ...multiCluster, entry: { uuid: "e-5", name: "ack-multi" }, gpu_pools: multiCluster.gpu_pools.map((q) => ({ ...q, in_entry: q.id !== "np-p" })) };
+  api.providerClusters = (async () => list([held])) as never;
+  const calls: [string, string[], boolean | undefined][] = [];
+  api.setKubeClusterPools = refusedPools(calls, entry({ pool_ids: ["np-a"] }), { ...POOL_DROPS, verified: false });
+  const u = user();
+  wrap(<ProviderClustersTable providerId={3} providerName="ali-prod" />);
+  const row = (await screen.findByText("c-multi")).closest("tr") as HTMLElement;
+  await u.click(poolBox(row, L20));
+  await u.click(within(row).getByRole("button", { name: p.clusters.savePools }));
+  await screen.findByText(k.selectionDrops.title);
+  assert.ok(askDialog().getByText(k.selectionDrops.unverified));
+  assert.ok(askDialog().getByText("gpu-a1"));
+  await u.click(askDialog().getByRole("button", { name: k.selectionDrops.cancel }));
+  await waitFor(() => assert.equal(screen.queryByText(k.selectionDrops.title), null));
+  assert.equal(calls.length, 1);
+  await u.click(within(row).getByRole("button", { name: p.clusters.savePools }));
+  await screen.findByText(k.selectionDrops.title);
+  await u.click(askDialog().getByRole("button", { name: k.selectionDrops.confirm }));
+  await waitFor(() => assert.equal(calls.length, 3));
+  assert.deepEqual(calls[2], ["e-5", ["np-a"], true]);
+  assert.ok(await screen.findByText(k.pools.saved.replace("{{name}}", "ack-gpu")));
+});

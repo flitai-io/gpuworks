@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type KubeCluster, type ProviderClusterPool } from "../../api";
+import { api, type KubeCluster, type KubeSelectionDrops, type ProviderClusterPool } from "../../api";
 import { apiErrorText } from "../../apiError";
 import { Button } from "../../components/ui/button";
 import { Notice } from "../../ui-kit/Notice";
@@ -8,6 +8,8 @@ import { SideDrawer } from "../../ui-kit/SideDrawer";
 import { Spinner } from "../../ui-kit/Spinner";
 import KubePoolPicker from "./KubePoolPicker";
 import KubePoolsSaved from "./KubePoolsSaved";
+import KubeSelectionDropsDialog from "./KubeSelectionDropsDialog";
+import { selectionDropsOf } from "./kubeSelectionDrops";
 
 /**
  * Edits the node pools an entry made from a cloud cluster holds. The cluster's
@@ -23,12 +25,15 @@ export default function KubePoolsDrawer({ cluster, onClose, onSaved }: { cluster
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<KubeCluster | null>(null);
+  // Nodes that still run instances and would leave: asked about before saving.
+  const [drops, setDrops] = useState<KubeSelectionDrops | null>(null);
 
   useEffect(() => {
     setPools(null);
     setLoadError(null);
     setError(null);
     setSaved(null);
+    setDrops(null);
     if (!cluster?.source) return;
     setSelected(cluster.pool_ids);
     let alive = true;
@@ -43,15 +48,19 @@ export default function KubePoolsDrawer({ cluster, onClose, onSaved }: { cluster
     return () => { alive = false; };
   }, [cluster?.uuid]);
 
-  const save = async () => {
+  const save = async (confirm = false) => {
     if (!cluster) return;
     setSaving(true);
     setError(null);
     try {
-      setSaved(await api.setKubeClusterPools(cluster.uuid, selected));
+      setSaved(await (confirm ? api.setKubeClusterPools(cluster.uuid, selected, true) : api.setKubeClusterPools(cluster.uuid, selected)));
+      setDrops(null);
       onSaved();
     } catch (e) {
-      setError(apiErrorText(tCommon, e));
+      setDrops(null);
+      const asked = confirm ? null : selectionDropsOf(e);
+      if (asked) setDrops(asked);
+      else setError(apiErrorText(tCommon, e));
     } finally {
       setSaving(false);
     }
@@ -87,6 +96,7 @@ export default function KubePoolsDrawer({ cluster, onClose, onSaved }: { cluster
           </>
         )}
       </div>
+      {drops && <KubeSelectionDropsDialog drops={drops} busy={saving} onCancel={() => setDrops(null)} onConfirm={() => void save(true)} />}
     </SideDrawer>
   );
 }

@@ -104,6 +104,7 @@
     "KUBE_CLUSTER_INVALID": "集群的 {{field}} 不可用：{{reason}}。",
     "KUBE_CLUSTER_NAME_TAKEN": "已有名为 {{name}} 的集群。",
     "KUBE_CLUSTER_HAS_NODES": "集群里还有节点，先移除这些节点再删除集群。",
+    "KUBE_SELECTION_DROPS_INSTANCES": "新的节点选择会让仍有实例运行的节点退出。再次应用 manifest 时这些节点上的 agent 会被移除，实例也不再受管理。请先停止或迁走这些部署，或确认继续。",
     "KUBE_ENROLL_REFUSED": "接入令牌被拒绝（{{reason}}）。",
     "AUTOMATIC_PLACEMENT_UNAVAILABLE": "没有节点满足自动放置要求。请查看候选节点原因，或改为手动选择节点。",
     "AUTOMATIC_PLACEMENT_STALE": "评估后的节点或 GPU 方案已发生变化，请重新评估部署。",

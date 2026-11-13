@@ -236,6 +236,16 @@
     "separator": " · ",
     "none": "No accelerator"
   },
+  "selectionDrops": {
+    "title": "Nodes that still run instances leave the selection",
+    "intro": "This change no longer selects the nodes below, and they still run instances. Their agents are removed when the manifest is applied again. The instances keep running and holding cards, but are no longer managed, reachable through the gateway, or returned. Stop or move those deployments first, or confirm to save the change anyway.",
+    "unverified": "No agent of this cluster could be asked, so these nodes may be affected.",
+    "deployments": "Deployments: {{names}}",
+    "noDeployments": "No deployment on record",
+    "later": "Nothing changes in the cluster until the manifest is applied again.",
+    "cancel": "Cancel",
+    "confirm": "Confirm"
+  },
   "edit": {
     "saved": "Cluster {{name}} saved",
     "savedTitle": "Cluster {{name}} saved",

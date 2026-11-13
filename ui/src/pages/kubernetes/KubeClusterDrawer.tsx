@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
-import { api, type KubeCluster, type KubeClusterEdit } from "../../api";
+import { api, type KubeCluster, type KubeClusterEdit, type KubeSelectionDrops } from "../../api";
 import { APIError, apiErrorText } from "../../apiError";
 import { useKubeDefaults } from "../../kubeClusters";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
@@ -20,6 +20,8 @@ import ApplyCommand from "./ApplyCommand";
 import KubePoolPicker from "./KubePoolPicker";
 import KubeClusterOperationModal from "./KubeClusterOperationModal";
 import KubeEditSaved from "./KubeEditSaved";
+import KubeSelectionDropsDialog from "./KubeSelectionDropsDialog";
+import { selectionDropsOf } from "./kubeSelectionDrops";
 import { ADVANCED_FIELDS, FIELD_OF, defaultsOf, formImageSource, formSchema, requestOf, updateOf, type FormValues, type KubeClusterPrefill } from "./kubeClusterForm";
 
 export type { KubeClusterPrefill };
@@ -59,6 +61,8 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, onEdited, 
   const [poolIds, setPoolIds] = useState<string[]>(prefill?.pool_ids ?? []);
   const [applying, setApplying] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Set when the server refused an edit that leaves out nodes still running instances: asked about, then resent.
+  const [dropping, setDropping] = useState<{ drops: KubeSelectionDrops; values: FormValues } | null>(null);
 
   // Each opening starts from the defaults (and the prefill), like a fresh form.
   useEffect(() => {
@@ -70,19 +74,22 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, onEdited, 
     setError(null);
     setApplying(false);
     setAdvancedOpen(false);
+    setDropping(null);
     // The drawer takes focus itself when it opens; hand it to the first field once it has.
     const timer = setTimeout(() => nameInput.current?.focus(), 0);
     return () => clearTimeout(timer);
   }, [open, prefill, edit]);
 
-  const submit = async (values: FormValues) => {
+  const submit = async (values: FormValues, confirmDropInstances = false) => {
     setSaving(true);
     setError(null);
     try {
       if (edit) {
         const update = updateOf(values, edit, defaults);
         if (Object.keys(update).length === 0) { onClose(); return; }
+        if (confirmDropInstances) update.confirm_drop_instances = true;
         const result = await api.updateKubeCluster(edit.uuid, update);
+        setDropping(null);
         onEdited?.();
         if (result.reapply) setEdited(result);
         else { message.success(t("edit.saved", { name: result.cluster.name })); onClose(); }
@@ -92,6 +99,9 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, onEdited, 
         onCreated();
       }
     } catch (e) {
+      setDropping(null);
+      const asked = confirmDropInstances ? null : selectionDropsOf(e);
+      if (asked) { setDropping({ drops: asked, values }); return; }
       const text = apiErrorText(tCommon, e);
       const field = e instanceof APIError
         ? e.code === "KUBE_CLUSTER_NAME_TAKEN" ? "name" : e.code === "KUBE_CLUSTER_INVALID" ? FIELD_OF[String(e.params?.field ?? "")] : undefined
@@ -178,7 +188,7 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, onEdited, 
       {applying && <KubeClusterOperationModal cluster={created} op="apply" onClose={() => setApplying(false)} onDone={onCreated} />}
     </div>
   ) : (
-    <form id="kube-cluster-form" ref={formRef} noValidate onSubmit={formSubmit(form, () => formRef.current, submit)} className="flex flex-col gap-4">
+    <form id="kube-cluster-form" ref={formRef} noValidate onSubmit={formSubmit(form, () => formRef.current, (values) => submit(values))} className="flex flex-col gap-4">
       {/* The footer's button is outside the form; this one lets Enter in a field submit it. */}
       <button type="submit" hidden aria-hidden="true" tabIndex={-1} />
       {error && <Notice tone="danger" title={error} />}
@@ -227,6 +237,7 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, onEdited, 
       )}
     >
       {body}
+      {dropping && <KubeSelectionDropsDialog drops={dropping.drops} busy={saving} onCancel={() => setDropping(null)} onConfirm={() => void submit(dropping.values, true)} />}
     </SideDrawer>
   );
 }

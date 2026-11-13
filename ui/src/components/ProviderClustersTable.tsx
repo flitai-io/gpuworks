@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, type KubeCluster, type ProviderCluster } from "../api";
+import { api, type KubeCluster, type KubeSelectionDrops, type ProviderCluster } from "../api";
 import { apiErrorText } from "../apiError";
 import KubeClusterDrawer, { type KubeClusterPrefill } from "../pages/kubernetes/KubeClusterDrawer";
 import KubePoolPicker from "../pages/kubernetes/KubePoolPicker";
 import KubePoolsSaved from "../pages/kubernetes/KubePoolsSaved";
+import KubeSelectionDropsDialog from "../pages/kubernetes/KubeSelectionDropsDialog";
+import { selectionDropsOf } from "../pages/kubernetes/kubeSelectionDrops";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
@@ -36,6 +38,8 @@ export default function ProviderClustersTable({ providerId, providerName }: { pr
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState<KubeCluster | null>(null);
+  // The row whose pool change would leave out nodes that still run instances, and those nodes.
+  const [dropping, setDropping] = useState<{ cluster: ProviderCluster; drops: KubeSelectionDrops } | null>(null);
 
   const load = useCallback(() => {
     setRows(null);
@@ -62,16 +66,20 @@ export default function ProviderClustersTable({ providerId, providerName }: { pr
     source_label: `${providerName} · ${c.name} (${c.external_id})`,
   });
 
-  const savePools = async (c: ProviderCluster) => {
+  const savePools = async (c: ProviderCluster, confirm = false) => {
     if (!c.entry) return;
     setSaving(c.external_id);
     setSaveError(null);
     setSaved(null);
     try {
-      setSaved(await api.setKubeClusterPools(c.entry.uuid, chosen(c)));
+      setSaved(await (confirm ? api.setKubeClusterPools(c.entry.uuid, chosen(c), true) : api.setKubeClusterPools(c.entry.uuid, chosen(c))));
+      setDropping(null);
       load();
     } catch (e) {
-      setSaveError(apiErrorText(tCommon, e));
+      setDropping(null);
+      const asked = confirm ? null : selectionDropsOf(e);
+      if (asked) setDropping({ cluster: c, drops: asked });
+      else setSaveError(apiErrorText(tCommon, e));
     } finally {
       setSaving(null);
     }
@@ -151,6 +159,10 @@ export default function ProviderClustersTable({ providerId, providerName }: { pr
           )}
         </TableBody>
       </Table>
+      {dropping && (
+        <KubeSelectionDropsDialog drops={dropping.drops} busy={saving === dropping.cluster.external_id}
+          onCancel={() => setDropping(null)} onConfirm={() => void savePools(dropping.cluster, true)} />
+      )}
       <KubeClusterDrawer
         open={connecting !== null}
         prefill={connecting ?? undefined}
