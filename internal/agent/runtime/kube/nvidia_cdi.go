@@ -21,9 +21,12 @@ import (
 // when it starts; naming the card by that fully qualified name gives the pod
 // that card alone, with no device-plugin resource of its own.
 
-// nvidiaCDIDirs are where CDI specs live on a node (containerd's default
-// cdi_spec_dirs).
-var nvidiaCDIDirs = []string{"/etc/cdi", "/var/run/cdi"}
+// nvidiaCDIDirs are where CDI specs live on a node: containerd's default
+// cdi_spec_dirs, and /run/cdi for /var/run/cdi. On most distributions
+// /var/run is an absolute symlink to /run, which the kernel resolves
+// against the agent's own root, not the host's, when the path is read
+// through the host's root: only /run/cdi reaches the host's specs then.
+var nvidiaCDIDirs = []string{"/etc/cdi", "/run/cdi", "/var/run/cdi"}
 
 const nvidiaCDIManagementKind = "management.nvidia.com/gpu"
 
