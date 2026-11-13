@@ -188,6 +188,8 @@ API 方式可使用 `GET /api/v1/monitor/deployments/{id}/requests`、`GET /api/
 上下文用 `GET /api/v1/logs/context?instance=..&ts=..&id=..&before=..&after=..`；agent、server 等没有实例 UUID 的日志改用 `node` 限定范围。
 直方图用 `GET /api/v1/logs/histogram`，过滤条件与检索一致；完整参数见 [API 参考](../reference/api.md)。
 
+节点与 server 断开期间（server 重启或升级、网络中断），agent 把实例、节点和 agent 自身的日志暂存在内存里，重连后按原顺序补发，期间的日志照常能检索到。暂存上限 16 MiB，断开太久写满时丢弃最早的日志，并在丢弃处补一条 warn 级说明（英文原文以 `gpuworks: N log lines from … to … were dropped` 开头，可按 `were dropped` 检索）；agent 进程重启会丢失还没发出的部分。断开期间的指标不补发。
+
 ### server 与 agent 自身的日志
 
 - **哪些进日志页**：server 与 agent 只把 warn 及以上的记录送进日志中心；info 及以下只写各自的日志文件（server 的 `logs/gpuworks-server.log`、agent 的 `<state>/agent.log`）。

@@ -48,6 +48,9 @@ func (c *Conn) enginePortListeners() []int {
 // the next periodic report.
 func (c *Conn) handlerSend(ctx context.Context) SendFunc {
 	return func(t string, d any) error {
+		if isTelemetry(t) {
+			return c.sendTelemetry(ctx, t, d)
+		}
 		err := c.send(t, 0, d)
 		if err == nil && refusedLaunch(t, d) {
 			c.requestStatus(ctx)

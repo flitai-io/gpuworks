@@ -36,6 +36,8 @@ func (n *NodeRuntime) Bind(send conn.SendFunc) {
 			return
 		}
 	}
+	// A backlog can be megabytes; the connection's loops must not wait for it.
+	go n.flushLogs()
 }
 
 // Unbind detaches on disconnect.
@@ -71,6 +73,11 @@ func (n *NodeRuntime) reportRuntimeObservation(epoch uint64, st proto.InstanceSt
 }
 
 func (n *NodeRuntime) emit(t string, d any) {
+	if batch, ok := d.(proto.LogBatch); ok && t == proto.TLogs {
+		n.logOutbox().enqueue(batch)
+		n.flushLogs()
+		return
+	}
 	n.sendMu.Lock()
 	send := n.send
 	n.sendMu.Unlock()
@@ -79,6 +86,11 @@ func (n *NodeRuntime) emit(t string, d any) {
 		return // offline; server will re-sync on reconnect
 	}
 	if err := send(t, d); err != nil {
+		if errors.Is(err, conn.ErrTelemetryUnavailable) {
+			// Metrics while the data lane is not attached: dropped by
+			// design (ADR 0064), on every collector tick of an outage.
+			return
+		}
 		n.log.Warn("emit failed", "t", t, "err", err)
 	}
 }

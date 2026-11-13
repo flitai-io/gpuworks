@@ -176,3 +176,57 @@ func TestLogIngestFinalFlushOnCancel(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// The telemetry stream's waiting sink keeps every line a full queue would
+// drop: it waits for room, and gives up (counted) only when its context ends.
+func TestLogIngestWaitHoldsTheBatchUntilThereIsRoom(t *testing.T) {
+	block := &blockingStore{release: make(chan struct{}), appends: make(chan []logstore.Entry, 1024)}
+	o := &observability{logs: block, logQueue: make(chan []logstore.Entry, 1)}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go o.logIngestLoop(ctx)
+
+	// Feed chunks until one waits: the batcher wedges in Append and the
+	// queue fills behind it.
+	var waited chan error
+	for i := 0; waited == nil; i++ {
+		if i == 64 {
+			t.Fatal("ingestLogsWait never waited behind a wedged store")
+		}
+		call := make(chan error, 1)
+		// A full flush's worth of rows sends the batcher straight into Append.
+		go func() {
+			call <- o.ingestLogsWait(ctx, "node-1", newTestLines("inst-a", logIngestFlushRows, time.Now().UnixMilli()))
+		}()
+		select {
+		case err := <-call:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(100 * time.Millisecond):
+			waited = call
+		}
+	}
+	close(block.release)
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Fatalf("ingestLogsWait = %v after room opened", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("ingestLogsWait never got room")
+	}
+	if o.logDropped.Load() != 0 {
+		t.Fatalf("dropped %d lines while waiting", o.logDropped.Load())
+	}
+
+	full := &observability{logs: block, logQueue: make(chan []logstore.Entry)}
+	stop, cancelStop := context.WithCancel(context.Background())
+	cancelStop()
+	if err := full.ingestLogsWait(stop, "node-1", newTestLines("inst-a", 3, time.Now().UnixMilli())); err == nil {
+		t.Fatal("ingestLogsWait succeeded after its context ended with no room")
+	}
+	if full.logDropped.Load() != 3 {
+		t.Fatalf("dropped %d lines on a canceled wait, want 3", full.logDropped.Load())
+	}
+}

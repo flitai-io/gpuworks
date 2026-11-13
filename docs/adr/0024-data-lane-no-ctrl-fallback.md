@@ -13,3 +13,5 @@
 代价是明确的：detached 窗口内，单副本部署收到的请求会等最多 5 秒再拿到一个可重试的 503（带 `Retry-After`），而不是立即失败的 502；多副本部署由推理网关的连接级重试（ADR 0023）换到另一个副本兜底，用户侧通常感觉不到。这个代价被认为远小于把数据面故障放大成控制面故障的风险，尤其是控制面延迟一旦失控可能连带触发节点误判离线、正在运行的实例被判定失联等更严重的连锁后果。
 
 不做的事：不新增持久化数据结构，不改协议 wire（`DataHello`/`SessionID`/`stale_session` 拒绝逻辑不变）；`file.large_read`（`OpenLargeFileRead`）维持它更严格的既有语义——要求已经 `attached`，`none` 与 `detached` 都直接拒绝，不等待，因为这个 stream 的契约本来就是「没有 lane 就没有这次抓取，调用方立刻走另一条路径」，多等 5 秒只会拖慢那条回退路径。
+
+后续：agent 上送的指标与日志批次也按本规则路由，见 [ADR 0064](0064-telemetry-stream-on-the-data-lane.md)。另，`server_dial` 节点在 agent 开启数据通道时同样由 server 拨入第二条通道，并非永久处于 `none` 态。

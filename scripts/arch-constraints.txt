@@ -26,7 +26,7 @@ api_goroutines	5	max
 store_domain_imports	7	max
 agent_direct_exec	5	max
 bare_time_now_ctrl_hub	13	max
-files_over_600	9	max
+files_over_600	8	max
 milestone_named_files	0	max
 process_name_refs	0	max
 dto_test_lines_min	81	min

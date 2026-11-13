@@ -39,13 +39,15 @@ func TestSmokePreservesLiveControlDataAndUpgradeFailure(t *testing.T) {
 		t.Fatal("diagnostic handshake replaced a live session or cleared upgrade failure")
 	}
 	// Exchange real bytes on the original data lane, not just an attached flag.
-	stream, err := dataClient.OpenStream(ctx)
+	// The server opens and the agent accepts, as every server-side data-plane
+	// stream does; the server's own accept loop serves only telemetry.
+	stream, err := data.OpenStream(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer stream.Close()
 	defer data.Close()
-	accepted, err := data.AcceptStream()
+	accepted, err := dataClient.AcceptStream()
 	if err != nil {
 		t.Fatal(err)
 	}

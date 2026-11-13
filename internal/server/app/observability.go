@@ -141,17 +141,7 @@ func (o *observability) ingestLogs(nodeUUID string, lines []proto.LogLine) {
 	if len(lines) == 0 {
 		return
 	}
-	entries := make([]logstore.Entry, 0, len(lines))
-	for _, l := range lines {
-		source := l.Source
-		if source == "" {
-			source = logstore.SourceInstance
-		}
-		entries = append(entries, logstore.Entry{
-			Instance: l.Instance, Node: nodeUUID, TimeMS: l.TimeMS,
-			Level: l.Level, Source: source, Line: l.Line,
-		})
-	}
+	entries := logEntries(nodeUUID, lines)
 	if o.logQueue == nil {
 		// Constructions without the batcher (tests) keep the old synchronous
 		// behavior rather than silently dropping everything.
@@ -163,6 +153,41 @@ func (o *observability) ingestLogs(nodeUUID string, lines []proto.LogLine) {
 	default:
 		o.logDropped.Add(int64(len(entries)))
 	}
+}
+
+// ingestLogsWait is ingestLogs for a caller that can afford to wait: an
+// agent's telemetry stream, whose wait reaches the agent as flow control and
+// leaves the lines in its buffer. It drops nothing unless ctx ends first.
+func (o *observability) ingestLogsWait(ctx context.Context, nodeUUID string, lines []proto.LogLine) error {
+	if len(lines) == 0 {
+		return nil
+	}
+	entries := logEntries(nodeUUID, lines)
+	if o.logQueue == nil {
+		return o.logs.Append(entries)
+	}
+	select {
+	case o.logQueue <- entries:
+		return nil
+	case <-ctx.Done():
+		o.logDropped.Add(int64(len(entries)))
+		return ctx.Err()
+	}
+}
+
+func logEntries(nodeUUID string, lines []proto.LogLine) []logstore.Entry {
+	entries := make([]logstore.Entry, 0, len(lines))
+	for _, l := range lines {
+		source := l.Source
+		if source == "" {
+			source = logstore.SourceInstance
+		}
+		entries = append(entries, logstore.Entry{
+			Instance: l.Instance, Node: nodeUUID, TimeMS: l.TimeMS,
+			Level: l.Level, Source: source, Line: l.Line,
+		})
+	}
+	return entries
 }
 
 // logIngestLoop is the single logstore appender. It batches queued chunks

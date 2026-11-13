@@ -188,6 +188,8 @@ To search through the API, use `GET /api/v1/logs/search`. Add `with_total=1` to 
 For context, use `GET /api/v1/logs/context?instance=..&ts=..&id=..&before=..&after=..`. For logs without an instance UUID, such as agent and server logs, use `node` to restrict the scope instead.
 For the histogram, use `GET /api/v1/logs/histogram` with the same filters as the search. See the [API Reference](../reference/api.md) for all parameters.
 
+While a node is disconnected from the server (a server restart or upgrade, a network outage), the agent holds instance, node, and agent logs in memory and sends them in their original order after it reconnects, so lines from that period are still searchable. The buffer holds up to 16 MiB. If a disconnection lasts long enough to fill it, the oldest logs are dropped, and a warn-level line beginning `gpuworks: N log lines from … to … were dropped` marks the place (search for `were dropped`). An agent process restart loses what was not yet sent. Metrics from the disconnection are not sent later.
+
 ### The server's and agent's own logs
 
 - **What reaches the Logs page**: the server and the agent send only records at warn and above to the log center; info and below go only to their log files (the server's `logs/gpuworks-server.log`, the agent's `<state>/agent.log`).

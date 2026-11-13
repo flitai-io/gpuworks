@@ -101,6 +101,10 @@ type Session struct {
 	pending   map[uint64]chan proto.Envelope // in-flight RPC responses
 	closed    chan struct{}
 	closeOnce sync.Once
+	// telTail holds, per batch type, the done channel of the telemetry
+	// stream accepted last (telemetry.go); guarded by telMu.
+	telMu   sync.Mutex
+	telTail map[string]chan struct{}
 
 	// sessionID is a per-ctrl-handshake random token returned in Registered for
 	// dual-lane connections. A data lane must present the current ctrl session's
@@ -116,7 +120,7 @@ type Session struct {
 
 	// data is the optional dedicated high-throughput lane (a second yamux session
 	// over its own WebSocket or reverse TCP connection). It carries the data-plane stream kinds
-	// (tunnel/logtail/model/image) while ctrl/metrics/terminal stay on s.ysess.
+	// (tunnel/logtail/telemetry/model/image) while ctrl/terminal stay on s.ysess.
 	// Guarded by dataMu; nil when detached. dataEver records whether a data lane
 	// was ever attached so DataLaneState can distinguish detached from none.
 	// dataChangeCh is closed and replaced (see notifyDataChangeLocked) on every
@@ -293,19 +297,9 @@ func (s *Session) handle(env proto.Envelope) {
 	case proto.TStatusBenchmark:
 		s.handleBenchmarkStatus(env.D)
 	case proto.TMetrics:
-		if s.hub.onMetrics != nil {
-			var b proto.MetricBatch
-			if json.Unmarshal(env.D, &b) == nil && len(b.Samples) > 0 {
-				s.hub.onMetrics(s.NodeUUID, b.Samples)
-			}
-		}
+		s.handleMetrics(env.D)
 	case proto.TLogs:
-		if s.hub.onLogs != nil {
-			var b proto.LogBatch
-			if json.Unmarshal(env.D, &b) == nil && len(b.Lines) > 0 {
-				s.hub.onLogs(s.NodeUUID, b.Lines)
-			}
-		}
+		s.handleLogs(env.D)
 	case proto.TAgentUpgradeStatus:
 		var status proto.AgentUpgradeStatus
 		if err := json.Unmarshal(env.D, &status); err != nil {

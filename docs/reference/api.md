@@ -2187,8 +2187,8 @@ Playground 与 `/v1` 网关的边界、外部模型命名 `external:<config-id>:
 
 - 数据面 `/v1/*`（chat/embeddings/rerank/audio/image/video/realtime 等 OpenAI 兼容 endpoint）见
   [`openai-gateway.md`](openai-gateway.md)，不在本文重复；其中 `/v1/files` 与 `/v1/batches` 见 [Batches](#batches批处理任务)。
-- agent 侧 yamux 子协议（`ctrl`/`metrics`/`logtail`/`tunnel`/`model.read`/`model.write`/
-  `image.read`/`image.write`/`terminal`）不是 HTTP 路由，属于 `internal/proto` 控制面协议，不在本文范围。
+- agent 侧 yamux 子协议（`ctrl`/`telemetry`/`logtail`/`tunnel`/`model.read`/`model.write`/
+  `image.read`/`image.write`/`terminal` 等，完整列表与所属通道见 `proto.LaneFor`）不是 HTTP 路由，属于 `internal/proto` 控制面协议，不在本文范围。
 
 ## 路由与契约维护
 

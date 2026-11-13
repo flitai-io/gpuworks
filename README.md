@@ -196,8 +196,8 @@ flowchart LR
   reconciles desired state, the scheduler, and storage for metrics, logs and request traces.
 - An **agent** runs on each GPU node. It probes the accelerators, runs engines through Docker, nerdctl, the built-in
   rootless runtime (runveil) or as host processes on macOS, and reports metrics and logs.
-- Agents connect out to the server and multiplex everything over two lanes: `ctrl` for commands, metrics and
-  terminals, `data` for inference traffic, logs and model/image transfer. Inference requests reach the engine
+- Agents connect out to the server and multiplex everything over two lanes: `ctrl` for commands and
+  terminals, `data` for inference traffic, metrics and logs, and model/image transfer. Inference requests reach the engine
   through that tunnel, so nodes never expose ports.
 
 More in [Architecture](docs-en/explanation/architecture.md) and the [ADRs](docs-en/adr/README.md).

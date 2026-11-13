@@ -160,6 +160,10 @@ type NodeRuntime struct {
 	// removals drain (logshipper.go).
 	instanceLogs instanceLogs
 
+	// logOut holds log batches the node could not send yet (logoutbox.go).
+	logOutOnce sync.Once
+	logOut     *logOutbox
+
 	// runtimeGPU and occupancy carry the last real answer across a round in
 	// which the question could not be asked (runtime_gpu.go,
 	// card_occupancy.go).

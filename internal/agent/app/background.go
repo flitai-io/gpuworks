@@ -43,6 +43,7 @@ func (n *NodeRuntime) StartBackground(ctx context.Context, nodeUUID string) {
 		go n.shipNodeLogs(ctx)
 	}
 	go n.shipSelfLogs(ctx)
+	go n.retryLogs(ctx, logRetryInterval)
 	if n.engine != nil {
 		go n.shipLogs(ctx)
 		// Startup probes stop looking once an instance runs; this reports a

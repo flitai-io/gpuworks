@@ -17,20 +17,19 @@ import (
 )
 
 // TestNoisyNodeCtrlLatency measures what a node's own instance log volume
-// costs its control plane. Log and metric batches are envelopes on the ctrl
-// stream, the same stream and agent write lock as RPC responses, so a node
-// whose engine logs heavily may answer RPCs late. Two nodes sit behind
-// identical private shaped links; one runs an instance that logs as fast as
-// the agent ships, the other a quiet one. The case reports the RPC round-trip
-// distribution of each.
+// costs its control plane. Two nodes each sit behind one shaped link that
+// their ctrl and data lanes share; one runs an instance that logs as fast as
+// the agent ships, the other a quiet one. The case reports the RPC
+// round-trip distribution of each.
 //
-// Measured on 2026-11-13 (40 ms RTT): at 100 Mbps the noisy node's p50 was
-// 44 ms against 42 ms; at 10 Mbps 144 ms against 45 ms; at 2 Mbps 953 ms
-// against 57 ms. The added delay tracks the ctrl lane's fixed stream window
-// divided by link bandwidth: an RPC response queues behind at most one
-// window of log envelopes on the same stream. The case fails when the noisy
-// node exceeds that bound, which would mean log volume can delay RPCs without
-// limit.
+// While log batches were envelopes on the ctrl stream, an RPC response
+// queued behind up to one ctrl stream window (256 KiB) of them. Measured on
+// 2026-11-13 at 40 ms RTT, the noisy node's p50 was 954 ms against 58 ms at
+// 2 Mbps and 145 ms against 45 ms at 10 Mbps. On the telemetry stream of the
+// data lane it is 72 ms against 57 ms at 2 Mbps and 48 ms against 45 ms at
+// 10 Mbps. The case fails when the noisy node's slowest RPC is more than
+// 150 ms behind the quiet node's: at the default 2 Mbps that is well under
+// the one-window delay that sharing ctrl costs.
 //
 //	GPUWORKS_TEST_PERF=1 go test -count=1 -v -timeout 20m ./internal/integrationtest/fleet/ -run '^TestNoisyNodeCtrlLatency$'
 //
@@ -41,9 +40,11 @@ func TestNoisyNodeCtrlLatency(t *testing.T) {
 		t.Skip("timing measurement; set GPUWORKS_TEST_PERF=1 on an idle host to run (full command in the test's doc comment)")
 	}
 	linkCfg := testenv.ShapedLinkConfig{
-		RateMbps:   float64(EnvInt("GPUWORKS_CTRL_LINK_MBPS", 10)),
+		RateMbps:   float64(EnvInt("GPUWORKS_CTRL_LINK_MBPS", 2)),
 		RTT:        time.Duration(EnvInt("GPUWORKS_CTRL_LINK_RTT_MS", 40)) * time.Millisecond,
 		QueueBytes: 4 << 20,
+		// A node has one uplink: its ctrl and data lanes share the link.
+		SharedRate: true,
 	}
 	samples := EnvInt("GPUWORKS_CTRL_SAMPLES", 40)
 
@@ -118,16 +119,13 @@ func TestNoisyNodeCtrlLatency(t *testing.T) {
 		return out
 	}
 	quietRTT, noisyRTT := measure(quiet), measure(noisy)
-	t.Logf("link: %.0f Mbps, %s RTT, private per node", linkCfg.RateMbps, linkCfg.RTT)
+	t.Logf("link: %.0f Mbps, %s RTT, one per node, shared by its lanes", linkCfg.RateMbps, linkCfg.RTT)
 	t.Logf("quiet node rpc: %s", summarize(quietRTT))
 	t.Logf("noisy node rpc: %s", summarize(noisyRTT))
 
-	// ctrlLaneWindow mirrors hub/conn ctrlLaneWindow (unexported there).
-	const ctrlLaneWindow = 256 << 10
-	windowDrain := time.Duration(float64(ctrlLaneWindow*8) / (linkCfg.RateMbps * 1e6) * float64(time.Second))
-	bound := maxDuration(quietRTT) + windowDrain*3/2 + 100*time.Millisecond
+	bound := maxDuration(quietRTT) + 150*time.Millisecond
 	if got := maxDuration(noisyRTT); got > bound {
-		t.Fatalf("noisy node rpc max %s exceeds quiet max + 1.5 ctrl windows of link time (%s): log volume delays RPCs beyond the window bound", got.Round(time.Millisecond), bound.Round(time.Millisecond))
+		t.Fatalf("noisy node rpc max %s exceeds the quiet node's max + 150ms (%s): its log volume delays its RPC responses", got.Round(time.Millisecond), bound.Round(time.Millisecond))
 	}
 }
 

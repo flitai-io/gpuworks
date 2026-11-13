@@ -232,6 +232,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		obs.ingestMetrics(instanceUUID, samples)
 		px.ObserveEngineMetrics(samples)
 	}, obs.ingestLogs)
+	h.SetLogIngestWait(obs.ingestLogsWait)
 	h.SetBenchmarkDetailSink(newAgentBenchmarkDetailSink(filepath.Join(cfg.DataDir, "benchmark-artifacts"), st).Handle)
 
 	// Proxy request accounting (plan-9-18-monitor-center.md §4.3): counts
