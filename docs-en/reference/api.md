@@ -116,6 +116,10 @@ the first in a window goes out at once and the rest collapse into one event, wit
 For regular management resource endpoints that return `Content-Type: application/json`, send `Accept-Encoding: gzip` to enable gzip compression.
 Event streams, log streams, file transfers, and image transfers remain unchanged. WebSocket upgrades are unaffected.
 
+### How Setting Changes Reach Nodes
+
+Changes to pull credentials, networks and their attachments, node labels, storages (create, edit, node overrides), the orphan cleanup switch or the image catalog return as soon as they are saved, without waiting for the nodes: the server schedules one state update for each affected online node, each node is updated on its own without waiting for the others, changes in quick succession are sent together, and what is sent is the latest state at that time; the image catalog is sent about 250 ms after the first change, with the changes made meanwhile. A successful response means only that the change is saved. A node that cannot receive an update for now does not hold up the others, and gets the complete latest state when it reconnects. Deleting a storage still waits for the online nodes before it returns.
+
 ## Auth
 
 | Method | Path | Description | Authentication |
