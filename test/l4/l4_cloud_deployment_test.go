@@ -174,10 +174,6 @@ func deploySeedInferenceTemplateFake(t *testing.T, env *cloudTestEnv, image, ser
 	return d
 }
 
-func cloudTestModel(t *testing.T, env *cloudTestEnv) *store.Model {
-	return cloudTestModelSource(t, env, "modelscope", "Qwen/Qwen2-0.5B-Instruct", "master")
-}
-
 func cloudTestModelSource(t *testing.T, env *cloudTestEnv, source, sourceID, revision string) *store.Model {
 	t.Helper()
 	name := "Qwen2-1.5B-Instruct"

@@ -115,6 +115,13 @@ func mirrorFakeEngineThroughQuay(t *testing.T, env *cloudTestEnv) {
 	)
 }
 
+// runpodTestModel is the model the RunPod deployment cases download: from
+// Hugging Face, because RunPod pods run outside China and ModelScope's file
+// listing API answers their egress with HTTP 403 (observed 2026-11-13).
+func runpodTestModel(t *testing.T, env *cloudTestEnv) *store.Model {
+	return cloudTestModelSource(t, env, "huggingface", "Qwen/Qwen2-0.5B-Instruct", "main")
+}
+
 func deployRunpodModel(t *testing.T, env *cloudTestEnv, model *store.Model, engine, image, servedName string, sleepable bool, timeout time.Duration, extraQuick map[string]any) *runpodDeployment {
 	t.Helper()
 	// The controller intentionally requires an explicit public-download choice
@@ -200,7 +207,7 @@ func TestRunpodVLLMSGLangLifecycle(t *testing.T) {
 		d.stop(t)
 	})
 
-	model := cloudTestModel(t, env)
+	model := runpodTestModel(t, env)
 	prepareCloudModelDownload(t, env, model)
 
 	t.Run("vllm", func(t *testing.T) {
@@ -325,7 +332,7 @@ func testRunpodHAMi(t *testing.T) {
 	// artifacts on the rented host. Leave enough headroom for all of them.
 	d := setupCloudNode(t, testenv.New(t), runpodProvider(t), cloudprovider.GPUSpec{GPUModel: "auto", GPUCount: 2, MinVRAMMB: 8192, DiskGB: 120})
 	// Reuse the deployment flow after provisioning the two-card node.
-	model := cloudTestModel(t, d)
+	model := runpodTestModel(t, d)
 	node, err := d.Control.Store().NodeByUUID(d.NodeUUID)
 	if err != nil {
 		t.Fatal(err)
