@@ -12,7 +12,7 @@
 |---|---|---:|---|---|---|
 | Gitee x86_64 | x86_64 / 910B2C | 9.0 | 9.1（`gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2`）/ udocker | 平台整卡部署 + `/v1/chat/completions` | 支持（2026-11-13）；测试显式断言 `runtime_driver=udocker`；更早以内层 9.0 通过 |
 | Gitee x86_64 | x86_64 / 910B2C | 8.5.1 | 8.5 / udocker | 平台部署到 healthy；dGPU 能力探针正确返回云侧拒绝 | 外 8.5 + 内 8.5 可启动；尚缺一份可重复 CI 的成功 chat 证据 |
-| Gitee ARM | arm64 / 910B1 | 9.0 | 9.0 / udocker | 平台整卡部署 + `/v1/chat/completions` | 支持；真实预取 arm64 manifest/layers。2026-11-13 Gitee 已不再提供 910B1，内层 9.1 镜像在 ARM 上未复测 |
+| Gitee ARM | arm64 / 910B2 | 9.0 | 9.1（`gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2`）/ udocker | 平台整卡部署 + `/v1/chat/completions` | 支持（2026-11-13）；真实预取 arm64 manifest/layers。该机型的共享设备节点为 `root:root 0600`，由 agent 交给 `gpuworks-runtime` 组后以非 root 运行；此前在 910B1 上以内层 9.0 通过，Gitee 已不再提供 910B1 |
 | Gitee ARM | arm64 / 910B1 | 9.0 | 8.5 / udocker | 容器启动到 CANN FE | 旧 PRoot 下未通过；`platform_config` realpath 失败。ARM64 `faccessat2` 已修复，该云端组合尚未复测 |
 | Gitee ARM 目录项 | arm64 / 910B1 | 8.5 | 未进入内层 | 租机前置校验 | 云市场实际返回“镜像和主机不匹配”，不能作为 CI fixture；这不等于外 8.5 + 内 8.5 已被判定不兼容 |
 | 自有池 Docker 成员 | arm64 / 910B4 | 9.0/驱动 | 9.0 / Docker | 平台 API 双副本同卡 dGPU、真实推理/chat、超配拒绝、整卡 chat | 支持；完整平台 dGPU 主验收 |
