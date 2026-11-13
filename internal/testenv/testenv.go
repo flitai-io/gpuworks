@@ -38,9 +38,6 @@ type GPUSpec struct {
 	Healthy           *bool
 }
 
-// AdminPassword is the password of the harness server's "admin" account.
-const AdminPassword = "gpuworks-test-password-2026"
-
 type nodeOptions struct {
 	gpus                    []GPUSpec
 	gpuIndexes              []int
