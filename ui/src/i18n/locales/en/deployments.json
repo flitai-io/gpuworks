@@ -621,9 +621,9 @@
       "all": "all instances replaced at once"
     },
     "startup": {
-      "unknown": "Startup estimate unavailable: model weight size is unknown",
+      "unknown": "No estimate (weight size unknown)",
       "title": "Startup timing",
-      "budget": "Startup wait limit: {{duration}} · {{source}}",
+      "budget": "Startup wait limit {{duration}} ({{source}})",
       "source": {
         "deployment": "deployment setting",
         "cluster": "cluster setting",
@@ -631,28 +631,27 @@
         "harness": "test override",
         "unknown": "recorded budget"
       },
-      "estimate": "Rough startup estimate: {{duration}}",
+      "estimate": "about {{duration}}",
       "duration": {
         "seconds": "{{seconds}} s",
         "minutes": "{{minutes}} min {{seconds}} s",
         "hours": "{{hours}} h {{minutes}} min {{seconds}} s"
       },
-      "conflict": "The platform may stop waiting before the engine's {{duration}} wait limit. Review the deployment timeout.",
-      "elapsed": "Waiting for engine readiness: {{duration}}",
-      "slow": "Startup is taking longer than the rough estimate; still waiting within the configured limit.",
-      "observedReady": "Observed readiness wait: {{duration}}",
+      "conflict": "The platform stops waiting before the engine's {{duration}} limit. Raise the deployment timeout.",
+      "elapsed": "Waited {{duration}}",
+      "slow": "Past the estimate, still within the limit",
+      "observedReady": "Ready after {{duration}}",
       "measured": {
-        "ModelLoadingSeconds": "Weight loading: {{duration}}",
-        "CompilationSeconds": "Compilation: {{duration}}",
-        "GraphCaptureSeconds": "Graph capture: {{duration}}"
+        "ModelLoadingSeconds": "Weight loading {{duration}}",
+        "CompilationSeconds": "Compilation {{duration}}",
+        "GraphCaptureSeconds": "Graph capture {{duration}}"
       },
-      "measuredNote": "Engine log durations use the largest reported value per stage; stages may overlap and are not added.",
-      "unsupported": "Startup estimate unavailable for this deployment configuration",
-      "elapsedUnknown": "Readiness wait duration is unavailable",
-      "unavailable": "Startup estimate unavailable",
-      "engineDeadlineShort": "The engine's {{duration}} wait limit is shorter than the rough startup estimate and may expire before the platform limit. Review the engine configuration.",
-      "formula": "Reference formula: {{weight}} MiB ÷ {{rate}} MiB/s + {{initialization}} initialization.",
-      "referenceNote": "Throughput and initialization are fixed reference assumptions, not node measurements or a completion guarantee. This estimate does not change the startup wait limit."
+      "unsupported": "No estimate for this configuration",
+      "elapsedUnknown": "Wait time unknown",
+      "unavailable": "No estimate",
+      "engineDeadlineShort": "The engine's {{duration}} limit is shorter than the estimated start. Raise it in the engine configuration.",
+      "measuredHelp": "Each stage is the largest value the engine log reports; stages can overlap and are not added.",
+      "estimateHelp": "{{weight}} MiB ÷ {{rate}} MiB/s + {{initialization}} initialization\nThroughput and initialization are fixed reference values, not node measurements; the estimate does not affect the wait limit."
     }
   },
   "instanceMetrics": {

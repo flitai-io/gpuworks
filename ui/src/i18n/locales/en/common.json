@@ -1118,5 +1118,8 @@
     "observedAt": "Latest phase observation",
     "phaseConnected": "Transfer connection established",
     "transferId": "Transfer ID"
+  },
+  "helpTip": {
+    "label": "More information"
   }
 }

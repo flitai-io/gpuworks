@@ -119,6 +119,18 @@ grep -rlE "['\"]antd(/[^'\"]*)?['\"]" ui/src --include='*.ts' --include='*.tsx' 
 文件数只能拦"新文件引入 antd"，拦不住已有文件里继续加 antd 用法；逐文件的棘轮由下面的
 `ui/antd-inventory.json` 负责。
 
+### ui_copy_long_strings / ui_copy_caveat_strings（基线 46 / 14，2026-11-13）
+
+意图：页面只写事实和下一步，公式、口径、免责放进 `ui-kit/HelpTip` 或文档（`docs/dev/ui.md` "Copy on the page"）。
+`ui_copy_long_strings` 数中文 locale 里超过 120 字（key 以 `Help` 结尾的 HelpTip 内容放宽到 200 字）的字符串；
+`ui_copy_caveat_strings` 数非 `Help` key 中带免责短语（不保证、仅供参考、不代表、未经实测、并不意味、不改变、仅用于界面演示）的字符串。只降不升。
+
+```sh
+node scripts/ui_copy_audit.mjs long     # 或 caveat；list 逐条列出
+```
+
+排除：无。超长说明改写或移进文档；"不包含模型文件"这类事实不算免责，正则不收。
+
 ### ui_untested_shared_files（基线 0，2026-11-11）
 
 意图：每个页面都会复用的 UI 构件各有自己的单元测试，改它的人改得到对应测试，新加的构件不会没有测试就进来。范围：

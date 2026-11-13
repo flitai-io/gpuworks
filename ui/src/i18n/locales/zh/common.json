@@ -1118,5 +1118,8 @@
     "observedAt": "最近阶段观测",
     "phaseConnected": "传输连接已建立",
     "transferId": "传输 ID"
+  },
+  "helpTip": {
+    "label": "说明"
   }
 }

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { Instance, InstanceEvent } from "../api";
 import { instanceEventStage } from "./instanceEvents";
+import { HelpTip } from "../ui-kit/HelpTip";
 
 function validDuration(value: number | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
@@ -51,26 +52,29 @@ export default function InstanceStartupStatus({ inst, events }: { inst: Instance
     unsupported: "instance.startup.unsupported",
   } as Record<string, string>)[estimate?.method ?? ""] ?? "instance.startup.unavailable";
   const source = t(`instance.startup.source.${inst.start_timeout_source || "unknown"}`, { defaultValue: t("instance.startup.source.unknown") });
+  const estimateText = estimate && (estimatedSeconds != null
+    ? t("instance.startup.estimate", { duration: duration(estimatedSeconds, t) })
+    : t(unavailable));
+  const summary = [budget != null && t("instance.startup.budget", { duration: duration(budget, t), source }), estimateText].filter(Boolean).join(" · ");
+  const wait = waiting && (elapsed == null
+    ? t("instance.startup.elapsedUnknown")
+    : [t("instance.startup.elapsed", { duration: duration(elapsed, t) }),
+      estimatedSeconds != null && elapsed > estimatedSeconds && budget != null && elapsed < budget && t("instance.startup.slow")].filter(Boolean).join(" · "));
+  const measured = [
+    validDuration(readiness) && t("instance.startup.observedReady", { duration: duration(readiness, t) }),
+    ...stages.map(({ key, seconds }) => t(`instance.startup.measured.${key}`, { duration: duration(seconds, t) })),
+  ].filter(Boolean).join(" · ");
   return (
     <section aria-label={t("instance.startup.title")} className="mt-2 space-y-1 text-xs text-muted-foreground">
-      {budget != null && <p>{t("instance.startup.budget", { duration: duration(budget, t), source })}</p>}
+      {summary && <p className="flex items-center gap-1">{summary}{estimatedSeconds != null && estimate && <HelpTip content={t("instance.startup.estimateHelp", {
+        weight: Math.round(estimate.weight_bytes / 1024 ** 2 * 10) / 10,
+        rate: estimate.reference_mib_per_sec,
+        initialization: duration(estimate.initialization_seconds!, t),
+      })} />}</p>}
       {inst.start_timeout_conflict && validDuration(inst.engine_start_timeout_sec) && <p className="text-amber-700 dark:text-amber-400">{t("instance.startup.conflict", { duration: duration(inst.engine_start_timeout_sec, t) })}</p>}
       {estimatedSeconds != null && validDuration(inst.engine_start_timeout_sec) && inst.engine_start_timeout_sec > 0 && inst.engine_start_timeout_sec < estimatedSeconds && <p className="text-amber-700 dark:text-amber-400">{t("instance.startup.engineDeadlineShort", { duration: duration(inst.engine_start_timeout_sec, t) })}</p>}
-      {waiting && elapsed == null && <p>{t("instance.startup.elapsedUnknown")}</p>}
-      {elapsed != null && <p>{t("instance.startup.elapsed", { duration: duration(elapsed, t) })}</p>}
-      {estimatedSeconds != null && elapsed != null && elapsed > estimatedSeconds && budget != null && elapsed < budget && <p>{t("instance.startup.slow")}</p>}
-      {estimate && (estimatedSeconds != null ? <>
-        <p>{t("instance.startup.estimate", { duration: duration(estimatedSeconds, t) })}</p>
-        <p>{t("instance.startup.formula", {
-          weight: Math.round(estimate.weight_bytes / 1024 ** 2 * 10) / 10,
-          rate: estimate.reference_mib_per_sec,
-          initialization: duration(estimate.initialization_seconds!, t),
-        })}</p>
-        <p>{t("instance.startup.referenceNote")}</p>
-      </> : <p>{t(unavailable)}</p>)}
-      {validDuration(readiness) && <p>{t("instance.startup.observedReady", { duration: duration(readiness, t) })}</p>}
-      {stages.map(({ key, seconds }) => <p key={key}>{t(`instance.startup.measured.${key}`, { duration: duration(seconds, t) })}</p>)}
-      {!!stages.length && <p>{t("instance.startup.measuredNote")}</p>}
+      {wait && <p>{wait}</p>}
+      {measured && <p className="flex items-center gap-1">{measured}{!!stages.length && <HelpTip content={t("instance.startup.measuredHelp")} />}</p>}
     </section>
   );
 }
