@@ -17,6 +17,9 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 // App.tsx imports page stylesheets; under node they load as empty modules.
 register(pathToFileURL(new URL("./deploySleepableCssHook.mjs", import.meta.url).pathname));
 const closeChannels = trackMessageChannels();
+// Node's own, before the loop below replaces them: the Request bridge further down needs both.
+const NodeAbortController = globalThis.AbortController;
+const NodeAbortSignal = globalThis.AbortSignal;
 // Zeron hooks pass an AbortSignal to window.addEventListener; jsdom accepts only its own.
 for (const name of ["KeyboardEvent", "PointerEvent", "MouseEvent", "FocusEvent", "Document", "HTMLAnchorElement", "HTMLDivElement", "HTMLSpanElement", "HTMLImageElement", "DocumentFragment", "Text", "Event", "CustomEvent", "AbortController", "AbortSignal"] as const) {
   if (dom.window[name]) Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
@@ -324,15 +327,43 @@ test("the old private cloud address opens the external platforms page on the pri
   assert.equal(within(menu()).getByRole("link", { name: common.navigation.platforms }).getAttribute("aria-current"), "page");
 });
 
+// A data router builds a Request for every navigation, with a signal from the
+// global AbortController, which in this file is jsdom's (see the top of the file);
+// Node's Request rejects it ("Expected signal to be an instance of AbortSignal").
+// A browser has one AbortSignal. Here the Request that router code sees takes the
+// jsdom signal and forwards its abort to a Node one, for the duration of a test.
+// (A Request made without a signal is fine: undici creates its own with the global
+// AbortController and never validates it. Only a signal passed in is checked.)
+function acceptJsdomAbortSignals(): () => void {
+  const NodeRequest = globalThis.Request;
+  class RequestWithJsdomSignal extends NodeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      const foreign = init?.signal;
+      if (!foreign || foreign instanceof NodeAbortSignal) { super(input, init); return; }
+      const bridge = new NodeAbortController();
+      if (foreign.aborted) bridge.abort(foreign.reason);
+      else foreign.addEventListener("abort", () => bridge.abort(foreign.reason), { once: true });
+      super(input, { ...init, signal: bridge.signal });
+    }
+  }
+  globalThis.Request = RequestWithJsdomSignal as typeof Request;
+  return () => { globalThis.Request = NodeRequest; };
+}
+
 test("going back from the old private cloud address returns to the page before it, not to the old address", async () => {
-  serve(platforms);
-  const router = createMemoryRouter([{ path: "*", element: <App /> }], { initialEntries: ["/apikeys", "/zstack"], initialIndex: 1 });
-  render(<I18nextProvider i18n={i18n}><ConfigProvider theme={{ token: { motion: false } }}><RouterProvider router={router} /></ConfigProvider></I18nextProvider>);
-  await screen.findByRole("heading", { level: 2, name: locale.providers.platforms.title });
-  assert.equal(router.state.location.pathname + router.state.location.search, "/providers?category=private_cloud");
-  await act(() => router.navigate(-1));
-  assert.equal(router.state.location.pathname, "/apikeys");
-  assert.ok(await screen.findByRole("heading", { level: 2, name: locale.apikeys.title }));
+  const restoreRequest = acceptJsdomAbortSignals();
+  try {
+    serve(platforms);
+    const router = createMemoryRouter([{ path: "*", element: <App /> }], { initialEntries: ["/apikeys", "/zstack"], initialIndex: 1 });
+    render(<I18nextProvider i18n={i18n}><ConfigProvider theme={{ token: { motion: false } }}><RouterProvider router={router} /></ConfigProvider></I18nextProvider>);
+    await screen.findByRole("heading", { level: 2, name: locale.providers.platforms.title });
+    assert.equal(router.state.location.pathname + router.state.location.search, "/providers?category=private_cloud");
+    await act(() => router.navigate(-1));
+    assert.equal(router.state.location.pathname, "/apikeys");
+    assert.ok(await screen.findByRole("heading", { level: 2, name: locale.apikeys.title }));
+  } finally {
+    restoreRequest();
+  }
 });
 
 test("without a session the frame is not shown, only the sign-in form", async () => {

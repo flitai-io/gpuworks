@@ -2,11 +2,14 @@
 // selected-background merge/split it draws through useMergeSplitBlocks
 // (ui/src/hooks/use-merge-split.tsx). The app uses it in the column filter
 // popover (ui/src/ui-kit/ColumnFilter.tsx) and in DataTableFacetedFilter.
-import { dom, pendingFrameCount } from "./helpers/dom.ts";
+import { dom } from "./helpers/dom.ts";
+import { installPlainAnimationFrames } from "./helpers/plainAnimationFrames.ts";
 import assert from "node:assert/strict";
 import { afterEach, test as nodeTest } from "node:test";
 import React, { useState } from "react";
 
+// Before framer-motion loads (the imports below): see helpers/plainAnimationFrames.ts.
+const { pendingFrameCount } = installPlainAnimationFrames();
 for (const name of ["KeyboardEvent", "Document"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
@@ -190,20 +193,57 @@ test("contiguous checked options share one selection background", async () => {
   assert.equal(lower.style.height, "32px");
 });
 
+// use-merge-split.tsx resolves a merge on a ~300ms timer, while the glide it
+// shows takes ~160ms: the "halves have met" state exists for only ~150ms of
+// wall time, which a loaded CI runner (user.click alone can stall that long)
+// skips entirely. A test that asserts the mid-merge state holds back the long
+// timers (frame and event timers are all under 100ms) and releases them when it
+// is done looking, so the state it inspects lasts exactly as long as it needs.
+function holdMergeResolve() {
+  const realSet = globalThis.setTimeout;
+  const held: { id: ReturnType<typeof setTimeout>; fn: () => void }[] = [];
+  globalThis.setTimeout = ((fn: () => void, ms?: number, ...args: unknown[]) => {
+    if (ms === undefined || ms < 200) return realSet(fn, ms, ...args);
+    // A real timer so a clearTimeout on it (unmount) still works; it is far
+    // enough away that only release() ever runs the callback.
+    const id = realSet(() => {}, 600_000);
+    held.push({ id, fn });
+    return id;
+  }) as typeof setTimeout;
+  return {
+    heldCount: () => held.length,
+    release: () => act(async () => {
+      globalThis.setTimeout = realSet;
+      for (const { id, fn } of held.splice(0)) { clearTimeout(id); fn(); }
+    }),
+    restore: () => {
+      globalThis.setTimeout = realSet;
+      for (const { id } of held.splice(0)) clearTimeout(id);
+    },
+  };
+}
+
 test("checking the row between two selected runs glides them together, then settles into one background", async () => {
   render(<Group initial={[0, 2]} />);
   await waitFor(() => assert.equal(selectionBlocks().length, 2));
-  const user = userEvent.setup();
-  await user.click(option("Stopped"));
-  // Mid-merge both halves meet at the bridging row's midpoint (row 1: 32..64).
-  await waitFor(() => {
-    const blocks = selectionBlocks();
-    assert.equal(blocks.length, 2);
-    assert.equal(blocks[0].style.height, "48px");
-    assert.equal(blocks[1].style.top, "48px");
-  });
-  await waitFor(() => assert.equal(selectionBlocks().length, 1));
-  await waitFor(() => assert.equal(selectionBlocks()[0].style.height, "96px"));
+  const merge = holdMergeResolve();
+  try {
+    const user = userEvent.setup();
+    await user.click(option("Stopped"));
+    assert.equal(merge.heldCount(), 1, "the merge scheduled its resolve timer");
+    // Mid-merge both halves meet at the bridging row's midpoint (row 1: 32..64).
+    await waitFor(() => {
+      const blocks = selectionBlocks();
+      assert.equal(blocks.length, 2);
+      assert.equal(blocks[0].style.height, "48px");
+      assert.equal(blocks[1].style.top, "48px");
+    });
+    await merge.release();
+    await waitFor(() => assert.equal(selectionBlocks().length, 1));
+    await waitFor(() => assert.equal(selectionBlocks()[0].style.height, "96px"));
+  } finally {
+    merge.restore();
+  }
 });
 
 test("unchecking a middle row splits the background into two halves that part", async () => {

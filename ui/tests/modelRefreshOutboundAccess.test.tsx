@@ -5,17 +5,19 @@ import { I18nextProvider } from "react-i18next";
 import { createI18n } from "./helpers/dom.ts";
 
 const { i18n, locale } = await createI18n(["models", "storage"]);
-const { cleanup, render, screen, waitFor } = await import("@testing-library/react");
+const { act, cleanup, render, screen, waitFor } = await import("@testing-library/react");
 const user = (await import("@testing-library/user-event")).default;
 const { ModelDetailModal } = await import("../src/pages/ModelsPageParts.tsx");
 const originalFetch = globalThis.fetch;
 const current = { id: 9, source: "url", source_url: "http://models.private:8080/qwen/", source_id: "qwen", revision: "", name: "qwen", arch: "", quant_label: "", weight_gib: 0, created_at: "2026-11-12T00:00:00Z", nodes: [], storages: [] };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {status, headers:{"Content-Type":"application/json"}});
 type Call = { path: string; method: string; body?: unknown };
+let lastCalls: Call[] = [];
 function fixture(restrict = true, options: { editable?: boolean; status?: "blocked" | "unresolved"; conflict?: boolean; role?: string; stored?: typeof current; policyFailure?: boolean; browser?: boolean } = {}) {
  const stored = options.stored ?? current;
  const sourceHost = stored.source === "url" ? "models.private" : "mirror.private";
  const calls: Call[] = [];
+ lastCalls = calls;
  const unexpected: string[] = [];
  let policy = { restrict_private_hosts: restrict, allow_private_hosts: ["retained.corp"], editable: options.editable ?? true, revision: "r1" };
  globalThis.fetch = (async (input, init) => {
@@ -50,13 +52,21 @@ function fixture(restrict = true, options: { editable?: boolean; status?: "block
  }) as typeof fetch;
  return {calls,unexpected};
 }
-function show(onChanged: (...args: unknown[]) => void, model = current) {
+// The refresh action treats the user as a non-admin until /auth/me has answered
+// and the answer is rendered (useIsAdmin starts false), and a non-admin refresh
+// goes straight to the server without the permission step. A click that lands
+// before that, which a loaded machine allows, tests a different path. So the
+// modal counts as shown only once the role lookup has been answered and applied.
+async function show(onChanged: (...args: unknown[]) => void, model = current) {
  render(<I18nextProvider i18n={i18n}><ModelDetailModal model={model} onClose={()=>{}} onDownload={()=>{}} onCopy={()=>{}} onRegisterPath={()=>{}} onChanged={onChanged} /></I18nextProvider>);
+ const calls = lastCalls;
+ await waitFor(()=>assert.ok(calls.some(c=>c.path==="/api/v1/auth/me"),"the role lookup was requested"));
+ await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});
 }
 afterEach(()=>{cleanup();globalThis.fetch=originalFetch;});
 
 test("model detail refresh lets an administrator explicitly allow the current source before retrying",async()=>{
- const {calls,unexpected}=fixture();const changed:unknown[]=[];show(m=>changed.push(m));const actor=user.setup();
+ const {calls,unexpected}=fixture();const changed:unknown[]=[];await show(m=>changed.push(m));const actor=user.setup();
  await actor.click(screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)}));
  const checkbox=await screen.findByRole("checkbox",{name:/models\.private/});
  assert.equal(calls.filter(c=>c.method==="PUT").length,0,"opening permission never grants it");
@@ -69,7 +79,7 @@ test("model detail refresh lets an administrator explicitly allow the current so
 });
 
 test("global SSRF restrictions off keeps metadata refresh direct without host checks or permission writes",async()=>{
- const {calls,unexpected}=fixture(false);const changed:unknown[]=[];show(m=>changed.push(m));
+ const {calls,unexpected}=fixture(false);const changed:unknown[]=[];await show(m=>changed.push(m));
  await user.setup().click(screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)}));
  await waitFor(()=>assert.equal(changed.length,1));
  assert.equal(screen.queryByRole("checkbox"),null);
@@ -78,7 +88,7 @@ test("global SSRF restrictions off keeps metadata refresh direct without host ch
 });
 
 test("an unchecked metadata source is never added to the global allowlist",async()=>{
- const {calls}=fixture();const changed:unknown[]=[];show(m=>changed.push(m));const actor=user.setup();
+ const {calls}=fixture();const changed:unknown[]=[];await show(m=>changed.push(m));const actor=user.setup();
  const refresh=()=>screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)});
  await actor.click(refresh());await screen.findByRole("checkbox",{name:/models\.private/});
  await actor.click(refresh());
@@ -87,7 +97,7 @@ test("an unchecked metadata source is never added to the global allowlist",async
 });
 
 test("a policy conflict stops a selected grant before metadata is refreshed",async()=>{
- const {calls}=fixture(true,{conflict:true});show(()=>{});const actor=user.setup();
+ const {calls}=fixture(true,{conflict:true});await show(()=>{});const actor=user.setup();
  const refresh=()=>screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)});
  await actor.click(refresh());await actor.click(await screen.findByRole("checkbox",{name:/models\.private/}));await actor.click(refresh());
  await waitFor(()=>assert.ok(screen.getAllByRole("alert").some(n=>/changed/i.test(n.textContent??""))));
@@ -97,7 +107,7 @@ test("a policy conflict stops a selected grant before metadata is refreshed",asy
 
 test("permanently blocked and read-only sources cannot be granted during metadata refresh",async()=>{
  for(const options of [{status:"blocked" as const},{editable:false}]) {
-  const {calls}=fixture(true,options);show(()=>{});const actor=user.setup();
+  const {calls}=fixture(true,options);await show(()=>{});const actor=user.setup();
   await actor.click(screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)}));
   if(options.editable===false) assert.equal((await screen.findByRole("checkbox",{name:/models\.private/})).getAttribute("aria-disabled"),"true");
   else {await screen.findByText(/cannot be allowed by the outbound policy/i);assert.equal(screen.queryByRole("checkbox"),null);}
@@ -106,7 +116,7 @@ test("permanently blocked and read-only sources cannot be granted during metadat
 });
 
 test("ModelScope refresh authorizes the actual management-node mirror from source rules",async()=>{
- const stored={...current,source:"modelscope",source_url:""};const {calls,unexpected}=fixture(true,{stored});const changed:unknown[]=[];show(m=>changed.push(m),stored);const actor=user.setup();
+ const stored={...current,source:"modelscope",source_url:""};const {calls,unexpected}=fixture(true,{stored});const changed:unknown[]=[];await show(m=>changed.push(m),stored);const actor=user.setup();
  await actor.click(screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)}));
  await actor.click(await screen.findByRole("checkbox",{name:/mirror\.private/}));
  await actor.click(screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)}));
@@ -117,7 +127,7 @@ test("ModelScope refresh authorizes the actual management-node mirror from sourc
 });
 
 test("a successful Hugging Face browser refresh does not request server source authorization",async()=>{
- const stored={...current,source:"huggingface",source_url:""};const {calls,unexpected}=fixture(true,{stored,browser:true});const changed:unknown[]=[];show(m=>changed.push(m),stored);
+ const stored={...current,source:"huggingface",source_url:""};const {calls,unexpected}=fixture(true,{stored,browser:true});const changed:unknown[]=[];await show(m=>changed.push(m),stored);
  await user.setup().click(screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)}));
  await waitFor(()=>assert.equal(changed.length,1));
  assert.deepEqual(calls.filter(c=>c.path.startsWith("/api/v1/server/outbound-policy")),[]);
@@ -127,7 +137,7 @@ test("a successful Hugging Face browser refresh does not request server source a
 
 test("a member and an unavailable policy preflight preserve the original backend refresh action",async()=>{
  for(const options of [{role:"viewer"},{policyFailure:true}]) {
-  const {calls,unexpected}=fixture(false,options);const changed:unknown[]=[];show(m=>changed.push(m));
+  const {calls,unexpected}=fixture(false,options);const changed:unknown[]=[];await show(m=>changed.push(m));
   await user.setup().click(screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)}));
   await waitFor(()=>assert.equal(changed.length,1));
   assert.deepEqual(calls.filter(c=>c.path.endsWith("/check")||c.method==="PUT"),[]);assert.deepEqual(unexpected,[]);cleanup();
@@ -135,7 +145,7 @@ test("a member and an unavailable policy preflight preserve the original backend
 });
 
 test("switching global SSRF restrictions off discards a pending host selection and refreshes normally",async()=>{
- const {calls}=fixture();const changed:unknown[]=[];show(m=>changed.push(m));const actor=user.setup();
+ const {calls}=fixture();const changed:unknown[]=[];await show(m=>changed.push(m));const actor=user.setup();
  const refresh=()=>screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)});
  await actor.click(refresh());await actor.click(await screen.findByRole("checkbox",{name:/models\.private/}));
  const reply=await fetch("/api/v1/server/outbound-policy",{method:"PUT",body:JSON.stringify({restrict_private_hosts:false,allow_private_hosts:["retained.corp"],revision:"r1"})});assert.equal(reply.status,200);
@@ -147,7 +157,7 @@ test("switching global SSRF restrictions off discards a pending host selection a
 });
 
 test("an unavailable policy after explicit selection never grants or starts the metadata request",async()=>{
- const state={policyFailure:false};const {calls}=fixture(true,state);show(()=>{});const actor=user.setup();
+ const state={policyFailure:false};const {calls}=fixture(true,state);await show(()=>{});const actor=user.setup();
  const refresh=()=>screen.getByRole("button",{name:new RegExp(locale.models.detail.refreshMetadata)});
  await actor.click(refresh());await actor.click(await screen.findByRole("checkbox",{name:/models\.private/}));state.policyFailure=true;
  await actor.click(refresh());await waitFor(()=>assert.ok(screen.getAllByRole("alert").some(n=>/policy unavailable/i.test(n.textContent??""))));
