@@ -9,14 +9,18 @@ Implementations and upstreams per backend: NVIDIA uses [HAMi-core](https://githu
   which caps ordinary kernels, but does not constrain the CUDA graphs and cuBLAS used by vLLM by default. With multiple inference instances sharing one GPU, it cannot allocate compute proportionally,
   so the platform does not expose a compute cap.
 - Under long-context, high-concurrency workloads, PPU ppu-slicing-shim can turn a 20/80 configuration into busy-time throughput weights close to the target. It borrows spare capacity when the other instance
-  is idle, so this is not fixed SM partitioning.
+  is idle, so this is not fixed SM partitioning. Docker and Kubernetes are supported; the cross-process ledger always lives in the host's /dev/shm, at
+  an unchanging path — other runtimes rely on `--ipc=host` to give the container the host's /dev/shm directly, while on Kubernetes the agent's own
+  /dev/shm is its pod's private tmpfs, so the agent pre-creates that file through the host root and hostPath-mounts that same host path into the
+  instance pod.
 - Ascend vcann-rt/device-share depends on the combination of host permissions and runtime. The current Gitee cloud environment proves only node
   probes or full GPU chat; a cloud-side rejection cannot be reported as a dGPU pass.
 - Hygon Z100 / K100_AI / BW uses native vdevs (experimental), with one GPU per instance. The memory quota also determines the CU allocation; compute cannot be adjusted independently, and inference throughput is not guaranteed to scale with the memory quota. Docker or runveil/udocker on x86_64 is supported, with the native helper, host libraries, and a passing per-GPU behavioral probe. Devices reporting only K100, or other unsupported models, remain full-GPU only.
 - AMD uses rocm-slicing-shim (libvrocm.so) (experimental, user space, interposed at the HIP runtime layer). The quota is a hard GPU memory limit. ROCm enforces its compute quota in hardware
   through `HSA_CU_MASK`, below anything a preloaded library can see or verify, so the platform does not expose a compute cap for AMD either — the same
-  outcome as NVIDIA's "cannot be enforced proportionally," reached by a different mechanism. Docker, nerdctl, or runveil on x86_64 is supported.
-  dGPU has been tested on MI300X (gfx942) under Docker and runveil; other models and combinations remain unverified.
+  outcome as NVIDIA's "cannot be enforced proportionally," reached by a different mechanism. Docker, nerdctl, Kubernetes, or runveil on x86_64 is supported.
+  dGPU has been tested on MI300X (gfx942) under Docker and runveil; other models and combinations remain unverified. The ledger reaches the instance
+  pod the same way as PPU's: always a host /dev/shm path, pre-created through the host root and hostPath-mounted only on Kubernetes.
 
 The server derives partition capability status/reason from hardware facts, assets, and behavioral probes; the agent does not declare
 ready on its own. When the capability requirements are not met, full GPU deployment remains available, but a request with a dGPU memory limit must fail explicitly (for example, the scheduler returns

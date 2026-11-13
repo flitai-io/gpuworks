@@ -121,6 +121,13 @@ func (e *Engine) BuildPartitionProbeWorkload(ctx context.Context, backend, image
 		spec.SMLimitPct = 0
 	}
 	ws := toWorkloadSpec(spec, "gpuworks-partition-probe-"+sanitizeID(backend)+"-"+strconv.Itoa(gpuIndex))
+	// On Kubernetes (e.hostRoot is set only there) the probe is a pod. It
+	// needs no network, and the host's network, as instance pods use, keeps
+	// it from depending on the cluster's network plugin. Docker keeps its
+	// default network.
+	if e.hostRoot != "" {
+		ws.HostNetwork = true
+	}
 	if err := e.applyDeviceInjection(&ws, spec.GPUIndexes); err != nil {
 		return agentruntime.WorkloadSpec{}, err
 	}
@@ -311,6 +318,35 @@ func hasArchHint(path string, hints []string) bool {
 		}
 	}
 	return false
+}
+
+// createHostShmLedger pre-creates an empty placeholder at a /dev/shm ledger
+// path (amdLedgerPath, ppuLedgerPath) under hostRoot, so a kube hostPath
+// volume has an existing regular file to bind-mount: a missing bind source
+// is commonly auto-created as a directory by the container runtime, and the
+// shim's open() of what it expects to be a regular file would then fail.
+// The shim opens the existing file with O_CREAT (a no-op once it exists)
+// and unlinks it on a clean exit as usual; cleanupInstance removes it again
+// as a backstop for a failed or killed startup. Mode 0o666, not 0o777: the
+// workload's container may run as a UID with no entry on the host and must
+// be able to write the file, the same reasoning (and the same mode)
+// nvidiaPartitionInjector uses for the HAMi-core dgpu-cache file
+// (partition_nvidia.go) — the file has no execute bit to begin with, so
+// 0o777 would add nothing a reader/writer needs.
+func createHostShmLedger(hostRoot, ledgerPath string) error {
+	full := hostRoot + ledgerPath
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(full, os.O_CREATE|os.O_RDWR, 0o666)
+	if err != nil {
+		return err
+	}
+	if err := f.Chmod(0o666); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func writePrivateFile(path string, data []byte, mode os.FileMode) error {

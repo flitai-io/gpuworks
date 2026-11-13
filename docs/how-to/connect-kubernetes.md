@@ -49,7 +49,7 @@ gpuworks 不接管集群的 GPU，只借用要用的卡，集群里原有的业�
 集群条目没有厂商这一项。一个条目只有一个 DaemonSet，没有厂商专用的挂载，agent Pod 在默认运行时下运行（不给 agent 指定
 RuntimeClass）；每个 agent 自己探测所在节点的加速卡：
 
-- Kubernetes 上支持的厂商：NVIDIA、昇腾、海光（DCU）、PPU、AMD、昆仑芯（整卡；AMD 的 dGPU 切分在 Kubernetes 上不可用，见下文）。
+- Kubernetes 上支持的厂商：NVIDIA、昇腾、海光（DCU）、PPU、AMD、昆仑芯（整卡；AMD 与 PPU 的 dGPU 切分在 Kubernetes 上也可用，海光的 dGPU 切分在 Kubernetes 上不可用，见下文）。
 - 节点没有加速卡，或者是别家的卡（上述以外的厂商暂不支持 Kubernetes）时，节点处于待命状态：agent Pod 照常运行，但不向
   server 注册，这样的节点不会出现在平台的节点页。
 - 所以同一个条目可以覆盖含多个厂商节点的集群，不再需要一个厂商一个条目。节点选择器仍是可选项，用来只让平台使用其中一部分节点
@@ -133,8 +133,11 @@ agent 已知工具包属于 GPU Operator 还是装在节点上时，节点详情
 | ACK 共享 GPU（节点有 `aliyun.com/gpu-mem` 资源，或 `ack.node.gpu.schedule` 标签为 `share` / `cgpu` / `core_mem`） | 占位 Pod 申请一整张卡的显存，借到哪张读调度器写在 Pod 上的分配注解 |
 | MIG、time-slicing / MPS、没有 HAMi 登记的昇腾 vNPU 模板等其他切分 | 不借卡：节点的卡全部显示为外部占用，原因（MIG、time-slicing、vNPU 模板……）写在卡的占用信息里，不会在上面放实例；集群改回整卡分配后自动恢复 |
 
-三种模式借到整卡以后，卡上的 dGPU 切分（NVIDIA HAMi-core、昇腾 vCANN）与普通节点完全一致：实例 Pod 不申请 HAMi
-或 ACK 的资源，由 gpuworks 自己的 dGPU 把一张卡切给多个实例。PPU、海光与 AMD 的 dGPU 切分目前只在 Docker 等运行时上验证（PPU 仅 Docker；海光 Docker 与 udocker；AMD Docker、nerdctl 与 udocker），在 Kubernetes 节点上不可用，这些卡只做整卡部署。
+三种模式借到整卡以后，卡上的 dGPU 切分（NVIDIA HAMi-core、昇腾 vCANN、PPU ppu-slicing-shim、AMD rocm-slicing-shim）与普通节点完全一致：实例 Pod 不申请 HAMi
+或 ACK 的资源，由 gpuworks 自己的 dGPU 把一张卡切给多个实例。PPU、AMD 的跨进程账本在其他运行时上靠容器
+`--ipc=host` 共享宿主机 `/dev/shm`；Kubernetes 上 agent 自己的 `/dev/shm` 是 agent Pod 私有的 tmpfs，
+agent 改经宿主 root（`/proc/1/root`）预先在宿主机 `/dev/shm` 建好账本文件，再把这个宿主路径以 hostPath
+挂进实例 Pod，账本路径本身不变。海光的 dGPU 切分目前只在 Docker 与 udocker 上验证，在 Kubernetes 节点上不可用，这张卡只做整卡部署。
 
 **HAMi**：占位 Pod 不绑定节点，而是写 `schedulerName: hami-scheduler`、`nodeSelector: kubernetes.io/hostname=<节点>`，
 申请 `nvidia.com/gpu: 1`、`nvidia.com/gpucores: 100`、`nvidia.com/gpumem-percentage: 100`，并用注解
@@ -289,5 +292,5 @@ kubectl delete namespace <namespace> --ignore-not-found
 - 实例使用 host 网络，不创建 Service / Ingress，经 gpuworks 网关访问。
 - 厂商的命令行工具（`npu-smi`、`hy-smi`、`ppu-smi`、`xpu-smi`、`nvidia-smi`）在节点的挂载命名空间里运行，用节点自己的 C 库与驱动库，所以 agent
   镜像与节点的发行版无关；查找顺序见「加速卡厂商：自动识别」。
-- 只支持 NVIDIA、昇腾、海光、PPU、AMD 与昆仑芯的节点；其他厂商的节点保持待命，不成为平台节点。AMD 与昆仑芯只做整卡部署：AMD 的 dGPU 显存切分在 Kubernetes 上不可用，昆仑芯本来就没有 dGPU。
+- 只支持 NVIDIA、昇腾、海光、PPU、AMD 与昆仑芯的节点；其他厂商的节点保持待命，不成为平台节点。海光与昆仑芯只做整卡部署：海光的 dGPU 显存切分在 Kubernetes 上不可用，昆仑芯本来就没有 dGPU；AMD 与 PPU 的 dGPU 切分在 Kubernetes 上可用。
 - agent 以 privileged、hostNetwork、hostPID 运行（探测、经节点挂载命名空间运行 nerdctl 与 mount 需要）。

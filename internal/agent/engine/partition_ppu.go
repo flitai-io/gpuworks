@@ -16,6 +16,10 @@ import (
 // ppu-slicing-shim quota/hook libraries (hooking the HGGC runtime) are mounted into the container and activated through
 // LD_PRELOAD plus HGGC_DEVICE_* env, with per-instance quota ledgers in
 // /dev/shm (host IPC namespace, because inference workloads use --ipc=host).
+//
+// On the kube driver the agent's own /dev/shm is its pod's private tmpfs,
+// not the host's, so --ipc=host buys it nothing: see e.hostRoot and
+// createHostShmLedger in partition.go (shared with partition_amd.go).
 type ppuPartitionInjector struct{}
 
 func (ppuPartitionInjector) apply(e *Engine, _ context.Context, ws *agentruntime.WorkloadSpec, spec proto.InstanceDesiredState) (bool, string) {
@@ -49,7 +53,14 @@ func (ppuPartitionInjector) apply(e *Engine, _ context.Context, ws *agentruntime
 		ws.Env[accelerator.PPUEnvMemoryLimitPrefix+ordinal] = strconv.FormatInt((spec.VRAMLimitBytes+(1<<20)-1)/(1<<20), 10)
 		ws.Env[accelerator.PPUEnvSMLimitPrefix+ordinal] = strconv.Itoa(smLimit)
 	}
-	ws.Env[accelerator.PPUEnvLedgerPath] = ppuLedgerPath(spec.UUID)
+	ledger := ppuLedgerPath(spec.UUID)
+	ws.Env[accelerator.PPUEnvLedgerPath] = ledger
+	if e.hostRoot != "" {
+		if err := createHostShmLedger(e.hostRoot, ledger); err != nil {
+			return false, "PPU partition ledger: " + err.Error()
+		}
+		ws.Mounts = append(ws.Mounts, agentruntime.Mount{Source: ledger, Target: ledger})
+	}
 	return true, ""
 }
 
@@ -65,12 +76,16 @@ func (ppuPartitionInjector) applyLimit(*Engine, proto.InstanceDesiredState) (boo
 
 func (ppuPartitionInjector) cleanupInstance(e *Engine, uuid string) error {
 	err := os.RemoveAll(filepath.Join(e.stateDir, partitionStateRoot, "instances", sanitizeID(uuid)))
-	// PPU quota ledgers live in the host IPC namespace because inference
-	// workloads use --ipc=host. The shim normally unlinks a clean ledger on
-	// process exit, but a failed or killed startup can leave one behind. Remove
-	// the exact per-instance path during teardown so retries and deletions do not
-	// accumulate stale accounting files.
-	if removeErr := os.Remove(ppuLedgerPath(uuid)); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+	// PPU quota ledgers live in the host's /dev/shm: on every driver but
+	// kube, that is the agent's own /dev/shm too (the workload shares it via
+	// --ipc=host), and e.hostRoot is "", so this is exactly the path used
+	// before kube support existed. On kube, e.hostRoot prefixes the path
+	// with the agent's view of the host root (see createHostShmLedger). The
+	// shim normally unlinks a clean ledger on process exit, but a failed or
+	// killed startup can leave one behind. Remove the exact per-instance
+	// path during teardown so retries and deletions do not accumulate stale
+	// accounting files.
+	if removeErr := os.Remove(e.hostRoot + ppuLedgerPath(uuid)); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 		err = errors.Join(err, removeErr)
 	}
 	return err
