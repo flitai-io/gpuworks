@@ -17,12 +17,20 @@ import (
 // each last reported and what a restart does. Unlike a stub that always
 // succeeds it fails for a node it was not told about, as the hub does.
 type fakeNodeRuntime struct {
-	mu       sync.Mutex
-	proxies  map[string]*proto.RuntimeProxyStatus
-	restarts []string
+	mu      sync.Mutex
+	proxies map[string]*proto.RuntimeProxyStatus
+	// isolation is the soft-isolation notice each node last reported.
+	isolation map[string]*proto.NVIDIAIsolation
+	restarts  []string
 	// afterRestart is what the daemon reports once restarted, per node.
 	afterRestart map[string]*proto.RuntimeProxyStatus
 	failWith     error
+}
+
+func (f *fakeNodeRuntime) NVIDIAIsolation(uuid string) *proto.NVIDIAIsolation {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.isolation[uuid]
 }
 
 func (f *fakeNodeRuntime) RuntimeProxy(uuid string) *proto.RuntimeProxyStatus {

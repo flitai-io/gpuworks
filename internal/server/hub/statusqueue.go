@@ -230,6 +230,7 @@ func (s *Session) handleStatusNode(raw json.RawMessage) {
 		s.hub.log.Warn("bad status.node", "node", s.NodeUUID, "err", err)
 		return
 	}
+	s.nvidiaIsolation.Store(st.NVIDIAIsolation)
 	if st.RuntimeProxy != nil {
 		s.runtimeProxy.Store(st.RuntimeProxy)
 	}

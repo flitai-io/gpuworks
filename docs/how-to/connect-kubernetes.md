@@ -66,14 +66,57 @@ UUID 这样不带种类的名字会落到 `management.nvidia.com/gpu`，而那�
 （`unresolvable CDI devices management.nvidia.com/gpu=0`）。agent 创建实例 Pod 时经宿主机根目录读节点的 CDI 规格
 （`/etc/cdi`、`/var/run/cdi`）：工具包处在 CDI 模式（有 `management.nvidia.com/gpu` 规格，且工具包配置不是 legacy 模式）时，
 把选中的卡写成 NVIDIA device plugin 规格里按 UUID 命名的完整设备名（如
-`k8s.device-plugin.nvidia.com/gpu=GPU-…`），Pod 只拿到这张卡；规格里找不到这张卡时，Pod 不创建，报错说明怎么处理
-（让 NVIDIA 的 device plugin 以 CDI 运行，或把工具包设为 legacy 模式：`NVIDIA_CONTAINER_RUNTIME_MODE=legacy`）。
+`k8s.device-plugin.nvidia.com/gpu=GPU-…`），Pod 只拿到这张卡。
+
+规格里找不到这张卡时（典型情况：集群用 HAMi 或别的 device plugin，NVIDIA 自己的 device plugin 没有运行，没人写逐卡的名字），
+agent 不再让 Pod 失败，而是退到**软隔离**：Pod 的 `NVIDIA_VISIBLE_DEVICES` 写成 `management.nvidia.com/gpu=all`
+（该规格里唯一的设备，带上节点全部的 `/dev/nvidiaN`），再用 `CUDA_VISIBLE_DEVICES`（宿主机上的卡号，如 `1` 或 `1,0`）把引擎限制在
+分到的卡上，同时设 `CUDA_DEVICE_ORDER=PCI_BUS_ID`（除非工作负载自己设了），让这个卡号与宿主机 `nvidia-smi` 的卡号一致。
+软隔离下 Pod 能看到节点上所有的 GPU 设备，只有 CUDA 被限制；不遵守 `CUDA_VISIBLE_DEVICES` 或直接打开设备节点的程序可以访问其他卡。
+agent 在每次状态上报里带上这件事，节点详情的「基础信息」里就出现「GPU 设备为软隔离」标签，下面给出原因和要执行的命令
+（命令由 server 生成；节点离线时不显示，重新上线并上报后恢复）。要回到严格隔离，二选一：
+
+- 集群用 GPU Operator、且没有用别的 GPU device plugin：保持启用 Operator 自带的 device plugin，它会写出逐卡的 CDI 名称。
+  不要在 HAMi 或别的 device plugin 旁边再装 NVIDIA 的 device plugin，两者会重复上报同一批 GPU。
+- 把工具包设为 legacy 模式，按卡号隔离。
+
+GPU Operator 启用自带的 device plugin（没有别的 GPU device plugin 时）：
+
+```bash
+kubectl patch clusterpolicy "$(kubectl get clusterpolicy -o jsonpath='{.items[0].metadata.name}')" --type=merge -p '{"spec":{"devicePlugin":{"enabled":true}}}'
+```
+
+GPU Operator 把 toolkit 改成 legacy 模式。`spec.toolkit.env` 已存在时，追加一项，不动原有条目：
+
+```bash
+kubectl patch clusterpolicy "$(kubectl get clusterpolicy -o jsonpath='{.items[0].metadata.name}')" --type=json -p '[{"op":"add","path":"/spec/toolkit/env/-","value":{"name":"NVIDIA_CONTAINER_RUNTIME_MODE","value":"legacy"}}]'
+```
+
+上一条因为 `spec.toolkit.env` 不存在而失败时，改用这条（创建这个列表；已存在的列表会被替换）：
+
+```bash
+kubectl patch clusterpolicy "$(kubectl get clusterpolicy -o jsonpath='{.items[0].metadata.name}')" --type=json -p '[{"op":"add","path":"/spec/toolkit/env","value":[{"name":"NVIDIA_CONTAINER_RUNTIME_MODE","value":"legacy"}]}]'
+```
+
+工具包装在节点上、没有用 GPU Operator：在该节点上执行（默认配置文件 `/etc/nvidia-container-runtime/config.toml`），再重启容器运行时：
+
+```bash
+sudo nvidia-ctk config --in-place --set nvidia-container-runtime.mode=legacy
+sudo systemctl restart containerd
+```
+
+agent 已知工具包属于 GPU Operator 还是装在节点上时，节点详情只列出适用的那几条。重启容器运行时的服务名因发行版而异（`containerd`、`rke2-agent`、`k3s`……）。
 
 **一个 Kubernetes 节点同一时间只属于一个条目。** 同一个集群的两个条目选中了同一个节点时，后来的那个条目的 agent 注册被拒绝
 （`KUBE_ENROLL_REFUSED`，原因 `node_taken`，并指出占着它的条目名），直到第一个条目在这个节点上的 agent 离线超过 15 分钟；
 之后节点可以转到另一个条目（例如改了节点选择器之后）。其他拒绝原因：`unknown_token`（接入令牌未知或已吊销；已经注册过的 agent 保留自己保存的身份，
 不受影响）、`other_cluster`（令牌属于另一个 Kubernetes 集群）。保存的身份记着发给它的条目，agent 只用自己条目发的那份：
 几个条目共用默认的状态目录时，节点从一个条目转到另一个条目不会顶着前一个条目的身份连上来。
+
+注册被拒绝时，agent 除了写日志，还会在自己的 Pod 上记一条 Warning 事件（原因 `GpuworksEnrollRefused`），写明拒绝的原因和怎么处理，
+`kubectl describe pod -n <命名空间> <agent Pod>` 的 Events 一栏就能看到，不用去翻 agent 日志。同一个原因在拒绝持续期间每 10 分钟刷新一次，
+原因变了（例如占着节点的条目换了）立刻写一条新的。写事件需要 manifest 的 Role 里有 `events` 的 `create`（只在 agent 自己的命名空间）；
+用旧 manifest 接入的集群重新 `kubectl apply` 才有这条权限，没有时只是看不到事件，注册的重试不受影响。
 
 同一个 Kubernetes 集群接入两个条目时，**两个条目要用不同的命名空间**：manifest 里的对象按命名空间命名，同名命名空间下后应用的
 会覆盖先应用的，前一个条目的节点就悄悄转到了后一个条目。可能属于同一集群、又用了同一命名空间的条目，列表里名称旁会标「命名空间重复」

@@ -47,7 +47,7 @@ type podOptions struct {
 	// NVIDIAVisible rewrites the cards --gpus selects (NVIDIA_VISIBLE_DEVICES)
 	// into the names the node's NVIDIA runtime resolves (nvidia_cdi.go);
 	// nil keeps them.
-	NVIDIAVisible func(string) (string, error)
+	NVIDIAVisible func(string) (nvidiaVisibility, error)
 }
 
 // dockerTranslation is what a workload's docker-style arguments amount to
@@ -204,7 +204,17 @@ func instancePod(spec runtime.WorkloadSpec, o podOptions) (kubeapi.Pod, error) {
 		if err != nil {
 			return kubeapi.Pod{}, err
 		}
-		env["NVIDIA_VISIBLE_DEVICES"] = q
+		env["NVIDIA_VISIBLE_DEVICES"] = q.Devices
+		if q.CUDAVisible != "" {
+			// Every card is visible, so the engine's own CUDA_VISIBLE_DEVICES
+			// (counted from the pod's cards) would pick the wrong ones. With
+			// all of them present CUDA numbers them by PCI bus, as the host
+			// does, unless the workload says otherwise.
+			env["CUDA_VISIBLE_DEVICES"] = q.CUDAVisible
+			if _, ok := env["CUDA_DEVICE_ORDER"]; !ok {
+				env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+			}
+		}
 	}
 	keys := make([]string, 0, len(env))
 	for k := range env {

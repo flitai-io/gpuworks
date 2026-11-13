@@ -83,7 +83,11 @@ type Session struct {
 	// reported it (proto.NodeStatus.RuntimeProxy). It is not stored: the next
 	// report after a server restart brings it back.
 	runtimeProxy atomic.Pointer[proto.RuntimeProxyStatus]
-	rpcSeq       atomic.Uint64
+	// nvidiaIsolation is how strictly the node keeps its NVIDIA instance pods
+	// to their own card, as its last report said (nil: strictly, or not
+	// reported). Not stored either: each report states it afresh.
+	nvidiaIsolation atomic.Pointer[proto.NVIDIAIsolation]
+	rpcSeq          atomic.Uint64
 
 	// caps is what the agent advertised in its hello. Written during handshake,
 	// which completes before hub.register publishes the session; every reader

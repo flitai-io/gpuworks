@@ -50,6 +50,11 @@ type Server struct {
 	// DenyClusterPods makes the cluster-wide pod list answer 403 Forbidden, as
 	// it does for a service account without a ClusterRole that lists pods.
 	DenyClusterPods bool
+	// DenyEvents makes creating an event answer 403 Forbidden, as it does
+	// for a service account whose Role has no events rule (a manifest from
+	// before the agent wrote events).
+	DenyEvents bool
+	events     []kubeapi.Event
 	// Requests records "METHOD path?query" of every request.
 	Requests []string
 }
@@ -274,6 +279,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.listAllPods(w, r)
 	case len(parts) == 7 && parts[0] == "apis" && parts[5] == "daemonsets":
 		s.serveDaemonSet(w, r, parts[6])
+	case len(parts) == 5 && parts[0] == "api" && parts[2] == "namespaces" && parts[4] == "events":
+		s.serveEvents(w, r, parts[3])
 	case len(parts) >= 5 && parts[0] == "api" && parts[2] == "namespaces" && parts[4] == "pods":
 		s.servePods(w, r, parts[3], parts[5:])
 	default:

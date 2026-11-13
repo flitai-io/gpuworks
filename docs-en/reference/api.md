@@ -408,6 +408,8 @@ After the platform stops scheduling, setting `schedulable` through this endpoint
 
 `PATCH /api/v1/nodes/{uuid}/runtime` sets the node's container runtime preference `{runtime: auto|docker|nerdctl|udocker}`; it is saved after the agent accepts it. The node's `runtime_choices` lists the values this node may be set to, in display order: a Mac has only `auto`, every other node all four; **a Kubernetes node has no such field** (its instances are pods of the cluster, so there is no runtime to choose), and setting one returns 409 `NODE_RUNTIME_KUBE_NODE`. An invalid value returns 400 `NODE_RUNTIME_INVALID`.
 
+`GET /api/v1/nodes/{uuid}` carries `gpu_isolation` for a Kubernetes node whose NVIDIA instance pods are held to their own card by `CUDA_VISIBLE_DEVICES` alone (soft isolation: the pods can see every GPU device of the node): `level` (`soft`), `reason` (`cdi_names_missing`: the toolkit resolves `NVIDIA_VISIBLE_DEVICES` as CDI names and no CDI spec names the card), `toolkit` (`gpu_operator` or `host`, when the agent can tell), `cards`, and `fixes`: each has a `code` and `commands` to run in order, exactly as written, chosen by the server from `toolkit`. It comes from the agent's latest status report and is not stored: it is absent while the node is offline, strictly isolated, or runs an older agent, and the node list does not carry it.
+
 `PATCH /api/v1/nodes/{uuid}/accelerator` selects which vendor's cards to manage on a host with multiple vendors. The selection is saved only after the agent accepts it and restarts in place.
 The returned node's `accelerator_preference` indicates the selection; `accelerator_vendors` lists `{vendor, cards, model}` for each vendor on the host.
 

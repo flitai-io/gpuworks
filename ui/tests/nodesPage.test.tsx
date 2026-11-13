@@ -761,6 +761,57 @@ test("a node on its runveil fallback says which runtime it runs and why Docker w
   assert.ok(drawer.getByRole("button", { name: /Copy install command/ }));
 });
 
+// The server decides the node is soft-isolated and writes the commands; the
+// page words the label and why, and shows and copies the commands as received.
+test("a soft-isolated node says so in the detail and offers the server's commands to copy", async () => {
+  const append = `kubectl patch clusterpolicy "$(kubectl get clusterpolicy -o jsonpath='{.items[0].metadata.name}')" --type=json -p '[{"op":"add","path":"/spec/toolkit/env/-","value":{"name":"NVIDIA_CONTAINER_RUNTIME_MODE","value":"legacy"}}]'`;
+  const hostCommands = ["sudo nvidia-ctk config --in-place --set nvidia-container-runtime.mode=legacy", "sudo systemctl restart containerd"];
+  const node = {
+    ...onlineNode, gpu_vendor: "nvidia", runtime_driver: "kube", runtime_choices: undefined,
+    gpu_isolation: {
+      level: "soft", reason: "cdi_names_missing", cards: 2,
+      fixes: [
+        { code: "gpu_operator_toolkit_legacy_append", commands: [append] },
+        { code: "host_toolkit_legacy", commands: hostCommands },
+      ],
+    },
+  };
+  stubApi([node]);
+  api.node = async (uuid: string) => ({ ...node, uuid, gpus: [] }) as never;
+  let copied = "";
+  Object.defineProperty(globalThis.navigator, "clipboard", { value: { writeText: async (text: string) => { copied = text; } }, configurable: true });
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
+  screen.getByRole("button", { name: "gpu-a100-node-01" }).click();
+  const drawer = within(await screen.findByRole("dialog"));
+  // The label beside the status, and the explanation with its reason.
+  await waitFor(() => assert.ok(drawer.getAllByText("GPU devices are soft-isolated").length >= 2));
+  const alert = drawer.getAllByRole("alert").find((item) => /soft-isolated/.test(item.textContent ?? ""));
+  assert.match(alert?.textContent ?? "", /no CDI spec on the node names 2 of its NVIDIA cards/);
+  // Each fix shows its commands exactly as the server wrote them, and copies them.
+  const fixes = (await drawer.findAllByLabelText("gpu_operator_toolkit_legacy_append")) as HTMLElement[];
+  assert.equal(fixes[0].textContent, append);
+  assert.equal(drawer.getByLabelText("host_toolkit_legacy").textContent, hostCommands.join("\n"));
+  const copyButtons = drawer.getAllByRole("button", { name: "Copy commands" });
+  assert.equal(copyButtons.length, 2);
+  fireEvent.click(copyButtons[1]);
+  await waitFor(() => assert.equal(copied, hostCommands.join("\n")));
+  fireEvent.click(copyButtons[0]);
+  await waitFor(() => assert.equal(copied, append));
+});
+
+test("a strictly isolated node shows no soft-isolation label", async () => {
+  stubApi([onlineNode]);
+  api.node = async (uuid: string) => ({ ...onlineNode, uuid, gpus: [] }) as never;
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
+  screen.getByRole("button", { name: "gpu-a100-node-01" }).click();
+  const drawer = within(await screen.findByRole("dialog"));
+  await waitFor(() => assert.ok(drawer.getByText(onlineNode.uuid)));
+  assert.equal(drawer.queryByText("GPU devices are soft-isolated"), null);
+  assert.equal(drawer.queryByRole("button", { name: "Copy commands" }), null);
+});
+
 test("the detail drawer shows the node's disk usage and the paths it measures", async () => {
   stubApi([onlineNode]);
   api.node = async (uuid: string) => ({ ...onlineNode, uuid, path_usage: [{ kind: "docker", path: "/var/lib/docker", total_bytes: 200 * 1024 ** 3, available_bytes: 20 * 1024 ** 3 }] }) as never;

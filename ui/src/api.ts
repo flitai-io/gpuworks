@@ -167,6 +167,20 @@ export interface AcceleratorPresence {
   model?: string;
 }
 
+/** How strictly a node's NVIDIA instance pods are kept to their own card (Node.gpu_isolation). */
+export interface NodeGPUIsolation {
+  /** "soft". */
+  level: string;
+  /** Why: cdi_names_missing. */
+  reason: string;
+  /** gpu_operator or host when the agent could tell whose toolkit it is. */
+  toolkit?: string;
+  /** How many NVIDIA cards no CDI spec names. */
+  cards?: number;
+  /** Ways back to strict isolation; run each fix's commands in order, as written. */
+  fixes: Array<{ code: string; commands: string[] }>;
+}
+
 export interface Node {
   uuid: string;
   // scheduling is whether the node takes new replicas: cordoned takes none,
@@ -215,6 +229,12 @@ export interface Node {
   runtime_fallback_from?: string;
   runtime_fallback_reason?: string;
   runtime_fallback_plugin?: string;
+  /**
+   * Set while a Kubernetes node's NVIDIA instance pods are kept to their own
+   * card by CUDA_VISIBLE_DEVICES alone (soft isolation), with the fixes the
+   * server offers and their literal commands. Absent when strict.
+   */
+  gpu_isolation?: NodeGPUIsolation;
   /**
    * When the current streak of failed vendor-tool probes started; kept
    * across consecutive failures and absent once a probe succeeds.

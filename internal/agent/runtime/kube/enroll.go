@@ -93,6 +93,8 @@ type EnrollRefusal struct {
 	Reason string
 	// Message is the server's own English text, when it sent one.
 	Message string
+	// Entry names the entry holding the node, for "node_taken".
+	Entry string
 }
 
 func (e *EnrollRefusal) Error() string {
@@ -120,12 +122,13 @@ func parseEnrollRefusal(raw []byte) error {
 		Code   string `json:"code"`
 		Params struct {
 			Reason string `json:"reason"`
+			Entry  string `json:"entry"`
 		} `json:"params"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil || body.Code != kubeEnrollRefusedCode {
 		return errors.New("the server refused this cluster's enrollment token: " + strings.TrimSpace(string(raw)))
 	}
-	return &EnrollRefusal{Reason: body.Params.Reason, Message: body.Error}
+	return &EnrollRefusal{Reason: body.Params.Reason, Message: body.Error, Entry: body.Params.Entry}
 }
 
 // Enroll trades the cluster's enrollment token for this node's identity.
