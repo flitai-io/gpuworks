@@ -494,3 +494,43 @@ test("a failed node file import can switch explicitly to automatic pulling", asy
   assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync")[0].body, "{}");
   assert.equal(posts(calls, "/sync/retry").length, 0, "changing the source starts a fresh pull");
 });
+
+test("a node file dialog rejects whitespace and can be cancelled without starting an import", async () => {
+  const { calls, user } = renderPage({ state: "failed", source: "local" }, ACCEPTED);
+  const { row } = await openNightly(user);
+  await user.click(within(row).getByRole("button", { name: z.nodeTable.localAction }));
+  const dialog = await screen.findByRole("dialog", { name: z.nodeTable.localDialog.title.replace("{{node}}", "gpu-03") });
+  await user.type(within(dialog).getByRole("textbox", { name: z.nodeTable.localDialog.path }), "   ");
+  assert.equal((within(dialog).getByRole("button", { name: z.nodeTable.localDialog.start }) as HTMLButtonElement).disabled, true);
+  await user.keyboard("{Enter}");
+  await user.click(within(dialog).getByRole("button", { name: z.common.cancel }));
+  await waitFor(() => assert.equal(dialog.isConnected, false));
+  assert.equal(posts(calls, "/sync").length + posts(calls, "/sync/retry").length, 0);
+});
+
+test("a pending node file import blocks duplicate submits, edits and dismissal", async () => {
+  let resolve!: (response: Response) => void;
+  const pending = new Promise<Response>((done) => { resolve = done; });
+  const { calls, user } = renderPage({ state: "failed", source: "local" }, (call) =>
+    call.method === "POST" && call.path.endsWith("/nodes/n3/sync") ? pending : undefined);
+  const { row } = await openNightly(user);
+  await user.click(within(row).getByRole("button", { name: z.nodeTable.localAction }));
+  const dialog = await screen.findByRole("dialog", { name: z.nodeTable.localDialog.title.replace("{{node}}", "gpu-03") });
+  const input = within(dialog).getByRole("textbox", { name: z.nodeTable.localDialog.path }) as HTMLInputElement;
+  const start = within(dialog).getByRole("button", { name: z.nodeTable.localDialog.start }) as HTMLButtonElement;
+  await user.type(input, "/data/runner.tar");
+  try {
+    await user.dblClick(start);
+    await waitFor(() => assert.equal(posts(calls, "/sync").length, 1));
+    assert.equal(start.disabled, true);
+    assert.equal(input.disabled, true);
+    assert.equal((within(dialog).getByRole("button", { name: z.common.cancel }) as HTMLButtonElement).disabled, true);
+    assert.equal((within(dialog).getByRole("button", { name: zhCommon.actions.close }) as HTMLButtonElement).disabled, true);
+    await user.keyboard("{Escape}");
+    assert.equal(dialog.isConnected, true);
+    assert.equal(posts(calls, "/sync").length, 1);
+  } finally {
+    resolve(json(202, { state: "syncing", transfer_id: "local-1" }));
+  }
+  await waitFor(() => assert.equal(dialog.isConnected, false));
+});
