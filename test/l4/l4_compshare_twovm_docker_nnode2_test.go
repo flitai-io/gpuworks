@@ -243,15 +243,23 @@ case "${ID:-}" in ubuntu|debian) ;; *) echo "unsupported Docker apt distribution
 codename="${VERSION_CODENAME:-}"
 [ -n "$codename" ]
 arch="$(dpkg --print-architecture)"
-$root install -m 0755 -d /etc/apt/keyrings
-$root install -m 0755 -d /etc/apt/sources.list.d
-curl -fsSL "https://download.docker.com/linux/$ID/gpg" | $root tee /etc/apt/keyrings/docker.asc >/dev/null
-$root chmod a+r /etc/apt/keyrings/docker.asc
-printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' "$arch" "$ID" "$codename" | $root tee /etc/apt/sources.list.d/docker.list >/dev/null
-apt_retry $root apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
-docker_version="$(apt-cache madison docker-ce | awk '$3 ~ /^5:29\./ {print $3; exit}')"
-[ -n "$docker_version" ] || { echo 'Docker CE 29.x package is unavailable' >&2; exit 1; }
-DEBIAN_FRONTEND=noninteractive apt_retry $root apt-get install -y --allow-downgrades docker-ce="$docker_version" docker-ce-cli="$docker_version" containerd.io docker-buildx-plugin docker-compose-plugin
+# Images that already ship Docker 29 (Ubuntu docker.io on the cn-sh2 golden
+# image) keep it: download.docker.com stalls from some CompShare regions.
+preinstalled="$($root docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+case "$preinstalled" in
+29.*) echo "keeping preinstalled Docker $preinstalled" ;;
+*)
+  $root install -m 0755 -d /etc/apt/keyrings
+  $root install -m 0755 -d /etc/apt/sources.list.d
+  curl -fsSL "https://download.docker.com/linux/$ID/gpg" | $root tee /etc/apt/keyrings/docker.asc >/dev/null
+  $root chmod a+r /etc/apt/keyrings/docker.asc
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' "$arch" "$ID" "$codename" | $root tee /etc/apt/sources.list.d/docker.list >/dev/null
+  apt_retry $root apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+  docker_version="$(apt-cache madison docker-ce | awk '$3 ~ /^5:29\./ {print $3; exit}')"
+  [ -n "$docker_version" ] || { echo 'Docker CE 29.x package is unavailable' >&2; exit 1; }
+  DEBIAN_FRONTEND=noninteractive apt_retry $root apt-get install -y --allow-downgrades docker-ce="$docker_version" docker-ce-cli="$docker_version" containerd.io docker-buildx-plugin docker-compose-plugin
+;;
+esac
 if ! command -v nvidia-ctk >/dev/null 2>&1; then
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | $root gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
   curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | $root tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null
