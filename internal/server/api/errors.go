@@ -585,7 +585,8 @@ const (
 	// nodes that still run instances ({nodes}: node_uuid, node_name,
 	// kube_node and deployments of each; {verified}: false when no agent
 	// could be asked, so they only may be affected). The request is repeated
-	// with confirm_drop_instances to go ahead.
+	// with confirm_drop_instances to go ahead, which first asks the instances
+	// on those nodes to stop.
 	ErrorKubeSelectionDropsInstances = "KUBE_SELECTION_DROPS_INSTANCES"
 	// ErrorProviderInstanceInCluster: the instance is a node of the
 	// account's Kubernetes cluster {cluster}; connect the cluster instead.

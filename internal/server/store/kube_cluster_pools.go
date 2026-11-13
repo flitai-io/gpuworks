@@ -113,10 +113,21 @@ func (s *Store) KubeClusterPools(clusterIDs ...uint) (map[uint][]KubeClusterPool
 // selects by its pools alone: the free-form node selector an earlier entry may
 // still carry is cleared.
 func (s *Store) SetKubeClusterPools(uuid string, pools []KubeClusterPool) (*KubeCluster, error) {
+	c, _, err := s.SetKubeClusterPoolsLeaving(uuid, pools, KubeLeave{})
+	return c, err
+}
+
+// SetKubeClusterPoolsLeaving is SetKubeClusterPools that also applies leave
+// (the instances to stop and the nodes to cordon) in the same transaction, so
+// a change that fails stops and cordons nothing; events are published after
+// the commit. It returns the instances asked to stop.
+func (s *Store) SetKubeClusterPoolsLeaving(uuid string, pools []KubeClusterPool, leave KubeLeave) (*KubeCluster, []StoppedInstance, error) {
 	if err := checkPoolLabels(pools); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var c KubeCluster
+	var rows []Instance
+	var stopped []StoppedInstance
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("uuid = ?", uuid).First(&c).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -131,12 +142,18 @@ func (s *Store) SetKubeClusterPools(uuid string, pools []KubeClusterPool) (*Kube
 			return err
 		}
 		c.NodeSelector = ""
-		return tx.Model(&c).Update("node_selector", "").Error
+		if err := tx.Model(&c).Update("node_selector", "").Error; err != nil {
+			return err
+		}
+		var err error
+		rows, stopped, err = applyKubeLeaveTx(tx, leave)
+		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &c, nil
+	s.announceKubeLeave(leave, rows)
+	return &c, stopped, nil
 }
 
 func insertKubeClusterPools(tx *gorm.DB, clusterID uint, pools []KubeClusterPool) error {

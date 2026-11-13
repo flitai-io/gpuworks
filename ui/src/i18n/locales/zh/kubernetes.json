@@ -238,13 +238,13 @@
   },
   "selectionDrops": {
     "title": "仍有实例运行的节点将退出选择",
-    "intro": "这次修改不再选中下面的节点，而它们上面还有实例在运行。再次应用 manifest 时，这些节点上的 agent 会被移除；实例会继续运行并占着显卡，但不再受平台管理、不能通过网关访问，也不会被归还。请先停止或迁走这些部署，或者确认后仍保存这次修改。",
+    "intro": "这次修改不再选中下面的节点，而它们上面还有实例在运行。确认后会先请求停止这些实例，再保存这次修改，不会等它们停完。再次应用 manifest 时，这些节点上的 agent 会被移除。只运行在这些节点上的部署会因此没有副本。",
     "unverified": "没有可询问的 agent，无法核实，这些节点可能受影响。",
     "deployments": "部署：{{names}}",
     "noDeployments": "没有部署记录",
-    "later": "在再次应用 manifest 之前，集群里不会有任何变化。",
+    "later": "在再次应用 manifest 之前，集群里没有其他变化。",
     "cancel": "取消",
-    "confirm": "确认"
+    "confirm": "停止实例并保存"
   },
   "edit": {
     "saved": "集群 {{name}} 已保存",
@@ -252,7 +252,8 @@
     "savedHelp": "重新应用之前，集群里运行的仍是之前的 manifest。",
     "applyNow": "检查并应用…",
     "commandsTitle": "请按顺序在集群里执行",
-    "commandsHelp": "gpuworks 够不到这个集群，需要你自己让它跟上。Kubernetes 不能原地修改 PriorityClass，所以优先级或抢占策略变了时，第一条命令会先删除它，随后的 apply 命令再把它建回来。"
+    "commandsHelp": "gpuworks 够不到这个集群，需要你自己让它跟上。Kubernetes 不能原地修改 PriorityClass，所以优先级或抢占策略变了时，第一条命令会先删除它，随后的 apply 命令再把它建回来。",
+    "savedLiveHelp": "这次修改立即对集群生效，不需要再次应用。"
   },
   "commands": {
     "command": "命令 {{n}}",
@@ -268,5 +269,11 @@
   "namespaceShared": {
     "badge": "命名空间重复",
     "hint": "与 {{names}} 同用命名空间 {{namespace}}。它们接入的是同一个 Kubernetes 集群时，后应用的 manifest 会接管先应用的那个条目的 agent。命名空间创建后不能改：删掉其中一个条目，换个命名空间重建。"
+  },
+  "stopped": {
+    "title_one": "已请求停止 {{count}} 个实例",
+    "title_other": "已请求停止 {{count}} 个实例",
+    "help": "这些实例所在的节点退出了选择，所以保存之前先请求停止它们。它们由各自的 agent 执行停止；没有节点可运行的部署会一直没有副本。",
+    "item": "{{deployment}} · 实例 {{instance}}"
   }
 }

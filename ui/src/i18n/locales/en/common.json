@@ -104,7 +104,7 @@
     "KUBE_CLUSTER_INVALID": "The cluster's {{field}} cannot be used: {{reason}}.",
     "KUBE_CLUSTER_NAME_TAKEN": "Another cluster is already named {{name}}.",
     "KUBE_CLUSTER_HAS_NODES": "The cluster still has nodes. Remove them first, then delete the cluster.",
-    "KUBE_SELECTION_DROPS_INSTANCES": "The new node selection leaves out nodes that still run instances. Their agents are removed when the manifest is applied again, and the instances are no longer managed. Stop or move those deployments first, or confirm.",
+    "KUBE_SELECTION_DROPS_INSTANCES": "The new node selection leaves out nodes that still run instances. Confirming asks those instances to stop first, then saves; the agents of those nodes are removed when the manifest is applied again.",
     "KUBE_ENROLL_REFUSED": "The enrollment token was refused ({{reason}}).",
     "AUTOMATIC_PLACEMENT_UNAVAILABLE": "No node can satisfy automatic placement. Review the candidate reasons or choose a node manually.",
     "AUTOMATIC_PLACEMENT_STALE": "The evaluated node or GPU plan has changed. Evaluate the deployment again.",

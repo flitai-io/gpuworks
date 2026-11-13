@@ -3,6 +3,8 @@ package store
 import (
 	"sort"
 
+	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -23,7 +25,7 @@ const kubeInstanceChunk = 500
 // the deployments' primary key, never a whole table.
 func (s *Store) KubeNodesWithInstances(clusterID uint) ([]KubeNodeDeployments, error) {
 	var nodes []Node
-	if err := s.reader().Select("id", "uuid", "name", "kube_node_name").Where("kube_cluster_id = ?", clusterID).Order("id").Find(&nodes).Error; err != nil {
+	if err := s.reader().Select("id", "uuid", "name", "kube_node_name", "scheduling").Where("kube_cluster_id = ?", clusterID).Order("id").Find(&nodes).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]uint, 0, len(nodes))
@@ -76,6 +78,11 @@ func (s *Store) KubeNodesWithInstances(clusterID uint) ([]KubeNodeDeployments, e
 
 // deploymentNames reads the names of the given deployments by id.
 func (s *Store) deploymentNames(wanted map[uint]bool) (map[uint]string, error) {
+	return deploymentNamesOn(s.reader(), wanted)
+}
+
+// deploymentNamesOn is deploymentNames on db, which may be a transaction.
+func deploymentNamesOn(db *gorm.DB, wanted map[uint]bool) (map[uint]string, error) {
 	ids := make([]uint, 0, len(wanted))
 	for id := range wanted {
 		ids = append(ids, id)
@@ -86,7 +93,7 @@ func (s *Store) deploymentNames(wanted map[uint]bool) (map[uint]string, error) {
 			ID   uint
 			Name string
 		}
-		if err := s.reader().Model(&Deployment{}).Select("id", "name").Where("id IN ?", ids[start:min(start+kubeInstanceChunk, len(ids))]).Scan(&rows).Error; err != nil {
+		if err := db.Model(&Deployment{}).Select("id", "name").Where("id IN ?", ids[start:min(start+kubeInstanceChunk, len(ids))]).Scan(&rows).Error; err != nil {
 			return nil, err
 		}
 		for _, r := range rows {

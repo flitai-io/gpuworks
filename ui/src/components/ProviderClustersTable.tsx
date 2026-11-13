@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, type KubeCluster, type KubeSelectionDrops, type ProviderCluster } from "../api";
+import { api, type KubeClusterPools, type KubeSelectionDrops, type ProviderCluster } from "../api";
 import { apiErrorText } from "../apiError";
 import KubeClusterDrawer, { type KubeClusterPrefill } from "../pages/kubernetes/KubeClusterDrawer";
 import KubePoolPicker from "../pages/kubernetes/KubePoolPicker";
@@ -37,7 +37,7 @@ export default function ProviderClustersTable({ providerId, providerName }: { pr
   const [connecting, setConnecting] = useState<KubeClusterPrefill | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<KubeCluster | null>(null);
+  const [saved, setSaved] = useState<KubeClusterPools | null>(null);
   // The row whose pool change would leave out nodes that still run instances, and those nodes.
   const [dropping, setDropping] = useState<{ cluster: ProviderCluster; drops: KubeSelectionDrops } | null>(null);
 

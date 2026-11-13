@@ -36,6 +36,13 @@ const (
 	WarningPlanningKVBelowContext = "PLANNING_KV_BELOW_CONTEXT"
 )
 
+// WarningKubeEnginePortsOutside: an edit of a Kubernetes entry's engine_ports
+// left the ports some running instances hold outside the new range. The edit
+// is saved and those instances keep their ports; only ports allocated later
+// come from the new range. Params: range ("START-END"), instances (instance_uuid,
+// deployment and ports, the ports outside the range, of each).
+const WarningKubeEnginePortsOutside = "KUBE_ENGINE_PORTS_OUTSIDE"
+
 // Launch warnings: the platform cannot prove a launch will work, or knows it
 // depends on host conditions it cannot see. Evaluate reports them; create and
 // the controller never fail on them (the engine log and instance state carry a

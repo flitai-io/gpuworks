@@ -1,6 +1,10 @@
 package dto
 
-import "time"
+import (
+	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
+)
 
 // KubeCluster is a Kubernetes cluster whose GPU nodes join through one
 // DaemonSet. ApplyCommand carries the enrollment token and is present for
@@ -145,8 +149,27 @@ type KubeClusterRequest struct {
 type KubeClusterPoolsRequest struct {
 	ProviderPoolIDs []string `json:"provider_pool_ids"`
 	// ConfirmDropInstances accepts that nodes this change leaves out of the
-	// entry's selection still run instances (see KubeSelectionDrop).
+	// entry's selection still run instances, and that those instances are
+	// asked to stop first (see KubeSelectionDrop).
 	ConfirmDropInstances bool `json:"confirm_drop_instances,omitempty"`
+}
+
+// KubeClusterPools is the answer to a node pools change: the entry as stored
+// (the fields of KubeCluster, at the top level as before) and the instances
+// that were asked to stop because their nodes left the selection.
+type KubeClusterPools struct {
+	KubeCluster
+	StoppedInstances []KubeStoppedInstance `json:"stopped_instances"`
+}
+
+// KubeStoppedInstance is an instance a confirmed change of an entry's node
+// selection asked to stop, because its node leaves the selection. The stop is
+// requested, not finished: the agent keeps running until the manifest is
+// applied again.
+type KubeStoppedInstance struct {
+	InstanceUUID string `json:"instance_uuid"`
+	Deployment   string `json:"deployment"`
+	NodeUUID     string `json:"node_uuid"`
 }
 
 // KubeSelectionDrop is a node a narrower node selection would leave out while
@@ -276,8 +299,8 @@ type KubeClusterUpdate struct {
 	Priority          *int    `json:"priority,omitempty"`
 	AllowPreemption   *bool   `json:"allow_preemption,omitempty"`
 	// ConfirmDropInstances accepts that nodes a narrower node_selector leaves
-	// out still run instances (see KubeSelectionDrop); it is not a setting of
-	// the entry.
+	// out still run instances (see KubeSelectionDrop), and that those
+	// instances are asked to stop first; it is not a setting of the entry.
 	ConfirmDropInstances bool `json:"confirm_drop_instances,omitempty"`
 }
 
@@ -297,4 +320,11 @@ type KubeClusterEdit struct {
 	// administrators of an entry made by hand that is not revoked; empty
 	// when the manifest did not change.
 	Commands []string `json:"commands"`
+	// StoppedInstances are the instances a confirmed narrower node_selector
+	// asked to stop because their nodes leave the selection; empty when none.
+	StoppedInstances []KubeStoppedInstance `json:"stopped_instances"`
+	// Warnings are what the edit allowed but the administrator should know,
+	// such as engine_ports leaving the ports running instances hold outside
+	// the new range (KUBE_ENGINE_PORTS_OUTSIDE); empty when none.
+	Warnings []messages.Warning `json:"warnings"`
 }

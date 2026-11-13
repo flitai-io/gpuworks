@@ -448,7 +448,7 @@ const refusedPools = (calls: [string, string[], boolean | undefined][], held: Ku
   (async (uuid: string, ids: string[], confirm?: boolean) => {
     calls.push([uuid, ids, confirm]);
     if (!confirm) throw new APIError("KUBE_SELECTION_DROPS_INSTANCES", drops as Record<string, unknown>, "drops instances", 409);
-    return { ...held, pool_ids: ids };
+    return { ...held, pool_ids: ids, stopped_instances: [{ instance_uuid: "i-1", deployment: "chat", node_uuid: "n-1" }] };
   }) as never;
 const askDialog = () => within(screen.getByText(k.selectionDrops.title).closest('[role="dialog"]') as HTMLElement);
 
@@ -471,6 +471,7 @@ test("the pools drawer asks before taking pools away from nodes that still run i
   await screen.findByText(k.selectionDrops.title);
   assert.ok(askDialog().getByText("gpu-a1"));
   assert.ok(askDialog().getByText(k.selectionDrops.deployments.replace("{{names}}", "chat")));
+  assert.ok(askDialog().getByText(k.selectionDrops.intro), "confirming stops those instances first, then saves");
   assert.deepEqual(calls, [["e-5", ["np-a"], undefined]], "the first request carries no confirmation");
 
   await u.click(askDialog().getByRole("button", { name: k.selectionDrops.cancel }));
@@ -484,6 +485,9 @@ test("the pools drawer asks before taking pools away from nodes that still run i
   await waitFor(() => assert.equal(calls.length, 3));
   assert.deepEqual(calls[2], ["e-5", ["np-a"], true]);
   assert.ok(await drawer.findByText(k.pools.saved.replace("{{name}}", "ack-gpu")));
+  // The instances the server asked to stop are listed beside the saved notice.
+  assert.ok(drawer.getByText(i18n.getFixedT("en", "kubernetes")("stopped.title", { count: 1 })));
+  assert.ok(drawer.getByText(k.stopped.item.replace("{{deployment}}", "chat").replace("{{instance}}", "i-1")));
 });
 
 test("pools of a cloud row taken away from nodes that still run instances are confirmed the same way, with the unverified caveat when no agent answered", async () => {
@@ -508,4 +512,5 @@ test("pools of a cloud row taken away from nodes that still run instances are co
   await waitFor(() => assert.equal(calls.length, 3));
   assert.deepEqual(calls[2], ["e-5", ["np-a"], true]);
   assert.ok(await screen.findByText(k.pools.saved.replace("{{name}}", "ack-gpu")));
+  assert.ok(screen.getByText(k.stopped.item.replace("{{deployment}}", "chat").replace("{{instance}}", "i-1")));
 });

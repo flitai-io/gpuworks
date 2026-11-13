@@ -121,7 +121,7 @@ func refusal(t *testing.T, code int, body string) json.RawMessage {
 	if code != http.StatusConflict || e.Code != ErrorKubeSelectionDropsInstances {
 		t.Fatalf("answer = %d %s; want 409 %s", code, body, ErrorKubeSelectionDropsInstances)
 	}
-	for _, want := range []string{"agents are removed when the manifest is applied again", "keep running", "no longer managed", "Stop or move those deployments first, or confirm", "Nothing changes in the cluster until the manifest is applied again"} {
+	for _, want := range []string{"agents are removed when the manifest is applied again", "Confirming asks those instances to stop first, then saves", "no longer be managed", "Nothing changes in the cluster until the manifest is applied again"} {
 		if !strings.Contains(e.Error, want) {
 			t.Errorf("the English fallback lacks %q: %s", want, e.Error)
 		}
@@ -303,12 +303,13 @@ func TestNarrowingASelectionWithNoAgentToAskIsUnverified(t *testing.T) {
 		t.Fatalf("offline entry: params = %s, calls %d -> %d", params, before, agents.calls())
 	}
 
-	// Confirming does not need an agent.
+	// Confirming asks again, since the nodes that leave are decided when the
+	// instances stop; with nobody to ask, every node listed is stopped.
 	if rec := rig.do(rig.session, http.MethodPut, base, `{"node_selector":"gpuworks.ai/pool=b","confirm_drop_instances":true}`); rec.Code != http.StatusOK {
 		t.Fatalf("confirmed = %d %s", rec.Code, rec.Body)
 	}
 	if agents.calls() != before {
-		t.Fatal("an agent was asked although the request confirmed")
+		t.Fatal("an agent was asked although none of the entry is online")
 	}
 }
 
