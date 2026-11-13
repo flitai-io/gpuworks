@@ -106,6 +106,32 @@ func TestRequestedSyncsCoalesceIntoOneReplayEach(t *testing.T) {
 	}
 }
 
+// A replay builds under one of the fleet-wide slots and gives it back before
+// it writes: with every slot's worth of peers stalled on their writes, another
+// node's replay still goes through at once. Before, each stalled peer held
+// its slot through its 30 s write timeout, and sixteen of them held every
+// replay up.
+func TestStalledPeersDoNotHoldTheReplaySlots(t *testing.T) {
+	h := newTestHub(t)
+	never := make(chan struct{})
+	var stalled []<-chan struct{}
+	for i := 0; i < initialPushConcurrency; i++ {
+		s, _, began := resyncSession(t, h, never)
+		h.RequestSync(s.NodeUUID)
+		stalled = append(stalled, began)
+	}
+	for _, began := range stalled {
+		waitBegan(t, began) // every stalled replay is on its write
+	}
+	read := make(chan struct{})
+	close(read)
+	healthy, frames, _ := resyncSession(t, h, read)
+	h.RequestSync(healthy.NodeUUID)
+	if got := fullSyncs(frames, 3*time.Second); got != 1 {
+		t.Fatalf("the healthy node got %d replays within 3 s while %d peers stalled, want 1", got, initialPushConcurrency)
+	}
+}
+
 // A request for a node that is not connected, or whose session has closed,
 // is dropped: its next session starts with a full replay anyway.
 func TestARequestedSyncForAGoneSessionIsDropped(t *testing.T) {
