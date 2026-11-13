@@ -1233,6 +1233,18 @@ export interface KubeSelectionDrops {
   verified: boolean;
 }
 
+/** An instance a confirmed node selection change asked to stop because its node leaves the selection (dto.KubeStoppedInstance). */
+export interface KubeStoppedInstance {
+  instance_uuid: string;
+  deployment: string;
+  node_uuid: string;
+}
+
+/** The answer to a node pools change (dto.KubeClusterPools): the entry, and the instances asked to stop. */
+export interface KubeClusterPools extends KubeCluster {
+  stopped_instances?: KubeStoppedInstance[];
+}
+
 /** The answer to an edit (dto.KubeClusterEdit). */
 export interface KubeClusterEdit {
   cluster: KubeCluster;
@@ -1242,6 +1254,10 @@ export interface KubeClusterEdit {
   reapply: boolean;
   /** For an entry the server cannot apply: the kubectl commands, in order, that bring the cluster in line. */
   commands: string[];
+  /** The instances a confirmed narrower node selector asked to stop (always sent; an empty list when none). */
+  stopped_instances?: KubeStoppedInstance[];
+  /** What the edit allowed but the administrator should know, e.g. KUBE_ENGINE_PORTS_OUTSIDE (always sent; an empty list when none). */
+  warnings?: ProductWarning[];
 }
 
 // Every collection endpoint answers an envelope, never a bare array
@@ -5247,7 +5263,7 @@ export const api = {
   kubeDefaults: () => getJSON<KubeDefaults>("/api/v1/kube/defaults"),
   /** Replaces the node pools a cloud entry holds; the cluster follows when the manifest is applied again. */
   setKubeClusterPools: (uuid: string, poolIds: string[], confirmDropInstances?: boolean) =>
-    sendJSON<KubeCluster>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`,
+    sendJSON<KubeClusterPools>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`,
       confirmDropInstances ? { provider_pool_ids: poolIds, confirm_drop_instances: true } : { provider_pool_ids: poolIds }),
   createKubeCluster: (body: KubeClusterRequest) => sendJSON<KubeCluster>("POST", "/api/v1/kube/clusters", body),
   updateKubeCluster: (uuid: string, body: KubeClusterUpdate) => sendJSON<KubeClusterEdit>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}`, body),

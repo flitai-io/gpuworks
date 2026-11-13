@@ -91,7 +91,8 @@ export default function KubeClusterDrawer({ open, onClose, onCreated, onEdited, 
         const result = await api.updateKubeCluster(edit.uuid, update);
         setDropping(null);
         onEdited?.();
-        if (result.reapply) setEdited(result);
+        // Something to say after saving: the manifest to apply, instances asked to stop, or a warning.
+        if (result.reapply || (result.stopped_instances?.length ?? 0) > 0 || (result.warnings?.length ?? 0) > 0) setEdited(result);
         else { message.success(t("edit.saved", { name: result.cluster.name })); onClose(); }
       } else {
         const cluster = await api.createKubeCluster(requestOf(values, defaults, poolIds, prefill));

@@ -126,7 +126,8 @@
     "ENGRAM_SHARED_MEMORY_RUNTIME": "Engram 的 cpu_offload 与 dp_shared_memory（{{flag}}）需要约 {{shm_gib}} GiB 共享内存和不受限的锁定内存。{{runtime}} 直接使用宿主机的 /dev/shm 与资源限制，平台无法获知其大小。仍可创建；请检查宿主机，或改用 Docker/nerdctl。",
     "ENGRAM_CONFIG_UNCERTAIN": "无法解析 Engram 配置（{{flag}}），平台无法判断它是否使用共享内存。如果使用，需要约 {{shm_gib}} GiB 共享内存和不受限的锁定内存，而 {{runtime}} 直接使用宿主机的 /dev/shm 与资源限制。仍可创建；请检查配置和宿主机。",
     "ENGRAM_MANUAL_UNCHECKED": "手写命令中出现了 Engram（{{flag}}），但写法过于动态无法解析，平台没有据此推导共享内存和锁定内存设置。请确认共享内存与 memlock 足够，或改用引擎模式。",
-    "ASCEND_SLEEP_EXPANDABLE_SEGMENTS_DISABLED": "昇腾上的休眠不能和 expandable segments 同时使用，平台已把模板的 {{variable}} 从 {{template_value}} 改为 {{value}}。NPU 显存碎片可能增加：KV cache 可能变小，显存余量紧的配置可能在启动或高负载时显存不足。如果出现这种情况，请调低 gpu_memory_utilization 或 max_model_len，或关闭“可休眠”。"
+    "ASCEND_SLEEP_EXPANDABLE_SEGMENTS_DISABLED": "昇腾上的休眠不能和 expandable segments 同时使用，平台已把模板的 {{variable}} 从 {{template_value}} 改为 {{value}}。NPU 显存碎片可能增加：KV cache 可能变小，显存余量紧的配置可能在启动或高负载时显存不足。如果出现这种情况，请调低 gpu_memory_utilization 或 max_model_len，或关闭“可休眠”。",
+    "KUBE_ENGINE_PORTS_OUTSIDE": "有运行中的实例占用的端口在新的引擎端口段 {{range}} 之外：{{instances}}。它们保留原端口、继续运行；只有之后启动的实例才使用新范围。"
   },
   "warningFeature": {
     "dgpu": "动态 GPU（dGPU）",

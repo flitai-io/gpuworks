@@ -238,13 +238,13 @@
   },
   "selectionDrops": {
     "title": "Nodes that still run instances leave the selection",
-    "intro": "This change no longer selects the nodes below, and they still run instances. Their agents are removed when the manifest is applied again. The instances keep running and holding cards, but are no longer managed, reachable through the gateway, or returned. Stop or move those deployments first, or confirm to save the change anyway.",
+    "intro": "This change no longer selects the nodes below, and they still run instances. Confirming asks those instances to stop first, then saves the change; it does not wait for them to finish. Their agents are removed when the manifest is applied again. A deployment that runs only on these nodes is left without a replica.",
     "unverified": "No agent of this cluster could be asked, so these nodes may be affected.",
     "deployments": "Deployments: {{names}}",
     "noDeployments": "No deployment on record",
-    "later": "Nothing changes in the cluster until the manifest is applied again.",
+    "later": "Nothing else changes in the cluster until the manifest is applied again.",
     "cancel": "Cancel",
-    "confirm": "Confirm"
+    "confirm": "Stop instances and save"
   },
   "edit": {
     "saved": "Cluster {{name}} saved",
@@ -252,7 +252,8 @@
     "savedHelp": "The cluster still runs the previous manifest until it is applied again.",
     "applyNow": "Check and apply…",
     "commandsTitle": "Run these in the cluster, in order",
-    "commandsHelp": "gpuworks cannot reach this cluster, so bring it in line yourself. Kubernetes cannot change a PriorityClass in place, so the first command deletes it when its value or preemption changed; the apply command creates it again."
+    "commandsHelp": "gpuworks cannot reach this cluster, so bring it in line yourself. Kubernetes cannot change a PriorityClass in place, so the first command deletes it when its value or preemption changed; the apply command creates it again.",
+    "savedLiveHelp": "The change applies to the cluster at once; nothing needs to be applied again."
   },
   "commands": {
     "command": "Command {{n}}",
@@ -268,5 +269,11 @@
   "namespaceShared": {
     "badge": "Shared namespace",
     "hint": "Uses namespace {{namespace}} like {{names}}. If they connect the same Kubernetes cluster, the manifest applied later takes over the other entry's agents. The namespace cannot change after creation: delete one entry and create it again with another namespace."
+  },
+  "stopped": {
+    "title_one": "{{count}} instance was asked to stop",
+    "title_other": "{{count}} instances were asked to stop",
+    "help": "Their nodes leave the selection, so the instances were asked to stop before the change was saved. They stop as their agents act; a deployment left with no node to run on stays without a replica.",
+    "item": "{{deployment}} · instance {{instance}}"
   }
 }

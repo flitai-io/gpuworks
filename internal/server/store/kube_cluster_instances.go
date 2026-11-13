@@ -23,7 +23,7 @@ const kubeInstanceChunk = 500
 // the deployments' primary key, never a whole table.
 func (s *Store) KubeNodesWithInstances(clusterID uint) ([]KubeNodeDeployments, error) {
 	var nodes []Node
-	if err := s.reader().Select("id", "uuid", "name", "kube_node_name").Where("kube_cluster_id = ?", clusterID).Order("id").Find(&nodes).Error; err != nil {
+	if err := s.reader().Select("id", "uuid", "name", "kube_node_name", "scheduling").Where("kube_cluster_id = ?", clusterID).Order("id").Find(&nodes).Error; err != nil {
 		return nil, err
 	}
 	ids := make([]uint, 0, len(nodes))

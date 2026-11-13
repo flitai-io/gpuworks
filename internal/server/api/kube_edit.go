@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/kubemanifest"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -78,7 +80,10 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if !a.confirmEntrySelection(w, r, *old, c, pools[c.ID], pools[c.ID], req.ConfirmDropInstances) {
+	// Instances on nodes the new selection leaves out are asked to stop
+	// before the change is saved (kube_selection_stop.go).
+	stopped, ok := a.settleEntrySelection(w, r, *old, c, pools[c.ID], pools[c.ID], req.ConfirmDropInstances)
+	if !ok {
 		return
 	}
 	updated, err := a.d.Store.UpdateKubeCluster(c)
@@ -108,7 +113,19 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	out := dto.KubeClusterEdit{Cluster: kubeClusterDTO(*updated, views[updated.ID]), Changed: changed, Reapply: before != after, Commands: []string{}}
+	out := dto.KubeClusterEdit{Cluster: kubeClusterDTO(*updated, views[updated.ID]), Changed: changed, Reapply: before != after, Commands: []string{},
+		StoppedInstances: stopped, Warnings: []messages.Warning{}}
+	if slices.Contains(changed, "engine_ports") {
+		// Running instances keep their ports; the ones outside the new range are reported, not refused.
+		gone := make(map[string]bool, len(stopped))
+		for _, s := range stopped {
+			gone[s.InstanceUUID] = true
+		}
+		if out.Warnings, err = a.kubeEnginePortsWarnings(*updated, gone); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
 	if out.Reapply && updated.ProviderID == nil && updated.RevokedAt == nil {
 		// The PriorityClass goes first whatever this edit changed: an earlier
 		// edit of its value may not have been applied, and Kubernetes does not

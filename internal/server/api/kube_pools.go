@@ -217,7 +217,8 @@ func (a *apiHandlers) setKubeClusterPools(w http.ResponseWriter, r *http.Request
 	// The pools replace a node selector the entry may still carry.
 	next := *c
 	next.NodeSelector = ""
-	if !a.confirmEntrySelection(w, r, *c, next, held[c.ID], pools, req.ConfirmDropInstances) {
+	stopped, ok := a.settleEntrySelection(w, r, *c, next, held[c.ID], pools, req.ConfirmDropInstances)
+	if !ok {
 		return
 	}
 	updated, err := a.d.Store.SetKubeClusterPools(c.UUID, pools)
@@ -237,5 +238,5 @@ func (a *apiHandlers) setKubeClusterPools(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, kubeClusterDTO(*updated, views[updated.ID]))
+	writeJSON(w, http.StatusOK, dto.KubeClusterPools{KubeCluster: kubeClusterDTO(*updated, views[updated.ID]), StoppedInstances: stopped})
 }

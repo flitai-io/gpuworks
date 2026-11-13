@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type KubeCluster, type KubeSelectionDrops, type ProviderClusterPool } from "../../api";
+import { api, type KubeCluster, type KubeClusterPools, type KubeSelectionDrops, type ProviderClusterPool } from "../../api";
 import { apiErrorText } from "../../apiError";
 import { Button } from "../../components/ui/button";
 import { Notice } from "../../ui-kit/Notice";
@@ -24,7 +24,7 @@ export default function KubePoolsDrawer({ cluster, onClose, onSaved }: { cluster
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<KubeCluster | null>(null);
+  const [saved, setSaved] = useState<KubeClusterPools | null>(null);
   // Nodes that still run instances and would leave: asked about before saving.
   const [drops, setDrops] = useState<KubeSelectionDrops | null>(null);
 

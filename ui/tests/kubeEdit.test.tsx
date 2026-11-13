@@ -5,7 +5,7 @@ import { createI18n, dom } from "./helpers/dom.ts";
 import { I18nextProvider } from "react-i18next";
 import { list } from "./helpers/listPage.ts";
 
-const { i18n, locale } = await createI18n(["kubernetes", "providers"]);
+const { i18n, locale } = await createI18n(["kubernetes", "providers", "deploy"]);
 const { MemoryRouter } = await import("react-router-dom");
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const { default: userEvent } = await import("@testing-library/user-event");
@@ -391,4 +391,87 @@ test("another refusal of an edit is still a message in the form, not the confirm
   await user.click(form.getByRole("button", { name: k.drawer.save }));
   assert.ok(await form.findByText(locale.common.apiError.KUBE_CLUSTER_NAME_TAKEN.replace("{{name}}", "taken")));
   assert.equal(screen.queryByText(k.selectionDrops.title), null);
+});
+
+test("the confirmation says that confirming stops those instances first, then saves", async () => {
+  stubApi([cluster()], { edit: refusedUnlessConfirmed(DROPS) });
+  const user = renderPage();
+  const form = await openEdit(user, "prod-gpu");
+  await user.clear(form.getByLabelText(field(k.drawer.nodeSelector)));
+  await user.type(form.getByLabelText(field(k.drawer.nodeSelector)), "gpu=h100");
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+  await screen.findByText(k.selectionDrops.title);
+  const ask = confirmDialog();
+  assert.match(k.selectionDrops.intro, /asks those instances to stop first, then saves/);
+  assert.ok(ask.getByText(k.selectionDrops.intro));
+  assert.equal(k.selectionDrops.confirm, "Stop instances and save");
+  assert.ok(ask.getByRole("button", { name: k.selectionDrops.confirm }));
+  assert.equal(ask.queryByRole("button", { name: "Confirm" }), null, "the button says what it does, not just 'Confirm'");
+});
+
+test("after a confirmed change the saved view lists the instances the server asked to stop, with nothing to apply when the manifest did not change", async () => {
+  const entry = cluster();
+  const stopped = [
+    { instance_uuid: "i-1", deployment: "chat", node_uuid: "n-1" },
+    { instance_uuid: "i-2", deployment: "embed", node_uuid: "n-1" },
+  ];
+  const calls = stubApi([entry], {
+    edit: (_uuid, body) => body.confirm_drop_instances
+      ? { cluster: { ...entry, node_selector: body.node_selector ?? "" }, changed: ["node_selector"], reapply: false, commands: [], stopped_instances: stopped, warnings: [] }
+      : new APIError("KUBE_SELECTION_DROPS_INSTANCES", DROPS as Record<string, unknown>, "drops instances", 409),
+  });
+  const user = renderPage();
+  const form = await openEdit(user, "prod-gpu");
+  await user.clear(form.getByLabelText(field(k.drawer.nodeSelector)));
+  await user.type(form.getByLabelText(field(k.drawer.nodeSelector)), "gpu=h100");
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+  await screen.findByText(k.selectionDrops.title);
+  await user.click(confirmDialog().getByRole("button", { name: k.selectionDrops.confirm }));
+  await waitFor(() => assert.equal(calls.updateKubeCluster?.length, 2));
+
+  const saved = dialog();
+  const tk = i18n.getFixedT("en", "kubernetes");
+  assert.ok(await saved.findByText(tk("stopped.title", { count: 2 })));
+  assert.ok(saved.getByText(k.stopped.help));
+  assert.ok(saved.getByText(k.stopped.item.replace("{{deployment}}", "chat").replace("{{instance}}", "i-1")));
+  assert.ok(saved.getByText(k.stopped.item.replace("{{deployment}}", "embed").replace("{{instance}}", "i-2")));
+  assert.ok(saved.getByText(k.edit.savedLiveHelp), "the manifest did not change: nothing to apply");
+  assert.equal(saved.queryByRole("button", { name: k.edit.applyNow }), null);
+  assert.equal(saved.queryByText(k.edit.commandsTitle), null);
+});
+
+test("an engine_ports edit that leaves running instances outside the range is saved with a warning naming them", async () => {
+  const entry = cluster();
+  const warning = { code: "KUBE_ENGINE_PORTS_OUTSIDE", params: { range: "41000-41999", instances: [
+    { instance_uuid: "i-1", deployment: "chat", ports: [40010] },
+    { instance_uuid: "i-2", deployment: "embed", ports: [40090, 40091] },
+  ] } };
+  const calls = stubApi([entry], { edit: (_uuid, body) => ({ cluster: { ...entry, engine_ports: body.engine_ports ?? "" }, changed: ["engine_ports"], reapply: false, commands: [], stopped_instances: [], warnings: [warning] }) });
+  const user = renderPage();
+  const form = await openEdit(user, "prod-gpu");
+  await user.click(form.getByText(k.drawer.advanced));
+  await user.clear(form.getByLabelText(field(k.drawer.enginePorts)));
+  await user.type(form.getByLabelText(field(k.drawer.enginePorts)), "41000-41999");
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+  await waitFor(() => assert.equal(calls.updateKubeCluster?.length, 1));
+  assert.deepEqual(calls.updateKubeCluster[0], ["c-1", { engine_ports: "41000-41999" }]);
+
+  const saved = dialog();
+  const text = locale.deploy.warning.KUBE_ENGINE_PORTS_OUTSIDE.replace("{{range}}", "41000-41999").replace("{{instances}}", "chat (40010); embed (40090, 40091)");
+  assert.ok(await saved.findByText(text), "the drawer stays and shows the warning");
+  assert.ok(saved.getByText(k.edit.savedTitle.replace("{{name}}", "prod-gpu")));
+  assert.equal(saved.queryByRole("button", { name: k.edit.applyNow }), null, "an engine_ports change needs no apply");
+  assert.equal(saved.queryByText(k.edit.savedHelp), null);
+  await user.click(saved.getAllByRole("button", { name: k.drawer.close }).at(-1) as HTMLElement);
+  await noDialog();
+});
+
+test("a warning code this console has no text for is shown as its code", async () => {
+  const entry = cluster();
+  stubApi([entry], { edit: () => ({ cluster: entry, changed: ["name"], reapply: false, commands: [], stopped_instances: [], warnings: [{ code: "SOMETHING_NEW" }] }) });
+  const user = renderPage();
+  const form = await openEdit(user, "prod-gpu");
+  await user.type(form.getByLabelText(field(k.drawer.name)), "x");
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+  assert.ok(await dialog().findByText("SOMETHING_NEW"));
 });
