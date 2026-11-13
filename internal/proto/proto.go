@@ -23,8 +23,7 @@ const (
 
 // Stream kinds (first-frame stream header).
 const (
-	StreamCtrl             = "ctrl"               // agent opens; connection-lifetime; bidirectional JSON Lines
-	StreamMetrics          = "metrics"            // agent opens; snappy+prompb batches
+	StreamCtrl             = "ctrl"               // agent opens; connection-lifetime; bidirectional JSON Lines, incl. metric/log batches
 	StreamLogtail          = "logtail"            // server opens on demand
 	StreamTunnel           = "tunnel"             // server opens per data-plane request
 	StreamPeerRelaySend    = "peer.relay.send"    // server opens; source RPC on data, result on ctrl
@@ -65,6 +64,9 @@ const (
 	LaneData = "data"
 )
 
+// LaneFor maps a stream kind to the lane that carries it. Unknown kinds, such
+// as one from a newer peer, ride ctrl; every kind this build declares is
+// classified explicitly and lane_test.go fails on an unclassified one.
 func LaneFor(kind string) string {
 	switch kind {
 	case StreamPeerRelaySend, StreamPeerRelayReceive, StreamLogtail, StreamTunnel, StreamModelRead, StreamModelWrite, StreamImageRead, StreamImageWrite, StreamLargeFileRead, StreamAgentUpgrade,

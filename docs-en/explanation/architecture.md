@@ -48,13 +48,13 @@ The agent initiates a connection to `wss://server/api/v1/agent/connect`, then us
 
 | Lane | Traffic | Characteristics |
 |---|---|---|
-| `ctrl` | Control messages, metrics, terminals | Latency-sensitive, with a fixed small window; unaffected by heavy traffic |
+| `ctrl` | Control messages (including metric and log batches), terminals | Latency-sensitive, with a fixed small window; unaffected by heavy traffic |
 | `data` | Request tunnels to instances, log tailing, model and image transfers | Adaptive window for high-bandwidth, high-latency links |
 
 Stream types include:
 
-- `ctrl`: bidirectional JSON Lines control messages, with an envelope of `{"t":"...","id":...,"d":{...}}`;
-- `metrics`, `logtail`, `tunnel`: metrics, logs, and the data plane;
+- `ctrl`: bidirectional JSON Lines control messages, with an envelope of `{"t":"...","id":...,"d":{...}}`; metric and log batches are messages on this stream too, shared with heartbeats and RPC responses;
+- `logtail`, `tunnel`: live log tailing and the data plane;
 - `model.read`/`model.write`, `image.read`/`image.write`: model directories and docker save/load streams;
 - `terminal`: interactive pty on a host or in a container.
 

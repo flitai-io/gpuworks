@@ -1,7 +1,8 @@
 package proto
 
-// Metrics and log shipping over the ctrl stream (JSON batches every ~10s).
-// High-frequency but small at v1 scale; the tsdb/logstore ingest them.
+// Metrics and log shipping over the ctrl stream: JSON envelopes sharing the
+// stream, and the agent's write lock, with heartbeats and RPC responses. The
+// agent drops a batch emitted while it has no bound connection.
 
 const (
 	TMetrics = "metrics" // agent→server metric batch

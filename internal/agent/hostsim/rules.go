@@ -87,7 +87,6 @@ var rpcRules = map[string]rule{
 // other ports, images, model transfer, storage and its binary are refused.
 var streamRules = map[string]rule{
 	proto.StreamCtrl:          allow,
-	proto.StreamMetrics:       allow,
 	proto.StreamLogtail:       allow,
 	proto.StreamTunnel:        allowEngines,
 	proto.StreamLargeFileRead: allowInDir,

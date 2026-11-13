@@ -48,13 +48,13 @@ agent 主动连接 `wss://server/api/v1/agent/connect`，升级后通过 yamux �
 
 | 通道 | 承载 | 特点 |
 |---|---|---|
-| `ctrl` | 控制消息、指标、终端 | 延迟敏感，固定小窗口，不被大流量拖慢 |
+| `ctrl` | 控制消息（含指标与日志批次）、终端 | 延迟敏感，固定小窗口，不被大流量拖慢 |
 | `data` | 到实例的请求隧道、日志追踪、模型与镜像传输 | 窗口自适应，适配高带宽高延迟链路 |
 
 其中各类流为：
 
-- `ctrl`：双向 JSON Lines 控制消息，envelope 为 `{"t":"...","id":...,"d":{...}}`；
-- `metrics`、`logtail`、`tunnel`：指标、日志和数据面；
+- `ctrl`：双向 JSON Lines 控制消息，envelope 为 `{"t":"...","id":...,"d":{...}}`；指标与日志批次也是这条流上的消息，与心跳、RPC 应答共用；
+- `logtail`、`tunnel`：实时日志追踪和数据面；
 - `model.read`/`model.write`、`image.read`/`image.write`：模型目录和 docker save/load 流；
 - `terminal`：host 或 container 的交互 pty。
 
