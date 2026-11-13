@@ -108,6 +108,7 @@ func reconcileImagePresence(tx *gorm.DB, nodeID uint, reports []proto.ImagePrese
 			// did not bring the image: it arrived another way, typically a
 			// replica pulling it itself after a copy from a peer failed.
 			updates["source"], updates["source_node_id"], updates["message"], updates["transferred_bytes"] = "", uint(0), "", int64(0)
+			updates["transfer_error_code"] = ""
 		}
 		if report.SizeBytes > 0 {
 			updates["size_bytes"] = report.SizeBytes

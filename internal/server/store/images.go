@@ -626,6 +626,10 @@ func (s *Store) MarkImageNodeAbsent(imageID, nodeID uint, message string) error 
 			"state": ImageStateAbsent, "size_bytes": int64(0), "runtime_size_bytes": nil,
 			"transferred_bytes": int64(0), "rate_bps": int64(0),
 			"last_transfer_id": gorm.Expr("CASE WHEN COALESCE(transfer_id, '') <> '' THEN transfer_id ELSE last_transfer_id END"), "transfer_id": "", "message": message,
+			// A removed image ends whatever the last attempt's code said, a
+			// cancel included: the row now reports the removal, and its next
+			// reports must not be held back by a cancel that no longer applies.
+			"transfer_error_code": "",
 		})
 	if res.Error != nil {
 		return res.Error
@@ -733,6 +737,13 @@ func (s *Store) ApplyImageNodeStatus(imageID, nodeID uint, st proto.ImageNodeSta
 		return nil
 	}
 	if current.TransferErrorCode == "PEER_RELAY_BUSY" && st.State != ImageStatePresent {
+		return nil
+	}
+	// An operator cancel is the attempt's outcome. The receiver reports the
+	// docker load that the stop killed ("signal: killed") after the row was
+	// already failed; that report is a consequence of the cancel, not a cause,
+	// and must not replace its reason. An image that did arrive still wins.
+	if current.TransferErrorCode == "PEER_TRANSFER_CANCELED" && current.TransferID == "" && st.State != ImageStatePresent {
 		return nil
 	}
 	updates := map[string]any{"state": st.State, "message": st.Message, "runtime_size_bytes": nil}

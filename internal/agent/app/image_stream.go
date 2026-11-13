@@ -52,7 +52,7 @@ func (n *NodeRuntime) streamImage(ctx context.Context, imageRef, transferID stri
 			if beforeTerminal != nil {
 				beforeTerminal()
 			}
-			n.reportImageNode(proto.ImageNodeStatus{ImageRef: imageRef, State: "failed", TransferID: transferID, Message: err.Error()})
+			n.reportImageNode(proto.ImageNodeStatus{ImageRef: imageRef, State: "failed", TransferID: transferID, Message: imageOperationError(ctx, err)})
 			return err
 		}
 		status.TransferID = transferID
