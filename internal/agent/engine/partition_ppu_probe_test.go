@@ -135,3 +135,29 @@ func TestPPUProbeUsesSeparateUUIDWithNumericVisibility(t *testing.T) {
 		})
 	}
 }
+
+// On Kubernetes the probe pod takes the host's network, as instance pods do,
+// so it does not depend on the cluster's network plugin; docker keeps its
+// default network.
+func TestPartitionProbeUsesTheHostNetworkOnlyOnKubernetes(t *testing.T) {
+	for driver, want := range map[string]bool{"kube": true, "docker": false, "nerdctl": false} {
+		t.Run(driver, func(t *testing.T) {
+			state := t.TempDir()
+			if _, err := assets.InstallDomesticRuntimeAssets(state, "ppu"); err != nil {
+				t.Fatal(err)
+			}
+			d := &headlessTestDriver{name: driver}
+			e := &Engine{stateDir: state, prober: &probePPUProber{library: filepath.Join(t.TempDir(), "libhgml.so")}, driver: d, hostRoot: hostRootFor(d)}
+			if driver == "kube" {
+				e.hostRoot = t.TempDir() // the host's root as the kube agent sees it
+			}
+			ws, err := e.BuildPartitionProbeWorkload(t.Context(), accelerator.BackendPPULogical, assets.PartitionProbeImage, 8, 4<<30, "probe-net")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ws.HostNetwork != want {
+				t.Fatalf("%s probe HostNetwork = %v, want %v", driver, ws.HostNetwork, want)
+			}
+		})
+	}
+}
