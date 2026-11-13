@@ -28,7 +28,7 @@ func (amdLogicalBackend) Matches(vendor, _ string) bool {
 func (amdLogicalBackend) Maturity() Maturity       { return MaturityExperimental }
 func (amdLogicalBackend) RequiredAssets() []string { return []string{"libvrocm.so"} }
 func (amdLogicalBackend) Metadata() Metadata {
-	return Metadata{Vendor: VendorAMD, DisplayName: "AMD dGPU", Compatibility: "AMD ROCm GPU × x86_64 · Docker / nerdctl / runveil · memory quota only"}
+	return Metadata{Vendor: VendorAMD, DisplayName: "AMD dGPU", Compatibility: "AMD ROCm GPU × x86_64 · Docker / nerdctl / runveil / Kubernetes · memory quota only"}
 }
 func (amdLogicalBackend) NeedsInstanceTeardown() bool { return true }
 
@@ -37,14 +37,19 @@ func (amdLogicalBackend) NeedsInstanceTeardown() bool { return true }
 func (amdLogicalBackend) SkipsBehaviorProbe() bool { return true }
 
 // AMD's host runtime contract (internal/accelerator/features.go) admits
-// Docker, nerdctl and runveil (udocker); libvrocm.so is an LD_PRELOAD
-// interposer that PRoot carries like any other bind-mounted library.
+// Docker, nerdctl, runveil (udocker) and kube; libvrocm.so is an LD_PRELOAD
+// interposer that PRoot carries like any other bind-mounted library. The
+// cross-process ledger stays a /dev/shm path on every driver; on Kubernetes
+// alone the agent's own /dev/shm is its pod's private tmpfs rather than the
+// host's, so the agent pre-creates the ledger on the host (through its
+// hostRoot) and the instance pod reaches it through an explicit hostPath
+// mount at that same path (see partition_amd.go).
 func (amdLogicalBackend) RuntimeConstraint(driver string) string {
 	switch strings.ToLower(strings.TrimSpace(driver)) {
-	case "docker", "nerdctl", "udocker":
+	case "docker", "nerdctl", "udocker", "kube":
 		return ""
 	default:
-		return "AMD dGPU currently requires the Docker, nerdctl or udocker runtime"
+		return "AMD dGPU currently requires the Docker, nerdctl, udocker or Kubernetes runtime"
 	}
 }
 

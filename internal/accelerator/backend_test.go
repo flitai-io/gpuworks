@@ -112,8 +112,10 @@ func TestOptionalCapabilitiesAreBackendScoped(t *testing.T) {
 		t.Fatal("AMD must skip the behavior probe")
 	}
 
-	if why := RuntimeConstraint(ppu, "docker"); why != "" {
-		t.Fatalf("PPU under docker constrained: %q", why)
+	for _, driver := range []string{"docker", "kube"} {
+		if why := RuntimeConstraint(ppu, driver); why != "" {
+			t.Fatalf("PPU under %s constrained: %q", driver, why)
+		}
 	}
 	if why := RuntimeConstraint(ppu, "udocker"); why == "" {
 		t.Fatal("PPU under udocker must report a runtime constraint")
@@ -123,19 +125,18 @@ func TestOptionalCapabilitiesAreBackendScoped(t *testing.T) {
 			t.Fatalf("Hygon under %s constrained: %q", driver, why)
 		}
 	}
-	for _, driver := range []string{"", "nerdctl", "runveil"} {
+	// Hygon stays unsupported on Kubernetes (native vdev is unverified there).
+	for _, driver := range []string{"", "nerdctl", "runveil", "kube"} {
 		if why := RuntimeConstraint(hygon, driver); why == "" {
 			t.Errorf("Hygon under %q must report a runtime constraint", driver)
 		}
 	}
-	for _, driver := range []string{"docker", "nerdctl", "Docker", "udocker"} {
+	for _, driver := range []string{"docker", "nerdctl", "Docker", "udocker", "kube"} {
 		if why := RuntimeConstraint(amd, driver); why != "" {
 			t.Fatalf("AMD under %s constrained: %q", driver, why)
 		}
 	}
-	// Whole AMD cards run on Kubernetes (targetConstraints), but the dGPU
-	// partition backend does not.
-	for _, driver := range []string{"", "host", "runveil", "kube"} {
+	for _, driver := range []string{"", "host", "runveil"} {
 		if why := RuntimeConstraint(amd, driver); why == "" {
 			t.Errorf("AMD under %q must report a runtime constraint", driver)
 		}

@@ -35,8 +35,17 @@ type Engine struct {
 	report           Reporter
 	log              *slog.Logger
 	stateDir         string // for extracted assets (libvgpu), the dGPU usage cache
-	runtimeMounts    *RuntimeMountManager
-	extractLibvgpu   func(string) (string, error)
+	// hostRoot is the host's root as the agent sees it (kube.HostRoot,
+	// "/proc/1/root"), set only for the kube driver, where the agent's own
+	// /dev/shm is its pod's private tmpfs rather than the host's. "" for
+	// every other driver, where the agent's own /dev/shm already is the
+	// host's (see createHostShmLedger, partition_amd.go, partition_ppu.go).
+	// A literal, not an import of the kube driver package: the engine stays
+	// driver-agnostic, the same reason device_injection.go compares
+	// driver.Name() against string literals rather than importing it.
+	hostRoot       string
+	runtimeMounts  *RuntimeMountManager
+	extractLibvgpu func(string) (string, error)
 	// checkPorts runs before a container is created (checkEnginePorts).
 	checkPorts func(proto.InstanceDesiredState) error
 
@@ -157,6 +166,7 @@ func NewWithProber(driver runtime.Driver, report Reporter, log *slog.Logger, sta
 		report:                report,
 		log:                   log,
 		stateDir:              stateDir,
+		hostRoot:              hostRootFor(driver),
 		runtimeMounts:         newRuntimeMountManager(stateDir, driver),
 		extractLibvgpu:        assets.ExtractLibvgpu,
 		checkPorts:            portCheckFor(driver),
@@ -448,6 +458,15 @@ func (e *Engine) Driver() runtime.Driver {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.driver
+}
+
+// hostRootFor is "/proc/1/root" (kube.HostRoot) for the kube driver, else
+// "". See Engine.hostRoot.
+func hostRootFor(driver runtime.Driver) string {
+	if driver != nil && driver.Name() == "kube" {
+		return "/proc/1/root"
+	}
+	return ""
 }
 
 // RunningSpecs returns desired-running, awake instance specs for log shipping.

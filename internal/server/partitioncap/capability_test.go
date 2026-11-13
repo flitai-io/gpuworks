@@ -139,15 +139,19 @@ func TestCapabilitiesAreDerivedFromMatchingGPUProbe(t *testing.T) {
 }
 
 func TestPPUDockerDoesNotRequireHostHGGCRuntime(t *testing.T) {
-	node := &store.Node{
-		Arch: "amd64", Framework: "hggc", RuntimeDriver: "docker",
-		PartitionAssets: `[{"backend":"ppu-dgpu","root":"/assets","files":["hggc_quota.so","hgml_dlsym_hook.so"]}]`,
-		PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"passed"}]`,
-	}
-	gpu := &store.GPU{Vendor: "ppu", ArchID: "ZW810E"}
-	got := ForGPU(node, gpu)
-	if len(got) != 1 || got[0].Status != StatusReady || got[0].Reason != "" {
-		t.Fatalf("PPU capability = %+v, want ready Docker path", got)
+	for _, driver := range []string{"docker", "kube"} {
+		t.Run(driver, func(t *testing.T) {
+			node := &store.Node{
+				Arch: "amd64", Framework: "hggc", RuntimeDriver: driver,
+				PartitionAssets: `[{"backend":"ppu-dgpu","root":"/assets","files":["hggc_quota.so","hgml_dlsym_hook.so"]}]`,
+				PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"passed"}]`,
+			}
+			gpu := &store.GPU{Vendor: "ppu", ArchID: "ZW810E"}
+			got := ForGPU(node, gpu)
+			if len(got) != 1 || got[0].Status != StatusReady || got[0].Reason != "" {
+				t.Fatalf("PPU capability under %s = %+v, want ready", driver, got)
+			}
+		})
 	}
 }
 
@@ -155,12 +159,12 @@ func TestPPUUdockerRemainsUnavailableUntilValidated(t *testing.T) {
 	node := &store.Node{
 		Arch: "amd64", Framework: "hggc", RuntimeDriver: "udocker",
 		PartitionAssets: `[{"backend":"ppu-dgpu","root":"/assets","files":["hggc_quota.so","hgml_dlsym_hook.so"]}]`,
-		PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"skipped","detail":"PPU is currently verified on the Docker runtime only"}]`,
+		PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"skipped","detail":"PPU is currently verified on the Docker or Kubernetes runtime only"}]`,
 	}
 	gpu := &store.GPU{Vendor: "ppu", ArchID: "ZW810E"}
 	got := ForGPU(node, gpu)
-	if len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker runtime only") {
-		t.Fatalf("PPU capability = %+v, want Docker-only reason", got)
+	if len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker or Kubernetes runtime only") {
+		t.Fatalf("PPU capability = %+v, want Docker/Kubernetes-only reason", got)
 	}
 }
 
@@ -249,6 +253,11 @@ func testHygonCapabilityPrerequisites(t *testing.T, model string) {
 	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker") {
 		t.Fatalf("nerdctl capability = %+v", got)
 	}
+	// Hygon native vdev stays unsupported on Kubernetes, unlike AMD and PPU.
+	node.RuntimeDriver = "kube"
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker") {
+		t.Fatalf("kube capability = %+v, want unavailable", got)
+	}
 	node.RuntimeDriver = "docker"
 	node.PartitionProbes = `[]`
 	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || got[0].ProbeStatus == proto.PartitionProbePassed {
@@ -277,8 +286,12 @@ func TestAMDDGPUIsProbeExemptAndRuntimeConstrained(t *testing.T) {
 	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusReady {
 		t.Fatalf("AMD runveil capability = %+v", got)
 	}
+	node.RuntimeDriver = "kube"
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusReady {
+		t.Fatalf("AMD kube capability = %+v", got)
+	}
 	node.RuntimeDriver = "host"
-	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker, nerdctl or udocker") {
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker, nerdctl, udocker or Kubernetes") {
 		t.Fatalf("AMD host-process capability = %+v", got)
 	}
 	node.RuntimeDriver = "docker"
