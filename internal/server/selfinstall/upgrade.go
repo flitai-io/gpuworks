@@ -205,6 +205,11 @@ func (i *Installer) runUpgrade(ctx context.Context, req UpgradeRequest, inst ins
 	if err := i.prepareDirs(ctx); err != nil {
 		return err
 	}
+	// So is a history removed by hand: recreated after the handoff by the
+	// audit line below, it would be root's again (see createHistory).
+	if err := i.createHistory(ctx, i.layout.HistoryPath(), 0o600); err != nil {
+		i.io.Warn("warning: could not create the install history: %v", err)
+	}
 	if err := i.chownTree(ctx, inst.ServiceUser); err != nil {
 		return err
 	}
@@ -278,7 +283,9 @@ func (i *Installer) rollback(ctx context.Context, svc Service, serviceUser, back
 	if restoreErr == nil {
 		// The snapshot is unpacked by root, which would leave the database and
 		// the master key unreadable for the service account that has to open
-		// them; the tree is handed back before the service is started again.
+		// them; the tree is handed back before the service is started again,
+		// with the history the failure is about to be recorded in.
+		_ = i.createHistory(ctx, i.layout.HistoryPath(), 0o600)
 		restoreErr = i.chownTree(ctx, serviceUser)
 	}
 	if restoreErr == nil {

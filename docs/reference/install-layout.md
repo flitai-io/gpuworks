@@ -136,7 +136,7 @@ macOS 上 systemd 单元的对应物是 system 域的 launch daemon `/Library/La
 - install 与 upgrade 启动服务后轮询 `/healthz`，最长 60 秒；探测地址是监听地址对应的回环地址（通配地址用 `127.0.0.1`）。
 - nohup 模式下这个等待会在进程已经退出时提前结束：该模式没有监管者，启动留下的进程一旦消失就不会再有人应答，继续等满只是推迟回滚（例如新版本缺少动态库、或拒绝某项配置而启动即退出）。systemd 单元与 launchd plist 都会拉起崩溃的 server，所以那里的 60 秒正是留给重试的，不提前结束。
 - 备份是 `backups/<release_id>-<UTC时间戳>.tar.gz`，包含 `data/gpuworks.db`（含 `-wal` / `-shm`）、`data/master.key`、`server.yaml` 和 `bin/gpuworks`，不含模型、镜像等数据目录里的其他内容。恢复会先删掉旧库的 WAL/SHM，避免新版本写入的前滚日志被旧 schema 重放。
-- 每次安装和升级向 `<data>/install-history.jsonl` 追加一行审计：动作、结果、release、操作者（`sudo` 下取 `SUDO_USER`）、时间；失败时含 `previous_release_id` 与错误。
+- 每次安装和升级向 `<data>/install-history.jsonl` 追加一行审计：动作、结果、release、操作者（`sudo` 下取 `SUDO_USER`）、时间；失败时含 `previous_release_id` 与错误。文件在把安装树交给服务账户之前创建，因此归服务账户所有，控制台升级由服务账户自己确认时也能追加。审计写不进去不会让安装或升级失败：控制台升级照常确认，服务日志记一条 `console upgrade confirmed without an install history entry` 警告。
 
 ## 日志与轮转
 

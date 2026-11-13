@@ -164,7 +164,7 @@ Key behavior:
 - `--base-url`: the release site's manifest is unsigned; trust comes from the site's TLS. Verify the archive against the sha256 in the manifest. This mode is for internal release sites.
 - `--archive`: extract `gpuworks` from the archive to `<dir>/tmp/`, run its `version` once, and use the release ID in the output as the target version. Subsequent steps match the online path. Before stopping the service, reject archives that cannot be extracted, have the wrong architecture (check the ELF header first rather than attempting execution, so hosts with qemu binfmt installed are also protected), cannot run, or do not report a release ID (local builds). Keep the release archive unchanged. Integrity relies on gzip's built-in check; after copying the archive to the host, verify sha256 yourself against the release's `SHA256SUMS`.
 - Use `<dir>/.upgrade.lock` for mutual exclusion; concurrent upgrades fail immediately. Backups include the database, `master.key`, `server.yaml`, and binary.
-- Rollback restores the pre-upgrade snapshot, losing writes made during the upgrade window. The backup path is still printed after rollback. Each installation/upgrade appends an audit entry to `<data>/install-history.jsonl`.
+- Rollback restores the pre-upgrade snapshot, losing writes made during the upgrade window. The backup path is still printed after rollback. Each installation/upgrade appends an audit entry to `<data>/install-history.jsonl`; a failure to write it is only a warning and does not change the upgrade's result.
 - Only the control plane is upgraded; agents on nodes are not automatically upgraded with it.
 
 ## gpuworks restart

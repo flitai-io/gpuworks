@@ -262,19 +262,28 @@ func guardStart(layout Layout, running, mode string, now time.Time, lookupGroup 
 	return StartGuard{Pending: pending, RolledBack: true}, nil
 }
 
+// ErrHistoryNotRecorded is returned, wrapped, by a confirmation that
+// succeeded but could not append its audit line. The upgrade stands: like
+// every other history write, a missing record must not undo working software.
+var ErrHistoryNotRecorded = errors.New("upgrade confirmed, but the install history could not be appended")
+
 // ConfirmStart records that the pending upgrade came up: the marker goes, the
 // install history gains the upgrade, and old snapshots beyond keep are pruned.
+// Only failing to remove the marker fails the confirmation; a history that
+// cannot be written (a log an older install left to root) is reported as
+// ErrHistoryNotRecorded after the upgrade is confirmed.
 func ConfirmStart(layout Layout, pending PendingUpgrade, mode string, now time.Time, keep int) error {
-	if err := AppendHistory(layout.HistoryPath(), HistoryEntry{
+	historyErr := AppendHistory(layout.HistoryPath(), HistoryEntry{
 		Action: ActionUpgrade, Result: "ok", ReleaseID: pending.To, PreviousReleaseID: pending.From,
 		Backup: pending.Backup, Mode: mode, By: pending.By, At: stampNow(now),
-	}, 0o600); err != nil {
-		return err
-	}
+	}, 0o600)
 	if err := os.Remove(layout.PendingUpgradePath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	(&Installer{layout: layout}).pruneBackups(keep, pending.Backup)
+	if historyErr != nil {
+		return fmt.Errorf("%w: %w", ErrHistoryNotRecorded, historyErr)
+	}
 	return nil
 }
 
