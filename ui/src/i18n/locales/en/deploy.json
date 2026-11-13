@@ -100,7 +100,7 @@
     "W9": "W9: The engine disables chunked prefill and prefix caching for encoder-decoder models.",
     "W10": "W10: {{cpu_cores}} physical CPU cores are available, but API server, DP, and GPU workers require at least {{required_cores}}.",
     "MODEL_NOT_FOUND": "The selected model was not found.",
-    "IMAGE_OVERRIDE_INCOMPATIBLE": "The selected image {{image}} is incompatible with the node vendor, framework, operating system, or host architecture. Choose a different image or node.",
+    "IMAGE_OVERRIDE_INCOMPATIBLE": "The selected image {{image}} is incompatible with the node vendor, framework, chip model, operating system, or host architecture. Choose a different image or node.",
     "IMAGE_ENGINE_DEFAULT_INCOMPATIBLE": "The default engine image {{image}} supports NVIDIA CUDA nodes only and is incompatible with the selected node. Choose a different image or node.",
     "IMAGE_OVERRIDE_UNVERIFIED": "The selected image {{image}} is not in the Image Catalog, so its compatibility with this node cannot be verified automatically.",
     "COMPUTE_NETWORK_FALLBACK": "Some of the selected nodes are on a compute network, but not all of them are on the same one, so this deployment runs over the management network. To avoid it, put every node on one compute network, or turn off compute traffic on the management network for those nodes.",
