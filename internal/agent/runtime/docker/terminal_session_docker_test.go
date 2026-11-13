@@ -93,14 +93,11 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 		if _, err = session.local.Write([]byte("printf '%s' \"$$\" > " + path + "\n")); err != nil {
 			t.Fatal(err)
 		}
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			output, err = docker("exec", container, "cat", path)
-			if err == nil {
-				session.pid = strings.TrimSpace(string(output))
-				break
-			}
-			time.Sleep(50 * time.Millisecond)
+		pidCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		session.pid, err = waitTerminalPID(pidCtx, func() ([]byte, error) { return docker("exec", container, "cat", path) })
+		cancel()
+		if err != nil {
+			t.Fatal(err)
 		}
 		pid, err := strconv.Atoi(session.pid)
 		if err != nil || pid <= 1 {
@@ -126,15 +123,11 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	if _, err = first.local.Write([]byte("/bin/sh -c 'setsid sleep 300 & echo $! > " + escapedPath + "; wait' &\n")); err != nil {
 		t.Fatal(err)
 	}
-	escapedPID := ""
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		output, err = docker("exec", container, "cat", escapedPath)
-		if err == nil {
-			escapedPID = strings.TrimSpace(string(output))
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
+	pidCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	escapedPID, err := waitTerminalPID(pidCtx, func() ([]byte, error) { return docker("exec", container, "cat", escapedPath) })
+	cancel()
+	if err != nil {
+		t.Fatal(err)
 	}
 	if pid, parseErr := strconv.Atoi(escapedPID); parseErr != nil || pid <= 1 {
 		t.Fatalf("escaped descendant PID missing: %q", escapedPID)
@@ -184,7 +177,7 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	if _, err = second.local.Write([]byte(command)); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		output, err = docker("exec", container, "cat", path)
 		if err == nil && string(output) == marker {
