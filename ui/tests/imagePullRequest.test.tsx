@@ -459,7 +459,7 @@ test("a node file import sends the path to that node without changing the catalo
   const start = within(dialog).getByRole("button", { name: z.nodeTable.localDialog.start }) as HTMLButtonElement;
   assert.equal(start.disabled, true, "a path is required before submission");
   await user.type(within(dialog).getByRole("textbox", { name: z.nodeTable.localDialog.path }), "  /data/image with spaces.tar  ");
-  await user.click(start);
+  await user.keyboard("{Enter}");
   await waitFor(() => assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync").length, 1));
   assert.deepEqual(JSON.parse(posts(calls, "/api/v1/images/31/nodes/n3/sync")[0].body!), {
     source: "local", archive_path: "/data/image with spaces.tar",

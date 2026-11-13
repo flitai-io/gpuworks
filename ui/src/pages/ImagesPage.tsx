@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, message } from "antd";
+import { toast } from "../components/ui/toast";
 import { useTranslation } from "react-i18next";
 import {
   api,
@@ -272,7 +273,7 @@ export default function ImagesPage() {
   const importFromPath = async (version: ImageCatalogEntry, nodeUUID: string, path: string) => {
     try {
       await api.syncImage(version.id, nodeUUID, "local", { archive_path: path });
-      message.success(t("action.submitted", { source: t("nodeTable.sourceLocal") }));
+      toast.success(t("action.submitted", { source: t("nodeTable.sourceLocal") }));
     } finally {
       await refreshDetail(version.series_id || detail?.id || 0);
       versions.refetch();

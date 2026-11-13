@@ -1,6 +1,9 @@
-import { Alert, Form, Input, Modal, Typography } from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Alert, AlertDescription } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { Input } from "../../components/ui/input";
 
 type Props = {
   imageRef: string;
@@ -11,6 +14,7 @@ type Props = {
 
 export default function ImageArchivePathDialog({ imageRef, nodeLabel, onCancel, onStart }: Props) {
   const { t } = useTranslation("images");
+  const { t: common } = useTranslation("common");
   const [path, setPath] = useState("");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,34 +31,34 @@ export default function ImageArchivePathDialog({ imageRef, nodeLabel, onCancel, 
     }
   };
   return (
-    <Modal
-      open
-      title={t("nodeTable.localDialog.title", { node: nodeLabel })}
-      onCancel={onCancel}
-      onOk={() => void submit()}
-      okText={t("nodeTable.localDialog.start")}
-      cancelText={t("common.cancel")}
-      confirmLoading={starting}
-      okButtonProps={{ disabled: !path.trim(), "aria-label": t("nodeTable.localDialog.start") }}
-      cancelButtonProps={{ disabled: starting }}
-      closable={!starting}
-      maskClosable={!starting}
-      keyboard={!starting}
-    >
-      <Typography.Paragraph>{t("nodeTable.localDialog.description", { ref: imageRef })}</Typography.Paragraph>
-      <Form layout="vertical" component="div">
-        <Form.Item label={t("nodeTable.localDialog.path")} htmlFor="image-archive-path" extra={t("nodeTable.localDialog.help")}>
-          <Input
-            id="image-archive-path"
-            value={path}
-            disabled={starting}
-            placeholder="/data/images/runner.tar"
-            onChange={(event) => { setPath(event.target.value); setError(null); }}
-            onPressEnter={() => void submit()}
-          />
-        </Form.Item>
-      </Form>
-      {error ? <Alert type="error" showIcon message={error} /> : null}
-    </Modal>
+    <Dialog open onOpenChange={(open) => { if (!open && !starting) onCancel(); }}>
+      <DialogContent size="lg" closeButtonLabel={common("actions.close")} closeButtonDisabled={starting}>
+        <DialogHeader>
+          <DialogTitle>{t("nodeTable.localDialog.title", { node: nodeLabel })}</DialogTitle>
+          <DialogDescription>{t("nodeTable.localDialog.description", { ref: imageRef })}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+          <div className="space-y-2">
+            <label htmlFor="image-archive-path" className="text-body">{t("nodeTable.localDialog.path")}</label>
+            <Input
+              id="image-archive-path"
+              value={path}
+              disabled={starting}
+              aria-describedby="image-archive-path-help"
+              placeholder="/data/images/runner.tar"
+              onChange={(event) => { setPath(event.target.value); setError(null); }}
+            />
+            <p id="image-archive-path-help" className="text-label text-fg-muted">{t("nodeTable.localDialog.help")}</p>
+            {error ? <Alert status="danger"><AlertDescription>{error}</AlertDescription></Alert> : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" disabled={starting} onClick={onCancel}>{t("common.cancel")}</Button>
+            <Button type="submit" variant="primary" disabled={starting || !path.trim()} aria-busy={starting}>
+              {t("nodeTable.localDialog.start")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

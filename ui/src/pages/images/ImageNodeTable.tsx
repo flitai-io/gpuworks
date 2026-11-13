@@ -20,6 +20,7 @@ import { detailExpandable } from "../../components/detail/DetailDrawer";
 import ImageArchiveURLDialog from "./ImageArchiveURLDialog";
 import ImagePeerSyncDialog from "./ImagePeerSyncDialog";
 import ImageArchivePathDialog from "./ImageArchivePathDialog";
+import { Badge } from "../../components/ui/badge";
 
 const { Text } = Typography;
 type FetchMode = "peer" | string;
@@ -236,7 +237,7 @@ export default function ImageNodeTable({
         if (row.state !== "pulling" && row.state !== "syncing") {
           return <Text type="secondary">—</Text>;
         }
-        if (row.source === "local") return <Text type="secondary">{t("nodeTable.localLoading")}</Text>;
+        if (row.source === "local") return <span className="text-fg-muted">{t("nodeTable.localLoading")}</span>;
         const expected = row.size_bytes || selectedVersion.size_bytes || 0;
         const done = row.transferred_bytes || 0;
         return (
@@ -273,7 +274,7 @@ export default function ImageNodeTable({
           ) : row.source === "mirror" ? (
             <Tag>{t("nodeTable.sourceMirror")}</Tag>
           ) : row.source === "local" ? (
-            <Tag>{t("nodeTable.sourceLocal")}</Tag>
+            <Badge size="sm" status="neutral">{t("nodeTable.sourceLocal")}</Badge>
           ) : row.source === "offline" ? (
             <Tag>{t("nodeTable.offline")}</Tag>
           ) : row.source === "url" ? (
@@ -301,7 +302,7 @@ export default function ImageNodeTable({
               node: row.source_node_name || row.source_node_uuid.slice(0, 8),
             })}</Tag>
           ) : row.source === "local" ? (
-            <Tag color="processing">{t("nodeTable.sourceLocal")}</Tag>
+            <Badge size="sm" status="info">{t("nodeTable.sourceLocal")}</Badge>
           ) : row.source && /[./]/.test(row.source) ? (
             <Tag color="processing" title={row.source}>{t("nodeTable.pullingFrom", { source: registryName(row.source) })}</Tag>
           ) : (
