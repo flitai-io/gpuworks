@@ -13,8 +13,8 @@
 
 ### 连接架构
 
-agent 主动外连 `wss://server/api/v1/agent/connect` → WS upgrade → go-yamux 多路复用。默认走**双通道**（各一条 WS + 一条 yamux）：`?lane=ctrl` 控制通道（固定 256 KiB 窗口，承载 `ctrl`/`metrics`/`terminal`，延迟敏感）、`?lane=data` 数据通道（256 KiB→16 MiB 自适应窗口，承载 `tunnel`/`logtail`/`model.read`/`model.write`/`image.read`/`image.write`，适配高带宽高延迟链路）。数据通道用 `DataHello{node_token, session_id}` 认证并绑定当前 ctrl 会话（`session_id` 由 Registered 下发，不匹配回 `reject{reason:stale_session}`），是其子资源：独立退避重连，掉线（detached）期间新数据类流在调用方 context 内等重连（上限 5s，见 `hub.dataLaneReattachWait`），超时返回 `hub.ErrDataLaneUnavailable`（proxy 映射为可重试 503），永不回退到 ctrl（ADR 0024）。`proto.LaneFor(kind)` 是 kind→lane 唯一映射。老 agent、`--data-lane=false`、server_dial 走单通道（无 `lane` 参数，data profile，行为同早期单通道）。
-yamux 流：`ctrl`（双向 JSON Lines 控制面）、`metrics`、`logtail`、`tunnel`、`model.read`/`model.write`（模型目录 tar 收发）、`image.read`/`image.write`（docker save/load 流）、`terminal`（交互 pty，target=host/container）。
+agent 主动外连 `wss://server/api/v1/agent/connect` → WS upgrade → go-yamux 多路复用。默认走**双通道**（各一条 WS + 一条 yamux）：`?lane=ctrl` 控制通道（固定 256 KiB 窗口，承载 `ctrl`/`terminal`，延迟敏感；指标与日志批次目前是 `ctrl` 流上的 JSON 信封）、`?lane=data` 数据通道（256 KiB→16 MiB 自适应窗口，承载 `tunnel`/`logtail`/`model.read`/`model.write`/`image.read`/`image.write`，适配高带宽高延迟链路）。数据通道用 `DataHello{node_token, session_id}` 认证并绑定当前 ctrl 会话（`session_id` 由 Registered 下发，不匹配回 `reject{reason:stale_session}`），是其子资源：独立退避重连，掉线（detached）期间新数据类流在调用方 context 内等重连（上限 5s，见 `hub.dataLaneReattachWait`），超时返回 `hub.ErrDataLaneUnavailable`（proxy 映射为可重试 503），永不回退到 ctrl（ADR 0024）。`proto.LaneFor(kind)` 是 kind→lane 唯一映射。老 agent、`--data-lane=false`、server_dial 走单通道（无 `lane` 参数，data profile，行为同早期单通道）。
+yamux 流：`ctrl`（双向 JSON Lines 控制面，含指标/日志批次）、`logtail`、`tunnel`、`model.read`/`model.write`（模型目录 tar 收发）、`image.read`/`image.write`（docker save/load 流）、`terminal`（交互 pty，target=host/container）。
 控制消息 envelope：`{"t":"...","id":...,"d":{...}}`（定义在 `internal/proto`，含 serverdial HMAC、终端帧协议、instance 状态枚举如 `optimizing`）。
 指令下发 = desired state + watch；短动作走 RPC。另有 server_dial（HMAC）：server 直连 agent 的 `--listen` 端口纳管出站受限的节点（SSH 只用于安装、预检查和带外恢复）。
 
