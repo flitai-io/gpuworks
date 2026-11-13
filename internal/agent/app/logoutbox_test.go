@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/agent/conn"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -328,6 +329,34 @@ func TestRetrySendsADropMarkerWithNothingElseQueued(t *testing.T) {
 	if len(batches) != 1 || !strings.Contains(batches[0].Lines[0].Line, "were dropped") {
 		t.Fatalf("sent %+v, want the drop marker", batches)
 	}
+}
+
+// Metrics while the data lane is not attached are dropped by design; that
+// must not log a warning on every collector tick.
+func TestMetricsDroppedQuietlyWhileTheDataLaneIsUnavailable(t *testing.T) {
+	var out strings.Builder
+	var mu sync.Mutex
+	n := &NodeRuntime{log: slog.New(slog.NewTextHandler(lockedWriter{&mu, &out}, nil))}
+	n.Bind(func(string, any) error { return conn.ErrTelemetryUnavailable })
+	n.emit(proto.TMetrics, proto.MetricBatch{Samples: []proto.MetricSample{{Metric: "m"}}})
+	n.Bind(func(string, any) error { return errors.New("broken pipe") })
+	n.emit(proto.TMetrics, proto.MetricBatch{Samples: []proto.MetricSample{{Metric: "m"}}})
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Count(out.String(), "emit failed") != 1 || !strings.Contains(out.String(), "broken pipe") {
+		t.Fatalf("log = %q, want only the real failure reported", out.String())
+	}
+}
+
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (l lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
 
 // One batch larger than the whole bound is sent as it is on a healthy link,

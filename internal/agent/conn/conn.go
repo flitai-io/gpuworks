@@ -6,8 +6,6 @@ package conn
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -151,6 +149,7 @@ type Conn struct {
 	dataMu   sync.Mutex
 	dataSess *yamux.Session
 	dataEver bool // guarded by dataMu; true only after an actual setDataSess
+	tel      telemetry
 
 	// localMu guards the local end of the connection to the server and whether
 	// it goes through an HTTP proxy; they decide the management address.
@@ -229,14 +228,6 @@ func (c *Conn) serverDialAgentAuth(netConn net.Conn) error {
 		return errors.New("invalid server_dial proof")
 	}
 	return nil
-}
-
-func randomNonce() (string, error) {
-	var b [32]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b[:]), nil
 }
 
 // helloCapabilities describes the actual accelerator backend selected by the
@@ -600,17 +591,4 @@ func (c *Conn) writeStreamHeader(h proto.StreamHeader) error {
 	defer c.writeMu.Unlock()
 	_, err = c.ctrl.Write(b)
 	return err
-}
-
-// toWSURL converts an http(s) base URL to ws(s).
-func toWSURL(u string) string {
-	u = strings.TrimRight(u, "/")
-	switch {
-	case strings.HasPrefix(u, "https://"):
-		return "wss://" + strings.TrimPrefix(u, "https://")
-	case strings.HasPrefix(u, "http://"):
-		return "ws://" + strings.TrimPrefix(u, "http://")
-	default:
-		return u
-	}
 }

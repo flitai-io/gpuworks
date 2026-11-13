@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -23,14 +24,26 @@ import (
 // optional SessionID) and the real data-lane hello/ack/reject line protocol, and
 // records what the agent sent so tests can assert the agent's lane decisions.
 type laneTestServer struct {
-	sessionID       string // returned in Registered; "" models an old server
-	dataReject      string // non-empty: reject every data hello with this reason
-	dropAfterAttach bool   // close the data session right after acking it
+	sessionID       string   // returned in Registered; "" models an old server
+	dataReject      string   // non-empty: reject every data hello with this reason
+	dropAfterAttach bool     // close the data session right after acking it
+	caps            []string // advertised in the server hello
 
-	mu         sync.Mutex
-	ctrlLanes  []string // lane query seen on each ctrl dial
-	dataHellos []proto.DataHello
-	helloTimes []time.Time // wall-clock arrival of each data hello, index-aligned with dataHellos
+	mu sync.Mutex
+	// ctrlKinds and telemetry record, in arrival order, the envelope types
+	// the agent sent on ctrl and on agent-opened telemetry streams.
+	ctrlKinds []string
+	telemetry []string
+	dataSess  *yamux.Session // the current data lane, for tests to drop
+	holdData  bool           // reject data hellos (stale_session) while set
+	// stallTelemetry, while open, keeps telemetry streams from being read,
+	// as a server waiting for ingest room does.
+	stallTelemetry chan struct{}
+	telemetryLines []string                 // log lines received on telemetry streams, in order
+	telTail        map[string]chan struct{} // per batch type: the last accepted stream's done channel
+	ctrlLanes      []string                 // lane query seen on each ctrl dial
+	dataHellos     []proto.DataHello
+	helloTimes     []time.Time // wall-clock arrival of each data hello, index-aligned with dataHellos
 }
 
 func (s *laneTestServer) handle(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +97,17 @@ func (s *laneTestServer) serveCtrl(nc net.Conn, lane string) {
 		sid = s.sessionID
 	}
 	write(proto.TRegistered, proto.Registered{NodeUUID: "node-1", NodeToken: "secret", Proto: 1, SessionID: sid})
-	write(proto.THello, proto.Hello{ProtoMin: 1, ProtoMax: 1})
-	_, _ = io.Copy(io.Discard, stream) // drain status/heartbeats until the agent hangs up
+	write(proto.THello, proto.Hello{ProtoMin: 1, ProtoMax: 1, Caps: s.caps})
+	// Record status/heartbeats until the agent hangs up.
+	for {
+		var env proto.Envelope
+		if err := dec.Decode(&env); err != nil {
+			return
+		}
+		s.mu.Lock()
+		s.ctrlKinds = append(s.ctrlKinds, env.T)
+		s.mu.Unlock()
+	}
 }
 
 func (s *laneTestServer) serveData(nc net.Conn) {
@@ -101,9 +123,13 @@ func (s *laneTestServer) serveData(nc net.Conn) {
 	s.dataHellos = append(s.dataHellos, hello)
 	s.helloTimes = append(s.helloTimes, time.Now())
 	drop := s.dropAfterAttach
+	reject := s.dataReject
+	if s.holdData {
+		reject = proto.RejectStaleSession
+	}
 	s.mu.Unlock()
-	if s.dataReject != "" {
-		d, _ := json.Marshal(proto.Reject{Reason: s.dataReject})
+	if reject != "" {
+		d, _ := json.Marshal(proto.Reject{Reason: reject})
 		env, _ := json.Marshal(proto.Envelope{T: proto.TReject, D: d})
 		_, _ = nc.Write(append(env, '\n'))
 		return
@@ -123,7 +149,71 @@ func (s *laneTestServer) serveData(nc net.Conn) {
 		_ = ys.Close()
 		return
 	}
-	<-ys.CloseChan()
+	s.mu.Lock()
+	s.dataSess = ys
+	s.mu.Unlock()
+	for {
+		stream, err := ys.AcceptStream()
+		if err != nil {
+			return
+		}
+		// Like the hub: the header is read in the accept loop, and streams of
+		// one batch type are read in the order they were accepted.
+		line, err := readLine(stream)
+		var hdr proto.StreamHeader
+		if err != nil || json.Unmarshal(line, &hdr) != nil || hdr.Kind != proto.StreamTelemetry ||
+			(hdr.Ref != proto.TMetrics && hdr.Ref != proto.TLogs) {
+			_ = stream.Reset()
+			continue
+		}
+		s.mu.Lock()
+		if s.telTail == nil {
+			s.telTail = map[string]chan struct{}{}
+		}
+		prev, done := s.telTail[hdr.Ref], make(chan struct{})
+		s.telTail[hdr.Ref] = done
+		s.mu.Unlock()
+		go func() {
+			defer close(done)
+			if prev != nil {
+				<-prev
+			}
+			s.serveAgentStream(stream)
+		}()
+	}
+}
+
+// serveAgentStream records the envelopes of an agent-opened telemetry stream
+// whose header the accept loop has read: only newline-terminated lines count,
+// as at the hub.
+func (s *laneTestServer) serveAgentStream(stream *yamux.Stream) {
+	defer stream.Close()
+	s.mu.Lock()
+	stall := s.stallTelemetry
+	s.mu.Unlock()
+	if stall != nil {
+		<-stall
+	}
+	br := bufio.NewReader(stream)
+	for {
+		line, err := br.ReadBytes('\n')
+		if err != nil {
+			return // an unterminated line is not a batch
+		}
+		var env proto.Envelope
+		if json.Unmarshal(line, &env) != nil {
+			return
+		}
+		s.mu.Lock()
+		s.telemetry = append(s.telemetry, env.T)
+		var batch proto.LogBatch
+		if env.T == proto.TLogs && json.Unmarshal(env.D, &batch) == nil {
+			for _, l := range batch.Lines {
+				s.telemetryLines = append(s.telemetryLines, l.Line)
+			}
+		}
+		s.mu.Unlock()
+	}
 }
 
 func (s *laneTestServer) snapshot() ([]string, []proto.DataHello) {
@@ -142,9 +232,18 @@ func (s *laneTestServer) helloTimestamps() []time.Time {
 // stop func that cancels it and waits for Run to return.
 func runAgainst(t *testing.T, s *laneTestServer, dataLane bool) (*Conn, func() error) {
 	t.Helper()
+	return runAgainstWith(t, s, dataLane, nil)
+}
+
+// runAgainstWith is runAgainst with setup applied to the Conn before it runs.
+func runAgainstWith(t *testing.T, s *laneTestServer, dataLane bool, setup func(*Conn)) (*Conn, func() error) {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(s.handle))
 	t.Cleanup(srv.Close)
 	c := New(Credentials{ServerURL: srv.URL, NodeUUID: "node-1", NodeToken: "secret", DataLane: dataLane}, nil, nil, capabilityProber{}, slog.Default())
+	if setup != nil {
+		setup(c)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- c.Run(ctx) }()

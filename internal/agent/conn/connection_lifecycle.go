@@ -83,7 +83,7 @@ func (c *Conn) Run(ctx context.Context) (err error) {
 		}
 	}()
 
-	return c.runYamuxClient(ctx, netConn, lane, wantData)
+	return c.runYamuxClient(ctx, netConn, lane, wantData, false)
 }
 
 // wantsDataLane reports whether this connection should open a dedicated data
@@ -119,10 +119,13 @@ func (c *Conn) runAcceptedControl(ctx context.Context, netConn net.Conn, proof p
 	if proof.Lane == proto.LaneCtrl {
 		lane = proto.LaneCtrl
 	}
-	return c.runYamuxClient(ctx, netConn, lane, false)
+	// On a dual-lane server_dial connection the server dials the data lane.
+	return c.runYamuxClient(ctx, netConn, lane, false, c.creds.DataLane && lane == proto.LaneCtrl)
 }
 
-func (c *Conn) runYamuxClient(ctx context.Context, netConn net.Conn, lane string, wantData bool) error {
+// runYamuxClient runs one control connection. wantData asks it to dial a data
+// lane; serverDialsData says the server will dial one back (server_dial).
+func (c *Conn) runYamuxClient(ctx context.Context, netConn net.Conn, lane string, wantData, serverDialsData bool) error {
 	// The ctrl connection uses the profile selected by lane; a data lane, when
 	// opened, always uses the adaptive data profile on its own socket.
 	endYamux := c.smokeStage("yamux")
@@ -157,6 +160,12 @@ func (c *Conn) runYamuxClient(ctx context.Context, netConn net.Conn, lane string
 	}
 	c.log.Info("connected to server")
 	c.confirmUpgrade()
+
+	// Decide where telemetry goes before anything can send it.
+	c.tel.begin(c.sessionID != "" && (wantData || serverDialsData))
+	defer c.closeTelemetry()
+	// Runs first: closing the lane releases a telemetry write blocked on it.
+	defer c.closeDataLane()
 
 	// Bind the persistent handlers to this connection's sender so the engine and
 	// downloader can report status; unbind when the connection ends.
@@ -268,5 +277,23 @@ func (c *Conn) handshake() error {
 	if env.T != proto.THello {
 		return errors.New("handshake: expected hello, got " + env.T)
 	}
+	var serverHello proto.Hello
+	if len(env.D) == 0 || json.Unmarshal(env.D, &serverHello) != nil {
+		serverHello = proto.Hello{}
+	}
+	c.tel.setServerCaps(serverHello.Caps)
 	return nil
+}
+
+// toWSURL converts an http(s) base URL to ws(s).
+func toWSURL(u string) string {
+	u = strings.TrimRight(u, "/")
+	switch {
+	case strings.HasPrefix(u, "https://"):
+		return "wss://" + strings.TrimPrefix(u, "https://")
+	case strings.HasPrefix(u, "http://"):
+		return "ws://" + strings.TrimPrefix(u, "http://")
+	default:
+		return u
+	}
 }
