@@ -1,0 +1,119 @@
+{
+  "description": "Weight sources: downloadable repositories or registered local model identities.",
+  "items": {
+    "additionalProperties": false,
+    "maxProperties": 1,
+    "minProperties": 1,
+    "properties": {
+      "huggingface": {
+        "anyOf": [
+          {
+            "description": "Organization/repository identity.",
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "repo_id": {
+                "description": "Organization/repository identity.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "description": "Repository commit or registered local revision, when known.",
+                "type": "string"
+              },
+              "subfolder": {
+                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "repo_id"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "local": {
+        "anyOf": [
+          {
+            "description": "Registered local model identity, not a host path or URL.",
+            "minLength": 1,
+            "not": {
+              "pattern": "(^/|/$|//|^[A-Za-z]:/|(^|/)\\.{1,2}(/|$)|\\\\)"
+            },
+            "type": "string"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "repo_id": {
+                "description": "Registered local model identity, not a host path or URL.",
+                "minLength": 1,
+                "not": {
+                  "pattern": "(^/|/$|//|^[A-Za-z]:/|(^|/)\\.{1,2}(/|$)|\\\\)"
+                },
+                "type": "string"
+              },
+              "revision": {
+                "description": "Repository commit or registered local revision, when known.",
+                "type": "string"
+              },
+              "subfolder": {
+                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "repo_id"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "modelscope": {
+        "anyOf": [
+          {
+            "description": "Organization/repository identity.",
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "repo_id": {
+                "description": "Organization/repository identity.",
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "description": "Repository commit or registered local revision, when known.",
+                "type": "string"
+              },
+              "subfolder": {
+                "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "repo_id"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "propertyNames": {
+      "enum": [
+        "huggingface",
+        "modelscope",
+        "local"
+      ]
+    },
+    "type": "object"
+  },
+  "minItems": 1,
+  "type": "array"
+}

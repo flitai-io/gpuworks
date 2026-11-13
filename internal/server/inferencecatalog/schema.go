@@ -406,24 +406,37 @@ func gpuSelectorSchema() map[string]any {
 }
 
 func weightSourcesSchema() map[string]any {
-	return map[string]any{
-		"type":        "array",
-		"minItems":    1,
-		"description": "Weight download sources; the compact one-key form selects the provider.",
-		"items": map[string]any{
-			"type":          "object",
-			"minProperties": 1,
-			"maxProperties": 1,
-			"propertyNames": map[string]any{"enum": []any{"huggingface", "modelscope"}},
-			"additionalProperties": map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"required":             []string{"repo_id"},
+	repository := map[string]any{"type": "string", "minLength": 1, "description": "Organization/repository identity."}
+	local := map[string]any{
+		"type": "string", "minLength": 1,
+		"description": "Registered local model identity, not a host path or URL.",
+		"not":         map[string]any{"pattern": `(^/|/$|//|^[A-Za-z]:/|(^|/)\.{1,2}(/|$)|\\)`},
+	}
+	// The compact scalar and expanded object are both accepted by ParseYAML.
+	// State each provider explicitly; overlapping allOf/additionalProperties
+	// definitions are merged differently by the editor's schema validator.
+	source := func(identity map[string]any) map[string]any {
+		return map[string]any{"anyOf": []any{
+			identity,
+			map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"repo_id"},
 				"properties": map[string]any{
-					"repo_id":   map[string]any{"type": "string", "minLength": 1, "description": "Organization/repository identity."},
-					"revision":  map[string]any{"type": "string", "description": "Pinned commit hash."},
+					"repo_id":   identity,
+					"revision":  map[string]any{"type": "string", "description": "Repository commit or registered local revision, when known."},
 					"subfolder": map[string]any{"type": "string", "description": "Repository subpath when weights are nested: a directory, or a single file when no directory has that name."},
 				},
+			},
+		}}
+	}
+	return map[string]any{
+		"type": "array", "minItems": 1,
+		"description": "Weight sources: downloadable repositories or registered local model identities.",
+		"items": map[string]any{
+			"type": "object", "minProperties": 1, "maxProperties": 1,
+			"propertyNames":        map[string]any{"enum": []any{"huggingface", "modelscope", "local"}},
+			"additionalProperties": false,
+			"properties": map[string]any{
+				"huggingface": source(repository), "modelscope": source(repository), "local": source(local),
 			},
 		},
 	}

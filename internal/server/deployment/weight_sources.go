@@ -28,6 +28,12 @@ import (
 // always described by the artifact identity rather than by the template's
 // preference.
 func TemplateWeightMatchesModel(source weightSource, model *store.Model) bool {
+	// A local source names registered private bytes, not a public repository
+	// that happens to have the same name. Public sources retain mirror reuse.
+	if strings.EqualFold(strings.TrimSpace(source.Provider), "local") &&
+		(model == nil || !strings.EqualFold(strings.TrimSpace(model.Source), "local")) {
+		return false
+	}
 	return model != nil &&
 		strings.EqualFold(strings.TrimSpace(model.SourceID), strings.TrimSpace(source.RepoID)) &&
 		modelArtifactSatisfiesSubfolder(model.ArtifactSubfolder, source.Subfolder)

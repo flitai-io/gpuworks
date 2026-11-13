@@ -220,6 +220,7 @@ type UnsupportedGPU struct {
 // callers believe only bounded selectors were accepted in the flat catalog.
 var ccExpression = regexp.MustCompile(`^(?:[0-9]+(?:\.[0-9]+)?|(?:>=|<)[0-9]+(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?\.\.[0-9]+(?:\.[0-9]+)?)$`)
 var modelIDExpression = regexp.MustCompile(`^[^\s/]+(?:/[^\s/]+)*$`)
+var localDrivePathExpression = regexp.MustCompile(`^[A-Za-z]:/`)
 
 // ValidateModelID checks the identity grammar shared by imports and clones.
 // Callers normalize case and surrounding whitespace before validation.
@@ -510,11 +511,14 @@ func validateWeights(modelID, specName string, weights *Weights) error {
 		source.RepoID = strings.TrimSpace(source.RepoID)
 		source.Revision = strings.TrimSpace(source.Revision)
 		source.Subfolder = strings.TrimSpace(source.Subfolder)
-		if source.Provider != "huggingface" && source.Provider != "modelscope" {
+		if source.Provider != "huggingface" && source.Provider != "modelscope" && source.Provider != "local" {
 			return fmt.Errorf("model %s spec %s has unsupported weight source %q", modelID, specName, source.Provider)
 		}
 		if source.RepoID == "" || strings.ContainsAny(source.RepoID, "\r\n") {
 			return fmt.Errorf("model %s spec %s has invalid %s repository id", modelID, specName, source.Provider)
+		}
+		if source.Provider == "local" && (!validModelIDPath(source.RepoID) || localDrivePathExpression.MatchString(source.RepoID)) {
+			return fmt.Errorf("model %s spec %s local weights must name a registered model identity, not a host path or URL", modelID, specName)
 		}
 		if strings.ContainsAny(source.Revision, "\r\n") {
 			return fmt.Errorf("model %s spec %s has invalid %s revision", modelID, specName, source.Provider)

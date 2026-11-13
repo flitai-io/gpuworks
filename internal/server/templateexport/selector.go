@@ -31,12 +31,14 @@ func Selector(card GPUFact) (inferencecatalog.GPUSelector, error) {
 }
 
 // weightSource is the one weight source a deployment without a template
-// read: the repository it was downloaded from, pinned to the commit every
-// copy resolved. A model registered from a local directory or a URL has no
-// repository anybody else can download, and a revision that is a branch name
-// would let the template drift; both are refused rather than written loosely.
+// read: either a registered local model identity, or the repository it was
+// downloaded from pinned to the commit every copy resolved. Local identities
+// refer to registered artifacts, never the host path or an invented download.
 func weightSource(facts ModelFacts) (inferencecatalog.WeightSource, error) {
 	provider := strings.ToLower(strings.TrimSpace(facts.Source))
+	if provider == "local" {
+		return inferencecatalog.WeightSource{Provider: provider, RepoID: strings.TrimSpace(facts.RepoID), Subfolder: strings.TrimSpace(facts.Subfolder)}, nil
+	}
 	if provider != "huggingface" && provider != "modelscope" {
 		return inferencecatalog.WeightSource{}, Unavailable(ReasonWeightsNotPublic, map[string]any{"source": provider})
 	}

@@ -1014,6 +1014,7 @@
     },
     "notes": "What the template states and what is missing",
     "note": {
+      "local_weights": "This template references the registered local weights {{repo_id}}; it does not include the model files. Register these weights before using the template on another cluster.",
       "verified_on": "Verified on {{count}} × {{gpu}}; the template matches only this card model.",
       "kv_bytes_missing": "No KV cost per token for {{engine}}: the deploy form will show no token capacity until a reviewer computes it from config.json.",
       "model_config_missing": "The model's config.json was not available, so memory estimation has no model shape.",
@@ -1030,7 +1031,7 @@
       "no_gpu_facts": "The running instance is not bound to specific cards, so the cards it was tested on are unknown.",
       "template_assets": "The source template carries packaged files, which one YAML document cannot hold. Edit the template in the template editor instead.",
       "components": "The source template uses component models, which one YAML document cannot resolve. Edit the template in the template editor instead.",
-      "weights_not_public": "The weights come from a local directory or a URL that nobody else can download.",
+      "weights_not_public": "The current weight source cannot be saved as a template. Use a registered local model or a Hugging Face or ModelScope repository.",
       "revision_unpinned": "The weight revision is a branch name, not a commit. Pin the model to a commit and deploy again.",
       "revisions_differ": "The model's copies resolved to different commits. Pin the model to one commit and deploy again.",
       "template_missing": "The template this deployment was created from has been deleted.",
