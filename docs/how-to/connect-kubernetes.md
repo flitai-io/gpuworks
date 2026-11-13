@@ -61,6 +61,14 @@ agent 没有厂商挂载也能用到厂商工具：它以 privileged、hostPID �
 （manifest 固定设置 `NVIDIA_VISIBLE_DEVICES=all` 与 `NVIDIA_DRIVER_CAPABILITIES=compute,utility`，这两个变量只在 NVIDIA 的运行时下生效）。
 设备节点是否存在，看的是宿主机实时的 `/dev`。
 
+**NVIDIA GPU Operator 的 CDI 模式**（Operator 的默认）下，容器工具包把 `NVIDIA_VISIBLE_DEVICES` 当作 CDI 设备名读，卡号或
+UUID 这样不带种类的名字会落到 `management.nvidia.com/gpu`，而那里只有 `all`，按卡号选卡的 Pod 起不来
+（`unresolvable CDI devices management.nvidia.com/gpu=0`）。agent 创建实例 Pod 时经宿主机根目录读节点的 CDI 规格
+（`/etc/cdi`、`/var/run/cdi`）：工具包处在 CDI 模式（有 `management.nvidia.com/gpu` 规格，且工具包配置不是 legacy 模式）时，
+把选中的卡写成 NVIDIA device plugin 规格里按 UUID 命名的完整设备名（如
+`k8s.device-plugin.nvidia.com/gpu=GPU-…`），Pod 只拿到这张卡；规格里找不到这张卡时，Pod 不创建，报错说明怎么处理
+（让 NVIDIA 的 device plugin 以 CDI 运行，或把工具包设为 legacy 模式：`NVIDIA_CONTAINER_RUNTIME_MODE=legacy`）。
+
 **一个 Kubernetes 节点同一时间只属于一个条目。** 同一个集群的两个条目选中了同一个节点时，后来的那个条目的 agent 注册被拒绝
 （`KUBE_ENROLL_REFUSED`，原因 `node_taken`，并指出占着它的条目名），直到第一个条目在这个节点上的 agent 离线超过 15 分钟；
 之后节点可以转到另一个条目（例如改了节点选择器之后）。其他拒绝原因：`unknown_token`（接入令牌未知或已吊销；已经注册过的 agent 保留自己保存的身份，

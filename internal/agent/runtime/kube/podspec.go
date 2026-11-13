@@ -44,6 +44,10 @@ type podOptions struct {
 	UncoveredDevices bool
 	// Group resolves a --group-add name on the node.
 	Group func(name string) (int64, error)
+	// NVIDIAVisible rewrites the cards --gpus selects (NVIDIA_VISIBLE_DEVICES)
+	// into the names the node's NVIDIA runtime resolves (nvidia_cdi.go);
+	// nil keeps them.
+	NVIDIAVisible func(string) (string, error)
 }
 
 // dockerTranslation is what a workload's docker-style arguments amount to
@@ -194,6 +198,13 @@ func instancePod(spec runtime.WorkloadSpec, o podOptions) (kubeapi.Pod, error) {
 	}
 	for k, v := range spec.Env {
 		env[k] = v
+	}
+	if v, ok := tr.Env["NVIDIA_VISIBLE_DEVICES"]; ok && o.NVIDIAVisible != nil && env["NVIDIA_VISIBLE_DEVICES"] == v {
+		q, err := o.NVIDIAVisible(v)
+		if err != nil {
+			return kubeapi.Pod{}, err
+		}
+		env["NVIDIA_VISIBLE_DEVICES"] = q
 	}
 	keys := make([]string, 0, len(env))
 	for k := range env {
