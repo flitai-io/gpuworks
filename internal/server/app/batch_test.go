@@ -108,6 +108,13 @@ func TestBatchServiceOverTheStore(t *testing.T) {
 	if rows, _, _ := svc.ListBatchesPage(batch.Owner{UserID: 99}, nil, 0, 10); len(rows) != 0 {
 		t.Fatalf("another user lists %+v", rows)
 	}
+	// The count is scoped the same way, without reading the rows.
+	if counts, err := svc.CountByStatus(owner, []string{batch.StatusCompleted, batch.StatusFailed}); err != nil || len(counts) != 1 || counts[batch.StatusCompleted] != 1 {
+		t.Fatalf("owner counts = %v err=%v", counts, err)
+	}
+	if counts, err := svc.CountByStatus(batch.Owner{UserID: 99}, []string{batch.StatusCompleted}); err != nil || len(counts) != 0 {
+		t.Fatalf("another user counts %v err=%v", counts, err)
+	}
 	// The input file is free to delete once the batch ended; before that the
 	// store said ErrBatchFileInUse, which the service reports as 409.
 	if err := svc.DeleteFile(owner, f.ID); err != nil {

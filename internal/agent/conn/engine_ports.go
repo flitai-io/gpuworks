@@ -11,6 +11,9 @@ import (
 // first status of a connection goes out before the sync arrives, so a changed
 // range reports again at once instead of waiting a status interval.
 func (c *Conn) setEnginePorts(ctx context.Context, r *proto.PortRange) {
+	if c.creds.EnginePorts != nil {
+		return // this node allocates from its own range
+	}
 	if old := c.enginePorts.Swap(r); !samePortRange(old, r) {
 		c.requestStatus(ctx)
 	}

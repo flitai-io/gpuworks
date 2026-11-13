@@ -222,6 +222,12 @@ type Mode struct {
 	// PPU SGLang: 188–198 s, the rest under a second). The deploy form says
 	// so; the gateway waits as for any slow answer.
 	FirstRequestCompiles bool
+	// HybridKVCacheManager: a model with recurrent layers (gated delta net,
+	// Mamba; modelconfig.Config.HasRecurrentLayers) runs under the mode only
+	// with vLLM's hybrid KV cache manager on, which vLLM turns off whenever a
+	// KV connector is configured unless told otherwise. Without it the
+	// layers' KV specs cannot be unified and the engine fails to start.
+	HybridKVCacheManager bool
 }
 
 // ascendCards is what HCCL needs to be told on an Ascend host; the mode that
@@ -366,30 +372,35 @@ var modes = map[string]Mode{
 	// HIP transport), patched by vllm-hcu, so the KV moves over whatever host
 	// network the group shares. A decoder given no handoff computes the
 	// prefill itself. The vllm-hcu patch is about heterogeneous TP/PP; only
-	// equal TP was tried. The mode is experimental and marked unverified. It
+	// equal TP was tried. Verified on K100, two cards in one host at TP 1. It
 	// needs the image's r2 or later: r1's connector reported a failed pull as
 	// finished, so the decoder answered from KV it never received and the
-	// load failure policy did not apply.
+	// load failure policy did not apply. Hybrid models with gated delta net
+	// layers (Qwen3.5/3.6/3.8) need r4, whose connector moves their KV pages
+	// whole at equal TP and whose scheduler survives their failed pulls and
+	// does not zero blocks a pull is writing (r3 can), and the hybrid KV cache
+	// manager (verified on K100 with Qwen3.5-0.8B and
+	// hygon/Qwen3.8-27B-Channel-INT8-w8a8).
 	"vllm-mooncake": {
-		Name:                "vllm-mooncake",
-		Engine:              engines.VLLM,
-		Vendors:             []string{accelerator.VendorHygon},
-		SameVendor:          true,
-		Roles:               []string{RoleDecode, RolePrefill},
-		Connector:           "MooncakeConnector",
-		ConnectorRoles:      map[string]string{RolePrefill: "kv_producer", RoleDecode: "kv_consumer"},
-		Wire:                WireSequential,
-		TP:                  TPEqual,
-		TwoStagePaths:       []string{"/v1/chat/completions", "/v1/completions"},
-		TransferMetricsRole: RoleDecode,
-		VerifiedVersions:    "0.21.0",
-		ScalableToZero:      []string{RolePrefill},
-		DecodeServesAlone:   true,
-		KVLoadFailures:      []string{KVLoadFail, KVLoadRecompute},
-		ExtraPortsFixed:     map[string]int{RolePrefill: 1},
-		SynthesizedHandoff:  true,
-		Unverified:          true,
-		Transport:           TransportMooncake,
+		Name:                 "vllm-mooncake",
+		Engine:               engines.VLLM,
+		Vendors:              []string{accelerator.VendorHygon},
+		SameVendor:           true,
+		Roles:                []string{RoleDecode, RolePrefill},
+		Connector:            "MooncakeConnector",
+		ConnectorRoles:       map[string]string{RolePrefill: "kv_producer", RoleDecode: "kv_consumer"},
+		Wire:                 WireSequential,
+		TP:                   TPEqual,
+		TwoStagePaths:        []string{"/v1/chat/completions", "/v1/completions"},
+		TransferMetricsRole:  RoleDecode,
+		VerifiedVersions:     "0.21.0",
+		ScalableToZero:       []string{RolePrefill},
+		DecodeServesAlone:    true,
+		KVLoadFailures:       []string{KVLoadFail, KVLoadRecompute},
+		ExtraPortsFixed:      map[string]int{RolePrefill: 1},
+		SynthesizedHandoff:   true,
+		Transport:            TransportMooncake,
+		HybridKVCacheManager: true,
 	},
 	// SGLang on T-Head PPU with the mooncake backend: Mooncake's NVLink
 	// transport over legacy IPC handles copies the KV card to card inside one

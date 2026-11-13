@@ -102,6 +102,7 @@
     "search_api": "Find endpoint",
     "call_api": "Read",
     "search_metrics": "Find metric",
+    "get_node_connection_diagnostics": "Check node connection",
     "get_gpu_topology": "GPU topology",
     "compare_with_healthy_replica": "Compare with healthy replica"
   },

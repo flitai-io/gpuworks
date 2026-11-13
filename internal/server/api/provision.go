@@ -238,7 +238,7 @@ func installedSSHSecrets(auth provision.SSHAuth, report provision.SSHInstallRepo
 		return store.NodeSSHSecrets{}
 	}
 	switch report.AuthUsed {
-	case provision.AuthPassword:
+	case provision.AuthPassword, provision.AuthKeyboardInteractive:
 		return store.NodeSSHSecrets{Password: auth.Password}
 	case provision.AuthPrivateKey:
 		return store.NodeSSHSecrets{PrivateKeyPEM: auth.PrivateKeyPEM}

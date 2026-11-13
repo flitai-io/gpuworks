@@ -8,16 +8,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-// deploymentWire reads the deployment as the API serves it.
-func (r *scheduleRig) deploymentWire(t *testing.T, dep *store.Deployment) map[string]any {
-	t.Helper()
-	rec := r.do(r.session, http.MethodGet, fmt.Sprintf("/api/v1/deployments/%d", dep.ID), "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET deployment = %d %s", rec.Code, rec.Body)
-	}
-	return decodeBody(t, rec)
-}
-
 func TestScheduleRoutesRequireAuthAndFindTheirTarget(t *testing.T) {
 	rig := newScheduleRig(t)
 	own := &store.LifecycleSchedule{DeploymentID: rig.sleepable.ID, Action: store.ScheduleActionWake, Weekdays: 1 << 1, Minute: 8 * 60, Enabled: true}

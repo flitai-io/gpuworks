@@ -21,7 +21,6 @@ import {
   CopyOutlined,
 	DeleteOutlined,
   FolderAddOutlined,
-  ReloadOutlined,
   RocketOutlined,
 } from "@ant-design/icons";
 import { formatDate } from "../i18n/datetime";
@@ -37,7 +36,7 @@ import { isModelFileReady } from "../storageTypes";
 import AIAssistant from "../components/AIAssistant";
 import MarkdownContent from "../components/MarkdownContent";
 import { formatBytes } from "../format";
-import { refreshRemoteModelMetadata } from "./models/modelMetadataRefresh";
+import ModelMetadataRefreshAction from "./models/ModelMetadataRefreshAction";
 import { hasUnpinnedLocalCopy } from "./models/unpinnedRevision";
 import { ModelFilesSection } from "./models/ModelFilesSection";
 import { useLocalStorageChoice } from "./models/useStorages";
@@ -179,7 +178,6 @@ export function ModelDetailModal({
   onChanged: (model?: Model) => void;
 }) {
   const { t } = useTranslation("models");
-  const [refreshing, setRefreshing] = useState(false);
   const modelId = model?.id;
   const displayName = model?.name || model?.source_id;
   useEffect(() => {
@@ -209,19 +207,6 @@ export function ModelDetailModal({
     setSelectedInputModalities((current) => (sameModel && current.join(",") !== prev.inputModalities ? current : serverInputModalities));
     // serverOperations/serverInputModalities are fully described by their keys.
   }, [model?.id, serverOperationsKey, serverInputModalitiesKey]);
-  const refreshMetadata = async () => {
-    if (!model) return;
-    setRefreshing(true);
-    try {
-      const updated = await refreshRemoteModelMetadata(model, api.refreshModelMetadata);
-      message.success(t("detail.message.metadataUpdated"));
-      onChanged(updated);
-    } catch (e) {
-      message.error(t("detail.message.refreshFailed", { detail: (e as Error).message }));
-    } finally {
-      setRefreshing(false);
-    }
-  };
   const saveInferenceConfig = async () => {
     if (!model) return;
     setSavingInferenceConfig(true);
@@ -263,14 +248,14 @@ export function ModelDetailModal({
                 </Typography.Paragraph>
               </div>
             </Flex>
-            <Flex gap={8} style={{ alignItems: "last baseline" }}>
+            <Flex gap={8} wrap style={{ alignItems: "last baseline" }}>
               <div className="model-detail-specs">
                 <Tag>{t("detail.contextLength")} <span>{model.context_length ? model.context_length.toLocaleString() : t("unrecognized")}</span></Tag>
                 <Tag>{t("column.weight")} <span>{model.weight_gib ? `${model.weight_gib.toFixed(1)} GiB` : "—"}</span></Tag>
                 <Tag>{t("detail.precision")} <span>{model.precision || t("unrecognized")}</span></Tag>
               </div>
               {model.source !== "local" && (
-                <Button type="text" icon={<ReloadOutlined />} loading={refreshing} onClick={refreshMetadata}>{t("detail.refreshMetadata")}</Button>
+                <ModelMetadataRefreshAction key={model.id} model={model} onChanged={onChanged} />
               )}
             </Flex>
           </Flex>

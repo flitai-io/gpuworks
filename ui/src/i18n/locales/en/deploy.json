@@ -215,7 +215,15 @@
     "model_unavailable_detail": "Reported failure: {{detail}}",
     "plan_failed_detail": "Reported failure: {{detail}}",
     "blockers_keep_cards": "{{blockers}} never yields and keeps its cards: also choose another card, or enable sleep for {{blockers}} and pick a yield policy that shares cards.",
-    "holders_give_way": "The other holders give way: {{holders}}."
+    "holders_give_way": "The other holders give way: {{holders}}.",
+    "disk_node": "Node: {{node}}.",
+    "disk_storage": "Storage: {{storage}}.",
+    "disk_path": "Disk check directory: {{path}}.",
+    "disk_capacity": "Required free space: {{required}}; available: {{available}}.",
+    "disk_required": "Required free space: {{required}}.",
+    "disk_available": "Available space: {{available}}.",
+    "disk_register": "If these weights already exist on the node, register their directory on this model and evaluate again.",
+    "disk_register_action": "Register an existing model directory"
   },
   "shared": {
     "automatic": "Automatic",
@@ -316,7 +324,8 @@
       "nvidia": "NVIDIA",
       "ascend": "Ascend",
       "hygon": "Hygon",
-      "ppu": "T-Head PPU"
+      "ppu": "T-Head PPU",
+      "kunlunxin": "Kunlunxin"
     },
     "recommendedInferenceTemplate": "Recommended Inference Template",
     "selected": "Selected",
@@ -672,6 +681,17 @@
       "switchHelp": "Switching applies the profile's parameters and topology together"
     },
     "gpu": {
+      "notEvaluated": "Resource availability has not been evaluated",
+      "resourcesUnavailable": "Resources unavailable: {{reason}}",
+      "resourceReason": {
+        "gpu_not_schedulable": "This GPU is not schedulable; check its device state",
+        "gpu_index_unavailable": "This GPU has no usable device index",
+        "gpus_held_outside_platform": "This GPU is held by a process outside the platform",
+        "no_free_gpu": "This GPU has no free resources",
+        "gpu_whole_allocated": "This GPU is fully allocated to an inference service",
+        "partition_unavailable": "This GPU does not support the requested dGPU backend",
+        "no_fit": "Available memory {{available_gib}} GiB is below the required {{required_gib}} GiB"
+      },
       "notReported": "The node has not reported GPU details",
       "selectionAria": "GPU selection",
       "unavailableHealth": "GPU is unavailable for allocation: {{health}}",
@@ -771,7 +791,8 @@
       "downloadFrom": "Download from {{provider}}",
       "unknown": "Unknown",
       "unknownOffline": "Unknown (node offline)",
-      "unknownUnselected": "Unknown (no node selected)"
+      "unknownUnselected": "Unknown (no node selected)",
+      "unavailable": "No usable model path: {{detail}}"
     },
     "acquisition": {
       "loading": "Checking what this node already has…",
@@ -810,6 +831,24 @@
       "saveTo": "Save to",
       "storageGone": "The storage you chose is no longer available for this deployment. Choose a storage again.",
       "storageTarget": "{{name}} ({{type}})"
+    },
+    "componentAcquisition": {
+      "title": "Component weights",
+      "heading": "{{name}} · {{model}} · {{size}}",
+      "sizeUnknown": "size unknown",
+      "ready_one": "The target node already has it; nothing to download",
+      "ready_other": "All {{count}} target nodes already have it; nothing to download",
+      "sharedFollowsPrimary_one": "Will be downloaded into the shared storage \"{{storage}}\" (where the primary model is), written once by one node; the target node reads that copy",
+      "sharedFollowsPrimary_other": "Will be downloaded into the shared storage \"{{storage}}\" (where the primary model is), written once by one node and shared by the {{count}} target nodes",
+      "sharedChosen_one": "Will be downloaded into the chosen shared storage \"{{storage}}\", written once by one node; the target node reads that copy",
+      "sharedChosen_other": "Will be downloaded into the chosen shared storage \"{{storage}}\", written once by one node and shared by the {{count}} target nodes",
+      "sharedUsage": "Uses {{size}} of \"{{storage}}\"; deleting the deployment does not delete this copy",
+      "sharedAvoid": "To keep it out of this storage, limit the storage in the node requirements",
+      "sharedAvoidOrSaveTo": "To keep it out of this storage, limit the storage in the node requirements, or choose a local storage under Save to",
+      "nodeDownload_one": "{{count}} node downloads it into its local storage ({{total}}); the first start waits for the download",
+      "nodeDownload_other": "{{count}} nodes each download it into their local storage ({{total}} in total); the first start waits for the download",
+      "someReady_one": "{{count}} node already has it and reads it directly",
+      "someReady_other": "{{count}} nodes already have it and read it directly"
     },
     "resource": {
       "title": "Resources",
@@ -955,8 +994,8 @@
     "shmHelpDefault": "Size limit of the container's /dev/shm tmpfs, not a memory reservation. Tensor-parallel workers and NCCL communicate through it. Leave empty for the engine default of {{size}} GiB, plus the CPU memory tier's size when one is enabled (the engine keeps that tier in /dev/shm). Under --ipc=host the host's /dev/shm applies instead.",
     "shmHelpResolved": "Size limit of the container's /dev/shm tmpfs, not a memory reservation. Tensor-parallel workers and NCCL communicate through it. Leave empty for {{size}} GiB: the engine default, plus the CPU memory tier's size when one is enabled (the engine keeps that tier in /dev/shm). A size you set must be at least the tier's. Under --ipc=host the host's /dev/shm applies instead.",
     "startTimeout": "Start timeout",
-    "startTimeoutHelp": "How long a started instance may take to pass the engine health check before the start counts as failed. Leave empty for the cluster default (Settings → Deployment).",
-    "startTimeoutHelpDefault": "How long a started instance may take to pass the engine health check before the start counts as failed. A large model's first start compiles kernels and loads weights and may need longer. Leave empty for the cluster default of {{seconds}} s (Settings → Deployment).",
+    "startTimeoutHelp": "Maximum wait for engine health after startup. Leave empty for an automatic budget using the cluster default as a floor and the known engine deadline. An explicit value takes priority.",
+    "startTimeoutHelpDefault": "Maximum wait for engine health after startup. Leave empty for an automatic budget using the cluster default of {{seconds}} s as a floor and the known engine deadline. An explicit value takes priority.",
     "seconds": "s",
     "mounts": "Additional Mounts",
     "mountsHelp": "Purpose is used for scheduling and display and does not change the container path",
@@ -1050,5 +1089,74 @@
     "idleOrTurn": "{{deployment}} gives up its GPUs after {{idle}} idle or {{turn}} of serving",
     "sleeping": "the deployments giving up their GPUs finish going to sleep",
     "separator": "; "
+  },
+  "diagnostics": {
+    "title": "Check details ({{count}})",
+    "request": "Request ID: {{id}}",
+    "createFailed": "The last create attempt failed; your draft is preserved.",
+    "blockedBy": "Not executed because of: {{checks}}",
+    "missingDependency": "an unavailable prerequisite",
+    "truncated": "Some check details were omitted because the report reached its size limit.",
+    "storageAction": "Open storage status",
+    "modelAction": "Open model copies",
+    "status": {
+      "passed": "Passed",
+      "failed": "Failed",
+      "pending": "Waiting",
+      "blocked": "Not executed",
+      "unknown": "Not observed",
+      "not_applicable": "Not applicable"
+    },
+    "object": {
+      "node": "Node: {{name}}",
+      "storage": "Storage: {{name}}",
+      "model": "Model: {{name}}"
+    },
+    "observer": {
+      "control_plane": "Evidence: control-plane records; not a live filesystem check.",
+      "agent_report": "Evidence: the agent’s reported state; not a new probe.",
+      "management_node": "Check executed from the management node.",
+      "unknown": "The evidence source is unknown."
+    },
+    "reason": {
+      "source_ready": "The control-plane records show a ready model copy.",
+      "cache_fill_required": "The shared storage holds the model; this node must fill its cache before starting.",
+      "shared_transfer_pending": "A transfer to the shared storage is in progress. Wait for it to finish.",
+      "copy_in_progress": "A model copy has been accepted and is still in progress. It is not ready yet.",
+      "not_on_node": "This node has no complete model-copy record. Check other copies or prepare the model first.",
+      "model_missing_in_storage": "This storage has no complete model-copy record. Check the model’s copies or transfer status; this does not prove that its directory is absent.",
+      "storage_unavailable": "The storage is not ready on this node. Check its mount status on the storage page.",
+      "storage_not_on_node": "The storage does not apply to this node. Check its node selection or choose another target.",
+      "storage_not_found": "The selected storage no longer exists. Choose an available storage.",
+      "storage_disabled": "The storage cannot accept the required model acquisition. Enable it or choose another target.",
+      "facts_unavailable": "Model or storage state could not be read. The availability of model copies is unknown.",
+      "storage_access_required": "The model path was not checked because storage access is a prerequisite.",
+      "peer_available": "An eligible peer has a model-copy record. The actual transfer connection has not been checked.",
+      "no_acquisition_path": "No executable model acquisition path was found under this request’s constraints. Check copies, the save target and sync groups.",
+      "source_timeout": "Reading model-source metadata from the management node timed out. Check source connectivity and retry.",
+      "source_cancelled": "The model-source metadata check was cancelled.",
+      "source_unavailable": "The management node could not read model-source metadata. This does not indicate that a download from the GPU node was tested.",
+      "metadata_not_checked": "Model-source metadata was not checked in this request.",
+      "source_not_required": "The current path does not require access to the public model source.",
+      "not_mounted": "The storage is not mounted on this node. Check the storage’s node status and mount configuration.",
+      "permission_denied": "The reported storage access was denied. Check the mount and file access permissions.",
+      "model_record_ready": "The control-plane records show a complete model copy.",
+      "model_transfer_pending": "The model transfer is still in progress. Wait for it to finish before reading the model.",
+      "storage_state_unknown": "This node has not reported a usable storage state. Whether the storage is mounted is unknown.",
+      "storage_ready": "The node’s reported storage state is ready.",
+      "metadata_only": "Only source metadata was requested. This does not verify all weight files or a download from the GPU node.",
+      "source_dns_failed": "The management node could not resolve the model-source hostname. Check its DNS configuration.",
+      "source_tls_failed": "TLS certificate verification failed while the management node read model-source metadata. Check the certificate and trust configuration.",
+      "source_connect_failed": "The management node could not connect to the model source. Check its connection route and the source service.",
+      "source_authentication": "The model source rejected the configured credentials. Check its credentials and access permissions.",
+      "storage_mounting": "The node is mounting the storage. Wait until it is ready, then recheck the model path.",
+      "storage_unresponsive": "The storage is not responding on this node. Check the node’s storage diagnostics.",
+      "storage_unsupported": "The node does not support the required storage mount. Check the node platform and selected storage type.",
+      "storage_not_writable": "The selected storage cannot accept model writes. Check its writer node and write permissions.",
+      "unsupported_storage": "The model source uses an unsupported storage type. Check the storage configuration.",
+      "shared_path_invalid": "The shared model record has an invalid relative path. Scan the storage again or register a valid model path.",
+      "no_storage_path": "The candidate copy source {{source}} and target {{target}} have no common network allowed to carry storage sync. Check the storage sync role on the management network or another common network on both nodes.",
+      "peer_transport_required": "The peer acquisition path was not accepted because a permitted storage-sync network is required. Resolve the preceding peer network check first."
+    }
   }
 }

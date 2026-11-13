@@ -348,7 +348,7 @@ revision 编译，这些差异不再参与任何判断。
 挂载与回退、字节完整性、重连这些确定性断言照常无条件运行。
 
 此前认为 `.32` 不支持切分的说法是错误的：nerdctl 没有 Ascend Docker
-Runtime 插件，但 GPUWorks 可以自己传入原始设备节点/挂载，vCANN 依然会使用
+Runtime 插件，但 GPUWorks 可以自己传入原始设备节点/挂载，vcann-rt 依然会使用
 宿主机的 device-share 能力。`TestAscendNerdctlPartitionCapabilityProbeEndToEnd`
 现在会调用生产环境的 `Engine.BuildPartitionProbeWorkload` 路径，通过真实的
 nerdctl driver 加载已内置的 2.5 MiB `gpuworks/partition-probe:v1` 镜像，并

@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next";
 import { APIError, apiResponseError } from "../apiError";
 import LoginPage, { LoginForm } from "../pages/LoginPage";
+import type { AuthUser } from "../api";
+import { SessionUserContext } from "./sessionUser";
 import { notifySessionAuthenticated, notifySessionExpired, startSessionActivity, subscribeSessionChanges } from "../session";
 
 export default function SessionBoundary({ children, onLogout }: { children: (logout: () => Promise<void>) => ReactNode; onLogout?: () => void }) {
@@ -11,6 +13,7 @@ export default function SessionBoundary({ children, onLogout }: { children: (log
   const [expired, setExpired] = useState(false);
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
+  const [user, setUser] = useState<AuthUser>();
   const request = useRef<AbortController>(undefined);
 
   const checkSession = useCallback(async () => {
@@ -30,6 +33,9 @@ export default function SessionBoundary({ children, onLogout }: { children: (log
         }
         throw failure;
       }
+      const me = await response.json().catch(() => undefined) as AuthUser | undefined;
+      if (controller.signal.aborted) return;
+      setUser(me && typeof me.username === "string" ? me : undefined);
       setAuthenticated(true);
       setExpired(false);
     } catch {
@@ -85,7 +91,7 @@ export default function SessionBoundary({ children, onLogout }: { children: (log
 
   return <>
     {error && <Alert type="error" showIcon role="alert" message={t(error)} action={<Button onClick={() => void checkSession()} loading={checking}>{t("retry")}</Button>} />}
-    {children(logout)}
+    <SessionUserContext.Provider value={user}>{children(logout)}</SessionUserContext.Provider>
     <Modal open={expired} title={t("sessionExpiredTitle")} footer={null} closable={false} maskClosable={false} keyboard={false} destroyOnHidden>
       <Typography.Paragraph>{t("sessionExpiredDescription")}</Typography.Paragraph>
       <LoginForm onLogin={loggedIn} />

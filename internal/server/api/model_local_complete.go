@@ -29,7 +29,7 @@ func (a *apiHandlers) completeFromLocalCopy(ctx context.Context, m *store.Model,
 	}
 	dir, err := a.modelDirFromMetadata(ctx, node.UUID, reg.Path, reg.Metadata)
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // Metadata completion is optional; retain the already registered local model.
 	}
 	local := dir.model(m.Source, m.SourceID, m.Revision, m.Name, reg.SizeBytes)
 	current, err := a.d.Store.GetModel(m.ID)

@@ -41,8 +41,9 @@ type Repo struct {
 	Registry string `json:"registry,omitempty"`
 	// UpstreamAPI overrides the first-page URL of the tag list.
 	UpstreamAPI string `json:"upstream_api,omitempty"`
-	Engine      string `json:"engine"`
-	Framework   string `json:"framework,omitempty"`
+	// Engine may be empty for repositories containing several engine families.
+	Engine    string `json:"engine"`
+	Framework string `json:"framework,omitempty"`
 	// Siblings are further repositories shown on the same card. Each lists
 	// its own tags and inherits this card's engine and framework.
 	Siblings []string `json:"siblings,omitempty"`
@@ -50,10 +51,14 @@ type Repo struct {
 }
 
 type Tag struct {
-	Tag           string `json:"tag"`
-	EngineVersion string `json:"engine_version,omitempty"`
-	RollingTag    bool   `json:"rolling_tag,omitempty"`
-	UpstreamGone  bool   `json:"upstream_gone,omitempty"`
+	Tag              string `json:"tag"`
+	Engine           string `json:"engine,omitempty"`
+	EngineVersion    string `json:"engine_version,omitempty"`
+	Framework        string `json:"framework,omitempty"`
+	FrameworkVersion string `json:"framework_version,omitempty"`
+	Arch             string `json:"arch,omitempty"`
+	RollingTag       bool   `json:"rolling_tag,omitempty"`
+	UpstreamGone     bool   `json:"upstream_gone,omitempty"`
 	// LastUpdated is the registry's own timestamp for the tag, when its API
 	// reports one (Docker Hub and quay do, the OCI tag list does not).
 	LastUpdated string `json:"last_updated,omitempty"`
@@ -66,8 +71,6 @@ type Catalog struct {
 	CatalogVersion string `json:"catalog_version,omitempty"`
 	Repos          []Repo `json:"repos"`
 }
-
-var versionPattern = regexp.MustCompile(`(?:^|[^0-9])v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:[^0-9]|$)`)
 
 // IsRollingTag identifies tags whose content moves upstream without the tag
 // changing. Numbered and release-candidate tags stay immutable-looking entries.
@@ -84,21 +87,6 @@ func IsRollingTag(tagOrRef string) bool {
 	}
 }
 
-// InferEngineVersion extracts the first release-like version from a community
-// tag. It is intentionally conservative: mutable names and hash-only tags
-// return an empty value and remain valid imports without an engine version.
-func InferEngineVersion(tagOrRef string) string {
-	value := strings.TrimSpace(tagOrRef)
-	if colon := strings.LastIndex(value, ":"); colon >= 0 && colon+1 < len(value) {
-		value = value[colon+1:]
-	}
-	match := versionPattern.FindStringSubmatch(value)
-	if len(match) != 2 {
-		return ""
-	}
-	return match[1]
-}
-
 //go:embed catalog.json
 var builtinCatalogJSON []byte
 
@@ -111,6 +99,10 @@ type HTTPClient interface {
 // repository. The zero value is not usable; use NewBrowser.
 type Browser struct {
 	client HTTPClient
+
+	// Credentials reads the current login for an exact registry host.
+	// Configure it before using the browser; secrets never enter catalog rows.
+	Credentials func(host string) (username, secret string, err error)
 
 	mu      sync.Mutex
 	entries map[string]cacheEntry
@@ -131,7 +123,7 @@ func NewBrowser(client HTTPClient) *Browser {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &Browser{client: client, entries: map[string]cacheEntry{}}
+	return &Browser{client: scopedRedirectClient(client), entries: map[string]cacheEntry{}}
 }
 
 // Repos returns the built-in community repositories with the
@@ -205,7 +197,11 @@ func (b *Browser) Browse(ctx context.Context, repo string, configured []Repo) (R
 	}
 	row := lookup(repo, repos)
 	row.Tags = nil
-	key := fingerprint(row)
+	ctx, authKey, err := b.authContext(ctx, row)
+	if err != nil {
+		return row, err
+	}
+	key := fingerprint(row) + authKey
 
 	b.mu.Lock()
 	entry, cached := b.entries[repo]
@@ -246,9 +242,6 @@ func ValidateRepos(repos []Repo) error {
 			return fmt.Errorf("duplicate community repo %q", row.Repo)
 		}
 		seen[row.Repo] = true
-		if strings.TrimSpace(row.Engine) == "" {
-			return fmt.Errorf("community repo %q engine is required", row.Repo)
-		}
 		switch strings.TrimSpace(row.Registry) {
 		case "", RegistryDockerHub, RegistryQuay, RegistryOCI:
 		default:
@@ -284,12 +277,9 @@ func mergeTags(previous []Tag, upstream []upstreamTag) []Tag {
 			continue
 		}
 		seen[name] = true
-		merged = append(merged, Tag{
-			Tag:           name,
-			EngineVersion: InferEngineVersion(name),
-			RollingTag:    IsRollingTag(name),
-			LastUpdated:   item.LastUpdated,
-		})
+		tag := inferTagMetadata(name)
+		tag.LastUpdated = item.LastUpdated
+		merged = append(merged, tag)
 	}
 	for _, tag := range previous {
 		name := strings.TrimSpace(tag.Tag)

@@ -1,23 +1,23 @@
-import { Progress, Tag, Typography, theme } from "antd";
+import { Badge, type BadgeStatus } from "../../components/ui/badge";
 import { useTranslation } from "react-i18next";
 import type { Batch, BatchStatus } from "../../batchApi";
 
-const STATUS_COLORS: Record<BatchStatus, string> = {
-  validating: "default",
-  in_progress: "processing",
-  finalizing: "processing",
-  cancelling: "orange",
+const STATUS_COLORS: Record<BatchStatus, BadgeStatus> = {
+  validating: "neutral",
+  in_progress: "info",
+  finalizing: "info",
+  cancelling: "warning",
   completed: "success",
-  failed: "error",
+  failed: "danger",
   expired: "warning",
-  cancelled: "default",
+  cancelled: "neutral",
 };
 
 /** BatchStatusTag is a batch's status, coloured by how it ended or that it is still moving. */
 export function BatchStatusTag({ status }: { status: string }) {
   const { t } = useTranslation("batches");
   const label = t(`status.${status}`, { defaultValue: status });
-  return <Tag color={STATUS_COLORS[status as BatchStatus] ?? "default"}>{label}</Tag>;
+  return <Badge status={STATUS_COLORS[status as BatchStatus] ?? "neutral"}>{label}</Badge>;
 }
 
 /** The share of a batch's requests that reached a final result, and how many of those failed. */
@@ -37,20 +37,17 @@ export function batchProgress(batch: Pick<Batch, "request_counts">) {
 export function BatchProgress({ batch }: { batch: Batch }) {
   const { t } = useTranslation("batches");
   const p = batchProgress(batch);
-  const { token } = theme.useToken();
   return (
     <div className="batch-progress">
-      <Progress
-        size="small"
-        showInfo={false}
-        percent={p.percent}
-        success={{ percent: p.succeeded }}
-        strokeColor={token.colorWarning}
+      <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.percent}
         aria-label={t("progress.aria", { done: p.done, total: p.total, failed: p.failed })}
-      />
+        className="flex h-2 overflow-hidden rounded-full bg-emphasis">
+        <div className="h-full bg-success-strong" style={{ width: `${p.succeeded}%` }} />
+        <div className="h-full bg-warning" style={{ width: `${Math.max(0, p.percent - p.succeeded)}%` }} />
+      </div>
       <div>
-        <Typography.Text>{t("progress.summary", { done: p.done, total: p.total })}</Typography.Text>
-        {p.failed > 0 && <Typography.Text type="warning" className="batch-progress-failed">{t("progress.failed", { count: p.failed })}</Typography.Text>}
+        <span>{t("progress.summary", { done: p.done, total: p.total })}</span>
+        {p.failed > 0 && <span className="batch-progress-failed text-fg-warning">{t("progress.failed", { count: p.failed })}</span>}
       </div>
     </div>
   );

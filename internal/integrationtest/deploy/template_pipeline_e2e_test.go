@@ -119,7 +119,7 @@ func TestInferenceTemplateDeploymentRejectsInvalidGPUSelectionsBeforeAgentWorklo
 					Name: "hygon-general", Scenario: "balanced", Engine: "vllm", Image: "gpuworks/runtime-hygon:test",
 					Quantization: "bf16", WeightBytes: 1 << 20,
 					WeightSources: fmt.Sprintf(`[{"provider":"huggingface","repo_id":%q,"revision":"main"}]`, modelID),
-					GPUs:          `{"vendor":"hygon","name":"(^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW[_ -]?1000|BW[_ -]?1100)([^A-Za-z0-9]|$)"}`,
+					GPUs:          `{"vendor":"hygon","name":"(^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9]|$)"}`,
 					Args:          `["--tensor-parallel-size","${TP_SIZE}"]`, Env: `{}`,
 					Placement: fmt.Sprintf(`{"language":"starlark","resolver":%q}`, resolver),
 				}},
@@ -261,7 +261,7 @@ func TestInferenceTemplateDeploymentPipeline(t *testing.T) {
 	catalog := store.InferenceModel{ModelID: "gpuworks/template-pipeline", Source: "upstream", Architecture: "Qwen3ForCausalLM", ContextLength: 4096, Specs: []store.InferenceSpecRow{
 		{Name: "nvidia-general", Engine: "vllm", Image: "gpuworks/runtime-nvidia:test", Quantization: "bf16", WeightSources: sources, WeightBytes: 1 << 20, GPUs: `{"vendor":"nvidia","cc":">=7.5"}`, Args: `["--max-model-len","1024"]`, Env: `{"CATALOG_LAYER":"nvidia"}`},
 		{Name: "ascend-general", Engine: "sglang", Image: "gpuworks/runtime-ascend:test", Quantization: "bf16", WeightSources: sources, WeightBytes: 1 << 20, GPUs: `{"vendor":"ascend","name":"(^|[^A-Za-z0-9])(?:910B4?|910C|950DT|950PR)([^A-Za-z0-9]|$)"}`, Args: `["--context-length","1024"]`, Env: `{"CATALOG_LAYER":"ascend"}`},
-		{Name: "hygon-general", Engine: "vllm", Image: "gpuworks/runtime-hygon:test", Quantization: "bf16", WeightSources: sources, WeightBytes: 1 << 20, GPUs: `{"vendor":"hygon","name":"(^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW[_ -]?1000|BW[_ -]?1100)([^A-Za-z0-9]|$)"}`, Args: `["--max-model-len","1024"]`, Env: `{"CATALOG_LAYER":"hygon"}`},
+		{Name: "hygon-general", Engine: "vllm", Image: "gpuworks/runtime-hygon:test", Quantization: "bf16", WeightSources: sources, WeightBytes: 1 << 20, GPUs: `{"vendor":"hygon","name":"(^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9]|$)"}`, Args: `["--max-model-len","1024"]`, Env: `{"CATALOG_LAYER":"hygon"}`},
 	}}
 	if err := env.Store().ReconcileInferenceCatalog([]store.InferenceModel{catalog}); err != nil {
 		t.Fatal(err)

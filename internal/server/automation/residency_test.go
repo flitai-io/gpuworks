@@ -28,12 +28,13 @@ type residencyWorld struct {
 	// never asks that, a request or a resume wakes only the platform's.
 	heldWakes []uint
 	settling  map[uint]bool // waiting to be placed, or starting
+	restartLog
 }
 
 func newResidencyWorld() *residencyWorld {
 	return &residencyWorld{
 		fakeWorld: newFakeWorld(), levels: map[uint]yieldpolicy.Policy{}, asleep: map[uint]bool{}, blocking: map[uint]Blocking{},
-		activity: map[uint]Activity{}, fitsNow: map[uint]bool{}, settling: map[uint]bool{}, inFlight: map[string]int{},
+		activity: map[uint]Activity{}, fitsNow: map[uint]bool{}, settling: map[uint]bool{}, inFlight: map[string]int{}, restartLog: restartLog{awake: map[uint]time.Time{}},
 	}
 }
 

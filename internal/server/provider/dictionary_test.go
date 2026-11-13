@@ -21,6 +21,9 @@ func TestProviderDictionaryCoversKindsCredentialsAndConnections(t *testing.T) {
 		if !providerTextComplete(labelFor(kind)) {
 			t.Errorf("provider kind %q has incomplete labels: %#v", kind, labelFor(kind))
 		}
+		if category := CategoryOf(kind); category != CategoryPublicCloud && category != CategoryPrivateCloud {
+			t.Errorf("provider kind %q category = %q, want a declared category", kind, category)
+		}
 		if !strings.HasPrefix(kindHomepages[kind], "https://") {
 			t.Errorf("provider kind %q homepage = %q, want an https URL", kind, kindHomepages[kind])
 		}

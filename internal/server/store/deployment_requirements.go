@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 )
 

@@ -89,6 +89,96 @@ def terminal_row(page, name):
 #           → 输入 echo 标记并看到真实回显 → exit 后会话结束
 #           → 设置页关闭 Web Terminal 后新终端被拒绝 → 重新开启后终端恢复
 #           → 停止 agent 并强制删除节点
+def _untranslated(locale_pairs, label):
+    """Pairs whose zh copy is identical to the en copy, i.e. never translated."""
+    return [name for name, (english, chinese) in locale_pairs.items() if english == chinese]
+
+
+def _internal_identifiers(text):
+    """Internal field names that must never stand in for a translation."""
+    hits = []
+    for token in ("cache_max_bytes", "node_uuid", "target_kind", "expires_at",
+                  "session_id", "transport_bytes"):
+        if token in text:
+            hits.append(token)
+    return hits
+
+
+def exercise_localization(page, server, nodes, settings, auth, node, open_terminal, terminal_row):
+    """22.5: navigation, first screen, form and error text are translated to zh.
+
+    Asserting that the page 'looks Chinese' cannot distinguish a translated sentence
+    from an English one that happens to sit next to a Chinese label, and guessing at
+    what untranslated text looks like gave me two false positives on legitimate
+    command examples. The check is exact instead: each surface has to render the zh
+    string, and that zh string has to differ from the en one, so a surface still
+    showing its English copy fails no matter how it is worded.
+    """
+    found = {}
+    keys = {
+        "page_title": ("page", "title"),
+        "terminal_host": ("terminalView", "host"),
+        "terminal_cannot_open": ("terminalView", "cannotOpen"),
+        "terminal_open": ("terminalView", "status", "open"),
+        "terminal_error": ("terminalView", "status", "error"),
+        "terminal_disabled": ("terminalView", "preflight", "disabled"),
+    }
+
+    def load(locale):
+        return json.loads((ROOT / "ui/src/i18n/locales" / locale / "nodes.json").read_text())
+
+    en_nodes, zh_nodes = load("en"), load("zh")
+    pairs = {}
+    for label, path_ in keys.items():
+        en_value, zh_value = en_nodes, zh_nodes
+        for part in path_:
+            en_value = en_value.get(part, "")
+            zh_value = zh_value.get(part, "")
+        pairs[label] = (en_value, zh_value)
+    identical = _untranslated(pairs, "nodes")
+    check(not identical, f"these nodes.json entries are not translated: {identical}")
+
+    # First screen: the page title is the zh copy, not the en one.
+    page.goto(server.base + "/nodes")
+    title_zh, title_en = pairs["page_title"][1], pairs["page_title"][0]
+    check(title_zh != title_en, "page.title is the same in both locales")
+    expect(page.get_by_role("heading", name=title_zh, exact=True)).to_be_visible()
+    found["page_title"] = title_zh
+
+    # Navigation and table headers carry Chinese and no internal identifiers.
+    nav_text = page.get_by_role("navigation").first.inner_text()
+    # The page under inspection may render either the antd table or the ResourceTable
+    # (components/resourceTable/ResourceTable.tsx), whose heads are
+    # [data-slot=table-head]; read whichever is present so the leak check still has text.
+    headers = page.locator('[data-slot="table-head"], .ant-table-thead th')
+    headers_text = " ".join(headers.all_inner_texts())
+    for label, text in (("navigation", nav_text), ("table_headers", headers_text)):
+        leaked = _internal_identifiers(text)
+        check(not leaked, f"{label} shows internal identifiers instead of a translation: {leaked}")
+    found["navigation_leaks"] = _internal_identifiers(nav_text)
+    found["table_headers_leaks"] = _internal_identifiers(headers_text)
+
+    # Form: the terminal settings card renders the zh terminal title.
+    page.goto(server.base + "/settings")
+    page.get_by_role("tab", name=settings["page"]["tabs"]["access"], exact=True).click()
+    card = page.locator(".ant-card").filter(has_text=settings["terminal"]["title"]).first
+    expect(card).to_be_visible()
+    card_text = card.inner_text()
+    check(_internal_identifiers(card_text) == [],
+          f"the settings card shows internal identifiers: {_internal_identifiers(card_text)}")
+    found["settings_card_translated"] = True
+
+    # Dynamic text: the live terminal status and the server's preflight reason both
+    # arrive as the zh copy.
+    page.goto(server.base + "/nodes")
+    terminal = open_terminal(page, terminal_row(page, node["name"]), nodes)
+    expect(terminal.get_by_text(pairs["terminal_open"][1], exact=True)).to_be_visible(timeout=20000)
+    found["terminal_status_translated"] = pairs["terminal_open"][1]
+    terminal.close()
+    found["localized_pairs"] = {k: v[1] for k, v in pairs.items()}
+    return found
+
+
 def test_terminal_host(page, context, server, artifacts, report, locale, node,
                        agent, agent_log, admin_token):
     nodes, settings, auth = strings(locale)
@@ -205,6 +295,15 @@ def test_terminal_host(page, context, server, artifacts, report, locale, node,
     terminal = open_terminal(page, terminal_row(page, node["name"]), nodes)
     expect(terminal.get_by_text(nodes["terminalView"]["status"]["open"], exact=True)).to_be_visible(timeout=20000)
     terminal.close()
+
+    # 22.5: in a non-English locale the operator-facing text has to be translated,
+    # including the dynamic strings the server contributes, and internal field names
+    # must not stand in for a translation. This is driven on the zh run only, since
+    # the assertion is that Chinese text appears where English would otherwise leak.
+    if locale == "zh":
+        report["localization"] = exercise_localization(
+            page, server, nodes, settings, auth, node, open_terminal, terminal_row)
+        report["last_step"] = "localization"
 
     check(len([item for item in preflights if item["status"] == 200]) >= 3,
           f"terminal preflights differ: {preflights}")

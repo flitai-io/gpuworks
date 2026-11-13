@@ -23,15 +23,15 @@ _Avoid_: 双进程测试
 ### dGPU
 
 **dGPU — dGPU**:
-dynamic GPU 的缩写，产品对「GPU 切分」功能的唯一叫法：把整张物理加速卡呈现为带显存或算力限额的逻辑资源。UI 与用户文案统一用 dGPU，不再出现 HAMi、vGPU、切分、显存切分等历史叫法；实现名（NVIDIA 由 HAMi-core libvgpu、昇腾由 vCANN、PPU 由 HGGC 实现）只出现在工程文档与代码里。
-_Avoid_: vGPU、HAMi、切分、显存切分、虚拟化（把逻辑限额误写成虚拟设备）
+dynamic GPU 的缩写，产品对「GPU 切分」功能的唯一叫法：把整张物理加速卡呈现为带显存或算力限额的逻辑资源。UI 与用户文案统一用 dGPU，不再出现 HAMi、vGPU、切分、显存切分等历史叫法；实现名只出现在工程文档与代码里，写上游项目名而不是自造简称：NVIDIA 用 HAMi-core（`libvgpu.so`）；昇腾用 openEuler ubs-virt 的 vcann-rt（`libvruntime.so`，软件层逻辑限额）；PPU 用 ppu-slicing-shim（`hggc_quota.so` + `hgml_dlsym_hook.so`，拦截 PPU 的 HGGC 运行时与 HGML 管理库）；AMD 用 rocm-slicing-shim（`libvrocm.so`，HIP 运行时层拦截）；海光用驱动原生 vdev（可选 helper 经 hcu-dcgm 创建）。HGGC 是 PPU 的运行时（对应 CUDA），不是切分实现；平台不使用昇腾 vNPU（`npu-smi` 按模板的驱动层切分）。
+_Avoid_: vGPU、HAMi、切分、显存切分、虚拟化（把逻辑限额误写成虚拟设备）；工程文档里的 vCANN（不是公开名称，指 vcann-rt）、「PPU HGGC 切分」（HGGC 是运行时）、vNPU（未使用）
 
 **dGPU 后端 — dGPU Backend**:
 一种把整张物理加速卡呈现为带显存或算力限额的逻辑资源的实现合同。后端描述适用硬件、成熟度、所需资产、注入合同、展示信息和实例清理要求；是否允许某次部署仍由平台准入规则决定。
 _Avoid_: partitioner（容易误指一次切分动作）、把准入策略叫后端能力
 
 **dGPU 能力 — dGPU Capability**:
-某张物理加速卡在当前节点事实下可选择的 dGPU 后端集合；每项只有 ready / unavailable 两种状态，并附兼容范围或不可用原因。除豁免行为探针的后端（NVIDIA）外，ready 的唯一依据是[[dGPU 探针]]通过（豁免后端只看运行时约束与资产，由 `accelerator.SkipsBehaviorProbe` 声明）；版本/平台组合只产生兼容性警告，不产生 unavailable。它是 dGPU 可用性的唯一事实源，节点级展示只是对各卡能力的汇总。
+某张物理加速卡在当前节点事实下可选择的 dGPU 后端集合；每项只有 ready / unavailable 两种状态，并附兼容范围或不可用原因。除豁免行为探针的后端（NVIDIA、AMD）外，ready 的唯一依据是[[dGPU 探针]]通过（豁免后端只看运行时约束与资产，由 `accelerator.SkipsBehaviorProbe` 声明）；版本/平台组合只产生兼容性警告，不产生 unavailable。它是 dGPU 可用性的唯一事实源，节点级展示只是对各卡能力的汇总。
 _Avoid_: `partition_mode`（已删除的单值推断）、从厂商名、MIG 状态或健康状态反推 dGPU 能力、用版本组合表作硬门（探测缺口 × 硬门 = 假阴性）
 
 **dGPU 探针 — dGPU Probe**:
@@ -255,10 +255,10 @@ _Avoid_: 把上游整机硬件档当芯片类型、因当前卡数不足判定�
 _Avoid_: 芯片类/Chip Class(旧具名类注册表与 `<vendor>_sm<NN>_plus` 三段文法,ADR 0009 已废,谓词内联不再具名)、把场景合并行标成「通用配置」(该词只属于开区间谓词档位)
 
 **国产代际兼容继承 — Domestic Generation Compatibility Inheritance**:
-目录生产时对真机 PASS recipe 执行的有向兼容规则:K100/K100AI PASS 默认同样适用于 BW1000/BW1100;910B/910B4 PASS 默认同样适用于 910C/950DT/950PR。继承结果写入档位的[[GPU 适配谓词]],不在 chipmatch 中隐式猜测;同一精确配置在后继卡上的明确 FAIL 优先,中止该卡继承。
+目录生产时对真机 PASS recipe 执行的有向兼容规则:K100/K100AI PASS 默认同样适用于整个 BW 系列(只报系列的 `BW` 与 BW100、BW150、BW1000、BW1100 等);910B/910B4 PASS 默认同样适用于 910C/950DT/950PR。继承结果写入档位的[[GPU 适配谓词]],不在 chipmatch 中隐式猜测;同一精确配置在后继卡上的明确 FAIL 优先,中止该卡继承。
 
 **厂商目录镜像必需 — Vendor Catalog Image Required**:
-`accelerator.RequiresVendorCatalogImage(vendor) bool` 是镜像解析的唯一判定依据，表示该 vendor 的镜像不能安全继承 CUDA/ROCm 引擎默认镜像，必须在镜像目录中有对应条目。当前命中范围：ascend、ppu（`IsDomestic` 子集）以及 hygon（DTK 镜像与 ROCm 引擎默认镜像不兼容）。`IsDomestic` 是更窄的子集（仅 ascend/ppu），用于 dGPU 后端与原生资产选择；两者含义不同，不可互换。所有镜像目录键、hardwarecatalog 的 vendor 字段、agent 探测器的 `Vendor()` 返回值都必须在 `accelerator.KnownVendors()` 范围内，由测试机械化断言。
+`accelerator.RequiresVendorCatalogImage(vendor) bool` 是镜像解析的唯一判定依据，表示该 vendor 的镜像不能安全继承 CUDA/ROCm 引擎默认镜像，必须在镜像目录中有对应条目。当前命中范围：ascend、ppu、kunlunxin（`IsDomestic` 子集）、hygon（DTK 镜像与 ROCm 引擎默认镜像不兼容）以及 apple（使用 macOS 环境包，不继承 Linux 引擎镜像）。`IsDomestic` 是更窄的子集（ascend/ppu/kunlunxin），用于 dGPU 后端与原生资产选择；两者含义不同，不可互换。所有镜像目录键、hardwarecatalog 的 vendor 字段、agent 探测器的 `Vendor()` 返回值都必须在 `accelerator.KnownVendors()` 范围内，由测试机械化断言。
 _Avoid_: 在镜像解析路径中自行判断"是否国产"、用 `IsDomestic` 代替 `RequiresVendorCatalogImage` 做镜像目录必需判断、在 deploy/imagecatalog/hub 中重新实现 vendor 规范化逻辑
 
 _Avoid_: 将 K100 继承扩大到 K500、将非 PASS 文档声明当成继承源、在匹配器代码中写死代际关系
@@ -314,7 +314,7 @@ supported/unsupported 自由文本标签。镜像目录描述 framework、引擎
 _Avoid_: 在镜像上填写 GPU 型号兼容标签、把目录经验当成节点硬件事实
 
 **厂商 / 框架 — Vendor / Framework**:
-框架(cuda/rocm/cann/hggc/dtk)是系列级单值事实属性(一系列一框架,不混排);厂商(nvidia/amd/ascend/ppu/hygon)由 framework→vendor 映射派生,仅用于展示(logo)与过滤,不独立存储在镜像上。
+框架(cuda/rocm/cann/hggc/dtk/xre)是系列级单值事实属性(一系列一框架,不混排);厂商(nvidia/amd/ascend/ppu/hygon/kunlunxin)由 framework→vendor 映射派生,仅用于展示(logo)与过滤,不独立存储在镜像上。
 _Avoid_: 把厂商当镜像的独立必填字段、一个系列混多框架
 
 **校验 — Verification**:
@@ -483,6 +483,22 @@ _Avoid_: 健康检查（那是运行中的存活探测）、ping
 agent 升级机制：下载新二进制 → smoke 握手通过 → 原子替换文件 → `exec` 原地换进程映像（PID 不变、进程从不退出），从而不触发 systemd 重启、不杀正在跑的推理。
 _Avoid_: 重启升级、滚动升级
 
+**Kubernetes 集群 — Kubernetes Cluster**:
+以一个 DaemonSet 接入的一组 GPU 节点，记录接入令牌与 manifest 参数（`kube_clusters`）。集群里的每个节点仍是普通节点。
+_Avoid_: 集群分组（标签的事）、k8s 节点池
+
+**接入令牌 — Enrollment Token**:
+集群级凭证，只用来让 DaemonSet 的 agent 换取各自的节点 token（`POST /kube/enroll`），首次使用时绑定集群。吊销后新节点不能再加入，已加入的节点照常。
+_Avoid_: bootstrap token、节点 token
+
+**kube 运行时 — Kube Runtime**:
+agent 的运行时之一（`--driver=kube`），把实例落成钉在本节点的裸 Pod；镜像在节点 containerd 的 `k8s.io` 命名空间。
+_Avoid_: k8s 驱动、Operator
+
+**占位 Pod / 借卡 — Hold Pod / Card Borrowing**:
+有 device plugin 的节点上，gpuworks 为要用的卡起一个只申请 1 张卡的占位 Pod（`gpuworks-hold-*`），使该卡在 Kubernetes 账面上归平台；实例全部停止超过集群的「空闲归还」时间后删除，称为归还。
+_Avoid_: 预留 Pod、独占
+
 **带外恢复 — Out-of-band Recovery**:
 agent 控制面连接失联后，server 经独立的 SSH 旁路判定节点与 agent 状态并尝试修复的机制；它与 agent 自身重连、server_dial 拨号并列，是最后一层手段。
 _Avoid_: 失联恢复（「失联」只是 offline 的口语泛称）、节点自愈（没有体现旁路通道）
@@ -500,7 +516,7 @@ agent 重启无效或安装环境丢失时，经 SSH 重新安装 agent 并沿�
 _Avoid_: 重新纳管（会创建新的节点身份）
 
 **AgentVersion / 可升级 — Agent Version / Upgrade Available**:
-节点连接时自报并落库的 agent 版本；“最新版”即 server 自身版本（agent 内嵌于 server，同次构建），二者不等即标“可升级”。
+节点连接时自报并落库的 agent 版本；“最新版”即 server 自身版本（agent 内嵌于 server，同次构建），计算节点按当前连接、版本、升级能力和本地包情况展示待升级（较低正式版）、待对齐（较高正式版）、构建不同（先后未知）或暂不可升级。离线 Agent 单独展示离线前版本，重连后重新分类。预览确认后按 server 目标版本执行。
 _Avoid_: manifest 版本（不存在独立版本清单）
 
 **name / hostname — Name / Hostname**:
@@ -530,6 +546,10 @@ _Avoid_: agent 监听端口、agent 接入地址、节点端口
 **节点互联地址 — Node Interconnect Address**:
 多机推理和节点间模型同步使用的节点互达地址，与 SSH 和 server_dial 寻址无关。
 _Avoid_: agent 互联地址、SSH 地址、agent 接入地址
+
+**外部平台 — External Platform**:
+GPUWorks 之外、把机器交给 GPUWorks 纳管的平台：公有云厂商的账号、ZStack Cloud 专有云环境，以及以后的 Kubernetes 集群。控制台在“外部平台”页把它们列在一起，用平台类型（公有云、专有云）区分。界面上单说“平台”分不清指谁：指这些对象写“外部平台”，指 GPUWorks 自己的密钥写“GPUWorks 平台密钥”。
+_Avoid_: 第三方平台（ZStack Cloud 与客户自己的私有云不是第三方）、接入平台、算力来源
 
 ### 控制面安装与升级
 

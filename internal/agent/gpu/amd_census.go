@@ -2,12 +2,13 @@ package gpu
 
 import (
 	"context"
-	"gpuworks.ai/gpuworks/internal/accelerator"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/accelerator"
 )
 
 // PCI display identity alone is insufficient: Ryzen graphics without a KFD

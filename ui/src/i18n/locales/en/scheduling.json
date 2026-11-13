@@ -1,22 +1,23 @@
 {
   "page": {
     "title": "Scheduling analysis",
-    "description": "Who holds each GPU, what waits to be placed or woken, and what schedules and automation do next",
+    "description": "See which deployments are waiting, which instances hold GPUs, and what the scheduler did recently",
     "loading": "Loading scheduling analysis…",
     "loadFailed": "Could not load scheduling analysis",
     "refreshFailed": "Could not refresh the board: {{detail}}",
-    "retry": "Retry"
+    "retry": "Retry",
+    "activityAndSharing": "Scheduling activity and GPU sharing"
   },
   "summary": {
     "title": "Scheduling summary",
-    "waitingWakes": "Waiting wakes",
-    "pending": "Pending deployments",
-    "upcoming": "Scheduled in the next 24 hours",
-    "cardsTitle": "Cards by state",
-    "total": "Total cards",
+    "waitingWakes": "Awaiting wake-up",
+    "pending": "Awaiting placement",
+    "upcoming": "Scheduled in next 24h",
+    "cardsTitle": "Current GPU state",
+    "total": "Total GPUs",
     "nodesOnline": "{{online}} of {{count}} nodes online",
-    "contentionTitle": "Contention and queues",
-    "heldRequests": "Requests held for a wake now",
+    "contentionTitle": "Deployment queues and schedules",
+    "heldRequests": "Requests waiting for wake-up",
     "yields": "Yields in the last hour"
   },
   "nodes": {
@@ -42,17 +43,26 @@
     "heldOutsideHint": "Part of this card's memory is used by a process gpuworks does not manage. Sleeping or stopping deployments cannot free it."
   },
   "pending": {
-    "title": "Pending deployments",
+    "title": "Deployments awaiting placement",
     "empty": "Nothing waits for a node.",
     "columns": {
       "deployment": "Deployment",
       "reason": "Why it waits",
       "at": "Recorded"
-    }
+    },
+    "noReason": "No reason reported",
+    "noReasonCode": "No reason code reported",
+    "affected_one": "{{count}} deployment",
+    "affected_other": "{{count}} deployments",
+    "otherReasons_one": "View {{count}} other reason",
+    "otherReasons_other": "View {{count}} other reasons",
+    "shortTitle": "Awaiting placement",
+    "search": "Search deployment name, ID or waiting reason",
+    "noMatches": "No matching deployments"
   },
   "waiting": {
-    "title": "Wakes waiting for room",
-    "empty": "No wake waits for room.",
+    "title": "Deployments waiting for GPU capacity to wake",
+    "empty": "No deployments are waiting for GPU capacity to wake.",
     "columns": {
       "deployment": "Deployment",
       "instances": "Instances",
@@ -61,10 +71,17 @@
     "cancel": "Cancel waiting",
     "cancelOf": "Cancel the waiting wake of {{name}}",
     "cancelled": "Stopped waiting for {{name}}",
-    "cancelFailed": "Failed to cancel waiting: {{detail}}"
+    "cancelFailed": "Failed to cancel waiting: {{detail}}",
+    "since": "Waiting since {{time}}",
+    "shortTitle": "Awaiting wake-up",
+    "requestCount_one": "{{count}} request waiting for wake-up",
+    "requestCount_other": "{{count}} requests waiting for wake-up",
+    "instances_one": "{{count}} instance",
+    "instances_other": "{{count}} instances",
+    "elapsed": "waiting {{duration}}"
   },
   "upcoming": {
-    "title": "Scheduled in the next 24 hours",
+    "title": "Schedules in the next 24 hours",
     "empty": "No schedule fires in the next 24 hours.",
     "columns": {
       "at": "When",
@@ -76,9 +93,11 @@
       "wake": "Wake",
       "replicas": "Set replicas to {{count}}",
       "roleReplicas": "Set {{role}} replicas to {{count}}"
-    }
+    },
+    "shortTitle": "Scheduled executions"
   },
-  "history": { "viewLogs": "View logs",
+  "history": {
+    "viewLogs": "View logs",
     "title": "Scheduling history",
     "loading": "Loading the scheduling history…",
     "loadFailed": "Cannot load the scheduling history",
@@ -245,12 +264,12 @@
   "filters": {
     "title": "Filters and view",
     "models": "GPU model",
-    "modelsPlaceholder": "All GPU models",
+    "modelsPlaceholder": "GPU model",
     "label": "Node label",
-    "labelPlaceholder": "Any node label",
+    "labelPlaceholder": "Node label",
     "noLabels": "No node has labels",
     "state": "Node state",
-    "statePlaceholder": "Any node state",
+    "statePlaceholder": "Node state",
     "stateOptions": {
       "free": "Has free cards",
       "sleepers": "Has sleepers",
@@ -258,7 +277,7 @@
       "offline": "Offline"
     },
     "search": "Find a deployment",
-    "searchPlaceholder": "Highlight the cards a deployment occupies",
+    "searchPlaceholder": "Highlight by deployment",
     "groupBy": "Group by",
     "group": {
       "node": "Group by node",
@@ -276,7 +295,8 @@
   "drawer": {
     "aria": "Details of {{node}}",
     "loading": "Loading the node…",
-    "loadFailed": "Could not load the node"
+    "loadFailed": "Could not load the node",
+    "notFound": "Node not found"
   },
   "sharing": {
     "title": "Deployments sharing cards",
@@ -286,18 +306,25 @@
   },
   "queues": {
     "loading": "Loading what waits and what is scheduled…",
-    "loadFailed": "Could not load what waits and what is scheduled"
+    "loadFailed": "Could not load what waits and what is scheduled",
+    "details": "Details",
+    "showAll": "View all {{count}} entries",
+    "currentWaiting": "Currently waiting",
+    "executions_one": "execution",
+    "executions_other": "executions",
+    "deployments_one": "deployment",
+    "deployments_other": "deployments"
   },
   "activity": {
-    "title": "Scheduling activity",
+    "title": "Fleet scheduling activity",
     "loading": "Loading the scheduling activity…",
     "loadFailed": "Could not load the scheduling activity",
     "refreshFailed": "Could not refresh the scheduling activity: {{detail}}",
     "empty": "No scheduling activity in this range.",
-    "chartAria": "Scheduling activity stacked by reason, {{bucket}} per bar",
-    "totals": "{{bucket}} per bar",
+    "chartAria": "Scheduling event counts by reason per {{bucket}} bucket",
+    "totals": "Events per {{bucket}} bucket",
     "beyondRetention": "Beyond the statistics retention: the start of the range has no figures.",
-    "topCards": "Cards that switched most",
+    "topCards": "GPUs by switch count",
     "topCardsEmpty": "No card changed hands in this range.",
     "gpu": "GPU {{index}}",
     "switches": "{{count}} times",
@@ -308,7 +335,8 @@
       "operator_yield": "Operator yield",
       "scheduled": "Schedule",
       "failure": "Failure (rebuilt / replaced / timed out)",
-      "queued": "Unschedulable / queued"
+      "queued": "Unschedulable / queued",
+      "placement": "Placement and migration"
     },
     "bucket": {
       "seconds": "{{value}} s",
@@ -316,5 +344,25 @@
       "hours": "{{value}} h",
       "days": "{{value}} d"
     }
+  },
+  "nodeChart": {
+    "memory": "Current GPU memory",
+    "allocation": "Memory allocation",
+    "noGpu": "No GPUs reported",
+    "deployment": "Deployment",
+    "emptyWindow": "No residency in this period",
+    "servingMemory": "Serving",
+    "sleepingMemory": "Sleep residue",
+    "unreported": "Not reported",
+    "unreportedDeployment": "Deployment not reported",
+    "unknown": "Unknown",
+    "noAllocation": "No recorded allocations",
+    "recordedSwitching": "Switching (recorded)",
+    "offlineNote": "Node offline. Showing recorded allocations. Live free memory is unknown.",
+    "cardOfflineNote": "GPU offline. Showing recorded allocations.",
+    "gpuCount_one": "{{count}} GPU",
+    "gpuCount_other": "{{count}} GPUs",
+    "sharing": "GPU sharing on this node",
+    "range": "{{from}} to {{to}} · All GPUs"
   }
 }

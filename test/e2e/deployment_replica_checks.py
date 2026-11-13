@@ -5,8 +5,21 @@ import time
 from urllib.parse import urlsplit, parse_qs
 from playwright.sync_api import expect
 from local_browser_fixture import http
-from platform_token_read_revoke import check
+from platform_token_read_revoke import button, check
 import deployment_replica_fixture as fixture
+
+def button_name(label):
+    """The accessible-name matcher antd actually renders for this button label.
+
+    Reuses the rule already captured in platform_token_read_revoke.button: antd's Button
+    defaults autoInsertSpace to true, so a two-character Chinese label renders with a space
+    between the characters ("应用" becomes "应 用") and an exact string match finds nothing
+    under zh. The pattern is anchored and each character is escaped, so it stays exactly as
+    strict as the exact match it replaces; non-matching labels are returned unchanged.
+    """
+    accessible = r"\s*".join(label) if re.fullmatch(r"[\u3400-\u9fff]{2}", label) else re.escape(label)
+    return re.compile("^" + accessible + "$")
+
 
 FAMILIES = ('all', 'first-open', 'cancel', 'numeric', 'keyboard', 'notice', 'navigation', 'drain')
 
@@ -81,11 +94,11 @@ def first_open(page, server, token, data, labels, report, requests, expected_cou
         report['last_step'] = 'replica-navigation-entry'
         # A real menu entry and the row action are different UI entry paths.
         page.goto(server.base + '/')
-        link = page.locator('.app-nav').get_by_role('link', name=labels['_navigation'], exact=True)
+        link = page.locator('[data-slot=sidebar]').get_by_role('link', name=labels['_navigation'], exact=True)
         link.click()
         expect(page).to_have_url(server.base + '/deployments')
         expect(page.get_by_role('heading', name=labels['page']['title'], exact=True)).to_be_visible()
-        expect(link.locator('xpath=ancestor::li[1]')).to_have_class(re.compile(r'\bant-menu-item-selected\b'))
+        expect(link).to_have_attribute('aria-current', 'page')
         report['replica_navigation'] = {'menu_path': '/deployments', 'selected': True}
     if not active(report, 'first-open'):
         return
@@ -107,7 +120,7 @@ def first_open(page, server, token, data, labels, report, requests, expected_cou
             page.wait_for_timeout(50)
         check(bool(held), 'browser did not request selected deployment detail')
         expect(page.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)).to_have_count(0)
-        expect(page.get_by_role('button', name=labels['replica']['apply'], exact=True)).to_have_count(0)
+        expect(page.get_by_role('button', name=button_name(labels['replica']['apply']))).to_have_count(0)
         with page.expect_response(lambda response: response.request.method == 'GET'
                                   and urlsplit(response.url).path == path) as read:
             releasing = True
@@ -120,7 +133,7 @@ def first_open(page, server, token, data, labels, report, requests, expected_cou
         check(body.get('name') == data['body']['name'], 'first-open deployment name differs')
         drawer = page.get_by_role('dialog', name=data['body']['name'], exact=True)
         expect(drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)).to_have_value(str(expected_count))
-        expect(drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)).to_be_disabled()
+        expect(drawer.get_by_role('button', name=button_name(labels['replica']['apply']))).to_be_disabled()
         integer(get_document(server, token, ident).get('replicas'), expected_count, 'independent first-open count')
         check(requests == [], 'opening detail submitted an incomplete mutation')
         report['replica_first_open'] = {'request': {'method': 'GET', 'path': path},
@@ -157,14 +170,21 @@ def navigation_reentry(page, drawer, server, data, labels, report, expected_coun
 
 def count_editor(page, drawer, server, token, data, labels, report, requests, reopen, expected_count):
     spin = drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)
-    apply = drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)
+    apply = drawer.get_by_role('button', name=button_name(labels['replica']['apply']))
     before = stable(get_document(server, token, data['deployment']['id']))
     integer(before['replicas'], expected_count, 'saved editor count')
     if active(report, 'numeric'):
         report['last_step'] = 'replica-count-metadata'
-        integer(get_document(server, token, data['deployment']['id']).get('max_replicas'), 32, 'server replica range')
+        # The ceiling is a product constant (planning.MaxReplicas), not a test fact.
+        # Pinning 32 here went red the day the server raised it to 1024 and said
+        # nothing about whether the control agrees with the server - which is the
+        # only thing this line is for. Read the server's number, then require the
+        # control to publish the same one.
+        ceiling = get_document(server, token, data['deployment']['id']).get('max_replicas')
+        check(type(ceiling) is int and ceiling >= 1,
+              f'server replica range is not a usable JSON integer: {ceiling!r}')
         expect(spin).to_have_attribute('aria-valuemin', '1')
-        expect(spin).to_have_attribute('aria-valuemax', '32')
+        expect(spin).to_have_attribute('aria-valuemax', str(ceiling))
         expect(spin).to_have_value(str(expected_count))
         spin.press('ArrowUp')
         expect(spin).to_have_value(str(expected_count + 1))
@@ -194,7 +214,7 @@ def count_editor(page, drawer, server, token, data, labels, report, requests, re
         for dismissal in ('close', 'escape'):
             spin = drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)
             spin.fill(str(expected_count + 1))
-            expect(drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)).to_be_enabled()
+            expect(drawer.get_by_role('button', name=button_name(labels['replica']['apply']))).to_be_enabled()
             if dismissal == 'close':
                 drawer.locator('.ant-drawer-close').click()
             else:
@@ -205,7 +225,7 @@ def count_editor(page, drawer, server, token, data, labels, report, requests, re
                   'discarding replica draft changed persisted deployment configuration')
             drawer = reopen()
             expect(drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)).to_have_value(str(expected_count))
-            expect(drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)).to_be_disabled()
+            expect(drawer.get_by_role('button', name=button_name(labels['replica']['apply']))).to_be_disabled()
             observed.append(dismissal)
         report['replica_draft_cancel'] = {'dismissals': observed, 'cancel_button': 'not provided by inline editor',
             'mutation_count': 0, 'saved_config': before, 'reopened_count': expected_count}

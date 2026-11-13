@@ -21,6 +21,9 @@ import uuid
 
 from playwright.sync_api import expect, sync_playwright
 from local_browser_fixture import Artifacts, LocalServer, ROOT, digest
+
+# The sizes the table offers, from components/resourceTable/columnPrefs.ts:27.
+PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 from network_storage_lifecycle import locale_strings, read
 from platform_token_read_revoke import button, check
 from storage_cache_policy_inventory import exercise_node_path_required, exercise_node_policy_inventory
@@ -154,7 +157,7 @@ def test_storage_cache_policy(page, server, artifacts, report, storage_id, stora
             toggle.click()
         expect(button(record, t['detail']['collapse'])).to_be_visible()
         detail = record.locator('xpath=following-sibling::tr[1]')
-        expect(detail).to_have_class(re.compile(r'\bant-table-expanded-row\b'))
+        expect(detail).to_have_count(1)
         return detail
     node_links = page.get_by_role('link', name=re.compile(r'^Cache node \d\d$'))
     def effective(limit):
@@ -179,13 +182,193 @@ def test_storage_cache_policy(page, server, artifacts, report, storage_id, stora
     report['last_step'] = 'table-loaded'
     expect(page.locator('.storage-cache-management .ant-btn-block')).to_have_count(5, timeout=12000)
     report['cache_metric_blocks'] = True
+
+    # 11.5/11.7: the batch buttons act on the selection, so selection is driven
+    # before any single-node edit. Both stay disabled until something is selected.
+    batch = button(page, cm['batch'])
+    restore = button(page, cm['restore'])
+    expect(batch).to_be_disabled()
+    expect(restore).to_be_disabled()
+    sel = {}
+
+    def box(node):
+        return page.get_by_role('checkbox', name=cm['selectNode'].replace('{{node}}', node), exact=True)
+
+    box('Cache node 01').check()
+    expect(batch).to_be_enabled()
+    expect(restore).to_be_enabled()
+    sel['single_enables_batch'] = True
+
+    box('Cache node 02').check()
+    sel['multi_rows'] = page.get_by_role('checkbox', checked=True).count()
+
+    box('Cache node 01').uncheck()
+    expect(batch).to_be_enabled()
+    sel['deselect_keeps_rest'] = True
+
+    # Select-all is scoped to what the table is showing, not to every node: the
+    # header control takes the visible rows, and select-filtered takes the filtered
+    # set. Both are driven here with a search that narrows the list, so a control
+    # that ignored the filter would select too many and fail.
+    sel['rows_in_table'] = page.locator('[data-slot="table-body"] [data-proximity-index]').count()
+    sel['pages'] = int(re.search(r"of\s+(\d+)",
+        page.get_by_text(re.compile(r"^Page\s+\d+\s+of\s+\d+$")).first.inner_text()).group(1))
+    page.locator('[data-slot="table-header"]').get_by_role('checkbox').first.check()
+    page.wait_for_timeout(300)
+    sel['select_all_count'] = page.locator('[data-slot="table-body"]').get_by_role('checkbox', checked=True).count()
+    # The header control is page-scoped: with 22 nodes paged at 20 it takes the
+    # page, not the set, so the count has to stay below the table total.
+    check(sel['select_all_count'] < sel['rows_in_table'],
+          f"select-all took {sel['select_all_count']} of {sel['rows_in_table']} - it is not page-scoped")
+
+    page.locator('[data-slot="table-header"]').get_by_role('checkbox').first.uncheck()
+    page.wait_for_timeout(250)
+    search_box = page.locator('.storage-cache-management').get_by_placeholder(cm['search'])
+    search_box.fill('Cache node 0')
+    page.wait_for_timeout(400)
+    sel['filtered_rows'] = page.locator('[data-slot="table-body"] [data-proximity-index]').count()
+    check(sel['filtered_rows'] < sel['rows_in_table'],
+          f"the search did not narrow the table ({sel['filtered_rows']} of {sel['rows_in_table']})")
+    page.locator('[data-slot="table-header"]').get_by_role('checkbox').first.check()
+    sel['filtered_select_all'] = page.locator('[data-slot="table-body"]').get_by_role('checkbox', checked=True).count()
+    # Under a filter the header control still takes at most one page; what matters
+    # is that it never reaches the rows the filter excluded, and that the filtered
+    # count is what the select-filtered action advertises.
+    check(sel['filtered_select_all'] <= sel['filtered_rows'],
+          f"select-all under a filter ticked {sel['filtered_select_all']} of {sel['filtered_rows']} filtered rows")
+    check(sel['filtered_select_all'] < sel['rows_in_table'],
+          'select-all under a filter reached rows the filter excluded')
+    sel['filter_limits_select_all'] = True
+    # The dedicated control names the filtered total, so the operator can tell the
+    # two scopes apart before acting.
+    alert = page.locator('.storage-cache-management').get_by_role('alert')
+    expect(alert).to_be_visible()
+    sel['selection_alert_text'] = alert.inner_text()
+    sel['select_filtered_present'] = cm['selectFiltered'].split('{{')[0].strip() in alert.inner_text()
+
+    search_box.fill('')
+    page.wait_for_timeout(400)
+
+    # Clearing disables the batch actions again. The header control only reaches the
+    # current page, so the dedicated clear action is what empties the whole set.
+    button(page, cm['deselect']).click()
+    page.wait_for_timeout(300)
+    expect(batch).to_be_disabled()
+    sel['clear_selection_disables_batch'] = True
+    sel['checked_after_clear'] = page.get_by_role('checkbox', checked=True).count()
+    report['row_selection'] = sel
+    evidence.append({'layer': 'ui', 'row_selection': sel})
+
+    # 10.5/10.6/10.7: the node table pages at 20 of 22, so page-size switching and
+    # first/prev/next/last navigation are all exercised against a real second page.
+    pages = {}
+    report['pagination'] = pages  # bind early so diagnostics survive an assertion
+    # The node table is a ResourceTable whose footer is DataTablePagination
+    # (components/ui/data-table.tsx:657+): rows carry data-row-key, the size changer is a
+    # Select named by labels.rowsPerPage, the position is a "Page X of N" summary, and the
+    # navigation controls are named buttons.
+    tbody = page.locator('.storage-cache-management [data-slot="table-body"] > tr[data-row-key]')
+    pages['default_rows'] = tbody.count()
+    common = json.loads((ROOT / "ui/src/i18n/locales" / locale / "common.json").read_text())
+    labels = common["resourceTable"]
+    scope = page.locator('.storage-cache-management')
+    size_select = scope.get_by_role("combobox", name=labels["rowsPerPage"], exact=True)
+    expect(size_select.first).to_be_visible()
+    report['size_changer_count'] = size_select.count()
+
+    def summary():
+        text = scope.get_by_text(re.compile(r"^Page\s+\d+\s+of\s+\d+$")).first.inner_text().strip()
+        matched = re.match(r"^Page\s+(\d+)\s+of\s+(\d+)$", text)
+        return (int(matched.group(1)), int(matched.group(2))) if matched else (None, None)
+
+    def go(name):
+        scope.get_by_role("button", name=labels[name], exact=True).click()
+        page.wait_for_timeout(400)
+
+    size_select.first.click(force=True)
+    # The options are the bare numbers of PAGE_SIZE_OPTIONS, so the first is matched exactly.
+    options = page.get_by_role("option")
+    pages['size_option_labels'] = options.all_inner_texts()
+    page.get_by_role("option", name=str(PAGE_SIZE_OPTIONS[0]), exact=True).click(force=True)
+    # The click closes the popover and the table re-renders; retry the measurement rather
+    # than reading the row count once and calling a slow commit a failure.
+    for _ in range(20):
+        page.wait_for_timeout(100)
+        if tbody.count() == PAGE_SIZE_OPTIONS[0]:
+            break
+    pages['rows_at_10'] = tbody.count()
+    check(pages['rows_at_10'] == PAGE_SIZE_OPTIONS[0],
+          f"page size {PAGE_SIZE_OPTIONS[0]} shows {pages['rows_at_10']} rows")
+    current, page_count = summary()
+    pages['pagination_total_text'] = scope.get_by_text(
+        re.compile(r"^\d+ (items?|条)$")).first.inner_text()
+    total = int(''.join(ch for ch in pages['pagination_total_text'] if ch.isdigit()) or 0)
+    pages['total_nodes'] = total
+    check(page_count == 3, f"the table reports {page_count} pages, not 3")
+
+    # With 10 per page there are 3 pages, so every navigation control is live.
+    go("lastPage")
+    pages['last_page_rows'] = tbody.count()
+    pages['last_page_pages'] = summary()[1]
+    check(pages['last_page_rows'] == total - 2 * PAGE_SIZE_OPTIONS[0],
+          f"the last page shows {pages['last_page_rows']} rows, "
+          f"expected {total - 2 * PAGE_SIZE_OPTIONS[0]}")
+
+    go("previousPage")
+    pages['prev_page_rows'] = tbody.count()
+    go("nextPage")
+    pages['next_page_rows'] = tbody.count()
+    check(pages['next_page_rows'] == total - 2 * PAGE_SIZE_OPTIONS[0],
+          'next did not return to the last page')
+    check(summary()[0] == 3, f"the last page is not reported as current: {summary()}")
+    pages['back_to_last'] = True
+
+    # Back to the first page through the named control, then the size returns to the
+    # default so the rest of the case sees the table as it started.
+    go("firstPage")
+    pages['first_page_rows'] = tbody.count()
+    size_select.first.click(force=True)
+    page.get_by_role("option", name=str(PAGE_SIZE_OPTIONS[1]), exact=True).click(force=True)
+    page.wait_for_timeout(400)
+    pages['restored_rows'] = tbody.count()
+    check(pages['restored_rows'] == pages['default_rows'],
+          f"restoring the page size left {pages['restored_rows']} rows, expected {pages['default_rows']}")
+    report['pagination'] = pages
+    evidence.append({'layer': 'ui', 'pagination': pages})
+
+    # 10.9: each row in the viewport opens its own detail, addressed by the row's own
+    # node name rather than by position, and the detail that opens is a definition
+    # list belonging to that row. policy_details already encodes how this table opens
+    # and closes a row, so the sweep reuses it instead of a second spelling of it.
+    view = {}
+    report['viewport_rows'] = view
+    visible_rows = scope.locator('[data-slot="table-body"] > tr[data-row-key]')
+    names = [visible_rows.nth(i).locator('a').first.inner_text().strip()
+             for i in range(visible_rows.count())]
+    view['row_names'] = names
+    check(len(names) >= 10, f"the viewport only rendered {len(names)} rows")
+    check(len(names) == len(set(names)), f"row names are not unique: {names}")
+    opened = 0
+    for name in names:
+        detail = policy_details(name)
+        terms = [item.strip() for item in detail.locator('dt').all_inner_texts() if item.strip()]
+        check(len(terms) >= 3, f"the detail for {name} rendered {len(terms)} labelled fields")
+        record = row(name)
+        button(record, t['detail']['collapse']).click()
+        expect(button(record, t['detail']['expand'])).to_be_visible()
+        opened += 1
+    view['rows_opened'] = opened
+    check(opened == len(names), f"opened {opened} of {len(names)} row details")
+
     button(row('Cache node 01'), cm['configure']).click()
     dialog = page.get_by_role('dialog', name=cm['nodeTitle'].replace('{{node}}', 'Cache node 01'), exact=True)
     report['node_inventory'] = exercise_node_policy_inventory(dialog, cm, cp)
     evidence.append({'layer': 'ui', 'node_inventory': report['node_inventory']})
 
     def reopen_node():
-        button(row('Cache node 01'), cm['configure']).click()
+        trigger = button(row('Cache node 01'), cm['configure'])
+        trigger.focus()
+        trigger.click()
         opened = page.get_by_role('dialog', name=cm['nodeTitle'].replace('{{node}}', 'Cache node 01'), exact=True)
         expect(opened).to_be_visible()
         return opened

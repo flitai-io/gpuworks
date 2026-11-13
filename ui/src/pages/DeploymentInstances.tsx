@@ -3,7 +3,7 @@ import { Alert, Empty, Space, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import type { Deployment, Instance } from "../api";
 import InstancePanel from "./InstancePanel";
-import { distRank, followerCount, orderByGeneration } from "./instanceGroups";
+import { distRank, followerCount, orderInstances } from "./instanceGroups";
 import { imageMismatch } from "./instanceImage";
 import { ReplicaActions } from "./DeploymentReplicaActions";
 
@@ -12,9 +12,12 @@ import { ReplicaActions } from "./DeploymentReplicaActions";
 // group, and for every other deployment, a multi-node replica's ranks sit
 // together, leader first, each tagged with its rank. An instance no role
 // claims (mid-rebuild) still renders, in a trailing group, so nothing
-// silently disappears. focus names an instance to scroll to (the monitor's
-// replica links carry it). onChanged refreshes the drawer after a replica
-// action.
+// silently disappears. A failed attempt whose unit is already filled by
+// another row is a previous attempt: it stays, with its own message, after
+// the row that fills the unit. Ordinary replicas share one unit key, so a
+// sibling being up is not that. focus names an instance to scroll to (the
+// monitor's replica links carry it). onChanged refreshes the drawer after a
+// replica action.
 export default function DeploymentInstances({ dep, focus, onChanged }: { dep: Deployment; focus?: string | null; onChanged: () => void }) {
   const { t } = useTranslation("deployments");
   const instances = dep.instances ?? [];
@@ -25,8 +28,9 @@ export default function DeploymentInstances({ dep, focus, onChanged }: { dep: De
     if (!focus || !listed) return;
     document.getElementById(`instance-${focus}`)?.scrollIntoView?.({ block: "start" });
   }, [focus, listed]);
-  const panels = (group: Instance[]) =>
-    orderByGeneration(group).map((inst) => {
+  const panels = (group: Instance[]) => {
+    const { instances: ordered, previous } = orderInstances(group, dep.replicas);
+    return ordered.map((inst) => {
       const rank = distRank(inst, instances);
       return (
         <InstancePanel
@@ -34,11 +38,13 @@ export default function DeploymentInstances({ dep, focus, onChanged }: { dep: De
           inst={inst}
           params={dep.quick_params}
           rank={rank}
+          previousAttempt={previous.has(inst.uuid)}
           imageDiffers={differing.has(inst.uuid)}
           actions={<ReplicaActions dep={dep} inst={inst} onChanged={onChanged} />}
         />
       );
     });
+  };
   return (
     <>
       <Typography.Title level={5} style={{ marginTop: 20 }}>

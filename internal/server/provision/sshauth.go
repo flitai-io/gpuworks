@@ -17,10 +17,11 @@ import (
 // empty mode (cloud installs, stored recovery credentials) tries everything
 // it has, platform key first.
 const (
-	AuthPlatformKey      = "platform_key"
-	AuthPassword         = "password"
-	AuthPrivateKey       = "private_key"
-	AuthInstancePassword = "instance_password" // a password the cloud provider's API returned
+	AuthPlatformKey         = "platform_key"
+	AuthPassword            = "password"
+	AuthKeyboardInteractive = "keyboard_interactive"
+	AuthPrivateKey          = "private_key"
+	AuthInstancePassword    = "instance_password" // a password the cloud provider's API returned
 )
 
 // SSHAuth is how a request logs in. Every SSH path in this package (precheck,
@@ -78,11 +79,15 @@ func (a SSHAuth) attempts() ([]authAttempt, error) {
 		if err := platform(); err != nil {
 			return nil, err
 		}
-	case AuthPassword:
+	case AuthPassword, AuthKeyboardInteractive:
 		if a.Password == "" {
 			return nil, errors.New("ssh password is required")
 		}
-		password(AuthPassword, "password", a.Password)
+		label := "password"
+		if a.Mode == AuthKeyboardInteractive {
+			label = "keyboard-interactive password"
+		}
+		password(a.Mode, label, a.Password)
 	case AuthPrivateKey:
 		if strings.TrimSpace(a.PrivateKeyPEM) == "" {
 			return nil, errors.New("ssh private key is required")
@@ -106,6 +111,12 @@ func (a SSHAuth) attempts() ([]authAttempt, error) {
 		}
 		if a.InstancePassword != "" && a.InstancePassword != a.Password {
 			password(AuthInstancePassword, "instance password", a.InstancePassword)
+		}
+		// Stored recovery credentials keep the password, not its SSH protocol.
+		// Preserve the normal credential order, then try that password against
+		// hosts whose sshd exposes password prompts only through PAM.
+		if a.Password != "" {
+			password(AuthKeyboardInteractive, "keyboard-interactive password", a.Password)
 		}
 		if len(out) == 0 {
 			return nil, errors.New("no ssh credential: the platform key is not available and no password or private key was given")
@@ -143,16 +154,19 @@ type authRecorder struct {
 	mu       sync.Mutex
 	attempts []authAttempt
 	tried    []int
-	last     int // the attempt that signed or sent its password most recently
+	last     int // the attempt that signed or answered an authentication challenge most recently
 }
 
 func newAuthRecorder(attempts []authAttempt) (*authRecorder, []ssh.AuthMethod) {
 	r := &authRecorder{attempts: attempts, last: -1}
 	var signers []ssh.Signer
 	var passwords []int
+	interactive := -1
 	for i, attempt := range attempts {
 		if attempt.signer != nil {
 			signers = append(signers, newRecordingSigner(attempt.signer, func() { r.mark(i, false) }, func() { r.mark(i, true) }))
+		} else if attempt.kind == AuthKeyboardInteractive {
+			interactive = i
 		} else {
 			passwords = append(passwords, i)
 		}
@@ -172,6 +186,28 @@ func newAuthRecorder(attempts []authAttempt) (*authRecorder, []ssh.AuthMethod) {
 			r.mark(i, true)
 			return attempts[i].password, nil
 		}), len(passwords)))
+	}
+	if interactive >= 0 {
+		answered := false
+		rounds := 0
+		methods = append(methods, ssh.KeyboardInteractive(func(_ string, _ string, questions []string, echos []bool) ([]string, error) {
+			r.mark(interactive, false)
+			rounds++
+			if rounds > 4 {
+				return nil, errors.New("keyboard-interactive exceeded the supported challenge limit; use an SSH key for multi-step authentication")
+			}
+			// PAM may send an informational challenge before its password prompt.
+			if len(questions) == 0 && len(echos) == 0 {
+				r.mark(interactive, true)
+				return []string{}, nil
+			}
+			if answered || len(questions) != 1 || len(echos) != 1 || echos[0] {
+				return nil, errors.New("keyboard-interactive requires a single non-echoing password prompt; use an SSH key for multi-step authentication")
+			}
+			answered = true
+			r.mark(interactive, true)
+			return []string{attempts[interactive].password}, nil
+		}))
 	}
 	return r, methods
 }
@@ -263,7 +299,7 @@ func (o AuthOutcome) Check() CheckResult {
 	return CheckResult{Name: "SSH authentication", Status: status, Detail: strings.Join(steps, " → ")}
 }
 
-// SSHAuthError is a handshake the target refused, with what was tried.
+// SSHAuthError is authentication that could not complete, with what was tried.
 type SSHAuthError struct {
 	Outcome AuthOutcome
 	Err     error
@@ -294,11 +330,20 @@ func DialSSH(ctx context.Context, user, host string, port int, auth SSHAuth, tim
 	client, err := connect(ctx, user, host, port, methods, timeout, hostKeys)
 	outcome := recorder.outcome(err == nil)
 	if err != nil {
-		if len(outcome.Tried) == 0 {
+		// x/crypto/ssh reports exhausted authentication as an untyped error.
+		// No callback also means the peer offered none of our method types,
+		// not just that the TCP/host-key handshake failed before authentication.
+		if len(outcome.Tried) == 0 && !strings.Contains(err.Error(), "ssh: unable to authenticate, attempted methods ") {
 			return nil, outcome, err // never got as far as authenticating
 		}
 		authErr := &SSHAuthError{Outcome: outcome, Err: err}
-		if outcome.platformOnly && auth.PlatformKey != nil {
+		if len(outcome.Tried) == 0 {
+			labels := make([]string, len(attempts))
+			for i, attempt := range attempts {
+				labels[i] = attempt.label
+			}
+			authErr.hint = "no credential was offered with the configured SSH methods (" + strings.Join(labels, ", ") + "); check the target's SSH authentication settings, or select keyboard-interactive if it requires a password prompt"
+		} else if outcome.platformOnly && auth.PlatformKey != nil {
 			authErr.hint = "the target has not authorized the platform key; run on it: " + AuthorizeKeyCommand(auth.PlatformKey.PublicKey)
 		}
 		return nil, outcome, authErr

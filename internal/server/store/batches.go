@@ -182,6 +182,25 @@ func (s *Store) ListBatchesPage(owner BatchOwnerFilter, statuses []string, offse
 	return out, int(total), err
 }
 
+// CountBatchesByStatus counts the owner's batches in each of the statuses,
+// in one grouped count query; a status with none is absent.
+func (s *Store) CountBatchesByStatus(owner BatchOwnerFilter, statuses []string) (map[string]int, error) {
+	var rows []struct {
+		Status string
+		N      int
+	}
+	err := owner.apply(s.reader().Model(&Batch{})).Where("status IN ?", statuses).
+		Select("status, COUNT(*) AS n").Group("status").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int, len(rows))
+	for _, r := range rows {
+		out[r.Status] = r.N
+	}
+	return out, nil
+}
+
 // UnfinishedBatches lists the batches the executor must run or resume: every
 // one that is not in a terminal status, oldest first.
 func (s *Store) UnfinishedBatches() ([]Batch, error) {

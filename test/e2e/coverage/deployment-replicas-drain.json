@@ -6,7 +6,7 @@
   "control_id": "ordinary-replica-drain",
   "test_file": "test/e2e/deployment_replica_browser.py",
   "test_function": "test_replicas",
-  "command": "make test-e2e-deployment-replicas REPLICA_CASE=drain LOCALE=en",
+  "command": "python3 -B test/e2e/deployment_replicas.py --case drain --locale en",
   "lane": "local-real-agent-docker-fake-gpu-facts",
   "identity": "admin browser, run-owned inference key",
   "fixture": "API-created initial ordinary deployment, local model, real agent and Docker; exactly two synthetic A100 cards with whole-card claims and explicit failover routing; drain additionally proves no ready replacement while target holds its stream; audited fake-engine with 120x500ms SSE deltas; real host network; image ID captured once and deployed through a run-owned immutable tag, removed independently after containers; explicit dedicated DOCKER_HOST required and DOCKER_CONTEXT empty, shared/default daemon rejected before resources",

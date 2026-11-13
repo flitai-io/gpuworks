@@ -77,7 +77,7 @@ func TestVendorKeyKeepsUnknownVendorsVerbatim(t *testing.T) {
 
 func TestKnownVendorsIsTheClosedSetNormalizeVendorProduces(t *testing.T) {
 	known := KnownVendors()
-	if !reflect.DeepEqual(known, []string{VendorNVIDIA, VendorAMD, VendorAscend, VendorPPU, VendorHygon, VendorApple}) {
+	if !reflect.DeepEqual(known, []string{VendorNVIDIA, VendorAMD, VendorAscend, VendorPPU, VendorHygon, VendorApple, VendorKunlunxin}) {
 		t.Fatalf("KnownVendors() = %v", known)
 	}
 	set := make(map[string]struct{}, len(known))
@@ -221,5 +221,20 @@ func TestVendorBrandCoversEveryKnownVendor(t *testing.T) {
 		if got := VendorBrand(unknown); got != "" {
 			t.Errorf("VendorBrand(%q) = %q, want none", unknown, got)
 		}
+	}
+}
+
+func TestKunlunVendorIdentity(t *testing.T) {
+	if FrameworkVendor("xre") != VendorKunlunxin || NormalizeVendor("Kunlunxin") != VendorKunlunxin || RequiresVendorCatalogImage(VendorKunlunxin) == false {
+		t.Fatal("Kunlun runtime identity")
+	}
+	if NormalizeVendor("Intel XPU") != "" || InferVendor("Intel XPU", "", "", "") == VendorKunlunxin {
+		t.Fatal("Intel XPU identified as Kunlun")
+	}
+	if InferVendor("", "P800 PCIe", "KL3", "10.2") != VendorKunlunxin {
+		t.Fatal("compatibility CUDA field overrode Kunlun")
+	}
+	if arch := GPUArch(VendorKunlunxin, "kl3", ""); arch.ID != "kl3" || arch.Family != "kl3" {
+		t.Fatalf("architecture: %+v", arch)
 	}
 }

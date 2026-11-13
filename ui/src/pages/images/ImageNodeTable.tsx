@@ -1,3 +1,5 @@
+import { PeerTransferDetails } from "../../components/peerTransfer/PeerTransferDetails";
+import { productMessageText } from "../../apiError";
 import { Button, Popconfirm, Progress, Select, Space, Table, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import type { ImageCatalogEntry, ImageNode } from "../../api";
@@ -39,10 +41,10 @@ type Props = {
     nodeUUID: string,
     retry?: boolean,
   ) => void;
-  /** Proves the source can reach this node directly; rejects with the reason. */
+  /** Verifies a direct or relayed peer connection; rejects with the reason. */
   probeImage: (version: ImageCatalogEntry, nodeUUID: string, sourceNode: string) => Promise<unknown>;
   /**
-   * Starts (or retries) a direct copy from sourceNode. Rejecting leaves the
+   * Starts (or retries) a peer copy from sourceNode. Rejecting leaves the
    * dialog open with the reason on screen.
    */
   syncFromPeer: (
@@ -90,6 +92,7 @@ export default function ImageNodeTable({
   repullVersion,
 }: Props) {
   const { t } = useTranslation("images");
+  const { t: common } = useTranslation("common");
   // The archive dialog is the one place an address is entered, resolved and
   // confirmed, so it also owns the per-node relay choice: one node can reach
   // the mirror while its neighbour cannot.
@@ -121,6 +124,8 @@ export default function ImageNodeTable({
   // already holds: one step down from the row, so the row keeps to what the
   // table is read for and the actions that move bytes (detailDrawer.css).
   const renderExtra = (row: ImageNode) => {
+    const displayMessage = row.transfer_error_code
+      ? productMessageText(common, { code: row.transfer_error_code, message: row.message ?? "" }) : row.message;
     const at = row.updated_at ? Date.parse(row.updated_at) : NaN;
     return (
       <>
@@ -145,9 +150,10 @@ export default function ImageNodeTable({
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <dt>{t("nodeTable.column.message")}</dt>
-            <dd>{row.message ? <Text type="warning">{row.message}</Text> : "—"}</dd>
+            <dd>{displayMessage ? <Text type="warning">{displayMessage}</Text> : "—"}</dd>
           </div>
         </dl>
+        {row.transfer_id && <PeerTransferDetails transferId={row.transfer_id} transferErrorCode={row.transfer_error_code} />}
         <Space size={8} wrap className="detail-extra-actions">
           <Tooltip title={t("nodeTable.inspectHelp")}>
           <Button

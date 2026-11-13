@@ -7,7 +7,7 @@ import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/nodes" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLInputElement", "HTMLTextAreaElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "Document"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLHtmlElement", "HTMLInputElement", "HTMLTextAreaElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "Document"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
@@ -74,11 +74,17 @@ await i18n.use(initReactI18next).init({
 
 const { MemoryRouter } = await import("react-router-dom");
 const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
+const { message } = await import("antd");
 const { default: userEvent } = await import("@testing-library/user-event");
 const { api } = await import("../src/api.ts");
+const { default: requestI18n } = await import("../src/i18n/index.ts");
+requestI18n.addResourceBundle("en", "common", i18n.getResourceBundle("en", "common"), true, true);
+await requestI18n.changeLanguage("en");
+const originalFetch = globalThis.fetch;
+const { SessionUserContext } = await import("../src/components/sessionUser.ts");
 const { default: NodesPage } = await import("../src/pages/NodesPage.tsx");
 const { DETAIL_DRAWER_WIDTH } = await import("../src/components/detail/DetailDrawer.tsx");
-const { runtimeChoices, runtimeLabel } = await import("../src/nodeDisplay.ts");
+const { runtimeLabel } = await import("../src/nodeDisplay.ts");
 import type { ListQuery, Node, NodePage } from "../src/api";
 import { list } from "./helpers/listPage.ts";
 
@@ -89,7 +95,9 @@ const onlineNode: Node = {
   name: "gpu-a100-node-01",
   os: "linux", kernel: "5.15.0", arch: "amd64", cpu_model: "EPYC 7543",
   cpu_cores: 128, mem_total_gib: 1024, disk_total_gib: 2048, gpu_count: 8,
-  agent_version: "0.9.7", gpus: [],
+  agent_version: "0.9.7", has_ssh_credential: true, gpus: [],
+  // What the server offers a plain Linux node (the runtime selector renders exactly these).
+  runtime_choices: ["auto", "docker", "nerdctl", "udocker"],
 };
 
 const offlineNode: Node = {
@@ -132,6 +140,7 @@ const originals = {
   node: api.node,
   storageUsage: api.storageUsage,
   storages: api.storages,
+  kubeClusters: api.kubeClusters,
   metricsQuery: api.metricsQuery,
   nodeDoctor: api.nodeDoctor,
 };
@@ -158,6 +167,7 @@ function nodesServer(nodes: Node[]) {
     for (const node of nodes) for (const [key, value] of Object.entries(node.labels ?? {})) facets.set(key, (facets.get(key) ?? new Set()).add(value));
     const start = (query.page - 1) * query.page_size;
     return {
+      agent_fleet: { target: "0.9.7", align: 0, check: 0 },
       items: matched.slice(start, start + query.page_size),
       page: query.page, page_size: query.page_size, total: matched.length, all: nodes.length,
       labels: [...facets].sort(([a], [b]) => a.localeCompare(b)).map(([key, values]) => ({ key, values: [...values].sort() })),
@@ -187,16 +197,22 @@ function stubApi(nodes: Node[]) {
   api.engines = async () => list([]);
 }
 
-afterEach(() => {
-  cleanup();
+afterEach(async () => {
+  await act(async () => {
+    cleanup();
+    message.destroy();
+  });
   Object.assign(api, originals);
+  globalThis.fetch = originalFetch;
 });
 
-function renderPage() {
+function renderPage(userID?: number) {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={["/nodes"]}>
-        <NodesPage />
+        <SessionUserContext.Provider value={userID === undefined ? undefined : { id: userID, username: "preview", role: "admin" }}>
+          <NodesPage />
+        </SessionUserContext.Provider>
       </MemoryRouter>
     </I18nextProvider>,
   );
@@ -209,6 +225,48 @@ test("renders each node with its name and hostname in the node column", async ()
   assert.ok(screen.getByText("192.168.10.11"));
   assert.ok(screen.getByText("k8s-3-910c-host"));
   assert.ok(screen.getByText("192.0.2.129"));
+});
+
+test("offline Agent versions are historical, including when the session closed before the node state updated", async () => {
+  const restarting: Node = { ...offlineNode, uuid: "restarting", name: "restarting", agent_version: "0.9.6", agent_eligibility: "busy" };
+  stubApi([offlineNode, { ...onlineNode, agent_eligibility: "offline" }, restarting]);
+  renderPage();
+  await screen.findByText(onlineNode.name!);
+  const versionCell = rowOf(onlineNode.name!).getByText("0.9.7").closest("td")!;
+  assert.ok(within(versionCell).getByText("Last known version").closest('[data-slot="badge"]'));
+  const restartingRow = rowOf("restarting");
+  assert.ok(restartingRow.getByText("In upgrade batch"));
+  assert.ok(restartingRow.getByText("Last known version"));
+  const unreported = rowOf(offlineNode.name!);
+  assert.ok(unreported.getByText("Not reported").closest('[data-slot="badge"]'));
+  assert.equal(unreported.queryByText("Last known version"), null);
+  assert.equal(screen.queryByText("Upgrade available"), null);
+});
+
+test("dismissing the fleet notice follows the account and target while leaving the table available", async () => {
+  stubApi([onlineNode]);
+  const nodes = api.nodesPage;
+  let target = "v1.2.0";
+  api.nodesPage = async query => ({
+    ...await nodes(query),
+    agent_fleet: { target, align: 1, upgrade: 1, check: 0 },
+  });
+  const ignore = { name: "Dismiss this notice" };
+  const first = renderPage(101);
+  fireEvent.click(await screen.findByRole("button", ignore));
+  assert.ok(screen.getByRole("combobox", { name: "Agent status" }));
+  assert.ok(screen.getByText(onlineNode.name!));
+  first.unmount();
+  const same = renderPage(101);
+  await screen.findByText(onlineNode.name!);
+  assert.equal(screen.queryByRole("button", ignore), null);
+  same.unmount();
+  const other = renderPage(102);
+  await screen.findByRole("button", ignore);
+  other.unmount();
+  target = "v1.3.0";
+  renderPage(101);
+  await screen.findByRole("button", ignore);
 });
 
 test("the latest-rejection column is gone from the table; the drawer keeps the detail", async () => {
@@ -226,18 +284,18 @@ test("the table uses a fixed layout with explicit widths; the name leads frozen 
   stubApi([onlineNode]);
   const { container } = renderPage();
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
-  const table = container.querySelector(".ant-table-content table") as HTMLTableElement;
+  const table = container.querySelector("table") as HTMLTableElement;
   assert.equal(table.style.tableLayout, "fixed");
-  const cols = Array.from(table.querySelectorAll("colgroup col"));
-  // A selection column plus 10 shown columns; the agent version and creation time are offered but hidden by default.
-  assert.equal(cols.length, 11);
+  const cols = Array.from(table.querySelectorAll("thead th"));
+  assert.ok(screen.getByRole("columnheader", { name: /Agent version/i }));
+  assert.equal(cols.length, 12);
   assert.equal((cols[1] as HTMLElement).style.width, "220px");
   assert.equal((cols[cols.length - 1] as HTMLElement).style.width, "110px");
   const headers = screen.getAllByRole("columnheader");
   assert.equal(headers[1].textContent, "Name");
-  assert.ok(headers[1].className.includes("ant-table-cell-fix-left"), "the name column is frozen left");
+  assert.equal((headers[1] as HTMLElement).style.left, "48px");
   assert.equal(headers.at(-1)?.textContent, "Actions");
-  assert.ok(headers.at(-1)?.className.includes("ant-table-cell-fix-right"), "the actions column is frozen right");
+  assert.equal((headers.at(-1) as HTMLElement).style.right, "0px");
 });
 
 function rowOf(text: string) {
@@ -269,7 +327,7 @@ test("the name opens the detail; row actions are Terminal and a More dropdown; T
   onlineRow.getByRole("button", { name: "gpu-a100-node-01" });
   const onlineTerminal = onlineRow.getByRole("button", { name: /Terminal/ }) as HTMLButtonElement;
   assert.equal(onlineTerminal.disabled, false);
-  assert.equal(onlineRow.queryByRole("button", { name: /Resource group/ }), null);
+  assert.ok(onlineRow.queryByRole("button", { name: /Resource group/ }) === null, "Expected the element to be absent");
   onlineRow.getByRole("button", { name: "More" }).click();
   for (const item of [/Details/, /Edit labels/, /Delete/]) await waitFor(() => screen.getByRole("menuitem", { name: item }));
 
@@ -277,13 +335,16 @@ test("the name opens the detail; row actions are Terminal and a More dropdown; T
   const offlineTerminal = offlineRow.getByRole("button", { name: /Terminal/ }) as HTMLButtonElement;
   assert.equal(offlineTerminal.disabled, true);
   // Delete is no longer an inline button that forced the row to wrap.
-  assert.equal(offlineRow.queryByRole("button", { name: /Delete/ }), null);
+  assert.ok(offlineRow.queryByRole("button", { name: /Delete/ }) === null, "Expected the element to be absent");
 });
 
 test("delete lives behind the More dropdown and asks for confirmation", async () => {
-  stubApi([onlineNode]);
+  stubApi([{ ...onlineNode, has_ssh_credential: undefined } as unknown as Node]);
   let deleted: string | undefined;
-  api.deleteNode = async (uuid: string) => { deleted = uuid; };
+  api.deleteNode = async (uuid: string) => {
+    deleted = uuid;
+    return { status: "deleted", agent_uninstalled: true };
+  };
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
   const row = rowOf("gpu-a100-node-01");
@@ -292,6 +353,8 @@ test("delete lives behind the More dropdown and asks for confirmation", async ()
   menuItem.click();
   await waitFor(() => assert.ok(deleteModal()));
   assert.ok(screen.getByText("Stop deployment instances on this node first."));
+  assert.ok(screen.getByText("Normal removal uninstalls the agent over SSH before deleting the node record."));
+  assert.ok(screen.getByRole("checkbox", { name: /Force removal/ }));
   // Cancel must leave the node untouched. (Whether the dialog's leave motion
   // finishes is antd's own concern in jsdom; assert only the functional bit.)
   deleteModalButtons().find((b) => b.textContent === "Cancel")!.click();
@@ -301,7 +364,10 @@ test("delete lives behind the More dropdown and asks for confirmation", async ()
 test("confirming the dialog deletes the node and reports success", async () => {
   stubApi([onlineNode]);
   let deleted: string | undefined;
-  api.deleteNode = async (uuid: string) => { deleted = uuid; };
+  api.deleteNode = async (uuid: string) => {
+    deleted = uuid;
+    return { status: "deleted", agent_uninstalled: true };
+  };
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
   const row = rowOf("gpu-a100-node-01");
@@ -316,7 +382,10 @@ test("confirming the dialog deletes the node and reports success", async () => {
 test("force removal is explicit and warns that the remote agent may still run", async () => {
   stubApi([onlineNode]);
   let request: { uuid: string; force: boolean } | undefined;
-  api.deleteNode = async (uuid: string, force = false) => { request = { uuid, force }; };
+  api.deleteNode = async (uuid: string, force = false) => {
+    request = { uuid, force };
+    return { status: "deleted", agent_uninstalled: false };
+  };
   renderPage();
   await waitFor(() => screen.getByText("gpu-a100-node-01"));
   rowOf("gpu-a100-node-01").getByRole("button", { name: "More" }).click();
@@ -332,12 +401,73 @@ test("force removal is explicit and warns that the remote agent may still run", 
   await waitFor(() => screen.getByText("Management records deleted; the agent may still be running"));
 });
 
+test("normal deletion without SSH retains the dialog and offers an explicit force retry", async () => {
+  stubApi([{ ...onlineNode, has_ssh_credential: false }]);
+  const requests: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(init?.method, "DELETE");
+    const url = String(input);
+    requests.push(url);
+    if (url.endsWith("?force=true")) return Response.json({ status: "deleted", agent_uninstalled: false });
+    return new Response('{"code":"NODE_DELETE_SSH_REQUIRED","error":"normal deletion requires saved SSH credentials to uninstall the agent; node retained. Configure SSH and retry, or uninstall the agent manually and use force=true to remove only its management record"}', { status: 409, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  renderPage();
+  await waitFor(() => screen.getByText("gpu-a100-node-01"));
+  rowOf("gpu-a100-node-01").getByRole("button", { name: "More" }).click();
+  (await waitFor(() => screen.getByRole("menuitem", { name: /Delete/ }))).click();
+  const dialog = within(await waitFor(() => deleteModal()));
+  assert.match(dialog.getByRole("alert").textContent ?? "", /Configure SSH credentials for normal deletion/);
+  assert.ok(dialog.getByText("Normal removal uninstalls the agent over SSH before deleting the node record."));
+  const checkbox = dialog.getByRole("checkbox", { name: /Force removal/ }) as HTMLInputElement;
+  assert.equal(checkbox.checked, false);
+  dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  const explanation = "Normal deletion requires SSH to uninstall the agent, but this node has no saved SSH credentials. The node record was retained. Configure SSH credentials and retry, or uninstall the agent manually and then select Force removal to delete its management record.";
+  await screen.findByText(`Failed to delete node: ${explanation}`);
+  assert.deepEqual(requests, [`/api/v1/nodes/${onlineNode.uuid}`]);
+  assert.ok(deleteModal());
+  const retainedRow = within(screen.getByRole("table", { hidden: true })).getByText("gpu-a100-node-01").closest("tr");
+  assert.ok(retainedRow, "failed deletion retained the node row");
+  checkbox.click();
+  await waitFor(() => assert.equal(checkbox.checked, true));
+  assert.ok(dialog.getByText("The agent may still be running on the node. Stop it manually when the node is accessible."));
+  const previousMessages = new Set(screen.queryAllByText("Management records deleted; the agent may still be running"));
+  dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await waitFor(() => assert.deepEqual(requests, [`/api/v1/nodes/${onlineNode.uuid}`, `/api/v1/nodes/${onlineNode.uuid}?force=true`]));
+  await waitFor(() => {
+    const newMessage = screen.queryAllByText("Management records deleted; the agent may still be running")
+      .find((element) => !previousMessages.has(element));
+    assert.ok(newMessage, "the current deletion reported that its agent remains installed");
+  });
+});
+
+test("SSH uninstall failure explains recovery steps while keeping the deletion dialog open", async () => {
+  stubApi([onlineNode]);
+  const requests: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    assert.equal(init?.method, "DELETE");
+    requests.push(String(input));
+    return new Response('{"code":"NODE_UNINSTALL_UNCONFIRMED","error":"agent uninstall over SSH was not confirmed; node and SSH credentials retained. Fix SSH and retry, or uninstall the agent manually and use force=true to remove only its management record: SSH unreachable","params":{"detail":"SSH unreachable"}}', { status: 409, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  renderPage();
+  await waitFor(() => screen.getByText("gpu-a100-node-01"));
+  rowOf("gpu-a100-node-01").getByRole("button", { name: "More" }).click();
+  (await waitFor(() => screen.getByRole("menuitem", { name: /Delete/ }))).click();
+  within(await waitFor(() => deleteModal())).getByRole("button", { name: "Delete", exact: true }).click();
+  const explanation = "Normal deletion could not confirm that the agent was uninstalled over SSH. The node and SSH credentials were retained. Fix the SSH connection or credentials and retry, or uninstall the agent manually and then select Force removal to delete its management record. Details: SSH unreachable";
+  await screen.findByText(`Failed to delete node: ${explanation}`);
+  assert.deepEqual(requests, [`/api/v1/nodes/${onlineNode.uuid}`]);
+  assert.ok(deleteModal());
+  const retainedRow = within(screen.getByRole("table", { hidden: true })).getByText("gpu-a100-node-01").closest("tr");
+  assert.ok(retainedRow, "failed deletion retained the node row");
+});
+
 test("uninstall failure keeps the dialog open and allows an explicit force retry", async () => {
   stubApi([onlineNode]);
   const requests: boolean[] = [];
   api.deleteNode = async (_uuid: string, force = false) => {
     requests.push(force);
     if (!force) throw new Error("SSH unreachable; node retained");
+    return { status: "deleted", agent_uninstalled: false };
   };
   renderPage();
   await waitFor(() => screen.getByText("gpu-a100-node-01"));
@@ -357,7 +487,11 @@ test("the delete dialog prevents duplicate submissions while SSH uninstall is pe
   stubApi([onlineNode]);
   let finish!: () => void;
   let requests = 0;
-  api.deleteNode = async () => { requests++; await new Promise<void>((resolve) => { finish = resolve; }); };
+  api.deleteNode = async () => {
+    requests++;
+    await new Promise<void>((resolve) => { finish = resolve; });
+    return { status: "deleted", agent_uninstalled: true };
+  };
   renderPage();
   await waitFor(() => screen.getByText("gpu-a100-node-01"));
   rowOf("gpu-a100-node-01").getByRole("button", { name: "More" }).click();
@@ -389,10 +523,27 @@ test("the detail drawer renders identity rows and the accelerator table", async 
   await waitFor(() => assert.equal(screen.getAllByRole("link", { name: "A100-SXM4-80GB" }).length, 2));
   // The detail response still carries the node token, but the drawer no
   // longer shows it or offers to regenerate it.
-  const drawer = document.querySelector(".ant-drawer")!;
+  const drawer = screen.queryByRole("dialog")!;
   assert.ok(!drawer.textContent?.includes("3267d3b0a4684093b8393fc6eeeacea0cdff34ae15108322"), "token is not shown");
-  assert.equal(drawer.querySelector(".ant-typography-copy"), null);
-  assert.equal(screen.queryByRole("button", { name: /regenerate/i }), null);
+  assert.ok(drawer.querySelector(".ant-typography-copy") === null, "Expected the element to be absent");
+  assert.ok(screen.queryByRole("button", { name: /regenerate/i }) === null, "Expected the element to be absent");
+});
+
+test("ordinary node detail shows its last report without administrator diagnostics", async () => {
+  for (const last_seen_at of [new Date(2026, 10, 12, 8, 15).toISOString(), undefined]) {
+    const node = { ...onlineNode, last_seen_at };
+    stubApi([node]);
+    api.me = async () => ({ role: "member" }) as never;
+    renderPage();
+    await screen.findByRole("button", { name: node.name });
+    fireEvent.click(screen.getByRole("button", { name: node.name }));
+    await screen.findByText(node.uuid);
+    const drawer = screen.getByRole("dialog");
+    const report = within(drawer).getByRole("row", { name: /Last successful report/ });
+    assert.match(report.textContent ?? "", last_seen_at ? /2026-11-12 08:15/ : /Not observed/);
+    assert.equal(within(drawer).queryByRole("button", { name: "Check connection" }), null);
+    await act(async () => cleanup());
+  }
 });
 
 test("the label filter ORs values of one key, ANDs across keys, and explains an empty match", async () => {
@@ -446,11 +597,11 @@ test("the node list asks the server for one page and counts matches against the 
   stubApi(fleet);
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("node-00")));
-  assert.deepEqual(pageQueries[0], { page: 1, page_size: 20, q: "", label: [], state: [] });
+  assert.deepEqual(pageQueries[0], { extra: { agent_upgrade: ["all"] }, page: 1, page_size: 20, q: "", label: [], state: [] });
   assert.ok(screen.getByText("23/23 nodes"));
   assert.ok(!screen.queryByText("node-20"), `"node-20" is still shown`);
 
-  fireEvent.click(screen.getByTitle("2"));
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
   await waitFor(() => assert.ok(screen.getByText("node-22")));
   assert.equal(pageQueries.at(-1)?.page, 2);
   assert.ok(!screen.queryByText("node-00"), `"node-00" is still shown`);
@@ -480,8 +631,8 @@ test("a deep link opens the named node even when it is not on the first page", a
       </MemoryRouter>
     </I18nextProvider>,
   );
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer-open")));
-  await waitFor(() => assert.ok(within(document.querySelector(".ant-drawer-open") as HTMLElement).getAllByText(/deep-0/).length > 0));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")));
+  await waitFor(() => assert.ok(within(screen.queryByRole("dialog") as HTMLElement).getAllByText(/deep-0/).length > 0));
 });
 
 test("the instance topology link opens its node on the GPU tab with the topology; the list still opens on the overview", async () => {
@@ -496,17 +647,17 @@ test("the instance topology link opens its node on the GPU tab with the topology
       </MemoryRouter>
     </I18nextProvider>,
   );
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer-open")));
-  const drawer = within(document.querySelector(".ant-drawer-open") as HTMLElement);
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")));
+  const drawer = within(screen.queryByRole("dialog") as HTMLElement);
   await waitFor(() => assert.equal(drawer.getByRole("tab", { name: /GPUs/ }).getAttribute("aria-selected"), "true"));
   assert.ok(document.querySelector(".node-gpu-table"));
   assert.ok(drawer.getByRole("heading", { name: "Accelerator topology" }));
   // Another node opened from the list afterwards starts on its overview.
   fireEvent.click(drawer.getByRole("button", { name: "Close" }));
-  await waitFor(() => assert.equal(document.querySelector(".ant-drawer-open"), null));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog") === null, "Expected the element to be absent"));
   screen.getByRole("button", { name: other.name }).click();
   await waitFor(() => assert.ok(screen.getByText(other.uuid)));
-  const next = within(document.querySelector(".ant-drawer-open") as HTMLElement);
+  const next = within(screen.queryByRole("dialog") as HTMLElement);
   assert.equal(next.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected"), "true");
 });
 
@@ -532,30 +683,40 @@ test("the detail drawer lists the node labels where the resource group used to b
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
   screen.getByRole("button", { name: "gpu-a100-node-01" }).click();
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer")));
-  const drawer = within(document.querySelector(".ant-drawer") as HTMLElement);
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")));
+  const drawer = within(screen.queryByRole("dialog") as HTMLElement);
   await waitFor(() => assert.ok(drawer.getByText("resource_group=pool-a")));
   assert.ok(drawer.getByText("owner=ml"));
-  assert.equal(drawer.queryByText("Resource group"), null);
+  assert.ok(drawer.queryByText("Resource group") === null, "Expected the element to be absent");
 });
 
-test("a Mac offers only the automatic runtime, which picks its host driver", () => {
-  assert.deepEqual(runtimeChoices("darwin"), ["auto"]);
-  assert.deepEqual(runtimeChoices("linux"), ["auto", "docker", "nerdctl", "udocker"]);
-  assert.deepEqual(runtimeChoices(undefined), ["auto", "docker", "nerdctl", "udocker"]);
+test("a Mac's host driver label is shown as is", () => {
   assert.equal(runtimeLabel("host"), "host");
 });
 
+test("a Kubernetes node has no runtime selector, only the runtime it runs", async () => {
+  const kube = { ...onlineNode, name: "kube-gpu-1", runtime_driver: "kube", runtime_choices: undefined, kube: { cluster_id: 1, node_name: "gpu-1", unschedulable: false } };
+  stubApi([kube]);
+  api.node = async () => kube as never;
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("kube-gpu-1")));
+  screen.getByRole("button", { name: "kube-gpu-1" }).click();
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")));
+  const drawer = within(screen.queryByRole("dialog") as HTMLElement);
+  await waitFor(() => assert.ok(drawer.getByText("kube")));
+  assert.equal(screen.queryByRole("dialog")?.querySelector(".ant-select-selection-item")?.textContent ?? null, null);
+});
+
 test("the runtime selector of a Mac node offers only the automatic choice", async () => {
-  const mac = { ...onlineNode, os: "darwin", arch: "arm64", name: "mac-studio-01" };
+  const mac = { ...onlineNode, os: "darwin", arch: "arm64", name: "mac-studio-01", runtime_choices: ["auto"] };
   stubApi([mac]);
   api.node = async () => mac as never;
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("mac-studio-01")));
   screen.getByRole("button", { name: "mac-studio-01" }).click();
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer .ant-select")));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")?.querySelector(".ant-select")));
   const optionTexts = async () => {
-    const selector = document.querySelector(".ant-drawer .ant-select-selector") as HTMLElement;
+    const selector = screen.queryByRole("dialog")?.querySelector(".ant-select-selector") as HTMLElement;
     fireEvent.mouseDown(selector);
     await waitFor(() => assert.ok(document.querySelector(".ant-select-dropdown .ant-select-item-option")));
     return [...document.querySelectorAll(".ant-select-dropdown .ant-select-item-option")].map((option) => option.textContent);
@@ -574,10 +735,10 @@ test("the udocker driver is shown as runveil while its wire value stays udocker"
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
   screen.getByRole("button", { name: "gpu-a100-node-01" }).click();
   await waitFor(() => {
-    const selected = document.querySelector(".ant-drawer .ant-select-selection-item");
+    const selected = screen.queryByRole("dialog")?.querySelector(".ant-select-selection-item");
     assert.equal(selected?.textContent, "runveil");
   });
-  assert.equal(document.querySelector(".ant-drawer")?.textContent?.includes("udocker"), false);
+  assert.equal(screen.queryByRole("dialog")?.textContent?.includes("udocker"), false);
 });
 
 test("a node on its runveil fallback says which runtime it runs and why Docker was passed over", async () => {
@@ -591,10 +752,10 @@ test("a node on its runveil fallback says which runtime it runs and why Docker w
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
   screen.getByRole("button", { name: "gpu-a100-node-01" }).click();
   await waitFor(() => {
-    const selected = document.querySelector(".ant-drawer .ant-select-selection-item");
+    const selected = screen.queryByRole("dialog")?.querySelector(".ant-select-selection-item");
     assert.equal(selected?.textContent, "auto (now runveil)");
   });
-  const drawer = within(document.querySelector(".ant-drawer") as HTMLElement);
+  const drawer = within(screen.queryByRole("dialog") as HTMLElement);
   assert.ok(drawer.getAllByRole("alert").some((alert) =>
     /docker is installed but NVIDIA Container Toolkit is not, so this node uses runveil/.test(alert.textContent ?? "")));
   assert.ok(drawer.getByRole("button", { name: /Copy install command/ }));
@@ -626,10 +787,10 @@ test("the detail drawer offers the accelerator choice only on a host with cards 
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
   screen.getByRole("button", { name: "gpu-a100-node-01" }).click();
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer")?.textContent?.includes("Runtime plugin")));
-  const drawer = within(document.querySelector(".ant-drawer") as HTMLElement);
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")?.textContent?.includes("Runtime plugin")));
+  const drawer = within(screen.queryByRole("dialog") as HTMLElement);
   // The accelerator choice lives with the cards it chooses between.
-  assert.equal(drawer.queryByRole("combobox", { name: "Accelerator" }), null);
+  assert.ok(drawer.queryByRole("combobox", { name: "Accelerator" }) === null, "Expected the element to be absent");
   fireEvent.click(drawer.getByRole("tab", { name: /GPUs/ }));
   await waitFor(() => assert.ok(drawer.getByRole("combobox", { name: "Accelerator" })));
   assert.ok(drawer.getAllByRole("alert").some((alert) => /This machine also has NVIDIA ×1/.test(alert.textContent ?? "")));
@@ -642,15 +803,15 @@ test("a node whose host has one vendor's cards shows no accelerator choice", asy
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
   screen.getByRole("button", { name: "gpu-a100-node-01" }).click();
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer")?.textContent?.includes("Runtime plugin")));
-  const drawer = document.querySelector(".ant-drawer") as HTMLElement;
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")?.textContent?.includes("Runtime plugin")));
+  const drawer = screen.queryByRole("dialog") as HTMLElement;
   const labels = [...drawer.querySelectorAll(".ant-descriptions-item-label")].map((el) => el.textContent);
   assert.ok(labels.includes("Runtime"), `labels: ${labels.join(", ")}`);
   fireEvent.click(within(drawer).getByRole("tab", { name: /GPUs/ }));
   await waitFor(() => assert.ok(within(drawer).getByText("Summary")));
   const gpuLabels = [...drawer.querySelectorAll(".ant-descriptions-item-label")].map((el) => el.textContent);
   assert.equal(gpuLabels.includes("Accelerator"), false, `labels: ${gpuLabels.join(", ")}`);
-  assert.equal(within(drawer).queryByRole("combobox", { name: "Accelerator" }), null);
+  assert.ok(within(drawer).queryByRole("combobox", { name: "Accelerator" }) === null, "Expected the element to be absent");
 });
 
 async function openDrawer(node: Node) {
@@ -660,7 +821,7 @@ async function openDrawer(node: Node) {
   await waitFor(() => assert.ok(screen.getByText(node.name!)));
   screen.getByRole("button", { name: node.name! }).click();
   await waitFor(() => assert.ok(screen.getByText(node.uuid)));
-  return within(document.querySelector(".ant-drawer") as HTMLElement);
+  return within(screen.queryByRole("dialog") as HTMLElement);
 }
 
 test("the detail drawer opens on the overview, in sections, and is a little wider than before but never wider than the window", async () => {
@@ -669,7 +830,7 @@ test("the detail drawer opens on the overview, in sections, and is a little wide
   for (const section of ["Node", "Runtime", "Storage", "Network"]) assert.ok(drawer.getByRole("heading", { name: section }), section);
   // The GPU tab carries its card count apart from its label.
   const gpuTab = drawer.getByRole("tab", { name: /GPUs/ });
-  assert.equal(gpuTab.querySelector(".detail-tab-count")?.textContent, "1");
+  assert.match(gpuTab.textContent ?? "", /GPUs\s*1$/);
   // JSDOM drops a min() width from inline styles, so the bound is checked
   // where the drawer takes it from.
   assert.equal(DETAIL_DRAWER_WIDTH, "min(720px, calc(100vw - 32px))");
@@ -689,7 +850,7 @@ test("the GPU tab leads each card with its model, memory and live readings, and 
   assert.ok(within(table).getByText("20.0 / 80 GiB"));
   assert.ok(within(table).getByText("61°C"));
   // PCIe address and NUMA node wait in the expanded row.
-  assert.equal(within(table).queryByText("0000:8a:00.0"), null);
+  assert.ok(within(table).queryByText("0000:8a:00.0") === null, "Expected the element to be absent");
   const expand = within(table).getByRole("button", { name: "Show details" });
   fireEvent.click(expand);
   await waitFor(() => assert.ok(within(table).getByText("0000:8a:00.0")));
@@ -708,7 +869,7 @@ test("a capability every card reports alike is listed once, with how many cards 
 test("a diagnosis opens its own tab", async () => {
   api.nodeDoctor = async () => ({ report: "all checks passed" }) as never;
   const drawer = await openDrawer({ ...onlineNode, gpus: [] });
-  assert.equal(drawer.queryByRole("tab", { name: "Diagnosis" }), null);
+  assert.ok(drawer.queryByRole("tab", { name: "Diagnosis" }) === null, "Expected the element to be absent");
   fireEvent.click(drawer.getByRole("button", { name: "Diagnose" }));
   await waitFor(() => assert.equal(drawer.getByRole("tab", { name: "Diagnosis" }).getAttribute("aria-selected"), "true"));
 });
@@ -720,7 +881,7 @@ test("a node event reloads the list in the background, without the table's loadi
   api.nodesPage = (query) => serve(query);
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("gpu-a100-node-01")));
-  await waitFor(() => assert.equal(document.querySelector(".ant-spin-spinning"), null));
+  await waitFor(() => assert.ok(document.querySelector(".ant-spin-spinning") === null, "Expected the element to be absent"));
   const grown = nodesServer([onlineNode, offlineNode]);
   let release!: () => void;
   const held = new Promise<void>((resolve) => { release = resolve; });
@@ -768,10 +929,10 @@ test("batch upgrade retains checked nodes across pages and previews only those n
   assert.equal(batch.disabled, true);
   fireEvent.click(rowOf("batch-node-0").getByRole("checkbox"));
   await screen.findByText("1 nodes selected");
-  fireEvent.click(screen.getByTitle("2")); await screen.findByText("batch-node-11");
+  fireEvent.click(screen.getByRole("button", { name: "Next page" })); await screen.findByText("batch-node-11");
   fireEvent.click(rowOf("batch-node-11").getByRole("checkbox")); await screen.findByText("2 nodes selected");
-  fireEvent.click(screen.getByTitle("1")); await screen.findByText("batch-node-0");
-  assert.equal((rowOf("batch-node-0").getByRole("checkbox") as HTMLInputElement).checked, true);
+  fireEvent.click(screen.getByRole("button", { name: "Previous page" })); await screen.findByText("batch-node-0");
+  assert.equal(rowOf("batch-node-0").getByRole("checkbox").getAttribute("aria-checked"), "true");
   fireEvent.click(batch); await screen.findByRole("dialog", { name: "Review Agent upgrade" });
   assert.deepEqual(requests, [{ node_uuids: ["batch-0", "batch-11"] }]);
 });
@@ -783,8 +944,8 @@ test("clear selection unchecks selected rows and disables batch upgrade", async 
   fireEvent.click(rowOf(offlineNode.name!).getByRole("checkbox"));
   await screen.findByText("2 nodes selected");
   fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
-  assert.equal((rowOf(onlineNode.name!).getByRole("checkbox") as HTMLInputElement).checked, false);
-  assert.equal((rowOf(offlineNode.name!).getByRole("checkbox") as HTMLInputElement).checked, false);
+  assert.equal(rowOf(onlineNode.name!).getByRole("checkbox").getAttribute("aria-checked"), "false");
+  assert.equal(rowOf(offlineNode.name!).getByRole("checkbox").getAttribute("aria-checked"), "false");
   assert.equal((screen.getByRole("button", { name: "Upgrade selected Agents" }) as HTMLButtonElement).disabled, true);
   assert.ok(!screen.queryByText("2 nodes selected"));
 });
@@ -801,7 +962,7 @@ test("a node-list refresh failure preserves an open upgrade preview and its retr
   fireEvent.click(rowOf(onlineNode.name!).getByRole("checkbox"));
   fireEvent.click(screen.getByRole("button", { name: "Upgrade selected Agents" }));
   const modal = await screen.findByRole("dialog", { name: "Review Agent upgrade" });
-  await within(modal).findByText("0.9.7");
+  await within(modal).findByText("0.9.7 → 0.9.8");
   fireEvent.click(within(modal).getByRole("checkbox"));
   fireEvent.click(within(modal).getByRole("button", { name: "Update to this version" }));
   await within(modal).findByText("create response lost");
@@ -834,4 +995,48 @@ test("an offline node uses doctor and reruns replace the partial report", async 
   await waitFor(() => assert.ok(drawer.getByText(/No reliable evidence/)));
   assert.equal(drawer.queryByText(/No SSH credentials/), null);
   assert.equal(calls, 2);
+});
+
+// What the server sends for a node that joined from a Kubernetes cluster: the
+// placement is two of its system labels (the cluster by UUID, shown by name),
+// not a field the page composes.
+const kubeNode: Node = {
+  ...onlineNode,
+  uuid: "33333333-3333-3333-3333-333333333333", name: "k8s-gpu-01", hostname: "k8s-gpu-01",
+  system_labels: [
+    { key: "gpuworks.ai/kubernetes-cluster", value: "7c1b6f0e-0000-4000-8000-000000000007", display: "prod-gpu" },
+    { key: "gpuworks.ai/kubernetes-node", value: "worker-3", display: "worker-3" },
+    { key: "gpuworks.ai/node", value: "33333333-3333-3333-3333-333333333333", display: "k8s-gpu-01" },
+  ],
+};
+
+test("a node that joined from Kubernetes shows its cluster and Kubernetes node as system labels; no K8s badge is composed", async () => {
+  stubApi([onlineNode, kubeNode]);
+  let clusterLookups = 0;
+  api.kubeClusters = async () => { clusterLookups++; return list([]) as never; };
+  renderPage();
+  const row = (await screen.findByText("k8s-gpu-01", { selector: "button span, button" })).closest("tr") as HTMLElement;
+  await waitFor(() => assert.ok(within(row).getByText("Kubernetes cluster: prod-gpu")));
+  assert.ok(within(row).queryByText(/^K8s/) === null, "no K8s badge next to the name");
+  assert.equal(clusterLookups, 0, "the page does not look up cluster names itself");
+
+  screen.getByRole("button", { name: "k8s-gpu-01" }).click();
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")));
+  const drawer = within(screen.queryByRole("dialog") as HTMLElement);
+  await waitFor(() => assert.ok(drawer.getByText("Kubernetes cluster: prod-gpu")));
+  assert.ok(drawer.getByText("Kubernetes node: worker-3"));
+  assert.ok(drawer.queryByText(/^K8s/) === null);
+  assert.equal(clusterLookups, 0);
+});
+
+test("a node Kubernetes has cordoned carries the platform cordon, not a K8s badge", async () => {
+  const cordoned: Node = { ...kubeNode, scheduling: "cordoned", scheduling_by: "platform", cordon_reason: "kube_unschedulable" };
+  stubApi([cordoned]);
+  renderPage();
+  const row = (await screen.findByText("k8s-gpu-01", { selector: "button span, button" })).closest("tr") as HTMLElement;
+  await waitFor(() => assert.ok(within(row).getByText("Kubernetes cluster: prod-gpu")));
+  assert.ok(within(row).queryByText("K8s cordoned") === null);
+  screen.getByRole("button", { name: "k8s-gpu-01" }).click();
+  await waitFor(() => assert.ok(screen.queryByRole("dialog")));
+  assert.ok(within(screen.queryByRole("dialog") as HTMLElement).queryByText("K8s cordoned") === null);
 });

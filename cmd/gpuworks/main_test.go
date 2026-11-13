@@ -145,7 +145,7 @@ func TestServerLoggerPreservesRedirectedStderr(t *testing.T) {
 	os.Stderr = stderr
 	t.Cleanup(func() { os.Stderr = saved; stderr.Close() })
 	logPath := filepath.Join(t.TempDir(), "explicit", "server.log")
-	log, closeLog := serverLogger(discardLog(), logPath, "1KB", 2, slog.LevelInfo)
+	log, closeLog := serverLogger(logPath, "1KB", 2, slog.LevelInfo)
 	log.Info("redirected server record")
 	closeLog()
 	for _, path := range []string{stderrPath, logPath} {

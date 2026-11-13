@@ -44,7 +44,7 @@ export default function BenchmarkEvidencePanel({ run, point }: { run: BenchmarkR
   };
   const reasonRows = Object.entries(all.finish_reasons || {}).map(([reason, count]) => ({ reason, count }));
   const finishUnknown = Math.max(0, all.attempted - reasonRows.reduce((total, row) => total + row.count, 0));
-  return <Card title={t("evidence.title")} extra={point?.detail_path ? <Button href={`/api/v1/benchmarks/${run.id}/points/${point.seq}/detail`}>{t("evidence.download")}</Button> : undefined}>
+  return <Card title={t("evidence.title")} extra={point?.detail_path ? <Button data-report-exclude href={`/api/v1/benchmarks/${run.id}/points/${point.seq}/detail`}>{t("evidence.download")}</Button> : undefined}>
     <Space direction="vertical" size="middle" style={{ width: "100%" }}>
       <Descriptions size="small" bordered column={{ xs: 1, sm: 2, xl: 4 }} items={[
         ...counts.map(([key, value]) => ({ key, label: t(`evidence.${key}`), children: number(value) })),

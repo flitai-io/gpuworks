@@ -116,6 +116,34 @@ test("saving a password reports that the platform key replaced it", async () => 
   await waitFor(() => assert.ok(screen.getByText(nodes.ssh.message.switchedToPlatformKey)));
 });
 
+test("the SSH editor selects keyboard-interactive for a saved password and sends the newly entered password", async () => {
+  stub("platformSSHKey", () => key);
+  stub("nodeSSH", () => ({ host: "gpu.example", port: 22, user: "root", has_password: true, has_private_key: false, auth_mode: "password" }));
+  const puts = stub("putNodeSSH", () => ({
+    host: "gpu.example", port: 22, user: "root", has_password: false, has_private_key: false, auth_mode: "platform_key",
+    platform_key: { name: "Platform key", status: "ok", detail: "added to /root/.ssh/authorized_keys" },
+  }));
+  stub("node", () => sshNode);
+  wrap(<NodeSSHAccess node={sshNode} onUpdated={() => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: nodes.ssh.edit }));
+  await waitFor(() => assert.ok(screen.getByRole("button", { name: nodes.ssh.save })));
+  assert.ok(screen.getByRole("radio", { name: nodes.ssh.auth.password, checked: true }));
+  assert.ok(screen.getByText(nodes.ssh.existingAuth.replace("{{method}}", nodes.ssh.auth.password)));
+  assert.ok(screen.getByText(nodes.ssh.savedPasswordHelp));
+  fireEvent.click(screen.getByRole("radio", { name: nodes.ssh.auth.key }));
+  fireEvent.change(screen.getByPlaceholderText("-----BEGIN OPENSSH PRIVATE KEY-----"), { target: { value: "EDITOR STALE KEY" } });
+  fireEvent.click(screen.getByRole("radio", { name: "Keyboard-interactive" }));
+  const password = screen.getByLabelText(nodes.ssh.password) as HTMLInputElement;
+  assert.equal(password.value, "", "stored passwords must never be returned to the editor");
+  fireEvent.change(password, { target: { value: "new-keyboard-secret" } });
+  fireEvent.click(screen.getByRole("button", { name: nodes.ssh.save }));
+  await waitFor(() => assert.equal(puts.length, 1));
+  assert.equal(puts[0][0], "n1");
+  assert.equal(puts[0][1].auth_mode, "keyboard_interactive");
+  assert.equal(puts[0][1].password, "new-keyboard-secret");
+  assert.equal(puts[0][1].private_key_pem, undefined);
+});
+
 test("saving reports a gpuworks-agent service that belongs to another server", async () => {
   stub("platformSSHKey", () => key);
   stub("nodeSSH", () => ({ host: "gpu.example", port: 22, user: "root", has_password: false, has_private_key: false, auth_mode: "platform_key" }));

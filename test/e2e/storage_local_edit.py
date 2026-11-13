@@ -18,7 +18,11 @@ def _title(storage, name):
 
 
 def _open(page, storage, name):
-    button(page, storage["actions"]["edit"]).click()
+    # The list row and the open detail drawer each render Edit, so take the one in
+    # the drawer header for the row under test.
+    header = page.locator(".ant-drawer-header").filter(has_text=name).first
+    expect(header).to_be_visible()
+    button(header, storage["actions"]["edit"]).click()
     dialog = page.get_by_role("dialog", name=_title(storage, name), exact=True)
     expect(dialog).to_be_visible()
     return dialog

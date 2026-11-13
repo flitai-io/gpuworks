@@ -100,3 +100,15 @@ func TestCatalogIncludesAMDWithoutNVIDIAComputeCapability(t *testing.T) {
 		t.Fatalf("missing AMD choices: %v", want)
 	}
 }
+
+func TestKunlunCatalogArchitecture(t *testing.T) {
+	for _, gpu := range List() {
+		if gpu.Name == "Kunlunxin P800 PCIe" {
+			if gpu.Architecture != "KL3" {
+				t.Fatalf("architecture = %q", gpu.Architecture)
+			}
+			return
+		}
+	}
+	t.Fatal("Kunlunxin P800 PCIe missing")
+}

@@ -55,7 +55,7 @@ evidence cannot go into [docs/reference/support-matrix.md](docs/reference/suppor
 
 Requirements:
 
-- **Go** — the version in `go.mod` (currently Go 1.26.10, matching the CI image `golang:1.26`).
+- **Go** — the version in `go.mod` (currently Go 1.26.11, matching the CI image `golang:1.26.11`).
 - **Node.js and npm** — versions follow `ui/package.json` and the lockfile.
 - **GNU Make**.
 - **Docker**, SSH, and vendor CLIs are needed only for the container-level and cloud test
@@ -124,7 +124,10 @@ Notes that cost people time if skipped:
   over-subscribed machine) and count the change as verified only after a clean re-run.
 - Lint is configured in [.golangci.yml](.golangci.yml) (`govet`, `errcheck`, `staticcheck`,
   `unused`, `ineffassign`, `misspell`, `gofmt`, `goimports`, `revive`, `bodyclose`, `nilerr`).
-  Run `golangci-lint run` before submitting.
+  Run `make lint` before submitting; CI runs the same target. It builds
+  golangci-lint v1.64.8 with the repository's Go version into `bin/tools`,
+  preserving the complete rule set and reporting all findings. The first run
+  downloads the development tool and builds the embedded UI if it is missing.
 - `goimports` uses `local-prefixes: gpuworks.ai/gpuworks`, so local imports form their own
   group.
 - The layered and cloud test strategy is described in [docs/dev/testing.md](docs/dev/testing.md).
@@ -200,6 +203,11 @@ match `--help` output. Relative links and anchors are checked by `make check-doc
 (part of `make test-unit`).
 
 ## Commits and pull requests
+
+For branch setup, validation records, and review, follow the
+[PR / MR workflow](docs-en/dev/pull-requests.md). Use the
+[single PR template](.github/PULL_REQUEST_TEMPLATE.md), keeping its Chinese headings;
+write the body in either English or Chinese.
 
 - Branch from the current target branch, with a name that says what it does
   (`fix/pd-scaling-loop`, `docs/connect-nodes-typo`).

@@ -10,21 +10,22 @@
 - Agent 发起连接且 server 在 NAT 后面时，提供实例可达的稳定域名或反代地址，不用 quick 隧道地址（见[公网入口](expose-public-address.md)）。
 
 GPUWORKS 对云实例做的事是：保存云账号凭据（加密存储）→ 同步实例清单 → 经 SSH（阿里云优先经云助手）在实例上安装
-agent → 实例作为“计算节点”上线。**控制台里的“公有云”页不提供“选机型、选区域、下单”的界面**：
+agent → 实例作为“计算节点”上线。**控制台里的“外部平台”页不提供“选机型、选区域、下单”的界面**：
 租机（选机型、区域、镜像）请先在云厂商自己的控制台完成，再回到 GPUWORKS 同步并接入。通过 REST API
 创建/删除实例的方式见[用 API 创建和释放实例](#用-api-创建和释放实例)。
 
 ## 添加云账号
 
-1. 左侧菜单“资源”分组下打开“公有云”页（路径 `/providers`）。
-2. 点“添加公有云”，或点页面中部“快速接入”里的某个厂商卡片（会预选该类型）。卡片下方是厂商官网链接。
-3. 选择类型，填写“名称”（自定义，必填）和“认证信息”里的字段，点“添加”。
+1. 左侧菜单“算力资源”分组下打开“外部平台”页（路径 `/providers`）。
+2. 点“添加外部平台”，或点页面中部“快速接入”里的某个厂商卡片（会预选该类型）。卡片下方是厂商官网链接。
+3. 在“外部平台”字段选择厂商，填写“名称”（自定义，必填）和“认证信息”里的字段，点“添加”。
 
 各类型的凭据字段（以界面显示为准，带“可选”的可以不填）：
 
 | 类型 | 必填 | 可选 |
 |---|---|---|
 | 阿里云 | AccessKey ID、AccessKey Secret | RAM 角色 ARN、地域（见[阿里云](#阿里云)） |
+| DigitalOcean | API Key（Personal Access Token） | API 接口地址（见 [DigitalOcean](#digitalocean)） |
 | RunPod | API Key | API 接口地址 |
 | 优云智算（CompShare） | 公钥、私钥（优云智算 API 密钥对） | API 接口地址 |
 | AutoDL | API Key | API 接口地址、SSH 密码（之后装 agent 时作为默认 SSH 密码） |
@@ -40,23 +41,21 @@ RunPod 只支持 Secure Cloud 的 Pod，不支持 Community Cloud（添加账号
 “添加失败：…”，并带上云厂商返回的原因。保存后凭据加密存储，界面不再回显。之后可在列表里点“编辑”
 更新凭据：**没填的字段保留原值**，类型不能改。
 
-ZStack Cloud 在**专有云**页（`/zstack`），使用 API Endpoint、AccessKey ID 和 AccessKey Secret，支持同步资源与安装 agent；不通过本页租用公有云实例。凭据条件见[ZStack Cloud 连接凭据](#zstack-cloud-连接凭据)。
-
 ## 同步实例并确认机型、区域和价格
 
-1. 在“已接入公有云”列表里点某个账号的“同步”（或页面上方“同步全部”一次同步所有账号）。完成后提示“同步完成，发现 N 个实例”。
+1. 在“已接入的外部平台”列表里点某个账号的“同步”（或页面上方“同步全部”一次同步所有外部平台）。列表的“外部平台”列显示厂商（如阿里云、RunPod），“平台类型”列为公有云。完成后提示“同步完成，发现 N 个实例”。
 2. 点开该账号所在行左侧的展开箭头，看实例表：
 
    | 列 | 含义 |
    |---|---|
    | 实例名称 / 实例 ID | 云厂商侧的名称与 ID |
    | GPU 型号 / GPU 卡数 | 云厂商返回的规格；拿不到时显示“未返回” |
-   | 连接方式 | 云厂商提供的入口：“直连”或“平台代理”（SSH，可复制 `ssh` 命令；标注“仅终端”的入口只能连接，不能用来装 agent），阿里云还有“云助手”（无需 SSH） |
+   | 连接方式 | 云厂商提供的入口：“直连”或“外部平台代理”（SSH，可复制 `ssh` 命令；标注“仅终端”的入口只能连接，不能用来装 agent），阿里云还有“云助手”（无需 SSH） |
    | 状态 | 运行中 / 已停止 / 未知 |
    | 费用 | 每小时价格（如 `¥1.98/时`）；云厂商没返回价格时可能显示 `¥0.00/时`，不代表免费 |
    | 区域、类型 | 区域；类型为“容器”或“虚拟机” |
 
-3. 账号状态会随同步结果变化：同步失败会把账号标为“异常”，页面上方出现“存在异常公有云”提示，按提示检查凭据和云厂商 API 可用性，再重新同步。
+3. 账号状态会随同步结果变化：同步失败会把账号标为“异常”，页面上方出现“存在异常的外部平台”提示，按提示检查凭据和云厂商 API 可用性，再重新同步。
 
 列表每 15 秒自动刷新一次账号状态，但实例清单来自上一次“同步”的结果，想看云端最新情况请重新点“同步”。容器实例通常没有可用的 Docker 守护进程，agent 在无法使用 Docker 时使用内置 runveil；即使容器内是 root，也不等于能运行宿主机 Docker。
 
@@ -130,7 +129,7 @@ SSH 安装默认使用平台密钥，通常不用手填密码。各厂商的准�
 - `DELETE /api/v1/providers/{id}/instances/{externalID}`：释放。
 - `POST /api/v1/providers/{id}/instances/{externalID}/power`：请求体 `{"action":"on"}` 或 `{"action":"off"}`。
 
-创建之后，到“公有云”页点“同步”，实例才会出现在列表里。各类型的要求不同：
+创建之后，到“外部平台”页点“同步”，实例才会出现在列表里。各类型的要求不同：
 
 | 类型 | 创建时的要求 |
 |---|---|
@@ -138,8 +137,9 @@ SSH 安装默认使用平台密钥，通常不用手填密码。各厂商的准�
 | 优云智算 | `gpu_model` 和 `image`（优云智算镜像 ID）必填；`gpu_count` 默认 1；`region` 缺省用厂商默认区域；`extra` 可带 `zone`、`disk_gb`（默认 100）、`cpu`、`memory_mb`、`password` 等 |
 | AutoDL | `image`（镜像 UUID）必填；GPU 型号需能映射到已知规格，或在 `extra.gpu_spec_uuid` 里给出；`gpu_count` 1–4；`region` 为数据中心列表 |
 | Vast.ai | `extra.offer_id` 必填（先在 Vast.ai 上搜索并选定一个报价，价格由该报价决定）；`image` 有默认值；`extra.disk_gb` 默认 20 |
+| DigitalOcean | `region` 和 `extra.size`（GPU 规格 slug，如 `gpu-h100x1-80gb`）必填；`image` 缺省按规格选 DigitalOcean 的 AI/ML Ready 镜像（NVIDIA 单卡 `gpu-h100x1-base`、多卡 `gpu-h100x8-base`、AMD `gpu-amd-base`）；`extra.ssh_keys` 可带逗号分隔的账号 SSH Key ID 或指纹，平台公钥总会带上 |
 
-这些要求来自各 provider 的实现，以接口返回的错误信息为准；创建前先确认余额和库存。释放：RunPod、Vast.ai 直接销毁；优云智算、AutoDL 会先关机再释放。`resize` 接口目前四家都返回 501（不支持）。
+这些要求来自各 provider 的实现，以接口返回的错误信息为准；创建前先确认余额和库存。释放：RunPod、Vast.ai、DigitalOcean 直接销毁；优云智算、AutoDL 会先关机再释放。`resize` 接口目前都返回 501（不支持）。
 
 ## 常见问题
 
@@ -182,7 +182,7 @@ SSH 入口不可达、用户名／密码／私钥不对，或选了**仅终端**
 
 **其他安装检查项**
 
-- **SSH authentication 失败且只试了平台密钥**：实例还没有平台公钥。RunPod 上在 server 注册公钥前已启动的 Pod，从**公有云**页安装时会询问是否重启以加入公钥。也可在**高级设置**提供一次私钥或密码，或按错误提示在实例上授权。
+- **SSH authentication 失败且只试了平台密钥**：实例还没有平台公钥。RunPod 上在 server 注册公钥前已启动的 Pod，从**外部平台**页安装时会询问是否重启以加入公钥。也可在**高级设置**提供一次私钥或密码，或按错误提示在实例上授权。
 - **云厂商未返回 SSH 入口**：实例可能仍在启动，稍后重新点击**同步**。
 - **agent_dial 警告**：agent 已启动但还没连上 server，通常是 `server_url` 对实例不可达，按下一条处理。
 
@@ -214,6 +214,8 @@ GPUWORKS 不会自动释放云实例，删除云账号也不会。到云厂商�
 | `ecs:RunCommand`、`ecs:DescribeInvocationResults` | 经云助手执行安装前检查和安装，并读取结果 |
 | `ecs:StartInstance`、`ecs:StopInstance` | 开机、关机；不需要可以去掉 |
 | `ecs:DescribeSecurityGroupAttribute` | Server 发起连接时读取入站安全组规则；不使用此检查时可不授予 |
+| `cs:DescribeClustersV1`、`cs:DescribeClusterNodePools`、`ecs:DescribeInstanceTypes` | 「Kubernetes 集群」页签列出 ACK 集群及其 GPU 节点池；不接入 ACK 可以去掉 |
+| `cs:DescribeClusterUserKubeconfig` | 由 GPUWORKS 把接入 manifest 应用到 ACK 集群时签发 15 分钟有效的 kubeconfig；只用 kubectl 接入可以去掉 |
 
 ```json
 {
@@ -228,7 +230,11 @@ GPUWORKS 不会自动释放云实例，删除云账号也不会。到云厂商�
         "ecs:RunCommand",
         "ecs:DescribeInvocationResults",
         "ecs:StartInstance",
-        "ecs:StopInstance"
+        "ecs:StopInstance",
+        "ecs:DescribeInstanceTypes",
+        "cs:DescribeClustersV1",
+        "cs:DescribeClusterNodePools",
+        "cs:DescribeClusterUserKubeconfig"
       ],
       "Resource": "*"
     }
@@ -248,7 +254,7 @@ GPUWORKS 不在阿里云上创建或释放实例，不需要这两类权限。
 **用命令行创建**（[阿里云 CLI](https://help.aliyun.com/zh/cli/)，用有 RAM 管理权限的身份执行）：
 
 ```bash
-POLICY='{"Version":"1","Statement":[{"Effect":"Allow","Action":["ecs:DescribeRegions","ecs:DescribeInstances","ecs:DescribeCloudAssistantStatus","ecs:RunCommand","ecs:DescribeInvocationResults","ecs:StartInstance","ecs:StopInstance"],"Resource":"*"}]}'
+POLICY='{"Version":"1","Statement":[{"Effect":"Allow","Action":["ecs:DescribeRegions","ecs:DescribeInstances","ecs:DescribeCloudAssistantStatus","ecs:RunCommand","ecs:DescribeInvocationResults","ecs:StartInstance","ecs:StopInstance","ecs:DescribeInstanceTypes","cs:DescribeClustersV1","cs:DescribeClusterNodePools","cs:DescribeClusterUserKubeconfig"],"Resource":"*"}]}'
 aliyun ram CreatePolicy --PolicyName gpuworks-ecs --PolicyDocument "$POLICY"
 aliyun ram CreateUser --UserName gpuworks
 aliyun ram AttachPolicyToUser --PolicyType Custom --PolicyName gpuworks-ecs --UserName gpuworks
@@ -293,20 +299,27 @@ server 调用 `RunCommand`，让实例以 root 执行与**添加节点**相同�
 
 云助手会记录执行命令，保留期限以阿里云设置和文档为准。命令包含节点接入 token，agent 之后持续用它连接 server；有权查看调用记录（`ecs:DescribeInvocations`）的阿里云用户能读到 token。节点删除后，该 token 随之失效。
 
+**ACK 集群**：账号展开后的「Kubernetes 集群」页签实时列出账号下的 ACK 集群（Serverless 与 ACS 集群的 Pod 跑在虚拟节点上，不能运行 agent 的 DaemonSet，不列出）和其中的 GPU 节点池：节点池的实例规格都带同一型号的 GPU 才算，自动模式节点池（不指定规格）不列出。选一个节点池「接入」，会建一个节点选择器为 `alibabacloud.com/nodepool-id=<节点池 ID>` 的 Kubernetes 集群条目，之后可以由 GPUWORKS 应用 manifest，也可以自己执行 kubectl，见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)。ACK 集群的节点本身也是 GPU 实例，会出现在实例表里，标为「集群节点」，不能单独安装 agent。
+
+由 GPUWORKS 应用 manifest 需要：集群的 API Server 有公网地址（创建集群时勾选「使用 EIP 暴露 API Server」，没有的显示「仅内网 API」，只能用 kubectl 接入）；用 RAM 子账号时，这个子账号还要在 ACK 控制台「授权管理」里获得该集群的管理员（或能创建 Namespace、RBAC、DaemonSet、PriorityClass 的）RBAC 权限，否则签发出的 kubeconfig 会被集群拒绝，GPUWORKS 会把集群的拒绝原因原样显示出来。
+
 **开关机**：关机使用“普通停机”（继续计费），保留实例的 GPU、固定公网 IP 等资源；“节省停机模式”会释放这些资源，再开机时可能没有库存，GPUWORKS 不使用它。
 
-## ZStack Cloud 连接凭据
+## DigitalOcean
 
-添加专有云时填写 API Endpoint、管理员的 AccessKey ID 和 AccessKey Secret。使用 ZStack 的
-本地 AccessKey，无需保存或刷新登录 Session。AccessKey 必须处于启用状态，所属账号须有查询
-物理机、GPU 和资源配置以及执行 GPU 资源联动的权限；Cloud 的许可证与版本须支持 AccessKey 认证。
-Endpoint 支持包含 `/zstack` 上下文和可选的 `/v1` 后缀。
+**凭据**：在 DigitalOcean 控制台「API → Tokens」生成一个 Personal Access Token 填到 API Key。用 Full Access 最简单；
+自定义权限时要覆盖 account、droplet、size、ssh_key、kubernetes 的读取，开关机、创建、删除 Droplet 要 droplet 的写入，
+登记平台公钥要 ssh_key 的写入，签发 DOKS 的 kubeconfig 要 kubernetes 的相应权限（自定义权限的组合未逐项实测，缺权限时界面会显示 DigitalOcean 返回的原因）。
 
-API 沿用公共凭据字段：`public_key` 保存 AccessKey ID，`private_key` 保存 Secret；两者随整个
-凭据对象加密存储。界面根据服务端字段字典显示 AccessKey 名称，Secret 使用密码输入框。
-已经配置 Session Token 的专有云，需要通过编辑凭据填写这两个字段；原 Session 无法转换为 AccessKey。
+**同步**：实例表只列出 GPU Droplet（规格带 GPU 的），型号、卡数和每小时价格来自规格。DigitalOcean 的 GPU 规格要账号开通，
+控制台和 API 里看不到某个规格时先在控制台申请。DOKS 集群的节点也是 GPU Droplet，标为「集群节点」，不能单独安装 agent。
 
-请求使用 ZStack AccessKey 签名。
-GPUWorks 与 Cloud 的系统时间需要同步。旧版 Cloud 配置 `rest.checkTimeZone=false` 时会忽略
-时区偏移，两端系统时区也须一致；签名保留 GPUWorks 进程的本地时区，与 ZStack 官方 SDK 一致。
-查询和资源变更请求都使用 AccessKey，Secret 不随请求发送。
+**安装**：走 SSH（`root@<公网 IP>:22`）。添加账号时平台公钥登记为账号的 SSH Key，之后经 GPUWORKS 创建的 Droplet 自带它，
+不用填凭据；DigitalOcean 不能给已经存在的 Droplet 追加账号 Key，别处创建的 Droplet 在安装的「高级设置」里提供一次私钥或密码。
+账号里已有的 SSH Key 不会被修改或删除；平台登记的 `gpuworks-platform` 在 GPUWORKS 里删除账号后仍留在 DigitalOcean，不再需要时到控制台「Settings → Security」删除。
+
+**开关机与释放**：开机、关机对应 Droplet 的 power on / power off（关机后仍计费）；释放即删除 Droplet，数据一并删除。
+
+**DOKS 集群**：「Kubernetes 集群」页签列出账号下的 DOKS 集群与 NVIDIA GPU 节点池（AMD 节点池不列出），接入后节点选择器为
+`doks.digitalocean.com/node-pool-id=<节点池 ID>`；可以由 GPUWORKS 用 15 分钟有效的 kubeconfig 应用 manifest，也可以自己执行
+kubectl，见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)。

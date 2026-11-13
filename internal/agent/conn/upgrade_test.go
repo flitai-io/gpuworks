@@ -2,12 +2,15 @@ package conn
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -354,4 +357,63 @@ func TestUpgradeGuardIgnoresAbsentOrUnreadableMarkers(t *testing.T) {
 	if exists(bin+upgradePendingSuffix) || len(calls.snapshot()) != 0 {
 		t.Fatalf("marker=%v calls=%+v", exists(bin+upgradePendingSuffix), calls.snapshot())
 	}
+}
+
+// A Kubernetes agent freshly seeded from its image takes the server's binary
+// once: it installs it as an unconfirmed upgrade and execs it when the two
+// differ, and leaves everything alone when they are the same.
+func TestAlignWithServerInstallsTheServersBinaryOnlyWhenItDiffers(t *testing.T) {
+	const serverBinary = "#!/bin/sh\n[ \"$1\" = smoke ]\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(serverBinary))
+	}))
+	defer server.Close()
+
+	t.Run("different", func(t *testing.T) {
+		calls := stubExec(t, nil)
+		bin := filepath.Join(t.TempDir(), "gpuworks-agent")
+		writeFile(t, bin, "#!/bin/sh\n# the image's agent\n")
+		if err := alignWithServer(context.Background(), bin, server.URL, "node-token"); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(bin); string(got) != serverBinary {
+			t.Fatalf("installed binary = %q, want the server's", got)
+		}
+		if old, _ := os.ReadFile(bin + ".old"); !strings.Contains(string(old), "the image's agent") {
+			t.Fatalf("previous binary kept as .old = %q", old)
+		}
+		if _, err := os.Stat(bin + upgradePendingSuffix); err != nil {
+			t.Fatalf("the replacement is not marked unconfirmed: %v", err)
+		}
+		if c := calls.snapshot(); len(c) != 1 || c[0].bin != bin {
+			t.Fatalf("exec calls = %+v, want one of %s", c, bin)
+		}
+	})
+	t.Run("same", func(t *testing.T) {
+		calls := stubExec(t, nil)
+		bin := filepath.Join(t.TempDir(), "gpuworks-agent")
+		writeFile(t, bin, serverBinary)
+		if err := alignWithServer(context.Background(), bin, server.URL, "node-token"); err != nil {
+			t.Fatal(err)
+		}
+		if len(calls.snapshot()) != 0 {
+			t.Fatal("re-executed although the binary is already the server's")
+		}
+		for _, leftover := range []string{".new", ".old", upgradePendingSuffix} {
+			if _, err := os.Stat(bin + leftover); err == nil {
+				t.Fatalf("%s left behind", leftover)
+			}
+		}
+	})
+	t.Run("server unreachable", func(t *testing.T) {
+		calls := stubExec(t, nil)
+		bin := filepath.Join(t.TempDir(), "gpuworks-agent")
+		writeFile(t, bin, "#!/bin/sh\n")
+		if err := alignWithServer(context.Background(), bin, "http://127.0.0.1:1", "node-token"); err == nil {
+			t.Fatal("no error from an unreachable server")
+		}
+		if got, _ := os.ReadFile(bin); string(got) != "#!/bin/sh\n" || len(calls.snapshot()) != 0 {
+			t.Fatal("the running binary was touched although nothing was downloaded")
+		}
+	})
 }

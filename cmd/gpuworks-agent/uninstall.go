@@ -3,58 +3,20 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 
-	"gpuworks.ai/gpuworks/internal/agentconf"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/agentconf"
 )
 
 const agentUnitPath = "/etc/systemd/system/gpuworks-agent.service"
-
-func uninstall(args []string) error {
-	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
-	stateDir := fs.String("state", "", "state directory (default: the one the service names)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if runtime.GOOS == "darwin" {
-		if err := uninstallLaunchd(ctx, *stateDir, os.Stdout); err != nil {
-			return err
-		}
-	} else {
-		binary, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		u := linuxUninstaller{
-			binary: binary, procDir: "/proc", unitPath: agentUnitPath,
-			run: func(ctx context.Context, args ...string) error {
-				out, err := exec.CommandContext(ctx, "systemctl", args...).CombinedOutput()
-				if err != nil {
-					return fmt.Errorf("systemctl %s: %s: %w", strings.Join(args, " "), strings.TrimSpace(string(out)), err)
-				}
-				return nil
-			},
-			signal: func(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) },
-		}
-		if err := u.uninstall(ctx, *stateDir); err != nil {
-			return err
-		}
-	}
-	fmt.Println("gpuworks-agent service removed")
-	return nil
-}
 
 type linuxUninstaller struct {
 	binary, procDir, unitPath string
@@ -87,6 +49,9 @@ func (u linuxUninstaller) uninstall(ctx context.Context, state string) error {
 		return fmt.Errorf("agent service names no state directory; refusing to guess whether it is %s", state)
 	}
 	if ownUnit {
+		if err := u.validateUnit(unit); err != nil {
+			return err
+		}
 		if err := u.run(ctx, "disable", "--now", "gpuworks-agent.service"); err != nil {
 			return err
 		}
@@ -151,8 +116,29 @@ func (u linuxUninstaller) processes(state string) ([]int, error) {
 	var pids []int
 	for _, entry := range entries {
 		pid, err := strconv.Atoi(entry.Name())
-		if err == nil && pid != os.Getpid() && u.matches(pid, state) {
-			pids = append(pids, pid)
+		if err != nil || pid == os.Getpid() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(u.procDir, entry.Name(), "cmdline"))
+		if os.IsNotExist(err) {
+			if _, gone := os.Stat(filepath.Join(u.procDir, entry.Name())); os.IsNotExist(gone) {
+				continue // A process may exit between listing and reading.
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("process %d command-line identity could not be read", pid)
+		}
+		if agentRunArgs(data, u.binary, state) {
+			exe, err := os.Readlink(filepath.Join(u.procDir, entry.Name(), "exe"))
+			if err != nil {
+				if _, gone := os.Stat(filepath.Join(u.procDir, entry.Name())); os.IsNotExist(gone) {
+					continue
+				}
+				return nil, fmt.Errorf("process %d executable identity could not be read", pid)
+			}
+			if sameAgentBinary(strings.TrimSuffix(exe, " (deleted)"), u.binary) && u.matches(pid, state) {
+				pids = append(pids, pid)
+			}
 		}
 	}
 	return pids, nil
@@ -164,12 +150,23 @@ func (u linuxUninstaller) matches(pid int, state string) bool {
 	if err != nil {
 		return false
 	}
-	args := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
-	if len(args) < 2 || args[1] != "run" || !sameAgentBinary(args[0], u.binary) {
+	if !agentRunArgs(data, u.binary, state) {
+		return false
+	}
+	exe, err := os.Readlink(filepath.Join(dir, "exe"))
+	if err != nil || !sameAgentBinary(strings.TrimSuffix(exe, " (deleted)"), u.binary) {
 		return false
 	}
 	stat, _ := os.ReadFile(filepath.Join(dir, "stat"))
 	if _, rest, found := strings.Cut(string(stat), ") "); found && strings.HasPrefix(rest, "Z ") {
+		return false
+	}
+	return true
+}
+
+func agentRunArgs(data []byte, binary, state string) bool {
+	args := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
+	if len(args) < 2 || args[1] != "run" || !sameAgentBinary(args[0], binary) {
 		return false
 	}
 	for i, arg := range args {

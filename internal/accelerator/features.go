@@ -25,14 +25,15 @@ type targetConstraint struct {
 }
 
 var targetConstraints = map[string]targetConstraint{
-	VendorApple: {denyAll: true},
+	VendorApple:     {denyAll: true},
+	VendorKunlunxin: kunlunTargetConstraint,
 	// AMD runs every launch feature NVIDIA does: multi-node, pipeline and
 	// data parallelism ride RCCL over the same NCCL_* socket and IB
 	// variables, vLLM sleep mode uses CuMemAllocator on HIP VMM, and PD uses
 	// NIXL over UCX. What remains AMD-specific is the host runtime and the
 	// explicit device selection below.
 	VendorAMD: {
-		runtime:         hostRequirements{os: "linux", arch: "amd64", drivers: []string{"docker", "nerdctl", "udocker"}},
+		runtime:         hostRequirements{os: "linux", arch: "amd64", drivers: []string{"docker", "nerdctl", "udocker", "kube"}},
 		explicitDevices: true,
 	},
 }
@@ -76,4 +77,10 @@ func RequiresDeviceSelection(vendor string) bool {
 // ordinary unknown-dialect inference; it does not claim an engine dialect.
 func RequiresKnownLaunchFeatures(vendor string) bool {
 	return len(targetConstraints[NormalizeVendor(vendor)].unsupported) > 0
+}
+
+// RequiresCollectiveInterface reports whether the target's collective runtime
+// needs a real host interface rather than the single-process loopback default.
+func RequiresCollectiveInterface(vendor string, nNodes, devices int) bool {
+	return NormalizeVendor(vendor) == VendorKunlunxin && (nNodes > 1 || devices > 1)
 }

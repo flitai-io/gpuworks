@@ -138,7 +138,7 @@ func huggingFaceRevision(downloadDir string) string {
 	mixed := false
 	_ = filepath.WalkDir(downloadDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".metadata") {
-			return nil
+			return nil //nolint:nilerr // Optional revision discovery tolerates unreadable metadata.
 		}
 		if probed++; probed > maxMetadataProbe {
 			mixed = true

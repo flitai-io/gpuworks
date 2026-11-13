@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/server/planning"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/server/planning"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
@@ -657,5 +658,28 @@ func TestReconcileDeploymentEmptyModelOperationsFallBackToTemplate(t *testing.T)
 	}
 	if len(contract.Operations) != 1 || contract.Operations[0].Type != inferenceapi.OperationChat {
 		t.Fatalf("empty model operations did not fall back to the template contract: %+v", contract.Operations)
+	}
+}
+
+func TestPickPortUsesTheNodesOwnRange(t *testing.T) {
+	st, err := store.Open("file:"+t.Name()+"?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	node, err := st.RegisterNode("own-range-node", store.HashToken("port-token"), "own-range-node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.NetworkInventory = `{"interfaces":[],"rdma_ports":[],"engine_port_listeners":[40000],"engine_port_range":{"start":40000,"end":40001}}`
+	c := New(st, nil, nil)
+	c.SetEnginePorts(30000, 30010)
+	got, rejected := c.pickPort(node)
+	if rejected != nil || got != 40001 {
+		t.Fatalf("pickPort = %d, %+v; want 40001 from the node's own range", got, rejected)
+	}
+	node.NetworkInventory = `{"interfaces":[],"rdma_ports":[],"engine_port_range":{"start":0,"end":-1}}`
+	if got, rejected = c.pickPort(node); rejected != nil || got != 30000 {
+		t.Fatalf("pickPort with an invalid own range = %d, %+v; want the server's 30000", got, rejected)
 	}
 }

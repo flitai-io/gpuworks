@@ -30,7 +30,7 @@ export default function NodeLabelsModal({ node, onClose, onSaved }: { node: Node
     <Typography.Paragraph>{t("labels.help")}</Typography.Paragraph>
     <Form form={form} layout="vertical"><Form.List name="labels">{(fields, { add, remove }) => <>
       {fields.map((field) => <Space key={field.key} align="baseline">
-        <Form.Item name={[field.name, "key"]} rules={[{ required: true, message: t("labels.keyRequired") }]}><Input aria-label={t("labels.key")} placeholder={t("labels.key")} maxLength={128} /></Form.Item>
+        <Form.Item name={[field.name, "key"]} rules={[{ required: true, whitespace: true, message: t("labels.keyRequired") }]}><Input aria-label={t("labels.key")} placeholder={t("labels.key")} maxLength={128} /></Form.Item>
         <Form.Item name={[field.name, "value"]}><Input aria-label={t("labels.value")} placeholder={t("labels.value")} maxLength={256} /></Form.Item>
         <Button type="text" icon={<MinusCircleOutlined />} aria-label={t("labels.remove")} onClick={() => remove(field.name)} />
       </Space>)}

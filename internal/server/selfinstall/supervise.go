@@ -1,7 +1,6 @@
 package selfinstall
 
 import (
-	"errors"
 	"os"
 	"strings"
 	"time"
@@ -98,7 +97,3 @@ func ManagedMode() string {
 	}
 	return ""
 }
-
-// errSuperviseUnsupported is a platform without the process controls the
-// supervisor relies on.
-var errSuperviseUnsupported = errors.New("serve --supervise is only supported on Linux and macOS")

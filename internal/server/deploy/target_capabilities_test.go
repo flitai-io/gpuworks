@@ -97,12 +97,42 @@ func TestPreparationHooksCannotSupplyLaunchFeatures(t *testing.T) {
 
 func TestUnknownExecutableRequiresProofOnlyForPartialLaunchRestrictions(t *testing.T) {
 	launch := ResolvedLaunch{Entrypoint: []string{"/bin/sh"}, Argv: []string{"-c", "exec custom-server"}}
-	// No vendor carries a partial restriction today (AMD runs every launch
-	// feature), so no vendor needs a recognizable command.
 	for _, vendor := range []string{"amd", "nvidia", "ascend", "apple"} {
-		err := ValidateTargetFeatures(EngineVLLM, launch, Params{Vendor: vendor})
-		if err != nil {
+		if err := ValidateTargetFeatures(EngineVLLM, launch, Params{Vendor: vendor}); err != nil {
 			t.Fatalf("%s unknown launch error=%v", vendor, err)
 		}
+	}
+	err := ValidateTargetFeatures(EngineVLLM, launch, Params{Vendor: "kunlunxin"})
+	var product *messages.ProductError
+	if !errors.As(err, &product) || product.Code() != messages.ErrorLaunchFeaturesUnknown {
+		t.Fatalf("Kunlun unknown launch error=%v, want %s", err, messages.ErrorLaunchFeaturesUnknown)
+	}
+}
+
+func TestKunlunDirectEntrypointsExposeSupportedParallelFeatures(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		entrypoint []string
+		known      bool
+	}{
+		{name: "absolute vllm executable", entrypoint: []string{"/opt/vllm025-venv/bin/vllm", "serve"}, known: true},
+		{name: "absolute python cli module", entrypoint: []string{"/opt/vllm025-venv/bin/python", "-m", "vllm.entrypoints.cli.main", "serve"}, known: true},
+		{name: "env unset and assignment wrappers", entrypoint: []string{"/usr/bin/env", "-u", "XPU_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES=0", "/opt/vllm025-venv/bin/python", "-m", "vllm.entrypoints.cli.main", "serve"}, known: true},
+		{name: "incomplete env unset", entrypoint: []string{"env", "-u"}},
+		{name: "unsupported env option", entrypoint: []string{"env", "-i", "/opt/vllm025-venv/bin/vllm", "serve"}},
+		{name: "cli module without serve", entrypoint: []string{"python", "-m", "vllm.entrypoints.cli.main", "bench"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			launch := ResolvedLaunch{Entrypoint: tc.entrypoint, Argv: []string{"--pipeline-parallel-size", "2", "--data-parallel-size", "2"}}
+			features := ResolveRequestedFeatures(EngineVLLM, launch, Params{Vendor: "kunlunxin"})
+			if features.CommandKnown != tc.known || features.PipelineParallel != tc.known || features.DataParallel != tc.known {
+				t.Fatalf("features=%+v, want known/PP/DP=%t", features, tc.known)
+			}
+			if tc.known {
+				if err := ValidateTargetFeatures(EngineVLLM, launch, Params{Vendor: "kunlunxin"}); err != nil {
+					t.Fatalf("supported direct-entry PP/DP refused: %v", err)
+				}
+			}
+		})
 	}
 }

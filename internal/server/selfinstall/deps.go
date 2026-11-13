@@ -36,6 +36,9 @@ type Deps struct {
 	Euid func() int
 	// LookupUser reports whether a local account exists.
 	LookupUser func(name string) bool
+	// LookupAccount resolves a local account's uid and groups; a missing
+	// account is user.UnknownUserError.
+	LookupAccount func(name string) (Account, error)
 	// LookupGroup resolves the explicit credential group's numeric identity.
 	LookupGroup func(name string) (*user.Group, error)
 	// HasBinary reports whether a command resolves on PATH.
@@ -71,6 +74,7 @@ func NewDeps(stderr io.Writer) Deps {
 		StartDetached:  startDetached,
 		Euid:           os.Geteuid,
 		LookupUser:     userExists,
+		LookupAccount:  lookupAccount,
 		LookupGroup:    user.LookupGroup,
 		HasBinary:      hasBinary,
 		SystemdRunning: systemdAvailable,

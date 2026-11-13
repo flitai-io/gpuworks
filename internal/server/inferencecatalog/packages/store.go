@@ -23,10 +23,10 @@ type Store struct {
 
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-// PutArchive validates and stores the canonical distribution format. It is
-// used for both user imports and for materializing the package embedded in the
-// current server binary, so an older deployment can still resolve its exact
-// assets after a future binary upgrade.
+// PutArchive validates and stores the canonical distribution format. The
+// server persists the package embedded in its own binary with PutLoaded, so an
+// older deployment can still resolve its exact assets after a future binary
+// upgrade.
 func (store *Store) PutArchive(reader io.Reader) (digest string, created bool, err error) {
 	archive, err := inferencecatalog.ReadPackageArchive(reader)
 	if err != nil {
@@ -59,22 +59,44 @@ func (store *Store) Put(fsys fs.FS) (digest string, created bool, err error) {
 	if err != nil {
 		return "", false, err
 	}
+	created, err = store.publish(fsys, digest)
+	return digest, created, err
+}
+
+// PutLoaded persists a package the caller has already loaded with
+// inferencecatalog.LoadPackage and whose digest it computed with
+// inferencecatalog.PackageDigest: the package embedded in the binary, which a
+// process validates once however many servers it starts. Anything read from
+// outside goes through Put or PutArchive.
+func (store *Store) PutLoaded(fsys fs.FS, digest string) (created bool, err error) {
+	if store == nil {
+		return false, errors.New("catalog package store is unavailable")
+	}
+	if !digestPattern.MatchString(digest) {
+		return false, fmt.Errorf("invalid catalog package digest %q", digest)
+	}
+	return store.publish(fsys, digest)
+}
+
+// publish writes a validated package under its digest, unless that digest is
+// already stored.
+func (store *Store) publish(fsys fs.FS, digest string) (created bool, err error) {
 	destination := filepath.Join(store.root, digest)
 	if info, statErr := os.Stat(destination); statErr == nil {
 		if !info.IsDir() {
-			return "", false, fmt.Errorf("catalog package digest destination is not a directory: %s", digest)
+			return false, fmt.Errorf("catalog package digest destination is not a directory: %s", digest)
 		}
 		if _, loadErr := inferencecatalog.LoadPackageDirectory(destination); loadErr != nil {
-			return "", false, fmt.Errorf("catalog package digest cache is invalid: %w", loadErr)
+			return false, fmt.Errorf("catalog package digest cache is invalid: %w", loadErr)
 		}
-		return digest, false, nil
+		return false, nil
 	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return "", false, statErr
+		return false, statErr
 	}
 
 	staging, err := os.MkdirTemp(store.root, ".package-*")
 	if err != nil {
-		return "", false, err
+		return false, err
 	}
 	published := false
 	defer func() {
@@ -102,13 +124,13 @@ func (store *Store) Put(fsys fs.FS) (digest string, created bool, err error) {
 		}
 		return os.WriteFile(target, data, 0o644)
 	}); err != nil {
-		return "", false, fmt.Errorf("stage catalog package: %w", err)
+		return false, fmt.Errorf("stage catalog package: %w", err)
 	}
 	if err := os.Rename(staging, destination); err != nil {
-		return "", false, fmt.Errorf("publish catalog package: %w", err)
+		return false, fmt.Errorf("publish catalog package: %w", err)
 	}
 	published = true
-	return digest, true, nil
+	return true, nil
 }
 
 func (store *Store) Remove(digest string) error {

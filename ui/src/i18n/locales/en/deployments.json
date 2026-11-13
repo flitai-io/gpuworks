@@ -172,6 +172,7 @@
     "placement": {
       "preparingModel": "Preparing model; {{count}} replica(s) have not started",
       "preparationFailed": "Model preparation failed; {{count}} replica(s) have not started",
+      "diskFull": "Insufficient model disk space; {{count}} replica(s) have not started",
       "waiting": "{{count}} replica(s) are waiting for a node",
       "candidates": "Candidate nodes",
       "requirements": "Node requirements",
@@ -401,6 +402,7 @@
       "DEPLOYMENT_ROLLING_RESTARTED": "Rolling restart requested for {{replicas}} replicas",
       "DEPLOYMENT_ROLLING_STALLED": "Rolling restart waits: replica {{replica}} gave up after {{attempts}} failed attempts; retry it to continue",
       "DEPLOYMENT_DGPU_QUOTA_CHANGED": "dGPU memory limit {{from}} → {{to}}: {{live}} instances took it at once, {{pending}} take it at restart",
+      "DEPLOYMENT_COMPONENT_DOWNLOAD": "Started downloading component {{component}} ({{model}}, {{bytes}}) into the shared storage \"{{storage}}\", written once by {{node}} and shared by the nodes",
       "DEPLOYMENT_EDITED": "Configuration edited ({{count}}: {{fields}}); applied: {{apply}}",
       "REPLICA_RESTARTED": "Restart requested for the replica of instance {{instance}}",
       "UNIT_RETRY_EXHAUSTED": "Gave up after {{attempts}} failed attempts ({{reason}})",
@@ -519,6 +521,7 @@
       "resourceLimits": "VRAM {{vram}} bytes · SM {{sm}}% · backend {{backend}}"
     },
     "diagnoseButton": "AI Diagnosis",
+    "previousAttempt": "Previous attempt",
     "commandMode": {
       "manual": "Manual command"
     },
@@ -538,7 +541,9 @@
       "systemTag": "System",
       "eventsUnavailable": "Event history unavailable",
       "retry": "Retry",
-      "earlierEventsHidden": "Earlier events are not shown"
+      "earlierEventsHidden": "Earlier events are not shown",
+      "streamFailed": "Live logs stopped: the server refused the stream",
+      "streamRetrying": "Live logs reconnecting"
     },
     "noLogs": "The instance is not running; no log stream is available",
     "noMetrics": "The instance is not running; no inference metrics are available",
@@ -557,6 +562,40 @@
       "none": "saved, takes effect at the next restart",
       "rolling": "rolling replacement",
       "all": "all instances replaced at once"
+    },
+    "startup": {
+      "unknown": "Startup estimate unavailable: model weight size is unknown",
+      "title": "Startup timing",
+      "budget": "Startup wait limit: {{duration}} · {{source}}",
+      "source": {
+        "deployment": "deployment setting",
+        "cluster": "cluster setting",
+        "engine": "engine configuration",
+        "harness": "test override",
+        "unknown": "recorded budget"
+      },
+      "estimate": "Rough startup estimate: {{duration}}",
+      "duration": {
+        "seconds": "{{seconds}} s",
+        "minutes": "{{minutes}} min {{seconds}} s",
+        "hours": "{{hours}} h {{minutes}} min {{seconds}} s"
+      },
+      "conflict": "The platform may stop waiting before the engine's {{duration}} wait limit. Review the deployment timeout.",
+      "elapsed": "Waiting for engine readiness: {{duration}}",
+      "slow": "Startup is taking longer than the rough estimate; still waiting within the configured limit.",
+      "observedReady": "Observed readiness wait: {{duration}}",
+      "measured": {
+        "ModelLoadingSeconds": "Weight loading: {{duration}}",
+        "CompilationSeconds": "Compilation: {{duration}}",
+        "GraphCaptureSeconds": "Graph capture: {{duration}}"
+      },
+      "measuredNote": "Engine log durations use the largest reported value per stage; stages may overlap and are not added.",
+      "unsupported": "Startup estimate unavailable for this deployment configuration",
+      "elapsedUnknown": "Readiness wait duration is unavailable",
+      "unavailable": "Startup estimate unavailable",
+      "engineDeadlineShort": "The engine's {{duration}} wait limit is shorter than the rough startup estimate and may expire before the platform limit. Review the engine configuration.",
+      "formula": "Reference formula: {{weight}} MiB ÷ {{rate}} MiB/s + {{initialization}} initialization.",
+      "referenceNote": "Throughput and initialization are fixed reference assumptions, not node measurements or a completion guarantee. This estimate does not change the startup wait limit."
     }
   },
   "instanceMetrics": {
@@ -685,7 +724,7 @@
     "reason": {
       "MODEL_PREPARATION_WAITING": "Waiting for preparation update",
       "MODEL_NODE_OFFLINE": "Node disconnected",
-      "MODEL_CACHE_DISK_FULL": "Insufficient cache disk space",
+      "MODEL_CACHE_DISK_FULL": "Insufficient model disk space",
       "MODEL_PREPARATION_FAILED": "Model preparation failed",
       "MODEL_STORAGE_UNRESPONSIVE": "Storage is not responding",
       "MODEL_COPY_STALLED": "No recent copy progress",

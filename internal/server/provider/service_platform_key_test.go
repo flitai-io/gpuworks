@@ -299,3 +299,39 @@ func TestVolatilePlatformKeyKeepsTheInstallCredential(t *testing.T) {
 		t.Fatalf("secrets = %+v err=%v", secrets, err)
 	}
 }
+
+func TestInstalledSecretsKeepOnlyTheKeyboardInteractivePassword(t *testing.T) {
+	opts := InstallOptions{Password: "operator-pw", SSHKeyPEM: "unused-private-key"}
+	for _, tc := range []struct {
+		name   string
+		report InstallReport
+		want   store.NodeSSHSecrets
+	}{
+		{
+			name:   "authorization failed",
+			report: InstallReport{AuthUsed: provision.AuthKeyboardInteractive},
+			want:   store.NodeSSHSecrets{Password: "operator-pw"},
+		},
+		{
+			name:   "platform key durably authorized",
+			report: InstallReport{AuthUsed: provision.AuthKeyboardInteractive, PlatformKeyAuthorized: true},
+			want:   store.NodeSSHSecrets{},
+		},
+		{
+			name:   "platform key volatile",
+			report: InstallReport{AuthUsed: provision.AuthKeyboardInteractive, PlatformKeyAuthorized: true, PlatformKeyVolatile: true},
+			want:   store.NodeSSHSecrets{Password: "operator-pw"},
+		},
+		{
+			name:   "legacy driver without auth outcome",
+			report: InstallReport{},
+			want:   store.NodeSSHSecrets{Password: "operator-pw", PrivateKeyPEM: "unused-private-key"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := installedSecrets(tc.report, opts, sshAccess{instancePassword: "instance-pw"}); got != tc.want {
+				t.Fatalf("retained credentials = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}

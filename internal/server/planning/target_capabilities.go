@@ -214,7 +214,7 @@ func constrainTargetGPUs(in Input, snap *scheduler.NodeSnapshot) *scheduler.Reas
 	vendor := ""
 	haveVendor, mixed := false, false
 	for _, g := range kept {
-		card, _ := cards[g.Index]
+		card := cards[g.Index]
 		v := accelerator.NormalizeVendor(in.Node.VendorOf(card))
 		if !haveVendor {
 			vendor = v

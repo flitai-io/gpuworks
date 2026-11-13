@@ -7,8 +7,9 @@ import (
 )
 
 // UsageKey is one row of the token usage: an hour, the API key (0 without
-// one: the playground, or a gateway with no keys), the user the request ran
-// as, the deployment and where the request came from.
+// one: the playground, or a keyless request the gateway accepted because open
+// access is on), the user the request ran as, the deployment and where the
+// request came from.
 type UsageKey struct {
 	HourMS       int64
 	APIKeyID     uint

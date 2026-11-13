@@ -96,32 +96,3 @@ func ArchQuirks(archFamily string) []string {
 	}
 	return nil
 }
-
-func ftoa(f float64) string {
-	// small fixed formatting for "8.9", "10.0"
-	whole := int(f)
-	frac := int((f-float64(whole))*10 + 0.5)
-	return itoa(whole) + "." + itoa(frac)
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
-}

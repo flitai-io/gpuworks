@@ -38,21 +38,29 @@ func NormalizeSubfolder(value string) (string, error) {
 // FilesUnderSubfolder keeps the files of one repository subtree, with their
 // repository-relative paths in forward-slash form. An empty subfolder is the whole
 // repository. The subfolder is matched as a directory prefix, so "IQ2_XS" never
-// selects "IQ2_XS_extra/...". The caller validates the subfolder with
-// NormalizeSubfolder first.
+// selects "IQ2_XS_extra/...". When no directory has that name, a file at exactly
+// that path is the selection, so one adapter file can be taken from a repository
+// that keeps many at its root; a directory wins over a file of the same name.
+// The caller validates the subfolder with NormalizeSubfolder first.
 func FilesUnderSubfolder(files []File, subfolder string) []File {
 	if subfolder == "" {
 		return files
 	}
 	prefix := subfolder + "/"
 	out := make([]File, 0, len(files))
+	var exact []File
 	for _, f := range files {
 		// Some hubs list paths with backslashes; the repository's own form is
 		// forward slashes, which is how a kept file is returned.
 		f.Path = strings.ReplaceAll(f.Path, "\\", "/")
 		if strings.HasPrefix(f.Path, prefix) && f.Path != prefix {
 			out = append(out, f)
+		} else if f.Path == subfolder {
+			exact = append(exact, f)
 		}
+	}
+	if len(out) == 0 {
+		return exact
 	}
 	return out
 }

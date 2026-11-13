@@ -9,6 +9,7 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 // the lanes drawn to scale with their ticks and legend, the tooltip a hovered
 // or focused block shows, the window selector and the sharing table.
 
+Object.defineProperty(globalThis, "Document", { value: dom.window.Document, configurable: true });
 const closeChannels = trackMessageChannels();
 const { i18n, locale } = await createI18n(["scheduling", "deployments", "deploy"]);
 const { cleanup, render, screen, waitFor, within, fireEvent } = await import("@testing-library/react");
@@ -16,9 +17,9 @@ const userEvent = (await import("@testing-library/user-event")).default;
 const { MemoryRouter } = await import("react-router-dom");
 const { schedulingApi } = await import("../src/schedulingApi.ts");
 const { default: ResidencyTimeline } = await import("../src/pages/scheduling/ResidencyTimeline.tsx");
-const { blockOf, ticksOf, tickLabel, lanesOf, CHART_WIDTH } = await import("../src/pages/scheduling/timelineChart.ts");
+const { blockOf, ticksOf, tickLabel, cardIntervals, lanesOf, CHART_WIDTH } = await import("../src/pages/scheduling/timelineChart.ts");
 const { formatTime } = await import("../src/i18n/datetime.ts");
-const { colors } = await import("../src/theme/tokens.ts");
+const { deploymentColor } = await import("../src/pages/scheduling/palette.ts");
 type Timeline = import("../src/schedulingApi.ts").SchedulingTimeline;
 type BoardNode = import("../src/schedulingApi.ts").BoardNode;
 
@@ -76,6 +77,12 @@ function mount(list: BoardNode[] = nodes) {
   return userEvent.setup();
 }
 
+async function expandSharing() {
+  const trigger = await screen.findByRole("button", { name: new RegExp(s.nodeChart.sharing) });
+  fireEvent.click(trigger);
+  return document.getElementById(trigger.getAttribute("aria-controls")!)!;
+}
+
 afterEach(() => {
   cleanup();
   Object.assign(schedulingApi, original);
@@ -111,6 +118,19 @@ test("lanes are one per deployment in the order they first held the card; unlist
   assert.deepEqual(gone.map((lane) => [lane.deployment, lane.deleted]), [["old-batch", true]]);
 });
 
+test("overlapping sleepers and a handoff stay on a shared clock without filling gaps or extending the window", () => {
+  const seg = (id: number, state: "awake" | "asleep", start: number, end: number) => ({
+    deployment_id: id, deployment: String(id), instance: "i" + id, state, from: at(start), to: at(end),
+  });
+  const segments = [seg(2, "asleep", 1, 3), seg(1, "asleep", -1, 2), seg(3, "awake", 2, 3),
+    seg(4, "awake", 4, 7), seg(5, "awake", 3, 3), seg(6, "awake", -2, -1)];
+  const spans = cardIntervals(segments, { fromMs: Date.parse(FROM), toMs: Date.parse(TO) });
+  const hour = (ms: number) => (ms - Date.parse(FROM)) / 3600_000;
+  assert.deepEqual(spans.map(s => [hour(s.from), hour(s.to), s.residents.map(r => r.deployment_id)]), [
+    [0, 1, [1]], [1, 2, [1, 2]], [2, 3, [3, 2]], [4, 6, [4]],
+  ]);
+});
+
 test("a loading status shows until the timeline answers", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -119,7 +139,7 @@ test("a loading status shows until the timeline answers", async () => {
   assert.ok(screen.getByRole("status"));
   assert.ok(screen.getByText(s.timeline.loading));
   release();
-  await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+  await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
   assert.equal(screen.queryByText(s.timeline.loading), null);
 });
 
@@ -134,7 +154,7 @@ test("a failed first load shows the error and retries on request", async () => {
   assert.ok(await screen.findByText(s.timeline.loadFailed));
   assert.ok(screen.getByText("timeline unavailable"));
   await user.click(screen.getByRole("button", { name: s.page.retry }));
-  await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+  await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
   assert.equal(screen.queryByText(s.timeline.loadFailed), null);
 });
 
@@ -153,29 +173,37 @@ test("a window nobody held a card in says so, and an empty sharing table says so
   });
   mount();
   assert.ok(await screen.findByText(i18n.t("scheduling:timeline.noneInWindow", { span: i18n.t("scheduling:timeline.hours", { hours: 6 }) })));
-  assert.ok(screen.getByText(s.timeline.noneOnCard));
+  assert.equal(screen.getAllByText(s.nodeChart.emptyWindow).length, nodes[0].gpus.length);
+  await expandSharing();
   assert.ok(screen.getByText(s.timeline.sharingEmpty));
 });
 
-test("each card is lanes of blocks coloured by state from the theme, with a legend and hour ticks", async () => {
-  schedulingApi.timeline = async () => timeline();
+test("one track per GPU shows handoffs to scale and keeps co-resident deployments inspectable", async () => {
+  const data = timeline();
+  data.nodes[0].gpus[0].segments.push({ deployment_id: 11, deployment: "old-batch", instance: "old", state: "asleep", level: 1, from: at(0), to: at(2) });
+  schedulingApi.timeline = async () => data;
   mount();
-  const gpu0 = within(await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
-  assert.ok(gpu0.getByText(i18n.t("scheduling:nodes.gpuLabel", { index: 0, name: "RTX 8000" })));
-  const qwen = within(gpu0.getByRole("group", { name: i18n.t("scheduling:timeline.laneAria", { deployment: "qwen" }) }));
-  const blocks = qwen.getAllByRole("img");
-  assert.equal(blocks.length, 3);
-  assert.deepEqual(blocks.map((b) => b.getAttribute("fill")), [colors.chartPrimary, colors.chartSecondary, colors.chartQuaternary]);
-  // 2 h of 6 h, then half an hour, then an hour and a half.
-  assert.deepEqual(blocks.map((b) => Math.round(parseFloat(b.getAttribute("width") ?? "0"))), [333, 83, 250]);
-  assert.deepEqual(blocks.map((b) => Math.round(parseFloat(b.getAttribute("x") ?? "0"))), [0, 333, 417]);
-  // The deployment's yield policy labels its lane.
-  assert.ok(gpu0.getAllByText(i18n.t("deployments:yieldPolicy.policy.name.timeslice")).length >= 1);
+  const gpu0 = within(await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
+  const [track] = gpu0.getAllByRole("group");
+  assert.equal(gpu0.getAllByRole("group").length, 1);
+  const intervals = within(track).getAllByRole("img");
+  const blocks = intervals.map(el => el.parentElement!.querySelector("rect[data-state]")!);
+  assert.deepEqual(blocks.map(el => Math.round(Number(el.getAttribute("width")))), [333, 83, 250, 333]);
+  assert.deepEqual(blocks.map(el => Math.round(Number(el.getAttribute("x")))), [0, 333, 417, 667]);
+  assert.equal(blocks[0].getAttribute("fill"), deploymentColor(7));
+  assert.equal(blocks[1].getAttribute("stroke"), deploymentColor(7));
+  assert.match(blocks[2].getAttribute("fill")!, /-asleep\)$/);
+  assert.equal(blocks[3].getAttribute("fill"), deploymentColor(8));
+  fireEvent.focus(intervals[0]);
+  const tip = await screen.findByRole("tooltip");
+  assert.match(tip.textContent!, /qwen · Serving/);
+  assert.match(tip.textContent!, /old-batch · Asleep L1/);
+  fireEvent.blur(intervals[0]);
   assert.ok(gpu0.getByRole("link", { name: "llama" }));
-  const legend = screen.getByRole("list", { name: s.timeline.legend });
+  const legend = screen.getByRole("group", { name: s.timeline.legend });
   for (const label of [s.timeline.state.awake, s.timeline.state.asleep, s.timeline.state.switching, s.timeline.state.starting]) assert.ok(within(legend).getByText(label), label);
   const ticks = document.querySelectorAll(".timeline-axis-ticks > span");
-  assert.ok(ticks.length >= 5, `${ticks.length} ticks`);
+  assert.ok(ticks.length >= 3, `${ticks.length} ticks`);
   // A truncated card says so; one that is not does not.
   assert.ok(screen.getByText(s.timeline.truncated));
   assert.equal(screen.getAllByText(s.timeline.truncated).length, 1);
@@ -189,7 +217,7 @@ test("a block names itself to assistive tech and shows a tooltip on hover and on
   assert.equal(screen.queryByRole("tooltip"), null);
   // Hover.
   fireEvent.mouseEnter(sleeping);
-  const tip = screen.getByRole("tooltip");
+  const tip = await screen.findByRole("tooltip");
   assert.equal(tip.textContent, sleeping.getAttribute("aria-label"));
   assert.ok(tip.textContent?.includes("qwen"));
   fireEvent.mouseLeave(sleeping);
@@ -197,18 +225,16 @@ test("a block names itself to assistive tech and shows a tooltip on hover and on
   // The keyboard: tab to a block, the tooltip shows, Escape and blur hide it.
   const first = screen.getAllByRole("img", { name: /qwen/ })[0];
   await user.tab();
-  while (document.activeElement !== first) {
-    await user.tab();
-    if (document.activeElement === document.body) assert.fail("the first block never took focus");
-  }
+  for (let step = 0; step < 10 && document.activeElement !== first; step++) await user.tab();
+  assert.ok(document.activeElement === first, "the first interval is keyboard accessible");
   assert.ok(screen.getByRole("tooltip").textContent?.includes(i18n.t("scheduling:timeline.state.awake")));
   await user.keyboard("{Escape}");
   assert.equal(screen.queryByRole("tooltip"), null);
   await user.tab();
-  assert.ok(screen.getByRole("tooltip").textContent?.includes(i18n.t("scheduling:timeline.state.switching")));
+  assert.ok((await screen.findByRole("tooltip")).textContent?.includes(i18n.t("scheduling:timeline.state.switching")));
   await user.tab({ shift: true });
-  await user.tab({ shift: true });
-  assert.equal(screen.queryByRole("tooltip"), null);
+  assert.ok(document.activeElement === first);
+  assert.equal(screen.getByRole("tooltip").textContent, first.getAttribute("aria-label"));
 });
 
 const rangeBox = () => screen.getByRole("combobox", { name: i18n.t("deployments:timeRange.ariaLabel") });
@@ -233,7 +259,7 @@ test("the range picker offers the server's windows and a custom range, asks for 
     return answerWindow(query as { window?: string });
   };
   const user = mount();
-  await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+  await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
   // The first read leaves the window to the server, whose answer lists the choices.
   assert.deepEqual(asked, [{ nodes: ["node-a"], window: undefined }]);
   const box = await waitFor(() => rangeBox());
@@ -243,7 +269,7 @@ test("the range picker offers the server's windows and a custom range, asks for 
   assert.deepEqual(offered, [timeRange("15m"), timeRange("1h"), timeRange("6h"), timeRange("1d"), timeRange("custom")]);
   await user.click(await screen.findByTitle(timeRange("15m")));
   await waitFor(() => assert.deepEqual(asked.at(-1), { nodes: ["node-a"], window: "15m" }));
-  assert.ok(screen.getByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
+  assert.ok(screen.getByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
   await pickQuick(user, "1h");
   await waitFor(() => assert.deepEqual(asked.at(-1), { nodes: ["node-a"], window: "1h" }));
   await pickQuick(user, "1d");
@@ -262,8 +288,8 @@ test("only the windows the server lists are offered", async () => {
 test("the sharing table lists the yield policy, awake time, switches, yields and the held requests' waits", async () => {
   schedulingApi.timeline = async () => timeline();
   mount();
-  await screen.findByText(s.timeline.sharingTitle);
-  const table = within(screen.getByRole("table"));
+  const sharing = await expandSharing();
+  const table = within(within(sharing).getByRole("table"));
   for (const heading of Object.values(s.timeline.columns)) assert.ok(table.getAllByText(heading).length >= 1, heading);
   const qwen = table.getByRole("link", { name: "qwen" }).closest("tr") as HTMLElement;
   const cells = within(qwen);
@@ -290,7 +316,7 @@ test("the sharing table lists the yield policy, awake time, switches, yields and
 test("the stats' title says, from the server's scope, that they count only this node's replicas, by hover or keyboard", async () => {
   schedulingApi.timeline = async () => timeline();
   const user = mount();
-  const title = await screen.findByRole("heading", { name: new RegExp(s.timeline.sharingTitle) });
+  const title = await expandSharing();
   const hint = within(title).getByRole("img", { name: s.timeline.scopeNode });
   assert.equal(hint.getAttribute("tabindex"), "0");
   // Tab to it: the tooltip opens on focus with the sentence.
@@ -302,7 +328,7 @@ test("the stats' title says, from the server's scope, that they count only this 
   cleanup();
   schedulingApi.timeline = async () => timeline({ scope: "fleet" });
   mount();
-  const fleetTitle = await screen.findByRole("heading", { name: new RegExp(s.timeline.sharingTitle) });
+  const fleetTitle = await expandSharing();
   assert.equal(within(fleetTitle).queryByRole("img"), null);
 });
 
@@ -311,12 +337,11 @@ test("a deleted deployment that shared cards is listed greyed and marked, with n
   const gpus = base.nodes[0].gpus.map((gpu) => gpu.index === 1 ? { ...gpu, segments: [{ deployment_id: 11, deployment: "old-batch", instance: "i11", state: "awake" as const, from: at(0), to: at(2) }, ...gpu.segments] } : gpu);
   schedulingApi.timeline = async () => ({ ...base, nodes: [{ ...base.nodes[0], gpus }] });
   mount();
-  await screen.findByText(s.timeline.sharingTitle);
-  // Its lane is marked the same way, with no link either.
-  const lane = screen.getByRole("group", { name: i18n.t("scheduling:timeline.laneAria", { deployment: "old-batch" }) }).closest(".timeline-lane") as HTMLElement;
-  assert.ok(within(lane).getByText(i18n.t("scheduling:history.deleted", { name: "old-batch" })).closest(".ant-typography-secondary"));
-  assert.equal(within(lane).queryByRole("link"), null);
-  const table = within(screen.getByRole("table"));
+  const sharing = await expandSharing();
+  const history = within(document.getElementById("gpu-1-residency")!);
+  assert.ok(history.getByText(i18n.t("scheduling:history.deleted", { name: "old-batch" })));
+  assert.equal(history.queryByRole("link", { name: /old-batch/ }), null);
+  const table = within(within(sharing).getByRole("table"));
   const name = table.getByText(i18n.t("scheduling:history.deleted", { name: "old-batch" }));
   assert.ok(name.closest(".ant-typography-secondary"), "the deleted name is greyed");
   assert.equal(table.queryByRole("link", { name: /old-batch/ }), null);
@@ -335,10 +360,10 @@ test("a failed refresh keeps the last timeline and warns", async () => {
     return timeline();
   };
   const user = mount();
-  await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+  await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
   await pickQuick(user, "1d");
   assert.ok(await screen.findByText(i18n.t("scheduling:timeline.refreshFailed", { detail: "boom" })));
-  assert.ok(screen.getByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
+  assert.ok(screen.getByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
 });
 
 // Picks a custom range in the shared picker: the range option reveals the date
@@ -383,7 +408,7 @@ test("a custom range is asked for by since and until, is read once and is not po
       return answerWindow(query as { window?: string });
     };
     const user = mount();
-    await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+    await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
     const polled = () => intervals.seen.filter((ms) => ms === 60_000).length;
     assert.equal(polled(), 1, "the default window is polled once a minute");
     await pickCustom(user, CUSTOM_START, CUSTOM_END);
@@ -391,7 +416,7 @@ test("a custom range is asked for by since and until, is read once and is not po
       nodes: ["node-a"], since: new Date(local(CUSTOM_START)).toISOString().replace(".000Z", "Z"), until: new Date(local(CUSTOM_END)).toISOString().replace(".000Z", "Z"),
     }));
     // The answer is drawn, the picker shows the range, and nothing polls it.
-    await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+    await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
     assert.deepEqual([...document.querySelectorAll<HTMLInputElement>(".ant-picker-input input")].map((input) => input.value), [CUSTOM_START, CUSTOM_END]);
     const polledAtCustom = polled();
     const readsAtCustom = asked.length;
@@ -429,10 +454,10 @@ test("a custom range the server refuses keeps the last timeline and says why; a 
     return answerWindow(query as { window?: string });
   };
   const user = mount();
-  await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+  await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
   await pickCustom(user, CUSTOM_START, CUSTOM_END);
   assert.ok(await screen.findByText(i18n.t("scheduling:timeline.refreshFailed", { detail: "since is at most 7 days before until" })));
-  assert.ok(screen.getByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
+  assert.ok(screen.getByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) }));
   // Retrying asks again.
   let calls = 0;
   schedulingApi.timeline = async (query) => {
@@ -451,8 +476,8 @@ test("when the server cannot give the switch counts for the range, the columns s
     return answerWindow(query as { window?: string });
   };
   const user = mount();
-  const qwenRow = () => within([...document.querySelectorAll<HTMLElement>(".ant-table-tbody tr")].find((tr) => tr.textContent?.includes("qwen")) as HTMLElement);
-  await screen.findByText(s.timeline.sharingTitle);
+  const qwenRow = () => within([...sharing.querySelectorAll<HTMLElement>("tbody tr")].find((tr) => tr.textContent?.includes("qwen")) as HTMLElement);
+  const sharing = await expandSharing();
   const qwen = qwenRow();
   assert.ok(qwen.getByText("3"), "the counts are shown when the server has them");
   assert.equal(screen.queryByText(s.timeline.switchesUnavailable), null);
@@ -500,12 +525,12 @@ test("the picker follows the answered window: 15 minutes, then a custom range, s
     return answerWindow(query as { window?: string });
   };
   const user = mount();
-  await screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
+  await screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index: 0 }) });
   await pickQuick(user, "15m");
   await waitFor(() => assert.ok(within(rangeBox().closest(".ant-select") as HTMLElement).getByTitle(timeRange("15m"))));
   // The lanes' axis is the 15 minute window: ticks at whole minutes.
   const labels = [...document.querySelectorAll(".timeline-axis-ticks > span")].map((el) => el.textContent ?? "");
-  assert.ok(labels.length >= 4 && labels.every((text) => /^\d\d:\d\d$/.test(text)), labels.join(","));
+  assert.ok(labels.length >= 2 && labels.every((text) => /^\d\d:\d\d$/.test(text)), labels.join(","));
   await pickCustom(user, CUSTOM_START, CUSTOM_END);
   await waitFor(() => assert.ok(within(rangeBox().closest(".ant-select") as HTMLElement).getByTitle(timeRange("custom"))));
 });

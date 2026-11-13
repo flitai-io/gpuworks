@@ -7,6 +7,7 @@ For upgrade steps, see [Upgrades and Version Compatibility](../how-to/upgrade-an
 
 | Version | Release date | Type | Highlights |
 |---|---|---|---|
+| [v26.11.3](v26.11.3.md) | 2026-11-12 | Patch release | Hygon cards reporting only `BW` match built-in templates, Hygon cards other than card 0 work under Docker/nerdctl, deployments no longer refused when the selected model and weight source disagree |
 | [v26.11.2](v26.11.2.md) | 2026-11-08 | Patch release | Private-network sources work by default, storage paths no longer limited to default directories, local models deploy with inference templates, benchmark metrics corrected for reasoning models, Go 1.26.10 |
 | [v26.11.1](v26.11.1.md) | 2026-11-04 | Patch release | Default vLLM and vLLM-Omni runners move to r4, Qwen3-0.6B deploys on V100, about 20 templates fixed from A100 runs, archives ship third-party license texts |
 | [v26.11.0](v26.11.0.md) | 2026-11-03 | First release | First version of the 26.11 release line |

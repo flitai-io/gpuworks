@@ -9,8 +9,8 @@ import { initReactI18next } from "react-i18next";
 
 export const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
 const names = [
-  "window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLInputElement", "HTMLTextAreaElement",
-  "HTMLButtonElement", "HTMLSelectElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot",
+  "window", "document", "navigator", "HTMLElement", "HTMLHtmlElement", "HTMLBodyElement", "HTMLInputElement", "HTMLTextAreaElement",
+  "HTMLButtonElement", "HTMLSelectElement", "SVGElement", "Element", "Node", "NodeFilter", "MutationObserver", "ShadowRoot",
 ] as const;
 for (const name of names) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
@@ -71,6 +71,10 @@ Object.defineProperties(dom.window, {
     },
   },
 });
+// Zeron's popups (Base UI, framer-motion) call the bare global, not window's.
+for (const name of ["requestAnimationFrame", "cancelAnimationFrame"] as const) {
+  Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
+}
 /** Frames scheduled and not yet run (or dropped); a test can wait for 0. */
 export const pendingFrameCount = () => pendingFrames.size;
 afterEach(() => {

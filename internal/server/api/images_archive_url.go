@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/outbound"
@@ -45,17 +46,7 @@ func (a *apiHandlers) previewImageArchiveURL(w http.ResponseWriter, r *http.Requ
 	defer client.CloseIdleConnections()
 	peek, err := imagecatalog.PeekArchiveURL(ctx, client, normalized)
 	if err != nil {
-		if errors.Is(err, outbound.ErrTargetDenied) {
-			writeProductError(w, http.StatusForbidden, ErrorImageArchiveURLPolicyDenied, "the management node's outbound policy does not permit this archive source",
-				map[string]any{"host": imagecatalog.ArchiveURLHost(normalized), "config_key": "outbound_allow_private_hosts"})
-			return
-		}
-		if imagecatalog.ArchiveURLInvalid(err) {
-			writeProductError(w, http.StatusBadRequest, ErrorImageArchiveURLInvalid, "invalid image archive URL: "+err.Error(), map[string]any{"detail": err.Error()})
-			return
-		}
-		writeProductError(w, http.StatusBadGateway, ErrorImageArchiveURLUnreachable, "the image archive could not be read",
-			map[string]any{"host": imagecatalog.ArchiveURLHost(normalized), "detail": "the image archive could not be read"})
+		writeArchivePeekError(w, normalized, err)
 		return
 	}
 	tags := peek.RepoTags
@@ -65,6 +56,34 @@ func (a *apiHandlers) previewImageArchiveURL(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, dto.ImageArchivePreview{
 		URL: normalized, SizeBytes: peek.SizeBytes, RepoTags: tags, Previewable: peek.Previewable,
 	})
+}
+
+// writeArchivePeekError keeps a policy refusal, an upstream HTTP status and a
+// transport failure apart. The response names the host and the status code,
+// never the URL.
+func writeArchivePeekError(w http.ResponseWriter, normalized string, err error) {
+	host := imagecatalog.ArchiveURLHost(normalized)
+	if errors.Is(err, outbound.ErrTargetNeedsAllow) {
+		writeProductError(w, http.StatusForbidden, ErrorImageArchiveURLPolicyDenied, "this archive host is not allowed yet",
+			map[string]any{"host": host, "allow_host": imagecatalog.ArchiveURLHostname(normalized), "approvable": true, "config_key": "outbound_allow_private_hosts"})
+		return
+	}
+	if errors.Is(err, outbound.ErrTargetDenied) {
+		writeProductError(w, http.StatusForbidden, ErrorImageArchiveURLPolicyBlocked, "this archive host cannot be allowed",
+			map[string]any{"host": host})
+		return
+	}
+	if status, ok := imagecatalog.UpstreamStatus(err); ok {
+		writeProductError(w, http.StatusBadGateway, ErrorImageArchiveURLUpstreamStatus, "the archive server returned an unexpected status",
+			map[string]any{"host": host, "upstream_status": status})
+		return
+	}
+	if imagecatalog.ArchiveURLInvalid(err) {
+		writeProductError(w, http.StatusBadRequest, ErrorImageArchiveURLInvalid, "invalid image archive URL: "+err.Error(), map[string]any{"detail": err.Error()})
+		return
+	}
+	writeProductError(w, http.StatusBadGateway, ErrorImageArchiveURLUnreachable, "the image archive could not be read",
+		map[string]any{"host": host, "detail": "the image archive could not be read"})
 }
 
 // decodeImageNodeSyncRequest reads the distribution request body. A missing or

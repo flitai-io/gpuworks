@@ -7,11 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"mime/multipart"
 	"net/http"
 	"strings"
 	"unicode"
+
+	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 )
 
 func (e HTTPTaskEvaluator) evaluateASR(ctx context.Context, baseURL string, testCase L3Case) (TaskEvaluation, error) {
@@ -32,7 +33,7 @@ func (e HTTPTaskEvaluator) evaluateASR(ctx context.Context, baseURL string, test
 	text, parseErr := transcriptionText(body)
 	if parseErr != nil {
 		result.Warning = "transcription response cannot be parsed: " + parseErr.Error()
-		return result, nil
+		return result, nil //nolint:nilerr // Invalid transcription output is recorded in the task warning.
 	}
 	applyWER(&result, testCase.ExpectedTranscript, text, testCase.MaxWER)
 	return result, nil
@@ -61,7 +62,7 @@ func (e HTTPTaskEvaluator) evaluateTTS(ctx context.Context, baseURL string, test
 	wavInfo, err := inspectWAV(audio)
 	if err != nil {
 		result.Warning = "speech response is not a valid WAV: " + err.Error()
-		return result, nil
+		return result, nil //nolint:nilerr // Invalid WAV output is recorded in the task warning.
 	}
 	result.Verification["wav"] = wavInfo
 	asrBase, err := normalizeHTTPBaseURL(testCase.ASRBaseURL)
@@ -77,7 +78,7 @@ func (e HTTPTaskEvaluator) evaluateTTS(ctx context.Context, baseURL string, test
 	text, parseErr := transcriptionText(asrBody)
 	if parseErr != nil {
 		result.Warning = "ASR backread response cannot be parsed: " + parseErr.Error()
-		return result, nil
+		return result, nil //nolint:nilerr // Invalid ASR output is recorded in the task warning.
 	}
 	applyWER(&result, testCase.ExpectedTranscript, text, testCase.MaxWER)
 	return result, nil

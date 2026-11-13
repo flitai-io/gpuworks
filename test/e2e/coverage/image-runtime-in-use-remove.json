@@ -5,7 +5,7 @@
   "page_id": "images",
   "test_file": "test/e2e/image_in_use.py",
   "test_function": "test_in_use_remove",
-  "command": "make test-e2e-image-in-use-remove",
+  "command": "python3 -B test/e2e/image_in_use.py --case in-use-remove --locale en",
   "lane": "local-real-server-agent-isolated-docker",
   "identity": "admin",
   "required_evidence": [
@@ -69,5 +69,12 @@
     "registry/peer/relay acquisition",
     "GPU inference",
     "full keyboard/focus/computed-style/error layout matrix"
+  ],
+  "component_checklist": [
+    {
+      "item": "12.7",
+      "status": "COVERED",
+      "reason": "The remove confirmation names the image reference and the node it is on and states the impact ('Only this node's local copy will be removed; the catalog version and copies on other nodes stay'). All three outcomes 12.7 asks for are proven against real runtime: reference blocking - a real CPU container holds the image, the browser's DELETE is refused with 409 and the dialog shows the server's reason, which names the actual referencing container id and the image reference; allowed cleanup - after the owned consumer is released the same UI delete succeeds with 202; and no partial change on failure - the independent GET, the node row, and the node's state/source/image_digest_id/transfer_id are compared field by field with their pre-refusal values, present_nodes stays 1, and the Docker image and running container are compared by Id/RepoTags/RootFS/Config and State before and after."
+    }
   ]
 }

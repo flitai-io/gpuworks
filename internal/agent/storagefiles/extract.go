@@ -205,12 +205,10 @@ func (e *extractor) extractZip(ctx context.Context, archive string) error {
 }
 
 func (e *extractor) zipFile(f *zip.File, mode fs.FileMode) error {
-	declared := int64(-1)
-	if f.UncompressedSize64 <= 1<<62 {
-		declared = int64(f.UncompressedSize64)
-	} else {
+	if f.UncompressedSize64 > 1<<62 {
 		return e.tooLarge()
 	}
+	declared := int64(f.UncompressedSize64)
 	rc, err := f.Open()
 	if err != nil {
 		return extractFailed("archive entry %q: %v", f.Name, err)

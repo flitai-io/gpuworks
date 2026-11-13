@@ -29,7 +29,7 @@ func (s *sqliteStore) Append(entries []Entry) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // Commit/statement errors take precedence; a committed transaction is already closed.
 	for _, day := range days {
 		dayStart, err := partitionStartMS(day)
 		if err != nil {

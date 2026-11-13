@@ -61,10 +61,6 @@ func (c *apiClient) get(ctx context.Context, path string, out any) error {
 	return c.call(ctx, http.MethodGet, path, nil, out)
 }
 
-func (c *apiClient) put(ctx context.Context, path string, body, out any) error {
-	return c.call(ctx, http.MethodPut, path, body, out)
-}
-
 func (c *apiClient) post(ctx context.Context, path string, body, out any) error {
 	return c.call(ctx, http.MethodPost, path, body, out)
 }

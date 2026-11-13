@@ -23,6 +23,8 @@ const { cleanup, render, screen, within } = await import("@testing-library/react
 const userEvent = (await import("@testing-library/user-event")).default;
 const { AdvancedResult } = await import("../src/pages/EvaluationSupport.tsx");
 
+const { pointEvidence } = await import("../src/pages/evaluations/reportSections.ts");
+
 afterEach(() => cleanup());
 
 const run = { id: 7 } as BenchmarkRun;
@@ -122,4 +124,22 @@ test("versioned advanced summaries with no cache or token source facts stay unkn
 	assert.equal(screen.queryByText("0%"), null);
 	assert.equal(screen.queryByText(en.support.exact), null);
 	assert.ok(screen.getAllByText(/Unknown/).length >= 2);
+});
+
+test("offline advanced metrics preserve the four expanded preview fields for each point, including unknown measurements", async () => {
+	const selected = point({ evidence: { version: 1, all: {
+		cache: { input_tokens: 40, cached_tokens: 10 },
+		tokens: { input_sources: { server_usage: 3 }, output_sources: { character_estimate: 3 } },
+		ttft: { count: 0 }, tpot: { count: 0 }, last_output_latency: { count: 0 },
+	} } });
+	const preview = render(<I18nextProvider i18n={i18n}><AdvancedResult run={run} point={selected} /></I18nextProvider>);
+	await expand();
+	const pairs = Array.from(preview.container.querySelectorAll(".ant-descriptions-item"), item =>
+		["label", "content"].map(part => item.querySelector(".ant-descriptions-item-" + part)?.textContent));
+	assert.equal(pairs.length, 4);
+	const section = document.createElement("section");
+	section.innerHTML = "<h3>Point 1</h3>";
+	pointEvidence(section, selected, false, i18n.getFixedT("en", "evaluations"));
+	const rows = section.querySelector("details table")!.rows;
+	assert.deepEqual(Array.from(rows, row => Array.from(row.cells, cell => cell.textContent)), pairs);
 });

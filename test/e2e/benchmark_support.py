@@ -32,6 +32,8 @@ def confirm_popconfirm(page):
 
 
 def assert_point_table(page, ui, point):
+    # The points table is still antd's Table (pages/evaluations/PointResultsTable.tsx:50,
+    # which passes its own title prop), so it keeps the antd wrapper and classes.
     table = page.locator(".ant-table-wrapper").filter(
         has=page.get_by_text(ui["pointTable"]["title"], exact=True))
     expect(table).to_have_count(1)
@@ -59,6 +61,43 @@ def assert_point_table(page, ui, point):
         assert text.endswith(" " + unit), f"UI {key} unit differs: {text}"
         value = float(text[:-(len(unit) + 1)].replace(",", ""))
         assert abs(value - expected) <= 0.051, f"UI {key} differs: {text}"
+
+
+def assert_offline_report(page, ui, locale, run, point, output):
+    preview = page.locator("[data-report-points] tbody tr[data-row-key]").first
+    preview_cells = preview.locator("td").all_text_contents()
+    action(page, ui["agentic"]["export"]["button"]).click()
+    with page.expect_download() as downloaded:
+        page.get_by_role("menuitem", name=ui["agentic"]["export"]["html"], exact=True).click()
+    download = downloaded.value
+    assert download.failure() is None
+    download.save_as(output)
+
+    offline = page.context.browser.new_context(offline=True)
+    try:
+        report = offline.new_page()
+        external = []
+        report.on("request", lambda r: external.append(r.url) if r.url.startswith(("http:", "https:")) else None)
+        report.goto(output.resolve().as_uri())
+        expect(report.locator("html")).to_have_attribute("lang", locale)
+        expect(report.get_by_role("heading", name=run["name"], exact=True)).to_be_visible()
+        rows = report.locator("#all-points tbody tr[data-seq]")
+        expect(rows).to_have_count(1)
+        cells = rows.locator("td:visible")
+        assert cells.all_text_contents() == preview_cells
+        report.get_by_label(ui["pointTable"]["showFullMetrics"]).check()
+        link = rows.get_by_role("link").first
+        expect(link).to_have_attribute("href", f"#point-{point['seq']}")
+        link.click()
+        expect(report.locator(f"#point-{point['seq']}")).to_be_visible()
+        values = report.locator("#benchmark-chart-data").text_content()
+        plot = json.loads(values)["pareto"]
+        assert len(plot) == 1 and plot[0]["seq"] == point["seq"]
+        assert plot[0]["y"] == point["output_tput"]
+        expect(report.locator(".native-pareto canvas")).to_be_visible()
+        assert external == [], f"Offline report requested external resources: {external}"
+    finally:
+        offline.close()
 
 
 def close_browser(context, browser, report, artifacts):

@@ -75,7 +75,7 @@ function PdFollowerRow({
         <Form.Item
           name={[followerFieldName, "node_uuid"]}
           noStyle
-          rules={[{ required: true, message: t("pd.unitNodeRequired") }]}
+          rules={[{ required: true, whitespace: true, message: t("pd.unitNodeRequired") }]}
         >
           <PdNodePicker choice={choice} ariaLabel={t("pd.followerNodeAria", ariaArgs)} />
         </Form.Item>

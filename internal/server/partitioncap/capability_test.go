@@ -165,7 +165,7 @@ func TestPPUUdockerRemainsUnavailableUntilValidated(t *testing.T) {
 }
 
 // A quota that names no backend takes the node's own ready one. An Ascend node
-// must answer its vCANN backend: answering NVIDIA's, the historical default,
+// must answer its vcann-rt backend: answering NVIDIA's, the historical default,
 // refused every Ascend node a placement had not named a backend for.
 func TestPreferredIsTheNodesReadyBackend(t *testing.T) {
 	ascend := testNode(t, "ascend", []proto.AssetReport{{Backend: accelerator.BackendAscendLogical, Root: "/assets", Files: []string{"libvruntime.so"}}})

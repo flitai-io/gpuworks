@@ -80,14 +80,6 @@ func writeGaugeHold(t *testing.T, store tsdb.Store, metric string, labels map[st
 	writeTicks(t, store, metric, labels, now, gaugeHoldTicks, func(int) float64 { return value })
 }
 
-// writeCounterHold writes a monotonically increasing counter ending at now,
-// growing by deltaPerTick every holdStep - after Rate() reduces the raw
-// counter to a one-shorter rate series, the result still spans 110s.
-func writeCounterHold(t *testing.T, store tsdb.Store, metric string, labels map[string]string, deltaPerTick float64, now time.Time) {
-	t.Helper()
-	writeTicks(t, store, metric, labels, now, counterHoldTicks, func(i int) float64 { return deltaPerTick * float64(i) })
-}
-
 func writeTicks(t *testing.T, store tsdb.Store, metric string, labels map[string]string, now time.Time, count int, valueAt func(i int) float64) {
 	t.Helper()
 	start := now.Add(-time.Duration(count-1) * holdStep)

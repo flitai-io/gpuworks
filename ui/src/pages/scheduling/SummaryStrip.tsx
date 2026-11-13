@@ -1,54 +1,44 @@
-import { Typography } from "antd";
+import { Progress } from "../../ui-kit/Progress";
+import { Tooltip } from "../../components/ui/tooltip";
 import { useTranslation } from "react-i18next";
 import type { SchedulingOverview } from "../../schedulingApi";
-import { stateFill } from "./cellColor";
-import { CELL_STATES, type CellState } from "./overviewModel";
+import { freeBorder, stateFill } from "./cellColor";
+import HeatmapLegend from "./HeatmapLegend";
+import { CELL_STATES } from "./overviewModel";
 
-const SUMMARY_KEY: Record<CellState, keyof SchedulingOverview["summary"]> = {
-  awake: "awake", asleep: "asleep", free: "free", held_outside: "held_outside", unhealthy: "unhealthy", offline: "offline",
-};
-
-export interface QueueCounts {
-  pending: number;
-  upcoming: number;
-}
-
-function Tile({ label, value, hint, swatch }: { label: string; value: number | string; hint?: string; swatch?: string }) {
+export default function SummaryStrip({ summary, searching }: { summary: SchedulingOverview["summary"]; searching: boolean }) {
+  const { t, i18n } = useTranslation("scheduling");
+  const percent = new Intl.NumberFormat(i18n.language, { style: "percent", maximumFractionDigits: 1 });
+  const segments = CELL_STATES.filter((state) => summary[state] > 0 && summary.cards > 0).map((state) => {
+    const count = summary[state];
+    const share = count / summary.cards;
+    return { state, share, detail: `${t(`states.${state}`)} ${count} / ${summary.cards} · ${percent.format(share)}` };
+  });
+  const onlineLabel = t("summary.nodesOnline", { online: summary.online_nodes, count: summary.nodes });
   return (
-    <div className="scheduling-tile">
-      <Typography.Text type="secondary">
-        {swatch && <span className="hm-swatch" style={{ background: swatch, marginInlineEnd: 6 }} aria-hidden="true" />}
-        {label}
-      </Typography.Text>
-      <strong className="scheduling-num">{value}</strong>
-      {hint && <Typography.Text type="secondary" className="scheduling-num">{hint}</Typography.Text>}
-    </div>
-  );
-}
-
-/**
- * SummaryStrip is the fleet at a glance: how many cards there are and in what
- * state, and how hard the deployments push on each other for them. The figures are the server's, over the whole fleet whatever the
- * filters below it show.
- */
-export default function SummaryStrip({ summary, queues }: { summary: SchedulingOverview["summary"]; queues?: QueueCounts }) {
-  const { t } = useTranslation("scheduling");
-  const contention = summary.contention;
-  return (
-    <div className="hm-strip" role="group" aria-label={t("summary.title")}>
-      <div className="hm-strip-tiles" role="group" aria-label={t("summary.cardsTitle")}>
-        <Tile label={t("summary.total")} value={summary.cards} hint={t("summary.nodesOnline", { online: summary.online_nodes, count: summary.nodes })} />
-        {CELL_STATES.filter((state) => state !== "unhealthy" || summary.unhealthy > 0).map((state) => (
-          <Tile key={state} label={t(`states.${state}`)} value={summary[SUMMARY_KEY[state]] as number} swatch={stateFill[state]} />
-        ))}
+    <div className="scheduling-map-summary" role="group" aria-label={t("summary.cardsTitle")}>
+      <div className="flex flex-wrap items-baseline gap-4">
+        <div className="flex items-baseline gap-1.5"><strong className="scheduling-fleet-total">{summary.cards}</strong><span>{t("summary.total")}</span></div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-fg-muted">{onlineLabel}</span>
+          {summary.nodes > 0 && (
+            <Tooltip content={`${onlineLabel} · ${percent.format(summary.online_nodes / summary.nodes)}`}>
+              <span className="block w-11"><Progress label={onlineLabel} value={summary.online_nodes} max={summary.nodes}/></span>
+            </Tooltip>
+          )}
+        </div>
+        <span className="text-fg-muted">{t("summary.yields")} <strong>{summary.contention.yields_last_hour}</strong></span>
       </div>
-      <div className="hm-strip-tiles" role="group" aria-label={t("summary.contentionTitle")}>
-        <Tile label={t("summary.waitingWakes")} value={contention.waiting_wakes} />
-        <Tile label={t("summary.heldRequests")} value={contention.held_requests} />
-        <Tile label={t("summary.yields")} value={contention.yields_last_hour} />
-        <Tile label={t("summary.pending")} value={queues?.pending ?? "—"} />
-        <Tile label={t("summary.upcoming")} value={queues?.upcoming ?? "—"} />
-      </div>
+      {segments.length > 0 && (
+        <div className="scheduling-state-share flex" role="img" aria-label={segments.map(({ detail }) => detail).join(" · ")}>
+          {segments.map(({ state, share, detail }) => (
+            <Tooltip key={state} content={detail}>
+              <span style={{ width: `${share * 100}%`, backgroundColor: state === "free" ? freeBorder : stateFill[state] }} />
+            </Tooltip>
+          ))}
+        </div>
+      )}
+      <HeatmapLegend searching={searching} summary={summary} />
     </div>
   );
 }

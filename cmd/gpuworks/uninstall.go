@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/selfinstall"
+	"gpuworks.ai/gpuworks/internal/server/store"
+	"gpuworks.ai/gpuworks/internal/uninstallcheck"
 )
 
 type uninstallRunner func(context.Context, selfinstall.Layout, selfinstall.UninstallRequest, *selfinstall.IO) (selfinstall.UninstallReport, error)
@@ -38,6 +40,7 @@ func runUninstallCLI(ctx context.Context, args []string, streams *selfinstall.IO
 	fs := flag.NewFlagSet("uninstall", flag.ContinueOnError)
 	fs.SetOutput(streams.Err)
 	fs.StringVar(&dir, "dir", dir, "installation directory")
+	fs.BoolVar(&req.KeepResources, "keep-resources", false, "remove only this component while explicitly retaining workloads and cloud resources")
 	fs.BoolVar(&req.Purge, "purge", false, "also delete installation configuration, data, backups and logs")
 	fs.BoolVar(&req.Yes, "yes", false, "skip interactive questions and confirm the selected cleanup")
 	fs.BoolVar(&req.Yes, "y", false, "alias for --yes")
@@ -97,6 +100,9 @@ func runUninstallCLI(ctx context.Context, args []string, streams *selfinstall.IO
 		req.Purge = purge
 	}
 	layout := selfinstall.NewLayout(dir, "", "")
+	req.Resources = func(ctx context.Context, actual selfinstall.Layout) []uninstallcheck.Item {
+		return store.ReadUninstallInventory(ctx, filepath.Join(actual.DataDir, "gpuworks.db"))
+	}
 	report, err := run(ctx, layout, req, streams)
 	if err == nil && !jsonOutput {
 		if req.DryRun {

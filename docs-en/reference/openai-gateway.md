@@ -1,6 +1,19 @@
 # OpenAI-Compatible Gateway
 
-The server's `/v1/*` endpoints use API key authentication. The `model` field in the request body specifies the model name exposed for inference (the served model). The server uses it to find the deployment, instance, and node, then forwards the request to the local port through the agent tunnel. Management APIs use JWTs; a management JWT cannot replace a gateway key.
+The server's `/v1/*` endpoints require API key authentication by default; see [Authentication](#authentication) below. The `model` field in the request body specifies the model name exposed for inference (the served model). The server uses it to find the deployment, instance, and node, then forwards the request to the local port through the agent tunnel. Management APIs use JWTs; a management JWT cannot replace a gateway key.
+
+## Authentication
+
+`/v1` requires an API key by default: a request without `Authorization: Bearer <key>`, or with a key that does not exist or was revoked, returns 401.
+
+The only exception is an explicit administrator switch: the `inference_open_access` security setting (default `false`), changed in the **Security** card under **Settings → Security** or with `PATCH /api/v1/security/settings`; see [Complete REST API Routes](api.md#settings--network-presets).
+
+- Off (default): every request needs a valid key. That includes a server with no keys at all: a fresh installation no longer creates a `default` token, so `/v1` refuses every request until an operator creates the first key.
+- On: a request without a key is accepted anonymously and can reach every deployed model, while a request that does present a key is still verified and an invalid key still returns 401. Anyone who can reach this listener can then call the deployed models and consume their GPUs.
+- An unreadable setting counts as off: a failed read never lets a request without a key through; the request is treated as one that must carry a key.
+- Revoking a key does not change the decision: revoking the last key does not reopen the gateway, and `/v1` refuses every request until another key is created or an administrator turns the switch on.
+
+The rule covers every `/v1` route, including `/v1/models`, `/v1/files`, `/v1/batches`, `/v1/tokenize`, and `/v1/detokenize`. The 401 body depends on the entry point: gateway routes return `{"error":{"message":"invalid or missing API key","type":"gpuworks_proxy"}}`, while Files and Batches return the OpenAI-format `invalid_api_key`; see [Differences and Troubleshooting](#differences-and-troubleshooting).
 
 ## Supported Operations
 
@@ -32,6 +45,7 @@ Deployments with multiple replicas use least-request selection by default, prefe
 - After a connection-level failure, the gateway retries on another replica only if the request can still be replayed.
 - Once an upstream response is received, including a 5xx response, the gateway does not retry.
 - If an instance cannot serve because it is sleeping, starting, or has a nonzero rank, the gateway returns 503 and preserves retry semantics.
+- When the server stops gracefully, a request waiting for a sleeping deployment to wake returns 503 with `Retry-After: 10` and the message `the server is restarting; send the request again`; send it again.
 
 A deployment can select `least_request`, `prefix_affinity`, or `failover` through the management API `PUT /api/v1/deployments/{id}/routing`. Prefix affinity first reads `X-GPUWorks-Affinity-Key` and also supports extracting a stable key from chat messages, prompt, or input. This header is not forwarded to the engine.
 
@@ -170,7 +184,7 @@ The gateway does not emulate all OpenAI product APIs. For the exact capabilities
 
 | Status code | What to check |
 |---|---|
-| 401 | Check `Authorization: Bearer <key>` first |
+| 401 | Check `Authorization: Bearer <key>` first. When no key is sent at all, confirm whether anonymous access is really wanted (see [Authentication](#authentication)); `/v1` refuses every request without a key by default |
 | 404 | Check the `model` name; for Playground, also check the contract |
 | 503 | Check instance status, sleep/wake, and whether the node is online |
 | 502 | Check tunnel and engine logs |

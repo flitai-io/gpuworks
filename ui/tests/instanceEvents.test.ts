@@ -123,6 +123,32 @@ test("a storage outage on the timeline names the storage, the node and the local
   }), "存储 nfs-test 在节点 gpu3 上已恢复");
 });
 
+// A create that downloads a template component into a shared storage leaves a
+// timeline entry naming the component, the storage and the writer node.
+test("a component downloaded into a shared storage is named on the timeline", async () => {
+  const i18n = createInstance();
+  await i18n.init({
+    lng: "zh",
+    resources: {
+      zh: { deployments: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/zh/deployments.json", import.meta.url), "utf8")) },
+      en: { deployments: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/deployments.json", import.meta.url), "utf8")) },
+    },
+    interpolation: { escapeValue: false },
+  });
+  assert.ok(lifecycleEventCodes.includes("DEPLOYMENT_COMPONENT_DOWNLOAD"));
+  const event = {
+    kind: "lifecycle",
+    code: "DEPLOYMENT_COMPONENT_DOWNLOAD",
+    params: { component: "text-encoder", model: "MiniMax/MiniMax-H3", bytes: 66_726_510_529, storage: "models-nfs", node: "h20-1", follows_primary: true },
+    created_at: "2026-11-11T08:00:00Z",
+  };
+  const tc = i18n.getFixedT("zh", "common") as never;
+  assert.equal(instanceEventText(i18n.getFixedT("zh", "deployments") as never, tc, event),
+    "组件 text-encoder（MiniMax/MiniMax-H3，62 GiB）开始下载到共享存储「models-nfs」，由 h20-1 写入一次，各节点共用这一份");
+  assert.equal(instanceEventText(i18n.getFixedT("en", "deployments") as never, tc, event),
+    'Started downloading component text-encoder (MiniMax/MiniMax-H3, 62 GiB) into the shared storage "models-nfs", written once by h20-1 and shared by the nodes');
+});
+
 test("an operator's order is worded with its scope and names the user who gave it", async () => {
   const bundle = (lang: string, ns: string) => JSON.parse(fs.readFileSync(new URL(`../src/i18n/locales/${lang}/${ns}.json`, import.meta.url), "utf8"));
   const i18n = createInstance();

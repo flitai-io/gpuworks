@@ -322,8 +322,8 @@
     },
     {
       "item": "12.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 分别关闭按钮、取消、Esc 及适用的遮罩关闭；焦点返回触发器，取消不产生 mutation。"
+      "status": "covered",
+      "assertion": "covered: all four dismissals are driven in turn - cancel button, header close button, Escape and a mask click. After each the dialog is hidden, the page is back on /deploy with no dialog mounted, focus returns to the trigger, no POST /models/quick-register was sent and the server-side model list is still empty. The dialog is reopened by a fresh template visit between attempts, so each dismissal stands alone rather than inheriting the previous one. Kill: adding maskClosable={false} to the weight-source modal fails at quick-dismiss-mask on 'dialog expected to be hidden' - the mask path is asserted, not assumed."
     },
     {
       "item": "12.5",

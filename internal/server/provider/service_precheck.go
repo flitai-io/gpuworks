@@ -43,12 +43,16 @@ func (s *Service) Precheck(ctx context.Context, providerID uint, externalID, ser
 	if user == "" {
 		user = "root"
 	}
-	checker := provision.NewSSHPrechecker()
-	// A newly booted cloud VM can accept TCP/SSH before it has enough CPU to
-	// start all probe sessions within five seconds. Keep connection setup and
-	// the whole precheck independently bounded while leaving enough time for
-	// that first-boot load to settle.
-	checker.Timeout = 10 * time.Second
+	checker := s.sshPrecheck
+	if checker == nil {
+		defaults := provision.NewSSHPrechecker()
+		// A newly booted cloud VM can accept TCP/SSH before it has enough CPU
+		// to start all probe sessions within five seconds. Keep connection
+		// setup and the whole precheck independently bounded while leaving
+		// enough time for that first-boot load to settle.
+		defaults.Timeout = 10 * time.Second
+		checker = defaults
+	}
 	precheckCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	report, err := checker.PrecheckSSH(precheckCtx, provision.SSHPrecheckRequest{

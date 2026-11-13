@@ -297,8 +297,8 @@ func TestAIConfigStoresNormalizedAddress(t *testing.T) {
 	rig := newAIConfigRig(t)
 	for body, want := range map[string]string{
 		`{"name":"pasted","base_url":"http://198.51.100.122:8800/v1/chat/completions","model":"m"}`: "http://198.51.100.122:8800/v1",
-		`{"name":"trailing","base_url":"https://api.deepseek.com/v1///","model":"m"}`:             "https://api.deepseek.com/v1",
-		`{"name":"bare","base_url":"https://api.deepseek.com","model":"m"}`:                       "https://api.deepseek.com",
+		`{"name":"trailing","base_url":"https://api.deepseek.com/v1///","model":"m"}`:               "https://api.deepseek.com/v1",
+		`{"name":"bare","base_url":"https://api.deepseek.com","model":"m"}`:                         "https://api.deepseek.com",
 	} {
 		if got := rig.config(t, rig.create(t, body)).BaseURL; got != want {
 			t.Fatalf("%s: stored %q, want %q", body, got, want)

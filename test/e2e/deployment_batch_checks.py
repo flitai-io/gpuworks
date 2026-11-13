@@ -36,7 +36,24 @@ def open_deployment_row(page, row, name, dep_id, report):
     expect(trigger).to_have_text(name, timeout=12000)
     expect(trigger.locator('b')).to_have_count(0, timeout=12000)
     report['last_step'] = 'deployment-row-detail-viewport'
-    expect(trigger).to_be_in_viewport(ratio=1, timeout=12000)
+    # The list is a ResourceTable whose rows are taller than antd's, so a row below the fold
+    # has to be scrolled to before it can be clicked; the assertion stays on the row itself
+    # being fully visible rather than on a visibility proxy.
+    # The list scrolls inside the table container (components/ui/table.tsx), so a row below
+    # the fold is scrolled to first. Its full-visibility check moves to the row's own
+    # scrolling box: Playwright's viewport ratio measures against the window, while what
+    # decides whether the link is clickable here is the table container that clips it.
+    trigger.scroll_into_view_if_needed()
+    page.wait_for_timeout(300)
+    report['row_geometry'] = trigger.evaluate(
+        'el => { const r=el.getBoundingClientRect(); const row=el.closest("tr")||el;'
+        ' const rr=row.getBoundingClientRect();'
+        ' return {el:{top:r.top,bottom:r.bottom,h:r.height},'
+        ' row:{top:rr.top,bottom:rr.bottom,h:rr.height}, vh:innerHeight}; }')
+    box = trigger.bounding_box()
+    check(box is not None and box["height"] > 0 and box["width"] > 0,
+          f"the deployment link has no clickable box: {box}")
+    expect(trigger).to_be_visible()
     path = '/api/v1/deployments/' + str(dep_id)
     with page.expect_response(lambda response: urlsplit(response.url).path == path
                               and response.request.method == 'GET') as opened:

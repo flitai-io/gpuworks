@@ -521,14 +521,3 @@ func copyTree(src, dst string, skip func(rel string) bool) error {
 		return os.WriteFile(target, data, info.Mode())
 	})
 }
-
-func copyFile(src, dst string, mode os.FileMode) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, mode)
-}

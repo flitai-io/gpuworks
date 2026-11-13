@@ -1,22 +1,23 @@
 # Strata 分层推理(https://github.com/Niko1221/Strata,MIT,基于 llama.cpp):MoE 专家在
 # VRAM/RAM/SSD 间分层,单张 >=12GiB 的 NVIDIA 卡跑 125B 的 Qwen3.8-Flash-Next。
 # 值来源:
-#   - weight_bytes: ModelScope ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF IQ2_XS/
-#     两个分片字节之和(39225954592 + 28800138432)。仓库只有 GGUF 分片、没有 config.json,
-#     平台不要求模型目录布局,由镜像内的引擎读取。
+#   - weight_bytes: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF 各量化子目录
+#     两个分片字节之和: IQ2_XS=68026093024, Q2_0=66423878624,
+#     IQ3_XXS=75839998528, IQ3_S=83617662656。HF ed59f92082b1e93c0e96d60a8b11aab089b52f09
+#     与 ModelScope 1868010e27505d4b8cc15970cdcc4dd76005d7de 的分片大小一致。
+#     目录只有 GGUF 分片、没有 config.json,由镜像内的引擎读取。
 #   - 架构/上下文: Qwen/Qwen3.8-Flash-Next config.json(model_type qwen4_exp,
 #     text_config.max_position_embeddings 262144,48 层 x 512 专家)。
-#   - 镜像 gpuworks/strata:0.1-gw6(同内容另有 quay.io/gpuworks、SWR gpuworks、registry.zstack.ai 三份,
-#     列在 image_sources 里供部署页选择,均可匿名拉取;
-#     gw5 = gw4 + 新入口:不再写死 --context 32768,上下文交给 Strata
-#     setup 按显卡推荐,模板/用户 args 里的 --context 覆盖,见 README;
-#     gw6 = gw5 + 图像编码器 strata-vision + 钉住仓库 revision 的 mmproj
-#     (/opt/strata/preloaded/mmproj,模板只下载 IQ2_XS/,而 mmproj 在仓库根目录)
-#     + 默认 --vision gpu 的入口,见 artifacts/archive/2026-10-10-strata-vision):
-#     上游 Dockerfile + /opt/strata/gpuworks-entrypoint.sh(把模板以变量给出的
-#     --model/--host/--port 转译成 Strata 参数,递归收集模型挂载下的 gguf(模板下载保留
-#     仓库布局,分片在 IQ2_XS/ 子目录),在可写层建 symlink farm 避开只读
-#     模型挂载)+ 预置 MTP 层 /opt/strata/preloaded/mtp。
+#   - 旧镜像 gpuworks/strata:0.1-gw6 及其三个镜像源保留给已有部署。
+#     /opt/strata/gpuworks-entrypoint.sh 把 --model/--host/--port 与分配的 GPU
+#     转为 Strata 参数,递归收集所选量化目录的 GGUF,在可写层建 symlink farm
+#     避开只读模型挂载。上下文由 setup 推荐,用户 --context 可覆盖。
+#     镜像预置 MTP 层 /opt/strata/preloaded/mtp、strata-vision 编码器和固定
+#     revision 的 /opt/strata/preloaded/mmproj,默认 --vision gpu。
+#   - 新部署使用 quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5
+#     (= gw6 全部层 + PLE 适配器、entrypoint/link_models.py 兼容修复与镜像元数据)。
+#     /opt/strata/serve/server.py 未改,仍为 Strata 09817da3979abfeb5fbdef7c8f1223d120c1ad39
+#     的固定源码,所以 strata-queue-runtime 资产的 SOURCE_SHA 校验继续适用。
 model_id: ista-daslab/qwen3.8-flash-next-strata
 source: upstream
 display_title: Qwen3.8-Flash-Next 125B (Strata 分层推理)
@@ -27,9 +28,10 @@ release_date: '2026-09-29'
 # kv_bytes_per_token 故意不写: Strata 的 KV 在 VRAM/RAM 间流式分层,平台无测量
 # 即报 no_measurement,不发明数字。
 specs:
-- name: iq2xs-strata-nvidia-single-gpu
-  display_name_zh_cn: Turing 及以上 · GGUF IQ2_XS
-  display_name_en: Turing+ · GGUF IQ2_XS
+- &strata_gw6
+  name: iq2xs-strata-nvidia-single-gpu
+  display_name_zh_cn: Turing 及以上 · IQ2_XS · Strata gw6（旧镜像）
+  display_name_en: Turing+ · IQ2_XS · Strata gw6 (legacy image)
   scenario: balanced
   engine: callable
   image: gpuworks/strata:0.1-gw6
@@ -110,6 +112,10 @@ specs:
           # non-dGPU instance owns its whole cards in the scheduler's ledger.
           return accept(gpu_memory_mib_per_device=12288)
   api:
+    # The GGUF-only weights have no independent vocabulary, and Strata does
+    # not expose tokenize. This pinned file matches the working GWKS-217
+    # tokenizer: sha256 0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3.
+    tokenizer_ref: ms://Qwen/Qwen3.8-Flash-Next@2741eec155d03a8ce151b993ccce1a7b1e398d6b
     health_endpoint: /health
     operations:
     - type: openai.chat
@@ -140,5 +146,90 @@ specs:
       timings.queue_ms: {to: queue_seconds, scale: 0.001}
       timings.prompt_ms: {to: prefill_seconds, scale: 0.001}
       timings.predicted_ms: {to: decode_seconds, scale: 0.001}
-# The gw6 entrypoint serves the vision encoder by default (--vision gpu).
+# r5 publishes the PLE adapter and model-link fixes with the same launch contract.
+# Only verified copies of this revision are listed; gw6 is not a fallback.
+- &strata_runner
+  <<: *strata_gw6
+  name: iq2xs-strata-nvidia
+  display_name_zh_cn: Turing 及以上 · IQ2_XS · Strata r5
+  display_name_en: Turing+ · IQ2_XS · Strata r5
+  image: quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5
+  image_sources:
+  - registry.zstack.ai/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5
+# The image consumes --model PATH as the platform mount. The equals form
+# reaches setup.py and overrides its IQ2_XS default without changing that mount.
+# Each quantization is a separate weight artifact, not a mirror of IQ2_XS.
+- <<: *strata_runner
+  name: q2-0-strata-nvidia
+  display_name_zh_cn: Turing 及以上 · Q2_0 · Strata r5
+  display_name_en: Turing+ · Q2_0 · Strata r5
+  weights:
+    quantization: GSQ-RCO Q2_0
+    sources:
+    - huggingface:
+        repo_id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+        revision: ed59f92082b1e93c0e96d60a8b11aab089b52f09
+        subfolder: Q2_0
+    - modelscope:
+        repo_id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+        revision: 1868010e27505d4b8cc15970cdcc4dd76005d7de
+        subfolder: Q2_0
+  weight_bytes: 66423878624
+  args:
+  - --model
+  - ${MODEL_PATH}
+  - --host
+  - ${API_HOST}
+  - --port
+  - ${API_PORT}
+  - --model=Q2_0
+- <<: *strata_runner
+  name: iq3-xxs-strata-nvidia
+  display_name_zh_cn: Turing 及以上 · IQ3_XXS · Strata r5
+  display_name_en: Turing+ · IQ3_XXS · Strata r5
+  weights:
+    quantization: GSQ-RCO IQ3_XXS
+    sources:
+    - huggingface:
+        repo_id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+        revision: ed59f92082b1e93c0e96d60a8b11aab089b52f09
+        subfolder: IQ3_XXS
+    - modelscope:
+        repo_id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+        revision: 1868010e27505d4b8cc15970cdcc4dd76005d7de
+        subfolder: IQ3_XXS
+  weight_bytes: 75839998528
+  args:
+  - --model
+  - ${MODEL_PATH}
+  - --host
+  - ${API_HOST}
+  - --port
+  - ${API_PORT}
+  - --model=IQ3_XXS
+- <<: *strata_runner
+  name: iq3-s-strata-nvidia
+  display_name_zh_cn: Turing 及以上 · IQ3_S · Strata r5
+  display_name_en: Turing+ · IQ3_S · Strata r5
+  weights:
+    quantization: GSQ-RCO IQ3_S
+    sources:
+    - huggingface:
+        repo_id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+        revision: ed59f92082b1e93c0e96d60a8b11aab089b52f09
+        subfolder: IQ3_S
+    - modelscope:
+        repo_id: ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF
+        revision: 1868010e27505d4b8cc15970cdcc4dd76005d7de
+        subfolder: IQ3_S
+  weight_bytes: 83617662656
+  args:
+  - --model
+  - ${MODEL_PATH}
+  - --host
+  - ${API_HOST}
+  - --port
+  - ${API_PORT}
+  - --model=IQ3_S
+# Both entrypoints serve the vision encoder by default (--vision gpu).
 input_modalities: [text, image]

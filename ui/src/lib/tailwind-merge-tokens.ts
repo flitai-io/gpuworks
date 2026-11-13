@@ -1,0 +1,3 @@
+export const mergeBorderWidthTokenNames = ["hairline"] as const;
+export const mergeMotionDurationTokenNames = ["fast", "fast-exit", "moderate", "moderate-exit", "slow", "slow-exit"] as const;
+export const mergeTypographyTokenNames = ["label", "code", "body", "title", "heading", "display"] as const;

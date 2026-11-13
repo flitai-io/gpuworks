@@ -2,6 +2,7 @@ package store
 
 import (
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 

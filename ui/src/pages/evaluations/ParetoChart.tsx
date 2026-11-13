@@ -4,13 +4,13 @@ import * as echarts from "echarts/core";
 import { LineChart, ScatterChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import type { EChartsOption } from "echarts";
+import { buildParetoOption } from "./paretoOption";
 import type { ECElementEvent } from "echarts/core";
 import { useTranslation } from "react-i18next";
 import type { BenchmarkPoint } from "../../api";
 import { colors } from "../../theme/tokens";
-import { format, pointParameterLabel } from "./evaluationUtils";
-import { paretoData, paretoTooltip, type ParetoDatum } from "./paretoUtils";
+import { format } from "./evaluationUtils";
+import { paretoData, type ParetoLabels } from "./paretoUtils";
 
 echarts.use([LineChart, ScatterChart, GridComponent, TooltipComponent, CanvasRenderer]);
 
@@ -59,31 +59,18 @@ export default function ParetoChart({ points, selectedSeq, onSelect }: { points:
 			chart.clear();
 			return;
 		}
-		const ordered = [...plotted].sort((a, b) => a.x - b.x);
-		const option: EChartsOption = {
-			animation: false,
-			grid: { top: 20, right: 20, bottom: 52, left: 72 },
-			tooltip: { trigger: "item", confine: true, formatter: (params: unknown) => paretoTooltip((params as { data: ParetoDatum }).data, t) },
-			xAxis: { type: "value", min: 0, name: t("pareto.xAxis"), nameLocation: "middle", nameGap: 34, axisLabel: { color: colors.chartTick }, axisLine: { lineStyle: { color: colors.chartGrid } }, splitLine: { show: true, lineStyle: { color: colors.chartGrid, type: "dashed" } } },
-			yAxis: { type: "value", min: 0, name: t("pareto.yAxis"), nameLocation: "middle", nameGap: 52, axisLabel: { color: colors.chartTick }, axisLine: { show: false }, splitLine: { show: true, lineStyle: { color: colors.chartGrid, type: "dashed" } } },
-			series: [
-				{ id: "pareto-line", type: "line", silent: true, showSymbol: false, data: ordered.map((datum) => [datum.x, datum.y]), lineStyle: { color: colors.chartPrimary, width: 2 } },
-				{ id: "pareto-points", type: "scatter", data: plotted.map((datum) => ({ ...datum, value: [datum.x, datum.y], symbolSize: datum.seq === selected?.seq ? 16 : 10, itemStyle: { color: datum.seq === selected?.seq ? colors.warning : colors.chartPrimary, borderColor: colors.white, borderWidth: 2 } })), emphasis: { scale: 1.35 } },
-			],
-		};
+		const option = buildParetoOption(plotted, selected?.seq, t("pareto", { returnObjects: true }) as ParetoLabels);
 		chart.setOption(option, { notMerge: false, lazyUpdate: true, replaceMerge: ["series"] });
 	}, [plotted, selected?.seq, t]);
 
-	const point = selected?.point;
-	const total = point ? point.success + point.errors : 0;
 	return <div style={{ position: "relative" }}>
 		<div ref={hostRef} role="img" aria-label={t("pareto.aria")} style={{ width: "100%", height: CHART_HEIGHT }} />
-		{!point && <div style={{ position: "absolute", inset: "0 0 auto", height: CHART_HEIGHT, background: colors.white }}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("pareto.empty")} /></div>}
-		{point && <Descriptions size="small" column={2} style={{ marginTop: 8 }} items={[
-			{ key: "point", label: t("pareto.selected"), children: `#${point.seq} · ${pointParameterLabel(point)}`, span: 2 },
+		{!selected && <div style={{ position: "absolute", inset: "0 0 auto", height: CHART_HEIGHT, background: colors.white }}><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("pareto.empty")} /></div>}
+		{selected && <Descriptions size="small" column={2} style={{ marginTop: 8 }} items={[
+			{ key: "point", label: t("pareto.selected"), children: `#${selected.seq} · ${selected.loadLabel}`, span: 2 },
 			{ key: "x", label: t("pareto.interactivity"), children: `${format(selected?.x)} tok/s/user` },
 			{ key: "y", label: t("pareto.average"), children: `${format(selected?.y)} tok/s` },
-			{ key: "success", label: t("pareto.success"), children: `${format(total ? point.success / total * 100 : 0)}%` },
+			{ key: "success", label: t("pareto.success"), children: `${format(selected.successRate)}%` },
 		]} />}
 	</div>;
 }

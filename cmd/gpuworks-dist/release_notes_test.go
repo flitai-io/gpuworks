@@ -50,7 +50,7 @@ func TestPackageReleaseRequiresReleaseNotes(t *testing.T) {
 			}
 			cmd := exec.Command("sh", filepath.Join(repo, "scripts", "package_release.sh"))
 			cmd.Env = append(os.Environ(), "GPUWORKS_RELEASE_CHANNEL=release", "GPUWORKS_RELEASE_ID="+id,
-				"GPUWORKS_RELEASE_ARCHES=none", "CI_COMMIT_SHA=0123456789abcdef", "TMPDIR="+t.TempDir())
+				"GPUWORKS_RELEASE_ARCHES=none", "GPUWORKS_BUILD_COMMIT=0123456789abcdef", "TMPDIR="+t.TempDir())
 			out, err := cmd.CombinedOutput()
 			var exit *exec.ExitError
 			if !errors.As(err, &exit) || exit.ExitCode() != 2 || !strings.Contains(string(out), tc.want) {

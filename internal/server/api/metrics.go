@@ -1,13 +1,14 @@
 package api
 
 import (
-	"gpuworks.ai/gpuworks/internal/server/api/dto"
-	"gpuworks.ai/gpuworks/internal/server/store"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // metricsQuery serves range queries for the dashboards.

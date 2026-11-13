@@ -65,7 +65,7 @@ func transportError(err error) *APIError {
 	retryable := kind == ErrorTimeout || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EPIPE)
-	if errors.As(err, &timeout) && timeout.Temporary() {
+	if errors.As(err, &timeout) && timeout.Temporary() { //nolint:staticcheck // SA1019: existing API transports report temporary network failures through this legacy interface.
 		retryable = true
 	}
 	return &APIError{Kind: kind, cause: err, retryable: retryable && kind != ErrorCanceled}

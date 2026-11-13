@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,15 +12,25 @@ import (
 )
 
 // cudaSmokeCommand runs the check, with only one card visible to it when
-// visible is set.
+// visible is set, and with the driver's own library directory first on
+// LD_LIBRARY_PATH when it was found under nvidiaDriverContainerRoot: the
+// script loads libcuda.so.1 by its bare name, and the dynamic linker never
+// searches there on its own.
 //
 // WaitDelay bounds the wait after the context ends: a process stuck in the
 // driver ignores the kill until it leaves the kernel, and without it the
 // caller would wait as long as the driver does.
 var cudaSmokeCommand = func(ctx context.Context, visible string, name string, args ...string) ([]byte, error) {
-	var env []string
+	overrides := map[string]string{}
 	if visible != "" {
-		env = append(os.Environ(), "CUDA_VISIBLE_DEVICES="+visible)
+		overrides["CUDA_VISIBLE_DEVICES"] = visible
+	}
+	if dir, ok := cudaLibraryDir(); ok {
+		overrides["LD_LIBRARY_PATH"] = dir
+	}
+	env := os.Environ()
+	if len(overrides) > 0 {
+		env = environmentWith(env, overrides)
 	}
 	return runRuntimeCheck(ctx, env, name, args...)
 }
@@ -74,15 +84,26 @@ func cudaSmokeVerdict(out []byte, err error) error {
 // the usual place. Saying so is the honest answer — a check that cannot run
 // is not a card that failed.
 func CUDASmokePrerequisite() string {
-	if _, err := exec.LookPath("python3"); err != nil {
+	if _, err := lookCLI("python3"); err != nil {
 		return "the runtime check needs python3, which is not installed on this node"
 	}
+	if _, ok := cudaLibraryDir(); !ok {
+		return "the CUDA driver library (libcuda.so.1) is not where the runtime check can load it"
+	}
+	return ""
+}
+
+// cudaLibraryDir is the directory the driver's user-space library was found
+// in, so the smoke check can name it on LD_LIBRARY_PATH explicitly: a node
+// whose driver lives only under nvidiaDriverContainerRoot is not on any
+// default search path.
+func cudaLibraryDir() (string, bool) {
 	for _, path := range cudaLibraryPaths {
-		if _, err := os.Stat(path); err == nil {
-			return ""
+		if _, err := statTool(path); err == nil {
+			return filepath.Dir(path), true
 		}
 	}
-	return "the CUDA driver library (libcuda.so.1) is not where the runtime check can load it"
+	return "", false
 }
 
 // cudaLibraryPaths are where the driver's user-space library is found. A

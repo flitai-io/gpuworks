@@ -5,6 +5,7 @@ original edit/concurrency/delete chain. URL/key fields have no invented text
 limits. Name whitespace facts do not claim full required-field coverage.
 """
 import json
+import re
 from urllib.parse import urlsplit
 
 from playwright.sync_api import expect
@@ -15,7 +16,9 @@ from platform_token_read_revoke import button, check
 from provider_form_checks import family_enabled
 
 DETAIL = 'must contain valid text without control characters and at most 256 characters'
-ACCEPTED_UPDATE_COUNT = 8
+# One fewer than before the whitespace fix: a whitespace-only name is now refused in the browser
+# instead of being accepted by the server with the old name retained.
+ACCEPTED_UPDATE_COUNT = 7
 REJECTED_UPDATE_COUNT = 2
 
 
@@ -169,7 +172,27 @@ def exercise_name_boundaries(page, context, server, fixture, copy, label, path, 
         read(current_name)
         records.append({'stage': 'empty-required', 'input': '', 'mutation_count': 0, 'outbound_calls': 0})
         name_input.fill('   ')
-        save('   ', saved=current_name, stage='whitespace-retains-name')
+        # A whitespace-only name is not a name. The form's required rule is declared with
+        # whitespace:true, so the client refuses it: no PUT leaves the browser and the field
+        # carries the nameRequired message. Without that flag antd validates the value, the
+        # update goes out, and the server silently keeps the old name - which is what this
+        # stage used to assert.
+        report['last_step'] = 'provider-name-whitespace-refused-locally'
+        before_writes = len(writes)
+        before_calls = len(fixture.requests)
+        form_action(dialog, copy['config']['save']).click()
+        name_item = name_input.locator("xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' ant-form-item ')][1]")
+        expect(name_item.get_by_text(copy['config']['nameRequired'], exact=True)).to_be_visible(timeout=12000)
+        expect(name_item).to_have_class(re.compile(r'ant-form-item-has-error'), timeout=12000)
+        check(len(writes) == before_writes, 'a whitespace-only name sent a provider mutation')
+        check(len(fixture.requests) == before_calls,
+              'a whitespace-only name contacted the external provider')
+        check(not errors, f'whitespace name validation caused a browser page error: {errors}')
+        expect(dialog).to_be_visible(timeout=12000)
+        read(current_name)
+        records.append({'stage': 'whitespace-refused-locally', 'input': '   ',
+                        'mutation_count': 0, 'outbound_calls': 0})
+        name_input.fill(current_name)
         open_editor()
         padded = '  ' + original_name + '  '
         name_input.fill(padded)

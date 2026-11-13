@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+
 	"gpuworks.ai/gpuworks/internal/server/api"
 )
 
@@ -86,6 +87,9 @@ func TestGuardPermitsAndRefuses(t *testing.T) {
 		{http.MethodGet, "/api/v1/storages/2/files/download"},
 		{http.MethodGet, "/install.sh"},
 		{http.MethodHead, "/install.sh"},
+		// The launcher owns the console password and shows it to the host's
+		// administrator; a visitor changing it would lock the next one out.
+		{http.MethodPost, "/api/v1/auth/password"},
 		// Denied to the assistant, so refused here without being listed.
 		{http.MethodGet, "/api/v1/images/community/browse"},
 		{http.MethodGet, "/api/v1/ssh-key"},

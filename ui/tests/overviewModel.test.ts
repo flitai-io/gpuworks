@@ -1,3 +1,4 @@
+import { schedulingColors } from "../src/pages/scheduling/palette";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { arrange, buildModel, compareNames, countStates, freeMiB, NO_FILTERS, type OverviewModel } from "../src/pages/scheduling/overviewModel.ts";
@@ -139,14 +140,14 @@ test("a large fleet decodes and arranges quickly", () => {
   assert.ok(rebuildCPU < 1500, `rebuilding with the seen identities took ${Math.round(rebuildCPU)} ms of CPU`);
 });
 
-test("colours come from the theme: one per state, and an awake card deepens with its claim", () => {
-  assert.equal(stateFill.awake, colors.chartPrimary);
-  assert.equal(stateFill.asleep, colors.chartQuaternary);
-  assert.equal(stateFill.held_outside, colors.chartSecondary);
+test("colours come from the scheduling palette: one per state, and an awake card deepens with its claim", () => {
+  assert.equal(stateFill.awake, schedulingColors.serving);
+  assert.equal(stateFill.asleep, schedulingColors.sleeping);
+  assert.equal(stateFill.held_outside, schedulingColors.external);
   assert.equal(new Set(Object.values(stateFill)).size, 6, "six states, six colours");
   assert.equal(mix("#000000", "#ffffff", 0.5), "#808080");
   assert.equal(mix("#102030", "#102030", 0.9), "#102030");
-  assert.equal(awakeFill(100), colors.chartPrimary);
+  assert.equal(awakeFill(100), schedulingColors.serving);
   const lightness = (hex: string) => parseInt(hex.slice(1, 3), 16) + parseInt(hex.slice(3, 5), 16) + parseInt(hex.slice(5, 7), 16);
   const shades = [1, 25, 50, 75, 100].map(awakeFill).map(lightness);
   assert.deepEqual([...shades].sort((a, b) => b - a), shades, "a deeper claim is a darker blue");

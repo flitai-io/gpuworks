@@ -55,7 +55,7 @@ func TestGiteeAscendPartitionCapability(t *testing.T) {
 		},
 		{
 			// The CANN9 fallback profile: same outer-container boundary, same
-			// unprivileged vCANN probe verdict expected under udocker/PRoot.
+			// unprivileged vcann-rt probe verdict expected under udocker/PRoot.
 			// Gitee offers this image for both 910B2C and 910B2, and the 910B2
 			// arch is not advertised, so both arches are accepted here and the
 			// observed one is recorded into the evidence file.

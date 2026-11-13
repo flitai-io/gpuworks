@@ -22,30 +22,6 @@ func postTemplateDeployment(t *testing.T, h *apiHandlers, body map[string]any) *
 	return rec
 }
 
-func TestInitTemplateModelInferenceConfigBuildsATransientCandidate(t *testing.T) {
-	selection := &templateSelection{
-		Model:       &store.InferenceModel{InputModalities: `["text"]`},
-		APIContract: json.RawMessage(`{"operations":[{"type":"openai.rerank","endpoint":"/v1/rerank"}]}`),
-	}
-	model := &store.Model{ID: 7, Operations: `[]`}
-	candidate, config, err := (&apiHandlers{}).initTemplateModelInferenceConfig(selection, model)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if candidate == model {
-		t.Fatal("the candidate aliases the stored model")
-	}
-	if candidate.Operations != `[{"inputs":null,"type":"openai.rerank","endpoint":"/v1/rerank"}]` || candidate.InputModalities != `["text"]` {
-		t.Fatalf("candidate = %+v", candidate)
-	}
-	if model.Operations != `[]` || model.InputModalities != "" {
-		t.Fatalf("the source model was mutated: %+v", model)
-	}
-	if config.modelID != model.ID || config.operations != candidate.Operations || config.inputModalities != `["text"]` {
-		t.Fatalf("declaration = %+v", config)
-	}
-}
-
 func TestTemplateDeploymentRepairsLegacyDefaultChatOperations(t *testing.T) {
 	for name, operations := range map[string]string{
 		"bare":        `[{"type":"openai.chat"}]`,

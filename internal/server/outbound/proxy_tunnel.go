@@ -66,7 +66,7 @@ func dialProxyTunnel(ctx context.Context, proxy *url.URL, target string, tlsConf
 		return nil, err
 	}
 	reader := bufio.NewReader(conn)
-	response, err := http.ReadResponse(reader, request)
+	response, err := http.ReadResponse(reader, request) //nolint:bodyclose // CONNECT transfers the stream to the returned conn; the defer closes conn on failure.
 	if err != nil {
 		return nil, err
 	}

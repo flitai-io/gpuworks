@@ -31,7 +31,7 @@ test("provider type cards show the vendor, its logo and its homepage, without ca
     { kind: "runpod", label: { en: "RunPod", zh: "RunPod" }, homepage: "https://www.runpod.io", capabilities, credential_fields: [], server_dial_supported: false },
     { kind: "newcloud", label: { en: "New Cloud", zh: "新云" }, capabilities, credential_fields: [], server_dial_supported: false },
   ]);
-  const { container } = render(<I18nextProvider i18n={i18n}><MemoryRouter><CloudProvidersPage scope="public" /></MemoryRouter></I18nextProvider>);
+  const { container } = render(<I18nextProvider i18n={i18n}><MemoryRouter><CloudProvidersPage /></MemoryRouter></I18nextProvider>);
 
   const add = await screen.findByRole("button", { name: "Add RunPod" });
   assert.equal(add.querySelector("img")?.getAttribute("src"), "/provider-logos/runpod.webp");
@@ -52,40 +52,43 @@ test("provider type cards show the vendor, its logo and its homepage, without ca
   assert.ok(await screen.findByRole("dialog"));
 });
 
-test("the connected list carries the account summary, flags invalid accounts and syncs them all", async () => {
+test("public and private clouds share one list, each with its platform type, and sync together", async () => {
   const synced: number[] = [];
   Object.assign(api, {
     providers: async () => ({
       items: [
-        { id: 1, name: "Pods", kind: "runpod", state: "valid", instance_count: 3, created_at: "", updated_at: "" },
-        { id: 2, name: "Hosts", kind: "zstack", state: "invalid", instance_count: 2, created_at: "", updated_at: "" },
+        { id: 1, name: "Pods", kind: "runpod", category: "public_cloud", state: "valid", instance_count: 3, created_at: "", updated_at: "" },
+        { id: 2, name: "Hosts", kind: "zstack", category: "private_cloud", state: "valid", instance_count: 2, created_at: "", updated_at: "" },
       ],
       total: 2,
     }),
     providerKinds: async () => ({ items: [
       { kind: "runpod", label: { en: "RunPod", zh: "RunPod" }, homepage: "https://www.runpod.io", capabilities, credential_fields: [], server_dial_supported: false },
-    ], total: 1 }),
+      { kind: "zstack", label: { en: "ZStack Cloud", zh: "ZStack Cloud" }, homepage: "https://www.zstack.io", capabilities, credential_fields: [], server_dial_supported: true },
+    ], total: 2 }),
     providerInstances: async () => ({ items: [], total: 0 }),
     syncProvider: async (id: number) => { synced.push(id); return { count: 0, instances: [] }; },
   });
-  render(<I18nextProvider i18n={i18n}><MemoryRouter><CloudProvidersPage scope="public" /></MemoryRouter></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><MemoryRouter><CloudProvidersPage /></MemoryRouter></I18nextProvider>);
 
   await screen.findByText("Pods");
-  // Public scope lists only public accounts: the private one is not counted.
-  assert.ok(screen.getByText(/Accounts: 1 · Instances: 3/));
+  assert.ok(screen.getByText("Hosts"));
+  assert.ok(screen.getByRole("columnheader", { name: "Platform type" }));
+  assert.ok(screen.getByText("Public cloud"));
+  assert.ok(screen.getByText("Private cloud"));
+  assert.ok(screen.getByText(/Accounts: 2 · Instances: 5/));
   assert.equal(screen.queryByText(/Invalid: /), null);
   assert.equal(screen.queryByRole("alert"), null);
-  assert.equal(screen.queryByText("Public Clouds Overview"), null);
 
   fireEvent.click(screen.getByRole("button", { name: "Sync All" }));
   await screen.findByText(/Synchronization complete|synchronized/i);
-  assert.deepEqual(synced, [1]);
+  assert.deepEqual(synced, [1, 2]);
 });
 
 test("an invalid account shows in the summary and raises the warning above the list", async () => {
   Object.assign(api, {
     providers: async () => ({
-      items: [{ id: 2, name: "Hosts", kind: "zstack", state: "invalid", instance_count: 2, created_at: "", updated_at: "" }],
+      items: [{ id: 2, name: "Hosts", kind: "zstack", category: "private_cloud", state: "invalid", instance_count: 2, created_at: "", updated_at: "" }],
       total: 1,
     }),
     providerKinds: async () => ({ items: [
@@ -93,11 +96,11 @@ test("an invalid account shows in the summary and raises the warning above the l
     ], total: 1 }),
     providerInstances: async () => ({ items: [], total: 0 }),
   });
-  render(<I18nextProvider i18n={i18n}><MemoryRouter><CloudProvidersPage scope="private" /></MemoryRouter></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><MemoryRouter><CloudProvidersPage /></MemoryRouter></I18nextProvider>);
 
   await screen.findByText("Hosts");
   assert.ok(screen.getByText("Invalid: 1"));
-  assert.ok(screen.getByText("Some Private Clouds providers have errors"));
+  assert.ok(screen.getByText("Some external platforms have errors"));
   const add = screen.getByRole("button", { name: "Add ZStack Cloud" });
   assert.equal(add.querySelector("img")?.getAttribute("src"), "/provider-logos/zstack.svg");
 });

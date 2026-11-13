@@ -18,6 +18,7 @@ Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: 
 const { i18n, locale } = await createI18n(["batches"]);
 const { cleanup, render, screen, waitFor, within } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
+const { FeedbackHost, message } = await import("../src/ui-kit/feedback/index.tsx");
 const { ConfigProvider } = await import("antd");
 const { MemoryRouter, Route, Routes } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
@@ -38,6 +39,7 @@ beforeEach(() => {
   ]);
 });
 afterEach(() => {
+  message.destroy();
   cleanup();
   Object.assign(batchApi, { list: original.list, get: original.get, create: original.create, dictionary: original.dictionary });
   api.me = original.me;
@@ -46,7 +48,7 @@ after(() => closeChannels());
 
 function mountPage() {
   render(
-    <I18nextProvider i18n={i18n}>
+    <I18nextProvider i18n={i18n}><FeedbackHost />
       <ConfigProvider theme={{ token: { motion: false } }}>
         <MemoryRouter initialEntries={["/batches"]}>
           <Routes><Route path="/batches" element={<BatchesPage />} /></Routes>
@@ -66,16 +68,22 @@ const jsonl = (text: string, size?: number) => {
 };
 
 async function openCreate(user: ReturnType<typeof userEvent.setup>) {
-  await waitFor(() => assert.equal((screen.getByRole("button", { name: b.action.create }) as HTMLButtonElement).disabled, false));
-  await user.click(screen.getByRole("button", { name: b.action.create }));
-  return screen.findByRole("dialog", { name: b.create.title });
+  await waitFor(() => assert.equal((screen.getAllByRole("button", { name: b.action.create })[0] as HTMLButtonElement).disabled, false));
+  await user.click(screen.getAllByRole("button", { name: b.action.create })[0]);
+  const dialog = await screen.findByRole("dialog", { name: b.create.title });
+  await waitFor(() => assert.ok(dialog.contains(document.activeElement), "initial dialog focus is settled"));
+  return dialog;
 }
 const submitButton = (dialog: HTMLElement) => within(dialog).getByRole("button", { name: b.create.submit }) as HTMLButtonElement;
 const optionLabel = (name: string, state: string) => `${name} · ${state}`;
 
 async function chooseModel(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, label: string) {
-  await user.click(within(dialog).getByRole("combobox", { name: b.create.model.label }));
-  await user.click(await screen.findByText(label, { selector: ".ant-select-item-option-content" }));
+  const trigger = within(dialog).getByRole("combobox", { name: b.create.model.label });
+  trigger.focus();
+  await user.keyboard("{Enter}");
+  await waitFor(() => assert.equal(trigger.getAttribute("aria-expanded"), "true"));
+  await user.click(await screen.findByRole("option", { name: label }));
+  await waitFor(() => assert.ok(!screen.queryByRole("listbox")));
 }
 
 test("modelsInJSONL lists each body.model once and skips lines that are not requests", () => {
@@ -89,7 +97,7 @@ test("the model select defaults to the server's ready models, including automati
   await waitFor(() => assert.ok(within(dialog).getByRole("combobox", { name: b.create.model.label })));
   assert.ok(within(dialog).getByText(b.create.model.placeholder));
   await user.click(within(dialog).getByRole("combobox", { name: b.create.model.label }));
-  const labels = (await screen.findAllByText(/ · /, { selector: ".ant-select-item-option-content" })).map((node) => node.textContent);
+  const labels = (await screen.findAllByRole("option", { name: / · / })).map((node) => node.textContent);
   // Both selects - the batch's model and the sample's - list them.
   const listed = [...new Set(labels)];
   assert.deepEqual(listed, [
@@ -102,21 +110,21 @@ test("waiting models require an explicit choice and hiding them clears a waiting
   const user = mountPage();
   const dialog = await openCreate(user);
   const toggle = within(dialog).getByRole("checkbox", { name: b.create.model.showWaiting });
-  assert.equal((toggle as HTMLInputElement).checked, false);
+  assert.equal(toggle.getAttribute("aria-checked"), "false");
   toggle.focus();
   await user.keyboard(" ");
-  assert.equal((toggle as HTMLInputElement).checked, true);
+  assert.equal(toggle.getAttribute("aria-checked"), "true");
   await user.click(within(dialog).getByRole("combobox", { name: b.create.model.label }));
-  const offered = (await screen.findAllByText(/ · /, { selector: ".ant-select-item-option-content" })).map((node) => node.textContent);
+  const offered = (await screen.findAllByRole("option", { name: / · / })).map((node) => node.textContent);
   for (const name of ["warming", "held-model", "offline-model", "parked", "broken"]) {
     assert.ok(offered.some((label) => label?.startsWith(`${name} · `)), `${name} is offered after opt-in`);
   }
-  await user.click(await screen.findByText(optionLabel("parked", b.create.model.state.stopped), { selector: ".ant-select-item-option-content" }));
+  await user.click(await screen.findByRole("option", { name: optionLabel("parked", b.create.model.state.stopped) }));
   assert.ok(await within(dialog).findByText(b.create.model.warning.stopped.replace("{{model}}", "parked")));
   await user.click(toggle);
   await waitFor(() => {
-    assert.equal(within(dialog).queryByText(b.create.model.warning.stopped.replace("{{model}}", "parked")), null);
-    assert.equal(within(dialog).queryByText(optionLabel("parked", b.create.model.state.stopped), { selector: ".ant-select-selection-item" }), null);
+    assert.ok(!(within(dialog).queryByText(b.create.model.warning.stopped.replace("{{model}}", "parked"))), "expected the element to be absent");
+    assert.ok(!(within(dialog).queryByText(optionLabel("parked", b.create.model.state.stopped), { selector: '[data-slot="select-value"]' })), "expected the element to be absent");
   });
 });
 
@@ -127,7 +135,7 @@ test("a sample cannot silently use a waiting model and opt-out restores its read
   await waitFor(() => assert.equal((within(dialog).getByRole("button", { name: b.create.sample.use }) as HTMLButtonElement).disabled, true));
   await user.click(within(dialog).getByRole("checkbox", { name: b.create.model.showWaiting }));
   await waitFor(() => assert.equal((within(dialog).getByRole("button", { name: b.create.sample.use }) as HTMLButtonElement).disabled, false));
-  assert.ok(within(dialog).getByText(optionLabel("parked", b.create.model.state.stopped), { selector: ".ant-select-selection-item" }));
+  assert.ok(within(dialog).getByText(optionLabel("parked", b.create.model.state.stopped), { selector: '[data-slot="select-value"]' }));
   await user.click(within(dialog).getByRole("checkbox", { name: b.create.model.showWaiting }));
   await waitFor(() => assert.equal((within(dialog).getByRole("button", { name: b.create.sample.use }) as HTMLButtonElement).disabled, true));
 });
@@ -142,13 +150,16 @@ test("the chosen model goes up with the file; without one the upload carries non
   batchApi.get = (async () => batch({ id: "batch_m", status: "validating", model: calls[calls.length - 1] })) as never;
   const user = mountPage();
   let dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("qwen-chat")));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("qwen-chat")));
   await user.click(submitButton(dialog));
   await waitFor(() => assert.deepEqual(calls, [undefined]));
   await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: b.create.title })));
 
+  const detail = await screen.findByRole("dialog", { name: b.detail.title.replace("{{id}}", "batch_m") });
+  await user.click(within(detail).getByRole("button", { name: "Close" }));
+  await waitFor(() => assert.ok(!screen.queryByRole("dialog")));
   dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("whatever")));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("whatever")));
   await chooseModel(user, dialog, optionLabel("nap-model", b.create.model.state.asleep));
   await user.click(submitButton(dialog));
   await waitFor(() => assert.deepEqual(calls, [undefined, "nap-model"]));
@@ -161,7 +172,7 @@ test("a model whose sleep is held shows the warning, and the server's warning af
   const user = mountPage();
   const dialog = await openCreate(user);
   await user.click(within(dialog).getByRole("checkbox", { name: b.create.model.showWaiting }));
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("held-model")));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("held-model")));
   await chooseModel(user, dialog, optionLabel("held-model", b.create.model.state.asleepHeld));
   assert.ok(await within(dialog).findByText(b.create.model.warning.asleepHeld.replace("{{model}}", "held-model")));
   await user.click(submitButton(dialog));
@@ -172,23 +183,23 @@ test("a stopped or failed model shows what becomes of its requests; a starting o
   const user = mountPage();
   const dialog = await openCreate(user);
   await user.click(within(dialog).getByRole("checkbox", { name: b.create.model.showWaiting }));
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("whatever")));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("whatever")));
   await chooseModel(user, dialog, optionLabel("parked", b.create.model.state.stopped));
   assert.ok(await within(dialog).findByText(b.create.model.warning.stopped.replace("{{model}}", "parked")));
   await chooseModel(user, dialog, optionLabel("broken", b.create.model.state.failed));
   assert.ok(await within(dialog).findByText(b.create.model.warning.failed.replace("{{model}}", "broken")));
   await chooseModel(user, dialog, optionLabel("qwen-chat", b.create.model.state.running));
-  await waitFor(() => assert.equal(within(dialog).queryByText(b.create.model.warning.failed.replace("{{model}}", "broken")), null));
+  await waitFor(() => assert.ok(!(within(dialog).queryByText(b.create.model.warning.failed.replace("{{model}}", "broken"))), "expected the element to be absent"));
 });
 
 test("the file's models are counted, and those without a deployment are warned about", async () => {
   const user = mountPage();
   const dialog = await openCreate(user);
   await waitFor(() => assert.ok(within(dialog).getByRole("combobox", { name: b.create.model.label })));
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("qwen-chat", "ghost-1", "nap-model", "ghost-2", "ghost-1")));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("qwen-chat", "ghost-1", "nap-model", "ghost-2", "ghost-1")));
   assert.ok(await within(dialog).findByText("Models in the file (4): qwen-chat, ghost-1, nap-model, ghost-2"));
   const warning = await within(dialog).findByText(b.create.fileModels.unknown.replace("{{models}}", "ghost-1, ghost-2"));
-  assert.ok(warning.closest(".ant-alert-warning"), "a warning, not an error");
+  assert.ok(warning.closest('[data-status="warning"]'), "a warning, not an error");
   assert.equal((submitButton(dialog) as HTMLButtonElement).disabled, false, "the submit is not blocked");
 });
 
@@ -196,32 +207,32 @@ test("a file whose models all have deployments raises no warning", async () => {
   const user = mountPage();
   const dialog = await openCreate(user);
   await waitFor(() => assert.ok(within(dialog).getByRole("combobox", { name: b.create.model.label })));
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("qwen-chat", "nap-model")));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("qwen-chat", "nap-model")));
   await within(dialog).findByText("Models in the file (2): qwen-chat, nap-model");
-  assert.equal(dialog.querySelector(".ant-alert-warning"), null);
+  assert.ok(!(dialog.querySelector('[data-status="warning"]')), "expected the element to be absent");
 });
 
 test("with a model chosen the file's other models are only said to be replaced, as information", async () => {
   const user = mountPage();
   const dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("ghost-1", "qwen-chat", "ghost-2")));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("ghost-1", "qwen-chat", "ghost-2")));
   await within(dialog).findByText(b.create.fileModels.unknown.replace("{{models}}", "ghost-1, ghost-2"));
   await chooseModel(user, dialog, optionLabel("qwen-chat", b.create.model.state.running));
   const info = await within(dialog).findByText(b.create.fileModels.replaced.replace("{{models}}", "ghost-1, ghost-2").replace("{{model}}", "qwen-chat"));
-  assert.ok(info.closest(".ant-alert-info"));
-  assert.equal(within(dialog).queryByText(/have no available deployment/), null);
-  assert.equal(dialog.querySelector(".ant-alert-warning"), null);
+  assert.ok(info.closest('[data-status="info"]'));
+  assert.ok(!(within(dialog).queryByText(/have no available deployment/)), "expected the element to be absent");
+  assert.ok(!(dialog.querySelector('[data-status="warning"]')), "expected the element to be absent");
 });
 
 test("a file over 50 MB is not read: no model list, no warning, and the reader is told", async () => {
   const user = mountPage();
   const dialog = await openCreate(user);
   await waitFor(() => assert.ok(within(dialog).getByRole("combobox", { name: b.create.model.label })));
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl(requests("ghost-1"), 51 * 1024 * 1024));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("ghost-1"), 51 * 1024 * 1024));
   assert.ok(await within(dialog).findByText(b.create.fileModels.skipped));
-  assert.equal(within(dialog).queryByText(/Models in the file/), null);
-  assert.equal(within(dialog).queryByText(/ghost-1/), null);
-  assert.equal(dialog.querySelector(".ant-alert-warning"), null);
+  assert.ok(!(within(dialog).queryByText(/Models in the file/)), "expected the element to be absent");
+  assert.ok(!(within(dialog).queryByText(/ghost-1/)), "expected the element to be absent");
+  assert.ok(!(dialog.querySelector('[data-status="warning"]')), "expected the element to be absent");
 });
 
 test("the sample is built on the chosen model", async () => {

@@ -36,7 +36,7 @@ func inArtifacts(relPath string) bool {
 // reports nothing.
 func trackedUnderArtifacts(root string) ([]string, error) {
 	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // Fixture directories outside a Git checkout have no tracked artifacts.
 	}
 	cmd := exec.Command("git", "-C", root, "ls-files", "-z", "--", artifactsDir+"/")
 	out, err := cmd.Output()

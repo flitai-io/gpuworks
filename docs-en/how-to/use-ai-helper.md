@@ -67,7 +67,10 @@ Common tools in the query steps:
 | `cluster_overview` | Node counts and capacity by status, GPU health and allocation, deployment counts, and offline, degraded, failed, or unscheduled objects |
 | `search_api` / `call_api` | Find read-only platform APIs, then read objects or logs; continue retrieving required fields to avoid relying only on truncated initial results |
 | `search_metrics` | Search the metric catalog, then read time-series metrics for the relevant period |
+| `get_node_connection_diagnostics` | Administrators read connection diagnostics by node UUID: saved address, recovery records, historical public entry, and available current Agent observations or SSH checks |
 | `get_gpu_topology` / `compare_with_healthy_replica` | View accelerator interconnects on a node, or compare a failed instance with running replicas of the same deployment |
+
+For connecting or offline nodes, or questions about connection failures, the assistant is instructed to query connection diagnostics before citing the check location, target and observation time. The tool reuses the node detail page's read-only diagnostic and accepts only a node UUID, not custom probe URLs or SSH parameters; members without permission receive an authorization error. Missing SSH access, an offline Agent or an unperformed check means insufficient evidence, not a confirmed network or firewall failure. A different historical public entry alone does not prove the old address is invalid. If the model does not call the tool or the result is incomplete, do not treat the analysis as a confirmed root cause.
 
 After the answer completes, time to first text, total duration, call counts, and tokens show the cost of this analysis. The server's `ai answer` logs also record these values.
 One analysis allows at most 10 rounds and 30 tool calls. If evidence remains insufficient when the query limit is reached, do not treat the conclusion as verified.
@@ -75,7 +78,7 @@ Each user can process up to 2 questions simultaneously. If `AI_ASK_BUSY` appears
 
 ## Boundaries
 
-The assistant reads the platform with the asker's permissions. It is read-only: it does not deploy, delete, change parameters, or run commands on nodes.
+The assistant reads the platform with the asker's permissions. It does not deploy, delete, change parameters, or run arbitrary node commands. An administrator's connection diagnostic can reuse the existing read-only SSH configuration checks and HTTP health probes; it does not restart, reinstall, recover automatically, or change addresses. An operator must confirm a stable entry and check both the platform record and Agent configuration when changing an address.
 The platform estimator produces model-fit numbers; AI explains them. The fit table accounts only for weights plus engine reserve and excludes multi-node deployments and quantized variants.
 
 The assistant can query platform-approved read-only APIs, including the cluster overview, nodes / deployments / instances, metrics, and historical logs.

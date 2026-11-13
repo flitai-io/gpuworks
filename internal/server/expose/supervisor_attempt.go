@@ -336,24 +336,6 @@ func (s *Supervisor) newOutput() (*ConnectorOutput, error) {
 // cannot be opened degrades to parsing only: losing the log must not lose the
 // entry point.
 
-func (s *Supervisor) openLogWriter() {
-	if err := s.store.Ensure(); err != nil {
-		s.log.Warn("cannot prepare the exposure state directory", "err", err)
-		return
-	}
-	writer, err := logging.NewRotatingWriter(s.store.LogPath(), logging.RotationOptions{
-		MaxBytes: logging.DefaultRotation().MaxBytes,
-		Keep:     logging.DefaultRotation().Keep,
-	})
-	if err != nil {
-		s.log.Warn("connector output will not be written to a file", "err", err)
-		return
-	}
-	s.mu.Lock()
-	s.logWriter = writer
-	s.mu.Unlock()
-}
-
 func (s *Supervisor) closeLogWriter() {
 	s.mu.Lock()
 	writer := s.logWriter

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/agentconf"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
@@ -31,6 +32,7 @@ type Config struct {
 
 type Hub interface {
 	Online(string) bool
+	ReconnectServerDial(context.Context, string) error
 	ServerDialRecoveryReady(string) bool
 	// ResetServerDialBackoff makes the server dial a node again at once, at
 	// an address the provider just moved it to.
@@ -307,6 +309,16 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 		if strings.TrimSpace(out.Probe.Detail) != "" {
 			message += ": " + strings.TrimSpace(out.Probe.Detail)
 		}
+		if force && node.ConnectMode == agentconf.ServerDial && r.hub != nil {
+			out.Action = "reconnect"
+			if err := r.hub.ReconnectServerDial(ctx, node.UUID); err != nil {
+				message = err.Error()
+			}
+		}
+		if r.hub != nil && r.hub.Online(node.UUID) {
+			out.Recovered, out.Phase = true, ""
+			return out, r.store.ClearNodeRecovery(node.UUID)
+		}
 		message = classifyRecoveryFailure(store.RecoveryPhaseProbing, message)
 		phase, err := r.recordFailure(node, store.RecoveryPhaseProbing, r.now(), message)
 		if err != nil {
@@ -383,7 +395,14 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 }
 
 func (r *Recoverer) recordFailure(node *store.Node, phase string, probeAt time.Time, message string) (string, error) {
-	if node.RecoveryPhase == phase && node.RecoveryAttempts >= 1 {
+	previousPhase := node.RecoveryPhase
+	if phase == store.RecoveryPhaseProbing {
+		phase = store.RecoveryPhaseProbeFailed
+		if previousPhase == store.RecoveryPhaseProbing && node.LastRecoveryError != "" {
+			previousPhase = store.RecoveryPhaseProbeFailed
+		}
+	}
+	if previousPhase == phase && node.RecoveryAttempts >= 1 {
 		return store.RecoveryPhaseBlocked, r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseBlocked, node.RecoveryAttempts+1, &probeAt, phase+": "+message)
 	}
 	return phase, r.store.SetNodeRecoveryPhase(node.UUID, phase, node.RecoveryAttempts+1, &probeAt, message)

@@ -28,6 +28,9 @@ func TestReadVerifiedUsesExpandedEmbeddedArtifact(t *testing.T) {
 	tree := testTree(t, raw)
 	tree["dl/"+ManifestName] = &fstest.MapFile{Data: manifestBytes(t, "dev-build", name, raw)}
 	useTree(t, tree)
+	if !Available("", name, "dev-build") || Available("", name, "other") {
+		t.Fatal("embedded availability must follow the target manifest")
+	}
 	got, err := ReadVerified("", name, "dev-build")
 	if err != nil || !bytes.Equal(got, raw) {
 		t.Fatalf("verified embedded=%d bytes err=%v", len(got), err)
@@ -52,6 +55,9 @@ func TestReadVerifiedRefusesAnUnmanifestedOverride(t *testing.T) {
 	raw := []byte("patched agent")
 	if err := os.WriteFile(filepath.Join(dir, name), raw, 0o755); err != nil {
 		t.Fatal(err)
+	}
+	if Available(dir, name, "target") {
+		t.Fatal("override without its own manifest was offered")
 	}
 	if _, err := ReadVerified(dir, name, "target"); err == nil || !strings.Contains(err.Error(), "manifest") {
 		t.Fatalf("unmanifested override accepted: %v", err)

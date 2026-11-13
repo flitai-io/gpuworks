@@ -46,5 +46,5 @@ export default function SharingStats() {
     );
   }
   const title = <>{t("sharing.title")}<ScopeHint scope={data?.scope} /></>;
-  return <Card className="scheduling-card" title={title} extra={picker}>{body}</Card>;
+  return <Card className="scheduling-card scheduling-sharing-card" title={title} extra={picker} styles={{ body: data ? { padding: 0 } : undefined, header: { paddingInline: 12 } }}>{body}</Card>;
 }

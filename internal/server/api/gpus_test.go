@@ -176,7 +176,6 @@ func TestCardsThatTakeNoWorkAreNotShownAvailable(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	node, _ = st.NodeWithGPUs(node.UUID)
 
 	h := apiHandlers{d: Deps{Store: st}}
 	inventory, err := h.buildGPUInventory()

@@ -36,9 +36,9 @@ controller 都经 `planning.PlanLaunch` 调它，产物是 `proto.ResolvedLaunch
 | 3 | GPU/芯片方言 | 少数 vLLM 兼容性修正 | **补缺**：字段、模板与用户已设置时不生效 | `deploy/quirks.go` |
 | 4 | 调度推导值 | 分配到的 GPU 数 → TP；放置变量 | 估算器的值**不进** argv | `planning/launch_plan.go` |
 | 5 | 推理模板档位 | 字典外的 args、env、entrypoint、准备脚本、资产、组件、API 契约、`/dev/shm` 下限（`shm_bytes`）、不限锁定内存（`memlock_unlimited`） | 覆盖引擎注入的值；用户输入可再覆盖本层 | `inferencecatalog/flat.go`、`deploy/catalog_selection.go` |
-| 6 | 拓扑 | 多机、PD 的角色参数与 env、RDMA docker 参数 | 平台所有，模板与用户不得重写 PD connector | `deploy/pd.go`、`compute_network.go` |
+| 6 | 拓扑 | 多机、PD 的角色参数与 env、RDMA docker 参数 | 平台所有，模板与用户不得重写 PD connector | `deploy/pd.go`、`deploy/compute_network.go` |
 | 7 | 引擎收尾 | 如 SGLang 日志配置 | **补缺** | `deploy/sglang_logging.go` |
-| 8 | 用户输入 | 字典字段、`extra_args` | 盖过模板 | `api/deployments_launch_config.go` |
+| 8 | 用户输入 | 字典字段、`extra_args` | 盖过模板 | `deployment/launch_config.go` |
 | 9 | 容器覆盖 | env、env_unset、挂载、docker 参数、`/dev/shm`（不填时由引擎基线加 CPU 内存层推导，见「`/dev/shm` 大小」）、模型挂载路径、entrypoint、命令、命令模式 | 部署级最终一层 | `deploy/assemble.go`、`kv_cpu_tier.go`、`effective_command.go` |
 | 10 | agent 注入 | 模型目录挂载、准备脚本包装、设备、dGPU 分区 | 设备与 dGPU 的 env **覆盖一切** | `agent/engine/engine.go`、`agent/gpu/*.go`、`agent/engine/partition*.go` |
 | 11 | 运行时拼装 | `docker run` 固定部分：名称、`-d`、`--restart no`、网络、`--shm-size` | 平台所有，docker 参数里写这些会被拒绝 | `agent/runtime/docker/docker.go`、`nerdctl/nerdctl.go` |
@@ -119,7 +119,7 @@ dtype 兼容矩阵只用于准入与告警，不改写 argv。
 
 - **多机**：rank 0 为 leader，其余为 headless follower。vLLM 注入 `--distributed-executor-backend mp --nnodes --node-rank --headless --master-addr --master-port`（端口默认 29500），`VLLM_HOST_IP` 取节点的参数网络地址；SGLang 注入 `--nnodes --node-rank --dist-init-addr`。
 - **参数网络**：注入 `NCCL_SOCKET_IFNAME`、`GLOO_SOCKET_IFNAME`、`NCCL_IB_*`、`UCX_NET_DEVICES` 等系统层 env；使用 RDMA 时追加 docker 参数 `--device /dev/infiniband --ulimit memlock=-1 --cap-add IPC_LOCK`（ADR 0027）；部署自己的 docker 参数已写 `memlock` 时不再追加这一项，见「锁定内存」。
-- **PD 分离**：按角色生成 vLLM `--kv-transfer-config` 或 SGLang `--disaggregation-*`，以及 NIXL/UCX 相关 env 与主机挂载；`vllm-mooncake` 另在 `kv_connector_extra_config` 写 `mooncake_protocol`（主机 RDMA 网络为 `rdma`，否则 `tcp`），并给 prefill 设 `VLLM_MOONCAKE_BOOTSTRAP_PORT`、给所有实例设 `VLLM_HOST_IP`；模板或用户写 connector 参数会被拒绝（ADR 0028）。
+- **PD 分离**：按角色生成 vLLM `--kv-transfer-config` 或 SGLang `--disaggregation-*`，以及 NIXL/UCX 相关 env 与主机挂载；`vllm-mooncake` 另在 `kv_connector_extra_config` 写 `mooncake_protocol`（主机 RDMA 网络为 `rdma`，否则 `tcp`），并给 prefill 设 `VLLM_MOONCAKE_BOOTSTRAP_PORT`、给所有实例设 `VLLM_HOST_IP`，模型含线性注意力或 Mamba 层（`config.json` 的 `layer_types`）时再加 `--no-disable-hybrid-kv-cache-manager`（模板或用户写了任一极性时不加）；模板或用户写 connector 参数会被拒绝（ADR 0028）。
 
 sleep、LoRA、投机解码、KV 卸载等特性只在对应字典字段被声明时注入参数，例如 vLLM sleep 注入
 `--enable-sleep-mode` 与 `VLLM_SERVER_DEV_MODE=1`。
@@ -216,7 +216,7 @@ vLLM 把 CPU 内存层（字典参数 `kv_offloading_size`，GiB）放在 `/dev/
 
 之后还有两类补充：SGLang 日志配置与 agent 的多机网卡填充都是补缺；agent 的设备与 dGPU env 覆盖以上所有层。
 
-镜像内置 ENV 在容器运行时继承，只有被 `-e` 显式设置的键会被替换（例如昇腾 vCANN 会先读出镜像的
+镜像内置 ENV 在容器运行时继承，只有被 `-e` 显式设置的键会被替换（例如昇腾 vcann-rt 会先读出镜像的
 `LD_LIBRARY_PATH` 再追加驱动路径）。
 
 udocker 运行时（runveil 与 udocker CLI 两种启动器）在非国产卡上自带
@@ -245,9 +245,10 @@ agent 不重建目录、镜像或命令语义，只做以下节点事实相关�
    - 海光：`--device` kfd/DRM、`/opt/hyhal`、`--group-add video`、`HIP/ROCR/HYGON_VISIBLE_DEVICES`
    - 昇腾 docker：`--runtime ascend` + `ASCEND_VISIBLE_DEVICES` 等；昇腾 nerdctl：`/dev/davinci*` 设备与驱动挂载
    - PPU：`/dev/alixpu*` 设备、`NVIDIA_VISIBLE_DEVICES=void`、`CUDA_VISIBLE_DEVICES`
+   - 昆仑芯：Linux amd64 / Docker 整卡 TP；逐卡重新核对 UUID/BDF/minor 与 sysfs 后，注入所选 `/dev/xpuN` 和一个 `/dev/xpuctrl`。设备占用由公共计算进程清单上报，不以显存用量替代占用检查。模板参数遵循公共管理员契约，不另设厂商专属 Docker 参数过滤器。多机原生通信依赖见[厂商支持矩阵](support-matrix.md)。
 7. **dGPU 分区**：服务端只下发显存上限、算力百分比与后端名，注入全部在 agent：
    - HAMi-core：挂载 `libvgpu.so`，`LD_PRELOAD`、`CUDA_DEVICE_MEMORY_LIMIT_<i>`，以及部署带算力百分比时的 `CUDA_DEVICE_SM_LIMIT`（部署请求目前不接受算力百分比，见 [dGPU 说明](../explanation/dgpu.md)）
-   - vCANN：挂载 `libvruntime.so` 等，`ENPU_DSMI_HOOK=1`、`LD_LIBRARY_PATH`
+   - vcann-rt：挂载 `libvruntime.so` 等，`ENPU_DSMI_HOOK=1`、`LD_LIBRARY_PATH`
    - HGGC：挂载 `hggc_quota.so` 等，`LD_PRELOAD`、`HGGC_DEVICE_MEMORY_LIMIT_<i>`
 
 详见 [dGPU 说明](../explanation/dgpu.md)。

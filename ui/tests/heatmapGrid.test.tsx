@@ -163,7 +163,7 @@ test("8000 cards render, are described by one hover card, move by keyboard and o
   console.log(`heatmap: rendered 8000 cards in ${Math.round(performance.now() - started)} ms (${Math.round(rendered)} ms of CPU)`);
   assert.equal(cells().length, 8000);
   assert.equal(document.querySelectorAll(".hm-node").length, 1000);
-  assert.equal(document.querySelectorAll("button.hm-node-name").length, 0, "with this many nodes the names are read from the hover card");
+  assert.equal(document.querySelectorAll("button.hm-node-name").length, 1000, "each group keeps its visible node name even at fleet scale");
   assert.equal(cells().filter((cell) => cell.tabIndex === 0).length, 1);
   assert.ok(rendered < 20_000, `rendering took ${Math.round(rendered)} ms of CPU`);
 

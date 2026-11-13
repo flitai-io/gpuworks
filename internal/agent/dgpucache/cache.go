@@ -83,7 +83,8 @@ func ReadCache(path string, deviceCount int) (CacheSnapshot, error) {
 	if err != nil {
 		return CacheSnapshot{}, fmt.Errorf("mmap HAMi cache: %w", err)
 	}
-	defer syscall.Munmap(data)
+	// This function owns the mapping; parsing/writing determines the result.
+	defer func() { _ = syscall.Munmap(data) }()
 	return parseCache(data, deviceCount)
 }
 
@@ -179,7 +180,8 @@ func SetMemoryLimit(path string, deviceCount int, limitBytes int64) (bool, error
 	if err != nil {
 		return false, fmt.Errorf("mmap HAMi cache: %w", err)
 	}
-	defer syscall.Munmap(data)
+	// This function owns the mapping; parsing/writing determines the result.
+	defer func() { _ = syscall.Munmap(data) }()
 	return setLimit(data, deviceCount, uint64(limitBytes))
 }
 

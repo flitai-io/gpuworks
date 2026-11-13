@@ -65,6 +65,9 @@ const (
 	CheckSkipForeign = "foreign"
 	// CheckSkipDeferred: what the node runs is not known yet.
 	CheckSkipDeferred = "deferred"
+	// CheckSkipNotHeld: the platform does not hold the card (a Kubernetes node
+	// whose kubelet may give it to another pod), so the check does not touch it.
+	CheckSkipNotHeld = "not_held"
 	// CheckSkipUnavailable: the host cannot run the check right now (the
 	// driver is not answering, the runtime is missing, an earlier check has
 	// not returned).

@@ -5,7 +5,7 @@
   "page_id": "images",
   "test_file": "test/e2e/image_enable_cycle.py",
   "test_function": "test_image_enable_cycle",
-  "command": "make test-e2e-image-enable-cycle",
+  "command": "python3 -B test/e2e/image_enable_cycle.py --case enabled-cycle --locale en",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
   "required_evidence": ["ui", "request", "persistence", "cleanup"],

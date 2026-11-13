@@ -138,6 +138,25 @@
     }
   },
   "register": {
+    "directoryError": {
+      "validate": "validate local model",
+      "noEntry": "directory must identify exactly one model entry (found 0)",
+      "component": "directory is a model component",
+      "incomplete": "model entry has missing or unresolved files",
+      "missingFile": "missing or unresolved file",
+      "noReason": "the recognizer returned no detailed failure reason",
+      "missingWeights": "Transformers configuration was read, but no supported checkpoint weights or index were found in this directory",
+      "missingIdentity": "Transformers identity is absent: neither model_type nor architectures is declared",
+      "missingConfig": "checkpoint files are present, but the Transformers model configuration is absent",
+      "componentConfig": "configuration describes a Diffusers component, not an independent Transformers model",
+      "modelscopeWeights": "ModelScope configuration was read, but no supported checkpoint weights or index were found in this directory",
+      "modelscopeIdentity": "ModelScope identity requires both a task and a non-empty model definition",
+      "jsonTruncated": "unexpected end of JSON input",
+      "permissionDenied": "permission denied",
+      "emptyFile": "file is empty",
+      "notFile": "expected a file, found a directory",
+      "readLimit": "metadata read limit exceeded"
+    },
     "chooseSource": "Select a repository",
     "sourceRequired": "Select the repository to download from",
     "parsePreview": "Parse preview",
@@ -242,6 +261,7 @@
     "present": "Available",
     "registered": "Registered",
     "failed": "Failed",
+    "insufficientDisk": "Insufficient disk space",
     "downloadRequired": "Action required",
     "notDownloaded": "Not downloaded",
     "missing": "Missing"

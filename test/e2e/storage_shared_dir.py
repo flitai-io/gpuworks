@@ -220,8 +220,15 @@ def test_shared_dir_lifecycle(page, context, server, artifacts, report, locale,
     report["owned_storage_id"] = storage_id
     expect(page.locator(".ant-message").get_by_text(
         form["created"].replace("{{name}}", name), exact=True)).to_be_visible()
-    expect(page).to_have_url(re.compile(re.escape(f"/storage/{storage_id}") + "$"))
-    expect(page.get_by_role("heading", name=re.compile(re.escape(name)))).to_be_visible()
+    # The detail is a drawer over the list now, and which one is open lives in the list page's own
+    # query string (?storage=<id>), not in a /storage/<id> route. Asserting the old route failed on a
+    # product that had already moved on: the create itself was answering 201 with the exact body.
+    expect(page).to_have_url(re.compile(r"\?storage=" + str(storage_id) + r"(?:&|$)"))
+    # The create opens the detail as a drawer over the list; it is identified by its own surface
+    # class rather than by a translated title, so the check holds under both locales.
+    drawer = page.locator(".ant-drawer-content").filter(has_text=name)
+    expect(drawer).to_have_count(1)
+    expect(drawer.get_by_text(name, exact=False).first).to_be_visible()
     report["last_step"] = "storage-created"
 
     ready = wait_json(page, server, STORAGES + f"/{storage_id}?all_nodes=1",
@@ -249,7 +256,11 @@ def test_shared_dir_lifecycle(page, context, server, artifacts, report, locale,
     scan_result = scan.json()
     paths = [candidate.get("rel_path") for candidate in scan_result.get("candidates") or []]
     check(model_rel in paths, f"the agent did not scan {model_rel}: {paths}")
-    scan_modal = page.get_by_role("dialog").last
+    # The detail is a drawer, which also answers to role=dialog; the scan result is the modal that sits
+    # above it. Binding to .last picked whichever came last in the DOM and closed the wrong surface.
+    scan_modal = page.locator(".ant-modal").filter(has=page.get_by_text(
+        scan_text["found"].replace("{{count}}", "1"), exact=True))
+    expect(scan_modal).to_have_count(1)
     expect(scan_modal.get_by_text(model_rel, exact=True)).to_be_visible(timeout=15000)
     expect(scan_modal.get_by_text(scan_text["found"].replace("{{count}}", "1"),
                                   exact=True)).to_be_visible()

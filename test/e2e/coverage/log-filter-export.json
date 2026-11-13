@@ -8,8 +8,18 @@
   "command": "make test-e2e-log-filter-export",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
-  "locales": ["en", "zh"],
-  "required_evidence": ["collection", "ui", "request", "persistence", "download", "cleanup"],
+  "locales": [
+    "en",
+    "zh"
+  ],
+  "required_evidence": [
+    "collection",
+    "ui",
+    "request",
+    "persistence",
+    "download",
+    "cleanup"
+  ],
   "phase_0": "Source, time range and minimum-level comboboxes plus the auto-refresh switch lacked accessible names. Localized labels are protected by a prior red-to-green LogsPage RTL regression.",
   "product_contracts": [
     "ui/src/pages/LogsPage.tsx",
@@ -23,24 +33,236 @@
     "expected_status": 400,
     "source": "real server WARN -> selflog collector -> local logstore -> authenticated GET",
     "isolation": "two unique e2e-runId markers in one private LocalServer database; no DB writes or management mocks",
-    "characters": ["Chinese", "comma", "double quote", "literal WARNING without ERROR"]
+    "characters": [
+      "Chinese",
+      "comma",
+      "double quote",
+      "literal WARNING without ERROR"
+    ]
   },
-  "additional_cases": ["test/e2e/coverage/log-quick-controls.json"],
+  "additional_cases": [
+    "test/e2e/coverage/log-quick-controls.json"
+  ],
   "fields": [
-    {"field_id": "logs.query", "component": "Search Text", "request": "q", "persistence": "none; resets on reload", "covered": ["quoted exact marker", "nonexistent marker", "restore", "request and result equality", "free-text OR grouped before quick-filter AND", "empty and whitespace normalization with exact q omission", "real clipboard and keyboard clear"], "missing": ["remaining FTS operators", "invalid syntax", "full keyword boundary matrix"]},
-    {"field_id": "logs.quick", "component": "AntD Button / aria-pressed", "request": "q", "persistence": "none; component state", "covered": ["quoted text plus WARNING", "WARNING OR ERROR combined with explicit AND", "ERROR-only excludes warning even with free-text OR", "deselect restores text", "exact search and histogram queries and known result counts"], "missing": ["all pairwise signature combinations", "full keyboard focus/computed-style matrix", "additional signature/order/truth-table coverage is independently bound in log-quick-controls.json"]},
-    {"field_id": "logs.source", "component": "Select", "request": "source", "persistence": "none; reload defaults to instance", "covered": ["default instance", "server selected and matching", "agent empty", "restore server"], "missing": ["real agent and container collection", "node and all options"]},
-    {"field_id": "logs.level", "component": "Select", "request": "level", "persistence": "none; resets on reload", "covered": ["default unset", "warn includes real warning", "error excludes warning", "restore warn"], "missing": ["info and fatal options", "clearing via control", "actual error/fatal log collection"]},
-    {"field_id": "logs.range", "component": "Select / custom deep link", "request": "from/to", "persistence": "custom bounds from URL survive reload", "covered": ["fixed custom window at authoritative target time_ms minus/plus 1ms", "exact millisecond query", "UTC display", "quick-filter histogram uses same fixed bounds and exact aligned warn bucket"], "missing": ["all six interactive presets", "inclusive left/right boundary fixtures", "invalid window", "full histogram and timezone matrix"]},
-    {"field_id": "logs.auto", "component": "Switch", "request": "repeated search when enabled", "persistence": "none", "covered": ["accessible name", "default off and remains off after reload"], "missing": ["on/off lifecycle", "timer-driven refresh and stop"]},
-    {"field_id": "logs.export", "component": "Download button", "request": "N/A: browser serializes currently loaded entries", "persistence": "downloaded CSV bytes", "covered": ["disabled for empty filters", "real browser download", "UTF-8 Chinese", "CSV commas and quotes", "exact headers/order/fields/row count"], "missing": ["large loaded pages", "download failure", "permission matrix"]},
-    {"field_id": "logs.quick.traceback", "component": "AntD Button / aria-pressed", "request": "q (chip terms OR together; chip group AND free text)", "persistence": "none; local selected chips", "covered": [], "additional_case": {"manifest": "test/e2e/coverage/log-quick-controls.json", "test_file": "test/e2e/log_quick_controls.py", "parameter": "Traceback"}, "missing": ["all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"]},
-    {"field_id": "logs.quick.err99999", "component": "AntD Button / aria-pressed", "request": "q (chip terms OR together; chip group AND free text)", "persistence": "none; local selected chips", "covered": [], "additional_case": {"manifest": "test/e2e/coverage/log-quick-controls.json", "test_file": "test/e2e/log_quick_controls.py", "parameter": "ERR99999"}, "missing": ["all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"]},
-    {"field_id": "logs.quick.out-of-memory", "component": "AntD Button / aria-pressed", "request": "q (chip terms OR together; chip group AND free text)", "persistence": "none; local selected chips", "covered": [], "additional_case": {"manifest": "test/e2e/coverage/log-quick-controls.json", "test_file": "test/e2e/log_quick_controls.py", "parameter": "out of memory"}, "missing": ["all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"]},
-    {"field_id": "logs.quick.no-such-container", "component": "AntD Button / aria-pressed", "request": "q (chip terms OR together; chip group AND free text)", "persistence": "none; local selected chips", "covered": [], "additional_case": {"manifest": "test/e2e/coverage/log-quick-controls.json", "test_file": "test/e2e/log_quick_controls.py", "parameter": "no such container"}, "missing": ["all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"]},
-    {"field_id": "logs.instance", "component": "AutoComplete and per-row instance link", "request": "instance", "persistence": "instance deep-link seeds initial value", "covered": ["empty/padded/whitespace preservation in actual request", "clipboard and keyboard clear", "known no-instance WARN excluded by any instance prefix"], "missing": ["registered instance choice and resource-specific context linkage"]},
-    {"field_id": "logs.node", "component": "NodePicker", "request": "node and selector search query", "persistence": "none; local UI selection", "covered": ["empty/padded/whitespace node candidate search requests", "clipboard and keyboard clear", "exact empty candidates in a fixture with no nodes"], "missing": ["selected real node identity preservation and resource isolation"]},
-    {"field_id": "logs.context", "component": "Row context button, Select, InputNumber and close button", "request": "GET /api/v1/logs/context: instance/node/ts/id/before/after", "persistence": "none; local context selection", "covered": [], "missing": ["MISSING: anchor identity/match_index and surrounding rows, per-option ±5/10/20/50/100, custom 1..500/empty boundaries, close/reopen and source scoping"]}
+    {
+      "field_id": "logs.query",
+      "component": "Search Text",
+      "request": "q",
+      "persistence": "none; resets on reload",
+      "covered": [
+        "quoted exact marker",
+        "nonexistent marker",
+        "restore",
+        "request and result equality",
+        "free-text OR grouped before quick-filter AND",
+        "empty and whitespace normalization with exact q omission",
+        "real clipboard and keyboard clear"
+      ],
+      "missing": [
+        "remaining FTS operators",
+        "invalid syntax",
+        "full keyword boundary matrix"
+      ]
+    },
+    {
+      "field_id": "logs.quick",
+      "component": "AntD Button / aria-pressed",
+      "request": "q",
+      "persistence": "none; component state",
+      "covered": [
+        "quoted text plus WARNING",
+        "WARNING OR ERROR combined with explicit AND",
+        "ERROR-only excludes warning even with free-text OR",
+        "deselect restores text",
+        "exact search and histogram queries and known result counts"
+      ],
+      "missing": [
+        "all pairwise signature combinations",
+        "full keyboard focus/computed-style matrix",
+        "additional signature/order/truth-table coverage is independently bound in log-quick-controls.json"
+      ]
+    },
+    {
+      "field_id": "logs.source",
+      "component": "Select",
+      "request": "source",
+      "persistence": "none; reload defaults to instance",
+      "covered": [
+        "default instance",
+        "server selected and matching",
+        "agent empty",
+        "restore server"
+      ],
+      "missing": [
+        "real agent and container collection",
+        "node and all options"
+      ]
+    },
+    {
+      "field_id": "logs.level",
+      "component": "Select",
+      "request": "level",
+      "persistence": "none; resets on reload",
+      "covered": [
+        "default unset",
+        "warn includes real warning",
+        "error excludes warning",
+        "restore warn"
+      ],
+      "missing": [
+        "info and fatal options",
+        "clearing via control",
+        "actual error/fatal log collection"
+      ]
+    },
+    {
+      "field_id": "logs.range",
+      "component": "Select / custom deep link",
+      "request": "from/to",
+      "persistence": "custom bounds from URL survive reload",
+      "covered": [
+        "fixed custom window at authoritative target time_ms minus/plus 1ms",
+        "exact millisecond query",
+        "UTC display",
+        "quick-filter histogram uses same fixed bounds and exact aligned warn bucket"
+      ],
+      "missing": [
+        "all six interactive presets",
+        "inclusive left/right boundary fixtures",
+        "invalid window",
+        "full histogram and timezone matrix"
+      ]
+    },
+    {
+      "field_id": "logs.auto",
+      "component": "Switch",
+      "request": "repeated search when enabled",
+      "persistence": "none",
+      "covered": [
+        "accessible name",
+        "default off and remains off after reload"
+      ],
+      "missing": [
+        "on/off lifecycle",
+        "timer-driven refresh and stop"
+      ]
+    },
+    {
+      "field_id": "logs.export",
+      "component": "Download button",
+      "request": "N/A: browser serializes currently loaded entries",
+      "persistence": "downloaded CSV bytes",
+      "covered": [
+        "disabled for empty filters",
+        "real browser download",
+        "UTF-8 Chinese",
+        "CSV commas and quotes",
+        "exact headers/order/fields/row count"
+      ],
+      "missing": [
+        "large loaded pages",
+        "download failure",
+        "permission matrix"
+      ]
+    },
+    {
+      "field_id": "logs.quick.traceback",
+      "component": "AntD Button / aria-pressed",
+      "request": "q (chip terms OR together; chip group AND free text)",
+      "persistence": "none; local selected chips",
+      "covered": [],
+      "additional_case": {
+        "manifest": "test/e2e/coverage/log-quick-controls.json",
+        "test_file": "test/e2e/log_quick_controls.py",
+        "parameter": "Traceback"
+      },
+      "missing": [
+        "all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"
+      ]
+    },
+    {
+      "field_id": "logs.quick.err99999",
+      "component": "AntD Button / aria-pressed",
+      "request": "q (chip terms OR together; chip group AND free text)",
+      "persistence": "none; local selected chips",
+      "covered": [],
+      "additional_case": {
+        "manifest": "test/e2e/coverage/log-quick-controls.json",
+        "test_file": "test/e2e/log_quick_controls.py",
+        "parameter": "ERR99999"
+      },
+      "missing": [
+        "all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"
+      ]
+    },
+    {
+      "field_id": "logs.quick.out-of-memory",
+      "component": "AntD Button / aria-pressed",
+      "request": "q (chip terms OR together; chip group AND free text)",
+      "persistence": "none; local selected chips",
+      "covered": [],
+      "additional_case": {
+        "manifest": "test/e2e/coverage/log-quick-controls.json",
+        "test_file": "test/e2e/log_quick_controls.py",
+        "parameter": "out of memory"
+      },
+      "missing": [
+        "all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"
+      ]
+    },
+    {
+      "field_id": "logs.quick.no-such-container",
+      "component": "AntD Button / aria-pressed",
+      "request": "q (chip terms OR together; chip group AND free text)",
+      "persistence": "none; local selected chips",
+      "covered": [],
+      "additional_case": {
+        "manifest": "test/e2e/coverage/log-quick-controls.json",
+        "test_file": "test/e2e/log_quick_controls.py",
+        "parameter": "no such container"
+      },
+      "missing": [
+        "all pairwise signatures and full keyboard/style matrix; see additional case for independently executed selection/composition coverage"
+      ]
+    },
+    {
+      "field_id": "logs.instance",
+      "component": "AutoComplete and per-row instance link",
+      "request": "instance",
+      "persistence": "instance deep-link seeds initial value",
+      "covered": [
+        "empty/padded/whitespace preservation in actual request",
+        "clipboard and keyboard clear",
+        "known no-instance WARN excluded by any instance prefix"
+      ],
+      "missing": [
+        "registered instance choice and resource-specific context linkage"
+      ]
+    },
+    {
+      "field_id": "logs.node",
+      "component": "NodePicker",
+      "request": "node and selector search query",
+      "persistence": "none; local UI selection",
+      "covered": [
+        "empty/padded/whitespace node candidate search requests",
+        "clipboard and keyboard clear",
+        "exact empty candidates in a fixture with no nodes"
+      ],
+      "missing": [
+        "selected real node identity preservation and resource isolation"
+      ]
+    },
+    {
+      "field_id": "logs.context",
+      "component": "Row context button, Select, InputNumber and close button",
+      "request": "GET /api/v1/logs/context: instance/node/ts/id/before/after",
+      "persistence": "none; local context selection",
+      "covered": [],
+      "missing": [
+        "MISSING: anchor identity/match_index and surrounding rows, per-option ±5/10/20/50/100, custom 1..500/empty boundaries, close/reopen and source scoping"
+      ]
+    }
   ],
   "crud": {
     "Create": "N/A for UI: log facts originate from actual server events; collector evidence is separately recorded",
@@ -59,7 +281,11 @@
     "18.6": "CSV content is verified; no live-follow or clipboard claim",
     "2.1": "PARTIAL: initial query/instance/node values, placeholders, enabled/optional/single-line metadata are observed; full persistent accessible labels remain a product gap. Placeholders do not substitute for labels.",
     "2.6": "Covered: actual clipboard permissions and Control+V populate query/instance/node-search inputs, Control+A/Backspace clear each, exact browser GET parameters and known hit/empty results match. Editing sends zero mutation requests; final independent GET and UI filter state restore the original WARN. Multiline is inapplicable to these single-line controls.",
-    "18.8": "Covered: real browser text-first and chips-first paths use one/two quick terms, exact grouped text AND (WARNING OR ERROR), phrase quotes and free-text OR; search and histogram queries and known hit/empty results match. Removing matching/nonmatching chips and clearing restore the exact original text result."
+    "18.8": "Covered: real browser text-first and chips-first paths use one/two quick terms, exact grouped text AND (WARNING OR ERROR), phrase quotes and free-text OR; search and histogram queries and known hit/empty results match. Removing matching/nonmatching chips and clearing restore the exact original text result.",
+    "16.7": "covered: the export is consumed as a finished file rather than as a click. The real download event is awaited, its failure() must be None, the bytes are saved to disk and re-read, and they are parsed with the standard csv module independently of the product's serializer - so the check is against the delivered artefact, not the component that produced it. The bytes are then proven to carry the actual UTF-8 and CSV escaping markers, the filename keeps its gpuworks-logs-*.csv contract, and the sha256 of what landed on disk is recorded as the evidence.",
+    "2.4": "covered: the keyword control is asserted on what it sends, not on what it displays. Four character shapes are typed and the query that reaches the server is compared exactly - Chinese text, a punctuation run of colon, quotes, parentheses, brackets and braces, a string carrying percent, ampersand and equals so the encoder has something to get wrong, and a two-line value. Each is then read back through the response, and the run returns to a matching keyword afterwards so the export that follows is not silently disabled by a probe. The single-line control is required to collapse the newline rather than truncate at it or keep a character the field cannot represent, and the Chinese and punctuation values are required to arrive unchanged. No character is forbidden by this field: the server accepts every shape and answers with the empty result set, which is recorded as the contract rather than as a failure. Proven by mutation: stripping non-ASCII characters from the query fails the Chinese case as the request never matches what the browser was told to send.",
+    "2.7": "covered: a log line is rendered as text, and that is asserted rather than assumed. A warning whose stored line carries markup - a bold element, a script element that would set a global, an escaped ampersand and an image element with an inline handler - is collected through the same real server selflog route as every other fixture row, and the stored line is required to still contain that markup unchanged, so an entity doubling on the way in would fail before rendering is even reached. The row is then searched for through the box with the server source selected, and the rendering is measured: an element whose textContent is the whole line is required to exist, the row's own container is required to contain no b, script or img element, and the global the script would set is required to be absent - so markup becoming DOM, or a handler executing, fails here. Proven by mutation: rendering the highlighted segment with dangerouslySetInnerHTML fails as no element's textContent equals the line any more.",
+    "2.3": "covered: the page size is the field with a length contract on this surface, and the four values around its thresholds are sent rather than one comfortable middle value. Below the floor - 0 - is required to be clamped up to the default, which exceeds the match count and so returns every match; at the floor - 1 - exactly one row is required back and the page is required to mark itself truncated, because more matches wait behind it; at the ceiling - 5000 - everything is required back and the page is required not to claim truncation, since nothing is being hidden; above the ceiling - 5001 - is required to be clamped down and answered without an error. Counting is in whole rows, which is the unit the endpoint documents, and the credential and time fields are strings with no length contract of their own, which is recorded rather than invented. The truncation half is what makes the floor case meaningful: only a page that came back full while matches remain may carry the marker. Proven by mutation: removing the store's one-row lookahead makes the floor case return a full page without marking it truncated."
   },
   "time_semantics": "Both endpoints included: known real WARN tested at exact lower/upper timestamps and excluded one millisecond beyond each endpoint.",
   "export_contract": "Current loaded entries, not all backend matches. BOM is optional because the product does not promise it.",

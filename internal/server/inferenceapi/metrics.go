@@ -79,7 +79,7 @@ func (t MetricTarget) MarshalYAML() (any, error) {
 	if t.Scale == 0 {
 		return t.To, nil
 	}
-	return metricTargetObject{To: t.To, Scale: t.Scale}, nil
+	return metricTargetObject(t), nil
 }
 
 // UnmarshalJSON accepts the same two shapes as the YAML form.
@@ -104,7 +104,7 @@ func (t MetricTarget) MarshalJSON() ([]byte, error) {
 	if t.Scale == 0 {
 		return json.Marshal(t.To)
 	}
-	return json.Marshal(metricTargetObject{To: t.To, Scale: t.Scale})
+	return json.Marshal(metricTargetObject(t))
 }
 
 // Rules is the declaration's own mapping, sorted by source.

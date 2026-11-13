@@ -8,6 +8,7 @@ import { estimateOpenLoop, estimateRequests, initialBenchmarkDataset, modeFormRe
 import { formatTime } from "../../i18n/datetime";
 import { localizedText } from "../../i18n/localizedText";
 import { useTranslation } from "react-i18next";
+import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
 import {
 	agenticSessionsPerPoint,
 	summarizeAgenticLoad,
@@ -105,7 +106,8 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 	const mode = Form.useWatch("mode", form) || "saturation";
 	const targetKind = Form.useWatch("target_kind", form) || "instance";
 	const deploymentID = Form.useWatch("deployment_id", form);
-	const loadOrigin = Form.useWatch("load_origin", form);
+	const [loadOrigin, baseURL] = Form.useWatch((values: Values) => [values.load_origin, values.base_url], { form, preserve: true }) || [];
+	const access = useOutboundHostAccess([baseURL || ""], open && targetKind === "external" && loadOrigin === "server");
 	const keepDetail = Form.useWatch("keep_detail", form);
 	const dataset = Form.useWatch("dataset", form) || "random";
 	const concurrencyRaw = Form.useWatch("concurrency", form) || "1";
@@ -246,7 +248,7 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 	}, [open, targetKind, deploymentID, listedDeployment]);
 	const targetNodeUUIDs = useMemo(() => deploymentDetail && deploymentDetail.id === deploymentID
 		? benchmarkOriginNodes(deploymentDetail.instances || []) : [], [deploymentDetail, deploymentID]);
-	const targetNodeUUID = targetNodeUUIDs.includes(loadOrigin) ? loadOrigin : targetNodeUUIDs[0];
+	const targetNodeUUID = loadOrigin && targetNodeUUIDs.includes(loadOrigin) ? loadOrigin : targetNodeUUIDs[0];
 	useEffect(() => {
 		if (!open || targetKind !== "instance") return;
 		let alive = true;
@@ -319,6 +321,7 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 		form.setFieldValue("base_url", normalized.url);
 		setProbing(true);
 		try {
+			await access.authorize();
 			const result = await api.benchmarkModels({ node_uuid: values.load_origin, url: normalized.url, api_key: values.api_key });
 			setModels(result.models);
 			form.setFieldValue("model", result.models[0]);
@@ -380,6 +383,7 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 			if (dataset === "agentic" && !openLoop) Object.assign(search, { fixed_concurrency: concurrency, sessions_per_point: agenticSessionsPerPoint(meta, concurrency) });
 			const ignoreEOS = ignoreEOSOffered ? { ignore_eos: !!values.ignore_eos } : {};
 			const endpoint = normalizeEndpointURL(values.base_url || "").url;
+			await access.authorize();
 			const created = await api.createBenchmark({
 				name: values.name?.trim() || `${localizedText(meta.modes.find((item) => item.value === mode)?.label, language) || t("wizard.defaultName")} ${formatTime(new Date())}`,
 				target_kind: values.target_kind, deployment_id: values.deployment_id, base_url: endpoint || undefined,
@@ -428,7 +432,8 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 						const selected = knownDeployments.get(id) || deployments.find((item) => item.id === id);
 						if (selected && !hasOperation(selected.operations, "openai.chat")) throw new Error(t("wizard.chatRequired"));
 					} }]} extra={t("wizard.chatRequired")}><Select showSearch {...(onSearchDeployments ? { filterOption: false, onSearch: onSearchDeployments } : { optionFilterProp: "label" })} options={deploymentOptions} /></Form.Item> : <>
-						<Form.Item name="base_url" label={t("wizard.baseUrl")} rules={[{ required: true }]} extra={t("wizard.baseUrlHelp")}><Input placeholder={t("wizard.baseUrlPlaceholder")} /></Form.Item>
+						<Form.Item name="base_url" label={t("wizard.baseUrl")} rules={[{ required: true, whitespace: true }]} extra={t("wizard.baseUrlHelp")}><Input placeholder={t("wizard.baseUrlPlaceholder")} /></Form.Item>
+						<OutboundHostAccess access={access} />
 						<Form.Item name="api_key" label="API Key"><Input.Password /></Form.Item>
 					</>}
 					<Form.Item name="load_origin" label={t("wizard.loadOrigin")} extra={targetKind === "instance" && originError ? t("wizard.originLoadFailed") : undefined} rules={[{ required: true }, { validator: async (_, value) => {

@@ -3,7 +3,7 @@
   "name": "设置 / 品牌外观 / 文字与图标保存、刷新回读、登录页与浏览器标题生效",
   "test_file": "test/e2e/settings_branding.py",
   "test_function": "test_branding",
-  "command": "make test-e2e-settings-branding",
+  "command": "python3 -B test/e2e/settings_branding.py --locale en",
   "priority": "P1",
   "page_id": "settings",
   "lane": "local-real-server-sqlite",
@@ -128,7 +128,9 @@
     "2.3": "Empty is the shortest product name and the closing save stores it. There is no shorter value. The control stops at 32 Unicode characters, the header and the independent GET match those 32 characters, and a 33-character PATCH returns FIELD_INVALID while the stored name stays at 32. Thirty-two Chinese characters are accepted, so the limit counts characters rather than UTF-8 bytes",
     "2.4": "The product name saves Chinese, English, a digit and punctuation. The header and the independent GET match that saved value. A control character in the product name returns FIELD_INVALID, the field keeps that rejected draft, and the independent GET stays on the saved name. The login description saves an internal newline and the independent GET keeps that newline",
     "2.6": "The login description accepts a pasted 粘A1., a keyboard clear back to empty, and keyboard editing that includes an internal newline. That newline is the saved PATCH value. Reload and the independent GET keep it. Paste, clear and typing send no request of their own",
-    "16.1": "The upload rejects a non-image type and accepts a real image; size/type boundaries remain MISSING"
+    "16.1": "The upload rejects a non-image type and accepts a real image; size/type boundaries remain MISSING",
+    "2.7": "The product name is free text, so it can carry markup. 'e2e-<img src=x onerror=1>-brand' is saved through the real PATCH, the independent GET confirms the server holds that exact string, and the edit control still shows it verbatim. The public sign-in page then displays it as a text node whose element has no child elements, its document title equals the raw string, and no img[src=x] element exists there or on the settings page. The name is restored afterwards so the recorded evidence matches the original brand. Proven by mutation: rendering the name with dangerouslySetInnerHTML on the sign-in page makes the case fail.",
+    "2.5": "A real conflict against server state is constructed, though not a uniqueness conflict: branding has no name uniqueness to violate (it is a single row under one setting key, replaced without lookup or comparison), so the conflict used here is a concurrent writer. exercise_branding_conflict PATCHes the branding from a second session, asserts through the independent GET that the other session won and is what the server holds, then asserts that the open card kept its own draft - the four fields still read the card's values, the header fell back to the built-in wordmark rather than showing the other session's empty logo, and the card shows no error. Saving the open draft is then asserted to PATCH exactly the draft and to become what a fresh GET returns, so the conflict is resolved by a successful resubmit. The other session's write is asserted not to be counted as a page save. No mutation was performed for this item: the product reaches the draft through local React state, and two attempts to make the card read server state instead (a periodic refresh, and binding the field to the shared store) either fell outside the assertion window or could not be reached by a second session's PATCH, so the discriminating power here is not demonstrated by a product mutation. What it does have is an independent check: the other session's write is confirmed through a fresh GET, and the open draft is confirmed to be what a later PATCH sends and what a later GET returns."
   },
   "missing": [
     "MISSING: checklist 1.10 corrupt image decode failure and server-side rejection; only the non-image type is rejected",

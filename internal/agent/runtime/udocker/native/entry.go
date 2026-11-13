@@ -194,8 +194,11 @@ func (u *Unpacker) fileMode(header *tar.Header) os.FileMode {
 
 func removeExisting(target string) error {
 	info, err := os.Lstat(target)
-	if err != nil {
+	if os.IsNotExist(err) {
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	if info.Mode().IsRegular() {
 		return nil // O_TRUNC handles it without an extra unlink

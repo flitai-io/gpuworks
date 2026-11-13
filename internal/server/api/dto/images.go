@@ -60,19 +60,20 @@ type ImageNode struct {
 	NodeUUID string `json:"node_uuid"`
 	// NodeName and NodeState are the node's display name and state, so a
 	// client lists an image's nodes without fetching every node.
-	NodeName         string `json:"node_name"`
-	NodeState        string `json:"node_state"`
-	State            string `json:"state"`
-	SizeBytes        int64  `json:"size_bytes,omitempty"`
-	TransferredBytes int64  `json:"transferred_bytes,omitempty"`
-	RateBPS          int64  `json:"rate_bps,omitempty"`
-	RateLimitKiB     int64  `json:"rate_limit_kib_s,omitempty"`
-	LastRateLimitKiB int64  `json:"last_rate_limit_kib_s,omitempty"`
-	TransferID       string `json:"transfer_id,omitempty"`
-	SourceNodeUUID   string `json:"source_node_uuid,omitempty"`
-	SourceNodeName   string `json:"source_node_name,omitempty"`
-	Source           string `json:"source,omitempty"`
-	Message          string `json:"message,omitempty"`
+	NodeName          string `json:"node_name"`
+	NodeState         string `json:"node_state"`
+	State             string `json:"state"`
+	SizeBytes         int64  `json:"size_bytes,omitempty"`
+	TransferredBytes  int64  `json:"transferred_bytes,omitempty"`
+	RateBPS           int64  `json:"rate_bps,omitempty"`
+	RateLimitKiB      int64  `json:"rate_limit_kib_s,omitempty"`
+	LastRateLimitKiB  int64  `json:"last_rate_limit_kib_s,omitempty"`
+	TransferID        string `json:"transfer_id,omitempty"`
+	TransferErrorCode string `json:"transfer_error_code,omitempty"`
+	SourceNodeUUID    string `json:"source_node_uuid,omitempty"`
+	SourceNodeName    string `json:"source_node_name,omitempty"`
+	Source            string `json:"source,omitempty"`
+	Message           string `json:"message,omitempty"`
 	// ImageDigestID is the runtime image id the node last reported, so a
 	// rolling tag's re-pull shows whether the content changed.
 	ImageDigestID string `json:"image_digest_id,omitempty"`

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/server/messages"
 	"io"
 	"log/slog"
 	"net"
@@ -17,6 +16,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // The launcher starts this test binary in place of gpuworks: with

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/server/auth"
 )
 
@@ -79,9 +80,6 @@ func TestRevokedKeyRejectsNewGatewayRequestWhileEarlierVerificationIsBlocked(t *
 	}
 	if err := rig.st.RevokeAPIKey(prefix); err != nil {
 		t.Fatal(err)
-	}
-	if !rig.st.HasAnyAPIKey() {
-		t.Fatal("another live key must keep gateway authentication enabled")
 	}
 	if status := request(other); status != http.StatusOK {
 		t.Fatalf("unrelated live key: HTTP %d, want 200", status)

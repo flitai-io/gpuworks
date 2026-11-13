@@ -1,7 +1,7 @@
 {
   "scope": "Runner preflight regression coverage only; no GPU or full Playground business acceptance",
   "test_file": "test/e2e/test_playground_acceptance.py",
-  "command": "python3 -m unittest discover -s test/e2e -p test_playground_acceptance.py",
+  "command": "python3 -B test/e2e/test_playground_acceptance.py",
   "lane": "offline-runner-contract",
   "identity": "No product login or remote principal",
   "cases": [

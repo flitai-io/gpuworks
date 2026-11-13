@@ -38,9 +38,9 @@ const crumbs = () => {
   return nav ? [...nav.querySelectorAll("li")].map((li) => li.textContent?.trim()).filter((text) => text && text !== "/") : [];
 };
 
-test("the breadcrumb names the menu section the page sits in", () => {
+test("a page reached from the menu shows no breadcrumb, only its title", () => {
   at("/nodes", <PageHeader title="Compute Nodes" description="Onboarded hardware" />);
-  assert.deepEqual(crumbs(), ["Compute"]);
+  assert.deepEqual(crumbs(), []);
   assert.ok(screen.getByRole("heading", { level: 2, name: "Compute Nodes" }));
   assert.ok(screen.getByText("Onboarded hardware"));
 });
@@ -56,9 +56,9 @@ test("the overview entry omits its section even when the title text differs", ()
   assert.deepEqual(crumbs(), []);
 });
 
-test("a title that happens to equal a section name still shows that section", () => {
-  at("/nodes", <PageHeader title="Compute" />);
-  assert.deepEqual(crumbs(), ["Compute"]);
+test("a page below a menu page names the section and its parents, whatever its title", () => {
+  at("/deploy", <PageHeader title="Inference" parents={[<Link key="list" to="/deployments">Inference Services</Link>]} />);
+  assert.deepEqual(crumbs(), ["Inference", "Inference Services"]);
 });
 
 test("a nested route selects the menu item key, not the first path segment", () => {
@@ -74,7 +74,7 @@ test("a nested route selects the menu item key, not the first path segment", () 
 test("actions sit beside the title and page controls in their own row below", () => {
   const { container } = at("/monitor", <PageHeader title="Monitor Center" extra={<button type="button">Add</button>} toolbar={<input aria-label="Request ID" />} />);
   const header = container.querySelector(".page-header") as HTMLElement;
-  const row = header.querySelector(".page-header-row") as HTMLElement;
+  const row = header.querySelector("header") as HTMLElement;
   assert.ok(within(row).getByRole("button", { name: "Add" }));
   const toolbar = header.querySelector(".page-header-toolbar") as HTMLElement;
   assert.equal(toolbar.previousElementSibling, row, "the toolbar follows the title row");

@@ -58,11 +58,25 @@ const dockerHubConfigKey = "https://index.docker.io/v1/"
 // ~/.docker/config.json is neither read nor written. Without a matching login
 // base is returned unchanged and cleanup is a no-op.
 func PullAuthEnv(ctx context.Context, image string, base []string) (env []string, cleanup func(), err error) {
+	return PullAuthEnvIn(ctx, image, base, "")
+}
+
+// PullAuthEnvIn is PullAuthEnv with the private directory created under
+// parent (made, 0700, if missing) instead of the system temp directory. A CLI
+// that runs in another mount namespace than the agent (the kube runtime's
+// nerdctl, run on the node) only sees the paths both share, such as the
+// agent's state directory.
+func PullAuthEnvIn(ctx context.Context, image string, base []string, parent string) (env []string, cleanup func(), err error) {
 	auth, ok := RegistryAuthFor(ctx, image)
 	if !ok {
 		return base, func() {}, nil
 	}
-	dir, err := os.MkdirTemp("", "gpuworks-pull-auth-")
+	if parent != "" {
+		if err := os.MkdirAll(parent, 0o700); err != nil {
+			return nil, func() {}, fmt.Errorf("prepare registry login: %w", err)
+		}
+	}
+	dir, err := os.MkdirTemp(parent, "gpuworks-pull-auth-")
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("prepare registry login: %w", err)
 	}

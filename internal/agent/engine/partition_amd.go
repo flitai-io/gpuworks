@@ -13,7 +13,7 @@ import (
 )
 
 // amdPartitionInjector implements the AMD logical partition backend:
-// libvrocm.so (gpustack-operator's rocm-slicing shim) is mounted into the
+// libvrocm.so (the rocm-slicing-shim) is mounted into the
 // container and activated through LD_PRELOAD plus VROCM_DEVICE_MEMORY_LIMIT_*
 // env, with a per-instance usage ledger in /dev/shm (host IPC namespace,
 // because inference workloads use --ipc=host; see partition_ppu.go, which

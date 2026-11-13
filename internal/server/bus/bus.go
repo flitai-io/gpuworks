@@ -2,7 +2,10 @@
 // commit) fan out to subscribers over per-subscriber bounded channels. When a
 // subscriber's buffer is full, events for the same (topic,key) are coalesced
 // rather than blocking the publisher — a slow SSE client must never stall a DB
-// write. Dropped-vs-coalesced counts are tracked for observability.
+// write. A per-subscriber pump goroutine drains that coalesced backlog as soon
+// as the consumer makes room, so a burst's last state change per key lands
+// without waiting for another overflow. Coalesced counts are tracked for
+// observability.
 package bus
 
 import (
@@ -28,11 +31,24 @@ type Event struct {
 type subscriber struct {
 	topics map[string]bool
 	ch     chan Event
-	// pending holds the latest event per coalesce-key while ch is full.
-	mu       sync.Mutex
-	pending  map[string]Event
-	order    []string
-	coalesce atomic.Int64
+	// pending holds the latest event per coalesce-key while ch is full; the
+	// pump moves them onto ch as the consumer drains it.
+	mu      sync.Mutex
+	pending map[string]Event
+	order   []string
+	// inflight counts the keys in pending plus the one event the pump has
+	// claimed but not yet handed to ch. A publisher that reads 0 may deliver
+	// straight to ch; any other value means the pump is (or is about to be)
+	// writing, and events join pending to keep per-key publish order.
+	inflight atomic.Int64
+	// wake nudges the pump that pending is non-empty; stop ends it. Neither is
+	// ever blocked on, so the publishing path stays non-blocking.
+	wake chan struct{}
+	stop chan struct{}
+	// done closes when the pump has returned, letting Close wait it out.
+	done      chan struct{}
+	closeOnce sync.Once
+	coalesce  atomic.Int64
 }
 
 // Bus routes events to subscribers.
@@ -57,7 +73,8 @@ type Subscription struct {
 }
 
 // Subscribe registers interest in one or more topics (empty = all topics).
-// buffer is the per-subscriber channel depth.
+// buffer is the per-subscriber channel depth. The subscription owns a pump
+// goroutine that runs until Close.
 func (b *Bus) Subscribe(buffer int, topics ...string) *Subscription {
 	if buffer <= 0 {
 		buffer = 64
@@ -66,6 +83,9 @@ func (b *Bus) Subscribe(buffer int, topics ...string) *Subscription {
 		topics:  make(map[string]bool, len(topics)),
 		ch:      make(chan Event, buffer),
 		pending: make(map[string]Event),
+		wake:    make(chan struct{}, 1),
+		stop:    make(chan struct{}),
+		done:    make(chan struct{}),
 	}
 	for _, t := range topics {
 		s.topics[t] = true
@@ -73,17 +93,21 @@ func (b *Bus) Subscribe(buffer int, topics ...string) *Subscription {
 	b.mu.Lock()
 	b.subs[s] = struct{}{}
 	b.mu.Unlock()
+	go s.pump()
 	return &Subscription{bus: b, sub: s}
 }
 
-// C returns the receive channel. The pump drains coalesced events onto it.
+// C returns the receive channel. The pump drains coalesced events onto it, so a
+// consumer only has to keep reading; it never flushes the backlog itself.
 func (sub *Subscription) C() <-chan Event { return sub.sub.ch }
 
-// Close removes the subscription.
+// Close removes the subscription and stops its pump. It is idempotent.
 func (sub *Subscription) Close() {
 	sub.bus.mu.Lock()
 	delete(sub.bus.subs, sub.sub)
 	sub.bus.mu.Unlock()
+	sub.sub.closeOnce.Do(func() { close(sub.sub.stop) })
+	<-sub.sub.done
 }
 
 // CoalescedCount reports how many events were merged due to backpressure.
@@ -125,43 +149,81 @@ func (b *Bus) Publish(e Event) {
 }
 
 func (s *subscriber) deliver(e Event) {
+	// The pump is the only other writer, and it is busy only while inflight is
+	// non-zero. With nothing queued, hand the event straight to the consumer.
+	// Once anything is queued, this event joins pending too: a later state
+	// change must not overtake an earlier one the pump still holds.
+	if s.inflight.Load() == 0 {
+		select {
+		case s.ch <- e:
+			return
+		default:
+		}
+	}
 	key := e.Topic + "\x00" + e.Key
+	// Buffer full (or the pump is behind): coalesce by key. Newest wins, except
+	// that progress never displaces a state change.
+	s.mu.Lock()
+	held, exists := s.pending[key]
+	if exists {
+		s.coalesce.Add(1)
+	} else {
+		s.order = append(s.order, key)
+		s.inflight.Add(1)
+	}
+	// A progress notice must not replace a held state change: subscribers that
+	// skip progress would then never learn the state moved.
+	if !exists || e.Reason != ReasonProgress || held.Reason == ReasonProgress {
+		s.pending[key] = e
+	}
+	s.mu.Unlock()
 	select {
-	case s.ch <- e:
-		return
+	case s.wake <- struct{}{}:
 	default:
-		// Buffer full: coalesce by key. Newest wins, except that progress never
-		// displaces a state change; a pump goroutine flushes.
-		s.mu.Lock()
-		held, exists := s.pending[key]
-		if exists {
-			s.coalesce.Add(1)
-		} else {
-			s.order = append(s.order, key)
-		}
-		// A progress notice must not replace a held state change: subscribers
-		// that skip progress would then never learn the state moved.
-		if !exists || e.Reason != ReasonProgress || held.Reason == ReasonProgress {
-			s.pending[key] = e
-		}
-		s.mu.Unlock()
-		s.tryFlush()
+		// A wake is already pending; the pump will see this event on its pass.
 	}
 }
 
-// tryFlush moves pending events onto the channel opportunistically.
-func (s *subscriber) tryFlush() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for len(s.order) > 0 {
-		key := s.order[0]
-		e := s.pending[key]
+// pump moves coalesced events onto the channel as the consumer makes room. The
+// blocking send lives only here, so a stalled consumer parks this goroutine and
+// never a publisher. It is the only writer while a backlog exists, which is why
+// deliver must not bypass it then.
+func (s *subscriber) pump() {
+	defer close(s.done)
+	for {
 		select {
-		case s.ch <- e:
-			delete(s.pending, key)
-			s.order = s.order[1:]
-		default:
+		case <-s.wake:
+		case <-s.stop:
 			return
 		}
+		for {
+			e, ok := s.nextPending()
+			if !ok {
+				break
+			}
+			select {
+			case s.ch <- e:
+				// Delivered: only now may a publisher bypass the pump again.
+				s.inflight.Add(-1)
+			case <-s.stop:
+				return
+			}
+		}
 	}
+}
+
+// nextPending takes the oldest queued event out of pending. Its key still
+// counts toward inflight until the event is on the channel, so publishers keep
+// routing through pending while it is in flight.
+func (s *subscriber) nextPending() (Event, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.order) == 0 {
+		return Event{}, false
+	}
+	key := s.order[0]
+	e := s.pending[key]
+	delete(s.pending, key)
+	s.order = s.order[1:]
+	return e, true
 }

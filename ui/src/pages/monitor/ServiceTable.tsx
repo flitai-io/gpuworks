@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Badge, Typography } from "antd";
+import { Badge } from "antd";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import type { HealthStatus, MonitorService } from "../../api";
@@ -74,7 +74,7 @@ function KvBar({ pct }: { pct: number | null }) {
       <div style={{ flex: 1, height: 6, borderRadius: 3, background: colors.borderSoft, overflow: "hidden" }}>
         <div style={{ width: `${Math.min(100, Math.max(0, pct))}%`, height: "100%", background: color }} />
       </div>
-      <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums" }}>{pct.toFixed(0)}%</span>
+      <span style={{ fontVariantNumeric: "tabular-nums" }}>{pct.toFixed(0)}%</span>
     </div>
   );
 }
@@ -109,7 +109,7 @@ export default function ServiceTable({
       render: (_: unknown, row: MonitorService) => (
         <>
           <Link to={`/monitor/d/${row.deployment_id}`} onClick={(event) => event.stopPropagation()}>
-            <Typography.Text strong>{row.name}</Typography.Text>
+            {row.name}
           </Link>
           <span className="resource-table-sub">{t("table.placement", { engine: row.engine, placement: row.placement })}</span>
         </>

@@ -1,6 +1,7 @@
 package launchd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -22,6 +24,10 @@ type Host struct {
 	Launchctl func(ctx context.Context, args ...string) (string, error)
 	// Root prefixes every plist path; "" on a real Mac.
 	Root string
+	// ProcessAlive observes whether a former job PID remains. Nil uses signal 0.
+	ProcessAlive func(pid int) (bool, error)
+	// ProcessTable supplies the read-only ps snapshot used to detect leftover agents.
+	ProcessTable func(context.Context) (string, error)
 	// Admin is true when running as root: the job is then a launch daemon.
 	Admin bool
 	// Self is the account running the install, and the one a launch agent
@@ -159,8 +165,9 @@ func (h *Host) load(ctx context.Context, t target) error {
 }
 
 var (
-	printState = regexp.MustCompile(`(?m)^\s*state = (\S+)`)
-	printPID   = regexp.MustCompile(`(?m)^\s*pid = (\d+)`)
+	printState   = regexp.MustCompile(`(?m)^\s*state = (\S+)`)
+	printProgram = regexp.MustCompile(`(?m)^\s*program = ([^\r\n]+)`)
+	printPID     = regexp.MustCompile(`(?m)^\s*pid = (\d+)`)
 )
 
 // RunningPID reads the output of `launchctl print <domain>/<label>`: the pid
@@ -287,42 +294,248 @@ func (h *Host) adopt(dir string, owner Account) error {
 // Uninstall removes the job from both domains it may be in: the launch daemon
 // and the launch agent of the user (the one sudo was run from, as root). It
 // returns the state directories the removed jobs named. Engines the agent
-// started are process groups of their own and keep running.
-func (h *Host) Uninstall(ctx context.Context) ([]string, error) {
+// started are process groups of their own and keep running. beforeRemove runs
+// after every job/process has stopped and before any plist is removed, allowing
+// identity cleanup failures to retain discoverable installation definitions.
+func (h *Host) Uninstall(ctx context.Context, binary string, beforeRemove func(context.Context, []string) error) ([]string, error) {
 	type job struct {
-		domain, plist string
+		domain, plist, state string
+		data                 []byte
 	}
-	jobs := []job{{"system", DaemonPlist()}, {"gui/" + strconv.Itoa(h.Self.UID), AgentPlist(h.Self.Home)}}
-	var stateDirs []string
-	var errs []error
-	for _, j := range jobs {
-		plist := h.path(j.plist)
-		data, err := os.ReadFile(plist)
+	jobs := []job{{domain: "system", plist: DaemonPlist()}, {domain: "gui/" + strconv.Itoa(h.Self.UID), plist: AgentPlist(h.Self.Home)}}
+	// Validate every installed definition before touching either domain.
+	for i := range jobs {
+		j := &jobs[i]
+		data, err := os.ReadFile(h.path(j.plist))
 		if os.IsNotExist(err) {
 			continue
 		}
-		if j.domain == "system" && !h.Admin {
-			errs = append(errs, fmt.Errorf("removing the launch daemon needs administrator rights: sudo gpuworks-agent uninstall"))
-			continue
-		}
 		if err != nil {
-			errs = append(errs, err)
+			return nil, errors.New("launchd definition could not be read")
+		}
+		if j.domain == "system" && !h.Admin {
+			return nil, errors.New("removing the launch daemon needs administrator rights: sudo gpuworks-agent uninstall")
+		}
+		parsed, err := ReadOwnedAgentJob(data, binary)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := h.AgentProcesses(ctx, binary, parsed.StateDir); err != nil {
+			return nil, err
+		}
+		j.data, j.state = data, parsed.StateDir
+	}
+	// Keep every plist discoverable until every job/process has stopped. A
+	// failure in the second domain must not hide the first state on retry.
+	for _, j := range jobs {
+		if j.data == nil {
 			continue
 		}
-		if parsed, err := ReadJob(data); err == nil && parsed.StateDir != "" {
-			stateDirs = append(stateDirs, parsed.StateDir)
+		current, err := os.ReadFile(h.path(j.plist))
+		if err != nil || !bytes.Equal(current, j.data) {
+			return nil, errors.New("launchd definition changed before shutdown")
 		}
-		// A job that is not loaded (or a session that is gone) has nothing to
-		// stop; once its plist is removed launchd will not load it again.
-		if out, err := h.Launchctl(ctx, "bootout", j.domain+"/"+AgentLabel); err != nil && strings.Contains(out, "not permitted") {
-			errs = append(errs, fmt.Errorf("launchctl bootout %s/%s: %s", j.domain, AgentLabel, strings.TrimSpace(out)))
+		if err := h.stopUninstallJob(ctx, j.domain+"/"+AgentLabel, binary, j.state); err != nil {
+			return nil, err
+		}
+	}
+	for _, j := range jobs {
+		if j.data == nil {
 			continue
 		}
-		if err := os.Remove(plist); err != nil {
-			errs = append(errs, err)
+		current, err := os.ReadFile(h.path(j.plist))
+		if err != nil || !bytes.Equal(current, j.data) {
+			return nil, errors.New("launchd definition changed during shutdown; definitions retained")
+		}
+		out, err := h.Launchctl(ctx, "print", j.domain+"/"+AgentLabel)
+		if !IsAbsentJob(out, err) {
+			return nil, errors.New("launchd job reappeared before cleanup; definitions retained")
+		}
+		pids, err := h.AgentProcesses(ctx, binary, j.state)
+		if err != nil {
+			return nil, err
+		}
+		if len(pids) > 0 {
+			return nil, errors.New("agent process reappeared before cleanup; definitions retained")
+		}
+	}
+	if beforeRemove != nil {
+		var stoppedStates []string
+		for _, j := range jobs {
+			if j.data != nil {
+				stoppedStates = append(stoppedStates, j.state)
+			}
+		}
+		if err := beforeRemove(ctx, stoppedStates); err != nil {
+			return nil, err
+		}
+	}
+	var stateDirs []string
+	for _, j := range jobs {
+		if j.data == nil {
 			continue
 		}
+		if err := ctx.Err(); err != nil {
+			return stateDirs, err
+		}
+		if err := os.Remove(h.path(j.plist)); err != nil {
+			return stateDirs, err
+		}
+		stateDirs = append(stateDirs, j.state)
 		h.say("removed %s", j.plist)
 	}
-	return stateDirs, errors.Join(errs...)
+	return stateDirs, nil
+}
+
+// IsAbsentJob reports only launchctl errors that explicitly mean an absent
+// service/domain status. Permission, cancellation and transport failures cannot
+// establish that stopping the job succeeded.
+func IsAbsentJob(out string, err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var status interface{ ExitCode() int }
+	if !errors.As(err, &status) {
+		return false
+	}
+	switch status.ExitCode() {
+	case 3:
+		return strings.Contains(out, "No such process")
+	case 113:
+		return strings.Contains(out, "Could not find service") || strings.Contains(out, "Could not find domain")
+	}
+	return false
+}
+
+func (h *Host) stopUninstallJob(ctx context.Context, service, binary, state string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	out, err := h.Launchctl(ctx, "print", service)
+	if err != nil && !IsAbsentJob(out, err) {
+		return errors.New("launchd job state could not be observed before stopping")
+	}
+	pid := 0
+	if err == nil {
+		pid, err = AgentProgramPID(out, binary)
+		if err != nil {
+			return err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	out, err = h.Launchctl(ctx, "bootout", service)
+	if err != nil && !IsAbsentJob(out, err) {
+		return errors.New("launchd job could not be stopped; autostart definition retained")
+	}
+	deadline := time.Now().Add(h.Wait)
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		out, err = h.Launchctl(ctx, "print", service)
+		absent := IsAbsentJob(out, err)
+		if err != nil && !absent {
+			return errors.New("launchd job shutdown could not be verified")
+		}
+		alive := false
+		if pid > 0 {
+			alive, err = h.uninstallProcessAlive(pid)
+			if err != nil {
+				return errors.New("former launchd job process exit could not be verified")
+			}
+		}
+		if absent && !alive {
+			pids, inventoryErr := h.AgentProcesses(ctx, binary, state)
+			if inventoryErr != nil {
+				return inventoryErr
+			}
+			if len(pids) == 0 {
+				return nil
+			}
+		}
+		if !time.Now().Before(deadline) {
+			return errors.New("launchd job or process has not stopped; autostart definition retained")
+		}
+		if err := h.sleep(ctx); err != nil {
+			return err
+		}
+	}
+}
+
+func (h *Host) uninstallProcessAlive(pid int) (bool, error) {
+	if h.ProcessAlive != nil {
+		return h.ProcessAlive(pid)
+	}
+	err := syscall.Kill(pid, 0)
+	if errors.Is(err, syscall.ESRCH) {
+		return false, nil
+	}
+	if err == nil || errors.Is(err, syscall.EPERM) {
+		return true, nil
+	}
+	return false, err
+}
+
+// ReadOwnedAgentJob accepts only the agent label and run command using the
+// explicitly selected executable and one absolute installation state directory.
+// It never includes untrusted plist arguments or environment in errors.
+func ReadOwnedAgentJob(data []byte, binary string) (Job, error) {
+	spec, err := ReadSpec(data)
+	if err != nil || spec.Label != AgentLabel || len(spec.Args) < 4 || spec.Args[1] != "run" {
+		return Job{}, errors.New("launchd definition is not an owned agent run job")
+	}
+	if !sameAgentPath(spec.Args[0], binary) || (spec.Program != "" && !sameAgentPath(spec.Program, binary)) {
+		return Job{}, errors.New("launchd executable identity differs from this agent")
+	}
+	states := 0
+	for _, arg := range spec.Args[2:] {
+		if arg == "--state" {
+			states++
+		}
+		if strings.HasPrefix(arg, "--state=") {
+			return Job{}, errors.New("launchd state arguments are ambiguous")
+		}
+	}
+	job, err := ReadJob(data)
+	if err != nil || states != 1 || !filepath.IsAbs(job.StateDir) || filepath.Clean(job.StateDir) == string(filepath.Separator) || strings.ContainsAny(job.StateDir, "\r\n\x1b") {
+		return Job{}, errors.New("launchd installation state could not be established")
+	}
+	return job, nil
+}
+
+// AgentProgramPID validates a loaded job's executable before returning its PID.
+// A foreign or unobservable live program must not be stopped by agent uninstall.
+func AgentProgramPID(out, binary string) (int, error) {
+	program := printProgram.FindStringSubmatch(out)
+	if program == nil || !sameAgentPath(strings.Trim(strings.TrimSpace(program[1]), "\""), binary) {
+		return 0, errors.New("loaded launchd executable identity could not be established")
+	}
+	pid := printPID.FindStringSubmatch(out)
+	if pid == nil {
+		state := printState.FindStringSubmatch(out)
+		if state == nil || state[1] == "running" {
+			return 0, errors.New("loaded launchd process identity could not be established")
+		}
+		return 0, nil
+	}
+	n, err := strconv.Atoi(pid[1])
+	if err != nil || n <= 0 {
+		return 0, errors.New("loaded launchd process identity could not be established")
+	}
+	return n, nil
+}
+
+func sameAgentPath(a, b string) bool {
+	if !filepath.IsAbs(a) || !filepath.IsAbs(b) {
+		return false
+	}
+	resolve := func(path string) string {
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			return resolved
+		}
+		return filepath.Clean(path)
+	}
+	return resolve(a) == resolve(b)
 }

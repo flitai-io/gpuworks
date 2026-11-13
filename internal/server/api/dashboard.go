@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -29,31 +30,79 @@ func (a *apiHandlers) dashboardSummary(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	rows, err := newListLookup(a.d.Store, a.d.Preparation, deps, instances)
+	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, instances)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	out := summarizeNodes(nodes, strings.TrimSpace(r.URL.Query().Get("label_key")))
 	out.CurrentMetrics = a.dashboardCurrentMetrics(nodes)
+	out.Cards = a.dashboardCards()
+	out.Tasks = a.dashboardTasks(r)
 	out.Deployments.Total = len(deps)
 	for i := range deps {
 		d := &deps[i]
 		if d.Sleepable {
 			out.Deployments.Sleepable++
 		}
-		// A sleeping or asleep deployment serves nothing, so it is not counted
-		// as running; it falls into neither group and reads as another state,
-		// as a stopped one does.
-		insts := rows.instances(d.ID)
-		switch effectiveDeploymentState(d, deploymentRuntimeState(rows, d, insts, recordedModelProgress(rows, d)), deploymentFactsFor(rows, d, insts)) {
+		// A sleeping or asleep deployment serves nothing, so it is counted as
+		// sleeping, not running; whatever no bucket names is Other.
+		insts := rows.Instances(d.ID)
+		switch effectiveDeploymentState(d, deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d)), deploymentFactsFor(rows, d, insts)) {
 		case "running":
 			out.Deployments.Running++
 		case "pulling", "starting":
 			out.Deployments.Warming++
+		case deploymentStateSleeping, deploymentStateAsleep:
+			out.Deployments.Sleeping++
+		case "pending":
+			out.Deployments.Pending++
+		default:
+			out.Deployments.Other++
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// dashboardCards is the scheduling overview's fleet summary, read from its
+// cache so a dashboard poll does not rebuild the overview; nil when it cannot
+// be built, which the dashboard shows as unknown rather than as no cards.
+func (a *apiHandlers) dashboardCards() *dto.DashboardCards {
+	snap, err := a.currentOverview()
+	if err != nil {
+		if a.d.Log != nil {
+			a.d.Log.Warn("dashboard card summary unavailable", "error", err)
+		}
+		return nil
+	}
+	return &dto.DashboardCards{OverviewSummary: snap.summary, Allocated: snap.summary.Awake + snap.summary.Asleep}
+}
+
+// dashboardTasks counts the batches the caller may see by status, and the
+// evaluation runs in flight, each in one count query rather than a list read.
+func (a *apiHandlers) dashboardTasks(r *http.Request) dto.DashboardTasks {
+	var out dto.DashboardTasks
+	if counter, ok := a.d.Batches.(BatchCounter); ok {
+		counts, err := counter.CountByStatus(a.batchCaller(r), []string{"validating", "in_progress", "finalizing"})
+		if err == nil {
+			out.Batches = &dto.DashboardBatches{Active: counts["in_progress"] + counts["finalizing"], Waiting: counts["validating"]}
+		} else if a.d.Log != nil {
+			a.d.Log.Warn("dashboard batch count unavailable", "error", err)
+		}
+	}
+	if n, err := a.d.Store.CountActiveBenchmarkRuns(); err == nil {
+		out.Benchmarks = int(n)
+	} else if a.d.Log != nil {
+		a.d.Log.Warn("dashboard benchmark count unavailable", "error", err)
+	}
+	return out
+}
+
+// BatchCounter is the count side of a BatchService: the batches the caller
+// may see in each of the states, counted without reading them; a state with
+// none is absent. The app's batch console implements it.
+type BatchCounter interface {
+	CountByStatus(c BatchCaller, states []string) (map[string]int, error)
 }
 
 // nodeCapacity is what one node adds to a capacity group.

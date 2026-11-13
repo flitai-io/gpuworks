@@ -68,6 +68,8 @@
 #                                   且 mooncake 在位
 #                 mooncake_load_errors  vLLM 的 MooncakeConnector 把拉取失败的块上报给调度器
 #                                   （patches/vllm_dtk/001），且 mooncake 在位
+#                 mooncake_hybrid   GDN/Mamba 混合模型的 vllm-mooncake PD 补丁在位
+#                                   （patches/vllm_dtk/002、003、004），且 mooncake_load_errors 成立
 #   base_requires_clean_history
 #               true = 该 base 的 image history 里有内网凭据，必须先用
 #               prepare-base.sh 在 base 这一层压掉 history，再以干净 base 构建；
@@ -608,7 +610,8 @@ items:
     args:
       VLLM_OMNI_VERSION: ""
       MOONCAKE: ""
-    requires: [engine, hcu_patches, overlays]
+      DIFFUSERS_VERSION: "0.38.0"
+    requires: [engine, hcu_patches, overlays, diffusion]
     note: >-
       K100 等海光 DCU 的 vllm 档。**不含 omni**：厂商原件的 pip 清单是 vllm 0.18.1、
       vllm-hcu 0.18.1、transformers 5.5.0、flash-attn、flash_mla，没有 vllm-omni；
@@ -617,7 +620,7 @@ items:
       callable runtime 不烤进镜像：推理目录用 sha256 钉住同一资产并只读挂到同一路径。
 
   - id: dtk26.04-vllm0.21.0
-    revision: r2
+    revision: r4
     backend: dtk
     engine: vllm
     platforms: [linux/amd64]
@@ -630,11 +633,18 @@ items:
       VLLM_OMNI_VERSION: ""
       MOONCAKE: ""
       DTK_VLLM_PATCHES: "1"
-    requires: [engine, hcu_patches, overlays, mooncake, mooncake_load_errors]
+    requires: [engine, hcu_patches, overlays, mooncake, mooncake_load_errors, mooncake_hybrid]
     note: >-
       K100 等海光 DCU 的 vllm 0.21 档。r2 起应用 patches/vllm_dtk/001：base 自带海光构建的
       mooncake-transfer-engine 0.3.10 与 vLLM 的 MooncakeConnector（PD 模式 vllm-mooncake 用它），但连接器
-      把拉取失败的请求当作已收到 KV，decode 照样回答、kv_load_failure_policy 不生效；补丁让失败的块上报给调度器。**不含 omni**：厂商原件（ubuntu22.04 / py3.10）的 pip 清单是
+      把拉取失败的请求当作已收到 KV，decode 照样回答、kv_load_failure_policy 不生效；补丁让失败的块上报给调度器。r3 起再应用 002、003：Qwen3.5/3.6/3.8 这类 GDN 混合模型做 PD
+      时，连接器原样只认全注意力（Mamba 层注册即断言失败、强制 HND 布局让混合模型算错），调度器遇到
+      多 KV 组的拉取失败直接让 EngineCore 崩；补丁让同 TP、PP=1 的混合模型按整页传 KV、prefill 只算
+      N-1、失败按策略处理（K100 实测 Qwen3.5-0.8B 与 hygon/Qwen3.8-27B-Channel-INT8-w8a8）。混合模型须带
+      `--no-disable-hybrid-kv-cache-manager`，平台对 vllm-mooncake 的混合模型自动加。r4 起再应用 004：
+      混合模型新分配的块要清零，调度器把块号随该步输出交给 worker 发清零 kernel，而 decode 在同一步发起远端
+      KV 拉取，二者无序，清零晚于写入时抹掉收到的 KV/状态（BW 实测把清零延后时 20/20 次输出错）；004 不清零
+      异步加载要写入的块（上游 vLLM 后来的 `_skip_zero_block_ids` 同理）。**不含 omni**：厂商原件（ubuntu22.04 / py3.10）的 pip 清单是
       vllm 0.21.0、vllm-hcu 0.21.0（vllm 平台插件）、transformers 5.5.0、torch 2.10.0（dtk2604），
       没有 vllm-omni；海光的 omni 负载仍走厂商 custom:* 系列镜像。
       内置 vllm-hcu-apply-patches（厂商 base 构建时已执行过一次，可重复执行；推理目录的

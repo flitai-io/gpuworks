@@ -2,9 +2,10 @@ package controller
 
 import (
 	"context"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"testing"
 )
 
 func TestDeletingServiceWithdrawsOnlyItsUnneededDownload(t *testing.T) {

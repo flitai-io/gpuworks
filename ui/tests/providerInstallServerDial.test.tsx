@@ -183,7 +183,7 @@ test("a RunPod pod without the platform key is restarted only after the operator
     </I18nextProvider>,
   );
   fireEvent.click(screen.getByRole("button", { name: /^(loading)?Install$/ }));
-  await screen.findByText(/started before the platform key was added to the RunPod account/);
+  await screen.findByText(/started before the GPUWorks platform key was added to the RunPod account/);
   fireEvent.click(screen.getByRole("button", { name: "Confirm and restart the pod" }));
   await waitFor(() => assert.equal(requests.length, 2));
   assert.equal(requests[0].connect_mode, "agent_dial");

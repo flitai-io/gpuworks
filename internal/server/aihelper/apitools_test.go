@@ -176,16 +176,40 @@ func TestCallAPIAppliesJQ(t *testing.T) {
 	}
 }
 
-func TestCallAPIJQErrorAnswersTheOutline(t *testing.T) {
-	got := callErr(t, apiEnv{newFakeAPI()}, "call_api", `{"path":"/api/v1/nodes","jq":".items["}`)
-	want := `jq: unexpected EOF. The answer's structure: {"items":[{"created_at":"string","gpu_count":"number","gpus":["{…}","×2"],"has_ssh_credential":"bool","hostname":"string","labels":"{…}","last_seen_at":"string","name":"string","scheduling":"string","state":"string","uuid":"string"},"×2"],"total":"number"}`
-	if got != want {
-		t.Fatalf("got  %s\nwant %s", got, want)
+func TestCallAPIJQFailureReturnsTheBodyAndTheStructure(t *testing.T) {
+	env := apiEnv{newFakeAPI()}
+	outline := `The answer's structure: {"items":[{"created_at":"string","gpu_count":"number","gpus":["{…}","×2"],"has_ssh_credential":"bool","hostname":"string","labels":"{…}","last_seen_at":"string","name":"string","scheduling":"string","state":"string","uuid":"string"},"×2"],"total":"number"}`
+	for _, jq := range []string{".items[", ".total | keys"} {
+		out := mustCall(t, env, "call_api", `{"path":"/api/v1/nodes","jq":"`+jq+`"}`)
+		if !strings.Contains(out, `"name":"gpu-a"`) || !strings.Contains(out, "filter did not apply") || !strings.Contains(out, outline) || strings.Contains(out, "jq:") {
+			t.Fatalf("jq %s => %s", jq, out)
+		}
 	}
-	// A runtime error is reported the same way.
-	got = callErr(t, apiEnv{newFakeAPI()}, "call_api", `{"path":"/api/v1/nodes","jq":".total | keys"}`)
-	if !strings.HasPrefix(got, "jq: ") || !strings.HasSuffix(got, `The answer's structure: `+want[strings.Index(want, "{"):]) {
-		t.Fatalf("runtime jq error = %q", got)
+	if !strings.Contains(callAPITool().Description, "`.items[].points[-1][1]`") || !strings.Contains(callAPITool().Description, "no items") {
+		t.Fatal("call_api no longer shows the single-object and metric-point filters")
+	}
+}
+
+// The list filter from the tool's own examples, pointed at one node, does not
+// match that body. The read still succeeded: the step must carry the node,
+// and must not be a tool error a caller can classify by the text "jq:".
+func TestCallAPIJQMismatchReturnsTheBody(t *testing.T) {
+	env := apiEnv{newFakeAPI()}
+	args := `{"path":"/api/v1/nodes/` + uuidA + `","jq":".items[] | {name, state}"}`
+	out := mustCall(t, env, "call_api", args)
+	if !strings.Contains(out, "gpu-a") || !strings.Contains(out, "cannot iterate over: null") || !strings.Contains(out, "The answer's structure:") {
+		t.Fatalf("mismatch = %s", out)
+	}
+	if strings.Contains(out, "jq:") {
+		t.Fatalf("mismatch is still tagged jq: %s", out)
+	}
+	tool, ok := LookupTool("call_api")
+	if !ok {
+		t.Fatal("no call_api")
+	}
+	_, errText := tool.Run(t.Context(), env, json.RawMessage(args))
+	if errText != "" {
+		t.Fatalf("step error = %q", errText)
 	}
 }
 

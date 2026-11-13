@@ -80,14 +80,15 @@ class LanguageMenu(unittest.TestCase):
                     # reproduces the user gesture, independent of tooltip type.
                     page.wait_for_timeout(400)
                     trigger.click()
-                item = page.get_by_role("menuitem", name=option, exact=True)
+                item = page.get_by_role("menuitemradio", name=option, exact=True)
                 expect(item).to_be_visible()
                 if directory := os.environ.get("LANGUAGE_SCREENSHOTS"):
                     Path(directory).mkdir(parents=True, exist_ok=True)
                     page.screenshot(path=str(Path(directory) / f"{'header' if header else 'login'}-{'keyboard' if keyboard else 'pointer'}-{language}.png"))
                 if keyboard:
-                    page.keyboard.press("Tab")
-                    expect(page.get_by_role("menuitem", name="English", exact=True)).to_be_focused()
+                    # Opening from the keyboard moves focus straight onto the
+                    # first item (Zeron/Base UI menu button; antd needed a Tab).
+                    expect(page.get_by_role("menuitemradio", name="English", exact=True)).to_be_focused()
                     if option == "简体中文":
                         page.keyboard.press("ArrowDown")
                     expect(item).to_be_focused()

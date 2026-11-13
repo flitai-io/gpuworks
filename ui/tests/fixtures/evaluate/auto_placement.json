@@ -1,5 +1,73 @@
 {
+  "startup_estimate": {
+    "weight_bytes": 17179869184,
+    "method": "weight_reference",
+    "estimated_seconds": 332,
+    "reference_mib_per_sec": 512,
+    "initialization_seconds": 300
+  },
+  "start_timeout_sec": 1800,
+  "start_timeout_source": "cluster",
+  "engine_start_timeout_sec": 1770,
   "schema_version": 1,
+  "diagnostics": {
+    "checks": [
+      {
+        "id": "model-record:1:1:1",
+        "status": "unknown",
+        "message": {
+          "code": "MODEL_SOURCE_UNAVAILABLE",
+          "params": {
+            "action": "acquire",
+            "model": "Acme/Deploy-FP8",
+            "model_id": 1,
+            "node": "fixture-node",
+            "node_id": 1,
+            "node_uuid": "fixture-node",
+            "observer": "control_plane",
+            "reason": "not_on_node",
+            "storage": "default",
+            "storage_id": 1
+          },
+          "message": "No complete model copy is recorded on this node"
+        }
+      },
+      {
+        "id": "model-source:1:1:1",
+        "status": "unknown",
+        "message": {
+          "code": "MODEL_SOURCE_UNAVAILABLE",
+          "params": {
+            "action": "acquire",
+            "model": "Acme/Deploy-FP8",
+            "model_id": 1,
+            "node": "fixture-node",
+            "node_id": 1,
+            "node_uuid": "fixture-node",
+            "observer": "control_plane",
+            "reason": "metadata_not_checked",
+            "storage": "default",
+            "storage_id": 1
+          },
+          "message": "Public metadata has not been checked by the management node"
+        }
+      },
+      {
+        "id": "model-metadata:1:0:0",
+        "status": "unknown",
+        "message": {
+          "code": "MODEL_SOURCE_UNAVAILABLE",
+          "params": {
+            "model": "Acme/Deploy-FP8",
+            "model_id": 1,
+            "observer": "management_node",
+            "reason": "metadata_not_checked"
+          },
+          "message": "Public metadata has not been checked by the management node"
+        }
+      }
+    ]
+  },
   "replicas": 1,
   "plan_scope": "per_replica",
   "ok": true,
@@ -41,6 +109,7 @@
     "HF_HUB_OFFLINE": "1",
     "NCCL_SOCKET_IFNAME": "lo",
     "TRANSFORMERS_OFFLINE": "1",
+    "VLLM_ENGINE_READY_TIMEOUT_S": "1770",
     "VLLM_HOST_IP": "127.0.0.1"
   },
   "env_layers": {
@@ -49,6 +118,7 @@
       "HF_HUB_OFFLINE": "1",
       "NCCL_SOCKET_IFNAME": "lo",
       "TRANSFORMERS_OFFLINE": "1",
+      "VLLM_ENGINE_READY_TIMEOUT_S": "1770",
       "VLLM_HOST_IP": "127.0.0.1"
     }
   },
@@ -100,6 +170,7 @@
         "HF_HUB_OFFLINE": "1",
         "NCCL_SOCKET_IFNAME": "lo",
         "TRANSFORMERS_OFFLINE": "1",
+        "VLLM_ENGINE_READY_TIMEOUT_S": "1770",
         "VLLM_HOST_IP": "127.0.0.1"
       },
       "command_mode": "engine",
@@ -111,6 +182,7 @@
           "HF_HUB_OFFLINE": "1",
           "NCCL_SOCKET_IFNAME": "lo",
           "TRANSFORMERS_OFFLINE": "1",
+          "VLLM_ENGINE_READY_TIMEOUT_S": "1770",
           "VLLM_HOST_IP": "127.0.0.1"
         }
       }

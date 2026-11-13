@@ -287,8 +287,13 @@ func newHarness(t *testing.T, dir string) *harness {
 		// The installer runs as an ordinary operator holding a sudo ticket. A
 		// fake 0 here would send writes straight to /etc instead of through the
 		// runner the test observes.
-		Euid:           func() int { return 1000 },
-		LookupUser:     func(name string) bool { return h.users[name] },
+		Euid:       func() int { return 1000 },
+		LookupUser: func(name string) bool { return h.users[name] },
+		// The fixture tree lives under the test's 0700 temporary directory,
+		// which only the account running the suite can enter.
+		LookupAccount: func(string) (Account, error) {
+			return Account{UID: strconv.Itoa(os.Getuid()), GroupIDs: []string{strconv.Itoa(os.Getgid())}}, nil
+		},
 		LookupGroup:    credentialGroupFixture,
 		HasBinary:      func(name string) bool { return h.binaries[name] },
 		SystemdRunning: func() bool { return h.systemd },

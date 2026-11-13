@@ -1,6 +1,6 @@
 import type { TimelineDeployment, TimelineSegment, TimelineState, TimelineSummary, TimelineSummaryDeployment } from "../../schedulingApi";
 import type { YieldPolicyName } from "../../yieldPolicyApi";
-import { colors } from "../../theme/tokens";
+import { schedulingColors } from "./palette";
 
 // Geometry of the residency timeline. Every x is a position on a track that is
 // CHART_WIDTH units wide and spans the window exactly, so a block's width is
@@ -101,10 +101,10 @@ export function tickLabel(ms: number, span: Span): string {
 
 /** Fill of each state, from the theme's chart colours. */
 export const stateColor: Record<TimelineState, string> = {
-  awake: colors.chartPrimary,
-  asleep: colors.chartQuaternary,
-  switching: colors.chartSecondary,
-  starting: colors.chartTeal,
+  awake: schedulingColors.serving,
+  asleep: schedulingColors.sleeping,
+  switching: schedulingColors.switching,
+  starting: schedulingColors.starting,
 };
 
 export const stateOrder: TimelineState[] = ["awake", "asleep", "switching", "starting"];
@@ -151,4 +151,31 @@ export function lanesOf(segments: TimelineSegment[], stats: TimelineDeployment[]
   }
   for (const segment of segments) laneOf(segment.deployment_id, segment.deployment).segments.push(segment);
   return [...lanes.values()];
+}
+
+export function cardIntervals(segments: TimelineSegment[], span: Span) {
+  const edges = new Map<number, { start: TimelineSegment[]; end: TimelineSegment[] }>();
+  const edge = (time: number) => {
+    const value = edges.get(time) ?? { start: [], end: [] };
+    edges.set(time, value);
+    return value;
+  };
+  for (const segment of segments) {
+    const from = Math.max(span.fromMs, Date.parse(segment.from));
+    const to = Math.min(span.toMs, Date.parse(segment.to));
+    if (!(from < to)) continue;
+    edge(from).start.push(segment);
+    edge(to).end.push(segment);
+  }
+  const priority = { awake: 0, switching: 1, starting: 2, asleep: 3 };
+  const times = [...edges.keys()].sort((a, b) => a - b);
+  const active = new Set<TimelineSegment>();
+  return times.flatMap((from, index) => {
+    const { start, end } = edges.get(from)!;
+    for (const s of end) active.delete(s);
+    for (const s of start) active.add(s);
+    if (!active.size || index + 1 === times.length) return [];
+    const residents = [...active].sort((a, b) => priority[a.state] - priority[b.state] || a.deployment_id - b.deployment_id);
+    return [{ from, to: times[index + 1], residents }];
+  });
 }

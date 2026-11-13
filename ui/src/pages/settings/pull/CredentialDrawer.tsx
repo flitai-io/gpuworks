@@ -2,12 +2,20 @@ import { useState } from "react";
 import { Alert, Button, Drawer, Form, Input, Radio, Space, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, type Credential } from "../../../api";
+import { OutboundHostAccess, useOutboundHostAccess } from "../../../components/OutboundHostAccess";
 import { useLoginTests } from "./loginTest";
 import { pullErrorField, pullErrorText } from "./pullFormat";
 
 /** isSiteToken: a credential without a user name is a model site's token. */
 export function isSiteToken(credential: { username: string }): boolean {
   return credential.username === "";
+}
+
+/** Match the stored credential normalization and the registry login API alias. */
+export function credentialLoginHost(host: string, site: boolean): string {
+  const entered = host.trim().toLowerCase().replace(/^https:\/\//, "").replace(/^http:\/\//, "").replace(/\/$/, "");
+  const normalized = ["index.docker.io", "registry-1.docker.io", "registry.hub.docker.com"].includes(entered) ? "docker.io" : entered;
+  return !site && normalized === "docker.io" ? "registry-1.docker.io" : normalized;
 }
 
 type CredentialKind = "registry" | "site";
@@ -35,6 +43,8 @@ export default function CredentialDrawer({
   const [hadSecret, setHadSecret] = useState(credential?.has_secret ?? false);
   const [kind, setKind] = useState<CredentialKind>(credential && isSiteToken(credential) ? "site" : "registry");
   const [host, setHost] = useState(credential?.host ?? "");
+  const loginHost = credentialLoginHost(host, kind === "site");
+  const outboundAccess = useOutboundHostAccess([loginHost]);
   const [username, setUsername] = useState(credential?.username ?? "");
   const [secret, setSecret] = useState("");
   const [revealed, setRevealed] = useState(false);
@@ -53,6 +63,7 @@ export default function CredentialDrawer({
     }
     const body = { host: host.trim(), username: kind === "site" ? "" : username.trim(), secret };
     try {
+      await outboundAccess.authorize();
       const saved = savedId != null ? await api.updateCredential(savedId, body) : await api.createCredential(body);
       setSavedId(saved.id);
       setHadSecret(saved.has_secret);
@@ -134,6 +145,7 @@ export default function CredentialDrawer({
             onPressEnter={() => void save()}
           />
         </Form.Item>
+        <OutboundHostAccess access={outboundAccess} />
         {!site && (
           <Form.Item label={t("pull.credentials.username")} htmlFor="pull-credential-username" validateStatus={fieldStatus("username")} help={fieldHelp("username")}>
             <Input

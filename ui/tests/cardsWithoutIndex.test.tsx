@@ -84,7 +84,7 @@ test("the GPU list keys cards without an index apart, never says GPU -1, and ope
     facets: { nodes: [{ uuid: "n1", name: "gpu-a" }], models: [], vendors: ["nvidia"] },
   } as never);
   render(<I18nextProvider i18n={i18n}><MemoryRouter><GPUPage /></MemoryRouter></I18nextProvider>);
-  await waitFor(() => assert.equal(document.querySelectorAll(".ant-table-tbody tr.ant-table-row").length, 4));
+  await waitFor(() => assert.equal(screen.getAllByRole("row").slice(1).length, 4));
 
   assert.equal(screen.queryByText(/GPU -1/), null, "a card with no device number is not called GPU -1");
   assert.ok(screen.getByText("0000:1b:00.0"), "named by its PCI address instead");
@@ -95,7 +95,7 @@ test("the GPU list keys cards without an index apart, never says GPU -1, and ope
   // Each row says why its card takes no work, beside the verdict: these
   // cards have no detail page, so the row is the only place to say it.
   const reasonOf = (bdf: string) => {
-    const row = [...document.querySelectorAll<HTMLElement>(".ant-table-tbody tr.ant-table-row")].find((r) => r.textContent?.includes(bdf))!;
+    const row = [...screen.getAllByRole("row").slice(1)].find((r) => r.textContent?.includes(bdf))!;
     return row.textContent ?? "";
   };
   assert.ok(reasonOf("0000:1b:00.0").includes("Passed through"), "the passed-through card says so in its row");
@@ -103,7 +103,7 @@ test("the GPU list keys cards without an index apart, never says GPU -1, and ope
   assert.ok(reasonOf("GPU 1").includes("In use outside the platform"), "the card held outside the platform says so in its row");
 
   // A card the driver never answered for has no detail drawer and no charts.
-  const rows = [...document.querySelectorAll<HTMLElement>(".ant-table-tbody tr.ant-table-row")];
+  const rows = [...screen.getAllByRole("row").slice(1)];
   const bare = rows.filter((row) => row.textContent?.includes("0000:1b:00.0") || row.textContent?.includes("0000:1a:00.0"));
   assert.equal(bare.length, 2);
   for (const row of bare) {
@@ -115,7 +115,7 @@ test("the GPU list keys cards without an index apart, never says GPU -1, and ope
   const numbered = rows.find((row) => row.textContent?.includes("GPU 0"))!;
   assert.ok(numbered.classList.contains("gpu-clickable-row"));
   fireEvent.click(numbered);
-  await waitFor(() => assert.ok(document.querySelector(".gpu-detail-drawer .ant-drawer-title")?.textContent?.includes("GPU 0")));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog", { name: /GPU 0/ })));
 });
 
 test("the node's GPU list keys cards apart, reads no metrics for them, and tags them like the card table", async () => {
@@ -146,8 +146,8 @@ test("the deploy GPU select greys out cards that cannot be picked and says why",
   const node = { uuid: "n1", hostname: "gpu-a", state: "online", gpu_count: 2, gpus } as unknown as NodeT;
   render(
     <I18nextProvider i18n={i18n}>
-      <Form layout="vertical" initialValues={{ node_selection_mode: "auto", nnodes: 1 }}>
-        <DeployResourceStep selectedNode={node} result={null} />
+      <Form layout="vertical" initialValues={{ node_selection_mode: "manual", nnodes: 1 }}>
+        <DeployResourceStep selectedNode={node} result={{ gpu_candidates: { node_uuid: node.uuid, items: [{ index: 0, available: true }, { index: 1, available: false, reason: { code: "gpus_held_outside_platform" } }] } } as import("../src/api.ts").EvaluateResponse} />
       </Form>
     </I18nextProvider>,
   );

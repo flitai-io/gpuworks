@@ -102,11 +102,23 @@ def _drawer_focus(dialog):
     }""")
 
 
+
+def _drawer_focusables(dialog):
+    """How many tab stops the drawer itself publishes, for sizing a Tab cycle."""
+    return dialog.evaluate("""(d) => d.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), '
+        + 'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])').length""")
+
 def _cycle_drawer(page, dialog, key):
     """One rc-drawer sentinel is part of the trap. The page behind it is not."""
     seen = []
     bridges = 0
-    for _ in range(48):
+    # Enough presses to come back to the first control however many the drawer
+    # holds. A fixed 48 stopped being enough once the replica editor grew: the
+    # cycle is still the assertion, only the budget is derived, and a drawer whose
+    # trap is genuinely broken still fails because the first control never repeats.
+    budget = max(48, _drawer_focusables(dialog) * 2 + 8)
+    for _ in range(budget):
         page.keyboard.press(key)
         focus = _drawer_focus(dialog)
         check(focus["inDrawer"], f"{key} reached background content: {focus}")
@@ -122,6 +134,46 @@ def _cycle_drawer(page, dialog, key):
             seen.append(focus["index"])
     check(False, f"{key} did not cycle inside the drawer; visited {seen}")
     return 0
+
+
+def drawer_regions(dialog):
+    """The drawer's header, title, body and header actions as viewport boxes."""
+    return dialog.evaluate("""element => {
+        const rect = (node) => {
+            if (!node) return null;
+            const box = node.getBoundingClientRect();
+            return {top: Math.round(box.top), left: Math.round(box.left),
+                    right: Math.round(box.right), bottom: Math.round(box.bottom)};
+        };
+        return {
+            box: rect(element),
+            header: rect(element.querySelector('.ant-drawer-header')),
+            title: rect(element.querySelector('.ant-drawer-title')),
+            body: rect(element.querySelector('.ant-drawer-body')),
+            extra: rect(element.querySelector('.ant-drawer-extra')),
+        };
+    }""")
+
+
+def check_drawer_stacked(regions, viewport):
+    """12.2: the drawer's parts stay inside the viewport and do not overlap each other."""
+    width, height = viewport["width"], viewport["height"]
+    for key in ("header", "title", "body"):
+        region = regions.get(key)
+        check(region is not None, f"drawer has no {key} region: {regions}")
+        check(region["top"] >= 0 and region["left"] >= 0
+              and region["right"] <= width and region["bottom"] <= height,
+              f"drawer {key} leaves the viewport: {region}")
+    check(regions["body"]["top"] >= regions["header"]["bottom"] - 1,
+          f"drawer body overlaps its header: {regions}")
+    check(regions["title"]["bottom"] <= regions["header"]["bottom"] + 1,
+          f"drawer title spills out of its header: {regions}")
+    extra = regions.get("extra")
+    if extra is not None:
+        check(extra["right"] <= width and extra["top"] >= 0,
+              f"drawer actions leave the viewport: {extra}")
+        check(extra["left"] >= regions["title"]["right"] - 1,
+              f"drawer actions overlap the title: {regions}")
 
 
 def assert_drawer_identity(page, dialog, name, first_step, absent):
@@ -151,9 +203,15 @@ def assert_drawer_identity(page, dialog, name, first_step, absent):
     expect(dialog.locator(".ant-modal-close")).to_have_count(0)
     expect(first_step).to_be_visible()
     expect(absent).to_have_count(0)
+    # 12.2 for a drawer: it has no title/body/footer stack, but its header, body and header
+    # actions still have to fit the viewport without overlapping each other. Measured here so
+    # every drawer opened through this helper gets the same check.
+    regions = drawer_regions(dialog)
+    check_drawer_stacked(regions, page.viewport_size)
     return {"layer": "ui", "drawer_shell": name, "role": "dialog", "component": kind["className"],
             "aria_modal": kind["ariaModal"], "first_step_visible": True, "other_component_count": 0,
-            "viewport": f"{page.viewport_size['width']}x{page.viewport_size['height']}"}
+            "viewport": f"{page.viewport_size['width']}x{page.viewport_size['height']}",
+            "drawer_regions": regions}
 
 
 def assert_yaml_drawer_focus(page, dialog, save, editor):

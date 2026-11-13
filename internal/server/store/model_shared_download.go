@@ -56,3 +56,9 @@ func (s *Store) PrepareSharedModelDownload(ref FileRef, path string, writerID, d
 	s.publishModelFile(row.ID, row.State)
 	return &row, nil
 }
+
+// EventDeploymentComponentDownload: a deployment's create started the one
+// write of a template component into a shared storage (ADR 0062). Params:
+// component, model, bytes, storage, node (the writer), follows_primary (the
+// request named no storage and the storage is the one the primary sits on).
+const EventDeploymentComponentDownload = "DEPLOYMENT_COMPONENT_DOWNLOAD"

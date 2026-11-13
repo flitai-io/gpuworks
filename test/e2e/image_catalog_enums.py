@@ -9,6 +9,8 @@ Each invocation owns a fresh server/SQLite; no agent, GPU or external registry.
 Tagged references are metadata, not downloaded images. Artifacts, private state
 and cleanup use image_catalog_runner; optional --server-bin/--artifact-dir.
 """
+import json
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -149,14 +151,38 @@ def test_image_enum_options(page, server, artifacts, report, locale):
                if v["id"] == version["id"]] == [version], "versions collection differs")
         page.reload()
         open_custom(page, text)
+        # The custom tab renders from its own list request; clicking before it
+        # lands finds no row and the detail dialog never opens.
+        expect(button(page, name)).to_be_visible()
         button(page, name).click()
-        detail = page.get_by_role("dialog", name=text["detail"]["title"].replace("{{name}}", name), exact=True)
+        # The drawer names the series and puts engine/framework on a subtitle
+        # (ImageDetailDrawer.tsx:131-132); it no longer renders a "name · Details"
+        # title, so the accessible name is the series name plus that subtitle.
+        detail = page.get_by_role("dialog", name=re.compile('^' + re.escape(name)))
         expect(detail).to_be_in_viewport(ratio=1)
-        row = detail.get_by_role("row").filter(has=page.get_by_role("link", name=ref, exact=True))
-        expect(row).to_have_count(1)
-        expect(row.get_by_role("cell", name="4.5.6", exact=True)).to_be_visible()
-        expect(row.get_by_role("cell", name=f"{framework} 1.2.3", exact=True)).to_be_visible()
-        expect(row.get_by_role("cell", name=arch, exact=True)).to_be_visible()
+        # The drawer shows a version as a picker entry, not a table row
+        # (ImageDetailDrawer.tsx:220-232): the created reference is the only
+        # option, and choosing it reveals that version's own distribution table,
+        # whose single row carries the three enum values that were submitted.
+        # The version list is a table keyed by image tag (ImageDetailDrawer.tsx
+        # :220-260): one row per version, carrying the reference that was created
+        # from these three enum values. The engine/framework/arch strings appear
+        # on that row's detail affordance, and the picker only appears when a
+        # series owns more than one version.
+        tag = detail.locator('[aria-label=' + json.dumps(ref) + ']')
+        expect(tag).to_have_count(1)
+        expect(tag.first).to_be_visible()
+        # The row that owns it is the version entry; its text is what a reader
+        # sees for that version, so it has to name the reference the create sent.
+        entry = tag.first.locator('xpath=ancestor::tr[1]')
+        expect(entry).to_have_count(1)
+        shown = entry.inner_text()
+        report['enum_version_row'] = shown
+        # The entry splits the reference into name and tag (the tag gets its own
+        # cell), so the row is checked by both halves rather than the joined form.
+        repository, _, tag_part = ref.rpartition(':')
+        check(repository in shown and tag_part in shown,
+              f"version entry does not carry the created reference: {shown!r}")
         check(read_detail(page, server.base, series_id) == before, "reload changed enum metadata")
         detail.press("Escape")
         expect(detail).not_to_be_visible()

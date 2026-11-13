@@ -108,11 +108,33 @@ def exercise_create_dialog(page, create, platform, k, mutations, report):
         "dismissals": ["cancel", "escape", "close", "mask"], "post_requests": 0})
 
 
-def theme_color(locator, property_name, token_name):
+def theme_color_source(token_name, mode="light"):
+    """Resolve a named color to its hex value from the generated theme tokens.
+
+    tokens.ts stopped holding literal hex: each entry of `colors` now names a
+    semantic token in the generated Zeron set (tokens.ts:22-36, e.g.
+    `primary: semantic["brand"]`). Read the mapping, then the value it points at,
+    for the mode the page is actually showing.
+    """
     source = (ROOT / "ui/src/theme/tokens.ts").read_text()
-    match = re.search(rf'^  {re.escape(token_name)}: "(#[0-9a-fA-F]{{6}})"', source, re.M)
-    check(match is not None, f"theme color {token_name} absent")
-    expected = [int(match[1][i:i + 2], 16) for i in (1, 3, 5)] + [255]
+    mapped = re.search(rf'^  {re.escape(token_name)}: semantic\["([^"]+)"\]', source, re.M)
+    if mapped is not None:
+        generated = (ROOT / "ui/src/theme/zeron.generated.ts").read_text()
+        value = re.search(rf'"{re.escape(mapped[1])}": "(#[0-9a-fA-F]{{6}})"',
+                          generated.split(f'"{mode}": {{', 1)[-1], re.M)
+        check(value is not None, f"theme color {token_name} absent from the {mode} generated tokens")
+        return value[1]
+    # A literal hex in tokens.ts still resolves directly.
+    literal = re.search(rf'^  {re.escape(token_name)}: "(#[0-9a-fA-F]{{6}})"', source, re.M)
+    check(literal is not None, f"theme color {token_name} absent")
+    return literal[1]
+
+
+def theme_color(locator, property_name, token_name):
+    mode = locator.page.evaluate(
+        "() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'")
+    hex_value = theme_color_source(token_name, mode)
+    expected = [int(hex_value[i:i + 2], 16) for i in (1, 3, 5)] + [255]
     # Normalize CSS Color serialization without inserting or changing UI DOM.
     locator.page.wait_for_function("""({el, property, expected}) => {
         const ctx = new OffscreenCanvas(1, 1).getContext('2d');
@@ -401,6 +423,49 @@ def test_read_token_create_revoke(page, context, server, artifacts, report, loca
     used = collection(page.request.get(server.base + TOKEN_PATH))[0]
     check(used["id"] == item["id"] and used["last_used_at"] is not None, "successful bearer use was not persisted")
 
+    # 7.7: a platform token has its own lifecycle and is not a management session, so dropping
+    # the browser session must not touch it. The token keeps reading while the console's own
+    # credential stops being presented - the two are separate channels, which is why the
+    # session-revocation half of this item is a CLI action rather than something a browser can
+    # trigger, and no attempt is made to claim it here.
+    # 7.5: the three credential kinds are told apart by what they are, not by what a caller claims.
+    # An inference key is a different family from a platform token: presented as a bearer it is not
+    # treated as a platform token, so it cannot reach the token routes, and it is not a management
+    # session either, so it cannot read management data. The product carries no expiry field on any
+    # of the three, so no expiry control is invented and none is asserted.
+    created_key = page.request.post(server.base + "/api/v1/apikeys", data={"name": resource_name + "-gw"})
+    check(created_key.status in {200, 201}, f"inference key create HTTP {created_key.status}")
+    inference_secret = created_key.json().get("key")
+    check(isinstance(inference_secret, str) and inference_secret.startswith("gw-"),
+          "the inference key does not carry its own prefix")
+    check(not inference_secret.startswith("gwp_"),
+          "an inference key was issued in the platform token family")
+    inference_headers = {"Authorization": "Bearer " + inference_secret}
+    code, refused_read = http(server.base, "GET", "/api/v1/nodes", inference_headers)
+    check(code in {401, 403},
+          f"an inference key read management inventory: {code}")
+    check(refused_read.get("code") != "PLATFORM_TOKEN_NOT_ALLOWED",
+          "an inference key was mistaken for a platform token")
+    code, refused_token_route = http(server.base, "GET", TOKEN_PATH, inference_headers)
+    check(code in {401, 403}, f"an inference key reached the platform token routes: {code}")
+    report["evidence"].append({"layer": "runtime", "credential_families": {
+        "inference_prefix": "gw-", "platform_prefix": "gwp_", "management": "session cookie",
+        "inference_refused_management": True, "inference_not_platform_token": True,
+        "expiry_fields": "none on any of the three"}})
+    prefix = created_key.json()["key"][:12]
+    page.request.delete(server.base + "/api/v1/apikeys/" + prefix)
+
+    page.evaluate("() => { localStorage.clear(); sessionStorage.clear(); }")
+    code, still = http(server.base, "GET", "/api/v1/nodes", copied)
+    check(code == 200 and still == {"items": [], "total": 0},
+          f"a platform token stopped working when the browser session was dropped: {code}")
+    code, untouched = http(server.base, "GET", TOKEN_PATH, copied)
+    check(code == 403 and untouched["code"] == "PLATFORM_TOKEN_NOT_ALLOWED",
+          "the token gained session-only management access after the console session was dropped")
+    report["evidence"].append({"layer": "runtime", "token_survives_session_drop": True,
+        "session_only_still_denied": True,
+        "note": "password change revokes sessions through the store but is reached by the reset CLI, not by a browser route, so no UI path is invented for it"})
+
     revoke = button(row, platform["revoke"])
     revoke.click()
     confirmation = platform["revokeConfirm"].replace("{{name}}", resource_name)
@@ -427,6 +492,20 @@ def test_read_token_create_revoke(page, context, server, artifacts, report, loca
     check(collection(page.request.get(server.base + TOKEN_PATH)) == [], "revoked token still persisted")
     code, denied = http(server.base, "GET", "/api/v1/nodes", copied)
     check(code == 401 and denied["code"] == "AUTHENTICATION_REQUIRED", "revoked token remains authorized")
+    # 7.6: a refusal must refuse without quoting the credential back. The body is read as text so a
+    # secret echoed in any field - or in a debug string - is caught, not only one in a known key.
+    refusal_text = json.dumps(denied)
+    check(copied not in refusal_text, "the 401 body echoed the revoked credential")
+    check(copied[:16] not in refusal_text, "the 401 body echoed the revoked credential's prefix")
+    # A second revoke of the same id must fail cleanly: the row is already gone,
+    # so the answer is 404 and nothing else in the collection moves.
+    again = page.request.delete(server.base + delete_path)
+    again_body = again.json() if again.text() else {}
+    check(again.status == 404 and again_body.get("error") == "not found",
+          "second revoke did not report not-found: HTTP %d %r" % (again.status, again_body))
+    check(collection(page.request.get(server.base + TOKEN_PATH)) == [],
+          "a failed revoke left a token behind")
+    report["revoke_failure"] = {"status": again.status, "error": again_body.get("error")}
     page.reload()
     expect(page.get_by_text(platform["empty"], exact=True)).to_be_visible()
     expect(row).to_have_count(0)
@@ -511,7 +590,17 @@ def main():
             report["status"] = "FAIL_TEST"
         server_log = artifacts.private / "server.log"
         if server_log.exists():
-            (artifacts.directory / "server.log").write_text(artifacts.redact(server_log.read_text()))
+            # 7.6: the log the server wrote is the surface, not the copy that was redacted on the way
+            # out. Reading the original is the only way to know the server did not write a credential
+            # down itself; scanning the sanitised copy would prove nothing about the product.
+            raw_log = server_log.read_text(errors="replace")
+            leaked = [value[:8] + "..." for value in artifacts.secrets
+                      if len(value) >= 16 and value in raw_log]
+            report["server_log_clean"] = not leaked
+            if leaked:
+                report["status"] = "FAIL_TEST"
+                report["server_log_leak"] = {"count": len(leaked), "prefixes": leaked}
+            (artifacts.directory / "server.log").write_text(artifacts.redact(raw_log))
         report["private_state"] = "private/ retains isolated DB/logs; no process kept; remove only this run directory after diagnosis (7 days)"
         artifacts.write_json("report.json", report)
         try:

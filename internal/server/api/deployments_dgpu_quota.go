@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
@@ -106,7 +107,7 @@ func (a *apiHandlers) setDeploymentDGPUQuota(w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := a.checkStoredCanEverFit(r.Context(), &next, reqs); err != nil {
+	if err := a.deployments().CheckStoredCanEverFit(r.Context(), &next, reqs); err != nil {
 		status := http.StatusInternalServerError
 		var refused *messages.ProductError
 		if errors.As(err, &refused) {

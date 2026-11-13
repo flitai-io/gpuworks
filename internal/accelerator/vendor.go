@@ -6,12 +6,13 @@ import "strings"
 // belongs to; it is the key every layer uses to match hardware facts against
 // catalog data, so it must be spelled the same everywhere.
 const (
-	VendorNVIDIA = "nvidia"
-	VendorAMD    = "amd"
-	VendorAscend = "ascend"
-	VendorPPU    = "ppu"
-	VendorHygon  = "hygon"
-	VendorApple  = "apple"
+	VendorNVIDIA    = "nvidia"
+	VendorAMD       = "amd"
+	VendorAscend    = "ascend"
+	VendorPPU       = "ppu"
+	VendorHygon     = "hygon"
+	VendorApple     = "apple"
+	VendorKunlunxin = "kunlunxin"
 )
 
 // FrameworkVendor returns the canonical vendor that owns a framework's
@@ -33,6 +34,8 @@ func FrameworkVendor(framework string) string {
 		return VendorHygon
 	case "hggc":
 		return VendorPPU
+	case "xre":
+		return VendorKunlunxin
 	case "metal":
 		return VendorApple
 	default:
@@ -45,7 +48,7 @@ func FrameworkVendor(framework string) string {
 // table in the product (image catalog metadata, the static hardware catalog,
 // the dtype matrix) must stay within.
 func KnownVendors() []string {
-	return []string{VendorNVIDIA, VendorAMD, VendorAscend, VendorPPU, VendorHygon, VendorApple}
+	return []string{VendorNVIDIA, VendorAMD, VendorAscend, VendorPPU, VendorHygon, VendorApple, VendorKunlunxin}
 }
 
 // NormalizeVendor returns the canonical vendor name used on the wire. Each
@@ -57,6 +60,8 @@ func NormalizeVendor(values ...string) string {
 	for _, value := range values {
 		v := strings.ToLower(strings.TrimSpace(value))
 		switch {
+		case strings.Contains(v, "kunlunxin") || strings.Contains(v, "kunlun") || v == "xre":
+			return VendorKunlunxin
 		case strings.Contains(v, "nvidia") || strings.Contains(v, "cuda"):
 			return VendorNVIDIA
 		case strings.Contains(v, "amd") || strings.Contains(v, "rocm") || strings.Contains(v, "gfx"):
@@ -102,14 +107,14 @@ func NormalizeArch(value string) string {
 }
 
 // IsDomestic reports whether a vendor is a domestic accelerator, the axis that
-// decides which partition backends and native assets apply.
+// groups hardware in the catalog. Partition support is a separate capability.
 //
 // It is deliberately narrower than RequiresVendorCatalogImage: Hygon runs a
-// ROCm-derived stack and is not a domestic partition target, yet it still
+// ROCm-derived stack and is catalogued separately, yet it still
 // cannot inherit a CUDA/ROCm engine default image.
 func IsDomestic(vendor string) bool {
 	vendor = NormalizeVendor(vendor)
-	return vendor == VendorAscend || vendor == VendorPPU
+	return vendor == VendorAscend || vendor == VendorPPU || vendor == VendorKunlunxin
 }
 
 // HasRuntimeAssetBundles reports whether the vendor's partition backend ships
@@ -157,6 +162,8 @@ func VendorBrand(vendor string) string {
 		return "T-Head"
 	case VendorHygon:
 		return "Hygon"
+	case VendorKunlunxin:
+		return "Kunlunxin"
 	case VendorApple:
 		return "Apple"
 	default:

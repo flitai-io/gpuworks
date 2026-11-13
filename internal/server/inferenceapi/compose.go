@@ -1,7 +1,6 @@
 package inferenceapi
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -69,14 +68,4 @@ func EncodeMediaInput(field InputField, mime string, data []byte) (string, error
 		return "", fmt.Errorf("input %s requires a MIME type", field.Name)
 	}
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
-}
-
-func normalizeRawObject(raw json.RawMessage) (map[string]any, error) {
-	var object map[string]any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&object); err != nil {
-		return nil, err
-	}
-	return object, nil
 }

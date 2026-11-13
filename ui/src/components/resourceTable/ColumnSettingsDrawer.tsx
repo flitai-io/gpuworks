@@ -1,8 +1,8 @@
-import { CloseOutlined, HolderOutlined, LockOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Drawer, Typography } from "antd";
-import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { CloseOutlined, LockOutlined } from "@ant-design/icons";
+import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
+import { SortableCollection, type SortableCollectionItem } from "../ui/sortable-collection";
+import { SideDrawer } from "../../ui-kit/SideDrawer";
 import { useTranslation } from "react-i18next";
 import type { ColumnPrefs } from "./columnPrefs";
 
@@ -12,29 +12,11 @@ export interface SettingsColumn {
   role?: "name" | "actions";
 }
 
-function SelectedItem({ column, onRemove }: { column: SettingsColumn; onRemove: () => void }) {
-  const { t } = useTranslation("common");
-  const sortable = useSortable({ id: column.key });
-  return (
-    <div
-      ref={sortable.setNodeRef}
-      className="resource-table-settings-item"
-      style={{ transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }}
-    >
-      <span className="resource-table-settings-handle" {...sortable.attributes} {...sortable.listeners} aria-label={t("resourceTable.dragColumn", { name: column.label })}>
-        <HolderOutlined />
-      </span>
-      <span className="resource-table-settings-label">{column.label}</span>
-      <Button type="text" size="small" icon={<CloseOutlined />} onClick={onRemove} aria-label={t("resourceTable.hideColumn", { name: column.label })} />
-    </div>
-  );
-}
-
 function LockedItem({ column }: { column: SettingsColumn }) {
   return (
-    <div className="resource-table-settings-item resource-table-settings-locked">
-      <span className="resource-table-settings-handle"><LockOutlined /></span>
-      <span className="resource-table-settings-label">{column.label}</span>
+    <div className="flex min-w-0 items-center gap-1.5 px-2 py-2 text-body text-fg-subtle" data-slot="locked-column">
+      <span className="grid size-6 shrink-0 place-items-center"><LockOutlined /></span>
+      <span className="min-w-0 flex-1 truncate font-medium">{column.label}</span>
     </div>
   );
 }
@@ -53,10 +35,6 @@ export default function ColumnSettingsDrawer({ open, columns, prefs, onChange, o
   onClose: () => void;
 }) {
   const { t } = useTranslation("common");
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
   const byKey = new Map(columns.map((column) => [column.key, column]));
   const hidden = new Set(prefs.hidden);
   const shown = prefs.order.filter((key) => !hidden.has(key));
@@ -64,17 +42,20 @@ export default function ColumnSettingsDrawer({ open, columns, prefs, onChange, o
   const trailing = columns.filter((column) => column.role === "actions");
   const setHidden = (key: string, hide: boolean) =>
     onChange({ ...prefs, hidden: hide ? [...prefs.hidden, key] : prefs.hidden.filter((item) => item !== key) });
-  const dragEnd = ({ active, over }: DragEndEvent) => {
-    if (!over || active.id === over.id) return;
-    const from = prefs.order.indexOf(String(active.id));
-    const to = prefs.order.indexOf(String(over.id));
-    if (from < 0 || to < 0) return;
-    onChange({ ...prefs, order: arrayMove(prefs.order, from, to) });
+  // Zeron's sortable list moves the shown columns, by pointer or keyboard
+  // (Space or Enter picks up, arrows move, Escape cancels). Hidden columns keep
+  // their places in the saved order.
+  const items: SortableCollectionItem[] = shown.map((key) => byKey.get(key)).filter((column): column is SettingsColumn => !!column)
+    .map((column) => ({ id: column.key, title: column.label, removable: false }));
+  const reorder = (next: SortableCollectionItem[]) => {
+    const moved = next.map((item) => item.id);
+    let index = 0;
+    onChange({ ...prefs, order: prefs.order.map((key) => (hidden.has(key) || !byKey.has(key) ? key : moved[index++] ?? key)) });
   };
   const total = columns.length;
   const shownCount = leading.length + shown.length + trailing.length;
   return (
-    <Drawer
+    <SideDrawer
       open={open}
       onClose={onClose}
       width={560}
@@ -84,30 +65,35 @@ export default function ColumnSettingsDrawer({ open, columns, prefs, onChange, o
     >
       <div className="resource-table-settings-panes">
         <section aria-label={t("resourceTable.selected", { count: shownCount })}>
-          <Typography.Text strong className="resource-table-settings-heading">{t("resourceTable.selected", { count: shownCount })}</Typography.Text>
-          <div className="resource-table-settings-selected">
+          <strong className="resource-table-settings-heading">{t("resourceTable.selected", { count: shownCount })}</strong>
+          <div className="flex flex-col gap-1 rounded-lg border border-border-subtle bg-muted/70 p-1.5">
             {leading.map((column) => <LockedItem key={column.key} column={column} />)}
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}>
-              <SortableContext items={shown} strategy={verticalListSortingStrategy}>
-                {shown.map((key) => byKey.get(key)).filter((column): column is SettingsColumn => !!column).map((column) => (
-                  <SelectedItem key={column.key} column={column} onRemove={() => setHidden(column.key, true)} />
-                ))}
-              </SortableContext>
-            </DndContext>
+            {/* Escape while a column is lifted cancels the move in the list; it
+                stops here so the drawer, which closes on Escape, does not close too. */}
+            <div onKeyDown={(event) => {
+              if (event.key === "Escape" && (event.target as HTMLElement).getAttribute("aria-pressed") === "true") event.stopPropagation();
+            }}>
+            <SortableCollection className="border-0 bg-transparent p-0" items={items} onItemsChange={reorder}
+              reorderLabel={(name) => t("resourceTable.dragColumn", { name })}
+              renderActions={(item) => (
+                <Button variant="ghost" size="sm" iconOnly onClick={() => setHidden(item.id, true)}
+                  aria-label={t("resourceTable.hideColumn", { name: String(item.title) })}><CloseOutlined /></Button>
+              )} />
+            </div>
             {trailing.map((column) => <LockedItem key={column.key} column={column} />)}
           </div>
         </section>
         <section aria-label={t("resourceTable.all", { shown: shownCount, total })}>
-          <Typography.Text strong className="resource-table-settings-heading">{t("resourceTable.all", { shown: shownCount, total })}</Typography.Text>
+          <strong className="resource-table-settings-heading">{t("resourceTable.all", { shown: shownCount, total })}</strong>
           <div className="resource-table-settings-all">
-            {leading.map((column) => <Checkbox key={column.key} checked disabled>{column.label}</Checkbox>)}
+            {leading.map((column) => <label key={column.key} className="flex items-center gap-2"><Checkbox checked disabled />{column.label}</label>)}
             {prefs.order.map((key) => byKey.get(key)).filter((column): column is SettingsColumn => !!column).map((column) => (
-              <Checkbox key={column.key} checked={!hidden.has(column.key)} onChange={(event) => setHidden(column.key, !event.target.checked)}>{column.label}</Checkbox>
+              <label key={column.key} className="flex items-center gap-2"><Checkbox checked={!hidden.has(column.key)} onCheckedChange={(checked) => setHidden(column.key, !checked)} />{column.label}</label>
             ))}
-            {trailing.map((column) => <Checkbox key={column.key} checked disabled>{column.label}</Checkbox>)}
+            {trailing.map((column) => <label key={column.key} className="flex items-center gap-2"><Checkbox checked disabled />{column.label}</label>)}
           </div>
         </section>
       </div>
-    </Drawer>
+    </SideDrawer>
   );
 }

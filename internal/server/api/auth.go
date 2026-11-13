@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/server/usagereport"
 )
@@ -40,7 +41,7 @@ func (a *apiHandlers) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req loginRequest
-	if !decodeJSONBody(w, r, &req) || !validateTextField(w, "username", req.Username, maxNameRunes) {
+	if !decodeJSONBody(w, r, &req) || !validateTextField(w, "username", req.Username, deployment.MaxNameRunes) {
 		return
 	}
 	finish, wait := a.loginThrottle.begin(time.Now().UTC(), a.loginClientIP(r), req.Username)
@@ -121,7 +122,7 @@ func (a *apiHandlers) me(w http.ResponseWriter, r *http.Request) {
 	}
 	claims := id.claims
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"id": claims.UserID, "username": claims.Username, "role": claims.Role})
+	writeJSON(w, http.StatusOK, map[string]any{"id": claims.UserID, "username": claims.Username, "role": claims.Role, "password_policy": passwordPolicy()})
 }
 
 // activity reports browser interaction. Passive GET polling and connection

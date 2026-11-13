@@ -16,7 +16,7 @@ afterEach(() => { cleanup(); api.providerInstances = original; });
 const instance: ProviderInstance = {
   external_id: "host-a", name: "Test host", gpu_model: "A100", gpu_count: 1,
   power: "running", price_per_hr: 0, region: "zone-a", public_ip: "", ssh_port: 22,
-  ssh_user: "root", ssh_connections: [], kind: "vm", node_id: 1,
+  ssh_user: "root", ssh_connections: [], kind: "vm", node_id: 1, actions: [],
 };
 
 for (const pricing of [false, true, undefined]) {

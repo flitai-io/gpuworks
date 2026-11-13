@@ -85,19 +85,19 @@ func findTag(t *testing.T, row Repo, name string) Tag {
 
 func TestBrowseDockerHubListsEveryTagAcrossPages(t *testing.T) {
 	fake := &fakeRegistries{handler: func(w http.ResponseWriter, r *http.Request, host string) {
-		if host != "registry.hub.docker.com" || r.URL.Path != "/v2/repositories/vllm/vllm-openai/tags" {
+		if host != "hub.docker.com" || r.URL.Path != "/v2/repositories/vllm/vllm-openai/tags" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("page") == "2" {
-			_, _ = io.WriteString(w, `{"count":4,"next":null,"previous":"https://registry.hub.docker.com/v2/repositories/vllm/vllm-openai/tags?page_size=100","results":[{"name":"v0.11.0","last_updated":"2026-09-01T00:00:00.000000Z","digest":"sha256:c"},{"name":"latest","last_updated":"2026-10-07T00:00:00.000000Z","digest":"sha256:d"}]}`)
+			_, _ = io.WriteString(w, `{"count":4,"next":null,"previous":"https://hub.docker.com/v2/repositories/vllm/vllm-openai/tags?page_size=100","results":[{"name":"v0.11.0","last_updated":"2026-09-01T00:00:00.000000Z","digest":"sha256:c"},{"name":"latest","last_updated":"2026-10-07T00:00:00.000000Z","digest":"sha256:d"}]}`)
 			return
 		}
 		if r.URL.Query().Get("page_size") != "100" {
 			t.Errorf("first page query = %q", r.URL.RawQuery)
 		}
-		_, _ = io.WriteString(w, `{"count":4,"next":"https://registry.hub.docker.com/v2/repositories/vllm/vllm-openai/tags?page=2&page_size=100","previous":null,"results":[{"name":"qwen38","last_updated":"2026-10-05T12:00:00.000000Z","digest":"sha256:a"},{"name":"nightly","last_updated":"2026-10-08T03:00:00.000000Z","digest":"sha256:b"}]}`)
+		_, _ = io.WriteString(w, `{"count":4,"next":"https://hub.docker.com/v2/repositories/vllm/vllm-openai/tags?page=2&page_size=100","previous":null,"results":[{"name":"qwen38","last_updated":"2026-10-05T12:00:00.000000Z","digest":"sha256:a"},{"name":"nightly","last_updated":"2026-10-08T03:00:00.000000Z","digest":"sha256:b"}]}`)
 	}}
 	browser := fake.install(t)
 	row, err := browser.Browse(context.Background(), "vllm/vllm-openai", nil)
@@ -139,7 +139,7 @@ func TestBrowseDockerHubStopsAtPageLimit(t *testing.T) {
 		if page == "" {
 			page = "1"
 		}
-		_, _ = fmt.Fprintf(w, `{"next":"https://registry.hub.docker.com/v2/repositories/acme/huge/tags?page=%s1","results":[{"name":"t%s"}]}`, page, page)
+		_, _ = fmt.Fprintf(w, `{"next":"https://hub.docker.com/v2/repositories/acme/huge/tags?page=%s1","results":[{"name":"t%s"}]}`, page, page)
 	}}
 	browser := fake.install(t)
 	row, err := browser.Browse(context.Background(), "acme/huge", nil)
@@ -334,7 +334,7 @@ func TestCommunityReposOverlayAndValidation(t *testing.T) {
 	for _, row := range repos {
 		names = append(names, row.Repo+"="+row.Registry)
 	}
-	want := "vllm/vllm-openai=docker-hub,vllm/vllm-omni=docker-hub,lmsysorg/sglang=docker-hub,quay.io/ascend/vllm-ascend=quay,quay.io/ascend/sglang=quay,harbor.sourcefind.cn:5443/dcu/admin/base/vllm=oci,registry.example.com/team/runner=oci"
+	want := "vllm/vllm-openai=docker-hub,vllm/vllm-omni=docker-hub,lmsysorg/sglang=docker-hub,quay.io/ascend/vllm-ascend=quay,quay.io/ascend/sglang=quay,harbor.sourcefind.cn:5443/dcu/admin/base/vllm=oci,quay.io/gpuworks/gpuworks-runner=quay,registry.example.com/team/runner=oci"
 	if strings.Join(names, ",") != want {
 		t.Fatalf("repos = %v", names)
 	}
@@ -347,7 +347,7 @@ func TestCommunityReposOverlayAndValidation(t *testing.T) {
 	for _, bad := range []Repo{
 		{Repo: "bad", Engine: "vllm", UpstreamAPI: "file:///etc/passwd"},
 		{Repo: "bad", Engine: "vllm", Registry: "ftp"},
-		{Repo: "bad"},
+		{Repo: ""},
 	} {
 		if err := ValidateRepos([]Repo{bad}); err == nil {
 			t.Fatalf("accepted %+v", bad)
@@ -374,6 +374,10 @@ func TestInferEngineVersionFromCommunityTags(t *testing.T) {
 		want  string
 	}{
 		{value: "v0.9.0", want: "0.9.0"},
+		{value: "cuda13.0-vllm0.29.0-amd64-slot01", want: "0.29.0"},
+		{value: "cann9.0-sglang0.5.15.post1-arm64-diffusion-slot16", want: "0.5.15.post1"},
+		{value: "cuda13.0-vllm-omni0.30.0-r3", want: "0.30.0"},
+		{value: "xre-vllm0.1.dev3-amd64-slot25", want: "0.1.dev3"},
 		{value: "release-0.8.5", want: "0.8.5"},
 		{value: "registry.example/vllm:v0.10", want: "0.10"},
 		{value: "latest", want: ""},
@@ -382,5 +386,16 @@ func TestInferEngineVersionFromCommunityTags(t *testing.T) {
 		if got := InferEngineVersion(tt.value); got != tt.want {
 			t.Errorf("InferEngineVersion(%q) = %q, want %q", tt.value, got, tt.want)
 		}
+	}
+}
+
+func TestMixedRepositoryDoesNotInventAnEngine(t *testing.T) {
+	rows, err := Repos([]Repo{{Repo: "registry.example/team/mixed"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := lookup("registry.example/team/mixed", rows)
+	if row.Engine != "" || row.Framework != "" {
+		t.Fatal("mixed repository received invented engine defaults")
 	}
 }

@@ -51,6 +51,8 @@ After connecting, confirm that the client can list the GPUWorks tools. Then requ
 
 MCP provides the same read-only tools as the console's [AI assistant](use-ai-helper.md): `cluster_overview` (cluster overview), `search_api` / `call_api` (find and read APIs, with jq support), `search_metrics` (metric catalog), `get_gpu_topology` (GPU interconnects), and `compare_with_healthy_replica` (differences between a failed instance and a healthy replica). The data available is the same as what the token owner can see in the console. Credentials are redacted and results are truncated before the data is handed over, just as in the console. MCP provides no write operations, regardless of the token scope.
 
+`get_node_connection_diagnostics` can also read connection diagnostics by node UUID, retaining the existing endpoint's administrator permission. It uses a fixed POST path, so the existing method restriction rejects read-only platform tokens; other GET tools remain available. The tool accepts no custom addresses or SSH parameters and performs no recovery or configuration changes.
+
 A user can have at most 4 tool calls running concurrently. Additional calls return a result asking you to try again later. Every tool call writes an `mcp tool call` entry to the server log, recording the user, token prefix, tool, and duration.
 
 ## Manage Tokens

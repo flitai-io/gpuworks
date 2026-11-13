@@ -180,7 +180,7 @@ func (r L3Runner) Run(ctx context.Context, input L3Input) (L3Result, error) {
 	handle, err := r.Deployer.Create(ctx, input.Deployment)
 	if err != nil {
 		applyL3Error(&result, HarnessStageError{Stage: "deployment_create", Err: err})
-		return result, nil
+		return result, nil //nolint:nilerr // Deployment failure is recorded in the L3 result with its failure stage.
 	}
 	result.DeploymentID = handle.ID
 	if input.KeepDeployment {

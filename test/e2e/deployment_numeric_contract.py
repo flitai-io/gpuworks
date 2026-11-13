@@ -3,8 +3,8 @@
 Source: internal/server/deploy/param_specs.go:162-243 and locales/{en,zh}.json.
 Unstated bounds are intentionally None; InputNumber's default step is 1.
 Only SGLang overrides the utilization default (0.88 instead of 0.9).
-`data_parallel_size` is published but neither quick whitelist nor expert tabs
-render its `parallel` group. Keep that absence explicit rather than dropping it.
+`data_parallel_size` is published and, since the parallel group gained a quick-form
+entry in both engines, now reachable from the quick whitelist as well.
 """
 
 DICTIONARY = [{'key': 'max_model_len',
@@ -333,7 +333,7 @@ QUICK_QUOTA_GIB = 16
 SURFACES = {
     'vllm': {
         'quick-default': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs'),
+            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'data_parallel_size'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'tp', 'pp', 'container-overrides-shm', 'container-overrides-start-timeout'),
             'pd_fields': (),
@@ -344,7 +344,7 @@ SURFACES = {
             'inline_quota': False,
         },
         'quick-partition': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs'),
+            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'data_parallel_size'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'tp', 'pp', 'container-overrides-shm', 'container-overrides-start-timeout', 'vram_limit_gib'),
             'pd_fields': (),
@@ -355,7 +355,7 @@ SURFACES = {
             'inline_quota': True,
         },
         'quick-multi': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs'),
+            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'data_parallel_size'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'tp', 'pp', 'container-overrides-shm', 'container-overrides-start-timeout', 'nnodes'),
             'pd_fields': (),
@@ -399,7 +399,9 @@ SURFACES = {
             'inline_quota': False,
         },
         'quick-tiers': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'kv_offloading_size', 'kv_offload_read_threads', 'kv_offload_write_threads', 'kv_disk_limit_gib'),
+            # The quick form publishes the data-parallel size on every mode, tiers included
+            # (internal/server/deploy/vllm.go:55 and sglang.go:58 list it in the quick whitelist).
+            'numbers': ('data_parallel_size', 'max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'kv_offloading_size', 'kv_offload_read_threads', 'kv_offload_write_threads', 'kv_disk_limit_gib'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'tp', 'pp', 'container-overrides-shm', 'container-overrides-start-timeout'),
             'pd_fields': (),
@@ -456,7 +458,7 @@ SURFACES = {
     },
     'sglang': {
         'quick-default': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs'),
+            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'data_parallel_size'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'tp', 'pp', 'container-overrides-shm', 'container-overrides-start-timeout'),
             'pd_fields': (),
@@ -467,7 +469,7 @@ SURFACES = {
             'inline_quota': False,
         },
         'quick-partition': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs'),
+            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'data_parallel_size'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'tp', 'pp', 'container-overrides-shm', 'container-overrides-start-timeout', 'vram_limit_gib'),
             'pd_fields': (),
@@ -478,7 +480,7 @@ SURFACES = {
             'inline_quota': True,
         },
         'quick-multi': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs'),
+            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'data_parallel_size'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'tp', 'pp', 'container-overrides-shm', 'container-overrides-start-timeout', 'nnodes'),
             'pd_fields': (),
@@ -544,7 +546,7 @@ SURFACES = {
             'inline_quota': False,
         },
         'quick-pd': {
-            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs'),
+            'numbers': ('max_model_len', 'max_num_batched_tokens', 'max_num_seqs', 'data_parallel_size'),
             'sliders': ('gpu_memory_utilization',),
             'static': ('health_check_threshold_sec', 'replicas', 'container-overrides-shm', 'container-overrides-start-timeout'),
             'pd_fields': ('pd_roles_decode_tp', 'pd_roles_decode_pp', 'pd_roles_prefill_tp', 'pd_roles_prefill_pp'),

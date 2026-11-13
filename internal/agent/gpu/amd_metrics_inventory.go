@@ -3,11 +3,12 @@ package gpu
 import (
 	"context"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/accelerator"
-	"gpuworks.ai/gpuworks/internal/proto"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // Only static inventory/KFD pool facts share this short lease. Device identity,

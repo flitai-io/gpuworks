@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -91,15 +92,6 @@ func (s *Store) DeploymentsReadingFiles(storageID uint) (map[uint][]uint, error)
 		out[row.ModelFileID] = append(out[row.ModelFileID], row.DeploymentID)
 	}
 	return out, nil
-}
-
-// liveReadersOfFile lists the deployments with a live instance reading one
-// model file row.
-func liveReadersOfFile(db *gorm.DB, modelFileID uint) ([]uint, error) {
-	var ids []uint
-	err := liveReads(db).Where("instance_model_files.model_file_id = ?", modelFileID).
-		Distinct().Order("instances.deployment_id asc").Pluck("instances.deployment_id", &ids).Error
-	return ids, err
 }
 
 // touchInstanceModelFiles records that an instance started or stopped on its

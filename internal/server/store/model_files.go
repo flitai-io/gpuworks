@@ -250,6 +250,11 @@ func (s *Store) UpdateModelFileStatus(nodeID uint, st proto.ModelFileStatus) err
 	if current.State == proto.MFAbsent && current.Acquisition == proto.ModelAcquireCopy {
 		return nil // withdrawn intent, including a legacy report without an ID
 	}
+	// An owned wait/cancel must not be undone by the retired receiver's stop
+	// report. A verified target completion remains authoritative.
+	if (current.TransferErrorCode == "PEER_RELAY_BUSY" || current.TransferErrorCode == "PEER_TRANSFER_CANCELED") && !proto.ModelFileStateReady(st.State) {
+		return nil
+	}
 	registeredMissing := current.Acquisition == proto.ModelAcquireRegistered &&
 		st.Acquisition == proto.ModelAcquireRegistered && st.State == proto.MFAbsent
 	if proto.ModelFileStateReady(current.State) &&
@@ -266,7 +271,10 @@ func (s *Store) UpdateModelFileStatus(nodeID uint, st proto.ModelFileStatus) err
 		"state":    st.State,
 		"rate_bps": st.RateBytesPerS, "message": st.Message,
 	}
-	if current.RateLimit > 0 && (st.State == proto.MFPresent || st.State == proto.MFFailed || st.State == proto.MFAbsent || st.State == proto.MFDownloadRequired) {
+	if proto.ModelFileStateReady(st.State) {
+		updates["transfer_error_code"] = ""
+	}
+	if (current.RateLimit > 0 || current.State == proto.MFSyncing) && (st.State == proto.MFPresent || st.State == proto.MFFailed || st.State == proto.MFAbsent || st.State == proto.MFDownloadRequired) {
 		updates["last_rate_limit"] = current.RateLimit
 		updates["rate_limit"] = 0
 	}
@@ -296,7 +304,7 @@ func (s *Store) UpdateModelFileStatus(nodeID uint, st proto.ModelFileStatus) err
 	if st.Acquisition != "" {
 		updates["acquisition"] = st.Acquisition
 	}
-	res := s.db.Model(&ModelFile{}).Where("id = ? AND state = ? AND COALESCE(transfer_id, '') = ?", current.ID, current.State, current.TransferID).Updates(updates)
+	res := s.db.Model(&ModelFile{}).Where("id = ? AND state = ? AND COALESCE(transfer_id, '') = ? AND transfer_error_code = ?", current.ID, current.State, current.TransferID, current.TransferErrorCode).Updates(updates)
 	if res.Error == nil && res.RowsAffected > 0 {
 		// A four-times-a-second download tick moves byte counters and nothing
 		// else. Marking it as progress is what stops every such tick from
@@ -313,7 +321,7 @@ func (s *Store) UpdateModelFileStatus(nodeID uint, st proto.ModelFileStatus) err
 }
 
 // BeginModelSync marks a row as receiving a peer transfer.
-func (s *Store) BeginModelSync(ref FileRef, sourceNodeID uint, transferID string, expectedBytes int64) error {
+func (s *Store) BeginModelSync(ref FileRef, sourceNodeID uint, transferID string, expectedBytes int64, rate ...int) error {
 	if transferID == "" {
 		return errors.New("model sync transfer id is required")
 	}
@@ -321,7 +329,13 @@ func (s *Store) BeginModelSync(ref FileRef, sourceNodeID uint, transferID string
 	updates := map[string]any{
 		"state": proto.MFSyncing, "acquisition": proto.ModelAcquirePeer,
 		"transfer_id": transferID, "transfer_source_node_id": sourceNodeID,
-		"downloaded": 0, "transferred_bytes": 0, "rate_bps": 0, "message": "",
+		"downloaded": 0, "transferred_bytes": 0, "rate_bps": 0, "message": "", "transfer_error_code": "",
+	}
+	if len(rate) > 0 {
+		if rate[0] < 0 {
+			return errors.New("model sync rate must be non-negative")
+		}
+		updates["rate_limit"] = rate[0]
 	}
 	if expectedBytes > 0 {
 		updates["size_bytes"] = expectedBytes
@@ -337,7 +351,7 @@ func transferReset(path, state, acquisition string, extra map[string]any) map[st
 	updates := map[string]any{
 		"path": path, "state": state, "acquisition": acquisition,
 		"transfer_id": "", "transfer_source_node_id": 0,
-		"downloaded": 0, "transferred_bytes": 0, "rate_bps": 0, "message": "",
+		"downloaded": 0, "transferred_bytes": 0, "rate_bps": 0, "message": "", "transfer_error_code": "",
 	}
 	for column, value := range extra {
 		updates[column] = value
@@ -383,6 +397,9 @@ func (s *Store) prepareModelFile(ref FileRef, path string, updates map[string]an
 	var mf *ModelFile
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := sharedModelPathConflict(tx, ref, path); err != nil {
+			return err
+		}
+		if err := checkNodeRowAllowed(tx, ref); err != nil {
 			return err
 		}
 		var err error
@@ -442,26 +459,7 @@ func (s *Store) updateRef(ref FileRef, updates map[string]any, reason string) er
 // SetModelSyncDownloadRequired parks an unfinished transfer until the user
 // picks another source.
 func (s *Store) SetModelSyncDownloadRequired(ref FileRef, transferID, message string) error {
-	ref = s.resolveRef(ref)
-	q := refQuery(s.db.Model(&ModelFile{}), ref).
-		Where("state NOT IN ?", []string{proto.MFPresent, proto.MFRegistered, proto.MFDeleting})
-	if transferID != "" {
-		q = q.Where("transfer_id = ?", transferID)
-	}
-	var ids []uint
-	if err := q.Pluck("id", &ids).Error; err != nil || len(ids) == 0 {
-		return err
-	}
-	res := s.db.Model(&ModelFile{}).Where("id IN ? AND state <> ?", ids, proto.MFDeleting).Updates(map[string]any{
-		"state": proto.MFDownloadRequired, "acquisition": proto.ModelAcquirePeer,
-		"rate_bps": 0, "last_rate_limit": gorm.Expr("rate_limit"), "rate_limit": 0, "message": message,
-	})
-	if res.Error == nil && res.RowsAffected > 0 {
-		for _, id := range ids {
-			s.publishModelFile(id, proto.MFDownloadRequired)
-		}
-	}
-	return res.Error
+	return s.SetModelSyncDownloadRequiredCode(ref, transferID, message, "")
 }
 
 // SetModelSyncSource records the user-selected peer for the next sync.

@@ -3,7 +3,7 @@
   "name": "节点 / 真实 agent 离线重连与主机诊断 / 状态回读、同一节点身份、诊断报告",
   "test_file": "test/e2e/node_reconnect_doctor.py",
   "test_function": "test_node_reconnect_doctor",
-  "command": "make test-e2e-node-reconnect-doctor",
+  "command": "python3 -B test/e2e/node_reconnect_doctor.py --locale en",
   "priority": "P1",
   "page_id": "nodes",
   "lane": "local-real-server-agent-webdoctor",

@@ -18,7 +18,7 @@ const assistant = { id: "cloud_assistant", type: "cloud_assistant", label: { en:
 const direct = { id: "direct", type: "direct", label: { en: "Direct", zh: "直连" }, host: "47.0.0.1", port: 22, user: "root", install_supported: true };
 const instance: ProviderInstance = {
   external_id: "i-1", name: "gpu-1", gpu_model: "NVIDIA A10", gpu_count: 1, power: "running", price_per_hr: 0,
-  region: "cn-shanghai", public_ip: "47.0.0.1", ssh_port: 22, ssh_user: "root", ssh_connections: [assistant, direct], kind: "vm", node_id: 0,
+  region: "cn-shanghai", public_ip: "47.0.0.1", ssh_port: 22, ssh_user: "root", ssh_connections: [assistant, direct], kind: "vm", node_id: 0, actions: ["install"],
 };
 
 test("the instance list shows Cloud Assistant as a path without SSH", async () => {

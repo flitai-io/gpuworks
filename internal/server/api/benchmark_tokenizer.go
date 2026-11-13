@@ -143,6 +143,9 @@ func (a *apiHandlers) autoBenchmarkTokenizer(ctx context.Context, req benchmarkT
 	if req.Deployment != nil {
 		if model, err := a.d.Store.GetModel(req.Deployment.ModelID); err == nil {
 			repository = tokenizerRefForModel(model)
+			if declared := a.declaredBenchmarkTokenizer(req.Deployment, model); declared != "" {
+				repository = declared
+			}
 		}
 	}
 	if req.LoadOrigin == "server" {

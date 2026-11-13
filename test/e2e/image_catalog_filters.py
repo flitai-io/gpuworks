@@ -57,6 +57,106 @@ def reset_filter(page, title, options, locale):
 
 # Contract: gpuworks/image-catalog/series-filter-matrix
 # Mainline: API准备各引擎/框架及启用/禁用的自定义系列和社区对照 → UI逐项筛选、同列OR/跨列AND、空交集与重置 → 对照独立GET精确行集合/总数，刷新保留筛选，重进恢复默认；只读筛选不改持久化，不声明镜像运行时。
+def exercise_list_states(page, server, text, common, prefix, all_before, errors, failures, report):
+    """10.1: loading, failure, retry and the recovered row set.
+
+    The list reads the whole GET /images response, so the fetch is what decides
+    every state. Each state is driven through the table's own refresh path rather
+    than a reload, and the recovered set is compared against the independent GET.
+    """
+    list_path = "/api/v1/images"
+    search = text["page"].get("search")
+    states = report.setdefault("list_states_probe", {})
+    table_rows = page.get_by_role("table").get_by_role("button", name=re.compile("^" + re.escape(prefix)))
+
+    # Failure: a 503 on the list read has to surface as an error state, not as an
+    # empty table, and the retry control has to be offered.
+    def refuse(route):
+        route.fulfill(status=503, content_type="application/json", body='{"message":"fixture unavailable"}')
+
+    page.route(re.compile(re.escape(server.base + list_path) + r"(?:\?|$)"), refuse)
+    try:
+        with page.expect_response(lambda r: urlsplit(r.url).path == list_path) as failed:
+            page.reload()
+        check(failed.value.status == 503, f"forced list failure HTTP {failed.value.status}")
+        # Scope the retry to the error Alert: a page-wide button lookup could match
+        # some other Retry and would keep passing even if the Alert lost its action.
+        # The error Alert is the one carrying the failed-to-load message; match on
+        # the role only and then confirm its text, so a slow render is waited for
+        # rather than filtered out.
+        alert = page.get_by_role("alert").first
+        expect(alert).to_be_visible()
+        expect(alert).to_contain_text(text["page"]["loadFailed"])
+        states["error_alert"] = True
+        # antd inserts a space between the two glyphs of a two-character label
+        # (autoInsertSpace), so a Chinese Retry renders as "重 试" while the label
+        # itself is "重试". Comparing the exact text would reject a button that is
+        # correct on screen, and it passed in en only because "Retry" is one word.
+        # The accessible name is compared with that spacing removed, which still
+        # fails if the Alert carries a different action or none at all.
+        retry = alert.locator("button")
+        expect(retry).to_have_count(1)
+        check("".join(retry.inner_text().split()) == "".join(common["actions"]["retry"].split()),
+              "the error Alert's only action is not the retry control")
+        states["retry_offered"] = True
+    finally:
+        page.unroute(re.compile(re.escape(server.base + list_path) + r"(?:\?|$)"), refuse)
+
+    # Retry: now that the route is back, the same control has to recover the set.
+    with page.expect_response(lambda r: urlsplit(r.url).path == list_path and r.request.method == "GET") as again:
+        # antd puts a space between the two glyphs of "重试" (autoInsertSpace), so no
+        # name match finds it in zh: neither exact nor substring. The control is
+        # located as the error Alert's only button and its text is checked against
+        # the label with spacing removed, so a different action still fails.
+        retry_button = page.get_by_role("alert").first.locator("button")
+        expect(retry_button).to_have_count(1)
+        check("".join(retry_button.inner_text().split()) == "".join(common["actions"]["retry"].split()),
+              "the retried control is not the error Alert's retry action")
+        retry_button.click()
+    check(again.value.status == 200, f"retry HTTP {again.value.status}")
+    check(collection(again.value) == all_before, "retry lost rows against the independent GET")
+    # Recovery has to be judged on the source tab that actually holds the fixture:
+    # a reload lands on the system catalog, so switch to custom first.
+    page.get_by_role("tab", name=text["page"]["tab"]["custom"], exact=True).click()
+    expect(table_rows.first).to_be_visible()
+    states["recovered_rows"] = table_rows.count()
+
+    # Loading: hold the read and confirm the table reports its busy state while the
+    # response is outstanding, then release it.
+    held = []
+
+    def hold(route):
+        held.append(route)
+
+    page.route(re.compile(re.escape(server.base + list_path) + r"(?:\?|$)"), hold)
+    try:
+        page.get_by_role("button", name=common["dataTable"]["refresh"], exact=True).click()
+        for _ in range(40):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        check(held, "the list refresh was never intercepted")
+        busy = page.locator(".ant-spin-spinning").count()
+        states["loading_spin"] = busy
+        check(busy > 0, "no loading state during a held list read")
+        with page.expect_response(lambda r: urlsplit(r.url).path == list_path) as released:
+            held[0].continue_()
+    finally:
+        page.unroute(re.compile(re.escape(server.base + list_path) + r"(?:\?|$)"), hold)
+    check(released.value.status == 200, f"released read HTTP {released.value.status}")
+    # The list keeps whichever source tab it was left on, and the fixture rows live
+    # under custom, so go back there before counting them.
+    page.get_by_role("tab", name=text["page"]["tab"]["custom"], exact=True).click()
+    page.wait_for_timeout(500)
+
+    # The failure counts as an expected outcome of this probe.
+    failures[:] = [item for item in failures if item.get("status") != 503]
+    errors[:] = [line for line in errors if "503" not in line]
+    if search:
+        states["search_present"] = True
+    return states
+
+
 def test_image_series_filters(page, server, artifacts, report, locale):
     text = strings(locale)
     common = json.loads((ROOT / f"ui/src/i18n/locales/{locale}/common.json").read_text())
@@ -92,9 +192,15 @@ def test_image_series_filters(page, server, artifacts, report, locale):
     errors, failures, mutations = observe(page)
     reads = []
     page.on("response", lambda r: reads.append(r) if urlsplit(r.url).path == "/api/v1/images" and r.request.method == "GET" else None)
+    # reload() discards the previous document, and Playwright can no longer fetch a
+    # response body that belonged to it ("No resource with given identifier"). Reading
+    # the body inside the expect_response block keeps it while the page that produced
+    # it is still current, so the comparison is made on a body that was actually read
+    # rather than on a handle that has gone stale.
     with page.expect_response(lambda r: urlsplit(r.url).path == "/api/v1/images" and r.request.method == "GET") as initial:
         page.reload()
-    check(collection(initial.value) == all_before, "browser list differs from independent authority")
+        initial_items = collection(initial.value)
+    check(initial_items == all_before, "browser list differs from independent authority")
     page.get_by_role("tab", name=text["page"]["tab"]["custom"], exact=True).click()
     expect(page.get_by_role("tab", name=text["page"]["tab"]["custom"], exact=True)).to_have_attribute("aria-selected", "true")
     rows = page.get_by_role("table").get_by_role("button", name=re.compile("^" + re.escape(prefix)))
@@ -172,6 +278,9 @@ def test_image_series_filters(page, server, artifacts, report, locale):
     report["evidence"].append({"layer": "persistence", "unchanged_series_ids": sorted(details_before), "reload": True})
     check(page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "page horizontal overflow")
     check(not errors and not failures, "browser errors or unexpected HTTP failures")
+    exercise_list_states(page, server, text, common, prefix, all_before, errors, failures, report)
+    report["list_states"] = report.pop("list_states_probe")
+    report["evidence"].append({"layer": "ui", "list_states": report["list_states"]})
     artifacts.write_json("browser-observations.json", {"errors": errors, "failures": failures, "mutations": mutations})
     from metadata_table_checks import exercise as table_pilot
     table_pilot(page, server, artifacts, report, locale, text, engines, frameworks, select_filter, reset_filter)
@@ -185,4 +294,4 @@ if __name__ == "__main__":
         "test/e2e/metadata_table_checks.py", "test/e2e/metadata_table_fixture.py",
         "test/e2e/image_catalog.py", "ui/src/pages/ImagesPage.tsx", "ui/src/pages/images/ImageSeriesTable.tsx",
         "ui/src/pages/images/ImagesPageOverview.tsx", "ui/src/components/resourceTable/ResourceTable.tsx",
-        "ui/src/components/resourceTable/columnPrefs.ts", "ui/src/components/resourceTable/ResizableHeaderCell.tsx"]))
+        "ui/src/components/resourceTable/columnPrefs.ts", "ui/src/components/resourceTable/ColumnSettingsDrawer.tsx"]))

@@ -4,6 +4,7 @@ package selfinstall
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,37 +17,14 @@ import (
 func TestUninstallNohupStopsItsRealProcessBeforeDeletingProgram(t *testing.T) {
 	h := uninstallFixture(t)
 	h.supervisedByNohup()
-	sleepPath, err := exec.LookPath("sleep")
-	if err != nil {
-		t.Fatal(err)
-	}
-	sleepBinary, err := os.ReadFile(sleepPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(h.layout.Binary(), sleepBinary, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(h.layout.Binary(), "60")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("fixture process was not reaped")
-		}
-	})
+	installUninstallProcessHelper(t, h.layout.Binary())
+	cmd := startUninstallProcessHelper(t, h.layout.Binary(), h.layout.Dir)
 	if err := writePID(h.layout.PIDFile(), cmd.Process.Pid); err != nil {
 		t.Fatal(err)
 	}
 	// Allow the kernel and exec.Cmd.Wait to observe the real child exit.
 	h.installer.deps.Sleep = func(_ context.Context, duration time.Duration) { time.Sleep(duration / 10) }
-	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true}, nil)
+	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +44,7 @@ func TestUninstallNohupLeavesReusedPIDRunning(t *testing.T) {
 	if err := writePID(h.layout.PIDFile(), pid); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true}, nil); err != nil {
+	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !processAlive(pid) {
@@ -80,17 +58,8 @@ func TestUninstallRefusesLiveExecutableThroughOtherNames(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			h := uninstallFixture(t)
 			h.supervisedByNohup()
-			sleepPath, err := exec.LookPath("sleep")
-			if err != nil {
-				t.Fatal(err)
-			}
-			binary, err := os.ReadFile(sleepPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(h.layout.Binary(), binary, 0o755); err != nil {
-				t.Fatal(err)
-			}
+			installUninstallProcessHelper(t, h.layout.Binary())
+			var err error
 			program := "./gpuworks"
 			alias := filepath.Join(h.layout.Dir, "other-name")
 			if name == "symlink" {
@@ -105,19 +74,14 @@ func TestUninstallRefusesLiveExecutableThroughOtherNames(t *testing.T) {
 			}
 			// A real process gives the kernel executable identity and ps the
 			// actual argv. There is no PID file or configured listener to help.
-			cmd := exec.Command(program, "60")
-			cmd.Dir = h.layout.Dir
-			if err := cmd.Start(); err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+			cmd := startUninstallProcessHelper(t, program, h.layout.Dir)
 			if name == "unlinked hardlink" {
 				if err := os.Remove(alias); err != nil {
 					t.Fatal(err)
 				}
 			}
 			h.run.output["ps -ww -axo pid=,command="] = childProcessTable(t, cmd.Process.Pid)
-			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil); err == nil {
+			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err == nil {
 				t.Fatal("purge deleted a running executable's installation")
 			}
 			if !processAlive(cmd.Process.Pid) {
@@ -186,4 +150,82 @@ func childProcessTable(t *testing.T, pid int) string {
 		t.Fatalf("ps did not return exactly the live fixture: %q", table)
 	}
 	return strings.TrimSpace(table) + "\n"
+}
+
+// Execute our own binary rather than a renamed system utility: multicall
+// coreutils dispatch by argv[0], so copying sleep as gpuworks can exit at once.
+func installUninstallProcessHelper(t *testing.T, path string) {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := os.Open(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	dst, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, copyErr := io.Copy(dst, src)
+	closeErr := dst.Close()
+	if copyErr != nil {
+		t.Fatal(copyErr)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+}
+
+func TestUninstallProcessHelper(t *testing.T) {
+	if os.Getenv("GPUWORKS_UNINSTALL_PROCESS_HELPER") != "1" {
+		return
+	}
+	_, _ = os.Stdout.Write([]byte("ready\n"))
+	time.Sleep(time.Minute)
+	os.Exit(0)
+}
+
+// Readiness is observed before any uninstall or unlink, and Wait has one
+// owner even when uninstall itself kills the child. Cleanup is scoped to it.
+func startUninstallProcessHelper(t *testing.T, program, dir string) *exec.Cmd {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	cmd := exec.Command(program, "-test.run=^TestUninstallProcessHelper$")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GPUWORKS_UNINSTALL_PROCESS_HELPER=1")
+	cmd.Stdout = w
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("fixture process was not reaped")
+		}
+	})
+	_ = w.Close()
+	if err := r.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	ready := make([]byte, len("ready\n"))
+	if _, err := io.ReadFull(r, ready); err != nil {
+		t.Fatalf("fixture did not become ready: %v", err)
+	}
+	if string(ready) != "ready\n" || !processAlive(cmd.Process.Pid) {
+		t.Fatal("fixture is not alive and ready")
+	}
+	return cmd
 }

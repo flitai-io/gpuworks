@@ -3,21 +3,20 @@ package proxy
 import (
 	"bufio"
 	"encoding/json"
-	"gpuworks.ai/gpuworks/internal/server/store"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 func TestChatRejectsUnsupportedInputBeforeUpstream(t *testing.T) {
 	var calls atomic.Int32
 	p, key, closeUpstream := newProxyE2E(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); _, _ = io.WriteString(w, `{"choices":[]}`) }))
 	defer closeUpstream()
-	defer p.Close()
-	defer p.store.Close()
 	var model store.Model
 	if err := p.store.DB().First(&model).Error; err != nil {
 		t.Fatal(err)
@@ -64,8 +63,6 @@ func TestUpstreamValidationErrorIsBounded(t *testing.T) {
 		_, _ = w.Write(payload)
 	}))
 	defer closeUpstream()
-	defer p.Close()
-	defer p.store.Close()
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"omni","messages":[{"role":"user","content":"hello"}]}`))
 	req.Header.Set("Authorization", "Bearer "+key)
 	rec := httptest.NewRecorder()
@@ -85,8 +82,6 @@ func TestChatInputDeclaredSupportedAndUnknownRemainCompatible(t *testing.T) {
 				_, _ = io.WriteString(w, `{"choices":[]}`)
 			}))
 			defer closeUpstream()
-			defer p.Close()
-			defer p.store.Close()
 			if err := p.store.DB().Model(&store.Model{}).Where("source_id = ?", "org/omni").Update("input_modalities", modalities).Error; err != nil {
 				t.Fatal(err)
 			}

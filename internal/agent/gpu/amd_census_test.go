@@ -2,13 +2,14 @@ package gpu
 
 import (
 	"context"
-	"gpuworks.ai/gpuworks/internal/proto"
 	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 func TestVendorCensusBlockedAMDComputeReadPreservesOtherVendors(t *testing.T) {

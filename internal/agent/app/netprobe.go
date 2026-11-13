@@ -118,7 +118,7 @@ func (n *NodeRuntime) rpcNetProbe(ctx context.Context, params json.RawMessage) (
 		conn, _, err := dialNetBench(ctx, p.SourceIP, p.Target, p.Token, "ping")
 		if err != nil {
 			res.Error = err.Error()
-			return res, nil
+			return res, nil //nolint:nilerr // A failed probe is a successful RPC carrying its diagnostic result.
 		}
 		rtts = append(rtts, float64(time.Since(start).Microseconds())/1000.0)
 		_ = conn.Close()
@@ -133,7 +133,7 @@ func (n *NodeRuntime) rpcNetProbe(ctx context.Context, params json.RawMessage) (
 	gbps, sent, received, duration, err := measureBandwidth(ctx, p.SourceIP, p.Target, p.Token, p.Seconds)
 	if err != nil {
 		res.BandwidthError = err.Error()
-		return res, nil
+		return res, nil //nolint:nilerr // Preserve reachability and expose bandwidth failure in the result.
 	}
 	res.BandwidthTested = true
 	res.Gbps = gbps

@@ -104,7 +104,7 @@ func TestUninstallCLIJSONContract(t *testing.T) {
 			if err := json.Unmarshal(out.Bytes(), &result); err != nil {
 				t.Fatalf("invalid JSON result: %s (%v)", out, err)
 			}
-			for _, key := range []string{"layout", "mode", "service_user", "purge", "dry_run", "already_absent", "removed", "kept", "success"} {
+			for _, key := range []string{"layout", "mode", "service_user", "purge", "dry_run", "already_absent", "removed", "kept", "keep_resources", "checklist", "success"} {
 				if _, ok := result[key]; !ok {
 					t.Errorf("missing wire field %s: %s", key, out)
 				}

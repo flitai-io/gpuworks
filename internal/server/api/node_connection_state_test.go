@@ -58,4 +58,26 @@ func TestARecoveringNodeReadsAsConnectingEverywhere(t *testing.T) {
 	if summary.Nodes.Connecting != 1 || summary.Nodes.Offline != 1 || summary.Nodes.Online != 0 {
 		t.Fatalf("dashboard counts = %+v, want one connecting and one offline", summary.Nodes)
 	}
+
+	if err := n.store.SetNodeRecoveryPhase("node-recovering", store.RecoveryPhaseProbeFailed, 1, nil, "connection refused"); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(n.memberGet("/api/v1/nodes/node-recovering"), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.State != store.NodeStateOffline || detail.LastRecoveryError != "connection refused" {
+		t.Fatalf("ended probe detail=%+v, want offline with its failure", detail)
+	}
+	if got := nodePageNames(n.nodePage("/api/v1/nodes?page=1&state=connecting")); len(got) != 0 {
+		t.Fatalf("ended probe still appears in connecting filter: %v", got)
+	}
+	if got := nodePageNames(n.nodePage("/api/v1/nodes?page=1&state=offline")); len(got) != 2 {
+		t.Fatalf("ended probe missing from offline filter: %v", got)
+	}
+	if err := json.Unmarshal(n.memberGet("/api/v1/dashboard/summary"), &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Nodes.Connecting != 0 || summary.Nodes.Offline != 2 || summary.Nodes.Online != 0 {
+		t.Fatalf("ended probe left stale dashboard counts: %+v", summary.Nodes)
+	}
 }

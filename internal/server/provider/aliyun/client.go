@@ -33,6 +33,9 @@ var (
 		return "ecs." + region + ".aliyuncs.com"
 	}}
 	stsProduct = product{name: "sts", version: "2015-04-01", host: func(string) string { return "sts.aliyuncs.com" }}
+	// csProduct is Container Service for Kubernetes (ACK), an ROA-style API
+	// whose central endpoint answers for every region.
+	csProduct = product{name: "cs", version: "2015-12-15", host: func(string) string { return "cs.aliyuncs.com" }}
 )
 
 // centralECSHost serves every region (the RegionId parameter routes the
@@ -183,7 +186,7 @@ func (c *client) retryHost(ctx context.Context, base endpoint, key accessKey, p 
 				return nil, err
 			}
 		}
-		body, err := c.do(ctx, base.host, base.url, key, p, action, query)
+		body, err := c.do(ctx, base.host, base.url, key, p, action, http.MethodPost, "/", query)
 		if err == nil {
 			return body, nil
 		}
@@ -200,6 +203,38 @@ func (c *client) retryHost(ctx context.Context, base endpoint, key accessKey, p 
 		}
 	}
 	return nil, lastErr
+}
+
+// getROA reads an ROA-style resource (ACK) from the product's central
+// endpoint and decodes the JSON response into out, retrying throttling and
+// server-side failures like call does.
+func (c *client) getROA(ctx context.Context, creds provider.Credentials, p product, action, path string, query map[string]string, out any) error {
+	key, err := c.accessKey(ctx, creds)
+	if err != nil {
+		return err
+	}
+	host := p.host("")
+	var lastErr error
+	for attempt := 0; attempt < attemptsPerHost; attempt++ {
+		if attempt > 0 {
+			if err := c.sleep(ctx, retryBase<<(attempt-1)); err != nil {
+				return err
+			}
+		}
+		body, err := c.do(ctx, host, c.baseURL(host), key, p, action, http.MethodGet, path, query)
+		if err == nil {
+			return decodeResponse(action, body, out)
+		}
+		lastErr = err
+		var apiErr *apiError
+		if errors.As(err, &apiErr) && !apiErr.retryable() {
+			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+	return lastErr
 }
 
 func decodeResponse(action string, body []byte, out any) error {
@@ -237,7 +272,7 @@ func (c *client) bases(creds provider.Credentials, p product, region string) []e
 	return out
 }
 
-func (c *client) do(ctx context.Context, host string, base *url.URL, key accessKey, p product, action string, query map[string]string) ([]byte, error) {
+func (c *client) do(ctx context.Context, host string, base *url.URL, key accessKey, p product, action, method, path string, query map[string]string) ([]byte, error) {
 	headers := map[string]string{
 		"x-acs-action":          action,
 		"x-acs-version":         p.version,
@@ -248,11 +283,11 @@ func (c *client) do(ctx context.Context, host string, base *url.URL, key accessK
 	if key.token != "" {
 		headers["x-acs-security-token"] = key.token
 	}
-	authorization := sign(signedRequest{method: http.MethodPost, host: host, query: query, headers: headers}, key.id, key.secret)
+	authorization := sign(signedRequest{method: method, host: host, path: path, query: query, headers: headers}, key.id, key.secret)
 	u := *base
-	u.Path = "/"
+	u.Path = path
 	u.RawQuery = canonicalQuery(query)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}

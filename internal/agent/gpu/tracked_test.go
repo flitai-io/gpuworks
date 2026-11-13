@@ -50,10 +50,47 @@ func TestRunTrackedStuckKeyRefusesEveryCommandUnderIt(t *testing.T) {
 	shortVendorCLITimeouts(t, time.Second, 50*time.Millisecond)
 	dir := t.TempDir()
 	started := filepath.Join(dir, "started")
-	// The child in its own session holds the output pipe past the group
-	// kill, standing in for a process stuck in the driver.
-	_, err := RunTracked(t.Context(), "gw-test-stuck", 100*time.Millisecond, shCmd("setsid sleep 1.5 & sleep 5"))
-	if !IsCLIUnresponsive(err) {
+	// Wait for the escaped child to own the pipe before canceling its parent.
+	// A 100 ms wall-clock delay can kill the shell before setsid even starts on
+	// a loaded/race host; that never establishes the stuck-process precondition.
+	ready := filepath.Join(dir, "ready")
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		_, err := RunTracked(ctx, "gw-test-stuck", 10*time.Second, func(ctx context.Context) *exec.Cmd {
+			return exec.CommandContext(ctx, "sh", "-c", `setsid sh -c ': > "$1"; sleep 2' escaped "$1" & wait`, "parent", ready)
+		})
+		done <- err
+	}()
+	// The escaped child has a finite lifetime even if this test fails.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			t.Error("tracked child was not reaped")
+		}
+	})
+	readyDeadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(readyDeadline) {
+			t.Fatal("escaped child did not become ready")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("canceled tracked call did not return")
+	}
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("first call err = %v", err)
 	}
 	_, err = RunTracked(t.Context(), "gw-test-stuck", time.Second, shCmd(`touch "`+started+`"`))

@@ -14,6 +14,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type ImageArchivePreview, type ImageCatalogEntry } from "../../api";
 import { APIError, apiErrorText } from "../../apiError";
+import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
+import ArchiveURLResolveAlert from "./ArchiveURLResolveAlert";
 import { bytes } from "./ImagePageHelpers";
 
 const { Text } = Typography;
@@ -57,6 +59,7 @@ export default function ImageArchiveURLDialog({
   const { t } = useTranslation("images");
   const { t: tCommon } = useTranslation("common");
   const [url, setUrl] = useState(initialURL);
+  const access = useOutboundHostAccess([url], open);
   const [relay, setRelay] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -64,7 +67,7 @@ export default function ImageArchiveURLDialog({
   const [resolveError, setResolveError] = useState<Error | null>(null);
   const [startError, setStartError] = useState<Error | null>(null);
 
-  const resolve = async (address: string) => {
+  const resolve = async (address: string, authorize = true) => {
     const trimmed = address.trim();
     if (!trimmed) {
       setResolveError(new Error(t("import.url.required")));
@@ -74,6 +77,7 @@ export default function ImageArchiveURLDialog({
     setResolving(true);
     setResolveError(null);
     try {
+      if (authorize) await access.authorize();
       setPreview(await api.previewImageArchiveURL(trimmed));
     } catch (e) {
       setPreview(null);
@@ -95,7 +99,7 @@ export default function ImageArchiveURLDialog({
     setStartError(null);
     setResolving(false);
     setStarting(false);
-    if (initialURL.trim()) void resolve(initialURL);
+    if (initialURL.trim()) void resolve(initialURL, false);
   }, [open, initialURL]);
 
   const errorMessage = (error: Error, fallback: string) => error instanceof APIError
@@ -118,6 +122,7 @@ export default function ImageArchiveURLDialog({
     setStarting(true);
     setStartError(null);
     try {
+      if (relay) await access.authorize();
       await onStart(url.trim(), relay);
     } catch (e) {
       setStartError(e instanceof APIError ? e : new Error(t("action.pullFailed")));
@@ -162,6 +167,7 @@ export default function ImageArchiveURLDialog({
             {t("import.url.resolve")}
           </Button>
         </Space.Compact>
+        <OutboundHostAccess access={access} />
         {!declared && url.trim() ? (
           <Text type="secondary">
             {t("nodeTable.archiveDialog.recordNote", { ref: version?.image_ref ?? "" })}
@@ -207,12 +213,7 @@ export default function ImageArchiveURLDialog({
           />
         ) : null}
         {!mismatch && !preview && resolveError ? (
-          <Alert
-            type={resolveError instanceof APIError && resolveError.code === "IMAGE_ARCHIVE_URL_POLICY_DENIED" ? "error" : "warning"}
-            showIcon
-            message={errorMessage(resolveError, t("import.url.failed"))}
-            description={resolveError instanceof APIError ? `HTTP ${resolveError.status} · ${resolveError.code}` : undefined}
-          />
+          <ArchiveURLResolveAlert error={resolveError} fallback={t("import.url.failed")} />
         ) : null}
         {startError ? <Alert type="error" showIcon message={errorMessage(startError, t("action.pullFailed"))}
           description={startError instanceof APIError ? `HTTP ${startError.status} · ${startError.code}` : undefined} /> : null}

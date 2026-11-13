@@ -19,6 +19,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 TOOL_CALL_ID = "call_fixture_1"
 DENIED_CALL_ID = "call_fixture_denied"
 DENIED_PATH = "/api/v1/ssh-key"
+# A caller that tries to make call_api write: the tool has no method field, so
+# this must reach the server as an ordinary read of the path and change nothing.
+WRITE_CALL_ID = "call_fixture_write"
+# HOSTILE_ANSWER is upstream model output the console must present as text: markup, a script body,
+# a javascript: link and a markdown image that would fetch on render. None of it may execute or be
+# interpreted - the answer is untrusted input from outside the product.
+HOSTILE_ANSWER = (
+    "Cluster looks healthy. <img src=x onerror=\"alert(1)\"> "
+    "<script>alert('xss')</script> "
+    "[click me](javascript:alert(2)) "
+    "<b>bold</b> done."
+)
+WRITE_PATH = "/api/v1/nodes-labels-probe"
 
 
 def cluster_answer(content: str) -> str:
@@ -177,8 +190,12 @@ class AssistantEndpoint:
                         errors.append("tool_calls: " + structure)
                 user_text = " ".join(str(m.get("content", "")) for m in messages
                                      if m.get("role") == "user")
-                if "slow" in user_text:
+                if "hostile" in user_text:
+                    kind = "hostile"
+                elif "slow" in user_text:
                     kind = "slow"
+                elif "please write" in user_text:
+                    kind = "write_final" if tool_messages else "write"
                 elif "denied" in user_text:
                     kind = "denied_final" if tool_messages else "denied"
                 elif tool_messages:
@@ -215,9 +232,13 @@ class AssistantEndpoint:
                             fixture.aborted += 1
                         fixture.aborted_event.set()
                         return
-                elif kind in {"tool", "denied"}:
+                elif kind in {"tool", "denied", "write"}:
                     if kind == "tool":
                         call_id, call_name, arguments = TOOL_CALL_ID, "cluster_overview", "{}"
+                    elif kind == "write":
+                        call_id, call_name = WRITE_CALL_ID, "call_api"
+                        arguments = json.dumps({"path": WRITE_PATH, "method": "DELETE",
+                                                "body": {"labels": {"pwned": "yes"}}})
                     else:
                         call_id, call_name = DENIED_CALL_ID, "call_api"
                         arguments = json.dumps({"path": DENIED_PATH})
@@ -225,10 +246,17 @@ class AssistantEndpoint:
                         "index": 0, "id": call_id, "type": "function",
                         "function": {"name": call_name, "arguments": arguments}}]}}]})
                     self._send({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]})
+                elif kind == "hostile":
+                    answer = HOSTILE_ANSWER
+                    self._send({"choices": [{"delta": {"content": answer}}]})
+                    self._send({"choices": [{"delta": {}, "finish_reason": "stop"}]})
                 else:
                     content = tool_messages[0].get("content", "") if tool_messages else ""
                     call_id = tool_messages[0].get("tool_call_id", "") if tool_messages else ""
-                    if kind == "denied_final":
+                    if kind == "write_final":
+                        answer = ("write tool result: " + content
+                                  if call_id == WRITE_CALL_ID else "write tool id mismatch")
+                    elif kind == "denied_final":
                         answer = (denied_answer(content) if call_id == DENIED_CALL_ID
                                   else "The denied route could not be verified: "
                                        "mismatched tool_call_id.")

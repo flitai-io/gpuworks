@@ -116,7 +116,7 @@ export function stepDetail(tool: string, args: string): string {
     return `GET ${parsed.path}${query ? `?${query}` : ""}${typeof parsed.jq === "string" && parsed.jq ? ` · jq: ${parsed.jq}` : ""}`;
   }
   if ((tool === "search_api" || tool === "search_metrics") && typeof parsed.query === "string") return parsed.query;
-  if (tool === "get_gpu_topology" && typeof parsed.node_uuid === "string") return parsed.node_uuid;
+  if ((tool === "get_gpu_topology" || tool === "get_node_connection_diagnostics") && typeof parsed.node_uuid === "string") return parsed.node_uuid;
   if (tool === "compare_with_healthy_replica" && typeof parsed.instance_uuid === "string") return parsed.instance_uuid;
   if (tool === "cluster_overview") return "";
   return args;

@@ -2,10 +2,11 @@ package api
 
 import (
 	"fmt"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"testing"
 )
 
 // Keep the real adapter's assembly and hooks, with one architecture-dependent

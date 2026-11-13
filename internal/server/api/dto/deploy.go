@@ -135,7 +135,7 @@ type Deployment struct {
 	MaxReplicas   int    `json:"max_replicas"`
 	RoutingPolicy string `json:"routing_policy"`
 	// StartTimeoutSec is the deployment's own instance health budget; absent
-	// when it states none and its launches take the cluster default.
+	// when it states none and the launch resolves an automatic budget.
 	StartTimeoutSec int `json:"start_timeout_sec,omitempty"`
 	// ReadyReplicas counts the replicas the gateway would serve a request from
 	// now: running, on an online node, every rank of a multi-node one up, and
@@ -323,13 +323,19 @@ const (
 
 // Instance is the API view of a running replica.
 type Instance struct {
-	PreStartArgv   []string `json:"pre_start_argv,omitempty"`
-	PreStartScript string   `json:"pre_start_script,omitempty"`
-	UUID           string   `json:"uuid"`
-	DeploymentID   uint     `json:"deployment_id"`
-	NodeUUID       string   `json:"node_uuid"`
-	State          string   `json:"state"`
-	GPUIndexes     []int    `json:"gpu_indexes"`
+	StartupEstimate       *StartupEstimate `json:"startup_estimate,omitempty"`
+	StartTimeoutSec       int              `json:"start_timeout_sec,omitempty"`
+	StartTimeoutSource    string           `json:"start_timeout_source,omitempty"`
+	StartTimeoutConflict  bool             `json:"start_timeout_conflict,omitempty"`
+	EngineStartTimeoutSec int              `json:"engine_start_timeout_sec,omitempty"`
+	RuntimeFailure        *ProductMessage  `json:"runtime_failure,omitempty"`
+	PreStartArgv          []string         `json:"pre_start_argv,omitempty"`
+	PreStartScript        string           `json:"pre_start_script,omitempty"`
+	UUID                  string           `json:"uuid"`
+	DeploymentID          uint             `json:"deployment_id"`
+	NodeUUID              string           `json:"node_uuid"`
+	State                 string           `json:"state"`
+	GPUIndexes            []int            `json:"gpu_indexes"`
 	// VRAMLimitBytes is the dGPU memory limit the instance runs under on each
 	// of its GPUs; absent for an instance that holds its GPUs whole.
 	VRAMLimitBytes int64              `json:"vram_limit_bytes,omitempty"`
@@ -474,7 +480,8 @@ type DeployRequest struct {
 	VRAMLimitGiB  float64             `json:"vram_limit_gib"` // >0 = dGPU memory limit (shareable GPU)
 	// StartTimeoutSec is how long a started instance may take to answer its
 	// health check before the start counts as failed. Zero (or absent) states
-	// none: each launch takes the cluster default then.
+	// none: each launch resolves an automatic budget, with the cluster default
+	// as its floor and the managed engine deadline taken into account.
 	StartTimeoutSec int `json:"start_timeout_sec,omitempty"`
 	// HealthCheck turns the server's health check of the deployment on or
 	// off; absent, it is on when the model serves chat or embeddings.

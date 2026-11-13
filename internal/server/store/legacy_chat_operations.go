@@ -35,12 +35,40 @@ func IsDefaultChatOperations(raw string) bool {
 	return isBareOperation(raw, legacyChatOperationType)
 }
 
-// IsDefaultTemplateOperations also recognizes the bare video operation model
-// registration infers from a task. Neither placeholder chooses an engine API;
-// a template may supply its endpoint, mode, encoding and inputs. Normalized
-// contracts, including explicit JSON video contracts, remain user choices.
+// IsDefaultTemplateOperations also recognizes every bare operation model
+// registration infers from the repository's tasks
+// (inferenceapi.OperationsForTasks): one per task, so a text-to-image
+// checkpoint registers as a lone image generation and a checkpoint listing
+// several tasks as several bare operations. None of them chooses an engine
+// API; a template may supply its endpoint, mode, encoding and inputs.
+// Normalized contracts, including explicit JSON video contracts, remain user
+// choices.
 func IsDefaultTemplateOperations(raw string) bool {
-	return isBareOperation(raw, legacyChatOperationType, "openai.video.generate")
+	var operations []json.RawMessage
+	if json.Unmarshal([]byte(raw), &operations) != nil || len(operations) == 0 {
+		return false
+	}
+	for _, operation := range operations {
+		if !isBareOperation("["+string(operation)+"]", registrationInferredOperationTypes...) {
+			return false
+		}
+	}
+	return true
+}
+
+// registrationInferredOperationTypes are the operation types model
+// registration writes from a repository task, spelled as it writes them. Like
+// legacyChatOperationType they are literals: inferenceapi depends on this
+// package.
+var registrationInferredOperationTypes = []string{
+	legacyChatOperationType,
+	"openai.embeddings",
+	"openai.rerank",
+	"openai.audio.transcribe",
+	"openai.audio.speech",
+	"openai.image.generate",
+	"openai.image.edit",
+	"openai.video.generate",
 }
 
 func isBareOperation(raw string, allowedTypes ...string) bool {

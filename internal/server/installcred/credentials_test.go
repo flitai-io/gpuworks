@@ -112,3 +112,45 @@ func TestProtectInitialCredentialsRestrictsLegacyFileAndRejectsSymlink(t *testin
 		t.Fatal("symlink target was changed")
 	}
 }
+
+func TestForgetInitialCredentials(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := WriteInitialCredentials(dataDir, "admin", "s3cret-token"); err != nil {
+		t.Fatal(err)
+	}
+	keep := filepath.Join(dataDir, "gpuworks.db")
+	if err := os.WriteFile(keep, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Another account changing its password leaves the admin's record.
+	if err := ForgetInitialCredentials(dataDir, "zhangsan"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(CredentialsPath(dataDir)); err != nil {
+		t.Fatalf("another account removed the record: %v", err)
+	}
+	for i := 0; i < 2; i++ { // the second call finds nothing and is not an error
+		if err := ForgetInitialCredentials(dataDir, "admin"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(CredentialsPath(dataDir)); !os.IsNotExist(err) {
+		t.Fatalf("record still present: %v", err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("removed more than the record: %v", err)
+	}
+}
+
+func TestForgetInitialCredentialsKeepsADamagedRecord(t *testing.T) {
+	dataDir := t.TempDir()
+	if err := os.WriteFile(CredentialsPath(dataDir), []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ForgetInitialCredentials(dataDir, "admin"); err == nil {
+		t.Fatal("a damaged record was reported as handled")
+	}
+	if _, err := os.Stat(CredentialsPath(dataDir)); err != nil {
+		t.Fatalf("damaged record removed: %v", err)
+	}
+}

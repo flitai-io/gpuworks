@@ -54,6 +54,12 @@ type NetInventory struct {
 	// so placement avoids ports owned outside GPUWorks. It is a best-effort
 	// snapshot, up to one status interval old.
 	EnginePortListeners []int `json:"engine_port_listeners,omitempty"`
+	// EnginePortRange is the node's own engine port range, set when its
+	// agent was started with one (--engine-ports); nil means the server's.
+	// A Kubernetes node needs it: the server's default range is the
+	// cluster's NodePort range, whose ports kube-proxy redirects even on
+	// loopback, so an engine there would be unreachable.
+	EnginePortRange *PortRange `json:"engine_port_range,omitempty"`
 	// Tools names the network test tools the node can run (ib_write_bw: the
 	// host's, else the one embedded in the agent).
 	Tools []string `json:"tools,omitempty"`

@@ -128,7 +128,8 @@ func playgroundOperations(contract inferenceapi.Contract, model string) []dto.Pl
 			RequestEncoding:  operation.RequestEncoding,
 			RequestEncodings: definition.RequestEncodings, Renderer: definition.Renderer,
 			Response: definition.Response, Async: definition.Async,
-			ExampleInput: operation.ExampleInput,
+			ExampleInput:       operation.ExampleInput,
+			MaxReferenceImages: operation.ReferenceImageLimit(),
 		}
 		if example, err := inferenceapi.BuildExample(operation, model); err == nil {
 			operationView.Example = &example

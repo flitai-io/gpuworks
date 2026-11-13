@@ -5,7 +5,7 @@
   "test_file": "test/e2e/image_runtime.py",
   "test_function": "test_url_acquire_remove",
   "name": "镜像节点副本 / URL实际获取、容器消费与UI删除 / digest一致且删除后absent",
-  "command": "make test-e2e-image-url-runtime",
+  "command": "python3 -B test/e2e/image_runtime.py --case acquire-remove --locale en",
   "lane": "local-real-server-agent-isolated-docker",
   "identity": "admin",
   "required_evidence": [

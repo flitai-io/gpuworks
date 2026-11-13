@@ -142,7 +142,7 @@ func walkTar(reader *tar.Reader, consume func(*tar.Header, io.Reader) error) (in
 					return 0, fmt.Errorf("create tar asset directory %s: %w", name, err)
 				}
 			}
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			if !AllowedFile(name) {
 				return 0, fmt.Errorf("tar asset %q has a forbidden file type", name)
 			}

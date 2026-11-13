@@ -16,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/diagnostics"
 	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
@@ -132,7 +133,7 @@ type Deps struct {
 	PeerSync        PeerSyncHooks
 	CancelModelSync func(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error)
 	// Preparation is model preparation as the hub and the controller hold it.
-	Preparation ModelPreparation
+	Preparation deployment.ModelPreparation
 	// NodeRuntime reads and restarts a node's container runtime daemon.
 	NodeRuntime     NodeRuntimeHooks
 	ImageFetch      ImageFetchHooks
@@ -141,6 +142,9 @@ type Deps struct {
 	ImageExists     func(ctx context.Context, ref, nodeUUID string) (bool, error)
 	CatalogPackages *packages.Store
 	ModelLogoDir    string
+	// ForgetInitialCredentials removes the install-time admin credentials
+	// file once the account it records has changed its password.
+	ForgetInitialCredentials func(username string) error
 	// FetchModelMeta reads a model's metadata from the first of candidates
 	// that serves it (modelmeta.FetchFrom); fetchModelMeta gives the
 	// candidates.
@@ -230,7 +234,7 @@ type Deps struct {
 	BenchmarkArtifactDir string
 }
 
-// PeerSyncHooks groups the direct, explicitly sourced model/image operations
+// PeerSyncHooks groups explicitly sourced model/image operations
 // so the API dependency surface remains stable as the peer protocol grows.
 type PeerSyncHooks struct {
 	RetryImage           func(ctx context.Context, imageID uint, nodeUUID string) (*store.ImageNode, error)
@@ -238,6 +242,7 @@ type PeerSyncHooks struct {
 	ProbeModel           func(ctx context.Context, modelID uint, targetNodeUUID, sourceNodeUUID string) error
 	SyncImageWithRate    func(ctx context.Context, imageID uint, nodeUUID, sourceNodeUUID string, rateLimitKiB int64) (*store.ImageNode, error)
 	ProbeImage           func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) error
+	ProbeImageResult     func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) (proto.ImageSyncCopyResult, error)
 	// CopyModel copies a model's files between two locations (storage, and
 	// node for a local storage); see controller.CopyModelFile.
 	CopyModel func(ctx context.Context, modelID uint, src, dst store.FileRef, rateLimitKiB int) (*store.ModelFile, error)

@@ -97,7 +97,7 @@ func TestRevokeAPIKeyInvalidatesTheCacheImmediately(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.VerifyAPIKey(key) || !st.HasAnyAPIKey() {
+	if !st.VerifyAPIKey(key) {
 		t.Fatal("fresh key did not verify")
 	}
 	sub := st.Bus.Subscribe(4, "apikey")
@@ -107,9 +107,6 @@ func TestRevokeAPIKeyInvalidatesTheCacheImmediately(t *testing.T) {
 	}
 	if st.VerifyAPIKey(key) {
 		t.Fatal("revoked key still verified from the cache")
-	}
-	if st.HasAnyAPIKey() {
-		t.Fatal("HasAnyAPIKey still true after the only key was revoked")
 	}
 	select {
 	case e := <-sub.C():
@@ -143,30 +140,8 @@ func TestRevokeAPIKeyInvalidatesTheCacheImmediately(t *testing.T) {
 	}
 	// A new key works beside the revoked one.
 	other, err := st.CreateAPIKey("gateway", 0)
-	if err != nil || !st.VerifyAPIKey(other) || !st.HasAnyAPIKey() || st.VerifyAPIKey(key) {
+	if err != nil || !st.VerifyAPIKey(other) || st.VerifyAPIKey(key) {
 		t.Fatalf("a new key beside a revoked one: err=%v", err)
-	}
-}
-
-func TestHasAnyAPIKeyFollowsCreateAndRevoke(t *testing.T) {
-	st := openAPIKeyStore(t)
-	if st.HasAnyAPIKey() {
-		t.Fatal("empty store reports a key")
-	}
-	key, err := st.CreateAPIKey("gateway", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The cached "no keys" answer must not survive the create: otherwise the
-	// gateway would stay open without authentication.
-	if !st.HasAnyAPIKey() {
-		t.Fatal("HasAnyAPIKey stayed false after a key was created")
-	}
-	if err := st.RevokeAPIKey(auth.PrefixOf(key)); err != nil {
-		t.Fatal(err)
-	}
-	if st.HasAnyAPIKey() {
-		t.Fatal("HasAnyAPIKey stayed true after the key was revoked")
 	}
 }
 
@@ -243,13 +218,13 @@ func TestAPIKeyCacheDropsReadsThatRacedAChange(t *testing.T) {
 	if _, ok := c.lookup(digest); ok {
 		t.Fatal("a key deleted mid-verification was cached")
 	}
-	// A count saw no keys, then a key was created before the count
-	// published: "no keys" must not be cached, or the gateway stays open.
-	_, _, generation := c.cachedHasAny()
+	// A verification read the key, then a key was created before the
+	// verification published: the result must not be cached either.
+	beforeCreate := c.snapshot()
 	c.changed()
-	c.setHasAny(generation, false)
-	if _, known, _ := c.cachedHasAny(); known {
-		t.Fatal("a stale no-keys count was cached after a key was created")
+	c.remember(beforeCreate, digest, APIKeyIdentity{KeyID: 2}, "gw-other")
+	if _, ok := c.lookup(digest); ok {
+		t.Fatal("a verification that raced a create was cached")
 	}
 }
 
@@ -319,7 +294,6 @@ func TestVerifyAPIKeyConcurrentCallersAgree(t *testing.T) {
 				if !st.VerifyAPIKey(key) {
 					rejected.Add(1)
 				}
-				_ = st.HasAnyAPIKey()
 			}
 		}()
 	}

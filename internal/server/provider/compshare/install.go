@@ -104,10 +104,6 @@ func compshareAcceleratedRegion(region string) bool {
 	return false
 }
 
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 func providerInstallConnectMode(mode string) string {
 	if mode == "server_dial" {
 		return "server_dial"

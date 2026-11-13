@@ -173,7 +173,7 @@ function PhysicalGPUView({ page, loading, error, pagination, query, onQuery, fil
     {
       key: "model", title: t("column.model"), width: 190, serverSort: true,
       filters: options.models, filterSearch: true, filteredValue: filtered("model"),
-      render: (_, gpu) => <Typography.Text strong>{gpu.name.replace(/^NVIDIA\s+/i, "")}</Typography.Text>,
+      render: (_, gpu) => gpu.name.replace(/^NVIDIA\s+/i, ""),
     },
     { key: "vendor", title: t("column.vendor"), width: 100, serverSort: true, filters: options.vendors, filteredValue: filtered("vendor"), render: (_, gpu) => vendorLabel(gpu.vendor, t) },
     {

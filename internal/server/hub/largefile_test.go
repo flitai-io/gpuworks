@@ -53,7 +53,7 @@ func TestOpenLargeFileReadRequiresADataLane(t *testing.T) {
 		t.Fatal("an offline node must fail")
 	}
 
-	dataServer, dataClient := yamuxPairData(t)
+	dataServer, _ := yamuxPairData(t)
 	session := h.session(uuid)
 	session.attachData(dataServer)
 	if got := session.DataLaneState(); got != "attached" {

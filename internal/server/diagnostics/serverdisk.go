@@ -93,7 +93,7 @@ func dirEntries(dir string, budget *int) ([]ServerDirEntry, bool) {
 		} else {
 			_ = filepath.WalkDir(filepath.Join(dir, e.Name()), func(_ string, d fs.DirEntry, err error) error {
 				if err != nil {
-					return nil
+					return nil //nolint:nilerr // The bounded diagnostic listing skips paths it cannot inspect.
 				}
 				if *budget <= 0 {
 					partial = true

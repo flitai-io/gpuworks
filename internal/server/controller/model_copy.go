@@ -116,7 +116,7 @@ func (c *Controller) copyIntoLocal(ctx context.Context, model *store.Model, srcS
 			return nil, errors.New("no online node can read the source storage")
 		}
 	}
-	row, err := c.store.PrepareModelPeerSync(ref, relModelPath(model))
+	_, err = c.store.PrepareModelPeerSync(ref, relModelPath(model))
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (c *Controller) copyIntoLocal(ctx context.Context, model *store.Model, srcS
 			return nil, err
 		}
 	}
-	row, _ = c.store.ModelFileAt(ref)
+	row, _ := c.store.ModelFileAt(ref)
 	c.trySyncModelFromPeer(context.WithoutCancel(ctx), node, model, row)
 	return c.store.ModelFileAt(ref)
 }

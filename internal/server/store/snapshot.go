@@ -3,9 +3,10 @@ package store
 import (
 	"errors"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/securefile"
 	"os"
 	"strings"
+
+	"gpuworks.ai/gpuworks/internal/securefile"
 )
 
 // SnapshotTo writes a consistent copy of the live database to dest, which must

@@ -352,7 +352,7 @@ are a coin toss in CI, not a regression signal. The gate disables only the measu
 attachment and fallback, byte integrity, and reconnection continue to run unconditionally.
 
 The earlier claim that `.32` does not support partitioning was incorrect: nerdctl lacks the Ascend Docker
-Runtime plugin, but GPUWorks can pass in the raw device nodes and mounts itself, and vCANN still uses
+Runtime plugin, but GPUWorks can pass in the raw device nodes and mounts itself, and vcann-rt still uses
 the host's device-share capability. `TestAscendNerdctlPartitionCapabilityProbeEndToEnd`
 now calls the production `Engine.BuildPartitionProbeWorkload` path, loads the embedded 2.5 MiB
 `gpuworks/partition-probe:v1` image through the real nerdctl driver, and

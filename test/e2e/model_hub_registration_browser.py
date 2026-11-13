@@ -758,6 +758,10 @@ def test_quick(page, context, server, artifacts, report, locale, data, token, ho
     dismiss_weight("cancel", cancel_button(deploy["shared"]["cancel"]))
     dismiss_weight("close", close_button)
     dismiss_weight("escape", escape)
+    # The mask is the fourth dismissal. It is driven through the shared helper so the
+    # click lands on the wrap rather than somewhere inside the panel, which is where an
+    # earlier hand-written attempt was silently ineffective.
+    dismiss_weight("mask", mask)
     modal = box["modal"]
     choose = modal.get_by_role("combobox", name=deploy["action"]["selectSourcePlaceholder"], exact=True)
     choose_option(page, choose, deploy["action"]["modelScope"] + " · " + data["repo"])

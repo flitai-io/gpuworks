@@ -50,7 +50,7 @@ def phase_for(module, item, provider_section):
 
 
 def provider_section(rows):
-    """Smallest residual section on 公有云 after phases 1–10."""
+    """Smallest residual section on 外部平台 after phases 1–10."""
     gaps = Counter()
     for row in rows:
         if row.get("module") != "providers" or row.get("dimension") != "checklist" or not row.get("denominator"):

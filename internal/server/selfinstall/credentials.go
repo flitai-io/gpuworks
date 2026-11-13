@@ -60,7 +60,7 @@ func (i *Installer) resolvePassword(req InstallRequest) (string, string, error) 
 }
 
 func checkedPassword(password, source string) (string, string, error) {
-	if err := auth.ValidatePassword(password); err != nil {
+	if err := auth.ValidateAccountPassword(DefaultAdminUser, password); err != nil {
 		return "", "", err
 	}
 	return password, source, nil

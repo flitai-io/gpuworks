@@ -1,0 +1,86 @@
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -258,6 +258,8 @@
+ 
+         self.has_mamba_layers = kv_cache_config.has_mamba_layers
+         self.needs_kv_cache_zeroing = kv_cache_config.needs_kv_cache_zeroing
++        # Blocks an async KV load will write; zeroing them could race the write.
++        self._skip_zero_block_ids: set[int] = set()
+         self.need_mamba_block_aligned_split = (
+             self.has_mamba_layers and self.cache_config.mamba_cache_mode == "align"
+         )
+@@ -783,6 +785,14 @@
+                     # _update_waiting_for_remote_kv will then cache
+                     # only the successfully loaded tokens.
+                     request.num_computed_tokens = num_computed_tokens
++                    if self.needs_kv_cache_zeroing:
++                        # Skip zeroing the blocks the async load will overwrite;
++                        # the zeroing kernel could run after the transfer.
++                        self._skip_zero_block_ids.update(
++                            block_id
++                            for group in self.kv_cache_manager.get_block_ids(request.request_id)
++                            for block_id in group
++                        )
+                     continue
+ 
+                 # Speculative decode related.
+@@ -901,11 +911,7 @@
+         self.prev_step_scheduled_req_ids.clear()
+         self.prev_step_scheduled_req_ids.update(num_scheduled_tokens.keys())
+ 
+-        new_block_ids_to_zero = (
+-            (self.kv_cache_manager.take_new_block_ids() or None)
+-            if self.needs_kv_cache_zeroing
+-            else None
+-        )
++        new_block_ids_to_zero = self._take_new_block_ids_to_zero()
+ 
+         scheduler_output = SchedulerOutput(
+             scheduled_new_reqs=new_reqs_data,
+@@ -1218,6 +1224,14 @@
+                 # _update_waiting_for_remote_kv will then cache
+                 # only the successfully loaded tokens.
+                 request.num_computed_tokens = num_computed_tokens
++                if self.needs_kv_cache_zeroing:
++                    # Skip zeroing the blocks the async load will overwrite;
++                    # the zeroing kernel could run after the transfer.
++                    self._skip_zero_block_ids.update(
++                        block_id
++                        for group in self.kv_cache_manager.get_block_ids(request.request_id)
++                        for block_id in group
++                    )
+                 continue
+ 
+             self.running.append(request)
+@@ -1502,11 +1516,7 @@
+         self.prev_step_scheduled_req_ids.clear()
+         self.prev_step_scheduled_req_ids.update(num_scheduled_tokens.keys())
+ 
+-        new_block_ids_to_zero = (
+-            (self.kv_cache_manager.take_new_block_ids() or None)
+-            if self.needs_kv_cache_zeroing
+-            else None
+-        )
++        new_block_ids_to_zero = self._take_new_block_ids_to_zero()
+ 
+         scheduler_output = SchedulerOutput(
+             scheduled_new_reqs=new_reqs_data,
+@@ -2741,6 +2751,18 @@
+                 continue
+             self._free_blocks(req)
+ 
++    def _take_new_block_ids_to_zero(self) -> list[int] | None:
++        """New block ids the worker zeroes this step, minus those an async KV
++        load will overwrite."""
++        if not self.needs_kv_cache_zeroing:
++            return None
++        ids = self.kv_cache_manager.take_new_block_ids()
++        if self._skip_zero_block_ids:
++            skip = self._skip_zero_block_ids
++            ids = [b for b in ids if b not in skip]
++            skip.clear()
++        return ids or None
++
+     def _update_requests_with_invalid_blocks(
+         self,
+         requests: Iterable[Request],

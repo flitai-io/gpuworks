@@ -336,6 +336,7 @@ function restartConfirmContent(need: unknown): string {
 function autoAuthHelpKey(providerKind?: string): string {
   switch (providerKind) {
     case "aliyun":
+    case "digitalocean":
     case "runpod":
     case "vast":
     case "compshare":

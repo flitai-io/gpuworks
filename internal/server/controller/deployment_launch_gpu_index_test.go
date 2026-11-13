@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/server/planning"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/server/planning"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"

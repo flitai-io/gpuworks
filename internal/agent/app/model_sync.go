@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -21,6 +22,7 @@ type activeModelSync struct {
 	key        string
 	receiver   *agentmodelsync.Receiver
 	canceled   atomic.Bool
+	relayDone  chan struct{}
 }
 
 func (n *NodeRuntime) reportModelSyncStatus(active *activeModelSync, status proto.ModelFileStatus) {
@@ -164,6 +166,10 @@ func (n *NodeRuntime) waitModelSync(active *activeModelSync, p proto.ModelSyncLi
 }
 
 func (n *NodeRuntime) rpcModelSyncSend(ctx context.Context, params json.RawMessage) (any, error) {
+	return n.modelSyncSend(ctx, params, nil)
+}
+
+func (n *NodeRuntime) modelSyncSend(ctx context.Context, params json.RawMessage, raw net.Conn) (any, error) {
 	var p proto.ModelSyncSendParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
@@ -175,10 +181,24 @@ func (n *NodeRuntime) rpcModelSyncSend(ctx context.Context, params json.RawMessa
 	if err != nil {
 		return nil, err
 	}
-	result, err := agentmodelsync.Send(ctx, p.Endpoints, localIP, p.Token, p.Fingerprint, func(w io.Writer) error {
-		return n.StreamModelArchive(ctx, p.SourcePath, agentmodelsync.RateLimitedWriter(w, p.RateLimitKBs))
-	})
+	transport := "direct"
+	if raw != nil {
+		transport = "relay"
+	}
+	observe := n.peerTransferPhaseReporter(p.ReportPhase, p.TransferID, transport)
+	writeArchive := func(w io.Writer) error {
+		return n.StreamModelArchive(ctx, p.SourcePath, agentmodelsync.RateLimitedWriter(ctx, w, p.RateLimitKBs))
+	}
+	var result agentmodelsync.Result
+	if raw != nil {
+		result, err = agentmodelsync.SendOnConnWithMagic(ctx, raw, p.Token, p.Fingerprint, "GPUWORKS-MODEL/1", writeArchive, observe)
+	} else {
+		result, err = agentmodelsync.Send(ctx, p.Endpoints, localIP, p.Token, p.Fingerprint, writeArchive, observe)
+	}
 	if err != nil {
+		if p.AllowRelay && errors.Is(err, agentmodelsync.ErrDirectUnavailable) {
+			return proto.ModelSyncTransferResult{DirectDialError: err.Error()}, nil
+		}
 		return nil, err
 	}
 	return proto.ModelSyncTransferResult{Bytes: result.Bytes, SHA256: result.SHA256}, nil
@@ -197,6 +217,9 @@ func (n *NodeRuntime) rpcModelSyncProbe(ctx context.Context, params json.RawMess
 		return nil, err
 	}
 	if err := agentmodelsync.Probe(ctx, p.Endpoints, localIP, p.Token, p.Fingerprint, "GPUWORKS-MODEL/1"); err != nil {
+		if p.AllowRelay && errors.Is(err, agentmodelsync.ErrDirectUnavailable) {
+			return proto.ModelSyncTransferResult{DirectDialError: err.Error()}, nil
+		}
 		return nil, fmt.Errorf("source node cannot connect to target direct address: %w", err)
 	}
 	return map[string]string{"state": "ready"}, nil

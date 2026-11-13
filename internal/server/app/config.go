@@ -14,6 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/selflog"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/proxy"
+	"gpuworks.ai/gpuworks/internal/server/selfinstall"
 	"gpuworks.ai/gpuworks/internal/server/serverconfig"
 	"gpuworks.ai/gpuworks/internal/storagerules"
 )
@@ -56,6 +57,8 @@ type Config struct {
 	// UsageReportOff is server.yaml's usage_report: false. The zero value
 	// takes part in the user experience improvement program.
 	UsageReportOff bool
+	// PeerRelay is machine-scoped archive relay policy, resolved at startup.
+	PeerRelay serverconfig.PeerRelay
 	// Experience, when set, makes this server the experience environment's
 	// console (experience.go).
 	Experience *ExperienceConsole
@@ -105,7 +108,7 @@ func DefaultConfig() Config {
 		Addr:                        ":" + serverconfig.DefaultPort,
 		DataDir:                     "./data",
 		VLLMImage:                   "vllm/vllm-openai:latest",
-		AdminUser:                   "admin",
+		AdminUser:                   selfinstall.DefaultAdminUser,
 		SessionIdleTimeout:          24 * time.Hour,
 		SessionMaxLifetime:          7 * 24 * time.Hour,
 		ProxyMaxBodyBytes:           proxy.DefaultMaxBodyBytes,
@@ -172,14 +175,6 @@ func masterSecret(cfg Config, policies ...securefile.Policy) (string, error) {
 		return "", err
 	}
 	return secret, nil
-}
-
-func randHex(n int) string {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "gpuworks-fallback-master-secret"
-	}
-	return hex.EncodeToString(b)
 }
 
 func normalizeRuntimeConfig(cfg Config) Config {

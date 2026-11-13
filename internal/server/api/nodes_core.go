@@ -272,6 +272,12 @@ func (a *apiHandlers) updateNodeRuntime(w http.ResponseWriter, r *http.Request) 
 		writeProductError(w, http.StatusBadRequest, ErrorNodeRuntimeInvalid, "runtime must be auto, docker, nerdctl, or udocker (runveil)", nil)
 		return
 	}
+	// A Kubernetes node runs its instances as pods of its cluster: there is
+	// no runtime to pick (the node DTO offers no runtime_choices).
+	if node, err := a.d.Store.NodeByUUID(uuid); err == nil && node.KubeClusterID != 0 {
+		writeProductError(w, http.StatusConflict, ErrorNodeRuntimeKube, "a Kubernetes node's runtime is its cluster's", nil)
+		return
+	}
 	raw, err := a.d.CallNode(r.Context(), uuid, proto.RPCNodeSetRuntime, map[string]string{"runtime": preference})
 	if err != nil {
 		writeErr(w, http.StatusConflict, err)

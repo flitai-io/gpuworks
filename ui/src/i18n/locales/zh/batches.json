@@ -17,9 +17,6 @@
     "cancelOk": "确认取消",
     "cancelKeep": "继续运行"
   },
-  "filter": {
-    "status": "按状态筛选"
-  },
   "status": {
     "validating": "校验中",
     "in_progress": "运行中",
@@ -110,8 +107,7 @@
     "cancel": "取消",
     "file": "请求文件（JSONL）",
     "fileHelp": "选择 .jsonl 文件（JSON Lines），每行一个请求。",
-    "fileSelected": "{{name}}（{{size}}）",
-    "fileRequired": "请先选择请求文件。",
+    "fileRequired": "请选择 JSONL 请求文件",
     "window": {
       "label": "完成时限",
       "unit": "小时",

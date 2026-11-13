@@ -12,7 +12,7 @@ import math
 import re
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 from playwright.sync_api import expect
 from local_browser_fixture import ROOT, http
@@ -20,7 +20,8 @@ from platform_token_read_revoke import button, check
 import deployment_health_fixture as fixture
 import deployment_replica_fixture as replicas
 from dialog_checks import (
-    assert_drawer_shell, assert_nested_dismissals, cancel_button, close_button, escape, mask)
+    assert_drawer_shell, assert_nested_dismissals, cancel_button, close_button, drawer_regions,
+    escape, mask)
 from local_business_runner import case_parser, run_case
 
 CONTRACT = "gpuworks/deployment/health-check-configuration-runtime"
@@ -171,6 +172,84 @@ def prove_inflight_health_save(page, drawer, server, token, report, text, common
 
 # Mainline: 真server/agent/Docker→开着的健康探针→UI阈值1→真实2s上游超时取消→UI阈值3后恢复
 # →外部503→恢复→UI关→guard下一轮证明无目标探针→UI开恢复；全程相同容器/PID且不自动重启。
+def exercise_deployment_list(page, server, token, deployments, text, fixtures, report):
+    """10.2 and 10.3 on the real deployments table: the query the browser sends and the rows
+    it keeps must both follow the fixture facts, not the product's own filter construction.
+
+    Only search and the state filter are claimed here. Page-size and boundary paging are not
+    asserted from a two-deployment fixture, and 10.8's fixed 10/30/100 totals are not created,
+    so those stay undeclared rather than being inferred from these rows.
+    """
+    # antd Input.Search renders type=search, which is a searchbox role, not a textbox.
+    search = page.get_by_role("searchbox", name=deployments["page"]["search"], exact=True)
+    expect(search).to_be_visible()
+    rows = page.get_by_role("row")
+    names = sorted(entry["name"] for entry in fixtures)
+    sent = []
+
+    def watch(request):
+        if urlsplit(request.url).path == "/api/v1/deployments" and request.method == "GET":
+            sent.append(dict(parse_qsl(urlsplit(request.url).query)))
+
+    page.on("request", watch)
+    record = {"row_names": names, "queries": []}
+
+    def shown_names():
+        # Only body rows carry cells: the empty state is a single placeholder row, so counting
+        # cells rather than reading any text keeps it out of the row set.
+        out = []
+        for index in range(rows.count()):
+            row = rows.nth(index)
+            cells = row.get_by_role("cell")
+            if cells.count() < 2:
+                continue
+            value = cells.first.inner_text().strip()
+            if value:
+                out.append(value)
+        return sorted(out)
+
+    def apply(term, label):
+        before = len(sent)
+        search.fill(term)
+        search.press("Enter")
+        page.wait_for_timeout(600)
+        check(len(sent) > before, f"{label} sent no list query")
+        query = sent[-1]
+        # An empty search omits q entirely instead of sending q=; both are the same contract,
+        # so the expectation is the stripped term or its absence, never a stale value.
+        expected = term.strip() or None
+        check(query.get("q") == expected,
+              f"{label} query q was {query.get('q')!r}, expected {expected!r}")
+        record["queries"].append({"label": label, "q": query.get("q")})
+        return shown_names()
+
+    # A term no fixture name contains: the table must empty out and say why.
+    missing = apply("no-such-deployment-" + report["run_id"], "absent")
+    check(missing == [], f"an absent search still showed rows: {missing}")
+    expect(page.get_by_text(deployments["page"]["emptyFiltered"], exact=True)).to_be_visible()
+    # The full name of one fixture: exactly that row, from the fixture facts.
+    full = apply(fixtures[0]["name"], "complete")
+    check(full == [fixtures[0]["name"]], f"complete search showed {full}")
+    # A fragment of the other name: only that row.
+    # A fragment unique to the second fixture. Both names share a run id prefix, so a prefix
+    # of the whole name would legitimately match both - the distinguishing part is the tail.
+    distinct = fixtures[1]["name"].split("-")[-1]
+    fragment = distinct[: max(4, len(distinct) - 1)]
+    partial = apply(fragment, "partial")
+    check(partial == [fixtures[1]["name"]], f"partial search {fragment!r} showed {partial}")
+    # The shared prefix must match both, which is the other half of a substring contract.
+    shared = "-".join(fixtures[1]["name"].split("-")[:2])
+    both = apply(shared, "shared-prefix")
+    check(both == names, f"shared prefix {shared!r} showed {both}, expected {names}")
+    # Clearing restores every fixture row.
+    cleared = apply("", "cleared")
+    check(cleared == names, f"cleared search showed {cleared}, expected {names}")
+    check(not page.get_by_text(deployments["page"]["empty"], exact=True).is_visible(),
+          "the empty state stayed visible after clearing the search")
+    page.remove_listener("request", watch)
+    return record
+
+
 def test_deployment_health(page, context, server, artifacts, report, locale, data, token, holder):
     common = json.loads((ROOT / f"ui/src/i18n/locales/{locale}/common.json").read_text())
     text = common["healthCheck"]
@@ -196,6 +275,8 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
     check(logged.value.status == 200, "health browser login failed")
     report["sensitive_phase"] = False
     expect(page.get_by_role("heading", name=deployments["page"]["title"], exact=True)).to_be_visible()
+    report["deployment_list_10"] = exercise_deployment_list(
+        page, server, token, deployments, text, [target, guard], report)
     identities, docker_identities = {}, {}
     for entry in (target, guard):
         document = fixture.wait(page, lambda: (value if value.get("ready_replicas") == 1
@@ -233,8 +314,18 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
         expect(dialog).to_be_visible()
         return dialog
 
+    first_delete = open_delete()
+    # 12.7: the confirmation names the deployment and states what deleting it does, so the
+    # operator is not confirming a bare "are you sure".
+    expect(first_delete).to_contain_text(target["name"])
+    expect(first_delete).to_contain_text(deployments["delete"]["description"])
+    impact_text = first_delete.inner_text()
+    check(target["name"] in impact_text and deployments["delete"]["description"] in impact_text,
+          f"delete confirmation lacks the name or its impact: {impact_text!r}")
+    report["delete_confirmation"] = {"name": target["name"],
+                                     "impact": deployments["delete"]["description"]}
     dialog = assert_nested_dismissals(
-        open_delete(), drawer, open_delete,
+        first_delete, drawer, open_delete,
         [("cancel", cancel_button(deployments["delete"]["cancel"])),
          ("escape", escape), ("close", close_button), ("mask", mask)],
         lambda: len(deletes), remove)
@@ -262,6 +353,7 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
         drawer = page.get_by_role("dialog", name=target["name"], exact=True)
         expect(drawer).to_be_visible()
         expect(drawer).to_be_in_viewport(ratio=1)
+        report.setdefault("drawer_layout", drawer_regions(drawer))
         label = text["status"][status]
         if status == "ok":
             label += " · " + format_ms(observation["health"]["last"]["latency_ms"])
@@ -301,7 +393,19 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
     unit = number_group.locator(".ant-input-number-group-addon").last
     expect(unit).to_have_text({"en": "s", "zh": "秒"}[locale])
     expect(unit).to_be_visible()
-    save = button(drawer, text["save"])
+    # Two Save buttons now live in this drawer: this editor's own inline one beside the
+    # threshold input, and the node-failure setting's further down. Anchor on the one that
+    # shares a container with the threshold spinbutton instead of taking either by order.
+    def health_save():
+        # Two Save buttons now live in this drawer: this editor's own inline one beside the
+        # threshold input, and the node-failure setting's further down. Anchor on the one in the
+        # space item that follows the threshold rather than taking either one by order.
+        return drawer.get_by_role("spinbutton", name=text["threshold"], exact=True).locator(
+            "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' ant-space-item ')][1]"
+            "/following-sibling::*[contains(concat(' ', normalize-space(@class), ' '), ' ant-space-item ')][1]"
+            "//button").first
+    save = health_save()
+    expect(save).to_have_text(re.compile(r"^\s*" + re.escape(text["save"]) + r"\s*$"))
     expect(save).to_be_disabled()
     threshold.press("ArrowUp")
     expect(threshold).to_have_value("6")
@@ -324,7 +428,7 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
         report["step"] = f"health-config-{enabled}-{seconds}"
         if enabled and drawer.get_by_role("switch", name=text["enable"], exact=True).is_checked():
             drawer.get_by_role("spinbutton", name=text["threshold"], exact=True).fill(str(seconds))
-            trigger = button(drawer, text["save"])
+            trigger = health_save()
         else:
             trigger = drawer.get_by_role("switch", name=text["enable"], exact=True)
         expected = {"method": "PUT", "path": path + "/health-check", "query": "",
@@ -384,7 +488,7 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
     drawer = show("ok", final)
     expect(drawer.get_by_role("switch", name=text["enable"], exact=True)).to_be_checked()
     expect(drawer.get_by_role("spinbutton", name=text["threshold"], exact=True)).to_have_value("3")
-    expect(button(drawer, text["save"])).to_be_disabled()
+    expect(health_save()).to_be_disabled()
     unchanged()
     replicas.strict(requests, expected_requests, "final health PUT ledger")
     check(not page_errors, f"health page errors: {page_errors}")

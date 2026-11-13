@@ -281,21 +281,31 @@ export async function invokeOperation(operation: PlaygroundOperation, model: str
   body.append("model", model);
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined || value === null) continue;
-    if (typeof value === "string" && value.startsWith("data:")) {
-      const comma = value.indexOf(",");
-      if (comma > 0) {
-        const header = value.slice(5, comma).split(";")[0] || "application/octet-stream";
-        const bytes = Uint8Array.from(atob(value.slice(comma + 1)), (character) => character.charCodeAt(0));
-        body.append(key, new Blob([bytes], { type: header }), `${key}.bin`);
-        continue;
-      }
+    // A list of files - several reference images - is the same field
+    // repeated, one part per file, in order.
+    if (Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string" && item.startsWith("data:"))) {
+      for (const item of value as string[]) appendMultipartValue(body, key, item);
+      continue;
     }
-    body.append(key, typeof value === "string" ? value : JSON.stringify(value));
+    appendMultipartValue(body, key, value);
   }
   const response = await fetch(operationURL(operation.endpoint), { method: "POST", credentials: "include", body, signal });
   if (!response.ok) throw new Error(await responseError(response));
   if (["audio", "video"].includes(operation.response)) return response.blob();
   return response.json();
+}
+
+function appendMultipartValue(body: FormData, key: string, value: unknown) {
+  if (typeof value === "string" && value.startsWith("data:")) {
+    const comma = value.indexOf(",");
+    if (comma > 0) {
+      const header = value.slice(5, comma).split(";")[0] || "application/octet-stream";
+      const bytes = Uint8Array.from(atob(value.slice(comma + 1)), (character) => character.charCodeAt(0));
+      body.append(key, new Blob([bytes], { type: header }), `${key}.bin`);
+      return;
+    }
+  }
+  body.append(key, typeof value === "string" ? value : JSON.stringify(value));
 }
 
 export async function retrieveAsync(operation: PlaygroundOperation, model: string, taskID: string, kind: "poll" | "content" | "cancel", signal?: AbortSignal): Promise<unknown> {

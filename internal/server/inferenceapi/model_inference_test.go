@@ -1,8 +1,10 @@
 package inferenceapi
 
 import (
+	"encoding/json"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/pkg/model/modelmetadata"
 )
 
@@ -38,5 +40,37 @@ func TestMetadataToOperations(t *testing.T) {
 				t.Fatalf("operations = %+v, want %s", got, tt.want)
 			}
 		})
+	}
+}
+
+// Registration stores OperationsForTasks unnormalized, and a template may
+// replace that value only while store recognizes it as such a placeholder. A
+// task added here without the store's literal list following would leave every
+// checkpoint with that task stuck on a contract with no endpoint or inputs.
+func TestRegistrationInferredOperationsAreTemplatePlaceholders(t *testing.T) {
+	tasks := []string{
+		"text-ranking", "feature-extraction", "text-generation", "text2text-generation", "image-text-to-text",
+		"automatic-speech-recognition", "text-to-speech", "text-to-audio", "text-to-image", "image-to-image",
+		"text-to-video", "image-to-video", "image-text-to-video",
+	}
+	for _, task := range tasks {
+		operations := OperationsForTasks([]string{task})
+		if len(operations) != 1 {
+			t.Fatalf("task %s inferred %d operations, want 1", task, len(operations))
+		}
+		raw, err := json.Marshal(operations)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !store.IsDefaultTemplateOperations(string(raw)) {
+			t.Errorf("task %s registers %s, which a template cannot replace", task, raw)
+		}
+	}
+	raw, err := json.Marshal(OperationsForTasks([]string{"text-to-image", "image-to-image"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !store.IsDefaultTemplateOperations(string(raw)) {
+		t.Fatalf("a text-to-image and image-to-image checkpoint registers %s; it must stay a template placeholder", raw)
 	}
 }

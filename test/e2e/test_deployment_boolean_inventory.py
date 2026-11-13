@@ -45,7 +45,7 @@ class InventoryContracts(unittest.TestCase):
             self.assertEqual(expected['effective_operations'], ['openai.chat'] if local else [])
             model = {'id': 1, 'source': 'local' if local else 'huggingface',
                      'operations': [{'type': 'openai.chat'}] if local else []}
-            template = {'id': 2, 'specs': [{'name': 'owned', 'source': 'user', 'display_profile': 'general',
+            template = {'id': 2, 'specs': [{'name': 'owned', 'source': 'user', 'display_name_en': 'Acquisition · BF16', 'display_name_zh_cn': '采集 · BF16',
                          'api': {'health_endpoint': '/health', 'operations': []}}]}
             self.assertEqual(health_contract(body, model, template), expected)
             changed = copy.deepcopy(template)

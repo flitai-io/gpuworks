@@ -53,7 +53,7 @@ func IsTransient(err error) bool {
 		}
 	}
 	var netErr net.Error
-	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) { //nolint:staticcheck // SA1019: preserve retries for temporary errors from legacy download transports.
 		return true
 	}
 	// Some HTTP/2 and TLS transport failures have no exported error type.

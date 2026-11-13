@@ -51,7 +51,12 @@ func (a *apiHandlers) suggestUnit(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	perRank, err := placement.Parallelism(dep.NNodes).GPUsPerNode()
+	spec, err := planning.DeploymentParallelism(dep, placement)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	perRank, err := spec.GPUsPerNode()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -133,7 +138,7 @@ func (a *apiHandlers) trialUnit(r *http.Request, dep *store.Deployment, facts pl
 	}
 	group, err := a.networks().ComputeGroup(rows)
 	if err != nil {
-		return nodes[0], &dto.ScheduleReason{Code: "placement_rejected", Params: map[string]any{"detail": err.Error()}}, nil
+		return nodes[0], &dto.ScheduleReason{Code: "placement_rejected", Params: map[string]any{"detail": err.Error()}}, nil //nolint:nilerr // Network rejection is returned as a ScheduleReason, not a transport error.
 	}
 	for rank, node := range nodes {
 		launch, layer, _, err := planning.DeploymentLaunch(dep, facts.Requirements, node, model, nil)

@@ -1,3 +1,5 @@
+import type { PeerTransferSnapshot } from "./peerTransferTypes";
+export type * from "./peerTransferTypes";
 import type { ServerBuildInfo } from "./serverBuildInfo";
 import type { BenchmarkPointEvidence } from "./benchmarkEvidenceTypes";
 export type * from "./benchmarkEvidenceTypes";
@@ -16,10 +18,11 @@ import type {
   StorageDownloadFormat, StorageFileList,
 } from "./storageTypes";
 export type * from "./storageTypes";
-import type { AgentUpgradeCreate, AgentUpgradeItem, AgentUpgradePage, AgentUpgradePreview, AgentUpgradeRun } from "./agentUpgradesTypes";
+import type { AgentVersionChange, AgentUpgradeCreate, AgentUpgradeItem, AgentUpgradePage, AgentUpgradePreview, AgentUpgradeRun } from "./agentUpgradesTypes";
 export type * from "./agentUpgradesTypes";
 import i18n from "./i18n";
 import { APIError, apiErrorText, apiResponseError, ProxyErrorPage, type ProductMessage } from "./apiError";
+import type { DiagnosticReport } from "./diagnosticChecks";
 import { readSSE } from "./sse";
 import { isSessionExpired, subscribeSessionChanges } from "./session";
 import type { LocalizedText } from "./i18n/localizedText";
@@ -174,7 +177,7 @@ export interface Node {
   scheduling_by?: "operator" | "platform";
   // cordon_reason is why the platform holds the node now; absent unless
   // scheduling_by is platform.
-  cordon_reason?: "runtime_gpu_blocked" | "card_needs_host_reboot";
+  cordon_reason?: "runtime_gpu_blocked" | "card_needs_host_reboot" | "kube_unschedulable";
   name?: string;
   token?: string;
   /** Installs this node's agent; returned with the token, and the way back
@@ -232,6 +235,8 @@ export interface Node {
   }>;
   runtime_driver?: string;
   runtime_preference?: string;
+  /** The runtime preferences the operator may set, in the order to offer; absent when the node has no choice (a Kubernetes node). */
+  runtime_choices?: string[];
   /** The operator's choice of which vendor's cards the node manages: auto or a vendor; absent is auto. */
   accelerator_preference?: string;
   /** Every vendor whose cards the agent saw on the host's bus, the managed one included. */
@@ -253,6 +258,8 @@ export interface Node {
   server_dial_address?: string;
   server_dial_listen?: string;
   agent_version?: string;
+  agent_eligibility?: string;
+  agent_version_change?: AgentVersionChange;
   caps?: string[];
   last_remote_addr?: string;
   last_reject_reason?: string;
@@ -293,7 +300,7 @@ export interface AgentRejectEvent {
 // How the server logs in to a node over SSH. platform_key is the server's own
 // key pair (see PlatformSSHKey); it needs nothing from the operator once the
 // node authorized its public key.
-export type SSHAuthMode = "platform_key" | "password" | "private_key";
+export type SSHAuthMode = "platform_key" | "password" | "private_key" | "keyboard_interactive";
 
 export interface SSHCredentialInfo {
   host: string;
@@ -800,6 +807,7 @@ export interface ModelNodePresence {
   last_rate_limit_kib_s?: number;
   acquisition: "auto" | "peer" | "download" | "registered" | string;
   transfer_id?: string;
+  transfer_error_code?: string;
   source_node_uuid?: string;
   message?: string;
   /** The storage the files are in; cache marks an nfs_cache storage's copy on this node. */
@@ -881,6 +889,7 @@ export interface ImageNode {
   transferred_bytes?: number;
   rate_bps?: number;
   transfer_id?: string;
+  transfer_error_code?: string;
   source_node_uuid?: string;
   source_node_name?: string;
   source?: "peer" | "offline" | "quay" | "huaweicloud" | "direct" | string;
@@ -1009,6 +1018,191 @@ export interface ImageSeries {
   present_nodes: number;
   total_nodes: number;
   versions?: ImageCatalogEntry[];
+}
+
+/** The accelerator vendor of a cloud node pool (ProviderClusterPool.vendor). */
+export type KubeVendor = "nvidia" | "ascend" | "hygon" | "ppu" | "amd" | "kunlunxin";
+
+/** How many of an entry's nodes have one vendor's cards (dto.KubeVendorNodes); vendor "" is nodes that reported no cards. */
+export interface KubeVendorNodes {
+  vendor: string;
+  nodes: number;
+}
+
+/** A Kubernetes cluster whose GPU nodes join through one DaemonSet (dto.KubeCluster). */
+export interface KubeCluster {
+  id: number;
+  uuid: string;
+  name: string;
+  namespace: string;
+  server_url: string;
+  /** The entry's own image; empty runs the published image from agent_image_source. */
+  agent_image: string;
+  /** The registry the published agent image is pulled from (dto.KubeAgentImageSource id). */
+  agent_image_source: string;
+  /** The image the entry's manifest names. */
+  effective_agent_image: string;
+  node_selector: string;
+  /** The agent's directory on the host. */
+  state_dir: string;
+  /**
+   * Applies to the instance pods of NVIDIA nodes only (other vendors ignore it); empty uses the cluster's "nvidia"
+   * RuntimeClass when it has one and the node's default runtime otherwise.
+   */
+  runtime_class: string;
+  /** A docker-registry Secret in the namespace the agent image is pulled with; empty pulls without one. */
+  image_pull_secret: string;
+  /** Empty means the agents find the socket themselves. */
+  containerd_socket: string;
+  /** API server address the agents use instead of the "kubernetes" Service; empty uses the Service. */
+  api_server: string;
+  engine_ports: string;
+  /** Seconds a borrowed card may sit idle before it goes back; -1 keeps it. */
+  idle_return_seconds: number;
+  /** PriorityClass value of the hold and instance pods (larger first; ordinary pods are 0). */
+  priority: number;
+  /** Whether the scheduler may evict lower-priority pods for a hold pod. */
+  allow_preemption: boolean;
+  /** Empty until the first node enrolled. */
+  cluster_uid: string;
+  revoked: boolean;
+  node_count: number;
+  /** The joined nodes by the vendor of their cards, most first; each agent detects its own node's. */
+  vendors: KubeVendorNodes[];
+  created_at: string;
+  /** Carries the enrollment token; administrators only. */
+  apply_command?: string;
+  /** kubectl commands, in order, that uninstall the entry's agents and the pods they started from the cluster; administrators only, also for a revoked entry. */
+  remove_commands?: string[];
+  /** No node joined for longer than the dictionary's stalled_after_seconds: worth troubleshooting. */
+  stalled: boolean;
+  /** The cloud node pools a cloud entry holds, ascending; empty for an entry made by hand. */
+  pool_ids: string[];
+  /** Other entries that use this namespace and may be of the same cluster (server-computed). */
+  namespace_shared_with: string[];
+  /** Whether the server can apply the manifest to the source cluster, or delete it from there. */
+  can_apply: boolean;
+  can_remove: boolean;
+  /** Why not: no_source (made by hand), private_api (the cloud says the API server has no public address), revoked (apply only). */
+  operation_blocked?: "no_source" | "private_api" | "revoked";
+  /** The cloud account cluster the entry was made from; gpuworks can then apply the manifest itself. */
+  source?: KubeClusterSource;
+}
+
+/** What the cluster form takes from the server (dto.KubeDefaults); every value is a hint, a field left empty takes it. */
+export interface KubeDefaults {
+  namespace: string;
+  state_dir: string;
+  engine_ports: string;
+  idle_return_seconds: number;
+  /** The idle_return_seconds value that keeps borrowed cards. */
+  idle_return_keep: number;
+  agent_image: string;
+  stalled_after_seconds: number;
+  /** The registry an entry made by hand pulls the published agent image from. */
+  agent_image_source: string;
+  /** The registries the agent image is published to, the default first. */
+  agent_image_sources: KubeAgentImageSource[];
+  /** Default PriorityClass value and its upper bound (the lower bound is 0). */
+  priority: number;
+  priority_max: number;
+  allow_preemption: boolean;
+}
+
+/** A registry the agent image is published to (dto.KubeAgentImageSource). */
+export interface KubeAgentImageSource {
+  id: string;
+  /** The image there, at the server's runtime revision. */
+  image: string;
+}
+
+/** Where a cluster entry came from (dto.KubeClusterSource). */
+export interface KubeClusterSource {
+  provider_id: number;
+  /** Empty when the account is no longer listed. */
+  provider_name: string;
+  provider_kind: string;
+  cluster_id: string;
+}
+
+/** What an apply or removal did to each object of the manifest (dto.KubeClusterOperation). */
+export interface KubeClusterOperation {
+  dry_run: boolean;
+  results: KubeObjectResult[];
+  /** Present when the operation failed: KUBE_CLUSTER_OPERATION_FAILED. */
+  code?: string;
+  error?: string;
+  params?: { step: "kubeconfig" | "api_server"; reason: string };
+}
+
+export type KubeObjectAction = "create" | "update" | "replace" | "delete" | "absent" | "failed" | "not_tried" | "dependent";
+
+export interface KubeObjectResult {
+  kind: string;
+  name: string;
+  namespace?: string;
+  action: KubeObjectAction;
+  reason?: string;
+  error?: string;
+}
+
+/** Creates a cluster; an omitted optional field takes the server's default (dto.KubeClusterRequest). */
+export interface KubeClusterRequest {
+  name: string;
+  server_url: string;
+  namespace?: string;
+  agent_image?: string;
+  /** Omitted: Docker Hub for an entry made by hand, the registry its region reaches for one from a cloud cluster. */
+  agent_image_source?: string;
+  node_selector?: string;
+  /** The agent's directory on the host; omitted means /opt/gpuworks. */
+  state_dir?: string;
+  /** Applies to NVIDIA nodes' instance pods only; omitted lets the agents decide on each node. */
+  runtime_class?: string;
+  /** Omitted pulls the agent image without credentials. */
+  image_pull_secret?: string;
+  /** Omitted means the agents detect it (containerd, k3s, RKE2, microk8s). */
+  containerd_socket?: string;
+  /** "https://host:port"; omitted means the cluster's "kubernetes" Service. */
+  api_server?: string;
+  engine_ports?: string;
+  idle_return_seconds?: number;
+  /** Omitted take GET /kube/defaults. */
+  priority?: number;
+  allow_preemption?: boolean;
+  /** The cloud account cluster the entry is made from; both or neither. */
+  provider_id?: number;
+  provider_cluster_id?: string;
+  /** The cluster's GPU node pools the entry holds (required with a source; pools of any vendors). */
+  provider_pool_ids?: string[];
+}
+
+/** Edits an entry (dto.KubeClusterUpdate): a field omitted keeps the entry's value, an empty string clears an optional one. The namespace, server URL and state directory are fixed at creation. */
+export interface KubeClusterUpdate {
+  name?: string;
+  /** Refused for an entry made from a cloud cluster: its nodes are chosen by node pool. */
+  node_selector?: string;
+  agent_image?: string;
+  agent_image_source?: string;
+  image_pull_secret?: string;
+  runtime_class?: string;
+  containerd_socket?: string;
+  api_server?: string;
+  engine_ports?: string;
+  idle_return_seconds?: number;
+  priority?: number;
+  allow_preemption?: boolean;
+}
+
+/** The answer to an edit (dto.KubeClusterEdit). */
+export interface KubeClusterEdit {
+  cluster: KubeCluster;
+  /** The JSON names of the fields that changed, sorted. */
+  changed: string[];
+  /** The cluster still runs the old manifest until it is applied again. */
+  reapply: boolean;
+  /** For an entry the server cannot apply: the kubectl commands, in order, that bring the cluster in line. */
+  commands: string[];
 }
 
 // Every collection endpoint answers an envelope, never a bare array
@@ -1154,8 +1348,20 @@ export type DeploymentListItem = Pick<
 export type DeploymentPage = ListPage<DeploymentListItem>;
 
 
+export interface AgentFleetSummary {
+  target: string;
+  align: number;
+  upgrade?: number;
+  downgrade?: number;
+  different_build?: number;
+  check: number;
+  offline?: number;
+  run_id?: number;
+}
+
 /** A node page row omits topology and path usage (GET /nodes/{uuid} has them). */
 export interface NodePage extends ListPage<Node> {
+  agent_fleet?: AgentFleetSummary;
   /** Every node, whatever the filters; total counts the matches. */
   all: number;
   /** Every user label key=value across all nodes, whatever the filters. */
@@ -1208,12 +1414,29 @@ export interface CapacityGroup {
   unusable_gpus: number;
 }
 
+/** The fleet's cards counted once each, in the scheduling overview's states. */
+export interface SchedulingCardSummary {
+  nodes: number;
+  online_nodes: number;
+  cards: number;
+  awake: number;
+  asleep: number;
+  free: number;
+  held_outside: number;
+  unhealthy: number;
+  offline: number;
+  contention: { waiting_wakes: number; held_requests: number; yields_last_hour: number };
+}
+
 export interface DashboardSummary {
   current_metrics?: {
     utilization_pct: number | null;
     temperature_c: number | null;
     power_watts: number | null;
     memory_used_bytes: number | null;
+    /** VRAM used and owned by the online nodes' cards, summed over the cards with both samples fresh; null when none has. */
+    vram_used_bytes?: number | null;
+    vram_total_bytes?: number | null;
   };
   nodes: {
     total: number;
@@ -1225,7 +1448,12 @@ export interface DashboardSummary {
     vram_gib: number;
     memory_gib: number;
   };
-  deployments: { total: number; running: number; warming: number; sleepable: number };
+  /** Every deployment falls in exactly one bucket; other is the ones in no named bucket. */
+  deployments: { total: number; running: number; warming: number; sleeping?: number; pending?: number; other?: number; sleepable: number };
+  /** The scheduling overview's card summary; null when it cannot be built. */
+  /** allocated = cards a deployment holds (awake + asleep), counted by the server. */
+  cards?: (SchedulingCardSummary & { allocated: number }) | null;
+  tasks?: { batches: { active: number; waiting: number } | null; benchmarks: number };
   by_vendor: CapacityGroup[];
   label_keys: string[];
   label_key: string;
@@ -1365,10 +1593,13 @@ export interface AuthUser {
   id: number;
   username: string;
   role: string;
+  /** The length a new password must have; /auth/me only. */
+  password_policy?: { min_length: number; max_length: number };
 }
 
 /** One built-in (or administrator-configured) community repository card. */
 export interface CommunityRepo {
+  access_host?: string;
   repo: string;
   registry: "docker-hub" | "quay" | "oci" | string;
   engine: string;
@@ -1379,7 +1610,11 @@ export interface CommunityRepo {
 
 export interface CommunityTag {
   tag: string;
+  engine?: string;
   engine_version?: string;
+  framework?: string;
+  framework_version?: string;
+  arch?: string;
   rolling_tag?: boolean;
   upstream_gone?: boolean;
   /** When the registry last saw the tag move (RFC 3339); absent for plain OCI registries. */
@@ -1576,6 +1811,10 @@ export interface Breakdown {
   vram_limit_bytes?: number;
 }
 export interface Measured {
+  ModelLoadingSeconds?: number;
+  CompilationSeconds?: number;
+  GraphCaptureSeconds?: number;
+  StartupSeconds?: number;
   ModelWeightsGiB: number;
   KVCacheGiB: number;
   KVCacheTokens: number;
@@ -1594,9 +1833,22 @@ export interface RuntimeMount {
   purpose?: string;
 }
 
+export interface StartupEstimate {
+  weight_bytes: number;
+  method: string;
+  estimated_seconds?: number;
+  reference_mib_per_sec?: number;
+  initialization_seconds?: number;
+}
+
 export interface Instance {
   pre_start_argv?: string[];
   pre_start_script?: string;
+  start_timeout_sec?: number;
+  start_timeout_source?: string;
+  start_timeout_conflict?: boolean;
+  engine_start_timeout_sec?: number;
+  startup_estimate?: StartupEstimate;
   uuid: string;
   deployment_id: number;
   node_uuid: string;
@@ -1609,6 +1861,7 @@ export interface Instance {
   image: string;
   image_digest_id?: string;
   message: string;
+  runtime_failure?: { code: string; params?: Record<string, unknown>; message: string };
   container_id?: string;
   phase?: string;
   progress?: number;
@@ -1649,7 +1902,7 @@ export interface Instance {
   dist_role?: "leader" | "follower" | string;
   dist_group?: string;
   dist_attempt?: number;
-  schedule?: { explain?: any; breakdown?: Breakdown; network?: { compute?: InstanceComputeNetwork } };
+  schedule?: { explain?: any; breakdown?: Breakdown; network?: { compute?: InstanceComputeNetwork }; unit?: { key?: string } };
   measured?: Measured;
   entrypoint?: string[];
   argv?: string[];
@@ -2246,10 +2499,14 @@ export interface DataRetentionStatus {
   usage_flush: { at_ms: number; rows: number; ms: number; error?: string };
 }
 
+export type ProviderCategory = "public_cloud" | "private_cloud";
+
 export interface CloudProvider {
   id: number;
   name: string;
   kind: string;
+  // The platform the kind connects, which the server derives; the platform type column shows it.
+  category: ProviderCategory;
   state: string;
   instance_count: number;
   created_at: string;
@@ -2298,6 +2555,39 @@ export interface ProviderKindInfo {
   // The provider maps container ports: the server chooses the agent's port
   // and address when they are left empty.
   server_dial_auto_port?: boolean;
+  /** The account's managed Kubernetes clusters can be listed and connected (GET /providers/{id}/clusters). */
+  can_list_clusters?: boolean;
+}
+
+/** A managed Kubernetes cluster of a cloud account (dto.ProviderCluster), listed live. */
+export interface ProviderCluster {
+  external_id: string;
+  name: string;
+  region: string;
+  version: string;
+  /** The vendor's own word for the cluster's state. */
+  state: string;
+  running: boolean;
+  /** The API server has a public address, so gpuworks can apply the manifest itself. */
+  public_api: boolean;
+  gpu_pools: ProviderClusterPool[];
+  /** The cluster entry already made from this cluster. */
+  entry?: { uuid: string; name: string };
+  /** The registry an entry made from it pulls the agent image from unless the form names another. */
+  agent_image_source: string;
+}
+
+/** A GPU node pool of a ProviderCluster. */
+export interface ProviderClusterPool {
+  id: string;
+  name: string;
+  gpu_model: string;
+  /** GPUs per node. */
+  gpu_count: number;
+  nodes: number;
+  vendor: KubeVendor;
+  /** The cluster's entry holds this pool: the DaemonSet runs on its nodes. */
+  in_entry: boolean;
 }
 
 export interface ProviderInstance {
@@ -2314,6 +2604,10 @@ export interface ProviderInstance {
   ssh_connections: SSHConnection[];
   kind: string;
   node_id: number;
+  /** The instance is a node of this Kubernetes cluster of the account; it joins through the cluster. */
+  managed_cluster?: string;
+  /** What the instance allows now: power_on | power_off | install | delete. Empty for a cluster node. */
+  actions: string[];
 }
 
 export interface SSHConnection {
@@ -2713,12 +3007,12 @@ export interface BenchmarkTargetSnapshot {
 }
 export interface BenchmarkCurveSample {
   t: number;
-  output_tput: number;
-  total_tput: number;
-  request_tput: number;
-  ttft_p50: number;
-  tpot_p50: number;
-  latency_p99: number;
+  output_tput?: number | null;
+  total_tput?: number | null;
+  request_tput?: number | null;
+  ttft_p50?: number | null;
+  tpot_p50?: number | null;
+  latency_p99?: number | null;
 }
 export interface BenchmarkCurveResponse {
   points: Array<{
@@ -2726,6 +3020,40 @@ export interface BenchmarkCurveResponse {
     concurrency: number;
     samples: BenchmarkCurveSample[];
   }>;
+}
+export interface BenchmarkTimelineRecord {
+  version: number;
+  run_id: number;
+  point_seq: number;
+  session_id: string;
+  turn: number;
+  planned_turns: number;
+  attempt: number;
+  finish_reason?: string;
+  error_text?: string;
+  canceled?: boolean;
+  error_stage?: string;
+  http_status?: number;
+  input_source: string;
+  output_source: string;
+  output_budget: number;
+  metrics: {
+    started_at: string | null;
+    first_output_at: string | null;
+    first_content_at: string | null;
+    last_output_at: string | null;
+    finished_at: string | null;
+    ttft_ms: number | null;
+    tpot_ms: number | null;
+    latency_ms: number | null;
+    completion_ms: number | null;
+    input_tokens: number;
+    output_tokens: number;
+  };
+}
+export interface BenchmarkRequestTimeline {
+  status: "complete" | "disabled" | "unavailable" | "truncated";
+  records: BenchmarkTimelineRecord[];
 }
 export interface BenchmarkViolation {
   reason?: "limit_exceeded" | "evidence_unavailable";
@@ -2983,6 +3311,32 @@ export interface AcquisitionResult {
    * multi-node draft, in rank order); absent for automatic placement.
    */
   nodes?: AcquisitionNodeFact[];
+  /**
+   * How each template component other than the primary (a separate text
+   * encoder, a speculative draft) reaches the target nodes; present once the
+   * nodes are known.
+   */
+  components?: AcquisitionComponent[];
+}
+
+/**
+ * One template component's forecast. plan "ready": every target node reads it
+ * already; "shared_download": the create downloads it once into the shared
+ * storage `storage`, through one writer node (follows_primary: no storage was
+ * chosen and it is the one the primary sits on); "node_download": each target
+ * node without it downloads it into its own storage.
+ */
+export interface AcquisitionComponent {
+  name: string;
+  role: string;
+  model: string;
+  size_bytes?: number;
+  plan: "ready" | "shared_download" | "node_download";
+  nodes: number;
+  ready_nodes: number;
+  storage_id?: number;
+  storage?: string;
+  follows_primary?: boolean;
 }
 
 export type ImagePlan = "present" | "copy" | "pull";
@@ -3205,7 +3559,10 @@ export interface PreflightSummary {
 }
 
 export interface EvaluateResponse {
+  gpu_candidates?: GPUCandidates;
   schema_version?: number;
+  diagnostics?: DiagnosticReport;
+  request_id?: string;
   // Request errors attributed to form fields. A response with errors has
   // ok=false and stays HTTP 200; the codes match the create 400 path.
   errors?: EvaluateFieldError[];
@@ -3302,6 +3659,11 @@ export interface EvaluateResponse {
   // Whether the draft may be created with a yield policy other than never,
   // the create's own check; absent until the draft's engine is known.
   yield_policy_eligible?: Eligibility;
+}
+
+export interface GPUCandidates {
+  node_uuid: string;
+  items: { index: number; available: boolean; reason?: ScheduleReason }[];
 }
 
 // PdRoleName is the fixed pair every PD mode declares today (ADR 0028); the
@@ -3791,7 +4153,7 @@ export function engineReportsNoMetrics(sources: MonitorDeployment["sources"]): b
 // One stored series from the metric catalog GET /api/v1/monitor/metrics. An
 // inference histogram contributes its quantile gauges (quantiles: true) and
 // its _sum/_count.
-export type MonitorMetricSource = "gpu" | "dgpu" | "node" | "network" | "engine" | "gateway" | "kv_disk" | "benchmark";
+export type MonitorMetricSource = "gpu" | "dgpu" | "node" | "network" | "engine" | "gateway" | "kv_disk" | "benchmark" | "peer_transfer";
 export interface MonitorMetricSeriesInfo {
   series: string;
   name: string;
@@ -3846,6 +4208,22 @@ async function getText(path: string, signal?: AbortSignal): Promise<string> {
 }
 
 /** An error response as an Error in the reader's language: a product error's text, or the proxy-page explanation. */
+async function kubeClusterOperation(uuid: string, op: "apply" | "remove", dryRun: boolean): Promise<KubeClusterOperation> {
+  const res = await fetch(`/api/v1/kube/clusters/${encodeURIComponent(uuid)}/${op}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dry_run: dryRun }),
+  });
+  if (res.status === 424) {
+    // The cluster or the cloud refused: the body still says what happened to each object.
+    const body = (await res.clone().json().catch(() => null)) as KubeClusterOperation | null;
+    if (body && Array.isArray(body.results)) return body;
+  }
+  if (!res.ok) throw await localizedResponseError(res, `${op}: ${res.status}`);
+  return (await res.json()) as KubeClusterOperation;
+}
+
 export async function localizedResponseError(
   response: Response,
   fallback: string,
@@ -4004,6 +4382,11 @@ export interface Branding {
 export interface SecuritySettings {
   /** Lets the playground HTML preview make network requests; off by default. */
   playground_preview_network: boolean;
+  /**
+   * Accepts /v1 requests that present no API key, anonymously; off by default.
+   * A request that does present a key is still verified either way.
+   */
+  inference_open_access: boolean;
 }
 
 export interface ServerListenUpdate {
@@ -4014,6 +4397,7 @@ export interface ServerListenUpdate {
 
 export const api = {
   health: () => getJSON<Health>("/api/v1/healthz"),
+  peerTransfers: (transferId?: string) => getJSON<PeerTransferSnapshot>(`/api/v1/peer-transfers${transferId ? `?transfer_id=${encodeURIComponent(transferId)}` : ""}`),
   engines: (targetVendor?: string) => getJSON<List<EngineProfile>>(`/api/v1/engines${targetVendor ? `?target_vendor=${encodeURIComponent(targetVendor)}` : ""}`),
   nodes: () => getJSON<List<Node>>("/api/v1/nodes"),
   nodesPage: (query: ListQuery) => getJSON<NodePage>(`/api/v1/nodes?${listQueryString(query)}`),
@@ -4032,6 +4416,7 @@ export const api = {
     sendJSON<AgentUpgradePreview>("POST", "/api/v1/agent-upgrades/preview", body),
   createAgentUpgrade: (body: AgentUpgradeCreate) =>
     sendJSON<AgentUpgradeRun>("POST", "/api/v1/agent-upgrades", body),
+  agentFleetSummary: () => getJSON<AgentFleetSummary>("/api/v1/agent-upgrades/summary"),
   agentUpgradeRuns: (page = 1, pageSize = 20) =>
     getJSON<AgentUpgradePage<AgentUpgradeRun>>(`/api/v1/agent-upgrades?page=${page}&page_size=${pageSize}`),
   agentUpgradeRun: (id: number) => getJSON<AgentUpgradeRun>(`/api/v1/agent-upgrades/${id}`),
@@ -4107,7 +4492,7 @@ export const api = {
   renameNode: (uuid: string, name: string) =>
     sendJSON<Node>("PATCH", `/api/v1/nodes/${uuid}/name`, { name }),
   deleteNode: (uuid: string, force = false) =>
-    sendJSON<void>("DELETE", `/api/v1/nodes/${encodeURIComponent(uuid)}${force ? "?force=true" : ""}`),
+    sendJSON<{ status: "deleted"; agent_uninstalled: boolean }>("DELETE", `/api/v1/nodes/${encodeURIComponent(uuid)}${force ? "?force=true" : ""}`),
   upgradeNode: (uuid: string) =>
     sendJSON<{ status: string; run_id?: number }>("POST", `/api/v1/nodes/${uuid}/upgrade`),
   precheckNode: (body: SSHPrecheckRequest) =>
@@ -4212,6 +4597,9 @@ export const api = {
     sendJSON<RecoveryOutcome>("POST", `/api/v1/nodes/${uuid}/recovery/probe`),
 
   me: () => getJSON<AuthUser>("/api/v1/auth/me"),
+  /** Replaces the signed-in user's password and ends all of their sessions. */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    sendJSON<{ status: string }>("POST", "/api/v1/auth/password", { current_password: currentPassword, new_password: newPassword }),
   models: () => getJSON<List<Model>>("/api/v1/models"),
   modelsPage: (query: ListQuery) => getJSON<ModelPage>(`/api/v1/models?${listQueryString(query)}`),
   model: (id: number) => getJSON<Model>(`/api/v1/models/${id}`),
@@ -4473,7 +4861,7 @@ export const api = {
       imageFetchBody(source, fetch),
     ),
   probeImage: (id: number, nodeUuid: string, sourceNode: string) =>
-    sendJSON<{ state: string }>("POST", `/api/v1/images/${id}/nodes/${nodeUuid}/sync/probe`, { source_node: sourceNode }),
+    sendJSON<{ state: string; transport?: "direct" | "relay" }>("POST", `/api/v1/images/${id}/nodes/${nodeUuid}/sync/probe`, { source_node: sourceNode }),
   retryImage: (
     id: number,
     nodeUuid: string,
@@ -4687,6 +5075,8 @@ export const api = {
   benchmark: (id: number) => getJSON<BenchmarkRun>(`/api/v1/benchmarks/${id}`),
   benchmarkCurve: (id: number) =>
     getJSON<BenchmarkCurveResponse>(`/api/v1/benchmarks/${id}/curve`),
+  benchmarkPointTimeline: (id: number, seq: number, signal?: AbortSignal) =>
+    getJSON<BenchmarkRequestTimeline>(`/api/v1/benchmarks/${id}/points/${seq}/timeline`, signal),
   createBenchmark: (body: unknown) =>
     sendJSON<BenchmarkRun>("POST", "/api/v1/benchmarks", body),
   benchmarkModels: (body: unknown) =>
@@ -4756,6 +5146,20 @@ export const api = {
   deletePlatformToken: (id: number) => sendJSON<void>("DELETE", `/api/v1/platform-tokens/${id}`),
   mcpStatus: () => getJSON<MCPStatus>("/api/v1/mcp/status"),
   putMCPSettings: (enabled: boolean) => sendJSON<MCPStatus>("PUT", "/api/v1/mcp/settings", { enabled }),
+
+  kubeClusters: () => getJSON<List<KubeCluster>>("/api/v1/kube/clusters"),
+  kubeDefaults: () => getJSON<KubeDefaults>("/api/v1/kube/defaults"),
+  /** Replaces the node pools a cloud entry holds; the cluster follows when the manifest is applied again. */
+  setKubeClusterPools: (uuid: string, poolIds: string[]) =>
+    sendJSON<KubeCluster>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`, { provider_pool_ids: poolIds }),
+  createKubeCluster: (body: KubeClusterRequest) => sendJSON<KubeCluster>("POST", "/api/v1/kube/clusters", body),
+  updateKubeCluster: (uuid: string, body: KubeClusterUpdate) => sendJSON<KubeClusterEdit>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}`, body),
+  kubeManifest: (uuid: string) => getText(`/api/v1/kube/clusters/${encodeURIComponent(uuid)}/manifest`),
+  revokeKubeCluster: (uuid: string) => sendJSON<KubeCluster>("POST", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/revoke`),
+  deleteKubeCluster: (uuid: string) => sendJSON<void>("DELETE", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}`),
+  /** Applies (or, with remove, deletes) an entry's manifest on its cluster; a failure still carries the results it got to. */
+  kubeClusterOperation: (uuid: string, op: "apply" | "remove", dryRun: boolean) => kubeClusterOperation(uuid, op, dryRun),
+  providerClusters: (id: number) => getJSON<List<ProviderCluster>>(`/api/v1/providers/${id}/clusters`),
 
   providerKinds: () => getJSON<List<ProviderKindInfo>>("/api/v1/providers/kinds"),
   providers: () => getJSON<List<CloudProvider>>("/api/v1/providers"),

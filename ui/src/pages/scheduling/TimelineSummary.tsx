@@ -5,10 +5,6 @@ import { colors } from "../../theme/tokens";
 import { durationText } from "../durationText";
 import { LANE_HEIGHT } from "./timelineChart";
 
-// The summarized earlier time of a busy card is drawn inside each deployment's
-// own lane, left of the line where summarizing ends: one hatched block per
-// slice, in the colour of the state the server names for the deployment in it.
-
 /**
  * summaryText words one summarized slice for one deployment from the numbers
  * the server counted: the slice's time, how often the card changed hands

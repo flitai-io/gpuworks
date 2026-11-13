@@ -7,11 +7,41 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
+
+// TestHygonInspectAndRequireDeviceSeeTheLiveHostDev: a privileged
+// container's own /dev is a copy made at container start, so a device node
+// the driver creates afterward (/opt/hyhal, /dev/kfd, /dev/mkfd) is missing
+// there; the default inspect (no injected p.stat) must check the host's
+// live file system through hostRoot when CLIs run there.
+func TestHygonInspectAndRequireDeviceSeeTheLiveHostDev(t *testing.T) {
+	withHostRoot(t)
+	root := hostRoot
+	if err := os.MkdirAll(filepath.Join(root, "opt/hyhal"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := &HygonProber{}
+	if info, err := p.inspect("/opt/hyhal"); err != nil || !info.IsDir() {
+		t.Fatalf("inspect(/opt/hyhal) = %+v, %v", info, err)
+	}
+	if _, err := p.inspect("/opt/hyhal-missing"); err == nil {
+		t.Fatal("inspect found a directory that does not exist under hostRoot")
+	}
+	// requireDevice wants a device node, not a plain directory.
+	if err := p.requireDevice("/opt/hyhal"); err == nil || !strings.Contains(err.Error(), "not a device node") {
+		t.Fatalf("requireDevice(a directory) = %v", err)
+	}
+	// Off the host the same tree, visible only under hostRoot, is not found.
+	cliOnHost.Store(false)
+	if _, err := p.inspect("/opt/hyhal"); err == nil {
+		t.Fatal("inspect off the host found a directory that only exists under hostRoot")
+	}
+}
 
 func TestHygonProbeLibrariesResolveHostDTKClosure(t *testing.T) {
 	dir := t.TempDir()
@@ -214,6 +244,53 @@ func TestHygonRuntimeInjectionResolvesDRMFromPCI(t *testing.T) {
 	}
 }
 
+// Docker, nerdctl and a Kubernetes pod hand the container only the selected
+// cards' DRM nodes, so HIP numbers them 0..N-1 there; a host index past the first card would
+// hide every card. runveil binds the whole host /dev and keeps host indexes.
+func TestHygonRuntimeInjectionForDriverNumbersCardsAsHIPSeesThem(t *testing.T) {
+	for _, tc := range []struct {
+		driver  string
+		indexes []int
+		visible string
+	}{
+		{"docker", []int{1}, "0"},
+		{"nerdctl", []int{1}, "0"},
+		{"kube", []int{1}, "0"},
+		{"udocker", []int{1}, "1"},
+		{"docker", []int{1, 0}, "0,1"},
+		{"kube", []int{1, 0}, "0,1"},
+		{"nerdctl", []int{1, 0}, "0,1"},
+		{"udocker", []int{1, 0}, "1,0"},
+	} {
+		p := testHygonProber(t, readHygonFixture(t))
+		p.lastSeen = map[int]hygonIdentity{
+			0: {uuid: "GPU-a", bdf: "0000:19:00.0"},
+			1: {uuid: "GPU-b", bdf: "0000:67:00.0"},
+		}
+		inj := ResolveInjection(t.Context(), p, InjectionRequest{Indexes: tc.indexes, DriverName: tc.driver})
+		if inj.UnsupportedReason != "" {
+			t.Fatalf("%s %v: injection failed: %s", tc.driver, tc.indexes, inj.UnsupportedReason)
+		}
+		wantEnv := map[string]string{"HYGON_VISIBLE_DEVICES": tc.visible, "HIP_VISIBLE_DEVICES": tc.visible}
+		if !reflect.DeepEqual(inj.Env, wantEnv) {
+			t.Fatalf("%s %v: env = %+v, want %+v", tc.driver, tc.indexes, inj.Env, wantEnv)
+		}
+		// The selected cards' nodes are still the host's own, whatever HIP calls them.
+		if !slices.Contains(inj.DockerArgs, "/dev/dri/renderD129:/dev/dri/renderD129:rwm") {
+			t.Fatalf("%s %v: selected render node missing: %#v", tc.driver, tc.indexes, inj.DockerArgs)
+		}
+	}
+}
+
+func TestHygonRuntimeInjectionForDriverKeepsRefusals(t *testing.T) {
+	p := testHygonProber(t, readHygonFixture(t))
+	p.lastSeen = map[int]hygonIdentity{1: {uuid: "GPU-b", bdf: "0000:19:00.0"}}
+	inj := p.RuntimeInjectionForDriver([]int{1}, "docker")
+	if !strings.Contains(inj.UnsupportedReason, "changed from PCI") || inj.Env != nil || inj.DockerArgs != nil {
+		t.Fatalf("refused injection = %+v", inj)
+	}
+}
+
 func TestHygonRuntimeInjectionFailsClosedOnIndexDrift(t *testing.T) {
 	p := testHygonProber(t, readHygonFixture(t))
 	p.lastSeen = map[int]hygonIdentity{1: {uuid: "GPU-b", bdf: "0000:19:00.0"}}
@@ -292,7 +369,7 @@ func TestDefaultProbersPreserveExistingVendorOrder(t *testing.T) {
 	for i, prober := range probers {
 		vendors[i] = prober.Vendor()
 	}
-	want := []string{"hygon", "ascend", "ppu", "nvidia", "apple", "amd"}
+	want := []string{"hygon", "ascend", "ppu", "kunlunxin", "nvidia", "apple", "amd"}
 	if !reflect.DeepEqual(vendors, want) {
 		t.Fatalf("default prober vendors = %v, want %v", vendors, want)
 	}

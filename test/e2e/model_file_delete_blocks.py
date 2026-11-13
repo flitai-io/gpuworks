@@ -163,7 +163,7 @@ def delete_present_node_copy(page, report, server, token, labels, locale, data, 
     """Refuse a present node copy, then delete it once both blocks are gone."""
     dialog = model_detail_dialog(page, labels, data['name'])
     files = dialog.locator('#model-files')
-    target_row = files.locator('tr.ant-table-row').filter(has_text=target['name'] + ' · ')
+    target_row = files.locator('[data-slot="table-body"] [data-proximity-index]').filter(has_text=target['name'] + ' · ')
     remove = target_row.get_by_role('button', name=labels['files']['deleteOnNode'], exact=True)
     path = f"{MODELS}/{data['model']['id']}/nodes/{data['node']['uuid']}"
     exercise_node_delete_blocks(page, report, server, token, labels, locale, data, target, remove, path,
@@ -182,4 +182,4 @@ def delete_present_node_copy(page, report, server, token, labels, locale, data, 
     checked(presence(current, data, target) is None, 'present file row remains')
     page.reload()
     expect(model_detail_dialog(page, labels, data['name']).locator(
-        '#model-files tr.ant-table-row')).to_have_count(0)
+        '#model-files [data-slot="table-body"] [data-proximity-index]')).to_have_count(0)

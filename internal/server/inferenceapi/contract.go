@@ -2,14 +2,16 @@
 // by the executable catalog, deployment snapshots, proxy and Playground.
 package inferenceapi
 
-import ()
-
 // Contract describes the HTTP service exposed by one executable inference
 // spec. It is deliberately small: protocol details live in the operation
 // registry rather than being copied into every catalog entry.
 type Contract struct {
 	HealthEndpoint string      `yaml:"health_endpoint,omitempty" json:"health_endpoint,omitempty"`
 	Operations     []Operation `yaml:"operations" json:"operations"`
+	// TokenizerRef names a verified, commit-pinned tokenizer repository when
+	// the served weights do not include an independent tokenizer vocabulary.
+	// Benchmark auto resolution prefers an available node copy to this source.
+	TokenizerRef string `yaml:"tokenizer_ref,omitempty" json:"tokenizer_ref,omitempty"`
 	// Metrics is the engine's Prometheus endpoint and mapping (metrics.go).
 	// It is observation, not serving: launch never reads it, and a deployment
 	// takes it from its template's current spec rather than from its snapshot.
@@ -35,6 +37,23 @@ type Operation struct {
 	// example and what the Playground starts with; requests are never
 	// changed by it.
 	ExampleInput map[string]string `yaml:"example_input,omitempty" json:"example_input,omitempty"`
+	// MaxReferenceImages is how many reference images an image edit accepts,
+	// each sent as one more "image" part of the multipart request. Only
+	// openai.image.edit takes it; unset means one (ReferenceImageLimit).
+	MaxReferenceImages int `yaml:"max_reference_images,omitempty" json:"max_reference_images,omitempty"`
+}
+
+// ReferenceImageLimit is how many reference images a request of this operation
+// may carry: the declared count for an image edit, one when it declares none,
+// and zero for every other operation.
+func (o Operation) ReferenceImageLimit() int {
+	if o.Type != OperationImageEdit {
+		return 0
+	}
+	if o.MaxReferenceImages > 0 {
+		return o.MaxReferenceImages
+	}
+	return 1
 }
 
 // DefaultsInput contains catalog facts that may safely select standard engine

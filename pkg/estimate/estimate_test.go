@@ -52,35 +52,6 @@ func qwen3_8b() *modelconfig.Config {
 	}
 }
 
-func deepseekV3() *modelconfig.Config {
-	return &modelconfig.Config{
-		ModelType:             "deepseek_v3",
-		NumHiddenLayers:       61,
-		HiddenSize:            7168,
-		NumAttentionHeads:     128,
-		KVLoraRank:            512,
-		QKRopeHeadDim:         64,
-		QKNopeHeadDim:         128,
-		VHeadDim:              128,
-		MaxPositionEmbeddings: 163840,
-		TorchDtype:            "bfloat16",
-	}
-}
-
-func slidingWindow() *modelconfig.Config {
-	return &modelconfig.Config{
-		ModelType:             "gemma2",
-		NumHiddenLayers:       26,
-		HiddenSize:            2304,
-		NumAttentionHeads:     8,
-		NumKeyValueHeads:      4,
-		HeadDim:               256,
-		SlidingWindow:         4096,
-		MaxPositionEmbeddings: 8192,
-		TorchDtype:            "bfloat16",
-	}
-}
-
 func TestMMEncoderRuntimeBytes(t *testing.T) {
 	cfg := qwen3_8b()
 	cfg.HiddenSize = 4096

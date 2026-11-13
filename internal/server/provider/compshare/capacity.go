@@ -71,7 +71,7 @@ func (d *Driver) CheckResourceCapacity(ctx context.Context, creds provider.Crede
 	}
 	out := make([]ResourceCapacitySpec, 0, len(resp.Specs))
 	for _, spec := range resp.Specs {
-		out = append(out, ResourceCapacitySpec{GPU: spec.GPU, CPU: spec.CPU, MemoryGB: spec.MemoryGB, ResourceEnough: spec.ResourceEnough})
+		out = append(out, ResourceCapacitySpec(spec))
 	}
 	return out, nil
 }

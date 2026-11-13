@@ -9,6 +9,7 @@ const { cleanup, render, screen, waitFor } = await import("@testing-library/reac
 const userEvent = (await import("@testing-library/user-event")).default;
 const { NodeReconnectButton } = await import("../src/components/NodeReconnectButton.tsx");
 const { api } = await import("../src/api.ts");
+const { message } = await import("antd");
 type NodeT = import("../src/api.ts").Node;
 
 afterEach(() => cleanup());
@@ -77,6 +78,29 @@ test("reconnect over SSH runs the recovery probe", async () => {
   } finally {
     api.probeNodeRecovery = origProbe;
     api.node = origNode;
+  }
+});
+
+test("a failed recovery probe leaves the reconnect action available", async (t) => {
+  const user = userEvent.setup();
+  const originalProbe = api.probeNodeRecovery;
+  const originalNode = api.node;
+  const failed = node({ state: "offline", recovery_phase: "probe_failed", has_ssh_credential: true, last_recovery_error: "connection refused" });
+  let updated: NodeT | undefined;
+  const success = t.mock.method(message, "success", () => {});
+  api.probeNodeRecovery = (async () => ({ node_uuid: failed.uuid, action: "reconnect", recovered: false, phase: "probe_failed", error: "connection refused", probe: {} })) as never;
+  api.node = (async () => failed) as never;
+  try {
+    const view = render(<I18nextProvider i18n={i18n}><NodeReconnectButton node={failed} onUpdated={(n) => { updated = n; }} /></I18nextProvider>);
+    await user.click(screen.getByRole("button", { name: /重\s*连/ }));
+    await waitFor(() => assert.equal(updated?.state, "offline"));
+    view.rerender(<I18nextProvider i18n={i18n}><NodeReconnectButton node={updated!} onUpdated={() => {}} /></I18nextProvider>);
+    assert.ok(screen.getByRole("button", { name: /重\s*连/ }));
+    await screen.findByText("connection refused");
+    assert.equal(success.mock.callCount(), 0, "failed recovery must not report success");
+  } finally {
+    api.probeNodeRecovery = originalProbe;
+    api.node = originalNode;
   }
 });
 

@@ -92,6 +92,87 @@ def confirm_popconfirm(page):
     popconfirm.locator(".ant-btn-primary").click()
 
 
+def exercise_name_taken(page, server, storage, name, path, report, bad_http, console_errors):
+    """A storage name is unique: the second create is refused and recovers.
+
+    storages.go maps store.ErrStorageNameTaken to 409 STORAGE_NAME_TAKEN, and the
+    lookup is an exact name match, so the collision has to reuse the same name.
+    """
+    # The edit flow leaves its detail drawer open, which would sit over the add
+    # dialog's footer, so close it before opening the add dialog.
+    page.goto(server.base + "/storage")
+    for _ in range(3):
+        closer = page.locator(".ant-drawer-close").first
+        if closer.count() and closer.is_visible():
+            closer.click()
+            # The detail drawer unmounts after its close transition finishes, so wait for the
+            # drawer to be gone rather than for a fixed delay.
+            expect(page.locator(".ant-drawer-open")).to_have_count(0)
+        else:
+            break
+    expect(page.locator(".ant-drawer-open")).to_have_count(0)
+    add = action(page, storage["page"]["add"])
+    title = storage["form"]["addTitle"]
+    existing = page.request.get(server.base + STORAGES).json()
+    names = [item.get("name") for item in existing.get("items") or existing or []]
+    check(name in names, f'fixture storage {name!r} is missing from the list: {names}')
+
+    add.click()
+    dialog = page.get_by_role("dialog", name=title, exact=True)
+    expect(dialog).to_be_visible()
+    name_input = dialog.get_by_label(storage["form"]["name"], exact=True)
+    name_input.fill(name)
+    dialog.get_by_label(storage["form"]["path"], exact=True).fill(path + "-taken")
+    save = button(dialog, storage["form"]["save"])
+    # The dialog re-renders as the name is typed (the save button lives in the
+    # footer array), so wait for the modal to settle before pressing.
+    page.wait_for_timeout(400)
+    expect(save).to_be_visible()
+    expect(save).to_be_enabled()
+    with page.expect_response(lambda r: urlsplit(r.url).path == STORAGES
+                              and r.request.method == "POST") as refused:
+        save.click()
+    result = refused.value
+    check(result.status == 409, f'duplicate storage name HTTP {result.status}')
+    code = result.json().get("code")
+    check(code == "STORAGE_NAME_TAKEN", f'duplicate storage name code {code}')
+    # The dialog stays open with the typed name, so the operator can fix it.
+    page.wait_for_timeout(300)
+    report["name_taken_dialog_after_409"] = dialog.is_visible()
+    check(dialog.is_visible(), 'the add dialog closed itself on a refused save')
+    check(name_input.input_value() == name, 'the typed name was cleared after the refusal')
+    # The 409 is the expected outcome of this probe, so account for it rather than
+    # letting it fail the run's unexpected-error check.
+    from storage_delete_blocks import allow_http_status
+    allow_http_status(bad_http, console_errors, 409)
+
+    # A different name that is still free goes through, which shows the refusal was
+    # about the collision and not about the record being unsavable.
+    free = name + "-free"
+    name_input.fill(free)
+    dialog.get_by_label(storage["form"]["path"], exact=True).fill(path + "-free")
+    page.wait_for_timeout(400)
+    retry = button(dialog, storage["form"]["save"])
+    expect(retry).to_be_visible()
+    expect(retry).to_be_enabled()
+    with page.expect_response(lambda r: urlsplit(r.url).path == STORAGES
+                              and r.request.method == "POST") as created:
+        retry.click()
+    check(created.value.status == 201, f'renamed create HTTP {created.value.status}')
+    made = created.value.json()
+    report["name_taken"] = {"refused_status": result.status, "code": code,
+                            "typed_kept": True, "recovered_name": free,
+                            "created_id": made.get("id")}
+    report["evidence"].append({"layer": "request", "method": "POST", "path": STORAGES,
+                               "status": result.status, "code": code,
+                               "duplicate_of": name})
+    # Clean up the recovered record so the case leaves nothing behind.
+    removed = page.request.delete(server.base + STORAGES + f"/{made['id']}")
+    check(removed.status in (200, 204), f'recovered storage delete HTTP {removed.status}')
+    report["evidence"].append({"layer": "cleanup", "deleted": made["id"]})
+    return report["name_taken"]
+
+
 def exercise_full_local(page, server, storage, name, directory, report):
     """Second local create that fills the label optional. The label row is start-aligned."""
     full_name = name + "-full"
@@ -130,7 +211,7 @@ def exercise_full_local(page, server, storage, name, directory, report):
     sent = created.value.request.post_data_json
     check(sent == body, "full storage create body differs")
     storage_id = created.value.json()["id"]
-    page.wait_for_url(re.compile(rf".*/storage/{storage_id}$"), timeout=15000)
+    page.wait_for_url(re.compile(rf".*/storage\?storage={storage_id}(?:&|$)"), timeout=15000)
     expect(page.get_by_text(full_path, exact=True).first).to_be_visible()
     expect(page.get_by_text(storage["overview"]["scopeChosen"], exact=True).first).to_be_visible()
     expect(page.get_by_text("team=alpha", exact=True).first).to_be_visible()
@@ -205,8 +286,11 @@ def exercise_local_inflight(page, modal, storage, name, path, body, bad_response
 def exercise_edit_conflict(page, server, storage, common, storage_id, name, path_value, stale,
                            bad_responses, console_errors, evidence, report):
     """The open edit dialog sends its previewed revision. Another writer advances it first."""
-    page.goto(server.base + f"/storage/{storage_id}")
-    button(page, storage["actions"]["edit"]).click()
+    page.goto(server.base + f"/storage?storage={storage_id}")
+    # The row and the detail drawer both carry Edit; take the drawer's header.
+    header = page.locator(".ant-drawer-header").filter(has_text=name).first
+    expect(header).to_be_visible()
+    button(header, storage["actions"]["edit"]).click()
     scope = storage["form"]["scope"]
     dialog = page.get_by_role("dialog", name=storage["form"]["editTitle"].replace("{{name}}", name), exact=True)
     expect(dialog).to_be_visible()
@@ -267,10 +351,11 @@ def exercise_edit_conflict(page, server, storage, common, storage_id, name, path
     expect(dialog).to_be_hidden()
     report["last_step"] = "conflict-reopen"
     page.reload()
-    expect(page.get_by_text(name, exact=True).first).to_be_visible()
-    expect(button(page, storage["actions"]["edit"])).to_be_visible()
+    header = page.locator(".ant-drawer-header").filter(has_text=name).first
+    expect(header).to_be_visible()
+    expect(button(header, storage["actions"]["edit"])).to_be_visible()
     reopened = page.get_by_role("dialog", name=storage["form"]["editTitle"].replace("{{name}}", name), exact=True)
-    button(page, storage["actions"]["edit"]).click()
+    button(header, storage["actions"]["edit"]).click()
     expect(reopened).to_be_visible()
     expect(reopened.get_by_role("radio", name=scope["all"], exact=True)).to_be_checked()
     expect(reopened.get_by_label(scope["labelKey"], exact=True)).to_have_count(0)
@@ -298,7 +383,8 @@ def exercise_edit_conflict(page, server, storage, common, storage_id, name, path
           and recovered_labels == recovered_targets,
           f"reloaded edit GET differs: {recovered_doc}")
     report["last_step"] = "conflict-restored"
-    button(page, storage["actions"]["edit"]).click()
+    header = page.locator(".ant-drawer-header").filter(has_text=name).first
+    button(header, storage["actions"]["edit"]).click()
     restoring = page.get_by_role("dialog", name=storage["form"]["editTitle"].replace("{{name}}", name), exact=True)
     expect(restoring).to_be_visible()
     expect(restoring.get_by_label(scope["labelKey"], exact=True)).to_have_value("team")
@@ -326,6 +412,53 @@ def exercise_edit_conflict(page, server, storage, common, storage_id, name, path
 # Mainline: 独立 server/SQLite → 存储页新增本地存储 → NFS 类型显示 Export/Mount point
 #           且未试挂时不可保存 → 非法名称与相对路径都不发请求 → 合法本地存储创建
 #           → 刷新/独立 GET 回读 → UI 删除后列表消失且 GET 404
+def exercise_html_escaping(page, storage, common, posts, bad_responses, server):
+    """2.7: a path carrying HTML is shown as text wherever the product displays it.
+
+    A second storage is created through the real form, so the mainline assertions that read the
+    first one are untouched. Its stored path is then moved through the real PATCH route, and the
+    detail view and the list are each read back. A rendered element instead of text would mean
+    the value reached the DOM as HTML, so the checks look for the tag as a node, not only for its
+    characters.
+    """
+    marker = "e2e-xss-<img src=x onerror=1>"
+    escaped_name = "e2e-xss-" + uuid.uuid4().hex[:8]
+    escaped_path = str(server.storage_root / "e2e-xss")
+    api_base = page.url.split("/storage")[0]
+    action(page, storage["page"]["add"]).click()
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+    boxes = dialog.get_by_role("textbox")
+    boxes.nth(0).fill(escaped_name)
+    boxes.nth(1).fill(escaped_path)
+    with page.expect_response(lambda r: urlsplit(r.url).path == STORAGES
+                              and r.request.method == "POST") as created:
+        button(dialog, storage["form"]["save"]).click()
+    check(created.value.status == 201, f"escaping storage create HTTP {created.value.status}")
+    escaped_id = created.value.json()["id"]
+    injected = f"{escaped_path}-{marker}"
+    updated = page.request.patch(f"{api_base}{STORAGES}/{escaped_id}", data={"path": injected})
+    check(updated.status in {200, 204}, f"path injection PATCH HTTP {updated.status}")
+    reread = page.request.get(f"{api_base}{STORAGES}/{escaped_id}").json()
+    check(reread.get("path") == injected, f"persisted path differs: {reread.get('path')!r}")
+    page.goto(f"{api_base}/storage?storage={escaped_id}")
+    shown = page.get_by_text(injected, exact=True).first
+    expect(shown).to_be_visible()
+    check(page.locator("img[src='x']").count() == 0 and page.locator("script:has-text('onerror')").count() == 0,
+          "the injected path created DOM nodes on the detail view")
+    check(shown.evaluate("element => element.children.length") == 0,
+          "the detail view renders the path through child nodes, not as text")
+    page.goto(f"{api_base}/storage")
+    expect(page.get_by_role("heading", name=storage["page"]["title"], exact=True)).to_be_visible()
+    list_row = page.get_by_role("row").filter(has_text=escaped_name).first
+    expect(list_row).to_be_visible()
+    check(list_row.locator("img[src='x']").count() == 0 and list_row.locator("script").count() == 0,
+          "the list row created DOM nodes from the path")
+    page.request.delete(f"{api_base}{STORAGES}/{escaped_id}")
+    return {"marker": marker, "shown_as_text": True, "injected_nodes": 0,
+            "persisted": True, "patch_status": updated.status}
+
+
 def test_storage_local(page, context, server, artifacts, report, locale):
     storage, common, auth = strings(locale)
     name = f"e2e-{report['run_id'].lower()}-{uuid.uuid4().hex[:6]}"
@@ -414,6 +547,14 @@ def test_storage_local(page, context, server, artifacts, report, locale):
     from storage_local_required import exercise_storage_required
     report["required_fields"] = exercise_storage_required(page, modal, storage, path)
     report["last_step"] = "storage-required"
+    from storage_local_required import exercise_storage_name_contract
+    report["name_contract"] = exercise_storage_name_contract(page, modal, storage, posts)
+    report["evidence"].append({"layer": "ui", "name_contract": report["name_contract"]})
+    report["last_step"] = "storage-name-contract"
+    from storage_local_required import exercise_storage_name_editing
+    report["name_editing"] = exercise_storage_name_editing(page, modal, storage, posts)
+    report["evidence"].append({"layer": "ui", "name_editing": report["name_editing"]})
+    report["last_step"] = "storage-name-editing"
     name_input.fill("Bad Name")
     path_input.fill(path)
     save.click()
@@ -480,17 +621,19 @@ def test_storage_local(page, context, server, artifacts, report, locale):
     expect(page.get_by_text(format_text(storage["form"]["created"], name=name),
                             exact=True).first).to_be_visible()
     # The form opens the new storage's detail page.
-    page.wait_for_url(re.compile(rf".*/storage/{storage_id}$"), timeout=15000)
+    page.wait_for_url(re.compile(rf".*/storage\?storage={storage_id}(?:&|$)"), timeout=15000)
     expect(page.get_by_text(name, exact=True).first).to_be_visible()
     expect(page.get_by_text(common["storageType"]["local"], exact=True).first).to_be_visible()
     expect(page.get_by_text(path, exact=True).first).to_be_visible()
     expect(page.get_by_text(storage["scope"]["all"], exact=True).first).to_be_visible()
+
     config_title = storage["overview"]["config"]
-    config_card = page.locator(".ant-card").filter(
-        has=page.locator(".ant-card-head-title", has_text=re.compile(rf"^{re.escape(config_title)}$")))
+    # The overview is a stack of DetailSection blocks now, not antd cards: the
+    # section is a <section class="detail-section"> headed by an h5.
+    config_card = page.locator("section.detail-section").filter(
+        has=page.get_by_role("heading", name=config_title, exact=True))
     expect(config_card).to_have_count(1)
-    expect(config_card).to_have_class(re.compile(r"\bant-card-small\b"))
-    report["config_card_small"] = True
+    report["config_section"] = True
     report["last_step"] = "show-nodes-link"
     show_nodes = page.get_by_role("button", name=storage["overview"]["showNodes"], exact=True)
     expect(show_nodes).to_have_count(1)
@@ -520,6 +663,8 @@ def test_storage_local(page, context, server, artifacts, report, locale):
     report["local_edit"] = exercise_local_edit_changes(
         page, server, storage, storage_id, name, path)
     report["local_edit_sha256"] = digest(ROOT / "test/e2e/storage_local_edit.py")
+    report["last_step"] = "name-taken"
+    exercise_name_taken(page, server, storage, name, path, report, bad_responses, console_errors)
     report["last_step"] = "full-optional"
     report["full_optional"] = exercise_full_local(page, server, storage, name, path, report)
     page.goto(server.base + "/storage")
@@ -548,6 +693,13 @@ def test_storage_local(page, context, server, artifacts, report, locale):
     check(page.evaluate("document.documentElement.scrollWidth <= innerWidth"),
           "storage page has horizontal overflow")
     report["last_step"] = "browser-errors-clear"
+
+    # 2.7 runs last, against its own storage, so moving the path cannot disturb the mainline
+    # assertions that already read the first one.
+    report["last_step"] = "html-escaping"
+    report["html_escaping"] = exercise_html_escaping(
+        page, storage, common, posts, bad_responses, server)
+    report["evidence"].append({"layer": "ui", "html_escaping": report["html_escaping"]})
 
     report["evidence"].extend([
         {"layer": "ui", "page": "/storage", "modal": storage["form"]["addTitle"],
@@ -618,7 +770,9 @@ def main():
         report["owned_server_pid"] = server.process.pid
         with sync_playwright() as play:
             browser = play.chromium.launch(channel="chrome", headless=True)
-            context = browser.new_context(viewport=report["viewport"],
+            context = browser.new_context(
+                viewport=report["viewport"],
+                permissions=["clipboard-read", "clipboard-write"],
                 locale="zh-CN" if args.locale == "zh" else "en-US", timezone_id="UTC")
             report["browser_version"] = browser.version
             page = context.new_page()

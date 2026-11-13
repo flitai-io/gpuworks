@@ -43,10 +43,27 @@ def wait_node_state(page, server, series_id, version_id, node_uuid, state):
 
 def open_version(page, text, name, image_ref):
     open_custom(page, text)
+    # The custom tab renders from its own list request; clicking before it lands
+    # finds no row and the drawer never opens.
+    expect(button(page, name)).to_be_visible()
     button(page, name).click()
-    detail = page.get_by_role("dialog", name=text["detail"]["title"].replace("{{name}}", name), exact=True)
+    # ImageDetailDrawer.tsx:131-132 titles the drawer with the series name alone
+    # and puts engine/framework on a subtitle, so the "{{name}} · Details" label
+    # this used to wait for no longer exists.
+    detail = page.get_by_role("dialog", name=re.compile('^' + re.escape(name)))
     expect(detail).to_be_in_viewport(ratio=1)
-    detail.get_by_role("link", name=image_ref, exact=True).click()
+    # The drawer has two tabs: versions and nodes. The version picker and node
+    # table live on the nodes tab, which a version row opens
+    # (ImageDetailDrawer.tsx:191 onRow -> openVersion). Clicking that row replaces
+    # the old link click, and landing on the picker is what proves the version is
+    # selected.
+    tag = detail.locator('[aria-label=' + json.dumps(image_ref) + ']')
+    expect(tag).to_have_count(1)
+    tag.first.locator('xpath=ancestor::tr[1]').click()
+    # Both tabs keep their own picker mounted, so there is more than one; the
+    # point of the assertion is that the version is selected and actionable.
+    picker = detail.locator('[aria-label=' + json.dumps(text["detail"]["version"]) + ']')
+    expect(picker.first).to_be_visible()
     return detail
 
 
@@ -187,7 +204,19 @@ def test_url_acquire_remove(page, server, fixture, artifacts, report, locale):
     # A named confirmation describes the node-local impact; cancellation cannot
     # remove bytes or change the authoritative node inventory.
     confirmation = text["nodeTable"]["removeConfirm"].replace("{{ref}}", fixture.image_ref).replace("{{node}}", fixture.node_name)
-    button(row, text["nodeTable"]["remove"]).click()
+    # The delete control lives one step below the row, behind the expander: the
+    # table row itself keeps to what the table is read for and the actions that
+    # move bytes sit in the expanded area (ImageNodeTable.tsx:120-125). Opening it
+    # is part of reaching the control, not a way of finding it by another name.
+    expander = detail.get_by_role("button", name=text["nodeTable"]["expand"], exact=True)
+    expect(expander).to_have_count(1)
+    expander.click()
+    # The table renders the expanded content once; assert on the control it
+    # contains rather than on the expander's own attribute, which antd flips on
+    # the re-rendered node.
+    remove = detail.get_by_role("button", name=re.compile(r"^\s*Delete\s+image\s*$"))
+    expect(remove).to_have_count(1)
+    remove.click()
     popup = page.get_by_role("tooltip").filter(has_text=confirmation)
     expect(popup).to_be_in_viewport(ratio=1)
     expect(popup.get_by_text(confirmation, exact=True)).to_be_visible()
@@ -199,7 +228,9 @@ def test_url_acquire_remove(page, server, fixture, artifacts, report, locale):
           "cancel removed the node image")
     check(wait_node_state(page, server, series_id, version_id, fixture.node_uuid, "present")["node"]["image_digest_id"] == fixture.image_id,
           "cancel altered node inventory")
-    button(row, text["nodeTable"]["remove"]).click()
+    # The expanded area stays open across the cancelled confirmation, so the same
+    # control is reachable again.
+    detail.get_by_role("button", name=re.compile(r"^\s*Delete\s+image\s*$")).click()
     with page.expect_response(lambda r: urlsplit(r.url).path == path and r.request.method == "DELETE") as removed:
         button(popup, text["nodeTable"]["removeConfirmOk"]).click()
     result = removed.value

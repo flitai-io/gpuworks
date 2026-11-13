@@ -231,6 +231,13 @@ type WorkloadInspector interface {
 	InspectWorkload(context.Context, string) (WorkloadInspection, error)
 }
 
+// NamedWorkloads is optional. A driver implementing it returns from Run a
+// workload name (a Kubernetes pod's) rather than the container's runtime ID,
+// so an inspection's ContainerID cannot be compared with what Run returned.
+type NamedWorkloads interface {
+	WorkloadHandleIsName() bool
+}
+
 // MountOwner identifies the host user that resolves bind-mount source paths.
 // Username is required only when a root agent switches to a dedicated runtime
 // user; direct/non-root runtimes normally leave it empty.
@@ -358,6 +365,16 @@ type ImageArchiver interface {
 	SaveImage(ctx context.Context, image string, w io.Writer) error
 }
 
+// LocalImageSource is a runtime on this node that another runtime can copy a
+// local image from, so switching runtimes does not download what the node
+// already holds. HoldsImage must answer without setting the runtime up or
+// fetching anything: it is asked of runtimes the node is not using.
+type LocalImageSource interface {
+	Name() string
+	HoldsImage(ctx context.Context, image string) (bool, error)
+	SaveImage(ctx context.Context, image string, w io.Writer) error
+}
+
 // ImageFileLoader loads an image archive that is already a complete file on
 // the node's disk. It exists alongside ImageLoader because a node that
 // downloaded an archive itself must not pay for a second full-size copy just
@@ -472,8 +489,9 @@ func loadedImageRefName(ref string) string {
 	return host + "/" + path
 }
 
-// ImagePresenceReporter reads presence and size in one runtime operation.
-// A nil size means this runtime cannot measure it. Errors are not absence.
+// ImagePresenceReporter reads presence, identity and size in one runtime
+// operation. A nil size means this runtime cannot measure it. An empty
+// identity means it was not observed. Errors are not absence.
 type ImagePresenceReporter interface {
-	ImagePresence(context.Context, string) (bool, *int64, error)
+	ImagePresence(context.Context, string) (bool, string, *int64, error)
 }

@@ -184,10 +184,6 @@ func multiturnFS(c Config, n int, fsys fs.FS) ([]Sample, error) {
 	}
 	return out, nil
 }
-func loadConversationSamples(maxTurns int) ([]Sample, error) {
-	return loadConversationSamplesFS(embedded, "data/multiturn.jsonl", maxTurns)
-}
-
 func loadConversationSamplesFS(fsys fs.FS, name string, maxTurns int) ([]Sample, error) {
 	f, err := openEmbeddedFS(fsys, name)
 	if err != nil {

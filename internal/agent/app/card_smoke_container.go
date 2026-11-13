@@ -229,6 +229,15 @@ func containerLogs(ctx context.Context, d runtime.Driver, id string) string {
 func (n *NodeRuntime) cardRuntimeCheck(vendor string) (gpu.HostRuntimeCheck, bool) {
 	// The host half comes through the same seam Doctor's tests replace.
 	host, hasHost := doctorHostRuntimeCheck(vendor)
+	if n.kubeNode {
+		// A container check would create a pod and borrow a card from the
+		// kubelet to ask it. The host's runtime, asked only about the cards
+		// the platform holds, is the one check a Kubernetes node makes.
+		if !hasHost {
+			return host, false
+		}
+		return n.holdCardsWhileAsking(host), true
+	}
 	framework, hasContainer := accelerator.ContainerSmokeFramework(vendor)
 	if !hasContainer || n.engine == nil {
 		return host, hasHost

@@ -266,7 +266,7 @@ func TestAscendDockerPartitionInferenceAndWholeGPU(t *testing.T) {
 	repo := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 	libvruntime := filepath.Join(repo, "internal", "assets", "bin", "runtime-assets", "ascend", "linux-arm64", "libvruntime.so")
 	if stat, err := os.Stat(libvruntime); err != nil || stat.Size() < 4096 {
-		t.Fatalf("Ascend L4 vCANN asset %s is unavailable", libvruntime)
+		t.Fatalf("Ascend L4 vcann-rt asset %s is unavailable", libvruntime)
 	}
 
 	configDir := t.TempDir()
@@ -300,7 +300,7 @@ func TestAscendDockerPartitionInferenceAndWholeGPU(t *testing.T) {
 		command := "docker rm -f " + shellQuoteL4(name) + " >/dev/null 2>&1 || true; rm -f " + shellQuoteL4(filepath.Join(remoteDir, "libvruntime.so")) + " " + shellQuoteL4(filepath.Join(remoteDir, "ld.so.preload")) + " " + shellQuoteL4(filepath.Join(remoteDir, "npu_info.config")) + "; rmdir " + shellQuoteL4(remoteDir)
 		data, cleanupErr := partitionSSHCommand(cleanupCtx, host, jump, command).CombinedOutput()
 		if cleanupErr != nil {
-			t.Errorf("cleanup Ascend vCANN inference probe: %v: %s", cleanupErr, data)
+			t.Errorf("cleanup Ascend vcann-rt inference probe: %v: %s", cleanupErr, data)
 		}
 	})
 
@@ -308,7 +308,7 @@ func TestAscendDockerPartitionInferenceAndWholeGPU(t *testing.T) {
 	defer cancel()
 	scp := partitionSCPCommand(ctx, jump, []string{libvruntime, preload, config}, host+":"+remoteDir+"/")
 	if data, err := scp.CombinedOutput(); err != nil {
-		t.Fatalf("copy Ascend vCANN L4 assets: %v: %s", err, data)
+		t.Fatalf("copy Ascend vcann-rt L4 assets: %v: %s", err, data)
 	}
 	start := fmt.Sprintf(`set -eu
 docker run -d --name %s \
@@ -325,7 +325,7 @@ docker run -d --name %s \
     --max-num-seqs 4 --gpu-memory-utilization 0.80 --enforce-eager`,
 		shellQuoteL4(name), shellQuoteL4(card), shellQuoteL4(filepath.Join(remoteDir, "ld.so.preload")), shellQuoteL4(filepath.Join(remoteDir, "npu_info.config")), shellQuoteL4(filepath.Join(remoteDir, "libvruntime.so")), shellQuoteL4(modelDir), shellQuoteL4(image))
 	if out, err := runSSH(time.Minute, start); err != nil {
-		t.Fatalf("start Ascend vCANN vLLM: %v: %s", err, out)
+		t.Fatalf("start Ascend vcann-rt vLLM: %v: %s", err, out)
 	}
 	wait := fmt.Sprintf(`set -eu
 for attempt in $(seq 1 100); do
@@ -343,7 +343,7 @@ docker logs --tail 160 %s 2>&1
 exit 1`, shellQuoteL4(name), shellQuoteL4(name), shellQuoteL4(name), shellQuoteL4(name))
 	waitOut, err := runSSH(6*time.Minute, wait)
 	if err != nil {
-		t.Fatalf("wait for Ascend vCANN vLLM: %v\n%s", err, waitOut)
+		t.Fatalf("wait for Ascend vcann-rt vLLM: %v\n%s", err, waitOut)
 	}
 	verify := fmt.Sprintf(`set -eu
 docker exec %s curl -fsS http://127.0.0.1:8000/v1/models | grep -q 'qwen35-08b-ascend-vgpu'
@@ -384,7 +384,7 @@ PY`, shellQuoteL4(name), shellQuoteL4(name), shellQuoteL4(name), shellQuoteL4(na
 	combined := waitOut + verifyOut
 	archivePartitionEvidence(t, strings.ReplaceAll(t.Name(), "/", "-")+".txt", combined)
 	if err != nil {
-		t.Fatalf("verify Ascend vCANN inference, quota, and whole-GPU path: %v\n%s", err, combined)
+		t.Fatalf("verify Ascend vcann-rt inference, quota, and whole-GPU path: %v\n%s", err, combined)
 	}
 	requireProbeContains(t, combined, "partition_health=ok", "models=ok", "chat=ok", "over_quota_denied_acl", "health_after_denial=ok", "whole_gpu_total_mib", "whole_gpu_allocation_mib 128")
 }

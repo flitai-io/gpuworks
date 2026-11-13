@@ -4,14 +4,18 @@ package l2
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/testenv/apiwire"
 )
@@ -26,7 +30,24 @@ import (
 // deployment stated. Reaching running needs a container runtime and an
 // adapter image, which is the L4 template path's job.
 func TestCustomCallableImageDeploys(t *testing.T) {
-	const imageRef = "gpuworks/strata:0.1-gw4"
+	testCustomCallableImageDeploys(t, false)
+}
+
+// The runtime is a recording fixture, but server and agent are real processes.
+// Return the catalog wrapper's terminal HTTP response on the allocated port
+// and verify that its error crosses the control channel into the public API.
+func TestCallableLoaderFailureReachesInstanceAPI(t *testing.T) {
+	testCustomCallableImageDeploys(t, true)
+}
+
+func testCustomCallableImageDeploys(t *testing.T, loaderFails bool) {
+	t.Helper()
+	imageRef := "gpuworks/strata:0.1-gw4"
+	launchCommand := "strata-serve --model /model --port 8000"
+	if loaderFails {
+		imageRef = "gpuworks/callable-fixture:test"
+		launchCommand = "python3 /opt/gpuworks/runtime/gpuworks_serve.py --model /model --port 8000 --adapter diffusers_adapter --operation openai.image.generate"
+	}
 	ensureEmbeddedAgentFor(t, runtime.GOARCH)
 	serverBin := buildBinary(t, "./cmd/gpuworks")
 	agentBin := buildBinary(t, "./cmd/gpuworks-agent")
@@ -121,7 +142,7 @@ func TestCustomCallableImageDeploys(t *testing.T) {
 	deployBody, _ := json.Marshal(map[string]any{
 		"model_id": model.ID, "node_uuid": node.UUID, "name": "callable-custom", "served_name": "callable-custom",
 		"engine": "callable", "image": imageRef, "quick_params": map[string]any{},
-		"container_overrides": map[string]any{"command_mode": "manual", "cmd_display": "strata-serve --model /model --port 8000"},
+		"container_overrides": map[string]any{"command_mode": "manual", "cmd_display": launchCommand},
 	})
 	deployResp, deployData := authedDo(t, http.MethodPost, base, adminToken, "/api/v1/deployments", deployBody)
 	if deployResp.StatusCode != http.StatusCreated {
@@ -142,7 +163,49 @@ func TestCustomCallableImageDeploys(t *testing.T) {
 	command := strings.Join(append(append([]string(nil), recorded.Entrypoint...), recorded.Cmd...), " ")
 	// The platform keeps the command and only moves the port to the one it
 	// allocated.
-	if !strings.Contains(command, "strata-serve --model /model --port ") {
+	if !strings.Contains(command, strings.Split(launchCommand, "8000")[0]) {
 		t.Fatalf("command = %q, want the deployment's own adapter command", command)
 	}
+	if !loaderFails {
+		return
+	}
+	// Manual commands may be wrapped in a shell argv; this fixture has no
+	// quoted values, so inspect its command text for the rewritten port.
+	ports := launchConfigFlagValues(strings.Fields(command), "--port")
+	if len(ports) != 1 {
+		t.Fatalf("expected one allocated API port, got %q", ports)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:"+ports[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Server", "GPUWorksCallable/1 Python/3.10.12")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, `{"status":"failed","error":"ModuleNotFoundError: No module named 'diffusers'"}`)
+	}))
+	_ = probe.Listener.Close()
+	probe.Listener = listener
+	probe.Start()
+	defer probe.Close()
+	deadline := time.Now().Add(15 * time.Second)
+	var last string
+	for time.Now().Before(deadline) {
+		_, data := authedDo(t, http.MethodGet, base, adminToken, "/api/v1/instances", nil)
+		var instances []struct{ UUID, State, Message string }
+		if err := apiwire.UnmarshalList(data, &instances); err != nil {
+			t.Fatal(err)
+		}
+		for _, current := range instances {
+			if current.UUID == instance.UUID {
+				last = current.State + ": " + current.Message
+				if current.State == "failed" && strings.Contains(current.Message, "ModuleNotFoundError: No module named 'diffusers'") {
+					return
+				}
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("callable failure did not reach the instance API before startup timeout: %s", last)
 }

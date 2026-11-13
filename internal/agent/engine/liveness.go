@@ -54,7 +54,11 @@ func (e *Engine) RunLivenessMonitor(ctx context.Context) {
 // probeAndWatch runs the startup probe and, once it has reported the instance
 // running, hands the container to the liveness monitor.
 func (e *Engine) probeAndWatch(ctx context.Context, spec proto.InstanceDesiredState, id string, epoch uint64) {
-	if !e.probeAndReport(ctx, spec, id) {
+	e.probeAndWatchStartup(ctx, spec, id, epoch, false)
+}
+
+func (e *Engine) probeAndWatchStartup(ctx context.Context, spec proto.InstanceDesiredState, id string, epoch uint64, fresh bool) {
+	if !e.probeAndReportStartup(ctx, spec, id, fresh, fresh) {
 		return
 	}
 	e.mu.Lock()

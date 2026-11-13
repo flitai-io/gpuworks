@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 )
 
 // The overview is rebuilt at most every overviewRefreshFloor, and then only
@@ -29,8 +31,10 @@ var overviewTopics = []string{"node", "instance", "deployment"}
 // overviewSnapshot is one build of the overview, already encoded.
 type overviewSnapshot struct {
 	body []byte
-	etag string
-	at   time.Time
+	// summary is the build's fleet summary, which the dashboard shows too.
+	summary dto.OverviewSummary
+	etag    string
+	at      time.Time
 	// generation is the bus generation the snapshot was built at.
 	generation uint64
 }
@@ -95,7 +99,7 @@ func (a *apiHandlers) currentOverview() (*overviewSnapshot, error) {
 	}
 	sum := fnv.New64a()
 	_, _ = sum.Write(body)
-	c.snapshot = &overviewSnapshot{body: body, etag: `"` + strconv.FormatUint(sum.Sum64(), 36) + `"`, at: time.Now().UTC(), generation: generation}
+	c.snapshot = &overviewSnapshot{body: body, summary: out.Summary, etag: `"` + strconv.FormatUint(sum.Sum64(), 36) + `"`, at: time.Now().UTC(), generation: generation}
 	c.rebuilds.Add(1)
 	return c.snapshot, nil
 }

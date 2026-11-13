@@ -58,9 +58,10 @@ def test_image_enable_cycle(page, server, artifacts, report, locale):
         with page.expect_response(lambda r: urlsplit(r.url).path == series_path and r.request.method == "GET") as read:
             button(page, name).click()
         check(read.value.status == 200, "browser detail read failed")
-        # The accessible name joins the series and engine with a space. The
-        # title node is a flex row, so its inner text keeps those parts on two lines.
-        dialog_name = f"{name} vllm · cuda"
+        # The drawer's accessible name is the series name alone; the engine and framework moved
+        # to the subtitle line under the title (ImageDetailDrawer.tsx:131-132), which is why the
+        # header's own text still carries "<series>\n<engine> · <framework>".
+        dialog_name = name
         dialog = page.get_by_role("dialog", name=dialog_name, exact=True)
         expect(dialog).to_be_in_viewport(ratio=1)
         if not shell_checked["done"]:

@@ -1,7 +1,8 @@
 import { RightOutlined } from "@ant-design/icons";
-import { Drawer, Space, Tabs, Typography } from "antd";
+import { SideDrawer } from "../../ui-kit/SideDrawer";
+import { Tabs, TabsList, TabItem, TabPanel } from "../ui/tabs";
 import type { TableProps } from "antd";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 // As wide as the deployment drawer: room for a detail's tables without
 // scrolling sideways, never wider than the window less a margin.
@@ -47,56 +48,31 @@ export default function DetailDrawer({
   className?: string;
   children?: ReactNode;
 }) {
+  const selected = activeTab ?? tabs?.[0]?.key;
+  const [visited, setVisited] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    if (!open) { setVisited(new Set()); return; }
+    if (selected) setVisited(previous => previous.has(selected) ? previous : new Set([...previous, selected]));
+  }, [open, selected]);
+  const changeTab = (key: string) => {
+    setVisited(previous => new Set([...previous, key]));
+    onTabChange?.(key);
+  };
   return (
-    <Drawer
-      title={
-        // The title is the detail's heading, for screen readers as for tests.
-        <Space size={8} wrap role="heading" aria-level={2}>
-          <span>{title}</span>
-          {subtitle && (
-            <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400 }}>
-              {subtitle}
-            </Typography.Text>
-          )}
-        </Space>
-      }
-      open={open}
-      onClose={onClose}
-      width={DETAIL_DRAWER_WIDTH}
-      className={className}
-      // The whole drawer, header actions included, takes the faded disabled buttons (styles.css).
-      rootClassName="faded-disabled"
-      styles={{ body: { paddingTop: tabs ? 0 : undefined } }}
-      // Tables anywhere in a detail keep cells on one line and scroll inside
-      // their box (detailDrawer.css, scoped to this class).
-      classNames={{ body: "detail-body" }}
-      extra={extra}
-    >
+    <SideDrawer title={title}
+      open={open} onClose={onClose} width={DETAIL_DRAWER_WIDTH} className={className}
+      subtitle={subtitle} extra={extra}>
       {banner}
-      {tabs && (
-        <Tabs
-          className="detail-tabs"
-          activeKey={activeTab}
-          onChange={onTabChange}
-          items={tabs.map((tab) => ({
-            key: tab.key,
-            label:
-              tab.count == null ? (
-                tab.label
-              ) : (
-                <span>
-                  {tab.label}
-                  <span className="detail-tab-count" title={tab.countTitle}>
-                    {tab.count}
-                  </span>
-                </span>
-              ),
-            children: tab.children,
-          }))}
-        />
-      )}
+      {tabs && <Tabs className="detail-tabs" value={activeTab} defaultValue={tabs[0]?.key} onValueChange={changeTab} variant="underline">
+        <TabsList className="sticky top-0 z-10 bg-surface-overlay">
+          {tabs.map((tab) => <TabItem key={tab.key} value={tab.key} label={tab.label}
+            badge={tab.count == null ? undefined : <span title={tab.countTitle}>{tab.count}</span>} />)}
+        </TabsList>
+        {/* Zeron's tab list overhangs 4px below itself; the panel starts 16px under the tabs, as antd's did. */}
+        {tabs.map((tab) => <TabPanel key={tab.key} value={tab.key} keepMounted={visited.has(tab.key)} className="pt-4">{tab.children}</TabPanel>)}
+      </Tabs>}
       {children}
-    </Drawer>
+    </SideDrawer>
   );
 }
 

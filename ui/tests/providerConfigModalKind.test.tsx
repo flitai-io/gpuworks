@@ -267,8 +267,8 @@ test("the fixed edit kind is a labeled disabled textbox after saved config loads
   render(page(kindInfos));
   act(() => controls.openEdit({ id: 7, kind: "runpod", name: "list-account" }));
   await waitFor(() => assert.equal((screen.getByLabelText("Name") as HTMLInputElement).value, "loaded-account"));
-  const kind = screen.getByRole("textbox", { name: "Type", exact: true }) as HTMLInputElement;
-  assert.equal(screen.getByLabelText("Type", { exact: true }), kind);
+  const kind = screen.getByRole("textbox", { name: "External platform", exact: true }) as HTMLInputElement;
+  assert.equal(screen.getByLabelText("External platform", { exact: true }), kind);
   assert.equal(kind.disabled, true);
   assert.equal(kind.value, "RunPod");
 });

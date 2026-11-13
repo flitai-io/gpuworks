@@ -70,14 +70,14 @@ async function openSeries(user: ReturnType<typeof userEvent.setup>, name: string
     return button;
   });
   await user.click(row);
-  return (await screen.findByText(name, { selector: ".ant-drawer-title span" })).closest(".ant-drawer-content") as HTMLElement;
+  return await screen.findByRole("dialog", { name: new RegExp(name) });
 }
 
 // A node row's image ID, age and the actions on a held image sit in its
 // expanded row; open every row of the tab in view.
 async function expandNodeRows(user: ReturnType<typeof userEvent.setup>, drawer: HTMLElement) {
   const pane = await waitFor(() => {
-    const active = drawer.querySelector(".ant-tabs-tabpane-active") as HTMLElement | null;
+    const active = within(drawer).queryByRole("tabpanel");
     assert.ok(active && within(active).queryAllByRole("button", { name: z.nodeTable.expand }).length > 0, "the node rows are listed");
     return active;
   });
@@ -113,7 +113,7 @@ test("the series list shows loading, then its rows; a failed load says so; an em
     }
     return undefined;
   });
-  await waitFor(() => assert.ok(document.querySelector(".ant-table-wrapper .ant-spin-spinning"), "the table shows it is loading"));
+  await waitFor(() => assert.ok(screen.queryByRole("status"), "the table shows it is loading"));
   release?.();
   await screen.findByRole("button", { name: systemSeries.name });
 
@@ -303,7 +303,7 @@ test("opening a series reads its node rows from GET /images/{series_id}", async 
   await expandNodeRows(user, drawer);
   await within(drawer).findByText("0123456789ab");
   for (const name of ["gpu-01", "gpu-02", "gpu-03"]) assert.ok(within(drawer).getByText(name), name);
-  assert.ok(within(drawer).getByText("2 / 3"));
+  assert.ok(await within(drawer).findByText("2 / 3"));
 });
 
 test("while a node of the open series is transferring, the detail is polled fast and the list is not", async () => {

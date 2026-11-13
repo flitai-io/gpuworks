@@ -65,7 +65,7 @@ When only some replicas sleep (or only one PD role does), the deployment still s
 
 A deployment with no serving replica left (instances stopped or failed) is not asleep: there is nothing to wake, so `state` gives the failure's or stopped state itself and `asleep_replicas` is 0.
 
-For the field definitions, their precedence, and the per-role PD counts, see [API Reference: Deployment Sleep State](../reference/api.md#deployment-sleep-state-state-asleep_replicas-sleep_level).
+For the field definitions, their precedence, and the per-role PD counts, see [API Reference: Deployment Sleep State](../reference/api.md#部署的睡眠状态stateasleep_replicassleep_level).
 
 ## Partial Sleep: Replicas and PD Roles
 
@@ -170,7 +170,7 @@ When one instance fails to sleep, only its own desired state and any still-activ
 ## Limitations
 
 - Only vLLM is supported. SGLang cannot sleep (declaring sleep capability is rejected at creation).
-- Beyond NVIDIA, Ascend 910C, PPU ZW810E, and Hygon K100 have passed real-hardware validation; Apple nodes do not support engine sleep. The tested image versions and extra limits for each combination are under [vendor boundaries](../explanation/choosing-features.md#sleepwake-models-take-turns-on-one-gpu).
+- Beyond NVIDIA, Ascend 910C, PPU ZW810E, and Hygon K100 have passed real-hardware validation; Apple nodes do not support engine sleep. The tested image versions and extra limits for each combination are under [vendor boundaries](../explanation/choosing-features.md#sleepwake多个模型轮流用一张卡).
 - A PD deployment cannot declare sleep capability when KV transfer uses host RDMA networking (`PD_SLEEP_RDMA_UNSUPPORTED`): NIXL registers KV cache GPU memory with the RDMA NIC,
   and after engine sleep releases this memory, wake cannot allocate it again (CUDA out of memory occurs in testing). PD deployments with KV transfer over Ethernet and regular multi-node deployments with collective communication over RDMA can sleep.
 - Custom images are not probed; the engine's declared capabilities are authoritative. If the image lacks a sleep endpoint, sleep reports an error in instance events.

@@ -168,7 +168,7 @@ func (e HTTPTaskEvaluator) evaluateEmbedding(ctx context.Context, baseURL string
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
 		result.Warning = "embedding response is not valid JSON: " + err.Error()
-		return result, nil
+		return result, nil //nolint:nilerr // Invalid embedding output is recorded in the task warning, not a harness error.
 	}
 	if len(response.Data) != 3 {
 		result.Warning = fmt.Sprintf("embedding response has %d vectors, want 3", len(response.Data))

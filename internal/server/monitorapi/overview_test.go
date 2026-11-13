@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"

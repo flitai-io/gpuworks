@@ -1,3 +1,5 @@
+import { PeerTransferDetails } from "../../components/peerTransfer/PeerTransferDetails";
+import { productMessageText } from "../../apiError";
 import { Button, Flex, Popconfirm, Progress, Space, Tag, Tooltip, Typography, message } from "antd";
 import { CheckCircleFilled, CloudDownloadOutlined, ReloadOutlined, StopOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -85,19 +87,27 @@ function NodeFileActions({ model, row, isAdmin, onChanged }: { model: Model; row
       message.error(storageErrorText(t, e));
     }
   };
+  // The legacy sync endpoint resolves the target by node; only offer a new
+  // disk retry when that resolution cannot select a different local copy.
+  const soleLocalCopy = (model.nodes ?? []).filter((copy) => copy.node_uuid === row.node_uuid && !copy.cache && (!copy.storage_type || copy.storage_type === "local")).length === 1;
+  const diskRetry = row.state === "insufficient_disk_space" && !row.cache &&
+    (row.acquisition === "download" || (row.acquisition === "peer" && (!row.storage_type || row.storage_type === "local") && Boolean(row.source_node_uuid?.trim()) && soleLocalCopy));
   const retry = () => {
     if (row.acquisition === "download" && !row.cache) {
       return run(() => row.storage_id !== undefined
         ? api.downloadModelToStorage(model.id, { storage_id: row.storage_id, node_uuids: [row.node_uuid] })
         : api.downloadModel(model.id, row.node_uuid), t("presenceMessage.downloadStarted"));
     }
-    return run(() => api.syncModel(model.id, row.node_uuid, row.source_node_uuid, row.last_rate_limit_kib_s ?? 0), t("presenceMessage.syncStarted"));
+    // Disk-blocked transfers retain their current limit; its omitted zero
+    // means unlimited, not permission to restore an older archived limit.
+    const rateLimit = row.state === "insufficient_disk_space" ? row.rate_limit_kib_s ?? 0 : row.last_rate_limit_kib_s ?? 0;
+    return run(() => api.syncModel(model.id, row.node_uuid, row.source_node_uuid, rateLimit), t("presenceMessage.syncStarted"));
   };
   return <Flex wrap>
     {row.state === "download_required" && <Tooltip title={t("action.internetDownload")} trigger={["hover", "focus"]}>
       <Button type="text" size="small" icon={<CloudDownloadOutlined />} aria-label={t("action.internetDownload")} onClick={() => run(() => api.downloadModel(model.id, row.node_uuid), t("presenceMessage.downloadStarted"))} />
     </Tooltip>}
-    {(row.state === "failed" || row.state === "download_required" || row.state === "canceled") && <Tooltip title={t("action.retry")} trigger={["hover", "focus"]}>
+    {(row.state === "failed" || row.state === "download_required" || row.state === "canceled" || diskRetry) && <Tooltip title={t("action.retry")} trigger={["hover", "focus"]}>
       <Button type="text" size="small" icon={<ReloadOutlined />} aria-label={t("action.retry")} onClick={retry} />
     </Tooltip>}
     {row.acquisition === "download" && (row.state === "pending" || row.state === "downloading") && <CancelDownload modelId={model.id} storageId={row.storage_id} nodeUuid={row.node_uuid} onChanged={onChanged} />}
@@ -121,10 +131,14 @@ function NodeFileActions({ model, row, isAdmin, onChanged }: { model: Model; row
 
 function FileDetails({ row }: { row: ModelFile }) {
   const { t } = useTranslation("models");
+  const { t: common } = useTranslation("common");
   const node = "node_uuid" in row;
-  const statusNote = row.state === "missing" && !node ? t("files.missingHint")
-    : ["failed", "download_required", "canceled"].includes(row.state) ? row.message : undefined;
-  return <dl className="detail-extra">
+  const tagTextColors: Record<string, string> = { red: "var(--fg-danger)", orange: "var(--fg-warning)" };
+  const codedMessage = "transfer_error_code" in row && row.transfer_error_code
+    ? productMessageText(common, { code: row.transfer_error_code, message: row.message ?? "" }) : undefined;
+  const statusNote = codedMessage || (row.state === "missing" && !node ? t("files.missingHint")
+    : ["failed", "download_required", "canceled", "insufficient_disk_space"].includes(row.state) ? row.message : undefined);
+  return <><dl className="detail-extra">
     <div style={{ gridColumn: node ? "1 / -1" : "1 / -2" }}>
       <dt>{t(node ? "files.path" : "files.relativePath")}</dt>
       <dd>{row.path ? <Typography.Text code>{row.path}</Typography.Text> : "—"}</dd>
@@ -143,9 +157,10 @@ function FileDetails({ row }: { row: ModelFile }) {
       </>
     )}
     {statusNote && <div style={{ gridColumn: "1 / -1" }}>
-      <dt>{t("files.statusNote")}</dt><dd>{statusNote}</dd>
+      <dt>{t("files.statusNote")}</dt>
+      <dd style={{ color: tagTextColors[presenceVisual[row.state]?.color] ?? "var(--fg-muted)" }}>{statusNote}</dd>
     </div>}
-  </dl>;
+  </dl>{node && row.transfer_id && <PeerTransferDetails transferId={row.transfer_id} transferErrorCode={row.transfer_error_code} />}</>;
 }
 
 function FileLocation({ row }: { row: ModelFile }) {

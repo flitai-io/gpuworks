@@ -198,6 +198,9 @@ func TestPlatformTokenScopes(t *testing.T) {
 		if rec := rig.do(tok, "POST", "/api/v1/auth/activity", ""); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"PLATFORM_TOKEN_NOT_ALLOWED"`) {
 			t.Fatalf("platform token cannot renew a login session: %d %s", rec.Code, rec.Body)
 		}
+		if rec := rig.do(tok, "POST", "/api/v1/auth/password", `{"current_password":"x","new_password":"Tiger#Lake9"}`); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"PLATFORM_TOKEN_NOT_ALLOWED"`) {
+			t.Fatalf("platform token cannot change the password: %d %s", rec.Code, rec.Body)
+		}
 		for _, m := range []string{"GET", "POST"} {
 			rec := rig.do(tok, m, "/api/v1/platform-tokens", `{"name":"escalate","scope":"write"}`)
 			if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `"code":"PLATFORM_TOKEN_NOT_ALLOWED"`) {

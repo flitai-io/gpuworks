@@ -1,0 +1,60 @@
+{
+  "contract_id": "gpuworks/logs/stream-framing",
+  "name": "日志 / SSE 分块到达、多字节字符、空行与长行 / 帧边界与重连合同",
+  "priority": "P1",
+  "page_id": "logs",
+  "test_file": "test/e2e/log_stream_framing.py",
+  "test_function": "main",
+  "dimensions": [
+    "empty",
+    "long",
+    "multibyte",
+    "reconnect"
+  ],
+  "parameters": [
+    "empty",
+    "long",
+    "multibyte",
+    "reconnect"
+  ],
+  "command": "python3 -B test/e2e/log_stream_framing.py --dimension empty --locale en",
+  "command_note": "One dimension per invocation: the flag is --dimension (this script has no --case). Run it four times with empty, long, multibyte and reconnect, then again with --locale zh; the dimensions list above is the authority for the set.",
+  "lane": "local-real-server-sqlite",
+  "identity": "admin",
+  "locales": [
+    "en",
+    "zh"
+  ],
+  "required_evidence": [
+    "collection",
+    "request",
+    "ui",
+    "cleanup"
+  ],
+  "product_contracts": [
+    "internal/server/api/logs.go",
+    "internal/agent/app/node.go",
+    "ui/src/pages/InstanceLogStream.tsx",
+    "ui/src/pages/logStream.ts"
+  ],
+  "fixture": {
+    "source": "Owned Docker container; fixture bytes are written to the container's PID 1 stdout, which is the log source the agent's logtail stream follows",
+    "oracle": "The container's own `docker logs` proves what the engine emitted before any gpuworks code read it; the SSE response is then asserted as raw bytes",
+    "isolation": "One private server, one owned node/agent, one owned deployment and container per run; every marker carries a run-unique token",
+    "assertion_level": "Raw SSE body split on the protocol's blank-line frame delimiter, so half-characters, replacement characters and frame counts are asserted on the wire rather than on rendered text"
+  },
+  "checklist_items": {
+    "covered": [
+      "18.3"
+    ],
+    "18.3": "covered: Four dimensions are asserted against the real SSE endpoint GET /api/v1/instances/{uuid}/logs inside an owned Docker container, with the container's own docker logs as an independent oracle for what the engine emitted before gpuworks read it. (1) Multibyte: a 4-byte and a 3-byte rune arrive byte-faithful; a 16220-byte line that stays inside a single 16 KiB runtime chunk arrives with no U+FFFD on the wire; and a multibyte line spanning several runtime chunks reassembles whole and is reproduced byte for byte against the runtime copy. Every SSE event decodes as strict UTF-8, so no event carries a truncated character sequence. (2) Empty and whitespace-only lines: every physical line becomes exactly one SSE event, an empty line arrives as an event with empty data, spaces and tabs are preserved verbatim, and a \\r-only line collapses to that same empty event because \\r is stripped. (3) Long lines: a 1 KiB and a 1023 KiB line both arrive whole and byte-faithful, while a line above the bufio.Scanner 1 MiB ceiling ends the stream silently. (4) Reconnect: the stream carries no id: field, so there is no Last-Event-ID resume contract; the agent replays its tail window on reconnect, which necessarily repeats already-seen lines while still covering lines written during the gap. Chunked arrival is proven by reading the response in 64 KiB reads and reassembling frames on the SSE delimiter. Each dimension is mutation-proven."
+  },
+  "missing": [
+    "multibyte character split across a frame boundary cannot be constructed on this lane: the Docker json-file log driver replaces a rune that straddles its own 16 KiB chunk boundary with U+FFFD before any gpuworks code reads the bytes, so that corruption belongs to the runtime and not to the product",
+    "arrival timing: whether a line split by write timing is reassembled depends on the tail/docker flush behaviour and is not asserted as a product guarantee",
+    "SSE resume: there is no Last-Event-ID contract to check because the server emits no id: field, which is recorded as the observed design rather than a tested resume path"
+  ],
+  "result": "The three dimensions run separately, one dimension per invocation and per locale, against a real local server, a real agent and a real container. The PASS is per dimension and per locale rather than a page-wide claim.",
+  "artifact": "secrets/e2e/<runId>/report.json; source digests, matrix evidence and cleanup records",
+  "cleanup": "Stop the owned agent, container and server before PASS; secret scan. The private SQLite log store is retained for scoped diagnosis up to seven days."
+}

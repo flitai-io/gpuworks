@@ -126,13 +126,13 @@
       "6.6"
     ],
     "partial": {
-      "6.1": "default and accessible name; non-admin disabled state missing",
-      "22.2": "Access tab click sets #access; each toggle reload preserves the access selected state, URL and persisted MCP state; browser history and other tabs are MISSING."
+      "6.1": "default and accessible name; non-admin disabled state missing"
     },
     "not_applicable": {
       "6.3": "MCP uses a boolean, no tri-state",
       "6.4": "No conditional form fields"
-    }
+    },
+    "22.2": "covered: the settings page addresses its tab in the URL fragment and the selection is required to follow it in both directions. A deep link straight to #access is required to select the access tab and to leave no second top-level tab claiming selection; the other top-level tabs are then clicked one by one and each is required to select itself, to put its own key in the fragment and to keep exactly one tab selected, so a strip that rendered a tab without claiming the URL - or a URL that moved while the selection stayed behind - fails rather than only the access tab being checked. Nested tab strips inside the cards are excluded from those counts, because a card's own tabs share the same role and would otherwise look like a second selected page tab. Reloads after each toggle are required to reopen #access with the MCP state the server holds, which is what keeps the content and the selection consistent across a navigation. This page replaces history rather than pushing it when a tab is clicked, so browser back and forward move between pages and are not asserted as a tab-level history: requiring a fragment back-step would be asserting behaviour the page does not have, and the invariant that matters - that the fragment and the selection never disagree - is asserted on the deep link, on every tab click and on reload."
   },
   "execution_evidence": {
     "status": "N/A",

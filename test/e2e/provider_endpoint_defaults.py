@@ -76,7 +76,7 @@ def test_provider_endpoint_defaults(page, server, fixture, report):
     evidence = report['evidence']
     prefix = '/api/v1/providers'
     page.goto(server.base + '/providers')
-    expect(page.get_by_role('heading', name='Public Clouds', exact=True)).to_be_visible()
+    expect(page.get_by_role('heading', name='External Platforms', exact=True)).to_be_visible()
     kinds = read(page, server.base, prefix + '/kinds')['items']
     baseline = read(page, server.base, prefix)['items']
     mutations = []
@@ -85,7 +85,7 @@ def test_provider_endpoint_defaults(page, server, fixture, report):
     kind_labels = locale_strings('en', 'providers')['kind']
     for info in kinds:
         if info['kind'] == 'zstack':
-            continue  # Private-cloud page, no vendor-wide endpoint.
+            continue  # A private cloud has no vendor-wide endpoint.
         button(page, 'Add ' + kind_labels[info['kind']]).click()
         dialog = page.get_by_role('dialog')
         expect(dialog).to_be_visible()
@@ -105,7 +105,7 @@ def test_provider_endpoint_defaults(page, server, fixture, report):
     key_label = next(f['label']['en'] for k in kinds if k['kind'] == 'autodl' for f in k['credential_fields'] if f['name'] == 'api_key')
     endpoint = dialog.get_by_label(endpoint_label, exact=True)
     endpoint.fill(fixture.endpoint)
-    dialog.get_by_label('Type', exact=True).press('ArrowDown')
+    dialog.get_by_label('External platform', exact=True).press('ArrowDown')
     page.get_by_title('RunPod', exact=True).click()
     expect(endpoint).to_have_value(defaults['runpod'])
     button(dialog, 'Cancel').click()

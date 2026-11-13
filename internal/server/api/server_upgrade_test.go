@@ -62,7 +62,7 @@ func TestUpgradeServerFromTheChannel(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d %s", rec.Code, rec.Body.String())
 	}
-	if string(rec.Body.Bytes()) != `{"from":"`+version.Version+`","to":"rel-0001","backup":"/opt/gpuworks/server/backups/x.tar.gz"}`+"\n" {
+	if rec.Body.String() != `{"from":"`+version.Version+`","to":"rel-0001","backup":"/opt/gpuworks/server/backups/x.tar.gz"}`+"\n" {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
 	// The archive handed over is the channel's file for this platform,

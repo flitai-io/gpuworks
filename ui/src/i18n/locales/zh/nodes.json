@@ -86,6 +86,7 @@
     "confirm": "确认删除该计算节点？",
     "description": "请先停止该计算节点上的部署实例。",
     "uninstallDescription": "普通移除会先通过 SSH 卸载 agent，再删除节点记录。",
+    "noSSHDescription": "该节点未保存 SSH 凭据。普通删除需要先配置 SSH 凭据，也可在节点上手动卸载 agent 后勾选“强制移除”删除管理记录。",
     "force": "强制移除：仅删除管理记录",
     "forceWarning": "节点上的 agent 可能仍在运行，请在节点可访问后手动停止。"
   },
@@ -321,12 +322,14 @@
     "user": "用户",
     "userRequired": "请输入 SSH 用户",
     "probeAfterSave": "保存后立即探测一次",
-    "existingAuth": "现有认证：{{method}}。出于安全原因，凭证不会回显；保存时需重新输入。",
+    "existingAuth": "已保存凭据：{{method}}。出于安全原因，凭证不会回显；保存时需重新输入。",
+    "savedPasswordHelp": "恢复连接时，已保存的密码可通过密码认证或键盘交互认证尝试登录。",
     "password": "SSH 密码",
     "passwordRequired": "请输入 SSH 密码",
+    "keyboardInteractiveHelp": "适用于仅要求一次非回显密码应答的目标，不支持多步验证或 MFA 提示。",
     "privateKey": "SSH 私钥",
     "privateKeyRequired": "请输入 SSH 私钥",
-    "authorizesPlatformKey": "登录成功后平台会把平台公钥写入目标机，只保留平台密钥，这里填的密码或私钥不会保存。",
+    "authorizesPlatformKey": "登录成功后平台会尝试将平台公钥写入目标机；成功后只保留平台密钥，写入失败时保留本次凭据供恢复连接。",
     "platformKey": {
       "unavailable": "平台 SSH 密钥不可用：{{detail}}",
       "authorizeLabel": "在目标机授权平台公钥",
@@ -335,6 +338,7 @@
     "auth": {
       "label": "认证方式",
       "password": "密码",
+      "keyboardInteractive": "键盘交互认证",
       "key": "私钥",
       "platformKey": "平台密钥"
     },
@@ -366,6 +370,7 @@
     },
     "phase": {
       "probing": "探测中",
+      "probeFailed": "恢复探测失败",
       "artifactCheck": "检查 Agent 安装包",
       "uploading": "上传 Agent",
       "verifying": "校验 Agent",
@@ -519,7 +524,8 @@
       "platformLifts": "原因消失后平台会自动恢复调度。"
     },
     "cordonReason": {
-      "card_needs_host_reboot": "平台停止调度：有卡报告需要重启主机或断电重启才能恢复，同一驱动下的其他卡也可能受影响。"
+      "card_needs_host_reboot": "平台停止调度：有卡报告需要重启主机或断电重启才能恢复，同一驱动下的其他卡也可能受影响。",
+      "kube_unschedulable": "平台停止调度：Kubernetes 已停止向该节点调度（kubectl cordon/drain 或节点替换）。"
     }
   },
   "systemLabels": {
@@ -534,7 +540,9 @@
       "compute-network": "参数网络",
       "storage-sync-network": "存储同步网络",
       "serving-network": "服务网络",
-      "storage": "存储"
+      "storage": "存储",
+      "kubernetes-cluster": "Kubernetes 集群",
+      "kubernetes-node": "Kubernetes 节点"
     }
   },
   "diskUsage": {
@@ -714,6 +722,36 @@
       "ephemeral": "容器层"
     }
   },
+  "fleet": {
+    "notReported": "未上报",
+    "beforeOffline": "离线前版本",
+    "inBatch": "批次处理中",
+    "loadError": "节点版本信息获取失败",
+    "retry": "重试",
+    "noTarget": "无法识别当前 Server 的 Agent 目标版本",
+    "target": "Agent 目标版本 {{target}}",
+    "progress": "查看升级进度",
+    "filter": "Agent 状态",
+    "ignore": "忽略本次提示",
+    "versionChange": "当前 → 目标",
+    "willUpgrade": "将升级",
+    "replaceBuild": "替换为目标构建",
+    "status": {
+      "upgrade": "待升级",
+      "downgrade": "待对齐",
+      "different_build": "构建不同",
+      "check": "暂不可升级",
+      "all": "全部",
+      "align": "版本不同"
+    },
+    "count": {
+      "check": "暂不可升级 {{count}} 台",
+      "upgrade": "待升级 {{count}} 台",
+      "downgrade": "待对齐 {{count}} 台",
+      "different_build": "构建不同 {{count}} 台",
+      "align": "版本不同 {{count}} 台"
+    }
+  },
   "batchUpgrade": {
     "targetHeading": "本次目标",
     "targetSource": "由当前控制面提供。更新后，Agent 版本将与控制面一致。",
@@ -726,7 +764,7 @@
     "target": "目标版本：{{version}}",
     "previewCounts": "共 {{total}} 个节点，可执行 {{eligible}} 个，跳过 {{skipped}} 个。",
     "disruption": "Agent 将逐台重启，连接可能短暂中断。",
-    "versionWarning": "更新会将 Agent 替换为所示目标版本，也可能降级。多机及 PD 推理在节点持续离线时可能失败。",
+    "versionWarning": "Agent 将替换为所示目标版本。在途请求和长任务可能中断。多机推理和 PD 分离节点请一次选择一台，确认模型服务恢复后再升级下一台。",
     "acknowledge": "我已安排维护窗口，或确认受影响的业务允许中断。",
     "start": "更新到此版本",
     "refreshPreview": "重新预览",
@@ -797,6 +835,7 @@
       "offline": "离线",
       "unsupported": "平台或制品不支持",
       "legacy_unverified": "旧版下载条件待核实",
+      "kubernetes": "状态目录不可执行",
       "unknown_version": "版本未知",
       "busy": "已有升级占用",
       "unavailable": "暂不可执行"
@@ -809,6 +848,7 @@
       "artifact_missing": "目标 Agent 制品不可用。",
       "artifact_untrusted": "无法确认目标制品的版本或校验摘要。",
       "legacy_unverified": "无法确认旧 Agent 的下载条件，请单独处理此节点。",
+      "kubernetes": "该 Kubernetes 节点的 Agent 没能从节点状态目录启动（例如目录挂载为 noexec），只能运行 agent 镜像自带的程序，升级无法替换它。请检查节点上的状态目录，再删除该节点的 agent Pod 让它重新启动。",
       "unknown_version": "无法识别 Agent 版本。",
       "busy": "上一次升级仍占用此节点。",
       "target_changed": "目标或制品已经变化，请重新预览。",
@@ -896,6 +936,7 @@
       "busy": "卡正在服务",
       "foreign": "被平台外进程占用",
       "deferred": "平台还不知道节点在跑什么",
+      "not_held": "这张卡没有借给平台（归 Kubernetes 调度）",
       "unavailable": "宿主暂时不能检查",
       "probe_failed": "厂商工具本轮没应答"
     },

@@ -6,7 +6,7 @@
   "control_id": "ordinary-replica-scale",
   "test_file": "test/e2e/deployment_replica_browser.py",
   "test_function": "test_replicas",
-  "command": "make test-e2e-deployment-replicas REPLICA_CASE=scale LOCALE=en",
+  "command": "python3 -B test/e2e/deployment_replicas.py --case scale --locale en",
   "lane": "local-real-agent-docker-fake-gpu-facts",
   "identity": "admin browser, run-owned inference key",
   "fixture": "API-created initial ordinary deployment, local model, real agent and Docker; exactly two synthetic A100 cards with whole-card claims and explicit failover routing; drain additionally proves no ready replacement while target holds its stream; audited fake-engine with 120x500ms SSE deltas; real host network; image ID captured once and deployed through a run-owned immutable tag, removed independently after containers; explicit dedicated DOCKER_HOST required and DOCKER_CONTEXT empty, shared/default daemon rejected before resources",
@@ -148,8 +148,8 @@
     },
     {
       "item": "3.1",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "COVERED",
+      "reason": "The replica spinbutton's saved value, unit, step and both bounds are read from the control and from the server: aria-valuemin 1 and aria-valuemax 32, the server-supplied max_replicas asserted to be 32, step 1, unit 'replicas', and the saved count compared to the deployment document. Verified under en and zh."
     },
     {
       "item": "3.2",
@@ -173,8 +173,8 @@
     },
     {
       "item": "3.6",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "COVERED",
+      "reason": "The range the UI enforces is the range the server publishes: max_replicas from the deployment document is asserted equal to 32 and aria-valuemax is asserted to be that same 32, so a client clamp that disagreed with the server dictionary cannot pass (killed by setting MaxReplicas to 16, which fails with 'expected JSON integer 32, actual 16'). An abandoned draft leaves the stored configuration untouched: clearing the input disables Apply with zero requests recorded. Verified under en and zh."
     },
     {
       "item": "6.1",
@@ -278,8 +278,8 @@
     },
     {
       "item": "12.2",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "covered",
+      "reason": "Measured in the browser at 1440x900 by the shared drawer shell check, on the same deployment detail drawer this case already declares 12.1, 12.3 and 12.5 from: the drawer, header, title, body and header actions all lie inside the viewport, the body starts at or below the header's bottom edge, the title stays inside the header, and the actions start to the right of the title. Recorded as drawer_regions in the report's evidence. Proven by mutation on the same helper: a -60px body margin fails with 'drawer body overlaps its header'."
     },
     {
       "item": "12.3",
@@ -383,38 +383,45 @@
     },
     {
       "item": "17.1",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "N/A",
+      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed",
+      "assertion": "no chart loading, empty, error or stale state exists on the deployments list. N/A: this case drives the deployments list and its replica actions, and that page draws no chart. DeploymentsPage.tsx is six Buttons, two Tags, one Select and one Modal with no echarts, no Statistic, no Timeline and no canvas; the only Progress in the deployments surfaces is the per-file preparation bar in DeploymentPreparation.tsx:59, which this case does not open, and the chart component section 17 describes lives at ui/src/pages/analytics/EChart.tsx, imported by no deployments page."
     },
     {
       "item": "17.2",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "N/A",
+      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed",
+      "assertion": "there is no series, query parameter, time range, aggregation or unit to check. N/A: this case drives the deployments list and its replica actions, and that page draws no chart. DeploymentsPage.tsx is six Buttons, two Tags, one Select and one Modal with no echarts, no Statistic, no Timeline and no canvas; the only Progress in the deployments surfaces is the per-file preparation bar in DeploymentPreparation.tsx:59, which this case does not open, and the chart component section 17 describes lives at ui/src/pages/analytics/EChart.tsx, imported by no deployments page."
     },
     {
       "item": "17.3",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "N/A",
+      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed",
+      "assertion": "there is no legend, tooltip or time control, and no series to link them to. N/A: this case drives the deployments list and its replica actions, and that page draws no chart. DeploymentsPage.tsx is six Buttons, two Tags, one Select and one Modal with no echarts, no Statistic, no Timeline and no canvas; the only Progress in the deployments surfaces is the per-file preparation bar in DeploymentPreparation.tsx:59, which this case does not open, and the chart component section 17 describes lives at ui/src/pages/analytics/EChart.tsx, imported by no deployments page."
     },
     {
       "item": "17.4",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "N/A",
+      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed",
+      "assertion": "there is no chart response that a later response could overwrite. N/A: this case drives the deployments list and its replica actions, and that page draws no chart. DeploymentsPage.tsx is six Buttons, two Tags, one Select and one Modal with no echarts, no Statistic, no Timeline and no canvas; the only Progress in the deployments surfaces is the per-file preparation bar in DeploymentPreparation.tsx:59, which this case does not open, and the chart component section 17 describes lives at ui/src/pages/analytics/EChart.tsx, imported by no deployments page."
     },
     {
       "item": "17.5",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "N/A",
+      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed",
+      "assertion": "no card maps a metric to an authoritative source, because no metric card exists here. N/A: this case drives the deployments list and its replica actions, and that page draws no chart. DeploymentsPage.tsx is six Buttons, two Tags, one Select and one Modal with no echarts, no Statistic, no Timeline and no canvas; the only Progress in the deployments surfaces is the per-file preparation bar in DeploymentPreparation.tsx:59, which this case does not open, and the chart component section 17 describes lives at ui/src/pages/analytics/EChart.tsx, imported by no deployments page."
     },
     {
       "item": "17.6",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "N/A",
+      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed",
+      "assertion": "no timeline widget is drawn; replica state transitions are asserted from the deployment record and its instances, not from a timeline. N/A: this case drives the deployments list and its replica actions, and that page draws no chart. DeploymentsPage.tsx is six Buttons, two Tags, one Select and one Modal with no echarts, no Statistic, no Timeline and no canvas; the only Progress in the deployments surfaces is the per-file preparation bar in DeploymentPreparation.tsx:59, which this case does not open, and the chart component section 17 describes lives at ui/src/pages/analytics/EChart.tsx, imported by no deployments page."
     },
     {
       "item": "17.7",
-      "status": "MISSING",
-      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed"
+      "status": "N/A",
+      "reason": "Outside this bounded ordinary-replica mainline; no whole-page coverage claimed",
+      "assertion": "there is no chart axis, series label or unit rendering whose size, overlap or colour could be measured. N/A: this case drives the deployments list and its replica actions, and that page draws no chart. DeploymentsPage.tsx is six Buttons, two Tags, one Select and one Modal with no echarts, no Statistic, no Timeline and no canvas; the only Progress in the deployments surfaces is the per-file preparation bar in DeploymentPreparation.tsx:59, which this case does not open, and the chart component section 17 describes lives at ui/src/pages/analytics/EChart.tsx, imported by no deployments page."
     },
     {
       "item": "22.1",

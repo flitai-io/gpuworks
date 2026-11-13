@@ -10,7 +10,7 @@ from playwright.sync_api import expect
 from platform_token_read_revoke import check
 from deployment_boolean_contracts import (
     ENGINE_DECIDES, POSITIONS, SURFACES, TRISTATE, assert_wire, evaluate_body,
-    position_body, reviewed_profile, same,
+    evaluate_body_after_edits, position_body, reviewed_profile, same,
 )
 
 FAMILY = 'boolean-tristate'
@@ -56,7 +56,18 @@ def _restore(page, labels, body, report, control, key, surface, launch):
     label = 'boolean-tristate-' + key + '-restore-' + surface
     record = launch.evaluation(page, action,
         lambda wire: wire.get('served_name') == body['served_name'], report, label)
-    same(record['request'], evaluate_body(body), label + ' complete original draft')
+    # The control was edited during this case, and ADR 0020 keeps an edited key
+    # explicit for the rest of the session, so restoring the original value still
+    # travels - with the original value, which is the point: the draft returns to
+    # the fixture, not to the key's absence. A key the case never touched must
+    # stay absent, so any other quick value is still an error.
+    expected = evaluate_body(body)
+    authored = {key: body['quick_params'][key]} if key in body['quick_params'] else {}
+    if authored:
+        expected['quick_params'] = authored
+    else:
+        expected.pop('quick_params', None)
+    same(record['request'], expected, label + ' complete original draft')
     _selected(control, text)
 
 
@@ -120,5 +131,8 @@ def exercise(page, labels, body, report):
     # roundtrip provides an exact final wire checkpoint before old lifecycle.
     restored = launch.probe(page, labels, body, report,
         'boolean-tristate-restored-fixture', body['quick_params'])
-    same(restored['request'], evaluate_body(body), 'boolean final complete independent draft')
+    edited = [k for surface in ('quick', 'expert')
+              for k in SURFACES[body['engine']][surface]]
+    same(restored['request'], evaluate_body_after_edits(body, edited),
+         'boolean final complete independent draft')
     report['last_step'] = 'boolean-tristate-complete-and-restored'

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
@@ -84,7 +85,16 @@ type Node struct {
 	// state), so out-of-band restart and reinstall reach this node's agent on
 	// a host that runs several; empty for nodes installed another way, which
 	// recovery treats as the default /opt/gpuworks.
-	InstallDir        string `gorm:"size:512"`
+	InstallDir string `gorm:"size:512"`
+	// KubeClusterID is the Kubernetes cluster (KubeCluster) this node joined
+	// from, and KubeNodeName its node name there; zero and empty for a node
+	// that joined any other way. Enrollment finds a returning node by the pair.
+	KubeClusterID uint   `gorm:"index:idx_node_kube,priority:1"`
+	KubeNodeName  string `gorm:"size:253;index:idx_node_kube,priority:2"`
+	// KubeUnschedulable is the node's cordon in Kubernetes, as its agent
+	// last reported it. While it is set the platform cordons the node too,
+	// and lifts that once Kubernetes does (store.UpdateNodeStatus).
+	KubeUnschedulable bool
 	LastRemoteAddr    string `gorm:"size:128"` // address observed by the control plane
 	RuntimeDriver     string `gorm:"size:16"`  // docker | nerdctl | udocker | host (detected)
 	RuntimePreference string `gorm:"size:16"`  // auto | docker | nerdctl | udocker (desired)

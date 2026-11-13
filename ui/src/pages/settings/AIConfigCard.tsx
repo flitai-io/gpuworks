@@ -105,7 +105,7 @@ export default function AICard() {
           <Button type="link" size="small" onClick={() => setEditing(c)}>
             {t("common.edit")}
           </Button>
-          <Popconfirm title={t("ai.deleteConfirm")} onConfirm={() => del(c.id)} okText={t("common.delete")} cancelText={t("common.cancel")}>
+          <Popconfirm title={t("ai.deleteConfirm", { name: c.name })} onConfirm={() => del(c.id)} okText={t("common.delete")} cancelText={t("common.cancel")}>
             <Button type="link" danger size="small">
               {t("common.delete")}
             </Button>

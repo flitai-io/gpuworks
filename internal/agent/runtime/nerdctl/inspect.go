@@ -20,7 +20,7 @@ const imageTargetLabel = "gpuworks.image-target"
 var imageDigestPattern = regexp.MustCompile(`^(sha256:[0-9a-f]{64}|sha384:[0-9a-f]{96}|sha512:[0-9a-f]{128})$`)
 
 func (d *Driver) InspectWorkload(ctx context.Context, id string) (runtime.WorkloadInspection, error) {
-	out, err := output(ctx, 10*time.Second, "container", "inspect", "--format", "{{json .}}", id)
+	out, err := d.output(ctx, 10*time.Second, "container", "inspect", "--format", "{{json .}}", id)
 	if err != nil {
 		return runtime.WorkloadInspection{}, err
 	}

@@ -1,7 +1,7 @@
 {
   "scope": "Targeted network definition contracts, not communication or full page coverage",
   "test_file": "test/e2e/network_type_roles.py",
-  "command": "make test-e2e-network-type-roles",
+  "command": "python3 -B test/e2e/network_type_roles.py --case all --locale en",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
   "result": "NOT_RUN: execution belongs to SHA/runId report",
@@ -387,7 +387,7 @@
     "1.15": "Tab from the name field reaches the description. Enter in the empty name shows the name error and sends no network create. Enter on the filled minimum form sends no network create, and the dialog stays open on that name and the compute role. At 1440x900 the name, Save, and Cancel each stay inside the viewport, and the name does not overlap Save or Cancel. After the minimum create, the detail resolved-nodes table is one small table.",
     "5.1/5.2/5.4/5.5": "covered for four network type options and declared switch paths",
     "6.1/6.4": "covered for role compatibility; full toggle matrix MISSING",
-    "12.7": "PARTIAL: scoped deletion names the network; reference-block, allow-cleanup, and failed delete without a partial change are not exercised",
+    "12.7": "Delete confirmation carries both the name and the consequence, proven on this case's own scoped network rather than borrowed from the sibling network case: the confirmation string is the product's own, with {{name}} replaced, and it must be visible inside the viewport before the delete proceeds, so the copy asserted is 'Delete network <name>? Running instances keep the network they started with'. Reference blocking has no object on this resource, and the evidence is the surrounding error vocabulary rather than an absence of tests: writeNetworkErr (internal/server/api/networks.go:245) maps invalid, dedicated-unavailable, attachment-not-found, not-found, name-taken and attachment-exists and nothing in the in-use family, while errors.go defines SERVED_NAME_IN_USE, MODEL_IN_USE, IMAGE_IN_USE and STORAGE_IN_USE on four other resources and never NETWORK_IN_USE; Store.DeleteNetwork (internal/server/store/network_objects.go:98) removes the row together with its attachments and test runs in one transaction, so an attached network is deleted rather than refused. That is measured here: a node and two networks are created over the API, both attached, resolved_node_count reads 1, and DELETE answers 200 {'status': 'deleted'} rather than 409. The allowed-cleanup half is the cascade, asserted with the node still present, the network answering 404, and its name immediately reused - which is what proves no attachment row outlived the network. The failed-delete half deletes a non-existent id, requires 404 NETWORK_NOT_FOUND, and re-reads the second network afterwards with its attachment count and its name, description, CIDR, interface, roles and type required to be unchanged; 404 alone would show that an error was reported, not that nothing else moved. The copy states the consequence for running instances and does not mention the released attachment, recorded as an observation about the copy rather than asserted as a defect.",
     "12.1": "covered: New network on the networks page opens the dialog named by the create title",
     "12.2": "covered: Create dialog at 1440x900: the dialog and footer Save stay inside the viewport, and the title, body and footer sit inside the dialog without overlap",
     "12.3": "covered: Default focus is inside the create dialog. Tab and Shift+Tab each cycle across at least two controls and never leave the dialog",

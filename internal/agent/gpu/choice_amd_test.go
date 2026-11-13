@@ -28,7 +28,7 @@ func TestMixedVendorAutoKeepsExistingProberPriority(t *testing.T) {
 	for i, prober := range probers {
 		gotOrder[i] = prober.Vendor()
 	}
-	wantOrder := []string{"hygon", "ascend", "ppu", "nvidia", "apple", "amd"}
+	wantOrder := []string{"hygon", "ascend", "ppu", "kunlunxin", "nvidia", "apple", "amd"}
 	if len(gotOrder) != len(wantOrder) {
 		t.Fatalf("default prober count = %v, want %v", gotOrder, wantOrder)
 	}

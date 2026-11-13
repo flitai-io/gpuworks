@@ -93,7 +93,8 @@ test("when both paths fail the code is offered pre-selected for manual copy", as
   const user = userEvent.setup();
   installClipboard({ api: "reject", exec: false });
   renderMarkdown(fenced);
-  fireEvent.click(screen.getByRole("button", { name: copyLabel }));
+  const trigger = screen.getByRole("button", { name: copyLabel });
+  fireEvent.click(trigger);
   const dialog = await screen.findByRole("dialog", { name: locale.common.copy.manualTitle });
   assert.ok(dialog.textContent?.includes(locale.common.copy.manualHint));
   const editor = await waitFor(() => {
@@ -102,7 +103,7 @@ test("when both paths fail the code is offered pre-selected for manual copy", as
     return found;
   });
   assert.equal(editor.readOnly, true);
-  assert.ok(!screen.getByRole("button", { name: copyLabel }).querySelector("[aria-label=check]"), "no copied feedback");
+  assert.ok(!trigger.querySelector("[aria-label=check]"), "no copied feedback");
   await user.click(within(dialog).getByRole("button", { name: locale.common.copy.done }));
   await waitFor(() => assert.ok(screen.queryByRole("dialog") === null, "dialog closes"));
 });

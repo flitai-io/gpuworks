@@ -139,7 +139,7 @@ func transientWarmupError(err error) bool {
 		}
 	}
 	var network net.Error
-	return errors.As(err, &network) && (network.Timeout() || network.Temporary())
+	return errors.As(err, &network) && (network.Timeout() || network.Temporary()) //nolint:staticcheck // SA1019: warmup retries include legacy temporary DNS and transport failures.
 }
 
 func warmupDiagnostic(d loadgen.DetailRecord) string {

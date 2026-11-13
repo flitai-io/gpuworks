@@ -5,6 +5,8 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/agentupgrade"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/distribution"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // upgradeAPITestAdapter connects HTTP contract tests to the real domain without
@@ -76,7 +78,11 @@ func testAgentUpgradePreview(p agentupgrade.Preview) dto.AgentUpgradePreview {
 		out.Counts = map[string]int{}
 	}
 	for _, n := range p.Nodes {
-		out.Nodes = append(out.Nodes, dto.AgentUpgradeCandidate{NodeUUID: n.NodeUUID, Name: n.Name, FromVersion: n.FromVersion, OS: n.OS, Arch: n.Arch, Transport: n.Transport, Eligibility: n.Eligibility, Reason: n.Reason})
+		change := ""
+		if n.Eligibility == "eligible" {
+			change = distribution.VersionChange(n.FromVersion, p.TargetVersion)
+		}
+		out.Nodes = append(out.Nodes, dto.AgentUpgradeCandidate{VersionChange: change, Downgrade: change == "downgrade", NodeUUID: n.NodeUUID, Name: n.Name, FromVersion: n.FromVersion, OS: n.OS, Arch: n.Arch, Transport: n.Transport, Eligibility: n.Eligibility, Reason: n.Reason})
 	}
 	return out
 }
@@ -87,4 +93,9 @@ func testAgentUpgradeRun(v agentupgrade.RunView) dto.AgentUpgradeRun {
 func testAgentUpgradeItem(v agentupgrade.ItemView, target string) dto.AgentUpgradeItem {
 	i := v.Record
 	return dto.AgentUpgradeItem{RunID: i.RunID, NodeUUID: i.NodeUUID, Name: i.Name, FromVersion: i.FromVersion, TargetVersion: target, CurrentVersion: v.CurrentVersion, ObservedVersion: i.ObservedVersion, OS: i.OS, Arch: i.Arch, Transport: i.Transport, Phase: i.Phase, Reason: i.Reason, Error: i.Error, StartedAt: i.StartedAt, DeadlineAt: i.DeadlineAt, FinishedAt: i.FinishedAt, RegisteredAt: i.RegisteredAt, VerifiedAt: i.VerifiedAt, VerifiedBy: i.VerifiedBy, VerificationCode: i.VerificationCode, VerificationNote: i.VerificationNote}
+}
+
+func (a upgradeAPITestAdapter) Fleet(ctx context.Context, nodes []store.Node) (AgentFleetStatus, error) {
+	f, err := a.service.Fleet(ctx, nodes)
+	return AgentFleetStatus(f), err
 }

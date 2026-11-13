@@ -1,4 +1,9 @@
 import type { ThemeConfig } from "antd";
+import { zeronTokens } from "./zeron.generated";
+
+// Preview changes take effect on reload; index.html chooses the mode before modules load.
+export const darkPreview = typeof document !== "undefined" && document.documentElement.dataset.theme === "dark";
+const semantic = zeronTokens[darkPreview ? "dark" : "light"];
 
 /**
  * radius is the corner scale: sm for small parts (tags, checkboxes, menu
@@ -8,40 +13,46 @@ import type { ThemeConfig } from "antd";
  */
 export const radius = { sm: 4, md: 6, lg: 8 };
 
+/** A Zeron #rrggbb colour at the given opacity, for borders antd cannot take as CSS variables. */
+function alpha(hex: string, opacity: number) {
+  const value = Number.parseInt(hex.slice(1, 7), 16);
+  return `rgba(${value >> 16}, ${(value >> 8) & 255}, ${value & 255}, ${opacity})`;
+}
+
 export const colors = {
-  primary: "#005bd4",
-  primaryHover: "#0043b1",
-  primaryActive: "#052e82",
-  primarySoft: "#e6f6ff",
-  primaryPale: "#ceefff",
-  ink: "#181a1d",
-  text: "#4a4c4f",
-  muted: "#707275",
-  weak: "#96989b",
-  border: "#dbdde0",
-  borderSoft: "#f0f2f5",
-  controlBorder: "#c8cacd",
-  canvas: "#f5f7fa",
-  white: "#ffffff",
-  success: "#57d344",
-  successSoft: "#ecfedf",
-  successText: "#3ab333",
-  warning: "#ff9000",
-  warningSoft: "#fff8e5",
-  warningText: "#db7200",
-  danger: "#f93940",
-  dangerHover: "#db2e43",
-  dangerSoft: "#fff2ea",
-  dangerText: "#db2e43",
-  chartPrimary: "#0076f7",
-  chartSecondary: "#ff9000",
-  chartTertiary: "#57d344",
-  chartQuaternary: "#9a45e4",
-  chartTeal: "#01c8e6",
-  chartViolet: "#4f57ff",
-  chartSlate: "#5b7083",
-  chartGrid: "#e5e7eb",
-  chartTick: "#9ca3af",
+  primary: semantic["brand"],
+  primaryHover: semantic["brand-hover"],
+  primaryActive: semantic["brand-active"],
+  primarySoft: semantic["info-surface"],
+  primaryPale: semantic["info-surface-raised"],
+  ink: semantic["fg-default"],
+  text: semantic["fg-muted"],
+  muted: semantic["fg-subtle"],
+  weak: semantic["fg-subtle"],
+  border: semantic["border"],
+  borderSoft: semantic["border-subtle"],
+  controlBorder: semantic["input"],
+  canvas: semantic["surface-base"],
+  white: semantic["surface-floating"],
+  success: semantic["success-strong"],
+  successSoft: semantic["success-surface"],
+  successText: semantic["fg-success"],
+  warning: semantic["warning-strong"],
+  warningSoft: semantic["warning-surface-subtle"],
+  warningText: semantic["fg-warning"],
+  danger: semantic["destructive-action"],
+  dangerHover: semantic["destructive-action-hover"],
+  dangerSoft: semantic["danger-surface-subtle"],
+  dangerText: semantic["fg-danger"],
+  chartPrimary: semantic["chart-1"],
+  chartSecondary: semantic["chart-2"],
+  chartTertiary: semantic["chart-3"],
+  chartQuaternary: semantic["chart-4"],
+  chartTeal: semantic["chart-5"],
+  chartViolet: semantic["chart-6"],
+  chartSlate: semantic["chart-7"],
+  chartGrid: semantic["border-subtle"],
+  chartTick: semantic["fg-subtle"],
 } as const;
 
 export const themeConfig: ThemeConfig = {
@@ -51,9 +62,19 @@ export const themeConfig: ThemeConfig = {
     colorSuccess: colors.success,
     colorWarning: colors.warning,
     colorError: colors.danger,
+    // Light status surfaces come from Zeron directly: antd's own derivation
+    // from these strong colours over the translucent borders came out grey-green.
+    colorSuccessBg: semantic["success-surface"],
+    colorSuccessBorder: alpha(semantic["success-border"], 0.28),
+    colorWarningBg: semantic["warning-surface-subtle"],
+    colorWarningBorder: alpha(semantic["warning-border"], 0.28),
+    colorErrorBg: semantic["danger-surface-subtle"],
+    colorErrorBorder: alpha(semantic["danger-border"], 0.28),
+    colorInfoBg: semantic["info-surface"],
+    colorInfoBorder: alpha(semantic["info-border"], 0.28),
     colorBgLayout: colors.canvas,
     colorBgContainer: colors.white,
-    colorBgElevated: colors.white,
+    colorBgElevated: semantic["surface-overlay"],
     colorFillSecondary: colors.borderSoft,
     colorFillTertiary: colors.canvas,
     colorFillQuaternary: colors.canvas,
@@ -73,9 +94,9 @@ export const themeConfig: ThemeConfig = {
     fontSize: 14,
     fontSizeSM: 12,
     lineHeight: 1.4286,
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
-    boxShadow: "0 4px 6px -1px rgba(0,0,0,.10), 0 2px 4px -2px rgba(0,0,0,.10)",
-    boxShadowSecondary: "0 10px 15px -3px rgba(0,0,0,.10), 0 4px 6px -4px rgba(0,0,0,.10)",
+    fontFamily: semantic["font-family-sans"],
+    boxShadow: semantic["shadow-floating"],
+    boxShadowSecondary: semantic["shadow-overlay"],
     motionDurationMid: "0.2s",
   },
   components: {
@@ -145,7 +166,7 @@ export const themeConfig: ThemeConfig = {
     },
     Segmented: {
       itemSelectedBg: colors.primary,
-      itemSelectedColor: colors.white,
+      itemSelectedColor: semantic["fg-on-primary-action"],
       itemHoverBg: colors.borderSoft,
       trackBg: colors.canvas,
       trackPadding: 2,

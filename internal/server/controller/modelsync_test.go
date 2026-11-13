@@ -24,6 +24,7 @@ type modelSyncHub struct {
 	requests   []proto.ModelSyncCopyRequest
 	called     chan struct{}
 	release    chan struct{}
+	copyFn     func(context.Context, proto.ModelSyncCopyRequest) (proto.ModelSyncCopyResult, error)
 	copyErr    error
 	copyResult *proto.ModelSyncCopyResult
 	stops      int
@@ -62,7 +63,11 @@ func (h *modelSyncHub) CopyModelPath(ctx context.Context, req proto.ModelSyncCop
 	if len(h.requests) == 1 && h.called != nil {
 		close(h.called)
 	}
+	copyFn := h.copyFn
 	h.mu.Unlock()
+	if copyFn != nil {
+		return copyFn(ctx, req)
+	}
 	if h.release != nil {
 		select {
 		case <-ctx.Done():
@@ -359,11 +364,11 @@ func TestAutomaticPeerSyncFailureWithoutPublicSourceRequiresAction(t *testing.T)
 // A source the user picked is kept even when the copy from it fails: the
 // model file waits for an explicit retry or choice, never a silent download.
 func TestSelectedPeerSyncFailureRequiresExplicitAction(t *testing.T) {
-	st, model, src, dst, dstMF := setupModelSyncController(t)
+	st, model, src, dst, _ := setupModelSyncController(t)
 	if err := st.SetModelSyncSource(store.FileRef{ModelID: model.ID, NodeID: dst.ID}, src.ID); err != nil {
 		t.Fatal(err)
 	}
-	dstMF, _ = st.ModelFileByModelNode(model.ID, dst.ID)
+	dstMF, _ := st.ModelFileByModelNode(model.ID, dst.ID)
 	got, hub := failPeerSync(t, st, model, dst, dstMF)
 	if got.State != proto.MFDownloadRequired || got.Acquisition != proto.ModelAcquirePeer || got.TransferSourceNodeID != src.ID || got.Message == "" {
 		t.Fatalf("failed selected-source sync = %+v, want download_required keeping the source", got)
@@ -374,12 +379,12 @@ func TestSelectedPeerSyncFailureRequiresExplicitAction(t *testing.T) {
 }
 
 func TestTargetCompletionWinsRaceWithSourceRPCError(t *testing.T) {
-	st, model, src, dst, dstMF := setupModelSyncController(t)
+	st, model, src, dst, _ := setupModelSyncController(t)
 	const transferID = "target-completed-first"
 	if err := st.BeginModelSync(store.FileRef{ModelID: model.ID, NodeID: dst.ID}, src.ID, transferID, 12); err != nil {
 		t.Fatal(err)
 	}
-	dstMF, _ = st.ModelFileByModelNode(model.ID, dst.ID)
+	dstMF, _ := st.ModelFileByModelNode(model.ID, dst.ID)
 	if err := st.UpdateModelFileStatus(dst.ID, proto.ModelFileStatus{
 		Key: testModelFileKey(t, st, model.ID, dst.ID), State: proto.MFPresent, Path: "/models/Qwen3-copy",
 		BytesTotal: 12, BytesDone: 12, TransferID: transferID, Acquisition: proto.ModelAcquirePeer,
@@ -407,11 +412,11 @@ func TestTargetCompletionWinsRaceWithSourceRPCError(t *testing.T) {
 }
 
 func TestSyncingTransferIsReconciledAfterControllerRestart(t *testing.T) {
-	st, model, src, dst, dstMF := setupModelSyncController(t)
+	st, model, src, dst, _ := setupModelSyncController(t)
 	if err := st.BeginModelSync(store.FileRef{ModelID: model.ID, NodeID: dst.ID}, src.ID, "persisted-transfer", 12); err != nil {
 		t.Fatal(err)
 	}
-	dstMF, _ = st.ModelFileByModelNode(model.ID, dst.ID)
+	dstMF, _ := st.ModelFileByModelNode(model.ID, dst.ID)
 	hub := &modelSyncHub{online: map[string]bool{"src": true, "dst": true}, called: make(chan struct{}), release: make(chan struct{})}
 	c := New(st, hub, nil)
 	if !c.trySyncModelFromPeer(context.Background(), dst, model, dstMF) {
@@ -671,7 +676,7 @@ func TestProbeModelSyncAsksForTheCopysTargetPath(t *testing.T) {
 	if err := c.ProbeModelSync(context.Background(), model.ID, dst.UUID, "src"); err != nil {
 		t.Fatal(err)
 	}
-	if len(hub.probed) != 1 || hub.probed[0].TargetPath != relModelPath(model) {
+	if len(hub.probed) != 1 || hub.probed[0].TargetPath != relModelPath(model) || !hub.probed[0].AllowRelay {
 		t.Fatalf("probe = %+v, want target path %q", hub.probed, relModelPath(model))
 	}
 }

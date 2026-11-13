@@ -19,7 +19,7 @@
 | 自有 910C / Docker | arm64 / 910C | 9.0/驱动 | A3 镜像 / Docker | 下表标明 Docker 的档完成平台部署、health/模型发现和真实 chat | 只支持下表逐项列出的模型、拓扑与运行时；不把结果外推到 runveil 或未测档。`910c_1` 的 Phy-ID 0 已被逐 die 检查排除 |
 | 自有池 nerdctl 成员 | arm64 / 910B4 | driver-only，26.1.1 | 内嵌 probe v2 / nerdctl | 生产 Engine + Driver：物理卡 1→容器逻辑卡 0，精确返回 4 GiB；关闭钩子返回 32 GiB 并判失败 | 节点级 dGPU 探针通过；本次不加载业务镜像、模型或推理引擎 |
 | 自有裸机临时 Docker daemon | arm64 / 910B4 | driver-only，26.1.1 | 内嵌 probe v2 / Docker 27.5.1 + Ascend runtime | 生产 Engine + Driver：物理卡 1→容器逻辑卡 0，4 GiB 配额与关闭钩子的 32 GiB 负向对照均符合预期 | 补验 v2 的容器内 DSMI 映射；本次未重跑平台推理 |
-| 直通 VM / runveil | arm64 / 910B4 | driver-only，25.5.1 | 内嵌 probe v2 / runveil，无 vCANN 钩子 | 物理卡 7→逻辑卡 1，与生产推理注入一致；HBM 查询返回真实整卡 32 GiB，4 GiB 预期判失败 | 仅验证设备映射；device-share 为 False，驱动不支持 VM 开启，不能记为 dGPU 通过 |
+| 直通 VM / runveil | arm64 / 910B4 | driver-only，25.5.1 | 内嵌 probe v2 / runveil，无 vcann-rt 钩子 | 物理卡 7→逻辑卡 1，与生产推理注入一致；HBM 查询返回真实整卡 32 GiB，4 GiB 预期判失败 | 仅验证设备映射；device-share 为 False，驱动不支持 VM 开启，不能记为 dGPU 通过 |
 | 自有裸机 runveil（物理卡号 2–7） | arm64 / 910B4 | driver-only，26.0.rc1 | 内嵌 probe v2 / runveil | 生产 Engine + Runner 在物理卡 7 上返回 4 GiB；关闭 DSMI 钩子返回整卡 32 GiB 并判失败 | 节点级 dGPU 探针通过；旧 v1 可复现 `rc=87 total_kb=0` |
 | 同一自有裸机 runveil | arm64 / 910B4 | driver-only，26.0.rc1 | 8.5.1 / vLLM 0.18.0 / runveil | 默认 agent 路径：平台 API 同卡双副本 dGPU、网关 chat、逐实例超配拒绝，随后整卡部署及 chat | 已通过；每份配额 8 GiB，9 GiB 申请均拒绝。使用 `gpuworks/gpuworks-runner:cann8.5-910b-vllm0.18.0-r2`，自动兼容仅适用于下述已校验的 ARM64 TSD 库 |
 | 同一自有裸机 runveil | arm64 / 910B4 | driver-only，26.0.rc1 | 9.0 / vLLM 0.20.2 / runveil | 生产 Engine + runveil Driver 自动选卡，Qwen3-0.6B、8 GiB 配额，真实 chat 返回 HTTP 200 | 通过单实例 dGPU 推理；容器报告 8589934592 bytes，9 GiB 申请被拒绝，随后 chat 返回 `Hello! 😊`。本次未走平台 API/调度/网关 |
@@ -130,7 +130,7 @@ PRoot 兼容脚本。MiniMax-M3 的 Docker 结果同样不外推到 runveil。
 
 1. **探测**：架构、NPU、driver/toolkit、runtime 和dGPU 能力原因。
 2. **设备注入**：内层容器可见指定的物理 NPU。
-3. **dGPU 行为探针**：走生产 `Engine` 生成 vCANN 配置并启动真实 runtime；内嵌 2.5 MiB `/probe` 调用 `dsmi_get_hbm_info`，断言看到的总显存恰好是 4 GiB。该层刻意不加载业务镜像或模型。
+3. **dGPU 行为探针**：走生产 `Engine` 生成 vcann-rt 配置并启动真实 runtime；内嵌 2.5 MiB `/probe` 调用 `dsmi_get_hbm_info`，断言看到的总显存恰好是 4 GiB。该层刻意不加载业务镜像或模型。
 4. **平台 dGPU 推理**：必须经 GPUWorks API 创建部署和实例，验证同卡多副本、配额及真实推理。
 5. **完整整卡对话**：必须经平台 API 部署，并从 `/v1/chat/completions` 得到真实回复。
 
@@ -152,7 +152,7 @@ agent 现在通过 `GPUWORKS_PARTITION_PROBE_DEVICE` 传入所选物理卡号；
 
 runveil 保留宿主设备视图，不能沿用 Docker 的紧凑设备号。agent 现在结合 `npu-smi info` 的物理卡/芯片地址与 `npu-smi info -m` 的 `Chip Logic ID`，生成 `ASCEND_RT_VISIBLE_DEVICES` 和 `NPU_VISIBLE_DEVICES`；缺失或冲突的映射会阻止启动，不回退到 0。真机验证了裸机物理 7→逻辑 7，以及直通 VM 物理 7→逻辑 1 的生产注入结果。
 
-此前 ARM64 PRoot 的系统调用表缺少 `faccessat2`（439），导致 glibc `realpath()` 对目录的检查使用宿主路径，误报 `ENOENT`。CANN 因而找不到 platform 配置或算子注册库；CANN 9.0 表现为 `ZerosLike` / `aclnnInplaceZero` 的 `361001`。该错误在关闭 dGPU 的对照中也能复现，不能据此判定 vCANN 不支持 runveil。
+此前 ARM64 PRoot 的系统调用表缺少 `faccessat2`（439），导致 glibc `realpath()` 对目录的检查使用宿主路径，误报 `ENOENT`。CANN 因而找不到 platform 配置或算子注册库；CANN 9.0 表现为 `ZerosLike` / `aclnnInplaceZero` 的 `361001`。该错误在关闭 dGPU 的对照中也能复现，不能据此判定 vcann-rt 不支持 runveil。
 
 已补齐系统调用映射并重建 ARM64 内嵌 PRoot。构建门禁验证 guest bind 下的 `faccessat2`、相对 dirfd、缺失路径和带符号链接/父目录/尾斜杠的 `realpath`；原二进制失败，新二进制在 ARM64 真机通过。使用更新后的内嵌资产和自动设备映射，CANN 9.0 / vLLM 0.20.2 的单实例 dGPU 推理、超额分配拒绝及拒绝后的 chat 均通过。范围仍以上表为准。
 

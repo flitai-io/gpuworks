@@ -37,6 +37,17 @@ func TestUntrustedTargetsDoNotReachNetwork(t *testing.T) {
 	}
 }
 
+func TestPrivateMissCanBeAllowedAndReservedAddressCannot(t *testing.T) {
+	p := policy{}
+	if _, err := p.addresses(context.Background(), "10.1.2.3"); !errors.Is(err, ErrTargetNeedsAllow) {
+		t.Fatalf("private miss: %v", err)
+	}
+	_, err := p.addresses(context.Background(), "169.254.169.254")
+	if !errors.Is(err, ErrTargetDenied) || errors.Is(err, ErrTargetNeedsAllow) {
+		t.Fatalf("reserved: %v", err)
+	}
+}
+
 func TestAllowedPrivateHostStillCannotRedirectToMetadata(t *testing.T) {
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,74 @@
+# The UI walk, the GitHub counterpart of ui-check in .gitlab-ci.yml: a pull
+# request that touches the UI walks the pages it affects in both languages at
+# 1024 px against the target branch's UI; the nightly run and a manual run walk
+# every page at every width. scripts/ui_check_ci.sh does the work; the report
+# is for a person to look through, so it is uploaded whether or not the walk
+# passes.
+name: ui-check
+
+on:
+  pull_request:
+    paths:
+      - ui/**
+      - scripts/ui_check_ci.sh
+      - scripts/ui_antd_inventory.mjs
+      - .github/workflows/ui-check.yml
+  workflow_dispatch:
+  schedule:
+    - cron: "37 19 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+  # Servers started by CI jobs never send usage reports (ADR 0054).
+  GPUWORKS_USAGE_REPORT: "off"
+
+jobs:
+  ui-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The comparison builds the target branch's UI from a worktree.
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      # The runner image ships Google Chrome; the pages need CJK glyphs.
+      - name: Install CJK fonts
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y --no-install-recommends fonts-noto-cjk >/dev/null
+      - run: npm ci --no-audit --no-fund
+        working-directory: ui
+      - run: npm run build
+        working-directory: ui
+      - name: Walk the UI
+        env:
+          UI_CHECK_COMPARE: "1"
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          export CHROME_PATH=$(command -v google-chrome)
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            export UI_CHECK_BASE_REF="origin/$BASE_REF"
+            export UI_CHECK_WIDTHS=1024
+          fi
+          ./scripts/ui_check_ci.sh
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: ui-check-report
+          path: ui-check-report/
+          retention-days: 14

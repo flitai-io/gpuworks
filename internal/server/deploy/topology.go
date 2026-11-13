@@ -10,7 +10,7 @@ import (
 )
 
 // Data-parallel codes answer a stated data-parallel degree the assigned GPUs
-// cannot run. Placement assigns GPUs for tensor × pipeline parallelism only,
+// cannot run. Placement assigns GPUs for tensor × pipeline × data parallelism,
 // so each engine's topology validator judges the degree against its own
 // arithmetic and names the dictionary key the deploy form shows it beside.
 const (
@@ -153,4 +153,41 @@ func splitTopologyArgument(argument string, accepted map[string]struct{}) (strin
 		raw = ""
 	}
 	return name, raw, true
+}
+
+// PlacementDataParallel returns the GPU-multiplying data-parallel degree for
+// scheduling. The launch validator remains responsible for engine topology.
+func PlacementDataParallel(engine string, quickDP int, templateArgs, userArgs []string) (int, error) {
+	dp := quickDP
+	if dp < 1 {
+		dp = 1
+	}
+	args := append(append([]string(nil), templateArgs...), userArgs...)
+	flags := vllmDataParallelFlags
+	if engine == EngineSGLang {
+		flags = sglangDataParallelFlags
+	}
+	value, set, symbolic, err := topologyInteger(args, flags...)
+	if err != nil {
+		return 0, err
+	}
+	if symbolic {
+		return 0, fmt.Errorf("data parallel degree must be concrete for placement")
+	}
+	if set {
+		dp = value
+	}
+	if engine == EngineSGLang {
+		attention, symbolic, err := topologySwitch(args, "--enable-dp-attention")
+		if err != nil {
+			return 0, err
+		}
+		if symbolic {
+			return 0, fmt.Errorf("DP attention mode must be concrete for placement")
+		}
+		if attention {
+			return 1, nil
+		}
+	}
+	return dp, nil
 }

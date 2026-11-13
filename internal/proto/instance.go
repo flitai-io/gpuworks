@@ -45,16 +45,22 @@ func (f *RequestedFeatures) Names() []string {
 // persistence and agent execution. It contains no instance identity or node
 // allocation facts; those belong to InstanceDesiredState.
 type ResolvedLaunch struct {
-	RequestedFeatures *RequestedFeatures `json:"requested_features,omitempty"`
-	CommandMode       string             `json:"command_mode,omitempty"`
-	Entrypoint        []string           `json:"entrypoint,omitempty"`
-	Argv              []string           `json:"argv"`
-	PreStartArgv      []string           `json:"pre_start_argv,omitempty"`
-	PreStartScript    string             `json:"pre_start_script,omitempty"`
-	RuntimeAssets     []RuntimeAsset     `json:"runtime_assets,omitempty"`
-	Env               map[string]string  `json:"env,omitempty"`
-	EnvLayers         LaunchEnvLayers    `json:"env_layers,omitempty"`
-	DockerArgs        []string           `json:"docker_args,omitempty"`
+	StartupEstimate *StartupEstimate `json:"startup_estimate,omitempty"`
+	// These are the resolved health budget, not a startup-time prediction.
+	StartTimeoutSeconds       int                `json:"start_timeout_seconds,omitempty"`
+	StartTimeoutSource        string             `json:"start_timeout_source,omitempty"`
+	StartTimeoutConflict      bool               `json:"start_timeout_conflict,omitempty"`
+	EngineStartTimeoutSeconds int                `json:"engine_start_timeout_seconds,omitempty"`
+	RequestedFeatures         *RequestedFeatures `json:"requested_features,omitempty"`
+	CommandMode               string             `json:"command_mode,omitempty"`
+	Entrypoint                []string           `json:"entrypoint,omitempty"`
+	Argv                      []string           `json:"argv"`
+	PreStartArgv              []string           `json:"pre_start_argv,omitempty"`
+	PreStartScript            string             `json:"pre_start_script,omitempty"`
+	RuntimeAssets             []RuntimeAsset     `json:"runtime_assets,omitempty"`
+	Env                       map[string]string  `json:"env,omitempty"`
+	EnvLayers                 LaunchEnvLayers    `json:"env_layers,omitempty"`
+	DockerArgs                []string           `json:"docker_args,omitempty"`
 	// ShmBytes is the size of the container's /dev/shm tmpfs, not a memory
 	// reservation or limit: pages count against the host only once written.
 	// It is ineffective under --ipc=host, which shares the host's /dev/shm.
@@ -292,19 +298,20 @@ const (
 
 // InstanceStatus is reported by the agent (status.instance).
 type InstanceStatus struct {
-	UUID        string          `json:"uuid"`
-	State       string          `json:"state"`
-	ContainerID string          `json:"container_id,omitempty"`
-	Ports       []int           `json:"ports,omitempty"`
-	Message     string          `json:"message,omitempty"`  // error/detail
-	Phase       string          `json:"phase,omitempty"`    // image_verify | image_pull | image_extract | container_unpack | container_prepare | container_launch | health_check | optimizing | sleep
-	Progress    float64         `json:"progress,omitempty"` // 0..1 when known
-	BytesDone   int64           `json:"bytes_done,omitempty"`
-	BytesTotal  int64           `json:"bytes_total,omitempty"`
-	RateBPS     int64           `json:"rate_bps,omitempty"`
-	Measured    json.RawMessage `json:"measured,omitempty"`    // vllm log parse
-	DirectAddr  string          `json:"direct_addr,omitempty"` // host:port for direct proxy
-	SleepLevel  int             `json:"sleep_level,omitempty"` // 0 awake, 1 L1, 2 L2
+	RuntimeFailure *RuntimeFailure `json:"runtime_failure,omitempty"`
+	UUID           string          `json:"uuid"`
+	State          string          `json:"state"`
+	ContainerID    string          `json:"container_id,omitempty"`
+	Ports          []int           `json:"ports,omitempty"`
+	Message        string          `json:"message,omitempty"`  // error/detail
+	Phase          string          `json:"phase,omitempty"`    // image_verify | image_pull | image_extract | container_unpack | container_prepare | container_launch | health_check | optimizing | sleep
+	Progress       float64         `json:"progress,omitempty"` // 0..1 when known
+	BytesDone      int64           `json:"bytes_done,omitempty"`
+	BytesTotal     int64           `json:"bytes_total,omitempty"`
+	RateBPS        int64           `json:"rate_bps,omitempty"`
+	Measured       json.RawMessage `json:"measured,omitempty"`    // vllm log parse
+	DirectAddr     string          `json:"direct_addr,omitempty"` // host:port for direct proxy
+	SleepLevel     int             `json:"sleep_level,omitempty"` // 0 awake, 1 L1, 2 L2
 	// SleepTarget is populated on a failed sleep/wake report. The server uses
 	// it to roll the deployment intent back only when the failed order is still
 	// the current intent.

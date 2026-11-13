@@ -172,6 +172,7 @@
     "placement": {
       "preparingModel": "正在准备模型，{{count}} 个副本尚未启动",
       "preparationFailed": "模型准备失败，{{count}} 个副本尚未启动",
+      "diskFull": "模型存储空间不足，{{count}} 个副本尚未启动",
       "waiting": "{{count}} 个副本正在等待节点",
       "candidates": "候选节点",
       "requirements": "节点条件",
@@ -401,6 +402,7 @@
       "DEPLOYMENT_ROLLING_RESTARTED": "已请求滚动重启，共 {{replicas}} 个副本",
       "DEPLOYMENT_ROLLING_STALLED": "滚动重启暂停：副本 {{replica}} 连续失败 {{attempts}} 次已放弃，重试该副本后继续",
       "DEPLOYMENT_DGPU_QUOTA_CHANGED": "dGPU 显存上限 {{from}} → {{to}}：{{live}} 个实例立即生效，{{pending}} 个重启后生效",
+      "DEPLOYMENT_COMPONENT_DOWNLOAD": "组件 {{component}}（{{model}}，{{bytes}}）开始下载到共享存储「{{storage}}」，由 {{node}} 写入一次，各节点共用这一份",
       "DEPLOYMENT_EDITED": "配置已修改（{{count}} 项：{{fields}}）；生效方式：{{apply}}",
       "REPLICA_RESTARTED": "已请求重启实例 {{instance}} 所在的副本",
       "UNIT_RETRY_EXHAUSTED": "已放弃重试：连续失败 {{attempts}} 次（{{reason}}）",
@@ -519,6 +521,7 @@
       "resourceLimits": "显存 {{vram}} 字节 · SM {{sm}}% · 后端 {{backend}}"
     },
     "diagnoseButton": "AI 诊断",
+    "previousAttempt": "先前的尝试",
     "commandMode": {
       "manual": "手动命令"
     },
@@ -538,7 +541,9 @@
       "systemTag": "系统",
       "eventsUnavailable": "事件历史加载失败",
       "retry": "重试",
-      "earlierEventsHidden": "更早的事件未显示"
+      "earlierEventsHidden": "更早的事件未显示",
+      "streamFailed": "实时日志已中断：服务端拒绝了日志流",
+      "streamRetrying": "正在重新连接实时日志"
     },
     "noLogs": "实例未运行，无日志流",
     "noMetrics": "实例未运行，无推理指标",
@@ -557,6 +562,40 @@
       "none": "仅保存，下次重启时生效",
       "rolling": "滚动替换",
       "all": "全部立即重建"
+    },
+    "startup": {
+      "unknown": "暂无启动估算：模型权重大小未知",
+      "title": "启动耗时",
+      "budget": "启动等待上限：{{duration}} · {{source}}",
+      "source": {
+        "deployment": "部署设置",
+        "cluster": "集群设置",
+        "engine": "引擎配置",
+        "harness": "测试覆盖值",
+        "unknown": "已记录的上限"
+      },
+      "estimate": "粗略预计启动：{{duration}}",
+      "duration": {
+        "seconds": "{{seconds}} 秒",
+        "minutes": "{{minutes}} 分 {{seconds}} 秒",
+        "hours": "{{hours}} 小时 {{minutes}} 分 {{seconds}} 秒"
+      },
+      "conflict": "平台可能先于引擎的 {{duration}} 等待上限判定超时，请检查部署超时设置。",
+      "elapsed": "已等待引擎就绪：{{duration}}",
+      "slow": "启动已超过粗略估算，仍在配置的等待上限内，继续等待。",
+      "observedReady": "实测引擎就绪等待：{{duration}}",
+      "measured": {
+        "ModelLoadingSeconds": "权重加载：{{duration}}",
+        "CompilationSeconds": "编译：{{duration}}",
+        "GraphCaptureSeconds": "图捕获：{{duration}}"
+      },
+      "measuredNote": "引擎日志耗时取各阶段报告的最大值，各阶段可能重叠，不作累加。",
+      "unsupported": "当前部署配置暂无启动估算",
+      "elapsedUnknown": "引擎就绪等待时长未知",
+      "unavailable": "暂无启动估算",
+      "engineDeadlineShort": "引擎自身的 {{duration}} 等待上限短于粗略启动估算，可能先于平台超时，请检查引擎配置。",
+      "formula": "参考公式：{{weight}} MiB ÷ {{rate}} MiB/s + {{initialization}} 初始化耗时。",
+      "referenceNote": "吞吐与初始化耗时采用固定参考假设，未经节点实测，不保证完成时间，也不改变启动等待上限。"
     }
   },
   "instanceMetrics": {
@@ -685,7 +724,7 @@
     "reason": {
       "MODEL_PREPARATION_WAITING": "等待准备进度更新",
       "MODEL_NODE_OFFLINE": "节点连接已断开",
-      "MODEL_CACHE_DISK_FULL": "缓存磁盘空间不足",
+      "MODEL_CACHE_DISK_FULL": "模型存储空间不足",
       "MODEL_PREPARATION_FAILED": "模型准备失败",
       "MODEL_STORAGE_UNRESPONSIVE": "存储无响应",
       "MODEL_COPY_STALLED": "复制长时间无进展",

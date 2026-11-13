@@ -70,7 +70,7 @@ for (const kind of ["node", "bulk", "defaults"] as const) {
     api.updateStorageNodeOverrides = save;
     const { user, changed } = view();
     if (kind === "bulk") {
-      await user.click(screen.getByTitle("gpu-00", { selector: "input" }));
+      await user.click(within(screen.getByText("gpu-00").closest("tr")!).getByRole("checkbox"));
       await user.click(screen.getByRole("button", { name: s.cacheManage.batch }));
     } else {
       await user.click(screen.getByRole("button", { name: s.cacheManage[kind === "node" ? "configure" : "defaults"] }));
@@ -105,7 +105,7 @@ for (const kind of ["node", "bulk", "defaults"] as const) {
     assert.equal(path.value, "/new-cache");
     assert.equal(limit.value, "32");
     await user.click(submit);
-    await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
+    await waitFor(() => assert.ok(screen.queryByRole("dialog") === null, "Expected the element to be absent"));
     assert.equal(changed(), 1);
     const body = kind === "defaults"
       ? { cache_max_bytes: 32 * GIB, cache_path: "/new-cache", expected_updated_at: "2026-10-16T01:00:00Z" }
@@ -134,9 +134,9 @@ test("viewer sees policy and honest unknown state but cannot modify configuratio
   view(storage, false);
   expandAll(s.detail.expand);
   assert.ok(screen.getAllByText(s.cacheManage.unknown).length);
-  assert.equal(screen.queryByRole("button",{name:s.cacheManage.configure}),null);
-  assert.equal(screen.queryByRole("button",{name:s.cacheManage.defaults}),null);
-  assert.equal(screen.queryByRole("checkbox"),null);
+  assert.ok(screen.queryByRole("button",{name:s.cacheManage.configure}) === null, "Expected the element to be absent");
+  assert.ok(screen.queryByRole("button",{name:s.cacheManage.defaults}) === null, "Expected the element to be absent");
+  assert.ok(screen.queryByRole("checkbox") === null, "Expected the element to be absent");
 });
 
 test("leaving management destroys a pending destructive confirmation", async () => {
@@ -147,7 +147,7 @@ test("leaving management destroys a pending destructive confirmation", async () 
   await user.click(screen.getByRole("button", {name:s.cacheManage.clear}));
   await screen.findByRole("dialog");
   cleanup();
-  await waitFor(() => assert.equal(screen.queryByRole("dialog"),null));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog") === null, "Expected the element to be absent"));
   assert.equal(calls,0);
 });
 
@@ -163,7 +163,7 @@ test("default preview totals only known inherited nodes and marks unknown observ
   assert.ok(within(dialog).getByText(expected));
   const input = within(dialog).getByRole("textbox", {name:s.cacheManage.pathValue});
   fireEvent.change(input, {target:{value:"/new-cache"}});
-  assert.equal(within(dialog).queryByText(expected),null);
+  assert.ok(within(dialog).queryByText(expected) === null, "Expected the element to be absent");
   assert.ok(within(dialog).getAllByText(s.cacheManage.unknown).length >= 3);
 });
 
@@ -171,9 +171,9 @@ test("manual page selection survives filtering and an open batch keeps its IDs a
   const calls: unknown[] = [];
   api.updateStorageNodeOverrides = async (...args) => { calls.push(args); return fixture(27); };
   const { user, update } = view(fixture(26));
-  await user.click(screen.getByTitle("gpu-00", { selector: "input" }));
-  await user.click(screen.getByTitle("2", { selector: "li" }));
-  await user.click(screen.getByTitle("gpu-25", { selector: "input" }));
+  await user.click(within(screen.getByText("gpu-00").closest("tr")!).getByRole("checkbox"));
+  await user.click(screen.getByRole("button", { name: "Next page" }));
+  await user.click(within(screen.getByText("gpu-25").closest("tr")!).getByRole("checkbox"));
   fireEvent.change(screen.getByRole("searchbox", { name: s.nodes.search }), { target: { value: "gpu-00" } });
   await user.click(screen.getByRole("button", { name: s.cacheManage.batch }));
   const dialog = screen.getByRole("dialog");
@@ -195,7 +195,7 @@ test("keyboard can select a node, open batch settings and choose an unlimited po
   checkbox.focus();
   assert.ok(document.activeElement === checkbox, "node checkbox receives keyboard focus");
   await user.keyboard("[Space]");
-  await waitFor(() => assert.equal(checkbox.checked, true));
+  await waitFor(() => assert.equal(checkbox.getAttribute("aria-checked"), "true"));
   screen.getByRole("button", { name: s.cacheManage.batch }).focus();
   await user.keyboard("{Enter}");
   const dialog = screen.getByRole("dialog");
@@ -275,7 +275,7 @@ for (const mode of ["clear", "trim"] as const) {
     if (mode === "clear") {
       const button = screen.getByRole("button", { name: s.cacheManage.clear }) as HTMLButtonElement;
       assert.equal(button.disabled, true, "selection is still required");
-      await user.click(screen.getByTitle("gpu-00", { selector: "input" }));
+      await user.click(within(screen.getByText("gpu-00").closest("tr")!).getByRole("checkbox"));
       assert.equal(button.disabled, false, "read-only NFS does not disable local cache cleanup");
       await user.click(button);
       await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: s.cacheManage.clear }));
@@ -296,6 +296,6 @@ test("disabled NFS cache cleanup remains unavailable to a viewer", () => {
   storage.enabled = false;
   storage.nodes.all![0].cache!.state = "failed";
   view(storage, false);
-  assert.equal(screen.queryByRole("button", { name: s.cacheManage.clear }), null);
-  assert.equal(screen.queryByRole("button", { name: s.cacheManage.retry }), null);
+  assert.ok(screen.queryByRole("button", { name: s.cacheManage.clear }) === null, "Expected the element to be absent");
+  assert.ok(screen.queryByRole("button", { name: s.cacheManage.retry }) === null, "Expected the element to be absent");
 });

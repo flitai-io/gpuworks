@@ -16,3 +16,14 @@ type ServerOutboundPolicyUpdate struct {
 	AllowPrivateHosts    []string `json:"allow_private_hosts"`
 	Revision             string   `json:"revision"`
 }
+
+type ServerOutboundPolicyCheck struct {
+	Hosts []string `json:"hosts"`
+}
+
+// ServerOutboundHostCheck explains current permission, not network reachability.
+// Status is allowed, needs_allow, blocked, or unresolved; DNS answers stay private.
+type ServerOutboundHostCheck struct {
+	Host   string `json:"host"`
+	Status string `json:"status"`
+}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	benchmeta "gpuworks.ai/gpuworks/pkg/bench"
 )
@@ -48,6 +49,12 @@ func (s *Store) GetBenchmarkRun(id uint) (*BenchmarkRun, error) {
 func (s *Store) ListBenchmarkRuns() ([]BenchmarkRun, error) {
 	var out []BenchmarkRun
 	return out, s.db.Order("id desc").Find(&out).Error
+}
+
+// CountActiveBenchmarkRuns counts the runs not yet finished.
+func (s *Store) CountActiveBenchmarkRuns() (int64, error) {
+	var n int64
+	return n, s.db.Model(&BenchmarkRun{}).Where("state IN ?", []string{"pending", "running"}).Count(&n).Error
 }
 
 // RecoverServerBenchmarkRuns fails workloads that could only have been driven

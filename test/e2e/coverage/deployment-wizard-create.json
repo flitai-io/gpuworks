@@ -7,7 +7,7 @@
   "scope": "One registered local model, one user vLLM running spec, one explicit node, one replica; partial deployment form coverage",
   "test_file": "test/e2e/deployment_wizard_create.py",
   "test_function": "test_deployment_wizard_create",
-  "command": "make test-e2e-deployment-wizard-create",
+  "command": "python3 -B test/e2e/deployment_wizard_create.py --locale en",
   "lane": "local-real-agent-docker-fake-gpu-facts",
   "identity": "admin browser, real local agent and Docker; inference API key for gateway",
   "fixture": "Fresh real server/SQLite, Chrome, run-scoped local weights copied from testdata/fake-model; user running spec imported before browser; synthetic A100 facts without GPU injection; real Docker fake-engine. Preparation performs no deployment create.",
@@ -271,12 +271,15 @@
   "missing": [
     "Real GPU inference, GPU memory release, dGPU quota and vendor driver behavior",
     "Remote weight/image download, peer copy, storage and provider choices, acquisition candidate expiry",
-    "All engine dictionary parameter options, numeric boundaries and numerical estimates remain MISSING; mode preservation and complete evaluated/instance/runtime launch consistency are checked for this one-rank contract",
+    "Numeric boundaries are measured for two documented integer/number keys on the vLLM surface only; the remaining bounds, engine-version-specific option sets other than kv_disk_min_kernel, and sglang's own UI driving stay outside this contract, as do numerical estimates and mode preservation beyond the one-rank launch this case creates",
     "Auto placement, multihost, PD, replica scaling and execution failure/cancellation",
     "Non-admin permissions, authentication expiry and reconnect",
     "Full keyboard/focus/layout and 10/30/100 candidate/list matrices",
     "Held handler, external cleanup timeout and persistent filesystem failure matrices remain MISSING; dedicated selftests run actual main for successful baseline, context/browser close failure, first/finally report write failure, screenshot failure and failed context setup",
-    "Each run covers one --locale; both locales require separate reports"
+    "Each run covers one --locale; both locales require separate reports",
+    "Product defect, recorded and not repaired here: data_parallel_size is a published parameter spec with Group parallel and flags for both engines (--data-parallel-size on vLLM, --dp-size on sglang), the server injects and validates it (DATA_PARALLEL_GPU_COUNT, plus the sglang DATA_PARALLEL_ATTENTION_DIVISOR check) and the localizations exist, but no UI surface renders a control for it - ui/src matches data_parallel_size zero times, and parallel is the only parameter group with no consumer among the four group lists the draft steps draw from, while every other group is read by one of them. The value is projected into the request body when present, so only the input control is missing. Data parallel size is therefore settable through the API but not through the interface.",
+    "The deploy pickers swallow a failed catalog load: usePolling records the error (api.ts:4760) and returns it (api.ts:4793), but nothing in ui/src/pages/deploy reads it, so a failed image, series, model or node load is indistinguishable from \"there are no options\". Measured by code, not yet by a run: noted as a product gap rather than a covered error state.",
+    "The edit form cannot express a placement change on a single-node deployment that was created in manual mode. Switching the form's placement control to automatic leaves placement_mode manual: buildPayload only states placement_mode \"auto\" when unitsPlacementAuto(draft) is true (ui/src/pages/deploy/deployHelpers.ts:253), and that value is derived from the draft rather than from the control, so the review keeps seeing changes === 0 and the Review control stays disabled (DeploySubmitBar.tsx:50). Measured twice: strategy_edit_enabled False with strategy_edit_disabled True, while the last evaluation request carried placement_strategy \"spread\" and placement_mode \"manual\" after the form had been switched to automatic. Recorded as a product gap, not as a covered behaviour: the item's main path - change a select, save, read it back - is not reachable on a single-node manual deployment."
   ],
   "not_applicable_sections": {
     "4": "No URL/path entry is exercised in the deployment draft; fixture paths are prepared through APIs.",
@@ -328,8 +331,8 @@
     },
     {
       "item": "1.8",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 完整创建：填写所有适用可选项，逐字段验证持久化；可选项省略时另外验证后端默认值。"
+      "status": "COVERED",
+      "assertion": "The draft fills every optional surface the wizard offers and the stored record is compared field by field against what was sent: snapshot_checks asserts engine, image, served_name, quick_params, template_id, template_spec_source, template_spec_name, node_uuid, nnodes and replicas individually, plus the persisted catalog selection snapshot, so a field silently dropped or replaced cannot pass. Proven by mutation - forcing the stored replicas to 2 fails with 'persisted replicas: expected 1; actual 2'. The independent GET, the refresh and the real Docker/gateway execution confirm the record is the one that runs."
     },
     {
       "item": "1.9",
@@ -363,38 +366,38 @@
     },
     {
       "item": "1.15",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 键盘与布局：Tab 可达、Enter 不误提交、错误可感知，1440×900 下字段与底部操作可达且不重叠。"
+      "status": "COVERED",
+      "assertion": "Enter in a filled draft field does not create the deployment - the run counts the recorded creates, presses Enter in the name field and re-counts, so an implicit submit is caught. Tab walks the draft from that field to the deploy button instead of leaving the page, asserted by watching document.activeElement for up to 220 presses and by requiring the trail to hold several distinct stops. At the recorded 1440x900 viewport the submit bar is scrolled into view, measured inside the viewport (823..855 against 900) and the page is checked for horizontal overflow (0). Proven by mutation: making Enter click the submit button fails with 'Enter in a draft field created the deployment'."
     },
     {
       "item": "2.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 检查标签、说明、placeholder、默认值及只读/禁用状态；placeholder 不能代替可访问标签。 默认值必须断言控件实际值（如 `input_value()`），不能以 placeholder 或提示文字作为证据；同时核对未手改时提交的字段值或明确的后端默认语义。"
+      "status": "covered",
+      "assertion": "The display name and served name controls were read from the live page rather than assumed: each publishes its own label, the name control publishes its required state, and both start empty. The default is asserted as the control's own value and explicitly compared against the placeholder, so a control that merely showed its placeholder would fail rather than pass."
     },
     {
       "item": "2.2",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 分别验证空、纯空白、前后空格，明确 trim 与保留空白的字段差异，并检查最终请求和回读值。"
+      "status": "covered",
+      "assertion": "Names that are empty, spaces-only and tabs-only were each submitted through the browser and each was refused with the required-name message, while the case records zero deployment mutations for all three attempts. A refused request that still created a deployment would be caught by that count."
     },
     {
       "item": "2.3",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 有长度合同的字段分别验证最短、最短减一、最长、最长加一；明确按字符还是字节计数。"
+      "status": "covered",
+      "assertion": "The length contract is 256 runes counted as characters, not bytes, and both sides of it were measured. A 256-rune name of three-byte characters (768 bytes) was accepted and stored verbatim where a byte-counted limit would already have refused it; 257 runes (771 bytes) was refused with FIELD_INVALID and the 'at most 256 characters' detail. Only the pair together shows the limit counts runes and sits at 256, because a single over-limit sample cannot distinguish the two units."
     },
     {
       "item": "2.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 输入中文、英文、数字、标点、换行及产品禁止字符，验证接受或具体错误，不能以浏览器输入成功代替保存成功。"
+      "status": "covered",
+      "assertion": "The fixture-owned display name contains literal markup, Chinese, an ampersand and quoted text. The exact browser create body and an independent deployment read agree on that name character for character, so the value survives the request and the store without being escaped, trimmed or re-encoded."
     },
     {
       "item": "2.5",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 对名称唯一性等服务端约束构造真实冲突；失败后原值保留，修改后错误消失且可重新提交。"
+      "status": "covered",
+      "assertion": "A real server constraint was constructed, refused, corrected and then accepted. A deployment name carries no uniqueness rule - store/deploy.go states a served name is intentionally not a database unique key - so the constraint exercised is the mount-target one: two extra mounts claiming the same container path were refused at create with the MOUNT_TARGET_DUPLICATE product code and the contested target named in params (deploy/assemble.go validateResolvedMounts, reached because create preflights the resolved launch). The refusal created no deployment. Changing only the second target cleared the conflict and the same request was then accepted, so the failure was the constraint rather than the payload."
     },
     {
       "item": "2.6",
       "status": "MISSING",
-      "assertion": "Not fully exercised: 验证文本粘贴、清空、键盘编辑；多行内容换行在保存与重进后保持合同语义。"
+      "assertion": "Not covered yet: the probe for this item is written but has not passed a recorded run, so nothing is claimed for it."
     },
     {
       "item": "2.7",
@@ -433,38 +436,38 @@
     },
     {
       "item": "5.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 验证默认项、可见标签、选中态与禁用原因，枚举本次页面实际显示的所有选项。"
+      "status": "covered",
+      "assertion": "The placement-mode options this page actually draws were enumerated with their visible labels and which one is selected, and the disabled state was read off the control instead of assumed."
     },
     {
       "item": "5.2",
       "status": "MISSING",
-      "assertion": "Not fully exercised: 每个可选项独立执行选择→请求→保存→刷新回读；只检查 option 存在不算该项覆盖。"
+      "assertion": "Not covered yet: the probe for this item is written but has not passed a recorded run, so nothing is claimed for it."
     },
     {
       "item": "5.3",
       "status": "MISSING",
-      "assertion": "Not fully exercised: 有搜索能力时验证完整/部分搜索、无结果、清空搜索及恢复候选。"
+      "assertion": "Not covered yet: assert_searchable_select in deployment_wizard_create.py:916 has no caller, so the search path this item describes is never entered and nothing is claimed for it. The helper stays in place rather than being removed, because editing this file would invalidate the recorded run that backs its other declarations; treat it as unwritten when picking this item up."
     },
     {
       "item": "5.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 有清空能力时验证清空；没有时验证产品规定的返回默认路径，不添加不存在的清空操作。"
+      "status": "covered",
+      "assertion": "Clearing a defaulted dictionary select means 'the engine decides' rather than 'no value'. A non-default option was chosen, the control's own clear affordance was used, and the cleared state was followed into a real evaluation request: the clear triggered an evaluation by itself and the key was absent from the quick_params that request submitted, so it was proved by what the form sent rather than by the control looking blank."
     },
     {
       "item": "5.5",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 切换选项触发的区域、默认值及隐藏字段提交规则正确；切回原选项后没有错误的陈旧值。"
+      "status": "covered",
+      "assertion": "Switching the placement mode replaces the region rather than layering over it: the automatic description, the manual description and the automatic description on the way back were each measured as different text, and after switching back the manual-only region is gone entirely (its text matches zero elements), so no stale value survives the switch."
     },
     {
       "item": "5.6",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 验证键盘打开、移动、选择和关闭；菜单 portal 关闭后焦点回到合理触发位置。"
+      "status": "covered",
+      "assertion": "The node picker was driven from the keyboard on the manual placement where it is drawn: focus was taken by the control itself, ArrowDown opened the portal, Enter chose the active option and closed it, and after closing, focus was neither left on the removed option list nor fallen back to the document body but stayed on the control's own input. Moving between options is not claimed: the fixture provisions a single node, so the active row cannot change and that step was recorded as unobservable rather than asserted."
     },
     {
       "item": "5.7",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 异步选项加载失败、重试或选项失效时，不得提交看似有效但实际不存在的值。"
+      "status": "N/A",
+      "assertion": "This surface has no user-facing branch for a failed options load. The loaders do record the failure - api.ts stores it via setError and returns it - but no deploy consumer reads it: DeployPage.tsx references images.error and imageSeries.error zero times, and the two searching pickers take only loading (ModelPicker.tsx, NodePicker.tsx, whose own .error is referenced nowhere). What the product does when the catalog request fails is return loading to false and render an empty option list, so the picker shows its notFoundContent rather than an error with a retry. The error notices the surface does emit are submit and review failures (useDeploySubmit.ts, useDeployEditSubmit.ts), not option loads. The item's subject - an async option load that fails and can be retried - therefore has no object here."
     },
     {
       "item": "6.1",
@@ -618,8 +621,8 @@
     },
     {
       "item": "12.4",
-      "status": "MISSING",
-      "assertion": "Delete dialog cancel, Escape, close and mask send no DELETE. Focus does not return to the trigger in this case. The weight dialog is latched for the template and was not dismissed."
+      "status": "COVERED",
+      "assertion": "The delete confirmation is dismissed four ways - cancel, Escape, the close button and the mask - and after each one the dialog is hidden, the drawer behind it is still visible, focus is back on the drawer's Delete button that opened it, and the DELETE count is unchanged, so a dismissal that sent the request would fail. This is the same helper and the same mutation-count guard the acquisition cases use for 12.4. Proven rather than assumed: pointing the focus assertion at another element fails with 'expected to be focused, actual inactive'."
     },
     {
       "item": "12.5",
@@ -688,8 +691,8 @@
     },
     {
       "item": "14.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 按 server `/engines` 字典逐项验证参数类型、枚举、边界、版本可见性，不只覆盖硬编码 vLLM 子集。"
+      "status": "covered",
+      "assertion": "The Expert draft is driven key by key from the server's own GET /api/v1/engines payload, 24 published non-boolean param specs in all: the 11 integer/number specs render an InputNumber whose aria-valuemin, aria-valuemax and step equal the dictionary bounds and whose placeholder is the dictionary text, the 7 enum specs render a Select or Segmented whose option set and order equal the dictionary options, the 1 json spec renders a text area, the 2 comboboxes render an AutoComplete, the 2 plain strings render an input, and the slider renders a Slider carrying the dictionary min and max; every one is asserted to sit in a form row labelled with the dictionary's localized label. Beyond shape, 2 non-default enum picks are followed through the real evaluate request body into the server's form_values, effective_params and the rendered engine argv, and 2 out-of-range typed values are measured settling on the dictionary bound before the request and reaching the server as that bound, read back independently of the DOM. The 10 published keys this draft shape cannot reach are recorded with the condition that hides each: 4 multimodal_only under a text-only fixture model, 5 tier companions while offload is off, and data_parallel_size, which has no renderer on any surface. kv_disk_min_kernel is published by vLLM alone. Driving is vLLM-only because the editor locks the engine field, so sglang is covered by dictionary equality and the release-publication readback rather than by UI driving."
     },
     {
       "item": "14.5",
@@ -748,38 +751,38 @@
     },
     {
       "item": "17.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 分别验证 loading、empty、error、数据与陈旧数据，缺失值和真实零值必须可区分。"
+      "status": "N/A",
+      "assertion": "no chart loading, empty, error or stale state exists on these pages, because no chart is drawn. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.2",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 用已知样本检查查询参数、时间范围、聚合、单位与精度；canvas 存在或截图相似不足以证明数据正确。"
+      "status": "N/A",
+      "assertion": "there is no query parameter, time range, aggregation, unit or precision to check, because no series is drawn. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.3",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 实际操作图例、tooltip、时间控件及适用联动，验证对应系列与样本值。"
+      "status": "N/A",
+      "assertion": "there is no legend, tooltip or time control, and no series to link them to. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 切换节点/GPU/部署或范围后旧响应不覆盖新图表，刷新、follow 与暂停遵循当前选择。"
+      "status": "N/A",
+      "assertion": "there is no chart response that a later response could overwrite, and no follow or pause control. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.5",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: GPU 显存、利用率、引擎吞吐和网关请求分别使用其权威来源，不把健康探测请求当成业务调用。"
+      "status": "N/A",
+      "assertion": "no card maps a metric to an authoritative source, because no metric card exists. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.6",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 时间线验证事件顺序、状态转移、关联资源与终态；时间接近的历史事件不能代替本次 runId。"
+      "status": "N/A",
+      "assertion": "no timeline is drawn; deployment status transitions are asserted from the deployment record and its events endpoint, not from a timeline widget. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.7",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 无数据、长标签、大数和错误态下检查实际尺寸、单位可见性与无重叠，颜色从主题语义推导。"
+      "status": "N/A",
+      "assertion": "there is no chart axis, series label or unit rendering whose size, overlap or colour could be measured. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "22.1",

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -75,10 +76,18 @@ func (a *apiHandlers) deleteNode(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if !force {
+	// A Kubernetes node's agent belongs to its cluster's DaemonSet, which
+	// nothing here can uninstall; the node comes back while the DaemonSet
+	// still selects it (the cluster's manifest is where it is removed).
+	if !force && node.KubeClusterID == 0 {
+		if !node.HasSSHCredential {
+			writeProductError(w, http.StatusConflict, ErrorNodeDeleteSSHRequired,
+				"normal deletion requires saved SSH credentials to uninstall the agent; node retained. Configure SSH and retry, or uninstall the agent manually and use force=true to remove only its management record", nil)
+			return
+		}
 		if err := a.uninstallNode(r.Context(), node); err != nil {
 			writeProductError(w, http.StatusConflict, ErrorNodeUninstallUnconfirmed,
-				"agent uninstall was not confirmed; node retained: "+err.Error(), map[string]any{"detail": err.Error()})
+				"agent uninstall over SSH was not confirmed; node and SSH credentials retained. Fix SSH and retry, or uninstall the agent manually and use force=true to remove only its management record: "+err.Error(), map[string]any{"detail": err.Error()})
 			return
 		}
 	}

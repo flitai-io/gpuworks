@@ -69,7 +69,7 @@ test("while loading it shows a spinner; an empty system invites adding the first
   stubApi();
   api.storages = (() => new Promise((resolve) => { release = resolve as never; })) as never;
   const first = renderPage();
-  assert.ok(document.querySelector(".ant-spin-spinning"), "a spinner while the first load runs");
+  assert.ok(screen.getByRole("table").getAttribute("aria-busy") === "true", "the list reports loading");
   release(list([]));
   assert.ok(await screen.findByText(s.page.empty));
   assert.ok(screen.getAllByRole("button", { name: new RegExp(`${s.page.add}$`) }).length >= 2, "header and empty state both offer adding");
@@ -87,7 +87,7 @@ test("a viewer gets the empty text without an add button", async () => {
   stubApi({ storages: [], admin: false });
   renderPage();
   assert.ok(await screen.findByText(s.page.empty));
-  await waitFor(() => assert.equal(screen.queryByRole("button", { name: new RegExp(`${s.page.add}$`) }), null));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: new RegExp(`${s.page.add}$`) }) === null, "Expected the element to be absent"));
 });
 
 test("one row per storage, with name link, tags, type, location, scope, node health, capacity, models and deployments", async () => {
@@ -111,14 +111,14 @@ test("one row per storage, with name link, tags, type, location, scope, node hea
   assert.ok(within(local).getByText(s.capacity.perNode));
 
   assert.ok(within(await rowOf("library")).getByText(s.tag.readOnly));
-  assert.equal(within(archive).queryByText(s.tag.readOnly), null);
+  assert.ok(within(archive).queryByText(s.tag.readOnly) === null, "Expected the element to be absent");
 
   const dir = await rowOf("ceph");
   assert.ok(within(dir).getByText("/mnt/ceph/models"));
   assert.ok(within(dir).getByText(s.scope.labels.replace("{{labels}}", "pool=a") + " · " + s.scope.nodes.replace("{{count}}", "1")));
   assert.ok(within(dir).getByText(s.health.none));
   assert.ok(within(dir).getByText(s.capacity.unknown));
-  assert.equal(screen.queryByText(/Related Resources|Managed Path/), null, "the images and managed path blocks are gone from this page");
+  assert.ok(screen.queryByText(/Related Resources|Managed Path/) === null, "the images and managed path blocks are gone from this page");
 });
 
 test("a storage with nodes in trouble shows a warning mark that names them", async () => {
@@ -129,7 +129,7 @@ test("a storage with nodes in trouble shows a warning mark that names them", asy
   await user.hover(mark);
   assert.ok(await screen.findByText(/node-47: Failed · nfs client missing/));
   assert.ok(screen.getByText(/node-07: Not responding/));
-  assert.equal(within(await rowOf("team-cache")).queryByRole("img", { name: /with problems/ }), null);
+  assert.ok(within(await rowOf("team-cache")).queryByRole("img", { name: /with problems/ }) === null, "Expected the element to be absent");
 });
 
 test("opening a storage's drawer reads the node list once, with the page", async () => {
@@ -169,8 +169,8 @@ test("a viewer sees the storages and Details, none of the admin actions", async 
   renderPage();
   const archive = await rowOf("model-archive");
   assert.ok(within(archive).getByRole("button", { name: s.actions.detail }));
-  for (const name of [s.actions.edit, s.actions.delete]) assert.equal(within(archive).queryByRole("button", { name }), null, name);
-  assert.equal(screen.queryByRole("button", { name: new RegExp(`${s.page.add}$`) }), null);
+  for (const name of [s.actions.edit, s.actions.delete]) assert.ok(within(archive).queryByRole("button", { name }) === null, name);
+  assert.ok(screen.queryByRole("button", { name: new RegExp(`${s.page.add}$`) }) === null, "Expected the element to be absent");
   assert.ok(screen.getByRole("button", { name: new RegExp(`${s.page.settings}$`) }), "settings stay readable");
 });
 
@@ -267,7 +267,7 @@ test("settings that cannot be saved say so; a viewer cannot edit them; a failed 
   await second.user.click(await screen.findByRole("button", { name: new RegExp(`${s.page.settings}$`) }));
   const name = await screen.findByLabelText(s.settings.controlPlaneName) as HTMLInputElement;
   assert.equal(name.disabled, true);
-  assert.equal(screen.queryByRole("button", { name: s.settings.save }), null);
+  assert.ok(screen.queryByRole("button", { name: s.settings.save }) === null, "Expected the element to be absent");
   second.view.unmount();
 
   stubApi();
@@ -285,7 +285,7 @@ test("offline nodes are counted apart and raise no warning; only online nodes wh
   const row = await rowOf("default");
   assert.ok(within(row).getByText(s.health.summary.replace("{{ready}}", "7").replace("{{total}}", "7")));
   assert.ok(within(row).getByText(s.health.offline.replace("{{count}}", "5")));
-  assert.equal(row.querySelector(".anticon-exclamation-circle"), null, "no warning for offline nodes");
+  assert.ok(row.querySelector(".anticon-exclamation-circle") === null, "no warning for offline nodes");
 });
 
 

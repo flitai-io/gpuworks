@@ -216,7 +216,7 @@ func (d *Driver) PrecheckCommand(ctx context.Context, creds provider.Credentials
 		return nil, fmt.Errorf("aliyun: cannot precheck through %q", connection.Type)
 	}
 	if err := d.requireAssistant(ctx, creds, inst); err != nil {
-		return []provider.InstallCheck{{Name: "Cloud Assistant", Status: "error", Detail: err.Error()}}, nil
+		return []provider.InstallCheck{{Name: "Cloud Assistant", Status: "error", Detail: err.Error()}}, nil //nolint:nilerr // Cloud Assistant unavailability is returned as a failed precheck row.
 	}
 	result, err := d.runCommand(ctx, creds, inst, "gpuworks-precheck", precheckScript(req), precheckTimeout)
 	if err != nil {

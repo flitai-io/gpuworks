@@ -12,8 +12,8 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
-// ppuPartitionInjector implements the PPU logical partition backend: HGGC
-// quota/hook libraries are mounted into the container and activated through
+// ppuPartitionInjector implements the PPU logical partition backend: the
+// ppu-slicing-shim quota/hook libraries (hooking the HGGC runtime) are mounted into the container and activated through
 // LD_PRELOAD plus HGGC_DEVICE_* env, with per-instance quota ledgers in
 // /dev/shm (host IPC namespace, because inference workloads use --ipc=host).
 type ppuPartitionInjector struct{}

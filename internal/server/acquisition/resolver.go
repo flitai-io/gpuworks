@@ -91,7 +91,7 @@ type ImageResult struct {
 // it starts.
 func Resolve(w WeightFacts, image ImageFacts) Result {
 	return Result{
-		Image:     ImageResult{Canonical: image.Canonical, Cached: image.Cached},
+		Image:     ImageResult(image),
 		Present:   resolvePresent(w.Present),
 		Targets:   resolveTargets(w.Targets),
 		Providers: resolveProviders(w.Providers),

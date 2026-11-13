@@ -10,34 +10,35 @@ const (
 	// RPCNodeSetAccelerator chooses which vendor's cards the node manages
 	// ({"accelerator": "auto" | vendor}). The agent refuses while anything
 	// runs on the node, and otherwise restarts itself to manage them.
-	RPCNodeSetAccelerator = "node.set_accelerator"
-	RPCFSList             = "fs.list"
-	RPCFSReadFile         = "fs.read_file"
-	RPCFSStat             = "fs.stat"
-	RPCNetProbe           = "net.probe"
-	RPCNetBenchStart      = "net.bench.start"
-	RPCNetBenchStop       = "net.bench.stop"
-	RPCRDMABenchServe     = "rdma.bench.serve"
-	RPCRDMABenchRun       = "rdma.bench.run"
-	RPCAcceleratorPing    = "accelerator.ping"
-	RPCRegisterPath       = "model.register_path"
-	RPCModelEvict         = "model.evict"
-	RPCCacheEvict         = "model.cache.evict"
-	RPCModelCopyStop      = "model.copy.stop"
-	RPCModelDownloadStop  = "model.download.stop"
-	RPCModelSyncListen    = "model.sync.listen"
-	RPCModelSyncSend      = "model.sync.send"
-	RPCModelSyncStop      = "model.sync.stop"
-	RPCModelSyncProbe     = "model.sync.probe"
-	RPCImageSyncListen    = "image.sync.listen"
-	RPCImageSyncSend      = "image.sync.send"
-	RPCImageSyncStop      = "image.sync.stop"
-	RPCImageSyncProbe     = "image.sync.probe"
-	RPCImagePull          = "image.pull"
-	RPCImageLoadURL       = "image.load_url"
-	RPCImageCancel        = "image.cancel"
-	RPCImageRemove        = "image.remove"
-	RPCImageInspect       = "image.inspect"
+	RPCNodeSetAccelerator  = "node.set_accelerator"
+	RPCFSList              = "fs.list"
+	RPCFSReadFile          = "fs.read_file"
+	RPCFSStat              = "fs.stat"
+	RPCNetProbe            = "net.probe"
+	RPCNetBenchStart       = "net.bench.start"
+	RPCNetBenchStop        = "net.bench.stop"
+	RPCRDMABenchServe      = "rdma.bench.serve"
+	RPCRDMABenchRun        = "rdma.bench.run"
+	RPCAcceleratorPing     = "accelerator.ping"
+	RPCRegisterPath        = "model.register_path"
+	RPCModelEvict          = "model.evict"
+	RPCCacheEvict          = "model.cache.evict"
+	RPCModelCopyStop       = "model.copy.stop"
+	RPCModelDownloadStop   = "model.download.stop"
+	RPCModelSyncListen     = "model.sync.listen"
+	RPCModelSyncSend       = "model.sync.send"
+	RPCModelSyncStop       = "model.sync.stop"
+	RPCModelSyncProbe      = "model.sync.probe"
+	RPCPeerRelayWaitClosed = "peer.relay.wait_closed"
+	RPCImageSyncListen     = "image.sync.listen"
+	RPCImageSyncSend       = "image.sync.send"
+	RPCImageSyncStop       = "image.sync.stop"
+	RPCImageSyncProbe      = "image.sync.probe"
+	RPCImagePull           = "image.pull"
+	RPCImageLoadURL        = "image.load_url"
+	RPCImageCancel         = "image.cancel"
+	RPCImageRemove         = "image.remove"
+	RPCImageInspect        = "image.inspect"
 	// RPCRuntimeRestart restarts the node's container runtime daemon so a
 	// changed proxy takes effect. Only dockerd under systemd supports it.
 	RPCRuntimeRestart   = "runtime.restart"
@@ -46,7 +47,24 @@ const (
 	RPCBenchCancel      = "bench.cancel"
 	RPCPartitionReprobe = "partition.reprobe"
 	RPCAgentUpgrade     = "agent.upgrade"
+	// RPCKubeNodeExists asks a Kubernetes node's agent whether another node
+	// of its cluster still exists there (KubeNodeExistsParams).
+	RPCKubeNodeExists = "kube.node.exists"
 )
+
+// KubeNodeExistsParams is RPCKubeNodeExists's request.
+type KubeNodeExistsParams struct {
+	NodeName string `json:"node_name"`
+}
+
+// KubeNodeExistsResult is RPCKubeNodeExists's answer. Agent says whether
+// an agent pod of the asking agent's entry is on that node: none means the
+// entry no longer selects it (its node selector or node pools changed).
+// Agents that predate it leave it out.
+type KubeNodeExistsResult struct {
+	Exists bool  `json:"exists"`
+	Agent  *bool `json:"agent,omitempty"`
+}
 
 type ImagePullParams struct {
 	EffectiveRef string `json:"effective_ref"`
@@ -169,6 +187,9 @@ type ImageSyncListenResult struct {
 }
 
 type ImageSyncSendParams struct {
+	ReportPhase bool `json:"report_phase,omitempty"`
+	// AllowRelay permits negotiation only when TCP dialing fails before TLS.
+	AllowRelay   bool     `json:"allow_relay,omitempty"`
 	TransferID   string   `json:"transfer_id"`
 	ImageRef     string   `json:"image_ref"`
 	Token        string   `json:"token"`
@@ -185,11 +206,14 @@ type ImageSyncStopParams struct {
 }
 
 type ImageSyncTransferResult struct {
-	Bytes  int64  `json:"bytes"`
-	SHA256 string `json:"sha256"`
+	// DirectDialError is an opt-in negotiation result for pre-TLS TCP failure.
+	DirectDialError string `json:"direct_dial_error,omitempty"`
+	Bytes           int64  `json:"bytes"`
+	SHA256          string `json:"sha256"`
 }
 
 type ImageSyncCopyRequest struct {
+	AllowRelay     bool   `json:"allow_relay,omitempty"`
 	TransferID     string `json:"transfer_id"`
 	ImageRef       string `json:"image_ref"`
 	SourceNodeUUID string `json:"source_node_uuid"`
@@ -203,6 +227,7 @@ type ImageSyncCopyRequest struct {
 }
 
 type ImageSyncCopyResult struct {
+	Transport  string `json:"transport,omitempty"`
 	TransferID string `json:"transfer_id"`
 	InProgress bool   `json:"in_progress,omitempty"`
 	Bytes      int64  `json:"bytes,omitempty"`

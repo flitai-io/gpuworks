@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 
 import type { EvaluateResponse } from "../../api";
-import { placementRefusalText } from "./deploySchedule";
+import { diskRegistrationModelID, placementRefusalText } from "./deploySchedule";
 
 // A node the automatic placement looked at and turned down, with the reason
 // the scheduler gave, already in the viewer's language.
@@ -9,6 +9,8 @@ export interface NodeRefusal {
   uuid: string;
   name: string;
   reason: string;
+  /** Only present for a local-model disk refusal with a server model ID. */
+  modelId?: number;
 }
 
 // Reasons the eligibility pass gives before any plan is tried: the node is
@@ -51,14 +53,19 @@ export function nodeRefusals(
     .map((candidate, index) => ({ candidate, index }))
     .sort((a, b) => Number(eligibility.get(b.candidate.node_uuid)?.requirements_match === true) - Number(eligibility.get(a.candidate.node_uuid)?.requirements_match === true)
       || Number(eligibilityOnly(a.candidate)) - Number(eligibilityOnly(b.candidate)) || a.index - b.index)
-    .map(({ candidate }) => ({
-      uuid: candidate.node_uuid,
-      name: candidate.node_name || candidate.node_uuid,
-      reason: [...new Set([
-        placementRefusalText(t, candidate.reason) || placementRefusalText(t, candidate.plan?.message),
-        ...(eligibility.get(candidate.node_uuid)?.reasons ?? []).map((reason) => placementRefusalText(t, reason)),
-      ].filter(Boolean))].join(" "),
-    }));
+    .map(({ candidate }) => {
+      const primaryReason = placementRefusalText(t, candidate.reason);
+      const modelId = diskRegistrationModelID(primaryReason ? candidate.reason : candidate.plan?.message);
+      return {
+        uuid: candidate.node_uuid,
+        name: candidate.node_name || candidate.node_uuid,
+        ...(modelId !== undefined ? { modelId } : {}),
+        reason: [...new Set([
+          primaryReason || placementRefusalText(t, candidate.plan?.message),
+          ...(eligibility.get(candidate.node_uuid)?.reasons ?? []).map((reason) => placementRefusalText(t, reason)),
+        ].filter(Boolean))].join(" "),
+      };
+    });
 }
 
 // No diagnostic means an older server, invalid conditions, or no explicit

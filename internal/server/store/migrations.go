@@ -1332,6 +1332,16 @@ var migrations = []migration{
 		return db.Migrator().AddColumn(&Node{}, "PeerMemory")
 	}},
 	{Version: 200, Name: "model_source_id_index", Apply: createModelSourceIDIndex},
+	{Version: 201, Name: "instance_runtime_failure", Apply: addInstanceRuntimeFailure},
+	{Version: 202, Name: "kube_clusters", Apply: createKubeClusters},
+	{Version: 203, Name: "kube_cluster_image_pull_secret", Apply: addKubeClusterImagePullSecret},
+	{Version: 204, Name: "cloud_kubernetes_sources", Apply: addCloudKubernetesSources},
+	{Version: 205, Name: "kube_cluster_pools", Apply: createKubeClusterPools},
+	{Version: 206, Name: "kube_cluster_agent_image_source", Apply: addKubeClusterAgentImageSource},
+	{Version: 207, Name: "legacy_column_and_index_leftovers", Apply: repairLegacyColumnAndIndexLeftovers},
+	{Version: 208, Name: "peer_transfer_ownership", Apply: addPeerTransferOwnership},
+	{Version: 209, Name: "kube_cluster_priority", Apply: addKubeClusterPriority},
+	{Version: 210, Name: "kube_cluster_drop_vendor", Apply: dropKubeClusterVendor},
 }
 
 // modelFileNetworkColumns are the columns migrations 76 and 77 added to

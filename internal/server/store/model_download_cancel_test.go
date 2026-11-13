@@ -1,8 +1,9 @@
 package store
 
 import (
-	"gpuworks.ai/gpuworks/internal/proto"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 func TestCanceledDownloadNeverResumesOnReconnectOrLateReport(t *testing.T) {

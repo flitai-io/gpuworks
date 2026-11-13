@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import ForgotPasswordHint from "../components/ForgotPasswordHint";
 import { BrandMark, useBranding, useDocumentBranding } from "../branding";
 
 const { Title } = Typography;
@@ -75,10 +76,10 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
 
   return (
     <Form form={form} layout="vertical" onFinish={submit} requiredMark={false}>
-      <Form.Item label={t("username")} name="username" rules={[{ required: true, message: t("usernameRequired") }]}>
+      <Form.Item label={t("username")} name="username" rules={[{ required: true, whitespace: true, message: t("usernameRequired") }]}>
         <Input size="large" prefix={<UserOutlined />} placeholder={t("username")} autoComplete="username" onChange={() => error && setError("")} />
       </Form.Item>
-      <Form.Item label={t("password")} name="password" rules={[{ required: true, message: t("passwordRequired") }]}>
+      <Form.Item label={t("password")} name="password" rules={[{ required: true, whitespace: true, message: t("passwordRequired") }]}>
         <Input.Password size="large" prefix={<LockOutlined />} placeholder={t("password")} autoComplete="current-password" onChange={() => error && setError("")} />
       </Form.Item>
       <div className="auth-error-slot">
@@ -87,6 +88,7 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
       <Button className="auth-submit" type="primary" htmlType="submit" loading={loading}>
         {t("submit")}
       </Button>
+      <ForgotPasswordHint />
     </Form>
   );
 }

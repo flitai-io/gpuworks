@@ -10,6 +10,18 @@ This guide explains how to install, verify, upgrade, and uninstall the GPUWorks 
 - You need a release package to install or upgrade. If the host cannot download it from the internet, download it on another machine and copy it to the host. For upgrades, see [Offline Upgrade](#离线升级).
 - Using systemd on Linux or launchd on Mac requires root or sudo. Without sudo, install to a user directory; see [Systemd and Nohup](#systemd-与-nohup). For container environments, first read the persistence requirements in [Run in a Container](#在容器里运行).
 
+## Replace an Existing Inference Platform
+
+When replacing another inference platform on the same host or reusing its GPU nodes, complete this manual handover before running the installation command. To update an existing GPUWorks installation, use the [Upgrade](#升级) procedure in this guide.
+
+The GPUWorks installer checks whether it can bind the configured listening addresses. This check does not identify other inference platforms, stop their services, or migrate their configuration. An available port does not mean that the selected GPU has been released.
+
+1. **Record and back up the old environment.** Identify the old platform's control plane, node services, inference processes or containers, service management method, listening ports, and installation and data directories. Back up its configuration and data, and record the current application endpoint, models, and settings needed for a rollback.
+2. **Stop the services being replaced.** During an agreed cutover window, pause the affected application requests. Use the old platform's management tools to stop its control plane, its node services on the selected nodes, and their inference processes or containers. Also handle their boot startup, container restart policies, or supervisors, and confirm that the services will not restart automatically. Act on each identified service, process, or container individually, and retain the old data.
+3. **Confirm port and GPU availability.** Check that the listening addresses and ports selected for GPUWorks (port `8800` by default) are available. Confirm that the old inference processes have exited and that resource usage on the selected GPUs is as expected. Investigate and resolve any remaining occupancy before installing.
+4. **Install into separate directories.** Choose GPUWorks installation and data directories separate from the old platform. Do not use the old platform's database or state directory as the GPUWorks data directory. Install the control plane as described below, then [connect the nodes](connect-nodes.md), register models, and create deployments and inference tokens. A fresh server comes with no inference token, and `/v1` requires a key by default, so it refuses every inference request until the first token is created; for genuine anonymous access an administrator must turn on `inference_open_access` under **Settings → Security**, see [Gateway Authentication](../reference/openai-gateway.md#authentication). To reuse old model files, first confirm their format, paths, and read permissions, then follow the model registration procedure. Installation does not automatically import model records, deployments, or tokens from the old platform.
+5. **Verify before switching the endpoint.** Complete the health check below, confirm that the nodes are online, and [verify an actual inference request](../tutorials/getting-started.md#6-调用并验证回答). Then update the API address, model names, and tokens used by the application. To roll back, first stop the relevant GPUWorks deployments and conflicting services, then restore the old services and application endpoint from the backups and records. Avoid having both platforms compete for the same port or GPU.
+
 ## Installation
 
 ### One-Line Install
@@ -71,7 +83,7 @@ To check each step yourself, or when the host can only receive a copied release 
 
    Save the access URL, administrator password, actual installation directory, and data directory from the summary, then complete the verification in the next section. The default installation directory is `/opt/gpuworks/server`; for a custom directory, use the one in the summary.
 
-New or changed administrator passwords must contain 15–128 Unicode characters and at most 512 bytes. Common guessable values, whole-value repetitions and sequences are rejected; character-class mixtures are not required and passphrases are supported. Without an explicit password, a 24-byte random value is encoded as hexadecimal. Existing accounts can still authenticate with their current passwords.
+New or changed administrator passwords must contain 8–128 Unicode characters and at most 512 bytes, and must not be the username. Common guessable values, whole-value repetitions and sequences are rejected; character-class mixtures are not required and passphrases are supported. Without an explicit password, a 24-byte random value is encoded as hexadecimal. Existing accounts can still authenticate with their current passwords.
 
 ## Verification and First Login
 
@@ -87,18 +99,18 @@ For the password change in this section and subsequent maintenance commands, use
 
 2. Open the access URL from the summary in a browser. Log in with `admin` and the password from the summary, and confirm that you can enter the console.
 
-3. Change the initial password from the actual installation directory on the control plane host. For a systemd installation, first run `newgrp gpuworks` as instructed in the summary, or log in again to obtain the new group permissions, then run:
+3. Change the initial password: in the console, open the account menu at the top right and choose **Change password**, then enter the current and the new password. Every session of the account ends, and the console tries to delete `initial-credentials` from the data directory (if that fails, the server log has a warning; delete it by hand). You can also change it from the actual installation directory on the control plane host: for a systemd installation, first run `newgrp gpuworks` as instructed in the summary, or log in again to obtain the new group permissions, then run:
 
    ```bash
-   ./gpuworks reset-password --password '<new-password>'
+   ./gpuworks reset-password
    ```
 
-   Replace the password. The command reads the data directory from the `server.yaml` next to the binary; you can also specify it explicitly with `--data`. Do not leave the actual password in command history or logs.
+   Enter the new password twice at the prompt (not echoed). The command reads the data directory from the `server.yaml` next to the binary; you can also specify it explicitly with `--data`.
 
 4. Log in again with the new password and confirm that login succeeds.
-5. Delete the `initial-credentials` file in the actual data directory. This file stores the initial credentials in plain text. Deleting it does not change the account password. See [Control Plane Installation Layout](../reference/install-layout.md#凭证文件) for credential details.
+5. Confirm that the `initial-credentials` file in the actual data directory is gone: both a change in the console and `reset-password` try to delete it after succeeding, and warn when they cannot, in which case delete it by hand. This file stores the initial credentials in plain text. Deleting it does not change the account password. See [Control Plane Installation Layout](../reference/install-layout.md#凭证文件) for credential details.
 
-Next, [connect a node and deploy your first model](../tutorials/getting-started.md). Nodes must be able to access the control plane. If you need a domain or a public endpoint, see [Give the Console a Public Address](expose-public-address.md).
+Next, [connect a node and deploy your first model](../tutorials/getting-started.md). Nodes must be able to access the control plane. If you need a domain or a public endpoint, see [Give the Console a Public Address](expose-public-address.md). After deploying, create an inference token on the **API Tokens** page before calling `/v1`: a fresh server ships with no token and `/v1` requires a key by default, so it refuses every inference request until one exists; anonymous access is a separate administrator switch, see [Gateway Authentication](../reference/openai-gateway.md#authentication).
 
 ## Systemd and Nohup
 
@@ -244,6 +256,8 @@ The new agent is embedded in the server, so you can still click **Upgrade Agent*
 
 ## Uninstall
 
+First review check statuses, resource evidence, retained items, and suggested actions. Active workloads or unavailable critical evidence block uninstallation by default; `--yes` does not bypass checks. To retain workloads while removing only the control plane, explicitly use `--keep-resources`; see [CLI uninstall checks](../reference/cli.md#gpuworks-uninstall). Database records do not prove that remote GPUs were released or cloud billing ended.
+
 To preview the full cleanup scope first, run `./gpuworks uninstall --purge --dry-run --json` from the actual installation directory. This preview does not stop services or delete files. Review the list before following the steps below.
 
 1. Run the following in the actual installation directory on the control plane host:
@@ -286,7 +300,8 @@ Run `./gpuworks` in the table from the actual installation directory. Confirm `<
 | Cannot access the service after installation or upgrade | Check `<installation-directory>/logs/gpuworks-server.log`, resolve errors, and retry; call `/healthz` again and verify the version. If the log location is customized, use the actual configuration |
 | `cannot listen on :8800` | Another process occupies the port. First use `systemctl status gpuworks` to check whether it is the old service; do not simply install again |
 | `create /opt/gpuworks/server needs root` | Use an account with sudo permission, or use `--dir ~/gpuworks/server --no-systemd` |
-| Change the initial password or reset a forgotten password | Run `./gpuworks reset-password --password '<new-password>'`, replacing the password; the data directory is read from the `server.yaml` next to the binary (or specify it with `--data`). Do not leave the actual password in command history or logs. Log in again after the change to verify |
+| `the service account gpuworks cannot enter /root` | The service account cannot enter a directory above the installation directory, so systemd cannot start the service. Install into the default `/opt/gpuworks/server` or another directory whose every level can be entered; add `--service-user root` only if it must run as root |
+| Change the initial password or reset a forgotten password | While you can sign in, choose **Change password** in the console's account menu at the top right; for a forgotten password, run `./gpuworks reset-password` and enter the new password twice at the prompt (not echoed); the data directory is read from the `server.yaml` next to the binary (or specify it with `--data`). Do not leave the actual password in command history or logs. Log in again after the change to verify |
 | Permission error when upgrading or resetting a password | The current terminal may not yet have `gpuworks` group permissions. Run `newgrp gpuworks` or log in again, then retry. If the data directory is still not writable, check its permissions |
 | The console reports that the channel has no version yet | Switch to a channel with a published release, or wait for a release on this channel and check again |
 | Release index signature verification fails | Check the server's outbound proxy, gateway, or login interception. As a temporary alternative, use a matching local upgrade package |

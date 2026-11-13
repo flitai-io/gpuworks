@@ -8,8 +8,10 @@ release_id=${GPUWORKS_RELEASE_ID:-$(git describe --tags --always 2>/dev/null || 
 # The channel the binaries follow for upgrades (ADR 0040): nightly for
 # default-branch builds, release for version tags.
 channel=${GPUWORKS_RELEASE_CHANNEL:-nightly}
-commit=${CI_COMMIT_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}
-build_at=${CI_PIPELINE_CREATED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+# CI names the commit and one build time shared by every job of the run
+# (GPUWORKS_BUILD_COMMIT, GPUWORKS_BUILT_AT); a local build uses its own.
+commit=${GPUWORKS_BUILD_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}
+build_at=${GPUWORKS_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
 dist_dir=${GPUWORKS_DIST_DIR:-$repo_dir/dist}
 release_oses=${GPUWORKS_RELEASE_OSES:-"linux darwin"}
 release_arches=${GPUWORKS_RELEASE_ARCHES:-"amd64 arm64"}

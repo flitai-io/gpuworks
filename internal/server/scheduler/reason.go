@@ -3,9 +3,10 @@ package scheduler
 import (
 	"errors"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/server/messages"
 	"sort"
 	"strings"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // Reason constructors. Every rejection code's params are built in exactly one

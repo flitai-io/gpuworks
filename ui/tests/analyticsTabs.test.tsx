@@ -55,7 +55,7 @@ const last = <T,>(list: T[]) => list[list.length - 1];
 // The chart's current ECharts option: what is drawn, without a canvas to look at.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const option = (label: string): any => getInstanceByDom(screen.getByRole("img", { name: label }) as HTMLElement)!.getOption();
-const bodyRows = () => [...document.querySelectorAll("tbody tr.ant-table-row")] as HTMLElement[];
+const bodyRows = () => [...document.querySelectorAll("tbody tr[data-row-key]")] as HTMLElement[];
 const rowNamed = (text: string) => {
   const row = bodyRows().find((r) => r.textContent!.includes(text));
   assert.ok(row, `a row with ${text}`);

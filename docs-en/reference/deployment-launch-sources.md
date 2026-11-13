@@ -36,9 +36,9 @@ The layers are listed in merge order. Later layers generally override earlier on
 | 3 | GPU/chip dialect | A few vLLM compatibility fixes | **Fills in missing values**: has no effect when fields, templates, or users have already set the value | `deploy/quirks.go` |
 | 4 | Scheduler-derived values | Allocated GPU count → TP; placement variables | Estimator values **do not enter** argv | `planning/launch_plan.go` |
 | 5 | Inference template spec | Non-dictionary args, env, entrypoint, preparation scripts, assets, components, API contract, `/dev/shm` minimum (`shm_bytes`), and unlimited locked memory (`memlock_unlimited`) | Overrides engine-injected values; user input can override this layer in turn | `inferencecatalog/flat.go`, `deploy/catalog_selection.go` |
-| 6 | Topology | Multi-node and PD role arguments and env; RDMA docker arguments | Platform-owned; neither templates nor user input can override the PD connector | `deploy/pd.go`, `compute_network.go` |
+| 6 | Topology | Multi-node and PD role arguments and env; RDMA docker arguments | Platform-owned; neither templates nor user input can override the PD connector | `deploy/pd.go`, `deploy/compute_network.go` |
 | 7 | Engine finalization | For example, SGLang logging configuration | **Fills in missing values** | `deploy/sglang_logging.go` |
-| 8 | User input | Dictionary fields, `extra_args` | Overrides the template | `api/deployments_launch_config.go` |
+| 8 | User input | Dictionary fields, `extra_args` | Overrides the template | `deployment/launch_config.go` |
 | 9 | Container overrides | env, env_unset, mounts, docker arguments, `/dev/shm` (when unspecified, derived from the engine baseline plus the CPU memory tier; see "`/dev/shm` Size"), model mount path, entrypoint, command, and command mode | Final deployment-level layer | `deploy/assemble.go`, `kv_cpu_tier.go`, `effective_command.go` |
 | 10 | Agent injection | Model directory mount, preparation script wrapper, devices, and dGPU partitions | Device and dGPU env **override everything** | `agent/engine/engine.go`, `agent/gpu/*.go`, `agent/engine/partition*.go` |
 | 11 | Runtime assembly | Fixed parts of `docker run`: name, `-d`, `--restart no`, network, and `--shm-size` | Platform-owned; specifying these in docker arguments is rejected | `agent/runtime/docker/docker.go`, `nerdctl/nerdctl.go` |
@@ -119,7 +119,7 @@ Template specs always use the `engine` command mode; `image-entry` and `manual` 
 
 - **Multi-node**: rank 0 is the leader; the others are headless followers. vLLM injects `--distributed-executor-backend mp --nnodes --node-rank --headless --master-addr --master-port` (default port 29500), and sets `VLLM_HOST_IP` to the node's parameter network address. SGLang injects `--nnodes --node-rank --dist-init-addr`.
 - **Parameter network**: injects system-layer env such as `NCCL_SOCKET_IFNAME`, `GLOO_SOCKET_IFNAME`, `NCCL_IB_*`, and `UCX_NET_DEVICES`. When RDMA is used, it appends the docker arguments `--device /dev/infiniband --ulimit memlock=-1 --cap-add IPC_LOCK` (ADR 0027). If the deployment's own docker arguments already specify `memlock`, this item is not appended; see "Locked Memory".
-- **PD disaggregation**: generates vLLM `--kv-transfer-config` or SGLang `--disaggregation-*` by role, along with NIXL/UCX-related env and host mounts. `vllm-mooncake` also writes `mooncake_protocol` into `kv_connector_extra_config` (`rdma` on a Host RDMA network, otherwise `tcp`), sets `VLLM_MOONCAKE_BOOTSTRAP_PORT` on prefill, and sets `VLLM_HOST_IP` on every instance. Connector parameters supplied by a template or user are rejected (ADR 0028).
+- **PD disaggregation**: generates vLLM `--kv-transfer-config` or SGLang `--disaggregation-*` by role, along with NIXL/UCX-related env and host mounts. `vllm-mooncake` also writes `mooncake_protocol` into `kv_connector_extra_config` (`rdma` on a Host RDMA network, otherwise `tcp`), sets `VLLM_MOONCAKE_BOOTSTRAP_PORT` on prefill, and sets `VLLM_HOST_IP` on every instance; for a model with linear attention or Mamba layers (`layer_types` in `config.json`) it also adds `--no-disable-hybrid-kv-cache-manager`, unless the template or user states either polarity. Connector parameters supplied by a template or user are rejected (ADR 0028).
 
 Features such as sleep, LoRA, speculative decoding, and KV offloading inject arguments only when the corresponding dictionary fields are declared. For example, vLLM sleep injects
 `--enable-sleep-mode` and `VLLM_SERVER_DEV_MODE=1`.
@@ -216,7 +216,7 @@ The evaluation API attaches these errors to the docker arguments or shared memor
 
 Two types of additions follow: SGLang logging configuration and the agent's multi-node network interface selection fill in missing values; the agent's device and dGPU env override all layers above.
 
-Image-built-in ENV is inherited by the container runtime; only keys explicitly set by `-e` are replaced (for example, Ascend vCANN first reads the image's
+Image-built-in ENV is inherited by the container runtime; only keys explicitly set by `-e` are replaced (for example, Ascend vcann-rt first reads the image's
 `LD_LIBRARY_PATH` and then appends the driver paths).
 
 For non-Chinese GPUs, the udocker runtime (both the runveil and udocker CLI launchers) includes
@@ -245,9 +245,10 @@ The agent does not reconstruct catalog, image, or command semantics. It only mak
    - Hygon: `--device` kfd/DRM, `/opt/hyhal`, `--group-add video`, `HIP/ROCR/HYGON_VISIBLE_DEVICES`
    - Ascend docker: `--runtime ascend` + `ASCEND_VISIBLE_DEVICES`, etc.; Ascend nerdctl: `/dev/davinci*` devices and driver mounts
    - PPU: `/dev/alixpu*` devices, `NVIDIA_VISIBLE_DEVICES=void`, `CUDA_VISIBLE_DEVICES`
+   - Kunlunxin: Linux amd64 / Docker whole-card TP. Recheck each selected card’s UUID/BDF/minor and sysfs identity, then inject only its `/dev/xpuN` plus `/dev/xpuctrl`. Occupancy comes from the common compute-process inventory, not memory usage alone. Template options use the common administrator contract, with no vendor-specific Docker option filter. See the [support matrix](support-matrix.md) for native multi-node requirements.
 7. **dGPU partitioning**: the server sends only the GPU memory limit, compute percentage, and backend name; all injection happens in the agent:
    - HAMi-core: mounts `libvgpu.so`; sets `LD_PRELOAD`, `CUDA_DEVICE_MEMORY_LIMIT_<i>`, and `CUDA_DEVICE_SM_LIMIT` when the deployment carries a compute percentage (deployment requests currently do not accept a compute percentage; see [dGPU Explained](../explanation/dgpu.md))
-   - vCANN: mounts `libvruntime.so`, etc.; sets `ENPU_DSMI_HOOK=1` and `LD_LIBRARY_PATH`
+   - vcann-rt: mounts `libvruntime.so`, etc.; sets `ENPU_DSMI_HOOK=1` and `LD_LIBRARY_PATH`
    - HGGC: mounts `hggc_quota.so`, etc.; sets `LD_PRELOAD` and `HGGC_DEVICE_MEMORY_LIMIT_<i>`
 
 For details, see [dGPU Explained](../explanation/dgpu.md).

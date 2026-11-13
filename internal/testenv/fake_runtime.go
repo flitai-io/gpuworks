@@ -269,7 +269,8 @@ func (d *FakeDriver) Run(ctx context.Context, s runtime.WorkloadSpec) (string, e
 	d.mu.Lock()
 	d.servers[id] = srv
 	d.mu.Unlock()
-	go srv.Serve(ln)
+	// Stop owns server shutdown; Serve terminates when its listener closes.
+	go func() { _ = srv.Serve(ln) }()
 	if after != nil {
 		after(s)
 	}

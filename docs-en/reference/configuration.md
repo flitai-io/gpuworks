@@ -84,6 +84,33 @@ When a reverse proxy terminates HTTPS, configure its actual address in `trusted_
 
 Login is rate-limited separately by client address and account: after 5 failures are recorded, it returns 429 `LOGIN_THROTTLED`, with `Retry-After` indicating the number of seconds before the next attempt is allowed. Subsequent failures use exponential backoff from 1 second to 15 minutes; failure records expire after 30 minutes of inactivity. A successful login clears only that account's records, not failures for other accounts sharing the client address. Unknown accounts receive the same treatment, and forged untrusted forwarding headers cannot change the source address. Both the number of records and concurrent password checks are capped. State is kept in the current server process; endpoints with multiple replicas should also configure shared rate limiting at the reverse proxy.
 
+### Peer Relay Resource Limits
+
+Model and image relays share the current server process budget. Configure it in `server.yaml` and restart to apply:
+
+```yaml
+peer_relay:
+  rate_limit_kib_s: 65536
+  burst_kib: 64
+  no_progress_timeout: 2m
+  confirmation_timeout: 5m
+```
+
+Rate and burst values are integer KiB (1 KiB = 1024 bytes). Omitted values or `0` select safe defaults, rather than unlimited bandwidth.
+The defaults are 64 MiB/s aggregate, a 64 KiB burst, two concurrent relays per process, and one relay per participating node.
+A lower task limit still applies; direct transfers retain their task limit. The server charges actual writes of the inner TLS stream,
+sharing the budget across both directions. Receiving and forwarding the same bytes do not count as two copies of model progress.
+
+Timeouts use Go durations such as `30s` or `2m`; omitted, empty, or `0` values use defaults.
+The no-progress clock excludes time spent waiting for the relay's own bandwidth budget. The confirmation deadline starts after
+the server has drained source output and observed EOF, while waiting for target validation and its ACK.
+A source “sending finished” report alone does not start this deadline.
+Negative values, fractional capacities, overflow, invalid durations, unknown keys, and duplicate keys reject startup.
+
+When the relay is busy, tasks queue in arrival order for up to one minute at a time; a task not yet admitted retries with the selected source and keeps its place. Model and image transfer details show the observed route, stage,
+encrypted bytes, and forwarding rate. Historical events enter the log center; aggregate series appear in the existing metric catalog.
+Budgets and runtime counters belong to this server process; multiple management servers do not share a global bandwidth pool.
+
 ### Listen Rules
 
 - Addresses must be `IP:port` literals (hostnames are not accepted); unknown keys in `server.yaml` cause the server to refuse to start, preventing misspelled keys from being silently ignored.
@@ -134,7 +161,7 @@ The following arguments have no configuration file keys. Their defaults are the 
   the same file. It is read only when creating the account; subsequent changes do not affect existing accounts. Unit files never carry passwords.
 - Master key: `<data>/master.key` (generated on first startup; permissions below), used to encrypt cloud provider credentials and other secrets; explicitly back it up in production.
 
-New or changed administrator passwords must contain 15–128 Unicode characters and at most 512 bytes. Common guessable values, whole-value repetitions and sequences are rejected; character-class mixtures are not required and passphrases are supported. Without an explicit password, a 24-byte random value is encoded as hexadecimal. Existing accounts can still authenticate with their current passwords.
+New or changed administrator passwords must contain 8–128 Unicode characters and at most 512 bytes, and must not be the username. Common guessable values, whole-value repetitions and sequences are rejected; character-class mixtures are not required and passphrases are supported. Without an explicit password, a 24-byte random value is encoded as hexadecimal. Existing accounts can still authenticate with their current passwords.
 
 Sensitive files default to owner-only access (`0600`). A Linux systemd installation explicitly bound to this binary and a non-root service account may use its trusted service group (`0660`); group membership grants access to platform credentials. macOS and standalone servers do not implicitly trust ordinary primary groups. Startup, install and upgrade harden existing credentials, databases and sidecars, and recognized backups; temporary database snapshots are owner-only. Failure to protect a file stops the operation: repair the reported owner/service-group permissions and retry. Generated passwords are not written to service logs.
 
@@ -161,6 +188,11 @@ Outbound URL hostnames accept only ASCII; convert internationalized domain names
 By default, user-configurable HTTP sources on the management node do not restrict ordinary private or local loopback destinations. Private model mirrors, registries, AI endpoints, and OTLP collectors require no additional allowlist configuration. All DNS answers are still checked before connection, and the connection is bound to a validated IP; every redirect step is validated again, and special metadata, link-local, and reserved addresses remain denied. URL credentials, IPv4 mapping, DNS rebinding, and secondary proxy resolution cannot bypass these target checks.
 
 Platform administrators can view and change the policy under **Settings → Security & access → Outbound access policy**. **Restrict access to private hosts** is off by default. When enabled, enter one exact hostname, IP address, or CIDR per line under **Allowed private hosts**. Turning the switch off preserves the entered list. **Save** writes both fields to the active `server.yaml` and applies them to the next request or redirect without restarting.
+
+
+With strict mode enabled, HTTP model directories, community repository browsing, manually entered image archive sources, AI services, collectors, credential login tests, model site rules used by the management node, and external benchmarks run from the server offer **Automatically add this host to the allowlist** beside the source address. Create and edit use the same authorization action. Selecting it alone does not save anything. On Save, Parse, Test, or the corresponding action, the platform checks the target again, appends only the selected eligible host to the existing list, and continues the original action. Unselected hosts do not change the list; changing the hostname requires selecting it again.
+
+This permission applies to every management-node feature using that host, independently of whether the resource itself is saved successfully. Other entries are preserved; a concurrent policy edit is rejected rather than overwritten, so review the current policy before trying again. Users without administrator permission, read-only configurations, unresolved hosts, and permanently prohibited addresses cannot authorize from a form. A read-only check does not connect to the source or prove credentials, directory readability, or node download access. Direct node access and browser links do not use this management-node allowlist; node connectivity tests for source rules do not check management-node permission either.
 
 Host administrators can also edit the file directly: set `outbound_restrict_private_hosts` to `true` and authorize necessary hosts or network ranges in `outbound_allow_private_hosts`. For example, this configuration enables strict mode:
 
@@ -263,7 +295,7 @@ The request body is merged into the current value, changing only the keys it con
 | Key | Factory Default | Range | Meaning |
 |---|---|---|---|
 | `pending_timeout_sec` | 600 | 5–86400 | How long to wait before marking a deployment as failed when it still cannot be placed after its weights are ready (not a queue timeout) |
-| `start_timeout_sec` | 1800 | 60–86400 | Maximum time after an instance starts to wait for the engine health check to pass. A timeout marks this startup attempt as failed and recreates the instance according to retry rules. Edit it in the "Deployment" card in Settings; an individual deployment can override it with `start_timeout_sec` ("Start timeout" under "Runtime environment" in the deployment form) |
+| `start_timeout_sec` | 1800 | 60–86400 | Floor for the automatic startup health budget; known engine deadlines can extend it up to 86400 seconds. A timeout marks this startup attempt as failed and recreates the instance according to retry rules. Edit it in the "Deployment" card in Settings; an individual deployment can override it with `start_timeout_sec` ("Start timeout" under "Runtime environment" in the deployment form) |
 | `event_retention_days` | 180 | 1–3650 | Number of days to retain the event timeline |
 | `event_retention_bytes` | 50 GiB | 64 MiB–1 TiB | Event timeline retention in bytes; whichever limit is reached first, bytes or days, applies |
 

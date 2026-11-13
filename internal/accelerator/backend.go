@@ -46,7 +46,7 @@ const (
 	// independently of the numeric selectors consumed by inference engines.
 	PPUEnvDeviceUUIDs = "GPUWORKS_PPU_DEVICE_UUIDS"
 
-	// AMDLibraryTarget is libvrocm.so (gpustack-operator's rocm-slicing-shim,
+	// AMDLibraryTarget is libvrocm.so (the rocm-slicing-shim,
 	// build/runtime-assets/amd/): one shared object for every ROCm version,
 	// interposing the HIP runtime's allocating and capacity-query entry
 	// points. It links only libc, so it is LD_PRELOAD-safe into any ROCm

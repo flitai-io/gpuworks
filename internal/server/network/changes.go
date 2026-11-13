@@ -56,6 +56,8 @@ var (
 )
 
 // NetworkSpec is a network as the operator declares it.
+//
+//nolint:revive // Preserve the exported network API type used by planning callers.
 type NetworkSpec struct {
 	Name, Description string
 	Roles             []string

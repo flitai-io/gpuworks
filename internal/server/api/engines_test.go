@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -61,6 +62,11 @@ func TestEnginesEndpointReturnsProfiles(t *testing.T) {
 			t.Fatalf("%s operation definitions drifted", p.Name)
 		}
 		byName[p.Name] = p
+	}
+	for _, name := range []string{deploy.EngineVLLM, deploy.EngineSGLang} {
+		if !slices.Contains(byName[name].QuickFormKeys, "data_parallel_size") {
+			t.Fatalf("%s hides the data-parallel field from the deploy form", name)
+		}
 	}
 	vllm, ok := byName["vllm"]
 	if !ok {

@@ -36,6 +36,12 @@ export default function StorageCacheEditor({ session, files, onClose, onSaved }:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const alive = useRef(true);
+  // The parent mounts this editor conditionally, so returning from onClose unmounts the whole
+  // subtree at once. The Drawer and Modal then never run their close transition, and antd has no
+  // chance to hand focus back to the control that opened the editor - it lands on the body
+  // instead. Closing is a two-step: flip open to false, then let the transition finish.
+  const [closing, setClosing] = useState(false);
+  const requestClose = () => setClosing(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const changedPath = defaults ? path.trim() !== (storage.cache_path ?? "") : pathMode !== "keep";
   const impact = cachePolicyImpact(storage, rows, limit, defaults ? limit !== initialLimit : changeLimit, defaults,
@@ -76,7 +82,7 @@ export default function StorageCacheEditor({ session, files, onClose, onSaved }:
     } finally { if (alive.current) setBusy(false); }
   };
   const title = defaults ? t("cacheManage.defaults") : kind === "bulk" ? t("cacheManage.batchTitle", { count: rows.length }) : t("cacheManage.nodeTitle", { node: node!.node_name });
-  const footer = <Space><Button onClick={onClose}>{t("actions.cancel")}</Button><Button type="primary" loading={busy} disabled={busy || !hasChanges} onClick={() => void save()}>{t("cacheManage.save")}</Button></Space>;
+  const footer = <Space><Button onClick={requestClose}>{t("actions.cancel")}</Button><Button type="primary" loading={busy} disabled={busy || !hasChanges} onClick={() => void save()}>{t("cacheManage.save")}</Button></Space>;
   const content = <Space direction="vertical" size={16} style={{ width: "100%" }}>
     {kind === "bulk" && <><Alert type="info" showIcon message={t("cacheManage.fixedSelection", { count: rows.length })} /><details><summary>{t("cacheManage.selectedNodes")}</summary><Typography.Paragraph>{rows.map((row) => row.node_name).join(", ")}</Typography.Paragraph></details></>}
     {node && !node.active && <Alert type="info" showIcon message={t("cacheManage.inactiveHelp")} />}
@@ -101,5 +107,10 @@ export default function StorageCacheEditor({ session, files, onClose, onSaved }:
     {node && <div><Typography.Text strong>{t("cacheManage.cachedModels")}</Typography.Text>{files === null ? <Typography.Paragraph type="secondary">{t("cacheManage.filesUnknown")}</Typography.Paragraph> : <ul>{files.filter((file) => file.cache && file.node_uuid === node.node_uuid).map((file) => <li key={file.id}><Typography.Text>{file.model_name || file.source_id}</Typography.Text>{file.deployment_ids.map((id) => <Link key={id} to={`/deployments?deployment=${id}`} style={{ marginLeft: 8 }}>{t("cacheManage.deployment", { id })}</Link>)}</li>)}</ul>}</div>}
     {error && <Alert type="error" role="alert" showIcon message={error} />}
   </Space>;
-  return kind === "node" ? <Drawer open title={title} width={560} onClose={onClose} footer={footer}>{content}</Drawer> : <Modal open title={title} width={680} onCancel={onClose} footer={footer}>{content}</Modal>;
+  // afterOpenChange also fires for the opening transition, so the parent is only told to drop
+  // this editor once a close is actually in progress.
+  const closed = (shown: boolean) => { if (!shown && closing && alive.current) onClose(); };
+  return kind === "node"
+    ? <Drawer open={!closing} title={title} width={560} onClose={requestClose} afterOpenChange={closed} footer={footer}>{content}</Drawer>
+    : <Modal open={!closing} title={title} width={680} onCancel={requestClose} afterOpenChange={closed} footer={footer}>{content}</Modal>;
 }

@@ -12,7 +12,7 @@ import (
 )
 
 func TestUninstallAgentOverSSHChecksCompletion(t *testing.T) {
-	for _, scenario := range []string{"success", "command-failure", "false-success", "foreign-service", "remaining-mac-process", "remaining-linux-process", "mac-success", "mac-probe-failure", "own-token", "another-nodes-service"} {
+	for _, scenario := range []string{"success", "command-failure", "false-success", "foreign-service", "remaining-mac-process", "remaining-linux-process", "mac-success", "mac-probe-failure", "own-token", "another-nodes-service", "checklist-success", "checklist-blocked"} {
 		t.Run(scenario, func(t *testing.T) {
 			root := t.TempDir()
 			toolsDir := filepath.Join(root, "tools")
@@ -49,9 +49,20 @@ esac`)
 				}
 				writeExecutable(t, filepath.Join(toolsDir, "pgrep"), probe)
 			}
-			writeExecutable(t, binary, `printf '%s\n' "$@" >> "$CALLS"
+			writeExecutable(t, binary, `if [ "$1" = uninstall ] && [ "$2" = --help ]; then
+  case "$SCENARIO" in
+    checklist-*) echo '  -keep-resources  -yes  -state DIR' ;;
+    *) echo '  -state DIR' ;;
+  esac
+  exit 0
+fi
+printf '%s\n' "$@" >> "$CALLS"
+case "$SCENARIO" in
+  checklist-*) [ "$4" = --yes ] || { echo 'requires explicit --yes' >&2; exit 2; } ;;
+esac
 [ "$1" = uninstall ] && [ "$2" = --state ] && [ "$3" = "$STATE" ] || exit 2
 case "$SCENARIO" in
+  checklist-blocked) echo 'active workloads must be stopped first' >&2; exit 3 ;;
   command-failure) echo 'permission denied' >&2; exit 9 ;;
   false-success) echo 'service stopped'; exit 0 ;;
 esac
@@ -97,18 +108,22 @@ echo 'service removed'
 				Host: host, Port: port, User: "operator", ServerURL: server, Token: token,
 				SSHAuth: SSHAuth{Mode: AuthPassword, Password: "password"},
 			})
-			if (err == nil) != (scenario == "success" || scenario == "mac-success" || scenario == "own-token") {
+			if (err == nil) != (scenario == "success" || scenario == "mac-success" || scenario == "own-token" || scenario == "checklist-success") {
 				t.Fatalf("scenario=%s err=%v", scenario, err)
 			}
 			if err != nil && strings.Contains(err.Error(), "secret-fixture-token") {
 				t.Fatal("error exposed node token")
+			}
+			expectedArgs := "uninstall\n--state\n" + state + "\n"
+			if strings.HasPrefix(scenario, "checklist-") {
+				expectedArgs += "--yes\n"
 			}
 			data, readErr := os.ReadFile(calls)
 			if scenario == "foreign-service" || scenario == "another-nodes-service" {
 				if !os.IsNotExist(readErr) {
 					t.Fatalf("another agent was uninstalled: %s", data)
 				}
-			} else if string(data) != "uninstall\n--state\n"+state+"\n" {
+			} else if string(data) != expectedArgs {
 				t.Fatalf("wrong command arguments: %q (%v)", data, readErr)
 			}
 		})

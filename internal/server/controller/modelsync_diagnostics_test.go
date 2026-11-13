@@ -15,12 +15,12 @@ import (
 )
 
 func TestModelSyncFailureDiagnosticNamesAttemptEndpoints(t *testing.T) {
-	st, model, src, dst, mf := setupModelSyncController(t)
+	st, model, src, dst, _ := setupModelSyncController(t)
 	const transfer = "peer-failure-evidence"
 	if err := st.BeginModelSync(store.FileRef{ModelID: model.ID, NodeID: dst.ID}, src.ID, transfer, 12); err != nil {
 		t.Fatal(err)
 	}
-	mf, _ = st.ModelFileByModelNode(model.ID, dst.ID)
+	mf, _ := st.ModelFileByModelNode(model.ID, dst.ID)
 	var logs bytes.Buffer
 	c := New(st, &modelSyncHub{copyErr: errors.New("send peer model archive: target reset")}, slog.New(slog.NewJSONHandler(&logs, nil)))
 	key := store.ModelFileKey(mf.ID)
@@ -30,7 +30,7 @@ func TestModelSyncFailureDiagnosticNamesAttemptEndpoints(t *testing.T) {
 	var record map[string]any
 	for _, line := range strings.Split(logs.String(), "\n") {
 		var item map[string]any
-		if json.Unmarshal([]byte(line), &item) == nil && item["msg"] == "direct model sync failed" {
+		if json.Unmarshal([]byte(line), &item) == nil && item["msg"] == "peer model sync failed" {
 			record = item
 		}
 	}
@@ -49,12 +49,12 @@ func TestModelSyncFailureDiagnosticNamesAttemptEndpoints(t *testing.T) {
 func TestModelSyncConfirmationTimeoutKeepsAttemptEndpoints(t *testing.T) {
 	for _, state := range []string{"active", "replaced", "completed"} {
 		t.Run(state, func(t *testing.T) {
-			st, model, src, dst, mf := setupModelSyncController(t)
+			st, model, src, dst, _ := setupModelSyncController(t)
 			const transfer = "peer-confirmation-evidence"
 			if err := st.BeginModelSync(store.FileRef{ModelID: model.ID, NodeID: dst.ID}, src.ID, transfer, 12); err != nil {
 				t.Fatal(err)
 			}
-			mf, _ = st.ModelFileByModelNode(model.ID, dst.ID)
+			mf, _ := st.ModelFileByModelNode(model.ID, dst.ID)
 			var logs bytes.Buffer
 			c := New(st, &modelSyncHub{}, slog.New(slog.NewJSONHandler(&logs, nil)))
 			key := store.ModelFileKey(mf.ID)

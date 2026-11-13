@@ -1,8 +1,9 @@
 package store
 
 import (
-	"gorm.io/gorm"
 	"testing"
+
+	"gorm.io/gorm"
 )
 
 func TestEffectiveStorageForNodeReadsOnlyItsTargets(t *testing.T) {

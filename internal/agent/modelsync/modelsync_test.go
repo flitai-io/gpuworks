@@ -101,7 +101,7 @@ func TestDirectTransferProbesEndpointsConcurrently(t *testing.T) {
 	if elapsed := time.Since(start); elapsed >= 2*time.Second {
 		t.Fatalf("usable endpoint took %s after a stalled candidate", elapsed)
 	}
-	if string(received.Bytes()) != string(payload) || sent.Bytes != int64(len(payload)) {
+	if received.String() != string(payload) || sent.Bytes != int64(len(payload)) {
 		t.Fatalf("transfer result = %+v, received %q", sent, received.Bytes())
 	}
 	waitCtx, waitCancel := context.WithTimeout(context.Background(), time.Second)

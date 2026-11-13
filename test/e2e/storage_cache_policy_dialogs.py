@@ -58,11 +58,20 @@ def exercise_editor_dismissals(page, dialog, reopen, close_selector, cancel_labe
         baseline = len(writes)
         before = snapshot()
         current = dialog
+        focus_report = []
 
         def dismiss_and_reopen(action_name, action):
             nonlocal current
             action(current)
             expect(current).to_be_hidden()
+            # 12.4: closing returns focus to the control that opened the editor.
+            focus_after = page.evaluate("""() => {
+                const active = document.activeElement;
+                if (!active) return null;
+                return {tag: active.tagName, text: (active.textContent || '').trim().slice(0, 40),
+                        inDrawer: !!active.closest('.ant-drawer')};
+            }""")
+            focus_report.append({'action': action_name, 'focus': focus_after})
             # The storage detail is itself a drawer and stays open.
             expect(page.get_by_role('dialog')).to_have_count(1)
             check(len(writes) == baseline, f'{label} {action_name} sent a storage write')
@@ -81,8 +90,12 @@ def exercise_editor_dismissals(page, dialog, reopen, close_selector, cancel_labe
         dismiss_and_reopen('escape', press_escape)
     finally:
         page.remove_listener('request', on_request)
+    lost = [entry['action'] for entry in focus_report
+            if not entry['focus'] or not entry['focus']['inDrawer']]
     evidence.append({'layer': 'ui', 'dismissals': label,
-                     'actions': ['cancel', 'close', 'escape'], 'write_requests': 0})
+                     'actions': ['cancel', 'close', 'escape'], 'write_requests': 0,
+                     'focus_return': focus_report, 'focus_lost': lost})
+    check(not lost, f'{label} editor left focus outside the detail drawer after: {lost}')
     return current
 
 

@@ -1,0 +1,550 @@
+"use client";
+import { Children, forwardRef, isValidElement, useRef, useEffect, useState, useCallback, useMemo, createContext, useContext, type ReactNode, type HTMLAttributes, type ComponentProps, type ComponentPropsWithoutRef, } from "react";
+import { motion, AnimatePresence, useReducedMotionConfig } from "framer-motion";
+import { cva, type VariantProps } from "class-variance-authority";
+import { Select as SelectPrimitive } from "@base-ui/react/select";
+import type { IconComponent } from "@/lib/icon-context";
+import { cn } from "@/lib/utils";
+import { spring, exitFallbackMs } from "@/lib/springs";
+import { useProximityHover } from "@/hooks/use-proximity-hover";
+import { Elevated } from "@/lib/elevated";
+import { usePortalContainer } from "@/lib/portal-container-context";
+import { useComposedRefs } from "@/lib/compose-refs";
+import { controlFieldPaddingClasses, controlSizeClasses, controlSizeRecipe, type ControlSize, } from "@/lib/tokens/control-size";
+// ---------------------------------------------------------------------------
+// Select context
+//
+// Built on Base UI's Select primitive, which owns positioning (collision
+// flipping, anchor tracking), dismissal (outside press, focus-out, Escape
+// nesting inside dialogs), list keyboard navigation + typeahead, combobox
+// ARIA, and the hidden form input. This layer keeps the
+// proximity-hover overlays, the spring open/close animation (via actionsRef
+// deferred unmount), and the animated checkmark.
+// ---------------------------------------------------------------------------
+// How long a selection holds the popup open before closing, so the
+// acknowledgment — the checkmark drawing in and the selected background
+// springing to the picked row — is visible instead of being cut off by the
+// ~60ms close fade. Escape and outside presses still close immediately.
+const selectionAckMs = 300;
+interface SelectContextValue {
+    value: string;
+    open: boolean;
+    size: ControlSize;
+    itemDensity: SelectItemDensity;
+    itemIndexByValue: ReadonlyMap<string, number>;
+    actionsRef: React.RefObject<SelectPrimitive.Root.Actions | null>;
+}
+const SelectContext = createContext<SelectContextValue | null>(null);
+function useSelectContext() {
+    const ctx = useContext(SelectContext);
+    if (!ctx)
+        throw new Error("Select compound components must be inside <Select>");
+    return ctx;
+}
+// Content context for proximity hover
+interface SelectContentContextValue {
+    registerItem: (index: number, element: HTMLElement | null) => void;
+    activeIndex: number | null;
+    checkedIndex?: number;
+}
+const SelectContentContext = createContext<SelectContentContextValue | null>(null);
+// ---------------------------------------------------------------------------
+// Select (root)
+// ---------------------------------------------------------------------------
+export type SelectItemDensity = "compact" | "regular" | "comfortable";
+interface SelectProps {
+    children: ReactNode;
+    value?: string;
+    defaultValue?: string;
+    onValueChange?: (value: string) => void;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    disabled?: boolean;
+    name?: string;
+    required?: boolean;
+    size?: ControlSize;
+    itemDensity?: SelectItemDensity;
+}
+/**
+ * Walk the children tree collecting `{ value, label }` pairs from SelectItem
+ * elements. Passed to Base UI's `items` prop so the trigger can resolve the
+ * label of an initial value before the popup has ever mounted (items only
+ * render while open). Non-string labels fall back to the raw value, matching
+ * the previous labelMap behaviour.
+ */
+function collectSelectItems(node: ReactNode, out: {
+    value: string;
+    label: ReactNode;
+}[] = []) {
+    Children.forEach(node, (child) => {
+        if (!isValidElement(child))
+            return;
+        const props = child.props as {
+            value?: unknown;
+            children?: ReactNode;
+            label?: ReactNode;
+        };
+        if (typeof props.value === "string") {
+            out.push({
+                value: props.value,
+                // The trigger renders this collection before the popup has mounted.
+                // Preserve rich option labels instead of leaking an internal value
+                // such as "all" into the closed control.
+                label: props.label ?? props.children ?? props.value,
+            });
+        }
+        else if (props.children) {
+            collectSelectItems(props.children, out);
+        }
+    });
+    return out;
+}
+function Select({ children, value, defaultValue, onValueChange, open: openProp, defaultOpen = false, onOpenChange, disabled = false, name, required, size = "md", itemDensity = "regular", }: SelectProps) {
+    const [internalValue, setInternalValue] = useState(defaultValue ?? "");
+    const [internalOpen, setInternalOpen] = useState(defaultOpen);
+    const open = openProp !== undefined ? openProp : internalOpen;
+    const actionsRef = useRef<SelectPrimitive.Root.Actions | null>(null);
+    const currentValue = value !== undefined ? value : internalValue;
+    const items = useMemo(() => collectSelectItems(children), [children]);
+    const itemIndexByValue = useMemo(() => new Map(items.map((item, index) => [item.value, index])), [items]);
+    const handleValueChange = useCallback((next: string | null) => {
+        const v = next ?? "";
+        if (value === undefined)
+            setInternalValue(v);
+        onValueChange?.(v);
+    }, [value, onValueChange]);
+    const ackTimeoutRef = useRef<number | null>(null);
+    const cancelAckClose = useCallback(() => {
+        if (ackTimeoutRef.current !== null) {
+            clearTimeout(ackTimeoutRef.current);
+            ackTimeoutRef.current = null;
+        }
+    }, []);
+    useEffect(() => cancelAckClose, [cancelAckClose]);
+    const commitOpenChange = useCallback((nextOpen: boolean) => {
+        if (openProp === undefined)
+            setInternalOpen(nextOpen);
+        onOpenChange?.(nextOpen);
+    }, [openProp, onOpenChange]);
+    // Picking an item acknowledges before closing: the close is deferred by
+    // selectionAckMs so the checkmark draw and the selected background's spring
+    // to the picked row are seen. Every other close reason (Escape, outside
+    // press, trigger toggle, focus-out) closes immediately and cancels any
+    // pending acknowledgment; re-picking within the window restarts it.
+    const handleOpenChange = useCallback((nextOpen: boolean, eventDetails: {
+        reason: string;
+    }) => {
+        if (!nextOpen && eventDetails.reason === "item-press") {
+            cancelAckClose();
+            ackTimeoutRef.current = window.setTimeout(() => {
+                ackTimeoutRef.current = null;
+                commitOpenChange(false);
+            }, selectionAckMs);
+            return;
+        }
+        cancelAckClose();
+        commitOpenChange(nextOpen);
+    }, [cancelAckClose, commitOpenChange]);
+    const ctx = useMemo(() => ({
+        value: currentValue,
+        open,
+        size,
+        itemDensity,
+        itemIndexByValue,
+        actionsRef,
+    }), [currentValue, open, size, itemDensity, itemIndexByValue]);
+    return (<SelectContext.Provider value={ctx}>
+      <SelectPrimitive.Root 
+    // Always controlled; "" (no selection) maps to Base UI's null.
+    value={currentValue === "" ? null : currentValue} onValueChange={handleValueChange} open={open} onOpenChange={handleOpenChange} actionsRef={actionsRef} items={items} disabled={disabled} name={name} required={required} 
+    // Non-modal: the page keeps scrolling and the Positioner tracks the
+    // anchor, so the popup follows its trigger instead of detaching.
+    modal={false}>
+        {children}
+      </SelectPrimitive.Root>
+    </SelectContext.Provider>);
+}
+Select.displayName = "Select";
+// ---------------------------------------------------------------------------
+// SelectTrigger
+// ---------------------------------------------------------------------------
+const triggerVariants = cva([
+    "group inline-flex min-w-[160px] items-center justify-between outline-none cursor-pointer",
+    "transition-all duration-fast",
+    "disabled:opacity-50 disabled:pointer-events-none",
+    "focus-visible:ring-1 focus-visible:ring-focus-ring",
+], {
+    variants: {
+        variant: {
+            bordered: "border border-input bg-transparent text-fg-default shadow-control hover:border-input-hover hover:bg-hover",
+            borderless: "border border-transparent bg-transparent text-fg-default hover:bg-hover",
+        },
+        size: {
+            xs: cn(controlSizeClasses.xs, controlFieldPaddingClasses.xs, "gap-1 text-label"),
+            sm: cn(controlSizeClasses.sm, controlFieldPaddingClasses.sm, "gap-1 text-label"),
+            md: cn(controlSizeClasses.md, controlFieldPaddingClasses.md, "gap-1.5 text-body"),
+            lg: cn(controlSizeClasses.lg, controlFieldPaddingClasses.lg, "gap-1.5 text-body"),
+            xl: cn(controlSizeClasses.xl, controlFieldPaddingClasses.xl, "gap-2 text-body"),
+        },
+    },
+    defaultVariants: {
+        variant: "bordered",
+        size: "md",
+    },
+});
+interface SelectTriggerProps extends Omit<ComponentPropsWithoutRef<"button">, "children" | "prefix" | "size">, Omit<VariantProps<typeof triggerVariants>, "size"> {
+    icon?: IconComponent;
+    prefix?: ReactNode;
+    placeholder?: ReactNode;
+    error?: string;
+    wrapperClassName?: string;
+    /** Uses content-driven height for compact inline selectors. */
+    contentSized?: boolean;
+}
+const SelectTrigger = forwardRef<HTMLButtonElement, SelectTriggerProps>(({ className, variant, icon: Icon, prefix, placeholder = "Select…", error, wrapperClassName, contentSized = false, ...props }, ref) => {
+    const { size } = useSelectContext();
+    const iconSize = controlSizeRecipe[size].icon;
+    return (<div className={cn("flex flex-col gap-1", wrapperClassName)}>
+        <SelectPrimitive.Trigger ref={ref} aria-invalid={!!error || undefined} data-size={size} data-slot="select-trigger" data-variant={variant ?? "bordered"} className={cn(triggerVariants({ variant, size }), "rounded-lg", contentSized && "h-auto min-h-0 px-1.5 py-1", error && "border-danger-border hover:border-danger-border", className)} {...props}>
+          <span data-slot="select-trigger-content" className="flex min-w-0 flex-1 items-center gap-[inherit]">
+            {Icon && (<Icon data-slot="select-leading-icon" size={iconSize} strokeWidth={1.5} className="shrink-0 text-fg-subtle transition-[color,stroke-width] duration-fast group-hover:text-fg-default group-hover:stroke-[2]"/>)}
+            {prefix && <span data-slot="select-prefix" className="flex shrink-0 items-center gap-1.5 text-label text-fg-muted">{prefix}</span>}
+            <SelectPrimitive.Value data-slot="select-value" placeholder={placeholder} className="min-w-0 flex-1 text-left truncate data-[placeholder]:text-fg-subtle"/>
+          </span>
+
+          <svg data-slot="select-trigger-icon" width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-fg-subtle transition-colors duration-fast group-hover:text-fg-default">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </SelectPrimitive.Trigger>
+        {error && (<span className="text-label text-fg-danger pl-3">{error}</span>)}
+      </div>);
+});
+SelectTrigger.displayName = "SelectTrigger";
+// ---------------------------------------------------------------------------
+// SelectContent
+// ---------------------------------------------------------------------------
+type SelectPositionerProps = ComponentProps<typeof SelectPrimitive.Positioner>;
+interface SelectContentProps extends Omit<ComponentProps<typeof SelectPrimitive.Popup>, "children" | "className" | "render"> {
+    className?: string;
+    children: ReactNode;
+    side?: SelectPositionerProps["side"];
+    align?: SelectPositionerProps["align"];
+    sideOffset?: number;
+    alignOffset?: number;
+    alignItemWithTrigger?: boolean;
+    /** Use a containing cell or another element as the popup positioning anchor. */
+    anchor?: SelectPositionerProps["anchor"];
+    /** Render the popup at its final visual state without an entry tween. */
+    animated?: boolean;
+}
+const SelectContent = forwardRef<HTMLDivElement, SelectContentProps>(({ className, children, side = "bottom", align = "start", sideOffset = 6, alignOffset = 0, alignItemWithTrigger = false, anchor, animated = true, ...popupProps }, ref) => {
+    const portalContainer = usePortalContainer();
+    const { open, value, actionsRef, itemIndexByValue } = useSelectContext();
+    const containerRef = useRef<HTMLDivElement>(null);
+    const popupRef = useComposedRefs(ref, containerRef);
+    const hasOpenedRef = useRef(false);
+    const openRef = useRef(open);
+    openRef.current = open;
+    const reduceMotion = useReducedMotionConfig();
+    const closedTransform = reduceMotion
+        ? "translateY(0px) scaleY(1)"
+        : "translateY(-4px) scaleY(0.96)";
+    const { activeIndex, setActiveIndex, itemRects, isMeasured, sessionRef, handlers, registerItem, remeasure, } = useProximityHover(containerRef);
+    const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+    // Item discovery already owns the indexes used by proximity registration.
+    // Read selection synchronously instead of querying the DOM two frames later.
+    const checkedIndex = open ? itemIndexByValue.get(value) : undefined;
+    // Release Base UI's deferred unmount once the exit tween has played.
+    // onAnimationComplete on the motion.div is the primary signal; this
+    // timeout is a fallback for throttled/background tabs where rAF-driven
+    // animation callbacks can stall. The popup exits with spring.moderate, so the
+    // fallback tracks that tier's exit duration plus a safety buffer.
+    useEffect(() => {
+        if (open) {
+            hasOpenedRef.current = true;
+            return;
+        }
+        // Base UI force-mounts the popup immediately before the first open so it
+        // can position the menu. Do not interpret that preparation render as a
+        // close, otherwise an immediate popup is torn down during its own click.
+        if (!hasOpenedRef.current)
+            return;
+        const id = setTimeout(() => {
+            actionsRef.current?.unmount();
+            hasOpenedRef.current = false;
+        }, exitFallbackMs(spring.moderate));
+        return () => clearTimeout(id);
+    }, [open, actionsRef]);
+    // Fresh rects once per open. Measuring is the hook's job — it owns the
+    // one coalesced pass that item registration and container resizes both
+    // feed into, and a second pass from elsewhere is what used to land a
+    // corrected rect on an already-mounted overlay. The popup keeps its items
+    // registered while it sits hidden between opens, so registration alone
+    // would never trigger a fresh pass on reopen.
+    useEffect(() => {
+        if (!open)
+            return;
+        remeasure();
+    }, [open, remeasure]);
+    // Reset hover and focus as the close begins. Base UI
+    // keeps the popup mounted through the exit tween, so on reopen the hover
+    // pill would still be sitting on the previously active row and spring from
+    // there to the row that auto-focus lands on.
+    useEffect(() => {
+        if (open)
+            return;
+        setActiveIndex(null);
+        setFocusedIndex(null);
+    }, [open, setActiveIndex]);
+    // Overlays read rects only once the hook reports the item set fully
+    // measured. Positioning one from an incomplete pass mounts it at the wrong
+    // row, and the correcting pass then springs it across the list.
+    const activeRect = isMeasured && activeIndex !== null ? itemRects[activeIndex] : null;
+    const checkedRect = isMeasured && checkedIndex != null ? itemRects[checkedIndex] : null;
+    const focusRect = isMeasured && focusedIndex !== null ? itemRects[focusedIndex] : null;
+    const contentCtx = useMemo(() => ({ registerItem, activeIndex, checkedIndex }), [registerItem, activeIndex, checkedIndex]);
+    const renderPopup = useCallback((renderProps: React.ComponentPropsWithRef<"div">, state: SelectPrimitive.Popup.State) => (<motion.div initial={animated ? { opacity: 0, transform: closedTransform } : false} animate={state.open && (!animated || state.transitionStatus !== "starting")
+            ? { opacity: 1, transform: "translateY(0px) scaleY(1)" }
+            : { opacity: 0, transform: closedTransform }} transition={state.open && !animated
+            ? { duration: 0 }
+            : state.open ? spring.moderate : spring.moderate.exit} style={{ transformOrigin: "top center" }} onAnimationComplete={() => {
+            if (!openRef.current && hasOpenedRef.current) {
+                actionsRef.current?.unmount();
+                hasOpenedRef.current = false;
+            }
+        }}>
+          <Elevated {...renderProps} surface="floating" shadow="floating"/>
+        </motion.div>), [actionsRef, animated, closedTransform]);
+    return (<SelectPrimitive.Portal container={portalContainer ?? undefined}>
+        <SelectPrimitive.Positioner side={side} align={align} sideOffset={sideOffset} alignOffset={alignOffset} alignItemWithTrigger={alignItemWithTrigger} anchor={anchor} className="z-popover outline-none">
+            <SelectContentContext.Provider value={contentCtx}>
+              <SelectPrimitive.Popup {...popupProps} ref={popupRef} render={renderPopup} onMouseEnter={(event) => {
+            popupProps.onMouseEnter?.(event);
+            if (event.defaultPrevented)
+                return;
+            handlers.onMouseEnter();
+            setFocusedIndex(null);
+        }} onMouseMove={(event) => {
+            popupProps.onMouseMove?.(event);
+            if (!event.defaultPrevented)
+                handlers.onMouseMove(event);
+        }} onMouseLeave={(event) => {
+            popupProps.onMouseLeave?.(event);
+            if (!event.defaultPrevented)
+                handlers.onMouseLeave();
+        }} onFocus={(e) => {
+            popupProps.onFocus?.(e);
+            if (e.defaultPrevented)
+                return;
+            const indexAttr = (e.target as HTMLElement)
+                .closest("[data-proximity-index]")
+                ?.getAttribute("data-proximity-index");
+            if (indexAttr != null) {
+                const idx = Number(indexAttr);
+                setActiveIndex(idx);
+                setFocusedIndex((e.target as HTMLElement).matches(":focus-visible")
+                    ? idx
+                    : null);
+            }
+        }} onBlur={(e) => {
+            popupProps.onBlur?.(e);
+            if (e.defaultPrevented)
+                return;
+            if (containerRef.current?.contains(e.relatedTarget as Node))
+                return;
+            setFocusedIndex(null);
+            setActiveIndex(null);
+        }} className={cn(
+        // min-w tracks the trigger via the Positioner's --anchor-width
+        // var, matching the pre-migration minWidth: triggerRect.width.
+        `relative flex flex-col gap-0.5 min-w-[var(--anchor-width)] max-h-[min(300px,var(--available-height))] overflow-y-auto rounded-xl p-1 select-none outline-none`, className)}>
+                {/* The three overlays are torn down as the close begins rather
+            than exit-animated, because an overlay still mounted when the
+            popup reopens is one AnimatePresence re-adopts under its old
+            key: `initial` never runs again, so it keeps the position of the
+            row it had before and animates from there to the new one. The
+            popup's own fade covers their disappearance. */}
+                {/* Selected background */}
+                {open && (<AnimatePresence>
+                    {checkedRect && (<motion.div className={`absolute rounded-lg bg-selection pointer-events-none`} 
+            // Position lives in `animate` so an in-session value
+            // change springs the marker to the picked row (the
+            // selection acknowledgment). Safe against the reopen
+            // slide: the `open &&` teardown means no marker
+            // survives a close, and a fresh mount with
+            // initial={false} renders snapped at these values.
+            initial={false} animate={{
+                    top: checkedRect.top,
+                    left: checkedRect.left,
+                    width: checkedRect.width,
+                    height: checkedRect.height,
+                    opacity: 1,
+                }} exit={{ opacity: 0, transition: spring.moderate.exit }} transition={{
+                    ...spring.moderate,
+                    opacity: { duration: spring.fast.duration },
+                }}/>)}
+                  </AnimatePresence>)}
+
+                {/* Hover background */}
+                {open && (<AnimatePresence>
+                    {activeRect && (<motion.div key={sessionRef.current} className={`absolute rounded-lg bg-hover pointer-events-none`} initial={{
+                    opacity: 0,
+                    top: activeRect.top,
+                    left: activeRect.left,
+                    width: activeRect.width,
+                    height: activeRect.height,
+                }} animate={{
+                    opacity: 1,
+                    top: activeRect.top,
+                    left: activeRect.left,
+                    width: activeRect.width,
+                    height: activeRect.height,
+                }} exit={{ opacity: 0, transition: spring.fast.exit }} transition={{
+                    ...spring.fast,
+                    opacity: { duration: spring.fast.duration },
+                }}/>)}
+                  </AnimatePresence>)}
+
+                {/* Focus ring */}
+                {open && (<AnimatePresence>
+                    {focusRect && (<motion.div className={`absolute rounded-lg pointer-events-none z-raised outline outline-1 outline-focus-ring outline-offset-2`} initial={false} animate={{
+                    left: focusRect.left,
+                    top: focusRect.top,
+                    width: focusRect.width,
+                    height: focusRect.height,
+                }} exit={{ opacity: 0, transition: spring.fast.exit }} transition={{
+                    ...spring.fast,
+                    opacity: { duration: spring.fast.duration },
+                }}/>)}
+                  </AnimatePresence>)}
+
+                {children}
+              </SelectPrimitive.Popup>
+            </SelectContentContext.Provider>
+        </SelectPrimitive.Positioner>
+      </SelectPrimitive.Portal>);
+});
+SelectContent.displayName = "SelectContent";
+// ---------------------------------------------------------------------------
+// SelectItem
+// ---------------------------------------------------------------------------
+const selectItemVariants = cva("relative z-content flex shrink-0 items-center cursor-pointer outline-none select-none transition-[color] duration-fast", {
+    variants: {
+        density: {
+            compact: "h-control-md gap-1.5 px-2 text-label",
+            regular: "h-control-lg gap-2 px-2.5 text-body",
+            comfortable: "h-control-xl gap-2 px-3 text-body",
+        },
+    },
+    defaultVariants: {
+        density: "regular",
+    },
+});
+const selectItemIconSizes: Record<SelectItemDensity, number> = {
+    compact: 14,
+    regular: 16,
+    comfortable: 18,
+};
+// Shared by BadgeOverflow's option-style popup. It intentionally uses the
+// Select regular density unless the consumer explicitly supplies another one.
+const selectItemClassName = selectItemVariants();
+interface SelectItemProps extends HTMLAttributes<HTMLDivElement> {
+    icon?: IconComponent;
+    /** Text shown by the closed trigger. Defaults to the item children. */
+    label?: ReactNode;
+    /** Plain text used by keyboard typeahead when the label is not text-only. */
+    textValue?: string;
+    /** @deprecated Select derives an index from item order. */
+    index?: number;
+    value: string;
+    disabled?: boolean;
+}
+const SelectItem = forwardRef<HTMLDivElement, SelectItemProps>(({ className, children, icon: Icon, label, textValue, value, index, disabled = false, ...props }, ref) => {
+    const selectCtx = useSelectContext();
+    const contentCtx = useContext(SelectContentContext);
+    const internalRef = useRef<HTMLDivElement>(null);
+    const hasMounted = useRef(false);
+    const resolvedIndex = selectCtx.itemIndexByValue.get(value) ?? index;
+    useEffect(() => {
+        hasMounted.current = true;
+    }, []);
+    // Register with proximity hover. Depends on the (stable) registerItem
+    // rather than the content context, which is rebuilt on every activeIndex
+    // change: keying the effect to the whole context re-ran it per mousemove,
+    // unregistering and re-registering every row and so keeping the hook's
+    // measurement permanently unsettled while the pointer moved.
+    const registerItem = contentCtx?.registerItem;
+    useEffect(() => {
+        if (!registerItem || resolvedIndex === undefined)
+            return;
+        registerItem(resolvedIndex, internalRef.current);
+        return () => registerItem(resolvedIndex, null);
+    }, [registerItem, resolvedIndex]);
+    const isActive = contentCtx?.activeIndex === resolvedIndex;
+    const isChecked = selectCtx.value === value;
+    const skipAnimation = !hasMounted.current;
+    const itemIconSize = selectItemIconSizes[selectCtx.itemDensity];
+    return (<SelectPrimitive.Item value={value} disabled={disabled} label={textValue ??
+            (typeof label === "string"
+                ? label
+                : typeof children === "string"
+                    ? children
+                    : undefined)} render={<div ref={(node: HTMLDivElement | null) => {
+                (internalRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+                if (typeof ref === "function")
+                    ref(node);
+                else if (ref)
+                    (ref as React.MutableRefObject<HTMLDivElement | null>).current =
+                        node;
+            }} data-proximity-index={resolvedIndex} data-value={value} className={cn(
+            // Fixed density height keeps rows consistent while long popups
+            // scroll, independently of the trigger's outer control size.
+            // shrink-0: the popup is a max-height flex column, so without it
+            // a long list compresses rows to fit instead of scrolling.
+            selectItemVariants({ density: selectCtx.itemDensity }), "rounded-lg", isActive || isChecked
+                ? "text-fg-default"
+                : "text-fg-muted", disabled && "opacity-50 pointer-events-none", className)} {...props}/>}>
+        {Icon && (<Icon size={itemIconSize} strokeWidth={isActive || isChecked ? 2 : 1.5} className="shrink-0 transition-[color,stroke-width] duration-fast"/>)}
+
+        <SelectPrimitive.ItemText render={<span className="flex-1 min-w-0 truncate"/>}>
+          {children}
+        </SelectPrimitive.ItemText>
+
+        {/* Always-rendered fixed slot so the check appearing/disappearing
+            never changes the row's intrinsic width — without it the whole
+            popup resizes when a selection lands. */}
+        <span aria-hidden className="shrink-0" style={{ width: itemIconSize, height: itemIconSize }}>
+          <AnimatePresence>
+            {isChecked && (<motion.svg key="check" width={itemIconSize} height={itemIconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-fg-brand" initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }}>
+                <motion.path d="M4 12L9 17L20 6" initial={{ pathLength: skipAnimation ? 1 : 0 }} animate={{
+                pathLength: 1,
+                transition: { duration: spring.fast.duration, ease: "easeOut" },
+            }} exit={{
+                pathLength: 0,
+                transition: { duration: 0.04, ease: "easeIn" },
+            }}/>
+              </motion.svg>)}
+          </AnimatePresence>
+        </span>
+      </SelectPrimitive.Item>);
+});
+SelectItem.displayName = "SelectItem";
+// ---------------------------------------------------------------------------
+// SelectGroup + SelectLabel + SelectSeparator
+// ---------------------------------------------------------------------------
+function SelectGroup({ children, className, ...props }: HTMLAttributes<HTMLDivElement>) {
+    return (<div role="group" className={className} {...props}>
+      {children}
+    </div>);
+}
+SelectGroup.displayName = "SelectGroup";
+const SelectLabel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (<div ref={ref} className={cn("px-2 py-1.5 shrink-0 text-label text-fg-subtle", className)} {...props}/>));
+SelectLabel.displayName = "SelectLabel";
+const SelectSeparator = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (<div ref={ref} role="separator" className={cn("my-1 -mx-1 h-px shrink-0 bg-border-subtle", className)} {...props}/>));
+SelectSeparator.displayName = "SelectSeparator";
+// ---------------------------------------------------------------------------
+// Exports
+// ---------------------------------------------------------------------------
+export { Select, SelectTrigger, SelectContent, SelectItem, SelectGroup, SelectLabel, SelectSeparator, selectItemClassName, triggerVariants, };
+export type { SelectProps, SelectTriggerProps, SelectContentProps, SelectItemProps };

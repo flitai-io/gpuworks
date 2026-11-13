@@ -3,10 +3,11 @@ package benchrun
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"time"
+
 	"gpuworks.ai/gpuworks/pkg/bench/dataset"
 	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
 	"gpuworks.ai/gpuworks/pkg/bench/metrics"
-	"time"
 )
 
 func (e *execution) pointEvidence(dc dataset.Config, reqs []loadgen.Request, requests []metrics.Request, canceled bool) *metrics.PointEvidence {

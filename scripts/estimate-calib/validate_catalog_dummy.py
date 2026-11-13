@@ -40,7 +40,7 @@ except Exception:  # pragma: no cover - the fallback keeps the host tool portabl
     yaml = None
 
 GIB = float(1 << 30)
-DEFAULT_IMAGE = "gpustack/runner:cuda13.0-vllm0.25.1"
+DEFAULT_IMAGE = "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"
 FILES = (
     "config.json",
     "generation_config.json",
@@ -175,8 +175,8 @@ def run_one(row: dict, args: argparse.Namespace, model_dir: Path, log_dir: Path)
     port = random.randint(18000, 19999)
     command = [
         "docker", "run", "--name", name, "--gpus", f"device={args.gpu}",
-        "-v", f"{args.models_root}:/models:ro", args.image,
-        "vllm", "serve", f"/models/{model_dir.name}", "--load-format", "dummy",
+        "-v", f"{args.models_root}:/models:ro", "--entrypoint", "vllm", args.image,
+        "serve", f"/models/{model_dir.name}", "--load-format", "dummy",
         "--gpu-memory-utilization", str(args.util), "--max-model-len", str(args.max_model_len),
         "--port", str(port), "--trust-remote-code",
     ]

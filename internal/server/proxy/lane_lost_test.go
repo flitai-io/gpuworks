@@ -75,6 +75,11 @@ func newMidRequestProxy(t *testing.T, name string, hub Tunneler) (*Proxy, string
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/" + name, Revision: "main", Name: name})
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +99,9 @@ func newMidRequestProxy(t *testing.T, name string, hub Tunneler) (*Proxy, string
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(st, storeNetworks(st), hub, slog.New(slog.NewTextHandler(io.Discard, nil)), 0), apiKey
+	p := New(st, storeNetworks(st), hub, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(p.Close)
+	return p, apiKey
 }
 
 func proxyChat(t *testing.T, p *Proxy, apiKey, model string) *httptest.ResponseRecorder {

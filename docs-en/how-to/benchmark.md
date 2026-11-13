@@ -28,7 +28,9 @@ For external endpoints, prepare the address, model name, and required API key. S
    To import a dataset, first upload JSONL. Multi-turn conversations send requests in session order, and the output length is an upper limit.
    Random token-length and Agentic datasets require a loadable tokenizer. **Automatic** tries, in order: the inference service's own `/v1/tokenize` and `/v1/detokenize`
    (served by vLLM and SGLang and on by default for a deployment; sampling uses the engine's tokenizer, so lengths match the engine's count whatever the tokenizer format),
-   the `tokenizer.json` or `tiktoken.model` already on the target machine, and finally the model repository. For an external endpoint, **Automatic** uses only the endpoint's own tokenize endpoints.
+   the `tokenizer.json` or `tiktoken.model` already on the target machine, then the tokenizer repository explicitly declared by the template; without that declaration, it uses the weight repository.
+   A GGUF weight repository may lack independent tokenizer files. For example, the Strata template uses a commit-pinned `api.tokenizer_ref` to name the base model's tokenizer.
+   The evaluation saves the resolved reference; a template never overrides a manually selected source. For an external endpoint, **Automatic** uses only the endpoint's own tokenize endpoints.
    You can also use only the **Inference service (de)tokenize endpoints** (if it is unavailable the evaluation stops before inference rather than switching sources), name a model repository (`org/repo`),
    or upload `tokenizer.json` / `tiktoken.model`.
 4. Review warmup, request timeout, output policy, experience thresholds, and per-request details in **Advanced Settings**. To view individual timelines in the report, enable **Keep per-request details** and set the capacity.
@@ -118,10 +120,27 @@ Caches are not currently cleared automatically, and the actual cache state at th
 
 ## Export and Compare
 
-Use the report menu to download HTML, Markdown, and CSV. All three formats use the same count accounting, grouping, and statistical definitions.
-CSV retains scalar values per point, versioned evidence, and sanitized configuration. HTML lets you view session request timelines offline, click a timeline bar to locate
-a specific request, and view the actual in-flight request curve. Detailed timelines depend on retained per-request details; the report explicitly indicates when details are disabled,
-missing, or exceed the capacity limit. Core session and turn summaries do not depend on the detail file.
+The detail page's **Export report** menu offers four formats for reading, sharing, or data analysis:
+
+| Format | Content and features | Uses and limitations |
+|---|---|---|
+| **Offline HTML** | Saves the preview in the platform language. The single file includes ECharts, the original report tables and request/session evidence. | Offline, switch the time-series metric, toggle a legend entry or select a throughput point. The captured preview and tables also open with JavaScript disabled. |
+| **PNG** | Saves the current preview as a single long image, including the displayed timeline and selected request details. | Suitable for direct sharing or inserting into documents. Text and tables are stored as an image. Export fails if the report exceeds the browser's single-image capacity; show fewer columns or choose HTML instead. |
+| **Markdown** | Lists evaluation configuration, results for each point, request and session counts, turn groups, metric definitions, and the deployment snapshot as text and tables. Includes request timings, sources, errors, and other details when per-request records are retained. | Suitable for editing, documentation, or version control. Does not preserve page styling or interactive charts; content is independent of the page's selected point and visible columns. |
+| **CSV** | Usually one row per point, with scalar columns such as throughput, latency, and success rate, plus versioned grouped evidence in `evidence_json` and sanitized configuration and report context in `report_context_json`. Unavailable numeric values are empty. | Suitable for filtering, calculations, and comparisons in spreadsheets or scripts. Full groups require parsing the JSON columns. Does not include page charts; content is independent of the page's selected point and visible columns. |
+
+HTML and PNG preserve the current language, curve metric, selected point, and visible columns. Advanced metrics and the run snapshot expand automatically,
+and all selected table columns are included. Online actions such as back, rerun, and detail downloads are excluded. Active runs retain their live/provisional
+notices; exported files do not continue to update.
+
+The **request timeline** is interactive on the online result page. After choosing a point, inspect requests by session, turn, and attempt, from send through first generated output,
+first visible content, last output, and stream completion. Click a bar or use the keyboard to select a request and inspect its sources, latency, and errors.
+Long records are paginated, with the current page and retained record count stated explicitly. The exported preview retains the timeline page and request selected at export time.
+
+In HTML, turn on **Show full metrics** to see the original columns on the same point rows. Expand the detailed results below the preview for all retained points, percentiles, samples and warnings.
+
+Metrics with the same name use consistent count accounting, grouping, and statistical definitions across formats. Disabled, unavailable, or truncated per-request details are explicitly indicated.
+Core session and turn summaries do not depend on detail files; unobserved events remain unknown. CLI and existing report API exports remain compatible.
 
 Enable **Keep per-request details** to download compressed JSONL from a point or the evidence panel. It contains Run, point, session, and turn identities,
 finish_reason, error text, HTTP status, timing, raw usage, and local estimates. Bodies may contain sensitive information,

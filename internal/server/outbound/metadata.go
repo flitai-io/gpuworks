@@ -81,7 +81,7 @@ func metadataRetry(resp *http.Response, err error, attempt int) (time.Duration, 
 	delay := time.Duration(attempt+1) * 200 * time.Millisecond
 	if err != nil {
 		var network net.Error
-		retry := errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || (errors.As(err, &network) && (network.Timeout() || network.Temporary()))
+		retry := errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || (errors.As(err, &network) && (network.Timeout() || network.Temporary())) //nolint:staticcheck // SA1019: preserve metadata retries for temporary DNS failures from existing transports.
 		return delay, retry
 	}
 	switch resp.StatusCode {

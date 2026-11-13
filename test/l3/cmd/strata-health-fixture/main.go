@@ -23,7 +23,8 @@ func main() {
 	mux := http.NewServeMux()
 	reply := func(w http.ResponseWriter, v any) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(v)
+		// The peer owns the response; a write failure means it disconnected.
+		_ = json.NewEncoder(w).Encode(v)
 	}
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]any{"service": "strata", "status": "ok", "loaded": loaded.Load(), "api_key": false})
@@ -40,7 +41,7 @@ func main() {
 			w.WriteHeader(415)
 			return
 		}
-		io.Copy(io.Discard, r.Body)
+		_, _ = io.Copy(io.Discard, r.Body)
 		loads.Add(1)
 		// The real loader does not stop when its HTTP client disconnects.
 		<-ready

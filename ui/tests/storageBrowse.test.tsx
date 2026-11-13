@@ -43,7 +43,7 @@ function tree(query: BrowseQuery): StorageFileList {
   }
 }
 
-const row = async (name: string) => (await screen.findByText(name, { selector: ".ant-table-tbody *" })).closest("tr") as HTMLElement;
+const row = async (name: string) => (await screen.findByText(name, { selector: "tbody *" })).closest("tr") as HTMLElement;
 const open = async (name: string) => fireEvent.click(await screen.findByRole("button", { name: fill(b.open, { name }) }));
 const listed = (calls: Record<string, unknown[][]>) => (calls.storageFiles ?? []).map((c) => c[1] as BrowseQuery);
 
@@ -51,7 +51,7 @@ test("a viewer does not get the tab; an admin's tab is labelled Browse", async (
   stubDetail({ storage: shared, admin: false });
   renderDetail("/storage/2");
   await screen.findByRole("tab", { name: new RegExp(s.detail.tab.overview) });
-  await waitFor(() => assert.equal(screen.queryByRole("tab", { name: s.detail.tab.browse }), null));
+  await waitFor(() => assert.ok(screen.queryByRole("tab", { name: s.detail.tab.browse }) === null, "Expected the element to be absent"));
   cleanup();
   stubDetail({ storage: shared });
   renderDetail("/storage/2");
@@ -94,7 +94,7 @@ test("a shared storage lists without a node, says which node read it, and the br
   renderDetail("/storage/2?tab=browse", false);
   assert.ok(await row("Qwen"));
   assert.deepEqual(listed(calls)[0], { node: undefined, path: "" });
-  assert.equal(screen.queryByRole("combobox", { name: b.nodeLabel }), null);
+  assert.ok(screen.queryByRole("combobox", { name: b.nodeLabel }) === null, "Expected the element to be absent");
   assert.ok(screen.getByText(fill(b.readBy, { node: "gpu-01" })));
 
   await open("files");
@@ -104,7 +104,7 @@ test("a shared storage lists without a node, says which node read it, and the br
   const dirRow = await row("data sets");
   assert.ok(within(dirRow).getByText("—"), "a directory has no size");
   assert.ok(within(await row("latest")).getByText(b.symlink));
-  assert.equal(screen.queryByRole("button", { name: fill(b.open, { name: "latest" }) }), null, "a link is not followed");
+  assert.ok(screen.queryByRole("button", { name: fill(b.open, { name: "latest" }) }) === null, "a link is not followed");
 
   await open("data sets");
   assert.ok(await screen.findByText(b.empty));
@@ -129,7 +129,7 @@ test("listing shows a spinner while loading, and a failure with a retry that lis
     },
   });
   renderDetail("/storage/2?tab=browse", false);
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer .ant-spin-spinning"), "loading"));
+  await waitFor(() => assert.ok(document.querySelector('[role="dialog"] .ant-spin-spinning'), "loading"));
   release(tree({ path: "" }));
   await open("files");
   assert.ok(await screen.findByText("node gpu-01 is offline"));
@@ -153,7 +153,7 @@ test("load more asks for the next page with the cursor and appends it, until the
   assert.ok(await row("c.txt"));
   assert.ok(screen.getByText("a.txt"), "the first page stays");
   assert.deepEqual(listed(calls).at(-1), { node: undefined, path: "", cursor: "b.txt" });
-  await waitFor(() => assert.equal(screen.queryByRole("button", { name: b.loadMore }), null));
+  await waitFor(() => assert.ok(screen.queryByRole("button", { name: b.loadMore }) === null, "Expected the element to be absent"));
 });
 
 test("a read-only place disables upload and new directory and says why, on hover, focus and to a screen reader", async () => {
@@ -169,8 +169,9 @@ test("a read-only place disables upload and new directory and says why, on hover
 
   const wrapper = upload.parentElement as HTMLElement;
   assert.equal(wrapper.tabIndex, 0);
-  await user.click(document.body);
-  while (document.activeElement !== wrapper) await user.tab();
+  screen.getByRole("button", { name: "Close", exact: true }).focus();
+  for (let step = 0; step < 50 && document.activeElement !== wrapper; step++) await user.tab();
+  assert.ok(document.activeElement === wrapper, "the disabled-action explanation is reachable within the drawer");
   const tip = await screen.findByRole("tooltip");
   assert.ok(tip.textContent?.includes(reason));
 
@@ -192,7 +193,7 @@ test("a region root can take new things but cannot itself be renamed or deleted"
   await open("files");
   await row("notes&1.txt");
   assert.equal((screen.getByRole("button", { name: new RegExp(`${b.upload}$`) }) as HTMLButtonElement).disabled, false);
-  assert.equal(screen.queryByText(b.readonly.region, { selector: ".ant-typography" }), null);
+  assert.ok(screen.queryByText(b.readonly.region, { selector: ".ant-typography" }) === null, "Expected the element to be absent");
 });
 
 test("a disabled storage is read-only everywhere and says the storage is disabled", async () => {

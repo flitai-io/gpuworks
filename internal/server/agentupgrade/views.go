@@ -2,7 +2,6 @@ package agentupgrade
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -198,13 +197,6 @@ func (s *Service) Release(ctx context.Context, id uint, uuid, actor, note string
 	_, err = s.st.VerifyAgentUpgrade(item.ID, s.now(), actor, "operator_verified", strings.TrimSpace(note))
 	if err == nil {
 		s.notify()
-	}
-	return err
-}
-
-func upgradeStoreError(err error) error {
-	if errors.Is(err, store.ErrNotFound) {
-		return &Error{Code: "AGENT_UPGRADE_NOT_FOUND", Detail: err.Error()}
 	}
 	return err
 }

@@ -1,6 +1,9 @@
 import { CheckOutlined, CopyOutlined } from "@ant-design/icons";
-import { Button, Input, Modal, Tooltip, Typography, message } from "antd";
-import type { ButtonProps } from "antd";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { Tooltip } from "./ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog";
+import { message } from "../ui-kit/feedback";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { copyText } from "../clipboard";
@@ -30,17 +33,14 @@ export function useCopy(): [(text: string, options?: CopyOptions) => Promise<boo
     return false;
   }, []);
   const holder = manual && (
-    <Modal
-      open
-      title={manual.title || t("copy.manualTitle")}
-      okText={t("copy.done")}
-      cancelButtonProps={{ style: { display: "none" } }}
-      onOk={() => setManual(undefined)}
-      onCancel={() => setManual(undefined)}
-    >
-      <Typography.Paragraph>{t("copy.manualHint")}</Typography.Paragraph>
-      <Input.TextArea readOnly autoFocus autoSize={{ minRows: 4, maxRows: 16 }} value={manual.text} onFocus={(event) => event.currentTarget.select()} />
-    </Modal>
+    <Dialog open onOpenChange={open => { if (!open) setManual(undefined); }}>
+      <DialogContent closeButtonLabel={t("actions.close")}>
+        <DialogHeader><DialogTitle>{manual.title || t("copy.manualTitle")}</DialogTitle></DialogHeader>
+        <p>{t("copy.manualHint")}</p>
+        <Textarea readOnly autoFocus rows={6} aria-label={t("copy.manualTitle")} value={manual.text} onFocus={event => event.currentTarget.select()} />
+        <DialogFooter><Button onClick={() => setManual(undefined)}>{t("copy.done")}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
   return [copy, holder];
 }
@@ -54,8 +54,8 @@ interface CopyButtonProps {
   label: string;
   success?: string;
   manualTitle?: string;
-  size?: ButtonProps["size"];
-  type?: ButtonProps["type"];
+  size?: "small" | "middle" | "large";
+  type?: "text" | "default" | "primary" | "dashed" | "link";
   disabled?: boolean;
   className?: string;
   children?: ReactNode;
@@ -76,17 +76,17 @@ export default function CopyButton({ text, label, success, manualTitle, size, ty
   };
   return (
     <>
-      <Tooltip title={copied ? t("copy.copied") : label}>
+      <Tooltip content={copied ? t("copy.copied") : label}>
         <Button
           className={className}
-          size={size}
-          type={type}
+          size={size === "small" ? "sm" : size === "large" ? "lg" : "md"}
+          variant={type === "primary" ? "primary" : type === "default" || type === "dashed" ? "neutral" : "ghost"}
           disabled={disabled}
-          icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+          iconOnly={!children}
           aria-label={label}
           onClick={() => void onClick()}
         >
-          {children}
+          {copied ? <CheckOutlined /> : <CopyOutlined />}{children}
         </Button>
       </Tooltip>
       {holder}

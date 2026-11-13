@@ -25,3 +25,20 @@ func TestServerOutboundPolicyWireContract(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestServerOutboundHostCheckWireContract(t *testing.T) {
+	const wire = `[{"host":"models.corp","status":"needs_allow"},{"host":"169.254.169.254","status":"blocked"}]`
+	original := []ServerOutboundHostCheck{{Host: "models.corp", Status: "needs_allow"}, {Host: "169.254.169.254", Status: "blocked"}}
+	raw, err := json.Marshal(original)
+	if err != nil || string(raw) != wire {
+		t.Fatalf("wire=%s err=%v", raw, err)
+	}
+	var decoded []ServerOutboundHostCheck
+	if err := json.Unmarshal([]byte(wire), &decoded); err != nil || !reflect.DeepEqual(original, decoded) {
+		t.Fatalf("round trip=%+v err=%v", decoded, err)
+	}
+	var request ServerOutboundPolicyCheck
+	if err := json.Unmarshal([]byte(`{"hosts":["models.corp","::1"]}`), &request); err != nil || !reflect.DeepEqual(request.Hosts, []string{"models.corp", "::1"}) {
+		t.Fatalf("request=%+v err=%v", request, err)
+	}
+}

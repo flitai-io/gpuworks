@@ -11,6 +11,7 @@ export const presenceVisual: Record<string, { labelKey: string; color: string }>
   registered: { labelKey: "presence.registered", color: "green" },
   deleting: { labelKey: "presence.deleting", color: "orange" },
   failed: { labelKey: "presence.failed", color: "red" },
+  insufficient_disk_space: { labelKey: "presence.insufficientDisk", color: "red" },
   download_required: { labelKey: "presence.downloadRequired", color: "orange" },
   missing: { labelKey: "presence.missing", color: "red" },
 };

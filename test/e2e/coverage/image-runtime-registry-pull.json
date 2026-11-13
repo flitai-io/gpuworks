@@ -5,7 +5,7 @@
   "test_file": "test/e2e/image_registry.py",
   "test_function": "test_registry_pull",
   "name": "镜像节点副本 / UI选择Registry直接拉取 / 刷新来源与digest正确且真实容器可执行",
-  "command": "make test-e2e-image-registry-pull",
+  "command": "python3 -B test/e2e/image_registry.py --case registry-pull --locale en",
   "lane": "local-real-server-agent-isolated-docker",
   "identity": "admin",
   "required_evidence": [
@@ -71,6 +71,7 @@
     "internal/agent/runtime/docker/docker.go"
   ],
   "missing": [
+    "BLOCKED_PRODUCT: the node source picker no longer offers a registry reference. imageSourceOptions (ImagePageHelpers.tsx:112-133) keeps only the automatic choice, options for values that pass isArchiveURL (http/https, :84-87) and the \"From URL...\" dialog, so a registry reference such as 127.0.0.1:PORT/repo:tag is filtered out and cannot be selected or pulled from. Until a registry reference is offered again, choosing a remote source and pulling it cannot be reached from this UI",
     "TLS and authenticated/public registries",
     "multi-architecture manifests",
     "registry failure/retry/cancel and explicit-source failure no-fallback",

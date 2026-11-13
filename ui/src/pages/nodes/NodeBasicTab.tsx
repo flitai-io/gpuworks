@@ -13,7 +13,7 @@ import RuntimeFallbackNotice from "../../components/RuntimeFallbackNotice";
 import RuntimePluginStatus from "../../components/RuntimePluginStatus";
 import { SystemLabelTags } from "../../components/SystemLabelTags";
 import { formatTime } from "../../i18n/datetime";
-import { runtimeChoices, runtimeLabel } from "../../nodeDisplay";
+import { runtimeLabel } from "../../nodeDisplay";
 import DetailSection from "../../components/detail/DetailSection";
 import NodeDiskUsage from "./NodeDiskUsage";
 import NodeConnectionDiagnostics from "../../components/NodeConnectionDiagnostics";
@@ -56,6 +56,9 @@ export default function NodeBasicTab({
               <NodeConnectionBadge node={node} />
               <GPUProbeFailedTag node={node} />
             </Space>
+            <div>
+              {t("connectionDiagnostics.lastSeen")}: {formatTime(node.last_seen_at, t("connectionDiagnostics.unknown"))}
+            </div>
           </Descriptions.Item>
           <Descriptions.Item label="UUID">{node.uuid}</Descriptions.Item>
           <Descriptions.Item label={t("detail.agentVersion")}>
@@ -103,21 +106,25 @@ export default function NodeBasicTab({
         <Descriptions bordered size="small" column={1}>
           <Descriptions.Item label={t("detail.runtime")}>
             <Space direction="vertical" size={4} style={{ width: "100%" }}>
-              <Select
-                size="small"
-                style={{ minWidth: 200 }}
-                value={node.runtime_preference || node.runtime_driver || undefined}
-                loading={runtimeLoading}
-                placeholder={t("runtime.select")}
-                onChange={onRuntime}
-                options={runtimeChoices(node.os).map((value) => ({
-                  value,
-                  label:
-                    value === "auto" && node.runtime_driver
-                      ? t("runtime.autoCurrent", { runtime: runtimeLabel(node.runtime_driver) })
-                      : runtimeLabel(value),
-                }))}
-              />
+              {node.runtime_choices?.length ? (
+                <Select
+                  size="small"
+                  style={{ minWidth: 200 }}
+                  value={node.runtime_preference || node.runtime_driver || undefined}
+                  loading={runtimeLoading}
+                  placeholder={t("runtime.select")}
+                  onChange={onRuntime}
+                  options={node.runtime_choices.map((value) => ({
+                    value,
+                    label:
+                      value === "auto" && node.runtime_driver
+                        ? t("runtime.autoCurrent", { runtime: runtimeLabel(node.runtime_driver) })
+                        : runtimeLabel(value),
+                  }))}
+                />
+              ) : (
+                <span>{node.runtime_driver ? runtimeLabel(node.runtime_driver) : "—"}</span>
+              )}
               <RuntimeFallbackNotice node={node} />
             </Space>
           </Descriptions.Item>

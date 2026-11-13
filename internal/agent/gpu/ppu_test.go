@@ -12,6 +12,29 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
+// TestVerifyPPUDeviceNodeSeesTheLiveHostDev: a privileged container's own
+// /dev is a copy made at container start, so a device node created
+// afterward is missing there; verifyPPUDeviceNode must stat the host's
+// live /dev through hostRoot when CLIs run there.
+func TestVerifyPPUDeviceNodeSeesTheLiveHostDev(t *testing.T) {
+	root := withHostRoot(t)
+	const path = "/dev/alixpu0"
+	full := filepath.Join(root, path)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyPPUDeviceNode(0, path, 0); err != nil {
+		t.Fatalf("verifyPPUDeviceNode(present only under hostRoot) = %v", err)
+	}
+	cliOnHost.Store(false)
+	if err := verifyPPUDeviceNode(0, path, 0); err == nil {
+		t.Fatal("verifyPPUDeviceNode off the host found a node that only exists under hostRoot")
+	}
+}
+
 func TestParsePPUFrameworkVersion(t *testing.T) {
 	if got := parsePPUFrameworkVersion("HGGC Runtime Version : v13.0.1\n"); got != "13.0.1" {
 		t.Fatalf("runtime version = %q", got)
@@ -220,6 +243,10 @@ func TestPPURuntimeInjectionUsesDriverInventory(t *testing.T) {
 		{"docker", []int{8, 12}, "0,1"},
 		{"docker", []int{12, 8}, "1,0"},
 		{"nerdctl", []int{12, 8}, "1,0"},
+		// The kube runtime's device plugin hands the pod the selected
+		// devices only, renumbered like an OCI runtime's.
+		{"kube", []int{8}, "0"},
+		{"kube", []int{12, 8}, "1,0"},
 		{"udocker", []int{8}, "8"},
 		{"udocker", []int{12, 8}, "12,8"},
 	} {

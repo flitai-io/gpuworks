@@ -42,7 +42,7 @@ func transitionInstances(tx *gorm.DB, depID uint, uuids []string, from []string,
 		return nil, ErrStateChanged
 	}
 	result := tx.Model(&Instance{}).Where("deployment_id = ? AND uuid IN ? AND state IN ?", depID, uuids, from).
-		Updates(map[string]any{"state": to, "message": message})
+		Updates(map[string]any{"state": to, "message": message, "runtime_failure": ""})
 	if result.Error != nil {
 		return nil, result.Error
 	}

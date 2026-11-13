@@ -23,17 +23,35 @@ func TestArchivePreviewReportsPolicyDenialWithoutLeakingURL(t *testing.T) {
 		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 	}
 	var got struct {
-		Code   string            `json:"code"`
-		Params map[string]string `json:"params"`
+		Code   string         `json:"code"`
+		Params map[string]any `json:"params"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Code != "IMAGE_ARCHIVE_URL_POLICY_DENIED" || got.Params["config_key"] != "outbound_allow_private_hosts" || got.Params["host"] != strings.TrimPrefix(origin.URL, "http://") {
+	if got.Code != "IMAGE_ARCHIVE_URL_POLICY_DENIED" || got.Params["config_key"] != "outbound_allow_private_hosts" || got.Params["approvable"] != true || got.Params["allow_host"] != "127.0.0.1" || got.Params["host"] != strings.TrimPrefix(origin.URL, "http://") {
 		t.Fatalf("policy error=%+v", got)
 	}
 	if strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), "/image.tar") {
 		t.Fatalf("policy response leaked the source URL: %s", response.Body.String())
+	}
+}
+
+func TestArchivePreviewNamesAReservedAddressThatCannotBeAllowed(t *testing.T) {
+	h := &apiHandlers{d: Deps{Outside: OutsideSources{AllowPrivateHosts: []string{"0.0.0.0/0", "::/0"}}}}
+	response := postJSON(t, h.previewImageArchiveURL, "/api/v1/images/preview-archive-url", `{"url":"http://169.254.169.254/latest/meta-data/"}`, nil)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var got struct {
+		Code   string         `json:"code"`
+		Params map[string]any `json:"params"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Code != "IMAGE_ARCHIVE_URL_POLICY_BLOCKED" || got.Params["host"] != "169.254.169.254" || got.Params["approvable"] != nil || got.Params["allow_host"] != nil {
+		t.Fatalf("blocked error=%+v", got)
 	}
 }
 

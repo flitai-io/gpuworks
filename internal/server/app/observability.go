@@ -2,18 +2,20 @@ package app
 
 import (
 	"context"
-	"gpuworks.ai/gpuworks/internal/server/api/dto"
-	"gpuworks.ai/gpuworks/internal/server/hub"
 	"log/slog"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/hub"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/selflog"
 	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/logstore"
+	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/tsdb"
 	"gpuworks.ai/gpuworks/internal/server/uxstore"
 )
@@ -258,6 +260,19 @@ func (o *observability) queryMetrics(metric string, matchers map[string]string, 
 		out = append(out, dto.MonitorSeries{Labels: labels, Points: points})
 	}
 	return out, nil
+}
+
+// hostMemory reads a node's host memory from the metrics store's newest
+// samples by planning.RecentHostMemory, the reader an operator's L1 sleep uses
+// too.
+func (o *observability) hostMemory() planning.HostMemory {
+	return planning.RecentHostMemory(func(metric, node string, sinceMS int64) (float64, bool) {
+		points, err := o.tsdb.QueryLatest(metric, map[string]string{"node": node}, sinceMS)
+		if err != nil || len(points) == 0 {
+			return 0, false
+		}
+		return points[0].Value, true
+	}, time.Now)
 }
 
 func (o *observability) latestMetrics(metric string, matchers map[string]string, sinceMS int64, asOfMS ...int64) ([]api.MetricLatest, error) {

@@ -375,7 +375,7 @@ func (c *CLI) requireAgentUser(name string) error {
 	}
 	info, err := os.Stat(c.Driver.SpecPath(name))
 	if err != nil {
-		return nil // no spec: ExecPTY reports the container was never started
+		return nil //nolint:nilerr // ExecPTY owns reporting an absent or unreadable spec; this check only rejects a known different owner.
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || uint32(euid) == stat.Uid {

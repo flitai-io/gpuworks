@@ -256,7 +256,7 @@ test("ttft/tpot carry an upper-bound tooltip on the tile", async () => {
   api.monitorOverview = async () => overview;
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
-  const ttftTile = screen.getByRole("button", { name: /^TTFT/ });
+  const ttftTile = screen.getByRole("button", { name: /^TTFT p95 \/ p99:/ });
   assert.ok(ttftTile.getAttribute("title")?.includes("upper bound"));
 });
 

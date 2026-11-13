@@ -10,26 +10,101 @@
   "command": "python3 test/e2e/inference_key_lifecycle.py",
   "lane": "local-real-server-sqlite",
   "identity": "admin creates; copied inference bearer consumes without cookies",
-  "fixture": "Fresh SQLite/server/Chrome; remove the fresh server-owned default key via API, then scoped guard key keeps gateway authentication enabled during target revocation",
-  "product_contracts": ["ui/src/pages/APIKeysPage.tsx", "internal/server/api/deploy.go", "internal/server/api/dto/deploy.go", "internal/server/proxy/proxy.go", "internal/server/store/auth.go"],
-  "required_evidence": ["ui", "request", "persistence", "runtime", "cleanup"],
-  "execution_evidence": {"status": "N/A", "reason": "Gateway authorization is server/store-only; empty /v1/models proves no model execution"},
-  "fields": [{"field_id": "inference-key.name", "component": "Text", "required": true, "default": "", "request": "name", "persistence": "name", "contract": "UI requires nonblank name; API preserves supplied name, defaults empty to default, and declares no length bound", "covered": ["empty", "whitespace", "named create"], "missing": ["non-ASCII and surrounding-whitespace preservation"]},
-    {"field_id": "api-keys.table-preferences", "component": "ResourceTable settings drawer and resize handles", "request": "N/A: browser-local table preferences", "persistence": "preferences keyed by tableId=api-keys", "covered": [], "missing": ["MISSING: drag width/minimum width, hide/show/reorder/reset columns and reload persistence", "MISSING: fixed name/action column restrictions and safe handling of unknown saved columns", "MISSING: api-keys and platform-tokens preferences remain isolated on the same page", "MISSING: concrete sortable columns name/last_used/created_at in both directions and tied-value ordering; existing full-list gap includes pagination and volumes"]}
+  "fixture": "Fresh SQLite/server/Chrome start with zero API key rows, inference_open_access false in the stored policy, and /v1 refusing a keyless request; an API-created guard key keeps one live credential while the target is revoked, so the target 401 cannot be confused with an empty store; revoking the guard leaves zero active keys, the same stored policy, and /v1 still 401",
+  "product_contracts": [
+    "ui/src/pages/APIKeysPage.tsx",
+    "ui/src/pages/apikeys/KeyScope.tsx",
+    "internal/server/api/deploy.go",
+    "internal/server/api/dto/deploy.go",
+    "internal/server/proxy/proxy.go",
+    "internal/server/proxy/open_access.go",
+    "internal/server/store/auth.go",
+    "internal/server/store/security_policy.go"
+  ],
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "runtime",
+    "cleanup"
+  ],
+  "execution_evidence": {
+    "status": "N/A",
+    "reason": "Gateway authorization is server/store-only; empty /v1/models proves no model execution"
+  },
+  "fields": [
+    {
+      "field_id": "inference-key.name",
+      "component": "Text",
+      "required": true,
+      "default": "",
+      "request": "name",
+      "persistence": "name",
+      "contract": "UI requires nonblank name; API preserves supplied name, defaults empty to default, and declares no length bound",
+      "covered": [
+        "empty",
+        "whitespace",
+        "named create"
+      ],
+      "missing": [
+        "non-ASCII and surrounding-whitespace preservation"
+      ]
+    },
+    {
+      "field_id": "inference-key.scope",
+      "component": "Radio group with conditional deployment picker",
+      "default": "all model services (all_deployments=true, deployment_ids=[])",
+      "request": "all_deployments, deployment_ids",
+      "persistence": "all_deployments, deployments",
+      "contract": "Two scope radios are visible; all model services is checked by default and no deployment combobox is shown in that state. The unchanged default scope is submitted with the name and independently read from the created key.",
+      "covered": [
+        "two radios and default all selection",
+        "no deployment picker in the default all state",
+        "POST all_deployments=true and deployment_ids=[]",
+        "independent GET all_deployments=true and deployments=[]"
+      ],
+      "missing": [
+        "switch to selected model services and choose deployments",
+        "selected-scope request and persistence",
+        "scope-specific runtime authorization boundaries",
+        "scope keyboard, async picker and validation boundaries"
+      ]
+    },
+    {
+      "field_id": "api-keys.table-preferences",
+      "component": "ResourceTable settings drawer and resize handles",
+      "request": "N/A: browser-local table preferences",
+      "persistence": "preferences keyed by tableId=api-keys",
+      "covered": [],
+      "missing": [
+        "MISSING: drag width/minimum width, hide/show/reorder/reset columns and reload persistence",
+        "MISSING: fixed name/action column restrictions and safe handling of unknown saved columns",
+        "MISSING: api-keys and platform-tokens preferences remain isolated on the same page",
+        "MISSING: concrete sortable columns name/last_used/created_at in both directions and tied-value ordering; existing full-list gap includes pagination and volumes"
+      ]
+    }
   ],
   "crud": {
-    "create": "UI Enter POST; exact name and 201 once-only key; field rejection and Esc do not mutate",
-    "read": "Reload and independent exact GET metadata, no full key, successful gateway call persists last_used",
-    "update": {"status": "N/A", "reason": "Inference key API/UI expose create/list/delete only; no expiry or scope control"},
+    "create": "UI Enter POST with exact name and default all scope; 201 once-only key; field rejection and Esc do not mutate",
+    "read": "Reload and independent exact GET metadata including default all scope, no full key; successful gateway call persists last_used",
+    "update": {
+      "status": "N/A",
+      "reason": "Inference key API/UI expose create/list/revoke only; scope is selected at creation, with no edit operation or expiry control"
+    },
     "delete": "UI named-impact confirmation, cancel retains runtime access, delete returns 200 and invalidates key while guard remains usable"
   },
   "checklist_items": {
-    "1.1": "The create dialog shows one field and none is hidden. Name is a required textbox, its value is empty, it has no unit and no control range. Reading the field sends no key write. The submit sends POST /api/v1/apikeys with only name. The 201 response carries that name. After reload the row shows the name and the prefix. The independent GET item keeps name, prefix and created_at",
-    "covered_in_this_scenario": ["1.3", "1.7", "7.3", "21.1", "21.5"],
+    "1.1": "The create dialog shows name and scope with no hidden form item. Name is a required textbox, empty by default, with no unit or control range. Scope has two radios with all model services checked; no deployment combobox is present in the default state. Reading the form sends no key write. POST /api/v1/apikeys sends name, all_deployments=true and deployment_ids=[]. The 201 response carries the name. After reload the row shows name and prefix; the independent GET keeps name, prefix, created_at, all_deployments=true and deployments=[]. Choosing a deployment subset is not exercised here.",
+    "covered_in_this_scenario": [
+      "1.3",
+      "1.7",
+      "7.3",
+      "21.1",
+      "21.5"
+    ],
     "partial": {
       "7.4": "Valid/wrong-secret/revoked runtime paths; broader identities missing",
-      "7.6": "GET/DOM and artifacts checked; not all response/log/export surfaces",
-      "12.7": "Target name/impact, cancel and deletion; key resource has no management reference preview",
+      "12.7": "The confirmation carries the name and the consequence and both are asserted: the current product locale's revoke.confirm string with {{name}} replaced must be visible inside the viewport. With open access off, it explains that revoking the last active token leaves /v1 refusing every request until another token is created, unless an administrator explicitly turns on keyless access in Settings > Security. Cancelling it is required to send no mutation and to leave the token still authenticating /v1/models. What keeps this binding below the strongest form is a contract difference rather than an absent assertion: this resource is revoked, not deleted. DELETE /api/v1/apikeys/{prefix} answers {'status': 'revoked'} and the row stays listed carrying revoked_at, which the product's own test pins down as TestAPIKeyRevokeKeepsTheKeyListed (internal/server/api/apikey_validation_test.go:85), including a second revoke answering 200 with revoked_at unmoved at :121-125 - a delete is not idempotent that way. The case asserts the same shape from the outside: the active set is filtered by revoked_at, the revoked token appears in revoked rather than active, and it stops authenticating. So the name/impact and the failed-path halves of a delete confirmation have no object here: there is no destructive removal of the record, no in-use reference that could block a revoke, and therefore no half-applied-change half to prove. Recorded as the resource's own contract rather than as untested ground.",
       "22.6": "Input keyboard focus border from shared theme; not all styles"
     },
     "1.10": "covered: A real 502 keeps the create dialog and the name, shows the server reason, stores no key, and the retry 201 is the only stored key",
@@ -42,10 +117,24 @@
     "12.4": "covered: Cancel, Escape, close and mask each return focus to the card Create inference token button and send no key mutation",
     "12.5": "N/A: the create dialog has no nested child layer; the one-time secret dialog opens only after create closes",
     "12.6": "covered: While the create POST is held the footer Create shows the loading state and a second click sends no further create request; the 502 keeps the name and shows the failure reason; the later 201 matches the reloaded row and the independent key list",
-    "12.8": "N/A: inference key create and delete have no delete preview, revision or compare-and-swap"
+    "12.8": "N/A: inference key create and delete have no delete preview, revision or compare-and-swap",
+    "1.15": "covered: Tab from the field stays inside the dialog across eight presses, Shift+Tab returns to the field, and the focus ring inherits theme.primary. At the recorded 1440x900 viewport the dialog and its submit button are each measured in a single frame after the open animation settles and must both sit inside the viewport with the button's rectangle wholly inside the dialog's, so neither the field nor the footer action can be clipped or overlapped.",
+    "7.1": "The create dialog has a name textbox and a scope radio group; neither is an entered credential, so masked/reveal controls have nothing to act on here - the key is generated by the server and shown once after creation, which is 7.3. The fields are inventoried before typing: one textbox with the name label, empty value, declared placeholder, aria-required, no maxlength, no unit or number input; two scope radios with all checked, no combobox or switch in the default state; exactly two form items and none hidden. Reading it is asserted to send no key write. Then the empty string and a whitespace-only value are each submitted and required to show the product's nameRequired message on the dialog, to mark the field aria-invalid, and to leave the mutation record empty. Proven by mutation: dropping whitespace:true from the name rule in APIKeysPage makes the case fail on the aria-invalid attribute for the whitespace value.",
+    "7.2": "N/A: this component has no edit operation. The management API exposes only GET, POST and DELETE for these credentials, and the card offers create and revoke only, so there is no edit form whose blank field could mean either keep or clear. Replacing a credential means creating a new one and revoking the old, which is what the case already does.",
+    "7.5": "The three credential planes are kept apart by shape and by what each one authorises, and both halves are asserted. The inference key is required to be a 51-character value starting with gw-, so it cannot be mistaken for a platform token, and the platform token is separately required to start with gwp_. The behaviour split is asserted with real requests rather than by reading a field: the inference key is accepted as a Bearer credential on /v1/models and refused with 401 once a character is appended, while the same key against the management route /api/v1/nodes is refused with 401 and AUTHENTICATION_REQUIRED - so an inference key never stands in for a management session. The expiry side is not invented: inference keys expose no expiry control at all, which the field inventory asserts, and the platform token's own lifetime is asserted by its own case, so no expiry widget is claimed where the product has none.",
+    "7.6": "No credential value the component holds is exposed by a read, an error or an artifact. The independent GET is required to return an exact field set - name, prefix, created_at, all_deployments and deployments - with the prefix being the first twelve characters, so the stored form is a hash and a prefix and the full secret is never recoverable from it. The DOM is asserted to contain no occurrence of the secret and so is the whole persisted collection, and the row is required to show only the prefix. The error plane is asserted too: a tampered secret sharing a valid prefix is refused with 401 and the product's fixed invalid-key body, which is a constant message rather than an echo of anything sent. The server log is written out through the artifact redactor and the artifacts are scanned, with a scan failure failing the run, so a secret reaching a log or a download rejects the artifacts rather than shipping them. Proven by mutation: storing the full token as the prefix in CreatePlatformToken makes the case fail on the token prefix."
   },
-  "missing": ["real deployed model generation/streaming", "full list matrix and 10/30/100 records", "non-admin permissions", "browser server-failure recovery", "last-key deletion through UI (zero-key mode is checked after fixture cleanup only)", "all name and keyboard/style boundaries"],
+  "missing": [
+    "real deployed model generation/streaming",
+    "full list matrix and 10/30/100 records",
+    "non-admin permissions",
+    "browser server-failure recovery",
+    "last-key deletion through UI (zero active keys with open access off leave /v1 refusing everyone; that is checked after fixture cleanup only)",
+    "turning inference_open_access on through the settings UI and observing keyless /v1 then succeed, and turning it back off",
+    "selected-deployment scope controls, request/persistence and runtime authorization boundaries; only the default all scope is checked",
+    "all name and keyboard/style boundaries"
+  ],
   "result": "NOT_RUN until a matching real report.json records PASS and all evidence",
   "artifact": "secrets/e2e/<runId>/report.json; source/test/helper/fixture/manifest/binary SHA, evidence, redacted trace/screenshots",
-  "cleanup": "Target UI deletion asserted in body; owned guard API deletion and empty GET asserted; stop owned process; private diagnostic state retained at most 7 days"
+  "cleanup": "Target UI deletion asserted in body; owned guard API deletion asserted, the empty active set read back, the unchanged closed open-access policy re-read, and the resulting keyless /v1/models 401 asserted; stop owned process; private diagnostic state retained at most 7 days"
 }

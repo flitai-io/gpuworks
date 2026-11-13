@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -98,8 +97,25 @@ func queryLogged(ctx context.Context, vendor, name string, args ...string) (stri
 	return out, err
 }
 
+// QueryVendorCLIStdout keeps stderr diagnostics out of structured stdout.
+// It shares the per-binary process slot, but never a combined-output cache entry.
+func QueryVendorCLIStdout(ctx context.Context, name string, args ...string) (string, error) {
+	out, at, err := queryVendorCLIOutput(ctx, true, name, args...)
+	if err == nil {
+		RecordResultTime(ctx, at)
+	}
+	return out, err
+}
+
 func queryVendorCLI(ctx context.Context, name string, args ...string) (string, time.Time, error) {
+	return queryVendorCLIOutput(ctx, false, name, args...)
+}
+
+func queryVendorCLIOutput(ctx context.Context, stdoutOnly bool, name string, args ...string) (string, time.Time, error) {
 	key := name + "\x00" + strings.Join(args, "\x00")
+	if stdoutOnly {
+		key = "stdout\x00" + key
+	}
 	vendorQueries.Lock()
 	q := vendorQueries.byKey[key]
 	if q == nil {
@@ -113,7 +129,7 @@ func queryVendorCLI(ctx context.Context, name string, args ...string) (string, t
 	}
 	if q.running == nil {
 		q.running = make(chan struct{})
-		go runVendorQuery(q, b, q.running, name, args)
+		go runVendorQuery(q, b, q.running, name, args, stdoutOnly)
 	}
 	running := q.running
 	// A slow CLI's earlier answer is served at once: waiting would only
@@ -147,7 +163,7 @@ func queryVendorCLI(ctx context.Context, name string, args ...string) (string, t
 
 func fresh(at time.Time) bool { return !at.IsZero() && time.Since(at) <= vendorQueryMaxAge }
 
-func runVendorQuery(q *vendorQuery, b *vendorBinary, done chan struct{}, name string, args []string) {
+func runVendorQuery(q *vendorQuery, b *vendorBinary, done chan struct{}, name string, args []string, stdoutOnly bool) {
 	b.slot <- struct{}{}
 	defer func() { <-b.slot }()
 
@@ -158,15 +174,22 @@ func runVendorQuery(q *vendorQuery, b *vendorBinary, done chan struct{}, name st
 	ctx, cancel := context.WithTimeout(context.Background(), vendorQueryLimit)
 	defer cancel()
 	var buf bytes.Buffer
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := cliCommand(ctx, name, args...)
 	killGroupOnCancel(cmd)
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
+	var stderr limitedDiagnostic
+	if stdoutOnly {
+		cmd.Stderr = &stderr
+	}
 	cmd.WaitDelay = time.Second
 	// A process stuck in the driver past the kill keeps the slot until it
 	// exits, so no second one joins it; callers are served the last answer
 	// meanwhile.
 	err := cmd.Run()
+	if stdoutOnly && err != nil {
+		slog.Warn("structured gpu query failed", "command", name, "stderr_tail", stderr.String())
+	}
 	took := time.Since(start)
 	if ctx.Err() != nil {
 		err = fmt.Errorf("%s: no answer within %s: %w", name, vendorQueryLimit, ErrCLIUnresponsive)

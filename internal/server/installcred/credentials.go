@@ -124,3 +124,25 @@ func ProtectInitialCredentials(dataDir string, policies ...securefile.Policy) er
 	}
 	return err
 }
+
+// ForgetInitialCredentials deletes the record once the password it holds for
+// user has been replaced; it is read only when the admin account is first
+// created. A record for another account, a damaged record and a missing file
+// are left as they are. policies are the ones the record was written with.
+func ForgetInitialCredentials(dataDir, user string, policies ...securefile.Policy) error {
+	creds, err := ReadInitialCredentials(dataDir, policies...)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if creds.User != user {
+		return nil
+	}
+	err = os.Remove(CredentialsPath(dataDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}

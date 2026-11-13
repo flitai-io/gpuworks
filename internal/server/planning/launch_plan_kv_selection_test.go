@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/store"

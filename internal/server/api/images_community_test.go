@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -143,5 +145,28 @@ func TestCommunityBrowseRejectsMalformedRepositoryBeforeRegistryLookup(t *testin
 				t.Fatalf("error envelope=%v", body)
 			}
 		})
+	}
+}
+
+func TestCommunityBrowseReturnsPerTagMetadata(t *testing.T) {
+	run := newImageManifestRun(t)
+	run.deps.Outside.Community = community.NewBrowser(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"results":[{"name":"cann9.0-sglang0.5.15.post1-arm64-diffusion-slot16"},{"name":"latest"}],"next":null}`)), Request: r}, nil
+	})})
+	run.router = Router(run.deps)
+	// Even a default CUDA/vLLM card can carry a tag naming another stack.
+	rec := run.do(http.MethodGet, "/api/v1/images/community/browse?repo=vllm/vllm-openai", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Tags []map[string]any `json:"tags"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"tag": "cann9.0-sglang0.5.15.post1-arm64-diffusion-slot16", "engine": "sglang", "engine_version": "0.5.15.post1", "framework": "cann", "framework_version": "9.0", "arch": "arm64"}
+	if len(body.Tags) != 2 || !reflect.DeepEqual(body.Tags[0], want) || !reflect.DeepEqual(body.Tags[1], map[string]any{"tag": "latest", "rolling_tag": true}) {
+		t.Fatalf("tag contract=%v", body.Tags)
 	}
 }

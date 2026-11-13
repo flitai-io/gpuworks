@@ -55,7 +55,10 @@ func TestPlatformCordonReason(t *testing.T) {
 		// A card lent to a virtual machine is not this node's to judge.
 		{"", []proto.GPUInfo{lent}, ""},
 	} {
-		if got := PlatformCordonReason(tc.blocked, tc.cards); got != tc.want {
+		if got := PlatformCordonReason(tc.blocked, true, tc.cards); got != CordonKubeUnschedulable {
+			t.Errorf("PlatformCordonReason(%q, kube cordon, %+v) = %q, want %q", tc.blocked, tc.cards, got, CordonKubeUnschedulable)
+		}
+		if got := PlatformCordonReason(tc.blocked, false, tc.cards); got != tc.want {
 			t.Errorf("PlatformCordonReason(%q, %+v) = %q, want %q", tc.blocked, tc.cards, got, tc.want)
 		}
 	}

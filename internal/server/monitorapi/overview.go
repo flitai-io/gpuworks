@@ -3,9 +3,10 @@ package monitorapi
 import (
 	"context"
 	"encoding/json"
-	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 	"sort"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"

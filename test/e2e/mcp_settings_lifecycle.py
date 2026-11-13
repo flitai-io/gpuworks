@@ -133,6 +133,64 @@ def test_mcp_toggle_runtime(page, context, server, artifacts, report, locale):
     expect(access).to_have_attribute("aria-selected", "true")
     expect(page).to_have_url(re.compile(r"/settings#access$"))
     report["evidence"].append({"layer": "ui", "tab": "access", "selected": True, "url": page.url})
+    # 22.2: the tab is a URL fragment and the page replaces history rather than pushing it, so the
+    # invariant this can assert is that the URL and the selected tab never disagree - including when a
+    # fragment arrives from outside the tab strip. A deep link to #access is followed by checking that
+    # the tab it names is the one selected and that no other tab claims to be, which is exactly the
+    # mismatch the item describes; a back/forward expectation would be asserting a history behaviour
+    # this page deliberately does not have.
+    page.goto(server.base + "/settings#access")
+    expect(page.get_by_role("tab", selected=True)).to_have_count(1, timeout=10000)
+    check(page.get_by_role("tab", selected=True).inner_text() == settings["page"]["tabs"]["access"],
+          "a deep link to #access did not select the access tab")
+    expect(access).to_have_attribute("aria-selected", "true")
+    for other in page.get_by_role("tab").all():
+        if other.inner_text() != settings["page"]["tabs"]["access"]:
+            check(other.get_attribute("aria-selected") != "true",
+                  f"a second tab claimed selection next to #access: {other.inner_text()}")
+    report["evidence"].append({"layer": "ui", "deep_link": "#access",
+                               "url": page.url, "selected_tabs": 1})
+    # The other tabs are walked too: each is required to select itself, to put its own key in the
+    # fragment, and to keep exactly one tab selected, so a tab that rendered without claiming the URL
+    # - or a URL that moved without the selection following - is caught rather than only the one tab
+    # this case is about.
+    visited = []
+    for other in page.get_by_role("tab").all():
+        name = other.inner_text()
+        if name == settings["page"]["tabs"]["access"]:
+            continue
+        # The strip re-renders as each tab becomes active, so the click is made against a freshly
+        # located control and the loop waits for that specific tab to report itself selected before
+        # reading anything. Without that, the reading can land on the transition and attribute the
+        # previous tab's selection to this one.
+        target = page.locator(".settings-tabs > .ant-tabs-nav").get_by_role("tab", name=name, exact=True)
+        expect(target).to_have_count(1, timeout=10000)
+        target.click()
+        for _ in range(100):
+            if target.get_attribute("aria-selected") == "true":
+                break
+            page.wait_for_timeout(100)
+        page.wait_for_timeout(200)
+        # The page's own tab strip is .settings-tabs; several cards render their own nested Tabs, so
+        # the selection has to be read from the top-level strip or a card's inner tab would be
+        # counted as a second selected page tab.
+        selected_names = [node.inner_text() for node in
+                          page.locator(".settings-tabs > .ant-tabs-nav").get_by_role("tab", selected=True).all()]
+        check(len(selected_names) == 1,
+              f"after clicking {name!r} more than one tab claimed selection: {selected_names}")
+        selected_name = selected_names[0]
+        check(selected_name == name,
+              f"clicking {name!r} selected {selected_name!r} instead")
+        check(re.search(r"/settings#[^/]+$", page.url) is not None,
+              f"clicking {name!r} did not address the tab in the fragment: {page.url}")
+        second = [t for t in page.locator(".settings-tabs > .ant-tabs-nav").get_by_role("tab").all()
+                  if t.get_attribute("aria-selected") == "true"]
+        check(len(second) == 1, f"{name!r} left {len(second)} top-level tabs selected")
+        visited.append(name)
+    check(len(visited) >= 2, f"the settings page exposed too few tabs to walk: {visited}")
+    report["evidence"].append({"layer": "ui", "tabs_walked": len(visited)})
+    page.get_by_role("tab", name=settings["page"]["tabs"]["access"], exact=True).click()
+    expect(access).to_have_attribute("aria-selected", "true")
     report["last_step"] = "access-tab-selected"
     report["preflight"] = "PASS"
     page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
@@ -157,6 +215,29 @@ def test_mcp_toggle_runtime(page, context, server, artifacts, report, locale):
     report["fixture_token_id"] = token_id
     artifacts.start_trace(context)
     switch = page.get_by_role("switch", name=settings["mcp"]["switch"], exact=True)
+    # 6.1: the control is disabled until the service reports its state, so the operator cannot toggle
+    # a service whose current state is not yet known. The status request is held and the switch is
+    # required to be disabled while it is pending, then required to become usable once the answer
+    # arrives - a control that started enabled would let a click race the state it is meant to flip.
+    held = []
+    page.route("**/api/v1/mcp/status", lambda route: held.append(route))
+    page.reload()
+    for _ in range(120):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    check(len(held) >= 1, "the MCP status was not requested when the card opened")
+    loading_switch = page.get_by_role("switch", name=settings["mcp"]["switch"], exact=True)
+    expect(loading_switch).to_be_visible(timeout=12000)
+    check(loading_switch.is_disabled(),
+          "the MCP switch was operable before the service reported its state")
+    for route in held:
+        route.continue_()
+    held.clear()
+    page.unroute("**/api/v1/mcp/status")
+    expect(switch).to_be_enabled(timeout=15000)
+    report["evidence"].append({"layer": "ui", "disabled_while_status_pending": True,
+                               "control": settings["mcp"]["switch"]})
     expect(switch).to_be_enabled()
     expect(switch).not_to_be_checked()
     # This card is below the fold; explicit user scrolling is appropriate for the entry control.

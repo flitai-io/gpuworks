@@ -143,7 +143,8 @@ func TestCachedNVIDIADeviceNodeMapKeepsAnEmptyAnswer(t *testing.T) {
 		calls++
 		return []byte("<nvidia_smi_log></nvidia_smi_log>"), nil
 	})
-	if cachedNVIDIADeviceNodeMap() != nil || cachedNVIDIADeviceNodeMap() != nil || calls != 1 {
+	first, second := cachedNVIDIADeviceNodeMap(), cachedNVIDIADeviceNodeMap()
+	if first != nil || second != nil || calls != 1 {
 		t.Fatalf("empty report queried %d times, want 1 and a nil map", calls)
 	}
 }

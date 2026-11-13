@@ -9,27 +9,30 @@ const META: Record<Vendor, { label?: string; labelKey?: string; color: string; m
   ascend: { labelKey: "vendor.ascend", color: "#c8102e", mark: "A" },
   ppu: { labelKey: "vendor.ppu", color: "#1677ff", mark: "P" },
   hygon: { labelKey: "vendor.hygon", color: "#6b4fbb", mark: "H" },
+  kunlunxin: { labelKey: "vendor.kunlunxin", color: "var(--brand)", mark: "K" },
   apple: { labelKey: "vendor.apple", color: "#555555", mark: "M" },
   unknown: { labelKey: "vendor.unknown", color: "#8c8c8c", mark: "?" },
 };
 export { vendorForFramework };
 export default function VendorLogo({
+  vendor: vendorName,
   framework,
   size = 22,
   style,
 }: {
+  vendor?: string;
   framework?: string;
   size?: number;
   style?: CSSProperties;
 }) {
   const { t } = useTranslation("common");
-  const meta = META[vendorForFramework(framework)];
+  const vendor = vendorForFramework(vendorName ?? framework);
+  const meta = META[vendor];
   const label = meta.label || t(meta.labelKey!);
-  const vendor = vendorForFramework(framework);
   const asset = VENDOR_ASSETS[vendor === "ppu" ? "thead" : vendor];
   return (
     <span
-      title={`${label} · ${(framework || t("vendor.unknownFramework")).toUpperCase()}`}
+      title={`${label} · ${(vendorName || framework || t("vendor.unknownFramework")).toUpperCase()}`}
       style={{ display: "inline-flex", alignItems: "center", gap: 6, ...style }}
     >
       {asset ? (

@@ -146,6 +146,10 @@ type pdHarness struct {
 	decode   *fakeDecode
 	prefills []*fakePrefill
 	hub      *portHub
+	// key authenticates the harness's /v1 requests: the gateway requires one
+	// unless an administrator opens it, and a test about routing should not
+	// also be a test of the auth switch.
+	key string
 }
 
 func newPDHarness(t testing.TB, prefills int, fallback string) *pdHarness {
@@ -197,6 +201,11 @@ func newPDHarnessMode(t testing.TB, mode string, prefills int, fallback string) 
 		h.prefills = append(h.prefills, f)
 		serve(f, 32000+i, "prefill", fmt.Sprintf("prefill-%d", i))
 	}
+	key, err := st.CreateAPIKey("pd-harness", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.key = key
 	h.proxy = New(st, storeNetworks(st), h.hub, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
 	t.Cleanup(h.proxy.Close)
 	h.acct = NewAccountant(func([]tsdb.Sample) {}, nil)
@@ -209,6 +218,7 @@ func (h *pdHarness) do(t testing.TB, path, body string) *httptest.ResponseRecord
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+h.key)
 	h.proxy.Handler()(rec, req)
 	return rec
 }
@@ -434,6 +444,7 @@ func TestPlaygroundPinsOneInstanceAndV1DoesNot(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(pdChat))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set(instanceHeader, instance)
+		req.Header.Set("Authorization", "Bearer "+h.key)
 		handler(rec, req)
 		return rec
 	}

@@ -136,15 +136,15 @@ func (s *Service) modelStopped(model string) bool {
 		return false
 	}
 	now := s.cfg.Clock.Now()
+	// Hold the lock across the read. Releasing it first lets every concurrent
+	// refusal miss an empty cache and pay for its own lookup.
 	s.stoppedMu.Lock()
+	defer s.stoppedMu.Unlock()
 	if l, ok := s.stopped[model]; ok && now.Sub(l.at) < stoppedModelTTL {
-		s.stoppedMu.Unlock()
 		return l.stopped
 	}
-	s.stoppedMu.Unlock()
 	entry, err := s.cfg.Models.Lookup(model)
 	stopped := err == nil && entry.State == ModelStopped
-	s.stoppedMu.Lock()
 	if s.stopped == nil {
 		s.stopped = map[string]stoppedLookup{}
 	}
@@ -154,7 +154,6 @@ func (s *Service) modelStopped(model string) bool {
 		}
 	}
 	s.stopped[model] = stoppedLookup{stopped: stopped, at: now}
-	s.stoppedMu.Unlock()
 	return stopped
 }
 

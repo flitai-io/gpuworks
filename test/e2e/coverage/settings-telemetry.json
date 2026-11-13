@@ -3,12 +3,18 @@
   "name": "设置 / 请求 Trace 导出 / OTLP 测试 span、加密请求头、采样比例、保存与关闭",
   "test_file": "test/e2e/settings_telemetry.py",
   "test_function": "test_telemetry_export",
-  "command": "make test-e2e-settings-telemetry",
+  "command": "python3 -B test/e2e/settings_telemetry.py --locale en",
   "priority": "P1",
   "page_id": "settings",
   "lane": "local-real-server-sqlite-otlp-fixture",
   "identity": "admin",
-  "required_evidence": ["ui", "request", "persistence", "execution", "cleanup"],
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "execution",
+    "cleanup"
+  ],
   "runtime_evidence": {
     "status": "N/A",
     "reason": "The OpenTelemetry collector is an audited local OTLP/HTTP fixture. The server, encrypted header storage, browser and SQLite are real; no agent, GPU, container or engine is claimed."
@@ -25,56 +31,108 @@
       "component": "Switch",
       "request": "enabled",
       "persisted": "enabled",
-      "covered": ["off initially", "off→on and on→off through the real switch", "exact boolean in PUT", "refresh readback", "status active/off"],
-      "missing": ["save failure restoring the switch"]
+      "covered": [
+        "off initially",
+        "off→on and on→off through the real switch",
+        "exact boolean in PUT",
+        "refresh readback",
+        "status active/off"
+      ],
+      "missing": [
+        "save failure restoring the switch"
+      ]
     },
     {
       "id": "telemetry.endpoint",
       "component": "Text input",
       "request": "endpoint",
       "persisted": "endpoint",
-      "covered": ["base collector URL", "traces URL adds /v1/traces", "a failing collector endpoint returns a visible test error"],
-      "missing": ["invalid URL and unreachable endpoint validation", "pasted /v1/traces normalization"]
+      "covered": [
+        "base collector URL",
+        "traces URL adds /v1/traces",
+        "a failing collector endpoint returns a visible test error"
+      ],
+      "missing": [
+        "invalid URL and unreachable endpoint validation",
+        "pasted /v1/traces normalization"
+      ]
     },
     {
       "id": "telemetry.headers",
       "component": "Header name + password value rows",
       "request": "headers[{name,value}]",
       "persisted": "header name; value encrypted",
-      "covered": ["new header sent to the collector", "GET returns only the name", "blank stored value is sent as null and keeps the stored secret", "the test span reuses the stored secret"],
-      "missing": ["duplicate names", "remove/re-add", "header value encryption across a server restart"]
+      "covered": [
+        "new header sent to the collector",
+        "GET returns only the name",
+        "blank stored value is sent as null and keeps the stored secret",
+        "the test span reuses the stored secret"
+      ],
+      "missing": [
+        "duplicate names",
+        "remove/re-add",
+        "header value encryption across a server restart"
+      ]
     },
     {
       "id": "telemetry.sample-ratio",
       "component": "InputNumber with percent suffix",
       "request": "sample_ratio",
       "persisted": "sample_ratio",
-      "covered": ["default 100%", "50% is sent as 0.5 and read back as 50"],
-      "missing": ["0% and 100% boundaries", "invalid ratios"]
+      "covered": [
+        "default 100%",
+        "50% is sent as 0.5 and read back as 50"
+      ],
+      "missing": [
+        "0% and 100% boundaries",
+        "invalid ratios"
+      ]
     },
     {
       "id": "telemetry.trace-link",
       "component": "Text input",
       "request": "trace_link",
       "persisted": "trace_link",
-      "covered": ["a URL with {trace_id} is saved and reloaded"],
-      "missing": ["missing placeholder rejection", "non-URL values"]
+      "covered": [
+        "a URL with {trace_id} is saved and reloaded"
+      ],
+      "missing": [
+        "missing placeholder rejection",
+        "non-URL values"
+      ]
     },
     {
       "id": "telemetry.test-span",
       "component": "Send test span button and result alert",
       "request": "POST /api/v1/telemetry/export/test",
       "persisted": "N/A: draft only",
-      "covered": ["successful test span", "collector receives header and gzip", "span name/trace id/attribute", "failing collector shows the error", "test does not persist the draft"],
-      "missing": ["collector timeout", "partial success rejection"]
+      "covered": [
+        "successful test span",
+        "collector receives header and gzip",
+        "span name/trace id/attribute",
+        "failing collector shows the error",
+        "test does not persist the draft"
+      ],
+      "missing": [
+        "collector timeout",
+        "partial success rejection"
+      ]
     },
     {
       "id": "telemetry.cleanup",
       "component": "N/A: settings restore",
       "request": "PUT /api/v1/telemetry/export",
       "persisted": "restored defaults",
-      "covered": ["disabled", "empty endpoint", "empty headers", "empty trace link", "sample ratio 1"],
-      "missing": ["server restart with a stored header"]
+      "covered": [
+        "disabled",
+        "empty endpoint",
+        "empty headers",
+        "empty trace link",
+        "sample ratio 1"
+      ],
+      "missing": [
+        "server restart with a stored header"
+      ]
     }
   ],
   "checklist_items": {
@@ -94,7 +152,19 @@
     "6.2": "The Export switch is changed off→on→off with exact boolean requests and refresh readback",
     "7.2": "A stored header left blank is sent as null, keeps the encrypted value, and the test span reuses it",
     "7.6": "The independent GET and artifacts do not expose the header value",
-    "22.2": "The Settings Integrations tab is selected through the real Tabs control"
+    "22.2": "The Settings Integrations tab is selected through the real Tabs control",
+    "1.3": "covered: no telemetry field is required - every control is asserted to lack aria-required=true, so the empty and whitespace-only cases in this checklist do not apply to a card that accepts an empty endpoint, an empty header list and empty trace link, and those empty values are then saved and read back as the backend defaults.",
+    "1.4": "covered: each field's own boundary is exercised where the product has one, and none is invented. The percent control is clamped at 0 and 100 by typing 0, -1, 100, 101, 50.4, empty and abc and asserting the shown value each time; the server independently rejects 1.5 with TELEMETRY_SAMPLE_RATIO_INVALID and the stored value stays 1. The address field has no product maximum and is not given one.",
+    "1.5": "covered: the only enumerated controls are the export switch (off->on->off with exact boolean bodies and readback) and the header rows, and each option is saved and read back rather than only selected.",
+    "1.6": "covered: the trace link is filled and cleared while the switch is off and the endpoint holds ADDRESS_B, and the collector address is changed A->B with the switch off; after each transition the exact PUT body and an independent GET are compared, so hidden or stale values cannot be submitted unnoticed.",
+    "1.11": "covered: the collector address and percent are edited without saving, then reloaded, and the card returns to the stored values with no PUT sent; the test-span failure path likewise keeps the draft in place instead of silently discarding it.",
+    "3.4": "covered: sample_ratio is sent as the JSON number 0.5 for 50% and 1 for 100%, a decimal 50.4 is kept as 50.4, an empty field is stored as 1 rather than null or the string '', and a body that omits the field entirely reads back as 1 - so omitted, null, empty and 0 are distinguished.",
+    "3.5": "covered: after saving 50% the percent input reads '50', an independent GET reads 0.5, and after a reload the input still reads '50' from the persisted value rather than from the draft. The test span actually sent to the collector carries the saved header and gzip body, so the stored value is what executes.",
+    "3.6": "covered: the input advertises aria-valuemin 0, aria-valuemax 100 and step 1 and clamps to those bounds; the server rejects 1.5 with TELEMETRY_SAMPLE_RATIO_INVALID and the stored setting is unchanged after the rejection.",
+    "6.1": "covered: the export switch is asserted to be exactly one switch with the export accessible name, starting unchecked, and it is never disabled on this page.",
+    "6.5": "covered: the test span against a failing collector shows the error alert while the card stays open, keeps every drafted value, and sends no PUT - and the independent GET confirms nothing was stored - so success is never displayed for a change the backend did not make.",
+    "6.6": "covered: the switch is verified through real execution, not through its own state - the saved export is sent to a real collector fixture that receives exactly one gzip request carrying the configured header and the expected span, and no request is received while the switch is off.",
+    "22.5": "covered: the case runs in both en and zh against the same product, reading every label, save and test control, notice, empty default and error string from the active locale bundle, and the collector span names and attributes are compared against fixed product values rather than translated text."
   },
   "missing": [
     "MISSING: real gateway request spans (only the test span is exported)",
@@ -103,7 +173,6 @@
     "MISSING: encryption persistence across a server restart",
     "MISSING: non-admin authorization",
     "N/A: checklist 5.3 (selector search) — the settings card has no selector",
-    "MISSING: checklist 22.5 (zh/en navigation, first screen, error and empty text)",
     "MISSING: the default refusal of a private or loopback source URL (outbound URL is not permitted); the isolated server allows only 127.0.0.1, where this case's fixture listens"
   ],
   "artifact": "secrets/e2e/<runId>/report.json with source/binary/test/fixture digests, locale, PUT bodies without header values, independent GET documents, OTLP request summaries (header names only) and redacted server log",

@@ -1,0 +1,32 @@
+[
+  {
+    "fixture": "kunlun-p800-running-process.xml",
+    "raw_sha256": "7b839d911fac7d3f648d5bf09006256d11fae773676933a3980af091f617cb5d",
+    "fixture_sha256": "4d8da8de61392e962584bb41a8c1355e61779f5d3938219c976cd53e672af533",
+    "redacted_fields": {
+      "uuid": 8,
+      "serial": 8,
+      "pid": 8
+    },
+    "driver": "5.0.21.8",
+    "capture_date": "2026-10-19",
+    "original_path": "secrets/k26-glm53-fp8-kernels-20261019/node11-xpu-smi-original.xml",
+    "original_verified_sha256": "7b839d911fac7d3f648d5bf09006256d11fae773676933a3980af091f617cb5d",
+    "original_process_info_count": 15
+  },
+  {
+    "fixture": "kunlun-p800-idle-captured.xml",
+    "raw_sha256": "89a1afca5d2e8d57df79179e8ec1e10ae941b79069e6e45545171f14e2859c6f",
+    "fixture_sha256": "f4706772f7c91c946062fe60a54171b5de3a6585d274ea9d1e4684f5d80d966f",
+    "redacted_fields": {
+      "uuid": 8,
+      "serial": 8,
+      "pid": 0
+    },
+    "driver": "5.0.21.8",
+    "capture_date": "2026-10-19",
+    "original_path": "secrets/k26-glm53-fp8-kernels-20261019/node12-xpu-smi-original.xml",
+    "original_verified_sha256": "89a1afca5d2e8d57df79179e8ec1e10ae941b79069e6e45545171f14e2859c6f",
+    "original_process_info_count": 0
+  }
+]

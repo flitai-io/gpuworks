@@ -221,6 +221,16 @@ func (m *memRepo) ListBatchesPage(owner Owner, statuses []string, offset, limit 
 	return all, total, nil
 }
 
+func (m *memRepo) CountByStatus(owner Owner, statuses []string) (map[string]int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := map[string]int{}
+	for _, b := range m.sortedBatches(owner, statuses) {
+		out[b.Status]++
+	}
+	return out, nil
+}
+
 func (m *memRepo) Unfinished() ([]Batch, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

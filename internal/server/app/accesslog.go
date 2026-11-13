@@ -40,6 +40,7 @@ func accessLogHandlerFor(log *slog.Logger, dataDir string, next http.Handler) ht
 		started := time.Now()
 		requestID := "r" + strconv.FormatUint(middleware.NextRequestID(), 10)
 		r.Header.Set("X-Request-ID", requestID)
+		w.Header().Set("X-Request-ID", requestID)
 		params := accessLogParams(r)
 		stream := isStreamingRequest(r)
 		if stream {
@@ -57,6 +58,9 @@ func accessLogHandlerFor(log *slog.Logger, dataDir string, next http.Handler) ht
 				"status", rw.statusCode(), "bytes", rw.bytes, "duration_ms", time.Since(started).Seconds() * 1000}
 			if params != "" {
 				attrs = append(attrs, "params", params)
+			}
+			if rw.evaluationOK != nil {
+				attrs = append(attrs, "business_ok", *rw.evaluationOK, "evaluation_skipped", rw.evaluationSkipped)
 			}
 			if rw.errorCode != "" {
 				attrs = append(attrs, "code", rw.errorCode)
@@ -173,9 +177,15 @@ type accessResponseWriter struct {
 	written bool
 	// errorCode and errorParams are the product error the response carries
 	// (api.noteProductError).
-	errorCode   string
-	errorParams map[string]any
-	dataDir     string
+	errorCode         string
+	errorParams       map[string]any
+	dataDir           string
+	evaluationOK      *bool
+	evaluationSkipped bool
+}
+
+func (w *accessResponseWriter) NoteEvaluationOutcome(ok, skipped bool) {
+	w.evaluationOK, w.evaluationSkipped = &ok, skipped
 }
 
 // ServerDataDir is the data directory of the server answering.

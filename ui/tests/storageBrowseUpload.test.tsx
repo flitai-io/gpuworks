@@ -61,7 +61,7 @@ test("cancel aborts the request in flight and lets the same file go again", asyn
   await user.click(within(dialog).getByRole("button", { name: u.cancelUpload }));
   assert.ok(first.aborted);
   assert.ok(await within(dialog).findByText(u.cancelled));
-  assert.equal(within(dialog).queryByRole("progressbar"), null);
+  assert.ok(within(dialog).queryByRole("progressbar") === null, "Expected the element to be absent");
   await user.click(startButton(dialog));
   assert.ok(lastXHR() !== first, "a new request");
   await act(async () => lastXHR().respond(200, JSON.stringify({ path: "files/big.bin", bytes: 1000, files: 1 })));

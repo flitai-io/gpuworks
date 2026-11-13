@@ -147,7 +147,7 @@ func legacyTemplateNonChatOperations(db *gorm.DB, snapshot templateSnapshotAPI) 
 		Operations json.RawMessage `json:"operations"`
 	}
 	if json.Unmarshal([]byte(raw), &contract) != nil {
-		return "", false, nil
+		return "", false, nil //nolint:nilerr // Unreadable historical contracts are excluded from operation recovery.
 	}
 	operations := string(contract.Operations)
 	if !legacyOperationsPresent(operations) || legacyChatOnlyOperations(operations) {

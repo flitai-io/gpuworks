@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"gpuworks.ai/gpuworks/internal/server/auth"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,7 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/auth"
+
 	"github.com/go-chi/chi/v5"
+
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/modelmeta"

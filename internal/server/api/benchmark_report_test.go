@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"gpuworks.ai/gpuworks/internal/proto"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"

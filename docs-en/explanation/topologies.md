@@ -162,7 +162,7 @@ Key points:
   the node's source address (shown in logs and node details) and does not affect any address generation.
 - To expose only the inference API to the internet, bind `listen.gateway` to the external IP and keep console and node access on internal IPs. Requests for
   console paths at the external address return 404.
-- Public exposure exposes the entire server: the UI still requires login, and `/v1` still requires an API key. There is no path filtering, Cloudflare Access, or login rate limiting;
+- Public exposure exposes the entire server: the UI still requires login, and `/v1` still requires an API key by default (an administrator can explicitly open keyless access in the security settings). There is no path filtering, Cloudflare Access, or login rate limiting;
   configure these in Cloudflare or the reverse proxy if needed.
 - `cloudflare-named`, which provides a fixed domain, is not yet available to users. Use a reverse proxy or your own domain when you need a stable address.
 
@@ -280,7 +280,7 @@ flowchart LR
 ```
 
 **Use cases**: You have no GPU machines available or need compute capacity only temporarily. Configure provider credentials (RunPod, CompShare, AutoDL, Vast,
-or ZStack) on the Cloud Providers page. List instances and confirm the model, card count, region, and price, then create the instance, run SSH preflight checks, and install the agent.
+or ZStack) on the External Platforms page. List instances and confirm the model, card count, region, and price, then create the instance, run SSH preflight checks, and install the agent.
 
 **Ports and directions**:
 

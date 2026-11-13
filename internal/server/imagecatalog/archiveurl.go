@@ -2,6 +2,7 @@ package imagecatalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -97,6 +98,25 @@ func ArchiveURLHost(raw string) string {
 		return strings.TrimSpace(raw)
 	}
 	return u.Host
+}
+
+// ArchiveURLHostname is the allow-list name for an archive URL. It has no port.
+func ArchiveURLHostname(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+// UpstreamStatus reports the archive server's HTTP status when err is one.
+// Transport failures and URL rejections return ok false.
+func UpstreamStatus(err error) (int, bool) {
+	var status *imagearchive.UpstreamStatusError
+	if !errors.As(err, &status) || status == nil || status.Status == 0 {
+		return 0, false
+	}
+	return status.Status, true
 }
 
 // ArchiveHTTPClient is the client every request against an operator-supplied

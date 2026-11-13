@@ -30,13 +30,13 @@ const pendingGPU = {
 test("a healthy card shows only its level, with no details button", () => {
   wrap(<GPUHealthTag gpu={{ schedulable: true, health_status: "OK" }} />);
   assert.ok(screen.getByText("正常"));
-  assert.equal(screen.queryByRole("button", { name: "查看健康详情" }), null);
+  assert.equal(screen.queryByRole("button", { name: "查看健康详情" }) === null, true);
 });
 
 test("a card waiting for a reset shows the short label and explains it on demand", async () => {
   wrap(<GPUHealthTag gpu={pendingGPU} />);
   assert.ok(screen.getByText("待复位"));
-  assert.equal(screen.queryByText("remapped rows pending"), null, "the raw field never shows in the cell");
+  assert.equal(screen.queryByText("remapped rows pending") === null, true, "the raw field never shows in the cell");
   fireEvent.click(screen.getByRole("button", { name: "查看健康详情" }));
   await waitFor(() => assert.ok(screen.getByText(/该卡存在待替换的显存行或显存页/)));
   assert.ok(screen.getByText("可正常使用；调度时优先选择其他健康的加速卡。"));
@@ -60,7 +60,7 @@ test("a failed replacement stops scheduling and names no command to run", async 
   fireEvent.click(screen.getByRole("button", { name: "查看健康详情" }));
   await waitFor(() => assert.ok(screen.getByText("已停止调度。")));
   assert.ok(screen.getByText("请联系硬件厂商。"));
-  assert.equal(screen.queryByText(/ppu-smi -r/), null);
+  assert.equal(screen.queryByText(/ppu-smi -r/) === null, true);
 });
 
 test("a row from an older agent falls back to its level and raw sentence", async () => {
@@ -89,8 +89,8 @@ test("a card in use outside the platform names the processes instead of a fault"
     foreign_processes: [{ pid: 4242, name: "python3", memory_bytes: 8 * 1024 ** 3 }, { pid: 77, name: "Xorg" }],
   }} />);
   const tag = screen.getByText("被平台外的进程占用");
-  assert.equal(screen.queryByText("故障"), null);
-  assert.equal(screen.queryByText("正常"), null);
+  assert.equal(screen.queryByText("故障") === null, true);
+  assert.equal(screen.queryByText("正常") === null, true);
   const described = tag.closest("[aria-label]")?.getAttribute("aria-label") ?? "";
   assert.ok(described.includes("python3 (pid 4242, 8 GiB)"), described);
   assert.ok(described.includes("Xorg (pid 77)"), described);
@@ -205,7 +205,7 @@ test("a long runtime-check command is collapsed, and the whole of it is what get
   const lines = runtimeUnusableGPU.health_guide.probe.split("\n");
   await waitFor(() => assert.ok(screen.getByText(/die='0'/), "the command's first line is shown"));
   // The tail is withheld until asked for, so the evidence stays readable.
-  assert.equal(screen.queryByText(/print\(1\)/), null, "the whole command is shown without being asked");
+  assert.equal(screen.queryByText(/print\(1\)/) === null, true, "the whole command is shown without being asked");
   const expand = screen.getByRole("button", { name: `展开全部 ${lines.length} 行` });
 
   // Copying does not depend on expanding: a reader who only wants to paste it
@@ -224,5 +224,21 @@ test("a short command is shown in full with no expander", async () => {
   wrap(<GPUHealthTag gpu={runtimeUnusableGPU} />);
   fireEvent.click(screen.getByRole("button", { name: "查看健康详情" }));
   await waitFor(() => assert.ok(screen.getByText("npu-smi info -m; npu-smi info")));
-  assert.equal(screen.queryByRole("button", { name: "收起" }), null);
+  assert.equal(screen.queryByRole("button", { name: "收起" }) === null, true);
+});
+
+
+test("missing telemetry is a visible warning, not a reported CLI failure", () => {
+  wrap(<GPUHealthTag gpu={{ schedulable: true, health_status: "Warning", health_code: "telemetry_unavailable", health_message: "ecc_errors.volatile.dram_uncorrectable=N/A" }} />);
+  assert.equal(screen.queryByText("诊断数据缺失") !== null, true);
+  assert.equal(screen.queryByText("不可读取") === null, true);
+});
+
+
+test("incomplete driver inventory is visible without disabling verified cards", async () => {
+ wrap(<GPUHealthTag gpu={{ schedulable: true, health_status: "Warning", health_code: "inventory_incomplete", health_message: "attached_xpus=8\ninventory_rows=7" }} />);
+ assert.equal(screen.queryByText("设备清单不完整") !== null, true);
+ fireEvent.click(screen.getByRole("button", { name: "查看健康详情" }));
+ await waitFor(() => assert.equal(screen.queryByText(/驱动报告的卡数与设备清单行数不一致/) !== null, true));
+ assert.equal(screen.queryByText("已停止调度。") === null, true);
 });

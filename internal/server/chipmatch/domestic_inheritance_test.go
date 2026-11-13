@@ -10,10 +10,10 @@ func TestDomesticInheritancePredicatesMatchOnlyApprovedFamilies(t *testing.T) {
 		rejects   []string
 	}{
 		{
-			name:      "Hygon K100 PASS inheritance excludes K500",
-			predicate: Predicate{Vendor: "hygon", Name: "(^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW[_ -]?1000|BW[_ -]?1100)([^A-Za-z0-9]|$)"},
-			matches:   []string{"K100", "K100_AI", "K100AI", "BW1000", "BW1100"},
-			rejects:   []string{"K500", "BW150"},
+			name:      "Hygon K100 PASS inheritance covers the BW family and excludes K500",
+			predicate: Predicate{Vendor: "hygon", Name: "(^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9]|$)"},
+			matches:   []string{"K100", "K100_AI", "K100AI", "BW", "BW100", "BW150", "BW1000", "BW1100", "BW_1000", "BW3000"},
+			rejects:   []string{"K500", "Z100", "BWX", "BW1000X"},
 		},
 		{
 			name:      "Ascend 910B PASS inheritance stays within approved SKUs",

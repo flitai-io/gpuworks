@@ -2,9 +2,10 @@ package store
 
 import (
 	"encoding/json"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
-	"testing"
 )
 
 func TestImageRuntimeSizeLifecycle(t *testing.T) {

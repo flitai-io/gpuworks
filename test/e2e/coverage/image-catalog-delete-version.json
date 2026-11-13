@@ -23,7 +23,7 @@
   "contract_id": "gpuworks/image-catalog/delete-sibling-version",
   "name": "镜像详情 / 删除系列中版本 A / 兄弟版本 B 与父系列保留",
   "test_function": "test_delete_sibling_version",
-  "command": "make test-e2e-image-version-delete",
+  "command": "python3 -B test/e2e/image_catalog.py --case delete-version --locale en",
   "missing": [
     "full field and enumeration matrix",
     "list search/filter/page-size and 10/30/100 volumes",

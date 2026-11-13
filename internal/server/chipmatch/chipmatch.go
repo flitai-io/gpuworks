@@ -95,7 +95,7 @@ func DecodeUnsupported(raw string) ([]Unsupported, error) {
 	}
 	result := make([]Unsupported, len(rows))
 	for index, row := range rows {
-		result[index] = Unsupported{GPUs: row.GPUs, Quantization: row.Quantization, Reason: row.Reason}
+		result[index] = Unsupported(row)
 	}
 	return result, nil
 }

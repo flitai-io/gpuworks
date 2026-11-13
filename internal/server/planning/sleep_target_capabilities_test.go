@@ -77,6 +77,15 @@ func TestUnsupportedSleepTargetFailsClosedOnlyForUnresolvedRestrictedTargets(t *
 	}
 }
 
+func TestUnsupportedSleepTargetRefusesKunlun(t *testing.T) {
+	node := &store.Node{ID: 1, GPUs: []store.GPU{{Index: 0, Vendor: "kunlunxin", Name: "P800 PCIe", ArchID: "kl3"}}}
+	inst := store.Instance{UUID: "sleep-target", NodeID: 1, State: proto.InstRunning, GPUIndexes: "[0]", DesiredStateJSON: `{}`}
+	refusal, err := UnsupportedSleepTarget("vllm", []store.Instance{inst}, sleepTargetNodeReader{node: node})
+	if err != nil || refusal == nil || refusal.Code != messages.ErrorAcceleratorFeatureUnsupported || refusal.Params["vendor"] != "Kunlunxin" || refusal.Params["feature"] != "engine_sleep" {
+		t.Fatalf("refusal=%+v err=%v", refusal, err)
+	}
+}
+
 func TestUnsupportedSleepTargetPropagatesInventoryReadErrors(t *testing.T) {
 	readErr := errors.New("inventory read failed")
 	inst := store.Instance{UUID: "sleep-target", NodeID: 1, State: proto.InstRunning, GPUIndexes: "[]", DesiredStateJSON: `{}`}

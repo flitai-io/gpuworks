@@ -9,7 +9,6 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -86,17 +85,17 @@ func (p *SMIProber) Vendor() string { return accelerator.VendorNVIDIA }
 // --gpus support. Unlike Docker, nerdctl needs no daemon runtime
 // registration, but the toolkit still has to be installed.
 func (p *SMIProber) DetectRuntimePlugin(ctx context.Context, driver string) runtime.PluginInfo {
-	if out, err := exec.CommandContext(ctx, "nvidia-ctk", "--version").CombinedOutput(); err == nil {
+	if out, err := cliCommand(ctx, "nvidia-ctk", "--version").CombinedOutput(); err == nil {
 		return runtime.PluginInfo{Name: accelerator.PluginNVIDIAContainerToolkit, Version: runtime.FirstVersion(string(out)), Installed: true}
 	}
-	if out, err := exec.CommandContext(ctx, "nvidia-container-runtime", "--version").CombinedOutput(); err == nil {
+	if out, err := cliCommand(ctx, "nvidia-container-runtime", "--version").CombinedOutput(); err == nil {
 		return runtime.PluginInfo{Name: accelerator.PluginNVIDIAContainerToolkit, Version: runtime.FirstVersion(string(out)), Installed: true}
 	}
 	return runtime.PluginInfo{Name: accelerator.PluginNVIDIAContainerToolkit}
 }
 
 func (p *SMIProber) Available() bool {
-	if _, err := exec.LookPath("nvidia-smi"); err != nil && p.runner == nil {
+	if _, err := lookCLI("nvidia-smi"); err != nil && p.runner == nil {
 		return false
 	}
 	_, err := p.query(context.Background(), "--query-gpu=index", "--format=csv,noheader,nounits")
@@ -280,7 +279,7 @@ func parseFrameworkVersion(text, pattern string) string {
 // Probe returns the detected GPUs. Empty slice + nil error means "no GPU here".
 func (p *SMIProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 	slog.Debug("gpu probe started", "vendor", p.Vendor())
-	if _, err := exec.LookPath("nvidia-smi"); err != nil && p.runner == nil {
+	if _, err := lookCLI("nvidia-smi"); err != nil && p.runner == nil {
 		// No CLI to ask. The cards plugged in are still a fact, and saying
 		// "this host has four cards and no driver for them" is the useful
 		// answer; reporting none sends an operator looking for hardware

@@ -195,7 +195,7 @@ export default function ImagesPage() {
       versions.refetch();
     }
   };
-  // syncFromPeer starts a direct copy from the node the operator picked in the
+  // syncFromPeer starts a peer copy from the node the operator picked in the
   // peer dialog. It rejects so the dialog can keep the reason on screen.
   const syncFromPeer = async (
     version: ImageCatalogEntry,

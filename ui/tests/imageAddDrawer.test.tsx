@@ -60,6 +60,42 @@ function selectOptions() {
     .map((node) => node.getAttribute("title") || node.textContent || "");
 }
 
+test("custom archive acquisition addresses are authorized only after the image fields are valid", async () => {
+  let allowed = false;
+  const { calls, user } = renderPage((call) => {
+    if (call.path === "/api/v1/auth/me") return json(200, { id: 1, username: "admin", role: "admin" });
+    if (call.path === "/api/v1/server/outbound-policy" && call.method === "GET") return json(200, { restrict_private_hosts: true, allow_private_hosts: ["existing.internal"], editable: true, revision: "r1" });
+    if (call.path === "/api/v1/server/outbound-policy/check") return json(200, { items: [{ host: "archive.internal", status: allowed ? "allowed" : "needs_allow" }], total: 1 });
+    if (call.path === "/api/v1/server/outbound-policy" && call.method === "PUT") {
+      assert.deepEqual(JSON.parse(call.body || "{}"), { restrict_private_hosts: true, allow_private_hosts: ["existing.internal", "archive.internal"], revision: "r1" });
+      allowed = true;
+      return json(200, { restrict_private_hosts: true, allow_private_hosts: ["existing.internal", "archive.internal"], editable: true, revision: "r2" });
+    }
+    if (call.path === "/api/v1/images/import") return json(200, { items: [], total: 0 });
+    return undefined;
+  });
+  await screen.findByRole("button", { name: "vLLM · CUDA" });
+  const drawer = await openDrawer(user, "自定义镜像");
+  const sources = within(drawer).getByRole("combobox", { name: zhImages.import.registrySources });
+  await user.type(sources, "registry.internal/team/runner:v1,");
+  await user.type(sources, "https://archive.internal/runner.tar,");
+  const allow = await within(drawer).findByRole("checkbox", { name: /archive\.internal/ });
+  await user.click(allow);
+  await user.click(within(drawer).getByRole("button", { name: zhImages.import.addImage }));
+  await within(drawer).findByText(zhImages.import.imageRefRequired);
+  assert.equal(calls.some((call) => call.method === "PUT"), false, "invalid forms cannot grant a host");
+  await user.type(within(drawer).getByRole("textbox", { name: zhImages.import.imageRef }), "example/runner:v1");
+  await choose(within(drawer).getByRole("combobox", { name: zhImages.import.engine }), "vLLM");
+  await choose(within(drawer).getByRole("combobox", { name: zhImages.import.framework }), "CUDA");
+  await user.type(within(drawer).getByRole("textbox", { name: zhImages.import.frameworkVersion }), "13.0");
+  await user.click(within(drawer).getByRole("button", { name: zhImages.import.addImage }));
+  await waitFor(() => assert.ok(calls.some((call) => call.path === "/api/v1/images/import")));
+  assert.equal(calls.filter((call) => call.method === "PUT").length, 1);
+  const body = JSON.parse(calls.find((call) => call.path === "/api/v1/images/import")!.body!);
+  assert.deepEqual(body.series[0].versions[0].registry_sources, ["registry.internal/team/runner:v1", "https://archive.internal/runner.tar"]);
+  assert.ok(calls.filter((call) => call.path.endsWith("/check")).every((call) => JSON.parse(call.body!).hosts.every((host: string) => host !== "registry.internal")), "node registry sources do not request management permissions");
+});
+
 async function choose(field: HTMLElement, title: string) {
   fireEvent.mouseDown(field);
   const option = await waitFor(() => {

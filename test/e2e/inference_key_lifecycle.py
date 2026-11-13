@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Real single-server inference credential lifecycle; no GPU inference claim.
 
+A fresh server starts with no API key rows and /v1 requires a key by default;
+a keyless request is admitted only when an administrator explicitly turns the
+open-access setting on. Revoking every key therefore leaves /v1 refusing all
+callers until another key is created.
+
 E2E standard: test/e2e/browser-e2e-testing-standard.md
 Run after make build: python3 test/e2e/inference_key_lifecycle.py
 """
@@ -39,6 +44,7 @@ def revoked(rows):
 
 CASE = "推理令牌 / UI 创建复制并删除 / 刷新回读、真实网关鉴权与即时撤销生效"
 KEY_PATH = "/api/v1/apikeys"
+SECURITY_PATH = "/api/v1/security/settings"
 DENIED = {"error": {"message": "invalid or missing API key", "type": "gpuworks_proxy"}}
 MODELS = {"object": "list", "data": []}
 
@@ -77,12 +83,14 @@ def exercise_create_dialog(page, create, k, mutations, report):
 
 
 def exercise_key_field_inventory(dialog, k, mutations):
-    """Register the only create-dialog field before a name is typed.
+    """Register the create dialog's fields before a name is typed.
 
     Name is a required textbox. It opens empty, with no unit and no control
-    range. No other field is shown. Reading it sends no key write. The later
-    submit in this run is the request and the persisted record: POST body
-    name only, then a list row of name, prefix and created_at.
+    range. The other field is the key's scope: two radios defaulting to "all
+    model services", with the deployment picker appearing only after "some" is
+    chosen. Reading the form sends no key write. The later submit in this run is
+    the request and the persisted record: POST body of name and scope, then a
+    list row of name, prefix and created_at.
     """
     before = len(mutations)
     name_label = k["table"]["name"]
@@ -97,10 +105,16 @@ def exercise_key_field_inventory(dialog, k, mutations):
     expect(required).to_have_count(1)
     expect(required).to_have_text(name_label)
     expect(dialog.locator(".ant-input-suffix, .ant-input-number")).to_have_count(0)
-    expect(dialog.get_by_role("radio")).to_have_count(0)
+    # A key now carries a scope (apikeys/KeyScope.tsx:34-41): all model services or
+    # a chosen subset. The default is the "all" radio, and the deployment picker
+    # only exists once "some" is chosen, so the create form has exactly two radios
+    # and no combobox until then.
+    scope = dialog.get_by_role("radio")
+    expect(scope).to_have_count(2)
+    expect(dialog.get_by_role("radio", name=k["scope"]["all"], exact=True)).to_be_checked()
     expect(dialog.get_by_role("combobox")).to_have_count(0)
     expect(dialog.get_by_role("switch")).to_have_count(0)
-    expect(dialog.locator(".ant-form-item")).to_have_count(1)
+    expect(dialog.locator(".ant-form-item")).to_have_count(2)
     expect(dialog.locator(".ant-form-item-hidden")).to_have_count(0)
     check(len(mutations) == before, "reading the create field sent a key write")
     return {
@@ -111,8 +125,9 @@ def exercise_key_field_inventory(dialog, k, mutations):
 
 
 # Contract: gpuworks/inference-key/create-copy-delete
-# Mainline: 独立 server/SQLite 和同轮 guard Key → UI 校验、创建并真实复制推理令牌 → 刷新/GET脱敏回读
-#           → 原样Bearer调用/v1/models且拒绝管理API → UI取消删除仍可用、确认删除后401 → guard仍可用并清理
+# Mainline: 独立 server/SQLite（无任何 Key 行，/v1 默认要求 Key）和同轮 guard Key → UI 校验、创建并真实复制推理令牌
+#           → 刷新/GET脱敏回读 → 原样Bearer调用/v1/models且拒绝管理API → UI取消删除仍可用、确认删除后401
+#           → guard仍可用并清理 → 零 Key 后 /v1 对所有人仍 401（放开无 Key 访问是显式的安全设置，默认关闭）
 def test_inference_key_lifecycle(page, context, server, artifacts, report, locale):
     k, auth = strings(locale)
     name = f"e2e-{report['run_id']}-inference"
@@ -152,18 +167,21 @@ def test_inference_key_lifecycle(page, context, server, artifacts, report, local
     expect(page.get_by_role("heading", name=k["title"], exact=True)).to_be_visible()
     authenticated = True
     report["preflight"] = "PASS"
-    # A fresh real server seeds one default key. Remove only that owned bootstrap
-    # resource before constructing this case's explicit two-key fixture.
-    bootstrap = collection(page.request.get(server.base + KEY_PATH))
-    check(len(bootstrap) == 1 and bootstrap[0]["name"] == "default", "fresh-server bootstrap key contract differs")
-    removed = page.request.delete(server.base + KEY_PATH + "/" + bootstrap[0]["prefix"])
-    check(removed.status == 200 and removed.json() == {"status": "revoked"}, "owned bootstrap key cleanup failed")
-    after_bootstrap = collection(page.request.get(server.base + KEY_PATH))
-    check(active(after_bootstrap) == [], f"bootstrap key still authenticates: {after_bootstrap}")
-    check(bootstrap[0]["prefix"] in [row["prefix"] for row in revoked(after_bootstrap)],
-          f"revoking dropped the row that carries the usage attribution: {after_bootstrap}")
-    # Zero configured keys intentionally enables the product's anonymous dev mode.
-    # Keep a scoped guard key until the revoked key has been proved unauthorized.
+    # The bootstrap mints no API key: a fresh server has no key rows at all, and
+    # /v1 refuses a keyless request until an administrator creates one. The
+    # refusal comes from the open-access setting, which reads closed by default,
+    # not from the key count, so it is read independently here.
+    fresh_keys = collection(page.request.get(server.base + KEY_PATH))
+    check(fresh_keys == [], f"fresh server must start with zero key rows: {fresh_keys}")
+    security = page.request.get(server.base + SECURITY_PATH)
+    check(security.status == 200, f"security settings read failed: {security.status}")
+    posture = security.json()
+    check(posture.get("inference_open_access") is False, f"open access must default closed: {posture}")
+    check(http(server.base, "GET", "/v1/models") == (401, DENIED),
+          "a fresh server with no keys still admitted a keyless gateway request")
+    # Keep a guard key until the revoked key has been proved unauthorized: with
+    # no live key the gateway refuses every request, so leaving zero keys would
+    # not distinguish "this key was revoked" from "no key exists".
     guard_response = page.request.post(server.base + KEY_PATH, data={"name": guard_name})
     check(guard_response.status == 201, "guard fixture create failed")
     guard_payload = guard_response.json()
@@ -171,9 +189,13 @@ def test_inference_key_lifecycle(page, context, server, artifacts, report, local
     guard = guard_payload["key"]
     artifacts.remember(guard)
     guard_prefix = guard[:12]
-    check(http(server.base, "GET", "/v1/models") == (401, DENIED), "guard failed to enable real gateway authentication")
-    report["fixture"] = {"guard_name": guard_name, "guard_prefix": guard_prefix, "owned_bootstrap_key_removed": bootstrap[0]["prefix"],
-                         "reason": "Keep authentication enabled while proving target-key revocation; zero keys allows anonymous development access"}
+    check(http(server.base, "GET", "/v1/models") == (401, DENIED),
+          "creating a key changed the keyless posture: /v1 must still refuse a request without a key")
+    report["fixture"] = {"guard_name": guard_name, "guard_prefix": guard_prefix,
+                         "fresh_server_key_rows": len(fresh_keys), "inference_open_access": posture["inference_open_access"],
+                         "keyless_gateway_status": 401,
+                         "reason": "A guard key keeps one live credential in the store while the target is revoked; the "
+                                   "gateway posture comes from the open-access setting, which stays off, not from the key count"}
     artifacts.start_trace(context)
     create = button(page, k["create"]["button"])
     expect(create).to_be_visible()
@@ -247,7 +269,11 @@ def test_inference_key_lifecycle(page, context, server, artifacts, report, local
     with page.expect_response(lambda r: urlsplit(r.url).path == KEY_PATH and r.request.method == "POST") as created:
         field.press("Enter")
     response = created.value
-    check(response.status == 201 and response.request.post_data_json == {"name": name} and not urlsplit(response.url).query,
+    # The default scope is submitted with the name: every model service, with an
+    # empty explicit list (apikeys/KeyScope.tsx:26-32, ALL_DEPLOYMENTS).
+    check(response.status == 201
+          and response.request.post_data_json == {"name": name, "all_deployments": True, "deployment_ids": []}
+          and not urlsplit(response.url).query,
           "incorrect inference create method/path/query/body/status")
     payload = response.json()
     check(set(payload) == {"name", "key"} and payload["name"] == name, "incorrect inference create envelope")
@@ -277,7 +303,13 @@ def test_inference_key_lifecycle(page, context, server, artifacts, report, local
     check({item["name"] for item in items} == {name, guard_name},
           f"independent GET active set drift: {[row['name'] for row in everything]}")
     item = next(item for item in items if item["name"] == name)
-    check(set(item) == {"name", "prefix", "created_at"} and item["prefix"] == secret[:12], "list fields/prefix drift or secret leak")
+    # A key now reports the scope it was created with: all_deployments plus the
+    # resolved deployments list (apikeys/KeyScope.tsx). The secret must still not
+    # appear - the prefix is the only part of the credential in the record.
+    check(set(item) == {"name", "prefix", "created_at", "all_deployments", "deployments"}
+          and item["prefix"] == secret[:12]
+          and item["all_deployments"] is True and item["deployments"] == [],
+          "list fields/prefix/scope drift or secret leak")
     check(datetime.fromisoformat(item["created_at"].replace("Z", "+00:00")).timestamp() > 0, "invalid persisted created time")
     check(secret not in page.content() and secret not in json.dumps(everything), "persisted list or DOM reveals full secret")
     report["evidence"].append({"layer": "persistence", "method": "GET", "path": KEY_PATH, "status": 200,
@@ -344,11 +376,17 @@ def test_inference_key_lifecycle(page, context, server, artifacts, report, local
     check(active(final_keys) == [], f"owned keys leaked: {final_keys}")
     check(len(revoked(final_keys)) == len(final_keys),
           f"cleanup left a key that never got revoked: {final_keys}")
-    check(http(server.base, "GET", "/v1/models") == (200, MODELS), "zero-key cleanup did not restore documented anonymous development mode")
+    check(http(server.base, "GET", "/v1/models") == (401, DENIED),
+          "deleting every key opened the gateway: keyless /v1 must stay refused because open access is off by default")
+    final_posture = page.request.get(server.base + SECURITY_PATH)
+    check(final_posture.status == 200 and final_posture.json().get("inference_open_access") is False,
+          f"this case never changed the security posture, yet it now reads: {final_posture.status} {final_posture.text()[:200]}")
     check(not errors and not console_errors and not bad_responses, "unexpected browser errors: " + str([errors, console_errors, bad_responses]))
     report["evidence"].append({"layer": "cleanup", "method": "DELETE", "path": delete_path, "status": 200,
-        "cancel": "no DELETE, original key still 200", "revoked_key": 401, "anonymous": 401, "guard_key": 200,
-        "refresh_and_get": "target absent, guard unchanged", "fixture_cleanup": "guard DELETE 200 then collection empty; anonymous /v1/models 200 in zero-key development mode", "browser_mutations": mutations})
+        "cancel": "no DELETE, original key still 200", "revoked_key": 401, "keyless": 401, "guard_key": 200,
+        "refresh_and_get": "target absent, guard unchanged",
+        "fixture_cleanup": "guard DELETE 200 then the collection has no active row; the stored open-access policy still reads false; keyless /v1/models 401 because open access is off, not because a key happens to exist",
+        "browser_mutations": mutations})
     report["browser_errors"] = {"page": errors, "console": console_errors, "http": bad_responses}
 
 

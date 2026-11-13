@@ -94,6 +94,51 @@ func TestRequestsForAStoppedModelWaitForItsStart(t *testing.T) {
 	}
 }
 
+// overlapModels counts how many Lookups run at once.
+type overlapModels struct {
+	fakeModels
+	mu  sync.Mutex
+	in  int
+	max int
+}
+
+func (m *overlapModels) Lookup(name string) (ModelEntry, error) {
+	m.mu.Lock()
+	m.in++
+	if m.in > m.max {
+		m.max = m.in
+	}
+	m.mu.Unlock()
+	time.Sleep(50 * time.Millisecond)
+	m.mu.Lock()
+	m.in--
+	m.mu.Unlock()
+	return m.fakeModels.Lookup(name)
+}
+
+func (m *overlapModels) maxInFlight() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.max
+}
+
+// Three refusals that are in flight together still share one lookup.
+func TestConcurrentRefusalsShareOneStoppedLookup(t *testing.T) {
+	models := &overlapModels{fakeModels: fakeModels{states: map[string]ModelState{"m": ModelStopped}}}
+	r := newRig(t, Config{Models: models}, func(context.Context, Owner, string, []byte) Reply {
+		return Reply{Status: 404, Body: []byte(unknownModel)}
+	})
+	r.start()
+	b := r.batchOf(3)
+	eventually(t, "every request waiting", func() bool {
+		w := r.svc.Waits(b.ID)
+		return len(w) == 1 && w[0].Requests == 3
+	})
+	if n := models.maxInFlight(); n != 1 {
+		t.Fatalf("overlapping lookups = %d", n)
+	}
+}
+
 // A 404 for a model that is not stopped is final: the request asked for
 // something the model does not serve.
 func TestA404ForAServedModelFails(t *testing.T) {

@@ -409,10 +409,6 @@ func validContainerPath(value string) bool {
 	return strings.HasPrefix(value, "/") && path.Clean(value) == value && value != "/"
 }
 
-func validEndpoint(value string) bool {
-	return strings.HasPrefix(value, "/") && path.Clean(value) == value && !strings.ContainsAny(value, "?#\r\n")
-}
-
 // splitInlineFlag separates a "--flag=value" token. It is spelled out here
 // because the catalog reads argv only to find plugin file arguments; turning a
 // spec's args into parameter values is the deploy package's job.

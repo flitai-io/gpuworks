@@ -53,10 +53,6 @@ func queryError(code, field, detail string) error {
 	return messages.NewProductError(code, field+": "+detail, map[string]any{"field": field, "detail": detail})
 }
 
-// maxHeatCardsByGPU bounds a heat map by card: a fleet's 8000 cards are read
-// by model or node.
-const maxHeatCardsByGPU = 256
-
 // Query is a range and its granularity ("" picks one by the span).
 type Query struct {
 	FromMS, ToMS int64

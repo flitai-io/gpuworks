@@ -3,17 +3,22 @@ import { useTranslation } from "react-i18next";
 import type { EvaluateResponse } from "../../api";
 import VRAMBreakdown from "../../components/VRAMBreakdown";
 import { warningKey, warningText } from "./deployWarnings";
-import { scheduleText } from "./deploySchedule";
+import { diskRegistrationModelID, scheduleText } from "./deploySchedule";
+import ModelDiskRegistrationLink from "./ModelDiskRegistrationLink";
 import EvictionSuggestionAlert from "./EvictionSuggestion";
+import { APIError } from "../../apiError";
+import DeployDiagnostics from "./DeployDiagnostics";
 
 export default function DeployStepSummary({
   result,
   error,
+  failure,
   loading,
   onReevaluate,
 }: {
   result: EvaluateResponse | null;
   error: string | null;
+  failure?: Error | null;
   loading: boolean;
   onReevaluate?: () => void;
 }) {
@@ -37,6 +42,7 @@ export default function DeployStepSummary({
     result?.plan && !result.plan.ok
       ? scheduleText(t, result.plan.message) || t("eval.noPlan")
       : "";
+  const registrationModelId = diskRegistrationModelID(result?.plan?.message);
   const conclusion = loading ? (
     <Typography.Text type="warning">{t("summary.loading")}</Typography.Text>
   ) : error ? (
@@ -54,7 +60,7 @@ export default function DeployStepSummary({
     />
   ) : !result.ok ? (
     planFailure ? (
-      <Alert type="error" showIcon message={planFailure} />
+      <Alert type="error" showIcon message={planFailure} action={registrationModelId ? <ModelDiskRegistrationLink modelId={registrationModelId} /> : undefined} />
     ) : null
   ) : replicas > 1 ? (
     <Alert
@@ -74,6 +80,7 @@ export default function DeployStepSummary({
       <Space direction="vertical" size={5} style={{ width: "100%" }}>
         <Typography.Text strong>{t("summary.title")}</Typography.Text>
         {conclusion}
+        {!loading && <DeployDiagnostics report={failure instanceof APIError ? failure.diagnostics : result?.diagnostics} requestId={failure instanceof APIError ? failure.requestId : result?.request_id} />}
         {warnings.map((warning) => (
           <Alert
             key={warningKey(warning)}

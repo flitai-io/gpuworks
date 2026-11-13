@@ -1,10 +1,11 @@
 package api
 
 import (
-	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 )
 
 // Log severity levels accepted by the logs API; the filter is >= semantics

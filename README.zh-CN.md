@@ -27,7 +27,7 @@ GPUWorks 是一个超轻量的 GPU 管理和模型即服务（MaaS）平台，�
 租来的云主机或容器或一台 Mac，选一个模型，GPUWorks 会估算它需要多少显存、选好卡、启动 vLLM 或 SGLang 或推理模板定义好的 Strata、ninfer、……，并通过统一的 OpenAI 兼容入口对外提供服务。
 NVIDIA、AMD Instinct 与 Ryzen AI Max、华为昇腾、平头哥 PPU、海光 DCU 和 Apple Silicon 可以在同一个集群里并存。
 
-平台的核心是统一的算力池：今天接入裸机、公有云主机和私有云虚拟机，接下来还会接入 Kubernetes 集群和 Slurm 分区；
+平台的核心是统一的算力池：今天接入裸机、公有云主机、私有云虚拟机和已有的 Kubernetes 集群，接下来还会接入 Slurm 分区；
 在这个算力池之上，GPUWorks 现在提供模型服务，之后也会在同一批加速器上运行微调与训练任务。
 
 ## 亮点
@@ -38,14 +38,17 @@ NVIDIA、AMD Instinct 与 Ryzen AI Max、华为昇腾、平头哥 PPU、海光 D
 - **异构加速器，统一调度。** NVIDIA、AMD、昇腾、PPU、海光和 Apple Silicon 节点接入同一个集群，调度器把每个部署放到其启动规格支持的硬件上。
 - **公有云与私有云混合调度。** 从 RunPod、优云智算（CompShare）、AutoDL、Vast.ai、阿里云同步云主机，或从 ZStack Cloud 同步虚拟机，
   一键安装 agent，和自有服务器放在同一个资源池里调度。
+- **接入已有的 Kubernetes 集群，与集群里的其他业务共存。** 应用一份 manifest 即可接入，不替换集群已装的 device plugin，
+  也兼容 HAMi 与 ACK 共享 GPU。GPUWorks 只借用要用的卡，用完归还，两边的调度互相感知：GPUWorks 占用的卡 Kubernetes
+  不会再分给别的 Pod，别的 Pod 占着的卡 GPUWorks 也不会调度。
 - **超轻量。** server 和 agent 各是一个静态二进制（`CGO_ENABLED=0`），server 内嵌 Web 界面（中文 / English）和各平台的 agent，
   状态存在一个 SQLite 文件里。agent 通过 WebSocket 主动外连，节点不用开入站端口（出不去的节点也可以由 server 反向直连）。
   在阿里云的一次演练中，一个 server 纳管了 7 个地域租来的 1,003 台 GPU 机器：500 多个副本在 4 分钟内放置并全部跑起来，
   网关承接 2,000 并发，server 峰值只用了 9 个 CPU 核、1.6 GB 内存。
 - **先估算显存，再解释放置。** 启动前就能看到权重、KV cache 和引擎开销各要多少显存，调度器选了哪些卡、其他卡为什么没选。
-- **一张卡跑多个模型。** dGPU 给每个实例加显存硬限额，让多个模型共用一张卡（NVIDIA 基于 HAMi-core，昇腾基于 vCANN，PPU 基于 HGGC，海光基于 hy-smi 虚拟设备）。
-  sleep/wake 让多个 vLLM 模型轮流使用同一批卡，支持 NVIDIA、昇腾、PPU 和海光。
-- **横向扩展。** 跨节点多副本、多机张量 / 流水线并行，以及 PD 分离（NVIDIA 上 vLLM + NIXL，昇腾上 vLLM-Ascend + Mooncake，PPU 上 SGLang 或 vLLM + Mooncake，同机或经 RDMA，海光上 vLLM + Mooncake 为实验性）。
+- **一张卡跑多个模型。** dGPU 给每个实例加显存限额，让多个模型共用一张卡（NVIDIA 基于 HAMi-core，昇腾基于 vcann-rt，PPU 基于 ppu-slicing-shim，AMD 基于 rocm-slicing-shim，海光基于原生 vdev）；支持型号、运行时和就绪条件见[厂商支持矩阵](docs/reference/support-matrix.md)。
+  sleep/wake 让可休眠的 vLLM 模型轮流使用同一批卡；已验证的厂商与镜像组合见[功能选择指南](docs/explanation/choosing-features.md#sleepwake多个模型轮流用一张卡)。
+- **横向扩展。** 跨节点多副本、多机张量 / 流水线并行，以及 PD 分离（NVIDIA 上 vLLM + NIXL，昇腾上 vLLM-Ascend + Mooncake，PPU 上 SGLang 或 vLLM + Mooncake，同机或经 RDMA，海光上 vLLM + Mooncake）。
 - **OpenAI 兼容网关。** `/v1` 下提供 chat、completions、embeddings、rerank、音频、图像、视频和 realtime；
   `/v1/messages`、`/v1/responses` 透传。支持最少请求、前缀亲和、故障转移三种路由，API 令牌和按令牌的 token 用量统计。
 - **看得清发生了什么。** GPU 与引擎指标、可检索的日志、带时间线的单请求追踪（可导出 OTLP）、进入主机和容器的 Web 终端，
@@ -101,10 +104,10 @@ curl http://<server>:8800/v1/chat/completions \
 | 加速器 | 整卡部署 | dGPU（共享一张卡） | sleep/wake | 多机 | PD 分离 |
 |---|---|---|---|---|---|
 | **NVIDIA**（CUDA） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | ✅ 显存 MiB 级限额 | ✅ vLLM | ✅ | ✅ vLLM + NIXL |
-| **AMD**（ROCm：Instinct MI300 系列、Ryzen AI Max） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | ✅ 显存配额（libvrocm，用户态） | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
-| **华为昇腾**（CANN） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | ✅ 显存 MiB 级限额 | ✅ vLLM-Ascend | ✅ | ✅ vLLM-Ascend + Mooncake |
-| **平头哥 PPU**（HGGC） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | ✅ 显存 MiB 级限额 | ✅ vLLM | ✅ | ✅ SGLang + Mooncake（同机或经 RDMA）、vLLM + Mooncake（RDMA） |
-| **海光 DCU**（DTK） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | ✅ 显存 MiB 级限额 | ✅ vLLM | ✅ | 🧪 vLLM 0.21 + Mooncake |
+| **AMD**（ROCm：Instinct MI300 系列、Ryzen AI Max） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 libvrocm 显存配额；MI300X 的 Docker/runveil 已验证 | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
+| **华为昇腾**（CANN） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 vcann-rt 显存配额；需 device-share 权限和逐卡探针 | ✅ vLLM-Ascend | ✅ | ✅ vLLM-Ascend + Mooncake |
+| **平头哥 PPU**（HGGC） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 ppu-slicing-shim 显存配额及加权 QoS；仅 Docker | ✅ vLLM | ✅ | ✅ SGLang + Mooncake（同机或经 RDMA）、vLLM + Mooncake（RDMA） |
+| **海光 DCU**（DTK） | ✅ Docker、Containerd 或 runveil（内置免 root 运行时） | 🧪 Z100 / K100_AI / BW 原生 vdev；Docker 或 runveil | ✅ vLLM | ✅ | ✅ vLLM 0.21 + Mooncake |
 | **Apple Silicon**（M1–M5，macOS 15+） | ✅ vllm-metal、MLX、llama.cpp 以本机进程运行 | — | — | — | — |
 
 ✅ 真机验证 · 🧪 实验性 · — 不支持或未验证。NVIDIA 以外的 sleep/wake 已在昇腾 910C、PPU ZW810E、海光 K100、AMD MI300X 上真机验证，

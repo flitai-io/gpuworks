@@ -133,3 +133,30 @@ test("the failure message survives a transfer origin line", () => {
     assert.ok(screen.getByText(message));
     assert.ok(screen.getByText(labels.reason.MODEL_PREPARATION_FAILED));
 });
+
+// Disk exhaustion is reported with its own real state/reason, including when a
+// peer's origin line is present. The origin must not hide the actionable error.
+test("a peer disk-space failure preserves its path and capacity detail", () => {
+    const detail = "insufficient disk space at /cache/models: available=1048576 required=2147483648";
+    show([row({ state: "insufficient_disk_space", acquisition: "peer", source_node_name: "gpu-9", source_node_uuid: "u-9", message: detail, preparation: { phase: "waiting", reason: "MODEL_CACHE_DISK_FULL", total_known: false, idle_seconds: 0 } })]);
+    assert.equal(screen.queryByText(detail)?.textContent, detail, "disk details must not be hidden by the peer source");
+    assert.ok(screen.getByText("Insufficient model disk space"));
+    assert.equal(screen.queryByRole("button", { name: labels.retry }), null);
+    assert.equal(screen.queryByText(labels.retryUnavailable), null);
+    assert.equal(screen.queryByText(labels.noAutoRetry), null);
+});
+
+
+test("a disk-full cache copy keeps only the retry action offered by the server", async () => {
+    const detail = "insufficient disk space at /cache/models: available=1048576 required=2147483648";
+    let changed = 0;
+    const calls: unknown[] = [];
+    api.retryModelCache = async (id, node, storage) => { calls.push([id, node, storage]); return { status: "pending" }; };
+    show([row({ state: "insufficient_disk_space", transfer_id: "intent", message: detail, preparation: { phase: "waiting", reason: "MODEL_CACHE_DISK_FULL", total_known: false, idle_seconds: 0, retryable: true } })], () => { changed++; });
+    assert.ok(screen.getByText(detail));
+    assert.ok(screen.getByText(labels.noAutoRetry));
+    const user = userEvent.setup({ document: dom.window.document });
+    await user.click(screen.getByRole("button", { name: labels.retry }));
+    await waitFor(() => assert.equal(changed, 1));
+    assert.deepEqual(calls, [[1, "node", 2]]);
+});

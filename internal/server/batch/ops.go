@@ -269,6 +269,12 @@ func (s *Service) ListBatchesPage(owner Owner, statuses []string, offset, limit 
 	return s.repo.ListBatchesPage(owner, statuses, offset, limit)
 }
 
+// CountByStatus counts the owner's batches in each of the statuses without
+// reading them.
+func (s *Service) CountByStatus(owner Owner, statuses []string) (map[string]int, error) {
+	return s.repo.CountByStatus(owner, statuses)
+}
+
 // Cancel stops a batch that has not finished: it goes to cancelling, lets the
 // requests in flight finish for a while and ends as cancelled with the results
 // so far. A batch already cancelling is returned as it is.

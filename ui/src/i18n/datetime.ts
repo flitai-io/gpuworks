@@ -23,6 +23,13 @@ export function formatTime(value: DateTimeInput, fallback = "—"): string {
   return `${datePart(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** Time of day for an instant today ("09:46"), else the full formatTime: for "updated at" labels. */
+export function formatClock(value: DateTimeInput, fallback = "—", now = new Date()): string {
+  const date = parse(value);
+  if (!date) return fallback;
+  return datePart(date) === datePart(now) ? `${pad(date.getHours())}:${pad(date.getMinutes())}` : formatTime(date, fallback);
+}
+
 /** Same as formatTime, with seconds for logs and other high-frequency events. */
 export function formatTimeSec(value: DateTimeInput, fallback = "—"): string {
   const date = parse(value);

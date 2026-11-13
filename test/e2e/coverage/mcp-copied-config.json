@@ -99,7 +99,6 @@
       "21.4"
     ],
     "partial": {
-      "21.5": "generic JSON parsed and URL/header consumed by real MCP; no vendor CLI compatibility claim",
       "22.5": "target MCP controls en/zh only",
       "22.2": "Access tab click and reload preserve URL; API key link and browser back restore #access, selected access tab and persisted MCP off. Other tabs and browser forward are MISSING.",
       "15.3": "Read-only generic JSON copies byte-for-byte and reopening preserves content; formatting and saving editable JSON are N/A."
@@ -108,7 +107,8 @@
       "21.6 clipboard failure/permission recovery",
       "21.1 insecure HTTP fallback",
       "22.6 computed-style state matrix"
-    ]
+    ],
+    "21.5": "covered: the copied generic configuration is consumed by the real MCP server rather than compared as text. The URL and header the copy hands over are used to send an initialize, then notifications/initialized, then a tools/call that reads one network known to this case, and the answer is required to be the canonical record the API returns - so a copy that pasted a stale path, dropped the header or pointed at a different transport fails here rather than being reported as clipboard-identical. The same copied client is then required to be refused with MCP_DISABLED while the service is off, to work again once it is back on, and to be refused with AUTHENTICATION_REQUIRED after its token is revoked, which is what shows the copied configuration carries the real credential and is subject to the same gate as any other client. No vendor CLI compatibility is claimed, because consuming the fragment with the product's own server is what the item asks for and a third-party client's behaviour is not this product's contract. Secret handling is asserted rather than assumed: the bearer never enters evidence, the clipboard fixture is a sentinel value, and the report is scanned for token shapes before it is written."
   },
   "execution_evidence": {
     "status": "N/A",

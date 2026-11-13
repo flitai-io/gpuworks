@@ -128,6 +128,10 @@ func (r batchRepo) ListBatchesPage(o batch.Owner, statuses []string, offset, lim
 	return out, total, err
 }
 
+func (r batchRepo) CountByStatus(o batch.Owner, statuses []string) (map[string]int, error) {
+	return r.st.CountBatchesByStatus(r.owner(o), statuses)
+}
+
 func (r batchRepo) Unfinished() ([]batch.Batch, error) {
 	rows, err := r.st.UnfinishedBatches()
 	if err != nil {

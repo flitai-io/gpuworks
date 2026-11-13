@@ -31,6 +31,8 @@ func TestValidateSSHProbeRequestMatchesRealAuthenticationRequirements(t *testing
 		{name: "platform-key", req: SSHProbeRequest{Host: "node.example", Port: 22, User: "root", SSHAuth: SSHAuth{PlatformKey: testPlatformKey(t)}}, ok: true},
 		{name: "platform-key-mode-without-key", req: SSHProbeRequest{Host: "node.example", Port: 22, User: "root", SSHAuth: SSHAuth{Mode: AuthPlatformKey}}},
 		{name: "password-mode-without-password", req: SSHProbeRequest{Host: "node.example", Port: 22, User: "root", SSHAuth: SSHAuth{Mode: AuthPassword, PlatformKey: testPlatformKey(t)}}},
+		{name: "keyboard-interactive", req: SSHProbeRequest{Host: "node.example", Port: 22, User: "root", SSHAuth: SSHAuth{Mode: AuthKeyboardInteractive, Password: "secret"}}, ok: true},
+		{name: "keyboard-interactive-without-password", req: SSHProbeRequest{Host: "node.example", Port: 22, User: "root", SSHAuth: SSHAuth{Mode: AuthKeyboardInteractive, PlatformKey: testPlatformKey(t)}}},
 		{name: "unknown-mode", req: SSHProbeRequest{Host: "node.example", Port: 22, User: "root", SSHAuth: SSHAuth{Mode: "kerberos", Password: "x"}}},
 		{name: "malformed-key", req: SSHProbeRequest{Host: "node.example", Port: 22, User: "root", SSHAuth: SSHAuth{PrivateKeyPEM: "not a key"}}},
 	} {

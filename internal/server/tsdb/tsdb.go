@@ -11,10 +11,13 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/glebarez/go-sqlite" // registers the "sqlite" driver (shared with the main store; avoids double registration)
@@ -68,7 +71,22 @@ type Store interface {
 
 // sqliteStore is the SQLite-backed Store implementation.
 type sqliteStore struct {
-	db *sql.DB
+	// db is the single writer connection (SQLite allows one writer). reader is
+	// a separate query_only pool on the same WAL file for QueryRange and
+	// QueryLatest: a 30-day range scan streams and decodes rows for as long as
+	// it takes, and sharing db's one connection made every WriteBatch wait for
+	// it. For an in-memory database reader is db, since a second pool would
+	// open a different, empty database.
+	db     *sql.DB
+	reader *sql.DB
+	// writeMu serializes WriteBatch and Retain's series sweep around ids, the
+	// process-lifetime labels_key -> series id map. A hit skips the series
+	// upsert and lookup, so an established series costs one INSERT per
+	// sample instead of three. Only ids from committed transactions are
+	// added, and the sweep that deletes series rows clears the map, since
+	// SQLite may hand a deleted id to the next new series.
+	writeMu sync.Mutex
+	ids     map[string]int64
 	// retainBatchHook, when set, is called with the rows-affected count after
 	// each Retain delete pass. Test-only observability (same-package tests set
 	// it directly); nil in production.
@@ -76,8 +94,9 @@ type sqliteStore struct {
 }
 
 // OpenSQLite opens (creating if needed) a metrics database at path and returns
-// a ready Store. WAL and a busy timeout are enabled; the connection pool is
-// capped at one since SQLite has a single writer.
+// a ready Store. WAL and a busy timeout are enabled; writes go through one
+// connection since SQLite has a single writer, and queries use a small
+// read-only pool that WAL lets run alongside an in-flight write.
 func OpenSQLite(path string) (result Store, err error) {
 	defer func() { err = sqliteutil.WrapOpenError(path, err) }()
 	dsn := path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
@@ -86,11 +105,29 @@ func OpenSQLite(path string) (result Store, err error) {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(1)
-	s := &sqliteStore{db: db}
+	s := &sqliteStore{db: db, reader: db, ids: make(map[string]int64)}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
+	if path == "" || path == ":memory:" {
+		return s, nil
+	}
+	// Opened after migrate so the file and its WAL sidecars already exist.
+	// query_only makes a write routed here fail instead of becoming a second
+	// writer.
+	reader, err := sql.Open("sqlite", path+"?_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open sqlite (read pool): %w", err)
+	}
+	reader.SetMaxOpenConns(4)
+	if err := reader.Ping(); err != nil {
+		_ = reader.Close()
+		_ = db.Close()
+		return nil, fmt.Errorf("open sqlite (read pool): %w", err)
+	}
+	s.reader = reader
 	return s, nil
 }
 
@@ -121,10 +158,16 @@ func labelsKey(metric string, labels map[string]string) string {
 	return b.String()
 }
 
+// seriesIDCacheMax bounds the series id map. A fleet of a thousand 8-card
+// nodes has a few hundred thousand series; past the bound the map is
+// dropped and refilled from the series table on the following writes. A var
+// so tests can shrink it.
+var seriesIDCacheMax = 1 << 20
+
 // nullableLabel returns labels[key] as a bind value, or nil (SQL NULL) when
-// the label is absent or empty. Most metrics (GPU/host samples) carry neither
-// "instance" nor "deployment", and NULL is what lets an indexed lookup on
-// that column correctly find nothing rather than matching on "".
+// the label is absent or empty. Host samples carry no "instance" or
+// "deployment" and proxy samples no "node", and NULL is what lets an indexed
+// lookup on that column correctly find nothing rather than matching on "".
 func nullableLabel(labels map[string]string, key string) any {
 	if v, ok := labels[key]; ok && v != "" {
 		return v
@@ -134,41 +177,58 @@ func nullableLabel(labels map[string]string, key string) any {
 
 // WriteBatch upserts each sample's series (get-or-create by labels_key) and
 // inserts the samples in a single transaction. Duplicate (series, ts) rows are
-// replaced (last write wins).
+// replaced (last write wins). A series already written by this process is
+// found in s.ids and not upserted again.
+//
+// A NaN or infinite value is skipped rather than stored: the samples table
+// rejects NaN as NULL, which failed the whole batch (and callers drop the
+// error), and an infinity was stored but then made every answer containing
+// it fail to encode as JSON until retention removed it.
 func (s *sqliteStore) WriteBatch(samples []Sample) error {
 	if len(samples) == 0 {
 		return nil
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// ON CONFLICT self-heals a series row whose instance/deployment columns
-	// were left NULL by an older binary (the rollback window right after an
-	// upgrade, or any row written before migration 2 populated them): the
-	// next write for that exact label set repairs the columns in place
-	// instead of leaving them permanently invisible to the pushed-down
-	// matcher in QueryRange/QueryLatest. The WHERE guard makes the UPDATE a
-	// no-op (no write, no row version bump) once the columns already agree,
-	// which is the common case on every write after the first repair.
-	insSeries, err := tx.Prepare(`
-		INSERT INTO series(metric, labels_key, labels_json, instance, deployment)
-		VALUES(?, ?, ?, ?, ?)
-		ON CONFLICT(labels_key) DO UPDATE SET
-			instance = excluded.instance,
-			deployment = excluded.deployment
-		WHERE series.instance IS NOT excluded.instance OR series.deployment IS NOT excluded.deployment`)
-	if err != nil {
+	// ON CONFLICT self-heals a series row whose node/instance/deployment
+	// columns were left NULL by an older binary (the rollback window right
+	// after an upgrade, or any row written before migrations 2 and 3
+	// populated them): the first write of that exact label set in a process
+	// repairs the columns in place instead of leaving them permanently
+	// invisible to the pushed-down matcher in QueryRange/QueryLatest. The
+	// WHERE guard makes the UPDATE a no-op (no write, no row version bump)
+	// once the columns already agree.
+	var insSeries, selSeries *sql.Stmt
+	prepareSeries := func() error {
+		var err error
+		if insSeries, err = tx.Prepare(`
+			INSERT INTO series(metric, labels_key, labels_json, instance, deployment, node)
+			VALUES(?, ?, ?, ?, ?, ?)
+			ON CONFLICT(labels_key) DO UPDATE SET
+				instance = excluded.instance,
+				deployment = excluded.deployment,
+				node = excluded.node
+			WHERE series.instance IS NOT excluded.instance
+				OR series.deployment IS NOT excluded.deployment
+				OR series.node IS NOT excluded.node`); err != nil {
+			return err
+		}
+		selSeries, err = tx.Prepare(`SELECT id FROM series WHERE labels_key = ?`)
 		return err
 	}
-	defer insSeries.Close()
-	selSeries, err := tx.Prepare(`SELECT id FROM series WHERE labels_key = ?`)
-	if err != nil {
-		return err
-	}
-	defer selSeries.Close()
+	defer func() {
+		for _, st := range []*sql.Stmt{insSeries, selSeries} {
+			if st != nil {
+				_ = st.Close()
+			}
+		}
+	}()
 	insSample, err := tx.Prepare(
 		`INSERT OR REPLACE INTO samples(series_id, ts_ms, value) VALUES(?, ?, ?)`)
 	if err != nil {
@@ -176,31 +236,54 @@ func (s *sqliteStore) WriteBatch(samples []Sample) error {
 	}
 	defer insSample.Close()
 
-	// Cache labels_key -> series id within this batch to cut round-trips.
-	ids := make(map[string]int64)
+	// added holds this batch's series ids until the commit makes them safe
+	// to remember: a rolled-back upsert leaves no row behind its id.
+	added := make(map[string]int64)
 	for _, sm := range samples {
+		if math.IsNaN(sm.Value) || math.IsInf(sm.Value, 0) {
+			continue
+		}
 		key := labelsKey(sm.Metric, sm.Labels)
-		id, ok := ids[key]
+		id, ok := s.ids[key]
 		if !ok {
+			id, ok = added[key]
+		}
+		if !ok {
+			if insSeries == nil {
+				if err := prepareSeries(); err != nil {
+					return err
+				}
+			}
 			lj, err := json.Marshal(sm.Labels)
 			if err != nil {
 				return err
 			}
-			instance := nullableLabel(sm.Labels, "instance")
-			deployment := nullableLabel(sm.Labels, "deployment")
-			if _, err := insSeries.Exec(sm.Metric, key, string(lj), instance, deployment); err != nil {
+			if _, err := insSeries.Exec(sm.Metric, key, string(lj), nullableLabel(sm.Labels, "instance"),
+				nullableLabel(sm.Labels, "deployment"), nullableLabel(sm.Labels, "node")); err != nil {
 				return err
 			}
 			if err := selSeries.QueryRow(key).Scan(&id); err != nil {
 				return err
 			}
-			ids[key] = id
+			added[key] = id
 		}
 		if _, err := insSample.Exec(id, sm.TimeMS, sm.Value); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if len(s.ids)+len(added) > seriesIDCacheMax {
+		s.ids = make(map[string]int64, min(len(added), seriesIDCacheMax))
+	}
+	for key, id := range added {
+		if len(s.ids) >= seriesIDCacheMax {
+			break
+		}
+		s.ids[key] = id
+	}
+	return nil
 }
 
 // queryRangeJoinSQL is QueryRange's single statement: one LEFT JOIN pass over
@@ -222,18 +305,21 @@ const queryRangeJoinSQL = `
 
 // QueryRange finds every series whose metric equals `metric` and whose labels
 // are a superset of `matchers`, then returns bucketed points for each. An
-// "instance" and/or "deployment" matcher is pushed into the SQL WHERE against
-// the series table's indexed columns (see schema.go migration 2); every other
-// matcher is still checked exactly in Go against the decoded labels_json,
-// same as before that index existed.
+// "instance", "deployment" or "node" matcher is pushed into the SQL WHERE
+// against the series table's indexed columns (see schema.go migrations 2 and
+// 3); every other matcher is still checked exactly in Go against the decoded
+// labels_json, same as before those indexes existed.
 func (s *sqliteStore) QueryRange(metric string, matchers map[string]string, startMS, endMS, stepMS int64) ([]Series, error) {
 	if stepMS <= 0 {
 		return nil, fmt.Errorf("stepMS must be positive, got %d", stepMS)
 	}
+	if stepMS >= seekBucketsMinStepMS {
+		return s.queryRangeBySeek(metric, matchers, startMS, endMS, stepMS)
+	}
 	clause, extraArgs, rest := indexedMatcherClause("sr.", matchers)
 	query := fmt.Sprintf(queryRangeJoinSQL, clause)
 	args := append([]any{startMS, endMS, metric}, extraArgs...)
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.reader.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +387,7 @@ func (s *sqliteStore) QueryRange(metric string, matchers map[string]string, star
 }
 
 // queryLatestBaseSQL and queryLatestOrderSQL are split so QueryLatest can
-// splice indexed "instance"/"deployment" conditions in between them; tests
+// splice indexed "instance"/"deployment"/"node" conditions between them; tests
 // exercise both the unfiltered and filtered forms built from these two
 // (TestQueryLatestPlanSeeksPerSeriesTimeIndex).
 const queryLatestBaseSQL = `
@@ -318,9 +404,9 @@ const queryLatestOrderSQL = ` ORDER BY sr.id`
 // QueryLatest returns the newest sample at or after sinceMS for each matching
 // series. An optional asOfMS bounds the samples inclusively before selecting
 // the latest; without it, the upper bound remains unrestricted. Like
-// QueryRange, an "instance"/"deployment" matcher is pushed into the SQL WHERE
-// against the series table's indexed columns; every other matcher is still
-// checked exactly against the decoded labels_json.
+// QueryRange, an "instance", "deployment" or "node" matcher is pushed into the
+// SQL WHERE against the series table's indexed columns; every other matcher is
+// still checked exactly against the decoded labels_json.
 func (s *sqliteStore) QueryLatest(metric string, matchers map[string]string, sinceMS int64, asOfMS ...int64) ([]LatestPoint, error) {
 	if len(asOfMS) > 1 {
 		return nil, fmt.Errorf("QueryLatest accepts at most one as-of timestamp")
@@ -332,7 +418,7 @@ func (s *sqliteStore) QueryLatest(metric string, matchers map[string]string, sin
 	clause, extraArgs, rest := indexedMatcherClause("sr.", matchers)
 	query := queryLatestBaseSQL + clause + queryLatestOrderSQL
 	args := append([]any{sinceMS, endMS, metric}, extraArgs...)
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.reader.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -365,9 +451,9 @@ func matchesAll(labels, matchers map[string]string) bool {
 	return true
 }
 
-// indexedMatcherClause pulls the "instance" and "deployment" matchers - the
-// two labels the series table carries as dedicated indexed columns (schema.go
-// migration 2) - out of matchers and turns them into SQL conditions. prefix is
+// indexedMatcherClause pulls the "instance", "deployment" and "node" matchers -
+// the labels the series table carries as dedicated indexed columns (schema.go
+// migrations 2 and 3) - out of matchers and turns them into SQL conditions. prefix is
 // the series table's alias in the calling query ("" for a bare "series",
 // "sr." when it is joined and aliased). The remaining matchers are returned
 // unchanged for the caller's Go-side matchesAll check.
@@ -377,7 +463,7 @@ func indexedMatcherClause(prefix string, matchers map[string]string) (clause str
 	}
 	rest = make(map[string]string, len(matchers))
 	var b strings.Builder
-	for _, key := range [...]string{"instance", "deployment"} {
+	for _, key := range [...]string{"instance", "deployment", "node"} {
 		v, ok := matchers[key]
 		if !ok {
 			continue
@@ -399,7 +485,7 @@ func indexedMatcherClause(prefix string, matchers map[string]string) (clause str
 		args = append(args, v)
 	}
 	for k, v := range matchers {
-		if k == "instance" || k == "deployment" {
+		if k == "instance" || k == "deployment" || k == "node" {
 			continue
 		}
 		rest[k] = v
@@ -417,9 +503,9 @@ func indexedMatcherClause(prefix string, matchers map[string]string) (clause str
 const retainDropOrphanSeriesSQL = `DELETE FROM series WHERE NOT EXISTS (SELECT 1 FROM samples WHERE samples.series_id = series.id)`
 
 // retainBatchSize bounds each Retain delete pass so a large prune never holds
-// the pool's single connection long enough to starve a concurrent writer or
-// reader; retainBatchYield is the pause between passes that gives one a fair
-// chance at the connection before the next batch starts. retainMaxBatches
+// the single writer connection long enough to starve a concurrent WriteBatch;
+// retainBatchYield is the pause between passes that gives it a fair chance at
+// the connection before the next batch starts. retainMaxBatches
 // bounds the whole call: a truly pathological backlog (a server down for a
 // long stretch, or the first prune after lowering the configured retention -
 // see docs/reference/configuration.md's upgrade note) could otherwise turn
@@ -437,10 +523,10 @@ var (
 // Retain deletes samples older than the cutoff (unix ms) in bounded batches,
 // then drops any series left with no samples at all. Each batch is its own
 // implicit transaction (there is no explicit Begin/Commit spanning batches),
-// so between passes the pool's one connection is free for a queued WriteBatch
-// or query — the previous single-transaction delete held that connection for
-// the whole prune, which on a large table starved every writer and reader
-// behind it until busy_timeout gave up. The orphan-series sweep runs once,
+// so between passes the writer connection is free for a queued WriteBatch —
+// the previous single-transaction delete held that connection for the whole
+// prune, which on a large table starved every write behind it until
+// busy_timeout gave up. The orphan-series sweep runs once,
 // after every sample batch is gone (or the batch ceiling is hit — a
 // still-referenced series is harmless, it just isn't swept until a later
 // call finishes the job): a series row is identity plus labels, and one
@@ -482,9 +568,23 @@ func (s *sqliteStore) Retain(ctx context.Context, olderThanMS int64) error {
 		case <-time.After(retainBatchYield):
 		}
 	}
-	_, err := s.db.Exec(retainDropOrphanSeriesSQL)
-	return err
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	res, err := s.db.Exec(retainDropOrphanSeriesSQL)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n > 0 {
+		s.ids = make(map[string]int64)
+	}
+	return nil
 }
 
-// Close releases the database handle.
-func (s *sqliteStore) Close() error { return s.db.Close() }
+// Close releases both database handles.
+func (s *sqliteStore) Close() error {
+	var readErr error
+	if s.reader != s.db {
+		readErr = s.reader.Close()
+	}
+	return errors.Join(readErr, s.db.Close())
+}

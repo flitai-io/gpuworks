@@ -58,7 +58,7 @@ func TestBenchmarkCurveAPIAndHistoricalRunFallback(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &curve); err != nil {
 		t.Fatal(err)
 	}
-	if len(curve.Points) != 1 || curve.Points[0].Concurrency != 8 || len(curve.Points[0].Samples) != 1 || curve.Points[0].Samples[0].OutputTput != 12.5 {
+	if len(curve.Points) != 1 || curve.Points[0].Concurrency != 8 || len(curve.Points[0].Samples) != 1 || curve.Points[0].Samples[0].OutputTput == nil || *curve.Points[0].Samples[0].OutputTput != 12.5 {
 		t.Fatalf("curve response = %+v", curve)
 	}
 

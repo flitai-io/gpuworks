@@ -44,7 +44,7 @@ no rules beyond "prefill/decode". There are currently four modes:
 | `vllm-nixl` | Sequential, two-stage | decode ≥ prefill | UCX | Verified (same node, cross-node Ethernet, and multiple nodes within a role) |
 | `sglang-nixl` | Concurrent dispatch to both (`bootstrap_host/port/room`) | Equal | UCX | Not verified |
 | `vllm-ascend-mooncake` | Sequential, two-stage | prefill ≥ decode | HCCL (RoCE built into the NPU; mounts `/etc/hccn.conf`) | Verified (cross-node; P and D NPUs must reach each other on the NPU network) |
-| `vllm-mooncake` | Sequential, two-stage; the gateway generates the handoff parameters (prefill returns no `kv_transfer_params`; the gateway reads the engine id from its bootstrap server) | Equal | Mooncake transfer engine (Hygon DTK build, RDMA or TCP) | Experimental |
+| `vllm-mooncake` | Sequential, two-stage; the gateway generates the handoff parameters (prefill returns no `kv_transfer_params`; the gateway reads the engine id from its bootstrap server) | Equal | Mooncake transfer engine (Hygon DTK build, RDMA or TCP) | Verified (K100, two cards in one node, TP 1) |
 
 Violating a TP rule returns the corresponding error code. Engine presets expose `pd_modes` through `pdmode.ForEngine`, and the frontend uses them to offer available modes.
 

@@ -224,3 +224,16 @@ func TestIsSelfTestFixtureExemptsOnlyThisPackagesTests(t *testing.T) {
 		t.Error("did not expect an unrelated package's test file to be exempt")
 	}
 }
+
+func TestIsCodeOrConfigCoversBothCIDefinitions(t *testing.T) {
+	for _, path := range []string{".gitlab-ci.yml", ".github/workflows/ci.yml", ".github/workflows/release.yml", "Makefile"} {
+		if !isCodeOrConfig(path) {
+			t.Errorf("isCodeOrConfig(%q) = false, want true", path)
+		}
+	}
+	for _, path := range []string{".github/PULL_REQUEST_TEMPLATE.md", "docs/README.md"} {
+		if isCodeOrConfig(path) {
+			t.Errorf("isCodeOrConfig(%q) = true, want false", path)
+		}
+	}
+}

@@ -35,7 +35,8 @@ func registerDiscovery(mux *http.ServeMux, opts Options) {
 		if err != nil {
 			return
 		}
-		defer conn.CloseNow()
+		// This handler owns the socket; a disconnected peer has no close result to consume.
+		defer func() { _ = conn.CloseNow() }()
 		if err := wsjson.Write(r.Context(), conn, map[string]any{"type": "session.created", "session": map[string]any{"id": "fake-session", "model": opts.Model}}); err != nil {
 			return
 		}

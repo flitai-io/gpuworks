@@ -2,10 +2,11 @@ package gpu
 
 import (
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/accelerator"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"gpuworks.ai/gpuworks/internal/accelerator"
 )
 
 type amdMemorySource string

@@ -26,13 +26,6 @@ export function nodeRankAddress(node?: { compute_address?: string; management_ad
   return node?.compute_address || node?.management_address || "";
 }
 
-// runtimeChoices are the runtime preferences a node offers. A Mac runs engines
-// as host processes (the host driver): a container runtime there runs in a VM
-// without the Metal GPU, so automatic is its only choice.
-export function runtimeChoices(os?: string): string[] {
-  return os === "darwin" ? ["auto"] : ["auto", "docker", "nerdctl", "udocker"];
-}
-
 // The "udocker" driver ID is kept on the wire and in storage for existing
 // nodes and API callers; its implementation is runveil (native image handling
 // plus a direct PRoot launcher), which is what operators see.

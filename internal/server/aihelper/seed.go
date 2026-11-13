@@ -375,6 +375,6 @@ func (c NodeContext) Prompt() string {
 	if dropped > 0 {
 		fmt.Fprintf(&b, "; %d dropped to fit", dropped)
 	}
-	b.WriteString(". Metrics are not included: find them with search_metrics (e.g. gpuworks_gpu_temperature_celsius, gpuworks_gpu_power_watts, gpuworks_gpu_throttle_reasons) and read GET /api/v1/metrics/query with this node; get_gpu_topology has the link matrix.\n")
+	b.WriteString(". Metrics are not included. Read a series only when the lines above do not settle temperature, power or throttle: call_api GET /api/v1/metrics/query with metric gpuworks_gpu_temperature_celsius, gpuworks_gpu_power_watts or gpuworks_gpu_throttle_reasons and jq `.items[].points[-1][1]` (a point is [unix ms, value]). get_gpu_topology has the link matrix. Do not re-read this node's hardware. Connection diagnostics are not in this seed: for connecting/offline nodes or a connection question, call get_node_connection_diagnostics with this node_uuid before attributing a connection failure.\n")
 	return b.String()
 }

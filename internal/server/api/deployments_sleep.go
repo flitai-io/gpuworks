@@ -6,11 +6,9 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -264,48 +262,10 @@ func (a *apiHandlers) roleSleepTargets(w http.ResponseWriter, dep *store.Deploym
 	return planning.RoleInstances(insts, role), true
 }
 
-// writeSleepDeclarationError preserves sleep refusal text and target capability
-// errors when a deployment asks to enable sleep.
-func writeSleepDeclarationError(w http.ResponseWriter, err error) {
-	var product *messages.ProductError
-	if errors.As(err, &product) {
-		fallback := product.Error()
-		if strings.HasPrefix(product.Code(), "SLEEP_") {
-			fallback = sleepRefusalFallback(product.Code())
-		}
-		writeProductError(w, http.StatusBadRequest, product.Code(), fallback, product.Params())
-	} else {
-		writeErr(w, http.StatusBadRequest, err)
-	}
-}
-
 // writeSleepRefusal answers a refused sleep or wake order with its code and
 // the English fallback; the UI renders the code.
 func writeSleepRefusal(w http.ResponseWriter, status int, refusal *planning.SleepRefusal) {
-	writeProductError(w, status, refusal.Code, sleepRefusalFallback(refusal.Code), refusal.Params)
-}
-
-// sleepRefusalFallback is the English wire text for a refused sleep order.
-func sleepRefusalFallback(code string) string {
-	switch code {
-	case ErrorSleepNotEnabled:
-		return "sleep mode was not enabled for this deployment"
-	case ErrorSleepEngineUnsupported:
-		return "the deployment's engine does not support sleep mode"
-	case ErrorInstanceNotServing:
-		return "the instance fills no replica: it failed, is draining or is being removed"
-	case ErrorSleepRoleCannotEmpty:
-		return "the role cannot be left without an awake instance; sleep the whole deployment instead"
-	case ErrorSleepHostMemoryInsufficient:
-		return "the node's host memory cannot hold the weights an L1 sleep moves there; sleep at L2 instead"
-	case messages.ErrorPDNotPD:
-		return "deployment is not PD disaggregated"
-	case messages.ErrorPDRoleUnknown:
-		return "the role is not a role of this deployment"
-	case messages.ErrorAcceleratorFeatureUnsupported:
-		return "the selected accelerator does not support sleep mode"
-	}
-	return "sleep order refused"
+	writeProductError(w, status, refusal.Code, messages.SleepRefusalFallback(refusal.Code), refusal.Params)
 }
 
 func appendUnique(values []string, more ...string) []string {
@@ -317,30 +277,23 @@ func appendUnique(values []string, more ...string) []string {
 	return values
 }
 
-// hostMemory is a node's host memory as its agent recently reported it
-// (planning.RecentHostMemory).
+// hostMemory is a node's host memory as its agent recently reported it, read
+// from the metrics store's newest samples (Deps.MetricsLatest) by
+// planning.RecentHostMemory, the one reader of host memory for an operator's
+// L1 sleep and the automation's.
 func (a *apiHandlers) hostMemory(nodeUUID string) (available, total int64, ok bool) {
-	host := HostMemory(a.d.MetricsLatest)
-	if host == nil {
+	latest := a.d.MetricsLatest
+	if latest == nil {
 		return 0, 0, false
 	}
-	return host(nodeUUID)
-}
-
-// HostMemory is planning.RecentHostMemory over latest, the metrics store's
-// newest samples (Deps.MetricsLatest): the one reader of host memory for an
-// operator's L1 sleep and the automation's. Nil latest knows nothing.
-func HostMemory(latest func(metric string, matchers map[string]string, sinceMS int64, asOfMS ...int64) ([]MetricLatest, error)) planning.HostMemory {
-	if latest == nil {
-		return nil
-	}
-	return planning.RecentHostMemory(func(metric, node string, sinceMS int64) (float64, bool) {
+	host := planning.RecentHostMemory(func(metric, node string, sinceMS int64) (float64, bool) {
 		rows, err := latest(metric, map[string]string{"node": node}, sinceMS)
 		if err != nil || len(rows) == 0 {
 			return 0, false
 		}
 		return rows[0].Value, true
 	}, time.Now)
+	return host(nodeUUID)
 }
 
 // releaseSleepHold lets requests wake the deployment's held sleepers without

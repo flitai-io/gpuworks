@@ -1,16 +1,18 @@
-import { Layout, Menu, Space, Typography, Button, Tooltip, Drawer } from "antd";
-import type { MenuProps } from "antd";
+import { FeedbackHost } from "./ui-kit/feedback";
+import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import AppSidebar from "./app/AppSidebar";
+import { ConsoleIcon } from "./ui-kit/consoleIcons";
+
+const AssistantIcon = ConsoleIcon.assistant;
 import UpdateNotice from "./components/UpdateNotice";
 import NoticeBell from "./components/NoticeBell";
 import AssistantPanel from "./assistant/AssistantPanel";
 import { AssistantProvider, useAssistant } from "./assistant/AssistantContext";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MenuOutlined, RobotOutlined,
-} from "@ant-design/icons";
-import { navGroups, selectedNavKey } from "./navigation";
 import NodesPage from "./pages/NodesPage";
 import DashboardPage from "./pages/DashboardPage";
 import MonitorPage from "./pages/monitor/MonitorPage";
@@ -28,9 +30,11 @@ import EvaluationDetailPage from "./pages/evaluations/EvaluationDetailPage";
 import EvaluationComparePage from "./pages/evaluations/EvaluationComparePage";
 import APIKeysPage from "./pages/APIKeysPage";
 import CloudProvidersPage from "./pages/CloudProvidersPage";
+import KubernetesPage from "./pages/KubernetesPage";
 import SettingsPage from "./pages/SettingsPage";
 import LogsPage from "./pages/LogsPage";
 import SessionBoundary from "./components/SessionBoundary";
+import UserMenu from "./components/UserMenu";
 import NotFoundPage from "./pages/NotFoundPage";
 import ImagesPage from "./pages/ImagesPage";
 import StoragePage from "./pages/StoragePage";
@@ -56,13 +60,12 @@ import "./pages/batches/batches.css";
 import "./pages/scheduling/heatmap.css";
 import "./pages/playground/playground.css";
 
-const { Header, Sider, Content } = Layout;
-
 
 export default function App() {
   return (
     <SessionBoundary onLogout={signOutPlayground}>
       {(logout) => <AppErrorBoundary>
+        <FeedbackHost />
         <Routes>
           <Route path="/login" element={<Navigate to="/dashboard" replace />} />
           {/* The terminal uses the full viewport and shares the session gate. */}
@@ -80,66 +83,34 @@ function ModelsAlias() {
   return <Navigate replace to={`/models${search}`} />;
 }
 
-/** NAV_INDENT is the menu items' inner left padding; styles.css lines the collapse button up with it. */
-const NAV_INDENT = 12;
-
 function AuthenticatedShell({ onLogout }: { onLogout: () => Promise<void> }) {
-  const { t } = useTranslation();
   const branding = useBranding();
   useDocumentBranding(branding);
-  const loc = useLocation();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(readNavCollapsed);
-  const selected = selectedNavKey(loc.pathname);
-
-  const menuItems = navGroups.flatMap((group): NonNullable<MenuProps["items"]> => {
-    const children = group.items.map(({ key, icon, labelKey }) => ({ key, icon, label: <Link to={key}>{t(labelKey)}</Link> }));
-    return group.labelKey ? [{ type: "group" as const, label: t(group.labelKey), children }] : children;
-  });
-
-  const toggleNav = () => {
-    const next = !navCollapsed;
-    setNavCollapsed(next);
-    writeNavCollapsed(next);
+  const setNavOpen = (open: boolean) => {
+    setNavCollapsed(!open);
+    writeNavCollapsed(!open);
   };
 
   return (
     <AssistantProvider>
-    <Layout className="app-shell">
-      <Header className="app-header">
-        <Space size={8} className="app-header-start">
-          <Tooltip title={t("header.openNavigation")}>
-            <Button className="mobile-menu-button" type="text" icon={<MenuOutlined />} onClick={() => setMobileNavOpen(true)} aria-label={t("header.openNavigation")} />
-          </Tooltip>
+    <div className="app-shell">
+      <header className="app-header">
+        <div className="app-header-start">
           <Brand title={branding.consoleTitle} />
-        </Space>
-        <Space>
+        </div>
+        <div className="app-header-actions">
           <UpdateNotice />
           <NoticeBell />
           <AssistantHeaderButton />
           <LanguageSwitcher light />
-          <Typography.Text className="app-header-user">{t("header.administrator")}</Typography.Text>
-          <Tooltip title={t("header.logout")}><Button type="text" icon={<LogoutOutlined />} onClick={onLogout} aria-label={t("header.logout")} /></Tooltip>
-        </Space>
-      </Header>
-      <Layout hasSider>
-        <Sider theme="light" width={208} collapsedWidth={56} collapsed={navCollapsed} trigger={null} className="app-sider desktop-sider">
-          <Menu mode="inline" inlineIndent={NAV_INDENT} selectedKeys={[selected]} items={menuItems} className="app-nav" />
-          <div className="app-nav-toggle">
-            <Tooltip title={navCollapsed ? t("header.expandNavigation") : undefined} placement="right">
-              <Button
-                type="text"
-                block
-                icon={navCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                onClick={toggleNav}
-                aria-label={t(navCollapsed ? "header.expandNavigation" : "header.collapseNavigation")}
-              >
-                {!navCollapsed && t("header.collapseNavigation")}
-              </Button>
-            </Tooltip>
-          </div>
-        </Sider>
-        <Content className="app-content">
+          <UserMenu onLogout={onLogout} />
+        </div>
+      </header>
+      <SidebarProvider open={!navCollapsed} onOpenChange={setNavOpen} breakpointBehavior="collapse">
+      <div className="app-body">
+        <AppSidebar />
+        <main className="app-content"><div className="app-page">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/login" element={<Navigate to="/dashboard" replace />} />
@@ -149,8 +120,10 @@ function AuthenticatedShell({ onLogout }: { onLogout: () => Promise<void> }) {
             <Route path="/analytics/:tab?" element={<AnalyticsPage />} />
             <Route path="/nodes" element={<NodesPage />} />
             <Route path="/gpus" element={<GPUPage />} />
-            <Route path="/providers" element={<CloudProvidersPage scope="public" />} />
-            <Route path="/zstack" element={<CloudProvidersPage scope="private" />} />
+            <Route path="/providers" element={<CloudProvidersPage />} />
+            {/* The private cloud page became the external platforms list, opened on private clouds. */}
+            <Route path="/zstack" element={<Navigate to="/providers?category=private_cloud" replace />} />
+            <Route path="/kubernetes" element={<KubernetesPage />} />
             <Route path="/models" element={<ModelsPage />} />
 			<Route path="/inference-templates" element={<InferenceTemplatesPage />} />
 			<Route path="/inference-templates/*" element={<InferenceTemplateDetailPage />} />
@@ -174,28 +147,11 @@ function AuthenticatedShell({ onLogout }: { onLogout: () => Promise<void> }) {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-        </Content>
-      </Layout>
-      <Drawer
-        title={null}
-        placement="left"
-        width={260}
-        open={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
-        styles={{ body: { padding: 0 } }}
-      >
-        <Brand />
-        <Menu
-          mode="inline"
-          inlineIndent={NAV_INDENT}
-          selectedKeys={[selected]}
-          items={menuItems}
-          className="app-nav"
-          onClick={() => setMobileNavOpen(false)}
-        />
-      </Drawer>
+        </div></main>
+      </div>
+      </SidebarProvider>
       <AssistantPanel />
-    </Layout>
+    </div>
     </AssistantProvider>
   );
 }
@@ -205,8 +161,9 @@ function AssistantHeaderButton() {
   const { t } = useTranslation("ai");
   const { open, setOpen } = useAssistant();
   return (
-    <Tooltip title={t("panel.headerTooltip")}>
-      <Button type="text" icon={<RobotOutlined />} onClick={() => setOpen(!open)} aria-label={t("title")}>
+    <Tooltip content={t("panel.headerTooltip")}>
+      {/* The one header button with a label and a hairline border (ui-guidelines 9.1b). */}
+      <Button variant="secondary" size="md" leadingIcon={AssistantIcon} onClick={() => setOpen(!open)} aria-label={t("title")} aria-pressed={open}>
         <span className="app-header-user">{t("title")}</span>
       </Button>
     </Tooltip>

@@ -45,7 +45,7 @@ func uninstallExpose(ctx context.Context, layout selfinstall.Layout, runner self
 	if err != nil {
 		return nil, fmt.Errorf("cannot determine whether the public entry point is running: %w", err)
 	}
-	cfg, err := store.ReadConfig()
+	_, err = store.ReadConfig()
 	if err != nil {
 		if held || owned {
 			return nil, fmt.Errorf("cannot safely close the public entry point with unreadable configuration: %w", err)
@@ -61,7 +61,7 @@ func uninstallExpose(ctx context.Context, layout selfinstall.Layout, runner self
 	if err != nil {
 		return nil, err
 	}
-	cfg, err = store.ReadConfig()
+	cfg, err := store.ReadConfig()
 	if err == nil {
 		cfg.Desired = expose.DesiredDisabled
 		cfg.Revision = expose.NewRevision()

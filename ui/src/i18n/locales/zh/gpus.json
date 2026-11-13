@@ -96,7 +96,8 @@
   "vendor": {
     "nvidia": "NVIDIA",
     "ascend": "昇腾",
-    "ppu": "平头哥"
+    "ppu": "平头哥",
+    "kunlunxin": "昆仑芯"
   },
   "empty": {
     "physical": "暂无 GPU 设备",

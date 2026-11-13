@@ -71,7 +71,7 @@
         "Generation cancellation and failure recovery",
         "GPU performance, dGPU isolation or sleep/wake",
         "Full API-key list/field/permission/style matrix",
-        "Deleting the last key through UI and anonymous development-mode generation"
+        "Deleting the last key through the UI while observing the gateway (after cleanup the zero-key /v1 401 is asserted in the inference-key case, not here)"
       ],
       "product_contracts": [
         "ui/src/pages/APIKeysPage.tsx",

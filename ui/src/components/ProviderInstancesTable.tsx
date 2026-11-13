@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
+import { Badge as ZeronBadge } from "./ui/badge";
+import { Tooltip } from "./ui/tooltip";
 import type { ColumnsType } from "antd/es/table";
 import { localizedText } from "../i18n/localizedText";
 import { isCommandChannel } from "../providerConnections";
@@ -143,8 +145,10 @@ export default function ProviderInstancesTable({
       width: 200,
       fixed: "right",
       render: (_: unknown, inst: ProviderInstance) => {
-        const powerAction = inst.power === "running" ? "off" : "on";
-        const powerButton = kindInfo?.capabilities.can_power_control ? (
+        // The server says what the instance allows; nothing here decides it.
+        const actions = inst.actions ?? [];
+        const powerAction = actions.includes("power_off") ? "off" : actions.includes("power_on") ? "on" : null;
+        const powerButton = powerAction ? (
           powerAction === "off" ? (
             <Popconfirm
               title={t("instances.powerOffConfirm")}
@@ -175,7 +179,11 @@ export default function ProviderInstancesTable({
         return (
           <>
             {powerButton}
-            {inst.node_id === 0 ? (
+            {inst.managed_cluster ? (
+              <Tooltip content={t("instances.clusterNodeHint", { cluster: inst.managed_cluster })}>
+                <ZeronBadge color="purple">{t("instances.clusterNode")}</ZeronBadge>
+              </Tooltip>
+            ) : actions.includes("install") ? (
               <Button type="link" size="small" onClick={() => setInstallFor(inst)}>
                 {t("instances.installAgent")}
               </Button>

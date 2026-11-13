@@ -1,6 +1,7 @@
 import { Alert, Button, Checkbox, Modal, Space, Spin, Table, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Badge } from "../ui/badge";
 import ServerBuildSummary from "../ServerBuildSummary";
 import type { AgentUpgradeCandidate, AgentUpgradePreview } from "../../agentUpgradesTypes";
 
@@ -39,7 +40,10 @@ export default function UpgradePreviewModal({ open, preview, loading, busy, erro
         {!eligible && <Alert type="info" showIcon message={t("batchUpgrade.noEligible")} />}
         <Table<AgentUpgradeCandidate> size="small" rowKey="node_uuid" dataSource={preview.nodes} pagination={{ pageSize: 10, showSizeChanger: false }} columns={[
           { title: t("batchUpgrade.columns.node"), key: "node", render: (_, node) => <Space direction="vertical" size={0}><Typography.Text>{node.name || node.node_uuid}</Typography.Text><Typography.Text type="secondary">{node.node_uuid}</Typography.Text></Space> },
-          { title: t("batchUpgrade.columns.from"), dataIndex: "from_version", render: (value: string) => value || "—" },
+          { title: t("fleet.versionChange"), key: "version", render: (_, node) => node.eligibility === "eligible"
+            ? <div className="flex flex-col items-start gap-1"><span>{node.from_version} → {preview.target_version}</span>
+                <Badge size="sm" status="neutral">{t(node.downgrade ? "fleet.status.downgrade" : node.version_change === "upgrade" ? "fleet.willUpgrade" : "fleet.replaceBuild")}</Badge></div>
+            : node.from_version || "—" },
           { title: t("batchUpgrade.columns.platform"), key: "platform", render: (_, node) => `${node.os || "—"}/${node.arch || "—"}` },
           { title: t("batchUpgrade.columns.result"), key: "eligibility", render: (_, node) => t(`batchUpgrade.eligibility.${node.eligibility}`, { defaultValue: t("batchUpgrade.eligibility.unavailable") }) },
           { title: t("batchUpgrade.columns.reason"), key: "reason", render: (_, node) => node.reason ? t(`batchUpgrade.reason.${node.reason}`, { defaultValue: node.reason }) : "—" },

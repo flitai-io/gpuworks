@@ -1,0 +1,20 @@
+.report-archive { box-sizing: border-box; padding: 20px; margin: 16px 0; color: #172033; background: white; font: 14px/1.55 system-ui,sans-serif }
+.report-archive :is(details,section,footer) { margin: 12px 0 }
+.report-archive details { overflow-x: auto }
+.report-archive summary, .offline-table-controls label { cursor: pointer }
+.report-archive pre { white-space: pre-wrap; overflow-wrap: anywhere }
+.report-archive table { border-collapse: collapse; margin: 8px 0 }
+.report-archive :is(td,th), #all-points .full-metric { padding: 6px 10px; border-bottom: 1px solid #ddd; text-align: start; white-space: nowrap }
+#all-points { position: relative }
+.offline-table-controls { position: absolute; inset: 7px 12px auto auto; z-index: 1; font: 13px/1.5 system-ui,sans-serif }
+#all-points:not(:has(#full-point-columns:checked)) :is(.full-metric,.full-only,.offline-full-heading),
+#all-points:has(#full-point-columns:checked) :is(.preview-only,colgroup,.offline-preview-heading,.ant-table-measure-row),
+#all-points:has(#full-point-columns:checked) tr > :is(th,td):not(.full-metric) { display: none !important }
+#all-points:has(#full-point-columns:checked) :is(.ant-table-content,.ant-table-body) { overflow-x: auto !important }
+#all-points:has(#full-point-columns:checked) table { width: max-content !important; table-layout: auto !important }
+#all-points tr[data-offline-selected] > td { background: #fff7e6 !important }
+[data-report-curve] .ant-segmented-item:has(input:checked) { background: white !important; color: #172033 !important }
+[data-report-curve] .ant-segmented-item:not(:has(input:checked)) { background: transparent !important; box-shadow: none !important }
+
+.offline-point-link { color: inherit; text-decoration: none }
+.offline-point-link:hover { text-decoration: underline }

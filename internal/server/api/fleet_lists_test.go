@@ -232,7 +232,7 @@ func TestDashboardSummaryCountsTheFleet(t *testing.T) {
 	if !reflect.DeepEqual(got.Nodes, wantNodes) {
 		t.Errorf("nodes = %+v, want %+v", got.Nodes, wantNodes)
 	}
-	wantDeps := dto.DashboardDeployments{Total: 4, Running: 1, Warming: 2, Sleepable: 2}
+	wantDeps := dto.DashboardDeployments{Total: 4, Running: 1, Warming: 2, Pending: 1, Sleepable: 2}
 	if got.Deployments != wantDeps {
 		t.Errorf("deployments = %+v, want %+v", got.Deployments, wantDeps)
 	}
@@ -297,7 +297,7 @@ func TestDashboardSummaryGroupsMixedNodeCardsByTheirOwnVendor(t *testing.T) {
 func TestDashboardSummaryOfAnEmptyFleet(t *testing.T) {
 	n := newNetworkAPI(t)
 	raw := n.memberGet("/api/v1/dashboard/summary")
-	const want = `{"current_metrics":{"utilization_pct":null,"temperature_c":null,"power_watts":null,"memory_used_bytes":null},"nodes":{"total":0,"online":0,"offline":0,"connecting":0,"gpus":0,"unusable_gpus":0,"vram_gib":0,"memory_gib":0},"deployments":{"total":0,"running":0,"warming":0,"sleepable":0},"by_vendor":[],"label_keys":[],"label_key":"","by_label":[]}`
+	const want = `{"current_metrics":{"utilization_pct":null,"temperature_c":null,"power_watts":null,"memory_used_bytes":null,"vram_used_bytes":null,"vram_total_bytes":null},"nodes":{"total":0,"online":0,"offline":0,"connecting":0,"gpus":0,"unusable_gpus":0,"vram_gib":0,"memory_gib":0},"deployments":{"total":0,"running":0,"warming":0,"sleeping":0,"pending":0,"other":0,"sleepable":0},"cards":{"nodes":0,"online_nodes":0,"cards":0,"awake":0,"asleep":0,"free":0,"held_outside":0,"unhealthy":0,"offline":0,"contention":{"waiting_wakes":0,"held_requests":0,"yields_last_hour":0},"allocated":0},"tasks":{"batches":null,"benchmarks":0},"by_vendor":[],"label_keys":[],"label_key":"","by_label":[]}`
 	if string(raw) != want+"\n" && string(raw) != want {
 		t.Fatalf("empty summary\n got: %s\nwant: %s", raw, want)
 	}
@@ -386,10 +386,8 @@ func TestNodeFacetsWireJSON(t *testing.T) {
 	}
 }
 
-// A sleeping deployment serves nothing, so the fleet summary must not count it
-// as running — the same way it does not count a stopped one. That also means
-// Total does not equal Running+Warming, which the DTO documents; this test is
-// what pins the gap to sleep rather than to a counting bug.
+// A sleeping deployment serves nothing, so the fleet summary counts it as
+// sleeping, not running, and every deployment lands in exactly one bucket.
 func TestDashboardSummaryDoesNotCountSleepingDeploymentsAsRunning(t *testing.T) {
 	n := fleetFixture(t)
 	model, err := n.store.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/m", Revision: "main", Name: "org/m"})
@@ -437,10 +435,66 @@ func TestDashboardSummaryDoesNotCountSleepingDeploymentsAsRunning(t *testing.T) 
 	if got.Deployments.Total != 2 {
 		t.Errorf("total = %d, want 2: it is still a deployment", got.Deployments.Total)
 	}
-	if got.Deployments.Total != got.Deployments.Running+got.Deployments.Warming {
-		// The gap is the point of this test, documented on the DTO.
-		if got.Deployments.Total-got.Deployments.Running-got.Deployments.Warming != 1 {
-			t.Errorf("deployments = %+v, want exactly one deployment outside running+warming (the sleeping one)", got.Deployments)
-		}
+	if got.Deployments.Sleeping != 1 {
+		t.Errorf("sleeping = %d, want 1: the asleep deployment is counted as sleeping", got.Deployments.Sleeping)
+	}
+	if d := got.Deployments; d.Other != 0 || d.Total != d.Running+d.Warming+d.Sleeping+d.Pending+d.Other {
+		t.Errorf("deployments = %+v, want the buckets to add up to the total with nothing in other", d)
+	}
+}
+
+// A stopped deployment is in no named bucket: it is counted as other, once,
+// and not also as pending.
+func TestDashboardSummaryCountsUnnamedStatesAsOther(t *testing.T) {
+	n := fleetFixture(t)
+	model, err := n.store.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/m", Revision: "main", Name: "org/m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.store.CreateDeployment(&store.Deployment{Name: "queued", ModelID: model.ID, Replicas: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.store.CreateDeployment(&store.Deployment{Name: "stopped", ModelID: model.ID, Replicas: 1, State: store.DeployStopped}); err != nil {
+		t.Fatal(err)
+	}
+	var got dto.DashboardSummary
+	if err := json.Unmarshal(n.memberGet("/api/v1/dashboard/summary"), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := dto.DashboardDeployments{Total: 2, Pending: 1, Other: 1}
+	if got.Deployments != want {
+		t.Errorf("deployments = %+v, want %+v", got.Deployments, want)
+	}
+	if got.Cards == nil || got.Cards.Allocated != got.Cards.Awake+got.Cards.Asleep {
+		t.Errorf("cards = %+v, want allocated = awake + asleep", got.Cards)
+	}
+}
+
+// The wire of a summary whose overview could not be built (cards null) and
+// with deployments in every bucket.
+func TestDashboardSummaryWireJSONWithUnknownCardsAndEveryBucket(t *testing.T) {
+	got, err := json.Marshal(dto.DashboardSummary{
+		Deployments: dto.DashboardDeployments{Total: 10, Running: 3, Warming: 2, Sleeping: 1, Pending: 2, Other: 2, Sleepable: 4},
+		Tasks:       dto.DashboardTasks{Benchmarks: 1},
+		ByVendor:    []dto.CapacityGroup{}, LabelKeys: []string{}, ByLabel: []dto.CapacityGroup{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"current_metrics":{"utilization_pct":null,"temperature_c":null,"power_watts":null,"memory_used_bytes":null,"vram_used_bytes":null,"vram_total_bytes":null},"nodes":{"total":0,"online":0,"offline":0,"connecting":0,"gpus":0,"unusable_gpus":0,"vram_gib":0,"memory_gib":0},"deployments":{"total":10,"running":3,"warming":2,"sleeping":1,"pending":2,"other":2,"sleepable":4},"cards":null,"tasks":{"batches":null,"benchmarks":1},"by_vendor":[],"label_keys":[],"label_key":"","by_label":[]}`
+	if string(got) != want {
+		t.Fatalf("wire JSON\n got: %s\nwant: %s", got, want)
+	}
+	var back dto.DashboardSummary
+	if err := json.Unmarshal(got, &back); err != nil || back.Cards != nil || back.Deployments.Other != 2 {
+		t.Fatalf("round trip = %+v (%v)", back, err)
+	}
+	cards, err := json.Marshal(dto.DashboardCards{OverviewSummary: dto.OverviewSummary{Nodes: 2, OnlineNodes: 2, Cards: 8, Awake: 3, Asleep: 2, Free: 2, Unhealthy: 1}, Allocated: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const wantCards = `{"nodes":2,"online_nodes":2,"cards":8,"awake":3,"asleep":2,"free":2,"held_outside":0,"unhealthy":1,"offline":0,"contention":{"waiting_wakes":0,"held_requests":0,"yields_last_hour":0},"allocated":5}`
+	if string(cards) != wantCards {
+		t.Fatalf("cards wire JSON\n got: %s\nwant: %s", cards, wantCards)
 	}
 }

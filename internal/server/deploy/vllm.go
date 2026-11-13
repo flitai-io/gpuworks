@@ -52,6 +52,7 @@ func (vLLMEngine) Profile() Profile {
 		QuickFormKeys: []string{
 			"max_model_len", "dtype", "quantization", "gpu_memory_utilization",
 			"max_num_seqs", "max_num_batched_tokens", "enable_prefix_caching",
+			"data_parallel_size",
 			"enable_cache_report",
 			"kv_cache_dtype",
 			// The KV tier row of the quick form is driven by these keys: without
@@ -106,7 +107,8 @@ func BuildVLLM(p Params) ResolvedLaunch {
 		// Force loopback for vllm's intra-node IPC (V1 EngineCore uses gloo/NCCL
 		// over TCP); without this the engine subprocess can fail hostname
 		// resolution (gloo getaddrinfo -2), especially under a dGPU/host-network
-		// container. Loopback is correct for single-node tp/pp.
+		// container. Targets with multi-device collectives override this default
+		// through computeNetworkEnv.
 		"VLLM_HOST_IP":       "127.0.0.1",
 		"GLOO_SOCKET_IFNAME": "lo",
 		"NCCL_SOCKET_IFNAME": "lo",
@@ -208,6 +210,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 		// The disk tier and the PD connector are composite flags: one JSON
 		// object carries them, so the adapter composes it in one place.
 		b.injectKV("--kv-transfer-config", config)
+		vllmHybridKVCacheManager(b, p)
 	} else if q.KVOffloadingSize > 0 {
 		b.injectDictionary("kv_offloading_size", q.KVOffloadingSize)
 		b.injectKV("--kv-offloading-backend", "native")

@@ -13,12 +13,15 @@ Connect a GPU host to a running server. After connecting it, you should see the 
 
 ## Choose a Connection Method
 
+Cloud hosts can also use the manual command or SSH wizard. When installation starts from a cloud platform, GPUWorks uses the synchronized instance or host information to install the agent. Once the agent connects to the server, the host appears as an online compute node.
+
 | Method | Requirements | Entry point |
 |---|---|---|
 | Manual command | You can run commands in the node's terminal, and the node can reach the server's download address | **Add node → SSH unavailable** generates an installation command |
 | SSH wizard | The server can sign in to the host through SSH | **Add node → SSH supported** installs after a precheck |
 | Offline package | Manual installation with a server-initiated connection, including when the node cannot download from the server | **Add node → SSH unavailable → Server-initiated connection** |
-| One-click cloud host installation | The cloud account is connected to the platform | Click **Install Agent** in the instance list under **Public Cloud**; see [Rent Cloud GPUs](rent-cloud-gpus.md) for steps |
+| One-click public cloud instance installation | The public cloud account has been added and the target instance synchronized | Expand the account under **External Platforms** and click **Install Agent** in its instance list; see [Public Cloud Instance Installation](rent-cloud-gpus.md#安装-agent让实例出现在计算节点) |
+| One-click ZStack Cloud host installation | The ZStack Cloud environment has been added and the target host synchronized | Expand the environment under **External Platforms** and click **Install Agent** for the target host; see [ZStack Cloud Installation](onboard-zstack-cloud.md#安装-agent-并确认接入) |
 
 ### agent_dial and server_dial
 
@@ -44,7 +47,7 @@ To change parameters such as the driver or state directory, see [Installation Sc
 
 1. Open **Compute Nodes → Add node**, select **SSH supported**, and enter the node name, connection direction, and corresponding addresses. You do not need to create a node first to obtain a token.
 2. For **SSH target**, enter `user@host[:port]` or paste the SSH command provided by your cloud provider. The wizard reads only the user, host, and port; options such as `-i` and port forwarding have no effect, and jump hosts using `-J` / `ProxyJump` are unsupported.
-3. Choose an authentication method. With the default **Platform key**, copy the authorization command from the form and run it on the target host as the SSH user. You can also enter a **Password** or **Private key**.
+3. Choose an authentication method. With the default **Platform key**, copy the authorization command from the form and run it on the target host as the SSH user. You can also enter a **Password** or **Private key**. If the target SSH server accepts passwords only through an interactive prompt such as PAM, select **Keyboard-interactive** and use the same password field. It is a different protocol from ordinary SSH password authentication; an explicit selection attempts only that method.
 4. Under **Advanced**, check **Installation directory** and **Start via systemd**, then click **Start precheck**. Resolve network, directory, and device permission issues according to the report, then click **Install Agent**.
 5. Review the installation results. If prompted to confirm replacement of an existing agent, first check which node is affected. **Installation command executed** does not mean the node is online; continue to [verify the connection](#确认接入结果).
 
@@ -54,7 +57,9 @@ You can also view the platform public key under **SSH Key** on the Settings page
 mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '<platform-public-key>' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
 ```
 
-After successful installation using a password or private key, the server attempts to write the platform public key. If successful, it retains only the platform key; it saves the entered credentials only if writing the public key fails. `SSH authentication` and `Platform key` in the installation report show the authentication and public key write results. The precheck does not write the public key; it only creates and removes temporary files to probe the directory.
+Keyboard-interactive supports only one non-echoing password response, with a bounded number of informational rounds containing no questions. Multiple questions, repeated password prompts, and MFA are unsupported. When authentication methods do not match, the report points to the target SSH configuration or suggests selecting keyboard-interactive; network failures and changed host keys still require their own remedies.
+
+After successful installation using a password, keyboard-interactive, or private key, the server attempts to write the platform public key. If successful, it retains only the platform key; it saves the entered credentials only if writing the public key fails. `SSH authentication` and `Platform key` in the installation report show the authentication and public key write results. The precheck does not write the public key; it only creates and removes temporary files to probe the directory. The node SSH credential editor offers the same authentication options and also attempts to authorize the platform public key when saving. If a password is retained, reopening the editor shows **Password**, which identifies the stored credential type. Subsequent automatic recovery supports both ordinary password and keyboard-interactive authentication without saving the credentials again.
 
 ### Offline Package
 
@@ -229,9 +234,11 @@ When a node goes offline unexpectedly, its replicas move to other nodes automati
 
 ## Uninstall
 
+Before manual uninstallation, add `--dry-run --json` to the same command to inspect the detailed checklist. Active workloads or critical unknowns must be addressed by default, and checks run again after confirmation. Noninteractive execution requires `--yes`. Use `--keep-resources` only when deliberately removing the agent while retaining workloads; it does not release GPUs or delete models for you. See the [agent uninstall reference](../reference/cli.md#gpuworks-agent-uninstall).
+
 1. Stop or move the deployment instances off the node first.
 2. Select **More → Delete** in the node list. Normal removal uninstalls the corresponding agent using saved SSH credentials, then deletes the management record only after success is confirmed. Other nodes on the same host are unaffected.
-3. Confirm that the node is removed from the list. If SSH is unreachable, credentials are missing, or the uninstall result cannot be confirmed, the node and credentials are retained. Fix the issue and retry.
+3. Confirm that the node is removed from the list. Normal removal requires saved SSH credentials. If none are configured, the platform retains the node and prompts you to configure SSH and retry. For manually registered nodes that do not support SSH, uninstall the agent manually on the node, then select **Force removal: only delete management records**. If SSH fails or uninstallation cannot be confirmed, the node and credentials are also retained. Fix SSH and retry, or confirm that manual uninstallation has completed before force removal.
 
 If the node is unreachable, you can explicitly select **Force removal: only delete management records**. This skips remote uninstallation, so the agent may still be running.
 Uninstall it manually after you regain access to the node. Force removal still cannot delete a node that has instances. If an older agent on the node cannot stop

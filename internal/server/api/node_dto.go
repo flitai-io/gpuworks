@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/partitioncap"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -43,6 +44,7 @@ func nodeDTO(n *store.Node, includeToken bool) dto.Node {
 		FrameworkVersion:      n.FrameworkVersion,
 		RuntimeDriver:         n.RuntimeDriver,
 		RuntimePreference:     n.RuntimePreference,
+		RuntimeChoices:        nodeDTORuntimeChoices(n),
 		RuntimePlugin:         n.RuntimePlugin,
 		Runtimes:              nodeDTORuntimes(n),
 		PartitionCapabilities: partitioncap.ForNode(n),
@@ -88,7 +90,7 @@ func nodeDTO(n *store.Node, includeToken bool) dto.Node {
 		d.RuntimeFallbackPlugin = accelerator.RuntimeGPUPlugin(n.GPUVendor, n.RuntimeFallbackFrom)
 	}
 	d.AcceleratorPreference = n.AcceleratorPreference
-	d.AcceleratorVendors = n.AcceleratorVendorList()
+	d.AcceleratorVendors = acceleratorChoices(n)
 	d.GPUProbeError = n.GPUProbeError
 	d.GPUProbeFailedAt = utcTimePtr(n.GPUProbeFailedAt)
 	if n.TopoJSON != "" {
@@ -151,6 +153,20 @@ func nodeDTOGPUDriver(n *store.Node) string {
 		return accelerator.NormalizeDriverVersion(vendor, n.GPUDriver)
 	}
 	return accelerator.NormalizeDriverVersion(vendor, n.NvidiaDriver)
+}
+
+// nodeDTORuntimeChoices is what the runtime selector offers: nothing for a
+// Kubernetes node, whose instances are pods; only automatic on a Mac, where
+// a container runtime would run in a VM without the Metal GPU and the host
+// driver is the way; every driver otherwise.
+func nodeDTORuntimeChoices(n *store.Node) []string {
+	switch {
+	case n.KubeClusterID != 0:
+		return nil
+	case n.OS == "darwin":
+		return []string{proto.RuntimePreferenceAuto}
+	}
+	return []string{proto.RuntimePreferenceAuto, proto.RuntimePreferenceDocker, proto.RuntimePreferenceNerdctl, proto.RuntimePreferenceUdocker}
 }
 
 func nodeDTORuntimes(n *store.Node) []string {

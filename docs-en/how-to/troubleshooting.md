@@ -395,6 +395,8 @@ The node can continue scheduling with runveil; the “Runtime” row in node det
 The agent rechecks every minute: when a skipped runtime becomes usable, it switches back automatically if the node has no instances. If instances are present, it shows “Docker is ready and can be switched to” (`gpu_ready`),
 and you can switch manually in the “Runtime” dropdown. Ascend nodes do not use this fallback (runveil cannot run CANN on ARM 910B).
 
+After a runtime switch (manual or automatic), instances are recreated in the new runtime. When the new runtime lacks an image, the agent first checks the node's other runtimes that still answer (docker, nerdctl, runveil) for the same image; if one holds it, the image is exported and loaded into the new runtime locally instead of being downloaded again, shown as “copying the image from the local … runtime”. If the copy fails or no runtime holds it, the image is downloaded as usual. Digest-pinned images (`repo@sha256:…`) are always pulled again: a loaded archive cannot carry the registry digest. runveil can export only images in its native store; images registered by the old udocker CLI are downloaded as usual.
+
 **Docker is installed but did not answer when the agent started**
 
 When the agent starts before dockerd at boot, or dockerd is busy pulling a large image and does not answer within 5 seconds, an agent that picks its own runtime waits up to 2 more minutes at startup;
@@ -828,7 +830,7 @@ The node probes `https://<host>/v2/` for the image's own copies and sorts them b
 On nerdctl, layers larger than 1 GiB report progress in 0.1 GiB increments, so the stall timeout is extended to approximately 17.5 minutes. If `Progress output not understood, stall check off` appears, stall detection is disabled for that attempt. The agent log preserves the original line to help investigate formatting changes between runtime versions.
 
 - Download byte progress has been reported, the download is incomplete, and no progress occurs for 3 consecutive minutes: switch candidates. Docker usually reports per-layer byte progress and is also subject to this check.
-- A download that makes progress but stays very slow: if it averages under 64 KiB/s over any 5 consecutive minutes and another candidate remains, the node switches candidates; the last candidate is never abandoned for this. Large nerdctl layers that show progress in coarse steps are not judged this way. On runveil nodes the connection level acts first: a single connection that falls clearly behind is replaced (see [Registry Rate Limits or Refused Connections](#registry-rate-limits-or-refused-connections)).
+- A download that makes progress but stays very slow: if it averages under 64 KiB/s over any 5 consecutive minutes and another candidate remains, the node switches candidates; the last candidate is never abandoned for this. Large nerdctl layers that show progress in coarse steps are not judged this way. On runveil nodes the connection level acts first: a single connection that falls clearly behind is replaced (see [Registry Rate Limits or Refused Connections](#仓库限流或连接被拒)).
 - No byte progress is available, unpacking is in progress, or image registration is in progress after all bytes have arrived: the 3-minute check above does not apply. Each candidate has up to 60 minutes from the start of pulling to completion of unpacking.
 - Network or transfer failure, or a stall: the registry enters a 30-minute cooldown on that node and is placed last among latency-tested candidates, but is not removed. Missing images and authentication or permission denials also trigger candidate switching, but do not put the entire registry into cooldown. Fix the reference or credentials first; there is no need to wait for cooldown. An unavailable runtime immediately ends the pull; restore the runtime first.
 
@@ -839,7 +841,7 @@ When a runveil (udocker) node pulls an image, the agent log (`<state>/agent.log`
 - `download connections backed off` appears repeatedly, with the reason `throttled` (the registry answered 429/503 or refused connections; refused connections are waited on and retried) or `connection resets`: the registry or a proxy is limiting the source address, and the agent has already halved the connections and is waiting. Usually nothing needs to be done. If the pull is noticeably slower but keeps making progress, the budget has dropped to a level the registry accepts.
 - The pull fails with an error containing `429` or `503` after several retries: the registry keeps refusing. Check the per-address connection and request-rate limits of the private registry (Harbor, SWR, ACR) or the proxy and raise them if needed, or cap the node with `--image-pull-max-connections 2` (range 0 to 32) and restart the agent. When there are several candidate sources, the next one is tried after a failure.
 - `registry ignores Range: reading the layer whole` appears: the registry or proxy does not support Range requests for this layer, so it is read whole over one connection and is limited to the speed of a single connection. Use a source that supports Range or adjust the proxy.
-- `download connection recycled` appears (only after the same reason holds in two windows in a row) with the reason `far below its siblings`, `collapsed from its own peak` or `below the absolute floor`: one connection was clearly slower than the others of the same pull and was replaced by a new one that continues from the same position. This is normal self-healing. A slow link as a whole does not trigger replacement; then the slowness is the speed of the link itself, see [Why Candidates Switch and When Pulls Are Considered Stalled](#why-candidates-switch-and-when-pulls-are-considered-stalled).
+- `download connection recycled` appears (only after the same reason holds in two windows in a row) with the reason `far below its siblings`, `collapsed from its own peak` or `below the absolute floor`: one connection was clearly slower than the others of the same pull and was replaced by a new one that continues from the same position. This is normal self-healing. A slow link as a whole does not trigger replacement; then the slowness is the speed of the link itself, see [Why Candidates Switch and When Pulls Are Considered Stalled](#候选为何切换何时判定卡住).
 
 ### Additional Checks for Digest References
 
@@ -950,10 +952,51 @@ The agent waits for the timed-out `run` to return and removes the container it c
 For a multi-node follower, the corresponding message is `headless worker readiness timed out`. If loading a large model, compiling kernels, or capturing CUDA graphs is slow, first check whether the logs show continued progress. If progress is normal, increase the startup health check budget:
 
 - Cluster default: **1800 seconds**. Change it under **Settings → Nodes & deployments → Deployments**.
-- Individual deployment: set `start_timeout_sec` under **Runtime environment → Start timeout** in the deployment form, in the range **60–86400 seconds**. Leave it blank to use the cluster default.
+- Individual deployment: set `start_timeout_sec` under **Runtime environment → Start timeout** in the deployment form, in the range **60–86400 seconds**. Leave it blank for an automatic budget using the cluster default as a floor.
 
 The budget applies while waiting for health checks after instance startup. Its value is determined when the instance is created; changes affect only instances started afterward.
 Exceeding the budget fails the startup attempt and triggers recreation according to the rules below.
+
+
+
+Instance details show the **startup wait limit** separately from the **rough startup estimate**. For managed vLLM, an explicit final `VLLM_ENGINE_READY_TIMEOUT_S` receives 30 extra seconds for probing under the automatic policy, capped at 86400 seconds. When the variable is neither explicitly set nor removed, the platform coordinates the inner wait budget. Manual commands and replaced entrypoints do not have their internal timeout inferred. An explicit deployment budget takes priority even when shorter than the engine deadline; the page reports the conflict. Probe heartbeats do not establish model-loading progress.
+
+The basic estimate covers single-node, single-model managed vLLM/SGLang starts. It separates checkpoint loading from the other engine initialization costs:
+
+```text
+estimated seconds = W / (512 * 1024 * 1024 bytes/second) + I_ref
+```
+
+`W` is the selected checkpoint size in bytes. `I_ref` is an aggregate initialization reference allowance selected by engine and recognized execution mode:
+
+| Managed engine/mode | `I_ref` |
+|---|---:|
+| SGLang | 240 seconds (4 minutes) |
+| Ordinary vLLM | 300 seconds (5 minutes) |
+| vLLM with an explicit `--omni` flag in its final command | 420 seconds (7 minutes) |
+
+The allowance combines framework startup, tokenizer, compilation, KV profiling and graph capture; it is not a sum of measured stages. The final command is authoritative: stale template arguments or mentions of `--omni` in a model name or JSON do not select that profile. Manual commands, multi-node, PD and external multi-component configurations still receive no numeric estimate.
+
+In GiB, estimated seconds are approximately `weight GiB × 2 + I_ref`:
+
+| Weight size | Ordinary vLLM | SGLang | vLLM `--omni` |
+|---|---|---|---|
+| 10 GiB | 5 min 20 s | 4 min 20 s | 7 min 20 s |
+| 50 GiB | 6 min 40 s | 5 min 40 s | 8 min 40 s |
+| 100 GiB | 8 min 20 s | 7 min 20 s | 10 min 20 s |
+| 256 GiB | 13 min 32 s | 12 min 32 s | 15 min 32 s |
+| 512 GiB | 22 min 4 s | 21 min 4 s | 24 min 4 s |
+| 1 TiB (1024 GiB) | 39 min 8 s | 38 min 8 s | 41 min 8 s |
+| 2 TiB (2048 GiB) | 1 h 13 min 16 s | 1 h 12 min 16 s | 1 h 15 min 16 s |
+
+The table uses binary size units. For decimal 1 TB (10¹² bytes), ordinary vLLM gives about 36 min 3 s. These estimates assume weights are already on the node and exclude model downloads, image pulls and queuing.
+
+**Evidence and limits**: [Breaking the Ice (MLSys 2026)](https://arxiv.org/abs/2606.07362) models initialization by stage and requires environment-specific coefficients; [ServerlessLLM (OSDI 2024)](https://www.usenix.org/conference/osdi24/presentation/fu) uses the bytes/bandwidth term for loading, which does not describe complete readiness. This implementation adopts that decomposition, while 512 MiB/s and the initialization profiles are rounded reference assumptions based on limited project measurements, **not paper coefficients, current-node benchmarks or a cross-platform calibration**.
+
+The profiles are primarily grounded in NVIDIA development-environment samples and do not improve every backend: DeepSeek and some Ascend SGLang starts may be overestimated. Caches, compilation options, model structure, CPU and storage contention still affect latency. Without separate evidence, no linear speedup is inferred from GPU or CPU-core counts, no guessed stage cost is deducted when graphs are disabled, and no runtime penalty is added. Missing weights, distributed or multi-component starts and manual commands still return unknown/unsupported; existing instances display their recorded parameters. The estimate is advisory, does not change the startup wait limit and is not a completion guarantee.
+
+Loading, compilation and graph capture seconds are displayed only when explicitly logged. Duplicate ranks contribute the maximum single duration, not a sum; stages can overlap or come from different ranks and cannot be added as a complete startup breakdown. Agent reconnection/adoption does not measure a new startup. Elapsed wait starts with the current health-check stage, excluding model download and image pulling. Exceeding the rough estimate only indicates a slower start; probes, process exit and OOM determine actual failures.
+
 
 ### Container Exits After Reaching Running
 
@@ -991,7 +1034,7 @@ The gateway error body differs from the management API: `{"error":{"message":"�
 
 | Status | message | Cause and action |
 |---|---|---|
-| 401 | `invalid or missing API key` | `Authorization: Bearer <key>` is missing or the key was deleted. The gateway does not authenticate requests when the database contains **no keys at all** |
+| 401 | `invalid or missing API key` | `Authorization: Bearer <key>` is missing, or the key was deleted or is invalid. `/v1` requires a key by default and refuses every request even when the database contains **no keys at all**; for genuinely keyless access an administrator turns on "Accept /v1 inference requests without a token" (`inference_open_access`) under **Settings → Security** |
 | 400 | `request body must specify a model` | The request body has no `model` |
 | 404 | `no deployment serves model <name>` | The model name is not the deployment's served name (list names with `GET /v1/models`), or the deployment has stopped |
 | 404 | `deployment <name> does not expose <METHOD> <path>` | Only the playground (`/api/v1/playground/v1/*`) performs contract checks and returns this error: the deployment's API contract does not include this endpoint (for example, calling `/v1/embeddings` on a Chat model). Use `GET /api/v1/playground/openapi.json` to view its declared endpoints. The public `/v1` does not perform this check; it forwards the request unchanged to the engine, which returns its own 404 or other response |
@@ -1168,7 +1211,7 @@ Not every write fails once the disk fills: SQLite first uses up the space it alr
 
 ## Forgotten Admin Password
 
-**Symptoms**: You cannot sign in.
+**Symptoms**: You cannot sign in. (To change a password while you can still sign in, choose **Change password** in the console's account menu at the top right.)
 
 **Resolution**
 
@@ -1176,12 +1219,12 @@ Not every write fails once the disk fills: SQLite first uses up the space it alr
    Run it as an operator with database access. You do not need to stop the server:
 
    ```bash
-   gpuworks reset-password --password '<new-password>' --data /opt/gpuworks/server/data
+   gpuworks reset-password --data /opt/gpuworks/server/data
    ```
 
 2. Sign in again with the new password and confirm that access is restored. Changing the password invalidates this user's existing management sessions; inference tokens are unaffected.
 
-`--user` defaults to `admin`. Without `--data`, the command reads `data_dir` from the `server.yaml` next to the binary, then from the default installation's `server.yaml`, and uses `./data` only if neither exists (you can specify the database path directly with `--db`). `--password` cannot be empty. New or changed administrator passwords must contain 15–128 Unicode characters and at most 512 bytes. Common guessable values, whole-value repetitions and sequences are rejected; character-class mixtures are not required and passphrases are supported. Existing accounts can still authenticate with their current passwords.
+`--user` defaults to `admin`. Without `--data`, the command reads `data_dir` from the `server.yaml` next to the binary, then from the default installation's `server.yaml`, and uses `./data` only if neither exists (you can specify the database path directly with `--db`). Without `--password`, the command prompts twice in the terminal without echo, which keeps the password out of command history; when stdin is not a terminal, `--password` is required. New or changed administrator passwords must contain 8–128 Unicode characters and at most 512 bytes, and must not be the username. Common guessable values, whole-value repetitions and sequences are rejected; character-class mixtures are not required and passphrases are supported. Existing accounts can still authenticate with their current passwords.
 If it reports `database ... does not exist`, use `--data` to specify the server's actual data directory as instructed.
 If the user does not exist, the command returns `not found`; first check the username and data directory. For permission errors, check the current user's access to the database.
 See [CLI](../reference/cli.md).
@@ -1215,7 +1258,7 @@ When the server does not start, run [`gpuworks support-bundle`](../reference/cli
 
 ## Still Unresolved?
 
-When filing an issue or asking for help, attach a [diagnostics archive](#when-you-cannot-log-in-on-site-debug-collection-and-collecting-diagnostics) first; without one, include the following information to reduce back-and-forth:
+When filing an issue or asking for help, attach a [diagnostics archive](#无法登录现场时调试采集与收集诊断信息) first; without one, include the following information to reduce back-and-forth:
 
 1. Versions: `gpuworks version` (server) and `gpuworks-agent version` (the affected node).
 2. The affected instance UUID and its event timeline: `GET /api/v1/instances/<uuid>/events` (add

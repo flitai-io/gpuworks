@@ -121,7 +121,7 @@ export default function HistoryCard() {
   }
 
   return (
-    <Card className="scheduling-card" title={t("history.title")}>
+    <Card className="scheduling-card">
       <Space wrap className="scheduling-filters">
         <Segmented
           aria-label={t("history.filters.category")}

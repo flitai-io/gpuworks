@@ -17,9 +17,6 @@
     "cancelOk": "Yes, cancel it",
     "cancelKeep": "Keep running"
   },
-  "filter": {
-    "status": "Filter by status"
-  },
   "status": {
     "validating": "Validating",
     "in_progress": "In progress",
@@ -110,8 +107,7 @@
     "cancel": "Cancel",
     "file": "Requests file (JSONL)",
     "fileHelp": "Choose a .jsonl file (JSON Lines), one request per line.",
-    "fileSelected": "{{name}} ({{size}})",
-    "fileRequired": "Choose a requests file first.",
+    "fileRequired": "Select a JSONL requests file",
     "window": {
       "label": "Completion window",
       "unit": "hours",

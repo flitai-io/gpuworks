@@ -1374,6 +1374,7 @@
       "max_num_seqs",
       "max_num_batched_tokens",
       "enable_prefix_caching",
+      "data_parallel_size",
       "enable_cache_report",
       "kv_cache_dtype",
       "reasoning_parser",
@@ -3409,8 +3410,7 @@
         "kv_load_failures": [
           "fail",
           "recompute"
-        ],
-        "unverified": true
+        ]
       },
       {
         "name": "vllm-nixl",
@@ -3462,6 +3462,7 @@
       "max_num_seqs",
       "max_num_batched_tokens",
       "enable_prefix_caching",
+      "data_parallel_size",
       "enable_cache_report",
       "kv_cache_dtype",
       "kv_offloading_size",

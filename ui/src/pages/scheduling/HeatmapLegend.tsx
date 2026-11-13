@@ -1,20 +1,26 @@
 import { useTranslation } from "react-i18next";
+import type { SchedulingOverview } from "../../schedulingApi";
 import { awakeFill, stateFill, tokenVars } from "./cellColor";
-import { CELL_STATES } from "./overviewModel";
+import { CELL_STATES, type CellState } from "./overviewModel";
+
+export function HeatmapSwatch({ state }: { state: CellState | "switching" }) {
+  const background = state === "awake" ? awakeFill(100) : state === "switching" ? undefined : stateFill[state];
+  return <span className={`hm-swatch is-${state}`} style={{...tokenVars(), background}} aria-hidden="true"/>;
+}
 
 /**
  * HeatmapLegend names the colours once for the whole heatmap: a state each,
  * the awake blue deepening with the share of the card claimed, an outline for a
  * card changing state, and, while a deployment is searched, the ring on its cards.
  */
-export default function HeatmapLegend({ searching }: { searching: boolean }) {
+export default function HeatmapLegend({ searching, summary }: { searching: boolean; summary: SchedulingOverview["summary"] }) {
   const { t } = useTranslation("scheduling");
   return (
     <ul className="hm-legend" style={tokenVars()} aria-label={t("nodes.legend.title")}>
       {CELL_STATES.map((state) => (
         <li key={state}>
-          <span className={`hm-swatch is-${state}`} style={{ background: state === "awake" ? awakeFill(100) : stateFill[state] }} aria-hidden="true" />
-          {t(`states.${state}`)}
+          <HeatmapSwatch state={state}/>
+          <span>{t(`states.${state}`)}</span> <strong>{summary[state]}</strong>
         </li>
       ))}
       <li>
@@ -22,7 +28,7 @@ export default function HeatmapLegend({ searching }: { searching: boolean }) {
         {t("heatmap.legendShade")}
       </li>
       <li>
-        <span className="hm-swatch is-switching" aria-hidden="true" />
+        <HeatmapSwatch state="switching"/>
         {t("heatmap.legendSwitching")}
       </li>
       {searching && (

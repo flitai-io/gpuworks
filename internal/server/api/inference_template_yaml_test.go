@@ -96,7 +96,7 @@ func fullTemplateCatalog(asset []byte) inferencecatalog.FlatCatalog {
 		Assets:           []inferencecatalog.Asset{{File: fullAssetPath, SHA256: hex.EncodeToString(digest[:]), SizeBytes: int64(len(asset)), UnpackTo: "/opt/gpuworks/serve.py"}},
 		Entrypoint:       []string{"python3", "-m", "vllm.entrypoints.openai.api_server"},
 		Placement:        &inferencecatalog.Placement{Language: "starlark", Resolver: fullPlacementFn},
-		API:              &inferencecatalog.APIContract{HealthEndpoint: "/health", Operations: []inferenceapi.Operation{chat, completion}, Metrics: prometheus},
+		API:              &inferencecatalog.APIContract{HealthEndpoint: "/health", TokenizerRef: "ms://Acme/Tokenizer@0123456789abcdef0123456789abcdef01234567", Operations: []inferenceapi.Operation{chat, completion}, Metrics: prometheus},
 		Components:       []inferencecatalog.Component{primary, draft},
 		PDMode:           "vllm-nixl",
 		ShmBytes:         429_496_729_600,
@@ -106,7 +106,7 @@ func fullTemplateCatalog(asset []byte) inferencecatalog.FlatCatalog {
 		Name: "scripted", Engine: "vllm", Image: "gpuworks/vllm:test", Weights: weights(fullTemplateID),
 		GPUs:           inferencecatalog.GPUSelector{Vendor: "ascend"},
 		PreStartScript: "set -e\necho preparing\n  indented line\n",
-		API: &inferencecatalog.APIContract{Operations: []inferenceapi.Operation{{Type: inferenceapi.OperationChat}},
+		API: &inferencecatalog.APIContract{Operations: []inferenceapi.Operation{{Type: inferenceapi.OperationChat}, {Type: inferenceapi.OperationImageEdit, MaxReferenceImages: 4}},
 			Metrics:      &inferenceapi.Metrics{Format: "json", Map: inferenceapi.MetricMap{"totals.output_tokens": {To: "generation_tokens_total"}}},
 			RequestStats: inferenceapi.MetricMap{"timings.prompt_ms": {To: "prefill_seconds", Scale: 0.001}}},
 	}
@@ -283,6 +283,7 @@ func TestInferenceTemplateYAMLRoundTripsEveryFieldThroughImport(t *testing.T) {
 	}
 	text := response.Body.String()
 	for _, want := range []string{
+		"tokenizer_ref: ms://Acme/Tokenizer@0123456789abcdef0123456789abcdef01234567",
 		"runtime_weight_bytes: 70000000000", "pd_mode: vllm-nixl", "shm_bytes: 429496729600", "memlock_unlimited: true", "kv_bytes_per_token:", "model_config:", "unsupported:",
 		"arch_id: sm_90", "readme_zh_cn: README.zh-CN.md", "resolver: |", "pre_start_script: |", "request_defaults:", "format: json",
 	} {

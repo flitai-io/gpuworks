@@ -209,10 +209,10 @@ test("operation counts intersect with the selected chip and engine", async () =>
   await waitFor(() => assert.equal(operationButton("Chat").textContent, "Chat0"));
   assert.equal(operationButton("Image generation").textContent, "Image generation1");
   assert.equal(operationButton("Embeddings").textContent, "Embeddings1");
-  await userEvent.setup().click(screen.getByRole("button", { name: "SGLang" }));
+  await userEvent.setup().click(screen.getByRole("tab", { name: "SGLang" }));
   await waitFor(() => assert.equal(operationButton("Chat").textContent, "Chat0"));
   assert.equal(operationButton("Embeddings").textContent, "Embeddings0", "chip and engine must match the same spec");
-  await userEvent.setup().click(screen.getByRole("button", { name: "vLLM" }));
+  await userEvent.setup().click(screen.getByRole("tab", { name: "vLLM" }));
   await userEvent.setup().click(screen.getByRole("button", { name: "H100" }));
   await userEvent.setup().click(operationButton("Image generation"));
   await waitFor(() => assert.ok(screen.getByText("1 original models")));
@@ -250,7 +250,7 @@ test("returning from any model detail restores the catalog organization and filt
   await screen.findByText("DeepSeek Model");
   await userEvent.setup().click(screen.getByRole("button", { name: /PaddlePaddle/ }));
   await userEvent.setup().click(screen.getByRole("button", { name: "H100" }));
-  await userEvent.setup().click(screen.getByRole("button", { name: "vLLM" }));
+  await userEvent.setup().click(screen.getByRole("tab", { name: "vLLM" }));
   await userEvent.setup().click(screen.getByText("Chat"));
   const search = screen.getByPlaceholderText("Search models or weight repositories");
   await userEvent.setup().type(search, "Paddle");
@@ -262,7 +262,7 @@ test("returning from any model detail restores the catalog organization and filt
   assert.match(container.querySelector(".template-organization-sidebar button.is-active")?.textContent || "", /PaddlePaddle/);
   assert.equal((screen.getByPlaceholderText("Search models or weight repositories") as HTMLInputElement).value, "Paddle");
   assert.equal(screen.getByRole("button", { name: "H100" }).getAttribute("aria-pressed"), "true");
-  assert.ok(screen.getByRole("button", { name: "vLLM" }).classList.contains("is-active"));
+  assert.ok(screen.getByRole("tab", { name: "vLLM" }).getAttribute("aria-selected") === "true");
   assert.equal(screen.getByText("Chat").closest("button")?.getAttribute("aria-pressed"), "true");
 });
 
@@ -285,7 +285,7 @@ test("returning without a search term keeps the requested organization while the
 
   await screen.findByText("BGE Reranker");
   assert.match(container.querySelector(".template-organization-sidebar button.is-active")?.textContent || "", /BAAI/);
-  assert.ok(screen.getByRole("button", { name: "vLLM" }).classList.contains("is-active"));
+  assert.ok(screen.getByRole("tab", { name: "vLLM" }).getAttribute("aria-selected") === "true");
   assert.equal(screen.queryByPlaceholderText("Search models or weight repositories")?.getAttribute("value") || "", "");
 });
 

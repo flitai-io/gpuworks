@@ -3,6 +3,7 @@
     "aliyun": "Alibaba Cloud",
     "autodl": "AutoDL",
     "compshare": "UCloud",
+    "digitalocean": "DigitalOcean",
     "runpod": "RunPod",
     "vast": "Vast.ai",
     "zstack": "ZStack Cloud"

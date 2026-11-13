@@ -484,7 +484,7 @@ func (c *Controller) reconcileDeployment(ctx context.Context, id uint) error {
 	pd, err := planning.PDOf(dep.Placement)
 	if err != nil {
 		c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": err.Error()}})
-		return nil
+		return nil //nolint:nilerr // The placement error is persisted as an unschedulable reason instead of retried as an internal failure.
 	}
 	// Every shape - replicas, a multi-node group, PD roles - is a set of
 	// units reconciled the same way (ADR 0029).

@@ -8,9 +8,9 @@
 
 - 节点已接入并上报 GPU（见[接入节点](connect-nodes.md)）。
 - NVIDIA：x86_64、glibc ≥ 2.17，宿主机驱动提供动态库（`libcuda.so.1`、`libnvidia-ml.so.1`）。
-- 昇腾：宿主机的 device-share 权限满足 vCANN 的要求，所选推理镜像提供 glibc ≥ 2.33；能接入并整卡运行，不代表宿主机已允许 dGPU 设备共享。
+- 昇腾：宿主机的 device-share 权限满足 vcann-rt 的要求，所选推理镜像提供 glibc ≥ 2.33；能接入并整卡运行，不代表宿主机已允许 dGPU 设备共享。
 - PPU：配额语义是显存限额加繁忙时的加权 QoS。20/80 配置表示繁忙时的相对吞吐权重，不是硬 SM 分区。
-- AMD：x86_64、Docker、nerdctl 或 runveil，libvrocm.so 做硬显存限额，不支持算力（SM/CU）上限；当前只在 MI300X（gfx942）上实测。
+- AMD：x86_64、Docker、nerdctl 或 runveil，rocm-slicing-shim（libvrocm.so）做硬显存限额，不支持算力（SM/CU）上限；当前只在 MI300X（gfx942）上实测。
 - 海光 Z100 / K100_AI / BW：实验性，支持 x86_64 上的 Docker 或 runveil/udocker，每实例一张卡；需安装原生 helper、宿主 DTK/HYHAL/DCGM 库并通过逐卡探针。CU 随显存比例分配，不支持独立算力配额；仅报告系列 K100 或其他未适配型号时仍只支持整卡。PRoot 不提供独立 cgroup 或内核只读挂载，不代表敌对程序的安全隔离。详见[海光 Z100 / K100_AI / BW dGPU](../reference/support-matrix.md#海光-z100--k100_ai--bw-dgpu)。
 - 想先走一遍完整流程，见[一张 GPU 跑两个模型](../tutorials/one-gpu-two-models.md)；语义与边界见 [dGPU 是什么、又不是什么](../explanation/dgpu.md)。
 
@@ -19,12 +19,12 @@
 ## 确认能力并部署
 
 1. 打开**GPU 设备**页，查看目标 GPU 详情中的 **dGPU** 能力及原因。只有状态为 `ready` 的 GPU 才能创建带配额的实例。
-2. 在[部署模型](deploy-models.md)时填写 **dGPU 显存上限**，检查候选节点与显存评估结果，再提交。平台根据节点硬件选择已就绪的后端；NVIDIA 对应 HAMi-core、昇腾对应 vCANN、PPU 对应 HGGC、AMD 对应 libvrocm、海光 Z100 / K100_AI / BW 对应原生 vdev，无需手动指定。
+2. 在[部署模型](deploy-models.md)时填写 **dGPU 显存上限**，检查候选节点与显存评估结果，再提交。平台根据节点硬件选择已就绪的后端；NVIDIA 对应 HAMi-core、昇腾对应 vcann-rt、PPU 对应 ppu-slicing-shim、AMD 对应 rocm-slicing-shim、海光 Z100 / K100_AI / BW 对应原生 vdev，无需手动指定。
 3. 实例启动后，回到 **GPU 设备 → dGPU**，确认切片所属部署、节点和显存上限。需要验证两个模型共卡时，按[一张 GPU 跑两个模型](../tutorials/one-gpu-two-models.md)完成调用检查。
 
 能力以页面返回的 `status` 和 `reason` 为准：
 
-- `ready`：运行时、dGPU 资产、（非 NVIDIA 后端还需）dGPU 探针条件全部满足，可以创建带配额的实例。
+- `ready`：运行时、dGPU 资产及该后端要求的逐卡探针条件全部满足，可以创建带配额的实例；NVIDIA 与 AMD 豁免行为探针。
 - `unavailable`：任一条件不满足，`reason` 说明具体原因，例如 agent 版本过旧未上报探针、
   缺少 dGPU 资产、运行时未验证容器推理、探针尚未完成或探针失败。
 
@@ -59,7 +59,7 @@
 
 | `reason` | 情况 |
 |---|---|
-| `backend` | 后端需重启实例才能应用新上限（昇腾 vCANN、PPU HGGC、AMD libvrocm、海光 Z100 / K100_AI 原生 vdev） |
+| `backend` | 后端需重启实例才能应用新上限（昇腾 vcann-rt、PPU ppu-slicing-shim、AMD rocm-slicing-shim、海光 Z100 / K100_AI / BW 原生 vdev） |
 | `in_use` | 调低时，实例已占用的显存超过新上限——当场调低会让引擎下一次分配失败而退出 |
 | `starting` / `asleep` | 调低时实例正在启动或休眠，之后需要的显存可能比现在多 |
 | `no_usage` | 调低时实例没有上报显存用量 |

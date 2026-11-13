@@ -334,24 +334,6 @@ func (s *scanner) parseNode(ctx context.Context, n node) (modelmetadata.Report, 
 	return modelmetadata.Parse(ctx, modelmetadata.Input{Path: name, Context: n.context}, v)
 }
 
-func contains(list []string, want string) bool {
-	for _, v := range list {
-		if v == want {
-			return true
-		}
-	}
-	return false
-}
-
-func containsAll(list []string, wants ...string) bool {
-	for _, w := range wants {
-		if !contains(list, w) {
-			return false
-		}
-	}
-	return true
-}
-
 // allMetadata reports whether every file is documentation or repo bookkeeping.
 func allMetadata(files []string) bool {
 	for _, f := range files {

@@ -311,7 +311,7 @@ func TestImportValidatesTheMetricsDeclaration(t *testing.T) {
 	catalog := flatFixture()
 	catalog.Models[0].Specs[0].API = &APIContract{
 		Operations: []APIOperation{{Type: "openai.chat"}},
-		Metrics:    &inferenceapi.Metrics{Map: inferenceapi.MetricMap{"tensorfold:requests_running": {To: "requests_runing"}}},
+		Metrics:    &inferenceapi.Metrics{Map: inferenceapi.MetricMap{"tensorfold:requests_running": {To: "requests_unknown"}}},
 	}
 	err := ValidateFlatCatalog(&catalog)
 	var product *messages.ProductError

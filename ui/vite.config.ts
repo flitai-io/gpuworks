@@ -1,11 +1,13 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
 // Vite builds directly into the Go embed directory so `make ui` produces the
 // exact tree that go:embed bundles into the server binary.
 export default defineConfig({
-  plugins: [react()],
+  resolve: { alias: { "@": resolve(__dirname, "src") } },
+  plugins: [react(), tailwindcss()],
   build: {
     outDir: resolve(__dirname, "../internal/server/webui/dist"),
     emptyOutDir: true,

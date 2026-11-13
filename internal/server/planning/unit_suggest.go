@@ -7,8 +7,9 @@
 package planning
 
 import (
-	"gpuworks.ai/gpuworks/internal/proto"
 	"sort"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/netplan"

@@ -43,6 +43,8 @@ func socketInterfaceEnvFor(vendor string) []string {
 // EngineOption customizes an Engine dependency while preserving production
 // defaults. It is primarily useful for hermetic agents whose advertised node
 // addresses are simulated rather than assigned to the test host.
+//
+//nolint:revive // Preserve the exported Engine constructor option type for callers.
 type EngineOption func(*Engine)
 
 // WithNetworkInterfaceResolver supplies the mapping from an advertised node IP

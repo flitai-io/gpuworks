@@ -3,7 +3,7 @@
   "name": "评测 / 外部 OpenAI 端点参数扫描 / UI 探测模型、真实流式请求、完成回读与删除",
   "test_file": "test/e2e/evaluation_external.py",
   "test_function": "test_external_endpoint_sweep",
-  "command": "make test-e2e-benchmark-external",
+  "command": "python3 -B test/e2e/evaluation_external.py --case sweep --locale en",
   "additional_cases": [
     {
       "manifest": "test/e2e/coverage/benchmark-external-cancel.json",
@@ -153,7 +153,9 @@
     "1.15": "The API key field shows one visibility icon. Tab from the evaluation name reaches the selected target, then the endpoint URL, then the API key. Next can be focused. Enter in the empty API key sends no evaluation create. Leaving the endpoint URL empty and choosing Next shows a field error and sends no evaluation create. At 1440x900 the name, the endpoint URL, the API key, Previous, and Next are each inside the viewport, and the name does not overlap Next.",
     "3.1": "Concurrency, ISL, OSL and sample count use their real units",
     "5.5": "External Endpoint selection reveals the endpoint fields and replaces the managed-instance selector",
-    "17.1": "Persisted verdict plus actual point-table lengths, throughput and latency cells/units match independent GET; other metric columns and loading/empty/error/stale states remain MISSING"
+    "17.1": "Persisted verdict plus actual point-table lengths, throughput and latency cells/units match independent GET; other metric columns and loading/empty/error/stale states remain MISSING",
+    "14.1": "covered: the wizard is required to render exactly three named steps - the question, the target and the load step the dictionary defines - with exactly one of them active, and the target step is required to be the active one after Next was pressed once from a fresh drawer. Previous is required to be disabled on the first step and enabled on the second, so the two directions are real state rather than decoration. An empty required field is then required to refuse to advance: the name is cleared, Next is pressed, the wizard is required to still be on the target step, and the form is required to be showing an error explanation instead of silently moving on. Proven by mutation: making Next skip form validation sends the wizard past the empty name and the case fails.",
+    "14.2": "covered: going Previous then Next again is required to keep the same draft in the name field, and the wizard is required to be back on the target step both times, so the two directions share one form rather than resetting it. Abandoning is read as an absence rather than as a message: a wizard is opened, advanced to the target step, the name is filled and Escape closes it; the benchmark list is then read from the server and its exact set of ids is required to be unchanged, and the abandoned name is required to appear in no row. That runs after the real run of this case was deleted, so the list is known to be empty and any row would be the draft's. Not mutation-proven: closing the drawer with a submit attached still submits nothing, because submit() validates the form itself and the abandoned draft has no endpoint - two independent guards, so that mutation is equivalent and was recorded as such rather than as a kill."
   },
   "missing": [
     "MISSING: checklist 5.3 — model and load-origin Select search, no-result and clearing recovery are not exercised; only mode cards and target radios have no search",

@@ -2,7 +2,7 @@
 
 ## 依赖
 
-- Go 版本以 `go.mod` 为准（当前为 Go 1.26.10，与 CI 镜像 `golang:1.26` 一致）。
+- Go 版本以 `go.mod` 为准（当前为 Go 1.26.11，与 CI 镜像 `golang:1.26.11` 一致）。
 - Node.js 与 npm；前端依赖版本以 `ui/package.json` 和 lockfile 为准。
 - GNU Make。构建或 L3/L4 测试还可能需要 Docker、SSH、`curl` 和目标厂商 CLI。
 

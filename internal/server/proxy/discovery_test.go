@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -37,7 +38,9 @@ func TestPlaygroundRealtimeStripsControlPlaneOriginBeforeUpstreamHandshake(t *te
 	if _, err := st.CreateInstance(&store.Instance{UUID: "realtime", DeploymentID: dep.ID, NodeID: node.ID, State: proto.InstRunning, APIPort: 30000, DesiredStateJSON: string(desired)}); err != nil {
 		t.Fatal(err)
 	}
-	proxyServer := httptest.NewServer(New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstream.URL, "http://")}, nil, 0).PlaygroundHandler(nil))
+	p := New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstream.URL, "http://")}, nil, 0)
+	defer p.Close()
+	proxyServer := httptest.NewServer(p.PlaygroundHandler(nil))
 	defer proxyServer.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -86,7 +89,9 @@ func TestPlaygroundDiscoveryForwardsUnmodifiedSchemaAndRejectsWrites(t *testing.
 			t.Fatal(err)
 		}
 	}
-	handler := New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstream.URL, "http://")}, nil, 0).PlaygroundHandler(nil)
+	p := New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstream.URL, "http://")}, nil, 0)
+	defer p.Close()
+	handler := p.PlaygroundHandler(nil)
 	for _, tc := range []struct {
 		method, path, model string
 		status              int

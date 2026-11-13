@@ -92,7 +92,8 @@ DNS 传播延迟等原因会使公网探测暂时失败；连接器可能仍在�
 
 ## 安全边界
 
-入口暴露的是整个 server：UI/API 仍需登录会话，`/v1` 仍需 API key，和在内网一样。**没有**做
+入口暴露的是整个 server：UI/API 仍需登录会话，`/v1` 默认仍需 API key（只有管理员显式打开安全设置里的
+`inference_open_access` 才接受不带 key 的请求，见[OpenAI 兼容网关的认证](../reference/openai-gateway.md#认证)），和在内网一样。**没有**做
 路径过滤，也没有配置 Cloudflare Access。server 自身有登录失败限流；需要额外入口策略时应单独配置。团队里加节点时，
 如果填的是 quick 地址，界面会提示这是临时地址。
 

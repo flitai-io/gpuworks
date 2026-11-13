@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
@@ -38,7 +37,7 @@ func HygonRuntimeSmokeOn(ctx context.Context, bdf string) error {
 // "". A host with the driver but without DTK keeps hy-smi's verdict rather
 // than being reported as a failed card.
 func HygonHIPSmokePrerequisite() string {
-	if _, err := exec.LookPath("python3"); err != nil {
+	if _, err := lookCLI("python3"); err != nil {
 		return "the Hygon runtime check needs python3, which is not installed on this node"
 	}
 	if _, ok := hygonSmokeLibraryFinder(); !ok {
@@ -49,7 +48,7 @@ func HygonHIPSmokePrerequisite() string {
 
 func findHygonHIPLibrary() (string, bool) {
 	for _, path := range accelerator.HygonHIPLibraryPaths {
-		if _, err := os.Stat(path); err == nil {
+		if _, err := statTool(path); err == nil {
 			return path, true
 		}
 	}

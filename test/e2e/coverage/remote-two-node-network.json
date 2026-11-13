@@ -1,7 +1,8 @@
 {
   "scope": "Targeted two-host management TCP test; not whole network page or distributed GPU coverage",
   "test_file": "test/e2e/remote_two_node_network.py",
-  "command": "python3 test/e2e/remote_runtime_acceptance.py --config <private.json> --case two-node-network",
+  "command": "python3 test/e2e/remote_runtime_acceptance.py --config <private-json> --case two-node-network",
+  "command_note": "Requires two real agent nodes and the private config JSON described in test/e2e/RUNNING.md. Not runnable without it.",
   "lane": "remote-real-agent-two-node-tcp",
   "identity": "admin",
   "cases": [

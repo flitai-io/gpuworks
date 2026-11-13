@@ -144,17 +144,37 @@ def exercise(page, context, server, artifacts, report, locale, data, token, hold
     # before checking the dialog, rather than spending the render assertion's
     # budget while the template/spec and source lookup are still loading.
     report['last_step'] = 'template-source-lookup-ready'
-    source_query = {'page': ['1'], 'page_size': ['50'], 'source_id': [data['repo']]}
+    # The source chooser asks the template's own weight lookup
+    # (api.ts:4206, useTemplateWeightSource.ts:105); the older /api/v1/models
+    # ?source_id= query no longer exists, so waiting for it timed out rather than
+    # observing anything about the fixture.
+    # spec_source/spec_name name the owned spec, which assert_template_sources
+    # above just read out of the real template document.
+    owned_spec = next(spec for spec in loaded_template.value.json()['specs']
+                      if spec['name'] == SPEC and spec['source'] == 'user')
+    source_query = {'template_id': [str(data['template']['id'])],
+                    'spec_source': [owned_spec['source']],
+                    'spec_name': [owned_spec['name']]}
     with page.expect_response(lambda response: response.request.method == 'GET'
-                              and urlsplit(response.url).path == '/api/v1/models'
+                              and urlsplit(response.url).path == '/api/v1/inference-templates/weight-models'
                               and parse_qs(urlsplit(response.url).query) == source_query) as source_lookup:
         page.get_by_role('button').filter(has_text=re.compile('^' + deploy_pattern + '$')).click()
     response = source_lookup.value
     body = response.json()
-    check(response.status == 200 and body['items'] == [] and body['total'] == 0
-          and body['page'] == 1 and body['page_size'] == 50,
+    # The fixture repository is independently unregistered, so the lookup offers
+    # the template's declared source with no model attached to it.
+    check(response.status == 200 and body['models'] == [],
           'template source lookup must return the independently unregistered fixture repository')
-    report['selector_requests'].append({'method': 'GET', 'path': '/api/v1/models',
+    # The owned spec declares both providers against the one fixture repository,
+    # so the lookup echoes both and attaches no model to either.
+    report['acquisition_lookup'] = {'query': source_query, 'body': body}
+    check([source['provider'] for source in body['sources']] == ['huggingface', 'modelscope']
+          and all(source['repo_id'] == data['repo'] for source in body['sources']),
+          'template source lookup did not describe the fixture sources: ' + json.dumps(body))
+    check(all(source.get('reuse_model_id', 0) == 0 for source in body['sources']),
+          'an unregistered repository must not offer a model to reuse')
+    report['selector_requests'].append({'method': 'GET',
+        'path': '/api/v1/inference-templates/weight-models',
         'query': source_query, 'status': response.status, 'candidates': []})
     modal = page.get_by_role('dialog', name=labels['action']['selectWeightSource'], exact=True)
     choice = modal.get_by_role('combobox', name=labels['action']['selectSourcePlaceholder'], exact=True)

@@ -8,14 +8,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/server/pdmode"
 	"io"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/pdmode"
+
 	"gopkg.in/yaml.v3"
+
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"gpuworks.ai/gpuworks/pkg/modelconfig"
 	"gpuworks.ai/gpuworks/pkg/modelrepo"
@@ -204,7 +206,7 @@ type GPUSelector struct {
 	// RetiredDisplayTarget is the display_target key that paired with
 	// display_profile: still read so older YAML imports, never stored.
 	RetiredDisplayTarget string `yaml:"display_target,omitempty" json:"-"`
-	ArchID string `yaml:"arch_id,omitempty" json:"arch_id,omitempty"`
+	ArchID               string `yaml:"arch_id,omitempty" json:"arch_id,omitempty"`
 }
 
 type UnsupportedGPU struct {

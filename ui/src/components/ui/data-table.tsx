@@ -1,0 +1,780 @@
+"use client";
+import { type Column, type ColumnDef, type ColumnFiltersState, type ColumnOrderState, type ColumnPinningState, flexRender, getCoreRowModel, getFacetedRowModel, getFacetedUniqueValues, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, type PaginationState, type Row, type RowSelectionState, type SortingState, type Table as TanstackTable, type TableOptions, type TableState, useReactTable, type VisibilityState, } from "@tanstack/react-table";
+import * as React from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CheckboxGroup, CheckboxItem } from "@/components/ui/checkbox-group";
+import { DropdownContent, DropdownLabel, DropdownMenu, DropdownSeparator, DropdownTrigger, } from "@/components/ui/dropdown";
+import { Empty, EmptyActions, EmptyDescription, EmptyHeader, EmptyIllustration, EmptyMedia, EmptyTitle, } from "@/components/ui/empty";
+import { MenuItem } from "@/components/ui/menu-item";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger, } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, } from "@/components/ui/select";
+import { SortableCollection, type SortableCollectionItem, } from "@/components/ui/sortable-collection";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableSkeletonBody, } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
+import { useIcon, type IconComponent } from "@/lib/icon-context";
+export type DataTableColumnMeta = {
+    /** Icon shown before the faceted-filter label and selected values. */
+    filterIcon?: IconComponent;
+    label?: string;
+    options?: DataTableFilterOption[];
+    placeholder?: string;
+    unit?: string;
+    variant?: "text" | "number" | "select" | "multiSelect";
+};
+export type DataTableFilterOption = {
+    /** Optional authoritative count, for example from a server-side facet response. */
+    count?: number;
+    icon?: IconComponent;
+    label: string;
+    value: string;
+};
+export type DataTablePaginationLabels = {
+    firstPage: string;
+    lastPage: string;
+    nextPage: string;
+    pageSummary: (page: number, pageCount: number) => React.ReactNode;
+    previousPage: string;
+    rowsPerPage: string;
+    selectedRows: (selected: number, total: number) => React.ReactNode;
+};
+const defaultDataTablePaginationLabels: DataTablePaginationLabels = {
+    firstPage: "Go to first page",
+    lastPage: "Go to last page",
+    nextPage: "Go to next page",
+    pageSummary: (page, pageCount) => `Page ${page} of ${pageCount}`,
+    previousPage: "Go to previous page",
+    rowsPerPage: "Rows per page",
+    selectedRows: (selected, total) => `${selected} of ${total} row(s) selected.`,
+};
+declare module "@tanstack/react-table" {
+    // TanStack exposes this empty interface specifically for declaration
+    // merging; the type parameters must match its upstream declaration.
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
+    interface ColumnMeta<TData, TValue> extends DataTableColumnMeta {
+    }
+}
+export type UseDataTableProps<TData> = Omit<TableOptions<TData>, "getCoreRowModel" | "getFacetedRowModel" | "getFacetedUniqueValues" | "getFilteredRowModel" | "getPaginationRowModel" | "getSortedRowModel" | "onColumnFiltersChange" | "onColumnOrderChange" | "onColumnPinningChange" | "onColumnVisibilityChange" | "onPaginationChange" | "onRowSelectionChange" | "onSortingChange" | "state"> & {
+    columns: ColumnDef<TData, unknown>[];
+    initialState?: TableOptions<TData>["initialState"];
+    /** Optionally controls one or more table-state slices from the caller. */
+    state?: Partial<TableState>;
+    onColumnFiltersChange?: TableOptions<TData>["onColumnFiltersChange"];
+    onColumnOrderChange?: TableOptions<TData>["onColumnOrderChange"];
+    onColumnPinningChange?: TableOptions<TData>["onColumnPinningChange"];
+    onColumnVisibilityChange?: TableOptions<TData>["onColumnVisibilityChange"];
+    onPaginationChange?: TableOptions<TData>["onPaginationChange"];
+    onRowSelectionChange?: TableOptions<TData>["onRowSelectionChange"];
+    onSortingChange?: TableOptions<TData>["onSortingChange"];
+};
+function useDataTable<TData>({ initialState, state: controlledState, onColumnFiltersChange, onColumnOrderChange, onColumnPinningChange, onColumnVisibilityChange, onPaginationChange, onRowSelectionChange, onSortingChange, ...options }: UseDataTableProps<TData>) {
+    const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(initialState?.columnFilters ?? []);
+    const [columnOrder, setColumnOrder] = React.useState<ColumnOrderState>(initialState?.columnOrder ?? []);
+    const [columnPinning, setColumnPinning] = React.useState<ColumnPinningState>(initialState?.columnPinning ?? {});
+    const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(initialState?.columnVisibility ?? {});
+    const [pagination, setPagination] = React.useState<PaginationState>({
+        pageIndex: initialState?.pagination?.pageIndex ?? 0,
+        pageSize: initialState?.pagination?.pageSize ?? 10,
+    });
+    const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(initialState?.rowSelection ?? {});
+    const [sorting, setSorting] = React.useState<SortingState>(initialState?.sorting ?? []);
+    const table = useReactTable({
+        ...options,
+        getCoreRowModel: getCoreRowModel(),
+        getFacetedRowModel: getFacetedRowModel(),
+        getFacetedUniqueValues: getFacetedUniqueValues(),
+        getFilteredRowModel: getFilteredRowModel(),
+        getPaginationRowModel: getPaginationRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        initialState,
+        onColumnFiltersChange: (updater) => {
+            if (controlledState?.columnFilters === undefined) {
+                setColumnFilters(updater);
+            }
+            onColumnFiltersChange?.(updater);
+        },
+        onColumnOrderChange: (updater) => {
+            if (controlledState?.columnOrder === undefined)
+                setColumnOrder(updater);
+            onColumnOrderChange?.(updater);
+        },
+        onColumnPinningChange: (updater) => {
+            if (controlledState?.columnPinning === undefined) {
+                setColumnPinning(updater);
+            }
+            onColumnPinningChange?.(updater);
+        },
+        onColumnVisibilityChange: (updater) => {
+            if (controlledState?.columnVisibility === undefined) {
+                setColumnVisibility(updater);
+            }
+            onColumnVisibilityChange?.(updater);
+        },
+        onPaginationChange: (updater) => {
+            if (controlledState?.pagination === undefined)
+                setPagination(updater);
+            onPaginationChange?.(updater);
+        },
+        onRowSelectionChange: (updater) => {
+            if (controlledState?.rowSelection === undefined) {
+                setRowSelection(updater);
+            }
+            onRowSelectionChange?.(updater);
+        },
+        onSortingChange: (updater) => {
+            if (controlledState?.sorting === undefined)
+                setSorting(updater);
+            onSortingChange?.(updater);
+        },
+        state: {
+            ...controlledState,
+            columnFilters: controlledState?.columnFilters ?? columnFilters,
+            columnOrder: controlledState?.columnOrder ?? columnOrder,
+            columnPinning: controlledState?.columnPinning ?? columnPinning,
+            columnVisibility: controlledState?.columnVisibility ?? columnVisibility,
+            pagination: controlledState?.pagination ?? pagination,
+            rowSelection: controlledState?.rowSelection ?? rowSelection,
+            sorting: controlledState?.sorting ?? sorting,
+        },
+    });
+    return { table };
+}
+export type DataTableProps<TData> = React.ComponentProps<"div"> & {
+    /** Embedded tables let a parent own the frame; style.backgroundColor also colors pinned cells. */
+    variant?: "framed" | "embedded";
+    /** Public row-density recipe; does not resize controls inside cells. */
+    density?: "comfortable" | "compact";
+    /** Keeps the column header visible inside the bounded table scroll area. */
+    stickyHeader?: boolean;
+    /** Caps the table scroll area; stickyHeader defaults to min(65dvh, 40rem). Pagination stays outside. */
+    scrollAreaMaxHeight?: React.CSSProperties["maxHeight"];
+    /** Group headers are automatic for TanStack grouped rows; customize their content here. */
+    grouping?: DataTableGroupingOptions<TData>;
+    /** Highlights the row whose TanStack id matches this value. */
+    activeRowId?: string | null;
+    actionBar?: React.ReactNode;
+    /** Replaces the built-in empty state when the current row model has no rows. */
+    emptyState?: React.ReactNode;
+    /** Title used by the built-in empty state. */
+    emptyMessage?: React.ReactNode;
+    /** Replaces data and empty rows with a column-aligned Skeleton body. */
+    isLoading?: boolean;
+    /** Accessible message announced while the table is loading. */
+    loadingMessage?: React.ReactNode;
+    /** Number of placeholder rows shown while loading. Defaults to the current page size. */
+    loadingRowCount?: number;
+    /** Activates a row by pointer or keyboard while preserving nested controls. */
+    onRowActivate?: (row: Row<TData>) => void;
+    /** Configures the built-in pagination region through its public contract. */
+    paginationProps?: Omit<DataTablePaginationProps<TData>, "table">;
+    /** Spanning content before a record, for presentation sections that do not count toward pagination. */
+    renderRowHeader?: (context: DataTableRowContext<TData> & {
+        previousRow?: Row<TData>;
+    }) => React.ReactNode;
+    /** Spanning detail content after an expanded record. Expansion is owned by TanStack state. */
+    renderExpandedRow?: (context: DataTableRowContext<TData>) => React.ReactNode;
+    /** Hide pagination for a complete, unpaginated row model (for example a resource tree). */
+    showPagination?: boolean;
+    /** Customizes a loading cell when its final shape is not text-like. */
+    renderLoadingCell?: (context: DataTableLoadingCellContext<TData>) => React.ReactNode;
+    table: TanstackTable<TData>;
+};
+export type DataTableRowContext<TData> = {
+    row: Row<TData>;
+    table: TanstackTable<TData>;
+};
+export type DataTableGroupContext<TData> = {
+    row: Row<TData>;
+    table: TanstackTable<TData>;
+    /** Matching leaf records, independent of expansion, preview limits and pagination. */
+    leafRowCount: number;
+    /** Direct children currently presented beneath this group. */
+    visibleRowCount: number;
+};
+export type DataTableGroupingOptions<TData> = {
+    getLabel?: (row: Row<TData>) => string;
+    /** Stable presentation order, independent of sorting the group's records. */
+    getOrder?: (row: Row<TData>) => number;
+    /** Limits direct children for presentation only; leaves the table's data models intact. */
+    getRowLimit?: (row: Row<TData>) => number | undefined;
+    /** Content after the built-in expand/collapse button. */
+    renderHeader?: (context: DataTableGroupContext<TData>) => React.ReactNode;
+    /** Content of a spanning row after an expanded group's visible descendants. */
+    renderFooter?: (context: DataTableGroupContext<TData>) => React.ReactNode;
+    labels?: {
+        expandGroup?: (label: string) => string;
+        collapseGroup?: (label: string) => string;
+    };
+};
+type DataTableBodyEntry<TData> = {
+    kind: "row";
+    row: Row<TData>;
+} | {
+    kind: "group" | "footer";
+    context: DataTableGroupContext<TData>;
+};
+function getDataTableBodyEntries<TData>(table: TanstackTable<TData>, grouping?: DataTableGroupingOptions<TData>): DataTableBodyEntry<TData>[] {
+    const rows = table.getRowModel().rows;
+    if (!rows.some((row) => row.getIsGrouped())) {
+        return rows.map((row) => ({ kind: "row", row }));
+    }
+    // Reconstruct only the current row model, so paginated/expanded-out rows are
+    // never reintroduced from subRows. Ordinary tree rows keep their hierarchy.
+    const ids = new Set(rows.map((row) => row.id));
+    const children = new Map<string | undefined, Row<TData>[]>();
+    for (const row of rows) {
+        const parent = row.parentId && ids.has(row.parentId) ? row.parentId : undefined;
+        const siblings = children.get(parent) ?? [];
+        siblings.push(row);
+        children.set(parent, siblings);
+    }
+    const entries: DataTableBodyEntry<TData>[] = [];
+    const getOrder = grouping?.getOrder;
+    const orderRows = (siblings: Row<TData>[]) => getOrder && siblings.every((row) => row.getIsGrouped())
+        ? [...siblings].sort((a, b) => getOrder(a) - getOrder(b))
+        : siblings;
+    function visit(siblings: Row<TData>[]) {
+        for (const row of siblings) {
+            const descendants = orderRows(children.get(row.id) ?? []);
+            if (!row.getIsGrouped()) {
+                entries.push({ kind: "row", row });
+                visit(descendants);
+                continue;
+            }
+            const requested = grouping?.getRowLimit?.(row);
+            const limit = requested !== undefined && Number.isFinite(requested)
+                ? Math.max(0, Math.floor(requested))
+                : descendants.length;
+            const visible = row.getIsExpanded() ? descendants.slice(0, limit) : [];
+            const context = {
+                row,
+                table,
+                leafRowCount: row.getLeafRows().filter((leaf) => !leaf.getIsGrouped()).length,
+                visibleRowCount: visible.length,
+            };
+            entries.push({ kind: "group", context });
+            visit(visible);
+            if (row.getIsExpanded() && grouping?.renderFooter) {
+                entries.push({ kind: "footer", context });
+            }
+        }
+    }
+    visit(orderRows(children.get(undefined) ?? []));
+    return entries;
+}
+function DataTableGroupHeader<TData>({ context, grouping, }: {
+    context: DataTableGroupContext<TData>;
+    grouping?: DataTableGroupingOptions<TData>;
+}) {
+    const { row } = context;
+    const expanded = row.getIsExpanded();
+    const Chevron = useIcon(expanded ? "chevron-down" : "chevron-right");
+    const label = grouping?.getLabel?.(row) ?? String(row.groupingValue ?? row.groupingColumnId ?? "");
+    return (<div className="flex min-w-0 items-center gap-2">
+      <Button aria-expanded={expanded} aria-label={expanded
+            ? grouping?.labels?.collapseGroup?.(label) ?? `Collapse ${label}`
+            : grouping?.labels?.expandGroup?.(label) ?? `Expand ${label}`} iconOnly onClick={row.getToggleExpandedHandler()} size="xs" variant="ghost">
+        <Chevron aria-hidden/>
+      </Button>
+      {grouping?.renderHeader ? grouping.renderHeader(context) : (<>
+          <span className="font-medium text-fg-default">{label}</span>
+          <Badge size="sm">{context.leafRowCount}</Badge>
+        </>)}
+    </div>);
+}
+export type DataTableLoadingCellContext<TData> = {
+    column: Column<TData, unknown>;
+    columnIndex: number;
+    rowIndex: number;
+};
+type HorizontalScrollEdges = {
+    canScrollLeft: boolean;
+    canScrollRight: boolean;
+};
+const initialHorizontalScrollEdges: HorizontalScrollEdges = {
+    canScrollLeft: false,
+    canScrollRight: false,
+};
+function isInteractiveRowTarget(target: EventTarget | null) {
+    return (target instanceof Element &&
+        Boolean(target.closest("a,button,input,select,textarea,[role=button],[role=checkbox],[role=link]")));
+}
+function DataTable<TData>({ activeRowId, actionBar, children, className, density = "comfortable", emptyMessage = "No results.", emptyState, grouping, isLoading = false, loadingMessage = "Loading data.", loadingRowCount, onRowActivate, paginationProps, renderRowHeader, renderExpandedRow, showPagination = true, renderLoadingCell, stickyHeader = false, scrollAreaMaxHeight, style, table, variant = "framed", "aria-busy": ariaBusy, ...props }: DataTableProps<TData>) {
+    const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+    const tableElementRef = React.useRef<HTMLTableElement>(null);
+    const pinnedBackgroundColor = variant === "embedded" ? style?.backgroundColor : undefined;
+    const [scrollEdges, setScrollEdges] = React.useState<HorizontalScrollEdges>(initialHorizontalScrollEdges);
+    const isFilteredEmpty = table.getState().columnFilters.length > 0 &&
+        table.getPreFilteredRowModel().rows.length > 0;
+    const visibleColumns = table.getVisibleLeafColumns();
+    const bodyEntries = getDataTableBodyEntries(table, grouping);
+    const hasActionBar = Boolean(!isLoading && actionBar && table.getFilteredSelectedRowModel().rows.length > 0);
+    const resolvedLoadingRowCount = loadingRowCount ?? table.getState().pagination.pageSize;
+    const updateScrollEdges = React.useCallback(() => {
+        const scrollContainer = scrollContainerRef.current;
+        if (!scrollContainer)
+            return;
+        const maxScrollLeft = Math.max(scrollContainer.scrollWidth - scrollContainer.clientWidth, 0);
+        const hasOverflow = maxScrollLeft > 1;
+        const nextScrollEdges = {
+            canScrollLeft: hasOverflow && scrollContainer.scrollLeft > 1,
+            canScrollRight: hasOverflow && scrollContainer.scrollLeft < maxScrollLeft - 1,
+        };
+        setScrollEdges((currentScrollEdges) => currentScrollEdges.canScrollLeft === nextScrollEdges.canScrollLeft &&
+            currentScrollEdges.canScrollRight === nextScrollEdges.canScrollRight
+            ? currentScrollEdges
+            : nextScrollEdges);
+    }, []);
+    React.useEffect(() => {
+        updateScrollEdges();
+        if (typeof ResizeObserver === "undefined") {
+            window.addEventListener("resize", updateScrollEdges);
+            return () => window.removeEventListener("resize", updateScrollEdges);
+        }
+        const resizeObserver = new ResizeObserver(updateScrollEdges);
+        const scrollContainer = scrollContainerRef.current;
+        const tableElement = tableElementRef.current;
+        if (scrollContainer)
+            resizeObserver.observe(scrollContainer);
+        if (tableElement)
+            resizeObserver.observe(tableElement);
+        return () => resizeObserver.disconnect();
+    }, [updateScrollEdges]);
+    return (<div className={cn("flex w-full min-w-0 flex-col gap-2", className)} data-slot="data-table" data-density={density} data-loading={isLoading || undefined} data-variant={variant} style={style} {...props}>
+      <span aria-atomic="true" className="sr-only" role="status">
+        {isLoading ? loadingMessage : null}
+      </span>
+      {children}
+      <div aria-busy={ariaBusy ?? (isLoading || undefined)} className={cn("overflow-hidden", variant === "framed" && "rounded-xl border border-border bg-surface-floating")}>
+        <div className={cn("overflow-auto", (stickyHeader || scrollAreaMaxHeight !== undefined) && "@container/data-table-scroll-area")} style={{ maxHeight: scrollAreaMaxHeight ?? (stickyHeader ? "min(65dvh, 40rem)" : undefined) }} data-slot="data-table-scroll-area" onScroll={updateScrollEdges} ref={scrollContainerRef}>
+          <Table ref={tableElementRef}>
+            <TableHeader className={stickyHeader ? "sticky top-0 z-raised" : undefined} style={stickyHeader ? { backgroundColor: pinnedBackgroundColor ?? "var(--surface-floating)" } : undefined}>
+              {table.getHeaderGroups().map((headerGroup) => (<TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (<TableHead className="h-control-md align-middle whitespace-nowrap [&>[data-slot=checkbox]]:block" colSpan={header.colSpan} key={header.id} style={getCommonPinningStyles(header.column, {
+                    backgroundColor: pinnedBackgroundColor,
+                    showLeftShadow: scrollEdges.canScrollLeft,
+                    showRightShadow: scrollEdges.canScrollRight,
+                })}>
+                      {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                    </TableHead>))}
+                </TableRow>))}
+            </TableHeader>
+            {isLoading ? (<TableSkeletonBody cellClassName={cn("align-middle whitespace-nowrap", density === "compact" && "py-1")} columns={Math.max(visibleColumns.length, 1)} rows={resolvedLoadingRowCount} getCellProps={(_, columnIndex) => {
+                const column = visibleColumns[columnIndex];
+                if (!column)
+                    return {};
+                return {
+                    style: getCommonPinningStyles(column, {
+                        backgroundColor: pinnedBackgroundColor,
+                        showLeftShadow: scrollEdges.canScrollLeft,
+                        showRightShadow: scrollEdges.canScrollRight,
+                    }),
+                };
+            }} renderCell={(rowIndex, columnIndex) => {
+                const column = visibleColumns[columnIndex];
+                return column
+                    ? renderLoadingCell?.({ column, columnIndex, rowIndex })
+                    : undefined;
+            }}/>) : (<TableBody>
+                {table.getRowModel().rows.length ? (bodyEntries.map((entry, rowIndex) => {
+                if (entry.kind !== "row") {
+                    const { context } = entry;
+                    const footer = entry.kind === "footer" ? grouping?.renderFooter?.(context) : undefined;
+                    if (entry.kind === "footer" && (footer == null || typeof footer === "boolean"))
+                        return null;
+                    return (<TableRow data-slot={entry.kind === "group" ? "data-table-group" : "data-table-group-footer"} data-group-id={context.row.id} key={`${entry.kind}:${context.row.id}`}>
+                          <TableCell className={cn("align-middle", entry.kind === "group" && "bg-surface-raised text-fg-default", density === "compact" && "py-1")} colSpan={Math.max(visibleColumns.length, 1)}>
+                            {entry.kind === "group"
+                            ? <DataTableGroupHeader context={context} grouping={grouping}/>
+                            : footer}
+                          </TableCell>
+                        </TableRow>);
+                }
+                const { row } = entry;
+                const isActive = row.id === activeRowId;
+                const activateRow = () => onRowActivate?.(row);
+                const previousEntry = bodyEntries[rowIndex - 1];
+                const header = renderRowHeader?.({ row, table, previousRow: previousEntry?.kind === "row" ? previousEntry.row : undefined });
+                const details = renderExpandedRow && row.getIsExpanded() ? renderExpandedRow({ row, table }) : undefined;
+                return (<React.Fragment key={row.id}>
+                        {header != null && typeof header !== "boolean" && (<TableRow data-slot="data-table-row-header" data-row-id={row.id}>
+                            <TableCell className={cn("align-middle bg-surface-raised text-fg-default", density === "compact" && "py-1")} colSpan={Math.max(visibleColumns.length, 1)}>
+                              {header}
+                            </TableCell>
+                          </TableRow>)}
+                        <TableRow aria-expanded={renderExpandedRow && row.getCanExpand() ? row.getIsExpanded() : undefined} aria-selected={isActive || undefined} className={cn("data-[state=selected]:bg-selection", onRowActivate &&
+                        "cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-focus-ring")} data-state={row.getIsSelected() || isActive
+                        ? "selected"
+                        : undefined} index={rowIndex} data-row-id={row.id} onClick={(event) => {
+                        if (isInteractiveRowTarget(event.target))
+                            return;
+                        activateRow();
+                    }} onKeyDown={(event) => {
+                        if (isInteractiveRowTarget(event.target))
+                            return;
+                        if (event.key !== "Enter" && event.key !== " ")
+                            return;
+                        event.preventDefault();
+                        activateRow();
+                    }} tabIndex={onRowActivate ? 0 : undefined}>
+                          {row.getVisibleCells().map((cell) => (<TableCell className={cn("align-middle whitespace-nowrap [&>[data-slot=checkbox]]:block", density === "compact" && "py-1", cell.column.getIsPinned() &&
+                            "group-[.is-active]/row:[background-image:linear-gradient(var(--hover),var(--hover))]")} key={cell.id} style={getCommonPinningStyles(cell.column, {
+                            backgroundColor: pinnedBackgroundColor,
+                            backgroundImage: row.getIsSelected() || isActive
+                                ? "linear-gradient(var(--selection), var(--selection))"
+                                : undefined,
+                            showLeftShadow: scrollEdges.canScrollLeft,
+                            showRightShadow: scrollEdges.canScrollRight,
+                        })}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>))}
+                        </TableRow>
+                        {details != null && typeof details !== "boolean" && (<TableRow data-slot="data-table-expanded-row" data-row-id={row.id}>
+                            <TableCell className={cn("align-middle whitespace-normal bg-surface-raised", density === "compact" && "py-1")} colSpan={Math.max(visibleColumns.length, 1)}>
+                              {details}
+                            </TableCell>
+                          </TableRow>)}
+                      </React.Fragment>);
+            })) : (<TableRow>
+                    <TableCell className="p-0 align-middle" colSpan={Math.max(table.getVisibleLeafColumns().length, 1)}>
+                      {emptyState ?? (<Empty announce={isFilteredEmpty} density="compact" reason={isFilteredEmpty ? "no-filter-results" : "no-data"} scope="section">
+                          <EmptyMedia>
+                            <EmptyIllustration variant={isFilteredEmpty ? "filter" : "resources"}/>
+                          </EmptyMedia>
+                          <EmptyHeader>
+                            <EmptyTitle>{emptyMessage}</EmptyTitle>
+                            {isFilteredEmpty && (<EmptyDescription>
+                                Try adjusting your search or clearing the active
+                                filters.
+                              </EmptyDescription>)}
+                          </EmptyHeader>
+                          {isFilteredEmpty && (<EmptyActions>
+                              <Button onClick={() => table.resetColumnFilters()} size="sm" variant="secondary">
+                                Clear filters
+                              </Button>
+                            </EmptyActions>)}
+                        </Empty>)}
+                    </TableCell>
+                  </TableRow>)}
+              </TableBody>)}
+          </Table>
+        </div>
+      </div>
+      {(showPagination || hasActionBar) && <div className="flex flex-col gap-2.5">
+        {showPagination && <DataTablePagination {...paginationProps} table={table}/>}
+        {hasActionBar && actionBar}
+      </div>}
+    </div>);
+}
+export type DataTableControlLabels = {
+    ascending?: string;
+    descending?: string;
+    resetSorting?: string;
+    hideColumn?: string;
+    customizeColumns?: string;
+    dragToReorder?: string;
+    reorderAndToggle?: string;
+    reorderColumn?: (title: string) => string;
+    showColumn?: (title: string) => string;
+};
+export type DataTableColumnHeaderProps<TData, TValue> = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    column: Column<TData, TValue>;
+    label: string;
+    labels?: DataTableControlLabels;
+};
+function DataTableColumnHeader<TData, TValue>({ className, column, label, labels, ...props }: DataTableColumnHeaderProps<TData, TValue>) {
+    const [open, setOpen] = React.useState(false);
+    const ChevronUp = useIcon("chevron-up");
+    const ChevronDown = useIcon("chevron-down");
+    const ChevronsUpDown = useIcon("chevrons-up-down");
+    const EyeOff = useIcon("eye-off");
+    const X = useIcon("x");
+    const sorted = column.getIsSorted();
+    const canSort = column.getCanSort();
+    const canHide = column.getCanHide();
+    const SortIcon = !canSort
+        ? ChevronDown
+        : sorted === "asc"
+            ? ChevronUp
+            : sorted === "desc"
+                ? ChevronDown
+                : ChevronsUpDown;
+    if (!canSort && !canHide) {
+        return <div className={cn(className)}>{label}</div>;
+    }
+    return (<DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownTrigger render={<Button active={open} className={cn("-ml-2 px-2 text-body font-medium text-fg-default", className)} size="sm" trailingIcon={SortIcon} variant="ghost" {...props}>
+            {label}
+          </Button>}/>
+      <DropdownContent align="start" checkedIndex={sorted === "asc" ? 0 : sorted === "desc" ? 1 : undefined} className="w-40">
+        <DropdownLabel>{label}</DropdownLabel>
+        {canSort && (<>
+            <MenuItem checked={sorted === "asc"} icon={ChevronUp} index={0} label={labels?.ascending ?? "Ascending"} onSelect={() => column.toggleSorting(false)}/>
+            <MenuItem checked={sorted === "desc"} icon={ChevronDown} index={1} label={labels?.descending ?? "Descending"} onSelect={() => column.toggleSorting(true)}/>
+            {sorted && (<MenuItem icon={X} index={2} label={labels?.resetSorting ?? "Reset sorting"} onSelect={() => column.clearSorting()}/>)}
+          </>)}
+        {canSort && canHide && <DropdownSeparator />}
+        {canHide && (<MenuItem icon={EyeOff} index={3} label={labels?.hideColumn ?? "Hide column"} onSelect={() => column.toggleVisibility(false)}/>)}
+      </DropdownContent>
+    </DropdownMenu>);
+}
+export type DataTableToolbarProps<TData> = React.ComponentProps<"div"> & {
+    /** Whether to render the column-visibility control beside toolbar actions. */
+    showViewOptions?: boolean;
+    table: TanstackTable<TData>;
+};
+function DataTableToolbar<TData>({ children, className, showViewOptions = true, table, ...props }: DataTableToolbarProps<TData>) {
+    const CircleX = useIcon("circle-x");
+    const isFiltered = table.getState().columnFilters.length > 0;
+    const columns = React.useMemo(() => table
+        .getAllColumns()
+        .filter((column) => column.getCanFilter() && column.columnDef.meta?.variant), [table]);
+    return (<div aria-orientation="horizontal" className={cn("flex w-full flex-wrap items-center justify-between gap-2 overflow-visible p-1", className)} role="toolbar" {...props}>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        {columns.map((column) => (<DataTableToolbarFilter column={column} key={column.id}/>))}
+        {isFiltered && (<Button aria-label="Reset filters" className="border-dashed" leadingIcon={CircleX} onClick={() => table.resetColumnFilters()} size="md" variant="tertiary">
+            Reset
+          </Button>)}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {children}
+        {showViewOptions && <DataTableViewOptions table={table}/>}
+      </div>
+    </div>);
+}
+type DataTableToolbarFilterProps<TData> = {
+    column: Column<TData>;
+};
+function DataTableToolbarFilter<TData>({ column, }: DataTableToolbarFilterProps<TData>) {
+    const meta = column.columnDef.meta;
+    const variant = meta?.variant;
+    if (!variant)
+        return null;
+    if (variant === "select" || variant === "multiSelect") {
+        return (<DataTableFacetedFilter column={column} icon={meta?.filterIcon} multiple={variant === "multiSelect"} options={meta?.options ?? []} title={meta?.label ?? column.id}/>);
+    }
+    if (variant === "number") {
+        const filterValue = column.getFilterValue();
+        const usesNumberRange = !column.columnDef.filterFn ||
+            column.columnDef.filterFn === "auto" ||
+            column.columnDef.filterFn === "inNumberRange";
+        return (<div className="relative shrink-0">
+        <Input className={cn("w-32", meta?.unit && "pr-10")} inputMode="numeric" onChange={(event) => {
+                const value = event.target.value;
+                column.setFilterValue(value === ""
+                    ? undefined
+                    : usesNumberRange ? [Number(value), Number(value)] : value);
+            }} placeholder={meta?.placeholder ?? meta?.label ?? column.id} size="md" type="number" value={((Array.isArray(filterValue) ? filterValue[0] : filterValue) as string | number | undefined) ?? ""}/>
+        {meta?.unit && (<span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-label text-fg-muted">
+            {meta.unit}
+          </span>)}
+      </div>);
+    }
+    return (<Input className="w-40 lg:w-56" onChange={(event) => column.setFilterValue(event.target.value)} placeholder={meta?.placeholder ?? meta?.label ?? column.id} size="md" value={(column.getFilterValue() as string) ?? ""}/>);
+}
+export type DataTableFacetedFilterProps<TData, TValue> = {
+    column: Column<TData, TValue>;
+    disabled?: boolean;
+    icon?: IconComponent;
+    labels?: {
+        clearFilters?: string;
+    };
+    multiple?: boolean;
+    options: DataTableFilterOption[];
+    title: string;
+};
+function DataTableFacetedFilter<TData, TValue>({ column, disabled = false, icon: FilterIcon, labels, multiple = false, options, title, }: DataTableFacetedFilterProps<TData, TValue>) {
+    const [open, setOpen] = React.useState(false);
+    const CirclePlus = useIcon("circle-plus");
+    const CircleX = useIcon("circle-x");
+    const columnFilterValue = column.getFilterValue();
+    const selectedValues = new Set(Array.isArray(columnFilterValue) ? columnFilterValue : []);
+    const checkedIndices = new Set(options.flatMap((option, index) => selectedValues.has(option.value) ? [index] : []));
+    const selectedOptions = options.filter((option) => selectedValues.has(option.value));
+    const hasSelectedOptions = selectedValues.size > 0;
+    // A column can provide a semantic icon (for example, a status dot). Keep it
+    // fixed as filters are selected so the control does not imply a rotation or
+    // mode change. Existing filters retain the add/clear icon fallback.
+    const LeadingIcon = FilterIcon ?? (hasSelectedOptions ? CircleX : CirclePlus);
+    const toggleOption = (option: DataTableFilterOption) => {
+        const isSelected = selectedValues.has(option.value);
+        if (multiple) {
+            const nextValues = new Set(selectedValues);
+            if (isSelected)
+                nextValues.delete(option.value);
+            else
+                nextValues.add(option.value);
+            const filterValue = Array.from(nextValues);
+            column.setFilterValue(filterValue.length ? filterValue : undefined);
+        }
+        else {
+            column.setFilterValue(isSelected ? undefined : [option.value]);
+            setOpen(false);
+        }
+    };
+    return (<Popover onOpenChange={setOpen} open={open}>
+      <PopoverTrigger render={<Button active={open} aria-label={selectedOptions.length > 0
+                ? `${title}: ${selectedOptions.map((option) => option.label).join(", ")}`
+                : title} className="shrink-0" dashed={!hasSelectedOptions} disabled={disabled} leadingIcon={LeadingIcon} size="md" variant="tertiary">
+            {!hasSelectedOptions ? (title) : (<>
+                {selectedOptions.slice(0, 2).map((option) => (<Badge color="gray" key={option.value} size="sm">
+                    {option.label}
+                  </Badge>))}
+                {selectedOptions.length > 2 && (<Badge color="gray" size="sm">
+                    +{selectedOptions.length - 2}
+                  </Badge>)}
+              </>)}
+          </Button>}/>
+      <PopoverContent align="start" className="w-52 p-1" sideOffset={4}>
+        <div className="px-2 py-1.5 text-label text-fg-muted">
+          {title}
+        </div>
+        <div className="-mx-1 my-1 h-px"/>
+        <CheckboxGroup aria-label={title} checkedIndices={checkedIndices} className="w-full">
+          {options.map((option, index) => (<CheckboxItem checked={selectedValues.has(option.value)} icon={option.icon} index={index} key={option.value} label={option.label} onToggle={() => toggleOption(option)} trailing={option.count ??
+                column.getFacetedUniqueValues().get(option.value) ??
+                0}/>))}
+        </CheckboxGroup>
+        {selectedValues.size > 0 && (<Button className="mt-0.5 w-full border-t border-border" onClick={() => {
+                column.setFilterValue(undefined);
+                setOpen(false);
+            }} size="md" variant="ghost">
+            {labels?.clearFilters ?? "Clear filters"}
+          </Button>)}
+      </PopoverContent>
+    </Popover>);
+}
+export type DataTablePaginationProps<TData> = React.ComponentProps<"div"> & {
+    disabled?: boolean;
+    labels?: Partial<DataTablePaginationLabels>;
+    pageSizeOptions?: number[];
+    table: TanstackTable<TData>;
+};
+function DataTablePagination<TData>({ className, disabled = false, labels: providedLabels, pageSizeOptions = [10, 20, 30, 40, 50], table, ...props }: DataTablePaginationProps<TData>) {
+    const ChevronLeft = useIcon("chevron-left");
+    const ChevronRight = useIcon("chevron-right");
+    const ChevronsLeft = useIcon("chevrons-left");
+    const ChevronsRight = useIcon("chevrons-right");
+    const pageSize = table.getState().pagination.pageSize;
+    const hasSelectionCheckbox = table
+        .getAllLeafColumns()
+        .some((column) => column.id === "select");
+    const resolvedPageSizeOptions = pageSizeOptions.includes(pageSize)
+        ? pageSizeOptions
+        : [...pageSizeOptions, pageSize].sort((left, right) => left - right);
+    const labels = {
+        ...defaultDataTablePaginationLabels,
+        ...providedLabels,
+    };
+    const pageCount = Math.max(table.getPageCount(), 1);
+    return (<div className={cn("flex w-full flex-col-reverse items-center justify-between gap-4 overflow-auto px-2 py-1 text-body sm:flex-row sm:gap-8", !hasSelectionCheckbox && "sm:justify-end", className)} data-slot="data-table-pagination" {...props}>
+      {hasSelectionCheckbox && (<div className="flex-1 whitespace-nowrap text-fg-muted">
+          {labels.selectedRows(table.getFilteredSelectedRowModel().rows.length, table.getFilteredRowModel().rows.length)}
+        </div>)}
+      <div className="flex w-full min-w-0 flex-nowrap items-center gap-1.5 sm:w-auto sm:gap-6 lg:gap-8">
+        <div className="flex min-w-20 flex-1 items-center gap-2 whitespace-nowrap sm:flex-none">
+          <span className="min-w-0 truncate text-label text-fg-default" title={labels.rowsPerPage}>{labels.rowsPerPage}</span>
+          <Select disabled={disabled} itemDensity="compact" onValueChange={(value) => table.setPageSize(Number(value))} size="sm" value={`${pageSize}`}>
+            <SelectTrigger aria-label={labels.rowsPerPage} className="min-w-18 w-18 shrink-0 px-2 text-label" placeholder={`${pageSize}`}/>
+            <SelectContent>
+            {resolvedPageSizeOptions.map((option) => (<SelectItem key={option} value={`${option}`}>
+                {option}
+              </SelectItem>))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 truncate whitespace-nowrap text-label tabular-nums text-fg-default">
+          {labels.pageSummary(table.getState().pagination.pageIndex + 1, pageCount)}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button aria-label={labels.firstPage} className="hidden lg:inline-flex" disabled={disabled || !table.getCanPreviousPage()} onClick={() => table.setPageIndex(0)} iconOnly size="sm" variant="tertiary">
+            <ChevronsLeft />
+          </Button>
+          <Button aria-label={labels.previousPage} disabled={disabled || !table.getCanPreviousPage()} onClick={() => table.previousPage()} iconOnly size="sm" variant="tertiary">
+            <ChevronLeft />
+          </Button>
+          <Button aria-label={labels.nextPage} disabled={disabled || !table.getCanNextPage()} onClick={() => table.nextPage()} iconOnly size="sm" variant="tertiary">
+            <ChevronRight />
+          </Button>
+          <Button aria-label={labels.lastPage} className="hidden lg:inline-flex" disabled={disabled || !table.getCanNextPage()} onClick={() => table.setPageIndex(pageCount - 1)} iconOnly size="sm" variant="tertiary">
+            <ChevronsRight />
+          </Button>
+        </div>
+      </div>
+    </div>);
+}
+export type DataTableViewOptionsProps<TData> = {
+    className?: string;
+    table: TanstackTable<TData>;
+    labels?: DataTableControlLabels;
+};
+function DataTableViewOptions<TData>({ className, table, labels, }: DataTableViewOptionsProps<TData>) {
+    const [open, setOpen] = React.useState(false);
+    const Settings = useIcon("settings");
+    const allLeafColumns = table.getAllLeafColumns();
+    const columns = allLeafColumns.filter((column) => typeof column.accessorFn !== "undefined" && column.getCanHide());
+    if (!columns.length)
+        return null;
+    const columnItems: SortableCollectionItem[] = columns.map((column) => ({
+        id: column.id,
+        title: column.columnDef.meta?.label ?? column.id,
+        description: column.getIsPinned() ? "Pinned" : undefined,
+        draggable: !column.getIsPinned(),
+        removable: false,
+    }));
+    const reorderColumns = (items: SortableCollectionItem[]) => {
+        const reorderedIds = items.flatMap((item) => table.getColumn(item.id)?.getIsPinned() ? [] : [item.id]);
+        const reorderedSet = new Set(reorderedIds);
+        let reorderedIndex = 0;
+        // Preserve utility and pinned columns that are not reorderable here.
+        const nextOrder = allLeafColumns.map((column) => reorderedSet.has(column.id)
+            ? reorderedIds[reorderedIndex++]
+            : column.id);
+        table.setColumnOrder(nextOrder);
+    };
+    return (<Popover onOpenChange={setOpen} open={open}>
+      <PopoverTrigger render={<Button active={open} aria-label={labels?.customizeColumns ?? "Customize columns"} className={cn("shrink-0", className)} iconOnly size="md" variant="tertiary">
+            <Settings aria-hidden/>
+          </Button>}/>
+      <PopoverContent align="end" className="w-64 p-1.5" sideOffset={4}>
+        <div className="px-1 pb-1.5 pt-0.5 text-label text-fg-muted">
+          {labels?.dragToReorder ?? "Drag to reorder columns"}
+        </div>
+        <SortableCollection aria-label={labels?.reorderAndToggle ?? "Reorder and toggle columns"} className="border-0 bg-transparent p-0 [&_[data-slot=sortable-collection-item]]:px-1 [&_[data-slot=sortable-collection-item]]:py-1" dragHandlePosition="end" items={columnItems} onItemsChange={reorderColumns} reorderLabel={labels?.reorderColumn} renderLeading={(item) => {
+            const column = table.getColumn(item.id);
+            if (!column)
+                return null;
+            return (<Checkbox aria-label={labels?.showColumn?.(String(item.title)) ?? `Show ${String(item.title)} column`} checked={column.getIsVisible()} onCheckedChange={(checked) => column.toggleVisibility(checked === true)}/>);
+        }}/>
+      </PopoverContent>
+    </Popover>);
+}
+function getCommonPinningStyles<TData, TValue>(column: Column<TData, TValue>, { backgroundColor = "var(--surface-floating)", backgroundImage, showLeftShadow = false, showRightShadow = false, }: {
+    backgroundColor?: string;
+    backgroundImage?: string;
+    showLeftShadow?: boolean;
+    showRightShadow?: boolean;
+} = {}): React.CSSProperties {
+    const isPinned = column.getIsPinned();
+    const isLastLeftPinnedColumn = isPinned === "left" && column.getIsLastColumn("left");
+    const isFirstRightPinnedColumn = isPinned === "right" && column.getIsFirstColumn("right");
+    return {
+        backgroundColor: isPinned ? backgroundColor : undefined,
+        backgroundImage: isPinned ? backgroundImage : undefined,
+        boxShadow: isLastLeftPinnedColumn && showLeftShadow
+            ? "-4px 0 4px -4px var(--border) inset"
+            : isFirstRightPinnedColumn && showRightShadow
+                ? "4px 0 4px -4px var(--border) inset"
+                : undefined,
+        left: isPinned === "left" ? `${column.getStart("left")}px` : undefined,
+        position: isPinned ? "sticky" : "relative",
+        right: isPinned === "right" ? `${column.getAfter("right")}px` : undefined,
+        width: column.getSize(),
+        zIndex: isPinned ? "var(--layer-control)" : undefined,
+    };
+}
+export { DataTable, DataTableColumnHeader, DataTableFacetedFilter, DataTablePagination, DataTableToolbar, DataTableViewOptions, useDataTable, };

@@ -66,11 +66,27 @@ func bootstrapAdminAccount(cfg Config, st *store.Store, log *slog.Logger, polici
 		log.Info("initial admin credentials are recorded in this file; change the password and delete it after first login",
 			"path", credsPath)
 	}
-	if !st.HasAnyAPIKey() {
-		if _, err := st.CreateAPIKey("default", 0); err != nil {
-			return fmt.Errorf("bootstrap default API key: %w", err)
-		}
-		log.Warn("created default API key; rotate it before production use")
+	// The gateway requires an API key unless an administrator opened it. Tell
+	// an operator who has none, because /v1 will refuse every request until
+	// they create one; do not mint a key here, since its secret would be
+	// discarded and nothing could authenticate with it.
+	if open, err := st.InferenceOpenAccess(); err == nil && !open && !hasLiveAPIKey(st) {
+		log.Info("the gateway requires an API key and no API token exists yet; create one under API tokens, or turn on open access under Settings > Security")
 	}
 	return nil
+}
+
+// hasLiveAPIKey reports whether an unrevoked API key exists: a best-effort read
+// for the startup hint, not a security decision.
+func hasLiveAPIKey(st *store.Store) bool {
+	keys, err := st.ListAPIKeys()
+	if err != nil {
+		return true // Unknown: stay quiet rather than hint wrongly.
+	}
+	for i := range keys {
+		if keys[i].RevokedAt == nil {
+			return true
+		}
+	}
+	return false
 }

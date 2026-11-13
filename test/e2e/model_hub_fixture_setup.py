@@ -37,7 +37,7 @@ def prepare(server, token, run_id, report, holder, agent_bin, artifacts):
     report["owned_template_model_id"] = model_id
     model = {"model_id": model_id, "display_title": prefix + "-template",
         "architecture": "Qwen2ForCausalLM", "input_modalities": ["text"], "context_length": 4096,
-        "model_config": json.loads(CONFIG), "specs": [{"name": SPEC, "display_profile": "general",
+        "model_config": json.loads(CONFIG), "specs": [{"name": SPEC, "display_name_zh_cn": "模型 · BF16", "display_name_en": "Model · BF16",
         "scenario": "balanced", "engine": "vllm", "image": "gpuworks/fake-engine:test",
         "weights": {"quantization": "fp16", "sources": [
             {"huggingface": {"repo_id": repo, "revision": "main"}},

@@ -23,17 +23,30 @@ type providerLocale struct {
 	SSHConnections   map[string]string                `json:"ssh_connections"`
 }
 
-var knownProviderKinds = []string{"aliyun", "autodl", "compshare", "runpod", "vast", "zstack"}
+var knownProviderKinds = []string{"aliyun", "autodl", "compshare", "digitalocean", "runpod", "vast", "zstack"}
 
 // kindHomepages is each known vendor's public site, linked from the provider
 // type cards.
 var kindHomepages = map[string]string{
-	"aliyun":    "https://www.aliyun.com",
-	"autodl":    "https://www.autodl.com",
-	"compshare": "https://www.compshare.cn",
-	"runpod":    "https://www.runpod.io",
-	"vast":      "https://vast.ai",
-	"zstack":    "https://www.zstack.io",
+	"aliyun":       "https://www.aliyun.com",
+	"autodl":       "https://www.autodl.com",
+	"compshare":    "https://www.compshare.cn",
+	"digitalocean": "https://www.digitalocean.com",
+	"runpod":       "https://www.runpod.io",
+	"vast":         "https://vast.ai",
+	"zstack":       "https://www.zstack.io",
+}
+
+// kindCategories is the platform each known kind connects: ZStack Cloud is
+// deployed on the customer's premises, the rental vendors are public clouds.
+var kindCategories = map[string]Category{
+	"aliyun":       CategoryPublicCloud,
+	"autodl":       CategoryPublicCloud,
+	"compshare":    CategoryPublicCloud,
+	"digitalocean": CategoryPublicCloud,
+	"runpod":       CategoryPublicCloud,
+	"vast":         CategoryPublicCloud,
+	"zstack":       CategoryPrivateCloud,
 }
 
 var knownCredentialFields = []string{"access_key_id", "access_key_secret", "api_key", "endpoint", "private_key", "public_key", "regions", "role_arn", "ssh_password"}

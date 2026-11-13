@@ -17,6 +17,7 @@ import type {
 import DeployAdvancedSection from "./DeployAdvancedSection";
 import DeployImageRow from "./DeployImageRow";
 import DeployKvOffloadSection from "./DeployKvOffloadSection";
+import DeployComponentAcquisition from "./DeployComponentAcquisition";
 import DeployNodeAcquisition from "./DeployNodeAcquisition";
 import DeployYieldPolicyField from "./DeployYieldPolicyField";
 import DeployParamField from "./DeployParamField";
@@ -291,6 +292,7 @@ export default function DeployQuickForm({
           evaluating={loading}
         />
       </LockedGroup>
+      <DeployComponentAcquisition acquisition={result?.acquisition} />
       <DeployNodeAcquisition
         acquisition={result?.acquisition}
         automatic={nodeMode === "auto"}

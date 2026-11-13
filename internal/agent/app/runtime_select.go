@@ -15,6 +15,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	dockerdrv "gpuworks.ai/gpuworks/internal/agent/runtime/docker"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/hostproc"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/kube"
 	nerdctldrv "gpuworks.ai/gpuworks/internal/agent/runtime/nerdctl"
 	udockerdrv "gpuworks.ai/gpuworks/internal/agent/runtime/udocker"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -144,10 +145,21 @@ func detectDriverWaiting(log *slog.Logger, baseDir, force string, prober gpu.Pro
 	case hostproc.DriverName:
 		log.Info("runtime driver forced", "driver", hostproc.DriverName)
 		return runtimeSelection{driver: hostproc.New(baseDir)}
+	case kube.DriverName:
+		d, err := kube.FromEnvironment(baseDir, cardUUIDs(prober), cardBDFs(prober), cardDevices(prober, log), log)
+		if err == nil {
+			_, err = d.Detect(ctx)
+		}
+		if err != nil {
+			log.Error("kube runtime unavailable", "err", err)
+			return runtimeSelection{}
+		}
+		log.Info("runtime driver forced", "driver", kube.DriverName)
+		return runtimeSelection{driver: d}
 	case "":
 		// auto-detect below
 	default:
-		log.Error("invalid runtime driver", "driver", force, "allowed", "docker|udocker|nerdctl|host|none")
+		log.Error("invalid runtime driver", "driver", force, "allowed", "docker|udocker|nerdctl|host|kube|none")
 		return runtimeSelection{}
 	}
 	candidates := []struct {
@@ -232,6 +244,18 @@ func passOver(ctx context.Context, log *slog.Logger, prober gpu.Prober, driver r
 	return judgeRuntimeGPU(ctx, log, prober, driver, runtime.DetectPlugin(ctx, prober, driver.Name()))
 }
 
+// refuseRuntimeSwitch says why a Kubernetes node's runtime cannot be replaced
+// by target: its instances are pods of the cluster, and the nerdctl, docker
+// or udocker the host may also have would run them outside Kubernetes, with
+// cards the kubelet can hand to other pods. nil when the node is no
+// Kubernetes node, or target is its own runtime.
+func (n *NodeRuntime) refuseRuntimeSwitch(target string) error {
+	if !n.kubeNode || target == kube.DriverName {
+		return nil
+	}
+	return fmt.Errorf("this node is a Kubernetes node: its runtime is %s and cannot be switched to %s (instances run as pods of the cluster)", kube.DriverName, target)
+}
+
 // SwitchRuntime changes the active runtime for subsequent reconciles. Existing
 // managed containers are stopped by the engine and recreated with the target
 // driver. The operation is intentionally available even when the target's
@@ -240,6 +264,9 @@ func (n *NodeRuntime) SwitchRuntime(ctx context.Context, name string) error {
 	n.switchMu.Lock()
 	defer n.switchMu.Unlock()
 	name = strings.ToLower(strings.TrimSpace(name))
+	if err := n.refuseRuntimeSwitch(name); err != nil {
+		return err
+	}
 	if name != "docker" && name != "nerdctl" && name != "udocker" {
 		return fmt.Errorf("unsupported runtime %q", name)
 	}
@@ -306,6 +333,12 @@ func (n *NodeRuntime) applyRuntimePreference(ctx context.Context, preference str
 func (n *NodeRuntime) applyAutoRuntime(ctx context.Context, idleOnly bool) error {
 	n.switchMu.Lock()
 	defer n.switchMu.Unlock()
+	if n.kubeNode {
+		// Auto-detection would find the node's nerdctl (the host wrapper the
+		// kube runtime installed) and move the instances out of their pods.
+		n.runtimeChoice.reset(false, runtimeFallback{})
+		return nil
+	}
 	// Detection runs again every minute on a node with something to watch;
 	// what it finds is logged below only when it changes, not each round.
 	selection := detectDriver(slog.New(slog.DiscardHandler), n.stateDir, "", n.prober)

@@ -110,7 +110,9 @@ func callAPITool() Tool {
 	return Tool{
 		Name: "call_api",
 		Description: "Read one GET endpoint of the platform API (find it with search_api) and get its JSON. " +
-			"Collections answer {\"items\": [...], \"total\": N}. Arrays are cut to `limit` items (default 20, max 200) and strings to 300 characters, each cut marked; " +
+			"Collections answer {\"items\": [...], \"total\": N}. A single object has no items: filter `.name`, not `.items[].name`. " +
+			"Metric points are [unix ms, value] arrays: `.items[].points[-1][1]`. " +
+			"Arrays are cut to `limit` items (default 20, max 200) and strings to 300 characters, each cut marked; " +
 			"answers over 12000 characters are truncated. Use `jq` to keep only what you need - e.g. '.items[] | {name, state}', " +
 			"'[.items[] | select(.state != \"running\")] | length', '.items | group_by(.state) | map({state: .[0].state, n: length})'. " +
 			"Path parameters go in the path (a node's name works where its uuid is expected); query parameters in `query`. Times are shown as UTC with their age.",
@@ -160,7 +162,7 @@ func callAPI(ctx context.Context, env ToolEnv, args json.RawMessage) (string, er
 	}
 	var data any
 	if err := json.Unmarshal(body, &data); err != nil {
-		return clipToFit(string(body), maxAnswerChars), nil // a text answer, such as a report
+		return clipToFit(string(body), maxAnswerChars), nil //nolint:nilerr // Non-JSON API responses are successful text answers, including reports.
 	}
 	// Secrets go before jq can reach them; times are aged after it, so a
 	// filter still compares time_ms as the number it is.
@@ -172,26 +174,29 @@ func callAPI(ctx context.Context, env ToolEnv, args json.RawMessage) (string, er
 	limit = min(limit, maxListLimit)
 	// A filter naming a field the answer lacks still runs - jq reads it as
 	// null - and a null reads to a model like missing data; say which.
-	missing := ""
+	// A filter that does not run at all still returns this body: the GET
+	// succeeded, and a failed step only sends the model back for another try.
+	note := ""
 	if a.JQ != "" {
 		out, err := runJQ(ctx, a.JQ, data)
 		if err != nil {
-			return "", fmt.Errorf("jq: %v.%s The answer's structure: %s", err, fieldHints(a.JQ, data), outlineText(data))
+			note = fmt.Sprintf("\n(filter did not apply: %v.%s The answer's structure: %s)", err, fieldHints(a.JQ, data), outlineText(data))
+		} else {
+			if hints := fieldHints(a.JQ, data); hints != "" {
+				note = "\n(note:" + hints + " jq reads a missing field as null, so a null above may only mean the field name is wrong.)"
+			}
+			data = out
 		}
-		if hints := fieldHints(a.JQ, data); hints != "" {
-			missing = "\n(note:" + hints + " jq reads a missing field as null, so a null above may only mean the field name is wrong.)"
-		}
-		data = out
 	}
 	data = humanize(data)
 	if isEmptyAnswer(data) {
-		return compact(data, "") + "\n(empty. If you expected data, check the parameter values against search_api's description: an unknown filter value answers empty, not an error.)" + missing, nil
+		return compact(data, "") + "\n(empty. If you expected data, check the parameter values against search_api's description: an unknown filter value answers empty, not an error.)" + note, nil
 	}
 	hint := "Select fields with jq or lower limit."
 	if a.JQ == "" {
 		hint += " The answer's structure: " + outlineText(data)
 	}
-	return clipToFit(compact(shape(data, limit), hint), maxAnswerChars-len(missing)) + missing, nil
+	return clipToFit(compact(shape(data, limit), hint), maxAnswerChars-len(note)) + note, nil
 }
 
 // apiPath reads the ways a model writes an endpoint as its path: a full URL,

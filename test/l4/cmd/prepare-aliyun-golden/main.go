@@ -38,7 +38,7 @@ const (
 	// 2026-10-25): 1-GPU L20/A10/T4 and 2-GPU T4/L20 across these four.
 	defaultRegions = "cn-hangzhou,cn-beijing,cn-shenzhen,cn-guangzhou"
 	// defaultPullSources are tried in order; the final tag is -docker-image.
-	defaultPullSources = "swr.cn-south-1.myhuaweicloud.com/gpustack/runner:cuda12.8-vllm0.17.1,quay.io/gpustack/runner:cuda12.8-vllm0.17.1,gpustack/runner:cuda12.8-vllm0.17.1"
+	defaultPullSources = "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4,quay.io/gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4,gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"
 )
 
 type options struct {

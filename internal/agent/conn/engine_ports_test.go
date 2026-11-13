@@ -169,3 +169,23 @@ func TestARefusedLaunchReportsTheNodeStatusAtOnce(t *testing.T) {
 		})
 	}
 }
+
+func TestOwnEnginePortRangeOverridesTheServersAndIsReported(t *testing.T) {
+	ctrl := &nopRWC{}
+	own := &proto.PortRange{Start: 40000, End: 42767}
+	c := New(Credentials{NodeUUID: "node-1", EnginePorts: own}, nil, &inboundHandlers{}, &gpu.FixedProber{VendorName: "test"}, slog.Default())
+	c.ctrl = ctrl
+	c.handleInbound(syncEnvelope(t, &proto.PortRange{Start: 30000, End: 32767}))
+	statusIdle(t, c)
+	if got := c.enginePorts.Load(); got == nil || *got != *own {
+		t.Fatalf("engine ports after a server sync = %+v, want the node's own %+v", got, own)
+	}
+	c.reportStatus(context.Background())
+	statuses := sentStatuses(t, ctrl)
+	if len(statuses) == 0 || statuses[len(statuses)-1].Network == nil {
+		t.Fatalf("statuses = %+v, want a network inventory", statuses)
+	}
+	if got := statuses[len(statuses)-1].Network.EnginePortRange; got == nil || *got != *own {
+		t.Fatalf("reported engine_port_range = %+v, want %+v", got, own)
+	}
+}

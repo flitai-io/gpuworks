@@ -16,6 +16,11 @@ func TestDetectDriverExplicitNoneAndInvalid(t *testing.T) {
 	if got := detectDriver(log, t.TempDir(), "bogus", nil).driver; got != nil {
 		t.Fatalf("detectDriver(bogus) = %T, want nil", got)
 	}
+	// The kube runtime outside a pod has no API server to talk to.
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	if got := detectDriver(log, t.TempDir(), "kube", nil).driver; got != nil {
+		t.Fatalf("detectDriver(kube) outside a pod = %T, want nil", got)
+	}
 }
 
 // The host runtime runs macOS environment packages and runveil is Linux PRoot:

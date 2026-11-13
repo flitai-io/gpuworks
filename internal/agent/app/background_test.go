@@ -330,7 +330,7 @@ func (d *mixedStreamDriver) Logs(context.Context, string, bool, int) (io.ReadClo
 	return io.NopCloser(strings.NewReader(strings.Join([]string{
 		`(APIServer pid=1) INFO:     127.0.0.1:49254 - "GET /metrics HTTP/1.1" 200 OK`,
 		`(APIServer pid=97413) INFO 09-18 20:41:29 [utils.py:299] API server ready`,
-		`(APIServer pid=83923) [ERROR] 2026-09-18-20:39:28 (PID:83923) ERR99999 UNKNOWN applicaiton exception`,
+		`(APIServer pid=83923) [ERROR] 2026-09-18-20:39:28 (PID:83923) ERR99999 UNKNOWN applicaiton exception`, //nolint:misspell // Preserve the exact error text emitted by the engine fixture.
 	}, "\n"))), nil
 }
 

@@ -62,14 +62,17 @@ func isSelfTestFixture(relPath string) bool {
 
 // isCodeOrConfig reports whether relPath is "production/test code and
 // config" per the link-check scope: any .go/.ts/.tsx source file, the CI
-// pipeline definition, a Makefile, or anything under scripts/ (shell/python/
-// etc. helper scripts, which have no single shared extension).
+// definitions (.gitlab-ci.yml and the GitHub workflows), a Makefile, or
+// anything under scripts/ (shell/python/etc. helper scripts, which have no
+// single shared extension).
 func isCodeOrConfig(relPath string) bool {
 	base := filepath.Base(relPath)
 	switch {
 	case strings.HasSuffix(base, ".go"), strings.HasSuffix(base, ".ts"), strings.HasSuffix(base, ".tsx"):
 		return true
 	case base == ".gitlab-ci.yml", base == "Makefile":
+		return true
+	case strings.HasPrefix(relPath, ".github/workflows/"):
 		return true
 	case relPath == "scripts" || strings.HasPrefix(relPath, "scripts/"):
 		return true

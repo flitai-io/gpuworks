@@ -6,6 +6,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -104,6 +105,9 @@ type Engine struct {
 	// puller pulls images from an instance's candidate sources; the node's
 	// image.pull RPC shares it (see WithImagePuller).
 	puller *imagepull.Puller
+	// otherRuntimes lists the node's runtimes besides the active one, to copy
+	// a missing image from (WithOtherRuntimes).
+	otherRuntimes func(ctx context.Context, active string) []runtime.LocalImageSource
 	// cardGate is what a start waits on before launching (SetCardGate).
 	cardGate func(ctx context.Context, idents []string, limit time.Duration) bool
 }
@@ -221,13 +225,17 @@ func (e *Engine) reclaimInstance(ctx context.Context, uuid string) error {
 	return nil
 }
 
-func (e *Engine) failAfterContainer(ctx context.Context, spec proto.InstanceDesiredState, message string) {
+func (e *Engine) failAfterContainer(ctx context.Context, spec proto.InstanceDesiredState, message string, measured ...json.RawMessage) {
+	var observation json.RawMessage
+	if len(measured) > 0 {
+		observation = measured[0]
+	}
 	if err := e.reclaimInstance(ctx, spec.UUID); err != nil {
 		e.log.Error("failed instance cleanup pending", "uuid", spec.UUID, "err", err)
-		e.report(proto.InstanceStatus{UUID: spec.UUID, State: proto.InstRemoving, Message: message + "; cleanup pending: " + err.Error()})
+		e.report(proto.InstanceStatus{UUID: spec.UUID, State: proto.InstRemoving, Message: message + "; cleanup pending: " + err.Error(), Measured: observation})
 		return
 	}
-	e.reportState(spec, proto.InstFailed, "", "", message)
+	e.report(proto.InstanceStatus{UUID: spec.UUID, State: proto.InstFailed, Message: message, Measured: observation})
 }
 
 // removeContainer stops and deletes the instance's container, reporting the

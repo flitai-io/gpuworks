@@ -1,0 +1,9 @@
+{
+  "shadow-color": "rgb(0 0 0 / 0.06)",
+  "dm-hi-base": "rgba(255,255,255,0.01)",
+  "dm-hi-mid": "rgba(255,255,255,0.02)",
+  "dm-hi-high": "rgba(255,255,255,0.04)",
+  "dm-ring-base": "rgba(255,255,255,0.02)",
+  "dm-ring-mid": "rgba(255,255,255,0.04)",
+  "dm-drop": "rgba(0,0,0,0.18)"
+}

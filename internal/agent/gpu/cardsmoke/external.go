@@ -15,6 +15,9 @@ const (
 	SkipForeign = "foreign"
 	// SkipDeferred: what the node runs is not known yet.
 	SkipDeferred = "deferred"
+	// SkipNotHeld: the platform does not hold the card (on a Kubernetes node,
+	// it is the kubelet's to give to any pod), so it is not asked.
+	SkipNotHeld = "not_held"
 	// SkipUnavailable: the host cannot be asked right now.
 	SkipUnavailable = "unavailable"
 )
@@ -75,8 +78,11 @@ func (r *Runner) CheckCard(ctx context.Context, ident string) (Outcome, string) 
 		case r.busy(card):
 			return Outcome{}, SkipBusy
 		}
-		before := r.answerCount(ident)
+		before, heldBefore := r.answerCount(ident), r.notHeldCount(ident)
 		r.tryUnlessBusy(ctx, card, false)
+		if r.notHeldCount(ident) != heldBefore {
+			return Outcome{}, SkipNotHeld
+		}
 		after, ok := r.Outcomes()[ident]
 		if !ok || r.answerCount(ident) == before {
 			// Inconclusive, cancelled, stuck or claimed while asked:
@@ -110,6 +116,12 @@ func (r *Runner) skipAll(cards []Card, reason string) {
 	for _, card := range cards {
 		r.skip(card.Ident, reason)
 	}
+}
+
+func (r *Runner) notHeldCount(ident string) uint64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.notHeld[ident]
 }
 
 func (r *Runner) answerCount(ident string) uint64 {

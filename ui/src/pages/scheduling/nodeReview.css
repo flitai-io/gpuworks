@@ -1,0 +1,34 @@
+.node-review .detail-body {padding:16px;font-variant-numeric:tabular-nums}
+.node-review.residency-direct {transform:none!important}
+.node-review small {font-size:12px;color:var(--fg-muted)}
+.node-review .memory-tags,.node-review .residency-legend,.node-review .residency-legend>span {display:flex;align-items:center;gap:6px}
+.node-review .gpu-ident-col {width:24%}
+.node-review .history-gpu-col {width:96px}
+.node-review .gpu-meta {display:grid;gap:2px}
+.node-review .memory-tags {flex-wrap:wrap}
+.node-review .resident-tag {max-width:100%}
+.node-review .resident-tag [data-slot="badge-label"] {display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.node-review .resident-tag a {color:inherit}
+.node-review .resident-tag a:hover {text-decoration:underline}
+.node-review .residency-meter {display:flex;margin-top:7px;background:var(--border);height:6px;overflow:hidden;border-radius:3px}
+.node-review .residency-meter[data-balanced="false"] {background:var(--surface-raised)}
+.node-review .residency-meter[data-switching="true"] {outline:1px solid var(--hm-switching);outline-offset:-1px}
+.node-review .residency-legend .hm-swatch.is-switching {width:18px;height:6px;border-radius:3px;box-shadow:inset 0 0 0 1px var(--hm-switching)}
+.node-review .resident-marker,.node-review .residency-legend i {display:inline-block;width:10px;height:10px;border-radius:2px}
+.node-review :is(.resident-marker,.residency-meter i,.residency-legend i)[data-state="awake"] {background:currentColor}
+.node-review :is(.resident-marker,.residency-meter i,.residency-legend i)[data-state="asleep"] {background:repeating-linear-gradient(45deg,currentColor 0 2px,transparent 2px 4px);background-color:color-mix(in srgb,currentColor 18%,transparent)}
+.node-review .residency-legend i[data-state="starting"] {background:radial-gradient(currentColor 1.2px,transparent 1.3px) 0 0/4px 4px}
+.node-review .residency-legend i[data-state="free"] {background:var(--border)}
+.node-review .residency-history {display:grid;gap:8px;color:var(--fg-default)}
+.node-review .residency-legend {padding:10px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--fg-muted)}
+.node-review .residency-deployments {display:flex;flex-wrap:wrap;gap:4px 8px;min-width:0}
+.node-review .residency-deployments a {color:inherit;max-width:100%}
+.node-review .residency-deployments a:hover {text-decoration:underline}
+.node-review .timeline-axis-ticks {font-size:11px;color:var(--fg-muted)}
+.node-review .timeline-track {display:block}
+.node-review .track-caption {position:absolute;inset-block:0;container-type:inline-size;text-align:center;pointer-events:none;overflow:hidden;color:white}
+.node-review .track-caption span {display:none}
+@container (min-width:52px){.node-review .track-caption span {display:block;padding-inline:3px;font-size:11px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+@media(max-width:600px){.node-review .gpu-ident-col{width:125px}.node-review .detail-body{padding:8px}.node-review .history-gpu-col{width:85px}}
+
+.node-review .offline-memory-note {padding:8px 12px;background:var(--surface-raised);color:var(--fg-muted);font-size:var(--text-label)}

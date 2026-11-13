@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
@@ -118,7 +119,7 @@ func TestZStackCloudInstallPreparesSSHAccess(t *testing.T) {
 				}
 			}))
 			t.Cleanup(cloud.Close)
-			env := newCloudEnv(t, installerFunc(func(ctx context.Context, req provision.SSHInstallRequest) (provision.SSHInstallReport, error) {
+			env := newCloudEnvWithSSHServer(t, installerFunc(func(ctx context.Context, req provision.SSHInstallRequest) (provision.SSHInstallReport, error) {
 				installCalls.Add(1)
 				if req.User != user || req.Port != port || req.Target != "127.0.0.1" {
 					return provision.SSHInstallReport{}, errors.New("Cloud SSH account or port was lost")

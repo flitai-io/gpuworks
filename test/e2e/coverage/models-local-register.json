@@ -3,7 +3,7 @@
   "name": "模型 / 节点本地目录登记 / 真实 agent 读取预览、UI 登记、刷新回读与清理",
   "test_file": "test/e2e/models_local_register.py",
   "test_function": "test_models_local_register",
-  "command": "make test-e2e-models-local-register",
+  "command": "python3 -B test/e2e/models_local_register.py --locale en",
   "priority": "P1",
   "page_id": "models",
   "lane": "local-real-server-agent-local-files",

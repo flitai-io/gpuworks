@@ -48,7 +48,7 @@ export default function PointResultsTable({ run, selectedSeq, onSelect }: { run:
 	const columns = preference.order.filter((key) => preference.visible.includes(key) && (key !== "sla" || run.mode === "sla") && (key !== "request_rate" || openLoop)).map((key) => registry[key]);
 	const scrollX = columns.reduce((sum, column) => sum + Number(column.width || 130), 0);
 	return <Table<BenchmarkPoint>
-		title={() => <Flex justify="space-between" align="center"><Typography.Text strong>{t("pointTable.title")}</Typography.Text><Dropdown trigger={["click"]} dropdownRender={() => settings}><Button icon={<SettingOutlined />}>{t("pointTable.customize")}</Button></Dropdown></Flex>}
+		title={() => <Flex justify="space-between" align="center"><Typography.Text strong>{t("pointTable.title")}</Typography.Text><Dropdown trigger={["click"]} dropdownRender={() => settings}><Button data-report-exclude icon={<SettingOutlined />}>{t("pointTable.customize")}</Button></Dropdown></Flex>}
 		rowKey="seq" pagination={false} sticky scroll={{ x: Math.max(900, scrollX) }} dataSource={run.points || []} columns={columns}
 		onRow={(point) => ({ onClick: () => onSelect(point), style: { cursor: "pointer", background: selectedSeq === point.seq ? "#fff7e6" : undefined } })}
 	/>;
@@ -76,7 +76,7 @@ function columnRegistry(run: BenchmarkRun, t: TFunction, titles: Record<PointCol
 		latency_p99: metric(titles.latency_p99, (point) => pointTimingValue(point, "p99_latency"), " ms", "latency"),
 		sla: { title: titles.sla, width: 105, render: (_, point) => pointMeetsSLA(run, point) ? <Tag color="green">{t("pointTable.slaMet")}</Tag> : <Tag color="red">{t("pointTable.slaFailed")}</Tag> },
 		mark: { title: titles.mark, width: 105, render: (_, point) => markedSeq === point.seq ? <Tag color="blue">{terminal ? t("pointTable.verdictPoint") : t("pointTable.currentBest")}</Tag> : "—" },
-		detail: { title: titles.detail, width: 90, render: (_, point) => point.detail_path ? <Button type="link" size="small" icon={<DownloadOutlined />} href={`/api/v1/benchmarks/${run.id}/points/${point.seq}/detail`} onClick={(event) => event.stopPropagation()} /> : "—" },
+		detail: { title: titles.detail, width: 90, render: (_, point) => point.detail_path ? <Button data-report-exclude type="link" size="small" icon={<DownloadOutlined />} href={`/api/v1/benchmarks/${run.id}/points/${point.seq}/detail`} onClick={(event) => event.stopPropagation()} /> : "—" },
 		max_output: metric(titles.max_output, (point) => pointDerivedValues(point).maxOutput, " tok/s", "maxOutput"), max_total: metric(titles.max_total, (point) => pointDerivedValues(point).maxTotal, " tok/s", "maxTotal"),
 		avg_ttft: metric(titles.avg_ttft, (point) => pointTimingValue(point, "avg_ttft"), " ms"), avg_tpot: metric(titles.avg_tpot, (point) => pointTimingValue(point, "avg_tpot"), " ms"),
 		avg_latency: metric(titles.avg_latency, (point) => pointTimingValue(point, "avg_latency"), " ms"),

@@ -68,7 +68,7 @@ func modelPresenceSummary(m dto.Model) dto.ModelPresenceSummary {
 		case proto.MFDownloading, proto.MFSyncing, proto.MFPending:
 			s.InFlight++
 			progress += p
-		case proto.MFFailed, proto.MFDownloadRequired, proto.MFMissing:
+		case proto.MFFailed, proto.MFDownloadRequired, proto.MFMissing, proto.MFInsufficientDisk:
 			s.Failed++
 		}
 	}

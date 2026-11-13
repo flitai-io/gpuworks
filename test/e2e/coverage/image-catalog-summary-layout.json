@@ -3,7 +3,7 @@
   "name": "镜像统计 / 等宽等高与统计口径 / 双语响应式布局",
   "test_file": "test/e2e/image_summary_layout.py",
   "test_function": "test_image_summary_layout",
-  "command": "make test-e2e-image-summary-layout",
+  "command": "python3 -B test/e2e/image_summary_layout.py --case summary-layout --locale en",
   "page_id": "images",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
@@ -19,7 +19,7 @@
   ],
   "checklist_items": {
     "13.1": "covered: both named help buttons open through hover, focus and click; Escape and outside click close them.",
-    "13.2": "partial: both help popups stay inside desktop/mobile viewport and Escape retains trigger focus; no long-list menu claim.",
+    "13.2": "Covered: both named help popups are opened by hover, focus and click at 1440 and 390 wide. Each one is measured against the viewport - x, y, right and bottom all fall inside it, so an edge-placed card's help stays on screen - and against every other help trigger that is actually visible at that width, which it must not overlap: covering the control the user needs next is the failure this item names, and staying inside the viewport alone does not catch it. Escape and outside click each close the popup and return focus to the trigger, which is then re-opened with the keyboard. A tall mutant popup that reaches the next card row is caught as 'the localSize help covers another help trigger'. There is no long list on this page - the summary is five fixed cards - so the end-of-list variant has no subject here; the last card plays that role, and a narrow viewport legitimately drops a card, so hidden triggers are skipped rather than counted as covered.",
     "13.3": "N/A: informational help has no privileged action or disabled menu entry.",
     "13.4": "covered: unknown version count remains visible with popup closed; keyboard focus opens the full statistical definition.",
     "13.5": "N/A: no notification in this summary flow.",

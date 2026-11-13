@@ -8,11 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
-	"gpuworks.ai/gpuworks/internal/server/planning"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -125,62 +124,6 @@ func hasReason(node struct {
 	return false
 }
 
-// The five cases the plan names: requirement mismatch, vendor mismatch,
-// chipmatch mismatch, offline, and all-eligible. One draft answers for every node at
-// once, which is exactly what the dropdown renders.
-func TestEvaluateEligibleNodesFilterAMDFeatureRequirements(t *testing.T) {
-	h, _ := eligibleNodeFixture(t)
-	if _, err := h.d.Store.RegisterNode("amd-feature-node", store.HashToken("amd-feature-token"), "amd-feature-node"); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.d.Store.UpdateNodeStatus("amd-feature-node", proto.NodeStatus{
-		Sys:  proto.SysInfo{Hostname: "amd-feature-node", OS: "linux", Arch: "amd64", GPUVendor: "amd", Framework: "rocm", RuntimeDriver: "docker"},
-		GPUs: []proto.GPUInfo{{Index: 0, Name: "AMD Instinct MI300X", Vendor: "amd", ArchID: "gfx942", MemoryTotalBytes: 96 << 30, Healthy: true}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	features := []accelerator.Feature{accelerator.FeatureMultiNode, accelerator.FeaturePD, accelerator.FeatureDataParallel}
-	nodes, _ := h.evaluateEligibleNodes(templateSelection{}, nil, nil, true, func(node *store.Node) map[int]planning.TargetCardRequest {
-		return eligibleRequestsForTest(node, planning.TargetRequest{Features: features, CommandKnown: true})
-	})
-	byUUID := make(map[string]struct {
-		eligible bool
-		reasons  map[string]bool
-	}, len(nodes))
-	for _, node := range nodes {
-		reasons := make(map[string]bool)
-		for _, reason := range node.Reasons {
-			reasons[reason.Code] = true
-		}
-		byUUID[node.UUID] = struct {
-			eligible bool
-			reasons  map[string]bool
-		}{node.Eligible, reasons}
-	}
-	amd := byUUID["amd-feature-node"]
-	// AMD runs multi-node ranks, PD and data parallelism.
-	if !amd.eligible || len(amd.reasons) != 0 {
-		t.Fatalf("AMD feature requirements were not explained: %+v", amd)
-	}
-	for _, uuid := range []string{"eligible-node", "vendor-node"} {
-		if node := byUUID[uuid]; !node.eligible {
-			t.Fatalf("supported vendor %s was filtered by AMD feature requirements: %+v", uuid, node)
-		}
-	}
-}
-
-func TestEvaluateEligibleNodesSkipsAMDFeatureWorkWithoutOwnedAMD(t *testing.T) {
-	h, _ := eligibleNodeFixture(t)
-	called := false
-	h.evaluateEligibleNodes(templateSelection{}, nil, nil, true, func(node *store.Node) map[int]planning.TargetCardRequest {
-		called = true
-		return eligibleRequestsForTest(node, planning.TargetRequest{Features: []accelerator.Feature{accelerator.FeatureMultiNode}, CommandKnown: true})
-	})
-	if !called {
-		t.Fatal("resolved launch features were not evaluated for owned cards")
-	}
-}
-
 func TestEvaluateEligibleNodesCoverEveryReason(t *testing.T) {
 	h, templateID := eligibleNodeFixture(t)
 	body := fmt.Sprintf(`{"template_id":%d,"template_spec_name":"fp8-balanced","node_uuid":"eligible-node","target_vendor":"nvidia","node_requirements":{"pool":["inference"]}}`, templateID)
@@ -191,16 +134,16 @@ func TestEvaluateEligibleNodesCoverEveryReason(t *testing.T) {
 	if entry, ok := nodes["eligible-node"]; !ok || !entry.Eligible || len(entry.Reasons) != 0 {
 		t.Fatalf("the matching labeled node must be eligible without reasons: %+v", entry)
 	}
-	if entry := nodes["unlabeled-node"]; entry.Eligible || !hasReason(entry, reasonRequirementsUnmet) {
+	if entry := nodes["unlabeled-node"]; entry.Eligible || !hasReason(entry, deployment.ReasonRequirementsUnmet) {
 		t.Fatalf("the unlabeled node must report the label mismatch: %+v", entry)
 	}
-	if entry := nodes["vendor-node"]; entry.Eligible || !hasReason(entry, reasonVendorMismatch) {
+	if entry := nodes["vendor-node"]; entry.Eligible || !hasReason(entry, deployment.ReasonVendorMismatch) {
 		t.Fatalf("the ascend node must report the vendor mismatch: %+v", entry)
 	}
-	if entry := nodes["chip-old-node"]; entry.Eligible || !hasReason(entry, reasonChipMismatch) {
+	if entry := nodes["chip-old-node"]; entry.Eligible || !hasReason(entry, deployment.ReasonChipMismatch) {
 		t.Fatalf("the sm_80 node must report the chip mismatch: %+v", entry)
 	}
-	if entry := nodes["offline-node"]; entry.Eligible || !hasReason(entry, reasonNodeOffline) {
+	if entry := nodes["offline-node"]; entry.Eligible || !hasReason(entry, deployment.ReasonNodeOffline) {
 		t.Fatalf("the offline node must report its state: %+v", entry)
 	}
 }
@@ -214,7 +157,7 @@ func TestEvaluateEligibleNodesMatchSystemLabels(t *testing.T) {
 	nodes := eligibleNodesOf(t, h, body)
 	for uuid, entry := range nodes {
 		named := uuid == "chip-old-node" || uuid == "vendor-node"
-		if named == hasReason(entry, reasonRequirementsUnmet) {
+		if named == hasReason(entry, deployment.ReasonRequirementsUnmet) {
 			t.Errorf("%s: requirement unmet = %v, want %v (%+v)", uuid, !named, !named, entry)
 		}
 	}
@@ -231,7 +174,7 @@ func TestEvaluateEligibleNodesWithUnreadableRequirements(t *testing.T) {
 		t.Fatalf("eligible_nodes = %v", nodes)
 	}
 	for uuid, entry := range nodes {
-		if entry.Eligible || !hasReason(entry, reasonRequirementsInvalid) {
+		if entry.Eligible || !hasReason(entry, deployment.ReasonRequirementsInvalid) {
 			t.Errorf("%s: %+v, want ineligible for unreadable requirements", uuid, entry)
 		}
 	}
@@ -264,12 +207,4 @@ func TestEvaluateEligibleNodesWithoutTemplate(t *testing.T) {
 	if entry, ok := nodes["plain-node"]; !ok || !entry.Eligible {
 		t.Fatalf("a plain online node must be eligible: %+v", entry)
 	}
-}
-
-func eligibleRequestsForTest(node *store.Node, request planning.TargetRequest) map[int]planning.TargetCardRequest {
-	out := map[int]planning.TargetCardRequest{}
-	for _, gpu := range node.OwnedGPUs() {
-		out[gpu.Index] = planning.TargetCardRequest{Request: request}
-	}
-	return out
 }

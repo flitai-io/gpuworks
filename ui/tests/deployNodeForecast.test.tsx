@@ -149,6 +149,15 @@ test("an unrelated download error shows no source hint", () => {
   assert.equal(cells("gpu-a-01")[2], "Cannot download: cannot plan");
 });
 
+test("an unavailable model path shows its reason rather than a download forecast", () => {
+  view(forecast({ ...present, weights_present: false, weights_plan: "unavailable", weights_fetch_error: {
+    code: "MODEL_SOURCE_UNAVAILABLE", params: { reason: "facts_unavailable" }, message: "cannot read model facts",
+  } }));
+  const detail = locale.deploy.diagnostics.reason.facts_unavailable;
+  assert.equal(cells("gpu-a-01")[2], na.unavailable.replace("{{detail}}", detail));
+  assert.equal(cells("gpu-a-01")[2].includes("Download from"), false);
+});
+
 test("automatic placement says the platform fetches after scheduling and links to the pull settings", () => {
   view({ image: { image: IMG } }, { automatic: true });
   assert.ok(screen.getByText(na.automatic, { exact: false }));

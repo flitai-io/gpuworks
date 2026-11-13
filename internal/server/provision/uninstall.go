@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/agentconf"
 	"gpuworks.ai/gpuworks/internal/launchd"
@@ -42,6 +43,14 @@ func (i *SSHInstaller) UninstallAgent(ctx context.Context, req SSHProbeRequest) 
 		return err
 	}
 	command := sudo + shellQuote(installation.binary) + " uninstall --state " + shellQuote(installation.state)
+	// New agents require explicit unattended confirmation. Probe help without
+	// changing the host, while keeping older agents' command syntax intact.
+	helpCtx, cancelHelp := context.WithTimeout(ctx, 5*time.Second)
+	help, helpErr := runContext(helpCtx, client, sudo+shellQuote(installation.binary)+" uninstall --help")
+	cancelHelp()
+	if helpErr == nil && strings.Contains(help, "-keep-resources") && strings.Contains(help, "-yes") {
+		command += " --yes"
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

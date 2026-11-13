@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"testing"
 )
 
 func TestTargetPoolRefusalIsLocalAndIndependentOfNodeOrder(t *testing.T) {
@@ -229,7 +230,9 @@ func BenchmarkTargetPoolRefusal1000Nodes(b *testing.B) {
 		}
 		nodes[n] = store.Node{UUID: fmt.Sprint(n), GPUVendor: "amd", OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: gpus}
 	}
-	resolve := func(LaunchRequest) (*proto.RequestedFeatures, error) { return &proto.RequestedFeatures{CommandKnown: true}, nil }
+	resolve := func(LaunchRequest) (*proto.RequestedFeatures, error) {
+		return &proto.RequestedFeatures{CommandKnown: true}, nil
+	}
 	b.ReportAllocs()
 	for b.Loop() {
 		refusal, err := targetRefusalFor(dep, nil, &store.Model{Name: "model"}, func(string) bool { return true }, resolve)

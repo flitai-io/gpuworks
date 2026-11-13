@@ -25,7 +25,7 @@ func TestProviderCredentialDefaultsWireContract(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	expected := map[string]string{"autodl": "https://api.autodl.com", "compshare": "https://api.compshare.cn", "runpod": "https://api.runpod.io/v2", "vast": "https://console.vast.ai/api/v0"}
+	expected := map[string]string{"autodl": "https://api.autodl.com", "compshare": "https://api.compshare.cn", "digitalocean": "https://api.digitalocean.com", "runpod": "https://api.runpod.io/v2", "vast": "https://console.vast.ai/api/v0"}
 	seen := map[string]bool{}
 	seenTemplate := false
 	for _, kind := range response.Items {

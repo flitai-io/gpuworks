@@ -459,7 +459,7 @@ func (e *Env) API(t testing.TB) *APIClient {
 }
 
 func (c *APIClient) Do(req *http.Request) (*http.Response, error) {
-	if req.URL.IsAbs() == false {
+	if !req.URL.IsAbs() {
 		u := *req.URL
 		u.Scheme = "http"
 		u.Host = strings.TrimPrefix(c.BaseURL, "http://")
@@ -738,6 +738,7 @@ func (e *Env) StopNode(t testing.TB, name string) *Node {
 	e.nodesMu.Unlock()
 	if n == nil {
 		t.Fatalf("unknown test node %q", name)
+		return nil
 	}
 	if n.cancel != nil {
 		n.cancel()

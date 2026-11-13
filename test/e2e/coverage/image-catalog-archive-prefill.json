@@ -5,7 +5,7 @@
   "test_function": "test_archive_prefill",
   "contract_id": "gpuworks/image-catalog/archive-prefill",
   "name": "镜像目录 / 归档地址 A 到 B 与失败恢复 / 仅保存最终解析的引用与地址",
-  "command": "make test-e2e-image-archive-prefill",
+  "command": "python3 -B test/e2e/image_selection.py --case archive-prefill --locale en",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
   "required_evidence": [
@@ -26,11 +26,8 @@
   },
   "checklist_items": {
     "partial": [
-      "1.11",
       "4.5",
-      "5.5",
-      "8.4",
-      "12.2"
+      "5.5"
     ],
     "reason": "Only source selection and draft preservation branches asserted in this case.",
     "12.1": "Opened from the page Add control as the only dialog. The role is dialog, the accessible name is the drawer title, the component is ant-drawer-content, and the first step is the archive URL card. The community browser count is 0",
@@ -42,7 +39,10 @@
     "1.9": "While the image import POST is held the Add Image button stays loading and a second click sends no further import. The continued 200 is the only stored series",
     "1.10": "The real 502 IMAGE_ARCHIVE_URL_UNREACHABLE keeps the import drawer and the manual reference, shows the archive reason, and stores no series. The later resolve and import 200 match the independent detail GET",
     "1.14": "After the archive import, reloading the images page and opening the series shows the saved image reference. That reloaded detail agrees with the independent series GET, including the reference and the archive source. The series is catalog metadata with no agent and no workload.",
-    "12.6": "covered: While the image import is held the Add Image button shows the loading state and a second click sends no further import; the earlier real 502 keeps the manual reference, shows HTTP 502 · IMAGE_ARCHIVE_URL_UNREACHABLE, and stores no series; the continued 200 matches the independent detail GET and the reloaded link"
+    "12.6": "covered: While the image import is held the Add Image button shows the loading state and a second click sends no further import; the earlier real 502 keeps the manual reference, shows HTTP 502 · IMAGE_ARCHIVE_URL_UNREACHABLE, and stores no series; the continued 200 matches the independent detail GET and the reloaded link",
+    "1.11": "covered: the ways out of this drawer are walked and each is required to leave no trace on the server. A draft reference is typed first - closing an empty form would prove nothing about what a close discards - and then the close control and Escape are each used on a freshly opened drawer. After each one the drawer is required to be gone and the import request log is required to be exactly as long as it was before, so a dismissal that fired the import fails here. Reopening is required to show the draft still there, which is this drawer's real contract: the form is held outside the drawer, so a close keeps what was typed and discards nothing. Asserting an emptied field would have asserted a behaviour this screen does not have; what the requirement is about is that the dismissal wrote nothing. The probe's draft is cleared afterwards so the prefill checks that follow start from an empty field. This drawer has no cancel button - its only action is the submit - so a cancel walk is not claimed, and that absence is recorded instead of being replaced by a click on something else. Proven by mutation: posting the import from the close handler is caught with the discarded reference named in the failure.",
+    "12.2": "covered: the drawer is measured where it lands at 1440x900 rather than checked for being open. Its header, its scrolling body and its submit control are measured on the opened drawer, and the header and body are required to sit inside the drawer without overlapping each other. The submit is required to be reachable rather than merely to start on screen - the body may scroll, but a control the operator cannot get to is not reachable - so it is scrolled into view and measured again, and its rectangle is required to fall inside the viewport on both axes. Both numbers are recorded, so the claim rests on the boxes rather than on an absence of errors. The overlap half is not independently mutation-proven: the drawer's own stacking check runs earlier and catches an intrusive header by reporting the body leaving the viewport, which is what a real layout break looks like, so no mutation was found that the new assertion alone would catch. The reachability half is measured here and its numbers are in the report.",
+    "8.4": "covered: the registry-source relation is walked through bind, rebind, clear and restore, and every step is confirmed against a fresh read rather than against the request that made the change. The version is created bound to one source, then rebound to a second, and the stored list is required to be exactly the second one - so an update that appended instead of replacing fails here. The relation is then cleared and the stored value is required to state that nothing is bound; the surface round-trips an emptied list as null, and that is treated as the same statement rather than as a mismatch. Finally the created source is restored and read back, which is what shows a cleared relation can be established again. The reverse half of the requirement has no subject on this surface: nothing answers 'which images point at this registry', so it is recorded as absent rather than imitated by re-reading the same version. Proven by mutation: ignoring an emptied list leaves the old binding in place and the clear step fails."
   },
   "fields": [
     {

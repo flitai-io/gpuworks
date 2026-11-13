@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="{{ .Site.Language.Locale }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="handbook-base-url" content="{{ .Site.BaseURL }}">
+  {{ $title := cond (eq .Language.Lang "zh") "GPUWorks 用户手册" "GPUWorks User Guide" }}
+  <title>{{ $title }}</title>
+  {{ $style := resources.Get "css/handbook.css" | fingerprint }}
+  <link rel="stylesheet" href="{{ $style.RelPermalink }}">
+  {{ $mermaid := resources.Get "third_party/mermaid/mermaid.min.js" | fingerprint }}
+  <script defer src="{{ $mermaid.RelPermalink }}"></script>
+</head>
+<body>
+  {{ $sections := slice "tutorials" "how-to" "reference" "explanation" }}
+  <header class="cover">
+    <p>GPUWorks</p>
+    <h1>{{ $title }}</h1>
+    <p data-handbook-version></p>
+    <p data-handbook-commit></p>
+    <p>{{ cond (eq .Language.Lang "zh") "教程 · 操作指南 · 参考手册 · 架构说明" "Tutorials · How-to Guides · Reference · Architecture" }}</p>
+  </header>
+  <nav class="contents" aria-label="{{ cond (eq .Language.Lang "zh") "目录" "Contents" }}">
+    <h1>{{ cond (eq .Language.Lang "zh") "目录" "Contents" }}</h1>
+    {{ range $sections }}
+      {{ with $.Site.GetPage . }}
+        <h2>{{ .Title }}</h2>
+        <ul>
+          {{ range .RegularPagesRecursive.ByWeight }}
+            <li><a href="#page-{{ .File.UniqueID }}">{{ .Title }}</a></li>
+          {{ end }}
+        </ul>
+      {{ end }}
+    {{ end }}
+  </nav>
+  <main>
+    {{ range $sections }}
+      {{ with $.Site.GetPage . }}
+        {{ range .RegularPagesRecursive.ByWeight }}
+          <article id="page-{{ .File.UniqueID }}" data-page-path="{{ .RelPermalink }}" data-source-path="{{ .Params.source_path | default .File.Path }}">
+            <h1>{{ .Title }}</h1>
+            {{ partial "print/page-content.html" (dict "page" .) }}
+          </article>
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  </main>
+</body>
+</html>

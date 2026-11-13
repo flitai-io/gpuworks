@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
 	agentterminal "gpuworks.ai/gpuworks/internal/agent/terminal"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/testenv"

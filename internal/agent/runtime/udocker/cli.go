@@ -150,7 +150,7 @@ func (d *Driver) useOfflineBundle(ctx context.Context) (bool, error) {
 	}
 	st, err := os.Stat(bundle)
 	if err != nil || !st.IsDir() {
-		return false, nil
+		return false, nil //nolint:nilerr // An unavailable optional offline bundle leaves normal provisioning available.
 	}
 	// The bundle's own proot builds are never copied: bin/proot-* is the
 	// patched PRoot extractProot owns, and it may be executing right now (a

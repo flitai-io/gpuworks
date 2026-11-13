@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 )
@@ -152,7 +153,7 @@ func (s *Store) carriedProxyRow(entry carriedProxy) (PullProxy, bool, error) {
 		Username: username, ControlPlane: entry.controlPlane, Note: entry.note, Requirements: entry.reqs,
 	})
 	if err != nil {
-		return PullProxy{}, false, nil
+		return PullProxy{}, false, nil //nolint:nilerr // Invalid legacy proxy addresses are deliberately dropped during carry-over.
 	}
 	cipher, err := s.sealProxyPassword(password)
 	if err != nil {

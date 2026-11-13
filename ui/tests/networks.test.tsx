@@ -134,7 +134,7 @@ test("an empty ?network= opens no detail, while ?network=0 is the management net
   renderAt("/networks?network=", <NetworksPage />, "/networks");
   await waitFor(() => assert.ok(screen.getByText(n.empty)));
   assert.deepEqual(asked, [], "an empty value is no network");
-  assert.equal(document.querySelector(".ant-drawer-open"), null);
+  assert.equal(document.querySelector('[role="dialog"]'), null);
   cleanup();
   renderAt("/networks?network=0", <NetworksPage />, "/networks");
   await waitFor(() => assert.deepEqual(asked, [0]));
@@ -845,23 +845,39 @@ test("an accelerator network offers card tests and shows the server's estimate",
 });
 
 test("a card test the server refuses cannot be started and says why", async () => {
+  let resolveRing!: (value: ReturnType<typeof estimateOf>) => void;
+  const ringEstimate = new Promise<ReturnType<typeof estimateOf>>((resolve) => { resolveRing = resolve; });
+  let rejectMesh!: (reason: Error) => void;
+  const meshEstimate = new Promise<never>((_resolve, reject) => { rejectMesh = reject; });
+  let ringRequested = false;
+  let meshRequested = false;
+  let starts = 0;
   stub("network", async () => cardNetwork(60, 8));
   stub("estimateNetworkTest", async (_id, body) => {
-    if (body.kind === "card_matrix" && body.pattern === "mesh") throw new Error("This test takes 240 rounds, up to 720 seconds, over the 600-second limit; narrow the scope, or use a ring or same-named cards.");
+    if (body.kind === "card_matrix" && body.pattern === "mesh") { meshRequested = true; return meshEstimate; }
     if (body.scope === "label") return estimateOf(12, 12, 8, 768) as never;
+    if (body.kind === "card_matrix") { ringRequested = true; return ringEstimate as never; }
     return estimateOf(60, 60, 8, 3840) as never;
   });
+  stub("startNetworkTest", async () => { starts++; return cardRun("card_matrix", "mesh", "full", []) as never; });
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
   // Until the server has answered, the form says it is asking.
   await user.click(await screen.findByText(n.test.kindCardMatrix));
   assert.ok(screen.getByText(n.test.cardEstimating));
+  await waitFor(() => assert.ok(ringRequested));
+  resolveRing(estimateOf(60, 60, 8, 3840));
   assert.ok(await screen.findByText(/^60 nodes, 60 pairs: 3840 probes in 8 rounds, at most 24 s\./), "sixty nodes as a ring are eight rounds");
   const start = screen.getAllByRole("button", { name: n.test.start })[0] as HTMLButtonElement;
   await user.click(screen.getByText(n.test.patternName.mesh));
+  assert.ok(screen.getByText(n.test.cardEstimating));
+  await waitFor(() => assert.ok(meshRequested));
+  rejectMesh(new Error("This test takes 240 rounds, up to 720 seconds, over the 600-second limit; narrow the scope, or use a ring or same-named cards."));
   assert.ok(await screen.findByText(/^Cannot start: This test takes 240 rounds, up to 720 seconds/));
   assert.equal(start.disabled, true);
+  await user.click(start);
+  assert.equal(starts, 0, "a server-refused test cannot be started");
   // A label's nodes are the server's to resolve: nothing is asked until a key is given.
   await user.click(screen.getByText(n.test.patternName.ring));
   await user.click(screen.getByText(n.test.scopeLabel));

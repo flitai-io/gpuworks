@@ -14,7 +14,7 @@ import (
 // Recovery phases are orthogonal to Node.State. Node.State remains the
 // scheduler-facing connection state; these values describe out-of-band work.
 //
-// The first eight are steps of an attempt in flight; the last three are
+// The first eight are steps of an attempt in flight; the others describe
 // where an attempt ended. RecoveryUnderway is the one reader of that
 // division — the recovery loop's own "try this node again" rule is a
 // different question and lives with the query that asks it.
@@ -30,6 +30,7 @@ const (
 	RecoveryPhaseUnreachable   = "unreachable"
 	RecoveryPhaseBlocked       = "recovery_blocked"
 	RecoveryPhaseStopped       = "stopped"
+	RecoveryPhaseProbeFailed   = "probe_failed"
 )
 
 // RecoveryUnderway is whether the platform is in the middle of restoring

@@ -4,7 +4,9 @@ import noCJKLiteral from "./eslint-local-rules/no-cjk-literal.mjs";
 // M3 is complete: every TypeScript source file is now guarded. Locale
 // resources are JSON and tests live outside src, so neither needs an ignore.
 export default [
-  { ignores: ["coverage/**"] },
+  // Zeron-managed sources (installed by the Zeron CLI, hash-tracked in
+  // .zeron/install-state.json) follow Zeron's own lint, not this project's.
+  { ignores: ["coverage/**", "src/components/ui/**", "src/lib/**", "src/hooks/use-*"] },
   {
     files: ["src/**/*.{ts,tsx}"],
     languageOptions: {

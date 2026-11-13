@@ -42,6 +42,9 @@ func addUninstallProcess(t *testing.T, u linuxUninstaller, pid int, args ...stri
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(args[0], filepath.Join(dir, "exe")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte(strings.Join(args, "\x00")+"\x00"), 0o600); err != nil {
 		t.Fatal(err)
 	}

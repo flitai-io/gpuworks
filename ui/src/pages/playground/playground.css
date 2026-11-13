@@ -2,15 +2,15 @@
   min-height: calc(100vh - 116px);
   margin: -20px -24px -32px;
   padding: 20px 24px 32px;
-  background: #eef4f8;
 }
 /* Chat mode fits the viewport: the negative margins above already stretch the
-   page over the whole .app-content border box, so the only chrome above is the
-   app top bar (--app-header-height in styles.css). The pane scrolls internally instead of the
+   page over the whole white page panel, so the chrome around it is the app top
+   bar, the frame gap under the panel and the panel's two 1px borders
+   (--app-header-height and --app-frame-gap in styles.css). The pane scrolls internally instead of the
    window, and the composer lives in the flow — it follows the centered content
    column by construction instead of tracking it with viewport coordinates. */
 .playground-page.playground-page--fit {
-  height: calc(100dvh - var(--app-header-height));
+  height: calc(100dvh - var(--app-header-height) - var(--app-frame-gap) - 2px);
   min-height: 0;
   padding-bottom: 12px;
   display: flex;
@@ -266,3 +266,12 @@
 .playground-preview-note { font-size: 12px; }
 .playground-preview-frame { width: 100%; min-height: 0; flex: 1; border: 1px solid #dfe3e8; border-radius: 4px; background: #fff; }
 .playground-preview-source { min-height: 0; flex: 1; margin: 0; overflow: auto; padding: 12px 14px; border: 1px solid #2d333b; border-radius: 4px; background: #15181c; color: #e9edf2; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre; }
+/* The single column stays as wide as the section, so a long file name is cut
+   with an ellipsis instead of pushing the buttons out of view. */
+.playground-reference-images { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 0; margin: 8px 0 0; list-style: none; }
+.playground-reference-images li { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.playground-reference-images li > :not(.playground-reference-name) { flex: none; }
+.playground-reference-images img { width: 72px; height: 72px; flex: none; border-radius: var(--radius-sm); object-fit: cover; background: var(--surface-raised); }
+.playground-reference-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playground-reference-title { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.playground-reference-hint { margin: 0 0 8px; color: var(--fg-muted); font-size: 12px; }

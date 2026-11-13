@@ -39,9 +39,11 @@ const i18n = createInstance();
 await i18n.use(initReactI18next).init({ lng: "en", fallbackLng: "en", resources: { en: { gpus, common: read("common") } }, defaultNS: "gpus", interpolation: { escapeValue: false } });
 
 const { MemoryRouter } = await import("react-router-dom");
+const userEvent = (await import("@testing-library/user-event")).default;
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const { api } = await import("../src/api.ts");
 const { default: GPUPage } = await import("../src/pages/GPUPage.tsx");
+import { sortColumn } from "./helpers/sortColumn";
 import type { GPUPage as GPUListPage, ListQuery, PhysicalGPU } from "../src/api";
 
 const fleet: PhysicalGPU[] = Array.from({ length: 30 }, (_, i) => ({
@@ -109,37 +111,35 @@ test("a card on an unreachable node is listed as unknown and offers nothing", as
 
 test("the GPU list asks the server for one page; the overview counts the fleet", async () => {
   renderPage();
-  await waitFor(() => assert.equal(document.querySelectorAll(".ant-table-tbody tr.ant-table-row").length, 20));
+  await waitFor(() => assert.equal(screen.getAllByRole("row").slice(1).length, 20));
   assert.deepEqual(queries[0], { q: "", extra: {}, page: 1, page_size: 20 });
   assert.ok(screen.getByText(gpus.page.physicalCount.replace("{{count}}", "30")));
-  fireEvent.click(screen.getByTitle("2"));
-  await waitFor(() => assert.equal(document.querySelectorAll(".ant-table-tbody tr.ant-table-row").length, 10));
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => assert.equal(screen.getAllByRole("row").slice(1).length, 10));
   assert.equal(queries.at(-1)?.page, 2);
 });
 
 test("header filters and sort go to the server; filter choices come from the server's facets", async () => {
   renderPage();
   await waitFor(() => assert.ok(queries.length > 0));
-  const nodeHeader = screen.getAllByRole("columnheader").find((cell) => cell.textContent === gpus.column.nodeGPU)!;
-  fireEvent.click(nodeHeader.querySelector(".ant-table-filter-trigger")!);
-  for (const node of ["gpu-0", "gpu-3"]) await screen.findByRole("menuitem", { name: new RegExp(node) });
+  await userEvent.setup().click(screen.getByRole("button", { name: `Filter by ${gpus.column.nodeGPU}` }));
+  for (const node of ["gpu-0", "gpu-3"]) await screen.findByRole("checkbox", { name: new RegExp(node) });
   fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
 
-  const stateHeader = screen.getAllByRole("columnheader").find((cell) => cell.textContent === gpus.column.allocationState)!;
-  fireEvent.click(stateHeader.querySelector(".ant-table-filter-trigger")!);
-  fireEvent.click(await screen.findByRole("menuitem", { name: new RegExp(gpus.allocation.unusable) }));
-  fireEvent.click(screen.getAllByRole("button", { name: "OK" }).at(-1)!);
+  await userEvent.setup().click(screen.getByRole("button", { name: `Filter by ${gpus.column.allocationState}` }));
+  fireEvent.click(await screen.findByRole("checkbox", { name: new RegExp(gpus.allocation.unusable) }));
   await waitFor(() => assert.deepEqual(queries.at(-1)?.extra, { allocation_state: ["unusable"] }));
   assert.equal(queries.at(-1)?.page, 1);
 
-  fireEvent.click(stateHeader);
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+  await sortColumn(gpus.column.allocationState, "Ascending");
   await waitFor(() => assert.equal(queries.at(-1)?.sort, "allocation_state"));
 });
 
 test("a deep link opens a GPU that is not on the first page", async () => {
   renderPage("/gpus?gpu=GPU-29");
   await waitFor(() => assert.ok(queries.some((query) => query.q === "GPU-29")));
-  await waitFor(() => assert.ok(document.querySelector(".gpu-detail-drawer .ant-drawer-title")?.textContent?.includes("GPU 5")));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog", { name: /GPU 5/ })));
 });
 
 // A measured zero is a real reading. Unknown capacity must not become a

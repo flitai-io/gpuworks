@@ -1,6 +1,6 @@
 // Package parallelism is the one definition of how a deployment splits a
 // model across GPUs. Tensor and pipeline parallel degrees are stated for the
-// whole deployment; every node runs an equal share of the TP×PP ranks, so a
+// whole deployment; every node runs an equal share of the TP×PP×DP ranks, so a
 // tensor-parallel group may span nodes. The scheduler, the launch assembly
 // and request validation all derive the per-node GPU count from here.
 //
@@ -10,28 +10,33 @@ package parallelism
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 var (
 	// ErrTPRequired rejects a multi-node deployment that states no tensor
 	// parallel degree: the scheduler only chooses one on a single node.
 	ErrTPRequired = errors.New("a multi-node deployment needs a tensor parallel degree")
-	// ErrIndivisible rejects TP×PP ranks that cannot be shared equally by
+	// ErrIndivisible rejects TP×PP×DP ranks that cannot be shared equally by
 	// the nodes.
-	ErrIndivisible = errors.New("tensor parallel × pipeline parallel is not a multiple of the node count")
+	ErrIndivisible = errors.New("tensor parallel × pipeline parallel × data parallel is not a multiple of the node count")
 )
 
 // Spec is a deployment's parallelism. TP 0 means unstated, which only a
 // single-node deployment allows: the scheduler then picks the GPU count and
-// TP follows it. PP and NNodes below one read as one.
+// TP follows it. PP, DP and NNodes below one read as one.
 type Spec struct {
 	TP     int
 	PP     int
+	DP     int
 	NNodes int
 }
 
-// Normalized returns the spec with PP and NNodes defaulted to one.
+// Normalized returns the spec with PP, DP and NNodes defaulted to one.
 func (s Spec) Normalized() Spec {
+	if s.DP < 1 {
+		s.DP = 1
+	}
 	if s.PP < 1 {
 		s.PP = 1
 	}
@@ -47,7 +52,7 @@ func (s Spec) Normalized() Spec {
 // Stated reports whether the deployment fixed its tensor parallel degree.
 func (s Spec) Stated() bool { return s.TP > 0 }
 
-// World is the total number of GPUs: TP×PP.
+// World is the number of model shards in each data-parallel replica: TP×PP.
 func (s Spec) World() int {
 	s = s.Normalized()
 	return s.TP * s.PP
@@ -63,28 +68,36 @@ func (s Spec) GPUsPerNode() (int, error) {
 		}
 		return 0, nil
 	}
-	world := s.TP * s.PP
+	world := s.TP * s.PP * s.DP
 	if world%s.NNodes != 0 {
-		return 0, fmt.Errorf("%w: %d×%d ranks over %d nodes", ErrIndivisible, s.TP, s.PP, s.NNodes)
+		return 0, fmt.Errorf("%w: %d×%d×%d ranks over %d nodes", ErrIndivisible, s.TP, s.PP, s.DP, s.NNodes)
 	}
 	return world / s.NNodes, nil
 }
 
 // Defaulted completes a multi-node spec whose TP is unstated from the GPU
-// counts of its nodes: one pipeline stage per node unless PP is stated, and
-// TP over the GPUs the fewest-GPU node has, so every node runs the same
+// counts of its nodes. Callers that validate the result should use
+// DefaultedChecked so an impossible PP×DP shape is not mistaken for missing TP.
+func (s Spec) Defaulted(nodeGPUs []int) Spec {
+	defaulted, _ := s.DefaultedChecked(nodeGPUs)
+	return defaulted
+}
+
+// DefaultedChecked completes a multi-node spec whose TP is unstated from the
+// GPU counts of its nodes: one pipeline stage per node unless PP is stated,
+// and TP over the GPUs the fewest-GPU node has, so every node runs the same
 // share and a node with more GPUs leaves the rest unused. A stated TP, a
 // single node or a node without GPUs leaves the spec as stated.
-func (s Spec) Defaulted(nodeGPUs []int) Spec {
+func (s Spec) DefaultedChecked(nodeGPUs []int) (Spec, error) {
 	if s.TP > 0 || len(nodeGPUs) < 2 {
-		return s.Normalized()
+		return s.Normalized(), nil
 	}
 	fewest := nodeGPUs[0]
 	for _, count := range nodeGPUs[1:] {
 		fewest = min(fewest, count)
 	}
 	if fewest < 1 {
-		return s.Normalized()
+		return s.Normalized(), nil
 	}
 	nodes := len(nodeGPUs)
 	pp := s.PP
@@ -97,7 +110,26 @@ func (s Spec) Defaulted(nodeGPUs []int) Spec {
 		// per node.
 		pp = nodes
 	}
-	return Spec{TP: world / pp, PP: pp, NNodes: nodes}
+	dp := s.Normalized().DP
+	if s.PP < 1 && world%(pp*dp) != 0 && world%dp == 0 {
+		// With DP replicas consuming the available cards, the default
+		// stage-per-node split may no longer fit; keep a single stage.
+		pp = 1
+	}
+	if world%(pp*dp) != 0 || world/(pp*dp) < 1 {
+		return s.Normalized(), fmt.Errorf("%w: %d GPUs over %d nodes cannot form pipeline parallel %d × data parallel %d", ErrIndivisible, world, nodes, pp, dp)
+	}
+	return Spec{TP: world / (pp * dp), PP: pp, DP: dp, NNodes: nodes}, nil
+}
+
+// MinimumGPUs is the smallest GPU group an automatic single-node placement
+// may choose: every pipeline stage of every data-parallel replica needs one.
+func (s Spec) MinimumGPUs() int {
+	s = s.Normalized()
+	if s.PP > math.MaxInt/s.DP {
+		return math.MaxInt
+	}
+	return s.PP * s.DP
 }
 
 // Assigned completes an unstated spec from the GPU count the scheduler chose
@@ -112,9 +144,9 @@ func (s Spec) Assigned(gpus int) Spec {
 	if gpus < 1 {
 		gpus = 1
 	}
-	if gpus%s.PP != 0 {
+	if gpus%(s.PP*s.DP) != 0 {
 		s.PP = 1
 	}
-	s.TP = gpus / s.PP
+	s.TP = max(1, gpus/(s.PP*s.DP))
 	return s
 }

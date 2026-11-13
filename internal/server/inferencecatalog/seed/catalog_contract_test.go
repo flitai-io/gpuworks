@@ -289,6 +289,19 @@ func TestNVIDIASourceRemediationAPIsAndH3Recipes(t *testing.T) {
 			}
 			if model.ModelID == "minimaxai/minimax-h3" && spec.GPUs.Vendor == "nvidia" {
 				h3Specs++
+				if spec.Name == "nvfp4-vllm-nvidia-blackwell-fasth3-omni-1x" {
+					// FastH3 Omni is a Ref2VA checkpoint; its only launch-time step
+					// builds the offline Hugging Face cache entry for the base VAEs.
+					if len(spec.Assets) != 0 || !strings.Contains(spec.PreStartScript, "snapshots/9bfb6693f2cf6de171db46d1aa586f67d773a1da") ||
+						!containsArgumentPair(spec.Args, "--task-type", "ref2va") || spec.Env["HF_HOME"] == "" {
+						t.Errorf("H3 %s FastH3 contract args=%v env=%v pre_start=%q", spec.Name, spec.Args, spec.Env, spec.PreStartScript)
+					}
+					continue
+				}
+				if strings.HasSuffix(spec.Name, "-turbo4") && (!containsArgumentPair(spec.Args, "--lora-path", "/models/MiniMax-H3-Turbo/minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16.safetensors") ||
+					!containsArgumentPair(spec.Args, "--default-sampling-params", `{"0":{"num_inference_steps":4,"guidance_scale":1}}`)) {
+					t.Errorf("H3 %s does not load the Turbo adapter at its four-step schedule: %v", spec.Name, spec.Args)
+				}
 				// The vllm-omni 0.30 runner already carries the modular H3 pipeline;
 				// the old source overlay would overwrite its engine files.
 				if len(spec.Assets) != 0 || spec.PreStartScript != "" {
@@ -308,8 +321,8 @@ func TestNVIDIASourceRemediationAPIsAndH3Recipes(t *testing.T) {
 			t.Errorf("%s lacks its audited API operation", modelID)
 		}
 	}
-	if h3Specs != 5 {
-		t.Fatalf("H3 NVIDIA specs=%d, want 5", h3Specs)
+	if h3Specs != 8 {
+		t.Fatalf("H3 NVIDIA specs=%d, want 8", h3Specs)
 	}
 }
 

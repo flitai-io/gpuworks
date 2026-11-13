@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/agent/gpu"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -65,11 +66,12 @@ func (e *Engine) validateTargetDesiredForDriver(spec proto.InstanceDesiredState,
 		host = e.hostRuntimeFacts()
 	}
 	host.Driver = driverName
-	if mismatch := accelerator.RuntimeMismatchFor(vendor, host); mismatch != nil {
-		return fmt.Errorf("%s host runtime does not meet accelerator requirements: %v", accelerator.VendorBrand(vendor), mismatch.Params())
+	if err := gpu.RuntimeRequirementError(vendor, host); err != nil {
+		return err
 	}
+
 	if accelerator.RequiresDeviceSelection(vendor) && len(spec.GPUIndexes) == 0 {
-		return fmt.Errorf("%s requires an explicit nonempty GPU selection", accelerator.VendorBrand(vendor))
+		return gpu.DeviceSelectionError(vendor)
 	}
 	if accelerator.RequiresDeviceSelection(vendor) {
 		// A vendor that requires explicit device selection may still have a

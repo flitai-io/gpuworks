@@ -98,7 +98,9 @@ func RunTracked(ctx context.Context, key string, timeout time.Duration, build fu
 	cmd := build(runCtx)
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	cmd.Stderr = &out
+	if cmd.Stderr == nil {
+		cmd.Stderr = &out
+	}
 	killGroupOnCancel(cmd)
 	// Bounds the wait for output pipes held open by a child of the command.
 	cmd.WaitDelay = time.Second
@@ -131,7 +133,7 @@ func RunTracked(ctx context.Context, key string, timeout time.Duration, build fu
 // killed (RunTracked, under the binary's name).
 func RunVendorCLI(ctx context.Context, stdin io.Reader, name string, args ...string) (string, error) {
 	return RunTracked(ctx, binaryKey(name), vendorCLITimeout, func(ctx context.Context) *exec.Cmd {
-		cmd := exec.CommandContext(ctx, name, args...)
+		cmd := cliCommand(ctx, name, args...)
 		cmd.Stdin = stdin
 		return cmd
 	})

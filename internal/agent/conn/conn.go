@@ -23,6 +23,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
 	"gpuworks.ai/gpuworks/internal/agent/hostsim"
+	"gpuworks.ai/gpuworks/internal/agent/kubeboot"
 	"gpuworks.ai/gpuworks/internal/agent/netinfo"
 	"gpuworks.ai/gpuworks/internal/agent/sysinfo"
 	"gpuworks.ai/gpuworks/internal/agent/terminal"
@@ -48,6 +49,10 @@ type Credentials struct {
 	// Simulated is the machine a simulated node stands for, whose policy
 	// (hostsim) decides what the connection serves; nil is a real node.
 	Simulated *hostsim.Host
+	// EnginePorts is this node's own engine port range (--engine-ports). It
+	// replaces the range a state sync carries and is reported to the server,
+	// which then allocates this node's ports from it. Nil follows the server.
+	EnginePorts *proto.PortRange
 }
 
 // RejectError is returned when the server explicitly rejects a handshake.
@@ -179,6 +184,10 @@ func New(creds Credentials, onReg OnRegistered, handlers Handlers, prober gpu.Pr
 	}
 	c := &Conn{creds: creds, log: log, onReg: onReg, handlers: handlers, prober: prober}
 	c.initConnectionObservation()
+	if creds.EnginePorts != nil {
+		r := *creds.EnginePorts
+		c.enginePorts.Store(&r)
+	}
 	return c
 }
 
@@ -242,7 +251,7 @@ func helloCapabilities(prober gpu.Prober) []string {
 // PTYExecer implementation and are validated against the runtime name below.
 func helloCapabilitiesForRuntime(prober gpu.Prober, runtimeDriver string) []string {
 	_ = runtimeDriver // runtime-specific container bits come from the handler
-	caps := []string{"sysinfo", proto.CapConnectionDiagnostics}
+	caps := []string{"sysinfo", proto.CapConnectionDiagnostics, proto.CapPeerRelayV1}
 	// Terminal support is platform-gated rather than GPU-gated, so it is
 	// advertised independently of the prober. The server greys out the terminal
 	// entry point for agents that do not claim it, instead of opening a session
@@ -256,6 +265,9 @@ func helloCapabilitiesForRuntime(prober gpu.Prober, runtimeDriver string) []stri
 		proto.CapStorageFiles, proto.CapCardChecks)
 	if upgradeSupported() {
 		caps = append(caps, proto.CapUpgradePush)
+		if kubeboot.Running() {
+			caps = append(caps, proto.CapKubeBinaryUpgrade)
+		}
 	}
 	if prober == nil {
 		return caps
@@ -415,6 +427,11 @@ func (c *Conn) reportStatus(ctx context.Context) {
 		if h, ok := c.handlers.(interface{ PeerMemory() string }); ok {
 			sys.PeerMemory = h.PeerMemory()
 		}
+		if h, ok := c.handlers.(interface {
+			KubeUnschedulable(context.Context) bool
+		}); ok {
+			sys.KubeUnschedulable = h.KubeUnschedulable(ctx)
+		}
 		if h, ok := c.handlers.(interface{ RuntimeFallback() (string, string) }); ok {
 			sys.RuntimeFallbackFrom, sys.RuntimeFallbackReason = h.RuntimeFallback()
 		}
@@ -474,6 +491,7 @@ func (c *Conn) reportStatus(ctx context.Context) {
 			network.Tools = h.NetworkTools()
 		}
 		network.EnginePortListeners = c.enginePortListeners()
+		network.EnginePortRange = c.creds.EnginePorts
 		if p, ok := c.prober.(gpu.AcceleratorPortProber); ok && cliAnswered {
 			network.AcceleratorPorts = p.AcceleratorPorts(ctx)
 		}

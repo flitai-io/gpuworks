@@ -77,7 +77,7 @@ func TestDashboardCurrentMetricsUseExistingOnlineHardwareAndFreshSamples(t *test
 			if err := json.Unmarshal(wire["current_metrics"], &metrics); err != nil {
 				t.Fatalf("current_metrics missing or invalid: %s", rec.Body.String())
 			}
-			for _, key := range []string{"utilization_pct", "temperature_c", "power_watts", "memory_used_bytes"} {
+			for _, key := range []string{"utilization_pct", "temperature_c", "power_watts", "memory_used_bytes", "vram_used_bytes", "vram_total_bytes"} {
 				got, present := metrics[key]
 				if !present {
 					t.Fatalf("missing field %s", key)
@@ -90,7 +90,7 @@ func TestDashboardCurrentMetricsUseExistingOnlineHardwareAndFreshSamples(t *test
 					t.Errorf("%s = %v, want no measurement", key, *got)
 				}
 			}
-			if queries > 4 {
+			if queries > 6 {
 				t.Fatalf("queries %d scale with hardware", queries)
 			}
 		})
@@ -171,13 +171,13 @@ func TestDashboardCurrentMetricsKeepCurrentSampleBehindFutureSamples(t *testing.
 		return out, err
 	}}}
 	got := h.dashboardCurrentMetrics([]store.Node{{UUID: "live", State: store.NodeStateOnline, GPUs: []store.GPU{{Index: 3}}}})
-	for _, value := range []*float64{got.UtilizationPct, got.TemperatureC, got.PowerWatts, got.MemoryUsedBytes} {
+	for _, value := range []*float64{got.UtilizationPct, got.TemperatureC, got.PowerWatts, got.MemoryUsedBytes, got.VRAMUsedBytes, got.VRAMTotalBytes} {
 		if value == nil || *value != 20 {
 			t.Fatalf("valid current sample lost behind later arrivals: %+v", got)
 		}
 	}
-	if calls != 4 {
-		t.Fatalf("query count = %d, want 4", calls)
+	if calls != 6 {
+		t.Fatalf("query count = %d, want 6", calls)
 	}
 }
 
@@ -227,16 +227,16 @@ func TestDashboardSummaryRetainsInventoryWhenMetricsFail(t *testing.T) {
 			if got.CurrentMetrics.TemperatureC != nil {
 				t.Fatal("failed temperature must be null")
 			}
-			for _, value := range []*float64{got.CurrentMetrics.UtilizationPct, got.CurrentMetrics.PowerWatts, got.CurrentMetrics.MemoryUsedBytes} {
+			for _, value := range []*float64{got.CurrentMetrics.UtilizationPct, got.CurrentMetrics.PowerWatts, got.CurrentMetrics.MemoryUsedBytes, got.CurrentMetrics.VRAMUsedBytes, got.CurrentMetrics.VRAMTotalBytes} {
 				if all && value != nil || !all && (value == nil || *value != 20) {
 					t.Fatalf("incorrect partial metrics: %+v", got.CurrentMetrics)
 				}
 			}
 			wantErrors := 1
 			if all {
-				wantErrors = 4
+				wantErrors = 6
 			}
-			if calls != 4 || strings.Count(logs.String(), "metric storage unavailable") != wantErrors {
+			if calls != 6 || strings.Count(logs.String(), "metric storage unavailable") != wantErrors {
 				t.Fatalf("calls=%d logs=%s", calls, logs.String())
 			}
 			// Inventory keeps updating even while metrics remain unavailable.
@@ -247,5 +247,41 @@ func TestDashboardSummaryRetainsInventoryWhenMetricsFail(t *testing.T) {
 				t.Fatalf("inventory froze: %+v", updated.Nodes)
 			}
 		})
+	}
+}
+
+// VRAM used and total are summed over the same cards: a card with only one
+// of the two samples is left out of both, so the ratio stays a real one.
+func TestDashboardCurrentMetricsPairVRAMUsedAndTotalPerCard(t *testing.T) {
+	now := time.Now().UnixMilli()
+	nodes := []store.Node{{UUID: "live", State: store.NodeStateOnline, GPUs: []store.GPU{{Index: 0}, {Index: 1}, {Index: 2}}}}
+	point := func(gpu string, value float64) MetricLatest {
+		return MetricLatest{Labels: map[string]string{"node": "live", "gpu": gpu}, TimeMS: now, Value: value}
+	}
+	h := apiHandlers{d: Deps{MetricsLatest: func(metric string, _ map[string]string, _ int64, _ ...int64) ([]MetricLatest, error) {
+		switch metric {
+		case "gpuworks_gpu_memory_used_bytes":
+			// Card 2 has a used sample but no total one.
+			return []MetricLatest{point("0", 10), point("1", 20), point("2", 70)}, nil
+		case "gpuworks_gpu_memory_total_bytes":
+			return []MetricLatest{point("0", 40), point("1", 60)}, nil
+		}
+		return nil, nil
+	}}}
+	got := h.dashboardCurrentMetrics(nodes)
+	if got.VRAMUsedBytes == nil || got.VRAMTotalBytes == nil || *got.VRAMUsedBytes != 30 || *got.VRAMTotalBytes != 100 {
+		t.Fatalf("vram used/total = %v/%v, want 30/100 over cards 0 and 1", got.VRAMUsedBytes, got.VRAMTotalBytes)
+	}
+	none := (&apiHandlers{d: Deps{MetricsLatest: func(metric string, _ map[string]string, _ int64, _ ...int64) ([]MetricLatest, error) {
+		if metric == "gpuworks_gpu_memory_used_bytes" {
+			return []MetricLatest{point("0", 10)}, nil
+		}
+		if metric == "gpuworks_gpu_memory_total_bytes" {
+			return []MetricLatest{point("1", 40)}, nil
+		}
+		return nil, nil
+	}}}).dashboardCurrentMetrics(nodes)
+	if none.VRAMUsedBytes != nil || none.VRAMTotalBytes != nil {
+		t.Fatalf("no card with both samples: vram = %v/%v, want null", none.VRAMUsedBytes, none.VRAMTotalBytes)
 	}
 }

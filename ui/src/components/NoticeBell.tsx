@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, Empty, List, Popover, Space, Tag, Tooltip, Typography } from "antd";
-import { BellOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
+import { Badge, type BadgeStatus } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader } from "@/components/ui/empty";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, type NoticeItem, type NoticeList } from "../api";
 import { formatTime } from "../i18n/datetime";
+import { ConsoleIcon } from "../ui-kit/consoleIcons";
 
-const { Text, Paragraph, Link } = Typography;
+const BellIcon = ConsoleIcon.notifications;
 
 // How often an open console asks for notices again. The server fetches them
 // from the distribution channel with its update check, at most hourly.
 const refreshMs = 30 * 60_000;
 
-const severityColor: Record<NoticeItem["severity"], string> = { critical: "red", important: "orange", info: "blue" };
+const severityStatus: Record<NoticeItem["severity"], BadgeStatus> = { critical: "danger", important: "warning", info: "info" };
 
 // localized picks the publisher's text for the console's language, falling
 // back to English, which every notice carries.
@@ -56,68 +60,69 @@ export default function NoticeBell() {
 
   const unread = list?.unread ?? 0;
   const notices = list?.notices ?? [];
-  const content = (
-    <div className="notice-bell-panel" style={{ width: 380, maxWidth: "calc(100vw - 32px)" }}>
-      {failed && !list && <Text type="secondary">{t("notices.loadFailed")}</Text>}
-      {list && notices.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("notices.empty")} />}
-      {notices.length > 0 && (
-        <List<NoticeItem>
-          size="small"
-          dataSource={notices}
-          style={{ maxHeight: 420, overflow: "auto" }}
-          renderItem={(notice) => {
-            const title = localized(notice.title, i18n.language);
-            const body = localized(notice.body, i18n.language);
-            return (
-              <List.Item
-                data-testid={`notice-${notice.id}`}
-                style={{ opacity: notice.read ? 0.65 : 1, alignItems: "flex-start" }}
-                actions={notice.read ? [] : [
-                  <Button key="read" size="small" type="link" onClick={() => void markRead([notice.id])}>{t("notices.markRead")}</Button>,
-                ]}
-              >
-                <Space direction="vertical" size={2} style={{ width: "100%" }}>
-                  <Space size={4} wrap>
-                    <Tag color={severityColor[notice.severity]}>{t(`notices.severity.${notice.severity}`)}</Tag>
-                    <Tag>{t(`notices.kind.${notice.kind}`)}</Tag>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{formatTime(notice.published_at)}</Text>
-                  </Space>
-                  <Text strong={!notice.read}>{title}</Text>
-                  {body && <Paragraph type="secondary" style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>{body}</Paragraph>}
-                  {notice.url && (
-                    <Link href={notice.url} target="_blank" rel="noopener noreferrer">{t("notices.readMore")}</Link>
-                  )}
-                </Space>
-              </List.Item>
-            );
-          }}
-        />
-      )}
-    </div>
-  );
+  const bellLabel = unread > 0 ? `${t("notices.title")} (${t("notices.unread", { count: unread })})` : t("notices.title");
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => { setOpen(next); if (next) void load(); }}
-      trigger="click"
-      placement="bottomRight"
-      title={(
-        <Space style={{ width: "100%", justifyContent: "space-between" }}>
-          <span>{t("notices.title")}</span>
+    <Popover open={open} onOpenChange={(next) => { setOpen(next); if (next) void load(); }}>
+      <Tooltip content={unread > 0 ? t("notices.unread", { count: unread }) : t("notices.title")}>
+        <PopoverTrigger
+          render={(
+            <Button variant="ghost" size="md" iconOnly aria-label={bellLabel} className="relative">
+              <BellIcon />
+              {unread > 0 && (
+                <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger-strong px-1 text-[11px] leading-none text-fg-on-danger-strong">
+                  {unread}
+                </span>
+              )}
+            </Button>
+          )}
+        />
+      </Tooltip>
+      <PopoverContent align="end" className="w-[380px] max-w-[calc(100vw-32px)] p-0">
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-4 py-2.5">
+          <PopoverTitle>{t("notices.title")}</PopoverTitle>
           {unread > 0 && (
-            <Button size="small" type="link" onClick={() => void markRead(notices.filter((n) => !n.read).map((n) => n.id))}>
+            <Button variant="ghost" size="xs" className="text-fg-brand" onClick={() => void markRead(notices.filter((n) => !n.read).map((n) => n.id))}>
               {t("notices.markAllRead")}
             </Button>
           )}
-        </Space>
-      )}
-      content={content}
-    >
-      <Tooltip title={unread > 0 ? t("notices.unread", { count: unread }) : t("notices.title")}>
-        <Button type="text" aria-label={unread > 0 ? `${t("notices.title")} (${t("notices.unread", { count: unread })})` : t("notices.title")}
-          icon={<Badge count={unread} size="small" offset={[2, -2]}><BellOutlined /></Badge>} />
-      </Tooltip>
+        </div>
+        <div className="max-h-[420px] overflow-auto">
+          {failed && !list && <p className="px-4 py-3 text-body text-fg-muted">{t("notices.loadFailed")}</p>}
+          {list && notices.length === 0 && (
+            <Empty reason="no-data" scope="inline" density="compact">
+              <EmptyHeader><EmptyDescription>{t("notices.empty")}</EmptyDescription></EmptyHeader>
+            </Empty>
+          )}
+          {notices.length > 0 && (
+            <ul className="list-none divide-y divide-border-subtle">
+              {notices.map((notice) => {
+                const title = localized(notice.title, i18n.language);
+                const body = localized(notice.body, i18n.language);
+                return (
+                  <li key={notice.id} data-testid={`notice-${notice.id}`} className={`flex items-start gap-3 px-4 py-3 ${notice.read ? "opacity-65" : ""}`}>
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge status={severityStatus[notice.severity]} size="sm">{t(`notices.severity.${notice.severity}`)}</Badge>
+                        <Badge size="sm">{t(`notices.kind.${notice.kind}`)}</Badge>
+                        <span className="text-label text-fg-subtle">{formatTime(notice.published_at)}</span>
+                      </div>
+                      <span className={`text-body text-fg-default ${notice.read ? "" : "font-medium"}`}>{title}</span>
+                      {body && <p className="whitespace-pre-wrap text-body text-fg-muted">{body}</p>}
+                      {notice.url && (
+                        <a className="text-body text-fg-brand hover:underline" href={notice.url} target="_blank" rel="noopener noreferrer">{t("notices.readMore")}</a>
+                      )}
+                    </div>
+                    {!notice.read && (
+                      <Button variant="ghost" size="xs" className="shrink-0 text-fg-brand" onClick={() => void markRead([notice.id])}>{t("notices.markRead")}</Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </PopoverContent>
     </Popover>
   );
 }

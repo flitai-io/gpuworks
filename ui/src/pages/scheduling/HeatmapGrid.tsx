@@ -6,9 +6,6 @@ import { fillOf, tokenVars } from "./cellColor";
 import CardTooltip, { type ActiveCard } from "./CardTooltip";
 import type { Arrangement, CardView, GridNode, GroupBy, OverviewModel, Section } from "./overviewModel";
 
-// More nodes than this and a node's name no longer fits above its cards: the
-// groups shrink to the cards alone and the name is read from the hover card.
-const NAMED_NODES = 60;
 // The keys that jump a page of nodes.
 const PAGE_NODES = 10;
 
@@ -70,7 +67,6 @@ const Cells = memo(function Cells({ arrangement, model, groupBy, onActivate, onO
     for (const node of model.nodes) for (const card of node.cards) index.set(`${node.uuid}/${card.index}`, card);
     return index;
   }, [model]);
-  const named = arrangement.nodes <= NAMED_NODES;
   const searching = arrangement.matched.size > 0;
 
   // One cell is in the tab order; the arrows move it.
@@ -109,7 +105,7 @@ const Cells = memo(function Cells({ arrangement, model, groupBy, onActivate, onO
   return (
     <div
       ref={root}
-      className={`hm-body${named ? " is-named" : ""}${searching ? " is-searching" : ""}`}
+      className={`hm-body${searching ? " is-searching" : ""}`}
       role="group"
       aria-label={t("heatmap.aria")}
       aria-describedby="hm-help"
@@ -122,7 +118,7 @@ const Cells = memo(function Cells({ arrangement, model, groupBy, onActivate, onO
     >
       <p id="hm-help" className="hm-help">{t("heatmap.help")}</p>
       {arrangement.sections.map((section) => (
-        <SectionBlock key={section.key} section={section} grouped={groupBy !== "node"} named={named} matched={arrangement.matched} model={model} t={t} tDeploy={tDeploy} />
+        <SectionBlock key={section.key} section={section} grouped={groupBy !== "node"} matched={arrangement.matched} model={model} t={t} tDeploy={tDeploy} />
       ))}
     </div>
   );
@@ -131,14 +127,13 @@ const Cells = memo(function Cells({ arrangement, model, groupBy, onActivate, onO
 interface SectionProps {
   section: Section;
   grouped: boolean;
-  named: boolean;
   matched: Set<number>;
   model: OverviewModel;
   t: TFunction<"scheduling">;
   tDeploy: TFunction<"deployments">;
 }
 
-function SectionBlock({ section, grouped, named, matched, model, t, tDeploy }: SectionProps) {
+function SectionBlock({ section, grouped, matched, model, t, tDeploy }: SectionProps) {
   const heading = section.label || t("heatmap.noLabel");
   return (
     <section className="hm-section" aria-label={grouped ? heading : undefined}>
@@ -150,7 +145,7 @@ function SectionBlock({ section, grouped, named, matched, model, t, tDeploy }: S
       )}
       <div className="hm-groups">
         {section.nodes.map((item) => (
-          <NodeGroup key={item.node.uuid} item={item} named={named} matched={matched} deployments={model.deployments} t={t} tDeploy={tDeploy} />
+          <NodeGroup key={item.node.uuid} item={item} matched={matched} deployments={model.deployments} t={t} tDeploy={tDeploy} />
         ))}
       </div>
     </section>
@@ -159,7 +154,6 @@ function SectionBlock({ section, grouped, named, matched, model, t, tDeploy }: S
 
 interface GroupProps {
   item: GridNode;
-  named: boolean;
   matched: Set<number>;
   deployments: OverviewModel["deployments"];
   t: TFunction<"scheduling">;
@@ -167,15 +161,14 @@ interface GroupProps {
 }
 
 /** NodeGroup is one node's cards. It re-renders only when its node or the search changes. */
-const NodeGroup = memo(function NodeGroup({ item, named, matched, deployments, t, tDeploy }: GroupProps) {
+const NodeGroup = memo(function NodeGroup({ item, matched, deployments, t, tDeploy }: GroupProps) {
   const { node, cards } = item;
   return (
     <div className={`hm-node${node.online ? "" : " is-offline"}`} role="group" aria-label={node.name} data-node={node.uuid}>
-      {named && (
-        <button type="button" tabIndex={-1} className="hm-node-name" data-open="" data-node={node.uuid} aria-label={t("heatmap.openNode", { node: node.name })}>
-          {node.name}
-        </button>
-      )}
+      <button type="button" tabIndex={-1} className="hm-node-name" data-open="" data-node={node.uuid}
+        title={node.name} aria-label={t("heatmap.openNode", { node: node.name })}>
+        {node.name}
+      </button>
       <div className="hm-cards" style={{ gridTemplateColumns: `repeat(${cardsAcross(cards.length)}, var(--hm-cell, 12px))` }}>
         {cards.map((card) => {
           const hit = matched.size > 0 && card.occupants.some((o) => matched.has(o.deployment));

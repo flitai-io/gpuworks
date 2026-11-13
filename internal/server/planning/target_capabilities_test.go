@@ -182,3 +182,35 @@ func TestSleepDeclarableUsesFeatureRefusalWithoutGPUSelectionGate(t *testing.T) 
 		t.Fatalf("non-sleepable AMD request should not require target selection: %v", err)
 	}
 }
+
+func TestTargetCardFilteringKeepsNVIDIAPeerOnKunlunMixedNode(t *testing.T) {
+	node := &store.Node{OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{
+		{Index: 0, Name: "P800 PCIe", Vendor: "kunlunxin", ArchID: "kl3"},
+		{Index: 1, Name: "NVIDIA H100", Vendor: "nvidia", ArchID: "sm_90"},
+	}}
+	in := Input{Node: node, RequestedFeatures: &proto.RequestedFeatures{CommandKnown: true, EngineSleep: true}, Sleepable: true}
+	snap := scheduler.NodeSnapshot{Vendor: "kunlunxin", GPUs: []scheduler.GPU{{Index: 0}, {Index: 1}}}
+	if refusal := constrainTargetGPUs(in, &snap); refusal != nil {
+		t.Fatalf("mixed node refusal=%+v", refusal)
+	}
+	if len(snap.GPUs) != 1 || snap.GPUs[0].Index != 1 || snap.Vendor != "nvidia" {
+		t.Fatalf("filtered candidates=%+v vendor=%q", snap.GPUs, snap.Vendor)
+	}
+}
+
+func TestKunlunTargetAdmissionInspectsHandwrittenParallelModes(t *testing.T) {
+	node := &store.Node{OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUVendor: "kunlunxin", GPUs: []store.GPU{{Index: 0, Name: "P800 PCIe", Vendor: "kunlunxin", ArchID: "kl3"}}}
+	for _, args := range [][]string{{"-pp", "2"}, {"--data-parallel-size", "2"}} {
+		req := LaunchRequest{Node: node, Model: &store.Model{}, Engine: "vllm", ExtraArgs: args, Source: LaunchSourceFromRequest("registry.example/kunlun:v1", deploy.ContainerOverrides{})}
+		if refusal, err := TargetCandidateRefusal(req, deploy.CatalogSelection{}, node); err != nil || refusal != nil {
+			t.Fatalf("supported handwritten args %v: refusal=%+v err=%v", args, refusal, err)
+		}
+	}
+	req := LaunchRequest{Node: node, Model: &store.Model{}, Engine: "vllm", Source: LaunchSourceFromRequest("registry.example/kunlun:v1", deploy.ContainerOverrides{
+		CommandMode: string(deploy.CommandManual), CmdDisplay: "/bin/sh -c 'vllm serve -pp 2'",
+	})}
+	refusal, err := TargetCandidateRefusal(req, deploy.CatalogSelection{}, node)
+	if err != nil || refusal == nil || refusal.Code != scheduler.ReasonLaunchFeaturesUnknown {
+		t.Fatalf("unknown shell refusal=%+v err=%v", refusal, err)
+	}
+}

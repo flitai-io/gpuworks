@@ -276,10 +276,11 @@ func (n *NodeRuntime) StatusSnapshot(ctx context.Context, refs []string) ([]prot
 	if d := n.runtimeDriver(); d != nil {
 		for _, ref := range refs {
 			var present bool
+			var imageID string
 			var size *int64
 			var err error
 			if reporter, ok := d.(runtime.ImagePresenceReporter); ok {
-				present, size, err = reporter.ImagePresence(ctx, ref)
+				present, imageID, size, err = reporter.ImagePresence(ctx, ref)
 			} else {
 				present, err = d.ImageExists(ctx, ref)
 			}
@@ -288,7 +289,7 @@ func (n *NodeRuntime) StatusSnapshot(ctx context.Context, refs []string) ([]prot
 				continue
 			}
 			n.imageSeen.observe(ctx, n.log, d, ref, present)
-			images = append(images, proto.ImagePresence{ImageRef: ref, Present: present, RuntimeSizeBytes: size})
+			images = append(images, proto.ImagePresence{ImageRef: ref, Present: present, ImageID: imageID, RuntimeSizeBytes: size})
 		}
 	}
 	return images, n.pathUsage()
@@ -334,7 +335,7 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 		ctx = withDoctorAttempts(ctx, n.cardSmoke.Begin)
 		ctx = withDoctorOutcomes(ctx, n.cardSmoke.Record)
 		ctx = withDoctorHeldFindings(ctx, n.applyHeldHardwareFindings)
-		return buildDoctorReport(ctx, n.prober, n.doctorPathUsage(), n.runtimeDriver()), nil
+		return buildDoctorReportForNode(ctx, n.prober, n.doctorPathUsage(), n.stateDir, n.runtimeDriver()), nil
 	case proto.RPCNodeCardCheckDetail:
 		var req proto.CardCheckDetailRequest
 		if err := json.Unmarshal(params, &req); err != nil {
@@ -378,6 +379,8 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 		// report does not immediately execute the same probe a second time.
 		_ = n.partitionProbeNeedsRefresh(reports, gpus)
 		return n.partitionProbe.Refresh(ctx, reports, gpus), nil
+	case proto.RPCKubeNodeExists:
+		return n.kubeRPC(ctx, method, params)
 	case proto.RPCFSList:
 		return n.rpcFSList(params)
 	case proto.RPCFSReadFile:
@@ -466,6 +469,8 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 			return nil, err
 		}
 		return proto.BenchmarkCancelResult{ID: p.ID, State: "canceled", Running: false}, nil
+	case proto.RPCPeerRelayWaitClosed:
+		return n.rpcPeerRelayWaitClosed(ctx, params)
 	case proto.RPCModelSyncListen:
 		return n.rpcModelSyncListen(params)
 	case proto.RPCModelSyncSend:

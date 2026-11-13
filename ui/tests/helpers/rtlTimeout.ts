@@ -17,3 +17,13 @@ const { configure } = require("@testing-library/dom/dist/config.js") as {
 };
 
 configure({ asyncUtilTimeout: 30_000 });
+
+// Node 22 tries to parse an entire source-mapped TSX file when assert.ok has
+// no message. On these large fixtures that blocks the event loop inside
+// findColumn/parseCode, so waitFor cannot reach its timeout. Keep the exact
+// assertion, with a fallback message instead of implicit source extraction.
+import assert from "node:assert/strict";
+const originalOk = assert.ok;
+assert.ok = ((value: unknown, message?: string | Error) => {
+  originalOk(value, message ?? "Expected a truthy value (assertion has no explicit message)");
+}) as typeof assert.ok;

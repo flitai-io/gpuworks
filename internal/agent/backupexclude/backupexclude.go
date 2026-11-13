@@ -19,10 +19,6 @@ var run = func(ctx context.Context, name string, args ...string) ([]byte, error)
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
-// excludeAttr is the extended attribute `tmutil addexclusion` sets: an item
-// carrying it is already excluded, which reading it tells without tmutil.
-const excludeAttr = "com.apple.metadata:com_apple_backup_excludeItem"
-
 // excluded reports whether path carries excludeAttr; tests substitute it.
 var excluded = hasXattr
 

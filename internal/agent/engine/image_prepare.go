@@ -95,6 +95,9 @@ func (e *Engine) prepareImage(ctx context.Context, driver runtime.Driver, spec p
 		e.failRuntimeUnavailable(spec, imageCheckErr)
 		return "", false
 	}
+	if imageCheckErr == nil && e.importFromOtherRuntime(ctx, driver, spec, name) {
+		return spec.Image, true
+	}
 	message := "image is not available locally; download required"
 	if imageCheckErr != nil {
 		message = "image availability check failed; download required"

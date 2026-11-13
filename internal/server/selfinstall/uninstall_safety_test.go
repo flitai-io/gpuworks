@@ -34,7 +34,7 @@ func TestUninstallRejectsSharedServiceBinary(t *testing.T) {
 				writeFile(t, filepath.Join(h.layout.UnitPath()+".d", "override.conf"), "[Service]\nExecStart=/another/gpuworks serve\n", 0o644)
 			}
 			before := uninstallSnapshot(t, h.layout.Dir, h.layout.UnitDir, h.layout.LaunchdDir)
-			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil); err == nil {
+			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err == nil {
 				t.Fatal("ambiguous service ownership was accepted")
 			}
 			if after := uninstallSnapshot(t, h.layout.Dir, h.layout.UnitDir, h.layout.LaunchdDir); !reflect.DeepEqual(before, after) {
@@ -49,7 +49,7 @@ func TestUninstallDoesNotDeleteWhenProcessesCannotBeConfirmedGone(t *testing.T) 
 		h := uninstallFixture(t)
 		h.supervisedByNohup()
 		h.run.output["ps -ww -axo pid=,command="] = strings.ReplaceAll(table, "TARGET", h.layout.Binary())
-		if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil); err == nil {
+		if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err == nil {
 			t.Fatalf("uninstall accepted process table %q", table)
 		}
 		if readFile(t, h.layout.Binary()) != "old binary" || readFile(t, filepath.Join(h.layout.DataDir, "gpuworks.db")) != "old database" {
@@ -63,7 +63,7 @@ func TestUninstallRejectsDamagedPIDFile(t *testing.T) {
 		h := uninstallFixture(t)
 		h.supervisedByNohup()
 		writeFile(t, h.layout.PIDFile(), content, 0o644)
-		if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true}, nil); err == nil || !strings.Contains(err.Error(), "invalid pid") {
+		if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil); err == nil || !strings.Contains(err.Error(), "invalid pid") {
 			t.Fatalf("pid %q: %v", content, err)
 		}
 		if readFile(t, h.layout.PIDFile()) != content {
@@ -76,14 +76,14 @@ func TestUninstallRestoresDisabledServiceDefinitionWhenReloadFails(t *testing.T)
 	h := uninstallFixture(t)
 	original := readFile(t, h.layout.UnitPath())
 	h.run.fail["sudo systemctl daemon-reload"] = errors.New("injected reload failure")
-	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true, Purge: true}, nil); err == nil {
+	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err == nil {
 		t.Fatal("reload failure hidden")
 	}
 	if readFile(t, h.layout.UnitPath()) != original || readFile(t, h.layout.Binary()) != "old binary" {
 		t.Fatal("failed reload lost installation identity or program")
 	}
 	delete(h.run.fail, "sudo systemctl daemon-reload")
-	if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil); err != nil {
+	if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err != nil {
 		t.Fatalf("retry after reload failure: %v", err)
 	}
 }

@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 import urllib.error
 import urllib.request
 
@@ -76,6 +77,21 @@ class CallableServerTest(unittest.TestCase):
 
     def tearDown(self):
         self.fixture.close()
+
+    def test_loader_exception_keeps_terminal_health_response_available(self):
+        failure = ModuleNotFoundError("No module named 'diffusers'")
+        with mock.patch.object(SERVE.importlib, "import_module", side_effect=failure):
+            with mock.patch.object(SERVE.traceback, "print_exc"):
+                self.fixture.state.load("diffusers_adapter", {"device": "cuda"})
+        for _ in range(2):
+            with self.assertRaises(urllib.error.HTTPError) as caught:
+                urllib.request.urlopen(self.fixture.url + "/health", timeout=3)
+            with caught.exception as response:
+                self.assertEqual(response.code, 503)
+                self.assertEqual(response.headers["Server"].split()[0], "GPUWorksCallable/1")
+                self.assertEqual(json.loads(response.read()), {
+                    "status": "failed", "error": "ModuleNotFoundError: No module named 'diffusers'",
+                })
 
     def test_health_models_and_six_synchronous_operations(self):
         status, _, body = self.fixture.request("GET", "/health")

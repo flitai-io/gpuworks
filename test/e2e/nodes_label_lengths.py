@@ -317,6 +317,25 @@ def exercise_label_text_edit(page, context, base, node_uuid, ui, open_labels, re
     # the characters. The footer default button is the cancel control.
     reopened.locator(".ant-modal-footer .ant-btn-default").click()
     expect(reopened).not_to_be_visible()
+    # 2.7: a label value is free text. A value carrying markup is stored verbatim and shown as
+    # text wherever the product lists labels, never as an element.
+    markup = "<img src=x onerror=1>"
+    saved_markup = page.request.put(base + labels_path, data={"labels": {"team": markup}})
+    check(saved_markup.status == 200, f"a markup label value was refused: HTTP {saved_markup.status}")
+    markup_reread = page.request.get(base + node_path)
+    check(markup_reread.status == 200 and markup_reread.json()["labels"] == {"team": markup},
+          f"the markup value was not stored verbatim: {markup_reread.json().get('labels')}")
+    page.reload()
+    expect(page.get_by_role("heading", name=ui["page"]["title"], exact=True).first).to_be_visible()
+    # The list row renders every label as key=value text, so that is where arbitrary label text
+    # is shown. It has to arrive as text, not as an element the value built.
+    pair = f"team={markup}"
+    row_text = page.get_by_text(pair, exact=True)
+    expect(row_text.first).to_be_visible()
+    check(page.locator("img[src='x']").count() == 0,
+          "the label value created an img element on the nodes list")
+    # Restore the plain value so anything reading labels afterwards sees what it seeded.
+    page.request.put(base + labels_path, data={"labels": {"team": "alpha"}})
     return {
         "observed": {"pasted": pasted, "cleared": True, "keyboard": "alpha",
                      "newline_in_control": False, "newline_status": 400, "restored": "alpha"},

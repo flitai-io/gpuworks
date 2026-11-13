@@ -84,3 +84,39 @@ func TestSaveImageRefusals(t *testing.T) {
 		}
 	})
 }
+
+// HoldsImage is asked of a runtime the node may never have used, so it answers
+// from the store on disk and sets nothing up.
+func TestHoldsImageReadsTheNativeStoreWithoutProvisioning(t *testing.T) {
+	t.Run("never used", func(t *testing.T) {
+		d := New(t.TempDir())
+		held, err := d.HoldsImage(context.Background(), "team/app:v1")
+		if err != nil || held {
+			t.Fatalf("held=%v err=%v", held, err)
+		}
+		if d.ProvisionState().Provisioned {
+			t.Fatal("asking provisioned the runtime")
+		}
+		if _, err := os.Stat(d.udockerDir); !os.IsNotExist(err) {
+			t.Fatalf("asking created %s: %v", d.udockerDir, err)
+		}
+	})
+	t.Run("held and missing", func(t *testing.T) {
+		d := cliFreeDriver(t)
+		registerNativeImage(t, d, "team/app:v1", `{"config":{}}`)
+		if held, err := d.HoldsImage(context.Background(), "team/app:v1"); err != nil || !held {
+			t.Fatalf("present image: held=%v err=%v", held, err)
+		}
+		if held, err := d.HoldsImage(context.Background(), "team/app:v2"); err != nil || held {
+			t.Fatalf("other tag: held=%v err=%v", held, err)
+		}
+	})
+	t.Run("native store disabled", func(t *testing.T) {
+		d := cliFreeDriver(t)
+		registerNativeImage(t, d, "team/app:v1", `{"config":{}}`)
+		t.Setenv(disableNativeEnv, "1")
+		if held, err := d.HoldsImage(context.Background(), "team/app:v1"); err != nil || held {
+			t.Fatalf("an image SaveImage cannot stream is not held: held=%v err=%v", held, err)
+		}
+	})
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
+	"gpuworks.ai/gpuworks/internal/engines"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/pkg/enginelog"
 )
@@ -17,8 +18,18 @@ import (
 // probeAndReport polls the health endpoint until ready or the budget expires,
 // then reports running/failed. It returns true only once running was reported.
 func (e *Engine) probeAndReport(ctx context.Context, spec proto.InstanceDesiredState, id string) bool {
+	return e.probeAndReportStartup(ctx, spec, id, false, true)
+}
+
+// probeAndReportStartup observes the health budget only for a newly created
+// container. Adoption must not turn a quick probe of an existing service into
+// a new startup sample or replace the original startup log observations.
+func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceDesiredState, id string, fresh, readLogs bool) bool {
 	if spec.Headless {
 		return e.probeHeadlessAndReport(ctx, spec, id)
+	}
+	if ctx.Err() != nil {
+		return false
 	}
 	driver := e.Driver()
 	timeout := time.Duration(spec.StartTimeout) * time.Second
@@ -28,6 +39,9 @@ func (e *Engine) probeAndReport(ctx context.Context, spec proto.InstanceDesiredS
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: engineHealthTimeout}
 	healthStarted := time.Now()
+	if fresh {
+		e.reportStateProgress(spec, proto.InstStarting, id, "", "waiting for engine health", proto.PhaseHealthCheck, 0, 0, 0, 0)
+	}
 	nextHealthReport := 10 * time.Second
 	loadRequested := false
 	var loadResult <-chan string
@@ -63,6 +77,14 @@ func (e *Engine) probeAndReport(ctx context.Context, spec proto.InstanceDesiredS
 		if err == nil {
 			lastResult = fmt.Sprintf("HTTP %d", resp.StatusCode)
 			readiness, decodeErr := readEngineReadiness(resp)
+			if spec.Engine == engines.Callable && decodeErr == nil {
+				if failure := callableStartupFailure(resp, readiness); failure != "" {
+					if ctx.Err() == nil {
+						e.failAfterContainer(ctx, spec, failure)
+					}
+					return false
+				}
+			}
 			ready := resp.StatusCode == http.StatusOK
 			if ready && readiness.Service == "strata" {
 				ready = decodeErr == nil && readiness.Loaded != nil && *readiness.Loaded
@@ -76,7 +98,7 @@ func (e *Engine) probeAndReport(ctx context.Context, spec proto.InstanceDesiredS
 					modelsReq, modelsErr := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1/models", spec.APIPort), nil)
 					var modelsResp *http.Response
 					if modelsErr == nil {
-						modelsResp, modelsErr = client.Do(modelsReq)
+						modelsResp, modelsErr = client.Do(modelsReq) //nolint:bodyclose // readStrataModels consumes and closes the successful response.
 					}
 					if modelsErr == nil {
 						models, valid := readStrataModels(modelsResp)
@@ -99,6 +121,11 @@ func (e *Engine) probeAndReport(ctx context.Context, spec proto.InstanceDesiredS
 					return false
 				}
 				e.log.Info("instance healthy", "uuid", spec.UUID, "port", spec.APIPort)
+				var startupSeconds *float64
+				if fresh {
+					elapsed := time.Since(healthStarted).Seconds()
+					startupSeconds = &elapsed
+				}
 				e.mu.Lock()
 				doPrewarm := spec.Sleepable && spec.DesiredSleep == 0 && !e.prewarmed[spec.UUID]
 				if doPrewarm {
@@ -115,11 +142,19 @@ func (e *Engine) probeAndReport(ctx context.Context, spec proto.InstanceDesiredS
 				e.mu.Lock()
 				actualSleep := e.sleepLevel[spec.UUID]
 				e.mu.Unlock()
+				var measured json.RawMessage
+				if readLogs {
+					measured = e.collectMeasured(ctx, spec, id, startupSeconds)
+				}
+				paths := readOpenAPIPaths(ctx, client, spec.APIPort)
+				if ctx.Err() != nil {
+					return false
+				}
 				e.report(proto.InstanceStatus{
 					UUID: spec.UUID, State: proto.InstRunning, ContainerID: id,
 					Ports: spec.Ports, DirectAddr: fmt.Sprintf("127.0.0.1:%d", spec.APIPort),
-					Measured: e.collectMeasured(ctx, spec, id), SleepLevel: actualSleep,
-					OpenAPIPaths:     readOpenAPIPaths(ctx, client, spec.APIPort),
+					Measured: measured, SleepLevel: actualSleep,
+					OpenAPIPaths:     paths,
 					L1HostBufferHeld: e.holdsL1HostBuffer(spec.UUID),
 				})
 				return true
@@ -153,7 +188,15 @@ func (e *Engine) probeAndReport(ctx context.Context, spec proto.InstanceDesiredS
 	if !lastObservedAt.IsZero() {
 		message += ": " + healthDiagnosticDetail(lastTarget, lastResult) + " observed_at=" + lastObservedAt.UTC().Format(time.RFC3339Nano)
 	}
-	e.failAfterContainer(ctx, spec, message)
+	if ctx.Err() != nil {
+		return false
+	}
+	var measured json.RawMessage
+	if fresh {
+		elapsed := time.Since(healthStarted).Seconds()
+		measured, _ = json.Marshal(enginelog.Measured{StartupTimeoutSeconds: &elapsed})
+	}
+	e.failAfterContainer(ctx, spec, message, measured)
 	return false
 }
 
@@ -280,22 +323,23 @@ func (e *Engine) exitMessage(ctx context.Context, id, base string) string {
 // collectMeasured reads recent container logs and parses the engine's real
 // memory breakdown for estimate calibration. Unsupported log formats are
 // intentionally silent.
-func (e *Engine) collectMeasured(ctx context.Context, spec proto.InstanceDesiredState, id string) json.RawMessage {
+func (e *Engine) collectMeasured(ctx context.Context, spec proto.InstanceDesiredState, id string, startupSeconds *float64) json.RawMessage {
 	// The window must reach back to the start of the launch: the SGLang parser
 	// reports no memory sums from a tail that has lost it, and an engine on
 	// many GPUs logs dozens of lines per GPU before it is healthy. This runs
 	// once per healthy transition, so the larger read is not on a hot path.
+	var m enginelog.Measured
 	rc, err := e.Driver().Logs(ctx, id, false, 4000)
-	if err != nil {
-		return nil
+	if err == nil {
+		defer rc.Close()
+		if data, readErr := io.ReadAll(io.LimitReader(rc, 4<<20)); readErr == nil {
+			m = enginelog.ParseDialect(spec.LogDialect, string(data))
+		}
 	}
-	defer rc.Close()
-	data, err := io.ReadAll(io.LimitReader(rc, 4<<20))
-	if err != nil {
-		return nil
-	}
-	m := enginelog.ParseDialect(spec.LogDialect, string(data))
-	if !m.Found {
+	// The successful readiness observation is independent of whether the
+	// engine logs were available or in a recognized dialect.
+	m.StartupSeconds = startupSeconds
+	if !m.Found && m.StartupSeconds == nil && m.ModelLoadingSeconds == nil && m.CompilationSeconds == nil && m.GraphCaptureSeconds == nil {
 		return nil
 	}
 	b, err := json.Marshal(m)

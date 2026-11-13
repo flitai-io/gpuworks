@@ -3,6 +3,7 @@
 import importlib.util
 import pathlib
 import sys
+import tarfile
 import types
 import unittest
 from unittest import mock
@@ -20,6 +21,43 @@ def load(name):
 
 
 class RuntimeAdaptersTest(unittest.TestCase):
+    def test_ernie_catalog_bundle_contains_tested_sources(self):
+        root = HERE.parents[1]
+        bundle = root / "internal/server/inferencecatalog/seed/catalog/models/paddlepaddle/ernie-image/assets/gpuworks-diffusers-runtime.tar.gz"
+        with tarfile.open(bundle) as archive:
+            for name in ("diffusers_adapter.py", "gpuworks_serve.py"):
+                self.assertEqual(archive.extractfile(name).read(), (HERE / name).read_bytes())
+
+    def test_diffusers_resolves_json_dtype_before_loading(self):
+        module = load("diffusers_adapter")
+        observed = {}
+        torch = types.ModuleType("torch")
+        torch.bfloat16 = object()
+        torch.float32 = object()
+        diffusers = types.ModuleType("diffusers")
+
+        class Pipeline:
+            @staticmethod
+            def from_pretrained(model, *, torch_dtype):
+                # Diffusers 0.38 falls back to float32 for a JSON string.
+                observed["dtype"] = torch.float32 if isinstance(torch_dtype, str) else torch_dtype
+                observed["model"] = model
+                return Pipeline()
+
+            def to(self, device):
+                observed["device"] = device
+                return self
+
+        diffusers.DiffusionPipeline = Pipeline
+        config = {"device": "cuda", "load_kwargs": {"torch_dtype": "bfloat16"}}
+        with mock.patch.dict(sys.modules, {"torch": torch, "diffusers": diffusers}):
+            module.DiffusersAdapter("ernie-model", config)
+            self.assertIs(observed.pop("dtype"), torch.bfloat16)
+            with self.assertRaisesRegex(ValueError, "torch_dtype"):
+                module.DiffusersAdapter("ernie-model", {"load_kwargs": {"torch_dtype": "unknown"}})
+        self.assertEqual(observed, {"model": "ernie-model", "device": "cuda"})
+        self.assertEqual(config["load_kwargs"]["torch_dtype"], "bfloat16")
+
     def test_transformers_normalizes_chat_vectors_and_rerank(self):
         module = load("transformers_adapter")
 

@@ -16,6 +16,7 @@ Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: 
 const { i18n, locale } = await createI18n(["batches"]);
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
+const { FeedbackHost, message } = await import("../src/ui-kit/feedback/index.tsx");
 const { ConfigProvider } = await import("antd");
 const { MemoryRouter, Route, Routes, useLocation } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
@@ -39,6 +40,7 @@ beforeEach(() => {
   batchApi.dictionary = async () => dictionary([model("qwen-chat", "running")]);
 });
 afterEach(() => {
+  message.destroy();
   cleanup();
   Object.assign(batchApi, original);
   api.me = original.me;
@@ -52,7 +54,7 @@ function Probe() {
 
 function mountPage() {
   render(
-    <I18nextProvider i18n={i18n}>
+    <I18nextProvider i18n={i18n}><FeedbackHost />
       <ConfigProvider theme={{ token: { motion: false } }}>
         <MemoryRouter initialEntries={["/batches"]}>
           <Routes><Route path="/batches" element={<BatchesPage />} /></Routes>
@@ -71,13 +73,15 @@ const jsonl = (name = "reqs.jsonl", size?: number) => {
 };
 
 async function openCreate(user: ReturnType<typeof userEvent.setup>) {
-  await waitFor(() => assert.equal((screen.getByRole("button", { name: b.action.create }) as HTMLButtonElement).disabled, false));
-  await user.click(screen.getByRole("button", { name: b.action.create }));
-  return screen.findByRole("dialog", { name: b.create.title });
+  await waitFor(() => assert.equal((screen.getAllByRole("button", { name: b.action.create })[0] as HTMLButtonElement).disabled, false));
+  await user.click(screen.getAllByRole("button", { name: b.action.create })[0]);
+  const dialog = await screen.findByRole("dialog", { name: b.create.title });
+  await waitFor(() => assert.ok(dialog.contains(document.activeElement), "initial dialog focus is settled"));
+  return dialog;
 }
 
 // The dialog moves focus into itself shortly after it opens.
-const focusIn = (dialog: HTMLElement) => waitFor(() => assert.ok(dialog.closest(".ant-modal-wrap")?.contains(document.activeElement), "focus moves into the dialog"));
+const focusIn = (dialog: HTMLElement) => waitFor(() => assert.ok(dialog.contains(document.activeElement), "focus moves into the dialog"));
 
 const submitButton = (dialog: HTMLElement) => within(dialog).getByRole("button", { name: b.create.submit }) as HTMLButtonElement;
 
@@ -93,17 +97,20 @@ test("creating a batch uploads the chosen file without an endpoint, closes the d
   };
   const user = mountPage();
   const dialog = await openCreate(user);
-  assert.equal(submitButton(dialog).disabled, true, "nothing to upload yet");
+  assert.equal(submitButton(dialog).disabled, true, "nothing to create until a file is chosen");
+  assert.equal(calls.length, 0);
   for (const hint of [b.create.hint.line, b.create.hint.unique, b.create.hint.sameUrl, b.create.hint.noStream]) {
     assert.ok(within(dialog).getByText(hint));
   }
   assert.ok(within(dialog).getByText("JSON Lines, at most 200 MB and 50,000 requests."));
-  const fileInput = within(dialog).getByLabelText(b.create.file) as HTMLInputElement;
+  const fileInput = within(dialog).getByLabelText(b.create.file, { exact: false }) as HTMLInputElement;
   assert.equal(fileInput.getAttribute("accept"), ".jsonl");
   await user.upload(fileInput, jsonl());
-  assert.ok(await within(dialog).findByText(/^reqs\.jsonl \(/));
+  // The chosen file is named once, its size beside it.
+  const chosen = await within(dialog).findByText((_, element) => element?.tagName === "SPAN" && /^reqs\.jsonl\S/.test(element.textContent ?? "") && element.children.length === 1);
+  assert.match(chosen.textContent ?? "", /^reqs\.jsonl\d/);
   // The batch's endpoint is the file's: the dialog does not ask for one.
-  assert.equal(within(dialog).queryByRole("combobox", { name: "Endpoint" }), null);
+  assert.ok(!(within(dialog).queryByRole("combobox", { name: "Endpoint" })), "expected the element to be absent");
   await user.click(submitButton(dialog));
   await waitFor(() => assert.deepEqual(calls, [{ name: "reqs.jsonl", endpoint: undefined }]));
   await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: b.create.title })));
@@ -120,7 +127,7 @@ test("a file asking for two endpoints is refused at the line that differs", asyn
   };
   const user = mountPage();
   const dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl());
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl());
   await user.click(submitButton(dialog));
   const want = b.errors.fileLine.replace("{{line}}", "3").replace("{{reason}}", b.errors.fileReasons.mixed_endpoints);
   assert.ok(await within(dialog).findByText(want));
@@ -139,13 +146,13 @@ test("an invalid file names its line, keeps the dialog open and lets the file be
   batchApi.get = async () => batch({ id: "batch_ok", input_filename: "fixed.jsonl" });
   const user = mountPage();
   const dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl("bad.jsonl"));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl("bad.jsonl"));
   await user.click(submitButton(dialog));
   const alert = await within(dialog).findByText(b.errors.fileLine.replace("{{line}}", "7").replace("{{reason}}", b.errors.fileReasons.missing_custom_id));
   assert.ok(alert);
   assert.ok(within(dialog).getByText(b.errors.detail.replace("{{detail}}", "line 7: custom_id is required")));
   assert.ok(screen.getByRole("dialog", { name: b.create.title }), "the dialog stays open");
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl("fixed.jsonl"));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl("fixed.jsonl"));
   assert.ok(!within(dialog).queryByText(/Line 7/), "choosing another file clears the error");
   await user.click(submitButton(dialog));
   await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: b.create.title })));
@@ -159,7 +166,7 @@ test("a refusal because the file's models are served by nothing is shown in the 
   };
   const user = mountPage();
   const dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl("ghosts.jsonl"));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl("ghosts.jsonl"));
   await user.click(submitButton(dialog));
   const list = new Intl.ListFormat("en", { type: "conjunction" }).format(["ghost-1", "ghost-2"]);
   assert.ok(await within(dialog).findByText(c.apiError.BATCH_FILE_MODELS_UNKNOWN.replace("{{models, list}}", list)));
@@ -217,7 +224,7 @@ test("a file over the size limit is refused before any upload", async () => {
   batchApi.create = async () => { uploads += 1; return batch(); };
   const user = mountPage();
   const dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl("huge.jsonl", 201 * 1024 * 1024));
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl("huge.jsonl", 201 * 1024 * 1024));
   assert.ok(await within(dialog).findByText(b.create.tooLarge.replace("{{limit}}", "200")));
   assert.equal(submitButton(dialog).disabled, true);
   assert.equal(uploads, 0);
@@ -231,10 +238,10 @@ test("while uploading, the dialog is locked; a server error then unlocks it", as
   });
   const user = mountPage();
   const dialog = await openCreate(user);
-  await user.upload(within(dialog).getByLabelText(b.create.file), jsonl());
+  await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl());
   await user.click(submitButton(dialog));
   await within(dialog).findByText(b.create.submitting);
-  assert.equal((within(dialog).getByLabelText(b.create.file) as HTMLInputElement).disabled, true);
+  assert.equal((within(dialog).getByLabelText(b.create.file, { exact: false }) as HTMLInputElement).disabled, true);
   assert.equal((within(dialog).getByRole("button", { name: b.create.cancel }) as HTMLButtonElement).disabled, true);
   escape();
   assert.ok(screen.getByRole("dialog", { name: b.create.title }), "Escape does not abandon an upload in flight");
@@ -254,9 +261,11 @@ test("the dialog is operable from the keyboard: Tab reaches the controls, Enter 
   escape();
   await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: b.create.title })));
   dialog = await openCreate(user);
-  const fileInput = within(dialog).getByLabelText(b.create.file);
+  const fileInput = within(dialog).getByLabelText(b.create.file, { exact: false });
   fileInput.focus();
   await user.upload(fileInput, jsonl("kb.jsonl"));
+  await user.tab();
+  assert.ok(document.activeElement === within(dialog).getByRole("button", { name: c.actions.remove }));
   await user.tab();
   assert.ok(document.activeElement === within(dialog).getByRole("spinbutton", { name: b.create.window.label }));
   const submit = submitButton(dialog);
@@ -278,7 +287,7 @@ test("the dialog can be opened and closed without creating anything", async () =
 
 test("the modal component reports nothing while closed", () => {
   render(
-    <I18nextProvider i18n={i18n}>
+    <I18nextProvider i18n={i18n}><FeedbackHost />
       <BatchCreateModal open={false} onClose={() => {}} onCreated={() => {}} />
     </I18nextProvider>,
   );
@@ -296,10 +305,10 @@ test("the dialog reads the batch dictionary: loading, a failed read with a retry
   const user = mountPage();
   const dialog = await openCreate(user);
   const failure = await within(dialog).findByText(b.create.dictionary.failed);
-  assert.ok(failure.closest(".ant-alert-error"));
+  assert.ok(failure.closest('[role="alert"]'));
   assert.ok(within(dialog).getByText("server unreachable"));
   assert.equal(submitButton(dialog).disabled, true, "nothing to create with before the dictionary is read");
-  assert.equal(within(dialog).queryByLabelText(b.create.file), null);
+  assert.ok(!(within(dialog).queryByLabelText(b.create.file, { exact: false })), "expected the element to be absent");
 
   reachable = true;
   await user.click(within(dialog).getByRole("button", { name: b.create.dictionary.retry }));
@@ -311,16 +320,16 @@ test("the dialog reads the batch dictionary: loading, a failed read with a retry
     endpoints: ["/v1/embeddings"], completion_window_hours: { min: 2, max: 12, default: 6 },
     max_file_bytes: 10 * 1024 * 1024, max_file_lines: 1000, output_retention_days: 7,
   }));
-  const fileInput = await within(dialog).findByLabelText(b.create.file);
-  assert.equal(within(dialog).queryByRole("status"), null);
+  const fileInput = await within(dialog).findByLabelText(b.create.file, { exact: false });
+  assert.ok(!within(dialog).queryByText(b.create.dictionary.loading));
   // The server's endpoints for the sample, window bounds and default, limits and retention.
-  assert.ok(within(dialog).getByText(b.create.sample.endpoints.embeddings.replace("{{endpoint}}", "/v1/embeddings"), { selector: ".ant-select-selection-item" }));
-  assert.equal((within(dialog).getByLabelText(b.create.window.label) as HTMLInputElement).value, "6");
+  assert.ok(within(dialog).getByText(b.create.sample.endpoints.embeddings.replace("{{endpoint}}", "/v1/embeddings"), { selector: '[data-slot="select-value"]' }));
+  assert.equal((within(dialog).getByLabelText(b.create.window.label, { exact: false }) as HTMLInputElement).value, "6");
   assert.ok(within(dialog).getByText(i18n.t("batches:create.window.help", { min: 2, max: 12, default: 6 })));
   assert.ok(within(dialog).getByText(i18n.t("batches:create.hint.format", { size: 10, requests: 1000 })));
   assert.ok(within(dialog).getByText(i18n.t("batches:create.hint.retention", { days: 7 })));
   // The models are the server's, with its state; the sample uses the first.
-  assert.ok(within(dialog).getByText(`only-model · ${b.create.model.state.asleep}`, { selector: ".ant-select-selection-item" }));
+  assert.ok(within(dialog).getByText(`only-model · ${b.create.model.state.asleep}`, { selector: '[data-slot="select-value"]' }));
   await user.upload(fileInput, jsonl("big.jsonl", 11 * 1024 * 1024));
   assert.ok(await within(dialog).findByText(i18n.t("batches:create.tooLarge", { limit: 10 })));
   assert.equal(submitButton(dialog).disabled, true, "a file over the server's limit is not sent");
@@ -332,13 +341,13 @@ test("a dictionary read again on every opening shows the models' states of now",
   batchApi.dictionary = async () => dictionary([model("m", state)]);
   const user = mountPage();
   let dialog = await openCreate(user);
-  await within(dialog).findByText(`m · ${b.create.model.state.running}`, { selector: ".ant-select-selection-item" });
+  await within(dialog).findByText(`m · ${b.create.model.state.running}`, { selector: '[data-slot="select-value"]' });
   await user.click(within(dialog).getByRole("button", { name: b.create.cancel }));
   await waitFor(() => assert.ok(!screen.queryByRole("dialog", { name: b.create.title })));
   state = "asleep_held";
   dialog = await openCreate(user);
   await waitFor(() => assert.equal((within(dialog).getByRole("button", { name: b.create.sample.use }) as HTMLButtonElement).disabled, true));
-  assert.equal(within(dialog).queryByText(`m · ${b.create.model.state.asleepHeld}`, { selector: ".ant-select-selection-item" }), null);
+  assert.ok(!(within(dialog).queryByText(`m · ${b.create.model.state.asleepHeld}`, { selector: '[data-slot="select-value"]' })), "expected the element to be absent");
   await user.click(within(dialog).getByRole("checkbox", { name: b.create.model.showWaiting }));
-  await within(dialog).findByText(`m · ${b.create.model.state.asleepHeld}`, { selector: ".ant-select-selection-item" });
+  await within(dialog).findByText(`m · ${b.create.model.state.asleepHeld}`, { selector: '[data-slot="select-value"]' });
 });

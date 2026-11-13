@@ -153,6 +153,9 @@ type ModelSyncListenResult struct {
 }
 
 type ModelSyncSendParams struct {
+	ReportPhase bool `json:"report_phase,omitempty"`
+	// AllowRelay permits negotiation only when TCP dialing fails before TLS.
+	AllowRelay   bool     `json:"allow_relay,omitempty"`
 	TransferID   string   `json:"transfer_id"`
 	SourcePath   string   `json:"source_path"`
 	Token        string   `json:"token"`
@@ -170,13 +173,17 @@ type ModelSyncStopParams struct {
 }
 
 type ModelSyncTransferResult struct {
-	Bytes  int64  `json:"bytes"`
-	SHA256 string `json:"sha256"`
+	// DirectDialError means every TCP candidate failed before the archive began.
+	// It is emitted only for a caller that explicitly set AllowRelay.
+	DirectDialError string `json:"direct_dial_error,omitempty"`
+	Bytes           int64  `json:"bytes"`
+	SHA256          string `json:"sha256"`
 }
 
 // ModelSyncCopyRequest is the server-side coordination contract. Only control
-// metadata crosses the hub; the archive is sent directly between the agents.
+// metadata uses ctrl; archives use direct TLS or an authorized data-lane relay.
 type ModelSyncCopyRequest struct {
+	AllowRelay     bool   `json:"allow_relay,omitempty"`
 	TransferID     string `json:"transfer_id"`
 	Key            string `json:"key"`
 	SourceNodeUUID string `json:"source_node_uuid"`
@@ -194,6 +201,7 @@ type ModelSyncCopyRequest struct {
 }
 
 type ModelSyncCopyResult struct {
+	Transport  string `json:"transport,omitempty"`
 	TransferID string `json:"transfer_id"`
 	InProgress bool   `json:"in_progress,omitempty"`
 	Bytes      int64  `json:"bytes,omitempty"`

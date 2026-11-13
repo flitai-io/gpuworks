@@ -168,3 +168,21 @@ test("while the storages load the dialog shows a spinner and cannot be submitted
   assert.ok(document.querySelector(".ant-spin"));
   assert.equal((screen.getByRole("button", { name: models.copy.start }) as HTMLButtonElement).disabled, true);
 });
+
+
+test("an explicit copy can retry a disk-space target without changing either location", async () => {
+  const calls = stub();
+  renderModal({
+    id: 9, source: "huggingface", source_id: "Qwen/Qwen3-8B", name: "Qwen3-8B",
+    nodes: [row({}), row({ node_uuid: "n2", node_name: "node-01", state: "insufficient_disk_space", downloaded: 0, progress: 0, message: "insufficient disk space at /data" })],
+    storages: [],
+  });
+  fireEvent.mouseDown(await screen.findByRole("combobox", { name: models.copy.targetNode }));
+  await waitFor(() => assert.deepEqual(visibleOptions().map((option) => option.textContent), ["gpu3", "node-01", "cloud-01"]));
+  const target = visibleOptions().find((option) => option.textContent === "node-01")!;
+  assert.equal(target.className.includes("ant-select-item-option-disabled"), false, "a disk-space failure must not count as an existing usable copy");
+  fireEvent.click(target);
+  fireEvent.click(screen.getByRole("button", { name: models.copy.start }));
+  await waitFor(() => assert.equal(calls.length, 1));
+  assert.deepEqual(calls[0], [9, { source: { storage_id: 1, node_uuid: "n1" }, target: { storage_id: 1, node_uuid: "n2" } }]);
+});

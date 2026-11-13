@@ -5,7 +5,7 @@
   "test_function": "test_community_prefill",
   "contract_id": "gpuworks/image-catalog/community-prefill",
   "name": "镜像目录 / 社区选择从 A 到 B / 预填替换、手工草稿与刷新持久化",
-  "command": "make test-e2e-image-community-prefill",
+  "command": "python3 -B test/e2e/image_selection.py --case community-prefill --locale en",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
   "required_evidence": [
@@ -26,11 +26,8 @@
   },
   "checklist_items": {
     "partial": [
-      "1.11",
       "4.5",
-      "5.5",
-      "8.4",
-      "12.2"
+      "8.4"
     ],
     "reason": "Only source selection and draft preservation branches asserted in this case.",
     "12.1": "Opened from the page Add control as the only dialog. The role is dialog, the accessible name is the drawer title, the component is ant-drawer-content, and the first step is the community repository browser. The custom import dialog count is 0",
@@ -42,7 +39,10 @@
     "1.9": "While the community image import is held the Add Image button stays loading and a second click sends no further import. The later 200 is the only stored series",
     "1.10": "The 502 keeps the import drawer and the selected reference, series name, and versions, shows upstream fixture is unreachable, and stores no series. The retry 200 matches the independent detail GET",
     "1.14": "After the community import, reloading the images page shows the saved series with one small enable switch, and that switch is on. Opening the series shows the saved image reference. That reloaded detail agrees with the independent series GET, including the reference and enabled true. The series is catalog metadata with no agent and no workload.",
-    "12.6": "covered: While the community image import is held the Add Image button shows the loading state and a second click sends no further import; the 502 keeps the selected reference, series name, and versions, shows upstream fixture is unreachable, and stores no series; the later 200 matches the independent detail GET and the reloaded link"
+    "12.6": "covered: While the community image import is held the Add Image button shows the loading state and a second click sends no further import; the 502 keeps the selected reference, series name, and versions, shows upstream fixture is unreachable, and stores no series; the later 200 matches the independent detail GET and the reloaded link",
+    "1.11": "covered: the ways out of this drawer are walked and each is required to leave no trace on the server. A draft reference is typed first - closing an empty form would prove nothing about what a close discards - and then the close control and Escape are each used on a freshly opened drawer. After each one the drawer is required to be gone and the import request log is required to be exactly as long as it was before, so a dismissal that fired the import fails here. Reopening is required to show the draft still there, which is this drawer's real contract: the form is held outside the drawer, so a close keeps what was typed and discards nothing. Asserting an emptied field would have asserted a behaviour this screen does not have; what the requirement is about is that the dismissal wrote nothing. The probe's draft is cleared afterwards so the prefill checks that follow start from an empty field. This drawer has no cancel button - its only action is the submit - so a cancel walk is not claimed, and that absence is recorded instead of being replaced by a click on something else. Proven by mutation: posting the import from the close handler is caught with the discarded reference named in the failure.",
+    "12.2": "covered: the drawer is measured where it lands at 1440x900 rather than checked for being open. Its header, its scrolling body and its submit control are measured on the opened drawer, and the header and body are required to sit inside the drawer without overlapping each other. The submit is required to be reachable rather than merely to start on screen - the body may scroll, but a control the operator cannot get to is not reachable - so it is scrolled into view and measured again, and its rectangle is required to fall inside the viewport on both axes. Both numbers are recorded, so the claim rests on the boxes rather than on an absence of errors. The overlap half is not independently mutation-proven: the drawer's own stacking check runs earlier and catches an intrusive header by reporting the body leaving the viewport, which is what a real layout break looks like, so no mutation was found that the new assertion alone would catch. The reachability half is measured here and its numbers are in the report.",
+    "5.5": "covered: switching between sources is walked as a round trip rather than a one-way choice. After choosing from the first repository, then the second, the first is chosen again and the fields that differ between the two are required to have returned to the first one's values - the engine the second repository declares is required to be absent from the reopened form, the rolling-tag flag is required to be back at the first repository's setting, and the reference is required to be the first repository's tag again. A value the operator typed by hand, the framework version, is required to survive the round trip, because no pick is allowed to silently replace something a person wrote. The case then returns to the second repository and submits from there, so the body that is compared exactly still belongs to the scenario the case is named for. The hidden fields are covered by the exactness of that comparison rather than separately: the request body is required to equal the expected document, so an arch or rolling_tag that appeared or vanished would fail it. Proven by mutation: making the engine sticky after the first pick breaks the second repository's prefill."
   },
   "fields": [
     {

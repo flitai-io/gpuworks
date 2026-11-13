@@ -61,7 +61,7 @@ type storageRuntime struct {
 	trigger chan bool // true forces a status report
 }
 
-func newStorageRuntime(stateDir string, busy func(string) bool) *storageRuntime {
+func newStorageRuntime(stateDir string, busy func(string) bool, runner storagemount.Runner) *storageRuntime {
 	return &storageRuntime{
 		timeouts: defaultStorageTimeouts(),
 		manager: storagemount.New(storagemount.Options{
@@ -73,6 +73,7 @@ func newStorageRuntime(stateDir string, busy func(string) bool) *storageRuntime 
 			MountTimeout: storageMountTimeout,
 			ProbeDir:     filepath.Join(stateDir, "probe-mounts"),
 			Busy:         busy,
+			Runner:       runner,
 		}),
 		tasks: map[uint]proto.StorageTask{}, statuses: map[uint]storagemount.Status{},
 		heartbeat: map[uint]time.Time{}, hbInvalid: map[uint]bool{}, waiting: map[string]proto.ModelFileTask{},

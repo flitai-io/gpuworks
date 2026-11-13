@@ -3,9 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"gpuworks.ai/gpuworks/internal/proto"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 func TestWithdrawDownloadStopsNetworkRequests(t *testing.T) {

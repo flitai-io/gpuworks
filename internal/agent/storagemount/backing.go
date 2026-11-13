@@ -22,7 +22,7 @@ func (m *Manager) checkBacking(ctx context.Context, sp Spec, key string) (reason
 	entries, readErr := m.readMounts()
 	if sp.Type == TypeNFS || sp.Type == TypeNFSCache {
 		if readErr != nil {
-			return ReasonOther, "cannot read mountinfo: " + readErr.Error(), nil
+			return ReasonOther, "cannot read mountinfo: " + readErr.Error(), nil //nolint:nilerr // A mount observation failure is a domain reason; err is reserved for guard/platform failures.
 		}
 		e, ok := FindMount(entries, sp.Path)
 		switch {

@@ -32,7 +32,7 @@ func pdVerifyFixture(t *testing.T, uuid string) (*store.Store, *store.Deployment
 	}
 	dep, err := st.CreateDeployment(&store.Deployment{
 		Name: "pd-" + uuid, ModelID: model.ID, ServedName: "pd-" + uuid + "-served", Engine: "vllm",
-		State: store.DeployActive,
+		State:     store.DeployActive,
 		Placement: `{"pd":{"mode":"vllm-nixl","roles":{"prefill":{"units":[{"node_uuid":"pd-node-` + uuid + `"}]},"decode":{"units":[{"node_uuid":"pd-node-` + uuid + `"}]}}}}`,
 	})
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -38,9 +39,9 @@ func TestAcquisitionProviderDeploymentMatrix(t *testing.T) {
 				t.Run(name, func(t *testing.T) {
 					st := newAcquisitionStore(t)
 					catalog := deploymentFlatFixture()
-					weights := []weightSource{}
+					weights := []inferencecatalog.WeightSource{}
 					for _, provider := range sources.providers {
-						weights = append(weights, weightSource{Provider: provider, RepoID: "Acme/Deploy-FP8", Revision: provider + "-pin"})
+						weights = append(weights, inferencecatalog.WeightSource{Provider: provider, RepoID: "Acme/Deploy-FP8", Revision: provider + "-pin"})
 					}
 					encoded, err := json.Marshal(weights)
 					if err != nil {
@@ -117,9 +118,9 @@ func TestAcquisitionProviderDeploymentMatrix(t *testing.T) {
 						return
 					}
 					var wantProviders []string
-					if !useTemplate {
+					if !useTemplate && modelSource != "local" {
 						wantProviders = []string{modelSource}
-					} else if selected == nil || slices.Contains(sources.providers, modelSource) {
+					} else if useTemplate && (selected == nil || slices.Contains(sources.providers, modelSource)) {
 						wantProviders = sources.providers
 					}
 					checkEvaluation := func(rec *httptest.ResponseRecorder) {

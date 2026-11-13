@@ -68,6 +68,10 @@ type PlaygroundOperation struct {
 	// ExampleInput is the declared working value of a text primary input
 	// (inferenceapi.Operation.ExampleInput), which the page starts with.
 	ExampleInput map[string]string `json:"example_input,omitempty"`
+	// MaxReferenceImages is how many reference images the page may send, as
+	// the server resolves it (inferenceapi.Operation.ReferenceImageLimit):
+	// at least one for an image edit, absent for every other operation.
+	MaxReferenceImages int `json:"max_reference_images,omitempty"`
 }
 
 type PlaygroundParameter struct {

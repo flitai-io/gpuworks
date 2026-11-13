@@ -2,10 +2,11 @@ package app
 
 import (
 	"context"
-	"gpuworks.ai/gpuworks/internal/accelerator"
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/accelerator"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/aihelper"
@@ -103,7 +104,7 @@ func TestNodeContextCarriesHealthTopologyAndInfraWarnings(t *testing.T) {
 		t.Fatalf("logs = %+v", c.Logs)
 	}
 	p := c.Prompt()
-	for _, want := range []string{"Check this node's health", "level=error code=xid_79", "fallen off the bus", "fast interconnect groups: [[0 1]]", "search_metrics",
+	for _, want := range []string{"Check this node's health", "level=error code=xid_79", "fallen off the bus", "fast interconnect groups: [[0 1]]", ".items[].points[-1][1]", "Do not re-read this node",
 		"pci 0000:1b:00.0 H100 level=ok code= can_serve=no (" + accelerator.CardPassedThrough + ")", "can_serve=no (in use outside the platform: python3 pid 4242)",
 		"container runtime cannot use the accelerators: " + accelerator.RuntimeGPUBlockedRuntimeUnconfigured,
 		"container runtime: udocker", "runtime passed over for runveil (udocker): docker (" + accelerator.RuntimeGPUBlockedPluginMissing + ")"} {
@@ -155,6 +156,14 @@ func TestPrepareLaysOutFirstTurnsAndFollowUps(t *testing.T) {
 	}
 	if _, err := f.ai.prepare(aihelper.AskRequest{Task: aihelper.TaskNodeHealth, Target: aihelper.Target{NodeUUID: "nope"}}); err == nil {
 		t.Fatal("unknown node should fail")
+	}
+	health, err := f.ai.prepare(aihelper.AskRequest{Task: aihelper.TaskNodeHealth, Target: aihelper.Target{NodeUUID: f.node.UUID}, Locale: "zh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sys := health.messages[0].Content
+	if strings.Index(sys, aihelper.NodeHealthClose) < strings.Index(sys, "Read before you answer") || !strings.Contains(health.messages[1].Content, ".items[].points[-1][1]") {
+		t.Fatalf("node health prompt =\n%s\n\n%s", sys, health.messages[1].Content)
 	}
 }
 

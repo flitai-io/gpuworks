@@ -125,5 +125,6 @@ var catalog = func() []GPU {
 	result = append(result, domestic(accelerator.VendorAscend, "Ascend 310P", "Ascend 910B", "Ascend 910C", "Ascend 950PR", "Ascend 950DT")...)
 	result = append(result, domestic(accelerator.VendorHygon, "Hygon K100", "Hygon K500", "Hygon BW1000", "Hygon BW1100")...)
 	result = append(result, domestic(accelerator.VendorPPU, "PPU ZW810E", "PPU M890")...)
+	result = append(result, GPU{Vendor: accelerator.VendorKunlunxin, Name: "Kunlunxin P800 PCIe", Category: CategoryDomestic, Architecture: "KL3"})
 	return result
 }()

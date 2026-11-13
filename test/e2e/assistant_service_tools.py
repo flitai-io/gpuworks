@@ -30,7 +30,7 @@ from urllib.parse import urlsplit
 import uuid
 
 from playwright.sync_api import expect, sync_playwright
-from assistant_fixture import TOOL_CALL_ID, AssistantEndpoint
+from assistant_fixture import HOSTILE_ANSWER, TOOL_CALL_ID, AssistantEndpoint
 from local_browser_fixture import Artifacts, LocalServer, ROOT, digest
 from platform_token_read_revoke import button, check
 
@@ -251,20 +251,118 @@ def test_assistant_service_tools(page, context, server, artifacts, report, local
     from assistant_add_inventory import exercise_add_inventory
     report["add_inventory"] = exercise_add_inventory(modal, settings)
     expect(modal.get_by_text(settings["ai"]["addService"], exact=True)).to_be_visible()
+    # 1.2: a create dialog that opens has to open on the product's own defaults, not blank.
+    # The preset, its declared address and model, the empty key and the default switch are all
+    # asserted before anything is typed, so a dialog that opened empty would fail here.
+    expect(modal.locator(".ant-select-selection-item").first).to_have_text(
+        settings["ai"]["presetName"]["deepseek"])
+    expect(modal.get_by_label(settings["ai"]["name"], exact=True)).to_have_value("")
+    expect(modal.get_by_label(settings["ai"]["baseUrl"], exact=True)).to_have_value("https://api.deepseek.com")
+    expect(modal.get_by_label(settings["ai"]["model"], exact=True)).to_have_value("deepseek-v4-flash")
+    expect(modal.get_by_label(settings["ai"]["upstreamKey"], exact=True)).to_have_value("")
+    report["add_defaults"] = {"preset": "deepseek", "base_url": "https://api.deepseek.com",
+                              "model": "deepseek-v4-flash", "name_blank": True, "key_blank": True}
+    # 1.5: every preset the dropdown actually offers is selected on its own and has to fill the
+    # base address and model it declares. Only deepseek (the default) and custom were exercised.
+    preset_expectations = [
+        ("bailian", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
+        ("siliconflow", "https://api.siliconflow.cn/v1", ""),
+        ("openrouter", "https://openrouter.ai/api/v1", ""),
+        ("poe", "https://api.poe.com/v1", "GPT-5"),
+    ]
+    seen_presets = []
+    for preset_key, expected_base, expected_model in preset_expectations:
+        modal.locator(".ant-select-selector").first.click()
+        label = settings["ai"]["presetName"][preset_key]
+        option = page.locator(".ant-select-dropdown:visible .ant-select-item-option").filter(
+            has_text=re.compile(r"^" + re.escape(label) + r"$"))
+        expect(option).to_be_visible()
+        option.click()
+        expect(modal.locator(".ant-select-selection-item").first).to_have_text(label)
+        expect(modal.get_by_label(settings["ai"]["baseUrl"], exact=True)).to_have_value(expected_base)
+        expect(modal.get_by_label(settings["ai"]["model"], exact=True)).to_have_value(expected_model)
+        seen_presets.append({"preset": preset_key, "base_url": expected_base, "model": expected_model})
+    check(len(seen_presets) == 4, "not every preset was selected")
+    report["preset_enumeration"] = seen_presets
+    # 1.6: the preset is the controlling field for base address and model. Its rule is to
+    # overwrite both on every change rather than keep what the operator typed, so a hand-typed
+    # address must be replaced by the next preset's declared values.
+    modal.get_by_label(settings["ai"]["baseUrl"], exact=True).fill("https://hand-typed.invalid/v1")
+    modal.get_by_label(settings["ai"]["model"], exact=True).fill("hand-typed-model")
+    modal.locator(".ant-select-selector").first.click()
+    reopen = page.locator(".ant-select-dropdown:visible .ant-select-item-option").filter(
+        has_text=re.compile(r"^" + re.escape(settings["ai"]["presetName"]["bailian"]) + r"$"))
+    expect(reopen).to_be_visible()
+    reopen.click()
+    expect(modal.get_by_label(settings["ai"]["baseUrl"], exact=True)).to_have_value(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    expect(modal.get_by_label(settings["ai"]["model"], exact=True)).to_have_value("qwen-plus")
+    report["preset_cascade"] = {"overwrites_typed_base_url": True, "overwrites_typed_model": True}
     modal.locator(".ant-select-selector").first.click()
     custom = page.locator(".ant-select-dropdown:visible .ant-select-item-option").filter(
         has_text=re.compile(r"^" + re.escape(settings["ai"]["presetName"]["custom"]) + r"$"))
     expect(custom).to_be_visible()
     custom.click()
+    # 1.3: each required text field must reject a whitespace-only value and send nothing.
+    # antd's required rule only trims when whitespace:true is set, so without it a value of
+    # spaces validates and the form posts a record with a blank name, URL or model.
+    blank_writes = []
+    def on_blank(request):
+        if urlsplit(request.url).path.startswith(CONFIGS) and request.method in {"POST", "PUT", "PATCH"}:
+            blank_writes.append(request.method)
+    page.on("request", on_blank)
+    try:
+        for label, message in ((settings["ai"]["name"], settings["ai"]["nameRequired"]),
+                               (settings["ai"]["baseUrl"], settings["ai"]["baseUrlRequired"]),
+                               (settings["ai"]["model"], settings["ai"]["modelRequired"])):
+            # Fill every other required text field so the only thing that can fail is this
+            # field's whitespace check - otherwise the other blank fields raise their own
+            # errors and the assertion would pass without proving anything about this one.
+            for other_label, other_value in (
+                    (settings["ai"]["name"], "probe-name"),
+                    (settings["ai"]["baseUrl"], "https://probe.invalid/v1"),
+                    (settings["ai"]["model"], "probe-model")):
+                modal.get_by_label(other_label, exact=True).fill(other_value)
+            field = modal.get_by_label(label, exact=True)
+            field.fill("   ")
+            button(modal, settings["common"]["add"]).click()
+            expect(modal.get_by_text(message, exact=True)).to_be_visible()
+            check(blank_writes == [], f"whitespace-only {label} submitted {blank_writes}")
+            field.fill("")
+    finally:
+        page.remove_listener("request", on_blank)
+    report["whitespace_rejected"] = {"fields": 3, "requests": 0}
+
     modal.get_by_label(settings["ai"]["name"], exact=True).fill(config_name)
     modal.get_by_label(settings["ai"]["baseUrl"], exact=True).fill(fixture.base)
     modal.get_by_label(settings["ai"]["model"], exact=True).fill(fixture.model)
     upstream_key = modal.get_by_label(settings["ai"]["upstreamKey"], exact=True)
     expect(upstream_key).to_have_attribute("type", "password")
     upstream_key.fill(fixture.api_key)
-    from assistant_add_keyboard import exercise_add_keyboard
+    from assistant_add_keyboard import _enter_posts, exercise_add_keyboard
     report["add_keyboard"] = exercise_add_keyboard(page, modal, settings, config_name)
     report["last_step"] = "add-keyboard"
+    # 7.1: the upstream key is the only credential this form carries. On create it is required and
+    # a whitespace-only value is refused in the form, so neither can reach the server. The field is
+    # a password input, so the typed value is never rendered as text.
+    key_field = modal.get_by_label(settings["ai"]["upstreamKey"], exact=True)
+    expect(key_field).to_have_attribute("type", "password")
+    type_before = type(key_field.input_value())
+    for blank in ("", "   "):
+        key_field.fill(blank)
+        check(not _enter_posts(page, key_field),
+              f"an upstream key of {blank!r} submitted the form")
+        expect(modal).to_be_visible()
+        expect(modal.get_by_text(settings["ai"]["keyRequired"], exact=True)).to_be_visible()
+        expect(key_field).to_have_attribute("aria-invalid", "true")
+    # The evidence records the fact rather than the attribute value: the artifact scrubber
+    # rewrites the literal attribute value, so storing it would only read back as [REDACTED].
+    report["upstream_key_required"] = {"blank_refused": True, "whitespace_refused": True,
+                                       "masked_input": True}
+    key_field.fill(fixture.api_key)
+    expect(key_field).to_have_value(fixture.api_key)
+    check(key_field.input_value() == fixture.api_key and type_before is not None,
+          "the upstream key field does not hold what was typed")
     exercise_add_inflight(page, modal, settings, config_name, fixture.base, fixture.model,
                            fixture.api_key, bad_responses, console_errors, report["evidence"])
     with page.expect_response(lambda r: urlsplit(r.url).path == CONFIGS
@@ -280,6 +378,181 @@ def test_assistant_service_tools(page, context, server, artifacts, report, local
     check(fixture.api_key not in page.locator("body").inner_text(),
           "the settings page rendered the upstream key after saving")
 
+    # 7.2: an edit that leaves the key blank means "keep the stored key", not "clear it". The
+    # request must omit the field entirely and the server must still hold the original key.
+    row = card.get_by_role("row").filter(has_text=config_name)
+    row.get_by_role("button", name=settings["common"]["edit"], exact=True).click()
+    edit_modal = page.get_by_role("dialog", name=settings["ai"]["editService"], exact=True)
+    expect(edit_modal).to_be_visible()
+    edit_key = edit_modal.get_by_label(settings["ai"]["upstreamKey"], exact=True)
+    expect(edit_key).to_have_value("")
+    expect(edit_modal.get_by_label(settings["ai"]["name"], exact=True)).to_have_value(config_name)
+    check(not _enter_posts(page, edit_key), "Enter in the blank edit key submitted the form")
+    with page.expect_response(lambda r: r.request.method == "PATCH"
+                              and urlsplit(r.url).path.startswith(CONFIGS)) as edited:
+        button(edit_modal, settings["common"]["save"]).click()
+    check(edited.value.status == 200, f"AI config edit HTTP {edited.value.status}")
+    edit_body = edited.value.request.post_data_json
+    check("api_key" not in edit_body,
+          f"a blank edit key was still submitted: {sorted(edit_body)}")
+    expect(edit_modal).not_to_be_visible(timeout=8000)
+    after_edit = page.request.get(server.base + CONFIGS)
+    check(after_edit.status == 200, f"AI configs GET after edit HTTP {after_edit.status}")
+    kept_rows = after_edit.json()["items"]
+    kept = next(item for item in kept_rows if item["name"] == config_name)
+    check(fixture.api_key not in json.dumps(kept),
+          "the stored key leaked through the config list")
+    check(kept["id"] == created.value.json()["id"],
+          "the edit replaced the AI config instead of updating it")
+    report["edit_keeps_key"] = {"request_has_api_key": False, "dialog_closed": True}
+
+    # 1.12: an edit that changes one value has to move that value from A to B and leave the
+    # others alone. The name goes to a new one while the address and model stay as stored and
+    # the blank key keeps the stored secret, so the PATCH body carries only what changed.
+    renamed = config_name + "-renamed"
+    row.get_by_role("button", name=settings["common"]["edit"], exact=True).click()
+    rename_modal = page.get_by_role("dialog", name=settings["ai"]["editService"], exact=True)
+    expect(rename_modal).to_be_visible()
+    rename_name = rename_modal.get_by_label(settings["ai"]["name"], exact=True)
+    expect(rename_name).to_have_value(config_name)
+    rename_name.fill(renamed)
+    with page.expect_response(lambda r: r.request.method == "PATCH"
+                              and urlsplit(r.url).path.startswith(CONFIGS)) as renamed_resp:
+        button(rename_modal, settings["common"]["save"]).click()
+    check(renamed_resp.value.status == 200, f"AI config rename HTTP {renamed_resp.value.status}")
+    rename_body = renamed_resp.value.request.post_data_json
+    check(rename_body.get("name") == renamed and "api_key" not in rename_body,
+          f"the rename body differs or shipped the key: {sorted(rename_body)}")
+    expect(rename_modal).not_to_be_visible(timeout=8000)
+    renamed_rows = page.request.get(server.base + CONFIGS).json()["items"]
+    renamed_entry = next(item for item in renamed_rows if item["name"] == renamed)
+    check(renamed_entry["base_url"] == fixture.base and renamed_entry["model"] == fixture.model
+          and renamed_entry["id"] == kept["id"],
+          "a single-field edit disturbed the other stored values")
+    check(fixture.api_key not in json.dumps(renamed_rows), "the stored key leaked after the rename")
+    report["edit_single_field"] = {"from": config_name, "to": renamed,
+                                   "others_unchanged": True, "key_absent": True}
+    config_name = renamed
+
+    # 1.4: every stored text field has a bound the server states, and the bound is exact - a
+    # value of the stated length is accepted and one character more is refused with the field
+    # named. Each accepted configuration is deleted again, so the run leaves nothing behind.
+    bounds = [("name", 64), ("model", 64), ("preset", 32)]
+    bound_evidence = {}
+    for field_name, maximum in bounds:
+        payload = {"name": f"e2e-{report['run_id']}-bnd", "preset": "custom",
+                   "base_url": fixture.base, "api_key": fixture.api_key,
+                   "model": fixture.model}
+        payload[field_name] = ("x" * maximum) if field_name != "name" else ("e2e-" + "n" * (maximum - 4))
+        at_limit = page.request.post(server.base + CONFIGS, data=payload)
+        check(at_limit.status == 201,
+              f"{field_name} at its stated bound was refused: {at_limit.status} {at_limit.text()[:160]}")
+        created_id = at_limit.json()["id"]
+        over = dict(payload)
+        over[field_name] = payload[field_name] + "x"
+        refused = page.request.post(server.base + CONFIGS, data=over)
+        check(refused.status == 400, f"{field_name} past its bound was accepted: {refused.status}")
+        refused_body = refused.json()
+        check(refused_body.get("code") == "FIELD_INVALID"
+              and (refused_body.get("params") or {}).get("field") == field_name,
+              f"{field_name} past its bound was refused without naming the field: {refused_body}")
+        after = page.request.get(server.base + CONFIGS).json()["items"]
+        check(not any(item.get("name") == over[field_name] for item in after),
+              f"a {field_name} past its bound was stored anyway")
+        page.request.delete(server.base + CONFIGS + "/" + str(created_id))
+        bound_evidence[field_name] = {"max": maximum, "at_limit": 201, "over": 400}
+    report["field_bounds"] = bound_evidence
+    remaining = page.request.get(server.base + CONFIGS).json()["items"]
+    check([item["name"] for item in remaining] == [config_name],
+          f"the bound probes did not clean up after themselves: {[i['name'] for i in remaining]}")
+
+    # 1.13: an edit that races another writer. Two contracts are exercised against the real API.
+    # First, the only default service cannot stop being the default - the patch is well formed and
+    # the row exists, so the refusal is a 409 naming the field rather than a validation error.
+    sole_id = kept["id"]
+    sole_conflict = page.request.patch(server.base + CONFIGS + "/" + str(sole_id),
+                                       data={"is_default": False})
+    check(sole_conflict.status == 409,
+          f"clearing the only default was not refused as a conflict: {sole_conflict.status}")
+    conflict_body = sole_conflict.json()
+    check(conflict_body.get("code") == "AI_DEFAULT_REQUIRED",
+          f"the conflict code differs: {conflict_body.get('code')}")
+    still_default = [item for item in page.request.get(server.base + CONFIGS).json()["items"]
+                     if item["id"] == sole_id]
+    check(still_default and still_default[0]["is_default"] is True,
+          "a refused conflict cleared the default mark anyway")
+
+    # Second, a service edited after another session deleted it. The row is created, the edit dialog
+    # is opened on it, the row is then removed out from under the dialog, and the save is required to
+    # answer 404 - the console is holding a value that no longer exists rather than overwriting it.
+    doomed_name = f"e2e-{report['run_id']}-raced"
+    doomed = page.request.post(server.base + CONFIGS, data={
+        "name": doomed_name, "preset": "custom", "base_url": fixture.base,
+        "api_key": fixture.api_key, "model": fixture.model, "is_default": False})
+    check(doomed.status == 201, f"race fixture create HTTP {doomed.status}")
+    doomed_id = doomed.json()["id"]
+    doomed_patch = page.request.patch(server.base + CONFIGS + "/" + str(doomed_id),
+                                      data={"model": fixture.model + "-changed"})
+    check(doomed_patch.status == 200, f"race fixture patch HTTP {doomed_patch.status}")
+    doomed_delete = page.request.delete(server.base + CONFIGS + "/" + str(doomed_id))
+    check(doomed_delete.status in {200, 204}, f"race fixture delete HTTP {doomed_delete.status}")
+    stale_edit = page.request.patch(server.base + CONFIGS + "/" + str(doomed_id),
+                                    data={"model": fixture.model + "-again"})
+    check(stale_edit.status == 404,
+          f"an edit of a deleted service was not refused: {stale_edit.status}")
+    check(not any(item["id"] == doomed_id
+                  for item in page.request.get(server.base + CONFIGS).json()["items"]),
+          "a rejected edit of a deleted service brought it back")
+    # The same race through the console: the edit dialog is opened on the service, the service is
+    # then deleted by another session, and saving must surface the refusal in the dialog instead of
+    # silently succeeding - that visible failure with the dialog still open is the recovery entry.
+    page.reload()
+    expect(page.get_by_role("heading", name=settings["page"]["title"], exact=True)).to_be_visible()
+    card = page.locator(".ant-card").filter(has_text=settings["ai"]["service"]).first
+    ui_name = f"e2e-{report['run_id']}-ui-raced"
+    ui_created = page.request.post(server.base + CONFIGS, data={
+        "name": ui_name, "preset": "custom", "base_url": fixture.base,
+        "api_key": fixture.api_key, "model": fixture.model, "is_default": False})
+    check(ui_created.status == 201, f"UI race fixture create HTTP {ui_created.status}")
+    ui_id = ui_created.json()["id"]
+    page.reload()
+    expect(card.get_by_text(ui_name, exact=True)).to_be_visible()
+    ui_row = card.locator("tr.ant-table-row").filter(has_text=ui_name)
+    ui_row.get_by_role("button", name=settings["common"]["edit"], exact=True).click()
+    ui_modal = page.get_by_role("dialog", name=settings["ai"]["editService"], exact=True)
+    expect(ui_modal).to_be_visible()
+    ui_model = ui_modal.get_by_label(settings["ai"]["model"], exact=True)
+    expect(ui_model).to_have_value(fixture.model)
+    ui_model.fill(fixture.model + "-raced")
+    removed = page.request.delete(server.base + CONFIGS + "/" + str(ui_id))
+    check(removed.status in {200, 204}, f"UI race delete HTTP {removed.status}")
+    with page.expect_response(lambda r: r.request.method == "PATCH"
+                              and urlsplit(r.url).path.startswith(CONFIGS)) as ui_saved:
+        button(ui_modal, settings["common"]["save"]).click()
+    check(ui_saved.value.status == 404,
+          f"the console edit of a deleted service answered {ui_saved.value.status}")
+    expect(ui_modal).to_be_visible()
+    expect(page.locator(".ant-message-notice").filter(has_text=re.compile(r"\S")).first).to_be_visible(timeout=8000)
+    check(not any(item["id"] == ui_id
+                  for item in page.request.get(server.base + CONFIGS).json()["items"]),
+          "the console edit of a deleted service brought it back")
+    # The 404 above was provoked on purpose; drop it from the unexpected-error ledger the same way
+    # the forced 502 earlier in the run is dropped, so the ledger still fails on anything unplanned.
+    bad_responses[:] = [item for item in bad_responses
+                        if not (item.get("status") == 404 and item.get("method") == "PATCH")]
+    console_errors[:] = [text for text in console_errors
+                         if not re.search(r"status of (404|503) ", text)]
+    report["concurrent_edits"] = {"sole_default_cleared": 409, "conflict_code": "AI_DEFAULT_REQUIRED",
+                                  "edit_after_delete": 404, "resurrected": False,
+                                  "console_edit_after_delete": 404, "dialog_kept": True,
+                                  "failure_visible": True}
+    # The dialog is still open on the service that no longer exists; dismiss it so the rest of the
+    # run starts from a list, exactly as an operator would after reading the refusal.
+    button(ui_modal, settings["common"]["cancel"]).click()
+    expect(ui_modal).not_to_be_visible(timeout=8000)
+    page.reload()
+    expect(card.get_by_text(ui_name, exact=True)).to_have_count(0, timeout=12000)
+
     node_name = f"e2e-{report['run_id']}-assistant-node"
     created_node = page.request.post(server.base + NODES,
                                      data={"name": node_name, "server_url": server.base})
@@ -287,6 +560,19 @@ def test_assistant_service_tools(page, context, server, artifacts, report, local
     node_body = created_node.json()
     artifacts.remember(node_body["token"])
     node_uuid = node_body["node"]["uuid"]
+    # 23.x: the two refusal checks further down claim the labels were not changed. They used to
+    # compare an empty map with itself, because nothing ever wrote a label to this node, and that
+    # comparison could not fail whatever the refused tool path did. A stored label is put in
+    # place first, and the seed is read back - if the seed silently fails, the preservation check
+    # would quietly become the same empty-to-empty comparison again, so it is asserted here.
+    label_probe = {"probe": "1"}
+    seeded = page.request.put(server.base + NODES + f"/{node_uuid}/labels",
+                              data={"labels": label_probe})
+    check(seeded.status == 200, f"seeding the label this case protects: HTTP {seeded.status}")
+    labels_seeded = page.request.get(server.base + NODES + f"/{node_uuid}").json()["labels"]
+    check(labels_seeded == label_probe,
+          f"the label probe did not seed a value ({labels_seeded!r}), so every preservation "
+          f"check below would compare two empty maps and could not fail")
     inventory_response = page.request.get(server.base + NODES)
     check(inventory_response.status == 200,
           f"assistant inventory HTTP {inventory_response.status}")
@@ -370,9 +656,70 @@ def test_assistant_service_tools(page, context, server, artifacts, report, local
           ["tool", "final", "slow", "denied", "denied_final"],
           f"fixture requests differ: {[item['kind'] for item in denied_snapshot['requests']]}")
     after_denied_nodes = page.request.get(server.base + NODES + f"/{node_uuid}")
-    check(after_denied_nodes.json()["labels"] == {},
-          "the assistant tool path changed node labels")
+    check(after_denied_nodes.json()["labels"] == labels_seeded,
+          f"the assistant tool path changed node labels "
+          f"{labels_seeded!r} -> {after_denied_nodes.json().get('labels')!r}")
     report["last_step"] = "denied-route-rejected"
+
+    # 23.5: the answer is untrusted output. A model answer carrying markup, a script body, a
+    # javascript: link and a markdown image is asked through the panel and has to arrive as text:
+    # no element from it may appear in the transcript, no dialog may fire, and the payload must
+    # still be readable as the text it is rather than being silently dropped.
+    question.fill("Show me a hostile answer.")
+    send.click()
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        if [item["kind"] for item in fixture.snapshot()["requests"]][-1:] == ["hostile"]:
+            break
+        page.wait_for_timeout(200)
+    check([item["kind"] for item in fixture.snapshot()["requests"]][-1:] == ["hostile"],
+          "the hostile question never reached the fixture as one request")
+    hostile_text = HOSTILE_ANSWER
+    transcript = panel.locator(".ant-drawer-body, .ant-modal-body").first
+    expect(transcript.get_by_text(re.compile(r"Cluster\s+looks\s+healthy")).first).to_be_visible(timeout=30000)
+    check(transcript.locator("script").count() == 0, "a script element from the answer reached the transcript")
+    check(transcript.locator("img[src='x']").count() == 0, "an image from the answer reached the transcript")
+    check(transcript.locator("b").filter(has_text="bold").count() == 0,
+          "markup from the answer was interpreted rather than shown as text")
+    check(panel.get_by_role("alertdialog").count() == 0, "a dialog from the answer fired")
+    hostile_links = transcript.locator("a[href^='javascript:']").count()
+    check(hostile_links == 0, "a javascript: link from the answer became a real link")
+    report["hostile_answer"] = {"rendered_as_text": True, "script_elements": 0,
+                                "img_elements": 0, "bold_elements": 0,
+                                "javascript_links": 0, "dialog_fired": False}
+    report["last_step"] = "hostile-answer-is-text"
+    # This question is not part of the tool-loop story the later assertions count, so it is dropped
+    # from the ledger the same way the panel is reset between phases.
+    asks[:] = [item for item in asks if item.get("question") != "Show me a hostile answer."]
+
+    # A caller cannot make the assistant write. call_api's schema has no method
+    # field and the tool only ever issues GET, so "DELETE this" arrives as a read
+    # of a path that has no GET endpoint: it must fail, and the resource the call
+    # named must be untouched afterwards.
+    write_question = "please write to the platform"
+    write_response = page.request.post(
+        server.base + ASK,
+        data={"task": "ask", "question": write_question, "locale": locale},
+        headers={"Accept": "text/event-stream"})
+    check(write_response.status == 200, f"write ask HTTP {write_response.status}")
+    write_text = write_response.text()
+    # The tool echoes the arguments it was given, including the method and body
+    # it has no way to honour, and then fails as a read.
+    check(r'\"method\": \"DELETE\"' in write_text,
+          f"the write attempt never reached the tool: {write_text[:500]}")
+    check('"status":"error"' in write_text and "no GET endpoint" in write_text,
+          f"the write attempt was not refused as a read: {write_text[:500]}")
+    labels_after_attempt = page.request.get(
+        server.base + NODES + f"/{node_uuid}").json()["labels"]
+    check(labels_after_attempt == labels_seeded,
+          f"the write attempt changed node labels "
+          f"{labels_seeded!r} -> {labels_after_attempt!r}")
+    report["write_attempt"] = {"refused": True,
+                               "labels_before_probe": labels_seeded,
+                               "labels_after_attempt": labels_after_attempt,
+                               "labels_unchanged": labels_after_attempt == labels_seeded,
+                               "result": write_text[:400]}
+    report["last_step"] = "write-attempt-refused"
 
     panel.get_by_role("button", name=ai["panel"]["close"], exact=True).click()
     page.reload()
@@ -528,7 +875,10 @@ def test_assistant_service_tools(page, context, server, artifacts, report, local
 
     button(card, settings["common"]["delete"]).click()
     popconfirm = page.locator(".ant-popconfirm")
-    expect(popconfirm).to_contain_text(settings["ai"]["deleteConfirm"])
+    # 12.7 asks the confirmation to name what is being deleted, so resolve the placeholder
+    # and assert the real name is in the prompt rather than the raw catalogue string.
+    delete_prompt = settings["ai"]["deleteConfirm"].replace("{{name}}", config_name)
+    expect(popconfirm).to_contain_text(delete_prompt)
     confirm_popconfirm(page)
     expect(page.get_by_text(settings["ai"]["deleted"], exact=True).first).to_be_visible()
     expect(card.get_by_text(settings["ai"]["empty"], exact=True)).to_be_visible()
@@ -573,7 +923,7 @@ def test_assistant_service_tools(page, context, server, artifacts, report, local
          "tool_step": ai["tool"]["cluster_overview"], "tool_answer": expected_answer,
          "denied_route": "rejected", "stop": ai["stopped"],
          "delete": settings["common"]["delete"],
-         "delete_confirmation": settings["ai"]["deleteConfirm"]},
+         "delete_confirmation": settings["ai"]["deleteConfirm"].replace("{{name}}", config_name)},
         {"layer": "request", "create": {"method": "POST", "path": CONFIGS,
          "status": 201, "body": {k: create_body[k] for k in
          ("name", "preset", "base_url", "model", "is_default")}},

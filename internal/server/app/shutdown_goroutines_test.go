@@ -22,7 +22,9 @@ func backgroundLoopMarkers() []string {
 	return []string{
 		"internal/server/app.(*App).staleLoop(",
 		"internal/server/app.(*App).eventRetentionLoop(",
+		"internal/server/app.(*App).kubeNodeLoop(",
 		"internal/server/hub.(*Hub).RunServerDialReconnect(",
+		"internal/server/hub.(*Hub).RunPeerTransferMetrics(",
 		"internal/server/recovery.(*Recoverer).Run(",
 		"internal/server/controller.(*Controller).Run(",
 		"internal/server/app.runPDVerifier(",

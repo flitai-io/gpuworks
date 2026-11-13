@@ -133,7 +133,9 @@ func TestOptionalCapabilitiesAreBackendScoped(t *testing.T) {
 			t.Fatalf("AMD under %s constrained: %q", driver, why)
 		}
 	}
-	for _, driver := range []string{"", "host", "runveil"} {
+	// Whole AMD cards run on Kubernetes (targetConstraints), but the dGPU
+	// partition backend does not.
+	for _, driver := range []string{"", "host", "runveil", "kube"} {
 		if why := RuntimeConstraint(amd, driver); why == "" {
 			t.Errorf("AMD under %q must report a runtime constraint", driver)
 		}

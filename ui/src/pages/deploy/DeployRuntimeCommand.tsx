@@ -156,7 +156,7 @@ export default function DeployRuntimeCommand({
           />
           <Form.Item
             name="container_cmd"
-            rules={[{ required: true, message: t("runtimeCommand.required") }]}
+            rules={[{ required: true, whitespace: true, message: t("runtimeCommand.required") }]}
           >
             <Input.TextArea
               autoSize={{ minRows: 3, maxRows: 10 }}

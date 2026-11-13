@@ -1,59 +1,47 @@
-import { Alert, Button, Drawer, Spin } from "antd";
 import { useTranslation } from "react-i18next";
 import { usePolling } from "../../api";
 import { schedulingApi } from "../../schedulingApi";
-import { Legend, NodeList } from "./GpuBoard";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Container, ContainerHeader, ContainerBody } from "../../components/ui/container";
+import { Notice } from "../../ui-kit/Notice";
+import { SideDrawer } from "../../ui-kit/SideDrawer";
+import { Spinner } from "../../ui-kit/Spinner";
+import GpuResidencyTable from "./GpuResidencyTable";
 import ResidencyTimeline from "./ResidencyTimeline";
 
-const NODE_POLL_MS = 10_000;
-
-/**
- * NodeDrawer is one node of the heatmap in detail: each GPU as a bar of
- * awake, sleeping and free memory with the deployments holding it, and the
- * node's residency timeline. Only now is the node read from the server in full;
- * the heatmap itself carries no occupant detail.
- */
 export default function NodeDrawer({ uuid, name, onClose }: { uuid: string | null; name: string; onClose: () => void }) {
-  const { t } = useTranslation("scheduling");
-  return (
-    <Drawer open={uuid != null} onClose={onClose} width={820} title={name} destroyOnHidden aria-label={t("drawer.aria", { node: name })}>
-      {uuid != null && <NodeDetail key={uuid} uuid={uuid} />}
-    </Drawer>
-  );
+  const opensWithDetail = /^#gpu-\d+-residency$/.test(window.location.hash);
+  return <SideDrawer open={!!uuid} title={name} onClose={onClose} width={1020} className={opensWithDetail ? "node-review residency-direct" : "node-review"}>
+    {uuid && <NodeDetail key={uuid} uuid={uuid}/>}
+  </SideDrawer>;
 }
 
 function NodeDetail({ uuid }: { uuid: string }) {
   const { t } = useTranslation("scheduling");
-  const board = usePolling(() => schedulingApi.board({ node: uuid }), NODE_POLL_MS, [uuid]);
-  const node = board.data?.nodes.items[0];
-  if (!node && board.error) {
-    return (
-      <Alert
-        type="error"
-        showIcon
-        message={t("drawer.loadFailed")}
-        description={board.error.message}
-        action={<Button onClick={() => void board.refetch()}>{t("page.retry")}</Button>}
-      />
-    );
-  }
+  const board = usePolling(() => schedulingApi.board({ node: uuid }), 10000, [uuid]);
+  const node = board.data?.nodes.items.find(item => item.uuid === uuid);
+  const retry = <Button size="sm" onClick={() => void board.refetch()}>{t("page.retry")}</Button>;
   if (!node) {
-    return <div role="status" className="scheduling-loading"><Spin /> <span>{t("drawer.loading")}</span></div>;
+    if (board.error || board.data) return <Notice tone="danger" title={t("drawer.loadFailed")} action={retry}>
+      {board.error?.message ?? t("drawer.notFound")}
+    </Notice>;
+    return <Spinner label={t("drawer.loading")}/>;
   }
-  return (
-    <>
-      {board.error && (
-        <Alert
-          style={{ marginBottom: 12 }}
-          type="warning"
-          showIcon
-          message={t("page.refreshFailed", { detail: board.error.message })}
-          action={<Button size="small" onClick={() => void board.refetch()}>{t("page.retry")}</Button>}
-        />
-      )}
-      <Legend />
-      <NodeList nodes={[node]} />
-      <ResidencyTimeline nodes={[node]} />
-    </>
-  );
+  return <>
+    {board.error && <Notice tone="warning" title={t("page.refreshFailed", { detail: board.error.message })} action={retry}/>}
+    <section aria-label={node.name}>
+      <Container className="memory-chart rounded-2xl">
+        <ContainerHeader className="py-2">
+          <h2 className="text-title font-semibold">{t("nodeChart.memory")}</h2>
+          <div className="flex items-center gap-2">
+            <Badge status={node.online ? "success" : "neutral"} variant="dot" size="sm">{t(node.online ? "nodes.online" : "nodes.offline")}</Badge>
+            <span className="text-label text-fg-muted">{t("nodeChart.gpuCount", { count: node.gpus.length })}</span>
+          </div>
+        </ContainerHeader>
+        <ContainerBody className="rounded-xl p-0"><GpuResidencyTable node={node}/></ContainerBody>
+      </Container>
+    </section>
+    <ResidencyTimeline nodes={[node]}/>
+  </>;
 }

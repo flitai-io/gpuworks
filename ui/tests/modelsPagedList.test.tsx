@@ -32,6 +32,7 @@ const userEvent = (await import("@testing-library/user-event")).default;
 const { api } = await import("../src/api.ts");
 const { default: ModelsPage } = await import("../src/pages/ModelsPage.tsx");
 import type { ListQuery, Model, ModelPage } from "../src/api";
+import { sortColumn } from "./helpers/sortColumn";
 import { installFleet } from "./helpers/fakeFleet.ts";
 
 const presence = { ready_nodes: 3, cached_nodes: 0, ready_storages: 0, in_flight: 0, in_flight_percent: 0, failed: 0 };
@@ -101,7 +102,7 @@ test("the list view sorts through the server and shows the summed presence", asy
   renderPage("list");
   await screen.findByText("model-45");
   assert.equal(screen.getAllByRole("button", { name: "Ready on 3 nodes" }).length, 20);
-  fireEvent.click(screen.getByRole("columnheader", { name: /Weight/ }));
+  await sortColumn(/^Weight/, "Ascending");
   await waitFor(() => assert.equal(queries.at(-1)?.sort, "weight"));
 });
 
@@ -145,7 +146,7 @@ test("deleting the last row of a page steps back to the previous page instead of
   try {
     renderPage("list");
     await screen.findByText("model-41");
-    fireEvent.click(screen.getByTitle("3"));
+    fireEvent.click(screen.getByRole("button", { name: "Last page" }));
     await screen.findByText("model-1");
     assert.equal(document.querySelectorAll("tr[data-row-key]").length, 1, "page 3 holds exactly one row");
     const row = screen.getByText("model-1").closest("tr")!;

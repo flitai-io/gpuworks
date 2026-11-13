@@ -69,7 +69,7 @@ func (s *Store) UsageReportLastDay() (string, error) {
 	}
 	var day string
 	if err := json.Unmarshal([]byte(raw), &day); err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // An invalid optional last-report marker is treated as not yet reported.
 	}
 	return day, nil
 }

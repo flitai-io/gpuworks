@@ -1,11 +1,12 @@
 .batch-progress { min-width: 140px; }
-.batch-progress .ant-progress { margin: 0; line-height: 1; }
 .batch-progress-failed { margin-inline-start: 8px; }
-.batch-create-form { display: flex; flex-direction: column; gap: 16px; }
+.batch-create-form { display: flex; flex-direction: column; gap: 16px; font-size: var(--text-body); }
 .batch-create-field { display: flex; flex-direction: column; gap: 6px; }
-.batch-create-field label { font-weight: 500; }
-.batch-create-hint { margin: 0; padding-inline-start: 18px; }
-.batch-waiting { margin: 0; padding-inline-start: 18px; }
+/* Field titles and help read like the Zeron FormField ones above them. */
+.batch-create-field > label:first-child { padding-inline: 6px; font-weight: 500; color: var(--fg-muted); }
+.batch-create-field > .batch-create-help { padding-inline: 6px; }
+.batch-create-hint { margin: 0; padding-inline-start: 18px; list-style: disc; }
+.batch-waiting { margin: 0; padding-inline-start: 18px; list-style: disc; }
 .batch-waiting li + li { margin-top: 6px; }
 .batch-row { cursor: pointer; }
 

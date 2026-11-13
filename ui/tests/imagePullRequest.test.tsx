@@ -10,7 +10,7 @@ import {
   catalogRoutes,
   communitySeries,
   i18n,
-  installFetch,
+  installFetch as installHTTPFixture,
   json,
   nightlyVersion,
   zhCommon,
@@ -25,6 +25,28 @@ const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@t
 const { default: userEvent } = await import("@testing-library/user-event");
 const { message } = await import("antd");
 const { default: ImagesPage } = await import("../src/pages/ImagesPage.tsx");
+
+// Archive fixtures model the same signed-in administrator and policy/check
+// endpoints as the real source controls. DNS for archive.internal is private;
+// 169.254.169.254 is permanently blocked, even when explicitly allow-listed.
+function installFetch(handler: Handler) {
+  let policy = { restrict_private_hosts: false, allow_private_hosts: [] as string[], editable: true, revision: "r1" };
+  return installHTTPFixture(async (call) => {
+    const response = await handler(call);
+    if (response) {
+      if (call.path === "/api/v1/server/outbound-policy" && response.ok) policy = await response.clone().json();
+      return response;
+    }
+    if (call.path === "/api/v1/auth/me") return json(200, { id: 1, username: "admin", role: "admin" });
+    if (call.path === "/api/v1/server/outbound-policy" && call.method === "GET") return json(200, policy);
+    if (call.path === "/api/v1/server/outbound-policy/check") {
+      const { hosts } = JSON.parse(call.body!);
+      return json(200, { items: hosts.map((host: string) => ({ host, status: host === "169.254.169.254" ? "blocked"
+        : policy.restrict_private_hosts && host === "archive.internal" && !policy.allow_private_hosts.includes(host) ? "needs_allow" : "allowed" })), total: hosts.length });
+    }
+    return undefined;
+  });
+}
 
 const z = zhImages;
 const ARCHIVE_URL = "https://containerimages.example/vllm-nightly.tar";
@@ -79,7 +101,7 @@ async function openNightly(user: ReturnType<typeof userEvent.setup>) {
     return button;
   });
   await user.click(row);
-  const drawer = (await screen.findByText(communitySeries.name, { selector: ".ant-drawer-title span" })).closest(".ant-drawer-content") as HTMLElement;
+  const drawer = (await screen.findByRole("dialog", { name: new RegExp(communitySeries.name) }));
   await user.click(await within(drawer).findByRole("link", { name: nightlyVersion.image_ref }));
   const node = await within(drawer).findByText("gpu-03");
   return { drawer, row: node.closest("tr") as HTMLElement };
@@ -213,7 +235,7 @@ test("a manual copy from a node still names source_node and its rate", async () 
   fireEvent.mouseDown(screen.getByRole("combobox", { name: dialog.source }));
   await waitFor(() => assert.ok(screen.getAllByText("gpu-01").length > 1));
   await user.click(screen.getAllByText("gpu-01").at(-1)!);
-  await user.click(screen.getByRole("button", { name: z.nodeTable.testDirect }));
+  await user.click(screen.getByRole("button", { name: z.nodeTable.testTransport }));
   await screen.findByText(dialog.probeOk);
   await user.click(screen.getByRole("button", { name: dialog.start }));
   await waitFor(() => assert.equal(posts(calls, "/api/v1/images/31/nodes/n3/sync").length, 1));
@@ -221,27 +243,115 @@ test("a manual copy from a node still names source_node and its rate", async () 
 });
 
 
-test("a private archive policy denial explains optional strict-mode authorization without exposing raw errors", async () => {
+test("a checked archive address writes an approvable host during resolve", async () => {
   const { default: ImageArchiveURLImport } = await import("../src/pages/images/ImageArchiveURLImport.tsx");
-  const stub = installFetch((call) => call.method === "POST" && call.path === "/api/v1/images/preview-archive-url"
-    ? json(403, { code: "IMAGE_ARCHIVE_URL_POLICY_DENIED", error: "RAW https://archive.internal/image.tar?token=private-query", params: { host: "archive.internal", config_key: "outbound_allow_private_hosts" } })
-    : undefined);
+  let allowed = false;
+  let writes = 0;
+  const stub = installFetch((call) => {
+    if (call.method === "POST" && call.path === "/api/v1/images/preview-archive-url") {
+      if (!allowed) return json(403, { code: "IMAGE_ARCHIVE_URL_POLICY_DENIED", error: "RAW https://archive.internal/image.tar?token=private-query", params: { host: "archive.internal:443", allow_host: "archive.internal", approvable: true, config_key: "outbound_allow_private_hosts" } });
+      return json(200, { url: "http://archive.internal/image.tar", size_bytes: 2048, repo_tags: ["example/app:v1"], previewable: true });
+    }
+    if (call.method === "GET" && call.path === "/api/v1/server/outbound-policy") {
+      return json(200, { restrict_private_hosts: true, allow_private_hosts: allowed ? ["10.0.0.8", "archive.internal"] : ["10.0.0.8"], editable: true, revision: allowed ? "r2" : "r1" });
+    }
+    if (call.method === "PUT" && call.path === "/api/v1/server/outbound-policy") {
+      writes += 1;
+      assert.equal(call.body, JSON.stringify({ restrict_private_hosts: true, allow_private_hosts: ["10.0.0.8", "archive.internal"], revision: "r1" }));
+      allowed = true;
+      return json(200, { restrict_private_hosts: true, allow_private_hosts: ["10.0.0.8", "archive.internal"], editable: true, revision: "r2" });
+    }
+    return undefined;
+  });
   restoreFetch = stub.restore;
-  render(<I18nextProvider i18n={i18n}><ImageArchiveURLImport versions={[]} onMatched={() => assert.fail("a denied source must not resolve")} onPrefill={() => assert.fail("a denied source must not prefill")} /></I18nextProvider>);
+  const prefilled: string[] = [];
+  render(<I18nextProvider i18n={i18n}><ImageArchiveURLImport versions={[]} onMatched={() => assert.fail("a new reference must prefill")} onPrefill={(preview) => prefilled.push(preview.repo_tags[0])} /></I18nextProvider>);
+  const user = userEvent.setup({ document: dom.window.document });
+  await user.type(screen.getByLabelText(z.import.url.label), "http://archive.internal/image.tar");
+  const allow = await screen.findByRole("checkbox", { name: "自动加入 archive.internal 的白名单" });
+  await user.click(screen.getByRole("button", { name: spaced(z.import.url.resolve) }));
+  const alert = await screen.findByRole("alert");
+  assert.match(alert.textContent ?? "", /archive\.internal:443 需要允许后才能访问/);
+  assert.equal(alert.textContent?.includes("白名单"), false);
+  assert.equal(screen.queryByText(/RAW|private-query|server\.yaml|outbound_allow_private_hosts/), null);
+  assert.equal(writes, 0, "an unchecked address is not written");
+  allow.focus();
+  await user.keyboard("[Space]");
+  assert.equal(allow.getAttribute("aria-checked") ?? String((allow as HTMLInputElement).checked), "true", "the opt-in can be checked from the keyboard");
+  await user.click(screen.getByRole("button", { name: /解\s*析/ }));
+  await screen.findByText("example/app:v1");
+  assert.equal(writes, 1);
+  assert.deepEqual(prefilled, ["example/app:v1"]);
+});
+
+test("an unrestricted outbound policy hides the allow checkbox and does not write", async () => {
+  const { default: ImageArchiveURLImport } = await import("../src/pages/images/ImageArchiveURLImport.tsx");
+  let previews = 0;
+  const stub = installFetch((call) => {
+    if (call.method === "GET" && call.path === "/api/v1/server/outbound-policy") {
+      return json(200, { restrict_private_hosts: false, allow_private_hosts: ["10.0.0.8"], editable: true, revision: "r1" });
+    }
+    if (call.method === "POST" && call.path === "/api/v1/images/preview-archive-url") {
+      previews += 1;
+      return json(200, { url: "http://archive.internal/image.tar", size_bytes: 2048, repo_tags: ["example/app:v1"], previewable: true });
+    }
+    return undefined;
+  });
+  restoreFetch = stub.restore;
+  render(<I18nextProvider i18n={i18n}><ImageArchiveURLImport versions={[]} onMatched={() => {}} onPrefill={() => {}} /></I18nextProvider>);
   const user = userEvent.setup({ document: dom.window.document });
   await user.type(screen.getByLabelText(z.import.url.label), "http://archive.internal/image.tar");
   await user.click(screen.getByRole("button", { name: spaced(z.import.url.resolve) }));
+  await screen.findByText("example/app:v1");
+  await waitFor(() => assert.ok(stub.calls.some((call) => call.method === "GET" && call.path === "/api/v1/server/outbound-policy")));
+  assert.equal(screen.queryByRole("checkbox", { name: "自动加入 archive.internal 的白名单" }), null);
+  assert.equal(stub.calls.some((call) => call.method === "PUT"), false);
+  assert.equal(previews, 1);
+});
+
+test("a reserved archive address explains that the allow list cannot permit it", async () => {
+  const { default: ImageArchiveURLImport } = await import("../src/pages/images/ImageArchiveURLImport.tsx");
+  const stub = installFetch((call) => {
+    if (call.method === "GET" && call.path === "/api/v1/server/outbound-policy") {
+      return json(200, { restrict_private_hosts: true, allow_private_hosts: [], editable: true, revision: "r1" });
+    }
+    return call.method === "POST" && call.path === "/api/v1/images/preview-archive-url"
+      ? json(403, { code: "IMAGE_ARCHIVE_URL_POLICY_BLOCKED", error: "RAW http://169.254.169.254/latest", params: { host: "169.254.169.254" } })
+      : undefined;
+  });
+  restoreFetch = stub.restore;
+  render(<I18nextProvider i18n={i18n}><ImageArchiveURLImport versions={[]} onMatched={() => {}} onPrefill={() => {}} /></I18nextProvider>);
+  const user = userEvent.setup({ document: dom.window.document });
+  await user.type(screen.getByLabelText(z.import.url.label), "http://169.254.169.254/latest");
+  await screen.findByText(zhCommon.outboundAccess.blocked.replace("{{host}}", "169.254.169.254"));
+  assert.equal(screen.queryByRole("checkbox", { name: /169\.254\.169\.254/ }), null);
+  await user.click(screen.getByRole("button", { name: spaced(z.import.url.resolve) }));
   const alert = await screen.findByRole("alert");
-  assert.match(alert.textContent ?? "", /outbound_allow_private_hosts/);
-  assert.match(alert.textContent ?? "", /管理节点.*出站.*拒绝/);
-  assert.match(alert.textContent ?? "", /普通内网来源默认允许访问/);
-  assert.match(alert.textContent ?? "", /若.*开启 outbound_restrict_private_hosts 严格模式/);
-  assert.match(alert.textContent ?? "", /关闭严格模式或加入白名单也不例外/);
-  assert.match(alert.textContent ?? "", /server\.yaml/);
-  assert.match(alert.textContent ?? "", /保存后重试/);
-  assert.match(alert.textContent ?? "", /特殊保留地址始终禁止/);
-  assert.equal(screen.queryByText(/RAW|private-query|重启/), null);
-  await screen.findByText("HTTP 403 · IMAGE_ARCHIVE_URL_POLICY_DENIED");
+  assert.match(alert.textContent ?? "", /169\.254\.169\.254 不能通过允许列表访问/);
+  assert.equal(stub.calls.some((call) => call.method === "PUT"), false);
+  assert.equal(screen.queryByText(/RAW|latest/), null);
+});
+
+test("an upstream archive status names the HTTP status without the source URL", async () => {
+  const { default: ImageArchiveURLImport } = await import("../src/pages/images/ImageArchiveURLImport.tsx");
+  const stub = installFetch((call) => {
+    if (call.method === "GET" && call.path === "/api/v1/server/outbound-policy") {
+      return json(200, { restrict_private_hosts: true, allow_private_hosts: [], editable: true, revision: "r1" });
+    }
+    return call.method === "POST" && call.path === "/api/v1/images/preview-archive-url"
+      ? json(502, { code: "IMAGE_ARCHIVE_URL_UPSTREAM_STATUS", error: "RAW https://archive.internal/missing.tar?token=private-query", params: { host: "archive.internal", upstream_status: 404 } })
+      : undefined;
+  });
+  restoreFetch = stub.restore;
+  render(<I18nextProvider i18n={i18n}><ImageArchiveURLImport versions={[]} onMatched={() => {}} onPrefill={() => {}} /></I18nextProvider>);
+  const user = userEvent.setup({ document: dom.window.document });
+  await user.type(screen.getByLabelText(z.import.url.label), "http://archive.internal/missing.tar");
+  await user.click(screen.getByRole("button", { name: spaced(z.import.url.resolve) }));
+  const alert = await screen.findByRole("alert");
+  assert.match(alert.textContent ?? "", /archive\.internal 返回了 HTTP 404/);
+  assert.match(alert.textContent ?? "", /HTTP 502 · IMAGE_ARCHIVE_URL_UPSTREAM_STATUS/);
+  assert.ok(await screen.findByRole("checkbox", { name: "自动加入 archive.internal 的白名单" }));
+  assert.equal(screen.queryByText(/private-query|missing\.tar|无法读取/), null);
 });
 
 
@@ -262,19 +372,23 @@ test("an archive import hides unstructured upstream error text", async () => {
 
 test("the node archive dialog retains a policy denial code while allowing node-direct acquisition", async () => {
   const { default: ImageArchiveURLDialog } = await import("../src/pages/images/ImageArchiveURLDialog.tsx");
-  const stub = installFetch((call) => call.method === "POST" && call.path === "/api/v1/images/preview-archive-url"
-    ? json(403, { code: "IMAGE_ARCHIVE_URL_POLICY_DENIED", error: "RAW https://archive.internal/image.tar?token=private-query", params: { host: "archive.internal", config_key: "outbound_allow_private_hosts" } }) : undefined);
+  const stub = installFetch((call) => {
+    if (call.method === "GET" && call.path === "/api/v1/server/outbound-policy") {
+      return json(200, { restrict_private_hosts: true, allow_private_hosts: [], editable: true, revision: "r1" });
+    }
+    return call.method === "POST" && call.path === "/api/v1/images/preview-archive-url"
+      ? json(403, { code: "IMAGE_ARCHIVE_URL_POLICY_DENIED", error: "RAW https://archive.internal/image.tar?token=private-query", params: { host: "archive.internal", allow_host: "archive.internal", approvable: true, config_key: "outbound_allow_private_hosts" } })
+      : undefined;
+  });
   restoreFetch = stub.restore;
   const starts: Array<{ url: string; relay: boolean }> = [];
   render(<I18nextProvider i18n={i18n}><ImageArchiveURLDialog open version={nightlyVersion as never} nodeLabel="gpu-03" initialURL="http://archive.internal/image.tar" onCancel={() => {}} onStart={async (url, relay) => { starts.push({ url, relay }); }} /></I18nextProvider>);
   const alert = await screen.findByRole("alert");
-  assert.match(alert.textContent ?? "", /outbound_allow_private_hosts/);
+  assert.match(alert.textContent ?? "", /archive\.internal 需要允许后才能访问/);
   assert.match(alert.textContent ?? "", /HTTP 403 · IMAGE_ARCHIVE_URL_POLICY_DENIED/);
-  assert.match(alert.textContent ?? "", /server\.yaml.*保存后重试/);
-  assert.match(alert.textContent ?? "", /普通内网来源默认允许访问/);
-  assert.match(alert.textContent ?? "", /若.*开启 outbound_restrict_private_hosts 严格模式/);
-  assert.match(alert.textContent ?? "", /关闭严格模式或加入白名单也不例外/);
-  assert.equal(screen.queryByText(/RAW|private-query|重启/), null);
+  assert.equal(alert.textContent?.includes("白名单"), false);
+  assert.equal(screen.queryByText(/RAW|private-query|server\.yaml|outbound_allow_private_hosts/), null);
+  await screen.findByRole("checkbox", { name: "自动加入 archive.internal 的白名单" });
   const pull = screen.getByRole("button", { name: PULL }) as HTMLButtonElement;
   assert.equal(pull.disabled, false, "management-node policy does not describe the node's direct route");
   const user = userEvent.setup({ document: dom.window.document });
@@ -292,8 +406,14 @@ for (const entry of ["import", "dialog"] as const) {
     }
     await i18n.changeLanguage("en");
     try {
-      const stub = installFetch((call) => call.method === "POST" && call.path === "/api/v1/images/preview-archive-url"
-        ? json(403, { code: "IMAGE_ARCHIVE_URL_POLICY_DENIED", error: "RAW https://archive.internal/image.tar?token=private-query", params: { host: "archive.internal", config_key: "outbound_allow_private_hosts" } }) : undefined);
+      const stub = installFetch((call) => {
+        if (call.method === "GET" && call.path === "/api/v1/server/outbound-policy") {
+          return json(200, { restrict_private_hosts: true, allow_private_hosts: [], editable: true, revision: "r1" });
+        }
+        return call.method === "POST" && call.path === "/api/v1/images/preview-archive-url"
+          ? json(403, { code: "IMAGE_ARCHIVE_URL_POLICY_DENIED", error: "RAW https://archive.internal/image.tar?token=private-query", params: { host: "archive.internal", allow_host: "archive.internal", approvable: true, config_key: "outbound_allow_private_hosts" } })
+          : undefined;
+      });
       restoreFetch = stub.restore;
       if (entry === "import") {
         const { default: Import } = await import("../src/pages/images/ImageArchiveURLImport.tsx");
@@ -306,15 +426,10 @@ for (const entry of ["import", "dialog"] as const) {
         render(<I18nextProvider i18n={i18n}><Dialog open version={nightlyVersion as never} nodeLabel="gpu-03" initialURL="http://archive.internal/image.tar" onCancel={() => {}} onStart={async () => {}} /></I18nextProvider>);
       }
       const alert = await screen.findByRole("alert");
-      assert.match(alert.textContent ?? "", /management node's outbound policy refuses access to archive\.internal/);
-      assert.match(alert.textContent ?? "", /Ordinary private sources are allowed by default/);
-      assert.match(alert.textContent ?? "", /If strict mode is enabled with outbound_restrict_private_hosts in server\.yaml/);
-      assert.match(alert.textContent ?? "", /check outbound_allow_private_hosts and add the required host/);
-      assert.match(alert.textContent ?? "", /even with strict mode off or an allowlist entry/);
-      assert.match(alert.textContent ?? "", /save the file and retry/);
-      assert.match(alert.textContent ?? "", /special-purpose reserved addresses stay blocked/);
+      assert.match(alert.textContent ?? "", /archive\.internal has to be allowed before it can be used/);
       assert.match(alert.textContent ?? "", /HTTP 403 · IMAGE_ARCHIVE_URL_POLICY_DENIED/);
-      assert.equal(screen.queryByText(/RAW|private-query|restart/), null);
+      await screen.findByRole("checkbox", { name: "Automatically add archive.internal to the allowlist" });
+      assert.equal(screen.queryByText(/RAW|private-query|server\.yaml|outbound_allow_private_hosts/), null);
     } finally {
       cleanup();
       await i18n.changeLanguage("zh");

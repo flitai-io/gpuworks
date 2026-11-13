@@ -61,6 +61,9 @@ export interface InferenceAPIOperation {
    * for a model that needs a particular format; the Playground starts with
    * them. */
   example_input?: Record<string, string>;
+  /** How many reference images an image edit takes, resolved by the server
+   * (at least one for openai.image.edit, absent otherwise). */
+  max_reference_images?: number;
 }
 
 export interface InputField {

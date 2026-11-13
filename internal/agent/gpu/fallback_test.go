@@ -31,6 +31,12 @@ func TestFallbackProberFollowsTheDriverDevices(t *testing.T) {
 	if got := fallbackProber(probers, present("/dev/alixpu_ctl"), present("nvidia-smi"), none).Vendor(); got != accelerator.VendorPPU {
 		t.Fatalf("ppu devices with nvidia-smi -> %s", got)
 	}
+	if got := fallbackProber(probers, present("/dev/xpuctrl"), present("nvidia-smi"), none).Vendor(); got != accelerator.VendorKunlunxin {
+		t.Fatalf("Kunlun control device with compatible NVIDIA CLI -> %s", got)
+	}
+	if got := fallbackProber(probers, none, present("xpu-smi"), none).Vendor(); got != "" {
+		t.Fatalf("ambiguous xpu-smi executable invented a vendor -> %s", got)
+	}
 	// Devices outrank an installed CLI of another vendor.
 	if got := fallbackProber(probers, present("/dev/davinci_manager"), present("nvidia-smi"), none).Vendor(); got != accelerator.VendorAscend {
 		t.Fatalf("ascend devices with nvidia-smi -> %s", got)

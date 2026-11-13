@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -33,8 +34,21 @@ func TestExecutorScaleBudget(t *testing.T) {
 	if raceEnabled {
 		requests = 200
 	}
+	// A short sleep cannot prove saturation on a loaded scheduler. Hold the
+	// first wave until the configured cap is reached, then measure the same
+	// request workload. Cancellation still releases every blocked sender.
+	var entered atomic.Int32
+	firstWave := make(chan struct{})
 	r := newRig(t, Config{PerBatch: 8, GlobalCap: cap, MaxRunning: batches}, func(ctx context.Context, _ Owner, _ string, _ []byte) Reply {
-		time.Sleep(50 * time.Microsecond) // enough latency for the cap to be reached
+		if entered.Add(1) == cap {
+			close(firstWave)
+		}
+		select {
+		case <-firstWave:
+		case <-ctx.Done():
+			return Reply{}
+		}
+		time.Sleep(50 * time.Microsecond)
 		return okReply(`{"id":"x","choices":[{"finish_reason":"stop"}]}`)
 	})
 	r.start()
@@ -70,6 +84,13 @@ func TestExecutorScaleBudget(t *testing.T) {
 		}
 	}()
 
+	var stopOnce sync.Once
+	stopSampler := func() {
+		stopOnce.Do(func() { close(stopSampling) })
+		<-sampled
+	}
+	t.Cleanup(stopSampler)
+
 	var ids []string
 	for i := 0; i < batches; i++ {
 		b, err := r.svc.CreateBatch(testOwner, CreateRequest{InputFileID: file.ID, Endpoint: EndpointChat, CompletionWindow: "24h"})
@@ -86,8 +107,7 @@ func TestExecutorScaleBudget(t *testing.T) {
 		}
 	}
 	elapsed := time.Since(started)
-	close(stopSampling)
-	<-sampled
+	stopSampler()
 	cpu := cpuTime(t) - cpuBefore
 
 	if peak := r.send.peakInFlight(); peak > cap || (!raceEnabled && peak < cap*3/4) {

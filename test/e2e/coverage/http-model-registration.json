@@ -4,7 +4,7 @@
   "test_file": "test/e2e/http_model_registration.py",
   "test_function": "test_model_registration",
   "lane": "local-real-server-sqlite-http-directory",
-  "command": "make test-e2e-http-model-registration",
+  "command": "python3 -B test/e2e/http_model_registration.py --case all --locale en",
   "cases": {
     "register": {
       "id": "gpuworks/models/http-register",
@@ -57,9 +57,9 @@
         "HTTP directory option selected"
       ],
       "missing": [
-    "MISSING: source URL A-to-B invalidates prior preview; parsed metadata and submitted source/name/size must all belong to B",
-    "MISSING: HTTP-to-other-source-to-HTTP transitions preserve/reset fields by contract and cannot submit stale preview values",
-    "MISSING: URL Enter-to-preview and form Enter-to-register paths, including exactly one mutation and explicit-button equivalence",
+        "MISSING: source URL A-to-B invalidates prior preview; parsed metadata and submitted source/name/size must all belong to B",
+        "MISSING: HTTP-to-other-source-to-HTTP transitions preserve/reset fields by contract and cannot submit stale preview values",
+        "MISSING: URL Enter-to-preview and form Enter-to-register paths, including exactly one mutation and explicit-button equivalence",
         "Hugging Face/ModelScope/local options"
       ]
     },
@@ -141,7 +141,6 @@
     ],
     "partial": {
       "1.2": "HTTP defaults only",
-      "1.3": "empty URL only; other field boundaries missing",
       "1.15": "Tab, focus border, named modal/footer viewport; other states missing",
       "5.2": "HTTP option only",
       "16.5": "no background task: registration fetches metadata synchronously"
@@ -154,7 +153,8 @@
     "12.5": "N/A: the register dialog has no nested child layer",
     "12.6": "covered: While the register POST is held the footer confirm shows the loading state and a second click sends no further register request; the 502 keeps the URL, source ID and name and shows the unreachable reason; the later 201 matches the independent detail GET and the reloaded row",
     "12.7": "Delete confirmation names the model and says node copy records are removed and a deployment reference blocks deletion. A deployment row blocks deletion with 409 MODEL_IN_USE and the model and deployment stay. A model file whose state is deleting keeps the model on 409 and the file stays. After both rows are cleared, delete returns 204, the independent GET is 404, and the reloaded list is empty",
-    "12.8": "MISSING: the revision field is not exercised by this register dialog"
+    "12.8": "N/A: the models surface this case covers has no delete preview, no compare-and-swap and no revision-conflict check for either the reviewer or the product to act on. Revision on a model is the upstream git branch label, not a concurrency token - the form help reads 'Blank uses the platform default branch' (ui/src/i18n/locales/en/models.json:149) and the detail view renders it as a description item (ModelsPageParts.tsx:254) - and the write routes that could carry a base revision, PATCH /models/{id}/inference-config and the model edits, send no such field and answer no conflict code; errors.go has no model revision-conflict error, and the only conflict this resource defines is MODEL_IN_USE for a referenced model (internal/server/api/models.go:143), which is reference blocking for the delete item rather than a stale-write guard. The item is conditional - it applies only where the product actually offers a preview/revision/CAS - so with none offered on this surface there is nothing to observe, and teardown is not used to stand in for a delete assertion.",
+    "1.3": "Every required text field this mode renders is checked for both an empty and a whitespace-only value, and each is refused in the browser with no request on the wire. The directory URL and the source id both declare whitespace:true, so three spaces are refused exactly like an empty value: the field is left aria-invalid, the typed value stays in place, and neither a preview nor a registration is posted. The source id rule carries no message, so its antd default wording is locale dependent and is deliberately not asserted - the contract that is asserted is the refusal and the absence of a request. Name is not a required field in this form: the minimum-create stage posts an empty name and reads back the defaulted tiny-model, so there is no empty-name refusal to claim. Proven by mutation twice - dropping whitespace:true from the directory URL rule removes the expected message, and dropping the validation guard makes a refused submit raise an uncaught page error."
   },
   "missing": [
     "download to node, content verification on agent and real GPU inference",

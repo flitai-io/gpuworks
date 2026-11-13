@@ -335,8 +335,29 @@ func TestFilesUnderSubfolderKeepsOnlyThatDirectory(t *testing.T) {
 	if all := FilesUnderSubfolder(files, ""); len(all) != len(files) {
 		t.Fatalf("an empty subfolder selected %d of %d files", len(all), len(files))
 	}
+	// The IQ2_XS directory wins over the file of the same name.
 	if none := FilesUnderSubfolder(files, "missing"); len(none) != 0 {
 		t.Fatalf("an unknown subfolder selected %+v", none)
+	}
+}
+
+// A repository that keeps many adapter files at its root (LightX2V publishes
+// every Turbo LoRA revision side by side) is reachable one file at a time: a
+// subfolder naming a file selects just that file, at its repository path.
+func TestFilesUnderSubfolderSelectsOneFileWhenNoDirectoryHasThatName(t *testing.T) {
+	files := []File{
+		{Path: "README.md", Size: 1},
+		{Path: "turbo_4step_v1.3.safetensors", Size: 2},
+		{Path: "turbo_4step_v1.3.safetensors.bak", Size: 3},
+		{Path: "turbo_8step_v1.1.safetensors", Size: 4},
+	}
+	got := FilesUnderSubfolder(files, "turbo_4step_v1.3.safetensors")
+	if len(got) != 1 || got[0].Path != "turbo_4step_v1.3.safetensors" || got[0].Size != 2 {
+		t.Fatalf("FilesUnderSubfolder = %+v, want only the named file", got)
+	}
+	nested := FilesUnderSubfolder([]File{{Path: `loras\a.safetensors`, Size: 5}, {Path: "loras/b.safetensors", Size: 6}}, "loras/a.safetensors")
+	if len(nested) != 1 || nested[0].Path != "loras/a.safetensors" {
+		t.Fatalf("nested file selection = %+v", nested)
 	}
 }
 

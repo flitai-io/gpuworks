@@ -1,4 +1,4 @@
-import { Collapse, Typography } from "antd";
+import { AccordionGroup, AccordionItem, AccordionTrigger, AccordionContent } from "../../components/ui/accordion";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
@@ -48,25 +48,13 @@ export default function BatchAPIUsage() {
   const { t } = useTranslation("batches");
   const gateway = window.location.origin;
   return (
-    <Collapse
-      className="batch-api-usage"
-      items={[{
-        key: "api",
-        label: t("api.title"),
-        children: (
-          <div className="batch-api-steps">
-            <Typography.Paragraph type="secondary">
-              {t("api.description")} <Link to="/apikeys">{t("api.keys")}</Link>
-            </Typography.Paragraph>
-            {batchAPISteps(gateway).map((step) => (
-              <div key={step.key}>
-                <Typography.Text strong>{t(`api.steps.${step.key}`)}</Typography.Text>
-                <pre className="code-block">{step.code}</pre>
-              </div>
-            ))}
-          </div>
-        ),
-      }]}
-    />
+    <AccordionGroup className="batch-api-usage" collapsible>
+      <AccordionItem value="api"><AccordionTrigger>{t("api.title")}</AccordionTrigger>
+        <AccordionContent><div className="batch-api-steps">
+          <p className="text-fg-muted">{t("api.description")} <Link to="/apikeys">{t("api.keys")}</Link></p>
+          {batchAPISteps(gateway).map(step => <div key={step.key}><strong>{t(`api.steps.${step.key}`)}</strong><pre className="code-block">{step.code}</pre></div>)}
+        </div></AccordionContent>
+      </AccordionItem>
+    </AccordionGroup>
   );
 }

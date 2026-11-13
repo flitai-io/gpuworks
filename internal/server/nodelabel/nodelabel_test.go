@@ -64,6 +64,7 @@ func TestSystemKeysAreRequirableButNeverWritable(t *testing.T) {
 		KeyGPUModel: "GeForce RTX 4090", KeyGPUArch: "ada",
 		KeyComputeNetwork: "12", KeyStorageSyncNetwork: ManagementNetwork, KeyServingNetwork: "3",
 		KeyStorage: "2", KeyProvider: "runpod", KeyRegion: "US-VA-1",
+		KeyKubernetesCluster: "7c1b6f0e-uuid", KeyKubernetesNode: "worker-3",
 	}
 	if len(valid) != len(SystemKeys()) {
 		t.Fatalf("test covers %d keys, SystemKeys has %d", len(valid), len(SystemKeys()))

@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"gpuworks.ai/gpuworks/internal/proto"
-	"gpuworks.ai/gpuworks/pkg/bench/dataset"
-	"gpuworks.ai/gpuworks/pkg/bench/search"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +14,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/pkg/bench/dataset"
+	"gpuworks.ai/gpuworks/pkg/bench/search"
 
 	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
 )

@@ -1,9 +1,5 @@
-import {
-  ApartmentOutlined, ApiOutlined, AppstoreOutlined, BarChartOutlined, CloudOutlined,
-  CloudServerOutlined, ContainerOutlined, ControlOutlined, DashboardOutlined, DatabaseOutlined,
-  ExperimentOutlined, FileTextOutlined, FundOutlined, HeartOutlined, InboxOutlined, KeyOutlined,
-  ProfileOutlined, RocketOutlined, ScheduleOutlined, SettingOutlined,
-} from "@ant-design/icons";
+import { createElement } from "react";
+import { ConsoleIcon } from "./ui-kit/consoleIcons";
 import type { ReactNode } from "react";
 
 export interface NavItem {
@@ -22,43 +18,50 @@ export interface NavGroup {
 
 // The side menu, also read by PageHeader so a page's breadcrumb names the
 // same section the menu files it under. Monitoring and analysis come first,
-// then daily work (serving, models), then the platform (compute,
-// administration). New features go to the end of their group so existing
-// entries keep their place; monitoring and analysis holds at most five
-// entries (alerts would be the fifth), and further views become tabs.
+// then the resources work builds on (compute, models), then serving, and
+// administration last, where the log search sits with the API keys. New
+// features go to the end of their group so existing entries keep their
+// place; monitoring and analysis holds at most five entries (alerts would
+// be the fourth), and further views become tabs.
+// Menu icons: the HugeIcons stroke set Zeron uses, 16px, thin stroke (ui-guidelines 9.2).
+const icon = (Icon: (typeof ConsoleIcon)[keyof typeof ConsoleIcon]) => createElement(Icon, { size: 16, strokeWidth: 1.5 });
+
 export const navGroups: NavGroup[] = [
   { items: [
-    { key: "/dashboard", icon: <DashboardOutlined />, labelKey: "navigation.dashboard" },
+    { key: "/dashboard", icon: icon(ConsoleIcon.dashboard), labelKey: "navigation.dashboard" },
   ] },
   { labelKey: "navigation.groups.observability", items: [
-    { key: "/monitor", icon: <HeartOutlined />, labelKey: "navigation.monitor" },
-    { key: "/scheduling", icon: <ScheduleOutlined />, labelKey: "navigation.scheduling" },
-    { key: "/analytics", icon: <BarChartOutlined />, labelKey: "navigation.analytics" },
-    { key: "/logs", icon: <FileTextOutlined />, labelKey: "navigation.logs" },
+    { key: "/monitor", icon: icon(ConsoleIcon.monitor), labelKey: "navigation.monitor" },
+    { key: "/scheduling", icon: icon(ConsoleIcon.scheduling), labelKey: "navigation.scheduling" },
+    { key: "/analytics", icon: icon(ConsoleIcon.analytics), labelKey: "navigation.analytics" },
+  ] },
+  { labelKey: "navigation.groups.compute", items: [
+    // External platforms provide nodes, so they sit above them. Public and
+    // private clouds share one list; /zstack redirects to it.
+    // Kubernetes clusters provide nodes too.
+    { key: "/providers", icon: icon(ConsoleIcon.platforms), labelKey: "navigation.platforms" },
+    { key: "/kubernetes", icon: icon(ConsoleIcon.kubernetes), labelKey: "navigation.kubernetes" },
+    { key: "/nodes", icon: icon(ConsoleIcon.nodes), labelKey: "navigation.nodes" },
+    { key: "/gpus", icon: icon(ConsoleIcon.gpus), labelKey: "navigation.gpus" },
+    { key: "/storage", icon: icon(ConsoleIcon.storage), labelKey: "navigation.storage" },
+    { key: "/networks", icon: icon(ConsoleIcon.networks), labelKey: "navigation.networks" },
+  ] },
+  { labelKey: "navigation.groups.models", items: [
+    { key: "/models", icon: icon(ConsoleIcon.models), labelKey: "navigation.models" },
+    { key: "/inference-templates", icon: icon(ConsoleIcon.inferenceTemplates), labelKey: "navigation.inferenceTemplates" },
+    { key: "/images", icon: icon(ConsoleIcon.images), labelKey: "navigation.images" },
   ] },
   { labelKey: "navigation.groups.inference", items: [
     // Deploying is the list's create action, so /deploy highlights the list.
-    { key: "/deployments", icon: <RocketOutlined />, labelKey: "navigation.deployments", also: ["deploy"] },
-    { key: "/batches", icon: <InboxOutlined />, labelKey: "navigation.batches" },
-    { key: "/playground/chat", icon: <ExperimentOutlined />, labelKey: "navigation.playground" },
-    { key: "/evaluations", icon: <FundOutlined />, labelKey: "navigation.evaluations" },
-  ] },
-  { labelKey: "navigation.groups.models", items: [
-    { key: "/models", icon: <AppstoreOutlined />, labelKey: "navigation.models" },
-    { key: "/inference-templates", icon: <ProfileOutlined />, labelKey: "navigation.inferenceTemplates" },
-    { key: "/images", icon: <ContainerOutlined />, labelKey: "navigation.images" },
-  ] },
-  { labelKey: "navigation.groups.compute", items: [
-    { key: "/nodes", icon: <CloudServerOutlined />, labelKey: "navigation.nodes" },
-    { key: "/gpus", icon: <ControlOutlined />, labelKey: "navigation.gpus" },
-    { key: "/storage", icon: <DatabaseOutlined />, labelKey: "navigation.storage" },
-    { key: "/networks", icon: <ApiOutlined />, labelKey: "navigation.networks" },
-    { key: "/providers", icon: <CloudOutlined />, labelKey: "navigation.publicCloud" },
-    { key: "/zstack", icon: <ApartmentOutlined />, labelKey: "navigation.privateCloud" },
+    { key: "/deployments", icon: icon(ConsoleIcon.deployments), labelKey: "navigation.deployments", also: ["deploy"] },
+    { key: "/batches", icon: icon(ConsoleIcon.batches), labelKey: "navigation.batches" },
+    { key: "/playground/chat", icon: icon(ConsoleIcon.playground), labelKey: "navigation.playground" },
+    { key: "/evaluations", icon: icon(ConsoleIcon.evaluations), labelKey: "navigation.evaluations" },
   ] },
   { labelKey: "navigation.groups.admin", items: [
-    { key: "/apikeys", icon: <KeyOutlined />, labelKey: "navigation.apiKeys" },
-    { key: "/settings", icon: <SettingOutlined />, labelKey: "navigation.settings" },
+    { key: "/apikeys", icon: icon(ConsoleIcon.apiKeys), labelKey: "navigation.apiKeys" },
+    { key: "/logs", icon: icon(ConsoleIcon.logs), labelKey: "navigation.logs" },
+    { key: "/settings", icon: icon(ConsoleIcon.settings), labelKey: "navigation.settings" },
   ] },
 ];
 

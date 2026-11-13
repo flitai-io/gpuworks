@@ -203,7 +203,7 @@ func TestSchedulingActivityAtFleetScale(t *testing.T) {
 	}
 	measure := func(label string) map[string]time.Duration {
 		out := map[string]time.Duration{}
-		h := &apiHandlers{d: fleet.deps}
+		var h *apiHandlers
 		for _, path := range paths {
 			// Uncached: a fresh handler set, the best of three.
 			best := time.Hour

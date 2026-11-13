@@ -521,7 +521,7 @@ func modelRepoBytesDone(root string) int64 {
 	var done int64
 	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
-			return nil
+			return nil //nolint:nilerr // Progress is best effort; unreadable entries contribute no observed bytes.
 		}
 		info, statErr := entry.Info()
 		if statErr == nil && info.Mode().IsRegular() {

@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -56,7 +54,7 @@ func (p *HygonProber) Available() bool {
 
 func (p *HygonProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 	if _, err := p.lookup("hy-smi"); err != nil {
-		return p.roster(nil, false), nil
+		return p.roster(nil, false), nil //nolint:nilerr // Absence of this vendor CLI is an unavailable probe, not a node failure.
 	}
 	out, err := p.run(ctx, hygonInventoryArgs()...)
 	if err != nil {
@@ -152,97 +150,6 @@ func (p *HygonProber) Metrics(ctx context.Context) ([]Metric, error) {
 		return nil, errors.Join(err, memErr, overviewErr)
 	}
 	return p.parseMetrics(memOut, overview), nil
-}
-
-func (p *HygonProber) RuntimeInjection(indexes []int) RuntimeInjection {
-	if len(indexes) == 0 {
-		return RuntimeInjection{}
-	}
-	out, err := p.run(context.Background(), hygonInventoryArgs()...)
-	if err != nil {
-		return RuntimeInjection{UnsupportedReason: fmt.Sprintf("cannot verify Hygon device inventory: hy-smi: %v", err)}
-	}
-	gpus := parseHygonInventory(out, func(path string) ([]byte, error) {
-		return p.read(path)
-	})
-	byIndex := make(map[int]proto.GPUInfo, len(gpus))
-	for _, gpu := range gpus {
-		byIndex[gpu.Index] = gpu
-	}
-
-	args := make([]string, 0, 14+len(indexes)*4)
-	devices := []string{}
-	for _, path := range []string{"/dev/kfd", "/dev/mkfd"} {
-		if err := p.requireDevice(path); err != nil {
-			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("required Hygon device is unavailable: %s: %v", path, err)}
-		}
-		args = append(args, "--device", path+":"+path+":rwm")
-		devices = append(devices, path)
-	}
-	if info, err := p.inspect("/opt/hyhal"); err != nil || !info.IsDir() {
-		return RuntimeInjection{UnsupportedReason: "required Hygon driver directory is unavailable: /opt/hyhal"}
-	}
-
-	seen := make(map[int]bool, len(indexes))
-	for _, index := range indexes {
-		if seen[index] {
-			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("Hygon device index %d was selected more than once", index)}
-		}
-		seen[index] = true
-		gpu, ok := byIndex[index]
-		if !ok || gpu.PCIeBDF == "" {
-			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("Hygon device %d is absent from the hy-smi inventory", index)}
-		}
-		p.mu.RLock()
-		expected, hasExpected := p.lastSeen[index]
-		p.mu.RUnlock()
-		if hasExpected && expected.bdf != "" && expected.bdf != gpu.PCIeBDF {
-			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("Hygon index %d changed from PCI %s to %s since probe", index, expected.bdf, gpu.PCIeBDF)}
-		}
-		nodes, err := p.drmNodes(gpu.PCIeBDF)
-		if err != nil {
-			return RuntimeInjection{UnsupportedReason: err.Error()}
-		}
-		for _, path := range nodes {
-			args = append(args, "--device", path+":"+path+":rwm")
-			devices = append(devices, path)
-		}
-	}
-	// Docker resolves named supplementary groups inside the image. Minimal
-	// probe images have no group database, so pass host device GIDs as numbers.
-	groups := map[uint32]bool{}
-	for _, path := range devices {
-		info, err := p.inspect(path)
-		if err != nil {
-			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("inspect Hygon device %s group: %v", path, err)}
-		}
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok {
-			return RuntimeInjection{UnsupportedReason: fmt.Sprintf("cannot determine Hygon device %s group", path)}
-		}
-		groups[stat.Gid] = true
-	}
-	groupIDs := make([]int, 0, len(groups))
-	for group := range groups {
-		groupIDs = append(groupIDs, int(group))
-	}
-	sort.Ints(groupIDs)
-	for _, group := range groupIDs {
-		args = append(args, "--group-add", strconv.Itoa(group))
-	}
-	visible := joinDeviceIndexes(indexes)
-	// Ray in Hygon vLLM images rejects ROCR_VISIBLE_DEVICES when
-	// HIP_VISIBLE_DEVICES is also set. HIP alone restricts the visible cards.
-	return RuntimeInjection{
-		Env: map[string]string{
-			"HYGON_VISIBLE_DEVICES": visible,
-			"HIP_VISIBLE_DEVICES":   visible,
-		},
-		DockerArgs: args,
-		// Driver libraries are required by every runtime. PRoot launchers do
-		// not interpret Docker volume flags; structured mounts reach them too.
-		Mounts: []RuntimeMount{{Source: "/opt/hyhal", Target: "/opt/hyhal", ReadOnly: true}},
-	}
 }
 
 func (p *HygonProber) parseMetrics(fieldsOut, overview string) []Metric {
@@ -510,14 +417,6 @@ func hygonInventoryArgs() []string {
 	return []string{"--showbus", "--showproductname", "--showmeminfo", "vram"}
 }
 
-func joinDeviceIndexes(indexes []int) string {
-	values := make([]string, len(indexes))
-	for i, index := range indexes {
-		values[i] = strconv.Itoa(index)
-	}
-	return strings.Join(values, ",")
-}
-
 func (p *HygonProber) run(ctx context.Context, args ...string) (string, error) {
 	if p.command != nil {
 		return p.command(ctx, args...)
@@ -525,7 +424,7 @@ func (p *HygonProber) run(ctx context.Context, args ...string) (string, error) {
 	// Keep the normal CLI name for shared query health tracking. Some DTK
 	// installations expose hy-smi only under their installation directory.
 	command := "hy-smi"
-	if _, err := exec.LookPath(command); err != nil {
+	if _, err := lookCLI(command); err != nil {
 		var lookupErr error
 		command, lookupErr = p.lookup(command)
 		if lookupErr != nil {
@@ -539,12 +438,12 @@ func (p *HygonProber) lookup(name string) (string, error) {
 	if p.lookPath != nil {
 		return p.lookPath(name)
 	}
-	command, err := exec.LookPath(name)
+	command, err := lookCLI(name)
 	if err == nil || name != "hy-smi" {
 		return command, err
 	}
 	for _, candidate := range []string{"/opt/dtk/bin/hy-smi", "/opt/hyhal/bin/hy-smi"} {
-		if command, err := exec.LookPath(candidate); err == nil {
+		if command, err := lookCLI(candidate); err == nil {
 			return command, nil
 		}
 	}
@@ -565,11 +464,15 @@ func (p *HygonProber) match(pattern string) ([]string, error) {
 	return filepath.Glob(pattern)
 }
 
+// inspect stats path where CLIs run (statTool): a privileged container's
+// own /dev and /opt/hyhal are copies made at container start, so a device
+// node or driver directory that appears afterward is found only on the
+// host's live file system.
 func (p *HygonProber) inspect(path string) (os.FileInfo, error) {
 	if p.stat != nil {
 		return p.stat(path)
 	}
-	return os.Stat(path)
+	return statTool(path)
 }
 
 func (p *HygonProber) requireDevice(path string) error {

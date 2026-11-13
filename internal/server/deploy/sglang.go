@@ -55,6 +55,7 @@ func (sglangEngine) Profile() Profile {
 			"enable_metrics", "log_level",
 			"max_model_len", "dtype", "quantization", "gpu_memory_utilization",
 			"max_num_seqs", "max_num_batched_tokens", "enable_prefix_caching",
+			"data_parallel_size",
 			"enable_cache_report",
 			"kv_cache_dtype", "reasoning_parser", "tool_call_parser",
 			"enable_auto_tool_choice", "trust_remote_code", "enforce_eager",

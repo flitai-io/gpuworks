@@ -25,7 +25,7 @@ export default function VerdictCard({ run, meta, onRerun }: { run: BenchmarkRun;
 				type={presentation.tone}
 				message={presentation.title}
 				description={presentation.description}
-				action={presentation.suggestion && onRerun ? <Button onClick={() => onRerun(presentation.suggestion?.maxConcurrency)}>{presentation.suggestion.label}</Button> : undefined}
+				action={presentation.suggestion && onRerun ? <Button data-report-exclude onClick={() => onRerun(presentation.suggestion?.maxConcurrency)}>{presentation.suggestion.label}</Button> : undefined}
 			/>
 			{point ? <Typography.Text type="secondary" style={{ display: "block", marginTop: 12 }}>{cardTitle} · {pointParameterLabel(point)}</Typography.Text> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("verdictCard.waiting")} style={{ marginBlock: 12 }} />}
 			<Row gutter={[12, 12]} style={{ marginTop: 16 }}>

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -136,7 +137,7 @@ func observeSQLitePeerLock(path string) (result sqlitePeerLock, err error) {
 	if err := unix.Fstat(int(f.Fd()), &stat); err != nil {
 		return result, err
 	}
-	lock := unix.Flock_t{Type: unix.F_WRLCK, Whence: int16(os.SEEK_SET)}
+	lock := unix.Flock_t{Type: unix.F_WRLCK, Whence: int16(io.SeekStart)}
 	if err := unix.FcntlFlock(f.Fd(), unix.F_GETLK, &lock); err != nil {
 		return result, err
 	}

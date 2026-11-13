@@ -8,14 +8,12 @@ import {
   Select,
   Space,
   Switch,
-  Typography,
   message,
 } from "antd";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { api, type AIConfig, type AIConfigTestResult, type AIPreset } from "../../api";
-
-const { Text } = Typography;
+import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
 
 /** PRESETS are the endpoints the platform knows a base address and model for. */
 export const PRESETS: { value: AIPreset; base_url: string; model: string }[] = [
@@ -81,6 +79,8 @@ export default function AIConfigModal({
 }) {
   const { t } = useTranslation("settings");
   const [form] = Form.useForm<FormValues>();
+  const baseURL = Form.useWatch("base_url", form) as string | undefined;
+  const outboundAccess = useOutboundHostAccess([baseURL ?? ""], open);
   const [submitting, setSubmitting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<AIConfigTestResult | null>(null);
@@ -125,6 +125,7 @@ export default function AIConfigModal({
     setTesting(true);
     setTestResult(null);
     try {
+      await outboundAccess.authorize();
       setTestResult(
         await api.testAIConfig({
           id: editing?.id,
@@ -151,6 +152,7 @@ export default function AIConfigModal({
     if (!v) return;
     setSubmitting(true);
     try {
+      await outboundAccess.authorize();
       if (editing) {
         await api.updateAIConfig(editing.id, {
           name: v.name,
@@ -205,24 +207,25 @@ export default function AIConfigModal({
         <Form.Item label={t("ai.preset")} name="preset" rules={[{ required: true }]}>
           <Select options={PRESETS.map((preset) => ({ value: preset.value, label: presetLabel(t, preset.value) }))} onChange={onPreset} />
         </Form.Item>
-        <Form.Item label={t("ai.name")} name="name" rules={[{ required: true, message: t("ai.nameRequired") }]}>
+        <Form.Item label={t("ai.name")} name="name" rules={[{ required: true, whitespace: true, message: t("ai.nameRequired") }]}>
           <Input placeholder={t("ai.namePlaceholder")} />
         </Form.Item>
         <Form.Item
           label={t("ai.baseUrl")}
           name="base_url"
           extra={t("ai.baseUrlHint")}
-          rules={[{ required: true, message: t("ai.baseUrlRequired") }]}
+          rules={[{ required: true, whitespace: true, message: t("ai.baseUrlRequired") }]}
         >
           <Input placeholder="https://api.deepseek.com" />
         </Form.Item>
-        <Form.Item label={t("ai.model")} name="model" rules={[{ required: true, message: t("ai.modelRequired") }]}>
+        <OutboundHostAccess access={outboundAccess} />
+        <Form.Item label={t("ai.model")} name="model" rules={[{ required: true, whitespace: true, message: t("ai.modelRequired") }]}>
           <Input placeholder="deepseek-v4-flash" />
         </Form.Item>
         <Form.Item
           label={t("ai.upstreamKey")}
           name="api_key"
-          rules={editing ? [] : [{ required: true, message: t("ai.keyRequired") }]}
+          rules={editing ? [] : [{ required: true, whitespace: true, message: t("ai.keyRequired") }]}
         >
           <Input.Password placeholder={editing ? t("ai.keyKeep") : "sk-…"} autoComplete="new-password" />
         </Form.Item>
@@ -250,7 +253,7 @@ export default function AIConfigModal({
             showIcon
             message={t(result.text)}
             description={
-              <Text type="secondary">
+              <span className="text-fg-muted">
                 {[
                   testResult.detail,
                   t("ai.testAddress", { url: testResult.base_url }),
@@ -258,7 +261,7 @@ export default function AIConfigModal({
                 ]
                   .filter(Boolean)
                   .join(" · ")}
-              </Text>
+              </span>
             }
           />
         )}

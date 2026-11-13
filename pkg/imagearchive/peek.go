@@ -32,6 +32,21 @@ const (
 // ErrInvalidURL marks a URL this package refuses before any request is made.
 var ErrInvalidURL = errors.New("invalid archive url")
 
+// UpstreamStatusError is an HTTP status from the archive server. The error
+// text is only the method and status, never the URL: query strings can carry
+// credentials.
+type UpstreamStatusError struct {
+	Method string
+	Status int
+}
+
+func (e *UpstreamStatusError) Error() string {
+	if e == nil {
+		return "unexpected status"
+	}
+	return fmt.Sprintf("%s: unexpected status %d", e.Method, e.Status)
+}
+
 // errRangeIgnored is the internal signal that the server answered a Range
 // request with the full body (200 instead of 206).
 var errRangeIgnored = errors.New("server ignored range request")
@@ -216,7 +231,7 @@ func (f *fetcher) head(ctx context.Context) (size int64, acceptsRanges bool, err
 	}
 	defer closeBody(resp)
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return 0, false, fmt.Errorf("HEAD %s: unexpected status %s", f.url, resp.Status)
+		return 0, false, &UpstreamStatusError{Method: http.MethodHead, Status: resp.StatusCode}
 	}
 	size = resp.ContentLength
 	if size < 0 {
@@ -288,7 +303,7 @@ func (f *fetcher) rangeGet(ctx context.Context, start, end int64) ([]byte, error
 	}
 	defer closeBody(resp)
 	if resp.StatusCode != http.StatusPartialContent {
-		return nil, fmt.Errorf("GET %s bytes=%d-%d: unexpected status %s", f.url, start, end, resp.Status)
+		return nil, &UpstreamStatusError{Method: http.MethodGet, Status: resp.StatusCode}
 	}
 	if cr := resp.Header.Get("Content-Range"); cr != "" {
 		got, ok := contentRangeStart(cr)

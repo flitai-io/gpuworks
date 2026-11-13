@@ -59,7 +59,7 @@ func (a *apiHandlers) putNodeSSH(w http.ResponseWriter, r *http.Request) {
 	}
 	auth := provision.SSHAuth{Mode: req.AuthMode, PlatformKey: a.platformKey()}
 	switch req.AuthMode {
-	case provision.AuthPassword:
+	case provision.AuthPassword, provision.AuthKeyboardInteractive:
 		auth.Password = req.Password
 	case provision.AuthPrivateKey:
 		auth.PrivateKeyPEM = req.PrivateKeyPEM

@@ -96,8 +96,12 @@ def exercise_branding_conflict(page, card, branding, base, path, patches, click_
     expect(text_field(branding["productName"])).to_have_value("")
     expect(text_field(branding["consoleTitle"])).to_have_value("")
     expect(text_field(branding["loginDescription"], "textarea")).to_have_value("")
-    check(card.locator("img.app-brand-logo").count() == 0, "the open card took the other session logo")
-    expect(page.locator(".app-header-title")).to_have_text(default_title)
+    # The other session stored no logo, so BrandMark must fall back to the
+    # built-in wordmark instead of showing the open card's draft.
+    check(card.locator("img.app-brand-logo").get_attribute("src") == "/assets/gpuworks-wordmark.svg",
+          "the open card took the other session logo")
+    # An empty consoleTitle renders the logo alone, so there is no title span.
+    expect(page.locator(".app-brand-name")).to_have_count(0)
     check(card.locator(".ant-alert-error").count() == 0, "the branding card shows a conflict")
     check(len(patches) == baseline, "the other branding session was counted as a page save")
     with page.expect_response(lambda response: urlsplit(response.url).path == path

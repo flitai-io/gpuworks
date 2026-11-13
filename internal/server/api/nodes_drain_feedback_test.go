@@ -2,10 +2,11 @@ package api
 
 import (
 	"encoding/json"
-	"gpuworks.ai/gpuworks/internal/proto"
 	"net/http"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/store"

@@ -6,6 +6,7 @@ import { createI18n } from "./helpers/dom.ts";
 
 const { i18n } = await createI18n(["nodes"], "zh");
 const { cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
+const { default: userEvent } = await import("@testing-library/user-event");
 const { NodeConnectionBadge } = await import("../src/components/NodeConnectionBadge.tsx");
 type NodeT = import("../src/api.ts").Node;
 
@@ -35,7 +36,7 @@ test("a node being restored reads as connecting with the phase as a note", () =>
 // Once recovery has failed or been given up the node arrives offline; the
 // reason stays as a note rather than becoming a state.
 test("a recovery that gave up reads as offline with the reason kept", () => {
-  for (const [phase, text] of [["unreachable", "不可达"], ["recovery_blocked", "恢复受阻"], ["stopped", "实例已销毁"]]) {
+  for (const [phase, text] of [["unreachable", "不可达"], ["probe_failed", "恢复探测失败"], ["recovery_blocked", "恢复受阻"], ["stopped", "实例已销毁"]]) {
     const { container } = show({ state: "offline", recovery_phase: phase });
     assert.ok(container.textContent?.includes("离线"), `phase ${phase} reads as offline`);
     assert.equal(screen.queryByText("连接中"), null);
@@ -59,7 +60,7 @@ test("the badge shows the state, and the recovery detail only on demand", async 
   assert.equal(screen.queryByText("重装中"), null, "the phase is not a second status beside it");
   const mark = screen.getByRole("img");
   assert.match(mark.getAttribute("aria-label") ?? "", /重装中[\s\S]*ssh: handshake failed/);
-  fireEvent.focus(mark);
+  await userEvent.setup().tab();
   await waitFor(() => assert.match(screen.getByRole("tooltip").textContent ?? "", /重装中/));
 });
 
@@ -67,4 +68,33 @@ test("an online node carries no warning mark", () => {
   const { container } = show({ state: "online" });
   assert.ok(container.textContent?.includes("在线"));
   assert.equal(screen.queryByRole("img"), null);
+});
+
+test("keyboard focus reveals the saved report and recovery history only on demand", async () => {
+  show({
+    state: "connecting", recovery_phase: "probing", last_recovery_error: "ssh: handshake failed",
+    last_seen_at: new Date(2026, 10, 12, 8, 15).toISOString(),
+    last_probe_at: new Date(2026, 10, 12, 9, 20).toISOString(), recovery_attempts: 3,
+  });
+  assert.equal(screen.queryByText("最后成功上报"), null);
+  await userEvent.setup().tab();
+  const history = await screen.findByRole("tooltip");
+  assert.equal(document.activeElement?.getAttribute("aria-describedby"), history.id);
+  assert.match(history.textContent ?? "", /最后成功上报[\s\S]*2026-11-12 08:15/);
+  assert.match(history.textContent ?? "", /最近恢复探测[\s\S]*2026-11-12 09:20/);
+  assert.match(history.textContent ?? "", /已尝试恢复 3 次/);
+  assert.match(history.textContent ?? "", /ssh: handshake failed/);
+});
+
+test("hovering a healthy node keeps unobserved times unknown and omitted zero attempts as zero", async () => {
+  // Node DTO omits recovery_attempts when it is zero.
+  for (const recovery_attempts of [undefined, 0]) {
+    show({ state: "online", recovery_attempts });
+    assert.equal(screen.queryByRole("img"), null);
+    fireEvent.mouseOver(screen.getByLabelText(/^在线 · /));
+    const history = await screen.findByRole("tooltip");
+    assert.equal((history.textContent?.match(/未观测/g) ?? []).length, 2);
+    assert.match(history.textContent ?? "", /已尝试恢复 0 次/);
+    cleanup();
+  }
 });

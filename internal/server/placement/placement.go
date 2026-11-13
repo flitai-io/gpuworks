@@ -152,7 +152,7 @@ func validateProgram(source string) error {
 	if len(source) == 0 || len(source) > MaxSourceBytes {
 		return fmt.Errorf("placement resolver source must contain 1..%d bytes", MaxSourceBytes)
 	}
-	file, err := syntax.Parse("placement.star", source, 0)
+	file, err := syntax.LegacyFileOptions().Parse("placement.star", source, 0)
 	if err != nil {
 		return fmt.Errorf("parse placement resolver: %w", err)
 	}

@@ -73,6 +73,9 @@ func adopt(dir, releaseID string) (string, error) {
 	if len(archives) != len(sums) {
 		return "", fmt.Errorf("SHA256SUMS lists %d archives, %s holds %d", len(sums), dir, len(archives))
 	}
+	if _, err := readReleaseDocs(dir, releaseID); err != nil {
+		return "", err
+	}
 	builtAt := ""
 	for _, archive := range archives {
 		want, ok := sums[archive.name]
@@ -112,6 +115,9 @@ func readSums(file string) (map[string]string, error) {
 		digest, name, ok := strings.Cut(line, "  ")
 		if !ok || !sha256Pattern.MatchString(digest) || name == "" {
 			return nil, fmt.Errorf("SHA256SUMS line %q is not \"<sha256>  <name>\"", line)
+		}
+		if _, exists := sums[name]; exists {
+			return nil, fmt.Errorf("SHA256SUMS lists %q twice", name)
 		}
 		sums[name] = digest
 	}

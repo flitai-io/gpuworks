@@ -5,15 +5,26 @@ import (
 	"errors"
 	"net/http"
 
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/diagnostics"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
+	if resp, ok := v.(*dto.EvaluateResponse); ok {
+		prepareEvaluateResponse(w, resp)
+	}
+	// Encoding can fail for persisted RawMessage values, before any bytes
+	// reach the writer. Do not commit a successful status until it succeeds.
+	body, err := json.Marshal(v)
+	if err != nil {
+		code = http.StatusInternalServerError
+		body = []byte(`{"code":"RESPONSE_ENCODING_FAILED","error":"response data could not be encoded as JSON"}`)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(append(body, '\n'))
 }
 
 // WriteError answers err as the API does: a product error with its stable
@@ -31,13 +42,25 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 		code = http.StatusInsufficientStorage
 	}
 	response := map[string]any{"error": err.Error()}
+	report := boundedDiagnosticReport(diagnosticsFromError(err))
+	if report != nil {
+		response["diagnostics"] = report
+	}
 	if errors.As(err, &productErr) {
 		response["code"] = productErr.Code()
 		w.Header().Set(usageErrorHeader, productErr.Code())
 		if params := productErr.Params(); len(params) > 0 {
 			response["params"] = params
 		}
-		noteProductError(w, productErr.Code(), productErr.Params())
+		params := productErr.Params()
+		if summary := diagnosticLogSummary(report); summary != nil {
+			params = make(map[string]any, len(productErr.Params())+1)
+			for key, value := range productErr.Params() {
+				params[key] = value
+			}
+			params["diagnostics"] = summary
+		}
+		noteProductError(w, productErr.Code(), params)
 	}
 	writeJSON(w, code, response)
 }

@@ -15,7 +15,14 @@ import (
 )
 
 // ErrTargetDenied deliberately reveals neither DNS answers nor network errors.
+// Reserved, link-local and non-global addresses use this error: an allow-list
+// entry does not make them reachable.
 var ErrTargetDenied = errors.New("outbound URL is not permitted")
+
+// ErrTargetNeedsAllow is a private or loopback target the allow list can
+// permit. Callers can offer that approval without treating it as a reserved
+// address.
+var ErrTargetNeedsAllow = fmt.Errorf("%w: private host is not allowed", ErrTargetDenied)
 
 // policy applies only to user-configurable HTTP sources, never node RPC/SSH.
 // Exceptions are administrator configuration, not fields accepted by the API.
@@ -60,11 +67,35 @@ func (p policy) addresses(ctx context.Context, host string) ([]netip.Addr, error
 	// Validate the entire DNS answer before any dial. Mixed public/private
 	// answers must not allow a public first address to hide a private fallback.
 	for _, address := range addresses {
-		if !p.permits(host, address.Unmap()) {
+		address = address.Unmap()
+		if addressUnallowable(address) {
 			return nil, ErrTargetDenied
 		}
 	}
+	// An allow-list miss must not hide a permanently forbidden later answer.
+	for _, address := range addresses {
+		address = address.Unmap()
+		if !p.permits(host, address) {
+			return nil, ErrTargetNeedsAllow
+		}
+	}
 	return addresses, nil
+}
+
+// addressUnallowable reports addresses the allow list is not allowed to permit.
+func addressUnallowable(address netip.Addr) bool {
+	address = address.Unmap()
+	if !address.IsValid() || (!address.IsGlobalUnicast() && !address.IsLoopback()) || address.IsLinkLocalUnicast() {
+		return true
+	}
+	for _, prefix := range forbiddenRanges {
+		// ::/96 covers IPv4-compatible wrappers and genuine ::1. Only the
+		// latter follows the explicit loopback exception policy below.
+		if prefix.Contains(address) && address != netip.IPv6Loopback() {
+			return true
+		}
+	}
+	return false
 }
 
 var forbiddenRanges = []netip.Prefix{
@@ -82,15 +113,8 @@ var forbiddenRanges = []netip.Prefix{
 
 func (p policy) permits(host string, address netip.Addr) bool {
 	address = address.Unmap()
-	if !address.IsValid() || (!address.IsGlobalUnicast() && !address.IsLoopback()) || address.IsLinkLocalUnicast() {
+	if addressUnallowable(address) {
 		return false
-	}
-	for _, prefix := range forbiddenRanges {
-		// ::/96 covers IPv4-compatible wrappers and genuine ::1. Only the
-		// latter follows the explicit loopback exception policy below.
-		if prefix.Contains(address) && address != netip.IPv6Loopback() {
-			return false
-		}
 	}
 	if !address.IsPrivate() && !address.IsLoopback() {
 		return true

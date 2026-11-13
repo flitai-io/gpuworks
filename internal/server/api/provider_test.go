@@ -289,6 +289,12 @@ func TestListProvidersIncludesCountsAndTimestamps(t *testing.T) {
 	if rows[1].Name != "provider" || rows[1].InstanceCount != 0 {
 		t.Fatalf("second row = %+v", rows[1])
 	}
+	// Each row names the platform its kind connects, so the console never classifies kinds itself.
+	for _, want := range []string{`"kind":"zstack","category":"private_cloud",`, `"kind":"runpod","category":"public_cloud",`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("wire JSON lacks %s: %s", want, rec.Body.String())
+		}
+	}
 }
 
 func TestUpdateProviderAcceptsEndpointAndExtra(t *testing.T) {

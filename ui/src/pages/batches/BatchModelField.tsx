@@ -1,4 +1,6 @@
-import { Alert, Checkbox, Select, Typography } from "antd";
+import { Notice } from "../../ui-kit/Notice";
+import { Checkbox } from "../../components/ui/checkbox";
+import { OptionSelect } from "../../ui-kit/OptionSelect";
 import { useTranslation } from "react-i18next";
 import type { BatchModel } from "../../batchApi";
 
@@ -43,9 +45,9 @@ export default function BatchModelField({ options, value, onChange, disabled, sh
   return (
     <div className="batch-create-field">
       <label htmlFor="batch-create-model">{t("create.model.label")}</label>
-      <Select
+      <OptionSelect
         id="batch-create-model"
-        allowClear
+        clearable
         value={value}
         onChange={(next) => onChange(next || undefined)}
         placeholder={t("create.model.placeholder")}
@@ -53,11 +55,11 @@ export default function BatchModelField({ options, value, onChange, disabled, sh
         options={options.map((option) => ({ value: option.name, label: `${option.name} · ${stateText(option.state)}` }))}
         style={{ width: "100%" }}
       />
-      <Checkbox checked={showWaiting} onChange={(event) => onShowWaitingChange(event.target.checked)} disabled={disabled}>
+      <label className="flex items-center gap-2 px-1.5"><Checkbox checked={showWaiting} onCheckedChange={(checked) => onShowWaitingChange(checked === true)} disabled={disabled} />
         {t("create.model.showWaiting")}
-      </Checkbox>
-      <Typography.Text type="secondary">{t("create.model.help")}</Typography.Text>
-      {warning && <Alert type="warning" showIcon message={warning} />}
+      </label>
+      <span className="batch-create-help text-label text-fg-muted">{t("create.model.help")}</span>
+      {warning && <Notice tone="warning" title={warning} />}
     </div>
   );
 }

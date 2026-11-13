@@ -5,13 +5,24 @@
 # the mainland mirrors or host-side caches the GitLab runners need apply.
 #
 # Nothing here uses a secret or a self-hosted runner, so a pull request from a
-# fork runs with the same read-only token as any other. Cloud and hardware
-# acceptance (L4), release publishing and the docs build stay in GitLab.
+# fork runs with the same read-only token as any other. The docs build and the
+# UI walk have workflows of their own (docs.yml, ui-check.yml), the release
+# packages release.yml, which calls this workflow for its gates. Cloud and
+# hardware acceptance (L4) stays in GitLab.
 name: ci
 
 on:
   pull_request:
   workflow_dispatch:
+  # release.yml: with release_gates only the fast deterministic gates run, the
+  # ones .release-build needs in .gitlab-ci.yml. The UI suite and L2/L3 flake
+  # often enough that requiring them would skip nightly packages over a
+  # local-timing failure.
+  workflow_call:
+    inputs:
+      release_gates:
+        type: boolean
+        default: false
   # While GitLab stays authoritative only master reaches this mirror, so a
   # nightly run on it is what gets compared with GitLab's pipeline for the
   # same commit. 03:07 Asia/Shanghai: just after GitLab's nightly starts and
@@ -22,8 +33,10 @@ on:
 permissions:
   contents: read
 
+# github.workflow names the caller under workflow_call, so the release run on
+# master never cancels the nightly run of this workflow on it, or the reverse.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -59,6 +72,7 @@ jobs:
   # The suite runs one test file at a time on a 2-core runner and takes
   # over an hour unsplit; four shards each finish in about a quarter.
   ui-test:
+    if: ${{ !inputs.release_gates }}
     strategy:
       fail-fast: false
       matrix:
@@ -84,10 +98,40 @@ jobs:
         env:
           TEST_SHARD: ${{ matrix.shard }}/4
 
+  # The untagged suite in three shards of whole packages
+  # (scripts/go_package_shard.sh): unsplit it is the longest job, and dealing
+  # the packages round-robin by import path puts its three heaviest
+  # (server/api and two integrationtest suites) in different shards.
   test:
     needs: ui
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          name: webui-dist
+          path: internal/server/webui/dist/
+      - name: go test (shard ${{ matrix.shard }}/3)
+        run: |
+          packages=$(CGO_ENABLED=0 ./scripts/go_package_shard.sh ${{ matrix.shard }}/3 ./...)
+          CGO_ENABLED=0 go test -timeout 30m -coverprofile=coverage-core-${{ matrix.shard }}.out $packages
+
+  # Everything else in the core gate that is not the unit suite, in one job:
+  # each step takes seconds to a few minutes, and a job of its own per step
+  # would hold a runner from the organization's concurrent-job limit for the
+  # setup alone.
+  checks:
+    needs: ui
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
         with:
@@ -106,57 +150,38 @@ jobs:
       - run: ./scripts/check_ci_yaml.sh
       - run: CGO_ENABLED=0 go run ./scripts/artifactsindex
       - run: make test-e2e-coverage-check
+      - run: CGO_ENABLED=0 go vet ./...
+      - run: make lint
+      - run: make test-l4-compshare-offline-contracts
       - run: (cd build/runtime-assets/hygon-vdev-helper && CGO_ENABLED=0 go test -timeout 5m ./...)
-      - run: CGO_ENABLED=0 go test -timeout 30m -coverprofile=coverage-core.out ./...
       # Build-tag suites run in their own jobs; compile them here so a
       # refactor cannot silently break an opt-in lane.
       - run: make check-tagged-build
-
-  vet:
-    needs: ui
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-      - uses: actions/download-artifact@v5
-        with:
-          name: webui-dist
-          path: internal/server/webui/dist/
-      - run: CGO_ENABLED=0 go vet ./...
-
-  compshare-offline-contracts:
-    needs: ui
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-      - uses: actions/download-artifact@v5
-        with:
-          name: webui-dist
-          path: internal/server/webui/dist/
-      - run: make test-l4-compshare-offline-contracts
 
   # Same shape as .docker-core in .gitlab-ci.yml: a per-job DinD daemon
   # exposed on a dedicated gpuworks-e2e socket (the real terminal cases refuse
   # any other daemon) and the suite in a golang container, which also keeps
   # the upgrade cases off the runner VM's systemd.
   docker-suite:
+    if: ${{ !inputs.release_gates }}
     needs: ui
+    # L2 in three shards, as core-l2 in .gitlab-ci.yml (make test-l2 L2_SHARD,
+    # scripts/go_test_shard.sh); unsplit it is the longest job. l3 ignores
+    # the empty shard.
     strategy:
       fail-fast: false
       matrix:
-        suite: [l2, l3]
+        include:
+          - {suite: l2, shard: 1/3}
+          - {suite: l2, shard: 2/3}
+          - {suite: l2, shard: 3/3}
+          - {suite: l3, shard: ""}
+    name: docker-suite (${{ matrix.suite }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       DOCKER_DIND_IMAGE: "docker:29-dind@sha256:12e683a161823b2a839aeea999b9d960e6e1f9a97b1679ad6b441982e2d9cf07"
-      DOCKER_GO_IMAGE: "golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c"
+      DOCKER_GO_IMAGE: "golang:1.26.11@sha256:7af425da11f4fc1a9308eb704369e3f6d1c44e35bac0f874a59ade3f20fdc07e"
       DIND: gpuworks-docker-core-dind
     steps:
       - uses: actions/checkout@v5
@@ -164,6 +189,18 @@ jobs:
         with:
           name: webui-dist
           path: internal/server/webui/dist/
+      # The suites run in a golang container, so setup-go's cache does not
+      # reach them: keep their module and build caches here, as the GitLab
+      # lanes keep theirs on the runner host. Keyed by go.sum like setup-go's;
+      # the L2 shards build the same binaries and share one entry.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .cache/go-mod
+            .cache/go-build
+          key: go-docker-${{ matrix.suite }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-docker-${{ matrix.suite }}-
       - name: Start the isolated Docker daemon
         run: |
           mkdir -p .tmp/gpuworks-e2e .cache/home .cache/go-mod .cache/go-build
@@ -193,7 +230,11 @@ jobs:
           for image in busybox:1.36 python:3.12 alpine:3.20 quay.io/libpod/registry:2.8.2; do
             docker exec "$DIND" docker pull -q "$image"
           done
+      # The full-disk L2 case fills a tmpfs mounted for it: the suite's
+      # container may not create the user namespace it would mount one in.
       - name: make test-${{ matrix.suite }}
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           docker run --rm \
             --network "container:$DIND" \
@@ -201,6 +242,8 @@ jobs:
             -v /usr/bin/docker:/usr/bin/docker:ro \
             -v "$PWD:$PWD" \
             -v "$PWD/.tmp/gpuworks-e2e:/run/gpuworks-e2e" \
+            --tmpfs /run/gpuworks-full-disk:rw,size=64m,mode=1777 \
+            -e GPUWORKS_TEST_FULL_DISK_TMPFS=/run/gpuworks-full-disk \
             -w "$PWD" \
             -e DOCKER_HOST=unix:///run/gpuworks-e2e/docker.sock \
             -e HOME="$PWD/.cache/home" \
@@ -215,7 +258,7 @@ jobs:
             -e GPUWORKS_L3_SHELL_BASE_IMAGE=busybox:1.36 \
             -e GPUWORKS_L3_NO_PYTHON_IMAGE=alpine:3.20 \
             "$DOCKER_GO_IMAGE" \
-            make test-${{ matrix.suite }} GO_TEST_FLAGS=-v COVERPROFILE=coverage-${{ matrix.suite }}.out
+            make test-${{ matrix.suite }} GO_TEST_FLAGS=-v L2_SHARD="$SHARD" COVERPROFILE=coverage-${{ matrix.suite }}.out
       - name: Count skipped cases
         if: always()
         run: grep -c -- '--- SKIP' .testlogs/${{ matrix.suite }}.log || true
@@ -225,6 +268,6 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: ${{ matrix.suite }}-log
+          name: ${{ matrix.suite }}-log-${{ strategy.job-index }}
           path: .testlogs/
           retention-days: 14

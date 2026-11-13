@@ -141,7 +141,7 @@ export default function DeployBasicStep({
           <Form.Item
             label={t("basic.name")}
             name="name"
-            rules={[{ required: true, message: t("basic.nameRequired") }]}
+            rules={[{ required: true, whitespace: true, message: t("basic.nameRequired") }]}
           >
             <Input placeholder="my-qwen" />
           </Form.Item>

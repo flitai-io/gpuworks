@@ -11,6 +11,7 @@ type Updated = (node: Node) => void;
 const authModeLabel: Record<SSHAuthMode, string> = {
   platform_key: "ssh.auth.platformKey",
   password: "ssh.auth.password",
+  keyboard_interactive: "ssh.auth.keyboardInteractive",
   private_key: "ssh.auth.key",
 };
 
@@ -53,7 +54,7 @@ export function NodeSSHAccess({ node, onUpdated }: { node: Node; onUpdated: Upda
         user: values.user.trim(),
         probe: values.probe,
         auth_mode: authMode,
-        password: authMode === "password" ? values.password : undefined,
+        password: authMode === "password" || authMode === "keyboard_interactive" ? values.password : undefined,
         private_key_pem: authMode === "private_key" ? values.private_key_pem?.trim() || undefined : undefined,
       });
       setInfo(saved);
@@ -115,14 +116,15 @@ export function NodeSSHAccess({ node, onUpdated }: { node: Node; onUpdated: Upda
         )}
       >
         <Form form={form} layout="vertical">
-          <Form.Item label={t("ssh.host")} name="host" rules={[{ required: true, message: t("ssh.hostRequired") }]}><Input placeholder="gpu.example.com" /></Form.Item>
+          <Form.Item label={t("ssh.host")} name="host" rules={[{ required: true, whitespace: true, message: t("ssh.hostRequired") }]}><Input placeholder="gpu.example.com" /></Form.Item>
           <Space align="start" style={{ width: "100%" }}>
             <Form.Item label={t("ssh.port")} name="port" rules={[{ required: true }]}><InputNumber min={1} max={65535} /></Form.Item>
-            <Form.Item label={t("ssh.user")} name="user" rules={[{ required: true, message: t("ssh.userRequired") }]}><Input placeholder="root" /></Form.Item>
+            <Form.Item label={t("ssh.user")} name="user" rules={[{ required: true, whitespace: true, message: t("ssh.userRequired") }]}><Input placeholder="root" /></Form.Item>
           </Space>
           <SSHCredentialFields authMode={authMode} onAuthModeChange={setAuthMode} />
           <Form.Item name="probe" valuePropName="checked"><Checkbox>{t("ssh.probeAfterSave")}</Checkbox></Form.Item>
           {info && <Typography.Text type="secondary">{t("ssh.existingAuth", { method: t(authModeLabel[info.auth_mode]) })}</Typography.Text>}
+          {info?.auth_mode === "password" && <Typography.Paragraph type="secondary">{t("ssh.savedPasswordHelp")}</Typography.Paragraph>}
         </Form>
       </Modal>
     </>

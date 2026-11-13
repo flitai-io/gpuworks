@@ -85,6 +85,16 @@ Use an administrator account. The node must be online; older agents also need ac
 
 For older agents that download their binary, the batch package remains pinned during the download. Older server-initiated agents that cannot receive an upgrade package over the connection require the manual procedure below. Upgrading does not automatically drain workloads or guarantee uninterrupted requests; verify workload recovery one node at a time for multi-node inference and PD disaggregation.
 
+### Nodes of a Kubernetes Cluster
+
+Nodes connected through a DaemonSet are upgraded in a batch like any other: the agent runs from `agent/gpuworks-agent` in the node's state directory (`/opt/gpuworks` by default), and an upgrade replaces that program in place, without changing the DaemonSet or reaching a registry, so private registries and offline clusters are covered too.
+
+- A node the preview marks "State directory not executable" could not start from its state directory (for example, it is mounted noexec) and runs the program built into the image; the batch upgrade skips it. Check the state directory on the node, then delete the node's agent Pod to restart it.
+- The image tag is the runtime version and rarely changes. When a release raises it, its release notes say so: after upgrading the server, apply the manifest once more (`kubectl apply` or "Apply to the cluster") and the DaemonSet moves to the new tag; when the cluster uses a private registry or an image imported offline, push the new tag to the registry or import it on each node first.
+- A node that joins the cluster later first runs the image's own program and switches to the server's current agent before it registers; it needs no upgrade.
+
+See [Connect a Kubernetes Cluster](connect-kubernetes.md).
+
 ### Rerun the Installation Script on the Node
 
 If you can sign in to the node, you can also rerun `/install.sh` to update the agent. Use this method if the node is offline or the old version does not support self-upgrade.
@@ -114,7 +124,11 @@ With a **new server + old agent**, each feature uses the following conditions. I
 
 With an **old server + new agent**, new features may not be available. Avoid keeping this combination long term; upgrade the server first.
 
-The **Agent** column in the node list is hidden by default; you can view versions in node details. The **Upgrade Available** badge only means that version strings differ, without comparing which is newer; `dev` builds do not show this badge. Always verify the target version before upgrading.
+The node list shows **Agent version** by default. Users with a saved layout can enable it in column settings. An offline Agent shows its stored version with a **Last known version** badge. If it has never reported a version, it shows only a **Not reported** badge. Reconnecting updates the classification.
+
+On **Compute nodes**, an eligible older Agent shows **Upgrade available**, a newer Agent shows **Pending alignment**, and unordered nightly or custom builds show **Different build**. Online Agents with a blocker such as a missing package appear under **Currently unavailable for upgrade**. Filter this group to see the reason. Select a count in the notice or use the **Agent status** filter in the table toolbar. Select **All** to see the full list. **Dismiss this notice** hides the notice for this account and target version in the current browser.
+
+After a successful console upgrade, including an uploaded offline release, **Version and updates** shows counts below the Server row if any online Agents fall into these groups. Select **View compute nodes** to open the full list and choose which nodes to maintain. If every Agent is offline or already current, the notice stays hidden. It lasts up to 30 minutes, and refreshing preserves the remaining time. Closing it, leaving the page, or confirming an empty or entirely up-to-date fleet ends it. After a CLI upgrade, open Compute nodes to review Agent versions. Use the same page after upgrading from an older console that did not yet offer this notice. The batch preview shows each eligible node’s current and target versions or build IDs and explains skipped offline or up-to-date nodes.
 
 Database migrations run automatically when the server starts; no separate command is needed. **Migrations only go forward; reverse migrations are unsupported.** To downgrade, restore a pre-upgrade snapshot instead of merely replacing the binary with an old one. The observability database `ux.db` is not included in upgrade backups and needs separate handling if incompatible with the old version; see [Rollback](#回滚).
 

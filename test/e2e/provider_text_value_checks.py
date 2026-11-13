@@ -128,7 +128,7 @@ class AccountFlow:
         expect(row).to_have_count(1)
         # CSS/accessibility text normalizes whitespace; textContent preserves
         # the actual raw name, including an account named only three spaces.
-        expect(row.locator('.resource-table-name-cell button')).to_have_js_property('textContent', account['name'])
+        expect(row.locator('.resource-table-name button')).to_have_js_property('textContent', account['name'])
         return row
 
     def new(self, name, endpoint, secret):
@@ -291,13 +291,26 @@ def exercise_text_values(page, context, server, artifacts, report, copy, label, 
             flow.new('', endpoint, secret)
             flow.required(flow.name, copy['config']['nameRequired'], 'provider-text-name-create-empty', fixture)
             check(collection(page.request.get(server.base + ROOT)) == [], 'empty create name persisted an account')
+            # A whitespace-only name is refused in the browser. Before the form declared its
+            # required rule with whitespace:true the value validated, a create went out, and the
+            # server stored an account whose name is three spaces.
+            report['last_step'] = 'provider-text-name-create-whitespace'
             flow.name.fill('   ')
             before, keys = len(fixture.requests), list(fixture.keys)
-            account = flow.submit({'kind': 'runpod', 'name': '   ', 'endpoint': endpoint, 'api_key': secret},
-                                  stage='provider-text-name-create-whitespace')
-            calls, after = registration_calls(keys, expected_keys)
-            flow.verify_external(fixture, before, calls, 'name create whitespace')
-            check(fixture.keys == after, 'name create altered account SSH keys')
+            before_writes = len(flow.writes)
+            form_action(flow.dialog, copy['config']['add']).click()
+            name_item = flow.name.locator("xpath=ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ant-form-item ')][1]")
+            expect(name_item.get_by_text(copy['config']['nameRequired'], exact=True)).to_be_visible()
+            expect(flow.name).to_have_value('   ')
+            check(len(flow.writes) == before_writes, 'whitespace-only create name sent a provider mutation')
+            check(len(fixture.requests) == before and fixture.keys == keys,
+                  'whitespace-only create name contacted the provider or altered account SSH keys')
+            check(collection(page.request.get(server.base + ROOT)) == [],
+                  'whitespace-only create name persisted an account')
+            flow.records.append({'stage': 'provider-text-name-create-whitespace',
+                                 'front_refused': True, 'provider_writes': 0})
+            account = create('e2e-' + report['run_id'] + '-after-whitespace', endpoint, secret,
+                             'provider-text-name-create-after-whitespace-refused')
             flow.edit(account)
             flow.required(flow.name, copy['config']['nameRequired'], 'provider-text-name-edit-empty', fixture)
             flow.read(account)
@@ -308,12 +321,24 @@ def exercise_text_values(page, context, server, artifacts, report, copy, label, 
             account = flow.submit({'name': padded_name, 'endpoint': endpoint}, account=account, saved_name=clean_name,
                                   stage='provider-text-name-edit-outerspace')
             flow.verify_external(fixture, before, [pods_call()], 'name edit trims outer spaces')
+            # Same rule on the edit side: a whitespace-only name is refused in the browser, so the
+            # stored name is untouched and no update is sent.
+            report['last_step'] = 'provider-text-name-edit-whitespace'
             flow.edit(account)
             flow.name.fill('   ')
-            before = len(fixture.requests)
-            account = flow.submit({'name': '   ', 'endpoint': endpoint}, account=account, saved_name=clean_name,
-                                  stage='provider-text-name-edit-whitespace')
-            flow.verify_external(fixture, before, [pods_call()], 'name edit keeps saved name')
+            before, before_writes = len(fixture.requests), len(flow.writes)
+            form_action(flow.dialog, copy['config']['save']).click()
+            edit_item = flow.name.locator("xpath=ancestor::*[contains(concat(' ',normalize-space(@class),' '),' ant-form-item ')][1]")
+            expect(edit_item.get_by_text(copy['config']['nameRequired'], exact=True)).to_be_visible()
+            expect(flow.name).to_have_value('   ')
+            check(len(flow.writes) == before_writes, 'whitespace-only edit name sent a provider mutation')
+            check(len(fixture.requests) == before, 'whitespace-only edit name contacted the provider')
+            check(collection(page.request.get(server.base + ROOT))[0]['name'] == clean_name,
+                  'whitespace-only edit name changed the stored name')
+            flow.records.append({'stage': 'provider-text-name-edit-whitespace',
+                                 'front_refused': True, 'provider_writes': 0})
+            button(flow.dialog, copy['config']['cancel']).click()
+            expect(flow.dialog).to_be_hidden()
 
             for suffix, raw in [('leading', '  ' + clean_name), ('trailing', clean_name + '  ')]:
                 flow.edit(account)

@@ -4,37 +4,45 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+
+	"gpuworks.ai/gpuworks/internal/uninstallcheck"
 )
 
 // UninstallRequest selects the explicitly authorized local cleanup scope.
 type UninstallRequest struct {
-	Purge  bool
-	Yes    bool
-	DryRun bool
+	Purge         bool
+	Yes           bool
+	DryRun        bool
+	KeepResources bool
+	// Resources must only observe persisted/local resources; nil is unknown.
+	Resources func(context.Context, Layout) []uninstallcheck.Item
 }
 
 // UninstallReport describes actual removals (or planned removals for DryRun).
 // Kept includes data and resources whose ownership cannot be established.
 type UninstallReport struct {
-	Layout        Layout   `json:"layout"`
-	Mode          string   `json:"mode"`
-	ServiceUser   string   `json:"service_user"`
-	Purge         bool     `json:"purge"`
-	DryRun        bool     `json:"dry_run"`
-	AlreadyAbsent bool     `json:"already_absent"`
-	Removed       []string `json:"removed"`
-	Kept          []string `json:"kept"`
+	Layout        Layout                `json:"layout"`
+	Mode          string                `json:"mode"`
+	ServiceUser   string                `json:"service_user"`
+	Purge         bool                  `json:"purge"`
+	DryRun        bool                  `json:"dry_run"`
+	AlreadyAbsent bool                  `json:"already_absent"`
+	Removed       []string              `json:"removed"`
+	Kept          []string              `json:"kept"`
+	KeepResources bool                  `json:"keep_resources"`
+	Checklist     []uninstallcheck.Item `json:"checklist"`
 }
 
 // Uninstall removes one local control plane. beforeStop closes resources
 // managed outside selfinstall (the public connector) while the upgrade lock
 // is held. It is never called for a preview or before confirmation.
 func (i *Installer) Uninstall(ctx context.Context, req UninstallRequest, beforeStop func(context.Context, Layout) error) (report UninstallReport, err error) {
-	report = UninstallReport{Layout: i.layout, Purge: req.Purge, DryRun: req.DryRun, Removed: []string{}, Kept: []string{}}
+	report = UninstallReport{Layout: i.layout, Purge: req.Purge, DryRun: req.DryRun, KeepResources: req.KeepResources, Checklist: []uninstallcheck.Item{}, Removed: []string{}, Kept: []string{}}
 	if !req.Yes && !req.DryRun && !i.io.Terminal() {
 		return report, fmt.Errorf("uninstall requires confirmation; pass --yes for unattended use")
 	}
@@ -44,6 +52,10 @@ func (i *Installer) Uninstall(ctx context.Context, req UninstallRequest, beforeS
 			return report, absentErr
 		}
 		report.AlreadyAbsent = true
+		report.Checklist = []uninstallcheck.Item{{ID: "server.scope", Status: uninstallcheck.Warn, Summary: "No local installation configuration, program or autostart definition remains"}, {ID: "server.resources", Status: uninstallcheck.Unknown, Summary: "Remote resource state cannot be inferred from an absent control plane", Action: "Inspect agents, inference workloads and cloud accounts separately; no resources were removed."}}
+		if err := i.printUninstallChecklist(report.Checklist); err != nil {
+			return report, err
+		}
 		i.io.Say("gpuworks is already uninstalled from %s", i.layout.Dir)
 		if _, statErr := os.Stat(i.layout.Dir); statErr == nil {
 			report.Kept = append(report.Kept, i.layout.Dir)
@@ -70,7 +82,14 @@ func (i *Installer) Uninstall(ctx context.Context, req UninstallRequest, beforeS
 	if inst.ServiceUser != "" {
 		report.Kept = append(report.Kept, "service account and group: "+inst.ServiceUser+" (existing accounts may be shared)")
 	}
-	i.printUninstallPlan(report, paths)
+	var resources []uninstallcheck.Item
+	report.Checklist, resources = i.uninstallChecklist(ctx, req, report, inst)
+	if err := i.printUninstallChecklist(report.Checklist); err != nil {
+		return report, err
+	}
+	if err := i.printUninstallPlan(report, paths); err != nil {
+		return report, err
+	}
 	if req.DryRun {
 		report.Removed = paths
 		if inst.Mode == ModeSystemd {
@@ -79,6 +98,9 @@ func (i *Installer) Uninstall(ctx context.Context, req UninstallRequest, beforeS
 			report.Removed = append(report.Removed, i.layout.LaunchdPath())
 		}
 		return report, nil
+	}
+	if err := checkUninstallResources(req, resources); err != nil {
+		return report, err
 	}
 	if !req.Yes {
 		ok, err := i.io.Confirm("Uninstall this control plane?", false)
@@ -107,6 +129,13 @@ func (i *Installer) Uninstall(ctx context.Context, req UninstallRequest, beforeS
 		return report, errors.New("installation changed during confirmation; run uninstall again")
 	}
 	if err := i.validateUninstall(paths, req.Purge); err != nil {
+		return report, err
+	}
+	report.Checklist, resources = i.uninstallChecklist(ctx, req, report, fresh)
+	if err := i.printUninstallChecklist(report.Checklist); err != nil {
+		return report, err
+	}
+	if err := checkUninstallResources(req, resources); err != nil {
 		return report, err
 	}
 	if beforeStop != nil {
@@ -179,19 +208,28 @@ func (i *Installer) Uninstall(ctx context.Context, req UninstallRequest, beforeS
 	return report, nil
 }
 
-func (i *Installer) printUninstallPlan(report UninstallReport, paths []string) {
-	i.io.Say("installation: %s (%s)", i.layout.Dir, report.Mode)
-	i.io.Say("stop: the local server and its public entry point; remove their autostart definitions")
+func (i *Installer) printUninstallPlan(report UninstallReport, paths []string) error {
+	if i.io.Quiet || i.io.Out == nil {
+		return nil
+	}
+	var plan strings.Builder
+	say := func(format string, args ...any) { _, _ = fmt.Fprintf(&plan, format+"\n", args...) }
+	say("installation: %s (%s)", i.layout.Dir, report.Mode)
+	say("stop: the local server and its public entry point; remove their autostart definitions")
 	for _, path := range paths {
-		i.io.Say("remove: %s", path)
+		say("remove: %s", path)
 	}
 	if report.Purge {
-		i.io.Say("remove: numbered server log rotations, including those created during shutdown")
+		say("remove: numbered server log rotations, including those created during shutdown")
 	}
 	for _, path := range report.Kept {
-		i.io.Say("keep: %s", path)
+		say("keep: %s", path)
 	}
-	i.io.Say("remote agents, inference workloads and rented cloud instances require separate management")
+	say("remote agents, inference workloads and rented cloud instances require separate management")
+	if _, err := io.WriteString(i.io.Out, plan.String()); err != nil {
+		return fmt.Errorf("write uninstall plan: %w", err)
+	}
+	return nil
 }
 
 // confirmUninstalled permits retry after a completed purge, but never treats

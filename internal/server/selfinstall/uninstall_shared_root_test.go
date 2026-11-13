@@ -30,7 +30,7 @@ func TestUninstallSharedApplicationRootPreservesAgent(t *testing.T) {
 				writeFile(t, filepath.Join(h.layout.TmpDir(), "partial"), "server download", 0o600)
 				before := uninstallSnapshot(t, root, h.layout.UnitDir)
 				preserved := uninstallSnapshot(t, agent...)
-				req := UninstallRequest{Yes: true, Purge: operation != "ordinary", DryRun: operation == "preview"}
+				req := UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: operation != "ordinary", DryRun: operation == "preview"}
 				report, err := h.installer.Uninstall(t.Context(), req, nil)
 				if err != nil {
 					t.Fatalf("historical shared-root uninstall rejected: %v", err)
@@ -80,7 +80,7 @@ func TestUninstallSharedApplicationRootRefusesRecursiveRootCleanup(t *testing.T)
 	h.writeConfig(cfg)
 	before := uninstallSnapshot(t, root, h.layout.UnitDir)
 	called := false
-	_, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, func(context.Context, Layout) error {
+	_, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, func(context.Context, Layout) error {
 		called = true
 		return nil
 	})
@@ -103,7 +103,7 @@ func TestUninstallSharedApplicationRootRejectsSymlinkAlias(t *testing.T) {
 	h.installer.layout.Dir = alias
 	before := uninstallSnapshot(t, root, h.layout.UnitDir)
 	called := false
-	_, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, func(context.Context, Layout) error {
+	_, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, func(context.Context, Layout) error {
 		called = true
 		return nil
 	})

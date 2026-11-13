@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 

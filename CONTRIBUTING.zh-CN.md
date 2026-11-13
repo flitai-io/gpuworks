@@ -53,7 +53,7 @@ vLLM / SGLang 推理服务，再通过 OpenAI 兼容网关对外提供调用。�
 
 依赖：
 
-- **Go** —— 版本以 `go.mod` 为准（当前 Go 1.26.10，与 CI 镜像 `golang:1.26` 一致）。
+- **Go** —— 版本以 `go.mod` 为准（当前 Go 1.26.11，与 CI 镜像 `golang:1.26.11` 一致）。
 - **Node.js 与 npm** —— 版本以 `ui/package.json` 和 lockfile 为准。
 - **GNU Make**。
 - **Docker**、SSH 和厂商 CLI 只有在跑容器级/云端测试层，或者构建交叉编译 agent 时才需要。
@@ -117,7 +117,9 @@ git diff --check
   验证通过。
 - Lint 配置在 [.golangci.yml](.golangci.yml)（`govet`、`errcheck`、`staticcheck`、`unused`、
   `ineffassign`、`misspell`、`gofmt`、`goimports`、`revive`、`bodyclose`、`nilerr`）。
-  提交前跑一次 `golangci-lint run`。
+  提交前运行 `make lint`，CI 执行同一目标。该目标使用仓库的 Go 版本将
+  golangci-lint v1.64.8 编译到 `bin/tools`，执行完整规则并展示全部诊断。
+  首次运行会下载开发工具；缺少内嵌 UI 时会先构建 UI。
 - `goimports` 配了 `local-prefixes: gpuworks.ai/gpuworks`，本地包单独成组。
 - 分层测试与云端测试策略见 [docs/dev/testing.md](docs/dev/testing.md)。
 
@@ -184,6 +186,10 @@ make check-translations
 `make check-doc-links` 校验（已包含在 `make test-unit` 里）。
 
 ## 提交与拉取请求
+
+创建分支、记录验证结果和响应评审的步骤见 [PR / MR 操作指南](docs/dev/pull-requests.md)。
+统一使用 [PR 模板](.github/PULL_REQUEST_TEMPLATE.md)，保留「问题 / 验证 / 说明」三个标题，
+正文只需填写中文或英文中的一种。
 
 - 从当前目标分支拉出分支，名字说清做什么（`fix/pd-scaling-loop`、`docs/connect-nodes-typo`）。
 - 提交信息要说明问题与改动，而不是只写动了哪个文件。

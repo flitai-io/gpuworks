@@ -177,24 +177,6 @@ func TestUpdateModelSourceIDRefusals(t *testing.T) {
 	}
 }
 
-// Correcting a local model's source id to the repository id is what makes a
-// template's weight source see it as registered.
-func TestRenamedLocalModelServesTheTemplateWeightSource(t *testing.T) {
-	f := newSourceIDFixture(t)
-	model := f.model(&store.Model{Source: "local", SourceID: "Qwen3-0.6B", Revision: "local"})
-	h := &apiHandlers{d: Deps{Store: f.st}}
-	selection := templateSelection{Spec: &store.InferenceSpecRow{WeightSources: `[{"provider":"modelscope","repo_id":"Qwen/Qwen3-0.6B"}]`}}
-	if options := h.evaluateWeightSourceOptions(selection); len(options) != 1 || options[0].Registered {
-		t.Fatalf("before rename: %+v", options)
-	}
-	if rec := f.do(http.MethodPatch, model.ID, `{"source_id":"Qwen/Qwen3-0.6B"}`, true); rec.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if options := h.evaluateWeightSourceOptions(selection); len(options) != 1 || !options[0].Registered {
-		t.Fatalf("after rename: %+v", options)
-	}
-}
-
 func TestModelDTOMarksOnlyLocalAndURLSourceIDsEditable(t *testing.T) {
 	h := &apiHandlers{}
 	for source, want := range map[string]bool{"local": true, "url": true, "LOCAL": true, "huggingface": false, "modelscope": false} {

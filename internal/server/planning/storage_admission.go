@@ -2,6 +2,7 @@ package planning
 
 import (
 	"encoding/json"
+	"path"
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -96,7 +97,7 @@ func admitStorage(st *store.Store, in Input, primaryBytes, componentBytes int64)
 		if err != nil || plan.Refusal == "" {
 			continue
 		}
-		refusal := CacheRefusal(&storage, nil, plan, cacheNeed[id], eff.CacheMaxBytes)
+		refusal := CacheRefusal(&storage, in.Node, plan, cacheNeed[id], eff.CacheMaxBytes)
 		out.Refusal = &refusal
 	}
 	return out
@@ -114,12 +115,23 @@ func CacheRefusal(storage *store.Storage, node *store.Node, plan modelcache.Resu
 		code = scheduler.ReasonCacheFullInUse
 	}
 	params := map[string]any{
-		"storage": storage.Name, "storage_id": storage.ID,
+		"storage": storage.Name, "storage_id": storage.ID, "storage_type": storage.Type,
 		"model_bytes": need, "cache_max_bytes": capBytes,
 		"need_disk_bytes": plan.NeedDiskBytes, "need_cap_bytes": plan.NeedCapBytes,
 	}
 	if node != nil {
-		params["node"] = node.UUID
+		params["node"], params["node_uuid"] = node.DisplayName(), node.UUID
+		if usage, ok := nodePathUsage(node, "storage_cache", storage.ID); ok {
+			if path.IsAbs(usage.Path) {
+				params["path"] = path.Clean(usage.Path)
+			}
+			if code == scheduler.ReasonInsufficientDisk && usage.AvailableBytes >= 0 && plan.NeedDiskBytes > 0 {
+				required := usage.AvailableBytes + plan.NeedDiskBytes
+				if required >= usage.AvailableBytes {
+					params["required_bytes"], params["available_bytes"] = required, usage.AvailableBytes
+				}
+			}
+		}
 	}
 	return scheduler.Reason{Code: code, Params: params}
 }

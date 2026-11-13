@@ -25,12 +25,26 @@ def copy(locale, namespace):
 
 
 def watch_weight_lookups(page):
+    """Every lookup the page makes to resolve a spec's weight models.
+
+    The page asks GET /api/v1/inference-templates/weight-models for the models that
+    serve the selected spec (useTemplateWeightSource.ts:45, api.go:197). It used to
+    ask GET /api/v1/models?source_id=..., which is why a listener keyed on that
+    query stopped seeing anything once the page was rewritten and the case failed
+    with "did not request the selected spec repository models" while the modal was
+    showing exactly the right model. Both shapes are collected here so the case
+    asserts on the answer rather than on the route it arrived by.
+    """
     responses = []
 
     def seen(response):
+        if response.request.method != 'GET':
+            return
         parts = urlsplit(response.url)
-        if (response.request.method == 'GET' and parts.path == '/api/v1/models'
-                and 'source_id' in parse_qs(parts.query)):
+        query = parse_qs(parts.query)
+        if parts.path == '/api/v1/inference-templates/weight-models':
+            responses.append(response)
+        elif parts.path == '/api/v1/models' and 'source_id' in query:
             responses.append(response)
 
     page.on('response', seen)
@@ -73,13 +87,48 @@ def choose_registered_model(page, fixture, locale, report):
                                          'id': model['id'], 'readable_option': True}
 
 
+def _weight_lookup_facts(response, model, report):
+    """The weight lookup has to name this model, and say it serves the spec."""
+    parts = urlsplit(response.url)
+    query = parse_qs(parts.query)
+    check(response.request.method == 'GET' and response.status == 200,
+          'weight-source lookup must be a real GET 200')
+    body = response.json()
+    if parts.path == '/api/v1/inference-templates/weight-models':
+        # {models: [ModelListItem], sources: [{provider, repo_id, revision,
+        # subfolder, reuse_model_id}]} - api.go:197. The model that serves the
+        # selected spec has to appear in models, and the source that matches it
+        # has to point back at it, which is the rule the create path enforces.
+        ids = [item.get('id') for item in body.get('models') or []]
+        check(model['id'] in ids,
+              f"weight lookup did not offer the registered model: ids={ids!r} expected {model['id']!r}")
+        offered = [item for item in body.get('models') or [] if item.get('id') == model['id']][0]
+        check(offered.get('name') == model['name'] and offered.get('source_id') == model['source_id'],
+              f"weight lookup offered a different model: {offered!r}")
+        # reuse_model_id is only set when the source's provider equals the model's
+        # source (inference_template_weight_models.go:55). A locally registered
+        # model serving a template whose declared source is, say, huggingface
+        # therefore reuses nothing - correct product behaviour, and the reason this
+        # case must not demand a non-zero reuse_model_id. What it can require is
+        # that every reuse id points at a model the same answer actually offered.
+        offered_ids = {item.get('id') for item in body.get('models') or []}
+        for match in body.get('sources') or []:
+            reuse = match.get('reuse_model_id') or 0
+            check(reuse == 0 or reuse in offered_ids,
+                  f"weight source reuses a model the answer did not offer: {reuse!r}")
+        report.setdefault('selector_requests', []).append({
+            'method': 'GET', 'path': parts.path, 'query': query,
+            'status': response.status, 'candidates': [offered]})
+        return
+    model_facts(response, model, {'page': ['1'], 'page_size': ['50'],
+                                  'source_id': [model['source_id']]}, report,
+                'weight-source model lookup')
+
+
 def assert_weight_match(page, radio, fixture, locale, report, responses):
     model = fixture['model']
-    query = {'page': ['1'], 'page_size': ['50'], 'source_id': [model['source_id']]}
-    matching = [response for response in responses
-                if parse_qs(urlsplit(response.url).query) == query]
-    check(bool(matching), 'page did not request the selected spec repository models')
-    model_facts(matching[-1], model, query, report, 'weight-source model lookup')
+    check(bool(responses), 'page did not request the selected spec repository models')
+    _weight_lookup_facts(responses[-1], model, report)
     report['last_step'] = 'selector-weight-model-readable-identity'
     label = radio.locator('xpath=ancestor::label[1]')
     expect(label.get_by_text(model['name'], exact=True)).to_be_visible(timeout=12000)

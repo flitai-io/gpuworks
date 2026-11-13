@@ -2,11 +2,14 @@ package api
 
 import (
 	"cmp"
+	"errors"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -55,6 +58,11 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	mode := r.URL.Query().Get("agent_upgrade")
+	if mode != "" && (!query.paged || !slices.Contains([]string{"all", "align", "upgrade", "downgrade", "different_build", "check"}, mode)) {
+		writeErr(w, http.StatusBadRequest, listFilterError("agent_upgrade", mode))
+		return
+	}
 	if !query.paged {
 		// Every match in full; the filters and order apply either way.
 		matched := a.filterNodes(nodes, query, reqs)
@@ -74,16 +82,39 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	matched := a.filterNodes(nodes, query, reqs)
+	var summary *dto.AgentFleetSummary
+	var statuses map[string]nodeAgentStatus
+	if mode != "" {
+		summary, statuses, err = a.nodeAgentSummary(r, nodes)
+		if mode != "all" {
+			if err != nil {
+				writeErr(w, http.StatusServiceUnavailable, err)
+				return
+			}
+			matched = slices.DeleteFunc(matched, func(n store.Node) bool {
+				status := statuses[n.UUID]
+				if mode == "align" {
+					return status.eligibility != "eligible"
+				}
+				return status.group != mode
+			})
+		}
+	}
 	nodeListSorters.apply(matched, order)
 	page := pageOf(matched, query, func(rows []store.Node) []dto.Node {
 		items := a.nodeDTOs(rows)
 		for i := range items {
+			status := statuses[items[i].UUID]
+			items[i].AgentEligibility = status.eligibility
+			if status.eligibility == "eligible" {
+				items[i].AgentVersionChange = status.group
+			}
 			items[i].Topology = nil
 			items[i].PathUsage = nil
 		}
 		return items
 	})
-	writeJSON(w, http.StatusOK, dto.NodePage{ListPage: page, All: len(nodes), Labels: nodeLabelFacets(facets)})
+	writeJSON(w, http.StatusOK, dto.NodePage{AgentFleet: summary, ListPage: page, All: len(nodes), Labels: nodeLabelFacets(facets)})
 }
 
 // filterNodes keeps the nodes a list query and label requirements match, in
@@ -161,4 +192,68 @@ func nodeLabelFacets(facets map[string]map[string]bool) []dto.NodeLabelValues {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out
+}
+
+type nodeAgentStatus struct {
+	eligibility string
+	group       string
+}
+
+func agentFleetGroup(eligibility, current, target string) string {
+	switch eligibility {
+	case "eligible":
+		return distribution.VersionChange(current, target)
+	case "offline":
+		return "offline"
+	case "", "busy", "already_current":
+		return ""
+	default:
+		return "check"
+	}
+}
+
+func (a *apiHandlers) nodeAgentSummary(r *http.Request, nodes []store.Node) (*dto.AgentFleetSummary, map[string]nodeAgentStatus, error) {
+	svc := a.d.AgentUpgrades.Service
+	if svc == nil {
+		return nil, nil, errors.New("agent status unavailable")
+	}
+	fleet, err := svc.Fleet(r.Context(), nodes)
+	if err != nil {
+		return nil, nil, err
+	}
+	summary := &dto.AgentFleetSummary{Target: fleet.Target, RunID: fleet.RunID}
+	statuses := make(map[string]nodeAgentStatus, len(nodes))
+	for _, n := range nodes {
+		state := fleet.Eligibility[n.UUID]
+		group := agentFleetGroup(state, n.AgentVersion, fleet.Target)
+		statuses[n.UUID] = nodeAgentStatus{eligibility: state, group: group}
+		switch group {
+		case "upgrade":
+			summary.Upgrade++
+		case "downgrade":
+			summary.Downgrade++
+		case "different_build":
+			summary.DifferentBuild++
+		case "check":
+			summary.Check++
+		case "offline":
+			summary.Offline++
+		}
+	}
+	summary.Align = summary.Upgrade + summary.Downgrade + summary.DifferentBuild
+	return summary, statuses, nil
+}
+
+func (a *apiHandlers) agentFleetSummary(w http.ResponseWriter, r *http.Request) {
+	nodes, err := a.d.Store.NodesForAgentUpgrade()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	summary, _, err := a.nodeAgentSummary(r, nodes)
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
 }

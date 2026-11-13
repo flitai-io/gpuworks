@@ -10,11 +10,17 @@
 - `max` 键实测**严格低于**限额时打印 WARNING（不失败），提示在同一个 MR 里把限额收紧到新实测值。
 - 误报以**修模式为先**，不以调预算为先。每条排除项都记录在本文；改脚本时必须同步本文。
 - **上调（`max` 变大、`min` 变小）必须带理由**：`check_architecture.sh` 把本文件与基线版本
-  比较——基线优先取 GitLab MR 流水线的 `$CI_MERGE_REQUEST_DIFF_BASE_SHA`，否则取
+  比较——基线优先取 CI 给出的合并请求基线 `$GPUWORKS_ARCH_BASELINE`，否则取
   `git merge-base HEAD origin/master`；解析不出基线（浅克隆、没有 `origin` remote、当前就在
   default branch 上）时打印 NOTE 并跳过，不算失败。被判定为上调的行必须在行尾追加 Tab 分隔的
   `# raised: <原因>` 注释（`min` 键同一标记），否则直接 FAIL；新增或删除的键不算上调。该注释
   是第 4 个 Tab 分隔字段，不影响 `key<TAB>limit<TAB>direction` 的既有解析。
+- **`warn` 是软预算**：实测超过限额只打印 WARNING（附该键的替代做法提示），实测低于限额提示可收紧，
+  **从不失败**；基线比较也不检查 `warn` 键。用于不宜硬拦、但需要在评审里被看见的趋势
+  （`ui_antd_icon_import_files`、`ui_bundle_gzip_kb`）。收紧或上调 `warn` 限额同样在行尾写
+  `# raised: <原因>` 说明上调理由（约定，不由脚本强制）。
+- 需要额外前置条件才能测的键（如 `ui_bundle_gzip_kb` 需要先构建 UI），在 `measure()` 里返回
+  `EXTERNAL`，预算循环只打印并跳过，由专门脚本测量。
 
 初值取 2026-09-09 `refactor/refactor-2` 分支上的实测结果，不是计划正文里的人工估算值。
 
@@ -98,6 +104,91 @@ grep -rnE "'vllm'|\"vllm\"|'sglang'|\"sglang\"" ui/src --include='*.ts' --includ
 
 排除：`*.test.*`；`ui/src/i18n/**`（引擎名作为展示文案出现在 locale 里是合理的）。
 
+### ui_antd_import_files（迁移基线 349，2026-11-09）
+
+意图：antd 与 Zeron 并存期间，引用 antd 的源文件数只降不升（迁移收尾清单见 `docs/dev/ui.md`）。计数单位是**文件**，
+含 re-export、动态 import 与 `antd/es/...`、`antd/locale/...` 子路径。
+
+```sh
+grep -rlE "['\"]antd(/[^'\"]*)?['\"]" ui/src --include='*.ts' --include='*.tsx' \
+  | grep -v '\.test\.' | grep -c .
+```
+
+排除：`*.test.*`。降到 0 时脚本额外提示加 `ui_raw_color` / `ui_raw_radius` 规则。
+
+文件数只能拦"新文件引入 antd"，拦不住已有文件里继续加 antd 用法；逐文件的棘轮由下面的
+`ui/antd-inventory.json` 负责。
+
+### ui_untested_shared_files（基线 0，2026-11-11）
+
+意图：每个页面都会复用的 UI 构件各有自己的单元测试，改它的人改得到对应测试，新加的构件不会没有测试就进来。范围：
+`ui/src/ui-kit/**`、`ui/src/app/**`、`ui/src/components/detail/**`、`ui/src/components/resourceTable/**`，
+以及 `ui/src/components/PageHeader.tsx`、`EmptyState.tsx`。`ui/tests/` 下某个测试直接 import 它，或经真实宿主驱动它（侧栏经 App、列筛选经 ResourceTable）并在注释写明其 `ui/src/...` 路径，才算有测试；
+只被页面测试顺带渲染不算。超出时脚本列出缺测试的文件。
+
+```sh
+# 见 check_architecture.sh 的 untested_shared_ui：对范围内每个 .ts/.tsx，
+grep -rqE "['\"](\.\./)+<去掉 ui/ 与扩展名的路径>(\.tsx?)?['\"]|ui/<同一路径>\.tsx?" ui/tests --include='*.ts' --include='*.tsx'
+```
+
+排除：无。不再使用的构件直接删掉，不为它补测试。
+
+### antd 逐文件棘轮（`ui/antd-inventory.json`，硬检查，非预算行）
+
+`check_architecture.sh` 在预算循环后运行
+`node scripts/ui_antd_inventory.mjs --check ui/antd-inventory.json`，与提交的快照逐文件比较，以下任一情况 FAIL：
+
+- 某文件的 antd 使用点（sites）变多；
+- 某文件新引入了快照里没有的 antd 名字（含 `import type`）；
+- 某文件的 `@ant-design/icons` 引入数变多，或 CSS 的 `.ant-*` 规则数变多；
+- 快照里没有的文件开始使用 antd / `@ant-design/icons` / `.ant-*` 选择器。
+
+减少一律通过（打印 NOTE 提示刷新快照）。迁移 MR 在同一提交里运行
+`node scripts/ui_antd_inventory.mjs --write` 刷新快照；快照每个文件一行，diff 只显示动到的文件。
+机器上没有 `node` 时打印 NOTE 并跳过（CI 的 `core-test` 跑在 golang 镜像里，需在有 node 的 job 里执行）。
+
+计量口径（`scripts/ui_antd_inventory.mjs`，只用 Node 内置模块）：
+
+- 范围：`ui/src` 下 `*.ts(x)`、`*.js(x)`、`*.css`；排除 Zeron 托管代码 `src/components/ui/`、`src/lib/`、
+  `src/hooks/use-*`，以及 `*.test.*` 与 `src/i18n/`。
+- 使用点 sites = JSX `<Name` / `<Name.Sub` + 静态调用 `name.fn(`（`message.success(`、`Modal.confirm(`、
+  `Form.useForm(`），按 import 的本地别名匹配；`const { Text } = Typography` 解构出的名字记到 `Typography`。
+- 只识别行首注释（`//`、`/* */`、`{/* */}`），行尾注释里的 `<Name` 会被计入；作为值传递
+  （`component={Table}`）、仅用于类型位置的名字不计 sites，但计入 imports/types，新增照样被拦。
+- `@ant-design/icons` 按引入的名字数计；CSS 按选择器含 `.ant-` 的规则块计（`@media` 内的规则同样计）。
+
+另有页面归属（`--json` 的 `attribution`、`--affected <file...>`、`--base <ref>`），供浏览器检查按改动文件
+挑页面重查：`App.tsx` 的 `<Route path element={<X`> 解析出路由元素模块，按 `navigation.tsx` 菜单项
+（含 `also`）的首段路径归到菜单 key；某文件归属每个能经 import 图（静态、re-export、`import()`、CSS `@import`）
+传递到达它的页面。从 `main.tsx` / `App.tsx` 外壳（不走 App 到路由元素的边）能到达的文件记为 `shared`，
+改动时输出 `["*"]`；`styles.css`、`app.css`、`theme/`、`main/App/navigation.tsx` 与 UI 构建配置同样输出 `["*"]`。
+已知缺口：`App.tsx` 全局引入的页面 CSS（如 `pages/batches/batches.css`）因此记为 `shared`；
+不被任何页面引用的文件（死代码）输出空；不在 import 图里的现存非 md 文件（如静态资源）保守输出 `["*"]`。
+
+### ui_antd_icon_import_files（软预算 warn，初值 103，2026-11-09）
+
+意图：外壳与新页面的图标统一走 `ui/src/ui-kit/consoleIcons.ts`（HugeIcons），`@ant-design/icons` 的引用
+只减不增。软预算：超出只告警（提示改用 `consoleIcons.ts`），不失败；新文件引入 antd 图标由上面的逐文件棘轮硬拦。
+
+```sh
+grep -rlE "['\"]@ant-design/icons(/[^'\"]*)?['\"]" ui/src --include='*.ts' --include='*.tsx' \
+  | grep -v '\.test\.' | grep -v '^ui/src/components/ui/' | grep -c .
+```
+
+排除：`*.test.*`；`ui/src/components/ui/`（Zeron 托管代码）。
+
+### ui_bundle_gzip_kb（软预算 warn，初值 2450，2026-11-09）
+
+意图：内嵌 Web UI 的发布体积可见。由 `scripts/check_ui_bundle_size.sh` 在 `make ui` 末尾测量
+（`check_architecture.sh` 不构建 UI，跳过该键）：
+
+```sh
+tar -C internal/server/webui/dist -czf - . | wc -c   # 字节，向上取整到 KB
+```
+
+与 `scripts/package_release.sh` 打包方式一致。超出只告警并列出最大的 5 个资产（原始 / gzip KB），从不失败。
+初值为 2026-11-09 实测 2400 KB（macOS bsdtar，含其 10 KiB 块填充；GNU tar 略小）向上取到下一个 50 KB。
+
 ### setting_key_literal（初值 27）
 
 意图：设置键无常量，`GetSetting("…")` / `SetSetting("…")` 字面量散落多包（计划 A9）。
@@ -166,6 +257,10 @@ go list -e -f '{{.ImportPath}}{{"\t"}}{{join .Imports " "}}' ./... \
 `store_concrete_importers` 21→22；`api_deps_fields` 56→57（`Deps.SchedulingActivity`，调度活动路由、共卡部署统计与节点时间线
 共读的这份内存汇总，没有对应的 store 行）。
 
+2026-11-12：部署用例（用例层拆分的第一组）。新包 `internal/server/deployment` 承接部署的创建、评估与读模型（行查找、运行时状态
+推导、模型准备观测），不依赖 `net/http` 与 `api`（依赖方向检查守护）；`api` 的 handler 只做解码、调用、映射。该包按 store 写入
+与读取，`store_concrete_importers` 22→23；`api` 仍为其余 handler 依赖 store，故没有随之减少。
+
 ### api_fanout（初值 36）
 
 意图：`api` 包扇出全仓最高（计划 B1）。计数为 `api` 直接 import 的**本仓库**包数。
@@ -193,6 +288,13 @@ go list -e -f '{{join .Imports "\n"}}' ./internal/server/api \
 计入叶子包 `internal/server/usagereport`，更新检查附带的装机规模参数（原 `distribution.Report`）也搬进该包，`distribution`
 因此仍不依赖本仓库任何包。
 
+2026-11-10：Kubernetes 集群接入（[ADR 0052](../docs/adr/0052-kubernetes-nodes.md)）。`api_fanout` 48→49：集群的接入 manifest
+由纯叶子包 `internal/server/kubemanifest` 渲染（不依赖 store，参数进、YAML 出），api 直接依赖它返回 manifest；`api_deps_fields`
+不变（manifest 不经 Deps 注入）。
+
+2026-11-12：部署用例（用例层拆分的第一组）。创建与评估搬进 `internal/server/deployment`，api 改为依赖它（+1），不再直接依赖
+`acquisition` 与 `placement`（−2），`api_fanout` 49→48。
+
 ### api_opaque_response_fields（初值 40，2026-10-11）
 
 意图：API 响应里类型为 `any`、`map[string]any`、`json.RawMessage` 的字段，`scripts/apiconv` 看不到其中的字段名，
@@ -218,10 +320,13 @@ CGO_ENABLED=0 go run ./scripts/apiconv -opaque      # 加 -v 列出字段
 awk '/^type Deps struct/ {inside=1; next}
      inside && /^}/ {exit}
      inside && /^\t[A-Z]/ {n++}
-     END {print n+0}' internal/server/api/api.go
+     END {print n+0}' internal/server/api/dependencies.go
 ```
 
 排除：注释行与空行（只计一级缩进的导出字段）。
+
+2026-11-12：`Deps` 早已从 `api.go` 移到 `dependencies.go`，计数仍读 `api.go`，实测一直为 0，预算形同虚设。计数改读
+`dependencies.go`，实测 61（8ac050aa0 自身的字段数），预算 60→61 是对齐实测的一次性调整，不是新增字段；棘轮从 61 起继续只降不升。
 
 2026-09-18：`artifacts/archive/2026-09-19-monitor-center/plan.md`（监控中枢）第一期给
 `api.Deps` 加了一个 `Monitor MonitorService` 字段，服务
@@ -265,7 +370,7 @@ awk '/^type Deps struct/ {inside=1; next}
 既不属于 `server.yaml` 的 `Deps.Server`，也不属于监控读路径的 `Deps.Monitor`，所以单独成一个具名接口；
 `api` 不 import `traceexport`（`api_fanout` 不变），实现与校验在 `app`。
 
-2026-10-18：NFS Cache 准备进度把高频复制观测、实际选中的准备节点与缓存淘汰阶段放回各自的生产者（hub、controller，`internal/server/prepobs` 叶子包提供有界过期表），不再放进 store；API 经一个具名接口字段 `Deps.Preparation`（`api.ModelPreparation`：三项观测加缓存复制重试）读取，50→51。拆成四个回调会是 50→54。
+2026-10-18：NFS Cache 准备进度把高频复制观测、实际选中的准备节点与缓存淘汰阶段放回各自的生产者（hub、controller，`internal/server/prepobs` 叶子包提供有界过期表），不再放进 store；API 经一个具名接口字段 `Deps.Preparation`（`api.ModelPreparation`，现为 `deployment.ModelPreparation`：三项观测加缓存复制重试）读取，50→51。拆成四个回调会是 50→54。
 
 
 2026-10-22：51→53。`Deps.UsageReport`（改进计划的日报：状态、开关、预览与 API 写入的进程内计数）与 `Deps.Notices`

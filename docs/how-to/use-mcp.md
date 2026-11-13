@@ -51,6 +51,8 @@ claude mcp add --transport http gpuworks https://<控制台地址>/api/v1/mcp \
 
 与控制台里的 [AI 助手](use-ai-helper.md) 是同一套只读工具：`cluster_overview`（集群概况）、`search_api` / `call_api`（找接口、读接口，支持 jq）、`search_metrics`（指标目录）、`get_gpu_topology`（卡间互联）、`compare_with_healthy_replica`（失败实例与健康副本的差异）。读到的数据与令牌所属用户在控制台上看到的一样，交出之前同样做凭证脱敏和截断。MCP 不提供任何写操作，与令牌范围无关。
 
+`get_node_connection_diagnostics` 还可按节点 UUID 读取连接诊断，沿用原接口的管理员权限。该操作使用固定 POST 路径，只读平台令牌会被原有方法限制拒绝；其他 GET 工具仍可正常使用。工具不接受自定义地址或 SSH 参数，不执行恢复或配置修改。
+
 同一用户同时最多 4 个工具调用在执行，再多的调用会收到「请稍后」的结果。每次工具调用都在 server 日志里记一条 `mcp tool call`（用户、令牌前缀、工具、耗时）。
 
 ## 管理令牌

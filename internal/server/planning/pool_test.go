@@ -157,7 +157,7 @@ func TestHardwareShape(t *testing.T) {
 	}
 	mixed := &store.Node{GPUVendor: "nvidia", Arch: "amd64", GPUs: []store.GPU{
 		{Index: 0, Name: "H100", MemoryTotal: 80, ComputeCapability: "9.0", ArchID: "sm_90", Vendor: "nvidia"},
-		{Index: 1, Name: "H100", MemoryTotal: 80, ComputeCapability: "9.0", ArchID: "sm_90", Vendor: "amd"},
+		{Index: 1, Name: "P800 PCIe", MemoryTotal: 80, ComputeCapability: "9.0", ArchID: "kl3", Vendor: "kunlunxin"},
 	}}
 	uniform := &store.Node{GPUVendor: "nvidia", Arch: "amd64", GPUs: []store.GPU{
 		{Index: 0, Name: "H100", MemoryTotal: 80, ComputeCapability: "9.0", ArchID: "sm_90", Vendor: "nvidia"},
@@ -265,5 +265,28 @@ func TestBuildPoolCountsOnlySelectableFreeGPUs(t *testing.T) {
 				t.Fatalf("pool=%+v entries=%+v", pool, pool.Entries)
 			}
 		})
+	}
+}
+
+func TestBuildPoolUsesResolvedSleepTargetAdmission(t *testing.T) {
+	kunlun := store.GPU{Index: 0, Name: "P800 PCIe", Vendor: "kunlunxin", ArchID: "kl3"}
+	nvidia := store.GPU{Index: 1, Name: "H100", Vendor: "nvidia", ArchID: "sm_90"}
+	nodes := []store.Node{
+		{ID: 1, UUID: "kunlun", GPUVendor: "kunlunxin", OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{kunlun}},
+		{ID: 2, UUID: "mixed", OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{kunlun, nvidia}},
+		{ID: 3, UUID: "amd", GPUVendor: "amd", OS: "linux", Arch: "amd64", RuntimeDriver: "docker", GPUs: []store.GPU{{Index: 0, Name: "MI300X", Vendor: "amd", ArchID: "gfx942"}}},
+	}
+	admission := TargetRefusalFor(&store.Deployment{Engine: "vllm", Sleepable: true}, nil, func() (*store.Model, error) { return &store.Model{}, nil }, nil)
+	pool := BuildPool(PoolFacts{Nodes: nodes, TargetRefusal: admission.Refusal})
+	if err := admission.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(pool.Ranked) != 2 || pool.UnmetByKey[PoolUnmetAccelerator] != 1 {
+		t.Fatalf("pool did not keep compatible cards: %+v", pool)
+	}
+	for _, entry := range pool.Entries {
+		if entry.Node.UUID == "kunlun" && (entry.Status != PoolUnmet || entry.Reason == nil || entry.Reason.Code != "sleep_unsupported_on_node") {
+			t.Fatalf("Kunlun pool refusal = %+v", entry)
+		}
 	}
 }

@@ -29,7 +29,7 @@ func Transport(readProxy func() (proto.NetworkConfig, error), allowPrivateHosts 
 	}
 	tr.DialContext = pinnedDial
 	tr.DialTLSContext = nil
-	tr.DialTLS = nil
+	tr.DialTLS = nil //nolint:staticcheck // SA1019: clear inherited legacy TLS hooks so they cannot bypass address pinning.
 	return &SafeTransport{Transport: tr, policy: policy{allowed: append([]string(nil), allowPrivateHosts...)}}
 }
 

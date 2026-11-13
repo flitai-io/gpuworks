@@ -91,7 +91,7 @@ func extractModel(r *http.Request, maxBody int64) (string, func(), error) {
 		Model string `json:"model"`
 	}
 	if err := json.NewDecoder(b.NewReader()).Decode(&probe); err != nil {
-		return "", cleanup, nil
+		return "", cleanup, nil //nolint:nilerr // Model extraction is best effort; the caller rejects requests without a model.
 	}
 	return probe.Model, cleanup, nil
 }

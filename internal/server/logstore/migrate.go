@@ -45,15 +45,13 @@ func (s *sqliteStore) migrateLegacy() error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // Commit/statement errors take precedence; a committed transaction is already closed.
 	for day, entries := range byDay {
-		ts := entries[0].TimeMS
 		dayStart, err := partitionStartMS(day)
 		if err != nil {
 			return err
 		}
-		ts = dayStart // ensure DDL matches the day, not the first row's ts
-		if err := ensurePartition(tx, ts); err != nil {
+		if err := ensurePartition(tx, dayStart); err != nil {
 			return err
 		}
 		name := partitionPrefix + day

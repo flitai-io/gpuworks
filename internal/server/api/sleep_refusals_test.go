@@ -3,22 +3,12 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
-
-// holdOutside marks the fixture's only card as held by a process outside the
-// platform, as the agent's occupancy report does.
-func holdOutside(t *testing.T, st *store.Store) {
-	t.Helper()
-	if err := st.DB().Model(&store.GPU{}).Where("uuid = ?", "gpu-0").Update("foreign_processes", `[{"pid":1,"name":"python"}]`).Error; err != nil {
-		t.Fatal(err)
-	}
-}
 
 // metricsFor answers MetricsLatest as the metrics store does for the host
 // series of one node: only that node's rows, only samples at or after since.
@@ -42,15 +32,6 @@ func metricsFor(nodeUUID string, totalBytes, usedBytes float64) func(string, map
 		}
 		return []MetricLatest{{Labels: map[string]string{"node": nodeUUID}, Value: value, TimeMS: now}}, nil
 	}
-}
-
-func wakeDeploymentCall(t *testing.T, f sleepFixture, id uint, query string) (int, string) {
-	t.Helper()
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/deployments/x/wake"+query, nil)
-	req = req.WithContext(chiRouteContext(req.Context(), map[string]string{"id": jsonOfUint(id)}))
-	f.h.wakeDeployment(rec, req)
-	return rec.Code, strings.TrimSpace(rec.Body.String())
 }
 
 func jsonOfUint(id uint) string {

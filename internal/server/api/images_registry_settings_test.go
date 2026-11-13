@@ -35,6 +35,7 @@ func TestPutCommunityCatalogValidatesAndPersists(t *testing.T) {
 		`{"schema_version":2,"repos":[{"repo":"example/runtime","engine":"vllm"}]}`:                                                                         http.StatusOK,
 		`{"schema_version":3,"repos":[{"repo":"harbor.example:5443/a/vllm","registry":"oci","engine":"vllm","siblings":["harbor.example:5443/a/sglang"]}]}`: http.StatusOK,
 		`{"schema_version":4,"repos":[]}`: http.StatusBadRequest,
+		`{"schema_version":3,"repos":[{"repo":"registry.example/team/mixed","registry":"oci"}]}`: http.StatusOK,
 	} {
 		req = httptest.NewRequest(http.MethodPut, "/api/v1/settings/image_community_catalog", strings.NewReader(body))
 		req = req.WithContext(chiRouteContext(req.Context(), map[string]string{"key": "image_community_catalog"}))

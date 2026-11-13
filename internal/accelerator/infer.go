@@ -20,6 +20,8 @@ func InferVendor(vendor, name, arch, computeCapability string) string {
 	}
 	hay := strings.ToLower(strings.TrimSpace(name + " " + arch + " " + computeCapability))
 	switch {
+	case strings.Contains(hay, "kunlun"), strings.EqualFold(strings.TrimSpace(arch), "kl3"):
+		return VendorKunlunxin
 	case strings.Contains(hay, "ascend"), strings.Contains(hay, "910b"), strings.Contains(hay, "910c"), strings.Contains(hay, "310p"),
 		strings.Contains(hay, "davinci"), strings.Contains(hay, "npu"):
 		return VendorAscend

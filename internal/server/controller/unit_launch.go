@@ -201,10 +201,16 @@ func (c *Controller) recordRankWait(dep *store.Deployment, refusal *scheduler.Re
 func (c *Controller) persistGeneration(ctx context.Context, dep *store.Deployment, launches []rankLaunch) (err error) {
 	insts := make([]*store.Instance, 0, len(launches))
 	reads := make([][]store.InstanceModelFile, 0, len(launches))
-	startTimeout := c.instanceStartTimeout(dep)
 	observation := c.observationFor(dep)
 	for _, launch := range launches {
 		reads = append(reads, launch.reads)
+		startTimeout := launch.plan.Resolved.StartTimeoutSeconds
+		if startTimeout <= 0 {
+			startTimeout = c.instanceStartTimeout(dep)
+		}
+		if c.startTimeout > 0 {
+			startTimeout = c.startTimeout
+		}
 		inst, err := scheduledInstance(dep, launch.plan, launch.port, launch.modelHostPath, startTimeout, launch.node, launch.extras, observation)
 		if err != nil {
 			return err
@@ -321,11 +327,9 @@ func replicaMaster(dep *store.Deployment, leader *store.Node, group netplan.Grou
 	return "", fmt.Errorf("deployment %d: replica leader %s has no address on its compute network", dep.ID, leader.DisplayName())
 }
 
-// instanceStartTimeout is the health budget, in seconds, a generation's
-// instances are started with: the harness override when one is set, else the
-// deployment's own value, else the cluster default as it reads now. It is
-// fixed into each instance's desired state, so changing the default or the
-// deployment later applies to the next generation, not to a running start.
+// instanceStartTimeout is the fallback for an older allocation with no resolved
+// budget. Current launches take ResolveLaunch's decision; the harness override
+// still wins so short hermetic failure paths remain testable.
 func (c *Controller) instanceStartTimeout(dep *store.Deployment) int {
 	if c.startTimeout > 0 {
 		return c.startTimeout

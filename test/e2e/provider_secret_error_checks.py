@@ -133,7 +133,8 @@ def exercise_provider_secret_errors(page, context, server, artifacts, report, co
             assert_raw_secret_free(artifacts, listing.body(), 'raw provider list GET')
             rows = collection(listing)
             check(len(rows) == 1 and set(rows[0])
-                  == {'id', 'name', 'kind', 'state', 'instance_count', 'created_at', 'updated_at'},
+                  == {'id', 'name', 'kind', 'category', 'state', 'instance_count',
+                      'created_at', 'updated_at'},
                   'ordinary provider list exposed credential/cipher fields or extra accounts')
             row = rows[0]
             check((row['id'], row['name'], row['kind'], row['state'], row['instance_count'])

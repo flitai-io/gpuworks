@@ -20,14 +20,14 @@ export default function BenchmarkCurveNotice({ active, loading, hasResponse, has
 		return <Space role="status" style={{ marginBottom: 12 }}><Spin size="small" /><Typography.Text type="secondary">{t("detail.curveLoading")}</Typography.Text></Space>;
 	}
 	if (error && !hasResponse) {
-		return <Alert style={{ marginBottom: 12 }} type="error" showIcon message={t("detail.curveLoadFailed")} description={error.message} action={<Button size="small" onClick={onRetry}>{t("common.retry")}</Button>} />;
+		return <Alert style={{ marginBottom: 12 }} type="error" showIcon message={t("detail.curveLoadFailed")} description={error.message} action={<Button data-report-exclude size="small" onClick={onRetry}>{t("common.retry")}</Button>} />;
 	}
 	if (!active && !hasSamples) {
 		const failedBeforeRequest = runState === "failed" && completed === 0;
 		return <Alert style={{ marginBottom: 12 }} type="info" showIcon message={t(failedBeforeRequest ? "detail.curveNoRequests" : "detail.curveLegacyMissing")} description={failedBeforeRequest && runError ? benchmarkErrorText(t, runError) : undefined} />;
 	}
 	if (error) {
-		return <Alert style={{ marginBottom: 12 }} type="warning" showIcon message={t("detail.curveRefreshFailed")} description={error.message} action={<Button size="small" onClick={onRetry}>{t("common.retry")}</Button>} />;
+		return <Alert style={{ marginBottom: 12 }} type="warning" showIcon message={t("detail.curveRefreshFailed")} description={error.message} action={<Button data-report-exclude size="small" onClick={onRetry}>{t("common.retry")}</Button>} />;
 	}
 	return null;
 }

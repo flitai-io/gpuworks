@@ -1,0 +1,33 @@
+# systemd unit for scripts/gitsync, on a host that reaches both the internal
+# GitLab and github.com. Install:
+#
+#   CGO_ENABLED=0 go build -o /usr/local/bin/gitsync ./scripts/gitsync
+#   useradd --system --no-create-home --shell /sbin/nologin gitsync
+#   install -m 0644 scripts/gitsync/gitsync.service /etc/systemd/system/
+#   install -m 0600 gitsync.env /etc/gitsync.env   # see gitsync.env.example
+#   install -m 0600 -o gitsync app.pem /etc/gitsync-github-app.pem
+#   systemctl daemon-reload && systemctl enable --now gitsync
+#
+# Logs: journalctl -u gitsync
+[Unit]
+Description=Keep the GitLab and GitHub copies of gpuworks in step
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/gitsync.env
+ExecStart=/usr/local/bin/gitsync -cache /var/lib/gitsync/repo.git
+StateDirectory=gitsync
+# git reads its per-user config from HOME; the system user has none.
+Environment=HOME=/var/lib/gitsync
+Restart=always
+RestartSec=30
+User=gitsync
+Group=gitsync
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

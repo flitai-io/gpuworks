@@ -13,17 +13,18 @@ Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
 Object.defineProperty(globalThis, "ResizeObserver", { value: class { observe() {} unobserve() {} disconnect() {} }, configurable: true });
 
-const { cleanup, render, screen, fireEvent, within } = await import("@testing-library/react");
+const { cleanup, render, screen, fireEvent, within, waitFor } = await import("@testing-library/react");
 const { default: userEvent } = await import("@testing-library/user-event");
 const { default: BenchmarkWizard } = await import("../src/pages/evaluations/BenchmarkWizard.tsx");
 const { MemoryRouter } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
 const { default: EvaluationsPage } = await import("../src/pages/EvaluationsPage.tsx");
 const locale = (await import("../src/i18n/locales/en/evaluations.json")).default;
+const common = (await import("../src/i18n/locales/en/common.json")).default;
 const i18n = createInstance();
 await i18n.use(initReactI18next).init({
 	lng: "en", defaultNS: "evaluations", interpolation: { escapeValue: false },
-	resources: { en: { evaluations: locale } },
+	resources: { en: { evaluations: locale, common } },
 });
 
 Object.defineProperty(globalThis, "localStorage", { value: dom.window.localStorage, configurable: true });
@@ -54,8 +55,82 @@ const deployment = { id: 7, name: "Test service", node_uuid: "node-1", model_id:
 function wizard(preset?: WizardPreset, open = true) {
 	return <I18nextProvider i18n={i18n}><BenchmarkWizard open={open} meta={meta} deployments={[deployment]} nodes={[]} preset={preset} onClose={() => {}} onCreated={() => {}} /></I18nextProvider>;
 }
+let restoreFetch = () => {};
 beforeEach(() => { mock.method(api, "deployment", async () => ({ ...deployment, instances: [{ uuid: "leader-1", deployment_id: deployment.id, node_uuid: "node-1", state: "running", sleep_level: 0, node_rank: 0, api_port: 8000 }] })); });
-afterEach(() => { cleanup(); mock.restoreAll(); });
+afterEach(() => { cleanup(); mock.restoreAll(); restoreFetch(); });
+
+function externalServerFixture() {
+	const original = globalThis.fetch;
+	let allowed = false;
+	const calls: { method: string; path: string; body?: Record<string, unknown> }[] = [];
+	globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const path = new URL(String(input), "http://localhost").pathname;
+		const method = init?.method || "GET";
+		const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+		calls.push({ method, path, body });
+		const json = (status: number, value: unknown) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
+		if (path === "/api/v1/auth/me") return json(200, { id: 1, username: "admin", role: "admin" });
+		if (path === "/api/v1/nodes/load-node") return json(200, { uuid: "load-node", name: "Bench node", state: "online", caps: ["bench"] });
+		if (path === "/api/v1/server/outbound-policy" && method === "GET") return json(200, { restrict_private_hosts: true, allow_private_hosts: ["existing.internal"], editable: true, revision: "r1" });
+		if (path.endsWith("/outbound-policy/check")) return json(200, { items: [{ host: "bench.internal", status: allowed ? "allowed" : "needs_allow" }], total: 1 });
+		if (path === "/api/v1/server/outbound-policy" && method === "PUT") {
+			assert.deepEqual(body, { restrict_private_hosts: true, allow_private_hosts: ["existing.internal", "bench.internal"], revision: "r1" });
+			allowed = true;
+			return json(200, { restrict_private_hosts: true, allow_private_hosts: ["existing.internal", "bench.internal"], editable: true, revision: "r2" });
+		}
+		if (path === "/api/v1/benchmarks/models") return allowed || (body?.node_uuid && body.node_uuid !== "server") ? json(200, { models: ["served"], normalized_url: "http://bench.internal:8000" }) : json(403, { error: "outbound URL is not permitted" });
+		if (path === "/api/v1/benchmarks" && method === "POST") return allowed || (body?.load_origin && body.load_origin !== "server") ? json(200, { id: 91, name: "Private run" }) : json(403, { error: "outbound URL is not permitted" });
+		return json(599, { error: `unexpected ${method} ${path}` });
+	}) as typeof fetch;
+	restoreFetch = () => { globalThis.fetch = original; };
+	const sourceRun = { id: 90, name: "External private", mode: "grid", target_kind: "external", base_url: "http://bench.internal:8000/v1", model: "served", load_origin: "server", tokenizer_ref: "engine:", dataset: { kind: "random" }, search: { concurrency: [1], isl: [128], osl: [32] } } as import("../src/api.ts").BenchmarkRun;
+	return { calls, sourceRun };
+}
+
+test("an external server-origin rerun authorizes its checked current host before creation", async () => {
+	const { calls, sourceRun } = externalServerFixture();
+	render(wizard({ sourceRun }));
+	const user = userEvent.setup({ document: dom.window.document });
+	await user.click(await screen.findByRole("checkbox", { name: /bench\.internal/ }));
+	await user.click(screen.getByRole("button", { name: locale.wizard.next }));
+	await user.click(await screen.findByRole("button", { name: locale.wizard.start }));
+	await screen.findByText(locale.wizard.created);
+	assert.equal(calls.filter((call) => call.method === "PUT").length, 1);
+	const create = calls.find((call) => call.path === "/api/v1/benchmarks" && call.method === "POST");
+	assert.equal(create?.body?.base_url, "http://bench.internal:8000");
+	assert.equal(create?.body?.load_origin, "server");
+	assert.ok(calls.findIndex((call) => call.method === "PUT") < calls.indexOf(create!), "permission is saved before creating the run");
+});
+
+test("external model probing saves a host only after explicit consent", async () => {
+	const { calls, sourceRun } = externalServerFixture();
+	render(wizard({ sourceRun }));
+	const user = userEvent.setup({ document: dom.window.document });
+	const allow = await screen.findByRole("checkbox", { name: /bench\.internal/ });
+	await user.click(screen.getByRole("button", { name: new RegExp(`${locale.wizard.probe}$`) }));
+	await waitFor(() => assert.equal(calls.filter((call) => call.path === "/api/v1/benchmarks/models").length, 1));
+	assert.equal(calls.some((call) => call.method === "PUT"), false, "an unchecked probe does not change policy");
+	await user.click(allow);
+	await user.click(screen.getByRole("button", { name: new RegExp(`${locale.wizard.probe}$`) }));
+	await waitFor(() => assert.equal(calls.filter((call) => call.path === "/api/v1/benchmarks/models").length, 2));
+	assert.equal(calls.filter((call) => call.method === "PUT").length, 1);
+	await screen.findByText(i18n.t("wizard.probeSuccess", { count: 1 }));
+	const secondProbe = calls.filter((call) => call.path === "/api/v1/benchmarks/models")[1];
+	assert.ok(calls.findIndex((call) => call.method === "PUT") < calls.indexOf(secondProbe));
+});
+
+test("a node-origin external rerun probes from that node without management-host authorization", async () => {
+	const { calls, sourceRun } = externalServerFixture();
+	const loadNode = { uuid: "load-node", name: "Bench node", hostname: "bench-node", state: "online", caps: ["bench"] } as import("../src/api.ts").Node;
+	render(<I18nextProvider i18n={i18n}><BenchmarkWizard open meta={meta} deployments={[]} nodes={[loadNode]} preset={{ sourceRun: { ...sourceRun, load_origin: "load-node" } }} onClose={() => {}} onCreated={() => {}} /></I18nextProvider>);
+	const user = userEvent.setup({ document: dom.window.document });
+	await screen.findByText("Compute node · Bench node");
+	await user.click(screen.getByRole("button", { name: new RegExp(`${locale.wizard.probe}$`) }));
+	await screen.findByText(locale.wizard.v1Removed);
+	assert.equal(screen.queryByRole("checkbox", { name: /bench\.internal/ }), null);
+	assert.equal(calls.some((call) => call.path.includes("outbound-policy")), false);
+	assert.equal(calls.find((call) => call.path === "/api/v1/benchmarks/models")?.body?.node_uuid, "load-node");
+});
 
 function page(entry = "/evaluations") {
 	mock.method(api, "benchmarks", async () => ({ items: [], total: 0 }));

@@ -3,7 +3,7 @@
   "name": "终端 / 宿主机 PTY / 真实命令回显、退出结束、管理员开关禁用与恢复",
   "test_file": "test/e2e/terminal_host.py",
   "test_function": "test_terminal_host",
-  "command": "make test-e2e-terminal-host",
+  "command": "python3 -B test/e2e/terminal_host.py --locale en",
   "priority": "P1",
   "page_id": "terminal",
   "lane": "local-real-server-agent-webterm",
@@ -100,13 +100,14 @@
     "22.1": "The admin Nodes menu popup, the explicit /nodes/{uuid}/terminal?target=host deep link and a real reload each establish distinct audited host PTYs with the correct title, host banner, WS target and URL query, verified against independent host files (PID/start_ticks, agent ancestry); a disconnected context proves release.",
     "22.3": "A non-admin user sees the Nodes menu and the enabled terminal button as the product currently renders them, but the popup and the host deep link get preflight 403 with the localized permission text, zero new WS/audit, and a direct upgrade-shaped API request is refused 403 ADMINISTRATOR_REQUIRED.",
     "22.7": "The node-row terminal popup opens the exact /nodes/{uuid}/terminal URL with window.opener===null while the explicit host deep link and reload still reach the real PTY; an unknown node yields node-detail 404 plus preflight 200 can_open=false with the raw server reason, never an SPA-200 success.",
-    "22.6": "Real Tab presses from the page body reach the terminal entry; while unfocused it paints no outline (0px/none), and once keyboard-focused it matches :focus-visible and reports a solid 3px rgb(120,189,250) ring that is a lighter derivative of the theme primary #005bd4 read from ui/src/theme/tokens.ts; verified en+zh and killed by removing antd genFocusOutline."
+    "22.6": "Real Tab presses from the page body reach the terminal entry; while unfocused it paints no outline (0px/none), and once keyboard-focused it matches :focus-visible and reports a solid 3px rgb(120,189,250) ring that is a lighter derivative of the theme primary #005bd4 read from ui/src/theme/tokens.ts; verified en+zh and killed by removing antd genFocusOutline.",
+    "22.4": "Expiry is measured on the real session row, not inferred. A read-only poll leaves expires_at untouched, so polling alone cannot keep a login alive; a real pointer gesture moves it forward through the activity probe, and a read after that leaves it alone again; no extension passes the absolute deadline the row already carries. When the deadline is moved into the past, the next gesture's activity probe comes back 401, the product keeps the page where it is and asks for the password in an undismissable dialog, signing in there restores a new session on the same URL, and the unsaved value typed into the policy form is still displayed afterwards, so the operator keeps their work. Verified in en and zh.",
+    "22.5": "covered: In the zh run, every surface is checked against the zh locale entry rather than judged by appearance, and that entry has to differ from the en one - so a surface still rendering its English copy fails however it is worded. The navigation, the first-screen page title and the nodes table headers render Chinese and expose no internal identifiers (cache_max_bytes, node_uuid, target_kind, expires_at, session_id, transport_bytes). The terminal settings card renders its zh copy. Dynamic text is covered too: the live session status reads the zh string ('已连接'), and the server's own preflight reason arrives translated ('平台设置已禁用 Web 终端。') rather than as the raw English sentence. Kill: hardcoding the status tag to 'Connected' fails on the zh assertion waiting for '已连接'."
   },
   "missing": [
     "MISSING: checklist 19.3 (UTF-8 across frames, continuous output and resize/SIGWINCH)",
     "MISSING: checklist 19.5 (per-node/global concurrency and idle timeout)",
     "MISSING: checklist 19.6 (session audit subject, target and result)",
-    "MISSING: checklist 22.5 (zh/en navigation, first screen, error and empty text)",
     "MISSING: container terminal targets and runtime capability differences",
     "MISSING: idle timeout, SIGTERM/SIGKILL cleanup and leftover process checks",
     "MISSING: per-node and global concurrency limits (429)",

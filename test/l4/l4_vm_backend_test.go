@@ -41,6 +41,9 @@ type vmBackend struct {
 	// Image is the vLLM runner single-VM cases deploy; DistributedImage the one
 	// multi-node cases do.
 	Image, DistributedImage string
+	// Model is the small model every deployment case serves: the one the
+	// provider's VMs carry at PreloadedModelPath.
+	Model l4TestModel
 	// Engine is the vLLM image and extra engine arguments a card type runs, and
 	// false for a card no image of ours can run (CompShare: V100S takes the
 	// 1Cat-vLLM Volta image, P40 is skipped). EnsureEngineImage makes that image
@@ -108,7 +111,43 @@ func (b *vmBackend) dockerTestImage() string {
 
 // servedName builds a model name unique to the provider and scenario.
 func (b *vmBackend) servedName(scenario string) string {
-	return "qwen2-" + b.Name + "-" + scenario
+	return b.Model.ServedPrefix + "-" + b.Name + "-" + scenario
+}
+
+// l4TestModel is a model's registration: where it comes from and the
+// metadata the estimator reads, as config.json of the repository states it.
+type l4TestModel struct {
+	SourceID, Name, Arch, Meta string
+	WeightBytes                int64
+	// ServedPrefix starts the served names of the deployments.
+	ServedPrefix string
+}
+
+var (
+	// l4Qwen2Model is the model the CompShare golden images carry.
+	l4Qwen2Model = l4TestModel{
+		SourceID: "Qwen/Qwen2-0.5B-Instruct", Name: "Qwen2-0.5B-Instruct", Arch: "qwen2", WeightBytes: 1 << 30, ServedPrefix: "qwen2",
+		Meta: `{"model_type":"qwen2","num_hidden_layers":24,"hidden_size":896,"num_attention_heads":14,"num_key_value_heads":2,"max_position_embeddings":32768}`,
+	}
+	// l4Qwen3Model is the model the Aliyun golden image carries
+	// (goldenimage.DefaultModelRepo).
+	l4Qwen3Model = l4TestModel{
+		SourceID: "Qwen/Qwen3-0.6B", Name: "Qwen3-0.6B", Arch: "qwen3", WeightBytes: 3 << 29, ServedPrefix: "qwen3",
+		Meta: `{"model_type":"qwen3","num_hidden_layers":28,"hidden_size":1024,"num_attention_heads":16,"num_key_value_heads":8,"head_dim":128,"max_position_embeddings":40960}`,
+	}
+)
+
+// registerModel stores the model the backend's VMs carry.
+func (b *vmBackend) registerModel(t *testing.T, env *cloudTestEnv) *store.Model {
+	t.Helper()
+	model, err := env.Control.Store().UpsertModel(&store.Model{
+		Source: "modelscope", SourceID: b.Model.SourceID, Revision: "master",
+		Name: b.Model.Name, Arch: b.Model.Arch, WeightBytes: b.Model.WeightBytes, Dtype: "bfloat16", Meta: b.Model.Meta,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return model
 }
 
 // compshareAcceptanceDiskGB: the externally maintained golden image currently
@@ -133,6 +172,7 @@ func compshareBackend(t *testing.T) *vmBackend {
 		ModelEndpoint: compshareModelEndpoint(),
 		PullMirror:    gpustackMirrorEndpoints,
 		Image:         compshareTestImage(), DistributedImage: compshareDistributedTestImage(),
+		Model:           l4Qwen2Model,
 		DockerTestImage: strings.TrimSpace(os.Getenv("COMPSHARE_DOCKER_TEST_IMAGE")),
 		PreloadedModelPath: func(t *testing.T) string {
 			path := strings.TrimSpace(os.Getenv("COMPSHARE_PRELOADED_MODEL_PATH"))
@@ -218,7 +258,7 @@ n=$(nvidia-smi -L | wc -l)
 [ "$n" -ge 1 ] || { echo "no GPU listed" >&2; exit 1; }
 i=0
 while [ "$i" -lt "$n" ]; do
-  docker run --rm --gpus "\"device=$i\"" -e CUDA_VISIBLE_DEVICES=0 --entrypoint python ` + shellQuoteForTest(image) + ` -c 'import torch; assert torch.cuda.is_available(); torch.zeros(1, device="cuda"); print("GPUWORKS_GPU_READY")' 2>&1 | tail -3 | grep -q GPUWORKS_GPU_READY || exit 1
+  docker run --rm --gpus "\"device=$i\"" -e CUDA_VISIBLE_DEVICES=0 --entrypoint python3 ` + shellQuoteForTest(image) + ` -c 'import torch; assert torch.cuda.is_available(); torch.zeros(1, device="cuda"); print("GPUWORKS_GPU_READY")' 2>&1 | tail -3 | grep -q GPUWORKS_GPU_READY || exit 1
   i=$((i + 1))
 done
 echo "GPUWORKS_GPUS_READY $n"`

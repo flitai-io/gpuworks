@@ -10,7 +10,7 @@ import (
 // the Ascend probe has always reported "Ascend <chip>", and macOS names the
 // GPU "Apple M4 Pro"; none of these words says anything the vendor field does
 // not already say.
-var gpuNameVendorPrefixes = []string{"nvidia", "huawei", "ascend", "hygon", "amd", "apple"}
+var gpuNameVendorPrefixes = []string{"nvidia", "huawei", "ascend", "hygon", "amd", "apple", "kunlunxin"}
 
 // NormalizeGPUName is the model name of a GPU as the server stores it: the
 // probe's name with surrounding and repeated whitespace collapsed and a
@@ -70,6 +70,11 @@ func GPUArch(vendor, archID, computeCapability string) Arch {
 		return Arch{ID: archID, Family: hygonFamily(archID)}
 	case VendorPPU:
 		return Arch{ID: archID, Family: ppuFamily(archID)}
+	case VendorKunlunxin:
+		if strings.EqualFold(archID, "KL3") {
+			return Arch{ID: archID, Family: "kl3"}
+		}
+		return Arch{ID: archID}
 	case VendorApple:
 		return Arch{ID: archID, Family: appleFamily(archID)}
 	default:

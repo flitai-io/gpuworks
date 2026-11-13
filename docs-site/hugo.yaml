@@ -38,9 +38,17 @@ markup:
     noClasses: false
 
 outputs:
-  home: [HTML, RSS, markdown, LLMS]
+  home: [HTML, RSS, markdown, LLMS, handbook]
   page: [HTML, markdown]
   section: [HTML, RSS, print, markdown]
+
+outputFormats:
+  handbook:
+    mediaType: text/html
+    baseName: index
+    path: handbook
+    isHTML: true
+    permalinkable: false
 
 params:
   page_width: wide

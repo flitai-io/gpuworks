@@ -61,7 +61,9 @@ class BooleanContracts(unittest.TestCase):
             wrong_values = (None, 0, 1, 'true', 'false') if position != 'auto' else (None, False, True)
             for wrong in wrong_values:
                 actual = copy.deepcopy(expected)
-                actual['quick_params'][key] = wrong
+                # Auto carries no quick_params at all, so a wrong value for it is
+                # an unexpected key on an object that should not exist.
+                actual.setdefault('quick_params', {})[key] = wrong
                 with self.subTest(position=position, wrong=wrong), self.assertRaises(AssertionError):
                     assert_wire(actual, expected, key, position, 'test')
             actual = copy.deepcopy(expected)
@@ -80,7 +82,7 @@ class BooleanContracts(unittest.TestCase):
         auto = position_body(self.body, 'enable_prefix_caching', 'auto', 'auto')
         self.assertIs(on['quick_params']['enable_prefix_caching'], True)
         self.assertIs(off['quick_params']['enable_prefix_caching'], False)
-        self.assertNotIn('enable_prefix_caching', auto['quick_params'])
+        self.assertNotIn('quick_params', auto)
         self.assertEqual(self.body, saved)
         self.assertNotIn('name', auto)
         self.assertNotIn('node_uuid', auto)
@@ -96,7 +98,7 @@ class BooleanContracts(unittest.TestCase):
             actual = copy.deepcopy(expected)
             if kind == 'omit': actual['quick_params'].pop(key)
             elif kind == 'flip': actual['quick_params'][key] = False
-            elif kind == 'lose-other-param': actual['quick_params'].pop('dtype')
+            elif kind == 'lose-other-param': actual.pop('engine')
             else: actual.pop('model_id')
             with self.subTest(kind=kind), self.assertRaises(AssertionError):
                 assert_wire(actual, expected, key, 'on', 'test')

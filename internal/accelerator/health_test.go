@@ -187,3 +187,13 @@ func TestNVIDIARecoveryGuide(t *testing.T) {
 		t.Fatalf("reboot guide = %+v ok=%v", g, ok)
 	}
 }
+
+func TestKunlunHealthGuideUsesVerifiedQuery(t *testing.T) {
+	guide, ok := HealthGuideFor(HealthCard{Vendor: VendorKunlunxin, Code: HealthMemoryUncorrectable, BDF: "0000:07:00.0"}, nil)
+	if !ok || guide.Probe != "xpu-smi -q -x" || guide.Recheck != "xpu-smi -q -x" || len(guide.Actions) != 0 {
+		t.Fatalf("guide = %+v, %v", guide, ok)
+	}
+	if ToolCommand(VendorKunlunxin) != "xpu-smi -q -x" {
+		t.Fatal("incorrect diagnostic command")
+	}
+}

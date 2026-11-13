@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
-	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/automation"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/planning"
@@ -24,7 +24,7 @@ type automationAdapter struct {
 	store *store.Store
 	acct  *proxy.Accountant
 	// host reads a node's host memory as its agent recently reported it
-	// (api.HostMemory, the reader an operator's sleep uses); nil knows
+	// (planning.RecentHostMemory, the reader an operator's sleep uses); nil knows
 	// nothing.
 	host  planning.HostMemory
 	scale func(deploymentID uint, role string, replicas int) error
@@ -78,7 +78,7 @@ func (a *automationAdapter) Schedules() ([]automation.Schedule, error) {
 	}
 	out := make([]automation.Schedule, 0, len(rows))
 	for _, row := range rows {
-		s, err := api.AutomationSchedule(row)
+		s, err := deployment.AutomationSchedule(row)
 		if err != nil {
 			a.log.Warn("automation: schedule time zone unknown; skipped", "schedule", row.ID, "timezone", row.Timezone)
 			continue
@@ -211,13 +211,12 @@ func (a *automationAdapter) WakeWaiting(deploymentID uint, uuids []string) ([]st
 	for _, uuid := range uuids {
 		want[uuid] = true
 	}
-	var named, gone []string
+	var gone []string
 	var waiting []store.Instance
 	for _, in := range insts {
 		if !want[in.UUID] {
 			continue
 		}
-		named = append(named, in.UUID)
 		if !store.HoldsSleepIntent(&in) || planning.InstanceSleepIntent(&in) == 0 {
 			gone = append(gone, in.UUID)
 			continue

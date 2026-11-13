@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
@@ -59,6 +60,7 @@ type fakeAliyun struct {
 
 type fakeCall struct {
 	host, action, token string
+	method, path        string
 	query               map[string]string
 }
 
@@ -76,11 +78,11 @@ func (f *fakeAliyun) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	auth := r.Header.Get("Authorization")
 	keyID := strings.TrimPrefix(strings.SplitN(auth, ",", 2)[0], signAlgorithm+" Credential=")
 	secret, ok := f.secrets[keyID]
-	if !ok || sign(signedRequest{method: r.Method, host: r.Host, query: query, headers: headers}, keyID, secret) != auth {
+	if !ok || sign(signedRequest{method: r.Method, host: r.Host, path: r.URL.Path, query: query, headers: headers}, keyID, secret) != auth {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"Code": "IncompleteSignature", "Message": "The request signature does not conform to Aliyun standards.", "RequestId": "req-sig"})
 		return
 	}
-	call := fakeCall{host: r.Host, action: headers["x-acs-action"], token: headers["x-acs-security-token"], query: query}
+	call := fakeCall{host: r.Host, action: headers["x-acs-action"], token: headers["x-acs-security-token"], method: r.Method, path: r.URL.Path, query: query}
 	f.mu.Lock()
 	f.calls = append(f.calls, call)
 	f.mu.Unlock()

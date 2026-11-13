@@ -1,5 +1,16 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Alert, Button, InputNumber, Modal, Select, Spin, Typography } from "antd";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Button } from "../../components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
+import { FormField } from "../../ui-kit/form/FormField";
+import { formSubmit } from "../../ui-kit/form/submit";
+import { FileUpload } from "../../ui-kit/FileUpload";
+import { NumberInput } from "../../ui-kit/NumberInput";
+import { Spinner } from "../../ui-kit/Spinner";
+import { Notice } from "../../ui-kit/Notice";
+import { OptionSelect } from "../../ui-kit/OptionSelect";
 import { useTranslation } from "react-i18next";
 import { batchApi, type Batch, type BatchDictionary, type BatchEndpoint } from "../../batchApi";
 import { batchErrorText, type BatchErrorText } from "./batchErrors";
@@ -61,12 +72,24 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
   const { t } = useTranslation("batches");
   const { t: tCommon } = useTranslation("common");
   const { dictionary, error: dictionaryError, retry } = useDictionary(open);
-  const [file, setFile] = useState<File | null>(null);
-  // The window the reader chose; until then the dictionary's default.
-  const [chosenWindow, setWindowHours] = useState<number | null | undefined>(undefined);
+  // Only mirror limits supplied by the dictionary; file contents remain server-validated.
+  const schema = z.object({
+    file: z.custom<File | null>().refine((value): boolean => !!value, t("create.fileRequired")).refine(value => !value || !dictionary || value.size <= dictionary.max_file_bytes, t("create.tooLarge", { limit: dictionary ? Math.floor(dictionary.max_file_bytes / MB) : 0 })),
+    windowHours: z.number().nullable().optional().superRefine((value, ctx) => {
+      const bounds = dictionary?.completion_window_hours;
+      const hours = value === undefined ? bounds?.default : value;
+      if (bounds && (hours == null || !Number.isInteger(hours) || hours < bounds.min || hours > bounds.max)) ctx.addIssue({ code: "custom", message: t("create.window.help", bounds) });
+    }),
+    model: z.string().optional(),
+  });
+  const formRef = useRef<HTMLFormElement>(null);
+  const form = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema), shouldFocusError: false, defaultValues: { file: null } });
+  const [file, chosenWindow, model] = useWatch({ control: form.control, name: ["file", "windowHours", "model"] });
+  const setFile = (value: File | null) => form.setValue("file", value, { shouldValidate: form.formState.isSubmitted });
+  const setWindowHours = (value: number | null | undefined) => form.setValue("windowHours", value, { shouldValidate: form.formState.isSubmitted });
+  const setModel = (value: string | undefined) => form.setValue("model", value);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<BatchErrorText | null>(null);
-  const [model, setModel] = useState<string | undefined>(undefined);
   const [showWaiting, setShowWaiting] = useState(false);
   const [sampleModel, setSampleModel] = useState<string>("");
   const [chosenSampleEndpoint, setSampleEndpoint] = useState<string | undefined>(undefined);
@@ -105,12 +128,10 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
   };
 
   const reset = () => {
-    setFile(null);
+    form.reset({ file: null });
     setError(null);
-    setModel(undefined);
     setShowWaiting(false);
     setSampleModel("");
-    setWindowHours(undefined);
   };
   const changeShowWaiting = (show: boolean) => {
     setShowWaiting(show);
@@ -141,58 +162,33 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
   let body: ReactNode;
   if (!dictionary && dictionaryError) {
     body = (
-      <Alert
-        type="error"
-        showIcon
-        message={t("create.dictionary.failed")}
-        description={dictionaryError.message}
-        action={<Button size="small" onClick={retry}>{t("create.dictionary.retry")}</Button>}
+      <Notice
+        tone="danger"
+        title={t("create.dictionary.failed")}
+        children={dictionaryError.message}
+        action={<Button variant="secondary" size="sm" onClick={retry}>{t("create.dictionary.retry")}</Button>}
       />
     );
   } else if (!dictionary || !bounds) {
-    body = <div role="status" className="batch-create-loading"><Spin size="small" /> <span>{t("create.dictionary.loading")}</span></div>;
+    body = <div className="batch-create-loading"><Spinner label={t("create.dictionary.loading")} /></div>;
   } else {
     body = (
       <div className="batch-create-form">
-        <div className="batch-create-field">
-          <label htmlFor="batch-create-file">{t("create.file")}</label>
-          <input
-            id="batch-create-file"
-            type="file"
-            accept={BATCH_FILE_ACCEPT}
-            disabled={submitting}
-            aria-describedby="batch-create-file-help"
-            onChange={(event) => pick(event.target.files?.[0] ?? null)}
-          />
-          <Typography.Text id="batch-create-file-help" type="secondary">
-            {file ? t("create.fileSelected", { name: file.name, size: sizeText(file.size) }) : t("create.fileHelp")}
-          </Typography.Text>
-          <BatchFileModels fileModels={fileModels} skipped={skipped && !tooLarge} known={known} override={model} />
-        </div>
-        <div className="batch-create-field">
-          <label htmlFor="batch-create-window">{t("create.window.label")}</label>
-          <InputNumber
-            id="batch-create-window"
-            min={bounds.min}
-            max={bounds.max}
-            precision={0}
-            value={windowHours}
-            onChange={setWindowHours}
-            disabled={submitting}
-            addonAfter={t("create.window.unit")}
-            aria-describedby="batch-create-window-help"
-            status={windowValid ? undefined : "error"}
-            style={{ width: 160 }}
-          />
-          <Typography.Text id="batch-create-window-help" type={windowValid ? "secondary" : "danger"}>
-            {t("create.window.help", { min: bounds.min, max: bounds.max, default: bounds.default })}
-          </Typography.Text>
-        </div>
+        <FormField control={form.control} name="file" label={t("create.file")} required
+          description={t("create.fileHelp")}>
+          {binding => <FileUpload {...binding} value={file ?? null} meta={file ? sizeText(file.size) : undefined} onChange={pick} accept={BATCH_FILE_ACCEPT} disabled={submitting} />}
+        </FormField>
+        <BatchFileModels fileModels={fileModels} skipped={skipped && !tooLarge} known={known} override={model} />
+        <FormField control={form.control} name="windowHours" label={t("create.window.label")} required
+          description={<span className={windowValid ? undefined : "text-fg-danger"} role={windowValid ? undefined : "alert"}>{t("create.window.help", { min: bounds.min, max: bounds.max, default: bounds.default })}</span>}>
+          {binding => <div className="flex items-center gap-2"><NumberInput {...binding} value={windowHours} onChange={setWindowHours}
+            min={bounds.min} max={bounds.max} precision={0} disabled={submitting} className="w-40" /><span>{t("create.window.unit")}</span></div>}
+        </FormField>
         <BatchModelField options={modelOptions} value={model} onChange={setModel} disabled={submitting} showWaiting={showWaiting} onShowWaitingChange={changeShowWaiting} />
         <div className="batch-create-field">
           <label htmlFor="batch-create-sample-model">{t("create.sample.title")}</label>
           <div className="batch-create-sample">
-            <Select
+            <OptionSelect
               aria-label={t("create.sample.endpoint")}
               value={sampleEndpoint}
               onChange={setSampleEndpoint}
@@ -200,7 +196,7 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
               options={dictionary.endpoints.map((value) => ({ value, label: sampleEndpointKey[value] ? t(`create.sample.endpoints.${sampleEndpointKey[value]}`, { endpoint: value }) : value }))}
               style={{ minWidth: 200 }}
             />
-            <Select
+            <OptionSelect
               id="batch-create-sample-model"
               aria-label={t("create.sample.model")}
               value={chosenSample || undefined}
@@ -208,19 +204,18 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
               onChange={setSampleModel}
               disabled={submitting || servesSample(model) || sampleOptions.length === 0}
               options={sampleOptions.map((option) => ({ value: option.name, label: `${option.name} · ${stateText(option.state)}` }))}
-              style={{ minWidth: 200, flex: 1 }}
+              style={{ minWidth: 200 }}
             />
-            <Button onClick={() => downloadBatchSample(sampleEndpoint, sampleModelName)} disabled={submitting}>
+            <Button variant="secondary" onClick={() => downloadBatchSample(sampleEndpoint, sampleModelName)} disabled={submitting}>
               {t("create.sample.download")}
             </Button>
-            <Button onClick={useSample} disabled={submitting || !chosenSample}>{t("create.sample.use")}</Button>
+            <Button variant="secondary" onClick={useSample} disabled={submitting || !chosenSample}>{t("create.sample.use")}</Button>
           </div>
         </div>
-        <Alert
-          type="info"
-          showIcon
-          message={t("create.hintTitle")}
-          description={
+        <Notice
+          tone="info"
+            title={t("create.hintTitle")}
+          children={
             <ul className="batch-create-hint">
               <li>{t("create.hint.format", { size: maxFileMB, requests: dictionary.max_file_lines })}</li>
               <li>{t("create.hint.line")}</li>
@@ -231,15 +226,14 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
             </ul>
           }
         />
-        {tooLarge && <Alert type="error" showIcon message={t("create.tooLarge", { limit: maxFileMB })} />}
+        {tooLarge && <Notice tone="danger" title={t("create.tooLarge", { limit: maxFileMB })} />}
         {error && (
-          <Alert
-            type="error"
-            showIcon
-            message={t("create.failed")}
-            description={<>
+          <Notice
+            tone="danger"
+                title={t("create.failed")}
+            children={<>
               <div>{error.message}</div>
-              {error.detail && <Typography.Text type="secondary">{t("errors.detail", { detail: error.detail })}</Typography.Text>}
+              {error.detail && <span className="text-fg-muted">{t("errors.detail", { detail: error.detail })}</span>}
             </>}
           />
         )}
@@ -247,24 +241,21 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
     );
   }
 
+  const close = () => { if (!submitting) { reset(); onClose(); } };
   return (
-    <Modal
-      open={open}
-      title={t("create.title")}
-      onCancel={onClose}
-      afterClose={reset}
-      maskClosable={false}
-      keyboard={!submitting}
-      closable={!submitting}
-      destroyOnHidden
-      footer={[
-        <Button key="close" onClick={onClose} disabled={submitting}>{t("create.cancel")}</Button>,
-        <Button key="submit" type="primary" onClick={() => void submit()} loading={submitting} disabled={!dictionary || !file || tooLarge || !windowValid}>
-          {submitting ? t("create.submitting") : t("create.submit")}
-        </Button>,
-      ]}
-    >
-      {body}
-    </Modal>
+    <Dialog open={open} onOpenChange={next => { if (!next) close(); }} disablePointerDismissal>
+      <DialogContent closeButtonLabel={tCommon("actions.close")} closeButtonDisabled={submitting} style={{ width: "min(520px, calc(100vw - 32px))", maxWidth: "calc(100vw - 32px)" }} className="flex max-h-[calc(100dvh-32px)] flex-col">
+        <DialogHeader><DialogTitle>{t("create.title")}</DialogTitle></DialogHeader>
+        <form ref={formRef} noValidate onSubmit={formSubmit(form, () => formRef.current, submit)} className="flex min-h-0 flex-col gap-4">
+          <div className="min-h-0 overflow-auto">{body}</div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={close} disabled={submitting}>{t("create.cancel")}</Button>
+            <Button type="submit" variant="primary" loading={submitting} disabled={!dictionary || !file || tooLarge || !windowValid}>
+              {submitting ? t("create.submitting") : t("create.submit")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

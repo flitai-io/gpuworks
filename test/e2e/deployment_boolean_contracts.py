@@ -88,12 +88,42 @@ def evaluate_body(body):
 
     Evaluate has no display name. Automatic evaluation does not pin the node
     or submit's selected GPU/TP; those only enter the successful create body.
+
+    It also carries no quick_params until the operator authors one. ADR 0020 rule
+    3: during reevaluation, values the server projected and nobody edited do not
+    become explicit fields, so a default or an earlier template cannot override a
+    newly selected one. EvaluateQuickParams.prepare deletes the key when nothing
+    was authored (evaluateQuickParams.ts:36) and create still submits the complete
+    displayed set, which is what the fixture body describes. Callers that edit a
+    key add it back through position_body, so the explicit path stays exact.
     """
     expected = copy.deepcopy(body)
     expected.pop('name')
+    expected.pop('quick_params', None)
     if expected['placement_mode'] == 'auto':
         expected.pop('node_uuid')
         expected.pop('placement')
+    return expected
+
+
+
+def evaluate_body_after_edits(body, edited_keys):
+    """evaluate_body, plus the quick values this case authored by editing.
+
+    ADR 0020: an edited key stays explicit for the rest of the session, and it
+    travels with the value it was restored to. A case that walked every control
+    and then restored the fixture therefore ends on a body that names those keys
+    with the fixture's own values - still exactly the fixture's configuration,
+    which is what the closing checkpoint is for, but not the keyless body a
+    pristine form sends. Keys the case never touched stay absent.
+    """
+    expected = evaluate_body(body)
+    authored = {key: body['quick_params'][key]
+                for key in edited_keys if key in body.get('quick_params', {})}
+    if authored:
+        expected['quick_params'] = authored
+    else:
+        expected.pop('quick_params', None)
     return expected
 
 
@@ -102,10 +132,14 @@ def position_body(body, key, position, marker):
     check(position in POSITIONS, 'unreviewed tri-state position')
     expected = evaluate_body(body)
     expected['served_name'] = marker
+    # Setting this control is an authored edit, so it is the one quick value that
+    # must travel. Auto states no value, and EvaluateQuickParams drops the key
+    # entirely rather than sending an empty object, so the expected body has no
+    # quick_params at all on that path.
     if position == 'auto':
-        expected['quick_params'].pop(key, None)
+        expected.pop('quick_params', None)
     else:
-        expected['quick_params'][key] = position == 'on'
+        expected['quick_params'] = {key: position == 'on'}
     return expected
 
 

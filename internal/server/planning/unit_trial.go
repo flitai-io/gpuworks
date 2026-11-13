@@ -47,7 +47,7 @@ func (t UnitTrial) Unit(ctx context.Context, role string, original, unit PDUnit,
 	}
 	group, err := t.Networks.ComputeGroup(rows)
 	if err != nil {
-		return ranks[0].NodeUUID, &scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": err.Error()}}, nil
+		return ranks[0].NodeUUID, &scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": err.Error()}}, nil //nolint:nilerr // Network rejection is returned as a ScheduleReason.
 	}
 	kept := original.Ranks()
 	for i, rank := range ranks {

@@ -103,20 +103,66 @@ def test_quick_controls(page, context, server, artifacts, report, locale, chip):
         expected = {'items': expected_rows, **({'total': len(keys)} if keys else {})}
         actual = response.value.json()
         check(actual == expected, 'search IDs/content/order/total mismatch: ' + label)
+        # Both endpoints must be asked the identical fixed filter: same q, level,
+        # source and inclusive window, with node/instance pinned to the fixture's
+        # own empty values. A hit count that differs between them cannot be read
+        # as one measurement, so compare the filters before the numbers.
+        pinned = ('q', 'level', 'source', 'node', 'instance', 'from', 'to')
+        def filters(view):
+            return {key: view.get(key, '') for key in pinned}
+        check(filters(search_query) == filters(histogram_query),
+              f'search and histogram were asked different filters: {label}; search={filters(search_query)} histogram={filters(histogram_query)}')
+        check(filters(search_query)['source'] and filters(search_query)['from'] and filters(search_query)['to'],
+              f'the fixed source and inclusive window are not both read: {label}')
+        # node and instance are pinned by being unsent on both endpoints: the
+        # fixture WARNs are server-sourced, so every row carries an empty node
+        # and instance. Neither endpoint may narrow on a value the fixture does
+        # not have, or the two readings would no longer describe one window.
+        check('node' not in search_query and 'instance' not in search_query,
+              f'a node/instance narrowing appeared on the request: {label}; {sorted(search_query)}')
+        check({(row['node'], row['instance']) for row in expected_rows} <= {('', '')},
+              f'fixture rows are not the pinned empty node/instance: {label}')
+        if keys:
+            check(actual.get('total') == len(actual['items']) == len(keys),
+                  f'search total differs from the rows it returned: {label}; total={actual.get("total")} rows={len(actual["items"])}')
         counts = Counter(row['time_ms'] // 60000 * 60000 for row in expected_rows)
-        buckets = [{'start_ms': stamp, 'counts': {'warn': count}} for stamp, count in sorted(counts.items())]
+        # The store returns buckets newest-first, the same order as every other read
+        # (logstore.histogramOnce sorts descending and the UI reverses for display).
+        # Sorting ascending here only matched while the fixture happened to fall in a
+        # single minute; once it straddled two, the expected order was reversed.
+        buckets = [{'start_ms': stamp, 'counts': {'warn': count}}
+                   for stamp, count in sorted(counts.items(), reverse=True)]
         actual_histogram = histogram.value.json()
-        check(actual_histogram == {'items': buckets, 'total': len(buckets)}, 'histogram mismatch: ' + label)
+        check(actual_histogram == {'items': buckets, 'total': len(buckets)},
+              f'histogram mismatch: {label}; expected={buckets} actual={actual_histogram}')
+        # The two readings must agree as one measurement. The fixture window is
+        # a single histogram bucket, so every matched row lands in the one bar
+        # returned, and the histogram total must stay that bar's own count while
+        # the search total is the number of matched rows.
+        bucket_sum = sum(count for bucket in actual_histogram['items'] for count in bucket['counts'].values())
+        check(bucket_sum == len(keys),
+              f'histogram bucket sum differs from the matched row count: {label}; buckets={bucket_sum} rows={len(keys)}')
+        check(actual_histogram['total'] == len(actual_histogram['items']),
+              f'histogram total is not its own bucket count: {label}')
+        if keys:
+            check(actual['total'] == bucket_sum,
+                  f'search total differs from the histogram bucket sum: {label}; search={actual["total"]} buckets={bucket_sum}')
         visible = page.get_by_test_id('log-row')
         expect(visible).to_have_count(len(keys))
         for index, row in enumerate(expected_rows):
             expect(visible.nth(index)).to_contain_text(row['line'])
         # Verify rendered histogram too, not merely its response.
-        bars = page.get_by_test_id('logs-histogram').get_by_role('img')
+        # A bar publishes role="img" while it is a readout and role="button" once
+        # onPick makes it clickable (LogsHistogram.tsx:35). Both are the same bar,
+        # and pinning one role would go red the moment the page gains or loses the
+        # pick handler, so the bars are addressed by their aria-label instead and
+        # the count still has to match the buckets the response carried.
+        histogram = page.get_by_test_id('logs-histogram')
+        bars = histogram.locator('[role="img"], [role="button"]')
         expect(bars).to_have_count(len(buckets))
         for stamp, count in counts.items():
             label_text = datetime.fromtimestamp(stamp / 1000, timezone.utc).strftime('%Y-%m-%d %H:%M:%S') + ' ' + str(count)
-            expect(page.get_by_test_id('logs-histogram').get_by_role('img', name=label_text, exact=True)).to_be_visible()
+            expect(histogram.locator(f'[aria-label="{label_text}"]')).to_be_visible()
         for name, control in controls.items():
             expect(control).to_have_attribute('aria-pressed', 'true' if name in selected else 'false')
         if keys:
@@ -149,6 +195,23 @@ def test_quick_controls(page, context, server, artifacts, report, locale, chip):
     theme_color(controls[chip], 'backgroundColor', 'white')
     report['evidence'].append({'layer': 'ui', 'computed_style': {'selected_background': 'theme.colors.primary', 'unselected_background': 'theme.colors.white'}, 'keyboard': ['Tab', 'Space', 'Enter']})
     result(lambda: controls[partner].click(), text, ['a', 'ab', 'ac'], [], 'all chips removed restores text')
+    # FTS syntax is its own dimension: these two expressions are only meaningful
+    # if the real backend parser runs them. A literal/substring scan would find
+    # nothing for the trailing-star prefix and would not honour NOT.
+    result(lambda: search.fill('alph*'), 'alph*', ['a', 'ab', 'ac'], [], 'FTS prefix operator reaches the parser')
+    result(lambda: search.fill(term + ' NOT ' + text), term + ' NOT ' + text, ['b'], [], 'FTS NOT with a quoted phrase')
+    # A dangling operator is invalid FTS5. Whatever the backend does with it, it
+    # must not silently drop the term and return the whole window: the known
+    # facts above make a "returned everything" degradation visible here.
+    result(lambda: search.fill(text + ' AND'), text + ' AND', [], [], 'dangling operator never returns the whole window')
+    result(lambda: search.fill(text), text, ['a', 'ab', 'ac'], [], 'restore phrase after FTS operators')
+    # ZSTAC-89654 regression form: text AND (a parenthesised chip OR-group) must
+    # keep the known chip-only records. Space-joining these tokens would make the
+    # backend reject the expression and return nothing, which is the exact
+    # degradation the contract forbids.
+    group = f'{term} AND ({term} OR {partner})'
+    result(lambda: search.fill(group), group, ['ab', 'b'], [], 'ZSTAC-89654 AND over an OR group keeps known hits')
+    result(lambda: search.fill(text), text, ['a', 'ab', 'ac'], [], 'restore phrase after the OR group')
     # Text before chip yields exactly the same row identity as chip before text.
     result(lambda: controls[chip].click(), '(' + text + ') AND ' + term, ['ab'], [chip], 'text first then chip')
     # Each predicate is nonempty separately; their intersection must be empty.
@@ -167,6 +230,34 @@ def test_quick_controls(page, context, server, artifacts, report, locale, chip):
     query, expected = result(lambda: choose(page, logs['search']['levelPlaceholder'], '≥ warn'), '(' + text + ') AND ' + term, ['ab'], [chip], 'minimum warn restores same fact', level='warn')
     independent = page.request.get(server.base + SEARCH + '?' + urlencode(query))
     check(independent.status == 200 and independent.json() == expected, 'independent persisted facts differ')
+    # The severity dropdown and the quick-word label are two separate query
+    # parameters, and passing with level=warn alone must not stand in for the
+    # quick word joining q. Drop the quick word first, then press it again, and
+    # read both parameters off the request each time.
+    severity_only, severity_rows = result(lambda: controls[chip].click(), text, ['a', 'ab', 'ac'], [],
+        'severity alone, quick word removed', level='warn')
+    check(severity_only['level'] == 'warn' and severity_only['q'] == text,
+          f'level and q are not two independent parameters: {severity_only}')
+    check(term not in severity_only['q'],
+          f'quick word {term} is in q although its label is not pressed: {severity_only["q"]}')
+    expect(controls[chip]).to_have_attribute('aria-pressed', 'false')
+    joined, joined_rows = result(lambda: controls[chip].click(), '(' + text + ') AND ' + term, ['ab'], [chip],
+        'quick word joins q, severity parameter untouched', level='warn')
+    check(joined['level'] == severity_only['level'] == 'warn',
+          f'pressing a quick word changed the severity parameter: {joined}')
+    check(joined['q'] != severity_only['q'] and term in joined['q'],
+          f'quick word did not enter q independently of level: {joined["q"]}')
+    expect(controls[chip]).to_have_attribute('aria-pressed', 'true')
+    check({row['id'] for row in severity_rows['items']} != {row['id'] for row in joined_rows['items']},
+          'the severity-only and quick-word readings returned the same rows, so one cannot be told from the other')
+    report['evidence'].append({'layer': 'ui', 'scenario': 'level and quick word are separate parameters',
+        'level_only': {'q': severity_only['q'], 'level': severity_only['level'],
+                       'row_ids': [row['id'] for row in severity_rows['items']]},
+        'quick_word': {'term': term, 'q': joined['q'], 'level': joined['level'],
+                       'row_ids': [row['id'] for row in joined_rows['items']]},
+        'assertions': ['level=warn passes without the quick word in q',
+                       'pressing the quick word adds it to q and leaves level at warn',
+                       'the two readings return different row identities']})
     result(page.reload, '', [], [], 'reload resets unsaved controls', source='instance')
     expect(search).to_have_value('')
     result(lambda: search.fill(text), text, [], [], 'reapply text', source='instance')

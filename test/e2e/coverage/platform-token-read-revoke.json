@@ -81,7 +81,19 @@
         "expiry boundary"
       ]
     },
-    {"field_id": "platform-tokens.table-preferences", "component": "ResourceTable settings drawer and resize handles", "request": "N/A: browser-local table preferences", "persistence": "preferences keyed by tableId=platform-tokens", "covered": [], "missing": ["MISSING: drag width/minimum width, hide/show/reorder/reset columns and reload persistence", "MISSING: fixed name/action column restrictions and safe handling of unknown saved columns", "MISSING: api-keys and platform-tokens preferences remain isolated on the same page", "MISSING: concrete sortable columns name/scope/last_used_at/expires_at/created_at in both directions and tied-value ordering; existing full-list gap includes pagination and volumes"]}
+    {
+      "field_id": "platform-tokens.table-preferences",
+      "component": "ResourceTable settings drawer and resize handles",
+      "request": "N/A: browser-local table preferences",
+      "persistence": "preferences keyed by tableId=platform-tokens",
+      "covered": [],
+      "missing": [
+        "MISSING: drag width/minimum width, hide/show/reorder/reset columns and reload persistence",
+        "MISSING: fixed name/action column restrictions and safe handling of unknown saved columns",
+        "MISSING: api-keys and platform-tokens preferences remain isolated on the same page",
+        "MISSING: concrete sortable columns name/scope/last_used_at/expires_at/created_at in both directions and tied-value ordering; existing full-list gap includes pagination and volumes"
+      ]
+    }
   ],
   "crud": {
     "create": "Covered in the named case: default read/no expiry; not full form coverage",
@@ -102,12 +114,7 @@
       "21.1",
       "21.5"
     ],
-    "partial": {
-      "1.2": "default read/no expiry only; no edit form exists",
-      "7.4": "read/revoke only; wrong scope and expiry matrix not complete",
-      "7.6": "list/DOM and produced artifact checks; not every response/download surface",
-      "12.7": "token name/impact and cancel/revoke; other referenced-resource deletion contracts not applicable"
-    },
+    "partial": {},
     "1.10": "covered: A real 502 keeps the create dialog and the name, shows the server reason, stores no token, and the retry 201 is the only stored token on the independent GET",
     "1.11": "covered: Cancel, close and Escape each close the create dialog immediately, with no unsaved-changes prompt and no token write, so the stored tokens stay unchanged",
     "1.8": "The minimum create leaves scope at read and expiry at no expiry. That POST carries the typed name and scope read, and omits expires_in_days. The 201 item and the independent GET store that name, scope read, and expires_at null. A second create selects scope write and expiry 30 days. That POST carries the typed name, scope write, and expires_in_days 30. The 201 item and the independent GET store that name, scope write, and an expires_at 30 UTC days after creation. After reload the write row shows that prefix, that expiry, and one orange tag whose text is the write scope label. Revoking that token leaves the independent GET empty.",
@@ -118,7 +125,13 @@
     "12.4": "covered: Cancel, Escape, close and mask each return focus to the card Create platform token button and send no POST",
     "12.5": "N/A: the create dialog has no nested child layer; the one-time secret dialog opens only after create closes",
     "12.6": "covered: While the create POST is held the footer Create shows the loading state and a second click sends no further create request; the 502 keeps the name and shows the failure reason; the later 201 matches the reloaded row and the independent token list",
-    "12.8": "N/A: platform token create and revoke have no delete preview, revision or compare-and-swap"
+    "12.8": "N/A: platform token create and revoke have no delete preview, revision or compare-and-swap",
+    "12.7": "The revoke confirmation names the token (the localized sentence interpolates the token's own name, and the dialog is only shown for that row), cancelling leaves the token usable, and confirming returns 204 with the row gone from the list and the independent collection empty. Cleanup is proved rather than assumed: the exported secret is spent immediately after the revoke and GET /api/v1/nodes with it answers 401 AUTHENTICATION_REQUIRED, then the page reloads to the empty state. Failure leaves nothing behind - revoking the same id a second time answers 404 'not found' and the collection stays empty. Reference-blocking has no subject here: a platform token is not referenced by other resources, revoking it is itself the terminal act.",
+    "7.2": "N/A: this component has no edit operation. The management API exposes only GET, POST and DELETE for these credentials, and the card offers create and revoke only, so there is no edit form whose blank field could mean either keep or clear. Replacing a credential means creating a new one and revoking the old, which is what the case already does.",
+    "7.7": "A platform token is a separate credential channel from the management session, and that separation is asserted from both sides. Bearer-only requests with no cookies are required to read the node inventory and to be attributed to the right principal, so the token is shown to work on its own rather than riding a session. The same token is then required to be refused with 403 PLATFORM_TOKEN_NOT_ALLOWED on the session-only management route, both before and after the console's own storage is cleared, so dropping the browser session neither cuts the token off nor grants it session privileges. The other half of this item is a password change revoking sessions: the store does revoke them, but that path is reached by the reset CLI rather than by any browser route, so no UI surface exists to drive it and none is invented here - this entry claims only the lifecycle independence a browser can actually demonstrate. Proven by mutation: letting tokens through the session-only gate fails the run on the management refusals.",
+    "7.6": "covered: the surfaces a credential could leak through are checked where they actually run. The server's own log is read as it was written, not as the sanitised copy, and is required to contain none of the registered secrets - reading the redacted copy would prove nothing about the product, since redaction happens on the way out. The refusal bodies are read as full text and required to echo neither the credential nor its first characters, so a secret quoted in a debug string or an unexpected field is caught rather than only one in a known key; the scope refusal is compared for exact equality with the documented body, which is a stronger claim than absence alone. The list response and the rendered page are required to carry no secret. On the collection side every artifact - screenshots, traces inside their zip, logs - is scanned for the registered secrets before the report is accepted, and the run fails if anything is found. There is no download surface on this page, which is recorded rather than covered. Proven by mutation: logging the credential instead of its prefix is caught by the log check with two leaks named.",
+    "7.4": "covered: the credential this case creates is exercised on both sides. It reads successfully with the scope it was given, is refused with the product's read-only code when it attempts a write, and answers 401 with AUTHENTICATION_REQUIRED once revoked in the UI. The constraint sweep that covers the wrong-scope and expiry boundaries lives in the options case, which posts each refused request and reads the product code; this case does not duplicate it, because the rules belong to the server rather than to either screen.",
+    "1.2": "covered: three of the four first-open demands are measurable on this screen and are measured. The create dialog opens on the documented defaults, and the form is required to hold those values rather than inherit whatever the last visit left behind. A create that is still in flight cannot be started a second time: while the request is held the confirm button is loading, a second click and an Enter keystroke are both swallowed, and exactly one request is observed; when that request is answered with a failure the dialog keeps the typed name, the chosen scope and the chosen expiry with the reason shown. The secret is never echoed back - it appears in the one-time dialog and in no list cell, and the page is required to contain no copy of it after a reload. The fourth demand, filling a saved value back into an edit form, has no subject here because this resource has no edit form; it is not that the check was skipped, there is nothing to fill. That absence is recorded as the reason the claim rests on the three."
   },
   "missing": [
     "complete list matrix and 10/30/100 volumes",

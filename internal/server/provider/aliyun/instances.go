@@ -44,6 +44,22 @@ type apiInstance struct {
 	SecurityGroupIDs struct {
 		SecurityGroupID []string `json:"SecurityGroupId"`
 	} `json:"SecurityGroupIds"`
+	Tags struct {
+		Tag []struct {
+			TagKey   string `json:"TagKey"`
+			TagValue string `json:"TagValue"`
+		} `json:"Tag"`
+	} `json:"Tags"`
+}
+
+// tag returns the value of one of the instance's tags.
+func (i apiInstance) tag(key string) string {
+	for _, t := range i.Tags.Tag {
+		if t.TagKey == key {
+			return t.TagValue
+		}
+	}
+	return ""
 }
 
 func (i apiInstance) publicIP() string {
@@ -294,6 +310,7 @@ func mapInstance(inst apiInstance, assistantOnline bool) provider.Instance {
 		PublicIP:   inst.publicIP(),
 		PrivateIP:  inst.privateIP(),
 		Kind:       "vm",
+		Cluster:    inst.tag(ackClusterTag),
 	}
 	if out.Name == "" {
 		out.Name = inst.InstanceID

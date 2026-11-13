@@ -42,10 +42,14 @@ const (
 )
 
 type ResolveLaunchInput struct {
-	TargetValidation   TargetValidationMode
-	Engine             Engine
-	Params             Params
-	ContainerOverrides ContainerOverrides
+	// Startup budgets are supplied by the calling policy, after which this
+	// resolver coordinates them with the final managed engine environment.
+	StartTimeoutSec        int
+	DefaultStartTimeoutSec int
+	TargetValidation       TargetValidationMode
+	Engine                 Engine
+	Params                 Params
+	ContainerOverrides     ContainerOverrides
 	// ComponentModelMount is the template component's primary mount; it
 	// replaces DefaultModelMount, and an override may not contradict it.
 	ComponentModelMount string
@@ -335,6 +339,9 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 	warnings := launchWarnings(launch, params, input.Image, compat, engram)
 	if warning, ok := allocatorRewrite.warning(launch.Env); ok {
 		warnings = append(warnings, warning)
+	}
+	if err := resolveStartupBudget(input, &launch); err != nil {
+		return ResolvedLaunch{}, nil, fmt.Errorf("resolve launch: %w", err)
 	}
 	return launch, warnings, nil
 }

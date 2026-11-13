@@ -160,7 +160,7 @@ func parseMistral(ctx context.Context, in Input, files FileView) (RuleResult, er
 		return unrecognized(path.Join(in.Path, "params.json"), "Mistral model parameters are empty"), nil
 	}
 	if err := requiredFileError(ctx, files, path.Join(in.Path, "tekken.json")); err != nil {
-		return unrecognized(path.Join(in.Path, "tekken.json"), "Mistral tokenizer: "+err.Error()), nil
+		return unrecognized(path.Join(in.Path, "tekken.json"), "Mistral tokenizer: "+err.Error()), nil //nolint:nilerr // An unavailable tokenizer is returned as an unrecognized-model result.
 	}
 	items, err := files.ReadDir(ctx, in.Path)
 	if err != nil {

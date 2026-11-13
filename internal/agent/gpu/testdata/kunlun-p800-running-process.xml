@@ -1,0 +1,816 @@
+<?xml version="1.0" ?>
+<!DOCTYPE xpu_smi_log SYSTEM "nvsmi_device_v11.dtd">
+<xpu_smi_log>
+	<timestamp>Mon Oct 19 16:08:13 2026</timestamp>
+	<driver_version>5.0.21.8</driver_version>
+	<cuda_version>10.2</cuda_version>
+	<attached_xpus>8</attached_xpus>
+	<xpu id="00000000:15:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001100</serial>
+		<uuid>GPU-7a9b8fbb-e9da-54ac-9c94-345d1f757559</uuid>
+		<minor_number>0</minor_number>
+		<oam_id>2</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>15</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:15:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95754 MiB</used>
+			<free>2550 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>57 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>89.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52100</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP4</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+	<xpu id="00000000:16:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001101</serial>
+		<uuid>GPU-4312f13a-841c-5e16-bb0b-812afae06c38</uuid>
+		<minor_number>1</minor_number>
+		<oam_id>3</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>16</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:16:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95754 MiB</used>
+			<free>2550 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>56 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>86.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52101</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP6</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+	<xpu id="00000000:1B:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001102</serial>
+		<uuid>GPU-1e6c8957-dace-5486-ae06-f2f9d175fc26</uuid>
+		<minor_number>2</minor_number>
+		<oam_id>1</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>1B</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:1B:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95754 MiB</used>
+			<free>2550 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>51 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>81.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52102</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP2</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+	<xpu id="00000000:1E:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001103</serial>
+		<uuid>GPU-d912e2a2-5a89-55e6-814c-53302956791f</uuid>
+		<minor_number>3</minor_number>
+		<oam_id>0</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>1E</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:1E:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95978 MiB</used>
+			<free>2326 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>53 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>89.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52103</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP0</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52104</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP1</process_name>
+				<used_memory>32 MiB</used_memory>
+			</process_info>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52102</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP2</process_name>
+				<used_memory>32 MiB</used_memory>
+			</process_info>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52105</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP3</process_name>
+				<used_memory>32 MiB</used_memory>
+			</process_info>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52100</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP4</process_name>
+				<used_memory>32 MiB</used_memory>
+			</process_info>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52106</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP5</process_name>
+				<used_memory>32 MiB</used_memory>
+			</process_info>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52101</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP6</process_name>
+				<used_memory>32 MiB</used_memory>
+			</process_info>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52107</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP7</process_name>
+				<used_memory>32 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+	<xpu id="00000000:23:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001104</serial>
+		<uuid>GPU-48a564d8-58cf-5418-b156-be43a8b575a0</uuid>
+		<minor_number>4</minor_number>
+		<oam_id>3</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>23</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:23:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95754 MiB</used>
+			<free>2550 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>52 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>83.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52107</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP7</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+	<xpu id="00000000:29:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001105</serial>
+		<uuid>GPU-90b7ec4e-5181-58ef-a8d7-58d2343108b1</uuid>
+		<minor_number>5</minor_number>
+		<oam_id>2</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>29</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:29:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95754 MiB</used>
+			<free>2550 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>52 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>84.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52106</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP5</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+	<xpu id="00000000:2C:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001106</serial>
+		<uuid>GPU-56f6675b-1791-54f8-bde1-f6c1b4eec31f</uuid>
+		<minor_number>6</minor_number>
+		<oam_id>1</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>2C</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:2C:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95754 MiB</used>
+			<free>2550 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>54 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>81.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52105</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP3</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+	<xpu id="00000000:2D:00.0">
+		<product_name>P800 PCIe</product_name>
+		<product_brand>KUNLUNXIN</product_brand>
+		<product_architecture>KL3</product_architecture>
+		<serial>7000000000001107</serial>
+		<uuid>GPU-270c20f1-8959-5615-9418-49a9a8c570d5</uuid>
+		<minor_number>7</minor_number>
+		<oam_id>0</oam_id>
+		<xpu_part_number>B00100300110211</xpu_part_number>
+		<firmware_version>
+			<pbl_version>1.0</pbl_version>
+			<pcie_version>2.24</pcie_version>
+			<sbl>1.58</sbl>
+			<all_version>1.0.2.24.1.58</all_version>
+			<cpld_version>2.0</cpld_version>
+		</firmware_version>
+		<pci>
+			<pci_bus>2D</pci_bus>
+			<pci_device>00</pci_device>
+			<pci_device>0</pci_device>
+			<pci_domain>0000</pci_domain>
+			<pci_device_id>36862057</pci_device_id>
+			<pci_bus_id>00000000:2D:00.0</pci_bus_id>
+			<pci_sub_system_id>00010001</pci_sub_system_id>
+			<pci_xpu_link_info>
+				<pcie_gen>
+					<max_link_gen>4</max_link_gen>
+					<current_link_gen>4</current_link_gen>
+				</pcie_gen>
+				<link_widths>
+					<max_link_width>16x</max_link_width>
+					<current_link_width>16x</current_link_width>
+				</link_widths>
+			</pci_xpu_link_info>
+		</pci>
+		<fb_memory_usage>
+			<total>98304 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>95754 MiB</used>
+			<free>2550 MiB</free>
+		</fb_memory_usage>
+		<l3_usage>
+			<total>96 MiB</total>
+			<reserved>0 MiB</reserved>
+			<used>0 MiB</used>
+			<free>96 MiB</free>
+		</l3_usage>
+		<utilization>
+			<xpu_util>0 %</xpu_util>
+		</utilization>
+		<ecc_mode>
+			<current_ecc>Enabled</current_ecc>
+			<pending_ecc>Enabled</pending_ecc>
+		</ecc_mode>
+		<ecc_errors>
+			<volatile>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</volatile>
+			<aggregate>
+				<dram_correctable>0</dram_correctable>
+				<dram_uncorrectable>0</dram_uncorrectable>
+			</aggregate>
+		</ecc_errors>
+		<temperature>
+			<xpu_temp>59 C</xpu_temp>
+		</temperature>
+		<supported_xpu_target_temp>
+			<xpu_target_temp_min>N/A</xpu_target_temp_min>
+			<xpu_target_temp_max>N/A</xpu_target_temp_max>
+		</supported_xpu_target_temp>
+		<power_readings>
+			<power_state>N/A</power_state>
+			<enforced_power_limit>400.00 W</enforced_power_limit>
+			<power_draw>87.00 W</power_draw>
+		</power_readings>
+		<clocks>
+			<cluster_clock>1450 MHz</cluster_clock>
+			<cdnn_clock>1268 MHz</cdnn_clock>
+		</clocks>
+		<processes>
+			<process_info>
+				<gpu_instance_id>N/A</xpu_instance_id>
+				<compute_instance_id>N/A</compute_instance_id>
+				<pid>52104</pid>
+				<type>C</type>
+				<process_name>VLLM::Worker_TP1</process_name>
+				<used_memory>95754 MiB</used_memory>
+			</process_info>
+		</processes>
+		<accounted_processes>
+		</accounted_processes>
+	</xpu>
+
+</xpu_smi_log>

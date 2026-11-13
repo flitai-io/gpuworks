@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -59,7 +58,7 @@ func ascendLogicalDeviceForSmoke(physical string) (string, error) {
 // "". A driver-only host has npu-smi but no libascendcl, so it must keep the
 // vendor CLI's verdict rather than be reported as a failed card.
 func AscendCLSmokePrerequisite() string {
-	if _, err := exec.LookPath("python3"); err != nil {
+	if _, err := lookCLI("python3"); err != nil {
 		return "the Ascend runtime check needs python3, which is not installed on this node"
 	}
 	if _, ok := ascendSmokeTargetFinder(); !ok {
@@ -126,13 +125,12 @@ func findAscendSmokeTarget() (ascendSmokeTarget, bool) {
 			homes = append(homes, candidate)
 			continue
 		}
-		matches, _ := filepath.Glob(candidate)
-		homes = append(homes, matches...)
+		homes = append(homes, globTool(candidate)...)
 	}
 	for _, home := range homes {
 		for _, relative := range accelerator.AscendACLLibraryPaths {
 			library := filepath.Join(home, relative)
-			if info, err := os.Stat(library); err == nil && !info.IsDir() {
+			if info, err := statTool(library); err == nil && !info.IsDir() {
 				return ascendSmokeTarget{Home: home, Library: library}, true
 			}
 		}

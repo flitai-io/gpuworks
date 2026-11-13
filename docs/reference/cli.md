@@ -120,10 +120,11 @@ gpuworks restarted (systemd)
 | `--quiet` | `false` | 不打印 banner、不提问，未给密码则随机生成（结束摘要仍会打印） |
 | `--autostart` | Linux 上 `true`，macOS 上 `false` | 安装开机启动的 systemd 单元（macOS 上是 launch daemon）；与 `--no-systemd` 同给时报错 |
 | `--no-systemd` | `false` | 不用服务管理器（systemd，macOS 上是 launchd），改为 nohup 后台启动 |
+| `--skip-check` | `false` | 把预检中预判 server 能否运行的检查（端口占用、磁盘空间、服务账户能否进入安装目录）降为告警继续安装；保护主机的检查不受影响 |
 
 行为要点：
 
-- 预检：需要 root 或可用的 `sudo`（否则降级为 nohup 并告警）；目标端口被别的进程占用则失败（被当前安装占用除外）；安装目录所在文件系统至少要有 2 GiB 空闲。
+- 预检：需要 root 或可用的 `sudo`（否则降级为 nohup 并告警）；目标端口被别的进程占用则失败（被当前安装占用除外）；安装目录所在文件系统至少要有 2 GiB 空闲；systemd 模式下，安装目录、数据目录和日志目录之上已存在的每一级目录都必须允许 `--service-user` 进入（`x` 位，按属主/属组/其他判定；带 ACL 的目录不拒绝），否则失败，例如装在 `/root`（`0700`）下。这三项可用 `--skip-check` 降为告警；拒绝对 `/`、`/var`、主目录等宽泛目录递归改权限、以及会放宽敏感文件 ACL 的检查不能跳过。
 - 提权：install/upgrade/reset-password 以操作员身份运行，特权步骤（建目录、建账户、写单元、`systemctl`）各自以 `sudo` 命令执行；`sudo` 首次问一次密码并缓存，无终端又没有缓存的 `sudo` 会直接失败而不是挂起。
 - systemd 模式：创建 `--service-user` 系统账户（已存在则复用），并把操作员加入该组（当前终端需 `newgrp` 或重新登录）；此后 upgrade 备份和替换二进制不再需要 `sudo`，但 `systemctl` 和收尾的 `chown`/`chmod` 仍需要；reset-password 不需要。
 - nohup 模式（`--no-systemd`、没有运行中的 systemd、没有 root/`sudo`，或 macOS 上未给 `--autostart`）：忽略 `--service-user`（只在显式给出时告警），以调用用户在后台运行 `serve --supervise --config <dir>/server.yaml`，server 退出后由它重新拉起（因此支持控制台升级）；重启机器或容器后不会自动恢复，用 `<dir>/gpuworks restart` 拉起、`<dir>/gpuworks stop` 停止，或把这条命令设为容器的启动命令，见[在容器里运行](../how-to/install-server.md#在容器里运行)；macOS 上可再执行 `<dir>/gpuworks install --autostart` 改为开机启动。安装摘要会打印这些命令。
@@ -190,10 +191,17 @@ gpuworks uninstall --dir /opt/gpuworks/server --purge --dry-run --json
 |---|---|---|
 | `--dir DIR` | 同 `restart` | 目标安装目录；配置中的外置数据、日志目录也会识别 |
 | `--purge` | `false` | 删除本安装的配置、数据（含数据库及 `master.key`）、备份和日志；无法恢复 |
+| `--keep-resources` | `false` | 明确选择仅卸载组件，保留实例、节点和云资源；只允许越过资源检查，不越过目录、进程和服务归属校验 |
 | `--yes` / `-y` | `false` | 跳过交互选择和最终确认，按显式参数执行 |
 | `--dry-run` | `false` | 只打印清理清单，不停服务、不修改文件，无需确认 |
 | `--json` | `false` | 标准输出只返回结构化报告；除预览外必须同时传 `--yes` |
 | `--quiet` | `false` | 隐藏普通说明；仍会询问和确认，不代替 `--yes` |
+
+卸载前先用 `--dry-run --json` 查看 `checklist`。每项包含稳定的 `id`、`status`、说明、证据细节和处理建议；状态为 `pass`、`warn`、`blocked` 或 `unknown`。预览完成不表示所有检查通过。
+
+清单区分本机服务及自启、监听端口、安装/数据/备份/日志目录与保留项，以及数据库记录中的部署、实例、节点和云资源。数据库记录是持久化状态，不能证明远端进程已停止、GPU 已释放或租机已停止计费。默认遇到活动负载或关键资源信息无法确认时，在停服和删除前拒绝卸载；`--yes` 只跳过交互，不跳过资源检查。确认后、实际停服前还会重新检查资源。
+
+需保留业务、只移除控制面时，明确加 `--keep-resources`。它不会停止推理实例、删除云资源或替代节点卸载。若同时选择 `--purge`，管理记录和凭据也会随数据清理，应先保存后续独立管理这些资源所需的信息。资源检查通过也不替代原有的目录和服务归属保护。
 
 - 终端交互默认保留数据；未显式传 `--purge` 时会先询问是否彻底清理，再展示清单并确认。管道、脚本和 CI 必须传 `--yes` 或 `--dry-run`，否则在修改前失败。
 - 停止并确认 server 退出，取消自启，清理所属 systemd unit / launchd plist / nohup PID 和程序文件。所属 expose 公网入口也会关闭并清理其 unit；其他安装的服务保留，无法确认归属时拒绝清理。
@@ -252,13 +260,14 @@ gpuworks uninstall --dir /opt/gpuworks/server --purge --dry-run --json
 
 | flag | 默认值 | 说明 |
 |---|---|---|
-| `--password PASSWORD` | 无（必填） | 新密码，空值被拒绝 |
+| `--password PASSWORD` | 无：在终端里提示输入两次（不回显） | 新密码；stdin 不是终端时必填 |
 | `--user USER` | `admin` | 用户名 |
 | `--data DIR` | 见下 | 数据目录 |
 | `--db PATH` | `<data>/gpuworks.db` | SQLite 路径 |
 
 - 不给 `--data` 时依次取：二进制同目录 `server.yaml` 的 `data_dir`、默认安装（`/opt/gpuworks/server/server.yaml`，macOS 上 `~/gpuworks/server/server.yaml`）的 `data_dir`、`./data`，与当前工作目录无关地找到安装的数据库。
 - 数据库文件必须已存在：不存在时报出所用路径及其来源并退出，不会新建空库。
+- 成功后，若数据库旁的 `initial-credentials` 记录的正是该用户，尝试删除它（其中的密码已失效）；删除失败只打告警，不影响重置结果。
 - 以操作员身份运行、不需要 `sudo`；数据库权限不足时按其自身的权限错误失败。
 - 密码和 key 不要写进 shell history 或日志。
 
@@ -464,6 +473,17 @@ gpuworks-agent doctor --connectivity --state /opt/gpuworks --json
 | flag | 默认值 | 说明 |
 |---|---|---|
 | `--state DIR` | Linux 优先取 systemd unit 的 state，无 unit 时同 `run`；macOS 取 launchd 任务里的 state 目录 | agent state 目录 |
+
+先以 `--dry-run`（或 `--dry-run --json`）查看清单；确认安装与 state 归属、服务/进程、自启、运行时负载候选、GPU 观测和保留目录。共享运行时中仅名称匹配的容器不能证明属于该 agent；缺失的运行时证据标为未知。GPU 查询不支持或失败时不会报告空闲，也不能仅凭进程组长退出证明所有 worker 已退出。
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `--dry-run` | `false` | 仅预览检查与清理范围，不停止服务或删除文件 |
+| `--json` | `false` | 输出结构化清单和结果；执行卸载时需 `--yes` |
+| `--yes` / `-y` | `false` | 跳过交互确认；不跳过资源和归属检查 |
+| `--keep-resources` | `false` | 明确保留负载，只移除 agent；不绕过服务/进程归属和清理安全检查 |
+
+默认先要求处理活动负载和关键未知项，再确认并卸载；关键资源在确认后重新检查。GPU 观测未知会明确展示，不能据此承诺 GPU 已释放。二进制、模型和日志仍保留，卸载成功只表示所选组件移除完成。
 
 - Linux 上 unit 的 state 就是这个目录时先 `disable --now gpuworks-agent.service`，再停止相同二进制及显式 `--state` 目录的 `run` 进程（包括 nohup），等待进程退出；随后删除 `/etc/systemd/system/gpuworks-agent.service` 并 `daemon-reload`，最后删除 `<state>/identity.json`、PID 文件和 `<state>/gpuworks-agent.conf`（里面有 token）。unit 属于另一个 state 目录（同一主机上的另一个 agent）时不动它，只停这个目录的进程；unit 里读不出 state 时拒绝执行。
 - macOS 上移除 LaunchDaemon 与（执行者的，`sudo` 下是发起 sudo 的用户的）LaunchAgent，并删除各自 state 目录里的 `identity.json` 和 `gpuworks-agent.conf`；存在 LaunchDaemon 而没有 root 权限时报错并以 1 退出。

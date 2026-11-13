@@ -12,6 +12,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/engine"
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
 	"gpuworks.ai/gpuworks/internal/agent/gpu/cardsmoke"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/recording"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
@@ -406,5 +407,39 @@ func TestTheRuntimeChecksOwnProcessIsNotForeign(t *testing.T) {
 	n.CardHealthFindings(context.Background(), cards, true)
 	if len(cards[0].ForeignProcesses) != 1 {
 		t.Fatalf("card = %+v, want the process reported once the check is long over", cards[0].ForeignProcesses)
+	}
+}
+
+// holderRuntime is a runtime that knows of allocations no process list
+// shows (the kube runtime: the kubelet gave a card to another pod).
+type holderRuntime struct {
+	runtime.Driver
+	holders map[string][]proto.CardProcess
+	err     error
+}
+
+func (h *holderRuntime) ExternalCardHolders(context.Context) (map[string][]proto.CardProcess, error) {
+	return h.holders, h.err
+}
+
+// A card the kubelet gave another pod is the platform's no more than one a
+// stray process holds, even before that pod starts using it; a round in
+// which the kubelet cannot be asked keeps the last answer.
+func TestACardAKubernetesPodHoldsIsReportedAndRestated(t *testing.T) {
+	rt := &holderRuntime{Driver: recording.New(filepath.Join(t.TempDir(), "rec.jsonl")),
+		holders: map[string][]proto.CardProcess{"GPU-40": {{Name: "Pod ml/train-0"}}}}
+	n := newNodeRuntime(slog.New(slog.DiscardHandler), rt, t.TempDir(), "",
+		&occupiedProber{FixedProber: gpu.FixedProber{VendorName: "nvidia", GPUs: twoOwnedCards()}}, nil)
+	n.heldCards = func() engine.HeldCards { return engine.HeldCards{} }
+	cards := twoOwnedCards()
+	n.CardHealthFindings(context.Background(), cards, true)
+	if len(cards[0].ForeignProcesses) != 0 || len(cards[1].ForeignProcesses) != 1 || cards[1].ForeignProcesses[0].Name != "Pod ml/train-0" {
+		t.Fatalf("cards = %+v", cards)
+	}
+	rt.err, rt.holders = errors.New("kubelet unreachable"), nil
+	cards = twoOwnedCards()
+	n.CardHealthFindings(context.Background(), cards, true)
+	if len(cards[1].ForeignProcesses) != 1 {
+		t.Fatalf("a round without the kubelet's answer freed the card: %+v", cards[1])
 	}
 }

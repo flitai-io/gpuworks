@@ -1,0 +1,74 @@
+[
+  {
+    "fixture": "kunlun-p800-node11-busy-20261028.xml",
+    "node": "node11",
+    "captured_at": "Wed Oct 28 10:40:40 2026",
+    "raw_json_sha256": "fb372ca1267e25026d7c5d12714504b22c384bf7fba09ad7c72e97f08694bd36",
+    "raw_xml_sha256": "78850e0bd647f3227813d3c256959822a4c0ad3b5493c7ef8dfd697934ca4e94",
+    "fixture_sha256": "22692a8c70a3a73f3f7a59a38efe93f3b21e610d4090dfb5377fad690a15b626",
+    "redacted_unique_fields": {
+      "uuid": 8,
+      "serial": 8,
+      "pid": 1
+    },
+    "xml_exit": 0,
+    "topology_result": "Command '['xpu-smi', 'topo', '-m']' timed out after 15 seconds",
+    "raw_location": "secrets/kunlun-capture-20261028/kunlun-node11-capture-20261028.json",
+    "sysfs_fixture_sha256": "045fa37a1f3e87640ee8f3b9854b13dd13f0f532c30da577648da4d810c3134b",
+    "device_mode_followup": {
+      "captured_at_utc": "2026-10-28T03:25:58.410625+00:00",
+      "private_raw": "secrets/kunlun-capture-20261028/node11-device-mode-followup.json",
+      "private_raw_sha256": "ea39ca80f55ad191c7d24e024e21f9255492bfde6b8ef8651bd61ddb117a0a60",
+      "public_fixture": "kunlun-p800-node11-device-mode-followup.json",
+      "public_fixture_sha256": "5d7856b428bdbd1ec99ccb9e51d7d1451947b5016ef388308a83d843335b6f3c",
+      "separate_from_original_xml_capture": true,
+      "method": "os.stat"
+    },
+    "device_lstat_followup": {
+      "method": "os.lstat",
+      "captured_at_utc": "2026-10-28T04:12:00.972211+00:00",
+      "collector": "collect-kunlun-device-lstat.py",
+      "private_raw": "secrets/kunlun-capture-20261028/node11-device-lstat-followup.json",
+      "private_raw_sha256": "89f5c3cf783719282e428c41f473c14fb49820593906870c76f9dd5c2233c500",
+      "public_fixture": "kunlun-p800-node11-device-lstat-followup.json",
+      "public_fixture_sha256": "de04189fbb15f4b00ee75ec3356fc95933f2349d6a08321b7311055933695598",
+      "separate_from_original_xml_capture": true
+    }
+  },
+  {
+    "fixture": "kunlun-p800-node12-idle-20261028.xml",
+    "node": "node12",
+    "captured_at": "Wed Oct 28 10:40:56 2026",
+    "raw_json_sha256": "07c84783756e34dc9f5b8be496acd0e00bb3c73253cece9591d620585f9d371b",
+    "raw_xml_sha256": "1a4f4b718107bbd0f5099a3167150faedadfa772009526f17fac9315938da1f6",
+    "fixture_sha256": "197e005650d496b4dddbd26479bafe060e20d0c69bc5bfe5a900d8ce5cc913e8",
+    "redacted_unique_fields": {
+      "uuid": 8,
+      "serial": 8,
+      "pid": 0
+    },
+    "xml_exit": 0,
+    "topology_result": "Command '['xpu-smi', 'topo', '-m']' timed out after 15 seconds",
+    "raw_location": "secrets/kunlun-capture-20261028/kunlun-node12-capture-20261028.json",
+    "sysfs_fixture_sha256": "045fa37a1f3e87640ee8f3b9854b13dd13f0f532c30da577648da4d810c3134b",
+    "device_mode_followup": {
+      "captured_at_utc": "2026-10-28T03:25:58.764734+00:00",
+      "private_raw": "secrets/kunlun-capture-20261028/node12-device-mode-followup.json",
+      "private_raw_sha256": "b0ce7ef5060c431f631d2bfd7d1042bbc59ad4ff4b85fa4cc36292ebb670083d",
+      "public_fixture": "kunlun-p800-node12-device-mode-followup.json",
+      "public_fixture_sha256": "a7a97ee4b7f237e9d0a5ba45700d840405c6f872cbfdcc4b42fbff969b885f6f",
+      "separate_from_original_xml_capture": true,
+      "method": "os.stat"
+    },
+    "device_lstat_followup": {
+      "method": "os.lstat",
+      "captured_at_utc": "2026-10-28T04:12:01.348247+00:00",
+      "collector": "collect-kunlun-device-lstat.py",
+      "private_raw": "secrets/kunlun-capture-20261028/node12-device-lstat-followup.json",
+      "private_raw_sha256": "a4a1672da6824aef3261bd000cc6fe156ecf27596d56916a4b2d3201654e1d1e",
+      "public_fixture": "kunlun-p800-node12-device-lstat-followup.json",
+      "public_fixture_sha256": "db918f2efe354e96680dc0feca8165c6619f155fad265b344aab5c9f71bef132",
+      "separate_from_original_xml_capture": true
+    }
+  }
+]

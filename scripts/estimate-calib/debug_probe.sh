@@ -18,8 +18,8 @@ run() { # tag util
     -v /opt/gpuworks/models:/models -v /tmp/calib:/calib \
     -v /tmp/calib/torchcache:/root/.cache/vllm \
     -e VLLM_LOGGING_LEVEL=DEBUG \
-    quay.io/gpustack/runner:cuda13.0-vllm0.25.1 \
-    vllm serve /models/modelscope/Qwen_Qwen3-0.6B-default \
+    --entrypoint vllm gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4 \
+    serve /models/modelscope/Qwen_Qwen3-0.6B-default \
     --load-format dummy --gpu-memory-utilization "$util" --max-model-len 4096 \
     --port 19501 >/dev/null
   local deadline=$(( $(date +%s) + 900 ))

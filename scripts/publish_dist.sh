@@ -60,8 +60,8 @@ export GPUWORKS_DIST_SIGNING_KEY GPUWORKS_DIST_SIGNING_KEY_ID
 rclone=${RCLONE:-rclone}
 keep=${GPUWORKS_DIST_KEEP:-30}
 
-built_at=${CI_PIPELINE_CREATED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
-commit=${CI_COMMIT_SHA:-$(git rev-parse HEAD)}
+built_at=${GPUWORKS_BUILT_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+commit=${GPUWORKS_BUILD_COMMIT:-$(git rev-parse HEAD)}
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/gpuworks-dist.XXXXXX")
 trap 'rm -rf "$work"' EXIT INT TERM
@@ -73,6 +73,7 @@ go build -o "$work/gpuworks-dist" ./cmd/gpuworks-dist
 
 release_id=$("$work/gpuworks-dist" release-id -dist "$dist")
 published="$work/published"
+adopted_release=false
 for remote in $remotes; do
   rm -rf "$published"
   # A release not published yet is an empty listing (or "directory not
@@ -85,11 +86,19 @@ for remote in $remotes; do
     echo "release $release_id is already on $remote (built $adopted); republishing those archives, not this build's"
     dist=$published
     built_at=$adopted
+    adopted_release=true
     break
   fi
   # The upload below refuses to replace it, so the publish stops there.
   echo "$remote holds a release $release_id that does not check out against its SHA256SUMS"
 done
+
+# Only a new formal release needs handbooks. Preserve an adopted release
+# byte-for-byte, including legacy releases that never carried documentation.
+if [ "$channel" = release ] && [ "$adopted_release" = false ] && [ ! -f "$dist/docs/SHA256SUMS" ]; then
+  echo "formal releases require the versioned Chinese and English PDF handbooks" >&2
+  exit 1
+fi
 
 set --
 for url in $publics; do
@@ -123,6 +132,11 @@ for remote in $remotes; do
   echo "uploading files to $remote"
   "$rclone" copy "$tree" "$remote" --checksum --immutable --header-upload "$immutable" \
     --exclude "/*/index.json" --exclude "/*/latest" --exclude "/*/manifest.json"
+  if [ -d "$tree/releases/$release_id/docs" ]; then
+    # PDFs are release sidecars, outside the server update index. Read every
+    # byte back before switching channel pointers, rather than just HEAD size.
+    "$rclone" check "$tree/releases/$release_id/docs" "$remote/releases/$release_id/docs" --download --one-way
+  fi
 done
 
 echo "checking every source serves the files of the new index"

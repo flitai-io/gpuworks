@@ -1,0 +1,198 @@
+# GPUWorks agents for cluster "prod".
+# Apply with kubectl apply -f; delete the same file to remove every agent and
+# instance pod GPUWorks started (the pods are owned by the DaemonSet).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "gpuworks-system"
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    app.kubernetes.io/managed-by: gpuworks
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gpuworks-agent
+  namespace: "gpuworks-system"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gpuworks-enroll
+  namespace: "gpuworks-system"
+type: Opaque
+stringData:
+  token: "enroll-token"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gpuworks-agent
+  namespace: "gpuworks-system"
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: ["apps"]
+    resources: ["daemonsets"]
+    resourceNames: ["gpuworks-agent"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gpuworks-agent
+  namespace: "gpuworks-system"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gpuworks-agent
+subjects:
+  - kind: ServiceAccount
+    name: gpuworks-agent
+    namespace: "gpuworks-system"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "gpuworks-agent-gpuworks-system"
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  # Other namespaces' pods on the agent's own node: where HAMi or ACK GPU
+  # sharing allocates cards, their allocation annotations are the only record
+  # of who holds how much of a card.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    resourceNames: ["kube-system"]
+    verbs: ["get"]
+  - apiGroups: ["node.k8s.io"]
+    resources: ["runtimeclasses"]
+    resourceNames: ["nvidia"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "gpuworks-agent-gpuworks-system"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: "gpuworks-agent-gpuworks-system"
+subjects:
+  - kind: ServiceAccount
+    name: gpuworks-agent
+    namespace: "gpuworks-system"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: "gpuworks-inference-gpuworks-system"
+value: 10000
+preemptionPolicy: Never
+globalDefault: false
+description: "GPUWorks hold and inference pods of namespace gpuworks-system."
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gpuworks-agent
+  namespace: "gpuworks-system"
+  labels:
+    app.kubernetes.io/name: gpuworks-agent
+    app.kubernetes.io/managed-by: gpuworks
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gpuworks-agent
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gpuworks-agent
+        app.kubernetes.io/managed-by: gpuworks
+      annotations:
+        gpuworks.ai/idle-return-seconds: "0"
+    spec:
+      serviceAccountName: gpuworks-agent
+      hostNetwork: true
+      hostPID: true
+      # The node's own resolver, as an agent installed on the host has: the
+      # agent reaches the server and model sources outside the cluster, and
+      # the API server by address.
+      dnsPolicy: Default
+      priorityClassName: system-node-critical
+      nodeSelector:
+        "gpuworks.ai/pool": "a"
+        "nvidia.com/gpu.present": "true"
+      tolerations:
+        - operator: Exists
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: agent
+          image: "registry.example/gpuworks/gpuworks-agent:v1.2.3"
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - "--server=https://gw.example:8800"
+            - "--state=/opt/gpuworks"
+            - "--driver=kube"
+            - "--engine-ports=40000-42767"
+          env:
+            - name: GPUWORKS_KUBE_ENROLL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gpuworks-enroll
+                  key: token
+            - name: GPUWORKS_KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: GPUWORKS_KUBE_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: GPUWORKS_KUBE_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: GPUWORKS_KUBE_RUNTIME_CLASS
+              value: "nvidia"
+            - name: GPUWORKS_KUBE_PRIORITY_CLASS
+              value: "gpuworks-inference-gpuworks-system"
+            - name: "NVIDIA_DRIVER_CAPABILITIES"
+              value: "compute,utility"
+            - name: "NVIDIA_VISIBLE_DEVICES"
+              value: "all"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: state
+              mountPath: "/opt/gpuworks"
+              mountPropagation: Bidirectional
+            - name: pod-resources
+              mountPath: /var/lib/kubelet/pod-resources
+              readOnly: true
+            - name: device-plugins
+              mountPath: /var/lib/kubelet/device-plugins
+      volumes:
+        - name: state
+          hostPath:
+            path: "/opt/gpuworks"
+            type: DirectoryOrCreate
+        - name: pod-resources
+          hostPath:
+            path: /var/lib/kubelet/pod-resources
+            type: DirectoryOrCreate
+        - name: device-plugins
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+            type: DirectoryOrCreate

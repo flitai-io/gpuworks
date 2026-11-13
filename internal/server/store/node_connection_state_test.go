@@ -6,6 +6,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
@@ -274,6 +275,7 @@ func TestRecoveryInFlightReadsAsConnectingWithoutRewritingTheColumn(t *testing.T
 		{NodeStateOffline, RecoveryPhaseReconnecting, NodeStateConnecting},
 		// An attempt that ended is not underway, even one the loop retries.
 		{NodeStateOffline, RecoveryPhaseUnreachable, NodeStateOffline},
+		{NodeStateOffline, RecoveryPhaseProbeFailed, NodeStateOffline},
 		{NodeStateOffline, RecoveryPhaseBlocked, NodeStateOffline},
 		{NodeStateOffline, RecoveryPhaseStopped, NodeStateOffline},
 		{NodeStateOffline, "", NodeStateOffline},

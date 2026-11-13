@@ -20,6 +20,10 @@ import (
 // memory-limited instance claims limit+engine-reserve), so the ledger supports
 // both whole-GPU placement and GPU sharing.
 type GPU struct {
+	// WholeGPUAllocated distinguishes an exclusive claim from shared claims
+	// that happen to fill the card; it only explains resource refusals.
+	WholeGPUAllocated bool
+
 	Index          int
 	MemoryTotal    int64
 	AllocatedBytes int64
@@ -465,26 +469,18 @@ func reserveFor(req Request) int64 {
 }
 
 // perGPUNeed computes the per-GPU memory requirement for a group of tp GPUs
-// on this node. A stated parallelism spreads the weights over every GPU of the
-// deployment, which is more than this node's group when it spans nodes.
+// on this node. Weights are sharded within a DP replica, possibly across nodes;
+// independent DP replicas each retain a complete copy.
 func perGPUNeed(req Request, tp int) int64 {
-	shards := tp
-	if req.Parallel.Stated() {
-		shards = req.Parallel.World()
-	}
+	// DP duplicates a whole model; only TP × PP shards its weights.
+	shards := req.Parallel.Assigned(tp).World()
 	return serverestimate.RequiredPerGPUBytes(req.WeightBytes, req.MMEncoderBytes, reserveFor(req), shards)
 }
 
 // headTP is the tensor-parallel degree the attention heads are split over for
 // a group of tp GPUs on this node.
 func headTP(req Request, tp int) int {
-	if req.Parallel.Stated() {
-		return req.Parallel.TP
-	}
-	if pp := req.Parallel.Normalized().PP; tp%pp == 0 {
-		return tp / pp
-	}
-	return tp
+	return req.Parallel.Assigned(tp).TP
 }
 
 func allowedTPs(req Request, maxGPUs int) []int {
@@ -498,16 +494,31 @@ func allowedTPs(req Request, maxGPUs int) []int {
 		return []int{perNode}
 	}
 	if len(req.AllowedTPs) > 0 {
+		if spec := req.Parallel.Normalized(); spec.DP > 1 {
+			// An exact card selection must still contain whole DP copies.
+			// Divide before multiplying so malformed large degrees cannot
+			// overflow the group size check.
+			var groups []int
+			for _, count := range req.AllowedTPs {
+				if count > 0 && count%spec.DP == 0 && (count/spec.DP)%spec.PP == 0 {
+					groups = append(groups, count)
+				}
+			}
+			return groups
+		}
 		return req.AllowedTPs
 	}
 	if maxGPUs <= 0 {
 		maxGPUs = 8
 	}
-	// A stated PP with the TP left to the scheduler: every pipeline stage
-	// gets the same TP, so the group is PP times a power of two.
-	pp := req.Parallel.Normalized().PP
+	// Every DP copy has PP stages with the same TP. No candidate can need
+	// more than the node's cards.
+	minimum := req.Parallel.MinimumGPUs()
+	if minimum > maxGPUs {
+		return nil
+	}
 	tps := make([]int, 0, 5)
-	for tp := pp; tp <= maxGPUs; tp *= 2 {
+	for tp := minimum; tp <= maxGPUs; tp *= 2 {
 		tps = append(tps, tp)
 	}
 	return tps

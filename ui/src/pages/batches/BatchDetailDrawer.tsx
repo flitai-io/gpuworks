@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Alert, Button, Descriptions, Drawer, Modal, Space, Spin, Tooltip, Typography, message } from "antd";
+import { Button } from "../../components/ui/button";
+import { Tooltip } from "../../components/ui/tooltip";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
+import { SideDrawer } from "../../ui-kit/SideDrawer";
+import { Spinner } from "../../ui-kit/Spinner";
+import { Notice } from "../../ui-kit/Notice";
+import { message } from "../../ui-kit/feedback";
+import { fromAntd } from "../../ui-kit/antdIcon";
+import CopyButton from "../../components/CopyButton";
+import { BatchFacts } from "./BatchFacts";
 import { DownloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { usePolling } from "../../api";
@@ -28,10 +37,10 @@ function DownloadButton({ batch, kind }: { batch: Batch; kind: BatchFileKind }) 
   const label = t(`detail.download.${kind}`);
   const { available, expired } = fileAvailable(batch, kind);
   // The session cookie authenticates a plain link, as it does for storage file downloads.
-  if (available) return <Button icon={<DownloadOutlined />} href={batchFileURL(batch.id, kind)} download>{label}</Button>;
+  if (available) return <a className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-fg-default" href={batchFileURL(batch.id, kind)} download><DownloadOutlined />{label}</a>;
   return (
-    <Tooltip title={expired ? t("detail.download.expired") : t("detail.download.unavailable")}>
-      <span><Button icon={<DownloadOutlined />} disabled>{label}</Button></span>
+    <Tooltip content={expired ? t("detail.download.expired") : t("detail.download.unavailable")}>
+      <span><Button variant="secondary" leadingIcon={fromAntd(DownloadOutlined)} disabled>{label}</Button></span>
     </Tooltip>
   );
 }
@@ -39,9 +48,9 @@ function DownloadButton({ batch, kind }: { batch: Batch; kind: BatchFileKind }) 
 function Metadata({ metadata }: { metadata: Batch["metadata"] }) {
   const { t } = useTranslation("batches");
   const entries = Object.entries(metadata ?? {});
-  if (entries.length === 0) return <Typography.Text type="secondary">{t("detail.noMetadata")}</Typography.Text>;
+  if (entries.length === 0) return <span className="text-fg-muted">{t("detail.noMetadata")}</span>;
   return (
-    <Descriptions size="small" column={1} bordered items={entries.map(([key, value]) => ({ key, label: key, children: value }))} />
+    <BatchFacts items={entries.map(([key, value]) => ({ key, label: key, value: value }))} />
   );
 }
 
@@ -54,11 +63,10 @@ function WaitingAlert({ waiting }: { waiting: NonNullable<Batch["waiting"]> }) {
   const { t } = useTranslation("batches");
   const stateText = useModelStateText();
   return (
-    <Alert
-      type="warning"
-      showIcon
-      message={t("detail.waiting.title")}
-      description={
+    <Notice
+      tone="warning"
+      title={t("detail.waiting.title")}
+      children={
         <ul className="batch-waiting">
           {waiting.map((wait) => (
             <li key={wait.model}>
@@ -71,9 +79,9 @@ function WaitingAlert({ waiting }: { waiting: NonNullable<Batch["waiting"]> }) {
                 })}
               </div>
               {wait.detail && (
-                <Typography.Text type="secondary">
+                <span className="text-fg-muted">
                   {wait.status > 0 ? t("detail.waiting.answer", { status: wait.status, detail: wait.detail }) : wait.detail}
-                </Typography.Text>
+                </span>
               )}
             </li>
           ))}
@@ -87,6 +95,7 @@ function BatchBody({ batch, canManage, onChanged }: { batch: Batch; canManage: b
   const { t } = useTranslation("batches");
   const { t: tCommon } = useTranslation("common");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const counts = batch.request_counts;
   const pending = Math.max(0, counts.total - counts.completed - counts.failed);
@@ -94,6 +103,7 @@ function BatchBody({ batch, canManage, onChanged }: { batch: Batch; canManage: b
 
   const cancel = async () => {
     setActionError(null);
+    setCancelling(true);
     try {
       await batchApi.cancel(batch.id);
       setConfirming(false);
@@ -104,99 +114,87 @@ function BatchBody({ batch, canManage, onChanged }: { batch: Batch; canManage: b
       setActionError(t("detail.cancelFailed", { detail: batchErrorText(t, tCommon, e).message }));
       // A 409 means the batch just ended: show what it is now.
       onChanged();
-    }
+    } finally { setCancelling(false); }
   };
 
   return (
-    <Space direction="vertical" size="large" style={{ width: "100%" }}>
-      {actionError && <Alert type="error" showIcon message={actionError} closable onClose={() => setActionError(null)} />}
-      {batch.status === "cancelling" && <Alert type="info" showIcon message={t("detail.cancelPending")} />}
+    <div className="flex min-w-0 flex-col gap-6">
+      {actionError && <Notice tone="danger" title={actionError} action={<Button variant="ghost" onClick={() => setActionError(null)}>{tCommon("actions.close")}</Button>} />}
+      {batch.status === "cancelling" && <Notice tone="info" title={t("detail.cancelPending")} />}
       {batch.waiting && batch.waiting.length > 0 && <WaitingAlert waiting={batch.waiting} />}
       <section aria-label={t("detail.sections.summary")}>
-        <Descriptions
-          size="small"
-          column={1}
-          bordered
+        <BatchFacts
           title={t("detail.sections.summary")}
-          extra={canManage && batch.cancellable && (
-            <Button danger onClick={() => setConfirming(true)}>{t("action.cancel")}</Button>
+          action={canManage && batch.cancellable && (
+            <Button variant="destructive" onClick={() => setConfirming(true)}>{t("action.cancel")}</Button>
           )}
           items={[
-            { key: "id", label: t("detail.id"), children: <Typography.Text copyable code>{batch.id}</Typography.Text> },
-            { key: "status", label: t("detail.status"), children: <BatchStatusTag status={batch.status} /> },
-            { key: "endpoint", label: t("detail.endpoint"), children: <Typography.Text code>{batch.endpoint}</Typography.Text> },
-            ...(batch.model ? [{ key: "model", label: t("detail.model"), children: <Typography.Text code>{batch.model}</Typography.Text> }] : []),
-            { key: "window", label: t("detail.completionWindow"), children: batch.completion_window },
-            ...(batch.input_filename ? [{ key: "file", label: t("detail.inputFilename"), children: batch.input_filename }] : []),
-            { key: "owner", label: t("detail.owner"), children: batch.user_id },
-            { key: "apiKey", label: t("detail.apiKey"), children: batch.api_key_id },
+            { key: "id", label: t("detail.id"), value: <span className="inline-flex items-center gap-2"><code>{batch.id}</code><CopyButton text={batch.id} label={tCommon("copy.code")} /></span> },
+            { key: "status", label: t("detail.status"), value: <BatchStatusTag status={batch.status} /> },
+            { key: "endpoint", label: t("detail.endpoint"), value: <code>{batch.endpoint}</code> },
+            ...(batch.model ? [{ key: "model", label: t("detail.model"), value: <code>{batch.model}</code> }] : []),
+            { key: "window", label: t("detail.completionWindow"), value: batch.completion_window },
+            ...(batch.input_filename ? [{ key: "file", label: t("detail.inputFilename"), value: batch.input_filename }] : []),
+            { key: "owner", label: t("detail.owner"), value: batch.user_id },
+            { key: "apiKey", label: t("detail.apiKey"), value: batch.api_key_id },
           ]}
         />
       </section>
       {batch.failure && (
-        <Alert
-          type="error"
-          showIcon
-          message={t("detail.sections.failure")}
-          description={<><div>{batch.failure.message}</div><Typography.Text type="secondary">{t("detail.failureCode")}: {batch.failure.code}</Typography.Text></>}
+        <Notice
+          tone="danger"
+              title={t("detail.sections.failure")}
+          children={<><div>{batch.failure.message}</div><span className="text-fg-muted">{t("detail.failureCode")}: {batch.failure.code}</span></>}
         />
       )}
       <section aria-label={t("detail.sections.counts")}>
-        <Descriptions
-          size="small"
-          column={2}
-          bordered
+        <BatchFacts
           title={t("detail.sections.counts")}
           items={[
-            { key: "total", label: t("detail.total"), children: counts.total, span: 2 },
-            { key: "completed", label: t("detail.completed"), children: counts.completed },
-            { key: "failed", label: t("detail.failed"), children: counts.failed },
-            ...(!ended ? [{ key: "pending", label: <Tooltip title={t("detail.pendingHint")}>{t("detail.pending")}</Tooltip>, children: pending, span: 2 }] : []),
-            { key: "progress", label: t("columns.progress"), children: <BatchProgress batch={batch} />, span: 2 },
+            { key: "total", label: t("detail.total"), value: counts.total },
+            { key: "completed", label: t("detail.completed"), value: counts.completed },
+            { key: "failed", label: t("detail.failed"), value: counts.failed },
+            ...(!ended ? [{ key: "pending", label: <Tooltip content={t("detail.pendingHint")}><span tabIndex={0}>{t("detail.pending")}</span></Tooltip>, value: pending }] : []),
+            { key: "progress", label: t("columns.progress"), value: <BatchProgress batch={batch} /> },
           ]}
         />
       </section>
       <section aria-label={t("detail.sections.times")}>
-        <Descriptions
-          size="small"
-          column={1}
-          bordered
+        <BatchFacts
           title={t("detail.sections.times")}
           items={TIME_FIELDS.filter((field) => batch[field]).map((field) => ({
-            key: field, label: t(`detail.times.${field}`), children: formatTimeSec(batch[field]),
+            key: field, label: t(`detail.times.${field}`), value: formatTimeSec(batch[field]),
           }))}
         />
       </section>
       <section aria-label={t("detail.sections.metadata")}>
-        <Typography.Title level={5}>{t("detail.sections.metadata")}</Typography.Title>
+        <h3 className="mb-3 text-body font-semibold">{t("detail.sections.metadata")}</h3>
         <Metadata metadata={batch.metadata} />
       </section>
       <section aria-label={t("detail.sections.files")}>
-        <Typography.Title level={5}>{t("detail.sections.files")}</Typography.Title>
-        <Space wrap>
+        <h3 className="mb-3 text-body font-semibold">{t("detail.sections.files")}</h3>
+        <div className="flex flex-wrap gap-2">
           <DownloadButton batch={batch} kind="input" />
           <DownloadButton batch={batch} kind="output" />
           <DownloadButton batch={batch} kind="error" />
-        </Space>
+        </div>
         {batch.output_expires_at && (
-          <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
+          <p className="mt-2 text-fg-muted">
             {t("detail.download.hint", { time: formatTimeSec(batch.output_expires_at) })}
-          </Typography.Paragraph>
+          </p>
         )}
       </section>
-      <Modal
-        open={confirming}
-        title={t("action.cancelTitle")}
-        okText={t("action.cancelOk")}
-        cancelText={t("action.cancelKeep")}
-        okButtonProps={{ danger: true }}
-        onOk={cancel}
-        onCancel={() => setConfirming(false)}
-        destroyOnHidden
-      >
-        {t("action.cancelBody")}
-      </Modal>
-    </Space>
+      <Dialog open={confirming} onOpenChange={next => { if (!cancelling) setConfirming(next); }} disablePointerDismissal>
+        <DialogContent closeButtonLabel={tCommon("actions.close")} closeButtonDisabled={cancelling}>
+          <DialogHeader><DialogTitle>{t("action.cancelTitle")}</DialogTitle></DialogHeader>
+          <p>{t("action.cancelBody")}</p>
+          <DialogFooter>
+            <Button variant="ghost" disabled={cancelling} onClick={() => setConfirming(false)}>{t("action.cancelKeep")}</Button>
+            <Button variant="destructive" loading={cancelling} onClick={() => void cancel()}>{t("action.cancelOk")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 
@@ -227,20 +225,19 @@ export default function BatchDetailDrawer({ id, canManage, pollMs = BATCH_POLL_M
   if (!id) body = null;
   else if (!batch && detail.error) {
     body = (
-      <Alert
-        type="error"
-        showIcon
-        message={t("page.detailLoadFailed")}
-        description={detail.error.message}
-        action={<Button onClick={() => void detail.refetch()}>{t("action.retry")}</Button>}
+      <Notice
+        tone="danger"
+          title={t("page.detailLoadFailed")}
+        children={detail.error.message}
+        action={<Button variant="secondary" onClick={() => void detail.refetch()}>{t("action.retry")}</Button>}
       />
     );
-  } else if (!batch) body = <div role="status"><Spin /></div>;
+  } else if (!batch) body = <Spinner label={t("create.dictionary.loading")} />;
   else body = <BatchBody batch={batch} canManage={canManage} onChanged={changed} />;
 
   return (
-    <Drawer open={!!id} width={640} title={id ? t("detail.title", { id }) : null} onClose={onClose} destroyOnHidden>
+    <SideDrawer open={!!id} width={640} title={id ? t("detail.title", { id }) : null} onClose={onClose}>
       {body}
-    </Drawer>
+    </SideDrawer>
   );
 }

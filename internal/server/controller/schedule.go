@@ -40,12 +40,15 @@ func (c *Controller) pickPorts(node *store.Node, sizes ...int) ([]int, *schedule
 			used[p] = true
 		}
 	}
+	r := c.EnginePorts()
 	if inv := network.Inventory(*node); inv != nil {
 		for _, p := range inv.EnginePortListeners {
 			used[p] = true
 		}
+		if own := inv.EnginePortRange; own != nil && own.Valid() {
+			r = *own
+		}
 	}
-	r := c.EnginePorts()
 	out := make([]int, len(sizes))
 	next := r.Start
 	for i, size := range sizes {

@@ -398,6 +398,8 @@ func runtimeSkipReason(reason string) string {
 		return accelerator.CheckSkipForeign
 	case cardsmoke.SkipDeferred:
 		return accelerator.CheckSkipDeferred
+	case cardsmoke.SkipNotHeld:
+		return accelerator.CheckSkipNotHeld
 	}
 	return accelerator.CheckSkipUnavailable
 }

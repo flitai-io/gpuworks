@@ -2,9 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"time"
+
 	"gpuworks.ai/gpuworks/internal/benchrun"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
-	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/pkg/bench/dataset"

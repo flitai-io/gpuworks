@@ -55,7 +55,8 @@ func Serve(rw io.ReadWriter, spec Spec) error {
 		})
 		return cleanupErr
 	}
-	defer cleanup()
+	// Owned-session paths report cleanup errors explicitly; this defer is a fallback.
+	defer func() { _ = cleanup() }()
 	sess, err := Open(spec)
 	if err != nil {
 		slog.Warn("terminal session open failed", "err", err)

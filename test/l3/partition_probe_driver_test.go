@@ -17,7 +17,7 @@ import (
 // probeStandInDriver is the real docker driver except for one thing: the
 // partition probe container. The probe runs the quota-enforcing probe image
 // against the node's partition libraries; the L3 cases install placeholder
-// libraries (they exercise injection into real containers, not a real vCANN or
+// libraries (they exercise injection into real containers, not a real vcann-rt or
 // HGGC), so a real probe can only fail, and the agent would report that failure
 // at every status report - replacing any passing result a test wrote into the
 // store by hand, whenever the report happens to land (a state sync, a catalog

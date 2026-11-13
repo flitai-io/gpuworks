@@ -36,13 +36,15 @@ func (a *apiHandlers) listProviders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	type providerDTO struct {
-		ID            uint   `json:"id"`
-		Name          string `json:"name"`
-		Kind          string `json:"kind"`
-		State         string `json:"state"`
-		InstanceCount int    `json:"instance_count"`
-		CreatedAt     string `json:"created_at"`
-		UpdatedAt     string `json:"updated_at"`
+		ID   uint   `json:"id"`
+		Name string `json:"name"`
+		Kind string `json:"kind"`
+		// Category is derived from the kind on every read, never stored.
+		Category      provider.Category `json:"category"`
+		State         string            `json:"state"`
+		InstanceCount int               `json:"instance_count"`
+		CreatedAt     string            `json:"created_at"`
+		UpdatedAt     string            `json:"updated_at"`
 	}
 	out := make([]providerDTO, 0, len(ps))
 	for _, p := range ps {
@@ -55,6 +57,7 @@ func (a *apiHandlers) listProviders(w http.ResponseWriter, r *http.Request) {
 			ID:            p.ID,
 			Name:          p.Name,
 			Kind:          p.Kind,
+			Category:      provider.CategoryOf(p.Kind),
 			State:         p.State,
 			InstanceCount: len(insts),
 			CreatedAt:     p.CreatedAt.UTC().Format(time.RFC3339),
@@ -169,10 +172,17 @@ func (a *apiHandlers) syncProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) {
-	pis, err := a.d.Store.ProviderInstances(parseUint(chi.URLParam(r, "id")))
+	id := parseUint(chi.URLParam(r, "id"))
+	pis, err := a.d.Store.ProviderInstances(id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	var caps provider.Capabilities
+	if a.d.Providers != nil {
+		if p, err := a.d.Store.GetProvider(id); err == nil {
+			caps, _ = a.d.Providers.KindCapabilities(p.Kind)
+		}
 	}
 	type instanceDTO struct {
 		ExternalID     string                   `json:"external_id"`
@@ -188,6 +198,13 @@ func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) 
 		SSHConnections []provider.SSHConnection `json:"ssh_connections"`
 		Kind           string                   `json:"kind"`
 		NodeID         uint                     `json:"node_id"`
+		// ManagedCluster: the instance is a node of this Kubernetes cluster
+		// of the account and joins through it, not by its own install.
+		ManagedCluster string `json:"managed_cluster,omitempty"`
+		// Actions are the operations the instance allows now (power_on |
+		// power_off | install | delete); empty for a cluster node. A client
+		// offers exactly these.
+		Actions []string `json:"actions"`
 	}
 	out := make([]instanceDTO, 0, len(pis))
 	for _, p := range pis {
@@ -199,6 +216,8 @@ func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) 
 			ExternalID: p.ExternalID, Name: p.Name, GPUModel: p.GPUModel, GPUCount: p.GPUCount,
 			Power: p.Power, PricePerHr: p.PricePerHr, Region: p.Region, PublicIP: p.PublicIP,
 			SSHPort: p.SSHPort, SSHUser: p.SSHUser, SSHConnections: connections, Kind: p.Kind, NodeID: p.NodeID,
+			ManagedCluster: p.ManagedCluster,
+			Actions:        provider.InstanceActions(caps, p.Power, p.NodeID, p.ManagedCluster),
 		})
 	}
 	writeJSON(w, http.StatusOK, dto.NewList(out))
@@ -292,6 +311,11 @@ func (a *apiHandlers) resizeProviderInstance(w http.ResponseWriter, r *http.Requ
 const statusProviderFailed = http.StatusFailedDependency
 
 func writeProviderOpErr(w http.ResponseWriter, err error) {
+	var inCluster *provider.InstanceInClusterError
+	if errors.As(err, &inCluster) {
+		writeErr(w, http.StatusConflict, wrapProductError(ErrorProviderInstanceInCluster, err.Error(), map[string]any{"cluster": inCluster.Cluster}, err))
+		return
+	}
 	if errors.Is(err, provider.ErrUnsupported) {
 		writeErr(w, http.StatusNotImplemented, err)
 		return
@@ -369,6 +393,13 @@ func (a *apiHandlers) putSetting(w http.ResponseWriter, r *http.Request) {
 	}
 	if key == store.SettingDataRetention.String() {
 		writeProductError(w, http.StatusBadRequest, ErrorSettingHasOwnRoute, "data_retention is set through PUT /api/v1/data-retention", map[string]any{"setting": key, "route": "/api/v1/data-retention"})
+		return
+	}
+	if key == store.SettingSecurityPolicy.String() {
+		// A whole-object replace here would silently clear switches the body
+		// does not name — including the one that decides whether /v1 asks for
+		// a key — so the partial patch on its own route is the only way in.
+		writeProductError(w, http.StatusBadRequest, ErrorSettingHasOwnRoute, "security is set through PATCH /api/v1/security/settings", map[string]any{"setting": key, "route": "/api/v1/security/settings"})
 		return
 	}
 	body, err := readAll(r)
@@ -459,20 +490,6 @@ func (a *apiHandlers) putSetting(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
-}
-
-func validRegistrySourceLabel(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" || len(value) > 64 {
-		return false
-	}
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
-			continue
-		}
-		return false
-	}
-	return true
 }
 
 const errNoProviders = staticErr("cloud providers not available")

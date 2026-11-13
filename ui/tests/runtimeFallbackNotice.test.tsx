@@ -35,11 +35,13 @@ await i18n.use(initReactI18next).init({
 const { cleanup, fireEvent, render, screen } = await import("@testing-library/react");
 const { default: RuntimeFallbackNotice, runtimeFallbackCommand } = await import("../src/components/RuntimeFallbackNotice.tsx");
 
-afterEach(() => cleanup());
+const { FeedbackHost, message: zeronMessage } = await import("../src/ui-kit/feedback");
+
+afterEach(() => { cleanup(); zeronMessage.destroy(); });
 
 const plugin = "NVIDIA Container Toolkit";
 const renderNotice = (node: Parameters<typeof RuntimeFallbackNotice>[0]["node"]) =>
-  render(<I18nextProvider i18n={i18n}><RuntimeFallbackNotice node={node} /></I18nextProvider>);
+  render(<I18nextProvider i18n={i18n}><FeedbackHost /><RuntimeFallbackNotice node={node} /></I18nextProvider>);
 
 test("the fix offered follows why the runtime was passed over", () => {
   const missing = runtimeFallbackCommand({ gpu_vendor: "nvidia", runtime_fallback_from: "docker", runtime_fallback_reason: "gpu_plugin_missing" });

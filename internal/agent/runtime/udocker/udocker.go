@@ -366,7 +366,7 @@ func (d *Driver) RunWithProgress(ctx context.Context, spec runtime.WorkloadSpec,
 			return "", err
 		}
 		args = command.Argv
-		cmd = d.runveilExec(nil, command, groups)
+		cmd = d.runveilExec(context.Background(), command, groups)
 	} else {
 		full, err := d.workloadInvocation(args, spec)
 		if err != nil {

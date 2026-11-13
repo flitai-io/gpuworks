@@ -258,6 +258,7 @@ func TestBothPDStagesAreChildrenOfTheGatewaySpan(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, chatPath, strings.NewReader(pdChat))
 			req.Header.Set("traceparent", "00-"+clientTrace+"-"+clientSpan+"-01")
+			req.Header.Set("Authorization", "Bearer "+h.key)
 			h.proxy.Handler()(rec, req)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status %d %s", rec.Code, rec.Body.String())

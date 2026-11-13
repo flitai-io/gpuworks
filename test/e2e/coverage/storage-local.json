@@ -3,12 +3,17 @@
   "name": "存储 / 本地存储表单与生命周期 / 类型条件字段、字段负例、创建、刷新与删除",
   "test_file": "test/e2e/storage_local.py",
   "test_function": "test_storage_local",
-  "command": "make test-e2e-storage-local",
+  "command": "python3 -B test/e2e/storage_local.py --locale en",
   "priority": "P1",
   "page_id": "storage",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
-  "required_evidence": ["ui", "request", "persistence", "cleanup"],
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "cleanup"
+  ],
   "runtime_evidence": {
     "status": "N/A",
     "reason": "A local storage is a control-plane record. No agent trial mount, capacity, model file or container is claimed."
@@ -25,16 +30,32 @@
       "component": "Radio.Group",
       "request": "type",
       "persisted": "type",
-      "covered": ["local default", "NFS reveals Export and Mount point", "an unprobed NFS form cannot save", "switching back restores the local Directory field"],
-      "missing": ["shared_dir and nfs_cache fields", "cache wizard steps", "type switching after values are entered"]
+      "covered": [
+        "local default",
+        "NFS reveals Export and Mount point",
+        "an unprobed NFS form cannot save",
+        "switching back restores the local Directory field"
+      ],
+      "missing": [
+        "shared_dir and nfs_cache fields",
+        "cache wizard steps",
+        "type switching after values are entered"
+      ]
     },
     {
       "id": "storage.name",
       "component": "Text input",
       "request": "name",
       "persisted": "name",
-      "covered": ["invalid uppercase/space name is rejected without a request", "valid lowercase name creates the record"],
-      "missing": ["length boundaries", "duplicate names", "Unicode and whitespace normalization"]
+      "covered": [
+        "invalid uppercase/space name is rejected without a request",
+        "valid lowercase name creates the record"
+      ],
+      "missing": [
+        "length boundaries",
+        "duplicate names",
+        "Unicode and whitespace normalization"
+      ]
     },
     {
       "id": "storage.path",
@@ -49,19 +70,37 @@
       "component": "all/labels/nodes scope",
       "request": "all_nodes and targets",
       "persisted": "all_nodes, targets",
-      "covered": ["the default all-nodes scope is sent explicitly"],
-      "missing": ["label and node scopes", "mixed scope", "target validation"]
+      "covered": [
+        "the default all-nodes scope is sent explicitly"
+      ],
+      "missing": [
+        "label and node scopes",
+        "mixed scope",
+        "target validation"
+      ]
     },
     {
       "id": "storage.delete",
       "component": "Row action + Popconfirm",
       "request": "DELETE /api/v1/storages/{id}",
       "persisted": "removal",
-      "covered": ["delete through the UI", "list row and independent GET disappear"],
-      "missing": ["in-use deletion refusal", "delete permission for non-admins"]
+      "covered": [
+        "delete through the UI",
+        "list row and independent GET disappear"
+      ],
+      "missing": [
+        "in-use deletion refusal",
+        "delete permission for non-admins"
+      ]
     }
   ],
   "checklist_items": {
+    "2.1": "Every text control is checked for its accessible label, control type, empty default and help text, and the inventory also records that the name has no placeholder and no maximum length attribute so the field is not relying on one. The values that are not edited are captured from the POST body itself rather than assumed: the create asserts the whole payload equals name/type/all_nodes/targets/path, so the untouched type and scope fields are shown to submit their displayed defaults.",
+    "2.6": "The name input is driven three ways and each one is read back from the control: per-key typing followed by Backspace (the value shortens by exactly the deleted characters and completes correctly), a real clipboard paste, and select-all plus Delete which leaves the field empty. A paste that the controlled value drops is a real defect and is caught.",
+    "2.5": "A real name collision is built against the live list: the case reads the existing storage names from GET /api/v1/storages, opens the add dialog and submits that exact name, because store's lookup is an exact match. The server answers 409 with code STORAGE_NAME_TAKEN, the dialog stays open and keeps the typed name so the operator can correct it, and no duplicate record is created. Renaming to a free name then creates successfully, which shows the refusal was about the collision and not an unsavable form; that record is deleted again so the case leaves nothing behind. A mutant that returns the wrong product code is caught on the code assertion.",
+    "2.2": "The name is validated after trimming: '  spaced  ' is accepted and stored as 'spaced', while a run of only spaces trims to empty and is refused. Nothing is submitted by the rejected attempt.",
+    "2.3": "The name's length contract is 1 to 63 characters, taken from storageForm.ts's /^[a-z0-9][a-z0-9-]{0,62}$/. A single character is accepted, 63 characters are accepted and 64 are refused - each driven through the real field and read from the form item's own error state rather than from a click.",
+    "2.4": "The allowed alphabet is lowercase letters, digits and inner hyphens. 'ok-name-2' is accepted, while an uppercase value, a non-latin value, an underscore and an inner space are each refused by the field. The refusal is the form item going to its error state, not merely the browser rejecting a keystroke.",
     "1.1": "On first open the add dialog shows four type radios. Local storage is selected. NFS, NFS with local cache, and the mounted shared directory are visible and not selected. The local type description is visible. Name and Directory are empty textboxes. Neither has a unit or a maximum length. The name help states the 1-to-63 lowercase, digit, or hyphen range. The directory help is visible. Export, mount options, and the cache directory are absent. Applies to has All nodes selected. By label and One by one are visible and not selected. Mixed is absent. There is no spinbutton. Reading the dialog sends no storage POST. A relative directory shows the absolute-path error and sends no create. The minimum create sends POST /api/v1/storages with name, type local, all_nodes true, an empty targets list, and the directory path. The list row, the detail page, and the independent GET keep that name, type local, path, and all_nodes true.",
     "1.2": "On first open the add dialog shows an empty name, an empty directory, local storage selected, and all nodes selected, and those fields are present immediately with no loading gate before Save. An empty name is rejected on the name field and sends no storage create. The add dialog and the edit dialog have no password field. After the local create, the detail overview configuration card is one small card. Opening edit backfills that name, that directory, and the all-nodes scope, and the edit dialog shows the local type.",
     "1.11": "covered: Cancel, close and Escape each close the add dialog immediately, with no unsaved-changes prompt and no storage write, so the stored storages stay unchanged",
@@ -83,7 +122,8 @@
     "12.4": "covered: Cancel, Escape, close and mask each return focus to the Add storage button and send no POST",
     "12.5": "N/A: the local add dialog has no nested child layer",
     "12.6": "covered: While the create POST is held the footer Save is disabled and a forced second click sends no further create request; the 502 keeps the name and path and shows the server reason; the later 201 matches the independent detail GET and the refreshed list row",
-    "12.8": "The edit dialog sends the previewed expected_updated_at. After another writer advances the revision, Save returns 409 STORAGE_CONFIG_CHANGED, the label draft stays in the open dialog, and the independent GET keeps all nodes, the original path and the other writer's revision. Teardown is not the assertion"
+    "12.8": "The edit dialog sends the previewed expected_updated_at. After another writer advances the revision, Save returns 409 STORAGE_CONFIG_CHANGED, the label draft stays in the open dialog, and the independent GET keeps all nodes, the original path and the other writer's revision. Teardown is not the assertion",
+    "2.7": "Text carrying HTML is displayed as text. The name has a lowercase alphabet, so the path is the field that can carry markup: a second storage is created through the real form, its stored path is moved to a value embedding <img src=x onerror=1> through the real PATCH route, and the independent GET confirms the server holds it. The detail view then shows the raw string as a text node - the carrying element has no child elements - and neither the detail view nor the list row gains an img or script element. The case cleans up its own storage. No product mutation was performed for this item: the assertion is a direct DOM-structure check, not a behavioural discriminator."
   },
   "missing": [
     "MISSING: checklist 1.11 (cancel, close, Esc) and the unsaved-draft behavior",

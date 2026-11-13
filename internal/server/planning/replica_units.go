@@ -115,7 +115,11 @@ func PlanReplicaUnits(dep *store.Deployment, reqs nodelabel.Requirements, facts 
 	if err != nil {
 		return store.ReplicaUnitsPatch{}, err
 	}
-	perRank, err := placement.Parallelism(dep.NNodes).GPUsPerNode()
+	spec, err := DeploymentParallelism(dep, placement)
+	if err != nil {
+		return store.ReplicaUnitsPatch{}, err
+	}
+	perRank, err := spec.GPUsPerNode()
 	if err != nil {
 		return store.ReplicaUnitsPatch{}, err
 	}

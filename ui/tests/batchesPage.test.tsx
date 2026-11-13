@@ -19,6 +19,7 @@ Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: 
 const { i18n, locale } = await createI18n(["batches"]);
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
+const { FeedbackHost, message } = await import("../src/ui-kit/feedback/index.tsx");
 const { ConfigProvider } = await import("antd");
 const { MemoryRouter, Route, Routes, useLocation } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
@@ -50,6 +51,7 @@ beforeEach(() => {
   batchApi.dictionary = async () => dictionary();
 });
 afterEach(() => {
+  message.destroy();
   cleanup();
   Object.assign(batchApi, original);
   api.me = original.me;
@@ -63,7 +65,7 @@ function Probe() {
 
 function mount(entry = "/batches", pollMs?: number) {
   render(
-    <I18nextProvider i18n={i18n}>
+    <I18nextProvider i18n={i18n}><FeedbackHost />
       <ConfigProvider theme={{ token: { motion: false } }}>
         <MemoryRouter initialEntries={[entry]}>
           <Routes>
@@ -95,18 +97,18 @@ async function closeDrawer(user: ReturnType<typeof userEvent.setup>) {
 const named = (label: string) => new RegExp(`${label}$`);
 const row = (id: string) => screen.getByRole("button", { name: b.action.open.replace("{{id}}", id) }).closest("tr") as HTMLElement;
 // The value cell beside a description label.
-const valueOf = (scope: HTMLElement, label: string) => within(scope).getByText(label).closest("th")?.nextElementSibling?.textContent;
+const valueOf = (scope: HTMLElement, label: string) => within(scope).getByText(label).closest("dt")?.nextElementSibling?.textContent;
 
 test("a loading state shows until the first page answers", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   batchApi.list = async () => { await gate; return page([batch()]); };
   mount();
-  assert.ok(document.querySelector(".ant-spin"), "the table shows its spinner");
+  assert.ok(screen.getByRole("status"), "the table shows its loading status");
   release();
   await screen.findByRole("button", { name: b.action.open.replace("{{id}}", "batch_aaa111") });
   // A boolean, never the element: a failed assert.equal prints its operands, and printing a jsdom node walks the whole document.
-  await waitFor(() => assert.ok(!document.querySelector(".ant-spin-spinning")));
+  await waitFor(() => assert.ok(!screen.queryByRole("status")));
 });
 
 test("a failed load shows the error and retries on request", async () => {
@@ -160,11 +162,16 @@ test("the status filter asks the server for those states and words an empty answ
   const user = mount();
   await screen.findByRole("button", { name: b.action.open.replace("{{id}}", "batch_aaa111") });
   batchApi.list = async (query) => { listCalls.push({ ...query }); return page([], { page_size: query.page_size }); };
-  await user.click(screen.getByRole("combobox", { name: b.filter.status }));
-  await user.click(await screen.findByText(b.status.completed, { selector: ".ant-select-item-option-content" }));
-  await user.click(await screen.findByText(b.status.failed, { selector: ".ant-select-item-option-content" }));
+  await user.click(screen.getByRole("button", { name: `Filter by ${b.columns.status}` }));
+  await user.click(await screen.findByRole("checkbox", { name: b.status.completed }));
+  await user.click(await screen.findByRole("checkbox", { name: b.status.failed }));
   assert.ok(await screen.findByText(b.empty.filtered));
   assert.deepEqual(listCalls.at(-1)?.state, ["completed", "failed"]);
+  await user.keyboard("{Escape}");
+  const active = await screen.findByRole("group", { name: "Filtered" });
+  assert.equal(within(active).getByRole("button", { name: /^Clear filter: / }).textContent, `${b.columns.status}: ${b.status.completed}, ${b.status.failed}`);
+  await user.click(within(active).getByRole("button", { name: /^Clear filter: / }));
+  await waitFor(() => assert.deepEqual(listCalls.at(-1)?.state, []));
 });
 
 test("the list refreshes while a batch is moving and stops once all have ended", async () => {
@@ -273,7 +280,7 @@ test("a batch with no request waiting shows no waiting notice", async () => {
   mount("/batches?detail=batch_fine");
   const dialog = await screen.findByRole("dialog");
   await within(dialog).findByText("batch_fine", { selector: "code" });
-  assert.equal(within(dialog).queryByText(b.detail.waiting.title), null);
+  assert.ok(!(within(dialog).queryByText(b.detail.waiting.title)), "expected the element to be absent");
 });
 
 test("downloads are links for files that exist and disabled buttons for those that do not", async () => {

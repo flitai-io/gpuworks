@@ -28,7 +28,7 @@ func (s *Store) EnsureAdmin(username, password string) (string, string, bool, er
 			return "", "", false, err
 		}
 	}
-	if err := auth.ValidatePassword(password); err != nil {
+	if err := auth.ValidateAccountPassword(username, password); err != nil {
 		return "", "", false, err
 	}
 	hash, err := auth.HashPassword(password)
@@ -62,7 +62,7 @@ func (s *Store) AuthenticateUser(username, password string) (*User, error) {
 
 // SetUserPassword replaces a user's password hash.
 func (s *Store) SetUserPassword(username, password string) error {
-	if err := auth.ValidatePassword(password); err != nil {
+	if err := auth.ValidateAccountPassword(username, password); err != nil {
 		return err
 	}
 	hash, err := auth.HashPassword(password)
@@ -195,20 +195,4 @@ func (s *Store) touchAPIKey(id uint) {
 	if now, due := s.apiKeys.dueLastUsed(id); due {
 		s.db.Model(&APIKey{}).Where("id = ?", id).Update("last_used", now)
 	}
-}
-
-// HasAnyAPIKey reports whether at least one unrevoked API key exists. The
-// answer is cached until a key is created or revoked through this store.
-func (s *Store) HasAnyAPIKey() bool {
-	some, known, generation := s.apiKeys.cachedHasAny()
-	if known {
-		return some
-	}
-	var count int64
-	if err := s.db.Model(&APIKey{}).Where("revoked_at IS NULL").Count(&count).Error; err != nil {
-		// A failed read is not cached, so it cannot pin the answer.
-		return count > 0
-	}
-	s.apiKeys.setHasAny(generation, count > 0)
-	return count > 0
 }

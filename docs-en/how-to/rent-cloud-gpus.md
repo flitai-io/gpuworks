@@ -10,15 +10,15 @@ Connect GPU instances from Alibaba Cloud, RunPod, CompShare, AutoDL, or Vast.ai 
 - For an agent-initiated connection with the server behind NAT, provide a stable domain name or reverse proxy address reachable from the instance. Do not use a quick tunnel address (see [Public Access](expose-public-address.md)).
 
 GPUWORKS handles cloud instances as follows: save cloud account credentials (encrypted at rest) → sync the instance inventory → install the
-agent over SSH (prefer Cloud Assistant for Alibaba Cloud) → bring the instance online as a compute node. **The console's Public Clouds page does not provide an interface for selecting an instance type, region, or placing an order**:
+agent over SSH (prefer Cloud Assistant for Alibaba Cloud) → bring the instance online as a compute node. **The console's External Platforms page does not provide an interface for selecting an instance type, region, or placing an order**:
 first rent an instance (select its type, region, and image) in the cloud provider's console, then return to GPUWORKS to sync and connect it. For REST APIs
 to create or delete instances, see [Create and Release Instances Through the API](#用-api-创建和释放实例).
 
 ## Add a Cloud Account
 
-1. Open **Public Cloud** under **Resources** in the left menu (path: `/providers`).
-2. Click **Add Public Clouds**, or click a provider card under **Quick Connect** in the center of the page to preselect its type. Links to the providers' official websites appear below the cards.
-3. Select a type, enter a **Name** (required; choose your own) and the fields under **Credentials**, then click **Add**.
+1. Open **External Platforms** under **Compute** in the left menu (path: `/providers`).
+2. Click **Add External Platform**, or click a provider card under **Quick Connect** in the center of the page to preselect its type. Links to the providers' official websites appear below the cards.
+3. Select the vendor in the **External platform** field, enter a **Name** (required; choose your own) and the fields under **Credentials**, then click **Add**.
 
 Credential fields for each type (the UI is authoritative; optional fields can be left blank):
 
@@ -29,6 +29,7 @@ Credential fields for each type (the UI is authoritative; optional fields can be
 | CompShare | Public key, private key (CompShare API key pair) | API endpoint |
 | AutoDL | API Key | API endpoint, SSH password (used as the default SSH password for subsequent agent installation) |
 | Vast.ai | API Key | API endpoint |
+| DigitalOcean | API Key (Personal Access Token) | API endpoint (see [DigitalOcean](#digitalocean)) |
 
 The current AutoDL API syncs only **Pro container instances**, and one-click installation offers only **Agent-initiated connection**. Do not interpret this product limitation as the port capabilities of all AutoDL instances. For manual port configuration, follow the [provider's port documentation](https://www.autodl.com/docs/port/) and the instance's actual configuration.
 
@@ -40,23 +41,21 @@ When you save, the server calls the cloud provider's API once to validate these 
 **Add failed: …** with the reason returned by the provider. Saved credentials are encrypted at rest and are no longer displayed in the UI. To update them later, click **Edit**
 in the list: **fields left blank retain their existing values**. You cannot change the type.
 
-ZStack Cloud is on the **Private Clouds** page (`/zstack`). It uses an API Endpoint, AccessKey ID, and AccessKey Secret, and supports syncing resources and installing agents. You do not rent public cloud instances through that page. For credential requirements, see [ZStack Cloud Connection Credentials](#zstack-cloud-连接凭据).
-
 ## Sync Instances and Check Types, Regions, and Prices
 
-1. Click **Sync** for an account in the **Connected Public Clouds** list (or **Sync All** at the top of the page to sync all accounts at once). On completion, the message reads **Synchronization complete; N instances found**.
+1. Click **Sync** for an account in the **Connected external platforms** list (or **Sync All** at the top of the page to sync all external platforms at once). The list's **External platform** column shows the provider (such as Alibaba Cloud or RunPod), and its **Platform type** column shows **Public cloud**. On completion, the message reads **Synchronization complete; N instances found**.
 2. Click the expand arrow on the left of the account row to view its instance table:
 
    | Column | Meaning |
    |---|---|
    | Instance name / Instance ID | Name and ID at the cloud provider |
    | GPU model / GPUs | Specifications returned by the provider; **Not returned** if unavailable |
-   | Connection | Endpoints offered by the provider: **Direct** or **Provider proxy** (SSH, with a copyable `ssh` command; endpoints marked **Terminal only** support connections but cannot install the agent). Alibaba Cloud also offers **Cloud Assistant** (no SSH needed) |
+   | Connection | Endpoints offered by the provider: **Direct** or **External platform proxy** (SSH, with a copyable `ssh` command; endpoints marked **Terminal only** support connections but cannot install the agent). Alibaba Cloud also offers **Cloud Assistant** (no SSH needed) |
    | Status | Running / Stopped / Unknown |
    | Price | Hourly price (for example, `¥1.98/hr`); if the provider returns no price, this may display `¥0.00/hr`, which does not mean it is free |
    | Region, Type | Region; type is **Container** or **Virtual machine** |
 
-3. Account status changes with sync results. A failed sync marks the account as **Error** and displays **Some Public Clouds providers have errors** at the top of the page. Follow the prompt to check credentials and provider API availability, then sync again.
+3. Account status changes with sync results. A failed sync marks the account as **Error** and displays **Some external platforms have errors** at the top of the page. Follow the prompt to check credentials and provider API availability, then sync again.
 
 The list automatically refreshes account status every 15 seconds, but the instance inventory comes from the last sync. Click **Sync** again for the latest cloud state. Container instances usually have no usable Docker daemon; the agent uses the built-in runveil when Docker is unavailable. Being root inside a container does not mean you can run the host's Docker.
 
@@ -130,7 +129,7 @@ To place orders or release instances directly through GPUWORKS without opening t
 - `DELETE /api/v1/providers/{id}/instances/{externalID}`: release an instance.
 - `POST /api/v1/providers/{id}/instances/{externalID}/power`: use the request body `{"action":"on"}` or `{"action":"off"}`.
 
-After creation, click **Sync** on the **Public Clouds** page for the instance to appear in the list. Requirements differ by type:
+After creation, click **Sync** on the **External Platforms** page for the instance to appear in the list. Requirements differ by type:
 
 | Type | Creation Requirements |
 |---|---|
@@ -138,8 +137,9 @@ After creation, click **Sync** on the **Public Clouds** page for the instance to
 | CompShare | `gpu_model` and `image` (CompShare image ID) are required; `gpu_count` defaults to 1; omitted `region` uses the provider's default region; `extra` can include `zone`, `disk_gb` (default: 100), `cpu`, `memory_mb`, `password`, and other fields |
 | AutoDL | `image` (image UUID) is required; the GPU model must map to a known specification or be supplied in `extra.gpu_spec_uuid`; `gpu_count` is 1–4; `region` is a list of data centers |
 | Vast.ai | `extra.offer_id` is required (search for and select an offer on Vast.ai first; that offer determines the price); `image` has a default value; `extra.disk_gb` defaults to 20 |
+| DigitalOcean | `region` and `extra.size` (GPU size slug, such as `gpu-h100x1-80gb`) are required; when `image` is omitted, DigitalOcean's AI/ML Ready image is chosen by size (NVIDIA single GPU `gpu-h100x1-base`, multi-GPU `gpu-h100x8-base`, AMD `gpu-amd-base`); `extra.ssh_keys` can carry comma-separated account SSH key IDs or fingerprints, and the platform public key is always added |
 
-These requirements come from each provider implementation; API error messages are authoritative. Check balance and inventory before creating an instance. For release, RunPod and Vast.ai destroy the instance directly; CompShare and AutoDL power it off first, then release it. All four currently return 501 (unsupported) for the `resize` API.
+These requirements come from each provider implementation; API error messages are authoritative. Check balance and inventory before creating an instance. For release, RunPod, Vast.ai, and DigitalOcean destroy the instance directly; CompShare and AutoDL power it off first, then release it. All of them currently return 501 (unsupported) for the `resize` API.
 
 ## Frequently Asked Questions
 
@@ -182,7 +182,7 @@ To install the agent on a compatible persistent volume or data disk, enter the i
 
 **Other installation checks**
 
-- **SSH authentication fails after trying only the platform key**: the instance does not yet have the platform public key. For a RunPod pod started before the server registered its public key, installation from **Public Clouds** asks whether to restart to add the key. You can also provide a private key or password once under **Advanced Settings**, or authorize it on the instance as instructed by the error.
+- **SSH authentication fails after trying only the platform key**: the instance does not yet have the platform public key. For a RunPod pod started before the server registered its public key, installation from **External Platforms** asks whether to restart to add the key. You can also provide a private key or password once under **Advanced Settings**, or authorize it on the instance as instructed by the error.
 - **The provider returns no SSH endpoint**: the instance may still be starting. Click **Sync** again later.
 - **agent_dial warning**: the agent has started but is not connected to the server, usually because `server_url` is unreachable from the instance. Follow the next item.
 
@@ -213,6 +213,8 @@ Leave **Regions** blank to sync all regions in the account. If you have instance
 | `ecs:DescribeCloudAssistantStatus` | Check whether the instance's Cloud Assistant is online |
 | `ecs:RunCommand`, `ecs:DescribeInvocationResults` | Run preinstallation checks and installation through Cloud Assistant, and read results |
 | `ecs:StartInstance`, `ecs:StopInstance` | Power on and power off; omit if not needed |
+| `cs:DescribeClustersV1`, `cs:DescribeClusterNodePools`, `ecs:DescribeInstanceTypes` | The “Kubernetes clusters” tab lists ACK clusters and their GPU node pools; omit if you do not connect ACK |
+| `cs:DescribeClusterUserKubeconfig` | Issues a kubeconfig valid for 15 minutes when GPUWORKS applies the connect manifest to an ACK cluster; omit if you connect with kubectl only |
 | `ecs:DescribeSecurityGroupAttribute` | Read inbound security group rules for server-initiated connections; omit if you do not use this check |
 
 ```json
@@ -228,7 +230,11 @@ Leave **Regions** blank to sync all regions in the account. If you have instance
         "ecs:RunCommand",
         "ecs:DescribeInvocationResults",
         "ecs:StartInstance",
-        "ecs:StopInstance"
+        "ecs:StopInstance",
+        "ecs:DescribeInstanceTypes",
+        "cs:DescribeClustersV1",
+        "cs:DescribeClusterNodePools",
+        "cs:DescribeClusterUserKubeconfig"
       ],
       "Resource": "*"
     }
@@ -248,7 +254,7 @@ GPUWORKS does not create or release instances on Alibaba Cloud, so it does not n
 **Create from the command line** ([Alibaba Cloud CLI](https://help.aliyun.com/zh/cli/); run as an identity with RAM management permissions):
 
 ```bash
-POLICY='{"Version":"1","Statement":[{"Effect":"Allow","Action":["ecs:DescribeRegions","ecs:DescribeInstances","ecs:DescribeCloudAssistantStatus","ecs:RunCommand","ecs:DescribeInvocationResults","ecs:StartInstance","ecs:StopInstance"],"Resource":"*"}]}'
+POLICY='{"Version":"1","Statement":[{"Effect":"Allow","Action":["ecs:DescribeRegions","ecs:DescribeInstances","ecs:DescribeCloudAssistantStatus","ecs:RunCommand","ecs:DescribeInvocationResults","ecs:StartInstance","ecs:StopInstance","ecs:DescribeInstanceTypes","cs:DescribeClustersV1","cs:DescribeClusterNodePools","cs:DescribeClusterUserKubeconfig"],"Resource":"*"}]}'
 aliyun ram CreatePolicy --PolicyName gpuworks-ecs --PolicyDocument "$POLICY"
 aliyun ram CreateUser --UserName gpuworks
 aliyun ram AttachPolicyToUser --PolicyType Custom --PolicyName gpuworks-ecs --UserName gpuworks
@@ -293,20 +299,20 @@ For an instance without the platform public key, the `SSH` row in precheck displ
 
 Cloud Assistant records executed commands; retention depends on Alibaba Cloud settings and documentation. The command contains the node connection token, which the agent continues using to connect to the server. Alibaba Cloud users authorized to view invocation records (`ecs:DescribeInvocations`) can read the token. Deleting the node invalidates its token.
 
+**ACK clusters**: the “Kubernetes clusters” tab of an expanded account lists, live, the account's ACK clusters (Serverless and ACS clusters run Pods on virtual nodes, which cannot run the agent DaemonSet, so they are not listed) and their GPU node pools. A node pool counts only when all its instance types carry GPUs of the same model; auto-mode node pools (no specified instance type) are not listed. Choose a node pool and click “Connect” to create a Kubernetes cluster entry whose node selector is `alibabacloud.com/nodepool-id=<node pool ID>`. After that, GPUWORKS can apply the manifest, or you can run kubectl yourself; see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md). The nodes of an ACK cluster are themselves GPU instances: they appear in the instance table marked “Cluster node” and cannot have the agent installed individually.
+
+For GPUWORKS to apply the manifest, the cluster's API Server needs a public address (select “Expose API Server with EIP” when creating the cluster; clusters without one show “Private API only” and can be connected only with kubectl). If you use a RAM sub-account, that sub-account must also be granted cluster administrator RBAC permissions (or permissions to create Namespaces, RBAC, DaemonSets, and PriorityClasses) on the cluster under “Authorizations” in the ACK console; otherwise the issued kubeconfig is rejected by the cluster, and GPUWORKS shows the cluster's rejection reason verbatim.
+
 **Power control**: power-off uses **normal stop** (billing continues), preserving resources such as the instance's GPUs and fixed public IP. **Economical mode** releases those resources, and capacity may be unavailable when restarting. GPUWORKS does not use that mode.
 
-## ZStack Cloud Connection Credentials
+## DigitalOcean
 
-When adding a private cloud, enter the API Endpoint and the administrator's AccessKey ID and AccessKey Secret. Use ZStack's
-local AccessKey; no login session needs to be saved or refreshed. The AccessKey must be enabled, and its account must have permission to query
-hosts, GPUs, and resource configurations and to perform coordinated GPU resource operations. The Cloud license and version must support AccessKey authentication.
-The endpoint supports the `/zstack` context and an optional `/v1` suffix.
+**Credentials**: in the DigitalOcean console, go to “API → Tokens”, generate a Personal Access Token, and enter it as the API Key. Full Access is simplest. With custom scopes, cover read access to account, droplet, size, ssh_key, and kubernetes; write access to droplet for powering on/off, creating, and deleting Droplets; write access to ssh_key for registering the platform public key; and the corresponding kubernetes permission for issuing a DOKS kubeconfig (custom scope combinations have not been tested one by one; when a permission is missing, the UI shows the reason DigitalOcean returns).
 
-The API reuses the common credential fields: `public_key` stores the AccessKey ID, and `private_key` stores the Secret. Both are encrypted at rest with the entire
-credentials object. The UI displays AccessKey names based on the server's field dictionary and uses a password input for the Secret.
-For a private cloud already configured with a Session Token, edit the credentials and enter these two fields; an existing session cannot be converted to an AccessKey.
+**Sync**: the instance table lists only GPU Droplets (sizes that include GPUs); the model, GPU count, and hourly price come from the size. DigitalOcean GPU sizes must be enabled for the account; if a size does not appear in the console or API, request it in the console first. The nodes of a DOKS cluster are also GPU Droplets; they are marked “Cluster node” and cannot have the agent installed individually.
 
-Requests use ZStack AccessKey signing.
-GPUWorks and Cloud system clocks must be synchronized. Older Cloud versions ignore
-time zone offsets when `rest.checkTimeZone=false` is configured, so both systems must also use the same time zone. Signatures preserve the GPUWorks process's local time zone, matching the official ZStack SDK.
-Both queries and resource modification requests use AccessKey authentication; the Secret is not sent with requests.
+**Installation**: over SSH (`root@<public IP>:22`). When the account is added, the platform public key is registered as an account SSH key, and Droplets subsequently created through GPUWORKS carry it, so no credentials are needed. DigitalOcean cannot add an account key to an existing Droplet; for Droplets created elsewhere, provide a private key or password once under “Advanced Settings” during installation. SSH keys already in the account are never modified or deleted; the `gpuworks-platform` key registered by the platform stays in DigitalOcean after you delete the account in GPUWORKS, so delete it under “Settings → Security” in the console when it is no longer needed.
+
+**Power control and release**: power on and power off map to the Droplet's power on / power off (billing continues after power-off); releasing deletes the Droplet together with its data.
+
+**DOKS clusters**: the “Kubernetes clusters” tab lists the account's DOKS clusters and NVIDIA GPU node pools (AMD node pools are not listed). After connecting, the node selector is `doks.digitalocean.com/node-pool-id=<node pool ID>`. GPUWORKS can apply the manifest with a kubeconfig valid for 15 minutes, or you can run kubectl yourself; see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md).

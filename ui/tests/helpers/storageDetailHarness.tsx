@@ -159,12 +159,12 @@ export function detailOf(row: HTMLElement): HTMLElement {
   const button = within(row).queryByRole("button", { name: s.detail.expand });
   if (button) fireEvent.click(button);
   const next = row.nextElementSibling as HTMLElement | null;
-  if (!next || !next.classList.contains("ant-table-expanded-row")) throw new Error("the row has no expanded detail");
+  if (!next || !next.querySelector(".detail-extra")) throw new Error("the row has no expanded detail");
   return next;
 }
 
 /** The open modals: the detail drawer is a dialog too, so a bare dialog query is ambiguous. */
-export const modals = () => rtl.screen.queryAllByRole("dialog").filter((dialog) => !dialog.closest(".ant-drawer"));
+export const modals = () => rtl.screen.queryAllByRole("dialog").filter((dialog) => !dialog.querySelector(".detail-body"));
 export const findModal = () => rtl.waitFor(() => {
   const open = modals();
   if (open.length === 0) throw new Error("no modal is open");

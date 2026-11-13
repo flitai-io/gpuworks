@@ -29,61 +29,71 @@ export default function OverviewFilters({ model, view, onChange }: { model: Over
   const set = (patch: Partial<Filters>) => onChange({ ...view, filters: { ...view.filters, ...patch } });
   const labelOptions = model.labels.flatMap(({ key, values }) => values.map((value) => ({ value: `${key}=${value}`, label: `${key}=${value}` })));
   return (
-    <div className="hm-filters" role="search" aria-label={t("filters.title")}>
-      <Select<string[]>
-        mode="multiple"
-        allowClear
-        maxTagCount="responsive"
-        aria-label={t("filters.models")}
-        placeholder={t("filters.modelsPlaceholder")}
-        value={view.filters.models}
-        options={model.models.map((name) => ({ value: name, label: name }))}
-        onChange={(models) => set({ models })}
-        style={{ minWidth: 200 }}
-      />
-      <Select<string>
-        allowClear
-        showSearch
-        aria-label={t("filters.label")}
-        placeholder={t("filters.labelPlaceholder")}
-        value={view.filters.label || undefined}
-        options={labelOptions}
-        onChange={(label) => set({ label: label ?? "" })}
-        notFoundContent={t("filters.noLabels")}
-      />
-      <Select<StateFilter>
-        allowClear
-        aria-label={t("filters.state")}
-        placeholder={t("filters.statePlaceholder")}
-        value={view.filters.state || undefined}
-        options={STATES.map((state) => ({ value: state, label: t(`filters.stateOptions.${state}`) }))}
-        onChange={(state) => set({ state: state ?? "" })}
-      />
-      <Input
-        allowClear
-        aria-label={t("filters.search")}
-        placeholder={t("filters.searchPlaceholder")}
-        value={view.filters.search}
-        onChange={(event) => set({ search: event.target.value })}
-        style={{ width: 240 }}
-      />
-      <Select<GroupBy>
-        aria-label={t("filters.groupBy")}
-        value={view.groupBy}
-        options={[
-          { value: "node", label: t("filters.group.node") },
-          { value: "model", label: t("filters.group.model") },
-          ...model.labels.map(({ key }) => ({ value: `label:${key}` as GroupBy, label: t("filters.group.label", { key }) })),
-        ]}
-        onChange={(groupBy) => onChange({ ...view, groupBy })}
-      />
-      <Select<SortBy>
-        aria-label={t("filters.sortBy")}
-        value={view.sortBy}
-        options={SORTS.map((sort) => ({ value: sort, label: t(`filters.sort.${sort}`) }))}
-        onChange={(sortBy) => onChange({ ...view, sortBy })}
-      />
-      {!isDefault(view) && <Button onClick={() => onChange(DEFAULT_VIEW)}>{t("filters.reset")}</Button>}
+    <div className="resource-table-toolbar hm-filters" role="search" aria-label={t("filters.title")}>
+      <div className="resource-table-toolbar-left hm-filter-fields">
+        <Input
+          allowClear
+          aria-label={t("filters.search")}
+          placeholder={t("filters.searchPlaceholder")}
+          value={view.filters.search}
+          onChange={(event) => set({ search: event.target.value })}
+          className="hm-search-input"
+        />
+        <Select<string[]> className="hm-filter-select"
+          mode="multiple"
+          allowClear
+          maxTagCount="responsive"
+          popupMatchSelectWidth={280}
+          aria-label={t("filters.models")}
+          placeholder={t("filters.modelsPlaceholder")}
+          value={view.filters.models}
+          options={model.models.map((name) => ({ value: name, label: name }))}
+          onChange={(models) => set({ models })}
+        />
+        <Select<string> className="hm-filter-select"
+          allowClear
+          showSearch
+          popupMatchSelectWidth={280}
+          aria-label={t("filters.label")}
+          placeholder={t("filters.labelPlaceholder")}
+          value={view.filters.label || undefined}
+          options={labelOptions}
+          onChange={(label) => set({ label: label ?? "" })}
+          notFoundContent={t("filters.noLabels")}
+        />
+        <Select<StateFilter> className="hm-filter-select"
+          allowClear
+          popupMatchSelectWidth={false}
+          aria-label={t("filters.state")}
+          placeholder={t("filters.statePlaceholder")}
+          value={view.filters.state || undefined}
+          options={STATES.map((state) => ({ value: state, label: t(`filters.stateOptions.${state}`) }))}
+          onChange={(state) => set({ state: state ?? "" })}
+        />
+        {!isDefault(view) && <Button type="link" onClick={() => onChange(DEFAULT_VIEW)}>{t("filters.reset")}</Button>}
+      </div>
+      <div className="resource-table-toolbar-right hm-view-options flex gap-1">
+        <Select<GroupBy>
+          variant="borderless"
+          popupMatchSelectWidth={false}
+          aria-label={t("filters.groupBy")}
+          value={view.groupBy}
+          options={[
+            { value: "node", label: t("filters.group.node") },
+            { value: "model", label: t("filters.group.model") },
+            ...model.labels.map(({ key }) => ({ value: `label:${key}` as GroupBy, label: t("filters.group.label", { key }) })),
+          ]}
+          onChange={(groupBy) => onChange({ ...view, groupBy })}
+        />
+        <Select<SortBy>
+          variant="borderless"
+          popupMatchSelectWidth={false}
+          aria-label={t("filters.sortBy")}
+          value={view.sortBy}
+          options={SORTS.map((sort) => ({ value: sort, label: t(`filters.sort.${sort}`) }))}
+          onChange={(sortBy) => onChange({ ...view, sortBy })}
+        />
+      </div>
     </div>
   );
 }

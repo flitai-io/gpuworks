@@ -30,6 +30,10 @@ type PDLaunch struct {
 	// RoleTP is every role's tensor parallel degree, for connectors whose
 	// config names both sides.
 	RoleTP map[string]int
+	// RecurrentLayers: the model has recurrent layers (gated delta net,
+	// Mamba), so a mode with pdmode.Mode.HybridKVCacheManager needs vLLM's
+	// hybrid KV cache manager on.
+	RecurrentLayers bool
 }
 
 // mode returns the declared mode; an unknown name yields the zero Mode, which
@@ -127,6 +131,21 @@ func MooncakeProtocol(n ComputeNetwork) string {
 		return "rdma"
 	}
 	return "tcp"
+}
+
+// vllmHybridKVCacheManager turns vLLM's hybrid KV cache manager on for a PD
+// instance of a model with recurrent layers under a mode that needs it: vLLM
+// turns the manager off whenever a KV connector is configured, and such a
+// model's KV cache specs cannot be unified without it. A deployment that states
+// either polarity keeps its choice.
+func vllmHybridKVCacheManager(b *builder, p Params) {
+	if p.PD == nil || !p.PD.RecurrentLayers || !p.PD.mode().HybridKVCacheManager {
+		return
+	}
+	if b.blocked["--disable-hybrid-kv-cache-manager"] {
+		return
+	}
+	b.injectFlag("--no-disable-hybrid-kv-cache-manager")
 }
 
 // vllmPDEnv is the vLLM side channel environment of a PD instance, as the

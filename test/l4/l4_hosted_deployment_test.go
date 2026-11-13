@@ -80,8 +80,8 @@ func hostedPrepareRealModel(t *testing.T, harness *hostedControlPlane) dto.Model
 	}
 	var model dto.Model
 	if err := registerHostedModel(t.Context(), harness.API, map[string]any{
-		"source": "modelscope", "source_id": "Qwen/Qwen2-0.5B-Instruct",
-		"revision": "master", "name": "Qwen2-0.5B-Instruct",
+		"source": "modelscope", "source_id": backend.Model.SourceID,
+		"revision": "master", "name": backend.Model.Name,
 	}, &model); err != nil {
 		t.Fatalf("register hosted model: %v", err)
 	}
@@ -353,6 +353,9 @@ func (d *hostedDeployment) chat(t *testing.T) []byte {
 	t.Helper()
 	body := map[string]any{
 		"model": d.servedName, "messages": []map[string]string{{"role": "user", "content": "reply with the word ready"}}, "max_tokens": 16,
+		// A model that thinks first (Qwen3) would spend the 16 tokens on its
+		// reasoning and return no content; a template without the switch ignores it.
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
 	}
 	data, status, err := d.gatewayJSON(t.Context(), http.MethodPost, "/v1/chat/completions", body)
 	if err != nil || status != http.StatusOK {

@@ -196,7 +196,7 @@ func (s *KVDiskSweeper) collect(target KVDiskTarget) ([]kvDiskBlock, int64) {
 		if err != nil {
 			// The block was removed between the readdir and the stat; it holds
 			// no bytes any more, so there is nothing to count or prune.
-			return nil
+			return nil //nolint:nilerr // The sweep tolerates entries disappearing or becoming unreadable during inspection.
 		}
 		blocks = append(blocks, kvDiskBlock{path: name, size: info.Size(), modified: info.ModTime()})
 		used += info.Size()

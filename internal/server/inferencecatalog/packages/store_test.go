@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/seed"
 )
 
 func TestNewRejectsBroadRootAndAssetPathEscapes(t *testing.T) {
@@ -57,5 +59,42 @@ func TestPruneRemovesOnlyUnreferencedDigestDirectories(t *testing.T) {
 		if _, err := os.Lstat(filepath.Join(root, name)); err != nil {
 			t.Fatalf("non-eligible entry %q was removed: %v", name, err)
 		}
+	}
+}
+
+// PutLoaded stores the embedded package under the digest its caller computed,
+// exactly where Put of the same files would, and refuses a malformed digest.
+func TestPutLoadedStoresTheEmbeddedPackageAsPutWould(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "packages")
+	store, err := New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fsys, digest, err := seed.Package()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"", "../escape", strings.ToUpper(digest), digest + "0"} {
+		if _, err := store.PutLoaded(fsys, bad); err == nil {
+			t.Fatalf("digest %q was accepted", bad)
+		}
+	}
+	if entries, err := os.ReadDir(root); err != nil || len(entries) != 0 {
+		t.Fatalf("a refused digest left %v (%v)", entries, err)
+	}
+	created, err := store.PutLoaded(fsys, digest)
+	if err != nil || !created {
+		t.Fatalf("PutLoaded = %v, %v; want created", created, err)
+	}
+	again, err := store.PutLoaded(fsys, digest)
+	if err != nil || again {
+		t.Fatalf("second PutLoaded = %v, %v; want an existing package", again, err)
+	}
+	putDigest, putCreated, err := store.Put(fsys)
+	if err != nil || putDigest != digest || putCreated {
+		t.Fatalf("Put = %q, %v, %v; want the stored %q", putDigest, putCreated, err, digest)
+	}
+	if _, err := store.Load(digest); err != nil {
+		t.Fatalf("stored package does not load: %v", err)
 	}
 }

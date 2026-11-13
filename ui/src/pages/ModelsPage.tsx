@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Card, Dropdown, Input, Modal, Pagination, Segmented, Select, Space, Tooltip, Typography, message } from "antd";
+import { FilterChips } from "../ui-kit/FilterChips";
 import {
   AppstoreOutlined,
   BarsOutlined,
@@ -282,20 +283,8 @@ export default function ModelsPage() {
           />
         }
       />
-      <div className="model-type-filter" aria-label={t("filter.operationAria")}>
-        {modelOperationOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className="model-type-filter-button"
-            data-selected={modelOperation === option.value}
-            aria-pressed={modelOperation === option.value}
-            onClick={() => setModelOperation(option.value)}
-          >
-            {t(option.labelKey)}
-          </button>
-        ))}
-      </div>
+      <FilterChips className="model-type-filter" label={t("filter.operationAria")} value={modelOperation} onChange={setModelOperation}
+        items={modelOperationOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }))} />
       <Card className="model-resource-card">
         <div className="model-content-toolbar">
           <div className="model-toolbar-actions">

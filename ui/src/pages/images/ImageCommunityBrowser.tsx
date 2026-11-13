@@ -1,9 +1,12 @@
 import { Alert, Button, Card, Empty, Input, Space, Spin, Table, Tag, Tooltip, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type CommunityRepo, type CommunityRepoBrowse, type CommunityTag } from "../../api";
+import { outboundPolicyApi } from "../../outboundPolicyApi";
+import CommunityBrowseApproval from "./CommunityBrowseApproval";
 import { formatTime } from "../../i18n/datetime";
 import { searchCommunityTags } from "./tagFilter";
+import { OutboundHostAccess, outboundHostName, useOutboundHostAccess } from "../../components/OutboundHostAccess";
 
 const { Text } = Typography;
 
@@ -13,6 +16,8 @@ export type CommunityPick = {
   engine: string;
   framework: string;
   engineVersion: string;
+  frameworkVersion: string;
+  arch: string;
   rollingTag: boolean;
 };
 
@@ -26,6 +31,17 @@ type Browse =
   | { state: "error"; repo: string; message: string }
   | { state: "done"; repo: string; result: CommunityRepoBrowse };
 
+// Match the community API's default tag-list route, not a node's image pull:
+// unqualified Docker references are read from hub.docker.com.
+function repositoryAPIAddress(repo: string): string {
+  const value = repo.trim();
+  if (!value || value.includes("://") || /[\s?#@\\]/.test(value)) return "";
+  const head = value.split("/", 1)[0];
+  const explicit = value.includes("/") && (head.includes(".") || head.includes(":") || head === "localhost");
+  const host = !explicit || head === "index.docker.io" || head === "registry-1.docker.io" ? "docker.io" : head.toLowerCase();
+  return `https://${host === "docker.io" ? "hub.docker.com" : host}`;
+}
+
 /**
  * ImageCommunityBrowser lists the built-in community repositories as cards
  * and every tag upstream holds for the one chosen — release, nightly and
@@ -34,18 +50,49 @@ type Browse =
  */
 export default function ImageCommunityBrowser({ onPick }: Props) {
   const { t } = useTranslation("images");
+  const { t: tCommon } = useTranslation("common");
   const [repos, setRepos] = useState<CommunityRepo[] | null>(null);
   const [reposError, setReposError] = useState("");
   const [manualRepo, setManualRepo] = useState("");
   const [browse, setBrowse] = useState<Browse>({ state: "idle" });
+  const [repoBrowses, setRepoBrowses] = useState<Record<string, Browse>>({});
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState("");
+  const [approvalRepo, setApprovalRepo] = useState("");
+  const requestVersion = useRef(0);
+  const configured = repos?.find((repo) => repo.repo.trim() === manualRepo.trim());
+  const reposReady = repos !== null && !reposError;
+  const accessUnknown = Boolean(manualRepo.trim()) && (!reposReady || Boolean(configured && !configured.access_host));
+  const accessAddress = reposReady ? (configured ? configured.access_host || "" : repositoryAPIAddress(manualRepo)) : "";
+  const access = useOutboundHostAccess([accessAddress], !accessUnknown);
 
   useEffect(() => {
     let alive = true;
     api
       .communityRepos()
-      .then((rows) => alive && setRepos(rows.items))
+      .then(async (rows) => {
+        if (!alive) return;
+        setRepos(rows.items);
+        // Mixed repositories have no single default. Their badges come from
+        // actual tags, with at most two background metadata requests at once.
+        const pending = rows.items.filter((card) => !card.engine || !card.framework);
+        let next = 0;
+        const load = async () => {
+          while (alive && next < pending.length) {
+            const card = pending[next++];
+            setRepoBrowses((current) => ({ ...current, [card.repo]: { state: "loading", repo: card.repo } }));
+            try {
+              const result = await api.browseCommunity(card.repo);
+              if (alive) setRepoBrowses((current) => ({ ...current, [card.repo]: { state: "done", repo: card.repo, result } }));
+            } catch (error) {
+              if (alive) setRepoBrowses((current) => ({ ...current, [card.repo]: {
+                state: "error", repo: card.repo, message: error instanceof Error ? error.message : String(error),
+              } }));
+            }
+          }
+        };
+        await Promise.all([load(), load()]);
+      })
       .catch((e) => {
         if (!alive) return;
         setRepos([]);
@@ -56,13 +103,17 @@ export default function ImageCommunityBrowser({ onPick }: Props) {
     };
   }, []);
 
-  const open = async (repo: string, card?: CommunityRepo) => {
+  const open = async (repo: string, card?: CommunityRepo, authorize = false) => {
     const target = repo.trim();
-    if (!target) return;
+    if (!target) return false;
+    const version = ++requestVersion.current;
     setBrowse({ state: "loading", repo: target });
     setQuery("");
     try {
+      if (authorize) await access.authorize();
       const result = await api.browseCommunity(target);
+      if (version !== requestVersion.current) return false;
+      setRepoBrowses((current) => ({ ...current, [target]: { state: "done", repo: target, result } }));
       // A sibling path lists its own tags but belongs to its card, so the
       // card's engine and framework stand in when the answer leaves them out.
       setBrowse({
@@ -74,9 +125,38 @@ export default function ImageCommunityBrowser({ onPick }: Props) {
           framework: result.framework || card?.framework || "",
         },
       });
+      return true;
     } catch (e) {
-      setBrowse({ state: "error", repo: target, message: e instanceof Error ? e.message : String(e) });
+      if (version === requestVersion.current) setBrowse({ state: "error", repo: target, message: e instanceof Error ? e.message : String(e) });
+      return false;
     }
+  };
+
+  const addressFor = (repo: string) => {
+    const exact = repos?.find((row) => row.repo.trim() === repo.trim());
+    return exact ? exact.access_host || "" : repositoryAPIAddress(repo);
+  };
+  const cardFor = (repo: string) => repos?.find((row) => row.repo === repo)
+    ?? repos?.find((row) => row.siblings?.includes(repo));
+  const openCard = async (repo: string) => {
+    const version = ++requestVersion.current;
+    setApprovalRepo("");
+    try {
+      const policy = await outboundPolicyApi.get();
+      if (version !== requestVersion.current) return;
+      if (policy.restrict_private_hosts) {
+        const address = addressFor(repo);
+        if (!address) { setApprovalRepo(repo); return; }
+        const host = outboundHostName(address);
+        const checks = await outboundPolicyApi.checkHosts([host]);
+        if (version !== requestVersion.current) return;
+        if (checks.find((item) => item.host === host)?.status !== "allowed") { setApprovalRepo(repo); return; }
+      }
+    } catch {
+      // Listing tags remains available to members who cannot read admin policy.
+      // No permission is written when the optional approval preflight fails.
+    }
+    if (version === requestVersion.current) await open(repo, cardFor(repo));
   };
 
   const visible = useMemo(
@@ -89,9 +169,11 @@ export default function ImageCommunityBrowser({ onPick }: Props) {
     setPicked(imageRef);
     onPick({
       imageRef,
-      engine: result.engine,
-      framework: result.framework,
+      engine: tag.engine || result.engine,
+      framework: tag.framework || result.framework,
       engineVersion: tag.engine_version || "",
+      frameworkVersion: tag.framework_version || "",
+      arch: tag.arch || "",
       rollingTag: Boolean(tag.rolling_tag),
     });
   };
@@ -110,27 +192,37 @@ export default function ImageCommunityBrowser({ onPick }: Props) {
           <Alert type="error" showIcon message={t("import.community.reposFailed")} description={reposError} />
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
-            {repos.map((card) => (
-              <Card key={card.repo} size="small" styles={{ body: { padding: 8 } }}>
-                <Space direction="vertical" size={2} style={{ width: "100%" }}>
-                  {[card.repo, ...(card.siblings ?? [])].map((path) => (
-                    <Button
-                      key={path}
-                      type={activeRepo === path ? "primary" : "link"}
-                      size="small"
-                      style={{ padding: activeRepo === path ? undefined : 0, maxWidth: "100%", whiteSpace: "normal", textAlign: "left", height: "auto" }}
-                      onClick={() => void open(path, card)}
-                    >
-                      {path}
-                    </Button>
-                  ))}
-                  <Space size={4}>
-                    <Tag color="blue">{card.engine}</Tag>
-                    <Tag>{card.framework}</Tag>
+            {repos.map((card) => {
+              const details = repoBrowses[card.repo];
+              const tags = details?.state === "done" ? (details.result.tags ?? []).filter((tag) => !tag.upstream_gone) : [];
+              const engines = [...new Set([card.engine, ...tags.map((tag) => tag.engine)].filter((value): value is string => Boolean(value)))];
+              const frameworks = [...new Set([card.framework, ...tags.map((tag) => tag.framework)].filter((value): value is string => Boolean(value)))];
+              return (
+                <Card key={card.repo} size="small" styles={{ body: { padding: 8 } }}>
+                  <Space direction="vertical" size={2} style={{ width: "100%" }}>
+                    {[card.repo, ...(card.siblings ?? [])].map((path) => (
+                      <Button
+                        key={path}
+                        type={activeRepo === path ? "primary" : "link"}
+                        size="small"
+                        style={{ padding: activeRepo === path ? undefined : 0, maxWidth: "100%", whiteSpace: "normal", textAlign: "left", height: "auto" }}
+                        onClick={() => void openCard(path)}
+                      >
+                        {path}
+                      </Button>
+                    ))}
+                    <Space size={[4, 4]} wrap>
+                      {engines.map((engine) => <Tag key={engine} color="blue">{engine}</Tag>)}
+                      {frameworks.map((framework) => <Tag key={framework}>{framework}</Tag>)}
+                      {details?.state === "loading" && <Spin size="small" />}
+                    </Space>
+                    {details?.state === "error" && (
+                      <Text type="secondary" title={details.message}>{t("import.community.tagsFailed", { repo: card.repo })}</Text>
+                    )}
                   </Space>
-                </Space>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
         <Space.Compact style={{ width: "100%" }}>
@@ -141,12 +233,17 @@ export default function ImageCommunityBrowser({ onPick }: Props) {
             placeholder={t("import.community.otherRepoPlaceholder")}
             value={manualRepo}
             onChange={(event) => setManualRepo(event.target.value)}
-            onPressEnter={() => void open(manualRepo)}
+            onPressEnter={() => void open(manualRepo, undefined, true)}
           />
-          <Button onClick={() => void open(manualRepo)} disabled={!manualRepo.trim()}>
+          <Button onClick={() => void open(manualRepo, undefined, true)} disabled={!manualRepo.trim()}>
             {t("import.community.browse")}
           </Button>
         </Space.Compact>
+        {accessUnknown && <p className="text-sm text-fg-muted">
+          {t("import.community.accessUnknown")}{" "}
+          <a className="underline" href="/settings#outbound-policy">{tCommon("outboundAccess.settings")}</a>
+        </p>}
+        <OutboundHostAccess access={access} />
         {browse.state === "loading" && (
           <Space>
             <Spin size="small" />
@@ -233,6 +330,8 @@ export default function ImageCommunityBrowser({ onPick }: Props) {
           </Space>
         )}
       </Space>
+      {approvalRepo && <CommunityBrowseApproval key={approvalRepo} repo={approvalRepo} address={addressFor(approvalRepo)}
+        onBrowse={() => open(approvalRepo, cardFor(approvalRepo))} onClose={() => setApprovalRepo("")} />}
     </Card>
   );
 }

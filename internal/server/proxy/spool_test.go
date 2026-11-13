@@ -186,36 +186,37 @@ func newCappedProxy(t *testing.T, maxBody int64, upstreamHit *bool) (*Proxy, str
 		*upstreamHit = true
 		w.WriteHeader(http.StatusOK)
 	}))
+	t.Cleanup(upstream.Close)
 	st, err := store.Open("file:proxy_cap_"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared", bus.New())
 	if err != nil {
-		upstream.Close()
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/omni", Revision: "main", Name: "omni"})
 	if err != nil {
-		upstream.Close()
 		t.Fatal(err)
 	}
 	node, err := st.RegisterNode("cap-node", store.HashToken("node"), "cap-node")
 	if err != nil {
-		upstream.Close()
 		t.Fatal(err)
 	}
 	dep, err := st.CreateDeployment(&store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: "omni", Engine: "vllm", State: "active"})
 	if err != nil {
-		upstream.Close()
 		t.Fatal(err)
 	}
 	if _, err := st.CreateInstance(&store.Instance{UUID: "omni-cap", DeploymentID: dep.ID, NodeID: node.ID, State: proto.InstRunning, APIPort: 30000, Ports: "[30000]"}); err != nil {
-		upstream.Close()
 		t.Fatal(err)
 	}
 	apiKey, err := st.CreateAPIKey("cap-test", 0)
 	if err != nil {
-		upstream.Close()
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), dialTestHub{addr: strings.TrimPrefix(upstream.URL, "http://")}, slog.New(slog.NewTextHandler(io.Discard, nil)), maxBody)
+	t.Cleanup(p.Close)
 	return p, apiKey, upstream.Close
 }
 

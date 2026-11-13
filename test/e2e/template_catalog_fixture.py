@@ -22,7 +22,8 @@ parameter_count: 4096
 readme_en: README.en.md
 specs:
   - name: {spec_name}
-    display_profile: general
+    display_name_zh_cn: 模板 · BF16
+    display_name_en: Template · BF16
     scenario: balanced
     engine: vllm
     image: gpuworks/fake-engine:test

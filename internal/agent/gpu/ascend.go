@@ -60,10 +60,10 @@ func (p *AscendProber) DetectRuntimePlugin(ctx context.Context, driver string) r
 	// The package name differs between Ascend releases. Keep the lookup
 	// conservative and report the first executable's version when exposed.
 	for _, binary := range []string{"ascend-docker-runtime", "ascend-container-runtime"} {
-		if _, err := exec.LookPath(binary); err != nil {
+		if _, err := lookCLI(binary); err != nil {
 			continue
 		}
-		out, err := exec.CommandContext(ctx, binary, "--version").CombinedOutput()
+		out, err := cliCommand(ctx, binary, "--version").CombinedOutput()
 		if err == nil {
 			return runtime.PluginInfo{Name: accelerator.PluginAscendDockerRuntime, Version: runtime.FirstVersion(string(out)), Installed: true}
 		}
@@ -79,7 +79,7 @@ func (p *AscendProber) DetectRuntimePlugin(ctx context.Context, driver string) r
 }
 
 func (p *AscendProber) Available() bool {
-	if _, err := exec.LookPath("npu-smi"); err != nil && p.runner == nil {
+	if _, err := lookCLI("npu-smi"); err != nil && p.runner == nil {
 		return false
 	}
 	_, err := p.info(context.Background())
@@ -125,11 +125,10 @@ func (p *AscendProber) Framework(ctx context.Context) (string, string) {
 		"/usr/local/Ascend/cann-*/aarch64-linux/ascend_toolkit_install.info",
 		"/usr/local/Ascend/cann-*/x86_64-linux/ascend_toolkit_install.info",
 	} {
-		matches, _ := filepath.Glob(pattern)
-		paths = append(paths, matches...)
+		paths = append(paths, globTool(pattern)...)
 	}
 	for _, path := range paths {
-		if raw, err := os.ReadFile(path); err == nil {
+		if raw, err := readTool(path); err == nil {
 			if version := parseCANNFrameworkVersion(string(raw)); version != "" {
 				return "cann", version
 			}
@@ -165,7 +164,7 @@ func parseCANNFrameworkVersion(text string) string {
 }
 
 func (p *AscendProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
-	if _, err := exec.LookPath("npu-smi"); err != nil && p.runner == nil {
+	if _, err := lookCLI("npu-smi"); err != nil && p.runner == nil {
 		return p.roster(nil, false), nil
 	}
 	out, err := p.info(ctx)
@@ -285,9 +284,13 @@ var ascendSharedDeviceNodes = []string{
 }
 
 // deviceNodeExists is the test seam for the check above; the offline suite
-// must not depend on what the build host happens to have under /dev.
+// must not depend on what the build host happens to have under /dev. A
+// privileged container's own /dev is a copy made at container start, so a
+// device node created later (the driver finishing its init after the agent
+// started) is missing there; statTool checks the host's live /dev instead
+// when CLIs run on it.
 var deviceNodeExists = func(path string) bool {
-	_, err := os.Stat(path)
+	_, err := statTool(path)
 	return err == nil
 }
 
@@ -298,9 +301,19 @@ var deviceNodeExists = func(path string) bool {
 // /dev/davinciN passthrough plus these five mounts is sufficient for
 // torch.npu.is_available() to return true — no CANN toolkit mount is needed
 // beyond what the inference image itself bakes in.
-var ascendNerdctlDriverMounts = []RuntimeMount{
+//
+// npu-smi is mounted from wherever the host has it: driver packages put it in
+// /usr/local/bin or /usr/local/sbin (openEuler 24.03, driver 25.5.1).
+func ascendNerdctlDriverMounts() []RuntimeMount {
+	smi := "/usr/local/bin/npu-smi"
+	if p, err := lookCLI("npu-smi"); err == nil && filepath.IsAbs(p) {
+		smi = p
+	}
+	return append([]RuntimeMount{{Source: smi, Target: smi, ReadOnly: true}}, ascendDriverMounts...)
+}
+
+var ascendDriverMounts = []RuntimeMount{
 	{Source: "/usr/local/dcmi", Target: "/usr/local/dcmi", ReadOnly: true},
-	{Source: "/usr/local/bin/npu-smi", Target: "/usr/local/bin/npu-smi", ReadOnly: true},
 	{Source: "/usr/local/Ascend/driver/lib64", Target: "/usr/local/Ascend/driver/lib64", ReadOnly: true},
 	{Source: "/usr/local/Ascend/driver/version.info", Target: "/usr/local/Ascend/driver/version.info", ReadOnly: true},
 	{Source: "/etc/ascend_install.info", Target: "/etc/ascend_install.info", ReadOnly: true},
@@ -309,7 +322,10 @@ var ascendNerdctlDriverMounts = []RuntimeMount{
 // RuntimeInjectionForDriver implements DriverAwareInjector. Every driver
 // other than nerdctl keeps the device-injection shape from RuntimeInjection.
 // Rootless execution resolves host logical IDs for ACL; Docker keeps compact
-// container ordinals. nerdctl has no Ascend Docker Runtime plugin
+// container ordinals. The kube runtime hands the --device nodes to the pod
+// through the agent's device plugin and the mounts as host paths, so it
+// takes the nerdctl form too, without needing the runtime on the node.
+// nerdctl has no Ascend Docker Runtime plugin
 // (docs/dev/ledgers/engineering-log.md "Ascend device injection for the nerdctl runtime driver"), so
 // it gets raw device passthrough plus explicit driver/DCMI mounts instead of
 // --runtime ascend. Device paths are passed unrenamed
@@ -327,7 +343,7 @@ func (p *AscendProber) RuntimeInjectionForDriver(indexes []int, driverName strin
 		base.Env[accelerator.AscendEnvNPUVisible] = visible
 		return base
 	}
-	if driverName != "nerdctl" || len(indexes) == 0 {
+	if (driverName != "nerdctl" && driverName != "kube") || len(indexes) == 0 {
 		return base
 	}
 	containerDevices := compactVisibleDevices(len(indexes))
@@ -352,7 +368,7 @@ func (p *AscendProber) RuntimeInjectionForDriver(indexes []int, driverName strin
 			accelerator.AscendEnvNPUVisible:       containerDevices,
 		},
 		DockerArgs: args,
-		Mounts:     append([]RuntimeMount(nil), ascendNerdctlDriverMounts...),
+		Mounts:     ascendNerdctlDriverMounts(),
 	}
 }
 

@@ -9,6 +9,8 @@ const { cleanup, render, screen, waitFor, act } = await import("@testing-library
 const { Form, Input, message } = await import("antd");
 const { default: useDeploySubmit } = await import("../src/pages/deploy/useDeploySubmit.ts");
 const { default: DeploySubmitBar } = await import("../src/pages/deploy/DeploySubmitBar.tsx");
+const { default: DeploySubmissionError } = await import("../src/pages/deploy/DeploySubmissionError.tsx");
+const { APIError } = await import("../src/apiError.ts");
 const { api } = await import("../src/api.ts");
 type FormInstance = import("antd").FormInstance;
 type EvaluateResponse = import("../src/api.ts").EvaluateResponse;
@@ -29,7 +31,7 @@ function mount() {
   api.createDeployment = (async (body: unknown) => { requests.push(body); return { id: 1 }; }) as never;
   function Harness() {
     [form] = Form.useForm();
-    const { submit, submitting } = useDeploySubmit({ form, nodes: [], evalErr: null,
+    const { submit, submitting, submitError } = useDeploySubmit({ form, nodes: [], evalErr: null,
       evaluating: false, evalResult: evaluated, onCreated: () => {} });
     return <Form form={form} initialValues={{ model_id: 3, node_selection_mode: "auto", nnodes: 1 }}>
       <Form.Item name="name" label="Deployment name" rules={[{ required: true, message: "Enter a deployment name" }]}>
@@ -40,6 +42,7 @@ function mount() {
         // broken implementation into a process-level unhandled rejection.
         pending = submit().catch((error) => { rejections.push(error); });
       }} />
+      <DeploySubmissionError error={submitError} />
     </Form>;
   }
   render(<I18nextProvider i18n={i18n}><Harness /></I18nextProvider>);
@@ -62,6 +65,21 @@ test("required-field rejection stays in the form and a corrected draft can creat
   await harness.click();
   assert.equal(harness.requests.length, 1);
   assert.equal((harness.requests[0] as Record<string, unknown>).name, "corrected");
+  assert.deepEqual(harness.rejections, []);
+});
+
+test("a rejected create retains its checks and request ID beside the unchanged draft", async () => {
+  const harness = mount();
+  const checks = { checks: [{ id: "node:7", status: "failed", message: {
+    code: "MODEL_SOURCE_UNAVAILABLE", params: { reason: "not_on_node", node: "gpu-a", model: "local-model", observer: "control_plane" }, message: "no complete model record",
+  } }] };
+  api.createDeployment = async () => { throw new APIError("MODEL_SOURCE_UNAVAILABLE", {}, "source unavailable", 400, checks, "r215"); };
+  await act(async () => harness.getForm().setFieldValue("name", "retained-draft"));
+  await harness.click();
+  await screen.findByText("The last create attempt failed; your draft is preserved.");
+  assert.ok(screen.getByText("This node has no complete model-copy record. Check other copies or prepare the model first."));
+  assert.ok(screen.getByText("Request ID: r215"));
+  assert.equal(harness.getForm().getFieldValue("name"), "retained-draft");
   assert.deepEqual(harness.rejections, []);
 });
 

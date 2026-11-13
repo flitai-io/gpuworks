@@ -8,8 +8,6 @@ package gpu
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
 	"sync"
 	"time"
 
@@ -27,6 +25,8 @@ type RuntimeInjection struct {
 	DockerArgs        []string
 	Mounts            []RuntimeMount
 	UnsupportedReason string
+	// Failure augments the legacy reason; old backends need not implement it.
+	Failure *proto.RuntimeFailure
 }
 
 // RuntimeSelectionCleanup identifies only accelerator-owned workload settings.
@@ -56,6 +56,51 @@ type RuntimeMount struct {
 // driver.
 type DriverAwareInjector interface {
 	RuntimeInjectionForDriver(indexes []int, driverName string) RuntimeInjection
+}
+
+// TopologyAwareInjector extends the same device-injection seam for backends
+// whose distributed transport needs extra devices. Its result includes the
+// selected accelerators and transport together; failure exposes neither.
+// The input slices are borrowed read-only for this call. The caller owns the
+// returned resources; implementations must not retain or modify its inputs.
+type TopologyAwareInjector interface {
+	RuntimeInjectionForLaunch(ctx context.Context, req InjectionRequest) RuntimeInjection
+}
+
+// InjectionRequest is what the caller knows about the workload whose devices
+// it is asking for. DriverName is the container runtime driver that will start
+// it, NNodes its rank count, and DockerArgs the options already resolved for
+// it (the compute network's, among others), which a backend may require but
+// must not duplicate. Env and the other request fields are read-only for the
+// prober.
+type InjectionRequest struct {
+	Indexes    []int
+	DriverName string
+	NNodes     int
+	DockerArgs []string
+	Env        map[string]string
+}
+
+// ResolveInjection asks a prober for its device injection through the most
+// specific seam it implements. It is the one place the optional extensions
+// above are dispatched, so a launch and the doctor that is supposed to
+// predict it ask the same question of the same backend.
+//
+// Asking through a plainer seam than the backend implements means inventing
+// the facts the seam leaves out: a caller that drops DriverName has to assume
+// some container runtime, and a backend whose contract depends on it then
+// answers for a host that may not be this one.
+func ResolveInjection(ctx context.Context, p Prober, req InjectionRequest) RuntimeInjection {
+	switch injector := p.(type) {
+	case nil:
+		return RuntimeInjection{}
+	case TopologyAwareInjector:
+		return injector.RuntimeInjectionForLaunch(ctx, req)
+	case DriverAwareInjector:
+		return injector.RuntimeInjectionForDriver(req.Indexes, req.DriverName)
+	default:
+		return injector.RuntimeInjection(req.Indexes)
+	}
 }
 
 // AcceleratorPortProber is an optional Prober extension for accelerators
@@ -136,12 +181,26 @@ func New() Prober {
 	return fallbackProber(probers, deviceExists, commandExists, bus)
 }
 
-// Preserve a failed physical backend when AMD would otherwise be the
-// automatic winner. An operator can still explicitly select AMD with NewFor.
+// Prefer physical native evidence over an answering compatibility CLI.
+// NewFor remains authoritative when an operator explicitly chooses a backend.
 func firstAvailableWithBus(probers []Prober, onBus func(string) bool) Prober {
 	for _, p := range probers {
 		if p == nil || !p.Available() {
 			continue
+		}
+		// A CUDA-compatible CLI can answer even when a native driver has failed.
+		// Without a physical NVIDIA card, retain the earlier native PCI owner so
+		// the failure remains attributable. An actual NVIDIA card is still a valid
+		// fallback on a mixed host. This does not invent PCI facts in containers.
+		if p.Vendor() == accelerator.VendorNVIDIA && !onBus(accelerator.VendorNVIDIA) {
+			for _, native := range probers {
+				if native != nil && native.Vendor() == p.Vendor() {
+					break
+				}
+				if native != nil && onBus(native.Vendor()) {
+					return native
+				}
+			}
 		}
 		if p.Vendor() == accelerator.VendorAMD {
 			for _, other := range probers {
@@ -153,13 +212,6 @@ func firstAvailableWithBus(probers []Prober, onBus func(string) bool) Prober {
 		return p
 	}
 	return nil
-}
-
-// cardsOnBus reports, per vendor, whether the host's PCI bus has one of its
-// cards. The bus is read once, on the first question.
-func cardsOnBus(hostRoot string) func(vendor string) bool {
-	all, _ := pciBusVendors(hostRoot)
-	return all
 }
 
 // pciBusVendors shares one scan between fallback evidence and managed choices.
@@ -185,11 +237,14 @@ func pciBusVendors(hostRoot string) (func(string) bool, func(string) bool) {
 // host's real vendor, and reporting it keeps the failure attributable (for
 // example "npu-smi: dcmi module initialize failed" instead of "0 NVIDIA GPUs").
 var vendorDeviceFiles = map[string][]string{
-	accelerator.VendorNVIDIA: {"/dev/nvidiactl"},
-	accelerator.VendorAscend: {"/dev/davinci_manager"},
-	accelerator.VendorPPU:    {"/dev/alixpu_ctl"},
+	accelerator.VendorKunlunxin: {"/dev/xpuctrl"},
+	accelerator.VendorNVIDIA:    {"/dev/nvidiactl"},
+	accelerator.VendorAscend:    {"/dev/davinci_manager"},
+	accelerator.VendorPPU:       {"/dev/alixpu_ctl"},
 }
 
+// xpu-smi is deliberately absent: Intel uses that name too. Kunlun fallback
+// needs its control device or PCI identity, not an executable name alone.
 // vendorCommands are the CLIs each backend queries its driver with, in the
 // order fallbackProber trusts them: NVIDIA's last, because a stale
 // nvidia-smi is the one commonly left on hosts of other vendors.
@@ -200,13 +255,17 @@ var vendorCommands = []struct{ vendor, command string }{
 	{accelerator.VendorNVIDIA, "nvidia-smi"},
 }
 
+// deviceExists checks the host's live /dev when CLIs run there: a
+// privileged container's own /dev is a copy made at container start, so a
+// device node created afterward (a driver still initializing) would
+// otherwise be reported missing.
 func deviceExists(path string) bool {
-	_, err := os.Stat(path)
+	_, err := statTool(path)
 	return err == nil
 }
 
 func commandExists(name string) bool {
-	_, err := exec.LookPath(name)
+	_, err := lookCLI(name)
 	return err == nil
 }
 
@@ -255,7 +314,7 @@ func defaultProbers() []Prober {
 	// Keep the existing automatic-probe order stable. AMD is an explicit
 	// choice on mixed-vendor nodes; inserting it before NVIDIA would silently
 	// change which vendor the single-prober agent reports in auto mode.
-	return []Prober{&HygonProber{}, &AscendProber{}, &PPUProber{}, &SMIProber{}, &AppleProber{}, &AMDProber{}}
+	return []Prober{&HygonProber{}, &AscendProber{}, &PPUProber{}, &KunlunProber{}, &SMIProber{}, &AppleProber{}, &AMDProber{}}
 }
 
 func firstAvailable(probers []Prober) Prober {

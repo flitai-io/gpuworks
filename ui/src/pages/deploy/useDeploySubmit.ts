@@ -42,6 +42,7 @@ export default function useDeploySubmit({
   const { t } = useTranslation("deploy");
   const { t: tCommon } = useTranslation("common");
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<Error | null>(null);
   // Why an automatic draft has no node to create on, from the evaluation the
   // deployer is looking at.
   const placementRefusedText = () => {
@@ -181,11 +182,13 @@ export default function useDeploySubmit({
       }
     }
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await api.createDeployment(body);
       message.success(t("action.created"));
       onCreated();
     } catch (e) {
+      setSubmitError(e instanceof Error ? e : new Error(String(e)));
       const detail = apiErrorText(tCommon, e);
       // The served name is the deployer's to change: say so at the field.
       if (e instanceof APIError && e.code === "SERVED_NAME_IN_USE") {
@@ -196,5 +199,5 @@ export default function useDeploySubmit({
       setSubmitting(false);
     }
   };
-  return { submit, submitting };
+  return { submit, submitting, submitError };
 }

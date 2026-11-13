@@ -9,9 +9,9 @@
 | 问题 | 影响 | 搁置理由 |
 | T20：`Model.WeightBytes` 沿用声明值，下载后不回写实际大小 | 目录/元数据声明错误时长期停留，planning 的显存与磁盘估算一直读错误值且无告警 | 声明值只用于调度前粗筛，真正放不下由引擎启动失败兜底；目录 spec 的声明值至今未见错误 |
 | T41：删除节点副本不等待节点间模型同步的接收端结束 | 删除之后被取消的同步仍可能把临时目录改名回来，磁盘上留下 server 已无记录的模型目录 | 未证实、未复现；窗口是删除与 rename 之间，后果是一份孤立目录占盘，不影响正确性 |
-| T40：昇腾 vCANN 与分区探针拼 `LD_LIBRARY_PATH` 不去重、不丢空段 | 重复项只是冗余；空段让加载器搜当前目录 | 空段是镜像自带的，不是本仓库引入的；去掉它等于替镜像作者改写环境，需要昇腾机器实测后再决定 |
+| T40：昇腾 vcann-rt 与分区探针拼 `LD_LIBRARY_PATH` 不去重、不丢空段 | 重复项只是冗余；空段让加载器搜当前目录 | 空段是镜像自带的，不是本仓库引入的；去掉它等于替镜像作者改写环境，需要昇腾机器实测后再决定 |
 | T53：按卡推出的显存份额进了表单草稿后会粘住 | 同一表单会话里换到大卡节点，份额仍是小卡算出的值，大卡上白留显存 | 方向安全（少用不会 OOM）；修它要新增 DTO 字段区分「平台推的值」与「用户填的值」，属 `todo.md` T6 的一部分 |
-| T54：`internal/server/api` 在 `-race` 下跑不完 `go test` 的 10m 默认超时 | 按 `CLAUDE.md` 的提交前检查逐字执行，必然看到一个长得像失败的红（超时后的 goroutine dump，不是 DATA RACE） | 先在规约里写明 race 检查要带 `-timeout`；给它一个带足超时的 target 属于另一件事 |
+| T54：`internal/server/api` 跑不完 `go test` 的 10m 默认超时（不带 race 也已到边上） | 按 `CLAUDE.md` 的提交前检查逐字执行，必然看到一个长得像失败的红（超时后的 goroutine dump，不是 DATA RACE）；不带 race 实测约 620–650s，同样会撞上 600s | 先在规约里写明 race 检查要带 `-timeout`；给它一个带足超时的 target 属于另一件事 |
 | T45：时间线折叠 SQL 只为历史事件行存在 | `instance_timeline.go` 用 `json_extract` 取旧行的 `$.state`/`$.phase`，是迁移之外唯一看进 JSON 的 SQL（`store_sql_json_lines` 为 2） | 现在无事可做：要等 2026-09-17 之前写下的事件行随保留期（默认 180 天）淘汰，约 2027-03 |
 | T61：通用 `PUT /settings/{key}` 只要求登录、不限 key | `user` 角色可以写任意设置行，包括全局网络/镜像配置、`orphan_cleanup`、有 admin 专用路由的 `storage_policy`/`control_plane` 与试验场的 `security` 策略 | 平台目前只有管理员用户，`user` 角色没有实际使用者 |
 | T66：平台因容器运行时无法使用加速卡而自动停止调度后，原因消失也不会自动恢复 | 装好插件、或 docker 重新配置 nvidia runtime 之后，节点仍是「停止调度」，要运维手动开启 | 你定过「不加锁定字段」：自动恢复要新增一个「停调来源」事实，才能只撤销平台自己设的停调而不碰运维的；偶发的 daemon 无应答已不再触发停调，误停的来源已去掉 |
@@ -24,6 +24,7 @@
 | T103：udocker CLI 路径拉取还没完成，节点镜像行就显示「已存在」 | 拉取卡住或失败时界面仍显示镜像在节点上 | 同 T102 |
 | T107：用量分析按卡型筛选逐卡列出时，漏掉从仍在的节点上拔掉、而该节点已没有这种卡的卡 | 这张卡的历史只在汇总行与总计里，逐卡列表与热力图（按单卡）里没有它，两边差这一张 | 修它要在只按卡型筛选时扫这个卡型全部卡的统计行，规模大时代价高；触发要换卡且换成别的型号，节点删除的情况已覆盖 |
 | T108：agent 状态目录在宿主 `/tmp` 下时，udocker 工作负载找不到宿主路径下的库 | runveil 给容器私有 `/tmp` 的绑定盖住了放在 `ROOT/tmp/...` 下的宿主路径回环链接，引擎按宿主路径打开 `libcudart` 等库时失败 | 只在状态目录装在宿主 `/tmp` 下时触发；安装脚本与各云厂商一键安装都默认 `/opt/gpuworks`，测试夹具也已改用 `/opt` |
+| T109：Strata 的宿主机内存不参与准入 | 低内存节点可能通过每卡 12 GiB 显存检查后，在 setup 阶段失败或产生内存压力 | 本次仅发布目录规格；可先核对可用内存、标记合适节点并在部署时手动选择 |
 
 ## T20. 模型权重字节对账：下载完成后不回写实际大小
 
@@ -35,7 +36,7 @@
 
 ### 现状
 
-- `store.Model.WeightBytes`（`internal/server/store/entities_model.go:22`）只在模型注册/绑定目录档位时写入一次：`persistCatalogWeight`（`internal/server/api/deployments_evaluate.go:73-84`）只在 `model.WeightBytes` 当前为 0 时，才把目录档位声明的 `selection.Spec.WeightBytes` 回填进去，之后不再覆盖；`model_url_register.go`、`model_local_register.go`、`model_quick_register.go` 同样只在注册时各写一次估算/声明值。
+- `store.Model.WeightBytes`（`internal/server/store/entities_model.go:22`）只在模型注册/绑定目录档位时写入一次：`persistCatalogWeight`（`internal/server/deployment/evaluate.go:37-48`，由 `evaluate_plan.go` 调用）只在 `model.WeightBytes` 当前为 0 时，才把目录档位声明的 `selection.Spec.WeightBytes` 回填进去，之后不再覆盖；`model_url_register.go`、`model_local_register.go`、`model_quick_register.go` 同样只在注册时各写一次估算/声明值。
 - 节点侧其实有更接近真实的字节数：`store.ModelFile.SizeBytes`（`entities_model.go:48`）在下载过程中随 agent 上报的 `st.BytesTotal` 更新（`internal/server/store/deploy.go:335-336`），下载完成后落在该节点该模型的 `ModelFile` 行上；但这个值只喂给该节点的磁盘占用/驱逐核算（`internal/server/store/model_eviction.go`），从未回写到全局的 `Model.WeightBytes`。
 - 结果：`Model.WeightBytes` 一旦声明错误（目录 spec 写错、HTTP 导入的目录列举估算偏差、HF/ModelScope index 与实际 shard 不一致等），会一直错下去；`internal/server/planning/planning.go:124-141` 的显存与磁盘需求估算全程读这个声明值，不会拿 `ModelFile.SizeBytes` 交叉核对，也不产生任何告警或不一致记录。
 
@@ -69,7 +70,7 @@
 
 - 同步进行中删除副本：删除返回后接收端已结束，目录不会再出现；有 hermetic 用例覆盖。
 
-## T40. 昇腾 vCANN 与分区探针拼 `LD_LIBRARY_PATH` 不去重、不丢空段
+## T40. 昇腾 vcann-rt 与分区探针拼 `LD_LIBRARY_PATH` 不去重、不丢空段
 
 **搁置记录**：2026-10-02 决定暂不修，原记录的两个毛病性质不同，核实后都不适合当成普通缺陷直接改。
 
@@ -134,6 +135,11 @@
 
 ## T54. `internal/server/api` 在 `-race` 下跑不完默认超时
 
+**2026-11-12 更新**：同一台机器、前后相邻实测，不带 race 已是 624s（8ac050aa0）与 646s（部署创建/评估迁入
+`internal/server/deployment` 之后），都超过默认 600s；`make test` 的 Go 套件带足了超时，不受影响。迁出的约 130 个用例
+改在 `deployment` 下跑（约 30s），api 包的耗时主要在留下的 handler 测试与几个按集群规模跑的用例
+（如 `TestSchedulingActivityAtFleetScale` 约 78s）。`api_fanout` 现为 48。
+
 **搁置记录**：2026-10-03 决定暂不修。这不是竞态，是耗时：该包不带 race 实测 95s，带 race 实测 1835s
 （约 31 分钟，零 DATA RACE），而 `go test` 的默认超时是 10 分钟。所以照 `CLAUDE.md`
 「提交前检查：…相关包 `go test -race`」逐字执行，这个包必然在 601s 处超时并打印一大段 goroutine dump ——
@@ -145,7 +151,7 @@
 
 **为什么暂不做**：真正的修法有两种，都不该顺手塞进别的 MR ——
 给 race 检查一个 Makefile target（要决定覆盖哪些包、是否进 CI、CI 时长预算），
-或者拆分这个包（它已是全仓扇出最高的包，`api_fanout` 有 38 的棘轮预算盯着）。
+或者拆分这个包（它已是全仓扇出最高的包，`api_fanout` 有棘轮预算盯着，当时为 38）。
 眼下的实际影响是"执行规约的人会看到一次假红"，代价是一次困惑而不是一个缺陷。
 
 ### 要动这项时
@@ -349,3 +355,12 @@
 ### 验收条件
 
 - 状态目录位于宿主 `/tmp` 下时，要么安装前明确报错，要么 udocker 工作负载能正常打开宿主路径下的库；有对应的离线测试。
+
+
+## T109. Strata 的宿主机内存不参与准入
+
+**搁置记录**：2026-11-12 review 确认暂不在本次 Strata 目录发布中扩展内存准入逻辑。当前可通过人工核对资源并限制部署节点规避；若需要自动放置到混合内存节点，应另行设计宿主机内存准入与记账。
+
+**现象与原因**：Strata 的 placement 只要求每张分配的 GPU 至少有 12 GiB 显存，不检查宿主机可用内存，也不预留容器内存。固定版本 setup 对 IQ2_XS、Q2_0、IQ3_XXS、IQ3_S 的内存建议分别为 48、48、60、62 GB；这些是准备阶段的建议，不是实测峰值或 GPUWorks 准入条件。低内存节点可能被选中，然后在 setup 阶段失败，或在准备、加载和运行时产生内存压力。
+
+**规避方式**：部署前核对节点当前可用内存与容器内存上限，为上下文、准备过程及其他进程留出余量。给满足所选量化要求的节点加标签，部署时据此筛选并手动选择节点，避免自动放置到低内存节点。标签仅帮助运维识别合适节点，不会触发内存预留，也不能防止其他任务消耗内存。PLE RAM 模式还需额外检查内存和 memlock 条件。

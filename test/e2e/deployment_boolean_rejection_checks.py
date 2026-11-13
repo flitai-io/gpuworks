@@ -19,7 +19,7 @@ from platform_token_read_revoke import check
 from deployment_batch_checks import rejected_notice
 from deployment_boolean_contracts import evaluate_body, reviewed_profile, same
 from deployment_boolean_inventory_contracts import (
-    SLEEP_SUPPORTED, expected_ids, fixture_hardware, health_contract, rows,
+    CARRIED_MARK, SLEEP_SUPPORTED, expected_ids, fixture_hardware, health_contract, rows,
 )
 import deployment_boolean_inventory as inventory
 
@@ -79,10 +79,33 @@ def plan(body):
             'baseline_cache_wire': params[CACHE]}
 
 
-def seeded_body(body, pending_mount):
+# Values the form itself pinned that no evaluation reports: entering manual command
+# mode rewrites dtype in the form (ADR 0020 rule 6) without sending it as an
+# evaluation, so the create body is the first place it surfaces. Keyed by run id
+# so a stale entry cannot leak into another run.
+form_pinned = {}
+
+
+def seeded_body(body, pending_mount, report=None):
+    """The create body this case submits: the fixture, seeded, plus anything
+    this session already made explicit.
+
+    Creating submits the whole displayed configuration (ADR 0020 rule 3), so it
+    carries the values earlier steps pinned - entering manual command mode fixes
+    dtype to the concrete value the page showed (rule 6) and leaving text mode
+    does not restore "auto". Reading them from the live wire keeps every caller
+    (create assertions and refusal checks alike) on the same description.
+    """
     plan(body)
     mount_contract(body, pending_mount)
     result = copy.deepcopy(body)
+    if report is not None:
+        # Carried values first, then the seed: the seed is what this case set on
+        # the controls, so it has to win over anything the warm read reported.
+        result['quick_params'].update(_carried_quick(report))
+        form_dtype = form_pinned.get(report.get('run_id'))
+        if form_dtype:
+            result['quick_params']['dtype'] = form_dtype
     result['quick_params'].update({CACHE: False, PREFIX: True})
     result['container_overrides']['extra_mounts'] = [
         *copy.deepcopy(body['container_overrides'].get('extra_mounts', [])), copy.deepcopy(pending_mount)]
@@ -90,7 +113,26 @@ def seeded_body(body, pending_mount):
 
 
 def expected_bad_body(body, report):
-    return seeded_body(body, _pending(report)) if enabled(report) else copy.deepcopy(body)
+    if not enabled(report):
+        return copy.deepcopy(body)
+    return seeded_body(body, _pending(report), report)
+
+
+
+def restored_quick(report):
+    """The quick values the form holds after the restore checkpoint.
+
+    The restore checkpoint puts CACHE/PREFIX back to the fixture's own values and
+    a later create submits them, because a stated value stays stated (ADR 0020
+    rule 3). Computed from the restore plan so it describes the values that were
+    actually asked for rather than copying back whatever the wire happened to say.
+    """
+    body = (report.get('boolean_rejection') or {}).get('baseline')
+    if not body:
+        return {}
+    values = plan(body)['restore']
+    return {key: values[key] == 'on' for key in (CACHE, PREFIX)
+            if values[key] != 'auto'}
 
 
 def expected_mutations(original, report):
@@ -100,14 +142,23 @@ def expected_mutations(original, report):
               and expected[0]['path'] == '/api/v1/deployments'
               and expected[0]['query'] == '' and expected[0]['body']['name'] == INVALID_NAME,
               '6.5 rejected-mutation binding must be the literal first invalid-name create')
-        expected[0]['body'] = seeded_body(expected[0]['body'], _pending(report))
+        expected[0]['body'] = seeded_body(expected[0]['body'], _pending(report), report)
+        # dtype is pinned in the form by entering manual command mode and every
+        # later create submits it (ADR 0020 rules 3 and 6). A case can publish the
+        # exact value it pinned; without one the fixture's own value stands.
+        pinned = form_pinned.get(report.get('run_id'))
+        if pinned:
+            for mutation in expected:
+                body = mutation.get('body')
+                if isinstance(body, dict) and isinstance(body.get('quick_params'), dict):
+                    body['quick_params']['dtype'] = pinned
     return expected
 
 
-def refusal(body, kind, pending_mount):
+def refusal(body, kind, pending_mount, report=None):
     acquisition = 'E2E_ACQUISITION' in body['container_overrides']['env']
     same(kind, 'provider' if acquisition else 'name', '6.5 fixed fixture save-refusal trigger')
-    bad = seeded_body(body, pending_mount)
+    bad = seeded_body(body, pending_mount, report)
     if kind == 'name':
         bad['name'] = INVALID_NAME
         error = {'code': 'FIELD_INVALID', 'error': 'name ' + NAME_DETAIL,
@@ -119,8 +170,8 @@ def refusal(body, kind, pending_mount):
     return bad, error
 
 
-def assert_refusal(record, body, kind, pending_mount):
-    bad, error = refusal(body, kind, pending_mount)
+def assert_refusal(record, body, kind, pending_mount, report=None):
+    bad, error = refusal(body, kind, pending_mount, report)
     same(record, {'method': 'POST', 'path': '/api/v1/deployments', 'query': '',
                   'body': bad, 'status': 400, 'response': error},
          '6.5 exact real refusal method/path/query/body/status/error')
@@ -260,6 +311,20 @@ def _matrix(page, labels, body, report, token, phase):
     row was seeded before expiry. No field changes or API mocks occur here.
     """
     import deployment_launch_checks as launch
+    # The page shows the values it is actually carrying, which include every key
+    # this session edited (ADR 0020 rule 3). seeded_body describes the create
+    # body - where the whole displayed set is submitted - so reading it directly
+    # would expect the fixture's pristine values and call a correctly retained
+    # control a defect. Mirror the live state onto the inspection copy so
+    # initial() judges the controls by what they show.
+    body = copy.deepcopy(body)
+    carried = _carried_quick(report)
+    if carried:
+        body[CARRIED_MARK] = carried
+    report['boolean_rejection'].setdefault('matrix_debug', []).append(
+        {'phase': phase, 'carried': carried,
+         'merged': {k: v for k, v in (carried or {}).items()
+                    if k in ('enable_prefix_caching', 'enable_cache_report')}})
     evidence = {'records': [], 'gaps': [], 'phase': phase}
     report['boolean_rejection']['checkpoints'][phase] = evidence
     _preconditions(page, body, report, token, evidence)
@@ -330,6 +395,31 @@ def _positions(page, labels, positions, body, report):
                       labels['workbench']['triState' + {'on': 'On', 'off': 'Off', 'auto': 'Auto'}[positions[key]]])
 
 
+
+def _carried_quick(report):
+    """The quick values the page was already sending before this action.
+
+    An edit stays explicit for the rest of the session (ADR 0020 rule 3), so the
+    case that walked the inventory and the tristate controls earlier is still
+    carrying those keys now. Reading them from the last real wire describes what
+    the page actually does instead of guessing which controls were touched.
+    """
+    latest = {}
+    for record in reversed(report.get('launch_evaluations') or []):
+        request = record.get('request') or {}
+        quick = request.get('quick_params')
+        if isinstance(quick, dict):
+            # The newest evaluation describes the current authored set, and the
+            # dtype pinned by manual command mode is first seen here too - it never
+            # appears in an evaluation that only touched a boolean, so a plain
+            # "last request wins" would lose it after the first quick-mode step.
+            if not latest:
+                latest.update(quick)
+            if 'dtype' in quick:
+                latest.setdefault('dtype', quick['dtype'])
+    return latest
+
+
 def _wire(page, labels, body, report, phase, positions=None, mount_action=None):
     import deployment_launch_checks as launch
     route = page.get_by_role('textbox', name=labels['basic']['servedName'], exact=True)
@@ -342,6 +432,43 @@ def _wire(page, labels, body, report, phase, positions=None, mount_action=None):
         route.fill(marker)
     expected = evaluate_body(body)
     expected['served_name'] = marker
+    # The action sets exactly the two controls in _positions, so those two keys
+    # are the authored ones and the only quick values the evaluation carries
+    # (ADR 0020 rule 3). seeded_body still describes the create body, where the
+    # complete displayed set is submitted, which is why body's other fixture
+    # values must not appear here.
+    # ADR 0020 rule 3 keeps a key explicit from the moment the operator edits it
+    # until the page is replaced, so a case that walked the whole inventory
+    # earlier in the same session still carries those keys here with the values
+    # they were restored to. `authored` names them; this action adds CACHE and
+    # PREFIX. Every other fixture value must stay absent, so an extra key is
+    # still a failure.
+    sent_quick = {}
+    for key, value in _carried_quick(report).items():
+        # dtype is pinned in the form but never travels through an evaluation -
+        # EvaluateQuickParams only ever carries keys the operator authored there.
+        # The create bodies below still describe it; an evaluate body must not.
+        if key == 'dtype':
+            continue
+        sent_quick[key] = value
+    if positions is not None:
+        for key in (CACHE, PREFIX):
+            # Auto states no value, and EvaluateQuickParams drops a key that has
+            # no authored value rather than sending false - "off" and "unstated"
+            # are different answers, which is the whole point of the tri-state.
+            if positions[key] == 'auto':
+                sent_quick.pop(key, None)
+            else:
+                sent_quick[key] = positions[key] == 'on'
+    if sent_quick:
+        expected['quick_params'] = sent_quick
+    else:
+        expected.pop('quick_params', None)
+    # Seed from what the page is already sending: an earlier phase's edits stay
+    # explicit (ADR 0020 rule 3) and re-deriving them here would only guess at
+    # which controls this session touched. The action's own keys override theirs,
+    # and the whole-object comparison below still rejects any key that neither
+    # source named.
     observed = launch.evaluation(page, action, lambda wire: wire.get('served_name') == marker,
         report, 'boolean-rejection-' + phase + '-wire')
     same(observed['request'], expected, '6.5 complete independent ' + phase + ' evaluate wire')
@@ -349,7 +476,15 @@ def _wire(page, labels, body, report, phase, positions=None, mount_action=None):
     restored = launch.evaluation(page, lambda: route.fill(body['served_name']),
         lambda wire: wire.get('served_name') == body['served_name'], report,
         'boolean-rejection-' + phase + '-restore-route')
-    same(restored['request'], evaluate_body(body), '6.5 complete ' + phase + ' route restoration')
+    # Restoring the served name does not unauthor the quick keys the phase set;
+    # they travel with the values they hold (ADR 0020 rule 3), so the expected
+    # body is the same one this phase just accepted.
+    restoration = evaluate_body(body)
+    if sent_quick:
+        restoration['quick_params'] = sent_quick
+    else:
+        restoration.pop('quick_params', None)
+    same(restored['request'], restoration, '6.5 complete ' + phase + ' route restoration')
 
 
 def seed(page, labels, body, report, token, pending_mount, pending_storage_id=None):
@@ -383,7 +518,7 @@ def retained(page, labels, body, report, token, response, kind):
     parts = urlsplit(response.url)
     record = {'method': response.request.method, 'path': parts.path, 'query': parts.query,
         'body': response.request.post_data_json, 'status': response.status, 'response': response.json()}
-    assert_refusal(record, body, kind, _pending(report))
+    assert_refusal(record, body, kind, _pending(report), report)
     report['boolean_rejection']['rejected_wire'] = record
     common = _common(report)
     _, error = refusal(body, kind, _pending(report))

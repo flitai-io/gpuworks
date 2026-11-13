@@ -215,7 +215,15 @@
     "model_unavailable_detail": "失败原因：{{detail}}",
     "plan_failed_detail": "上报的失败原因：{{detail}}",
     "blockers_keep_cards": "{{blockers}} 不自动出让，不会让卡：还要换一张卡，或为 {{blockers}} 开启休眠并选择能共卡的出让策略。",
-    "holders_give_way": "其余占卡的部署会让卡：{{holders}}。"
+    "holders_give_way": "其余占卡的部署会让卡：{{holders}}。",
+    "disk_node": "节点：{{node}}。",
+    "disk_storage": "存储：{{storage}}。",
+    "disk_path": "磁盘检查目录：{{path}}。",
+    "disk_capacity": "所需可用空间 {{required}}，当前可用 {{available}}。",
+    "disk_required": "所需可用空间 {{required}}。",
+    "disk_available": "可用空间 {{available}}。",
+    "disk_register": "若该节点已有这份权重，请为当前模型登记已有目录后重新评估。",
+    "disk_register_action": "登记已有模型目录"
   },
   "shared": {
     "automatic": "自动",
@@ -316,7 +324,8 @@
       "nvidia": "NVIDIA",
       "ascend": "昇腾",
       "hygon": "海光",
-      "ppu": "平头哥 PPU"
+      "ppu": "平头哥 PPU",
+      "kunlunxin": "昆仑芯"
     },
     "recommendedInferenceTemplate": "推荐推理模板",
     "selected": "已选择",
@@ -672,6 +681,17 @@
       "switchHelp": "切换后会整体应用该档位的参数与拓扑"
     },
     "gpu": {
+      "notEvaluated": "资源状态未评估",
+      "resourcesUnavailable": "资源不可用：{{reason}}",
+      "resourceReason": {
+        "gpu_not_schedulable": "此 GPU 当前不可调度，请查看设备状态",
+        "gpu_index_unavailable": "此 GPU 尚无有效设备编号",
+        "gpus_held_outside_platform": "此 GPU 被平台外进程占用",
+        "no_free_gpu": "此 GPU 当前没有空闲资源",
+        "gpu_whole_allocated": "该 GPU 已被推理服务整卡占用",
+        "partition_unavailable": "此 GPU 不支持当前 dGPU 后端",
+        "no_fit": "可用显存 {{available_gib}} GiB，不足所需 {{required_gib}} GiB"
+      },
       "notReported": "节点尚未上报 GPU 明细",
       "selectionAria": "GPU 选择",
       "unavailableHealth": "GPU 不可分配：{{health}}",
@@ -771,7 +791,8 @@
       "downloadFrom": "将从 {{provider}} 下载",
       "unknown": "未知",
       "unknownOffline": "未知（节点离线）",
-      "unknownUnselected": "未知（未选择节点）"
+      "unknownUnselected": "未知（未选择节点）",
+      "unavailable": "暂无可用模型路径：{{detail}}"
     },
     "acquisition": {
       "loading": "正在检查该节点已有内容…",
@@ -810,6 +831,24 @@
       "saveTo": "保存到",
       "storageGone": "你选择的存储已不再适用于这次部署，请重新选择存储。",
       "storageTarget": "{{name}}（{{type}}）"
+    },
+    "componentAcquisition": {
+      "title": "组件权重",
+      "heading": "{{name}} · {{model}} · {{size}}",
+      "sizeUnknown": "大小未知",
+      "ready_one": "目标节点已有，无需下载",
+      "ready_other": "{{count}} 个目标节点都已有，无需下载",
+      "sharedFollowsPrimary_one": "将下载到共享存储「{{storage}}」（主模型所在的存储），由一个节点写入一次，目标节点读取这一份",
+      "sharedFollowsPrimary_other": "将下载到共享存储「{{storage}}」（主模型所在的存储），由一个节点写入一次，{{count}} 个目标节点共用这一份",
+      "sharedChosen_one": "将下载到所选的共享存储「{{storage}}」，由一个节点写入一次，目标节点读取这一份",
+      "sharedChosen_other": "将下载到所选的共享存储「{{storage}}」，由一个节点写入一次，{{count}} 个目标节点共用这一份",
+      "sharedUsage": "占用「{{storage}}」{{size}}；删除部署不会删除这份文件",
+      "sharedAvoid": "不想写入这个存储：在节点条件里限定存储",
+      "sharedAvoidOrSaveTo": "不想写入这个存储：在节点条件里限定存储，或在「保存到」中选择本地存储",
+      "nodeDownload_one": "{{count}} 个节点各自下载到本地存储（共 {{total}}），首次启动需等下载完成",
+      "nodeDownload_other": "{{count}} 个节点各自下载到本地存储（共 {{total}}），首次启动需等下载完成",
+      "someReady_one": "其中 {{count}} 个节点已有，直接读取",
+      "someReady_other": "其中 {{count}} 个节点已有，直接读取"
     },
     "resource": {
       "title": "资源",
@@ -955,8 +994,8 @@
     "shmHelpDefault": "容器内 /dev/shm 的大小上限，不是内存预留；多卡张量并行的 worker 与 NCCL 通过它通信。留空使用引擎默认的 {{size}} GiB；开启 CPU 内存层时再加上内存层的大小（引擎把内存层放在 /dev/shm 里）。使用 --ipc=host 时改用宿主机的 /dev/shm。",
     "shmHelpResolved": "容器内 /dev/shm 的大小上限，不是内存预留；多卡张量并行的 worker 与 NCCL 通过它通信。留空使用 {{size}} GiB：引擎默认值，开启 CPU 内存层时再加上内存层的大小（引擎把内存层放在 /dev/shm 里）。自行设置的大小不得小于内存层。使用 --ipc=host 时改用宿主机的 /dev/shm。",
     "startTimeout": "启动超时",
-    "startTimeoutHelp": "实例启动后等待引擎健康检查通过的最长时间，超时即判定这次启动失败。留空使用集群默认值（设置 → 部署）。",
-    "startTimeoutHelpDefault": "实例启动后等待引擎健康检查通过的最长时间，超时即判定这次启动失败。大模型首次启动要编译内核、加载权重，可能需要更久。留空使用集群默认的 {{seconds}} 秒（设置 → 部署）。",
+    "startTimeoutHelp": "实例启动后等待引擎健康检查通过的最长时间。留空自动计算：以集群默认值为下限，结合已知引擎等待上限；显式值优先。",
+    "startTimeoutHelpDefault": "实例启动后等待引擎健康检查通过的最长时间。留空自动计算：以集群默认的 {{seconds}} 秒为下限，结合已知引擎等待上限；显式值优先。",
     "seconds": "秒",
     "mounts": "额外挂载",
     "mountsHelp": "用途用于调度和展示，不改变容器路径",
@@ -1050,5 +1089,74 @@
     "idleOrTurn": "{{deployment}} 闲置 {{idle}}或本轮服务满 {{turn}}后让出 GPU",
     "sleeping": "已让出 GPU 的部署完成休眠",
     "separator": "；"
+  },
+  "diagnostics": {
+    "title": "检查明细（{{count}} 项）",
+    "request": "请求 ID：{{id}}",
+    "createFailed": "上一次创建失败，已保留当前表单。",
+    "blockedBy": "未执行，受以下前置检查阻断：{{checks}}",
+    "missingDependency": "尚不可用的前置步骤",
+    "truncated": "检查明细达到大小上限，部分内容未显示。",
+    "storageAction": "查看存储状态",
+    "modelAction": "查看模型副本",
+    "status": {
+      "passed": "通过",
+      "failed": "失败",
+      "pending": "等待中",
+      "blocked": "未执行",
+      "unknown": "尚未观测",
+      "not_applicable": "不适用"
+    },
+    "object": {
+      "node": "节点：{{name}}",
+      "storage": "存储：{{name}}",
+      "model": "模型：{{name}}"
+    },
+    "observer": {
+      "control_plane": "依据：控制面记录，并非实时文件系统检查。",
+      "agent_report": "依据：agent 已上报的状态，本次未重新探测。",
+      "management_node": "检查执行位置：管理节点。",
+      "unknown": "尚不清楚证据来源。"
+    },
+    "reason": {
+      "source_ready": "控制面记录表明模型副本已就绪。",
+      "cache_fill_required": "共享存储已有模型，需先填充该节点的缓存才能启动。",
+      "shared_transfer_pending": "向共享存储传输模型的任务进行中，请等待完成。",
+      "copy_in_progress": "模型复制已接受，仍在进行中，尚未就绪。",
+      "not_on_node": "该节点没有完整模型副本记录。请核对其他副本或先准备模型。",
+      "model_missing_in_storage": "该存储未登记完整模型副本。请查看模型副本或传输状态，这不代表实际目录一定不存在。",
+      "storage_unavailable": "该存储在节点上尚未就绪。请到存储页查看挂载状态。",
+      "storage_not_on_node": "该存储不适用于这台节点。请检查存储的节点选择或更换目标。",
+      "storage_not_found": "所选存储已不存在，请选择可用存储。",
+      "storage_disabled": "该存储无法接受本次模型获取，请启用存储或更换目标。",
+      "facts_unavailable": "读取模型或存储状态失败，尚无法判断模型副本是否可用。",
+      "storage_access_required": "模型路径尚未检查，因为访问存储的前置条件未满足。",
+      "peer_available": "发现有副本记录且具备复制资格的节点，实际传输链路尚未检查。",
+      "no_acquisition_path": "按本次请求约束，尚未找到可执行的模型获取路径。请检查副本、保存目标与同步组。",
+      "source_timeout": "管理节点读取模型来源元数据超时。请检查来源连通性后重试。",
+      "source_cancelled": "本次模型来源元数据检查已取消。",
+      "source_unavailable": "管理节点无法读取模型来源元数据；这不代表 GPU 节点已执行下载检查。",
+      "metadata_not_checked": "本次请求尚未检查模型来源元数据。",
+      "source_not_required": "当前路径无需访问公网模型来源。",
+      "not_mounted": "该节点尚未挂载存储。请查看存储的节点状态和挂载配置。",
+      "permission_denied": "上报的存储访问被拒绝，请检查挂载和文件访问权限。",
+      "model_record_ready": "控制面已登记完整模型副本。",
+      "model_transfer_pending": "模型传输仍在进行中，完成后才能读取模型。",
+      "storage_state_unknown": "该节点尚未上报可用的存储状态，无法确认存储是否已挂载。",
+      "storage_ready": "节点上报的存储状态为就绪。",
+      "metadata_only": "本次仅请求来源元数据，不代表所有权重文件可获取，也未验证 GPU 节点的下载链路。",
+      "source_dns_failed": "管理节点无法解析模型来源域名，请检查 DNS 配置。",
+      "source_tls_failed": "管理节点读取模型来源元数据时，TLS 证书校验失败。请检查证书和信任配置。",
+      "source_connect_failed": "管理节点无法连接模型来源，请检查连接路径和来源服务。",
+      "source_authentication": "模型来源拒绝所配置的凭据，请检查来源凭据和访问权限。",
+      "storage_mounting": "节点正在挂载存储，请等待就绪后复查模型路径。",
+      "storage_unresponsive": "该存储在节点上没有响应，请查看节点的存储诊断。",
+      "storage_unsupported": "该节点不支持所需的存储挂载能力，请检查节点平台和所选存储类型。",
+      "storage_not_writable": "所选存储无法写入模型，请检查写入节点和写权限。",
+      "unsupported_storage": "模型来源使用了不支持的存储类型，请检查存储配置。",
+      "shared_path_invalid": "共享模型记录的相对路径无效，请重新扫描存储或登记有效的模型路径。",
+      "no_storage_path": "候选复制源 {{source}} 与目标 {{target}} 之间没有允许承担存储同步的共同网络。请检查两端管理网或其他共同网络的存储同步角色。",
+      "peer_transport_required": "节点间获取路径尚未通过，因为缺少允许承担存储同步的网络。请先处理前置的复制网络检查。"
+    }
   }
 }

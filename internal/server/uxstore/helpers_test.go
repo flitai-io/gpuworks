@@ -2,7 +2,6 @@ package uxstore
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -108,15 +107,6 @@ func tableNames(t *testing.T, s *Store) map[string]bool {
 		out[n] = true
 	}
 	return out
-}
-
-func countRows(t *testing.T, db *sql.DB, table string) int {
-	t.Helper()
-	var n int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
-		t.Fatalf("count %s: %v", table, err)
-	}
-	return n
 }
 
 func ms(t time.Time) int64 { return t.UnixMilli() }

@@ -1,0 +1,10 @@
+.benchmark-report-export *,
+.benchmark-report-export *::before,
+.benchmark-report-export *::after {
+	animation: none !important;
+	transition: none !important;
+}
+
+.benchmark-report-export [data-report-exclude] { display: none !important; }
+.benchmark-report-export .ant-collapse-content-active { height: auto !important; opacity: 1 !important; }
+.benchmark-report-export .ant-table-sticky-scroll { display: none !important; }

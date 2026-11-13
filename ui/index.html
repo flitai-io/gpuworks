@@ -2,6 +2,18 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (() => {
+        let mode = "light";
+        try {
+          if (localStorage.getItem("gpuworks.themePreview") === "1" &&
+              localStorage.getItem("gpuworks.theme") === "dark") mode = "dark";
+        } catch { /* Storage can be unavailable; the public theme stays light. */ }
+        document.documentElement.dataset.theme = mode;
+        document.documentElement.classList.toggle("dark", mode === "dark");
+        document.documentElement.style.colorScheme = mode;
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <title>GPUWorks</title>

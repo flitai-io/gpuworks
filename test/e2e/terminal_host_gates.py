@@ -7,8 +7,8 @@ import sqlite3
 import time
 from urllib.parse import urlsplit
 from playwright.sync_api import expect
-from local_browser_fixture import ROOT
-from platform_token_read_revoke import button
+from local_browser_fixture import ADMIN_PASSWORD, ROOT
+from platform_token_read_revoke import button, check
 from terminal_host_oracles import POLICY, TEXT, NODE_BUSY, GLOBAL_BUSY, OFFLINE, require, policy_contract
 from terminal_host_owner import Owner
 from terminal_host_sessions import Sessions, poll
@@ -63,11 +63,11 @@ def set_policy(owner, page, locale, value):
 def node_row(page, owner, node, locale):
     text = labels(locale, 'nodes')
     page.goto(owner.server.base + '/nodes')
-    nav = page.locator('.desktop-sider .app-nav').get_by_role('link', name=labels(locale, 'common')['navigation']['nodes'], exact=True)
+    nav = page.get_by_role('complementary', name=labels(locale, 'common')['header']['navigation']).get_by_role('link', name=labels(locale, 'common')['navigation']['nodes'], exact=True)
     expect(nav).to_have_attribute('href', '/nodes')
     nav.click()
     expect(page).to_have_url(owner.server.base + '/nodes')
-    expect(nav.locator('xpath=ancestor::*[@role="menuitem"][1]')).to_have_class(re.compile(r'\bant-menu-item-selected\b'))
+    expect(nav).to_have_attribute('aria-current', 'page')
     row = page.get_by_role('row').filter(has_text=node['name'])
     expect(row).to_have_count(1)
     control = row.get_by_role('button', name=text['action']['terminal'], exact=True)
@@ -236,32 +236,73 @@ def session_expiry(owner, page, locale, result):
                                  'idle_after_read': str(idle_after_read),
                                  'absolute': str(absolute)}
 
-    # Once the session is gone the product stops probing altogether: the page
-    # only runs the activity probe while it believes it is authenticated, so an
-    # expired login produces no further traffic. That is the property worth
-    # pinning - the expired login must not keep generating requests.
+    # An unsaved edit has to survive: the product asks for the password in place
+    # and keeps the operator's work, rather than throwing the page away.
+    settings_text = labels(locale, 'settings')
+    auth_text = labels(locale, 'auth')
+    page.goto(owner.server.base + '/settings')
+    access_tab = page.get_by_role('tab', name=settings_text['page']['tabs']['access'], exact=True)
+    expect(access_tab).to_be_visible(timeout=30000)
+    access_tab.click()
+    card = page.locator('.ant-card').filter(has_text=settings_text['terminal']['title']).first
+    grace = card.locator('.ant-form-item').filter(
+        has=page.get_by_text(settings_text['terminal']['grace'], exact=True)).get_by_role('spinbutton')
+    expect(grace).to_be_visible(timeout=30000)
+    draft_value = '9'
+    # The field can ignore the first keystroke while the form is still binding,
+    # so retype until the visible value is the draft, then commit it.
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        grace.fill('')
+        grace.fill(draft_value)
+        grace.press('Tab')
+        if grace.input_value() == draft_value:
+            break
+        page.wait_for_timeout(200)
+    require(grace.input_value() == draft_value,
+            'the draft value was never accepted: ' + repr(grace.input_value()))
+    draft_url = page.url
+
+    # Expire the live session, then let a real gesture reach the activity probe.
+    past = '2000-01-01 00:00:00.000000000+00:00'
     with sqlite3.connect(owner.db) as db:
-        expired = '2000-01-01 00:00:00.000000000+00:00'
         db.execute("UPDATE management_sessions SET expires_at = ?, absolute_expires_at = ? WHERE token_hash = ?",
-                   (expired, expired, key))
+                   (past, past, key))
         db.commit()
-    expiry_probes, expiry_codes = [], []
-    page.on('response', lambda response: expiry_codes.append(
+    expiry_probes = []
+    page.on('response', lambda response: expiry_probes.append(
         [urlsplit(response.url).path, response.status])
         if urlsplit(response.url).path == '/api/v1/auth/activity' else None)
-    page.goto(owner.server.base + '/nodes')
-    expect(page.get_by_role('textbox', name=labels(locale, 'auth')['username'],
-                            exact=True)).to_be_visible(timeout=30000)
-    page.wait_for_timeout(4000)
+    page.wait_for_timeout(62000)
     page.mouse.move(420, 320)
     page.mouse.click(420, 320)
-    page.wait_for_timeout(2000)
-    require(not expiry_probes,
-            'an unauthenticated page kept sending activity probes, so an expired login still generates traffic: '
-            + json.dumps(expiry_probes))
-    require(all(code[1] in (401, 200) for code in expiry_codes),
-            'activity probes on an expired login behaved unexpectedly: ' + json.dumps(expiry_codes))
-    result['expired_page'] = {'url': page.url, 'probes': expiry_codes}
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and not any(p[1] == 401 for p in expiry_probes):
+        page.wait_for_timeout(100)
+    require(any(p[1] == 401 for p in expiry_probes),
+            'the activity probe did not report the expired session: ' + json.dumps(expiry_probes))
+
+    # The expiry dialog appears over the same page, with the form still behind it.
+    modal = page.get_by_role('dialog', name=auth_text['sessionExpiredTitle'], exact=True)
+    expect(modal).to_be_visible(timeout=20000)
+    require(urlsplit(page.url).path == urlsplit(draft_url).path,
+            'the expired session navigated away instead of asking in place: ' + page.url)
+    check(not page.get_by_role('button', name='Close').count(),
+          'the expiry dialog can be dismissed')
+    modal.get_by_role('textbox', name=auth_text['username'], exact=True).fill('admin')
+    modal.get_by_label(auth_text['password'], exact=True).fill(ADMIN_PASSWORD)
+    button(modal, auth_text['submit']).click()
+    expect(modal).not_to_be_visible(timeout=30000)
+    require(urlsplit(page.url).path == urlsplit(draft_url).path,
+            're-authentication did not return to the same page: ' + page.url)
+    fresh = [c for c in page.context.cookies() if c['name'] == 'gpuworks_session']
+    require(fresh and fresh[0]['value'] != cookie, 're-authentication did not issue a new session')
+    require(grace.input_value() == draft_value,
+            'the unsaved draft was lost across the expiry: ' + repr(grace.input_value()))
+    result['expiry_in_place'] = {'url': page.url, 'draft_kept': grace.input_value(),
+                                 'probes': expiry_probes}
+
+
 def exercise(parent, server, artifacts, report, locale, first, agent, agent_bin, token):
     result = report['host_gates'] = {'status': 'NOT_RUN', 'candidate_items': ['19.3', '19.5', '19.6', '22.1', '22.3', '22.5', '22.6', '22.7'],
         'scope': 'real Linux host PTY and navigation only; no container/GPU/runtime claim', 'coverage_credit': 0,

@@ -138,6 +138,25 @@
     }
   },
   "register": {
+    "directoryError": {
+      "validate": "校验本地模型",
+      "noEntry": "目录必须且只能识别出一个模型条目（当前识别到 0 个）",
+      "component": "该目录是模型组件",
+      "incomplete": "模型条目中存在缺失或无法确认的文件",
+      "missingFile": "缺失或无法确认的文件",
+      "noReason": "识别器未返回详细失败原因",
+      "missingWeights": "已读取 Transformers 配置，但在此目录中未找到支持的模型权重或权重索引",
+      "missingIdentity": "缺少 Transformers 模型身份信息：未声明 model_type 或 architectures",
+      "missingConfig": "存在模型权重文件，但缺少 Transformers 模型配置",
+      "componentConfig": "配置描述的是 Diffusers 组件，不是独立的 Transformers 模型",
+      "modelscopeWeights": "已读取 ModelScope 配置，但在此目录中未找到支持的模型权重或权重索引",
+      "modelscopeIdentity": "ModelScope 模型身份需要同时声明 task 和非空的 model 定义",
+      "jsonTruncated": "JSON 内容不完整，解析意外结束",
+      "permissionDenied": "权限不足",
+      "emptyFile": "文件为空",
+      "notFile": "预期是文件，实际是目录",
+      "readLimit": "超出元数据读取上限"
+    },
     "chooseSource": "请选择仓库",
     "sourceRequired": "请选择要从哪个仓库下载",
     "parsePreview": "解析预览",
@@ -242,6 +261,7 @@
     "present": "可用",
     "registered": "已登记",
     "failed": "失败",
+    "insufficientDisk": "磁盘空间不足",
     "downloadRequired": "等待选择",
     "notDownloaded": "未下载",
     "missing": "已丢失"

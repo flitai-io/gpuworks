@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, usePolling, type Credential } from "../../../api";
-import CredentialDrawer, { isSiteToken } from "./CredentialDrawer";
+import CredentialDrawer, { credentialLoginHost, isSiteToken } from "./CredentialDrawer";
+import CredentialLoginAccess from "./CredentialLoginAccess";
+import { outboundPolicyApi } from "../../../outboundPolicyApi";
+import { outboundHostName } from "../../../components/OutboundHostAccess";
 import { useLoginTests } from "./loginTest";
 import { pullErrorText } from "./pullFormat";
 
@@ -20,7 +23,44 @@ export default function Credentials() {
   const credentialsQuery = usePolling(() => api.credentials(), 0, []);
   const [editing, setEditing] = useState<Credential | "new" | null>(null);
   const [actionError, setActionError] = useState("");
+  const [checkingId, setCheckingId] = useState<number | null>(null);
+  const [authorizing, setAuthorizing] = useState<Credential | null>(null);
   const { results, test } = useLoginTests();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const testLogin = async (credential: Credential) => {
+    setCheckingId(credential.id);
+    setActionError("");
+    try {
+      // A policy read must not turn an existing login test into a credential edit.
+      // The test endpoint always enforces the current server-side policy itself.
+      const policy = await outboundPolicyApi.get().catch(() => null);
+      if (!mounted.current) return;
+      if (policy?.restrict_private_hosts) {
+        const host = outboundHostName(credentialLoginHost(credential.host, isSiteToken(credential)));
+        try {
+          const checks = await outboundPolicyApi.checkHosts([host]);
+          if (!mounted.current) return;
+          if (checks.length === 1 && checks[0].status === "allowed") {
+            await test(credential.id);
+            return;
+          }
+        } catch {
+          // The selected target's dialog can retry an unavailable host check.
+        }
+        if (!mounted.current) return;
+        setAuthorizing(credential);
+        return;
+      }
+      await test(credential.id);
+    } finally {
+      if (mounted.current) setCheckingId(null);
+    }
+  };
 
   const remove = async (credential: Credential) => {
     setActionError("");
@@ -68,8 +108,8 @@ export default function Credentials() {
             size="small"
             type="link"
             aria-label={t("pull.credentials.testFor", { host: credential.host })}
-            disabled={!credential.has_secret || results[credential.id]?.state === "testing"}
-            onClick={() => void test(credential.id)}
+            disabled={!credential.has_secret || checkingId !== null || authorizing !== null || results[credential.id]?.state === "testing"}
+            onClick={() => void testLogin(credential)}
           >
             {t("pull.credentials.test")}
           </Button>
@@ -123,6 +163,11 @@ export default function Credentials() {
           onChanged={() => void credentialsQuery.refetch()}
         />
       )}
+      {authorizing && <CredentialLoginAccess
+        credential={authorizing}
+        onClose={() => setAuthorizing(null)}
+        onTest={async () => { await test(authorizing.id); }}
+      />}
     </Space>
   );
 }

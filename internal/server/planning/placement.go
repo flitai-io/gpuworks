@@ -52,6 +52,12 @@ func (p Placement) ParallelismOn(nodeGPUs []int) parallelism.Spec {
 	return parallelism.Spec{TP: p.TP, PP: p.PP, NNodes: len(nodeGPUs)}.Defaulted(nodeGPUs)
 }
 
+// ParallelismOnDP defaults an unstated topology after accounting for each
+// data-parallel copy. DP is derived from launch configuration, not stored here.
+func (p Placement) ParallelismOnDP(nodeGPUs []int, dp int) (parallelism.Spec, error) {
+	return parallelism.Spec{TP: p.TP, PP: p.PP, DP: dp, NNodes: len(nodeGPUs)}.DefaultedChecked(nodeGPUs)
+}
+
 // ParsePlacement reads a placement hint from either shape one appears in: the
 // decoded object an api request carries, or the JSON text a stored row holds.
 // An empty or absent hint is the zero placement, which is a deployment that

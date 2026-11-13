@@ -93,9 +93,9 @@ function storageDefault(targets: AcquisitionCandidate[]): number | undefined {
 }
 
 /**
- * The save-to storage the form should hold: undefined when nothing is asked,
- * the current one while the latest evaluation still offers it, otherwise the
- * recommended or default one.
+ * Keep a picked save target; otherwise keep an offered one or follow the
+ * recommendation while a choice is asked. An automatic value is absent when
+ * there is no question.
  *
  * A storage the person picked is never replaced: when the evaluation stops
  * offering it, it stays and weightStorageInvalid reports it, so the form asks
@@ -106,10 +106,11 @@ export function resolveSaveTo(
   current: unknown,
   picked = false,
 ): number | undefined {
+  const id = asStorageId(current);
+  if (picked && id !== undefined) return id;
   if (!askSaveTo(acquisition)) return undefined;
   const targets = acquisition.targets || [];
-  const id = asStorageId(current);
-  if (id !== undefined && (picked || targets.some((candidate) => candidate.storage_id === id)))
+  if (id !== undefined && targets.some((candidate) => candidate.storage_id === id))
     return id;
   return storageDefault(targets);
 }
@@ -122,9 +123,9 @@ export function weightStorageInvalid(
   acquisition: AcquisitionResult,
   selection: unknown,
 ): boolean {
-  if (!askSaveTo(acquisition)) return false;
   const source = (selection && typeof selection === "object" ? selection : {}) as Record<string, unknown>;
   const id = asStorageId(source.storage_id);
   if (source.storage_picked !== true || id === undefined) return false;
-  return !(acquisition.targets || []).some((candidate) => candidate.storage_id === id);
+  return !(acquisition.targets || []).some((candidate) => candidate.storage_id === id) &&
+    !(acquisition.present || []).some((candidate) => candidate.storage_id === id && !candidate.unavailable);
 }

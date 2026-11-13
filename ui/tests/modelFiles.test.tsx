@@ -78,6 +78,30 @@ test("a file the storage no longer holds is shown as missing with the hint to sc
   assert.ok(expandFile("archive").getByText(models.files.missingHint));
 });
 
+test("a real disk-space failure exposes the original path and capacity detail", () => {
+  stubMe("admin");
+  const detail = "insufficient disk space at /data/models: available=1048576 required=2147483648 (download=1073741824 safety_margin=1073741824)";
+  renderSection(modelWith({ nodes: [row({ state: "insufficient_disk_space", message: detail, size_bytes: GiB, downloaded: 0, progress: 0 })] }));
+  const details = expandFile("gpu3");
+  assert.ok(details.getByText("/data/models/qwen"));
+  assert.equal(details.queryByText(detail)?.textContent, detail, "the disk failure detail must remain visible");
+  assert.ok(screen.getByText("Insufficient disk space"));
+  assert.equal(screen.queryByText("insufficient_disk_space"), null);
+});
+
+test("a shared-storage disk-space failure has a Chinese label and preserves its detail", async () => {
+  stubMe("admin");
+  const translated = await createI18n(["models", "storage"], "zh");
+  const detail = "insufficient disk space at /data/models: available=1048576 required=2147483648";
+  render(<I18nextProvider i18n={translated.i18n}><ModelFilesSection model={modelWith({ storages: [shared({ state: "insufficient_disk_space", message: detail, size_bytes: GiB, downloaded: 0, progress: 0 })] })} onChanged={() => {}} /></I18nextProvider>);
+  const fileRow = screen.getByText("archive", { exact: true }).closest("tr")!;
+  fireEvent.click(within(fileRow).getByRole("button", { name: translated.locale.storage.detail.expand }));
+  assert.ok(within(fileRow.nextElementSibling as HTMLElement).getByText("Qwen/Qwen3-8B"));
+  assert.ok(screen.getByText("磁盘空间不足"));
+  assert.ok(screen.getByText(detail));
+  assert.equal(screen.queryByText("insufficient_disk_space"), null);
+});
+
 test("only admins get a delete, for shared storage files and for a node's files", async () => {
   stubMe("viewer");
   renderSection(modelWith({ nodes: [row({ storage_id: 1, storage_name: "default", storage_type: "local" })], storages: [shared({})] }));
@@ -405,4 +429,54 @@ test("download cancellation errors preserve the task and do not announce a chang
     assert.equal(changes, 0);
     assert.ok(screen.getAllByText(models.presence.downloading).length > 0);
   } finally { api.cancelModelDownload = originalCancel; }
+});
+
+
+for (const scenario of [
+  { name: "a public download into its selected storage", row: { storage_id: 7, node_uuid: "n-selected", cache: false, acquisition: "download" }, path: "/api/v1/models/9/download", body: { storage_id: 7, node_uuids: ["n-selected"] } },
+  { name: "a legacy public download on its original node", row: { node_uuid: "n-legacy", cache: false, acquisition: "download" }, path: "/api/v1/models/9/download", body: { node_uuid: "n-legacy" } },
+  { name: "a peer transfer with its current rate and no archived rate", row: { storage_id: 7, node_uuid: "n-selected", cache: false, acquisition: "peer", source_node_uuid: "n-origin", rate_limit_kib_s: 512 }, path: "/api/v1/models/9/nodes/n-selected/sync", body: { source_node: "n-origin", rate_limit_kib_s: 512 } },
+  { name: "a peer transfer with its current rate ahead of an old archived rate", row: { storage_id: 7, node_uuid: "n-selected", cache: false, acquisition: "peer", source_node_uuid: "n-origin", rate_limit_kib_s: 512, last_rate_limit_kib_s: 1024 }, path: "/api/v1/models/9/nodes/n-selected/sync", body: { source_node: "n-origin", rate_limit_kib_s: 512 } },
+  { name: "an unlimited peer transfer whose omitted current rate must not reuse an old limit", row: { storage_id: 7, node_uuid: "n-selected", cache: false, acquisition: "peer", source_node_uuid: "n-origin", last_rate_limit_kib_s: 512 }, path: "/api/v1/models/9/nodes/n-selected/sync", body: { source_node: "n-origin", rate_limit_kib_s: 0 } },
+]) {
+  test(`disk-space Retry preserves ${scenario.name} on the HTTP wire`, async () => {
+    stubMe("admin");
+    const originalFetch = globalThis.fetch;
+    const seen: unknown[] = [];
+    let changed = 0;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push({ path: String(input), method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      const accepted = String(input) === scenario.path && init?.method === "POST";
+      return new Response(JSON.stringify(accepted ? (scenario.path.endsWith("/sync") ? { state: "syncing" } : { status: "downloading" }) : { error: "unexpected request" }), { status: accepted ? 202 : 404, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+    try {
+      renderSection(modelWith({ nodes: [row({ ...scenario.row, state: "insufficient_disk_space", message: "insufficient disk space", downloaded: 0, progress: 0 })] }), () => { changed++; });
+      fireEvent.click(screen.getByRole("button", { name: models.action.retry }));
+      await waitFor(() => assert.equal(changed, 1));
+      assert.deepEqual(seen, [{ path: scenario.path, method: "POST", body: scenario.body }]);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+}
+
+test("disk-space rows do not invent a cache, unknown-source or ambiguous-target retry", () => {
+  stubMe("admin");
+  renderSection(modelWith({ nodes: [
+    row({ node_uuid: "n-cache", node_name: "cache", state: "insufficient_disk_space", cache: true, acquisition: "download", storage_type: "nfs_cache" }),
+    row({ node_uuid: "n-copy", node_name: "copy", state: "insufficient_disk_space", cache: true, acquisition: "copy", storage_type: "nfs_cache" }),
+    row({ node_uuid: "n-future", node_name: "future", state: "insufficient_disk_space", cache: false, acquisition: "future" }),
+    row({ node_uuid: "n-source", node_name: "source-unknown", state: "insufficient_disk_space", cache: false, acquisition: "peer", source_node_name: "source-without-uuid" }),
+    row({ node_uuid: "n-many", node_name: "many", storage_id: 7, state: "insufficient_disk_space", cache: false, acquisition: "peer", source_node_uuid: "n-origin", storage_type: "local" }),
+    row({ node_uuid: "n-many", node_name: "many", storage_id: 8, state: "present", cache: false, acquisition: "peer", source_node_uuid: "n-origin", storage_type: "local" }),
+    row({ node_uuid: "n-shared", node_name: "shared", storage_id: 3, state: "insufficient_disk_space", cache: false, acquisition: "peer", source_node_uuid: "n-origin", storage_type: "nfs" }),
+    row({ node_uuid: "n-shared", node_name: "shared", storage_id: 7, state: "present", cache: false, acquisition: "registered", storage_type: "local" }),
+  ] }));
+  assert.equal(screen.queryAllByRole("button", { name: models.action.retry }).length, 0, "an unknown or ambiguous target must not expose Retry");
+});
+
+test("relay capacity refusal keeps its localized retry guidance in the task details", () => {
+  stubMe("admin");
+  renderSection(modelWith({ nodes: [row({ state: "download_required", acquisition: "peer", source_node_uuid: "source", transfer_error_code: "PEER_RELAY_BUSY", message: "raw server capacity message" })] }));
+  const details = expandFile("gpu3");
+  assert.ok(details.getByText(locale.common.apiError.PEER_RELAY_BUSY));
+  assert.equal(details.queryByText("raw server capacity message"), null);
 });

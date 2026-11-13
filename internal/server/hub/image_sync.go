@@ -8,13 +8,15 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
+	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 const imageArchiveMaxBytes int64 = 500 << 30
 
 // SyncImage starts a direct source-to-target image transfer. A source is
-// mandatory; peer image sync never falls back to server relay or another node.
+// mandatory; a relay preserves the selected source and target nodes.
 func (h *Hub) SyncImage(ctx context.Context, imageID uint, targetNodeUUID string) (*store.ImageNode, error) {
 	return nil, errors.New("source node is required for direct image sync")
 }
@@ -52,7 +54,7 @@ func (h *Hub) syncImageDirect(ctx context.Context, imageID uint, targetNodeUUID,
 		if existing.State == store.ImageStatePresent && !force {
 			return existing, nil
 		}
-		if existing.State == store.ImageStateSyncing && !force {
+		if existing.State == store.ImageStateSyncing && !force && !(existing.TransferErrorCode == messages.ErrorPeerRelayBusy && !h.ownsImageSync(existing.TransferID)) {
 			h.watchDirectImageTransfer(image.ID, target.ID)
 			sourceNode, sourceErr := h.store.NodeByID(existing.SourceNodeID)
 			if sourceErr != nil || sourceNode.UUID != requestedSourceNodeUUID {
@@ -60,7 +62,7 @@ func (h *Hub) syncImageDirect(ctx context.Context, imageID uint, targetNodeUUID,
 			}
 			return existing, nil
 		}
-		if existing.State == store.ImageStateSyncing && force && time.Since(existing.UpdatedAt) < 2*time.Minute {
+		if existing.State == store.ImageStateSyncing && force && (h.ownsImageSync(existing.TransferID) || (existing.TransferErrorCode != messages.ErrorPeerRelayBusy && time.Since(existing.UpdatedAt) < 2*time.Minute)) {
 			// A reconnect can race an archive that is still alive. Keep the
 			// existing transfer and let its original completion update the row.
 			h.watchDirectImageTransfer(image.ID, target.ID)
@@ -97,15 +99,32 @@ func (h *Hub) syncImageDirect(ctx context.Context, imageID uint, targetNodeUUID,
 	}
 	transferID := auth.NewUUID()
 	sizeBytes := source.SizeBytes
+	copyCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	h.imageSyncMu.Lock()
+	// Recheck after source validation: another caller may have started this slot.
+	if current, e := h.store.ImageNode(image.ID, target.ID); e == nil && (current.State == store.ImageStateSyncing || current.State == store.ImageStatePulling) && (!force || h.imageSyncOwners[current.TransferID] != nil) && !(current.TransferErrorCode == messages.ErrorPeerRelayBusy && h.imageSyncOwners[current.TransferID] == nil) {
+		h.imageSyncMu.Unlock()
+		cancel()
+		return current, nil
+	}
+	if h.imageSyncOwners == nil {
+		h.imageSyncOwners = make(map[string]context.CancelFunc)
+	}
+	h.imageSyncOwners[transferID] = cancel
 	targetRow, err := h.store.UpsertImageNode(&store.ImageNode{ImageID: image.ID, NodeID: target.ID, State: store.ImageStateSyncing, SizeBytes: sizeBytes, TransferID: transferID, SourceNodeID: source.NodeID, Source: "peer", RateLimitKiB: rateLimitKiB})
+	if err == nil {
+		err = h.store.BeginDirectImageSync(image.ID, target.ID, source.NodeID, transferID, sizeBytes, rateLimitKiB)
+	}
+	if err != nil {
+		delete(h.imageSyncOwners, transferID)
+		cancel()
+	}
+	h.imageSyncMu.Unlock()
 	if err != nil {
 		return nil, err
 	}
-	if err := h.store.BeginDirectImageSync(image.ID, target.ID, source.NodeID, transferID, sizeBytes, rateLimitKiB); err != nil {
-		return nil, err
-	}
 	h.watchDirectImageTransfer(image.ID, target.ID)
-	go h.runDirectImageSync(context.WithoutCancel(ctx), image, target, sourceNode, target.ID, transferID, sizeBytes, rateLimitKiB)
+	go h.runDirectImageSync(copyCtx, image, target, sourceNode, target.ID, transferID, sizeBytes, rateLimitKiB)
 	return targetRow, nil
 }
 
@@ -135,15 +154,69 @@ func (h *Hub) RetryImageSync(ctx context.Context, imageID uint, targetNodeUUID s
 }
 
 func (h *Hub) runDirectImageSync(ctx context.Context, image *store.Image, target, source *store.Node, nodeID uint, transferID string, sizeBytes, rateLimitKiB int64) {
-	path, err := h.storagePath(source, target)
-	if err != nil {
-		_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, err.Error())
-		return
-	}
-	result, err := h.CopyImagePath(ctx, proto.ImageSyncCopyRequest{TransferID: transferID, ImageRef: image.ImageRef, SourceNodeUUID: source.UUID, TargetNodeUUID: target.UUID, SourceIP: path.SourceIP, TargetIP: path.TargetIP, ExpectedBytes: sizeBytes, RateLimitKBs: int(rateLimitKiB)})
-	if err != nil {
-		_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, err.Error())
-		return
+	defer func() {
+		h.imageSyncMu.Lock()
+		cancel := h.imageSyncOwners[transferID]
+		delete(h.imageSyncOwners, transferID)
+		h.imageSyncMu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+	}()
+	var result proto.ImageSyncCopyResult
+	for {
+		path, err := h.storagePath(source, target)
+		if err != nil {
+			_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, err.Error())
+			return
+		}
+		result, err = h.copyImagePath(ctx, proto.ImageSyncCopyRequest{TransferID: transferID, ImageRef: image.ImageRef, SourceNodeUUID: source.UUID, TargetNodeUUID: target.UUID, SourceIP: path.SourceIP, TargetIP: path.TargetIP, ExpectedBytes: sizeBytes, RateLimitKBs: int(rateLimitKiB), AllowRelay: network.PeerRelayAllowed(source, target)}, func() {
+			_, _ = h.store.MarkImageSyncWaiting(image.ID, nodeID, transferID, messages.PeerRelayBusy().Error(), messages.ErrorPeerRelayBusy)
+		})
+		if !errors.Is(err, messages.ErrPeerRelayBusy) {
+			if err != nil {
+				_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, err.Error())
+				return
+			}
+			break
+		}
+		timer := time.NewTimer(2 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		freshSource, e := h.store.NodeByID(source.ID)
+		if e != nil {
+			_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, "selected source is unavailable")
+			return
+		}
+		freshTarget, e := h.store.NodeByID(target.ID)
+		sourceRow, rowErr := h.store.ImageNode(image.ID, source.ID)
+		if e != nil || rowErr != nil || sourceRow.State != store.ImageStatePresent || !h.Online(freshSource.UUID) || !h.Online(freshTarget.UUID) {
+			_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, "selected peer is no longer available")
+			return
+		}
+		source, target = freshSource, freshTarget
+		nextID := auth.NewUUID()
+		h.imageSyncMu.Lock()
+		cancel := h.imageSyncOwners[transferID]
+		if cancel == nil || ctx.Err() != nil {
+			h.imageSyncMu.Unlock()
+			return
+		}
+		changed, e := h.store.RestartImageSyncIfActive(image.ID, nodeID, transferID, nextID, source.ID, sizeBytes, rateLimitKiB)
+		if changed {
+			delete(h.imageSyncOwners, transferID)
+			h.imageSyncOwners[nextID] = cancel
+			transferID = nextID
+		}
+		h.imageSyncMu.Unlock()
+		if e != nil || !changed {
+			return
+		}
+		h.watchDirectImageTransfer(image.ID, nodeID)
 	}
 	if result.InProgress {
 		// The target agent already runs another receiver for this image, so
@@ -154,6 +227,7 @@ func (h *Hub) runDirectImageSync(ctx context.Context, image *store.Image, target
 		}
 		return
 	}
+	h.log.Info("peer image archive transferred", "transfer_id", transferID, "transport", result.Transport)
 	if result.Bytes > imageArchiveMaxBytes {
 		_ = h.store.FailImageSyncIfActive(image.ID, nodeID, transferID, "image archive exceeded 500 GiB transfer limit")
 		return

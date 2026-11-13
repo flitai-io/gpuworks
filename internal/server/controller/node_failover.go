@@ -25,7 +25,8 @@ const (
 
 // failoverMove is one rank a lost node made the controller move, kept until
 // the unit runs on its new node: if the lost node returns first, the move is
-// undone. It lives in memory only; a server restart keeps the move.
+// undone. It lives in memory; a server that has just started reads it back
+// from the NODE_REPLACED events (node_failover_restore.go).
 type failoverMove struct {
 	Role      string
 	Unit      int
@@ -42,6 +43,7 @@ type nodeFailover struct {
 	noneSince map[uint]time.Time      // last NODE_REPLACE_NO_CANDIDATE, by deployment
 	drains    map[uint][]drainSurge   // units moving off draining nodes (node_failover_drain.go)
 	repicked  map[uint]time.Time      // last automatic re-pick that found no nodes, by deployment (unit_auto.go)
+	restored  map[uint]bool           // deployments whose moves were read back from the events (node_failover_restore.go)
 }
 
 func (f *nodeFailover) get(dep uint) []failoverMove {
@@ -218,10 +220,6 @@ func (c *Controller) failoverNamedUnits(ctx context.Context, deployment *unitDep
 // moved unit has not run on its new node yet, and forgets a move once the
 // unit runs there. It reports whether it rewrote the placement.
 func (c *Controller) revertFailovers(dep *store.Deployment, deployment *unitDeployment, match planning.UnitMatch) (bool, error) {
-	moves := c.failover.get(dep.ID)
-	if len(moves) == 0 {
-		return false, nil
-	}
 	units := map[string][]planning.PDUnit{}
 	if deployment.pd != nil {
 		for _, role := range deployment.pd.mode.Roles {
@@ -229,6 +227,11 @@ func (c *Controller) revertFailovers(dep *store.Deployment, deployment *unitDepl
 		}
 	} else {
 		units[""] = planning.ReplicaUnitsOf(dep, deploymentNodeOrder(deployment))
+	}
+	c.restoreFailovers(dep, deployment, units)
+	moves := c.failover.get(dep.ID)
+	if len(moves) == 0 {
+		return false, nil
 	}
 	var keep, reverted []failoverMove
 	for _, move := range moves {

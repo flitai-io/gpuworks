@@ -29,7 +29,11 @@ type ProviderInstance struct {
 	SSHUser        string `gorm:"size:32"`
 	SSHConnections string `gorm:"type:text"` // JSON []provider.SSHConnection
 	Kind           string `gorm:"size:16"`   // container | vm
-	NodeID         uint   `gorm:"index"`     // linked gpuworks node once agent installed
+	// ManagedCluster is the vendor's managed Kubernetes cluster the instance
+	// is a node of (provider.Instance.Cluster); such an instance joins
+	// through its cluster's DaemonSet, never by an agent installed on it.
+	ManagedCluster string `gorm:"size:128"`
+	NodeID         uint   `gorm:"index"` // linked gpuworks node once agent installed
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

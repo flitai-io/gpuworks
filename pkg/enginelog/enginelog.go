@@ -20,7 +20,20 @@ type Measured struct {
 	GraphCaptureGiB float64 // CUDA graph capture memory, when logged
 	MaxConcurrency  float64 // maximum concurrency, when logged
 	NumGPUBlocks    int     // GPU block count, when logged
-	Found           bool    // true if at least one field was parsed
+	// Durations are the largest explicitly logged block across workers, not
+	// sums of parallel ranks or overlapping initialization phases. Nil means
+	// the log did not report that duration; a reported zero remains known.
+	ModelLoadingSeconds *float64 `json:",omitempty"`
+	CompilationSeconds  *float64 `json:",omitempty"`
+	GraphCaptureSeconds *float64 `json:",omitempty"`
+	// StartupSeconds is observed by the agent from the first health probe of
+	// a newly started container to readiness. Log parsing never infers it.
+	StartupSeconds *float64 `json:",omitempty"`
+	// StartupTimeoutSeconds is the new container's observed health wait when
+	// its budget expired without readiness. It is censored, not a completion
+	// duration, and survives later retirement of the failed attempt.
+	StartupTimeoutSeconds *float64 `json:",omitempty"`
+	Found                 bool     // true if a memory/cache figure was parsed; durations have their own presence
 }
 
 type pattern struct {
@@ -219,10 +232,14 @@ func Parse(logText string) Measured {
 // ParseDialect scans log text using a dialect-specific table. Unknown dialects
 // fall back to vLLM for backward compatibility with older specs.
 func ParseDialect(dialect, logText string) Measured {
+	var m Measured
 	if strings.ToLower(strings.TrimSpace(dialect)) == DialectSGLang {
-		return parseSGLang(logText)
+		m = parseSGLang(logText)
+	} else {
+		m = parseWith(vllmPatterns, logText)
 	}
-	return parseWith(vllmPatterns, logText)
+	parseStartupDurations(&m, dialect, logText)
+	return m
 }
 
 func parseWith(patterns []pattern, logText string) Measured {

@@ -7,7 +7,7 @@ set -u
 
 TAG="$1"; MODEL="$2"; GPU="$3"; FRAC="$4"; CTX="$5"; shift 5
 
-IMAGE="${IMAGE:-quay.io/gpustack/runner:cuda13.0-sglang0.5.15.post1}"
+IMAGE="${IMAGE:-gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r3}"
 OUTDIR="${OUTDIR:-/tmp/calib/logs-sglang}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-600}"
 NAME="calib-sg-$TAG"
@@ -21,7 +21,7 @@ docker rm -f "$NAME" >/dev/null 2>&1
 docker run -d --name "$NAME" --gpus "device=$GPU" --shm-size 16g \
   -v /opt/gpuworks/models:/models -v /tmp/calib:/calib \
   -v /tmp/calib/torchcache-sg:/root/.cache \
-  "$IMAGE" python3 -m sglang.launch_server \
+  --entrypoint python3 "$IMAGE" -m sglang.launch_server \
   --model-path "$MODEL" --load-format dummy \
   --mem-fraction-static "$FRAC" --context-length "$CTX" \
   --host 0.0.0.0 --port "$PORT" "$@" >/dev/null

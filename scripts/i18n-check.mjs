@@ -252,11 +252,13 @@ for (const [index, source] of schedulerSources.entries()) {
 // Structured API product errors keep an English fallback on the wire, while
 // the UI resolves stable codes from the common namespace. Package messages
 // declares them, one file per area; api/errors.go adds its own and aliases
-// the rest.
+// the rest. Agent runtime failures travel through the same ProductMessage API,
+// with their wire codes owned by proto.
 const messagesDir = path.join(root, "internal/server/messages");
 const productErrorSourceFiles = [
   ...fs.readdirSync(messagesDir).filter((name) => name.endsWith(".go") && !name.endsWith("_test.go")).sort().map((name) => path.join(messagesDir, name)),
   path.join(root, "internal/server/api/errors.go"),
+  path.join(root, "internal/proto/runtime_failure.go"),
 ];
 const productErrorSources = productErrorSourceFiles.map((file) => fs.readFileSync(file, "utf8"));
 const productErrorCodes = new Set(
@@ -288,7 +290,11 @@ for (const [index, source] of productErrorSources.entries()) {
 // messages, CJK fallbacks, and unregistered raw string codes.
 const productionAPIFiles = filesUnder(path.join(root, "internal/server/api"), ".go")
   .filter((file) => !file.endsWith("_test.go"));
-for (const file of productionAPIFiles) {
+// The deployment use cases build the same product errors without HTTP; the
+// CJK and raw-code rules hold for them too (writeErr does not occur there).
+const productionUseCaseFiles = filesUnder(path.join(root, "internal/server/deployment"), ".go")
+  .filter((file) => !file.endsWith("_test.go"));
+for (const file of [...productionAPIFiles, ...productionUseCaseFiles]) {
   const source = fs.readFileSync(file, "utf8");
   const relative = path.relative(root, file);
   for (const [lineIndex, line] of source.split("\n").entries()) {

@@ -4,7 +4,7 @@
   "driver_file": "test/e2e/assistant_drawer_layout.py",
   "test_file": "test/e2e/assistant_drawer_layout.py",
   "test_function": "test_assistant_drawer_layout",
-  "command": "make test-e2e-assistant-drawer-layout",
+  "command": "python3 -B test/e2e/assistant_drawer_layout.py --locale en",
   "page_id": "deployments",
   "lane": "local-real-server-sqlite-llm-fixture",
   "identity": "admin",

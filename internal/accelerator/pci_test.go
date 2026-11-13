@@ -90,6 +90,35 @@ func TestTheAcceleratorBaseClassCountsWholeAndTheProcessorOneDoesNot(t *testing.
 	}
 }
 
+// A card has to be found by its class with its vendor's module unbound,
+// because that is the case the PCI roster exists for: an unloaded or
+// wrong-bound driver must reach an operator as a driver problem on a node
+// that has cards, not as a node that has none. The driver rule alone would
+// hide exactly the failure worth reporting.
+//
+// Kunlunxin's P800 claims no accelerator class of its own and reports
+// 0x0780, "other communication device" (2057:3686, measured 2026-10-28 on
+// two eight-card hosts).
+func TestACardIsFoundByItsClassWithItsVendorsDriverUnbound(t *testing.T) {
+	// The class as sysfs spells it, programming interface byte included.
+	const p800 = 0x078000
+	for _, driver := range []string{"kunlun", "", "pci-stub", "vfio-pci"} {
+		if got := VendorForPCI(0x2057, 0x3686, p800, driver); got != VendorKunlunxin {
+			t.Errorf("a P800 on driver %q = %q, want %q", driver, got, VendorKunlunxin)
+		}
+	}
+	// Being identified is the point; a card the rules recognize is not also
+	// reported as one nobody told us about.
+	if UnknownAcceleratorFunction(0x2057, 0x3686, p800, "") {
+		t.Error("a recognized P800 was also reported as unrecognized")
+	}
+	// The class is granted to this vendor id, not to the class: a server is
+	// full of 0x07 functions and none of the others is a card.
+	if got := VendorForPCI(0x10de, 0x2204, p800, ""); got != "" {
+		t.Errorf("another vendor's 0x0780 function = %q, want no claim", got)
+	}
+}
+
 // A vendor that ships a new product line at a class nobody told us about
 // still has its own kernel module bound to it. That is enough.
 func TestAVendorsOwnDriverIdentifiesACardWhateverItsClass(t *testing.T) {
@@ -185,7 +214,7 @@ func TestAnUnnamedCardIsLabelledByItsIDs(t *testing.T) {
 // The vendors a node can be told to manage are those a PCI bus lists:
 // every one but Apple, and nothing unknown.
 func TestOnlyVendorsOnAPCIBusCanBeChosen(t *testing.T) {
-	for _, vendor := range []string{VendorNVIDIA, VendorAscend, VendorHygon, VendorPPU, VendorAMD} {
+	for _, vendor := range []string{VendorNVIDIA, VendorAscend, VendorHygon, VendorPPU, VendorAMD, VendorKunlunxin} {
 		if !HasPCICards(vendor) {
 			t.Fatalf("HasPCICards(%q) = false", vendor)
 		}
@@ -193,6 +222,49 @@ func TestOnlyVendorsOnAPCIBusCanBeChosen(t *testing.T) {
 	for _, vendor := range []string{VendorApple, "", "auto", "NVIDIA"} {
 		if HasPCICards(vendor) {
 			t.Fatalf("HasPCICards(%q) = true", vendor)
+		}
+	}
+}
+
+// A backend that has to confirm, before granting a character device to a
+// container, that the device belongs to the card it probed asks this package
+// rather than carrying the vendor id itself. Kunlun's injection check did
+// carry it, and a second id for a later generation would have been added to
+// pciVendors while that copy went on rejecting every card.
+func TestSysfsVendorIsReadsTheIDFromThisPackage(t *testing.T) {
+	// The attribute as the captured P800 hosts write it.
+	for _, raw := range []string{"0x2057", "0x2057\n", " 0x2057 ", "0X2057", "2057"} {
+		if !SysfsVendorIs(VendorKunlunxin, raw) {
+			t.Errorf("SysfsVendorIs(kunlunxin, %q) = false", raw)
+		}
+	}
+	// Another vendor's card at the same bus position is not this one.
+	for _, raw := range []string{"0x10de", "0x19e5", "0x1002"} {
+		if SysfsVendorIs(VendorKunlunxin, raw) {
+			t.Errorf("SysfsVendorIs(kunlunxin, %q) = true", raw)
+		}
+	}
+	// Each vendor answers for its own id and no other.
+	for _, tc := range []struct{ vendor, raw string }{
+		{VendorNVIDIA, "0x10de"}, {VendorAscend, "0x19e5"},
+		{VendorPPU, "0x1ded"}, {VendorHygon, "0x1d94"},
+	} {
+		if !SysfsVendorIs(tc.vendor, tc.raw) {
+			t.Errorf("SysfsVendorIs(%q, %q) = false", tc.vendor, tc.raw)
+		}
+		if SysfsVendorIs(tc.vendor, "0x2057") {
+			t.Errorf("SysfsVendorIs(%q, kunlun's id) = true", tc.vendor)
+		}
+	}
+	// Nothing is granted on an unreadable attribute, an id this platform
+	// does not know, or a vendor it has no cards for.
+	for _, tc := range []struct{ vendor, raw string }{
+		{VendorKunlunxin, ""}, {VendorKunlunxin, "not hex"}, {VendorKunlunxin, "0x"},
+		{VendorKunlunxin, "0xffffffffff"}, {VendorKunlunxin, "0x8086},"},
+		{VendorApple, "0x2057"}, {"", "0x2057"}, {"nonsense", "0x2057"},
+	} {
+		if SysfsVendorIs(tc.vendor, tc.raw) {
+			t.Errorf("SysfsVendorIs(%q, %q) = true, want no claim", tc.vendor, tc.raw)
 		}
 	}
 }

@@ -43,11 +43,11 @@ export { externalHost };
  * (/settings#security) opens the tab holding it, so links into the page keep
  * working.
  */
-const SETTINGS_TABS: { key: string; anchors: string[]; cards: () => ReactNode }[] = [
+const SETTINGS_TABS: { key: string; anchors: string[]; cards: (active: boolean) => ReactNode }[] = [
   {
     key: "general",
     anchors: [BRANDING_ANCHOR, "updates", EXPERIENCE_ANCHOR],
-    cards: () => <><BrandingCard /><UpdatesCard /><ServerListenCard /><ExperienceCard /></>,
+    cards: (active) => <><BrandingCard />{active && <UpdatesCard />}<ServerListenCard /><ExperienceCard /></>,
   },
   { key: "pull", anchors: ["pull-settings"], cards: () => <PullSettingsCard /> },
   {
@@ -101,7 +101,7 @@ export default function SettingsPage() {
         items={SETTINGS_TABS.map((tab) => ({
           key: tab.key,
           label: t(`page.tabs.${tab.key}`),
-          children: <Space direction="vertical" size={16} style={{ width: "100%" }}>{tab.cards()}</Space>,
+          children: <Space direction="vertical" size={16} style={{ width: "100%" }}>{tab.cards(active === tab.key)}</Space>,
         }))}
       />
     </>

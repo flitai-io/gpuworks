@@ -93,6 +93,10 @@ func HealthGuideFor(card HealthCard, evidence []HealthField) (HealthGuide, bool)
 		return HealthGuide{}, false
 	}
 	switch card.Vendor {
+	case VendorKunlunxin:
+		if card.Code == HealthMemoryUncorrectable {
+			return HealthGuide{Probe: "xpu-smi -q -x", Recheck: "xpu-smi -q -x"}, true
+		}
 	case VendorPPU:
 		return ppuHealthGuide(card.Code, target, evidence)
 	case VendorNVIDIA:
@@ -303,6 +307,8 @@ func ToolCommand(vendor string) string {
 	switch vendor {
 	case VendorNVIDIA:
 		return "nvidia-smi"
+	case VendorKunlunxin:
+		return "xpu-smi -q -x"
 	case VendorPPU:
 		return "ppu-smi"
 	case VendorAscend:

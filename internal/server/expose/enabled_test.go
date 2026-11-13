@@ -20,8 +20,10 @@ func TestEnabledWatchFollowsTheDesiredState(t *testing.T) {
 		}
 	}
 	write(DesiredEnabled)
-	if !watch.Enabled() || !watch.Enabled() {
-		t.Fatal("enabled configuration not seen")
+	for range 2 {
+		if !watch.Enabled() {
+			t.Fatal("enabled configuration not seen")
+		}
 	}
 	write(DesiredDisabled)
 	if watch.Enabled() {

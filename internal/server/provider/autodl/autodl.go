@@ -428,11 +428,6 @@ func parseSSHCommand(s string) (host string, port int, user string) {
 	return host, port, user
 }
 
-// shellQuote single-quotes a string for safe use in a remote shell command.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 func providerInstallConnectMode(mode string) string {
 	if mode == "server_dial" {
 		return "server_dial"

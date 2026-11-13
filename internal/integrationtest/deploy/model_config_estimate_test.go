@@ -111,7 +111,6 @@ func TestTemplateDeploymentEstimatesKVCapacityFromTheCatalog(t *testing.T) {
 	// A Qwen3-32B-shaped model: 64 layers, 8 KV heads, head_dim 128, which is
 	// 64*8*128*2*2 = 262144 B/token, the figure the seed catalog carries for it.
 	const modelID = "acme/kv-catalog"
-	const kvBytesPerToken = `{"vllm":262144,"sglang":262144}`
 	const wantKVBytesPerToken = 262144
 	template := seedEstimateCatalog(t, env, modelID,
 		`{"model_type":"qwen3","num_hidden_layers":64,"hidden_size":5120,"num_attention_heads":64,"num_key_value_heads":8,"head_dim":128,"max_position_embeddings":40960}`, `{"vllm":262144,"sglang":262144}`)

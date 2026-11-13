@@ -62,7 +62,7 @@ export default function DeployWeightSourceFields({
   // Follow the server's recommendation until the person picks something, and
   // abandon a provider or a recommended storage the latest evaluation no
   // longer offers. A storage the person picked stays, flagged as unavailable,
-  // until they choose again; once nothing is asked, the answer is forgotten.
+  // until they choose again, including when fewer than two targets remain.
   useEffect(() => {
     // An edit cannot change where the weights come from.
     if (!acquisition || evaluating || sourceLocked) return;
@@ -85,8 +85,13 @@ export default function DeployWeightSourceFields({
   const providers = acquisition.providers || [];
   const locked = lockedProvider(acquisition, modelSource);
   const showProvider = askProvider(acquisition, modelSource);
-  const showSaveTo = askSaveTo(acquisition);
+  const showSaveTo = askSaveTo(acquisition) || (storagePicked && storageId !== undefined);
   const holders = (acquisition.present || []).filter((c) => !c.unavailable);
+  const targets = acquisition.targets || [];
+  // A selected destination can become "already there" when its transfer
+  // finishes. Keep that selected label without offering new source choices.
+  const selectedPresent = storagePicked ? holders.find((c) => c.storage_id === storageId) : undefined;
+  const saveOptions = selectedPresent && !targets.some((c) => c.storage_id === storageId) ? [selectedPresent, ...targets] : targets;
   const showLocked = Boolean(locked) && providers.length >= 2;
   if (!showProvider && !showSaveTo && !showLocked && holders.length === 0)
     return null;
@@ -145,7 +150,7 @@ export default function DeployWeightSourceFields({
           >
             <Select
               onChange={() => form.setFieldValue(STORAGE_PICKED, true)}
-              options={(acquisition.targets || []).map((target) => ({
+              options={saveOptions.map((target) => ({
                 value: target.storage_id,
                 label: storageName(target, t),
                 recommended: Boolean(target.recommended),

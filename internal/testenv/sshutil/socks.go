@@ -57,7 +57,8 @@ func socks5Connect(ctx context.Context, conn net.Conn, addr string) error {
 	} else {
 		_ = conn.SetDeadline(time.Now().Add(15 * time.Second))
 	}
-	defer conn.SetDeadline(time.Time{})
+	// The caller owns the connection; resetting its deadline is best effort.
+	defer func() { _ = conn.SetDeadline(time.Time{}) }()
 	if _, err := conn.Write([]byte{5, 1, 0}); err != nil {
 		return fmt.Errorf("SOCKS5 greeting: %w", err)
 	}

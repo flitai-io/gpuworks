@@ -1,11 +1,14 @@
+import { acceleratorMessageParams } from "./acceleratorMessages";
 import { formatBytes } from "./format";
 import { notifySessionExpired } from "./session";
+import { diagnosticReport, type DiagnosticReport } from "./diagnosticChecks";
 
 export interface APIErrorPayload {
   error?: string;
   message?: string;
   code?: string;
   params?: Record<string, unknown>;
+  diagnostics?: DiagnosticReport;
 }
 
 export type APIErrorTranslator = (key: string, options: Record<string, unknown>) => string;
@@ -15,14 +18,18 @@ export class APIError extends Error {
   readonly params?: Record<string, unknown>;
   readonly fallback: string;
   readonly status: number;
+  readonly diagnostics?: DiagnosticReport;
+  readonly requestId?: string;
 
-  constructor(code: string, params: Record<string, unknown> | undefined, fallback: string, status: number) {
+  constructor(code: string, params: Record<string, unknown> | undefined, fallback: string, status: number, diagnostics?: DiagnosticReport, requestId?: string) {
     super(fallback || code);
     this.name = "APIError";
     this.code = code;
     this.params = params;
     this.fallback = fallback;
     this.status = status;
+    this.diagnostics = diagnostics;
+    this.requestId = requestId;
   }
 }
 
@@ -35,8 +42,7 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
     params.detail = pullSettingErrorDetail(t, error);
   }
   if (error.code === "ACCELERATOR_FEATURE_UNSUPPORTED") {
-    const feature = String(params.feature ?? "");
-    return t("acceleratorFeature.unsupported", { ...params, feature: t(`acceleratorFeature.names.${feature}`, { defaultValue: feature }), defaultValue: error.fallback || error.code });
+    return t("acceleratorFeature.unsupported", { ...acceleratorMessageParams(t, params), defaultValue: error.fallback || error.code });
   }
   if (error.code === "SERVER_STORAGE_FULL" && typeof params.path === "string" && typeof params.available_bytes === "number" && typeof params.total_bytes === "number") {
     return t("serverStorageFull.at", { path: params.path, available: formatBytes(params.available_bytes), total: formatBytes(params.total_bytes), defaultValue: error.fallback || error.code });
@@ -105,6 +111,6 @@ export async function apiResponseError(response: Response, fallback: string): Pr
   }
   const detail = payload?.error || payload?.message || raw || fallback;
   if (response.status === 401 && payload?.code === "AUTHENTICATION_REQUIRED") notifySessionExpired();
-  if (payload?.code) return new APIError(payload.code, payload.params, detail, response.status);
+  if (payload?.code) return new APIError(payload.code, payload.params, detail, response.status, diagnosticReport(payload.diagnostics), response.headers.get("X-Request-ID") || undefined);
   return new Error(detail);
 }

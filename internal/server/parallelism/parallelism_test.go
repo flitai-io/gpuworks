@@ -38,13 +38,13 @@ func TestDefaulted(t *testing.T) {
 		nodes []int
 		want  Spec
 	}{
-		{"a stage per node, TP over the fewest GPUs", Spec{}, []int{8, 4}, Spec{TP: 4, PP: 2, NNodes: 2}},
-		{"one-GPU nodes", Spec{}, []int{1, 1}, Spec{TP: 1, PP: 2, NNodes: 2}},
-		{"a stated PP keeps the per-node share", Spec{PP: 1}, []int{2, 2}, Spec{TP: 4, PP: 1, NNodes: 2}},
-		{"a PP that cannot split the GPUs falls back", Spec{PP: 3}, []int{2, 2}, Spec{TP: 2, PP: 2, NNodes: 2}},
-		{"a stated TP is kept", Spec{TP: 2, NNodes: 2}, []int{8, 8}, Spec{TP: 2, PP: 1, NNodes: 2}},
-		{"a single node is left to the scheduler", Spec{}, []int{8}, Spec{PP: 1, NNodes: 1}},
-		{"a node without GPUs", Spec{NNodes: 2}, []int{2, 0}, Spec{PP: 1, NNodes: 2}},
+		{"a stage per node, TP over the fewest GPUs", Spec{}, []int{8, 4}, Spec{TP: 4, PP: 2, DP: 1, NNodes: 2}},
+		{"one-GPU nodes", Spec{}, []int{1, 1}, Spec{TP: 1, PP: 2, DP: 1, NNodes: 2}},
+		{"a stated PP keeps the per-node share", Spec{PP: 1}, []int{2, 2}, Spec{TP: 4, PP: 1, DP: 1, NNodes: 2}},
+		{"a PP that cannot split the GPUs falls back", Spec{PP: 3}, []int{2, 2}, Spec{TP: 2, PP: 2, DP: 1, NNodes: 2}},
+		{"a stated TP is kept", Spec{TP: 2, NNodes: 2}, []int{8, 8}, Spec{TP: 2, PP: 1, DP: 1, NNodes: 2}},
+		{"a single node is left to the scheduler", Spec{}, []int{8}, Spec{PP: 1, DP: 1, NNodes: 1}},
+		{"a node without GPUs", Spec{NNodes: 2}, []int{2, 0}, Spec{PP: 1, DP: 1, NNodes: 2}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.spec.Defaulted(tc.nodes); got != tc.want {
@@ -55,16 +55,16 @@ func TestDefaulted(t *testing.T) {
 }
 
 func TestAssignedAndWorld(t *testing.T) {
-	if got := (Spec{}).Assigned(4); got != (Spec{TP: 4, PP: 1, NNodes: 1}) || got.World() != 4 {
+	if got := (Spec{}).Assigned(4); got != (Spec{TP: 4, PP: 1, DP: 1, NNodes: 1}) || got.World() != 4 {
 		t.Fatalf("unstated on 4 GPUs = %+v", got)
 	}
-	if got := (Spec{PP: 2}).Assigned(4); got != (Spec{TP: 2, PP: 2, NNodes: 1}) {
+	if got := (Spec{PP: 2}).Assigned(4); got != (Spec{TP: 2, PP: 2, DP: 1, NNodes: 1}) {
 		t.Fatalf("PP 2 on 4 GPUs = %+v", got)
 	}
-	if got := (Spec{PP: 3}).Assigned(4); got != (Spec{TP: 4, PP: 1, NNodes: 1}) {
+	if got := (Spec{PP: 3}).Assigned(4); got != (Spec{TP: 4, PP: 1, DP: 1, NNodes: 1}) {
 		t.Fatalf("PP that does not divide falls back to 1: %+v", got)
 	}
-	if got := (Spec{TP: 2, NNodes: 2}).Assigned(1); got != (Spec{TP: 2, PP: 1, NNodes: 2}) || got.World() != 2 {
+	if got := (Spec{TP: 2, NNodes: 2}).Assigned(1); got != (Spec{TP: 2, PP: 1, DP: 1, NNodes: 2}) || got.World() != 2 {
 		t.Fatalf("a stated spec is kept: %+v", got)
 	}
 	if got := (Spec{}).Assigned(0); got.TP != 1 {

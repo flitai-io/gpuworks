@@ -43,9 +43,10 @@ func TestDisabledCacheDeletionProtections(t *testing.T) {
 				_, err := f.st.UpdateStorage(f.cache.ID, StoragePatch{AllNodes: &no, Targets: &[]StorageNode{{NodeID: f.n2.ID}}})
 				must(err)
 			case "type_changed":
-				kind := proto.StorageNFS
-				_, err := f.st.UpdateStorage(f.cache.ID, StoragePatch{Type: &kind})
-				must(err)
+				// UpdateStorage refuses this switch while the cache holds the
+				// entry; the eviction guard must still refuse a storage whose
+				// type is no longer nfs_cache, however it changed.
+				must(f.st.db.Model(f.cache).Update("type", proto.StorageNFS).Error)
 			case "not_ready":
 				f.report(t, f.n1, proto.StorageStatus{ID: f.cache.ID, State: proto.StorageStateFailed, CachePath: f.cache.CachePath})
 			case "source_file":

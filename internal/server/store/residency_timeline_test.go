@@ -193,7 +193,11 @@ func sameWords(a, b string) bool {
 
 func TestDeletingAnInstanceRecordsWhereItSat(t *testing.T) {
 	s, node, ids := seedResidency(t)
-	if err := s.DB().Create(&Instance{UUID: "gone", DeploymentID: ids["alpha"], NodeID: node.ID, State: proto.InstStopped, GPUIndexes: "[0,1]"}).Error; err != nil {
+	if err := s.DB().Create(&Instance{UUID: "gone", DeploymentID: ids["alpha"], NodeID: node.ID, State: proto.InstStopped, GPUIndexes: "[0,1]",
+		// Old startup observations must not be copied into removal events.
+		DesiredStateJSON: `{"launch":{"startup_estimate":{"weight_bytes":1073741824,"environment_key":"legacy-cohort"}}}`,
+		Measured:         `{"StartupSeconds":100,"ModelLoadingSeconds":50}`,
+	}).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DB().Create(&Instance{UUID: "never-placed", DeploymentID: ids["alpha"], NodeID: node.ID, State: proto.InstPending}).Error; err != nil {

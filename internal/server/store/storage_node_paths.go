@@ -3,9 +3,10 @@ package store
 import (
 	"errors"
 	"fmt"
-	"gorm.io/gorm"
 	"path"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 // SetStorageNodePath gives one node its own directory for a storage: the

@@ -140,7 +140,7 @@ func installedSecrets(report InstallReport, opts InstallOptions, access sshAcces
 		return store.NodeSSHSecrets{}
 	}
 	switch report.AuthUsed {
-	case provision.AuthPassword:
+	case provision.AuthPassword, provision.AuthKeyboardInteractive:
 		return store.NodeSSHSecrets{Password: opts.Password}
 	case provision.AuthPrivateKey:
 		return store.NodeSSHSecrets{PrivateKeyPEM: opts.SSHKeyPEM}

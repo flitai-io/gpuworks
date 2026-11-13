@@ -128,3 +128,29 @@ test("logout preserves work on server failure and clears account state after suc
   assert.equal(clearedAccount, true);
   assert.equal(screen.queryByRole("textbox", { name: "Deployment name" }), null);
 });
+
+test("the user read while confirming the session reaches the shell without a second request", async () => {
+  const { useSessionUser } = await import("../src/components/sessionUser.ts");
+  const asked: string[] = [];
+  globalThis.fetch = async (url) => {
+    asked.push(String(url));
+    return Response.json({ id: 1, username: "ops", role: "admin", password_policy: { min_length: 8, max_length: 128 } });
+  };
+  function Who() {
+    const user = useSessionUser();
+    return <p>{user ? `${user.username} ${user.password_policy?.min_length}` : "unknown"}</p>;
+  }
+  render(<I18nextProvider i18n={i18n}><SessionBoundary>{() => <Who />}</SessionBoundary></I18nextProvider>);
+  assert.ok(await screen.findByText("ops 8"));
+  assert.deepEqual(asked, ["/api/v1/auth/me"]);
+});
+
+test("an unreadable identity answer still opens the shell, without a user", async () => {
+  const { useSessionUser } = await import("../src/components/sessionUser.ts");
+  globalThis.fetch = async () => new Response("not json", { status: 200 });
+  function Who() {
+    return <p>{useSessionUser()?.username ?? "unknown"}</p>;
+  }
+  render(<I18nextProvider i18n={i18n}><SessionBoundary>{() => <Who />}</SessionBoundary></I18nextProvider>);
+  assert.ok(await screen.findByText("unknown"));
+});

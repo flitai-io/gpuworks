@@ -96,7 +96,8 @@
   "vendor": {
     "nvidia": "NVIDIA",
     "ascend": "Ascend",
-    "ppu": "T-Head"
+    "ppu": "T-Head",
+    "kunlunxin": "Kunlunxin"
   },
   "empty": {
     "physical": "No GPU devices",

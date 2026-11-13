@@ -21,6 +21,7 @@ func TestNewDepsWiresEverySeam(t *testing.T) {
 		"StartDetached":  deps.StartDetached == nil,
 		"Euid":           deps.Euid == nil,
 		"LookupUser":     deps.LookupUser == nil,
+		"LookupAccount":  deps.LookupAccount == nil,
 		"HasBinary":      deps.HasBinary == nil,
 		"SystemdRunning": deps.SystemdRunning == nil,
 		"FreeBytes":      deps.FreeBytes == nil,

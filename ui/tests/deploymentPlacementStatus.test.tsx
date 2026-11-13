@@ -206,3 +206,19 @@ test("active preparation and failed preparation say different things", () => {
   assert.ok(screen.getByText(i18n.t("detail.placement.preparationFailed", { count: 2 })));
   assert.equal(screen.queryByText(i18n.t("detail.placement.preparingModel", { count: 2 })), null);
 });
+
+
+test("a disk-space block remains the placement cause while another model is preparing", () => {
+  const detail = "insufficient disk space at /cache/models: available=1048576 required=2147483648";
+  show(deployment({ model_progress: [
+    { node_uuid: "n-2", state: "downloading", preparation: { phase: "downloading", total_known: true, idle_seconds: 0 } },
+    { node_uuid: "n-1", state: "insufficient_disk_space", message: detail, preparation: { phase: "waiting", reason: "MODEL_CACHE_DISK_FULL", total_known: false, idle_seconds: 0 } },
+  ] }));
+  assert.ok(screen.getByText("Insufficient model disk space; 2 replica(s) have not started"));
+  assert.ok(screen.getByText("Insufficient model disk space"));
+  assert.ok(screen.getByText(detail));
+  assert.equal(screen.queryByText(i18n.t("detail.placement.preparingModel", { count: 2 })), null);
+  assert.equal(screen.queryByText(i18n.t("detail.placement.waiting", { count: 2 })), null);
+  assert.equal(screen.queryByText(locale.closest), null, "the old scheduler refusal must not hide disk exhaustion");
+  assert.equal(screen.queryByText(i18n.t("preparation.noAutoRetry")), null, "disk admission must not invent copy retry policy");
+});

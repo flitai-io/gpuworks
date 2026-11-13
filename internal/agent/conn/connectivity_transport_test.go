@@ -21,6 +21,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/libp2p/go-yamux/v5"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 

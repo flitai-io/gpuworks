@@ -78,7 +78,7 @@ type Node struct {
 	// platform lifts only its own.
 	SchedulingBy string `json:"scheduling_by,omitempty"`
 	// CordonReason is why the platform holds the node out of scheduling
-	// now (runtime_gpu_blocked, card_needs_host_reboot); absent unless
+	// now (runtime_gpu_blocked, card_needs_host_reboot, kube_unschedulable); absent unless
 	// SchedulingBy is platform. A client renders the code in its language.
 	CordonReason string `json:"cordon_reason,omitempty"`
 	Name         string `json:"name,omitempty"`
@@ -111,6 +111,11 @@ type Node struct {
 	PathUsage         any        `json:"path_usage,omitempty"`
 	RuntimeDriver     string     `json:"runtime_driver,omitempty"`
 	RuntimePreference string     `json:"runtime_preference,omitempty"`
+	// RuntimeChoices are the runtime preferences the operator may set on
+	// this node (PATCH /nodes/{uuid}/runtime), in the order to offer them;
+	// absent when the node has no choice to make (a Kubernetes node runs
+	// its instances as pods of its cluster). A Mac offers only auto.
+	RuntimeChoices []string `json:"runtime_choices,omitempty"`
 	// RuntimePlugin is the installed vendor container plugin, for display
 	// ("NVIDIA Container Toolkit 1.17.4"); absent when none is installed.
 	RuntimePlugin string `json:"runtime_plugin,omitempty"`
@@ -140,7 +145,8 @@ type Node struct {
 	// cards the node manages: auto, a vendor, or absent when never chosen
 	// (which is automatic). AcceleratorVendors is every vendor whose cards
 	// the agent last saw on the host's bus, the managed one (GPUVendor)
-	// included; a client offers the choice only when it lists more than one.
+	// included, and on a Kubernetes node only the vendors that run there;
+	// a client offers the choice only when it lists more than one.
 	AcceleratorPreference string                      `json:"accelerator_preference,omitempty"`
 	AcceleratorVendors    []proto.AcceleratorPresence `json:"accelerator_vendors,omitempty"`
 	Runtimes              []string                    `json:"runtimes,omitempty"`
@@ -156,26 +162,28 @@ type Node struct {
 	// ComputeNetwork / ComputeAddress name the network the node would use
 	// for compute traffic on its own (its compute network, else the
 	// management network) and its address there.
-	ComputeNetwork    string        `json:"compute_network,omitempty"`
-	ComputeAddress    string        `json:"compute_address,omitempty"`
-	ServerURL         string        `json:"server_url,omitempty"`
-	ConnectMode       string        `json:"connect_mode,omitempty"`
-	ServerDialAddress string        `json:"server_dial_address,omitempty"`
-	ServerDialListen  string        `json:"server_dial_listen,omitempty"`
-	AgentVersion      string        `json:"agent_version,omitempty"`
-	Caps              []string      `json:"caps,omitempty"`
-	LastRemoteAddr    string        `json:"last_remote_addr,omitempty"`
-	LastRejectReason  string        `json:"last_reject_reason,omitempty"`
-	LastRejectAt      *time.Time    `json:"last_reject_at,omitempty"`
-	LastSeenAt        *time.Time    `json:"last_seen_at,omitempty"`
-	RecoveryPhase     string        `json:"recovery_phase,omitempty"`
-	RecoveryAttempts  int           `json:"recovery_attempts,omitempty"`
-	LastProbeAt       *time.Time    `json:"last_probe_at,omitempty"`
-	LastRecoveryError string        `json:"last_recovery_error,omitempty"`
-	HasSSHCredential  bool          `json:"has_ssh_credential"`
-	CreatedAt         time.Time     `json:"created_at"`
-	GPUs              []GPU         `json:"gpus"`
-	Topology          *NodeTopology `json:"topology,omitempty"`
+	ComputeNetwork     string        `json:"compute_network,omitempty"`
+	ComputeAddress     string        `json:"compute_address,omitempty"`
+	ServerURL          string        `json:"server_url,omitempty"`
+	ConnectMode        string        `json:"connect_mode,omitempty"`
+	ServerDialAddress  string        `json:"server_dial_address,omitempty"`
+	ServerDialListen   string        `json:"server_dial_listen,omitempty"`
+	AgentVersionChange string        `json:"agent_version_change,omitempty"`
+	AgentEligibility   string        `json:"agent_eligibility,omitempty"`
+	AgentVersion       string        `json:"agent_version,omitempty"`
+	Caps               []string      `json:"caps,omitempty"`
+	LastRemoteAddr     string        `json:"last_remote_addr,omitempty"`
+	LastRejectReason   string        `json:"last_reject_reason,omitempty"`
+	LastRejectAt       *time.Time    `json:"last_reject_at,omitempty"`
+	LastSeenAt         *time.Time    `json:"last_seen_at,omitempty"`
+	RecoveryPhase      string        `json:"recovery_phase,omitempty"`
+	RecoveryAttempts   int           `json:"recovery_attempts,omitempty"`
+	LastProbeAt        *time.Time    `json:"last_probe_at,omitempty"`
+	LastRecoveryError  string        `json:"last_recovery_error,omitempty"`
+	HasSSHCredential   bool          `json:"has_ssh_credential"`
+	CreatedAt          time.Time     `json:"created_at"`
+	GPUs               []GPU         `json:"gpus"`
+	Topology           *NodeTopology `json:"topology,omitempty"`
 }
 
 // SystemLabel is one generated node label: a key in the reserved

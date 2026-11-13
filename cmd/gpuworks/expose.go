@@ -372,7 +372,7 @@ func printAddress(io *selfinstall.IO, st *expose.Status) {
 	}
 	io.Say("")
 	io.Say("The address is public: anyone who has it reaches the login page. The REST API")
-	io.Say("requires a session and /v1 requires an API key, exactly as they do locally.")
+	io.Say("requires a session, and /v1 requires an API key unless the gateway was opened.")
 	io.Say("The connector runs in its own service: restarting or upgrading the server keeps")
 	io.Say("this address. `gpuworks expose down` closes the entry point.")
 }
@@ -541,7 +541,10 @@ func writeTail(w io.Writer, path string, n int) (int64, error) {
 	}
 	info, err := os.Stat(path)
 	if err != nil {
-		return 0, nil
+		if os.IsNotExist(err) {
+			return 0, nil // Rotation can remove the path before the next follow pass.
+		}
+		return 0, err
 	}
 	return info.Size(), nil
 }
@@ -557,7 +560,7 @@ func copyNew(w io.Writer, path string, offset int64) (int64, error) {
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil {
-		return offset, nil
+		return offset, err
 	}
 	if info.Size() < offset {
 		offset = 0

@@ -2,11 +2,12 @@ package planning
 
 import (
 	"context"
+	"strings"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"strings"
-	"testing"
 )
 
 func TestUnresolvedImageIsOnlyAllowedForResourcePreview(t *testing.T) {

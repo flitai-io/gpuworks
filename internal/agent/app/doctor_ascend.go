@@ -10,6 +10,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
+	"gpuworks.ai/gpuworks/internal/agent/gpu/cardsmoke"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -214,6 +215,10 @@ func (run *doctorDieRun) ask(ctx context.Context, dies []doctorDie) {
 			run.failed = append(run.failed, doctorDieFailed{die: die, at: at, detail: detail})
 			doctorRecordOutcome(ctx, die, errors.New(detail))
 		default:
+			if why := cardsmoke.NotHeldReason(err); why != "" {
+				run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, reason: why})
+				continue
+			}
 			if reason := gpu.HostRuntimeUnavailable(err); reason != "" {
 				run.stopped = reason
 				run.notChecked = append(run.notChecked, notChecked(dies[i:], "the runtime could not be used on this host")...)

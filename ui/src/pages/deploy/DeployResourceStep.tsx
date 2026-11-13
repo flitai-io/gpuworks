@@ -43,6 +43,7 @@ export default function DeployResourceStep({
   capability,
   preflight,
   result,
+  evaluating = false,
 }: {
   profile?: EngineProfile;
   eligibleNodes?: EligibleNode[];
@@ -50,6 +51,7 @@ export default function DeployResourceStep({
   capability?: Capability;
   preflight?: PreflightSummary;
   result: EvaluateResponse | null;
+  evaluating?: boolean;
 }) {
   const { t } = useTranslation("deploy");
   const { t: tc } = useTranslation("common");
@@ -57,7 +59,10 @@ export default function DeployResourceStep({
   const watchOptions = { form, preserve: true } as const;
   const nodeMode =
     Form.useWatch("node_selection_mode", watchOptions) || "manual";
-  const nnodes = Number(Form.useWatch("nnodes", watchOptions) || 1);
+  const [nodeCount, selectedGPUs = []] = Form.useWatch(
+    (values) => [values.nnodes, values.gpu_indexes] as const, watchOptions,
+  ) ?? [];
+  const nnodes = Number(nodeCount || 1);
   // A multi-node group is placed by the platform unless the deployer names
   // its nodes (the quick form's switch, here as a form control).
   const groupAuto = Form.useWatch("units_placement", watchOptions) !== "manual";
@@ -123,7 +128,7 @@ export default function DeployResourceStep({
               mode="multiple"
               allowClear
               placeholder={t("resource.autoSelect")}
-              options={gpuSelectOptions(selectedNode?.gpus, tc)}
+              options={gpuSelectOptions(selectedNode?.gpus, tc, nodeMode === "manual" && nnodes <= 1 ? { nodeUUID: selectedNode?.uuid ?? "", candidates: result?.gpu_candidates, pending: evaluating, selected: selectedGPUs, t } : undefined)}
             />
           </Form.Item>
         </Col>

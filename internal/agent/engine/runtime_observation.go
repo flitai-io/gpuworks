@@ -80,7 +80,7 @@ func (e *Engine) collectRuntimeObservation(ctx context.Context, driver runtime.D
 		observation.Container.Reason = observationReason(err)
 		return observation
 	}
-	if expectedID != "" && !sameContainerIdentity(expectedID, workload.ContainerID) {
+	if expectedID != "" && !handleIsName(driver) && !sameContainerIdentity(expectedID, workload.ContainerID) {
 		observation.Container.Reason = proto.ObservationReasonInspectFailed
 		return observation
 	}
@@ -143,6 +143,13 @@ func observationReason(err error) string {
 	default:
 		return proto.ObservationReasonInspectFailed
 	}
+}
+
+// handleIsName is true for a driver whose Run returns a name, not the
+// container ID the inspection reports (the identity check cannot apply).
+func handleIsName(driver runtime.Driver) bool {
+	named, ok := driver.(runtime.NamedWorkloads)
+	return ok && named.WorkloadHandleIsName()
 }
 
 func sameContainerIdentity(expected, actual string) bool {

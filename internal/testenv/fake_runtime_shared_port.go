@@ -81,7 +81,8 @@ func acquireSharedEnginePort(claim sharedClaim) (net.Listener, error) {
 	opts.StaticGauges = true
 	entry.server = &http.Server{Handler: fakehandler.New(opts)}
 	sharedEnginePorts[claim.port] = entry
-	go entry.server.Serve(listener)
+	// Releasing the last port claim owns server/listener shutdown.
+	go func() { _ = entry.server.Serve(listener) }()
 	return listener, nil
 }
 

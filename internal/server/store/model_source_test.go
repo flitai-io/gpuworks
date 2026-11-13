@@ -285,3 +285,53 @@ func TestNodeNeedsOwnDirectory(t *testing.T) {
 		}
 	}
 }
+
+// A create that fetches a template component into the shared storage its
+// primary sits on starts one write there, owned by the deployment; with no
+// storage chosen, that deployment's nodes that read the storage wait for it
+// instead of each downloading into local storage. Another deployment, a
+// preview, a node the storage does not serve, a finished or failed write, or
+// a chosen storage leave the usual order in charge.
+func TestModelSourceWaitsOnlyForASharedWriteItsDeploymentStarted(t *testing.T) {
+	f := newSourceFixture(t)
+	f.mount(t, f.n1, f.team, proto.StorageStateReady)
+	own, other := SourceRules{Deployment: 7}, SourceRules{Deployment: 8}
+	if src := f.source(t, f.n1, own); src.Action != SourceAcquire || src.Location.Storage.ID != f.local.ID {
+		t.Fatalf("nothing under way = %+v, want the default local storage", src)
+	}
+	row := f.file(t, f.team, nil, "MiniMax/MiniMax-H3-text_encoder", proto.MFDownloading)
+	row.DownloadDeploymentID = 7
+	if _, err := f.st.UpsertModelFile(row); err != nil {
+		t.Fatal(err)
+	}
+	if src := f.source(t, f.n1, own); src.Action != SourceWaitShared || src.Location.Storage.ID != f.team.ID {
+		t.Fatalf("own write under way = %+v, want to wait for lab-nfs", src)
+	}
+	// A write another deployment started, or a preview with no deployment,
+	// does not hold the node up: a stuck writer stalls only its own service.
+	for name, rules := range map[string]SourceRules{"another deployment": other, "preview": {}} {
+		if src := f.source(t, f.n1, rules); src.Action != SourceAcquire || src.Location.Storage.ID != f.local.ID {
+			t.Fatalf("%s = %+v, want the default local storage", name, src)
+		}
+	}
+	if src := f.source(t, f.n2, own); src.Action != SourceAcquire || src.Location.Storage.ID != f.local.ID {
+		t.Fatalf("n2 outside lab-nfs = %+v, want its local storage", src)
+	}
+	if src := f.source(t, f.n1, SourceRules{SaveTo: f.local.ID, Deployment: 7}); src.Action != SourceAcquire || src.Location.Storage.ID != f.local.ID {
+		t.Fatalf("local chosen = %+v, want the chosen storage", src)
+	}
+	row.State, row.Message = proto.MFFailed, "403 from the hub"
+	if _, err := f.st.UpsertModelFile(row); err != nil {
+		t.Fatal(err)
+	}
+	if src := f.source(t, f.n1, own); src.Action != SourceAcquire || src.Location.Storage.ID != f.local.ID {
+		t.Fatalf("failed write = %+v, want the default local storage", src)
+	}
+	row.State, row.Message = proto.MFPresent, ""
+	if _, err := f.st.UpsertModelFile(row); err != nil {
+		t.Fatal(err)
+	}
+	if src := f.source(t, f.n1, other); src.Action != SourceReady || src.Location.Storage.ID != f.team.ID {
+		t.Fatalf("finished write = %+v, want any deployment to read it from lab-nfs", src)
+	}
+}

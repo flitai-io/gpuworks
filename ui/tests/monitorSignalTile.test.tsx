@@ -24,6 +24,7 @@ await i18n.use(initReactI18next).init({
 const { cleanup, render, screen } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { default: SignalTile, formatSignalValue } = await import("../src/pages/monitor/SignalTile.tsx");
+const { colors } = await import("../src/theme/tokens.ts");
 const { formatLatency, formatLatencyText, latencyUnit } = await import("../src/pages/monitor/signalFormat.ts");
 import type { MonitorSignal } from "../src/api";
 
@@ -184,7 +185,11 @@ test("a tile passes no verdict: no status dot; only fewer replicas ready than wa
   unmount();
   const short = renderTile({ key: "ready_replicas", collected: true, value: 9, denominator: 11 });
   const number = short.container.querySelector(".monitor-signal-tile__value-number") as HTMLElement;
-  assert.equal(number.style.color, "rgb(219, 114, 0)");
+  // The warning text colour comes from the theme, so the check follows it.
+  const expected = document.createElement("span");
+  expected.style.color = colors.warningText;
+  assert.equal(number.style.color, expected.style.color);
+  assert.notEqual(number.style.color, "");
   short.unmount();
   const full = renderTile({ key: "ready_replicas", collected: true, value: 11, denominator: 11 });
   assert.equal((full.container.querySelector(".monitor-signal-tile__value-number") as HTMLElement).style.color, "");

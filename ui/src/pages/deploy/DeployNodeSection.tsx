@@ -298,7 +298,7 @@ export default function NodeSection({
                   {gpuModelSummary(selectedNode)}
                 </span>
                 <i />
-                <GPUGrid node={selectedNode} />
+                <GPUGrid node={selectedNode} resourceContext={{ nodeUUID: selectedNode.uuid, candidates: result?.gpu_candidates, pending: loading, t }} />
               </div>
             )}
           </div>

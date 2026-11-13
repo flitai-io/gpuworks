@@ -104,7 +104,7 @@ models:                       # FlatCatalog: a single top-level models list
 | Field | Constraints | Description |
 |---|---|---|
 | `name` | Required; unique within the model | |
-| `display_name_zh_cn` / `display_name_en` | Optional; one line, at most 56 / 72 characters respectively; each unique within the model and engine (ignoring case and extra spaces) | The spec's Chinese and English display names. The UI shows the one for its language, falls back to the other, and shows `name` when there is neither. Built-in specs set both. See [Display Names](#display-names) |
+| `display_name_zh_cn` / `display_name_en` | Optional; one line, at most 56 / 72 characters respectively; each unique within the model and engine (ignoring case and extra spaces) | The spec's Chinese and English display names. The UI shows the one for its language, falls back to the other, and shows `name` when there is neither. Built-in specs set both. See [Display Names](#显示名) |
 | `scenario` | `latency` \| `balanced` \| `throughput` | |
 | `engine` | Required; resolved through the registry at deployment time; valid values are `vllm` / `sglang` / `callable` (`internal/engines` is the sole source) | `callable` runs the Serve Adapter bundled with the catalog, with no log dialect or parameter dictionary; **the template controls the entire command line**. The engine appends no arguments. The template places platform facts such as model paths, ports, and multi-node ranks using [variables](#变量展开), and must reference `${API_PORT}` (ADR 0036) |
 | `image` | Required | For image reference syntax and drift, see [Image Families](image-families.md) and todo.md T2 |
@@ -173,6 +173,8 @@ sources:
     subfolder: sub/dir                      # Optional; normalized (no leading / or ..)
 ```
 
+`subfolder` selects one subtree of the repository by directory prefix, and the download keeps the repository-relative paths. When no directory has that name, it can name a single file in the repository and only that file is downloaded (for example, one adapter from a repository that keeps many LoRA files at its root); when a directory and a file share the name, the directory is selected.
+
 Multiple sources in the same spec mean that any one can be pulled. The deployment's `model_source.provider` selects which provider's weights to run; [pull settings](../how-to/configure-pull-settings.md) determine how the node obtains them (already present, copied within a sync group, read from shared storage, or downloaded).
 
 ### image_sources: Image Sources Declared by the Template
@@ -228,7 +230,7 @@ writes only the normalized list.
 
 For example, GLM-5.3-Flash's two vLLM Hopper specs are "H20 / H200 141G · FP8 · 8 GPUs · 1M context" and "H100 / H20 96G · FP8 · 8 GPUs · 256K context".
 
-The `display_profile` and `gpus.display_target` keys of earlier templates are no longer used: an import still reads them, ignores them and raises the `CATALOG_DISPLAY_PROFILE_RETIRED` warning (see [Pre-Import Checks and Warnings](#pre-import-checks-and-warnings)).
+The `display_profile` and `gpus.display_target` keys of earlier templates are no longer used: an import still reads them, ignores them and raises the `CATALOG_DISPLAY_PROFILE_RETIRED` warning (see [Pre-Import Checks and Warnings](#导入前检查与警告)).
 
 ### assets[]
 
@@ -426,10 +428,28 @@ Special cases:
 the curl / Python examples under "Usage" on the template page and the initial input in Playground use it instead of a generic example, preserving it exactly (including multiple lines and trailing newlines).
 It only affects examples and initial values and never rewrites actual requests. Keys must be the operation's primary text input, and values must be nonempty. Examples also include `request_defaults`.
 
+`max_reference_images` is valid only on `openai.image.edit` and declares how many reference images one edit accepts (a positive count, default 1; the platform sets no upper bound, so state what the engine actually accepts). Each reference image is one `image` part of the multipart request, in upload order; Playground uses it to allow selecting several images, show their order, and cap the count.
+
 When a template creates a deployment, if the deployment's model does not yet have its own operations, the operations declared by the template (along with model-level
 `input_modalities`) are written to the model as its initial operations. The deployment page, Playground, and its proxy read only the operations
-on the model. Existing nonempty operations are not overwritten by subsequent deployments. An empty list, including `[]` explicitly cleared on the model page, is populated from the next deployed template that declares operations.
+on the model. Existing nonempty operations are not overwritten by subsequent deployments, except that type-only operations inferred from the repository's tasks at registration count as unconfigured and are replaced by the template's declaration. An empty list, including `[]` explicitly cleared on the model page, is populated from the next deployed template that declares operations.
 Preview (evaluate) does not write to the model.
+
+### api.tokenizer_ref: Independent Tokenizer Source
+
+When the weight repository lacks independent tokenizer files, declare a verified tokenizer repository for the evaluation's **Automatic** source:
+
+```yaml
+api:
+  tokenizer_ref: ms://Qwen/Qwen3.8-Flash-Next@2741eec155d03a8ce151b993ccce1a7b1e398d6b
+  operations:
+  - type: openai.chat
+```
+
+Only `hf://org/repo@<40-hex-commit>` or `ms://org/repo@<40-hex-commit>` is accepted; arbitrary URLs, file paths, and mutable branches are not allowed.
+Automatic resolution still tries the inference service's tokenize endpoints and the node's existing vocabulary first. Without a node vocabulary, it uses this declaration, or the weight repository if none is declared. Manually selected sources are unaffected.
+
+New deployments save the declaration in their snapshot, and an existing snapshot's declaration takes precedence. Deployments that have deviated from the template do not automatically use template declarations, including those in the snapshot. If an old snapshot lacks one, a declaration added to the current template applies only when the model, spec and source, engine, image, and the actual weights' provider, repository, revision, and subfolder all match. Managed evaluations from legacy clients that omit the source and leave the reference empty also use this declaration; tokenizer repositories are never guessed from model names or READMEs.
 
 ### api.metrics: Engine Metric Mapping
 

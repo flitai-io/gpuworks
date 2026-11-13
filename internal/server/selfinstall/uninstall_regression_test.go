@@ -17,7 +17,7 @@ func TestUninstallPurgeIncludesLogsRotatedDuringShutdown(t *testing.T) {
 			writeFile(t, unrelated, "operator backup", 0o600)
 		}
 	}
-	report, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil)
+	report, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestUninstallRefusesAmbiguousRelativeServeProcess(t *testing.T) {
 	h := uninstallFixture(t)
 	h.supervisedByNohup()
 	h.run.output["ps -ww -axo pid=,command="] = "42 ./gpuworks serve --addr 127.0.0.1:8802\n"
-	if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil); err == nil {
+	if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err == nil {
 		t.Fatal("purge accepted a server whose relative executable cannot be identified")
 	}
 	if _, err := os.Stat(h.layout.Binary()); err != nil {
@@ -51,7 +51,7 @@ func TestUninstallIgnoresUnrelatedServerCommands(t *testing.T) {
 			h := uninstallFixture(t)
 			h.supervisedByNohup()
 			h.run.output["ps -ww -axo pid=,command="] = "2147483647 " + command + "\n"
-			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true}, nil); err != nil {
+			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil); err != nil {
 				t.Fatalf("unrelated process blocked uninstall: %v", err)
 			}
 		})
@@ -63,7 +63,7 @@ func TestUninstallIdentifiesAbsoluteTargetWithSpacesWithoutKernelIdentity(t *tes
 	h.writeExistingInstall("previous")
 	h.supervisedByNohup()
 	h.run.output["ps -ww -axo pid=,command="] = "2147483647 " + h.layout.Binary() + " serve --addr 127.0.0.1:8802\n"
-	if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil); err == nil {
+	if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err == nil {
 		t.Fatal("purge accepted an absolute target containing spaces")
 	}
 	if _, err := os.Stat(h.layout.Binary()); err != nil {
@@ -94,7 +94,7 @@ func TestUninstallRefusesSpacedAliasesWithoutKernelIdentity(t *testing.T) {
 				}
 			}
 			h.run.output["ps -ww -axo pid=,command="] = "2147483647 " + program + " serve --addr 127.0.0.1:8802\n"
-			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Yes: true, Purge: true}, nil); err == nil {
+			if _, err := h.installer.Uninstall(t.Context(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil); err == nil {
 				t.Fatal("purge accepted a spaced executable alias")
 			}
 			if _, err := os.Stat(h.layout.Binary()); err != nil {

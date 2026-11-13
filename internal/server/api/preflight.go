@@ -9,22 +9,13 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
-	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
-
-type distributedPreflightRequest struct {
-	NodeUUIDs  []string `json:"node_uuids"`
-	Port       int      `json:"port"`
-	MasterAddr string   `json:"master_addr"`
-	Bandwidth  bool     `json:"bandwidth"`
-	Seconds    int      `json:"seconds"`
-}
 
 type preflightPair struct {
 	SourceUUID      string  `json:"source_uuid"`
@@ -58,12 +49,12 @@ func (a *apiHandlers) distributedPreflight(w http.ResponseWriter, r *http.Reques
 		writeProductError(w, http.StatusServiceUnavailable, ErrorNodeRPCUnavailable, "node RPC is not configured", nil)
 		return
 	}
-	var req distributedPreflightRequest
+	var req deployment.DistributedPreflightRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := validatePreflightRequest(&req); err != nil {
+	if err := deployment.ValidatePreflightRequest(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
@@ -83,7 +74,7 @@ func (a *apiHandlers) distributedPreflight(w http.ResponseWriter, r *http.Reques
 		nodes = append(nodes, node)
 	}
 	// The ranks probe each other on the network the group would share.
-	group, err := a.computeGroup(nodes)
+	group, err := a.deployments().ComputeGroup(nodes)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -92,7 +83,7 @@ func (a *apiHandlers) distributedPreflight(w http.ResponseWriter, r *http.Reques
 		hosts[node.UUID] = group.Ranks[node.ID].IP
 	}
 	if req.MasterAddr != "" {
-		host, err := masterHost(req.MasterAddr)
+		host, err := deployment.MasterHost(req.MasterAddr)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err)
 			return
@@ -196,43 +187,7 @@ func (a *apiHandlers) distributedPreflight(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, out)
 }
 
-func validatePreflightRequest(req *distributedPreflightRequest) error {
-	if len(req.NodeUUIDs) < 2 {
-		return productError(ErrorPreflightMinimumNodes, "at least two nodes are required", map[string]any{"minimum": 2})
-	}
-	if len(req.NodeUUIDs) > 16 {
-		return productError(ErrorPreflightMaximumNodes, "at most 16 nodes are supported", map[string]any{"maximum": 16})
-	}
-	seen := make(map[string]struct{}, len(req.NodeUUIDs))
-	for _, uuid := range req.NodeUUIDs {
-		trimmed := strings.TrimSpace(uuid)
-		if trimmed == "" {
-			return productError(ErrorPreflightNodeRequired, "node UUID must not be empty", nil)
-		}
-		if trimmed != uuid {
-			return productError(ErrorPreflightNodeWhitespace, "node UUID must not contain surrounding whitespace", map[string]any{"node": uuid})
-		}
-		if _, duplicate := seen[uuid]; duplicate {
-			return productError(ErrorPreflightDuplicateNode, fmt.Sprintf("duplicate node UUID %s", uuid), map[string]any{"node": uuid})
-		}
-		seen[uuid] = struct{}{}
-	}
-	if req.Port == 0 {
-		req.Port = deploy.DefaultMasterPort
-	}
-	if req.Port < 1024 || req.Port > 65535 {
-		return productError(ErrorPreflightPortInvalid, "preflight port must be between 1024 and 65535", map[string]any{"minimum": 1024, "maximum": 65535})
-	}
-	if req.Seconds == 0 {
-		req.Seconds = 3
-	}
-	if req.Seconds < 1 || req.Seconds > 10 {
-		return productError(ErrorPreflightDurationInvalid, "bandwidth duration must be between 1 and 10 seconds", map[string]any{"minimum": 1, "maximum": 10})
-	}
-	return nil
-}
-
-func preflightListenerTTL(req distributedPreflightRequest) int {
+func preflightListenerTTL(req deployment.DistributedPreflightRequest) int {
 	ttl := len(req.NodeUUIDs)*(len(req.NodeUUIDs)-1)*(req.Seconds+5) + 30
 	if ttl < 60 {
 		return 60

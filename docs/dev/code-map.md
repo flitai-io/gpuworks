@@ -17,7 +17,7 @@
 ## server 侧（`internal/server/`）
 
 - `app`：装配根（config/store/bus/hub/HTTP 接线、启动与优雅关停、accesslog、admin bootstrap）。
-- `api`（+`api/dto`）：REST 层，按域拆分为数十个文件，DTO 与 entity 严格分离；`auth` JWT 登录鉴权。
+- `api`（+`api/dto`）：REST 层，按域拆分为数十个文件，DTO 与 entity 严格分离；部署创建/评估委托 `deployment`，handler 只做解码与映射；`auth` JWT 登录鉴权。
 - `hub`：agent 会话管理、desired state 推送（含来源规则、代理、同步组成员与凭据，凭据只随 state.sync 下发）、server_dial。
 - 拉取设置（ADR 0048、[ADR 0050](../adr/0050-model-pull-sources-and-proxies.md)）：规则（镜像规则与模型站点规则同表，种类由 `match` 是否带 `http(s)://` 决定）、代理、同步组、凭据带类型的表在 `store`（迁移见 `migration_pull_settings.go`），API 在 `api/pull*.go`。
 
@@ -39,6 +39,7 @@
 - `automation`：调度分析的执行者，评估器按 10 秒 tick 执行定时计划与唤醒等位，驻留仲裁在让卡到期时（闲置时间满、一轮服务结束、等待完成的上限到）由一个定时器触发，只通过 `Source` / `Actions` 接口读写，动作经与 API 相同的生命周期锁；由 `app` 接线（`automation_adapter.go`）。
 - `yieldpolicy`：叶子包（仅标准库），部署的出让策略（`never` / `idle` / `timeslice` / `anytime`）及其参数的唯一产地：取值范围、默认值与归一、让卡规则 `Yields` 与让卡条件 `TermsOf`；store（列值）、网关（唤醒时请求最多等多久）、放置与驻留仲裁（谁可以让谁休眠）共用，见 [出让策略](../explanation/service-levels.md)。
 - `deploy`：引擎参数组装、instance 状态机（含 `optimizing`、sleep/wake；状态枚举定义在 `internal/proto`）。
+- `deployment`：部署用例层。创建与评估一个部署（请求类型进，部署行、预览或 ProductError 出；`Kind` 区分请求错误、集群当前状态的冲突与服务端故障，api 映射成 HTTP 状态）以及部署的读模型（`StoreRows`/`ListRows` 行查找、`RuntimeStates` 运行时状态推导、`ModelPreparation` 模型准备观测）。不依赖 `net/http` 与 `api`（`make check-architecture` 守护），api 的 handler 只做解码、调用、映射；自动化、批处理、MCP 复用同一实现。编辑、节点删除、存储移除与评测执行器尚在 api，按组迁入。
 - `proxy`：`/v1` OpenAI 兼容反代 + API key；睡眠实例返回 503。PD 交接在 `pd_sequential.go` / `pd_concurrent.go`，请求的 prefill 阶段（实例、等待、prefill 实例自报的排队与 Prefill、降级原因、`pd.prefill` span）由 `pd_stage.go` 记下，进请求记录与在途表。
 - `inferenceapi`：稳定的推理操作词表与 Contract（openai.chat/embeddings/rerank 等），被目录、部署快照、proxy、Playground 共享。
 - `aihelper`：AI 助手的 agent 循环（流式、并行工具、步数预算）、任务种子与已知故障表；工具以提问用户的身份在进程内读本平台 API（`APIReader`，由 `api` 按请求提供，复用同一路由与鉴权）：`cluster_overview`、`search_api`（目录 `apidocs_gen.go` 由 `docs/reference/api.md` 生成并由测试守护）、`call_api`（jq、条数与长度上限、敏感字段脱敏、时间换算）、`search_metrics`；不可读的 GET 路由及原因在 `apiread.go`。`app/aiservice.go` 组装每次请求。
@@ -48,7 +49,7 @@
   估算器负责产生数值；OpenAI 兼容 LLM 在预组装上下文上跑只读工具 agent 循环。未配置 LLM 时，规则命中与适配表仍可用。
 
   同一套工具经 MCP 对外提供：协议在叶子包 `mcp`（JSON-RPC、版本协商、方法分发，不认识调用者与工具），`api/mcp.go` 只做开关、限流并以调用者身份运行工具（`aihelper.Tool.Run`，与助手的 agent 循环同一份调用、报错与截断）。鉴权用平台 API 令牌（`api/platform_tokens.go`）：`managementAuth` 识别会话或令牌，令牌范围由路由声明（`sessionOnly`、`readTokensRead`，见 `api/auth.go`）；校验结果在 `store` 里短时缓存，吊销即失效。
-- `provider` / `provision`：云厂商（aliyun/runpod/compshare/autodl/vast/zstack）租机与 SSH 预检查/安装接入。
+- `provider` / `provision`：云厂商（aliyun/digitalocean/runpod/compshare/autodl/vast/zstack）租机与 SSH 预检查/安装接入。
 
   阿里云签 V3 请求、经云助手（`provider.ConnectionCloudAssistant`，一种不走 SSH 的连接方式）安装；`provision/connectivity.go` 是预检查里节点↔server 双向连通判断的唯一实现。SSH 安装（Linux 与 Mac）都是上传 agent 与 `installscript.Script` 后运行它（`provision/install_script.go`，`install_command.go` 生成 curl 与离线包两种手工安装命令），启动配置由脚本经 `gpuworks-agent configure` 记下，不在 provision 里另拼 systemd/nohup 启动命令。
 
@@ -76,7 +77,7 @@
 - `internal/server/sourceurl`：纯叶子包（仅标准库），站点规则的语法、匹配与 `Plan`（叠加、去重、回源判定）的唯一实现；`store` 按种类分派校验，`planning` 与 `modelmeta` 调用。
 - `nodeaddr`：节点地址校验。
 - `modelcache`：叶子包，`nfs_cache` 存储节点缓存的淘汰计划（纯函数：上限、保留空间、按最近使用从旧到新、只淘汰未被引用且有共享副本兜底的缓存）；调度准入（`planning.CachePlan`）与 controller 淘汰共用。存储与模型文件的数据结构、位置查询（`store.ModelLocation`，宿主机路径的唯一产地）在 `store/storage*.go`、`model_files.go`、`model_location.go`，见 ADR 0034。
-- `prepobs`：叶子包，模型准备的内存观测（有界、过期、不落库）：hub 持有 agent 复制进度帧（`Copies`，按会话作废、按节点反向索引），controller 持有缓存淘汰阶段（`Phases`）。controller 另记实际选中的准备节点（`controller/preparation_view.go`）；`planning.PrepareModelView` 把这些与持久化的模型文件状态归约成部署的准备视图，API 经 `api.ModelPreparation` 读取。失败缓存复制的重试由 `controller.RetryCacheCopy` 编排。
+- `prepobs`：叶子包，模型准备的内存观测（有界、过期、不落库）：hub 持有 agent 复制进度帧（`Copies`，按会话作废、按节点反向索引），controller 持有缓存淘汰阶段（`Phases`）。controller 另记实际选中的准备节点（`controller/preparation_view.go`）；`planning.PrepareModelView` 把这些与持久化的模型文件状态归约成部署的准备视图，API 经 `Deps.Preparation`（`deployment.ModelPreparation`） 读取。失败缓存复制的重试由 `controller.RetryCacheCopy` 编排。
 - `acquisition`：部署页展示用的纯函数 resolver，只列出已持有模型的存储（`present`）、节点取模型时可保存到的存储（`targets`）与模板的权重来源（`providers`），不做选择、不做 I/O；镜像和模型怎么到达节点由节点启动时按拉取设置决定，不在这里（ADR 0048）。逐节点预估（`nodes`）在 evaluate 里由 `planning` 算出。
 - `inferencecatalog`：ADR 0009 扁平目录（原始模型 + 可执行 spec 列表）、`inferencecatalog/seed`（内置包）、`inferencecatalog/packages`（内容寻址包仓库，DB 只存 digest/投影）。
 - `chipmatch` / `hardwarecatalog` / `placement` / `partitioncap`：spec GPU 谓词与上报硬件事实匹配、假想规划用静态加速卡目录、spec 内嵌 Starlark 拓扑 resolver（确定性、无 I/O、硬限额）、dGPU 能力推导（status/reason 文本唯一产地）。
@@ -88,6 +89,8 @@
 - `distribution`：发布通道客户端（ADR 0040）：签名信封与索引 schema、同时请求所有发布源取第一个验签通过的索引、文件按 sha256 校验并换源续传；发布方通知 `notices.json` 的 schema、校验、本地匹配与拉取（`notices.go`，ADR 0054）；默认源与信任公钥是包内常量。只依赖标准库（`check-architecture` 守护），selfinstall 与 api 共用。
 - `diagnostics`：远程排查。调试采集（server 与所选节点的 debug 会话、所选部署请求原文的记录，一次一个、按时长与大小自动结束）与诊断信息收集（时间范围内的日志、调试采集文件、节点诊断与脱敏的数据库快照打包下载）；数据源由 `app/diagnostics_sources.go` 提供，`gpuworks support-bundle` 走同一套收集。
 - `usagereport`：用户体验改进计划（ADR 0054，字段见 `docs/reference/usage-report.md`）：叶子包，日报结构与裁剪、进程内计数器（API 路由/错误码/panic、登录、agent 连接问题，由 `api.countUsage` 中间件与 hub 写入）、SLS WebTracking 与 Cloudflare 收集端的发送、每日发送时刻，以及检查更新附带的装机规模 `FleetReport`；库侧日汇总是 `store/usage_report.go`，调度与组装在 `app/usage_report.go`，通知铃铛服务在 `app/notices.go`。
+- `kubemanifest`：叶子包，Kubernetes 集群接入 manifest（Namespace、RBAC、Secret、PriorityClass、agent DaemonSet）的纯函数渲染；集群接入与 enroll 接口在 `api/kube.go`，离开集群的节点回收在 `app/kube_nodes.go`（ADR 0052）。
+- `kubeapply`：叶子包，用一份 kubeconfig（只认文件里自带的证书或 token）把 `kubemanifest` 渲染的对象 server-side apply 到 API server 或删除，支持 dry run，返回逐对象结果；kubeconfig 由 `provider.ClusterProvider` 为一次操作现发（ADR 0063）。`provider/cluster.go` 是集群能力：列出云账号的托管集群与 GPU 节点池、签发 kubeconfig、应用与卸载；阿里云实现在 `provider/aliyun/ack.go`。
 - `bus`：事件发布。**不用 ORM 钩子**，写操作收敛进 `store` 显式方法，事务提交后 publish。
 - `experiencelaunch`：设置页「功能体验模式」开关背后的启动器：在控制台端口 +10 起停独立的 `gpuworks experience` 进程（自己的数据目录与密码），`gpuworks experience` 的命令行契约（子命令与 flag 名）只定义在这里。
 
@@ -98,6 +101,8 @@
 - `gpu`：多厂商探测器。AMD 通过 amdgpu sysfs/KFD 探测并按已发布身份注入所选 render 设备；单卡异常保留健康同伴。**不用 NVML cgo**，走 `nvidia-smi` + `/proc` + sysfs；ascend `npu-smi`、ppu `ppu-smi`、hygon `hy-smi`、Apple silicon `sysctl` + `ioreg`。`gpu.Prober` 可注入以做 hermetic 测试。
 - `runtime`：docker / udocker / nerdctl（containerd，全命令固定 namespace；`pull_output.go` 把 nerdctl 重画的进度表换算成逐层字节行与解包行）driver，另有测试用 recording driver（shell out 到 CLI，不用 Go SDK）；`runtime.Driver` 可注入。
   - `runtime/nerdctl` 的容器身份标签：`gpuworks.image-target` 保存启动前查询到的 manifest/index digest。`Run` 只追加这一个 `--label`，保留原镜像引用。观测通过内部 `WorkloadInspection.ImageLookupRef` 按 target 查询镜像，核对返回的 target 后，将 config digest 作为容器和镜像的对外 ImageID，与 Docker 及原有镜像上报保持一致；不另外保存 config ID 标签。查询失败时不猜测 ImageID。标签缺失、无效或与不可变的 `Image` 冲突时只有镜像身份未知，容器本身照常观测，不自动补标或重建。标签可跨 agent 重启、容器创建后改 tag 保留，但不能消除 inspect 到创建之间并发改 tag 的窗口；启动前查询失败仍按原参数启动且不写标签。不要手工写入这个保留标签。
+  - `kubeboot`：Kubernetes DaemonSet 的 agent 启动时从镜像交给节点状态目录里的 `agent/gpuworks-agent`（首次从镜像播种，之后沿用），新播种的一份注册前取一次 server 的 agent；此后原地升级与普通节点相同（ADR 0052 第 8 条）。叶子包。
+  - `runtime/kube`：Kubernetes 节点的运行时（ADR 0052）：实例 = 钉在本节点的裸 Pod，镜像委托 `k8s.io` 命名空间的 nerdctl，日志经 apiserver，终端经 nerdctl exec；`cards.go` 是占位 Pod 借卡与空闲归还（含非整卡识别）；`devices.go` 把各卡的设备节点分到 agent 自带 device plugin 的每卡资源与共用资源；`host.go` 在节点挂载命名空间里准备 nerdctl、按 shim 认出 kubelet 的 containerd；`enroll.go` 用接入令牌换节点 token。`kube/kubeapi`（最小 REST 客户端，`kubefake` 是测试用的忠实假 apiserver）、`kube/grpcwire`（标准库上的最小 gRPC 与 protobuf 编解码）、`kube/podresources`（kubelet PodResources 客户端）与 `kube/deviceplugin`（kubelet device plugin v1beta1：注册、ListAndWatch、Allocate，kubelet 重启后重新注册）是叶子包。Kubernetes 上 agent 不挂任何厂商目录：`gpu.RunCLIsOnHost` 让全部厂商 CLI 经宿主机根在节点挂载命名空间里运行（nvidia-smi 依次找宿主机、`/run/nvidia/driver`、容器里的一份），哪些厂商能在 Kubernetes 上运行（NVIDIA、昇腾、海光、PPU、AMD、昆仑芯）由 `accelerator.RunsOnKube` 决定，没有这些厂商卡的节点待命不接入；设备节点检查用 `statTool`、`lstatTool`、`globTool`，宿主机文件用 `readTool`，CLI 用 `lookCLI`（`gpu/hostexec.go`）。device plugin 以 PCI 地址命名设备的厂商（AMD）按 `Options.CardBDFs` 对到卡。
   - `runtime/hostproc`：macOS 的 `host` driver（ADR 0044）。镜像是 darwin 环境包（OCI 镜像，用 `runtime/udocker/native` 的镜像库拉取与解包），引擎作为宿主进程组运行，`launch.go` 把容器形态的 spec（挂载、包内路径）翻译成宿主路径；`SupportedOn` 是它只在 macOS 可用的唯一判定。环境包由 `build/host-envs` 构建。
   - `runtime/procgroup`：不经守护进程管理的工作负载（hostproc 引擎、runveil 的 PRoot）的 pid/退出码记录、回收与整组停止，agent 重启后仍能找到它们。
   - `runtime/runveil`：udocker CLI 的薄替代（叶子包）。按 udocker P1 语义从 `UDOCKER_DIR/containers/<name>` 构造 patched PRoot 的 argv/env、生成 passwd/group、移植 `setup --nvidia`；udocker driver 默认用它启动/exec/终端/删除容器（`GPUWORKS_UDOCKER_LAUNCHER=udocker` 恢复 CLI 启动器）。udocker CLI 的供给与调用集中在 `runtime/udocker/cli.go`，runveil 下按需才供给；镜像拉取/导入/导出/创建/元数据在 `runtime/udocker/native`。`runveilcli` 是 `gpuworks-agent runveil ps/images/load/exec/logs`，直接读写 driver 的磁盘状态，不经过 agent。

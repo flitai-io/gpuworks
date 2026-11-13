@@ -86,3 +86,10 @@ func (s *Store) NodesForLabelsByID(ids []uint, withGPUs bool) ([]Node, error) {
 	}
 	return nodes, find(s.reader())
 }
+
+// NodesForAgentUpgrade reads the facts needed for fleet eligibility without loading cards or credentials.
+func (s *Store) NodesForAgentUpgrade() ([]Node, error) {
+	var nodes []Node
+	err := s.reader().Select("uuid", "agent_version", "os", "arch", "connect_mode", "kube_cluster_id").Find(&nodes).Error
+	return nodes, err
+}

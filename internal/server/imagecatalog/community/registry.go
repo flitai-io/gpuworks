@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -30,7 +31,7 @@ const (
 )
 
 // errCredentials reports a registry that refused an anonymous tag
-// list. Credentials for community registries are not managed yet.
+// list, or rejected the configured login.
 var errCredentials = errors.New("community registry requires credentials")
 
 // ErrRepositoryNotFound identifies a repository the upstream registry cannot find.
@@ -71,6 +72,47 @@ func registryOf(row Repo) string {
 	return inferRegistry(row.Repo)
 }
 
+// tagListURL is the initial request used by each registry dialect. Overrides
+// belong to the resolved repository, including lookup's sibling semantics.
+func tagListURL(row Repo) string {
+	if target := strings.TrimSpace(row.UpstreamAPI); target != "" {
+		return target
+	}
+	host, path := splitHost(row.Repo)
+	switch registryOf(row) {
+	case RegistryDockerHub:
+		return "https://hub.docker.com/v2/repositories/" + path + "/tags"
+	case RegistryQuay:
+		return "https://quay.io/api/v1/repository/" + path + "/tag/"
+	case RegistryOCI:
+		return "https://" + host + "/v2/" + path + "/tags/list?n=1000"
+	default:
+		return ""
+	}
+}
+
+// AccessHost names the initial tag API host without exposing its configured
+// path, query, credentials or port. Unknown or unusable targets stay empty.
+func (row Repo) AccessHost() string {
+	target, err := url.Parse(tagListURL(row))
+	if err != nil || target.Scheme != "https" || target.User != nil {
+		return ""
+	}
+	host := strings.ToLower(strings.TrimSuffix(target.Hostname(), "."))
+	if address, err := netip.ParseAddr(host); err == nil {
+		if address.Zone() != "" {
+			return ""
+		}
+		return address.Unmap().String()
+	}
+	for _, ch := range host {
+		if ch > 127 {
+			return ""
+		}
+	}
+	return host
+}
+
 // listTags returns every tag the registry lists for row.Repo, in the
 // registry's order, following pagination up to maxPages.
 func (b *Browser) listTags(ctx context.Context, row Repo) ([]upstreamTag, error) {
@@ -87,11 +129,7 @@ func (b *Browser) listTags(ctx context.Context, row Repo) ([]upstreamTag, error)
 }
 
 func (b *Browser) listDockerHubTags(ctx context.Context, row Repo) ([]upstreamTag, error) {
-	next := strings.TrimSpace(row.UpstreamAPI)
-	if next == "" {
-		_, path := splitHost(row.Repo)
-		next = "https://registry.hub.docker.com/v2/repositories/" + path + "/tags"
-	}
+	next := tagListURL(row)
 	if !strings.Contains(next, "?") {
 		next += "?page_size=100"
 	}
@@ -119,11 +157,7 @@ func (b *Browser) listDockerHubTags(ctx context.Context, row Repo) ([]upstreamTa
 }
 
 func (b *Browser) listQuayTags(ctx context.Context, row Repo) ([]upstreamTag, error) {
-	base := strings.TrimSpace(row.UpstreamAPI)
-	if base == "" {
-		_, path := splitHost(row.Repo)
-		base = "https://quay.io/api/v1/repository/" + path + "/tag/"
-	}
+	base := tagListURL(row)
 	var out []upstreamTag
 	for page := 1; page <= maxPages; page++ {
 		pageURL, err := url.Parse(base)
@@ -159,14 +193,18 @@ func (b *Browser) listQuayTags(ctx context.Context, row Repo) ([]upstreamTag, er
 // 401 with a Bearer challenge is asked for an anonymous token once; harbor and
 // most public registries hand one out for public repositories.
 func (b *Browser) listOCITags(ctx context.Context, row Repo) ([]upstreamTag, error) {
-	next := strings.TrimSpace(row.UpstreamAPI)
-	if next == "" {
-		host, path := splitHost(row.Repo)
-		next = "https://" + host + "/v2/" + path + "/tags/list?n=1000"
+	next := tagListURL(row)
+	origin, err := url.Parse(next)
+	if err != nil {
+		return nil, err
 	}
 	var out []upstreamTag
 	var authorization string
 	for page := 0; page < maxPages && next != ""; page++ {
+		pageURL, err := url.Parse(next)
+		if err != nil || !sameOrigin(origin, pageURL) || pageURL.User != nil {
+			return nil, errors.New("registry pagination changed origin")
+		}
 		var payload struct {
 			Tags []string `json:"tags"`
 		}
@@ -249,6 +287,7 @@ func (b *Browser) do(ctx context.Context, target string, bearer *string) (*http.
 		return nil, err
 	}
 	request.Header.Set("Accept", "application/json")
+	applyRegistryLogin(request)
 	if bearer != nil && *bearer != "" {
 		request.Header.Set("Authorization", *bearer)
 	}

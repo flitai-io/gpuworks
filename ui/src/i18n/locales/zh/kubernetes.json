@@ -1,0 +1,262 @@
+{
+  "page": {
+    "title": "Kubernetes",
+    "description": "以 DaemonSet 接入 Kubernetes 集群，选中的 GPU 节点自动成为计算节点。",
+    "breadcrumb": {
+      "platform": "AI 算力平台",
+      "resources": "资源",
+      "kubernetes": "Kubernetes"
+    },
+    "add": "接入集群",
+    "empty": "还没有接入 Kubernetes 集群。接入后，集群里的 GPU 节点会出现在节点列表里。"
+  },
+  "column": {
+    "name": "名称",
+    "namespace": "命名空间",
+    "nodes": "节点",
+    "vendors": "加速卡",
+    "clusterUid": "集群 UID",
+    "cardReturn": "卡归还",
+    "status": "状态",
+    "createdAt": "创建时间",
+    "actions": "操作",
+    "source": "来源"
+  },
+  "clusterUid": {
+    "notEnrolled": "未接入",
+    "notEnrolledHint": "还没有节点从这个集群接入。",
+    "troubleshoot": "排查"
+  },
+  "returnPolicy": {
+    "afterIdle": "空闲 {{duration}}后归还",
+    "keep": "常驻（不归还）"
+  },
+  "duration": {
+    "seconds": "{{count}} 秒",
+    "minutes": "{{count}} 分钟",
+    "hours": "{{count}} 小时"
+  },
+  "status": {
+    "active": "正常",
+    "revoked": "已吊销"
+  },
+  "actions": {
+    "copyCommand": "复制接入命令",
+    "pools": "节点池",
+    "manifest": "查看 manifest",
+    "revoke": "吊销",
+    "revokeConfirm": "吊销 {{name}} 的接入令牌？",
+    "revokeHelp": "已接入的节点不受影响，新节点不能再用这条命令接入。",
+    "revoked": "集群 {{name}} 已吊销",
+    "delete": "删除",
+    "deleteConfirm": "删除集群 {{name}}？",
+    "deleteHelp": "只删除这里的集群记录。仍有节点的集群不能删除：请先从 Kubernetes 集群里卸载，等节点都消失后再删除。",
+    "deleted": "集群 {{name}} 已删除",
+    "cancel": "取消",
+    "failed": "操作失败",
+    "apply": "应用到集群",
+    "remove": "从集群卸载",
+    "edit": "编辑",
+    "uninstall": "卸载",
+    "deleteHasNodes_one": "这个集群还有 {{count}} 个节点，暂时不能删除，请先从集群里卸载。",
+    "deleteHasNodes_other": "这个集群还有 {{count}} 个节点，暂时不能删除，请先从集群里卸载。"
+  },
+  "manifest": {
+    "title": "{{name}} 的 manifest",
+    "copy": "复制 manifest",
+    "close": "关闭",
+    "failed": "无法加载 manifest"
+  },
+  "drawer": {
+    "title": "接入 Kubernetes 集群",
+    "editTitle": "编辑集群",
+    "name": "名称",
+    "nameRequired": "请输入集群名称",
+    "namePlaceholder": "prod-gpu",
+    "serverUrl": "Server 地址",
+    "serverUrlHelp": "集群里的 agent 访问本服务的地址，须能从集群的 Pod 里访问到。",
+    "serverUrlRequired": "请输入 Server 地址",
+    "serverUrlInvalid": "请输入 http:// 或 https:// 开头的地址",
+    "pools": "GPU 节点池",
+    "poolsHelp": "条目只在这里勾选的节点池的节点上运行。可以同时勾选不同厂商的节点池，每个节点上的 agent 自行探测自己的卡。",
+    "nodeSelector": "节点选择器",
+    "nodeSelectorPlaceholder": "nvidia.com/gpu.present=true",
+    "nodeSelectorHelp": "可选。以逗号分隔的 key=value，只有同时带有这些标签的 Kubernetes 节点才会接入；留空表示所有节点。",
+    "advanced": "高级",
+    "namespace": "命名空间",
+    "namespaceHelp": "DaemonSet 及其资源创建在哪个命名空间。",
+    "stateDir": "状态目录",
+    "stateDirHelp": "agent 在主机上的目录。改成别的目录，可以让 agent 与主机上已安装的 agent 共存；留空使用框里显示的默认目录。",
+    "agentImageSource": "agent 镜像仓库",
+    "agentImageSourceHelp": "节点从这里拉取发布的 agent 镜像。国内集群通常拉不到 Docker Hub，请选华为云 SWR；从云账号接入时按集群地域预选。",
+    "agentImageSources": {
+      "dockerhub": "Docker Hub",
+      "swr": "华为云 SWR",
+      "quay": "quay.io"
+    },
+    "agentImage": "agent 镜像",
+    "agentImagePlaceholder": "默认镜像",
+    "defaultsFailed": "默认值没有加载成功",
+    "defaultsFailedHelp": "留空的字段仍然采用 server 的默认值；只是看不到提示。",
+    "agentImageHelp": "填写后使用你自己的镜像（例如推到私有仓库的副本），不再从上面的仓库拉取。",
+    "imagePullSecret": "镜像拉取凭据",
+    "imagePullSecretPlaceholder": "不使用",
+    "imagePullSecretHelp": "agent 镜像在需要登录的仓库时填写：命名空间里一个 docker-registry 类型 Secret 的名称，须在 apply 前建好。",
+    "runtimeClass": "RuntimeClass",
+    "runtimeClassPlaceholder": "自动",
+    "runtimeClassHelp": "只影响 NVIDIA 节点上的实例 Pod（其他厂商的节点忽略它）：实例 Pod 访问 GPU 用的 RuntimeClass。留空时自动判断：集群里有 nvidia RuntimeClass 就用它（如 k3s），没有就用节点的默认运行时（托管 Kubernetes 一般如此）。",
+    "containerdSocket": "containerd socket",
+    "containerdSocketHelp": "节点上的路径。留空由 agent 自行探测，只有路径特殊时才需要填写。",
+    "containerdSocketPlaceholder": "留空自动探测（containerd、k3s、RKE2、microk8s）",
+    "apiServer": "API server 地址",
+    "apiServerHelp": "只用于节点上没有组件提供 Service 地址的集群（没有 kube-proxy 或其替代品，例如 KubeEdge、OpenYurt 的边缘节点）。地址须在 API server 的证书里。留空使用集群的 kubernetes Service。",
+    "apiServerPlaceholder": "https://host:6443",
+    "enginePorts": "引擎端口段",
+    "enginePortsHelp": "推理引擎监听的主机端口，须避开集群的 NodePort 端口段（默认 30000-32767）。",
+    "priority": "优先级",
+    "priorityHelp": "gpuworks 占位 Pod 与实例 Pod 的 PriorityClass 数值，越大越优先，普通 Pod 是 0。节点内存或磁盘紧张时，Kubernetes 先驱逐优先级低的 Pod。",
+    "allowPreemption": "允许抢占",
+    "allowPreemptionHelp": "关闭时（默认）gpuworks 借卡放不下就等待，不会让调度器驱逐你的其他 Pod。开启后，HAMi 与 ACK 共享 GPU 模式下调度器可能为占位 Pod 驱逐优先级更低的 Pod。",
+    "allowPreemptionSwitch": "允许驱逐优先级更低的 Pod",
+    "idleReturn": "空闲归还",
+    "secondsUnit": "s",
+    "idleReturnSeconds": "空闲多少秒后归还卡",
+    "idleReturnHelp": "向 Kubernetes 借来的卡，空闲这么久后还给它。",
+    "keepCards": "常驻",
+    "keepCardsHelp": "借来的卡不再归还给 Kubernetes。",
+    "submit": "接入",
+    "save": "保存",
+    "cancel": "取消",
+    "close": "关闭",
+    "fromSource": "来自 {{source}}：条目运行在下面所选的节点池上。",
+    "nodeSelectorCloud": "这个条目来自云集群，节点由节点池决定。请在列表里用「节点池」操作修改。",
+    "fixedAfterCreate": "集群条目创建后不能再修改。"
+  },
+  "created": {
+    "title": "集群 {{name}} 已创建",
+    "note": "在集群里执行这条命令；被选中的 GPU 节点会自动出现在节点列表。",
+    "command": "接入命令",
+    "copyCommand": "复制接入命令",
+    "secret": "命令里含有接入令牌，请像密码一样保管。",
+    "noteSource": "接下来把 manifest 应用到集群，二选一：",
+    "byGpuworks": "由 gpuworks 应用到集群",
+    "byGpuworksHelp": "gpuworks 用云账号现取的临时集群凭据（15 分钟内有效，用完即弃，不保存）先检查再应用，应用前会列出要创建的对象请你确认。",
+    "applyNow": "检查并应用…",
+    "byKubectl": "或者自己在集群里执行",
+    "applyBlocked": "gpuworks 不能替你应用"
+  },
+  "blocked": {
+    "no_source": "这个集群是手动添加的，gpuworks 没有进入它的途径，请在集群里执行 kubectl 命令。",
+    "private_api": "云厂商说这个集群的 API Server 没有公网地址，gpuworks 连不上；请在集群的内网里执行 kubectl 命令。",
+    "revoked": "接入令牌已吊销，不能再次应用 manifest；仍可从集群里删除。"
+  },
+  "stalled": {
+    "title": "还没有节点接入",
+    "intro": "集群已等了一阵，仍没有节点接入。先在集群里看 agent 的 DaemonSet 和 Pod：",
+    "causes": "常见原因",
+    "pull": "Pod 处于 ImagePullBackOff：拉不到 agent 镜像。镜像在需要登录的仓库时，在命名空间里建好 docker-registry Secret，并在新建集群时填写“镜像拉取凭据”。",
+    "runtimeClass": "DaemonSet 事件提示 RuntimeClass 不存在：填写的 RuntimeClass 在集群里没有；留空即可，由 agent 自动判断。",
+    "selector": "DaemonSet 的 DESIRED 为 0：节点选择器没有选中任何节点。",
+    "connect": "Pod 在运行但节点没出现：agent 连不上 Server 地址，看 agent 日志。",
+    "copy": "复制命令"
+  },
+  "source": {
+    "byHand": "手动接入",
+    "pools_one": "{{count}} 个节点池",
+    "pools_other": "{{count}} 个节点池"
+  },
+  "pools": {
+    "title": "{{name}} 的节点池",
+    "group": "GPU 节点池",
+    "intro": "条目只在其云集群里勾选的 GPU 节点池的节点上运行，可以是不同厂商的节点池。保存只改 gpuworks 里的记录，重新应用 manifest 后集群才跟着变。",
+    "legacy": "这个条目用节点选择器选节点",
+    "legacyHelp": "它建于可选节点池之前，用「{{selector}}」选节点。保存节点池会替换这个选择器，之后条目只在这些节点池上运行。",
+    "loading": "正在读取集群的节点池",
+    "loadFailed": "无法读取集群的节点池",
+    "clusterGone": "云账号里已经没有这个集群了。",
+    "none": "这个集群没有可选的 GPU 节点池。",
+    "save": "保存节点池",
+    "saved": "{{name}} 的节点池已保存",
+    "savedHelp": "请再应用一次 manifest，集群才跟着变（或重新执行 kubectl apply）。去掉的节点池上的 agent 会退出，对应节点留在节点列表里，直到按离线节点清理。",
+    "applyNow": "检查并应用…"
+  },
+  "operation": {
+    "applyTitle": "应用到集群 · {{name}}",
+    "removeTitle": "从集群卸载 · {{name}}",
+    "applyIntro": "gpuworks 将用云账号 {{account}} 现取的临时凭据（不保存）在集群 {{cluster}} 中创建或更新下列对象。",
+    "removeIntro": "gpuworks 将用云账号 {{account}} 现取的临时凭据（不保存）删除集群 {{cluster}} 中的下列对象：agent、占位 Pod 和实例 Pod 随 DaemonSet 一起删除，卡还给 Kubernetes。",
+    "checking": "正在请集群检查这些改动（dry run，不会改动集群）…",
+    "checkedApply": "检查通过。确认后才会真正应用。",
+    "checkedRemove": "检查通过。确认后才会真正删除。",
+    "applying": "正在应用…",
+    "removing": "正在删除…",
+    "applied": "已应用到集群",
+    "appliedNext": "被选中的 GPU 节点约半分钟后出现在节点页。",
+    "removed": "已从集群卸载",
+    "failed": {
+      "kubeconfig": "云账号没能签发可用的集群凭据",
+      "api_server": "集群拒绝了这次操作",
+      "other": "操作失败"
+    },
+    "planTitle": "将要进行的改动",
+    "resultTitle": "结果",
+    "retry": "重新检查",
+    "close": "关闭",
+    "cancel": "取消",
+    "confirmApply": "确认应用",
+    "confirmRemove": "确认卸载",
+    "column": {
+      "kind": "类型",
+      "name": "名称",
+      "action": "操作"
+    },
+    "plan": {
+      "create": "将创建",
+      "update": "将更新",
+      "delete": "将删除",
+      "absent": "不存在",
+      "failed": "被拒绝",
+      "not_tried": "未执行",
+      "dependent": "随命名空间创建",
+      "replace": "将删除后重建"
+    },
+    "done": {
+      "create": "已创建",
+      "update": "已更新",
+      "delete": "已删除",
+      "absent": "不存在",
+      "failed": "被拒绝",
+      "not_tried": "未执行",
+      "dependent": "随命名空间创建",
+      "replace": "已删除并重建"
+    }
+  },
+  "vendors": {
+    "entry": "{{vendor}} ×{{count}}",
+    "separator": " · ",
+    "none": "无加速卡"
+  },
+  "edit": {
+    "saved": "集群 {{name}} 已保存",
+    "savedTitle": "集群 {{name}} 已保存",
+    "savedHelp": "重新应用之前，集群里运行的仍是之前的 manifest。",
+    "applyNow": "检查并应用…",
+    "commandsTitle": "请按顺序在集群里执行",
+    "commandsHelp": "gpuworks 够不到这个集群，需要你自己让它跟上。Kubernetes 不能原地修改 PriorityClass，所以优先级或抢占策略变了时，第一条命令会先删除它，随后的 apply 命令再把它建回来。"
+  },
+  "commands": {
+    "command": "命令 {{n}}",
+    "copy": "复制命令 {{n}}",
+    "copyAll": "复制全部命令"
+  },
+  "uninstall": {
+    "title": "从集群卸载 · {{name}}",
+    "intro": "gpuworks 够不到这个集群，请按顺序在集群里执行下面的命令。它们会把 agent 以及 agent 启动的推理 Pod 和占位 Pod 从集群里清除，卡还给 Kubernetes。",
+    "next": "之后这些节点会离线，由平台从节点列表里清理；等节点都消失后，再删除这个集群条目。",
+    "close": "关闭"
+  },
+  "namespaceShared": {
+    "badge": "命名空间重复",
+    "hint": "与 {{names}} 同用命名空间 {{namespace}}。它们接入的是同一个 Kubernetes 集群时，后应用的 manifest 会接管先应用的那个条目的 agent。命名空间创建后不能改：删掉其中一个条目，换个命名空间重建。"
+  }
+}

@@ -476,3 +476,65 @@ func UpgradeWithResumeArgs(ctx context.Context, serverURL, token string, resumeA
 	c := New(Credentials{ServerURL: serverURL, NodeToken: token, ResumeArgs: append([]string(nil), resumeArgs...)}, nil, nil, nil, log)
 	return c.selfUpgrade(ctx)
 }
+
+// AlignWithServer replaces the running binary with the server's own agent
+// binary when the two differ, and execs it; it returns nil without doing
+// anything when they are the same. A Kubernetes agent freshly seeded from
+// its image runs whatever agent the image carried, so it takes the server's
+// once before it registers (internal/agent/kubeboot). The replacement is
+// an ordinary unconfirmed upgrade: if it never registers, the guard puts
+// the image's binary back.
+func AlignWithServer(ctx context.Context, serverURL, token string) error {
+	if !upgradeMu.TryLock() {
+		return errors.New("agent upgrade already in progress")
+	}
+	defer upgradeMu.Unlock()
+	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > selfUpgradeTimeout {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, selfUpgradeTimeout)
+		defer cancel()
+	}
+	bin, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return alignWithServer(ctx, bin, serverURL, token)
+}
+
+func alignWithServer(ctx context.Context, bin, serverURL, token string) error {
+	tmp := bin + ".new"
+	defer os.Remove(tmp)
+	if err := downloadAndSmoke(ctx, tmp, serverURL, token); err != nil {
+		return err
+	}
+	same, err := sameFile(bin, tmp)
+	if err != nil || same {
+		return err
+	}
+	return installAndExec(bin, tmp, os.Args)
+}
+
+func sameFile(a, b string) (bool, error) {
+	sa, err := fileSum(a)
+	if err != nil {
+		return false, err
+	}
+	sb, err := fileSum(b)
+	if err != nil {
+		return false, err
+	}
+	return sa == sb, nil
+}
+
+func fileSum(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}

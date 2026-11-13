@@ -37,6 +37,7 @@ export default function ProviderConfigModal({
   const editReady = !provider || (loadedProviderID === provider.id && kindInfos.some((info) => info.kind === provider.kind));
   const selectedKind = kindInfos.find((k) => k.kind === kind);
   const selectedKindLabel = selectedKind ? t(`kind.${selectedKind.kind}`, { defaultValue: localizedText(selectedKind.label, language) || selectedKind.kind }) : "provider";
+  const requirement = t(`config.requirements.${provider?.kind ?? kind}`, { defaultValue: "" });
 
   // The initial kind is applied once per open (and again when the provider or
   // the preselected kind changes), never in reaction to the user's own pick:
@@ -186,7 +187,12 @@ export default function ProviderConfigModal({
               />
             </Form.Item>
           )}
-          <Form.Item label={t("config.name")} name="name" rules={[{ required: true, message: t("config.nameRequired") }]}>
+          {requirement && (
+            <Form.Item>
+              <Alert type="info" showIcon message={requirement} />
+            </Form.Item>
+          )}
+          <Form.Item label={t("config.name")} name="name" rules={[{ required: true, whitespace: true, message: t("config.nameRequired") }]}>
             <Input placeholder={t("config.namePlaceholder", { kind: selectedKindLabel })} />
           </Form.Item>
           <div className="provider-modal-section-title provider-modal-credential-title">{t("config.credentials")}</div>

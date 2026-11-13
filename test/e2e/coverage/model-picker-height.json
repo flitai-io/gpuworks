@@ -7,7 +7,7 @@
   "test_file": "test/e2e/model_picker_height/case.py",
   "driver_file": "test/e2e/model_picker_height/case.py",
   "test_function": "test_model_picker_height",
-  "command": "make test-e2e-model-picker-height E2E_TARGET_REF=upstream/master E2E_BROWSER_CHANNEL=chromium",
+  "command": "cd test/e2e && python3 -B -m model_picker_height.test_case",
   "required_evidence": [
     "ui",
     "request",
@@ -73,8 +73,8 @@
     },
     {
       "item": "5.6",
-      "status": "partial",
-      "assertion": "Keyboard focus and ArrowDown open the associated popup; mouse selection closes it. Arrow-key candidate changes are not asserted."
+      "status": "covered",
+      "assertion": "covered: the picker is opened, walked and closed from the keyboard, and the walk is required to move the highlight rather than merely to open the menu. A second candidate is registered in the same owned repository so the walk has somewhere to go; the popup is opened with ArrowDown, ArrowDown is pressed again and the active candidate - read from the popup's own active class, which is what the control highlights and what Enter would commit - is required to be a different one; ArrowUp is then pressed and the highlight is required to return to where it was. The mouse selection that closes the popup and commits the fixture's exact id is unchanged and still asserted. Both labels are recorded, so the claim rests on the two candidate texts rather than on an absence of errors. The keyboard walk is not mutation-proven: swallowing the arrow keys at the wrapper was tried and broke option location instead of the walk, and no mutation was found that the new assertion alone would catch, so the report says that rather than implying a kill."
     },
     {
       "item": "5.7",

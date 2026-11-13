@@ -10,6 +10,7 @@
  */
 export const recoveryLabel: Record<string, { key: string; color: string }> = {
   probing: { key: "recovery.phase.probing", color: "processing" },
+  probe_failed: { key: "recovery.phase.probeFailed", color: "error" },
   artifact_check: { key: "recovery.phase.artifactCheck", color: "processing" },
   uploading: { key: "recovery.phase.uploading", color: "processing" },
   verifying: { key: "recovery.phase.verifying", color: "processing" },

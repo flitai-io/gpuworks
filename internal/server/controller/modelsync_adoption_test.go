@@ -2,11 +2,12 @@ package controller
 
 import (
 	"context"
+	"sync"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"sync"
-	"testing"
 )
 
 func TestModelSyncAdoptionAndTerminalEventsKeepTheSameOwner(t *testing.T) {

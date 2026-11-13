@@ -375,17 +375,25 @@ func TestADeferredRoundIsRetriedOnce(t *testing.T) {
 	now, _ := clock(t)
 	rec := &recorder{now: now}
 	var mu sync.Mutex
-	known := false
+	calls := 0
+	// The retry waits here until this test has seen the first skip.
+	// RetryAfter is 10ms, so a loaded machine otherwise spends that retry
+	// while the node is still unknown, or reads Skipped before the round
+	// publishes that the skip is over.
+	proceed := make(chan struct{})
 	r := New(Config{
 		Cards: func(context.Context) []Card { return cards("a") },
 		Try:   rec.try,
 		Deferred: func() string {
 			mu.Lock()
-			defer mu.Unlock()
-			if known {
-				return ""
+			calls++
+			n := calls
+			mu.Unlock()
+			if n == 1 {
+				return "what this node runs is not known yet"
 			}
-			return "what this node runs is not known yet"
+			<-proceed
+			return ""
 		},
 		Interval:   time.Hour,
 		FirstRound: time.Millisecond,
@@ -411,9 +419,7 @@ func TestADeferredRoundIsRetriedOnce(t *testing.T) {
 		t.Fatalf("outcomes = %+v, want none: a deferred round is not a verdict", r.Outcomes())
 	}
 
-	mu.Lock()
-	known = true
-	mu.Unlock()
+	close(proceed)
 	// The retry arrives without waiting out the interval, which is an hour.
 	deadline = time.Now().Add(2 * time.Second)
 	for len(rec.idents()) == 0 {
@@ -422,8 +428,12 @@ func TestADeferredRoundIsRetriedOnce(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	if r.Skipped() != "" {
-		t.Fatalf("skipped = %q, want cleared once a card was asked", r.Skipped())
+	deadline = time.Now().Add(2 * time.Second)
+	for r.Skipped() != "" {
+		if time.Now().After(deadline) {
+			t.Fatalf("skipped = %q, want cleared once a card was asked", r.Skipped())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 

@@ -93,7 +93,7 @@ export default function ImagesPageOverview({
         }))}
       />
       {sourceTab === "official" && (
-        <Card size="small" style={{ marginBottom: 12 }}>
+        <Card size="small" style={{ marginBottom: 16 }}>
           <Space wrap>
             <Button type="primary" loading={syncingCatalog} disabled={uploadingManifest} onClick={onSyncCatalog}>
               {t("page.catalog.update")}

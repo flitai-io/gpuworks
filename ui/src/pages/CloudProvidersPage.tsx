@@ -21,28 +21,28 @@ import PageHeader from "../components/PageHeader";
 import ResourceTable, { type ResourceColumn } from "../components/resourceTable/ResourceTable";
 import ProviderConfigModal from "../components/ProviderConfigModal";
 import ProviderInstancesTable from "../components/ProviderInstancesTable";
+import ProviderClustersTable from "../components/ProviderClustersTable";
+import { Tabs, TabsList, TabItem, TabPanel } from "../components/ui/tabs";
 import { formatTime } from "../i18n/datetime";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import type { TFunction } from "i18next";
 import type { LocalizedText } from "../i18n/localizedText";
 import { localizedText } from "../i18n/localizedText";
 
-type ProviderScope = "public" | "private";
-
-function belongsToScope(kind: string, scope: ProviderScope): boolean {
-  return scope === "private" ? kind === "zstack" : kind !== "zstack";
-}
-
-export default function CloudProvidersPage({ scope = "public" }: { scope?: ProviderScope }) {
+// One list for every connected platform; each row carries the category the
+// server derives from its kind, which the platform type column shows.
+// ?category=<type> opens the list filtered to that type, as the overview's
+// cloud counts and the old /zstack address do.
+export default function CloudProvidersPage() {
   const { t, i18n } = useTranslation("providers");
+  const [searchParams] = useSearchParams();
+  const requested = searchParams.get("category");
+  // A type the console has no name for is not a type: the list opens unfiltered.
+  const openedCategory = requested && i18n.exists(`providers:category.${requested}`) ? requested : null;
   const language = i18n.resolvedLanguage || i18n.language;
-  const copy = {
-    title: t(`scope.${scope}.title`),
-    description: t(`scope.${scope}.description`),
-    empty: t(`scope.${scope}.empty`),
-  };
-  const { data: allProviders, refetch, loading, error, updatedAt } = usePolling<List<CloudProvider>>(api.providers, 15000);
-  const data = (allProviders?.items ?? []).filter((provider) => belongsToScope(provider.kind, scope));
+  const { data: providers, refetch, loading, error, updatedAt } = usePolling<List<CloudProvider>>(api.providers, 15000);
+  const data = providers?.items ?? [];
   const [modalOpen, setModalOpen] = useState(false);
   const [defaultKind, setDefaultKind] = useState<string | null>(null);
   const [editingProvider, setEditingProvider] = useState<CloudProvider | null>(null);
@@ -54,9 +54,9 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
   useEffect(() => {
     api
       .providerKinds()
-      .then((infos) => setKindInfos(infos.items.filter((kind) => belongsToScope(kind.kind, scope))))
+      .then((infos) => setKindInfos(infos.items))
       .catch(() => setKindInfos([]));
-  }, [scope]);
+  }, []);
 
   const openAdd = (kind?: string) => {
     setEditingProvider(null);
@@ -111,7 +111,7 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
       await refetch();
       setInstanceRefreshVersion((version) => version + 1);
       if (failed === 0) {
-        message.success(t("message.syncAllDone", { count: ok, scope: copy.title }));
+        message.success(t("message.syncAllDone", { count: ok }));
       } else {
         message.warning(t("message.syncAllPartial", { ok, failed }));
       }
@@ -131,30 +131,41 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
   }).length;
 
   const kindsPresent = [...new Set(data.map((provider) => provider.kind))];
+  const categoriesPresent = [...new Set(data.map((provider) => provider.category).filter(Boolean))];
   const columns: ResourceColumn<CloudProvider>[] = [
     {
       key: "name",
       role: "name",
       title: t("table.column.name"),
-      width: 220,
+      width: 132,
       sortValue: (p) => p.name,
       render: (_: unknown, p: CloudProvider) => <Button type="link" onClick={() => openEdit(p)}>{p.name || "—"}</Button>,
     },
     {
       key: "kind",
       title: t("table.column.type"),
-      width: 160,
+      width: 130,
       sortValue: (p) => p.kind,
-      filters: kindsPresent.map((kind) => ({ value: kind, text: providerKindLabel(t, kind, kindInfos.find((info) => info.kind === kind)?.label, language) })),
+      // No rows, no choices: the filter appears with the first platform.
+      filters: kindsPresent.length ? kindsPresent.map((kind) => ({ value: kind, text: providerKindLabel(t, kind, kindInfos.find((info) => info.kind === kind)?.label, language) })) : undefined,
       onFilter: (value, p) => p.kind === value,
       render: (_: unknown, p: CloudProvider) => <Tag color="blue">{providerKindLabel(t, p.kind, undefined, language)}</Tag>,
     },
-    { key: "instance_count", title: t("table.column.instances"), width: 100, align: "right", sortValue: (p) => p.instance_count ?? 0, render: (_: unknown, p: CloudProvider) => `${p.instance_count ?? 0}` },
-    { key: "updated_at", title: t("table.column.updatedAt"), width: 180, sortValue: (p) => p.updated_at, render: (_: unknown, p: CloudProvider) => formatTime(p.updated_at) },
+    {
+      key: "category",
+      title: t("table.column.category"),
+      width: 96,
+      filters: categoriesPresent.length || openedCategory ? [...new Set([...categoriesPresent, ...(openedCategory ? [openedCategory] : [])])].map((category) => ({ value: category, text: t(`category.${category}`) })) : undefined,
+      defaultFilteredValue: openedCategory ? [openedCategory] : null,
+      onFilter: (value, p) => p.category === value,
+      render: (_: unknown, p: CloudProvider) => p.category ? t(`category.${p.category}`) : "—",
+    },
+    { key: "instance_count", title: t("table.column.instances"), width: 72, align: "right", sortValue: (p) => p.instance_count ?? 0, render: (_: unknown, p: CloudProvider) => `${p.instance_count ?? 0}` },
+    { key: "updated_at", title: t("table.column.updatedAt"), width: 156, sortValue: (p) => p.updated_at, render: (_: unknown, p: CloudProvider) => formatTime(p.updated_at) },
     {
       key: "state",
       title: t("table.column.status"),
-      width: 110,
+      width: 90,
       sortValue: (p) => p.state,
       filters: [{ value: "valid", text: t("table.state.valid") }, { value: "invalid", text: t("table.state.invalid") }],
       onFilter: (value, p) => p.state === value,
@@ -167,7 +178,7 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
     {
       key: "action",
       role: "actions",
-      width: 120,
+      width: 110,
       render: (_: unknown, p: CloudProvider) => {
         const kindInfo = kindInfos.find((k) => k.kind === p.kind);
         const syncable = kindInfo?.capabilities.can_list_instances !== false;
@@ -180,7 +191,7 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
               <Button type="text" size="small" icon={<SyncOutlined />} aria-label={t("table.sync")} disabled={!syncable} loading={syncing === p.id} onClick={() => doSync(p.id)} />
             </Tooltip>
             <Popconfirm
-              title={t("table.deleteConfirm", { scope: copy.title })}
+              title={t("table.deleteConfirm")}
               okText={t("table.delete")}
               cancelText={t("table.cancel")}
               okButtonProps={{ danger: true }}
@@ -207,13 +218,13 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
   return (
     <>
       <PageHeader
-        title={copy.title}
-        description={copy.description}
+        title={t("platforms.title")}
+        description={t("platforms.description")}
         extra={
           <>
-            <Typography.Text type="secondary">{t("page.count", { count: data.length, scope: copy.title })}</Typography.Text>
+            <Typography.Text type="secondary">{t("page.count", { count: data.length })}</Typography.Text>
             <Button type="primary" onClick={() => openAdd()}>
-              {t("page.add", { scope: copy.title })}
+              {t("page.add")}
             </Button>
           </>
         }
@@ -228,7 +239,7 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
             type="warning"
             showIcon
             style={{ marginBottom: 12 }}
-            message={t("page.listFailed", { scope: copy.title })}
+            message={t("page.listFailed")}
             description={error.message}
           />
         )}
@@ -268,7 +279,7 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
       <section className="operational-panel">
         <div className="provider-connected-heading">
           <Typography.Title level={5} style={{ margin: 0 }}>
-            {t("page.connected", { scope: copy.title })}
+            {t("page.connected")}
           </Typography.Title>
           {summary.total > 0 && (
             <Typography.Text type="secondary">
@@ -287,12 +298,14 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
             type="warning"
             showIcon
             style={{ marginBottom: 12 }}
-            message={t("page.invalidMessage", { scope: copy.title })}
+            message={t("page.invalidMessage")}
             description={t("page.invalidDescription")}
           />
         )}
         <ResourceTable<CloudProvider>
-          tableId={`providers-${scope}`}
+          // A different ?category= opens the list anew with that filter.
+          key={openedCategory ?? "all"}
+          tableId="providers"
           rowKey="id"
           error={error}
           loading={loading}
@@ -300,7 +313,7 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
           data={data}
           onRefresh={refetch}
           updatedAt={updatedAt}
-          emptyDescription={copy.empty}
+          emptyDescription={t("platforms.empty")}
           emptyKind="data"
           toolbarExtra={
             <Button onClick={doSyncAll} loading={syncingAll} disabled={syncableCount === 0}>
@@ -308,14 +321,29 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
             </Button>
           }
           expandable={{
-            expandedRowRender: (p) => (
-              <ProviderInstancesTable
-                providerId={p.id}
-                kindInfo={kindInfos.find((k) => k.kind === p.kind)}
-                refreshKey={`${p.updated_at}:${instanceRefreshVersion}`}
-                showRegion={scope === "public"}
-              />
-            ),
+            expandedRowRender: (p) => {
+              const kindInfo = kindInfos.find((k) => k.kind === p.kind);
+              const instances = (
+                <ProviderInstancesTable
+                  providerId={p.id}
+                  kindInfo={kindInfo}
+                  refreshKey={`${p.updated_at}:${instanceRefreshVersion}`}
+                  showRegion={p.category !== "private_cloud"}
+                />
+              );
+              if (!kindInfo?.can_list_clusters) return instances;
+              // Clusters are read from the cloud when their tab is opened.
+              return (
+                <Tabs defaultValue="instances" variant="underline">
+                  <TabsList>
+                    <TabItem value="instances" label={t("tabs.instances")} />
+                    <TabItem value="clusters" label={t("tabs.clusters")} />
+                  </TabsList>
+                  <TabPanel value="instances" className="pt-4">{instances}</TabPanel>
+                  <TabPanel value="clusters" className="pt-4"><ProviderClustersTable providerId={p.id} providerName={p.name} /></TabPanel>
+                </Tabs>
+              );
+            },
           }}
         />
       </section>
@@ -325,7 +353,7 @@ export default function CloudProvidersPage({ scope = "public" }: { scope?: Provi
         provider={editingProvider}
         defaultKind={defaultKind}
         kindInfos={kindInfos}
-        providerLabel={copy.title}
+        providerLabel={t("platforms.label")}
         onClose={closeModal}
         onSaved={() => {
           closeModal();
@@ -340,6 +368,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
   aliyun: "/provider-logos/aliyun.webp",
   autodl: "/provider-logos/autodl.webp",
   compshare: "/provider-logos/compshare.webp",
+  digitalocean: "/provider-logos/digitalocean.svg",
   runpod: "/provider-logos/runpod.webp",
   vast: "/provider-logos/vast.webp",
   zstack: "/provider-logos/zstack.svg",

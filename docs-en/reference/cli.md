@@ -120,10 +120,11 @@ Install the current binary as a service: copy it to `--dir`, write `server.yaml`
 | `--quiet` | `false` | Do not print a banner or prompt; generate a random password if none is supplied (the final summary is still printed) |
 | `--autostart` | `true` on Linux, `false` on macOS | Install a systemd unit (a launch daemon on macOS) that starts at boot; an error if given together with `--no-systemd` |
 | `--no-systemd` | `false` | Do not use a service manager (systemd, or launchd on macOS); start in the background with nohup instead |
+| `--skip-check` | `false` | Downgrade the preflight checks that predict whether the server can run (port in use, disk space, whether the service account can enter the installation directory) to warnings and continue; checks that protect the host are unaffected |
 
 Key behavior:
 
-- Preflight checks: root or usable `sudo` is required (otherwise, fall back to nohup with a warning). Fail if another process occupies the target port, except when it is the current installation. The filesystem containing the installation directory must have at least 2 GiB free.
+- Preflight checks: root or usable `sudo` is required (otherwise, fall back to nohup with a warning). Fail if another process occupies the target port, except when it is the current installation. The filesystem containing the installation directory must have at least 2 GiB free. In systemd mode, every existing directory above the installation, data and log directories must let `--service-user` enter it (the `x` bit, judged by owner/group/other; directories with an ACL are not refused), otherwise the install fails, for example under `/root` (`0700`). `--skip-check` downgrades these three checks to warnings; the checks that refuse recursive permission changes on broad directories such as `/`, `/var` or a home directory, or that would widen a sensitive file's ACL, cannot be skipped.
 - Privilege escalation: install/upgrade/reset-password run as the operator, with each privileged step (creating directories and accounts, writing units, and `systemctl`) executed through a separate `sudo` command. `sudo` prompts for a password once and caches it; without a terminal or cached credentials, `sudo` fails immediately instead of hanging.
 - systemd mode: create the `--service-user` system account (or reuse it if it exists) and add the operator to its group (the current terminal requires `newgrp` or a new login). Subsequent upgrade backups and binary replacement no longer require `sudo`, but `systemctl` and the final `chown`/`chmod` still do; reset-password does not.
 - nohup mode (`--no-systemd`, no running systemd, no root/`sudo`, or no `--autostart` on macOS): ignore `--service-user` (with a warning only if it was given explicitly) and run `serve --supervise --config <dir>/server.yaml` in the background as the invoking user. The supervisor restarts the server when it exits, so console upgrades are supported. It does not automatically recover after a machine or container restart. Start it with `<dir>/gpuworks restart` and stop it with `<dir>/gpuworks stop`, or set this command as the container startup command; see [Run in a Container](../how-to/install-server.md#在容器里运行). On macOS, run `<dir>/gpuworks install --autostart` to switch to starting at boot. The installation summary prints these commands.
@@ -190,10 +191,17 @@ gpuworks uninstall --dir /opt/gpuworks/server --purge --dry-run --json
 |---|---|---|
 | `--dir DIR` | Same as `restart` | Target installation directory; external data and log directories in the configuration are also recognized |
 | `--purge` | `false` | Delete this installation's configuration, data (including the database and `master.key`), backups, and logs; this cannot be undone |
+| `--keep-resources` | `false` | Explicitly remove only the component while retaining workloads, nodes, and cloud resources; bypasses resource gates only, never path, process, or service ownership checks |
 | `--yes` / `-y` | `false` | Skip interactive selection and final confirmation; execute according to explicit options |
 | `--dry-run` | `false` | Print only the cleanup list without stopping services or modifying files; no confirmation required |
 | `--json` | `false` | Return only a structured report on stdout; except for previews, also requires `--yes` |
 | `--quiet` | `false` | Hide ordinary explanatory output; prompts and confirmation still appear, so this does not replace `--yes` |
+
+Before uninstalling, use `--dry-run --json` to inspect the `checklist`. Each item has a stable `id`, a `status`, a summary, evidence details, and a suggested action. Statuses are `pass`, `warn`, `blocked`, or `unknown`. Completing a preview does not mean that every check passed.
+
+The checklist distinguishes local services and autostart, listening ports, installation/data/backup/log paths and retained items, and deployment, instance, node, and cloud records in the database. Persisted records do not prove that remote processes stopped, GPUs were released, or cloud billing ended. By default, active workloads or unavailable critical resource evidence block uninstallation before services stop or files are deleted. `--yes` skips interaction, not resource checks. Resources are checked again after confirmation and before stopping the service.
+
+To retain workloads while removing only the control plane, explicitly add `--keep-resources`. It does not stop inference instances, delete cloud resources, or replace node uninstallation. Combining it with `--purge` also removes management records and credentials, so first preserve the information needed to manage those resources independently. Passing resource checks does not replace the existing directory and service ownership protections.
 
 - Terminal interaction retains data by default. Without explicit `--purge`, first ask whether to clean up completely, then show the list and request confirmation. Pipelines, scripts, and CI must supply `--yes` or `--dry-run`; otherwise, the command fails before making changes.
 - Stop the server and confirm it has exited, disable automatic startup, and remove the associated systemd unit / launchd plist / nohup PID and program files. The associated expose public endpoint is also closed and its unit removed. Services for other installations are retained; cleanup is refused when ownership cannot be determined.
@@ -252,19 +260,20 @@ Reset a user's password by modifying the database directly, without going throug
 
 | Flag | Default | Description |
 |---|---|---|
-| `--password PASSWORD` | None (required) | New password; empty values are rejected |
+| `--password PASSWORD` | None: prompts twice in the terminal without echo | New password; required when stdin is not a terminal |
 | `--user USER` | `admin` | Username |
 | `--data DIR` | See below | Data directory |
 | `--db PATH` | `<data>/gpuworks.db` | SQLite path |
 
 - Without `--data`, the data directory is, in order: `data_dir` from the `server.yaml` next to the binary, `data_dir` from the default installation (`/opt/gpuworks/server/server.yaml`; `~/gpuworks/server/server.yaml` on macOS), then `./data`. The installation's database is therefore found regardless of the current working directory.
 - The database file must already exist: if it does not, the command reports the path it used and where that path came from, then exits without creating an empty database.
+- On success, if the `initial-credentials` beside the database records this user, the command tries to delete it, since its password no longer works; a failure only prints a warning and does not affect the reset.
 - Run as the operator; `sudo` is not required. If database permissions are insufficient, the operation fails with the database's own permission error.
 - Do not write passwords or keys to shell history or logs.
 
 ## gpuworks support-bundle
 
-Collects diagnostics without the server, for when the server does not start or the console cannot be reached; the content matches the console's [Collect diagnostics](../how-to/troubleshooting.md#when-you-cannot-log-in-on-site-debug-collection-and-collecting-diagnostics), except that the nodes' part cannot be collected (the manifest marks them offline). Prints the archive's path when done. The archive is assembled in the directory of `--out`, not in the data directory, so with `--out` on another disk it still works when the server's disk is full.
+Collects diagnostics without the server, for when the server does not start or the console cannot be reached; the content matches the console's [Collect diagnostics](../how-to/troubleshooting.md#无法登录现场时调试采集与收集诊断信息), except that the nodes' part cannot be collected (the manifest marks them offline). Prints the archive's path when done. The archive is assembled in the directory of `--out`, not in the data directory, so with `--out` on another disk it still works when the server's disk is full.
 
 | flag | Default | Description |
 |---|---|---|
@@ -312,7 +321,7 @@ Each configuration item is resolved in this order: **command-line flag > environ
 | `--listen ADDR` | `$GPUWORKS_SERVER_DIAL_LISTEN`; defaults to `0.0.0.0:18800` for `server_dial` | Listen address in `server_dial` mode |
 | None | `$GPUWORKS_RUNTIME_MOUNT_ROOT`, `$GPUWORKS_UDOCKER_BUNDLE` | Can only come from environment variables or the configuration file's `MOUNT_ROOT` and `UDOCKER_BUNDLE`; the agent sets them for the runtime at startup |
 | `--data-lane BOOL` | None | Defaults to `true`. Enable a dedicated high-throughput data channel; set to `false` behind a proxy that only supports a single connection |
-| `--image-pull-max-connections N` | `$GPUWORKS_IMAGE_PULL_MAX_CONNECTIONS` | Upper limit of simultaneous connections a runveil (udocker) node opens to each registry host (to the proxy when going through one) when pulling images; `0` or unset means automatic (up to 16), `1` means a single connection, and the largest value is 32; a value out of range makes the agent refuse to start. For registries and proxies that allow only a few connections or rate-limit many; not an everyday setting. See [Limit Connections for Image Pulls](../how-to/configure-pull-settings.md#limit-connections-for-image-pulls-runveil-nodes) |
+| `--image-pull-max-connections N` | `$GPUWORKS_IMAGE_PULL_MAX_CONNECTIONS` | Upper limit of simultaneous connections a runveil (udocker) node opens to each registry host (to the proxy when going through one) when pulling images; `0` or unset means automatic (up to 16), `1` means a single connection, and the largest value is 32; a value out of range makes the agent refuse to start. For registries and proxies that allow only a few connections or rate-limit many; not an everyday setting. See [Limit Connections for Image Pulls](../how-to/configure-pull-settings.md#限制镜像拉取的连接数runveil-节点) |
 | `--dcgm MODE` | `$GPUWORKS_DCGM`; defaults to `off` | Optional DCGM SM utilization probe: `off` / `auto` (enabled only when `dcgmi` is on PATH) |
 
 - Default for `--state`: `$GPUWORKS_STATE_DIR`, otherwise `/opt/gpuworks` (if it exists); on macOS, then `~/gpuworks` (if it contains `gpuworks-agent.conf`) and `~/.gpuworks` (if it exists); otherwise `gpuworks` under the user's configuration directory, and finally `./gpuworks-state`.
@@ -320,7 +329,7 @@ Each configuration item is resolved in this order: **command-line flag > environ
 - `--driver udocker` selects runveil: `udocker` is the retained driver name (still used in node records and APIs). Its implementation uses native image handling and a launcher that directly invokes the embedded PRoot; the UI displays runveil.
 - `--driver host` runs the engine as a host process for macOS (Apple silicon) nodes: Linux containers on macOS run in a virtual machine and cannot access the Metal GPU. The image is a darwin/arm64 environment bundle, which the agent starts directly after extraction.
 - If no driver is specified, macOS selects host directly (even if Docker Desktop is available). Other systems detect runtimes in this order: docker (daemon available) > nerdctl > runveil. If none is available, deployments are disabled on the node. An unknown `--driver` value or a runtime unavailable on the current system (`host` on Linux or `udocker` on macOS) logs an error and leaves all runtimes disabled.
-- Logs are written to both stderr and `<state>/agent.log` (rotated at 10 MiB, retaining the previous generation as `agent.log.1`). Records at warning level or above are sent to the server's log center. Only the `GPUWORKS_LOG_LEVEL` environment variable controls the log level, which filters both the file and stderr; repeated records are compressed, see [The server's and agent's own logs](../how-to/monitor-and-logs.md#the-servers-and-agents-own-logs).
+- Logs are written to both stderr and `<state>/agent.log` (rotated at 10 MiB, retaining the previous generation as `agent.log.1`). Records at warning level or above are sent to the server's log center. Only the `GPUWORKS_LOG_LEVEL` environment variable controls the log level, which filters both the file and stderr; repeated records are compressed, see [The server's and agent's own logs](../how-to/monitor-and-logs.md#server-与-agent-自身的日志).
 - The merged configuration is validated with the same set of rules. A failure immediately reports an error and exits, indicating the configuration file path: a missing token; a missing server for `agent_dial`; a server URL without a scheme or containing credentials, a query string, or a fragment; or an invalid port in the listen address for `server_dial`. A `server_dial` agent only needs a token and listen address. It never connects to the server and neither requires nor uses a server address.
 
 ## gpuworks-agent smoke
@@ -464,6 +473,17 @@ macOS only. Register the currently running binary as the launchd job `ai.gpuwork
 | Flag | Default | Description |
 |---|---|---|
 | `--state DIR` | On Linux, prefer the state directory from the systemd unit; without a unit, use the same default as `run`. On macOS, use the state directory in the launchd job | Agent state directory |
+
+First use `--dry-run` (or `--dry-run --json`) to inspect installation/state ownership, services and processes, autostart, runtime workload candidates, GPU observations, and retained directories. A container name in a shared runtime does not prove that it belongs to this agent. Unavailable runtime evidence is marked unknown. Unsupported or failed GPU queries do not report an idle GPU, and an exited process-group leader does not prove that all workers exited.
+
+| Option | Default | Description |
+|---|---|---|
+| `--dry-run` | `false` | Preview checks and cleanup scope without stopping services or deleting files |
+| `--json` | `false` | Output a structured checklist and result; execution requires `--yes` |
+| `--yes` / `-y` | `false` | Skip interactive confirmation, not resource or ownership checks |
+| `--keep-resources` | `false` | Explicitly retain workloads and remove only the agent; never bypass service/process ownership or cleanup safety checks |
+
+By default, active workloads and critical unknowns must be addressed before confirmation and uninstallation. Critical resources are checked again after confirmation. Unknown GPU observations are shown explicitly and cannot establish that GPUs were released. Binaries, models, and logs remain; success means that the selected component was removed.
 
 - On Linux, if the unit's state directory matches this directory, first run `disable --now gpuworks-agent.service`, then stop `run` processes with the same binary and explicit `--state` directory (including nohup), and wait for them to exit. Then delete `/etc/systemd/system/gpuworks-agent.service` and run `daemon-reload`. Finally, delete `<state>/identity.json`, the PID file, and `<state>/gpuworks-agent.conf` (which contains the token). If the unit belongs to another state directory (another agent on the same host), leave it untouched and stop only this directory's processes. Refuse to execute if the state directory cannot be read from the unit.
 - On macOS, remove the LaunchDaemon and the executor's LaunchAgent (under `sudo`, the user who invoked sudo), and delete `identity.json` and `gpuworks-agent.conf` from their respective state directories. If a LaunchDaemon exists but root permissions are unavailable, report an error and exit with 1.

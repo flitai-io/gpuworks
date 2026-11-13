@@ -211,7 +211,7 @@ func TestPDMultiNodeUnitIsWrittenWholeOrNotAtAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	insts := f.reconcile(t)
-	prefill, leader, follower := pdByRole(insts)
+	_, leader, follower := pdByRole(insts)
 	if leader != nil || follower != nil {
 		t.Fatalf("a decode unit whose follower does not fit was written: leader %+v follower %+v", leader, follower)
 	}
@@ -223,7 +223,7 @@ func TestPDMultiNodeUnitIsWrittenWholeOrNotAtAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	insts = f.reconcile(t)
-	prefill, leader, follower = pdByRole(insts)
+	prefill, leader, follower := pdByRole(insts)
 	if prefill == nil || leader == nil || follower == nil || leader.DistGroup == "" || follower.DistGroup != leader.DistGroup {
 		t.Fatalf("instances after the card came back = %+v", insts)
 	}

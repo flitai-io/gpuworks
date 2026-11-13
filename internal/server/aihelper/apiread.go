@@ -47,6 +47,7 @@ var deniedRoutes = map[string]string{
 	"/api/v1/playground/openapi.json":             "the playground's proxy to model endpoints",
 	"/api/v1/pull/registry-credentials":           "registry logins",
 	"/api/v1/ssh-key":                             "the platform's SSH key",
+	"/api/v1/kube/clusters/{uuid}/manifest":       "carries the cluster's enrollment token",
 	"/api/v1/terminal/sessions":                   "terminal audit records, with client addresses",
 }
 

@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/agent/gpu"
-	"gpuworks.ai/gpuworks/internal/agent/runtime"
-	"gpuworks.ai/gpuworks/internal/proto"
 	"io"
 	"log/slog"
 	"net"
@@ -19,6 +16,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/agent/gpu"
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 func TestApplyPreStartArgvWrapsEngineCommand(t *testing.T) {

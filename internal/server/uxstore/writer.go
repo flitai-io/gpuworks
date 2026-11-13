@@ -253,7 +253,7 @@ func (s *Store) writeBatch() (created []string, err error) {
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // Commit/statement errors take precedence; a committed transaction is already closed.
 	for _, d := range order {
 		made, err := s.ensurePartition(tx, d)
 		if err != nil {

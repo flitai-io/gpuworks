@@ -18,11 +18,13 @@ const signAlgorithm = "ACS3-HMAC-SHA256"
 // its parameters in the query string.
 const emptyPayloadHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
-// signedRequest is what a V3 signature covers: method, host, query and the
-// x-acs-* headers. The body is always empty.
+// signedRequest is what a V3 signature covers: method, host, path, query and
+// the x-acs-* headers. The body is always empty. RPC-style APIs (ECS) post to
+// "/"; ROA-style ones (ACK) name the resource in the path.
 type signedRequest struct {
 	method  string
 	host    string
+	path    string // "" is "/"
 	query   map[string]string
 	headers map[string]string // lower-case names; host is added by sign
 }
@@ -45,9 +47,13 @@ func sign(req signedRequest, accessKeyID, accessKeySecret string) string {
 		canonicalHeaders.WriteString(name + ":" + strings.TrimSpace(headers[name]) + "\n")
 	}
 	signedHeaders := strings.Join(names, ";")
+	path := req.path
+	if path == "" {
+		path = "/"
+	}
 	canonical := strings.Join([]string{
 		req.method,
-		"/",
+		canonicalPath(path),
 		canonicalQuery(req.query),
 		canonicalHeaders.String(),
 		signedHeaders,
@@ -58,6 +64,15 @@ func sign(req signedRequest, accessKeyID, accessKeySecret string) string {
 	mac := hmac.New(sha256.New, []byte(accessKeySecret))
 	mac.Write([]byte(stringToSign))
 	return signAlgorithm + " Credential=" + accessKeyID + ",SignedHeaders=" + signedHeaders + ",Signature=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// canonicalPath percent-encodes each segment of a resource path.
+func canonicalPath(path string) string {
+	segments := strings.Split(path, "/")
+	for i, s := range segments {
+		segments[i] = percentEncode(s)
+	}
+	return strings.Join(segments, "/")
 }
 
 // canonicalQuery sorts the parameters by name and percent-encodes both names

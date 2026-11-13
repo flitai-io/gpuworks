@@ -1,10 +1,11 @@
 package proxy
 
 import (
-	"gpuworks.ai/gpuworks/internal/server/uxrecord"
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/uxrecord"
 
 	"gpuworks.ai/gpuworks/internal/inferencemetrics"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"

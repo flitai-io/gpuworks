@@ -42,8 +42,35 @@ func DataParallelFlags(engine string) []string {
 
 var pythonExecutable = regexp.MustCompile(`^python([0-9]+(\.[0-9]+)?)?$`)
 
+func unwrapEnvCommand(argv []string) []string {
+	if len(argv) == 0 || strings.ToLower(filepath.Base(argv[0])) != "env" {
+		return argv
+	}
+	for i := 1; i < len(argv); i++ {
+		arg := argv[i]
+		switch {
+		case arg == "--":
+			return argv[i+1:]
+		case arg == "-u" || arg == "--unset":
+			if i+1 == len(argv) {
+				return nil
+			}
+			i++
+		case strings.HasPrefix(arg, "--unset="):
+		case !strings.HasPrefix(arg, "-") && strings.Contains(arg, "="):
+		default:
+			return argv[i:]
+		}
+	}
+	return nil
+}
+
 func serverArguments(engine string, argv []string) ([]string, bool) {
 	if engine != VLLM && engine != SGLang || len(argv) == 0 {
+		return nil, false
+	}
+	argv = unwrapEnvCommand(argv)
+	if len(argv) == 0 {
 		return nil, false
 	}
 	executable := strings.ToLower(filepath.Base(argv[0]))
@@ -57,6 +84,12 @@ func serverArguments(engine string, argv []string) ([]string, bool) {
 		return nil, false
 	}
 	module := argv[2]
+	if engine == VLLM && module == "vllm.entrypoints.cli.main" {
+		if len(argv) > 3 && argv[3] == "serve" {
+			return argv[4:], true
+		}
+		return nil, false
+	}
 	if engine == VLLM && module == "vllm.entrypoints.openai.api_server" || engine == SGLang && module == "sglang.launch_server" {
 		return argv[3:], true
 	}
@@ -64,9 +97,9 @@ func serverArguments(engine string, argv []string) ([]string, bool) {
 }
 
 // CommandFeatures inspects actual server executable argv using its exact CLI
-// vocabulary. Shells, wrappers, other subcommands, and invalid feature values
-// remain unknown. valueFlags comes from the caller's parameter dictionary so
-// a flag-looking model name or other value cannot become an option here.
+// vocabulary. Shells, unrecognized wrappers, other subcommands, and invalid
+// feature values remain unknown. valueFlags comes from the caller's parameter
+// dictionary so a flag-looking model name or other value cannot become an option here.
 func CommandFeatures(engine string, argv []string, valueFlags ...string) ([]Feature, bool) {
 	args, known := serverArguments(engine, argv)
 	if !known {

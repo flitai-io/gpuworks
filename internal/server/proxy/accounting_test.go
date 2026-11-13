@@ -67,6 +67,11 @@ func TestSelectDeploymentInstanceDistributedAsleepFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/dist", Revision: "main", Name: "dist"})
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +100,7 @@ func TestSelectDeploymentInstanceDistributedAsleepFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"dist-a": true, "dist-b": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	selected, _, status, message, asleep := p.selectDeploymentInstance("dist")
 	if status != http.StatusServiceUnavailable || !strings.Contains(message, "asleep") || !asleep {
 		t.Fatalf("status=%d message=%q asleep=%v, want 503 asleep=true", status, message, asleep)

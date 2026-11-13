@@ -165,7 +165,13 @@ class NumericInventory(unittest.TestCase):
             'roles': {'decode': {'tp': 1, 'units': [{}]}, 'prefill': {'tp': 1, 'units': [{}]}}})
 
     def test_three_known_negative_drafts_have_distinct_exact_errors(self):
+        # A multi-node draft in automatic placement reports the missing tp first; the
+        # node-count error belongs to the manual path, and both are asserted here.
         self.assertEqual(numeric.expected_errors({'nnodes': 2}), [
+            {'field': 'placement_mode', 'code': 'AUTO_PLACEMENT_TP_REQUIRED'}])
+        self.assertEqual(numeric.expected_errors({'nnodes': 2, 'placement_mode': 'auto'}), [
+            {'field': 'placement_mode', 'code': 'AUTO_PLACEMENT_TP_REQUIRED'}])
+        self.assertEqual(numeric.expected_errors({'nnodes': 2, 'placement_mode': 'manual'}), [
             {'field': 'node_uuids', 'code': 'DISTRIBUTED_NODE_COUNT', 'params': {'actual': 0, 'required': 2}}])
         self.assertEqual(numeric.expected_errors({'quick_params': {'kv_disk_offload': True}}), [
             {'field': 'shared_kv_dir', 'code': 'QUICK_PARAM_PATH_INVALID', 'params': {'key': 'shared_kv_dir'}}])
@@ -261,13 +267,13 @@ class NumericInventory(unittest.TestCase):
             self.assertIs(ordinary.kwargs['required'], False)
 
     def test_distributed_quota_absence_is_wire_context_not_dom_filtered(self):
-        record = {'request': {'placement_mode': 'manual', 'nnodes': 2}, 'response': {}}
+        record = {'request': {'placement_mode': 'auto', 'nnodes': 2}, 'response': {}}
         numeric.distributed_partition_contract(record, same)
         for wrong in (None, {}, numeric.FIXTURE_PARTITION):
             record['response'] = {'pool_partition_capability': wrong}
             with self.subTest(wrong=wrong), self.assertRaisesRegex(AssertionError, 'must omit'):
                 numeric.distributed_partition_contract(record, same)
-        for wrong in ({'placement_mode': 'auto', 'nnodes': 2},
+        for wrong in ({'placement_mode': 'manual', 'nnodes': 2},
                       {'placement_mode': 'auto', 'nnodes': 1}):
             with self.subTest(wrong=wrong), self.assertRaisesRegex(AssertionError, 'fixed distributed quota context'):
                 numeric.distributed_partition_contract({'request': wrong, 'response': {}}, same)

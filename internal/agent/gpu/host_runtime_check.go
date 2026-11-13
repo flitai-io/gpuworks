@@ -76,7 +76,11 @@ const RuntimeCheckKey = "accelerator-runtime-check"
 // as its environment (nil inherits the agent's).
 func runRuntimeCheck(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 	out, err := RunTracked(ctx, RuntimeCheckKey, 0, func(ctx context.Context) *exec.Cmd {
-		cmd := exec.CommandContext(ctx, name, args...)
+		// On the host when the agent runs the vendor's CLIs there: python3
+		// is not in the agent's image, and the runtime libraries are the
+		// host's. The environment (visible devices, library paths) passes
+		// through nsenter to the program.
+		cmd := cliCommand(ctx, name, args...)
 		cmd.Env = env
 		return cmd
 	})

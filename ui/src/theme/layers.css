@@ -1,0 +1,31 @@
+/* Overlay stacking while antd and Zeron coexist (loaded after app.css, which
+   the Zeron CLI owns). antd modals and drawers sit at 1000 and their popups at
+   1050+; Zeron's defaults (40/50/60) put a Zeron dialog, select or copy
+   fallback opened inside an antd modal underneath it. At the same 1000 the
+   overlay opened last is on top, whichever library drew it; tooltips and
+   toasts stay above antd's popups (1070). Drop once antd overlays are gone. */
+:root,
+.dark {
+  --layer-overlay: 1000;
+  --layer-popover: 1000;
+  --layer-tooltip: 1080;
+}
+
+/* Right-side Zeron drawers open beside the resident AI assistant, as the antd
+   ones do (styles.css, body.assistant-open): otherwise the assistant panel
+   and a detail or column-settings drawer cover each other. Narrow windows
+   keep the overlapping layout. */
+@media (min-width: 1200px) {
+  body.assistant-open [role="dialog"][data-placement="right"] {
+    right: var(--assistant-panel-width);
+    max-width: calc(100vw - var(--assistant-panel-width) - 2rem);
+  }
+}
+
+/* Tailwind's preflight strips list markers; pages still written for antd
+   expect the browser's. In the base layer, so antd's own lists (menus,
+   pagination) and Tailwind's list-none still win; Zeron lists carry data-slot. */
+@layer base {
+  ul:not([data-slot]) { list-style: disc; }
+  ol:not([data-slot]) { list-style: decimal; }
+}

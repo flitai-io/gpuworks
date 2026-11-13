@@ -158,7 +158,7 @@ func (c *Controller) fillNodeCache(ctx context.Context, node *store.Node, dep *s
 	for _, deleting := range pending {
 		if err := c.evictCacheRow(ctx, node, deleting.ID); err != nil {
 			c.q.addAfter(depKey(dep.ID), c.retryBackoff)
-			return nil
+			return nil //nolint:nilerr // The failed eviction is already scheduled for retry with retryBackoff.
 		}
 	}
 	plan, err := planning.CachePlan(c.store, storage, eff, node, need)

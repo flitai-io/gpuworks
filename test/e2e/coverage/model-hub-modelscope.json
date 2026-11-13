@@ -387,8 +387,8 @@
     },
     {
       "item": "13.5",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 成功通知对应真实持久化结果，错误通知包含操作与具体原因；消失不能替代后端恢复证明。"
+      "status": "covered",
+      "assertion": "covered: notices are tied to the persisted result rather than to their own appearance. A rejected name returns real 400 FIELD_INVALID / params.field=name, and the case asserts the translated error notice carries that cause, that the dialog keeps every field, and that the server-side model list is still empty. A source outage produces one notice whose code and params are compared exactly (MODEL_METADATA_UNREACHABLE with the real host), the row is saved with metadata unknown rather than invented, and the exact set of 503 source reads behind that notice is enumerated from the fixture audit - so the notice is matched against what actually happened upstream. Success is only claimed after listed()/read() agree with the created row."
     },
     {
       "item": "13.6",

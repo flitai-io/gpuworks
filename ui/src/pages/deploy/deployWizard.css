@@ -172,6 +172,16 @@
   font-size: 11px;
 }
 
+.deploy-component-acquisition {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.deploy-component-acquisition-line {
+  display: block;
+}
+
 .deploy-image-picker {
   gap: 5px;
 }

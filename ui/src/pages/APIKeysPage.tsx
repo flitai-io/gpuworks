@@ -62,7 +62,7 @@ export default function APIKeysPage() {
 
   // A token has no detail of its own, so its name is plain text rather than a link.
   const columns: ResourceColumn<ApiKey>[] = [
-    { key: "name", role: "name", title: t("table.name"), width: 220, sortValue: (k) => k.name, render: (_: unknown, k: ApiKey) => <Text strong>{k.name || "—"}</Text> },
+    { key: "name", role: "name", title: t("table.name"), width: 220, sortValue: (k) => k.name, render: (_: unknown, k: ApiKey) => k.name || "—" },
     { key: "prefix", title: t("table.prefix"), width: 180, render: (_: unknown, k: ApiKey) => <Text code>{k.prefix}</Text> },
     {
       key: "status",

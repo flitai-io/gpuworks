@@ -102,6 +102,7 @@
     "search_api": "查找接口",
     "call_api": "读取",
     "search_metrics": "查找指标",
+    "get_node_connection_diagnostics": "检查节点连接",
     "get_gpu_topology": "GPU 拓扑",
     "compare_with_healthy_replica": "对比健康副本"
   },

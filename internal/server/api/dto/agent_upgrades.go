@@ -17,14 +17,27 @@ type AgentUpgradeCreateRequest struct {
 }
 
 type AgentUpgradeCandidate struct {
-	NodeUUID    string `json:"node_uuid"`
-	Name        string `json:"name"`
-	FromVersion string `json:"from_version"`
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	Transport   string `json:"transport"`
-	Eligibility string `json:"eligibility"`
-	Reason      string `json:"reason"`
+	NodeUUID      string `json:"node_uuid"`
+	Name          string `json:"name"`
+	VersionChange string `json:"version_change,omitempty"`
+	Downgrade     bool   `json:"downgrade,omitempty"`
+	FromVersion   string `json:"from_version"`
+	OS            string `json:"os"`
+	Arch          string `json:"arch"`
+	Transport     string `json:"transport"`
+	Eligibility   string `json:"eligibility"`
+	Reason        string `json:"reason"`
+}
+
+type AgentFleetSummary struct {
+	Target         string `json:"target"`
+	Align          int    `json:"align"`
+	Upgrade        int    `json:"upgrade"`
+	Downgrade      int    `json:"downgrade"`
+	DifferentBuild int    `json:"different_build"`
+	Check          int    `json:"check"`
+	Offline        int    `json:"offline,omitempty"`
+	RunID          uint   `json:"run_id,omitempty"`
 }
 
 type AgentUpgradeBlocker struct {

@@ -258,7 +258,7 @@ const aiConfigNameMaxRunes = 64
 
 // validateAIConfigName is the one bound both a create and an edit apply to a
 // service name, so that a name the API accepts is a name the API can later
-// change. When the two disagreed - create accepted up to maxNameRunes (256) and
+// change. When the two disagreed - create accepted up to deployment.MaxNameRunes (256) and
 // edit held 64 - the API could store a 70-character name and then refuse every
 // edit of that service, because the edit dialog always sends the name back and
 // the edit path re-validated it: the row was permanently uneditable through the

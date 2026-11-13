@@ -359,7 +359,7 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 	// Admission governs creation. A running container is adopted above using
 	// its existing runtime contract, even if a newer policy rejects new launches.
 	if err := e.validateTargetDesiredForDriver(spec, driver.Name()); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", err.Error())
+		e.reportInjectionFailure(spec, err)
 		return
 	}
 	// A model path that is not there must fail the launch, not reach the
@@ -409,8 +409,8 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 		return
 	}
 
-	if err := e.applyDeviceInjectionForDriver(&ws, spec.GPUIndexes, driver.Name()); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", err.Error())
+	if err := e.applyDeviceInjectionForLaunch(ctx, &ws, spec.GPUIndexes, driver.Name(), spec.NNodes); err != nil {
+		e.reportInjectionFailure(spec, err)
 		return
 	}
 	if ok, reason := e.applyPartition(ctx, &ws, spec); !ok {
@@ -487,7 +487,7 @@ runFinished:
 		return
 	}
 	e.collectAndPublishRuntimeObservation(ctx, spec, id, id, epoch)
-	e.probeAndWatch(ctx, spec, id, epoch)
+	e.probeAndWatchStartup(ctx, spec, id, epoch, true)
 }
 
 func (e *Engine) invalidateRuntimeEpochLocked(uuid string) {

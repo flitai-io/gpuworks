@@ -7,7 +7,7 @@
   "scope": "Single targeted contract; not a full storage-type or page completion claim",
   "test_file": "test/e2e/storage_shared_dir.py",
   "test_function": "test_shared_dir_lifecycle",
-  "command": "make test-e2e-storage-shared-dir",
+  "command": "python3 -B test/e2e/storage_shared_dir.py --locale en",
   "lane": "local-real-server-agent-bind-mounted-shared-dir",
   "identity": "admin browser; real agent; the fixture process owns a private bind mount",
   "fixture": "isolated server, fresh SQLite, unique runId, real Chrome, real agent over WS, private bind mount standing in for an already-mounted shared directory, passwordless sudo required only for mount/umount",

@@ -183,7 +183,7 @@ func (a *apiHandlers) buildGPUInventory() (*gpuInventoryCache, error) {
 				}
 				row := dto.DGPU{
 					InstanceUUID: instance.UUID, DeploymentID: instance.DeploymentID, State: instance.State, SleepLevel: instance.SleepLevel,
-					NodeUUID: node.UUID, NodeName: displayNodeName(node), GPUIndex: gpuIndex,
+					NodeUUID: node.UUID, NodeName: node.DisplayName(), GPUIndex: gpuIndex,
 					GPUUUID: gpu.UUID, GPUName: gpu.Name, MemoryLimit: spec.VRAMLimitBytes, SMLimitPct: spec.SMLimitPct,
 				}
 				if dep := deployment(instance.DeploymentID); dep != nil {
@@ -219,7 +219,7 @@ func physicalGPU(node *store.Node, partitionReports partitioncap.Reports, gpu *s
 		Schedulable:       gpu.CanTakeWork(),
 		HealthStatus:      gpu.HealthStatus, HealthCode: gpu.HealthCode, HealthMessage: gpu.HealthMessage,
 		HealthEvidence: evidence, HealthGuide: guide,
-		NodeUUID: node.UUID, NodeName: displayNodeName(node), NodeState: node.ConnectionState(), DriverVersion: node.GPUDriver,
+		NodeUUID: node.UUID, NodeName: node.DisplayName(), NodeState: node.ConnectionState(), DriverVersion: node.GPUDriver,
 		AllocatedBytes: allocation.AllocatedBytes, AvailableBytes: available, Occupants: []dto.GPUOccupant{},
 	}
 	switch {
@@ -351,10 +351,3 @@ func applyDGPUMetrics(item *dto.DGPU, metrics map[string]map[string]MetricLatest
 }
 
 func metricKey(node, gpu, instance string) string { return node + "\x00" + gpu + "\x00" + instance }
-
-func displayNodeName(node *store.Node) string {
-	if node.Hostname != "" {
-		return node.Hostname
-	}
-	return node.UUID
-}

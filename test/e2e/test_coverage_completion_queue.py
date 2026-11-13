@@ -290,20 +290,33 @@ from coverage_completion_queue import summary
 # Six complete current-fixture boolean6.1 inventories verified against unfixed Expert baseline and restored all en/zh.
 # These counts move only when a manifest declaration changes.
 BASELINE = {
-    "1": 138, "2": 291, "3": 267, "4": 299, "5": 197, "6": 137,
-    "7": 105, "8": 102, "9": 76, "10": 110, "11": 84, "out": 379,
+    "1": 124, "2": 251, "3": 249, "4": 318, "5": 189, "6": 130,
+    "7": 101, "8": 89, "9": 65, "10": 95, "11": 83, "out": 297,
 }
+
+# The deploy manifests declare section 17 not applicable: no deploy page imports a chart library,
+# and a recursive search of ui/src/pages/deploy/ finds no echarts, Statistic, Timeline, Progress or
+# canvas, so the seven chart items leave the queue on six manifests at once (42 fewer open items).
+#
+# The container-overrides manifest also leaves the queue on sections 13 and 22: 13.1 to 13.3 and
+# 22.1, 22.2 and 22.7 are measured, 13.4 and 13.6 name a branch the product's own data keeps shut
+# (every image series is official, PATCH answers 400 and there is no create route), and 22.3 is a
+# single-role product that cannot produce the second identity it would compare against. Three
+# drafts had also cleared 22.4 to 22.6 as not applicable; those items describe a session timeout,
+# a locale switcher and theme tokens the product does have, so the sentences were about the
+# contract rather than the product and the items are open again.
 
 
 class QueueTest(unittest.TestCase):
     def test_every_open_checklist_gap_has_one_phase(self):
         extra, counts, total = summary()
-        # No provider section after 1-10 still has a residual, so there is no
-        # "smallest" one left to name.
+        # The provider tables carry no row selection, so 11.5 to 11.7 are declared not applicable on
+        # that surface with the measured header and checkbox count as the reason; with them resolved,
+        # section 11 no longer has an open provider residual to route to a phase.
         self.assertIsNone(extra)
         self.assertEqual(dict(counts), BASELINE)
         self.assertEqual(total, sum(BASELINE.values()))
-        self.assertEqual(total, 2185)
+        self.assertEqual(total, 1991)
 
 
 if __name__ == "__main__":

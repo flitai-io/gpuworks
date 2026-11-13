@@ -7,7 +7,7 @@
   "scope": "Single targeted contract; not a full Playground or renderer completion claim",
   "test_file": "test/e2e/playground_chat_gateway.py",
   "test_function": "test_playground_chat",
-  "command": "make test-e2e-playground-chat-gateway",
+  "command": "python3 -B test/e2e/playground_chat_gateway.py --locale en",
   "lane": "local-real-agent-docker-fake-gpu-facts",
   "identity": "admin browser session; node agent/Docker; the Playground calls /api/v1/playground/v1/* with the session, not an inference key",
   "fixture": "isolated server, fresh SQLite, unique runId, real Chrome (two browser contexts), real agent over WS, real Docker daemon; GPU facts injected for scheduling only; engine is the audited fake-engine image",

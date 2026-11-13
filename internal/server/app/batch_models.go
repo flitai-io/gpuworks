@@ -6,8 +6,8 @@ import (
 	"sort"
 
 	"gpuworks.ai/gpuworks/internal/proto"
-	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/batch"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -17,12 +17,12 @@ import (
 // what each is to a batch. The create check (Lookup) and the list a client
 // chooses from (List) both judge a name by nameEntry, so they cannot disagree.
 // A deployment's state is the one the deployment list shows
-// (api.DeploymentRuntimeStates), refined by sleep as the gateway judges it.
+// (deployment.RuntimeStates), refined by sleep as the gateway judges it.
 type batchModels struct {
 	st *store.Store
 	// prep reads model preparation, which tells a deployment whose download
 	// failed from one still being prepared; nil reads none.
-	prep api.ModelPreparation
+	prep deployment.ModelPreparation
 }
 
 func (m batchModels) Lookup(name string) (batch.ModelEntry, error) {
@@ -114,7 +114,7 @@ func (m batchModels) entries(deployments []store.Deployment, instances []store.I
 	if len(kept) == 0 {
 		return nil, nil
 	}
-	states, err := api.DeploymentRuntimeStates(m.st, m.prep, kept, instances)
+	states, err := deployment.RuntimeStates(m.st, m.prep, kept, instances)
 	if err != nil {
 		return nil, err
 	}

@@ -14,9 +14,25 @@ Session invalidation is handled as follows:
 
 The credentials accepted by each entry point and their uses are:
 
-- `/v1` uses a separate API key.
+- `/v1` requires a separate API key by default: a request without a key, or with an invalid or revoked one, returns 401, and that holds when the database contains no keys at all. Keyless access exists only when an administrator explicitly turns on the `inference_open_access` security setting (off by default); with it on, a request without a key is served anonymously, a request that presents a key is still verified, and an unreadable setting counts as off. See [OpenAI-Compatible Gateway](openai-gateway.md#authentication).
 - A per-node token (a separate token for each node) is used only for that node's connection and bootstrap (initial onboarding). It is not injected into the public `/install.sh`.
 - The management API and MCP also accept platform API tokens (`gwp_`): only SHA-256 hashes are stored, and operations use the owning user's current role with the token's scope applied on top (read-only by default). Tokens can have an expiration and can be revoked; no token can manage tokens. MCP is disabled by default and must be enabled by an administrator.
+
+## Administrator Password
+
+Creating or changing an administrator password (install, first start, Change password in the console, `reset-password`) follows one set of rules:
+
+- 8–128 Unicode characters and at most 512 bytes; no mix of case, digits or symbols is required, and Chinese text or a phrase of a few words is accepted.
+- Common weak passwords (including variants with digits or symbols around them, such as `Password123`), whole-value repetitions and sequences (such as `12345678` or `qwertyui`) are rejected. The list is short and is not a database of breached passwords.
+- The password cannot be the username (ignoring case, punctuation and leading or trailing digits).
+- Control characters are not allowed. Existing passwords are not affected and keep working.
+
+Changing and recovering:
+
+- While you can sign in, choose **Change password** in the account menu at the top right of the console. It changes only your own password and asks for the current one; checking the current password shares the login throttle.
+- Afterwards all of the user's management sessions end; platform API tokens and API keys keep working. When `initial-credentials` records this user, the server tries to delete it (`reset-password` does the same).
+- For a forgotten password, an administrator runs `gpuworks reset-password` on the server; without `--password` it prompts twice in the terminal without echo, which keeps the password out of command history.
+- The console of the experience mode cannot change its password; the main console manages it under **Settings › General › Feature experience mode**.
 
 ## Credential Encryption and Installation Files
 

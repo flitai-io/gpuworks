@@ -1,9 +1,11 @@
-{"schema_version":3,"catalog_version":"2026-10-08","repos":[
+{"schema_version":3,"catalog_version":"2026-11-11","repos":[
   {"repo":"vllm/vllm-openai","registry":"docker-hub","engine":"vllm","framework":"cuda"},
   {"repo":"vllm/vllm-omni","registry":"docker-hub","engine":"vllm-omni","framework":"cuda"},
   {"repo":"lmsysorg/sglang","registry":"docker-hub","engine":"sglang","framework":"cuda"},
   {"repo":"quay.io/ascend/vllm-ascend","registry":"quay","engine":"vllm","framework":"cann"},
   {"repo":"quay.io/ascend/sglang","registry":"quay","engine":"sglang","framework":"cann"},
   {"repo":"harbor.sourcefind.cn:5443/dcu/admin/base/vllm","registry":"oci","engine":"vllm","framework":"dtk",
-   "siblings":["harbor.sourcefind.cn:5443/dcu/admin/base/custom","harbor.sourcefind.cn:5443/dcu/admin/base/sglang"]}
+   "siblings":["harbor.sourcefind.cn:5443/dcu/admin/base/custom","harbor.sourcefind.cn:5443/dcu/admin/base/sglang"]},
+  {"repo":"quay.io/gpuworks/gpuworks-runner","registry":"quay","engine":"",
+   "siblings":["registry.zstack.ai/gpuworks/gpuworks-runner"]}
 ]}

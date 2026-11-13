@@ -54,8 +54,10 @@ func TestPartitionProbeRefreshesWhenGPUChanges(t *testing.T) {
 	n := &NodeRuntime{}
 	assets := []proto.AssetReport{{Backend: "ascend-dgpu", Files: []string{"libvruntime.so"}}}
 	gpus := []proto.GPUInfo{{Index: 0, Vendor: "ascend", DriverVersion: "1", Healthy: true}}
-	if n.partitionProbeNeedsRefresh(assets, gpus) || n.partitionProbeNeedsRefresh(assets, gpus) {
-		t.Fatal("unchanged probe inputs should be cached")
+	for range 2 {
+		if n.partitionProbeNeedsRefresh(assets, gpus) {
+			t.Fatal("unchanged probe inputs should be cached")
+		}
 	}
 	gpus[0].DriverVersion = "2"
 	if !n.partitionProbeNeedsRefresh(assets, gpus) {

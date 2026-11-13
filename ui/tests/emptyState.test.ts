@@ -21,7 +21,19 @@ test("EmptyState renders user-visible description and optional action", () => {
   }));
   assert.equal(screen.getByText("No models yet").textContent, "No models yet");
   assert.equal(screen.getByRole("button", { name: "Add model" }).textContent, "Add model");
-  assert.equal(document.querySelector(".empty-state-image")?.getAttribute("src"), "/assets/empty-models.webp");
+});
+
+test("each kind draws its Zeron illustration, the resource stack for resource lists and the general one otherwise, never an image file", () => {
+  const cases = [["nodes", "resources"], ["models", "resources"], ["deployments", "resources"], ["data", "general"], [undefined, "general"]] as const;
+  for (const [kind, variant] of cases) {
+    const { container } = render(React.createElement(EmptyState, { kind, description: "Nothing here" }));
+    const drawn = [...container.querySelectorAll('[data-slot="empty-media"] [data-slot="empty-illustration"]')];
+    assert.deepEqual(drawn.map((illustration) => [illustration.tagName, illustration.getAttribute("data-variant")]), [["svg", variant]], `kind ${kind}`);
+    // The drawing is decoration: assistive technology hears only the description.
+    assert.equal(drawn[0].getAttribute("aria-hidden"), "true", `kind ${kind}`);
+    assert.equal(container.querySelectorAll("img").length, 0, `kind ${kind}`);
+    cleanup();
+  }
 });
 
 test("EmptyState omits action and applies compact class", () => {
@@ -29,6 +41,7 @@ test("EmptyState omits action and applies compact class", () => {
     description: "Nothing here",
     compact: true,
   }));
-  assert.match(container.firstElementChild?.className ?? "", /empty-state-compact/);
+  assert.equal(container.firstElementChild?.getAttribute("data-density"), "compact");
+  assert.equal(container.firstElementChild?.getAttribute("data-scope"), "inline");
   assert.equal(screen.queryByRole("button"), null);
 });

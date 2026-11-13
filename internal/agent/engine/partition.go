@@ -232,7 +232,7 @@ func (e *Engine) scanPartitionAssets(backend accelerator.Backend, aliasDir strin
 		byDir := map[string]partitionAsset{}
 		_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil || entry == nil || entry.IsDir() || !hasArchHint(path, archHints) || !strings.Contains(filepath.ToSlash(path), "/"+aliasDir+"/") {
-				return nil
+				return nil //nolint:nilerr // Asset discovery skips unreadable candidates and keeps searching other roots.
 			}
 			dir := filepath.Dir(path)
 			if acceptDir != nil && !acceptDir(root, aliasDir, dir) {

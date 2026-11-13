@@ -234,7 +234,7 @@ func (c *Controller) prepareUnits(dep *store.Deployment, pd *planning.PDPlacemen
 		mode, err := planning.ValidateRunningPD(pd, dep.Engine)
 		if err != nil {
 			c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": err.Error()}})
-			return nil, false, nil
+			return nil, false, nil //nolint:nilerr // Invalid placement is recorded as an unschedulable result.
 		}
 		for _, uuid := range pd.NodeUUIDs(mode) {
 			node, err := c.store.NodeWithGPUs(uuid)
@@ -269,7 +269,7 @@ func (c *Controller) prepareUnits(dep *store.Deployment, pd *planning.PDPlacemen
 	if out.pd != nil {
 		if _, err := planning.ValidatePDNodes(pd, out.pd.mode, out.nodes, false); err != nil {
 			c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": err.Error()}})
-			return nil, false, nil
+			return nil, false, nil //nolint:nilerr // Invalid PD nodes are recorded as an unschedulable result.
 		}
 		resolved, groupErr := c.networks.ComputeGroup(out.members)
 		group, err := planning.PDGroup(out.members, resolved, groupErr)
@@ -278,7 +278,7 @@ func (c *Controller) prepareUnits(dep *store.Deployment, pd *planning.PDPlacemen
 		}
 		if err != nil {
 			c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": "PD compute network: " + err.Error()}})
-			return nil, false, nil
+			return nil, false, nil //nolint:nilerr // The PD network error is recorded as an unschedulable result.
 		}
 		out.pd.group = group
 	}

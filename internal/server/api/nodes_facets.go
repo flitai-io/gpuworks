@@ -47,7 +47,7 @@ func (a *apiHandlers) facetsOf(nodes []store.Node) dto.NodeFacets {
 	}
 	// Provider labels are what offer "rented on" as a node condition.
 	providers, _ := a.d.Store.NodeProviders(ids)
-	facts := planning.NodeFacts{Networks: resolved, Storages: storages, Providers: providers}
+	facts := planning.NodeFacts{Networks: resolved, Storages: storages, Providers: providers, KubeClusters: planning.LoadKubeClusters(a.d.Store, nodes)}
 	written := map[string]map[string]int{}
 	system := map[string]map[string]*dto.SystemLabelValueCount{}
 	type chip struct{ vendor, name, cc, archID string }

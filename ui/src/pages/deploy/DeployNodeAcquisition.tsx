@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { AcquisitionNodeFact, AcquisitionResult } from "../../api";
 import { APIError, apiErrorText } from "../../apiError";
+import { diagnosticMessageText } from "./deployDiagnosticText";
 
 // refSource names where a pull candidate lives: the registry host of an image
 // reference, or the host of an archive URL. A reference without a registry is
@@ -136,6 +137,8 @@ function WeightsCell({
   declaredProviders: string[];
 }) {
   switch (node.weights_plan) {
+    case "unavailable":
+      return <Typography.Text type="danger">{t("workbench.nodeAcquisition.unavailable", { detail: node.weights_fetch_error ? diagnosticMessageText(t, tCommon, node.weights_fetch_error) : t("workbench.nodeAcquisition.unknown") })}</Typography.Text>;
     case "present":
       return <Tag color="green">{t("workbench.nodeAcquisition.present")}</Tag>;
     case "copy":

@@ -3,6 +3,7 @@ import { Alert, Button, Checkbox, Drawer, Form, Input, Radio, Space, Switch, Typ
 import { ArrowDownOutlined, ArrowUpOutlined, CloseOutlined, PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, type NodeRequirementsMap, type PullSourceRule } from "../../../api";
+import { OutboundHostAccess, useOutboundHostAccess } from "../../../components/OutboundHostAccess";
 import NodeRequirementsSelect from "./NodeRequirementsSelect";
 import PullRuleTest from "./PullRuleTest";
 import { moved, pullErrorField, pullErrorText } from "./pullFormat";
@@ -42,6 +43,7 @@ export default function PullRuleDrawer({
 
   const site = kind === "url";
   const controlPlane = controlTouched ?? Object.keys(requirements).length === 0;
+  const outboundAccess = useOutboundHostAccess([...endpoints, ...(allowUpstream ? [match] : [])], site && controlPlane);
   const suffix = site ? "Url" : "";
   const save = async () => {
     setSaving(true);
@@ -55,6 +57,7 @@ export default function PullRuleDrawer({
       ...(site ? { control_plane: controlPlane } : {}),
     };
     try {
+      await outboundAccess.authorize();
       if (rule) await api.updatePullSourceRule(rule.id, body);
       else await api.createPullSourceRule(body);
       onSaved();
@@ -189,11 +192,13 @@ export default function PullRuleDrawer({
             <Checkbox checked={controlPlane} onChange={(event) => setControlTouched(event.target.checked)}>{t("pull.rules.controlPlane")}</Checkbox>
           </Form.Item>
         )}
+        <OutboundHostAccess access={outboundAccess} />
 
         <Form.Item label={t("pull.rules.note")} htmlFor="pull-rule-note" validateStatus={fieldStatus("note")} help={fieldHelp("note")}>
           <Input.TextArea id="pull-rule-note" rows={2} value={note} placeholder={t("pull.rules.notePlaceholder")} onChange={(event) => setNote(event.target.value)} />
         </Form.Item>
 
+        {site && controlPlane && <p className="text-sm text-fg-muted">{t("pull.rules.managementTestScope")}</p>}
         {site && <PullRuleTest match={match} endpoints={endpoints} allowUpstream={allowUpstream} />}
 
         <Typography.Text type="secondary">{t("pull.rules.docsHint")}</Typography.Text>

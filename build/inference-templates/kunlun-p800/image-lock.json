@@ -1,0 +1,7 @@
+{
+  "image_ref": "registry.zstack.ai/gpuworks/gpuworks-runner@sha256:33d94768ff9a895bdc8874cae09940aede1b0e88218e52ed52231b8f86a91beb",
+  "manifest_digest": "sha256:33d94768ff9a895bdc8874cae09940aede1b0e88218e52ed52231b8f86a91beb",
+  "config_digest": "sha256:cf75e94dc5d9c9cfc5ff263008035af4ad3d23bb262c42d711d5c030d18685ec",
+  "architecture": "amd64",
+  "interpreter": "/opt/vllm025-venv/bin/python"
+}

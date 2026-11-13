@@ -7,7 +7,7 @@
   "scope": "Single targeted contract; not a full sleep/wake or dGPU completion claim",
   "test_file": "test/e2e/deployment_sleep_wake.py",
   "test_function": "test_deployment_sleep_wake",
-  "command": "make test-e2e-deployment-sleep-wake",
+  "command": "python3 -B test/e2e/deployment_sleep_wake.py --locale en",
   "lane": "local-real-agent-docker-fake-gpu-facts",
   "identity": "admin browser; real agent/Docker; OpenAI-compatible inference key for the gateway",
   "fixture": "isolated server, fresh SQLite, unique runId, real Chrome, real agent over WS, real Docker daemon; GPU facts injected for scheduling only; engine is the audited fake-engine image; engine /is_sleeping read over the host network",

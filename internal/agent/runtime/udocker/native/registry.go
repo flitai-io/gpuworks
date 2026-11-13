@@ -276,7 +276,8 @@ func (c *Client) fetchToken(ctx context.Context, ref Ref) (string, time.Duration
 	if err != nil {
 		return "", 0, err
 	}
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	// The challenge is in the headers; draining only permits connection reuse.
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
 		return "", time.Hour, nil // open registry

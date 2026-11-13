@@ -1,0 +1,1151 @@
+{
+  "version": 1,
+  "installations": [
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "springs",
+        "surface-classes",
+        "surface-context",
+        "icon-context",
+        "control-size",
+        "button",
+        "use-touch-primary",
+        "scroll-area",
+        "portal-container-context",
+        "mobile-drawer",
+        "popover",
+        "sidebar",
+        "use-proximity-hover",
+        "nav-menu",
+        "tooltip",
+        "nav-item"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/lib/springs.ts",
+        "src/lib/surface-classes.ts",
+        "src/lib/surface-context.tsx",
+        "src/lib/icon-context.tsx",
+        "src/lib/huge-icon.tsx",
+        "src/lib/icon-catalog.ts",
+        "src/lib/hugeicons.d.ts",
+        "src/lib/tokens/control-size.ts",
+        "src/components/ui/button.tsx",
+        "src/hooks/use-touch-primary.tsx",
+        "src/components/ui/scroll-area.tsx",
+        "src/lib/portal-container-context.tsx",
+        "src/components/ui/mobile-drawer.tsx",
+        "src/components/ui/popover.tsx",
+        "src/components/ui/sidebar.tsx",
+        "src/hooks/use-proximity-hover.ts",
+        "src/components/ui/nav-menu.tsx",
+        "src/components/ui/tooltip.tsx",
+        "src/components/ui/nav-item.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/lib/springs.ts": {
+          "sourceHash": "ed42d0bca6bce0d36d79a70cb162e38be422a45ad70155c5d008946d8cf4823f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5453027c1a35a2bb8879cfb883fc24ddebc041c59524095f8052d035df62be58"
+        },
+        "src/lib/surface-classes.ts": {
+          "sourceHash": "0ffd51810e24abe46e9a6b9c49bcc6c502031bc96ebe7c2a4685384cc69d7a71",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1be43ecf97b2259a07c3e0d663040f3ecf50fd071ea48397267b87948b93b65e"
+        },
+        "src/lib/surface-context.tsx": {
+          "sourceHash": "29e215c6c587d16f30fffac78f4d6bc28caed0484c3a3397929066f60d5b301e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "e5331794b0cb164c5d59cfe87abcd1887666be5e9bdc2e50965ea645db3f83ad"
+        },
+        "src/lib/icon-context.tsx": {
+          "sourceHash": "07f0868e8fe45508ced8b0928eecd67655f5707c5ed3bd7725930802080fd655",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c8f1da9d186866d68f25db9e3843644deee2256a44d952d6129fbf954a203484"
+        },
+        "src/lib/huge-icon.tsx": {
+          "sourceHash": "f9957071efd430d3e6f76a52966ee906d707e418b584270e6daa04ffd36c4b9b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "584994e6218791a875d50ba24b0685a442c1f3cffd3a65258da705a4b13c458b"
+        },
+        "src/lib/icon-catalog.ts": {
+          "sourceHash": "3737b6e64010f1f798836e2f88f3bf617ad61a90961270dee77f6ff3e87ba305",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "50f7dbc34e3ea18201ee9d4d2286f8c66d69f86eb0d58cc3e5a87a88b2f84aec"
+        },
+        "src/lib/hugeicons.d.ts": {
+          "sourceHash": "956607cd138a8e94e7ce66dca087ef34f51295e466abbf488850134025b2903e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b964d3891cdd6e57638f0affc647ade61724aa668dce4f7606c63e32d010e70c"
+        },
+        "src/lib/tokens/control-size.ts": {
+          "sourceHash": "54d54ff80e87d6af2ea17f4a9997fbb3f7037719c3233802dc5338e0fb6a2d74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "4e6a2572c6d452f058d7cbf096e3c9a86c107c94350dd5919d8dccb35c5e6fa9"
+        },
+        "src/components/ui/button.tsx": {
+          "sourceHash": "90a7bcaec0077f7b6e42ab9a985f030287a7f132e81c5269276d9ed7d2b6aaec",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1c423dcc0352fa34212be3a180cfcdcb0b92a24770780af058679a11c5c8ac94"
+        },
+        "src/hooks/use-touch-primary.tsx": {
+          "sourceHash": "d621743c1c0837c8a19e19b5215999b567e5006f5ac5bb9f78cd39a28f819a9e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "068cb9e8d5ac11dc6b5f21d836d526fcbac04d1462b53587375ae4d4e04c311b"
+        },
+        "src/components/ui/scroll-area.tsx": {
+          "sourceHash": "c502944fb545f812db497355f0a02b0b490c67c156eaf526ebb0498934091e8c",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b3996d6a7331322ff00b342e3b29af2f156c6b6c6d035d78dbb9f8853aca45ad"
+        },
+        "src/lib/portal-container-context.tsx": {
+          "sourceHash": "d54747ee09d40f90939a98ea843641f5aa6268fca5300b1bd003615e87711e74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b13806446c6a669c943111aa1a361e587223492a75657d8bafd6743b1de200c2"
+        },
+        "src/components/ui/mobile-drawer.tsx": {
+          "sourceHash": "21cbd16fd81936a2edcf9c5f3f41a94f7a7a90ed8826c40e92a88dc8333f7130",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "eaa1bdf2fcdf2855a5b829e85889a27caa0c15fde9e8fd68fabd166d35129f53"
+        },
+        "src/components/ui/popover.tsx": {
+          "sourceHash": "35240136c8629aa21ff9f804b59bbcee7c06a0d317ab97f952410809f887d5e0",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "700abcebac2b1ccccda5fa053285416f2db35818618ae81866391ca0ac297a9a"
+        },
+        "src/components/ui/sidebar.tsx": {
+          "sourceHash": "d4438f342054972e14d080648cbced21554143e89669c663d64fc65356d7470a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "005cabe8af56474b69900b8e1f560eaa4e4bb835db6d1a52e3b374c988be8b00"
+        },
+        "src/hooks/use-proximity-hover.ts": {
+          "sourceHash": "9b0d8f949290d3dcb2b6ad5cad38305007d41e9d7b8cfa6525b3713bee2ba657",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "67e0b976ccd96fef96f59cdbd568eb59264d8b3bd98ff5ba24ff314ff65e9e72"
+        },
+        "src/components/ui/nav-menu.tsx": {
+          "sourceHash": "6e32c7a4cf4a3a7955187daadeda6d15bac6ef284860604599a1883939286b2c",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b97008a99e1683fbd9637cd43e8a7c568de33596edc59e7cb6977386708b294a"
+        },
+        "src/components/ui/tooltip.tsx": {
+          "sourceHash": "7346e4bc2686df2de72b2bbb95cfed082080e38055617d1556913a1bae0e590a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "2659adcb19221fae729f6caf9493cd53f33a58d455e8f3bd5b1545e73aa4a62b"
+        },
+        "src/components/ui/nav-item.tsx": {
+          "sourceHash": "38f24e4e64b144dfb15f8259aae0a520907bedbcdc628ee2dc6abaac2f6ea35b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "57124590b080c4c0c06b04768180686ae67c1c2fa1a8c79af5cb548416300e05"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0",
+        "@hugeicons/core-free-icons@^4.1.1",
+        "@hugeicons/react@^1.1.6",
+        "@base-ui/react@^1.4.1",
+        "class-variance-authority@^0.7.1",
+        "framer-motion@^12.34.0"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "springs",
+        "surface-classes",
+        "surface-context",
+        "icon-context",
+        "use-proximity-hover",
+        "elevated",
+        "portal-container-context",
+        "compose-refs",
+        "dropdown",
+        "tooltip",
+        "menu-item",
+        "badge",
+        "empty"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/lib/springs.ts",
+        "src/lib/surface-classes.ts",
+        "src/lib/surface-context.tsx",
+        "src/lib/icon-context.tsx",
+        "src/lib/huge-icon.tsx",
+        "src/lib/icon-catalog.ts",
+        "src/lib/hugeicons.d.ts",
+        "src/hooks/use-proximity-hover.ts",
+        "src/lib/elevated.tsx",
+        "src/lib/portal-container-context.tsx",
+        "src/lib/compose-refs.ts",
+        "src/components/ui/dropdown.tsx",
+        "src/components/ui/menu-item.tsx",
+        "src/components/ui/tooltip.tsx",
+        "src/components/ui/badge.tsx",
+        "src/components/ui/badge-colors.ts",
+        "src/components/ui/empty.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/lib/springs.ts": {
+          "sourceHash": "ed42d0bca6bce0d36d79a70cb162e38be422a45ad70155c5d008946d8cf4823f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5453027c1a35a2bb8879cfb883fc24ddebc041c59524095f8052d035df62be58"
+        },
+        "src/lib/surface-classes.ts": {
+          "sourceHash": "0ffd51810e24abe46e9a6b9c49bcc6c502031bc96ebe7c2a4685384cc69d7a71",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1be43ecf97b2259a07c3e0d663040f3ecf50fd071ea48397267b87948b93b65e"
+        },
+        "src/lib/surface-context.tsx": {
+          "sourceHash": "29e215c6c587d16f30fffac78f4d6bc28caed0484c3a3397929066f60d5b301e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "e5331794b0cb164c5d59cfe87abcd1887666be5e9bdc2e50965ea645db3f83ad"
+        },
+        "src/lib/icon-context.tsx": {
+          "sourceHash": "07f0868e8fe45508ced8b0928eecd67655f5707c5ed3bd7725930802080fd655",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c8f1da9d186866d68f25db9e3843644deee2256a44d952d6129fbf954a203484"
+        },
+        "src/lib/huge-icon.tsx": {
+          "sourceHash": "f9957071efd430d3e6f76a52966ee906d707e418b584270e6daa04ffd36c4b9b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "584994e6218791a875d50ba24b0685a442c1f3cffd3a65258da705a4b13c458b"
+        },
+        "src/lib/icon-catalog.ts": {
+          "sourceHash": "3737b6e64010f1f798836e2f88f3bf617ad61a90961270dee77f6ff3e87ba305",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "50f7dbc34e3ea18201ee9d4d2286f8c66d69f86eb0d58cc3e5a87a88b2f84aec"
+        },
+        "src/lib/hugeicons.d.ts": {
+          "sourceHash": "956607cd138a8e94e7ce66dca087ef34f51295e466abbf488850134025b2903e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b964d3891cdd6e57638f0affc647ade61724aa668dce4f7606c63e32d010e70c"
+        },
+        "src/hooks/use-proximity-hover.ts": {
+          "sourceHash": "9b0d8f949290d3dcb2b6ad5cad38305007d41e9d7b8cfa6525b3713bee2ba657",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "67e0b976ccd96fef96f59cdbd568eb59264d8b3bd98ff5ba24ff314ff65e9e72"
+        },
+        "src/lib/elevated.tsx": {
+          "sourceHash": "f1c6ff8ab292f697c0d407d6db5061aa9e4a52b478c4ffaa10e49df55a9fcbdc",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "37c0eb562c370f21b4a30269b8a6f7b607932470c712dea01f0ed1fc2dbc29f9"
+        },
+        "src/lib/portal-container-context.tsx": {
+          "sourceHash": "d54747ee09d40f90939a98ea843641f5aa6268fca5300b1bd003615e87711e74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b13806446c6a669c943111aa1a361e587223492a75657d8bafd6743b1de200c2"
+        },
+        "src/lib/compose-refs.ts": {
+          "sourceHash": "a9f3ae263c45703612e5ae483c20bc4af267cf06c91863fad604e2f7f6347c02",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "26670b2e453d09da41bfe5cc8744eb98ee420e474ea3003c21e0c53e790407ba"
+        },
+        "src/components/ui/dropdown.tsx": {
+          "sourceHash": "af484d79dcd87df445d5652021f32d7d827f745aba23deb4e446f1a567260c12",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b662a1d10985a99672e6861c20877adadc9ed8bb15b94a4e32ee73c579285ca5"
+        },
+        "src/components/ui/menu-item.tsx": {
+          "sourceHash": "735192420dd9eeeb6625152801178c1d52ab5c5260afaf3ff421e190955f8f06",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "38596314bbd219f3d04665b5e783167ae17043b41c1719eb47e3287c9d811a0b"
+        },
+        "src/components/ui/tooltip.tsx": {
+          "sourceHash": "7346e4bc2686df2de72b2bbb95cfed082080e38055617d1556913a1bae0e590a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "2659adcb19221fae729f6caf9493cd53f33a58d455e8f3bd5b1545e73aa4a62b"
+        },
+        "src/components/ui/badge.tsx": {
+          "sourceHash": "11b3367a37b6d7ca6c60d418cd7fcd37915becd9fd0f03e190f42442d44c2cbc",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "8e34b79ed8d6bf4ee467fe0cc3d611fb49e8714be9619798ecae7d8f752c6783"
+        },
+        "src/components/ui/badge-colors.ts": {
+          "sourceHash": "c70396c77a0de00736ead56707e8f8b3b47d8119088bcea920681bbc59563cb7",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1fc1da77799937969804f959cf3466a1fa6a53e87044886703532a16291fb00b"
+        },
+        "src/components/ui/empty.tsx": {
+          "sourceHash": "01bfa5c07c45496751d475bf91df43341f58150560e49ae8cb065a4abaa3d64e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "202767ab9d3a170e5b80a849b7e9dddd6bf18606c65fd2b971e200c1b86c4340"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0",
+        "@hugeicons/core-free-icons@^4.1.1",
+        "@hugeicons/react@^1.1.6",
+        "@base-ui/react@^1.4.1",
+        "framer-motion@^12.34.0",
+        "class-variance-authority@^0.7.1"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "field",
+        "control-size",
+        "input",
+        "textarea",
+        "springs",
+        "surface-classes",
+        "surface-context",
+        "icon-context",
+        "use-proximity-hover",
+        "elevated",
+        "portal-container-context",
+        "compose-refs",
+        "select",
+        "checkbox",
+        "radio-group",
+        "switch"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/components/ui/field.tsx",
+        "src/lib/tokens/control-size.ts",
+        "src/components/ui/input.tsx",
+        "src/components/ui/textarea.tsx",
+        "src/lib/springs.ts",
+        "src/lib/surface-classes.ts",
+        "src/lib/surface-context.tsx",
+        "src/lib/icon-context.tsx",
+        "src/lib/huge-icon.tsx",
+        "src/lib/icon-catalog.ts",
+        "src/lib/hugeicons.d.ts",
+        "src/hooks/use-proximity-hover.ts",
+        "src/lib/elevated.tsx",
+        "src/lib/portal-container-context.tsx",
+        "src/lib/compose-refs.ts",
+        "src/components/ui/select.tsx",
+        "src/components/ui/checkbox.tsx",
+        "src/components/ui/radio-group.tsx",
+        "src/components/ui/switch.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/components/ui/field.tsx": {
+          "sourceHash": "97cc858ccc301fa45dc5074b54aa902e6edf0cc59f25c466a1719b42958a624a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5c94b1d9bfc4c814392216706e0e5f55cfc3ac70355cdc48e4a24a04d36244d0"
+        },
+        "src/lib/tokens/control-size.ts": {
+          "sourceHash": "54d54ff80e87d6af2ea17f4a9997fbb3f7037719c3233802dc5338e0fb6a2d74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "4e6a2572c6d452f058d7cbf096e3c9a86c107c94350dd5919d8dccb35c5e6fa9"
+        },
+        "src/components/ui/input.tsx": {
+          "sourceHash": "309947bc89d1c349cbafcd30290f45f1bb4cfe2747e10404772526eab7dd5104",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "a08d377d720e17de8e7dac10b6b438526385c50eb749a83399b235d4be6be185"
+        },
+        "src/components/ui/textarea.tsx": {
+          "sourceHash": "459603de58d1cc76c7920aef7448547ca62ce3acb82bc511c47d54de0c4d3795",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "86ebda8b0e5b8ae5e02bb5f5d7192a01d009f0f25e739547fd2b7277657ad417"
+        },
+        "src/lib/springs.ts": {
+          "sourceHash": "ed42d0bca6bce0d36d79a70cb162e38be422a45ad70155c5d008946d8cf4823f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5453027c1a35a2bb8879cfb883fc24ddebc041c59524095f8052d035df62be58"
+        },
+        "src/lib/surface-classes.ts": {
+          "sourceHash": "0ffd51810e24abe46e9a6b9c49bcc6c502031bc96ebe7c2a4685384cc69d7a71",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1be43ecf97b2259a07c3e0d663040f3ecf50fd071ea48397267b87948b93b65e"
+        },
+        "src/lib/surface-context.tsx": {
+          "sourceHash": "29e215c6c587d16f30fffac78f4d6bc28caed0484c3a3397929066f60d5b301e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "e5331794b0cb164c5d59cfe87abcd1887666be5e9bdc2e50965ea645db3f83ad"
+        },
+        "src/lib/icon-context.tsx": {
+          "sourceHash": "07f0868e8fe45508ced8b0928eecd67655f5707c5ed3bd7725930802080fd655",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c8f1da9d186866d68f25db9e3843644deee2256a44d952d6129fbf954a203484"
+        },
+        "src/lib/huge-icon.tsx": {
+          "sourceHash": "f9957071efd430d3e6f76a52966ee906d707e418b584270e6daa04ffd36c4b9b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "584994e6218791a875d50ba24b0685a442c1f3cffd3a65258da705a4b13c458b"
+        },
+        "src/lib/icon-catalog.ts": {
+          "sourceHash": "3737b6e64010f1f798836e2f88f3bf617ad61a90961270dee77f6ff3e87ba305",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "50f7dbc34e3ea18201ee9d4d2286f8c66d69f86eb0d58cc3e5a87a88b2f84aec"
+        },
+        "src/lib/hugeicons.d.ts": {
+          "sourceHash": "956607cd138a8e94e7ce66dca087ef34f51295e466abbf488850134025b2903e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b964d3891cdd6e57638f0affc647ade61724aa668dce4f7606c63e32d010e70c"
+        },
+        "src/hooks/use-proximity-hover.ts": {
+          "sourceHash": "9b0d8f949290d3dcb2b6ad5cad38305007d41e9d7b8cfa6525b3713bee2ba657",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "67e0b976ccd96fef96f59cdbd568eb59264d8b3bd98ff5ba24ff314ff65e9e72"
+        },
+        "src/lib/elevated.tsx": {
+          "sourceHash": "f1c6ff8ab292f697c0d407d6db5061aa9e4a52b478c4ffaa10e49df55a9fcbdc",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "37c0eb562c370f21b4a30269b8a6f7b607932470c712dea01f0ed1fc2dbc29f9"
+        },
+        "src/lib/portal-container-context.tsx": {
+          "sourceHash": "d54747ee09d40f90939a98ea843641f5aa6268fca5300b1bd003615e87711e74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b13806446c6a669c943111aa1a361e587223492a75657d8bafd6743b1de200c2"
+        },
+        "src/lib/compose-refs.ts": {
+          "sourceHash": "a9f3ae263c45703612e5ae483c20bc4af267cf06c91863fad604e2f7f6347c02",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "26670b2e453d09da41bfe5cc8744eb98ee420e474ea3003c21e0c53e790407ba"
+        },
+        "src/components/ui/select.tsx": {
+          "sourceHash": "c8dc526f2ada3b66cc29808c64d35d9b7e82f5ff182c7f89fb711408e2fe9ac7",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "7566e064ff66f57757daf8a05d8b3eba58b09144374fbe28404346d21ccb59e5"
+        },
+        "src/components/ui/checkbox.tsx": {
+          "sourceHash": "1dc217d8239d691dcf85bf40bc97235c5dd94653e69fc237ca147094fa4d8f51",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "f3effb93ab6ad32da382c1fd5fd7b1cf269083f3a91144168c37fcf01d246941"
+        },
+        "src/components/ui/radio-group.tsx": {
+          "sourceHash": "cd3869f60256a7ca51a69ddbdeaa287cb39bc654ae5b747c94ac28846bcf2296",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "7a550b512fb6422f91fb850f31702c6ef999d15a502017eac3601e0aab7c7b91"
+        },
+        "src/components/ui/switch.tsx": {
+          "sourceHash": "a3c2abc77ffd5c5a7965993c79afc5c329048a58c44b2ea6999090b16fd18658",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "ac7a4195c5cf5fc678b5aaf94f787bc276b026e90b8fd6b65b10de674089bf81"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0",
+        "@base-ui/react@^1.4.1",
+        "class-variance-authority@^0.7.1",
+        "@hugeicons/core-free-icons@^4.1.1",
+        "@hugeicons/react@^1.1.6",
+        "framer-motion@^12.34.0"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "springs",
+        "surface-classes",
+        "surface-context",
+        "icon-context",
+        "control-size",
+        "button",
+        "portal-container-context",
+        "dialog",
+        "badge",
+        "use-proximity-hover",
+        "tabs",
+        "toast"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/lib/springs.ts",
+        "src/lib/surface-classes.ts",
+        "src/lib/surface-context.tsx",
+        "src/lib/icon-context.tsx",
+        "src/lib/huge-icon.tsx",
+        "src/lib/icon-catalog.ts",
+        "src/lib/hugeicons.d.ts",
+        "src/lib/tokens/control-size.ts",
+        "src/components/ui/button.tsx",
+        "src/lib/portal-container-context.tsx",
+        "src/components/ui/dialog.tsx",
+        "src/components/ui/badge.tsx",
+        "src/components/ui/badge-colors.ts",
+        "src/hooks/use-proximity-hover.ts",
+        "src/components/ui/tabs.tsx",
+        "src/components/ui/toast.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/lib/springs.ts": {
+          "sourceHash": "ed42d0bca6bce0d36d79a70cb162e38be422a45ad70155c5d008946d8cf4823f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5453027c1a35a2bb8879cfb883fc24ddebc041c59524095f8052d035df62be58"
+        },
+        "src/lib/surface-classes.ts": {
+          "sourceHash": "0ffd51810e24abe46e9a6b9c49bcc6c502031bc96ebe7c2a4685384cc69d7a71",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1be43ecf97b2259a07c3e0d663040f3ecf50fd071ea48397267b87948b93b65e"
+        },
+        "src/lib/surface-context.tsx": {
+          "sourceHash": "29e215c6c587d16f30fffac78f4d6bc28caed0484c3a3397929066f60d5b301e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "e5331794b0cb164c5d59cfe87abcd1887666be5e9bdc2e50965ea645db3f83ad"
+        },
+        "src/lib/icon-context.tsx": {
+          "sourceHash": "07f0868e8fe45508ced8b0928eecd67655f5707c5ed3bd7725930802080fd655",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c8f1da9d186866d68f25db9e3843644deee2256a44d952d6129fbf954a203484"
+        },
+        "src/lib/huge-icon.tsx": {
+          "sourceHash": "f9957071efd430d3e6f76a52966ee906d707e418b584270e6daa04ffd36c4b9b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "584994e6218791a875d50ba24b0685a442c1f3cffd3a65258da705a4b13c458b"
+        },
+        "src/lib/icon-catalog.ts": {
+          "sourceHash": "3737b6e64010f1f798836e2f88f3bf617ad61a90961270dee77f6ff3e87ba305",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "50f7dbc34e3ea18201ee9d4d2286f8c66d69f86eb0d58cc3e5a87a88b2f84aec"
+        },
+        "src/lib/hugeicons.d.ts": {
+          "sourceHash": "956607cd138a8e94e7ce66dca087ef34f51295e466abbf488850134025b2903e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b964d3891cdd6e57638f0affc647ade61724aa668dce4f7606c63e32d010e70c"
+        },
+        "src/lib/tokens/control-size.ts": {
+          "sourceHash": "54d54ff80e87d6af2ea17f4a9997fbb3f7037719c3233802dc5338e0fb6a2d74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "4e6a2572c6d452f058d7cbf096e3c9a86c107c94350dd5919d8dccb35c5e6fa9"
+        },
+        "src/components/ui/button.tsx": {
+          "sourceHash": "90a7bcaec0077f7b6e42ab9a985f030287a7f132e81c5269276d9ed7d2b6aaec",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1c423dcc0352fa34212be3a180cfcdcb0b92a24770780af058679a11c5c8ac94"
+        },
+        "src/lib/portal-container-context.tsx": {
+          "sourceHash": "d54747ee09d40f90939a98ea843641f5aa6268fca5300b1bd003615e87711e74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b13806446c6a669c943111aa1a361e587223492a75657d8bafd6743b1de200c2"
+        },
+        "src/components/ui/dialog.tsx": {
+          "sourceHash": "9ef823fbdb14fc65f17fd32be9375b3e7ec05997d8c2d32b0269d371727d745b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "2d22ed08b326bfac7813aa7a6a333843a200b64d542246609ccd2923bee00e15"
+        },
+        "src/components/ui/badge.tsx": {
+          "sourceHash": "11b3367a37b6d7ca6c60d418cd7fcd37915becd9fd0f03e190f42442d44c2cbc",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "8e34b79ed8d6bf4ee467fe0cc3d611fb49e8714be9619798ecae7d8f752c6783"
+        },
+        "src/components/ui/badge-colors.ts": {
+          "sourceHash": "c70396c77a0de00736ead56707e8f8b3b47d8119088bcea920681bbc59563cb7",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1fc1da77799937969804f959cf3466a1fa6a53e87044886703532a16291fb00b"
+        },
+        "src/hooks/use-proximity-hover.ts": {
+          "sourceHash": "9b0d8f949290d3dcb2b6ad5cad38305007d41e9d7b8cfa6525b3713bee2ba657",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "67e0b976ccd96fef96f59cdbd568eb59264d8b3bd98ff5ba24ff314ff65e9e72"
+        },
+        "src/components/ui/tabs.tsx": {
+          "sourceHash": "aa3ac5c6824382ae5209056f8ac6b857b64c9912e39361b2889865fe95d5225b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c3feb135ba5c740e378c82dab91aea356256375350ca3fd543529549cda10431"
+        },
+        "src/components/ui/toast.tsx": {
+          "sourceHash": "d3fe21f6aca1a4d06ec4a58fafe8640feb044fcc4dcb1af7a2a25f484cab38e7",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5fd0b690115e178bad36499ab6c1cfabbbae013e94413a050cfb476e25b28fcb"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0",
+        "@hugeicons/core-free-icons@^4.1.1",
+        "@hugeicons/react@^1.1.6",
+        "@base-ui/react@^1.4.1",
+        "class-variance-authority@^0.7.1",
+        "framer-motion@^12.34.0"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "springs",
+        "portal-container-context",
+        "tooltip",
+        "use-proximity-hover",
+        "nav-menu",
+        "icon-context",
+        "control-size",
+        "button",
+        "nav-item",
+        "page-layout",
+        "surface-classes",
+        "surface-context",
+        "elevated",
+        "compose-refs",
+        "dropdown",
+        "breadcrumb",
+        "badge",
+        "checkbox",
+        "use-merge-split",
+        "checkbox-group",
+        "empty",
+        "input",
+        "popover",
+        "select",
+        "sortable-collection",
+        "skeleton",
+        "table",
+        "data-table"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/lib/springs.ts",
+        "src/lib/portal-container-context.tsx",
+        "src/components/ui/tooltip.tsx",
+        "src/hooks/use-proximity-hover.ts",
+        "src/components/ui/nav-menu.tsx",
+        "src/lib/icon-context.tsx",
+        "src/lib/huge-icon.tsx",
+        "src/lib/icon-catalog.ts",
+        "src/lib/hugeicons.d.ts",
+        "src/lib/tokens/control-size.ts",
+        "src/components/ui/button.tsx",
+        "src/components/ui/nav-item.tsx",
+        "src/components/ui/page-layout.tsx",
+        "src/lib/surface-classes.ts",
+        "src/lib/surface-context.tsx",
+        "src/lib/elevated.tsx",
+        "src/lib/compose-refs.ts",
+        "src/components/ui/dropdown.tsx",
+        "src/components/ui/menu-item.tsx",
+        "src/components/ui/breadcrumb.tsx",
+        "src/components/ui/badge.tsx",
+        "src/components/ui/badge-colors.ts",
+        "src/components/ui/checkbox.tsx",
+        "src/hooks/use-merge-split.tsx",
+        "src/components/ui/checkbox-group.tsx",
+        "src/components/ui/empty.tsx",
+        "src/components/ui/input.tsx",
+        "src/components/ui/popover.tsx",
+        "src/components/ui/select.tsx",
+        "src/components/ui/sortable-collection.tsx",
+        "src/components/ui/skeleton.tsx",
+        "src/components/ui/table.tsx",
+        "src/components/ui/data-table.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/lib/springs.ts": {
+          "sourceHash": "ed42d0bca6bce0d36d79a70cb162e38be422a45ad70155c5d008946d8cf4823f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5453027c1a35a2bb8879cfb883fc24ddebc041c59524095f8052d035df62be58"
+        },
+        "src/lib/portal-container-context.tsx": {
+          "sourceHash": "d54747ee09d40f90939a98ea843641f5aa6268fca5300b1bd003615e87711e74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b13806446c6a669c943111aa1a361e587223492a75657d8bafd6743b1de200c2"
+        },
+        "src/components/ui/tooltip.tsx": {
+          "sourceHash": "7346e4bc2686df2de72b2bbb95cfed082080e38055617d1556913a1bae0e590a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "2659adcb19221fae729f6caf9493cd53f33a58d455e8f3bd5b1545e73aa4a62b"
+        },
+        "src/hooks/use-proximity-hover.ts": {
+          "sourceHash": "9b0d8f949290d3dcb2b6ad5cad38305007d41e9d7b8cfa6525b3713bee2ba657",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "67e0b976ccd96fef96f59cdbd568eb59264d8b3bd98ff5ba24ff314ff65e9e72"
+        },
+        "src/components/ui/nav-menu.tsx": {
+          "sourceHash": "6e32c7a4cf4a3a7955187daadeda6d15bac6ef284860604599a1883939286b2c",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b97008a99e1683fbd9637cd43e8a7c568de33596edc59e7cb6977386708b294a"
+        },
+        "src/lib/icon-context.tsx": {
+          "sourceHash": "07f0868e8fe45508ced8b0928eecd67655f5707c5ed3bd7725930802080fd655",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c8f1da9d186866d68f25db9e3843644deee2256a44d952d6129fbf954a203484"
+        },
+        "src/lib/huge-icon.tsx": {
+          "sourceHash": "f9957071efd430d3e6f76a52966ee906d707e418b584270e6daa04ffd36c4b9b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "584994e6218791a875d50ba24b0685a442c1f3cffd3a65258da705a4b13c458b"
+        },
+        "src/lib/icon-catalog.ts": {
+          "sourceHash": "3737b6e64010f1f798836e2f88f3bf617ad61a90961270dee77f6ff3e87ba305",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "50f7dbc34e3ea18201ee9d4d2286f8c66d69f86eb0d58cc3e5a87a88b2f84aec"
+        },
+        "src/lib/hugeicons.d.ts": {
+          "sourceHash": "956607cd138a8e94e7ce66dca087ef34f51295e466abbf488850134025b2903e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b964d3891cdd6e57638f0affc647ade61724aa668dce4f7606c63e32d010e70c"
+        },
+        "src/lib/tokens/control-size.ts": {
+          "sourceHash": "54d54ff80e87d6af2ea17f4a9997fbb3f7037719c3233802dc5338e0fb6a2d74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "4e6a2572c6d452f058d7cbf096e3c9a86c107c94350dd5919d8dccb35c5e6fa9"
+        },
+        "src/components/ui/button.tsx": {
+          "sourceHash": "90a7bcaec0077f7b6e42ab9a985f030287a7f132e81c5269276d9ed7d2b6aaec",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1c423dcc0352fa34212be3a180cfcdcb0b92a24770780af058679a11c5c8ac94"
+        },
+        "src/components/ui/nav-item.tsx": {
+          "sourceHash": "38f24e4e64b144dfb15f8259aae0a520907bedbcdc628ee2dc6abaac2f6ea35b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "57124590b080c4c0c06b04768180686ae67c1c2fa1a8c79af5cb548416300e05"
+        },
+        "src/components/ui/page-layout.tsx": {
+          "sourceHash": "b79ee74c1a57b1a1a762d01e0c4afdaa5f315b6ffda28b83277b2ccd7f93fceb",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "048534c0a6116b0508d819dabc3b2615fe4d9522f016a8af826fe6a2d53eb564"
+        },
+        "src/lib/surface-classes.ts": {
+          "sourceHash": "0ffd51810e24abe46e9a6b9c49bcc6c502031bc96ebe7c2a4685384cc69d7a71",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1be43ecf97b2259a07c3e0d663040f3ecf50fd071ea48397267b87948b93b65e"
+        },
+        "src/lib/surface-context.tsx": {
+          "sourceHash": "29e215c6c587d16f30fffac78f4d6bc28caed0484c3a3397929066f60d5b301e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "e5331794b0cb164c5d59cfe87abcd1887666be5e9bdc2e50965ea645db3f83ad"
+        },
+        "src/lib/elevated.tsx": {
+          "sourceHash": "f1c6ff8ab292f697c0d407d6db5061aa9e4a52b478c4ffaa10e49df55a9fcbdc",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "37c0eb562c370f21b4a30269b8a6f7b607932470c712dea01f0ed1fc2dbc29f9"
+        },
+        "src/lib/compose-refs.ts": {
+          "sourceHash": "a9f3ae263c45703612e5ae483c20bc4af267cf06c91863fad604e2f7f6347c02",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "26670b2e453d09da41bfe5cc8744eb98ee420e474ea3003c21e0c53e790407ba"
+        },
+        "src/components/ui/dropdown.tsx": {
+          "sourceHash": "af484d79dcd87df445d5652021f32d7d827f745aba23deb4e446f1a567260c12",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b662a1d10985a99672e6861c20877adadc9ed8bb15b94a4e32ee73c579285ca5"
+        },
+        "src/components/ui/menu-item.tsx": {
+          "sourceHash": "735192420dd9eeeb6625152801178c1d52ab5c5260afaf3ff421e190955f8f06",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "38596314bbd219f3d04665b5e783167ae17043b41c1719eb47e3287c9d811a0b"
+        },
+        "src/components/ui/breadcrumb.tsx": {
+          "sourceHash": "b24e9614082c95f4b8650f61cc615f9c30e1a55273adaa3f83b8074d46b2dc87",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "59eeb58de51cc2bcc2bb0d3229c35dfd2b789ca4aa9e8ef01d7deefbd16fa1da"
+        },
+        "src/components/ui/badge.tsx": {
+          "sourceHash": "11b3367a37b6d7ca6c60d418cd7fcd37915becd9fd0f03e190f42442d44c2cbc",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "8e34b79ed8d6bf4ee467fe0cc3d611fb49e8714be9619798ecae7d8f752c6783"
+        },
+        "src/components/ui/badge-colors.ts": {
+          "sourceHash": "c70396c77a0de00736ead56707e8f8b3b47d8119088bcea920681bbc59563cb7",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1fc1da77799937969804f959cf3466a1fa6a53e87044886703532a16291fb00b"
+        },
+        "src/components/ui/checkbox.tsx": {
+          "sourceHash": "1dc217d8239d691dcf85bf40bc97235c5dd94653e69fc237ca147094fa4d8f51",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "f3effb93ab6ad32da382c1fd5fd7b1cf269083f3a91144168c37fcf01d246941"
+        },
+        "src/hooks/use-merge-split.tsx": {
+          "sourceHash": "fff8e8386a2bace4a946dba2767d2ee8547a44066ca1dc7508ec1bc51cd5df87",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1fa5061139006070dee45bc6c8114f2cdf0e7c779db4a21e280a54eff59ca8ca"
+        },
+        "src/components/ui/checkbox-group.tsx": {
+          "sourceHash": "3510ee9b30c92048600f5d481f7be0231929f4c6408c510a494d48f07a8e891f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "ed1620e8c46700f5a989823a7d5b249bf951db735f87fc9662cae8630fc6fcd5"
+        },
+        "src/components/ui/empty.tsx": {
+          "sourceHash": "01bfa5c07c45496751d475bf91df43341f58150560e49ae8cb065a4abaa3d64e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "202767ab9d3a170e5b80a849b7e9dddd6bf18606c65fd2b971e200c1b86c4340"
+        },
+        "src/components/ui/input.tsx": {
+          "sourceHash": "309947bc89d1c349cbafcd30290f45f1bb4cfe2747e10404772526eab7dd5104",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "a08d377d720e17de8e7dac10b6b438526385c50eb749a83399b235d4be6be185"
+        },
+        "src/components/ui/popover.tsx": {
+          "sourceHash": "35240136c8629aa21ff9f804b59bbcee7c06a0d317ab97f952410809f887d5e0",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "700abcebac2b1ccccda5fa053285416f2db35818618ae81866391ca0ac297a9a"
+        },
+        "src/components/ui/select.tsx": {
+          "sourceHash": "c8dc526f2ada3b66cc29808c64d35d9b7e82f5ff182c7f89fb711408e2fe9ac7",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "7566e064ff66f57757daf8a05d8b3eba58b09144374fbe28404346d21ccb59e5"
+        },
+        "src/components/ui/sortable-collection.tsx": {
+          "sourceHash": "e65402ec19b706d3b8c260bd2d4200c5734809e88f2be7e672097b04a5dad6ff",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "756d69348fd1cb4cd9cb300c62b4807b02d83be579a07c08bb3e619ea8b15f2d"
+        },
+        "src/components/ui/skeleton.tsx": {
+          "sourceHash": "25a6b53b732ae9ccd16164bceae5b263bbb7953006d66aad46f6f2891e62554a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "7b4f0da87bceef218455895664128f678567a46ff8d892ece007c87b6ffb103d"
+        },
+        "src/components/ui/table.tsx": {
+          "sourceHash": "557d6846a83c0acf414503a8dd4069a8799b5c19f2f62375ab4125b46c4c24fa",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "20601123c80ac01d3b59911571a60e0cc9792158c8466fa0a973eed5e4c75c80"
+        },
+        "src/components/ui/data-table.tsx": {
+          "sourceHash": "f98c422f516312e8d74f8738ebef133f659edcc90b35a1d0519c49935e0b86d1",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5fa58a8269f67cf8a486aeedbf45b4a8c94361b432fab028c46dccb188f648dc"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0",
+        "framer-motion@^12.34.0",
+        "@base-ui/react@^1.4.1",
+        "@hugeicons/core-free-icons@^4.1.1",
+        "@hugeicons/react@^1.1.6",
+        "class-variance-authority@^0.7.1",
+        "@tanstack/react-table@^8.21.3"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "alert",
+        "icon-context",
+        "control-size",
+        "button",
+        "use-proximity-hover",
+        "input",
+        "input-group",
+        "surface-classes",
+        "surface-context",
+        "elevated",
+        "portal-container-context",
+        "combobox",
+        "springs",
+        "tooltip",
+        "accordion"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/components/ui/alert.tsx",
+        "src/lib/icon-context.tsx",
+        "src/lib/huge-icon.tsx",
+        "src/lib/icon-catalog.ts",
+        "src/lib/hugeicons.d.ts",
+        "src/lib/tokens/control-size.ts",
+        "src/components/ui/button.tsx",
+        "src/hooks/use-proximity-hover.ts",
+        "src/components/ui/input.tsx",
+        "src/components/ui/input-group.tsx",
+        "src/lib/surface-classes.ts",
+        "src/lib/surface-context.tsx",
+        "src/lib/elevated.tsx",
+        "src/lib/portal-container-context.tsx",
+        "src/components/ui/combobox.tsx",
+        "src/lib/springs.ts",
+        "src/components/ui/tooltip.tsx",
+        "src/components/ui/accordion.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/components/ui/alert.tsx": {
+          "sourceHash": "44176ca0744149e74e24e45e85bbde7dbf23519acc28a1aaf9e490aa45fce6ea",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "601e456aff30bac2cf2ea7ff54d2e50f75a7ffd263134b88d4174d9d3c39a16c"
+        },
+        "src/lib/icon-context.tsx": {
+          "sourceHash": "07f0868e8fe45508ced8b0928eecd67655f5707c5ed3bd7725930802080fd655",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c8f1da9d186866d68f25db9e3843644deee2256a44d952d6129fbf954a203484"
+        },
+        "src/lib/huge-icon.tsx": {
+          "sourceHash": "f9957071efd430d3e6f76a52966ee906d707e418b584270e6daa04ffd36c4b9b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "584994e6218791a875d50ba24b0685a442c1f3cffd3a65258da705a4b13c458b"
+        },
+        "src/lib/icon-catalog.ts": {
+          "sourceHash": "3737b6e64010f1f798836e2f88f3bf617ad61a90961270dee77f6ff3e87ba305",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "50f7dbc34e3ea18201ee9d4d2286f8c66d69f86eb0d58cc3e5a87a88b2f84aec"
+        },
+        "src/lib/hugeicons.d.ts": {
+          "sourceHash": "956607cd138a8e94e7ce66dca087ef34f51295e466abbf488850134025b2903e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b964d3891cdd6e57638f0affc647ade61724aa668dce4f7606c63e32d010e70c"
+        },
+        "src/lib/tokens/control-size.ts": {
+          "sourceHash": "54d54ff80e87d6af2ea17f4a9997fbb3f7037719c3233802dc5338e0fb6a2d74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "4e6a2572c6d452f058d7cbf096e3c9a86c107c94350dd5919d8dccb35c5e6fa9"
+        },
+        "src/components/ui/button.tsx": {
+          "sourceHash": "90a7bcaec0077f7b6e42ab9a985f030287a7f132e81c5269276d9ed7d2b6aaec",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1c423dcc0352fa34212be3a180cfcdcb0b92a24770780af058679a11c5c8ac94"
+        },
+        "src/hooks/use-proximity-hover.ts": {
+          "sourceHash": "9b0d8f949290d3dcb2b6ad5cad38305007d41e9d7b8cfa6525b3713bee2ba657",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "67e0b976ccd96fef96f59cdbd568eb59264d8b3bd98ff5ba24ff314ff65e9e72"
+        },
+        "src/components/ui/input.tsx": {
+          "sourceHash": "309947bc89d1c349cbafcd30290f45f1bb4cfe2747e10404772526eab7dd5104",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "a08d377d720e17de8e7dac10b6b438526385c50eb749a83399b235d4be6be185"
+        },
+        "src/components/ui/input-group.tsx": {
+          "sourceHash": "1e557c94262669689cda21b2d932da31a51a51ca31a306275a6b9a13ef95898a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "85db6561129e44648704ed97e01b42a53d6047157b29588893704c44c18aafa0"
+        },
+        "src/lib/surface-classes.ts": {
+          "sourceHash": "0ffd51810e24abe46e9a6b9c49bcc6c502031bc96ebe7c2a4685384cc69d7a71",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1be43ecf97b2259a07c3e0d663040f3ecf50fd071ea48397267b87948b93b65e"
+        },
+        "src/lib/surface-context.tsx": {
+          "sourceHash": "29e215c6c587d16f30fffac78f4d6bc28caed0484c3a3397929066f60d5b301e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "e5331794b0cb164c5d59cfe87abcd1887666be5e9bdc2e50965ea645db3f83ad"
+        },
+        "src/lib/elevated.tsx": {
+          "sourceHash": "f1c6ff8ab292f697c0d407d6db5061aa9e4a52b478c4ffaa10e49df55a9fcbdc",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "37c0eb562c370f21b4a30269b8a6f7b607932470c712dea01f0ed1fc2dbc29f9"
+        },
+        "src/lib/portal-container-context.tsx": {
+          "sourceHash": "d54747ee09d40f90939a98ea843641f5aa6268fca5300b1bd003615e87711e74",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b13806446c6a669c943111aa1a361e587223492a75657d8bafd6743b1de200c2"
+        },
+        "src/components/ui/combobox.tsx": {
+          "sourceHash": "1a36fb8d978bf74378092ee10d157cf298b57f3555b231ddf9f26b1eff640219",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "04f65563360e087daa5d00b2f1829f1f88053efef51b0df0d704c6268517fb54"
+        },
+        "src/lib/springs.ts": {
+          "sourceHash": "ed42d0bca6bce0d36d79a70cb162e38be422a45ad70155c5d008946d8cf4823f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5453027c1a35a2bb8879cfb883fc24ddebc041c59524095f8052d035df62be58"
+        },
+        "src/components/ui/tooltip.tsx": {
+          "sourceHash": "7346e4bc2686df2de72b2bbb95cfed082080e38055617d1556913a1bae0e590a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "2659adcb19221fae729f6caf9493cd53f33a58d455e8f3bd5b1545e73aa4a62b"
+        },
+        "src/components/ui/accordion.tsx": {
+          "sourceHash": "cbc3958657269d9cf796f22ffe4cd3caf700f5ca357987f65a3a9a9a1497e371",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "4917a1a34cc09120277b9422b4207e4132c336e2fded60b2ff72ea39c9e29f54"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0",
+        "@hugeicons/core-free-icons@^4.1.1",
+        "@hugeicons/react@^1.1.6",
+        "@base-ui/react@^1.4.1",
+        "class-variance-authority@^0.7.1",
+        "framer-motion@^12.34.0"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "surface-classes",
+        "surface-context",
+        "tailwind-merge-tokens",
+        "utils",
+        "container",
+        "skeleton",
+        "metric-card"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/surface-classes.ts",
+        "src/lib/surface-context.tsx",
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/components/ui/container.tsx",
+        "src/components/ui/skeleton.tsx",
+        "src/components/ui/metric-card.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/surface-classes.ts": {
+          "sourceHash": "0ffd51810e24abe46e9a6b9c49bcc6c502031bc96ebe7c2a4685384cc69d7a71",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1be43ecf97b2259a07c3e0d663040f3ecf50fd071ea48397267b87948b93b65e"
+        },
+        "src/lib/surface-context.tsx": {
+          "sourceHash": "29e215c6c587d16f30fffac78f4d6bc28caed0484c3a3397929066f60d5b301e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "e5331794b0cb164c5d59cfe87abcd1887666be5e9bdc2e50965ea645db3f83ad"
+        },
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/components/ui/container.tsx": {
+          "sourceHash": "f73c7602d25c2f2db204918d76d2e67624406f04c952cb47d5161b00c296537c",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "408ad4f9359b85e0fc38df32123d2884189d92e7edb0ef8106e6981756facb2e"
+        },
+        "src/components/ui/skeleton.tsx": {
+          "sourceHash": "25a6b53b732ae9ccd16164bceae5b263bbb7953006d66aad46f6f2891e62554a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "7b4f0da87bceef218455895664128f678567a46ff8d892ece007c87b6ffb103d"
+        },
+        "src/components/ui/metric-card.tsx": {
+          "sourceHash": "97982afa223951ae0fe03dcb8bf566f06fae9efb9fa7969f291a05dbdaf7edcf",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "23a81eab2582d0872a14907ee0dc4c40fc954091645a636daa0d2a50e9643ab4"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0"
+      ],
+      "devDependencies": []
+    }
+  ]
+}

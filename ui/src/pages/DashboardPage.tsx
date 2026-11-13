@@ -1,31 +1,27 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, Button, Card, Dropdown, Pagination, Select, Tag, Tooltip, Typography } from "antd";
-import { ArrowRightOutlined, CloudOutlined, CloudServerOutlined, ControlOutlined, DatabaseOutlined, InfoCircleOutlined, RocketOutlined } from "@ant-design/icons";
+import { useState, type ReactNode } from "react";
+import { Button } from "../components/ui/button";
+import { Tooltip } from "../components/ui/tooltip";
+import { Notice } from "../ui-kit/Notice";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, useEvents, usePolling, type CapacityGroup, type CloudProvider, type DashboardSummary, type GPUListResponse, type Health, type List, type ModelListItem, type ModelPage, type MonitorOverview, type NodePage, type Storage, type StorageNodeUsage } from "../api";
+import { api, useEvents, usePolling, type CloudProvider, type GPUListResponse, type Health, type List, type ModelListItem, type ModelPage, type MonitorOverview, type NodePage, type Storage, type StorageNodeUsage } from "../api";
 import { analyticsApi, type UsageAnalytics } from "../analyticsApi";
 import { fmtCelsius, fmtCompact, fmtInt, fmtPct, fmtWatts } from "./analytics/format";
 import { storageTypeInfo } from "../storageTypes";
 import { formatLatencyText } from "./monitor/signalFormat";
 import PageHeader from "../components/PageHeader";
+import { Badge } from "../components/ui/badge";
 import { storageDetailPath } from "./storage/storageLinks";
+import { AttentionBanner, Block, CardOccupancy, EmptyState, Figure, Metric, ModelComposition, ModuleArrow, Panel, StatusCount, StorageCapacityRow, fmt, vendorGroups, type StorageRow } from "./dashboard/OverviewParts";
 
-const GIB = 1024 ** 3;
 const DAY = 24 * 60 * 60 * 1000;
 const ATTENTION_DETAIL_LIMIT = 5;
-const DISTRIBUTION_PAGE_SIZE = 8;
 const STORAGE_PAGE_SIZE = 2;
-const fmt = (value?: number) => value == null ? "—" : Intl.NumberFormat().format(value);
-const gib = (value?: number) => value == null ? "—" : `${(value / GIB).toFixed(1)} GiB`;
 
 type ModelOverview = { total: number; ready: number; preparing: number; failed: number; items: ModelListItem[] };
-type StorageRow = { id: number; name: string; total?: number; available?: number; problems: number };
 type StorageOverview = { rows: StorageRow[]; problems: { id: number; name: string; count: number }[]; failedDetails: number };
-type DistributionRow = { name: string; vramGiB?: number };
 type Issue = { kind: string; name: string; reason: string; to: string };
 type AttentionGroup = { label: string; count: number; to: string };
-type AttentionEntry = { to: string; title: string; content: ReactNode };
 
 async function readModels(): Promise<ModelOverview> {
   const first = await api.modelsPage({ page: 1, page_size: 100 });
@@ -76,26 +72,15 @@ async function readStorageOverview(storages: Storage[], usage: StorageNodeUsage[
   return { rows, problems, failedDetails: results.length - details.length };
 }
 
-function physicalCapacityRows(gpus: GPUListResponse | null, unknownLabel: string): DistributionRow[] {
-  if (!gpus) return [];
-  const capacity = new Map<string, { bytes: number; known: boolean }>();
-  for (const gpu of gpus.items.filter((card) => !card.ownership)) {
-    const name = gpu.name || unknownLabel;
-    const row = capacity.get(name) ?? { bytes: 0, known: true };
-    row.known = row.known && Number.isFinite(gpu.memory_total_bytes) && gpu.memory_total_bytes > 0;
-    row.bytes += gpu.memory_total_bytes || 0;
-    capacity.set(name, row);
-  }
-  return [...capacity].map(([name, row]) => ({ name, vramGiB: row.known ? row.bytes / GIB : undefined })).sort((a, b) => (b.vramGiB ?? -1) - (a.vramGiB ?? -1) || a.name.localeCompare(b.name));
-}
+const ratio = (part?: number | null, whole?: number | null) => part != null && whole != null && whole > 0 ? part / whole * 100 : undefined;
+const pct = (value?: number) => value == null ? "—" : <>{Math.round(value)}<small className="dashboard-metric-unit">%</small></>;
 
 export default function DashboardPage() {
   const { t, i18n } = useTranslation("dashboard");
   const language = i18n.resolvedLanguage ?? "en";
-  const [pickedLabelKey, setPickedLabelKey] = useState<string>();
   const [storagePage, setStoragePage] = useState(1);
   const health = usePolling<Health>(api.health, 10000);
-  const summary = usePolling<DashboardSummary>(() => api.dashboardSummary(pickedLabelKey), 10000, [pickedLabelKey]);
+  const summary = usePolling(() => api.dashboardSummary(), 10000);
   const providers = usePolling<List<CloudProvider>>(api.providers, 30000);
   const gpus = usePolling<GPUListResponse>(api.gpus, 60000);
   const models = usePolling<ModelOverview>(readModels, 60000);
@@ -115,12 +100,10 @@ export default function DashboardPage() {
 
   const fleet = summary.data;
   const cloudList = providers.data?.items ?? [];
-  const publicClouds = cloudList.filter((cloud) => cloud.kind !== "zstack");
-  const privateClouds = cloudList.filter((cloud) => cloud.kind === "zstack");
+  const publicClouds = cloudList.filter((cloud) => cloud.category === "public_cloud");
+  const privateClouds = cloudList.filter((cloud) => cloud.category === "private_cloud");
   const invalidClouds = cloudList.filter((cloud) => cloud.state === "invalid");
-  const gpuStates = gpus.data?.overview.allocation;
-  const otherNodes = fleet ? Math.max(0, fleet.nodes.total - fleet.nodes.online - fleet.nodes.connecting - fleet.nodes.offline) : undefined;
-  const otherServices = fleet ? Math.max(0, fleet.deployments.total - fleet.deployments.running - fleet.deployments.warming) : undefined;
+  const deployments = fleet?.deployments;
   const replicaSignal = monitor.data?.signals?.find((signal) => signal.key === "ready_replicas");
   const readyReplicas = replicaSignal?.collected ? replicaSignal.value : undefined;
   const desiredReplicas = replicaSignal?.collected ? replicaSignal.denominator : undefined;
@@ -138,8 +121,11 @@ export default function DashboardPage() {
   const currentGpu = summary.error ? undefined : fleet?.current_metrics;
   const gpuPower = currentGpu?.power_watts;
   const gpuPowerValue = gpuPower == null ? "—" : gpuPower >= 1000 ? `${(gpuPower / 1000).toFixed(2)} kW` : fmtWatts(gpuPower);
+  const cards = summary.error ? undefined : fleet?.cards ?? undefined;
+  const tasks = fleet?.tasks;
   const totals = usage.data?.totals;
   const totalTokens = totals ? totals.prompt_tokens + totals.completion_tokens : undefined;
+  // Open usage analytics on the same window the token panel shows.
   const usageLink = usage.data ? `/analytics/usage?range=custom&from=${usage.data.range.from_ms}&to=${usage.data.range.to_ms}&gran=${usage.data.range.granularity}` : "/analytics/usage";
   const storageIncomplete = !!(storages.error || storage.error || storage.data?.failedDetails);
   const storageRows = storage.data?.rows ?? [];
@@ -150,8 +136,8 @@ export default function DashboardPage() {
     { label: t("overview.failedServicesGroup", { count: fmt(failedServices.length) }), count: failedServices.length, to: "/monitor" },
     { label: t(modelIssuesIncomplete ? "overview.failedModelsGroupPartial" : "overview.failedModelsGroup", { count: fmt(failedModelCount) }), count: failedModelCount, to: "/models" },
     { label: t("overview.problemStoragesGroup", { count: fmt(storage.data?.problems.length ?? 0) }), count: storage.data?.problems.length ?? 0, to: "/storage" },
-    { label: t("overview.invalidPublicCloudsGroup", { count: fmt(invalidClouds.filter((cloud) => cloud.kind !== "zstack").length) }), count: invalidClouds.filter((cloud) => cloud.kind !== "zstack").length, to: "/providers" },
-    { label: t("overview.invalidPrivateCloudsGroup", { count: fmt(invalidClouds.filter((cloud) => cloud.kind === "zstack").length) }), count: invalidClouds.filter((cloud) => cloud.kind === "zstack").length, to: "/zstack" },
+    { label: t("overview.invalidPublicCloudsGroup", { count: fmt(invalidClouds.filter((cloud) => cloud.category === "public_cloud").length) }), count: invalidClouds.filter((cloud) => cloud.category === "public_cloud").length, to: "/providers?category=public_cloud" },
+    { label: t("overview.invalidPrivateCloudsGroup", { count: fmt(invalidClouds.filter((cloud) => cloud.category === "private_cloud").length) }), count: invalidClouds.filter((cloud) => cloud.category === "private_cloud").length, to: "/providers?category=private_cloud" },
   ].filter((group) => group.count > 0);
   const attentionCount = attentionGroups.reduce((sum, group) => sum + group.count, 0);
   const issues: Issue[] = attentionCount <= ATTENTION_DETAIL_LIMIT ? [
@@ -160,147 +146,131 @@ export default function DashboardPage() {
     ...failedServices.map((service) => ({ kind: t("overview.issueService"), name: service.name, reason: t("overview.probeFailed"), to: `/monitor/d/${service.deployment_id}` })),
     ...failedModels.map((model) => ({ kind: t("overview.models"), name: model.name, reason: t("overview.fileFailed"), to: `/models?detail=${model.id}` })),
     ...(storage.data?.problems ?? []).map((problem) => ({ kind: t("overview.storageTitle"), name: problem.name, reason: t("overview.storageProblem", { count: problem.count }), to: storageDetailPath(problem.id, "nodes") })),
-    ...invalidClouds.map((cloud) => ({ kind: t("overview.clouds"), name: cloud.name, reason: t("overview.cloudProblem"), to: cloud.kind === "zstack" ? "/zstack" : "/providers" })),
+    ...invalidClouds.map((cloud) => ({ kind: t("overview.clouds"), name: cloud.name, reason: t("overview.cloudProblem"), to: `/providers?category=${cloud.category}` })),
   ] : [];
   const groupedAttention = attentionCount > ATTENTION_DETAIL_LIMIT || issues.length !== attentionCount || modelIssuesIncomplete;
   const attentionEntries = groupedAttention
     ? attentionGroups.map((group) => ({ to: group.to, title: group.label, content: <strong>{group.label}</strong> }))
     : issues.map((issue) => ({ to: issue.to, title: `${issue.kind} · ${issue.name} · ${issue.reason}`, content: <><span>{issue.kind}</span><strong>{issue.name}</strong><span>{issue.reason}</span></> }));
   const partial = [summary, providers, gpus, models, offlineNodes, monitor, storages, storageUsage, storage, usage].some((query) => !!query.error) || !!storage.data?.failedDetails || modelIssuesIncomplete;
-  const vendorRows = (fleet?.by_vendor ?? []).filter((row) => row.gpus > 0).map((row: CapacityGroup) => ({ name: row.key, vramGiB: row.vram_gib > 0 ? row.vram_gib : undefined })).sort((a, b) => (b.vramGiB ?? -1) - (a.vramGiB ?? -1));
-  const labelRows = (fleet?.by_label ?? []).filter((row) => row.gpus > 0).map((row: CapacityGroup) => ({ name: row.unlabeled ? t("capacity.unlabeled") : row.key.replace("=", ":"), vramGiB: row.vram_gib > 0 ? row.vram_gib : undefined })).sort((a, b) => (b.vramGiB ?? -1) - (a.vramGiB ?? -1));
-  const ownedGpus = gpus.data?.items.filter((gpu) => !gpu.ownership);
-  const modelVramKnown = ownedGpus?.every((gpu) => Number.isFinite(gpu.memory_total_bytes) && gpu.memory_total_bytes > 0);
-  const modelVramGiB = modelVramKnown ? ownedGpus!.reduce((sum, gpu) => sum + gpu.memory_total_bytes / GIB, 0) : undefined;
+  const groups = gpus.data ? vendorGroups(gpus.data, t("overview.unknownGpu")) : [];
+  const modelCount = groups.reduce((sum, group) => sum + group.models.length, 0);
 
-  return <div className="dashboard-overview">
-    <PageHeader title={t("title")} description={t("overview.description")} />
-    {attentionEntries.length > 0 && <AttentionBanner entries={attentionEntries} grouped={groupedAttention} count={groupedAttention ? attentionGroups.length : attentionCount} />}
-    {partial && <Alert type="warning" showIcon message={t("overview.unavailable")} className="dashboard-overview-alert" />}
-    <section className="dashboard-overview-summary" aria-label={t("overview.platformSummary")}>
-      <ResourceCard icon={<CloudServerOutlined />} title={t("overview.nodes")} value={fmt(fleet?.nodes.total)} unit={t("overview.nodeUnit")} to="/nodes" facts={<><StatusCount count={fleet?.nodes.online} label={t("overview.online", { count: fmt(fleet?.nodes.online) })} tone="success" /><StatusCount count={fleet?.nodes.connecting} label={t("overview.connecting", { count: fmt(fleet?.nodes.connecting) })} tone="warning" /><StatusCount count={fleet?.nodes.offline} label={t("overview.offlineCount", { count: fmt(fleet?.nodes.offline) })} tone="danger" /><StatusCount count={otherNodes} label={t("overview.otherStates", { count: fmt(otherNodes) })} tone="neutral" /></>} />
-      <ResourceCard icon={<ControlOutlined />} title={t("overview.gpuResources")} value={fmt(gpus.data?.overview.total)} unit={t("overview.gpuUnit")} to="/gpus" facts={<><StatusCount count={gpuStates?.allocatable} label={t("overview.allocatable", { count: fmt(gpuStates?.allocatable) })} tone="success" /><StatusCount count={gpuStates?.allocated} label={t("overview.allocated", { count: fmt(gpuStates?.allocated) })} tone="info" /><StatusCount count={gpuStates?.unusable} label={t("overview.unavailableGpuCount", { count: fmt(gpuStates?.unusable) })} tone="danger" /><StatusCount count={gpuStates?.unknown} label={t("overview.unknownGpuCount", { count: fmt(gpuStates?.unknown) })} tone="neutral" /><small style={{ flexBasis: "100%" }}>{t("overview.gpuAllocationHint")}</small></>} />
-      <ResourceCard icon={<RocketOutlined />} title={t("overview.deployments")} value={fmt(fleet?.deployments.total)} unit={t("overview.deploymentUnit")} to="/deployments" detail={fleet ? t("overview.sleepableCount", { count: fmt(fleet.deployments.sleepable) }) : undefined} facts={<><StatusCount count={fleet?.deployments.running} label={t("overview.running", { count: fmt(fleet?.deployments.running) })} tone="success" /><StatusCount count={fleet?.deployments.warming} label={t("overview.warming", { count: fmt(fleet?.deployments.warming) })} tone="warning" /><StatusCount count={otherServices} label={t("overview.otherStates", { count: fmt(otherServices) })} tone="neutral" /></>} />
-      <ResourceCard icon={<CloudOutlined />} title={t("overview.clouds")} value={fmt(providers.data?.total)} unit={t("overview.cloudUnit")} entry={<CloudModuleArrow />} facts={<><StatusCount count={providers.data ? publicClouds.length : undefined} label={t("overview.publicClouds", { count: publicClouds.length })} /><StatusCount count={providers.data ? privateClouds.length : undefined} label={t("overview.privateClouds", { count: privateClouds.length })} /></>} />
-    </section>
-    <Card size="small" className="dashboard-overview-posture" aria-label={t("situation.title")}><strong>{t("situation.title")}</strong><span>{t("platform.version", { version: health.error ? "—" : health.data?.version || "—" })}</span><span>{t("overview.managementService")} <b className={controlStatus === "ok" ? "dashboard-overview-healthy" : undefined}>{controlStatus === "ok" ? t("overview.normal") : controlStatus ?? "—"}</b></span><span>{t("situation.activeAgentSessions", { count: fmt(health.error ? undefined : health.data?.sessions) })}</span></Card>
-    <div className="dashboard-overview-grid dashboard-overview-inference">
-      <Card size="small" className="dashboard-overview-panel dashboard-overview-usage"><PanelHead title={t("overview.usageTitle")} extra={<><span className="dashboard-overview-count">{t("overview.usageRange")}</span><ModuleArrow to={usageLink} label={t("overview.viewUsage")} /></>} />
-        <div className="dashboard-overview-metrics">
-          <Metric label={t("overview.totalTokens")} value={fmtCompact(totalTokens, language)} exact={fmtInt(totalTokens)} hint={totals?.no_usage ? t("overview.unreportedUsageHint", { count: fmt(totals.no_usage) }) : ""} tip={t("overview.totalTokensTip")} />
-          <Metric label={t("overview.inputTokens")} value={fmtCompact(totals?.prompt_tokens, language)} exact={fmtInt(totals?.prompt_tokens)} tip={t("overview.inputTokensTip")} />
-          <Metric label={t("overview.outputTokens")} value={fmtCompact(totals?.completion_tokens, language)} exact={fmtInt(totals?.completion_tokens)} tip={t("overview.outputTokensTip")} />
+  const nodes = fleet?.nodes;
+  const unit = (value: ReactNode, suffix: string) => <>{value}<small className="dashboard-metric-unit">{suffix}</small></>;
+
+  // Compute is two panels of equal height: what the hardware is (static) and
+  // how it is used right now (live).
+  const computeBlock = <Block key="compute" title={t("overview.computeBlock")} className="dashboard-compute">
+    <Panel title={t("overview.hardwarePanel")} to="/nodes" label={t("overview.nodes")} className="dashboard-hardware">
+      <div className="dashboard-kpis">
+        <Metric className="is-kpi" label={t("overview.nodesKpi")} to={(nodes?.total ?? 0) > 0 ? "/nodes" : undefined} value={nodes ? unit(fmt(nodes.total), t("overview.nodeUnit")) : "—"} />
+        <Metric className="is-kpi" label={t("overview.gpusKpi")} to={(nodes?.gpus ?? 0) > 0 ? "/gpus" : undefined} value={nodes ? unit(fmt(nodes.gpus), t("overview.gpuUnit")) : "—"} />
+        <Metric className="is-kpi" label={t("overview.vramKpi")} to={(nodes?.vram_gib ?? 0) > 0 ? "/gpus" : undefined} value={nodes ? unit(fmt(Math.round(nodes.vram_gib)), "GiB") : "—"} />
+      </div>
+      <div className="dashboard-states-line">
+        <StatusCount count={nodes?.online} label={t("overview.online", { count: fmt(nodes?.online) })} tone="success" />
+        <StatusCount count={nodes?.connecting} label={t("overview.connecting", { count: fmt(nodes?.connecting) })} tone="warning" />
+        <StatusCount count={nodes?.offline} label={t("overview.offlineCount", { count: fmt(nodes?.offline) })} tone="danger" />
+      </div>
+      <div className="dashboard-subsection">
+        <div className="dashboard-subsection-head"><span>{t("overview.modelComposition")}</span>{groups.length > 0 && <span className="dashboard-subsection-tag">{groups.length > 1 ? t("overview.vendorsAndModels", { vendors: groups.length, models: modelCount }) : t("overview.modelCount", { count: modelCount })}</span>}<ModuleArrow to="/gpus" label={t("overview.viewGpu")} /></div>
+        {groups.length ? <ModelComposition groups={groups} /> : <EmptyState title={gpus.error ? t("overview.unavailable") : t("overview.noGpu")} detail="" />}
+      </div>
+    </Panel>
+    <Panel title={t("overview.usagePanel")} tag={t("overview.usageTag")} to="/scheduling" label={t("overview.viewScheduling")} className="dashboard-usage">
+      <div className="dashboard-kpis">
+        <Metric className="is-kpi" label={t("overview.allocationRate")} tip={t("overview.allocationTip")} value={pct(ratio(cards?.allocated, cards?.cards))} hint={cards ? t("overview.cardsOf", { used: fmt(cards.allocated), total: fmt(cards.cards) }) : undefined} />
+        <Metric className="is-kpi" label={t("overview.gpuUtilization")} tip={t("overview.gpuUtilizationTip")} value={pct(currentGpu?.utilization_pct ?? undefined)} hint={currentGpu?.utilization_pct != null ? t("overview.gpuUtilizationSub") : undefined} />
+        <Metric className="is-kpi" label={t("overview.vramUtilization")} tip={t("overview.vramUtilizationTip")} value={pct(ratio(currentGpu?.vram_used_bytes, currentGpu?.vram_total_bytes))} hint={currentGpu?.vram_used_bytes != null && currentGpu?.vram_total_bytes ? `${fmt(Math.round(currentGpu.vram_used_bytes / 1024 ** 3))} / ${fmt(Math.round(currentGpu.vram_total_bytes / 1024 ** 3))} GiB` : undefined} />
+      </div>
+      <div className="dashboard-subsection">
+        {cards ? cards.cards > 0 ? <CardOccupancy cards={cards} /> : <EmptyState title={t("overview.noGpu")} detail="" /> : <EmptyState title={summary.data || summary.error ? t("overview.unavailable") : t("overview.loading")} detail="" />}
+      </div>
+      <div className="dashboard-usage-foot">
+        <Figure label={t("overview.maxTemperature")} value={fmtCelsius(currentGpu?.temperature_c)} to={(currentGpu?.temperature_c ?? 0) > 0 ? "/analytics/gpus?metric=temp" : undefined} />
+        <Figure label={t("overview.totalPower")} value={gpuPowerValue} to={(gpuPower ?? 0) > 0 ? "/analytics/gpus?metric=power" : undefined} />
+        <Figure label={t("overview.yieldsLastHour")} value={cards?.contention.yields_last_hour} to="/scheduling" />
+      </div>
+    </Panel>
+  </Block>;
+
+  const servicesBlock = <Block key="services" title={t("overview.servicesBlock")} className="dashboard-services">
+    
+      <Panel title={t("overview.deployments")} to="/deployments" label={t("overview.deployments")}>
+        <div className="dashboard-big">{(deployments?.total ?? 0) > 0 ? <Link to="/deployments">{fmt(deployments?.total)}</Link> : fmt(deployments?.total)}<small>{t("overview.deploymentUnit")}</small></div>
+        <div className="dashboard-facts">
+          <StatusCount count={deployments?.running} label={t("overview.running", { count: fmt(deployments?.running) })} tone="success" />
+          <StatusCount count={deployments?.warming} label={t("overview.warming", { count: fmt(deployments?.warming) })} tone="warning" />
+          <StatusCount count={deployments?.sleeping} label={t("overview.sleepingCount", { count: fmt(deployments?.sleeping) })} tone="info" />
+          <StatusCount count={deployments?.other} label={t("overview.otherStates", { count: fmt(deployments?.other) })} tone="neutral" />
         </div>
-      </Card>
-      <Card size="small" className="dashboard-overview-panel dashboard-overview-monitor"><PanelHead title={t("overview.monitorSummary")} extra={<><Tooltip title={t("overview.replicaCountTip")}><span className="dashboard-overview-replica-count">{t("overview.readyReplicasLabel")} <strong>{fmt(readyReplicas)}/{fmt(desiredReplicas)}</strong></span></Tooltip><span className="dashboard-overview-count">{monitorStatus}</span><ModuleArrow to="/monitor?range=6h" label={t("overview.viewMonitor")} /></>} />
-        <div className="dashboard-overview-metrics">
+        <div className="dashboard-panel-foot">
+          <Tooltip content={t("overview.replicaCountTip")}><span className="dashboard-figure"><span>{t("overview.readyReplicasLabel")}</span><b>{fmt(readyReplicas)}/{fmt(desiredReplicas)}</b></span></Tooltip>
+          <Figure label={t("overview.pendingLabel")} value={deployments?.pending} to="/scheduling" hot={(deployments?.pending ?? 0) > 0} />
+          <Figure label={t("overview.waitingWakesLabel")} value={cards?.contention.waiting_wakes} to="/scheduling" />
+        </div>
+      </Panel>
+      <Panel title={t("overview.usageTitle")} tag={t("overview.usageRange")} to={usageLink} label={t("overview.viewUsage")}>
+        <div className="dashboard-big" title={fmtInt(totalTokens)}>{(totalTokens ?? 0) > 0 ? <Link to={usageLink}>{fmtCompact(totalTokens, language)}</Link> : fmtCompact(totalTokens, language)}<small>tokens</small></div>
+        <div className="dashboard-facts"><span>{t("overview.inputTokens")} {fmtCompact(totals?.prompt_tokens, language)}</span><span>{t("overview.outputTokens")} {fmtCompact(totals?.completion_tokens, language)}</span></div>
+        <Figure label={t("overview.requests")} value={totals?.requests} to={usageLink} />
+        {totals?.no_usage ? <div className="dashboard-panel-foot"><span className="dashboard-figure is-zero">{t("overview.unreportedUsageHint", { count: fmt(totals.no_usage) })}</span></div> : null}
+      </Panel>
+    <Panel title={t("overview.tasksGroup")} tag={t("overview.tasksGroupHint")} className="dashboard-tasks">
+      <TaskRow count={tasks?.batches?.active} name={t("overview.batches")} tip={t("overview.batchesActiveTip")} to="/batches" label={t("overview.viewBatches")} detail={tasks?.batches ? <Figure label={t("overview.batchesWaitingLabel")} value={tasks.batches.waiting} /> : undefined} />
+      <TaskRow count={tasks?.benchmarks} name={t("overview.evaluations")} tip={t("overview.evaluationsActiveTip")} to="/evaluations" label={t("overview.viewEvaluations")} />
+    </Panel>
+      <Panel title={t("overview.monitorSummary")} tag={monitorStatus} to="/monitor" label={t("overview.viewMonitor")} className="dashboard-quality">
+        <div className="dashboard-metrics">
           <Metric label={t("overview.requestRate")} value={requestRate?.collected && requestRate.value != null ? `${requestRate.value.toFixed(1)} req/s` : "—"} tip={t("overview.requestRateTip")} />
           <Metric label={t("overview.concurrency")} value={requestRate?.collected && requestRate.denominator != null ? String(Number(requestRate.denominator.toFixed(1))) : "—"} tip={t("overview.concurrencyTip")} />
           <Metric label={t("overview.errorRate")} value={errorRate?.collected ? fmtPct(errorRate.value) : "—"} tip={t("overview.errorRateTip")} />
           <Metric label={t("overview.ttftP95")} value={ttft?.collected && ttft.value != null ? formatLatencyText(ttft.value) : "—"} tip={t("overview.ttftP95Tip")} />
           <Metric label={t("overview.waitingP95")} value={waiting?.collected && waiting.value != null ? waiting.value.toFixed(1) : "—"} tip={t("overview.waitingP95Tip")} />
         </div>
-      </Card>
-    </div>
-    <div className="dashboard-overview-grid dashboard-overview-composition">
-      <Card size="small" className="dashboard-overview-panel"><PanelHead title={t("overview.gpuComposition")} extra={<ModuleArrow to="/gpus" label={t("overview.viewGpu")} />} />
-        <div className="dashboard-overview-composition-grid">
-          <Distribution title={t("overview.byVendor")} rows={vendorRows} totalVramGiB={fleet?.nodes.vram_gib} empty={t("overview.noGpu")} />
-          <Distribution title={t("overview.byModel")} rows={physicalCapacityRows(gpus.data, t("overview.unknownGpu"))} totalVramGiB={modelVramGiB} empty={t("overview.noGpu")} paginated />
-        </div>
-      </Card>
-      <Card size="small" className="dashboard-overview-panel"><PanelHead title={t("overview.labelDistribution")} extra={<>{(fleet?.label_keys.length ?? 0) > 1 && <Select size="small" variant="borderless" className="dashboard-overview-label-key" value={fleet?.label_key || undefined} aria-label={t("capacity.labelKeyAria")} onChange={setPickedLabelKey} options={(fleet?.label_keys ?? []).map((key) => ({ label: key, value: key }))} />}<ModuleArrow to="/nodes" label={t("overview.viewNodes")} /></>} />
-        <div className="dashboard-overview-panel-body"><Distribution key={fleet?.label_key} rows={labelRows} totalVramGiB={fleet?.nodes.vram_gib} empty={fleet?.nodes.gpus && !fleet.label_keys.length ? t("overview.noLabels") : t("overview.noGpu")} paginated /></div>
-      </Card>
-    </div>
-    <div className="dashboard-overview-grid dashboard-overview-capacity">
-      <Link to="/analytics/gpus" className="dashboard-overview-gpu-link" aria-label={t("overview.viewGpuUsage")}>
-        <Card size="small" className="dashboard-overview-panel dashboard-overview-gpu-usage">
-          <PanelHead title={t("overview.gpuUsageTitle")} extra={<><span className="dashboard-overview-count">{t("overview.currentSample")}</span><span className="dashboard-overview-module-arrow" aria-hidden="true"><ArrowRightOutlined /></span></>} />
-          <div className="dashboard-overview-metrics dashboard-overview-gpu-metrics">
-            <Metric label={t("overview.averageGpuUtilization")} value={fmtPct(currentGpu?.utilization_pct)} />
-            <Metric label={t("overview.maximumGpuTemperature")} value={fmtCelsius(currentGpu?.temperature_c)} />
-            <Metric label={t("overview.totalGpuPower")} value={gpuPowerValue} />
-          </div>
-        </Card>
-      </Link>
-      <Card size="small" className="dashboard-overview-panel"><PanelHead title={t("overview.storageCapacity")} extra={<><span className="dashboard-overview-count">{t("overview.storageCount", { count: storages.data?.items.filter((item) => storageTypeInfo(item.type).shared).length ?? 0 })}</span><ModuleArrow to="/storage" label={t("overview.viewStorage")} /></>} />
-        <div className="dashboard-overview-panel-body">{storageRows.length ? <><div className={storageRows.length > STORAGE_PAGE_SIZE ? "dashboard-overview-storage-page" : undefined}>{storageRows.slice((currentStoragePage - 1) * STORAGE_PAGE_SIZE, currentStoragePage * STORAGE_PAGE_SIZE).map((row) => <StorageCapacityRow key={row.id} row={row} />)}</div>{storageRows.length > STORAGE_PAGE_SIZE && <Pagination className="dashboard-overview-storage-pagination" size="small" current={currentStoragePage} pageSize={STORAGE_PAGE_SIZE} total={storageRows.length} showSizeChanger={false} onChange={setStoragePage} />}</> : <EmptyState title={storageIncomplete ? t("overview.unavailable") : t("overview.noStorage")} detail={storageIncomplete ? "" : t("overview.noStorageHint")} />}</div>
-      </Card>
-    </div>
+      </Panel>
+
+  </Block>;
+
+  const storageBlock = <Block key="storage" title={t("overview.storageBlock")} className="dashboard-storage">
+    <Panel title={t("overview.storageCapacity")} tag={t("overview.storageCount", { count: storages.data?.items.filter((item) => storageTypeInfo(item.type).shared).length ?? 0 })} to="/storage" label={t("overview.viewStorage")}>
+      {storageRows.length ? <><div className={storageRows.length > STORAGE_PAGE_SIZE ? "dashboard-overview-storage-page" : undefined}>{storageRows.slice((currentStoragePage - 1) * STORAGE_PAGE_SIZE, currentStoragePage * STORAGE_PAGE_SIZE).map((row) => <StorageCapacityRow key={row.id} row={row} />)}</div>{storageRows.length > STORAGE_PAGE_SIZE && <nav className="dashboard-overview-storage-pagination" aria-label={t("overview.storageCapacity")}><Button variant="ghost" size="sm" disabled={currentStoragePage === 1} onClick={() => setStoragePage(currentStoragePage - 1)}>{t("common:resourceTable.previousPage")}</Button><span>{currentStoragePage} / {Math.ceil(storageRows.length / STORAGE_PAGE_SIZE)}</span><Button variant="ghost" size="sm" disabled={currentStoragePage * STORAGE_PAGE_SIZE >= storageRows.length} onClick={() => setStoragePage(currentStoragePage + 1)}>{t("common:resourceTable.nextPage")}</Button></nav>}</> : <EmptyState title={storageIncomplete ? t("overview.unavailable") : t("overview.noStorage")} detail={storageIncomplete ? "" : t("overview.noStorageHint")} />}
+    </Panel>
+    <Panel title={t("overview.resourceAccess")}>
+      <div className="dashboard-sources">
+        <Source count={providers.data ? publicClouds.length : undefined} label={t("overview.publicCloud")} to="/providers?category=public_cloud" />
+        <Source count={providers.data ? privateClouds.length : undefined} label={t("overview.privateCloud")} to="/providers?category=private_cloud" />
+      </div>
+    </Panel>
+  </Block>;
+
+  // The blocks in the order the page reads: the hardware first, then what it
+  // carries, then storage and external resources.
+  const blocks: ReactNode[] = [computeBlock, servicesBlock, storageBlock];
+
+  return <div className="dashboard-overview">
+    <PageHeader title={t("title")} description={t("overview.description")} extra={<div className="dashboard-header-meta">
+      <span className="dashboard-header-service">{t("overview.managementService")} {controlStatus === "ok"
+        // A light green pill with a bright dot: the dark success text alone read as black.
+        ? <Badge status="success" size="sm" leadingIcon={<span className="size-1.5 rounded-full bg-success-strong" />}>{t("overview.normal")}</Badge>
+        : <b>{controlStatus ?? "—"}</b>}</span>
+    </div>} />
+    {attentionEntries.length > 0 && <AttentionBanner entries={attentionEntries} grouped={groupedAttention} count={groupedAttention ? attentionGroups.length : attentionCount} />}
+    {partial && <Notice tone="warning" title={t("overview.unavailable")} />}
+    {blocks}
   </div>;
 }
 
-function PanelHead({ title, extra }: { title: string; extra?: ReactNode }) { return <div className="dashboard-overview-panel-head"><h2>{title}</h2><div>{extra}</div></div>; }
-function AttentionBanner({ entries, grouped, count }: { entries: AttentionEntry[]; grouped: boolean; count: number }) {
-  const { t } = useTranslation("dashboard");
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [visibleCount, setVisibleCount] = useState(2);
-  const entryTitles = entries.map((entry) => entry.title).join("\n");
-  useLayoutEffect(() => {
-    const content = contentRef.current;
-    if (!content) return;
-    const update = () => {
-      if (!content.clientWidth) return;
-      const headingWidth = content.querySelector<HTMLElement>(".dashboard-overview-attention-heading")?.offsetWidth ?? 0;
-      const entryWidths = [...content.querySelectorAll<HTMLElement>(".dashboard-overview-attention-measure-entry")].map((element) => element.offsetWidth);
-      const moreWidths = [...content.querySelectorAll<HTMLElement>(".dashboard-overview-attention-measure-more")].map((element) => element.offsetWidth);
-      for (let visible = entryWidths.length; visible >= 0; visible--) {
-        const itemsWidth = entryWidths.slice(0, visible).reduce((sum, width) => sum + width, 0) + Math.max(0, visible - 1) * 8;
-        const hidden = entryWidths.length - visible;
-        const required = headingWidth + (visible ? 12 + itemsWidth : 0) + (hidden ? 12 + moreWidths[hidden - 1] : 0);
-        if (required <= content.clientWidth) {
-          setVisibleCount(Math.max(1, visible));
-          return;
-        }
-      }
-      setVisibleCount(1);
-    };
-    update();
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(update);
-    observer?.observe(content);
-    window.addEventListener("resize", update);
-    return () => { observer?.disconnect(); window.removeEventListener("resize", update); };
-  }, [entryTitles, grouped, count]);
-  const shown = Math.min(visibleCount, entries.length);
-  const hidden = entries.slice(shown);
-  const moreLabel = (amount: number) => t(grouped ? "overview.moreCategories" : "overview.moreIssues", { count: amount });
-  return <Alert type="warning" showIcon className="dashboard-overview-attention" message={<div ref={contentRef} className="dashboard-overview-attention-content">
-    <span className="dashboard-overview-attention-heading">{t("overview.attention")}{" "}<Tag color="warning" className="dashboard-overview-attention-count">{grouped ? t("overview.attentionCategories", { count }) : count}</Tag></span>
-    <div className="dashboard-overview-attention-items">{entries.slice(0, shown).map((entry, index) => <Link key={index} to={entry.to} title={entry.title} className="dashboard-overview-attention-link">{entry.content}</Link>)}</div>
-    {hidden.length > 0 && <Dropdown trigger={["click"]} menu={{ items: hidden.map((entry, index) => ({ key: index, label: <Link to={entry.to}>{entry.title}</Link> })) }}><Button type="link" size="small" className="dashboard-overview-attention-more">{moreLabel(hidden.length)}</Button></Dropdown>}
-    <div className="dashboard-overview-attention-measure" aria-hidden="true">{entries.map((entry, index) => <span key={index} className="dashboard-overview-attention-measure-entry">{entry.content}</span>)}{entries.map((_, index) => <Button key={index} type="link" size="small" tabIndex={-1} className="dashboard-overview-attention-more dashboard-overview-attention-measure-more">{moreLabel(index + 1)}</Button>)}</div>
-  </div>} />;
-}
-function EmptyState({ title, detail }: { title: string; detail: string }) { return <div className="dashboard-overview-empty"><strong>{title}</strong><span>{detail}</span></div>; }
-function StatusCount({ count, label, tone }: { count?: number; label: string; tone?: "success" | "warning" | "danger" | "info" | "neutral" }) { return count != null && count > 0 ? <span className={tone ? `dashboard-overview-status dashboard-overview-status-${tone}` : undefined}>{label}</span> : null; }
-function ModuleArrow({ to, label }: { to: string; label: string }) { return <Link to={to} className="dashboard-overview-module-arrow" aria-label={label} title={label}><ArrowRightOutlined /></Link>; }
-function CloudModuleArrow() {
-  const { t } = useTranslation("dashboard");
-  return <Dropdown trigger={["click"]} menu={{ items: [
-    { key: "public", label: <Link to="/providers">{t("overview.publicCloud")}</Link> },
-    { key: "private", label: <Link to="/zstack">{t("overview.privateCloud")}</Link> },
-  ] }}><Button type="text" size="small" className="dashboard-overview-module-arrow" icon={<ArrowRightOutlined />} aria-label={t("overview.clouds")} title={t("overview.clouds")} /></Dropdown>;
-}
-function ResourceCard({ icon, title, value, unit, to, entry, detail, facts }: { icon: ReactNode; title: string; value: string; unit: string; to?: string; entry?: ReactNode; detail?: string; facts: ReactNode }) {
-  return <Card size="small" className="dashboard-overview-resource"><div className="dashboard-overview-resource-title">{icon}<span>{title}</span>{to ? <ModuleArrow to={to} label={title} /> : entry}</div><div className="dashboard-overview-resource-value">{value}<small>{unit}</small>{detail && <span className="dashboard-overview-resource-detail">{detail}</span>}</div><div className="dashboard-overview-resource-facts">{facts}</div></Card>;
-}
-function Metric({ label, value, exact, hint, tip }: { label: string; value: string; exact?: string; hint?: string; tip?: string }) {
-  return <div className="dashboard-overview-metric"><span>{label}{tip && <Tooltip title={tip}><InfoCircleOutlined className="dashboard-overview-metric-tip" tabIndex={0} role="img" aria-label={tip} /></Tooltip>}</span><strong title={exact}>{value}</strong>{hint && <small>{hint}</small>}</div>;
-}
-function Distribution({ title, rows, totalVramGiB, empty, paginated = false }: { title?: string; rows: DistributionRow[]; totalVramGiB?: number; empty: string; paginated?: boolean }) {
-  const [page, setPage] = useState(1);
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / DISTRIBUTION_PAGE_SIZE)));
-  const visibleRows = paginated ? rows.slice((currentPage - 1) * DISTRIBUTION_PAGE_SIZE, currentPage * DISTRIBUTION_PAGE_SIZE) : rows;
-  return <div className="dashboard-overview-distribution">
-    <h3>{title}</h3>
-    {rows.length ? <div className={paginated && rows.length > DISTRIBUTION_PAGE_SIZE ? "dashboard-overview-distribution-rows-paged" : undefined}>{visibleRows.map((row) => <div key={row.name} className="dashboard-overview-distribution-row"><span title={row.name}>{row.name}</span><span>{row.vramGiB == null ? "—" : `${row.vramGiB.toFixed(1)} GiB`}</span>{row.vramGiB != null && totalVramGiB != null && totalVramGiB > 0 && <i><b style={{ width: `${Math.min(100, row.vramGiB / totalVramGiB * 100)}%` }} /></i>}</div>)}</div> : <Typography.Text type="secondary">{empty}</Typography.Text>}
-    {paginated && rows.length > DISTRIBUTION_PAGE_SIZE && <Pagination className="dashboard-overview-distribution-pagination" size="small" current={currentPage} pageSize={DISTRIBUTION_PAGE_SIZE} total={rows.length} showSizeChanger={false} onChange={setPage} />}
+function TaskRow({ count, name, tip, to, label, detail }: { count?: number; name: string; tip: string; to: string; label: string; detail?: ReactNode }) {
+  return <div className="dashboard-task">
+    <Tooltip content={tip}><span className={`dashboard-task-count${count === 0 ? " is-zero" : ""}`}>{(count ?? 0) > 0 ? <Link to={to}>{fmt(count)}</Link> : fmt(count)}</span></Tooltip>
+    <span className="dashboard-task-body"><span className="dashboard-task-name">{name}</span>{detail && <span className="dashboard-task-facts">{detail}</span>}</span>
+    <ModuleArrow to={to} label={label} />
   </div>;
 }
-function StorageCapacityRow({ row }: { row: StorageRow }) {
-  const { t } = useTranslation("dashboard");
-  const used = row.total != null && row.available != null ? Math.max(0, row.total - row.available) : undefined;
-  const percent = used != null && row.total ? Math.min(100, used / row.total * 100) : 0;
-  return <div className="dashboard-overview-storage-row"><DatabaseOutlined /><div><Link to={storageDetailPath(row.id)}>{row.name}</Link>{row.problems > 0 && <small>{t("overview.storageProblem", { count: row.problems })}</small>}</div><div className="dashboard-overview-storage-capacity"><span>{used == null ? t("overview.capacityUnknown") : t("overview.usedStorage", { used: gib(used), total: gib(row.total) })}</span>{row.available != null && <span>{t("overview.availableStorage", { size: gib(row.available) })}</span>}</div>{used != null && <i className="dashboard-overview-storage-progress"><b style={{ width: `${percent}%` }} /></i>}</div>;
+
+function Source({ count, label, to }: { count?: number; label: string; to: string }) {
+  const content = <><span className={`dashboard-source-value${count === 0 ? " is-zero" : ""}`}>{fmt(count)}</span><span className="dashboard-source-label">{label}</span></>;
+  return count != null && count > 0 ? <Link to={to} className="dashboard-source">{content}</Link> : <div className="dashboard-source">{content}</div>;
 }

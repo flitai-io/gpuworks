@@ -35,17 +35,36 @@ func (f installerFunc) InstallSSH(ctx context.Context, req provision.SSHInstallR
 type installationTestDriver struct {
 	*zstackcloud.Driver
 	installer provision.Installer
+	precheck  provision.Prechecker // nil keeps the real SSH precheck
 }
 
 func (d *installationTestDriver) NewDriver(st *store.Store, svc *provider.Service, _ provision.Installer) provider.Driver {
+	if d.precheck != nil {
+		svc.SetSSHPrechecker(d.precheck)
+	}
 	return d.Driver.NewDriver(st, svc, d.installer)
+}
+
+// newCloudEnv is a server whose Cloud driver installs with installer and
+// prechecks through an sshPrecheckFixture: the hosts the Cloud fixtures list
+// have no SSH server behind them.
+func newCloudEnv(t *testing.T, installer provision.Installer) *testenv.Env {
+	t.Helper()
+	return newCloudEnvPrechecking(t, installer, &sshPrecheckFixture{})
+}
+
+// newCloudEnvWithSSHServer keeps the real SSH precheck, for a test that
+// serves SSH at the hosts' address itself.
+func newCloudEnvWithSSHServer(t *testing.T, installer provision.Installer) *testenv.Env {
+	t.Helper()
+	return newCloudEnvPrechecking(t, installer, nil)
 }
 
 // These tests run serially. The registry override lasts only through app creation;
 // each configured driver retains its own installer after the prototype is restored.
-func newCloudEnv(t *testing.T, installer provision.Installer) *testenv.Env {
+func newCloudEnvPrechecking(t *testing.T, installer provision.Installer, precheck provision.Prechecker) *testenv.Env {
 	t.Helper()
-	driver := &installationTestDriver{Driver: zstackcloud.New(), installer: installer}
+	driver := &installationTestDriver{Driver: zstackcloud.New(), installer: installer, precheck: precheck}
 	original, ok := provider.Get(driver.Name())
 	if !ok {
 		t.Fatal("Cloud driver is not registered")

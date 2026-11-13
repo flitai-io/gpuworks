@@ -33,9 +33,14 @@ func (a *apiHandlers) dashboardCurrentMetrics(nodes []store.Node) dto.DashboardC
 	// range and downsampling must never change a current measurement.
 	now := time.Now().UTC().UnixMilli()
 	since := now - int64(2*time.Minute/time.Millisecond)
+	// VRAM used and total are kept per card and summed together afterwards,
+	// over the cards with a fresh sample of both, so a card missing one of
+	// the two cannot skew their ratio.
+	var vramUsed, vramTotal map[string]MetricLatest
 	for _, metric := range []struct {
 		name    string
 		target  **float64
+		keep    *map[string]MetricLatest
 		node    bool
 		average bool
 		maximum bool
@@ -44,6 +49,8 @@ func (a *apiHandlers) dashboardCurrentMetrics(nodes []store.Node) dto.DashboardC
 		{name: "gpuworks_gpu_temperature_celsius", target: &out.TemperatureC, maximum: true},
 		{name: "gpuworks_gpu_power_watts", target: &out.PowerWatts},
 		{name: "gpuworks_node_mem_used_bytes", target: &out.MemoryUsedBytes, node: true},
+		{name: "gpuworks_gpu_memory_used_bytes", keep: &vramUsed},
+		{name: "gpuworks_gpu_memory_total_bytes", keep: &vramTotal},
 	} {
 		points, err := a.d.MetricsLatest(metric.name, nil, since, now)
 		if err != nil {
@@ -71,6 +78,10 @@ func (a *apiHandlers) dashboardCurrentMetrics(nodes []store.Node) dto.DashboardC
 				latest[key] = p
 			}
 		}
+		if metric.keep != nil {
+			*metric.keep = latest
+			continue
+		}
 		if len(latest) == 0 {
 			continue
 		}
@@ -89,6 +100,18 @@ func (a *apiHandlers) dashboardCurrentMetrics(nodes []store.Node) dto.DashboardC
 			value /= float64(len(latest))
 		}
 		*metric.target = &value
+	}
+	var used, total float64
+	paired := false
+	for key, u := range vramUsed {
+		if t, ok := vramTotal[key]; ok {
+			used += u.Value
+			total += t.Value
+			paired = true
+		}
+	}
+	if paired {
+		out.VRAMUsedBytes, out.VRAMTotalBytes = &used, &total
 	}
 	return out
 }

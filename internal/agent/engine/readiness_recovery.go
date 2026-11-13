@@ -13,12 +13,16 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
-// Strata 0.1.38 keeps HTTP200 while its child is not READY. Its
-// /v1/models distinguishes a crashed child (empty) from intentional unload.
+// Known health payloads share one bounded read. Strata keeps HTTP200 while
+// its child is not READY; the catalog wrapper uses HTTP503 on loader failure.
 type engineReadiness struct {
 	Service string `json:"service"`
 	Loaded  *bool  `json:"loaded"`
 	APIKey  *bool  `json:"api_key"`
+	// These fields belong to the catalog callable wrapper. Keep them opaque
+	// here so another server's status/error shape cannot break Strata probes.
+	Status json.RawMessage `json:"status"`
+	Error  json.RawMessage `json:"error"`
 }
 
 func readEngineReadiness(resp *http.Response) (engineReadiness, error) {
@@ -127,7 +131,8 @@ func requestStrataLoad(ctx context.Context, client *http.Client, port int) <-cha
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := client.Do(req)
 		if resp != nil {
-			io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+			// Readiness determines the outcome; this drain only permits socket reuse.
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 			resp.Body.Close()
 		}
 		detail := ""

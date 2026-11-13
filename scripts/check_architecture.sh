@@ -17,6 +17,10 @@ set -eu
 #      comment. New or removed keys are not a regression. When no baseline can
 #      be resolved (shallow clone, no origin remote, already on the default
 #      branch) this prints a NOTE and is skipped, never failed.
+#      A third direction, "warn", is a soft budget: over the limit prints a
+#      WARNING and never fails, and the baseline comparison ignores it.
+#      ui_bundle_gzip_kb is a warn key measured by scripts/check_ui_bundle_size.sh
+#      after a UI build; this script only skips it.
 #   3. Dependency direction — hard structural rules (plan §5.3). These are not
 #      budgets: any violation fails immediately.
 #
@@ -27,6 +31,18 @@ cd "$(dirname "$0")/.."
 BUDGET_FILE="scripts/arch-constraints.txt"
 if [ ! -f "$BUDGET_FILE" ]; then
   echo "missing $BUDGET_FILE" >&2
+  exit 1
+fi
+
+# Every import-graph measurement below reads `go list -e ... 2>/dev/null`. -e
+# keeps per-package errors (a missing webui dist) out of the exit status, but a
+# toolchain that cannot load the module at all — older than go.mod's go line
+# under GOTOOLCHAIN=local — then yields empty output: import counts drop to
+# zero and waivers look stale, reported as violations that are not there.
+# Stop on that up front with go's own error.
+if ! go_list_err=$(go list -e -f '{{.ImportPath}}' ./... 2>&1 >/dev/null); then
+  echo "go list cannot load the module, so the import-graph checks cannot run:" >&2
+  printf '%s\n' "$go_list_err" | sed 's/^/  /' >&2
   exit 1
 fi
 
@@ -97,6 +113,23 @@ go_imports() {
   go list -e -f '{{.ImportPath}}	{{join .Imports " "}}' ./... 2>/dev/null
 }
 
+# untested_shared_ui lists the shared UI building blocks no test covers by
+# name: ui-kit compositions, the console shell and the page structure every
+# page reuses (PageHeader, EmptyState, ResourceTable, DetailDrawer). A test
+# counts when it imports the file, or names its ui/src/... path because it
+# drives it through its real host (the sidebar through App, a column filter
+# through ResourceTable); a page test that happens to render it does not.
+untested_shared_ui() {
+  { find ui/src/ui-kit ui/src/app ui/src/components/detail ui/src/components/resourceTable \
+      -type f \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null
+    printf '%s\n' ui/src/components/PageHeader.tsx ui/src/components/EmptyState.tsx
+  } | sort | while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    module=${f#ui/}; module=${module%.*}
+    grep -rqE "['\"](\.\./)+${module}(\.tsx?)?['\"]|ui/${module}\.tsx?" ui/tests --include='*.ts' --include='*.tsx' 2>/dev/null || echo "$f"
+  done
+}
+
 # --- measurements ----------------------------------------------------------
 measure() {
   key="$1"
@@ -127,6 +160,24 @@ measure() {
     grep -rnE "'vllm'|\"vllm\"|'sglang'|\"sglang\"" ui/src \
       --include='*.ts' --include='*.tsx' 2>/dev/null \
       | grep -v '\.test\.' | grep -v '^ui/src/i18n/' | grep -c . || true
+    ;;
+  ui_antd_import_files)
+    # Count source files, including re-exports, dynamic imports and subpaths.
+    grep -rlE "['\"]antd(/[^'\"]*)?['\"]" ui/src \
+      --include='*.ts' --include='*.tsx' 2>/dev/null \
+      | grep -v '\.test\.' | grep -c . || true
+    ;;
+  ui_antd_icon_import_files)
+    grep -rlE "['\"]@ant-design/icons(/[^'\"]*)?['\"]" ui/src \
+      --include='*.ts' --include='*.tsx' 2>/dev/null \
+      | grep -v '\.test\.' | grep -v '^ui/src/components/ui/' | grep -c . || true
+    ;;
+  ui_untested_shared_files)
+    untested_shared_ui | grep -c . || true
+    ;;
+  ui_bundle_gzip_kb)
+    # Needs a fresh UI build; measured by scripts/check_ui_bundle_size.sh.
+    echo "EXTERNAL"
     ;;
   setting_key_literal)
     grep -rnE '(Get|Set)Setting\("' internal --include='*.go' 2>/dev/null \
@@ -245,6 +296,13 @@ neutralize_known_tokens() {
     # catalogs, like the udocker P1 case above.
     sed -E 's/P40/TESLA_P40/g'
     ;;
+  ui/src/components/ui/*)
+    # Zeron-managed components (installed by the Zeron CLI) spell SVG paths
+    # inside JSX props and string constants, beyond the d="M..." form that the
+    # shared filter below recognises: an "M4"/"M28" there is a path command,
+    # not a milestone. Scoped to the vendored directory, like the cases above.
+    sed -E 's/"M[0-9][^"]*"/"SVGPATH"/g'
+    ;;
   *)
     cat
     ;;
@@ -267,6 +325,13 @@ process_name_hits() {
       echo "$f:0:filename carries a process label"
     fi
   done
+}
+
+# soft_budget_hint prints what to do instead when a warn key is over budget.
+soft_budget_hint() {
+  case "$1" in
+  ui_antd_icon_import_files) printf '%s' ": use ui/src/ui-kit/consoleIcons.ts instead of @ant-design/icons" ;;
+  esac
 }
 
 # --- budget loop -----------------------------------------------------------
@@ -292,12 +357,23 @@ while IFS= read -r line || [ -n "$line" ]; do
     failures=$((failures + 1))
     continue
   fi
+  if [ "$measured" = "EXTERNAL" ]; then
+    echo "  $key -/$limit ($direction; measured by scripts/check_ui_bundle_size.sh)"
+    continue
+  fi
   [ -n "$measured" ] || measured=0
   echo "  $key $measured/$limit ($direction)"
+  if [ "$key" = "ui_antd_import_files" ] && [ "$measured" -eq 0 ]; then
+    echo "WARNING: antd 已清零：请在 scripts/arch-constraints.txt 加上 ui_raw_color / ui_raw_radius 计数规则，见 docs/dev/ui.md 的迁移收尾清单"
+  fi
   case "$direction" in
   max)
     if [ "$measured" -gt "$limit" ]; then
       echo "    FAIL: $key exceeds its budget ($measured > $limit)" >&2
+      if [ "$key" = "ui_untested_shared_files" ]; then
+        echo "      add a ui/tests/<name>.test.tsx that imports each of these, or names its path if it drives it through its host (docs/dev/ui.md, Verification):" >&2
+        untested_shared_ui | sed 's/^/        /' >&2
+      fi
       failures=$((failures + 1))
     elif [ "$measured" -lt "$limit" ]; then
       echo "    WARNING: $key is below its budget ($measured < $limit); budget can be tightened" >&2
@@ -310,6 +386,16 @@ while IFS= read -r line || [ -n "$line" ]; do
       failures=$((failures + 1))
     fi
     ;;
+  warn)
+    # Soft budget: reported, never failed.
+    if [ "$measured" -gt "$limit" ]; then
+      echo "    WARNING: $key is above its soft budget ($measured > $limit)$(soft_budget_hint "$key")" >&2
+      warnings=$((warnings + 1))
+    elif [ "$measured" -lt "$limit" ]; then
+      echo "    WARNING: $key is below its soft budget ($measured < $limit); budget can be tightened" >&2
+      warnings=$((warnings + 1))
+    fi
+    ;;
   *)
     echo "    FAIL: unknown direction '$direction' for $key" >&2
     failures=$((failures + 1))
@@ -317,14 +403,31 @@ while IFS= read -r line || [ -n "$line" ]; do
   esac
 done < "$BUDGET_FILE"
 
+# --- antd per-file ratchet -------------------------------------------------
+# ui_antd_import_files only counts files; ui/antd-inventory.json records each
+# file's antd usage (sites, imported names, icons, .ant-* rules) and the
+# inventory fails when any file grew or a new file started using antd.
+# Shrinking passes; the snapshot is refreshed with --write in the same MR.
+echo "antd per-file ratchet (ui/antd-inventory.json):"
+if command -v node >/dev/null 2>&1; then
+  if inventory_out=$(node scripts/ui_antd_inventory.mjs --check ui/antd-inventory.json 2>&1); then
+    printf '%s\n' "$inventory_out" | sed 's/^/  /'
+  else
+    printf '%s\n' "$inventory_out" | sed 's/^/  /' >&2
+    echo "  FAIL: antd usage grew against ui/antd-inventory.json" >&2
+    failures=$((failures + 1))
+  fi
+else
+  echo "  NOTE: node not found; skipping the antd per-file ratchet"
+fi
+
 # --- budget regressions vs baseline -----------------------------------------
 # Part 1 above is a ratchet on THIS tree; it cannot by itself stop someone
 # from raising a limit in scripts/arch-constraints.txt without saying why,
 # since a raised limit still "passes" its own new value. This section catches
 # that by comparing the file against the copy at the merge base with
-# origin/master (or, on a GitLab merge-request pipeline, against
-# $CI_MERGE_REQUEST_DIFF_BASE_SHA — see core-test in .gitlab-ci.yml for the
-# checkout this runs in). A key that loosened without a trailing
+# origin/master (or, when CI names the merge request's base commit, against
+# $GPUWORKS_ARCH_BASELINE; the checkout must then hold that commit). A key that loosened without a trailing
 # `# raised: <reason>` comment fails; a key added or removed on this branch is
 # not a regression.
 echo "budget regressions vs baseline (scripts/arch-constraints.txt):"
@@ -334,9 +437,9 @@ echo "budget regressions vs baseline (scripts/arch-constraints.txt):"
 # a failed git call escape under `set -e`: every risky command sits in an
 # `if`/`||` so this function's own failure path is the only way out.
 resolve_arch_baseline() {
-  if [ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]; then
-    if git cat-file -e "${CI_MERGE_REQUEST_DIFF_BASE_SHA}^{commit}" 2>/dev/null; then
-      printf '%s\n' "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+  if [ -n "${GPUWORKS_ARCH_BASELINE:-}" ]; then
+    if git cat-file -e "${GPUWORKS_ARCH_BASELINE}^{commit}" 2>/dev/null; then
+      printf '%s\n' "$GPUWORKS_ARCH_BASELINE"
       return 0
     fi
   fi
@@ -469,6 +572,25 @@ done
 forbid_import ./internal/server/api \
   'gpuworks/internal/server/controller' \
   'api does not import controller'
+
+# The deployment use cases take a request type and answer a plan, a row or a
+# ProductError; the HTTP handlers map that onto a status. They know neither
+# HTTP nor the handlers, so automation, batches and MCP can call them too.
+# Bespoke rather than forbid_import: forbid_import matches a substring, so a
+# rule against .../server/api would also refuse api/dto, the request and
+# response types the use cases take and answer.
+usecase_imports=$(pkg_imports ./internal/server/deployment)
+usecase_http=$(printf '%s\n' "$usecase_imports" | grep -xE 'net/http|gpuworks\.ai/gpuworks/internal/server/(api|hub|controller|proxy)' || true)
+if [ -z "$usecase_imports" ]; then
+  echo "  FAIL: deployment has no imports to check (package missing or broken)" >&2
+  failures=$((failures + 1))
+elif [ -n "$usecase_http" ]; then
+  echo "  FAIL: deployment imports none of net/http, api, hub, controller, proxy" >&2
+  echo "$usecase_http" | sed 's/^/    /' >&2
+  failures=$((failures + 1))
+else
+  echo "  ok: deployment imports none of net/http, api, hub, controller, proxy"
+fi
 
 # Network decisions live in netplan (pure) and the network service; the store
 # only keeps the rows, so it must not reach back for either.

@@ -71,7 +71,7 @@ func (p *AscendProber) AcceleratorPorts(ctx context.Context) []proto.Accelerator
 	}
 	run := p.hccn
 	if run == nil {
-		if _, err := exec.LookPath("hccn_tool"); err != nil {
+		if _, err := lookCLI("hccn_tool"); err != nil {
 			return nil
 		}
 		run = runHCCN
@@ -145,7 +145,7 @@ func ascendPort(ctx context.Context, run ascendCommandRunner, index int) *proto.
 // and the status report that reads the ports is never held past the bound.
 func runHCCN(ctx context.Context, args ...string) (string, error) {
 	return RunTracked(ctx, hccnKey(args), ascendPortsTimeout, func(ctx context.Context) *exec.Cmd {
-		return exec.CommandContext(ctx, "hccn_tool", args...)
+		return cliCommand(ctx, "hccn_tool", args...)
 	})
 }
 
@@ -237,7 +237,7 @@ func (p *AscendProber) PingAcceleratorPortProtocol(ctx context.Context, card, ta
 	}
 	run := p.hccn
 	if run == nil {
-		if _, err := exec.LookPath("hccn_tool"); err != nil {
+		if _, err := lookCLI("hccn_tool"); err != nil {
 			return 0, errors.New("hccn_tool is not installed")
 		}
 		run = runHCCNUnlimited
@@ -292,7 +292,7 @@ func (p *AscendProber) cardLock(index int) *sync.Mutex {
 // joined by another.
 func runHCCNUnlimited(ctx context.Context, args ...string) (string, error) {
 	return RunTracked(ctx, hccnKey(args), 0, func(ctx context.Context) *exec.Cmd {
-		return exec.CommandContext(ctx, "hccn_tool", args...)
+		return cliCommand(ctx, "hccn_tool", args...)
 	})
 }
 

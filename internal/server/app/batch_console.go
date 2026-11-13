@@ -34,6 +34,16 @@ func (c batchConsole) List(caller api.BatchCaller, states []string, page, pageSi
 	return dto.BatchPage{Items: items, Page: page, PageSize: pageSize, Total: total}, nil
 }
 
+var _ api.BatchCounter = batchConsole{}
+
+func (c batchConsole) CountByStatus(caller api.BatchCaller, states []string) (map[string]int, error) {
+	counts, err := c.svc.CountByStatus(consoleOwner(caller), states)
+	if err != nil {
+		return nil, consoleBatchError(err)
+	}
+	return counts, nil
+}
+
 func (c batchConsole) Get(caller api.BatchCaller, id string) (dto.Batch, error) {
 	b, err := c.svc.Batch(consoleOwner(caller), id)
 	if err != nil {

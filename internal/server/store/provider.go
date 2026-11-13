@@ -59,13 +59,19 @@ func (s *Store) ListProviders() ([]Provider, error) {
 
 // DeleteProvider removes a provider and its instances.
 func (s *Store) DeleteProvider(id uint) error {
-	if err := s.db.Where("provider_id = ?", id).Delete(&ProviderInstance{}).Error; err != nil {
-		return err
-	}
-	if err := s.db.Where("provider_id = ?", id).Delete(&ProviderBootstrapToken{}).Error; err != nil {
-		return err
-	}
-	return s.db.Delete(&Provider{}, id).Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("provider_id = ?", id).Delete(&ProviderInstance{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("provider_id = ?", id).Delete(&ProviderBootstrapToken{}).Error; err != nil {
+			return err
+		}
+		// Clusters made from the account stay, as entries made by hand.
+		if err := tx.Model(&KubeCluster{}).Where("provider_id = ?", id).Updates(map[string]any{"provider_id": nil, "provider_cluster_id": ""}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&Provider{}, id).Error
+	})
 }
 
 // SetProviderState updates validity.
@@ -88,7 +94,7 @@ func upsertProviderInstance(db *gorm.DB, pi *ProviderInstance) error {
 		pi.NodeID = existing.NodeID // preserve linkage
 		return db.Model(&existing).Select(
 			"name", "gpu_model", "gpu_count", "power", "price_per_hr", "region", "public_ip",
-			"ssh_port", "ssh_user", "ssh_connections", "kind", "updated_at",
+			"ssh_port", "ssh_user", "ssh_connections", "kind", "managed_cluster", "updated_at",
 		).Updates(pi).Error
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -210,6 +216,20 @@ func (s *Store) ProviderInstances(providerID uint) ([]ProviderInstance, error) {
 	var pis []ProviderInstance
 	err := s.db.Where("provider_id = ?", providerID).Order("id asc").Find(&pis).Error
 	return pis, err
+}
+
+// ProviderInstanceByExternalID is one stored instance of a provider, or nil
+// when the last sync did not list it.
+func (s *Store) ProviderInstanceByExternalID(providerID uint, externalID string) (*ProviderInstance, error) {
+	var pi ProviderInstance
+	err := s.db.Where("provider_id = ? AND external_id = ?", providerID, externalID).First(&pi).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &pi, nil
 }
 
 // LinkProviderInstanceNode ties a provider instance to a gpuworks node.

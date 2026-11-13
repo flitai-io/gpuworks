@@ -56,7 +56,7 @@ func TestDebugSessionRecordsTheRawExchange(t *testing.T) {
 	}
 	first, last := lines[0], lines[len(lines)-1]
 	if first["t"] != "request" || !strings.HasPrefix(first["body"].(string), `{"stream_options":{"include_usage":true},`) ||
-		strings.Contains(string(f.Bytes()), "secret") || strings.Contains(string(f.Bytes()), key) {
+		strings.Contains(f.String(), "secret") || strings.Contains(f.String(), key) {
 		t.Fatalf("request line = %v", first)
 	}
 	if lines[1]["t"] != "response" || lines[1]["status"] != float64(200) {
@@ -83,7 +83,7 @@ func TestDebugSessionRecordsTheRawExchange(t *testing.T) {
 	if last["read_error"] != nil || last["write_error"] != nil {
 		t.Fatalf("successful response reported a copy failure: %v", last)
 	}
-	if n := strings.Count(string(f.Bytes()), `"t":"end"`); n != 1 {
+	if n := strings.Count(f.String(), `"t":"end"`); n != 1 {
 		t.Fatalf("%d end lines", n)
 	}
 

@@ -18,12 +18,13 @@ from deployment_numeric_contract import DICTIONARY, PD_NUMBERS, PD_MODES, FIXTUR
 
 
 QUICK_KEYS = {'max_model_len', 'gpu_memory_utilization', 'max_num_batched_tokens', 'max_num_seqs',
+              'data_parallel_size',
               'kv_offloading_size', 'kv_offload_read_threads', 'kv_offload_write_threads', 'kv_disk_limit_gib'}
 TIER_KEYS = {'kv_offloading_size', 'kv_offload_read_threads', 'kv_offload_write_threads', 'kv_disk_limit_gib'}
 CORE = {'health_check_threshold_sec'}
 RESOURCE = {'replicas', 'tp', 'pp'}
 RUNTIME = {'container-overrides-shm', 'container-overrides-start-timeout'}
-ABSENT = {'data_parallel_size': 'published parallel group has no quick whitelist entry or expert tab'}
+ABSENT = {}  # every published numeric key is now reachable
 METADATA = ('key', 'type', 'control', 'group', 'layout', 'depends_on', 'min', 'max', 'step', 'default', 'automatic')
 
 
@@ -195,11 +196,12 @@ def static_controls(page, keys, labels, common, report, surface, nnodes=1, tier_
 
 
 def distributed_partition_contract(record, same):
-    # API eligibility suppresses pool capability for nnodes>1, including its
-    # early field-error response. The serializer makes multi wire manual even
-    # when the Form's single-node selection mode remains auto.
+    # API eligibility suppresses pool capability for nnodes>1, including its early
+    # field-error response. Since automatic placement was extended to multi-node
+    # requests the serializer keeps placement_mode auto for them - the server picks the
+    # ranks - so the multi-node draft no longer gets rewritten to manual on the wire.
     same({key: record['request'].get(key) for key in ('placement_mode', 'nnodes')},
-         {'placement_mode': 'manual', 'nnodes': 2}, 'fixed distributed quota context')
+         {'placement_mode': 'auto', 'nnodes': 2}, 'fixed distributed quota context')
     check('pool_partition_capability' not in record['response'],
           'distributed response must omit single-node pool capability')
 
@@ -342,7 +344,13 @@ def inventory(parent, labels, body, report, mode, evaluation, same):
         page.goto(urljoin(parent.url, '/deploy?' + query))
         report['last_step'] = 'numeric-inventory-probe-fixture-model'
         modal = page.get_by_role('dialog', name=labels['weightSourceModal']['confirmTitle'], exact=True)
-        expect(modal).to_be_visible()
+        # The confirmation is raised by a lookup the page runs after mount, so it can
+        # arrive well after load: the draft asks the server which registered models
+        # serve this spec's declared sources (useTemplateWeightSource.ts:177 holds
+        # until lookup.key === key). Waiting for the element to appear is different
+        # from asserting it is already there - the latter turns a slow lookup into a
+        # failure on a surface that would have answered correctly a moment later.
+        expect(modal).to_be_visible(timeout=60000)
         expect(modal.locator('input[type="radio"][value=' + json.dumps(str(body['model_id']), ensure_ascii=False) + ']')).to_be_checked()
         button(modal, labels['weightSourceModal']['useModel']).click()
         expect(modal).not_to_be_visible()
@@ -378,9 +386,13 @@ def inventory(parent, labels, body, report, mode, evaluation, same):
         multi_card = page.get_by_role('button').filter(has=page.get_by_text(labels['workbench']['node']['multi'], exact=True))
         expect(multi_card).to_have_count(1)
         expect(multi_card).to_be_enabled()
+        # Automatic placement checks placement.tp before the node count: racking a multi-node
+        # request without saying how many GPUs each node gives is the earlier problem, and
+        # the server reports it on placement_mode. The node-count error is still covered in
+        # the manual path below, so nothing about it is dropped here.
         quick_multi = checked_evaluation(page, multi_card.click, lambda b: b.get('nnodes') == 2,
             evaluation, same, report, 'numeric-inventory-quick-multi-empty-nodes',
-            [{'field': 'node_uuids', 'code': 'DISTRIBUTED_NODE_COUNT', 'params': {'actual': 0, 'required': 2}}])
+            [{'field': 'placement_mode', 'code': 'AUTO_PLACEMENT_TP_REQUIRED'}])
         distributed_partition_contract(quick_multi, same)
         # Unique controls and the nnodes 2..16 contract are fixture-independent
         # domain expectations. A second unbounded nnodes input is a real gap,
@@ -431,12 +443,19 @@ def inventory(parent, labels, body, report, mode, evaluation, same):
         surface_contract(page, engine, 'expert-runtime', rows, locale, labels, common, same, report)
         tab(page, labels, 'resource')
         surface_contract(page, engine, 'expert-resource', rows, locale, labels, common, same, report)
+        # Same ordering as the quick path: with placement_mode auto the server asks for
+        # placement.tp before it counts the named nodes.
         distributed = checked_evaluation(page, lambda: page.locator('#nnodes').fill('2'), lambda b: b.get('nnodes') == 2,
             evaluation, same, report, 'numeric-inventory-distributed-empty-nodes',
-            [{'field': 'node_uuids', 'code': 'DISTRIBUTED_NODE_COUNT', 'params': {'actual': 0, 'required': 2}}])
+            [{'field': 'placement_mode', 'code': 'AUTO_PLACEMENT_TP_REQUIRED'}])
         distributed_partition_contract(distributed, same)
         distributed_quota_controls(page, labels)
         surface_contract(page, engine, 'expert-distributed', rows, locale, labels, common, same, report)
+        # A multi-node group is placed by the platform unless the deployer names the nodes,
+        # so the named-node field only exists once units_placement is manual. Switch that
+        # control rather than dropping the field-attribution check below.
+        page.locator('#units_placement').get_by_text(
+            labels['resource']['manualSelect'], exact=True).click()
         distributed_control = page.locator('#distributed_nodes')
         expect(distributed_control).to_be_visible()
         expect(distributed_control).to_have_attribute('aria-invalid', 'true')
@@ -523,6 +542,10 @@ def expected_errors(request):
     if request.get('placement', {}).get('pd') is not None:
         return pd_errors()
     if request.get('nnodes') == 2:
+        # Automatic placement asks for placement.tp before it counts named nodes, so that
+        # is the error a multi-node request without nodes reports first.
+        if request.get('placement_mode') != 'manual':
+            return [{'field': 'placement_mode', 'code': 'AUTO_PLACEMENT_TP_REQUIRED'}]
         return [{'field': 'node_uuids', 'code': 'DISTRIBUTED_NODE_COUNT',
                  'params': {'actual': 0, 'required': 2}}]
     quick = request.get('quick_params', {})

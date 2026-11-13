@@ -162,7 +162,7 @@ flowchart LR
   节点的来源地址（日志与节点详情里的来源地址）；不影响任何地址生成。
 - 想让公网只能调用推理 API：把 `listen.gateway` 绑定到对外的 IP，控制台与节点接入留在内网 IP——对外地址上访问
   控制台路径会得到 404。
-- 公网入口暴露的是整个 server：UI 仍需登录，`/v1` 仍需 API key；没有路径过滤、Cloudflare Access 或登录限流，
+- 公网入口暴露的是整个 server：UI 仍需登录，`/v1` 默认仍需 API key（不带 key 的访问只能由管理员用安全设置显式打开）；没有路径过滤、Cloudflare Access 或登录限流，
   需要的话在 Cloudflare 或反代侧配置。
 - 固定域名的 `cloudflare-named` 尚未对用户开放，需要稳定地址时用反代或自己的域名。
 
@@ -279,7 +279,7 @@ flowchart LR
   S -.->|"server_dial 可选"| V
 ```
 
-**适用场景**：没有现成的 GPU 机器，或只要短期算力。在"云厂商"页配置 provider 凭证（RunPod、CompShare、AutoDL、Vast、
+**适用场景**：没有现成的 GPU 机器，或只要短期算力。在"外部平台"页配置 provider 凭证（RunPod、CompShare、AutoDL、Vast、
 ZStack），列出实例并确认型号、卡数、区域、价格后，创建、SSH 预检查并安装 agent。
 
 **端口与方向**：

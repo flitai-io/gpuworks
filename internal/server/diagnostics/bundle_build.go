@@ -83,7 +83,7 @@ func (m *Manager) buildBundle(ctx context.Context, b Bundle) (Bundle, error) {
 		dir := filepath.Join(m.DebugDir(), s)
 		_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
-				return nil
+				return nil //nolint:nilerr // A diagnostics bundle skips unreadable files and retains the available evidence.
 			}
 			rel, _ := filepath.Rel(m.DebugDir(), p)
 			info, _ := d.Info()

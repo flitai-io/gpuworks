@@ -24,6 +24,11 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# The one admin password an isolated server is started with. Cases that log in
+# through the API or a second browser context import this instead of spelling the
+# literal again: six of them still said "password" and got HTTP 401 once the real
+# value changed, which read like a product defect and was not one.
+ADMIN_PASSWORD = "gpuworks-test-password-2026"
 
 
 def digest(path: Path) -> str:
@@ -48,7 +53,8 @@ def http(base: str, method: str, path: str, token: str = "", body=None):
         return response.status, json.loads(raw) if raw else None
 
 
-def write_server_config(work: Path, storage_root: Path, listen: str, *, auto_check_updates=None) -> Path:
+def write_server_config(work: Path, storage_root: Path, listen: str, *, auto_check_updates=None,
+                        session_idle_timeout=None) -> Path:
     """server.yaml that makes the isolated server a self-contained installation.
 
     The product refuses user-configured HTTP sources on private or loopback
@@ -66,9 +72,23 @@ def write_server_config(work: Path, storage_root: Path, listen: str, *, auto_che
     become editable and only ever rewrite this file.
     auto_check_updates optionally sets the product's per-installation switch;
     None leaves the existing configuration bytes and default behavior intact.
+    session_idle_timeout optionally writes the product's own
+    session_idle_timeout key, a Go duration such as "2s". It is the only way to
+    reach an inactivity deadline inside a test window, since the shipped
+    default in auth.SessionPolicy.Normalized is 24h. None writes no key at all,
+    so every existing caller keeps byte-identical configuration and the
+    product's 24h default.
     """
     if auto_check_updates is not None and type(auto_check_updates) is not bool:
         raise ValueError('auto_check_updates must be bool or None')
+    if session_idle_timeout is not None:
+        if not isinstance(session_idle_timeout, str) or not session_idle_timeout.strip():
+            raise ValueError('session_idle_timeout must be a Go duration string such as "2s"')
+        # The product's parser accepts a bare Go duration; a value it silently
+        # ignored would leave the 24h default in place and make an expiry test
+        # pass for the wrong reason, so reject anything the shape check doubts.
+        if not re.fullmatch(r"[0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h)", session_idle_timeout.strip()):
+            raise ValueError(f'session_idle_timeout is not a Go duration: {session_idle_timeout!r}')
 
     def quoted(value: str) -> str:
         # Go's YAML decoder rejects raw DEL/C1 controls and the surrogate-pair
@@ -84,18 +104,23 @@ def write_server_config(work: Path, storage_root: Path, listen: str, *, auto_che
                       "outbound_allow_private_hosts:", "  - " + quoted("127.0.0.1"), ""])
     if auto_check_updates is not None:
         text += "auto_check_updates: " + str(auto_check_updates).lower() + "\n"
+    if session_idle_timeout is not None:
+        text += "session_idle_timeout: " + quoted(session_idle_timeout.strip()) + "\n"
     with os.fdopen(os.open(config, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as handle:
         handle.write(text)
     return config
 
 
 class LocalServer:
-    def __init__(self, binary: Path, work: Path, *, env_overrides=None, auto_check_updates=None):
+    def __init__(self, binary: Path, work: Path, *, env_overrides=None, auto_check_updates=None,
+                 session_idle_timeout=None):
         # Resolved once: storage roots compare lexically cleaned paths, so cases
         # must build their paths from the same spelling the root uses.
         self.binary, self.work = binary.resolve(), work.resolve()
         self.env_overrides = dict(env_overrides or {})
         self.auto_check_updates = auto_check_updates
+        # None keeps the product's own 24h inactivity default and writes no key.
+        self.session_idle_timeout = session_idle_timeout
         # The only storage root; cases put every storage path below it.
         self.storage_root = self.work / "storage"
         self.environment = {}
@@ -139,15 +164,16 @@ class LocalServer:
         data = self.work / "server-data"
         data.mkdir(mode=0o700)
         credentials = data / "initial-credentials"
-        credentials.write_text(json.dumps({"user": "admin", "password": "gpuworks-test-password-2026"}))
+        credentials.write_text(json.dumps({"user": "admin", "password": ADMIN_PASSWORD}))
         credentials.chmod(0o600)
         self.storage_root.mkdir(mode=0o700)
         config = write_server_config(self.work, self.storage_root, self.base.removeprefix("http://"),
-                                     auto_check_updates=self.auto_check_updates)
+                                     auto_check_updates=self.auto_check_updates,
+                                     session_idle_timeout=self.session_idle_timeout)
         self.environment = {"config": "private/server.yaml", "listen": [self.base.removeprefix("http://")],
                             "storage_probe_roots": [str(self.storage_root)],
                             "outbound_allow_private_hosts": ["127.0.0.1"]}
-        child_env = {**os.environ, "GPUWORKS_ADMIN_PASSWORD": "gpuworks-test-password-2026"}
+        child_env = {**os.environ, "GPUWORKS_ADMIN_PASSWORD": ADMIN_PASSWORD}
         for name, value in self.env_overrides.items():
             if value is None:
                 child_env.pop(name, None)

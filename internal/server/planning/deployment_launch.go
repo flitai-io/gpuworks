@@ -133,17 +133,9 @@ type ModelPaths struct {
 // index names a card on one machine, and a replica the pool places elsewhere
 // lets the scheduler pick its cards.
 func DeploymentLaunch(dep *store.Deployment, reqs map[string][]string, node *store.Node, model *store.Model, paths *ModelPaths) (LaunchRequest, deploy.CatalogSelection, string, error) {
-	var quick deploy.LaunchConfig
-	if dep.QuickParams != "" {
-		_ = json.Unmarshal([]byte(dep.QuickParams), &quick)
-	}
-	var extra []string
-	if dep.ExtraArgs != "" {
-		var err error
-		extra, err = deploy.ParseArgsText(dep.ExtraArgs)
-		if err != nil {
-			return LaunchRequest{}, deploy.CatalogSelection{}, "", fmt.Errorf("deployment %d extra_args: %w", dep.ID, err)
-		}
+	quick, extra, err := deploymentLaunchSettings(dep)
+	if err != nil {
+		return LaunchRequest{}, deploy.CatalogSelection{}, "", err
 	}
 	templateLayer, err := DeploymentTemplate(dep)
 	if err != nil {
@@ -188,7 +180,8 @@ func DeploymentLaunch(dep *store.Deployment, reqs map[string][]string, node *sto
 		served = model.Name
 	}
 	return LaunchRequest{
-		Engine: dep.Engine, Model: model, Node: node,
+		StartTimeoutSec: dep.StartTimeoutSec,
+		Engine:          dep.Engine, Model: model, Node: node,
 		Selection: templateLayer, Placement: placement,
 		Source: LaunchSourceFromDeployment(dep), Quick: quick, ExtraArgs: extra,
 		ModelMount: modelMount, ModelHostPath: modelHostPath, ComponentMounts: componentMounts,
@@ -196,7 +189,7 @@ func DeploymentLaunch(dep *store.Deployment, reqs map[string][]string, node *sto
 		YieldPolicy:    dep.YieldPolicy,
 		VRAMLimitBytes: dep.VRAMLimitBytes, PartitionBackend: dep.PartitionBackend,
 		APIContract: DeploymentAPIContract(model, templateLayer.APIContract),
-		ModelRules:  store.SourceRules{Pinned: store.StoragePins(reqs), SaveTo: dep.SaveToStorageID},
+		ModelRules:  store.SourceRules{Pinned: store.StoragePins(reqs), SaveTo: dep.SaveToStorageID, Deployment: dep.ID},
 	}, templateLayer, modelHostPath, nil
 }
 
@@ -254,9 +247,27 @@ func PlanTemplateLaunch(ctx context.Context, st *store.Store, networks Networks,
 				return plan, nil, gpuErr
 			}
 			if err := validateGPU(candidate); err != nil {
-				return plan, &scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": err.Error()}}, nil
+				return plan, &scheduler.Reason{Code: scheduler.ReasonPlacementRejected, Params: map[string]any{"detail": err.Error()}}, nil //nolint:nilerr // GPU rejection is returned in the placement reason, not as an internal planning failure.
 			}
 		}
 	}
 	return plan, nil, nil
+}
+
+// deploymentLaunchSettings is the compatibility reader shared by launch and
+// capacity planning. Malformed legacy quick_params has always read as zero
+// values; extra_args parsing remains an explicit error.
+func deploymentLaunchSettings(dep *store.Deployment) (deploy.LaunchConfig, []string, error) {
+	var quick deploy.LaunchConfig
+	if dep.QuickParams != "" {
+		_ = json.Unmarshal([]byte(dep.QuickParams), &quick)
+	}
+	if dep.ExtraArgs == "" {
+		return quick, nil, nil
+	}
+	extra, err := deploy.ParseArgsText(dep.ExtraArgs)
+	if err != nil {
+		return quick, nil, fmt.Errorf("deployment %d extra_args: %w", dep.ID, err)
+	}
+	return quick, extra, nil
 }

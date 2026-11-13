@@ -34,9 +34,12 @@ func TestNewMaterializesEmbeddedCatalogForFutureUpgradeRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest, _, err := packageStore.PutArchive(bytes.NewReader(archive))
+	digest, created, err := packageStore.PutArchive(bytes.NewReader(archive))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if created {
+		t.Fatal("New did not store the embedded package: storing its archive afterwards created it")
 	}
 	packageDir := filepath.Join(dir, "catalog-packages", digest)
 	if info, err := os.Stat(packageDir); err != nil || !info.IsDir() {

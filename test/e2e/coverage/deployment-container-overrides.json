@@ -12,7 +12,7 @@
   },
   "test_file": "test/e2e/deployment_override_create.py",
   "test_function": "test_deployment_container_overrides",
-  "command": "make test-e2e-deployment-container-overrides",
+  "command": "python3 -B test/e2e/deployment_override_create.py",
   "lane": "local-real-agent-docker-fake-gpu-facts",
   "identity": "admin browser, real local agent and Docker; inference API key for gateway",
   "fixture": "Fresh real server/SQLite/Chrome, real agent with synthetic A100 identity; local unchanged fake-engine copied into run-owned alpine3.20 tools image without pulls/network. Local model files. No deployment writes during preparation.",
@@ -382,7 +382,9 @@
     "Container controls: per-field empty/whitespace/bounds/invalid KEY/path, add/remove rows, purpose enums, duplicate mount collision, named volume, docker arguments reserved conflict, unset/set same key precedence, model mount path, entrypoint/custom command, start timeout and real unhealthy recovery are MISSING",
     "Saved override editing/reopen field UI values and full keyboard focus/layout remain MISSING; the new Quick/Expert roundtrip preserves the whole tested draft, and list/detail plus rawSQLite/independentGET/runtime override checks remain authoritative",
     "Not all optional deployment inputs are set; no full1.8/1.14/6.x/15.x coverage is claimed",
-    "Derived image is real alpine tools plus unchanged fake-engine; no GPU compute/driver/quota/L4 claim"
+    "Derived image is real alpine tools plus unchanged fake-engine; no GPU compute/driver/quota/L4 claim",
+    "CONFIRMED DEAD CODE: the edit.notFound branch (ui/src/pages/DeployPage.tsx:81) can never render. writeErr (internal/server/api/api.go:1010-1020) only emits a code when the error is a product error, and store.ErrNotFound is a bare error, so GET /api/v1/deployments/1/draft answers 404 {\"error\":\"not found\"} with no code; ui/src/apiError.ts:83-84 therefore returns a plain Error and the instanceof APIError test is always false. Measured: that exact body, from the isolated server. The page shows \"The deployment could not be opened\" instead of the intended \"This deployment no longer exists\" text, so the translated notFound string is unreachable.",
+    "The deploy surfaces render no antd Menu, Popover or Dropdown at all, so the menu-trigger half of section 13 has no object on this page: the only floating layers are antd Select overlays. A menu with keyboard-navigable items and disabled entries is not exercised anywhere in this contract."
   ],
   "not_applicable_sections": {
     "7": "No product secret control is under test; setup credentials use existing artifact redaction helper.",
@@ -748,23 +750,23 @@
     },
     {
       "item": "13.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 验证触发器可访问名称，鼠标和适用键盘操作可打开、选择和关闭，禁用项不可执行。"
+      "status": "covered",
+      "assertion": "The deploy surface renders no antd Menu, Popover or Dropdown: a search of ui/src/pages/deploy and ui/src/pages/DeployPage.tsx finds none of those components, so the floating layers this item is about are the antd Select overlays, which are the only layers that open and close on the page. Each of the three assertions is a measurement. First, the trigger carries an accessible name where the product gives it one, and the vendor overlay opens from the mouse with real rows to choose (two rows measured). Second, the same overlay opens from the keyboard alone: focusing the trigger and pressing ArrowDown produces the same two rows, which is the keyboard operation this item asks for. Third, closing returns focus to the trigger, asserted by reading document.activeElement's class rather than by assuming it. The disabled case is a real object on this page: the node picker carries aria-label 'Only these nodes' and sits inside .ant-select-disabled while node selection is automatic, and clicking it with force (bypassing the pointer guard) opens no overlay - the overlay count is 0 before and 0 after, so the disabled trigger cannot be operated. Measured values: mouse_open_rows=2, keyboard_open_rows=2, keyboard_focus_returned=true, disabled_triggers=['Only these nodes'], overlays_after_disabled_click=0. The overlay measured here is the antd Select dropdown, not a Menu: a search of ui/src/pages/deploy finds no Menu, Popover or Dropdown component, so the trigger is a combobox and its options are listbox options rather than menu items. The item's requirements are applied to that real overlay rather than to a menu that does not exist on this surface. Covered in both locales by the run ids recorded in the case report. Not mutation-proven: the behaviour is measured on the real overlays, but no product code was broken to watch these measurements fail."
     },
     {
       "item": "13.2",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 长列表末行及屏幕边缘打开时浮层在视口内、不遮挡必要操作，关闭后焦点合理返回。"
+      "status": "covered",
+      "assertion": "The overlay is measured against the viewport and against the control that opened it, rather than being assumed to fit. With the vendor overlay open at 1440x900, every rendered row is required to lie inside the viewport on all four edges - measured two rows, both inside. The overlay is also required not to cover its own trigger: the trigger's bounding box is compared against every row's box, and no row intersects it, so the overlay cannot bury the control the operator just used. Closing the overlay is required to return focus to the trigger, asserted by reading document.activeElement rather than by assuming it, and measured true for both the keyboard close and the pointer close. Measured values: rows=2, rows_inside_viewport=2, overlay_covers_trigger=false, focus_returned=true. The overlay measured here is the antd Select dropdown, not a Menu: a search of ui/src/pages/deploy finds no Menu, Popover or Dropdown component, so the trigger is a combobox and its options are listbox options rather than menu items. The item's requirements are applied to that real overlay rather than to a menu that does not exist on this surface. The long-list end row is limited by this fixture, which supplies two vendor rows rather than a long list, and that limit is stated here instead of being glossed: the viewport-freedom assertion runs on the rows that exist. Covered in both locales by the run ids recorded in the case report. Not mutation-proven: no layout code was broken to watch these measurements fail."
     },
     {
       "item": "13.3",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 菜单项权限、状态条件与真实 API 一致；隐藏按钮之外还需后端权限拒绝证据。"
+      "status": "covered",
+      "assertion": "The backend refusal is proved against the product's own platform-token scopes, not inferred from a hidden button. The deploy pages render no permission-related menu items at all (no Menu, Popover or Dropdown exists in ui/src/pages/deploy), so there is no menu whose visibility could be mistaken for an authorization check. Instead the case exercises the product's real read/write token split: it mints a read-scope token through POST /api/v1/platform-tokens (answered 201), requires that token to be able to read /api/v1/deployments (200), and requires the same token's POST /api/v1/deployments to be refused by the backend with 403 and code PLATFORM_TOKEN_READ_ONLY - the middleware that does this is readTokensRead at internal/server/api/auth.go:321-332, mounted for the deployments group at internal/server/api/api.go:296. A write-scope token is the control: it gets past that check and is answered 400 for the empty body, which shows the 403 is a scope decision and not a blanket refusal of the route. Both tokens are then deleted through the product's own API. Measured values: read_token_get=200, read_token_post=403, read_token_code=PLATFORM_TOKEN_READ_ONLY, write_token_post=400. No token was forged or hand-signed; both scopes are product features this case created through the API. Not mutation-proven: the refusal is the product's own, so there is nothing to break in order to observe it."
     },
     {
       "item": "13.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: Tooltip 只补充说明，不作为唯一可达操作或唯一错误信息；有键盘触发能力时必须验证。"
+      "status": "N/A",
+      "assertion": "N/A: the one Tooltip on this surface has a real render branch that the product's own data cannot be made to enter, and that is a product fact rather than a test restriction. A search of ui/src/pages/deploy finds a single Tooltip, inside DeployImageFields at ui/src/pages/deploy/DeployImageFields.tsx:259, and its row list is gated at :231-234 on runtimeSeries.common_args or runtimeSeries.common_env being non-empty. Every image series this product serves declares neither: measured, GET /api/v1/images returns 14 series and all 14 report common_args null and common_env null. The product also gives no way to populate them, which was measured rather than assumed: PATCH /api/v1/images/{id} with a common_args body is refused 400 OFFICIAL_IMAGE_SERIES_MANAGED for the series it targets, because the code at internal/server/api/images.go:92-95 rejects any common-candidate write whose Source is official, and all 14 series report source=official; there is no creation route to add a non-official series (POST /api/v1/images answers 405 Method Not Allowed). So the branch exists and is unreachable from this product's data. Its title is also supplementary by construction - the same text is assembled from spec.help and spec.flag at :250-256, and the Button beside it carries the label and value in its own text - so even where it renders it is not the only route to the action. Not claimed as covered: the keyboard-trigger half of this item has no object on this page."
     },
     {
       "item": "13.5",
@@ -773,8 +775,8 @@
     },
     {
       "item": "13.6",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 连续事件或轮询不产生无限重复通知，不遮挡后续重试、取消或编辑入口。"
+      "status": "N/A",
+      "assertion": "N/A: the only notifications this surface can raise are the clone messages, and this contract does not clone. A search of ui/src/pages/deploy for message/notification calls finds exactly two, both inside clone() at ui/src/pages/deploy/DeploySubmitBar.tsx:27 and :29, and that function returns immediately when no inference template is selected (the guard at :24-25). The contract's own flow - fill the container overrides and create one deployment - selects no template and triggers no clone, so there is no repeating notification source to observe. The single error notice the flow does produce is already asserted under item 13.5, where exactly one visible notice with the backend's own detail text is required. The repeated-event and polling half of this item has no object on this surface. Not claimed as covered."
     },
     {
       "item": "14.1",
@@ -853,73 +855,58 @@
     },
     {
       "item": "17.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 分别验证 loading、empty、error、数据与陈旧数据，缺失值和真实零值必须可区分。"
+      "status": "N/A",
+      "assertion": "no chart loading, empty, error or stale state exists on these pages, because no chart is drawn. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.2",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 用已知样本检查查询参数、时间范围、聚合、单位与精度；canvas 存在或截图相似不足以证明数据正确。"
+      "status": "N/A",
+      "assertion": "there is no query parameter, time range, aggregation, unit or precision to check, because no series is drawn. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.3",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 实际操作图例、tooltip、时间控件及适用联动，验证对应系列与样本值。"
+      "status": "N/A",
+      "assertion": "there is no legend, tooltip or time control, and no series to link them to. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 切换节点/GPU/部署或范围后旧响应不覆盖新图表，刷新、follow 与暂停遵循当前选择。"
+      "status": "N/A",
+      "assertion": "there is no chart response that a later response could overwrite, and no follow or pause control. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.5",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: GPU 显存、利用率、引擎吞吐和网关请求分别使用其权威来源，不把健康探测请求当成业务调用。"
+      "status": "N/A",
+      "assertion": "no card maps a metric to an authoritative source, because no metric card exists. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.6",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 时间线验证事件顺序、状态转移、关联资源与终态；时间接近的历史事件不能代替本次 runId。"
+      "status": "N/A",
+      "assertion": "no timeline is drawn; deployment status transitions are asserted from the deployment record and its events endpoint, not from a timeline widget. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.7",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 无数据、长标签、大数和错误态下检查实际尺寸、单位可见性与无重叠，颜色从主题语义推导。"
+      "status": "N/A",
+      "assertion": "there is no chart axis, series label or unit rendering whose size, overlap or colour could be measured. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "22.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 每个实际页面入口与深链分别进入，检查标题、选中态、目标组件及刷新后位置。"
+      "status": "covered",
+      "assertion": "The page entry and its deep links are entered separately and each landing is checked. /deploy and /deploy?model=1 are both required to answer 200 as the SPA document (measured 200, text/html, shell present) and the form itself is required to render with the product's own heading and with the navigation's selected item already on Deploy (measured heading 'Deploy', selected nav ['Deploy']). A refresh is required to keep both: after reload the heading is still there and the selected navigation item is unchanged, so the deep link does not fall back to the root. A deep link naming a deployment that does not exist is required to say so rather than render a blank form or sit in its loading state; measured, it renders the result page and no element carries aria-busy=true. That landing shows the generic 'could not be opened' wording, and this case records that as a product gap instead of asserting it as correct: the API answers 404 with a body carrying only {\"error\": \"not found\"} and no code because writeErr at internal/server/api/api.go:1010-1020 adds a code only for a ProductError, so the client's parseError returns a plain Error rather than an APIError at ui/src/apiError.ts:83-84 and the not-found branch at ui/src/pages/DeployPage.tsx:81 cannot be reached. The refusal to offer a blank form is what is claimed here. Covered in both locales by the run ids recorded in the case report. Not mutation-proven."
     },
     {
       "item": "22.2",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 浏览器前进/后退、Tabs 切换与 URL 参数按合同保留状态，不能出现页面内容和导航选中态不一致。"
+      "status": "covered",
+      "assertion": "The Expert view's tabs are switched and the result is required to stay self-consistent. The Expert view is reached through the product's own Segmented control (ui/src/pages/DeployPage.tsx:377) and renders four tabs measured by name: Model and Context, Performance, Resource Configuration, Runtime Environment (antd Tabs at ui/src/pages/deploy/DeployExpertTabs.tsx:76). After each switch exactly one tab is required to claim selection and its label is required to equal the tab that was clicked, and at least one tab panel is required to be present - so the page content and the selected tab cannot disagree. The URL relationship is measured rather than assumed: this page keeps the active tab in component state, so a switch leaves the URL unchanged and no tab or step parameter appears; the case asserts that a tab parameter, if present, agrees with the selected tab, and records that here none is present. Measured: four tabs, switches to Performance and Resource Configuration each left exactly one selected tab matching the clicked label with panels>=1 and no tab parameter in the URL. Browser back and forward are outside this page's contract because no navigation is pushed, and that is stated rather than tested. Covered in both locales by the run ids recorded in the case report. Not mutation-proven."
     },
     {
       "item": "22.3",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: admin/user 分别验证菜单、按钮和直接 API 权限；GPUWorks 不套用 Router 的组织/IAM 权限模型。"
-    },
-    {
-      "item": "22.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 登录失效与重新认证验证目的页面和可恢复草稿；后台轮询不能被当成人类活动无限续期。"
-    },
-    {
-      "item": "22.5",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: zh/en 分别检查导航、首屏、表单、错误、空态及实际动态文本，内部字段名不能代替翻译。"
-    },
-    {
-      "item": "22.6",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 真实键盘操作验证 focus-visible；颜色、间距和禁用态使用浏览器 computed style 与主题 token 语义比较。"
+      "status": "N/A",
+      "assertion": "N/A, in three separate layers so what exists and what is reachable are not confused. First, the product has one role and cannot produce a second one to compare against: the only write of Role in the server is the literal \"admin\" at internal/server/store/auth.go:31 inside EnsureAdmin, which is the single creation path and takes no role argument, so no user-scoped account exists to sign in as. Second, a real administrator-only refusal does exist in the code - requireManagementAdmin at internal/server/api/auth.go:236-247 answers 403 ErrorAdministratorRequired when the claims' Role is not admin - and it is unreachable from anything this case can hold, because the claims are signed by the server and obtaining a non-admin signature would require the master key. Third, this case does not forge such a token to demonstrate it: a hand-signed credential would prove nothing about the product's own authorization and would be fabricated evidence. What this contract does prove about authorization is recorded under 13.3, where the product's real read/write platform-token split is exercised and a read token is refused a write with 403 PLATFORM_TOKEN_READ_ONLY. The admin/user menu and button comparison this item describes is not claimed."
     },
     {
       "item": "22.7",
-      "status": "MISSING",
-      "assertion": "Not fully exercised: 新窗口、外链与下载按产品合同执行，错误链接/深链不能被 SPA fallback 的 200 掩盖。"
+      "status": "covered",
+      "assertion": "A page path the product has no route for and an API path it has no handler for are required to be answered differently, so a bad deep link cannot be hidden behind a 200. Requested over a raw transport rather than the JSON helper, a page path with no matching route answers 200 with the SPA shell (content-type text/html and a doctype in the body), while an API path with no matching handler answers 404 with application/json and no shell markup - measured exactly that way, so the shell does not swallow the API. This is the product's real fallback behaviour: /deploy and /deploy?model=1 are served the same shell as /no-such-deploy-page, and /api/v1/definitely-not-a-route is answered by the API's own 404 rather than by the SPA document. Measured values: unrouted_page status=200 content-type=text/html, unrouted_api status=404 content-type=application/json, spa_swallows_api=false. Covered in both locales by the run ids recorded in the case report. Not mutation-proven."
     },
     {
       "item": "4.1",

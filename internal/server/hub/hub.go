@@ -9,7 +9,6 @@ package hub
 import (
 	"context"
 	"crypto/hmac"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -73,19 +72,30 @@ type Hub struct {
 	// not yet reported.
 	pushLimiter chan struct{}
 
-	mu              sync.RWMutex
-	sessions        map[string]*Session             // keyed by node UUID
-	imageWatches    map[[2]uint]map[string]struct{} // active image/node watchers, owned by transfer id
-	rejectMu        sync.Mutex
-	rejects         []RejectEvent
-	upgradeMu       sync.RWMutex
-	upgradeErrors   map[string]string
-	upgradeObserver func(agentupgrade.Observation)
-	reconnectMu     sync.Mutex
-	reconnect       map[string]reconnectState
+	mu               sync.RWMutex
+	peerRelayMu      sync.Mutex
+	peerRelayManager *peerRelayManager
+	imageSyncMu      sync.Mutex
+	imageSyncOwners  map[string]context.CancelFunc
+	sessions         map[string]*Session             // keyed by node UUID
+	imageWatches     map[[2]uint]map[string]struct{} // active image/node watchers, owned by transfer id
+	rejectMu         sync.Mutex
+	rejects          []RejectEvent
+	upgradeMu        sync.RWMutex
+	upgradeErrors    map[string]string
+	upgradeObserver  func(agentupgrade.Observation)
+	reconnectMu      sync.Mutex
+	reconnect        map[string]reconnectState
+
+	reconnectAttempts map[string]*serverDialReconnectAttempt
+
 	// usage counts agent-link failures for the usage report; nil counts
 	// nothing.
 	usage *usagereport.Counters
+
+	// sessionWork is store work a session started. Close the store only after
+	// it finishes, or a write can recreate a WAL file under a directory removal.
+	sessionWork sync.WaitGroup
 }
 
 type reconnectState struct {
@@ -153,9 +163,10 @@ func New(st *store.Store, log *slog.Logger) *Hub {
 // write in flight.
 func (h *Hub) RunNodeQueues(ctx context.Context) {
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() { defer wg.Done(); h.statusQ.run(ctx) }()
 	go func() { defer wg.Done(); h.touchQ.run(ctx) }()
+	go func() { defer wg.Done(); h.RunPeerTransferMetrics(ctx) }()
 	wg.Wait()
 }
 
@@ -295,19 +306,32 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 // DialAgentWithSecret connects to an agent running in server_dial listen mode,
 // proving knowledge of the install token that the agent was started with.
 func (h *Hub) DialAgentWithSecret(ctx context.Context, addr, secret string) error {
+	return h.dialAgentWithSecret(ctx, addr, secret, 10*time.Second)
+}
+
+// tcpTimeout only bounds opening the socket. Authentication keeps its own
+// deadline; the caller's context can cancel either stage of the handshake.
+func (h *Hub) dialAgentWithSecret(ctx context.Context, addr, secret string, tcpTimeout time.Duration) error {
 	if strings.TrimSpace(secret) == "" {
 		return errors.New("server_dial requires node token")
 	}
-	dialer := net.Dialer{Timeout: 10 * time.Second}
+	dialer := net.Dialer{Timeout: tcpTimeout}
 	netConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("server_dial tcp dial: %w", err)
 	}
+	closed := make(chan struct{})
+	stopClose := context.AfterFunc(ctx, func() {
+		_ = netConn.Close()
+		close(closed)
+	})
+	defer stopClose()
 	if err := netConn.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
 		_ = netConn.Close()
 		return err
 	}
-	if err := h.serverDialServerAuth(netConn, secret); err != nil {
+	dualLane, err := h.serverDialServerAuthLane(netConn, secret, proto.LaneCtrl, "", "")
+	if err != nil {
 		_ = netConn.Close()
 		return err
 	}
@@ -315,18 +339,32 @@ func (h *Hub) DialAgentWithSecret(ctx context.Context, addr, secret string) erro
 		_ = netConn.Close()
 		return err
 	}
-	// server_dial keeps the single data-profile lane (no SessionID, no data
-	// lane); dataLaneRoute's "none" state routes every kind over it — this is
-	// its permanent shape, not a fallback from a failure.
-	sess, cleanup, err := h.acceptYamuxServer(netConn, "", addr)
+	lane := ""
+	if dualLane {
+		lane = proto.LaneCtrl
+	}
+	sess, cleanup, err := h.acceptYamuxServer(netConn, lane, addr)
 	if err != nil {
 		_ = netConn.Close()
 		return err
+	}
+	if !stopClose() {
+		<-closed
+		cleanup()
+		return ctx.Err()
 	}
 	if sess.NodeUUID != "" {
 		if err := h.store.SetNodeServerDialAddress(sess.NodeUUID, addr); err != nil {
 			h.log.Warn("persist server_dial address failed", "node", sess.NodeUUID, "addr", addr, "err", err)
 		}
+	}
+	if dualLane && sess.HasCap(proto.CapPeerRelayV1) {
+		// Negotiated data traffic waits for its physical lane even before the
+		// first successful attach; it must never borrow the control connection.
+		sess.dataMu.Lock()
+		sess.dataEver = true
+		sess.dataMu.Unlock()
+		go h.runServerDialDataLane(sess, addr, secret)
 	}
 	go h.serveSession(sess, cleanup, addr)
 	return nil
@@ -359,45 +397,7 @@ func (h *Hub) reconnectServerDial(ctx context.Context) {
 		return
 	}
 	for i := range nodes {
-		node := &nodes[i]
-		if h.Online(node.UUID) {
-			h.reconnectMu.Lock()
-			delete(h.reconnect, node.UUID)
-			h.reconnectMu.Unlock()
-			continue
-		}
-		h.reconnectMu.Lock()
-		state := h.reconnect[node.UUID]
-		if !state.next.IsZero() && time.Now().Before(state.next) {
-			h.reconnectMu.Unlock()
-			continue
-		}
-		h.reconnectMu.Unlock()
-		secret, ok := node.PlaintextToken()
-		if !ok {
-			// Legacy rows have no recoverable plaintext token. They must be
-			// re-enrolled through the pending-node flow before server_dial can
-			// reconnect.
-			h.log.Warn("server_dial reconnect skipped: plaintext token unavailable", "node", node.UUID, "state", node.State)
-			continue
-		}
-		attemptCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err := h.DialAgentWithSecret(attemptCtx, node.ServerDialAddress, secret)
-		cancel()
-		if err != nil {
-			h.reconnectMu.Lock()
-			state.failures++
-			delay := serverDialReconnectDelay(state.failures)
-			state.next = time.Now().Add(delay)
-			h.reconnect[node.UUID] = state
-			h.reconnectMu.Unlock()
-			h.log.Debug("server_dial reconnect failed", "node", node.UUID, "addr", node.ServerDialAddress, "err", err)
-			continue
-		}
-		h.reconnectMu.Lock()
-		delete(h.reconnect, node.UUID)
-		h.reconnectMu.Unlock()
-		h.log.Info("server_dial reconnected", "node", node.UUID, "addr", node.ServerDialAddress)
+		_ = h.reconnectServerDialNode(ctx, &nodes[i], false)
 	}
 }
 
@@ -410,6 +410,9 @@ func serverDialReconnectDelay(failures int) time.Duration {
 func (h *Hub) ResetServerDialBackoff(uuid string) {
 	h.reconnectMu.Lock()
 	delete(h.reconnect, uuid)
+	if attempt := h.reconnectAttempts[uuid]; attempt != nil {
+		attempt.reset = true
+	}
 	h.reconnectMu.Unlock()
 }
 
@@ -422,39 +425,11 @@ func (h *Hub) ServerDialRecoveryReady(uuid string) bool {
 	return ok && serverDialReconnectDelay(state.failures) >= 5*time.Minute
 }
 
-func (h *Hub) serverDialServerAuth(netConn net.Conn, secret string) error {
-	line, err := readLine(netConn)
-	if err != nil {
-		return fmt.Errorf("read server_dial challenge: %w", err)
-	}
-	var challenge proto.ServerDialChallenge
-	if err := json.Unmarshal(line, &challenge); err != nil {
-		return fmt.Errorf("decode server_dial challenge: %w", err)
-	}
-	if strings.TrimSpace(challenge.Nonce) == "" {
-		return errors.New("server_dial challenge missing nonce")
-	}
-	proofSecret := secret
-	if n, lookupErr := h.store.NodeByUUID(challenge.NodeUUID); lookupErr == nil && n.Token != "" && hmac.Equal([]byte(secret), []byte(n.Token)) {
-		proofSecret = proto.ServerDialNodeSecret(secret)
-	}
-	proof := proto.ServerDialProof{HMAC: proto.ServerDialHMAC(proofSecret, challenge.Nonce)}
-	resp, err := json.Marshal(proof)
-	if err != nil {
-		return err
-	}
-	resp = append(resp, '\n')
-	if _, err := netConn.Write(resp); err != nil {
-		return fmt.Errorf("write server_dial proof: %w", err)
-	}
-	return nil
-}
-
 // acceptYamuxServer builds the ctrl-side yamux session. lane selects the yamux
 // profile: proto.LaneCtrl uses the fixed 256 KiB control profile and issues a
 // random SessionID (returned in Registered) so the agent may open a data lane;
 // an empty lane keeps the single adaptive data profile (legacy/single-lane and
-// server_dial), which never issues a SessionID or opens a data lane.
+// older server_dial agents), which never issues a SessionID or opens a data lane.
 func (h *Hub) acceptYamuxServer(netConn net.Conn, lane string, remoteOpt ...string) (*Session, func(), error) {
 	profile := proto.LaneData
 	if lane == proto.LaneCtrl {
@@ -495,6 +470,7 @@ func (h *Hub) acceptYamuxServer(netConn net.Conn, lane string, remoteOpt ...stri
 		// go-yamux does not flush queued frames on Close; give the agent a
 		// chance to read the reject/smoke reply written during handshake.
 		sess.flushCtrlBeforeClose()
+		h.deregister(sess)
 		_ = ysess.Close()
 		return nil, nil, err
 	}
@@ -507,17 +483,19 @@ func (h *Hub) acceptYamuxServer(netConn net.Conn, lane string, remoteOpt ...stri
 }
 
 func (h *Hub) serveSession(sess *Session, cleanup func(), remote string) {
+	h.sessionWork.Add(1)
+	defer h.sessionWork.Done()
 	defer cleanup()
 	h.log.Info("agent connected", "node", sess.NodeUUID, "remote", remote)
 	// Replay full desired state so the agent reconciles from a clean slate.
 	// The replay is a multi-query read that storms the store when a fleet
 	// connects at once; it must never delay this goroutine's read loop, or
 	// every RPC to the node waits behind the replay (see push.go).
-	go func() {
+	h.trackSessionWork(func() {
 		if err := sess.pushInitialState(); err != nil {
 			h.log.Warn("push initial state failed", "node", sess.NodeUUID, "err", err)
 		}
-	}()
+	})
 	sess.ctrlLoop() // blocks until the stream closes
 	h.log.Info("agent disconnected", "node", sess.NodeUUID)
 }
@@ -540,8 +518,20 @@ func (h *Hub) register(s *Session) {
 	h.mu.Unlock()
 	_ = h.store.SetNodeState(s.NodeUUID, store.NodeStateOnline)
 	_ = h.store.ClearNodeRecovery(s.NodeUUID)
-	go h.resumeDirectImageTransfers(s.NodeUUID)
+	h.trackSessionWork(func() { h.resumeDirectImageTransfers(s.NodeUUID) })
 }
+
+// trackSessionWork runs fn on a goroutine that waitSessionWork joins.
+func (h *Hub) trackSessionWork(fn func()) {
+	h.sessionWork.Add(1)
+	go func() {
+		defer h.sessionWork.Done()
+		fn()
+	}()
+}
+
+// waitSessionWork blocks until session goroutines that use the store return.
+func (h *Hub) waitSessionWork() { h.sessionWork.Wait() }
 
 // deregister removes the session and marks the node offline (unless a newer
 // session already replaced this one).

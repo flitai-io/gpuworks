@@ -3,12 +3,17 @@
   "name": "节点 / 离线节点定义 / 标签保存、名称搜索与标签筛选 / 刷新和独立 GET 一致",
   "test_file": "test/e2e/nodes_labels_search.py",
   "test_function": "test_node_labels_search",
-  "command": "make test-e2e-nodes-labels-search",
+  "command": "python3 -B test/e2e/nodes_labels_search.py --locale en",
   "priority": "P1",
   "page_id": "nodes",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
-  "required_evidence": ["ui", "request", "persistence", "cleanup"],
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "cleanup"
+  ],
   "runtime_evidence": {
     "status": "N/A",
     "reason": "The two nodes are offline definitions prepared through the product API. No agent, container, GPU or engine is claimed."
@@ -25,32 +30,68 @@
       "component": "Menu action + Form.List modal",
       "request": "PUT /nodes/{uuid}/labels {\"labels\":{\"team\":\"alpha\"}}",
       "persisted": "labels",
-      "covered": ["add key/value and save", "row tag", "refresh", "independent GET", "reserved gpuworks.ai/ key rejected through the UI with the modal open and stored labels unchanged", "corrected save succeeds"],
-      "missing": ["editing an existing value", "removing a label", "duplicate-key and empty-key validation", "long key/value bounds"]
+      "covered": [
+        "add key/value and save",
+        "row tag",
+        "refresh",
+        "independent GET",
+        "reserved gpuworks.ai/ key rejected through the UI with the modal open and stored labels unchanged",
+        "corrected save succeeds"
+      ],
+      "missing": [
+        "editing an existing value",
+        "removing a label",
+        "duplicate-key and empty-key validation",
+        "long key/value bounds"
+      ]
     },
     {
       "id": "node.search",
       "component": "Search input",
       "request": "GET /nodes?q=...",
       "persisted": "N/A: ephemeral filter",
-      "covered": ["partial runId matches both nodes", "exact name matches only the target, total=1", "missing value returns the empty state and total=0", "clearing restores both rows and total=2", "query and result ID set checked against an independent GET"],
-      "missing": ["search by hostname or UUID", "special characters and case/whitespace contract", "pagination with a filtered set"]
+      "covered": [
+        "partial runId matches both nodes",
+        "exact name matches only the target, total=1",
+        "missing value returns the empty state and total=0",
+        "clearing restores both rows and total=2",
+        "query and result ID set checked against an independent GET"
+      ],
+      "missing": [
+        "search by hostname or UUID",
+        "special characters and case/whitespace contract",
+        "pagination with a filtered set"
+      ]
     },
     {
       "id": "node.label-filter",
       "component": "Multi-select fed by node facets",
       "request": "GET /nodes?label=team%3Dalpha",
       "persisted": "N/A: ephemeral filter",
-      "covered": ["selecting team=alpha keeps the labeled node and excludes the other", "GET /nodes?label=team%3Dalpha returns exactly the target with total=1", "the clear control removes team=alpha, both rows return, and the independent GET total is 2"],
-      "missing": ["clearing the selector search restores all candidates", "multiple label AND semantics", "a combination whose individual filters match but whose intersection is empty", "facet values changing after another edit"]
+      "covered": [
+        "selecting team=alpha keeps the labeled node and excludes the other",
+        "GET /nodes?label=team%3Dalpha returns exactly the target with total=1",
+        "the clear control removes team=alpha, both rows return, and the independent GET total is 2"
+      ],
+      "missing": [
+        "clearing the selector search restores all candidates",
+        "multiple label AND semantics",
+        "a combination whose individual filters match but whose intersection is empty",
+        "facet values changing after another edit"
+      ]
     },
     {
       "id": "node.cleanup",
       "component": "N/A: API fixture cleanup",
       "request": "DELETE /nodes/{uuid}?force=true",
       "persisted": "removal",
-      "covered": ["both owned nodes deleted", "independent GET returns 404"],
-      "missing": ["the force-removal UI and failure path, already covered by gpuworks/node/removal-with-explicit-force"]
+      "covered": [
+        "both owned nodes deleted",
+        "independent GET returns 404"
+      ],
+      "missing": [
+        "the force-removal UI and failure path, already covered by gpuworks/node/removal-with-explicit-force"
+      ]
     }
   ],
   "checklist_items": {
@@ -69,14 +110,16 @@
     "2.3": "The label value's shortest stored value is empty, and nothing is shorter. 256 ASCII characters are 256 bytes and save; the control stops at 256. A direct PUT of 257 bytes returns NODE_LABELS_INVALID and the independent GET keeps the 256-byte value. 85 Chinese characters are 255 bytes and save. 86 Chinese characters remain in the control, the save returns NODE_LABELS_INVALID, and the independent GET keeps the 85-character value, so the limit counts bytes. The label key's shortest value is one character. Empty is one shorter: the field error shows and no request is sent. 128 ASCII characters are 128 bytes and save; the control stops at 128. A direct PUT of 129 bytes returns NODE_LABELS_INVALID and the independent GET keeps the 128-byte key. The key grammar is single-byte, so its character count and its byte count are the same",
     "2.4": "A reserved gpuworks.ai/ key (a product-forbidden character/value class) is rejected by the real server, the modal and stored labels stay unchanged, and the corrected save succeeds",
     "2.6": "The label value accepts a pasted 粘A1., a keyboard clear back to empty, and keyboard editing back to alpha. Paste, clear and typing send no request. Pasting text that contains a newline leaves no newline in the control. A direct PUT of a value that contains a newline returns NODE_LABELS_INVALID and the independent GET stays team=alpha. Saving the keyboard-typed alpha and reopening the dialog shows alpha",
-    "2.5": "MISSING: no real uniqueness/duplicate-name conflict is constructed for labels",
+    "2.5": "Label writes are constrained by the platform rather than by name uniqueness: this product defines no uniqueness rule for a label name or a node name - a taken-name error exists for networks and storages but nothing on either the node or the label store - so the duplicate-name conflict the item offers as its example has no object here. What the write path does enforce is a set of rules on the labels object itself, at most 64 keys, no key in the reserved gpuworks.ai namespace or any subdomain of it, a key grammar check and a value check for length and control characters (internal/server/nodelabel/nodelabel.go:128-142, reached from store/node_labels.go both before the write and again inside the transaction), and those rules are violated for real here rather than described. The refusals are driven over a node that already stores team=alpha, which is what makes the preservation assertion mean something: the earlier refusals in this case all ran against an empty label map, so requiring the map to still be empty compared one empty map with another and could not fail whatever the product did with a rejected write. With a value in place, a reserved key and a reserved subdomain key each answer 400 and an independent GET afterwards returns exactly team=alpha both times, so the refused write lost nothing. The corrected save from the same dialog then answers 200, its body is exactly {'labels': {'team': 'alpha'}}, and the independent read-back agrees, so the error clears and the submission can be made again. One rule deliberately is not used as the conflict: the 256-byte value limit, because the form's own maxLength stops a longer value from ever being submitted, so refusing it would only prove that the input was clipped. The browser side is checked with it: exactly one resource-400 console line is allowed per recorded refusal, the count taken from the refusals actually recorded rather than a fixed number, and every other console error still fails the case.",
     "5.3": "The multi-select search filters candidates to team=alpha, reports the no-result state for a missing term, selector search restoration after clearing remains MISSING",
     "5.4": "The label filter has a clear control. After team=alpha is selected, Escape closes the menu and the labeled node stays the only row. Hovering the filter shows the clear control. Clicking it removes team=alpha, the selection is empty, both rows return, and the independent GET /api/v1/nodes returns both nodes",
     "10.2": "Search covers partial, exact, missing and cleared queries with independent hit/exclusion sets and totals",
     "12.1": "Edit labels on the node row opens one dialog named by the labels title, and the add-label control is the visible business control",
     "12.2": "The row menu and labels modal open inside the 1440x900 viewport; the modal container and Save button are reachable",
     "12.3": "Default focus is inside the labels dialog. Tab and Shift+Tab each cycle across at least two controls and never leave the dialog",
-    "12.6": "covered: While the label PUT is held the footer Save shows the loading state and a second click sends no further save; the 502 keeps the team and alpha draft and shows the server reason; the later 200 matches the reloaded row and the independent GET"
+    "12.6": "covered: While the label PUT is held the footer Save shows the loading state and a second click sends no further save; the 502 keeps the team and alpha draft and shows the server reason; the later 200 matches the reloaded row and the independent GET",
+    "2.7": "A label value is free text, so it can carry markup. '<img src=x onerror=1>' is written through the real labels PUT, and the independent GET confirms the server holds that exact string. The node list row renders each label as key=value text, so the case requires the literal 'team=<img src=x onerror=1>' to be visible as text and requires that no img[src=x] element exists on the page. The plain value is restored afterwards so the rest of the case reads what it seeded. Proven by mutation: rendering the cell tag text with dangerouslySetInnerHTML in CellTags makes the case fail. While adding this the case turned out to be red on its own for an unrelated reason - the form refuses a whitespace-only label key (whitespace: true in NodeLabelsModal), so that check no longer sends a PUT - and that expectation was corrected in the same change.",
+    "2.1": "The label editor's new row is registered before anything is typed, through exercise_label_field_inventory. Key and value are each located by their accessible name, the row is counted (exactly two textboxes), both are asserted empty with to_have_value(''), each placeholder is asserted separately from the value, the key is asserted required through aria-required while the value is asserted not required, and both maxLength limits are asserted (128 and 256). The add control is matched by its accessible name and asserted to be the dashed button, the row is asserted to have no unit and no spinner, and the whole sweep asserts that reading the row sent no request."
   },
   "missing": [
     "MISSING: checklist 10.4 (column sorting) — no sort interaction is exercised",

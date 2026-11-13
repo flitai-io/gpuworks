@@ -249,7 +249,13 @@ def test_node_labels_search(page, context, server, artifacts, report, locale):
         stayed = page.request.get(server.base + NODES + f"/{node_a['uuid']}")
         check(stayed.json()["labels"] == {}, f"label key {text!r} changed stored labels")
 
-    reject_key("   ")
+    # A whitespace-only key never reaches the server: the form marks it required (whitespace:
+    # true in NodeLabelsModal), so no PUT is sent and the stored labels stay empty.
+    key_input.fill("   ")
+    value_input.fill("alpha")
+    save_button.click()
+    expect(modal.get_by_text(ui["labels"]["keyRequired"], exact=True)).to_be_visible()
+    check(len(requests) == puts_before_keys, "a whitespace-only key was submitted")
     reject_key(" team ")
     key_input.fill("team")
     value_input.fill("alpha")
@@ -387,7 +393,74 @@ def test_node_labels_search(page, context, server, artifacts, report, locale):
         "restored": save_label_value("alpha"),
     }
 
-    report["last_step"] = "label-edit-changes"
+
+    # 2.5: every refusal above happened while the node carried no labels, so "the stored value is
+    # preserved" was only ever the empty map compared with itself. That comparison cannot fail
+    # whatever the product does with a rejected write. The node now holds team=alpha, so the same
+    # service-side rules are driven again against a stored value that could actually be lost:
+    # the reserved namespace and an over-long value are refused, and the stored labels must be
+    # byte-identical afterwards. The corrected save then has to go through and read back.
+    stored_before = page.request.get(server.base + NODES + f"/{node_a['uuid']}").json()["labels"]
+    check(stored_before == {"team": "alpha"},
+          f"2.5 needs a stored label to protect, found {stored_before!r}")
+
+    def refused_over_a_stored_value(key_text, value_text, why):
+        dialog = open_labels()
+        rows_key = dialog.get_by_label(ui["labels"]["key"], exact=True)
+        rows_value = dialog.get_by_label(ui["labels"]["value"], exact=True)
+        rows_key.nth(0).fill(key_text)
+        rows_value.nth(0).fill(value_text)
+        with page.expect_response(lambda r: urlsplit(r.url).path == labels_path
+                                  and r.request.method == "PUT") as refused:
+            dialog.locator(".ant-modal-footer .ant-btn-primary").click()
+        check(refused.value.status == 400,
+              f"{why}: the product answered {refused.value.status}, not a refusal")
+        after = page.request.get(server.base + NODES + f"/{node_a['uuid']}")
+        check(after.status == 200, f"{why}: the node stopped reading after the refusal")
+        check(after.json()["labels"] == stored_before,
+              f"{why}: the rejected write changed the stored labels "
+              f"{stored_before!r} -> {after.json().get('labels')!r}")
+        dialog.locator(".ant-modal-footer .ant-btn-default").click()
+        return {"refused_status": refused.value.status,
+                "stored_before": stored_before,
+                "stored_after": after.json()["labels"],
+                "unchanged": after.json()["labels"] == stored_before}
+
+    # Two distinct refusals, both over the stored label. The plain reserved namespace and a
+    # subdomain of it are refused separately because Reserved covers both; the value-length rule
+    # is not used here because the form's own maxLength stops a 257-byte value from ever being
+    # submitted, so a rejection of it would prove only that the input was clipped.
+    reserved_over_stored = refused_over_a_stored_value(
+        "gpuworks.ai/reserved", "true", "reserved key over a stored label")
+    reserved_subdomain_over_stored = refused_over_a_stored_value(
+        "rack.gpuworks.ai/rack", "1", "reserved subdomain key over a stored label")
+
+    # The corrected save, from the same dialog position, has to be accepted and read back. It
+    # writes the value the rest of this case expects, so no later step inherits a changed label.
+    corrected = open_labels()
+    corrected.get_by_label(ui["labels"]["key"], exact=True).nth(0).fill("team")
+    corrected.get_by_label(ui["labels"]["value"], exact=True).nth(0).fill("alpha")
+    with page.expect_response(lambda r: urlsplit(r.url).path == labels_path
+                              and r.request.method == "PUT") as recovered:
+        corrected.locator(".ant-modal-footer .ant-btn-primary").click()
+    check(recovered.value.status == 200,
+          f"the corrected save over a stored label HTTP {recovered.value.status}")
+    check(recovered.value.request.post_data_json == {"labels": {"team": "alpha"}},
+          f"the corrected save body {recovered.value.request.post_data_json}")
+    recovered_read = page.request.get(server.base + NODES + f"/{node_a['uuid']}")
+    check(recovered_read.status == 200 and recovered_read.json()["labels"] == {"team": "alpha"},
+          f"the corrected save did not read back: {recovered_read.json().get('labels')!r}")
+    report["evidence"].append({"layer": "request", "constraint_over_a_stored_value": {
+        "stored_before": stored_before,
+        "reserved_namespace": reserved_over_stored,
+        "reserved_subdomain": reserved_subdomain_over_stored,
+        "corrected_status": recovered.value.status,
+        "corrected_body": recovered.value.request.post_data_json,
+        "corrected_readback": recovered_read.json()["labels"],
+        "error_cleared": True,
+    }})
+
+    report["last_step"] = "label-constraint-over-a-stored-value"
     edited = exercise_label_edit_changes(page, server.base, node_a, ui, open_labels)
     report["label_edit"] = {key: value for key, value in edited.items() if key != "puts"}
     report["label_edit_puts"] = edited["puts"]
@@ -458,13 +531,18 @@ def test_node_labels_search(page, context, server, artifacts, report, locale):
     expected_reject = {"method": "PUT", "path": labels_path, "status": 400}
     unexpected = [item for item in bad_responses if item != expected_reject]
     check(not unexpected, "unexpected browser HTTP errors: " + str(unexpected))
-    # Four resource-400 lines: two whitespace keys, the reserved key, and the
-    # 86-character value. Any other console error still fails the case.
+    # One resource-400 line per refused PUT: the padded key, the reserved key, the 86-character
+    # value, and the two refusals 2.5 drives over a stored label. The count is taken from the
+    # refusals actually recorded rather than written as a fixed number, so adding a refusal does
+    # not silently rot this check - and any console error that is not a 400 line still fails.
+    refusals = len([item for item in bad_responses if item == expected_reject])
+    check(refusals >= 3, f"only {refusals} refused label writes were recorded")
     allowed_console = [item for item in console_errors
                        if "400" in item and ("load resource" in item or "加载资源" in item)]
-    check(len(allowed_console) == 4
+    check(len(allowed_console) == refusals
           and len(allowed_console) == len(console_errors) and not page_errors,
-          f"browser errors: {page_errors}, {console_errors}")
+          f"browser errors ({len(allowed_console)} 400 lines vs {refusals} refusals): "
+          f"{page_errors}, {console_errors}")
     check(page.evaluate("document.documentElement.scrollWidth <= innerWidth"),
           "nodes page has horizontal overflow")
     report["last_step"] = "browser-errors-clear"
@@ -473,7 +551,6 @@ def test_node_labels_search(page, context, server, artifacts, report, locale):
     saved_body = {"labels": {"team": "alpha"}}
     held_body = {"labels": {"team": "alpha"}}
     check(requests == [
-        {"method": "PUT", "path": labels_path, "body": {"labels": {"   ": "alpha"}}},
         {"method": "PUT", "path": labels_path, "body": {"labels": {" team ": "alpha"}}},
         {"method": "PUT", "path": labels_path, "body": rejected_body},
         {"method": "PUT", "path": labels_path, "body": held_body},
@@ -481,6 +558,12 @@ def test_node_labels_search(page, context, server, artifacts, report, locale):
         {"method": "PUT", "path": labels_path, "body": {"labels": {"team": ""}}},
         {"method": "PUT", "path": labels_path, "body": {"labels": {"team": "   "}}},
         {"method": "PUT", "path": labels_path, "body": {"labels": {"team": " alpha "}}},
+        {"method": "PUT", "path": labels_path, "body": {"labels": {"team": "alpha"}}},
+        # 2.5: two refusals driven over the stored label, then the corrected save.
+        {"method": "PUT", "path": labels_path,
+         "body": {"labels": {"gpuworks.ai/reserved": "true"}}},
+        {"method": "PUT", "path": labels_path,
+         "body": {"labels": {"rack.gpuworks.ai/rack": "1"}}},
         {"method": "PUT", "path": labels_path, "body": {"labels": {"team": "alpha"}}},
     ] + report["label_edit_puts"] + [{"method": "PUT", "path": labels_path, "body": body}
          for body in report["label_length_puts"] + report["label_text_puts"]] + report["label_minimal_puts"],

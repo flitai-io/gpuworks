@@ -34,6 +34,10 @@ type InstallRequest struct {
 	LogKeep        int
 	Quiet          bool
 	NoSystemd      bool
+	// SkipCheck turns the host checks that predict whether the server will
+	// run (address in use, free space, service account reach) into warnings.
+	// The guards that keep install from damaging the host still refuse.
+	SkipCheck bool
 
 	// The *Set fields record which settings the operator named explicitly. When
 	// one was left out, an existing installation's server.yaml wins, so running
@@ -111,7 +115,11 @@ func (i *Installer) Install(ctx context.Context, req InstallRequest) (InstallRep
 	// installation's binary, configuration or service definition. chownTree
 	// validates again before applying permissions and starting the service.
 	if pf.ServiceUser != "" && pf.ServiceUser != "root" {
-		if _, err := i.permissionRoots(); err != nil {
+		roots, err := i.permissionRoots()
+		if err != nil {
+			return InstallReport{}, err
+		}
+		if err := skippable(&pf, req, i.checkServiceUserReach(pf, roots)); err != nil {
 			return InstallReport{}, err
 		}
 		if i.installedInSharedRoot() {

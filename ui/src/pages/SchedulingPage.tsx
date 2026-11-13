@@ -1,14 +1,14 @@
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { Alert, Button, Card, Spin, message } from "antd";
+import { Tabs, TabsList, TabItem, TabPanel } from "../components/ui/tabs";
 import { useTranslation } from "react-i18next";
 import { api, usePolling } from "../api";
 import { schedulingApi, type BoardWaitingWake } from "../schedulingApi";
 import { apiErrorText } from "../apiError";
 import EmptyState from "../components/EmptyState";
 import PageHeader from "../components/PageHeader";
-import { PendingTable, UpcomingTable, WaitingWakesTable } from "./scheduling/BoardTables";
+import { PendingCard, UpcomingCard, WaitingWakesCard } from "./scheduling/BoardTables";
 import Heatmap from "./scheduling/HeatmapGrid";
-import HeatmapLegend from "./scheduling/HeatmapLegend";
 import ActivityCard from "./scheduling/ActivityCard";
 import HistoryCard from "./scheduling/HistoryCard";
 import NodeDrawer from "./scheduling/NodeDrawer";
@@ -33,6 +33,14 @@ export default function SchedulingPage() {
   const overview = usePolling(() => schedulingApi.overview(), POLL_MS);
   const queues = usePolling(() => schedulingApi.board({ queues: true }), POLL_MS);
   const [view, setView] = useState<ViewState>(DEFAULT_VIEW);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [tabsMinHeight, setTabsMinHeight] = useState(0);
+  const preserveTabScroll = () => {
+    const tabs = tabsRef.current;
+    if (!tabs) return;
+    const visibleHeight = document.documentElement.clientHeight - tabs.getBoundingClientRect().top;
+    setTabsMinHeight(window.scrollY > 0 ? Math.max(0, Math.ceil(visibleHeight)) : 0);
+  };
   // The open node lives in the URL (?node=<uuid>), so a link anywhere on the
   // page opens it, the browser goes back from it, and it can be shared.
   const { node: openUUID, openNode, closeNode } = useNodeParam();
@@ -110,8 +118,9 @@ export default function SchedulingPage() {
           action={<Button size="small" onClick={() => void overview.refetch()}>{t("page.retry")}</Button>}
         />
       )}
-      <SummaryStrip summary={data.summary} queues={board ? { pending: board.pending.length, upcoming: board.upcoming.length } : undefined} />
-      <Card className="scheduling-card" title={t("heatmap.title")} extra={<HeatmapLegend searching={searching} />}>
+      <QueueCards board={board} error={queues.error} heldRequests={data.summary.contention.held_requests} onRetry={() => void queues.refetch()} cancelling={cancelling} onCancel={(row) => void cancelWake(row)} />
+      <Card className="scheduling-card" title={t("heatmap.title")}>
+        <SummaryStrip summary={data.summary} searching={searching} />
         {data.summary.cards === 0 ? (
           <EmptyState kind="nodes" compact description={t("nodes.empty")} />
         ) : (
@@ -129,18 +138,23 @@ export default function SchedulingPage() {
           </>
         )}
       </Card>
-      <ActivityCard />
+      <Tabs ref={tabsRef} defaultValue="overview" variant="underline" onValueChange={preserveTabScroll} style={{ minHeight: tabsMinHeight }}>
+        <TabsList>
+          <TabItem value="overview" label={t("page.activityAndSharing")} />
+          <TabItem value="history" label={t("history.title")} />
+        </TabsList>
+        <TabPanel value="overview" className="pt-4"><ActivityCard/><SharingStats/></TabPanel>
+        <TabPanel value="history" className="pt-4"><HistoryCard/></TabPanel>
+      </Tabs>
       <NodeDrawer uuid={openUUID} name={openName} onClose={closeNode} />
-      <QueueCards board={board} error={queues.error} onRetry={() => void queues.refetch()} cancelling={cancelling} onCancel={(row) => void cancelWake(row)} />
-      <SharingStats />
-      <HistoryCard />
     </>
   );
 }
 
-function QueueCards({ board, error, onRetry, cancelling, onCancel }: {
+function QueueCards({ board, error, heldRequests, onRetry, cancelling, onCancel }: {
   board: Awaited<ReturnType<typeof schedulingApi.board>> | null;
   error: Error | null;
+  heldRequests: number;
   onRetry: () => void;
   cancelling: number | null;
   onCancel: (row: BoardWaitingWake) => void;
@@ -171,9 +185,17 @@ function QueueCards({ board, error, onRetry, cancelling, onCancel }: {
           action={<Button size="small" onClick={onRetry}>{t("page.retry")}</Button>}
         />
       )}
-      <Card className="scheduling-card" title={t("pending.title")}><PendingTable rows={board.pending} /></Card>
-      <Card className="scheduling-card" title={t("waiting.title")}><WaitingWakesTable rows={board.waiting_wakes} busyID={cancelling} onCancel={onCancel} /></Card>
-      <Card className="scheduling-card" title={t("upcoming.title")}><UpcomingTable rows={board.upcoming} /></Card>
+      <div className="scheduling-queue-groups">
+        <Card size="small" styles={{ body: { padding: 0 } }} title={t("queues.currentWaiting")}>
+          <div className="scheduling-wait-columns">
+            <PendingCard rows={board.pending} />
+            <WaitingWakesCard rows={board.waiting_wakes} heldRequests={heldRequests} busyID={cancelling} onCancel={onCancel} />
+          </div>
+        </Card>
+        <Card size="small" styles={{ body: { padding: 0 } }} title={t("summary.upcoming")}>
+          <UpcomingCard rows={board.upcoming} />
+        </Card>
+      </div>
     </>
   );
 }

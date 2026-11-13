@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	kgzip "github.com/klauspost/compress/gzip"
@@ -313,7 +314,10 @@ func (u *Unpacker) applyWhiteouts() error {
 		if mark.opaque {
 			entries, err := os.ReadDir(target)
 			if err != nil {
-				continue // the directory itself never materialized
+				if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
+					continue // absent, or a higher layer replaced the directory with a file
+				}
+				return err
 			}
 			for _, entry := range entries {
 				child := filepath.Join(target, entry.Name())
@@ -338,12 +342,15 @@ func (u *Unpacker) applyWhiteouts() error {
 func (u *Unpacker) prune(path string, layer int32) error {
 	rel, err := filepath.Rel(u.Root, path)
 	if err != nil {
-		return nil
+		return err
 	}
 	owner, known := u.table.claimedLayer(filepath.ToSlash(rel))
 	info, err := os.Lstat(path)
-	if err != nil {
+	if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	if !info.IsDir() {
 		if known && owner >= layer {
@@ -352,8 +359,11 @@ func (u *Unpacker) prune(path string, layer int32) error {
 		return os.Remove(path)
 	}
 	entries, err := os.ReadDir(path)
-	if err != nil {
+	if os.IsNotExist(err) {
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	kept := 0
 	for _, entry := range entries {

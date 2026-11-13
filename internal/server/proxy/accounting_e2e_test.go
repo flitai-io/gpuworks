@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	hubpkg "gpuworks.ai/gpuworks/internal/server/hub"
@@ -40,41 +41,42 @@ func newAccountingProxy(t *testing.T, upstream http.Handler) (p *Proxy, acct *Ac
 func newAccountingProxyFor(t *testing.T, upstream http.Handler, shape *store.Deployment) (p *Proxy, acct *Accountant, apiKey string, depID uint, closeUpstream func()) {
 	t.Helper()
 	upstreamServer := httptest.NewServer(upstream)
+	t.Cleanup(upstreamServer.Close)
 	st, err := store.Open("file:proxy_acct_"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared", bus.New())
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/omni", Revision: "main", Name: "omni"})
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	node, err := st.RegisterNode("node-omni", store.HashToken("node"), "node-omni")
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	shape.ModelID, shape.NodeID, shape.ServedName, shape.State = model.ID, node.ID, "omni", "active"
 	dep, err := st.CreateDeployment(shape)
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	if _, err := st.CreateInstance(&store.Instance{
 		UUID: "omni-instance", DeploymentID: dep.ID, NodeID: node.ID,
 		State: proto.InstRunning, APIPort: 30000, Ports: "[30000]",
 	}); err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	key, err := st.CreateAPIKey("proxy-acct-"+strings.ReplaceAll(t.Name(), "/", "_"), 0)
 	if err != nil {
-		upstreamServer.Close()
 		t.Fatal(err)
 	}
 	addr := strings.TrimPrefix(upstreamServer.URL, "http://")
 	pr := New(st, storeNetworks(st), dialTestHub{addr: addr}, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(pr.Close)
 	a := newAccountant(nil, 16, nil)
 	pr.SetAccountant(a)
 	return pr, a, key, dep.ID, upstreamServer.Close
@@ -151,6 +153,11 @@ func TestProxyAccountingAsleepInstanceCountedAsAsleep503(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/sleepy", Revision: "main", Name: "sleepy"})
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +181,7 @@ func TestProxyAccountingAsleepInstanceCountedAsAsleep503(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"sleepy-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 
@@ -344,6 +352,11 @@ func TestProxyAccountingUpstreamConnectionErrorCountedAs5xx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/dial", Revision: "main", Name: "dial"})
 	if err != nil {
 		t.Fatal(err)
@@ -364,6 +377,7 @@ func TestProxyAccountingUpstreamConnectionErrorCountedAs5xx(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), dialErrorHub{}, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 
@@ -400,6 +414,11 @@ func TestProxyDataLaneUnavailableReturns503WithRetryAfter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/lane", Revision: "main", Name: "lane"})
 	if err != nil {
 		t.Fatal(err)
@@ -420,6 +439,7 @@ func TestProxyDataLaneUnavailableReturns503WithRetryAfter(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), dataLaneUnavailableHub{}, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 
@@ -547,6 +567,11 @@ func TestProxyAccountingContractMismatchCountedForResolvedDeployment(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	node, err := st.RegisterNode("contract-node", store.HashToken("node"), "contract-node")
 	if err != nil {
 		t.Fatal(err)
@@ -564,6 +589,7 @@ func TestProxyAccountingContractMismatchCountedForResolvedDeployment(t *testing.
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"contract-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	acct := newAccountant(nil, 4, nil)
 	p.SetAccountant(acct)
 

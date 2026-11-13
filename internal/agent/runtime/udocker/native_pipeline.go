@@ -145,7 +145,7 @@ func (d *Driver) nativeRemoveImage(image string) (bool, error) {
 	}
 	ref := native.ParseRef(image)
 	if _, err := os.Stat(filepath.Join(engine.Layout.TagDir(ref), "TAG")); err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // No native candidate: let the existing CLI removal path decide the result.
 	}
 	return true, engine.Layout.RemoveImage(ref)
 }

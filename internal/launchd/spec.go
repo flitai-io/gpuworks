@@ -14,6 +14,8 @@ import (
 // (KeepAlive, restarted 3 s after it exits) and started when loaded.
 type Spec struct {
 	Label string
+	// Program, when present, overrides the executable in ProgramArguments.
+	Program string
 	// User is the account a launch daemon runs as; empty runs a daemon as
 	// root and a launch agent as the owner of its session.
 	User       string
@@ -44,6 +46,9 @@ func (s Spec) Plist() []byte {
 <dict>
 `)
 	fmt.Fprintf(&b, "  <key>Label</key>%s\n", str(s.Label))
+	if s.Program != "" {
+		fmt.Fprintf(&b, "  <key>Program</key>%s\n", str(s.Program))
+	}
 	if s.User != "" {
 		fmt.Fprintf(&b, "  <key>UserName</key>%s\n", str(s.User))
 	}
@@ -118,6 +123,8 @@ func ReadSpec(data []byte) (Spec, error) {
 		switch key {
 		case "Label":
 			spec.Label, err = nextString(dec)
+		case "Program":
+			spec.Program, err = nextString(dec)
 		case "UserName":
 			spec.User, err = nextString(dec)
 		case "ProgramArguments":

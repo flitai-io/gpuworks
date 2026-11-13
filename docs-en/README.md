@@ -11,6 +11,7 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 |---|---|
 | New to GPUWorks | [Install GPUWorks and Deploy Your First Model](tutorials/getting-started.md), then [Console Page Tour](reference/web-ui-tour.md) |
 | Trying it locally on a Mac | [Run Your First Local Model on a Mac](tutorials/mac-local-model.md) |
+| Trying it locally on Windows WSL2 | [Run GPUWorks on Windows WSL2 with Docker](how-to/wsl2-with-docker.md) |
 | Going to production | [Install and Upgrade the Control Plane](how-to/install-server.md) → [Production Deployment](how-to/deploy-production.md) → [Upgrades and Version Compatibility](how-to/upgrade-and-compatibility.md) |
 | Upgrading to a new version | [Release Notes](releases/README.md) → [Upgrades and Version Compatibility](how-to/upgrade-and-compatibility.md) |
 | Having a problem | [Troubleshooting](how-to/troubleshooting.md) |
@@ -35,9 +36,13 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 **Installation and Onboarding**
 
 - [Install and Upgrade the Control Plane](how-to/install-server.md)
+- [Run GPUWorks on Windows WSL2 with Docker](how-to/wsl2-with-docker.md)
 - [Upgrades and Version Compatibility](how-to/upgrade-and-compatibility.md)
 - [Connect Nodes and Upgrade or Uninstall the Agent](how-to/connect-nodes.md)
 - [Rent Cloud GPUs](how-to/rent-cloud-gpus.md)
+- [Onboard ZStack Cloud](how-to/onboard-zstack-cloud.md)
+- [Connect a Kubernetes Cluster](how-to/connect-kubernetes.md)
+- [Connect Managed Kubernetes from a Public Cloud (Alibaba Cloud ACK, DigitalOcean, Nebius)](how-to/connect-managed-kubernetes.md)
 - [Give the Console a Public Address](how-to/expose-public-address.md)
 - [Production Deployment](how-to/deploy-production.md)
 - [Configure Node Networks](how-to/configure-networks.md)
@@ -54,7 +59,9 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 **Deployment and Inference**
 
 - [Deploy Models, Select GPUs, and Interpret Scheduling Results](how-to/deploy-models.md)
+- [Deploy Models on Kunlun P800](how-to/kunlun-p800.md)
 - [Multi-Node Inference](how-to/multi-node-inference.md)
+- [Connect MinerU to a Remote Vision Model](how-to/use-mineru.md)
 - [PD Disaggregation Deployment](how-to/pd-disaggregation.md)
 - [Enable and Troubleshoot dGPU](how-to/dgpu.md)
 - [Put Instances to Sleep and Wake Them](how-to/sleep-wake.md)
@@ -126,6 +133,7 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 - [Browser E2E Testing Standards](../test/e2e/browser-e2e-testing-standard.md)
 - [Releases and Embedded Assets](dev/release.md)
 - [Contributing and Document Placement](dev/contributing.md)
+- [PR / MR Workflow](dev/pull-requests.md)
 - [Engineering Log](dev/ledgers/engineering-log.md), [A100 Bug Registry](dev/ledgers/a100-verification-bug-registry.md), [PPU Support Gap Register](dev/ledgers/ppu-support-gaps.md)
 
 ## Document Placement Rules

@@ -1,4 +1,5 @@
 import { colors } from "../../theme/tokens";
+import { schedulingColors } from "./palette";
 import type { CardView, CellState } from "./overviewModel";
 
 // The heatmap's palette, from the theme's chart colours: one hue per state,
@@ -7,16 +8,16 @@ import type { CardView, CellState } from "./overviewModel";
 
 /** Base fill of each state; an awake card's is shaded by awakeFill. */
 export const stateFill: Record<CellState, string> = {
-  awake: colors.chartPrimary,
-  asleep: colors.chartQuaternary,
-  free: colors.successSoft,
-  held_outside: colors.chartSecondary,
-  unhealthy: colors.danger,
-  offline: colors.controlBorder,
+  awake: schedulingColors.serving,
+  asleep: schedulingColors.sleeping,
+  free: schedulingColors.free,
+  held_outside: schedulingColors.external,
+  unhealthy: schedulingColors.failed,
+  offline: schedulingColors.offline,
 };
 
 /** Outline of a free card, which is otherwise as pale as the page. */
-export const freeBorder = colors.chartTertiary;
+export const freeBorder = schedulingColors.freeBorder;
 
 function channels(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
@@ -46,7 +47,7 @@ export function fillOf(card: Pick<CardView, "state" | "awakePct">): string {
 /** The palette as custom properties, from the theme's tokens, for the heatmap's stylesheet and its legend. */
 export function tokenVars(): Record<string, string> {
   return {
-    "--hm-free-border": freeBorder, "--hm-switching": colors.ink, "--hm-highlight": colors.danger, "--hm-offline-line": colors.weak, "--hm-tip-text": colors.white,
+    "--hm-free-border": freeBorder, "--hm-switching": schedulingColors.switching, "--hm-highlight": colors.danger, "--hm-offline-line": colors.weak, "--hm-tip-text": colors.white,
     "--hm-border": colors.border, "--hm-held": stateFill.held_outside, "--hm-unhealthy": stateFill.unhealthy, "--hm-offline": stateFill.offline,
   };
 }

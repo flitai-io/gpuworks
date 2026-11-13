@@ -61,6 +61,12 @@ const (
 	// region as the provider names it. A node added by hand has neither.
 	KeyProvider = Prefix + "provider"
 	KeyRegion   = Prefix + "region"
+	// KeyKubernetesCluster and KeyKubernetesNode say where a node that joined
+	// from a Kubernetes cluster sits: the cluster (by its UUID, which a rename
+	// does not change) and the node's name in it. A node added any other way
+	// has neither.
+	KeyKubernetesCluster = Prefix + "kubernetes-cluster"
+	KeyKubernetesNode    = Prefix + "kubernetes-node"
 )
 
 // ManagementNetwork is the value a network key takes when the management
@@ -74,7 +80,7 @@ func SystemKeys() []string {
 	return []string{
 		KeyNode, KeyVendor, KeyCPUArch, KeyGPUModel, KeyGPUArch,
 		KeyComputeNetwork, KeyStorageSyncNetwork, KeyServingNetwork, KeyStorage,
-		KeyProvider, KeyRegion,
+		KeyProvider, KeyRegion, KeyKubernetesCluster, KeyKubernetesNode,
 	}
 }
 

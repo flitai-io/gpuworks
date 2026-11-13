@@ -225,7 +225,7 @@ func (s *Store) ReadStatus() (*Status, error) {
 	if err := json.Unmarshal(raw, &st); err != nil {
 		// A truncated observation is stale, not fatal: report nothing rather
 		// than blocking the operator on a file the server owns.
-		return nil, nil
+		return nil, nil //nolint:nilerr // A truncated observation is stale and must not prevent reading the durable configuration.
 	}
 	return &st, nil
 }

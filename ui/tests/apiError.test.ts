@@ -15,6 +15,28 @@ test("structured API errors translate by code with params", async () => {
   assert.equal(apiErrorText((key, options) => `${key}:${options.resource}`, error), "apiError.EXAMPLE_ERROR:gpu-1");
 });
 
+test("admission errors retain all diagnostic checks and their request correlation", async () => {
+  const diagnostics = { checks: [
+    { id: "mount:7:3", status: "failed", message: { code: "STORAGE_UNAVAILABLE_ON_NODE", params: { node: "gpu-a", storage: "nfs", reason: "not_mounted" }, message: "storage is not mounted" } },
+    { id: "read:7:3", status: "blocked", blocked_by: ["mount:7:3"], message: { code: "MODEL_SOURCE_UNAVAILABLE", params: { reason: "storage_access_required" }, message: "model path was not checked" } },
+  ] };
+  const error = await apiResponseError(new Response(JSON.stringify({
+    error: "model source is unavailable", code: "MODEL_SOURCE_UNAVAILABLE", diagnostics,
+  }), { status: 400, headers: { "X-Request-ID": "r215" } }), "request failed");
+  assert.ok(error instanceof APIError);
+  assert.deepEqual(error.diagnostics, diagnostics, "wrapping an API error must not discard the actual failed and blocked checks");
+  assert.equal(error.requestId, "r215");
+});
+
+test("malformed optional diagnostics never hide an otherwise useful API error", async () => {
+  const error = await apiResponseError(new Response(JSON.stringify({
+    code: "MODEL_SOURCE_UNAVAILABLE", error: "useful fallback", diagnostics: { checks: [null, { status: "failed" }] },
+  }), { status: 400 }), "request failed");
+  assert.ok(error instanceof APIError);
+  assert.equal(error.fallback, "useful fallback");
+  assert.deepEqual(error.diagnostics, { checks: [], truncated: true });
+});
+
 test("API error parsing preserves old JSON and raw response bodies", async () => {
   const legacy = await apiResponseError(new Response('{"error":"legacy error"}', { status: 400 }), "request failed");
   assert.equal(legacy.message, "legacy error");

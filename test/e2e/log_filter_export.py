@@ -148,6 +148,52 @@ def test_log_filter_export(page, context, server, artifacts, report, locale):
     base_query = {'source': 'instance', 'from': str(lower), 'to': str(upper), 'limit': '500', 'with_total': '1'}
     export = page.get_by_role('button', name=re.compile(re.escape(logs['search']['export']) + '$'))
     search = page.get_by_placeholder(logs['search']['placeholder'], exact=True)
+    # 2.7: a log line is text, and it is rendered as text. An extra warning is collected whose line
+    # carries markup, and the row is then required to show those characters literally - the probe
+    # element must not exist, and the line must not have been parsed into DOM. The marker deliberately
+    # avoids quotes so the fixture's own search expression stays well formed.
+    markup_probe = 'e2e-' + report['run_id'] + '-markup'
+    markup_marker = markup_probe + ' <b>bold</b> <script>window.__e2eXss=1</script> &amp; <img src=x onerror=1>'
+    emit_warning(server, markup_marker)
+    markup_row, _ = collected_warning(page, server, markup_probe)
+    # The collector quotes the offending protocol value, so the stored line carries the marker inside
+    # quotes rather than equalling it. What matters is that the markup survived storage unchanged -
+    # no entity doubling on the way in - and that rendering then shows it as text.
+    check(markup_marker in markup_row['line'],
+          f"the stored line was altered before rendering: {markup_row['line']!r}")
+    page.reload()
+    expect(page.get_by_role('heading', name=logs['title'], exact=True)).to_be_visible(timeout=20000)
+    # The fixture's own range is a fixed window in the past, so the fresh warning is not inside it.
+    # The probe is searched with the real request the page sends after a reload, which uses the
+    # default range, and the search is driven through the box rather than the API so the rendering
+    # under test is what the page produced.
+    choose(page, logs['search']['sourceLabel'], logs['search']['sourceServer'])
+    with page.expect_response(lambda r: urlsplit(r.url).path == SEARCH
+                              and 'source=server' in r.url.split('?')[-1]) as markup_response:
+        search.fill(markup_probe)
+    check(markup_response.value.status == 200, 'markup fixture query failed')
+    check(markup_probe in parse_qs(urlsplit(markup_response.value.url).query, keep_blank_values=True).get('q', [''])[0],
+          'the markup probe was not the keyword that was sent')
+    # The row is rendered as several spans (the highlight splits it), so the text is located by the
+    # element whose textContent is the whole line rather than by an exact text match.
+    stored_markup = markup_row['line']
+    for _ in range(100):
+        if page.evaluate("""(line) => [...document.querySelectorAll('*')]
+                .some(n => n.textContent === line)""", stored_markup):
+            break
+        page.wait_for_timeout(150)
+    rendering = page.evaluate('''(line) => {
+        const nodes = [...document.querySelectorAll('*')].filter(n => n.textContent === line);
+        const holder = nodes.length ? nodes[nodes.length - 1] : null;
+        return {found: !!holder, tag: holder ? holder.tagName : null,
+                probes: document.querySelectorAll('.log-rows b, .log-rows script, .log-rows img').length,
+                executed: typeof window.__e2eXss !== 'undefined'};
+    }''', stored_markup)
+    check(rendering['found'], f"the markup warning was not rendered: {rendering}")
+    check(rendering['probes'] == 0, f"markup in a log line became DOM: {rendering}")
+    check(rendering['executed'] is False, f"a log line executed script: {rendering}")
+    report['evidence'].append({'layer': 'ui', 'scenario': 'log-line-markup-escaped',
+                               'line': markup_row['line'], 'rendering': rendering})
 
     def result(action, expected_query, expected_rows, label):
         def matches(response):
@@ -246,6 +292,72 @@ def test_log_filter_export(page, context, server, artifacts, report, locale):
     absent = '"e2e-' + report['run_id'] + '-absent"'
     result(lambda: search.fill(absent), {**selected_query, 'q': absent}, [], 'nonexistent keyword')
     loaded = result(lambda: search.fill(query), selected_query, [target], 'restore target keyword')
+    # 2.3: the page size is the field with a length contract here, and its boundary behaviour is
+    # asserted rather than its happy path. The store clamps a request to a default below the floor and
+    # to a ceiling above it, so the four values around those thresholds are sent and the number of rows
+    # that comes back is compared with what the contract says - not with what a caller might prefer.
+    # Counting is in whole rows, which is the unit the API documents.
+    boundary_warning = 'e2e-' + report['run_id'] + '-boundary'
+    for _ in range(3):
+        emit_warning(server, boundary_warning)
+    # The collector is asynchronous, so the fixture is required to be visible before the boundaries
+    # are probed - otherwise a page size would be judged against an empty match set.
+    settle = time.monotonic() + 20
+    while time.monotonic() < settle:
+        seen = page.request.get(server.base + SEARCH + '?' + urlencode(
+            {'source': 'server', 'q': boundary_warning, 'limit': '10', 'with_total': '1'}))
+        if seen.status == 200 and len((seen.json().get('items') or [])) >= 3:
+            break
+        time.sleep(0.25)
+    else:
+        raise AssertionError('the boundary warnings never became searchable')
+    # A page size is a ceiling, not a promise: a request below the match count returns everything
+    # there is. So the floor case asserts the whole match set rather than the default's numeric value,
+    # and the two ceiling cases assert that a page far above the match count still returns all of it.
+    matched = 3
+    limit_cases = [
+        ('below-floor', '0', matched, 'clamped up to the default, which exceeds the match count'),
+        ('floor', '1', 1, 'one row, and the page reports itself truncated'),
+        ('ceiling', '5000', matched, 'accepted as sent; the match count fits inside it'),
+        ('above-ceiling', '5001', matched, 'clamped down to the ceiling, no error'),
+    ]
+    limit_evidence = []
+    for label, value, expected_rows, note in limit_cases:
+        probe = {'source': 'server', 'q': boundary_warning, 'limit': value, 'with_total': '1'}
+        answer = page.request.get(server.base + SEARCH + '?' + urlencode(probe))
+        check(answer.status == 200, f'limit {value} was rejected: {answer.status}')
+        body = answer.json()
+        rows = len(body.get('items') or [])
+        check(rows == expected_rows,
+              f'limit {value} returned {rows} rows, the contract says {expected_rows}: {note}')
+        # Only a page that came back full while more matches wait behind it is truncated. The ceiling
+        # cases return everything there is, so requiring the marker there would be requiring a lie.
+        if expected_rows is not None and rows < matched:
+            check(answer.headers.get('x-logs-truncated') == '1',
+                  f'limit {value} returned a full page without marking it truncated')
+        else:
+            check(answer.headers.get('x-logs-truncated') is None,
+                  f'limit {value} marked a complete page as truncated')
+        limit_evidence.append({'value': value, 'rows': rows, 'note': note,
+                               'truncated': answer.headers.get('x-logs-truncated')})
+    report['evidence'].append({'layer': 'request', 'scenario': 'page-size-boundaries',
+                               'unit': 'rows', 'cases': limit_evidence})
+    # 2.4: the keyword control is required to carry the characters a log line actually contains, and
+    # what it sends is asserted rather than what it displays. Each shape is typed and the query that
+    # reaches the server is compared exactly, so a control that accepted the text but mangled,
+    # dropped or silently stripped part of it fails here instead of only looking fine in the box.
+    for label, value, sent in (
+            ('chinese', '错误 警告', '错误 警告'),
+            ('punctuation', 'ERROR: "quoted" (paren) [bracket] {brace}',
+             'ERROR: "quoted" (paren) [bracket] {brace}'),
+            ('percent-and-ampersand', 'a%b&c=d', 'a%b&c=d'),
+            ('single-line-newline-collapsed', 'first line\nsecond line', 'first line second line')):
+        result(lambda v=value: search.fill(v), {**selected_query, 'q': sent}, [], f'keyword characters: {label}')
+        report['evidence'].append({'layer': 'request', 'scenario': f'keyword-{label}',
+                                   'typed': value, 'sent': sent})
+    # Back to a query that matches, so the export below is not disabled by the last probe.
+    loaded = result(lambda: search.fill(query), selected_query, [target], 'restore target after characters')
+
     # Consume the real download bytes, including Chinese and CSV escaping, not just its name.
     with page.expect_download() as download_event:
         export.click()

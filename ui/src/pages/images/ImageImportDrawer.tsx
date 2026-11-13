@@ -7,7 +7,6 @@ import {
   Input,
   Row,
   Select,
-  Space,
   Switch,
 } from "antd";
 import { useEffect, useState } from "react";
@@ -20,6 +19,8 @@ import {
 } from "../../api";
 import ImageArchiveURLImport from "./ImageArchiveURLImport";
 import ImageCommunityBrowser from "./ImageCommunityBrowser";
+import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
+import { isArchiveURL } from "./ImagePageHelpers";
 import { useTranslation } from "react-i18next";
 
 type Props = {
@@ -57,6 +58,19 @@ export default function ImageImportDrawer({
   // server's dictionary (GET /images/engines); the form adds nothing to it.
   const [engines, setEngines] = useState<ImageEngineOption[] | null>(null);
   const [enginesError, setEnginesError] = useState<string | null>(null);
+  const [authorizing, setAuthorizing] = useState(false);
+  const sources = Form.useWatch("registry_sources", { form, preserve: true }) as string[] | undefined;
+  const access = useOutboundHostAccess((sources ?? []).filter(isArchiveURL), open);
+  const save = async () => {
+    if (authorizing || importing) return;
+    try {
+      await form.validateFields();
+      setAuthorizing(true);
+      await access.authorize();
+      importCustom();
+    } catch { /* The form and permission control retain their own errors. */ }
+    finally { setAuthorizing(false); }
+  };
   useEffect(() => {
     if (!open || engines) return;
     let alive = true;
@@ -74,7 +88,7 @@ export default function ImageImportDrawer({
   const engineOptions = (engines ?? []).map((option) => ({ value: option.name, label: option.label }));
   return (
     <Drawer title={t(`import.title.${sourceTab}`)} open={open} onClose={onClose} width={640}>
-      <Space direction="vertical" size={20} style={{ width: "100%" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, width: "100%" }}>
         {sourceTab === "community" && (
           <ImageCommunityBrowser
             onPick={(pick) => {
@@ -83,6 +97,8 @@ export default function ImageImportDrawer({
                 engine: pick.engine || undefined,
                 framework: pick.framework || undefined,
                 engine_version: pick.engineVersion,
+                framework_version: pick.frameworkVersion,
+                arch: pick.arch || "multi",
                 rolling_tag: pick.rollingTag,
               });
             }}
@@ -209,11 +225,12 @@ export default function ImageImportDrawer({
           >
             <Select mode="tags" tokenSeparators={[",", " "]} placeholder="https://containerimages.example/runner.tar" />
           </Form.Item>
-          <Button type="primary" loading={importing} onClick={importCustom}>
+          <OutboundHostAccess access={access} />
+          <Button type="primary" loading={importing || authorizing} onClick={() => void save()}>
             {t("import.addImage")}
           </Button>
         </Form>
-      </Space>
+      </div>
     </Drawer>
   );
 }

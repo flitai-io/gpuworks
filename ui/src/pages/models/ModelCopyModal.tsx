@@ -66,7 +66,7 @@ export function ModelCopyModal({ model, onClose, onDone }: { model: Model | null
   const targetShared = storageTypeInfo(target?.type).shared;
   const defaultLocalId = (storages.find((s) => s.type === "local" && s.is_default) ?? storages.find((s) => s.type === "local"))?.id;
   const holders = new Set((model?.nodes ?? [])
-    .filter((row) => !row.cache && (row.storage_id ?? defaultLocalId) === targetStorageId && row.state !== "failed")
+    .filter((row) => !row.cache && (row.storage_id ?? defaultLocalId) === targetStorageId && row.state !== "failed" && row.state !== "insufficient_disk_space")
     .map((row) => row.node_uuid));
   // A node already holding the model there, or the source itself, is no target.
   const notTarget = (uuid: string) => holders.has(uuid) || uuid === source?.nodeUuid;

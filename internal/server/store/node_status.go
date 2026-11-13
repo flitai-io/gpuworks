@@ -67,13 +67,14 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 		updates["runtime_fallback_from"] = truncate(st.Sys.RuntimeFallbackFrom, 16)
 		updates["runtime_fallback_reason"] = truncate(st.Sys.RuntimeFallbackReason, 64)
 		updates["accelerator_vendors"] = encodeAcceleratorVendors(st.Sys.AcceleratorVendors)
+		updates["kube_unschedulable"] = st.Sys.KubeUnschedulable
 		// The platform's half of NodeScheduling: it cordons a schedulable
 		// node while it has a reason of its own, and lifts only the cordons
 		// it set (node_cordon.go). A node whose runtime cannot be asked at
 		// all keeps whatever it has: an agent that cannot say is not a
 		// reason to let work onto the node, nor to take it off.
 		runtimeKnown := st.Sys.RuntimeDriver != "" || st.Sys.RuntimeGPUBlocked != ""
-		cordonReason := PlatformCordonReason(st.Sys.RuntimeGPUBlocked, st.GPUs)
+		cordonReason := PlatformCordonReason(st.Sys.RuntimeGPUBlocked, st.Sys.KubeUnschedulable, st.GPUs)
 		if d := decideCordon(n.Scheduling, n.SchedulingBy, cordonReason); d.changed && (runtimeKnown || cordonReason != "") {
 			updates["scheduling"] = d.scheduling
 			updates["scheduling_by"] = d.source

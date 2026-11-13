@@ -24,7 +24,7 @@ M29 实现部署到 mirror1 验收后,暴露两类问题:
 7. **存储两张表**:models + specs,args/env 存 JSON 列,列表筛选走 SQL。
 8. **静态卡表仅服务展示与假想规划**:NVIDIA 清单取自 developer.nvidia.com/cuda/gpus,两层分类(Data Center | Workstation/Consumer × 架构代,第二层由 CC 映射推导);国产卡列举(华为 310P/910B/910C/950PR/950DT、海光 K100/K500/BW1000/BW1100、平头哥 ZW810E/M890)。不参与匹配裁决。「我的芯片」直接读 GPU 表 distinct(name, vendor, cc),无解析步骤。
 9. **旧资产一次性全删,不留过渡**:五层实体与迁移、chip_classes/chip_registry 表、consolidate v1、前端子串探测与 40-flag 二次收编逻辑、evidence/validation 的 DTO 与 UI。功能未发布,mirror1 数据丢弃重导。
-10. **国产代际兼容继承是目录生产规则,不是匹配器规则**:K100/K100AI 真机 PASS 档位的 name 谓词扩展到 BW1000/BW1100;910B/910B4 真机 PASS 档位扩展到 910C/950DT/950PR。继承只来自 PASS,同一精确配置在后继卡上的明确 FAIL 优先并中止该卡继承;K500 不在 K100 继承范围。扩展后的范围显式写入 spec 的 gpus 谓词,chipmatch 仍只求值数据。
+10. **国产代际兼容继承是目录生产规则,不是匹配器规则**:K100/K100AI 真机 PASS 档位的 name 谓词扩展到整个 BW 系列(只报系列的 `BW`,以及 BW100、BW150、BW1000、BW1100 等带型号数字的写法);910B/910B4 真机 PASS 档位扩展到 910C/950DT/950PR。继承只来自 PASS,同一精确配置在后继卡上的明确 FAIL 优先并中止该卡继承;K500 不在 K100 继承范围。扩展后的范围显式写入 spec 的 gpus 谓词,chipmatch 仍只求值数据。
 11. **目录按 NVIDIA 通用档优先生产,再补专卡和国产档**:第一阶段从 vLLM recipes 与 SGLang cookbook 逐模型生成 NVIDIA 档位。recipe 的测试卡只提供验证边界,不自动成为目录约束;Luna 逐条剥离卡数、显存利用率、长度、批量和测试卡优化,保留 parser、dtype、trust-remote-code、格式等启动语义,形成至少保证 H20(CC 9.0)可运行的通用档,能够证明 A100(CC 8.0)可运行时优先放宽到 A100。只有不能安全下沉的特定镜像、量化/内核门槛或硬件专属 flag 才形成谓词更窄的补充档。第二阶段仅依据真机测试数据生成 Ascend/Hygon 档位,不得用文档声明、统一默认镜像或统一参数模板补数量。
 12. **模型日期属于原始模型,不属于权重制品**:`release_date` 表示原始模型仓库的创建/首次可审计发布时间。优先取规范 Hugging Face/ModelScope 仓库创建时间;仓库尚未公开时可用固定 commit 下结构化 recipe 的发布日期,并在管线审计中标明 fallback。量化、转载或跨组织权重仓库的创建时间不得覆盖它。内置目录发布要求每个模型都有合法 `YYYY-MM-DD`;UI 在同一模型组织内按该日期倒序、`model_id` 升序稳定展示。
 

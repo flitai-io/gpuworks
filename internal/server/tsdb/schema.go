@@ -85,6 +85,26 @@ var schemaMigrations = []schemaMigration{
 			return nil
 		},
 	},
+	{
+		// series_node_column adds the node column a node-matched query (a
+		// node's charts, a node's RDMA counters) pushes into SQL, the same
+		// way migration 2 did for instance and deployment. Without it such a
+		// query read and decoded every series of the metric in the fleet.
+		Version: 3,
+		Name:    "series_node_column",
+		Apply: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(`ALTER TABLE series ADD COLUMN node TEXT`); err != nil {
+				return fmt.Errorf("add node column: %w", err)
+			}
+			if _, err := tx.Exec(`UPDATE series SET node = json_extract(labels_json, '$.node')`); err != nil {
+				return fmt.Errorf("backfill node: %w", err)
+			}
+			if _, err := tx.Exec(`CREATE INDEX idx_series_metric_node ON series(metric, node)`); err != nil {
+				return fmt.Errorf("create idx_series_metric_node: %w", err)
+			}
+			return nil
+		},
+	},
 }
 
 // migrateSchema applies every not-yet-applied migration in list, in order.

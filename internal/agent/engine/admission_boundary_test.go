@@ -2,10 +2,11 @@ package engine
 
 import (
 	"context"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/proto"
-	"testing"
 )
 
 func TestRunningContainerAdoptionDoesNotApplyNewLaunchAdmission(t *testing.T) {

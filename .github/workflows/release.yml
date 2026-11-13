@@ -1,0 +1,220 @@
+# Release packages, the GitHub counterpart of .release-build, release-docs-pdf
+# and release-publish in .gitlab-ci.yml (docs/dev/release.md): every master
+# commit builds the nightly channel under its short commit, a vYY.M.PATCH tag
+# builds the release channel under the tag (ADR 0040).
+#
+# Publishing to the distribution sources is switched off until GitHub replaces
+# GitLab as the publisher: the publish job runs only when the repository
+# variable GPUWORKS_DIST_PUBLISH is "true", so the two never publish the same
+# channel. Its credentials and the index signing key are secrets of the
+# `distribution` environment, whose deployment rules admit only master and the
+# v* tags. A version tag also gets a GitHub release with the same archives.
+name: release
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  GPUWORKS_USAGE_REPORT: "off"
+
+jobs:
+  # One release id, channel and build time for every job of the run, as
+  # CI_COMMIT_SHORT_SHA and CI_PIPELINE_CREATED_AT are on GitLab: publish_dist.sh
+  # orders builds by that time and the archives carry it.
+  meta:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      release_id: ${{ steps.meta.outputs.release_id }}
+      channel: ${{ steps.meta.outputs.channel }}
+      built_at: ${{ steps.meta.outputs.built_at }}
+    steps:
+      - id: meta
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            if ! printf '%s\n' "$REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "tag $REF_NAME is not a vYY.M.PATCH release tag" >&2
+              exit 1
+            fi
+            echo "release_id=$REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "channel=release" >> "$GITHUB_OUTPUT"
+          elif [ "$REF_NAME" = "$DEFAULT_BRANCH" ]; then
+            echo "release_id=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"
+            echo "channel=nightly" >> "$GITHUB_OUTPUT"
+          else
+            echo "release builds run on $DEFAULT_BRANCH and version tags, not $REF_NAME" >&2
+            exit 1
+          fi
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+  gates:
+    uses: ./.github/workflows/ci.yml
+    with:
+      release_gates: true
+
+  build:
+    needs: [meta, gates]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, darwin]
+        arch: [amd64, arm64]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # The gates' UI build, embedded as is.
+      - uses: actions/download-artifact@v5
+        with:
+          name: webui-dist
+          path: internal/server/webui/dist/
+      # The zstd CLI packs the embedded agents ~10% smaller than the Go encoder.
+      - run: command -v zstd >/dev/null || { sudo apt-get -qq update && sudo apt-get -qq install -y zstd; }
+      - run: make release-packages
+        env:
+          GPUWORKS_RELEASE_ID: ${{ needs.meta.outputs.release_id }}
+          GPUWORKS_RELEASE_CHANNEL: ${{ needs.meta.outputs.channel }}
+          GPUWORKS_RELEASE_OSES: ${{ matrix.os }}
+          GPUWORKS_RELEASE_ARCHES: ${{ matrix.arch }}
+          GPUWORKS_BUILD_COMMIT: ${{ github.sha }}
+          GPUWORKS_BUILT_AT: ${{ needs.meta.outputs.built_at }}
+      - uses: actions/upload-artifact@v5
+        with:
+          name: dist-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/
+          retention-days: 30
+
+  docs:
+    if: github.ref_type == 'tag'
+    uses: ./.github/workflows/docs.yml
+
+  # Versioned Chinese and English handbooks; only a formal release carries them.
+  docs-pdf:
+    if: github.ref_type == 'tag'
+    needs: [meta, docs]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v5
+        with:
+          name: docs-site-public
+          path: docs-site/public/
+      - name: Install fonts and PDF tools
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y --no-install-recommends fonts-noto-cjk fontconfig poppler-utils >/dev/null
+      - run: python -m pip install --disable-pip-version-check -r requirements-e2e.txt
+      - name: Print the handbooks
+        env:
+          VERSION: ${{ needs.meta.outputs.release_id }}
+        run: |
+          export CHROME_PATH=$(command -v google-chrome)
+          python docs-site/pdf_browser_checks.py
+          python docs-site/export_pdf.py --version "$VERSION" --commit "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: dist-docs
+          path: dist/docs/
+          retention-days: 90
+
+  publish:
+    needs: [meta, build, docs-pdf]
+    # docs-pdf is skipped on master; every build must have succeeded.
+    if: >-
+      always() && vars.GPUWORKS_DIST_PUBLISH == 'true' &&
+      needs.build.result == 'success' &&
+      (needs.docs-pdf.result == 'success' || needs.docs-pdf.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: distribution
+    # Two publishes never interleave; publish_dist.sh skips a build older than
+    # what the sources already serve.
+    concurrency:
+      group: distribution
+      cancel-in-progress: false
+    env:
+      GPUWORKS_RCLONE_VERSION: v1.75.2
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: dist-*-*
+          path: dist/
+          merge-multiple: true
+      - uses: actions/download-artifact@v5
+        if: needs.docs-pdf.result == 'success'
+        with:
+          name: dist-docs
+          path: dist/docs/
+      - name: Install rclone
+        run: |
+          GOBIN="$RUNNER_TEMP/rclone" go install "github.com/rclone/rclone@$GPUWORKS_RCLONE_VERSION"
+          echo "RCLONE=$RUNNER_TEMP/rclone/rclone" >> "$GITHUB_ENV"
+      - run: ./scripts/publish_dist.sh "$CHANNEL" dist
+        env:
+          CHANNEL: ${{ needs.meta.outputs.channel }}
+          GPUWORKS_BUILD_COMMIT: ${{ github.sha }}
+          GPUWORKS_BUILT_AT: ${{ needs.meta.outputs.built_at }}
+          GPUWORKS_DIST_SIGNING_KEY: ${{ secrets.GPUWORKS_DIST_SIGNING_KEY }}
+          GPUWORKS_DIST_SIGNING_KEY_ID: ${{ secrets.GPUWORKS_DIST_SIGNING_KEY_ID }}
+          GPUWORKS_DIST_OSS_ACCESS_KEY_ID: ${{ secrets.GPUWORKS_DIST_OSS_ACCESS_KEY_ID }}
+          GPUWORKS_DIST_OSS_SECRET_ACCESS_KEY: ${{ secrets.GPUWORKS_DIST_OSS_SECRET_ACCESS_KEY }}
+          GPUWORKS_DIST_OBS_ACCESS_KEY_ID: ${{ secrets.GPUWORKS_DIST_OBS_ACCESS_KEY_ID }}
+          GPUWORKS_DIST_OBS_SECRET_ACCESS_KEY: ${{ secrets.GPUWORKS_DIST_OBS_SECRET_ACCESS_KEY }}
+          GPUWORKS_DIST_R2_ACCESS_KEY_ID: ${{ secrets.GPUWORKS_DIST_R2_ACCESS_KEY_ID }}
+          GPUWORKS_DIST_R2_SECRET_ACCESS_KEY: ${{ secrets.GPUWORKS_DIST_R2_SECRET_ACCESS_KEY }}
+          GPUWORKS_DIST_R2_ENDPOINT: ${{ secrets.GPUWORKS_DIST_R2_ENDPOINT }}
+
+  github-release:
+    if: github.ref_type == 'tag'
+    needs: [meta, build, docs-pdf]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: dist-*-*
+          path: dist/
+          merge-multiple: true
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist-docs
+          path: dist/docs/
+      # The per-job SHA256SUMS each cover one archive; the release carries one
+      # over all of them, as gpuworks-dist assembles for the sources.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.meta.outputs.release_id }}
+        run: |
+          cd dist
+          sha256sum gpuworks-"$TAG"-*.tar.gz > SHA256SUMS
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes-file "../docs-en/releases/$TAG.md" \
+            gpuworks-"$TAG"-*.tar.gz SHA256SUMS docs/*.pdf

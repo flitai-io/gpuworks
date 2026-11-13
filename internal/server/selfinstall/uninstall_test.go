@@ -11,7 +11,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/uninstallcheck"
 )
+
+// The pre-existing cleanup tests isolate filesystem/service behavior; their
+// intentionally non-SQLite data fixture supplies an explicit empty inventory.
+func emptyUninstallResources(context.Context, Layout) []uninstallcheck.Item {
+	return []uninstallcheck.Item{{ID: "server.fixture", Status: uninstallcheck.Pass, Summary: "No persisted resources in the isolated cleanup fixture"}}
+}
 
 func uninstallFixture(t *testing.T) *harness {
 	t.Helper()
@@ -77,7 +85,7 @@ func TestUninstallOrdinaryPreservesRecoveryFiles(t *testing.T) {
 	for _, path := range keep {
 		before[path] = readFile(t, path)
 	}
-	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true}, nil)
+	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +100,7 @@ func TestUninstallOrdinaryPreservesRecoveryFiles(t *testing.T) {
 	}
 	// Retry after an ordinary uninstall remains useful: config and data still
 	// identify this installation, although its service and program are gone.
-	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true}, nil); err != nil {
+	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil); err != nil {
 		t.Fatalf("repeat ordinary uninstall: %v", err)
 	}
 	if readFile(t, keep[1]) != before[keep[1]] {
@@ -116,7 +124,7 @@ func TestUninstallPurgeUsesConfiguredPathsAndRetainsUnownedFiles(t *testing.T) {
 	for _, path := range keep[:len(keep)-1] {
 		writeFile(t, path, "operator content", 0o600)
 	}
-	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true, Purge: true}, nil)
+	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +137,7 @@ func TestUninstallPurgeUsesConfiguredPathsAndRetainsUnownedFiles(t *testing.T) {
 	if report.Layout.DataDir != cfg.DataDir || report.Layout.LogsDir != filepath.Dir(cfg.Log.File) {
 		t.Fatalf("report did not use configured layout: %+v", report)
 	}
-	retry, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true, Purge: true}, nil)
+	retry, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil)
 	if err != nil || !retry.AlreadyAbsent {
 		t.Fatalf("repeat purge: report=%+v err=%v", retry, err)
 	}
@@ -142,7 +150,7 @@ func TestUninstallDryRunAndRefusedConfirmationDoNotMutateFiles(t *testing.T) {
 		req         UninstallRequest
 		wantErr     string
 	}{
-		{name: "preview", req: UninstallRequest{DryRun: true, Purge: true}},
+		{name: "preview", req: UninstallRequest{Resources: emptyUninstallResources, DryRun: true, Purge: true}},
 		{name: "nonterminal", wantErr: "--yes"},
 		{name: "declined", terminal: true, input: "n\n", wantErr: "cancelled"},
 		{name: "default no", terminal: true, input: "\n", wantErr: "cancelled"},
@@ -152,6 +160,7 @@ func TestUninstallDryRunAndRefusedConfirmationDoNotMutateFiles(t *testing.T) {
 			h.terminal, h.stdin = tc.terminal, tc.input
 			before := uninstallSnapshot(t, h.layout.Dir, h.layout.UnitDir, h.layout.LaunchdDir)
 			called := false
+			tc.req.Resources = emptyUninstallResources
 			report, err := h.installer.Uninstall(context.Background(), tc.req, func(context.Context, Layout) error {
 				called = true
 				return nil
@@ -193,7 +202,7 @@ func TestUninstallFailureKeepsRecoveryDataAndProgram(t *testing.T) {
 				defer unlock()
 			}
 			before := uninstallSnapshot(t, h.layout.Dir, h.layout.UnitDir)
-			_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true, Purge: true}, callback)
+			_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, callback)
 			if err == nil {
 				t.Fatal("uninstall unexpectedly succeeded")
 			}
@@ -238,7 +247,7 @@ func TestUninstallRejectsInstallationChangedDuringConfirmation(t *testing.T) {
 				}
 			}}
 			called := false
-			_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Purge: true}, func(context.Context, Layout) error { called = true; return nil })
+			_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Purge: true}, func(context.Context, Layout) error { called = true; return nil })
 			if err == nil || !strings.Contains(err.Error(), "changed during confirmation") || called {
 				t.Fatalf("stale approval accepted: err=%v callback=%v", err, called)
 			}
@@ -254,7 +263,7 @@ func TestUninstallLeavesSiblingServiceDefinition(t *testing.T) {
 	other := filepath.Join(t.TempDir(), "sibling", "gpuworks")
 	unit := RenderUnit(UnitConfig{Binary: other, ConfigPath: other + ".yaml"})
 	writeFile(t, h.layout.UnitPath(), unit, 0o644)
-	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true}, nil); err != nil {
+	if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := readFile(t, h.layout.UnitPath()); got != unit {
@@ -277,7 +286,7 @@ func TestUninstallLaunchdRemovesOwnedPlist(t *testing.T) {
 			h.run.fail["sudo launchctl print"] = errors.New("service not found")
 		}
 	}
-	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true}, nil)
+	report, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +305,7 @@ func TestUninstallLegacyInstallWithoutMigratingConfiguration(t *testing.T) {
 			h := newHarness(t, filepath.Join(t.TempDir(), "server"))
 			old := h.writeInstallJSONInstall("old", h.freeAddr())
 			original := readFile(t, h.layout.installJSONPath())
-			if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true, Purge: purge}, nil); err != nil {
+			if _, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: purge}, nil); err != nil {
 				t.Fatal(err)
 			}
 			assertUninstallAbsent(t, h.layout.Binary(), h.layout.UnitPath(), h.layout.ConfigPath())
@@ -340,7 +349,7 @@ func TestUninstallRejectsUnsafeCleanupBeforeMutation(t *testing.T) {
 			h.writeConfig(cfg)
 			before := uninstallSnapshot(t, h.layout.Dir, h.layout.UnitDir)
 			called := false
-			_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true, Purge: true}, func(context.Context, Layout) error { called = true; return nil })
+			_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, func(context.Context, Layout) error { called = true; return nil })
 			if err == nil || called {
 				t.Fatalf("unsafe cleanup accepted: err=%v callback=%v", err, called)
 			}
@@ -356,7 +365,7 @@ func TestUninstallMissingConfigRefusesOrphanProgram(t *testing.T) {
 	if err := os.Remove(h.layout.ConfigPath()); err != nil {
 		t.Fatal(err)
 	}
-	_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Yes: true, Purge: true}, nil)
+	_, err := h.installer.Uninstall(context.Background(), UninstallRequest{Resources: emptyUninstallResources, Yes: true, Purge: true}, nil)
 	if err == nil || !strings.Contains(err.Error(), "without configuration") {
 		t.Fatalf("orphan program treated as safely absent: %v", err)
 	}

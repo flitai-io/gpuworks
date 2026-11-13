@@ -23,8 +23,8 @@
   {
     "path": "dev/release.md",
     "block_index": 1,
-    "source_sha256": "d4fe9e378770454833b5e14d07395cbb70e032bf26b7fb5c7c6ed6d8ba57197e",
-    "translation_sha256": "717d64af809835f03c64cccb51dd54be3cd3ab3de0e7d93ce47f354fd4b6d1f7",
+    "source_sha256": "957acfe4b88a2bb0b730fab70c725bbbdaf2e1536f84f94d12918def820c5a7c",
+    "translation_sha256": "cac397a0dea3afc07b0e87be5f17fd4204658d3b070919f828730dc6f0f4992d",
     "reason": "Translate release validation command comments"
   },
   {
@@ -261,8 +261,8 @@
   {
     "path": "how-to/rent-cloud-gpus.md",
     "block_index": 1,
-    "source_sha256": "2052082d25b2ee92d79b26c3657df235a9339b7247a0bc4909f3acb93955a2b1",
-    "translation_sha256": "0ef02c9fd098a8f6e84ca31ab9e0bffa191c6f688a9563938cfccdd41984cda2",
+    "source_sha256": "a6a0a8058e9146b7cd2f396be4bad9947574d42b7cd5f0b9919404ca23294d5e",
+    "translation_sha256": "2c9437c6fbea28b4dc5c7f8200bb9e8b0b7ef31cd2e89dfcf8055f3c69392472",
     "reason": "Translate Chinese code comments, preserving executable statements, parameter values, and paths."
   },
   {
@@ -495,5 +495,54 @@
     "source_sha256": "99c27d4c7c0f7c7f316e94615dd19c248a756fda2cd3f87c48828bbb4ffa1f84",
     "translation_sha256": "f0fd6c6bfd121918a8813d6f5c64fdaa9479e8d6b3991fbccfc9c66c4a2110d5",
     "reason": "Shell prompt text is translated; the commands are unchanged."
+  },
+  {
+    "path": "how-to/connect-managed-kubernetes.md",
+    "block_index": 0,
+    "source_sha256": "67612afc84d4c5a55a6074c97e478d1a16d44a8ff00425b3900f9417213eee78",
+    "translation_sha256": "fef385864056e3ca73fbea3ea63cb14f8c90f6bf4fbd59692c2f5f6583234653",
+    "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
+  },
+  {
+    "path": "how-to/connect-managed-kubernetes.md",
+    "block_index": 1,
+    "source_sha256": "b60643ded580c41606bf4b1e2e2c785e8c3458104c6fd48caf7b4f349c590c2c",
+    "translation_sha256": "471063cbb2243b40082b9c42839c25ace1c2c2b25ee1ee3e4115d7cb76fc03ea",
+    "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
+  },
+  {
+    "path": "how-to/connect-managed-kubernetes.md",
+    "block_index": 2,
+    "source_sha256": "b3c4b3275907ae69c543bc8146a4d41f50f996a8f48c18c3bcab757038e88420",
+    "translation_sha256": "feb6991c41df94bf4e4b3d704f53b5ff63a8b72f6c175e0536fb55af342974b1",
+    "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
+  },
+  {
+    "path": "how-to/connect-managed-kubernetes.md",
+    "block_index": 3,
+    "source_sha256": "cc164835621a9d7f8b4de9bd676bbefed54ec29442f1fefaaf9706e561a2e8bc",
+    "translation_sha256": "2d948dfdd1d7e55797ce97897a007bc2d87f03a469ea9a436659ced82d7eb925",
+    "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
+  },
+  {
+    "path": "how-to/connect-managed-kubernetes.md",
+    "block_index": 5,
+    "source_sha256": "3ac97212aa95b66f63f6dcbc606180f06916bf5733365335b9045596f934b105",
+    "translation_sha256": "c86c6e33e52ea905609b329901f40f4b5c6efe31c5d39e4734fbd32e15b2120b",
+    "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
+  },
+  {
+    "path": "how-to/connect-managed-kubernetes.md",
+    "block_index": 6,
+    "source_sha256": "af7f55e0627f71ba6cfd42e841e6fdab5d942ac528a70e1dd5a261827fdd9e5f",
+    "translation_sha256": "eed660dc8078313a322337de1380fdd2f763fa1fde10c7e23fdd5ff0a09ef0ef",
+    "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
+  },
+  {
+    "path": "how-to/connect-managed-kubernetes.md",
+    "block_index": 18,
+    "source_sha256": "0f99cdeebc846d77a66623b709f47c053efe1a628ca4a434dacb5732dc957514",
+    "translation_sha256": "4bd9458da492df3691e5f6f4f785e09b2dedc28398eb2af31528495e170af09c",
+    "reason": "Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged."
   }
 ]

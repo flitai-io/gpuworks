@@ -57,6 +57,34 @@ type inconclusiveError struct{ reason string }
 
 func (e inconclusiveError) Error() string { return e.reason }
 
+// NotHeld marks an attempt's failure as "the platform does not hold this
+// card": it is not the platform's to ask (on a Kubernetes node, the kubelet may
+// give it to another pod at any moment). The attempt never touched the card, so
+// nothing is recorded about it except that it was skipped, and — unlike
+// Inconclusive — the round goes on with the other cards.
+func NotHeld(reason string) error {
+	return notHeldError{reason: strings.TrimSpace(reason)}
+}
+
+type notHeldError struct{ reason string }
+
+func (e notHeldError) Error() string {
+	if e.reason == "" {
+		return "the platform does not hold this card"
+	}
+	return e.reason
+}
+
+// NotHeldReason is why the platform does not hold the card the attempt was
+// about, or "" for any other error.
+func NotHeldReason(err error) string {
+	var held notHeldError
+	if errors.As(err, &held) {
+		return held.Error()
+	}
+	return ""
+}
+
 func inconclusiveReason(err error) string {
 	var inconclusive inconclusiveError
 	if errors.As(err, &inconclusive) {
@@ -189,6 +217,9 @@ type Runner struct {
 	// answers counts each card's recorded answers, so a caller can tell an
 	// attempt that decided something from one that did not.
 	answers map[string]uint64
+	// notHeld counts each card's attempts refused as not held, for the same
+	// reason.
+	notHeld map[string]uint64
 }
 
 func New(cfg Config) *Runner {
@@ -210,7 +241,7 @@ func New(cfg Config) *Runner {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Runner{cfg: cfg, outcomes: map[string]Outcome{}, stuck: map[string]bool{}, nextAttempt: map[string]time.Time{}, skips: map[string]Skip{}, answers: map[string]uint64{}}
+	return &Runner{cfg: cfg, outcomes: map[string]Outcome{}, stuck: map[string]bool{}, nextAttempt: map[string]time.Time{}, skips: map[string]Skip{}, answers: map[string]uint64{}, notHeld: map[string]uint64{}}
 }
 
 // Run keeps running rounds until ctx ends.
@@ -476,6 +507,15 @@ func (r *Runner) tryUnlessBusy(ctx context.Context, card Card, skipBusy bool) st
 		if err == timeoutErr {
 			return timeoutErr.Error()
 		}
+		return ""
+	}
+	if NotHeldReason(err) != "" {
+		// The platform does not hold the card: it was never asked, and
+		// keeps whatever it last answered.
+		r.mu.Lock()
+		r.skips[card.Ident] = Skip{Reason: SkipNotHeld, At: r.cfg.Now()}
+		r.notHeld[card.Ident]++
+		r.mu.Unlock()
 		return ""
 	}
 	if inconclusive := inconclusiveReason(err); inconclusive != "" {

@@ -33,11 +33,30 @@ import (
 // the same host.
 const Namespace = "gpuworks"
 
-// Driver runs containers via `nerdctl -n gpuworks`.
-type Driver struct{}
+// Driver runs containers via `nerdctl -n <namespace>`.
+type Driver struct {
+	ns string
+	// authDir is where a pull's private registry login is written; "" is the
+	// system temp directory.
+	authDir string
+}
 
-// New returns a nerdctl driver.
-func New() *Driver { return &Driver{} }
+// New returns a nerdctl driver pinned to the GPUWorks namespace.
+func New() *Driver { return &Driver{ns: Namespace} }
+
+// NewInNamespace returns a driver pinned to another containerd namespace.
+// The Kubernetes runtime uses it for kubelet's "k8s.io" namespace, where the
+// images its pods run from must live; nothing else should need it.
+func NewInNamespace(ns string) *Driver { return &Driver{ns: ns} }
+
+// WithAuthDir makes pulls write their private registry login under dir
+// instead of the system temp directory. The kube runtime runs nerdctl in the
+// node's mount namespace, where only paths shared with the agent (its state
+// directory) exist.
+func (d *Driver) WithAuthDir(dir string) *Driver {
+	d.authDir = dir
+	return d
+}
 
 // Name implements runtime.Driver.
 func (d *Driver) Name() string { return "nerdctl" }
@@ -51,8 +70,8 @@ func (d *Driver) Detect(ctx context.Context) (bool, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	slog.Debug("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "ps"})
-	if err := exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "ps").Run(); err != nil {
+	slog.Debug("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "ps"})
+	if err := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "ps").Run(); err != nil {
 		return false, nil // installed but containerd not reachable / no permission
 	}
 	return true, nil
@@ -60,8 +79,8 @@ func (d *Driver) Detect(ctx context.Context) (bool, error) {
 
 // ImageExists reports whether the image is present locally.
 func (d *Driver) ImageExists(ctx context.Context, image string) (bool, error) {
-	slog.Debug("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "image", "inspect", image})
-	out, err := exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "image", "inspect", image).CombinedOutput()
+	slog.Debug("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "image", "inspect", image})
+	out, err := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "image", "inspect", image).CombinedOutput()
 	if ctx.Err() != nil {
 		return false, ctx.Err()
 	}
@@ -78,8 +97,8 @@ func (d *Driver) ImageExists(ctx context.Context, image string) (bool, error) {
 // RemoveImage deletes a local image in the gpuworks namespace. containerd
 // refuses while a container still uses it, and that refusal is the answer.
 func (d *Driver) RemoveImage(ctx context.Context, image string) error {
-	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "image", "rm", image})
-	out, err := exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "image", "rm", image).CombinedOutput()
+	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "image", "rm", image})
+	out, err := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "image", "rm", image).CombinedOutput()
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -101,7 +120,7 @@ func (d *Driver) InspectImage(ctx context.Context, image string) (runtime.ImageI
 // dockercompat mode converts this same selected config, so native mode does not
 // change the platform selection. A Run --platform override is not applied here.
 func (d *Driver) inspectImage(ctx context.Context, image string) (runtime.ImageInspection, string, error) {
-	out, err := output(ctx, 10*time.Second, "image", "inspect", "--mode=native", "--format", "{{json .}}", image)
+	out, err := d.output(ctx, 10*time.Second, "image", "inspect", "--mode=native", "--format", "{{json .}}", image)
 	if err != nil {
 		return runtime.ImageInspection{}, "", err
 	}
@@ -161,15 +180,15 @@ func (d *Driver) PullImage(ctx context.Context, image string, onLine func(string
 	if err := runtime.ValidatePullProxy(ctx); err != nil {
 		return err
 	}
-	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "pull", image})
+	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "pull", image})
 	// A registry login rides in a private docker config directory for this
 	// pull only, never in the arguments or the user's own docker config.
-	env, cleanupAuth, err := runtime.PullAuthEnv(ctx, image, runtime.PullProxyEnv(ctx, os.Environ()))
+	env, cleanupAuth, err := runtime.PullAuthEnvIn(ctx, image, runtime.PullProxyEnv(ctx, os.Environ()), d.authDir)
 	if err != nil {
 		return err
 	}
 	defer cleanupAuth()
-	cmd := exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "pull", image)
+	cmd := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "pull", image)
 	cmd.Env = env
 	stdout, writer, err := os.Pipe()
 	if err != nil {
@@ -225,7 +244,7 @@ func (d *Driver) PullImage(ctx context.Context, image string, onLine func(string
 		err = scan.err
 	}
 	if err != nil {
-		slog.Warn("runtime command failed", "runtime", "nerdctl", "args", []string{"-n", Namespace, "pull", image}, "err", err, "stderr_tail", scan.tail)
+		slog.Warn("runtime command failed", "runtime", "nerdctl", "args", []string{"-n", d.ns, "pull", image}, "err", err, "stderr_tail", scan.tail)
 		if scan.tail != "" {
 			return fmt.Errorf("nerdctl pull: %w: %s", err, scan.tail)
 		}
@@ -235,13 +254,19 @@ func (d *Driver) PullImage(ctx context.Context, image string, onLine func(string
 
 // TagImage records a source-selected pull under the canonical catalog ref.
 func (d *Driver) TagImage(ctx context.Context, source, canonical string) error {
-	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "tag", source, canonical})
-	return exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "tag", source, canonical).Run()
+	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "tag", source, canonical})
+	return exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "tag", source, canonical).Run()
+}
+
+// HoldsImage reports whether the gpuworks namespace holds image, for a node
+// switching from nerdctl to another runtime.
+func (d *Driver) HoldsImage(ctx context.Context, image string) (bool, error) {
+	return d.ImageExists(ctx, image)
 }
 
 func (d *Driver) SaveImage(ctx context.Context, image string, w io.Writer) error {
-	slog.Debug("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "save", image})
-	cmd := exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "save", image)
+	slog.Debug("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "save", image})
+	cmd := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "save", image)
 	cmd.Stdout = w
 	cmd.Stderr = io.Discard
 	return cmd.Run()
@@ -255,8 +280,8 @@ func (d *Driver) LoadImage(ctx context.Context, image string, r io.Reader) error
 // LoadImageRef loads a streamed archive and returns the reference nerdctl
 // named on stdout ("unpacking <ref> (sha256:…)"), or "" when it named none.
 func (d *Driver) LoadImageRef(ctx context.Context, image string, r io.Reader) (string, error) {
-	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "load"}, "image", image)
-	cmd := exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "load")
+	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "load"}, "image", image)
+	cmd := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "load")
 	cmd.Stdin = r
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -280,8 +305,8 @@ func (d *Driver) LoadImageFile(ctx context.Context, image, path string) error {
 // LoadImageFileRef loads the archive and returns the reference nerdctl named
 // on stdout ("unpacking <ref> (sha256:…)"), or "" when it named none.
 func (d *Driver) LoadImageFileRef(ctx context.Context, image, path string) (string, error) {
-	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", Namespace, "load", "-i", path}, "image", image)
-	cmd := exec.CommandContext(ctx, "nerdctl", "-n", Namespace, "load", "-i", path)
+	slog.Info("runtime command", "runtime", "nerdctl", "args", []string{"-n", d.ns, "load", "-i", path}, "image", image)
+	cmd := exec.CommandContext(ctx, "nerdctl", "-n", d.ns, "load", "-i", path)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -298,6 +323,7 @@ var (
 	_ runtime.LoadedRefReporter   = (*Driver)(nil)
 	_ runtime.StreamedRefReporter = (*Driver)(nil)
 	_ runtime.ImageTagger         = (*Driver)(nil)
+	_ runtime.LocalImageSource    = (*Driver)(nil)
 )
 
 // Prepare is a no-op for nerdctl (image pull handled separately).
@@ -307,7 +333,7 @@ func (d *Driver) Prepare(ctx context.Context, spec runtime.WorkloadSpec) error {
 // namespace-scoped like every other nerdctl operation, so the listing never
 // mixes GPUWorks containers with kubelet-managed ones.
 func (d *Driver) ListContainers(ctx context.Context) ([]string, error) {
-	out, err := output(ctx, 10*time.Second, "ps", "-a", "--format", "{{.Names}}")
+	out, err := d.output(ctx, 10*time.Second, "ps", "-a", "--format", "{{.Names}}")
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +343,7 @@ func (d *Driver) ListContainers(ctx context.Context) ([]string, error) {
 // RunningContainers lists the names of the containers nerdctl reports as up
 // in the GPUWorks namespace: `nerdctl ps` without -a.
 func (d *Driver) RunningContainers(ctx context.Context) ([]string, error) {
-	out, err := output(ctx, 10*time.Second, "ps", "--format", "{{.Names}}")
+	out, err := d.output(ctx, 10*time.Second, "ps", "--format", "{{.Names}}")
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +363,7 @@ func (d *Driver) Run(ctx context.Context, spec runtime.WorkloadSpec) (string, er
 		spec.DockerArgs = append(slices.Clone(spec.DockerArgs), "--label", imageTargetLabel+"="+target)
 	}
 	return runtime.RunDetached(ctx, runtime.DetachedRun{
-		CLI: "nerdctl", Args: buildRunArgs(spec), Name: spec.Name, Remove: d.Remove,
+		CLI: "nerdctl", Args: d.buildRunArgs(spec), Name: spec.Name, Remove: d.Remove,
 		Timeout: runTimeout, AbandonGrace: abandonGrace,
 	})
 }
@@ -359,8 +385,8 @@ var runTimeout, abandonGrace time.Duration
 // driver/DCMI bind mounts; buildRunArgs propagates both here. See
 // gpu.AscendProber.RuntimeInjectionForDriver and docs/dev/ledgers/engineering-log.md "Ascend device
 // injection for the nerdctl runtime driver".
-func buildRunArgs(spec runtime.WorkloadSpec) []string {
-	args := []string{"-n", Namespace, "run", "-d", "--name", spec.Name}
+func (d *Driver) buildRunArgs(spec runtime.WorkloadSpec) []string {
+	args := []string{"-n", d.ns, "run", "-d", "--name", spec.Name}
 
 	if spec.HostNetwork {
 		args = append(args, "--network", "host")
@@ -398,13 +424,13 @@ func buildRunArgs(spec runtime.WorkloadSpec) []string {
 
 // Stop stops a container (10s graceful window).
 func (d *Driver) Stop(ctx context.Context, id string) error {
-	_, err := outputMutating(ctx, 30*time.Second, "stop", "-t", "10", id)
+	_, err := d.outputMutating(ctx, 30*time.Second, "stop", "-t", "10", id)
 	return err
 }
 
 // Remove force-deletes a container.
 func (d *Driver) Remove(ctx context.Context, id string) error {
-	out, err := outputMutating(ctx, 30*time.Second, "rm", "-f", id)
+	out, err := d.outputMutating(ctx, 30*time.Second, "rm", "-f", id)
 	if err != nil && (strings.Contains(out, "no such container") || strings.Contains(out, "not found") ||
 		strings.Contains(err.Error(), "no such container") || strings.Contains(err.Error(), "not found")) {
 		return nil
@@ -422,7 +448,7 @@ func (d *Driver) Remove(ctx context.Context, id string) error {
 // queried.
 func (d *Driver) Status(ctx context.Context, id string) (runtime.Status, error) {
 	format := "{{.State.Running}}|{{.State.ExitCode}}"
-	out, err := output(ctx, 10*time.Second, "inspect", "--format", format, id)
+	out, err := d.output(ctx, 10*time.Second, "inspect", "--format", format, id)
 	if err != nil {
 		// Only the CLI's own answer proves absence: a nerdctl binary that
 		// could not be executed fails with "executable file not found" too.
@@ -451,7 +477,7 @@ func (d *Driver) Status(ctx context.Context, id string) (runtime.Status, error) 
 
 // Logs returns the container's log stream.
 func (d *Driver) Logs(ctx context.Context, id string, follow bool, tail int) (io.ReadCloser, error) {
-	args := []string{"-n", Namespace, "logs"}
+	args := []string{"-n", d.ns, "logs"}
 	if follow {
 		args = append(args, "-f")
 	}
@@ -475,7 +501,7 @@ func (d *Driver) Logs(ctx context.Context, id string, follow bool, tail int) (io
 
 // Exec runs a command in the container.
 func (d *Driver) Exec(ctx context.Context, id string, cmd []string) ([]byte, error) {
-	args := append([]string{"-n", Namespace, "exec", id}, cmd...)
+	args := append([]string{"-n", d.ns, "exec", id}, cmd...)
 	slog.Info("runtime command", "runtime", "nerdctl", "args", args)
 	c := exec.CommandContext(ctx, "nerdctl", args...)
 	out, err := c.CombinedOutput()
@@ -497,7 +523,7 @@ func (d *Driver) ExecPTY(_ context.Context, id string, cmd []string) ([]string, 
 	if len(cmd) == 0 {
 		cmd = []string{"/bin/sh", "-l"}
 	}
-	args := []string{"nerdctl", "-n", Namespace, "exec", "-i", "-t", id}
+	args := []string{"nerdctl", "-n", d.ns, "exec", "-i", "-t", id}
 	return append(args, cmd...), nil
 }
 
@@ -523,8 +549,8 @@ func splitOutputLines(out string) []string {
 
 // output runs nerdctl (namespace-scoped) with a timeout and returns combined
 // output.
-func output(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
-	full := append([]string{"-n", Namespace}, args...)
+func (d *Driver) output(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
+	full := append([]string{"-n", d.ns}, args...)
 	slog.Debug("runtime command", "runtime", "nerdctl", "args", full)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -542,10 +568,10 @@ func output(ctx context.Context, timeout time.Duration, args ...string) (string,
 // outputMutating runs a state-changing nerdctl command. Mutating commands are
 // the audit trail for "who touched this node", so they log at INFO even on
 // success; pure reads through output stay at Debug.
-func outputMutating(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
-	full := append([]string{"-n", Namespace}, args...)
+func (d *Driver) outputMutating(ctx context.Context, timeout time.Duration, args ...string) (string, error) {
+	full := append([]string{"-n", d.ns}, args...)
 	slog.Info("runtime command", "runtime", "nerdctl", "args", full)
-	return output(ctx, timeout, args...)
+	return d.output(ctx, timeout, args...)
 }
 
 // procReadCloser wraps the log pipe so Close also kills the nerdctl logs

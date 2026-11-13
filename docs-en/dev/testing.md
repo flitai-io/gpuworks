@@ -269,11 +269,22 @@ that already hold tables, always run the real migrations, so upgrade paths are u
 ## GitHub Actions Mirror Gates
 
 `.github/workflows/ci.yml` runs the same checks as GitLab's core stage on GitHub-hosted runners: the UI
-build and tests, the untagged Go suite with the check scripts, `go vet`, the CompShare offline contracts,
-and strict L2/L3. GitLab remains the authoritative pipeline; the GitHub mirror only receives master, so this
-workflow runs on pull requests, on manual dispatch, and nightly at 03:07 (Asia/Shanghai, just after GitLab's
-nightly) on master, for comparison with GitLab's result for the same commit. L4, releases and the docs build
-do not run here, and no secret or self-hosted runner is used.
+build and tests, the untagged Go suite with the check scripts, `go vet`, `make lint`, the CompShare offline
+contracts, and strict L2/L3. GitLab remains the authoritative pipeline; the GitHub mirror only receives master,
+so this workflow runs on pull requests, on manual dispatch, and nightly at 03:07 (Asia/Shanghai, just after
+GitLab's nightly) on master, for comparison with GitLab's result for the same commit. It uses no secret or
+self-hosted runner. Three more workflows cover GitLab's other non-L4 jobs: `docs.yml` (the docs site build,
+triggered by pull requests that touch the docs; it fetches the OINK theme from the public `gpuworks_website` repository),
+`ui-check.yml` (the UI walk, triggered by pull requests that touch the UI and nightly, with the report
+uploaded as an artifact) and `release.yml` (release packages, see the
+[release guide](release.md#github-actions-releases)). L4 still runs only in GitLab.
+
+The scripts read CI-neutral variable names: `GPUWORKS_BUILD_COMMIT` (the commit built), `GPUWORKS_BUILT_AT`
+(one build time shared by every job of a run) and `GPUWORKS_ARCH_BASELINE` (the merge request's base commit,
+against which `check_architecture.sh` compares the budget file). `.gitlab-ci.yml` and the GitHub workflows
+each set them from their own built-in variables; unset, the scripts fall back to local `git` and the current
+time. `check_ci_yaml.sh` runs the folded-scalar comment check over both CI definitions; the stage-order check
+applies to `.gitlab-ci.yml` only.
 
 - L2/L3 take the shape of GitLab's `.docker-core`: one DinD daemon per job, exposed on a dedicated
   `gpuworks-e2e` socket, with the suite in a golang container. The runner VM's own Docker does not work: the
@@ -282,6 +293,14 @@ do not run here, and no secret or self-hosted runner is used.
 - On a 2-core runner the UI suite runs one test file at a time and takes over an hour unsplit; it runs as 4
   parallel shards, with `npm run test:coverage` passing an optional `TEST_SHARD` (such as `2/4`) to
   `--test-shard`. Unset, the command is the original one.
+- The untagged Go suite runs in 3 shards of whole packages: `scripts/go_package_shard.sh <i>/<n> ./...` sorts
+  the packages `go list` prints by import path and deals them round-robin, which puts the heaviest ones,
+  `server/api` and two integrationtest packages, in different shards. L2 runs in 3 shards by `L2_SHARD`, as
+  GitLab's `core-l2` does. The check scripts, `go vet`, `make lint`, the CompShare offline contracts and
+  `check-tagged-build` share one `checks` job: the organization's hosted runners have a concurrent-job limit,
+  and each of these takes seconds to a few minutes, so a job apiece would only hold more runners.
+- The full-disk L2 case needs a tmpfs of its own: the suite's container cannot create a user namespace, so,
+  as on GitLab, `docker run --tmpfs` mounts one and passes it in through `GPUWORKS_TEST_FULL_DISK_TMPFS`.
 
 ## Cost and Caching
 
@@ -398,8 +417,8 @@ The golden image is built by `make prepare-aliyun-golden-image`: it starts a T4 
 `ubuntu_22_04_x64_100G_with_gpu_driver_and_cuda_alibase_*` (driver and CUDA preinstalled),
 installs Docker 29 and the NVIDIA container toolkit (the Docker CE repository is tried at `mirrors.aliyun.com`, Tsinghua, USTC, and Huawei Cloud in turn,
 moving on when a mirror is mid-sync and fails the index check; a resumed build first drops the Docker repository the earlier attempt wrote), pulls the vLLM runner image (the Huawei Cloud SWR mirror first,
-then quay.io and Docker Hub; the final tag is `gpustack/runner:cuda12.8-vllm0.17.1`), downloads Qwen2-0.5B-Instruct to
-`/opt/gpuworks/test-fixtures/models/qwen2-0.5b` with checksums, stops Docker, syncs, and calls `CreateImage`, then `CopyImage`
+then quay.io and Docker Hub; the final tag is `gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4`), downloads Qwen3-0.6B to
+`/opt/gpuworks/test-fixtures/models/qwen3-0.6b` with checksums, stops Docker, syncs, and calls `CreateImage`, then `CopyImage`
 to every region in `-regions` (by default East China 1, North China 2, South China 1, and South China 3) and boots a new instance in the source region to validate it (validation comes before copying, so a broken image is not copied to four regions).
 The image is about 50 GB (the runner image dominates); the first full snapshot of the 150 GiB system disk takes about 90 minutes and the cross-region copies about another hour, so plan for two to three hours.
 Custom images are isolated by region, so there is one ID per region; the printed `ALIYUN_IMAGE_CN_HANGZHOU=` and similar lines go into `secrets/cloud-providers.env`
@@ -409,7 +428,7 @@ and `-resume-credentials` continues from it.
 Both the model and the runner can be changed: `-model-repo`/`-model-rev` pick the ModelScope model, `-model-path` its path in the image,
 and `-docker-image`/`-pull-sources` the runner; the default image name follows the model (`gpuworks-golden-<model>-<UTC time>`).
 `-source-regions` limits where the source and validation instances are rented (by default the same as `-regions`); when copying to overseas and similar regions, use it to keep the source instance in a mainland region with stock.
-The L4 cases register the default Qwen2-0.5B and `gpustack/runner:cuda12.8-vllm0.17.1`, so an image with another model or runner cannot serve them as is. The image already carries Docker and the model, so the cases only verify them and neither install nor download
+The L4 cases register the default Qwen3-0.6B; single-VM cases deploy `gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4` on A10, L20 and similar cards and `gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2` on T4 (baked in with `-extra-image`), and multi-node cases use the latter on every card. An image with another model or runner cannot serve them as is. The image already carries Docker and the model, so the cases only verify them and neither install nor download
 (a missing piece means the image is broken and the case fails at once).
 
 Variables CI needs (scoped to `cloud-test/aliyun/*`): `ALIYUN_ACCESS_KEY_ID`, `ALIYUN_ACCESS_KEY_SECRET`

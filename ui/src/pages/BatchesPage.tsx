@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Select, Tooltip, Typography, message } from "antd";
+import { Button } from "../components/ui/button";
+import { Tooltip } from "../components/ui/tooltip";
+import { PageLayout, PageContent, PageBody } from "../components/ui/page-layout";
+import { fromAntd } from "../ui-kit/antdIcon";
+import { message } from "../ui-kit/feedback";
 import { PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
@@ -78,50 +82,43 @@ export default function BatchesPage({ pollMs = BATCH_POLL_MS }: { pollMs?: numbe
     openDetail(batch.id);
   };
 
+  // Together the widths fit the 1440 panel; a narrower screen scrolls the table.
   const columns: ResourceColumn<Batch>[] = [
     {
-      key: "id", title: t("columns.id"), width: 240, role: "name",
+      key: "id", title: t("columns.id"), width: 210, role: "name",
       render: (_: unknown, batch) => (
-        <Button type="link" style={{ padding: 0 }} onClick={() => openDetail(batch.id)} aria-label={t("action.open", { id: batch.id })}>{batch.id}</Button>
+        <Button variant="ghost" style={{ padding: 0 }} onClick={() => openDetail(batch.id)} aria-label={t("action.open", { id: batch.id })}>{batch.id}</Button>
       ),
     },
-    { key: "status", title: t("columns.status"), width: 130, render: (_: unknown, batch) => <BatchStatusTag status={batch.status} /> },
-    { key: "endpoint", title: t("columns.endpoint"), width: 200, render: (_: unknown, batch) => <Typography.Text code>{batch.endpoint}</Typography.Text> },
     {
-      key: "model", title: t("columns.model"), width: 180,
-      render: (_: unknown, batch) => (batch.model ? <Typography.Text code>{batch.model}</Typography.Text> : <Typography.Text type="secondary">{t("columns.modelPerLine")}</Typography.Text>),
+      key: "status", title: t("columns.status"), width: 110,
+      filters: statuses.map((value) => ({ value, text: t(`status.${value}`) })), filteredValue: status.length ? status : null,
+      render: (_: unknown, batch) => <BatchStatusTag status={batch.status} />,
     },
-    { key: "progress", title: t("columns.progress"), width: 220, render: (_: unknown, batch) => <BatchProgress batch={batch} /> },
-    { key: "created_at", title: t("columns.createdAt"), width: 160, render: (_: unknown, batch) => formatTime(batch.created_at) },
-    { key: "expires_at", title: t("columns.expiresAt"), width: 160, render: (_: unknown, batch) => formatTime(batch.expires_at) },
+    { key: "endpoint", title: t("columns.endpoint"), width: 160, render: (_: unknown, batch) => <code>{batch.endpoint}</code> },
+    {
+      key: "model", title: t("columns.model"), width: 160,
+      render: (_: unknown, batch) => (batch.model ? <code>{batch.model}</code> : <span className="text-fg-muted">{t("columns.modelPerLine")}</span>),
+    },
+    { key: "progress", title: t("columns.progress"), width: 190, render: (_: unknown, batch) => <BatchProgress batch={batch} /> },
+    { key: "created_at", title: t("columns.createdAt"), width: 150, render: (_: unknown, batch) => formatTime(batch.created_at) },
+    { key: "expires_at", title: t("columns.expiresAt"), width: 150, render: (_: unknown, batch) => formatTime(batch.expires_at) },
   ];
 
   const filtering = status.length > 0;
-  const toolbar = (
-    <Select
-      mode="multiple"
-      allowClear
-      style={{ minWidth: 240 }}
-      placeholder={t("filter.status")}
-      aria-label={t("filter.status")}
-      value={status}
-      onChange={setStatus}
-      maxTagCount="responsive"
-      options={statuses.map((value) => ({ value, label: t(`status.${value}`) }))}
-    />
-  );
-  const createButton = (
-    <Tooltip title={isAdmin ? undefined : t("action.createAdminOnly")}>
-      <span>
-        <Button type="primary" icon={<PlusOutlined />} disabled={!isAdmin} onClick={() => setCreateOpen(true)}>{t("action.create")}</Button>
-      </span>
-    </Tooltip>
+  const createAction = <Button variant="primary" leadingIcon={fromAntd(PlusOutlined)} disabled={!isAdmin} onClick={() => setCreateOpen(true)}>{t("action.create")}</Button>;
+  // Only a non-admin gets a reason; an admin hovering the button sees no empty bubble.
+  const createButton = isAdmin ? createAction : (
+    <Tooltip content={t("action.createAdminOnly")}><span>{createAction}</span></Tooltip>
   );
 
   return (
-    <>
+    <PageLayout gutter="none" className="h-auto gap-0">
       <PageHeader title={t("page.title")} description={t("page.description")} extra={createButton} />
+      <PageContent><PageBody>
       <BatchAPIUsage />
+      {/* The list sits in a bordered panel like the other list pages. */}
+      <div className="rounded-xl border border-border-subtle bg-surface-floating p-4">
       <ResourceTable<Batch>
         tableId={TABLE_ID}
         rowKey="id"
@@ -132,13 +129,15 @@ export default function BatchesPage({ pollMs = BATCH_POLL_MS }: { pollMs?: numbe
         onRefresh={() => void list.refetch()}
         updatedAt={list.updatedAt}
         pagination={list.pagination}
-        toolbar={toolbar}
+        onFiltersChange={(next) => setStatus(next.status ?? [])}
         emptyDescription={t(filtering ? "empty.filtered" : "empty.all")}
-        emptyAction={filtering || !isAdmin ? undefined : <Button type="primary" onClick={() => setCreateOpen(true)}>{t("action.create")}</Button>}
+        emptyAction={filtering || !isAdmin ? undefined : <Button variant="primary" onClick={() => setCreateOpen(true)}>{t("action.create")}</Button>}
         onRow={(batch) => ({ className: "batch-row", onClick: () => openDetail(batch.id) })}
       />
+      </div>
+      </PageBody></PageContent>
       <BatchDetailDrawer id={detailID} canManage={isAdmin} pollMs={pollMs} onClose={closeDetail} onChanged={refresh} />
       <BatchCreateModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={created} />
-    </>
+    </PageLayout>
   );
 }

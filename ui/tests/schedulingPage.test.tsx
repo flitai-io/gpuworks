@@ -12,9 +12,10 @@ import { smallFleet } from "./helpers/overviewFixtures.ts";
 // drawer words it, upcoming, waiting wakes cancelled from the keyboard) and the
 // sharing stats.
 
+Object.defineProperty(globalThis, "Document", { value: dom.window.Document, configurable: true });
 const closeChannels = trackMessageChannels();
 const { i18n, locale } = await createI18n(["scheduling", "deployments", "deploy"]);
-const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { MemoryRouter, Route, Routes, useLocation, useNavigate } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
@@ -114,15 +115,12 @@ function serve(options: { overview?: () => Promise<Overview>; board?: () => Boar
   return calls;
 }
 
+let navigateBack: () => void;
 function Probe() {
   const location = useLocation();
   const navigate = useNavigate();
-  return (
-    <>
-      <div data-testid="loc">{location.pathname}{location.search}</div>
-      <button type="button" onClick={() => navigate(-1)}>browser back</button>
-    </>
-  );
+  React.useEffect(() => { navigateBack = () => navigate(-1); }, [navigate]);
+  return <div data-testid="loc">{location.pathname}{location.search}</div>;
 }
 
 function mount(path = "/scheduling") {
@@ -191,30 +189,55 @@ test("an empty fleet says so, and every queue says it is empty", async () => {
   });
   mount();
   await screen.findByText(s.nodes.empty);
-  for (const text of [s.pending.empty, s.waiting.empty, s.upcoming.empty]) assert.ok(await screen.findByText(text), text);
+  for (const section of [s.pending, s.waiting, s.upcoming]) {
+    const card = await screen.findByRole("region", { name: section.title });
+    assert.ok(within(card).getByText(section.empty));
+  }
   assert.equal(screen.queryByRole("group", { name: s.heatmap.aria }), null);
+  assert.equal(within(screen.getByRole("group", { name: s.summary.cardsTitle })).queryByRole("img"), null);
+});
+
+test("a queued wake is actionable directly from its card above the GPU heatmap", async () => {
+  serve({ board: () => queues({ pending: [] }) });
+  mount();
+  const panel = await screen.findByRole("region", { name: s.waiting.title });
+  assert.ok(within(panel).getByRole("button", { name: i18n.t("scheduling:waiting.cancelOf", { name: "llama" }) }));
+  const heatmap = screen.getByRole("group", { name: s.heatmap.aria });
+  assert.ok(panel.compareDocumentPosition(heatmap) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+});
+
+test("future plans remain visible alongside both empty deployment queues", async () => {
+  serve({ board: () => queues({ pending: [], waiting_wakes: [] }) });
+  mount();
+  const plans = await screen.findByRole("region", { name: s.upcoming.title });
+  assert.ok(within(plans).getByText(i18n.t("scheduling:upcoming.action.replicas", { count: 3 })));
+  const waitingGroup = screen.getByText(i18n.t("scheduling:queues.currentWaiting")).closest(".ant-card")!;
+  assert.ok(within(waitingGroup).getByText(s.waiting.empty));
+  assert.ok(within(waitingGroup).getByText(s.pending.empty));
+  assert.ok(!waitingGroup.contains(plans));
 });
 
 test("the summary counts the cards by state and the contention, with the queues' counts", async () => {
   serve();
   mount();
-  const summary = await screen.findByRole("group", { name: s.summary.title });
-  const tile = (group: string, label: string) => {
-    const el = within(within(summary).getByRole("group", { name: group })).getByText(label).closest(".scheduling-tile") as HTMLElement;
-    return el.querySelector("strong")?.textContent;
-  };
-  assert.equal(tile(s.summary.cardsTitle, s.summary.total), "6");
+  const summary = await screen.findByRole("group", { name: s.summary.cardsTitle });
+  assert.equal(within(summary).getByText(s.summary.total).parentElement?.querySelector("strong")?.textContent, "6");
+  const distribution = within(summary).getByRole("img", { name: new RegExp(s.states.awake + " 2 / 6") });
+  const shares = Array.from(distribution.children, (segment) => parseFloat((segment as HTMLElement).style.width));
+  assert.equal(shares.length, 5, "only nonempty GPU states take up space");
+  assert.ok(Math.abs(shares[0] - 100 * 2 / 6) < 0.001, "the denominator is the GPU count, not the node count");
+  assert.ok(Math.abs(shares.reduce((sum, share) => sum + share, 0) - 100) < 0.001);
   assert.ok(within(summary).getByText(i18n.t("scheduling:summary.nodesOnline", { online: 2, count: 3 })));
   for (const [state, count] of [["awake", "2"], ["asleep", "1"], ["free", "1"], ["held_outside", "1"], ["offline", "1"]]) {
-    assert.equal(tile(s.summary.cardsTitle, s.states[state as keyof typeof s.states]), count, state);
+    assert.equal(within(summary).getByText(s.states[state as keyof typeof s.states]).closest("li")?.querySelector("strong")?.textContent, count);
   }
-  assert.equal(within(summary).queryByText(s.states.unhealthy), null, "no faulty card, no faulty tile");
-  assert.equal(within(summary).queryByRole("list"), null, "no line of cards per GPU model");
-  assert.equal(tile(s.summary.contentionTitle, s.summary.waitingWakes), "1");
-  assert.equal(tile(s.summary.contentionTitle, s.summary.heldRequests), "3");
-  assert.equal(tile(s.summary.contentionTitle, s.summary.yields), "2");
-  await waitFor(() => assert.equal(tile(s.summary.contentionTitle, s.summary.pending), "1"));
-  assert.equal(tile(s.summary.contentionTitle, s.summary.upcoming), "2");
+  assert.equal(within(summary).getByText(s.summary.yields).querySelector("strong")?.textContent, "2");
+  const waiting = await screen.findByRole("region", { name: s.waiting.title });
+  assert.ok(within(waiting).getByText(i18n.t("scheduling:waiting.requestCount", { count: 3 }), { exact: false }));
+  for (const [title, count] of [[s.pending.title, 1], [s.waiting.title, 1], [s.upcoming.title, 2]] as const) {
+    const queue = await screen.findByRole("region", { name: title });
+    assert.ok(within(queue).getByRole("button", { name: i18n.t("scheduling:queues.showAll", { count }) }));
+  }
 });
 
 test("the heatmap shows every card and says how many are shown; the page never reads a page of nodes", async () => {
@@ -272,7 +295,8 @@ test("grouping by a label and sorting by contention reorder the nodes", async ()
   await screen.findByRole("group", { name: s.heatmap.aria });
   await choose(s.filters.groupBy, i18n.t("scheduling:filters.group.label", { key: "zone" }));
   const sections = await waitFor(() => {
-    const found = screen.getAllByRole("region");
+    const grid = screen.getByRole("group", { name: s.heatmap.aria });
+    const found = within(grid).getAllByRole("region");
     assert.equal(found.length, 3);
     return found;
   });
@@ -291,22 +315,20 @@ test("opening a node reads it in full: each GPU as a bar with its holders, and i
   const drawer = await screen.findByRole("dialog");
   await within(drawer).findByRole("region", { name: "gpu-a" });
   assert.deepEqual(calls.board.at(-1), { node: "node-a" });
-  const bar = within(drawer).getByRole("img", { name: i18n.t("scheduling:nodes.barAria", { node: "gpu-a", index: 0, awake: "20.0 GiB", sleeping: "4.0 GiB", free: "24.0 GiB", total: "48.0 GiB" }) });
-  assert.deepEqual([...bar.querySelectorAll("span")].map((span) => Math.round(parseFloat((span as HTMLElement).style.width))), [42, 8, 50]);
-  const level = (name: string) => i18n.t("scheduling:nodes.occupant.level", { level: i18n.t(`deployments:yieldPolicy.policy.name.${name}`) }).trim();
-  const awake = within(drawer).getByRole("link", { name: "qwen" }).parentElement as HTMLElement;
-  assert.ok(within(awake).getByText(new RegExp(i18n.t("scheduling:nodes.occupant.awake", { claim: "20.0 GiB" }))));
-  assert.ok(within(awake).getByText(level("idle")));
-  const asleep = within(drawer).getByRole("link", { name: "llama" }).parentElement as HTMLElement;
-  assert.ok(within(asleep).getByText(new RegExp(i18n.t("scheduling:nodes.occupant.asleep", { level: 2, residue: "4.0 GiB" }))));
-  assert.ok(within(asleep).getByText(level("timeslice")));
-  assert.ok(within(drawer).getByText(s.nodes.heldOutside));
-  // Each card names the state the server gave it, the one its heatmap cell shows.
-  assert.ok(within(drawer).getByText(s.states.awake, { selector: ".scheduling-gpu-state" }));
-  assert.ok(within(drawer).getByText(s.states.held_outside, { selector: ".scheduling-gpu-state" }));
+  const memory = within(within(drawer).getByRole("region", { name: "gpu-a" }));
+  const gpu = memory.getByText("GPU 0").closest("tr")!;
+  const proportions = [...gpu.querySelectorAll<HTMLElement>(".residency-meter i")].map(segment => Math.round(parseFloat(segment.style.width)));
+  assert.deepEqual(proportions, [42, 8]);
+  assert.match(gpu.textContent ?? "", /24.0 GiB/);
+  assert.match(within(gpu).getByRole("link", { name: "qwen" }).parentElement?.textContent ?? "", /20.0 GiB/);
+  assert.match(within(gpu).getByRole("link", { name: "llama" }).parentElement?.textContent ?? "", /L2.*4.0 GiB/);
+  const external = memory.getByText(s.states.held_outside).closest("tr")!;
+  assert.match(external.textContent ?? "", new RegExp(s.nodeChart.unknown));
+  assert.ok(external.querySelector('.residency-meter[data-balanced="false"]'));
+  assert.equal(external.querySelector(".residency-meter i"), null);
   assert.ok(within(drawer).getByText(s.timeline.title));
   await waitFor(() => assert.deepEqual(calls.timeline.find((query) => "nodes" in (query as object)), { nodes: ["node-a"], window: undefined }));
-  await user.click(within(drawer).getByRole("link", { name: "qwen" }));
+  await user.click(within(gpu).getByRole("link", { name: "qwen" }));
   assert.equal(screen.getByTestId("loc").textContent, "/deployments?deployment=7");
 });
 
@@ -337,13 +359,13 @@ test("the open node is in the URL: opening sets ?node=, closing clears it, and t
   assert.equal(screen.getByTestId("loc").textContent, "/scheduling?node=node-a");
   await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
   await waitFor(() => assert.equal(screen.getByTestId("loc").textContent, "/scheduling"));
-  await waitFor(() => assert.equal(document.querySelector(".ant-drawer-open"), null));
-  await user.click(screen.getByRole("button", { name: "browser back" }));
+  await waitFor(() => assert.equal(document.querySelector('[role="dialog"]'), null));
+  await act(async () => navigateBack());
   assert.equal(screen.getByTestId("loc").textContent, "/scheduling?node=node-a");
   await within(await screen.findByRole("dialog")).findByRole("region", { name: "gpu-a" });
-  await user.click(screen.getByRole("button", { name: "browser back" }));
+  await act(async () => navigateBack());
   assert.equal(screen.getByTestId("loc").textContent, "/scheduling");
-  await waitFor(() => assert.equal(document.querySelector(".ant-drawer-open"), null));
+  await waitFor(() => assert.equal(document.querySelector('[role="dialog"]'), null));
 });
 
 test("a link to /scheduling?node= opens that node's drawer, titled with its name", async () => {
@@ -357,7 +379,11 @@ test("a link to /scheduling?node= opens that node's drawer, titled with its name
 test("a node named in the scheduling history opens its drawer on the page", async () => {
   serve();
   const user = mount();
-  const history = (await screen.findByText(s.history.title)).closest(".ant-card") as HTMLElement;
+  const tab = await screen.findByRole("tab", { name: s.history.title });
+  const heatmap = screen.getByRole("group", { name: s.heatmap.aria }).closest(".ant-card")!;
+  assert.ok(heatmap.nextElementSibling?.contains(tab), "history must be reachable directly below the heatmap");
+  await user.click(tab);
+  const history = await screen.findByRole("tabpanel", { name: s.history.title });
   await user.click(await within(history).findByRole("link", { name: "gpu-c" }));
   assert.equal(screen.getByTestId("loc").textContent, "/scheduling?node=node-c");
   const drawer = await screen.findByRole("dialog");
@@ -374,17 +400,62 @@ test("a node can be opened from the keyboard alone", async () => {
   assert.ok(within(drawer).getByText("gpu-b"), "the third card is gpu-b's, and its name titles the drawer");
 });
 
-test("pending reasons read like the deployment drawer's placement alert; upcoming entries are worded; the history sits below", async () => {
+test("pending reasons read like the deployment drawer's placement alert; upcoming entries are worded; the history is available in its tab", async () => {
   serve();
-  mount();
-  await screen.findByText("big-model");
+  const user = mount();
+  await screen.findByRole("region", { name: s.pending.title });
   assert.ok(screen.getByText(i18n.t("deploy:schedule.pool_empty", { nodes: 3, unmet: 1, cordoned: 1, offline: 1 })));
   assert.ok(screen.getByText(i18n.t("scheduling:upcoming.action.sleep", { level: 2 })));
   assert.ok(screen.getByText(i18n.t("scheduling:upcoming.action.replicas", { count: 3 })));
+  await user.click(screen.getByRole("tab", { name: s.history.title }));
   assert.ok(await screen.findByText(i18n.t("deployments:instance.event.AUTO_SLEEP", {
     level: 2, cause: i18n.t("deployments:automation.cause.idle", { idle: "15 min" }),
   })));
   assert.ok(screen.getByText(s.history.title));
+});
+
+test("the placement table distinguishes same-name deployments, shows reason and time, and pages in place", async () => {
+  const sample = queues().pending[0];
+  const pending = Array.from({ length: 21 }, (_, index) => ({
+    ...sample, deployment_id: index + 1, deployment: index < 2 ? "same-name" : `pending-${index + 1}`,
+  }));
+  serve({ board: () => queues({ pending }) });
+  const user = mount();
+  const overview = await screen.findByRole("region", { name: s.pending.title });
+  await user.click(within(overview).getByRole("button", { name: i18n.t("scheduling:queues.showAll", { count: 21 }) }));
+  const panel = await screen.findByRole("dialog");
+  const links = await within(panel).findAllByRole("link", { name: "same-name" });
+  assert.deepEqual(links.map((link) => link.getAttribute("href")), ["/deployments?deployment=1", "/deployments?deployment=2"]);
+  for (const [i, link] of links.entries()) {
+    const row = within(link.closest("tr")!);
+    assert.ok(row.getByText(`#${i + 1}`));
+    assert.ok(row.getByText(i18n.t("deploy:schedule.pool_empty", sample.reason.params)));
+    assert.ok(row.getByText(/2026-10-25/));
+  }
+  assert.ok(within(panel).getByRole("link", { name: "pending-20" }));
+  assert.equal(within(panel).queryByRole("link", { name: "pending-21" }), null);
+  await user.click(within(panel).getByRole("button", { name: i18n.t("common:resourceTable.nextPage") }));
+  assert.equal((await within(panel).findByRole("link", { name: "pending-21" })).getAttribute("href"), "/deployments?deployment=21");
+});
+
+test("one shared placement cause opens only the affected deployments, even across different candidate nodes", async () => {
+  const base = queues().pending[0];
+  const pending = ["node-a", "node-b"].map((node, i) => ({
+    ...base, deployment_id: i + 1, deployment: node,
+    reason: { code: "pool_no_fit", params: { node, tried: 1, candidates: 1, first_reason: { message: "Model missing" } } },
+  }));
+  serve({ board: () => queues({ pending: [...pending, base] }) });
+  const user = mount();
+  const queue = await screen.findByRole("region", { name: s.pending.title });
+  const cause = within(queue).getByRole("button", { name: /Model missing/ });
+  assert.ok(within(cause).getByText(i18n.t("scheduling:pending.affected", { count: 2 })));
+  await user.click(cause);
+  const drawer = await screen.findByRole("dialog");
+  assert.ok(within(drawer).getByRole("link", { name: "node-a" }));
+  assert.ok(within(drawer).getByRole("link", { name: "node-b" }));
+  assert.equal(within(drawer).queryByRole("link", { name: base.deployment }), null);
+  await user.click(within(drawer).getByRole("button", { name: i18n.t("scheduling:queues.showAll", { count: 3 }) }));
+  assert.ok(within(drawer).getByRole("link", { name: base.deployment }));
 });
 
 test("a PD role's scheduled count names the role, and a count of 0 is still a count", async () => {
@@ -411,7 +482,7 @@ test("a waiting wake is cancelled from the keyboard, then the queues and the ove
   const base = schedulingApi.overview;
   schedulingApi.overview = async () => { reads += 1; return base(); };
   const user = mount();
-  await screen.findByText("big-model");
+  await screen.findByRole("region", { name: s.pending.title });
   const before = reads;
   const cancel = screen.getByRole("button", { name: i18n.t("scheduling:waiting.cancelOf", { name: "llama" }) });
   cancel.focus();
@@ -426,7 +497,7 @@ test("a refused cancel keeps the waiting wake and says why", async () => {
   serve();
   api.endWakeWaiting = async () => { throw new APIError("DEPLOYMENT_DELETING", {}, "the deployment is being deleted", 409); };
   const user = mount();
-  await screen.findByText("big-model");
+  await screen.findByRole("region", { name: s.pending.title });
   await user.click(screen.getByRole("button", { name: i18n.t("scheduling:waiting.cancelOf", { name: "llama" }) }));
   await screen.findByText(i18n.t("scheduling:waiting.cancelFailed", { detail: i18n.t("common:apiError.DEPLOYMENT_DELETING") }));
   assert.ok(screen.getByRole("button", { name: i18n.t("scheduling:waiting.cancelOf", { name: "llama" }) }));
@@ -454,6 +525,25 @@ test("the sharing stats cover the fleet, are read for the chosen window, and say
   await waitFor(() => assert.deepEqual(calls.timeline.at(-1), { sharing: true, window: "24h" }));
   assert.ok(await within(card).findByText(i18n.t("scheduling:sharing.refreshFailed", { detail: "log unavailable" })), "the last stats stay under the warning");
   assert.ok(within(card).getByRole("link", { name: "llama" }));
+});
+
+test("all nodes used by a deployment are reachable directly from its sharing row", async () => {
+  const cards = Array.from({ length: 20 }, (_, i) => ({
+    node_id: i + 1, node: `worker-${i + 1}`, node_uuid: `node-${i + 1}`, gpus: [0, 3],
+  }));
+  serve({ sharing: () => {
+    const data = sharing();
+    data.deployments[0].cards = cards;
+    return data;
+  } });
+  const user = mount();
+  const node = await screen.findByRole("link", { name: "worker-20" });
+  const cell = node.closest("td")!;
+  assert.equal(within(cell).getAllByRole("link").length, cards.length);
+  assert.equal(node.parentElement?.textContent, i18n.t("scheduling:timeline.cardsOnNode", { node: "worker-20", gpus: "0, 3" }));
+  await user.click(node);
+  await waitFor(() => assert.equal(screen.getByTestId("loc").textContent, "/scheduling?node=node-20"));
+  await screen.findByRole("dialog");
 });
 
 test("a later failed refresh keeps the last overview and warns", async () => {

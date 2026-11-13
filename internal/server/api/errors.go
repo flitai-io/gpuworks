@@ -15,9 +15,10 @@ const (
 	ErrorModelCacheRetryBlocked   = "MODEL_CACHE_RETRY_BLOCKED"
 	ErrorNodeLabelsInvalid        = "NODE_LABELS_INVALID"
 	ErrorNodeRPCUnavailable       = "NODE_RPC_UNAVAILABLE"
-	ErrorNodeOffline              = "NODE_OFFLINE"
+	ErrorNodeOffline              = messages.ErrorNodeOffline
 	ErrorNodeSchedulable          = "NODE_SCHEDULABLE"
 	ErrorNodeRuntimeInvalid       = "NODE_RUNTIME_INVALID"
+	ErrorNodeRuntimeKube          = "NODE_RUNTIME_KUBE_NODE" // a Kubernetes node's runtime is its cluster's, not a choice
 	ErrorNodeDeleteForceInvalid   = "NODE_DELETE_FORCE_INVALID"
 	ErrorNodeAcceleratorInvalid   = "NODE_ACCELERATOR_INVALID"
 	ErrorNodeAcceleratorNotOnHost = "NODE_ACCELERATOR_NOT_ON_HOST"
@@ -30,11 +31,18 @@ const (
 	ErrorNodeAcceleratorHasInstances            = "NODE_ACCELERATOR_HAS_INSTANCES"
 	ErrorNodeDeleteHasInstances                 = "NODE_DELETE_HAS_INSTANCES"
 	ErrorNodeDeleteCacheBusy                    = "NODE_DELETE_CACHE_BUSY"
+	ErrorNodeDeleteSSHRequired                  = "NODE_DELETE_SSH_REQUIRED"
 	ErrorNodeUninstallUnconfirmed               = "NODE_UNINSTALL_UNCONFIRMED"
 	ErrorNodeDeleteCleanupFailed                = "NODE_DELETE_CLEANUP_FAILED"
 	ErrorAuthNotConfigured                      = "AUTH_NOT_CONFIGURED"
 	ErrorInvalidCredentials                     = "INVALID_CREDENTIALS"
 	ErrorLoginThrottled                         = "LOGIN_THROTTLED"
+	ErrorPasswordLength                         = "PASSWORD_LENGTH"
+	ErrorPasswordCharacters                     = "PASSWORD_CHARACTERS"
+	ErrorPasswordGuessable                      = "PASSWORD_GUESSABLE"
+	ErrorPasswordUsername                       = "PASSWORD_USERNAME"
+	ErrorPasswordUnchanged                      = "PASSWORD_UNCHANGED"
+	ErrorCurrentPasswordInvalid                 = "CURRENT_PASSWORD_INVALID"
 	ErrorAuthenticationRequired                 = "AUTHENTICATION_REQUIRED"
 	ErrorManagementOriginRejected               = "MANAGEMENT_ORIGIN_REJECTED"
 	ErrorAdministratorRequired                  = "ADMINISTRATOR_REQUIRED"
@@ -89,7 +97,7 @@ const (
 	ErrorDigestImageUnsupported                 = "DIGEST_IMAGE_UNSUPPORTED"
 	ErrorDeploymentNotActive                    = "DEPLOYMENT_NOT_ACTIVE"
 	ErrorDeploymentDeleting                     = "DEPLOYMENT_DELETING"
-	ErrorServedNameInUse                        = "SERVED_NAME_IN_USE"
+	ErrorServedNameInUse                        = messages.ErrorServedNameInUse
 	ErrorRestartStrategyInvalid                 = "RESTART_STRATEGY_INVALID"
 	ErrorReplicasTooFew                         = messages.ErrorReplicasTooFew
 	ErrorReplicasBodyShape                      = "REPLICAS_BODY_SHAPE"
@@ -99,28 +107,28 @@ const (
 	ErrorUnitUnknown                            = "UNIT_UNKNOWN"
 	ErrorUnitNotFailed                          = "UNIT_NOT_FAILED"
 	ErrorUnitRetryNotActive                     = "UNIT_RETRY_NOT_ACTIVE"
-	ErrorReplicasNegative                       = "REPLICAS_NEGATIVE"
-	ErrorRoutingPolicyInvalid                   = "ROUTING_POLICY_INVALID"
-	ErrorDistributedReplicaCount                = "DISTRIBUTED_REPLICA_COUNT"
-	ErrorSleepNotEnabled                        = "SLEEP_NOT_ENABLED"
-	ErrorSleepEngineUnsupported                 = "SLEEP_ENGINE_UNSUPPORTED"
+	ErrorReplicasNegative                       = messages.ErrorReplicasNegative
+	ErrorRoutingPolicyInvalid                   = messages.ErrorRoutingPolicyInvalid
+	ErrorDistributedReplicaCount                = messages.ErrorDistributedReplicaCount
+	ErrorSleepNotEnabled                        = messages.ErrorSleepNotEnabled
+	ErrorSleepEngineUnsupported                 = messages.ErrorSleepEngineUnsupported
 	ErrorSleepInvalidLevel                      = "SLEEP_INVALID_LEVEL"
 	ErrorSleepInvalidMode                       = "SLEEP_INVALID_MODE"
 	ErrorSleepInvalidWakeOnRequest              = "SLEEP_INVALID_WAKE_ON_REQUEST"
 	ErrorWakeInsufficientGPUMemory              = "WAKE_INSUFFICIENT_GPU_MEMORY"
 	ErrorWakeGPUHeldOutside                     = "WAKE_GPU_HELD_OUTSIDE"
-	ErrorSleepHostMemoryInsufficient            = "SLEEP_HOST_MEMORY_INSUFFICIENT"
+	ErrorSleepHostMemoryInsufficient            = messages.ErrorSleepHostMemoryInsufficient
 	ErrorNodeReplacementInvalid                 = "NODE_REPLACEMENT_INVALID"
 	ErrorReplicasPlaceOnTooMany                 = messages.ErrorReplicasPlaceOnTooMany
 	ErrorReplicasPlaceOnRefused                 = messages.ErrorReplicasPlaceOnRefused
-	ErrorDistributedNodeCount                   = "DISTRIBUTED_NODE_COUNT"
-	ErrorDistributedTPRequired                  = "DISTRIBUTED_TP_REQUIRED"
-	ErrorMasterPortInvalid                      = "MASTER_PORT_INVALID"
-	ErrorDistributedDuplicateNode               = "DISTRIBUTED_DUPLICATE_NODE"
-	ErrorDistributedNodeOffline                 = "DISTRIBUTED_NODE_OFFLINE"
-	ErrorDistributedGPUCount                    = "DISTRIBUTED_GPU_COUNT"
-	ErrorDistributedParallelIndivisible         = "DISTRIBUTED_PARALLEL_INDIVISIBLE"
-	ErrorDistributedPartitionBackendUnavailable = "DISTRIBUTED_PARTITION_BACKEND_UNAVAILABLE"
+	ErrorDistributedNodeCount                   = messages.ErrorDistributedNodeCount
+	ErrorDistributedTPRequired                  = messages.ErrorDistributedTPRequired
+	ErrorMasterPortInvalid                      = messages.ErrorMasterPortInvalid
+	ErrorDistributedDuplicateNode               = messages.ErrorDistributedDuplicateNode
+	ErrorDistributedNodeOffline                 = messages.ErrorDistributedNodeOffline
+	ErrorDistributedGPUCount                    = messages.ErrorDistributedGPUCount
+	ErrorDistributedParallelIndivisible         = messages.ErrorDistributedParallelIndivisible
+	ErrorDistributedPartitionBackendUnavailable = messages.ErrorDistributedPartitionBackendUnavailable
 	ErrorModelSourceIDRequired                  = "MODEL_SOURCE_ID_REQUIRED"
 	ErrorQuickRegisterFieldsRequired            = "QUICK_REGISTER_FIELDS_REQUIRED"
 	ErrorQuickRegisterSourceUnsupported         = "QUICK_REGISTER_SOURCE_UNSUPPORTED"
@@ -140,8 +148,8 @@ const (
 	ErrorLocalModelPublicDownload               = "LOCAL_MODEL_PUBLIC_DOWNLOAD"
 	ErrorPeerSyncActive                         = "PEER_SYNC_ACTIVE"
 	ErrorModelSyncUnavailable                   = "MODEL_SYNC_UNAVAILABLE"
-	ErrorAcquisitionCandidateStale              = "ACQUISITION_CANDIDATE_STALE"
-	ErrorAcquisitionImageRequired               = "ACQUISITION_IMAGE_REQUIRED"
+	ErrorAcquisitionCandidateStale              = messages.ErrorAcquisitionCandidateStale
+	ErrorAcquisitionImageRequired               = messages.ErrorAcquisitionImageRequired
 	ErrorSettingRemoved                         = "SETTING_REMOVED"
 	ErrorPullSettingInvalid                     = "PULL_SETTING_INVALID"
 	// ErrorCredentialLoginRejected: {host} refused the stored login.
@@ -158,7 +166,8 @@ const (
 	ErrorWeightsFetchForbidden = messages.ErrorWeightsFetchForbidden
 	// ErrorSettingHasOwnRoute refuses the generic settings route for a
 	// setting with a route of its own.
-	ErrorSettingHasOwnRoute = "SETTING_HAS_OWN_ROUTE"
+	ErrorSettingHasOwnRoute          = "SETTING_HAS_OWN_ROUTE"
+	ErrorSecuritySettingsUnavailable = "SECURITY_SETTINGS_UNAVAILABLE"
 	// Telemetry export setting (telemetry_export.go).
 	ErrorTelemetryEndpointInvalid         = "TELEMETRY_ENDPOINT_INVALID"
 	ErrorTelemetryHeaderInvalid           = "TELEMETRY_HEADER_INVALID"
@@ -190,9 +199,9 @@ const (
 	ErrorManagementRolesNodesRequired     = "MANAGEMENT_ROLES_NODES_REQUIRED"
 	ErrorManagementRolesConflict          = "MANAGEMENT_ROLES_CONFLICT"
 	ErrorManagementRolesNodeNotFound      = "MANAGEMENT_ROLES_NODE_NOT_FOUND"
-	ErrorComputeNetworkNone               = "COMPUTE_NETWORK_NONE"
-	ErrorComputeNetworkMixed              = "COMPUTE_NETWORK_MIXED"
-	ErrorComputeNetworkMismatch           = "COMPUTE_NETWORK_MISMATCH"
+	ErrorComputeNetworkNone               = messages.ErrorComputeNetworkNone
+	ErrorComputeNetworkMixed              = messages.ErrorComputeNetworkMixed
+	ErrorComputeNetworkMismatch           = messages.ErrorComputeNetworkMismatch
 	ErrorNetworkTestUnsupported           = "NETWORK_TEST_UNSUPPORTED"
 	ErrorNetworkTestNodeCount             = "NETWORK_TEST_NODE_COUNT"
 	ErrorNetworkTestNodeInvalid           = "NETWORK_TEST_NODE_INVALID"
@@ -204,25 +213,23 @@ const (
 	ErrorLocalStorageDisabled             = "LOCAL_STORAGE_DISABLED"
 	ErrorLocalModelFieldsRequired         = "LOCAL_MODEL_FIELDS_REQUIRED"
 	ErrorModelPathRequired                = "MODEL_PATH_REQUIRED"
-	ErrorModelFilePathOccupied            = "MODEL_FILE_PATH_OCCUPIED"
+	ErrorModelFilePathOccupied            = messages.ErrorModelFilePathOccupied
 	ErrorLocalModelMetadataRefresh        = "LOCAL_MODEL_METADATA_REFRESH"
 	ErrorModelMetadataUnavailable         = "MODEL_METADATA_UNAVAILABLE"
 	// ErrorModelMetadataUnreachable: the management node reached none of
 	// {hosts}, the addresses the site rules give it for {source}.
-	ErrorModelMetadataUnreachable = "MODEL_METADATA_UNREACHABLE"
-	// ErrorModelMetadataForbidden: the site rules chosen for the management
-	// node forbid every address of {source} ({route}).
-	ErrorModelMetadataForbidden                 = "MODEL_METADATA_FORBIDDEN"
-	ErrorModelSourceUnavailable                 = "MODEL_SOURCE_UNAVAILABLE"
-	ErrorPreflightMinimumNodes                  = "PREFLIGHT_MINIMUM_NODES"
-	ErrorPreflightMaximumNodes                  = "PREFLIGHT_MAXIMUM_NODES"
-	ErrorPreflightNodeRequired                  = "PREFLIGHT_NODE_REQUIRED"
-	ErrorPreflightNodeWhitespace                = "PREFLIGHT_NODE_WHITESPACE"
-	ErrorPreflightDuplicateNode                 = "PREFLIGHT_DUPLICATE_NODE"
-	ErrorPreflightPortInvalid                   = "PREFLIGHT_PORT_INVALID"
-	ErrorPreflightDurationInvalid               = "PREFLIGHT_DURATION_INVALID"
-	ErrorPreflightNodeInvalid                   = "PREFLIGHT_NODE_INVALID"
-	ErrorPreflightNodeOffline                   = "PREFLIGHT_NODE_OFFLINE"
+	ErrorModelMetadataUnreachable               = "MODEL_METADATA_UNREACHABLE"
+	ErrorModelMetadataForbidden                 = messages.ErrorModelMetadataForbidden
+	ErrorModelSourceUnavailable                 = messages.ErrorModelSourceUnavailable
+	ErrorPreflightMinimumNodes                  = messages.ErrorPreflightMinimumNodes
+	ErrorPreflightMaximumNodes                  = messages.ErrorPreflightMaximumNodes
+	ErrorPreflightNodeRequired                  = messages.ErrorPreflightNodeRequired
+	ErrorPreflightNodeWhitespace                = messages.ErrorPreflightNodeWhitespace
+	ErrorPreflightDuplicateNode                 = messages.ErrorPreflightDuplicateNode
+	ErrorPreflightPortInvalid                   = messages.ErrorPreflightPortInvalid
+	ErrorPreflightDurationInvalid               = messages.ErrorPreflightDurationInvalid
+	ErrorPreflightNodeInvalid                   = messages.ErrorPreflightNodeInvalid
+	ErrorPreflightNodeOffline                   = messages.ErrorPreflightNodeOffline
 	ErrorImageSeriesPatchInvalid                = "IMAGE_SERIES_PATCH_INVALID"
 	ErrorOfficialImageSeriesManaged             = "OFFICIAL_IMAGE_SERIES_MANAGED"
 	ErrorImageCommonArgFlagRequired             = "IMAGE_COMMON_ARG_FLAG_REQUIRED"
@@ -275,8 +282,8 @@ const (
 	ErrorStorageIsDefault                       = "STORAGE_IS_DEFAULT"
 	ErrorStorageExportTaken                     = "STORAGE_EXPORT_ALREADY_REGISTERED"
 	ErrorStorageNameTaken                       = "STORAGE_NAME_TAKEN"
-	ErrorStorageDisabled                        = "STORAGE_DISABLED"
-	ErrorStorageNotWritable                     = "STORAGE_NOT_WRITABLE"
+	ErrorStorageDisabled                        = messages.ErrorStorageDisabled
+	ErrorStorageNotWritable                     = messages.ErrorStorageNotWritable
 	ErrorStorageTargetsRequired                 = "STORAGE_TARGETS_REQUIRED"
 	ErrorStorageNameInvalid                     = "STORAGE_NAME_INVALID"
 	ErrorStorageExportInvalid                   = "STORAGE_EXPORT_INVALID"
@@ -288,7 +295,7 @@ const (
 	ErrorStorageCacheLimitNegative              = "STORAGE_CACHE_LIMIT_NEGATIVE"
 	ErrorStorageImportCountInvalid              = "STORAGE_IMPORT_COUNT_INVALID"
 	ErrorStorageProbeFailed                     = "STORAGE_PROBE_FAILED"
-	ErrorStorageUnavailableOnNode               = "STORAGE_UNAVAILABLE_ON_NODE"
+	ErrorStorageUnavailableOnNode               = messages.ErrorStorageUnavailableOnNode
 	ErrorStorageScanFailed                      = "STORAGE_SCAN_FAILED"
 	ErrorModelMissingInStorage                  = "MODEL_MISSING_IN_STORAGE"
 	ErrorStorageSharedByOtherControlPlanes      = "STORAGE_SHARED_BY_OTHER_CONTROL_PLANES"
@@ -324,22 +331,24 @@ const (
 	ErrorCommunityCatalogJSONInvalid            = "COMMUNITY_CATALOG_JSON_INVALID"
 	ErrorCommunityCatalogSchemaInvalid          = "COMMUNITY_CATALOG_SCHEMA_INVALID"
 	ErrorNetworkRewriteInvalid                  = "NETWORK_REWRITE_INVALID"
-	ErrorDeploymentNodeInvalid                  = "DEPLOYMENT_NODE_INVALID"
-	ErrorAutomaticPlacementUnavailable          = "AUTOMATIC_PLACEMENT_UNAVAILABLE"
-	ErrorAutomaticPlacementStale                = "AUTOMATIC_PLACEMENT_STALE"
-	ErrorTargetVendorInvalid                    = "TARGET_VENDOR_INVALID"
+	ErrorDeploymentNodeInvalid                  = messages.ErrorDeploymentNodeInvalid
+	ErrorAutomaticPlacementUnavailable          = messages.ErrorAutomaticPlacementUnavailable
+	ErrorAutomaticPlacementStale                = messages.ErrorAutomaticPlacementStale
+	ErrorTargetVendorInvalid                    = messages.ErrorTargetVendorInvalid
 	ErrorBenchmarkProbeFailed                   = "BENCHMARK_PROBE_FAILED"
 	ErrorBenchmarkEndpointNotFound              = "BENCHMARK_ENDPOINT_NOT_FOUND"
 	ErrorHTTPDirectoryUnreachable               = "HTTP_DIRECTORY_UNREACHABLE"
 	ErrorHTTPDirectoryNotAModel                 = "HTTP_DIRECTORY_NOT_A_MODEL"
 	ErrorHTTPDirectoryTooLarge                  = "HTTP_DIRECTORY_TOO_LARGE"
-	ErrorModelSourceRequiresNewerAgent          = "MODEL_SOURCE_REQUIRES_NEWER_AGENT"
+	ErrorModelSourceRequiresNewerAgent          = messages.ErrorModelSourceRequiresNewerAgent
 	ErrorModelSourceURLRequired                 = "MODEL_SOURCE_URL_REQUIRED"
 	ErrorModelSourceURLInvalid                  = "MODEL_SOURCE_URL_INVALID"
 	ErrorImageArchiveURLRequired                = "IMAGE_ARCHIVE_URL_REQUIRED"
 	ErrorImageArchiveURLInvalid                 = "IMAGE_ARCHIVE_URL_INVALID"
 	ErrorImageArchiveURLUnreachable             = "IMAGE_ARCHIVE_URL_UNREACHABLE"
+	ErrorImageArchiveURLUpstreamStatus          = "IMAGE_ARCHIVE_URL_UPSTREAM_STATUS"
 	ErrorImageArchiveURLPolicyDenied            = "IMAGE_ARCHIVE_URL_POLICY_DENIED"
+	ErrorImageArchiveURLPolicyBlocked           = "IMAGE_ARCHIVE_URL_POLICY_BLOCKED"
 	ErrorImageArchiveURLNotDeclared             = "IMAGE_ARCHIVE_URL_NOT_DECLARED"
 	ErrorMonitorRangeInvalid                    = "MONITOR_RANGE_INVALID"
 	ErrorMonitorGroupInvalid                    = "MONITOR_GROUP_INVALID"
@@ -372,14 +381,9 @@ const (
 	// TestDataParallelCodesMatchTheirProducer asserts the pairs equal.
 	ErrorDataParallelGPUCount         = "DATA_PARALLEL_GPU_COUNT"
 	ErrorDataParallelAttentionDivisor = "DATA_PARALLEL_ATTENTION_DIVISOR"
-	// ErrorFieldInvalid carries a request error that is attributable to a form
-	// field but has no more specific stable code; the detail param holds the
-	// rule's English fallback.
-	ErrorFieldInvalid = "FIELD_INVALID"
-	// ErrorEngineInvalid answers an engine the registry does not know.
-	ErrorEngineInvalid = "ENGINE_INVALID"
-	// ErrorExtraArgsInvalid answers extra-args text the parser cannot read.
-	ErrorExtraArgsInvalid = "EXTRA_ARGS_INVALID"
+	ErrorFieldInvalid                 = messages.ErrorFieldInvalid
+	ErrorEngineInvalid                = messages.ErrorEngineInvalid
+	ErrorExtraArgsInvalid             = messages.ErrorExtraArgsInvalid
 	// ErrorExtraArgsJSONInvalid answers a JSON-valued engine flag typed into
 	// extra_args with a value that is not JSON ({flag}, {value}); it is
 	// produced by deploy.ValidateExtraArgsJSON.
@@ -390,12 +394,9 @@ const (
 	ErrorAscendSleepAdditionalConfigInvalid = "ASCEND_SLEEP_ADDITIONAL_CONFIG_INVALID"
 	ErrorAscendSleepWeightNZConflict        = "ASCEND_SLEEP_WEIGHT_NZ_CONFLICT"
 	ErrorAscendSleepExpandableSegments      = "ASCEND_SLEEP_EXPANDABLE_SEGMENTS"
-	// ErrorMountContainerPath and ErrorMountHostPath answer extra-mount rows
-	// whose path is not an absolute non-root directory; ErrorMountTargetNested
-	// answers two mount targets that contain each other.
-	ErrorMountContainerPath = "MOUNT_CONTAINER_PATH"
-	ErrorMountHostPath      = "MOUNT_HOST_PATH"
-	ErrorMountTargetNested  = "MOUNT_TARGET_NESTED"
+	ErrorMountContainerPath                 = messages.ErrorMountContainerPath
+	ErrorMountHostPath                      = messages.ErrorMountHostPath
+	ErrorMountTargetNested                  = messages.ErrorMountTargetNested
 	// ErrorQuickParamJSON and ErrorQuickParamPath are likewise produced by
 	// deploy's launch validation, on json- and path-typed parameters.
 	ErrorAcceleratorFeatureUnsupported      = messages.ErrorAcceleratorFeatureUnsupported
@@ -426,10 +427,8 @@ func writeProductError(w http.ResponseWriter, status int, code, fallback string,
 // Automatic placement of multi-node and PD deployments (placement_mode
 // "auto"; deployments_auto_units.go).
 const (
-	ErrorUnitPlacementNone = messages.ErrorUnitPlacementNone
-	// ErrorAutoPlacementTPRequired: an automatic multi-node request states no
-	// placement.tp, so how many free GPUs each node needs is unknown.
-	ErrorAutoPlacementTPRequired  = "AUTO_PLACEMENT_TP_REQUIRED"
+	ErrorUnitPlacementNone        = messages.ErrorUnitPlacementNone
+	ErrorAutoPlacementTPRequired  = messages.ErrorAutoPlacementTPRequired
 	ErrorAutoPlacementPDMultiNode = messages.ErrorAutoPlacementPDMultiNode
 	// ErrorPlacementModeShape: PUT /deployments/{id}/placement-mode on a
 	// single-node deployment, which states its placement in its node
@@ -556,3 +555,30 @@ const WarningBatchModelWaits = "BATCH_MODEL_WAITS"
 // ErrorServerStorageFull answers any request whose write failed because the
 // server's disk is full (store.IsStorageFull), whichever handler it reached.
 const ErrorServerStorageFull = "SERVER_STORAGE_FULL"
+
+// Kubernetes cluster codes (/kube/clusters, /kube/enroll).
+const (
+	// ErrorKubeClusterInvalid: a cluster parameter cannot be used
+	// ({field}, {reason}).
+	ErrorKubeClusterInvalid = "KUBE_CLUSTER_INVALID"
+	// ErrorKubeClusterNameTaken: another cluster already has {name}.
+	ErrorKubeClusterNameTaken = "KUBE_CLUSTER_NAME_TAKEN"
+	// ErrorKubeClusterHasNodes: the cluster still has nodes; remove them first.
+	ErrorKubeClusterHasNodes = "KUBE_CLUSTER_HAS_NODES"
+	// ErrorKubeEnrollRefused: the enrollment token is unknown, revoked or
+	// belongs to another cluster ({reason}: unknown_token | other_cluster).
+	ErrorKubeEnrollRefused = "KUBE_ENROLL_REFUSED"
+	// ErrorKubeClusterSourceTaken: an entry was already made from cluster
+	// {cluster} of the cloud account.
+	ErrorKubeClusterSourceTaken = "KUBE_CLUSTER_SOURCE_TAKEN"
+	// ErrorKubeClusterNoSource: the entry was not made from a cloud
+	// account's cluster, so the server has no way into the cluster; apply
+	// the manifest with kubectl.
+	ErrorKubeClusterNoSource = "KUBE_CLUSTER_NO_SOURCE"
+	// ErrorKubeClusterOperationFailed: applying to or removing from the
+	// cluster failed at {step} (kubeconfig | api_server): {reason}.
+	ErrorKubeClusterOperationFailed = "KUBE_CLUSTER_OPERATION_FAILED"
+	// ErrorProviderInstanceInCluster: the instance is a node of the
+	// account's Kubernetes cluster {cluster}; connect the cluster instead.
+	ErrorProviderInstanceInCluster = "PROVIDER_INSTANCE_IN_CLUSTER"
+)

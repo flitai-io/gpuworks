@@ -1,0 +1,50 @@
+@page {
+  size: A4;
+  margin: 18mm 14mm 20mm;
+}
+
+html { color-scheme: light; }
+body {
+  margin: 0;
+  color: #17233b;
+  background: white;
+  font: 10pt/1.6 "Noto Sans CJK SC", "Noto Sans", sans-serif;
+  overflow-wrap: anywhere;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.cover { padding-top: 45mm; min-height: 195mm; }
+.cover > p:first-child { color: #1559bd; font-size: 18pt; font-weight: 700; }
+.cover h1 { font-size: 32pt; }
+.cover [data-handbook-version] { font-size: 18pt; }
+.cover [data-handbook-commit] { color: #526078; font: 9pt monospace; }
+.contents, article { break-before: page; }
+h1, h2, h3, h4, h5, h6 { break-after: avoid-page; line-height: 1.35; }
+h1 { font-size: 22pt; }
+h2 { margin-top: 1.4em; font-size: 16pt; }
+h3 { font-size: 13pt; }
+a { color: #1559bd; text-decoration: none; }
+.contents li { margin: 0.35em 0; }
+p, li { orphans: 3; widows: 3; }
+pre {
+  padding: 9px;
+  background: #f1f4f8;
+  border: 1px solid #dce2eb;
+  font-size: 8pt;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+code { font-family: "Noto Sans Mono CJK SC", monospace; font-size: 0.9em; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8pt; }
+th, td { border: 1px solid #dce2eb; padding: 5px; vertical-align: top; overflow-wrap: anywhere; }
+th { background: #edf2fa; text-align: left; }
+thead { display: table-header-group; }
+tr, img, svg { break-inside: avoid; }
+img, svg { max-width: 100%; height: auto; }
+figure { margin: 1em 0; }
+blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid #1559bd; }
+.td-table, .td-table-wrapper, .highlight { overflow: visible; max-width: 100%; }
+.d-print-none, .td-heading-self-link, .anchor { display: none; }
+@media screen {
+  body { max-width: 182mm; margin: 24px auto; padding: 20px; }
+}

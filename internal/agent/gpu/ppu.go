@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -43,7 +42,7 @@ var _ DriverAwareInjector = (*PPUProber)(nil)
 func (p *PPUProber) Vendor() string { return accelerator.VendorPPU }
 
 func (p *PPUProber) Available() bool {
-	if _, err := exec.LookPath("ppu-smi"); err != nil {
+	if _, err := lookCLI("ppu-smi"); err != nil {
 		return false
 	}
 	_, err := queryPPU(context.Background(), "--query-ppu=index", "--format=csv,noheader,nounits")
@@ -53,8 +52,8 @@ func (p *PPUProber) Available() bool {
 const ppuProbeFields = "index,name,architecture,uuid,minor_number,pci.bus_id,memory.total,memory.used,utilization.ppu,temperature.ppu,power.draw,driver_version,ecc.errors.uncorrected.volatile.dram,ecc.errors.uncorrected.aggregate.dram,retired_pages.double_bit.count,retired_pages.pending,remapped_rows.uncorrectable,remapped_rows.pending,remapped_rows.failure,xid.correctable.ppu_reset,xid.correctable.os_reboot,xid.correctable.cold_reboot"
 
 func (p *PPUProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
-	if _, err := exec.LookPath("ppu-smi"); err != nil {
-		return p.roster(nil, false), nil
+	if _, err := lookCLI("ppu-smi"); err != nil {
+		return p.roster(nil, false), nil //nolint:nilerr // Absence of this vendor CLI is an unavailable probe, not a node failure.
 	}
 	out, err := queryPPU(ctx, "--query-ppu="+ppuProbeFields, "--format=csv,noheader,nounits")
 	if err != nil {
@@ -127,8 +126,8 @@ func sharedLibraryPath(ctx context.Context, name string) (string, error) {
 		return "", fmt.Errorf("invalid shared library name %q", name)
 	}
 	var candidates []string
-	if path, err := exec.LookPath("ldconfig"); err == nil {
-		if out, runErr := exec.CommandContext(ctx, path, "-p").Output(); runErr == nil {
+	if path, err := lookCLI("ldconfig"); err == nil {
+		if out, runErr := cliCommand(ctx, path, "-p").Output(); runErr == nil {
 			for _, line := range strings.Split(string(out), "\n") {
 				if candidate := parseLdconfigLibraryPath(line, name); candidate != "" {
 					candidates = append(candidates, candidate)
@@ -143,19 +142,12 @@ func sharedLibraryPath(ctx context.Context, name string) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		resolved, err := filepath.EvalSymlinks(candidate)
+		resolved, info, err := resolveLibraryCandidate(candidate)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
 			return "", fmt.Errorf("resolve probe dependency %s at %s: %w", name, candidate, err)
-		}
-		info, err := os.Stat(resolved)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return "", fmt.Errorf("inspect probe dependency %s at %s: %w", name, resolved, err)
 		}
 		if !info.Mode().IsRegular() {
 			return "", fmt.Errorf("probe dependency %s at %s is not a regular file", name, resolved)
@@ -163,6 +155,24 @@ func sharedLibraryPath(ctx context.Context, name string) (string, error) {
 		return resolved, nil
 	}
 	return "", fmt.Errorf("probe dependency %s was not found on the host: %w", name, os.ErrNotExist)
+}
+
+// resolveLibraryCandidate resolves a shared-library candidate's symlinks
+// and stats it, on the host when CLIs run there (through hostRoot, so an
+// absolute symlink target is resolved against the host's own root, not the
+// agent's /proc/1/root view of it) and locally otherwise. The returned path
+// is always the host's own, never one prefixed with hostRoot, because it
+// becomes a mount source for an instance container.
+func resolveLibraryCandidate(candidate string) (string, os.FileInfo, error) {
+	if cliOnHost.Load() {
+		return resolveOnHost(candidate)
+	}
+	resolved, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", nil, err
+	}
+	info, err := os.Stat(resolved)
+	return resolved, info, err
 }
 
 func parseLdconfigLibraryPath(output, name string) string {
@@ -287,12 +297,13 @@ func (p *PPUProber) runtimeInjection(indexes []int, rows string, resolve func(in
 }
 
 // OCI exposes only the selected devices, retaining their driver enumeration
-// order. PRoot exposes the host inventory. Keep the requested compute order in
+// order; the kube runtime's device plugin hands the pod the same OCI devices.
+// PRoot exposes the host inventory. Keep the requested compute order in
 // either view, using numeric selectors understood by HGGC and inference engines.
 func ppuVisibleDeviceIndexes(indexes []int, driverName string) (string, error) {
 	visibleIndexes := append([]int(nil), indexes...)
 	switch driverName {
-	case "docker", "nerdctl":
+	case "docker", "nerdctl", "kube":
 		inventory := append([]int(nil), indexes...)
 		sort.Ints(inventory)
 		for i, index := range indexes {
@@ -371,8 +382,12 @@ func parsePPUProcInfo(out string) map[string]string {
 	return fields
 }
 
+// verifyPPUDeviceNode checks the host's live /dev when CLIs run there: a
+// privileged container's own /dev is a copy made at container start, so a
+// device node created afterward (the driver finishing its init) would
+// otherwise be reported missing.
 func verifyPPUDeviceNode(index int, path string, expected int) error {
-	info, err := os.Stat(path)
+	info, err := statTool(path)
 	if err != nil {
 		return fmt.Errorf("PPU device %d is unavailable: %s: %w", index, path, err)
 	}

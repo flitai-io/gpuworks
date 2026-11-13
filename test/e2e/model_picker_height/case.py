@@ -45,12 +45,22 @@ def prepare(server, token, run_id, report, holder, agent_bin, artifacts):
     if isinstance(created, dict) and type(created.get('id')) is int:
         report['owned_model_ids'] = [created['id']]
     checked(code == 201 and type(created.get('id')) is int, f'model prerequisite failed: HTTP {code}')
+    # A second candidate in the same owned repository, so a keyboard walk has somewhere to go. The
+    # cleanup already enumerates and deletes every model under this source_id, so it is reclaimed with
+    # the first one.
+    second_expected = {'name': prefix + '-second-model', 'source': 'huggingface',
+                       'source_id': repo, 'revision': SHA + '-second'}
+    code, second = http(server.base, 'POST', MODELS, token, {**second_expected, 'browser_metadata': True,
+                                                              'config_raw': CONFIG, 'weight_bytes': WEIGHT_BYTES})
+    if isinstance(second, dict) and type(second.get('id')) is int:
+        report['owned_model_ids'].append(second['id'])
+    checked(code == 201 and type(second.get('id')) is int, f'second model prerequisite failed: HTTP {code}')
     code, stored = http(server.base, 'GET', MODELS + '/' + str(created['id']), token)
     checked(code == 200 and {key: stored.get(key) for key in expected} == expected,
             'registered model differs from the supplied fixture identity')
     report['evidence'].append({'layer': 'persistence', 'id': created['id'],
                                'expected': expected, 'independent_get': code})
-    return {**expected, 'id': created['id']}
+    return {**expected, 'id': created['id'], 'second': {**second_expected, 'id': second['id']}}
 
 
 def selected_geometry(select):
@@ -111,9 +121,11 @@ def test_model_picker_height(page, context, server, artifacts, report, locale, d
         checked(response.status == 200, 'browser model list failed')
         document = response.json()
         expected = {key: data[key] for key in ('id', 'name', 'source', 'source_id', 'revision')}
-        checked(document['total'] == 1 and
-                [{key: row.get(key) for key in expected} for row in document['items']] == [expected],
-                'browser candidates differ from the registered fixture')
+        second_expected = {key: data['second'][key] for key in expected}
+        seen = [{key: row.get(key) for key in expected} for row in document['items']]
+        checked(document['total'] == 2 and sorted(map(json.dumps, seen)) ==
+                sorted(json.dumps(item) for item in (expected, second_expected)),
+                'browser candidates differ from the registered fixtures')
         query = parse_qs(urlsplit(response.url).query, keep_blank_values=True)
         checked(query == {'page': ['1'], 'page_size': ['50']}, f'unexpected model lookup: {query}')
         report['evidence'].append({'layer': 'request', 'method': 'GET', 'path': MODELS,
@@ -133,6 +145,24 @@ def test_model_picker_height(page, context, server, artifacts, report, locale, d
         expect(option.get_by_text(data['name'], exact=True)).to_be_visible()
         expect(option.get_by_text(revision, exact=True)).to_be_visible()
         expect(option.get_by_text(no_files, exact=True)).to_be_visible()
+        # 5.6: the arrow keys are required to move the active candidate, not merely to open the popup.
+        # The active option is read from the popup's own active class, which is what the control
+        # highlights and what Enter would commit - a walk that only opened the menu would pass without
+        # this.
+        def active_label():
+            node = popup.locator('.ant-select-item-option-active')
+            return node.count() and node.first.inner_text() or ''
+
+        first_active = active_label()
+        control.press('ArrowDown')
+        second_active = active_label()
+        checked(first_active != second_active,
+                f'ArrowDown did not move the active candidate: {first_active!r} == {second_active!r}')
+        control.press('ArrowUp')
+        checked(active_label() == first_active,
+                f'ArrowUp did not return to the first candidate: {active_label()!r} != {first_active!r}')
+        report['keyboard_candidates'] = {'opened_on': first_active, 'after_down': second_active,
+                                         'returned_to': active_label()}
         option.click()
         summary = select.locator('.ant-select-selection-item')
         expect(summary.get_by_text(data['name'], exact=True)).to_be_visible()

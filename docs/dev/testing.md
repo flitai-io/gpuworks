@@ -264,16 +264,29 @@ suite 相差约 4 倍），job 落在哪台机器取决于哪里有空位。所�
 ## GitHub Actions 镜像门禁
 
 `.github/workflows/ci.yml` 在 GitHub 托管 runner 上跑与 GitLab core 阶段相同的检查：UI 构建与测试、
-untagged Go suite 与各 check 脚本、`go vet`、CompShare 离线契约、严格模式的 L2/L3。权威流水线仍是 GitLab；
+untagged Go suite 与各 check 脚本、`go vet`、`make lint`、CompShare 离线契约、严格模式的 L2/L3。权威流水线仍是 GitLab；
 GitHub 镜像只收到 master，所以这条 workflow 由 PR、手动触发与每晚 03:07（Asia/Shanghai，紧随 GitLab 的
-nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。L4、发布与文档构建不在这里跑，也不使用任何
-secret 或自托管 runner。
+nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。它不使用任何 secret 或自托管 runner。
+另外三条 workflow 对应 GitLab 的其余非 L4 job：`docs.yml`（文档站构建，改到文档的 PR 触发，从公开的
+`gpuworks_website` 仓库拉 OINK 主题）、`ui-check.yml`（UI 巡检，改到 UI 的 PR 与每晚触发，报告作为 artifact 上传）、
+`release.yml`（发布包，见[发布指南](release.md#github-actions-发布)）。L4 仍只在 GitLab 跑。
+
+脚本只读与 CI 无关的变量名：`GPUWORKS_BUILD_COMMIT`（构建提交）、`GPUWORKS_BUILT_AT`（同一次运行所有 job
+共用的构建时间）、`GPUWORKS_ARCH_BASELINE`（`check_architecture.sh` 比较预算文件用的合并请求基线），由
+`.gitlab-ci.yml` 与 GitHub workflow 各自从自己的内置变量赋值；不设时脚本退回本地的 `git` 与当前时间。
+`check_ci_yaml.sh` 对两边的 CI 定义都做 folded 标量注释检查，stage 顺序检查只针对 `.gitlab-ci.yml`。
 
 - L2/L3 与 GitLab 的 `.docker-core` 同形：每个 job 一个 DinD daemon，暴露在专用的 `gpuworks-e2e` socket
   上，suite 跑在 golang 容器里。直接用 runner VM 的 Docker 不行：VM 有 systemd，console upgrade 用例会把它
   当成服务管理器；真实终端用例只接受专用 daemon。fixture 基础镜像在 suite 前预拉进 DinD。
 - UI suite 在 2 核 runner 上一次只跑一个测试文件，不拆要一个多小时；按 4 片并行，`npm run test:coverage`
   读可选的 `TEST_SHARD`（如 `2/4`）传给 `--test-shard`，不设时与原命令相同。
+- untagged Go suite 按包分 3 片：`scripts/go_package_shard.sh <i>/<n> ./...` 把 `go list` 的包按导入路径排序后
+  轮流分配，最重的 `server/api` 与两个 integrationtest 包恰好落在不同片里。L2 与 GitLab 的 `core-l2` 一样按
+  `L2_SHARD` 分 3 片。check 脚本、`go vet`、`make lint`、CompShare 离线契约与 `check-tagged-build` 合在一个
+  `checks` job 里：组织的托管 runner 有并发 job 上限，每项只跑几十秒到几分钟，单开 job 只会多占 runner。
+- 满盘 L2 用例需要一个专门的 tmpfs：suite 所在容器不能建 user namespace，所以和 GitLab 一样由 `docker run
+  --tmpfs` 挂好并经 `GPUWORKS_TEST_FULL_DISK_TMPFS` 传入。
 
 ## 成本和缓存
 
@@ -385,8 +398,8 @@ secret 或自托管 runner。
 `ubuntu_22_04_x64_100G_with_gpu_driver_and_cuda_alibase_*`（驱动与 CUDA 已装）起一台 T4 实例，
 装 Docker 29 与 NVIDIA container toolkit（Docker CE 源依次试 `mirrors.aliyun.com`、清华、中科大、华为云，
 某个源正在同步、索引校验不过就换下一个；续跑前先删掉上次写下的 Docker 源）、拉取 vLLM runner 镜像（优先华为云 SWR 镜像，
-再 quay.io、Docker Hub，最终标签 `gpustack/runner:cuda12.8-vllm0.17.1`）、下载 Qwen2-0.5B-Instruct 到
-`/opt/gpuworks/test-fixtures/models/qwen2-0.5b` 并写校验和，停掉 Docker、同步后 `CreateImage`，再 `CopyImage`
+再 quay.io、Docker Hub，最终标签 `gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4`）、下载 Qwen3-0.6B 到
+`/opt/gpuworks/test-fixtures/models/qwen3-0.6b` 并写校验和，停掉 Docker、同步后 `CreateImage`，再 `CopyImage`
 到 `-regions`（默认华东1、华北2、华南1、华南3）并在源地域开一台新机验证（先验证再复制，坏镜像不会白白复制到四个地域）。镜像约 50 GB（runner 镜像占大头），
 150 GiB 系统盘的首个整盘快照约 90 分钟，跨地域复制再约一小时，整个过程要预留两到三小时。自定义镜像按地域隔离，
 所以每个地域一个 ID，输出的 `ALIYUN_IMAGE_CN_HANGZHOU=` 等行写进 `secrets/cloud-providers.env`
@@ -396,7 +409,7 @@ secret 或自托管 runner。
 模型与 runner 都可以换：`-model-repo`/`-model-rev` 指定 ModelScope 模型，`-model-path` 指定镜像内路径，
 `-docker-image`/`-pull-sources` 指定 runner，默认镜像名随模型生成（`gpuworks-golden-<模型>-<UTC 时间>`）；
 `-source-regions` 限定源机与验证机的租用地域（默认同 `-regions`），复制到海外等地域时用它把源机留在有库存的大陆地域。
-L4 用例按默认的 Qwen2-0.5B 与 `gpustack/runner:cuda12.8-vllm0.17.1` 注册模型，换了模型或 runner 的镜像不能直接给 L4 用。镜像里已有 Docker 与模型，用例只验证、不安装、不下载
+L4 用例按默认的 Qwen3-0.6B 注册模型；单机用例在 A10、L20 等卡上部署 `gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4`，在 T4 上部署 `gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2`（用 `-extra-image` 一并装进镜像），多机用例各卡都用后者。换了模型或 runner 的镜像不能直接给 L4 用。镜像里已有 Docker 与模型，用例只验证、不安装、不下载
 （缺了就是镜像坏了，直接失败）。
 
 CI 需要的变量（作用域 `cloud-test/aliyun/*`）：`ALIYUN_ACCESS_KEY_ID`、`ALIYUN_ACCESS_KEY_SECRET`

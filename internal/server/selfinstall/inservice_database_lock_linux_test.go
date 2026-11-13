@@ -76,7 +76,7 @@ func inspectInServiceSQLiteLock(path string) (result inServiceSQLiteLock, err er
 	if err := unix.Fstat(int(f.Fd()), &info); err != nil {
 		return result, err
 	}
-	lock := unix.Flock_t{Type: unix.F_WRLCK, Whence: int16(os.SEEK_SET)}
+	lock := unix.Flock_t{Type: unix.F_WRLCK, Whence: int16(io.SeekStart)}
 	if err := unix.FcntlFlock(f.Fd(), unix.F_GETLK, &lock); err != nil {
 		return result, err
 	}

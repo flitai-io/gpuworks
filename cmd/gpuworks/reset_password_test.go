@@ -12,6 +12,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/installcred"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -180,5 +181,77 @@ func copyFile(t *testing.T, from, to string) {
 	}
 	if err := dst.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResetPasswordPromptsWhenNoneIsGiven(t *testing.T) {
+	original := promptNewPassword
+	t.Cleanup(func() { promptNewPassword = original })
+	data := t.TempDir()
+	db := seedAdmin(t, data)
+
+	promptNewPassword = func() (string, error) { return "", errPasswordMismatch }
+	if err := resetPassword(discardLog(), []string{"--data", data}); !errors.Is(err, errPasswordMismatch) {
+		t.Fatalf("a failed prompt: %v", err)
+	}
+	promptNewPassword = func() (string, error) { return "short", nil }
+	if err := resetPassword(discardLog(), []string{"--data", data}); !errors.Is(err, auth.ErrPasswordPolicy) {
+		t.Fatalf("a weak prompted password: %v", err)
+	}
+	if !verifyPassword(t, db, "old-admin-password-2026") {
+		t.Fatal("a refused reset changed the password")
+	}
+	promptNewPassword = func() (string, error) { return "Tiger#Lake9", nil }
+	if err := resetPassword(discardLog(), []string{"--data", data}); err != nil {
+		t.Fatal(err)
+	}
+	if !verifyPassword(t, db, "Tiger#Lake9") {
+		t.Fatal("the prompted password does not log in")
+	}
+}
+
+func TestResetPasswordWithoutATerminalNeedsTheFlag(t *testing.T) {
+	// go test's stdin is not a terminal, so the real prompt refuses.
+	if _, err := promptNewPassword(); err == nil || !strings.Contains(err.Error(), "-password is required") {
+		t.Fatalf("prompt without a terminal: %v", err)
+	}
+}
+
+func TestResetPasswordForgetsOnlyItsOwnInitialCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		recorded string
+		removed  bool
+	}{{"admin", true}, {"ops", false}} {
+		t.Run(tc.recorded, func(t *testing.T) {
+			data := t.TempDir()
+			seedAdmin(t, data)
+			if err := installcred.WriteInitialCredentials(data, tc.recorded, "old-admin-password-2026"); err != nil {
+				t.Fatal(err)
+			}
+			if err := resetPassword(discardLog(), []string{"--data", data, "--password", "new-admin-password-2026"}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := os.Stat(installcred.CredentialsPath(data))
+			if removed := os.IsNotExist(err); removed != tc.removed {
+				t.Fatalf("record for %s removed=%v, want %v (stat err %v)", tc.recorded, removed, tc.removed, err)
+			}
+		})
+	}
+}
+
+func TestResetPasswordSucceedsWhenTheRecordCannotBeRead(t *testing.T) {
+	data := t.TempDir()
+	db := seedAdmin(t, data)
+	if err := os.WriteFile(installcred.CredentialsPath(data), []byte("not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := resetPassword(discardLog(), []string{"--data", data, "--password", "new-admin-password-2026"}); err != nil {
+		t.Fatalf("an unreadable record failed the reset: %v", err)
+	}
+	if !verifyPassword(t, db, "new-admin-password-2026") {
+		t.Fatal("the new password does not log in")
+	}
+	if _, err := os.Stat(installcred.CredentialsPath(data)); err != nil {
+		t.Fatalf("a damaged record was removed: %v", err)
 	}
 }

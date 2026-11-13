@@ -195,12 +195,15 @@ func (f *fakeKeyInstaller) Probe(_ context.Context, req provision.SSHProbeReques
 func TestSavingAPasswordAuthorizesThePlatformKeyInstead(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
+		mode       string
 		authorized bool
 		wantMode   string
 		wantPW     bool
 	}{
-		{name: "authorized", authorized: true, wantMode: provision.AuthPlatformKey},
-		{name: "authorize fails", authorized: false, wantMode: provision.AuthPassword, wantPW: true},
+		{name: "password authorized", mode: provision.AuthPassword, authorized: true, wantMode: provision.AuthPlatformKey},
+		{name: "password authorize fails", mode: provision.AuthPassword, authorized: false, wantMode: provision.AuthPassword, wantPW: true},
+		{name: "keyboard-interactive authorized", mode: provision.AuthKeyboardInteractive, authorized: true, wantMode: provision.AuthPlatformKey},
+		{name: "keyboard-interactive authorize fails", mode: provision.AuthKeyboardInteractive, authorized: false, wantMode: provision.AuthPassword, wantPW: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st, key := platformKeyAPIStore(t, true)
@@ -210,7 +213,7 @@ func TestSavingAPasswordAuthorizesThePlatformKeyInstead(t *testing.T) {
 			}
 			installer := &fakeKeyInstaller{authorized: tc.authorized}
 			h := apiHandlers{d: Deps{Store: st, NodeInstaller: installer}}
-			body := `{"host":"gpu.example","port":2222,"user":"root","auth_mode":"password","password":"pw-123","private_key_pem":"ignored","probe":true}`
+			body := `{"host":"gpu.example","port":2222,"user":"root","auth_mode":` + jsonString(tc.mode) + `,"password":"pw-123","private_key_pem":"ignored","probe":true}`
 			req := withNodeRecoveryURLParam(httptest.NewRequest(http.MethodPut, "/", strings.NewReader(body)), "uuid", node.UUID)
 			rec := httptest.NewRecorder()
 			h.putNodeSSH(rec, req)
@@ -231,15 +234,40 @@ func TestSavingAPasswordAuthorizesThePlatformKeyInstead(t *testing.T) {
 				t.Fatalf("response = %s", rec.Body.String())
 			}
 			// The authorize login used exactly what the operator chose.
-			if installer.authReq.Mode != provision.AuthPassword || installer.authReq.Password != "pw-123" || installer.authReq.PrivateKeyPEM != "" || installer.authReq.PlatformKey == nil || installer.authReq.PlatformKey.Fingerprint != key.Fingerprint {
+			if installer.authReq.Mode != tc.mode || installer.authReq.Password != "pw-123" || installer.authReq.PrivateKeyPEM != "" || installer.authReq.PlatformKey == nil || installer.authReq.PlatformKey.Fingerprint != key.Fingerprint {
 				t.Fatalf("authorize request = %+v", installer.authReq.SSHAuth)
 			}
 			_, secrets, err := st.GetNodeSSHCredential(node.UUID)
-			if err != nil || (secrets.Password != "") != tc.wantPW || secrets.PrivateKeyPEM != "" {
+			if err != nil || (secrets.Password != "") != tc.wantPW || (tc.wantPW && secrets.Password != "pw-123") || secrets.PrivateKeyPEM != "" {
 				t.Fatalf("stored secrets = %+v err=%v", secrets, err)
 			}
-			if tc.authorized && installer.probeReq.Mode != provision.AuthPlatformKey {
+			if tc.authorized && (installer.probeReq.Mode != provision.AuthPlatformKey || installer.probeReq.Password != "" || installer.probeReq.PrivateKeyPEM != "") {
 				t.Fatalf("probe after authorizing used %+v", installer.probeReq.SSHAuth)
+			}
+			if !tc.authorized && (installer.probeReq.Mode != tc.mode || installer.probeReq.Password != "pw-123" || installer.probeReq.PrivateKeyPEM != "") {
+				t.Fatalf("probe without authorizing used %+v", installer.probeReq.SSHAuth)
+			}
+			// A GET reports the stored credential type, not the protocol used
+			// during the one-off authorize/probe. It never returns the secret.
+			get := httptest.NewRecorder()
+			getReq := withNodeRecoveryURLParam(httptest.NewRequest(http.MethodGet, "/", nil), "uuid", node.UUID)
+			h.getNodeSSH(get, getReq)
+			if get.Code != http.StatusOK {
+				t.Fatalf("GET status=%d body=%s", get.Code, get.Body.String())
+			}
+			assertSanitizedSSHResponse(t, get.Body.String(), "pw-123")
+			var got map[string]any
+			if err := json.Unmarshal(get.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			wantKeys := []string{"auth_mode", "has_password", "has_private_key", "host", "port", "user"}
+			keys := make([]string, 0, len(got))
+			for key := range got {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			if strings.Join(keys, ",") != strings.Join(wantKeys, ",") || got["auth_mode"] != tc.wantMode || got["has_password"] != tc.wantPW || got["has_private_key"] != false || got["host"] != "gpu.example" || got["port"] != float64(2222) || got["user"] != "root" {
+				t.Fatalf("GET response = %s", get.Body.String())
 			}
 		})
 	}
@@ -285,8 +313,10 @@ func TestInstalledSSHSecretsKeepOnlyWhatIsNeeded(t *testing.T) {
 		want   store.NodeSSHSecrets
 	}{
 		{provision.SSHInstallReport{AuthUsed: provision.AuthPassword, PlatformKeyAuthorized: true}, store.NodeSSHSecrets{}},
+		{provision.SSHInstallReport{AuthUsed: provision.AuthKeyboardInteractive, PlatformKeyAuthorized: true}, store.NodeSSHSecrets{}},
 		{provision.SSHInstallReport{AuthUsed: provision.AuthPlatformKey, PlatformKeyAuthorized: true}, store.NodeSSHSecrets{}},
 		{provision.SSHInstallReport{AuthUsed: provision.AuthPassword}, store.NodeSSHSecrets{Password: "pw"}},
+		{provision.SSHInstallReport{AuthUsed: provision.AuthKeyboardInteractive}, store.NodeSSHSecrets{Password: "pw"}},
 		{provision.SSHInstallReport{AuthUsed: provision.AuthPrivateKey}, store.NodeSSHSecrets{PrivateKeyPEM: "KEY"}},
 		{provision.SSHInstallReport{AuthUsed: provision.AuthInstancePassword}, store.NodeSSHSecrets{Password: "ipw"}},
 	} {

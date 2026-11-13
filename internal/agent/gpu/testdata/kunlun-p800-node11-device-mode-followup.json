@@ -1,0 +1,58 @@
+{
+  "captured_at_utc": "2026-10-28T03:25:58.410625+00:00",
+  "devices": {
+    "/dev/xdrdrv": {
+      "file_type": "char",
+      "mode_octal": "0o20600",
+      "rdev": 129792
+    },
+    "/dev/xpu0": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49920
+    },
+    "/dev/xpu1": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49921
+    },
+    "/dev/xpu2": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49922
+    },
+    "/dev/xpu3": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49923
+    },
+    "/dev/xpu4": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49924
+    },
+    "/dev/xpu5": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49925
+    },
+    "/dev/xpu6": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49926
+    },
+    "/dev/xpu7": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 49927
+    },
+    "/dev/xpuctrl": {
+      "file_type": "char",
+      "mode_octal": "0o20666",
+      "rdev": 50175
+    }
+  },
+  "sysfs": {
+    "/sys/class/kunlun/xpuctrl/dev": "195:255"
+  }
+}

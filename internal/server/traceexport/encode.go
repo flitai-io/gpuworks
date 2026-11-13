@@ -14,29 +14,6 @@ import (
 // hex strings, 64-bit integers are decimal strings, enums are numbers. They
 // are written by encode, field names as the tags say.
 
-type exportRequest struct {
-	ResourceSpans []resourceSpans `json:"resourceSpans"`
-}
-
-type resourceSpans struct {
-	Resource   resource     `json:"resource"`
-	ScopeSpans []scopeSpans `json:"scopeSpans"`
-}
-
-type resource struct {
-	Attributes []attribute `json:"attributes"`
-}
-
-type scopeSpans struct {
-	Scope scope  `json:"scope"`
-	Spans []span `json:"spans"`
-}
-
-type scope struct {
-	Name    string `json:"name"`
-	Version string `json:"version,omitempty"`
-}
-
 type span struct {
 	TraceID      string      `json:"traceId"`
 	SpanID       string      `json:"spanId"`

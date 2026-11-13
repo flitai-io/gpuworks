@@ -1,0 +1,768 @@
+model_id: minimaxai/minimax-h3-image
+source: upstream
+display_title: MiniMax-H3-Image
+parameter_count: 67B
+architecture: dense
+release_date: '2026-11-10'
+model_config: {kv_cache: false}
+specs:
+- name: bf16-vllm-nvidia-hopper-sp4
+  display_name_zh_cn: Hopper 及以上 · BF16 · 4 卡 Ulysses
+  display_name_en: Hopper+ · BF16 · 4 GPUs Ulysses
+  scenario: latency
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3-Image
+        revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3-Image
+        revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+  weight_bytes: 68663558778
+  gpus:
+    vendor: nvidia
+    cc: '>=9.0'
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /tmp/MiniMax-H3-Image "$@"
+  - minimax-h3-image
+  # model_index.json names the MiniMax-H3 repository for the Qwen3-VL text
+  # encoder. The platform mounts that folder as a component, and the launch
+  # directory points model_index.json at the mount, so the pipeline never
+  # reaches for the hub (the engine runs with HF_HUB_OFFLINE=1).
+  pre_start_script: |-
+    set -e
+    src=/models/MiniMax-H3-Image
+    dst=/tmp/MiniMax-H3-Image
+    mkdir -p "$dst"
+    for item in "$src"/*; do ln -sfn "$item" "$dst/$(basename "$item")"; done
+    rm -f "$dst/model_index.json"
+    sed 's#"MiniMaxAI/MiniMax-H3"#"/models/MiniMax-H3"#' "$src/model_index.json" > "$dst/model_index.json"
+  components:
+  - name: minimax-h3-image
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3-Image
+          revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3-Image
+          revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+    weight_bytes: 68663558778
+    mount_path: /models/MiniMax-H3-Image
+  - name: minimax-h3-text-encoder
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: text_encoder
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: text_encoder
+    weight_bytes: 66726510529
+    mount_path: /models/MiniMax-H3
+  args:
+  - --omni
+  - --num-gpus
+  - '4'
+  - --tensor-parallel-size
+  - '1'
+  - --usp
+  - '4'
+  - --text-encoder-tp-size
+  - '4'
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 4:
+              return reject("该档位需要正好 4 张 GPU")
+          if gpu.min_memory_gib < 90:
+              return reject("单卡显存至少需要 90 GiB")
+          return accept(gpu_memory_mib_per_device = 88064)
+  # Ulysses keeps a full DiT on every rank. Measured on 4 x H20-3e: 83.0 GiB
+  # peak per GPU (nvidia-smi), 2.55 s per 2048x2048 image.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 1024x1024
+      - name: seed
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      max_reference_images: 9
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 2048x2048
+      - name: seed
+        kind: number
+- name: bf16-vllm-nvidia-hopper-tp4
+  display_name_zh_cn: Hopper 及以上 · BF16 · 4 卡 TP
+  display_name_en: Hopper+ · BF16 · 4 GPUs TP
+  scenario: balanced
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3-Image
+        revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3-Image
+        revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+  weight_bytes: 68663558778
+  gpus:
+    vendor: nvidia
+    cc: '>=9.0'
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /tmp/MiniMax-H3-Image "$@"
+  - minimax-h3-image
+  # model_index.json names the MiniMax-H3 repository for the Qwen3-VL text
+  # encoder. The platform mounts that folder as a component, and the launch
+  # directory points model_index.json at the mount, so the pipeline never
+  # reaches for the hub (the engine runs with HF_HUB_OFFLINE=1).
+  pre_start_script: |-
+    set -e
+    src=/models/MiniMax-H3-Image
+    dst=/tmp/MiniMax-H3-Image
+    mkdir -p "$dst"
+    for item in "$src"/*; do ln -sfn "$item" "$dst/$(basename "$item")"; done
+    rm -f "$dst/model_index.json"
+    sed 's#"MiniMaxAI/MiniMax-H3"#"/models/MiniMax-H3"#' "$src/model_index.json" > "$dst/model_index.json"
+  components:
+  - name: minimax-h3-image
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3-Image
+          revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3-Image
+          revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+    weight_bytes: 68663558778
+    mount_path: /models/MiniMax-H3-Image
+  - name: minimax-h3-text-encoder
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: text_encoder
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: text_encoder
+    weight_bytes: 66726510529
+    mount_path: /models/MiniMax-H3
+  args:
+  - --omni
+  - --num-gpus
+  - '4'
+  - --tensor-parallel-size
+  - '4'
+  - --usp
+  - '1'
+  - --text-encoder-tp-size
+  - '4'
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 4:
+              return reject("该档位需要正好 4 张 GPU")
+          if gpu.min_memory_gib < 44:
+              return reject("单卡显存至少需要 44 GiB")
+          return accept(gpu_memory_mib_per_device = 40960)
+  # Tensor parallelism shards the DiT. Measured on 4 x H20-3e: 35.5 GiB peak
+  # per GPU, 2.63 s per 2048x2048 image.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 1024x1024
+      - name: seed
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      max_reference_images: 9
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 2048x2048
+      - name: seed
+        kind: number
+- name: bf16-vllm-nvidia-hopper-sp2
+  display_name_zh_cn: Hopper 及以上 · BF16 · 2 卡 Ulysses
+  display_name_en: Hopper+ · BF16 · 2 GPUs Ulysses
+  scenario: balanced
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3-Image
+        revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3-Image
+        revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+  weight_bytes: 68663558778
+  gpus:
+    vendor: nvidia
+    cc: '>=9.0'
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /tmp/MiniMax-H3-Image "$@"
+  - minimax-h3-image
+  # model_index.json names the MiniMax-H3 repository for the Qwen3-VL text
+  # encoder. The platform mounts that folder as a component, and the launch
+  # directory points model_index.json at the mount, so the pipeline never
+  # reaches for the hub (the engine runs with HF_HUB_OFFLINE=1).
+  pre_start_script: |-
+    set -e
+    src=/models/MiniMax-H3-Image
+    dst=/tmp/MiniMax-H3-Image
+    mkdir -p "$dst"
+    for item in "$src"/*; do ln -sfn "$item" "$dst/$(basename "$item")"; done
+    rm -f "$dst/model_index.json"
+    sed 's#"MiniMaxAI/MiniMax-H3"#"/models/MiniMax-H3"#' "$src/model_index.json" > "$dst/model_index.json"
+  components:
+  - name: minimax-h3-image
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3-Image
+          revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3-Image
+          revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+    weight_bytes: 68663558778
+    mount_path: /models/MiniMax-H3-Image
+  - name: minimax-h3-text-encoder
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: text_encoder
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: text_encoder
+    weight_bytes: 66726510529
+    mount_path: /models/MiniMax-H3
+  args:
+  - --omni
+  - --num-gpus
+  - '2'
+  - --tensor-parallel-size
+  - '1'
+  - --usp
+  - '2'
+  - --text-encoder-tp-size
+  - '2'
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 2:
+              return reject("该档位需要正好 2 张 GPU")
+          if gpu.min_memory_gib < 110:
+              return reject("单卡显存至少需要 110 GiB")
+          return accept(gpu_memory_mib_per_device = 101376)
+  # Measured on 2 x H20-3e: 94.3 GiB peak per GPU, 4.70 s per 2048x2048 image.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 1024x1024
+      - name: seed
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      max_reference_images: 9
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 2048x2048
+      - name: seed
+        kind: number
+- name: bf16-vllm-nvidia-ampere-tp2
+  display_name_zh_cn: Ampere 及以上 · BF16 · 2 卡 TP
+  display_name_en: Ampere+ · BF16 · 2 GPUs TP
+  scenario: balanced
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3-Image
+        revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3-Image
+        revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+  weight_bytes: 68663558778
+  gpus:
+    vendor: nvidia
+    cc: '>=8.0'
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /tmp/MiniMax-H3-Image "$@"
+  - minimax-h3-image
+  # model_index.json names the MiniMax-H3 repository for the Qwen3-VL text
+  # encoder. The platform mounts that folder as a component, and the launch
+  # directory points model_index.json at the mount, so the pipeline never
+  # reaches for the hub (the engine runs with HF_HUB_OFFLINE=1).
+  pre_start_script: |-
+    set -e
+    src=/models/MiniMax-H3-Image
+    dst=/tmp/MiniMax-H3-Image
+    mkdir -p "$dst"
+    for item in "$src"/*; do ln -sfn "$item" "$dst/$(basename "$item")"; done
+    rm -f "$dst/model_index.json"
+    sed 's#"MiniMaxAI/MiniMax-H3"#"/models/MiniMax-H3"#' "$src/model_index.json" > "$dst/model_index.json"
+  components:
+  - name: minimax-h3-image
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3-Image
+          revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3-Image
+          revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+    weight_bytes: 68663558778
+    mount_path: /models/MiniMax-H3-Image
+  - name: minimax-h3-text-encoder
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: text_encoder
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: text_encoder
+    weight_bytes: 66726510529
+    mount_path: /models/MiniMax-H3
+  args:
+  - --omni
+  - --num-gpus
+  - '2'
+  - --tensor-parallel-size
+  - '2'
+  - --usp
+  - '1'
+  - --text-encoder-tp-size
+  - '2'
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 2:
+              return reject("该档位需要正好 2 张 GPU")
+          if gpu.min_memory_gib < 72:
+              return reject("单卡显存至少需要 72 GiB")
+          return accept(gpu_memory_mib_per_device = 69632)
+  # Tensor parallelism splits the DiT across two GPUs. Measured on 2 x A100
+  # 80 GB: 61.3 GiB peak per GPU, 3.31 s per 2048x2048 image.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 1024x1024
+      - name: seed
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      max_reference_images: 9
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 2048x2048
+      - name: seed
+        kind: number
+- name: bf16-vllm-nvidia-ampere-1x-offload
+  display_name_zh_cn: Ampere 及以上 · BF16 · 单卡 · 文本编码器 offload
+  display_name_en: Ampere+ · BF16 · 1 GPU · text encoder offload
+  scenario: balanced
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3-Image
+        revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3-Image
+        revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+  weight_bytes: 68663558778
+  gpus:
+    vendor: nvidia
+    cc: '>=8.0'
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /tmp/MiniMax-H3-Image "$@"
+  - minimax-h3-image
+  # model_index.json names the MiniMax-H3 repository for the Qwen3-VL text
+  # encoder. The platform mounts that folder as a component, and the launch
+  # directory points model_index.json at the mount, so the pipeline never
+  # reaches for the hub (the engine runs with HF_HUB_OFFLINE=1).
+  pre_start_script: |-
+    set -e
+    src=/models/MiniMax-H3-Image
+    dst=/tmp/MiniMax-H3-Image
+    mkdir -p "$dst"
+    for item in "$src"/*; do ln -sfn "$item" "$dst/$(basename "$item")"; done
+    rm -f "$dst/model_index.json"
+    sed 's#"MiniMaxAI/MiniMax-H3"#"/models/MiniMax-H3"#' "$src/model_index.json" > "$dst/model_index.json"
+  components:
+  - name: minimax-h3-image
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3-Image
+          revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3-Image
+          revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+    weight_bytes: 68663558778
+    mount_path: /models/MiniMax-H3-Image
+  - name: minimax-h3-text-encoder
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: text_encoder
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: text_encoder
+    weight_bytes: 66726510529
+    mount_path: /models/MiniMax-H3
+  args:
+  - --omni
+  - --num-gpus
+  - '1'
+  - --diffusion-offload-config
+  - '{"mode":"layer","components":["text_encoder"]}'
+  memlock_unlimited: true
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 1:
+              return reject("该档位需要正好 1 张 GPU")
+          if gpu.min_memory_gib < 78:
+              return reject("单卡显存至少需要 78 GiB")
+          return accept(gpu_memory_mib_per_device = 73216)
+  # The DiT stays resident and the text encoder streams from about 62 GiB of
+  # pinned host memory. Measured peaks: 69.9 GiB on an A100 80 GB (7.67 s per
+  # 2048x2048 image), 71.4 GiB on an H20-3e (9.55 s). Admission charges an
+  # omni launch 90% of the card, so the claim stays within an 80 GB card's 72 GiB.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 1024x1024
+      - name: seed
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      max_reference_images: 9
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 2048x2048
+      - name: seed
+        kind: number
+- name: bf16-vllm-nvidia-ampere-1x-dlo
+  display_name_zh_cn: Ampere 及以上 · BF16 · 单卡 · 逐层 offload
+  display_name_en: Ampere+ · BF16 · 1 GPU · layerwise offload
+  scenario: throughput
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3-Image
+        revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3-Image
+        revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+  weight_bytes: 68663558778
+  gpus:
+    vendor: nvidia
+    cc: '>=8.0'
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /tmp/MiniMax-H3-Image "$@"
+  - minimax-h3-image
+  # model_index.json names the MiniMax-H3 repository for the Qwen3-VL text
+  # encoder. The platform mounts that folder as a component, and the launch
+  # directory points model_index.json at the mount, so the pipeline never
+  # reaches for the hub (the engine runs with HF_HUB_OFFLINE=1).
+  pre_start_script: |-
+    set -e
+    src=/models/MiniMax-H3-Image
+    dst=/tmp/MiniMax-H3-Image
+    mkdir -p "$dst"
+    for item in "$src"/*; do ln -sfn "$item" "$dst/$(basename "$item")"; done
+    rm -f "$dst/model_index.json"
+    sed 's#"MiniMaxAI/MiniMax-H3"#"/models/MiniMax-H3"#' "$src/model_index.json" > "$dst/model_index.json"
+  components:
+  - name: minimax-h3-image
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3-Image
+          revision: 6534ea1c979a5f8cb00c2bd1025d5ca4ee8d8901
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3-Image
+          revision: 83bdca8ee262e3c06c7c4c1a5962b2fbe10f2665
+    weight_bytes: 68663558778
+    mount_path: /models/MiniMax-H3-Image
+  - name: minimax-h3-text-encoder
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: text_encoder
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: text_encoder
+    weight_bytes: 66726510529
+    mount_path: /models/MiniMax-H3
+  args:
+  - --omni
+  - --num-gpus
+  - '1'
+  - --diffusion-offload-config
+  - '{"mode":"layer","components":["dit","text_encoder"]}'
+  memlock_unlimited: true
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 1:
+              return reject("该档位需要正好 1 张 GPU")
+          if gpu.min_memory_gib < 22:
+              return reject("单卡显存至少需要 22 GiB")
+          return accept(gpu_memory_mib_per_device = 18432)
+  # The DiT and the text encoder both stream one block at a time from about
+  # 124 GiB of pinned host memory, so host-to-GPU bandwidth sets the pace:
+  # 9.53 s per 2048x2048 image on an H20-3e (PCIe 5), 18.3 s on an RTX 4090 and
+  # 19.7 s on an A100 (PCIe 4). Measured peaks 11.1-12.7 GiB.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.image.generate
+      endpoint: /v1/images/generations
+      mode: sync
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 1024x1024
+      - name: seed
+        kind: number
+    - type: openai.image.edit
+      endpoint: /v1/images/edits
+      mode: sync
+      request_encoding: multipart
+      max_reference_images: 9
+      inputs:
+      - name: size
+        kind: select
+        options:
+        - 1024x1024
+        - 2048x2048
+        - 2720x1536
+        - 1536x2720
+        - 2368x1760
+        - 2496x1664
+        - 3136x1344
+        default: 2048x2048
+      - name: seed
+        kind: number
+input_modalities: [text, image]

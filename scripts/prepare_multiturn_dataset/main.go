@@ -119,6 +119,7 @@ func main() {
 func openSource(source string) (io.Reader, func(), error) {
 	if len(source) >= 8 && (source[:7] == "http://" || source[:8] == "https://") {
 		client := &http.Client{Timeout: 10 * time.Minute}
+		//nolint:bodyclose // The returned cleanup callback owns the successful body; errors close it below.
 		resp, err := client.Get(source) // #nosec G107 -- operator-selected dataset source
 		if err != nil {
 			return nil, func() {}, err

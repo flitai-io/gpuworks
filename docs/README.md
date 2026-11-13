@@ -11,6 +11,7 @@
 |---|---|
 | 第一次接触 GPUWorks | [从零启动并部署第一个模型](tutorials/getting-started.md)，再看[控制台页面导览](reference/web-ui-tour.md) |
 | 在 Mac 上本地试用 | [在 Mac 上运行第一个本地模型](tutorials/mac-local-model.md) |
+| 在 Windows WSL2 上本机试用 | [在 Windows WSL2 上用 Docker 运行 GPUWorks](how-to/wsl2-with-docker.md) |
 | 要在生产上线 | [安装和升级控制面](how-to/install-server.md) → [生产环境部署](how-to/deploy-production.md) → [升级与版本兼容](how-to/upgrade-and-compatibility.md) |
 | 要升级到新版本 | [发布说明](releases/README.md) → [升级与版本兼容](how-to/upgrade-and-compatibility.md) |
 | 遇到问题 | [排障指南](how-to/troubleshooting.md) |
@@ -35,9 +36,13 @@
 **安装与接入**
 
 - [安装和升级控制面](how-to/install-server.md)
+- [在 Windows WSL2 上用 Docker 运行 GPUWorks](how-to/wsl2-with-docker.md)
 - [升级与版本兼容](how-to/upgrade-and-compatibility.md)
 - [接入节点、升级与卸载 agent](how-to/connect-nodes.md)
 - [租用云 GPU](how-to/rent-cloud-gpus.md)
+- [接入 ZStack Cloud](how-to/onboard-zstack-cloud.md)
+- [接入 Kubernetes 集群](how-to/connect-kubernetes.md)
+- [接入公有云托管 Kubernetes（阿里云 ACK、DigitalOcean、Nebius）](how-to/connect-managed-kubernetes.md)
 - [给控制台一个公网地址](how-to/expose-public-address.md)
 - [生产环境部署](how-to/deploy-production.md)
 - [配置节点网络](how-to/configure-networks.md)
@@ -54,7 +59,9 @@
 **部署与推理**
 
 - [部署模型、选卡与解释调度结果](how-to/deploy-models.md)
+- [在昆仑 P800 上部署模型](how-to/kunlun-p800.md)
 - [多机推理](how-to/multi-node-inference.md)
+- [用 MinerU 连接远程视觉模型](how-to/use-mineru.md)
 - [PD 分离部署](how-to/pd-disaggregation.md)
 - [启用和排查 dGPU](how-to/dgpu.md)
 - [让实例 sleep / wake](how-to/sleep-wake.md)
@@ -126,6 +133,7 @@
 - [浏览器 E2E 测试规范](../test/e2e/browser-e2e-testing-standard.md)
 - [发布与内嵌资产](dev/release.md)
 - [贡献与文档落位](dev/contributing.md)
+- [PR / MR 操作指南](dev/pull-requests.md)
 - [工程台账](dev/ledgers/engineering-log.md)、[A100 缺陷台账](dev/ledgers/a100-verification-bug-registry.md)、[PPU 缺口台账](dev/ledgers/ppu-support-gaps.md)
 
 ## 文档落位规则

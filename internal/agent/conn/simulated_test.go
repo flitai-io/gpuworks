@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-yamux/v5"
+
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
 	"gpuworks.ai/gpuworks/internal/agent/hostsim"
 	"gpuworks.ai/gpuworks/internal/proto"

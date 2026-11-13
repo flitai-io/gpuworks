@@ -472,4 +472,451 @@ specs:
       - name: input_reference
         kind: image
         encoding: data_url
+- name: bf16-vllm-nvidia-2x-turbo4
+  display_name_zh_cn: Ampere 及以上 · BF16 · 2 卡 · Turbo 4 步
+  display_name_en: Ampere+ · BF16 · 2 GPUs · Turbo 4-step
+  scenario: latency
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3
+        revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+        subfolder: FL2VA
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3
+        revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+        subfolder: FL2VA
+  weight_bytes: 144051182625
+  gpus:
+    vendor: nvidia
+    cc: '>=8.0'
+  # Only the FL2VA partition is downloaded, so the engine is pointed at that
+  # directory under the mount instead of the repository root the platform
+  # passes as the model path.
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /models/MiniMax-H3/FL2VA "$@"
+  - minimax-h3
+  components:
+  - name: minimax-h3-fl2va
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: FL2VA
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: FL2VA
+    weight_bytes: 144051182625
+    mount_path: /models/MiniMax-H3
+  # LightX2V's 4-step FL2VA Turbo LoRA. The repository keeps every release at
+  # its root (72 GB in all), so the source names the one file.
+  - name: minimax-h3-turbo-lora
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: lightx2v/Minimax-h3-Turbo
+          revision: 30f485ed874aa44c8183348ad361c5eabad318da
+          subfolder: minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16.safetensors
+      - modelscope:
+          repo_id: lightx2v/Minimax-h3-Turbo
+          revision: 747797eef26d529ec2281ffad18fa9772e6ad513
+          subfolder: minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16.safetensors
+    weight_bytes: 1383677808
+    mount_path: /models/MiniMax-H3-Turbo
+  args:
+  - --omni
+  - --task-type
+  - fl2va
+  - --trust-remote-code
+  - --num-gpus
+  - '2'
+  - --tensor-parallel-size
+  - '2'
+  - --usp
+  - '1'
+  - --ring
+  - '1'
+  - --text-encoder-tp-size
+  - '2'
+  - --vae-patch-parallel-size
+  - '2'
+  - --vae-parallel-mode
+  - tile
+  - --vae-use-tiling
+  - --enable-distributed-layerwise-offload
+  - --dlo-no-use-allgather
+  - --dlo-resident-layers
+  - ${DLO_RESIDENT_LAYERS}
+  - --enforce-eager
+  # Admission sizes the card by this fraction; the measured peaks below
+  # exceed the 0.9 default share of a 32 GiB card.
+  - --gpu-memory-utilization
+  - '0.98'
+  - --diffusion-attention-backend
+  - CUDNN_ATTN
+  - --lora-path
+  - /models/MiniMax-H3-Turbo/minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16.safetensors
+  # The adapter is trained for four denoiser forwards at guidance 1; requests
+  # that leave the step count out get that schedule instead of the base 50.
+  - --default-sampling-params
+  - '{"0":{"num_inference_steps":4,"guidance_scale":1}}'
+  env:
+    VLLM_WORKER_MULTIPROC_METHOD: spawn
+    VLLM_OMNI_VIDEO_SYNC_TIMEOUT: '3600'
+  memlock_unlimited: true
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 2:
+              return reject("该档位需要正好 2 张 GPU")
+          if gpu.min_memory_gib < 22:
+              return reject("单卡显存至少需要 24 GiB")
+          if gpu.min_memory_gib < 30:
+              return accept(gpu_memory_mib_per_device = 22528, variables = {"DLO_RESIDENT_LAYERS": 12})
+          return accept(gpu_memory_mib_per_device = 30720, variables = {"DLO_RESIDENT_LAYERS": 20})
+  # 32 GB cards keep 20 DiT blocks resident, 24 GB cards 12, as the upstream
+  # RTX 5090 and RTX 4090 recipes do. Measured on 2 x RTX 5090 (20 resident):
+  # 1344x768 5 s in 68 s, 15 s in 274 s, 29,750 MiB peak per GPU at 15 s. On
+  # 2 x RTX 3090 (12 resident): 1344x768 5 s in 184 s, 10 s in 507 s with a
+  # 20,000 MiB peak, 832x480 15 s in 225 s; 1344x768 15 s runs out of memory.
+  # DLO pins about 190 GiB of host memory.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.video.generate
+      endpoint: /v1/videos/sync
+      mode: sync
+      request_encoding: multipart
+      inputs:
+      - name: seconds
+        kind: number
+      - name: size
+        kind: select
+        options:
+        - 1344x768
+        - 832x480
+        - 768x1344
+        - 480x832
+        default: 1344x768
+      # The engine refuses a text-only request without an aspect ratio; the
+      # output still follows size.
+      - name: aspect_ratio
+        kind: select
+        options:
+        - '16:9'
+        - '9:16'
+        default: '16:9'
+      - name: input_reference
+        kind: image
+        encoding: data_url
+- name: bf16-vllm-nvidia-1x-turbo4
+  display_name_zh_cn: Ampere 及以上 · BF16 · 单卡 · Turbo 4 步
+  display_name_en: Ampere+ · BF16 · 1 GPU · Turbo 4-step
+  scenario: latency
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: MiniMaxAI/MiniMax-H3
+        revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+        subfolder: FL2VA
+    - modelscope:
+        repo_id: MiniMax/MiniMax-H3
+        revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+        subfolder: FL2VA
+  weight_bytes: 144051182625
+  gpus:
+    vendor: nvidia
+    cc: '>=8.0'
+  # Only the FL2VA partition is downloaded, so the engine is pointed at that
+  # directory under the mount instead of the repository root the platform
+  # passes as the model path.
+  entrypoint:
+  - /bin/sh
+  - -c
+  - |
+    shift
+    exec vllm serve /models/MiniMax-H3/FL2VA "$@"
+  - minimax-h3
+  components:
+  - name: minimax-h3-fl2va
+    role: primary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: FL2VA
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: FL2VA
+    weight_bytes: 144051182625
+    mount_path: /models/MiniMax-H3
+  # LightX2V's 4-step FL2VA Turbo LoRA. The repository keeps every release at
+  # its root (72 GB in all), so the source names the one file.
+  - name: minimax-h3-turbo-lora
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: lightx2v/Minimax-h3-Turbo
+          revision: 30f485ed874aa44c8183348ad361c5eabad318da
+          subfolder: minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16.safetensors
+      - modelscope:
+          repo_id: lightx2v/Minimax-h3-Turbo
+          revision: 747797eef26d529ec2281ffad18fa9772e6ad513
+          subfolder: minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16.safetensors
+    weight_bytes: 1383677808
+    mount_path: /models/MiniMax-H3-Turbo
+  args:
+  - --omni
+  - --task-type
+  - fl2va
+  - --trust-remote-code
+  - --num-gpus
+  - '1'
+  - --tensor-parallel-size
+  - '1'
+  - --usp
+  - '1'
+  - --ring
+  - '1'
+  - --text-encoder-tp-size
+  - '1'
+  - --vae-patch-parallel-size
+  - '1'
+  - --vae-parallel-mode
+  - tile
+  - --vae-use-tiling
+  - --enable-distributed-layerwise-offload
+  - --dlo-no-use-allgather
+  - --dlo-resident-layers
+  - '12'
+  - --enforce-eager
+  # Admission sizes the card by this fraction; the measured peaks below
+  # exceed the 0.9 default share of a 32 GiB card.
+  - --gpu-memory-utilization
+  - '0.98'
+  - --diffusion-attention-backend
+  - CUDNN_ATTN
+  - --lora-path
+  - /models/MiniMax-H3-Turbo/minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16.safetensors
+  # The adapter is trained for four denoiser forwards at guidance 1; requests
+  # that leave the step count out get that schedule instead of the base 50.
+  - --default-sampling-params
+  - '{"0":{"num_inference_steps":4,"guidance_scale":1}}'
+  env:
+    VLLM_WORKER_MULTIPROC_METHOD: spawn
+    VLLM_OMNI_VIDEO_SYNC_TIMEOUT: '3600'
+  memlock_unlimited: true
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 1:
+              return reject("该档位需要正好 1 张 GPU")
+          if gpu.min_memory_gib < 30:
+              return reject("单卡显存至少需要 32 GiB")
+          return accept(gpu_memory_mib_per_device = 29696)
+  # Measured on one RTX 5090: 1344x768 5 s in 113 s, 832x480 15 s in 108 s, 28,516 MiB
+  # peak (nvidia-smi); 1344x768 15 s runs out of memory on a 32 GB card. DLO pins
+  # about 150 GiB of host memory.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.video.generate
+      endpoint: /v1/videos/sync
+      mode: sync
+      request_encoding: multipart
+      inputs:
+      - name: seconds
+        kind: number
+      - name: size
+        kind: select
+        options:
+        - 1344x768
+        - 832x480
+        - 768x1344
+        - 480x832
+        default: 1344x768
+      # The engine refuses a text-only request without an aspect ratio; the
+      # output still follows size.
+      - name: aspect_ratio
+        kind: select
+        options:
+        - '16:9'
+        - '9:16'
+        default: '16:9'
+      - name: input_reference
+        kind: image
+        encoding: data_url
+- name: nvfp4-vllm-nvidia-blackwell-fasth3-omni-1x
+  display_name_zh_cn: Blackwell · FastH3 Omni NVFP4 · 单卡 · 参考图生视频
+  display_name_en: Blackwell · FastH3 Omni NVFP4 · 1 GPU · reference to video
+  scenario: balanced
+  engine: vllm
+  image: vllm/vllm-omni:minimax-h3-image
+  weights:
+    quantization: nvfp4
+    sources:
+    - huggingface:
+        repo_id: FastVideo/FastH3-Omni-NVFP4-QAD
+        revision: f01e6a23ac6066aa9eb622cf94b6259442e70ec2
+    - modelscope:
+        repo_id: FastVideo/FastH3-Omni-NVFP4-QAD
+        revision: aed5d1f3da2d064a22f19e9d97377473813b9425
+  weight_bytes: 108583657447
+  gpus:
+    vendor: nvidia
+    cc: '>=10.0'
+  # FastH3 Omni loads the native video and audio VAEs of the MiniMax-H3 release
+  # it was distilled from through the Hugging Face cache, at the revision its
+  # fastvideo_inference.json pins. The platform mounts those two folders (the
+  # same files as the revision below) and the launch builds that cache entry
+  # from them, so the engine stays offline.
+  pre_start_script: |-
+    set -e
+    snap="$HF_HOME/hub/models--MiniMaxAI--MiniMax-H3/snapshots/9bfb6693f2cf6de171db46d1aa586f67d773a1da/Ref2VA"
+    mkdir -p "$snap"
+    ln -sfn /models/MiniMax-H3-video-vae/Ref2VA/video_vae "$snap/video_vae"
+    ln -sfn /models/MiniMax-H3-audio-vae/Ref2VA/audio_vae "$snap/audio_vae"
+  components:
+  - name: fasth3-omni-nvfp4
+    role: primary
+    weights:
+      quantization: nvfp4
+      sources:
+      - huggingface:
+          repo_id: FastVideo/FastH3-Omni-NVFP4-QAD
+          revision: f01e6a23ac6066aa9eb622cf94b6259442e70ec2
+      - modelscope:
+          repo_id: FastVideo/FastH3-Omni-NVFP4-QAD
+          revision: aed5d1f3da2d064a22f19e9d97377473813b9425
+    weight_bytes: 108583657447
+    mount_path: /models/FastH3-Omni-NVFP4-QAD
+  - name: minimax-h3-video-vae
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: Ref2VA/video_vae
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: Ref2VA/video_vae
+    weight_bytes: 10415694629
+    mount_path: /models/MiniMax-H3-video-vae
+  - name: minimax-h3-audio-vae
+    role: auxiliary
+    weights:
+      quantization: bf16
+      sources:
+      - huggingface:
+          repo_id: MiniMaxAI/MiniMax-H3
+          revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+          subfolder: Ref2VA/audio_vae
+      - modelscope:
+          repo_id: MiniMax/MiniMax-H3
+          revision: 57559a6720ddaa2eaee52b09ec2ef011127997b2
+          subfolder: Ref2VA/audio_vae
+    weight_bytes: 605461455
+    mount_path: /models/MiniMax-H3-audio-vae
+  # The 8-layer NVFP4 video decoder the upstream single-card recipe selects.
+  - name: fasth3-nvfp4-vae-decoder
+    role: auxiliary
+    weights:
+      quantization: nvfp4
+      sources:
+      - huggingface:
+          repo_id: FastVideo/FastH3-NVFP4-VAE-Decoder
+          revision: ddd17469cab7e490b1a04baaf26b247f0f0dcf0e
+          subfolder: fast-8L
+      - modelscope:
+          repo_id: FastVideo/FastH3-NVFP4-VAE-Decoder
+          revision: 50e14b558c38a043b8f862b33416698abfbb551c
+          subfolder: fast-8L
+    weight_bytes: 1428035192
+    mount_path: /models/FastH3-NVFP4-VAE-Decoder
+  args:
+  - --omni
+  - --trust-remote-code
+  - --task-type
+  - ref2va
+  - --num-gpus
+  - '1'
+  - --vae-use-tiling
+  - --enforce-eager
+  # Admission sizes the card by this fraction; the measured peaks below
+  # exceed the 0.9 default share of a 32 GiB card.
+  - --gpu-memory-utilization
+  - '0.98'
+  - --diffusion-offload-config
+  - '{"mode":"layer","components":["dit","text_encoder"]}'
+  - --diffusion-attention-config
+  - '{"default":{"backend":"FASTVIDEO_VSA"}}'
+  - --additional-config
+  - '{"video_vae_decoder":{"model":"/models/FastH3-NVFP4-VAE-Decoder","subfolder":"fast-8L"}}'
+  - --default-sampling-params
+  - '{"0":{"num_inference_steps":8,"guidance_scale":1}}'
+  env:
+    HF_HOME: /tmp/hf
+    VLLM_WORKER_MULTIPROC_METHOD: spawn
+    VLLM_OMNI_VIDEO_SYNC_TIMEOUT: '3600'
+  memlock_unlimited: true
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.count != 1:
+              return reject("该档位需要正好 1 张 GPU")
+          if gpu.min_memory_gib < 30:
+              return reject("单卡显存至少需要 32 GiB")
+          return accept(gpu_memory_mib_per_device = 30720)
+  # Measured on one RTX 5090: 1344x768 5 s in 52 s and 832x480 15 s in 68 s once warm;
+  # 31,792 MiB peak (nvidia-smi) at 832x480 15 s, and 1344x768 15 s runs out of
+  # memory. The DiT and text encoder stream from about 65 GiB of pinned host memory.
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.video.generate
+      endpoint: /v1/videos/sync
+      mode: sync
+      request_encoding: multipart
+      inputs:
+      - name: input_reference
+        kind: image
+        encoding: data_url
+        required: true
+      - name: seconds
+        kind: number
+      - name: size
+        kind: select
+        options:
+        - 832x480
+        - 1344x768
+        - 480x832
+        - 768x1344
+        default: 832x480
 input_modalities: [text, image]

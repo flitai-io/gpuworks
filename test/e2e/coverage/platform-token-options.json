@@ -7,7 +7,7 @@
   "scope": "Eight targeted option combinations; not full form/page or actual-expiration coverage",
   "test_file": "test/e2e/platform_token_options.py",
   "test_function": "test_platform_token_option",
-  "command": "make test-e2e-platform-token-options",
+  "command": "python3 -B test/e2e/platform_token_options.py --case read-0 --locale en",
   "lane": "local-real-server-sqlite",
   "identity": "admin login session creates; read/write bearer consumes without cookies",
   "fixture": "fresh isolated server/SQLite for each case, real Chrome, runId-owned resources, no management mocks",
@@ -19,7 +19,7 @@
         "scope": "read",
         "days": 0
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=read-0"
+      "command": "python3 -B test/e2e/platform_token_options.py --case read-0 --locale en"
     },
     {
       "case": "read-30",
@@ -28,7 +28,7 @@
         "scope": "read",
         "days": 30
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=read-30"
+      "command": "python3 -B test/e2e/platform_token_options.py --case read-30 --locale en"
     },
     {
       "case": "read-90",
@@ -37,7 +37,7 @@
         "scope": "read",
         "days": 90
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=read-90"
+      "command": "python3 -B test/e2e/platform_token_options.py --case read-90 --locale en"
     },
     {
       "case": "read-365",
@@ -46,7 +46,7 @@
         "scope": "read",
         "days": 365
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=read-365"
+      "command": "python3 -B test/e2e/platform_token_options.py --case read-365 --locale en"
     },
     {
       "case": "write-0",
@@ -55,7 +55,7 @@
         "scope": "write",
         "days": 0
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=write-0"
+      "command": "python3 -B test/e2e/platform_token_options.py --case write-0 --locale en"
     },
     {
       "case": "write-30",
@@ -64,7 +64,7 @@
         "scope": "write",
         "days": 30
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=write-30"
+      "command": "python3 -B test/e2e/platform_token_options.py --case write-30 --locale en"
     },
     {
       "case": "write-90",
@@ -73,7 +73,7 @@
         "scope": "write",
         "days": 90
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=write-90"
+      "command": "python3 -B test/e2e/platform_token_options.py --case write-90 --locale en"
     },
     {
       "case": "write-365",
@@ -82,7 +82,7 @@
         "scope": "write",
         "days": 365
       },
-      "command": "make test-e2e-platform-token-options E2E_TOKEN_CASE=write-365"
+      "command": "python3 -B test/e2e/platform_token_options.py --case write-365 --locale en"
     }
   ],
   "product_contracts": [
@@ -233,8 +233,6 @@
       "21.5"
     ],
     "partial": {
-      "5.6": "Escape closes select; complete keyboard navigation missing",
-      "7.4": "scope/current validity/revocation covered; actual expiry and wrong-token remain outside this case",
       "7.6": "list/DOM/artifact scan; not every response surface",
       "22.5": "en/zh form/options and list; full-site language audit missing"
     },
@@ -250,15 +248,22 @@
     "12.4": "covered: Cancel, Escape, close and mask each return focus to the Create platform token button and send no token write",
     "12.5": "N/A: the create dialog has no nested child layer; the secret dialog opens only after create closes",
     "12.6": "covered: While the create POST is held the footer Create shows the loading state and a second click sends no further create request; the 502 keeps the name, read scope and no-expiry selection and shows the server reason; the later 201 matches the reloaded row and the independent token list",
-    "12.7": "MISSING: revoke names the token; reference-block, allow-cleanup, and failed delete without a partial change are not exercised",
-    "12.8": "N/A: create and revoke have no delete preview, revision, or compare-and-swap"
+    "12.7": "Revoking a platform token is a real removal here, not a status change, so the deletion confirmation the item describes has an exact object. The confirmation carries both the name and the consequence: the case replaces {{name}} in the product's own platform.revokeConfirm string - 'Revoke <name>? Programs using it lose access at once.' - and requires that exact sentence to be visible inside the viewport before the revoke proceeds, and the consequence is not taken on trust: after the revoke the same plaintext bearer is required to answer 401 AUTHENTICATION_REQUIRED on /api/v1/nodes and on creating an inference key, so 'lose access at once' is proven at runtime rather than read off the copy. Reference blocking has no object on this resource: a token is a credential rather than a referenced object, deletePlatformToken (internal/server/api/platform_tokens.go:81) maps an invalid id, a not-found row and an internal error and nothing in the in-use family, and errors.go defines SERVED_NAME_IN_USE, MODEL_IN_USE, IMAGE_IN_USE and STORAGE_IN_USE on four other resources and never TOKEN_IN_USE. The allowed-removal half is asserted against the server's own set rather than a fixed total - measured two tokens before, one after, so the set shrank by exactly one - together with the removed id being absent, the bystander surviving, and a DELETE answering 204. The failed half revokes an id that does not exist, requires 404, requires the token set to be identical afterwards, and then makes a live bystander token actually authenticate and answer 200. That last check is deliberate and stronger than comparing fields: Store.DeletePlatformToken (internal/server/store/platform_tokens.go:129) calls platformTokens.forget on the way out under a comment saying the token is forgotten even when the delete errored, so a failed removal that walked through that branch and evicted a bystander's cached credential would leave every stored field intact and still break that credential. Measured: the bystander answered 200, its id was still listed, its token set was unchanged, and its name, scope, expires_at and created_at were identical across the failed revoke.",
+    "12.8": "N/A: create and revoke have no delete preview, revision, or compare-and-swap",
+    "7.2": "N/A: this component has no edit operation. The management API exposes only GET, POST and DELETE for these credentials, and the card offers create and revoke only, so there is no edit form whose blank field could mean either keep or clear. Replacing a credential means creating a new one and revoking the old, which is what the case already does.",
+    "5.6": "covered: open, move, commit and dismiss are each driven from the keyboard rather than from a pointer. The option list is opened with Enter while the control is closed, the active option is required to move when an arrow key is pressed, and Enter is required to commit the option that was active - the committed value is read from the selection item and compared with the active option's label, so a list that moved but committed a different entry fails. Escape is required to close the list, leave the dialog standing and leave focus on the control itself rather than dropping it into the document, which is the focus-return half. Arrow navigation is required to wrap: at the last option another press lands on the first, and that case commits the first option's label. The value the case is actually about is put back afterwards, so the keyboard walk does not silently change what the rest of the run tests. One real product finding came out of this and is recorded rather than worked around: the combobox is not in the Tab order on this build - the walk visits the name field, the scope radios, both buttons and the close button, then wraps - so Tab alone never reaches the expiry choice. The test reports that as a finding instead of asserting a reachability the product does not have. Proven by mutation: making the control unfocusable leaves the scripted keyboard walk passing, which is why Tab reachability is measured separately from scripted focus.",
+    "7.4": "covered: both halves are now measured rather than described. The allowing half runs the new credential against the product: a read token is required to read successfully and is required to be refused when it writes, a write token is required to create, read back and delete a real inference key, and every case is required to answer 401 once the token is revoked in the UI. The refusing half posts the constraints this credential has and reads the product code the server defines for each: a name past the 128-byte ceiling, a name that is only whitespace, a scope outside read and write, an expiry below zero and an expiry past the 3650-day ceiling are each required to be refused with a product code and a 400, and the list is re-read afterwards so a refusal that half-wrote a token fails here too. Validation is by UTF-8 bytes rather than characters, which is why the name case is chosen by byte length. The expiry that cannot be exercised in a run of this length is stated rather than faked: the server's smallest expiry is one day, so a credential actually ageing out is not reproducible here and the boundary contract is covered instead. Proven by mutation: removing the scope check turns the out-of-range scope case into a bare 500 instead of the product refusal.",
+    "11.1": "covered: the resize handle of the Prefix column is driven by the keyboard (ArrowRight twice widens it by exactly two 16px steps) and the rendered width list shows that only that one column changed. Forty ArrowLeft presses are then required to stop at a positive minimum rather than run negative, the resulting width is required to be the one written into the stored layout, and a reload is required to bring the same width back - so the value is a real local preference and not just page state. Nothing is asserted against the database: the layout is read back from localStorage under the table's own id. Proven by mutation: removing the minimum clamp lets the column reach -428 and the case fails.",
+    "11.2": "covered: hiding the Status column through the settings drawer's checkbox is required to be checked off, to leave the rendered header row, to still be absent after a reload, and showing it again plus the drawer's reset button is required to restore the exact default header row, again read back after a reload. The default header row is captured before anything is touched, so the restore is compared to the real starting layout rather than to a hand-written list. Proven by mutation: making hide a no-op leaves the checkbox checked and the case fails.",
+    "11.3": "covered: the name and actions columns are required to appear in the drawer as checked and disabled checkboxes, and the name column is required to have no drag handle, so neither can be hidden or moved. Proven by mutation: dropping disabled from the trailing locked checkbox makes the case fail on to_be_disabled.",
+    "10.4": "covered: the platform token table is sorted through its own headers on two columns, and every assertion reads the rendered first cell of each row rather than the header's sorting attribute, so a header that draws the arrow without moving a row fails. Twenty-one real tokens are created through POST /api/v1/platform-tokens; scope alternates between read and write and expiry is left at its default on every row, which gives the equal-value groups the stability assertions need. Name ascending is required to be the true ordering of the rendered names and descending to be exactly that list reversed, and a third activation is required to clear the sort back to the server's own id-descending order. Scope, which only has two values, is required to split into its two value groups in both directions, and the eleven and ten rows inside each group are required to keep exactly the relative order they hold in the unsorted list in both directions - a sort that also shuffled equal rows fails there. Expiry, whose every value is the same, is required to leave the unsorted order untouched in both directions, and created_at is required to reverse exactly on a second column with distinct values. Sorting is then required to precede pagination: with ten rows per page under a descending name sort the first row of page one has to be the largest name in the whole collection, the last page has to hold the smallest one, and the three pages have to reassemble the sorted collection with no row lost or repeated. The two pagination conflicts are recorded as the product behaves rather than as assumed: re-sorting while page two is open keeps page two and shows page two of the new order, and removing the only row of the last page moves the open page back to the last page that still exists with its totals corrected. All twenty-one rows are removed afterwards and an independent GET is required to return an empty list. Proven by mutation: two separate builds of the product were used, each made in a scratch copy so the working tree was never touched. Replacing the column comparator with one that reverses the order of equal values fails the case on \"the equal-valued read rows changed their relative order when sorted ascending\"; replacing the comparator with one that always reports equal fails the case on \"name ascending is not the sorted order\"."
   },
   "missing": [
     "actual expiry boundary and expired-token denial",
     "non-admin ownership and role changes",
     "name length/UTF-8 boundaries",
     "server failure/recovery",
-    "complete list/sorting/pagination and 10/30/100 volumes",
+    "complete list volumes and 10/30/100 page sizes across a larger collection",
     "complete keyboard/computed-style matrix",
     "inference/GPU generation (not a platform-token authorization capability)"
   ],

@@ -49,3 +49,21 @@ func TestPartialRestrictionRefusesOnlyItsFeatures(t *testing.T) {
 		t.Fatal("a partial restriction must require a known launch")
 	}
 }
+
+func TestRequiresCollectiveInterface(t *testing.T) {
+	for _, tc := range []struct {
+		vendor  string
+		nodes   int
+		devices int
+		want    bool
+	}{
+		{vendor: VendorKunlunxin, nodes: 1, devices: 1},
+		{vendor: VendorKunlunxin, nodes: 1, devices: 2, want: true},
+		{vendor: VendorKunlunxin, nodes: 2, devices: 1, want: true},
+		{vendor: VendorNVIDIA, nodes: 2, devices: 2},
+	} {
+		if got := RequiresCollectiveInterface(tc.vendor, tc.nodes, tc.devices); got != tc.want {
+			t.Fatalf("%s nodes=%d devices=%d: got %t, want %t", tc.vendor, tc.nodes, tc.devices, got, tc.want)
+		}
+	}
+}

@@ -89,6 +89,7 @@ export default function useDeployEvaluation({
 }) {
   const [result, setResult] = useState<EvaluateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Error | null>(null);
   const [evaluating, setEvaluating] = useState(false);
   const [reevaluateSeq, setReevaluateSeq] = useState(0);
   // Counts answered evaluations so a report that repeats itself is still acted
@@ -114,6 +115,7 @@ export default function useDeployEvaluation({
     settledSignalRef.current = signal;
     setResult(null);
     setError(message);
+    setFailure(null);
     setEvaluating(false);
   };
 
@@ -159,6 +161,7 @@ export default function useDeployEvaluation({
           setResult(response);
           setResponseSeq((seq) => seq + 1);
           setError(null);
+          setFailure(null);
           // Field errors belong beside their controls; the codes translate the
           // same way every other product error does. An error the server could
           // not attribute (empty field), or attributed to a field with no
@@ -220,6 +223,7 @@ export default function useDeployEvaluation({
           )
             return;
           setError(reason.message);
+          setFailure(reason);
           setResult(null);
         })
         .finally(() => {
@@ -260,6 +264,7 @@ export default function useDeployEvaluation({
   return {
     result,
     error,
+    failure,
     evaluating: evaluating || !Object.is(settledSignalRef.current, signal),
     responseSeq,
     invalidate,

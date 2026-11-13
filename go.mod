@@ -1,6 +1,6 @@
 module gpuworks.ai/gpuworks
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/coder/websocket v1.8.15
@@ -12,6 +12,7 @@ require (
 	github.com/libp2p/go-yamux/v5 v5.1.0
 	go.starlark.net v0.0.0-20260828210309-6dd8f160a37f
 	golang.org/x/crypto v0.56.0
+	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	golang.org/x/tools v0.49.0

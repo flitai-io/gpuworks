@@ -1,0 +1,148 @@
+{
+  "contract_id": "gpuworks/benchmark/batch-selection-matrix",
+  "name": "评测 / 列表批量选择矩阵 / 单行多行取消与全选作用域、五条上限、混合集合、翻页过滤刷新后的集合",
+  "test_file": "test/e2e/evaluation_bulk_selection.py",
+  "test_function": "test_batch_selection",
+  "command": "python3 -B test/e2e/evaluation_bulk_selection.py --case selection --locale en",
+  "priority": "P1",
+  "page_id": "evaluations",
+  "lane": "local-real-server-sqlite-openai-fixture",
+  "identity": "admin browser / benchmark executor on the server",
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "execution",
+    "cleanup"
+  ],
+  "runtime_evidence": {
+    "status": "N/A",
+    "reason": "The target is an audited external OpenAI-compatible fixture. No GPU, agent, container, engine or real model is claimed."
+  },
+  "crud": {
+    "create": "covered as setup: twenty-one runs are created through the real POST /api/v1/benchmarks route and the server's benchmark executor really runs them; sixteen complete and five fail on a missing tokenizer",
+    "read": "covered: the list page, its total text, its pagination, the compare control's own count and the ?ids= it emits, plus an independent GET /api/v1/benchmarks readback of the row set and states",
+    "update": "covered: checkbox selection state, the column filter menus, the page size preference and the pagination controls all change what the table shows",
+    "delete": "covered: one selected run is deleted through the API while it stays in the selection set, and the comparison reports the server's not found reason"
+  },
+  "fields": [
+    {
+      "field_id": "benchmark.selection.row",
+      "component": "Table row Checkbox",
+      "request": "no request: client-side selection state in the evaluations table",
+      "persisted": "browser state only; a reload clears it",
+      "covered": [
+        "one press selects exactly that row and nothing else",
+        "a second press adds a row instead of replacing the first",
+        "unchecking removes exactly that row",
+        "the compare control's own count follows each press"
+      ],
+      "missing": [
+        "keyboard selection with the Shift and Ctrl modifiers",
+        "selecting with a screen reader",
+        "touch and narrow-viewport selection"
+      ]
+    },
+    {
+      "field_id": "benchmark.selection.select-all",
+      "component": "Table header Checkbox",
+      "request": "no request: the header press mutates only client-side selection state",
+      "persisted": "browser state only",
+      "covered": [
+        "the measured scope: the header selects the ten rows of the current page, not all twenty-one filtered rows",
+        "a second press clears the same page",
+        "under a filter the header selects the current page of the filtered result, not the whole filtered set",
+        "the header is not clamped to five, so the count can read ten and the compare control then refuses the set"
+      ],
+      "missing": [
+        "a select-all that spans every filtered result across pages",
+        "selecting all while a filter is being applied",
+        "the header state after a row on another page is selected"
+      ]
+    },
+    {
+      "field_id": "benchmark.selection.cap",
+      "component": "Selection bound of five runs",
+      "request": "no request: applied through the row checkbox's disabled property",
+      "persisted": "browser state only",
+      "covered": [
+        "the fifth row is selectable and the sixth is disabled",
+        "pressing the disabled sixth row adds nothing to the selection or the count",
+        "deselecting one row re-enables the sixth row and the released slot takes it",
+        "the compare control is enabled at five and refused above five"
+      ],
+      "missing": [
+        "the same bound with a larger page size",
+        "the bound's own error message when a set above five is submitted by URL"
+      ]
+    },
+    {
+      "field_id": "benchmark.selection.compare",
+      "component": "Compare button + comparison page",
+      "request": "GET /api/v1/benchmarks/{id} once per selected id from the comparison page",
+      "persisted": "the selected ids travel in the ?ids= query parameter",
+      "covered": [
+        "the button's label carries the live count and it is disabled below two and above five",
+        "the emitted ?ids= names exactly the selected rows, including rows hidden by a filter or living on another page",
+        "a readable hidden selection renders one card per selected run",
+        "a selected row deleted behind the browser reports the load failure with the server's not found reason and one way back"
+      ],
+      "missing": [
+        "the comparison charts' own metric values",
+        "comparison of runs whose modes cannot be aligned",
+        "the same page for a run with no completed point"
+      ]
+    },
+    {
+      "field_id": "benchmark.selection.retention",
+      "component": "Selection set across paging, filtering, reload and failure",
+      "request": "no request: the retention contract is the page's own state handling",
+      "persisted": "browser state only; nothing is written to the server",
+      "covered": [
+        "paging keeps the selection and a row on the second page can join it",
+        "a filter that hides the selected rows keeps them selected and Compare still names them",
+        "coming back from the comparison clears the selection",
+        "a reload clears the selection and restores the stored page size",
+        "a failed comparison leaves no selection behind"
+      ],
+      "missing": [
+        "retention when the row set changes under a live poll",
+        "retention across two browser tabs",
+        "the batch action after a failure that hits only some of several rows"
+      ]
+    },
+    {
+      "field_id": "benchmark.selection.permission",
+      "component": "Batch operation authorization",
+      "request": "DELETE /api/v1/benchmarks/{id} with a read-scope platform token",
+      "persisted": "N/A: the mutation is refused",
+      "covered": [
+        "a read-scope token reads the selected run with 200",
+        "the same token's delete is refused with 403 and the read-only code",
+        "the refused run is still readable afterwards"
+      ],
+      "missing": [
+        "a non-admin browser session",
+        "a token revoked between selecting and acting",
+        "batch delete of many runs at once"
+      ]
+    }
+  ],
+  "checklist_items": {
+    "11.5": "Measured with twenty-one seeded runs at ten rows per page, all read through the table DOM and the compare control's own label. A single press on a row checkbox selects exactly that row and nothing else, the compare control reads one and stays disabled; a second press adds the next row and the control reads two and becomes enabled; unchecking either row removes exactly that row and returns the control to one and then zero. The select-all scope is the explicit answer this item asks for: pressing the header checkbox, which carries the accessible name Select all, with ten rows on the page and twenty-one in the list, checks exactly the ten rows of the current page and makes the compare control read ten over five, so the scope is the current page and not every filtered result. The same press under the Status filter selects the ten rows of the first page of the sixteen-row filtered result, not all sixteen. The header is not clamped to the five-run comparison bound, so the count really reaches ten and the compare control becomes disabled instead of truncating the set; a second header press clears the page and the count returns to zero. Later in the same case the five-run bound is exercised one row at a time: the fifth row is selectable, the sixth is disabled, a forced press on the disabled sixth row adds nothing, and deselecting one row re-enables it so the released slot takes it. Every step is a real browser interaction against a real server; the selection set is browser state, so this item is not mutation-proven and no product-layer mutation was used to make these assertions fail.",
+    "11.6": "The batch set is built from runs this case really created and executed. Two facets are asserted item by item with the actual outcome and the failure reason. Mixed set: five of the twenty-one runs are in the failed state and sixteen are completed; selecting completed and failed rows together and comparing them emits exactly those ids, renders one card per selected run and shows no error alert, and the failed member's own verdict card names its failure reason, which is that the tokenizer file does not exist, so an unactionable member is shown as unactionable rather than silently dropped, while the completed members still render their measured points. Unreadable and invalid resource: two selected runs are kept in the selection set while the first of them is deleted through the real DELETE route, the delete answers 204 and an independent GET answers 404, the compare control still reads two rather than quietly dropping the member, and pressing Compare then shows the product's own failure alert, whose first line is the localized load failure text and whose description is the server's own not found reason, with a single way back to the list. No permission: the same selected row is read through a read-scope platform token with 200 and the same token's delete is refused with 403 and the PLATFORM_TOKEN_READ_ONLY code, and the row is still readable afterwards, so a visible but forbidden target is demonstrated to be readable and not mutable. Proven by mutation: the five-run bound is enforced only by the row checkbox's disabled property, so removing that bound in the product is fatal to this case. With getCheckboxProps changed to return disabled false for every row in ui/src/pages/EvaluationsPage.tsx, rebuilt and rerun, the case failed at the disabled-row expectation with the message Locator expected to be disabled / Actual value: enabled on the sixth row's checkbox, instead of reaching the later bound assertions. After restoring the source, rebuilding and rerunning, the case passes again. The bound is therefore really measured, not assumed.",
+    "11.7": "Each transition of the selection set is measured, and no stale target can be acted on invisibly. Paging: with two rows selected on the first page, moving to the second page leaves the count unchanged, shows no checked row on the second page, allows one second-page row to join the selection so the count rises, and returning to the first page restores exactly the still-selected rows; pressing Compare from the first page emits the selected ids from both pages, so the ids the browser sends are the selection and not the visible page. Filtering: with two completed rows selected, applying the Status filter and then a filter that hides them keeps the compare count at two while no rendered row is checked, and Compare emitted exactly those hidden ids, and the comparison page rendered both runs by name with no error alert, so a hidden but still-selected target is named rather than acted on as if it were visible. Failure: after the comparison reports the not found alert and the operator takes its only action back to the list, the count is zero; coming back from a healthy comparison also clears the selection and the full total returns. Refresh: a reload clears the selection to zero and leaves no checked row, while the stored ten-row page size survives the reload. A further select-all measurement under a filter is reported in 11.5. All of it is real browser and server behaviour; this item is not mutation-proven, since no product-layer mutation was applied to make these assertions fail."
+  },
+  "missing": [
+    "MISSING: keyboard multi-select with the Shift and Ctrl modifiers",
+    "MISSING: a select-all that spans every filtered result across pages",
+    "MISSING: the bound of five with page sizes other than ten",
+    "MISSING: the comparison charts' own metric values and runs whose modes cannot be aligned",
+    "MISSING: selection retention across two browser tabs or while a live poll changes the row set",
+    "MISSING: batch delete of several runs in one action",
+    "MISSING: a non-admin browser session and a token revoked between selecting and acting",
+    "MISSING: wide layouts, narrow viewports and touch selection",
+    "MISSING: the other locale (each run covers one --locale)",
+    "N/A: GPU performance and real model behaviour — the target is an audited fixture, and runtime evidence is not claimed"
+  ]
+}

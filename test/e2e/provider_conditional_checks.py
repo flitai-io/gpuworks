@@ -176,6 +176,19 @@ def exercise_conditional_fields(page, dialog, copy, kinds, locale, report, artif
         expect(option).to_have_count(1)
         option.click()
         expect(kind_control).to_have_attribute('aria-expanded', 'false')
+        # 1.5: the chosen option has to actually take the selection, not merely close the popup.
+        # The combobox shows that option's caption and no other, and reopening the popup marks
+        # exactly that one option as selected.
+        chosen = caption(kind)
+        expect(dialog.locator('.ant-select-selection-item')).to_have_count(1)
+        expect(dialog.locator('.ant-select-selection-item')).to_have_text(chosen)
+        selector.click()
+        popup = page.locator('[id=' + json.dumps(kind_control.get_attribute('aria-controls')) + ']').locator('..')
+        selected = popup.locator('.ant-select-item-option-selected')
+        expect(selected).to_have_count(1)
+        expect(selected).to_have_text(chosen)
+        page.keyboard.press('Escape')
+        expect(kind_control).to_have_attribute('aria-expanded', 'false')
         assert_defaults(kind)
 
     page.on('request', sent)

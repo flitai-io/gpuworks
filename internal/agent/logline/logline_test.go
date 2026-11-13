@@ -13,7 +13,7 @@ func TestLevel(t *testing.T) {
 	}{
 		{"(APIServer pid=97413) INFO 09-18 20:41:29 [utils.py:299] vLLM API server", LevelInfo},
 		{"(APIServer pid=97413) WARNING 09-18 20:41:29 [envs.py:1830] Unknown vLLM environment variable detected: VLLM_VERSION", LevelWarn},
-		{"(APIServer pid=83923) [ERROR] 2026-09-18-20:39:28 (PID:83923, Device:-1, RankID:-1) ERR99999 UNKNOWN applicaiton exception", LevelError},
+		{"(APIServer pid=83923) [ERROR] 2026-09-18-20:39:28 (PID:83923, Device:-1, RankID:-1) ERR99999 UNKNOWN applicaiton exception", LevelError}, //nolint:misspell // Preserve the exact error text emitted by the engine fixture.
 		{`(APIServer pid=97413) pydantic_core._pydantic_core.ValidationError: 1 validation error for ModelConfig`, ""},
 		{`time="2026-09-18T20:48:25+08:00" level=fatal msg="no such container gpuworks-5a39472d97ba"`, LevelFatal},
 		{"level=warning runtime is deprecated", LevelWarn},

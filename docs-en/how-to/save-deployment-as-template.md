@@ -60,7 +60,7 @@ models:
     ...
 ```
 
-The comments do not change what the document parses to. Fields and error codes are in the [API reference: Save as an inference template](../reference/api.md#save-as-an-inference-template).
+The comments do not change what the document parses to. Fields and error codes are in the [API reference: Save as an inference template](../reference/api.md#另存为推理模板).
 
 ## 2. Decide which environment variables to keep
 

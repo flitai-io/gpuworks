@@ -355,11 +355,13 @@ type Params struct {
 	// engine policy, and is what topology validation measures the effective
 	// argv against.
 	AssignedGPUs int
-	// TensorParallel and PipelineParallel are the degrees the engine injects,
-	// over the whole deployment (package parallelism): on N nodes each runs
-	// TensorParallel×PipelineParallel/N GPUs, which is AssignedGPUs.
+	// TensorParallel, PipelineParallel and DataParallel are the degrees the
+	// engine injects, over the whole deployment (package parallelism): on N
+	// nodes each runs TensorParallel×PipelineParallel×DataParallel/N GPUs,
+	// which is AssignedGPUs.
 	TensorParallel    int
 	PipelineParallel  int
+	DataParallel      int
 	Sleepable         bool
 	VRAMLimitBytes    int64
 	SMLimitPct        int

@@ -5,7 +5,7 @@ site_root=$(cd "$(dirname "$0")" && pwd)
 repo_root=$(cd "$site_root/.." && pwd)
 hugo_bin=${HUGO_BIN:-hugo}
 output_dir=${HUGO_DEST:-"$site_root/public"}
-theme_repo=${WEBSITE_REPO:-http://dev.zstack.io:9080/wei.wang/gpuworks_website.git}
+theme_repo=${WEBSITE_REPO:-https://github.com/flitai-io/gpuworks_website.git}
 # DOCS_BASE_URL overrides hugo.yaml's baseURL for the production build only
 # (Read the Docs serves the site from the project root instead of /docs/). It
 # is not exported as HUGO_BASEURL because the site tests run their own Hugo.
@@ -14,11 +14,10 @@ if [ -n "${DOCS_BASE_URL:-}" ]; then
 	base_url_args=(--baseURL "$DOCS_BASE_URL")
 fi
 
-# The oink theme lives in the gpuworks_website repository; this repository
-# carries no theme files. Fetch it once when it is missing. The internal
-# repository needs authentication: under CI the WEBSITE_REPO project variable
-# carries a read-only deploy-token URL, anywhere else git uses the operator's
-# own credentials (or set WEBSITE_REPO to a URL that carries them).
+# The oink theme lives in the public gpuworks_website repository; this
+# repository carries no theme files. Fetch it once when it is missing.
+# WEBSITE_REPO points the clone at another copy, such as a mirror for a
+# builder without access to github.com.
 if [ ! -d "$site_root/themes/oink" ]; then
 	tmp=$(mktemp -d)
 	trap 'rm -rf "$tmp"' EXIT

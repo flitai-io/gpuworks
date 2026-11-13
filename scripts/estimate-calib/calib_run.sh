@@ -12,7 +12,7 @@ set -u
 
 TAG="$1"; MODEL="$2"; GPU="$3"; UTIL="$4"; MAXLEN="$5"; shift 5
 
-IMAGE="${IMAGE:-quay.io/gpustack/runner:cuda13.0-vllm0.25.1}"
+IMAGE="${IMAGE:-gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4}"
 OUTDIR="${OUTDIR:-/tmp/calib/logs}"
 RUN_TIMEOUT="${RUN_TIMEOUT:-900}"
 NAME="calib-$TAG"
@@ -31,7 +31,7 @@ docker run -d --name "$NAME" --gpus "device=$GPU" \
   -v /opt/gpuworks/models:/models -v /tmp/calib:/calib \
   -v /tmp/calib/torchcache:/root/.cache/vllm \
   ${EXTRA_ENV} \
-  "$IMAGE" vllm serve "$MODEL" \
+  --entrypoint vllm "$IMAGE" serve "$MODEL" \
   --load-format dummy --gpu-memory-utilization "$UTIL" --max-model-len "$MAXLEN" \
   --port "$PORT" "$@" >/dev/null
 

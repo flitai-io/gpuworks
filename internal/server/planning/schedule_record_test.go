@@ -2,9 +2,10 @@ package planning
 
 import (
 	"encoding/json"
-	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"reflect"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/server/netplan"
 
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 )

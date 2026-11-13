@@ -15,6 +15,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/prepobs"
 	"gpuworks.ai/gpuworks/internal/server/rpccontext"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -418,8 +419,8 @@ func (h *Hub) NodeCaps(nodeUUID string) []string {
 	return s.Caps()
 }
 
-// CopyModelPath coordinates a direct node-to-node transfer. The hub sends only
-// listener credentials and the final confirmation over control RPCs.
+// CopyModelPath prefers direct transfer and can relay authorized TLS bytes on
+// independent data lanes when both agents support it.
 func (h *Hub) CopyModelPath(ctx context.Context, req proto.ModelSyncCopyRequest) (proto.ModelSyncCopyResult, error) {
 	if h.session(req.SourceNodeUUID) == nil {
 		return proto.ModelSyncCopyResult{}, errors.New("source node not connected: " + req.SourceNodeUUID)
@@ -427,119 +428,28 @@ func (h *Hub) CopyModelPath(ctx context.Context, req proto.ModelSyncCopyRequest)
 	if h.session(req.TargetNodeUUID) == nil {
 		return proto.ModelSyncCopyResult{}, errors.New("target node not connected: " + req.TargetNodeUUID)
 	}
-	return coordinateModelCopy(ctx, req, auth.NewToken(32), h.callNodeForModelSync)
+	if req.TransferID == "" {
+		req.TransferID = auth.NewUUID()
+	}
+	ctx, finish := h.beginObservedPeerTransfer(ctx, prepobs.PeerTransferSpec{TransferID: req.TransferID, Kind: "model", Operation: "copy", SourceNodeUUID: req.SourceNodeUUID, TargetNodeUUID: req.TargetNodeUUID, ResourceKey: req.Key})
+	relay := h.observeArchiveRelay(req.TransferID, h.archiveRelayFor(req.SourceNodeUUID, req.TargetNodeUUID, "model"), func() {
+		if file, err := h.store.ResolveModelFileKey(req.Key); err == nil {
+			_, _ = h.store.MarkModelSyncWaiting(store.FileRef{ModelID: file.ModelID, StorageID: file.StorageID, NodeID: file.NodeID}, req.TransferID, "Peer relay is busy; waiting to retry the same source.", messages.ErrorPeerRelayBusy)
+		}
+	})
+	result, err := coordinateModelCopy(ctx, req, auth.NewToken(32), h.callNodeForModelSync, relay)
+	finish(err, result.InProgress)
+	return result, err
 }
 
 func (h *Hub) ProbeModelPath(ctx context.Context, req proto.ModelSyncCopyRequest) error {
-	_, err := coordinateModelCopyProbe(ctx, req, auth.NewToken(32), h.callNodeForModelSync)
+	if req.TransferID == "" {
+		req.TransferID = auth.NewUUID()
+	}
+	ctx, finish := h.beginObservedPeerTransfer(ctx, prepobs.PeerTransferSpec{TransferID: req.TransferID, Kind: "model", Operation: "probe", SourceNodeUUID: req.SourceNodeUUID, TargetNodeUUID: req.TargetNodeUUID, ResourceKey: req.Key})
+	result, err := coordinateModelCopyProbe(ctx, req, auth.NewToken(32), h.callNodeForModelSync, h.observeArchiveRelay(req.TransferID, h.archiveRelayFor(req.SourceNodeUUID, req.TargetNodeUUID, "model"), nil))
+	finish(err, result.InProgress)
 	return err
-}
-
-func coordinateModelCopyProbe(ctx context.Context, req proto.ModelSyncCopyRequest, token string, call modelSyncCall) (proto.ModelSyncCopyResult, error) {
-	req.TransferID = strings.TrimSpace(req.TransferID)
-	if req.TransferID == "" {
-		req.TransferID = auth.NewUUID()
-	}
-	// Long for the same reason as coordinateModelCopy's listen.
-	listenRaw, err := call(ctx, req.TargetNodeUUID, proto.RPCModelSyncListen, proto.ModelSyncListenParams{TransferID: req.TransferID, Key: req.Key, TargetPath: req.TargetPath, Token: token, BindIP: req.TargetIP, ExpectedFileBytes: req.ExpectedFileBytes, StorageID: req.TargetStorageID}, true)
-	if err != nil {
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, fmt.Errorf("start target model receiver: %w", err)
-	}
-	var listen proto.ModelSyncListenResult
-	if err := json.Unmarshal(listenRaw, &listen); err != nil {
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, err
-	}
-	if listen.InProgress {
-		return proto.ModelSyncCopyResult{TransferID: listen.TransferID, InProgress: true}, errors.New("target model receiver already has an active transfer")
-	}
-	if len(listen.Endpoints) == 0 || listen.Fingerprint == "" {
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, errors.New("target model receiver returned no endpoint or fingerprint")
-	}
-	_, err = call(ctx, req.SourceNodeUUID, proto.RPCModelSyncProbe, proto.ModelSyncSendParams{TransferID: req.TransferID, Token: token, Endpoints: listen.Endpoints, Fingerprint: listen.Fingerprint, SourceIP: req.SourceIP}, false)
-	stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_, _ = call(stopCtx, req.TargetNodeUUID, proto.RPCModelSyncStop, proto.ModelSyncStopParams{TransferID: req.TransferID, Key: req.Key}, false)
-	if err != nil {
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, fmt.Errorf("source node cannot connect to target direct address: %w", err)
-	}
-	return proto.ModelSyncCopyResult{TransferID: req.TransferID}, nil
-}
-
-type modelSyncCall func(context.Context, string, string, any, bool) (json.RawMessage, error)
-
-func coordinateModelCopy(ctx context.Context, req proto.ModelSyncCopyRequest, token string, call modelSyncCall) (proto.ModelSyncCopyResult, error) {
-	req.TransferID = strings.TrimSpace(req.TransferID)
-	if req.TransferID == "" {
-		req.TransferID = auth.NewUUID()
-	}
-	if req.Key == "" || req.SourceNodeUUID == "" || req.SourcePath == "" || req.TargetNodeUUID == "" || req.TargetPath == "" {
-		return proto.ModelSyncCopyResult{}, errors.New("model sync copy request is incomplete")
-	}
-	if token == "" {
-		return proto.ModelSyncCopyResult{}, errors.New("generate model sync token")
-	}
-	// stop releases the target's receiver for this transfer. It is safe to call
-	// when no receiver exists (the agent answers "not_running") and when the
-	// listen call itself failed: the reply can be lost after the agent has
-	// already started receiving, and an orphan receiver is what makes every
-	// retry answer InProgress until the receiver's 10-minute TTL expires,
-	// leaving the model file in syncing with nothing downloaded (todo T23).
-	stop := func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_, _ = call(cleanupCtx, req.TargetNodeUUID, proto.RPCModelSyncStop, proto.ModelSyncStopParams{
-			TransferID: req.TransferID, Key: req.Key,
-		}, false)
-	}
-	// Listen is long like send: before it answers, the target resolves its
-	// storage and checks free space, each bounded by the agent's own 30-second
-	// storage timeout, so on slow storage the reply arrives after the ordinary
-	// management deadline and the server would give up on a receiver that then
-	// starts anyway.
-	listenRaw, err := call(ctx, req.TargetNodeUUID, proto.RPCModelSyncListen, proto.ModelSyncListenParams{
-		TransferID: req.TransferID, Key: req.Key, TargetPath: req.TargetPath, Token: token,
-		BindIP: req.TargetIP, ExpectedFileBytes: req.ExpectedFileBytes, StorageID: req.TargetStorageID,
-	}, true)
-	if err != nil {
-		stop()
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, fmt.Errorf("start target model receiver: %w", err)
-	}
-	var listen proto.ModelSyncListenResult
-	if err := json.Unmarshal(listenRaw, &listen); err != nil {
-		stop()
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, fmt.Errorf("decode target model receiver: %w", err)
-	}
-	// An in-progress answer belongs to an earlier request that owns that
-	// receiver; stopping it here would cancel a transfer already running.
-	if listen.InProgress {
-		if listen.TransferID != "" {
-			req.TransferID = listen.TransferID
-		}
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID, InProgress: true}, nil
-	}
-	if len(listen.Endpoints) == 0 || listen.Fingerprint == "" {
-		stop()
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, errors.New("target model receiver returned no endpoint or fingerprint")
-	}
-	sendRaw, err := call(ctx, req.SourceNodeUUID, proto.RPCModelSyncSend, proto.ModelSyncSendParams{
-		TransferID: req.TransferID, SourcePath: req.SourcePath, Token: token,
-		Endpoints: listen.Endpoints, Fingerprint: listen.Fingerprint,
-		RateLimitKBs: req.RateLimitKBs, SourceIP: req.SourceIP,
-	}, true)
-	if err != nil {
-		stop()
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, fmt.Errorf("send peer model archive: %w", err)
-	}
-	var sent proto.ModelSyncTransferResult
-	if err := json.Unmarshal(sendRaw, &sent); err != nil {
-		stop()
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, fmt.Errorf("decode peer model confirmation: %w", err)
-	}
-	if sent.Bytes <= 0 || len(sent.SHA256) != 64 {
-		stop()
-		return proto.ModelSyncCopyResult{TransferID: req.TransferID}, errors.New("peer model confirmation is incomplete")
-	}
-	return proto.ModelSyncCopyResult{TransferID: req.TransferID, Bytes: sent.Bytes, SHA256: sent.SHA256}, nil
 }
 
 func (h *Hub) callNodeForModelSync(ctx context.Context, uuid, method string, params any, long bool) (json.RawMessage, error) {
@@ -554,6 +464,7 @@ func (h *Hub) callNodeForModelSync(ctx context.Context, uuid, method string, par
 }
 
 func (h *Hub) StopModelSync(ctx context.Context, nodeUUID, key, transferID string) error {
+	h.CancelPeerTransfer(transferID)
 	_, err := h.CallNode(ctx, nodeUUID, proto.RPCModelSyncStop, proto.ModelSyncStopParams{Key: key, TransferID: transferID})
 	return err
 }

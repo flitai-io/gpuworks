@@ -1,5 +1,11 @@
 package proto
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // NetworkConfig is the effective per-node network/acceleration config (global
 // preset merged with the node override). Two mechanisms (plan §9): URL rewrites
 // (xget/1ms/xuanyuan style) and environment (HTTP proxy). DNS acceleration (e.g.
@@ -27,6 +33,21 @@ type NetworkConfig struct {
 type PortRange struct {
 	Start int `json:"start"`
 	End   int `json:"end"`
+}
+
+// Valid reports whether the range names at least one usable TCP port.
+func (r PortRange) Valid() bool { return r.Start >= 1 && r.Start <= r.End && r.End <= 65535 }
+
+// ParsePortRange reads "START-END", the form --engine-ports takes.
+func ParsePortRange(s string) (PortRange, error) {
+	lo, hi, ok := strings.Cut(strings.TrimSpace(s), "-")
+	start, err1 := strconv.Atoi(strings.TrimSpace(lo))
+	end, err2 := strconv.Atoi(strings.TrimSpace(hi))
+	r := PortRange{Start: start, End: end}
+	if !ok || err1 != nil || err2 != nil || !r.Valid() {
+		return PortRange{}, fmt.Errorf("port range %q: want START-END within 1-65535", s)
+	}
+	return r, nil
 }
 
 // Contains reports whether port lies in the range.

@@ -152,28 +152,26 @@ test("at or above the md breakpoint every column shows", () => {
 // layout. The shared list declares every width and lays them out fixed, with
 // the service name leading frozen on the left.
 function declaredColWidths(): number[] {
-  const cols = Array.from(document.querySelectorAll(".ant-table table colgroup col")) as HTMLElement[];
+  const cols = Array.from(document.querySelectorAll("table thead th")) as HTMLElement[];
   return cols.map((col) => Number.parseFloat(col.style.width)).filter((width) => !Number.isNaN(width));
 }
 
 test("wide layout is fixed-layout at the declared widths with the service frozen first", () => {
   matchMediaMatches = true;
   renderTable();
-  const wrapper = document.querySelector(".ant-table") as HTMLElement;
-  assert.ok(wrapper.className.includes("ant-table-layout-fixed"), wrapper.className);
-  const table = wrapper.querySelector("table") as HTMLElement;
+  const table = screen.getByRole("table") as HTMLElement;
+  assert.equal(table.style.tableLayout, "fixed");
   const widths = declaredColWidths();
   assert.equal(widths[0], 220, `service column width in ${widths.join(",")}`);
   assert.equal(widths[2], 150, `the health column has a declared width of its own in ${widths.join(",")}`);
   assert.equal(table.style.width, `${widths.reduce((sum, width) => sum + width, 0)}px`);
-  assert.ok(screen.getAllByRole("columnheader")[0].className.includes("ant-table-cell-fix-left"));
+  assert.equal((screen.getAllByRole("columnheader")[0] as HTMLElement).style.left, "0px");
 });
 
 test("narrow layout is fixed-layout too, over its four columns", () => {
   matchMediaMatches = false;
   renderTable();
-  const wrapper = document.querySelector(".ant-table") as HTMLElement;
-  assert.ok(wrapper.className.includes("ant-table-layout-fixed"), wrapper.className);
+  assert.equal((screen.getByRole("table") as HTMLElement).style.tableLayout, "fixed");
   assert.deepEqual(declaredColWidths(), [220, 110, 150, 100]);
 });
 

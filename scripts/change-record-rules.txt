@@ -1,0 +1,23 @@
+# Change-record classes. A file is a trigger only when it matches a glob here.
+# Tests (*_test.go, *.test.ts, *.test.tsx) never trigger. There is no N/A flag:
+# to stop a path from triggering, delete or narrow its line in this file.
+#
+# contract	same diff must also change docs/ or docs/adr/ (docs-en/ does not count)
+# decision	same source branch must have a gpuworks-artifacts MR whose plan.md
+#		frontmatter has non-empty decision and rejected
+#
+# Internal fixes (event bus, scheduler tweaks, refactors) are not listed.
+# Adding one is a change to this file, reviewed like any other rule.
+
+contract	internal/proto/*.go
+contract	internal/server/api/errors.go
+contract	cmd/gpuworks/*.go
+contract	internal/server/inferencecatalog/flat.go
+contract	internal/server/store/deployment_policy.go
+
+decision	internal/server/store/entities_model.go
+decision	internal/agent/modelsync/**
+decision	internal/server/hub/network_sync.go
+decision	internal/server/hub/image_direct_sync.go
+decision	internal/server/hub/image_archive_relay.go
+decision	internal/server/deploy/startup_budget.go

@@ -1,9 +1,10 @@
 package api
 
 import (
+	"net/http"
+
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
-	"net/http"
 
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 )

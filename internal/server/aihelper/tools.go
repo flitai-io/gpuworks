@@ -73,6 +73,7 @@ func BuiltinTools() []Tool {
 		searchAPITool(),
 		callAPITool(),
 		searchMetricsTool(),
+		nodeConnectionDiagnosticsTool(),
 		{
 			Name:        "get_gpu_topology",
 			Description: "Get a node's GPU interconnect as the platform reads it: which cards share a fast link (NVLink or the vendor's equivalent) and which NUMA node each sits on.",
@@ -126,21 +127,6 @@ func propsToSchema(props string) string {
 	return props
 }
 
-func parseArgs(args json.RawMessage) map[string]string {
-	var m map[string]any
-	_ = json.Unmarshal(args, &m)
-	out := map[string]string{}
-	for k, v := range m {
-		switch t := v.(type) {
-		case string:
-			out[k] = t
-		case float64:
-			out[k] = trimFloat(t)
-		}
-	}
-	return out
-}
-
 func jsonResult(v any, err error) (string, error) {
 	if err != nil {
 		return "", err
@@ -150,25 +136,4 @@ func jsonResult(v any, err error) (string, error) {
 		return "", e
 	}
 	return string(b), nil
-}
-
-func uintArg(s string) uint {
-	var n uint
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			break
-		}
-		n = n*10 + uint(r-'0')
-	}
-	return n
-}
-
-func trimFloat(f float64) string {
-	b, _ := json.Marshal(f)
-	s := string(b)
-	// strip a trailing ".0"
-	if len(s) > 2 && s[len(s)-2:] == ".0" {
-		return s[:len(s)-2]
-	}
-	return s
 }

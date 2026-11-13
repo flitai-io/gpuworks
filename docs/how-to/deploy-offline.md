@@ -134,6 +134,28 @@ Docker 与 udocker 节点可以直接用 `.tar.gz`；nerdctl 节点请先解压�
 2. 设置 → 拉取设置 → 来源规则，加一条 `gpuworks/` → `registry.corp.example/gpuworks/`，并关闭「允许回源」，节点就不会再去公网拉。
    仓库要登录时配[凭据](configure-pull-settings.md#凭据)，规则写法见[来源规则](configure-pull-settings.md#来源规则)。
 
+### Kubernetes 集群的 agent 镜像
+
+以 DaemonSet 接入的 Kubernetes 集群，节点要先拉到 agent 镜像。阿里云盘的 `gpuworks-agent/` 目录里有
+`gpuworks-agent_r1_linux-<架构>.tar.gz`（`r1` 是 agent 运行环境的版本，不随 server 版本变化），任选一种导入：
+
+- 推到内网镜像仓，在集群条目「高级」的「agent 镜像」里填这个地址（仓库要登录时再填「镜像拉取凭据」）：
+
+  ```bash
+  docker load -i gpuworks-agent_r1_linux-amd64.tar.gz
+  docker tag gpuworks/gpuworks-agent:r1 registry.corp.example/gpuworks/gpuworks-agent:r1
+  docker push registry.corp.example/gpuworks/gpuworks-agent:r1
+  ```
+
+- 或在每个节点上导入 kubelet 用的 containerd，集群条目保持默认：manifest 里的 `gpuworks/gpuworks-agent:r1` 在节点上已经有，就不会去拉。
+  之后新加入集群的节点也要先导入。
+
+  ```bash
+  gunzip -c gpuworks-agent_r1_linux-amd64.tar.gz | ctr -n k8s.io images import -
+  ```
+
+agent 程序本身由 server 下发和升级，平时升级 server 不用再导入；只有运行环境版本变化时（发布说明会写明）才要换新的归档。
+
 ### 模型放在内网 HTTP 目录
 
 模型目录已在 HTTP 文件服务器上时，按[从 HTTP 目录注册模型](import-from-http.md#从-http-目录注册模型)登记并下载。server 需要读取目录进行解析，目标节点也必须能直接访问该目录；内网地址按该指南配置出站授权。

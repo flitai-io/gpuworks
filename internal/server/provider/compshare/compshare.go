@@ -510,13 +510,6 @@ func selectCapacitySpec(specs []capacitySpec, gpuCount, cpu, memoryMB int, cpuEx
 	return candidates[0], true
 }
 
-func requestedValue(value int, explicit bool) string {
-	if !explicit {
-		return "auto"
-	}
-	return strconv.Itoa(value)
-}
-
 func isNotFoundError(err error) bool {
 	if err == nil {
 		return false

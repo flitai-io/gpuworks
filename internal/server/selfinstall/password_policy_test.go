@@ -11,7 +11,8 @@ import (
 
 func TestInstallRejectsWeakBootstrapPasswordsBeforeWrites(t *testing.T) {
 	for _, source := range []string{"flag", "env", "prompt"} {
-		for _, password := range []string{"123", "password", "admin123"} {
+		// "Admin@2026" is the admin username under the account-aware rule.
+		for _, password := range []string{"123", "password", "admin123", "Admin@2026"} {
 			t.Run(source+"/"+password, func(t *testing.T) {
 				t.Setenv(AdminPasswordEnvVar, "")
 				h := newHarness(t, t.TempDir())

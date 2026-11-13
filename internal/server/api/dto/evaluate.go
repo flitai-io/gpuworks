@@ -43,6 +43,15 @@ type EvictionSuggestion struct {
 // EvaluateResponse is the deploy-form feedback (argv preview + VRAM breakdown +
 // schedule plan).
 type EvaluateResponse struct {
+	// GPUCandidates describes every card's resource availability for a manual
+	// single-node draft. Unavailability is informational, not a selection ban.
+	GPUCandidates *GPUCandidates `json:"gpu_candidates,omitempty"`
+
+	StartupEstimate       *StartupEstimate `json:"startup_estimate,omitempty"`
+	StartTimeoutSec       int              `json:"start_timeout_sec,omitempty"`
+	StartTimeoutSource    string           `json:"start_timeout_source,omitempty"`
+	StartTimeoutConflict  bool             `json:"start_timeout_conflict,omitempty"`
+	EngineStartTimeoutSec int              `json:"engine_start_timeout_sec,omitempty"`
 	// SchemaVersion versions the evaluate response contract. Clients that
 	// render fixtures assert it, so a response shape they depend on cannot
 	// drift from what the server publishes without failing a test.
@@ -51,7 +60,9 @@ type EvaluateResponse struct {
 	// errors has ok=false and stays HTTP 200: evaluation is the interactive
 	// endpoint, and the form keeps the draft while showing each error beside
 	// its control. Codes match the 400 path create would answer with.
-	Errors []FieldError `json:"errors,omitempty"`
+	Errors      []FieldError      `json:"errors,omitempty"`
+	Diagnostics *DiagnosticReport `json:"diagnostics,omitempty"`
+	RequestID   string            `json:"request_id,omitempty"`
 	// AutoPlaced says the server picked the nodes of this multi-node or PD
 	// request (placement_mode "auto"): the nodes the preview shows are where
 	// it would go now, and the create picks again.
@@ -137,6 +148,17 @@ type EvaluateResponse struct {
 	// policy other than never (planning.DraftYieldPolicyRefusal), the check
 	// the create makes; absent until the draft's engine is known.
 	YieldPolicyEligible *Eligibility `json:"yield_policy_eligible,omitempty"`
+}
+
+type GPUCandidates struct {
+	NodeUUID string         `json:"node_uuid"`
+	Items    []GPUCandidate `json:"items"`
+}
+
+type GPUCandidate struct {
+	Index     int             `json:"index"`
+	Available bool            `json:"available"`
+	Reason    *ScheduleReason `json:"reason,omitempty"`
 }
 
 // EvaluatePD is the preview of a PD draft (ADR 0028).
@@ -287,6 +309,31 @@ type AcquisitionResult struct {
 	// the weights if it started now. It is a forecast, not a choice: the node
 	// decides again when it starts.
 	Nodes []AcquisitionNode `json:"nodes,omitempty"`
+	// Components is, for each template component other than the primary (a
+	// separately published text encoder, a speculative draft), how the
+	// target nodes would get it if the deployment were created now. It
+	// appears once the target nodes are known.
+	Components []AcquisitionComponent `json:"components,omitempty"`
+}
+
+// AcquisitionComponent is one template component's forecast. Plan is "ready"
+// (every target node reads it already), "shared_download" (the create
+// downloads it once into the shared storage Storage, through one writer node,
+// and the target nodes read that copy; FollowsPrimary says the request named
+// no storage and Storage is the one the primary sits on) or "node_download"
+// (each target node without it downloads it into its own storage). Nodes
+// counts the target nodes, ReadyNodes those that read it now.
+type AcquisitionComponent struct {
+	Name           string `json:"name"`
+	Role           string `json:"role"`
+	Model          string `json:"model"`
+	SizeBytes      int64  `json:"size_bytes,omitempty"`
+	Plan           string `json:"plan"`
+	Nodes          int    `json:"nodes"`
+	ReadyNodes     int    `json:"ready_nodes"`
+	StorageID      uint   `json:"storage_id,omitempty"`
+	Storage        string `json:"storage,omitempty"`
+	FollowsPrimary bool   `json:"follows_primary,omitempty"`
 }
 
 // AcquisitionNode is one node's forecast. ImagePlan is "present" (the node

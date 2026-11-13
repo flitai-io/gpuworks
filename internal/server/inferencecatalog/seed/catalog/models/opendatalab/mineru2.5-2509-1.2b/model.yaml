@@ -1,0 +1,50 @@
+model_id: opendatalab/mineru2.5-2509-1.2b
+source: upstream
+display_title: MinerU2.5-2509-1.2B
+parameter_count: 1.2B
+architecture: Qwen2VLForConditionalGeneration
+context_length: 16384
+input_modalities: [text, image]
+model_config: {model_type: qwen2_vl, num_hidden_layers: 24, hidden_size: 896, num_attention_heads: 14, num_key_value_heads: 2, max_position_embeddings: 16384, vision_config: {patch_size: 14, spatial_merge_size: 2}}
+kv_bytes_per_token:
+  vllm: 12288
+specs:
+- name: fp16-vllm-nvidia
+  display_name_zh_cn: NVIDIA Turing 及以上 · MinerU 远程视觉推理
+  display_name_en: NVIDIA Turing+ · MinerU remote vision inference
+  scenario: balanced
+  engine: vllm
+  image: gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2
+  weights:
+    quantization: bf16
+    sources:
+    - huggingface:
+        repo_id: opendatalab/MinerU2.5-2509-1.2B
+        revision: 1aa090b41282e64fadd79c10572221f91ec21924
+  weight_bytes: 2312126640
+  gpus:
+    vendor: nvidia
+    cc: '>=7.5'
+  args:
+  - --dtype
+  - half
+  - --max-model-len
+  - '16384'
+  - --limit-mm-per-prompt
+  - '{"image":1,"video":0}'
+  - --logits-processors
+  - mineru_logits_processor:VllmV1NoRepeatNGramLogitsProcessor
+  env:
+    PYTHONPATH: /opt/gpuworks/mineru
+    VLLM_USE_V2_MODEL_RUNNER: '0'
+  assets:
+  - file: assets/mineru-logits.tar.gz
+    sha256: 985e2f7e5c275b943d25fc3c9c82601abccc779868696eaf4ea76af4b8273e7a
+    size_bytes: 6086
+    unpack_to: /opt/gpuworks/mineru
+  api:
+    health_endpoint: /health
+    operations:
+    - type: openai.chat
+      endpoint: /v1/chat/completions
+      mode: stream

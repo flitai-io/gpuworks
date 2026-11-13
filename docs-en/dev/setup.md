@@ -2,7 +2,7 @@
 
 ## Dependencies
 
-- Use the Go version specified in `go.mod` (currently Go 1.26.10, consistent with the CI image `golang:1.26`).
+- Use the Go version specified in `go.mod` (currently Go 1.26.11, consistent with the CI image `golang:1.26.11`).
 - Node.js and npm; use the frontend dependency versions specified in `ui/package.json` and the lockfile.
 - GNU Make. Builds or L3/L4 tests may also require Docker, SSH, `curl`, and the target vendor's CLI.
 

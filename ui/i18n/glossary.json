@@ -1157,7 +1157,7 @@
     },
     {
       "term_en": "dGPU",
-      "definition": "dynamic GPU; the product term for GPU partitioning. Implemented by HAMi-core libvgpu (NVIDIA), vCANN (Ascend), and HGGC (PPU) — implementation names stay in engineering docs, never in UI copy.",
+      "definition": "dynamic GPU; the product term for GPU partitioning. Implemented by HAMi-core libvgpu (NVIDIA), vcann-rt from openEuler ubs-virt (Ascend), ppu-slicing-shim (PPU), rocm-slicing-shim (AMD), and native vdevs (Hygon) — implementation names stay in engineering docs, never in UI copy.",
       "translations": {
         "zh": "dGPU"
       },
@@ -1469,6 +1469,11 @@
       "translations": { "zh": "平台密钥" }
     },
     {
+      "term_en": "External Platform",
+      "translations": { "zh": "外部平台" },
+      "forbidden": { "zh": ["第三方平台", "接入平台", "算力来源"] }
+    },
+    {
       "term_en": "Compute Node Address",
       "translations": { "zh": "计算节点接入地址" },
       "forbidden": { "zh": ["直连地址", "主机接入地址"] }
@@ -1553,7 +1558,23 @@
     { "term_en": "Wake Waiting", "translations": { "zh": "唤醒等位" } },
     { "term_en": "Yielding Wake", "translations": { "zh": "让位唤醒" } },
     { "term_en": "Scheduling History", "translations": { "zh": "调度记录" } },
-    { "term_en": "Batch", "translations": { "zh": "批处理任务" } }
+    { "term_en": "Batch", "translations": { "zh": "批处理任务" } },
+    {
+      "term_en": "Kubernetes Cluster",
+      "translations": { "zh": "Kubernetes 集群" }
+    },
+    {
+      "term_en": "Enrollment Token",
+      "translations": { "zh": "接入令牌" }
+    },
+    {
+      "term_en": "Kube Runtime",
+      "translations": { "zh": "kube 运行时" }
+    },
+    {
+      "term_en": "Hold Pod / Card Borrowing",
+      "translations": { "zh": "占位 Pod / 借卡" }
+    }
   ],
   "do_not_translate": [
     "GPUWorks",

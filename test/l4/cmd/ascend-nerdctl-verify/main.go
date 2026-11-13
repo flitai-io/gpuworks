@@ -173,7 +173,9 @@ func verifyPartitionCapabilityProbe(driver *nerdctl.Driver, index int) error {
 	probeID := "nerdctl-capability-probe-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	defer func() {
 		if succeeded || !keepOnFailure {
-			partitionEngine.CleanupPartitionProbe(probeID)
+			if err := partitionEngine.CleanupPartitionProbe(probeID); err != nil {
+				slog.Warn("partition probe cleanup failed", "probe", probeID, "err", err)
+			}
 		}
 	}()
 

@@ -38,12 +38,11 @@ func TestScopedAPIKeyCreateRefusesBadScopesWithoutAKey(t *testing.T) {
 			t.Fatalf("ids %v: err = %v", ids, err)
 		}
 	}
-	// The failed creates left neither a key nor a grant behind, and the
-	// gateway stays open (no keys at all).
+	// The failed creates left neither a key nor a grant behind.
 	var keys, grants int64
 	st.db.Model(&APIKey{}).Count(&keys)
 	st.db.Model(&APIKeyDeployment{}).Count(&grants)
-	if keys != 0 || grants != 0 || st.HasAnyAPIKey() {
+	if keys != 0 || grants != 0 {
 		t.Fatalf("keys=%d grants=%d", keys, grants)
 	}
 }

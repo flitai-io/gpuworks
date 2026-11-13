@@ -1,0 +1,192 @@
+"use client";
+import { cloneElement, forwardRef, isValidElement, type ButtonHTMLAttributes, type ReactElement, type ReactNode, } from "react";
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
+import { cva, type VariantProps } from "class-variance-authority";
+import type { IconComponent } from "@/lib/icon-context";
+import { cn } from "@/lib/utils";
+import { controlButtonPaddingClasses, controlSizeClasses, controlSizeRecipe, type ControlSize, } from "@/lib/tokens/control-size";
+const buttonSizeVariants = {
+    xs: cn(controlSizeClasses.xs, controlButtonPaddingClasses.xs, "text-label gap-1"),
+    sm: cn(controlSizeClasses.sm, controlButtonPaddingClasses.sm, "text-label gap-1"),
+    md: cn(controlSizeClasses.md, controlButtonPaddingClasses.md, "text-body gap-1.5"),
+    lg: cn(controlSizeClasses.lg, controlButtonPaddingClasses.lg, "text-body gap-1.5"),
+    xl: cn(controlSizeClasses.xl, controlButtonPaddingClasses.xl, "text-body gap-2"),
+} satisfies Record<ControlSize, string>;
+const spinnerSizeClasses: Record<ControlSize, string> = {
+    xs: "size-3",
+    sm: "size-3.5",
+    md: "size-4",
+    lg: "size-4",
+    xl: "size-[18px]",
+};
+const iconOnlyIconSizeClasses: Partial<Record<ControlSize, string>> = {
+    xs: "[&_svg]:size-4",
+    sm: "[&_svg]:size-4",
+    md: "[&_svg]:size-5",
+};
+const buttonVariants = cva([
+    "group group/button relative isolate inline-flex shrink-0 items-center justify-center whitespace-nowrap outline-none cursor-pointer",
+    "transition-colors duration-fast",
+    "disabled:opacity-50 disabled:pointer-events-none",
+    "focus-visible:ring-1 focus-visible:ring-focus-ring",
+], {
+    variants: {
+        variant: {
+            primary: "text-fg-on-primary-action",
+            neutral: "text-fg-on-neutral-action",
+            destructive: "text-fg-on-destructive-action",
+            secondary: "text-fg-default",
+            tertiary: "text-fg-default",
+            ghost: "text-fg-muted hover:text-fg-default",
+            link: "text-fg-brand underline underline-offset-2",
+        },
+        size: buttonSizeVariants,
+        iconOnly: { true: "aspect-square p-0" },
+        iconLeft: { true: "" },
+        iconRight: { true: "" },
+    },
+    compoundVariants: [
+        { size: "xs", iconLeft: true, className: "pl-1" },
+        { size: "sm", iconLeft: true, className: "pl-1.5" },
+        { size: "md", iconLeft: true, className: "pl-2" },
+        { size: "lg", iconLeft: true, className: "pl-2.5" },
+        { size: "xl", iconLeft: true, className: "pl-3" },
+        { size: "xs", iconRight: true, className: "pr-1" },
+        { size: "sm", iconRight: true, className: "pr-1.5" },
+        { size: "md", iconRight: true, className: "pr-2" },
+        { size: "lg", iconRight: true, className: "pr-2.5" },
+        { size: "xl", iconRight: true, className: "pr-3" },
+    ],
+    defaultVariants: {
+        variant: "primary",
+        size: "md",
+    },
+});
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
+    /** When true, the given single React-element child becomes the rendered element (slot-style). */
+    asChild?: boolean;
+    /** Renders a square, icon-only button at the selected control size. */
+    iconOnly?: boolean;
+    loading?: boolean;
+    leadingIcon?: IconComponent;
+    trailingIcon?: IconComponent;
+    /** Draw the button's border as a dashed outline. This is most useful for
+     *  additive controls, such as an inactive filter. */
+    dashed?: boolean;
+    /** Force the visual pressed/held state. Useful when the button drives an
+     *  external open piece of UI (a popover, dropdown, etc.) so it reads as
+     *  engaged while the menu is showing. */
+    active?: boolean;
+    /** Applies a semantic status tone without changing the button hierarchy. */
+    tone?: ButtonTone;
+    /** Uses content-driven height and padding for multi-line or inline actions. */
+    contentSized?: boolean;
+    /** Applies classes to the public content wrapper inside the button. */
+    contentClassName?: string;
+    /** Applies classes to the public text label wrapper inside the button. */
+    labelClassName?: string;
+}
+type ButtonTone = "default" | "warning";
+const bgVariants: Record<string, string> = {
+    primary: "bg-primary-action group-hover/button:bg-primary-action-hover group-active/button:bg-primary-action-active",
+    neutral: "bg-neutral-action group-hover/button:bg-neutral-action-hover group-active/button:bg-neutral-action-active",
+    destructive: "bg-destructive-action group-hover/button:bg-destructive-action-hover group-active/button:bg-destructive-action-active",
+    secondary: "bg-secondary-action group-hover/button:bg-secondary-action-hover group-active/button:bg-secondary-action-active",
+    tertiary: "border border-border bg-surface-floating group-hover/button:bg-hover group-active/button:bg-active",
+    ghost: "bg-transparent group-hover/button:bg-hover group-active/button:bg-active",
+    link: "bg-transparent",
+};
+const activeBgVariants: Record<string, string> = {
+    primary: "bg-primary-action-active",
+    neutral: "bg-neutral-action-active",
+    destructive: "bg-destructive-action-active",
+    secondary: "bg-secondary-action-active",
+    tertiary: "border border-border bg-active",
+    ghost: "bg-active",
+    link: "bg-transparent",
+};
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(({ className, variant, size, asChild = false, iconOnly = false, loading = false, leadingIcon: LeadingIcon, trailingIcon: TrailingIcon, dashed = false, active = false, tone = "default", contentSized = false, contentClassName, labelClassName, disabled, children, style, ...props }, ref) => {
+    // asChild: the user's element becomes the root while the button's internal
+    // structure (bg layer, content wrapper, spinner, icons) survives as its
+    // children — the element's own children become the label. We clone the
+    // element directly instead of routing through ButtonPrimitive's `render`:
+    // Base UI would bolt button semantics (role="button", Space activation)
+    // onto e.g. a link, where plain-link output is wanted.
+    const asChildElement = asChild && isValidElement(children)
+        ? (children as ReactElement<{
+            children?: ReactNode;
+            className?: string;
+            "data-slot"?: string;
+            "data-tone"?: ButtonTone;
+            style?: React.CSSProperties;
+            ref?: React.Ref<HTMLButtonElement>;
+        }>)
+        : null;
+    const label = asChildElement ? asChildElement.props.children : children;
+    const resolvedSize = (size ?? "md") as ControlSize;
+    const iconSize = controlSizeRecipe[resolvedSize].icon;
+    const spinnerSizeClass = spinnerSizeClasses[resolvedSize];
+    const bgClass = tone === "warning"
+        ? active
+            ? "border-0 bg-[color-mix(in_srgb,var(--warning-surface)_65%,var(--warning-border))]"
+            : "border-0 bg-warning-surface group-hover/button:bg-[color-mix(in_srgb,var(--warning-surface)_80%,var(--warning-border))] group-active/button:bg-[color-mix(in_srgb,var(--warning-surface)_65%,var(--warning-border))]"
+        : active
+            ? activeBgVariants[variant ?? "primary"]
+            : bgVariants[variant ?? "primary"];
+    const internals = (<>
+        <span aria-hidden data-slot="button-background" className={cn("absolute inset-0 rounded-[inherit] transition-[background-color,transform] duration-fast group-active/button:scale-[0.98]", bgClass, dashed && "border-dashed")}/>
+        <span data-slot="button-content" className={cn("relative inline-flex min-w-0 items-center justify-center gap-[inherit]", contentClassName)}>
+          {loading ? (<>
+              <span className="flex items-center justify-center gap-[inherit] opacity-0">
+                {LeadingIcon && !iconOnly && (<LeadingIcon data-slot="button-leading-icon" size={iconSize} strokeWidth={2}/>)}
+                <span data-slot="button-label" className={cn("min-w-0", labelClassName)}>{label}</span>
+                {TrailingIcon && !iconOnly && (<TrailingIcon data-slot="button-trailing-icon" size={iconSize} strokeWidth={2}/>)}
+              </span>
+              <span className="absolute inset-0 flex items-center justify-center">
+                <svg className={spinnerSizeClass} viewBox="0 0 24 24" fill="none">
+                  <path d="M 12 12 C 14 8.5 19 8.5 19 12 C 19 15.5 14 15.5 12 12 C 10 8.5 5 8.5 5 12 C 5 15.5 10 15.5 12 12 Z" stroke="currentColor" strokeWidth="1.125" strokeLinecap="round" pathLength="100" style={{
+                strokeDasharray: "15 85",
+                animation: "spinner-move 2s linear infinite, spinner-dash 4s ease-in-out infinite",
+            }}/>
+                </svg>
+              </span>
+            </>) : iconOnly ? (<span data-slot="button-icon" className={cn("[&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-fast group-hover/button:[&_svg]:stroke-[2]", iconOnlyIconSizeClasses[resolvedSize])}>
+              {label}
+            </span>) : (<>
+              {LeadingIcon && (<LeadingIcon data-slot="button-leading-icon" size={iconSize} strokeWidth={1.5} className="transition-[stroke-width] duration-fast group-hover/button:stroke-[2]"/>)}
+              <span data-slot="button-label" className={cn("min-w-0", labelClassName)}>{label}</span>
+              {TrailingIcon && (<TrailingIcon data-slot="button-trailing-icon" size={iconSize} strokeWidth={1.5} className="transition-[stroke-width] duration-fast group-hover/button:stroke-[2]"/>)}
+            </>)}
+        </span>
+      </>);
+    const variantClasses = buttonVariants({
+        variant,
+        size: resolvedSize,
+        iconOnly,
+        iconLeft: !iconOnly && !!LeadingIcon,
+        iconRight: !iconOnly && !!TrailingIcon,
+    });
+    // Semantic height utilities are not removed by h-auto in the class merger.
+    // Content-driven modes must omit their fixed size instead of relying on CSS order.
+    const rootClassName = cn(contentSized || variant === "link" ? variantClasses.replace(controlSizeClasses[resolvedSize], "") : variantClasses, "rounded-lg", tone === "warning" && "text-fg-warning", contentSized && "h-auto min-h-control-sm px-1.5 py-1", variant === "link" && "h-auto min-h-0 px-0 py-0", className);
+    if (asChildElement) {
+        const childProps = asChildElement.props;
+        return cloneElement(asChildElement, {
+            ...props,
+            "data-slot": "button",
+            "data-tone": tone === "default" ? undefined : tone,
+            ref,
+            className: cn(rootClassName, childProps.className),
+            style: { ...style, ...childProps.style },
+        }, internals);
+    }
+    return (<ButtonPrimitive 
+    // Base UI's `ButtonPrimitive` forwards to an HTMLButtonElement;
+    // keep the public ref type narrow so consumers see the right type.
+    ref={ref as React.Ref<HTMLButtonElement>} className={rootClassName} disabled={disabled || loading} style={style} data-slot="button" data-tone={tone === "default" ? undefined : tone} {...props}>
+        {internals}
+      </ButtonPrimitive>);
+});
+Button.displayName = "Button";
+export { Button, buttonVariants };
+export type { ButtonProps, ButtonTone };

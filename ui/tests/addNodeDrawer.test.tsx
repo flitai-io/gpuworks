@@ -56,14 +56,17 @@ beforeEach(() => {
   keyStub.restore = () => { api.platformSSHKey = original; api.node = originalNode; };
 });
 afterEach(() => {
+  zeronMessage.destroy();
   cleanup();
   keyStub.restore();
 });
 
+const { FeedbackHost, message: zeronMessage } = await import("../src/ui-kit/feedback");
+
 function renderDrawer(onClose = () => {}) {
   return render(
     <I18nextProvider i18n={i18n}>
-      <AddNodeDrawer open onClose={onClose} onInstalled={() => {}} />
+      <FeedbackHost /><AddNodeDrawer open onClose={onClose} onInstalled={() => {}} />
     </I18nextProvider>,
   );
 }
@@ -94,11 +97,11 @@ test("connection direction labels name who starts the connection", () => {
 test("server-initiated mode asks for the listen address above the compute node address", () => {
   renderDrawer();
   assert.ok(screen.getByText("Management node address"));
-  assert.equal(screen.queryByText("Compute node address"), null);
-  assert.equal(screen.queryByText(nodes.add.agentListenAddress), null);
+  assert.ok(screen.queryByText("Compute node address") === null, "Expected the element to be absent");
+  assert.ok(screen.queryByText(nodes.add.agentListenAddress) === null, "Expected the element to be absent");
 
   fireEvent.click(screen.getByRole("radio", { name: nodes.connection.serverDial }));
-  assert.equal(screen.queryByText("Management node address"), null);
+  assert.ok(screen.queryByText("Management node address") === null, "Expected the element to be absent");
   const listen = screen.getByRole("textbox", { name: nodes.add.agentListenAddress }) as HTMLInputElement;
   const address = screen.getByRole("textbox", { name: nodes.add.hostAddress }) as HTMLInputElement;
   assert.equal(listen.value, "0.0.0.0:18800");
@@ -113,9 +116,9 @@ test("the removed connection notes are gone in both SSH branches", () => {
     fireEvent.click(screen.getByRole("radio", { name: branch }));
     for (const mode of [nodes.connection.agentDial, nodes.connection.serverDial]) {
       fireEvent.click(screen.getByRole("radio", { name: mode }));
-      assert.equal(screen.queryByText(/NAT container/i), null, `${branch}/${mode}`);
-      assert.equal(screen.queryByText(/connects to the target host's listen port/i), null, `${branch}/${mode}`);
-      assert.equal(screen.queryByRole("alert"), null, `${branch}/${mode}`);
+      assert.ok(screen.queryByText(/NAT container/i) === null, `${branch}/${mode}`);
+      assert.ok(screen.queryByText(/connects to the target host's listen port/i) === null, `${branch}/${mode}`);
+      assert.ok(screen.queryByRole("alert") === null, `${branch}/${mode}`);
     }
   }
 });
@@ -125,7 +128,7 @@ test("the install directory sits under Advanced in both SSH branches", () => {
   renderDrawer();
   for (const branch of [nodes.add.sshSupported, nodes.add.sshUnsupported]) {
     fireEvent.click(screen.getByRole("radio", { name: branch }));
-    assert.equal(screen.queryByPlaceholderText(nodes.add.installDirPlaceholder), null, `${branch}: collapsed by default`);
+    assert.ok(screen.queryByPlaceholderText(nodes.add.installDirPlaceholder) === null, `${branch}: collapsed by default`);
     fireEvent.click(screen.getByText(nodes.add.advanced));
     assert.ok(screen.getByPlaceholderText(nodes.add.installDirPlaceholder), `${branch}: shown once expanded`);
     fireEvent.click(screen.getByText(nodes.add.advanced));
@@ -192,6 +195,51 @@ test("password and private key modes require what they name", async () => {
     await waitFor(() => assert.ok(screen.getByText(nodes.ssh.privateKeyRequired)));
     assert.equal(install.bodies.length, 0);
   } finally {
+    install.restore();
+  }
+});
+
+test("keyboard-interactive sends its password to precheck and install without a stale private key", async () => {
+  const precheck = stubAPI("precheckNode", { checks: [] });
+  const install = stubAPI("installNode", installReport);
+  try {
+    renderDrawer();
+    fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
+    fireEvent.click(screen.getByRole("radio", { name: nodes.ssh.auth.key }));
+    fireEvent.change(screen.getByPlaceholderText("-----BEGIN OPENSSH PRIVATE KEY-----"), { target: { value: "STALE KEY" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Keyboard-interactive" }));
+    fireEvent.change(screen.getByLabelText(nodes.ssh.password), { target: { value: "keyboard-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: nodes.add.startPrecheck }));
+    await waitFor(() => assert.equal(precheck.bodies.length, 1));
+    fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
+    await waitFor(() => assert.equal(install.bodies.length, 1));
+    for (const body of [precheck.bodies[0], install.bodies[0]]) {
+      assert.equal(body.auth_mode, "keyboard_interactive");
+      assert.equal(body.password, "keyboard-secret");
+      assert.equal(body.private_key_pem, undefined);
+      assert.equal(body.target, "root@203.0.113.7");
+    }
+  } finally {
+    precheck.restore();
+    install.restore();
+  }
+});
+
+test("keyboard-interactive requires a password before precheck or install", async () => {
+  const precheck = stubAPI("precheckNode", { checks: [] });
+  const install = stubAPI("installNode", installReport);
+  try {
+    renderDrawer();
+    fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Keyboard-interactive" }));
+    fireEvent.click(screen.getByRole("button", { name: nodes.add.startPrecheck }));
+    await waitFor(() => assert.ok(screen.getByText(nodes.ssh.passwordRequired)));
+    fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
+    await waitFor(() => assert.ok(screen.getByText(nodes.ssh.passwordRequired)));
+    assert.equal(precheck.bodies.length, 0);
+    assert.equal(install.bodies.length, 0);
+  } finally {
+    precheck.restore();
     install.restore();
   }
 });
@@ -319,7 +367,7 @@ test("the install command copies on a plain-HTTP console", async () => {
     // assert.ok, not assert.equal: a failing equal on jsdom nodes inspects the
     // whole DOM graph and stalls the runner instead of reporting.
     assert.ok(document.activeElement === button, `focus returns to the copy button, got ${document.activeElement?.tagName}`);
-    assert.equal(document.querySelector("textarea[readonly]"), null, "the hidden textarea is removed");
+    assert.ok(document.querySelector("textarea[readonly]") === null, "the hidden textarea is removed");
   } finally {
     clipboard.restore();
     create.restore();
@@ -382,7 +430,7 @@ test("the precheck sends the install directory and lists each directory verdict"
     // A failed check is not "installation can still continue": a noexec
     // directory stops the install.
     await screen.findByText(nodes.add.message.precheckWithErrors);
-    assert.equal(screen.queryByText(nodes.add.message.precheckWithIssues), null);
+    assert.ok(screen.queryByText(nodes.add.message.precheckWithIssues) === null, "Expected the element to be absent");
   } finally {
     precheck.restore();
   }
@@ -398,7 +446,7 @@ test("a failed precheck echoes a parsed target and hides an empty one", async ()
     fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
     fireEvent.click(screen.getByRole("button", { name: nodes.add.startPrecheck }));
     await screen.findByText("connection refused");
-    assert.equal(screen.queryByText("@:0"), null);
+    assert.ok(screen.queryByText("@:0") === null, "Expected the element to be absent");
   } finally {
     refused.restore();
     cleanup();
@@ -413,7 +461,7 @@ test("a failed precheck echoes a parsed target and hides an empty one", async ()
     fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
     fireEvent.click(screen.getByRole("button", { name: nodes.add.startPrecheck }));
     await screen.findByText("root@203.0.113.7:22");
-    assert.equal(screen.queryByText("@:0"), null);
+    assert.ok(screen.queryByText("@:0") === null, "Expected the element to be absent");
   } finally {
     parsed.restore();
   }
@@ -546,7 +594,7 @@ for (const pending of ["installation", "connection"] as const) {
     api.node = () => new Promise((resolve) => { finish = resolve; });
     function Wizard() {
       const [open, setOpen] = React.useState(true);
-      return <><button onClick={() => setOpen(true)}>Reopen wizard</button><AddNodeDrawer open={open} onClose={() => { closes++; setOpen(false); }} onInstalled={() => {}} /></>;
+      return <><button onClick={() => setOpen(true)}>Reopen wizard</button><FeedbackHost /><AddNodeDrawer open={open} onClose={() => { closes++; setOpen(false); }} onInstalled={() => {}} /></>;
     }
     try {
       render(<I18nextProvider i18n={i18n}><Wizard /></I18nextProvider>);
@@ -565,7 +613,7 @@ for (const pending of ["installation", "connection"] as const) {
       }
       await act(async () => { finish(pending === "connection" ? { uuid: "new-node", state: "online" } as never : { ...installReport, node_uuid: "new-node" } as never); });
       assert.equal(closes, 1, "the late response must not close the new wizard");
-      assert.equal(screen.queryByText(nodes.add.waitingForConnection), null);
+      assert.ok(screen.queryByText(nodes.add.waitingForConnection) === null, "Expected the element to be absent");
       assert.equal((screen.getByPlaceholderText("root@192.0.2.10:22") as HTMLInputElement).value, "");
     } finally { api.installNode = installOriginal; api.node = nodeOriginal; }
   });
@@ -608,7 +656,7 @@ test("an HTTP 400 startup failure permits retry without observing a node", async
     fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
     await screen.findByText(nodes.add.message.installFailed.replace("{{detail}}", "start agent: exit status 1"));
     assert.equal(node.bodies.length, 0);
-    assert.equal(screen.queryByText(nodes.add.waitingForConnection), null);
+    assert.ok(screen.queryByText(nodes.add.waitingForConnection) === null, "Expected the element to be absent");
     fireEvent.click(screen.getByRole("button", { name: new RegExp(nodes.add.installAgent) }));
     await waitFor(() => assert.equal(attempts, 2));
   } finally { globalThis.fetch = original; node.restore(); }
@@ -627,7 +675,7 @@ test("switching onboarding mode discards the previous node's late registration",
     fireEvent.click(screen.getByRole("radio", { name: nodes.add.sshSupported }));
     await act(async () => { finish({ uuid: "new-node", state: "online" } as never); });
     assert.equal(closes, 0);
-    assert.equal(screen.queryByText(nodes.add.waitingForConnection), null);
+    assert.ok(screen.queryByText(nodes.add.waitingForConnection) === null, "Expected the element to be absent");
     assert.equal((screen.getByRole("button", { name: nodes.add.installAgent }) as HTMLButtonElement).disabled, false);
   } finally { apiModule.api.node = original; create.restore(); }
 });
@@ -661,7 +709,7 @@ for (const change of ["name", "credentials", "mode", "direction", "systemd"] as 
       await act(async () => { fireEvent.click(install); });
       assert.equal(requests.length, 1, "editing does not cancel the remote installation");
       await act(async () => { finish(installReport as never); });
-      assert.equal(screen.queryByText(nodes.add.waitingForConnection), null, "stale response does not start observing a changed form");
+      assert.ok(screen.queryByText(nodes.add.waitingForConnection) === null, "stale response does not start observing a changed form");
       fireEvent.click(install);
       await waitFor(() => assert.equal(requests.length, 2));
       await act(async () => { finish(installReport as never); });
@@ -678,7 +726,7 @@ test("starting via systemd is on by default and can be switched off", async () =
     fireEvent.click(screen.getByText(nodes.add.advanced));
     const toggle = screen.getByRole("switch", { name: nodes.add.useSystemd });
     assert.equal(toggle.getAttribute("aria-checked"), "true");
-    assert.equal(screen.queryByText(nodes.add.useSystemdOffHelp), null);
+    assert.ok(screen.queryByText(nodes.add.useSystemdOffHelp) === null, "Expected the element to be absent");
     fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
     fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
     await waitFor(() => assert.equal(install.bodies.length, 1));
@@ -711,7 +759,7 @@ test("the manual install command carries --no-systemd only when systemd is off",
 
     // Switching back discards the command minted for the other choice.
     fireEvent.click(screen.getByRole("switch", { name: nodes.add.useSystemd }));
-    assert.equal(screen.queryByText(nodes.add.tokenSaved), null);
+    assert.ok(screen.queryByText(nodes.add.tokenSaved) === null, "Expected the element to be absent");
     fireEvent.click(screen.getByRole("button", { name: nodes.add.createCommand }));
     await screen.findByText(nodes.add.tokenSaved);
     assert.doesNotMatch(document.querySelector("pre")?.textContent ?? "", /--no-systemd/);

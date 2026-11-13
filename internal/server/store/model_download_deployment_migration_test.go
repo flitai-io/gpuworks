@@ -2,9 +2,10 @@ package store
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	"testing"
 )
 
 func TestModelDownloadDeploymentMigration(t *testing.T) {

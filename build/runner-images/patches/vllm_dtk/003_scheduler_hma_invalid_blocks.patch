@@ -1,0 +1,39 @@
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -2783,8 +2783,34 @@
+             is_affected = False
+             marked_invalid_block = False
+             req_id = request.request_id
+-            # TODO (davidb): add support for hybrid memory allocator
+-            (req_block_ids,) = self.kv_cache_manager.get_block_ids(req_id)
++            block_ids_per_group = self.kv_cache_manager.get_block_ids(req_id)
++            if len(block_ids_per_group) > 1:
++                # Several KV cache groups (hybrid attention + Mamba/GDN). The
++                # groups share one block pool, so block ids are unique; block 0
++                # is the null block. A recurrent state cannot be kept up to a
++                # valid prefix: an affected request recomputes from the start.
++                req_blocks = [
++                    block_id
++                    for group in block_ids_per_group
++                    for block_id in group
++                    if block_id != 0
++                ]
++                failed = [b for b in req_blocks if b in invalid_block_ids]
++                if not failed:
++                    continue
++                req_num_computed_tokens = (
++                    request.num_computed_tokens
++                    - num_scheduled_tokens.get(req_id, 0)
++                )
++                first_to_mark = any(b not in marked_invalid_block_ids for b in failed)
++                marked_invalid_block_ids.update(failed)
++                total_affected_tokens += req_num_computed_tokens
++                request.num_computed_tokens = 0
++                if first_to_mark and evict_blocks:
++                    blocks_to_evict.update(req_blocks)
++                affected_req_ids.add(req_id)
++                continue
++            (req_block_ids,) = block_ids_per_group
+             # We iterate only over blocks that may contain externally computed
+             # tokens
+             req_num_computed_tokens = (

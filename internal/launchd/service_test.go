@@ -17,8 +17,9 @@ import (
 // running job only after the next print (launchd lets go asynchronously),
 // and a bootstrap of a label still held fails with "5: Input/output error".
 type fakeLaunchd struct {
-	sessions    map[string]bool // gui/<uid> domains with a login session
-	loaded      map[string]int  // service -> pid
+	sessions    map[string]bool   // gui/<uid> domains with a login session
+	programs    map[string]string // service -> executable from bootstrap
+	loaded      map[string]int    // service -> pid
 	releasing   map[string]bool
 	refuse      int    // bootstraps to refuse before accepting
 	refuseOf    string // refuse every bootstrap of a plist containing this
@@ -28,13 +29,18 @@ type fakeLaunchd struct {
 	bootstraped []string // plists, in order
 }
 
+type fakeLaunchctlExit int
+
+func (e fakeLaunchctlExit) Error() string { return fmt.Sprintf("exit status %d", e) }
+func (e fakeLaunchctlExit) ExitCode() int { return int(e) }
+
 func newFakeLaunchd() *fakeLaunchd {
-	return &fakeLaunchd{sessions: map[string]bool{"gui/501": true}, loaded: map[string]int{}, releasing: map[string]bool{}, nextPID: 700}
+	return &fakeLaunchd{sessions: map[string]bool{"gui/501": true}, loaded: map[string]int{}, programs: map[string]string{}, releasing: map[string]bool{}, nextPID: 700}
 }
 
 func (f *fakeLaunchd) run(_ context.Context, args ...string) (string, error) {
 	f.calls = append(f.calls, strings.Join(args, " "))
-	fail := func(code int, msg string) (string, error) { return msg, fmt.Errorf("exit status %d", code) }
+	fail := func(code int, msg string) (string, error) { return msg, fakeLaunchctlExit(code) }
 	switch args[0] {
 	case "print":
 		target := args[1]
@@ -57,7 +63,7 @@ func (f *fakeLaunchd) run(_ context.Context, args ...string) (string, error) {
 			f.loaded[target] = f.nextPID
 			pid = f.nextPID
 		}
-		return fmt.Sprintf("%s = {\n\tstate = running\n\tpid = %d\n}", target, pid), nil
+		return fmt.Sprintf("%s = {\n\tstate = running\n\tprogram = %s\n\tpid = %d\n}", target, f.programs[target], pid), nil
 	case "bootout":
 		if _, ok := f.loaded[args[1]]; !ok {
 			return fail(3, "Boot-out failed: 3: No such process")
@@ -76,6 +82,8 @@ func (f *fakeLaunchd) run(_ context.Context, args ...string) (string, error) {
 		}
 		f.nextPID++
 		f.loaded[service] = f.nextPID
+		job, _ := ReadJob(data)
+		f.programs[service] = job.Binary
 		f.bootstraped = append(f.bootstraped, args[2])
 		return "", nil
 	}
@@ -100,6 +108,15 @@ func newTestMac(t *testing.T, admin bool) *testMac {
 	self.Home = "/Users/alice"
 	m.Host = &Host{
 		Launchctl: f.run, Root: root, Admin: admin, Self: self,
+		ProcessTable: func(context.Context) (string, error) { return "1 /sbin/launchd\n", nil },
+		ProcessAlive: func(pid int) (bool, error) {
+			for _, running := range f.loaded {
+				if running == pid {
+					return true, nil
+				}
+			}
+			return false, nil
+		},
 		Lookup: func(name string) (Account, error) {
 			if name != "alice" {
 				return Account{}, errors.New("unknown user " + name)
@@ -383,7 +400,7 @@ func TestUninstallRemovesBothJobsAndNamesTheirState(t *testing.T) {
 	if _, err := m.Install(context.Background(), job); err != nil {
 		t.Fatal(err)
 	}
-	dirs, err := m.Uninstall(context.Background())
+	dirs, err := m.Uninstall(context.Background(), job.Binary, nil)
 	if err != nil || len(dirs) != 1 || dirs[0] != job.StateDir {
 		t.Fatalf("Uninstall = %v, %v", dirs, err)
 	}
@@ -391,7 +408,7 @@ func TestUninstallRemovesBothJobsAndNamesTheirState(t *testing.T) {
 		t.Fatal("daemon plist left")
 	}
 	// Nothing left: uninstalling again succeeds and does nothing.
-	if dirs, err := m.Uninstall(context.Background()); err != nil || len(dirs) != 0 {
+	if dirs, err := m.Uninstall(context.Background(), job.Binary, nil); err != nil || len(dirs) != 0 {
 		t.Fatalf("second Uninstall = %v, %v", dirs, err)
 	}
 
@@ -401,7 +418,7 @@ func TestUninstallRemovesBothJobsAndNamesTheirState(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Admin = false
-	if _, err := m.Uninstall(context.Background()); err == nil || !strings.Contains(err.Error(), "sudo gpuworks-agent uninstall") {
+	if _, err := m.Uninstall(context.Background(), job.Binary, nil); err == nil || !strings.Contains(err.Error(), "sudo gpuworks-agent uninstall") {
 		t.Fatalf("Uninstall without rights = %v", err)
 	}
 }

@@ -47,14 +47,6 @@ func closedChan() chan struct{} {
 	return ch
 }
 
-// asleep reports whether inference must wait; garbage reports whether the
-// engine is awake but serving from unloaded weights.
-func (s *sleepState) status() (asleep, garbage bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.sleepingTags) > 0 || !s.kvAwake, !s.weightsValid
-}
-
 func (s *sleepState) sleeping() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -319,10 +311,6 @@ func registerSleep(mux *http.ServeMux, state *sleepState) {
 		w.WriteHeader(http.StatusOK)
 	})
 }
-
-// garbageText is what an engine serving from unloaded weights produces: not an
-// error, just output no reader would accept.
-const garbageText = "��� garbage: weights were never reloaded after an L2 sleep ���"
 
 // gateInference wraps the inference routes so that a request arriving while
 // the engine is asleep waits, and one served after a bad L2 wake gets garbage.

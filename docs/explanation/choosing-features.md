@@ -64,8 +64,8 @@
 | NVIDIA | 支持 | stable | x86_64、glibc ≥ 2.17，宿主机驱动提供 `libcuda.so.1` 与 `libnvidia-ml.so.1` | 显存是硬上限；不提供算力上限（HAMi 的限流管不住 vLLM，见[语义](dgpu.md)） |
 | 昇腾 | 支持 | experimental | 宿主机的 device-share 权限满足要求；推理镜像需 glibc ≥ 2.33 | 在自有环境的 910B4 上，Docker 通过了平台 dGPU 推理与超配拒绝验证，nerdctl 只通过了节点级 dGPU 行为探针；云租机（矩阵中的 Gitee 环境）无权限执行 device-share，只能证明探测和整卡对话，不能当作 dGPU 通过；`aicore-quota` 不能据此承诺 20/80 吞吐比例 |
 | PPU | 支持 | experimental | HGGC 13.x、x86_64，且**只在 Docker 运行时**可用 | 20/80 配置在繁忙时表现为加权 QoS（对端空闲时会借用余量），不是硬 SM 分区 |
-| 海光（DTK） | 没有后端 | — | — | 探测与整卡部署取决于目录 spec 和 runtime；dGPU 后端注册表里没有海光，按整卡使用 |
-| AMD（ROCm） | 不支持 | — | — | 本表仅指 dGPU 分区；整卡实现范围见[厂商支持矩阵](../reference/support-matrix.md) |
+| 海光（DTK） | 支持 | experimental | Z100 / K100_AI / BW、x86_64，Docker 或 runveil/udocker；需原生 helper、宿主库和逐卡行为探针 | 原生 vdev，每实例一张卡；CU 随显存比例分配，不支持独立算力配额；仅报告 K100 或其他未适配型号时仍只支持整卡 |
+| AMD（ROCm） | 支持 | experimental | x86_64，Docker、nerdctl 或 runveil；需 libvrocm 资产 | 用户态硬显存上限，不提供算力上限；dGPU 已在 MI300X（gfx942）的 Docker 和 runveil 下实测，其他型号与组合未验证 |
 
 能力是否可用由 server 推导成 `ready` 或 `unavailable`（附 `reason`），agent 自己不宣布。不满足
 条件时节点仍可整卡部署，但带 dGPU 显存限额的请求会明确失败（如 `partition_unavailable`），
@@ -73,15 +73,15 @@
 
 **代价与限制**：
 
-- 实例的调度占用是显存上限加后端在限额之外的预留。NVIDIA 的引擎开销已包含在限额内，调度另加 512 MiB 的 CUDA context；昇腾和 PPU 保守加上完整引擎预留。限额要留出权重、KV cache 和引擎开销，过小会启动失败。详见 [dGPU 的语义与边界](dgpu.md)。
-- 昇腾与 PPU 后端的 `ready` 以 agent 在本节点自动跑的容器级探针（单次运行超时 15 秒）通过为准，agent 启动后运行一次，资产、GPU 或运行时变化时重跑；NVIDIA 后端不跑行为探针，内嵌资产校验通过即 `ready`。
+- 实例的调度占用是显存上限加后端在限额之外的预留。NVIDIA 的引擎开销已包含在限额内，调度另加 512 MiB 的 CUDA context；昇腾、PPU、海光和 AMD 保守加上完整引擎预留。限额要留出权重、KV cache 和引擎开销，过小会启动失败。详见 [dGPU 的语义与边界](dgpu.md)。
+- 昇腾、PPU 与海光后端还须通过 agent 在该卡上运行的行为探针，资产、GPU 或运行时变化时重跑。NVIDIA 与 AMD 豁免行为探针，仍须满足资产校验、架构和运行时条件；具体以该卡的 `status` 和 `reason` 为准。
 - dGPU 与 PD 叠加时评估会给"未验证"警告（见[组合速查](#组合速查)）；多机 + dGPU 没有验证结论。
 
 **什么时候不该用**：
 
 - 需要硬算力隔离、独立故障域或固定带宽——dGPU 都不保证。
 - 模型本来就要吃满整卡。
-- 节点是海光、AMD，或是 PPU 但运行时不是 Docker。
+- 该卡的 dGPU 能力为 `unavailable`，例如海光型号未适配、缺少资产或探针未通过，或 PPU 运行时不是 Docker。
 - 只是想让几个模型"轮流"用一张卡、不要求同时在线——sleep/wake 更省心，也没有固定配额的碎片问题。
 
 **详见**：[启用和排查 dGPU](../how-to/dgpu.md)、[一张 GPU 跑两个模型](../tutorials/one-gpu-two-models.md)、
@@ -105,9 +105,9 @@
 
 - 唤醒耗时：L1（权重挪到主机内存）一步、秒级，但实测要钉住约 1.9 倍权重大小的主机 RAM，唤醒后也不释放；L2（权重直接丢弃）
   唤醒时从模型目录重新加载，模型文件在页缓存里时几秒，要读盘时十几秒到几分钟，不占主机 RAM。两级都会丢弃 KV cache。
-- 你手动下的休眠，收到请求时网关返回 HTTP 503（`model is asleep; wake it first`）；平台自己让它睡下的（
-  按[出让策略](service-levels.md)让卡）有请求时网关挂起请求、自动唤醒。按请求切换和事先约定的切换都在[调度分析](../how-to/scheduling-center.md)：
-  定时计划按周几和时刻休眠、唤醒，出让策略（不自动出让、闲置自动出让、按时自动出让、随时出让）让共卡的部署按请求轮流，唤醒放不下时可以等位。
+- 手动休眠时的**有请求时自动唤醒**决定后续行为：勾选后网关挂起请求、自动唤醒；不勾选则保持选中实例休眠，请求不会唤醒它们；所有休眠副本都被保持、且没有清醒副本可服务时返回 HTTP 503。默认值由出让策略决定：`never` 默认不勾选，其他策略默认勾选。详见 [sleep / wake](../how-to/sleep-wake.md#休眠时在途请求怎么办)。
+- 平台按[出让策略](service-levels.md)让实例睡下后，有请求时会自动唤醒。策略包括不自动出让（`never`）、闲置自动出让（`idle`）、按时自动出让（`timeslice`）和随时出让（`anytime`）；通过 sleep/wake 让共卡的部署轮流用卡，唤醒放不下时可以等位。[调度分析](../how-to/scheduling-center.md)也支持定时休眠、唤醒。
+- 自动出让（非 `never` 策略）要求部署已开启**可休眠**、引擎支持 sleep，且仅适用于单节点、非 PD 部署。多机部署可以手动休眠，但不能配置自动出让。
 - 唤醒要先过准入：这张卡已被新部署占用时返回 409 `WAKE_INSUFFICIENT_GPU_MEMORY`，要先停止或
   休眠占用者，或选择等位、让占用者休眠后唤醒；卡被平台外进程占着时直接拒绝（`WAKE_GPU_HELD_OUTSIDE`）。
 - 休眠时可选"等待完成"（默认，先跑完在途请求）或"立即中止"。
@@ -203,7 +203,7 @@
 |---|---|---|---|
 | `vllm-nixl` | vLLM / NVIDIA | UCX（走参数网络） | 已验证：同机、跨机以太、角色内跨机 |
 | `vllm-ascend-mooncake` | vLLM / 昇腾 | NPU 自带 RoCE 口（HCCL） | 已验证：两台 910B4 跨机；P、D 的 NPU 必须在 NPU 网络上互通 |
-| `vllm-mooncake` | vLLM 0.21 / 海光 | Mooncake 传输引擎（走参数网络，RDMA 或 TCP） | **实验性** |
+| `vllm-mooncake` | vLLM 0.21 / 海光 | Mooncake 传输引擎（走参数网络，RDMA 或 TCP） | 已验证：海光 K100 同机两卡、TP 1，含 GDN 混合模型（需 r4 镜像）；跨机与 RDMA 未验证 |
 | `sglang-nixl` | SGLang / NVIDIA | UCX | **未验证** |
 | `sglang-ppu-ipc` | SGLang / PPU | 同机卡间 IPC（Mooncake NVLink 传输） | 已验证：PPU ZW810E 同机两卡、TP 1；P、D 必须在同一节点 |
 | `sglang-ppu-mooncake` | SGLang / PPU | Mooncake RDMA（走主机 RDMA 参数网络） | 已验证：PPU ZW810E 经 RoCE 网卡，TP 1；节点须加载 `alixpu_peermem` |
@@ -246,7 +246,7 @@ prefill TP ≥ decode TP，`vllm-mooncake`、`sglang-nixl`、`sglang-ppu-ipc` �
 
 ## 云厂商租机与自有节点
 
-**云厂商租机**解决"现在就要算力、不想买机器"：在"云厂商"页配置 provider 凭证（RunPod、CompShare、
+**云厂商租机**解决"现在就要算力、不想买机器"：在"外部平台"页配置 provider 凭证（RunPod、CompShare、
 AutoDL、Vast、ZStack），列出实例、确认型号/卡数/区域/价格后，创建、做 SSH 预检查并自动安装 agent。
 凭证由 server 加密存储，不写入 install script 或日志。
 
@@ -262,7 +262,7 @@ AutoDL、Vast、ZStack），列出实例、确认型号/卡数/区域/价格后�
   Docker（或 NVIDIA 节点上 Docker 没有 NVIDIA Container Toolkit 支持）时 agent 使用 runveil，而 RDMA 参数网络与 PPU dGPU 都不支持 runveil。
 - 各 provider 的 API 字段、区域约束和清理方式由各自的实现决定。文档与验收只覆盖"租机 → SSH → agent
   上线 → inventory"；云实例上的多机 RDMA、dGPU 没有系统化的验收记录，以节点页的实际探测结果为准。
-- 租来的实例按厂商计价（创建前先确认价格），用完后要在云厂商页或厂商控制台确认已经释放。
+- 租来的实例按厂商计价（创建前先确认价格），用完后要在"外部平台"页或厂商控制台确认已经释放。
 
 **什么时候该用自有节点**：需要稳定的多机 RDMA 集群、长期常驻、或合规要求数据不出内网。
 

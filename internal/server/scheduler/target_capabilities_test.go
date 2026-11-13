@@ -3,9 +3,10 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"testing"
+
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/messages"
-	"testing"
 )
 
 func TestTargetRefusalPreservesUnknownErrors(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	"os/exec"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 
+	"golang.org/x/net/route"
 	"golang.org/x/sys/unix"
 )
 
@@ -96,9 +96,7 @@ func ioregDisks() (map[string]macDiskIO, error) {
 // routeInterfaces reads every Ethernet and Wi-Fi port's counters from the
 // routing sysctl (64-bit counters, no process).
 func routeInterfaces() (map[string]macIfCounters, error) {
-	// sysctl {CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0}; x/sys resolves
-	// sysctls by name and "net.route" has none.
-	buf, err := syscall.RouteRIB(unix.NET_RT_IFLIST2, 0)
+	buf, err := route.FetchRIB(unix.AF_UNSPEC, unix.NET_RT_IFLIST2, 0)
 	if err != nil {
 		return nil, err
 	}

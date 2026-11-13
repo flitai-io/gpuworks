@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"

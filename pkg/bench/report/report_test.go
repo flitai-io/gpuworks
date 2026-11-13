@@ -2,10 +2,11 @@ package report
 
 import (
 	"encoding/csv"
-	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
 )
 
 func TestRenderReportFormatsAndRedactsSecrets(t *testing.T) {

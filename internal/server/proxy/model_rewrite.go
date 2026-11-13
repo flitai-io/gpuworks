@@ -184,12 +184,6 @@ func insertJSONField(source io.Reader, output io.Writer, key string, encoded []b
 	return err
 }
 
-// Locate top-level model string values without buffering media strings. The
-// request has already been parsed for routing; nested model fields stay intact.
-func jsonModelRanges(source io.Reader) ([][2]int64, error) {
-	return jsonKeyRanges(source, "model")
-}
-
 // jsonKeyRanges locates the top-level values of one key, whatever their type,
 // without buffering values: media strings can be megabytes.
 func jsonKeyRanges(source io.Reader, want string) ([][2]int64, error) {

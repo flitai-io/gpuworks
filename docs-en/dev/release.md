@@ -33,7 +33,7 @@ Both runtime binaries must keep `CGO_ENABLED=0`. Run these checks before release
 
 ```bash
 make check-assets          # HAMi libvgpu.so glibc baseline; ib_write_bw library/symbol baseline and hashes
-make runtime-assets-verify # Ascend vCANN, PPU HGGC, and partition probe manifest integrity and per-file sha256
+make runtime-assets-verify # Ascend vcann-rt, PPU ppu-slicing-shim, and partition probe manifest integrity and per-file sha256
 make test
 make vet
 git diff --check
@@ -41,6 +41,33 @@ git diff --check
 
 `check-assets` includes `check-libvgpu` and `check-perftest`; it does not validate Ascend, PPU, or partition probe assets.
 You must run `make runtime-assets-verify` separately before release, or missing or tampered assets in these three categories go undetected.
+
+## Release Documentation PDFs
+
+For a formal version tag, the pipeline first builds the Chinese and English documentation from that commit,
+then `release-docs-pdf` generates two user guides. They cover tutorials, how-to guides, reference, and architecture,
+excluding developer documentation and ADRs. The cover identifies the version and source commit. The guides include
+a clickable table of contents, page numbers, images, Mermaid diagrams, and searchable, copyable text. Links to included
+articles point to their PDF chapters; links to omitted articles and downloads point to online documentation and require network access.
+
+The outputs are `dist/docs/gpuworks-<tag>-zh.pdf`, `dist/docs/gpuworks-<tag>-en.pdf`, and
+`dist/docs/SHA256SUMS`. Failed checks for Chinese fonts, images, links, content width, or PDF completeness block publication.
+PDF artifacts for formal version tags are retained permanently. Once publication succeeds, all three files are available under
+`releases/<tag>/docs/` on each distribution source for separate download and sharing. Documentation has its own checksum
+list; the root `SHA256SUMS` continues to list only platform archives. Uploaded PDFs and checksums are read back in full
+and compared before switching the distribution channel.
+
+Local generation uses the website's Hugo and the existing browser acceptance tools, Playwright and Chrome/Chromium,
+plus Noto Sans CJK fonts, Fontconfig, and Poppler tools (`pdftotext`, `pdfinfo`, `pdffonts`).
+Install `requirements-e2e.txt`, then run in a checkout of the version tag:
+
+```bash
+HUGO_BIN=/path/to/hugo CHROME_PATH=/path/to/chrome make docs-pdf VERSION=v26.11.3
+```
+
+Replace the example version with the actual tag. The generator checks that the website output matches the requested source commit.
+CI generates PDFs only for formal version tags. MRs and nightly builds do not generate PDFs; MRs still build the documentation site and run related checks.
+Republishing the same version preserves the original documentation bytes. Historical versions without PDFs are not backfilled or replaced.
 
 ## Version Numbers
 
@@ -138,6 +165,48 @@ Wait for installed servers to upgrade before switching to the new private key fo
 
 When creating buckets, note that both object storage providers enable bucket-level “Block public access” by default. Disable it and set the bucket to public read.
 
+### GitHub Actions Releases
+
+`.github/workflows/release.yml` implements the same flow on GitHub, with the same triggers and channel
+rules: every push to master builds `nightly` (the release id is the 8-character short commit), a
+`vYY.M.PATCH` tag builds `release`, and any other tag fails.
+
+1. The `meta` job fixes the release id, the channel and one build time for the whole run
+   (`GPUWORKS_BUILT_AT`, the counterpart of GitLab's pipeline creation time);
+2. The gates call `ci.yml` in `release_gates` mode, which runs only the UI build, unit, vet, lint and the
+   CompShare offline contracts, matching the needs of GitLab's `.release-build`; the UI suite and L2/L3 are
+   not waited for;
+3. Four build jobs package one archive each by OS and architecture, embedding the UI the gates built;
+4. A version tag also calls `docs.yml` to build the docs site, then prints the handbooks in both languages;
+5. The `publish` job merges the four outputs (plus the PDFs for a tag) and runs `scripts/publish_dist.sh`;
+6. A version tag also gets a GitHub release carrying the four archives, a `SHA256SUMS` covering all of them
+   and the PDFs, with notes from `docs-en/releases/<tag>.md`.
+
+GitLab remains the only publisher to the distribution sources. The `publish` job runs only when the
+repository variable `GPUWORKS_DIST_PUBLISH` is `true`; at the switch, turn off GitLab's `release-publish`
+first and then set the variable, so the two never publish the same channel at once. The publish
+credentials and the signing key are secrets of the `distribution` environment (named as the CI variables
+above), whose deployment rules admit only master and `v*` tags; a tag ruleset must also restrict pushing
+`v*` tags to maintainers, the counterpart of GitLab's protected tags. The docs site build fetches the OINK
+theme from the public `gpuworks_website` repository and needs no secret.
+
+### Kubernetes Agent Image
+
+The image a Kubernetes cluster's agent DaemonSet runs (`build/agent-image/Dockerfile`, see [ADR 0052](../adr/0052-kubernetes-nodes.md)) is published by CI's
+`release-agent-image`. It sits in the `publish` stage with `release-publish` and runs after both linux build jobs succeed:
+`make agent-image-publish` (`scripts/agent_image.sh publish`) builds amd64 and arm64 in one go and pushes them to
+`docker.io/gpuworks/gpuworks-agent`, `quay.io/gpuworks/gpuworks-agent`, and `swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent`.
+The tag is the runtime revision (`build/agent-image/REVISION`, such as `r1`), which is what the manifest names when a cluster entry leaves its agent image empty, plus `r1-<server version>` to tell the builds apart.
+The image is only the agent's runtime: the agent in it only seeds a node, which then switches to the server's own agent and upgrades in place, so a nightly overwriting `r1` does not affect connected clusters.
+Raise the runtime revision only when the base image or nerdctl changes (edit `REVISION` and `kubemanifest.AgentImageRevision`; a test keeps them equal), and say in the release notes that Kubernetes clusters apply the manifest once more after the server upgrade; also upload `gpuworks-agent_<rN>_linux-<arch>.tar.gz` for both architectures to `gpuworks-agent/` of the Aliyun Drive offline share (`build/runner-images/pds-upload.py`, as for runner images; see `build/runner-images/README.md`).
+
+- The agent in the image is built with the same `LDFLAGS` as the embedded agents; nerdctl comes from its upstream release, is verified against the sha256 pinned in the script, and is cached on the runner host.
+  The runners time out on GitHub, so CI's `NERDCTL_URL_BASE` lists two GitHub mirrors and then GitHub itself; the sha256 decides what is used.
+- buildx's docker-container builder does not inherit the host docker's proxy: the script hands the daemon's http/https/no proxy to the builder, and the buildx client (which fetches registry tokens for buildkit) uses the same proxy.
+- Push credentials are the protected File variable `GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG` (a docker `config.json` with credentials for the three registries); without it the job fails.
+- Provenance and SBOM are off: SWR refuses an OCI index that carries attestations.
+- To build one architecture locally: `make agent-image ARCH=amd64|arm64 AGENT_IMAGE=<name>`.
+
 ## Embedded Native Assets
 
 Embedded native assets include the runtime libraries, tools, and probe images listed below. They are not ordinary Go source code,
@@ -147,8 +216,8 @@ so rebuilding only the server does not incorporate updates to them. Validate or 
 |---|---|---|---|
 | NVIDIA HAMi | `internal/assets/bin/libvgpu.so` | One copy, compiled against the oldest supported glibc baseline | `make check-libvgpu` (`scripts/check_libvgpu_compat.sh`) |
 | RDMA bandwidth test tool | `internal/assets/bin/ib_write_bw-{x86_64,arm64}` | x86_64 + arm64; uses the host's RDMA userspace libraries at runtime | `make check-perftest` (`scripts/check_perftest_compat.sh`); see `build/runtime-assets/perftest/README.md` for build instructions |
-| Ascend vCANN | `internal/assets/bin/runtime-assets/ascend/linux-{amd64,arm64}/libvruntime.so` | One copy each for amd64 + arm64 | `make runtime-assets-verify`; rebuild with `make runtime-assets` |
-| PPU HGGC | `internal/assets/bin/runtime-assets/ppu/linux-amd64/hggc-13.0/{hggc_quota.so,hgml_dlsym_hook.so}` | Currently amd64 only | Same as above |
+| Ascend vcann-rt | `internal/assets/bin/runtime-assets/ascend/linux-{amd64,arm64}/libvruntime.so` | One copy each for amd64 + arm64 | `make runtime-assets-verify`; rebuild with `make runtime-assets` |
+| PPU ppu-slicing-shim | `internal/assets/bin/runtime-assets/ppu/linux-amd64/hggc-13.0/{hggc_quota.so,hgml_dlsym_hook.so}` | Currently amd64 only | Same as above |
 | partition probe | `internal/assets/bin/runtime-assets/probe/partition-probe-linux-{amd64,arm64}.tar.gz` | amd64 + arm64 | Same as above; rebuild the images separately with `make runtime-assets-probe` |
 | udocker PRoot | `internal/assets/bin/proot-{x86_64,arm64}-static-nofd` | x86_64 + arm64 | Covered by neither `check-assets` nor `runtime-assets-verify`; verify manually against `internal/assets/bin/manifest.sha256`. `build/runtime-assets/proot/reproduce-embedded-x86_64.sh` rebuilds the x86_64 binary byte for byte; `build/runtime-assets/proot/README.md` records the source of each binary |
 

@@ -5,13 +5,16 @@ import type { Node } from "../../api";
 import { useTranslation } from "react-i18next";
 import { gpuHealthStatus, gpuStateReason } from "../../components/GPUHealth";
 import { cardKey, cardOrdinal, cardPickable } from "../../nodes/cardIdentity";
+import { gpuResourceHint, type GPUResourceContext } from "./gpuResourceHint";
 
 export function GPUGrid({
   node,
   automatic,
+  resourceContext,
 }: {
   node?: Node;
   automatic?: number[];
+  resourceContext?: GPUResourceContext;
 }) {
   const { t } = useTranslation("deploy");
   const { t: tc } = useTranslation("common");
@@ -41,7 +44,8 @@ export function GPUGrid({
         // and one lent to a virtual machine is not faulty. A card with no
         // device number cannot be named to the engine at all.
         const usable = cardPickable(gpu);
-        const disabled = !usable || nodeMode === "auto";
+        const disabled = nodeMode === "auto" || (!usable && !active);
+        const hint = gpuResourceHint(gpu, resourceContext);
         const status = gpuHealthStatus(gpu);
         // Why it cannot be picked: a finding if there is one, else
         // whoever holds the card.
@@ -50,7 +54,7 @@ export function GPUGrid({
           <button
             type="button"
             key={cardKey(gpu)}
-            className={`${active ? "is-picked" : ""}${!usable ? " is-unavailable" : ""}${usable && status === "Warning" ? " is-degraded" : ""}`}
+            className={`${active ? "is-picked" : ""}${!usable ? " is-unavailable" : ""}${usable && (status === "Warning" || hint?.unavailable) ? " is-degraded" : ""}`}
             disabled={disabled}
             title={
               !usable
@@ -63,6 +67,7 @@ export function GPUGrid({
                     // in model and memory, and the button shows only its index.
                     t("workbench.gpu.cardFacts", { name: gpu.name.replace(/^NVIDIA\s+/i, ""), memory: formatGPUCapacity(gpu, (bytes) => (bytes / 1024 ** 3).toFixed(0)) }),
                     health && t("workbench.gpu.degradedHealth", { health }),
+                    hint?.text,
                   ].filter(Boolean).join(" · ")
             }
             onClick={() =>

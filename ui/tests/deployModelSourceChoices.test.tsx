@@ -134,8 +134,12 @@ test("a local model with no template sources clears the provider and preserves t
   assert.equal(screen.queryByRole("combobox", { name: text("modelProvider") }), null);
   assert.equal(buildPayload({ engine: "vllm", model_id: 1, ...form.getFieldsValue(true) }).payload.model_id, 1);
 
+  // Losing all candidates must not silently discard an explicit destination.
   view.rerender(tree(acq({ providers: [] }), "local"));
-  await waitFor(() => assert.equal(requested(), undefined));
+  await waitFor(() => assert.deepEqual(requested(), { storage_id: 7 }));
+  assert.equal(form.getFieldValue(["model_source", "provider"]), undefined);
+  assert.equal(form.getFieldValue(["model_source", "storage_picked"]), true);
+  assert.equal((await screen.findByRole("alert")).textContent, text("storageGone"));
 });
 
 // ---------------------------------------------------------------- where a fetched model is saved
@@ -189,6 +193,35 @@ test("models already stored are listed for information; a storage that cannot se
 
 // ---------------------------------------------------------------- the choice follows the evaluation
 
+test("an explicit save target is retained and reported when zero or one alternative remains", async () => {
+  const view = mount(acq({ targets: [localTarget, nfsTarget] }));
+  const saveTo = await screen.findByRole("combobox", { name: text("saveTo") });
+  fireEvent.mouseDown(saveTo);
+  fireEvent.click(optionRow(targetName("model-archive", "nfs")));
+  await waitFor(() => assert.equal(form.getFieldValue(["model_source", "storage_id"]), 7));
+  for (const targets of [[localTarget], []]) {
+    view.rerender(tree(acq({ targets })));
+    assert.ok(await screen.findByText(text("storageGone")));
+    assert.equal(form.getFieldValue(["model_source", "storage_id"]), 7);
+    assert.equal(form.getFieldValue(["model_source", "storage_picked"]), true);
+    assert.deepEqual(requested(), { storage_id: 7 });
+    assert.ok(screen.getByRole("combobox", { name: text("saveTo") }), "the person must still see the invalid choice");
+  }
+});
+
+test("a selected save target becoming a complete readable copy stays valid", async () => {
+  const view = mount(acq({ targets: [localTarget, nfsTarget] }));
+  fireEvent.mouseDown(await screen.findByRole("combobox", { name: text("saveTo") }));
+  fireEvent.click(optionRow(targetName("model-archive", "nfs")));
+  await waitFor(() => assert.equal(form.getFieldValue(["model_source", "storage_id"]), 7));
+  const ready = acq({ targets: [localTarget], present: [nfsPresent] });
+  view.rerender(tree(ready));
+  await waitFor(() => assert.equal(weightStorageInvalid(ready, form.getFieldValue("model_source")), false));
+  assert.deepEqual(requested(), { storage_id: 7 });
+  assert.equal(screen.queryByRole("alert"), null);
+  assert.ok(screen.getByText(targetName("model-archive", "nfs"), { selector: ".ant-select-selection-item" }));
+});
+
 test("a storage the form chose by itself follows the evaluation; one the person picked is kept and flagged", async () => {
   const first = acq({ targets: [localTarget, scratchTarget] });
   const view = mount(first);
@@ -220,10 +253,15 @@ test("a storage the form chose by itself follows the evaluation; one the person 
   assert.deepEqual(requested(), { storage_id: 3 });
   assert.equal(weightStorageInvalid(second, form.getFieldValue("model_source")), false);
 
-  // Down to one writable storage: nothing is asked, so the pick is forgotten.
+  // Down to one writable storage: the explicit choice is still kept and flagged.
   view.rerender(tree(acq({ targets: [localTarget] })));
-  await waitFor(() => assert.equal(requested(), undefined));
-  assert.equal(form.getFieldValue(["model_source", "storage_picked"]), false);
+  assert.ok(await screen.findByText(text("storageGone")));
+  assert.deepEqual(requested(), { storage_id: 3 });
+  assert.equal(form.getFieldValue(["model_source", "storage_picked"]), true);
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: text("saveTo") }));
+  fireEvent.click(optionRow(targetName("default", "local")));
+  await waitFor(() => assert.equal(screen.queryAllByText(text("storageGone")).length, 0));
+  assert.deepEqual(requested(), { storage_id: 1 });
 });
 
 test("weightStorageInvalid only flags a storage the person picked", () => {
@@ -231,7 +269,7 @@ test("weightStorageInvalid only flags a storage the person picked", () => {
   assert.equal(weightStorageInvalid(offered, { storage_id: 99, storage_picked: true }), true);
   assert.equal(weightStorageInvalid(offered, { storage_id: 99 }), false, "a stale id nobody picked is not flagged");
   assert.equal(weightStorageInvalid(offered, { storage_id: 3, storage_picked: true }), false);
-  assert.equal(weightStorageInvalid(acq({ targets: [localTarget] }), { storage_id: 99, storage_picked: true }), false, "nothing is asked, so nothing can be invalid");
+  assert.equal(weightStorageInvalid(acq({ targets: [localTarget] }), { storage_id: 99, storage_picked: true }), true, "fewer targets must not erase an invalid explicit choice");
   assert.equal(weightStorageInvalid(offered, undefined), false);
 });
 

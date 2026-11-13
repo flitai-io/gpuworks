@@ -33,7 +33,7 @@ CI 为避开单 job artifact 大小限制（server 内嵌了 macOS agent 后单�
 
 ```bash
 make check-assets          # HAMi libvgpu.so 的 glibc 基线，以及 ib_write_bw 的库/符号基线与哈希
-make runtime-assets-verify # 昇腾 vCANN、PPU HGGC 与 partition probe 的清单完整性 + 逐文件 sha256
+make runtime-assets-verify # 昇腾 vcann-rt、PPU ppu-slicing-shim 与 partition probe 的清单完整性 + 逐文件 sha256
 make test
 make vet
 git diff --check
@@ -41,6 +41,31 @@ git diff --check
 
 `check-assets` 包含 `check-libvgpu` 和 `check-perftest`，不校验昇腾、PPU 或 partition probe 资产；
 发布前必须单独运行 `make runtime-assets-verify`，否则这三类资产的缺失或篡改不会被发现。
+
+## 发布文档 PDF
+
+正式版 tag 的流水线会先用该提交构建中英文文档，再由 `release-docs-pdf` 生成两份用户手册。
+手册覆盖教程、操作指南、参考手册和架构说明，不含开发者文档与 ADR；封面标明版本和源码提交，
+包含可点击目录、页码、图片和 Mermaid 图，文字可搜索、复制。文档内已收录文章的链接跳转到 PDF
+内对应章节；未收录的文章及下载链接指向在线文档，需联网访问。
+
+产物为 `dist/docs/gpuworks-<tag>-zh.pdf`、`dist/docs/gpuworks-<tag>-en.pdf` 与
+`dist/docs/SHA256SUMS`。中文字体、图片、链接、内容宽度或 PDF 完整性校验失败会阻止发布。
+正式版 tag 的 PDF artifact 永久保留；发布成功后，三份文件同时出现在各发布源的
+`releases/<tag>/docs/` 下，可单独下载并外发。文档使用独立的校验和清单，根目录的 `SHA256SUMS`
+仍只列平台压缩包。上传后会完整读回 PDF 和校验和，比对成功才切换发布通道。
+
+本地生成使用与网站相同的 Hugo，以及现有浏览器验收所用的 Playwright、Chrome/Chromium；
+另需 Noto Sans CJK 字体、Fontconfig 和 Poppler 工具（`pdftotext`、`pdfinfo`、`pdffonts`）。
+安装 `requirements-e2e.txt` 后，在待发布 tag 的 checkout 中执行：
+
+```bash
+HUGO_BIN=/path/to/hugo CHROME_PATH=/path/to/chrome make docs-pdf VERSION=v26.11.3
+```
+
+将示例版本替换为实际 tag。生成器会核对网站产物与指定源码提交一致。CI 仅在正式版 tag 时生成 PDF；
+MR 和 nightly 不生成 PDF，MR 仍运行文档站构建及相关检查。重新发布同一版本保留原始文档字节，
+历史上未附带 PDF 的版本不会被追补或替换。
 
 ## 版本号
 
@@ -138,6 +163,42 @@ Cloudflare 区域 `gpuworks.ai` 上为 `dl.gpuworks.ai` 配了两条缓存规则
 
 新建桶时注意两家对象存储默认打开桶级「阻止公共访问」，要关掉并设为公共读。
 
+### GitHub Actions 发布
+
+`.github/workflows/release.yml` 是同一流程在 GitHub 上的实现，触发条件与渠道规则相同：master 的每次推送构建
+`nightly`（release id 是 8 位短提交号），`vYY.M.PATCH` tag 构建 `release`，其他 tag 直接失败。
+
+1. `meta` job 定下 release id、渠道和整次运行共用的构建时间（`GPUWORKS_BUILT_AT`，对应 GitLab 的流水线创建时间）；
+2. 门禁调用 `ci.yml` 的 `release_gates` 模式，只跑 UI 构建、unit、vet、lint 与 CompShare 离线契约，与 GitLab `.release-build`
+   的 needs 一致，不等 UI suite 与 L2/L3；
+3. 四个构建 job 按 OS 与架构各打一个包，直接嵌入门禁构建的 UI；
+4. 版本 tag 另外调用 `docs.yml` 构建文档站，再打印两种语言的 PDF 手册；
+5. `publish` job 合并四份产物（tag 时加上 PDF）运行 `scripts/publish_dist.sh`；
+6. 版本 tag 再建一个 GitHub release，附四个压缩包、覆盖全部压缩包的 `SHA256SUMS` 与 PDF，说明取 `docs-en/releases/<tag>.md`。
+
+GitLab 仍是发布源的唯一发布者。`publish` job 只在仓库变量 `GPUWORKS_DIST_PUBLISH` 为 `true` 时运行，切换时先关掉 GitLab
+的 `release-publish`，再打开这个变量，两边不会同时往同一渠道发布。发布凭据与签名私钥是 `distribution` environment 的
+secret（名字与上面的 CI 变量相同），该 environment 的部署规则只放行 master 与 `v*` tag；`v*` tag 还要用 tag ruleset 限制
+只有维护者能推送，作用相当于 GitLab 的 protected tag。文档站构建从公开的 `gpuworks_website` 仓库拉 OINK 主题，不需要
+secret。
+
+### Kubernetes agent 镜像
+
+Kubernetes 集群的 agent DaemonSet 跑的镜像（`build/agent-image/Dockerfile`，见 [ADR 0052](../adr/0052-kubernetes-nodes.md)）由 CI 的
+`release-agent-image` 发布：与 `release-publish` 同在 `publish` 阶段，等 linux 的两个构建 job 成功后运行
+`make agent-image-publish`（`scripts/agent_image.sh publish`），一次构建 amd64 与 arm64，推到
+`docker.io/gpuworks/gpuworks-agent`、`quay.io/gpuworks/gpuworks-agent`、`swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent`。
+tag 是运行环境版本（`build/agent-image/REVISION`，如 `r1`），也就是集群条目不填 agent 镜像时 manifest 写的那个，另加 `r1-<server 版本>` 区分各次构建。
+镜像只是 agent 的运行环境：里面的 agent 只用来在节点上播种，节点随后换成 server 自己的 agent 并原地升级，所以每次 nightly 覆盖 `r1` 不影响已接入的集群。
+只在基础镜像或 nerdctl 变化时升运行环境版本（改 `REVISION` 与 `kubemanifest.AgentImageRevision`，测试保证两者一致），并在发布说明里提醒 Kubernetes 集群升级 server 后重新 apply 一次 manifest；同时把两个架构的 `gpuworks-agent_<rN>_linux-<arch>.tar.gz` 上传到阿里云盘离线分享的 `gpuworks-agent/`（`build/runner-images/pds-upload.py`，做法同 runner 镜像，见 `build/runner-images/README.md`）。
+
+- 镜像里的 agent 用与内嵌 agent 相同的 `LDFLAGS` 构建；nerdctl 取自上游发布并按脚本里固定的 sha256 校验，缓存在 runner 主机上。
+  runner 访问 GitHub 超时，CI 的 `NERDCTL_URL_BASE` 依次列出两个 GitHub 加速地址和 GitHub 本身，sha256 决定用不用。
+- buildx 的 docker-container builder 不继承宿主 docker 的代理：脚本把 daemon 的 http/https/no proxy 交给 builder，buildx 客户端（替 buildkit 取仓库 token）也用同一套代理。
+- 推送凭据是 protected 的 File 类型变量 `GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG`（一份含三个仓库凭据的 docker `config.json`），没有它 job 直接失败。
+- 关闭 provenance 与 SBOM：SWR 拒收带 attestation 的 OCI index。
+- 本机构建单架构：`make agent-image ARCH=amd64|arm64 AGENT_IMAGE=<名字>`。
+
 ## 内嵌原生资产
 
 内嵌原生资产包括下表中的运行库、工具和探针镜像。它们不是普通 Go 源码，
@@ -147,8 +208,8 @@ Cloudflare 区域 `gpuworks.ai` 上为 `dl.gpuworks.ai` 配了两条缓存规则
 |---|---|---|---|
 | NVIDIA HAMi | `internal/assets/bin/libvgpu.so` | 单份，最老受支持 glibc 基线编译 | `make check-libvgpu`（`scripts/check_libvgpu_compat.sh`） |
 | RDMA 带宽测试工具 | `internal/assets/bin/ib_write_bw-{x86_64,arm64}` | x86_64 + arm64，运行时使用宿主机 RDMA 用户态库 | `make check-perftest`（`scripts/check_perftest_compat.sh`）；构建说明见 `build/runtime-assets/perftest/README.md` |
-| 昇腾 vCANN | `internal/assets/bin/runtime-assets/ascend/linux-{amd64,arm64}/libvruntime.so` | amd64 + arm64 各一份 | `make runtime-assets-verify`；重建用 `make runtime-assets` |
-| PPU HGGC | `internal/assets/bin/runtime-assets/ppu/linux-amd64/hggc-13.0/{hggc_quota.so,hgml_dlsym_hook.so}` | 目前仅 amd64 | 同上 |
+| 昇腾 vcann-rt | `internal/assets/bin/runtime-assets/ascend/linux-{amd64,arm64}/libvruntime.so` | amd64 + arm64 各一份 | `make runtime-assets-verify`；重建用 `make runtime-assets` |
+| PPU ppu-slicing-shim | `internal/assets/bin/runtime-assets/ppu/linux-amd64/hggc-13.0/{hggc_quota.so,hgml_dlsym_hook.so}` | 目前仅 amd64 | 同上 |
 | partition probe | `internal/assets/bin/runtime-assets/probe/partition-probe-linux-{amd64,arm64}.tar.gz` | amd64 + arm64 | 同上；镜像单独用 `make runtime-assets-probe` 重建 |
 | udocker PRoot | `internal/assets/bin/proot-{x86_64,arm64}-static-nofd` | x86_64 + arm64 | `check-assets`/`runtime-assets-verify` 均不覆盖，需按 `internal/assets/bin/manifest.sha256` 人工核对；x86_64 可用 `build/runtime-assets/proot/reproduce-embedded-x86_64.sh` 逐字节复现，各自的源码见 `build/runtime-assets/proot/README.md` |
 

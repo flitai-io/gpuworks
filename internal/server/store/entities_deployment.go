@@ -165,12 +165,15 @@ type Instance struct {
 	// been read; false includes a document with an empty paths map.
 	TranscriptionServed *bool
 	Message             string `gorm:"size:512"`
-	Phase               string `gorm:"size:32"`
-	Progress            float64
-	BytesDone           int64
-	BytesTotal          int64
-	RateBPS             int64
-	SleepLevel          int
+	// RuntimeFailure is JSON proto.RuntimeFailure, an opaque snapshot accompanying
+	// Message. The host facts cannot be reconstructed after the agent disconnects.
+	RuntimeFailure string `gorm:"type:text"`
+	Phase          string `gorm:"size:32"`
+	Progress       float64
+	BytesDone      int64
+	BytesTotal     int64
+	RateBPS        int64
+	SleepLevel     int
 	// SleepResidueBytes is the per-GPU memory the agent measured the engine
 	// still holding after its last sleep, 0 when it could not measure (the
 	// card was shared, or the agent predates the measurement): the ledger

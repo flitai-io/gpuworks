@@ -1,5 +1,11 @@
 package messages
 
+import (
+	"errors"
+
+	"gpuworks.ai/gpuworks/internal/proto"
+)
+
 // ProductError is a language-neutral API error. Fallback is an English message
 // retained for older clients and scripts that only read the error field.
 type ProductError struct {
@@ -11,11 +17,12 @@ type ProductError struct {
 
 // Product error codes shared by domain services and the API layer.
 const (
+	ErrorSleepEngineUnsupported             = "SLEEP_ENGINE_UNSUPPORTED"
 	ErrorAgentUpgradeRequired               = "AGENT_UPGRADE_REQUIRED"
 	ErrorLaunchFeaturesUnknown              = "LAUNCH_FEATURES_UNKNOWN"
 	ErrorSleepTargetUnresolved              = "SLEEP_TARGET_UNRESOLVED"
 	ErrorAcceleratorFeatureUnsupported      = "ACCELERATOR_FEATURE_UNSUPPORTED"
-	ErrorAcceleratorDeviceSelectionRequired = "ACCELERATOR_DEVICE_SELECTION_REQUIRED"
+	ErrorAcceleratorDeviceSelectionRequired = proto.ErrorAcceleratorDeviceSelectionRequired
 	// ErrorAcceleratorSMLimitUnsupported reports a compute/SM limit requested
 	// on a vendor whose logical partition backend (if any) enforces GPU
 	// memory only, such as AMD's amd-dgpu (ROCm enforces compute quotas in
@@ -174,4 +181,13 @@ func NoStoragePath(source, target string) *ProductError {
 	return NewProductError(ErrorNoStoragePath,
 		"The source and target nodes share no network that may carry storage sync; download from the source instead, or let the management network carry storage sync on both nodes.",
 		map[string]any{"source": source, "target": target})
+}
+
+// ErrPeerRelayBusy is temporary server admission pressure, never peer failure.
+var ErrPeerRelayBusy = errors.New("peer relay is busy")
+
+const ErrorPeerRelayBusy = "PEER_RELAY_BUSY"
+
+func PeerRelayBusy() *ProductError {
+	return WrapProductError(ErrorPeerRelayBusy, "Peer relay is busy; retry this transfer from the same source.", nil, ErrPeerRelayBusy)
 }

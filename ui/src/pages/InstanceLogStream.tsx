@@ -48,6 +48,11 @@ export function LogStream({
   const { t: tCommon } = useTranslation("common");
   const [lines, setLines] = useState<TimelineLogInput[]>([]);
   const [truncated, setTruncated] = useState(false);
+  // The live stream reports nothing on its own: EventSource retries a dropped
+  // connection and gives up silently on a refused one. Both are surfaced here
+  // so a closed stream never looks like an idle one.
+  const [streamState, setStreamState] = useState<"open" | "retrying" | "failed">("open");
+  const [streamAttempt, setStreamAttempt] = useState(0);
   const preRef = useRef<HTMLPreElement>(null);
   const uuidRef = useRef(uuid);
   // historical is true whenever the view is not showing the live tail: an
@@ -133,12 +138,15 @@ export function LogStream({
       setLines((prev) => [...prev.slice(-LOG_TAIL_LIMIT), { timeMS: Date.now(), text }]);
     };
     es.onerror = () => {
-      // EventSource auto-reconnects; nothing to do.
+      // A refused stream (auth failure, server error) ends CLOSED and will not
+      // come back on its own; a dropped one goes back to CONNECTING and does.
+      setStreamState(es.readyState === EventSource.CLOSED ? "failed" : "retrying");
     };
+    es.onopen = () => setStreamState("open");
     return () => {
       es.close();
     };
-  }, [historical, uuid]);
+  }, [historical, uuid, streamAttempt]);
 
   const events = timeline?.events ?? [];
   // receivedAtRef is mutated by the effect above rather than read from state,
@@ -208,6 +216,26 @@ export function LogStream({
         {showEarlierHidden && (
           <>
             <SystemLine>{t("instance.log.earlierEventsHidden")}</SystemLine>
+            {"\n"}
+          </>
+        )}
+        {!historical && streamState !== "open" && (
+          <>
+            <SystemLine>
+              {t(streamState === "failed" ? "instance.log.streamFailed" : "instance.log.streamRetrying")}
+              {streamState === "failed" && (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    onClick={() => setStreamAttempt((attempt) => attempt + 1)}
+                    style={{ background: "none", border: "none", color: colors.chartTeal, textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
+                  >
+                    {t("instance.log.retry")}
+                  </button>
+                </>
+              )}
+            </SystemLine>
             {"\n"}
           </>
         )}

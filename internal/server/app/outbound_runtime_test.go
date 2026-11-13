@@ -267,7 +267,7 @@ func TestRunningAppDefaultsToPrivateAccessAndHotTogglesStrictMode(t *testing.T) 
 	} {
 		code, body := status(t, http.MethodPost, base+"/api/v1/images/preview-archive-url", token,
 			[]byte(fmt.Sprintf(`{"url":%q}`, target)))
-		if code != http.StatusForbidden || !strings.Contains(string(body), "IMAGE_ARCHIVE_URL_POLICY_DENIED") {
+		if code != http.StatusForbidden || !strings.Contains(string(body), "IMAGE_ARCHIVE_URL_POLICY_BLOCKED") {
 			t.Fatalf("relaxed policy allowed a permanently forbidden target: status=%d body=%s", code, body)
 		}
 	}

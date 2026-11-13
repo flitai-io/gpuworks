@@ -91,7 +91,7 @@ install 时的密码优先级：
 3. 交互模式提问（关闭回显，回车则随机生成；已有 admin 账户时不提问）；
 4. `--quiet` 或 stdin 不是终端时，随机生成。
 
-服务首启时创建 admin 账户的优先级是 `GPUWORKS_ADMIN_PASSWORD` > `initial-credentials` 文件 > 随机生成（不经 install、直接 `gpuworks serve` 时可用环境变量指定初始密码），并把最终使用的密码写回该文件。`GPUWORKS_ADMIN_PASSWORD` 只在创建 admin 时读取。
+服务首启时创建 admin 账户的优先级是 `GPUWORKS_ADMIN_PASSWORD` > `initial-credentials` 文件 > 随机生成（不经 install、直接 `gpuworks serve` 时可用环境变量指定初始密码），并把最终使用的密码写回该文件。`GPUWORKS_ADMIN_PASSWORD` 只在创建 admin 时读取。该文件记录的账户修改密码后（控制台或 `reset-password`），server 或命令会尝试删除该文件（其中的密码已失效）；删除失败只记告警，需手动删除。记录的是其他账户时不删除。
 
 数据目录已有 `gpuworks.db` 时视为已有 admin 账户：不再解析密码，数据库和账户不会被改动，`--password` 被忽略并提示改用 `gpuworks reset-password`。
 

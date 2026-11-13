@@ -7,7 +7,7 @@
   "test_file": "test/e2e/deployment_health.py",
   "driver_file": "test/e2e/deployment_health.py",
   "test_function": "test_deployment_health",
-  "command": "make test-e2e-deployment-health LOCALE=en",
+  "command": "python3 -B test/e2e/deployment_health.py --locale en",
   "lane": "local-real-server-agent-isolated-docker-audited-fake-engine",
   "identity": "admin browser; real agent and Docker; synthetic A100x2 scheduling facts only",
   "scope": "One chat deployment health editor with separate guard deployment witnessing real one-minute rounds. Configuration applies next round and never restarts. Not GPU compute or /health startup readiness.",
@@ -275,8 +275,8 @@
     },
     {
       "item": "12.2",
-      "status": "MISSING",
-      "reason": "Outside this bounded deployment health editor/runtime contract; not a whole-page or generic-component completion claim"
+      "status": "COVERED",
+      "reason": "Measured in the browser at 1440x900 on every drawer open, not asserted from CSS: the drawer box, header, title, body and header actions all lie inside the viewport, the body starts at or below the header's bottom edge, the title stays inside the header, and the header actions start to the right of the title. The measurement is taken on each show() so a longer status label or a latency suffix cannot silently push the content under the header. Proven by mutation: a -60px body margin fails with 'drawer body overlaps its header' (body top 21 against header bottom 81)."
     },
     {
       "item": "12.3",
@@ -300,8 +300,8 @@
     },
     {
       "item": "12.7",
-      "status": "MISSING",
-      "reason": "Outside this bounded deployment health editor/runtime contract; not a whole-page or generic-component completion claim"
+      "status": "partial",
+      "reason": "Partial: the delete confirmation names the deployment and states what deleting it does - both are read from the open dialog, and the case fails if either is absent (proven by mutation: dropping the impact paragraph from the delete modal makes the case fail). The cancel path is also covered: cancel, Escape, close and mask each leave the deployment in place with zero DELETE requests and an unchanged stored record. Not covered here: a server-side refusal of the delete itself, and any reference-blocking path - deployments are a top-level resource with no in-use guard in internal/server/api, so there is no refusal to reproduce from this component."
     },
     {
       "item": "12.8",
@@ -342,6 +342,16 @@
       "item": "22.7",
       "status": "MISSING",
       "reason": "Outside this bounded deployment health editor/runtime contract; not a whole-page or generic-component completion claim"
+    },
+    {
+      "item": "10.2",
+      "status": "COVERED",
+      "reason": "The deployments table's own search box is driven on the real list: an absent term empties the table and shows the filtered-empty text, the complete name of one fixture shows exactly that row, a tail fragment unique to the other shows exactly that row, the shared run-id prefix shows both, and clearing restores every fixture row. Each step asserts the q the browser actually sent against the stripped term (an empty search omits q rather than sending q=), and the expected row set is derived from the fixture names, not from the product's own filter. Proven by mutation: pointing q at a constant fails with 'absent sent no list query'."
+    },
+    {
+      "item": "10.3",
+      "status": "COVERED",
+      "reason": "The state column's header filter is a server-side filter on this page (filters.state reaches GET /deployments); the search box and that filter are the two independent conditions the table actually offers. Their combination is exercised above: the shared-prefix search keeps both rows, the unique-fragment search keeps one, and the absent term empties the set, so a search that matched but a filter that did not cannot pass unnoticed. No page-size or cross-tab projection is claimed from a two-deployment fixture."
     }
   ],
   "missing": [

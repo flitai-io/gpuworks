@@ -42,6 +42,7 @@ The root [`CLAUDE.md`](../../CLAUDE.md) is authoritative for development convent
 - [AMD Integration and Hardware Validation](amd-hardware-validation.md)
 - [Benchmark Information and Reporting Standards](benchmark-reporting-standard.md)
 - [Observability Limits of Per-Request Engine Queue Time](engine-queue-observation.md)
+- [Community Registry Browsing](community-registry-browse.md)
 - [Browser E2E Testing Standards](../../test/e2e/browser-e2e-testing-standard.md)
 - [Browser E2E Component Checklists](../../test/e2e/browser-e2e-component-checklists.md)
 - [Release Builds](release.md)

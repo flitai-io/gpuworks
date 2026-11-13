@@ -233,6 +233,13 @@ func (s *Store) UpdateStorage(id uint, patch StoragePatch) (*Storage, error) {
 				return err
 			}
 		}
+		if patch.Type != nil && *patch.Type == proto.StorageNFS && out.Type == proto.StorageNFSCache {
+			// After checkStorageIdle: a pending deletion or a live reader is
+			// reported as such, not as a cache entry.
+			if err := settleNodeCachesForSwitch(tx, &out); err != nil {
+				return err
+			}
+		}
 		if patch.Enabled != nil && !*patch.Enabled || patch.MountOptions != nil && strings.TrimSpace(*patch.MountOptions) != out.MountOptions {
 			if err := checkNoCacheDeletion(tx.Where("storage_id = ?", id)); err != nil {
 				return err
@@ -318,13 +325,6 @@ func (s *Store) UpdateStorage(id uint, patch StoragePatch) (*Storage, error) {
 				next.AllNodes = *patch.AllNodes
 			}
 			if err := checkStorageReaderTargets(tx, out, next, previousTargets); err != nil {
-				return err
-			}
-		}
-		if patch.Type != nil && *patch.Type == proto.StorageNFS && out.Type == proto.StorageNFSCache {
-			// The node caches belong to the nfs_cache type; their directories
-			// are cleared by the caller through the agents.
-			if err := tx.Where("storage_id = ? AND node_id <> 0", id).Delete(&ModelFile{}).Error; err != nil {
 				return err
 			}
 		}

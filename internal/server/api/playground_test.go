@@ -356,3 +356,60 @@ func TestPlaygroundCatalogOmitsDeploymentsThatCannotServe(t *testing.T) {
 		t.Fatal("starting deployment was listed as available")
 	}
 }
+
+// The page learns how many reference images an edit takes from the server:
+// the declared count, one when the stored contract predates the field, and no
+// key at all for an operation that takes none.
+func TestPlaygroundCatalogResolvesReferenceImageLimits(t *testing.T) {
+	st, err := store.Open("file:playground_reference_images_test?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, _ := st.RegisterNode("reference-node", store.HashToken("token"), "reference-node")
+	for index, item := range []struct{ served, operations string }{
+		{"multi-edit", `[{"type":"openai.image.generate"},{"type":"openai.image.edit","endpoint":"/v1/images/edits","mode":"sync","request_encoding":"multipart","max_reference_images":9}]`},
+		{"single-edit", `[{"type":"openai.image.edit","endpoint":"/v1/images/edits","mode":"sync","request_encoding":"multipart","inputs":[]}]`},
+	} {
+		model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "acme/" + item.served, Revision: "main", Name: item.served, Operations: item.operations, InputModalities: `["text","image"]`})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dep, err := st.CreateDeployment(&store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: item.served, State: "active", Engine: "vllm"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.CreateInstance(&store.Instance{UUID: item.served, DeploymentID: dep.ID, NodeID: node.ID, State: proto.InstRunning, APIPort: 30000 + index}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	signer, _ := auth.NewTokenSigner("reference-images-secret", time.Hour)
+	token, _ := managementSessionTestToken(t, st, signer, auth.Claims{UserID: 1, Username: "admin", Role: "admin"})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/playground/models", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	Router(Deps{Store: st, AuthSigner: signer}).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var wire struct {
+		Models []struct {
+			ID         string                       `json:"id"`
+			Operations []map[string]json.RawMessage `json:"operations"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &wire); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, model := range wire.Models {
+		for _, operation := range model.Operations {
+			var kind string
+			_ = json.Unmarshal(operation["type"], &kind)
+			got[model.ID+" "+kind] = string(operation["max_reference_images"])
+		}
+	}
+	want := map[string]string{"multi-edit openai.image.generate": "", "multi-edit openai.image.edit": "9", "single-edit openai.image.edit": "1"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("max_reference_images on the wire = %v, want %v", got, want)
+	}
+}

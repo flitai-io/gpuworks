@@ -86,6 +86,7 @@
     "confirm": "Delete this node?",
     "description": "Stop deployment instances on this node first.",
     "uninstallDescription": "Normal removal uninstalls the agent over SSH before deleting the node record.",
+    "noSSHDescription": "This node has no saved SSH credentials. Configure SSH credentials for normal deletion, or uninstall the agent manually and then select Force removal to delete its management record.",
     "force": "Force removal: only delete management records",
     "forceWarning": "The agent may still be running on the node. Stop it manually when the node is accessible."
   },
@@ -321,12 +322,14 @@
     "user": "User",
     "userRequired": "Enter the SSH user",
     "probeAfterSave": "Run a probe immediately after saving",
-    "existingAuth": "Current authentication: {{method}}. Credentials are never displayed for security reasons and must be entered again when saving.",
+    "existingAuth": "Saved credential: {{method}}. Credentials are never displayed for security reasons and must be entered again when saving.",
+    "savedPasswordHelp": "During recovery, a saved password can be tried with password or keyboard-interactive authentication.",
     "password": "SSH password",
     "passwordRequired": "Enter the SSH password",
+    "keyboardInteractiveHelp": "For targets that ask for one hidden password prompt. Multi-step verification and MFA prompts are not supported.",
     "privateKey": "SSH private key",
     "privateKeyRequired": "Enter the SSH private key",
-    "authorizesPlatformKey": "After signing in, the server adds its platform key to the target and keeps only that; this password or key is not stored.",
+    "authorizesPlatformKey": "After signing in, the server tries to authorize its platform key. If that succeeds, only the platform key is kept; otherwise, the supplied credential is retained for recovery.",
     "platformKey": {
       "unavailable": "The platform SSH key is not available: {{detail}}",
       "authorizeLabel": "Authorize the platform key on the target",
@@ -335,6 +338,7 @@
     "auth": {
       "label": "Authentication",
       "password": "Password",
+      "keyboardInteractive": "Keyboard-interactive",
       "key": "Private key",
       "platformKey": "Platform key"
     },
@@ -366,6 +370,7 @@
     },
     "phase": {
       "probing": "Probing",
+      "probeFailed": "Recovery probe failed",
       "artifactCheck": "Checking the agent package",
       "uploading": "Uploading the agent",
       "verifying": "Verifying the agent",
@@ -519,7 +524,8 @@
       "platformLifts": "The platform turns scheduling back on once the reason is gone."
     },
     "cordonReason": {
-      "card_needs_host_reboot": "Stopped by the platform: a card reports that only a host reboot or power cycle recovers it, and the other cards sit behind the same driver."
+      "card_needs_host_reboot": "Stopped by the platform: a card reports that only a host reboot or power cycle recovers it, and the other cards sit behind the same driver.",
+      "kube_unschedulable": "Stopped by the platform: Kubernetes stopped scheduling onto this node (kubectl cordon or drain, or the node is being replaced)."
     }
   },
   "systemLabels": {
@@ -534,7 +540,9 @@
       "compute-network": "Compute network",
       "storage-sync-network": "Storage sync network",
       "serving-network": "Serving network",
-      "storage": "Storage"
+      "storage": "Storage",
+      "kubernetes-cluster": "Kubernetes cluster",
+      "kubernetes-node": "Kubernetes node"
     }
   },
   "diskUsage": {
@@ -714,6 +722,36 @@
       "ephemeral": "Container layer"
     }
   },
+  "fleet": {
+    "notReported": "Not reported",
+    "beforeOffline": "Last known version",
+    "inBatch": "In upgrade batch",
+    "loadError": "Could not load node version information",
+    "retry": "Retry",
+    "noTarget": "The running server has no identifiable Agent target version",
+    "target": "Agent target {{target}}",
+    "progress": "View upgrade progress",
+    "filter": "Agent status",
+    "ignore": "Dismiss this notice",
+    "versionChange": "Current → target",
+    "willUpgrade": "Will upgrade",
+    "replaceBuild": "Replace with target build",
+    "status": {
+      "upgrade": "Upgrade available",
+      "downgrade": "Pending alignment",
+      "different_build": "Different build",
+      "check": "Currently unavailable for upgrade",
+      "all": "All",
+      "align": "Different version"
+    },
+    "count": {
+      "check": "Currently unavailable for upgrade ({{count}})",
+      "upgrade": "Agents to upgrade ({{count}})",
+      "downgrade": "Pending alignment ({{count}})",
+      "different_build": "Different builds ({{count}})",
+      "align": "Different versions ({{count}})"
+    }
+  },
   "batchUpgrade": {
     "targetHeading": "Target for this update",
     "targetSource": "Provided by the current control plane. After updating, Agent versions will match the control plane.",
@@ -726,7 +764,7 @@
     "target": "Target version: {{version}}",
     "previewCounts": "{{eligible}} eligible of {{total}} nodes; {{skipped}} will be skipped.",
     "disruption": "Agents will restart one at a time. Connections may be briefly interrupted.",
-    "versionWarning": "Updating replaces Agents with the target shown above and can downgrade them. Multi-node and PD inference can fail if a node remains offline.",
+    "versionWarning": "Updating replaces Agents with the target shown above. In-flight requests and long-running tasks may be interrupted. For multi-node or PD inference, select one node at a time and verify the model service before upgrading the next.",
     "acknowledge": "I have arranged a maintenance window or confirmed that the affected workloads can be interrupted.",
     "start": "Update to this version",
     "refreshPreview": "Refresh preview",
@@ -797,6 +835,7 @@
       "offline": "Offline",
       "unsupported": "Unsupported platform or artifact",
       "legacy_unverified": "Legacy download conditions unverified",
+      "kubernetes": "State directory not executable",
       "unknown_version": "Version unknown",
       "busy": "Upgrade already reserved",
       "unavailable": "Unavailable"
@@ -809,6 +848,7 @@
       "artifact_missing": "The target Agent artifact is unavailable.",
       "artifact_untrusted": "The target artifact version or checksum could not be verified.",
       "legacy_unverified": "The old Agent download conditions cannot be verified; handle this node individually.",
+      "kubernetes": "This Kubernetes node's agent could not start from the node's state directory (for example, it is mounted noexec), so it runs the program built into the agent image, which an upgrade cannot replace. Check the state directory on the node, then delete the node's agent Pod to restart it.",
       "unknown_version": "The Agent version cannot be identified.",
       "busy": "An earlier upgrade still owns this node.",
       "target_changed": "The target or artifact changed; refresh the preview.",
@@ -896,6 +936,7 @@
       "busy": "The card is serving",
       "foreign": "Used outside the platform",
       "deferred": "The platform does not yet know what the node runs",
+      "not_held": "Kubernetes has not lent this card to the platform",
       "unavailable": "The host cannot be asked right now",
       "probe_failed": "The vendor tool did not answer this round"
     },

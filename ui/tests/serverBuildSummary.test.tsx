@@ -48,11 +48,12 @@ test("matching records separate build and publication time and put commit in det
 });
 test("upgrade confirmation explains its target and links settings before consent", () => {
   render(<I18nextProvider i18n={i18n}><UpgradePreviewModal open loading={false} busy={false} error=""
-    preview={{ target_version: "target-build", target_build: { version: "target-build", kind: "development", build_channel: "nightly" }, manifest_fingerprint: "sealed", node_uuids: ["node-a"], nodes: [{ node_uuid: "node-a", name: "Node A", from_version: "old-build", os: "linux", arch: "amd64", transport: "push", eligibility: "eligible" }], counts: { eligible: 1 } }}
+    preview={{ target_version: "target-build", target_build: { version: "target-build", kind: "development", build_channel: "nightly" }, manifest_fingerprint: "sealed", node_uuids: ["node-a"], nodes: [{ node_uuid: "node-a", name: "Node A", from_version: "old-build", os: "linux", arch: "amd64", transport: "push", eligibility: "eligible", version_change: "different_build" }], counts: { eligible: 1 } }}
     onClose={() => {}} onRefresh={() => {}} onStart={() => {}} /></I18nextProvider>);
   const modal = screen.getByRole("dialog");
   assert.ok(within(modal).getByText(k.kind.development));
-  assert.ok(within(modal).getByText("old-build"));
+  assert.ok(within(modal).getByText("old-build → target-build"));
+  assert.ok(within(modal).getByText(locale.nodes.fleet.replaceBuild));
   assert.ok(within(modal).getByText(locale.nodes.batchUpgrade.targetSource));
   assert.ok(within(modal).getByText(locale.nodes.batchUpgrade.versionWarning));
   assert.equal(within(modal).getByRole("link", { name: locale.nodes.batchUpgrade.versionDetails }).getAttribute("href"), "/settings#updates");

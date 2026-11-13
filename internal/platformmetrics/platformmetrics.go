@@ -17,13 +17,14 @@ import "sort"
 type Source string
 
 const (
-	SourceGPU       Source = "gpu"       // the agent's GPU probes (nvidia-smi, DCGM and the vendor tools)
-	SourceDGPU      Source = "dgpu"      // a dGPU slice's own accounting
-	SourceNode      Source = "node"      // the host: CPU, memory, disks
-	SourceNetwork   Source = "network"   // the host's interfaces, NICs and RDMA ports
-	SourceKVDisk    Source = "kv_disk"   // an engine's KV cache disk tier
-	SourceBenchmark Source = "benchmark" // benchmark points, written by the server
-	SourceGateway   Source = "gateway"   // the gateway's operational counters
+	SourceGPU          Source = "gpu"           // the agent's GPU probes (nvidia-smi, DCGM and the vendor tools)
+	SourceDGPU         Source = "dgpu"          // a dGPU slice's own accounting
+	SourceNode         Source = "node"          // the host: CPU, memory, disks
+	SourceNetwork      Source = "network"       // the host's interfaces, NICs and RDMA ports
+	SourceKVDisk       Source = "kv_disk"       // an engine's KV cache disk tier
+	SourceBenchmark    Source = "benchmark"     // benchmark points, written by the server
+	SourcePeerTransfer Source = "peer_transfer" // server-coordinated peer transfers
+	SourceGateway      Source = "gateway"       // the gateway's operational counters
 )
 
 // Kind is how a value behaves over time.
@@ -52,6 +53,13 @@ type Definition struct {
 var gpuLabels = []string{"node", "gpu", "gpu_uuid", "vendor"}
 
 var definitions = []Definition{
+	{"gpuworks_peer_relay_active", SourcePeerTransfer, Gauge, "transfers", []string{"node"}, "Active relay leases in this server process."},
+	{"gpuworks_peer_relay_rate_waiting", SourcePeerTransfer, Gauge, "transfers", []string{"node"}, "Active relay transfers currently waiting for byte budget."},
+	{"gpuworks_peer_relay_rate_limit_bytes_per_second", SourcePeerTransfer, Gauge, "bytes_per_second", []string{"node"}, "Server process aggregate encrypted relay byte limit."},
+	{"gpuworks_peer_relay_bytes_total", SourcePeerTransfer, Counter, "bytes", []string{"node", "direction"}, "Actual encrypted bytes written by this server, counted once per direction."},
+	{"gpuworks_peer_relay_rate_wait_seconds_total", SourcePeerTransfer, Counter, "seconds", []string{"node"}, "Union of concurrent byte-budget wait times per relay, summed across transfers."},
+	{"gpuworks_peer_transfers_total", SourcePeerTransfer, Counter, "transfers", []string{"node", "outcome"}, "Peer copy attempts by coordinator outcome; peer_confirmed requires validated archive confirmation."},
+	{"gpuworks_peer_probes_total", SourcePeerTransfer, Counter, "probes", []string{"node", "outcome"}, "Connectivity probes, separate from archive transfers."},
 	{"gpuworks_gpu_utilization", SourceGPU, Gauge, "percent", gpuLabels, "Share of time the GPU's compute engines were busy over the last sample period (0-100)."},
 	{"gpuworks_gpu_memory_used_bytes", SourceGPU, Gauge, "bytes", gpuLabels, "Device memory in use on the GPU, by every process."},
 	{"gpuworks_gpu_memory_total_bytes", SourceGPU, Gauge, "bytes", gpuLabels, "Device memory the GPU has."},

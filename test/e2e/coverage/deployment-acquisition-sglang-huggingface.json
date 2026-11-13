@@ -18,8 +18,8 @@
     "ui/src/pages/deploy/DeployNodeSection.tsx",
     "ui/src/pages/deploy/DeployNodeAcquisition.tsx",
     "ui/src/pages/deploy/useDeploySubmit.ts",
-    "internal/server/api/deployments_acquisition.go",
-    "internal/server/api/deployments_weight_sources.go",
+    "internal/server/deployment/acquisition.go",
+    "internal/server/deployment/weight_sources.go",
     "internal/server/deploy/sglang_logging.go",
     "test/fake-engine/main.go"
   ],
@@ -616,13 +616,13 @@
     },
     {
       "item": "3.6",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 对服务端字典提供的范围与 step 验证前后端一致，拒绝后原配置保持不变。"
+      "status": "covered",
+      "assertion": "Every rendered numeric and slider control carries the range and step the live dictionary states: all 68 rows across the reviewed surfaces had their aria-valuemin, aria-valuemax and step asserted against the value read from GET /api/v1/engines in the same run, not against a hardcoded table (report.numeric_inventory, deployment_numeric_checks.py:95 and :129). The rejection side is measured on the two integer fields whose dictionary states a floor: an out-of-range value typed into the control never entered the draft, the control settled on the dictionary bound, and the evaluate wire and the server argv readback both carried the bound rather than the typed value (report.param_boundaries, typed_value_on_wire false). Runs: 20261105T073613Z-8a34b6c1 (en) and 20261105T074050Z-c3f161bc (zh), same test_sha256 5e1e0e3e28fb82e8, both PASS."
     },
     {
       "item": "5.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 验证默认项、可见标签、选中态与禁用原因，枚举本次页面实际显示的所有选项。"
+      "status": "covered",
+      "assertion": "All 4 enum controls the reviewed draft draws (dtype, kv_cache_dtype, log_level, speculative_algorithm) enumerate their complete live option set in the order the dictionary publishes: 4, 7, 6, 6 options respectively, read off the real antd option list this run opened (report.param_enum_options). Each control's visible label and its settled selection are recorded per row in report.param_matrix, and the disabled state plus its reason are recorded for all 68 rendered rows across the reviewed surfaces (report.numeric_inventory, key 'disabled'), so a control that is drawn but not operable is stated rather than passed over. Runs: 20261105T073613Z-8a34b6c1 (en) and 20261105T074050Z-c3f161bc (zh), same test_sha256 5e1e0e3e28fb82e8, both PASS."
     },
     {
       "item": "5.2",
@@ -876,8 +876,8 @@
     },
     {
       "item": "14.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 按 server `/engines` 字典逐项验证参数类型、枚举、边界、版本可见性，不只覆盖硬编码 vLLM 子集。"
+      "status": "covered",
+      "assertion": "The run drives the parameter form from the server's own dictionary rather than a vLLM-only subset: GET /api/v1/engines was read in-run and its specs grouped by declared type (enum 4, integer 7, number 1, string 4, report.param_dictionary.by_type), the 4 enum controls had their complete published option set enumerated in dictionary order (report.param_enum_options), every rendered numeric and slider row had its bounds and step asserted against the same dictionary plus two real out-of-range probes (report.numeric_inventory, report.param_boundaries), and version visibility is shown by the KV disk kernel floor being published only for vllm (report.param_engine_release.publishing_engines ['vllm']). Runs: 20261105T073613Z-8a34b6c1 (en) and 20261105T074050Z-c3f161bc (zh), same test_sha256 5e1e0e3e28fb82e8, both PASS."
     },
     {
       "item": "14.5",
@@ -936,38 +936,38 @@
     },
     {
       "item": "17.1",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 分别验证 loading、empty、error、数据与陈旧数据，缺失值和真实零值必须可区分。"
+      "status": "N/A",
+      "assertion": "no chart loading, empty, error or stale state exists on these pages, because no chart is drawn. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.2",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 用已知样本检查查询参数、时间范围、聚合、单位与精度；canvas 存在或截图相似不足以证明数据正确。"
+      "status": "N/A",
+      "assertion": "there is no query parameter, time range, aggregation, unit or precision to check, because no series is drawn. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.3",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 实际操作图例、tooltip、时间控件及适用联动，验证对应系列与样本值。"
+      "status": "N/A",
+      "assertion": "there is no legend, tooltip or time control, and no series to link them to. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.4",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 切换节点/GPU/部署或范围后旧响应不覆盖新图表，刷新、follow 与暂停遵循当前选择。"
+      "status": "N/A",
+      "assertion": "there is no chart response that a later response could overwrite, and no follow or pause control. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.5",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: GPU 显存、利用率、引擎吞吐和网关请求分别使用其权威来源，不把健康探测请求当成业务调用。"
+      "status": "N/A",
+      "assertion": "no card maps a metric to an authoritative source, because no metric card exists. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.6",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 时间线验证事件顺序、状态转移、关联资源与终态；时间接近的历史事件不能代替本次 runId。"
+      "status": "N/A",
+      "assertion": "no timeline is drawn; deployment status transitions are asserted from the deployment record and its events endpoint, not from a timeline widget. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "17.7",
-      "status": "MISSING",
-      "assertion": "Not fully exercised in this acquisition contract: 无数据、长标签、大数和错误态下检查实际尺寸、单位可见性与无重叠，颜色从主题语义推导。"
+      "status": "N/A",
+      "assertion": "there is no chart axis, series label or unit rendering whose size, overlap or colour could be measured. N/A: the deploy surfaces render no chart, metric card or timeline. A recursive search of ui/src/pages/deploy/ finds no echarts, no EChart, no Statistic, no Timeline, no Progress and no canvas: the acquisition view is one antd Table with five Tags (ui/src/pages/deploy/DeployNodeAcquisition.tsx), and the health-check view is three antd Forms with a Checkbox and an InputNumber (ui/src/pages/deploy/HealthCheckFields.tsx). The charts this item describes live in ui/src/pages/analytics/EChart.tsx, which no deploy page imports."
     },
     {
       "item": "22.1",

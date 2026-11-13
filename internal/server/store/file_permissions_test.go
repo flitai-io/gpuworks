@@ -9,6 +9,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/securefile"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 )

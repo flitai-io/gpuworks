@@ -92,7 +92,7 @@ func main() {
 		Model: served, Voices: strings.FieldsFunc(os.Getenv("FAKE_ENGINE_VOICES"), func(r rune) bool { return r == ',' }),
 		Health503: os.Getenv("FAKE_ENGINE_HEALTH_503") == "1", TTFTDelay: envDuration("FAKE_ENGINE_TTFT_DELAY"), TPOTDelay: envDuration("FAKE_ENGINE_TPOT_DELAY"),
 		PromptTokens: envInt("FAKE_ENGINE_PROMPT_TOKENS", 16), CompletionTokens: envInt("FAKE_ENGINE_COMPLETION_TOKENS", 8), CachedTokens: envInt("FAKE_ENGINE_CACHED_TOKENS", 0), StreamChunks: envInt("FAKE_ENGINE_STREAM_CHUNKS", 1),
-		ResponseText:                          os.Getenv("FAKE_ENGINE_RESPONSE_TEXT"),
+		ResponseText:                         os.Getenv("FAKE_ENGINE_RESPONSE_TEXT"),
 		Logf:                                 logf,
 		Dialect:                              dialect,
 		MetricsObservationsPerScrape:         envInt("FAKE_ENGINE_METRICS_OBSERVATIONS_PER_SCRAPE", 1),

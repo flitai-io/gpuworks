@@ -13,7 +13,17 @@ class DiffusersAdapter:
     def __init__(self, model: str, config: dict[str, Any]):
         from diffusers import DiffusionPipeline
 
-        self.pipe = DiffusionPipeline.from_pretrained(model, **dict(config.get("load_kwargs", {})))
+        load_kwargs = dict(config.get("load_kwargs", {}))
+        dtype = load_kwargs.get("torch_dtype")
+        if isinstance(dtype, str):
+            # Catalog configuration is JSON, whereas Diffusers expects a dtype
+            # object. Passing the string through can silently select float32.
+            if dtype not in ("float16", "bfloat16", "float32"):
+                raise ValueError("torch_dtype must be float16, bfloat16 or float32")
+            import torch
+
+            load_kwargs["torch_dtype"] = getattr(torch, dtype)
+        self.pipe = DiffusionPipeline.from_pretrained(model, **load_kwargs)
         device = config.get("device")
         if device:
             self.pipe = self.pipe.to(device)

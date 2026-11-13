@@ -182,10 +182,6 @@ func proxyPair(left, right net.Conn) {
 	<-done
 }
 
-func dial(ctx context.Context, host string, port int, privateKey []byte, username string) (*ssh.Client, error) {
-	return dialAuth(ctx, host, port, username, []ssh.AuthMethod{publicKeyAuth(privateKey)})
-}
-
 func publicKeyAuth(privateKey []byte) ssh.AuthMethod {
 	return ssh.PublicKeysCallback(func() ([]ssh.Signer, error) {
 		signer, err := ssh.ParsePrivateKey(privateKey)
@@ -212,10 +208,6 @@ func dialAuth(ctx context.Context, host string, port int, username string, auth 
 		return nil, fmt.Errorf("handshake SSH %s: %w", addr, err)
 	}
 	return ssh.NewClient(sshConn, channels, requests), nil
-}
-
-func run(client *ssh.Client, command string) (string, error) {
-	return runContext(context.Background(), client, command)
 }
 
 type sessionOutput struct {

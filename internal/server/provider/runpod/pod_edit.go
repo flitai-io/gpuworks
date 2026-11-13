@@ -143,7 +143,7 @@ func (d *Driver) ensurePlatformKey(ctx context.Context, creds provider.Credentia
 	}
 	p, err := d.getPod(ctx, creds, req.Instance.ExternalID)
 	if err != nil {
-		return inst, provider.InstallCheck{}, nil // the install reports what it cannot reach
+		return inst, provider.InstallCheck{}, nil //nolint:nilerr // Key refresh is optional; installation reports endpoint reachability separately.
 	}
 	if fresh := p.toInstance(); fresh.SSHPort != 0 {
 		inst = fresh

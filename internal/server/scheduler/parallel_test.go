@@ -99,3 +99,24 @@ func TestScheduleReasonsSeparateGroupSizeFromTP(t *testing.T) {
 		t.Fatalf("topology params = %+v, want gpus 2, tp 1, pp 2", p)
 	}
 }
+
+func TestScheduleAllocatesDistinctGPUsForDataParallel(t *testing.T) {
+	node := NodeSnapshot{UUID: "n1", DtypeSupported: true, DiskAvailBytes: 1 << 50, GPUs: []GPU{gpu(0, 48, true, 0), gpu(1, 48, true, 0), gpu(2, 48, true, 0), gpu(3, 48, true, 0)}}
+	for _, tc := range []struct {
+		spec parallelism.Spec
+		want int
+	}{
+		{parallelism.Spec{TP: 1, DP: 2}, 2},
+		{parallelism.Spec{TP: 2, DP: 2}, 4},
+		{parallelism.Spec{TP: 2, DP: 2, NNodes: 2}, 2},
+	} {
+		req := Request{WeightBytes: 2 * giB, HeadCount: 32, GPUMemUtil: 0.9, Parallel: tc.spec}
+		res := Schedule(req, node)
+		if !res.OK || len(res.Plan.GPUIndexes) != tc.want {
+			t.Fatalf("%+v: %+v %v", tc.spec, res.Plan, res.Message)
+		}
+		if perGPUNeed(req, tc.want) != perGPUNeed(Request{WeightBytes: req.WeightBytes, GPUMemUtil: req.GPUMemUtil, Parallel: parallelism.Spec{TP: tc.spec.TP, PP: tc.spec.PP, NNodes: tc.spec.NNodes}}, tc.want) {
+			t.Fatalf("DP diluted one replica's weights: %+v", tc.spec)
+		}
+	}
+}

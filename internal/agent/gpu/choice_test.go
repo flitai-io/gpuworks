@@ -16,11 +16,12 @@ import (
 func TestTheChosenVendorPicksItsBackend(t *testing.T) {
 	probers := defaultProbers()
 	for vendor, want := range map[string]any{
-		"nvidia": &SMIProber{},
-		"ascend": &AscendProber{},
-		"hygon":  &HygonProber{},
-		"ppu":    &PPUProber{},
-		"amd":    &AMDProber{},
+		"nvidia":    &SMIProber{},
+		"ascend":    &AscendProber{},
+		"hygon":     &HygonProber{},
+		"ppu":       &PPUProber{},
+		"amd":       &AMDProber{},
+		"kunlunxin": &KunlunProber{},
 	} {
 		got := chosenProber(probers, vendor)
 		if reflect.TypeOf(got) != reflect.TypeOf(want) {

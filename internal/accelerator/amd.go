@@ -3,7 +3,7 @@ package accelerator
 import "strings"
 
 // amdLogicalBackend is the AMD logical dGPU backend: a per-card VRAM quota
-// enforced in user space by libvrocm.so (gpustack-operator's rocm-slicing
+// enforced in user space by libvrocm.so (the rocm-slicing
 // shim), interposed at the HIP runtime layer. ROCm enforces compute (CU)
 // quotas in hardware through HSA_CU_MASK, read by ROCr below anything a
 // preloaded library in the workload process can see or verify, so this

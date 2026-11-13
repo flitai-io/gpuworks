@@ -3,7 +3,7 @@
   "name": "评测 / 运行中取消 / UI 取消、执行器停止、上游连接终止与取消状态回读",
   "test_file": "test/e2e/evaluation_external.py",
   "test_function": "test_cancel_running_run",
-  "command": "make test-e2e-benchmark-cancel",
+  "command": "python3 -B test/e2e/evaluation_external.py --case cancel --locale en",
   "priority": "P1",
   "page_id": "evaluations",
   "lane": "local-real-server-sqlite-openai-fixture",

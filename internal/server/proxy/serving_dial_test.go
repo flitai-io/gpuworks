@@ -178,11 +178,16 @@ func TestProxyReachesInstancesOverTheServingNetwork(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"ok":true}`)
 	}))
-	defer upstream.Close()
+	t.Cleanup(upstream.Close)
 	st, err := store.Open("file:proxy_serving_e2e?mode=memory&cache=shared", bus.New())
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, _ := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/m", Revision: "main", Name: "m"})
 	node, token, err := st.CreateNodePending("gpu-1")
 	if err != nil {
@@ -205,6 +210,7 @@ func TestProxyReachesInstancesOverTheServingNetwork(t *testing.T) {
 	fwd := startFakeForwarder(t, token, upstreamAddr, map[string]bool{"inst-1": true})
 	hub := &countingHub{addr: upstreamAddr}
 	p := New(st, storeNetworks(st), hub, slog.New(slog.NewTextHandler(io.Discard, nil)), 0)
+	t.Cleanup(p.Close)
 	var dialed atomic.Value
 	p.serving.dial = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		dialed.Store(addr)

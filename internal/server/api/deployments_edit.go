@@ -14,6 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -213,13 +214,13 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	if shape != deploymentShapeSingle {
 		req.Replicas = max(dep.Replicas, 1)
 	}
-	if err := validateReplicaShape(req); err != nil {
+	if err := deployment.ValidateReplicaShape(req); err != nil {
 		return bad(err)
 	}
-	if err := validateStartTimeout(req); err != nil {
+	if err := deployment.ValidateStartTimeout(req); err != nil {
 		return bad(err)
 	}
-	if err := validateHealthCheckThreshold(req); err != nil {
+	if err := deployment.ValidateHealthCheckThreshold(req); err != nil {
 		return bad(err)
 	}
 	model, err := a.d.Store.GetModel(dep.ModelID)
@@ -233,20 +234,19 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	nextReqs := reqs
 	node, _ := a.d.Store.NodeWithGPUs(nodeUUIDOf(a.d.Store, dep.NodeID))
 	if shape == deploymentShapeSingle {
-		if isAutomaticPlacement(req) {
+		if deployment.IsAutomaticPlacement(req) {
 			// The node an automatic draft's evaluation picked is the form's
 			// preview; where the replicas run is the requirements' to say.
 			req.NodeUUID = ""
 		}
 		var strategy store.PlacementStrategy
-		var status int
-		nextReqs, strategy, status, err = a.requestPlacement(req)
+		nextReqs, strategy, err = a.deployments().RequestPlacement(req)
 		if err != nil {
-			return nil, nil, status, err
+			return nil, nil, useCaseStatus(err), err
 		}
 		next.PlacementStrategy = strategy
 		if pinned, ok := planning.PinnedNode(nextReqs); ok {
-			if node, err = a.requestNode(pinned); err != nil {
+			if node, err = a.deployments().RequestNode(pinned); err != nil {
 				return bad(err)
 			}
 			next.NodeID = node.ID
@@ -255,24 +255,17 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 		next.VRAMLimitBytes = gibBytes(req.VRAMLimitGiB)
 		next.PartitionBackend = ""
 		if node != nil {
-			if next.PartitionBackend, err = resolvePartitionBackend(node, req.VRAMLimitGiB, req.PartitionBackend); err != nil {
+			if next.PartitionBackend, err = deployment.ResolvePartitionBackend(node, req.VRAMLimitGiB, req.PartitionBackend); err != nil {
 				return bad(err)
 			}
 		} else if req.VRAMLimitGiB > 0 {
 			next.PartitionBackend = strings.TrimSpace(req.PartitionBackend)
 		}
-		placement := storedPlacement(req.Placement, isAutomaticPlacement(req))
+		placement := deployment.StoredPlacement(req.Placement, deployment.IsAutomaticPlacement(req))
 		if _, err := planning.ParsePlacement(placement); err != nil {
 			return bad(err)
 		}
 		next.Placement = keepEquivalentJSON(dep.Placement, jsonStr(placement))
-	} else if shape == deploymentShapeMulti {
-		// The nodes are the deployment's; the parallelism over them may
-		// change, judged as a create judges it.
-		if _, err := a.prepareDistributedDeployRequest(req); err != nil {
-			return bad(err)
-		}
-		next.Placement = keepEquivalentJSON(dep.Placement, jsonStr(storedPlacement(req.Placement, false)))
 	}
 
 	base, err := storedLaunchConfig(dep)
@@ -290,14 +283,14 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	if err != nil {
 		return bad(err)
 	}
-	if err := validateRequestedLaunchConfig(engine.Name(), &dto.DeployRequest{QuickParams: edited, QuickParamsUnset: removed}, extra); err != nil {
+	if err := deployment.ValidateRequestedLaunchConfig(engine.Name(), &dto.DeployRequest{QuickParams: edited, QuickParamsUnset: removed}, extra); err != nil {
 		return bad(err)
 	}
 	snapshot, err := planning.DeploymentTemplate(dep)
 	if err != nil {
 		return internal(err)
 	}
-	overrides, err := requestContainerOverrides(req.ContainerOverrides)
+	overrides, err := deployment.RequestContainerOverrides(req.ContainerOverrides)
 	if err != nil {
 		return bad(err)
 	}
@@ -307,17 +300,29 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	}
 	launch, err := deploy.Materialize(deploy.MaterializeInput{
 		Engine: engine.Name(), Command: &command, Raw: req.QuickParams, Unset: req.QuickParamsUnset,
-		TemplateArgs: snapshot.ExtraArgs, ExtraArgs: extra, Cards: deployTargetCards(node, req.Placement), Base: &base,
+		TemplateArgs: snapshot.ExtraArgs, ExtraArgs: extra, Cards: deployment.DeployTargetCards(node, req.Placement), Base: &base,
 	})
 	if err != nil {
 		return bad(err)
+	}
+	if shape == deploymentShapeMulti {
+		// Count the effective DP after applying the stored base and edits,
+		// exactly as create does. An omitted field retains the stored value.
+		dp, err := deploy.PlacementDataParallel(engine.Name(), launch.Quick.DP, launch.TemplateResidual, launch.UserResidual)
+		if err != nil {
+			return bad(err)
+		}
+		if _, err := a.deployments().PrepareDistributedDeployRequest(req, dp); err != nil {
+			return bad(err)
+		}
+		next.Placement = keepEquivalentJSON(dep.Placement, jsonStr(deployment.StoredPlacement(req.Placement, false)))
 	}
 	if shape == deploymentShapePD {
 		if err := planning.CheckPDArgs(engine.Name(), launch.TemplateResidual, launch.UserResidual); err != nil {
 			return bad(err)
 		}
 	}
-	next.QuickParams = keepEquivalentJSON(dep.QuickParams, launchConfigJSON(launch.Quick))
+	next.QuickParams = keepEquivalentJSON(dep.QuickParams, deployment.LaunchConfigJSON(launch.Quick))
 	next.ExtraArgs = deploy.FormatArgsText(launch.UserResidual)
 	next.ContainerOverrides = keepEquivalentJSON(dep.ContainerOverrides, jsonStr(req.ContainerOverrides))
 	if image := strings.TrimSpace(req.Image); image != "" {
@@ -337,7 +342,7 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 			fmt.Sprintf("the deployment gives its cards way by yield policy %s; set the policy to never before turning sleep off", next.YieldPolicy),
 			map[string]any{"policy": next.YieldPolicy}))
 	}
-	if next.HealthCheck, next.HealthCheckThresholdSec, err = createHealthCheck(req, model); err != nil {
+	if next.HealthCheck, next.HealthCheckThresholdSec, err = deployment.CreateHealthCheck(req, model); err != nil {
 		return bad(err)
 	}
 	next.TokenizeDisabled = req.TokenizeEnabled != nil && !*req.TokenizeEnabled
@@ -350,7 +355,7 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	// create; a multi-node or PD one names its nodes and is judged there.
 	if shape == deploymentShapeSingle && (launchChanged || !sameRequirementSets(reqs, nextReqs) || next.Placement != dep.Placement ||
 		next.VRAMLimitBytes != dep.VRAMLimitBytes || next.PartitionBackend != dep.PartitionBackend || next.Sleepable != dep.Sleepable) {
-		if err := a.checkStoredCanEverFit(ctx, &next, nextReqs); err != nil {
+		if err := a.deployments().CheckStoredCanEverFit(ctx, &next, nextReqs); err != nil {
 			var refused *messages.ProductError
 			if errors.As(err, &refused) {
 				return bad(err)

@@ -152,8 +152,8 @@ func TestPPUIPCDeclaration(t *testing.T) {
 
 func TestVLLMMooncakeDeclaration(t *testing.T) {
 	mode, ok := Lookup("vllm-mooncake")
-	// Experimental: evaluation warns.
-	if !ok || !mode.SupportsVendor("hygon") || mode.SupportsVendor("nvidia") || mode.SupportsVendor("ppu") || !mode.Unverified {
+	// Verified on hardware: evaluation no longer warns.
+	if !ok || !mode.SupportsVendor("hygon") || mode.SupportsVendor("nvidia") || mode.SupportsVendor("ppu") || mode.Unverified {
 		t.Fatalf("mode = %+v", mode)
 	}
 	if mode.Connector != "MooncakeConnector" || mode.ConnectorRole(RolePrefill) != "kv_producer" || mode.ConnectorRole(RoleDecode) != "kv_consumer" {

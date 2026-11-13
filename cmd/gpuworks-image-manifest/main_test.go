@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/manifest"
 )

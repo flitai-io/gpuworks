@@ -237,6 +237,7 @@
     "switchTo": "切换为 {{type}}",
     "switchConfirm": "把这个存储切换为 {{type}}？",
     "switchHelp": "只影响之后的启动，NFS 上的文件不动。",
+    "switchFromCacheHelp": "会先清理各节点的缓存，NFS 上的文件不动，已清理的缓存不会恢复。有节点连不上，或有缓存的模型正被使用、还在复制、复制失败、在 NFS 上没有副本时，切换会停下。",
     "switch": "切换",
     "switched": "{{name}} 已切换为 {{type}}",
     "deleteDefaultBlocked": "默认存储不能删除，请先把其它存储设为默认。",

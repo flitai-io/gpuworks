@@ -1,23 +1,24 @@
 {
   "page": {
     "title": "调度分析",
-    "description": "每张 GPU 被谁占着、哪些在等待放置或唤醒，以及定时计划和自动化接下来要做什么",
+    "description": "查看哪些部署在等待 GPU、哪些实例占用 GPU，以及近期发生的调度事件",
     "loading": "正在加载调度分析…",
     "loadFailed": "无法加载调度分析",
     "refreshFailed": "刷新失败：{{detail}}",
-    "retry": "重试"
+    "retry": "重试",
+    "activityAndSharing": "调度活动与共卡统计"
   },
   "summary": {
     "title": "调度概览",
-    "waitingWakes": "等位中的唤醒",
-    "pending": "待放置的部署",
-    "upcoming": "24 小时内的定时计划",
-    "cardsTitle": "各状态的卡数",
-    "total": "卡总数",
+    "waitingWakes": "等待唤醒的部署",
+    "pending": "待分配节点的部署",
+    "upcoming": "未来 24 小时计划",
+    "cardsTitle": "当前 GPU 状态",
+    "total": "GPU 总数",
     "nodesOnline": "{{count}} 个节点中 {{online}} 个在线",
-    "contentionTitle": "争用与队列",
-    "heldRequests": "此刻挂起等唤醒的请求",
-    "yields": "近 1 小时的让位次数"
+    "contentionTitle": "部署队列与定时计划",
+    "heldRequests": "等待部署唤醒的请求",
+    "yields": "近 1 小时让卡次数"
   },
   "nodes": {
     "empty": "还没有节点。",
@@ -42,29 +43,45 @@
     "heldOutsideHint": "这张卡有一部分显存被 gpuworks 不管理的进程占用，休眠或停止部署都无法释放。"
   },
   "pending": {
-    "title": "待放置的部署",
+    "title": "等待分配节点的部署",
     "empty": "没有部署在等节点。",
     "columns": {
       "deployment": "部署",
       "reason": "等待原因",
       "at": "记录时间"
-    }
+    },
+    "noReason": "未上报原因",
+    "noReasonCode": "未上报原因码",
+    "affected_one": "{{count}} 个部署",
+    "affected_other": "{{count}} 个部署",
+    "otherReasons_one": "查看其余 {{count}} 种原因",
+    "otherReasons_other": "查看其余 {{count}} 种原因",
+    "shortTitle": "待分配节点",
+    "search": "搜索部署名称、ID 或等待原因",
+    "noMatches": "没有匹配的部署"
   },
   "waiting": {
-    "title": "等位中的唤醒",
-    "empty": "没有唤醒在等位。",
+    "title": "等待 GPU 空间唤醒的部署",
+    "empty": "当前没有部署在等待 GPU 空间以唤醒。",
     "columns": {
       "deployment": "部署",
       "instances": "实例",
-      "since": "等位开始于"
+      "since": "开始等待时间"
     },
     "cancel": "取消等位",
     "cancelOf": "取消 {{name}} 的等位唤醒",
     "cancelled": "已取消 {{name}} 的等位",
-    "cancelFailed": "取消等位失败：{{detail}}"
+    "cancelFailed": "取消等位失败：{{detail}}",
+    "since": "{{time}} 开始等待",
+    "shortTitle": "待唤醒",
+    "requestCount_one": "{{count}} 个请求等待唤醒",
+    "requestCount_other": "{{count}} 个请求等待唤醒",
+    "instances_one": "{{count}} 个实例",
+    "instances_other": "{{count}} 个实例",
+    "elapsed": "已等 {{duration}}"
   },
   "upcoming": {
-    "title": "24 小时内的定时计划",
+    "title": "未来 24 小时的定时计划",
     "empty": "24 小时内没有定时计划要执行。",
     "columns": {
       "at": "时间",
@@ -76,9 +93,11 @@
       "wake": "唤醒",
       "replicas": "副本数设为 {{count}}",
       "roleReplicas": "{{role}}副本数设为 {{count}}"
-    }
+    },
+    "shortTitle": "计划执行"
   },
-  "history": { "viewLogs": "查看日志",
+  "history": {
+    "viewLogs": "查看日志",
     "title": "调度记录",
     "loading": "正在加载调度记录…",
     "loadFailed": "无法加载调度记录",
@@ -245,12 +264,12 @@
   "filters": {
     "title": "筛选与视图",
     "models": "GPU 型号",
-    "modelsPlaceholder": "全部 GPU 型号",
+    "modelsPlaceholder": "GPU 型号",
     "label": "节点标签",
-    "labelPlaceholder": "任意节点标签",
+    "labelPlaceholder": "节点标签",
     "noLabels": "没有节点带标签",
     "state": "节点状态",
-    "statePlaceholder": "任意节点状态",
+    "statePlaceholder": "节点状态",
     "stateOptions": {
       "free": "有空闲卡",
       "sleepers": "有休眠者",
@@ -258,7 +277,7 @@
       "offline": "离线"
     },
     "search": "查找部署",
-    "searchPlaceholder": "高亮某个部署占用的卡",
+    "searchPlaceholder": "高亮部署用卡",
     "groupBy": "分组",
     "group": {
       "node": "按节点分组",
@@ -276,7 +295,8 @@
   "drawer": {
     "aria": "{{node}} 的详情",
     "loading": "正在加载节点…",
-    "loadFailed": "无法加载节点"
+    "loadFailed": "无法加载节点",
+    "notFound": "未找到节点"
   },
   "sharing": {
     "title": "共卡部署",
@@ -286,18 +306,25 @@
   },
   "queues": {
     "loading": "正在加载等待与计划…",
-    "loadFailed": "无法加载等待与计划"
+    "loadFailed": "无法加载等待与计划",
+    "details": "明细",
+    "showAll": "查看全部 {{count}} 条",
+    "currentWaiting": "当前等待",
+    "executions_one": "次",
+    "executions_other": "次",
+    "deployments_one": "个部署",
+    "deployments_other": "个部署"
   },
   "activity": {
-    "title": "调度活动",
+    "title": "集群调度活动",
     "loading": "正在加载调度活动…",
     "loadFailed": "无法加载调度活动",
     "refreshFailed": "刷新调度活动失败：{{detail}}",
     "empty": "这段时间没有调度活动。",
-    "chartAria": "按原因堆叠的调度活动，每根柱子 {{bucket}}",
-    "totals": "每根柱子 {{bucket}}",
+    "chartAria": "按原因统计调度事件次数，每 {{bucket}} 一组",
+    "totals": "每 {{bucket}} 一组 · 按事件次数统计",
     "beyondRetention": "超出统计保留期：范围开头的一段没有统计数据。",
-    "topCards": "最近切换最频繁的卡",
+    "topCards": "GPU 切换次数排行",
     "topCardsEmpty": "这段时间没有卡换过占用者。",
     "gpu": "GPU {{index}}",
     "switches": "{{count}} 次",
@@ -308,7 +335,8 @@
       "operator_yield": "运维让位",
       "scheduled": "定时计划",
       "failure": "失败（重建 / 替换 / 超时）",
-      "queued": "无法调度 / 排队"
+      "queued": "无法调度 / 排队",
+      "placement": "放置与迁移"
     },
     "bucket": {
       "seconds": "{{value}} 秒",
@@ -316,5 +344,25 @@
       "hours": "{{value}} 小时",
       "days": "{{value}} 天"
     }
+  },
+  "nodeChart": {
+    "memory": "当前显存",
+    "allocation": "显存分配",
+    "noGpu": "节点未上报 GPU",
+    "deployment": "部署",
+    "emptyWindow": "时段内无驻留记录",
+    "servingMemory": "服务占用",
+    "sleepingMemory": "休眠残留",
+    "unreported": "未上报",
+    "unreportedDeployment": "部署未上报",
+    "unknown": "未知",
+    "noAllocation": "暂无部署分配记录",
+    "recordedSwitching": "切换中（平台记录）",
+    "offlineNote": "节点已离线。以下为平台已有的分配记录，实时空闲显存未知。",
+    "cardOfflineNote": "此卡已离线，显示已有分配记录。",
+    "gpuCount_one": "{{count}} 张 GPU",
+    "gpuCount_other": "{{count}} 张 GPU",
+    "sharing": "本节点共卡统计",
+    "range": "{{from}} 至 {{to}} · 全部 GPU"
   }
 }

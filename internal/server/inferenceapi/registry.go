@@ -192,6 +192,10 @@ func Definitions() []Definition {
 // NormalizeContract validates and fills the registered endpoint/mode defaults.
 func NormalizeContract(contract Contract) (Contract, error) {
 	contract.Operations = append([]Operation(nil), contract.Operations...)
+	contract.TokenizerRef = strings.TrimSpace(contract.TokenizerRef)
+	if contract.TokenizerRef != "" && !catalogTokenizerReference.MatchString(contract.TokenizerRef) {
+		return Contract{}, fmt.Errorf("api.tokenizer_ref must name a commit-pinned hf://org/repo@<40-hex-commit> or ms://org/repo@<40-hex-commit> repository")
+	}
 	contract.HealthEndpoint = strings.TrimSpace(contract.HealthEndpoint)
 	if contract.HealthEndpoint != "" && !validEndpoint(contract.HealthEndpoint) {
 		return Contract{}, fmt.Errorf("invalid API health_endpoint %q", contract.HealthEndpoint)
@@ -245,6 +249,14 @@ func NormalizeContract(contract Contract) (Contract, error) {
 		}
 		if !contains(definition.RequestEncodings, operation.RequestEncoding) {
 			return Contract{}, fmt.Errorf("API operation %s does not support request encoding %q", operation.Type, operation.RequestEncoding)
+		}
+		if operation.MaxReferenceImages != 0 {
+			if operation.Type != OperationImageEdit {
+				return Contract{}, fmt.Errorf("API operation %s: max_reference_images is only valid for %s", operation.Type, OperationImageEdit)
+			}
+			if operation.MaxReferenceImages < 1 {
+				return Contract{}, fmt.Errorf("API operation %s: max_reference_images must be a positive count", operation.Type)
+			}
 		}
 		if err := normalizeRequestDeclaration(operation, definition); err != nil {
 			return Contract{}, fmt.Errorf("API operation %s: %w", operation.Type, err)

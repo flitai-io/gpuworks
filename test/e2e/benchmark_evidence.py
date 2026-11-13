@@ -72,15 +72,31 @@ def _ratio(numerator, denominator):
 
 
 def _context(value, run, point):
-    expected_keys = """created_at dataset detail_cap_mb detail_configured ended_at mode model persisted_verdict
-        point_eligibility recommendation recommendation_scope repeats run_id run_name search started_at target_snapshot
-        tokenizer warnings""".split()
-    assert set(value) == set(expected_keys), "CSV report context schema differs"
+    # state, failure_diagnostic and warmup_attempts joined the context when a run could be held
+    # waiting for a recoverable inference service; they are part of the schema now, so a report that
+    # stopped carrying them would be a regression rather than a simplification.
+    expected_keys = """created_at dataset detail_cap_mb detail_configured ended_at failure_diagnostic mode model
+        persisted_verdict point_eligibility recommendation recommendation_scope repeats run_id run_name
+        search started_at state target_snapshot tokenizer warmup_attempts warnings""".split()
+    assert set(value) == set(expected_keys), (
+        "CSV report context schema differs: extra=" + str(sorted(set(value) - set(expected_keys)))
+        + " absent=" + str(sorted(set(expected_keys) - set(value))))
     assert value["recommendation_scope"] == "best measured point in this run; no capacity upper bound"
     assert value["repeats"] == "see point repeat; no uncertainty estimate"
     assert isinstance(value["warnings"], list) and all(isinstance(item, str) for item in value["warnings"])
+    # The three added keys are asserted rather than merely counted: a finished, successful run
+    # reports its own state and no failure diagnostic, so a context that leaked another run's
+    # failure or reported a different state would fail here.
+    assert value["state"] in ("done", "canceled", "failed"), f"unexpected state {value['state']}"
+    assert value["failure_diagnostic"] in (None, ""), (
+        f"a successful run carries a failure diagnostic: {value['failure_diagnostic']}")
+    assert isinstance(value["warmup_attempts"], (list, type(None))), (
+        f"warmup attempts is not a record list: {type(value['warmup_attempts'])}")
     if run is None:
         return
+    assert value["state"] == run["state"]
+    assert value["failure_diagnostic"] == run.get("error", "")
+    assert not value["warmup_attempts"] and run["search"]["warmup_requests"] == 0
     for field, source in {"run_id": "id", "run_name": "name", "model": "model", "mode": "mode",
             "created_at": "created_at", "started_at": "started_at", "ended_at": "ended_at",
             "detail_configured": "keep_detail", "detail_cap_mb": "detail_cap_mb", "dataset": "dataset",

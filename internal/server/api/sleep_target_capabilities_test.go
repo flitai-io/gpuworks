@@ -39,44 +39,46 @@ func TestSleepTargetPolicyUsesSelectedGPUOnMixedNode(t *testing.T) {
 	}
 }
 
-// Apple is the vendor without engine sleep; the refusal mechanics are
-// vendor-neutral.
 func TestSleepTargetPolicyRefusesRestrictedVendorSleepButAllowsWake(t *testing.T) {
-	f := newSleepFixture(t)
-	setSleepFixtureGPUVendor(t, f, f.node.GPUs[0].ID, "apple")
-	dep := f.deployment(t, &store.Deployment{
-		Name: "legacy-amd", ServedName: "legacy-amd", Engine: "vllm",
-		Sleepable: true, DesiredSleep: 1,
-	})
-	inst := f.instance(t, dep, "legacy-amd-1", 1)
-	before := inst.DesiredStateJSON
+	for _, vendor := range []string{"apple", "kunlunxin"} {
+		t.Run(vendor, func(t *testing.T) {
+			f := newSleepFixture(t)
+			setSleepFixtureGPUVendor(t, f, f.node.GPUs[0].ID, vendor)
+			dep := f.deployment(t, &store.Deployment{
+				Name: "legacy-" + vendor, ServedName: "legacy-" + vendor, Engine: "vllm",
+				Sleepable: true, DesiredSleep: 1,
+			})
+			inst := f.instance(t, dep, "legacy-"+vendor+"-1", 1)
+			before := inst.DesiredStateJSON
 
-	status, body := f.call(t, f.h.sleepDeployment, "/api/v1/deployments/x/sleep", dep.ID)
-	if status != http.StatusBadRequest || body["code"] != messages.ErrorAcceleratorFeatureUnsupported {
-		t.Fatalf("new sleep order for restricted-vendor deployment = %d %v", status, body)
-	}
-	gotDep, err := f.st.GetDeployment(dep.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	gotInst, err := f.st.InstanceByUUID(inst.UUID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotDep.DesiredSleep != 1 || gotInst.DesiredStateJSON != before {
-		t.Fatalf("refused sleep changed state: desired_sleep=%d desired_state=%s", gotDep.DesiredSleep, gotInst.DesiredStateJSON)
-	}
+			status, body := f.call(t, f.h.sleepDeployment, "/api/v1/deployments/x/sleep", dep.ID)
+			if status != http.StatusBadRequest || body["code"] != messages.ErrorAcceleratorFeatureUnsupported {
+				t.Fatalf("new sleep order for restricted-vendor deployment = %d %v", status, body)
+			}
+			gotDep, err := f.st.GetDeployment(dep.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gotInst, err := f.st.InstanceByUUID(inst.UUID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotDep.DesiredSleep != 1 || gotInst.DesiredStateJSON != before {
+				t.Fatalf("refused sleep changed state: desired_sleep=%d desired_state=%s", gotDep.DesiredSleep, gotInst.DesiredStateJSON)
+			}
 
-	status, body = f.call(t, f.h.wakeDeployment, "/api/v1/deployments/x/wake", dep.ID)
-	if status != http.StatusOK || body["status"] != "waking" {
-		t.Fatalf("wake existing restricted-vendor sleeper = %d %v", status, body)
-	}
-	gotDep, err = f.st.GetDeployment(dep.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotDep.DesiredSleep != 0 || sleepIntent(t, f.st, inst.UUID) != 0 {
-		t.Fatalf("restricted-vendor wake did not clear sleep intent: deployment=%d instance=%d", gotDep.DesiredSleep, sleepIntent(t, f.st, inst.UUID))
+			status, body = f.call(t, f.h.wakeDeployment, "/api/v1/deployments/x/wake", dep.ID)
+			if status != http.StatusOK || body["status"] != "waking" {
+				t.Fatalf("wake existing restricted-vendor sleeper = %d %v", status, body)
+			}
+			gotDep, err = f.st.GetDeployment(dep.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotDep.DesiredSleep != 0 || sleepIntent(t, f.st, inst.UUID) != 0 {
+				t.Fatalf("restricted-vendor wake did not clear sleep intent: deployment=%d instance=%d", gotDep.DesiredSleep, sleepIntent(t, f.st, inst.UUID))
+			}
+		})
 	}
 }
 

@@ -28,6 +28,10 @@ func (h *fakeHub) Online(uuid string) bool             { return h.online[uuid] }
 func (h *fakeHub) ServerDialRecoveryReady(string) bool { return h.serverReady }
 func (h *fakeHub) ResetServerDialBackoff(uuid string)  { h.resets = append(h.resets, uuid) }
 
+func (h *fakeHub) ReconnectServerDial(context.Context, string) error {
+	return errors.New("unexpected server_dial reconnect")
+}
+
 type fakeProvisioner struct {
 	probeResult   provision.ProbeResult
 	restartErr    error
@@ -366,7 +370,7 @@ func TestAnotherServersAgentUnitIsReportedWithoutTakingItOver(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "foreign_agent: gpuworks-agent unit on the host is installed for another server (http://192.0.2.156:8800)"
-	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbing || !strings.HasPrefix(outcome.Error, want) {
+	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbeFailed || !strings.HasPrefix(outcome.Error, want) {
 		t.Fatalf("outcome=%+v restart=%d install=%d", outcome, fake.restarts, fake.installs)
 	}
 	updated, _ := st.NodeByUUID(node.UUID)
@@ -383,11 +387,11 @@ func TestReachableProbeErrorIsRecordedWithoutMutatingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbing || !strings.Contains(outcome.Error, "probe agent process") {
+	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbeFailed || !strings.Contains(outcome.Error, "probe agent process") {
 		t.Fatalf("outcome=%+v restart=%d install=%d", outcome, fake.restarts, fake.installs)
 	}
 	updated, _ := st.NodeByUUID(node.UUID)
-	if updated.RecoveryAttempts != 1 || updated.RecoveryPhase != store.RecoveryPhaseProbing {
+	if updated.RecoveryAttempts != 1 || updated.RecoveryPhase != store.RecoveryPhaseProbeFailed {
 		t.Fatalf("probe failure not persisted: %+v", updated)
 	}
 }

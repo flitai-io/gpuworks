@@ -52,7 +52,7 @@ func (a *apiHandlers) listCommunityRepos(w http.ResponseWriter, _ *http.Request)
 	}
 	out := make([]dto.CommunityRepo, 0, len(repos))
 	for _, row := range repos {
-		out = append(out, dto.CommunityRepo{Repo: row.Repo, Registry: row.Registry, Engine: row.Engine, Framework: row.Framework, Siblings: row.Siblings})
+		out = append(out, dto.CommunityRepo{Repo: row.Repo, Registry: row.Registry, AccessHost: row.AccessHost(), Engine: row.Engine, Framework: row.Framework, Siblings: row.Siblings})
 	}
 	writeJSON(w, http.StatusOK, dto.NewList(out))
 }
@@ -75,9 +75,13 @@ func (a *apiHandlers) browseCommunityImages(w http.ResponseWriter, r *http.Reque
 		writeErr(w, status, err)
 		return
 	}
-	out := dto.CommunityRepo{Repo: row.Repo, Registry: row.Registry, Engine: row.Engine, Framework: row.Framework, Siblings: row.Siblings, Tags: make([]dto.CommunityTag, 0, len(row.Tags))}
+	out := dto.CommunityRepo{Repo: row.Repo, Registry: row.Registry, AccessHost: row.AccessHost(), Engine: row.Engine, Framework: row.Framework, Siblings: row.Siblings, Tags: make([]dto.CommunityTag, 0, len(row.Tags))}
 	for _, tag := range row.Tags {
-		out.Tags = append(out.Tags, dto.CommunityTag{Tag: tag.Tag, EngineVersion: tag.EngineVersion, RollingTag: tag.RollingTag, UpstreamGone: tag.UpstreamGone, LastUpdated: tag.LastUpdated})
+		out.Tags = append(out.Tags, dto.CommunityTag{
+			Tag: tag.Tag, Engine: tag.Engine, EngineVersion: tag.EngineVersion,
+			Framework: tag.Framework, FrameworkVersion: tag.FrameworkVersion, Arch: tag.Arch,
+			RollingTag: tag.RollingTag, UpstreamGone: tag.UpstreamGone, LastUpdated: tag.LastUpdated,
+		})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -49,6 +49,7 @@ export function DeploymentPreparation({ rows, onChanged }: { rows?: ModelNodePre
       // A failure is the operator's to act on; its message is the agent's own
       // words about why, so it is never hidden behind a source line.
       const failed = view?.reason === "MODEL_PREPARATION_FAILED";
+      const diskFull = view?.reason === "MODEL_CACHE_DISK_FULL";
       return <div key={`${item.node_uuid}:${item.model_id}:${item.storage_id}`} style={{ marginTop: 12 }}>
         <Space wrap>
           <Typography.Text strong>{item.node_name || item.node_uuid.slice(0, 12)}</Typography.Text>
@@ -69,7 +70,7 @@ export function DeploymentPreparation({ rows, onChanged }: { rows?: ModelNodePre
           <RetryHint />
         </Space>}
         {failed && !view?.retryable && <Typography.Text type="secondary">{t("preparation.retryUnavailable")}</Typography.Text>}
-        {item.message && (!origin || failed) && <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{item.message}</Typography.Paragraph>}
+        {item.message && (!origin || failed || diskFull) && <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{item.message}</Typography.Paragraph>}
         {view?.reason === "MODEL_COPY_STALLED" && <Typography.Paragraph>{t("preparation.waitForIO")}</Typography.Paragraph>}
       </div>;
     })}

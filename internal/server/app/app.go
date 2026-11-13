@@ -3,7 +3,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -43,7 +42,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/proxy"
 	"gpuworks.ai/gpuworks/internal/server/recovery"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"gpuworks.ai/gpuworks/internal/server/tsdb"
 	"gpuworks.ai/gpuworks/internal/server/webterm"
 	"gpuworks.ai/gpuworks/internal/server/webui"
 )
@@ -93,20 +91,6 @@ type App struct {
 	scaleReplicas func(deploymentID uint, role string, replicas int) error
 }
 
-// proxyMetricsSink adapts an Accountant flush batch to observability's tsdb
-// ingest path, the same one every agent-reported metric batch already goes
-// through. It always runs on the Accountant's own single writer goroutine
-// (see proxy.Accountant), never on a request-handling goroutine.
-func proxyMetricsSink(obs *observability) func([]tsdb.Sample) {
-	return func(samples []tsdb.Sample) {
-		batch := make([]proto.MetricSample, 0, len(samples))
-		for _, s := range samples {
-			batch = append(batch, proto.MetricSample{Metric: s.Metric, Labels: s.Labels, Value: s.Value, TimeMS: s.TimeMS})
-		}
-		obs.ingestMetrics("server", batch)
-	}
-}
-
 // New builds the server from config.
 func New(cfg Config, log *slog.Logger) (*App, error) {
 	cfg = normalizeRuntimeConfig(cfg)
@@ -145,12 +129,12 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	// Materialize the exact package embedded in this binary before updating the
 	// database projection. A later server version then keeps this directory as
 	// long as an older deployment or instance snapshot still references it.
-	embeddedCatalogArchive, err := seed.Archive()
+	embeddedCatalog, embeddedDigest, err := seed.Package()
 	if err != nil {
 		_ = st.Close()
 		return nil, err
 	}
-	if _, _, err := catalogPackages.PutArchive(bytes.NewReader(embeddedCatalogArchive)); err != nil {
+	if _, err := catalogPackages.PutLoaded(embeddedCatalog, embeddedDigest); err != nil {
 		_ = st.Close()
 		return nil, err
 	}
@@ -176,9 +160,10 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	// the same catalog: every network declared in the store.
 	networks := network.New(st, network.StoreCatalog{Store: st})
 	readPrivateHosts := privateHostPermissions(cfg, log)
-	h := hub.New(st, log)
-	h.SetOutboundPrivateHostsReader(readPrivateHosts)
-	h.SetNetworks(networks)
+	h, err := newPolicyHub(st, log, cfg.PeerRelay, networks, readPrivateHosts)
+	if err != nil {
+		return nil, err
+	}
 	// Besides the listed proxies, the public entry point's connector on this
 	// host while `gpuworks expose` has it enabled (ADR 0049).
 	proxies, invalidProxies := auth.NewProxyTrust(cfg.TrustedProxies, expose.NewStore(cfg.DataDir).WatchEnabled().Enabled)
@@ -338,6 +323,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 			ProbeModel:           ctrl.ProbeModelSync,
 			SyncImageWithRate:    h.SyncImageFromRate,
 			ProbeImage:           h.ProbeImagePath,
+			ProbeImageResult:     h.ProbeImagePathResult,
 			RetryImage:           h.RetryImageSync,
 			CopyModel:            ctrl.CopyModelFile,
 		},
@@ -350,15 +336,16 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 			Cancel: h.CancelImageTransfer,
 			Remove: h.RemoveImageFromNode,
 		},
-		InspectImage:    h.InspectImage,
-		ImageExists:     h.ImageExists,
-		CatalogPackages: catalogPackages,
-		ModelLogoDir:    modelLogoDir,
+		InspectImage:             h.InspectImage,
+		ImageExists:              h.ImageExists,
+		CatalogPackages:          catalogPackages,
+		ModelLogoDir:             modelLogoDir,
+		ForgetInitialCredentials: forgetInitialCredentials(cfg),
 		FetchModelMeta: func(ctx context.Context, source, repo, revision, subfolder string, candidates []string) (*modelmeta.Meta, error) {
 			return modelmeta.FetchFrom(ctx, source, repo, revision, subfolder, candidates, metadataClient, planning.ModelLogins(st))
 		},
 		ServerDialAgent:      h.DialAgentWithSecret,
-		NodeStreams:          h,
+		NodeStreams:          peerTransferStreams{h},
 		OpenTerminal:         h.OpenTerminal,
 		NodeCaps:             h.NodeCaps,
 		Terminal:             webterm.New(st),
@@ -455,8 +442,8 @@ func (a *App) Run(ctx context.Context) error {
 
 	// Background: flip stale-online nodes to offline as a safety net.
 	goBG(func() { a.staleLoop(ctx) })
-	// Background: bound the deployment event timeline.
-	goBG(func() { a.eventRetentionLoop(ctx) })
+	goBG(func() { a.eventRetentionLoop(ctx) }) // Background: bound the deployment event timeline.
+	goBG(func() { a.kubeNodeLoop(ctx) })       // Background: remove Kubernetes nodes that left their cluster.
 	// Background: reconnect nodes that listen for reverse server_dial sessions.
 	goBG(func() { a.hub.RunServerDialReconnect(ctx, a.cfg.ServerDialReconnectInterval) })
 	goBG(func() { a.hub.RunNodeQueues(ctx) }) // persist reports queued off the read loops
@@ -475,7 +462,7 @@ func (a *App) Run(ctx context.Context) error {
 	// Background: schedules, waiting wakes, residency.
 	waits := a.ctrl.PlacementWaits()
 	goBG(func() {
-		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, api.HostMemory(a.obs.latestMetrics), a.scaleReplicas, waits, a.log)
+		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, a.obs.hostMemory(), a.scaleReplicas, waits, a.log)
 	}) // Background: schedules, waiting wakes, residency.
 	goBG(func() { a.health.Run(ctx) }) // Background: the deployments' health checks.
 	goBG(func() { a.cards.run(ctx) })  // Background: the cards' failure records.
@@ -557,6 +544,7 @@ func (a *App) Run(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		a.log.Info("shutting down")
+		a.proxy.StopHolding() // held requests: a 503 to retry now, not a drop when the window ends
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := a.http.Shutdown(shutCtx); err != nil {

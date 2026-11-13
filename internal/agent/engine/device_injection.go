@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -20,20 +21,22 @@ func (e *Engine) applyDeviceInjection(ws *runtime.WorkloadSpec, indexes []int) e
 }
 
 func (e *Engine) applyDeviceInjectionForDriver(ws *runtime.WorkloadSpec, indexes []int, driverName string) error {
+	return e.applyDeviceInjectionForLaunch(context.Background(), ws, indexes, driverName, 1)
+}
+
+func (e *Engine) applyDeviceInjectionForLaunch(ctx context.Context, ws *runtime.WorkloadSpec, indexes []int, driverName string, nNodes int) error {
 	if e.prober == nil {
 		return nil
 	}
 	if len(indexes) == 0 {
 		if accelerator.RequiresDeviceSelection(e.prober.Vendor()) {
-			return fmt.Errorf("%s requires an explicit nonempty GPU selection", accelerator.VendorBrand(e.prober.Vendor()))
+			return gpu.DeviceSelectionError(e.prober.Vendor())
 		}
 		return nil
 	}
-	var inj gpu.RuntimeInjection
-	if aware, ok := e.prober.(gpu.DriverAwareInjector); ok {
-		inj = aware.RuntimeInjectionForDriver(indexes, driverName)
-	} else {
-		inj = e.prober.RuntimeInjection(indexes)
+	inj := gpu.ResolveInjection(ctx, e.prober, gpu.InjectionRequest{Indexes: indexes, DriverName: driverName, NNodes: nNodes, DockerArgs: ws.DockerArgs, Env: ws.Env})
+	if inj.Failure != nil {
+		return &gpu.InjectionError{Failure: *inj.Failure, Reason: inj.UnsupportedReason}
 	}
 	if inj.UnsupportedReason != "" {
 		return fmt.Errorf("accelerator runtime unavailable: %s", inj.UnsupportedReason)
@@ -61,9 +64,11 @@ func applyRuntimeInjection(ws *runtime.WorkloadSpec, inj gpu.RuntimeInjection, i
 		// construct a compact container-visible inventory. Reusing the host
 		// indexes in CUDA_VISIBLE_DEVICES then hides non-zero selected cards
 		// (for example host device 1 is CUDA device 0 inside a one-card
-		// container). Udocker has no such remapping and continues to use the
+		// container). nerdctl's --gpus goes through the same toolkit hook, and
+		// the kube runtime gets the same remapping from the NVIDIA runtime
+		// class. Udocker has no such remapping and continues to use the
 		// physical indexes supplied by the prober.
-		if key == "CUDA_VISIBLE_DEVICES" && driverName == "docker" && hasDockerOption(inj.DockerArgs, "--gpus") {
+		if key == "CUDA_VISIBLE_DEVICES" && (driverName == "docker" || driverName == "nerdctl" || driverName == "kube") && hasDockerOption(inj.DockerArgs, "--gpus") {
 			value = compactDeviceIndexes(len(indexes))
 		}
 		env[key] = value
@@ -77,15 +82,7 @@ func applyRuntimeInjection(ws *runtime.WorkloadSpec, inj gpu.RuntimeInjection, i
 			args = removeDockerOption(args, option)
 		}
 	}
-	// The scheduled selection is authoritative over image- or user-provided
-	// singleton runtime options: an image-level `--gpus all` must not remain
-	// alongside the injected `--gpus '"device=0,1"'`.
-	for _, option := range []string{"--gpus", "--runtime"} {
-		if hasDockerOption(inj.DockerArgs, option) {
-			args = removeDockerOption(args, option)
-		}
-	}
-	updated.DockerArgs = append(args, inj.DockerArgs...)
+	updated.DockerArgs = mergeDeviceDockerArgs(args, inj.DockerArgs)
 	if len(inj.Mounts) > 0 {
 		mounts := append([]runtime.Mount(nil), ws.Mounts...)
 		for _, mount := range inj.Mounts {
@@ -98,8 +95,8 @@ func applyRuntimeInjection(ws *runtime.WorkloadSpec, inj gpu.RuntimeInjection, i
 
 // removeDockerDevicePaths removes only --device mappings whose host source
 // names a prober-managed device path. Other devices and malformed options are
-// preserved; AMD needs to replace GPU nodes without dropping unrelated device
-// access such as /dev/infiniband.
+// preserved; device backends replace their accelerator nodes without dropping
+// unrelated access such as /dev/infiniband.
 func removeDockerDevicePaths(args, paths []string) []string {
 	managed := make(map[string]bool, len(paths))
 	for _, path := range paths {

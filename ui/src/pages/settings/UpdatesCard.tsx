@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Card, Modal, Select, Space, Switch, Table, Tag, Typography, Upload, message } from "antd";
+import { Button, Card, Modal, Space, Switch, Table, Typography, Upload, message } from "antd";
 import { ReloadOutlined, UploadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
@@ -7,35 +7,17 @@ import { api, type CatalogUpdate, type ServerUpgradeStarted, type UpdateStatus }
 import { apiErrorText, productMessageText, type ProductMessage } from "../../apiError";
 import { formatTime } from "../../i18n/datetime";
 import { publishUpdateStatus } from "../../components/UpdateNotice";
+import { Badge } from "../../components/ui/badge";
+import { Notice } from "../../ui-kit/Notice";
+import { OptionSelect } from "../../ui-kit/OptionSelect";
 import ServerBuildSummary from "../../components/ServerBuildSummary";
+import { useConsoleUpgrade } from "./useConsoleUpgrade";
+import ServerAgentNotice from "./ServerAgentNotice";
 import UsageReportSwitch from "./UsageReportSwitch";
 
 const { Text } = Typography;
 
 type Busy = "" | "images" | "imagesUpload" | "templates" | "templatesUpload" | "server" | "serverUpload";
-
-// How long the console waits for the restarted server to answer as the new
-// release; the server itself gives up on it (and rolls back) after longer.
-const upgradeWaitMs = 5 * 60_000;
-
-// waitForRelease polls /healthz, which answers with the running version,
-// until it is release or the wait runs out; during the restart it fails.
-export async function waitForRelease(release: string, timeoutMs = upgradeWaitMs, intervalMs = 2000): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch("/healthz", { cache: "no-store" });
-      if (res.ok) {
-        const body = (await res.json()) as { version?: string };
-        if (body.version === release) return true;
-      }
-    } catch {
-      // Restarting.
-    }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  return false;
-}
 
 interface Row {
   key: "server" | "images" | "templates";
@@ -72,8 +54,7 @@ export default function UpdatesCard() {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [busy, setBusy] = useState<Busy>("");
-  const [upgrading, setUpgrading] = useState<ServerUpgradeStarted | null>(null);
+  const [request, setBusy] = useState<Busy>("");
   // switchingTo is the channel just picked, shown at once while it is saved
   // and checked; the table keeps the previous answer under a spinner.
   const [switchingTo, setSwitchingTo] = useState<string | null>(null);
@@ -97,6 +78,14 @@ export default function UpdatesCard() {
   useEffect(() => {
     void check();
   }, [check]);
+
+  const onUpgradeResult = useCallback((version: string, recovered: boolean) => {
+    if (recovered) message.success(t("updates.serverUpgraded", { version }));
+    else message.error(t("updates.serverNotBack", { version }));
+    void check();
+  }, [check, t]);
+  const { begin, upgrading, summary, dismiss } = useConsoleUpgrade(onUpgradeResult);
+  const busy = request || (upgrading ? "server" : "");
 
   const switchChannel = async (channel: string) => {
     setSwitchingTo(channel);
@@ -160,17 +149,10 @@ export default function UpdatesCard() {
   // A console upgrade answers once the binary is swapped; the server then
   // restarts, and the new version either answers or is rolled back.
   const upgradeServer = async (kind: Busy, start: () => Promise<ServerUpgradeStarted>) => {
+    dismiss();
     setBusy(kind);
     try {
-      const started = await start();
-      setUpgrading(started);
-      if (await waitForRelease(started.to)) {
-        message.success(t("updates.serverUpgraded", { version: started.to }));
-      } else {
-        message.error(t("updates.serverNotBack", { version: started.to }));
-      }
-      setUpgrading(null);
-      await check();
+      begin(await start());
     } catch (error) {
       message.error(apiErrorText(tCommon, error));
     } finally {
@@ -190,9 +172,9 @@ export default function UpdatesCard() {
     if (!status?.available) return <Text type="secondary">{t("updates.unknown")}</Text>;
     if (row.checkError) return <Text type="danger">{productMessageText(tCommon, row.checkError)}</Text>;
     if (!row.latest) return <Text type="secondary">{t("updates.notPublished")}</Text>;
-    if (!row.updateAvailable) return <Tag color="success">{t("updates.upToDate")}</Tag>;
-    if (!row.compatible) return <Tag color="error">{t("updates.needsServer")}</Tag>;
-    return <Tag color="warning">{t("updates.available")}</Tag>;
+    if (!row.updateAvailable) return <Badge size="sm" status="success">{t("updates.upToDate")}</Badge>;
+    if (!row.compatible) return <Badge size="sm" status="danger">{t("updates.needsServer")}</Badge>;
+    return <Badge size="sm" status="warning">{t("updates.available")}</Badge>;
   };
 
   const actionsOf = (row: Row) => {
@@ -288,21 +270,32 @@ export default function UpdatesCard() {
         <Text type="secondary">{t("updates.description")}</Text>
         {status && (
           <Space wrap align="center">
-            <label htmlFor="update-channel"><Text>{t("updates.channel")}</Text></label>
-            <Select id="update-channel" value={channel} options={channelOptions} style={{ minWidth: 160 }}
-              disabled={!status.channel_editable || busy !== "" || switchingTo !== null} onChange={(value) => void switchChannel(value)} />
+            <OptionSelect
+              prefix={<span className="text-body">{t("updates.channel")}</span>}
+              aria-label={t("updates.channel")}
+              value={channel}
+              options={channelOptions}
+              disabled={!status.channel_editable || busy !== "" || switchingTo !== null}
+              onChange={value => void switchChannel(value)}
+            />
             <Text type="secondary">{channel === "release" ? t("updates.channelReleaseHelp") : t("updates.channelNightlyHelp")}</Text>
           </Space>
         )}
         {status && <Text type="secondary">{status.auto_check ? t("updates.autoCheckOnHelp") : t("updates.autoCheckOffHelp")}</Text>}
-        {loadError && <Alert type="error" showIcon message={loadError} />}
-        {upgrading && <Alert type="info" showIcon message={t("updates.serverUpgrading", { from: upgrading.from, to: upgrading.to })} description={t("updates.serverUpgradingHelp")} />}
+        {loadError && <Notice tone="danger" title={loadError} />}
+        {upgrading && <Notice title={t("updates.serverUpgrading", { from: upgrading.from, to: upgrading.to })}>{t("updates.serverUpgradingHelp")}</Notice>}
         {status && !notChecked && <Text type="secondary">{loading ? t("updates.checking") : t("updates.checkedAt", { time: formatTime(status.checked_at) })}</Text>}
-        {status && notChecked && !loading && <Alert type="info" showIcon message={t("updates.notChecked")} description={t("updates.notCheckedHelp")} />}
+        {status && notChecked && !loading && <Notice tone="info" title={t("updates.notChecked")}>{t("updates.notCheckedHelp")}</Notice>}
         {status && !notChecked && !status.available && !loading && <UnavailableAlert status={status} channelName={channelName(status.channel)} />}
         {status && <section aria-label={t("updates.currentBuild")}><Text strong>{t("updates.currentBuild")}</Text><ServerBuildSummary version={status.server.current} build={status.server.current_build} /></section>}
         <Table<Row> rowKey="key" size="small" pagination={false} loading={loading}
-          dataSource={status ? rowsOf(status, names) : []} columns={columns} />
+          dataSource={status ? rowsOf(status, names) : []} columns={columns}
+          expandable={{
+            showExpandColumn: false,
+            expandedRowKeys: summary ? ["server"] : [],
+            rowExpandable: (row) => row.key === "server",
+            expandedRowRender: () => summary && <ServerAgentNotice summary={summary} dismiss={dismiss} />,
+          }} />
         <Text type="secondary">{t("updates.serverHelp")}</Text>
       </Space>
     </Card>
@@ -316,10 +309,10 @@ function UnavailableAlert({ status, channelName }: { status: UpdateStatus; chann
   const { t } = useTranslation("settings");
   switch (status.unavailable_reason) {
     case "unpublished":
-      return <Alert type="info" showIcon message={t("updates.unpublished", { channel: channelName })} description={t("updates.unpublishedHelp")} />;
+      return <Notice tone="info" title={t("updates.unpublished", { channel: channelName })}>{t("updates.unpublishedHelp")}</Notice>;
     case "invalid":
-      return <Alert type="warning" showIcon message={t("updates.invalidIndex")} description={t("updates.invalidIndexHelp")} />;
+      return <Notice tone="warning" title={t("updates.invalidIndex")}>{t("updates.invalidIndexHelp")}</Notice>;
     default:
-      return <Alert type="warning" showIcon message={t("updates.unavailable")} description={t("updates.unavailableHelp")} />;
+      return <Notice tone="warning" title={t("updates.unavailable")}>{t("updates.unavailableHelp")}</Notice>;
   }
 }

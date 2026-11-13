@@ -79,6 +79,23 @@ def assert_help(page, report, locale):
         rect = popup.bounding_box()
         check(rect["x"] >= 0 and rect["y"] >= 0 and rect["x"] + rect["width"] <= page.viewport_size["width"] + 1
               and rect["y"] + rect["height"] <= page.viewport_size["height"] + 1, f"help outside viewport: {rect}")
+        # While the help is open it must not sit over another card's help
+        # trigger: covering a control the user needs next is the failure this
+        # item is about, and staying inside the viewport alone does not catch it.
+        covered = []
+        for other in KEYS:
+            if other == key:
+                continue
+            candidate = page.get_by_test_id("image-summary-" + other).get_by_role("button")
+            if candidate.count() == 0 or not candidate.is_visible():
+                continue  # a narrow viewport may stack or drop a card entirely
+            box = candidate.bounding_box()
+            if box and not (rect["x"] + rect["width"] <= box["x"] or box["x"] + box["width"] <= rect["x"]
+                            or rect["y"] + rect["height"] <= box["y"] or box["y"] + box["height"] <= rect["y"]):
+                covered.append(other)
+        check(not covered, f"the {key} help covers another help trigger: {covered}")
+        report.setdefault("help_geometry", []).append({"key": key, "viewport": page.viewport_size["width"],
+                                                       "popup": rect, "covers_triggers": covered})
         trigger.click()
         page.get_by_role("heading", name=strings(locale)["page"]["title"], exact=True).hover()
         expect(popup).to_be_visible()

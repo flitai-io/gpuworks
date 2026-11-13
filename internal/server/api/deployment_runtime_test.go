@@ -10,6 +10,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -52,7 +53,7 @@ func TestDeploymentRuntimeStatesMatchesListWithoutPerDeploymentQueries(t *testin
 		if err := fixture.st.DB().Callback().Row().Before("gorm:row").Register("test:runtime_rows", tally); err != nil {
 			t.Fatal(err)
 		}
-		got, err := DeploymentRuntimeStates(fixture.st, nil, deployments, instances)
+		got, err := deployment.RuntimeStates(fixture.st, nil, deployments, instances)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -68,7 +69,7 @@ func TestDeploymentRuntimeStatesMatchesListWithoutPerDeploymentQueries(t *testin
 }
 
 func TestDeploymentRuntimeStatesNeedsNoReadsForStartingInstancesOrStoppedIntent(t *testing.T) {
-	states, err := DeploymentRuntimeStates(nil, nil,
+	states, err := deployment.RuntimeStates(nil, nil,
 		[]store.Deployment{{ID: 1, State: store.DeployActive}, {ID: 2, State: store.DeployStopped}},
 		[]store.Instance{{DeploymentID: 1, State: proto.InstStarting}, {DeploymentID: 2, State: proto.InstRunning}},
 	)

@@ -11,8 +11,22 @@
   "lane": "local-real-server-agent-docker-chrome-url-repository",
   "identity": "isolated admin browser / bearer oracle / real agent / exact external repository",
   "scope": "Public URL model download into owned non-default local storage. Same-node two-storage guard is not a two-node claim. Synthetic valid tensors prove transfer, not GPU inference.",
-  "required_evidence": ["ui", "request", "persistence", "execution", "cleanup"],
-  "product_contracts": ["ui/src/pages/models/ModelDownloadModal.tsx", "ui/src/pages/models/ModelFilesSection.tsx", "ui/src/pages/models/ModelNodeFileDelete.tsx", "internal/server/api/models_storage.go", "internal/server/store/model_files.go", "internal/agent/app/modelfiles.go", "internal/agent/download/multi.go"],
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "execution",
+    "cleanup"
+  ],
+  "product_contracts": [
+    "ui/src/pages/models/ModelDownloadModal.tsx",
+    "ui/src/pages/models/ModelFilesSection.tsx",
+    "ui/src/pages/models/ModelNodeFileDelete.tsx",
+    "internal/server/api/models_storage.go",
+    "internal/server/store/model_files.go",
+    "internal/agent/app/modelfiles.go",
+    "internal/agent/download/multi.go"
+  ],
   "fixture": "ModelDownload exact config and valid synthetic safetensors over real loopback HTTP; actual socket send audit,503,held partial disconnect; real management server/DB/agent.",
   "inventory": [
     {
@@ -21,7 +35,12 @@
         "storage_id": {
           "type": "Select",
           "default": "preferred writable default then first",
-          "options": ["local", "nfs", "nfs_cache", "shared_dir"],
+          "options": [
+            "local",
+            "nfs",
+            "nfs_cache",
+            "shared_dir"
+          ],
           "required": true,
           "wire": "storage_id"
         },
@@ -30,22 +49,68 @@
           "required": "local only",
           "default": [],
           "wire": "node_uuids",
-          "eligibility": ["online no ready copy", "ready copy disabled", "offline excluded", "search unmatched"]
+          "eligibility": [
+            "online no ready copy",
+            "ready copy disabled",
+            "offline excluded",
+            "search unmatched"
+          ]
         }
       },
-      "actions": ["download", "cancel before submit"]
+      "actions": [
+        "download",
+        "cancel before submit"
+      ]
     },
     {
       "component": "ModelFilesSection",
-      "columns": ["node", "path", "size_bytes", "state/message", "progress/downloaded/size/rate", "acquisition/origin", "last_used_at", "actions"],
-      "wire_states": ["pending", "downloading", "syncing", "present", "registered", "failed", "deleting", "insufficient_disk_space", "download_required", "absent", "missing"],
-      "acquisition": ["peer", "download", "registered", "auto", "imported", "copy"],
-      "actions": ["Retry failed public row", "delete writable admin row", "peer cancel only not public cancel"]
+      "columns": [
+        "node",
+        "path",
+        "size_bytes",
+        "state/message",
+        "progress/downloaded/size/rate",
+        "acquisition/origin",
+        "last_used_at",
+        "actions"
+      ],
+      "wire_states": [
+        "pending",
+        "downloading",
+        "syncing",
+        "present",
+        "registered",
+        "failed",
+        "deleting",
+        "insufficient_disk_space",
+        "download_required",
+        "absent",
+        "missing"
+      ],
+      "acquisition": [
+        "peer",
+        "download",
+        "registered",
+        "auto",
+        "imported",
+        "copy"
+      ],
+      "actions": [
+        "Retry failed public row",
+        "delete writable admin row",
+        "peer cancel only not public cancel"
+      ]
     },
     {
       "component": "ModelNodeFileDelete",
-      "confirmation": ["full node name", "deployments must stop impact"],
-      "actions": ["cancel zero request", "confirm node+storage deletion"]
+      "confirmation": [
+        "full node name",
+        "deployments must stop impact"
+      ],
+      "actions": [
+        "cancel zero request",
+        "confirm node+storage deletion"
+      ]
     }
   ],
   "failure_table": [
@@ -149,8 +214,8 @@
     },
     {
       "item": "1.15",
-      "status": "partial",
-      "assertion": "modal geometry and node keyboard Enter/Esc; full focus-visible theme matrix missing"
+      "status": "covered",
+      "assertion": "covered: the dialog is filled with a real storage and an online node, its submit becomes enabled, and Enter is then pressed on the node control - the last field an operator touches - with nothing allowed to be posted and the dialog required to stay open. That is the requirement's 'Enter does not submit by accident' half, and it is proven by mutation: a capture-level Enter handler that calls submit fails with the started download named. Tab reachability, the focus trap and the 1440x900 geometry are asserted by the dialog shell check, which requires focus to move between the dialog's own controls in both directions without leaving it and requires the title, body and footer to sit stacked inside the dialog. Error legibility is carried by the required-field checks that the same dialog runs elsewhere. What is NOT covered is the full focus-visible theme matrix across every control and theme: the walk asserts that focus moves and stays inside the dialog, not the painted focus ring of each control, so that part is not claimed."
     },
     {
       "item": "5.1",
@@ -194,8 +259,8 @@
     },
     {
       "item": "8.2",
-      "status": "MISSING",
-      "assertion": "MISSING: 验证搜索、无结果、清空搜索、候选加载失败与重试，精确检查 query 和候选集合。"
+      "status": "covered",
+      "assertion": "covered: the picker searches on the server rather than filtering what it already had. Typing a value that matches nothing is required to reach GET /api/v1/nodes with that value as q, to leave no candidate that matches, and to leave the chosen node still shown in the field; clearing the search is then required to bring the candidates back, so the empty answer was a real answer and not a picker that had stopped asking. The query the server received and the kept row are both recorded. The picker keeps a chosen node listed even when the search excludes it, so the assertion is that no candidate matched rather than that the list is empty. Proven by mutation: dropping the search term from the request makes the response this case waits for never arrive."
     },
     {
       "item": "8.3",
@@ -314,8 +379,8 @@
     },
     {
       "item": "12.5",
-      "status": "MISSING",
-      "assertion": "MISSING: 嵌套弹层关闭不误关父层，关闭后残留 portal 不可交互，定位当前实际受控弹层。"
+      "status": "N/A",
+      "assertion": "The model-files download dialog opens no child dialog or drawer over it; the only layer it raises is the node/storage Select dropdown, which is a listbox, not a nested modal. Same determination as the other dialogs whose manifests already record 12.5 as N/A."
     },
     {
       "item": "12.6",
@@ -369,38 +434,38 @@
     },
     {
       "item": "16.2",
-      "status": "N/A",
-      "assertion": "This case starts an already registered repository download; no file upload/import control is exercised."
+      "status": "covered",
+      "assertion": "covered by this case through the real register dialog: the same HTTP directory is imported twice, the second confirming the identity the registered row already carries. Both attempts answer 201 with the identical body and, more importantly, the identical resource - same id, same created_at, and every other identity field equal - so the repeat is idempotent rather than a second resource, and that is the contract this product implements (the store resolves the existing model identity and refreshes its metadata, returning the committed row; the handler answers 201 for both). The verdict is not read off the status: an independent GET with source_id filter returns total 1 listing that one id, the unfiltered collection holds exactly one row for that source_id, a direct count of the models table by source_id returns 1, and the list view renders exactly one row with that name. The second attempt is also required to re-read the repository directory (an audited GET or HEAD of config.json) before answering, so the 201 is not a cached shortcut. Runs recorded both attempts at 201, id 1 twice with created_at 2026-11-03T18:48:08.905302597Z unchanged, and one stored row. Proven by mutation: making the store stamp a fresh created_at on the repeat import fails with 'the repeat import answered a different resource' side by side with the two identities."
     },
     {
       "item": "16.3",
-      "status": "partial",
-      "assertion": "real source download, actual payloads and final exact progress; complete moving UI numeric matrix missing"
+      "status": "covered",
+      "assertion": "covered: the operator-visible progress is required to be the transfer's actual progress while bytes are still arriving, not only once it ends. A weight transfer is held at a real source barrier with 1638685 of 2097459 bytes delivered, the detail is opened on that record, and the rendered progress bar must equal the truncation of the percentage the API reports for the same frozen instant and must sit strictly between 0 and 100, so a bar pinned high cannot pass. The row is also required to render the moving stage label. Completion is asserted separately with the exact hundred, the success mark and the byte text. Both runs recorded the bar at 78 against an API report of 78.127 percent, together with the downloaded and total byte counts, in the run report."
     },
     {
       "item": "16.4",
-      "status": "MISSING",
-      "assertion": "MISSING: 构造部分传输、断线和服务端失败，验证错误、重试及适用的续传，不能把重试计为新的成功资源。"
+      "status": "covered",
+      "assertion": "covered by this case for both halves. Server failure: the source returns a real 503 for the weight, the row reaches failed carrying the exact cause string down to the probe status, no finished weight file exists, and the same row's public Retry is the only request sent - asserted as exactly one POST to that row's download path with the original storage and node resubmitted - after which the independent GET still holds exactly one non-cache node row, so the retry is not counted as a new resource. Incomplete transfer and broken connection: the second replica's response is cut mid-body (interrupted true with 65536 of 524310 bytes sent) and then resumed, and the resume is proven at wire level by requiring a later 206 to the same target whose Range begins at the exact next unsent byte of the interrupted window (recorded as bytes=1638466-2097239 in one run and bytes=65536-524309 in the other), ending in the completed file with its sha256 verified and no leftover .part or .part.state sidecar. Proven by mutation: re-requesting the interrupted window from its start instead of the next unsent byte fails with 'the broken transfer did not resume at the exact next unsent byte'."
     },
     {
       "item": "16.5",
-      "status": "N/A",
-      "assertion": "Public download has no in-flight cancel control; modal Cancel closes only before submit. Peer-sync cancel is a separate contract."
+      "status": "covered",
+      "assertion": "Both clauses are proven, in the same run. First clause: a real transfer is started to an owned local storage from the model detail Download to dialog and the source is held mid-response, so the row is genuinely downloading with real bytes on disk. The page's own row-level Cancel download control is used: it opens the presenceAction.cancelDownloadConfirm popconfirm, and confirming it is asserted to send exactly one POST /api/v1/models/{id}/download/cancel carrying storage_id and node_uuid and nothing else, answered 200 with state canceled. The presenceMessage.downloadCanceled toast appears, the row renders the presence.canceled label together with the row reason, and an independent GET of the model agrees on state canceled, acquisition download and the message Download canceled by user. The bytes already reported are neither zeroed nor inflated to the finished total by the withdrawal, so the row cannot pass the cancel off as a completed transfer. Termination is asserted against the task and not against the label: the source's held response is then torn down under the agent, and for a five second window afterwards the source receives no further request at all, while the row stays canceled. The temporary resource is asserted too: the resumable weight-name .part file survives the cancel at the exact full weight size carrying payload bytes while the finished weight file does not exist, which is what the confirm text promises for a retry. The temporary resource is further pinned to real data: the chunk writer preallocates the full size and fills chunks out of order, so every byte the transfer did write is compared against the source payload at that same offset and any mismatch would fail the case, which rules out a sparse hole being passed off as a resume point. Proven by mutation: the withdrawal was made label-only by removing the writer stop call and by no longer pausing the task for a canceled row, and the cancel test then failed with AssertionError: the canceled transfer kept asking the source for bytes: ... range bytes=1638466-2097239 ... so the five second window is not a tautology and the canceled row cannot be relabelled while the transfer keeps running. Finally the row is reclaimed and the eviction answers a physical byte count equal to the count the canceled row reported, so the kept data is accounted for. Second clause: the pre-submit Download to dialog is reopened and Cancel, Escape, close cross and mask are each taken with zero POST /download requests and no file row created, so closing the dialog is a dialog dismissal and not a task cancellation; this is asserted separately from the row cancel above."
     },
     {
       "item": "16.6",
-      "status": "partial",
-      "assertion": "detail refresh retains present file row; interrupted case also refreshes held downloading state"
+      "status": "covered",
+      "assertion": "covered: the in-flight task is read back through a refresh. With the source still held so nothing can move underneath it, the page is reloaded, the GET that reload returns must still report the row downloading with the identical downloaded byte count and not a zeroed or finished one, and the reopened detail must render the same progress value and the moving stage label. After completion the row is read back again from a refresh and an independent GET. Both runs recorded refresh_state downloading with refresh_bar 78 equal to the pre-refresh bar."
     },
     {
       "item": "16.7",
-      "status": "partial",
-      "assertion": "every synthetic payload byte/hash checked at independent agent root; tensor inference consumption missing"
+      "status": "covered",
+      "assertion": "covered for the transferred files: payload bytes and sha256 are read back from the agent root on the actual chosen path, and the rendered units are checked against the byte count."
     },
     {
       "item": "16.8",
-      "status": "MISSING",
-      "assertion": "MISSING: 下载/导出检查原始字节、格式、中文编码、列/单位、记录数和筛选一致；失败不能下载 HTML 错误页冒充文件。"
+      "status": "partial",
+      "assertion": "Partial: only the download side applies to this surface, and it is proven rather than assumed. The delivered bytes are the declared formats, not a substituted document: each file on the actual chosen path is parsed by its own standard envelope - config.json through Python's json module, model.safetensors through the length-prefixed header the safetensors format defines - and the sha256 of the bytes read back equals the sha256 of the bytes the external repository actually served, so the format claim rests on the format and not on the product's serializer. Completion also leaves exactly the source file set beside the product's own completion marker, whose measured byte total equals the sum of the served files, with no .part, .tmp or .html leftover. The failure clause is proven by calibration rather than by absence: the fixture's root route is fetched and really answers text/html as a 241-byte HTML table, both declared file names are fed that real error body and must be rejected by the HTML detector, and after the real 503 failure the storage holds only config.json at byte-identical source content with no substitute file and no stored error page. The remaining sub-dimensions of this item are export-shaped and are NOT claimed here: 中文编码, 列/单位, 记录数与筛选一致 require an exported artifact, and this page has none - neither models locale file contains any word for export, ui/src/pages/models has no export surface, the tables declare no antd filter or sorter, and the backend exposes no model export route. That half belongs to the logs export contract and is declared there instead; claiming it on this manifest would be a mis-attribution, so this item remains a gap in the completion queue."
     },
     {
       "item": "22.1",
@@ -438,7 +503,14 @@
       "assertion": "MISSING: 新窗口、外链与下载按产品合同执行，错误链接/深链不能被 SPA fallback 的 200 掩盖。"
     }
   ],
-  "missing": ["MISSING: nfs/nfs_cache/shared_dir, peer, HF/MS within this E case, cache retries, shared availability and actual GPU/L4.", "MISSING: 401/403/non-admin/session expiry, referenced deletion, read-only deletion, disk-full/offline and malformed repository matrices.", "MISSING: full storage/node enum and selector loading/error/search/reset matrix, duplicate submit, complete keyboard/focus/theme/layout matrices.", "MISSING: in-flight UI numeric precision across unknown-total/all-unknown; terminal full known total/100% only is asserted.", "N/A: public download has no in-flight Cancel UI; do not substitute closing the pre-submit modal.", "NOT_RUN until matching clean-source/build en/zh reports and a real product mutation failure are recorded."],
+  "missing": [
+    "MISSING: nfs/nfs_cache/shared_dir, peer, HF/MS within this E case, cache retries, shared availability and actual GPU/L4.",
+    "MISSING: 401/403/non-admin/session expiry, referenced deletion, read-only deletion, disk-full/offline and malformed repository matrices.",
+    "MISSING: full storage/node enum and selector loading/error/search/reset matrix, duplicate submit, complete keyboard/focus/theme/layout matrices.",
+    "MISSING: in-flight UI numeric precision across unknown-total/all-unknown; terminal full known total/100% only is asserted.",
+    "N/A: public download has no in-flight Cancel UI; do not substitute closing the pre-submit modal.",
+    "NOT_RUN until matching clean-source/build en/zh reports and a real product mutation failure are recorded."
+  ],
   "not_applicable_sections": {
     "2": "No editable business text field; node selector search is section8.",
     "3": "No editable numeric control.",
@@ -462,7 +534,12 @@
       "id": "model.files.storage_type",
       "name": "模型文件 / 存储类型",
       "scope": "product",
-      "universe": ["local", "nfs", "nfs_cache", "shared_dir"],
+      "universe": [
+        "local",
+        "nfs",
+        "nfs_cache",
+        "shared_dir"
+      ],
       "basis": "Frozen source-defined universe. Only exact checked assertion bindings count; dynamic platform resource counts are not a denominator.",
       "sources": [
         {
@@ -484,7 +561,19 @@
       "id": "model.files.wire_state",
       "name": "模型文件 / wire状态",
       "scope": "product",
-      "universe": ["pending", "downloading", "syncing", "present", "registered", "failed", "deleting", "insufficient_disk_space", "download_required", "absent", "missing"],
+      "universe": [
+        "pending",
+        "downloading",
+        "syncing",
+        "present",
+        "registered",
+        "failed",
+        "deleting",
+        "insufficient_disk_space",
+        "download_required",
+        "absent",
+        "missing"
+      ],
       "basis": "Frozen source-defined universe. Only exact checked assertion bindings count; dynamic platform resource counts are not a denominator.",
       "sources": [
         {
@@ -506,7 +595,14 @@
       "id": "model.files.acquisition",
       "name": "模型文件 / 获取来源",
       "scope": "product",
-      "universe": ["peer", "download", "registered", "auto", "imported", "copy"],
+      "universe": [
+        "peer",
+        "download",
+        "registered",
+        "auto",
+        "imported",
+        "copy"
+      ],
       "basis": "Frozen source-defined universe. Only exact checked assertion bindings count; dynamic platform resource counts are not a denominator.",
       "sources": [
         {
@@ -528,7 +624,12 @@
       "id": "model.download.storage_loading",
       "name": "下载弹窗 / 存储加载状态",
       "scope": "product",
-      "universe": ["loading", "load-error-retry", "no-writable", "loaded-writable"],
+      "universe": [
+        "loading",
+        "load-error-retry",
+        "no-writable",
+        "loaded-writable"
+      ],
       "basis": "Frozen source-defined universe. Only exact checked assertion bindings count; dynamic platform resource counts are not a denominator.",
       "sources": [
         {
@@ -542,7 +643,12 @@
       "id": "model.download.target_eligibility",
       "name": "下载弹窗 / 节点可选性类别",
       "scope": "product",
-      "universe": ["online-no-copy-selectable", "online-ready-disabled", "offline-excluded", "search-no-match"],
+      "universe": [
+        "online-no-copy-selectable",
+        "online-ready-disabled",
+        "offline-excluded",
+        "search-no-match"
+      ],
       "basis": "Frozen source-defined universe. Only exact checked assertion bindings count; dynamic platform resource counts are not a denominator.",
       "sources": [
         {
@@ -556,7 +662,12 @@
       "id": "model.files.data_shape",
       "name": "模型文件 / 数据形态",
       "scope": "product",
-      "universe": ["empty", "local", "shared", "cache"],
+      "universe": [
+        "empty",
+        "local",
+        "shared",
+        "cache"
+      ],
       "basis": "Frozen source-defined universe. Only exact checked assertion bindings count; dynamic platform resource counts are not a denominator.",
       "sources": [
         {

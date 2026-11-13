@@ -243,3 +243,40 @@ func TestTheAcceleratorChoiceNeedsNodeRPC(t *testing.T) {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// A Kubernetes node is offered, and may be switched to, only the vendors
+// whose cards run on Kubernetes: its host's Apple card is left out, while AMD and
+// Kunlunxin cards (whole cards, like the others) are kept.
+func TestAKubernetesNodeChoosesOnlyAmongVendorsThatRunThere(t *testing.T) {
+	a := newAcceleratorAPI(t)
+	if err := a.st.DB().Model(&store.Node{}).Where("uuid = ?", "mixed").Update("kube_cluster_id", 7).Error; err != nil {
+		t.Fatal(err)
+	}
+	ok := true
+	if err := a.st.UpdateNodeStatus("mixed", proto.NodeStatus{GPUProbeOK: &ok,
+		GPUs: []proto.GPUInfo{{Index: 4, UUID: "ascend-4", Name: "310P3", Vendor: "ascend", PCIeBDF: "0000:17:00.0", MemoryTotalBytes: 21 << 30, Healthy: true}},
+		Sys: proto.SysInfo{GPUVendor: "ascend", AcceleratorVendors: []proto.AcceleratorPresence{
+			{Vendor: "ascend", Cards: 1, Model: "310P3"}, {Vendor: "apple", Cards: 1, Model: "Apple M3"},
+		}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, raw := a.do(a.token, http.MethodGet, "/api/v1/nodes/mixed", "")
+	if !strings.Contains(raw, `"accelerator_vendors":[{"vendor":"ascend","cards":1,"model":"310P3"}]`) {
+		t.Fatalf("a Kubernetes node offers a vendor that does not run there: %s", raw)
+	}
+	code, out, body := a.patch("mixed", `{"accelerator":"apple"}`)
+	if code != http.StatusBadRequest || out["code"] != ErrorNodeAcceleratorInvalid || len(a.calls) != 0 {
+		t.Fatalf("switch to apple = %d %s (calls %q)", code, body, a.calls)
+	}
+	if err := a.st.UpdateNodeStatus("mixed", proto.NodeStatus{GPUProbeOK: &ok,
+		GPUs: []proto.GPUInfo{{Index: 4, UUID: "ascend-4", Name: "310P3", Vendor: "ascend", PCIeBDF: "0000:17:00.0", MemoryTotalBytes: 21 << 30, Healthy: true}},
+		Sys: proto.SysInfo{GPUVendor: "ascend", AcceleratorVendors: []proto.AcceleratorPresence{
+			{Vendor: "ascend", Cards: 1, Model: "310P3"}, {Vendor: "amd", Cards: 1, Model: "Instinct MI210"}, {Vendor: "kunlunxin", Cards: 1, Model: "P800 PCIe"},
+		}}}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, raw = a.do(a.token, http.MethodGet, "/api/v1/nodes/mixed", "")
+	if !strings.Contains(raw, `"accelerator_vendors":[{"vendor":"ascend","cards":1,"model":"310P3"},{"vendor":"amd","cards":1,"model":"Instinct MI210"},{"vendor":"kunlunxin","cards":1,"model":"P800 PCIe"}]`) {
+		t.Fatalf("a Kubernetes node hides an AMD or Kunlunxin card: %s", raw)
+	}
+}

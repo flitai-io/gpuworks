@@ -39,10 +39,10 @@ func TestImagePresenceWritesOnlyWhatChanged(t *testing.T) {
 		}
 		return got
 	}
-	present := proto.ImagePresence{ImageRef: settled.ImageRef, Present: true, SizeBytes: 100}
-	report(present, proto.ImagePresence{ImageRef: syncing.ImageRef}, proto.ImagePresence{ImageRef: "example/unknown:1", Present: true})
+	present := proto.ImagePresence{ImageRef: settled.ImageRef, Present: true, ImageID: "sha256:settled", SizeBytes: 100}
+	report(present, proto.ImagePresence{ImageRef: syncing.ImageRef, Present: true, ImageID: "sha256:while-syncing"}, proto.ImagePresence{ImageRef: "example/unknown:1", Present: true})
 	first, firstSync := row(settled), row(syncing)
-	if first.State != ImageStatePresent || first.SizeBytes != 100 || firstSync.State != ImageStateSyncing {
+	if first.State != ImageStatePresent || first.ImageDigestID != "sha256:settled" || first.SizeBytes != 100 || firstSync.State != ImageStateSyncing || firstSync.ImageDigestID != "" {
 		t.Fatalf("after first report: settled=%+v syncing=%+v", first, firstSync)
 	}
 
@@ -56,12 +56,16 @@ func TestImagePresenceWritesOnlyWhatChanged(t *testing.T) {
 	}
 
 	report(proto.ImagePresence{ImageRef: settled.ImageRef, Present: true, SizeBytes: 200})
-	if got := row(settled); got.SizeBytes != 200 {
-		t.Fatalf("size change not written: %+v", got)
+	if got := row(settled); got.SizeBytes != 200 || got.ImageDigestID != "sha256:settled" {
+		t.Fatalf("a report without an id rewrote the digest: %+v", got)
+	}
+	report(proto.ImagePresence{ImageRef: settled.ImageRef, Present: true, ImageID: "sha256:rolled", SizeBytes: 200})
+	if got := row(settled); got.ImageDigestID != "sha256:rolled" {
+		t.Fatalf("identity change not written: %+v", got)
 	}
 	report(proto.ImagePresence{ImageRef: settled.ImageRef, Present: false})
-	if got := row(settled); got.State != ImageStateAbsent {
-		t.Fatalf("state change not written: %+v", got)
+	if got := row(settled); got.State != ImageStateAbsent || got.ImageDigestID != "" {
+		t.Fatalf("absence did not clear state and identity: %+v", got)
 	}
 }
 
@@ -78,13 +82,17 @@ func TestImagePresenceClearsAFailedTransferOnceTheImageArrives(t *testing.T) {
 	source, _ := st.RegisterNode("node-presence-source", HashToken("s"), "presence-source")
 	node, _ := st.RegisterNode("node-presence-failed", HashToken("t"), "presence-failed")
 	if _, err := st.UpsertImageNode(&ImageNode{ImageID: image.ID, NodeID: node.ID, State: ImageStateFailed, Source: "peer", SourceNodeID: source.ID,
-		TransferredBytes: 4096, Message: "send peer image archive: connection refused"}); err != nil {
+		TransferredBytes: 4096, Message: "send peer image archive: connection refused", ImageDigestID: "sha256:failed-copy"}); err != nil {
 		t.Fatal(err)
 	}
 	ok := true
 	report := func(present bool) *ImageNode {
 		t.Helper()
-		if err := st.UpdateNodeStatus(node.UUID, proto.NodeStatus{GPUProbeOK: &ok, Images: []proto.ImagePresence{{ImageRef: image.ImageRef, Present: present, SizeBytes: 300}}}); err != nil {
+		presence := proto.ImagePresence{ImageRef: image.ImageRef, Present: present, SizeBytes: 300}
+		if present {
+			presence.ImageID = "sha256:arrived"
+		}
+		if err := st.UpdateNodeStatus(node.UUID, proto.NodeStatus{GPUProbeOK: &ok, Images: []proto.ImagePresence{presence}}); err != nil {
 			t.Fatal(err)
 		}
 		got, err := st.ImageNode(image.ID, node.ID)
@@ -93,11 +101,11 @@ func TestImagePresenceClearsAFailedTransferOnceTheImageArrives(t *testing.T) {
 		}
 		return got
 	}
-	if got := report(false); got.State != ImageStateFailed || got.Source != "peer" || got.Message == "" {
+	if got := report(false); got.State != ImageStateFailed || got.Source != "peer" || got.Message == "" || got.ImageDigestID != "" {
 		t.Fatalf("a failure the runtime confirms stays visible: %+v", got)
 	}
 	got := report(true)
-	if got.State != ImageStatePresent || got.Source != "" || got.SourceNodeID != 0 || got.Message != "" || got.TransferredBytes != 0 || got.SizeBytes != 300 {
+	if got.State != ImageStatePresent || got.Source != "" || got.SourceNodeID != 0 || got.Message != "" || got.TransferredBytes != 0 || got.SizeBytes != 300 || got.ImageDigestID != "sha256:arrived" {
 		t.Fatalf("present after a failed copy: %+v", got)
 	}
 }

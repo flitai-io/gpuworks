@@ -61,3 +61,14 @@ func TestPortRangeContainsItsBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePortRange(t *testing.T) {
+	if r, err := ParsePortRange(" 40000-42767 "); err != nil || r != (PortRange{Start: 40000, End: 42767}) {
+		t.Fatalf("ParsePortRange = %+v, %v", r, err)
+	}
+	for _, bad := range []string{"", "40000", "42767-40000", "0-10", "1-70000", "a-b"} {
+		if _, err := ParsePortRange(bad); err == nil {
+			t.Fatalf("ParsePortRange(%q) accepted", bad)
+		}
+	}
+}

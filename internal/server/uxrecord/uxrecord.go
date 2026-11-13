@@ -97,8 +97,9 @@ type Request struct {
 	ReceivedMS   int64
 	DeploymentID uint
 	InstanceUUID string
-	// APIKeyID and UserID identify the caller; zero when unknown (a gateway
-	// with no API keys configured, or the playground's APIKeyID).
+	// APIKeyID and UserID identify the caller; zero when unknown (the
+	// playground's APIKeyID, or a keyless request the gateway accepted because
+	// open access is on).
 	APIKeyID uint
 	UserID   uint
 	Source   Source

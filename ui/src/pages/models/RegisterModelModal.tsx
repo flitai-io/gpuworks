@@ -14,6 +14,8 @@ import { Modalities } from "../ModelsPageParts";
 import { formatBytes } from "../../format";
 import { useLocalStorageChoice } from "./useStorages";
 import NodePicker from "../../nodes/NodePicker";
+import { localRegistrationErrorText } from "./localRegistrationError";
+import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
 
 // The two-step sources are the ones whose identity cannot be typed from
 // memory: a node path and an HTTP directory are both read first and confirmed
@@ -29,6 +31,8 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
   const [preview, setPreview] = useState<LocalModelPreview | null>(null);
   const [urlPreview, setURLPreview] = useState<URLModelPreview | null>(null);
   const source = Form.useWatch("source", form) as string | undefined;
+  const directoryURL = Form.useWatch("source_url", form) as string | undefined;
+  const outbound = useOutboundHostAccess([directoryURL ?? ""], open && source === "url");
   // Which local storage a registered path belongs to is only asked when there
   // is more than one; otherwise the request carries no storage_id, as before.
   const localStorages = useLocalStorageChoice(open && source === "local");
@@ -44,7 +48,7 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
       setPreview(result);
       form.setFieldsValue({ source_id: result.source_id, name: result.name });
     } catch (e) {
-      message.error(t("register.previewFailed", { detail: (e as Error).message }));
+      message.error(t("register.previewFailed", { detail: localRegistrationErrorText(t, e) }));
     } finally {
       setPreviewing(false);
     }
@@ -60,6 +64,7 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
     }
     setPreviewing(true);
     try {
+      await outbound.authorize();
       const result = await api.previewURLModel(values.source_url);
       setURLPreview(result);
       form.setFieldsValue({ source_url: result.source_url, source_id: result.source_id, name: result.name });
@@ -70,14 +75,20 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
     }
   };
   const submit = async () => {
-    const v = await form.validateFields();
+    // A rejected validation leaves the dialog open on the fields it marked; it is not a failed
+    // registration, so it returns without a message and without a request.
+    const v = await form.validateFields().catch(() => null);
+    if (!v) return;
     if (v.source === "local" && !preview) { await previewLocal(); return; }
     if (v.source === "url" && !urlPreview) { await previewURL(); return; }
     setSubmitting(true);
     try {
       let registered: Model | undefined;
       if (v.source === "local") await api.registerLocalModel({ node_uuid: v.node_uuid, path: v.path, source_id: v.source_id, name: v.name, ...(effectiveStorageId ? { storage_id: effectiveStorageId } : {}) });
-      else if (v.source === "url") registered = await api.registerURLModel({ source_url: v.source_url, source_id: v.source_id, name: v.name });
+      else if (v.source === "url") {
+        await outbound.authorize();
+        registered = await api.registerURLModel({ source_url: v.source_url, source_id: v.source_id, name: v.name });
+      }
       else {
         let metadata: Awaited<ReturnType<typeof fetchHuggingFaceMetadata>> | undefined;
         if (v.source === "huggingface") {
@@ -109,7 +120,7 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
       reset();
       onDone();
     } catch (e) {
-      message.error(t("register.failed", { detail: (e as Error).message }));
+      message.error(t("register.failed", { detail: v.source === "local" ? localRegistrationErrorText(t, e) : (e as Error).message }));
     } finally {
       setSubmitting(false);
     }
@@ -131,23 +142,24 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
       </Form.Item>
       {source === "local" ? <>
         {localStorages.choose && <Form.Item label={t("register.storage")}><Select aria-label={t("register.storage")} value={effectiveStorageId} onChange={setStorageId} options={localStorages.options.map((s) => ({ value: s.id, label: s.name }))} /></Form.Item>}
-        <Form.Item label={t("detail.node")} name="node_uuid" rules={[{ required: true, message: t("register.nodeRequired") }]}><NodePicker placeholder={t("register.selectOnlineNode")} aria-label={t("detail.node")} filter={{ state: ["online"] }} notFoundContent={t("download.noOnlineNodes")} /></Form.Item>
-        <Form.Item label={t("register.modelDirectory")} name="path" rules={[{ required: true, message: t("register.modelDirectoryRequired") }]} extra={t("register.modelDirectoryHelp")}><Input placeholder="/models/Qwen/Qwen3-8B" /></Form.Item>
+        <Form.Item label={t("detail.node")} name="node_uuid" rules={[{ required: true, whitespace: true, message: t("register.nodeRequired") }]}><NodePicker placeholder={t("register.selectOnlineNode")} aria-label={t("detail.node")} filter={{ state: ["online"] }} notFoundContent={t("download.noOnlineNodes")} /></Form.Item>
+        <Form.Item label={t("register.modelDirectory")} name="path" rules={[{ required: true, whitespace: true, message: t("register.modelDirectoryRequired") }]} extra={t("register.modelDirectoryHelp")}><Input placeholder="/models/Qwen/Qwen3-8B" /></Form.Item>
       </> : source === "url" ? <>
-        <Form.Item label={t("register.directoryURL")} name="source_url" rules={[{ required: true, message: t("register.directoryURLRequired") }]} extra={t("register.directoryURLHelp")}>
+        <Form.Item label={t("register.directoryURL")} name="source_url" rules={[{ required: true, whitespace: true, message: t("register.directoryURLRequired") }]} extra={t("register.directoryURLHelp")}>
           <Input placeholder="https://hf-mirror.example.com/Qwen/Qwen3-0.6B" onPressEnter={(event) => { event.preventDefault(); void previewURL(); }} />
         </Form.Item>
-        <Form.Item>
+        <OutboundHostAccess access={outbound} />
+        <div className="mb-6">
           <Button loading={previewing} onClick={() => { void previewURL(); }}>{t("register.parseDirectory")}</Button>
-        </Form.Item>
+        </div>
       </> : <>
-        <Form.Item label={t("column.sourceID")} name="source_id" rules={[{ required: true }]}><Input placeholder="Qwen/Qwen3-8B" /></Form.Item>
+        <Form.Item label={t("column.sourceID")} name="source_id" rules={[{ required: true, whitespace: true }]}><Input placeholder="Qwen/Qwen3-8B" /></Form.Item>
         <Collapse size="small" ghost items={[{ key: "advanced", label: t("register.advanced"), children: <Form.Item label={t("detail.revision")} name="revision" extra={t("register.revisionHelp")}><Input placeholder={t("register.revisionPlaceholder")} /></Form.Item> }]} />
       </>}
       {source === "local" && preview && <Alert type="success" showIcon message={t("register.localParsed")} description={<Descriptions size="small" column={2}><Descriptions.Item label={t("register.path")} span={2}>{preview.path}</Descriptions.Item><Descriptions.Item label={t("detail.architecture")}>{preview.arch || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("detail.precision")}>{preview.precision || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.context")}>{preview.context_length?.toLocaleString() || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.directorySize")}>{formatBytes(preview.weight_bytes)}</Descriptions.Item><Descriptions.Item label={t("column.inputModalities")} span={2}><Modalities values={preview.input_modalities} /></Descriptions.Item></Descriptions>} style={{ marginBottom: 16 }} />}
       {source === "url" && urlPreview && <Alert type="success" showIcon message={t("register.urlParsed")} description={<Descriptions size="small" column={2}><Descriptions.Item label={t("register.directoryURLLabel")} span={2}>{urlPreview.source_url}</Descriptions.Item><Descriptions.Item label={t("detail.architecture")}>{urlPreview.arch || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("detail.precision")}>{urlPreview.precision || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.context")}>{urlPreview.context_length?.toLocaleString() || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.directorySize")}>{formatBytes(urlPreview.weight_bytes)}</Descriptions.Item><Descriptions.Item label={t("register.fileCount")} span={2}>{urlPreview.files_count}</Descriptions.Item><Descriptions.Item label={t("column.inputModalities")} span={2}><Modalities values={urlPreview.input_modalities} /></Descriptions.Item></Descriptions>} style={{ marginBottom: 16 }} />}
       {previewSources.has(source ?? "") && parsed && <>
-        <Form.Item label={t("register.modelID")} name="source_id" rules={[{ required: true }]}><Input onPressEnter={(event) => { event.preventDefault(); void submit(); }} /></Form.Item>
+        <Form.Item label={t("register.modelID")} name="source_id" rules={[{ required: true, whitespace: true }]}><Input onPressEnter={(event) => { event.preventDefault(); void submit(); }} /></Form.Item>
         {source === "local" && preview?.readme && <Card size="small" title={t("register.readmePreview", { truncated: preview.readme_truncated ? t("register.truncatedSuffix") : "" })} style={{ maxHeight: 220, overflow: "auto", marginBottom: 16 }}><MarkdownContent content={preview.readme} allowHtml /></Card>}
       </>}
       <Form.Item label={t("column.name")} name="name"><Input placeholder={t("register.displayNamePlaceholder")} /></Form.Item>

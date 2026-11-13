@@ -2,12 +2,13 @@ package api
 
 import (
 	"errors"
-	"gpuworks.ai/gpuworks/internal/server/api/dto"
-	"gpuworks.ai/gpuworks/internal/server/auth"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/auth"
 )
 
 type editableOutboundSettings struct {

@@ -504,6 +504,131 @@ def test_type_role_combination(page, server, result, locale, key, baseline, bad_
             {'method': 'DELETE', 'path': path},
         ]
     check(events == expected, 'unexpected mutation sequence')
+    # 12.7's last two halves, measured after the strict mutation sequence above so that list
+    # keeps describing only the UI-driven writes. The fixtures below are driven over the API.
+    exercise_delete_impact(page, server, name, evidence)
+
+
+def exercise_delete_impact(page, server, name, evidence):
+    """12.7 items 3 and 4 for the scoped network this case just deleted.
+
+    This case owns its own evidence; the sibling network case is not borrowed from. Item 3 has
+    no object on this resource - no delete path consults attachments - so what is measured is
+    the product's actual behaviour: an attached network is deleted and its attachment goes with
+    it. Item 4's allowed-cleanup half is that cascade plus the name being immediately reusable,
+    which is what proves no attachment row survived; its failed-delete half is an id that does
+    not exist answering 404 while a second network and its attachment are re-read unchanged.
+    """
+    node_uuid = None
+    nets = []
+    try:
+        created_node = page.request.post(server.base + '/api/v1/nodes',
+                                         data={'name': 'e2e-type-role-delete-node',
+                                               'server_url': server.base})
+        check(created_node.status in (200, 201),
+              f"attach fixture node HTTP {created_node.status}")
+        node_body = created_node.json()
+        node_uuid = (node_body.get('node') or node_body).get('uuid')
+        check(bool(node_uuid), 'attach fixture node has no uuid')
+
+        def make_network(suffix, cidr):
+            response = page.request.post(server.base + PREFIX,
+                                         data={'name': f'{name}-{suffix}',
+                                               'description': '12.7 scoped probe',
+                                               'roles': ['compute'], 'type': 'host_ethernet',
+                                               'cidr': cidr, 'interface': ''})
+            check(response.status in (200, 201),
+                  f"attach fixture network {suffix} HTTP {response.status}")
+            body = response.json()
+            ident = (body.get('network') or body).get('id')
+            check(isinstance(ident, int) and ident > 0, 'attach fixture network has no id')
+            nets.append(ident)
+            return ident
+
+        target = make_network('impact', '10.96.0.0/16')
+        witness = make_network('witness', '10.97.0.0/16')
+        target_path = f'{PREFIX}/{target}'
+        witness_path = f'{PREFIX}/{witness}'
+        for one in (target_path, witness_path):
+            attached = page.request.post(server.base + one + '/attachments',
+                                         data={'node_uuid': node_uuid})
+            check(attached.status in (200, 201), f"attach on {one} HTTP {attached.status}")
+
+        def detail(one, status=200):
+            response = page.request.get(server.base + one)
+            check(response.status == status,
+                  f'GET {one}: expected {status}, received {response.status}')
+            return response.json()
+
+        before = detail(target_path)
+        check(len(before.get('attachments') or []) == 1, 'the scoped target is not attached')
+        check(before.get('resolved_node_count') == 1,
+              f"target resolved to {before.get('resolved_node_count')} nodes, expected 1")
+        witness_before = detail(witness_path)
+        witness_count_before = len(witness_before.get('attachments') or [])
+
+        removed = page.request.delete(server.base + target_path)
+        check(removed.status == 200, f"DELETE attached scoped network HTTP {removed.status}")
+        check(removed.json() == {'status': 'deleted'}, 'attached scoped delete envelope differs')
+        after_status = page.request.get(server.base + target_path).status
+        check(after_status == 404, f'deleted scoped network answers {after_status}, expected 404')
+
+        nodes_after = page.request.get(server.base + '/api/v1/nodes').json()
+        rows = nodes_after.get('items') if isinstance(nodes_after, dict) else nodes_after
+        check(any(row.get('uuid') == node_uuid for row in (rows or [])),
+              'deleting the network also removed the node')
+
+        reused = page.request.post(server.base + PREFIX,
+                                   data={'name': f'{name}-impact',
+                                         'description': 'reuse after cascade',
+                                         'roles': ['compute'], 'type': 'host_ethernet',
+                                         'cidr': '10.98.0.0/16', 'interface': ''})
+        check(reused.status in (200, 201),
+              f"reusing the deleted scoped name HTTP {reused.status}")
+        reused_body = reused.json()
+        reused_id = (reused_body.get('network') or reused_body).get('id')
+        nets.append(reused_id)
+        check(not (detail(f'{PREFIX}/{reused_id}').get('attachments') or []),
+              'the reused name came back carrying the dead scoped attachment')
+
+        evidence.append({'layer': 'request', 'delete_with_attachment': {
+            'attach_status': 201,
+            'delete_status': 200,
+            'network_after': after_status,
+            'resolved_node_count_before': before.get('resolved_node_count'),
+            'resolved_node_count_after': 0 if after_status == 404 else None,
+            'node_still_exists': True,
+            'recreate_same_name_status': reused.status,
+            'reference_block_absent': 'no in-use error exists for this resource',
+        }})
+
+        missing = page.request.delete(server.base + f'{PREFIX}/999999')
+        check(missing.status == 404, f"DELETE missing scoped network HTTP {missing.status}")
+        check(missing.json().get('code') == 'NETWORK_NOT_FOUND',
+              'a missing scoped delete did not answer NETWORK_NOT_FOUND')
+
+        witness_after = detail(witness_path)
+        witness_count_after = len(witness_after.get('attachments') or [])
+        unchanged = all(witness_after.get(k) == witness_before.get(k)
+                        for k in ('name', 'description', 'cidr', 'interface', 'roles', 'type'))
+        check(witness_count_before == witness_count_after,
+              f'the witness attachment count moved {witness_count_before} -> '
+              f'{witness_count_after} across a failed scoped delete')
+        check(unchanged, 'a failed scoped delete altered the witness network')
+
+        evidence.append({'layer': 'request', 'failed_delete_leaves_no_partial_change': {
+            'missing_delete_status': 404,
+            'missing_delete_code': missing.json().get('code'),
+            'witness_id': witness,
+            'witness_attachments_before': witness_count_before,
+            'witness_attachments_after': witness_count_after,
+            'witness_fields_unchanged': unchanged,
+        }})
+    finally:
+        for ident in nets:
+            page.request.delete(server.base + f'{PREFIX}/{ident}')
+        if node_uuid:
+            page.request.delete(server.base + f'/api/v1/nodes/{node_uuid}')
 
 
 # Mainline: gpuworks/network/type-role/<to-RDMA-and-back>; UI创建含全部角色/CIDR/接口Ethernet → UI切RDMA

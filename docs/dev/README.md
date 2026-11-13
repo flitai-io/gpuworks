@@ -42,6 +42,7 @@ make demo
 - [AMD 接入结构与硬件验收](amd-hardware-validation.md)
 - [评测信息与报告规范](benchmark-reporting-standard.md)
 - [逐请求引擎排队耗时的观测边界](engine-queue-observation.md)
+- [社区镜像仓库浏览](community-registry-browse.md)
 - [浏览器 E2E 测试规范](../../test/e2e/browser-e2e-testing-standard.md)
 - [浏览器 E2E 组件逐项检查清单](../../test/e2e/browser-e2e-component-checklists.md)
 - [发布构建](release.md)

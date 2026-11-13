@@ -2,7 +2,7 @@
 // framework each one runs. One place for this fact: the vendor logo, the
 // template catalog and the template detail page all read it from here.
 
-export const knownVendors = ["nvidia", "amd", "ascend", "hygon", "ppu", "apple"] as const;
+export const knownVendors = ["nvidia", "amd", "ascend", "hygon", "ppu", "apple", "kunlunxin"] as const;
 export type KnownVendor = (typeof knownVendors)[number];
 export type Vendor = KnownVendor | "unknown";
 
@@ -14,6 +14,7 @@ export const vendorFramework: Record<KnownVendor, string> = {
   hygon: "dtk",
   ppu: "hggc",
   apple: "metal",
+  kunlunxin: "xre",
 };
 
 const frameworkVendors: Record<string, KnownVendor> = Object.fromEntries(

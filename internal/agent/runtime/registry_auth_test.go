@@ -130,6 +130,43 @@ func TestPullAuthEnvWithoutLoginLeavesEnvironmentAlone(t *testing.T) {
 	}
 }
 
+// PullAuthEnvIn stages the login under a caller-chosen parent (a path another
+// mount namespace shares), creating the parent private, and PullAuthEnv keeps
+// using the system temp directory.
+func TestPullAuthEnvInUsesTheGivenParent(t *testing.T) {
+	ctx := WithRegistryAuth(context.Background(), []proto.SourceAuth{{Host: "quay.io", Username: "u", Secret: "s"}})
+	parent := filepath.Join(t.TempDir(), "state", "pull-auth")
+	env, cleanup, err := PullAuthEnvIn(ctx, "quay.io/x:1", nil, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := strings.TrimPrefix(env[len(env)-1], "DOCKER_CONFIG=")
+	if filepath.Dir(dir) != parent {
+		t.Fatalf("login dir %s is not under %s", dir, parent)
+	}
+	if info, err := os.Stat(parent); err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("parent: %v %v", info, err)
+	}
+	if info, err := os.Stat(dir); err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("login dir: %v %v", info, err)
+	}
+	cleanup()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("login dir survived cleanup: %v", err)
+	}
+	if _, err := os.Stat(parent); err != nil {
+		t.Fatalf("cleanup removed the shared parent: %v", err)
+	}
+	// A parent that cannot be made is an error, not a fallback to /tmp.
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if env, _, err := PullAuthEnvIn(ctx, "quay.io/x:1", nil, filepath.Join(blocker, "sub")); err == nil || env != nil {
+		t.Fatalf("env=%v err=%v", env, err)
+	}
+}
+
 func TestPullAuthEnvFailsWhenTempDirUnavailable(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "missing", "dir"))
 	ctx := WithRegistryAuth(context.Background(), []proto.SourceAuth{{Host: "quay.io", Username: "u", Secret: "never-in-errors"}})

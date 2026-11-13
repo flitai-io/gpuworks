@@ -181,7 +181,7 @@ func extractModelArchive(ctx context.Context, root string, r io.Reader) error {
 			if err := os.MkdirAll(dst, 0o755); err != nil {
 				return err
 			}
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 				return err
 			}

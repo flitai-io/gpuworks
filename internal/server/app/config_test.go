@@ -83,3 +83,10 @@ func TestBindingsUseListenOrTheSingleAddress(t *testing.T) {
 		t.Fatalf("listen section = %+v", listen)
 	}
 }
+
+func TestDefaultPeerRelayConfigurationUsesSharedSafePolicy(t *testing.T) {
+	got, err := DefaultConfig().PeerRelay.Policy()
+	if err != nil || got.RateLimitBytesPerSecond != 64<<20 || got.BurstBytes != 64<<10 || got.MaxActive != 2 || got.MaxPerNode != 1 || got.NoProgressTimeout != 2*time.Minute || got.ConfirmationTimeout != 5*time.Minute {
+		t.Fatalf("default relay policy=%+v err=%v", got, err)
+	}
+}

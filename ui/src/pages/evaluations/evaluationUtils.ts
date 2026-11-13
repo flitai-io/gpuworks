@@ -275,8 +275,8 @@ export function verdictPresentation(run: BenchmarkRun, t?: TFunction): VerdictPr
 	if (run.state === "failed" || verdict?.kind === "failed") {
 		return { tone: "error", title: run.points?.length ? tr(t, "utility.verdict.partialTitle", "Evaluation Partially Complete") : tr(t, "utility.verdict.failedTitle", "Evaluation Failed"), description: benchmarkErrorText(t, run.error) || tr(t, "utility.verdict.failedDescription", "An error occurred during execution; completed points were retained.") };
 	}
-	if (!verdict) return { tone: "info", title: tr(t, "utility.verdict.doneTitle", "Evaluation Complete"), description: tr(t, "utility.verdict.legacyDescription", "This legacy Run has no verdict; point data remains available.") };
-	switch (verdict.kind) {
+
+	switch (verdict?.kind) {
 		case "saturated": {
 			const threshold = Number(run.search?.min_throughput_gain ?? .05) * 100;
 			return { tone: "success", title: tr(t, "utility.verdict.saturatedTitle", "Concurrency {{concurrency}} is the saturation point", { concurrency: verdict.saturation_concurrency }), description: tr(t, "utility.verdict.saturatedDescription", "Throughput gain falls below {{threshold}}% at higher concurrency. Recommended capacity is about {{rps}} req/s per instance, with TTFT P99 {{ttft}} ms.", { threshold: threshold.toFixed(0), rps: format(point?.request_tput), ttft: format(completedPointTTFT(point)) }) };
@@ -300,6 +300,7 @@ export function verdictPresentation(run: BenchmarkRun, t?: TFunction): VerdictPr
 			return { tone: "success", title: tr(t, "utility.verdict.gridDoneTitle", "Parameter scan complete with {{count}} points", { count: run.points?.length ?? 0 }), description: tr(t, "utility.verdict.gridDoneDescription", "Best measured point in this run: {{throughputLoad}} × ISL {{isl}}, output {{throughput}} tok/s; best measured TTFT P99 at {{latencyLoad}}: {{ttft}} ms.", { throughputLoad: point ? pointLoadLabel(point) : "-", isl: point?.target_isl ?? "-", throughput: format(point?.output_tput), latencyLoad: latencyBest ? pointLoadLabel(latencyBest) : "-", ttft: format(completedPointTTFT(latencyBest)) }) };
 		}
 	}
+	return { tone: "info", title: tr(t, "utility.verdict.doneTitle", "Evaluation Complete"), description: tr(t, "utility.verdict.legacyDescription", "This legacy Run has no verdict; point data remains available.") };
 }
 
 export function estimateRequests(mode: BenchmarkMode, concurrency: number[], multiplier: number, maxConcurrency?: number, islCount = 1, oslCount = 1) {

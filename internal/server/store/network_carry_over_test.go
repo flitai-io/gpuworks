@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
 )

@@ -27,6 +27,8 @@ import (
 	partitionprobe "gpuworks.ai/gpuworks/internal/agent/probe"
 	"gpuworks.ai/gpuworks/internal/agent/registryprobe"
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/kube"
+	"gpuworks.ai/gpuworks/internal/agent/storagemount"
 	"gpuworks.ai/gpuworks/internal/assets"
 	"gpuworks.ai/gpuworks/internal/debuglog"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -39,6 +41,12 @@ import (
 // status reports route to the live link (and are dropped when offline — the
 // server re-syncs and the agent re-reports on the next connect).
 type NodeRuntime struct {
+	// kubeCordon is the last cordon state a kube node read from its API
+	// server, restated when a round cannot ask.
+	kubeCordon struct {
+		mu   sync.Mutex
+		last bool
+	}
 	log            *slog.Logger
 	switchMu       sync.Mutex
 	engine         *engine.Engine
@@ -161,6 +169,9 @@ type NodeRuntime struct {
 	// runtimeChoice is whether auto-detection picks the runtime and what
 	// it passed over (runtime_select.go).
 	runtimeChoice runtimeChoice
+	// kubeNode is set when the agent runs as a Kubernetes node (--driver=kube):
+	// its instances are pods, so the runtime is fixed (refuseRuntimeSwitch).
+	kubeNode bool
 	// accelerator is which vendor's cards this process manages and how
 	// that is changed (accelerator_choice.go).
 	accelerator acceleratorChoice
@@ -275,7 +286,13 @@ func newNodeRuntime(log *slog.Logger, driver runtime.Driver, modelsDir, forceDri
 		log.Warn("agent state directory unavailable", "path", stateDir, "err", err)
 	}
 	n := &NodeRuntime{log: log, modelsDir: modelsDir, stateDir: stateDir, prober: prober, downloading: map[string]*modelDownload{}, modelSyncs: map[string]*activeModelSync{}, imageSyncs: map[string]*activeImageSync{}, netBench: newNetBenchManager(), progress: newProgressGate()}
-	n.storage = newStorageRuntime(stateDir, n.mountBusy)
+	var mountRunner storagemount.Runner
+	if forceDriver == kube.DriverName {
+		// The agent's pod mounts NFS on the host, with the host's
+		// mount.nfs, where instance pods see it.
+		mountRunner = kube.HostExec
+	}
+	n.storage = newStorageRuntime(stateDir, n.mountBusy, mountRunner)
 	n.servingForward = newServingForwarder(log, n.currentNodeToken, n.instanceAPIPort)
 	n.perftest = perftest.Host(stateDir)
 	if accelerator.HasRuntimeAssetBundles(prober.Vendor()) {
@@ -293,6 +310,7 @@ func newNodeRuntime(log *slog.Logger, driver runtime.Driver, modelsDir, forceDri
 		driver = selection.driver
 		n.runtimeChoice.reset(strings.TrimSpace(forceDriver) == "", selection.fallback)
 	}
+	n.kubeNode = forceDriver == kube.DriverName || (driver != nil && driver.Name() == kube.DriverName)
 	n.puller = n.newPuller(log, injected, registries)
 	if driver != nil {
 		// The node's puller comes first so a caller's own option can replace it.
@@ -300,6 +318,11 @@ func newNodeRuntime(log *slog.Logger, driver runtime.Driver, modelsDir, forceDri
 		options = append(options, engine.WithRuntimeObservationReporter(n.captureObservationConnection, n.reportRuntimeObservation))
 		options = append(options, engine.WithNetworkConfig(n.network))
 		options = append(options, engine.WithLogDrain(n.drainInstanceLogs))
+		if !injected {
+			// A test harness's runtime is not the host's: the host's docker
+			// images are no source for it.
+			options = append(options, engine.WithOtherRuntimes(n.otherRuntimes))
+		}
 		n.engine = engine.NewWithProber(driver, n.reportInstance, log, filepath.Dir(modelsDir), prober, options...)
 		n.partitionProbe = partitionprobe.New(driver, n.engine, prober.Vendor())
 	} else if hasPartitionBackendForVendor(prober.Vendor()) {

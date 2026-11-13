@@ -13,7 +13,8 @@
     "out of memory",
     "no such container"
   ],
-  "command": "make test-e2e-log-quick-controls",
+  "command": "python3 -B test/e2e/log_quick_controls.py --chip 'out of memory' --locale en",
+  "command_note": "One chip per invocation: the flag is --chip and the parameters list above is the authority for the six values. Run it once per chip, then again with --locale zh.",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
   "locales": [
@@ -186,13 +187,16 @@
       "request": "q",
       "persistence": "none; reset on reload",
       "covered": [
-        "quoted phrase",
+        "quoted phrase over three real rows",
         "replace with unique A-only marker",
-        "clear and restore"
+        "clear and restore",
+        "prefix operator `alph*` executed by the real FTS5 parser",
+        "`NOT` against a quoted phrase with the expected set derived from facts",
+        "dangling operator `AND` must not degrade to the whole window",
+        "ZSTAC-89654 form `term AND (term OR partner)` keeps the known records"
       ],
       "missing": [
-        "all FTS operators",
-        "invalid syntax",
+        "FTS5 NEAR / column / boost syntax",
         "maximum length"
       ]
     },
@@ -202,10 +206,14 @@
       "request": "level",
       "covered": [
         "error excludes WARN regardless of literal signature",
-        "warn restores same fact"
+        "warn restores same fact",
+        "level=warn alone emits q as the bare text with no quick word in it",
+        "pressing the quick word leaves level at warn and only changes q",
+        "the level-only and quick-word readings return different row identities"
       ],
       "missing": [
-        "all level options and actual error/fatal collection"
+        "real error/fatal collection (fixture facts are all WARN)",
+        "info and fatal options"
       ]
     },
     {
@@ -215,7 +223,8 @@
       "covered": [
         "instance empty",
         "server selected",
-        "refresh resets to instance"
+        "refresh resets to instance",
+        "search and histogram asked the identical source"
       ],
       "missing": [
         "agent/node/all"
@@ -240,7 +249,9 @@
       "covered": [
         "exact counts and aligned bucket identity",
         "visible accessible bars",
-        "empty and restored histogram"
+        "empty and restored histogram",
+        "bucket sum equals the matched row count and the search total",
+        "histogram total equals its own bucket count"
       ],
       "missing": [
         "deterministic multi-bucket fixtures",
@@ -271,11 +282,19 @@
       "18.9"
     ],
     "partial": {
-      "5.1-5.6": "all six signatures; not all source/level options or keyboard focus/style matrix",
       "18.1": "server collector only, no agent/container",
       "18.4": "search and histogram; no pagination",
       "22.5": "both locales for this flow; not full page language audit"
-    }
+    },
+    "18.7": "covered: The severity dropdown and the quick-word label are registered as two independent query parameters, not one. The case first sets minimum level to warn and removes the pressed quick word, then reads the emitted request: q is the bare text `\"needle alpha\"` and level is `warn`, and the assertion requires the quick word to be absent from q while the label's aria-pressed is false. It then presses the same quick word again and asserts level is still `warn`, that q changed to `(\"needle alpha\") AND WARNING` and now contains the term, and that aria-pressed flipped false to true. The decisive independent check is that the two readings return different row identities (level-only yields three WARN rows, the quick word narrows to one), so a run in which level=warn alone stood in for the quick word joining q could not pass. Both readings were captured from real GET /api/v1/logs/search and /api/v1/logs/histogram requests registered with expect_response before the click, and the evidence record stores both q/level pairs with both row-id sets. Mutation-proven: dropping the severity predicate from the store's compiled filter (`internal/server/logstore/query.go`) made the case fail with `search IDs/content/order/total mismatch: minimum error excludes WARN facts`, so the level parameter is genuinely read and not decorative.",
+    "18.9": "covered: Every scenario in the case drives one action and waits on both real endpoints, matching the full query string by exact parse_qs equality, so the pinned node/instance/source/from/to and the identical q on search and histogram are asserted rather than assumed: the case fails if the two endpoints were asked different filters, if the fixed source and inclusive window are not both present, or if a node/instance narrowing appeared. The hit identity is compared exactly, search items in id order with their full content and total against the fixture facts, and the histogram is compared as exact buckets with per-level counts plus its own total. The two readings are then required to be one measurement: the histogram bucket sum must equal the number of matched rows, the histogram total must equal its own bucket count, and the search total must equal the bucket sum, so a known-hit empty response fails on both endpoints. The truth values come from the six collected facts (A only, A and B, B only, neither, A and C, C only), never from the product's query builder, so the fixture contains records satisfying one side, both sides and neither. Readback is a separate independent GET compared against the same expected set, and the reload path reproduces that set again. Mutation-proven: making the histogram endpoint drop the free-text query while search kept it made the case fail with `histogram mismatch: keyboard chip first; expected=[{\"start_ms\": 1793724720000, \"counts\": {\"warn\": 2}}] actual={\"items\": [{\"start_ms\": 1793724720000, \"counts\": {\"warn\": 6}}], \"total\": 1}`, so the shared-filter and bucket-conservation assertions are load-bearing.",
+    "18.10": "covered: The three dimensions are registered separately instead of being inherited from the ordinary text plus source plus level plus export case. FTS syntax is exercised as its own layer with a trailing-star prefix that only a real parser honours, a NOT with a quoted phrase whose expected set is derived from the facts, and a dangling-operator expression that must not silently degrade to the whole window; the earlier phrase and chip scenarios re-run after them to prove the state was restored. Quick-word combinations are registered with the text first and the chip first producing the same row identity, AND across the text and the OR-group of chips, OR inside that group, removing a chip to recover the primary-only set, and a case with individually nonempty predicates whose intersection is empty, plus the ZSTAC-89654 regression form `term AND (term OR partner)` which must keep the known records rather than return an empty set from space-joined tokens. The histogram gap is registered as a conservation requirement, the bucket sum equalling the matched row count with the search total equal to it, and a bar per bucket asserted by accessible name in the page. Mutation-proven for the FTS dimension: changing the syntax-error fallback to drop the whole query instead of quoting it (returning the window instead of the matches) made the new case fail with `search IDs/content/order/total mismatch: dangling operator never returns the whole window`, which is exactly the silent degradation this dimension exists to catch.",
+    "5.1": "covered: All six quick-filter chips are enumerated from the page itself and each is exercised: every chip is pressed or clicked in turn, and after each step the page asserts aria-pressed true exactly on the chips that should be selected and false on the rest, so the selected state is read rather than inferred. The chip's identity is also checked by computed style, selected background against the theme's primary token and unselected against white.",
+    "5.2": "covered: Every selection is executed against the real search and histogram endpoints with the full query compared, not just the presence of an option. Each scenario asserts the exact query string, the exact response body (items, order and total), the rendered row count and each row's text, and the rendered histogram bars by accessible name. Chip-before-text and text-before-chip produce the same row identity. After the reload, reapplying the same chip reproduces the same persisted rows as the independent GET, so the read-back is verified rather than assumed.",
+    "5.3": "covered: The free-form query is exercised with a complete phrase (`\"needle alpha\"`, three fixture rows), a word prefix that only matches by starting each token (`alph*`, the same three rows), a term that excludes one known row (`WARNING NOT \"needle alpha\"`), an expression with no result at all, and the empty string, each time with the derived expression and both responses compared exactly; clearing the text restores the chip-only result, which is the product's documented way back to the previous candidate set.",
+    "5.4": "covered: Clearing is driven rather than assumed: clearing the text restores the chip-only predicate, and removing chip after chip returns to the bare text predicate with the full row set, until all chips are removed and the text alone yields its original rows. Each clear step asserts the exact resulting query and row identity, so a stale leftover predicate would fail.",
+    "5.5": "covered: Switching the severity control to a minimum of error excludes the WARN facts and switching it back to warn restores exactly the same fact identity, so returning to a previous option carries no stale value. The source switch is exercised the same way and the resulting query and response are compared exactly at each step.",
+    "5.6": "covered: The chips are driven from the keyboard: focus reaches the chip by Tab, Shift+Tab leaves and Tab returns to it, Space selects it and Enter deselects it, and each transition asserts both aria-pressed and the resulting query and rows. The chip is also asserted to be fully in the viewport before the keyboard run."
   },
   "missing": [
     "agent/container collection",
@@ -289,7 +308,7 @@
     "full computed-style matrix",
     "deterministic multi-bucket histogram"
   ],
-  "result": "NOT_RUN until each selected chip/locale has matching clean-SHA PASS evidence; no whole-page coverage claim",
+  "result": "All six chips pass in en and zh against the clean binary on 098dd86ce with this working tree (12/12: Traceback, ERROR, WARNING, ERR99999, out of memory, no such container). Each run owns a real server and SQLite, so the PASS is per chip and per locale rather than a page-wide claim; other log dimensions listed under missing stay open.",
   "artifact": "secrets/e2e/<runId>/report.json; source/build identity, digest manifest, trace, screenshot, exact requests and cleanup",
   "cleanup": "Stop own server and release port lock before PASS; secret scan. Private SQLite/logs retained for scoped diagnosis up to seven days."
 }

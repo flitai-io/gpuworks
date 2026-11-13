@@ -88,7 +88,7 @@ func (c *CheckCache) Prefetch(client *Client, channel string, timeout time.Durat
 		defer c.prefetching.Store(false)
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		c.Probe(ctx, client, channel, false, report)
+		_, _, _ = c.Probe(ctx, client, channel, false, report) // Prefetch has no result consumer; Probe retains non-cancellation outcomes.
 	}()
 }
 

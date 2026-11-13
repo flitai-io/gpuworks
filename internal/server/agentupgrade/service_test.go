@@ -479,6 +479,7 @@ func TestDispatchRechecksPlatformAndLegacyDownloadReachability(t *testing.T) {
 	}{
 		{"platform", map[string]any{"arch": "arm64"}, "platform_changed"},
 		{"connection", map[string]any{"connect_mode": "server_dial"}, "legacy_unverified"},
+		{"kubernetes", map[string]any{"kube_cluster_id": 7}, "kubernetes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t, 1, false)
@@ -494,5 +495,113 @@ func TestDispatchRechecksPlatformAndLegacyDownloadReachability(t *testing.T) {
 				t.Fatal("issued upgrade using stale platform or download conditions")
 			}
 		})
+	}
+}
+
+// A Kubernetes node's agent is a pod of its cluster's DaemonSet: the batch
+// upgrade leaves it to the node's own upgrade, which rolls the DaemonSet.
+func TestPreviewLeavesKubernetesNodesToTheirDaemonSet(t *testing.T) {
+	f := newFixture(t, 2, false)
+	if err := f.st.DB().Model(&store.Node{}).Where("uuid = ?", "n1").Update("kube_cluster_id", 7).Error; err != nil {
+		t.Fatal(err)
+	}
+	p, err := f.s.Preview(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, c := range p.Nodes {
+		got[c.NodeUUID] = c.Eligibility
+	}
+	if got["n1"] != "kubernetes" || got["n2"] != "eligible" {
+		t.Fatalf("eligibility = %v, want n1 kubernetes and n2 eligible", got)
+	}
+}
+
+// An agent that runs from its node's state directory (kubeboot) is upgraded
+// like any other: the preview offers it and the dispatch sends it the binary,
+// while its neighbour on the image's own binary is still left to its
+// DaemonSet.
+func TestKubernetesAgentsOnTheStateDirectoryAreUpgradedInPlace(t *testing.T) {
+	f := newFixture(t, 2, true)
+	if err := f.st.DB().Model(&store.Node{}).Where("uuid IN ?", []string{"n1", "n2"}).Update("kube_cluster_id", 7).Error; err != nil {
+		t.Fatal(err)
+	}
+	f.tr.set("n1", Connection{SessionID: "old-n1", Version: "old", Ready: true, Caps: []string{proto.CapUpgradePush, proto.CapKubeBinaryUpgrade}})
+	p, err := f.s.Preview(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]Candidate{}
+	for _, c := range p.Nodes {
+		got[c.NodeUUID] = c
+	}
+	if got["n1"].Eligibility != "eligible" || got["n1"].Transport != "push" {
+		t.Fatalf("state-directory agent = %+v, want eligible over push", got["n1"])
+	}
+	if got["n2"].Eligibility != "kubernetes" {
+		t.Fatalf("image-binary agent = %+v, want kubernetes", got["n2"])
+	}
+	r := f.create(t, "queued", []string{"n1"}, 0)
+	f.tick(t)
+	if i := f.item(t, r.Record.ID, "n1"); i.Phase == "skipped" {
+		t.Fatalf("state-directory agent skipped at dispatch: %+v", i)
+	}
+	if f.tr.count() != 1 {
+		t.Fatalf("upgrades sent = %d, want 1", f.tr.count())
+	}
+}
+
+func TestFleetNoticeUsesPackageMetadataAndCountsUntilRealignment(t *testing.T) {
+	f := newFixture(t, 3, true)
+	nodes, err := f.st.ListNodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodes[0].AgentVersion = "target"
+	f.s.cfg.ReadBinary = func(string) ([]byte, error) { t.Fatal("listing nodes read an upgrade binary"); return nil, nil }
+	checks := 0
+	f.s.cfg.BinaryAvailable = func(name string) bool { checks++; return false }
+	result, err := f.s.Fleet(context.Background(), nodes)
+	if err != nil || checks != 1 || result.Eligibility[nodes[0].UUID] != "already_current" || result.Eligibility[nodes[1].UUID] != "artifact_missing" || result.Eligibility[nodes[2].UUID] != "artifact_missing" {
+		t.Fatalf("missing local package: %+v, checks %d error %v", result, checks, err)
+	}
+	f.s.cfg.TargetVersion = "dev"
+	result, err = f.s.Fleet(context.Background(), nodes)
+	if err != nil || len(result.Eligibility) != 0 || result.Target != "dev" || checks != 1 {
+		t.Fatalf("development target: %+v, checks %d error %v", result, checks, err)
+	}
+}
+
+func TestMixedBatchSkipsNodesAlignedBeforePreviewOrWhileQueued(t *testing.T) {
+	f := newFixture(t, 10, true)
+	for _, uuid := range []string{"n1", "n2", "n3"} {
+		if err := f.st.SetNodeAgentInfo(uuid, "target", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := f.create(t, "mixed", nil, 0)
+	if r.Counts.Skipped != 3 || r.Counts.Queued != 7 {
+		t.Fatal(r.Counts)
+	}
+	f.tr.set("n10", Connection{SessionID: "other-upgrade", Version: "target", Ready: true, Caps: []string{proto.CapUpgradePush}})
+	for i := 0; i < 12; i++ {
+		f.tick(t)
+		pending, err := f.st.AgentUpgradePendingItems()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range pending {
+			if activePhase(item.Phase) {
+				f.tr.set(item.NodeUUID, Connection{SessionID: "confirmed-" + item.NodeUUID, Version: "target", Ready: true, Caps: []string{proto.CapUpgradePush}})
+			}
+		}
+		if len(pending) == 0 {
+			break
+		}
+	}
+	done, err := f.s.Get(context.Background(), r.Record.ID)
+	if err != nil || done.Counts.Skipped != 4 || done.Counts.Succeeded != 6 || f.tr.count() != 6 {
+		t.Fatalf("dispatches=%d result=%+v err=%v", f.tr.count(), done.Counts, err)
 	}
 }

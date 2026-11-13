@@ -1,4 +1,6 @@
-import { Button, Dropdown, Space, Tag, Tooltip } from "antd";
+import { Button, Dropdown, Space, Tooltip } from "antd";
+import { Badge } from "../../components/ui/badge";
+import { Tooltip as ZeronTooltip } from "../../components/ui/tooltip";
 import { CodeOutlined, DeleteOutlined, MoreOutlined } from "@ant-design/icons";
 import type { TFunction } from "i18next";
 import type { GPU, Node } from "../../api";
@@ -39,7 +41,7 @@ export interface NodeColumnContext {
   t: TFunction<"nodes">;
   /** The state filter the list was asked for. */
   states: string[];
-  serverVersion?: string;
+  showCheckReason?: boolean;
   upgradeErrors?: Record<string, string> | null;
   upgradePhase: (uuid: string) => UpgradePhase | undefined;
   onOpen: (node: Node) => void;
@@ -52,7 +54,7 @@ export interface NodeColumnContext {
  * The node list's columns. Keys are the server's sort keys where the column
  * sorts, so a header click asks GET /nodes for that order.
  */
-export function nodeColumns({ t, states, serverVersion, upgradeErrors, upgradePhase, onOpen, onEditLabels, onScheduling, onDelete }: NodeColumnContext): ResourceColumn<Node>[] {
+export function nodeColumns({ t, states, showCheckReason, upgradeErrors, upgradePhase, onOpen, onEditLabels, onScheduling, onDelete }: NodeColumnContext): ResourceColumn<Node>[] {
   return [
     {
       key: "name",
@@ -64,6 +66,7 @@ export function nodeColumns({ t, states, serverVersion, upgradeErrors, upgradePh
         <>
           <Button type="link" onClick={() => onOpen(n)}>{n.name || n.hostname || n.uuid.slice(0, 12)}</Button>
           <span className="resource-table-sub">{n.hostname || t("waitingFirstConnection")}</span>
+          {showCheckReason && n.agent_eligibility && <span className="resource-table-sub">{t(`batchUpgrade.reason.${n.agent_eligibility}`)}</span>}
         </>
       ),
     },
@@ -97,31 +100,26 @@ export function nodeColumns({ t, states, serverVersion, upgradeErrors, upgradePh
     },
     {
       key: "agent_version",
-      title: "Agent",
-      label: "Agent",
-      width: 160,
+      title: t("detail.agentVersion"),
+      label: t("detail.agentVersion"),
+      width: 180,
       serverSort: true,
-      // Offered in the column settings; the node detail shows the version and
-      // the upgrade.
-      defaultHidden: true,
-      render: (_: unknown, n: Node) =>
-        upgradeErrors?.[n.uuid] ? (
-          <Tooltip title={upgradeErrors[n.uuid]}>
-            <Tag color="red">{t("upgrade.failed")}</Tag>
-          </Tooltip>
-        ) : upgradePhase(n.uuid) === "waiting" ? (
-          <Tag color="processing">{t("upgrade.upgrading")}</Tag>
-        ) : n.agent_version ? (
-          serverVersion && serverVersion !== "dev" && n.agent_version !== "dev" && serverVersion !== n.agent_version ? (
-            <Tooltip title={t("upgrade.available")}>
-              <Tag color="orange">{n.agent_version} · {t("upgrade.available")}</Tag>
-            </Tooltip>
-          ) : (
-            n.agent_version
-          )
-        ) : (
-          "—"
-        ),
+      render: (_: unknown, n: Node) => {
+        const offline = n.agent_eligibility === "offline" || n.state === "offline";
+        const inBatch = n.agent_eligibility === "busy" || upgradePhase(n.uuid) === "waiting";
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            {n.agent_version ? <span>{n.agent_version}</span> : <Badge size="sm" status="neutral">{t("fleet.notReported")}</Badge>}
+            {offline && n.agent_version && <Badge size="sm" status="neutral">{t("fleet.beforeOffline")}</Badge>}
+            {!offline && n.agent_version === "dev" && <Badge size="sm" status="neutral">{t("batchUpgrade.eligibility.unknown_version")}</Badge>}
+            {inBatch ? (
+              <Badge size="sm" status="info">{t("fleet.inBatch")}</Badge>
+            ) : !offline && (upgradeErrors?.[n.uuid] ? (
+              <ZeronTooltip content={upgradeErrors[n.uuid]}><Badge size="sm" status="danger" tabIndex={0}>{t("upgrade.failed")}</Badge></ZeronTooltip>
+            ) : n.agent_eligibility === "eligible" && <Badge size="sm" status="warning">{t(`fleet.status.${n.agent_version_change ?? "align"}`)}</Badge>)}
+          </div>
+        );
+      },
     },
     {
       key: "system_labels",

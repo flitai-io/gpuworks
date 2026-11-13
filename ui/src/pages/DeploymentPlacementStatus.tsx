@@ -76,16 +76,20 @@ export function PlacementStatusAlert({ dep }: { dep: Deployment }) {
   const [open, setOpen] = useState(false);
   const status = dep.placement_status;
   if (!status || status.unscheduled <= 0 || dep.pd) return null;
-  const preparing = dep.model_progress?.find((item) => !isModelFileReady(item.state) && item.preparation && ["downloading", "syncing", "checking", "copying", "verifying", "installing", "evicting"].includes(item.preparation.phase));
+  // A disk block needs operator action even while another model is preparing.
+  const diskFull = dep.model_progress?.find((item) => !isModelFileReady(item.state) && item.preparation?.reason === "MODEL_CACHE_DISK_FULL");
+  const preparing = diskFull ? undefined : dep.model_progress?.find((item) => !isModelFileReady(item.state) && item.preparation && ["downloading", "syncing", "checking", "copying", "verifying", "installing", "evicting"].includes(item.preparation.phase));
   // A preparation that FAILED reports phase "waiting" with a reason, so it is
   // not "preparing" any more - but it is still the reason no replica starts.
-  const failed = preparing ? undefined : dep.model_progress?.find((item) => !isModelFileReady(item.state) && item.preparation?.reason === preparationFailedReason);
+  const failed = diskFull || preparing ? undefined : dep.model_progress?.find((item) => !isModelFileReady(item.state) && item.preparation?.reason === preparationFailedReason);
+  const blocked = diskFull ?? failed;
   const render = (value: ScheduleMessage) => scheduleText(tDeploy, value);
-  const reason = !preparing && !failed && status.reason ? render(reasonWithFirst(status.reason, render)) : "";
-  const closest = preparing || failed ? [] : (status.reason?.params?.closest as ClosestNode[] | undefined) ?? [];
-  const at = !preparing && !failed && status.at ? new Date(status.at).toLocaleString(i18n.language) : "";
-  const headline = failed
-    ? t("detail.placement.preparationFailed", { count: status.unscheduled })
+  const reason = !preparing && !blocked && status.reason ? render(reasonWithFirst(status.reason, render)) : "";
+  const closest = preparing || blocked ? [] : (status.reason?.params?.closest as ClosestNode[] | undefined) ?? [];
+  const at = !preparing && !blocked && status.at ? new Date(status.at).toLocaleString(i18n.language) : "";
+  const headline = diskFull
+    ? t("detail.placement.diskFull", { count: status.unscheduled })
+    : failed ? t("detail.placement.preparationFailed", { count: status.unscheduled })
     : t(preparing ? "detail.placement.preparingModel" : "detail.placement.waiting", { count: status.unscheduled });
   return (
     <>
@@ -97,9 +101,9 @@ export function PlacementStatusAlert({ dep }: { dep: Deployment }) {
         description={
           <Space direction="vertical" size={4} style={{ width: "100%" }}>
             {preparing && <Typography.Text><PreparationLabel item={preparing} /></Typography.Text>}
-            {failed && <Typography.Text><PreparationLabel item={failed} /></Typography.Text>}
+            {blocked && <Typography.Text><PreparationLabel item={blocked} /></Typography.Text>}
             {/* The agent's own words: the part that says whether a retry can work. */}
-            {failed?.message && <Typography.Text code>{failed.message}</Typography.Text>}
+            {blocked?.message && <Typography.Text code>{blocked.message}</Typography.Text>}
             {failed && <Typography.Text type="secondary">{t("preparation.noAutoRetry")}</Typography.Text>}
             {reason && <Typography.Text>{reason}</Typography.Text>}
             {closest.length > 0 && (

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, afterEach, test } from "node:test";
 import React from "react";
 import { I18nextProvider } from "react-i18next";
-import { createI18n } from "./helpers/dom.ts";
+import { createI18n, dom } from "./helpers/dom.ts";
 import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 
 // The summarized earlier time of a busy card on the residency timeline: it is
@@ -12,6 +12,7 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 // the legend's hatch; and the text that replaces "only the latest segments
 // are shown".
 
+Object.defineProperty(globalThis, "Document", { value: dom.window.Document, configurable: true });
 const closeChannels = trackMessageChannels();
 const { i18n, locale } = await createI18n(["scheduling", "deployments", "deploy"]);
 const zh = await createI18n(["scheduling", "deployments"], "zh");
@@ -21,7 +22,7 @@ const { MemoryRouter } = await import("react-router-dom");
 const { schedulingApi } = await import("../src/schedulingApi.ts");
 const { default: ResidencyTimeline } = await import("../src/pages/scheduling/ResidencyTimeline.tsx");
 const { summaryText } = await import("../src/pages/scheduling/TimelineSummary.tsx");
-const { stateColor, lanesOf, CHART_WIDTH } = await import("../src/pages/scheduling/timelineChart.ts");
+const { lanesOf, CHART_WIDTH } = await import("../src/pages/scheduling/timelineChart.ts");
 const { formatTime } = await import("../src/i18n/datetime.ts");
 type Timeline = import("../src/schedulingApi.ts").SchedulingTimeline;
 type BoardNode = import("../src/schedulingApi.ts").BoardNode;
@@ -96,8 +97,7 @@ function mount() {
   return userEvent.setup();
 }
 
-const gpuGroup = (index: number) => screen.findByRole("group", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index }) });
-const lane = (card: HTMLElement, deployment: string) => within(card).getByRole("group", { name: i18n.t("scheduling:timeline.laneAria", { deployment }) });
+const gpuGroup = (index: number) => screen.findByRole("row", { name: i18n.t("scheduling:timeline.gpuAria", { node: "gpu-a", index }) });
 const summaryBlocks = (el: HTMLElement) => within(el).queryAllByRole("img").filter((b) => b.classList.contains("timeline-summary-block"));
 const t = i18n.getFixedT(null, "scheduling");
 
@@ -135,141 +135,56 @@ test("lanesOf adds a deployment that held the card only in the summarized time, 
   assert.deepEqual(lanesOf(timeline().nodes[0].gpus[0].segments, stats).map((l) => [l.deployment, l.summary.length]), [["deepseek", 0], ["GLM", 0]]);
 });
 
-test("summarized slices are drawn in each deployment's own lane, hatched, and there is no separate summary lane", async () => {
-  schedulingApi.timeline = async () => timeline();
-  mount();
-  const card = await gpuGroup(0);
-  // One lane per deployment, nothing else: the old "Earlier (summarized)" lane and its group are gone.
-  const groups = within(card).getAllByRole("group").map((g) => g.getAttribute("aria-label"));
-  assert.deepEqual(groups, ["deepseek", "GLM", "old-eval"].map((deployment) => i18n.t("scheduling:timeline.laneAria", { deployment })));
-  assert.equal(card.querySelectorAll(".timeline-summary-lane").length, 0);
-  assert.equal(within(card).queryByText("Earlier (summarized)"), null);
-  assert.equal(within(card).queryByRole("list"), null);
-  // Each deployment's lane holds its own slices and its own raw segments.
-  const deepseek = lane(card, "deepseek");
-  const glm = lane(card, "GLM");
-  const oldEval = lane(card, "old-eval");
-  assert.deepEqual([deepseek, glm, oldEval].map((l) => summaryBlocks(l).length), [1, 2, 1]);
-  assert.deepEqual([deepseek, glm, oldEval].map((l) => within(l).getAllByRole("img").length - summaryBlocks(l).length), [1, 1, 0]);
-  // To scale on the whole window: deepseek's slice is the first 10 h of 24, GLM's second is hours 10 to 12.
-  const widths = (el: HTMLElement) => summaryBlocks(el).map((b) => [Math.round(parseFloat(b.getAttribute("x") ?? "0")), Math.round(parseFloat(b.getAttribute("width") ?? "0"))]);
-  assert.deepEqual(widths(deepseek), [[0, Math.round((10 / 24) * CHART_WIDTH)]]);
-  assert.deepEqual(widths(glm), [[0, Math.round((10 / 24) * CHART_WIDTH)], [Math.round((10 / 24) * CHART_WIDTH), Math.round((2 / 24) * CHART_WIDTH)]]);
-  // The raw segment of deepseek begins where its summary ends, not before.
-  const raw = within(deepseek).getAllByRole("img").find((b) => !b.classList.contains("timeline-summary-block"));
-  assert.equal(Math.round(parseFloat(raw?.getAttribute("x") ?? "0")), CHART_WIDTH / 2);
-  // A pattern per lane with slices, and a hatch over each slice, which is no extra thing to tab to.
-  assert.deepEqual([deepseek, glm, oldEval].map((l) => l.querySelectorAll("pattern").length), [1, 1, 1]);
-  assert.deepEqual([deepseek, glm, oldEval].map((l) => l.querySelectorAll('rect[fill^="url(#"][aria-hidden="true"]').length), [1, 2, 1]);
-  const ids = new Set([deepseek, glm, oldEval].map((l) => l.querySelector("pattern")?.id));
-  assert.equal(ids.size, 3, "each lane's hatch has an id of its own");
-});
-
-test("a slice is coloured by the server's state for the deployment, with the colours of raw segments", async () => {
-  schedulingApi.timeline = async () => timeline();
-  mount();
-  const card = await gpuGroup(0);
-  const fills = (deployment: string) => summaryBlocks(lane(card, deployment)).map((b) => b.getAttribute("fill"));
-  assert.deepEqual(fills("deepseek"), [stateColor.awake]);
-  assert.deepEqual(fills("GLM"), [stateColor.awake, stateColor.asleep]);
-  assert.deepEqual(fills("old-eval"), [stateColor.starting]);
-  // Nothing but the server's state decides it: a deployment whose seconds are mostly awake but whose state says switching is drawn switching.
-  cleanup();
-  const odd = timeline();
-  odd.nodes[0].gpus[0].summary = [{ ...slices[0], deployments: [{ ...slices[0].deployments[0], state: "switching" }] }];
-  schedulingApi.timeline = async () => odd;
-  mount();
-  const again = await gpuGroup(0);
-  assert.deepEqual(summaryBlocks(lane(again, "deepseek")).map((b) => b.getAttribute("fill")), [stateColor.switching]);
-});
-
-test("a deployment that held the card only in the summarized time gets a lane like the others", async () => {
-  schedulingApi.timeline = async () => timeline();
-  mount();
-  const card = await gpuGroup(0);
-  // old-eval has been deleted: its label is plain text, not a link, as in any lane.
-  assert.ok(within(card).getByText(i18n.t("scheduling:history.deleted", { name: "old-eval" })));
-  assert.equal(within(card).queryByRole("link", { name: "old-eval" }), null);
-  // GLM, from the stats, has its link and its yield policy; deepseek is a resident one.
-  assert.equal(within(card).getByRole("link", { name: "GLM" }).getAttribute("href"), "/deployments?deployment=8");
-  assert.equal(within(card).getAllByText(i18n.t("deployments:yieldPolicy.policy.name.timeslice")).length, 1);
-  assert.equal(within(card).getAllByText(i18n.t("deployments:yieldPolicy.policy.name.never")).length, 1);
-  // Its one slice is a block of its own with its words.
-  const [block] = summaryBlocks(lane(card, "old-eval"));
-  assert.equal(block.getAttribute("aria-label"), summaryText(t, slices[1], slices[1].deployments[1]));
-  // A live deployment that held the card only in the summary has a link too.
-  cleanup();
-  const live = timeline({ deployments: [] });
-  schedulingApi.timeline = async () => live;
-  mount();
-  const liveCard = await gpuGroup(0);
-  assert.equal(within(liveCard).getByRole("link", { name: "old-eval" }).getAttribute("href"), "/deployments?deployment=9");
-});
-
-test("a slice describes itself to assistive tech and shows its tooltip on hover and on keyboard focus, in its own lane", async () => {
+test("one block per summary bucket reports all its deployments, without inventing their handoff times", async () => {
   schedulingApi.timeline = async () => timeline();
   const user = mount();
   const card = await gpuGroup(0);
-  const [first] = summaryBlocks(lane(card, "deepseek"));
-  const expected = summaryText(t, slices[0], slices[0].deployments[0]);
-  assert.equal(first.getAttribute("aria-label"), expected);
-  assert.equal(first.getAttribute("role"), "img");
-  assert.equal(first.getAttribute("tabindex"), "0");
-  assert.equal(screen.queryByRole("tooltip"), null);
-  // Hover: the tooltip is in the lane's track, and shows only the states the deployment spent time in.
-  fireEvent.mouseEnter(first);
-  const tip = screen.getByRole("tooltip");
-  assert.equal(tip.textContent, expected);
-  assert.ok(lane(card, "deepseek").closest(".timeline-track")?.contains(tip));
-  assert.ok(tip.textContent?.includes("this card switched 85 times"));
-  assert.ok(tip.textContent?.includes("serving 12 min") && tip.textContent?.includes("switching 1 min"));
-  assert.ok(!tip.textContent?.includes("asleep") && !tip.textContent?.includes("starting"));
-  fireEvent.mouseLeave(first);
-  assert.equal(screen.queryByRole("tooltip"), null);
-  // The same slice words each deployment differently: GLM's second slice shows asleep and starting, not serving.
-  const [, glmLate] = summaryBlocks(lane(card, "GLM"));
-  fireEvent.focus(glmLate);
-  assert.ok(screen.getByRole("tooltip").textContent?.includes("this deployment asleep 2 min · starting 30 s"));
-  assert.ok(!screen.getByRole("tooltip").textContent?.includes("serving"));
-  fireEvent.blur(glmLate);
-  // The keyboard: tab to the slice, the tooltip shows; Escape hides it; the next tab moves on to the lane's raw segment.
-  await user.tab();
-  while (document.activeElement !== first) {
-    await user.tab();
-    if (document.activeElement === document.body) assert.fail("the first summary never took focus");
+  const [track] = within(card).getAllByRole("group");
+  assert.equal(within(card).getAllByRole("group").length, 1);
+  const blocks = summaryBlocks(track);
+  assert.equal(blocks.length, 2);
+  assert.deepEqual(blocks.map(b => Math.round(Number(b.getAttribute("width")))), [417, 83]);
+  assert.equal(within(track).getAllByRole("img").length, 4);
+  assert.equal(Number(track.querySelector("rect[data-state]")!.getAttribute("x")), CHART_WIDTH / 2);
+  for (const [i, slice] of slices.entries()) {
+    assert.equal(blocks[i].getAttribute("tabindex"), "0");
+    assert.match(blocks[i].getAttribute("fill")!, /-summary\)$/);
+    fireEvent.focus(blocks[i]);
+    const tip = await screen.findByRole("tooltip");
+    for (const d of slice.deployments) assert.ok(tip.textContent?.includes(d.deployment + " · " + summaryText(t, slice, d)));
+    assert.ok(!track.contains(tip));
+    await user.keyboard("{Escape}");
+    fireEvent.blur(blocks[i]);
   }
-  assert.equal(screen.getByRole("tooltip").textContent, expected);
-  await user.keyboard("{Escape}");
-  assert.equal(screen.queryByRole("tooltip"), null);
-  await user.tab();
-  assert.equal(screen.getByRole("tooltip").textContent, `deepseek · ${s.timeline.state.awake} · ${formatTime(at(12))} to ${formatTime(at(18))}`);
+  assert.ok(within(card).getByText(i18n.t("scheduling:history.deleted", { name: "old-eval" })));
+  assert.equal(within(card).queryByRole("link", { name: /old-eval/ }), null);
+  const link = within(card).getByRole("link", { name: "GLM" });
+  assert.equal(link.getAttribute("href"), "/deployments?deployment=8");
+  await user.hover(link);
+  assert.ok((await screen.findByRole("tooltip")).textContent?.includes(i18n.t("deployments:yieldPolicy.policy.name.timeslice")));
 });
 
 test("the legend keeps the state colours and adds the hatch for summarized time", async () => {
   schedulingApi.timeline = async () => timeline();
   mount();
   await gpuGroup(0);
-  const legend = await screen.findByRole("list", { name: s.timeline.legend });
+  const legend = await screen.findByRole("group", { name: s.timeline.legend });
   await within(legend).findByText(s.timeline.summary.legend);
-  const items = within(legend).getAllByRole("listitem").map((li) => li.textContent);
+  const items = Array.from(legend.children).map((li) => li.textContent);
   assert.deepEqual(items, [s.timeline.state.awake, s.timeline.state.asleep, s.timeline.state.switching, s.timeline.state.starting, "Summarized (earlier)"]);
   // Only the last swatch is hatched; there is no per-deployment key any more.
-  const swatches = [...legend.querySelectorAll<HTMLElement>(".scheduling-swatch")];
+  const swatches = [...legend.querySelectorAll<HTMLElement>("i, .hm-swatch")];
   assert.deepEqual(swatches.map((sw) => sw.classList.contains("timeline-summary-swatch")), [false, false, false, false, true]);
   assert.equal(screen.queryByRole("list", { name: /main deployment/i }), null);
 });
 
-test("a line marks where summarizing ends on every lane of the card, and on no other card", async () => {
+test("a single boundary marks the end of summaries on the affected GPU", async () => {
   schedulingApi.timeline = async () => timeline();
   mount();
   const card = await gpuGroup(0);
-  for (const deployment of ["deepseek", "GLM", "old-eval"]) {
-    const lines = lane(card, deployment).querySelectorAll("line[stroke-dasharray]");
-    assert.equal(lines.length, 1, deployment);
-    assert.equal(lines[0].getAttribute("x1"), String(CHART_WIDTH / 2));
-    assert.equal(lines[0].getAttribute("aria-hidden"), "true");
-  }
-  assert.equal(card.querySelectorAll("line[stroke-dasharray]").length, 3);
+  const lines = card.querySelectorAll("line[stroke-dasharray]");
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].getAttribute("x1"), String(CHART_WIDTH / 2));
   for (const index of [1, 2]) assert.equal((await gpuGroup(index)).querySelectorAll("line[stroke-dasharray]").length, 0);
 });
 
@@ -291,7 +206,7 @@ test("a card with nothing summarized is drawn as it was: its lanes have no hatch
   mount();
   for (const index of [1, 2]) {
     const card = await gpuGroup(index);
-    assert.equal(card.querySelectorAll("pattern").length, 0);
+    assert.equal(card.querySelectorAll("rect[stroke-dasharray]").length, 0);
     assert.equal(card.querySelectorAll("line[stroke-dasharray]").length, 0);
     assert.equal(card.querySelectorAll(".timeline-summary-block").length, 0);
     assert.equal(within(card).getAllByRole("group").length, 1, "one lane");
@@ -304,8 +219,8 @@ test("a card with nothing summarized is drawn as it was: its lanes have no hatch
   schedulingApi.timeline = async () => plain;
   mount();
   await gpuGroup(1);
-  const legend = screen.getByRole("list", { name: s.timeline.legend });
-  assert.equal(within(legend).getAllByRole("listitem").length, 4);
+  const legend = screen.getByRole("group", { name: s.timeline.legend });
+  assert.equal(Array.from(legend.children).length, 4);
   assert.equal(within(legend).queryByText(s.timeline.summary.legend), null);
 });
 
@@ -332,7 +247,7 @@ test("a card with summaries and no raw segments is not reported as empty, and it
   const card = await gpuGroup(0);
   assert.equal(within(card).queryByText(s.timeline.noneOnCard), null);
   assert.equal(screen.queryByText(i18n.t("scheduling:timeline.noneInWindow", { span: i18n.t("scheduling:timeline.hours", { hours: 24 }) })), null);
-  assert.deepEqual(within(card).getAllByRole("group").map((g) => g.getAttribute("aria-label")), ["deepseek", "GLM", "old-eval"].map((deployment) => i18n.t("scheduling:timeline.laneAria", { deployment })));
-  assert.equal(card.querySelectorAll(".timeline-summary-block").length, 4);
-  assert.equal(card.querySelectorAll("line[stroke-dasharray]").length, 3);
+  assert.equal(within(card).getAllByRole("group").length, 1);
+  assert.equal(card.querySelectorAll(".timeline-summary-block").length, 2);
+  assert.equal(card.querySelectorAll("line[stroke-dasharray]").length, 1);
 });

@@ -129,7 +129,7 @@ func (r *Recoverer) refreshSSHEndpoint(ctx context.Context, node *store.Node, li
 	}
 	candidates, err := provider.SSHInstallCandidates(*inst, "auto")
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // Optional refresh retains the existing credential endpoint when no candidates are available.
 	}
 	for _, connection := range candidates {
 		if !provider.IsSSHConnection(connection) || strings.TrimSpace(connection.Host) == "" || connection.Port == 0 {

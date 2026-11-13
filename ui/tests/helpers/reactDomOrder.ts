@@ -9,6 +9,17 @@
 // dynamically after the globals are installed.
 import { createRequire } from "node:module";
 
+// Zeron's popups (Base UI, framer-motion) call the bare requestAnimationFrame;
+// jsdom has none. Files that build their own JSDOM never pass through
+// helpers/dom.ts (which installs a per-test frame queue for ECharts), so the
+// process gets a plain fallback here; dom.ts replaces it where it is used.
+if (typeof globalThis.requestAnimationFrame !== "function") {
+  Object.defineProperties(globalThis, {
+    requestAnimationFrame: { configurable: true, writable: true, value: (callback: (time: number) => void) => setTimeout(() => callback(performance.now()), 16) as unknown as number },
+    cancelAnimationFrame: { configurable: true, writable: true, value: (id: number) => clearTimeout(id) },
+  });
+}
+
 const require = createRequire(import.meta.url);
 const Module = require("node:module") as {
   _load: (request: string, parent: { filename?: string } | null, isMain: boolean) => unknown;

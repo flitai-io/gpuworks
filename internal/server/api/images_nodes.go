@@ -13,13 +13,26 @@ func (a *apiHandlers) syncImageToNode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiHandlers) probeImageToNode(w http.ResponseWriter, r *http.Request) {
-	if a.d.PeerSync.ProbeImage == nil {
-		writeProductError(w, http.StatusServiceUnavailable, ErrorImageSyncUnavailable, "image direct probe is not configured", nil)
+	if a.d.PeerSync.ProbeImage == nil && a.d.PeerSync.ProbeImageResult == nil {
+		writeProductError(w, http.StatusServiceUnavailable, ErrorImageSyncUnavailable, "image peer probe is not configured", nil)
 		return
 	}
 	req := decodeImageNodeSyncRequest(r)
 	if req.SourceNode == "" {
-		writeProductError(w, http.StatusBadRequest, ErrorImageSyncUnavailable, "source_node is required for direct image probe", nil)
+		writeProductError(w, http.StatusBadRequest, ErrorImageSyncUnavailable, "source_node is required for image peer probe", nil)
+		return
+	}
+	if probe := a.d.PeerSync.ProbeImageResult; probe != nil {
+		result, err := probe(r.Context(), parseUint(chi.URLParam(r, "id")), chi.URLParam(r, "uuid"), req.SourceNode)
+		if err != nil {
+			writeErr(w, http.StatusConflict, err)
+			return
+		}
+		response := map[string]string{"state": "ready"}
+		if result.Transport == "direct" || result.Transport == "relay" {
+			response["transport"] = result.Transport
+		}
+		writeJSON(w, http.StatusOK, response)
 		return
 	}
 	if err := a.d.PeerSync.ProbeImage(r.Context(), parseUint(chi.URLParam(r, "id")), chi.URLParam(r, "uuid"), req.SourceNode); err != nil {

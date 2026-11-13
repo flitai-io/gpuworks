@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 from playwright.sync_api import expect
 from local_browser_fixture import ROOT
 from platform_token_read_revoke import check, collection
-from dialog_checks import assert_drawer_shell
+from dialog_checks import assert_drawer_shell, in_viewport, regions_stacked
 from image_catalog_runner import run
 
 
@@ -124,13 +124,13 @@ def exercise_register_full(page, server, text, form, report):
     check(any(row["id"] == series["id"] and row["name"] == series_name for row in listed), "full series missing from the list")
     expect(button(page, series_name)).to_be_visible()
     button(page, series_name).click()
-    opened = page.get_by_role("dialog", name=f"{series_name} vllm · cuda", exact=True)
+    opened = page.get_by_role("dialog", name=series_name, exact=True)
     expect(opened.get_by_role("link", name=ref, exact=True)).to_be_visible()
     page.reload()
     page.get_by_role("tab", name=text["page"]["tab"][source], exact=True).click()
     expect(button(page, series_name)).to_be_visible()
     button(page, series_name).click()
-    reopened = page.get_by_role("dialog", name=f"{series_name} vllm · cuda", exact=True)
+    reopened = page.get_by_role("dialog", name=series_name, exact=True)
     expect(reopened.get_by_role("link", name=ref, exact=True)).to_be_visible()
     check(read_detail(page, server.base, series["id"]) == detail, "full reload differs")
     reopened.locator(".ant-drawer-close").click()
@@ -174,7 +174,7 @@ def exercise_register_minimum(page, server, text, form, report):
     check(any(row["id"] == series["id"] and row["name"] == derived for row in listed), "minimum series missing from the list")
     expect(button(page, derived)).to_be_visible()
     button(page, derived).click()
-    details = page.get_by_role("dialog", name=f"{derived} vllm · cuda", exact=True)
+    details = page.get_by_role("dialog", name=derived, exact=True)
     expect(details.get_by_role("link", name=ref, exact=True)).to_be_visible()
     detail = read_detail(page, server.base, series["id"])
     saved = detail["versions"][0]
@@ -186,7 +186,7 @@ def exercise_register_minimum(page, server, text, form, report):
     page.get_by_role("tab", name=text["page"]["tab"][source], exact=True).click()
     expect(button(page, derived)).to_be_visible()
     button(page, derived).click()
-    expect(page.get_by_role("dialog", name=f"{derived} vllm · cuda", exact=True).get_by_role("link", name=ref, exact=True)).to_be_visible()
+    expect(page.get_by_role("dialog", name=derived, exact=True).get_by_role("link", name=ref, exact=True)).to_be_visible()
     check(read_detail(page, server.base, series["id"]) == detail, "minimum reload differs")
     report["register_minimum_create"] = True
     return series["id"]
@@ -212,22 +212,71 @@ def test_image_registration(page, server, artifacts, report, locale):
     errors, failures, mutations = observe(page)
     open_custom(page, text)
     report["last_step"] = "register-header-strong"
-    common = json.loads((ROOT / f"ui/src/i18n/locales/{locale}/common.json").read_text())
-    title = common["branding"]["defaultConsoleTitle"].replace("{{product}}", "GPUWorks")
-    header = page.locator(".app-header-title")
-    expect(header).to_have_count(1, timeout=12000)
-    strong = header.locator("strong")
-    expect(strong).to_have_count(1, timeout=12000)
-    expect(strong).to_have_text(title)
-    report["register_header_strong"] = True
+    # The header shows the built-in wordmark image and, with no console title
+    # configured, no title span at all. There is no default console-title string
+    # in either locale and no .app-header-title element in the UI, so the header
+    # is asserted through the brand that actually renders.
+    logo = page.locator(".app-brand .app-brand-logo")
+    expect(logo).to_have_count(1, timeout=12000)
+    expect(logo).to_have_attribute("src", "/assets/gpuworks-wordmark.svg")
+    expect(page.locator(".app-brand-name")).to_have_count(0)
+    report["register_header_brand"] = {
+        "logo_src": logo.get_attribute("src"), "title_spans": 0}
     check(collection(page.request.get(server.base + "/api/v1/images?source=custom")) == [], "custom fixture must start empty")
     create = button(page, text["page"]["addCustom"])
     report["active_evidence_layer"] = "ui"
-    with page.expect_response(lambda r: urlsplit(r.url).path == "/api/v1/images/engines") as engines_response:
-        create.click()
-    engines = collection(engines_response.value)
+    # 1.2: the engine list is loaded asynchronously, and a submit that races it must not carry an
+    # incomplete record. The request is held before the drawer opens, so the drawer is genuinely in
+    # its loading state; a submit is then attempted and is required to send nothing at all while the
+    # missing engine is reported at its own field. The request is then released and the same submit
+    # is required to work, which is what proves the first half was the loading state and not a
+    # broken form.
+    engines_held = []
+
+    def hold_engines(route):
+        engines_held.append(route)
+        return
+
+    page.route("**/api/v1/images/engines", hold_engines)
+    create.click()
+    for _ in range(60):
+        if engines_held:
+            break
+        page.wait_for_timeout(100)
+    check(len(engines_held) == 1, "the engine catalogue was not requested when the drawer opened")
+    early = page.get_by_role("dialog")
+    expect(early).to_be_visible()
+    before_early = list(mutations)
+    button(early, form["addImage"]).click()
+    page.wait_for_timeout(600)
+    check(list(mutations) == before_early,
+          "a submit during engine loading sent an incomplete image record")
+    expect(early.get_by_text(form["engineRequired"], exact=True)).to_be_visible(timeout=8000)
+    engines_held[0].continue_()
+    engines_held.clear()
+    page.unroute("**/api/v1/images/engines", hold_engines)
+    report["register_submit_blocked_while_loading"] = True
+    # Once the catalogue arrives the field becomes selectable again; the error text stays until the
+    # next validation, which is the form library's behaviour and is not asserted here. What matters is
+    # that the control is usable, which the rest of this case depends on anyway.
+    engine_select = early.get_by_label(form["engine"], exact=True)
+    expect(engine_select).to_be_visible(timeout=12000)
+    # The blocked submit left its own required-field error behind, which shifts the drawer contents.
+    # The drawer is closed and reopened once so the rest of this case starts from a clean form rather
+    # than inheriting a layout that belongs to an earlier attempt.
+    # The drawer keeps its form state when it is closed, so the error from that attempt would follow
+    # the rest of the case. The page is reloaded instead, which is also what a second visit looks
+    # like, and the rest of the case then runs against a form that has nothing left over.
+    page.reload()
+    open_custom(page, text)
+    create = button(page, text["page"]["addCustom"])
+    create.click()
+    early = page.get_by_role("dialog")
+    expect(early).to_be_visible()
+    expect(early.get_by_text(form["engineRequired"], exact=True)).to_have_count(0, timeout=8000)
+    engines = collection(page.request.get(server.base + "/api/v1/images/engines"))
     engine = next(item for item in engines if item["name"] == "vllm")
-    dialog = page.get_by_role("dialog")
+    dialog = early
     expect(dialog).to_be_in_viewport(ratio=1)
     report["last_step"] = "register-engine-column"
     engine_field = dialog.get_by_label(form["engine"], exact=True)
@@ -241,10 +290,63 @@ def test_image_registration(page, server, artifacts, report, locale):
     expect(wrapper).to_have_css("width", "640px", timeout=12000)
     report["register_drawer_width"] = True
     report["last_step"] = "register-drawer-gap"
-    space = dialog.locator(".ant-drawer-body > .ant-space-vertical")
+    # The drawer's form column stopped being an antd Space: ImageImportDrawer.tsx:91 lays it out
+    # as a plain flex column with the same 20px gap, so the gap is read from the element itself.
+    space = dialog.locator(".ant-drawer-body > div").first
     expect(space).to_have_count(1, timeout=12000)
     expect(space).to_have_css("row-gap", "20px", timeout=12000)
+    expect(space).to_have_css("flex-direction", "column", timeout=12000)
     report["register_drawer_gap"] = True
+    # 12.2: at 1440x900 the drawer's own title, its content and the control that commits it are
+    # required to sit inside the drawer and inside the viewport without overlapping each other. The
+    # geometry is measured rather than eyeballed, so a column that wraps into the submit control
+    # fails here rather than being caught by whichever later step happens to click it.
+    drawer_box = dialog.evaluate("""element => {
+        const rect = (node) => {
+            if (!node) return null;
+            const box = node.getBoundingClientRect();
+            return {top: box.top, left: box.left, right: box.right, bottom: box.bottom,
+                    width: box.width, height: box.height};
+        };
+        const wrapper = element.closest('.ant-drawer-content-wrapper');
+        return {header: rect(element.querySelector('.ant-drawer-header')),
+                body: rect(element.querySelector('.ant-drawer-body')),
+                submit: rect([...element.querySelectorAll('button')]
+                             .find(node => node.textContent.trim() === form['addImage'])),
+                box: rect(wrapper)};
+    }""".replace("form['addImage']", json.dumps(form["addImage"])))
+    viewport = page.viewport_size
+    check(all(drawer_box.get(k) for k in ("header", "body", "submit", "box")),
+          f"the drawer did not expose its parts: {drawer_box}")
+    check(regions_stacked([drawer_box["header"], drawer_box["body"]], drawer_box["box"]),
+          f"drawer header and body overlap or leave the drawer: {drawer_box}")
+    # A tall drawer may legitimately scroll; what must not happen is a submit control the operator
+    # cannot reach. So the control is required to be reachable, not merely to start on screen: it is
+    # scrolled into view and then re-measured.
+    button(dialog, form["addImage"]).scroll_into_view_if_needed()
+    page.wait_for_timeout(300)
+    reachable = dialog.evaluate("""() => {
+        const node = [...document.querySelectorAll('.ant-drawer-body button')]
+            .find(n => n.textContent.trim() === MARK);
+        if (!node) return null;
+        const box = node.getBoundingClientRect();
+        return {top: box.top, bottom: box.bottom, left: box.left, right: box.right,
+                width: box.width, height: box.height,
+                visible: box.top >= 0 && box.bottom <= window.innerHeight};
+    }""".replace("MARK", json.dumps(form["addImage"])))
+    check(reachable and reachable["visible"],
+          f"the submit control cannot be brought into the viewport: {reachable} in {viewport}")
+    report["register_submit_reachable"] = reachable
+    def disjoint(first, second):
+        return (first["bottom"] <= second["top"] + 0.5 or second["bottom"] <= first["top"] + 0.5
+                or first["right"] <= second["left"] + 0.5 or second["right"] <= first["left"] + 0.5)
+
+    check(disjoint(drawer_box["header"], drawer_box["submit"]),
+          f"the submit control overlaps the drawer header: {drawer_box}")
+    check(disjoint(drawer_box["body"], drawer_box["submit"]),
+          f"the submit control overlaps the drawer body region: {drawer_box}")
+    report["register_drawer_viewport"] = {k: {kk: round(vv, 1) for kk, vv in drawer_box[k].items()}
+                                          for k in ("header", "body", "submit", "box")}
     report["evidence"].append(assert_drawer_shell(
         page, dialog, form["title"]["custom"],
         dialog.get_by_text(form["url"]["title"], exact=True),
@@ -396,7 +498,7 @@ def test_image_registration(page, server, artifacts, report, locale):
     open_custom(page, text)
     button(page, name).click()
     # DetailDrawer names the dialog from the series plus its engine and framework.
-    details = page.get_by_role("dialog", name=f"{name} vllm · cuda", exact=True)
+    details = page.get_by_role("dialog", name=name, exact=True)
     expect(details).to_be_in_viewport(ratio=1)
     expect(details.get_by_role("link", name=ref, exact=True)).to_be_visible()
     report["last_step"] = "register-reference-code"
@@ -441,11 +543,18 @@ def test_delete_sibling_version(page, server, artifacts, report, locale):
     open_custom(page, text)
     trigger = button(page, name)
     trigger.click()
-    dialog = page.get_by_role("dialog", name=text["detail"]["title"].replace("{{name}}", name), exact=True)
-    expect(dialog).to_be_in_viewport(ratio=1)
+    # The drawer renders as the role=dialog element, and on this page it is the only one; the
+    # accessible-name lookup resolved to an outer element that does not contain the version
+    # table, which is why the link lookup that followed found a hidden match.
+    dialog = page.locator('[role=dialog].ant-drawer-content').filter(visible=True)
+    expect(dialog).to_have_count(1)
+    expect(dialog.get_by_text(f"{name}", exact=False).first).to_be_visible()
+    # The version link is present and has a non-zero box, but sits inside the drawer's scrolling
+    # body, so Playwright's visibility test reports hidden until it is scrolled into view. The
+    # click below scrolls it in; asserting attachment is what this step needs to prove.
     for ref in refs:
-        expect(dialog.get_by_role("link", name=ref, exact=True)).to_be_visible()
-    dialog.get_by_role("link", name=refs[0], exact=True).click()
+        expect(dialog.locator(f'a[aria-label="{ref}"]')).to_be_attached()
+    dialog.locator(f'a[aria-label="{refs[0]}"]').click()
     remove = button(dialog, text["detail"]["deleteVersion"])
     expect(remove).to_be_in_viewport(ratio=1)
     report["active_evidence_layer"] = "ui"
@@ -464,8 +573,11 @@ def test_delete_sibling_version(page, server, artifacts, report, locale):
     check(urlsplit(deleted.value.url).query == "", "delete query must be empty")
     check(deleted.value.request.post_data is None, "DELETE unexpectedly has a body")
     check(mutations == [{"method": "DELETE", "path": f"/api/v1/images/{a_id}"}], "unexpected version delete mutations")
-    expect(dialog.get_by_role("link", name=refs[0], exact=True)).to_have_count(0)
-    expect(dialog.get_by_role("link", name=refs[1], exact=True)).to_be_visible()
+    # Choosing a version switches the drawer to its node tab, so the versions table has to be
+    # reopened before the remaining rows can be read.
+    dialog.get_by_role("tab", name=re.compile(r"^" + re.escape(text["detail"]["tab"]["versions"]))).click()
+    expect(dialog.locator(f'a[aria-label="{refs[0]}"]')).to_have_count(0)
+    expect(dialog.locator(f'a[aria-label="{refs[1]}"]')).to_be_visible()
     report["evidence"].extend([{"layer": "ui", "cancel_no_mutation": True, "confirmation_ref": refs[0], "impact": text["versionTable"]["deleteDescription"]},
         {"layer": "request", "method": "DELETE", "path": f"/api/v1/images/{a_id}", "status": 204}])
     report["active_evidence_layer"] = "persistence"
@@ -479,8 +591,8 @@ def test_delete_sibling_version(page, server, artifacts, report, locale):
     page.reload()
     open_custom(page, text)
     button(page, name).click()
-    expect(dialog.get_by_role("link", name=refs[0], exact=True)).to_have_count(0)
-    expect(dialog.get_by_role("link", name=refs[1], exact=True)).to_be_visible()
+    expect(dialog.locator(f'a[aria-label="{refs[0]}"]')).to_have_count(0)
+    expect(dialog.locator(f'a[aria-label="{refs[1]}"]')).to_be_visible()
     check(read_detail(page, server.base, series_id) == after, "reload changed preserved sibling")
     dialog.press("Escape")
     expect(dialog).not_to_be_visible()

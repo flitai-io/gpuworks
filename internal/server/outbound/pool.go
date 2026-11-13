@@ -50,7 +50,7 @@ func (t *SafeTransport) requestTransport(proxy *url.URL, target pinnedTarget) *h
 	transport := t.Transport.Clone()
 	transport.Proxy = nil
 	transport.DialTLSContext = nil
-	transport.DialTLS = nil
+	transport.DialTLS = nil //nolint:staticcheck // SA1019: clear inherited legacy TLS hooks so they cannot bypass address pinning.
 	transport.DialContext = pinnedDial
 	if proxy != nil {
 		transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {

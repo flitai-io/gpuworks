@@ -120,7 +120,7 @@ test("a slice's detail shows its use only when its backend reports it", async ()
   renderPage();
   fireEvent.click(await screen.findByRole("tab", { name: gpus.tab.dgpu }));
   fireEvent.click(await screen.findByRole("button", { name: "qwen3-dgpu-a" }));
-  const reported = await waitFor(() => document.querySelector(".ant-drawer-open") as HTMLElement);
+  const reported = await screen.findByRole("dialog");
   assert.ok(await within(reported).findByRole("heading", { name: gpus.detail.currentUse }));
   assert.ok(within(reported).getByText("7.0 GiB / 8.0 GiB"));
   assert.ok(within(reported).getByRole("heading", { name: gpus.detail.monitoringData }));
@@ -130,7 +130,7 @@ test("a slice's detail shows its use only when its backend reports it", async ()
   renderPage();
   fireEvent.click(await screen.findByRole("tab", { name: gpus.tab.dgpu }));
   fireEvent.click(await screen.findByRole("button", { name: "qwen3-dgpu-c" }));
-  const silent = await waitFor(() => document.querySelector(".ant-drawer-open") as HTMLElement);
+  const silent = await screen.findByRole("dialog");
   assert.ok(await within(silent).findByRole("heading", { name: gpus.detail.quotaInfo }));
   assert.equal(within(silent).queryByRole("heading", { name: gpus.detail.currentUse }), null);
   assert.equal(within(silent).queryByRole("heading", { name: gpus.detail.monitoringData }), null);

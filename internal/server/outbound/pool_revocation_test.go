@@ -2,7 +2,6 @@ package outbound
 
 import (
 	"context"
-	"gpuworks.ai/gpuworks/internal/proto"
 	"io"
 	"net"
 	"net/http"
@@ -11,6 +10,8 @@ import (
 	"net/url"
 	"sync/atomic"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 func TestRevokedPrivateConnectionCannotSurviveDNSBecomingPublic(t *testing.T) {

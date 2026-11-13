@@ -110,3 +110,34 @@ func TestEverFitsSkipsUnsupportedAMDRuntimeAndTriesDocker(t *testing.T) {
 		t.Fatalf("invalid parallelism must propagate after skipping the host-process node: never=%+v err=%v", never, err)
 	}
 }
+
+func TestEverFitsRequiresEveryDataParallelReplicaCard(t *testing.T) {
+	st, err := store.Open("file:ever_fits_dp?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/ever-fits-dp", Name: "ever-fits-dp", WeightBytes: 1 << 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, err := st.RegisterNode("dp-pool", store.HashToken("token"), "dp-pool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.GPUVendor, node.Arch = "nvidia", "amd64"
+	node.GPUs = []store.GPU{{Index: 0, Name: "NVIDIA GPU", MemoryTotal: 16 << 30, Vendor: "nvidia", ArchID: "sm_80", ComputeCapability: "8.0"}}
+	build := func(node *store.Node) (LaunchRequest, deploy.CatalogSelection, error) {
+		return LaunchRequest{Engine: "vllm", Model: model, Node: node, Placement: Placement{TP: 1}, Quick: deploy.LaunchConfig{DP: 2}, Topology: DistTopology{NNodes: 1, Role: "standalone"}, Source: LaunchSourceFromDeployment(&store.Deployment{Image: "registry.example/vllm:v1"}), ServedName: "ever-fits-dp"}, deploy.CatalogSelection{}, nil
+	}
+	nodes := []*store.Node{node}
+	never, err := EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
+	if err != nil || never == nil || never.Reason.Code != "insufficient_empty_gpus" {
+		t.Fatalf("one card: never=%+v err=%v", never, err)
+	}
+	node.GPUs = append(node.GPUs, store.GPU{Index: 1, Name: "NVIDIA GPU", MemoryTotal: 16 << 30, Vendor: "nvidia", ArchID: "sm_80", ComputeCapability: "8.0"})
+	never, err = EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
+	if err != nil || never != nil {
+		t.Fatalf("two cards: never=%+v err=%v", never, err)
+	}
+}

@@ -128,7 +128,7 @@ def prepare(server, token, run_id, report, holder, agent_bin, artifacts, *, case
             return doc if len(states) == 1 and states[0]['state'] == 'ready' and states[0]['writable'] else None
         stores.append(wait(ready, 'owned storage ready'))
     report['owned_template_model_id'] = model_id = prefix + '/scheme'
-    spec = {'name': SPEC, 'display_profile': 'general', 'scenario': 'balanced', 'engine': engine,
+    spec = {'name': SPEC, 'display_name_zh_cn': '采集 · BF16', 'display_name_en': 'Acquisition · BF16', 'scenario': 'balanced', 'engine': engine,
         'image': IMAGE, 'weights': {'quantization': 'fp16', 'sources': [
             {'huggingface': {'repo_id': repo, 'revision': REVISION}},
             {'modelscope': {'repo_id': repo, 'revision': REVISION}}]},

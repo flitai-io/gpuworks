@@ -3,12 +3,17 @@
   "name": "概览 / 未上线节点库存与标签容量分组 / UI 计数、切换标签键、刷新与独立 GET 一致",
   "test_file": "test/e2e/dashboard_fleet.py",
   "test_function": "test_dashboard_fleet",
-  "command": "make test-e2e-dashboard-fleet",
+  "command": "python3 -B test/e2e/dashboard_fleet.py --locale en",
   "priority": "P1",
   "page_id": "dashboard",
   "lane": "local-real-server-sqlite",
   "identity": "admin",
-  "required_evidence": ["ui", "request", "persistence", "cleanup"],
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "cleanup"
+  ],
   "runtime_evidence": {
     "status": "N/A",
     "reason": "The dashboard reads fleet records. The three nodes are pending (connecting) definitions prepared through the product API; no agent, container, GPU or live metric is claimed."
@@ -25,47 +30,89 @@
       "component": "Statistic cards",
       "request": "GET /api/v1/dashboard/summary",
       "persisted": "N/A: counted from stored nodes",
-      "covered": ["total 3", "online 0", "connecting 3", "managed GPUs 0", "offline tag 0", "normal platform health"],
-      "missing": ["online nodes", "live GPU/VRAM capacity", "memory and power cards"]
+      "covered": [
+        "total 3",
+        "online 0",
+        "connecting 3",
+        "managed GPUs 0",
+        "offline tag 0",
+        "normal platform health"
+      ],
+      "missing": [
+        "online nodes",
+        "live GPU/VRAM capacity",
+        "memory and power cards"
+      ]
     },
     {
       "id": "dashboard.label-keys",
       "component": "Select in Capacity by label",
       "request": "GET /api/v1/dashboard/summary?label_key=rack",
       "persisted": "N/A: ephemeral selection",
-      "covered": ["keys team and rack", "default team (most used)", "switch to rack requests label_key=rack"],
-      "missing": ["ties between keys", "an unknown requested key", "key disappearing after a label edit"]
+      "covered": [
+        "keys team and rack",
+        "default team (most used)",
+        "switch to rack requests label_key=rack"
+      ],
+      "missing": [
+        "ties between keys",
+        "an unknown requested key",
+        "key disappearing after a label edit"
+      ]
     },
     {
       "id": "dashboard.label-groups",
       "component": "Capacity rows",
       "request": "GET /api/v1/dashboard/summary[?label_key=...]",
       "persisted": "N/A: counted from stored labels",
-      "covered": ["A2+B1: team=alpha has 2 nodes and team=beta 1 in the UI and the summary", "rack=r1 has 2 nodes and the unlabeled group 1 after switching", "each group count tag is asserted in its own row", "group counts add up to the fleet total for both keys", "the reloaded default summary matches the earlier default"],
-      "missing": ["labels on online nodes with real GPUs", "unusable GPU counts", "capacity percentages with nonzero GPUs", "a group whose nodes are deleted while the page is open"]
+      "covered": [
+        "A2+B1: team=alpha has 2 nodes and team=beta 1 in the UI and the summary",
+        "rack=r1 has 2 nodes and the unlabeled group 1 after switching",
+        "each group count tag is asserted in its own row",
+        "group counts add up to the fleet total for both keys",
+        "the reloaded default summary matches the earlier default"
+      ],
+      "missing": [
+        "labels on online nodes with real GPUs",
+        "unusable GPU counts",
+        "capacity percentages with nonzero GPUs",
+        "a group whose nodes are deleted while the page is open"
+      ]
     },
     {
       "id": "dashboard.cleanup",
       "component": "N/A: API fixture cleanup",
       "request": "DELETE /nodes/{uuid}?force=true",
       "persisted": "removal",
-      "covered": ["all three owned nodes deleted", "independent GET returns 404"],
-      "missing": ["the force-removal UI, already covered by gpuworks/node/removal-with-explicit-force"]
+      "covered": [
+        "all three owned nodes deleted",
+        "independent GET returns 404"
+      ],
+      "missing": [
+        "the force-removal UI, already covered by gpuworks/node/removal-with-explicit-force"
+      ]
     }
   ],
   "checklist_items": {
-    "1.1": "The overview inventories the fleet counts and the label-key control. Total compute nodes is 3, online compute nodes is 0, and managed GPUs is 0. Those three statistics have no unit suffix, and the page has no spinbutton. The localized platform-operating-normally sentence is visible. With zero offline nodes, the offline-nodes sentence is one green tag and it is not a required field. The label-key combobox is named by the localized group-by sentence, is not marked required, has no unit, and shows team. Its options are team and rack. Choosing rack sends GET /api/v1/dashboard/summary?label_key=rack and the response is 200. The independent GET without a label key stores label_key team, label keys team and rack, node counts total 3, online 0, offline 0, and connecting 3, and groups team=alpha with 2 nodes and team=beta with 1 node. The independent GET with label_key=rack stores the unlabeled group with 1 node and rack=r1 with 2 nodes. Reloading the overview shows team again, so the chosen key is not persisted.",
+    "1.1": "The overview inventories the fleet counts. The hardware panel's three KPIs are labelled Compute nodes / GPUs / Total VRAM (DashboardPage.tsx:167-169) and read 3 nodes, 0 cards and 0 GiB on this unconnected fleet; the page renders eleven metrics in total. The fleet states line renders all three statuses (online, connecting, offline) with the localized connecting-3 sentence, and a zero state keeps its slot in grey. There is no spinbutton and no tag. The management service reads out through Zeron's Badge with data-status=success and its dot marker, so the control plane reports ok. The label-key control this item used to check is gone with the panel (not applicable now that the panel is gone).",
     "1.14": "Refresh keeps the fleet counts and default grouping",
     "5.3": "N/A: the label-key Select has no search input (no showSearch); the option is chosen from the visible list",
-    "10.11": "A2+B1 grouping: per-group node counts, exact group sets, totals and key-switch consistency in the UI and summary",
-    "17.1": "Known nonzero and zero sample values are rendered from the persisted summary; loading, empty, error and stale states remain MISSING"
+    "10.11": "The by-label grouping contract holds at the API layer. The independent GET without a label key answers label_key team and reports the exact group set team=alpha with 2 nodes and team=beta with 1 node; the group counts sum to the fleet total of 3; the independent GET with label_key=rack answers label_key rack and reports the unlabeled group with 1 node and rack=r1 with 2 nodes, and those counts also sum to 3. Switching the key in the label-key combobox sends GET /api/v1/dashboard/summary?label_key=rack and the response is 200. After a reload the overview shows team again, so the chosen key is not persisted. The UI does not render the per-group node counts: DashboardPage.tsx:170 filters by_label to the groups that own at least one GPU, so a fleet whose nodes carry no GPU renders no group row at all and the panel shows its no-GPU-data copy, which this case asserts; at :295 a rendered group row shows the group name and its VRAM only. The per-group node count is therefore verified through the API, and the UI is verified in the state a GPU-less fleet puts it in.",
+    "17.1": "covered: All five states of the overview are read and each is required to be the one the product is really in, with an absent value and a real zero asserted as different spellings rather than as 'a number is shown'. The data state is read against an independent API read: /api/v1/analytics/usage reports zero tokens, so the three token cards are required to spell a zero, and /api/v1/monitor/overview reports collected false for the request rate, the error rate, TTFT and queue signals, so those cards are required to spell the absent marker - the case asserts collected != spelled_absent for each of the four, which fails if either side is wrong in either direction. Measured: the token cards read 0 in both locales (Total tokens, Input tokens, Output tokens) and seven cards read the em dash (request rate, error rate, TTFT p95, queue p95, average GPU utilization, highest GPU temperature, total GPU power). The two spellings come from DashboardPage.tsx:18 ('value == null ? \"—\" : Intl.NumberFormat().format(value)') and :19 for GiB. The loading state is induced by holding all four metric sources (the fleet summary, the GPU list, the monitor overview and the usage endpoint) and is required to render the absent marker on all ten cards, measured as ten em dashes - holding only the fleet summary is not enough, because the token and monitor cards have their own sources and would show real values. The error state is induced by answering the summary route with 500 and is required to surface the page's own warning alert with non-empty text (DashboardPage.tsx:168 computes the condition, :178 renders .dashboard-overview-alert); measured text 'Some overview data is temporarily unavailable' in en and '部分概览数据暂时无法获取' in zh, with 2 induced requests. The empty state is decided by the state the server is really in, not assumed: the case reads /api/v1/storages independently and filters it with the shared flag ui/src/storageTypes.ts:21-24 defines (nfs, nfs_cache, shared_dir are shared; local is not), which is the same flag the overview filters on at DashboardPage.tsx:48. When that read reports no shared storage the card must render the product's own empty copy, and when it reports some the card must render a row for them instead - both branches assert, so a shared storage created elsewhere on the same server cannot make the case pass by accident. Measured in this run: zero shared storages and zero rows, with 'No shared storage' plus its hint in en and the two Chinese strings in zh. The stale state uses the product's own flag, not a simulated one: monitor/overview_cluster.go:503 marks a snapshot stale when its as-of time is zero or older than staleAfter (30s, :23), the isolated fleet reports stale true with as_of 0, and the page is required to render its stale wording (DashboardPage.tsx:130) - measured 'Monitor data is delayed' in en and '监控数据已延迟' in zh. Units and precision are asserted as part of reading these values. Run 20261104T092033Z-214a0c2a (en) and 20261104T092102Z-1541207f (zh), both PASS. Mutation-proven for the stale state: setting the stale computation at internal/server/monitor/overview_cluster.go:503 to a constant false and running the same case against that binary (run 20261104T092302Z-c50e83cc) fails at dashboard_fleet.py:387 with 'the isolated fleet reports no monitor snapshot, so the stale wording cannot be checked here', so the stale assertion is load-bearing rather than decorative. The loading and error states are induced through request routing and compared against independent reads instead, which is honest about what was not broken to test them.",
+    "17.5": "covered: Each of the ten metrics is traced to the endpoint that owns it, and the health probe is required to contribute no metric value. The overview does not read one source: the fleet cards read /api/v1/dashboard/summary (DashboardPage.tsx:97), the GPU cards read /api/v1/gpus (:99), the monitor metrics read /api/v1/monitor/overview?range=6h (:102) resolved by signal key (:126-129), and the token cards read /api/v1/analytics/usage (:107-110, prompt_tokens + completion_tokens at :141). All five endpoints are re-read over a separate transport with the session cookie and each is required to answer 200 - measured summary, gpus, monitor, usage and healthz all 200 in both locales, with ten metric boxes traced and no metric box left untraced. The probe separation is asserted positively: /api/v1/healthz is polled at :96, so the case takes its own numeric fields and requires that no card reproduces one of them - measured zero cards doing so in both locales. The token cards are additionally required to agree with the usage endpoint's own totals, which holds in this fleet because both sides report zero. What this fleet cannot exercise is stated plainly rather than glossed: the monitor reports stale true with no collected signals, so the four monitor cards are asserted to be absent in agreement with the signals reporting collected false, and the request-rate and error-rate values cannot be compared as numbers against signal values that do not exist here. The claim made for those four is that they read from the monitor signals rather than from the health probe, which is what the trace and the probe-separation assertion establish. Run 20261104T092033Z-214a0c2a (en) and 20261104T092102Z-1541207f (zh), both PASS. Not mutation-proven: the separation is shown by reading each endpoint independently and showing the probe's fields appear in no card, rather than by making the page read the probe. Making the page read the probe would be an equivalent mutation of the rendering code, so it is recorded as unproven here instead of claimed.",
+    "17.7": "covered: The no-data, long-label, large-number and error renders are measured from the geometry the page itself uses rather than compared as pictures, and the anti-overlap logic is asserted on the elements it measures. The overview is measured at 1440px and at 720px, and at each width three properties are required: the document does not scroll horizontally, no two metric boxes intersect, and no metric box extends outside its own panel - measured ten boxes at both widths with zero intersecting pairs, zero boxes outside a panel, and scroll width equal to client width in both locales. Those are the same quantities the attention banner computes for itself when it measures entry widths under a ResizeObserver to decide how many entries fit (DashboardPage.tsx:238-262), so the assertion follows the product's own rule instead of a guessed tolerance. The no-data render is required to be the product's empty copy rather than blank rows (:273 EmptyState, used for the storage card at :226, with the distribution falling back at :295), and that copy is measured in both languages. Large numbers are required to be converted rather than left to overflow: the compact form on a card keeps the exact figure in the title attribute (:287, :189) and power switches to kilowatts above 1000 (:139) - the case reads every rendered value's shown text and its exact title and records how many differ. The error render is required to appear as the page's own alert with non-empty text when a query fails, which is asserted under 17.1 by inducing the failure. Run 20261104T092033Z-214a0c2a (en) and 20261104T092102Z-1541207f (zh), both PASS. Not mutation-proven: the geometry is measured at two viewports and compared against the rule the page itself computes, but no layout code was broken to watch these measurements fail.",
+    "17.2": "N/A: the time-range and aggregation half of this item has no object on the overview page. The page never asks for a window or a granularity it could vary: the monitor window is the literal 6h at DashboardPage.tsx:102 and the usage granularity is the literal \"hour\" with a from/to derived from Date.now() at :107-110, and there is no date picker, range control, segmented control or aggregation selector anywhere on the page (the antd import at :2 is Alert, Button, Card, Dropdown, Pagination, Select, Tag, Tooltip, Typography, and the single Select at :210 chooses a label key, not a range). One variable query parameter does exist and is recorded here rather than overlooked: api.dashboardSummary takes an optional label key and appends ?label_key= when set (ui/src/api.ts:3725), and the Select at :210 really changes it through usePolling's dependency list at :97. That is a filter parameter, not a time range or an aggregation, so it does not satisfy this item; the switch itself is recorded under 17.4 where the page's other switching capability is described. Chart query parameters belong to ui/src/pages/analytics/EChart.tsx, which this contract does not own. The units and precision this page does show are asserted as part of 17.1.",
+    "17.3": "N/A: this page has no chart, so it has no legend, no series and no chart tooltip to operate. DashboardPage.tsx references no charting library at all (no echarts, recharts or canvas), and its antd import at :2 contains no legend or chart component. The two Tooltip instances that do exist are text hints and are not treated as chart tooltips: the replica-count explanation at :194 and the per-metric info icon at :287, neither of which selects or describes a series. Charts with a legend and a tooltip live in ui/src/pages/analytics (EChart.tsx and its tabs), which this contract does not own.",
+    "17.4": "N/A: the overview page has nothing to switch that this item names - no node, GPU, deployment or range selector exists, and the two windows in use are hard-coded constants (:102 the 6h monitor window, :107-110 the hourly usage window). One real switching capability is recorded here so it is not lost: the label-key Select at :210 changes the summary query through usePolling's dependency list at :97, so picking a different label key really does refetch /api/v1/dashboard/summary with a different label_key. That is a genuine page capability but it is not the node/GPU/deployment/range switch this item asks about, so the item itself is not claimed.",
+    "17.6": "N/A: the overview page renders no timeline. useEvents is imported but all three of its uses only trigger refetches - :111 refreshes health, summary, gpus, offlineNodes and storageUsage on a node event, :112 refetches summary and monitor on a deployment event, and :113 refetches providers on a provider event. Nothing from the event stream is rendered: the file contains no Timeline component, no ul and no ol, and there is no event list, ordering, state transition or run id to assert. The timeline this item describes lives on the monitor page, which this contract does not own.",
+    "10.6": "The shared-storage list pages at two rows per page. The case stores three shared storages and reads the paged list: it opens on page 1 holding the first two storages with the previous control disabled and the next control enabled; the next control moves to page 2, which holds the remaining storage with next disabled and previous enabled; the first-page link and the previous control both return the same two rows; and the pages collected in order hold every storage exactly once, with no repeat and no gap. The rows are identified by the storage name each row links, not by position, and the paged set equals the shared storages the storages API reports. The page size is the product's own STORAGE_PAGE_SIZE = 2 (DashboardPage.tsx:17) applied by the pagination at :226."
   },
   "missing": [
-    "MISSING: checklist 10.4 (group-row sorting) — no sort interaction exists or is exercised",
-    "MISSING: checklist 17.1 loading, empty, error and stale states",
+    "N/A: the label-grouping panel is gone from the overview. Mainline a5b4266bf (\"Move the dashboard to Zeron and send its counts from the server\") rebuilt the page and dropped the \"GPU capacity by node label\" panel: no component renders api.ts's by_label any more (the field is typed but unused), while GET /api/v1/dashboard/summary still answers label_keys/label_key/by_label. The API aggregation is asserted from the report's request layer; the panel's absence is asserted as a count of 0 and recorded in the report as {label_panel: N/A, removed by: a5b4266bf}.",
+    "MISSING: checklist 10.4 (group-row sorting) — the grouping panel that owned this sorting no longer exists (see the N/A entry above)",
     "MISSING: checklist 22.5 (zh/en navigation, first screen, error and empty text)",
     "MISSING: real GPU capacity, VRAM, utilization, temperature and power",
-    "MISSING: time-series charts and historical windows",
+    "The overview page renders no time series and no historical chart: it draws no chart at all and its two windows are hard-coded constants (DashboardPage.tsx:102 the 6h monitor window, :107-110 the hourly usage window). The charting lives in ui/src/pages/analytics/EChart.tsx (echarts core with bar, line and heatmap charts), which this contract does not own.",
     "MISSING: provider health and invalid public/private clouds",
     "MISSING: an empty fleet and the empty-state copy",
     "MISSING: ties between label keys and an unknown requested key",

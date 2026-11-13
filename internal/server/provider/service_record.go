@@ -51,6 +51,7 @@ func instanceRows(providerID uint, insts []Instance) ([]store.ProviderInstance, 
 			GPUModel: in.GPUModel, GPUCount: in.GPUCount, Power: string(in.Power),
 			PricePerHr: in.PricePerHr, Region: in.Region, PublicIP: in.PublicIP,
 			SSHPort: in.SSHPort, SSHUser: in.SSHUser, SSHConnections: string(connections), Kind: in.Kind,
+			ManagedCluster: in.Cluster,
 		})
 	}
 	return rows, nil

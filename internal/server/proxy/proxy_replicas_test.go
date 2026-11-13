@@ -43,6 +43,7 @@ func TestSelectInstanceRoutesAroundAnInstanceOrderedToSleep(t *testing.T) {
 		}
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"replica-sleep-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	if err := st.OrderInstancesSleep(dep.ID, []string{"replica-a"}, 1, proto.SleepModeWait); err != nil {
 		t.Fatal(err)
 	}
@@ -104,6 +105,7 @@ func TestPickAwakePassesOverAnInstanceOrderedSinceTheRouteWasRead(t *testing.T) 
 		candidates = append(candidates, candidate{instanceUUID: uuid, nodeUUID: "pick-awake-node", port: 30021 + i, uuidHash: fnv64([]byte(uuid))})
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"pick-awake-node": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	if err := st.OrderInstancesSleep(dep.ID, []string{"awake-a"}, 1, proto.SleepModeWait); err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +134,11 @@ func TestDistributedSelectionPicksAmongCompleteReplicas(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "Qwen/Qwen3-72B-replicas", Revision: "main", Name: "Qwen72B"})
 	if err != nil {
 		t.Fatal(err)
@@ -168,6 +175,7 @@ func TestDistributedSelectionPicksAmongCompleteReplicas(t *testing.T) {
 	group("g1", nodes[0], nodes[1], proto.InstStarting)
 	group("g2", nodes[2], nodes[3], proto.InstRunning)
 	p := New(st, storeNetworks(st), readinessTestHub{online: online}, nil, 0)
+	t.Cleanup(p.Close)
 	for i := 0; i < 4; i++ {
 		_, tgt, status, message, _ := p.selectDeploymentInstance("qwen-replicas")
 		if status != 0 || tgt.instanceUUID != "g2-leader" {
@@ -241,6 +249,7 @@ func TestAMultiNodeReplicaIsAsleepOnlyWhenItsLeaderIs(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"leader-asleep-a": true, "leader-asleep-b": true}}, nil, 0)
+	t.Cleanup(p.Close)
 	_, tgt, status, msg, asleep := p.selectDeploymentInstance("leader-asleep")
 	if status != 0 || tgt.instanceUUID != "la-leader" || asleep {
 		t.Fatalf("selection = %d %q -> %q asleep=%v, want the awake leader", status, msg, tgt.instanceUUID, asleep)

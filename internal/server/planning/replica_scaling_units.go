@@ -38,7 +38,11 @@ func (s Scaling) AutoReplicaUnits(dep *store.Deployment, replicas int, placeOn, 
 	if err != nil {
 		return nil, err
 	}
-	perRank, err := placement.Parallelism(dep.NNodes).GPUsPerNode()
+	spec, err := DeploymentParallelism(dep, placement)
+	if err != nil {
+		return nil, err
+	}
+	perRank, err := spec.GPUsPerNode()
 	if err != nil || perRank < 1 {
 		perRank = 1
 	}

@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -72,29 +74,55 @@ func TestGatewayCountsTheWaitOfHeldRequests(t *testing.T) {
 	if err := p.store.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 1).Error; err != nil {
 		t.Fatal(err)
 	}
-	front := httptest.NewServer(p.Handler())
+	completed := make(chan struct{}, 1)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { completed <- struct{}{} }()
+		p.Handler()(w, r)
+	}))
 	t.Cleanup(front.Close)
+	waitForHandler := func() {
+		t.Helper()
+		select {
+		case <-completed:
+		case <-time.After(2 * time.Second):
+			t.Fatal("the request handler is still running")
+		}
+	}
 
-	// Abandoned: the client gives up after 300 ms.
-	p.SetWakeDemand(func(uint) {})
-	client := &http.Client{Timeout: 300 * time.Millisecond}
-	req, _ := http.NewRequest(http.MethodPost, front.URL+"/v1/chat/completions", strings.NewReader(`{"model":"omni"}`))
+	// Abandoned: cancel only after the gateway has held the request, so a
+	// slow machine cannot consume the client's timeout before it reaches hold.
+	entered := make(chan struct{}, 1)
+	p.SetWakeDemand(func(uint) { entered <- struct{}{} })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, front.URL+"/v1/chat/completions", strings.NewReader(`{"model":"omni"}`))
 	req.Header.Set("Authorization", "Bearer "+key)
-	if _, err := client.Do(req); err == nil {
-		t.Fatal("answered while asleep")
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if n, _ := p.HeldRequests(depID); n == 0 {
-			break
+	requestEnded := make(chan error, 1)
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if resp != nil {
+			_ = resp.Body.Close()
 		}
-		if time.Now().After(deadline) {
-			t.Fatal("the abandoned request is still held")
-		}
-		time.Sleep(10 * time.Millisecond)
+		requestEnded <- err
+	}()
+	select {
+	case <-entered:
+	case err := <-requestEnded:
+		t.Fatalf("request ended before being held: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("request did not enter hold")
 	}
-	// The wait is what was left of the client's 300 ms once the request was
-	// held: under load the request may reach the hold late.
+	time.Sleep(300 * time.Millisecond)
+	cancel()
+	if err := <-requestEnded; !errors.Is(err, context.Canceled) {
+		t.Fatalf("abandoned request error = %v, want context cancellation", err)
+	}
+	// HeldRequests becomes zero before accounting is recorded. Wait for the
+	// handler to return so both the hold and its accounting have completed.
+	waitForHandler()
+	if n, _ := p.HeldRequests(depID); n != 0 {
+		t.Fatal("the abandoned request is still held")
+	}
 	count, abandoned := holdWaitOf(t, acct, depID)
 	if count != 1 || abandoned <= 0 || abandoned > 2000 {
 		t.Fatalf("abandoned: count = %v sum = %v ms, want one wait of at most about 300 ms", count, abandoned)
@@ -121,6 +149,7 @@ func TestGatewayCountsTheWaitOfHeldRequests(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
+	waitForHandler()
 	if count, sum := holdWaitOf(t, acct, depID); count != 2 || sum-abandoned < 200 {
 		t.Fatalf("served: count = %v sum = %v ms, want a second wait of at least 200 ms", count, sum)
 	}
@@ -135,6 +164,7 @@ func TestGatewayCountsTheWaitOfHeldRequests(t *testing.T) {
 	if resp := postChat(t, front, key); resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("held sleep status = %d", resp.StatusCode)
 	}
+	waitForHandler()
 	if count, _ := holdWaitOf(t, acct, depID); count != 2 {
 		t.Fatalf("a refused request was counted as held: %v", count)
 	}

@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
-import { Button, Tooltip } from "antd";
+import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
+import { fromAntd } from "../ui-kit/antdIcon";
 import { CloudDownloadOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, type UpdateStatus } from "../api";
+
+const DownloadIcon = fromAntd(CloudDownloadOutlined);
 
 // How often one browser asks the server whether updates exist. The server
 // itself reuses its last check of the distribution channel for an hour, so this
@@ -82,8 +86,9 @@ export default function UpdateNotice() {
 
   if (!update) return null;
   return (
-    <Tooltip title={t("header.updateAvailableHint")}>
-      <Button type="text" className="app-header-update" icon={<CloudDownloadOutlined />} onClick={() => navigate("/settings#updates")}>
+    <Tooltip content={t("header.updateAvailableHint")}>
+      {/* A pale info capsule: the only header item that is a notice, not a tool (ui-guidelines 9.1b). */}
+      <Button variant="ghost" size="sm" leadingIcon={DownloadIcon} className="app-header-update rounded-full bg-info-surface text-fg-info hover:text-fg-info" onClick={() => navigate("/settings#updates")}>
         {t("header.updateAvailable")}
       </Button>
     </Tooltip>

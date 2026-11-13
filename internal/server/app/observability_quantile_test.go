@@ -506,7 +506,7 @@ func TestApplyQuantilesCorrectsANonMonotoneDeltaVector(t *testing.T) {
 
 	cases := map[string]float64{
 		"0.5":  0 + (0.1-0)*(50.0/80.0), // rank=50, bucket (0,0.1], count=80
-		"0.95": 2 + (5-2)*(5.0/5.0),     // rank=95, bucket (2,5], count=95-90=5, offset=5
+		"0.95": 5,                       // rank=95, bucket (2,5], count=95-90=5, offset=5
 		"0.99": 5,                       // rank=99 falls in the +Inf bucket -> last finite bound
 	}
 	for q, want := range cases {

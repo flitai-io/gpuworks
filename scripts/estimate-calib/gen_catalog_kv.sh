@@ -13,7 +13,7 @@ set -u
 TARGETS="${1:-/tmp/calib/kvtargets.json}"
 OUT="${2:-/tmp/calib/kvvalues.json}"
 WORK=/tmp/calib/kvgen
-IMAGE="${IMAGE:-quay.io/gpustack/runner:cuda13.0-vllm0.25.1}"
+IMAGE="${IMAGE:-gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4}"
 
 mkdir -p "$WORK/cfg"
 

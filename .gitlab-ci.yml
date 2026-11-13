@@ -1,4 +1,5 @@
 stages:
+  - change-record
   - core-prepare
   - core
   - release
@@ -36,10 +37,16 @@ variables:
   GIT_CLEAN_FLAGS: "-ffdx -e .tmp/"
   # Servers started by CI jobs never send usage reports (ADR 0054).
   GPUWORKS_USAGE_REPORT: "off"
+  # The scripts read CI-neutral names (the GitHub workflows set the same):
+  # the commit, one build time shared by every job of the pipeline, and the
+  # commit check_architecture.sh compares the budget file against.
+  GPUWORKS_BUILD_COMMIT: "$CI_COMMIT_SHA"
+  GPUWORKS_BUILT_AT: "$CI_PIPELINE_CREATED_AT"
+  GPUWORKS_ARCH_BASELINE: "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
 
 .go-core:
   image:
-    name: golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c
+    name: golang:1.26.11@sha256:7af425da11f4fc1a9308eb704369e3f6d1c44e35bac0f874a59ade3f20fdc07e
   variables:
     # gpu3 cannot reach proxy.golang.org consistently. Keep direct fallback for
     # modules that have not reached the mainland mirrors yet.
@@ -54,17 +61,35 @@ variables:
     GOMODCACHE: "/host-go-cache/go-mod"
     GOCACHE: "/host-go-cache/go-build"
     GOFLAGS: "-modcacherw"
-    # The pinned image ships go1.26.10, exactly what go.mod requires; fail
+    # The pinned image ships go1.26.11, exactly what go.mod requires; fail
     # loudly instead of silently downloading a toolchain through GOPROXY.
     GOTOOLCHAIN: "local"
   needs:
     - job: core-ui
       artifacts: true
 
+change-record:
+  environment:
+    name: change-record
+    action: prepare
+  extends: .go-core
+  stage: change-record
+  timeout: 10m
+  # The gate compiles only its own package; it must not wait for embedded UI.
+  needs: []
+  script:
+    - ./scripts/check_ci_yaml.sh
+    - python3 -B -m unittest discover -s scripts -p test_check_ci_yaml.py
+    - CGO_ENABLED=0 go test -timeout 2m ./scripts/changerecord
+    - CGO_ENABLED=0 go run ./scripts/changerecord
+
 core-ui:
   # Keep the UI artifact in a short preparation stage so Go checks that compile
   # the embedded web UI can fan out in core.
   stage: core-prepare
+  needs:
+    - job: change-record
+      artifacts: false
   image:
     name: node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a
   variables:
@@ -83,12 +108,13 @@ core-ui:
     - node scripts/i18n-check.mjs
     - cd ui
     # registry.npmmirror.com occasionally stalls mid-transfer from this runner
-    # and resets the connection after 15-20 minutes instead of failing fast.
-    # Retry the whole install a few times rather than let one flaky fetch
-    # fail the job.
+    # and resets the connection after 15-20 minutes instead of failing fast,
+    # and has hung an install for the whole job timeout. A warm-cache install
+    # takes ~10 s, so cut an attempt off at 5 minutes and retry the whole
+    # install a few times rather than let one flaky fetch fail the job.
     - |
       for attempt in 1 2 3; do
-        npm ci --registry="$NPM_REGISTRY" --prefer-offline --no-audit --no-fund \
+        timeout 300 npm ci --registry="$NPM_REGISTRY" --prefer-offline --no-audit --no-fund \
           --fetch-retries=5 --fetch-retry-mintimeout=5000 --fetch-retry-maxtimeout=60000 \
           && break
         echo "npm ci attempt $attempt failed" >&2
@@ -99,7 +125,13 @@ core-ui:
         sleep 15
       done
     - npm run lint:i18n
+    # Per-file antd ratchet (ui/antd-inventory.json): no file may use more antd
+    # than the snapshot records; core-test's architecture check runs without
+    # Node, so the check lives here.
+    - node ../scripts/ui_antd_inventory.mjs --check
     - npm run build
+    # Warns (never fails) when the compressed UI outgrows its budget.
+    - (cd .. && ./scripts/check_ui_bundle_size.sh)
   artifacts:
     # Vite writes directly to the directory embedded by the Go server.
     paths:
@@ -114,13 +146,17 @@ docs-build:
   # jobs. A successful job produces the exact static tree consumed by the
   # existing gpuworks-site refresh timer.
   stage: core-prepare
+  needs:
+    - job: change-record
+      artifacts: false
   image:
-    name: golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c
+    name: golang:1.26.11@sha256:7af425da11f4fc1a9308eb704369e3f6d1c44e35bac0f874a59ade3f20fdc07e
   variables:
     # Nothing in this job reaches a public host: the Hugo binary comes from
     # the rustfs mirror on mirror1 and the oink theme is cloned by
-    # docs-site/build.sh from the gpuworks_website repository, authenticated
-    # by the WEBSITE_REPO project variable (a read-only deploy-token URL).
+    # docs-site/build.sh from the internal copy of the gpuworks_website
+    # repository named by the WEBSITE_REPO project variable (a read-only
+    # deploy-token URL).
     # No Go toolchain or module proxy is involved at all.
     HUGO_VERSION: "0.165.0"
     # The runners have no egress to github.com, so Hugo comes from the rustfs
@@ -163,17 +199,20 @@ docs-build:
       - docs-site/public/
     expire_in: 30 days
   rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - docs/**/*
         - docs-en/**/*
         - docs-site/**/*
+        - requirements-e2e.txt
         - .gitlab-ci.yml
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       changes:
         - docs/**/*
         - docs-en/**/*
         - docs-site/**/*
+        - requirements-e2e.txt
         - .gitlab-ci.yml
     - when: never
 
@@ -190,6 +229,11 @@ core-ui-test:
   # Three shards (node --test-shard, see TEST_SHARD in ui/package.json) keep
   # the slow-runner case near the fast one instead of on the critical path.
   parallel: 3
+  # A shard takes ~4 min on the fast runner and under 25 on the slow ones. A
+  # test file that never exits used to hold a slot for the full hour; the
+  # suite now bounds each test (--test-timeout in ui/package.json), and this
+  # catches anything that still hangs well before the runner default.
+  timeout: 30m
   image:
     name: node:22-bookworm@sha256:0557ac14e0d45d02ed563067b82856ca5e7aa3437fa28d98d4350ea9c3d9494a
   variables:
@@ -205,7 +249,9 @@ core-ui-test:
     # This job deliberately starts independently of core-ui, so only consume a
     # cache produced by an earlier pipeline and never race to publish it.
     policy: pull
-  needs: []
+  needs:
+    - job: change-record
+      artifacts: false
   script:
     # The macOS serve adapters' tests need only the image's python3. They are
     # not part of the UI suite, so only the first shard runs them.
@@ -215,7 +261,7 @@ core-ui-test:
     # resets the connection instead of failing fast, so retry the install.
     - |
       for attempt in 1 2 3; do
-        npm ci --registry="$NPM_REGISTRY" --prefer-offline --no-audit --no-fund \
+        timeout 300 npm ci --registry="$NPM_REGISTRY" --prefer-offline --no-audit --no-fund \
           --fetch-retries=5 --fetch-retry-mintimeout=5000 --fetch-retry-maxtimeout=60000 \
           && break
         echo "npm ci attempt $attempt failed" >&2
@@ -234,6 +280,82 @@ core-ui-test:
     paths:
       - ui/coverage/lcov.info
       - ui/coverage/lcov-report/
+    expire_in: 14 days
+
+# Walks the console in Chromium against a disposable experience environment
+# and fails on what a person would see as broken: covered or overlapping text,
+# stretched controls, controls an invisible layer blocks, sideways scrolling,
+# console errors (scripts/ui_check_ci.sh, ui/tests/browser/ui-check.mjs). Only
+# when the UI changed, and on a merge request only the pages the change
+# reaches; shared files and the nightly schedule walk every page. The report
+# (screenshots, and the target branch's for the states that look different)
+# is attached to the job for a reviewer.
+ui-check:
+  extends: .go-core
+  stage: core
+  # Until a prebuilt image replaces the apt step its download alone can take
+  # 17–40 minutes; a walk with the comparison takes about 18 s a state.
+  timeout: 60m
+  retry: 1
+  variables:
+    NPM_REGISTRY: "https://registry.npmmirror.com"
+    npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+    UI_CHECK_COMPARE: "1"
+  cache:
+    - key:
+        files:
+          - ui/package-lock.json
+        prefix: npm-node22
+      paths:
+        - .cache/npm/
+      policy: pull
+    # The Chromium and font packages: downloading them took about 17 minutes
+    # even through the mirror; from the cache apt only unpacks them.
+    - key: ui-check-apt-bookworm
+      paths:
+        - .cache/apt/
+      # Keep the download even when the check fails or times out.
+      when: always
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - ui/**/*
+        - scripts/ui_check_ci.sh
+        - scripts/ui_antd_inventory.mjs
+        - .gitlab-ci.yml
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - when: never
+  before_script:
+    # Chromium and CJK fonts from Debian, through the mirror docs-pdf uses: the
+    # runners reach deb.debian.org too slowly. Node 22 (Debian ships 18,
+    # Playwright needs 20+) as the pinned, checksummed tarball from the npm
+    # mirror the UI jobs already use.
+    - sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+    - mkdir -p .cache/apt/archives/partial && rm -f /etc/apt/apt.conf.d/docker-clean
+    - apt-get -qq -o Acquire::http::Timeout=20 -o Acquire::Retries=2 update
+    - apt-get -qq -o Acquire::http::Timeout=20 -o Acquire::Retries=2 -o Dir::Cache::Archives="$CI_PROJECT_DIR/.cache/apt/archives" install -y --no-install-recommends chromium fonts-noto-cjk xz-utils >/dev/null
+    - export CHROME_PATH=$(command -v chromium)
+    - |
+      node_tar=node-v22.16.0-linux-x64.tar.xz
+      curl -fsSL --retry 3 -o "/tmp/$node_tar" "https://registry.npmmirror.com/-/binary/node/v22.16.0/$node_tar"
+      echo "f4cb75bb036f0d0eddf6b79d9596df1aaab9ddccd6a20bf489be5abe9467e84e  /tmp/$node_tar" | sha256sum -c -
+      tar -xJf "/tmp/$node_tar" -C /usr/local --strip-components=1
+    - (cd ui && npm ci --registry="$NPM_REGISTRY" --prefer-offline --no-audit --no-fund)
+  script:
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        git fetch -q origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        export UI_CHECK_BASE_REF="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        # A merge request walks both languages at 1024, where layouts break
+        # first and English labels run longest; scheduled runs walk 1440 too.
+        export UI_CHECK_WIDTHS=1024
+      fi
+    - ./scripts/ui_check_ci.sh
+  artifacts:
+    when: always
+    paths:
+      - ui-check-report/
     expire_in: 14 days
 
 core-test:
@@ -271,6 +393,12 @@ core-vet:
   script:
     - CGO_ENABLED=0 go vet ./...
 
+core-lint:
+  extends: .go-core
+  stage: core
+  script:
+    - make lint
+
 # Strict L2 contains a real Docker adoption/recovery case and L3 is entirely a
 # Docker gate. The ordinary project runners use an unprivileged Docker executor
 # with no daemon socket, so both jobs are pinned to the project's tag-only
@@ -293,7 +421,7 @@ core-vet:
       artifacts: true
   variables:
     DOCKER_DIND_IMAGE: "docker:29-dind@sha256:12e683a161823b2a839aeea999b9d960e6e1f9a97b1679ad6b441982e2d9cf07"
-    DOCKER_GO_IMAGE: "golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c"
+    DOCKER_GO_IMAGE: "golang:1.26.11@sha256:7af425da11f4fc1a9308eb704369e3f6d1c44e35bac0f874a59ade3f20fdc07e"
     # Docker Hub is intermittently unreachable from the CI runner. Keep the
     # L3 fixtures reproducible while using a public mainland mirror for their
     # busybox/Python/Alpine base images. The registry image keeps the quay
@@ -483,7 +611,7 @@ core-l3:
   # Same rationale as core-l2: single retry for container-timing flakes.
   retry: 1
   variables:
-    DOCKER_TEST_COMMAND: "make test-l3 COVERPROFILE=coverage-l3.out"
+    DOCKER_TEST_COMMAND: "make test-l3 GO_TEST_FLAGS=-v COVERPROFILE=coverage-l3.out"
   artifacts:
     when: always
     paths:
@@ -559,6 +687,37 @@ core-compshare-offline-contracts:
       - coverage-compshare-contracts.out
     expire_in: 14 days
 
+release-docs-pdf:
+  extends: .go-core
+  stage: release
+  timeout: 20m
+  needs:
+    - job: docs-build
+      artifacts: true
+  script:
+    # Reuse the existing Playwright requirement; browsers are build tools only.
+    - sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources
+    - apt-get -qq -o Acquire::http::Timeout=20 -o Acquire::Retries=2 update
+    - apt-get -qq -o Acquire::http::Timeout=20 -o Acquire::Retries=2 install -y --no-install-recommends chromium fonts-noto-cjk fontconfig python3-venv poppler-utils
+    - python3 -m venv .tmp/docs-pdf-venv
+    # Avoid slow public-PyPI wheel downloads and reuse the runner's tool cache.
+    - |
+      .tmp/docs-pdf-venv/bin/pip install --disable-pip-version-check \
+        --index-url "${GPUWORKS_PYPI_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}" \
+        --timeout 30 --retries 2 --cache-dir /host-go-cache/tools/pip \
+        -r requirements-e2e.txt
+    - export CHROME_PATH=/usr/bin/chromium
+    - .tmp/docs-pdf-venv/bin/python docs-site/pdf_browser_checks.py
+    - .tmp/docs-pdf-venv/bin/python docs-site/export_pdf.py --version "$CI_COMMIT_TAG" --commit "$CI_COMMIT_SHA"
+  artifacts:
+    name: "gpuworks-docs-$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - dist/docs/
+    expire_in: never
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+    - when: never
+
 # One archive per job keeps each below GitLab's per-job artifact size limit
 # (an archive is ~53 MB since the server embeds a macOS agent too; two per job
 # no longer fit). The release website publishes a pipeline only after every
@@ -576,6 +735,7 @@ core-compshare-offline-contracts:
       artifacts: true
     - job: core-test
     - job: core-vet
+    - job: core-lint
     - job: core-compshare-offline-contracts
   script:
     # The zstd CLI packs the embedded agents ~10% smaller than the Go
@@ -671,6 +831,9 @@ release-publish:
       artifacts: true
     - job: release-build-macos-arm64
       artifacts: true
+    - job: release-docs-pdf
+      artifacts: true
+      optional: true
   resource_group: distribution
   interruptible: false
   variables:
@@ -684,6 +847,80 @@ release-publish:
   # Keep these rules identical in .release-build and release-publish: the
   # default branch builds the nightly channel under its short commit, a
   # release tag builds the release channel under the tag (ADR 0040).
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      variables:
+        GPUWORKS_RELEASE_ID: "$CI_COMMIT_SHORT_SHA"
+        GPUWORKS_RELEASE_CHANNEL: "nightly"
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      variables:
+        GPUWORKS_RELEASE_ID: "$CI_COMMIT_TAG"
+        GPUWORKS_RELEASE_CHANNEL: "release"
+    - when: never
+
+# Push the agent image Kubernetes clusters run (build/agent-image, ADR 0052)
+# under its runtime revision (build/agent-image/REVISION), the tag a cluster
+# entry's manifest names, and under <revision>-<version>. The agent in the
+# image only seeds a node; the agents then take and upgrade to the server's
+# own binary, so a nightly moving the revision tag does no harm. GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG is a
+# protected file variable holding a docker config.json with the registries'
+# credentials; without it the job fails rather than pretend it published.
+# The shell runner has docker but no Go: make runs in the pinned Go image with
+# the host's docker CLI and socket, and buildx runs from the docker CLI image
+# (scripts/agent_image.sh), so the host needs no buildx plugin.
+release-agent-image:
+  stage: publish
+  tags:
+    - gpuworks-l3
+  needs:
+    - job: release-build-linux-amd64
+    - job: release-build-linux-arm64
+  resource_group: agent-image
+  interruptible: false
+  timeout: 30m
+  variables:
+    DOCKER_GO_IMAGE: "golang:1.26.11@sha256:7af425da11f4fc1a9308eb704369e3f6d1c44e35bac0f874a59ade3f20fdc07e"
+    GPUWORKS_AGENT_IMAGE_REPOS: "docker.io/gpuworks/gpuworks-agent quay.io/gpuworks/gpuworks-agent swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-agent"
+    # The runners time out on github.com; the script checks nerdctl's sha256
+    # whichever of these serves it.
+    NERDCTL_URL_BASE: "https://gh-proxy.com/https://github.com/containerd/nerdctl/releases/download https://ghfast.top/https://github.com/containerd/nerdctl/releases/download https://github.com/containerd/nerdctl/releases/download"
+  script:
+    # Mounted at its own host path: the docker CLI image that pushes is started
+    # by the host daemon, which resolves bind mounts on the host.
+    - |
+      if [ ! -s "${GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG:-}" ]; then
+        echo "GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG is not set, so there are no registry credentials to push the agent image with" >&2
+        exit 1
+      fi
+    - export TOOL_CACHE="$HOME/.cache/gpuworks-ci/$CI_PROJECT_ID"
+    - mkdir -p "$TOOL_CACHE/go-mod" "$TOOL_CACHE/go-build" "$TOOL_CACHE/tools" "$CI_PROJECT_DIR/.tmp"
+    - >
+      docker run --rm
+      --name "ci-gpuworks-agent-image-$CI_JOB_ID"
+      --network host
+      --user "$(id -u):$(id -g)" --group-add "$(stat -c %g /var/run/docker.sock)"
+      -v /usr/bin/docker:/usr/bin/docker:ro
+      -v /var/run/docker.sock:/var/run/docker.sock
+      -v "$CI_PROJECT_DIR:$CI_PROJECT_DIR"
+      -v "$TOOL_CACHE/go-mod:/go-cache/mod"
+      -v "$TOOL_CACHE/go-build:/go-cache/build"
+      -v "$TOOL_CACHE/tools:/go-cache/tools"
+      -v "$GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG:$GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG:ro"
+      -w "$CI_PROJECT_DIR"
+      -e HOME="$CI_PROJECT_DIR/.tmp"
+      -e TMPDIR="$CI_PROJECT_DIR/.tmp"
+      -e GOMODCACHE=/go-cache/mod -e GOCACHE=/go-cache/build -e GOFLAGS=-modcacherw
+      -e GOPROXY=https://goproxy.cn,direct -e GOSUMDB=sum.golang.google.cn -e GOTOOLCHAIN=local
+      -e GPUWORKS_TOOL_CACHE=/go-cache/tools
+      -e NERDCTL_URL_BASE
+      -e GPUWORKS_AGENT_IMAGE_REPOS
+      -e GPUWORKS_AGENT_IMAGE_DOCKER_CONFIG
+      -e GPUWORKS_DOCKER_CLI_IMAGE=docker.m.daocloud.io/library/docker:29-cli
+      -e GPUWORKS_BUILDKIT_IMAGE=docker.m.daocloud.io/moby/buildkit:v0.25.2
+      "$DOCKER_GO_IMAGE"
+      make agent-image-publish VERSION="$GPUWORKS_RELEASE_ID" COMMIT="$CI_COMMIT_SHA"
+  # Keep these rules identical in .release-build, release-publish and
+  # release-agent-image (ADR 0040).
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       variables:
@@ -709,7 +946,7 @@ release-publish:
 # the environment's, so a new L4 job needs `action: prepare` too.
 .l4-cloud:
   image:
-    name: golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c
+    name: golang:1.26.11@sha256:7af425da11f4fc1a9308eb704369e3f6d1c44e35bac0f874a59ade3f20fdc07e
   interruptible: false
   retry: 0
   needs:
@@ -760,6 +997,7 @@ release-publish:
       artifacts: true
     - job: core-test
     - job: core-vet
+    - job: core-lint
     - job: core-compshare-offline-contracts
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $CLOUD_FULL == "1"'
@@ -900,6 +1138,7 @@ l4-ascend-pool-partition-inference:
       artifacts: true
     - job: core-test
     - job: core-vet
+    - job: core-lint
     - job: core-compshare-offline-contracts
   environment:
     name: cloud-test/ascend-primary
@@ -968,7 +1207,7 @@ l4-ascend-pool-partition-inference:
       -e GPUWORKS_ASCEND_L4_CARD="$GPUWORKS_ASCEND_L4_CARD"
       -e GPUWORKS_ASCEND_NERDCTL_L4_IMAGE="$GPUWORKS_ASCEND_NERDCTL_L4_IMAGE"
       -e GPUWORKS_ASCEND_NERDCTL_L4_CARD="$GPUWORKS_ASCEND_NERDCTL_L4_CARD"
-      golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c
+      golang:1.26.11@sha256:7af425da11f4fc1a9308eb704369e3f6d1c44e35bac0f874a59ade3f20fdc07e
       sh -c "apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null && cp -a /run/gpuworks-ssh/. \$HOME/.ssh/ && chown -R \$RUNNER_UID:\$RUNNER_GID \$HOME/.ssh && if ! getent passwd \$RUNNER_UID >/dev/null; then getent group \$RUNNER_GID >/dev/null || groupadd --gid \$RUNNER_GID ci-runner; useradd --uid \$RUNNER_UID --gid \$RUNNER_GID --home-dir \$CI_PROJECT_DIR/.cache/l4-home --no-create-home --shell /bin/sh ci-runner; fi && pw_home=\$(getent passwd \$RUNNER_UID | cut -d: -f6) && { [ \"\$pw_home/.ssh\" = \"\$HOME/.ssh\" ] || { mkdir -p \"\$pw_home/.ssh\" && cp -a /run/gpuworks-ssh/. \"\$pw_home/.ssh/\" && chown -R \$RUNNER_UID:\$RUNNER_GID \"\$pw_home/.ssh\"; }; } && setpriv --reuid=\$RUNNER_UID --regid=\$RUNNER_GID --clear-groups -- make test-l4-ascend-pool-partition-inference"
   artifacts:
     when: always

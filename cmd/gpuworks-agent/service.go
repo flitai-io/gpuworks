@@ -64,24 +64,14 @@ func installService(ctx context.Context, args []string, out io.Writer) error {
 
 // uninstallLaunchd removes the Mac's agent job and the node identity in the
 // state directory it named, so the Mac registers afresh if installed again.
-func uninstallLaunchd(ctx context.Context, explicitState string, out io.Writer) error {
+func uninstallLaunchd(ctx context.Context, states []string, out io.Writer) error {
 	host, err := launchd.NewHost(out)
 	if err != nil {
 		return err
 	}
-	stateDirs, err := host.Uninstall(ctx)
+	binary, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	if explicitState != "" {
-		stateDirs = append(stateDirs, explicitState)
-	}
-	for _, dir := range stateDirs {
-		for _, name := range []string{"identity.json", agentconf.FileName} {
-			if rmErr := removeIfPresent(filepath.Join(dir, name)); rmErr != nil {
-				return rmErr
-			}
-		}
-	}
-	return err
+	return uninstallLaunchdStates(ctx, states, host, binary)
 }

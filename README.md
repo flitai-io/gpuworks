@@ -30,8 +30,8 @@ an inference template defines (Strata, ninfer, …), and serves it behind one Op
 NVIDIA, AMD Instinct and Ryzen AI Max, Huawei Ascend, T-Head PPU, Hygon DCU and Apple Silicon run side by side in the
 same cluster.
 
-The pool of capacity is the core: bare-metal servers, public cloud instances and private cloud VMs today, with
-Kubernetes clusters and Slurm partitions joining next. On top of it, GPUWorks serves models now and will run
+The pool of capacity is the core: bare-metal servers, public cloud instances, private cloud VMs and existing
+Kubernetes clusters today, with Slurm partitions joining next. On top of it, GPUWorks serves models now and will run
 fine-tuning and training jobs on the same accelerators.
 
 ## Highlights
@@ -45,6 +45,10 @@ fine-tuning and training jobs on the same accelerators.
   cluster; the scheduler matches each deployment to hardware its launch spec supports.
 - **Public and private cloud in one pool.** Sync instances from RunPod, CompShare, AutoDL, Vast.ai and Alibaba Cloud,
   or VMs from ZStack Cloud, install the agent in one click, and schedule them together with your own servers.
+- **Joins an existing Kubernetes cluster and coexists with its other workloads.** Apply one manifest to connect a
+  cluster. GPUWorks keeps the device plugin the cluster already runs and works with HAMi and ACK GPU sharing. It
+  borrows only the cards it uses and returns them when idle, and the two schedulers see each other: Kubernetes does
+  not hand a card GPUWorks holds to another Pod, and GPUWorks does not schedule onto a card another Pod holds.
 - **Ultra-lightweight.** The server and the agent are each one static binary (`CGO_ENABLED=0`); the server embeds the
   web UI (English / 中文) and the agents for every platform, and keeps its state in one SQLite file. The agent dials
   out over WebSocket, so nodes need no inbound ports (or the server dials in, for nodes that cannot reach out). In a
@@ -53,11 +57,13 @@ fine-tuning and training jobs on the same accelerators.
   and 1.6 GB of memory.
 - **Memory estimate and explained placement.** Before anything starts, you see how much GPU memory weights, KV
   cache and engine overhead need, which GPUs the scheduler picked and why the others were rejected.
-- **Share a GPU between models.** dGPU puts a hard memory quota on each instance so several models fit on one card
-  (NVIDIA via HAMi-core, Ascend via vCANN, PPU via HGGC, Hygon via hy-smi virtual devices). Sleep/wake lets vLLM models take turns
-  on the same GPUs on NVIDIA, Ascend, PPU and Hygon.
+- **Share a GPU between models.** dGPU puts a memory quota on each instance so several models fit on one card
+  (NVIDIA via HAMi-core, Ascend via vcann-rt, PPU via ppu-slicing-shim, AMD via rocm-slicing-shim, Hygon via native vdevs); supported models,
+  runtimes, and readiness requirements are in the [Vendor Support Matrix](docs-en/reference/support-matrix.md).
+  Sleep/wake lets sleep-capable vLLM models take turns on the same GPUs; verified vendor and image combinations
+  are listed in [choosing features](docs-en/explanation/choosing-features.md#sleepwake-models-take-turns-on-one-gpu).
 - **Scale out.** Replicas across nodes, multi-node tensor/pipeline parallel, and prefill/decode disaggregation
-  (vLLM + NIXL on NVIDIA, vLLM-Ascend + Mooncake on Ascend, SGLang or vLLM + Mooncake on PPU, within one host or over RDMA, and experimental vLLM + Mooncake on Hygon).
+  (vLLM + NIXL on NVIDIA, vLLM-Ascend + Mooncake on Ascend, SGLang or vLLM + Mooncake on PPU, within one host or over RDMA, and vLLM + Mooncake on Hygon).
 - **OpenAI-compatible gateway.** Chat, completions, embeddings, rerank, audio, images, video and realtime under
   `/v1`; `/v1/messages` and `/v1/responses` pass through. Least-request, prefix-affinity or failover routing, API
   keys, per-key token usage.
@@ -120,10 +126,10 @@ Install the GPUWorks control plane on this host and verify it.
 | Accelerator | Whole-GPU deploy | dGPU (shared GPU) | Sleep/wake | Multi-node | PD disaggregation |
 |---|---|---|---|---|---|
 | **NVIDIA** (CUDA) | ✅ Docker, containerd or runveil (built-in rootless runtime) | ✅ memory quota at MiB granularity | ✅ vLLM | ✅ | ✅ vLLM + NIXL |
-| **AMD** (ROCm: Instinct MI300 series, Ryzen AI Max) | ✅ Docker, containerd or runveil (built-in rootless runtime) | ✅ memory quota (libvrocm, user space) | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
-| **Huawei Ascend** (CANN) | ✅ Docker, containerd or runveil (built-in rootless runtime) | ✅ memory quota at MiB granularity | ✅ vLLM-Ascend | ✅ | ✅ vLLM-Ascend + Mooncake |
-| **T-Head PPU** (HGGC) | ✅ Docker, containerd or runveil (built-in rootless runtime) | ✅ memory quota at MiB granularity | ✅ vLLM | ✅ | ✅ SGLang + Mooncake (same node or over RDMA), vLLM + Mooncake (RDMA) |
-| **Hygon DCU** (DTK) | ✅ Docker, containerd or runveil (built-in rootless runtime) | ✅ memory quota at MiB granularity | ✅ vLLM | ✅ | 🧪 vLLM 0.21 + Mooncake |
+| **AMD** (ROCm: Instinct MI300 series, Ryzen AI Max) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 libvrocm memory quota; tested on MI300X under Docker/runveil | ✅ vLLM | ✅ vLLM | ✅ vLLM + NIXL |
+| **Huawei Ascend** (CANN) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 vcann-rt memory quota; requires device-share permissions and a per-GPU probe | ✅ vLLM-Ascend | ✅ | ✅ vLLM-Ascend + Mooncake |
+| **T-Head PPU** (HGGC) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 ppu-slicing-shim memory quota and weighted QoS; Docker only | ✅ vLLM | ✅ | ✅ SGLang + Mooncake (same node or over RDMA), vLLM + Mooncake (RDMA) |
+| **Hygon DCU** (DTK) | ✅ Docker, containerd or runveil (built-in rootless runtime) | 🧪 Z100 / K100_AI / BW native vdev; Docker or runveil | ✅ vLLM | ✅ | ✅ vLLM 0.21 + Mooncake |
 | **Apple Silicon** (M1–M5, macOS 15+) | ✅ vllm-metal, MLX, llama.cpp as native processes | — | — | — | — |
 
 ✅ verified on real hardware · 🧪 experimental · — not supported or not validated. Sleep/wake beyond NVIDIA is

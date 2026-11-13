@@ -38,12 +38,41 @@ BIN       := bin
 TEST_LOG_DIR ?= .testlogs
 PLATFORMS := linux/amd64 linux/arm64 darwin/arm64
 
-.PHONY: all build test-host-env-adapters server server-linux-amd64 server-linux-amd64-prebuilt-ui server-linux-arm64 server-linux-arm64-prebuilt-ui server-darwin-amd64-prebuilt-ui server-darwin-arm64-prebuilt-ui agent ui test test-unit test-ui test-integration test-fleet-perf-processes test-fleet-log-scale-processes test-fleet-benchmark-processes test-coverage-report test-l2 test-l3 test-l4 test-l4-runpod-server-dial-node-onboarding test-l4-runpod-huggingface-public-download test-l4-runpod-vllm-sglang-lifecycle test-l4-autodl-node-onboarding test-l4-vast-node-onboarding test-l4-vast-server-dial-node-onboarding test-l4-gitee-ascend-partition-capability test-l4-gitee-ascend-deploy-chat test-l4-ascend-pool-partition-inference test-l4-ascend-primary test-l4-ascend-preflight test-l4-ascend-nerdctl-devinject test-l4-compshare-modelscope-public-download test-l4-compshare-offline-contracts test-l4-compshare-single-vm-tp2-dgpu test-l4-compshare-provisioning-matrix test-l4-compshare-server-dial-node-onboarding-container test-l4-compshare-two-vm-udocker-distributed test-l4-compshare-two-vm-docker-distributed test-l4-compshare-one-vm-two-logical-nodes test-l4-compshare-pd-deploy-chat-two-vm-docker prepare-compshare-golden-image test-l4-runpod test-l4-compshare test-l4-cleanup-leaked vet check-assets check-libvgpu check-perftest check-time-policy check-architecture check-tagged-build check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations i18n-check i18n-translate i18n-review runtime-assets runtime-assets-probe runtime-assets-verify image-manifest image-manifest-verify fake-engine fake-engine-image fake-model clean demo run-server tidy cross release-packages dist-publish test-l4-runpod-node-onboarding test-l4-aliyun test-l4-aliyun-provisioning-matrix test-l4-aliyun-modelscope-public-download test-l4-aliyun-single-vm-tp2-dgpu test-l4-aliyun-one-vm-two-logical-nodes test-l4-aliyun-two-vm-docker-distributed test-l4-aliyun-two-vm-udocker-distributed test-l4-aliyun-pd-deploy-chat-two-vm-docker prepare-aliyun-golden-image
+# Build the lint tool with the same Go version that loads this module. A
+# globally installed binary can be too old to analyze the repo's Go syntax.
+GOLANGCI_LINT_VERSION := v1.64.8
+LINT_GO_VERSION := $(shell $(GO) env GOVERSION)
+LINT_BIN := $(CURDIR)/$(BIN)/tools/golangci-lint-$(GOLANGCI_LINT_VERSION)-$(LINT_GO_VERSION)/golangci-lint
+
+.PHONY: all build test-host-env-adapters server server-linux-amd64 server-linux-amd64-prebuilt-ui server-linux-arm64 server-linux-arm64-prebuilt-ui server-darwin-amd64-prebuilt-ui server-darwin-arm64-prebuilt-ui agent ui test test-unit test-ui test-integration test-fleet-perf-processes test-fleet-log-scale-processes test-fleet-benchmark-processes test-coverage-report test-l2 test-l3 test-l4 test-l4-runpod-server-dial-node-onboarding test-l4-runpod-huggingface-public-download test-l4-runpod-vllm-sglang-lifecycle test-l4-autodl-node-onboarding test-l4-vast-node-onboarding test-l4-vast-server-dial-node-onboarding test-l4-gitee-ascend-partition-capability test-l4-gitee-ascend-deploy-chat test-l4-ascend-pool-partition-inference test-l4-ascend-primary test-l4-ascend-preflight test-l4-ascend-nerdctl-devinject test-l4-compshare-modelscope-public-download test-l4-compshare-offline-contracts test-l4-compshare-single-vm-tp2-dgpu test-l4-compshare-provisioning-matrix test-l4-compshare-server-dial-node-onboarding-container test-l4-compshare-two-vm-udocker-distributed test-l4-compshare-two-vm-docker-distributed test-l4-compshare-one-vm-two-logical-nodes test-l4-compshare-pd-deploy-chat-two-vm-docker prepare-compshare-golden-image test-l4-runpod test-l4-compshare test-l4-cleanup-leaked vet check-assets check-libvgpu check-perftest check-time-policy check-architecture check-tagged-build check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations i18n-check i18n-translate i18n-review runtime-assets runtime-assets-probe runtime-assets-verify image-manifest image-manifest-verify fake-engine fake-engine-image fake-model clean demo run-server tidy cross release-packages dist-publish test-l4-runpod-node-onboarding test-l4-aliyun test-l4-aliyun-provisioning-matrix test-l4-aliyun-modelscope-public-download test-l4-aliyun-single-vm-tp2-dgpu test-l4-aliyun-one-vm-two-logical-nodes test-l4-aliyun-two-vm-docker-distributed test-l4-aliyun-two-vm-udocker-distributed test-l4-aliyun-pd-deploy-chat-two-vm-docker prepare-aliyun-golden-image agent-image agent-image-publish test-l3-kind
 
 all: build
 
+.PHONY: docs-pdf
+## docs-pdf: build the bilingual site and print validated, versioned user handbooks
+docs-pdf: check-doc-links check-translations
+	bash docs-site/build.sh
+	python3 docs-site/pdf_browser_checks.py
+	python3 docs-site/export_pdf.py --version "$(VERSION)" --commit "$(COMMIT)"
+
 ## build: full release build — cross-compile agents (embedded) + UI + server + agent
 build: check-libvgpu ui cross-agents server agent
+
+## agent-image: the agent image a Kubernetes cluster's DaemonSet runs, built
+## into the local docker (AGENT_IMAGE, default gpuworks/gpuworks-agent:<revision
+## in build/agent-image/REVISION>; ARCH amd64|arm64). agent-image-publish builds amd64 + arm64 and pushes them to
+## GPUWORKS_AGENT_IMAGE_REPOS (the release pipeline's release-agent-image job).
+AGENT_IMAGE ?= gpuworks/gpuworks-agent:$(shell tr -d '[:space:]' < build/agent-image/REVISION)
+NERDCTL_VERSION ?= 2.1.6
+ARCH ?= amd64
+DEBIAN_MIRROR ?= mirrors.aliyun.com
+agent-image:
+	GO="$(GO)" LDFLAGS="$(LDFLAGS)" VERSION="$(VERSION)" ARCH="$(ARCH)" AGENT_IMAGE="$(AGENT_IMAGE)" \
+	NERDCTL_VERSION="$(NERDCTL_VERSION)" DEBIAN_MIRROR="$(DEBIAN_MIRROR)" ./scripts/agent_image.sh build
+
+agent-image-publish:
+	GO="$(GO)" LDFLAGS="$(LDFLAGS)" VERSION="$(VERSION)" \
+	NERDCTL_VERSION="$(NERDCTL_VERSION)" DEBIAN_MIRROR="$(DEBIAN_MIRROR)" ./scripts/agent_image.sh publish
 
 ## server: build the control-plane binary (embeds UI + cross-compiled agents)
 server: cross-agents
@@ -124,6 +153,7 @@ ui: i18n-check
 	@cd ui && node ensure-deps.mjs
 	cd ui && npm run lint:i18n
 	cd ui && npm run build
+	./scripts/check_ui_bundle_size.sh
 
 i18n-check:
 	node scripts/i18n-check.mjs
@@ -147,7 +177,13 @@ UNIT_TIMEOUT ?= 30m
 
 ## test-unit: build the embedded UI first, then run the untagged Go suite.
 ## `go test ./...` cannot compile webui without the generated embed tree.
-test-unit: ui check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets
+test-unit: check-change-record
+	$(MAKE) test-unit-checked
+
+# A recursive boundary keeps even make -j from starting UI or tests before
+# the change-record gate succeeds.
+.PHONY: test-unit-checked
+test-unit-checked: ui check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets
 	CGO_ENABLED=0 $(GO) test -timeout $(UNIT_TIMEOUT) $(GO_TEST_FLAGS) ./...
 	cd build/runtime-assets/hygon-vdev-helper && CGO_ENABLED=0 $(GO) test $(GO_TEST_FLAGS) ./...
 	$(MAKE) check-tagged-build
@@ -160,6 +196,7 @@ test-host-env-adapters:
 .PHONY: test-inference-template-assets
 test-inference-template-assets:
 	python3 -B -m unittest discover -s build/inference-templates/glm53-910c -p 'test_*.py'
+	python3 -B -m unittest discover -s test/runtime-wrapper-assets -p '*_test.py'
 
 .PHONY: test-strata-queue-assets
 test-strata-queue-assets:
@@ -172,6 +209,7 @@ test-strata-queue-assets:
 check-tagged-build:
 	CGO_ENABLED=0 $(GO) test -tags='multiproc' ./test/l2 -run '^$$'
 	CGO_ENABLED=0 $(GO) test -tags='docker' ./test/l3 -run '^$$'
+	CGO_ENABLED=0 $(GO) test -tags='kind' ./test/l3kind -run '^$$'
 	CGO_ENABLED=0 $(GO) test -tags='cloudgpu,runpod' ./test/l4 -run '^$$'
 	CGO_ENABLED=0 $(GO) test -tags='cloudgpu,compshare' ./test/l4 -run '^$$'
 	CGO_ENABLED=0 $(GO) test -tags='cloudgpu,aliyun' ./test/l4 -run '^$$'
@@ -315,7 +353,8 @@ test-integration: ui
 test-coverage-report: ui
 	CGO_ENABLED=0 $(GO) test -coverprofile=coverage.out ./...
 
-test: test-unit test-ui
+test: check-change-record
+	$(MAKE) test-unit-checked test-ui
 
 check-time-policy:
 	./scripts/check_time_policy.sh
@@ -325,6 +364,14 @@ check-time-policy:
 check-architecture:
 	./scripts/check_architecture.sh
 
+## check-change-record: a contract or decision path in the diff needs a record.
+## Contract means docs/ in the same diff. Decision means a same-named
+## gpuworks-artifacts branch whose plan.md has decision and rejected.
+## The path list is scripts/change-record-rules.txt. No N/A flag.
+.PHONY: check-change-record
+check-change-record:
+	CGO_ENABLED=0 $(GO) run ./scripts/changerecord
+
 ## check-api-conventions: response envelopes and snake_case field names in
 ## internal/server/api, read off the types (docs/reference/api-conventions.md).
 check-api-conventions:
@@ -333,8 +380,10 @@ check-api-conventions:
 ## check-ci-yaml: reject '#' comments inside folded (>) scalars, which become
 ## shell comments and truncate the assembled command, and needs that name a
 ## job of the same or a later stage (GitLab 14.0 refuses the pipeline).
+## Every build/test job must also wait for the mandatory change-record gate.
 check-ci-yaml:
 	./scripts/check_ci_yaml.sh
+	python3 -B -m unittest discover -s scripts -p test_check_ci_yaml.py
 
 ## check-artifacts: verify plan-doc frontmatter (status/dates/summary) across
 ## artifacts/{work,archive,research}, that every topic directory has exactly
@@ -484,6 +533,20 @@ test-l3:
 		status="$$(cat "$$status_file")"; \
 		if [ "$$status" != 0 ]; then echo "l3 failed (status $$status); full output: $$log"; exit "$$status"; fi; \
 	fi
+
+## test-l3-kind: Kubernetes node support on a real kind cluster (needs docker and
+## kind; skips without them unless GPUWORKS_TEST_STRICT=1). Builds the agent
+## image the DaemonSet runs and the fake-engine image, which the test loads
+## into the cluster.
+KIND_AGENT_IMAGE ?= gpuworks/gpuworks-agent:l3kind
+
+test-l3-kind:
+	$(MAKE) agent-image AGENT_IMAGE=$(KIND_AGENT_IMAGE)
+	$(MAKE) fake-engine-image
+	GPUWORKS_KIND_AGENT_IMAGE=$(KIND_AGENT_IMAGE) CGO_ENABLED=0 $(GO) test -count=1 -v -tags=kind -timeout=30m ./test/l3kind/
+
+test-l4-runpod-node-onboarding: cross-agents
+	GPUWORKS_TEST_STRICT=1 CGO_ENABLED=0 $(GO) test $(GO_TEST_FLAGS) -v -tags=cloudgpu,runpod -run '^TestRunpodNodeOnboarding$$' -timeout=25m ./test/l4
 
 ## Server-dialed agent on a pod, then a pod edit that renumbers its ports.
 test-l4-runpod-server-dial-node-onboarding: cross-agents
@@ -657,6 +720,16 @@ check-perftest:
 ## vet: static analysis
 vet:
 	CGO_ENABLED=0 $(GO) vet ./...
+
+.PHONY: lint
+## lint: run the complete pinned Go lint rule set, including tests.
+lint: $(LINT_BIN)
+	@test -f internal/server/webui/dist/index.html || $(MAKE) ui
+	CGO_ENABLED=0 $(LINT_BIN) run --concurrency=4 --timeout=12m --max-issues-per-linter=0 --max-same-issues=0
+
+$(LINT_BIN):
+	mkdir -p $(dir $(LINT_BIN))
+	GOMAXPROCS=4 GOTOOLCHAIN=$(LINT_GO_VERSION) GOBIN=$(dir $(LINT_BIN)) $(GO) install -p=4 github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 ## tidy: sync go.mod/go.sum
 tidy:

@@ -43,12 +43,21 @@ const (
 	// platform can do on the node fixes it, and the other cards sit behind
 	// the same driver.
 	CordonCardNeedsHostReboot = "card_needs_host_reboot"
+	// CordonKubeUnschedulable: Kubernetes stopped scheduling onto the node
+	// (kubectl cordon or drain, a node being replaced), so the platform's
+	// own replicas do not land on a node about to go. Lifted once
+	// Kubernetes lifts it.
+	CordonKubeUnschedulable = "kube_unschedulable"
 )
 
 // PlatformCordonReason is why the platform would hold this node out of
 // scheduling right now, or "" when it would not. cards are the node's cards
-// as the report describes them.
-func PlatformCordonReason(runtimeGPUBlocked string, cards []proto.GPUInfo) string {
+// as the report describes them; kubeUnschedulable is a Kubernetes node's own
+// cordon.
+func PlatformCordonReason(runtimeGPUBlocked string, kubeUnschedulable bool, cards []proto.GPUInfo) string {
+	if kubeUnschedulable {
+		return CordonKubeUnschedulable
+	}
 	if strings.TrimSpace(runtimeGPUBlocked) != "" {
 		return CordonRuntimeGPUBlocked
 	}
@@ -100,5 +109,5 @@ func (n *Node) CordonReason() string {
 	for _, g := range n.GPUs {
 		cards = append(cards, proto.GPUInfo{Ownership: g.Ownership, HealthCode: g.HealthCode})
 	}
-	return PlatformCordonReason(n.RuntimeGPUBlocked, cards)
+	return PlatformCordonReason(n.RuntimeGPUBlocked, n.KubeUnschedulable, cards)
 }

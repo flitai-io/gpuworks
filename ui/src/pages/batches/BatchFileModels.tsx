@@ -1,4 +1,4 @@
-import { Alert, Typography } from "antd";
+import { Notice } from "../../ui-kit/Notice";
 import { useTranslation } from "react-i18next";
 
 /**
@@ -17,19 +17,19 @@ export default function BatchFileModels({ fileModels, skipped, known, override }
   override: string | undefined;
 }) {
   const { t } = useTranslation("batches");
-  if (skipped) return <Typography.Text type="secondary">{t("create.fileModels.skipped")}</Typography.Text>;
+  if (skipped) return <span className="text-fg-muted">{t("create.fileModels.skipped")}</span>;
   if (!fileModels) return null;
   const summary = (
-    <Typography.Text type="secondary">
+    <span className="text-fg-muted">
       {fileModels.length > 0 ? t("create.fileModels.count", { count: fileModels.length, models: fileModels.join(", ") }) : t("create.fileModels.none")}
-    </Typography.Text>
+    </span>
   );
   if (override) {
     const replaced = fileModels.filter((name) => name !== override);
     return (
       <>
         {summary}
-        {replaced.length > 0 && <Alert type="info" showIcon message={t("create.fileModels.replaced", { count: replaced.length, models: replaced.join(", "), model: override })} />}
+        {replaced.length > 0 && <Notice tone="info" title={t("create.fileModels.replaced", { count: replaced.length, models: replaced.join(", "), model: override })} />}
       </>
     );
   }
@@ -37,7 +37,7 @@ export default function BatchFileModels({ fileModels, skipped, known, override }
   return (
     <>
       {summary}
-      {unknown.length > 0 && <Alert type="warning" showIcon message={t("create.fileModels.unknown", { count: unknown.length, models: unknown.join(", ") })} />}
+      {unknown.length > 0 && <Notice tone="warning" title={t("create.fileModels.unknown", { count: unknown.length, models: unknown.join(", ") })} />}
     </>
   );
 }

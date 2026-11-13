@@ -134,6 +134,28 @@ For many nodes, long-term offline operation, or frequent image updates, sync ima
 2. Under Settings → Image & model pulls → Source rules, add a rule from `gpuworks/` to `registry.corp.example/gpuworks/` and disable “Allow upstream” so nodes no longer pull from the public internet.
    If the registry requires authentication, configure [Credentials](configure-pull-settings.md#凭据). For rule syntax, see [Source Rules](configure-pull-settings.md#来源规则).
 
+### Agent Image for Kubernetes Clusters
+
+For a Kubernetes cluster connected through a DaemonSet, the nodes first need the agent image. The `gpuworks-agent/` folder of the Aliyun Drive share holds
+`gpuworks-agent_r1_linux-<arch>.tar.gz` (`r1` is the version of the agent's runtime and does not follow the server's version). Import it either way:
+
+- Push it to the internal registry and enter that address in "Agent image" under "Advanced" of the cluster entry (add an "Image pull secret" when the registry needs a login):
+
+  ```bash
+  docker load -i gpuworks-agent_r1_linux-amd64.tar.gz
+  docker tag gpuworks/gpuworks-agent:r1 registry.corp.example/gpuworks/gpuworks-agent:r1
+  docker push registry.corp.example/gpuworks/gpuworks-agent:r1
+  ```
+
+- Or import it into the kubelet's containerd on every node and keep the cluster entry's defaults: the manifest's `gpuworks/gpuworks-agent:r1` is already on the node, so it is not pulled.
+  Nodes that join the cluster later need the import first as well.
+
+  ```bash
+  gunzip -c gpuworks-agent_r1_linux-amd64.tar.gz | ctr -n k8s.io images import -
+  ```
+
+The agent program itself is delivered and upgraded by the server, so ordinary server upgrades need no new import; a new archive is needed only when the runtime version changes (the release notes say so).
+
 ### Store Models in a Private HTTP Directory
 
 If the model directory is already on an HTTP file server, register and download it as described in [Register a Model from an HTTP Directory](import-from-http.md#从-http-目录注册模型). The server needs to read the directory to parse it, and the target node must also be able to access it directly. Configure outbound authorization for private network addresses as described in that guide.

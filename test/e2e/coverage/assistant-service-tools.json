@@ -3,12 +3,18 @@
   "name": "AI 助手 / 服务配置与只读工具读取 / 流式回答、停止、刷新与删除",
   "test_file": "test/e2e/assistant_service_tools.py",
   "test_function": "test_assistant_service_tools",
-  "command": "make test-e2e-assistant-service-tools",
+  "command": "python3 -B test/e2e/assistant_service_tools.py --locale en",
   "priority": "P1",
   "page_id": "assistant",
   "lane": "local-real-server-sqlite-llm-fixture",
   "identity": "admin",
-  "required_evidence": ["ui", "request", "persistence", "execution", "cleanup"],
+  "required_evidence": [
+    "ui",
+    "request",
+    "persistence",
+    "execution",
+    "cleanup"
+  ],
   "runtime_evidence": {
     "status": "N/A",
     "reason": "The LLM endpoint is an audited local fixture. The server, AI service configuration, read-only tools, SQLite and browser are real; no GPU, agent, container or vendor model is claimed."
@@ -25,40 +31,88 @@
       "component": "Modal with preset, name, URL, model, password and default switch",
       "request": "POST /api/v1/ai/configs {\"name\",\"preset\",\"base_url\",\"api_key\",\"model\",\"is_default\"}",
       "persisted": "name, preset, base_url, model, is_default; the key is encrypted and not returned",
-      "covered": ["custom preset", "required fields", "default flag", "refresh and independent GET", "preset, base_url and model readback", "delete confirmation"],
-      "missing": ["all vendor presets", "validation failures", "the edit dialog", "the connection test button", "multiple services and default switching"]
+      "covered": [
+        "custom preset",
+        "required fields",
+        "default flag",
+        "refresh and independent GET",
+        "preset, base_url and model readback",
+        "delete confirmation"
+      ],
+      "missing": [
+        "all vendor presets",
+        "validation failures",
+        "the edit dialog",
+        "the connection test button",
+        "multiple services and default switching"
+      ]
     },
     {
       "id": "assistant.ask-stream",
       "component": "Panel textarea and Send button; SSE answer",
       "request": "POST /api/v1/ai/ask with task, question and locale",
       "persisted": "N/A: the assistant thread is browser state",
-      "covered": ["free question", "streamed final answer", "answer visible after the stream", "exact task/question/locale and history presence for the first and follow-up asks"],
-      "missing": ["reasoning deltas", "error and retry", "rate-limit response", "thread persistence"]
+      "covered": [
+        "free question",
+        "streamed final answer",
+        "answer visible after the stream",
+        "exact task/question/locale and history presence for the first and follow-up asks"
+      ],
+      "missing": [
+        "reasoning deltas",
+        "error and retry",
+        "rate-limit response",
+        "thread persistence"
+      ]
     },
     {
       "id": "assistant.tool-loop",
       "component": "Tool step list in the answer",
       "request": "The server offers tools, executes cluster_overview and sends the tool result back",
       "persisted": "N/A: tool calls are part of the answer trace",
-      "covered": ["cluster_overview offered", "real server-side tool result", "tool result compared with an independent GET of the seeded node", "tool_call_id and exact function arguments matched to the preceding call; orphan or unanswered calls rejected", "error/unavailable content rejected by the fixture", "final answer derived from validated tool facts and compared with independently generated inventory text", "localized tool step"],
-      "missing": ["search_api/call_api/search_metrics", "multiple or parallel calls", "tool self-correction and retry", "step budget exhaustion"]
+      "covered": [
+        "cluster_overview offered",
+        "real server-side tool result",
+        "tool result compared with an independent GET of the seeded node",
+        "tool_call_id and exact function arguments matched to the preceding call; orphan or unanswered calls rejected",
+        "error/unavailable content rejected by the fixture",
+        "final answer derived from validated tool facts and compared with independently generated inventory text",
+        "localized tool step"
+      ],
+      "missing": [
+        "search_api/call_api/search_metrics",
+        "multiple or parallel calls",
+        "tool self-correction and retry",
+        "step budget exhaustion"
+      ]
     },
     {
       "id": "assistant.stop",
       "component": "Stop button while streaming",
       "request": "The browser aborts POST /ai/ask",
       "persisted": "N/A",
-      "covered": ["a slow stream is stopped and the stopped notice appears", "the fixture barrier proves the upstream request was observed and then cancelled"],
-      "missing": ["stop followed by retry", "cancellation observed by a real vendor endpoint"]
+      "covered": [
+        "a slow stream is stopped and the stopped notice appears",
+        "the fixture barrier proves the upstream request was observed and then cancelled"
+      ],
+      "missing": [
+        "stop followed by retry",
+        "cancellation observed by a real vendor endpoint"
+      ]
     },
     {
       "id": "assistant.cleanup",
       "component": "Row delete + Popconfirm",
       "request": "DELETE /api/v1/ai/configs/{id}",
       "persisted": "removal",
-      "covered": ["deleted through the UI", "independent GET empty", "the seeded node is force-deleted and an independent GET returns 404"],
-      "missing": ["deleting the active service while a question is in flight"]
+      "covered": [
+        "deleted through the UI",
+        "independent GET empty",
+        "the seeded node is force-deleted and an independent GET returns 404"
+      ],
+      "missing": [
+        "deleting the active service while a question is in flight"
+      ]
     }
   ],
   "checklist_items": {
@@ -78,12 +132,25 @@
     "12.4": "covered: Cancel, Escape, close and mask each return focus to the Add button on the AI Services card and send no AI config write",
     "12.5": "N/A: the add AI service dialog has no nested child layer",
     "12.6": "covered: While the create POST is held the footer Add shows the loading state and a second click sends no further create request; the 502 keeps the name, custom preset, URL, model, key and default switch and shows the server reason; the later 201 matches the independent config GET and the reloaded row",
-    "12.7": "MISSING: the delete Popconfirm has only the title 'Delete this configuration?' and shows neither the configuration name nor an impact description",
+    "12.7": "The delete confirmation names the configuration being deleted and states the impact. The placeholder in the product string is resolved with the real created name and the popconfirm is required to contain that resolved sentence, so a confirmation showing the raw catalogue text or an empty name fails. The impact clause travels in the same sentence - in English that the assistant stops using it in this configuration, in Chinese that the assistant will no longer use it - so the wording is asserted in both locales rather than only the name. Confirming the popconfirm is required to show the deleted notice, to empty the card, and a separate GET of the collection is required to return no items, which is the proof that the deletion happened and left nothing behind. Proven by mutation: passing an empty name into the confirm title makes the popconfirm read with blank quotes and the case fails on the expected sentence.",
     "12.8": "N/A: the add AI service dialog has no delete preview, revision, or compare-and-swap",
     "23.1": "Without a service the assistant states that one must be configured while Settings stays usable; with a service the tool loop runs",
     "23.2": "Question, streaming answer, stop, upstream cancellation and final state are exercised",
     "23.3": "The tool result matches an independent inventory read, carries the requested call ID, and error/unavailable content is not reported as success",
-    "23.4": "Partial: call_api to the denied /api/v1/ssh-key route returns an error and no key material; write tools, arbitrary commands and terminal-route attempts remain MISSING"
+    "23.4": "The assistant cannot write, and a caller asking it to cannot get around that. call_api's schema carries only path, query, jq and limit - there is no method field - and the reader it is handed exposes Get alone, so a write has no expression at all. A scripted call that does ask for one, sending method DELETE with a labels body to /api/v1/nodes-labels-probe, is echoed by the tool and then fails as a read ('no GET endpoint ...'), and an independent node GET afterwards still shows empty labels. Reading is denied separately: /api/v1/ssh-key and /api/v1/terminal/sessions are refused as routes the assistant may not read, no key material appears in the answer, and a later node GET is unchanged. Removing the Readable guard makes the denied route readable and the case fails.",
+    "1.3": "covered: each required text field on the add dialog is given a whitespace-only value while the other two carry valid ones, submitted, and required to show its own message - so the rejection is located at the field rather than reported generically, and no POST/PUT/PATCH is observed for any of the three. Proven by mutation: removing whitespace:true from the name rule makes the run fail waiting for 'Enter a name'. Verified under en and zh.",
+    "7.1": "The upstream key is the only credential the AI service form carries, and its contract is asserted per field rule. It is a password input, so the typed value is never rendered as text, and the saved key is asserted not to appear anywhere in the settings page after creation. On create it is required: an empty value and a whitespace-only value each leave the dialog open, show the product's keyRequired message, mark the field aria-invalid, and the case asserts that pressing Enter on the field in that state sends no POST. The field is then filled and asserted to hold exactly what was typed before the create continues.",
+    "7.2": "An edit that leaves the upstream key blank means keep the stored key, not clear it. The case opens the created config through the row's edit button, asserts the edit dialog is the editService one, asserts the key field is empty and the name is prefilled, and asserts that pressing Enter in the blank key field submits nothing. Saving is captured as a PATCH and the recorded body is required to contain no api_key at all - so the omission, not an empty string, is what the contract is. A subsequent independent GET is required to return the same config id and to carry no trace of the key, which shows the edit updated the row rather than replacing it. Proven by mutation: making the edit always send api_key fails with the submitted field list.",
+    "1.5": "Every preset the dropdown offers is selected on its own, not just the default: bailian, siliconflow, openrouter and poe are each chosen from the open dropdown and the case then requires the selected item's text to be that preset's label, and the base address and model fields to hold exactly the values that preset declares - qwen-plus for bailian, an empty model for siliconflow and openrouter, GPT-5 for poe. deepseek is already asserted as the first-open default and custom is chosen by the create flow, so all six options are covered. The selected values are recorded per preset. Proven by mutation: blanking poe's model in PRESETS makes the case fail on that field's value.",
+    "1.6": "The preset select is the controlling field for the base address and model, and its rule is overwrite rather than keep: selecting any preset replaces both fields with the values that preset declares, discarding whatever the operator typed. The case types a base address and a model by hand, then switches to a different preset, and requires both fields to read back that preset's declared values - so the reset rule is asserted, not just the initial fill. Selecting the already-selected preset is not used as evidence, because the control does not fire a change event in that case and it would prove nothing about the rule. Proven by mutation: making the preset only fill empty fields fails with the typed address still in place.",
+    "7.4": "The credential path is proven by the operation it is supposed to enable, and both ends of it are asserted. Before any endpoint is configured the panel is required to answer the ask with 503 and to show the configure-first notice, so the surface is shown to refuse rather than invent an answer. After the credential is saved through the dialog, two real asks are required to reach the server with task ask and the current locale, the second carrying the first question as a user history entry, which is the credential actually being used for an allowed operation rather than the form merely accepting input. The endpoint's refusals are typed rather than generic: the unconfigured answer is asserted by status and the whole bad-response list is compared against that single expected entry, so any additional unexpected HTTP failure fails the run. Revocation of the credential alone is not claimed - this product removes the whole configuration rather than one credential inside it, and the removal is covered by the delete contract - and no expiry scenario is claimed because the surface has none. Proven by mutation: changing the unconfigured refusal from 503 to 502 fails the case at the ask.",
+    "1.2": "All four halves are asserted. A create dialog is required to open on the product's own defaults rather than blank: the preset reads deepseek, its declared base address and model are the shipped values, and the name and key are empty - checked before anything is typed. An edit dialog is required to refill the saved values, the name reading back the stored one, while the key field is required to be empty: the upstream key is never returned by the read at all, the view type does not carry the field, so there is nothing to echo even if the dialog wanted to. Submitting before the asynchronous work settles is handled too - Enter inside the blank edit key is required to post nothing, and a held create is required to produce exactly one in-flight post while a second click is swallowed, with the draft and the failure reason kept when the create comes back 502. Proven by mutation: changing the shipped default model makes the create dialog assertion fail on the field value.",
+    "1.12": "The two change shapes this surface actually offers are both exercised, and each is checked on the wire and on the stored row rather than on the form. A to B: the name is edited from the created one to a new one, and the PATCH body is required to carry the new name while the id, address and model of the stored service are required to be unchanged afterwards - so a single field edit is shown not to disturb the rest. On to off: the default switch is turned off and the new service is created with is_default false, while the first service is required to remain the default and to keep every stored value, which is the A to B to none binding in the form this product has - exactly one service is default at a time and turning one off does not unbind the other. Leaving the key blank keeps the stored secret instead of clearing it, asserted by a body that omits the field entirely. Reverting off back on is not claimed: the list switches default by adding or editing a service and this surface has no separate re-enable control, so no on-off-on transition is invented. Proven by mutation: pinning the PATCH name to the stored one fails the rename body assertion.",
+    "1.4": "The bounds are asserted at the exact character the server states, in both directions, for every stored text field that has one: name and model at 64 and preset at 32. A value of exactly that length is required to be accepted with 201, and the same value with one more character is required to be refused with 400 FIELD_INVALID, with the refusal naming the offending field in its params rather than only in prose. The refused value is then required not to appear in the stored list, so the refusal is a real refusal and not a warning over a write that happened anyway. Each accepted probe is deleted again and the list is required to equal the one service this run owns, so the boundary sweep proves its own cleanup. base_url is not given a length probe of its own: it is validated as an absolute address rather than by rune count, and the address rules are exercised by the create and edit contracts. Proven by mutation: raising the name bound from 64 to 65 makes the one-over-length value be accepted with 201 and fails the case.",
+    "1.13": "Both racing writers this product can meet are exercised against the real contract. A service deleted by another session while the console holds it open: the edit is required to answer 404, the row is required not to come back, and the refusal is asserted through the console as well as through the API - the dialog is required to stay open with a visible message rather than closing as if the save had worked, and that open dialog with its message is the recovery entry an operator reads before closing it. A patch that races the default mark is refused as a conflict rather than as a validation error: clearing the mark on the one default service is required to answer 409 AI_DEFAULT_REQUIRED, and the stored row is then required to still carry the mark, so the refusal did not half-apply. Last write wins on ordinary fields is proven separately by the sequential edit in 1.12, where the stored row is required to hold the value the later write asked for. Proven by mutation: removing the sole-default guard makes the patch answer 200 and fails the conflict assertion.",
+    "23.5": "The answer is treated as untrusted output on every layer it crosses. A model answer carrying markup, a script body, a javascript: link and bold markup is asked through the panel and required to arrive as the text it is: the transcript is required to contain no script element, no image from the payload, no interpreted bold element and no javascript link, and no dialog may fire. The answer is rendered through the markdown component without the html opt-in, so markup is escaped rather than interpreted while the words around it stay readable - the assertion is on the rendered transcript, not on the raw stream. Tool errors are reported rather than dressed as success: the denied route answer must say the route was rejected and was not readable, and no key material may appear in it. Refusals are typed: the whole bad-response ledger is compared against the single expected entry, so an extra HTTP failure fails the run. Nothing is invented when the data is not there - after the denied tool call the node labels are required to be unchanged, so an answer claiming success cannot be covering for a write. Proven by mutation: rendering the answer with html allowed puts the payload image into the transcript and fails the case.",
+    "7.5": "The three credential kinds are told apart by what they are. An inference key is created through the console and required to carry its own gw- prefix and not the gwp_ family, so a key issued for inference cannot be mistaken for a platform token at the point it is handed out. Presented as a bearer it is then required to be refused on the inventory and on the platform token routes, and the refusal is required not to carry the platform-token refusal code - being turned away as a credential that does not authenticate is the correct answer, being turned away as a platform token would mean the families had been conflated. A management session is a cookie rather than a prefix, and its own separation from the token family is asserted in 7.7. No expiry control is claimed on any of the three, because the product carries no expiry field on any of them. This entry rests on existence and refusal assertions rather than on a mutation kill: widening the prefix test so that a gw- key is admitted as a platform token leaves the run green, because the token verifier rejects it one layer later with the same 401 the session path already produced, so that widening is not observable over HTTP and is not offered as evidence.",
+    "7.7": "N/A: this surface holds an upstream endpoint key that the operator supplies, not a platform issued credential, and it has no management session of its own to revoke. The session revocation and platform token lifecycle half of this item belongs to the surface that owns those credentials and is asserted there, so nothing about it is claimed here and no control is invented for a service dialog that never sees either."
   },
   "missing": [
     "MISSING: checklist 12.7 (delete names the object and impact) — the product shows only a generic title; the confirmation is required but the name/impact claim is not covered",

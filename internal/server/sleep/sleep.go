@@ -11,14 +11,17 @@
 // for every decision.
 package sleep
 
-import "gpuworks.ai/gpuworks/internal/server/deploy"
+import (
+	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/messages"
+)
 
 // Stable error codes for a sleep or wake order the server refuses. They are
 // part of the API wire contract; api/errors.go lists the same strings in its
 // inventory and asserts they match.
 const (
 	CodeNotEnabled        = "SLEEP_NOT_ENABLED"
-	CodeEngineUnsupported = "SLEEP_ENGINE_UNSUPPORTED"
+	CodeEngineUnsupported = messages.ErrorSleepEngineUnsupported
 )
 
 // Deployment is the subset of a deployment's declaration that decides whether

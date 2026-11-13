@@ -33,6 +33,8 @@ import (
 	agentapp "gpuworks.ai/gpuworks/internal/agent/app"
 	agentconn "gpuworks.ai/gpuworks/internal/agent/conn"
 	"gpuworks.ai/gpuworks/internal/agent/gpu"
+	"gpuworks.ai/gpuworks/internal/agent/kubeboot"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/kube"
 	recordingruntime "gpuworks.ai/gpuworks/internal/agent/runtime/recording"
 	udockerruntime "gpuworks.ai/gpuworks/internal/agent/runtime/udocker"
 	udockernative "gpuworks.ai/gpuworks/internal/agent/runtime/udocker/native"
@@ -63,10 +65,19 @@ func main() {
 	sub := os.Args[1]
 	switch sub {
 	case "run":
+		// The image of a Kubernetes DaemonSet hands over to the binary on the
+		// node's state directory; this returns only when it does not.
+		kubeboot.Boot(os.Args[1:])
 		if err := run(log, os.Args[2:]); err != nil && !errors.Is(err, flag.ErrHelp) {
 			log.Error("agent exited", "err", err)
 			os.Exit(1)
 		}
+	case "hold":
+		// What a kube node's hold pod runs: nothing, for as long as the pod
+		// keeps a card borrowed from the kubelet.
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		<-ctx.Done()
+		stop()
 	case "smoke":
 		if err := smoke(log, os.Args[2:]); err != nil && !errors.Is(err, flag.ErrHelp) {
 			log.Error("agent smoke failed", "err", err)
@@ -193,7 +204,15 @@ func run(log *slog.Logger, args []string) error {
 	fs.BoolVar(&cfg.DataLane, "data-lane", true, "open a dedicated high-throughput data lane (disable for single-connection proxies)")
 	fs.StringVar(&cfg.DCGM, "dcgm", cfg.DCGM, "optional DCGM SM-occupancy probe: off (default) | auto (opt in; enables only when dcgmi is on PATH)")
 	imagePullMaxConns := fs.Int("image-pull-max-connections", 0, "most simultaneous connections a runveil (udocker) image pull may open to one registry host (0 = automatic, up to "+strconv.Itoa(udockernative.DefaultMaxConnections)+"; 1 = one connection; at most "+strconv.Itoa(udockernative.MaxConnectionsLimit)+")")
+	enginePorts := fs.String("engine-ports", os.Getenv("GPUWORKS_ENGINE_PORTS"), "this node's own engine port range START-END (default: the server's)")
 	_ = fs.Parse(args)
+	if strings.TrimSpace(*enginePorts) != "" {
+		r, err := proto.ParsePortRange(*enginePorts)
+		if err != nil {
+			return fmt.Errorf("--engine-ports: %w", err)
+		}
+		cfg.EnginePorts = &r
+	}
 	if *imagePullMaxConns < 0 || *imagePullMaxConns > udockernative.MaxConnectionsLimit {
 		return fmt.Errorf("--image-pull-max-connections must be between 0 (automatic) and %d, got %d", udockernative.MaxConnectionsLimit, *imagePullMaxConns)
 	}
@@ -206,10 +225,19 @@ func run(log *slog.Logger, args []string) error {
 	if err != nil {
 		return safeAgentConfigurationError(err)
 	}
+	if strings.EqualFold(conf.RuntimeDriver, kube.DriverName) {
+		stoodBy, err := kubeAcquireTokenOrStandBy(log, &conf, &cfg, stateDir)
+		if stoodBy || err != nil {
+			return err
+		}
+	}
 	if err := conf.Validate(); err != nil {
 		return safeAgentConfigurationError(err)
 	}
 	cfg.ServerURL, cfg.Token, cfg.StateDir = conf.Server, conf.Token, stateDir
+	if strings.EqualFold(conf.RuntimeDriver, kube.DriverName) {
+		alignKubeAgent(log, conf.Server, conf.Token)
+	}
 	cfg.ConnectMode, cfg.ListenAddr, cfg.ForceDriver = conf.Mode(), conf.Listen, conf.RuntimeDriver
 	// The runtime reads these two where it uses them; the file is one more
 	// place they come from.

@@ -92,6 +92,11 @@ func (a *apiHandlers) installAgentOnInstance(w http.ResponseWriter, r *http.Requ
 		writeErr(w, http.StatusBadRequest, blocked)
 		return
 	}
+	var inCluster *provider.InstanceInClusterError
+	if errors.As(err, &inCluster) {
+		writeErr(w, http.StatusConflict, wrapProductError(ErrorProviderInstanceInCluster, err.Error(), map[string]any{"cluster": inCluster.Cluster}, err))
+		return
+	}
 	if err != nil {
 		writeErr(w, statusProviderFailed, err)
 		return

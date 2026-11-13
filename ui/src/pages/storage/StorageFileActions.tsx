@@ -38,7 +38,9 @@ export default function StorageFileActions({ storage, file, files, onChanged }: 
       storageId={storage.id}
       storageName={storage.name}
       cache={file.cache}
-      writable={writable}
+      // A node cache is not the storage's library: removing it is allowed on
+      // a disabled or read-only storage too, as the server allows.
+      writable={file.cache || writable}
       label={file.cache ? tStorage("files.evictCache") : undefined}
       onDone={onChanged}
     />

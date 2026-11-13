@@ -177,10 +177,10 @@ func TestAgentUpgradeRetentionPreservesUnresolvedReservations(t *testing.T) {
 		if i == 0 {
 			phase = "unconfirmed"
 		}
-		r, err := st.CreateAgentUpgrade(&AgentUpgradeRun{IdempotencyKey: fmt.Sprint(i), RequestFingerprint: fmt.Sprint(i)}, []AgentUpgradeItem{{NodeUUID: fmt.Sprint(i), Phase: phase, FinishedAt: &now}}, now)
+		_, err := st.CreateAgentUpgrade(&AgentUpgradeRun{IdempotencyKey: fmt.Sprint(i), RequestFingerprint: fmt.Sprint(i)}, []AgentUpgradeItem{{NodeUUID: fmt.Sprint(i), Phase: phase, FinishedAt: &now}}, now)
 		if err != nil {
 			if i > 0 && errors.Is(err, ErrAgentUpgradeConflict) { // insert completed historical fixtures without bypassing a live operation
-				r = &AgentUpgradeRun{IdempotencyKey: fmt.Sprint(i), RequestFingerprint: fmt.Sprint(i)}
+				r := &AgentUpgradeRun{IdempotencyKey: fmt.Sprint(i), RequestFingerprint: fmt.Sprint(i)}
 				if err := st.DB().Create(r).Error; err != nil {
 					t.Fatal(err)
 				}

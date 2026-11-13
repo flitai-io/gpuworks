@@ -91,6 +91,7 @@ func (c *Conn) dialDataLane(ctx context.Context) (err error) {
 	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	dialCtx = observation.context(dialCtx)
+	//nolint:bodyclose // coder/websocket.Dial owns handshake bodies; NetConn below owns the upgraded connection.
 	ws, resp, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
 		HTTPClient: client,
 		HTTPHeader: http.Header{"User-Agent": []string{"gpuworks-agent/" + version.Version}},

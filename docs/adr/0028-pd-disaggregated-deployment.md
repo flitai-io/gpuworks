@@ -44,7 +44,7 @@
 | `vllm-nixl` | 顺序两阶段 | decode ≥ prefill | UCX | 已验证（同机、跨机以太、角色内跨机） |
 | `sglang-nixl` | 并发双发（`bootstrap_host/port/room`） | 相等 | UCX | 未验证 |
 | `vllm-ascend-mooncake` | 顺序两阶段 | prefill ≥ decode | HCCL（NPU 自带 RoCE，挂载 `/etc/hccn.conf`） | 已验证（跨机；P、D 的 NPU 须在 NPU 网络上互通） |
-| `vllm-mooncake` | 顺序两阶段，交接参数由网关生成（prefill 不返回 `kv_transfer_params`，网关从其 bootstrap 服务读 engine id） | 相等 | Mooncake 传输引擎（海光 DTK 构建，RDMA 或 TCP） | 实验性 |
+| `vllm-mooncake` | 顺序两阶段，交接参数由网关生成（prefill 不返回 `kv_transfer_params`，网关从其 bootstrap 服务读 engine id） | 相等 | Mooncake 传输引擎（海光 DTK 构建，RDMA 或 TCP） | 已验证（K100 同机两卡、TP 1） |
 
 TP 规则违反时报与规则对应的错误码。引擎档位按 `pdmode.ForEngine` 下发 `pd_modes`，前端据此给出可选模式。
 

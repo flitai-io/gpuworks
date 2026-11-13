@@ -41,6 +41,7 @@ const userEvent = (await import("@testing-library/user-event")).default;
 const { api } = await import("../src/api.ts");
 const { default: DeploymentsPage } = await import("../src/pages/DeploymentsPage.tsx");
 import type { DeploymentListItem, DeploymentPage, ListQuery } from "../src/api";
+import { sortColumn } from "./helpers/sortColumn";
 import { list } from "./helpers/listPage.ts";
 
 // The fleet the fake server pages through: 45 deployments, every third one
@@ -155,7 +156,7 @@ test("the list asks the server for one page and shows the total", async () => {
   assert.ok(cells("svc-44").includes("Healthy · 90 ms") && cells("svc-44").includes("1/1"), String(cells("svc-44")));
   assert.ok(cells("svc-45").includes("Timed out") && cells("svc-45").includes("0/1"), String(cells("svc-45")));
 
-  fireEvent.click(screen.getByTitle("3"));
+  fireEvent.click(screen.getByRole("button", { name: "Last page" }));
   await screen.findByText("svc-5");
   assert.deepEqual(rowNames(), ["svc-5", "svc-4", "svc-3", "svc-2", "svc-1"]);
   assert.equal(server.queries.at(-1)?.page, 3);
@@ -165,7 +166,7 @@ test("searching asks the server and starts again from the first page", async () 
   const server = fakeServer(fleet);
   renderPage(server.serve);
   await screen.findByText("svc-45");
-  fireEvent.click(screen.getByTitle("2"));
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
   await screen.findByText("svc-25");
 
   const search = screen.getByRole("searchbox", { name: deploymentsLocale.page.search });
@@ -181,11 +182,9 @@ test("the state column's header filter asks the server for those states", async 
   const server = fakeServer(fleet);
   renderPage(server.serve);
   await screen.findByText("svc-45");
-  const header = screen.getByRole("columnheader", { name: /State/ });
-  fireEvent.click(header.querySelector(".ant-table-filter-trigger")!);
-  const failed = await screen.findByRole("menuitem", { name: /Failed/ });
+  await userEvent.setup().click(screen.getByRole("button", { name: "Filter by State" }));
+  const failed = await screen.findByRole("checkbox", { name: /Failed/ });
   fireEvent.click(failed);
-  fireEvent.click(screen.getByRole("button", { name: "OK" }));
   await waitFor(() => assert.deepEqual(server.queries.at(-1)?.state, ["failed"]));
   assert.equal(server.queries.at(-1)?.page, 1);
   await waitFor(() => assert.ok(screen.getByText("15 deployments")));
@@ -196,18 +195,18 @@ test("sorting a column asks the server to order every row, not just the page", a
   const server = fakeServer(fleet);
   renderPage(server.serve);
   await screen.findByText("svc-45");
-  fireEvent.click(screen.getByRole("columnheader", { name: /Name/ }));
+  await sortColumn("Name", "Ascending");
   await waitFor(() => assert.equal(server.queries.at(-1)?.sort, "name"));
-  fireEvent.click(screen.getByRole("columnheader", { name: /Name/ }));
+  await sortColumn("Name", "Descending");
   await waitFor(() => assert.equal(server.queries.at(-1)?.sort, "-name"));
-  fireEvent.click(screen.getByRole("columnheader", { name: /Name/ }));
+  await sortColumn("Name", "Clear sorting");
   await waitFor(() => assert.equal(server.queries.at(-1)?.sort, undefined));
 });
 
 // The header always offers to create a deployment, so the empty state is
 // checked on its own: it offers creating only when there is nothing at all.
 const createButton = (scope: HTMLElement) => within(scope).queryByRole("button", { name: new RegExp(`${deploymentsLocale.page.create}$`) });
-const emptyState = (description: string) => screen.getByText(description).closest(".empty-state") as HTMLElement;
+const emptyState = (description: string) => screen.getByText(description).closest('[data-slot="empty"]') as HTMLElement;
 const pageHeader = () => document.querySelector(".page-header") as HTMLElement;
 
 test("the header offers to create a deployment, whatever the list holds", async () => {
@@ -354,11 +353,9 @@ test("the state filter offers sleeping and asleep", async () => {
   ]);
   renderPage(server.serve);
   await screen.findByText("awake");
-  const header = screen.getByRole("columnheader", { name: /State/ });
-  fireEvent.click(header.querySelector(".ant-table-filter-trigger")!);
-  assert.ok(await screen.findByRole("menuitem", { name: new RegExp(commonLocale.states.sleeping) }));
-  fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(commonLocale.states.asleep) }));
-  fireEvent.click(screen.getByRole("button", { name: "OK" }));
+  await userEvent.setup().click(screen.getByRole("button", { name: "Filter by State" }));
+  assert.ok(await screen.findByRole("checkbox", { name: new RegExp(commonLocale.states.sleeping) }));
+  fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(commonLocale.states.asleep) }));
   await waitFor(() => assert.deepEqual(server.queries.at(-1)?.state, ["asleep"]));
   await waitFor(() => assert.equal(screen.queryByText("awake"), null));
   assert.ok(screen.getByText("slept"));

@@ -39,6 +39,10 @@ export function subscribeSessionChanges(listener: (change: SessionChange) => voi
   };
 }
 
+export function lastSessionChange(): string | null {
+  try { return window.localStorage.getItem(storageKey); } catch { return null; }
+}
+
 export function notifySessionExpired() { publish("expired"); }
 export function notifySessionAuthenticated() { publish("authenticated"); }
 export function isSessionExpired() { return expired; }

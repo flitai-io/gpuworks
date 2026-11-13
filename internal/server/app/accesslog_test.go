@@ -34,6 +34,22 @@ func TestAccessLogHandlerLogsOneCompletionRecord(t *testing.T) {
 	}
 }
 
+func TestAccessLogReturnsTheGeneratedRequestID(t *testing.T) {
+	var logs strings.Builder
+	var seen string
+	h := accessLogHandler(slog.New(slog.NewJSONHandler(&logs, nil)), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("X-Request-ID")
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/deployments", nil)
+	req.Header.Set("X-Request-ID", "untrusted-client-id")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if seen == "" || seen == "untrusted-client-id" || rec.Header().Get("X-Request-ID") != seen || !strings.Contains(logs.String(), `"request_id":"`+seen+`"`) {
+		t.Fatalf("response/log IDs differ: request=%q response=%q logs=%s", seen, rec.Header().Get("X-Request-ID"), logs.String())
+	}
+}
+
 func TestAccessLogHandlerLogsRedactedJSONParamsAndRestoresBody(t *testing.T) {
 	var logs strings.Builder
 	log := slog.New(slog.NewTextHandler(&logs, nil))

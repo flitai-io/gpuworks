@@ -36,6 +36,7 @@ export default function DeployExpertTabs({
   autoResolutionText,
   runtimeSeries,
   evalResult,
+  evaluating = false,
 }: {
   engineProfile?: EngineProfile;
   startTimeoutDefaultSec?: number;
@@ -56,6 +57,7 @@ export default function DeployExpertTabs({
   autoResolutionText: string;
   runtimeSeries?: ImageSeries;
   evalResult: EvaluateResponse | null;
+  evaluating?: boolean;
 }) {
   const { t } = useTranslation("deploy");
   return (
@@ -110,6 +112,7 @@ export default function DeployExpertTabs({
                   evalResult?.preflight as PreflightSummary | undefined
                 }
                 result={evalResult}
+                evaluating={evaluating}
               />
             ),
           },

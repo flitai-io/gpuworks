@@ -2,6 +2,7 @@
   "scope": "Targeted NFS mount contract; not all storage types, fields or page coverage",
   "test_file": "test/e2e/remote_storage_runtime.py",
   "command": "python3 test/e2e/remote_runtime_acceptance.py --config <private-json> --case storage",
+  "command_note": "Requires the private NFS/remote-agent fixture described in test/e2e/RUNNING.md; --config points at that machine-specific JSON. Not runnable without it.",
   "lane": "remote-real-agent-nfs",
   "identity": "admin",
   "cases": [

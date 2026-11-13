@@ -197,6 +197,6 @@ test("a failed choice lookup leaves the wizard usable with no choices", async ()
   wrap("/evaluations?create=saturation", <EvaluationsPage />);
   await waitFor(() => assert.ok(deploymentQueries.length > 0));
   // The wizard still opens on its first step; the service list is just empty.
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer-open")));
-  assert.ok(within(document.querySelector(".ant-drawer-open") as HTMLElement).getAllByText(evaluations.wizard.title).length > 0);
+  await waitFor(() => assert.ok(document.querySelector('[role="dialog"]')));
+  assert.ok(within(document.querySelector('[role="dialog"]') as HTMLElement).getAllByText(evaluations.wizard.title).length > 0);
 });

@@ -532,12 +532,6 @@ func agentProcessCheck(output, dir string) provider.InstallCheck {
 	return provider.InstallCheck{Name: check.Name, Status: check.Status, Detail: check.Detail}
 }
 
-// shellQuote single-quotes a value for safe interpolation into a /bin/sh
-// command line.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 func providerInstallConnectMode(mode string) string {
 	if mode == "server_dial" {
 		return "server_dial"

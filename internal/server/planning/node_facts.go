@@ -18,7 +18,21 @@ type NodeFacts struct {
 	Storages StorageScope
 	// Providers says where each rented node runs, by node id.
 	Providers map[uint]store.NodeProvider
+	// KubeClusters names the Kubernetes clusters nodes joined from, by
+	// cluster id: loaded once for a whole computation, never per node.
+	KubeClusters KubeClusters
 }
+
+// KubeClusterRef is what a node's Kubernetes cluster label is made of: the
+// cluster's UUID (the label value, stable across renames) and its name (the
+// text shown).
+type KubeClusterRef struct {
+	UUID string
+	Name string
+}
+
+// KubeClusters maps a Kubernetes cluster id to its UUID and name.
+type KubeClusters map[uint]KubeClusterRef
 
 // StorageScope lists the storages that apply to each node, by node id.
 type StorageScope map[uint][]store.Storage
@@ -44,6 +58,9 @@ func LoadNodeFacts(st *store.Store, resolve func([]store.Node) (netplan.Resoluti
 			facts.Providers = providers
 		}
 	}
+	if RequirementsNeedKubeClusters(reqs) {
+		facts.KubeClusters = LoadKubeClusters(st, nodes)
+	}
 	if RequirementsNeedStorages(reqs) {
 		ptrs := make([]*store.Node, len(nodes))
 		for i := range nodes {
@@ -54,6 +71,60 @@ func LoadNodeFacts(st *store.Store, resolve func([]store.Node) (netplan.Resoluti
 		}
 	}
 	return facts
+}
+
+// LoadKubeClusters reads the clusters nodes joined from with one query over
+// the distinct cluster ids; nil when no node joined from one or the read
+// fails (a node then carries no cluster label, never a wrong one).
+func LoadKubeClusters(st *store.Store, nodes []store.Node) KubeClusters {
+	seen := map[uint]bool{}
+	var ids []uint
+	for i := range nodes {
+		if id := nodes[i].KubeClusterID; id != 0 && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := st.KubeClusterRefs(ids)
+	if err != nil {
+		return nil
+	}
+	out := make(KubeClusters, len(rows))
+	for id, row := range rows {
+		out[id] = KubeClusterRef{UUID: row.UUID, Name: row.Name}
+	}
+	return out
+}
+
+// RequirementsNeedKubeClusters reports whether matching reqs reads the name
+// or UUID of a node's Kubernetes cluster. The Kubernetes node label comes
+// from the node row alone and needs nothing loaded.
+func RequirementsNeedKubeClusters(reqs nodelabel.Requirements) bool {
+	return len(reqs[nodelabel.KeyKubernetesCluster]) > 0
+}
+
+// kubeLabels say which Kubernetes cluster and node a node joined from; a node
+// added any other way carries none. The cluster label is left off when the
+// clusters were not loaded or the cluster is gone.
+func kubeLabels(node *store.Node, clusters KubeClusters) []SystemLabel {
+	if node.KubeClusterID == 0 {
+		return nil
+	}
+	var labels []SystemLabel
+	if cluster, ok := clusters[node.KubeClusterID]; ok && cluster.UUID != "" {
+		display := cluster.Name
+		if display == "" {
+			display = cluster.UUID
+		}
+		labels = append(labels, SystemLabel{Key: nodelabel.KeyKubernetesCluster, Value: cluster.UUID, Display: display})
+	}
+	if node.KubeNodeName != "" {
+		labels = append(labels, SystemLabel{Key: nodelabel.KeyKubernetesNode, Value: node.KubeNodeName, Display: node.KubeNodeName})
+	}
+	return labels
 }
 
 // LoadStorageScope reads which storages apply to each of nodes.

@@ -4,7 +4,7 @@ import { api, chooseMore, confirmDialog, localStorage, moreItems, locale, nodeSt
 import { nfsStorage } from "./helpers/storageFixtures.ts";
 
 const { cleanup, fireEvent, screen, waitFor, within } = rtl;
-const { APIError } = await import("../src/apiError.ts");
+const { APIError, apiResponseError } = await import("../src/apiError.ts");
 const { Modal } = await import("antd");
 // Confirmation dialogs live outside the rendered tree; close them between tests.
 afterEach(() => { Modal.destroyAll(); cleanup(); restoreApi(); });
@@ -22,7 +22,7 @@ test("while loading it shows a spinner; a failed load says so with retry, and th
   stubDetail();
   api.storage = (() => new Promise((resolve) => { release = resolve; })) as never;
   const pending = renderDetail("/storage/2");
-  await waitFor(() => assert.ok(document.querySelector(".ant-drawer .ant-spin"), "a spinner while the first load runs"));
+  await waitFor(() => assert.ok(document.querySelector('[role="dialog"] .ant-spin'), "a spinner while the first load runs"));
   release(archive);
   await screen.findByRole("heading", { name: /model-archive/ });
   pending.view.unmount();
@@ -42,9 +42,9 @@ test("the drawer title names the storage with its type and marks, over the list"
   stubDetail({ storage: nfsStorage({ is_default: true, enabled: false, writable: false }) });
   renderDetail("/storage/2");
   const title = await screen.findByRole("heading", { name: /model-archive/ });
-  assert.ok(within(title).getByText(locale.common.storageType.nfs));
-  assert.ok(within(title).getByText(s.tag.default));
-  assert.ok(within(title).getByText(s.tag.readOnly));
+  assert.ok(within(title.parentElement as HTMLElement).getByText(locale.common.storageType.nfs));
+  assert.ok(within(title.parentElement as HTMLElement).getByText(s.tag.default));
+  assert.ok(within(title.parentElement as HTMLElement).getByText(s.tag.readOnly));
   assert.equal(where(), "/storage?storage=2", "the old address opened the drawer over the list");
 });
 
@@ -77,7 +77,7 @@ test("a storage ready everywhere has no warning", async () => {
   stubDetail({ storage: nfsStorage({ nodes: { total: 2, ready: 2, problems: [] } }) });
   renderDetail("/storage/2");
   await screen.findByText(s.overview.config);
-  assert.equal(screen.queryByText(/not ready on/), null);
+  assert.ok(screen.queryByText(/not ready on/) === null, "Expected the element to be absent");
 });
 
 test("overview of an NFS storage: configuration, capacity once, who else uses it and the bound deployments", async () => {
@@ -120,7 +120,7 @@ test("overview of a local storage summarises free space per node and links to th
   const { user } = renderDetail("/storage/1");
   assert.ok(await screen.findByText(s.capacity.perNode));
   assert.ok(screen.getByText("Free space per node: least 100.0 GiB on gpu-02, most 800.0 GiB on gpu-01"));
-  assert.equal(screen.queryByText(s.overview.controlPlanes), null);
+  assert.ok(screen.queryByText(s.overview.controlPlanes) === null, "Expected the element to be absent");
   assert.equal(calls.storageControlPlanes, undefined);
   await user.click(screen.getByRole("button", { name: s.overview.showNodes }));
   await waitFor(() => assert.equal(where(), "/storage?storage=1&tab=nodes"));
@@ -158,7 +158,7 @@ test("a default storage's delete action is disabled and explains why", async () 
   assert.match(item.textContent ?? "", new RegExp(s.actions.deleteDefaultBlocked));
   fireEvent.click(item);
   assert.equal(calls.deleteStorage, undefined);
-  assert.equal(document.querySelector(".ant-modal-confirm:not(.ant-zoom-leave)"), null);
+  assert.ok(document.querySelector(".ant-modal-confirm:not(.ant-zoom-leave)") === null, "Expected the element to be absent");
 });
 
 test("a default or read-only storage offers no Make default", async () => {
@@ -193,8 +193,10 @@ test("only an NFS cache has Clear cache, and only NFS types switch into each oth
   await confirmDialog(s.actions.clearCache);
   await waitFor(() => assert.deepEqual(calls.clearStorageCache, [[3]]));
   await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  assert.ok(await screen.findByText(s.actions.switchFromCacheHelp), "leaving the cache type says the node caches go first");
   await confirmDialog(s.actions.switch);
   await waitFor(() => assert.deepEqual(calls.updateStorage.at(-1), [3, { type: "nfs" }]));
+  assert.deepEqual(calls.clearStorageCache, [[3], [3]], "the node caches are cleared again before the switch");
   // The confirmations above are Modal.confirm portals; clear them as afterEach does.
   Modal.destroyAll();
   cleanup();
@@ -212,7 +214,7 @@ test("only an NFS cache has Clear cache, and only NFS types switch into each oth
   renderDetail("/storage/1");
   await screen.findByRole("heading", { name: /default/ });
   assert.ok(!(await moreItems()).some((label) => label.startsWith(s.actions.switchTo.split("{{")[0])));
-  assert.equal(screen.queryByRole("button", { name: s.actions.scan }), null, "a local storage is not scanned");
+  assert.ok(screen.queryByRole("button", { name: s.actions.scan }) === null, "a local storage is not scanned");
 });
 
 test("Scan and import and Edit open their dialogs for this storage", async () => {
@@ -256,9 +258,9 @@ test("a viewer sees the page but none of the admin actions", async () => {
   stubDetail({ storage: cache, admin: false });
   renderDetail("/storage/3");
   await screen.findByRole("heading", { name: /team-cache/ });
-  await waitFor(() => assert.equal(screen.queryByRole("switch"), null));
+  await waitFor(() => assert.ok(screen.queryByRole("switch") === null, "Expected the element to be absent"));
   for (const name of [s.actions.edit, s.actions.scan, s.actions.more]) {
-    assert.equal(screen.queryByRole("button", { name: new RegExp(name) }), null, name);
+    assert.ok(screen.queryByRole("button", { name: new RegExp(name) }) === null, name);
   }
 });
 
@@ -278,6 +280,69 @@ test("cancelling the storage editor returns focus to Edit without saving", async
   assert.equal(calls.updateStorage, undefined);
 });
 
+// The errors below come from the exact bodies the server answers with,
+// decoded by the same client code the console uses.
+const wireError = (body: unknown) =>
+  apiResponseError(new Response(JSON.stringify(body), { status: 409, headers: { "Content-Type": "application/json" } }), "request failed");
+
+test("leaving an NFS cache stops when its caches cannot all be cleared, and says on which node", async () => {
+  const order: string[] = [];
+  const calls = stubDetail({ storage: cache });
+  const refusal = await wireError({
+    code: "STORAGE_CACHE_CLEAR_FAILED", error: "cache could not be cleared on 1 node(s); first gpu-07: node is offline",
+    failed: [{ message: "node is offline", node_name: "gpu-07", node_uuid: "n7" }], freed_bytes: 0, params: { failed: 1, node: "gpu-07" }, removed: 0,
+  });
+  api.clearStorageCache = (async () => {
+    order.push("clear");
+    throw refusal;
+  }) as never;
+  const update = api.updateStorage;
+  api.updateStorage = (async (...args: Parameters<typeof update>) => {
+    order.push("switch");
+    return update(...args);
+  }) as never;
+  renderDetail("/storage/3");
+  await screen.findByRole("heading", { name: /team-cache/ });
+  await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  await confirmDialog(s.actions.switch);
+  assert.ok(await screen.findByText(locale.common.apiError.STORAGE_CACHE_CLEAR_FAILED.replace("{{failed}}", "1").replace("{{node}}", "gpu-07")));
+  assert.deepEqual(order, ["clear"], "a failed clear must not be followed by the switch");
+  assert.equal(calls.updateStorage, undefined);
+});
+
+test("a refused switch after a partial clear reloads the storage so the remaining caches show", async () => {
+  const calls = stubDetail({ storage: cache });
+  const refusal = await wireError({
+    code: "STORAGE_CACHE_NOT_EMPTY", error: "node caches still hold entries (entries: 1, nodes: 1, transferring: 1); clear them before switching to nfs",
+    params: { entries: 1, node_uuids: ["n1"], nodes: 1, transferring: 1 },
+  });
+  api.updateStorage = (async () => { throw refusal; }) as never;
+  renderDetail("/storage/3");
+  await screen.findByRole("heading", { name: /team-cache/ });
+  const loadsBefore = calls.storage.length;
+  await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  await confirmDialog(s.actions.switch);
+  await screen.findByText(locale.common.apiError.STORAGE_CACHE_NOT_EMPTY.replace("{{entries}}", "1").replace("{{nodes}}", "1").replace("{{transferring}}", "1"));
+  await waitFor(() => assert.ok(calls.storage.length > loadsBefore, "the storage is read again after the clear"));
+});
+
+test("a switch refused because node caches remain explains it in the person's language", async () => {
+  stubDetail({ storage: cache });
+  const refusal = await wireError({
+    code: "STORAGE_CACHE_NOT_EMPTY", error: "node caches still hold entries (entries: 2, nodes: 2, transferring: 1); clear them before switching to nfs",
+    params: { entries: 2, node_uuids: ["n1", "n2"], nodes: 2, transferring: 1 },
+  });
+  api.updateStorage = (async () => {
+    throw refusal;
+  }) as never;
+  renderDetail("/storage/3");
+  await screen.findByRole("heading", { name: /team-cache/ });
+  await chooseMore(s.actions.switchTo.replace("{{type}}", locale.common.storageType.nfs));
+  await confirmDialog(s.actions.switch);
+  const want = locale.common.apiError.STORAGE_CACHE_NOT_EMPTY.replace("{{entries}}", "2").replace("{{nodes}}", "2").replace("{{transferring}}", "1");
+  assert.ok(await screen.findByText(want));
+});
+
 test("switching storage hides the previous resource's cached models until its own files arrive", async () => {
   const React = await import("react");
   const { MemoryRouter, Routes, Route, useNavigate } = await import("react-router-dom");
@@ -289,10 +354,11 @@ test("switching storage hides the previous resource's cached models until its ow
   api.storage = async (id) => ({...base,id,name:`storage-${id}`});
   let release!: (value: ReturnType<typeof list>) => void;
   api.storageModelFiles = (async (id: number) => id === 3 ? list([modelFile({cache:true,node_uuid:"n1",model_name:"previous-only-model"})]) : new Promise((resolve) => {release = resolve;})) as typeof api.storageModelFiles;
-  function Navigation() { const navigate = useNavigate(); return React.createElement("button",{onClick:()=>navigate("/storage?storage=4&tab=nodes")},"switch-resource"); }
+  let navigateTo!: ReturnType<typeof useNavigate>;
+  function Navigation() { navigateTo = useNavigate(); return null; }
   rtl.render(React.createElement(I18nextProvider,{i18n},React.createElement(MemoryRouter,{initialEntries:["/storage?storage=3&tab=nodes"]},React.createElement(Navigation),React.createElement(Routes,null,React.createElement(Route,{path:"/storage",element:React.createElement(DrawerHost)})))));
   await screen.findAllByText("storage-3");
-  fireEvent.click(screen.getByRole("button",{name:"switch-resource"}));
+  await rtl.act(async () => navigateTo("/storage?storage=4&tab=nodes"));
   await waitFor(() => assert.ok(screen.queryAllByText("storage-4").length));
   fireEvent.click(screen.getByRole("button",{name:s.cacheManage.configure}));
   const dialog = await screen.findByRole("dialog", { name: s.cacheManage.nodeTitle.replace("{{node}}", "shared-node") });

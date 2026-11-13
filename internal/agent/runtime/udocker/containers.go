@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gpuworks.ai/gpuworks/internal/agent/runtime"
-	"gpuworks.ai/gpuworks/internal/agent/runtime/procgroup"
-	"gpuworks.ai/gpuworks/internal/agent/runtime/udocker/native"
 	"io"
 	"log/slog"
 	"os"
@@ -14,6 +11,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/procgroup"
+	"gpuworks.ai/gpuworks/internal/agent/runtime/udocker/native"
 )
 
 // ListContainers lists udocker container names, including stopped ones.

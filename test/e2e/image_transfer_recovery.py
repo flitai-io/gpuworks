@@ -59,8 +59,10 @@ def read_state(page, series, version, node, state):
 def open_row(page, text, name, fixture):
     open_custom(page, text)
     button(page, name).click()
-    # The drawer accessible name is the series name plus its engine.
-    detail = page.get_by_role("dialog", name=f"{name} callable", exact=True)
+    # The drawer's accessible name is the series name alone: the engine moved out of the title
+    # into a subtitle line under it (ImageDetailDrawer.tsx:131-132, ui-kit/SideDrawer.tsx:29-30).
+    detail = page.get_by_role("dialog", name=name, exact=True)
+    expect(detail).to_contain_text("callable")
     expect(detail).to_be_in_viewport(ratio=1)
     detail.get_by_role("link", name=fixture.image_ref, exact=True).click()
     return detail.get_by_role("row").filter(has_text=fixture.node_name)
@@ -90,7 +92,7 @@ def dismiss_archive(page, row, text, fixture, name, series, version, path, repor
             transfers.append(urlsplit(request.url).path)
 
     page.on("request", seen)
-    parent = page.get_by_role("dialog", name=f"{name} callable", exact=True)
+    parent = page.get_by_role("dialog", name=name, exact=True)
     pull = button(row, text["nodeTable"]["pullFromURL"])
     title = text["nodeTable"]["archiveDialog"]["title"].replace("{{ref}}", fixture.image_ref).replace("{{node}}", fixture.node_name)
     last = {}
@@ -235,7 +237,7 @@ def test_url_failure_retry(page, server, fixture, artifacts, report, locale):
     expand = row.get_by_role("button", name=text["nodeTable"]["expand"], exact=True)
     if expand.count():
         expand.click()
-    expect(page.get_by_role("dialog", name=f"{name} callable", exact=True).get_by_text(failed["node"]["message"], exact=True)).to_be_visible()
+    expect(page.get_by_role("dialog", name=name, exact=True).get_by_text(failed["node"]["message"], exact=True)).to_be_visible()
     check(fixture.docker(["image", "inspect", fixture.image_ref], check=False).returncode != 0, "failed download created an image")
     wait_staging_clean(fixture)
     failed_audit = fixture.archive.snapshot()[first_audit_start:]
@@ -320,7 +322,7 @@ def test_url_cancel_retry(page, server, fixture, artifacts, report, locale):
     expand = row.get_by_role("button", name=text["nodeTable"]["expand"], exact=True)
     if expand.count():
         expand.click()
-    expect(page.get_by_role("dialog", name=f"{name} callable", exact=True).get_by_text(
+    expect(page.get_by_role("dialog", name=name, exact=True).get_by_text(
         refused_row["node"]["message"], exact=True)).to_be_visible()
     check(fixture.docker(["image", "inspect", fixture.image_ref], check=False).returncode != 0, "503 download created an image")
     wait_staging_clean(fixture)

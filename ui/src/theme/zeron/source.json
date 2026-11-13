@@ -1,0 +1,8 @@
+{
+  "commit": "1e036c58957a752bbd3ed61866f4616118a7dc28",
+  "repository": "https://github.com/Carlosfengv/zeron-ui",
+  "indexSha256": "c4de4ed145cf073b1968faf801da289c90a320ae56036068f720374bdb6c2931",
+  "supportSha256": "e9a1669c0d9458cc806e316acec0d13588ec3a3ba2b6094f45bda9ce30d8696c",
+  "supportSource": "public/r/surfaces.json cssVars.light; shadow support constants are referenced but not exported by packages/tokens/index.mjs",
+  "registrySha256": "8e678460564a5dea4a995831e952b75a40650536648ac65d2300f24e72e00272"
+}

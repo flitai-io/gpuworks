@@ -9,6 +9,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/network"
+	"gpuworks.ai/gpuworks/internal/server/parallelism"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -246,8 +247,76 @@ func TestLaunchInputBuildsCommandFeaturesOnlyForOwnedAMD(t *testing.T) {
 	}
 }
 
+func TestLaunchParamsSupplyManagementInterfaceForKunlunMultiGPU(t *testing.T) {
+	node := &store.Node{
+		GPUVendor: "kunlunxin", NetworkInventory: `{"management":{"interface":"br_eno1_31","ip":"172.25.17.112"}}`,
+		GPUs: []store.GPU{{Index: 0, Vendor: "kunlunxin"}, {Index: 1, Vendor: "kunlunxin"}},
+	}
+	params := launchParams(LaunchRequest{Node: node, Topology: DistTopology{NNodes: 1}}, node.GPUs[0], 2, parallelism.Spec{TP: 2}, 30000)
+	if params.ComputeNetwork.Type != "host_ethernet" || params.ComputeNetwork.Interface != "br_eno1_31" {
+		t.Fatalf("multi-GPU compute network = %+v", params.ComputeNetwork)
+	}
+	for _, parallel := range []parallelism.Spec{{TP: 1, PP: 2}, {TP: 1, DP: 2}} {
+		params = launchParams(LaunchRequest{Node: node, Topology: DistTopology{NNodes: 1}}, node.GPUs[0], 0, parallel, 30000)
+		if params.ComputeNetwork.Type != "host_ethernet" || params.ComputeNetwork.Interface != "br_eno1_31" {
+			t.Fatalf("parallel %+v compute network = %+v", parallel, params.ComputeNetwork)
+		}
+	}
+	params = launchParams(LaunchRequest{Node: node, Topology: DistTopology{NNodes: 1}}, node.GPUs[0], 1, parallelism.Spec{TP: 1}, 30000)
+	if params.ComputeNetwork.Type != "" {
+		t.Fatalf("single-card network changed = %+v", params.ComputeNetwork)
+	}
+	selected := deploy.ComputeNetwork{Type: "host_rdma", Interface: "bond0"}
+	params = launchParams(LaunchRequest{Node: node, Topology: DistTopology{NNodes: 1, Network: selected}}, node.GPUs[0], 2, parallelism.Spec{TP: 2}, 30000)
+	if !reflect.DeepEqual(params.ComputeNetwork, selected) {
+		t.Fatalf("selected network replaced = %+v", params.ComputeNetwork)
+	}
+	nvidia := &store.Node{GPUVendor: "nvidia", NetworkInventory: node.NetworkInventory, GPUs: []store.GPU{{Index: 0, Vendor: "nvidia"}, {Index: 1, Vendor: "nvidia"}}}
+	params = launchParams(LaunchRequest{Node: nvidia, Topology: DistTopology{NNodes: 1}}, nvidia.GPUs[0], 2, parallelism.Spec{TP: 2}, 30000)
+	if params.ComputeNetwork.Type != "" {
+		t.Fatalf("NVIDIA network changed = %+v", params.ComputeNetwork)
+	}
+}
+
 // storeNetworks is the network service over every network in st, as the app
 // wires it.
 func storeNetworks(st *store.Store) Networks {
 	return network.New(st, network.StoreCatalog{Store: st})
+}
+
+// The PD launch says whether the model has recurrent layers, read from its
+// config.json (Qwen3.5 nests layer_types under text_config), so the engine
+// builder can turn on what the mode needs for them. The rank's PD launch,
+// shared with the request, is not written.
+func TestLaunchParamsMarksRecurrentLayersOnPD(t *testing.T) {
+	node := &store.Node{GPUVendor: "hygon", GPUs: []store.GPU{{Index: 0, Vendor: "hygon"}}}
+	hybrid := &store.Model{Meta: `{"architectures":["Qwen3_5ForConditionalGeneration"],"model_type":"qwen3_5",
+		"text_config":{"model_type":"qwen3_5_text","num_hidden_layers":4,"hidden_size":1024,"num_attention_heads":8,
+		"num_key_value_heads":2,"head_dim":256,"layer_types":["linear_attention","linear_attention","linear_attention","full_attention"]}}`}
+	dense := &store.Model{Meta: `{"model_type":"qwen3","num_hidden_layers":28,"hidden_size":1024,"num_attention_heads":16,"num_key_value_heads":8,"head_dim":128}`}
+	for _, c := range []struct {
+		name  string
+		model *store.Model
+		want  bool
+	}{
+		{"gated delta net hybrid", hybrid, true},
+		{"full attention", dense, false},
+		{"no model record", nil, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			shared := &deploy.PDLaunch{Mode: "vllm-mooncake", Role: "decode"}
+			req := LaunchRequest{Node: node, Model: c.model, Topology: DistTopology{NNodes: 1}, PD: shared}
+			params := launchParams(req, node.GPUs[0], 1, parallelism.Spec{TP: 1}, 30000)
+			if params.PD == nil || params.PD.RecurrentLayers != c.want {
+				t.Fatalf("PD launch = %+v, want RecurrentLayers %v", params.PD, c.want)
+			}
+			if shared.RecurrentLayers {
+				t.Fatal("the request's shared PD launch was written")
+			}
+		})
+	}
+	params := launchParams(LaunchRequest{Node: node, Model: hybrid, Topology: DistTopology{NNodes: 1}}, node.GPUs[0], 1, parallelism.Spec{TP: 1}, 30000)
+	if params.PD != nil {
+		t.Fatalf("a launch without PD gained one: %+v", params.PD)
+	}
 }

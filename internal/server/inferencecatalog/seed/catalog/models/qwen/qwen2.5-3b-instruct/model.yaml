@@ -25,7 +25,7 @@ specs:
   weight_bytes: 6183464937
   gpus:
     vendor: hygon
-    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW[_ -]?1000|BW[_ -]?1100)([^A-Za-z0-9_-]|$)
+    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9_-]|$)
   args:
   - --dtype
   - auto
@@ -60,7 +60,7 @@ specs:
   weight_bytes: 2698207529
   gpus:
     vendor: hygon
-    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW[_ -]?1000|BW[_ -]?1100)([^A-Za-z0-9_-]|$)
+    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9_-]|$)
   args:
   - --dtype
   - auto
@@ -97,7 +97,7 @@ specs:
   weight_bytes: 2079259809
   gpus:
     vendor: hygon
-    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW[_ -]?1000|BW[_ -]?1100)([^A-Za-z0-9_-]|$)
+    name: (^|[^A-Za-z0-9])(?:K100(?:[_ -]?AI)?|BW(?:[_ -]?[0-9]+)?)([^A-Za-z0-9_-]|$)
   args:
   - --dtype
   - auto

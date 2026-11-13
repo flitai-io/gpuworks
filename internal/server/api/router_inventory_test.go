@@ -96,6 +96,7 @@ DELETE /api/v1/image-series/{id}
 DELETE /api/v1/images/{id}
 DELETE /api/v1/images/{id}/nodes/{uuid}
 DELETE /api/v1/inference-templates/spec
+DELETE /api/v1/kube/clusters/{uuid}
 DELETE /api/v1/models/{id}
 DELETE /api/v1/models/{id}/nodes/{uuid}
 DELETE /api/v1/models/{id}/storages/{storage_id}
@@ -115,6 +116,7 @@ DELETE /api/v1/storages/{id}
 DELETE /api/v1/storages/{id}/cache
 DELETE /api/v1/storages/{id}/files
 GET /api/v1/agent-upgrades
+GET /api/v1/agent-upgrades/summary
 GET /api/v1/agent-upgrades/{id}
 GET /api/v1/agent-upgrades/{id}/items
 GET /api/v1/agent/connect
@@ -140,6 +142,7 @@ GET /api/v1/benchmarks/meta
 GET /api/v1/benchmarks/{id}
 GET /api/v1/benchmarks/{id}/curve
 GET /api/v1/benchmarks/{id}/points/{seq}/detail
+GET /api/v1/benchmarks/{id}/points/{seq}/timeline
 GET /api/v1/benchmarks/{id}/report
 GET /api/v1/branding
 GET /api/v1/dashboard/summary
@@ -183,6 +186,9 @@ GET /api/v1/instances/{uuid}
 GET /api/v1/instances/{uuid}/events
 GET /api/v1/instances/{uuid}/launch-facts
 GET /api/v1/instances/{uuid}/logs
+GET /api/v1/kube/clusters
+GET /api/v1/kube/clusters/{uuid}/manifest
+GET /api/v1/kube/defaults
 GET /api/v1/logs/context
 GET /api/v1/logs/histogram
 GET /api/v1/logs/search
@@ -216,12 +222,14 @@ GET /api/v1/nodes/{uuid}/ssh
 GET /api/v1/nodes/{uuid}/terminal
 GET /api/v1/nodes/{uuid}/terminal/settings
 GET /api/v1/notices
+GET /api/v1/peer-transfers
 GET /api/v1/platform-tokens
 GET /api/v1/playground/models
 GET /api/v1/playground/openapi.json
 GET /api/v1/providers
 GET /api/v1/providers/kinds
 GET /api/v1/providers/{id}
+GET /api/v1/providers/{id}/clusters
 GET /api/v1/providers/{id}/instances
 GET /api/v1/pull/credentials
 GET /api/v1/pull/metadata-sources
@@ -255,6 +263,7 @@ GET /api/v1/updates
 GET /api/v1/usage-report
 GET /api/v1/usage-report/preview
 GET /healthz
+GET /kube/manifest.yaml
 PATCH /api/v1/ai/configs/{id}
 PATCH /api/v1/branding
 PATCH /api/v1/images/versions/{id}
@@ -281,6 +290,7 @@ POST /api/v1/apikeys
 POST /api/v1/auth/activity
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
+POST /api/v1/auth/password
 POST /api/v1/batches
 POST /api/v1/batches/{id}/cancel
 POST /api/v1/benchmarks
@@ -323,6 +333,11 @@ POST /api/v1/inference-templates/sync
 POST /api/v1/instances/{uuid}/restart
 POST /api/v1/instances/{uuid}/sleep
 POST /api/v1/instances/{uuid}/wake
+POST /api/v1/kube/clusters
+POST /api/v1/kube/clusters/{uuid}/apply
+POST /api/v1/kube/clusters/{uuid}/remove
+POST /api/v1/kube/clusters/{uuid}/revoke
+POST /api/v1/kube/enroll
 POST /api/v1/mcp
 POST /api/v1/models
 POST /api/v1/models/local
@@ -372,6 +387,7 @@ POST /api/v1/pull/registry-credentials/{id}/test
 POST /api/v1/pull/source-rules
 POST /api/v1/pull/source-rules/test
 POST /api/v1/pull/sync-groups
+POST /api/v1/server/outbound-policy/check
 POST /api/v1/server/restart
 POST /api/v1/ssh-key/rotate
 POST /api/v1/storages
@@ -400,6 +416,8 @@ PUT /api/v1/deployments/{id}/schedule/{sid}
 PUT /api/v1/deployments/{id}/tokenize
 PUT /api/v1/deployments/{id}/yield-policy
 PUT /api/v1/experience/enabled
+PUT /api/v1/kube/clusters/{uuid}
+PUT /api/v1/kube/clusters/{uuid}/pools
 PUT /api/v1/mcp/settings
 PUT /api/v1/networks/{id}
 PUT /api/v1/networks/{id}/attachments/{attachmentID}

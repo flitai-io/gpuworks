@@ -171,7 +171,7 @@ func (l Layout) Images() ([]Ref, error) {
 		tagDir := filepath.Dir(path)
 		repo, err := filepath.Rel(root, filepath.Dir(tagDir))
 		if err != nil || repo == "." {
-			return nil
+			return nil //nolint:nilerr // A TAG outside a valid repository subdirectory is not an image candidate.
 		}
 		tag := filepath.Base(tagDir)
 		sep := ":"

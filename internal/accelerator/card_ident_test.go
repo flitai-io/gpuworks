@@ -38,6 +38,36 @@ func TestCardIdentFallsBackToUUIDThenToNothing(t *testing.T) {
 	}
 }
 
+// A tie in healthSeverity hands the choice to the order the caller passed its
+// codes in: MostSevereHealth keeps the first of two equal ranks, so the same
+// card would report different findings depending on which call site asked.
+// That is exactly what the table is for, so every rank must be distinct.
+func TestHealthSeverityIsATotalOrder(t *testing.T) {
+	byRank := map[int]string{}
+	for _, code := range healthCodesDeclaredInSource(t) {
+		rank := healthSeverity[code]
+		if other, taken := byRank[rank]; taken {
+			t.Errorf("%q and %q both sort at %d; one of them has to be more worth reading than the other", code, other, rank)
+		}
+		byRank[rank] = code
+	}
+	// The order within each band, stated as the behaviour rather than as
+	// numbers: a named finding beats an absent diagnostic, and a card the
+	// runtime cannot use beats both.
+	for _, tc := range [][2]string{
+		{HealthVendorWarning, HealthTelemetryUnavailable},
+		{HealthMemoryRepairPending, HealthVendorWarning},
+		{HealthRuntimeUnusable, HealthMemoryRepairPending},
+		{HealthInventoryInvalid, HealthVendorFault},
+		{HealthResetRequired, HealthInventoryInvalid},
+		{HealthDriverInitFailed, HealthCLIUnanswered},
+	} {
+		if got := MostSevereHealth(tc[1], tc[0]); got != tc[0] {
+			t.Errorf("MostSevereHealth(%q, %q) = %q, want %q", tc[1], tc[0], got, tc[0])
+		}
+	}
+}
+
 // A code absent from healthSeverity sorts below every other, so
 // MostSevereHealth can never choose it and a card would keep a milder
 // finding than the truth. Every declared code must be ordered.

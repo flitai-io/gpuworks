@@ -32,7 +32,7 @@ const cacheFiles = [
 test("the nodes tab lists every node with its state, mount, writability, capacity, and last report", async () => {
   stubDetail({ storage: cacheStorage, files: cacheFiles });
   renderDetail("/storage/3?tab=nodes");
-  const row = async (name: string) => (await screen.findByText(name, { selector: ".ant-table-tbody a" })).closest("tr") as HTMLElement;
+  const row = async (name: string) => (await screen.findByText(name, { selector: "tbody a" })).closest("tr") as HTMLElement;
   const gpu1 = await row("gpu-01");
   assert.ok(within(gpu1).getByText(locale.common.storageNodeState.ready));
   // An NFS cache's row keeps the node and both states; the mount and cache
@@ -49,14 +49,14 @@ test("the nodes tab lists every node with its state, mount, writability, capacit
   const gpu3Detail = detailOf(gpu3);
   assert.ok(within(gpu3Detail).getByText(/mount failed/));
   assert.ok(within(gpu3Detail).getByText(s.nodes.no));
-  assert.equal(within(gpu3Detail).queryByText(/Used .* of/), null, "no capacity reported is a dash, not a made-up bar");
+  assert.ok(within(gpu3Detail).queryByText(/Used .* of/) === null, "no capacity reported is a dash, not a made-up bar");
   assert.ok(within(gpu3Detail).getAllByText("—").length >= 1);
 });
 
 test("an offline node is marked and says its figures are the last ones it reported", async () => {
   stubDetail({ storage: cacheStorage, files: cacheFiles });
   renderDetail("/storage/3?tab=nodes");
-  const gpu2 = (await screen.findByText("gpu-02", { selector: ".ant-table-tbody a" })).closest("tr") as HTMLElement;
+  const gpu2 = (await screen.findByText("gpu-02", { selector: "tbody a" })).closest("tr") as HTMLElement;
   assert.ok(gpu2.className.includes("storage-node-offline"));
   assert.ok(within(gpu2).getByText(locale.common.storageNodeState.offline));
   const gpu2Detail = detailOf(gpu2);
@@ -68,24 +68,24 @@ test("an NFS cache adds the cache disk and the cached models against the node's 
   stubDetail({ storage: cacheStorage, files: cacheFiles });
   renderDetail("/storage/3?tab=nodes");
   // The cache disk and the cached models are in each node's detail.
-  const gpu1 = (await screen.findByText("gpu-01", { selector: ".ant-table-tbody a" })).closest("tr") as HTMLElement;
+  const gpu1 = (await screen.findByText("gpu-01", { selector: "tbody a" })).closest("tr") as HTMLElement;
   const gpu1Detail = detailOf(gpu1);
   assert.ok(within(gpu1Detail).getByText(s.nodes.column.cache));
   assert.ok(within(gpu1Detail).getByText("Used 100.0 GiB of 1000.0 GiB, 900.0 GiB available"), "the cache disk");
   // 30 GiB finished + 70 GiB of the one still syncing, against the 100 GiB override.
   assert.ok(within(gpu1Detail).getByText("Cached models 100.0 GiB of 100.0 GiB limit"));
-  const gpu2 = (await screen.findByText("gpu-02", { selector: ".ant-table-tbody a" })).closest("tr") as HTMLElement;
+  const gpu2 = (await screen.findByText("gpu-02", { selector: "tbody a" })).closest("tr") as HTMLElement;
   assert.ok(within(detailOf(gpu2)).getByText(s.cacheManage.unknown), "missing cache accounting is unknown, not zero");
 });
 
 test("a local storage has no cache column; searching narrows the nodes; a storage without nodes says so", async () => {
   stubDetail({ storage: localStorage({ nodes: { total: 2, ready: 2, problems: [], all: [nodeStatus("n1", "gpu-01", "ready", { path: "/data/models", total_bytes: 100 * GIB, available_bytes: 60 * GIB }), nodeStatus("n2", "gpu-02", "ready", { path: "/data/models" })] } }) });
   const { user } = renderDetail("/storage/1?tab=nodes");
-  await screen.findByText("gpu-01", { selector: ".ant-table-tbody a" });
-  assert.equal(screen.queryByRole("columnheader", { name: s.nodes.column.cache }), null);
+  await screen.findByText("gpu-01", { selector: "tbody a" });
+  assert.ok(screen.queryByRole("columnheader", { name: s.nodes.column.cache }) === null, "Expected the element to be absent");
   await user.type(screen.getByRole("searchbox", { name: s.nodes.search }), "gpu-02");
-  await waitFor(() => assert.equal(screen.queryByText("gpu-01", { selector: ".ant-table-tbody a" }), null));
-  assert.ok(screen.getByText("gpu-02", { selector: ".ant-table-tbody a" }));
+  await waitFor(() => assert.ok(screen.queryByText("gpu-01", { selector: "tbody a" }) === null, "Expected the element to be absent"));
+  assert.ok(screen.getByText("gpu-02", { selector: "tbody a" }));
   await user.clear(screen.getByRole("searchbox", { name: s.nodes.search }));
   await user.type(screen.getByRole("searchbox", { name: s.nodes.search }), "zzz");
   assert.ok(await screen.findByText(s.nodes.empty));
@@ -98,10 +98,10 @@ test("a node that cannot use the local storage's directory is told to get one of
     nodeStatus("n3", "read-only-disk", "ready", { path: "/opt/gpuworks/models", writable: false, needs_own_directory: true }),
   ] } }) });
   renderDetail("/storage/1?tab=nodes");
-  const row = async (name: string) => (await screen.findByText(name, { selector: ".ant-table-tbody a" })).closest("tr") as HTMLElement;
+  const row = async (name: string) => (await screen.findByText(name, { selector: "tbody a" })).closest("tr") as HTMLElement;
   assert.ok(within(detailOf(await row("rootless"))).getByText(s.nodes.ownDirectoryHint));
   assert.ok(within(detailOf(await row("read-only-disk"))).getByText(s.nodes.ownDirectoryHint));
-  assert.equal(within(detailOf(await row("gpu-01"))).queryByText(s.nodes.ownDirectoryHint), null);
+  assert.ok(within(detailOf(await row("gpu-01"))).queryByText(s.nodes.ownDirectoryHint) === null, "Expected the element to be absent");
 });
 
 test("the files tab shows the shared copy and node caches with model link, place, path, size, state, source, last use and deployments", async () => {
@@ -131,7 +131,7 @@ test("the files tab shows the shared copy and node caches with model link, place
 
   const failed = (await screen.findByRole("link", { name: "Broken" })).closest("tr") as HTMLElement;
   assert.ok(within(failed).getByText(models.presence.failed));
-  assert.equal(within(failed).queryByRole("progressbar"), null);
+  assert.ok(within(failed).queryByRole("progressbar") === null, "Expected the element to be absent");
   assert.ok(within(failed).getAllByText("—").length >= 1, "an unknown size is a dash");
   const failedDetail = detailOf(failed);
   assert.ok(within(failedDetail).getByText(models.files.writerNode.replace("{{node}}", "gpu-02")));
@@ -160,17 +160,17 @@ test("the place filter offers all, shared and each node holding files; the searc
     fireEvent.click(option);
   };
   await pick(s.files.shared);
-  await waitFor(() => assert.equal(screen.queryByRole("link", { name: "Llama-3-70B" }), null));
+  await waitFor(() => assert.ok(screen.queryByRole("link", { name: "Llama-3-70B" }) === null, "Expected the element to be absent"));
   assert.ok(screen.getByRole("link", { name: "Broken" }));
   assert.equal(screen.getAllByRole("link", { name: "Qwen3-8B" }).length, 1, "only the shared copy");
 
   await pick("gpu-01");
   await waitFor(() => assert.ok(screen.queryByRole("link", { name: "Llama-3-70B" })));
-  assert.equal(screen.queryByRole("link", { name: "Broken" }), null);
+  assert.ok(screen.queryByRole("link", { name: "Broken" }) === null, "Expected the element to be absent");
 
   await pick(s.files.placeAll);
   await user.type(screen.getByRole("searchbox", { name: s.files.search }), "llama");
-  await waitFor(() => assert.equal(screen.queryByRole("link", { name: "Broken" }), null));
+  await waitFor(() => assert.ok(screen.queryByRole("link", { name: "Broken" }) === null, "Expected the element to be absent"));
   assert.ok(screen.getByRole("link", { name: "Llama-3-70B" }));
   await user.clear(screen.getByRole("searchbox", { name: s.files.search }));
   await user.type(screen.getByRole("searchbox", { name: s.files.search }), "nothing");
@@ -218,11 +218,21 @@ test("a local storage lists each node's copy and deletes it from that node", asy
   const { user } = renderDetail("/storage/1?tab=files");
   const first = (await screen.findAllByRole("link", { name: "Qwen3-8B" }))[0].closest("tr") as HTMLElement;
   assert.ok(within(first).getByText("gpu-01"));
-  assert.equal(within(first).queryByText(models.files.cache), null);
-  assert.equal(screen.queryByRole("columnheader", { name: s.files.column.lastUsed }), null, "last use only matters for caches");
+  assert.ok(within(first).queryByText(models.files.cache) === null, "Expected the element to be absent");
+  assert.ok(screen.queryByRole("columnheader", { name: s.files.column.lastUsed }) === null, "last use only matters for caches");
   await user.click(within(first).getByRole("button", { name: models.files.deleteOnNode }));
   await confirm(user, models.action.delete);
   await waitFor(() => assert.deepEqual(calls.deleteModelOnNode, [[7, "n1", 1]]));
+});
+
+test("a disabled NFS cache still lets an admin remove a node's cache, while its library stays protected", async () => {
+  stubDetail({ storage: { ...cacheStorage, enabled: false, writable: false }, files: cacheFiles });
+  renderDetail("/storage/3?tab=files");
+  const rows = await screen.findAllByRole("link", { name: "Qwen3-8B" });
+  const library = rows[0].closest("tr") as HTMLElement;
+  const cached = rows[1].closest("tr") as HTMLElement;
+  assert.equal((within(cached).getByRole("button", { name: s.files.evictCache }) as HTMLButtonElement).disabled, false);
+  assert.equal((within(library).getByRole("button", { name: models.action.deleteModelFiles }) as HTMLButtonElement).disabled, true);
 });
 
 test("a read-only storage's delete buttons are disabled; a viewer has no actions column", async () => {
@@ -236,8 +246,8 @@ test("a read-only storage's delete buttons are disabled; a viewer has no actions
   stubDetail({ storage: nfsStorage({ nodes: { total: 1, ready: 1, problems: [] } }), files: [modelFile()], admin: false });
   renderDetail("/storage/2?tab=files");
   await screen.findByRole("link", { name: "Qwen3-8B" });
-  await waitFor(() => assert.equal(screen.queryByRole("columnheader", { name: s.files.column.actions }), null));
-  assert.equal(screen.queryByRole("button", { name: models.action.deleteModelFiles }), null);
+  await waitFor(() => assert.ok(screen.queryByRole("columnheader", { name: s.files.column.actions }) === null, "Expected the element to be absent"));
+  assert.ok(screen.queryByRole("button", { name: models.action.deleteModelFiles }) === null, "Expected the element to be absent");
 });
 
 test("an empty shared storage invites scanning (admin only); an empty local one explains where files come from", async () => {
@@ -251,7 +261,7 @@ test("an empty shared storage invites scanning (admin only); an empty local one 
   stubDetail({ storage: nfsStorage({ nodes: { total: 1, ready: 1, problems: [] } }), files: [], admin: false });
   const viewer = renderDetail("/storage/2?tab=files");
   assert.ok(await screen.findByText(s.files.emptyShared));
-  assert.equal(screen.queryByRole("button", { name: s.actions.scan }), null);
+  assert.ok(screen.queryByRole("button", { name: s.actions.scan }) === null, "Expected the element to be absent");
   viewer.view.unmount();
 
   stubDetail({ storage: localStorage(), files: [] });
@@ -273,7 +283,7 @@ test("while the files load there is a spinner; a failed load says so and offers 
   api.storageModelFiles = (() => new Promise((resolve) => { release = resolve as never; })) as never;
   renderDetail("/storage/2?tab=files");
   await screen.findByRole("tab", { name: /Model files/ });
-  assert.ok(document.querySelector(".ant-spin-spinning"));
+  assert.ok(screen.getByRole("table").getAttribute("aria-busy") === "true");
   release(list([modelFile()]));
   assert.ok(await screen.findByRole("link", { name: "Qwen3-8B" }));
 });

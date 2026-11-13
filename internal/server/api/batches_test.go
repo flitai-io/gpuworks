@@ -81,9 +81,8 @@ func (f *fakeBatches) Download(c BatchCaller, id, kind string) (BatchDownload, e
 
 type batchRig struct {
 	*tokenRig
-	fake  *fakeBatches
-	user  string
-	admin string
+	fake *fakeBatches
+	user string
 }
 
 func newBatchRig(t *testing.T) *batchRig {

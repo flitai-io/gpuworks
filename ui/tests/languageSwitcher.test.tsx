@@ -18,12 +18,12 @@ for (const light of [false, true]) {
     const user = userEvent.setup();
     render(<I18nextProvider i18n={i18n}><LanguageSwitcher light={light} /></I18nextProvider>);
     await user.click(screen.getByRole("button", { name: locale.common.language.switch }));
-    await user.click(await screen.findByRole("menuitem", { name: "English" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "English" }));
     const english = await screen.findByRole("button", { name: en.language.switch });
     assert.equal(english.textContent, "EN");
     assert.equal(i18n.resolvedLanguage, "en");
     await user.click(english);
-    await user.click(await screen.findByRole("menuitem", { name: "简体中文" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "简体中文" }));
     const chinese = await screen.findByRole("button", { name: locale.common.language.switch });
     assert.equal(chinese.textContent, "中文");
     assert.equal(i18n.resolvedLanguage, "zh");

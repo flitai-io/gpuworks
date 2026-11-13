@@ -16,6 +16,7 @@ Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: 
 const { i18n, locale } = await createI18n(["batches"]);
 const { cleanup, render, screen, waitFor, within } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
+const { FeedbackHost, message } = await import("../src/ui-kit/feedback/index.tsx");
 const { ConfigProvider } = await import("antd");
 const { MemoryRouter, Route, Routes } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
@@ -34,6 +35,7 @@ beforeEach(() => {
   batchApi.dictionary = async () => dictionary([model("qwen-chat", "running"), model("embedder", "running", ["/v1/embeddings"])]);
 });
 afterEach(() => {
+  message.destroy();
   cleanup();
   Object.assign(batchApi, { list: original.list, create: original.create, dictionary: original.dictionary });
   api.me = original.me;
@@ -42,7 +44,7 @@ after(() => closeChannels());
 
 function mountPage() {
   render(
-    <I18nextProvider i18n={i18n}>
+    <I18nextProvider i18n={i18n}><FeedbackHost />
       <ConfigProvider theme={{ token: { motion: false } }}>
         <MemoryRouter initialEntries={["/batches"]}>
           <Routes><Route path="/batches" element={<BatchesPage />} /></Routes>
@@ -57,7 +59,9 @@ async function openCreate(user: ReturnType<typeof userEvent.setup>) {
   const create = () => screen.getAllByRole("button", { name: b.action.create })[0] as HTMLButtonElement;
   await waitFor(() => assert.equal(create().disabled, false));
   await user.click(create());
-  return screen.findByRole("dialog", { name: b.create.title });
+  const dialog = await screen.findByRole("dialog", { name: b.create.title });
+  await waitFor(() => assert.ok(dialog.contains(document.activeElement), "initial dialog focus is settled"));
+  return dialog;
 }
 
 test("a sample is a thousand valid batch requests, ten thousand for embeddings", () => {
@@ -158,8 +162,8 @@ test("use the sample: it names an active deployment and goes up as the request f
   // The model list holds the active deployments' served names, once each.
   await waitFor(() => assert.ok(dialog.textContent?.includes("qwen-chat")));
   assert.ok(!dialog.textContent?.includes("stopped-one"));
-  const submit = within(dialog.closest(".ant-modal") as HTMLElement).getByRole("button", { name: b.create.submit }) as HTMLButtonElement;
-  assert.equal(submit.disabled, true);
+  const submit = within(dialog).getByRole("button", { name: b.create.submit }) as HTMLButtonElement;
+  assert.equal(submit.disabled, true, "nothing to create until a file is chosen");
   await user.click(screen.getByRole("button", { name: b.create.sample.use }));
   await waitFor(() => assert.equal(submit.disabled, false));
   await user.click(submit);
@@ -180,13 +184,14 @@ test("the sample type picks the endpoint of the sample, and the file goes up wit
   const user = mountPage();
   const dialog = await openCreate(user);
   await waitFor(() => assert.ok(dialog.textContent?.includes("qwen-chat")));
-  await user.click(within(dialog).getByRole("combobox", { name: b.create.sample.endpoint }));
+  within(dialog).getByRole("combobox", { name: b.create.sample.endpoint }).focus();
+  await user.keyboard("{Enter}");
   for (const key of ["chat", "completions"] as const) {
-    assert.ok(await screen.findByText(b.create.sample.endpoints[key].replace("{{endpoint}}", key === "chat" ? "/v1/chat/completions" : "/v1/completions"), { selector: ".ant-select-item-option-content" }));
+    assert.ok(await screen.findByRole("option", { name: b.create.sample.endpoints[key].replace("{{endpoint}}", key === "chat" ? "/v1/chat/completions" : "/v1/completions") }));
   }
-  await user.click(await screen.findByText(b.create.sample.endpoints.embeddings.replace("{{endpoint}}", "/v1/embeddings"), { selector: ".ant-select-item-option-content" }));
+  await user.click(await screen.findByRole("option", { name: b.create.sample.endpoints.embeddings.replace("{{endpoint}}", "/v1/embeddings") }));
   await user.click(screen.getByRole("button", { name: b.create.sample.use }));
-  await user.click(within(dialog.closest(".ant-modal") as HTMLElement).getByRole("button", { name: b.create.submit }));
+  await user.click(within(dialog).getByRole("button", { name: b.create.submit }));
   await waitFor(() => assert.ok(sent));
   const got = sent as unknown as { file: File; endpoint?: string };
   assert.equal(got.endpoint, undefined);
@@ -205,11 +210,12 @@ test("the sample offers only the models serving its endpoint, in the server's or
   const dialog = await openCreate(user);
   await user.click(within(dialog).getByRole("checkbox", { name: b.create.model.showWaiting }));
   const sampleModel = await within(dialog).findByRole("combobox", { name: b.create.sample.model });
-  await waitFor(() => assert.ok(within(dialog).getByText(`glm · ${b.create.model.state.starting}`, { selector: ".ant-select-selection-item" })));
-  await user.click(sampleModel);
+  await waitFor(() => assert.ok(within(dialog).getByText(`glm · ${b.create.model.state.starting}`, { selector: '[data-slot="select-value"]' })));
+  sampleModel.focus();
+  await user.keyboard("{Enter}");
   const offered = (await screen.findAllByRole("option")).map((option) => option.getAttribute("title") ?? option.textContent);
   assert.ok(!offered.some((label) => label?.includes("BAAI/bge-m3")), `the embedder is not offered for chat: ${offered}`);
-  assert.ok(await screen.findByText(`deepseek · ${b.create.model.state.stopped}`, { selector: ".ant-select-item-option-content" }));
+  assert.ok(await screen.findByRole("option", { name: `deepseek · ${b.create.model.state.stopped}` }));
 });
 
 test("download the sample hands the browser a .jsonl file", async () => {

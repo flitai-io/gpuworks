@@ -178,7 +178,10 @@ def exercise_branding_single_field(page, card, branding, field_input, click_save
     expect(title).to_have_value("")
     expect(sign_in).to_have_value("")
     button(card, branding["restoreDefault"]).click()
-    expect(card.locator("img.app-brand-logo")).to_have_count(0)
+    # BrandMark always renders an <img> and falls back to the built-in wordmark,
+    # so "restored" is the fallback src rather than a missing element.
+    expect(card.locator("img.app-brand-logo")).to_have_attribute(
+        "src", "/assets/gpuworks-wordmark.svg")
     save_exact({**empty, "product_name": name_b}, "logo cleared")
     expect(title).to_have_value("")
     expect(sign_in).to_have_value("")
@@ -197,8 +200,11 @@ def exercise_branding_single_field(page, card, branding, field_input, click_save
 def test_branding(page, context, browser, server, artifacts, report, locale):
     settings, auth, common = strings(locale)
     branding = settings["branding"]
-    default_console_title = common["branding"]["defaultConsoleTitle"].replace(
-        "{{product}}", "GPUWorks")
+    # The product has no default header title: consoleTitle defaults to "" and
+    # Brand renders the logo alone with no title span when it is empty. Reading
+    # a defaultConsoleTitle string out of the locale would be inventing a value
+    # the product never shows.
+    default_console_title = ""
     product_name = f"e2e-{report['run_id'][-8:]}-brand"
     console_title = f"e2e-{report['run_id']}-console"
     login_description = f"Signed in to {report['run_id']}\nSecond line"
@@ -234,7 +240,12 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     page.on("request", request_seen)
 
     page.goto(server.base + "/login")
-    expect(page.get_by_text("GPUWorks", exact=True).first).to_be_visible()
+    # With no configured product name the sign-in page shows the built-in logo
+    # and no visible name: ProductName is only rendered once an administrator
+    # has set one. The default name reaches the reader through the logo's alt
+    # text and the document title, so assert it there rather than as body text.
+    expect(page.locator(".auth-brand-panel img.app-brand-logo")).to_have_attribute(
+        "alt", "GPUWorks")
     page.get_by_role("textbox", name=auth["username"], exact=True).fill("admin")
     page.get_by_label(auth["password"], exact=True).fill("gpuworks-test-password-2026")
     with page.expect_response(lambda r: urlsplit(r.url).path == "/api/v1/auth/login"
@@ -309,7 +320,7 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     report["branding_inventory"] = exercise_branding_field_inventory(
         card, branding, patches, {
             "productName": "GPUWorks",
-            "consoleTitle": default_console_title,
+            "consoleTitle": branding["consoleTitlePlaceholder"],
             "loginDescription": common["branding"]["defaultLoginDescription"],
         }, initial)
 
@@ -339,7 +350,8 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
           f"character-class save HTTP {accepted_name.value.status}")
     check(accepted_name.value.request.post_data_json["product_name"] == mixed_name,
           "the saved product name is not the mixed text")
-    expect(page.locator(".app-brand-name").first).to_have_text(mixed_name)
+    expect(page.locator("img.app-brand-logo").first).to_have_attribute("alt", mixed_name)
+    check(page.title() == mixed_name, f"document title after saving the name is {page.title()!r}")
     stored_name = branding_doc(page.request.get(server.base + BRANDING), "character class")
     check(stored_name["product_name"] == mixed_name,
           f"independent GET dropped the mixed name: {stored_name['product_name']!r}")
@@ -364,7 +376,8 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     report["branding_name_show_count"] = True
     expect(page.get_by_text("control character", exact=False).first).to_be_visible()
     expect(product_input).to_have_value(forbidden_name)
-    expect(page.locator(".app-brand-name").first).to_have_text(mixed_name)
+    expect(page.locator("img.app-brand-logo").first).to_have_attribute("alt", mixed_name)
+    check(page.title() == mixed_name, f"document title after saving the name is {page.title()!r}")
     kept_name = branding_doc(page.request.get(server.base + BRANDING), "after forbidden name")
     check(kept_name["product_name"] == mixed_name
           and kept_name["console_title"] == ""
@@ -389,7 +402,8 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     check(longest_saved.value.status == 200, f"32-character save HTTP {longest_saved.value.status}")
     check(longest_saved.value.request.post_data_json["product_name"] == longest_name,
           "the saved product name is not 32 characters")
-    expect(page.locator(".app-brand-name").first).to_have_text(longest_name)
+    expect(page.locator("img.app-brand-logo").first).to_have_attribute("alt", longest_name)
+    check(page.title() == longest_name, f"document title after saving the name is {page.title()!r}")
     stored_longest = branding_doc(page.request.get(server.base + BRANDING), "32 characters")
     check(stored_longest["product_name"] == longest_name,
           "independent GET did not keep the 32-character name")
@@ -478,7 +492,7 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     check(saved.value.request.post_data_json == expected_body,
           f"branding PATCH differs: {saved.value.request.post_data_json}")
     expect(page.get_by_text(branding["saved"], exact=True).first).to_be_visible()
-    expect(page.locator(".app-header-title")).to_have_text(console_title)
+    expect(page.locator(".app-brand-name").first).to_have_text(console_title)
     check(page.title() == product_name, f"document title is {page.title()!r}")
     saved_logo = page.locator("img.app-brand-logo").first
     expect(saved_logo).to_have_attribute("src", logo)
@@ -540,10 +554,13 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
     check(cleared_doc == {"product_name": "", "console_title": "",
                           "login_description": "", "logo": ""},
           f"branding was not restored: {cleared_doc}")
-    expect(page.locator(".app-header-title")).to_have_text(default_console_title)
+    expect(page.locator(".app-brand-name")).to_have_count(0)
     check(page.title() == "GPUWorks", f"document title after restore is {page.title()!r}")
-    expect(page.locator("img.app-brand-logo")).to_have_count(0)
-    expect(page.locator(".app-brand-mark").first).to_have_text("G")
+    expect(page.locator("img.app-brand-logo").first).to_have_attribute(
+        "src", "/assets/gpuworks-wordmark.svg")
+    # The built-in brand is a wordmark image, not a lettered mark: the restored
+    # state is the fallback wordmark carrying the default product name in alt.
+    expect(page.locator("img.app-brand-logo").first).to_have_attribute("alt", "GPUWorks")
     report["last_step"] = "branding-restored"
     report["branding_single_field"] = exercise_branding_single_field(
         page, card, branding, field_input, click_save, server.base)
@@ -564,6 +581,47 @@ def test_branding(page, context, browser, server, artifacts, report, locale):
           f"browser errors: {page_errors}, {other_logs}")
     check(page.evaluate("document.documentElement.scrollWidth <= innerWidth"),
           "settings page has horizontal overflow")
+    report["last_step"] = "branding-html-escaping"
+    # 2.7: the product name is free text, so it can carry markup. It is shown on the sign-in
+    # page, in the header and in the document title, and every one of those has to keep it as
+    # text. The value is saved through the real PATCH and read back from the independent GET.
+    markup_name = "e2e-<img src=x onerror=1>-brand"
+    name_input = field_input(branding["productName"])
+    name_input.fill(markup_name)
+    with page.expect_response(lambda r: urlsplit(r.url).path == BRANDING
+                              and r.request.method in {"PUT", "PATCH"}) as markup_saved:
+        click_save()
+    check(markup_saved.value.status == 200, f"markup name save HTTP {markup_saved.value.status}")
+    stored_markup = branding_doc(page.request.get(server.base + BRANDING), "markup name")
+    check(stored_markup["product_name"] == markup_name,
+          f"the stored name is not the markup string: {stored_markup['product_name']!r}")
+    # The edit control holds the value verbatim, and the page built no element from it.
+    expect(field_input(branding["productName"])).to_have_value(markup_name)
+    check(page.locator("img[src='x']").count() == 0,
+          "the name created an img element on the settings page")
+    # The sign-in page is the public surface for the same value.
+    markup_context = browser.new_context(
+        viewport=report["viewport"],
+        locale="zh-CN" if locale == "zh" else "en-US", timezone_id="UTC")
+    try:
+        markup_page = markup_context.new_page()
+        markup_page.goto(server.base + "/login")
+        shown = markup_page.get_by_text(markup_name, exact=True).first
+        expect(shown).to_be_visible()
+        check(shown.evaluate("element => element.children.length") == 0,
+              "the sign-in page renders the name through child nodes, not as text")
+        check(markup_page.locator("img[src='x']").count() == 0,
+              "the name created an img element on the sign-in page")
+        check(markup_page.title() == markup_name,
+              f"sign-in document title is {markup_page.title()!r}")
+    finally:
+        markup_context.close()
+    report["html_escaping"] = {"markup": markup_name, "stored": True, "sign_in_text": True,
+                               "settings_text": True, "injected_nodes": 0}
+    # Restore the name so the recorded evidence matches the original brand.
+    field_input(branding["productName"]).fill(product_name)
+    click_save()
+    expect(field_input(branding["productName"])).to_have_value(product_name)
     report["last_step"] = "browser-errors-clear"
 
     report["evidence"].extend([

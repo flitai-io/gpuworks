@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	agentconn "gpuworks.ai/gpuworks/internal/agent/conn"
-	"gpuworks.ai/gpuworks/internal/agent/gpu"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,6 +14,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	agentconn "gpuworks.ai/gpuworks/internal/agent/conn"
+	"gpuworks.ai/gpuworks/internal/agent/gpu"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 )

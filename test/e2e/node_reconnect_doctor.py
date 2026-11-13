@@ -188,8 +188,9 @@ def test_node_reconnect_doctor(page, context, server, artifacts, report, locale,
 
     wait_inside(drawer, "node detail drawer")
     wait_inside(button(drawer, nodes["action"]["doctor"]), "the Diagnose action")
-    # DetailDrawer puts the hostname on a second title line. The accessible name joins it with a space.
-    accessible = f"{node['name']} {socket.gethostname()}"
+    # DetailDrawer keeps the hostname on a second title line, and only the title line is the
+    # dialog's accessible name (ui-kit/SideDrawer.tsx:29-30 puts the subtitle outside DialogTitle).
+    accessible = node['name']
     expect(page.get_by_role("dialog", name=accessible, exact=True)).to_be_visible()
     evidence = assert_drawer_shell(
         page, drawer, f"{node['name']}\n{socket.gethostname()}",

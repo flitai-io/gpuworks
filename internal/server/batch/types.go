@@ -219,6 +219,9 @@ type Repo interface {
 	GetBatch(id string) (Batch, error)
 	ListBatchesAfter(owner Owner, after string, limit int) ([]Batch, error)
 	ListBatchesPage(owner Owner, statuses []string, offset, limit int) ([]Batch, int, error)
+	// CountByStatus counts the owner's batches in each of the statuses; a
+	// status with none is absent.
+	CountByStatus(owner Owner, statuses []string) (map[string]int, error)
 	Unfinished() ([]Batch, error)
 	Start(id string, at time.Time) (bool, error)
 	SaveProgress(id string, p Progress) error

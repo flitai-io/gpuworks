@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Avatar, Button, Empty, Input, Modal, Select, Space, Spin, Tag, Tooltip, Typography, message } from "antd";
+import { FilterChips } from "../ui-kit/FilterChips";
+import { Segmented } from "../ui-kit/Segmented";
 import { PlusOutlined, RightOutlined, UploadOutlined } from "@ant-design/icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -9,7 +11,7 @@ import TemplateWarnings from "../components/TemplateWarnings";
 import { fetchAllPages } from "../pagedList";
 import PageHeader from "../components/PageHeader";
 import VendorLogo from "../components/VendorLogo";
-import { compareVendors, frameworkForVendor } from "../vendors";
+import { compareVendors } from "../vendors";
 import { chipDisplayLabel, chipKey, compactModelMetadata } from "./inferenceTemplateFlat.ts";
 import { inputModalityLabelKey, inputModalitiesOf, operationLabelKey, operationTypes } from "../modelInference";
 import type { OperationType } from "../inferenceApi";
@@ -82,7 +84,7 @@ function ModelVendorMarks({ model }: { model: InferenceTemplate }) {
   const vendors = modelVendors(model);
   if (!vendors.length) return <Typography.Text type="secondary">—</Typography.Text>;
   return <div className="template-model-vendors">{vendors.map((vendor) => <Tooltip title={t(`vendor.${vendor}`, { defaultValue: vendor })} key={vendor}>
-    <span className={`template-model-vendor is-${vendor}`}><VendorLogo framework={frameworkForVendor(vendor)} size={18} /></span>
+    <span className={`template-model-vendor is-${vendor}`}><VendorLogo vendor={vendor} size={18} /></span>
   </Tooltip>)}</div>;
 }
 
@@ -270,17 +272,21 @@ export default function InferenceTemplatesPage() {
     <section className="template-chip-band">
       <div className="template-chip-band-label"><Typography.Text strong>{t("chips.mine")}</Typography.Text><span>{t("chips.selectToFilter")}</span></div>
       <div className="template-chip-pills">
-        {chips.map((chip) => { const key = chipKey(chip); return <button key={key} type="button" className={selectedChip === key ? "is-selected" : ""} aria-pressed={selectedChip === key} onClick={() => setSelectedChip((current) => current === key ? "" : key)}><i />{chipDisplayLabel(chip)}</button>; })}
+        {/* Same small filter buttons as the task row below; the dot says the chip is on a node. */}
+        <FilterChips label={t("chips.mine")} value={selectedChip} onChange={(key) => setSelectedChip((current) => current === key ? "" : key)}
+          items={chips.map((chip) => ({ value: chipKey(chip), label: <><i aria-hidden="true" className="template-chip-dot" />{chipDisplayLabel(chip)}</> }))} />
         {!chips.length && <Typography.Text type="secondary">{t("chips.noOnlineNode")}</Typography.Text>}
       </div>
     </section>
 
     <section className="template-catalog-card">
-      <div className="template-task-filter" aria-label={t("filters.operationAria")}>
-        {operationTypes.map((value) => <button type="button" key={value} aria-pressed={operation === value} className={operation === value ? "is-active" : ""} onClick={() => setOperation((current) => current === value ? "" : value)}><span>{t(operationLabelKey[value])}</span><small>{operationCounts[value]}</small></button>)}
+      <div className="template-task-filter">
+        <FilterChips label={t("filters.operationAria")} value={operation} onChange={(value) => setOperation((current) => current === value ? "" : value)}
+          items={operationTypes.map((value) => ({ value, label: t(operationLabelKey[value]), count: operationCounts[value] }))} />
       </div>
       <div className="template-filter-band">
-        <div className="template-engine-tabs">{[{ value: "", label: t("filters.all") }, { value: "vllm", label: "vLLM" }, { value: "sglang", label: "SGLang" }].map((item) => <button type="button" key={item.value} className={engine === item.value ? "is-active" : ""} onClick={() => setEngine(item.value)}>{item.label}</button>)}</div>
+        <Segmented label={t("columns.engine")} value={engine || "all"} onChange={(value) => setEngine(value === "all" ? "" : value)}
+          options={[{ value: "all", label: t("filters.all") }, { value: "vllm", label: "vLLM" }, { value: "sglang", label: "SGLang" }]} />
         <Space wrap><Input.Search allowClear value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("flat.search")} /><Tag color="green">{t("flat.modelCount", { count: visible.length })}</Tag></Space>
       </div>
       {activeChip && <Alert className="template-compatibility-alert" type="info" showIcon message={t("flat.selectedChip", { chip: chipDisplayLabel(activeChip) })} />}

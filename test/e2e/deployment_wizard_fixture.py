@@ -66,7 +66,7 @@ def prepare(server, token, run_id, report, holder, agent_bin, remember):
               "source_id": source_id, "name": name + "-model"})
     check(status in (200, 201), f"model fixture: {status} {model}")
     report["owned_model_id"] = model["id"]
-    spec = {"name": SPEC, "display_profile": "general", "scenario": "balanced",
+    spec = {"name": SPEC, "display_name_zh_cn": "向导 · BF16", "display_name_en": "Wizard · BF16", "scenario": "balanced",
             "engine": "vllm", "image": IMAGE,
             "weights": {"quantization": "fp16", "sources": [{"huggingface": source_id}]},
             "weight_bytes": sum(p.stat().st_size for p in model_dir.glob("*.safetensors")),

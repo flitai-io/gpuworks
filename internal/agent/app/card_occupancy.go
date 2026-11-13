@@ -46,6 +46,8 @@ type cardOccupancy struct {
 	// in the last probe that listed the cards. It names the cards of an
 	// instance whose desired state binds none (see engine.HeldCards).
 	identOfIndex map[int]string
+	// external is the last answer of the runtime's external card holders.
+	external map[string][]proto.CardProcess
 }
 
 // learnCards records which card each device index names in a probe that
@@ -169,6 +171,7 @@ func sameProcesses(a, b []proto.CardProcess) bool {
 // using. It mutates the cards in place, like the other findings this agent
 // contributes to its own report.
 func (n *NodeRuntime) applyForeignProcesses(ctx context.Context, gpus []proto.GPUInfo, probeOK bool) {
+	defer n.applyExternalHolders(ctx, gpus)
 	lister, ok := n.prober.(gpu.ComputeProcessLister)
 	if !ok || len(gpus) == 0 {
 		return
@@ -296,4 +299,36 @@ func (n *NodeRuntime) cardsInUse() (cards map[string]bool, known bool) {
 		ours[ident] = true
 	}
 	return ours, known
+}
+
+// externalCardHolders is a runtime that knows of allocations outside the
+// platform no process list shows: the kube runtime, whose kubelet may have
+// given a card to another pod that has not touched it yet.
+type externalCardHolders interface {
+	ExternalCardHolders(context.Context) (map[string][]proto.CardProcess, error)
+}
+
+// applyExternalHolders adds those holders to the cards' foreign use. A round
+// that cannot ask restates the last answer, as for processes: not knowing is
+// not the same as knowing a card is free.
+func (n *NodeRuntime) applyExternalHolders(ctx context.Context, gpus []proto.GPUInfo) {
+	runtime, ok := n.runtimeDriver().(externalCardHolders)
+	if !ok {
+		return
+	}
+	holders, err := runtime.ExternalCardHolders(ctx)
+	n.occupancy.mu.Lock()
+	if err != nil {
+		slog.Debug("kubelet allocations unavailable; restating the last", "err", err)
+		holders = n.occupancy.external
+	} else {
+		n.occupancy.external = holders
+	}
+	n.occupancy.mu.Unlock()
+	for i := range gpus {
+		card := &gpus[i]
+		if accelerator.CardUsable(card.Ownership) {
+			card.ForeignProcesses = append(card.ForeignProcesses, holders[card.UUID]...)
+		}
+	}
 }

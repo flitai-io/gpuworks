@@ -36,11 +36,15 @@ class HeightOracleTests(unittest.TestCase):
 
     def test_partial_prepare_retains_ownership_for_cleanup(self):
         report = {'evidence': []}
-        with patch('model_picker_height.case.http', side_effect=[(201, {'id': 17}), (500, {})]):
+        # Two models are registered - the one the case is about and a second candidate so a keyboard
+        # walk has somewhere to move to - then the read-back is made to disagree. Both ids are owned
+        # from that point on, which is what the cleanup relies on.
+        with patch('model_picker_height.case.http',
+                   side_effect=[(201, {'id': 17}), (201, {'id': 18}), (500, {})]):
             with self.assertRaisesRegex(AssertionError, 'differs from the supplied fixture'):
                 prepare(SimpleNamespace(base='http://unused'), 'token', 'owned', report, {}, None, None)
         self.assertEqual(report['owned_model_repo'], 'e2e-owned/model')
-        self.assertEqual(report['owned_model_ids'], [17])
+        self.assertEqual(report['owned_model_ids'], [17, 18])
 
 
 if __name__ == '__main__':

@@ -11,6 +11,7 @@ from playwright.sync_api import expect
 from platform_token_read_revoke import check
 import instance_diagnostics_browser as diagnostics
 import instance_diagnostics_fixture as runtime
+from local_browser_fixture import http
 import container_terminal_fixture as fixture
 
 
@@ -27,7 +28,13 @@ def observe(target, holder):
         def received(payload):
             if isinstance(payload, str):
                 record["controls"].append(json.loads(payload))
+        def sent(payload):
+            # The browser's own frames: keystrokes and resize reports. A resize the UI never sends
+            # would leave the agent's pty at its original geometry.
+            if isinstance(payload, str):
+                record.setdefault("sent", []).append(json.loads(payload))
         socket.on("framereceived", received)
+        socket.on("framesent", sent)
     target.on("websocket", socket_seen)
     return record
 
@@ -113,6 +120,52 @@ def execute(target, data, report, mode, params):
     return identity
 
 
+def verify_resize(target, record, data, report, stem, params):
+    """19.3: a viewport change must be reported to the pty, and the pty must adopt it.
+
+    The browser is resized, the UI is required to send a resize frame carrying new geometry, and the
+    container's own shell is then asked for its size again - so a UI that resized only its canvas, or
+    a frame that the server dropped, would leave the pty at the old geometry and fail here.
+    """
+    before = (int(params["rows"][0]), int(params["cols"][0]))
+    record.setdefault("sent", []).clear()
+    target.set_viewport_size({"width": 1000, "height": 620})
+    resized = None
+    for _ in range(80):
+        for frame in record.get("sent", []):
+            if frame.get("type") == "resize":
+                resized = frame
+                break
+        if resized:
+            break
+        target.wait_for_timeout(250)
+    check(resized is not None, "the browser never reported its new geometry to the terminal")
+    after = (int(resized["rows"]), int(resized["cols"]))
+    check(after != before, f"the resize frame repeated the old geometry {before} -> {after}")
+    check(all(isinstance(v, int) and 1 <= v <= 1000 for v in after),
+          f"the resize frame carries an invalid geometry: {after}")
+    state = "/tmp/e2e-" + report["run_id"] + "-resize.size"
+    target.locator(".xterm").click()
+    target.keyboard.insert_text("stty size > " + shlex.quote(state))
+    target.keyboard.press("Enter")
+    observed = None
+    for _ in range(40):
+        try:
+            observed = runtime.docker("exec", data["container"], "cat", state).decode().split()
+        except Exception:
+            observed = None
+        if observed and len(observed) == 2:
+            break
+        target.wait_for_timeout(250)
+    check(observed is not None, "the pty size was not readable after the resize")
+    check((int(observed[0]), int(observed[1])) == after,
+          f"the pty did not adopt the reported geometry: frame {after}, stty {observed}")
+    target.set_viewport_size({"width": 1440, "height": 900})
+    report.setdefault("resize", []).append({"from": list(before), "to": list(after),
+                                            "pty": observed})
+    return after
+
+
 # Mainline: instance's container shell button → exact container WS/real PTY
 # → independently read marker file and shell identity → exit / tab close /
 # context disconnect → audit ended, process gone and concurrency zero; wrong
@@ -123,11 +176,11 @@ def test_container_terminal(page, context, server, artifacts, report, locale, da
     _, panel = diagnostics.open_instance(page, server, data, report)
     node_uuid, ref = data["node"]["uuid"], data["container"]
     evidence, completed = [], []
-    for mode in ("exit", "close", "disconnect"):
+    for mode in ("exit", "close", "disconnect", "network"):
         report["step"] = "container PTY " + mode
         prior = {row["id"] for row in fixture.audits(server, token)}
         child = None
-        if mode == "disconnect":
+        if mode in ("disconnect", "network"):
             child = new_context(context, holder, locale)
             target = child.new_page()
             record = observe(target, holder)
@@ -138,6 +191,10 @@ def test_container_terminal(page, context, server, artifacts, report, locale, da
         audit = fixture.wait_audit(page, server, token, node_uuid, ref, prior, True)
         identity = execute(target, data, report, mode, params)
         if mode == "exit":
+            report["step"] = "container PTY resize reaches the pty"
+            verify_resize(target, record, data, report,
+                          "/tmp/e2e-" + report["run_id"] + "-exit", params)
+        if mode == "exit":
             target.keyboard.type("exit")
             target.keyboard.press("Enter")
             expect(target.get_by_text(nodes["terminalView"]["status"]["exited"], exact=True)).to_be_visible()
@@ -146,12 +203,24 @@ def test_container_terminal(page, context, server, artifacts, report, locale, da
             target.close()
         elif mode == "close":
             target.close()
+        elif mode == "network":
+            # A real network break rather than a tidy close: the browser loses the network, so the
+            # socket dies without a close handshake and the page cannot clean up after itself. The
+            # server must still end the session and reap the pty, which is the half of 19.4 that a
+            # deliberate tab close never exercises.
+            child.set_offline(True)
+            for _ in range(80):
+                if fixture.admission(server, token, node_uuid)["active_node"] == 0:
+                    break
+                target.wait_for_timeout(250)
+            child.set_offline(False)
+            child.close()
         else:
             child.close()
         check(target.is_closed(), "terminal page did not close")
         ended = fixture.wait_released(page, server, token, node_uuid, ref, identity, audit["id"])
         check(ended["close_reason"] == ("shell_exited" if mode == "exit" else "client_closed"),
-              "terminal audit close cause differs")
+              f"terminal audit close cause differs in {mode}: {ended['close_reason']}")
         check(record["errors"] == [], "container terminal page JS errors")
         evidence.append({"mode": mode, "audit_id": audit["id"], "close_reason": ended["close_reason"],
             "target": "container", "ref": ref, "ws_query": params, "process_released": list(identity)})
@@ -171,6 +240,114 @@ def test_container_terminal(page, context, server, artifacts, report, locale, da
     check(fixture.admission(server, token, node_uuid)["active_total"] == 0, "wrong ref consumed a concurrency slot")
     rejected.close()
     check(runtime.inspect(ref)["Id"] == ref, "wrong reference changed the real target")
+
+    # 19.5: the per-node concurrency limit and the idle policy are both real. Sessions are opened
+    # until the node reports itself full, then one more page is opened and required to be refused
+    # with the busy reason rather than admitted; the refused page must leave no session behind, and
+    # closing the held ones must return the node to empty. The idle timeout is required to be a
+    # positive number of minutes reported by the server, because a limit of zero would silently
+    # mean "never" and the notice it drives would be unreachable.
+    report["step"] = "concurrency limit refuses and releases"
+    stream_path = ("/api/v1/nodes/" + node_uuid + "/terminal?"
+                   + urlencode({"target": "container", "ref": ref}))
+    policy = fixture.admission(server, token, node_uuid)
+    per_node = policy["max_per_node"]
+    check(isinstance(per_node, int) and per_node >= 1, f"per-node terminal limit is not set: {per_node}")
+    check(isinstance(policy["idle_timeout_min"], int) and policy["idle_timeout_min"] >= 1,
+          f"idle timeout is not a positive number of minutes: {policy['idle_timeout_min']}")
+    prior = fixture.audits(server, token)
+    held = []
+    try:
+        for index in range(per_node):
+            extra = new_context(context, holder, locale)
+            extra_page = extra.new_page()
+            observe(extra_page, holder)
+            extra_page.goto(server.base + "/nodes/" + node_uuid + "/terminal?"
+                            + urlencode({"target": "container", "ref": ref}))
+            expect(extra_page.locator(".xterm-rows")).to_be_visible()
+            # The admission is counted by the server when the WS begins, so the next attempt is
+            # gated on the server seeing this one rather than on the page having rendered.
+            for _ in range(60):
+                if fixture.admission(server, token, node_uuid)["active_node"] == index + 1:
+                    break
+                extra_page.wait_for_timeout(250)
+            else:
+                check(False, f"held terminal {index + 1} never became an active session")
+            held.append((extra, extra_page))
+        full = fixture.admission(server, token, node_uuid)
+        check(full["can_open"] is False,
+              f"the node admitted past its limit of {per_node}: {json.dumps(full)}")
+        check(full["reason"] != "", "a full node reported no reason")
+        check(full["active_node"] >= per_node, f"active_node {full['active_node']} below the limit {per_node}")
+        # The fifth attempt must be refused at admission. It is driven from a page that is already
+        # signed in, and the socket is opened directly so the outcome is the server's admission
+        # answer rather than a rendering detail.
+        refused_ws = held[0][1].evaluate(
+            """async ([path]) => {
+                return await new Promise((resolve) => {
+                    const ws = new WebSocket((location.protocol === "https:" ? "wss:" : "ws:")
+                        + "//" + location.host + path);
+                    ws.onopen = () => { ws.close(); resolve({ opened: true }); };
+                    ws.onerror = () => resolve({ opened: false });
+                    setTimeout(() => { try { ws.close(); } catch (e) {} resolve({ opened: false }); }, 8000);
+                });
+            }""", [stream_path])
+        check(refused_ws["opened"] is False, "a full node accepted another terminal socket")
+        full_after = fixture.admission(server, token, node_uuid)
+        check(full_after["active_node"] <= per_node,
+              f"the refused attempt pushed active_node past the limit: {full_after['active_node']}")
+        report["concurrency"] = {"max_per_node": per_node, "idle_timeout_min": policy["idle_timeout_min"],
+                                 "refused_reason": full["reason"], "refused_opened_ws": False}
+    finally:
+        for extra, extra_page in held:
+            extra_page.close()
+            extra.close()
+    released = fixture.admission(server, token, node_uuid)
+    check(released["active_node"] == 0 and released["can_open"] is True,
+          f"closing the held terminals did not release the node: {released}")
+    report["last_step"] = "concurrency-limit-refused-and-released"
+
+    # 19.1: the kill switch is real and it is a kill switch, not a label. The terminal policy is
+    # switched off through the settings route, and the preflight is required to say it cannot open
+    # with the disabled reason while a socket attempt is refused. The policy is then restored and the
+    # preflight is required to allow again, so a value that only decorated the preflight would fail.
+    report["step"] = "kill switch refuses and restores"
+    settings_key = "/api/v1/settings/terminal"
+    original_status, original_policy = http(server.base, "GET", "/api/v1/nodes/" + node_uuid
+                                            + "/terminal/settings", token=token)
+    check(original_status == 200, "terminal preflight is unreadable before the kill switch")
+    settings_status, current_settings = http(server.base, "GET", "/api/v1/settings", token=token)
+    check(settings_status == 200, "settings are unreadable")
+    seeded = current_settings.get("terminal")
+    check(isinstance(seeded, dict), f"the terminal policy is not readable from settings: {seeded}")
+    disabled = dict(seeded)
+    disabled["enabled"] = False
+    off_status, off_body = http(server.base, "PUT", settings_key, token=token, body=disabled)
+    check(off_status == 200, f"the terminal kill switch was refused: {off_status} {off_body}")
+    try:
+        off = fixture.admission(server, token, node_uuid)
+        check(off["enabled"] is False, f"the kill switch did not take effect: {json.dumps(off)}")
+        check(off["can_open"] is False and off["reason"] != "",
+              f"a disabled terminal still allowed a session: {json.dumps(off)}")
+        check(off["reason"] == "web terminal is disabled in platform settings", f"the disabled reason differs: {off['reason']}")
+        blocked = page.evaluate(
+            """async ([path]) => await new Promise((resolve) => {
+                const ws = new WebSocket((location.protocol === "https:" ? "wss:" : "ws:")
+                    + "//" + location.host + path);
+                ws.onopen = () => { ws.close(); resolve({ opened: true }); };
+                ws.onerror = () => resolve({ opened: false });
+                setTimeout(() => { try { ws.close(); } catch (e) {} resolve({ opened: false }); }, 8000);
+            })""", [stream_path])
+        check(blocked["opened"] is False, "a disabled terminal accepted a socket")
+        report["kill_switch"] = {"can_open": off["can_open"], "reason": off["reason"],
+                                 "socket_refused": True}
+    finally:
+        on_status, on_body = http(server.base, "PUT", settings_key, token=token, body=disabled | {"enabled": True})
+        check(on_status == 200, f"the terminal kill switch could not be restored: {on_body}")
+    restored = fixture.admission(server, token, node_uuid)
+    check(restored["enabled"] is True and restored["can_open"] is True,
+          f"the terminal did not come back after the kill switch: {json.dumps(restored)}")
+    report["last_step"] = "kill-switch-refused-and-restored"
 
     report["step"] = "read-only principal rejected before WS"
     prior = fixture.audits(server, token)

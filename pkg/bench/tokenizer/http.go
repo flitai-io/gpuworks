@@ -105,7 +105,7 @@ func transientDownload(err error) bool {
 		return false
 	}
 	var network net.Error
-	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || (errors.As(err, &network) && (network.Timeout() || network.Temporary()))
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || (errors.As(err, &network) && (network.Timeout() || network.Temporary())) //nolint:staticcheck // SA1019: keep tokenizer retries for temporary DNS failures, matching metadata downloads.
 }
 
 // Retry-After may be delta seconds or an HTTP date. Cap long deltas at the

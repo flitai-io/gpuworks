@@ -24,6 +24,7 @@ type Manifest struct {
 	Series         []ManifestSeries `json:"series"`
 }
 
+//nolint:revive // Keep the exported manifest schema name stable for callers.
 type ManifestSeries struct {
 	Name       string            `json:"name"`
 	Engine     string            `json:"engine"`
@@ -35,6 +36,7 @@ type ManifestSeries struct {
 	Versions   []ManifestVersion `json:"versions"`
 }
 
+//nolint:revive // Keep the exported manifest schema name stable for callers.
 type ManifestVersion struct {
 	// Name is the version's display name; when empty the series name is used.
 	Name             string   `json:"name,omitempty"`

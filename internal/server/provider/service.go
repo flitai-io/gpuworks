@@ -20,6 +20,10 @@ type Service struct {
 	box             *auth.Secretbox
 	readAgentBinary AgentBinaryReader
 	drivers         map[string]Driver
+	clusterLists    clusterListCache
+	// sshPrecheck replaces the SSH precheck an install precheck runs; nil is
+	// the real one (provision.NewSSHPrechecker).
+	sshPrecheck provision.Prechecker
 }
 
 // NewService builds the provider service. box encrypts stored credentials.
@@ -36,6 +40,14 @@ func (s *Service) SetDriver(driver Driver) {
 		s.drivers = make(map[string]Driver)
 	}
 	s.drivers[driver.Name()] = driver
+}
+
+// SetSSHPrechecker replaces the SSH precheck that runs before an install,
+// before requests are served. A server keeps the real one; a harness whose
+// instances are fixtures, with no SSH server behind their addresses, answers
+// for them instead of waiting out a connection timeout per install.
+func (s *Service) SetSSHPrechecker(p provision.Prechecker) {
+	s.sshPrecheck = p
 }
 
 func (s *Service) driver(kind string) (Driver, bool) {
@@ -59,6 +71,15 @@ func (s *Service) SetAgentBinaryReader(reader AgentBinaryReader) {
 
 // AvailableKinds returns the registered provider driver schemas.
 func (s *Service) AvailableKinds() []KindInfo { return KindInfos() }
+
+// KindCapabilities are what a provider kind's driver supports.
+func (s *Service) KindCapabilities(kind string) (Capabilities, bool) {
+	drv, ok := s.driver(kind)
+	if !ok {
+		return Capabilities{}, false
+	}
+	return drv.Capabilities(), true
+}
 
 // Add validates credentials against the vendor and stores the provider with the
 // credentials encrypted.
@@ -202,6 +223,9 @@ func (s *Service) Power(ctx context.Context, providerID uint, externalID string,
 	if err != nil {
 		return err
 	}
+	if err := s.refuseClusterNode(providerID, externalID); err != nil {
+		return err
+	}
 	if on {
 		return drv.PowerOn(ctx, creds, externalID)
 	}
@@ -226,6 +250,9 @@ func (s *Service) DeleteInstance(ctx context.Context, providerID uint, externalI
 	if err != nil {
 		return err
 	}
+	if err := s.refuseClusterNode(providerID, externalID); err != nil {
+		return err
+	}
 	if err := drv.DeleteInstance(ctx, creds, externalID); err != nil {
 		return err
 	}
@@ -239,6 +266,9 @@ func (s *Service) DeleteInstance(ctx context.Context, providerID uint, externalI
 func (s *Service) ResizeInstance(ctx context.Context, providerID uint, externalID string, req ResizeInstanceRequest) error {
 	_, drv, creds, err := s.driverCreds(providerID)
 	if err != nil {
+		return err
+	}
+	if err := s.refuseClusterNode(providerID, externalID); err != nil {
 		return err
 	}
 	return drv.ResizeInstance(ctx, creds, externalID, req)
@@ -464,6 +494,9 @@ func (s *Service) installTarget(ctx context.Context, providerID uint, externalID
 	for i := range insts {
 		if insts[i].ExternalID == externalID {
 			target := insts[i]
+			if target.Cluster != "" {
+				return nil, nil, Credentials{}, nil, &InstanceInClusterError{Cluster: target.Cluster}
+			}
 			if getter, ok := drv.(InstanceGetter); ok && target.Power != PowerStopped {
 				target = s.detailUntilSSH(ctx, getter, creds, target)
 			}

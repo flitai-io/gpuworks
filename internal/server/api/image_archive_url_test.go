@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -108,10 +109,35 @@ func TestPreviewImageArchiveURLRejectsMissingAndUnusableURLs(t *testing.T) {
 	}
 }
 
-func TestPreviewImageArchiveURLReportsUnreachableArchive(t *testing.T) {
+func TestPreviewImageArchiveURLReportsUpstreamStatus(t *testing.T) {
 	srv, _ := archiveFixture(t, []string{"example/app:v1"})
 	rec := postJSON(t, (&apiHandlers{d: Deps{Outside: OutsideSources{AllowPrivateHosts: []string{"127.0.0.1"}}}}).previewImageArchiveURL, "/api/v1/images/preview-archive-url",
-		fmt.Sprintf(`{"url":%q}`, srv.URL+"/missing.tar"), nil)
+		fmt.Sprintf(`{"url":%q}`, srv.URL+"/missing.tar?token=private-token"), nil)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	params, _ := got["params"].(map[string]any)
+	if got["code"] != ErrorImageArchiveURLUpstreamStatus || params["upstream_status"] != float64(http.StatusNotFound) || params["host"] != strings.TrimPrefix(srv.URL, "http://") {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "private-token") || strings.Contains(rec.Body.String(), "missing.tar") {
+		t.Fatalf("upstream status leaked the source URL: %s", rec.Body.String())
+	}
+}
+
+func TestPreviewImageArchiveURLReportsUnreachableArchive(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	rec := postJSON(t, (&apiHandlers{d: Deps{Outside: OutsideSources{AllowPrivateHosts: []string{"127.0.0.1"}}}}).previewImageArchiveURL, "/api/v1/images/preview-archive-url",
+		fmt.Sprintf(`{"url":%q}`, "http://"+addr+"/image.tar"), nil)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
@@ -123,8 +149,8 @@ func TestPreviewImageArchiveURLReportsUnreachableArchive(t *testing.T) {
 		t.Fatalf("code = %v body = %s", got["code"], rec.Body.String())
 	}
 	params, _ := got["params"].(map[string]any)
-	if params["host"] != strings.TrimPrefix(srv.URL, "http://") {
-		t.Fatalf("params = %+v, want the archive host", params)
+	if params["host"] != addr || params["upstream_status"] != nil {
+		t.Fatalf("params = %+v, want the closed address and no upstream status", params)
 	}
 }
 

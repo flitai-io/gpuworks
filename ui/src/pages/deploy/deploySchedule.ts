@@ -1,7 +1,9 @@
+import { acceleratorMessageParams } from "../../acceleratorMessages";
 import type { TFunction } from "i18next";
 
 import type { GPUPredicate, ScheduleMessageLike } from "../../api";
 import { durationText } from "../durationText";
+import { formatBytes } from "../../format";
 
 /** Render a structured scheduler reason while preserving historical strings. */
 export function scheduleText(
@@ -13,8 +15,7 @@ export function scheduleText(
 
   const code = value.code?.trim() ?? "";
   if (code === "accelerator_feature_unsupported") {
-    const feature = String(value.params?.feature ?? "");
-    return t("schedule.accelerator_feature_unsupported", { ...value.params, feature: t(`common:acceleratorFeature.names.${feature}`, { defaultValue: feature }) });
+    return t("schedule.accelerator_feature_unsupported", acceleratorMessageParams(t, value.params));
   }
   if (code) {
     // A storage reason says which storage and why; the more specific text
@@ -73,6 +74,9 @@ export function placementRefusalText(
 // itself, so the message never renders a placeholder for a value nobody wrote.
 function scheduleNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike, string>): string {
   switch (value.code) {
+    case "insufficient_disk":
+    case "insufficient_runtime_disk":
+      return diskNote(t, value);
     // A card that hosts sleeping instances offers less than its utilization
     // share; the reason names the residue so the figure can be reconciled with
     // the card.
@@ -103,6 +107,31 @@ function scheduleNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike
     default:
       return "";
   }
+}
+
+/** Registration must target the model the server actually evaluated. */
+export function diskRegistrationModelID(value: ScheduleMessageLike | null | undefined): number | undefined {
+  if (!value || typeof value === "string" || value.code !== "insufficient_disk" || value.params?.storage_type !== "local") return undefined;
+  const id = value.params.model_id;
+  return typeof id === "number" && Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
+function diskNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike, string>): string {
+  const params = value.params ?? {};
+  const parts: string[] = [];
+  for (const key of ["node", "storage", "path"] as const) {
+    if (typeof params[key] === "string" && params[key].trim()) {
+      parts.push(t(`scheduleNote.disk_${key}`, { [key]: params[key] }));
+    }
+  }
+  const bytes = (value: unknown) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? formatBytes(value) : undefined;
+  const required = bytes(params.required_bytes);
+  const available = bytes(params.available_bytes);
+  if (required !== undefined && available !== undefined) parts.push(t("scheduleNote.disk_capacity", { required, available }));
+  else if (required !== undefined) parts.push(t("scheduleNote.disk_required", { required }));
+  else if (available !== undefined) parts.push(t("scheduleNote.disk_available", { available }));
+  if (diskRegistrationModelID(value) !== undefined) parts.push(t("scheduleNote.disk_register"));
+  return parts.length ? ` ${parts.join(" ")}` : "";
 }
 
 function note(t: TFunction<"deploy">, key: string, param: string, value: unknown): string {

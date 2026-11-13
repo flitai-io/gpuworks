@@ -696,6 +696,10 @@ func (s *Store) updateInstanceStatus(inst *Instance, st proto.InstanceStatus) er
 		updates["state"] = st.State
 		updates["container_id"] = st.ContainerID
 		updates["message"] = st.Message
+		updates["runtime_failure"] = ""
+		if st.RuntimeFailure != nil {
+			updates["runtime_failure"] = string(mustJSON(st.RuntimeFailure))
+		}
 		updates["phase"] = st.Phase
 		updates["progress"] = st.Progress
 		updates["bytes_done"] = st.BytesDone
@@ -901,7 +905,7 @@ func (s *Store) SetInstanceState(uuid, state, message string) error {
 		return err
 	}
 	if err := s.db.Model(&Instance{}).Where("id = ?", inst.ID).
-		Updates(map[string]any{"state": state, "message": message}).Error; err != nil {
+		Updates(map[string]any{"state": state, "message": message, "runtime_failure": ""}).Error; err != nil {
 		return err
 	}
 	s.AddInstanceEventCode(inst, "state", instanceEventStateChanged, map[string]any{"state": state, "detail": message})

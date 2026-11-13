@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/planning"
@@ -65,7 +66,7 @@ func (a *apiHandlers) setDeploymentRequirements(w http.ResponseWriter, r *http.R
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := a.checkStoredCanEverFit(r.Context(), dep, reqs); err != nil {
+	if err := a.deployments().CheckStoredCanEverFit(r.Context(), dep, reqs); err != nil {
 		status := http.StatusInternalServerError
 		var refused *messages.ProductError
 		if errors.As(err, &refused) {
@@ -100,7 +101,7 @@ func (a *apiHandlers) requirementLabels(reqs map[string][]string) []dto.Requirem
 	// nodes and nothing else does it follow from the named nodes alone.
 	var nodes []*store.Node
 	if planning.OnlyNamesNodes(reqs) {
-		named, err := a.candidateNodes(reqs)
+		named, err := a.deployments().CandidateNodes(reqs)
 		if err != nil {
 			return nil
 		}
@@ -121,4 +122,16 @@ func (a *apiHandlers) requirementLabels(reqs map[string][]string) []dto.Requirem
 		out = append(out, dto.RequirementLabel{Key: label.Key, Value: label.Value, Display: label.Display, DisplayCode: label.DisplayCode, Nodes: label.Nodes})
 	}
 	return out
+}
+
+// resolveForRequirements loads what matching reqs against nodes reads beyond
+// the node rows: their networks and the storages that apply to them, each
+// only when a requirement names one. A part that cannot be loaded stays nil,
+// which leaves its requirements unmet.
+func (a *apiHandlers) resolveForRequirements(nodes []*store.Node, reqs map[string][]string) planning.NodeFacts {
+	rows := make([]store.Node, 0, len(nodes))
+	for _, node := range nodes {
+		rows = append(rows, *node)
+	}
+	return planning.LoadNodeFacts(a.d.Store, a.networks().Resolve, rows, reqs)
 }

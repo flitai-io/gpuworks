@@ -1,9 +1,10 @@
 package deploy
 
 import (
-	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"reflect"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/server/netplan"
 )
 
 func TestComputeNetworkEnvByType(t *testing.T) {
@@ -14,6 +15,17 @@ func TestComputeNetworkEnvByType(t *testing.T) {
 		want   map[string]string
 	}{
 		{"single node ignores the network", Params{NNodes: 1, ComputeNetwork: ComputeNetwork{Type: netplan.TypeHostRDMA, Interface: "bond0"}}, nil},
+		{"single-node Kunlun TP uses the real interface", Params{NNodes: 1, Vendor: "kunlunxin", TensorParallel: 2, ComputeNetwork: ComputeNetwork{Type: netplan.TypeHostEthernet, Interface: "br_eno1_31"}}, map[string]string{
+			"NCCL_SOCKET_IFNAME": "br_eno1_31", "GLOO_SOCKET_IFNAME": "br_eno1_31",
+		}},
+		{"single-node Kunlun PP uses the real interface", Params{NNodes: 1, Vendor: "kunlunxin", TensorParallel: 1, PipelineParallel: 2, ComputeNetwork: ComputeNetwork{Type: netplan.TypeHostEthernet, Interface: "br_eno1_31"}}, map[string]string{
+			"NCCL_SOCKET_IFNAME": "br_eno1_31", "GLOO_SOCKET_IFNAME": "br_eno1_31",
+		}},
+		{"single-node Kunlun DP uses the real interface", Params{NNodes: 1, Vendor: "kunlunxin", TensorParallel: 1, DataParallel: 2, ComputeNetwork: ComputeNetwork{Type: netplan.TypeHostEthernet, Interface: "br_eno1_31"}}, map[string]string{
+			"NCCL_SOCKET_IFNAME": "br_eno1_31", "GLOO_SOCKET_IFNAME": "br_eno1_31",
+		}},
+		{"single-node Kunlun single card keeps loopback", Params{NNodes: 1, Vendor: "kunlunxin", TensorParallel: 1, PipelineParallel: 1, DataParallel: 1, ComputeNetwork: ComputeNetwork{Type: netplan.TypeHostEthernet, Interface: "br_eno1_31"}}, nil},
+		{"single-node Ascend keeps existing behavior", Params{NNodes: 1, Vendor: "ascend", TensorParallel: 2, ComputeNetwork: ComputeNetwork{Type: netplan.TypeAcceleratorRDMA, Interface: "br_ens3_36"}}, nil},
 		{"no network keeps automatic selection", Params{NNodes: 2}, nil},
 		{"ethernet", multi(ComputeNetwork{Type: netplan.TypeHostEthernet, Interface: "ens3f0"}), map[string]string{
 			"NCCL_SOCKET_IFNAME": "ens3f0", "GLOO_SOCKET_IFNAME": "ens3f0", "NCCL_IB_DISABLE": "1",

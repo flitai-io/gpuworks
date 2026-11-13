@@ -4,17 +4,17 @@
 
 :root {
   --assistant-panel-width: 480px;
-  color: #4a4c4f;
-  background: #f5f7fa;
+  color: var(--fg-muted);
+  background: var(--surface-base);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
 * { box-sizing: border-box; }
 html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
-body { background: #f5f7fa; }
+body { background: var(--surface-base); }
 button, input, textarea, select { letter-spacing: 0; }
-:focus-visible { outline: 2px solid #0076f7; outline-offset: 1px; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 .monitor-signal-grid {
   display: grid;
@@ -38,14 +38,14 @@ button, input, textarea, select { letter-spacing: 0; }
   min-width: 0;
   text-align: left;
   padding: 10px 12px;
-  border: 1px solid #f0f2f5;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  background: #ffffff;
+  background: var(--surface-floating);
   cursor: pointer;
 }
 .monitor-signal-tile[aria-disabled="true"] { cursor: default; }
-.monitor-signal-tile:hover { border-color: #005bd4; }
-.monitor-signal-tile:focus-visible { outline: 2px solid #0076f7; outline-offset: 1px; }
+.monitor-signal-tile:hover { border-color: var(--brand); }
+.monitor-signal-tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 
 .monitor-signal-tile__label {
   display: flex;
@@ -150,11 +150,11 @@ button, input, textarea, select { letter-spacing: 0; }
 }
 
 /* Shared by the shell and pages that fit the viewport below the top bar. */
-:root { --app-header-height: 44px; }
+:root { --app-header-height: 44px; --app-frame-gap: 12px; }
 /* The corner scale (radius in theme/tokens.ts): hand-written styles use
    these instead of literal pixels, page by page. */
-:root { --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; }
-.app-shell { min-height: 100vh; background: #f5f7fa; }
+:root { --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-tray: 16px; --radius-panel: 12px; }
+.app-shell { min-height: 100vh; background: var(--surface-base); }
 .app-header {
   position: sticky;
   top: 0;
@@ -164,139 +164,82 @@ button, input, textarea, select { letter-spacing: 0; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 12px 0 16px;
-  border-bottom: 1px solid #dbdde0;
-  background: #fff;
+  padding: 0 var(--app-frame-gap) 0 16px;
+  background: var(--surface-base);
+  font-size: var(--text-body);
   line-height: normal;
 }
+/* One icon size across the top bar: Zeron draws icon-only md buttons at 20px
+   and labelled ones at 16px; the bar uses 16 throughout, like the menu. */
+.app-header-actions [data-slot="button"] svg { width: 16px !important; height: 16px !important; } /* beats the utilities layer */
 /* The title gives way first (ellipsis); the actions on the right never wrap. */
-.app-header-start { flex: 1 1 auto; min-width: 0; }
-.app-header-start > .ant-space-item:last-child { min-width: 0; }
-.app-header > .ant-space:last-child { flex: none; white-space: nowrap; }
-.app-sider {
-  position: sticky !important;
-  top: var(--app-header-height);
-  height: calc(100vh - var(--app-header-height));
-  border-right: 1px solid #dbdde0;
-  background: #fff !important;
-}
-.app-sider > .ant-layout-sider-children { display: flex; flex-direction: column; }
-.app-sider .app-nav { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; }
-/* The collapse button spans the whole bar like a menu item (12px indent,
-   16px icon), so every point of the bar toggles; it used to hug its label. */
-.app-nav-toggle { display: flex; flex: none; align-items: center; height: 44px; padding: 0 8px; border-top: 1px solid #f0f2f5; }
-.app-nav-toggle > .ant-btn { justify-content: flex-start; gap: 8px; height: 32px; padding: 0 12px; border-radius: var(--radius-lg); color: #707275; }
-.app-nav-toggle > .ant-btn .anticon { font-size: 16px; }
-.app-nav-toggle > .ant-btn:not(:disabled):hover { background: transparent; color: #181a1d; }
-.app-sider.ant-layout-sider-collapsed .app-nav-toggle > .ant-btn { justify-content: center; padding: 0; }
-/* Collapsed, the group titles cannot fit: a thin rule separates the groups instead. */
-.app-sider.ant-layout-sider-collapsed .ant-menu-item-group-title { height: 1px; margin: 8px 12px; padding: 0; overflow: hidden; background: #f0f2f5; font-size: 0; }
+.app-header-start { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 8px; }
+.app-header-actions { display: flex; flex: none; align-items: center; gap: 8px; white-space: nowrap; }
+.app-header-user { color: var(--fg-muted); }
+/* The side menu (Zeron Sidebar, AppSidebar.tsx) and the page share this row. */
+.app-body { display: flex; min-width: 0; }
 .app-brand {
   display: flex;
   min-width: 0;
   height: var(--app-header-height);
   align-items: center;
   gap: 12px;
-  color: #181a1d;
+  color: var(--fg-default);
   font-size: 15px;
   font-weight: 600;
 }
-/* The mobile drawer covers the top bar, so it repeats the brand. */
-.ant-drawer .app-brand { padding: 0 16px; border-bottom: 1px solid #f0f2f5; }
 /* Any logo keeps its proportions and grows until either side reaches the
    160 x 24 box (LOGO_BOX in branding.tsx): the height is set and the width
    follows; a logo wider than the box shrinks inside it. Sizing from the
    height also covers SVGs that declare only a viewBox. */
 .app-brand-logo { display: block; flex: none; width: auto; height: 24px; max-width: 160px; object-fit: contain; object-position: left center; }
-.app-brand-sep { flex: none; width: 1px; height: 16px; background: #dbdde0; }
+.app-brand-sep { flex: none; width: 1px; height: 16px; background: var(--border); }
 .app-brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Shows the logo at its top bar size, inside a top-bar-high strip. */
-.branding-logo-preview { display: inline-flex; height: var(--app-header-height); align-items: center; padding: 0 12px; border: 1px solid #f0f2f5; border-radius: var(--radius-md); background: #fff; }
-.app-nav { padding: 8px 0 12px; border-inline-end: 0 !important; }
-/* Group titles sit 4px left of the item text; the open item reads in 500. */
-.app-nav .ant-menu-item-group-title { height: 24px; margin: 12px 0 2px; padding: 0 16px; line-height: 24px; }
-.app-nav .ant-menu-item-selected { font-weight: 500; }
-/* Folded, an item's name shows in a tooltip; it zooms in at half antd's speed
-   so it lands sooner (the 0.1s hover delay is fixed inside antd's Menu). */
-.ant-menu-inline-collapsed-tooltip.ant-zoom-big-fast-appear,
-.ant-menu-inline-collapsed-tooltip.ant-zoom-big-fast-enter { animation-duration: 0.05s; }
-.mobile-menu-button { display: none; }
+.branding-logo-preview { display: inline-flex; height: var(--app-header-height); align-items: center; padding: 0 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-floating); }
 /* Centered so wide viewports split the leftover margin symmetrically instead
    of piling all of it to the right of the 1600px content cap. */
-.app-content { width: 100%; max-width: 1600px; margin-inline: auto; padding: 20px 24px 32px; }
+/* The shell is one grey canvas (top bar, side menu, frame); the page is a
+   white panel set into it, 12px clear of the right and bottom edges. The
+   window still scrolls, so sticky offsets and viewport heights keep working;
+   the content inside stays capped at 1600px and centred. */
+.app-content { flex: 1 1 auto; min-width: 0; width: 0; min-height: calc(100svh - var(--app-header-height) - var(--app-frame-gap)); margin: 0 var(--app-frame-gap) var(--app-frame-gap) 0; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface-floating); }
+.app-page { max-width: 1600px; margin-inline: auto; padding: 20px 24px 32px; }
 
-/* PageHeader: the title block every page starts with. Sized by its own
-   width (a container), so a page with a side panel narrows it like a phone
-   does. Reading order never changes: breadcrumb, title, description,
-   actions, toolbar. */
-.page-header {
-  container: page-header / inline-size;
-  margin-bottom: 12px;
-  padding: 16px 20px;
-  border: 1px solid #f0f2f5;
-  border-radius: var(--radius-lg);
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
-}
-/* The copy takes the room and pushes the actions right; when the actions no
-   longer fit beside it they wrap under it and start at the left edge. */
-.page-header-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+/* Route-aware composition: Zeron owns header typography and surfaces. */
+/* ui-guidelines 10.1: title 18/600 (Zeron title size) behind a 4x18 blue bar; the breadcrumb
+   (secondary pages only) is a quiet 12px line above it. */
+.page-header { container: page-header / inline-size; margin-bottom: 16px; }
 .page-header-copy { flex: 1 1 280px; min-width: 0; }
-.page-header-breadcrumb { font-size: 12px; line-height: 20px; }
-/* antd darkens the last crumb; here every crumb is a quiet pointer upward. */
-.page-header-breadcrumb li, .page-header-breadcrumb li:last-child, .page-header-breadcrumb .ant-breadcrumb-separator { color: #96989b !important; }
-.page-header-breadcrumb a { color: #707275 !important; }
-.page-header-breadcrumb a:hover { color: #005bd4 !important; background: transparent; }
-.page-header-title {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  margin: 0 !important;
-  color: #181a1d !important;
-  font-size: 20px !important;
-  font-weight: 600 !important;
-  line-height: 28px !important;
-  letter-spacing: 0;
-}
-.page-header-title::before { flex: none; width: 4px; height: 18px; border-radius: 2px; background: linear-gradient(180deg, #005bd4, #4fc3ff); content: ""; }
-.page-header-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.page-header-description { margin: 2px 0 0 !important; overflow: hidden; color: #707275 !important; font-size: 13px; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
-.page-header-extra { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; gap: 8px; }
-.page-header-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 14px -20px 0; padding: 12px 20px 0; border-top: 1px solid #f0f2f5; }
+.page-header-breadcrumb { margin-bottom: 6px; font-size: 12px; line-height: 16px; color: var(--fg-subtle); }
+.page-header-breadcrumb a { color: var(--fg-subtle); }
+.page-header-breadcrumb a:hover { color: var(--fg-brand); }
+.page-header-title { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.page-header-title::before { flex: none; width: 4px; height: 18px; border-radius: 2px; background: linear-gradient(180deg, var(--brand), var(--info-surface-raised)); content: ""; }
+.page-header-description { margin-top: 4px; }
+/* A name that is an antd link button starts flush with its column title, like plain text. */
+.resource-table-name .ant-btn-link { padding-inline: 0; }
+/* Every body cell draws its row rule, so the opaque pinned cells (scrolled
+   columns pass under them) keep it in line; they also draw the row hover. */
+.resource-table-cell { border-bottom: 1px solid var(--border); }
+tbody tr:last-child > .resource-table-cell { border-bottom: 0; }
+tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(--hover), var(--hover)); }
+/* Page-wide controls sit flush with the title, 12px under the header row. */
+.page-header-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
 @container page-header (max-width: 600px) {
-  .page-header-description { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .page-header-extra { flex-basis: 100%; }
 }
 
-.model-type-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.model-type-filter-button {
-  display: inline-flex;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: #fff;
-  color: #4a4c4f;
-  font: inherit;
-  line-height: 30px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
-  cursor: pointer;
-}
-.model-type-filter-button:hover { color: #005bd4; }
-.model-type-filter-button[data-selected="true"] { border-color: #005bd4; color: #005bd4; }
+.model-type-filter { margin-bottom: 16px; }
 .model-resource-card { overflow: hidden; border-radius: 8px; }
 .model-resource-card > .ant-card-body { padding: 0; }
 .model-content-toolbar {
   display: flex;
-  min-height: 68px;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 12px 24px;
-  border-bottom: 1px solid #f0f2f5;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .model-toolbar-actions { display: flex; align-items: center; gap: 8px; }
 .model-resource-filters {
@@ -311,8 +254,8 @@ button, input, textarea, select { letter-spacing: 0; }
   align-items: center;
   gap: 0;
   padding: 6px 16px;
-  border-bottom: 1px solid #dbdde0;
-  background: #f5f7fa;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-base);
 }
 .model-summary-item {
   display: flex;
@@ -320,31 +263,31 @@ button, input, textarea, select { letter-spacing: 0; }
   align-items: baseline;
   gap: 8px;
   padding: 0 16px;
-  border-right: 1px solid #dbdde0;
-  color: #707275;
+  border-right: 1px solid var(--border);
+  color: var(--fg-subtle);
   font-size: 12px;
 }
 .model-summary-item:first-child { padding-left: 0; }
-.model-summary-item strong { color: #181a1d; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.model-summary-item strong { color: var(--fg-default); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .model-filter-result { font-size: 12px; white-space: nowrap; }
 .model-summary-inline { min-height: 0; padding: 0; border-bottom: 0; background: transparent; }
 .model-summary-inline .model-summary-item:last-child { padding-right: 0; border-right: 0; }
 .model-name-link { max-width: 100%; height: auto !important; padding: 0 !important; text-align: left; white-space: normal; }
 .model-row-actions .ant-btn { width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); }
-.model-row-actions .ant-btn-link { color: #707275; }
-.model-row-actions .ant-btn:hover { color: #005bd4 !important; background: #e6f6ff !important; }
-.model-grid-region { min-height: 260px; padding: 24px; }
+.model-row-actions .ant-btn-link { color: var(--fg-subtle); }
+.model-row-actions .ant-btn:hover { color: var(--brand) !important; background: var(--info-surface) !important; }
+.model-grid-region { min-height: 260px; padding: 16px; }
 .model-tile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .model-tile {
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #dbdde0;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface-floating);
   cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease;
 }
-.model-tile:hover, .model-tile:focus-visible { border-color: #005bd4; box-shadow: 0 4px 12px rgba(24, 26, 29, .10); outline: none; }
+.model-tile:hover, .model-tile:focus-visible { border-color: var(--brand); box-shadow: var(--shadow-floating); outline: none; }
 .model-tile-main {
   display: grid;
   min-height: 76px;
@@ -352,9 +295,9 @@ button, input, textarea, select { letter-spacing: 0; }
   align-items: center;
   gap: 16px;
   padding: 10px 14px;
-  border-bottom: 1px solid #dbdde0;
+  border-bottom: 1px solid var(--border);
 }
-.model-tile-logo { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 4px; overflow: hidden; background: #e6f6ff; color: #005bd4; font-size: 20px; }
+.model-tile-logo { display: grid; width: 40px; height: 40px; place-items: center; border-radius: var(--radius-sm); overflow: hidden; background: var(--info-surface); color: var(--brand); font-size: 20px; }
 .model-tile-logo img { width: 100%; height: 100%; object-fit: cover; }
 .model-tile-logo-small { width: 28px; height: 28px; flex: 0 0 28px; font-size: 14px; }
 .model-logo-fallback { font-weight: 700; line-height: 1; }
@@ -375,14 +318,14 @@ button, input, textarea, select { letter-spacing: 0; }
   .model-detail-inference-form > .ant-btn { justify-self: start; }
 }
 .model-tile-copy { min-width: 0; }
-.model-tile-name { display: block; color: #181a1d; font-size: 16px; font-weight: 500; line-height: 24px; }
+.model-tile-name { display: block; color: var(--fg-default); font-size: 16px; font-weight: 500; line-height: 24px; }
 .model-tile-tags { display: flex; min-width: 0; gap: 4px; margin-top: 4px; overflow: hidden; }
 .model-tile-actions { display: flex; align-items: center; gap: 2px; opacity: .72; }
 .model-tile:hover .model-tile-actions, .model-tile:focus-within .model-tile-actions { opacity: 1; }
-.model-tile-actions .ant-btn { width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); color: #707275; }
-.model-tile-actions .ant-btn:hover { color: #005bd4 !important; background: #e6f6ff !important; }
-.model-tile-footer { display: flex; height: 28px; align-items: center; gap: 8px; padding: 0 16px; background: #f5f7fa; color: #707275; font-size: 12px; white-space: nowrap; }
-.model-tile-divider { width: 1px; height: 12px; background: #dbdde0; }
+.model-tile-actions .ant-btn { width: 28px; height: 28px; padding: 0; border-radius: var(--radius-sm); color: var(--fg-subtle); }
+.model-tile-actions .ant-btn:hover { color: var(--brand) !important; background: var(--info-surface) !important; }
+.model-tile-footer { display: flex; height: 28px; align-items: center; gap: 8px; padding: 0 16px; background: var(--surface-base); color: var(--fg-subtle); font-size: 12px; white-space: nowrap; }
+.model-tile-divider { width: 1px; height: 12px; background: var(--border); }
 
 .empty-state {
   display: grid;
@@ -391,7 +334,7 @@ button, input, textarea, select { letter-spacing: 0; }
   align-content: center;
   gap: 8px;
   padding: 12px;
-  color: #96989b;
+  color: var(--fg-subtle);
   font-size: 12px;
   line-height: 16px;
   text-align: center;
@@ -403,75 +346,83 @@ button, input, textarea, select { letter-spacing: 0; }
 .empty-state-compact .empty-state-image { width: 88px; height: 88px; }
 .operational-panel {
   padding: 16px;
-  border: 1px solid #f0f2f5;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  background: #fff;
+  background: var(--surface-floating);
   box-shadow: 0 1px 2px rgba(0, 0, 0, .05);
 }
-.operational-panel + .operational-panel { margin-top: 12px; }
+.operational-panel + .operational-panel { margin-top: 16px; }
 .resource-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(144px, 1fr)); gap: 12px; }
 .resource-stat {
   min-height: 72px;
   padding: 12px 16px;
-  border: 1px solid #f0f2f5;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  background: #fff;
+  background: var(--surface-floating);
 }
-.resource-stat-success { border-color: #c9f7ae; background: #ecfedf; }
-.resource-stat-danger { border-color: #ffc3b2; background: #fff2ea; }
-.resource-stat-label { color: #707275; font-size: 12px; }
-.resource-stat-value { margin-top: 2px; color: #181a1d; font-size: 24px; font-weight: 600; line-height: 32px; }
-.resource-stat-success .resource-stat-value { color: #3ab333; }
-.resource-stat-danger .resource-stat-value { color: #db2e43; }
+.resource-stat-success { border-color: color-mix(in oklab, var(--success-border) 28%, transparent); background: var(--success-surface); }
+.resource-stat-danger { border-color: color-mix(in oklab, var(--danger-border) 28%, transparent); background: var(--danger-surface-subtle); }
+.resource-stat-label { color: var(--fg-subtle); font-size: 12px; }
+.resource-stat-value { margin-top: 2px; color: var(--fg-default); font-size: 24px; font-weight: 600; line-height: 32px; }
+.resource-stat-success .resource-stat-value { color: var(--fg-success); }
+.resource-stat-danger .resource-stat-value { color: var(--fg-danger); }
 .provider-connected-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
 .provider-kind-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+/* The logo sits beside the name and the homepage, which stack in one block. */
 .provider-kind-card {
+  position: relative;
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid #f0f2f5;
-  border-radius: 4px;
-  background: #fff;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 8px 12px 8px 52px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-floating);
   transition: border-color .15s ease, background-color .15s ease;
 }
-.provider-kind-card:hover { border-color: #005bd4; background: #f5f7fa; }
+.provider-kind-card:hover { border-color: var(--brand); background: var(--surface-base); }
 .provider-kind-add {
   display: flex;
   align-items: center;
-  gap: 10px;
   padding: 0;
   border: 0;
   background: none;
-  color: #4a4c4f;
+  color: var(--fg-muted);
   text-align: left;
   cursor: pointer;
 }
-.provider-kind-logo { flex: none; width: 32px; height: 32px; border-radius: 6px; object-fit: contain; }
-.provider-kind-logo-fallback { display: grid; place-items: center; background: #e8eefa; color: #005bd4; font-weight: 600; }
-.provider-kind-homepage { padding-left: 42px; font-size: 12px; }
+/* The whole card adds the platform, logo and padding included; the focus ring is the card's. */
+.provider-kind-add::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.provider-kind-add:focus-visible { outline: none; }
+.provider-kind-add:focus-visible::after { outline: 2px solid var(--focus-ring); outline-offset: 1px; border-radius: var(--radius-sm); }
+.provider-kind-logo { position: absolute; top: 50%; left: 12px; width: 32px; height: 32px; border-radius: var(--radius-md); object-fit: contain; transform: translateY(-50%); }
+.provider-kind-logo-fallback { display: grid; place-items: center; background: var(--info-surface); color: var(--brand); font-weight: 600; }
+/* Above the card-wide add target, so the link keeps its own click. */
+.provider-kind-homepage { position: relative; z-index: 1; align-self: flex-start; font-size: 12px; }
 .mono-value, .ant-statistic-content-value, .ant-table-cell code { font-variant-numeric: tabular-nums; }
-.image-version-disabled > td { color: #96989b !important; background: #fafafa; }
+.image-version-disabled > td { color: var(--fg-subtle) !important; background: var(--surface-base); }
 .image-version-disabled a { opacity: 0.65; }
-.image-version-selected > td { background: #e6f6ff !important; }
+.image-version-selected > td { background: var(--info-surface) !important; }
 .image-version-pick { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .image-version-pick .ant-select { flex: 1; min-width: 0; max-width: 420px; }
 /* A header that explains itself on hover: a dotted underline, the usual hint,
    costs no width where an icon would push a column out of a narrow table. */
-.header-help { cursor: help; text-decoration: underline dotted #96989b; text-underline-offset: 3px; }
+.header-help { cursor: help; text-decoration: underline dotted var(--fg-subtle); text-underline-offset: 3px; }
 .image-version-ref { display: flex; flex-direction: column; line-height: 1.4; }
 .image-version-ref > .ant-typography { font-size: 12px; }
 
 .gpu-page > .ant-tabs > .ant-tabs-nav { margin-bottom: 12px; }
-.gpu-page > .ant-tabs > .ant-tabs-nav::before { border-bottom-color: #dbdde0; }
+.gpu-page > .ant-tabs > .ant-tabs-nav::before { border-bottom-color: var(--border); }
 .gpu-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
 .gpu-overview-card { border-radius: 4px; }
 .gpu-overview-card > .ant-card-body { display: grid; min-height: 150px; grid-template-columns: 124px minmax(0, 1fr); align-items: center; gap: 20px; padding: 16px 20px; }
 .gpu-overview-donut { display: grid; place-items: center; }
-.gpu-overview-donut .ant-progress-text { display: flex; flex-direction: column; color: #181a1d !important; line-height: 1.1; }
+.gpu-overview-donut .ant-progress-text { display: flex; flex-direction: column; color: var(--fg-default) !important; line-height: 1.1; }
 .gpu-overview-donut .ant-progress-text strong { font-size: 24px; }
-.gpu-overview-donut .ant-progress-text small { margin-top: 4px; color: #707275; font-size: 11px; font-weight: 400; }
+.gpu-overview-donut .ant-progress-text small { margin-top: 4px; color: var(--fg-subtle); font-size: 11px; font-weight: 400; }
 .gpu-overview-legend { display: grid; gap: 10px; }
 .gpu-overview-legend > div { display: grid; grid-template-columns: 10px auto 32px; align-items: center; gap: 8px; }
 .gpu-overview-legend > div > span { width: 8px; height: 8px; border-radius: 50%; }
@@ -479,33 +430,33 @@ button, input, textarea, select { letter-spacing: 0; }
 .gpu-overview-legend strong { text-align: right; font-size: 15px; font-variant-numeric: tabular-nums; }
 .gpu-table-card { overflow: hidden; border-radius: 4px; }
 .gpu-table-card > .ant-card-body { padding: 0; }
-.gpu-toolbar { display: flex; min-height: 56px; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #dbdde0; }
+.gpu-toolbar { display: flex; min-height: 56px; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
 .gpu-result-count { margin-left: auto; }
 .gpu-clickable-row { cursor: pointer; }
-.gpu-clickable-row:hover > td { background: #e6f6ff !important; }
+.gpu-clickable-row:hover > td { background: var(--info-surface) !important; }
 .dgpu-note { margin-bottom: 12px; }
 .gpu-load-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.gpu-load-tile { display: grid; min-height: 76px; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #dbdde0; border-radius: 4px; background: #f9fafb; }
-.gpu-load-tile > span { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 2px; background: #e6f6ff; color: #005bd4; font-size: 16px; }
+.gpu-load-tile { display: grid; min-height: 76px; grid-template-columns: 32px minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #f9fafb; }
+.gpu-load-tile > span { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 2px; background: var(--info-surface); color: var(--brand); font-size: 16px; }
 .gpu-load-tile div { min-width: 0; }
 .gpu-load-tile .ant-typography { display: block; font-size: 11px; }
-.gpu-load-tile strong { display: block; margin-top: 2px; color: #181a1d; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.gpu-load-tile strong { display: block; margin-top: 2px; color: var(--fg-default); font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .gpu-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
-.gpu-chart { min-width: 0; padding: 12px; border: 1px solid #dbdde0; border-radius: 4px; }
+.gpu-chart { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .gpu-chart > .ant-typography { display: block; margin-bottom: 8px; font-size: 13px; }
-.gpu-memory-composition-bar { position: relative; display: flex; height: 22px; overflow: visible; border: 1px solid #dbdde0; border-radius: 4px; background: #f0f2f5; }
-.gpu-memory-composition-bar > span { height: 100%; min-width: 2px; border-right: 1px solid #ffffff; }
+.gpu-memory-composition-bar { position: relative; display: flex; height: 22px; overflow: visible; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--border-subtle); }
+.gpu-memory-composition-bar > span { height: 100%; min-width: 2px; border-right: 1px solid var(--surface-floating); }
 .gpu-memory-composition-bar > span:last-of-type { border-right: 0; }
 .gpu-memory-composition-bar > span.is-overhead,
 .gpu-memory-composition-legend .gpu-memory-swatch.is-overhead { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.55) 0 3px, transparent 3px 6px); }
-.gpu-memory-composition-bar > i { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #181a1d; }
+.gpu-memory-composition-bar > i { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--fg-default); }
 .gpu-memory-composition-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 4px 16px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 12px; }
 .gpu-memory-composition-legend li { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .gpu-memory-composition-legend .gpu-memory-swatch { flex: none; width: 10px; height: 10px; border-radius: 2px; }
-.gpu-memory-composition-legend .gpu-memory-swatch.is-marker { width: 2px; height: 12px; border-radius: 0; background: #181a1d; }
+.gpu-memory-composition-legend .gpu-memory-swatch.is-marker { width: 2px; height: 12px; border-radius: 0; background: var(--fg-default); }
 .gpu-memory-composition-legend li > .ant-typography { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gpu-memory-composition-legend li > .ant-typography:last-child { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
-.gpu-column-help { border-bottom: 1px dashed #96989b; cursor: help; }
+.gpu-column-help { border-bottom: 1px dashed var(--fg-subtle); cursor: help; }
 .gpu-memory-composition-note { display: block; margin-top: 8px; font-size: 12px; }
 
 .ant-btn { transition: color .15s ease, background-color .15s ease, border-color .15s ease, transform .15s ease; }
@@ -515,56 +466,56 @@ button, input, textarea, select { letter-spacing: 0; }
    button faded: its colour and white text stay, at half opacity, and it takes
    no clicks; antd's own grey on grey read as a different, broken button.
    Views adopt it one at a time; the detail drawers do. */
-.faded-disabled .ant-btn-variant-solid:disabled, .faded-disabled .ant-btn-variant-solid.ant-btn-disabled { color: #fff !important; border-color: transparent !important; opacity: .5; }
-.faded-disabled .ant-btn-primary:not(.ant-btn-dangerous):disabled { background: #005bd4 !important; }
-.faded-disabled .ant-btn-dangerous.ant-btn-variant-solid:disabled { background: #f93940 !important; }
+.faded-disabled .ant-btn-variant-solid:disabled, .faded-disabled .ant-btn-variant-solid.ant-btn-disabled { color: var(--fg-on-primary-action) !important; border-color: transparent !important; opacity: .5; }
+.faded-disabled .ant-btn-primary:not(.ant-btn-dangerous):disabled { background: var(--brand) !important; }
+.faded-disabled .ant-btn-dangerous.ant-btn-variant-solid:disabled { background: var(--destructive-action) !important; }
 /* Elsewhere a disabled primary button keeps antd's disabled look; forcing the
    brand blue on it too left grey disabled text on a blue button that looked
    clickable. */
-.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled) { background: #005bd4 !important; }
-.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):hover { background: #0043b1 !important; }
-.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):active { background: #052e82 !important; }
-.ant-card { border-color: #f0f2f5; }
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled) { background: var(--brand) !important; }
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):hover { background: var(--brand-hover) !important; }
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):active { background: var(--brand-active) !important; }
+.ant-card { border-color: var(--border-subtle); }
 .ant-card:not(.ant-card-bordered) { box-shadow: 0 1px 3px rgba(0, 0, 0, .1), 0 1px 2px -1px rgba(0, 0, 0, .1); }
-.ant-card-head { border-bottom-color: #dbdde0; background: #f5f7fa; }
-.ant-card-head-title { color: #181a1d; font-size: 14px; font-weight: 600; }
-.ant-input-number, .ant-picker, .ant-select-selector { border-color: #c8cacd !important; }
-.ant-input-number:hover, .ant-picker:hover, .ant-select-selector:hover { border-color: #005bd4 !important; }
+.ant-card-head { border-bottom-color: var(--border); background: var(--surface-base); }
+.ant-card-head-title { color: var(--fg-default); font-size: 14px; font-weight: 600; }
+.ant-input-number, .ant-picker, .ant-select-selector { border-color: var(--input) !important; }
+.ant-input-number:hover, .ant-picker:hover, .ant-select-selector:hover { border-color: var(--brand) !important; }
 .ant-form-item-explain, .ant-form-item-extra { min-height: 20px; font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
-.ant-table-wrapper .ant-table { color: #4a4c4f; }
-.ant-table-wrapper .ant-table-thead > tr > th { height: 36px; color: #707275; font-weight: 400; }
-.ant-table-wrapper .ant-table-tbody > tr > td { min-height: 40px; border-bottom-color: #dbdde0; }
-.ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected > td { color: #005bd4; background: #e6f6ff; }
-.ant-pagination .ant-pagination-item-active { border-color: #005bd4; background: transparent; }
+.ant-table-wrapper .ant-table { color: var(--fg-muted); }
+.ant-table-wrapper .ant-table-thead > tr > th { height: 36px; color: var(--fg-subtle); font-weight: 400; }
+.ant-table-wrapper .ant-table-tbody > tr > td { min-height: 40px; border-bottom-color: var(--border); }
+.ant-table-wrapper .ant-table-tbody > tr.ant-table-row-selected > td { color: var(--brand); background: var(--info-surface); }
+.ant-pagination .ant-pagination-item-active { border-color: var(--brand); background: transparent; }
 .ant-tag { max-width: 280px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; white-space: nowrap; }
-.ant-alert-error { border-color: #ffc3b2 !important; background: #fff2ea !important; }
-.ant-alert-error .ant-alert-icon, .ant-alert-error .ant-alert-message, .ant-alert-error .ant-alert-description { color: #db2e43 !important; }
+.ant-alert-error { border-color: color-mix(in oklab, var(--danger-border) 28%, transparent) !important; background: var(--danger-surface-subtle) !important; }
+.ant-alert-error .ant-alert-icon, .ant-alert-error .ant-alert-message, .ant-alert-error .ant-alert-description { color: var(--fg-danger) !important; }
 .ant-segmented-item-selected, .ant-radio-button-wrapper-checked:not(.ant-radio-button-wrapper-disabled) {
-  border-color: #005bd4 !important;
-  background: #005bd4 !important;
-  color: #fff !important;
+  border-color: var(--brand) !important;
+  background: var(--brand) !important;
+  color: var(--fg-on-primary-action) !important;
 }
 .ant-modal-mask { background: rgba(24, 26, 29, .3) !important; }
 .ant-modal-content { display: flex; max-height: 80vh; flex-direction: column; padding: 0 !important; overflow: hidden; }
 /* A fixed 48px header painted a wrapped title over the body. The content's
    80vh cap and the body's flex shrink replace the old body max-height, which
    assumed this header stayed 48px. */
-.ant-modal-header { min-height: 48px; height: auto; flex: none; margin: 0 !important; padding: 12px 24px !important; border-bottom: 1px solid #dbdde0 !important; }
-.ant-modal-title { color: #181a1d !important; font-size: 16px !important; font-weight: 400 !important; line-height: 24px !important; }
+.ant-modal-header { min-height: 48px; height: auto; flex: none; margin: 0 !important; padding: 12px 24px !important; border-bottom: 1px solid var(--border) !important; }
+.ant-modal-title { color: var(--fg-default) !important; font-size: 16px !important; font-weight: 400 !important; line-height: 24px !important; }
 .ant-modal-close { top: 8px !important; right: 12px !important; border-radius: var(--radius-sm) !important; }
 .ant-modal-body { min-height: 0; flex: 1 1 auto; padding: 24px 24px 40px !important; overflow: auto; overscroll-behavior: contain; }
-.ant-modal-footer { min-height: 60px; flex: none; margin: 0 !important; padding: 14px 24px !important; border-top: 1px solid #dbdde0 !important; }
+.ant-modal-footer { min-height: 60px; flex: none; margin: 0 !important; padding: 14px 24px !important; border-top: 1px solid var(--border) !important; }
 
 .provider-config-modal .ant-modal-body { padding: 20px 24px 28px !important; }
 .provider-config-form .ant-form-item { margin-bottom: 16px; }
 .provider-config-form .ant-form-item-row { flex-wrap: nowrap; }
 .provider-config-form .ant-form-item-label { flex: 0 0 140px !important; padding: 5px 20px 0 0; }
-.provider-config-form .ant-form-item-label > label { width: 100%; height: auto; color: #4a4c4f; }
+.provider-config-form .ant-form-item-label > label { width: 100%; height: auto; color: var(--fg-muted); }
 .provider-config-form .ant-form-item-control { min-width: 0; }
 .provider-config-form .ant-input,
 .provider-config-form .ant-input-affix-wrapper,
 .provider-config-form .ant-select-selector {
-  border: 1px solid #c8cacd !important;
+  border: 1px solid var(--input) !important;
   border-radius: 2px !important;
   box-shadow: none !important;
 }
@@ -575,13 +526,13 @@ button, input, textarea, select { letter-spacing: 0; }
 .provider-config-form .ant-input:hover,
 .provider-config-form .ant-input-affix-wrapper:hover,
 .provider-config-form .ant-select:not(.ant-select-disabled):hover .ant-select-selector {
-  border-color: #005bd4 !important;
+  border-color: var(--brand) !important;
 }
 .provider-config-form .ant-input:focus,
 .provider-config-form .ant-input-affix-wrapper-focused,
 .provider-config-form .ant-select-focused .ant-select-selector {
-  border-color: #005bd4 !important;
-  box-shadow: 0 0 0 2px #e6f6ff !important;
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 2px var(--info-surface) !important;
 }
 .provider-config-form .ant-input-affix-wrapper-focused .ant-input {
   box-shadow: none !important;
@@ -589,9 +540,9 @@ button, input, textarea, select { letter-spacing: 0; }
 .provider-config-form .ant-input[disabled],
 .provider-config-form .ant-input-affix-wrapper-disabled,
 .provider-config-form .ant-select-disabled .ant-select-selector {
-  border-color: #c8cacd !important;
-  background: #f5f7fa !important;
-  color: #96989b !important;
+  border-color: var(--input) !important;
+  background: var(--surface-base) !important;
+  color: var(--fg-subtle) !important;
 }
 .provider-modal-section-title {
   display: flex;
@@ -599,14 +550,14 @@ button, input, textarea, select { letter-spacing: 0; }
   align-items: center;
   gap: 10px;
   margin: 0 0 16px;
-  color: #181a1d;
+  color: var(--fg-default);
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
 }
-.provider-modal-section-title::before { width: 4px; height: 16px; flex: none; background: #0076f7; content: ""; }
+.provider-modal-section-title::before { width: 4px; height: 16px; flex: none; background: var(--chart-1); content: ""; }
 .provider-modal-credential-title { margin-top: 4px; }
-.provider-credential-hint { margin: -4px 0 0 140px; color: #707275; font-size: 12px; line-height: 20px; }
+.provider-credential-hint { margin: -4px 0 0 140px; color: var(--fg-subtle); font-size: 12px; line-height: 20px; }
 .provider-install-modal .ant-modal-body { padding-bottom: 28px !important; }
 
 .auth-page { display: grid; min-height: 100vh; place-items: center; padding: 32px 16px; overflow: hidden; background: #eaf6ff; }
@@ -618,29 +569,29 @@ button, input, textarea, select { letter-spacing: 0; }
   grid-template-columns: 320px minmax(0, 1fr);
   overflow: hidden;
   border-radius: var(--radius-lg);
-  background: #fff;
+  background: var(--surface-floating);
   box-shadow: 0 4px 8px rgba(0, 0, 0, .12);
 }
-.auth-brand-panel { position: relative; padding: 72px 38px; overflow: hidden; border-right: 1px solid #f0f2f5; background: #f7faff; color: #181a1d; }
+.auth-brand-panel { position: relative; padding: 72px 38px; overflow: hidden; border-right: 1px solid var(--border-subtle); background: var(--surface-base); color: var(--fg-default); }
 .auth-brand-content { position: relative; z-index: 1; }
-.auth-brand-name { margin: 16px 0 0; color: #181a1d; font-size: 24px; font-weight: 600; overflow-wrap: anywhere; }
-.auth-brand-copy { margin-top: 16px; color: #4a4c4f; font-size: 14px; line-height: 22px; white-space: pre-line; overflow-wrap: anywhere; }
+.auth-brand-name { margin: 16px 0 0; color: var(--fg-default); font-size: 24px; font-weight: 600; overflow-wrap: anywhere; }
+.auth-brand-copy { margin-top: 16px; color: var(--fg-muted); font-size: 14px; line-height: 22px; white-space: pre-line; overflow-wrap: anywhere; }
 .auth-brand-panel .app-brand-logo { height: 36px; max-width: 240px; }
 .auth-form-panel { display: flex; flex-direction: column; justify-content: center; padding: 48px 60px; }
-.auth-title { margin: 0 0 28px !important; color: #181a1d !important; font-size: 24px !important; line-height: 32px !important; }
+.auth-title { margin: 0 0 28px !important; color: var(--fg-default) !important; font-size: 24px !important; line-height: 32px !important; }
 .auth-error-slot { height: 72px; min-height: 72px; overflow: auto; }
 .auth-submit { width: 100%; height: 40px; font-size: 15px; font-weight: 600; }
+.auth-forgot { margin-top: 12px; display: flex; justify-content: flex-end; }
 .auth-form-panel .ant-input-affix-wrapper { border-radius: var(--radius-md); }
 
+@media (max-width: 1279px) {
+  .app-page { padding: 16px 20px 24px; }
+}
 @media (max-width: 991px) {
-  .desktop-sider { display: none; }
-  .mobile-menu-button { display: inline-flex; }
-  .app-content { padding: 16px; }
+  .app-page { padding: 16px; }
 }
 @media (max-width: 767px) {
   .app-header-user { display: none; }
-  .page-header { padding: 12px 16px; }
-  .page-header-toolbar { margin-inline: -16px; padding-inline: 16px; }
   .model-content-toolbar { display: block; padding: 12px; }
   .model-toolbar-actions { justify-content: space-between; }
   .model-resource-filters { width: 100%; margin-top: 12px; grid-template-columns: 1fr 1fr; }
@@ -659,19 +610,19 @@ button, input, textarea, select { letter-spacing: 0; }
   }
   .model-summary-item:first-child { padding-left: 10px; }
   .model-summary-item:nth-child(2) { border-right: 0; }
-  .model-summary-item:nth-child(n + 3) { border-top: 1px solid #dbdde0; }
+  .model-summary-item:nth-child(n + 3) { border-top: 1px solid var(--border); }
   .model-summary-item:nth-child(4) { border-right: 0; }
   .model-filter-result {
     grid-column: 1 / -1;
     min-width: 0;
     margin-left: 0;
     padding: 8px 10px 2px;
-    border-top: 1px solid #dbdde0;
+    border-top: 1px solid var(--border);
   }
   .model-grid-region { padding: 12px; }
   .model-tile-grid { grid-template-columns: 1fr; gap: 12px; }
   .model-tile-main { grid-template-columns: 40px minmax(0, 1fr); }
-  .model-tile-actions { grid-column: 1 / -1; justify-content: flex-end; border-top: 1px solid #f0f2f5; padding-top: 8px; }
+  .model-tile-actions { grid-column: 1 / -1; justify-content: flex-end; border-top: 1px solid var(--border-subtle); padding-top: 8px; }
   .auth-shell { display: block; min-height: 0; }
   .auth-brand-panel { padding: 24px; }
   .auth-brand-panel .auth-brand-copy { display: none; }
@@ -781,9 +732,16 @@ button, input, textarea, select { letter-spacing: 0; }
 .node-doctor-target { padding-left: 12px; border-left: 2px solid rgba(128, 128, 128, 0.25); }
 
 /* Shared resource list (components/resourceTable). */
-.resource-table-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 12px; }
+/* Search and filters on the left, list actions on the right, on one line:
+   when space runs out the filters wrap inside the left side, and the right
+   side stays pinned to the top right (never a lone half-row of its own). */
+.resource-table-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .resource-table-toolbar-left { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-.resource-table-toolbar-right { flex: 0 0 auto; margin-left: auto; }
+.resource-table-toolbar-right { flex: 0 0 auto; margin-left: auto; min-height: 32px; }
+.resource-table { container: resource-table / inline-size; }
+/* Filters in effect, between the toolbar and the table. */
+.resource-table-filters { margin: -4px 0 12px; }
+@container resource-table (max-width: 640px) { .resource-table-toolbar { flex-wrap: wrap; } }
 .resource-table-updated { font-size: 12px; white-space: nowrap; }
 .resource-table .ant-table-thead > tr > th { white-space: nowrap; }
 .resource-table .ant-table-placeholder > td { height: 204px; }
@@ -794,21 +752,14 @@ button, input, textarea, select { letter-spacing: 0; }
 .resource-table .ant-table .ant-table-tbody > .ant-table-placeholder > td > .ant-table-expanded-row-fixed { max-width: 100%; margin-inline: 0; }
 .resource-table-resizer { position: absolute; top: 0; right: -4px; z-index: 3; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
 .resource-table-resizer::after { content: ""; position: absolute; top: 25%; left: 3px; width: 2px; height: 50%; border-radius: 1px; background: transparent; transition: background .15s; }
-.resource-table .ant-table-thead > tr > th:hover .resource-table-resizer::after,
-.resource-table-resizer:focus-visible::after { background: #b4b7bb; }
+.resource-table th:hover .resource-table-resizer::after,
+.resource-table-resizer:focus-visible::after { background: var(--border-strong); }
 .resource-table-resizer:focus-visible { outline: none; }
 .resource-table .resource-table-name-cell .ant-btn-link { height: auto; padding: 0; max-width: 100%; }
 .resource-table .resource-table-name-cell .ant-btn-link > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.resource-table-sub { display: block; overflow: hidden; color: #707275; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.resource-table-sub { display: block; overflow: hidden; color: var(--fg-subtle); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .resource-table-settings-panes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .resource-table-settings-heading { display: block; margin-bottom: 8px; }
-.resource-table-settings-selected { padding: 4px; border-radius: 4px; background: #f5f7fa; }
-.resource-table-settings-item { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 4px 0 8px; border-radius: 4px; background: #f5f7fa; }
-.resource-table-settings-item:hover { background: #e9ecf0; }
-.resource-table-settings-handle { color: #96989b; cursor: grab; }
-.resource-table-settings-locked { color: #96989b; }
-.resource-table-settings-locked .resource-table-settings-handle { cursor: default; }
-.resource-table-settings-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .resource-table-settings-all { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
 .resource-table-settings-all .ant-checkbox-wrapper { margin-inline-start: 0; }
 @media (max-width: 640px) { .resource-table-settings-panes { grid-template-columns: 1fr; } }
@@ -827,16 +778,11 @@ button, input, textarea, select { letter-spacing: 0; }
 .model-name-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .model-name-cell .model-name-link { min-width: 0; overflow: hidden; white-space: nowrap; }
 .model-name-cell .model-name-link > span { overflow: hidden; text-overflow: ellipsis; }
-.model-resource-card .resource-table-toolbar { margin: 0; padding: 12px 24px; }
-/* The card has no body padding: the table's outer cells take the toolbar's
-   24px inset so the names line up with the search box, and rows still span
-   the card. */
-.model-resource-card .ant-table-thead > tr > th:first-child,
-.model-resource-card .ant-table-tbody > tr:not(.ant-table-measure-row) > td:first-child { padding-inline-start: 24px; }
-.model-resource-card .ant-table-thead > tr > th:last-child,
-.model-resource-card .ant-table-tbody > tr:not(.ant-table-measure-row) > td:last-child { padding-inline-end: 24px; }
-.model-resource-card .ant-table-pagination.ant-pagination { padding: 0 24px; }
-.model-grid-region .resource-table-toolbar { padding: 0 0 16px; }
+/* One 16px inset inside the card for every row: the action bar, the search
+   and filters, and the cards or the table (the table keeps its own frame, like
+   every other list), so their left edges line up. */
+.model-resource-card .ant-card-body > .resource-table { padding: 16px; }
+.model-grid-region .resource-table-toolbar { margin-bottom: 16px; }
 .model-grid-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 
 /* Bound each other drawer to the workspace beside the resident assistant.
@@ -930,7 +876,7 @@ button, input, textarea, select { letter-spacing: 0; }
   padding: 6px 8px;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.85);
-  color: #fff;
+  color: var(--fg-on-primary-action);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -974,7 +920,7 @@ button, input, textarea, select { letter-spacing: 0; }
   outline: none;
 }
 .monitor-latency-bar > span:focus-visible {
-  box-shadow: 0 0 0 2px #005bd4;
+  box-shadow: 0 0 0 2px var(--brand);
 }
 /* The health check's last checks, oldest on the left. */
 .monitor-health-strip {
@@ -990,7 +936,7 @@ button, input, textarea, select { letter-spacing: 0; }
   outline: none;
 }
 .monitor-health-strip > span:focus-visible {
-  box-shadow: 0 0 0 2px #005bd4;
+  box-shadow: 0 0 0 2px var(--brand);
 }
 .monitor-latency-legend {
   display: flex;
@@ -1026,10 +972,10 @@ button, input, textarea, select { letter-spacing: 0; }
 }
 .monitor-request-row:hover,
 .monitor-request-row:focus-visible {
-  background: var(--ant-color-fill-tertiary, #f5f7fa);
+  background: var(--ant-color-fill-tertiary, var(--surface-base));
 }
 .monitor-request-row:focus-visible {
-  box-shadow: inset 0 0 0 2px #005bd4;
+  box-shadow: inset 0 0 0 2px var(--brand);
 }
 .monitor-request-who {
   grid-area: who;
@@ -1045,7 +991,7 @@ button, input, textarea, select { letter-spacing: 0; }
   min-width: 0;
   font-size: 12px;
   line-height: 1.25;
-  color: #4a4c4f;
+  color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
 }
 .monitor-request-size > span {
@@ -1093,6 +1039,6 @@ button, input, textarea, select { letter-spacing: 0; }
 }
 
 /* Logo crop dialog: the image fits the dialog; the preview copies the mark. */
-.logo-crop-stage { display: flex; justify-content: center; padding: 12px; background: repeating-conic-gradient(#f0f2f5 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
+.logo-crop-stage { display: flex; justify-content: center; padding: 12px; background: repeating-conic-gradient(var(--border-subtle) 0 25%, var(--surface-floating) 0 50%) 0 0 / 16px 16px; }
 .logo-crop-image { display: block; max-width: 100%; max-height: 360px; }
-.logo-crop-preview { display: inline-flex; height: var(--app-header-height); align-items: center; padding: 0 12px; border: 1px solid #f0f2f5; border-radius: var(--radius-md); background: #fff; }
+.logo-crop-preview { display: inline-flex; height: var(--app-header-height); align-items: center; padding: 0 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-floating); }

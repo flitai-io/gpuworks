@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Upload a runner image archive to the offline-download share on Aliyun Drive (PDS).
+"""Upload an image archive to the offline-download share on Aliyun Drive (PDS).
 
 The share is the folder that docs/how-to/deploy-offline.md links to; it holds
 one directory per engine and framework (vllm-cuda/, sglang-dtk/, ...) with
-files named gpuworks-runner_<tag>_linux-<arch>.tar.gz. The API key this uses
+files named gpuworks-runner_<tag>_linux-<arch>.tar.gz, and gpuworks-agent/
+with the Kubernetes agent image, gpuworks-agent_<revision>_linux-<arch>.tar.gz
+(build/agent-image). The API key this uses
 can upload and rename but cannot delete, so every upload is permanent: the
 script refuses to overwrite a file that already exists, and --dry-run checks
 the destination without writing anything.
@@ -41,7 +43,7 @@ PART_BYTES = 256 << 20
 SEND_CHUNK = 4 << 20
 WORKERS = 16
 RENEW_MARGIN = 600  # re-sign a part URL this many seconds before it expires
-NAME = re.compile(r"^gpuworks-runner_[A-Za-z0-9._-]+_linux-(amd64|arm64)\.tar\.gz$")
+NAME = re.compile(r"^gpuworks-(runner|agent)_[A-Za-z0-9._-]+_linux-(amd64|arm64)\.tar\.gz$")
 
 
 def api(domain, key, path, body):
@@ -157,14 +159,14 @@ def sha1_part_contexts(path, part_bytes, parts):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("archive", help="gpuworks-runner_<tag>_linux-<arch>.tar.gz")
+    parser.add_argument("archive", help="gpuworks-runner_<tag>_linux-<arch>.tar.gz or gpuworks-agent_<revision>_linux-<arch>.tar.gz")
     parser.add_argument("folder", help="share subdirectory, e.g. vllm-dtk")
     parser.add_argument("--dry-run", action="store_true", help="check the destination, upload nothing")
     args = parser.parse_args()
 
     name = os.path.basename(args.archive)
     if not NAME.match(name):
-        raise SystemExit("archive name must be gpuworks-runner_<tag>_linux-<arch>.tar.gz, got %s" % name)
+        raise SystemExit("archive name must be gpuworks-runner_<tag>_linux-<arch>.tar.gz or gpuworks-agent_<revision>_linux-<arch>.tar.gz, got %s" % name)
     domain, key = os.environ.get("PDS_DOMAIN_ID"), os.environ.get("PDS_API_KEY")
     if not domain or not key:
         raise SystemExit("PDS_DOMAIN_ID and PDS_API_KEY must be set")

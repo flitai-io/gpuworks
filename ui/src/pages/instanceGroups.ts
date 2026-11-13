@@ -56,6 +56,63 @@ export function orderByGeneration(instances: Instance[]): Instance[] {
   return slots.flatMap((slot) => (typeof slot === "string" ? [...groups.get(slot)!].sort(rankOrder) : [slot]));
 }
 
+// launchedUnit is the unit class a leader was started for. The server keeps
+// it on a failed attempt after that attempt no longer fills a slot. Ordinary
+// replicas share one key: it names the class, not one replica.
+function launchedUnit(inst: Instance): string | undefined {
+  const key = inst.schedule?.unit?.key;
+  return key ? key : undefined;
+}
+
+// sharedReplicaClass is an ordinary single-rank key (one "|" segment). Every
+// replica of that deployment carries it. A multi-node or PD key names one unit.
+function sharedReplicaClass(key: string): boolean {
+  return key.startsWith("|") && key.indexOf("|", 1) === -1;
+}
+
+// previousAttempts are failed rows that do not fill a slot while another
+// listed row fills that same unit. One ordinary replica being up does not
+// make a failed sibling a previous attempt; that happens only once every
+// replica is filled. Rows from before unit keys are previous only on a
+// single-replica deployment. A lone failure stays the current instance.
+export function previousAttempts(instances: Instance[], replicas: number): Set<string> {
+  const slots = Math.max(1, replicas || 1);
+  const filled = new Map<string, number>();
+  let unkeyedFilled = 0;
+  let recorded = false;
+  for (const inst of instances) {
+    const key = launchedUnit(inst);
+    if (key) recorded = true;
+    if (!inst.replica) continue;
+    if (key) filled.set(key, (filled.get(key) ?? 0) + 1);
+    else unkeyedFilled += 1;
+  }
+  const previous = new Set<string>();
+  for (const inst of instances) {
+    if (inst.state !== "failed" || inst.replica) continue;
+    const key = launchedUnit(inst);
+    if (key) {
+      const occupying = filled.get(key) ?? 0;
+      if (occupying === 0) continue;
+      if (sharedReplicaClass(key) && slots > 1 && occupying < slots) continue;
+      previous.add(inst.uuid);
+      continue;
+    }
+    if (!recorded && slots === 1 && unkeyedFilled === 1) previous.add(inst.uuid);
+  }
+  return previous;
+}
+
+// orderInstances keeps a generation's ranks together, then lists whatever
+// fills a replica before the previous attempts of that same replica.
+export function orderInstances(instances: Instance[], replicas: number): { instances: Instance[]; previous: Set<string> } {
+  const previous = previousAttempts(instances, replicas);
+  const current: Instance[] = [];
+  const past: Instance[] = [];
+  for (const inst of orderByGeneration(instances)) (previous.has(inst.uuid) ? past : current).push(inst);
+  return { instances: [...current, ...past], previous };
+}
+
 // distRank describes a multi-node rank, undefined for a single-rank replica.
 export function distRank(inst: Instance, instances: Instance[]): DistRank | undefined {
   if (!isMultiNodeRank(inst)) return undefined;

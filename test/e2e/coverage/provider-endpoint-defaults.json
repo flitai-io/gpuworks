@@ -3,7 +3,7 @@
   "test_file": "test/e2e/provider_endpoint_defaults.py",
   "test_function": "test_provider_endpoint_defaults",
   "contract_id": "gpuworks/provider/create-endpoint-defaults",
-  "command": "make test-e2e-provider-endpoint-defaults",
+  "command": "python3 -B test/e2e/provider_endpoint_defaults.py",
   "jira": [
     "ZSTAC-89797"
   ],

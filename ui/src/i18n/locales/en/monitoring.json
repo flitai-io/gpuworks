@@ -105,7 +105,8 @@
       "engine": "Inference engine",
       "gateway": "Gateway",
       "kv_disk": "KV cache disk",
-      "benchmark": "Benchmark"
+      "benchmark": "Benchmark",
+      "peer_transfer": "Peer transfers"
     },
     "requestUrl": "Request: {{url}}",
     "empty": "No data for this selection",

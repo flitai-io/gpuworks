@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../../api";
 import { apiErrorText } from "../../apiError";
 import { useIsAdmin } from "../../components/useIsAdmin";
+import { OutboundHostAccess, useOutboundHostAccess } from "../../components/OutboundHostAccess";
 import { resetTraceLinkCache } from "../monitor/useTraceLink";
 import type { TelemetryExport, TelemetryExportTest, TelemetryExportUpdate } from "../../telemetryApi";
 
@@ -71,6 +72,7 @@ export default function TelemetryCard() {
   const isAdmin = useIsAdmin();
   const [current, setCurrent] = useState<TelemetryExport>();
   const [draft, setDraft] = useState<Draft>();
+  const outboundAccess = useOutboundHostAccess([draft?.endpoint ?? ""], isAdmin && !!draft);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -100,6 +102,7 @@ export default function TelemetryCard() {
     if (!draft) return;
     setSaving(true);
     try {
+      await outboundAccess.authorize();
       const saved = await api.updateTelemetryExport(updateOf(draft));
       setCurrent(saved);
       setDraft(draftOf(saved));
@@ -117,6 +120,7 @@ export default function TelemetryCard() {
     setTesting(true);
     setTest(undefined);
     try {
+      await outboundAccess.authorize();
       setTest(await api.testTelemetryExport(updateOf(draft)));
     } catch (error) {
       setTest({ ok: false, error: apiErrorText(tCommon, error), trace_id: "", traces_url: "" });
@@ -166,6 +170,7 @@ export default function TelemetryCard() {
                   onChange={(e) => edit({ endpoint: e.target.value })}
                 />
               </Form.Item>
+              <OutboundHostAccess access={outboundAccess} />
               <Form.Item label={t("telemetry.headers")} extra={t("telemetry.headersHelp")} style={{ marginBottom: 12 }}>
                 <Space direction="vertical" size={6} style={{ width: "100%" }}>
                   {draft.headers.map((h, i) => (

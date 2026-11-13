@@ -58,7 +58,6 @@ func TestDebugSessionUpstreamEOFBeforeHeadersKeepsReadFailure(t *testing.T) {
 			logs := &syncBuffer{}
 			p, key, closeUpstream := newObservedProxy(t, upstream, logs)
 			t.Cleanup(closeUpstream)
-			t.Cleanup(func() { _ = p.store.Close() })
 			if wrapped {
 				// Exercise the same ReverseProxy ErrorHandler with a wrapped EOF.
 				p.rp.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -106,7 +105,6 @@ func TestDebugSessionUpstreamTruncationKeepsReadFailure(t *testing.T) {
 	logs := &syncBuffer{}
 	p, key, closeUpstream := newObservedProxy(t, upstream, logs)
 	defer closeUpstream()
-	t.Cleanup(func() { _ = p.store.Close() })
 	recorder := &oneCaptureRecorder{}
 	p.SetRequestRecorder(recorder)
 	front := httptest.NewServer(p.Handler())
@@ -145,7 +143,6 @@ func TestDebugSessionClientWriteFailureKeepsObservedBoundary(t *testing.T) {
 	logs := &syncBuffer{}
 	p, key, closeUpstream := newObservedProxy(t, upstream, logs)
 	defer closeUpstream()
-	t.Cleanup(func() { _ = p.store.Close() })
 	recorder := &oneCaptureRecorder{}
 	p.SetRequestRecorder(recorder)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"omni"}`))

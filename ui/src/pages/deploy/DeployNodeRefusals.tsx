@@ -1,11 +1,12 @@
 import { Alert, Collapse, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { nodeConditionSummary, type NodeRefusal } from "./deployPlacementRefusal";
+import ModelDiskRegistrationLink from "./ModelDiskRegistrationLink";
 
 const SHOWN = 5;
 function RefusalList({ items }: { items: NodeRefusal[] }) {
   return <ul className="deploy-node-refusals" style={{ margin: 0, paddingInlineStart: 18 }}>
-    {items.map((item) => <li key={item.uuid}><strong>{item.name}</strong>{item.reason ? `: ${item.reason}` : ""}</li>)}
+    {items.map((item) => <li key={item.uuid}><strong>{item.name}</strong>{item.reason ? `: ${item.reason}` : ""}{item.modelId && <> <ModelDiskRegistrationLink modelId={item.modelId} /></>}</li>)}
   </ul>;
 }
 

@@ -256,7 +256,7 @@ func TestInspectImageAcceptsMultipleObjectsFirstLine(t *testing.T) {
 }
 
 func TestBuildRunArgsPinsNamespaceFirst(t *testing.T) {
-	args := buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-test", Image: "fake"})
+	args := New().buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-test", Image: "fake"})
 	if len(args) < 2 || args[0] != "-n" || args[1] != Namespace {
 		t.Fatalf("nerdctl args must start with -n %s, got %v", Namespace, args)
 	}
@@ -274,7 +274,7 @@ func TestBuildRunArgsOverrideOfficialImageEntrypoints(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := buildRunArgs(runtime.WorkloadSpec{
+			args := New().buildRunArgs(runtime.WorkloadSpec{
 				Name: tt.name, Image: tt.image, Entrypoint: tt.entrypoint, Cmd: tt.cmd,
 			})
 			assertContainsPair(t, args, "--entrypoint", tt.entrypoint[0])
@@ -292,7 +292,7 @@ func TestBuildRunArgsOverrideOfficialImageEntrypoints(t *testing.T) {
 }
 
 func TestBuildRunArgsUsesInjectedDockerArgsAndEnv(t *testing.T) {
-	args := buildRunArgs(runtime.WorkloadSpec{
+	args := New().buildRunArgs(runtime.WorkloadSpec{
 		Name:       "gpuworks-test",
 		Image:      "vllm/vllm-openai:latest",
 		DockerArgs: []string{"--gpus", "device=2,4"},
@@ -306,7 +306,7 @@ func TestBuildRunArgsUsesInjectedDockerArgsAndEnv(t *testing.T) {
 func TestBuildRunArgsHostNetworkAlwaysUsesHostFlag(t *testing.T) {
 	// Unlike the docker driver, nerdctl only targets Linux hosts (no Docker
 	// Desktop VM indirection), so --network host is unconditional.
-	args := buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-host", Image: "fake", HostNetwork: true, Ports: []int{30000}})
+	args := New().buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-host", Image: "fake", HostNetwork: true, Ports: []int{30000}})
 	assertContainsPair(t, args, "--network", "host")
 	assertNotContains(t, args, "-p")
 }
@@ -314,7 +314,7 @@ func TestBuildRunArgsHostNetworkAlwaysUsesHostFlag(t *testing.T) {
 func TestBuildRunArgsOmitsRestartPolicy(t *testing.T) {
 	// nerdctl has no persistent daemon behind it; --restart is meaningless
 	// there, unlike for the docker driver which always sets --restart=no.
-	args := buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-test", Image: "fake"})
+	args := New().buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-test", Image: "fake"})
 	assertNotContains(t, args, "--restart")
 }
 
@@ -415,7 +415,7 @@ func TestBuildRunArgsExpandsDeviceDirectories(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "by-path"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	args := buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-rdma", Image: "fake", DockerArgs: []string{
+	args := New().buildRunArgs(runtime.WorkloadSpec{Name: "gpuworks-rdma", Image: "fake", DockerArgs: []string{
 		"--device", dir, "--device=" + dir + ":/dev/ib:rw", "--device", "/dev/davinci3", "--ulimit", "memlock=-1",
 	}})
 	got := strings.Join(args, " ")
@@ -430,5 +430,26 @@ func TestBuildRunArgsExpandsDeviceDirectories(t *testing.T) {
 	}
 	if strings.Contains(got, "--device "+dir+" ") || strings.Contains(got, "by-path") {
 		t.Fatalf("directory passed through or subdirectory expanded: %s", got)
+	}
+}
+
+func TestNewInNamespacePinsEveryCommandToThatNamespace(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args")
+	installFakeNerdctl(t, "printf '%s\\n' \"$*\" >> '"+argsFile+"'\nexit 0")
+	d := NewInNamespace("k8s.io")
+	if _, err := d.ListContainers(context.Background()); err != nil {
+		t.Fatalf("ListContainers: %v", err)
+	}
+	if err := d.TagImage(context.Background(), "a:1", "b:1"); err != nil {
+		t.Fatalf("TagImage: %v", err)
+	}
+	args, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(args)), "\n") {
+		if !strings.HasPrefix(line, "-n k8s.io ") {
+			t.Fatalf("nerdctl argv %q is not pinned to k8s.io", line)
+		}
 	}
 }

@@ -24,6 +24,17 @@ from platform_token_read_revoke import check
 
 # Contract: gpuworks/image-runtime/in-use-remove
 # Mainline: 自有CPU agent实际获取归档，真实容器占用镜像 → UI确认删除被Docker拒绝409并显示对象/原因 → 独立GET和刷新仍present、digest与容器PID/启动时间不变且exec可用 → 释放自有消费者后UI再次删除 → GET/刷新absent且Docker镜像消失，目录版本保留 → 清理自有资源。
+def open_row_actions(page, row, text):
+    """The row's inspect, repull and remove live in its expanded detail, which the table renders
+    outside the row element, so the action is reached through the container itself."""
+    expand = row.locator(".detail-expand").first
+    if expand.get_attribute("aria-expanded") != "true":
+        expand.click()
+    scope = page.locator(".detail-extra-actions").filter(has_text=text["nodeTable"]["remove"])
+    expect(scope).to_have_count(1)
+    return scope
+
+
 def test_in_use_remove(page, server, fixture, artifacts, report, locale):
     text = strings(locale)
     name, series, version = seed(page, server, fixture, report)
@@ -81,7 +92,7 @@ def test_in_use_remove(page, server, fixture, artifacts, report, locale):
     row = open_row(page, text, name, fixture)
     expect(row.get_by_text(text["state"]["present"], exact=True)).to_be_visible()
     confirmation = text["nodeTable"]["removeConfirm"].replace("{{ref}}", fixture.image_ref).replace("{{node}}", fixture.node_name)
-    button(row, text["nodeTable"]["remove"]).click()
+    open_row_actions(page, row, text).get_by_role("button", name=text["nodeTable"]["remove"], exact=True).click()
     popup = page.get_by_role("tooltip").filter(has_text=confirmation)
     expect(popup).to_be_in_viewport(ratio=1)
     expect(popup.get_by_text(confirmation, exact=True)).to_be_visible()
@@ -141,7 +152,7 @@ def test_in_use_remove(page, server, fixture, artifacts, report, locale):
     check(fixture.docker(["container", "inspect", container_id], check=False).returncode != 0, "fixture consumer was not released")
     check(fixture.docker(["image", "inspect", "--format", "{{.Id}}", fixture.image_ref]).stdout.strip() == fixture.image_id,
           "releasing consumer unexpectedly removed image before UI retry")
-    button(row, text["nodeTable"]["remove"]).click()
+    open_row_actions(page, row, text).get_by_role("button", name=text["nodeTable"]["remove"], exact=True).click()
     expect(popup).to_be_in_viewport(ratio=1)
     with page.expect_response(lambda r: urlsplit(r.url).path == path and r.request.method == "DELETE") as removed, \
             page.expect_response(lambda r: version_refresh_after(r, 2)) as removal_refresh:

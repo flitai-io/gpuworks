@@ -1,0 +1,424 @@
+"use client";
+import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode, } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Collapsible } from "@base-ui/react/collapsible";
+import { useDirection } from "@base-ui/react/direction-provider";
+import { cn } from "@/lib/utils";
+import { useSurface, SurfaceProvider } from "@/lib/surface-context";
+import { resolveSurface, shadowClasses, type ShadowRole } from "@/lib/surface-classes";
+import { useIcon } from "@/lib/icon-context";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { MobileDrawer } from "@/components/ui/mobile-drawer";
+export const SIDEBAR_MOBILE_QUERY = "(max-width: 1279px)";
+export const SIDEBAR_COLLAPSED_WIDTH = "calc(var(--control-height-xl) + var(--spacing) + var(--spacing) + var(--spacing) + var(--spacing))";
+export type SidebarState = "expanded" | "collapsed";
+export type SidebarVariant = "sidebar" | "floating";
+export type SidebarCollapsible = "offcanvas" | "icon" | "none";
+export type SidebarSide = "start" | "end";
+export type SidebarBreakpointBehavior = "drawer" | "collapse";
+export interface SidebarProviderProps {
+    children: ReactNode;
+    defaultOpen?: boolean;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    defaultMobileOpen?: boolean;
+    mobileOpen?: boolean;
+    onMobileOpenChange?: (open: boolean) => void;
+    persistenceKey?: string;
+    keyboardShortcut?: string;
+    /** How the sidebar adapts below SIDEBAR_MOBILE_QUERY. */
+    breakpointBehavior?: SidebarBreakpointBehavior;
+}
+export interface SidebarContextValue {
+    state: SidebarState;
+    open: boolean;
+    setOpen: (open: boolean) => void;
+    mobileOpen: boolean;
+    setMobileOpen: (open: boolean) => void;
+    isMobile: boolean;
+    breakpointBehavior: SidebarBreakpointBehavior;
+    /** True while the compact breakpoint shows the collapsed persistent Sidebar. */
+    isBreakpointCollapsed: boolean;
+    triggerRef: React.RefObject<HTMLElement | null>;
+    /** Set the element that should regain focus after the next compact-drawer close. */
+    setActiveTrigger: (trigger: HTMLElement | null) => void;
+    toggle: () => void;
+    closeMobile: () => void;
+}
+const SidebarContext = createContext<SidebarContextValue | null>(null);
+function subscribeToSidebarBreakpoint(listener: () => void) {
+    const media = window.matchMedia(SIDEBAR_MOBILE_QUERY);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+}
+function getSidebarBreakpointSnapshot() {
+    return window.matchMedia(SIDEBAR_MOBILE_QUERY).matches;
+}
+function useSidebarMobile() {
+    return useSyncExternalStore(subscribeToSidebarBreakpoint, getSidebarBreakpointSnapshot, () => false);
+}
+export function useSidebar() {
+    const context = useContext(SidebarContext);
+    if (!context)
+        throw new Error("useSidebar must be used within a SidebarProvider");
+    return context;
+}
+function isEditableTarget(target: EventTarget | null) {
+    if (!(target instanceof HTMLElement))
+        return false;
+    const tagName = target.tagName;
+    return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT" || target.isContentEditable;
+}
+const SidebarProvider = ({ children, defaultOpen = true, open: openProp, onOpenChange, defaultMobileOpen = false, mobileOpen: mobileOpenProp, onMobileOpenChange, persistenceKey, keyboardShortcut, breakpointBehavior = "drawer", }: SidebarProviderProps) => {
+    const [internalOpen, setInternalOpen] = useState(defaultOpen);
+    const [internalMobileOpen, setInternalMobileOpen] = useState(defaultMobileOpen);
+    const [compactOpen, setCompactOpen] = useState(false);
+    const triggerRef = useRef<HTMLElement | null>(null);
+    const finalFocusPreparedRef = useRef(false);
+    const previousMobileOpenRef = useRef(defaultMobileOpen);
+    const isMobile = useSidebarMobile();
+    const preferredOpen = openProp ?? internalOpen;
+    const compactCollapse = breakpointBehavior === "collapse" && isMobile;
+    const isBreakpointCollapsed = compactCollapse && !compactOpen;
+    const open = compactCollapse ? compactOpen : preferredOpen;
+    const mobileOpen = mobileOpenProp ?? internalMobileOpen;
+    const mobileOpenRef = useRef(mobileOpen);
+    const state: SidebarState = open ? "expanded" : "collapsed";
+    useEffect(() => {
+        mobileOpenRef.current = mobileOpen;
+    }, [mobileOpen]);
+    const setOpen = useCallback((nextOpen: boolean) => {
+        if (compactCollapse) {
+            setCompactOpen(nextOpen);
+            return;
+        }
+        if (openProp === undefined)
+            setInternalOpen(nextOpen);
+        onOpenChange?.(nextOpen);
+    }, [compactCollapse, onOpenChange, openProp]);
+    useEffect(() => {
+        if (!compactCollapse)
+            setCompactOpen(false);
+    }, [compactCollapse]);
+    const setMobileOpen = useCallback((nextOpen: boolean) => {
+        if (nextOpen && !mobileOpenRef.current) {
+            // A programmatic open cannot infer which element initiated it. Clear a
+            // previous session's owner unless the caller explicitly supplied one
+            // with setActiveTrigger() immediately before opening.
+            if (!finalFocusPreparedRef.current)
+                triggerRef.current = null;
+        }
+        if (mobileOpenProp === undefined)
+            setInternalMobileOpen(nextOpen);
+        onMobileOpenChange?.(nextOpen);
+    }, [mobileOpenProp, onMobileOpenChange]);
+    const setActiveTrigger = useCallback((trigger: HTMLElement | null) => {
+        triggerRef.current = trigger;
+        finalFocusPreparedRef.current = true;
+    }, []);
+    const closeMobile = useCallback(() => setMobileOpen(false), [setMobileOpen]);
+    const toggle = useCallback(() => {
+        if (isMobile && breakpointBehavior === "drawer")
+            setMobileOpen(!mobileOpen);
+        else
+            setOpen(!open);
+    }, [breakpointBehavior, isMobile, mobileOpen, open, setMobileOpen, setOpen]);
+    useEffect(() => {
+        const wasMobileOpen = previousMobileOpenRef.current;
+        if (mobileOpen && !wasMobileOpen) {
+            // Also handles consumers that control mobileOpen directly instead of
+            // opening through setMobileOpen(). A direct open without an explicitly
+            // prepared owner must never reuse a previous drawer session's trigger.
+            if (!finalFocusPreparedRef.current)
+                triggerRef.current = null;
+            finalFocusPreparedRef.current = false;
+        }
+        previousMobileOpenRef.current = mobileOpen;
+    }, [mobileOpen]);
+    useEffect(() => {
+        if (!persistenceKey || openProp !== undefined)
+            return;
+        try {
+            const stored = window.localStorage.getItem(persistenceKey);
+            if (stored === "open" || stored === "closed")
+                setInternalOpen(stored === "open");
+        }
+        catch {
+            // Storage is optional; the controlled/default state remains authoritative.
+        }
+    }, [openProp, persistenceKey]);
+    useEffect(() => {
+        if (!persistenceKey || openProp !== undefined)
+            return;
+        try {
+            window.localStorage.setItem(persistenceKey, preferredOpen ? "open" : "closed");
+        }
+        catch {
+            // Best-effort persistence only.
+        }
+    }, [openProp, persistenceKey, preferredOpen]);
+    useEffect(() => {
+        if (!mobileOpen || (breakpointBehavior === "drawer" && isMobile))
+            return;
+        setMobileOpen(false);
+        const trigger = triggerRef.current;
+        if (trigger?.isConnected)
+            trigger.focus();
+    }, [breakpointBehavior, isMobile, mobileOpen, setMobileOpen]);
+    useEffect(() => {
+        if (!keyboardShortcut)
+            return;
+        const normalized = keyboardShortcut.toLowerCase();
+        const match = normalized.match(/^mod\+(.+)$/);
+        if (!match)
+            return;
+        const key = match[1];
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (isEditableTarget(event.target))
+                return;
+            if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== key)
+                return;
+            event.preventDefault();
+            if (breakpointBehavior === "drawer" && isMobile && !mobileOpen) {
+                const activeElement = document.activeElement;
+                setActiveTrigger(activeElement instanceof HTMLElement &&
+                    activeElement !== document.body &&
+                    activeElement.isConnected
+                    ? activeElement
+                    : null);
+            }
+            toggle();
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [breakpointBehavior, isMobile, keyboardShortcut, mobileOpen, setActiveTrigger, toggle]);
+    const value = useMemo<SidebarContextValue>(() => ({
+        state,
+        open,
+        setOpen,
+        mobileOpen,
+        setMobileOpen,
+        isMobile,
+        breakpointBehavior,
+        isBreakpointCollapsed,
+        triggerRef,
+        setActiveTrigger,
+        toggle,
+        closeMobile,
+    }), [breakpointBehavior, closeMobile, isBreakpointCollapsed, isMobile, mobileOpen, open, setActiveTrigger, setMobileOpen, setOpen, state, toggle]);
+    return <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>;
+};
+SidebarProvider.displayName = "SidebarProvider";
+export interface SidebarProps extends ComponentPropsWithoutRef<"div"> {
+    variant?: SidebarVariant;
+    collapsible?: SidebarCollapsible;
+    width?: string;
+    collapsedWidth?: string;
+    mobileWidth?: string;
+    /** Accessible name shared by the desktop aside and compact drawer. */
+    ariaLabel?: string;
+    /** Logical edge occupied by the sidebar. */
+    side?: SidebarSide;
+    /** @deprecated Use ariaLabel. */
+    mobileLabel?: string;
+}
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(({ variant = "sidebar", collapsible = "offcanvas", width = "16rem", collapsedWidth = SIDEBAR_COLLAPSED_WIDTH, mobileWidth = "16rem", ariaLabel, side = "start", mobileLabel, className, children, style, dir: dirProp, ...props }, forwardedRef) => {
+    const { state, isMobile, mobileOpen, closeMobile, triggerRef, breakpointBehavior } = useSidebar();
+    const reduceMotion = useReducedMotion() ?? false;
+    const contextDir = useDirection();
+    const dir = dirProp ?? contextDir;
+    const parentSurface = useSurface();
+    const surface = variant === "floating" ? resolveSurface(parentSurface, "raised") : parentSurface;
+    const resolvedAriaLabel = ariaLabel ?? mobileLabel ?? "Navigation";
+    const visualState: SidebarState = collapsible === "none" ? "expanded" : state;
+    const panelWidth = visualState === "collapsed" && collapsible === "icon"
+        ? collapsedWidth
+        : width;
+    const offcanvas = visualState === "collapsed" && collapsible === "offcanvas";
+    const physicalLeft = (side === "start") === (dir !== "rtl");
+    const offcanvasX = physicalLeft ? "-100%" : "100%";
+    const sidebarTransition = reduceMotion
+        ? { duration: 0 }
+        : { type: "tween" as const, duration: 0.24, ease: [0.65, 0, 0.35, 1] as const };
+    const rootStyle = {
+        ...style,
+        "--sidebar-width": width,
+        "--sidebar-width-collapsed": collapsedWidth,
+        "--sidebar-width-mobile": mobileWidth,
+    } as CSSProperties;
+    const renderPanel = (mobile: boolean) => (<aside data-slot="sidebar-panel" aria-label={resolvedAriaLabel} className={cn("flex h-full min-h-0 flex-col overflow-hidden", !mobile && variant === "sidebar" && cn("border-border-subtle", side === "start" ? "border-e-hairline" : "border-s-hairline"), !mobile && variant === "floating" && cn("m-2 h-[calc(100%-1rem)] border border-border-subtle", "rounded-xl"), !mobile && variant === "floating" && shadowClasses("raised"))}>
+        {mobile ? children : <SurfaceProvider role={surface}>{children}</SurfaceProvider>}
+      </aside>);
+    if (isMobile && breakpointBehavior === "drawer") {
+        return (<MobileDrawer open={mobileOpen} onClose={closeMobile} triggerRef={triggerRef} ariaLabel={resolvedAriaLabel} dir={dir} side={side} panelClassName="overflow-hidden p-0" panelStyle={{ width: mobileWidth }}>
+          <div ref={forwardedRef} data-slot="sidebar" data-state="expanded" data-collapsible={collapsible} data-variant={variant} data-side={side} data-mobile="true" className={cn("group/sidebar h-full", className)} style={rootStyle} dir={dir} {...props}>
+            {renderPanel(true)}
+          </div>
+        </MobileDrawer>);
+    }
+    return (<div ref={forwardedRef} data-slot="sidebar" data-state={visualState} data-collapsible={collapsible} data-variant={variant} data-side={side} data-breakpoint-behavior={breakpointBehavior} data-mobile="false" className={cn("group/sidebar sticky top-0 h-svh shrink-0", className, breakpointBehavior === "drawer"
+            ? "hidden xl:block"
+            : isMobile
+                ? "block"
+                : "block max-xl:hidden")} style={rootStyle} dir={dir} {...props}>
+        <motion.div aria-hidden="true" data-slot="sidebar-gap" className="h-full" initial={false} animate={{ width: offcanvas ? 0 : panelWidth }} transition={sidebarTransition}/>
+        <motion.div data-slot="sidebar-panel-wrapper" className={cn("absolute inset-y-0 overflow-hidden", physicalLeft ? "left-0" : "right-0")} initial={false} animate={{
+            width: panelWidth,
+            x: offcanvas ? offcanvasX : 0,
+            opacity: offcanvas ? 0 : 1,
+        }} transition={sidebarTransition}>
+          {renderPanel(false)}
+        </motion.div>
+      </div>);
+});
+Sidebar.displayName = "Sidebar";
+export interface SidebarTriggerProps extends Omit<ComponentPropsWithoutRef<typeof Button>, "children"> {
+    /** Replaces the default state-aware menu, collapse, or expand icon. */
+    icon?: ReactNode;
+    /** Shown in the collapsed rail until hover or keyboard focus reveals the expand icon. */
+    collapsedIcon?: ReactNode;
+    label?: string;
+}
+const SidebarTrigger = forwardRef<HTMLButtonElement, SidebarTriggerProps>(({ icon, collapsedIcon, label = "Toggle sidebar", className, onClick, size, ...props }, forwardedRef) => {
+    const { breakpointBehavior, isMobile, mobileOpen, state, toggle, setActiveTrigger } = useSidebar();
+    const MenuIcon = useIcon("menu");
+    const CollapseIcon = useIcon("layout-align-right");
+    const ExpandIcon = useIcon("layout-align-left");
+    const compactDrawer = breakpointBehavior === "drawer" && isMobile;
+    const collapsed = state === "collapsed" && !compactDrawer;
+    const showCollapsedIcon = collapsed && icon == null && collapsedIcon != null;
+    const resolvedSize = size ?? (collapsed ? "xl" : "lg");
+    const Icon = compactDrawer ? MenuIcon : state === "collapsed" ? ExpandIcon : CollapseIcon;
+    return (<Button ref={forwardedRef} variant="ghost" iconOnly size={resolvedSize} className={cn(showCollapsedIcon && "group/sidebar-expand", className)} aria-label={label} onClick={(event) => {
+            onClick?.(event);
+            if (event.defaultPrevented)
+                return;
+            // Only an external closed → open trigger owns final focus. The
+            // matching close button rendered inside the drawer must not replace
+            // the owner with an element that is about to unmount.
+            if (compactDrawer && !mobileOpen)
+                setActiveTrigger(event.currentTarget);
+            toggle();
+        }} {...props}>
+        {icon ?? (showCollapsedIcon ? (<span aria-hidden="true" className="relative flex size-8 items-center justify-center">
+            <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-fast group-hover/sidebar-expand:opacity-0 group-focus-visible/sidebar-expand:opacity-0 motion-reduce:transition-none">{collapsedIcon}</span>
+            <ExpandIcon className="absolute opacity-0 transition-opacity duration-fast group-hover/sidebar-expand:opacity-100 group-focus-visible/sidebar-expand:opacity-100 motion-reduce:transition-none" size={20} strokeWidth={1.5}/>
+          </span>) : <Icon aria-hidden="true" size={resolvedSize === "xl" ? 20 : 16} strokeWidth={1.5}/>)}
+      </Button>);
+});
+SidebarTrigger.displayName = "SidebarTrigger";
+export interface SidebarFloatingTriggerProps extends Omit<ComponentPropsWithoutRef<typeof Button>, "children"> {
+    /** The Sidebar collapse mode that exposes this trigger. */
+    collapsedBehavior?: SidebarCollapsible;
+    /** Accessible label for the collapsed-navigation trigger. */
+    label?: string;
+    /** Accessible label used when a breakpoint-forced collapse changes the trigger into a menu button. */
+    menuLabel?: string;
+    /** Renders the complete navigation panel; call close() after an in-place navigation action. */
+    renderContent: (controls: {
+        close: () => void;
+    }) => ReactNode;
+    /** Classes for the anchored navigation popover. */
+    contentClassName?: string;
+    /** Classes for the popover's managed background surface. */
+    surfaceClassName?: string;
+    /** Spatial separation for the popover's managed background surface. */
+    surfaceShadow?: ShadowRole;
+    /** Click behavior after a user collapse. Breakpoint-forced collapse always opens the floating menu. */
+    clickBehavior?: "expand" | "menu";
+}
+const SidebarFloatingTrigger = forwardRef<HTMLButtonElement, SidebarFloatingTriggerProps>(({ collapsedBehavior = "offcanvas", clickBehavior = "expand", contentClassName, surfaceClassName, surfaceShadow, label = "Expand sidebar", menuLabel = "Open sidebar menu", renderContent, className, onClick, ...props }, forwardedRef) => {
+    const { breakpointBehavior, isBreakpointCollapsed, isMobile, state, toggle } = useSidebar();
+    const [open, setOpen] = useState(false);
+    const MenuIcon = useIcon("menu");
+    const ExpandIcon = useIcon("layout-align-left");
+    const supportsBreakpointCollapse = breakpointBehavior === "collapse" && collapsedBehavior === "offcanvas";
+    const visible = state === "collapsed" && collapsedBehavior === "offcanvas" && (!isMobile || supportsBreakpointCollapse);
+    const opensMenuOnClick = isBreakpointCollapsed || clickBehavior === "menu";
+    const Icon = opensMenuOnClick ? MenuIcon : ExpandIcon;
+    useEffect(() => {
+        if (!visible)
+            setOpen(false);
+    }, [visible]);
+    if (!visible && !supportsBreakpointCollapse)
+        return null;
+    return (<Popover trigger="hover" open={open} onOpenChange={setOpen}>
+        <PopoverTrigger render={<Button ref={forwardedRef} variant="tertiary" iconOnly size="sm" aria-label={opensMenuOnClick ? menuLabel : label} active={open} className={cn(!visible && "hidden", supportsBreakpointCollapse && state !== "collapsed" && "max-xl:inline-flex", className)} onClick={(event) => {
+                onClick?.(event);
+                if (event.defaultPrevented)
+                    return;
+                if (!opensMenuOnClick) {
+                    setOpen(false);
+                    toggle();
+                }
+            }} {...props}>
+              <Icon aria-hidden="true" size={16} strokeWidth={1.5}/>
+            </Button>}/>
+        <PopoverContent align="start" side="bottom" sideOffset={6} className={cn("flex min-h-0 flex-col overflow-hidden", contentClassName)} surfaceClassName={surfaceClassName} surfaceShadow={surfaceShadow}>
+          {renderContent({ close: () => setOpen(false) })}
+        </PopoverContent>
+      </Popover>);
+});
+SidebarFloatingTrigger.displayName = "SidebarFloatingTrigger";
+export type SidebarRailProps = ComponentPropsWithoutRef<"button">;
+const SidebarRail = forwardRef<HTMLButtonElement, SidebarRailProps>(({ className, onClick, ...props }, ref) => {
+    const { toggle } = useSidebar();
+    return (<button ref={ref} type="button" tabIndex={-1} aria-hidden="true" data-slot="sidebar-rail" onClick={(event) => {
+            onClick?.(event);
+            if (!event.defaultPrevented)
+                toggle();
+        }} className={cn("absolute inset-y-0 -end-2 z-raised hidden w-4 cursor-pointer xl:block", "group-data-[side=end]/sidebar:end-auto group-data-[side=end]/sidebar:start-[-0.5rem]", className)} {...props}/>);
+});
+SidebarRail.displayName = "SidebarRail";
+export type SidebarHeaderProps = ComponentPropsWithoutRef<"div">;
+export type SidebarFooterProps = ComponentPropsWithoutRef<"div">;
+export interface SidebarContentProps extends ComponentPropsWithoutRef<"div"> {
+    viewportClassName?: string;
+    contentClassName?: string;
+}
+export interface SidebarGroupProps extends Omit<ComponentPropsWithoutRef<typeof Collapsible.Root>, "render"> {
+    /** Enables the label trigger and collapsible group content. */
+    collapsible?: boolean;
+}
+export type SidebarGroupLabelProps = ComponentPropsWithoutRef<"div">;
+export interface SidebarGroupTriggerProps extends ComponentPropsWithoutRef<typeof Collapsible.Trigger> {
+    indicator?: ReactNode;
+}
+export type SidebarGroupActionProps = Omit<ComponentPropsWithoutRef<typeof Button>, "size" | "variant">;
+export type SidebarGroupContentProps = ComponentPropsWithoutRef<typeof Collapsible.Panel>;
+export type SidebarSeparatorProps = ComponentPropsWithoutRef<"hr">;
+const SidebarHeader = forwardRef<HTMLDivElement, SidebarHeaderProps>(({ className, ...props }, ref) => (<div ref={ref} data-slot="sidebar-header" className={cn("shrink-0 p-3 group-data-[state=collapsed]/sidebar:p-2", className)} {...props}/>));
+SidebarHeader.displayName = "SidebarHeader";
+const SidebarContent = forwardRef<HTMLDivElement, SidebarContentProps>(({ className, viewportClassName, contentClassName, children, ...props }, ref) => (<ScrollArea ref={ref} data-slot="sidebar-content" className={cn("min-h-0 min-w-0 flex-1", className)} viewportClassName={cn("h-full overflow-x-hidden", viewportClassName)}>
+    <div data-slot="sidebar-content-inner" className={cn("flex min-h-full w-full min-w-0 flex-col gap-4 px-1 py-1.5 transition-[gap] duration-slow ease-[cubic-bezier(0.65,0,0.35,1)] motion-reduce:transition-none", "group-data-[state=collapsed]/sidebar:gap-0 group-data-[collapsible=icon]/sidebar:px-2", contentClassName)} {...props}>
+      {children}
+    </div>
+  </ScrollArea>));
+SidebarContent.displayName = "SidebarContent";
+const SidebarFooter = forwardRef<HTMLDivElement, SidebarFooterProps>(({ className, ...props }, ref) => (<div ref={ref} data-slot="sidebar-footer" className={cn("shrink-0 p-3", className)} {...props}/>));
+SidebarFooter.displayName = "SidebarFooter";
+const SidebarGroup = forwardRef<HTMLElement, SidebarGroupProps>(({ collapsible = false, open, defaultOpen = true, disabled, className, ...props }, ref) => (<Collapsible.Root ref={ref as React.Ref<HTMLDivElement>} render={<section />} open={collapsible ? open : true} defaultOpen={collapsible && open === undefined ? defaultOpen : undefined} disabled={collapsible ? disabled : true} data-slot="sidebar-group" data-collapsible={collapsible ? "true" : "false"} className={cn("group/sidebar-group relative min-w-0", className)} {...props}/>));
+SidebarGroup.displayName = "SidebarGroup";
+const SidebarGroupLabel = forwardRef<HTMLDivElement, SidebarGroupLabelProps>(({ className, children, ...props }, ref) => (<div ref={ref} data-slot="sidebar-group-label" className={cn("grid grid-rows-[1fr] overflow-hidden px-2 pb-1.5 text-label text-fg-muted transition-[grid-template-rows,opacity,padding,visibility] duration-slow ease-[cubic-bezier(0.65,0,0.35,1)]", "group-data-[state=collapsed]/sidebar:grid-rows-[0fr] group-data-[state=collapsed]/sidebar:pb-0 group-data-[state=collapsed]/sidebar:opacity-0 group-data-[state=collapsed]/sidebar:invisible motion-reduce:transition-none", className)} {...props}>
+    <span className="min-h-0 overflow-hidden">{children}</span>
+  </div>));
+SidebarGroupLabel.displayName = "SidebarGroupLabel";
+const SidebarGroupTrigger = forwardRef<HTMLButtonElement, SidebarGroupTriggerProps>(({ className, children, indicator, type = "button", ...props }, ref) => {
+    const Chevron = useIcon("chevron-right");
+    return (<Collapsible.Trigger ref={ref} type={type} data-slot="sidebar-group-trigger" className={cn("group/sidebar-group-trigger mb-1.5 flex h-control-xs w-full items-center gap-1.5 px-2 text-start text-label text-fg-muted outline-none", "transition-colors duration-fast hover:text-fg-default focus-visible:ring-1 focus-visible:ring-focus-ring", "group-data-[state=collapsed]/sidebar:hidden", "rounded-lg", className)} {...props}>
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {indicator ?? (<Chevron aria-hidden="true" size={14} strokeWidth={1.5} className="shrink-0 transition-transform duration-fast group-data-[panel-open]/sidebar-group-trigger:rotate-90 motion-reduce:transition-none"/>)}
+    </Collapsible.Trigger>);
+});
+SidebarGroupTrigger.displayName = "SidebarGroupTrigger";
+const SidebarGroupAction = forwardRef<HTMLButtonElement, SidebarGroupActionProps>(({ className, type = "button", ...props }, ref) => (<Button ref={ref} type={type} variant="ghost" iconOnly size="sm" data-slot="sidebar-group-action" className={cn("absolute right-1 top-0 text-fg-muted group-data-[state=collapsed]/sidebar:hidden", className)} {...props}/>));
+SidebarGroupAction.displayName = "SidebarGroupAction";
+const SidebarGroupContent = forwardRef<HTMLDivElement, SidebarGroupContentProps>(({ className, children, ...props }, ref) => (<Collapsible.Panel ref={ref} keepMounted data-slot="sidebar-group-content" className={cn("grid w-full min-w-0 grid-rows-[1fr] transition-[grid-template-rows,opacity] duration-moderate", "data-[starting-style]:grid-rows-[0fr] data-[starting-style]:opacity-0", "data-[ending-style]:grid-rows-[0fr] data-[ending-style]:opacity-0", "motion-reduce:transition-none", className)} {...props}>
+    <div className="min-h-0 min-w-0 w-full">{children}</div>
+  </Collapsible.Panel>));
+SidebarGroupContent.displayName = "SidebarGroupContent";
+const SidebarSeparator = forwardRef<HTMLHRElement, SidebarSeparatorProps>(({ className, ...props }, ref) => (<hr ref={ref} data-slot="sidebar-separator" className={cn("mx-3 border-border", className)} {...props}/>));
+SidebarSeparator.displayName = "SidebarSeparator";
+export { SidebarProvider, Sidebar, SidebarTrigger, SidebarFloatingTrigger, SidebarRail, SidebarHeader, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarGroupTrigger, SidebarGroupAction, SidebarGroupContent, SidebarSeparator, };

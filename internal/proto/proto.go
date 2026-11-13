@@ -23,15 +23,17 @@ const (
 
 // Stream kinds (first-frame stream header).
 const (
-	StreamCtrl       = "ctrl"        // agent opens; connection-lifetime; bidirectional JSON Lines
-	StreamMetrics    = "metrics"     // agent opens; snappy+prompb batches
-	StreamLogtail    = "logtail"     // server opens on demand
-	StreamTunnel     = "tunnel"      // server opens per data-plane request
-	StreamModelRead  = "model.read"  // server opens; agent streams a tar archive of a model dir
-	StreamModelWrite = "model.write" // server opens; agent receives a tar archive into a model dir
-	StreamImageRead  = "image.read"  // server opens; agent streams docker save output
-	StreamImageWrite = "image.write" // server opens; agent receives docker load input
-	StreamTerminal   = "terminal"    // server opens; interactive pty, see terminal.go
+	StreamCtrl             = "ctrl"               // agent opens; connection-lifetime; bidirectional JSON Lines
+	StreamMetrics          = "metrics"            // agent opens; snappy+prompb batches
+	StreamLogtail          = "logtail"            // server opens on demand
+	StreamTunnel           = "tunnel"             // server opens per data-plane request
+	StreamPeerRelaySend    = "peer.relay.send"    // server opens; source RPC on data, result on ctrl
+	StreamPeerRelayReceive = "peer.relay.receive" // server opens; target-owned receiver only
+	StreamModelRead        = "model.read"         // server opens; agent streams a tar archive of a model dir
+	StreamModelWrite       = "model.write"        // server opens; agent receives a tar archive into a model dir
+	StreamImageRead        = "image.read"         // server opens; agent streams docker save output
+	StreamImageWrite       = "image.write"        // server opens; agent receives docker load input
+	StreamTerminal         = "terminal"           // server opens; interactive pty, see terminal.go
 	// StreamLargeFileRead is a bounded single-file read (header Dst = absolute
 	// path on the node). It exists because the server occasionally needs a file
 	// that already exists on a node — a tokenizer.json the model directory
@@ -65,7 +67,7 @@ const (
 
 func LaneFor(kind string) string {
 	switch kind {
-	case StreamLogtail, StreamTunnel, StreamModelRead, StreamModelWrite, StreamImageRead, StreamImageWrite, StreamLargeFileRead, StreamAgentUpgrade,
+	case StreamPeerRelaySend, StreamPeerRelayReceive, StreamLogtail, StreamTunnel, StreamModelRead, StreamModelWrite, StreamImageRead, StreamImageWrite, StreamLargeFileRead, StreamAgentUpgrade,
 		StreamStorageUpload, StreamStorageDownload, StreamDiagnosticsRead:
 		return LaneData
 	default:
@@ -111,6 +113,10 @@ const (
 	// CapUpgradePush: the agent accepts StreamAgentUpgrade. Older agents only
 	// upgrade by pulling /dl/ after the agent.upgrade RPC.
 	CapUpgradePush = "upgrade.push"
+	// CapKubeBinaryUpgrade: an agent of a Kubernetes DaemonSet that runs from
+	// a binary on the node's state directory, so its upgrade replaces the
+	// binary like any agent's. Without it the DaemonSet's image is changed.
+	CapKubeBinaryUpgrade = "upgrade.kube_binary"
 	// CapImagePullCandidates: image.pull accepts the whole candidate list and
 	// the agent walks it itself.
 	CapImagePullCandidates = "image.pull.candidates"
@@ -118,6 +124,8 @@ const (
 	CapNetworkUpdate = "state.update.network"
 	// CapConnectionDiagnostics serves a lightweight connection snapshot over ctrl.
 	CapConnectionDiagnostics = "node.connection_diagnostics"
+	// CapPeerRelayV1 accepts transfer-scoped peer TLS relay streams on data.
+	CapPeerRelayV1 = "peer.relay.v1"
 )
 
 // StreamHeader is the first line written on every yamux stream.
@@ -127,8 +135,9 @@ type StreamHeader struct {
 	Dst string `json:"dst,omitempty"`
 	// Logtail: instance/container identifier.
 	// Terminal: container id when Target is TermTargetContainer.
+	// Peer relay receive: active transfer ID.
 	Ref string `json:"ref,omitempty"`
-	// Terminal-only: host | container.
+	// Terminal: host | container. Peer relay receive: model | image.
 	Target string `json:"target,omitempty"`
 	// Terminal-only: initial window size. Carried in the header so the shell
 	// starts at the right size instead of drawing one frame at 80x24 before the
@@ -394,6 +403,9 @@ type SysInfo struct {
 	// has no such module (and from an agent that predates the field). PD
 	// modes that move the KV over RDMA run only where it is loaded.
 	PeerMemory string `json:"peer_memory,omitempty"`
+	// KubeUnschedulable is a Kubernetes node's own cordon (spec.unschedulable),
+	// as its agent reads it; always false on other nodes.
+	KubeUnschedulable bool `json:"kube_unschedulable,omitempty"`
 	// RuntimeFallbackFrom is the runtime auto-detection passed over, and
 	// RuntimeFallbackReason the code saying why: it cannot give a container
 	// this node's accelerators (accelerator.RuntimeGPUBlocked*), its daemon
@@ -430,6 +442,9 @@ type ImagePresence struct {
 	ImageRef         string `json:"image_ref"`
 	Present          bool   `json:"present"`
 	SizeBytes        int64  `json:"size_bytes,omitempty"`
+	// ImageID is the runtime's immutable identity. Empty means this report
+	// did not observe one, so a digest already stored is left as it is.
+	ImageID string `json:"image_id,omitempty"`
 }
 
 // ImageNodeStatus is an explicit image distribution progress update.
@@ -544,3 +559,14 @@ const (
 // large image) to answer in time. The agent rechecks it every minute and
 // switches back once it answers and no instance would be disturbed.
 const RuntimeFallbackDaemonNotReady = "daemon_not_ready"
+
+// PeerRelayReady is consumed by the coordinator before forwarding TLS bytes.
+type PeerRelayReady struct {
+	Error string `json:"error,omitempty"`
+}
+
+// PeerRelayWaitClosedParams waits for a target data stream's attachment release.
+type PeerRelayWaitClosedParams struct {
+	Kind       string `json:"kind"`
+	TransferID string `json:"transfer_id"`
+}
