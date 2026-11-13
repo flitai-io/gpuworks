@@ -34,6 +34,28 @@ func (s *Store) FleetNodeSources(nodes []Node) (map[uint]NodeSource, error) {
 	return s.nodeSources(nodes, true)
 }
 
+// NodeCountsByProvider is how many compute nodes joined through each account,
+// on its instances or through the clusters connected from it, keyed by
+// provider id. It counts the sources NodeSources derives, so an account's
+// count is exactly the nodes its source filter lists.
+func (s *Store) NodeCountsByProvider() (map[uint]int, error) {
+	var nodes []Node
+	if err := s.reader().Select("id", "kube_cluster_id").Find(&nodes).Error; err != nil {
+		return nil, err
+	}
+	sources, err := s.nodeSources(nodes, true)
+	if err != nil {
+		return nil, err
+	}
+	out := map[uint]int{}
+	for i := range nodes {
+		if source, ok := sources[nodes[i].ID]; ok && source.ProviderID != 0 {
+			out[source.ProviderID]++
+		}
+	}
+	return out, nil
+}
+
 func (s *Store) nodeSources(nodes []Node, fleet bool) (map[uint]NodeSource, error) {
 	out := map[uint]NodeSource{}
 	if len(nodes) == 0 {

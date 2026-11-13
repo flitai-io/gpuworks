@@ -192,8 +192,12 @@ func TestAClusterOfACloudAccountBecomesAnEntryOnce(t *testing.T) {
 		t.Fatal("an entry before any was made")
 	}
 	// The cluster's product travels as a code with its name; a cluster whose driver cannot tell carries neither.
-	if !strings.Contains(rec.Body.String(), `"external_id":"c-gpu","name":"ack-gpu","region":"cn-shanghai","version":"1.35.7","type":"ack_managed","type_label":{"en":"ACK managed","zh":"ACK 托管版"},"state":"running"`) {
+	if !strings.Contains(rec.Body.String(), `"external_id":"c-gpu","name":"ack-gpu","connectable":true,"region":"cn-shanghai","version":"1.35.7","type":"ack_managed","type_label":{"en":"ACK managed","zh":"ACK 托管版"},"state":"running"`) {
 		t.Fatalf("c-gpu lacks its type: %s", rec.Body)
+	}
+	// A cluster with no GPU node pool has nothing to connect.
+	if !strings.Contains(rec.Body.String(), `"external_id":"c-empty","name":"ack-empty","connectable":false,`) {
+		t.Fatalf("c-empty is connectable: %s", rec.Body)
 	}
 	if strings.Count(rec.Body.String(), `"type"`) != 1 || strings.Count(rec.Body.String(), `"type_label"`) != 1 {
 		t.Fatalf("a cluster without a type carries one: %s", rec.Body)
@@ -215,6 +219,10 @@ func TestAClusterOfACloudAccountBecomesAnEntryOnce(t *testing.T) {
 	after := rig.do(rig.session, http.MethodGet, path, "")
 	if !strings.Contains(after.Body.String(), `"entry":{"uuid":"`+created["uuid"].(string)+`","name":"ack-gpu"}`) {
 		t.Fatalf("clusters after the entry: %s", after.Body)
+	}
+	// A cluster that has its entry is changed from it, not connected again.
+	if !strings.Contains(after.Body.String(), `"external_id":"c-gpu","name":"ack-gpu","connectable":false,`) {
+		t.Fatalf("c-gpu is still connectable with its entry: %s", after.Body)
 	}
 	listed := decodeKube[struct {
 		Items []struct {
@@ -361,5 +369,24 @@ func TestACloudEntryTakesTheSuggestedAgentImageSource(t *testing.T) {
 		fmt.Sprintf(`{"name":"ack-other","server_url":"https://gw.example","provider_pool_ids":["np-o"],"provider_id":%d,"provider_cluster_id":"c-other","agent_image_source":"quay"}`, rig.provider)))
 	if chosen["agent_image_source"] != "quay" || chosen["effective_agent_image"] != "quay.io/gpuworks/gpuworks-agent:r1" {
 		t.Fatalf("entry naming a registry = %v", chosen)
+	}
+}
+
+func TestProviderClusterConnectableNeedsARunningClusterWithGPUPoolsAndNoEntry(t *testing.T) {
+	pools := []provider.ClusterPool{{ID: "np-1"}}
+	for _, tc := range []struct {
+		name     string
+		cluster  provider.Cluster
+		hasEntry bool
+		want     bool
+	}{
+		{"running with pools", provider.Cluster{Running: true, GPUPools: pools}, false, true},
+		{"has its entry", provider.Cluster{Running: true, GPUPools: pools}, true, false},
+		{"not running", provider.Cluster{GPUPools: pools}, false, false},
+		{"no GPU pool", provider.Cluster{Running: true}, false, false},
+	} {
+		if got := providerClusterConnectable(tc.cluster, tc.hasEntry); got != tc.want {
+			t.Errorf("%s: connectable = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

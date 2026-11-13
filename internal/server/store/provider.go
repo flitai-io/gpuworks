@@ -383,32 +383,37 @@ func (s *Store) NodeProviders(nodeIDs []uint) (map[uint]NodeProvider, error) {
 	return out, nil
 }
 
-// ProviderInstanceCounts is how many instances of its own an account holds
-// and how many of them carry a node. A managed Kubernetes cluster's node is
-// the cluster's, not an instance of the account, and is not counted.
-type ProviderInstanceCounts struct {
-	Instances int
-	Nodes     int
+// accountInstances keeps the instances that are an account's own. A managed
+// Kubernetes cluster's node is listed by the vendor among the account's
+// instances, but it is the cluster's: it joins through the cluster, and its
+// lifecycle is the node pool's. This is the one place that rule is written.
+func accountInstances(db *gorm.DB) *gorm.DB {
+	return db.Where("managed_cluster = '' OR managed_cluster IS NULL")
 }
 
-// ProviderInstanceCountsByProvider counts every account's own instances in
-// one grouped query, keyed by provider id; an account without any is absent.
-func (s *Store) ProviderInstanceCountsByProvider() (map[uint]ProviderInstanceCounts, error) {
+// AccountInstances are an account's own instances, in id order: what its
+// instance list shows and its instance count counts.
+func (s *Store) AccountInstances(providerID uint) ([]ProviderInstance, error) {
+	var pis []ProviderInstance
+	err := accountInstances(s.reader().Where("provider_id = ?", providerID)).Order("id asc").Find(&pis).Error
+	return pis, err
+}
+
+// AccountInstanceCounts counts every account's own instances in one grouped
+// query, keyed by provider id; an account without any is absent.
+func (s *Store) AccountInstanceCounts() (map[uint]int, error) {
 	var rows []struct {
 		ProviderID uint
 		Instances  int
-		Nodes      int
 	}
-	err := s.reader().Model(&ProviderInstance{}).
-		Select("provider_id, COUNT(*) AS instances, SUM(CASE WHEN node_id <> 0 THEN 1 ELSE 0 END) AS nodes").
-		Where("managed_cluster = '' OR managed_cluster IS NULL").
-		Group("provider_id").Scan(&rows).Error
+	err := accountInstances(s.reader().Model(&ProviderInstance{})).
+		Select("provider_id, COUNT(*) AS instances").Group("provider_id").Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[uint]ProviderInstanceCounts, len(rows))
+	out := make(map[uint]int, len(rows))
 	for _, r := range rows {
-		out[r.ProviderID] = ProviderInstanceCounts{Instances: r.Instances, Nodes: r.Nodes}
+		out[r.ProviderID] = r.Instances
 	}
 	return out, nil
 }

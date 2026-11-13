@@ -20,7 +20,10 @@ import (
 // A resolution that cannot be loaded still leaves every node its system
 // labels, without the network (or storage) ones - the hardware facts are known either
 // way, and dropping them all would make a node look unlabelled.
-func (a *apiHandlers) fillResolvedNodeFields(nodes []store.Node, out []dto.Node) {
+//
+// sources are where the nodes came from when the caller has read them
+// already (the whole fleet's, for the list); nil reads those of nodes.
+func (a *apiHandlers) fillResolvedNodeFields(nodes []store.Node, out []dto.Node, sources map[uint]store.NodeSource) {
 	resolved, err := a.networks().Resolve(nodes)
 	if err != nil {
 		resolved = nil
@@ -38,9 +41,15 @@ func (a *apiHandlers) fillResolvedNodeFields(nodes []store.Node, out []dto.Node)
 		providers = nil
 	}
 	facts := planning.NodeFacts{Networks: resolved, Storages: storages, Providers: providers, KubeClusters: planning.LoadKubeClusters(a.d.Store, nodes)}
-	// An unreadable source is no source, as a node added by hand shows.
-	sources, _ := a.d.Store.NodeSources(nodes)
+	// An unreadable source is said to be so, not shown as a node added by hand.
+	sourceUnknown := false
+	if sources == nil {
+		if sources, err = a.d.Store.NodeSources(nodes); err != nil {
+			sourceUnknown = true
+		}
+	}
 	for i := range nodes {
+		out[i].SourceUnknown = sourceUnknown
 		if source, ok := sources[nodes[i].ID]; ok {
 			out[i].Source = nodeSourceDTO(source)
 		}

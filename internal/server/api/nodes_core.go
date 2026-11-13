@@ -201,7 +201,7 @@ func (a *apiHandlers) getNode(w http.ResponseWriter, r *http.Request) {
 		view = toNodeDTOWithToken(n)
 	}
 	views := []dto.Node{view}
-	a.fillResolvedNodeFields([]store.Node{*n}, views)
+	a.fillResolvedNodeFields([]store.Node{*n}, views, nil)
 	a.fillNodeGPUIsolation(views)
 	writeJSON(w, http.StatusOK, views[0])
 }

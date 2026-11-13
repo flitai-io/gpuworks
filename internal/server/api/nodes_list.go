@@ -79,8 +79,13 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 	var sources map[uint]store.NodeSource
 	if wanted != nil || query.paged {
 		if sources, err = a.d.Store.FleetNodeSources(fleet); err != nil {
-			writeErr(w, http.StatusInternalServerError, err)
-			return
+			// A list filtered by source cannot be answered without them; any
+			// other still is, each node saying its source could not be read.
+			if wanted != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			sources = nil
 		}
 	}
 	if wanted != nil {
@@ -94,7 +99,7 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 		// Every match in full; the filters and order apply either way.
 		matched := a.filterNodes(nodes, query, reqs)
 		nodeListSorters.apply(matched, order)
-		writeJSON(w, http.StatusOK, dto.NewList(a.nodeDTOs(matched)))
+		writeJSON(w, http.StatusOK, dto.NewList(a.nodeDTOs(matched, sources)))
 		return
 	}
 	facets := map[string]map[string]bool{}
@@ -130,7 +135,7 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 	}
 	nodeListSorters.apply(matched, order)
 	page := pageOf(matched, query, func(rows []store.Node) []dto.Node {
-		items := a.nodeDTOs(rows)
+		items := a.nodeDTOs(rows, sources)
 		for i := range items {
 			status := statuses[items[i].UUID]
 			items[i].AgentEligibility = status.eligibility
@@ -165,8 +170,9 @@ func (a *apiHandlers) filterNodes(nodes []store.Node, query listQuery, reqs map[
 	return matched
 }
 
-// nodeDTOs maps nodes as the node list shows them.
-func (a *apiHandlers) nodeDTOs(nodes []store.Node) []dto.Node {
+// nodeDTOs maps nodes as the node list shows them; sources is the fleet's,
+// when the list read it already, else nil.
+func (a *apiHandlers) nodeDTOs(nodes []store.Node, sources map[uint]store.NodeSource) []dto.Node {
 	out := make([]dto.Node, 0, len(nodes))
 	for i := range nodes {
 		view := toNodeDTO(&nodes[i])
@@ -175,7 +181,7 @@ func (a *apiHandlers) nodeDTOs(nodes []store.Node) []dto.Node {
 		}
 		out = append(out, view)
 	}
-	a.fillResolvedNodeFields(nodes, out)
+	a.fillResolvedNodeFields(nodes, out, sources)
 	return out
 }
 
@@ -340,7 +346,13 @@ func (f *nodeSourceFilter) matches(source store.NodeSource, joined bool) bool {
 // nodeSourceOptions lists every source a node of the fleet came from, with
 // how many: accounts by name, then clusters by name, then the nodes added by
 // hand. An account's count takes in its clusters' nodes, as its filter does.
+//
+// Sources that could not be read (nil) offer no choice rather than calling
+// every node added by hand.
 func nodeSourceOptions(fleet []store.Node, sources map[uint]store.NodeSource) []dto.NodeSourceOption {
+	if sources == nil {
+		return []dto.NodeSourceOption{}
+	}
 	providers := map[uint]*dto.NodeSourceOption{}
 	clusters := map[string]*dto.NodeSourceOption{}
 	manual := 0

@@ -311,3 +311,41 @@ func TestNodePageOfAnEmptyFleetOffersNoSource(t *testing.T) {
 		t.Fatalf("an empty fleet's sources = %d %s", rec.Code, rec.Body)
 	}
 }
+
+// Where a node came from that cannot be read is said to be unknown, not shown
+// as a node added by hand: the detail and the unpaged list, which read the
+// sources of the nodes they show, carry "source_unknown" and no source.
+func TestANodeWhoseSourceCannotBeReadIsNotShownAsAddedByHand(t *testing.T) {
+	w := newPlatformWorld(t)
+	// Read, every node says where it came from, or nothing when it was added by hand; none says unknown.
+	if raw := w.get(t, "/api/v1/nodes/"+w.ecsNode, http.StatusOK); !strings.Contains(raw, fmt.Sprintf(`"source":{"resource":"vm","provider_id":%d,"provider_name":"ali","provider_kind":"aliyun"}`, w.ali)) || strings.Contains(raw, `"source_unknown"`) {
+		t.Fatalf("a node on an instance: %s", raw)
+	}
+	if raw := w.get(t, "/api/v1/nodes/"+w.manual, http.StatusOK); strings.Contains(raw, `"source"`) || strings.Contains(raw, `"source_unknown"`) {
+		t.Fatalf("a node added by hand: %s", raw)
+	}
+	if raw := w.get(t, "/api/v1/nodes", http.StatusOK); strings.Contains(raw, `"source_unknown"`) {
+		t.Fatalf("the list with its sources read: %s", raw)
+	}
+
+	// The instances the sources are read from are gone; everything else about the nodes still reads.
+	if err := w.rig.st.DB().Exec("DROP TABLE provider_instances").Error; err != nil {
+		t.Fatal(err)
+	}
+	// A node on an instance, a node of a cluster and a node added by hand alike: unknown, with no source.
+	for _, uuid := range []string{w.ecsNode, w.ackNodes[0], w.manual} {
+		raw := w.get(t, "/api/v1/nodes/"+uuid, http.StatusOK)
+		if !strings.Contains(raw, `}],"source_unknown":true,"connect_mode":"agent_dial",`) || strings.Contains(raw, `"source":`) {
+			t.Fatalf("node %s with its source unreadable: %s", uuid, raw)
+		}
+	}
+	if raw := w.get(t, "/api/v1/nodes", http.StatusOK); strings.Count(raw, `}],"source_unknown":true,"connect_mode":"agent_dial",`) != 6 || strings.Contains(raw, `"source":`) {
+		t.Fatalf("the list with its sources unreadable: %s", raw)
+	}
+	// A page of the list is still answered the same way, offering no source to filter by rather than calling
+	// every node added by hand; a list filtered by source cannot be answered.
+	if raw := w.get(t, "/api/v1/nodes?page=1", http.StatusOK); strings.Count(raw, `}],"source_unknown":true,"connect_mode":"agent_dial",`) != 6 || strings.Contains(raw, `"source":`) || !strings.Contains(raw, `"sources":[]`) {
+		t.Fatalf("a page with its sources unreadable: %s", raw)
+	}
+	w.get(t, "/api/v1/nodes?page=1&source=manual", http.StatusInternalServerError)
+}

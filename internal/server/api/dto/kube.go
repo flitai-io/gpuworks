@@ -7,6 +7,14 @@ import (
 	"gpuworks.ai/gpuworks/pkg/localization"
 )
 
+// PlatformResource is one kind of machine a platform hands over (vm,
+// container, host, kubernetes), with the vendor's product name for it when it
+// has one (ECS, ACK).
+type PlatformResource struct {
+	Type    string `json:"type"`
+	Product string `json:"product,omitempty"`
+}
+
 // KubeCluster is a Kubernetes cluster whose GPU nodes join through one
 // DaemonSet. ApplyCommand carries the enrollment token and is present for
 // administrators only.
@@ -50,6 +58,15 @@ type KubeCluster struct {
 	// stalled_after_seconds (GET /kube/defaults), so it is worth looking at
 	// why. Never for a revoked cluster or one a node joined.
 	Stalled bool `json:"stalled"`
+	// State is where the entry stands, the one value a client shows and
+	// filters by: revoked, stalled (no node joined for too long), pending (no
+	// node yet) or active (a node joined).
+	State string `json:"state"`
+	// Category is the platform type the entry is listed under when it was
+	// connected on its own, and Resources what it connects (the kubernetes
+	// entry of GET /providers/kinds categories).
+	Category  string             `json:"category"`
+	Resources []PlatformResource `json:"resources"`
 	// CanApply and CanRemove say whether the server can apply the manifest
 	// to the cluster, or take it out again (POST .../apply, .../remove).
 	// OperationBlocked is why not: no_source (made by hand, so the server has
@@ -212,8 +229,10 @@ type KubeClusterSource struct {
 type ProviderCluster struct {
 	ExternalID string `json:"external_id"`
 	Name       string `json:"name"`
-	Region     string `json:"region"`
-	Version    string `json:"version"`
+	// Connectable: the cluster runs, has GPU node pools and no entry yet, so an entry can be made from it.
+	Connectable bool   `json:"connectable"`
+	Region      string `json:"region"`
+	Version     string `json:"version"`
 	// Type is the vendor's product the cluster is (provider.ClusterType…)
 	// and TypeLabel its name; both absent when the driver cannot tell.
 	Type      string                `json:"type,omitempty"`

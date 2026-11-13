@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,7 +119,7 @@ func TestASyncRecordsWhenTheAccountWasListed(t *testing.T) {
 
 // The platform list counts every account's own instances, and those carrying a
 // node, in one grouped query; a managed cluster's nodes are not instances.
-func TestProviderInstanceCountsLeaveOutManagedClusterNodes(t *testing.T) {
+func TestAccountInstancesLeaveOutManagedClusterNodes(t *testing.T) {
 	st := openKubeStore(t)
 	a, _ := st.CreateProvider(&Provider{Name: "a", Kind: "aliyun", CredsCipher: "c", State: "valid"})
 	b, _ := st.CreateProvider(&Provider{Name: "b", Kind: "runpod", CredsCipher: "c", State: "valid"})
@@ -135,29 +136,99 @@ func TestProviderInstanceCountsLeaveOutManagedClusterNodes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got, err := st.ProviderInstanceCountsByProvider()
+	got, err := st.AccountInstanceCounts()
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[uint]ProviderInstanceCounts{a.ID: {Instances: 2, Nodes: 1}, b.ID: {Instances: 1, Nodes: 1}}
-	if len(got) != len(want) || got[a.ID] != want[a.ID] || got[b.ID] != want[b.ID] {
-		t.Fatalf("counts = %+v, want %+v (an account of cluster nodes only is absent)", got, want)
+	if len(got) != 2 || got[a.ID] != 2 || got[b.ID] != 1 {
+		t.Fatalf("counts = %v, want a:2 b:1 (an account of cluster nodes only is absent)", got)
+	}
+	// The list an account shows is the one it counts.
+	for _, want := range []struct {
+		id  uint
+		ids []string
+	}{{a.ID, []string{"i-1", "i-2"}}, {b.ID, []string{"p-1"}}, {empty.ID, nil}} {
+		list, err := st.AccountInstances(want.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, pi := range list {
+			ids = append(ids, pi.ExternalID)
+		}
+		if strings.Join(ids, ",") != strings.Join(want.ids, ",") || len(list) != got[want.id] {
+			t.Fatalf("instances of %d = %v, want %v counted %d", want.id, ids, want.ids, got[want.id])
+		}
 	}
 }
 
-// The cluster entries made from accounts, by entry; entries made by hand are absent.
-func TestKubeClusterAccountsNameTheAccountOfEachCloudEntry(t *testing.T) {
+func TestNodeCountsByProviderCountWhatTheSourceFilterLists(t *testing.T) {
 	st := openKubeStore(t)
-	p, _ := st.CreateProvider(&Provider{Name: "a", Kind: "aliyun", CredsCipher: "c", State: "valid"})
-	cloud, err := st.CreateKubeCluster(KubeCluster{Name: "ack", Namespace: "gpuworks-system", ProviderID: &p.ID, ProviderClusterID: "c-1"})
+	a, _ := st.CreateProvider(&Provider{Name: "a", Kind: "aliyun", CredsCipher: "c", State: "valid"})
+	b, _ := st.CreateProvider(&Provider{Name: "b", Kind: "runpod", CredsCipher: "c", State: "valid"})
+	cloud, err := st.CreateKubeCluster(KubeCluster{Name: "ack", Namespace: "gpuworks-system", ProviderID: &a.ID, ProviderClusterID: "c-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.CreateKubeCluster(KubeCluster{Name: "lab", Namespace: "gpuworks-system"}); err != nil {
+	lab, err := st.CreateKubeCluster(KubeCluster{Name: "lab", Namespace: "gpuworks-lab"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := st.KubeClusterAccounts()
-	if err != nil || len(got) != 1 || got[cloud.ID] != p.ID {
-		t.Fatalf("accounts = %v, %v", got, err)
+	vm, err := st.RegisterNode("vm-uuid", "hash", "vm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pod, err := st.RegisterNode("pod-uuid", "hash", "pod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.RegisterNode("hand-uuid", "hash", "by-hand"); err != nil {
+		t.Fatal(err)
+	}
+	ack1, _, err := st.EnrollKubeNode(cloud.Token, "uid-ack", "gpu-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.EnrollKubeNode(cloud.Token, "uid-ack", "gpu-2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.EnrollKubeNode(lab.Token, "uid-lab", "gpu-1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, pi := range []ProviderInstance{
+		{ProviderID: a.ID, ExternalID: "i-1", NodeID: vm.ID},
+		// The cloud also lists the cluster's node as an instance of the
+		// account: it counts once, under its cluster.
+		{ProviderID: a.ID, ExternalID: "i-ack", ManagedCluster: "c-1", NodeID: ack1.ID},
+		{ProviderID: b.ID, ExternalID: "p-1", NodeID: pod.ID},
+	} {
+		pi := pi
+		if err := st.UpsertProviderInstance(&pi); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := st.NodeCountsByProvider()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[a.ID] != 3 || got[b.ID] != 1 {
+		t.Fatalf("node counts = %v, want a:3 (one instance, two cluster nodes) b:1; the lab cluster and the node added by hand belong to no account", got)
+	}
+	nodes, err := st.ListNodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources, err := st.FleetNodeSources(nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := map[uint]int{}
+	for _, source := range sources {
+		if source.ProviderID != 0 {
+			listed[source.ProviderID]++
+		}
+	}
+	if listed[a.ID] != got[a.ID] || listed[b.ID] != got[b.ID] {
+		t.Fatalf("source filter lists %v, counts say %v", listed, got)
 	}
 }

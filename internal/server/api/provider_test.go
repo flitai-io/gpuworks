@@ -139,9 +139,27 @@ func TestProviderKindsEndpointReturnsSchema(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var infos []provider.KindInfo
-	if err := unmarshalList(rec.Body.Bytes(), &infos); err != nil {
+	var body struct {
+		Items      []provider.KindInfo `json:"items"`
+		Total      int                 `json:"total"`
+		Categories json.RawMessage     `json:"categories"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
+	}
+	infos := body.Items
+	if body.Total != len(infos) || len(infos) == 0 {
+		t.Fatalf("total = %d for %d kinds", body.Total, len(infos))
+	}
+	// The platform types to offer the kinds under travel with the kinds
+	// (providerCategories, tested on its own: other tests register kinds of
+	// no type, which come under "other").
+	var categories []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body.Categories, &categories); err != nil || len(categories) < 3 ||
+		categories[0].ID != "public_cloud" || categories[1].ID != "private_cloud" || categories[len(categories)-1].ID != "kubernetes" {
+		t.Fatalf("categories = %s", body.Categories)
 	}
 	var runpod *provider.KindInfo
 	for i := range infos {
@@ -622,5 +640,33 @@ func TestInstallAgentOnInstanceAsksBeforeRestartingTheInstance(t *testing.T) {
 	}
 	if len(drv.allowed) != 2 || drv.allowed[0] || !drv.allowed[1] {
 		t.Fatalf("driver saw AllowInstanceRestart %v", drv.allowed)
+	}
+}
+
+func TestProviderCategoriesOfferTheKindsInOrder(t *testing.T) {
+	kinds := []provider.KindInfo{
+		{Kind: "zstack", Category: provider.CategoryPrivateCloud},
+		{Kind: "custom"},
+		{Kind: "aliyun", Category: provider.CategoryPublicCloud},
+		{Kind: "runpod", Category: provider.CategoryPublicCloud},
+	}
+	got, err := json.Marshal(providerCategories(kinds))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// In provider.Categories order whatever order the kinds come in; the kinds
+	// of no type under "other"; the Kubernetes cluster type, added as a
+	// cluster entry and naming no kind, last.
+	want := `[{"id":"public_cloud","kinds":["aliyun","runpod"]},` +
+		`{"id":"private_cloud","kinds":["zstack"]},` +
+		`{"id":"other","kinds":["custom"]},` +
+		`{"id":"kubernetes","resources":[{"type":"kubernetes"}],"kube_cluster":true,"kinds":[]}]`
+	if string(got) != want {
+		t.Fatalf("categories = %s\nwant %s", got, want)
+	}
+	// A type no kind is filed under is not offered; Kubernetes always is.
+	got, _ = json.Marshal(providerCategories(nil))
+	if string(got) != `[{"id":"kubernetes","resources":[{"type":"kubernetes"}],"kube_cluster":true,"kinds":[]}]` {
+		t.Fatalf("categories of no kinds = %s", got)
 	}
 }

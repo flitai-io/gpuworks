@@ -426,7 +426,28 @@ type Category string
 const (
 	CategoryPublicCloud  Category = "public_cloud"
 	CategoryPrivateCloud Category = "private_cloud"
+	// CategoryKubernetes is a Kubernetes cluster connected on its own (with
+	// kubectl), not through a vendor's account: no kind belongs to it.
+	CategoryKubernetes Category = "kubernetes"
 )
+
+// CategoryInfo is a platform type as the console offers it: in this order,
+// what it connects, and whether it is added as a Kubernetes cluster entry
+// (the cluster form) rather than as a vendor's account.
+type CategoryInfo struct {
+	ID          Category       `json:"id"`
+	Resources   []KindResource `json:"resources,omitempty"`
+	KubeCluster bool           `json:"kube_cluster,omitempty"`
+}
+
+// Categories are every platform type, in the order the console lists them.
+func Categories() []CategoryInfo {
+	return []CategoryInfo{
+		{ID: CategoryPublicCloud},
+		{ID: CategoryPrivateCloud},
+		{ID: CategoryKubernetes, Resources: []KindResource{{Type: ResourceKubernetes}}, KubeCluster: true},
+	}
+}
 
 // CategoryOf reports the platform a kind connects. Each known kind declares
 // its category (kindCategories); a kind that declares none has no category.

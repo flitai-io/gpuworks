@@ -75,6 +75,7 @@ func (a *apiHandlers) providerClusters(w http.ResponseWriter, r *http.Request) {
 		if e, ok := entries[c.ExternalID]; ok {
 			pc.Entry = &dto.KubeClusterRef{UUID: e.UUID, Name: e.Name}
 		}
+		pc.Connectable = providerClusterConnectable(c, pc.Entry != nil)
 		out = append(out, pc)
 	}
 	writeJSON(w, http.StatusOK, dto.NewList(out))
@@ -201,4 +202,10 @@ func (a *apiHandlers) kubeClusterOperation(w http.ResponseWriter, r *http.Reques
 	default:
 		writeErr(w, statusProviderFailed, err)
 	}
+}
+
+// providerClusterConnectable: an entry can be made from the cloud cluster,
+// which runs, has a GPU node pool to hold and no entry yet.
+func providerClusterConnectable(c provider.Cluster, hasEntry bool) bool {
+	return !hasEntry && c.Running && len(c.GPUPools) > 0
 }

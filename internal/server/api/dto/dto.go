@@ -159,6 +159,9 @@ type Node struct {
 	// Source is the external platform the node joined through; absent for a
 	// node added by hand.
 	Source *NodeSource `json:"source,omitempty"`
+	// SourceUnknown: where the node came from could not be read, so Source
+	// is absent without the node having been added by hand.
+	SourceUnknown bool `json:"source_unknown,omitempty"`
 	// ManagementAddress is the address the node's agent reaches the server
 	// from: its address on the management network.
 	ManagementAddress string `json:"management_address,omitempty"`
