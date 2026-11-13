@@ -160,6 +160,7 @@ func TestAgentBenchmarkStatusPersistsProcessCurve(t *testing.T) {
 	session.NodeUUID, session.nodeID = node.UUID, node.ID
 	h.sessions[node.UUID] = session
 	session.handle(proto.Envelope{T: proto.TStatusBenchmark, D: statusRaw})
+	session.drainReports()
 
 	persistedRun, err := st.GetBenchmarkRun(run.ID)
 	if err != nil || persistedRun.State != "running" || persistedRun.StartedAt == nil {
@@ -206,6 +207,7 @@ func TestAgentBenchmarkStatusFromWrongNodeCannotWriteCurve(t *testing.T) {
 	session.NodeUUID, session.nodeID = other.UUID, other.ID
 	h.sessions[other.UUID] = session // current, so only the store's owner check refuses it
 	session.handle(proto.Envelope{T: proto.TStatusBenchmark, D: statusRaw})
+	session.drainReports()
 	if _, err := st.GetBenchmarkPoint(run.ID, 1); err != store.ErrNotFound {
 		t.Fatalf("wrong node wrote a curve point: err=%v", err)
 	}

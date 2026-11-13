@@ -59,10 +59,11 @@ type Hub struct {
 	onNodeGone   func(nodeUUID string)
 
 	// The node queues persist per-node reports (status, heartbeats, image
-	// presence) off the session read loops; see statusqueue.go for why those
-	// loops must never wait on the store.
-	statusQ *nodeQueue[queuedNodeStatus]
-	touchQ  *nodeQueue[time.Time]
+	// presence, storage) off the session read loops; see statusqueue.go for
+	// why those loops must never wait on the store.
+	statusQ  *nodeQueue[queuedNodeStatus]
+	touchQ   *nodeQueue[time.Time]
+	storageQ *nodeQueue[queuedStorageStatus]
 
 	// pushLimiter caps initial desired-state replays and network policy reads. A fleet
 	// connecting at once otherwise runs one multi-query replay per session
@@ -152,20 +153,22 @@ func New(st *store.Store, log *slog.Logger) *Hub {
 		copies:        prepobs.NewCopies(),
 	}
 	h.statusQ = newStatusQueue(h)
+	h.storageQ = newStorageQueue(h)
 	return h
 }
 
 // RunNodeQueues drains the per-node report queues (status, heartbeats,
-// image presence) until ctx ends. Call exactly once from the app's background
-// loops; submitting works without it (bounded, and the next periodic report
-// supersedes what was dropped), but reports would never persist. It returns
-// once both workers have stopped, so shutdown never closes the store under a
-// write in flight.
+// image presence, storage) until ctx ends. Call exactly once from the app's
+// background loops; submitting works without it (bounded, and the next
+// periodic report supersedes what was dropped), but reports would never
+// persist. It returns once all workers have stopped, so shutdown never closes
+// the store under a write in flight.
 func (h *Hub) RunNodeQueues(ctx context.Context) {
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 	go func() { defer wg.Done(); h.statusQ.run(ctx) }()
 	go func() { defer wg.Done(); h.touchQ.run(ctx) }()
+	go func() { defer wg.Done(); h.storageQ.run(ctx) }()
 	go func() { defer wg.Done(); h.RunPeerTransferMetrics(ctx) }()
 	wg.Wait()
 }
@@ -548,6 +551,7 @@ func (h *Hub) deregister(s *Session) {
 		delete(h.sessions, s.NodeUUID)
 		h.mu.Unlock()
 		h.statusQ.forget(s.NodeUUID) // a stale report would mark it online again
+		h.storageQ.forget(s.NodeUUID)
 		// A report write already validated lands before the offline mark and
 		// before its copy observations are dropped.
 		s.fenceReports()

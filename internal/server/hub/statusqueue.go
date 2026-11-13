@@ -28,7 +28,8 @@ const nodeQueueCapacity = 8192
 // behind database work and management RPCs blow their deadlines (measured as
 // the 2026-09-21 l2-fleet regression). The read loop only submits here; one
 // worker per queue applies reports serially, which is exactly the store's
-// own concurrency anyway.
+// own concurrency anyway. Reports that are deltas rather than snapshots take
+// the session's ordered worker instead (session_reports.go).
 type nodeQueue[P any] struct {
 	log      *slog.Logger
 	apply    func(nodeUUID string, payload P) error
@@ -179,18 +180,37 @@ func (q *nodeQueue[P]) pop() (string, P, bool) {
 	return nodeUUID, payload, true
 }
 
-// The two queues differ only in payload and persistence call. They are
-// separate instances so a slow status transaction never delays a heartbeat,
-// and each drains in submission order.
+// The queues differ only in payload and persistence call. They are separate
+// instances so a slow status transaction never delays a heartbeat, and each
+// drains in submission order.
 
 func newStatusQueue(h *Hub) *nodeQueue[queuedNodeStatus] {
 	return newNodeQueue(h.log, h.applyQueuedNodeStatus)
 }
 
+// newTouchQueue persists heartbeats without the session fence: a heartbeat
+// only moves last_seen_at to a time the server really received one, which
+// stays true after the session ends, and it never changes the node's state.
 func newTouchQueue(log *slog.Logger, st *store.Store) *nodeQueue[time.Time] {
 	q := newNodeQueue[time.Time](log, nil)
 	q.applyBatch = st.TouchNodesAt
 	return q
+}
+
+// queuedStorageStatus is a storage report waiting in the coalescing queue,
+// with the session that received it for the current-session fence.
+type queuedStorageStatus struct {
+	report  proto.StorageStatusReport
+	session *Session
+}
+
+func newStorageQueue(h *Hub) *nodeQueue[queuedStorageStatus] {
+	return newNodeQueue(h.log, func(_ string, queued queuedStorageStatus) error {
+		_, err := queued.session.applyCurrent(func(nodeID uint) error {
+			return h.store.ApplyStorageStatus(nodeID, queued.report)
+		})
+		return err
+	})
 }
 
 // handleHeartbeat records the liveness timestamp and queues the persisted
