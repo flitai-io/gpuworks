@@ -407,6 +407,8 @@
     "MODEL_SOURCE_REQUIRES_NEWER_AGENT": "该节点的 agent 版本过旧，无法从 HTTP 目录下载。请先升级 agent 再重试。",
     "MODEL_SOURCE_URL_REQUIRED": "请填写模型所在的 HTTP 目录地址。",
     "MODEL_SOURCE_URL_INVALID": "请填写有效的 HTTP 或 HTTPS 目录地址，地址中不能包含用户名或密码。",
+    "IMAGE_ARCHIVE_PATH_INVALID": "本地导入需要填写目标计算节点上归档文件的绝对路径，不能同时指定其他来源或使用中转。",
+    "IMAGE_ARCHIVE_PATH_REQUIRED": "请重新选择节点上的镜像归档文件后重试导入。",
     "IMAGE_ARCHIVE_URL_REQUIRED": "请填写镜像归档 URL。",
     "IMAGE_ARCHIVE_URL_INVALID": "该镜像归档 URL 不可用。请使用不含内嵌凭据的 http 或 https 地址。",
     "IMAGE_ARCHIVE_URL_UNREACHABLE": "无法读取 {{host}} 上的镜像归档。",

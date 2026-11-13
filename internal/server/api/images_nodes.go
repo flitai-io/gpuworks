@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -53,7 +52,7 @@ func (a *apiHandlers) retryImageToNode(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Source == "" && req.SourceNode == "" && req.ArchiveURL == "" {
 		if row, err := a.d.Store.ImageNode(parseUint(chi.URLParam(r, "id")), a.nodeIDOf(chi.URLParam(r, "uuid"))); err == nil && row.Source == imagecatalog.FetchSourceLocal {
-			writeErr(w, http.StatusBadRequest, errors.New("choose the node archive file again to retry this local import"))
+			writeProductError(w, http.StatusBadRequest, ErrorImageArchivePathRequired, "choose the node archive file again to retry this local import", nil)
 			return
 		}
 	}

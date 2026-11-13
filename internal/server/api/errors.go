@@ -343,6 +343,8 @@ const (
 	ErrorModelSourceRequiresNewerAgent          = messages.ErrorModelSourceRequiresNewerAgent
 	ErrorModelSourceURLRequired                 = "MODEL_SOURCE_URL_REQUIRED"
 	ErrorModelSourceURLInvalid                  = "MODEL_SOURCE_URL_INVALID"
+	ErrorImageArchivePathInvalid                = "IMAGE_ARCHIVE_PATH_INVALID"
+	ErrorImageArchivePathRequired               = "IMAGE_ARCHIVE_PATH_REQUIRED"
 	ErrorImageArchiveURLRequired                = "IMAGE_ARCHIVE_URL_REQUIRED"
 	ErrorImageArchiveURLInvalid                 = "IMAGE_ARCHIVE_URL_INVALID"
 	ErrorImageArchiveURLUnreachable             = "IMAGE_ARCHIVE_URL_UNREACHABLE"

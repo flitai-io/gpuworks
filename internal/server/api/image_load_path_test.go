@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -46,6 +47,10 @@ func TestImageLocalImportRejectsAmbiguousSources(t *testing.T) {
 					route = h.retryImageToNode
 				}
 				resp := postJSON(t, route, "/", body, syncRoute(image, "node-1"))
+				var errorBody map[string]any
+				if err := json.Unmarshal(resp.Body.Bytes(), &errorBody); err != nil || errorBody["code"] != "IMAGE_ARCHIVE_PATH_INVALID" {
+					t.Fatalf("missing stable error code: %s", resp.Body.String())
+				}
 				if resp.Code != http.StatusBadRequest || len(rec.pulls)+len(rec.peers)+len(rec.retries) != 0 {
 					t.Fatalf("invalid input dispatched: %d %s, %+v", resp.Code, resp.Body.String(), rec)
 				}
