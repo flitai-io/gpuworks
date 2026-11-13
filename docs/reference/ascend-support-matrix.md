@@ -1,6 +1,6 @@
 # 昇腾支持矩阵
 
-更新日期：2026-11-02。这里把三件容易混淆的东西分开写：
+更新日期：2026-11-13。这里把三件容易混淆的东西分开写：
 
 - **外层 CANN**：节点或云市场租用镜像提供的 toolkit。自有裸机可能只有驱动，记为 `driver-only`，不等于没有容器 runtime。
 - **内层 CANN**：GPUWorks 启动的业务镜像内的 CANN 用户态二进制接口（userspace ABI）；它影响业务镜像能否运行，但不参与 `libvruntime.so` 资产选择。
@@ -10,9 +10,9 @@
 
 | 环境 | 架构 / NPU | 外层 CANN | 内层 CANN / runtime | 已通过的最高层级 | 结论 |
 |---|---|---:|---|---|---|
-| Gitee x86_64 | x86_64 / 910B2C | 9.0 | 9.0 / udocker | 平台整卡部署 + `/v1/chat/completions` | 支持；测试显式断言 `runtime_driver=udocker` |
+| Gitee x86_64 | x86_64 / 910B2C | 9.0 | 9.1（`gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2`）/ udocker | 平台整卡部署 + `/v1/chat/completions` | 支持（2026-11-13）；测试显式断言 `runtime_driver=udocker`；更早以内层 9.0 通过 |
 | Gitee x86_64 | x86_64 / 910B2C | 8.5.1 | 8.5 / udocker | 平台部署到 healthy；dGPU 能力探针正确返回云侧拒绝 | 外 8.5 + 内 8.5 可启动；尚缺一份可重复 CI 的成功 chat 证据 |
-| Gitee ARM | arm64 / 910B1 | 9.0 | 9.0 / udocker | 平台整卡部署 + `/v1/chat/completions` | 支持；真实预取 arm64 manifest/layers |
+| Gitee ARM | arm64 / 910B1 | 9.0 | 9.0 / udocker | 平台整卡部署 + `/v1/chat/completions` | 支持；真实预取 arm64 manifest/layers。2026-11-13 Gitee 已不再提供 910B1，内层 9.1 镜像在 ARM 上未复测 |
 | Gitee ARM | arm64 / 910B1 | 9.0 | 8.5 / udocker | 容器启动到 CANN FE | 旧 PRoot 下未通过；`platform_config` realpath 失败。ARM64 `faccessat2` 已修复，该云端组合尚未复测 |
 | Gitee ARM 目录项 | arm64 / 910B1 | 8.5 | 未进入内层 | 租机前置校验 | 云市场实际返回“镜像和主机不匹配”，不能作为 CI fixture；这不等于外 8.5 + 内 8.5 已被判定不兼容 |
 | 自有池 Docker 成员 | arm64 / 910B4 | 9.0/驱动 | 9.0 / Docker | 平台 API 双副本同卡 dGPU、真实推理/chat、超配拒绝、整卡 chat | 支持；完整平台 dGPU 主验收 |

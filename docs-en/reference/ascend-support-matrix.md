@@ -1,6 +1,6 @@
 # Ascend Support Matrix
 
-Updated: 2026-11-02. This document distinguishes three things that are easy to confuse:
+Updated: 2026-11-13. This document distinguishes three things that are easy to confuse:
 
 - **Outer CANN**: the toolkit provided by the node or rented cloud marketplace image. Self-owned bare-metal machines may have only a driver, recorded as `driver-only`; this does not mean that no container runtime is available.
 - **Inner CANN**: the CANN userspace application binary interface (userspace ABI) in the workload image launched by GPUWorks. It affects whether the workload image can run, but does not participate in `libvruntime.so` asset selection.
@@ -10,9 +10,9 @@ Updated: 2026-11-02. This document distinguishes three things that are easy to c
 
 | Environment | Architecture / NPU | Outer CANN | Inner CANN / Runtime | Highest Level Passed | Conclusion |
 |---|---|---:|---|---|---|
-| Gitee x86_64 | x86_64 / 910B2C | 9.0 | 9.0 / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported; test explicitly asserts `runtime_driver=udocker` |
+| Gitee x86_64 | x86_64 / 910B2C | 9.0 | 9.1 (`gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2`) / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported (2026-11-13); test explicitly asserts `runtime_driver=udocker`; passed earlier with inner 9.0 |
 | Gitee x86_64 | x86_64 / 910B2C | 8.5.1 | 8.5 / udocker | Platform deployment reaches healthy; dGPU capability probe correctly reports cloud-side denial | Outer 8.5 + inner 8.5 can start; successful chat evidence reproducible in CI is still missing |
-| Gitee ARM | arm64 / 910B1 | 9.0 | 9.0 / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported; actually prefetches arm64 manifest/layers |
+| Gitee ARM | arm64 / 910B1 | 9.0 | 9.0 / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported; actually prefetches arm64 manifest/layers. As of 2026-11-13 Gitee no longer offers the 910B1; the inner 9.1 image has not been re-tested on ARM |
 | Gitee ARM | arm64 / 910B1 | 9.0 | 8.5 / udocker | Container starts as far as CANN FE | Failed with the old PRoot because `platform_config` realpath resolution failed. ARM64 `faccessat2` is now fixed; this cloud combination has not yet been retested |
 | Gitee ARM catalog entry | arm64 / 910B1 | 8.5 | Inner environment not reached | Rental prerequisite validation | The cloud marketplace actually returns “image and host do not match,” so this cannot serve as a CI fixture; this does not establish incompatibility between outer 8.5 and inner 8.5 |
 | Self-owned pool Docker member | arm64 / 910B4 | 9.0/driver | 9.0 / Docker | Platform API dGPU with two replicas on one card, real inference/chat, overcommit rejection, full-GPU chat | Supported; complete primary acceptance for platform dGPU |
