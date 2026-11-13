@@ -90,8 +90,16 @@ func TestCancelPeerImageTransferStopsDirectReceiver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if row.State != store.ImageStateFailed {
-		t.Fatalf("state after cancel = %q, want failed", row.State)
+	if row.State != store.ImageStateFailed || row.TransferErrorCode != "PEER_TRANSFER_CANCELED" {
+		t.Fatalf("after cancel = state %q code %q, want failed and marked cancelled", row.State, row.TransferErrorCode)
+	}
+	// The stopped receiver's docker load dies of the signal and says so,
+	// after the row was cancelled; the operator's reason stays.
+	if err := st.ApplyImageNodeStatus(image.ID, node.ID, proto.ImageNodeStatus{ImageRef: image.ImageRef, State: store.ImageStateFailed, TransferID: "peer-transfer", Message: "load image archive: docker load: signal: killed"}); err != nil {
+		t.Fatal(err)
+	}
+	if row, err = st.ImageNode(image.ID, node.ID); err != nil || row.Message != "the transfer was cancelled" {
+		t.Fatalf("after the receiver's late report: %+v %v", row, err)
 	}
 	select {
 	case got := <-request:
@@ -138,6 +146,9 @@ func TestCancelImageTransferFailsTheRowWithoutANode(t *testing.T) {
 	}
 	if !strings.Contains(row.Message, "cancelled") {
 		t.Fatalf("message after cancel = %q", row.Message)
+	}
+	if row.TransferErrorCode != "" {
+		t.Fatalf("URL cancel code = %q; the peer cancel code would show peer-transfer text for a download", row.TransferErrorCode)
 	}
 	if row.TransferID != "" {
 		t.Fatalf("a cancelled row keeps its transfer id: %q", row.TransferID)

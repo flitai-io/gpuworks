@@ -36,6 +36,7 @@ await i18n.use(initReactI18next).init({ lng: "en", fallbackLng: "en", resources:
 
 const fixture = (name: string) => JSON.parse(fs.readFileSync(new URL(`./fixtures/catalog-template/${name}.json`, import.meta.url), "utf8"));
 const exported = fixture("exported");
+const exportedLocal = fixture("exported-local");
 const exportedWithEnv = fixture("exported-with-env");
 const checkFailed = fixture("check-failed");
 const notRunning = fixture("not-running");
@@ -70,6 +71,15 @@ async function open() {
 }
 
 const exports = () => calls.filter((call) => call.url.endsWith("/catalog-template"));
+
+test("saving a local deployment explains that the template references registered weights without bundling files", async () => {
+  exportAnswers = [Response.json(exportedLocal)];
+  const dialog = await open();
+  const yaml = await within(dialog).findByRole("textbox", { name: text.yaml }) as HTMLTextAreaElement;
+  assert.equal(yaml.value, exportedLocal.yaml);
+  assert.ok(within(dialog).queryByText("This template references the registered local weights company-tuned-model; it does not include the model files. Register these weights before using the template on another cluster.") !== null);
+  assert.equal((within(dialog).getByRole("button", { name: new RegExp(text.save) }) as HTMLButtonElement).disabled, false);
+});
 
 test("the dialog says it is testing, then shows the checks, the notes and the YAML", async () => {
   const dialog = await open();

@@ -1,0 +1,53 @@
+{
+  "model_id": "company-tuned-model",
+  "spec_name": "vllm-1xa100-d1",
+  "yaml": "# Saved from GPUWorks deployment \"working-local-model\" (id 1).\n# Verified on 1 x A100.\n# Local weights company-tuned-model must already be registered on the destination cluster; this template does not bundle model files.\n# No placement: the deployment ran on 1 card(s) with 24576 MiB each.\n# Missing kv_bytes_per_token for vllm: compute it from config.json\n# (scripts/estimate-calib/kv_layout.py) before proposing this template.\n# Tested openai.chat: HTTP 200.\nmodels:\n    - model_id: company-tuned-model\n      source: user\n      display_title: company-tuned-model\n      input_modalities:\n        - text\n      model_config:\n        architectures:\n            - Qwen3ForCausalLM\n        model_type: qwen3\n        num_hidden_layers: 1\n        hidden_size: 256\n        num_attention_heads: 8\n        num_key_value_heads: 8\n        max_position_embeddings: 2048\n        vocab_size: 32\n        torch_dtype: bfloat16\n      context_length: 2048\n      specs:\n        - name: vllm-1xa100-d1\n          scenario: balanced\n          engine: vllm\n          image: example/local-template:v1\n          weights:\n            quantization: bf16\n            sources:\n                - local: company-tuned-model\n          weight_bytes: 293\n          gpus:\n            vendor: nvidia\n            name: ^A100$\n          args:\n            - --enable-prompt-tokens-details\n            - --max-model-len\n            - \"512\"\n            - --gpu-memory-utilization\n            - \"0.8\"\n            - --seed\n            - \"7\"\n          api:\n            health_endpoint: /health\n            operations:\n                - request_encoding: json\n                  type: openai.chat\n                  endpoint: /v1/chat/completions\n                  mode: stream\n",
+  "verified": true,
+  "saveable": true,
+  "checks": [
+    {
+      "operation": "openai.chat",
+      "endpoint": "/v1/chat/completions",
+      "tested": true,
+      "passed": true,
+      "http_status": 200
+    }
+  ],
+  "notes": [
+    {
+      "code": "verified_on",
+      "params": {
+        "count": 1,
+        "gpu": "A100"
+      }
+    },
+    {
+      "code": "local_weights",
+      "params": {
+        "repo_id": "company-tuned-model"
+      }
+    },
+    {
+      "code": "placement_omitted",
+      "params": {
+        "gpu_count": 1,
+        "gpu_memory_mib": 24576
+      }
+    },
+    {
+      "code": "kv_bytes_missing",
+      "params": {
+        "engine": "vllm"
+      }
+    },
+    {
+      "code": "operation_passed",
+      "params": {
+        "http_status": 200,
+        "operation": "openai.chat"
+      }
+    }
+  ],
+  "excluded_env": [],
+  "evidence": "GPUWorks template test record\n\n- Deployment: working-local-model (id 1)\n- Cards: 1 x A100 (nvidia, 24576 MiB, driver fake)\n- Engine: vllm\n- Image: example/local-template:v1\n\n- Verified on 1 x A100.\n- Local weights company-tuned-model must already be registered on the destination cluster; this template does not bundle model files.\n- No placement: the deployment ran on 1 card(s) with 24576 MiB each.\n- Missing kv_bytes_per_token for vllm: compute it from config.json\n  (scripts/estimate-calib/kv_layout.py) before proposing this template.\n- Tested openai.chat: HTTP 200.\n"
+}

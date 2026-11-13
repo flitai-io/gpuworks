@@ -5,6 +5,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/planning"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // RequestNetworkSync schedules the latest persisted network policy without
@@ -120,16 +121,19 @@ func (s *Session) loadNetworkConfig() (proto.NetworkConfig, error) {
 		return proto.NetworkConfig{}, err
 	}
 	cfg := selection.Network()
-	s.completeNetworkConfig(node.ID, &cfg)
+	if err := s.completeNetworkConfig(node, &cfg); err != nil {
+		return proto.NetworkConfig{}, err
+	}
 	return cfg, nil
 }
 
-func (s *Session) completeNetworkConfig(nodeID uint, cfg *proto.NetworkConfig) {
+func (s *Session) completeNetworkConfig(node *store.Node, cfg *proto.NetworkConfig) error {
 	// Server-derived values are part of the policy too; omitting them would
 	// clear serving listeners on a proxy-only change.
-	cfg.ServingIP = s.hub.networks.ServingIP(nodeID)
+	cfg.ServingIP = s.hub.networks.ServingIP(node.ID)
 	if s.hub.enginePorts != nil {
 		ports := s.hub.enginePorts()
 		cfg.EnginePorts = &ports
 	}
+	return s.useKubeEnginePorts(node, cfg)
 }

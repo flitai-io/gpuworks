@@ -93,6 +93,11 @@ func verifyTemplateLaunch(dep *store.Deployment, instance store.Instance, node *
 			}
 		}
 	}
+	// Timeout edits are live policy changes, not a new container generation.
+	// Replay the captured budget so they do not change the engine environment
+	// used to verify this instance's immutable executable.
+	request.StartTimeoutSec = 0
+	request.DefaultStartTimeoutSec = desired.StartTimeoutSeconds
 	request.Source.Image = in.Image
 	request.ModelMount = desired.ModelMount
 	request.Topology.NNodes = 1

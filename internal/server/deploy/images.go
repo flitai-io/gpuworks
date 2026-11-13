@@ -11,10 +11,13 @@ import (
 // ImageTarget describes the runtime image lookup dimensions. Vendor is the
 // accelerator runtime family, not the cloud provider.
 type ImageTarget struct {
-	Engine           string
-	Vendor           string
-	PlatformArch     string // host image architecture, for example amd64 or arm64
-	PlatformOS       string // execution OS: linux containers or the host environment OS
+	Engine       string
+	Vendor       string
+	PlatformArch string // host image architecture, for example amd64 or arm64
+	PlatformOS   string // execution OS: linux containers or the host environment OS
+	// ChipFamily is the node card's family (accelerator.Arch.Family: 910b,
+	// 910c, 310p). Empty when unknown, which excludes nothing.
+	ChipFamily       string
 	Framework        string
 	FrameworkVersion string
 	DriverVersion    string // raw node-reported driver string; normalized by accelerator compat checks
@@ -38,10 +41,14 @@ type ImageCandidate struct {
 	Framework        string
 	FrameworkVersion string
 	Arch             string
-	ImageRef         string
-	Source           string
-	Deprecated       bool
-	Enabled          bool
+	// ChipFamily is the chip family the image is built for, derived from its
+	// reference (accelerator.RunnerImageChipFamily). Empty for a generic image,
+	// which runs on every family.
+	ChipFamily string
+	ImageRef   string
+	Source     string
+	Deprecated bool
+	Enabled    bool
 	// RollingTag marks a tag whose content moves (latest, nightly, ...). It
 	// may be chosen by hand but is never picked automatically: two replicas
 	// of one deployment could otherwise run different builds.
@@ -99,7 +106,8 @@ func IsEngineDefaultImage(engine, ref string) bool {
 // ResolveImageCatalog applies the automatic image precedence rules. An
 // explicit override wins unless its known execution platform cannot run on the target.
 // Automatic selection hard-filters on engine, framework, framework-implied
-// vendor, and host architecture, then orders survivors deterministically:
+// vendor, host architecture and chip family (an image built for a known other
+// family, such as the A3 build on a 910B node, is out), then orders survivors deterministically:
 // driver-compatible framework versions first (an unusable driver version only
 // sinks a candidate with a warning, it never eliminates it), then framework
 // version descending, engine version descending, and finally catalog creation
@@ -174,9 +182,9 @@ func ResolveImageCatalog(t ImageTarget, candidates []ImageCandidate) ImageResolu
 }
 
 // ImageCandidateSelectable reports whether an enabled catalog image may be
-// offered for the target. Engine, framework, the vendor the framework implies,
-// and host architecture decide it. The GPU model takes no part, so a new probe
-// that reports an unfamiliar GPU identity does not remove a manual choice.
+// offered for the target. Engine, framework, the vendor the framework implies
+// and host architecture decide it; the chip family only orders the automatic
+// pick (chipFamilyWeight), so every image stays a manual choice.
 func ImageCandidateSelectable(t ImageTarget, candidate ImageCandidate) bool {
 	return imageCandidateEligible(t, candidate)
 }
@@ -230,7 +238,8 @@ func candidateCompatible(t ImageTarget, candidate ImageCandidate) bool {
 
 // catalogCompatibility reports whether a candidate satisfies the hard runtime
 // constraints, and its ordering weight. The only weight inputs are the declared
-// framework and the driver compatibility of its framework version: every other
+// framework, the driver compatibility of its framework version and the chip
+// family the image is built for (chipFamilyWeight): every other
 // dimension (vendor labels, official source, arch specificity, engine-version
 // pinning) was either derivable from the framework or never set by a caller,
 // and their hidden bonuses made the automatic pick flip when one call site
@@ -259,7 +268,7 @@ func catalogCompatibility(t ImageTarget, targetVendor string, candidate ImageCan
 			score -= 4
 		}
 	}
-	return true, score
+	return true, score + chipFamilyWeight(candidate.ChipFamily, t.ChipFamily)
 }
 
 // imagePlatformCompatible checks binary execution facts independently of
@@ -278,6 +287,24 @@ func imagePlatformCompatible(t ImageTarget, candidate ImageCandidate) bool {
 		}
 	}
 	return os == "" || normalizeKey(t.PlatformOS) == "" || os == normalizeKey(t.PlatformOS)
+}
+
+// chipFamilyWeight orders images built for a chip family (the 910B and A3
+// builds of vllm-ascend): one built for the node's own family first, a generic
+// one next, and one built for another known family last, below a driver
+// warning. It only orders: no image is removed, so a manual choice of any of
+// them stands. When either family is unknown nothing is weighed.
+func chipFamilyWeight(candidate, target string) int {
+	candidate = normalizeKey(candidate)
+	target = normalizeKey(target)
+	switch {
+	case candidate == "" || target == "":
+		return 0
+	case candidate == target:
+		return 5
+	default:
+		return -40
+	}
 }
 
 func archMatches(candidate, platform string) bool {

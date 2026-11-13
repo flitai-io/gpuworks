@@ -78,6 +78,9 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	if !a.confirmEntrySelection(w, r, *old, c, pools[c.ID], pools[c.ID], req.ConfirmDropInstances) {
+		return
+	}
 	updated, err := a.d.Store.UpdateKubeCluster(c)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -99,6 +102,7 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 	if a.d.Log != nil && len(changed) > 0 {
 		a.d.Log.Info("kubernetes cluster edited", "cluster", updated.Name, "changed", strings.Join(changed, ","))
 	}
+	a.pushKubeLiveSettings(updated.ID, changed)
 	views, err := a.kubeEntryViews(r.Context(), []store.KubeCluster{*updated}, true)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

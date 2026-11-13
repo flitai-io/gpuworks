@@ -265,6 +265,8 @@
     "deploy": "Deploy"
   },
   "weightSourceModal": {
+    "localDescription": "This template references registered local weights and does not include the model files. Choose the registered model to deploy.",
+    "localMissing": "This template references registered local weights; it does not include the model files. Register the existing model directory in Models, then select the template again.",
     "confirmTitle": "Use a registered model?",
     "confirmDescription": "A registered model is the same repository as one the template declares. Choose the model to deploy, or register from a template source instead.",
     "useModel": "Use this model and deploy",

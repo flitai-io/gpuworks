@@ -18,7 +18,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/version"
-	"gpuworks.ai/gpuworks/pkg/bench/metrics"
 )
 
 var (
@@ -42,11 +41,24 @@ type Session struct {
 	ctrl                io.ReadWriteCloser
 	dec                 *json.Decoder
 	writeMu             sync.Mutex
-	imageStatusMu       sync.Mutex // serializes image inventory and operation persistence
-	imageStatusRevision atomic.Uint64
+	imageStatusMu       sync.Mutex    // serializes image inventory and operation persistence
+	imageStatusRevision atomic.Uint64 // image operation reports received
+	imageStatusApplied  uint64        // of those, persisted; guarded by imageStatusMu
+	// reportMu fences status writes against session replacement, submitMu
+	// does the same for coalesced submits without ever being held across
+	// store I/O, and reportQ is the ordered status worker's queue
+	// (session_report_queue.go).
+	reportMu sync.Mutex
+	submitMu sync.Mutex
+	reportQ  atomic.Pointer[reportQueue]
 	// Network saves coalesce independently from resource reconciliation.
 	networkSyncOnce   sync.Once
 	networkSyncNotify chan struct{}
+	// kubeSettingsMu orders the read and send of kube.settings (kube_settings.go).
+	kubeSettingsMu sync.Mutex
+	// kubeSettingsSent is set once the initial replay carried kube.settings:
+	// later full replays (SyncNode) leave them alone, edits push their own.
+	kubeSettingsSent atomic.Bool
 
 	// fullPushMu serializes full desired-state replays and network updates, and
 	// initialPushDone gates incremental updates behind the first replay
@@ -238,6 +250,7 @@ func (s *Session) handshake() error {
 // ctrlLoop processes inbound ctrl envelopes until the stream closes.
 func (s *Session) ctrlLoop() {
 	defer s.markClosed()
+	defer s.drainReports()
 	for {
 		var env proto.Envelope
 		if err := s.dec.Decode(&env); err != nil {
@@ -260,75 +273,18 @@ func (s *Session) handle(env proto.Envelope) {
 	case proto.TStatusImageNode:
 		s.handleImageStatus(env.D)
 	case proto.TStatusInstance:
-		var st proto.InstanceStatus
-		if err := json.Unmarshal(env.D, &st); err != nil {
-			s.hub.log.Warn("bad status.instance", "node", s.NodeUUID, "err", err)
-			return
-		}
-		accepted, err := s.hub.applyInstanceStatus(s, st)
-		if err != nil {
-			s.hub.log.Debug("apply status.instance", "uuid", st.UUID, "err", err)
-		}
-		if accepted {
-			s.rememberAssetDigests(st.RuntimeAssetDigests)
-		}
+		s.handleInstanceStatus(env.D)
 	case proto.TPeerTransferPhase:
 		var phase proto.PeerTransferPhase
 		if json.Unmarshal(env.D, &phase) == nil && s.hub.recordPeerTransferPhase(s, phase) {
 			s.hub.peerTransferEvent(phase.TransferID, "source_phase", "")
 		}
 	case proto.TStatusModelFile:
-		var st proto.ModelFileStatus
-		if err := json.Unmarshal(env.D, &st); err != nil {
-			return
-		}
-		_ = s.hub.applyModelFileStatus(s, st)
+		s.handleModelFileStatus(env.D)
 	case proto.TStatusStorage:
-		var report proto.StorageStatusReport
-		if err := json.Unmarshal(env.D, &report); err != nil {
-			s.hub.log.Warn("bad status.storage", "node", s.NodeUUID, "err", err)
-			return
-		}
-		node, err := s.hub.store.NodeByUUID(s.NodeUUID)
-		if err == nil {
-			if err := s.hub.store.ApplyStorageStatus(node.ID, report); err != nil {
-				s.hub.log.Warn("apply status.storage failed", "node", s.NodeUUID, "err", err)
-			}
-		}
+		s.handleStorageStatus(env.D)
 	case proto.TStatusBenchmark:
-		var st proto.BenchmarkStatus
-		if err := json.Unmarshal(env.D, &st); err != nil {
-			s.hub.log.Warn("bad status.benchmark", "node", s.NodeUUID, "err", err)
-			return
-		}
-		node, err := s.hub.store.NodeByUUID(s.NodeUUID)
-		if err != nil {
-			return
-		}
-		if err := s.hub.store.ApplyBenchmarkStatus(node.ID, st); err != nil {
-			s.hub.log.Debug("apply status.benchmark", "id", st.ID, "err", err)
-			return
-		}
-		if len(st.Sample) > 0 && st.PointIndex > 0 {
-			var sample metrics.ProcessSample
-			if json.Unmarshal(st.Sample, &sample) == nil {
-				_ = s.hub.store.AppendBenchmarkCurveSample(st.ID, st.PointIndex, time.Now().UTC(), sample)
-			}
-		}
-		if (len(st.DetailChunk) > 0 || st.DetailFinal) && s.hub.onBenchmarkDetail != nil {
-			s.hub.onBenchmarkDetail(s.NodeUUID, st)
-		}
-		if len(st.Sample) > 0 && s.hub.onMetrics != nil {
-			var sample metrics.ProcessSample
-			if json.Unmarshal(st.Sample, &sample) == nil {
-				now := time.Now().UnixMilli()
-				labels := map[string]string{"benchmark": fmt.Sprint(st.ID), "point": fmt.Sprint(st.PointIndex), "node": s.NodeUUID}
-				s.hub.onMetrics(s.NodeUUID, []proto.MetricSample{{Metric: "gpuworks_bench_output_tput", Labels: labels, Value: sample.OutputTput, TimeMS: now}, {Metric: "gpuworks_bench_total_tput", Labels: labels, Value: sample.TotalTput, TimeMS: now}, {Metric: "gpuworks_bench_request_tput", Labels: labels, Value: sample.RequestTput, TimeMS: now}, {Metric: "gpuworks_bench_ttft_p50_ms", Labels: labels, Value: sample.TTFTP50, TimeMS: now}, {Metric: "gpuworks_bench_tpot_p50_ms", Labels: labels, Value: sample.TPOTP50, TimeMS: now}, {Metric: "gpuworks_bench_latency_p99_ms", Labels: labels, Value: sample.LatencyP99, TimeMS: now}})
-			}
-		}
-		if st.State == "done" || st.State == "failed" || st.State == "canceled" {
-			_ = s.PushUpdate(proto.StateUpdate{RemovedBenchmarks: []uint{st.ID}})
-		}
+		s.handleBenchmarkStatus(env.D)
 	case proto.TMetrics:
 		if s.hub.onMetrics != nil {
 			var b proto.MetricBatch
@@ -538,6 +494,9 @@ func (s *Session) Close() {
 
 func (s *Session) markClosed() {
 	s.closeOnce.Do(func() { close(s.closed) })
+	if q := s.reportQ.Load(); q != nil {
+		q.wake() // a read loop waiting on a full queue gives up
+	}
 }
 
 // LastSeen returns the last activity time (unix ms).

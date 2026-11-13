@@ -1014,6 +1014,7 @@
     },
     "notes": "模板写了什么、缺什么",
     "note": {
+      "local_weights": "此模板引用已注册的本地权重 {{repo_id}}，不包含模型文件。在其他集群使用模板前，请先注册这些权重。",
       "verified_on": "已在 {{count}} × {{gpu}} 上验证；模板只匹配这一型号的卡。",
       "kv_bytes_missing": "缺少 {{engine}} 的每 token KV 字节数：在评审者按 config.json 补齐之前，部署表单不显示 token 容量。",
       "model_config_missing": "拿不到模型的 config.json，显存估算缺少模型结构。",
@@ -1030,7 +1031,7 @@
       "no_gpu_facts": "运行中的实例没有绑定到具体的卡，不知道它是在哪种卡上测的。",
       "template_assets": "源模板带随包文件，单个 YAML 装不下。请在模板编辑器里修改模板。",
       "components": "源模板使用了组件模型，单个 YAML 无法解析。请在模板编辑器里修改模板。",
-      "weights_not_public": "权重来自本地目录或 URL，别人下载不到。",
+      "weights_not_public": "当前权重来源不支持另存为模板。请使用已注册的本地模型，或 Hugging Face、ModelScope 仓库。",
       "revision_unpinned": "权重版本是分支名而不是 commit。把模型固定到一个 commit 后重新部署。",
       "revisions_differ": "模型的各个副本解析到了不同的 commit。把模型固定到一个 commit 后重新部署。",
       "template_missing": "创建这个部署所用的模板已被删除。",

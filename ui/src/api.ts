@@ -549,8 +549,22 @@ export interface DoctorFinding {
   recheck?: string;
 }
 
-/** The node.doctor result. Agents that predate the structured form send only `report`. */
+/** A check in the Server's unified node diagnosis. */
+export interface NodeDoctorCheck {
+  stage: string;
+  status: "passed" | "failed" | "warning" | "info" | "unavailable";
+  reason: string;
+  vantage: string;
+  target?: string;
+  source?: string;
+  observed_at?: string;
+  finding?: DoctorFinding;
+}
+
 export interface NodeDoctorReport {
+  checked_at?: string;
+  summary?: string;
+  checks?: NodeDoctorCheck[];
   report: string;
   host?: {
     hostname: string;
@@ -1178,6 +1192,25 @@ export interface KubeClusterUpdate {
   idle_return_seconds?: number;
   priority?: number;
   allow_preemption?: boolean;
+  /** Accepts that nodes a narrower node_selector leaves out still run instances (see KubeSelectionDrops); not a setting of the entry. */
+  confirm_drop_instances?: boolean;
+}
+
+/** A node a narrower node selection would leave out while it still runs instances (dto.KubeSelectionDrop). */
+export interface KubeSelectionDrop {
+  node_uuid: string;
+  node_name: string;
+  /** The node's name in the Kubernetes cluster. */
+  kube_node: string;
+  /** The deployments whose instances run there; empty when none is on record. */
+  deployments: string[];
+}
+
+/** The params of the 409 KUBE_SELECTION_DROPS_INSTANCES an edit or a pools change is refused with until confirmed. */
+export interface KubeSelectionDrops {
+  nodes: KubeSelectionDrop[];
+  /** False when no agent of the cluster could be asked: the nodes only may be affected. */
+  verified: boolean;
 }
 
 /** The answer to an edit (dto.KubeClusterEdit). */
@@ -5136,8 +5169,9 @@ export const api = {
   kubeClusters: () => getJSON<List<KubeCluster>>("/api/v1/kube/clusters"),
   kubeDefaults: () => getJSON<KubeDefaults>("/api/v1/kube/defaults"),
   /** Replaces the node pools a cloud entry holds; the cluster follows when the manifest is applied again. */
-  setKubeClusterPools: (uuid: string, poolIds: string[]) =>
-    sendJSON<KubeCluster>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`, { provider_pool_ids: poolIds }),
+  setKubeClusterPools: (uuid: string, poolIds: string[], confirmDropInstances?: boolean) =>
+    sendJSON<KubeCluster>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`,
+      confirmDropInstances ? { provider_pool_ids: poolIds, confirm_drop_instances: true } : { provider_pool_ids: poolIds }),
   createKubeCluster: (body: KubeClusterRequest) => sendJSON<KubeCluster>("POST", "/api/v1/kube/clusters", body),
   updateKubeCluster: (uuid: string, body: KubeClusterUpdate) => sendJSON<KubeClusterEdit>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}`, body),
   kubeManifest: (uuid: string) => getText(`/api/v1/kube/clusters/${encodeURIComponent(uuid)}/manifest`),

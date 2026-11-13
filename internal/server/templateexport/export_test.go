@@ -226,7 +226,7 @@ func TestBuildRefusesWhatASpecCannotExpress(t *testing.T) {
 		reason string
 	}{
 		{"no cards", func(in *Input) { in.GPUs, in.GPUCount = nil, 0 }, ReasonNoGPUFacts},
-		{"local weights", func(in *Input) { in.Model.Source = "local" }, ReasonWeightsNotPublic},
+		{"URL weights", func(in *Input) { in.Model.Source = "url" }, ReasonWeightsNotPublic},
 		{"branch revision", func(in *Input) { in.Model.ResolvedRevisions = []string{"main"} }, ReasonRevisionUnpinned},
 		{"copies disagree", func(in *Input) { in.Model.ResolvedRevisions = []string{commit, "a1b2c3d4e5f6"} }, ReasonRevisionsDiffer},
 		{"template assets", func(in *Input) {

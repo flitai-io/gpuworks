@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -124,7 +125,7 @@ func TestSweepEventRetentionAppliesBothBounds(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		n, err := st.SweepEventRetention(time.Now())
+		n, err := st.SweepEventRetention(context.Background(), time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -160,7 +161,7 @@ func TestSweepEventRetentionAppliesBothBounds(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		n, err := st.SweepEventRetention(time.Now())
+		n, err := st.SweepEventRetention(context.Background(), time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -271,7 +271,7 @@ func TestQueuedStatusDoesNotReviveDeregisteredNode(t *testing.T) {
 		t.Fatal("deregister left the node's queued status behind")
 	}
 	// One popped before deregister and applied after it is skipped too.
-	if err := h.applyNodeStatus(uuid, proto.NodeStatus{Sys: proto.SysInfo{Hostname: "late"}}); err != nil {
+	if err := h.applyQueuedNodeStatus(uuid, queuedNodeStatus{status: proto.NodeStatus{Sys: proto.SysInfo{Hostname: "late"}}, session: sess}); err != nil {
 		t.Fatal(err)
 	}
 	n, err := h.store.NodeByUUID(uuid)
@@ -284,7 +284,7 @@ func TestQueuedStatusDoesNotReviveDeregisteredNode(t *testing.T) {
 
 	// While the session is live the report applies.
 	h.register(sess)
-	if err := h.applyNodeStatus(uuid, proto.NodeStatus{Sys: proto.SysInfo{Hostname: "live"}}); err != nil {
+	if err := h.applyQueuedNodeStatus(uuid, queuedNodeStatus{status: proto.NodeStatus{Sys: proto.SysInfo{Hostname: "live"}}, session: sess}); err != nil {
 		t.Fatal(err)
 	}
 	if n, _ = h.store.NodeByUUID(uuid); n.State != store.NodeStateOnline || n.Hostname != "live" {

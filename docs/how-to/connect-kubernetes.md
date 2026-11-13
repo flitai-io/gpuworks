@@ -154,12 +154,12 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
    - 镜像拉取凭据：agent 镜像放在需要登录的仓库（企业 Harbor、云厂商的私有仓库）时，先在命名空间里建一个
      docker-registry 类型的 Secret（`kubectl -n gpuworks-system create secret docker-registry regcred …`，namespace 不存在时
      先建），再在这里填它的名称。agent Pod 用它拉镜像，agent 起的占位 Pod 也沿用它。
-   - RuntimeClass：只影响 NVIDIA 的实例 Pod，它们访问 GPU 用的 RuntimeClass；其他厂商的设备由 agent 自带的 device plugin
+   - RuntimeClass（保存后立即生效，见下文「修改集群条目」）：只影响 NVIDIA 的实例 Pod，它们访问 GPU 用的 RuntimeClass；其他厂商的设备由 agent 自带的 device plugin
      交给实例，不受它影响。留空（默认）时每个节点自己判断：集群里有 `nvidia` RuntimeClass 就用它，没有就用节点的默认运行时。
      只有 RuntimeClass 叫别的名字时才需要填写。
-   - 引擎端口段：默认 `40000-42767`。不要与集群的 NodePort 范围（默认 `30000-32767`）重叠：kube-proxy 会把发往本机
+   - 引擎端口段（保存后立即生效）：默认 `40000-42767`。不要与集群的 NodePort 范围（默认 `30000-32767`）重叠：kube-proxy 会把发往本机
      地址的 NodePort 流量转走。
-   - 空闲归还：借来的卡在最后一个实例停止后保留多久，默认 60 秒（每 30 秒检查一次，实际在 60 到 90 秒之间归还）；「常驻」表示一直不还，节点池整体交给 gpuworks。
+   - 空闲归还（保存后立即生效）：借来的卡在最后一个实例停止后保留多久，默认 60 秒（每 30 秒检查一次，实际在 60 到 90 秒之间归还）；「常驻」表示一直不还，节点池整体交给 gpuworks。
    - 优先级：gpuworks 的占位 Pod 与实例 Pod 所用 PriorityClass（`gpuworks-inference-<命名空间>`）的数值，默认 10000，范围 0 到 1000000000，越大越优先；普通 Pod 是 0。它也决定节点内存、磁盘紧张时的驱逐顺序：优先级低的先被驱逐。
    - 允许抢占：默认关闭（PriorityClass 写 `preemptionPolicy: Never`），借卡放不下时占位 Pod 只会等待，调度器不会为它驱逐你的其他 Pod。开启后，HAMi 与 ACK 共享 GPU 模式下（占位 Pod 经调度器）调度器可能驱逐优先级更低的 Pod；普通 device plugin 模式的占位 Pod 与所有实例 Pod 直接绑定节点，不经调度器，不受这个开关影响。
 3. 复制生成的命令在集群里执行：
@@ -183,20 +183,33 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
 命名空间、server 地址与状态目录创建后固定，要改就删掉条目重建。从云账号接入的条目按节点池选节点，不能改节点选择器，
 改它的节点池（见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)）。
 
-保存只改 gpuworks 里的记录，manifest 随即按新设置渲染，**集群里跑的仍是旧的，直到再应用一次**：
+**RuntimeClass、引擎端口段、空闲归还这三项不在 manifest 里，保存后立即对在线的 agent 生效**：不用重新应用、不重启 agent、网关不中断。
+server 把它们直接发给该条目的每个在线 agent（离线的在重新连上时拿到），agent 在原地更换：新起的 NVIDIA 实例 Pod 用新的 RuntimeClass
+（已经在跑的 Pod 不变）；之后的实例端口从新的端口段分配（已经在跑的实例端口不变）；借来的卡按新的空闲归还时间归还，
+改成「常驻」时 agent 马上把空闲的卡都借下来。只改这三项时，保存响应的 `reapply` 为 false、`commands` 为空。
+更早的 manifest（还带着 `--engine-ports` 参数、`GPUWORKS_KUBE_RUNTIME_CLASS` 环境变量或 Pod 模板注解）仍能用，以 server 发来的值为准；
+下次因别的原因重新应用时这些旧内容就不再出现。
+
+保存其余设置只改 gpuworks 里的记录，manifest 随即按新设置渲染，**集群里跑的仍是旧的，直到再应用一次**：
 
 - 手动接入的条目（没有吊销）：保存后页面给出一行 `kubectl` 命令，先删条目的 PriorityClass 再应用 manifest
   （`kubectl delete priorityclass gpuworks-inference-<命名空间> --ignore-not-found && kubectl apply -f ...`）：Kubernetes 不能原地修改
   PriorityClass 的数值与 `preemptionPolicy`，只能删了重建；之前改过优先级却没应用时，单独的 `kubectl apply` 会因此失败，
   所以每次都带上删除。写成一行是为了两步之间不留没有 PriorityClass 的空档。
 - 从云账号接入的条目：点「应用到集群」，server 自己应用；PriorityClass 变了时由 server 先删后建（应用结果里这一项的动作是 `replace`）。
-- 空闲归还时间也写在 manifest 里（DaemonSet 的 Pod 模板带注解 `gpuworks.ai/idle-return-seconds`），所以改了它同样要重新应用：
-  agent 随之重启，在启动注册时取到新值。agent 重启不会重启实例 Pod。
+- 重新应用会让 DaemonSet 滚动更新，agent 随之重启（agent 重启不会重启实例 Pod）。
 
 **改节点选择器（云条目是节点池）**：重新应用后，DaemonSet 不再在不被选中的节点上运行，这些节点的 agent 退出，节点离线；
 离线 15 分钟后，平台请同一个条目里另一个在线的 agent 确认：该节点在 Kubernetes 里是否还在、是否还运行着本条目的 agent Pod。
 连续两次确认（约隔 5 分钟，避开滚动更新时 agent Pod 删了还没重建的空档）都不是、且节点上没有实例时，节点记录自动删除。条目里没有别的在线节点时没有谁可问，不自动删除，需要在节点页手动删除这个节点
 （删除 Kubernetes 节点不需要 SSH）。新选中的节点自己加入。
+
+**缩小选择范围要确认**：改节点选择器（云条目是改节点池）会让某些节点退出选择、而这些节点上还有实例在运行时，server 拒绝保存，回 409
+`KUBE_SELECTION_DROPS_INSTANCES`，页面弹出确认框，列出这些节点和它们上面的部署。再次应用 manifest 时这些节点上的 agent 会被移除；
+实例继续运行、占着卡，但不再受平台管理、不能经网关访问，也不会被归还。请先停止或迁走这些部署，或者点「确认」仍然保存（请求带
+`confirm_drop_instances: true`）。server 不知道集群里节点的标签，所以请条目里一个在线的 agent 读取这些节点、按新的选择判断是否仍被选中；
+问不到任何 agent（条目里没有在线节点，或 agent 版本太旧）时，把所有还有实例的节点都列出来，确认框注明无法核实、这些节点可能受影响
+（参数 `verified` 为 false）。选择没变、只是放宽，或退出的节点上没有实例时不询问。保存本身仍只改 gpuworks 的记录，集群要等再次应用 manifest 才变。
 
 ## 卸载
 

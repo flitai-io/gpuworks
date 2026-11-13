@@ -144,6 +144,20 @@ type KubeClusterRequest struct {
 // cluster holds.
 type KubeClusterPoolsRequest struct {
 	ProviderPoolIDs []string `json:"provider_pool_ids"`
+	// ConfirmDropInstances accepts that nodes this change leaves out of the
+	// entry's selection still run instances (see KubeSelectionDrop).
+	ConfirmDropInstances bool `json:"confirm_drop_instances,omitempty"`
+}
+
+// KubeSelectionDrop is a node a narrower node selection would leave out while
+// it still runs instances, as the 409 KUBE_SELECTION_DROPS_INSTANCES lists
+// them: its agent is removed when the manifest is applied again, and the
+// instances keep running there unmanaged.
+type KubeSelectionDrop struct {
+	NodeUUID    string   `json:"node_uuid"`
+	NodeName    string   `json:"node_name"`
+	KubeNode    string   `json:"kube_node"`
+	Deployments []string `json:"deployments"`
 }
 
 // KubeEnrollRequest is what an agent of a cluster's DaemonSet sends to trade
@@ -261,6 +275,10 @@ type KubeClusterUpdate struct {
 	IdleReturnSeconds *int    `json:"idle_return_seconds,omitempty"`
 	Priority          *int    `json:"priority,omitempty"`
 	AllowPreemption   *bool   `json:"allow_preemption,omitempty"`
+	// ConfirmDropInstances accepts that nodes a narrower node_selector leaves
+	// out still run instances (see KubeSelectionDrop); it is not a setting of
+	// the entry.
+	ConfirmDropInstances bool `json:"confirm_drop_instances,omitempty"`
 }
 
 // KubeClusterEdit is the answer to an edit: the entry as stored, the fields

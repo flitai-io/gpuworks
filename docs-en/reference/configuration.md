@@ -299,6 +299,8 @@ The request body is merged into the current value, changing only the keys it con
 | `event_retention_days` | 180 | 1–3650 | Number of days to retain the event timeline |
 | `event_retention_bytes` | 50 GiB | 64 MiB–1 TiB | Event timeline retention in bytes; whichever limit is reached first, bytes or days, applies |
 
+At startup and every 6 hours after, the server trims events to these two limits, oldest first, in small batches, giving up the database write between batches so other writes are not held up for long; it deletes only as many as the limits require. When the server stops, a trim stops between batches and the next one picks up the rest. The byte count is estimated from the characters of an event's text (message, parameters, event code): a multi-byte character such as Chinese counts as one, so actual usage can exceed the set value.
+
 If values saved by older versions lack new keys, those keys use factory defaults when read. If the stored value cannot be parsed or is out of range, the entire value falls back to factory defaults.
 
 ## Environment Variables

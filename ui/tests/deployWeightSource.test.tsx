@@ -63,7 +63,7 @@ const i18n = createInstance();
 await i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  resources: { en: { deploy: deployLocale } },
+  resources: { en: { deploy: deployLocale, models: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/models.json", import.meta.url), "utf8")) } },
   defaultNS: "deploy",
   interpolation: { escapeValue: false },
 });
@@ -104,11 +104,18 @@ function serve(registry: FixtureModel[], { hold = false } = {}) {
   apiAny.templateWeightModels = (templateID: number, source: string, name: string): Promise<TemplateWeightModels> => {
     if (!hold) return answer(templateID, source, name);
     return new Promise((resolve, reject) => {
-      held.push({ release: () => resolve(answer(templateID, source, name)), fail: reject });
+      // The response belongs to the spec requested, even if the user changes
+      // the selected template while its delivery is held.
+      answer(templateID, source, name).then((value) => {
+        held.push({ release: () => resolve(value), fail: reject });
+      }, reject);
     });
   };
   apiAny.quickRegisterModel = async (payload: Record<string, unknown>) => {
     registered.push(payload);
+    if (payload.source !== "huggingface" && payload.source !== "modelscope") {
+      throw new Error("quick registration requires a Hugging Face or ModelScope source");
+    }
     const model = { id: 100 + registered.length, source: payload.source, source_id: payload.source_id, artifact_subfolder: payload.artifact_subfolder };
     registry.push(model as FixtureModel);
     return model;
@@ -174,6 +181,118 @@ const chooseSource = (label: string) => {
 };
 const useModelLabel = deployLocale.weightSourceModal.useModel;
 const fromTemplateLabel = deployLocale.weightSourceModal.registerFromTemplate;
+
+test("a local-only template without registered weights explains what is missing without registering a model", async () => {
+  const { fake, registered } = serve([]);
+  mount(spec([{ provider: "local", repo_id: "org/private-model" }]));
+  await waitFor(() => assert.equal(fake.weightLookups.length, 1));
+  await settle();
+  assert.deepEqual(registered, [], "a logical local identity is not a downloadable repository");
+  assert.ok(screen.getByText("This template references registered local weights; it does not include the model files. Register the existing model directory in Models, then select the template again."));
+  assert.equal(okButton(useModelLabel).disabled, true);
+  assert.equal(screen.queryByRole("combobox", { name: "Choose a model source" }), null);
+  assert.equal(text("model-id"), "");
+});
+
+test("a template with local and public weights offers only downloadable sources for registration", async () => {
+  const { registered } = serve([]);
+  mount(spec([{ provider: "local", repo_id: "org/private-model" }, { provider: "huggingface", repo_id: "org/public-model" }]));
+  await waitFor(() => assert.equal(text("modal-state"), "open"));
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Choose a model source" }));
+  assert.equal(screen.queryByText("Hugging Face · org/private-model") === null, true, "local weights must not be disguised as Hugging Face");
+  fireEvent.click(screen.getByText("Hugging Face · org/public-model", { selector: ".ant-select-item-option-content" }));
+  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await waitFor(() => assert.equal(text("model-id"), "101"));
+  assert.deepEqual(registered.map((value) => (value as { source: string; source_id: string }).source_id), ["org/public-model"]);
+  assert.equal(text("applied-source"), "huggingface:org/public-model");
+});
+
+test("a local-only template confirms the registered local model without offering remote registration", async () => {
+  const { registered } = serve([
+    { id: 9, source: "local", source_id: "org/private-model", name: "My local weights", presence: { ready_storages: 1 } },
+    { id: 10, source: "huggingface", source_id: "org/private-model", name: "A different public registration" },
+  ]);
+  mount(spec([{ provider: "local", repo_id: "org/private-model" }]));
+  await screen.findByRole("radio", { name: /My local weights/ });
+  assert.equal(screen.queryByRole("radio", { name: /A different public registration/ }) === null, true);
+  assert.equal(screen.queryByRole("radio", { name: fromTemplateLabel }) === null, true, "a local-only template has no remote registration choice");
+  assert.equal(text("model-id"), "", "the local model still requires confirmation");
+  fireEvent.click(okButton(useModelLabel));
+  await waitFor(() => assert.equal(text("model-id"), "9"));
+  assert.equal(text("template-id"), "3");
+  assert.equal(text("applied-source"), "local:org/private-model");
+  assert.deepEqual(registered, []);
+});
+
+test("a previous source confirmation cannot register or replace weights after selecting a local template", async () => {
+  const { held, registered } = serve([{ id: 9, source: "local", source_id: "org/private-model", name: "My local weights" }], { hold: true });
+  const view = mount(twoSources);
+  await waitFor(() => assert.equal(held.length, 1));
+  await act(async () => held[0].release());
+  await waitFor(() => assert.equal(text("modal-state"), "open"));
+  chooseSource("Hugging Face · org/model");
+  fireEvent.click(okButton(deployLocale.action.registerAndDeploy));
+  await waitFor(() => assert.equal(held.length, 2));
+  const localSelection = { spec: { name: "local-spec", source: "user", engine: "vllm", image: "local-image", weight_sources: [{ provider: "local", repo_id: "org/private-model" }] } };
+  view.rerender(<I18nextProvider i18n={i18n}><Host selection={localSelection} /></I18nextProvider>);
+  await waitFor(() => assert.equal(held.length, 3));
+  await act(async () => held[2].release());
+  await screen.findByRole("radio", { name: /My local weights/ });
+  await act(async () => held[1].release());
+  await settle();
+  assert.deepEqual(registered, [], "the obsolete source query must not start registration");
+  assert.equal(text("model-id"), "");
+  fireEvent.click(okButton(useModelLabel));
+  await waitFor(() => assert.equal(text("model-id"), "9"));
+  assert.equal(text("applied-source"), "local:org/private-model");
+});
+
+test("an older lookup cannot replace the registered choices of the current local template", async () => {
+  const { held, registered } = serve([{ id: 9, source: "local", source_id: "org/private-model", name: "My local weights" }], { hold: true });
+  const view = mount(oneSource);
+  await waitFor(() => assert.equal(held.length, 1));
+  const localSelection = { spec: { name: "local-spec", source: "user", engine: "vllm", image: "local-image", weight_sources: [{ provider: "local", repo_id: "org/private-model" }] } };
+  view.rerender(<I18nextProvider i18n={i18n}><Host selection={localSelection} /></I18nextProvider>);
+  await waitFor(() => assert.equal(held.length, 2));
+  await act(async () => held[1].release());
+  await screen.findByRole("radio", { name: /My local weights/ });
+  await act(async () => held[0].release());
+  await settle();
+  assert.deepEqual(registered, []);
+  assert.equal(text("model-id"), "");
+  fireEvent.click(okButton(useModelLabel));
+  await waitFor(() => assert.equal(text("model-id"), "9"));
+});
+
+test("returning to a source while its old registration finishes asks to use the registered model without duplicating it", async () => {
+  const registry: FixtureModel[] = [];
+  const { fake, registered } = serve(registry);
+  let complete!: () => void;
+  apiAny.quickRegisterModel = async (payload: Record<string, unknown>) => {
+    registered.push(payload);
+    assert.equal(payload.source, "modelscope");
+    return new Promise((resolve) => {
+      complete = () => {
+        const model = { id: 71, source: "modelscope", source_id: "Org/Model", name: "Registered while away" };
+        registry.push(model);
+        resolve(model);
+      };
+    });
+  };
+  const view = mount(oneSource);
+  await waitFor(() => assert.equal(registered.length, 1));
+  const localSelection = { spec: { name: "local-spec", source: "user", engine: "vllm", image: "local-image", weight_sources: [{ provider: "local", repo_id: "org/private-model" }] } };
+  view.rerender(<I18nextProvider i18n={i18n}><Host selection={localSelection} /></I18nextProvider>);
+  await waitFor(() => assert.equal(text("modal-state"), "open"));
+  view.rerender(<I18nextProvider i18n={i18n}><Host selection={oneSource} /></I18nextProvider>);
+  await waitFor(() => assert.equal(fake.weightLookups.length, 3));
+  await act(async () => complete());
+  await screen.findByRole("radio", { name: /Registered while away/ });
+  assert.equal(registered.length, 1);
+  assert.equal(text("model-id"), "", "the obsolete registration response cannot confirm the model for the user");
+  fireEvent.click(okButton(useModelLabel));
+  await waitFor(() => assert.equal(text("model-id"), "71"));
+});
 
 test("no registered model matches and several sources are declared: the user chooses, nothing is preselected", async () => {
   const { registered } = serve([{ id: 4, source: "modelscope", source_id: "org/other" }]);

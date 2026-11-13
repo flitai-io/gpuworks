@@ -209,6 +209,17 @@ func (a *apiHandlers) setKubeClusterPools(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	held, err := a.d.Store.KubeClusterPools(c.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	// The pools replace a node selector the entry may still carry.
+	next := *c
+	next.NodeSelector = ""
+	if !a.confirmEntrySelection(w, r, *c, next, held[c.ID], pools, req.ConfirmDropInstances) {
+		return
+	}
 	updated, err := a.d.Store.SetKubeClusterPools(c.UUID, pools)
 	switch {
 	case errors.Is(err, store.ErrNotFound):

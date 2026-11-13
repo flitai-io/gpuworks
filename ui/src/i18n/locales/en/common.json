@@ -104,6 +104,7 @@
     "KUBE_CLUSTER_INVALID": "The cluster's {{field}} cannot be used: {{reason}}.",
     "KUBE_CLUSTER_NAME_TAKEN": "Another cluster is already named {{name}}.",
     "KUBE_CLUSTER_HAS_NODES": "The cluster still has nodes. Remove them first, then delete the cluster.",
+    "KUBE_SELECTION_DROPS_INSTANCES": "The new node selection leaves out nodes that still run instances. Their agents are removed when the manifest is applied again, and the instances are no longer managed. Stop or move those deployments first, or confirm.",
     "KUBE_ENROLL_REFUSED": "The enrollment token was refused ({{reason}}).",
     "AUTOMATIC_PLACEMENT_UNAVAILABLE": "No node can satisfy automatic placement. Review the candidate reasons or choose a node manually.",
     "AUTOMATIC_PLACEMENT_STALE": "The evaluated node or GPU plan has changed. Evaluate the deployment again.",
@@ -600,7 +601,8 @@
     "PEER_TRANSFER_OBSERVATION_UNAVAILABLE": "Peer transfer observations are unavailable.",
     "PEER_TRANSFER_QUERY_INVALID": "Specify one non-empty transfer ID of at most 128 characters.",
     "PEER_RELAY_BUSY": "The management server is busy relaying another transfer. Retry shortly; the selected source is retained.",
-    "PEER_TRANSFER_CANCELED": "Peer transfer canceled. Retry from the selected source or choose a download."
+    "PEER_TRANSFER_CANCELED": "Peer transfer canceled. Retry from the selected source or choose a download.",
+    "IMAGE_REFETCH_FAILED": "The re-fetch failed; this node keeps the image it already had. Reason: {{reason}}"
   },
   "httpError": {
     "proxyPage": "HTTP {{status}}: a reverse proxy or tunnel between the browser and gpuworks answered with its own error page, so the server's reason was lost. Retry from the server's own address to see it."

@@ -219,7 +219,8 @@
     "copyConfigureCommand": "Copy configure command",
     "configureCopied": "Configure command copied",
     "fallback": {
-      "gpu_plugin_missing": "{{from}} is installed but {{plugin}} is not, so this node uses runveil. Install {{plugin}}; the node switches back to {{from}} once it is idle.", "daemon_not_ready": "{{from}} is installed but did not answer when the agent started (still starting or busy), so this node uses runveil for now. The agent retries every minute and switches back to {{from}} once it answers and the node is idle.",
+      "gpu_plugin_missing": "{{from}} is installed but {{plugin}} is not, so this node uses runveil. Install {{plugin}}; the node switches back to {{from}} once it is idle.",
+      "daemon_not_ready": "{{from}} is installed but did not answer when the agent started (still starting or busy), so this node uses runveil for now. The agent retries every minute and switches back to {{from}} once it answers and the node is idle.",
       "gpu_runtime_unconfigured": "{{from}} and {{plugin}} are installed but {{from}} is not configured for GPUs, so this node uses runveil. Configure it and restart {{from}}; the node switches back once it is idle.",
       "gpu_ready": "{{from}} is ready and can be switched to; the node switches automatically once it is idle."
     }
@@ -1190,6 +1191,81 @@
       },
       "elapsed": "Observed stage duration",
       "milliseconds": "{{count}} ms"
+    }
+  },
+  "doctorChecks": {
+    "rerun": "Run diagnosis again",
+    "checkedAt": "Diagnosis requested: {{time}}",
+    "result": "Result",
+    "evidence": "Evidence and next step",
+    "vantage": "Check location",
+    "target": "Target address",
+    "source": "Evidence source",
+    "observedAt": "Evidence observed at",
+    "unknown": "Observation time not provided",
+    "status": {
+      "passed": "Passed",
+      "failed": "Failed",
+      "unavailable": "Unavailable",
+      "warning": "Warning",
+      "info": "Available"
+    },
+    "stage": {
+      "ssh": "SSH inspection channel",
+      "installation": "Agent installation",
+      "process": "Agent process",
+      "connection": "Connection establishment",
+      "authentication": "Authentication",
+      "host": "Host and disk checks",
+      "runtimes": "Runtime checks",
+      "accelerators": "GPU and driver checks",
+      "finding": "Finding"
+    },
+    "vantageName": {
+      "node": "Compute node",
+      "control_plane": "Control plane (Server)"
+    },
+    "sourceName": {
+      "ssh": "Current SSH inspection",
+      "tcp_probe": "Current TCP probe",
+      "http_probe": "Current node-side HTTP probe",
+      "agent_rpc": "Agent self-check for this request"
+    },
+    "summary": {
+      "failed": "Diagnosis completed with failed checks. Review the evidence and suggested actions.",
+      "warning": "Diagnosis completed with checks that need attention.",
+      "unavailable": "Diagnosis completed with unavailable checks. Review their reasons.",
+      "completed": "Diagnosis completed. Review the checks and detailed information."
+    },
+    "reason": {
+      "credentials_unavailable": "No SSH credentials are available for node inspection. Independent Server-side checks still run.",
+      "credential_error": "Saved SSH credentials could not be read. Check the node SSH configuration.",
+      "ssh_unavailable": "SSH is unavailable. Check its address, credentials and network.",
+      "ssh_connected": "SSH connected during this inspection. This verifies only the inspection channel.",
+      "inspection_unavailable": "Node information could not be read. Check SSH account permissions and required tools.",
+      "not_installed": "No Agent binary exists in the target installation directory. Check the directory and installation result.",
+      "installed": "An Agent binary exists in the target installation directory.",
+      "not_running": "This check found no running Agent service or process for the target installation. Check its service state.",
+      "running": "This check found the Agent service or process for the target installation directory running.",
+      "not_observed": "No reliable evidence is available for this connection stage.",
+      "administrator_required": "Node access inspection requires an administrator. Run diagnosis with an administrator account.",
+      "invalid_address": "No valid connection target is configured. Check the node connection settings.",
+      "tcp_connected": "The target TCP port is reachable.",
+      "dns": "Target name resolution failed. Check DNS at the initiating endpoint.",
+      "connect": "Target connection failed. Check the address, port and network path.",
+      "refused": "The target TCP connection was refused. Check the listener, service and reject policies.",
+      "tls": "TLS establishment failed. Check certificates, system time and target protocol.",
+      "timeout": "The connection timed out. The blocking location is unknown; check routing and access policies between endpoints.",
+      "cancelled": "The check was cancelled before a complete result was available.",
+      "transport": "A transport error occurred. Check connection records at both endpoints.",
+      "identity_unverified": "The installation could not be associated with this node. The node-side network probe was not run; check node identity and installation directory.",
+      "http_connected": "The compute node can access the management node's health check endpoint.",
+      "http_error": "The Server health endpoint returned an unexpected HTTP status. Check the target, service and proxy configuration.",
+      "tool_missing": "curl is unavailable on the node; the HTTP probe could not run.",
+      "authentication_not_checked": "This check tests reachability without performing Agent authentication, so its authentication result is unavailable.",
+      "requires_agent": "This check requires a connected Agent.",
+      "not_reported": "The Agent did not return structured results for this item. Review the original report.",
+      "information_collected": "Detailed information is available. Findings are listed separately among the checks."
     }
   }
 }

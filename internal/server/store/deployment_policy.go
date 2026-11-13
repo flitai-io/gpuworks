@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -148,8 +149,9 @@ func (p DeploymentPolicy) EventRetentionCutoff(now time.Time) time.Time {
 // kept when their deployment is deleted (see deleteInstanceRecords), so without
 // a bound the table would grow for the life of the installation. The sweep is
 // passive and caller-driven, matching MarkStaleOffline: the store does no
-// scheduling of its own.
-func (s *Store) SweepEventRetention(now time.Time) (int64, error) {
+// scheduling of its own. It stops between batches once ctx ends: the server
+// waits for it on shutdown, and the next sweep picks up the rest.
+func (s *Store) SweepEventRetention(ctx context.Context, now time.Time) (int64, error) {
 	policy := s.DeploymentPolicy()
-	return s.DeleteEventsBefore(policy.EventRetentionCutoff(now), policy.EventRetentionBytes)
+	return s.DeleteEventsBefore(ctx, policy.EventRetentionCutoff(now), policy.EventRetentionBytes)
 }

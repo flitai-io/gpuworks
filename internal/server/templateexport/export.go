@@ -8,7 +8,9 @@
 package templateexport
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -221,6 +223,17 @@ func fromModel(in Input) (inferencecatalog.InferenceModel, inferencecatalog.Infe
 		DisplayTitle:    displayTitle(facts),
 		ContextLength:   facts.ContextLength,
 		InputModalities: append([]string(nil), facts.InputModalities...),
+	}
+	// Keep human local weight identities intact. Catalog keys must also be
+	// safe URL path segments so whitespace and Unicode do not change lookup.
+	if source.Provider == "local" {
+		portable := inferencecatalog.ValidateModelID(model.ModelID) == nil
+		for _, segment := range strings.Split(model.ModelID, "/") {
+			portable = portable && url.QueryEscape(segment) == segment
+		}
+		if !portable {
+			model.ModelID = fmt.Sprintf("local/%x", sha256.Sum256([]byte(model.ModelID)))
+		}
 	}
 	var notes []Note
 	if strings.TrimSpace(facts.ConfigJSON) != "" {
