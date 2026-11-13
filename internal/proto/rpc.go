@@ -50,7 +50,28 @@ const (
 	// RPCKubeNodeExists asks a Kubernetes node's agent whether another node
 	// of its cluster still exists there (KubeNodeExistsParams).
 	RPCKubeNodeExists = "kube.node.exists"
+	// RPCKubeNodesSelected asks a Kubernetes node's agent which of some nodes
+	// of its cluster a node selection still selects (KubeNodesSelectedParams).
+	RPCKubeNodesSelected = "kube.nodes.selected"
 )
+
+// KubeNodesSelectedParams is RPCKubeNodesSelected's request: the node
+// selection a cluster entry would have, as its manifest states it. A node is
+// selected when its labels carry every Selector pair and, when PoolLabel is
+// set, its PoolLabel label is one of PoolIDs.
+type KubeNodesSelectedParams struct {
+	NodeNames []string          `json:"node_names"`
+	Selector  map[string]string `json:"selector,omitempty"`
+	PoolLabel string            `json:"pool_label,omitempty"`
+	PoolIDs   []string          `json:"pool_ids,omitempty"`
+}
+
+// KubeNodesSelectedResult is RPCKubeNodesSelected's answer: for each node
+// asked about, whether the selection selects it. A node that no longer exists
+// is not selected.
+type KubeNodesSelectedResult struct {
+	Selected map[string]bool `json:"selected"`
+}
 
 // KubeNodeExistsParams is RPCKubeNodeExists's request.
 type KubeNodeExistsParams struct {

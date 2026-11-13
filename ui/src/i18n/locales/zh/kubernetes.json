@@ -236,6 +236,16 @@
     "separator": " · ",
     "none": "无加速卡"
   },
+  "selectionDrops": {
+    "title": "仍有实例运行的节点将退出选择",
+    "intro": "这次修改不再选中下面的节点，而它们上面还有实例在运行。再次应用 manifest 时，这些节点上的 agent 会被移除；实例会继续运行并占着显卡，但不再受平台管理、不能通过网关访问，也不会被归还。请先停止或迁走这些部署，或者确认后仍保存这次修改。",
+    "unverified": "没有可询问的 agent，无法核实，这些节点可能受影响。",
+    "deployments": "部署：{{names}}",
+    "noDeployments": "没有部署记录",
+    "later": "在再次应用 manifest 之前，集群里不会有任何变化。",
+    "cancel": "取消",
+    "confirm": "确认"
+  },
   "edit": {
     "saved": "集群 {{name}} 已保存",
     "savedTitle": "集群 {{name}} 已保存",

@@ -121,6 +121,9 @@ type kubeSourceRig struct {
 	api      *objectAPI
 	provider uint
 	signer   *auth.TokenSigner
+	// agents answers the RPCs the server sends to a node's agent; nil
+	// means no agent can be reached.
+	agents func(ctx context.Context, uuid, method string, params any) (json.RawMessage, error)
 }
 
 func newKubeSourceRig(t *testing.T) *kubeSourceRig {
@@ -153,8 +156,15 @@ func newKubeSourceRig(t *testing.T) *kubeSourceRig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rig := &tokenRig{t: t, h: Router(Deps{AuthSigner: signer, Store: st, Providers: svc, AI: &fakeAI{available: true}}), st: st, session: session}
-	return &kubeSourceRig{tokenRig: rig, drv: drv, api: fake, provider: p.ID, signer: signer}
+	out := &kubeSourceRig{drv: drv, api: fake, provider: p.ID, signer: signer}
+	callNode := func(ctx context.Context, uuid, method string, params any) (json.RawMessage, error) {
+		if out.agents == nil {
+			return nil, errors.New("node is offline")
+		}
+		return out.agents(ctx, uuid, method, params)
+	}
+	out.tokenRig = &tokenRig{t: t, h: Router(Deps{AuthSigner: signer, Store: st, Providers: svc, AI: &fakeAI{available: true}, CallNode: callNode}), st: st, session: session}
+	return out
 }
 
 func decodeKube[T any](t *testing.T, rec *httptest.ResponseRecorder) T {

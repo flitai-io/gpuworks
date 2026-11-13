@@ -324,3 +324,71 @@ test("deleting an entry with nodes that the server can remove offers its remove 
   await user.click(popover().getByRole("button", { name: k.actions.remove }));
   assert.ok(await screen.findByText(k.operation.removeTitle.replace("{{name}}", "ack-gpu")));
 });
+
+// A node selector that leaves out nodes still running instances is refused by the server until confirmed.
+const DROPS = {
+  nodes: [
+    { node_uuid: "n-1", node_name: "gpu-a1", kube_node: "ip-10-0-0-11", deployments: ["chat", "embed"] },
+    { node_uuid: "n-2", node_name: "gpu-a2", kube_node: "gpu-a2", deployments: [] },
+  ],
+  verified: true,
+};
+const refusedUnlessConfirmed = (drops: unknown) => (_uuid: string, body: KubeClusterUpdate): KubeClusterEdit | Error => {
+  if (body.confirm_drop_instances) return { cluster: cluster({ node_selector: body.node_selector }), changed: ["node_selector"], reapply: false, commands: [] };
+  return new APIError("KUBE_SELECTION_DROPS_INSTANCES", drops as Record<string, unknown>, "drops instances", 409);
+};
+const confirmDialog = () => within(screen.getByText(k.selectionDrops.title).closest('[role="dialog"]') as HTMLElement);
+
+test("a node selector that drops nodes still running instances lists them and their deployments; cancelling sends nothing more, confirming resends with the confirmation", async () => {
+  const calls = stubApi([cluster()], { edit: refusedUnlessConfirmed(DROPS) });
+  const user = renderPage();
+  const form = await openEdit(user, "prod-gpu");
+  await user.clear(form.getByLabelText(field(k.drawer.nodeSelector)));
+  await user.type(form.getByLabelText(field(k.drawer.nodeSelector)), "gpu=h100");
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+
+  await screen.findByText(k.selectionDrops.title);
+  const ask = confirmDialog();
+  assert.ok(ask.getByText("gpu-a1"));
+  assert.ok(ask.getByText("(ip-10-0-0-11)"), "the Kubernetes name is shown when it differs");
+  assert.ok(ask.getByText(k.selectionDrops.deployments.replace("{{names}}", "chat, embed")));
+  assert.ok(ask.getByText("gpu-a2"));
+  assert.ok(ask.getByText(k.selectionDrops.noDeployments));
+  assert.ok(ask.getByText(k.selectionDrops.later));
+  assert.equal(ask.queryByText(k.selectionDrops.unverified), null, "a verified answer carries no caveat");
+  assert.deepEqual(calls.updateKubeCluster, [["c-1", { node_selector: "gpu=h100" }]], "the first request carries no confirmation");
+
+  await user.click(ask.getByRole("button", { name: k.selectionDrops.cancel }));
+  await waitFor(() => assert.equal(screen.queryByText(k.selectionDrops.title), null));
+  assert.equal(calls.updateKubeCluster.length, 1, "cancelling sends nothing");
+  assert.ok(form.getByRole("button", { name: k.drawer.save }), "the form stays for another try");
+  assert.equal(screen.queryByText(locale.common.apiError.KUBE_SELECTION_DROPS_INSTANCES), null, "the dialog is the message, not a banner");
+
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+  await screen.findByText(k.selectionDrops.title);
+  await user.click(confirmDialog().getByRole("button", { name: k.selectionDrops.confirm }));
+  await waitFor(() => assert.equal(calls.updateKubeCluster.length, 3));
+  assert.deepEqual(calls.updateKubeCluster[2], ["c-1", { node_selector: "gpu=h100", confirm_drop_instances: true }]);
+  await noDialog();
+});
+
+test("when no agent could be asked the dialog says the nodes may be affected", async () => {
+  stubApi([cluster()], { edit: refusedUnlessConfirmed({ ...DROPS, verified: false }) });
+  const user = renderPage();
+  const form = await openEdit(user, "prod-gpu");
+  await user.clear(form.getByLabelText(field(k.drawer.nodeSelector)));
+  await user.type(form.getByLabelText(field(k.drawer.nodeSelector)), "gpu=h100");
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+  assert.ok(await screen.findByText(k.selectionDrops.unverified));
+  assert.ok(confirmDialog().getByText("gpu-a1"));
+});
+
+test("another refusal of an edit is still a message in the form, not the confirmation", async () => {
+  stubApi([cluster()], { edit: () => new APIError("KUBE_CLUSTER_NAME_TAKEN", { name: "taken" }, "taken", 409) });
+  const user = renderPage();
+  const form = await openEdit(user, "prod-gpu");
+  await user.type(form.getByLabelText(field(k.drawer.name)), "x");
+  await user.click(form.getByRole("button", { name: k.drawer.save }));
+  assert.ok(await form.findByText(locale.common.apiError.KUBE_CLUSTER_NAME_TAKEN.replace("{{name}}", "taken")));
+  assert.equal(screen.queryByText(k.selectionDrops.title), null);
+});

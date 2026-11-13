@@ -78,6 +78,9 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	if !a.confirmEntrySelection(w, r, *old, c, pools[c.ID], pools[c.ID], req.ConfirmDropInstances) {
+		return
+	}
 	updated, err := a.d.Store.UpdateKubeCluster(c)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
