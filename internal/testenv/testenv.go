@@ -168,10 +168,6 @@ type Env struct {
 // output. Setting GPUWORKS_TESTENV_LOG to a path turns the real server and
 // agent logs on, which is how a load case is diagnosed when it reports
 // something the assertions alone cannot explain.
-// AdminPassword is the bootstrap admin password of every harness server.
-// Callers that log in over HTTP themselves must use it rather than a literal.
-const AdminPassword = "gpuworks-test-password-2026"
-
 func harnessLogger(t testing.TB) *slog.Logger {
 	path := strings.TrimSpace(os.Getenv("GPUWORKS_TESTENV_LOG"))
 	if path == "" {
