@@ -48,18 +48,19 @@ agent 主动连接 `wss://server/api/v1/agent/connect`，升级后通过 yamux �
 
 | 通道 | 承载 | 特点 |
 |---|---|---|
-| `ctrl` | 控制消息（含指标与日志批次）、终端 | 延迟敏感，固定小窗口，不被大流量拖慢 |
-| `data` | 到实例的请求隧道、日志追踪、模型与镜像传输 | 窗口自适应，适配高带宽高延迟链路 |
+| `ctrl` | 控制消息、终端 | 延迟敏感，固定小窗口，不被大流量拖慢 |
+| `data` | 到实例的请求隧道、日志追踪、指标与日志上送、模型与镜像传输 | 窗口自适应，适配高带宽高延迟链路 |
 
 其中各类流为：
 
-- `ctrl`：双向 JSON Lines 控制消息，envelope 为 `{"t":"...","id":...,"d":{...}}`；指标与日志批次也是这条流上的消息，与心跳、RPC 应答共用；
+- `ctrl`：双向 JSON Lines 控制消息，envelope 为 `{"t":"...","id":...,"d":{...}}`；
+- `telemetry`：agent 在数据通道上打开，上送指标与日志批次，格式与 ctrl 消息相同；server 不支持（老版本）或 agent 不开数据通道（`--data-lane=false`）时这些批次仍走 ctrl；数据通道在握手后 30 秒内未连上时，该连接先走 ctrl，连上后切到数据通道，见 [ADR 0064](../adr/0064-telemetry-stream-on-the-data-lane.md)；
 - `logtail`、`tunnel`：实时日志追踪和数据面；
 - `model.read`/`model.write`、`image.read`/`image.write`：模型目录和 docker save/load 流；
 - `terminal`：host 或 container 的交互 pty。
 
 数据通道是控制通道会话的附属资源：它掉线时 server 会等待它重连，超时后网关返回可重试的 503，而不会把大流量回退到控制通道，
-见 [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md)。老版本 agent、`--data-lane=false` 和 `server_dial` 使用单通道。
+见 [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md)。老版本 agent 和 `--data-lane=false` 使用单通道；`server_dial` 在 agent 开启数据通道时同样建立第二条通道。
 
 断线后 agent 重连并重放状态；server 以 desired state + watch 驱动长生命周期，短动作走 RPC。
 `server_dial` 是带 HMAC challenge 的例外，用于 server 主动拨入受控节点。

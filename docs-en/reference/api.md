@@ -2181,8 +2181,8 @@ Errors of the upload request itself, all 400: `invalid_content_type`, `invalid_m
 
 - For data plane `/v1/*` endpoints (OpenAI-compatible chat/embeddings/rerank/audio/image/video/realtime endpoints, etc.), see
   [`openai-gateway.md`](openai-gateway.md); they are not repeated here, except `/v1/files` and `/v1/batches`, which are in [Batches](#batches批处理任务).
-- Agent-side yamux subprotocols (`ctrl`/`metrics`/`logtail`/`tunnel`/`model.read`/`model.write`/
-  `image.read`/`image.write`/`terminal`) are not HTTP routes. They belong to the `internal/proto` control plane protocol and are outside this document's scope.
+- Agent-side yamux subprotocols (`ctrl`/`telemetry`/`logtail`/`tunnel`/`model.read`/`model.write`/
+  `image.read`/`image.write`/`terminal` and others; `proto.LaneFor` has the full list and their lanes) are not HTTP routes. They belong to the `internal/proto` control plane protocol and are outside this document's scope.
 
 ## Route and Contract Maintenance
 

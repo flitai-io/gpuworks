@@ -169,7 +169,7 @@ flowchart LR
 - **server** 是控制面：REST API 与 Web 界面、OpenAI 兼容网关、按期望状态调谐的控制器、调度器，以及指标、日志和请求追踪的存储。
 - 每个 GPU 节点上跑一个 **agent**：探测加速器，通过 Docker、nerdctl、内置免 root 运行时（runveil）或 macOS 本机进程运行引擎，
   并上报指标和日志。
-- agent 主动外连 server，所有流量复用两条通道：`ctrl` 承载指令、指标和终端，`data` 承载推理流量、日志和模型 / 镜像传输。
+- agent 主动外连 server，所有流量复用两条通道：`ctrl` 承载指令和终端，`data` 承载推理流量、指标与日志、模型 / 镜像传输。
   推理请求经这条隧道到达引擎，节点不需要暴露任何端口。
 
 详见[架构说明](docs/explanation/architecture.md)和 [ADR](docs/adr/README.md)。

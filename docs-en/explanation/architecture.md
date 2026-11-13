@@ -48,18 +48,19 @@ The agent initiates a connection to `wss://server/api/v1/agent/connect`, then us
 
 | Lane | Traffic | Characteristics |
 |---|---|---|
-| `ctrl` | Control messages (including metric and log batches), terminals | Latency-sensitive, with a fixed small window; unaffected by heavy traffic |
-| `data` | Request tunnels to instances, log tailing, model and image transfers | Adaptive window for high-bandwidth, high-latency links |
+| `ctrl` | Control messages, terminals | Latency-sensitive, with a fixed small window; unaffected by heavy traffic |
+| `data` | Request tunnels to instances, log tailing, metric and log shipping, model and image transfers | Adaptive window for high-bandwidth, high-latency links |
 
 Stream types include:
 
-- `ctrl`: bidirectional JSON Lines control messages, with an envelope of `{"t":"...","id":...,"d":{...}}`; metric and log batches are messages on this stream too, shared with heartbeats and RPC responses;
+- `ctrl`: bidirectional JSON Lines control messages, with an envelope of `{"t":"...","id":...,"d":{...}}`;
+- `telemetry`: opened by the agent on the data lane to ship metric and log batches, in the same format as ctrl messages; against an older server that does not support it, or with `--data-lane=false`, these batches stay on ctrl; if the data lane has not attached within 30 s of the handshake, that connection's batches go on ctrl until it does. See [ADR 0064](../adr/0064-telemetry-stream-on-the-data-lane.md);
 - `logtail`, `tunnel`: live log tailing and the data plane;
 - `model.read`/`model.write`, `image.read`/`image.write`: model directories and docker save/load streams;
 - `terminal`: interactive pty on a host or in a container.
 
 The data lane is a subordinate resource of the control-lane session. If it disconnects, the server waits for it to reconnect. After a timeout, the gateway returns a retryable 503 instead of falling back to the control lane for heavy traffic.
-See [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md). Older agents, `--data-lane=false`, and `server_dial` use a single lane.
+See [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md). Older agents and `--data-lane=false` use a single lane; `server_dial` also sets up the second lane when the agent enables the data lane.
 
 After a disconnection, the agent reconnects and replays its state. The server drives long-lived lifecycles with desired state + watch, and uses RPC for short actions.
 `server_dial` is an exception that uses an HMAC challenge, allowing the server to initiate connections to managed nodes.
