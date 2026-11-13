@@ -231,17 +231,17 @@ func TestInstallDockerCommandPinsDockerAndUsesMainlandMirrors(t *testing.T) {
 }
 
 func TestPullImageCommandTriesMirrorsInOrderAndTagsTheCanonicalName(t *testing.T) {
-	command := pullImageCommand("gpustack/runner:cuda12.8-vllm0.17.1", []string{"swr.example/gpustack/runner:x", "gpustack/runner:cuda12.8-vllm0.17.1"})
-	if strings.Index(command, "swr.example") > strings.Index(command, "docker pull 'gpustack/runner") {
+	command := pullImageCommand("gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4", []string{"swr.example/gpuworks/gpuworks-runner:x", "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"})
+	if strings.Index(command, "swr.example") > strings.Index(command, "docker pull 'gpuworks/gpuworks-runner") {
 		t.Fatalf("mirror must come first:\n%s", command)
 	}
-	if !strings.Contains(command, `docker tag "$ok" 'gpustack/runner:cuda12.8-vllm0.17.1'`) {
+	if !strings.Contains(command, `docker tag "$ok" 'gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4'`) {
 		t.Fatalf("the pulled image is not tagged with the name the cases deploy:\n%s", command)
 	}
 }
 
 func TestBootedChecksRequireModelImageRuntimeAndAGPUInAContainer(t *testing.T) {
-	command := bootedChecksCommand("/opt/gpuworks/test-fixtures/models/qwen2-0.5b", "gpustack/runner:cuda12.8-vllm0.17.1", nil, nil)
+	command := bootedChecksCommand("/opt/gpuworks/test-fixtures/models/qwen3-0.6b", "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4", nil, nil)
 	if strings.Contains(command, "GPUWORKS_EXTRA_IMAGE") {
 		t.Error("no extra image was asked for, yet the checks look for one")
 	}

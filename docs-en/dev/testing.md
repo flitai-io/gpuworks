@@ -336,9 +336,20 @@ applies to `.gitlab-ci.yml` only.
   The image must be built and published first (`build.sh`, then `publish.py`).
   `COMPSHARE_GPU_MODELS` (comma-separated, e.g. `V100S`) replaces the candidate card order the case rents from, to aim a run at one card type.
 - `prepare-compshare-golden-image` creates and validates a new template, but does not delete old templates or change CI variables.
-  The template contains both open-source and proprietary kernel modules for the same NVIDIA driver version (currently 570.153.02). At boot,
+  The template contains both open-source and proprietary kernel modules for the same NVIDIA driver version (currently 580.95.05). At boot,
   `gpuworks-nvidia-kmod.service` loads the open-source modules first (Blackwell GPUs such as the RTX 5090 require them). If no GPU is initialized,
   it switches to the proprietary modules (GPUs without GSP, such as V100S and P40, require these). The selected variant is recorded in `/run/gpuworks-nvidia-kmod`.
+
+  The template's runner is `gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2` and its model is Qwen3-0.6B (`/opt/gpuworks/test-fixtures/models/qwen3-0.6b`,
+  the value of `COMPSHARE_PRELOADED_MODEL_PATH`); the `cuda13.0` image is not used because it has no Turing kernels and cannot run the cheapest card, the 2080 Ti.
+  When the source template carries another driver version, the tool first replaces the userspace driver: a runner image needs a driver at least as new as its CUDA version (the toolkit refuses to start it per `NVIDIA_REQUIRE_CUDA`),
+  and bridging the gap with the image's forward-compatibility libraries does not work on GeForce cards (`Error 804`); 580 is the last branch that still supports Pascal and Volta.
+  When the source template lacks that runner, the tool pulls it from `-pull-sources` (by default Huawei Cloud SWR, quay.io, Docker Hub);
+  old runners listed in `-remove-images` are deleted from the Docker store so they do not stay in the new template. Validation makes one real
+  CUDA call inside the runner on every GPU model, proving the driver carries the runner's CUDA runtime. The tool also switches Docker to the cgroupfs cgroup driver (as on the Aliyun template): a new template's first boot
+  reloads systemd twice, which under the systemd driver revokes the GPU device access of running containers, and they then report `No CUDA GPUs are available`.
+  When validation fails, `-keep-failed-validation` keeps the validation VM (its login credentials are written to `<run-id>.ssh` in the current directory; delete it with `cleanup-leaked -run-id` afterwards),
+  and `-revalidate-image <id>` reruns only the single-VM validation of an existing template.
 
   After creating the template, the tool boots and validates each GPU model specified by `-validate-gpus`. You can also use `-validate-image <id>` to validate only an existing template.
   GPU models that are out of stock or rejected by CompShare are reported without causing a failure. If the image lacks nvidia-container-toolkit, the tool installs the same version as the North China template and configures the Docker runtime

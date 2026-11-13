@@ -35,9 +35,6 @@ type vmBackend struct {
 	DiskGB int
 	// ModelEndpoint is an optional model mirror site rule.
 	ModelEndpoint string
-	// PullMirror is the replacement endpoint list of the gpustack/ image source
-	// rule; empty sets no rule (the image is already on the VM).
-	PullMirror []string
 	// Image is the vLLM runner single-VM cases deploy; DistributedImage the one
 	// multi-node cases do.
 	Image, DistributedImage string
@@ -124,12 +121,7 @@ type l4TestModel struct {
 }
 
 var (
-	// l4Qwen2Model is the model the CompShare golden images carry.
-	l4Qwen2Model = l4TestModel{
-		SourceID: "Qwen/Qwen2-0.5B-Instruct", Name: "Qwen2-0.5B-Instruct", Arch: "qwen2", WeightBytes: 1 << 30, ServedPrefix: "qwen2",
-		Meta: `{"model_type":"qwen2","num_hidden_layers":24,"hidden_size":896,"num_attention_heads":14,"num_key_value_heads":2,"max_position_embeddings":32768}`,
-	}
-	// l4Qwen3Model is the model the Aliyun golden image carries
+	// l4Qwen3Model is the model the Aliyun and CompShare golden images carry
 	// (goldenimage.DefaultModelRepo).
 	l4Qwen3Model = l4TestModel{
 		SourceID: "Qwen/Qwen3-0.6B", Name: "Qwen3-0.6B", Arch: "qwen3", WeightBytes: 3 << 29, ServedPrefix: "qwen3",
@@ -170,9 +162,8 @@ func compshareBackend(t *testing.T) *vmBackend {
 			return eachCompshareShape(t, p, models, cards, minVRAMMB, 160, try)
 		},
 		ModelEndpoint: compshareModelEndpoint(),
-		PullMirror:    gpustackMirrorEndpoints,
 		Image:         compshareTestImage(), DistributedImage: compshareDistributedTestImage(),
-		Model:           l4Qwen2Model,
+		Model:           l4Qwen3Model,
 		DockerTestImage: strings.TrimSpace(os.Getenv("COMPSHARE_DOCKER_TEST_IMAGE")),
 		PreloadedModelPath: func(t *testing.T) string {
 			path := strings.TrimSpace(os.Getenv("COMPSHARE_PRELOADED_MODEL_PATH"))

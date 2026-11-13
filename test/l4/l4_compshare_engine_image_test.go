@@ -192,8 +192,8 @@ func TestCompshareEngineRequireInstancesRunImageComparesTheLaunchedImage(t *test
 	requireInstancesRunImage(t, []store.Instance{instance(compshareV100DefaultImage), instance(compshareV100DefaultImage)}, compshareV100DefaultImage)
 
 	for name, instances := range map[string][]store.Instance{
-		"another image":      {instance("gpustack/runner:cuda12.8-vllm0.17.1")},
-		"one of two differs": {instance(compshareV100DefaultImage), instance("gpustack/runner:cuda12.8-vllm0.17.1")},
+		"another image":      {instance("gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4")},
+		"one of two differs": {instance(compshareV100DefaultImage), instance("gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4")},
 		"no instances":       nil,
 		"unparseable state":  {{UUID: "bad", DesiredStateJSON: "{"}},
 	} {

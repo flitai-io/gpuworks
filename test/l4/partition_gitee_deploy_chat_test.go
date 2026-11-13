@@ -29,18 +29,18 @@ const (
 )
 
 // giteeFullDeployAppImage is the actual inference workload image, pulled at
-// deployment time by the real GPUWorks agent. Sourced from Huawei's own SWR
-// registry. Confirmed to exist and be a multi-arch (amd64+arm64) manifest
-// list via the registry's own API. The prefetch path downloads all layers
-// concurrently before udocker pull runs, so the Gitee instance only needs
-// connectivity to swr.cn-south-1.myhuaweicloud.com (no Docker Hub auth
-// needed). Layers are decompressed in-place after pull to speed up
-// udocker create; multi-stream gzip layers are handled correctly.
+// deployment time by the real GPUWorks agent: the built-in 910B vLLM runner
+// the catalog's 910B specs use, by its Huawei SWR copy, so the Gitee
+// instance only needs connectivity to SWR (no Docker Hub auth needed). The
+// manifest is multi-arch (amd64+arm64). The prefetch path downloads all
+// layers concurrently before udocker pull runs. Layers are decompressed
+// in-place after pull to speed up udocker create; multi-stream gzip layers
+// are handled correctly.
 func giteeFullDeployAppImage() string {
 	if image := strings.TrimSpace(hostEnv("GITEE_FULL_DEPLOY_APP_IMAGE", "")); image != "" {
 		return image
 	}
-	return "swr.cn-south-1.myhuaweicloud.com/gpustack/runner:cann9.0-910b-vllm0.20.2"
+	return "swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2"
 }
 
 func giteeARM64FullDeployAppImage() string {
@@ -88,15 +88,17 @@ func TestGiteeAscendFullServerAgentDeployChatEndToEnd(t *testing.T) {
 }
 
 // TestGiteeAscendARM64ContainerInContainerDeployChatEndToEnd validates the
-// intended container-in-container boundary on Gitee's rentable
-// arm64/CANN9/910B1 profile. Both the outer rental and inner application use
+// intended container-in-container boundary on Gitee's arm64/CANN9 profile.
+// Gitee dropped the suanjia 910B1 offer in 2026-11; 910B2 in the gitee zone
+// takes the same arm64 CANN9 outer image, and the arch assertion below fails
+// the run if Gitee places it on an x86_64 host instead. Both the outer rental and inner application use
 // CANN9: the catalog-advertised CANN8.5 ARM outer image is rejected by Rent,
 // while a CANN8.5 application under this PRoot boundary fails inside CANN FE's
 // platform_config realpath lookup before inference. Do not claim that known
 // incompatibility as passing coverage.
 func TestGiteeAscendARM64ContainerInContainerDeployChatEndToEnd(t *testing.T) {
 	testGiteeAscendDeployChat(t, giteeDeployChatProfile{
-		runSuffix: "arm64-cann9", zone: "suanjia", gpuModel: "Ascend 910B1",
+		runSuffix: "arm64-cann9", zone: "gitee", gpuModel: "Ascend 910B2",
 		outerImage: giteeARM64CANN9RentalImage, wantArch: "arm64", wantCANNPrefix: "9.0",
 		innerAppImage: giteeARM64FullDeployAppImage(), servedName: "qwen3-06b-gitee-arm64-cann9",
 		evidenceContext: "arm64 CANN9 outer and CANN9 application",

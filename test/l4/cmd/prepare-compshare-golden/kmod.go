@@ -15,11 +15,14 @@ import (
 // The golden image carries both builds of its NVIDIA driver's kernel
 // modules and picks one at boot (nvidia/select-kmod.sh). The open modules
 // alone cannot drive GPUs without a GSP (V100S, P40); the proprietary ones
-// alone cannot drive Blackwell (RTX 5090). The version must equal the
-// userspace driver already in the source image.
+// alone cannot drive Blackwell (RTX 5090). install-dual-kmod.sh replaces
+// the source image's userspace driver when it is another version. R580 is
+// the oldest branch the CUDA 12.9 and 13.0 runners start on without forward
+// compatibility (which GeForce cards lack), and the last one that still
+// drives Pascal and Volta.
 const (
-	nvidiaDriverVersion = "570.153.02"
-	nvidiaDriverSHA256  = "148886e4f69576fa8fa67140e6e5dd6e51f90b2ec74a65f1a7a7334dfa5de1b6"
+	nvidiaDriverVersion = "580.95.05"
+	nvidiaDriverSHA256  = "849ef0ef8e842b9806b2cde9f11c1303d54f1a9a769467e4e5d961b2fe1182a7"
 	nvidiaKmodStore     = "/opt/gpuworks/nvidia-kmod/" + nvidiaDriverVersion
 	// nvidiaToolkitVersion is the nvidia-container-toolkit the cn-wlcb golden
 	// image carries; images without one get this version.
@@ -58,7 +61,10 @@ func remoteKmodValidationCommand(dockerImage string) string {
 		"test -s " + shellQuote(nvidiaKmodStore+"/open/nvidia.ko") + "; test -s " + shellQuote(nvidiaKmodStore+"/proprietary/nvidia.ko") + "; " +
 		"flavour=$(cat /run/gpuworks-nvidia-kmod); case \"$flavour\" in open|proprietary) ;; *) echo \"selector state: $flavour\" >&2; journalctl -u gpuworks-nvidia-kmod --no-pager | tail -20 >&2; exit 1;; esac; " +
 		"nvidia-smi -L; " +
-		"docker run --rm --gpus all --entrypoint nvidia-smi " + shellQuote(dockerImage) + " -L >/dev/null; " +
+		"cgroup_driver=$(docker info --format '{{.CgroupDriver}}'); [ \"$cgroup_driver\" = cgroupfs ] || { echo \"docker cgroup driver is $cgroup_driver, want cgroupfs\" >&2; exit 1; }; " +
+		// The runner's CUDA runtime is newer than the driver; minor version
+		// compatibility must carry it, which only a real CUDA call proves.
+		"docker run --rm --gpus all --entrypoint python3 " + shellQuote(dockerImage) + " -c \"import torch; torch.ones(1).cuda(); print(torch.cuda.get_device_name(0))\"; " +
 		"echo \"KMOD_FLAVOUR=$flavour\""
 	return "sudo -n sh -c " + shellQuote(checks)
 }
