@@ -307,7 +307,7 @@ sudo ./gpuworks uninstall --purge --yes --json   # 清理数据并输出报告
 | 控制台提示渠道尚无版本 | 切换到已有发布的渠道，或等待该渠道发布后重新检查 |
 | 发布索引签名校验失败 | 检查服务端出网代理、网关或登录拦截；暂时可用匹配的本地升级包 |
 | 无法连接发布源 | 检查服务端出网与代理；无法联网时采用上传升级包或离线升级 |
-| 控制台升级等待超时或失败 | 查看服务日志与实际数据目录中的 `install-history.jsonl`，再检查 `/healthz` 的运行版本；不能仅凭页面超时判断回滚。回滚后仍无法启动时，按[升级与版本兼容](upgrade-and-compatibility.md)检查并恢复备份 |
+| 控制台升级等待超时或失败 | 查看服务日志与实际数据目录中的 `install-history.jsonl`，再检查 `/healthz` 的运行版本；不能仅凭页面超时判断回滚。升级成功但历史里没有这一行时，服务日志会有 `console upgrade confirmed without an install history entry`：多是早期版本以 root 安装时把该文件留给了 root，以 root 执行一次 `gpuworks upgrade`（会重新把安装树交给服务账户）或 `chown gpuworks <data>/install-history.jsonl` 即可修复。回滚后仍无法启动时，按[升级与版本兼容](upgrade-and-compatibility.md)检查并恢复备份 |
 | 升级后节点全部离线 | 检查**设置**页的**监听地址**与反向代理/NAT 是否一致，再检查节点版本，见[配置节点网络](configure-networks.md#监听地址与别人怎么连过来) |
 
 ## 补充说明

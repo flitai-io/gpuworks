@@ -164,7 +164,7 @@ gpuworks restarted (systemd)
 - `--base-url`：发布站的清单不签名，信任来自站点的 TLS，压缩包按清单里的 sha256 校验；用于内网发布站。
 - `--archive`：从包里解出 `gpuworks` 到 `<dir>/tmp/`，先执行一次它的 `version`，以输出里的 release id 作为目标版本，之后与在线路径相同。解不出、架构不对（先读 ELF 头比对，不靠试运行，装了 qemu binfmt 的主机也拦得住）、跑不起来或报不出 release id（本地构建）的包在停服前就被拒绝；发布包本身原样保留。完整性靠 gzip 自带校验，sha256 请拷到主机后用发布包的 `SHA256SUMS` 自行核对。
 - 用 `<dir>/.upgrade.lock` 互斥，并发升级直接失败；备份含数据库、`master.key`、`server.yaml` 和二进制。
-- 回滚还原的是升级前快照，升级窗口内的写入会丢；回滚后仍打印备份路径。每次安装/升级追加一行审计到 `<data>/install-history.jsonl`。
+- 回滚还原的是升级前快照，升级窗口内的写入会丢；回滚后仍打印备份路径。每次安装/升级追加一行审计到 `<data>/install-history.jsonl`；写入失败只告警，不影响升级结果。
 - 只升级控制面；节点上的 agent 不会随之自动升级。
 
 ## gpuworks restart
