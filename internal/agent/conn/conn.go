@@ -139,6 +139,10 @@ type Conn struct {
 	statusMu            sync.Mutex
 	statusRunning       bool
 	statusTrailing      bool
+	// statusCtx is the context of the latest status request: a trailing
+	// collection runs under it, so one requested by a new session is not
+	// collected under the context of the session it replaced.
+	statusCtx context.Context
 	// enginePorts is the server's engine port range from the last state sync.
 	enginePorts atomic.Pointer[proto.PortRange]
 

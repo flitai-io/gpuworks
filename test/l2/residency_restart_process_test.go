@@ -120,7 +120,7 @@ func startRestartableRig(t *testing.T, name string) *restartableRig {
 	}
 	t.Cleanup(func() { stopProcess(agent) })
 	rig.node = seed.UUID
-	waitNode(t, base, rig.token, func(n processNode) bool { return n.UUID == seed.UUID && n.State == "online" })
+	waitNodeWithCards(t, base, rig.token, seed.UUID)
 	rig.modelID = registerFixtureModel(t, base, rig.token, seed.UUID, name)
 	return rig
 }
