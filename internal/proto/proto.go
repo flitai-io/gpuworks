@@ -51,6 +51,13 @@ const (
 	// and of the debug session files header Ref names (comma-separated
 	// session ids). The agent chooses the files; the server names no path.
 	StreamDiagnosticsRead = "diagnostics.read"
+	// StreamTelemetry is opened by the agent on the data lane and carries its
+	// metric and log batches as JSON Lines envelopes, so the node's bulkiest
+	// traffic does not queue ahead of heartbeats and RPC responses on ctrl.
+	// Header Ref names the batch type, TMetrics or TLogs: one stream each,
+	// so the server holding logs back never holds metrics back. Only used
+	// against a server whose hello advertises CapTelemetryStream.
+	StreamTelemetry = "telemetry"
 )
 
 // LargeFileReadMaxBytes bounds one StreamLargeFileRead transfer. It matches the
@@ -70,7 +77,7 @@ const (
 func LaneFor(kind string) string {
 	switch kind {
 	case StreamPeerRelaySend, StreamPeerRelayReceive, StreamLogtail, StreamTunnel, StreamModelRead, StreamModelWrite, StreamImageRead, StreamImageWrite, StreamLargeFileRead, StreamAgentUpgrade,
-		StreamStorageUpload, StreamStorageDownload, StreamDiagnosticsRead:
+		StreamStorageUpload, StreamStorageDownload, StreamDiagnosticsRead, StreamTelemetry:
 		return LaneData
 	default:
 		return LaneCtrl
@@ -128,6 +135,13 @@ const (
 	CapConnectionDiagnostics = "node.connection_diagnostics"
 	// CapPeerRelayV1 accepts transfer-scoped peer TLS relay streams on data.
 	CapPeerRelayV1 = "peer.relay.v1"
+)
+
+// Server capabilities, advertised in the server's Hello.Caps.
+const (
+	// CapTelemetryStream: the server accepts agent-opened StreamTelemetry
+	// streams on the data lane.
+	CapTelemetryStream = "telemetry.stream"
 )
 
 // StreamHeader is the first line written on every yamux stream.
@@ -202,10 +216,12 @@ type Envelope struct {
 
 // Hello is exchanged first on the ctrl stream in both directions.
 type Hello struct {
-	ProtoMin int      `json:"proto_min"`
-	ProtoMax int      `json:"proto_max"`
-	Version  string   `json:"version"`
-	Caps     []string `json:"caps,omitempty"`
+	ProtoMin int    `json:"proto_min"`
+	ProtoMax int    `json:"proto_max"`
+	Version  string `json:"version"`
+	// Caps are the sender's capabilities: the agent's in its hello, the
+	// server's in its reply.
+	Caps []string `json:"caps,omitempty"`
 	// RuntimeAssetDigests are validated SHA-addressed catalog assets already
 	// present in the agent cache. The server omits their content from desired
 	// state while retaining the immutable identity and mount contract.

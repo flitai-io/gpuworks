@@ -92,6 +92,8 @@ var streamRules = map[string]rule{
 	proto.StreamLargeFileRead: allowInDir,
 	// The agent's own log and debug session files, nothing of the host.
 	proto.StreamDiagnosticsRead: allow,
+	// The agent opens telemetry streams itself and never serves one.
+	proto.StreamTelemetry: refuse,
 
 	proto.StreamPeerRelaySend:    refuse,
 	proto.StreamPeerRelayReceive: refuse,

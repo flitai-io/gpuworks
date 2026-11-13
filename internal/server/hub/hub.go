@@ -53,6 +53,7 @@ type Hub struct {
 	// tsdb/logstore packages).
 	onMetrics         func(nodeUUID string, samples []proto.MetricSample)
 	onLogs            func(nodeUUID string, lines []proto.LogLine)
+	onLogsWait        func(ctx context.Context, nodeUUID string, lines []proto.LogLine) error // telemetry.go
 	onBenchmarkDetail func(nodeUUID string, status proto.BenchmarkStatus)
 	// onCardChecks and onNodeGone: card_checks.go.
 	onCardChecks func(nodeUUID string, nodeID uint, at time.Time, gpus []proto.GPUInfo)
@@ -587,13 +588,6 @@ func (h *Hub) serverHello() proto.Hello {
 		ProtoMin: proto.ProtoMin,
 		ProtoMax: proto.ProtoMax,
 		Version:  version.Version,
+		Caps:     []string{proto.CapTelemetryStream},
 	}
-}
-
-// slogWriter adapts yamux's io.Writer logging into slog at debug level.
-type slogWriter struct{ log *slog.Logger }
-
-func (w *slogWriter) Write(p []byte) (int, error) {
-	w.log.Debug("yamux", "msg", string(p))
-	return len(p), nil
 }

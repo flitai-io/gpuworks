@@ -30,6 +30,7 @@ var streamLanes = map[string]string{
 	"StreamDiagnosticsRead":  LaneData,
 	"StreamStorageUpload":    LaneData,
 	"StreamStorageDownload":  LaneData,
+	"StreamTelemetry":        LaneData,
 }
 
 func TestLaneForClassifiesEveryDeclaredStream(t *testing.T) {
