@@ -54,6 +54,11 @@ type Session struct {
 	// Network saves coalesce independently from resource reconciliation.
 	networkSyncOnce   sync.Once
 	networkSyncNotify chan struct{}
+	// kubeSettingsMu orders the read and send of kube.settings (kube_settings.go).
+	kubeSettingsMu sync.Mutex
+	// kubeSettingsSent is set once the initial replay carried kube.settings:
+	// later full replays (SyncNode) leave them alone, edits push their own.
+	kubeSettingsSent atomic.Bool
 
 	// fullPushMu serializes full desired-state replays and network updates, and
 	// initialPushDone gates incremental updates behind the first replay

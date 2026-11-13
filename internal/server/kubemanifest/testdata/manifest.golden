@@ -119,8 +119,6 @@ spec:
       labels:
         app.kubernetes.io/name: gpuworks-agent
         app.kubernetes.io/managed-by: gpuworks
-      annotations:
-        gpuworks.ai/idle-return-seconds: "0"
     spec:
       serviceAccountName: gpuworks-agent
       hostNetwork: true
@@ -145,7 +143,6 @@ spec:
             - "--server=https://gw.example:8800"
             - "--state=/opt/gpuworks"
             - "--driver=kube"
-            - "--engine-ports=40000-42767"
           env:
             - name: GPUWORKS_KUBE_ENROLL_TOKEN
               valueFrom:
@@ -164,8 +161,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: GPUWORKS_KUBE_RUNTIME_CLASS
-              value: "nvidia"
             - name: GPUWORKS_KUBE_PRIORITY_CLASS
               value: "gpuworks-inference-gpuworks-system"
             - name: "NVIDIA_DRIVER_CAPABILITIES"

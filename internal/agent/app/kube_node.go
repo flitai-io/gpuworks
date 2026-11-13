@@ -67,3 +67,15 @@ func (n *NodeRuntime) kubeRPC(ctx context.Context, method string, params json.Ra
 		return proto.KubeNodeExistsResult{Exists: true, Agent: &agent}, nil
 	}
 }
+
+// OnKubeSettings applies the cluster entry's settings the server pushed
+// (idle return of borrowed cards, the NVIDIA RuntimeClass of the instance
+// pods started from now on) without a restart. A node that does not run on
+// Kubernetes ignores them.
+func (n *NodeRuntime) OnKubeSettings(ctx context.Context, s proto.KubeSettings) {
+	d, ok := n.runtimeDriver().(*kube.Driver)
+	if !ok {
+		return
+	}
+	d.ApplySettings(ctx, kube.IdleReturnOf(s.IdleReturnSeconds), s.RuntimeClass)
+}

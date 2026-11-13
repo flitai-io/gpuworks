@@ -42,11 +42,15 @@ func EntryOf(enrollToken string) string {
 
 // IdleReturn is the cluster's grace period for borrowed cards; negative
 // keeps them.
-func (id Identity) IdleReturn() time.Duration {
-	if id.IdleReturnSeconds < 0 {
+func (id Identity) IdleReturn() time.Duration { return IdleReturnOf(id.IdleReturnSeconds) }
+
+// IdleReturnOf is the grace period an entry's idle_return_seconds names;
+// negative keeps borrowed cards.
+func IdleReturnOf(seconds int) time.Duration {
+	if seconds < 0 {
 		return -1
 	}
-	return time.Duration(id.IdleReturnSeconds) * time.Second
+	return time.Duration(seconds) * time.Second
 }
 
 // ReadIdentity is the node identity this state directory saved, or a zero

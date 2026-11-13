@@ -71,7 +71,9 @@ type Options struct {
 	PodName   string // the agent's own pod
 	// RuntimeClass injects NVIDIA devices into instance pods; empty makes
 	// Detect use the cluster's "nvidia" class if there is one, and the
-	// node's default runtime otherwise.
+	// node's default runtime otherwise. Only a manifest from before the
+	// server handed the class over (ApplySettings) still sets it; the
+	// server's value replaces it as soon as it arrives.
 	RuntimeClass string
 	// Cards maps device index to card UUID (the node's probe).
 	Cards func(context.Context) (map[int]string, error)
@@ -116,6 +118,11 @@ type Driver struct {
 	o     Options
 	cards *cardPool
 
+	// runtimeClass is the class of NVIDIA instance pods (settings.go);
+	// settingsChanged wakes Start when ApplySettings changed what it acts on.
+	runtimeClass    runtimeClassState
+	settingsChanged chan struct{}
+
 	planMu sync.Mutex
 	plan   *devicePlan
 }
@@ -155,7 +162,8 @@ func New(o Options) *Driver {
 		o.StartTimeout = 3 * time.Minute
 	}
 	o.PriorityClass = cmp.Or(o.PriorityClass, DefaultPriorityClass)
-	d := &Driver{o: o}
+	d := &Driver{o: o, settingsChanged: make(chan struct{}, 1)}
+	d.runtimeClass.class = o.RuntimeClass
 	d.cards = &cardPool{priorityClass: o.PriorityClass,
 		api: o.API, kubelet: o.Kubelet, ns: o.Namespace, node: o.NodeName, cards: o.Cards, cardBDFs: o.CardBDFs,
 		idleReturn: o.IdleReturn, now: time.Now, log: o.Log, poll: o.Poll,
@@ -166,11 +174,7 @@ func New(o Options) *Driver {
 
 // SetIdleReturn sets how long a borrowed card outlives its last instance
 // (the cluster's setting, learned at enrollment); negative keeps cards.
-func (d *Driver) SetIdleReturn(v time.Duration) {
-	d.cards.mu.Lock()
-	d.cards.idleReturn = v
-	d.cards.mu.Unlock()
-}
+func (d *Driver) SetIdleReturn(v time.Duration) { d.cards.setIdleReturn(v) }
 
 // Name implements runtime.Driver.
 func (d *Driver) Name() string { return DriverName }
@@ -220,8 +224,8 @@ func (d *Driver) Detect(ctx context.Context) (bool, error) {
 	// Hold pods run the agent's image, so they pull it as the agent's pod
 	// did (the manifest's secret, or whatever the service account added).
 	d.cards.pullSecrets = self.Spec.ImagePullSecrets
-	if d.o.RuntimeClass == "" {
-		d.o.RuntimeClass = d.nvidiaRuntimeClass(ctx)
+	if d.runtimeClass.get() == "" {
+		d.runtimeClass.initial(d.nvidiaRuntimeClass(ctx), true)
 	}
 	d.cards.holdCmd = []string{"gpuworks-agent", "hold"}
 	d.cards.owner = &kubeapi.OwnerReference{APIVersion: "apps/v1", Kind: "DaemonSet", Name: DaemonSetName, UID: ds.Metadata.UID}
@@ -249,11 +253,7 @@ func (d *Driver) nvidiaRuntimeClass(ctx context.Context) string {
 // Start borrows every free card at once when the cluster keeps cards, and
 // returns idle ones on a timer otherwise. It runs until ctx ends.
 func (d *Driver) Start(ctx context.Context) {
-	if d.cards.idleReturn < 0 {
-		if err := d.cards.keepAll(ctx); err != nil {
-			d.o.Log.Warn("borrowing the node's cards failed", "err", err)
-		}
-	}
+	d.keepCards(ctx)
 	d.servePlugin(ctx)
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
@@ -263,6 +263,19 @@ func (d *Driver) Start(ctx context.Context) {
 			return
 		case <-t.C:
 			d.cards.sweep(ctx)
+		case <-d.settingsChanged:
+			d.keepCards(ctx)
+		}
+	}
+}
+
+// keepCards borrows every free card when the cluster keeps cards (a
+// negative idle return); a cluster that returns idle cards borrows them as
+// instances ask.
+func (d *Driver) keepCards(ctx context.Context) {
+	if d.cards.idleReturnSetting() < 0 {
+		if err := d.cards.keepAll(ctx); err != nil {
+			d.o.Log.Warn("borrowing the node's cards failed", "err", err)
 		}
 	}
 }
@@ -381,7 +394,7 @@ func (d *Driver) Run(ctx context.Context, spec runtime.WorkloadSpec) (string, er
 	if err != nil {
 		return "", err
 	}
-	opts := podOptions{Namespace: d.o.Namespace, NodeName: d.o.NodeName, RuntimeClass: d.o.RuntimeClass, PriorityClass: d.o.PriorityClass, Owner: d.cards.owner, Cards: cards,
+	opts := podOptions{Namespace: d.o.Namespace, NodeName: d.o.NodeName, RuntimeClass: d.runtimeClass.get(), PriorityClass: d.o.PriorityClass, Owner: d.cards.owner, Cards: cards,
 		Group: func(name string) (int64, error) { return groupID(firstNonEmpty(d.o.HostRoot, "/"), name) }}
 	opts.NVIDIAVisible = d.nvidiaVisible(ctx)
 	if len(devices) > 0 {

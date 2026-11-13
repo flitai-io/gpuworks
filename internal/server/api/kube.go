@@ -87,9 +87,9 @@ func kubeManifestParams(c store.KubeCluster, pools []store.KubeClusterPool) (kub
 	return kubemanifest.Params{
 		PoolLabel: poolLabel, PoolIDs: kubePoolIDs(pools),
 		ClusterName: c.Name, Namespace: c.Namespace, ServerURL: c.ServerURL, Token: c.Token,
-		AgentImage: kubeAgentImage(c), NodeSelector: sel, RuntimeClass: c.RuntimeClass,
-		ImagePullSecret: c.ImagePullSecret, ContainerdSocket: c.ContainerdSocket, EnginePorts: c.EnginePorts, StateDir: c.StateDir, APIServer: c.APIServer,
-		Priority: c.Priority, AllowPreemption: c.AllowPreemption, IdleReturnSeconds: c.IdleReturnSeconds,
+		AgentImage: kubeAgentImage(c), NodeSelector: sel,
+		ImagePullSecret: c.ImagePullSecret, ContainerdSocket: c.ContainerdSocket, StateDir: c.StateDir, APIServer: c.APIServer,
+		Priority: c.Priority, AllowPreemption: c.AllowPreemption,
 	}, nil
 }
 
@@ -350,6 +350,10 @@ func kubeValid(w http.ResponseWriter, c store.KubeCluster, pools []store.KubeClu
 	}
 	if c.ImagePullSecret != "" && !kubemanifest.ValidSecretName(c.ImagePullSecret) {
 		kubeInvalid(w, "image_pull_secret", "must be the name of a Secret in the namespace")
+		return false
+	}
+	if !kubemanifest.ValidRuntimeClass(c.RuntimeClass) {
+		kubeInvalid(w, "runtime_class", "must be the name of a RuntimeClass (a DNS label)")
 		return false
 	}
 	if _, err := proto.ParsePortRange(c.EnginePorts); err != nil {

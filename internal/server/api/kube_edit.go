@@ -102,6 +102,7 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 	if a.d.Log != nil && len(changed) > 0 {
 		a.d.Log.Info("kubernetes cluster edited", "cluster", updated.Name, "changed", strings.Join(changed, ","))
 	}
+	a.pushKubeLiveSettings(updated.ID, changed)
 	views, err := a.kubeEntryViews(r.Context(), []store.KubeCluster{*updated}, true)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

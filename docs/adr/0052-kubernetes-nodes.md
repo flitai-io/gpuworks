@@ -86,7 +86,7 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
 2. **agent 经宿主机根目录和宿主机挂载命名空间用厂商工具，不靠挂载。** agent 以 privileged、hostPID 运行，经 `/proc/1/root` 读宿主机的文件，用 nsenter 在宿主机的挂载命名空间里运行 `npu-smi`、`hy-smi`、`ppu-smi` 与 `nvidia-smi`，用宿主机自己的 C 库与驱动库。`nvidia-smi` 的查找顺序：宿主机根目录，`/run/nvidia/driver`（NVIDIA GPU Operator 的驱动容器），最后是 NVIDIA 运行时放进 agent 容器的那份（manifest 固定设 `NVIDIA_VISIBLE_DEVICES=all`、`NVIDIA_DRIVER_CAPABILITIES=compute,utility`，只在 NVIDIA 运行时下生效）。设备节点检查看宿主机实时的 `/dev`。
 3. **不支持的节点待命。** Kubernetes 上支持 NVIDIA、昇腾、海光与 PPU。没有加速卡或是别家的卡（AMD、昆仑芯等）的节点上，agent Pod 照常运行但不注册，所以不会成为平台节点。选择器仍可选，只用来收窄平台使用的节点。
 4. **一个节点只属于一个条目。** 同一个集群的两个条目选中同一个节点时，后来者注册被拒绝（403 `KUBE_ENROLL_REFUSED`，`reason: node_taken`，`entry` 为占着节点的条目名），直到先到者在该节点的 agent 离线超过 15 分钟，之后节点可以转到另一个条目。这条规则让改节点选择器可以安全地把节点从一个条目挪到另一个条目，也避免两个 DaemonSet 的 agent 争同一个节点的卡与状态目录。
-5. **条目可编辑、可卸载。** `PUT /kube/clusters/{uuid}` 改除命名空间、server 地址与状态目录之外的设置；manifest 变了而集群里还是旧的，响应的 `reapply` 与（手动条目的）`commands` 说明怎么追上。空闲归还写进 DaemonSet 的 Pod 模板注解，改它会让 agent 重启后取新值。卸载给出不依赖接入令牌的 `kubectl` 命令（`remove_commands`），云条目由 server 执行。改节点选择器后不再被选中的节点离线，15 分钟后由同条目另一个在线 agent 确认并自动删除记录。
+5. **条目可编辑、可卸载。** `PUT /kube/clusters/{uuid}` 改除命名空间、server 地址与状态目录之外的设置；manifest 变了而集群里还是旧的，响应的 `reapply` 与（手动条目的）`commands` 说明怎么追上。RuntimeClass、引擎端口段与空闲归还不写进 manifest：server 在节点连上时、条目被修改后把它们发给在线的 agent（`kube.settings` 控制消息，引擎端口段随节点的网络配置），agent 原地生效，所以只改这三项时 `reapply` 为 false。manifest 只带 agent 启动所需的东西。卸载给出不依赖接入令牌的 `kubectl` 命令（`remove_commands`），云条目由 server 执行。改节点选择器后不再被选中的节点离线，15 分钟后由同条目另一个在线 agent 确认并自动删除记录。
 
 原因：同一个集群常有多个厂商的节点，一个条目一个厂商迫使用户建多个条目并各配选择器与命名空间；厂商专用挂载（驱动库目录、CLI 路径、设备节点）随节点的发行版与驱动安装方式变化，错配时 agent 起得来却探测不到卡，是接入失败最常见的来源；让 agent 在宿主机上直接运行宿主机自己的工具，减少了这一类配置与失败面。
 
