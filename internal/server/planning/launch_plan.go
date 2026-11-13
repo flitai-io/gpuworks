@@ -118,6 +118,21 @@ type LaunchPlan struct {
 	Profile deploy.Profile
 }
 
+// LaunchResolveError is a launch the plan scheduled but could not resolve
+// into a command on its node: the stated parallelism does not match the
+// cards the node gives it, say. It is about that node, not the request as a
+// whole, so a pool check (EverFits) reads it as the node refusing.
+type LaunchResolveError struct {
+	DeploymentID uint
+	Err          error
+}
+
+func (e *LaunchResolveError) Error() string {
+	return fmt.Sprintf("deployment %d resolve launch: %v", e.DeploymentID, e.Err)
+}
+
+func (e *LaunchResolveError) Unwrap() error { return e.Err }
+
 // PlanLaunch estimates, schedules and assembles one launch on one node.
 //
 // A schedule that does not fit is not an error: the caller reads
@@ -178,7 +193,7 @@ func PlanLaunch(ctx context.Context, st *store.Store, networks Networks, req Lau
 			plan.Output.Result = scheduler.Result{OK: false, Message: *refusal, Explain: scheduler.Explain{Filters: []scheduler.Reason{*refusal}}}
 			return plan, nil
 		}
-		return plan, fmt.Errorf("deployment %d resolve launch: %w", req.Source.DeploymentID, err)
+		return plan, &LaunchResolveError{DeploymentID: req.Source.DeploymentID, Err: err}
 	}
 	plan.Params, plan.Profile = allocated.Params, allocated.Profile
 	plan.Resolved, plan.Warnings = allocated.Resolved, allocated.Warnings

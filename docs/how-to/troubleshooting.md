@@ -872,6 +872,7 @@ runveil（udocker）节点拉取镜像时，agent 日志（`<state>/agent.log`�
 | `LAUNCH_CONFIG_CONFLICT` | 400 | 表单字段与自定义参数里同一个键取值不同；只保留一处（参数为 `key`、`field_value`、`flag`、`extra_value`） |
 | `ACQUISITION_CANDIDATE_STALE` | 400 / 409 | 请求指定的保存存储已不存在或不再存有模型，或所选权重来源已不在模板里；重新评估，服务端不会替换 |
 | `MODEL_SOURCE_UNAVAILABLE` | 409 | 本地模型在目标节点没有可用来源，或来源校验失败；查看错误详情，不将它等同于公网下载超时 |
+| `TEMPLATE_MODEL_MISMATCH` | 400 | 模板部署指定的模型（`params.model_id`）的仓库 ID 与模板任何一个权重来源都对不上（`params.repo_id`、`params.revision` 是模板解析出的来源）；平台不会改用别的模型。选该仓库的模型；本地模型可在模型详情里把来源 ID 改成模板的仓库 ID |
 | `DISTRIBUTED_*`、`REPLICAS_*`、`MASTER_PORT_INVALID` | 400 | 多机 / 副本参数不合法 |
 
 **显存不足**（`schedule` 原因码，见评估响应与 `schedule.explain`）：

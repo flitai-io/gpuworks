@@ -11,6 +11,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -200,5 +201,36 @@ func TestTemplateAutomaticModelReadFailureDoesNotRegister(t *testing.T) {
 	after, err := f.h.d.Store.ListModels()
 	if err != nil || len(after) != len(before) {
 		t.Fatalf("query failure changed model registrations: before=%d after=%d err=%v", len(before), len(after), err)
+	}
+}
+
+// A selected model whose repository serves none of the spec's weight sources
+// (a local directory registered under its own name) is refused with a stable
+// code at evaluation and create alike, never substituted.
+func TestTemplateUnrelatedModelIsRefusedWithStableCode(t *testing.T) {
+	f := newTemplateStorageFixture(t, proto.StorageNFS, true, true, true, false)
+	local, err := f.h.d.Store.UpsertModel(&store.Model{Source: "local", SourceID: "deploy-fp8-weights-dir", Name: "local-dir"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := f.request()
+	req.ModelID = local.ID
+	selection, err := f.h.applyTemplateDefaults(&req, templateHardware{NodeID: f.node.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.h.resolveDeploymentModelFromTemplate(context.Background(), req.ModelID, &selection, req.TemplateID)
+	var product *messages.ProductError
+	if !errors.As(err, &product) || product.Code() != messages.ErrorTemplateModelMismatch {
+		t.Fatalf("refusal = %v, want %s", err, messages.ErrorTemplateModelMismatch)
+	}
+	if params := product.Params(); params["model_id"] != local.ID || params["repo_id"] != selection.Weight.RepoID {
+		t.Fatalf("params = %+v", params)
+	}
+	evaluated := f.request()
+	evaluated.ModelID, evaluated.NodeUUID = local.ID, f.node.UUID
+	resp, err := f.h.Evaluate(context.Background(), dto.EvaluateRequest{DeployRequest: evaluated})
+	if err != nil || resp.OK || len(resp.Errors) != 1 || resp.Errors[0].Field != "model_id" || resp.Errors[0].Code != messages.ErrorTemplateModelMismatch {
+		t.Fatalf("evaluate = ok %t errors %+v, %v; want a model_id %s", resp.OK, resp.Errors, err, messages.ErrorTemplateModelMismatch)
 	}
 }

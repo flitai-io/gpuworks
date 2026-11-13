@@ -10,6 +10,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
+	"gpuworks.ai/gpuworks/internal/server/partitioncap"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -138,14 +139,26 @@ func freeHealthyGPUs(node *store.Node, held map[int]bool, allowed []int) int {
 }
 
 // HardwareShape names what a node permanently is, as far as placing a
-// replica goes: its vendor and CPU architecture, each card's model, memory
-// and compute capability, and whether it may serve. Two nodes of one shape
-// answer an unloaded plan the same way, so a pool is judged once per shape.
+// replica goes: its vendor and CPU architecture, each card's model, memory,
+// compute capability and ready dGPU backends, and whether it may serve. Two
+// nodes of one shape answer an unloaded plan the same way, so a pool is judged
+// once per shape. The ready backends are the scheduler's own fact
+// (nodeSnapshot reads the same partitioncap reports), decoded from the node
+// row in hand: no read beyond the node.
 func HardwareShape(node *store.Node, canServe bool) string {
-
-	cards := make([]string, 0, len(node.GPUs))
-	for _, gpu := range node.OwnedGPUs() {
-		cards = append(cards, fmt.Sprintf("%s/%s/%d/%s/%s", accelerator.NormalizeVendor(node.VendorOf(gpu)), accelerator.NormalizeGPUName(gpu.Name), gpu.MemoryTotal, gpu.ComputeCapability, gpu.ArchID))
+	reports := partitioncap.Decode(node)
+	owned := node.OwnedGPUs()
+	cards := make([]string, 0, len(owned))
+	for i := range owned {
+		gpu := &owned[i]
+		var ready []string
+		for _, capability := range reports.ForGPU(gpu) {
+			if capability.Status == partitioncap.StatusReady {
+				ready = append(ready, capability.Backend)
+			}
+		}
+		sort.Strings(ready)
+		cards = append(cards, fmt.Sprintf("%s/%s/%d/%s/%s/%s", accelerator.NormalizeVendor(node.VendorOf(*gpu)), accelerator.NormalizeGPUName(gpu.Name), gpu.MemoryTotal, gpu.ComputeCapability, gpu.ArchID, strings.Join(ready, "+")))
 	}
 	sort.Strings(cards)
 	return fmt.Sprintf("%s|%s|%s|%s|%t|%s", accelerator.NormalizeVendor(node.GPUVendor), node.OS, node.Arch, node.RuntimeDriver, canServe, strings.Join(cards, ","))

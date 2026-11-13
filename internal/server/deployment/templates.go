@@ -95,7 +95,9 @@ func (s *Service) resolveDeploymentModelFromTemplate(ctx context.Context, modelI
 			return nil, err
 		}
 		if !templateWeightMatchesAnySource(append(SpecWeightSources(selection.Spec), selection.Weight), requested) {
-			return nil, fmt.Errorf("model_id %d conflicts with template model %s@%s", modelID, selection.Weight.RepoID, selection.Weight.Revision)
+			return nil, productError(messages.ErrorTemplateModelMismatch,
+				fmt.Sprintf("model_id %d conflicts with template model %s@%s", modelID, selection.Weight.RepoID, selection.Weight.Revision),
+				map[string]any{"model_id": modelID, "repo_id": selection.Weight.RepoID, "revision": selection.Weight.Revision})
 		}
 		model = requested
 	}
