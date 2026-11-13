@@ -74,3 +74,13 @@ and afterward the replicas take part in refill and replacement like any other.
 - The evaluator reads only deployments that have a schedule, an idle setting, or a wait, and never scans them all, in keeping with the scale target; the board is paged by node and reads occupants only for the nodes on the page.
 
 > Note, 2026-10-30: the page this record calls the “scheduling center” is now named “Scheduling analysis” (in the “Overview” menu group, route still `/scheduling`); the decisions are unchanged.
+
+## Amendment (2026-11-13): The Undo Record Is Read Back from the Events After a Restart
+
+Decision 3 says node replacement's undo record lives in memory only, and that after a server restart a replacement already made is kept and not undone. A controller-restart case confirms it: after a replacement and a restart, when the original node returns before the new replica runs, the replica stays on the node it moved to and no `NODE_REPLACE_REVERTED` is written. It is changed:
+
+- No new persistence. `NODE_REPLACED` already names the unit, the rank and both nodes by UUID, and `NODE_REPLACE_REVERTED` the undoing; the first time the controller looks at a deployment after starting, it reads its undo record back from its newest events of these two kinds (at most 100), and reads again on the next pass when the read fails.
+- Only what can still be undone is read back: the rank's newest event is the move, not a revert; the placement still has the rank on the node it moved to (one edited since is history); and no instance of the deployment has served on that node since the move (the record in memory is dropped once the unit runs there, and a unit that ran and stopped must not be switched back). The last check is by node, so another replica of the same deployment having run on that node counts too; whatever cannot be told is not read back, which is the original behaviour.
+- The drain surge's progress and the first-placement hint stay in memory.
+
+**Consequences.** A restart no longer keeps a replacement that would have been undone; cases that cannot be told fall back to the original "keep the replacement".

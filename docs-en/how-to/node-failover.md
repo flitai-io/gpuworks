@@ -73,7 +73,7 @@ Both use the same candidates and trial plans, and both rewrite the placement the
 
 - If the original node comes back online **before the new generation is running**, the placement is changed back to it and the timeline records `NODE_REPLACE_REVERTED`.
 - If it returns **after the new generation is running**, the replica is not switched back and stays on the new node; once the original node reconnects, the platform pushes the removal and its leftover containers are cleaned up.
-- The undo record lives only in server memory. If the server restarts after a replacement, the replacement is kept and is not undone.
+- The undo record lives in server memory and is read back from the `NODE_REPLACED` events after a restart: if the server restarts after a replacement and the original node returns before the new replica runs, the replacement is still undone. A move is read back only when all three hold: no `NODE_REPLACE_REVERTED` for that rank since, the placement still has the rank on the node it moved to, and no instance of the deployment has run on that node since the move. When in doubt it is not read back, and the replacement is kept.
 
 ## Drain for Multi-Node and PD Replicas
 
@@ -118,4 +118,4 @@ curl --fail-with-body -sS -X PUT \
 - During the wait, a multi-node replica is still handled by the existing rules: a rank whose node is offline makes the whole group fail and be rebuilt, and those failures are recorded as usual; the replacement happens once the wait has elapsed.
 - Card-to-card connectivity tests and Ascend direct wiring are not conditions for choosing a node; the risk of crossing switches or of RDMA not working remains for you to confirm at creation, and manually created mixed-architecture deployments only get a warning, with no stricter check.
 - Replacement does not change the model, image, or configuration; the models and images the new node needs are obtained as described in [Download, Cache, and Sync Models Between Nodes](download-and-sync-models.md).
-- The undo record and the first-placement hint live only in server memory and do not survive a restart.
+- The first-placement hint lives only in server memory and does not survive a restart; the undo record is read back from the events after one (see above).

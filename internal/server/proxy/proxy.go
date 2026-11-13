@@ -106,11 +106,15 @@ func (p *Proxy) SetAccountant(a *Accountant) {
 	p.acct = a
 }
 
-// Start resumes route-table refreshes after an App restart. New already starts
-// the table, so this is idempotent for the normal first run.
+// Start resumes route-table refreshes after an App restart, and holds
+// requests for a wake again after StopHolding. New already starts the table,
+// so this is idempotent for the normal first run.
 func (p *Proxy) Start() {
 	if p != nil && p.routes != nil {
 		p.routes.start()
+	}
+	if p != nil && p.hold != nil {
+		p.hold.resume()
 	}
 }
 

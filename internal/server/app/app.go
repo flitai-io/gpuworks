@@ -557,6 +557,7 @@ func (a *App) Run(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		a.log.Info("shutting down")
+		a.proxy.StopHolding() // held requests: a 503 to retry now, not a drop when the window ends
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := a.http.Shutdown(shutCtx); err != nil {

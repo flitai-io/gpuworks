@@ -45,6 +45,7 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 - 连接级失败时，请求仍可重放才会换副本重试。
 - 已经收到上游响应（包括 5xx）时，不会重试。
 - 实例休眠、启动中或 rank 非 0 不可服务时，返回 503，并保留重试语义。
+- server 正常停止时，正在等休眠部署唤醒的请求返回 503，带 `Retry-After: 10`，消息为 `the server is restarting; send the request again`，重发即可。
 
 部署可以通过管理 API `PUT /api/v1/deployments/{id}/routing` 选择 `least_request`、`prefix_affinity` 或 `failover`。前缀亲和优先读取 `X-GPUWorks-Affinity-Key`，也支持从 chat messages、prompt 或 input 提取稳定 key；该请求头不会转发给引擎。
 

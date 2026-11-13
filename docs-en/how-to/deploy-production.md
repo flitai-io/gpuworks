@@ -190,6 +190,8 @@ reverse proxy or firewall instead of this switch. For the rule and the 401 shape
 
 Long requests and upgrades: a server restart or upgrade disconnects all in-flight streams, and responses that have already started are not retried; a node agent
 disconnection interrupts all streams on that node. Schedule upgrades for long-generation workloads during off-peak hours, or implement retries for interrupted streams in the caller first.
+A request waiting for a sleeping deployment to wake gets a 503 with `Retry-After: 10` at once on a graceful stop, and a dropped connection when the process is killed;
+the caller retries both, with a total backoff that covers a restart (usually under 10 seconds), and the request sent again waits for the wake again.
 
 Gateway metrics (available in the Monitor Center and `/api/v1/metrics/query`): `gpuworks_proxy_requests_total`,
 `gpuworks_proxy_request_duration_ms_*`, `gpuworks_proxy_requests_inflight`, plus replica distribution
