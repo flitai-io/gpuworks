@@ -125,7 +125,7 @@ export default function ImageNodeTable({
   // table is read for and the actions that move bytes (detailDrawer.css).
   const renderExtra = (row: ImageNode) => {
     const displayMessage = row.transfer_error_code
-      ? productMessageText(common, { code: row.transfer_error_code, message: row.message ?? "" }) : row.message;
+      ? productMessageText(common, { code: row.transfer_error_code, params: { reason: row.message ?? "" }, message: row.message ?? "" }) : row.message;
     const at = row.updated_at ? Date.parse(row.updated_at) : NaN;
     return (
       <>
