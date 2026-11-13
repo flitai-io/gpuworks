@@ -33,6 +33,7 @@ func Candidates(st *store.Store) ([]deploy.ImageCandidate, error) {
 			Framework:        framework,
 			FrameworkVersion: row.FrameworkVersion,
 			Arch:             row.Arch,
+			ChipFamily:       accelerator.RunnerImageChipFamily(row.ImageRef),
 			ImageRef:         row.ImageRef,
 			Source:           row.Source,
 			Deprecated:       row.Deprecated,
