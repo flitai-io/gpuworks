@@ -36,6 +36,8 @@ func (n *NodeRuntime) Bind(send conn.SendFunc) {
 			return
 		}
 	}
+	// A backlog can be megabytes; the connection's loops must not wait for it.
+	go n.flushLogs()
 }
 
 // Unbind detaches on disconnect.
@@ -71,6 +73,11 @@ func (n *NodeRuntime) reportRuntimeObservation(epoch uint64, st proto.InstanceSt
 }
 
 func (n *NodeRuntime) emit(t string, d any) {
+	if batch, ok := d.(proto.LogBatch); ok && t == proto.TLogs {
+		n.logOutbox().enqueue(batch)
+		n.flushLogs()
+		return
+	}
 	n.sendMu.Lock()
 	send := n.send
 	n.sendMu.Unlock()
