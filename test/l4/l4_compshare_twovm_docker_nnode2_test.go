@@ -264,6 +264,10 @@ try: d=json.load(open(p))
 except Exception: pass
 d["dns"]=["100.90.90.90","100.90.90.100"]
 json.dump(d,open(p,"w"))'
+# Replacing Ubuntu's docker.io with docker-ce leaves docker.socket failed, and
+# dockerd -H fd:// then exits with "no sockets found via socket activation".
+$root systemctl reset-failed docker.socket docker.service 2>/dev/null || true
+$root systemctl restart docker.socket 2>/dev/null || true
 $root systemctl restart docker 2>/dev/null || $root service docker restart
 if [ "$(id -u)" -ne 0 ]; then
   $root usermod -aG docker "$(id -un)"
