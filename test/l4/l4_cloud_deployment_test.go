@@ -380,7 +380,10 @@ func cloudDiagnosticInstanceForNode(env *cloudTestEnv, rows []store.Instance) *s
 
 func (d *cloudDeployment) chat(t *testing.T) []byte {
 	t.Helper()
-	body := fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"reply with the word ready"}],"max_tokens":16}`, d.servedName)
+	// enable_thinking: a model that thinks first (Qwen3) would spend the 16
+	// tokens on its reasoning and return no content; a template without the
+	// switch ignores it.
+	body := fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"reply with the word ready"}],"max_tokens":16,"chat_template_kwargs":{"enable_thinking":false}}`, d.servedName)
 	req, _ := http.NewRequest(http.MethodPost, d.envs[0].Control.URL()+"/v1/chat/completions", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+d.apiKey)
 	req.Header.Set("Content-Type", "application/json")

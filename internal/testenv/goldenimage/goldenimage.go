@@ -17,13 +17,18 @@ import (
 
 const (
 	// DefaultModelRepo is the model the L4 deployment cases serve.
-	DefaultModelRepo = "Qwen/Qwen2-0.5B-Instruct"
+	DefaultModelRepo = "Qwen/Qwen3-0.6B"
 	DefaultModelRev  = "master"
 	// DefaultModelPath is where the image carries it; cases register this path
 	// instead of downloading (see GPUWORKS_PRELOADED_MODEL_PATH).
-	DefaultModelPath = "/opt/gpuworks/test-fixtures/models/qwen2-0.5b"
-	// DefaultDockerImage is the vLLM runner the L4 cases deploy.
-	DefaultDockerImage = "gpustack/runner:cuda12.8-vllm0.17.1"
+	DefaultModelPath = "/opt/gpuworks/test-fixtures/models/qwen3-0.6b"
+	// DefaultDockerImage is the vLLM runner the L4 cases deploy on cards of
+	// compute capability 8.0 and later (A10, L20, ...).
+	DefaultDockerImage = "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"
+	// TuringDockerImage is the vLLM runner for Turing cards (T4): its CUDA 12.9
+	// build still carries sm_75 kernels, and it runs on later cards as well, so
+	// cases that use one image on every card take this one.
+	TuringDockerImage = "gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2"
 )
 
 // File is one remote model file with the size ModelScope reports for it.

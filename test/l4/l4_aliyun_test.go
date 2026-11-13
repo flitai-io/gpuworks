@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/testenv"
 	"gpuworks.ai/gpuworks/internal/testenv/cloudprovider"
@@ -25,9 +26,12 @@ func aliyunBackend(t *testing.T) *vmBackend {
 	t.Helper()
 	p := aliyunProvider(t)
 	secrets := readCloudSecrets()
-	image := strings.TrimSpace(secrets["ALIYUN_TEST_IMAGE"])
-	if image == "" {
-		image = goldenimage.DefaultDockerImage
+	// image runs on every card of the table (see goldenimage.TuringDockerImage):
+	// the multi-node cases and the GPU warm-up use it whatever was rented.
+	// ALIYUN_TEST_IMAGE replaces every image with one of the caller's.
+	image, engineImage := goldenimage.TuringDockerImage, aliyunEngineImage
+	if override := strings.TrimSpace(secrets["ALIYUN_TEST_IMAGE"]); override != "" {
+		image, engineImage = override, func(string) string { return override }
 	}
 	modelEndpoint := strings.TrimSpace(secrets["ALIYUN_MODEL_ENDPOINT"])
 	if modelEndpoint == "" {
@@ -38,7 +42,7 @@ func aliyunBackend(t *testing.T) *vmBackend {
 		EachShape: func(t *testing.T, _ bool, cards, minVRAMMB int, try func(string, int) bool) []string {
 			return eachAliyunShape(t, p, cards, minVRAMMB, try)
 		},
-		ModelEndpoint: modelEndpoint, Image: image, DistributedImage: image,
+		ModelEndpoint: modelEndpoint, Image: image, DistributedImage: image, Model: l4Qwen3Model,
 		// 300 GiB: the udocker case keeps the runner image four times on the VM
 		// at once while it imports: the golden Docker store, the saved tar it
 		// serves, the tar the node downloads, and udocker's own layers (the tar
@@ -59,12 +63,13 @@ func aliyunBackend(t *testing.T) *vmBackend {
 			}
 			return goldenimage.DefaultModelPath
 		},
-		// One engine image for every card: the table holds only sm_75+ cards (no
-		// V100 shapes), which the generic vLLM image supports. A Volta shape
-		// would need the 1Cat-vLLM image in the golden image first.
-		Engine: func(string) (string, string, bool) { return image, "", true },
-		EnsureEngineImage: func(t *testing.T, env *cloudTestEnv, _ string) {
-			requireAliyunGoldenImage(t, []*cloudTestEnv{env}, image)
+		// The table holds only sm_75+ cards (no V100 shapes); single-VM cases run
+		// the image the built-in templates give the rented card. A Volta shape
+		// would take the 1Cat-vLLM image the golden image also carries.
+		Engine: func(gpuModel string) (string, string, bool) { return engineImage(gpuModel), "", true },
+		EnsureEngineImage: func(t *testing.T, env *cloudTestEnv, gpuModel string) {
+			requireAliyunGoldenImage(t, []*cloudTestEnv{env}, engineImage(gpuModel))
+			firstAliyunImageStart(t, env, engineImage(gpuModel))
 		},
 		EnsureDocker: func(t *testing.T, envs []*cloudTestEnv) {
 			requireAliyunGoldenDocker(t, envs)
@@ -72,6 +77,16 @@ func aliyunBackend(t *testing.T) *vmBackend {
 		},
 		EnsureImage: func(t *testing.T, envs []*cloudTestEnv) { requireAliyunGoldenImage(t, envs, image) },
 	}
+}
+
+// aliyunEngineImage is the vLLM runner a card type runs: the CUDA 13 build on
+// compute capability 8.0 and later, the CUDA 12.9 build on Turing (T4), whose
+// kernels the CUDA 13 build no longer carries.
+func aliyunEngineImage(gpuModel string) string {
+	if strings.EqualFold(strings.TrimSpace(gpuModel), "T4") {
+		return goldenimage.TuringDockerImage
+	}
+	return goldenimage.DefaultDockerImage
 }
 
 // eachAliyunShape offers every card type that has stock for exactly cards GPUs
@@ -142,6 +157,22 @@ func requireAliyunGoldenImage(t *testing.T, envs []*cloudTestEnv, image string) 
 			t.Fatalf("rank %d golden image does not carry %s (rebuild it with prepare-aliyun-golden): %v\n%s", rank, image, err, strings.TrimSpace(out))
 		}
 	}
+}
+
+// firstAliyunImageStart imports vLLM once in a container of image and logs how
+// long it took. It is the first read of the image's files on a VM just
+// created from the golden image; done here, that time is reported on its own
+// instead of being part of a deployment's wait for the engine.
+func firstAliyunImageStart(t *testing.T, env *cloudTestEnv, image string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Minute)
+	defer cancel()
+	started := time.Now()
+	out, err := runCloudCommand(ctx, env.Instance, "docker run --rm --entrypoint python3 "+shellQuoteForTest(image)+" -c 'import vllm' 2>&1 | tail -n 5")
+	if err != nil {
+		t.Fatalf("first start of %s: %v\n%s", image, err, strings.TrimSpace(out))
+	}
+	t.Logf("first start of %s (import vllm) took %s", image, time.Since(started).Round(time.Second))
 }
 
 // aliyunOneGPUModel returns a card with a rentable single-GPU shape.

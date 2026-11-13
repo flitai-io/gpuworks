@@ -398,8 +398,8 @@ nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。
 `ubuntu_22_04_x64_100G_with_gpu_driver_and_cuda_alibase_*`（驱动与 CUDA 已装）起一台 T4 实例，
 装 Docker 29 与 NVIDIA container toolkit（Docker CE 源依次试 `mirrors.aliyun.com`、清华、中科大、华为云，
 某个源正在同步、索引校验不过就换下一个；续跑前先删掉上次写下的 Docker 源）、拉取 vLLM runner 镜像（优先华为云 SWR 镜像，
-再 quay.io、Docker Hub，最终标签 `gpustack/runner:cuda12.8-vllm0.17.1`）、下载 Qwen2-0.5B-Instruct 到
-`/opt/gpuworks/test-fixtures/models/qwen2-0.5b` 并写校验和，停掉 Docker、同步后 `CreateImage`，再 `CopyImage`
+再 quay.io、Docker Hub，最终标签 `gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4`）、下载 Qwen3-0.6B 到
+`/opt/gpuworks/test-fixtures/models/qwen3-0.6b` 并写校验和，停掉 Docker、同步后 `CreateImage`，再 `CopyImage`
 到 `-regions`（默认华东1、华北2、华南1、华南3）并在源地域开一台新机验证（先验证再复制，坏镜像不会白白复制到四个地域）。镜像约 50 GB（runner 镜像占大头），
 150 GiB 系统盘的首个整盘快照约 90 分钟，跨地域复制再约一小时，整个过程要预留两到三小时。自定义镜像按地域隔离，
 所以每个地域一个 ID，输出的 `ALIYUN_IMAGE_CN_HANGZHOU=` 等行写进 `secrets/cloud-providers.env`
@@ -409,7 +409,7 @@ nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。
 模型与 runner 都可以换：`-model-repo`/`-model-rev` 指定 ModelScope 模型，`-model-path` 指定镜像内路径，
 `-docker-image`/`-pull-sources` 指定 runner，默认镜像名随模型生成（`gpuworks-golden-<模型>-<UTC 时间>`）；
 `-source-regions` 限定源机与验证机的租用地域（默认同 `-regions`），复制到海外等地域时用它把源机留在有库存的大陆地域。
-L4 用例按默认的 Qwen2-0.5B 与 `gpustack/runner:cuda12.8-vllm0.17.1` 注册模型，换了模型或 runner 的镜像不能直接给 L4 用。镜像里已有 Docker 与模型，用例只验证、不安装、不下载
+L4 用例按默认的 Qwen3-0.6B 注册模型；单机用例在 A10、L20 等卡上部署 `gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4`，在 T4 上部署 `gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2`（用 `-extra-image` 一并装进镜像），多机用例各卡都用后者。换了模型或 runner 的镜像不能直接给 L4 用。镜像里已有 Docker 与模型，用例只验证、不安装、不下载
 （缺了就是镜像坏了，直接失败）。
 
 CI 需要的变量（作用域 `cloud-test/aliyun/*`）：`ALIYUN_ACCESS_KEY_ID`、`ALIYUN_ACCESS_KEY_SECRET`
