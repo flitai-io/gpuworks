@@ -265,6 +265,8 @@
     "deploy": "部署"
   },
   "weightSourceModal": {
+    "localDescription": "此模板引用已注册的本地权重，不包含模型文件。请选择要部署的已注册模型。",
+    "localMissing": "此模板引用已注册的本地权重，不包含模型文件。请在模型仓库中注册已有模型目录，然后重新选择此模板。",
     "confirmTitle": "使用已登记的模型？",
     "confirmDescription": "已登记的模型与模板声明的来源是同一个仓库。选择要部署的模型，或改从模板来源登记。",
     "useModel": "使用此模型并部署",

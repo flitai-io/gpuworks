@@ -58,6 +58,8 @@ func noteText(note Note) string {
 	switch note.Code {
 	case NoteVerifiedOn:
 		return fmt.Sprintf("Verified on %v x %v.", p["count"], p["gpu"])
+	case NoteLocalWeights:
+		return fmt.Sprintf("Local weights %v must already be registered on the destination cluster; this template does not bundle model files.", p["repo_id"])
 	case NoteOperationPassed:
 		return fmt.Sprintf("Tested %v: HTTP %v.", p["operation"], p["http_status"])
 	case NoteOperationFailed:

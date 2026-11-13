@@ -60,6 +60,11 @@ func (s *Service) resolveTemplateWeightModelForNode(source weightSource, origina
 			"model_id": existing.ID, "provider": existing.Source, "repo_id": existing.SourceID, "revision": existing.Revision,
 		})
 	}
+	if strings.EqualFold(strings.TrimSpace(source.Provider), "local") {
+		return nil, productError(messages.ErrorModelSourceUnavailable, "register the local model weights before deploying this template", map[string]any{
+			"provider": "local", "repo_id": source.RepoID, "reason": "local_model_not_registered",
+		})
+	}
 	return s.createTemplateWeightModel(source, original, engine, quantization, weightBytes)
 }
 

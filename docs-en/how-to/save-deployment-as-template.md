@@ -14,7 +14,7 @@ When you are done you have a flat YAML document that imports as it is, and a tes
 | `args` | The deployment's launch arguments: form fields, template arguments and user arguments together, written the way the engine actually builds its command line; arguments the platform injects itself (model path, port, served name, TP/PP, distributed arguments) are not written |
 | `env` | The source template's environment variables; variables the deployment added itself are not exported by default, see below |
 | `gpus` | The vendor and model of the instance's cards, the model written as a pattern that matches only that model (such as `^NVIDIA H20$`) |
-| `weights` | A deployment made from a template keeps the template's weight sources; a custom deployment gets the commit the copy its instance reads resolved to |
+| `weights` | A deployment made from a template keeps the template's weight sources; a public-repository custom deployment keeps the commit its instance reads; a local registration keeps its logical weight identity without a host path or an invented commit |
 | `model_config`, `context_length`, `input_modalities` | Current catalog model metadata for a template deployment (estimation facts that may change with catalog updates), or the registered model row's config.json and metadata for a custom deployment; these are not claimed to be a launch-time snapshot |
 | `api` | The API declaration in the instance's immutable launch record, used to choose operation checks |
 | `kv_bytes_per_token` | Written only when there is a reliable source: the source template, or the catalog's value for the same model. Otherwise it is left out and a comment says so |
@@ -34,6 +34,23 @@ On the Deployments page, find the running deployment, open the More menu at the 
 - **Template YAML**: you can edit it in place.
 
 Anyone can use Download YAML and Copy test record at the bottom; Save to catalog is shown only to administrators and is unavailable when a check failed. After saving, the dialog links to the template. The steps below are the same flow through the API.
+
+## Reuse registered local weights
+
+A model registered from a local directory can also be saved. The template keeps engine settings and uses the existing weight-source structure to reference the registered model's `source_id`:
+
+```yaml
+weights:
+  quantization: bf16
+  sources:
+    - local: company-tuned-model
+```
+
+`local` is not a download provider. Its value is a registration identity, not an absolute path, URL or database ID. Names containing spaces receive a stable catalog `model_id` without changing the weight identity. The template contains no weight or image files. Register local weights with the same identity before using it on another cluster.
+
+After an administrator chooses Save to catalog, find the model by name or weight identity and select the saved spec to deploy it again. The saved template is independent of the source deployment. Save before deleting; an already deleted deployment cannot automatically recover its parameters. An absent local registration is refused during deployment resolution with 400 `MODEL_SOURCE_UNAVAILABLE`, without first creating an empty downloadable model or substituting a public repository with the same name. Existing evaluation, storage-permission and sync-group rules still decide whether registered copies are readable or can be copied; none are bypassed.
+
+Deployment-added environment variables remain excluded by default. The local-weight notice is included in the YAML comments and test record as well as the UI, making clear that the template references files rather than bundling them.
 
 ## 1. Export
 
@@ -89,7 +106,7 @@ For 409 `TEMPLATE_EXPORT_UNAVAILABLE`, read `params.reason`:
 | `not_running` | The deployment is not running or has no running instance; start it first |
 | `distributed`, `pd` | Multi-node and PD deployments cannot be exported yet |
 | `template_assets`, `components` | The source template carries packaged files or component models, which one YAML document cannot hold; use the template editor instead |
-| `weights_not_public` | The weights come from a local directory or a URL that nobody else can download |
+| `weights_not_public` | The current source, such as a URL, cannot be exported; use registered local weights or an HF/ModelScope repository |
 | `revision_unpinned`, `revisions_differ` | The weight revision is a branch name, or the copies resolved different commits; pin the model to one commit and deploy again |
 | `launch_changed` | Configuration or the running instance changed; apply it and restart before retrying |
 | `launch_snapshot_missing` | The instance has no complete, verifiable launch snapshot; restart it with the current server version |

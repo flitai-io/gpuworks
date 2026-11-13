@@ -53,6 +53,9 @@ type Note struct {
 const (
 	// NoteVerifiedOn states the cards the spec ran on (gpu, count).
 	NoteVerifiedOn = "verified_on"
+	// NoteLocalWeights: the template references registered local files and
+	// does not bundle or make those files downloadable on another cluster.
+	NoteLocalWeights = "local_weights"
 	// NoteOperationPassed and NoteOperationFailed report an operation the
 	// export sent a request for (operation, http_status, message).
 	NoteOperationPassed = "operation_passed"
@@ -84,6 +87,13 @@ const (
 func launchNotes(in Input, launch deploy.ExportedArgs, excluded []string, model inferencecatalog.InferenceModel) []Note {
 	card := in.GPUs[0]
 	notes := []Note{{Code: NoteVerifiedOn, Params: map[string]any{"gpu": card.Name, "count": in.GPUCount}}}
+	if len(model.Specs) > 0 {
+		for _, source := range model.Specs[0].Weights.Sources {
+			if source.Provider == "local" {
+				notes = append(notes, Note{Code: NoteLocalWeights, Params: map[string]any{"repo_id": source.RepoID}})
+			}
+		}
+	}
 	if len(model.Specs) > 0 && model.Specs[0].Placement == nil {
 		memory := card.MemoryMiB
 		if in.VRAMLimitBytes > 0 {

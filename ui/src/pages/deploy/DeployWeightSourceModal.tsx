@@ -31,11 +31,15 @@ export default function DeployWeightSourceModal({
   onConfirm: () => void;
 }) {
   const { t } = useTranslation("deploy");
+  const sources = selection?.spec.weight_sources || [];
+  const remoteSources = sources.filter((source) => ["huggingface", "modelscope"].includes(source.provider.toLowerCase()));
+  const localOnly = sources.length > 0 && remoteSources.length === 0 && sources.some((source) => source.provider.toLowerCase() === "local");
   const hasMatches = matches.length > 0;
   const choosingSource = !hasMatches || useModel === "template";
   const choosingSourceOnly = useModel === "template";
   const usingModel = typeof useModel === "number";
-  const ready = usingModel || (choosingSource && !!choice);
+  const ready = (usingModel && matches.some((model) => model.id === useModel)) ||
+    (choosingSource && !!choice && remoteSources.some((source) => JSON.stringify(source) === JSON.stringify(choice)));
   const sourceSelect = (
     <Select
       value={choice ? JSON.stringify(choice) : undefined}
@@ -43,7 +47,7 @@ export default function DeployWeightSourceModal({
       style={{ width: "100%" }}
       placeholder={t("action.selectSourcePlaceholder")}
       aria-label={t("action.selectSourcePlaceholder")}
-      options={(selection?.spec.weight_sources || []).map((source) => ({
+      options={remoteSources.map((source) => ({
         value: JSON.stringify(source),
         label: `${source.provider === "modelscope" ? t("action.modelScope") : t("action.huggingFace")} · ${source.repo_id}`,
       }))}
@@ -53,7 +57,7 @@ export default function DeployWeightSourceModal({
     <Modal
       open={open}
       title={hasMatches ? t("weightSourceModal.confirmTitle") : t("action.selectWeightSource")}
-      okText={hasMatches && !choosingSourceOnly ? t("weightSourceModal.useModel") : t("action.registerAndDeploy")}
+      okText={localOnly || (hasMatches && !choosingSourceOnly) ? t("weightSourceModal.useModel") : t("action.registerAndDeploy")}
       cancelText={t("shared.cancel")}
       confirmLoading={loading}
       okButtonProps={{ disabled: !ready }}
@@ -62,7 +66,7 @@ export default function DeployWeightSourceModal({
     >
       {hasMatches ? (
         <>
-          <Typography.Paragraph>{t("weightSourceModal.confirmDescription")}</Typography.Paragraph>
+          <Typography.Paragraph>{t(localOnly ? "weightSourceModal.localDescription" : "weightSourceModal.confirmDescription")}</Typography.Paragraph>
           <Radio.Group
             value={useModel}
             onChange={(event) => onUseModel?.(event.target.value as number | "template")}
@@ -79,15 +83,15 @@ export default function DeployWeightSourceModal({
                   </Space>
                 </Radio>
               ))}
-              <Radio value="template">{t("weightSourceModal.registerFromTemplate")}</Radio>
+              {remoteSources.length > 0 && <Radio value="template">{t("weightSourceModal.registerFromTemplate")}</Radio>}
             </Space>
           </Radio.Group>
           {useModel === "template" && <div style={{ marginTop: 12 }}>{sourceSelect}</div>}
         </>
       ) : (
         <>
-          <Typography.Paragraph>{t("action.selectWeightSourceDescription")}</Typography.Paragraph>
-          {sourceSelect}
+          <Typography.Paragraph>{t(localOnly ? "weightSourceModal.localMissing" : "action.selectWeightSourceDescription")}</Typography.Paragraph>
+          {!localOnly && sourceSelect}
         </>
       )}
     </Modal>

@@ -728,7 +728,9 @@ macOS 忽略 `no_systemd`。
 - `notes` 的 `code`：`verified_on`、`operation_passed`、`operation_failed`、`operation_not_tested`、`kv_bytes_per_token` 缺失时的 `kv_bytes_missing`、`model_config_missing`、`placement_omitted`（`gpu_count`、`gpu_memory_mib`）、`vram_limit`、`env_excluded`、`parameters_dropped`（没有引擎 flag 承载的设置，如 `cpu_cores`）、`container_overrides_omitted`。
 - `evidence` 是提交上游时附带的纯文本测试记录。
 
-写不成模板时返回 409 `TEMPLATE_EXPORT_UNAVAILABLE`，`params.reason` 为：`not_running`（部署未运行或没有运行中的实例）、`distributed`（多机）、`pd`、`no_gpu_facts`、`template_assets`、`components`（源模板带随包文件或组件模型）、`weights_not_public`（权重来自本地目录或 URL）、`revision_unpinned`（权重版本不是 commit）、`revisions_differ`、`template_missing`、`model_missing`、`launch_changed`（配置或运行实例已变化）、`launch_snapshot_missing`（没有完整可核验的启动记录）、`heterogeneous_gpus`（绑定了不同型号的卡）、`command_overridden`（部署替换了引擎命令）。导出的参数重建不出原命令时返回 409 `LAUNCH_NOT_EXPORTABLE`。部署不存在 404，请求体不是合法 JSON 400。生成规则见[把部署另存为推理模板](../how-to/save-deployment-as-template.md)。
+写不成模板时返回 409 `TEMPLATE_EXPORT_UNAVAILABLE`，`params.reason` 为：`not_running`（部署未运行或没有运行中的实例）、`distributed`（多机）、`pd`、`no_gpu_facts`、`template_assets`、`components`（源模板带随包文件或组件模型）、`weights_not_public`（不支持的权重来源，如 URL；本地注册模型支持 `local` 来源）、`revision_unpinned`（权重版本不是 commit）、`revisions_differ`、`template_missing`、`model_missing`、`launch_changed`（配置或运行实例已变化）、`launch_snapshot_missing`（没有完整可核验的启动记录）、`heterogeneous_gpus`（绑定了不同型号的卡）、`command_overridden`（部署替换了引擎命令）。导出的参数重建不出原命令时返回 409 `LAUNCH_NOT_EXPORTABLE`。部署不存在 404，请求体不是合法 JSON 400。生成规则见[把部署另存为推理模板](../how-to/save-deployment-as-template.md)。
+
+本地模型另存的 YAML 使用 `weights.sources: [{local: <source_id>}]`，只引用已注册权重，不打包文件或保存主机路径。`local_weights` 说明携带 `repo_id`。缺少本地注册时，创建部署返回 400 `MODEL_SOURCE_UNAVAILABLE`，`params.reason=local_model_not_registered`；不会创建空模型。详情见[本地模型复用](../how-to/save-deployment-as-template.md)。
 
 ### 部署列表的筛选与返回字段
 

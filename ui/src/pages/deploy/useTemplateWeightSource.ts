@@ -67,7 +67,10 @@ export default function useTemplateWeightSource({
   // The registered models serving the selected spec's sources, once the
   // lookup for that spec (key) has answered; a pending or failed lookup
   // leaves it on another key, and nothing is registered meanwhile.
-  const [lookup, setLookup] = useState<{ key: string; models: WeightModel[]; sources: TemplateWeightModels["sources"] }>();
+  // Invalidate already queued effects as well as late query responses when
+  // an obsolete registration requires a fresh lookup of the current spec.
+  const lookupRequest = useRef(0);
+  const [lookup, setLookup] = useState<{ key: string; request: number; models: WeightModel[]; sources: TemplateWeightModels["sources"] }>();
   // A failed lookup is retried at the pace the model list used to poll.
   const [lookupRetry, setLookupRetry] = useState(0);
   const stateRef = useRef({ applied: adoptedKey ?? "", prompted: "", registering: "" });
@@ -85,6 +88,20 @@ export default function useTemplateWeightSource({
       ? `${template.id}:${selection.spec.source}:${selection.spec.name}`
       : "";
   const sources: WeightSource[] = selection?.spec.weight_sources || [];
+  // Identity changes also invalidate a response from an earlier visit to the
+  // same spec, not only a response for a different current key.
+  const activeSelection = useRef({ key });
+  if (activeSelection.current.key !== key) activeSelection.current = { key };
+
+  useEffect(() => {
+    setModalOpen(false);
+    setChoice(undefined);
+    setMatches([]);
+    setUseModel(undefined);
+    setAppliedModel(undefined);
+    setRegistering(false);
+    stateRef.current.prompted = "";
+  }, [key]);
 
   useEffect(() => {
     if (!key || key === adoptedKey) return;
@@ -101,13 +118,14 @@ export default function useTemplateWeightSource({
   useEffect(() => {
     if (!key || key === adoptedKey || !template || !selection || !sources.length || !sources[0]?.repo_id) return;
     let alive = true;
+    const request = ++lookupRequest.current;
     let retry: ReturnType<typeof setTimeout> | undefined;
     api.templateWeightModels(template.id, selection.spec.source, selection.spec.name).then(
       (answer) => {
-        if (alive) setLookup({ key, ...answer });
+        if (alive && request === lookupRequest.current) setLookup({ key, request, ...answer });
       },
       (reason: Error) => {
-        if (!alive) return;
+        if (!alive || request !== lookupRequest.current) return;
         message.error(t("action.modelLookupFailed", { detail: reason.message }));
         retry = setTimeout(() => setLookupRetry((n) => n + 1), LOOKUP_RETRY_MS);
       },
@@ -119,7 +137,9 @@ export default function useTemplateWeightSource({
   }, [key, lookupRetry]);
 
   const register = async (source: WeightSource, registrationKey: string) => {
-    if (!source.repo_id || stateRef.current.registering === registrationKey)
+    const requestSelection = activeSelection.current;
+    if (requestSelection.key !== registrationKey || !source.repo_id ||
+      !["huggingface", "modelscope"].includes(source.provider.toLowerCase()) || stateRef.current.registering === registrationKey)
       return;
     stateRef.current.registering = registrationKey;
     setRegistering(true);
@@ -135,6 +155,7 @@ export default function useTemplateWeightSource({
         architecture: template?.architecture,
         context_length: template?.context_length,
       });
+      if (activeSelection.current !== requestSelection) return;
       form.setFieldValue("model_id", model.id);
       pickedRef.current = { key: registrationKey, model };
       // The registered model now serves the spec: the template is applied
@@ -149,13 +170,22 @@ export default function useTemplateWeightSource({
       message.success(t("action.modelRegistered"));
       return model;
     } catch (reason) {
+      if (activeSelection.current !== requestSelection) return;
       stateRef.current.registering = "";
       message.error(
         t("action.modelRegisterFailed", { detail: (reason as Error).message }),
       );
       return undefined;
     } finally {
-      setRegistering(false);
+      if (stateRef.current.registering === registrationKey) stateRef.current.registering = "";
+      if (activeSelection.current === requestSelection) setRegistering(false);
+      // Returning to the same spec must discover the model the obsolete
+      // request just registered, without applying it or registering twice.
+      else if (activeSelection.current.key === registrationKey) {
+        lookupRequest.current++;
+        setLookup(undefined);
+        setLookupRetry((n) => n + 1);
+      }
     }
   };
 
@@ -165,7 +195,7 @@ export default function useTemplateWeightSource({
     if (!sources.length || !sources[0]?.repo_id) return;
     // Wait for the lookup before asking, choosing or registering: an answer
     // not yet in (or a failed one) must not create a duplicate model.
-    if (lookup?.key !== key) return;
+    if (lookup?.key !== key || lookup.request !== lookupRequest.current) return;
     const picked =
       pickedRef.current?.key === key ? pickedRef.current : undefined;
     if (!picked) {
@@ -174,7 +204,7 @@ export default function useTemplateWeightSource({
       const found = lookup.models;
       // Several sources with nothing registered: the user chooses, with no
       // default. One source with nothing registered: nothing to ask.
-      if (found.length || sources.length > 1) {
+      if (found.length || sources.length > 1 || sources[0]?.provider.toLowerCase() === "local") {
         if (stateRef.current.prompted === key) return;
         stateRef.current.prompted = key;
         setMatches(found);
@@ -216,7 +246,8 @@ export default function useTemplateWeightSource({
   }, [engineProfile, lookup, selection, template]);
 
   const confirm = async () => {
-    if (!selection) return;
+    if (!selection || lookup?.key !== key || lookup.request !== lookupRequest.current) return;
+    const requestSelection = activeSelection.current;
     const confirmKey = `${template?.id || 0}:${selection.spec.source}:${selection.spec.name}`;
     if (typeof useModel === "number") {
       // The user confirmed a registered model: it serves the template.
@@ -226,6 +257,7 @@ export default function useTemplateWeightSource({
       form.setFieldValue("model_id", picked.id);
       setLookup((prev) => ({
         key: confirmKey,
+        request: lookupRequest.current,
         models: prev?.key === confirmKey ? prev.models : [picked],
         sources: prev?.key === confirmKey ? prev.sources : [],
       }));
@@ -241,15 +273,17 @@ export default function useTemplateWeightSource({
     try {
       answer = await api.templateWeightModels(template?.id || 0, selection.spec.source, selection.spec.name);
     } catch (reason) {
+      if (activeSelection.current !== requestSelection) return;
       message.error(t("action.modelLookupFailed", { detail: (reason as Error).message }));
       return;
     }
+    if (activeSelection.current !== requestSelection) return;
     const existing = reusedModel(answer, choice);
     if (existing) {
       form.setFieldValue("model_id", existing.id);
       // The chosen source's model applies the template, as a single
       // source's would.
-      setLookup({ key: confirmKey, ...answer });
+      setLookup({ key: confirmKey, request: lookupRequest.current, ...answer });
       setModalOpen(false);
       setChoice(undefined);
       return;

@@ -63,7 +63,8 @@ export function fakeModels(models: FixtureModel[]) {
         const serves = (m: FixtureModel, source: WeightSource) => {
           const held = (m.artifact_subfolder ?? "").trim();
           const asked = (source.subfolder ?? "").trim();
-          return (m.source_id ?? "").trim().toLowerCase() === source.repo_id.trim().toLowerCase() &&
+          return (source.provider.toLowerCase() !== "local" || m.source === "local") &&
+            (m.source_id ?? "").trim().toLowerCase() === source.repo_id.trim().toLowerCase() &&
             (held === asked || (held === "" && asked !== ""));
         };
         const serving = newest.filter((m) => sources.some((source) => serves(m, source)));
