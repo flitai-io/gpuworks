@@ -27,6 +27,7 @@ export default function DetailDrawer({
   title,
   subtitle,
   width = DETAIL_DRAWER_WIDTH,
+  deferEscapeToModal,
   extra,
   banner,
   tabs,
@@ -40,6 +41,7 @@ export default function DetailDrawer({
   title: ReactNode;
   subtitle?: ReactNode;
   width?: string;
+  deferEscapeToModal?: boolean;
   extra?: ReactNode;
   banner?: ReactNode;
   tabs?: DetailTab[];
@@ -60,7 +62,7 @@ export default function DetailDrawer({
   };
   return (
     <SideDrawer title={title}
-      open={open} onClose={onClose} width={width} className={className}
+      open={open} onClose={onClose} width={width} className={className} deferEscapeToModal={deferEscapeToModal}
       subtitle={subtitle} extra={extra}>
       {banner}
       {tabs && <Tabs className="detail-tabs" value={activeTab} defaultValue={tabs[0]?.key} onValueChange={changeTab} variant="underline">

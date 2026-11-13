@@ -1437,7 +1437,7 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
   --detail-notice-width: 100%; --detail-notice-max-width: 100%; margin-inline-start: 0;
 }
 .deployment-detail-tabs .instance-launch-buttons { margin: 6px 0; }
-.deployment-top-tabs { position: sticky; top: 0; z-index: 4; background: var(--surface-floating); }
+.deployment-top-tabs { z-index: 4; background: var(--surface-floating); }
 .deployment-card-header {
   display: flex;
   flex-wrap: wrap;
@@ -1506,7 +1506,6 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
 .deployment-detail-tabs {
   margin-top: 0;
 }
-.deployment-top-tabs { margin-block: 0; }
 .replica-cascade {
   z-index: 3;
   background: var(--surface-floating);

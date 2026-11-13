@@ -98,12 +98,27 @@ def beyond_retention_warns(page: Page, capture) -> None:
     capture("restore-default-range")
 
 
+def assert_instance_filters_uncovered(drawer) -> None:
+    tablist = drawer.get_by_role("tablist", name="Deployment Details")
+    filters = drawer.locator(".cascade-filters button")
+    expect(filters.first).to_be_visible()
+    tab_bottom = tablist.evaluate("el => el.getBoundingClientRect().bottom")
+    for button in filters.all():
+        assert button.evaluate("""(el, tabBottom) => {
+            const r = el.getBoundingClientRect();
+            return r.top >= tabBottom && el.contains(document.elementFromPoint(r.x + r.width / 2, r.top + 1));
+        }""", tab_bottom), f"Instance filter covered by the tab strip: {button.inner_text()}"
+
+
 def log_range_queries_store(page: Page, capture) -> None:
     drawer = page.get_by_role("dialog")
     drawer.get_by_role("tab", name=re.compile(r"^Instance details \(")).click()
     logs = drawer.get_by_role("region", name="Logs", exact=True)
 
+    assert_instance_filters_uncovered(drawer)
+    capture("instance-filters")
     logs.scroll_into_view_if_needed()
+    assert_instance_filters_uncovered(drawer)
     capture("instance-live-logs")
 
     def bounded_log_search(request) -> bool:

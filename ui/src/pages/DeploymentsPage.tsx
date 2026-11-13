@@ -501,6 +501,7 @@ function DeploymentDetail({
       width="min(832px, calc(100vw - 32px))"
       title={dep?.name || t("detail.title")}
       className="deployment-detail-drawer"
+      deferEscapeToModal
       open={id != null}
       onClose={onClose}
       extra={dep && (
@@ -517,7 +518,7 @@ function DeploymentDetail({
         <div className="deployment-detail-content">
           <MetricWindowProvider key={dep.id}>
             <Tabs className="deployment-inspection-tabs deployment-detail-tabs" value={detailTab} onValueChange={setDetailTab} variant="underline">
-              <TabsList className="sticky top-0 deployment-top-tabs mx-0 max-w-full" aria-label={t("detail.title")}>
+              <TabsList className="deployment-top-tabs m-0 max-w-full" aria-label={t("detail.title")}>
                 <TabItem value="overview" label={t("detail.title")} />
                 <TabItem value="instances" label={instanceDetailsLabel} />
               </TabsList>
