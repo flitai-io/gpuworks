@@ -2,9 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
+
+	"gorm.io/gorm"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -265,4 +268,108 @@ func mustJSON(t *testing.T, v any) []byte {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// failInstanceWrites makes every update of the instances table fail until the
+// test ends, standing in for a store error after the entry's own write.
+func failInstanceWrites(t *testing.T, st *store.Store) {
+	t.Helper()
+	if err := st.DB().Callback().Update().Before("gorm:update").Register("test:fail-instances", func(db *gorm.DB) {
+		if db.Statement.Table == "instances" {
+			_ = db.AddError(errors.New("instances cannot be written"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.DB().Callback().Update().Remove("test:fail-instances") })
+}
+
+// untouched asserts a refused or failed change stopped nothing and cordoned nothing.
+func (r *stoppingRig) untouched(t *testing.T) {
+	t.Helper()
+	for _, uuid := range []string{"inst-gpu-a1-chat", "inst-gpu-a1-embed", "inst-gpu-b1-chat", "inst-gpu-b1-batch"} {
+		if got := r.state(t, uuid); got != proto.InstRunning {
+			t.Errorf("%s is %s; nothing should have stopped", uuid, got)
+		}
+	}
+	for _, n := range []*store.Node{r.a1, r.a2, r.b1} {
+		if r.scheduling(t, n) != store.NodeSchedulable {
+			t.Errorf("%s was cordoned", n.Name)
+		}
+	}
+	if entryOf(t, r.tokenRig, r.uuid).NodeSelector != "gpuworks.ai/pool=a" {
+		t.Error("the entry was changed")
+	}
+}
+
+// A confirmed edit whose save fails stops nothing: the name is taken, a field
+// is invalid, or the store fails after the entry was written.
+func TestConfirmedEditThatFailsToSaveStopsNothing(t *testing.T) {
+	r := newStoppingRig(t)
+	if rec := r.do(r.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"taken","server_url":"https://gw.example"}`); rec.Code != http.StatusCreated && rec.Code != http.StatusOK {
+		t.Fatalf("second entry = %d %s", rec.Code, rec.Body)
+	}
+	const move = `"node_selector":"gpuworks.ai/pool=b","confirm_drop_instances":true`
+
+	rec := r.do(r.session, http.MethodPut, r.base, `{"name":"taken",`+move+`}`)
+	var e struct{ Code string }
+	_ = json.Unmarshal(rec.Body.Bytes(), &e)
+	if rec.Code != http.StatusConflict || e.Code != ErrorKubeClusterNameTaken {
+		t.Fatalf("name taken = %d %s", rec.Code, rec.Body)
+	}
+	r.untouched(t)
+
+	if rec = r.do(r.session, http.MethodPut, r.base, `{"engine_ports":"nonsense",`+move+`}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid field = %d %s", rec.Code, rec.Body)
+	}
+	r.untouched(t)
+
+	failInstanceWrites(t, r.st)
+	if rec = r.do(r.session, http.MethodPut, r.base, `{"name":"renamed",`+move+`}`); rec.Code != http.StatusInternalServerError {
+		t.Fatalf("store failure = %d %s", rec.Code, rec.Body)
+	}
+	if entryOf(t, r.tokenRig, r.uuid).Name != "prod" {
+		t.Fatal("the entry was renamed although stopping its instances failed")
+	}
+	r.untouched(t)
+}
+
+// The pools endpoint is the same: a pool the cloud does not have, or a store
+// failure after the pools were written, stops nothing and changes no pools.
+func TestConfirmedPoolsChangeThatFailsToSaveStopsNothing(t *testing.T) {
+	rig := newKubeSourceRig(t)
+	const label = "alibabacloud.com/nodepool-id"
+	agents := &selectionAgents{labels: map[string]map[string]string{"n-1": {label: "np-1"}, "n-2": {label: "np-2"}}, down: map[string]bool{}}
+	rig.agents = agents.call
+	uuid, _ := rig.createFromPools("ack", "np-1", "np-2")
+	path := "/api/v1/kube/clusters/" + uuid + "/pools"
+	c := entryOf(t, rig.tokenRig, uuid)
+	n1 := seedKubeNode(t, rig.st, c, "n-1", "chat")
+	seedKubeNode(t, rig.st, c, "n-2", "embed")
+	untouched := func() {
+		t.Helper()
+		for _, id := range []string{"inst-n-1-chat", "inst-n-2-embed"} {
+			if got := instanceOf(t, rig.st, id).State; got != proto.InstRunning {
+				t.Errorf("%s is %s; nothing should have stopped", id, got)
+			}
+		}
+		if got, err := rig.st.NodeByUUID(n1.UUID); err != nil || got.Scheduling != store.NodeSchedulable {
+			t.Errorf("n-1 = %+v, %v; want schedulable", got, err)
+		}
+		if rig.poolsOf(uuid) != `["np-1","np-2"]` {
+			t.Errorf("pools = %s", rig.poolsOf(uuid))
+		}
+	}
+
+	// A pool the cluster does not have is refused before anything else.
+	if rec := rig.do(rig.session, http.MethodPut, path, `{"provider_pool_ids":["np-2","np-gone"],"confirm_drop_instances":true}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown pool = %d %s", rec.Code, rec.Body)
+	}
+	untouched()
+
+	failInstanceWrites(t, rig.st)
+	if rec := rig.do(rig.session, http.MethodPut, path, `{"provider_pool_ids":["np-2"],"confirm_drop_instances":true}`); rec.Code != http.StatusInternalServerError {
+		t.Fatalf("store failure = %d %s", rec.Code, rec.Body)
+	}
+	untouched()
 }

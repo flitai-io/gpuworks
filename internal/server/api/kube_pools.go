@@ -217,11 +217,14 @@ func (a *apiHandlers) setKubeClusterPools(w http.ResponseWriter, r *http.Request
 	// The pools replace a node selector the entry may still carry.
 	next := *c
 	next.NodeSelector = ""
-	stopped, ok := a.settleEntrySelection(w, r, *c, next, held[c.ID], pools, req.ConfirmDropInstances)
+	// The instances on leaving nodes are asked to stop in the transaction that
+	// saves the pools, after the pools were resolved and checked above: a
+	// change that fails stops nothing (kube_selection_stop.go).
+	leave, ok := a.settleEntrySelection(w, r, *c, next, held[c.ID], pools, req.ConfirmDropInstances)
 	if !ok {
 		return
 	}
-	updated, err := a.d.Store.SetKubeClusterPools(c.UUID, pools)
+	updated, stoppedRows, err := a.d.Store.SetKubeClusterPoolsLeaving(c.UUID, pools, leave)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, err)
@@ -230,6 +233,8 @@ func (a *apiHandlers) setKubeClusterPools(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	stopped := kubeStoppedDTO(stoppedRows)
+	a.logKubeStopped(updated.Name, stopped, leave)
 	if a.d.Log != nil {
 		a.d.Log.Info("kubernetes cluster pools changed", "cluster", updated.Name, "pools", len(pools))
 	}

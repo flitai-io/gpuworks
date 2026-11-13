@@ -18,6 +18,19 @@ type StoppedInstance struct {
 	NodeUUID     string
 }
 
+// KubeLeave is what a confirmed change of an entry's node selection does to
+// the nodes it leaves out, written in the same transaction as the change so a
+// change that fails (a name taken, an entry gone) stops nothing.
+type KubeLeave struct {
+	// StopNodeIDs are the nodes whose instances are asked to stop.
+	StopNodeIDs []uint
+	// CordonNodeUUIDs are the nodes that take no new replica from now on,
+	// as if an operator had cordoned them.
+	CordonNodeUUIDs []string
+	// Message is what the stopped instances say on their timelines.
+	Message string
+}
+
 // StopInstancesOnNodes asks every instance on the given nodes that has not
 // finished or begun leaving to stop: it is moved to removing, the state the
 // controller and the node's agent already treat as "stop this and reclaim its
@@ -27,64 +40,101 @@ type StoppedInstance struct {
 // runs elsewhere keeps those replicas; the controller decides afterwards
 // whether and where a replica is rebuilt.
 //
-// Reads follow the instances' node index and the deployments' primary key.
+// A confirmed selection change does this inside the transaction that saves it
+// (UpdateKubeClusterLeaving, SetKubeClusterPoolsLeaving); this is the same
+// write on its own.
 func (s *Store) StopInstancesOnNodes(nodeIDs []uint, message string) ([]StoppedInstance, error) {
+	var rows []Instance
+	var stopped []StoppedInstance
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		rows, stopped, err = stopInstancesOnNodesTx(tx, nodeIDs, message)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.announceTransition(rows, proto.InstRemoving, message)
+	return stopped, nil
+}
+
+// stopInstancesOnNodesTx moves the instances in tx and returns their rows (as
+// before the move, for the caller to announce once the transaction commits)
+// and their descriptions. Reads follow the instances' node index and the
+// deployments' primary key.
+func stopInstancesOnNodesTx(tx *gorm.DB, nodeIDs []uint, message string) ([]Instance, []StoppedInstance, error) {
 	if len(nodeIDs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	from := append(ReplicaFillingStates(), proto.InstDraining)
 	var rows []Instance
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		for start := 0; start < len(nodeIDs); start += kubeInstanceChunk {
-			var chunk []Instance
-			if err := tx.Select("id", "uuid", "deployment_id", "node_id").
-				Where("node_id IN ? AND state IN ?", nodeIDs[start:min(start+kubeInstanceChunk, len(nodeIDs))], from).Order("id").Find(&chunk).Error; err != nil {
-				return err
-			}
-			rows = append(rows, chunk...)
+	for start := 0; start < len(nodeIDs); start += kubeInstanceChunk {
+		var chunk []Instance
+		if err := tx.Select("id", "uuid", "deployment_id", "node_id").
+			Where("node_id IN ? AND state IN ?", nodeIDs[start:min(start+kubeInstanceChunk, len(nodeIDs))], from).Order("id").Find(&chunk).Error; err != nil {
+			return nil, nil, err
 		}
-		if len(rows) == 0 {
-			return nil
-		}
-		ids := make([]uint, 0, len(rows))
-		for _, r := range rows {
-			ids = append(ids, r.ID)
-		}
-		for start := 0; start < len(ids); start += kubeInstanceChunk {
-			if err := tx.Model(&Instance{}).Where("id IN ?", ids[start:min(start+kubeInstanceChunk, len(ids))]).
-				Updates(map[string]any{"state": proto.InstRemoving, "message": message, "runtime_failure": ""}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil || len(rows) == 0 {
-		return nil, err
+		rows = append(rows, chunk...)
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
-	s.announceTransition(rows, proto.InstRemoving, message)
+	if len(rows) == 0 {
+		return nil, nil, nil
+	}
+	ids := make([]uint, 0, len(rows))
 	wanted := map[uint]bool{}
 	nodes := map[uint]bool{}
 	for _, r := range rows {
+		ids = append(ids, r.ID)
 		wanted[r.DeploymentID], nodes[r.NodeID] = true, true
 	}
-	names, err := s.deploymentNames(wanted)
-	if err != nil {
-		return nil, err
+	for start := 0; start < len(ids); start += kubeInstanceChunk {
+		if err := tx.Model(&Instance{}).Where("id IN ?", ids[start:min(start+kubeInstanceChunk, len(ids))]).
+			Updates(map[string]any{"state": proto.InstRemoving, "message": message, "runtime_failure": ""}).Error; err != nil {
+			return nil, nil, err
+		}
 	}
-	nodeUUIDs, err := s.nodeUUIDsByID(nodes)
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	names, err := deploymentNamesOn(tx, wanted)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	nodeUUIDs, err := nodeUUIDsByIDOn(tx, nodes)
+	if err != nil {
+		return nil, nil, err
 	}
 	out := make([]StoppedInstance, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, StoppedInstance{InstanceUUID: r.UUID, DeploymentID: r.DeploymentID, Deployment: names[r.DeploymentID], NodeUUID: nodeUUIDs[r.NodeID]})
 	}
-	return out, nil
+	return rows, out, nil
 }
 
-// nodeUUIDsByID reads the uuids of the given nodes by primary key.
-func (s *Store) nodeUUIDsByID(wanted map[uint]bool) (map[uint]string, error) {
+// cordonNodesTx takes the nodes out of scheduling as an operator's cordon, in tx.
+func cordonNodesTx(tx *gorm.DB, uuids []string) error {
+	if len(uuids) == 0 {
+		return nil
+	}
+	return tx.Model(&Node{}).Where("uuid IN ?", uuids).
+		Updates(map[string]any{"scheduling": NodeCordoned, "scheduling_by": SchedulingByOperator}).Error
+}
+
+// applyKubeLeaveTx writes what leave asks for in tx.
+func applyKubeLeaveTx(tx *gorm.DB, leave KubeLeave) ([]Instance, []StoppedInstance, error) {
+	if err := cordonNodesTx(tx, leave.CordonNodeUUIDs); err != nil {
+		return nil, nil, err
+	}
+	return stopInstancesOnNodesTx(tx, leave.StopNodeIDs, leave.Message)
+}
+
+// announceKubeLeave publishes what applyKubeLeaveTx wrote, after commit.
+func (s *Store) announceKubeLeave(leave KubeLeave, rows []Instance) {
+	for _, uuid := range leave.CordonNodeUUIDs {
+		s.publishNode(uuid, NodeChangeScheduling)
+	}
+	s.announceTransition(rows, proto.InstRemoving, leave.Message)
+}
+
+// nodeUUIDsByIDOn reads the uuids of the given nodes by primary key.
+func nodeUUIDsByIDOn(db *gorm.DB, wanted map[uint]bool) (map[uint]string, error) {
 	ids := make([]uint, 0, len(wanted))
 	for id := range wanted {
 		ids = append(ids, id)
@@ -95,7 +145,7 @@ func (s *Store) nodeUUIDsByID(wanted map[uint]bool) (map[uint]string, error) {
 			ID   uint
 			UUID string
 		}
-		if err := s.reader().Model(&Node{}).Select("id", "uuid").Where("id IN ?", ids[start:min(start+kubeInstanceChunk, len(ids))]).Scan(&rows).Error; err != nil {
+		if err := db.Model(&Node{}).Select("id", "uuid").Where("id IN ?", ids[start:min(start+kubeInstanceChunk, len(ids))]).Scan(&rows).Error; err != nil {
 			return nil, err
 		}
 		for _, r := range rows {

@@ -80,13 +80,14 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Instances on nodes the new selection leaves out are asked to stop
-	// before the change is saved (kube_selection_stop.go).
-	stopped, ok := a.settleEntrySelection(w, r, *old, c, pools[c.ID], pools[c.ID], req.ConfirmDropInstances)
+	// Instances on nodes the new selection leaves out are asked to stop in
+	// the transaction that saves the change, after everything above and the
+	// name check inside it: a change that fails stops nothing (kube_selection_stop.go).
+	leave, ok := a.settleEntrySelection(w, r, *old, c, pools[c.ID], pools[c.ID], req.ConfirmDropInstances)
 	if !ok {
 		return
 	}
-	updated, err := a.d.Store.UpdateKubeCluster(c)
+	updated, stoppedRows, err := a.d.Store.UpdateKubeClusterLeaving(c, leave)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, err)
@@ -98,6 +99,8 @@ func (a *apiHandlers) updateKubeCluster(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	stopped := kubeStoppedDTO(stoppedRows)
+	a.logKubeStopped(updated.Name, stopped, leave)
 	after, err := renderKubeManifest(*updated, pools[c.ID])
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

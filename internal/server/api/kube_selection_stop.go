@@ -9,40 +9,48 @@ import (
 // leaves an entry's selection says on its timeline.
 const kubeSelectionStopMessage = "its node leaves the Kubernetes cluster entry's node selection"
 
-// kubeStopLeaving asks the instances on the nodes a confirmed selection leaves
-// out to stop, through the platform's own removal path (store.StopInstancesOnNodes:
-// the instance is moved to removing, which the controller and the node's agent
-// act on), and returns them. It does not wait for the agents, and it touches
-// only the instances on those nodes: a deployment that also runs elsewhere
-// keeps those replicas.
+// kubeLeaveOf is what a confirmed selection change does to the nodes it leaves
+// out: their instances are asked to stop through the platform's own removal
+// path (store.StopInstancesOnNodes: the instance is moved to removing, which
+// the controller and the node's agent act on), without waiting for the agents
+// and touching only the instances on those nodes, so a deployment that also
+// runs elsewhere keeps those replicas.
 //
 // Nodes the server knows leave (verified) and that still take replicas are
-// cordoned first, as the administrator would have: without it the controller
+// cordoned as well, as the administrator would have: without it the controller
 // could rebuild a replica it just lost on the same node, the freed cards being
 // the best fit, and the instance would run on a node whose agent is about to go.
 // A node already cordoned or draining is left as it is. When the question to
 // the agents was not answered the nodes may still be selected, so they are
 // not cordoned and only their instances are stopped, as the confirmation said.
-func (a *apiHandlers) kubeStopLeaving(entry store.KubeCluster, drops []kubeDrop, verified bool) ([]dto.KubeStoppedInstance, error) {
-	ids := make([]uint, 0, len(drops))
+//
+// It writes nothing. The store methods that save the change (UpdateKubeClusterLeaving,
+// SetKubeClusterPoolsLeaving) write it in the same transaction, after every
+// validation the request has, so a change that fails stops nothing.
+func kubeLeaveOf(drops []kubeDrop, verified bool) store.KubeLeave {
+	leave := store.KubeLeave{Message: kubeSelectionStopMessage}
 	for _, d := range drops {
-		ids = append(ids, d.nodeID)
+		leave.StopNodeIDs = append(leave.StopNodeIDs, d.nodeID)
 		if verified && d.schedulable {
-			if _, err := a.d.Store.SetNodeScheduling(d.NodeUUID, store.NodeCordoned); err != nil {
-				return nil, err
-			}
+			leave.CordonNodeUUIDs = append(leave.CordonNodeUUIDs, d.NodeUUID)
 		}
 	}
-	stopped, err := a.d.Store.StopInstancesOnNodes(ids, kubeSelectionStopMessage)
-	if err != nil {
-		return nil, err
-	}
+	return leave
+}
+
+// kubeStoppedDTO is the answer's list of the instances the save asked to stop;
+// always a list, empty when none.
+func kubeStoppedDTO(stopped []store.StoppedInstance) []dto.KubeStoppedInstance {
 	out := make([]dto.KubeStoppedInstance, 0, len(stopped))
 	for _, s := range stopped {
 		out = append(out, dto.KubeStoppedInstance{InstanceUUID: s.InstanceUUID, Deployment: s.Deployment, NodeUUID: s.NodeUUID})
 	}
-	if a.d.Log != nil {
-		a.d.Log.Info("instances asked to stop: their nodes leave a Kubernetes entry's selection", "cluster", entry.Name, "nodes", len(drops), "instances", len(out), "verified", verified)
+	return out
+}
+
+// logKubeStopped notes the stops of a saved change.
+func (a *apiHandlers) logKubeStopped(entry string, stopped []dto.KubeStoppedInstance, leave store.KubeLeave) {
+	if a.d.Log != nil && len(stopped) > 0 {
+		a.d.Log.Info("instances asked to stop: their nodes leave a Kubernetes entry's selection", "cluster", entry, "nodes", len(leave.StopNodeIDs), "instances", len(stopped), "cordoned", len(leave.CordonNodeUUIDs))
 	}
-	return out, nil
 }

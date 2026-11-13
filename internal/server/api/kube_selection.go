@@ -23,8 +23,9 @@ import (
 // the entry which of the nodes that run instances the new selection still
 // selects, and refuses until the administrator confirms. Confirming asks the
 // instances on those nodes to stop (and, when the server knows the nodes leave,
-// cordons them so nothing is rebuilt there) before the change is saved; the
-// request does not wait for the agents (kube_selection_stop.go).
+// cordons them so nothing is rebuilt there) in the same transaction that saves
+// the change, so a change that fails stops nothing; the request does not wait
+// for the agents (kube_selection_stop.go).
 
 // kubeSelectionAsk bounds the whole question to the entry's agents.
 const kubeSelectionAsk = 20 * time.Second
@@ -54,7 +55,7 @@ func (s kubeSelection) same(o kubeSelection) bool {
 
 // settleEntrySelection is settleKubeSelection for an entry changed from old
 // (holding oldPools) to next (holding nextPools).
-func (a *apiHandlers) settleEntrySelection(w http.ResponseWriter, r *http.Request, old, next store.KubeCluster, oldPools, nextPools []store.KubeClusterPool, confirmed bool) ([]dto.KubeStoppedInstance, bool) {
+func (a *apiHandlers) settleEntrySelection(w http.ResponseWriter, r *http.Request, old, next store.KubeCluster, oldPools, nextPools []store.KubeClusterPool, confirmed bool) (store.KubeLeave, bool) {
 	before, err := newKubeSelection(old, oldPools)
 	if err == nil {
 		var after kubeSelection
@@ -63,7 +64,7 @@ func (a *apiHandlers) settleEntrySelection(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	writeErr(w, http.StatusInternalServerError, err)
-	return nil, false
+	return store.KubeLeave{}, false
 }
 
 // settleKubeSelection decides what a change of an entry's node selection does
@@ -71,27 +72,24 @@ func (a *apiHandlers) settleEntrySelection(w http.ResponseWriter, r *http.Reques
 // selection changes. When no node that runs instances leaves, nothing is asked
 // and nothing stops. When some do, an unconfirmed request is answered with 409
 // KUBE_SELECTION_DROPS_INSTANCES and false is returned; a confirmed one
-// recomputes the nodes at that moment and asks the instances on them to stop
-// (kubeStopLeaving), returning those, and the caller saves the change.
-func (a *apiHandlers) settleKubeSelection(w http.ResponseWriter, r *http.Request, entry store.KubeCluster, before, after kubeSelection, confirmed bool) ([]dto.KubeStoppedInstance, bool) {
-	stopped := []dto.KubeStoppedInstance{}
+// recomputes the nodes at that moment and returns what the change does to them
+// (kubeLeaveOf: the instances to stop and the nodes to cordon). It writes
+// nothing: the caller passes it to the store method that saves the change,
+// which writes both in one transaction.
+func (a *apiHandlers) settleKubeSelection(w http.ResponseWriter, r *http.Request, entry store.KubeCluster, before, after kubeSelection, confirmed bool) (store.KubeLeave, bool) {
 	if before.same(after) {
-		return stopped, true
+		return store.KubeLeave{}, true
 	}
 	drops, verified, err := a.kubeSelectionDrops(r.Context(), entry, after)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
-		return nil, false
+		return store.KubeLeave{}, false
 	}
 	if len(drops) == 0 {
-		return stopped, true
+		return store.KubeLeave{}, true
 	}
 	if confirmed {
-		if stopped, err = a.kubeStopLeaving(entry, drops, verified); err != nil {
-			writeErr(w, http.StatusInternalServerError, err)
-			return nil, false
-		}
-		return stopped, true
+		return kubeLeaveOf(drops, verified), true
 	}
 	names := make([]string, 0, len(drops))
 	nodes := make([]dto.KubeSelectionDrop, 0, len(drops))
@@ -105,7 +103,7 @@ func (a *apiHandlers) settleKubeSelection(w http.ResponseWriter, r *http.Request
 		fallback = "No agent of the cluster could be asked which nodes the new selection keeps, so these nodes may be affected. " + fallback
 	}
 	writeProductError(w, http.StatusConflict, ErrorKubeSelectionDropsInstances, fallback, map[string]any{"nodes": nodes, "verified": verified})
-	return nil, false
+	return store.KubeLeave{}, false
 }
 
 // kubeDrop is a node the selection does not select while it runs instances,
