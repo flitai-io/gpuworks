@@ -184,6 +184,10 @@ type Node struct {
 	CreatedAt          time.Time     `json:"created_at"`
 	GPUs               []GPU         `json:"gpus"`
 	Topology           *NodeTopology `json:"topology,omitempty"`
+	// GPUIsolation is set while the node's NVIDIA instance pods are kept to
+	// their own card by CUDA alone (soft isolation); absent when strict, and
+	// while the node is offline.
+	GPUIsolation *NodeGPUIsolation `json:"gpu_isolation,omitempty"`
 }
 
 // SystemLabel is one generated node label: a key in the reserved

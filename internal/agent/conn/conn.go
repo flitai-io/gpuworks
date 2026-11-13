@@ -497,6 +497,11 @@ func (c *Conn) reportStatus(ctx context.Context) {
 	}); ok {
 		st.RuntimeProxy = h.RuntimeProxyStatus(ctx)
 	}
+	if h, ok := c.handlers.(interface {
+		NVIDIAIsolation(context.Context) *proto.NVIDIAIsolation
+	}); ok {
+		st.NVIDIAIsolation = h.NVIDIAIsolation(ctx)
+	}
 	if err := c.sendNodeStatus(st, imageRevision); err != nil {
 		c.log.Debug("status.node send failed", "err", safeConnectionError(err))
 	}

@@ -24,6 +24,17 @@ func (h *Hub) RuntimeProxy(uuid string) *proto.RuntimeProxyStatus {
 	return s.runtimeProxy.Load()
 }
 
+// NVIDIAIsolation is how strictly a Kubernetes node keeps its NVIDIA instance
+// pods to their own card, as its agent last reported it; nil when it is
+// strict, not reported, or the node is offline.
+func (h *Hub) NVIDIAIsolation(uuid string) *proto.NVIDIAIsolation {
+	s := h.session(uuid)
+	if s == nil {
+		return nil
+	}
+	return s.nvidiaIsolation.Load()
+}
+
 // RestartRuntime asks a node to restart its container runtime daemon so a
 // changed proxy takes effect, and records the proxy it reports afterwards.
 func (h *Hub) RestartRuntime(ctx context.Context, uuid string) (*proto.RuntimeProxyStatus, error) {

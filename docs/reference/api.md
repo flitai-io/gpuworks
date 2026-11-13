@@ -408,6 +408,8 @@ macOS 忽略 `no_systemd`。
 
 `PATCH /api/v1/nodes/{uuid}/runtime` 设置节点的容器运行时偏好 `{runtime: auto|docker|nerdctl|udocker}`，由 agent 接受后保存。节点的 `runtime_choices` 列出这个节点可以设置的值，按展示顺序：Mac 只有 `auto`，其他节点是全部四种；**Kubernetes 节点没有这个字段**（实例是集群里的 Pod，没有运行时可选），对它设置返回 409 `NODE_RUNTIME_KUBE_NODE`。非法值回 400 `NODE_RUNTIME_INVALID`。
 
+`GET /api/v1/nodes/{uuid}` 对 NVIDIA 实例 Pod 只靠 `CUDA_VISIBLE_DEVICES` 限定到自己那张卡（软隔离：Pod 能看到节点的全部 GPU 设备）的 Kubernetes 节点带 `gpu_isolation`：`level`（`soft`）、`reason`（`cdi_names_missing`：工具包按 CDI 名解析 `NVIDIA_VISIBLE_DEVICES`，而没有 CDI spec 给卡命名）、`toolkit`（`gpu_operator` 或 `host`，agent 能判断时给出）、`cards`，以及 `fixes`：每项有 `code` 与按顺序原样执行的 `commands`，由 server 按 `toolkit` 选出适用的。它来自 agent 最近一次状态上报，不入库：节点离线、严格隔离或旧 agent 时没有这个字段；节点列表不带它。
+
 `PATCH /api/v1/nodes/{uuid}/accelerator` 供一机多厂商选择管理哪家的卡。agent 接受后原地重启，选择才保存。
 返回节点的 `accelerator_preference` 表示选择；`accelerator_vendors` 列出主机各厂商的 `{vendor, cards, model}`。
 

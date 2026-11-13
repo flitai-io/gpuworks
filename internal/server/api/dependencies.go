@@ -248,10 +248,13 @@ type PeerSyncHooks struct {
 	CopyModel func(ctx context.Context, modelID uint, src, dst store.FileRef, rateLimitKiB int) (*store.ModelFile, error)
 }
 
-// NodeRuntimeHooks is the hub's view of a node's container runtime daemon:
-// the proxy it uses as the agent last reported it, and a restart so a changed
-// proxy takes effect.
+// NodeRuntimeHooks is the hub's view of a node's container runtime: the
+// proxy its daemon uses as the agent last reported it, a restart so a
+// changed proxy takes effect, and how strictly a Kubernetes node keeps its
+// NVIDIA instance pods to their own card (nil when strict, not reported, or
+// the node is offline; read from the live session, never stored).
 type NodeRuntimeHooks interface {
+	NVIDIAIsolation(uuid string) *proto.NVIDIAIsolation
 	RuntimeProxy(uuid string) *proto.RuntimeProxyStatus
 	RestartRuntime(ctx context.Context, uuid string) (*proto.RuntimeProxyStatus, error)
 }

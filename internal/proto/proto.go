@@ -512,6 +512,12 @@ type NodeStatus struct {
 	// for a runtime whose pulls run in a daemon (dockerd). Nil when the
 	// runtime pulls in the agent's own process, or from an older agent.
 	RuntimeProxy *RuntimeProxyStatus `json:"runtime_proxy,omitempty"`
+	// NVIDIAIsolation is set while this Kubernetes node's NVIDIA instance
+	// pods are kept to their own card by CUDA_VISIBLE_DEVICES alone, and
+	// absent while they are kept to it strictly (or the node has no NVIDIA
+	// card, or does not run on Kubernetes). Every report states it afresh,
+	// so absent also clears an earlier one.
+	NVIDIAIsolation *NVIDIAIsolation `json:"nvidia_isolation,omitempty"`
 }
 
 // RuntimeProxyStatus is what an agent observes about the proxy its container

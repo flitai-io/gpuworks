@@ -302,6 +302,23 @@
     "offline": "Offline",
     "connecting": "Connecting"
   },
+  "gpuIsolation": {
+    "tag": "GPU devices are soft-isolated",
+    "summary": "Instances on this node can see every GPU device of the node; CUDA_VISIBLE_DEVICES keeps each one to the card it was given. Software that ignores CUDA_VISIBLE_DEVICES, or opens /dev/nvidiaN directly, can reach the other cards.",
+    "reason": {
+      "cdi_names_missing": "NVIDIA's container toolkit runs in CDI mode and no CDI spec on the node names {{cards}} of its NVIDIA cards, typically because HAMi or another device plugin replaced NVIDIA's, which is what writes the per-card names. Instances therefore get every card, and are held to theirs by CUDA only."
+    },
+    "fixesTitle": "Restore strict isolation (choose one)",
+    "fix": {
+      "gpu_operator_device_plugin": "The cluster uses the GPU Operator and no other GPU device plugin: keep the Operator's own device plugin enabled, which writes the per-card CDI names. Do not run it next to HAMi or another device plugin; both would advertise the same GPUs.",
+      "gpu_operator_toolkit_legacy_append": "Switch the Operator's toolkit to legacy mode, which isolates by card index. Use this when spec.toolkit.env already exists: it appends to the list and keeps its entries.",
+      "gpu_operator_toolkit_legacy_create": "Use this one instead when the command above fails because spec.toolkit.env does not exist yet: it creates the list (and would replace one that exists).",
+      "host_toolkit_legacy": "The toolkit is installed on the node without the GPU Operator: switch it to legacy mode on the node (nvidia-ctk edits /etc/nvidia-container-runtime/config.toml), then restart the container runtime (containerd; use rke2-agent, k3s or your distribution's service name if it differs)."
+    },
+    "copy": "Copy commands",
+    "copied": "Commands copied",
+    "manualCopyTitle": "Copy the commands"
+  },
   "gpuProbeFailed": {
     "tag": "Vendor tool did not answer",
     "detail": "Since {{at}} the vendor tool has not answered, so for this node's own cards anything only that tool knows — memory, UUID, health — is still what it last reported: {{detail}}\n\nWhich cards are in the machine, whose they are and where they sit comes from the PCI bus and is unaffected."

@@ -79,3 +79,14 @@ func (n *NodeRuntime) OnKubeSettings(ctx context.Context, s proto.KubeSettings) 
 	}
 	d.ApplySettings(ctx, kube.IdleReturnOf(s.IdleReturnSeconds), s.RuntimeClass)
 }
+
+// NVIDIAIsolation is how strictly this Kubernetes node keeps its NVIDIA
+// instance pods to their own card, reported with its status; nil while it is
+// strict, on any other runtime, and when the node has no NVIDIA card.
+func (n *NodeRuntime) NVIDIAIsolation(ctx context.Context) *proto.NVIDIAIsolation {
+	d, ok := n.runtimeDriver().(*kube.Driver)
+	if !ok {
+		return nil
+	}
+	return d.NVIDIAIsolation(ctx)
+}
