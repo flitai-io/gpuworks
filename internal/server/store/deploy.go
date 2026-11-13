@@ -1085,56 +1085,6 @@ func (s *Store) scheduleEvent(deploymentID uint, order string) (InstanceEvent, b
 	return ev, err == nil, err
 }
 
-// DeleteEventsBefore trims the event table. Time and byte thresholds both apply
-// and whichever trips first wins: a burst of failures can outgrow a byte budget
-// long before it is old, and an old backlog can outlive its usefulness long
-// before it is large.
-func (s *Store) DeleteEventsBefore(cutoff time.Time, maxBytes int64) (int64, error) {
-	var deleted int64
-	if !cutoff.IsZero() {
-		res := s.db.Where("created_at < ?", cutoff.UTC()).Delete(&InstanceEvent{})
-		if res.Error != nil {
-			return deleted, res.Error
-		}
-		deleted += res.RowsAffected
-	}
-	if maxBytes <= 0 {
-		return deleted, nil
-	}
-	// SQLite has no cheap per-table byte counter, so the byte budget is enforced
-	// by trimming oldest-first until the estimated size fits. SUM over the text
-	// columns is the estimate; it ignores row overhead, which is irrelevant at
-	// the granularity this budget is set at (tens of gigabytes).
-	var total int64
-	if err := s.db.Model(&InstanceEvent{}).
-		Select("COALESCE(SUM(LENGTH(message) + LENGTH(data) + LENGTH(code)), 0)").
-		Scan(&total).Error; err != nil {
-		return deleted, err
-	}
-	for total > maxBytes {
-		var batch []InstanceEvent
-		if err := s.db.Order("id asc").Limit(500).Find(&batch).Error; err != nil {
-			return deleted, err
-		}
-		if len(batch) == 0 {
-			break
-		}
-		ids := make([]uint, 0, len(batch))
-		var freed int64
-		for i := range batch {
-			ids = append(ids, batch[i].ID)
-			freed += int64(len(batch[i].Message) + len(batch[i].Data) + len(batch[i].Code))
-		}
-		res := s.db.Where("id IN ?", ids).Delete(&InstanceEvent{})
-		if res.Error != nil {
-			return deleted, res.Error
-		}
-		deleted += res.RowsAffected
-		total -= freed
-	}
-	return deleted, nil
-}
-
 // ---- desired-state derivation (per node) ----
 
 // DesiredStateForNode builds the full desired state pushed to a node's agent.
