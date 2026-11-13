@@ -63,4 +63,9 @@ const (
 	// ErrorAutoPlacementTPRequired: an automatic multi-node request states no
 	// placement.tp, so how many free GPUs each node needs is unknown.
 	ErrorAutoPlacementTPRequired = "AUTO_PLACEMENT_TP_REQUIRED"
+	// ErrorTemplateModelMismatch: the request selects a model (model_id)
+	// whose repository id serves none of the template spec's weight sources
+	// (repo_id@revision is the source the spec resolved). The server refuses
+	// the choice rather than substituting another model.
+	ErrorTemplateModelMismatch = "TEMPLATE_MODEL_MISMATCH"
 )

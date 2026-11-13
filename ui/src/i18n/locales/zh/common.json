@@ -181,6 +181,7 @@
     "PROVIDER_ACTION_INVALID": "云资源操作必须是开启或关闭。",
     "DIGEST_IMAGE_UNSUPPORTED": "当前版本不支持 digest 镜像引用，请使用带 tag 的镜像引用。",
     "MODEL_SOURCE_UNAVAILABLE": "模型来源不可用，未创建部署。",
+    "TEMPLATE_MODEL_MISMATCH": "所选模型（ID {{model_id}}）的仓库 ID 与模板的权重来源 {{repo_id}} 不一致，平台不会替换你选择的模型。请选择该仓库的模型，或在模型详情里修改本地模型的来源 ID。",
     "MOUNT_TARGET_DUPLICATE": "有两个挂载指向容器内的 {{target}}。平台已经在该路径挂载了目录（KV 磁盘层会用到），请删除重复的挂载行或换一个容器路径。",
     "MOUNT_MODEL_NOT_FOUND": "挂载行选择的模型（ID {{model_id}}）不存在，可能已被删除。请重新选择模型或删除该挂载行。",
     "SHM_BELOW_KV_CPU_TIER": "共享内存（/dev/shm）设为 {{shm_gib}} GiB，但 CPU 内存层是 {{tier_gib}} GiB，引擎把整个内存层放在 /dev/shm 里，容器无法启动。请把大小设为至少 {{tier_gib}} GiB（再多留一些给 NCCL 等），或清空以使用引擎默认值加内存层大小。",

@@ -181,6 +181,7 @@
     "PROVIDER_ACTION_INVALID": "The provider action must be on or off.",
     "DIGEST_IMAGE_UNSUPPORTED": "Digest image references are not supported in this release. Use a tagged image reference.",
     "MODEL_SOURCE_UNAVAILABLE": "The model source is unavailable; deployment was not created.",
+    "TEMPLATE_MODEL_MISMATCH": "The selected model (ID {{model_id}}) is not the repository {{repo_id}} this template's weights come from, and the platform does not substitute your choice. Select a model of that repository, or change the local model's source id in its details.",
     "MOUNT_TARGET_DUPLICATE": "Two mounts target {{target}} inside the container. The platform already mounts that path (the KV disk tier uses one), so remove the duplicate mount row or choose another container path.",
     "MOUNT_MODEL_NOT_FOUND": "The model a mount row names (ID {{model_id}}) does not exist; it may have been deleted. Choose another model or remove the mount row.",
     "SHM_BELOW_KV_CPU_TIER": "Shared memory (/dev/shm) is set to {{shm_gib}} GiB, but the CPU memory tier is {{tier_gib}} GiB and the engine keeps the whole tier in /dev/shm, so the container could not start. Set the size to at least {{tier_gib}} GiB (more leaves room for NCCL), or clear it to use the engine default plus the tier.",

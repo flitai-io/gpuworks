@@ -213,6 +213,10 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	if resp.Image == "" {
 		resp.Image = profile.DefaultImage
 	}
+	// The selection as the create's launch preflight sees it: before the model
+	// binds the components and its API contract (evaluateLaunchPreflight).
+	preflightSelection := selection
+	preflightSelection.Components = append([]deploy.ComponentBinding(nil), selection.Components...)
 	model, err := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
 	if err != nil {
 		errs.add("model_id", err)
@@ -490,6 +494,17 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		templateEntrypoint: templateEntrypoint, tp: tp, errs: errs,
 	}) {
 		return
+	}
+	// The create resolves its launch on the per-node card count the request
+	// states, where the plan above used the cards the scheduler assigned; a
+	// memory-limited draft can get fewer cards than it states. The same
+	// preflight here makes what the create would refuse a blocking error.
+	if errs.empty() {
+		if err := s.evaluateLaunchPreflight(eng, req, preflightSelection, targetVendor, profileNode, rankNodes, &resp); err != nil {
+			errs.add("", err)
+			writeFieldErrors()
+			return
+		}
 	}
 	if !errs.empty() {
 		resp.OK = false

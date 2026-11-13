@@ -871,6 +871,7 @@ the `POST /api/v1/evaluate` response and in `DEPLOYMENT_UNSCHEDULABLE` deploymen
 | `LAUNCH_CONFIG_CONFLICT` | 400 | The same key has different values in a form field and custom arguments; keep only one (parameters are `key`, `field_value`, `flag`, and `extra_value`) |
 | `ACQUISITION_CANDIDATE_STALE` | 400 / 409 | The storage specified in the request no longer exists or no longer contains the model, or the selected weight source is no longer in the template; evaluate again. The server does not substitute another option |
 | `MODEL_SOURCE_UNAVAILABLE` | 409 | The local model has no available source on the target node, or source validation failed; check the error details rather than treating it as a public download timeout |
+| `TEMPLATE_MODEL_MISMATCH` | 400 | The model a template deployment selects (`params.model_id`) has a repository id that matches none of the template's weight sources (`params.repo_id` and `params.revision` are the source the template resolved); the platform does not switch to another model. Select a model of that repository; for a local model, change its source id to the template's repository id in the model details |
 | `DISTRIBUTED_*`, `REPLICAS_*`, `MASTER_PORT_INVALID` | 400 | Invalid multi-node / replica parameters |
 
 **Insufficient GPU memory** (`schedule` reason codes; see the evaluation response and `schedule.explain`):

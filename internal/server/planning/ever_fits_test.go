@@ -2,8 +2,13 @@ package planning
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
@@ -139,5 +144,104 @@ func TestEverFitsRequiresEveryDataParallelReplicaCard(t *testing.T) {
 	never, err = EverFits(context.Background(), st, storeNetworks(st), nodes, NodeFacts{}, nil, build)
 	if err != nil || never != nil {
 		t.Fatalf("two cards: never=%+v err=%v", never, err)
+	}
+}
+
+// A node whose launch cannot be resolved cannot run the deployment, but it
+// does not veto a pool where another hardware shape fits: a data-parallel
+// template on a 2-card node and a 4-card node fits on the 4-card node
+// whichever node is listed first. When no shape fits, the resolve error is
+// still what the request is refused with.
+func TestEverFitsUnresolvableShapeDoesNotVetoThePool(t *testing.T) {
+	st, err := store.Open("file:ever_fits_unresolvable?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/ever-fits-unresolvable", Name: "ever-fits-unresolvable", WeightBytes: 1 << 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := func(name string, cards int) *store.Node {
+		registered, err := st.RegisterNode(name, store.HashToken(name), name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		registered.GPUVendor, registered.Arch = "nvidia", "amd64"
+		for index := 0; index < cards; index++ {
+			registered.GPUs = append(registered.GPUs, store.GPU{Index: index, Name: "NVIDIA H100", MemoryTotal: 80 << 30, Vendor: "nvidia", ArchID: "sm_90", ComputeCapability: "9.0"})
+		}
+		return registered
+	}
+	small, large := node("two-cards", 2), node("four-cards", 4)
+	build := func(node *store.Node) (LaunchRequest, deploy.CatalogSelection, error) {
+		return LaunchRequest{Engine: "vllm", Model: model, Node: node, Placement: Placement{PP: 2},
+			Selection:  deploy.CatalogSelection{ExtraArgs: []string{"--data-parallel-size", "2"}},
+			Topology:   DistTopology{NNodes: 1, Role: "standalone"},
+			Source:     LaunchSourceFromDeployment(&store.Deployment{Image: "registry.example/vllm:v1"}),
+			ServedName: "ever-fits-unresolvable"}, deploy.CatalogSelection{}, nil
+	}
+	for _, order := range [][]*store.Node{{small, large}, {large, small}} {
+		if never, err := EverFits(context.Background(), st, storeNetworks(st), order, NodeFacts{}, nil, build); err != nil || never != nil {
+			t.Fatalf("order %s, %s: never=%+v err=%v; want the four-card node to fit", order[0].DisplayName(), order[1].DisplayName(), never, err)
+		}
+	}
+	never, err := EverFits(context.Background(), st, storeNetworks(st), []*store.Node{small}, NodeFacts{}, nil, build)
+	var unresolved *LaunchResolveError
+	if never != nil || !errors.As(err, &unresolved) {
+		t.Fatalf("only the two-card node: never=%+v err=%v; want its resolve error", never, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := EverFits(ctx, st, storeNetworks(st), []*store.Node{small, large}, NodeFacts{}, nil, build); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled context: err=%v", err)
+	}
+}
+
+// Whether a card's dGPU backend is ready is part of the node's hardware shape:
+// a memory-limited deployment fits on the ready node of a pool even when an
+// otherwise identical node without the backend is listed first.
+func TestEverFitsTellsDGPUReadyNodesApart(t *testing.T) {
+	st, err := store.Open("file:ever_fits_dgpu_shape?mode=memory&cache=shared", bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/ever-fits-dgpu", Name: "ever-fits-dgpu", WeightBytes: 4 << 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := func(name string, ready bool) *store.Node {
+		registered, err := st.RegisterNode(name, store.HashToken(name), name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		registered.GPUVendor, registered.Arch, registered.OS, registered.RuntimeDriver = "nvidia", "amd64", "linux", "docker"
+		registered.GPUs = []store.GPU{{Index: 0, Name: "NVIDIA H100", MemoryTotal: 80 << 30, Vendor: "nvidia", ArchID: "sm_90", ComputeCapability: "9.0"}}
+		if ready {
+			index := 0
+			assets, _ := json.Marshal([]proto.AssetReport{{Backend: accelerator.BackendNVIDIALogical, Root: "/assets", Files: []string{"libvgpu.so"}}})
+			probes, _ := json.Marshal([]proto.PartitionProbeResult{{Backend: accelerator.BackendNVIDIALogical, GPUIndex: &index, Status: proto.PartitionProbePassed}})
+			registered.PartitionAssets, registered.PartitionProbes, registered.PartitionSafetyProtocol = string(assets), string(probes), 1
+		}
+		return registered
+	}
+	plain, ready := node("plain", false), node("dgpu-ready", true)
+	if HardwareShape(plain, true) == HardwareShape(ready, true) {
+		t.Fatal("a dGPU-ready node shares its shape with one whose backend is not ready")
+	}
+	build := func(node *store.Node) (LaunchRequest, deploy.CatalogSelection, error) {
+		return LaunchRequest{Engine: "vllm", Model: model, Node: node, VRAMLimitBytes: 20 << 30, PartitionBackend: accelerator.BackendNVIDIALogical,
+			Topology:   DistTopology{NNodes: 1, Role: "standalone"},
+			Source:     LaunchSourceFromDeployment(&store.Deployment{Image: "registry.example/vllm:v1"}),
+			ServedName: "ever-fits-dgpu"}, deploy.CatalogSelection{}, nil
+	}
+	for _, order := range [][]*store.Node{{plain, ready}, {ready, plain}} {
+		if never, err := EverFits(context.Background(), st, storeNetworks(st), order, NodeFacts{}, nil, build); err != nil || never != nil {
+			t.Fatalf("order %s, %s: never=%+v err=%v; want the dGPU-ready node to fit", order[0].DisplayName(), order[1].DisplayName(), never, err)
+		}
+	}
+	if never, err := EverFits(context.Background(), st, storeNetworks(st), []*store.Node{plain}, NodeFacts{}, nil, build); err != nil || never == nil {
+		t.Fatalf("only the plain node: never=%+v err=%v; want a refusal", never, err)
 	}
 }

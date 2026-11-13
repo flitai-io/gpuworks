@@ -173,9 +173,6 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 			return nil, invalid(err)
 		}
 	}
-	// Resolve request-owned command, environment and mounts before template
-	// model registration or image acquisition can mutate persistent state.
-	modelMount, componentMounts := previewComponentMounts(s.d.Store, selection.Components, profileNode)
 	// A multi-node group settles its nodes and parallelism first: an
 	// unstated TP and PP default from the nodes, and the launch preflight
 	// below measures the result. Nothing is persisted by this step.
@@ -190,42 +187,14 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 			return nil, invalid(err)
 		}
 	}
-	placement, err := planning.ParsePlacement(req.Placement)
+	// Resolve request-owned command, environment and mounts before template
+	// model registration or image acquisition can mutate persistent state.
+	// Evaluate runs the same preflight (evaluateLaunchPreflight).
+	preflight, err := s.prepareLaunchPreflight(eng, &req, selection, launch, dp, targetVendor, profileNode, pdReq)
 	if err != nil {
 		return nil, invalid(err)
 	}
-	nnodes := req.NNodes
-	if nnodes <= 0 {
-		nnodes = 1
-	}
-	parallel := placement.Parallelism(nnodes)
-	parallel.DP = dp
-	perNode, err := parallelGPUsPerNode(parallel)
-	if err != nil {
-		return nil, invalid(err)
-	}
-	preflightParams := deploy.Params{
-		ModelPath: modelMount, ServedName: req.ServedName, APIPort: planning.PreviewAPIPort,
-		AssignedGPUs: perNode, TensorParallel: parallel.TP, PipelineParallel: parallel.PP, Sleepable: req.Sleepable, Quick: launch.Quick,
-		TemplateArgs: launch.TemplateResidual, TemplateEnv: selection.Env, ExtraArgs: launch.UserResidual,
-		Vendor: targetVendor, NNodes: nnodes, MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
-	}
-	if profileNode != nil {
-		// The bind address the launch will use, so the preflight resolves the
-		// same command (planning.PlanLaunch sets it from the node too).
-		preflightParams.Host = deploy.RuntimeBindHost(profileNode.RuntimeDriver)
-		preflightParams.RuntimeDriver = profileNode.RuntimeDriver
-	}
-	pdReq.preflight(&preflightParams)
-	preflight := deploy.ResolveLaunchInput{
-		StartTimeoutSec: req.StartTimeoutSec, DefaultStartTimeoutSec: s.d.Store.DeploymentPolicy().StartTimeoutSec,
-		Engine: eng, Params: preflightParams, Image: req.Image,
-		Entrypoint: selection.Entrypoint, PreStartArgv: selection.PreStartArgv,
-		PreStartScript: selection.PreStartScript, RuntimeAssets: selection.Assets,
-		ComponentMounts: componentMounts, APIContract: selection.APIContract,
-		TemplateShmBytes: selection.shmBytes(), TemplateMemlockUnlimited: selection.memlockUnlimited(),
-		AllowUnresolved: true,
-	}
+	modelMount, componentMounts, placement := preflight.modelMount, preflight.componentMounts, preflight.placement
 	imageNodes := append([]*store.Node{profileNode}, distNodes...)
 	if pdReq != nil {
 		imageNodes = append(imageNodes, pdReq.nodes...)
@@ -236,7 +205,7 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 	imageFor := func(node *store.Node) string {
 		return s.rankImage(eng.Name(), selection, req.Image, node).Image
 	}
-	if err := preflightCreateRuntimes(preflight, req.ContainerOverrides, selection.Components, modelMount, profileNode, distNodes, pdReq, imageFor); err != nil {
+	if err := preflight.run(&req, selection, profileNode, distNodes, pdReq, imageFor); err != nil {
 		return nil, invalid(err)
 	}
 	model, err := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
