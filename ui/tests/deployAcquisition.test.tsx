@@ -90,7 +90,7 @@ test("deployment evaluation renders startup fixed memory and the informational K
   assert.ok(screen.getByText("dGPU limit 16.0 GiB"));
   assert.ok(screen.getByText(/Startup fixed memory is about/));
   assert.ok(screen.getByText("Minimum startup requirement: 10.0 GiB"));
-  assert.equal(screen.queryByText(/Actual measured usage/), null);
+  assert.equal(screen.queryByText(/^Used [\d.]+ GiB/), null);
   assert.ok(screen.getByText(/KV pool 4\.0 GiB · estimated/));
   assert.equal(screen.queryByText(/Insufficient VRAM/), null);
 });
@@ -181,7 +181,10 @@ test("measured VRAM view reports actual measured usage instead of startup estima
     total_bytes: 10 * 1024 ** 3, actual_total_bytes: 99 * 1024 ** 3,
     grade: "exact", tensor_parallel: 1, max_model_len: 4096, source: "measured", fits: true,
   }} measured={{ ModelWeightsGiB: 8, KVCacheGiB: 2, KVCacheTokens: 1000, GraphCaptureGiB: 1, MaxConcurrency: 1, NumGPUBlocks: 1, Found: true }} /></I18nextProvider>);
-  assert.ok(screen.getByText("Actual measured usage: 11.0 GiB"));
+  assert.ok(screen.getByText(deployLocale.vram.actualTotal.replace("{{value}}", "11.0")));
+  assert.equal(screen.getAllByText(/11\.0 GiB/).length, 1, "the measured total belongs in the summary once");
+  assert.equal(screen.queryByText(deployLocale.vram.measured), null, "the calibration badge already identifies the measured bar");
+  assert.ok(screen.getByText(/KV pool 2\.0 GiB · 1,000 tokens/));
   assert.equal(screen.queryByText(/Minimum startup requirement/), null);
 });
 

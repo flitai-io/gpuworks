@@ -152,6 +152,6 @@ test("the drawer shows requirements as the node pages do and flags a value no no
     ],
   })} /></I18nextProvider>);
   const pinned = screen.getByText(`Node: gpu-a | gone (${i18n.t("detail.placement.noNode")})`);
-  assert.ok(pinned.closest(".ant-tag-warning"), "a value no node carries is flagged");
+  assert.ok(pinned.closest('[data-status="warning"]'), "a value no node carries is flagged");
   assert.ok(screen.getByText(/^Vendor: /));
 });

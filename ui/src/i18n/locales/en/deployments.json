@@ -1,4 +1,23 @@
 {
+  "detailLayout": {
+    "recordState": "Instance status",
+    "matchEmpty": "No instances of this replica match the filter",
+    "inactive": "No active instance",
+    "more": "More",
+    "instances": "Instances",
+    "noMatches": "No matches",
+    "replicaControls": "Replica selection and actions",
+    "switchReplica": "Switch replica",
+    "unknownReplica": "Unassigned",
+    "waitingInstance": "Waiting for instance creation",
+    "rebuildStopped": "Rebuild stopped",
+    "node": "Node",
+    "startup": "Instance startup progress",
+    "transferred": "{{size}} transferred",
+    "modelDownload": "Model download progress",
+    "ready": "{{ready}}/{{total}} ready",
+    "starting": "{{count}} starting"
+  },
   "instanceNoMeasuredMemory": "No actual GPU memory data is available yet.",
   "templateAudit": {
     "reviewTitle": "Inference Template Manual Review",
@@ -69,14 +88,14 @@
     "wakeStarted": "Wake started",
     "wakeFailed": "Failed to wake: {{detail}}",
     "sleeping": "Sleeping · L{{level}} ({{name}})",
-    "wake": "Wake",
+    "wake": "Wake now",
     "quickAction": "Sleep (Memory / L1)",
     "deepAction": "Deep Sleep (L2)",
     "partial": "Partly asleep · {{asleep}}/{{total}} replicas",
     "wakeAll": "Wake all",
-    "heldHint": "Put to sleep by an operator or a schedule: requests do not wake it",
+    "heldHint": "Requests will not wake sleeping replicas",
     "requestWakesHint": "A request wakes it automatically",
-    "someHeldHint": "Some replicas were put to sleep by an operator or a schedule: a request wakes only the others",
+    "someHeldHint": "Requests can wake only some sleeping replicas",
     "releaseHold": "Let requests wake it",
     "releaseHoldDone": "Requests now wake it: it stays asleep until one arrives",
     "releaseHoldFailed": "Could not let requests wake it: {{detail}}",
@@ -138,6 +157,32 @@
     "forceDescription": "Confirm that remote instances are already shut down. Running containers or cloud resources must be cleaned up separately."
   },
   "detail": {
+    "serviceOverview": "Service overview",
+    "modelAndEngine": "Model and engine",
+    "configuredRuntime": "Engine / configured image",
+    "copyModel": "Copy model",
+    "copyServedName": "Copy public model name",
+    "copyConfiguredImage": "Copy configured image",
+    "nodesMatchRecords": "Matches instance records",
+    "nodesOutsideTarget": "Includes nodes outside the target",
+    "schedulingInformation": "Scheduling information",
+    "replicaCapacity": "Replicas",
+    "desiredReplicas": "Desired {{desired}}",
+    "desiredCount": "Desired",
+    "instanceRuntime": "Runtime",
+    "instanceLaunch": "Instance image and startup",
+    "instanceDetails": "Instance details",
+    "switchInstance": "Switch instance",
+    "searchInstances": "Search by instance ID or status",
+    "allInstances": "All",
+    "searchInstanceID": "Search by instance ID",
+    "previousInstanceShort": "Previous",
+    "nextInstanceShort": "Next",
+    "historicalRecord": "Historical record",
+    "previousInstance": "Previous instance",
+    "nextInstance": "Next instance",
+    "failedAttempt": "Failed attempt",
+    "viewInstances": "View instances",
     "title": "Deployment Details",
     "edit": "Edit",
     "editHint": "Edit this deployment's launch parameters",
@@ -231,26 +276,25 @@
     },
     "model": "Model",
     "servedName": "Public Model Name",
-    "node": "Compute Node",
+    "node": "Nodes in instance records",
     "targetNode": "Target node",
-    "scheduledElsewhere": "Running on {{nodes}}, not on the target node {{target}}.",
-    "state": "State",
-    "sleepable": "Sleep Capable",
+    "state": "Service status",
+    "sleepable": "Sleep supported",
     "yes": "Yes",
     "no": "No",
-    "replicas": "Replicas",
+    "replicas": "Desired replicas",
     "routingPolicy": "Routing Policy",
     "routingUpdated": "Routing policy updated",
     "routingFailed": "Failed to update routing policy: {{detail}}",
     "inferenceTemplate": "Inference Template Configuration",
-    "deviated": "Deviated",
-    "notDeviated": "Not Deviated",
+    "deviated": "Differs from template settings",
+    "notDeviated": "Using template settings",
     "modelFromNode": "Copying from {{node}}",
     "modelFromHost": "Downloading from {{host}}",
     "modelPreparation": "Model Preparation",
     "metrics": "Deployment Metrics",
-    "instances": "Instances ({{count}})",
-    "instancesWithFollowers": "Instances ({{count}}, {{followers}} of them followers)",
+    "instances": "Instance details ({{count}})",
+    "instancesWithFollowers": "Instance details ({{count}}, including {{followers}} followers)",
     "noInstances": "No instances",
     "imageMismatch": "Replica image versions differ: {{count}} replica(s) run a different image from the others.",
     "pd": {
@@ -263,6 +307,10 @@
       },
       "short": "Some role has fewer ready instances than desired",
       "role": {
+        "decode": "Decode",
+        "prefill": "Prefill"
+      },
+      "roleLabel": {
         "decode": "Decode",
         "prefill": "Prefill"
       },
@@ -281,11 +329,12 @@
       },
       "retry": {
         "exhausted": "{{role}} instance {{index}} ({{node}}) failed {{attempts}} times and is no longer retried: {{reason}}"
-      }
+      },
+      "readyUnits": "Role units ready {{ready}} / {{desired}}"
     },
     "health": "Health check",
     "tokenize": "Tokenize API",
-    "readyReplicas": "{{ready}} of {{desired}} running"
+    "readyReplicas": "Ready {{ready}}"
   },
   "replica": {
     "sleep": "Sleep replica (L1)",
@@ -313,12 +362,14 @@
     "removeUnit": "Remove replica {{index}}",
     "save": "Save",
     "restart": "Restart replica",
+    "restartNamed": "Restart {{label}}?",
+    "removeNamed": "Remove {{label}}? It finishes its requests first, then stops.",
     "restartTitle": "Restart this replica?",
     "restartDescription": "Its instances are replaced; the other replicas keep serving. It costs the replica no retry.",
     "drain": "Drain first: finish the requests it holds while the replacement starts",
     "restartStarted": "Replica restart requested",
     "restartFailed": "Failed to restart the replica: {{detail}}",
-    "remove": "Remove this replica",
+    "remove": "Remove replica",
     "removeConfirm": "Remove this replica? It finishes its requests first, then stops.",
     "removed": "Replica removed",
     "removeFailed": "Failed to remove the replica: {{detail}}",
@@ -342,10 +393,11 @@
   },
   "instance": {
     "field": {
-      "instance": "Instance",
-      "state": "State",
-      "gpu": "GPU",
+      "instance": "Instance ID",
+      "state": "Runtime state",
+      "gpu": "GPU indices",
       "apiPort": "API Port",
+      "sleep": "Sleep",
       "computeNetwork": "Compute network",
       "image": "Image",
       "imageId": "Image ID",
@@ -353,15 +405,19 @@
       "message": "Message",
       "modelFiles": "Model files"
     },
+    "copyModelPath": "Copy model file path",
+    "copyImageId": "Copy full image ID",
+    "copyLaunchScript": "Copy full launch script",
+    "copyPreparation": "Copy engine preparation script",
     "storageGone": "Storage removed",
     "imageMismatch": {
       "label": "Image differs from the other replicas",
       "tooltip": "The image differs from the other replicas. The tag may have been updated, or different sources served different content."
     },
-    "sleeping": "Sleeping L{{level}} ({{storage}})",
+    "sleeping": "Asleep · L{{level}} ({{storage}})",
     "fallingAsleep": "Going to sleep · L{{level}}",
     "waking": "Waking up",
-    "held": "Held asleep: requests do not wake it",
+    "held": "Requests will not wake this instance",
     "rank": {
       "leader": "leader · rank {{rank}}",
       "follower": "follower · rank {{rank}}",
@@ -444,16 +500,16 @@
       "title": "Environment & Mounts",
       "environment": "Environment variables",
       "mounts": "Mounts",
-      "shm": "Shared memory",
+      "shm": "Container shared memory",
       "shmValue": "/dev/shm {{size}} GiB",
       "shmHost": "Host /dev/shm (--ipc=host)",
       "dockerArgs": "Docker arguments",
       "readOnly": "read-only",
-      "dgpu": "dGPU device variables are appended on the node.",
+      "dgpu": "The node adds dGPU variables at container startup to apply device and quota settings.",
       "preparation": "Before starting the engine"
     },
     "launchFacts": {
-      "title": "Launch facts",
+      "title": "Launch configuration and observations",
       "loading": "Loading launch facts",
       "error": "Launch facts could not be loaded.",
       "retry": "Retry",
@@ -525,17 +581,18 @@
     "commandMode": {
       "manual": "Manual command"
     },
-    "wakeEstimate": "Estimated wake time ~{{seconds}}s (L1)",
-    "sleepWeight": "Sleeping weights occupy {{storage}} ≈ {{gib}} GiB",
+    "wakeEstimate": "Estimated L1 wake time: about {{seconds}} s",
+    "sleepWeight": "Estimated weight size in {{storage}}: {{gib}} GiB",
     "hostMemory": "host memory",
-    "selectedGpu": "Scheduled GPUs:",
+    "selectedGpu": "Scheduled GPUs",
     "followLogs": "Follow latest logs",
     "logsHistoryHint": "Showing persisted logs in the selected range (timestamps are server arrival times).",
     "logsTruncated": "More than {{count}} log lines fall in this range; showing the newest {{count}}. Narrow the range or search by keyword on the Logs page.",
     "noLogsInRange": "No logs in the selected range",
     "tab": {
       "logs": "Logs",
-      "metrics": "Metrics"
+      "metrics": "Instance Metrics",
+      "details": "Runtime details"
     },
     "log": {
       "systemTag": "System",
@@ -599,6 +656,7 @@
     }
   },
   "instanceMetrics": {
+    "lastInWindow": "Last readings in the selected time range",
     "waiting": "Waiting for Inference Metrics",
     "waitingDescription": "After the instance starts, the agent collects running requests, queued requests, GPU cache, and token counters from the engine /metrics endpoint.",
     "running": "Running Requests",
@@ -606,8 +664,8 @@
     "gpuCache": "GPU Cache",
     "promptThroughput": "Prompt Throughput",
     "generationThroughput": "Generation Throughput",
-    "requestConcurrency": "Request Concurrency",
-    "requestConcurrencyDescription": "Running and queued request counts",
+    "requestConcurrency": "Instance Request Concurrency",
+    "requestConcurrencyDescription": "Running and queued requests on the selected instance",
     "cacheUsage": "GPU Cache Usage",
     "cacheUsageDescription": "Engine KV cache / token usage",
     "promptToken": "Prompt Token Throughput",
@@ -620,12 +678,16 @@
     "kvHitRateDescription": "Share of prompt tokens reused from the prefix cache",
     "kvHitRateScopeHint": "vLLM shows the windowed ratio of hit/query counters; SGLang reports an engine instantaneous value. The two scales differ and are not directly comparable.",
     "metricUnavailable": "Engine did not report this metric",
-    "metricNoTraffic": "Counter reported; no qualifying traffic yet"
+    "metricNoTraffic": "Counter reported; no qualifying traffic yet",
+    "groupLabel": "Metric groups",
+    "requestsGroup": "Requests & latency",
+    "gpuGroup": "GPU & memory",
+    "cacheGroup": "Cache & engine"
   },
   "kvTier": {
     "title": "KV Tiers",
     "gpu": "GPU",
-    "gpuDetail": "See the GPU memory bar above",
+    "gpuDetail": "See GPU Cache Usage for the engine cache trend.",
     "memory": "Host Memory",
     "disk": "Disk",
     "disabled": "Not enabled",
@@ -641,9 +703,10 @@
     "open": "Open Container Shell",
     "unavailable": "No active container is available",
     "openFailed": "Failed to open container shell: {{detail}}",
-    "hint": "View model output in the logs below"
+    "hint": "View model output in the Logs tab"
   },
   "instanceGpu": {
+    "lastSample": "Last sample {{time}}",
     "title": "Per-GPU Telemetry",
     "waiting": "Waiting for GPU Telemetry",
     "waitingDescription": "The agent reports per-GPU utilization, VRAM, temperature, and power every 10 seconds by default. Metrics may be empty right after the instance starts.",
@@ -655,19 +718,25 @@
     "sliceTitle": "GPU{{index}} · dGPU slice (limit {{limit}} GiB)",
     "sliceVram": "This instance's memory",
     "sliceSM": "SM reference",
-    "wholeCard": "Whole card (with its other instances): {{util}} utilization · {{vram}} memory"
+    "wholeCard": "Whole card (with its other instances): {{util}} utilization · {{vram}} memory",
+    "loadFailed": "Could not load GPU samples"
   },
   "instanceStages": {
     "stageTitle": "Stage Duration p95",
-    "stageDescription": "Queue, prefill, and decode p95 duration per request",
+    "stageDescription": "95th percentile of queue, prefill and decode time on this instance",
     "queue": "Queue",
     "prefill": "Prefill",
     "decode": "Decode",
     "preemptTitle": "Preemptions /s",
-    "preemptDescription": "Rate of engine-reported request preemptions",
-    "notCollected": "Not collected yet; requires an agent/engine update planned for a later phase"
+    "preemptDescription": "Requests preempted per second on this instance",
+    "notCollected": "No samples for this instance in the selected range"
   },
   "metrics": {
+    "emptyWindow": "No metric samples in the selected range",
+    "compareInstances": "Compare Instances",
+    "compareDescription": "Each line represents an instance. Select a line or an instance ID to inspect the same time range.",
+    "inspectInstance": "View instance metrics",
+    "historicalInstance": "Historical instance {{id}}",
     "noInstances": "No Instances",
     "noInstancesDescription": "Inference service metrics will be aggregated here after the deployment creates replicas.",
     "noRunning": "No Running Instances",
@@ -676,10 +745,13 @@
     "waiting": "Waiting for Deployment Metrics",
     "waitingDescription": "After the agent collects engine /metrics, request concurrency, GPU cache, and token throughput are aggregated at the deployment level.",
     "runningRequests": "Running Requests",
+    "totalRunningRequests": "Total Running Requests",
     "waitingRequests": "Waiting Requests",
+    "totalWaitingRequests": "Total Queued Requests",
     "runningInstances": "Running Instances",
     "peakCache": "Peak GPU Cache",
     "generationThroughput": "Generation Throughput",
+    "totalGenerationThroughput": "Total Generation Throughput",
     "concurrency": "Deployment Request Concurrency",
     "concurrencyDescription": "Sum of requests across all running instances",
     "tokenThroughput": "Token Throughput",
@@ -708,6 +780,14 @@
     "1y": "1 year",
     "beyondRetention": "The selected range exceeds the {{days}}-day retention; only retained data is shown.",
     "ariaLabel": "Time range"
+  },
+  "startup": {
+    "instanceCreated": "Instance created",
+    "title": "Startup progress",
+    "done": "Complete",
+    "active": "In progress",
+    "waiting": "Waiting",
+    "failed": "Failed"
   },
   "preparation": {
     "phase": {
@@ -877,7 +957,7 @@
   },
   "schedulingPolicy": {
     "title": "Scheduling policy",
-    "edit": "Edit",
+    "edit": "Edit scheduling policy",
     "close": "Done",
     "helpLabel": "About the scheduling policy",
     "help": "See the docs \"Use the Scheduling Center\" (schedule, yield policy) and \"Reschedule on Node Loss\" for details.",

@@ -138,7 +138,7 @@ test("disabling follow keeps the view anchored; re-enabling snaps to the newest 
   }
 });
 
-test("the instance panel has exactly two tabs: logs and metrics", async () => {
+test("startup logs appear below runtime details and stay in place when the instance becomes ready", async () => {
   api.instanceEvents = async () => cursorPage([]);
   api.metricsQuery = async () => list([]);
   api.monitorDeployment = (async () => ({
@@ -154,13 +154,18 @@ test("the instance panel has exactly two tabs: logs and metrics", async () => {
     message: "", container_id: "container-1", sleep_level: 0,
   } as never;
   const wrap = (inst: never) => <I18nextProvider i18n={i18n}><MemoryRouter><InstancePanel inst={inst} /></MemoryRouter></I18nextProvider>;
-  render(wrap(base));
-
-  const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
-  assert.deepEqual(tabs, ["Logs", "Metrics"], "the events tab is gone; instance events now merge into the log stream");
+  const view = render(wrap(base));
+  const logs = screen.getByRole("region", { name: "Logs" });
+  const details = document.getElementById("instance-inst-1")!;
+  assert.ok(details.contains(logs));
+  assert.ok(screen.getByText("Follow latest logs"));
+  assert.ok(screen.getByText("Launch Command").compareDocumentPosition(logs) & Node.DOCUMENT_POSITION_FOLLOWING);
+  view.rerender(wrap({ ...base, state: "running" } as never));
+  assert.equal(screen.getByRole("region", { name: "Logs" }), logs);
+  assert.ok(logs.compareDocumentPosition(screen.getByRole("heading", { name: "Instance Metrics" })) & Node.DOCUMENT_POSITION_FOLLOWING);
 });
 
-test("the follow-logs checkbox only appears while the logs tab is active", async () => {
+test("changing metric groups preserves the independent log controls", async () => {
   api.instanceEvents = async () => cursorPage([]);
   api.metricsQuery = async () => list([]);
   api.monitorDeployment = (async () => ({
@@ -171,20 +176,20 @@ test("the follow-logs checkbox only appears while the logs tab is active", async
     replicas: [],
   })) as typeof api.monitorDeployment;
   const base = {
-    uuid: "inst-1", deployment_id: 1, node_uuid: "node-1", state: "starting",
+    uuid: "inst-1", deployment_id: 1, node_uuid: "node-1", state: "running",
     gpu_indexes: [0], ports: [30000], api_port: 30000, image: "image",
     message: "", container_id: "container-1", sleep_level: 0,
   } as never;
   const wrap = (inst: never) => <I18nextProvider i18n={i18n}><MemoryRouter><InstancePanel inst={inst} /></MemoryRouter></I18nextProvider>;
   render(wrap(base));
 
-  assert.ok(screen.getByText("Follow latest logs"), "logs tab is the default, so the checkbox starts visible");
+  const follow = await screen.findByText("Follow latest logs");
+  const logs = screen.getByRole("region", { name: "Logs" });
+  assert.ok(logs.contains(follow));
+  fireEvent.click(screen.getByRole("tab", { name: "Cache & engine" }));
+  assert.equal(screen.getByText("Follow latest logs"), follow);
+  assert.ok(screen.getByRole("tab", { name: "Cache & engine", selected: true }));
 
-  fireEvent.click(screen.getByText("Metrics"));
-  await waitFor(() => assert.equal(screen.queryByText("Follow latest logs"), null, "checkbox must hide on the metrics tab"));
-
-  fireEvent.click(screen.getByText("Logs"));
-  await waitFor(() => assert.ok(screen.getByText("Follow latest logs"), "checkbox must come back on the logs tab"));
 });
 
 test("progress notifications do not refetch the instance event history; milestones do", async () => {

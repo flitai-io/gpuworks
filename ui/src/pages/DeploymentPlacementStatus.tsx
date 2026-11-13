@@ -1,5 +1,9 @@
-import { Alert, Button, Modal, Segmented, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Segmented } from "../ui-kit/Segmented";
+import { Modal, Space, Table, Tooltip, Typography } from "antd";
+import { Alert, Tag } from "../pages/DeploymentControls";
+import { Button } from "../components/ui/button";
 import AIAssistant from "../components/AIAssistant";
+import DeploymentDetailNotice from "./DeploymentDetailNotice";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -43,7 +47,7 @@ export function RequirementTags({ dep }: { dep: Deployment }) {
     <Space size={[4, 4]} wrap>
       {entries.map(([key, values]) => {
         const labels = values.map((value) => described.get(`${key}=${value}`));
-        if (labels.some((label) => !label)) return <Tag key={key}>{`${key}=${values.join(" | ")}`}</Tag>;
+        if (labels.some((label) => !label)) return <Tag className="deployment-requirement-tag" key={key}>{`${key}=${values.join(" | ")}`}</Tag>;
         const missing = labels.some((label) => label!.nodes === 0);
         const name = key.startsWith("gpuworks.ai/") ? systemLabelName(key, tNodes) : key;
         const shown = labels.map((label) => {
@@ -52,7 +56,7 @@ export function RequirementTags({ dep }: { dep: Deployment }) {
         });
         return (
           <Tooltip key={key} title={`${key}=${values.join(" | ")}`}>
-            <Tag color={missing ? "warning" : undefined}>{`${name}: ${shown.join(" | ")}`}</Tag>
+            <Tag className="deployment-requirement-tag" color={missing ? "warning" : undefined}>{`${name}: ${shown.join(" | ")}`}</Tag>
           </Tooltip>
         );
       })}
@@ -93,12 +97,10 @@ export function PlacementStatusAlert({ dep }: { dep: Deployment }) {
     : t(preparing ? "detail.placement.preparingModel" : "detail.placement.waiting", { count: status.unscheduled });
   return (
     <>
-      <Alert
+      <DeploymentDetailNotice
         type={failed ? "error" : preparing && !preparing.preparation?.reason ? "info" : "warning"}
-        showIcon
-        style={{ marginTop: 16 }}
         message={headline}
-        description={
+        description={(preparing || blocked || reason || closest.length > 0 || at) && (
           <Space direction="vertical" size={4} style={{ width: "100%" }}>
             {preparing && <Typography.Text><PreparationLabel item={preparing} /></Typography.Text>}
             {blocked && <Typography.Text><PreparationLabel item={blocked} /></Typography.Text>}
@@ -119,14 +121,14 @@ export function PlacementStatusAlert({ dep }: { dep: Deployment }) {
                 </ul>
               </div>
             )}
-            {at && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("detail.placement.recorded", { time: at })}</Typography.Text>}
+            {at && <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-label)" }}>{t("detail.placement.recorded", { time: at })}</Typography.Text>}
           </Space>
-        }
+        )}
         action={
-          <Space direction="vertical" size={4}>
-            <Button size="small" onClick={() => setOpen(true)}>{t("detail.placement.view")}</Button>
-            <AIAssistant task="deployment.unscheduled" subject={{ kind: "deployment", id: dep.id, label: dep.name }} buttonSize="small" />
-          </Space>
+          <>
+            <Button variant="tertiary" size="sm" onClick={() => setOpen(true)}>{t("detail.placement.view")}</Button>
+            <AIAssistant task="deployment.unscheduled" subject={{ kind: "deployment", id: dep.id, label: dep.name }} buttonType="tertiary" />
+          </>
         }
       />
       {open && <CandidatesModal dep={dep} onClose={() => setOpen(false)} />}
@@ -201,7 +203,7 @@ export function CandidatesModal({ dep, onClose }: { dep: Deployment; onClose: ()
             {t("detail.placement.summary", { nodes: data.nodes, room: counts?.room ?? 0, busy: counts?.busy ?? 0, unmet: counts?.unmet ?? 0, cordoned: counts?.cordoned ?? 0, offline: counts?.offline ?? 0 })}
           </Typography.Text>
         )}
-        <Segmented
+        <Segmented label={t("detail.placement.view")}
           options={options}
           value={filter}
           onChange={(value) => {

@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { Alert, Button, Modal, Space } from "antd";
+import { Modal } from "antd";
+import { Alert } from "../pages/DeploymentControls";
+import { Button } from "../components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useOrder } from "./useOrder";
+import DeploymentDetailNotice from "./DeploymentDetailNotice";
 
 // ConfirmOrderModal asks before an order that takes something down (a
 // restart of the deployment or of one replica). It stays open while the order
@@ -74,23 +77,21 @@ export function UnitRetryAlert({ message, retry, onDone, editHref }: { message: 
     else onDone();
   };
   return (
-    <Alert
-      style={{ marginTop: 12 }}
+    <DeploymentDetailNotice
       type="error"
-      showIcon
       message={message}
       description={failure ? t("detail.retry.failed", { detail: failure }) : undefined}
       action={
-        <Space>
+        <>
           {editHref && (
-            <Button size="small" onClick={() => navigate(editHref)}>
+            <Button variant="tertiary" size="sm" onClick={() => navigate(editHref)}>
               {t("detail.retry.editAndRetry")}
             </Button>
           )}
-          <Button size="small" loading={busy} onClick={() => void onRetry()}>
+          <Button variant="tertiary" size="sm" loading={busy} onClick={() => void onRetry()}>
             {t("detail.retry.action")}
           </Button>
-        </Space>
+        </>
       }
     />
   );

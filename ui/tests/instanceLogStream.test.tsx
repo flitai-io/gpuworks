@@ -122,6 +122,22 @@ test("a folded milestone's phase-cost summary is appended to its system line", a
   );
 });
 
+test("startup output appears once in recent logs and never leaks into a selected historical window", async () => {
+  stubPersistedLogs([{ time_ms: 1000, line: "stored line" }]);
+  const renderLogs = (line: string, history: boolean) => (
+    <I18nextProvider i18n={i18n}><LogStream uuid="inst-1" live={false} follow={true}
+      runtimeLine={line} range={history ? { kind: "custom", startMS: 0, endMS: 2000 } : null} /></I18nextProvider>
+  );
+  const view = render(renderLogs("stored line", false));
+  await waitFor(() => assert.match(linesOf(view.container)[0], /^\[.+\] stored line$/));
+  assert.equal(linesOf(view.container).length, 1);
+  view.rerender(renderLogs("extracting layer", false));
+  assert.equal(linesOf(view.container).at(-1), "extracting layer");
+  view.rerender(renderLogs("extracting layer", true));
+  await waitFor(() => assert.match(linesOf(view.container)[0], /stored line/));
+  assert.equal(linesOf(view.container).length, 1);
+});
+
 test("an events-fetch error renders a muted retry line instead of silently dropping history", async () => {
   stubPersistedLogs([{ time_ms: 1000, line: "line" }]);
   let reloaded = false;

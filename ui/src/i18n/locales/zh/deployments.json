@@ -1,4 +1,23 @@
 {
+  "detailLayout": {
+    "recordState": "实例状态",
+    "matchEmpty": "当前副本下没有符合筛选条件的实例",
+    "inactive": "无活动实例",
+    "more": "更多",
+    "instances": "实例",
+    "noMatches": "无匹配结果",
+    "replicaControls": "副本选择与操作",
+    "switchReplica": "切换副本",
+    "unknownReplica": "归属未知",
+    "waitingInstance": "等待创建实例",
+    "rebuildStopped": "已停止重建",
+    "node": "所在节点",
+    "startup": "实例启动进度",
+    "transferred": "已传输 {{size}}",
+    "modelDownload": "模型下载进度",
+    "ready": "{{ready}}/{{total}} 就绪",
+    "starting": "{{count}} 个启动中"
+  },
   "instanceNoMeasuredMemory": "暂无实际显存数据",
   "templateAudit": {
     "reviewTitle": "推理模板人工复核",
@@ -69,14 +88,14 @@
     "wakeStarted": "已发起唤醒",
     "wakeFailed": "唤醒失败：{{detail}}",
     "sleeping": "已休眠 · L{{level}}（{{name}}）",
-    "wake": "唤醒",
+    "wake": "立即唤醒",
     "quickAction": "休眠（内存/L1）",
     "deepAction": "深度休眠（L2）",
     "partial": "部分休眠 · {{asleep}}/{{total}} 个副本",
     "wakeAll": "全部唤醒",
-    "heldHint": "手动休眠，请求不会唤醒",
+    "heldHint": "请求不会自动唤醒休眠副本",
     "requestWakesHint": "有请求时会自动唤醒",
-    "someHeldHint": "部分副本手动休眠，请求只唤醒其余副本",
+    "someHeldHint": "仅部分休眠副本允许请求自动唤醒",
     "releaseHold": "允许请求唤醒",
     "releaseHoldDone": "已允许请求唤醒：仍在休眠，有请求时会自动唤醒",
     "releaseHoldFailed": "操作失败：{{detail}}",
@@ -138,6 +157,32 @@
     "forceDescription": "请确认远端实例已经关闭；仍在运行的容器或云资源需要单独清理。"
   },
   "detail": {
+    "serviceOverview": "服务概览",
+    "modelAndEngine": "模型与引擎",
+    "configuredRuntime": "引擎 / 配置镜像",
+    "copyModel": "复制模型",
+    "copyServedName": "复制对外模型名",
+    "copyConfiguredImage": "复制配置镜像",
+    "nodesMatchRecords": "与实例记录一致",
+    "nodesOutsideTarget": "含目标以外的节点",
+    "schedulingInformation": "调度信息",
+    "replicaCapacity": "副本数",
+    "desiredReplicas": "期望 {{desired}}",
+    "desiredCount": "期望",
+    "instanceRuntime": "运行信息",
+    "instanceLaunch": "实例镜像与启动",
+    "instanceDetails": "实例详情",
+    "switchInstance": "切换实例",
+    "searchInstances": "按实例 ID 或状态搜索",
+    "allInstances": "全部",
+    "searchInstanceID": "按实例 ID 搜索",
+    "previousInstanceShort": "上一个",
+    "nextInstanceShort": "下一个",
+    "historicalRecord": "历史记录",
+    "previousInstance": "上一个实例",
+    "nextInstance": "下一个实例",
+    "failedAttempt": "历史失败",
+    "viewInstances": "查看实例",
     "title": "部署详情",
     "edit": "编辑",
     "editHint": "编辑该部署的启动参数",
@@ -231,26 +276,25 @@
     },
     "model": "模型",
     "servedName": "对外模型名",
-    "node": "计算节点",
+    "node": "实例记录所在节点",
     "targetNode": "目标节点",
-    "scheduledElsewhere": "已调度到其它节点：实际运行于 {{nodes}}，目标节点为 {{target}}。",
-    "state": "状态",
-    "sleepable": "可休眠",
+    "state": "服务状态",
+    "sleepable": "支持休眠",
     "yes": "是",
     "no": "否",
-    "replicas": "副本数",
+    "replicas": "期望副本数",
     "routingPolicy": "路由策略",
     "routingUpdated": "路由策略已更新",
     "routingFailed": "路由策略更新失败：{{detail}}",
     "inferenceTemplate": "推理模板配置",
-    "deviated": "已偏离",
-    "notDeviated": "未偏离",
+    "deviated": "与模板配置有差异",
+    "notDeviated": "沿用模板配置",
     "modelFromNode": "从 {{node}} 复制",
     "modelFromHost": "从 {{host}} 下载",
     "modelPreparation": "模型准备",
     "metrics": "部署指标",
-    "instances": "实例（{{count}}）",
-    "instancesWithFollowers": "实例（{{count}}，其中 {{followers}} 个 follower）",
+    "instances": "实例详情（{{count}}）",
+    "instancesWithFollowers": "实例详情（{{count}}，含 {{followers}} 个从节点实例）",
     "noInstances": "暂无实例",
     "imageMismatch": "副本镜像版本不一致：{{count}} 个副本与其他副本不同。",
     "pd": {
@@ -265,6 +309,10 @@
       "role": {
         "decode": "Decode",
         "prefill": "Prefill"
+      },
+      "roleLabel": {
+        "decode": "Decode（生成）",
+        "prefill": "Prefill（预填充）"
       },
       "roleSummary": "{{role}} · TP {{tp}} · 就绪 {{ready}}/{{desired}}",
       "roleAsleep": "{{count}} 个休眠",
@@ -281,11 +329,12 @@
       },
       "retry": {
         "exhausted": "{{role}}第 {{index}} 个实例（{{node}}）连续失败 {{attempts}} 次，已停止重试：{{reason}}"
-      }
+      },
+      "readyUnits": "角色单元就绪 {{ready}} / {{desired}}"
     },
     "health": "健康检查",
     "tokenize": "分词 API",
-    "readyReplicas": "运行中 {{ready}} / {{desired}}"
+    "readyReplicas": "就绪 {{ready}}"
   },
   "replica": {
     "sleep": "休眠副本（L1）",
@@ -313,6 +362,8 @@
     "removeUnit": "移除副本 {{index}}",
     "save": "保存",
     "restart": "重启副本",
+    "restartNamed": "重启{{label}}？",
+    "removeNamed": "移除{{label}}？它会先处理完手上的请求再停止。",
     "restartTitle": "重启这个副本？",
     "restartDescription": "它的实例会被替换，其他副本照常服务；不占用这个副本的重试次数。",
     "drain": "先排空：替换实例启动期间，让它处理完手上的请求",
@@ -342,10 +393,11 @@
   },
   "instance": {
     "field": {
-      "instance": "实例",
-      "state": "状态",
-      "gpu": "GPU",
+      "instance": "实例 ID",
+      "state": "实例运行状态",
+      "gpu": "GPU 编号",
       "apiPort": "API 端口",
+      "sleep": "休眠",
       "computeNetwork": "参数网络",
       "image": "镜像",
       "imageId": "镜像 ID",
@@ -353,15 +405,19 @@
       "message": "消息",
       "modelFiles": "模型文件"
     },
+    "copyModelPath": "复制模型文件路径",
+    "copyImageId": "复制完整镜像 ID",
+    "copyLaunchScript": "复制完整启动脚本",
+    "copyPreparation": "复制引擎启动前执行的脚本",
     "storageGone": "存储已删除",
     "imageMismatch": {
       "label": "镜像与其他副本不同",
       "tooltip": "与其他副本的镜像不同。可能是 tag 被更新过，或不同来源的内容不一致。"
     },
-    "sleeping": "休眠中 L{{level}}（{{storage}}）",
+    "sleeping": "已休眠 · L{{level}}（{{storage}}）",
     "fallingAsleep": "正在进入休眠 · L{{level}}",
     "waking": "正在唤醒",
-    "held": "手动休眠，请求不会唤醒",
+    "held": "请求不会自动唤醒此实例",
     "rank": {
       "leader": "leader · rank {{rank}}",
       "follower": "follower · rank {{rank}}",
@@ -444,16 +500,16 @@
       "title": "环境与挂载",
       "environment": "环境变量",
       "mounts": "挂载",
-      "shm": "共享内存",
+      "shm": "容器共享内存",
       "shmValue": "/dev/shm {{size}} GiB",
       "shmHost": "共用宿主机 /dev/shm（--ipc=host）",
       "dockerArgs": "Docker 参数",
       "readOnly": "只读",
-      "dgpu": "dGPU 设备相关变量会在节点侧追加。",
+      "dgpu": "节点启动容器时会补充 dGPU 变量，使设备和配额设置生效。",
       "preparation": "引擎启动前执行"
     },
     "launchFacts": {
-      "title": "启动事实",
+      "title": "启动配置与观测",
       "loading": "正在加载启动事实",
       "error": "启动事实加载失败。",
       "retry": "重试",
@@ -525,17 +581,18 @@
     "commandMode": {
       "manual": "手动命令"
     },
-    "wakeEstimate": "预计唤醒 ~{{seconds}}s（L1）",
-    "sleepWeight": "休眠权重占用{{storage}} ≈ {{gib}} GiB",
+    "wakeEstimate": "L1 唤醒预计约 {{seconds}} 秒",
+    "sleepWeight": "权重占用{{storage}}约 {{gib}} GiB",
     "hostMemory": "宿主内存",
-    "selectedGpu": "调度选中 GPU：",
+    "selectedGpu": "调度选中 GPU",
     "followLogs": "自动跳到最新日志",
     "logsHistoryHint": "显示所选时间段的持久化日志（时间前缀为服务端采集时刻）。",
     "logsTruncated": "该范围日志超过 {{count}} 行，仅显示最新 {{count}} 行；可缩小时间范围，或在日志页用关键词检索。",
     "noLogsInRange": "所选时间段内没有日志",
     "tab": {
       "logs": "日志",
-      "metrics": "指标"
+      "metrics": "实例指标",
+      "details": "运行详情"
     },
     "log": {
       "systemTag": "系统",
@@ -599,6 +656,7 @@
     }
   },
   "instanceMetrics": {
+    "lastInWindow": "所选时段内的最后读数",
     "waiting": "等待推理指标",
     "waitingDescription": "实例运行后，agent 会从引擎 /metrics 端点采集运行请求、排队请求、GPU cache 和 token 计数。",
     "running": "运行请求",
@@ -606,8 +664,8 @@
     "gpuCache": "GPU cache",
     "promptThroughput": "Prompt 吞吐",
     "generationThroughput": "生成吞吐",
-    "requestConcurrency": "请求并发",
-    "requestConcurrencyDescription": "运行与排队请求数量",
+    "requestConcurrency": "实例请求并发",
+    "requestConcurrencyDescription": "所选实例上正在处理和排队的请求数",
     "cacheUsage": "GPU cache 使用率",
     "cacheUsageDescription": "引擎 KV Cache / token 用量",
     "promptToken": "Prompt token 吞吐",
@@ -620,12 +678,16 @@
     "kvHitRateDescription": "prompt token 从前缀缓存复用的比例",
     "kvHitRateScopeHint": "vLLM 为窗口内命中/查询计数器的比值；SGLang 为引擎上报的瞬时值。两者口径不同，不可直接比较。",
     "metricUnavailable": "引擎未上报该指标",
-    "metricNoTraffic": "已上报计数器，暂无相关流量"
+    "metricNoTraffic": "已上报计数器，暂无相关流量",
+    "groupLabel": "监控内容",
+    "requestsGroup": "请求与延迟",
+    "gpuGroup": "GPU 与显存",
+    "cacheGroup": "缓存与引擎"
   },
   "kvTier": {
     "title": "KV 分层",
     "gpu": "GPU",
-    "gpuDetail": "见上方显存条",
+    "gpuDetail": "缓存占用趋势见本组的「GPU cache 使用率」。",
     "memory": "内存",
     "disk": "磁盘",
     "disabled": "未启用",
@@ -641,9 +703,10 @@
     "open": "打开容器 Shell",
     "unavailable": "当前没有可进入的活动容器",
     "openFailed": "打开容器 Shell 失败：{{detail}}",
-    "hint": "模型输出请在下方日志中查看"
+    "hint": "模型输出可在「日志」中查看"
   },
   "instanceGpu": {
+    "lastSample": "最近采样 {{time}}",
     "title": "分卡监控",
     "waiting": "等待 GPU 监控数据",
     "waitingDescription": "agent 默认每 10 秒上报每张卡的利用率、显存、温度与功耗；实例刚启动时数据可能为空。",
@@ -655,19 +718,25 @@
     "sliceTitle": "GPU{{index}} · dGPU 切片（上限 {{limit}} GiB）",
     "sliceVram": "本实例显存",
     "sliceSM": "SM 参考值",
-    "wholeCard": "整卡（含同卡其他实例）：利用率 {{util}} · 显存 {{vram}}"
+    "wholeCard": "整卡（含同卡其他实例）：利用率 {{util}} · 显存 {{vram}}",
+    "loadFailed": "GPU 采样读取失败"
   },
   "instanceStages": {
     "stageTitle": "分段时长 p95",
-    "stageDescription": "每个请求的排队、prefill、decode p95 时长",
+    "stageDescription": "所选实例的排队、预填充和解码耗时的第 95 百分位数",
     "queue": "排队",
     "prefill": "Prefill",
     "decode": "Decode",
     "preemptTitle": "抢占 /s",
-    "preemptDescription": "引擎上报的请求被抢占速率",
-    "notCollected": "暂未采集，需等待后续阶段的 agent/引擎升级"
+    "preemptDescription": "所选实例每秒被抢占的请求次数",
+    "notCollected": "所选时段内暂无此实例的样本"
   },
   "metrics": {
+    "emptyWindow": "所选时段没有指标样本",
+    "compareInstances": "实例对比",
+    "compareDescription": "每条线对应一个实例。选择曲线或实例 ID 可查看该实例在同一时段的指标。",
+    "inspectInstance": "查看实例指标",
+    "historicalInstance": "历史实例 {{id}}",
     "noInstances": "暂无实例",
     "noInstancesDescription": "部署创建副本后会在这里汇总推理服务指标。",
     "noRunning": "没有运行中的实例",
@@ -676,10 +745,13 @@
     "waiting": "等待部署指标",
     "waitingDescription": "agent 采集到引擎 /metrics 后，会按实例汇总为部署级请求并发、GPU cache 和 token 吞吐。",
     "runningRequests": "运行请求",
+    "totalRunningRequests": "运行请求合计",
     "waitingRequests": "排队请求",
+    "totalWaitingRequests": "排队请求合计",
     "runningInstances": "运行实例",
     "peakCache": "峰值 GPU cache",
     "generationThroughput": "生成吞吐",
+    "totalGenerationThroughput": "总生成吞吐",
     "concurrency": "部署请求并发",
     "concurrencyDescription": "所有运行实例的请求数求和",
     "tokenThroughput": "Token 吞吐",
@@ -708,6 +780,14 @@
     "1y": "1 年",
     "beyondRetention": "所选范围超出数据保留期（{{days}} 天），仅显示保留期内数据。",
     "ariaLabel": "时间范围"
+  },
+  "startup": {
+    "instanceCreated": "创建实例",
+    "title": "启动进度",
+    "done": "已完成",
+    "active": "进行中",
+    "waiting": "等待中",
+    "failed": "失败"
   },
   "preparation": {
     "phase": {
@@ -877,7 +957,7 @@
   },
   "schedulingPolicy": {
     "title": "调度策略",
-    "edit": "编辑",
+    "edit": "编辑调度策略",
     "close": "完成",
     "helpLabel": "调度策略说明",
     "help": "详细说明见文档《使用调度分析》（定时计划、出让策略）和《节点失联重调度》。",

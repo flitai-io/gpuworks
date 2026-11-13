@@ -20,20 +20,10 @@ from __future__ import annotations
 
 import argparse
 import re
-import time
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
-from playwright.sync_api import Page, expect
-
-
-def wait_for(predicate, timeout_ms: int, message: str) -> None:
-    deadline = time.time() + timeout_ms / 1000
-    while time.time() < deadline:
-        if predicate():
-            return
-        time.sleep(0.2)
-    raise AssertionError(f"timeout waiting for: {message}")
+from playwright.sync_api import Page, expect, sync_playwright
 
 
 def login(page: Page, base_url: str, password: str) -> None:
@@ -46,98 +36,83 @@ def login(page: Page, base_url: str, password: str) -> None:
 
 def open_drawer(page: Page, base_url: str, deployment_id: int) -> None:
     page.goto(f"{base_url}/deployments?deployment={deployment_id}")
-    expect(page.get_by_role("heading", name="Deployment Details")).to_be_visible()
+    expect(page.get_by_role("dialog").get_by_role("tab", name=re.compile(r"^Instance details \("))).to_be_visible()
 
 
-def track_requests(page: Page, fragment: str) -> list[str]:
-    urls: list[str] = []
-    page.on(
-        "request",
-        lambda request: urls.append(request.url) if fragment in request.url else None,
-    )
-    return urls
+def metrics_window(page: Page, step: str):
+    def matches(request) -> bool:
+        url = urlparse(request.url)
+        params = parse_qs(url.query)
+        return (
+            url.path == "/api/v1/metrics/query"
+            and params.get("step") == [step]
+            and "start" in params and "end" in params
+        )
+    return page.expect_request(matches)
 
 
-def query_params(url: str) -> dict[str, str]:
-    return dict(pair.split("=", 1) for pair in urlparse(url).query.split("&") if "=" in pair)
-
-
-def choose_range(page: Page, label: str, index: int = 0) -> None:
-    drawer = page.locator(".ant-drawer-content-wrapper")
-    drawer.get_by_label("Time range").nth(index).click()
-    page.locator(".ant-select-dropdown:visible .ant-select-item-option-content").filter(
-        has_text=label
-    ).first.click()
+def choose_range(page: Page, label: str, scope=None) -> None:
+    drawer = page.get_by_role("dialog")
+    control = (scope if scope is not None else drawer).get_by_role("combobox", name="Time range")
+    control.click()
+    option = page.get_by_role("option", name=label, exact=True)
+    option.click()
+    expect(control).to_have_attribute("aria-expanded", "false")
+    expect(option).to_be_hidden()
 
 
 def quick_range_drives_metrics_queries(page: Page) -> None:
-    urls = track_requests(page, "/api/v1/metrics/query")
-    drawer = page.locator(".ant-drawer-content-wrapper")
-    expect(drawer.get_by_label("Time range").first).to_be_visible()
-
-    def saw_windowed_query() -> bool:
-        return any(
-            query_params(url).get("step") == "10s"
-            and query_params(url).get("start")
-            and query_params(url).get("end")
-            for url in urls
-        )
-
-    wait_for(saw_windowed_query, 10_000, "default 15m metrics query with start/end/step")
-
-    choose_range(page, "1 hour")
-    wait_for(
-        lambda: any(query_params(url).get("step") == "30s" for url in urls),
-        10_000,
-        "1 hour metrics query carries step=30s",
-    )
+    expect(page.get_by_role("tab", name="Deployment Details", exact=True)).to_have_attribute("aria-selected", "true")
+    with metrics_window(page, "30s"):
+        choose_range(page, "1 hour")
 
 
-def custom_range_drives_start_end(page: Page) -> None:
-    urls = track_requests(page, "/api/v1/metrics/query")
-    drawer = page.locator(".ant-drawer-content-wrapper")
+def custom_range_drives_start_end(page: Page, capture) -> None:
+    drawer = page.get_by_role("dialog")
     choose_range(page, "Custom")
     inputs = drawer.locator(".ant-picker:visible input")
     expect(inputs.first).to_be_visible()
-    inputs.first.fill("2026-09-12 22:00:00")
-    inputs.first.press("Tab")
-    inputs.nth(1).fill("2026-09-19 22:00:00")
-    inputs.nth(1).press("Enter")
-
-    # A 7-day window resolves to the 1-week bucket step (1h); the bounds pass
-    # through verbatim so the server never has to guess the anchor.
-    wait_for(
-        lambda: any(
-            query_params(url).get("step") == "1h"
-            and query_params(url).get("start")
-            and query_params(url).get("end")
-            for url in urls
-        ),
-        10_000,
-        "custom range metrics query carries start/end/step=1h",
-    )
+    inputs.first.click()
+    panel = page.locator(".ant-picker-dropdown:visible")
+    days = panel.locator("td.ant-picker-cell-in-view[title]")
+    confirm = panel.locator(".ant-picker-ok button")
+    capture("custom-calendar")
+    days.nth(0).click()
+    capture("custom-start")
+    confirm.click()
+    days.nth(7).click()
+    capture("custom-end")
+    with metrics_window(page, "1h") as issued:
+        confirm.click()
+    params = parse_qs(urlparse(issued.value.url).query)
+    assert int(params["end"][0]) - int(params["start"][0]) == 7 * 24 * 60 * 60 * 1000
+    capture("custom-applied")
 
 
-def beyond_retention_warns(page: Page) -> None:
+def beyond_retention_warns(page: Page, capture) -> None:
     choose_range(page, "1 month")
     expect(page.get_by_text(re.compile("exceeds the 7-day retention"))).to_be_visible()
+    capture("retention-warning")
     choose_range(page, "15 minutes")
     expect(page.get_by_text(re.compile("exceeds the 7-day retention"))).to_have_count(0)
+    capture("restore-default-range")
 
 
-def log_range_queries_store(page: Page) -> None:
-    searches = track_requests(page, "/api/v1/logs/search")
-    drawer = page.locator(".ant-drawer-content-wrapper")
-    drawer.get_by_role("tab", name="Logs").click()
-    choose_range(page, "6 hours", index=1)
-    wait_for(
-        lambda: any(
-            query_params(url).get("start") and query_params(url).get("end")
-            for url in searches
-        ),
-        10_000,
-        "log history query carries start/end",
-    )
+def log_range_queries_store(page: Page, capture) -> None:
+    drawer = page.get_by_role("dialog")
+    drawer.get_by_role("tab", name=re.compile(r"^Instance details \(")).click()
+    logs = drawer.get_by_role("region", name="Logs", exact=True)
+
+    logs.scroll_into_view_if_needed()
+    capture("instance-live-logs")
+
+    def bounded_log_search(request) -> bool:
+        url = urlparse(request.url)
+        params = parse_qs(url.query)
+        return url.path == "/api/v1/logs/search" and all(key in params for key in ("instance", "from", "to"))
+
+    with page.expect_request(bounded_log_search):
+        choose_range(page, "6 hours", logs)
     expect(drawer.get_by_text(re.compile("persisted logs in the selected range"))).to_be_visible()
 
 
@@ -156,14 +131,21 @@ def main() -> None:
         context.add_init_script("localStorage.setItem('gpuworks.locale', 'en')")
         page = context.new_page()
         page.set_default_timeout(10_000)
+        def capture(name: str) -> None:
+            page.screenshot(path=str(args.artifact_dir / f"{name}.png"), animations="disabled")
+
         try:
             login(page, args.base_url.rstrip("/"), args.password)
-            open_drawer(page, args.base_url.rstrip("/"), args.deployment_id)
+            capture("deployment-list")
+            with metrics_window(page, "10s"):
+                open_drawer(page, args.base_url.rstrip("/"), args.deployment_id)
+            capture("overview")
             quick_range_drives_metrics_queries(page)
-            custom_range_drives_start_end(page)
-            beyond_retention_warns(page)
-            log_range_queries_store(page)
-            page.screenshot(path=str(args.artifact_dir / "deployment-detail-time-range.png"), full_page=True)
+            capture("one-hour-range")
+            custom_range_drives_start_end(page, capture)
+            beyond_retention_warns(page, capture)
+            log_range_queries_store(page, capture)
+            capture("deployment-detail-time-range")
         except Exception:
             page.screenshot(path=str(args.artifact_dir / "failure.png"), full_page=True)
             print(f"failure URL: {page.url}")

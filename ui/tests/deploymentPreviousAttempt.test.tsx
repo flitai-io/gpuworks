@@ -16,7 +16,7 @@ import type { Instance } from "../src/api.ts";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement", "HTMLHtmlElement", "NodeFilter", "HTMLInputElement", "HTMLButtonElement"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "localStorage", { value: dom.window.localStorage, configurable: true });
@@ -43,7 +43,9 @@ await i18n.use(initReactI18next).init({
 
 const { MemoryRouter } = await import("react-router-dom");
 const { cleanup, render, within } = await import("@testing-library/react");
+const { selectInstance } = await import("./helpers/selectInstance.ts");
 const { api } = await import("../src/api.ts");
+const { AssistantProvider } = await import("../src/assistant/AssistantContext.tsx");
 const { default: DeploymentInstances } = await import("../src/pages/DeploymentInstances.tsx");
 
 const apiAny = api as unknown as Record<string, unknown>;
@@ -76,12 +78,17 @@ function deployment(instances: Instance[], replicas = 1) {
 function renderInstances(instances: Instance[], replicas = 1) {
   render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter><DeploymentInstances dep={deployment(instances, replicas)} onChanged={() => {}} /></MemoryRouter>
+      <MemoryRouter><AssistantProvider><DeploymentInstances dep={deployment(instances, replicas)} onChanged={() => {}} /></AssistantProvider></MemoryRouter>
     </I18nextProvider>,
   );
 }
 
-const panelOf = (uuid: string) => document.getElementById(`instance-${uuid}`) as HTMLElement;
+function panelOf(uuid: string) {
+  if (!document.getElementById(`instance-${uuid}`)) selectInstance(uuid);
+  const panel = document.getElementById(`instance-${uuid}`);
+  assert.ok(panel);
+  return panel;
+}
 const cardIds = () => [...document.querySelectorAll("[id^=instance-]")].map((el) => el.id);
 
 test("a timed-out attempt listed first is still not the current instance", () => {
@@ -89,11 +96,23 @@ test("a timed-out attempt listed first is still not the current instance", () =>
   const running = inst("running-now", { state: "running", replica: { index: 0 }, schedule: unit("|[]") });
   renderInstances([failed, running]);
 
-  assert.deepEqual(cardIds(), ["instance-running-now", "instance-failed-attempt"]);
+  assert.deepEqual(cardIds(), ["instance-running-now"]);
   assert.ok(within(panelOf("failed-attempt")).getByText("Previous attempt"));
   assert.equal(within(panelOf("running-now")).queryByText("Previous attempt"), null);
-  assert.ok(within(panelOf("failed-attempt")).getByText(timeout));
+  const reason = within(panelOf("failed-attempt")).getByText(timeout);
+  const diagnose = within(reason.closest("td")!).getByRole("button", { name: "AI Diagnosis" });
+  assert.ok(reason.compareDocumentPosition(diagnose) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(within(panelOf("running-now")).queryByRole("button", { name: "AI Diagnosis" }), null);
   assert.equal(within(panelOf("running-now")).queryByText(timeout), null);
+});
+
+test("a failed instance with no error text still offers diagnosis alongside its failed status", () => {
+  renderInstances([inst("silent-failure", { state: "failed", message: "" })]);
+  const panel = within(panelOf("silent-failure"));
+  const state = panel.getByText("Failed", { exact: true }).closest("td");
+  assert.ok(state);
+  assert.ok(within(state).getByRole("button", { name: "AI Diagnosis" }));
+  assert.equal(panel.queryByText("Message", { exact: true }), null);
 });
 
 test("a replacement that is still starting already owns the unit", () => {
@@ -101,7 +120,7 @@ test("a replacement that is still starting already owns the unit", () => {
   const starting = inst("starting-now", { state: "starting", replica: { index: 0 }, schedule: unit("|[]") });
   renderInstances([failed, starting]);
 
-  assert.deepEqual(cardIds(), ["instance-starting-now", "instance-failed-attempt"]);
+  assert.deepEqual(cardIds(), ["instance-starting-now"]);
   assert.ok(within(panelOf("failed-attempt")).getByText("Previous attempt"));
   assert.equal(within(panelOf("starting-now")).queryByText(timeout), null);
 });
@@ -111,7 +130,7 @@ test("one current replica without a unit key still demotes the timed-out attempt
   const running = inst("running-now", { state: "running", replica: { index: 0 } });
   renderInstances([failed, running]);
 
-  assert.deepEqual(cardIds(), ["instance-running-now", "instance-old-attempt"]);
+  assert.deepEqual(cardIds(), ["instance-running-now"]);
   assert.ok(within(panelOf("old-attempt")).getByText("Previous attempt"));
 });
 
@@ -128,7 +147,6 @@ test("an exhausted ordinary replica stays a current failure beside a running sib
 
   assert.equal(within(panelOf("replica-1-failed")).queryByText("Previous attempt"), null);
   assert.ok(within(panelOf("replica-1-failed")).getByText(timeout));
-  assert.deepEqual(cardIds(), ["instance-replica-1-failed", "instance-replica-0-running"]);
 });
 
 test("an exhausted replica with no unit key stays current when another replica runs", () => {
@@ -137,7 +155,6 @@ test("an exhausted replica with no unit key stays current when another replica r
   renderInstances([exhausted, running], 2);
 
   assert.equal(within(panelOf("replica-1-failed")).queryByText("Previous attempt"), null);
-  assert.deepEqual(cardIds(), ["instance-replica-1-failed", "instance-replica-0-running"]);
 });
 
 test("a failed ordinary attempt is previous once every replica is filled", () => {
@@ -145,8 +162,8 @@ test("a failed ordinary attempt is previous once every replica is filled", () =>
   const first = inst("replica-a", { state: "running", replica: { index: 0 }, schedule: unit("|[]") });
   const second = inst("replica-b", { state: "running", replica: { index: 1 }, schedule: unit("|[]") });
   renderInstances([failed, first, second], 2);
+  assert.deepEqual(cardIds(), ["instance-replica-a"]);
 
-  assert.deepEqual(cardIds(), ["instance-replica-a", "instance-replica-b", "instance-old-attempt"]);
   assert.ok(within(panelOf("old-attempt")).getByText("Previous attempt"));
 });
 
@@ -157,7 +174,6 @@ test("an exhausted multi-node unit stays a current failure beside a different ru
 
   assert.equal(within(panelOf("unit-1-failed")).queryByText("Previous attempt"), null);
   assert.ok(within(panelOf("unit-1-failed")).getByText(timeout));
-  assert.deepEqual(cardIds(), ["instance-unit-1-failed", "instance-unit-0-running"]);
 });
 
 test("a replaced multi-node unit is a previous attempt before the other replica exists", () => {
@@ -165,7 +181,7 @@ test("a replaced multi-node unit is a previous attempt before the other replica 
   const running = inst("unit-0-running", { state: "running", replica: { index: 0 }, schedule: unit("|node-a[]|node-b[]") });
   renderInstances([failed, running], 2);
 
-  assert.deepEqual(cardIds(), ["instance-unit-0-running", "instance-unit-0-failed"]);
+  assert.deepEqual(cardIds(), ["instance-unit-0-running"]);
   assert.ok(within(panelOf("unit-0-failed")).getByText("Previous attempt"));
 });
 
@@ -175,6 +191,5 @@ test("two current replicas and no unit keys are not guessed into history", () =>
     inst("replica-a", { state: "running", replica: { index: 0 } }),
     inst("replica-b", { state: "running", replica: { index: 1 } }),
   ], 2);
-  assert.equal(document.body.textContent?.includes("Previous attempt"), false);
-  assert.deepEqual(cardIds(), ["instance-old-attempt", "instance-replica-a", "instance-replica-b"]);
+  assert.equal(within(panelOf("old-attempt")).queryByText("Previous attempt"), null);
 });

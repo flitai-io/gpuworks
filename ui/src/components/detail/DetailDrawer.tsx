@@ -4,8 +4,6 @@ import { Tabs, TabsList, TabItem, TabPanel } from "../ui/tabs";
 import type { TableProps } from "antd";
 import { useEffect, useState, type ReactNode } from "react";
 
-// As wide as the deployment drawer: room for a detail's tables without
-// scrolling sideways, never wider than the window less a margin.
 export const DETAIL_DRAWER_WIDTH = "min(720px, calc(100vw - 32px))";
 
 export type DetailTab = {
@@ -28,6 +26,7 @@ export default function DetailDrawer({
   onClose,
   title,
   subtitle,
+  width = DETAIL_DRAWER_WIDTH,
   extra,
   banner,
   tabs,
@@ -40,6 +39,7 @@ export default function DetailDrawer({
   onClose: () => void;
   title: ReactNode;
   subtitle?: ReactNode;
+  width?: string;
   extra?: ReactNode;
   banner?: ReactNode;
   tabs?: DetailTab[];
@@ -60,7 +60,7 @@ export default function DetailDrawer({
   };
   return (
     <SideDrawer title={title}
-      open={open} onClose={onClose} width={DETAIL_DRAWER_WIDTH} className={className}
+      open={open} onClose={onClose} width={width} className={className}
       subtitle={subtitle} extra={extra}>
       {banner}
       {tabs && <Tabs className="detail-tabs" value={activeTab} defaultValue={tabs[0]?.key} onValueChange={changeTab} variant="underline">

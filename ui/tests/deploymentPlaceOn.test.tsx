@@ -51,7 +51,9 @@ function mount(dep = deployment(), onChanged = () => {}) {
 }
 
 const count = () => screen.getByLabelText(locale.deployments.detail.replicas) as HTMLInputElement;
-const setCount = (value: string) => fireEvent.change(count(), { target: { value } });
+function setCount(value: string) {
+  fireEvent.change(count(), { target: { value } });
+}
 const picker = () => screen.getByRole("combobox", { name: r.placeOn.label });
 const apply = () => screen.getByText(r.apply).closest("button") as HTMLButtonElement;
 
@@ -90,6 +92,10 @@ test("growing sends the chosen nodes as place_on and nothing else changes", asyn
   stub();
   let changed = 0;
   const user = mount(deployment(), () => { changed += 1; });
+  setCount("3");
+  await choose("node-b");
+  await user.click(screen.getByRole("button", { name: locale.deployments.detail.cancel }));
+  assert.deepEqual(scaled, []);
   setCount("3");
   await choose("node-b", "node-c");
   await user.click(apply());

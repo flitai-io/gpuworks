@@ -24,16 +24,43 @@ def open_detail(page, server, name, labels):
     return drawer
 
 
+def replica_name(labels, row):
+    slot = row.get("replica") or row.get("schedule", {}).get("unit")
+    if slot is None:
+        return labels["detailLayout"]["unknownReplica"]
+    return labels["replica"]["unitLabel"].replace("{{index}}", str(slot["index"] + 1))
+
+
+def select_instance(drawer, labels, row):
+    title = labels["detail"]["instanceDetails"]
+    drawer.get_by_role("tab", name=re.compile("^" + re.escape(title))).click()
+    filters = drawer.get_by_role("group", name=labels["detailLayout"]["recordState"])
+    filters.get_by_role("button", name=re.compile("^" + re.escape(labels["detail"]["allInstances"]) + r"\s+\d+$")).click()
+    name = replica_name(labels, row)
+    picker = drawer.get_by_role("combobox", name=labels["detailLayout"]["switchReplica"])
+    picker.click()
+    drawer.page.get_by_role("option", name=re.compile("^" + re.escape(name) + r"(?: · |$)")).click()
+    uuid = row["uuid"]
+    panel = drawer.locator("#instance-" + uuid)
+    if not panel.is_visible():
+        drawer.get_by_role("combobox", name=labels["detail"]["switchInstance"]).click()
+        drawer.page.get_by_role("option", name=re.compile("^" + re.escape(uuid))).click()
+    expect(panel).to_be_visible()
+    return drawer.get_by_role("group", name=labels["detailLayout"]["replicaControls"])
+
+
 def ui_ready(drawer, labels, document):
-    count = document["replicas"]
-    text = labels["detail"]["readyReplicas"].replace("{{ready}}", str(count)).replace("{{desired}}", str(count))
+    overview = drawer.get_by_role("tab", name=labels["detail"]["title"], exact=True)
+    overview.click()
+    count = str(document["replicas"])
+    text = labels["detailLayout"]["ready"].replace("{{ready}}", count).replace("{{total}}", count)
     expect(drawer.get_by_text(text, exact=True)).to_be_visible()
-    expect(drawer.get_by_role("spinbutton", name=labels["detail"]["replicas"], exact=True)).to_have_value(str(count))
+    checks.expect_saved_count(drawer, labels, count)
     expect(button(drawer, labels["replica"]["apply"])).to_be_disabled()
-    ids = sorted(item["uuid"] for item in fixture.current(document))
-    expect(drawer.locator('[id^="instance-"]')).to_have_count(len(document["instances"]))
-    for ident in ids:
-        expect(drawer.locator("#instance-" + ident)).to_be_visible()
+    for row in document["instances"]:
+        select_instance(drawer, labels, row)
+        expect(drawer.locator('[id^="instance-"]:visible')).to_have_count(1)
+    overview.click()
 
 
 def chat(server, key, served):
@@ -64,15 +91,6 @@ def visible_label(label):
     return re.compile(r"^\s*" + body + r"\s*$")
 
 
-def apply_button(drawer, replicas_label):
-    # The loading icon's aria-label is "loading", so the accessible name is
-    # no longer Apply while the write is held.
-    spin = drawer.get_by_role("spinbutton", name=replicas_label, exact=True)
-    return spin.locator(
-        'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " ant-space ")][1]'
-    ).locator("button").last
-
-
 def confirm_button(modal):
     return modal.locator(".ant-modal-footer .ant-btn-primary")
 
@@ -92,8 +110,11 @@ def capture_inflight(page, method, path, control, report, step):
         control.click()
         report["step"] = step
         report["last_step"] = step
-        expect(control).to_have_class(re.compile(r"\bant-btn-loading\b"))
-        control.click()
+        if method == "PUT":
+            expect(control).to_be_disabled()
+        else:
+            expect(control).to_have_class(re.compile(r"\bant-btn-loading\b"))
+        control.evaluate("button => button.click()")
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline and not held:
             page.wait_for_timeout(100)
@@ -123,7 +144,7 @@ def scale(page, server, token, report, data, labels, common, drawer, requests, a
     report["evidence"].append(assert_drawer_shell(
         page, drawer, data["body"]["name"],
         drawer.get_by_role("spinbutton", name=labels["detail"]["replicas"], exact=True),
-        page.get_by_role("dialog", name=labels["replica"]["restartTitle"], exact=True)))
+        page.get_by_role("dialog", name=labels["replica"]["restartNamed"].replace("{{label}}", replica_name(labels, original)), exact=True)))
     check(requests == [], "unchanged Apply caused mutation")
     parent = page.get_by_role("dialog", name=data["body"]["name"], exact=True)
     dep_path = f"/api/v1/deployments/{dep}"
@@ -135,7 +156,7 @@ def scale(page, server, token, report, data, labels, common, drawer, requests, a
 
     page.on("request", on_delete)
     delete_title = labels["delete"]["title"].replace("{{name}}", data["body"]["name"])
-    remove = parent.locator(".ant-drawer-extra").get_by_role("button", name=labels["delete"]["button"])
+    remove = parent.locator(".deployment-detail-actions").get_by_role("button", name=labels["delete"]["button"])
 
     def open_delete():
         remove.click()
@@ -166,7 +187,7 @@ def scale(page, server, token, report, data, labels, common, drawer, requests, a
         "dismissals": ["cancel", "escape", "close", "mask"],
         "focus_returned": True, "delete_requests": 0, "stored_name": data["body"]["name"]})
     drawer.get_by_role("spinbutton", name=labels["detail"]["replicas"], exact=True).fill("2")
-    control = apply_button(drawer, labels["detail"]["replicas"])
+    control = drawer.locator("button").filter(has_text=visible_label(labels["replica"]["apply"]))
     route, pattern, hold = capture_inflight(page, "PUT", f"/api/v1/deployments/{dep}/replicas",
                                           control, report, "replica-apply-inflight")
     with page.expect_response(lambda r: urlsplit(r.url).path == f"/api/v1/deployments/{dep}/replicas"
@@ -188,10 +209,10 @@ def scale(page, server, token, report, data, labels, common, drawer, requests, a
     ui_ready(drawer, labels, two)
     target = original
     survivor = next(i for i in fixture.current(two) if i["uuid"] != original["uuid"])
-    panel = drawer.locator("#instance-" + target["uuid"])
+    panel = select_instance(drawer, labels, target)
     button(panel, labels["replica"]["remove"]).click()
     pop = page.locator(".ant-popconfirm")
-    expect(pop.get_by_text(labels["replica"]["removeConfirm"], exact=True)).to_be_visible()
+    expect(pop.get_by_text(labels["replica"]["removeNamed"].replace("{{label}}", replica_name(labels, target)), exact=True)).to_be_visible()
     button(pop, labels["detail"]["cancel"]).click()
     expect(pop).not_to_be_visible()
     fixture.strict(requests, expected, "cancel removal wire")
@@ -241,9 +262,10 @@ def restart(page, server, token, report, holder, data, labels, common, drawer, r
     target = instances[0]
     report["step"] = "target restart confirmation and wire"
     # The restart Modal is portaled, so the drawer's .last locator would follow it.
+    select_instance(drawer, labels, target)
     parent = page.get_by_role("dialog").filter(has=page.locator("#instance-" + target["uuid"]))
     expect(parent).to_have_count(1)
-    panel = parent.locator("#instance-" + target["uuid"])
+    panel = parent.get_by_role("group", name=labels["detailLayout"]["replicaControls"])
     path = f"/api/v1/instances/{target['uuid']}/restart"
     posts = []
 
@@ -256,7 +278,7 @@ def restart(page, server, token, report, holder, data, labels, common, drawer, r
 
     def reopen():
         trigger.click()
-        opened = page.get_by_role("dialog", name=labels["replica"]["restartTitle"], exact=True)
+        opened = page.get_by_role("dialog", name=labels["replica"]["restartNamed"].replace("{{label}}", replica_name(labels, target)), exact=True)
         expect(opened).to_be_visible()
         expect(opened.get_by_role("checkbox", name=labels["replica"]["drain"], exact=True)).to_be_checked()
         return opened
@@ -274,7 +296,7 @@ def restart(page, server, token, report, holder, data, labels, common, drawer, r
           == sorted((item["uuid"], item["state"], item["container_id"]) for item in instances),
           "restart dialog dismissal changed instances")
     report["evidence"].append({
-        "layer": "ui", "restart_dialog": labels["replica"]["restartTitle"],
+        "layer": "ui", "restart_dialog": labels["replica"]["restartNamed"].replace("{{label}}", replica_name(labels, target)),
         "dismissals": ["cancel", "escape", "close", "mask"],
         "focus_returned": True, "restart_posts": 0, "instances_unchanged": True})
     expect(modal).to_be_in_viewport(ratio=1)
@@ -289,7 +311,7 @@ def restart(page, server, token, report, holder, data, labels, common, drawer, r
     report["last_step"] = "replica-restart-dialog-shell"
     assert_dialog_shell(page, modal, modal.get_by_text(labels["replica"]["restartDescription"], exact=True),
                         button(modal, labels["replica"]["restart"]))
-    report["evidence"].append({"layer": "ui", "dialog_shell": labels["replica"]["restartTitle"],
+    report["evidence"].append({"layer": "ui", "dialog_shell": labels["replica"]["restartNamed"].replace("{{label}}", replica_name(labels, target)),
         "viewport": "1440x900", "drain": drain})
     if checks.active(report, "cancel"):
         report["last_step"] = "replica-restart-draft-cancel-no-write"
@@ -332,10 +354,11 @@ def restart(page, server, token, report, holder, data, labels, common, drawer, r
         fixture.assert_counter_delta(probe_before, probe_after, target["container_id"], peer["container_id"],
                                      1, 0, "failover pre-drain held-stream target+1 peer+0")
         check(not stream.done.is_set(), "pre-drain counterfactual probe missed the held stream")
+    select_instance(drawer, labels, target)
     parent = page.get_by_role("dialog").filter(has=page.locator("#instance-" + target["uuid"]))
-    panel = parent.locator("#instance-" + target["uuid"])
+    panel = parent.get_by_role("group", name=labels["detailLayout"]["replicaControls"])
     button(panel, labels["replica"]["restart"]).click()
-    modal = page.get_by_role("dialog", name=labels["replica"]["restartTitle"], exact=True)
+    modal = page.get_by_role("dialog", name=labels["replica"]["restartNamed"].replace("{{label}}", replica_name(labels, target)), exact=True)
     checkbox = modal.get_by_role("checkbox", name=labels["replica"]["drain"], exact=True)
     if drain:
         checkbox.check()

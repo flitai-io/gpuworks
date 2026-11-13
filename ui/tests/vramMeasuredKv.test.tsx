@@ -4,6 +4,7 @@
 // line that carries it, and that it stays absent rather than showing a
 // confident zero when the engine never reported one.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { afterEach, test } from "node:test";
 import { JSDOM } from "jsdom";
 import React from "react";
@@ -29,6 +30,7 @@ await i18n.use(initReactI18next).init({
   resources: { en: { deploy: { vram: {
     title: "VRAM Allocation",
     measured: "Measured",
+    actualTotal: "Actual measured usage: {{value}} GiB",
     estimated: "Estimated",
     measuredCalibration: "Measured Calibration",
     measuredKvSummary: "KV pool {{value}} GiB · {{tokens}} tokens reported by the engine at startup",
@@ -42,7 +44,7 @@ await i18n.use(initReactI18next).init({
     partitionCapacity: "{{value}} GiB partition",
     fitFits: "fits",
     fitNoFit: "does not fit",
-    segment: { weights: "Weights", multimodal: "Multimodal", graph: "Graph", engine: "Engine", context: "Context", kvPool: "KV pool" },
+    segment: JSON.parse(readFileSync(new URL("../src/i18n/locales/en/deploy.json", import.meta.url), "utf8")).vram.segment,
     kvReason: {
       kv_no_measurement: "no measured KV cost for this model",
       kv_startup_exceeds_capacity: "it does not fit even before the KV cache",
@@ -107,6 +109,26 @@ test("renders the KV pool the engine reported, with its GiB figure", () => {
   assert.ok(screen.getByText(/KV pool 38\.4 GiB · 359,392 tokens reported by the engine at startup/),
     "measured KV line missing or unformatted");
   assert.ok(screen.getByText("Measured"), "measured bar label missing");
+});
+
+test("a measured instance still describes its VRAM usage below the bar when the engine did not report KV tokens", () => {
+  renderBreakdown({ ...breakdown, source: "measured", capacity_bytes: 128 * GIB }, {
+    ...measured, ModelWeightsGiB: 76.9, KVCacheGiB: 0, KVCacheTokens: 0,
+  });
+  const usage = screen.getByText(/Actual measured usage: 76.9 \/ 128.0 GiB/);
+  assert.match(usage.textContent ?? "", /60% used/);
+  assert.ok(screen.getByTitle("Weights 76.90 GiB").compareDocumentPosition(usage) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(screen.queryByText(/reported by the engine/), null);
+});
+
+test("each measured allocation is named and sized against the same GPU capacity", () => {
+  renderBreakdown({ ...breakdown, source: "measured", capacity_bytes: 20 * GIB }, {
+    ...measured, ModelWeightsGiB: 12, KVCacheGiB: 4, GraphCaptureGiB: 1,
+  });
+  assert.equal(screen.getByTitle("Weights 12.00 GiB").style.width, "60%");
+  assert.equal(screen.getByTitle("KV cache 4.00 GiB").style.width, "20%");
+  assert.equal(screen.getByTitle("CUDA graph capture 1.00 GiB").style.width, "5%");
+  assert.ok(screen.getByText(/Actual measured usage: 17.0 \/ 20.0 GiB/));
 });
 
 test("renders the estimate when no measurement is available", () => {

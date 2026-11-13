@@ -38,7 +38,8 @@ def require_dedicated_daemon(host, context=""):
     check(isinstance(host, str) and bool(host.strip()), "explicit dedicated DOCKER_HOST is required")
     parsed = urlsplit(host)
     path = parsed.path if parsed.scheme == "unix" else host
-    check(os.path.realpath(path) not in ("/run/docker.sock", "/var/run/docker.sock"),
+    defaults = {os.path.realpath(value) for value in ("/var/run/docker.sock", "/run/docker.sock")}
+    check(os.path.realpath(path) not in defaults,
           "the shared default Docker daemon is forbidden for this lane")
     check(parsed.scheme == "unix" and bool(parsed.path), "this local lane requires a dedicated unix Docker socket")
 

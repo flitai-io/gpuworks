@@ -85,14 +85,18 @@ function mountMode(dep: Deployment, onChanged = () => {}) {
   return userEvent.setup();
 }
 
-test("an automatic deployment says so, with its strategy, and offers the switch to manual", () => {
-  mountMode(deployment({ placement_mode: "auto", placement_strategy: "binpack" }));
-  assert.ok(screen.getByText(up.auto));
-  assert.ok(screen.getByText(locale.deployments.detail.placement.strategy.binpack));
-  assert.ok(screen.getByText(up.autoHint));
-  assert.ok(screen.getByRole("button", { name: up.toManual }));
-  assert.equal(screen.queryByRole("button", { name: up.toAuto }), null);
-});
+for (const strategy of ["binpack", "spread"] as const) {
+  test(`automatic placement shows its ${strategy} strategy before the action to switch modes`, () => {
+    mountMode(deployment({ placement_mode: "auto", placement_strategy: strategy }));
+    const modeTag = screen.getByText(up.auto);
+    const strategyTag = screen.getByText(locale.deployments.detail.placement.strategy[strategy]);
+    const switchButton = screen.getByRole("button", { name: up.toManual });
+    assert.ok(modeTag.compareDocumentPosition(strategyTag) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(strategyTag.compareDocumentPosition(switchButton) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(screen.getByText(up.autoHint));
+    assert.equal(screen.queryByRole("button", { name: up.toAuto }), null);
+  });
+}
 
 test("a manual deployment says so and offers the switch to automatic", () => {
   mountMode(deployment({ placement_mode: "manual" }));

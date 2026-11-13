@@ -576,6 +576,7 @@
     },
     "segment": {
       "weights": "Weights",
+      "graph": "CUDA graph capture",
       "multimodal": "Multimodal Encoder",
       "reserve": "Engine Reserve",
       "kvPool": "KV pool (estimated)"
