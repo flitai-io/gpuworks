@@ -63,6 +63,9 @@ type LaunchRequest struct {
 	ModelMount      string
 	ModelHostPath   string
 	ComponentMounts []proto.MountSpec
+	// ModelPaths is where each model an extra mount row names is on the node
+	// (deploy.ResolveLaunchInput.ModelPaths); empty in a preview.
+	ModelPaths map[uint]string
 
 	ServedName string
 	Sleepable  bool
@@ -246,7 +249,7 @@ func previewRequestedFeatures(req LaunchRequest) (*proto.RequestedFeatures, erro
 		Engine: engine, Params: params, Image: req.Source.Image, ContainerOverrides: req.Source.Overrides,
 		ComponentModelMount: componentModelMount(req), Entrypoint: req.Selection.Entrypoint,
 		PreStartArgv: req.Selection.PreStartArgv, PreStartScript: req.Selection.PreStartScript,
-		RuntimeAssets: req.Selection.RuntimeAssets, ComponentMounts: req.ComponentMounts,
+		RuntimeAssets: req.Selection.RuntimeAssets, ComponentMounts: req.ComponentMounts, ModelPaths: req.ModelPaths,
 		TemplateShmBytes: req.Selection.ShmBytes, TemplateMemlockUnlimited: req.Selection.MemlockUnlimited,
 		APIContract: req.APIContract, AllowUnresolved: true, TargetValidation: deploy.CollectTargetCapabilities,
 	})

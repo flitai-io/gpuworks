@@ -142,7 +142,9 @@ models:                       # FlatCatalog：顶层只有一个 models 列表
 大小写与别名不算解不出来：`--dtype half`
 与 `--speculative-algorithm eagle3` 都接受，入库时归一成字典的写法（`float16`、`EAGLE3`）。
 字典按引擎采用引擎自己的拼写：SGLang 的投机算法是大写的 `EAGLE`/`EAGLE3`/`NEXTN`/`DSPARK`/
-`NGRAM`/`STANDALONE`（其模型 hook 在归一化前就按大写比较），vLLM 是小写的方法名；KV 精度两边
+`NGRAM`/`STANDALONE`（其模型 hook 在归一化前就按大写比较），是封闭列表；vLLM 是小写的方法名，
+且和 tool call parser 一样只是建议列表（含 `dflash`、`dspark`），列表外的方法原样传给引擎，镜像里的
+vLLM 是否支持由部署者确认；KV 精度两边
 各自列全上游的取值（vLLM 的 `CacheDType`、SGLang 的 `--kv-cache-dtype` choices）。
 
 同名但不同词表：`--quantization` 是引擎的量化方法（如 `modelslim`），`weights.quantization`

@@ -83,7 +83,7 @@ await i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, render, screen, waitFor } =
+const { cleanup, fireEvent, render, screen, waitFor, within } =
   await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { Form } = await import("antd");
@@ -95,6 +95,8 @@ const DeployImageFields = (
   await import("../src/pages/deploy/DeployImageFields.tsx")
 ).default;
 const { buildPayload } = await import("../src/pages/deploy/deployHelpers.ts");
+const { api } = await import("../src/api.ts");
+const { installModels } = await import("./helpers/fakeModels.ts");
 
 afterEach(cleanup);
 after(() => {
@@ -335,6 +337,94 @@ test("a blank mount row is ignored while a half-filled row is rejected", async (
     undefined,
     "a half-filled row is not sent for the server to misread",
   );
+});
+
+test("a mount row can mount a registered model read-only", async () => {
+  const originals = { models: api.models, modelsPage: api.modelsPage, model: api.model };
+  installModels(api as never, [
+    { id: 41, name: "org/target", source: "huggingface", source_id: "org/target" },
+    { id: 42, name: "org/target-dflash", source: "huggingface", source_id: "org/target-dflash" },
+  ]);
+  try {
+    let form: FormInstance | undefined;
+    function Host() {
+      const [instance] = Form.useForm();
+      form = instance;
+      return (
+        <Form form={instance}>
+          <DeployImageFields
+            runtimeOnly
+            engines={{ data: [profile], loading: false }}
+            models={{ data: [model] }}
+            imageMode="auto"
+            inferenceSeries={[]}
+            imageSeriesLoading={false}
+            catalogVersions={[]}
+            autoResolutionText="automatic"
+            compatibilityWarnings={[]}
+            onlineNodes={[]}
+          />
+        </Form>
+      );
+    }
+    render(
+      <I18nextProvider i18n={i18n}>
+        <Host />
+      </I18nextProvider>,
+    );
+    const user = userEvent.setup({ document: dom.window.document });
+    await user.click(
+      screen.getByRole("button", { name: deployLocale.containerOverrides.addMount }),
+    );
+    const texts = deployLocale.containerOverrides;
+    // The row starts as a host path; switching to a model swaps the host
+    // path input for the model picker and locks the row read-only.
+    const sourceSelect = screen.getByRole("combobox", { name: texts.sourceLabel });
+    await user.click(sourceSelect);
+    await screen.findByRole("option", { name: texts.source.model });
+    assert.equal(
+      screen.queryByRole("option", { name: texts.source.volume }),
+      null,
+      "a new row is not offered a volume",
+    );
+    await user.click(screen.getByRole("option", { name: texts.source.model }));
+    await waitFor(() =>
+      assert.equal(screen.queryByPlaceholderText(texts.hostPathPlaceholder), null),
+    );
+    const readOnly = screen.getByRole("checkbox", { name: texts.readOnly }) as HTMLInputElement;
+    assert.equal(readOnly.checked, true);
+    assert.equal(readOnly.disabled, true);
+    assert.equal(
+      buildPayload(form!.getFieldsValue(true)).payload.container_overrides,
+      undefined,
+      "a model row with no model picked is not sent",
+    );
+
+    const row = sourceSelect.closest(".image-defaults-mount-row") as HTMLElement;
+    // The row's antd comboboxes, in order: model, purpose.
+    const picker = within(row)
+      .getAllByRole("combobox")
+      .filter((element) => element !== sourceSelect)[0];
+    fireEvent.mouseDown(picker);
+    const option = await screen.findByText("org/target-dflash");
+    await user.click(option);
+    await user.type(screen.getByPlaceholderText(texts.modelContainerPathPlaceholder), "/draft");
+    assert.deepEqual(buildPayload(form!.getFieldsValue(true)).payload.container_overrides, {
+      extra_mounts: [{ model_id: 42, container_path: "/draft", purpose: "models", read_only: true }],
+    });
+
+    // Back to a host path: the model is cleared, so the row cannot state two
+    // sources, and the read-only box is the deployer's again.
+    await user.click(sourceSelect);
+    await user.click(await screen.findByRole("option", { name: texts.source.host }));
+    await user.type(await screen.findByPlaceholderText(texts.hostPathPlaceholder), "/srv/draft");
+    assert.equal((screen.getByRole("checkbox", { name: texts.readOnly }) as HTMLInputElement).disabled, false);
+    assert.deepEqual(buildPayload(form!.getFieldsValue(true)).payload.container_overrides, {
+      extra_mounts: [{ host_path: "/srv/draft", container_path: "/draft", purpose: "models", read_only: true }],
+    });
+  } finally {
+    Object.assign(api, originals);
+  }
 });
 
 test("the start timeout field shows the cluster default and sends only a stated value", async () => {

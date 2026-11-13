@@ -124,6 +124,9 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 	if err := ValidateHealthCheckThreshold(&req); err != nil {
 		return nil, invalid(err)
 	}
+	if err := s.ValidateMountModels(&req); err != nil {
+		return nil, invalid(err)
+	}
 	pdReq, err := s.preparePDDeployRequest(&req, "")
 	if err == nil && pdReq != nil {
 		_, err = s.pdGroup(pdReq)

@@ -10,7 +10,11 @@ import {
   Select,
   Space,
 } from "antd";
+import { useReducer } from "react";
 import { useTranslation } from "react-i18next";
+import { api, usePolling } from "../../api";
+import { OptionSelect } from "../../ui-kit/OptionSelect";
+import ModelPicker from "./ModelPicker";
 
 type Props = {
   // The engine profile's /dev/shm size, which the server sends. It is only the
@@ -66,6 +70,9 @@ export default function ContainerOverridesEditor({
   // What an empty field takes: the draft's resolved size once the server has
   // stated it, the engine default (without the tier) until then.
   const shmEmptyGiB = shmResolvedGiB ?? shmDefaultGiB;
+  // A row's source is read off the fields it states at render; switching it
+  // writes the form without re-rendering this component, so it asks to.
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
   return (
     <Space direction="vertical" size={8} style={{ width: "100%" }}>
       <Form.Item
@@ -219,11 +226,27 @@ export default function ContainerOverridesEditor({
           {(fields, { add, remove }, { errors }) => (
             <Space direction="vertical" style={{ width: "100%" }} size={4}>
               {fields.map(({ key, ...field }) => {
-                const volumeSource =
-                  Boolean(
-                    form.getFieldValue([mountsName, field.name, "volume"]),
-                  ) &&
-                  !form.getFieldValue([mountsName, field.name, "host_path"]);
+                const row = (form.getFieldValue([mountsName, field.name]) ?? {}) as MountRow;
+                const source = mountSource(row);
+                const setSource = (next: MountSource) => {
+                  // A row mounts one source: switching clears the others, and
+                  // a model row is read-only and for models by default.
+                  const current = form.getFieldValue([mountsName, field.name]) ?? {};
+                  const cleared: MountRow = {
+                    ...current,
+                    host_path: undefined,
+                    volume: undefined,
+                    model_id: undefined,
+                  };
+                  if (next === "host") cleared.host_path = "";
+                  if (next === "model") {
+                    cleared.model_id = null;
+                    cleared.read_only = true;
+                    cleared.purpose = "models";
+                  }
+                  form.setFieldValue([mountsName, field.name], cleared);
+                  rerender();
+                };
                 return (
                   <Row
                     className="image-defaults-mount-row"
@@ -231,23 +254,44 @@ export default function ContainerOverridesEditor({
                     gutter={8}
                     align="middle"
                   >
-                    <Col flex="1">
-                      <Form.Item
-                        {...field}
-                        name={[
-                          field.name,
-                          volumeSource ? "volume" : "host_path",
-                        ]}
-                        noStyle
-                      >
-                        <Input
-                          placeholder={t(
-                            volumeSource
-                              ? "containerOverrides.volumePlaceholder"
-                              : "containerOverrides.hostPathPlaceholder",
-                          )}
-                        />
-                      </Form.Item>
+                    <Col flex="1" style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", gap: 8, minWidth: 0 }}>
+                        <div style={{ flex: "0 0 112px", minWidth: 0 }}>
+                          <OptionSelect
+                            aria-label={t("containerOverrides.sourceLabel")}
+                            value={source}
+                            onChange={(next) => setSource(next as MountSource)}
+                            options={[
+                              { value: "host", label: t("containerOverrides.source.host") },
+                              { value: "model", label: t("containerOverrides.source.model") },
+                              // A named volume can only be read off a stored
+                              // row; the form offers it only to keep one.
+                              ...(source === "volume"
+                                ? [{ value: "volume", label: t("containerOverrides.source.volume") }]
+                                : []),
+                            ]}
+                          />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Form.Item
+                            {...field}
+                            name={[field.name, sourceField[source]]}
+                            noStyle
+                          >
+                            {source === "model" ? (
+                              <MountModelPicker />
+                            ) : (
+                              <Input
+                                placeholder={t(
+                                  source === "volume"
+                                    ? "containerOverrides.volumePlaceholder"
+                                    : "containerOverrides.hostPathPlaceholder",
+                                )}
+                              />
+                            )}
+                          </Form.Item>
+                        </div>
+                      </div>
                     </Col>
                     <Col flex="1">
                       <Form.Item
@@ -257,7 +301,9 @@ export default function ContainerOverridesEditor({
                       >
                         <Input
                           placeholder={t(
-                            "containerOverrides.containerPathPlaceholder",
+                            source === "model"
+                              ? "containerOverrides.modelContainerPathPlaceholder"
+                              : "containerOverrides.containerPathPlaceholder",
                           )}
                         />
                       </Form.Item>
@@ -296,7 +342,12 @@ export default function ContainerOverridesEditor({
                         valuePropName="checked"
                         noStyle
                       >
-                        <Checkbox>{t("containerOverrides.readOnly")}</Checkbox>
+                        {/* The server mounts a model read-only whatever the
+                            row says; the box shows that instead of offering
+                            a choice it would not honor. */}
+                        <Checkbox disabled={source === "model"}>
+                          {t("containerOverrides.readOnly")}
+                        </Checkbox>
                       </Form.Item>
                     </Col>
                     <Col>
@@ -331,5 +382,56 @@ export default function ContainerOverridesEditor({
         </Form.List>
       </Form.Item>
     </Space>
+  );
+}
+
+// MountRow is one extra mount row as the form holds it. model_id is null on a
+// model row whose model is not picked yet.
+type MountRow = {
+  host_path?: string;
+  volume?: string;
+  model_id?: number | null;
+  container_path?: string;
+  purpose?: string;
+  read_only?: boolean;
+};
+
+type MountSource = "host" | "volume" | "model";
+
+// sourceField is the row field each source states.
+const sourceField: Record<MountSource, keyof MountRow> = {
+  host: "host_path",
+  volume: "volume",
+  model: "model_id",
+};
+
+// mountSource is the source a row states. It is read off the row's fields
+// instead of stored beside them, so the payload carries only server keys.
+export function mountSource(row: MountRow): MountSource {
+  if (row.model_id !== undefined) return "model";
+  if (row.volume && !row.host_path) return "volume";
+  return "host";
+}
+
+// MountModelPicker picks a registered model for a mount row. It reads the
+// chosen model by id so its name shows even when a search leaves it out.
+function MountModelPicker({
+  value,
+  onChange,
+}: {
+  value?: number | null;
+  onChange?: (value: number | undefined) => void;
+}) {
+  const selected = usePolling(
+    () => (value ? api.model(value) : Promise.resolve(undefined)),
+    0,
+    [value],
+  );
+  return (
+    <ModelPicker
+      value={value ?? undefined}
+      onChange={(next) => onChange?.(next)}
+      selected={selected.data ?? undefined}
+    />
   );
 }

@@ -145,7 +145,7 @@ sleep、LoRA、投机解码、KV 卸载等特性只在对应字典字段被声�
 | 字段 | 作用 | 限制 |
 |---|---|---|
 | `env` / `env_unset` | 新增、覆盖环境变量；删除引擎或模板设置的变量 | 设备与 dGPU 的 env 由 agent 在节点上注入，不受影响 |
-| `extra_mounts` | 主机目录或命名卷 → 容器路径，可只读 | 路径须绝对、非根；不得与平台挂载重叠或嵌套 |
+| `extra_mounts` | 主机目录、命名卷或已注册模型（`model_id`）→ 容器路径，可只读；模型行总是只读，部署像依赖模板组件一样依赖该模型：节点上没有时按模型所在存储获取，启动时挂载节点上的实际目录，例如把投机解码的 draft 挂到 `/draft` | 每行只有一个来源；路径须绝对、非根；不得与平台挂载重叠或嵌套；`model_id` 须是已注册模型（`MOUNT_MODEL_NOT_FOUND`） |
 | `model_mount_path` | 模型挂载路径（默认 `/model`），同时改写命令里的模型路径 | 有模型组件时不得改主组件路径 |
 | `shm_bytes` | 容器 `/dev/shm` tmpfs 的大小上限，不是内存预留；不填为引擎基线 16 GiB 加上 CPU 内存层的大小（没开内存层就是 16 GiB），模板档位声明了 `shm_bytes` 且更大时取模板的值；docker 参数含 `--ipc=host` 时启动配置不带大小（也不下发 `--shm-size`），容器共用宿主机 `/dev/shm` | 与 `--ipc=host` 同时设置被拒（`SHM_SIZE_WITH_HOST_IPC`）；小于 CPU 内存层被拒（`SHM_BELOW_KV_CPU_TIER`） |
 | `docker_args` | 按顺序追加到 `docker run`；最终的参数里还有平台追加的 RDMA 选项，以及模板档位 `memlock_unlimited` 带来的 `--ulimit memlock=-1:-1` | 见下表 |

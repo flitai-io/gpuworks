@@ -57,6 +57,9 @@ const (
 	ErrorMountContainerPath = "MOUNT_CONTAINER_PATH"
 	ErrorMountHostPath      = "MOUNT_HOST_PATH"
 	ErrorMountTargetNested  = "MOUNT_TARGET_NESTED"
+	// ErrorMountModelNotFound answers an extra-mount row naming a model that
+	// is not registered (any more); model_id is the id the row states.
+	ErrorMountModelNotFound = "MOUNT_MODEL_NOT_FOUND"
 	// ErrorAutoPlacementTPRequired: an automatic multi-node request states no
 	// placement.tp, so how many free GPUs each node needs is unknown.
 	ErrorAutoPlacementTPRequired = "AUTO_PLACEMENT_TP_REQUIRED"

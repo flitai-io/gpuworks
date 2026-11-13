@@ -34,7 +34,7 @@ func ResolveAllocatedLaunch(req LaunchRequest, indexes []int, assigned int, para
 		ContainerOverrides: req.Source.Overrides, ComponentModelMount: componentModelMount(req),
 		Entrypoint: req.Selection.Entrypoint, PreStartArgv: req.Selection.PreStartArgv,
 		PreStartScript: req.Selection.PreStartScript, RuntimeAssets: req.Selection.RuntimeAssets,
-		ComponentMounts: req.ComponentMounts, TemplateShmBytes: req.Selection.ShmBytes, TemplateMemlockUnlimited: req.Selection.MemlockUnlimited,
+		ComponentMounts: req.ComponentMounts, ModelPaths: req.ModelPaths, TemplateShmBytes: req.Selection.ShmBytes, TemplateMemlockUnlimited: req.Selection.MemlockUnlimited,
 		APIContract: req.APIContract, PlacementVariables: variables, AllowUnresolved: unresolved,
 		HealthPath: plan.Profile.HealthPath, ModelWeightBytes: weightBytes,
 	})

@@ -141,7 +141,9 @@ and the import raises a `CATALOG_ARG_PASSED_THROUGH` warning naming the model, s
 Case differences and aliases do not count as decoding failures: `--dtype half`
 and `--speculative-algorithm eagle3` are both accepted and normalized to the dictionary's spelling (`float16` and `EAGLE3`) before storage.
 The dictionary uses each engine's own spelling: SGLang's speculative algorithms are uppercase `EAGLE`/`EAGLE3`/`NEXTN`/`DSPARK`/
-`NGRAM`/`STANDALONE` (its model hook compares against uppercase values before normalization), while vLLM uses lowercase method names. For KV precision, each engine's list
+`NGRAM`/`STANDALONE` (its model hook compares against uppercase values before normalization) and form a closed list, while vLLM uses lowercase method names
+that, like the tool call parsers, are only suggestions (including `dflash` and `dspark`): a method outside the list reaches the engine verbatim, and whether
+the image's vLLM supports it is the deployer's to check. For KV precision, each engine's list
 includes all upstream values (vLLM's `CacheDType` and SGLang's `--kv-cache-dtype` choices).
 
 Similar names, different vocabularies: `--quantization` is the engine's quantization method (such as `modelslim`), while `weights.quantization`

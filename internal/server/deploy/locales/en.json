@@ -252,12 +252,16 @@
   },
   "speculative_algorithm": {
     "label": "Speculative Decoding Algorithm",
+    "placeholder": "Choose an algorithm",
+    "help": "For vLLM the list is only suggestions: type any method name the engine supports and it is passed as written; whether the chosen image supports it is yours to check. For SGLang, choose from the list. For an algorithm that needs a draft, such as DFlash, mount a registered model under Extra Mounts and enter its container path as the draft model.",
     "options": {
       "eagle": "EAGLE",
       "eagle3": "EAGLE 3",
       "mtp": "MTP",
       "ngram": "N-gram",
       "draft_model": "Draft Model",
+      "dflash": "DFlash",
+      "dspark": "DSpark",
       "EAGLE": "EAGLE",
       "EAGLE3": "EAGLE 3",
       "NEXTN": "NextN (MTP)",
@@ -268,7 +272,7 @@
   },
   "speculative_draft_model": {
     "label": "Draft Model",
-    "placeholder": "Model ID or path inside the container"
+    "placeholder": "Container path, such as /draft for a model mounted under Extra Mounts; or a model ID"
   },
   "speculative_tokens": {
     "label": "Speculative Tokens per Step"
