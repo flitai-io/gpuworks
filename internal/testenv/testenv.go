@@ -38,6 +38,9 @@ type GPUSpec struct {
 	Healthy           *bool
 }
 
+// AdminPassword is the password of the harness server's "admin" account.
+const AdminPassword = "gpuworks-test-password-2026"
+
 type nodeOptions struct {
 	gpus                    []GPUSpec
 	gpuIndexes              []int
@@ -238,7 +241,7 @@ func newEnv(t testing.TB, modelEndpoint, dbPath string, recovery bool, allowedPr
 			allowedPrivateHosts = append(append([]string(nil), allowedPrivateHosts...), endpoint.Hostname())
 		}
 	}
-	a, err := serverapp.New(serverapp.Config{Addr: "127.0.0.1:0", DataDir: dir, DBPath: dsn, AdminUser: "admin", AdminPassword: "gpuworks-test-password-2026", ModelEndpoint: modelEndpoint, OutboundAllowPrivateHosts: allowedPrivateHosts,
+	a, err := serverapp.New(serverapp.Config{Addr: "127.0.0.1:0", DataDir: dir, DBPath: dsn, AdminUser: "admin", AdminPassword: AdminPassword, ModelEndpoint: modelEndpoint, OutboundAllowPrivateHosts: allowedPrivateHosts,
 		// CI routes SSH to cloud nodes through a SOCKS proxy (.gitlab-ci.yml).
 		SSHProxy: os.Getenv("GPUWORKS_SSH_PROXY"), RecoveryEnabled: recovery}, harnessLogger(t))
 	if err != nil {
@@ -432,7 +435,7 @@ type APIClient struct {
 
 func (e *Env) API(t testing.TB) *APIClient {
 	t.Helper()
-	payload := bytes.NewBufferString(`{"username":"admin","password":"gpuworks-test-password-2026"}`)
+	payload := bytes.NewBufferString(`{"username":"admin","password":"` + AdminPassword + `"}`)
 	req, err := http.NewRequest(http.MethodPost, e.baseURL+"/api/v1/auth/login", payload)
 	if err != nil {
 		t.Fatal(err)
