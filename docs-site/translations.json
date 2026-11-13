@@ -123,7 +123,7 @@
   "how-to/wsl2-with-docker.md": "9da9306d2a5bbcf190f91f1481899ce34b0bdf48e73a6cd55ec2daa2501ec851",
   "reference/api-conventions.md": "be9237a197c811a623e5bd4e1aba875de5a46b333c3def6b5ac223b7a125a551",
   "reference/api.md": "f528cb856c5544b6cb19d925711ac87d255d910d00a5a750a39d97eaa738edf9",
-  "reference/ascend-support-matrix.md": "ba4a6b52bad19a5cfa9d10b04145045f06555d41af7d7d3adbae938db9cf1252",
+  "reference/ascend-support-matrix.md": "ca0ca41f25a1ea6ec08286d64c7fe195a9afda2e952242446631cb2e788e6aa9",
   "reference/cli.md": "e2a78d0e813832188c40cfc461cb27637c70d462f532e9194d92a76aadf77f21",
   "reference/configuration.md": "54d747b9ee678aa406b162c8f0044c7ad1e7688f0f8720b8c43fa25e8407a919",
   "reference/deployment-launch-sources.md": "6aba74af1b21bfedb4fc4f56836f2659c714cb266dd405e642c6d7d470475a21",
