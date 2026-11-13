@@ -17,12 +17,17 @@ import (
 
 	_ "github.com/glebarez/go-sqlite"
 
+	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/selfinstall"
 	"gpuworks.ai/gpuworks/internal/server/serverconfig"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-// This fixture uses SQLite's real wire schema and WAL rather than permissive
-// inventory stubs. Secret-bearing columns ensure checklist projections stay safe.
+// This fixture is the schema the migrations really produce (store.Open), in
+// WAL mode, rather than hand-written tables: a hand-made CREATE TABLE repeats
+// whatever column names the inventory query assumed, which is how a query of
+// a column that does not exist once passed here. Rows name their columns, and
+// secret-bearing columns ensure checklist projections stay safe.
 func serverChecklistFixture(t *testing.T) (selfinstall.Layout, *sql.DB) {
 	t.Helper()
 	layout := selfinstall.NewLayout(t.TempDir(), "", "")
@@ -36,22 +41,21 @@ func serverChecklistFixture(t *testing.T) (selfinstall.Layout, *sql.DB) {
 	if err := os.WriteFile(layout.Binary(), []byte("fixture binary"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	db, err := sql.Open("sqlite", filepath.Join(layout.DataDir, "gpuworks.db"))
+	path := filepath.Join(layout.DataDir, "gpuworks.db")
+	st, err := store.Open(path, bus.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	for _, query := range []string{
-		`PRAGMA journal_mode=WAL`,
-		`CREATE TABLE nodes (id integer, uuid text, name text, state text, token text)`,
-		`CREATE TABLE deployments (id integer, name text, desired_state text)`,
-		`CREATE TABLE instances (id integer, uuid text, deployment_id integer, node_id integer, state text, container_id text, api_port integer, gpu_indexes text)`,
-		`CREATE TABLE provider_instances (id integer, provider_id integer, external_id text, name text, power text, node_id integer, ssh_connections text)`,
-		`CREATE TABLE cloud_resource_leases (id integer, provider_id integer, cloud_host_id integer, node_uuid text, instance_uuid text, resource_type text, resource_id text, amount integer, unit text, state text)`,
-	} {
-		if _, err := db.Exec(query); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+		t.Fatal(err)
 	}
 	return layout, db
 }
@@ -59,11 +63,11 @@ func serverChecklistFixture(t *testing.T) (selfinstall.Layout, *sql.DB) {
 func TestUninstallCLIPreviewsPersistedWorkloadsWithoutChangingDatabase(t *testing.T) {
 	layout, db := serverChecklistFixture(t)
 	for _, query := range []string{
-		`INSERT INTO nodes VALUES (7,'node-7','gpu node','offline','DO-NOT-LEAK-node-token')`,
-		`INSERT INTO deployments VALUES (8,'chat model','active')`,
-		`INSERT INTO instances VALUES (9,'instance-9',8,7,'running','gpuworks-instance',8000,'[0]')`,
-		`INSERT INTO provider_instances VALUES (1,2,'vendor-vm','rented vm','running',7,'DO-NOT-LEAK-ssh')`,
-		`INSERT INTO cloud_resource_leases VALUES (1,2,3,'node-7','instance-9','gpu','gpu-id',1,'card','reserved')`,
+		`INSERT INTO nodes (id, uuid, name, state, token) VALUES (7,'node-7','gpu node','offline','DO-NOT-LEAK-node-token')`,
+		`INSERT INTO deployments (id, name, desired_state) VALUES (8,'chat model','active')`,
+		`INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (9,'instance-9',8,7,'running','gpuworks-instance',8000,'[0]')`,
+		`INSERT INTO provider_instances (id, provider_id, external_id, name, power, node_id, ssh_connections) VALUES (1,2,'vendor-vm','rented vm','running',7,'DO-NOT-LEAK-ssh')`,
+		`INSERT INTO cloud_resource_leases (id, provider_id, cloud_host_id, node_uuid, instance_uuid, resource_type, resource_id, amount, unit, state) VALUES (1,2,3,'node-7','instance-9','gpu','gpu-id',1,'card','reserved')`,
 	} {
 		if _, err := db.Exec(query); err != nil {
 			t.Fatal(err)
@@ -150,14 +154,14 @@ func TestUninstallCLIBlocksActiveOrUnreadableResourcesBeforeCleanup(t *testing.T
 		name, query string
 		breakDB     bool
 	}{
-		{name: "running instance", query: `INSERT INTO instances VALUES (9,'instance-active',8,7,'running','workload',8000,'[0]')`},
-		{name: "draining instance", query: `INSERT INTO instances VALUES (9,'instance-active',8,7,'draining','workload',8000,'[0]')`},
-		{name: "removing instance", query: `INSERT INTO instances VALUES (9,'instance-active',8,7,'removing','workload',8000,'[0]')`},
-		{name: "active deployment", query: `INSERT INTO deployments VALUES (8,'chat','active')`},
-		{name: "offline node unverified", query: `INSERT INTO nodes VALUES (7,'node-7','node','offline','secret')`},
-		{name: "unreleased reservation", query: `INSERT INTO cloud_resource_leases VALUES (1,2,3,'node-7','instance-9','gpu','gpu-id',1,'card','release_pending')`},
+		{name: "running instance", query: `INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (9,'instance-active',8,7,'running','workload',8000,'[0]')`},
+		{name: "draining instance", query: `INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (9,'instance-active',8,7,'draining','workload',8000,'[0]')`},
+		{name: "removing instance", query: `INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (9,'instance-active',8,7,'removing','workload',8000,'[0]')`},
+		{name: "active deployment", query: `INSERT INTO deployments (id, name, desired_state) VALUES (8,'chat','active')`},
+		{name: "offline node unverified", query: `INSERT INTO nodes (id, uuid, name, state, token) VALUES (7,'node-7','node','offline','secret')`},
+		{name: "unreleased reservation", query: `INSERT INTO cloud_resource_leases (id, provider_id, cloud_host_id, node_uuid, instance_uuid, resource_type, resource_id, amount, unit, state) VALUES (1,2,3,'node-7','instance-9','gpu','gpu-id',1,'card','release_pending')`},
 		{name: "incomplete schema", query: `DROP TABLE instances`},
-		{name: "unknown instance state", query: `INSERT INTO instances VALUES (9,'instance-active',8,7,'future-state','workload',8000,'[0]')`},
+		{name: "unknown instance state", query: `INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (9,'instance-active',8,7,'future-state','workload',8000,'[0]')`},
 		{name: "damaged database", breakDB: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -219,7 +223,7 @@ func checklistTree(t *testing.T, root string) map[string]string {
 
 func TestUninstallCLIKeepResourcesRetainsEvidenceAfterPurge(t *testing.T) {
 	layout, db := serverChecklistFixture(t)
-	if _, err := db.Exec(`INSERT INTO instances VALUES (9,'instance-kept',8,7,'running','workload-kept',8000,'[0]')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (9,'instance-kept',8,7,'running','workload-kept',8000,'[0]')`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -308,7 +312,7 @@ func TestUninstallCLIRechecksInventoryAfterConfirmation(t *testing.T) {
 	layout, db := serverChecklistFixture(t)
 	streams, out := uninstallStreams("", true)
 	streams.In = &checklistConfirmation{Reader: strings.NewReader("yes\n"), beforeRead: func() {
-		if _, err := db.Exec(`INSERT INTO instances VALUES (15,'arrived-during-confirmation',8,7,'starting','new-workload',8001,'[1]')`); err != nil {
+		if _, err := db.Exec(`INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (15,'arrived-during-confirmation',8,7,'starting','new-workload',8001,'[1]')`); err != nil {
 			t.Fatal(err)
 		}
 	}}
@@ -353,7 +357,7 @@ func TestUninstallCLICancelledConfirmationPreservesInstallation(t *testing.T) {
 
 func TestUninstallCLIPrivateWALSnapshotIsRemovedAndDoesNotTouchSource(t *testing.T) {
 	layout, db := serverChecklistFixture(t)
-	if _, err := db.Exec(`INSERT INTO instances VALUES (20,'only-in-WAL',8,7,'running','workload',8000,'[0]')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (20,'only-in-WAL',8,7,'running','workload',8000,'[0]')`); err != nil {
 		t.Fatal(err)
 	}
 	before := checklistTree(t, layout.Dir)
@@ -389,7 +393,7 @@ func TestUninstallCLIDoesNotTreatRollbackTransactionAsEmptyInventory(t *testing.
 		t.Fatal(err)
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO instances VALUES (30,'not-committed',8,7,'running','workload',8000,'[0]')`); err != nil {
+	if _, err := tx.Exec(`INSERT INTO instances (id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes) VALUES (30,'not-committed',8,7,'running','workload',8000,'[0]')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(`INSERT INTO padding VALUES (zeroblob(1048576))`); err != nil {
@@ -409,7 +413,7 @@ func TestUninstallCLIDoesNotTreatRollbackTransactionAsEmptyInventory(t *testing.
 
 func TestUninstallCLIChangingWALProducesUnknownAndCleansSnapshot(t *testing.T) {
 	layout, db := serverChecklistFixture(t)
-	for _, query := range []string{`PRAGMA wal_autocheckpoint=0`, `CREATE TABLE padding (payload blob)`, `INSERT INTO padding VALUES (zeroblob(16777216))`, `INSERT INTO nodes VALUES (1,'node','changing','online','secret')`} {
+	for _, query := range []string{`PRAGMA wal_autocheckpoint=0`, `CREATE TABLE padding (payload blob)`, `INSERT INTO padding VALUES (zeroblob(16777216))`, `INSERT INTO nodes (id, uuid, name, state, token) VALUES (1,'node','changing','online','secret')`} {
 		if _, err := db.Exec(query); err != nil {
 			t.Fatal(err)
 		}
