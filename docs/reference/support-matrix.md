@@ -4,8 +4,8 @@
 |---|---|---|---|---|
 | NVIDIA / CUDA | nvidia-smi、sysfs | Docker、runveil、nerdctl | HAMi libvgpu.so（x86_64，glibc ≥ 2.17） | 支持 CUDA/NCCL 拓扑；驱动库由宿主机提供 |
 | 昇腾 / CANN | npu-smi、驱动和 CANN 事实 | Docker + Ascend runtime；部分环境 runveil | vcann-rt；能力取决于宿主机 device-share 权限 | 外层/内层 CANN 版本不能混为一个结论 |
-| AMD / ROCm | amdgpu sysfs、KFD | Linux amd64、Docker/nerdctl/runveil/Kubernetes（整卡）；上游 vLLM ROCm 镜像已在 MI325X（gfx942）与 AMD395（gfx1151）单卡 BF16 文本推理实测，其余组合逐档待验 | amd-dgpu 显存配额（rocm-slicing-shim，用户态；已在 MI300X/gfx942 的 Docker 与 runveil 下实测，Docker/nerdctl/runveil） | 多机与 PP 经 vLLM mp 后端运行（RCCL 读取 NCCL_* 网络变量，已在两台 MI325X 上实测 PP=2 与跨机 TP=2）；vLLM sleep/wake（L1/L2）与 PD（`vllm-nixl`，以太网 UCX TCP）已在 MI300X 上实测；这不是对所有 AMD 卡或 ROCm 组合的兼容性承诺 |
-| PPU / HGGC | ppu-smi | provider/runtime 依赖 | ppu-slicing-shim 显存配额与加权 QoS | 20/80 长负载已证明繁忙时吞吐权重，不是硬 SM 分区 |
+| AMD / ROCm | amdgpu sysfs、KFD | Linux amd64、Docker/nerdctl/runveil/Kubernetes（整卡）；上游 vLLM ROCm 镜像已在 MI325X（gfx942）与 AMD395（gfx1151）单卡 BF16 文本推理实测，其余组合逐档待验 | amd-dgpu 显存配额（rocm-slicing-shim，用户态；已在 MI300X/gfx942 的 Docker 与 runveil 下实测，Docker/nerdctl/runveil/Kubernetes） | 多机与 PP 经 vLLM mp 后端运行（RCCL 读取 NCCL_* 网络变量，已在两台 MI325X 上实测 PP=2 与跨机 TP=2）；vLLM sleep/wake（L1/L2）与 PD（`vllm-nixl`，以太网 UCX TCP）已在 MI300X 上实测；这不是对所有 AMD 卡或 ROCm 组合的兼容性承诺 |
+| PPU / HGGC | ppu-smi | provider/runtime 依赖 | ppu-slicing-shim 显存配额与加权 QoS（Docker、Kubernetes） | 20/80 长负载已证明繁忙时吞吐权重，不是硬 SM 分区 |
 | 海光 / DTK | hy-smi | 由目录 spec 和 runtime 决定 | Z100 / K100_AI / BW 原生 vdev（实验性，x86_64，Docker 或 runveil/udocker） | 需可选原生 helper、宿主库和逐卡行为探针；其他型号仍只支持整卡 |
 | Apple / Metal | sysctl、ioreg（macOS 15+，Apple silicon） | host（引擎为宿主机进程，镜像是 darwin 环境包） | 无；一台 Mac 按统一内存同时跑多个实例 | 1 张统一内存卡，显存为 Metal 工作集；不支持引擎休眠、多机、KV 磁盘层；见 [ADR 0044](../adr/0044-mac-engines-as-host-processes.md) |
 | 昆仑芯 / XRE | xpu-smi XML、PCI/sysfs 设备身份 | Linux amd64、Docker/nerdctl/Kubernetes、P800 PCIe / KL3、整卡 TP / PP / DP | 不支持 | TP、PP、引擎 DP；跨节点须满足通信前提；不开放 PD、sleep、runveil；镜像和模型使用显式目录 spec |
@@ -18,7 +18,7 @@
 dGPU 不可用时，节点仍可使用整卡部署；平台不会把不满足 dGPU 条件的实例静默改成不限制显存的实例来启动。
 昇腾实测组合、CANN 和 runtime 细节见[昇腾矩阵](ascend-support-matrix.md)；PPU 未完成项见[开发台账](../dev/ledgers/ppu-support-gaps.md)。
 
-Kubernetes 节点（见[接入 Kubernetes 集群](../how-to/connect-kubernetes.md)）支持 NVIDIA、昇腾、海光、PPU、AMD 与昆仑芯的整卡部署；dGPU 只有 NVIDIA HAMi-core 与昇腾 vcann-rt 可用，PPU、海光、AMD 的 dGPU 在 Kubernetes 上不可用。
+Kubernetes 节点（见[接入 Kubernetes 集群](../how-to/connect-kubernetes.md)）支持 NVIDIA、昇腾、海光、PPU、AMD 与昆仑芯的整卡部署；dGPU 支持 NVIDIA HAMi-core、昇腾 vcann-rt、PPU ppu-slicing-shim 与 AMD rocm-slicing-shim，海光原生 vdev 在 Kubernetes 上不可用（仍只做整卡部署）。
 
 
 ## dGPU 能力对比
@@ -27,32 +27,34 @@ Kubernetes 节点（见[接入 Kubernetes 集群](../how-to/connect-kubernetes.m
 |---|---|---|---|---|
 | NVIDIA HAMi-core | 硬显存上限 | 平台不开放算力上限；CUDA graph、cuBLAS 不受 HAMi 发射限流约束 | 支持安全在线调整；引擎可能仍需重启才能利用新额度 | 依赖内嵌资产校验与准入检查，豁免行为探针 |
 | 昇腾 vcann-rt | 显存配额，依赖宿主 device-share 权限 | 受 vcann-rt 与宿主组合影响，不据此承诺固定吞吐比例 | 重启实例生效 | 必须逐卡通过 |
-| PPU ppu-slicing-shim | 显存配额 | 繁忙时加权 QoS，空闲时可借用余量；非硬 SM 分区 | 重启实例生效 | 必须逐卡通过；当前仅 Docker |
+| PPU ppu-slicing-shim | 显存配额 | 繁忙时加权 QoS，空闲时可借用余量；非硬 SM 分区 | 重启实例生效 | 必须逐卡通过；Docker 与 Kubernetes |
 | 海光 Z100 / K100_AI / BW 原生 vdev（实验性） | 原生 vdev 显存配额；每实例一张卡 | CU 随显存比例分配，不支持独立设置算力配额 | 重启实例生效，并按新显存配额重建 vdev | 必须逐卡通过；x86_64 上的 Docker 或 runveil/udocker |
-| AMD rocm-slicing-shim（用户态） | HIP 运行时层拦截的硬显存上限 | 平台不开放算力上限；ROCm 通过 `HSA_CU_MASK` 在硬件层实施算力配额，低于预加载库能看到或校验的层面 | 重启实例生效（限额只在 HIP 运行时初始化时读取一次） | 豁免行为探针（宿主与轻量探针镜像都不保证有 ROCm 用户态运行库可供探针调用），依赖内嵌资产校验；Docker/nerdctl/runveil |
+| AMD rocm-slicing-shim（用户态） | HIP 运行时层拦截的硬显存上限 | 平台不开放算力上限；ROCm 通过 `HSA_CU_MASK` 在硬件层实施算力配额，低于预加载库能看到或校验的层面 | 重启实例生效（限额只在 HIP 运行时初始化时读取一次） | 豁免行为探针（宿主与轻量探针镜像都不保证有 ROCm 用户态运行库可供探针调用），依赖内嵌资产校验；Docker/nerdctl/runveil/Kubernetes |
 
 在线调整的安全条件与待重启原因见[调整 dGPU 配额](../how-to/dgpu.md#调整-dgpu-配额)。
 表中能力不代表任意推理镜像均已验证；节点是否可用仍以该卡的 `status` / `reason` 为准。
 
 ## AMD 整卡实现边界与验收状态
 
-当前 agent 和 server 实现的 AMD 主机接入范围是 Linux amd64、Docker、nerdctl、Kubernetes 或 runveil（udocker 驱动）、整卡部署（单机或 vLLM 多机；Kubernetes 上只有整卡，没有 dGPU）。PCI 库存仅把绑定 `amdgpu` 且具有匹配 KFD 计算节点的 AMD PCI 功能识别为卡；agent 再读取其 amdgpu sysfs/KFD 事实，按 PCI BDF 和可用的 unique ID 核对设备库存。缺少驱动绑定、KFD 或明确的 render 映射时不应推断可部署；运行时只注入所选卡的 render 节点及 `/dev/kfd`。dGPU 显存分区（`amd-dgpu`，libvrocm，仅显存、不含算力限额）在设备注入之上叠加 `LD_PRELOAD`/配额环境变量，详见上节「dGPU 能力对比」；dGPU 支持 Docker、nerdctl 与 runveil（PRoot 同样绑入 libvrocm.so 并经 `LD_PRELOAD` 加载）。runveil 把宿主整个 `/dev` 与 `/sys` 绑进容器，HIP 能枚举到所有卡，因此 agent 用 `ROCR_VISIBLE_DEVICES=GPU-<unique_id>`（ROCm 的 GPU UUID）锁定所选卡，缺 `unique_id` 的卡在 runveil 下拒绝启动；PRoot 以非 root 运行用户执行，并自动带上设备节点所属的组（如 render），已在 MI300X 上实测。数据并行（DP）与 NVIDIA 走同一路径。sleep 与 PD 沿用 vLLM 的协议与 `vllm-nixl` 模式；有 RDMA 时平台只指定 HCA、不写 CUDA 专用的 `UCX_TLS`，由 UCX 选择 ROCm 传输，这一路径未经真机验证。多机与 PP 走 vLLM mp 后端：RCCL 与 NVIDIA 一样读取 `NCCL_SOCKET_IFNAME`、`NCCL_IB_*`，agent 按节点地址填入网卡，无 RDMA 时关闭 IB。此范围描述 GPUWorks 当前实现，不代表所有 AMD GPU、驱动、内核或 ROCm 用户态组合都兼容。
+当前 agent 和 server 实现的 AMD 主机接入范围是 Linux amd64、Docker、nerdctl、Kubernetes 或 runveil（udocker 驱动）、整卡部署（单机或 vLLM 多机）；Kubernetes 上同时支持整卡与 dGPU 显存切分。PCI 库存仅把绑定 `amdgpu` 且具有匹配 KFD 计算节点的 AMD PCI 功能识别为卡；agent 再读取其 amdgpu sysfs/KFD 事实，按 PCI BDF 和可用的 unique ID 核对设备库存。缺少驱动绑定、KFD 或明确的 render 映射时不应推断可部署；运行时只注入所选卡的 render 节点及 `/dev/kfd`。dGPU 显存分区（`amd-dgpu`，libvrocm，仅显存、不含算力限额）在设备注入之上叠加 `LD_PRELOAD`/配额环境变量，详见上节「dGPU 能力对比」；dGPU 支持 Docker、nerdctl、Kubernetes 与 runveil（PRoot 同样绑入 libvrocm.so 并经 `LD_PRELOAD` 加载）。runveil 把宿主整个 `/dev` 与 `/sys` 绑进容器，HIP 能枚举到所有卡，因此 agent 用 `ROCR_VISIBLE_DEVICES=GPU-<unique_id>`（ROCm 的 GPU UUID）锁定所选卡，缺 `unique_id` 的卡在 runveil 下拒绝启动；PRoot 以非 root 运行用户执行，并自动带上设备节点所属的组（如 render），已在 MI300X 上实测。数据并行（DP）与 NVIDIA 走同一路径。sleep 与 PD 沿用 vLLM 的协议与 `vllm-nixl` 模式；有 RDMA 时平台只指定 HCA、不写 CUDA 专用的 `UCX_TLS`，由 UCX 选择 ROCm 传输，这一路径未经真机验证。多机与 PP 走 vLLM mp 后端：RCCL 与 NVIDIA 一样读取 `NCCL_SOCKET_IFNAME`、`NCCL_IB_*`，agent 按节点地址填入网卡，无 RDMA 时关闭 IB。此范围描述 GPUWorks 当前实现，不代表所有 AMD GPU、驱动、内核或 ROCm 用户态组合都兼容。
 
 内置镜像目录提供 `gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1`（基于上游 `vllm/vllm-openai-rocm`，ROCm 7.2.3、vLLM 0.30.0），内置推理目录为 Qwen3 0.6B–32B 与 30B-A3B 提供 `arch_id: gfx942`（MI300X/MI325X）的 BF16 vLLM 规格，为 0.6B–8B 提供 `arch_id: gfx1151`（Ryzen AI Max+ 395）的规格；选模型即可部署，无需导入镜像或模板。实测覆盖：MI325X 单卡与两台 MI325X 的 PP=2、跨机 TP=2，AMD395 单卡；只证明短文本推理与部署/停止流程，不代表回答质量、持续性能、长上下文或图片输入已验证。SGLang ROCm 档仍是 `catalog: false` 的未发布候选。UMA 容量按实际 KFD/GTT 事实读取，不可推广为其他 APU 或主机的可用 GPU 内存。`gpus.arch_id` 是精确、大小写不敏感匹配；缺失或不一致的架构事实不会通过。验收步骤见 [AMD 硬件验收指南](../dev/amd-hardware-validation.md)与 [ROCm 镜像配方](../../build/runner-images/rocm/README.md)。
 
 ## AMD dGPU 显存配额
 
-`amd-dgpu` 后端用 libvrocm.so（rocm-slicing-shim，`build/runtime-assets/amd/`）在 HIP 运行时层拦截分配与容量查询接口，只链接 libc，一份构建适配任意 ROCm 版本。注入在 AMD 整卡设备选择（render 节点 + `/dev/kfd`）之上叠加：`LD_PRELOAD` 指向挂载的 `/opt/gpuworks/partition/libvrocm.so`，`VROCM_DEVICE_MEMORY_LIMIT_<N>`（MiB，`N` 为容器自身可见设备列表里的位次，不是物理序号）按所选每张卡写入，`VROCM_LEDGER_PATH` 指向 `/dev/shm` 下的实例专属账本（容器需 `--ipc=host` 才能与宿主侧清理共享该路径，做法同 PPU）。限额只在 HIP 运行时初始化时读取一次，调小配额需重启实例才生效。
+`amd-dgpu` 后端用 libvrocm.so（rocm-slicing-shim，`build/runtime-assets/amd/`）在 HIP 运行时层拦截分配与容量查询接口，只链接 libc，一份构建适配任意 ROCm 版本。注入在 AMD 整卡设备选择（render 节点 + `/dev/kfd`）之上叠加：`LD_PRELOAD` 指向挂载的 `/opt/gpuworks/partition/libvrocm.so`，`VROCM_DEVICE_MEMORY_LIMIT_<N>`（MiB，`N` 为容器自身可见设备列表里的位次，不是物理序号）按所选每张卡写入，`VROCM_LEDGER_PATH` 指向宿主机 `/dev/shm` 下的实例专属账本（`/dev/shm/gpuworks-amd-<实例 UUID>`），该路径在 Docker、nerdctl 与 runveil 上不变，容器靠 `--ipc=host` 共享宿主机的 `/dev/shm`。Kubernetes 上 agent 自己的 `/dev/shm` 是 agent Pod 私有的 tmpfs，不是宿主机的：agent 经宿主 root（`/proc/1/root`）在宿主机 `/dev/shm` 预先创建这同一个账本路径（空文件，0666，不是 0777：容器可能以宿主机未知的 UID 运行，需要能写但不需要可执行），再把该宿主路径以 hostPath 原样挂进实例 Pod（可写），`VROCM_LEDGER_PATH` 的值不因此改变；libvrocm.so 仍按普通方式打开并在干净退出时 unlink 该文件，agent 的清理步骤兜底经宿主 root 删除同一路径。限额只在 HIP 运行时初始化时读取一次，调小配额需重启实例才生效。
 
 没有算力（SM/CU）配额：ROCm 用 `HSA_CU_MASK` 在硬件层强制算力配额，低于任何预加载库能看到或校验的层面，因此该后端只做显存、永不暴露算力上限。
 
-与 PPU/昇腾/海光不同，AMD 整卡注入不挂载任何宿主 ROCm 用户态库（只给 `/dev/kfd` 与所选 render 节点），轻量探针镜像也没有 HIP 运行时可调用，因此这个后端豁免行为探针（`SkipsBehaviorProbe`），就绪只看内嵌资产的 sha256 校验与 Docker/nerdctl 运行时约束——这与 NVIDIA HAMi-core 的做法一致，但不同于 PPU/昇腾/海光逐卡探针通过才算就绪。
+与 PPU/昇腾/海光不同，AMD 整卡注入不挂载任何宿主 ROCm 用户态库（只给 `/dev/kfd` 与所选 render 节点），轻量探针镜像也没有 HIP 运行时可调用，因此这个后端豁免行为探针（`SkipsBehaviorProbe`），就绪只看内嵌资产的 sha256 校验与 Docker/nerdctl/udocker/Kubernetes 运行时约束——这与 NVIDIA HAMi-core 的做法一致，但不同于 PPU/昇腾/海光逐卡探针通过才算就绪。
 
 ## PPU 设备身份与 dGPU 探针
 
 PPU 使用 `ppu-smi` 查询并经设备节点校验的身份，按选卡顺序分别注入两份数据：`CUDA_VISIBLE_DEVICES` 为计算程序使用的数字设备编号，`GPUWORKS_PPU_DEVICE_UUIDS` 为探针和 HGML 配额库使用的完整 UUID 列表。Docker/nerdctl 的数字编号来自过滤后的设备视图，udocker/runveil 使用宿主编号；两份列表的顺序一致。vLLM 和 SGLang 共用数字选择，不增加引擎判断。HGML 复用 UUID 顺序定位配额与显存账本；新 UUID 变量缺省时兼容旧 Agent 的设备选择变量。
 
 内嵌探针 `gpuworks/partition-probe:v4` 同时检查目标 UUID 和显存配额。缺失、无效、重复或不可查询的身份，以及只有其他卡显示配额的情况都不能通过。升级 agent 后需重新创建已有工作负载，新的设备选择与切分库才会生效；runveil 的设备可见性仍不等于内核设备隔离。
+
+`HGGC_LEDGER_PATH` 指向宿主机 `/dev/shm` 下的实例专属账本（`/dev/shm/gpuworks-ppu-<实例 UUID>`），账本路径与到达实例 Pod 的机制同 AMD（见上节「AMD dGPU 显存配额」）：Docker 上容器靠 `--ipc=host` 共享宿主机的 `/dev/shm`；Kubernetes 上 agent 经宿主 root 预先创建同一路径，再以 hostPath 挂进实例 Pod，路径本身不变。PPU 的 dGPU 分区目前支持 Docker 与 Kubernetes；udocker 尚未验证。
 
 ## 海光整卡驱动库
 
