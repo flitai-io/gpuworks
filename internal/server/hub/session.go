@@ -46,13 +46,11 @@ type Session struct {
 	imageStatusApplied  uint64        // of those, persisted; guarded by imageStatusMu
 	// reportMu fences status writes against session replacement, submitMu
 	// does the same for coalesced submits without ever being held across
-	// store I/O, and reports is the ordered status worker's queue
-	// (session_reports.go).
-	reportMu    sync.Mutex
-	submitMu    sync.Mutex
-	reportsOnce sync.Once
-	reports     chan func()
-	reportsDone chan struct{}
+	// store I/O, and reportQ is the ordered status worker's queue
+	// (session_report_queue.go).
+	reportMu sync.Mutex
+	submitMu sync.Mutex
+	reportQ  atomic.Pointer[reportQueue]
 	// Network saves coalesce independently from resource reconciliation.
 	networkSyncOnce   sync.Once
 	networkSyncNotify chan struct{}
@@ -491,6 +489,9 @@ func (s *Session) Close() {
 
 func (s *Session) markClosed() {
 	s.closeOnce.Do(func() { close(s.closed) })
+	if q := s.reportQ.Load(); q != nil {
+		q.wake() // a read loop waiting on a full queue gives up
+	}
 }
 
 // LastSeen returns the last activity time (unix ms).

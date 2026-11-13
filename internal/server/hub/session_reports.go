@@ -22,7 +22,9 @@ import (
 // sessionReportDepth bounds one session's unapplied ordered reports. Past it
 // the session's own read loop waits for its worker: ordered reports cannot be
 // dropped, and back-pressure confined to one node is what the store's single
-// writer can honestly offer. Other sessions are unaffected.
+// writer can honestly offer. Other sessions are unaffected. Progress reports
+// coalesce per instance (session_report_queue.go), so a storm of them holds
+// at most two pending reports per instance.
 const sessionReportDepth = 1024
 
 // applyCurrent runs write with the session's authenticated node ID only while
@@ -57,20 +59,25 @@ func (s *Session) fenceReports() {
 // submits, so jobs run in receipt order. A job offered after the session closed
 // may be dropped; applyCurrent would refuse it anyway. ctrlLoop drains before
 // it marks the session closed, so a normal disconnect drops nothing.
-func (s *Session) submitReport(job func()) {
-	s.reportsOnce.Do(func() {
-		s.reports = make(chan func(), sessionReportDepth)
-		s.reportsDone = make(chan struct{})
-		s.hub.trackSessionWork(func() {
-			defer close(s.reportsDone)
-			for job := range s.reports {
-				job()
-			}
-		})
-	})
+func (s *Session) submitReport(job func()) { s.pushReport(&reportJob{run: job}) }
+
+func (s *Session) pushReport(job *reportJob) {
+	q := s.reportQ.Load()
+	if q == nil {
+		if fresh := newReportQueue(); s.reportQ.CompareAndSwap(nil, fresh) {
+			s.hub.trackSessionWork(func() { s.runReports(fresh) })
+		}
+		q = s.reportQ.Load()
+	}
+	q.push(job, s.isClosed)
+}
+
+func (s *Session) isClosed() bool {
 	select {
-	case s.reports <- job:
-	case <-s.closed: // replaced or closing: applyCurrent would refuse it anyway
+	case <-s.closed:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -78,11 +85,12 @@ func (s *Session) submitReport(job func()) {
 // ends, so reports sent just before a disconnect still land while the session
 // is current. Called on the read loop, after its last submitReport.
 func (s *Session) drainReports() {
-	if s.reports == nil {
+	q := s.reportQ.Load()
+	if q == nil {
 		return
 	}
-	close(s.reports)
-	<-s.reportsDone
+	q.close()
+	<-q.done
 }
 
 func (s *Session) handleInstanceStatus(raw json.RawMessage) {
@@ -91,15 +99,18 @@ func (s *Session) handleInstanceStatus(raw json.RawMessage) {
 		s.hub.log.Warn("bad status.instance", "node", s.NodeUUID, "err", err)
 		return
 	}
-	s.submitReport(func() {
-		accepted, err := s.hub.applyInstanceStatus(s, st)
-		if err != nil {
-			s.hub.log.Debug("apply status.instance", "uuid", st.UUID, "err", err)
-		}
-		if accepted {
-			s.rememberAssetDigests(st.RuntimeAssetDigests)
-		}
-	})
+	s.submitInstanceStatus(st)
+}
+
+// applyInstanceReport persists one instance report through the full path.
+func (s *Session) applyInstanceReport(st proto.InstanceStatus) {
+	accepted, err := s.hub.applyInstanceStatus(s, st)
+	if err != nil {
+		s.hub.log.Debug("apply status.instance", "uuid", st.UUID, "err", err)
+	}
+	if accepted {
+		s.rememberAssetDigests(st.RuntimeAssetDigests)
+	}
 }
 
 func (s *Session) handleModelFileStatus(raw json.RawMessage) {
