@@ -94,16 +94,15 @@ func (b *builder) injectDictionary(key string, value any) {
 		b.injectKV(spec.Flag, strconv.FormatFloat(number, 'g', -1, 64))
 	case "json":
 		b.injectKV(spec.Flag, jsonText(value))
-	case "enum":
+	default:
 		// A configuration stored before the dictionary changed an engine's
 		// spelling (SGLang's eagle3 -> EAGLE3) still reaches the engine in the
-		// spelling it accepts. A value the row does not know goes out as
-		// written, for the engine to judge.
+		// spelling it accepts, for an enum and for a free-text key's suggested
+		// values alike. A value the row does not know goes out as written, for
+		// the engine to judge.
 		if stated, ok := canonicalValue(spec, value); ok {
 			value = stated
 		}
-		b.injectKV(spec.Flag, fmt.Sprint(value))
-	default:
 		b.injectKV(spec.Flag, fmt.Sprint(value))
 	}
 }

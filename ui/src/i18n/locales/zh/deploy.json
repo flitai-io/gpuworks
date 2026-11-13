@@ -1000,7 +1000,7 @@
     "startTimeoutHelpDefault": "实例启动后等待引擎健康检查通过的最长时间。留空自动计算：以集群默认的 {{seconds}} 秒为下限，结合已知引擎等待上限；显式值优先。",
     "seconds": "秒",
     "mounts": "额外挂载",
-    "mountsHelp": "用途用于调度和展示，不改变容器路径",
+    "mountsHelp": "用途用于调度和展示，不改变容器路径。选择“模型”可挂载一个已注册模型（例如投机解码的 draft），平台负责在节点上准备好它，并以只读方式挂载",
     "hostPathPlaceholder": "宿主路径，例如 /srv/cache",
     "volumePlaceholder": "数据卷名称",
     "containerPathPlaceholder": "容器路径，例如 /cache",
@@ -1012,7 +1012,15 @@
     },
     "readOnly": "只读",
     "deleteMountAria": "删除挂载",
-    "addMount": "添加挂载"
+    "addMount": "添加挂载",
+    "sourceLabel": "挂载来源",
+    "source": {
+      "host": "宿主路径",
+      "model": "模型",
+      "volume": "数据卷"
+    },
+    "modelContainerPathPlaceholder": "容器路径，例如 /draft",
+    "mountModelLabel": "挂载的模型"
   },
   "edit": {
     "loading": "正在载入部署……",

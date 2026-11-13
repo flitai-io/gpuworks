@@ -252,12 +252,16 @@
   },
   "speculative_algorithm": {
     "label": "投机解码算法",
+    "placeholder": "选择算法",
+    "help": "vLLM 的列表只是建议，可直接输入引擎支持的任意方法名，原样传给引擎，所选镜像是否支持由部署者自行确认；SGLang 只能从列表中选择。DFlash 等需要 draft 的算法，可在“额外挂载”中挂载一个已注册模型，再把它的容器路径填到 Draft 模型。",
     "options": {
       "eagle": "EAGLE",
       "eagle3": "EAGLE 3",
       "mtp": "MTP",
       "ngram": "N-gram",
       "draft_model": "Draft 模型",
+      "dflash": "DFlash",
+      "dspark": "DSpark",
       "EAGLE": "EAGLE",
       "EAGLE3": "EAGLE 3",
       "NEXTN": "NextN（MTP）",
@@ -268,7 +272,7 @@
   },
   "speculative_draft_model": {
     "label": "Draft 模型",
-    "placeholder": "模型 ID 或容器内路径"
+    "placeholder": "容器内路径，例如在额外挂载中挂载的模型 /draft；或模型 ID"
   },
   "speculative_tokens": {
     "label": "每步投机 Token 数"

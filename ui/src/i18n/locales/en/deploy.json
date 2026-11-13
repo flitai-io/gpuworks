@@ -1000,7 +1000,7 @@
     "startTimeoutHelpDefault": "Maximum wait for engine health after startup. Leave empty for an automatic budget using the cluster default of {{seconds}} s as a floor and the known engine deadline. An explicit value takes priority.",
     "seconds": "s",
     "mounts": "Additional Mounts",
-    "mountsHelp": "Purpose is used for scheduling and display and does not change the container path",
+    "mountsHelp": "The purpose is for scheduling and display and does not change the container path. Choose Model to mount a registered model (such as a speculative-decoding draft); the platform prepares it on the node and mounts it read-only",
     "hostPathPlaceholder": "Host path, for example /srv/cache",
     "volumePlaceholder": "Volume name",
     "containerPathPlaceholder": "Container path, for example /cache",
@@ -1012,7 +1012,15 @@
     },
     "readOnly": "Read-only",
     "deleteMountAria": "Delete mount",
-    "addMount": "Add Mount"
+    "addMount": "Add Mount",
+    "sourceLabel": "Mount source",
+    "source": {
+      "host": "Host path",
+      "model": "Model",
+      "volume": "Volume"
+    },
+    "modelContainerPathPlaceholder": "Container path, e.g. /draft",
+    "mountModelLabel": "Mounted model"
   },
   "edit": {
     "loading": "Loading the deployment...",

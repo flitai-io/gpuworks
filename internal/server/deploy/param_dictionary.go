@@ -58,6 +58,9 @@ func engineParams(engine string) map[string]engineParam {
 		spec.Aliases = definition.Aliases
 		spec.Options = definition.optionsFor(engine)
 		spec.Enum = optionValues(spec.Options)
+		if containsString(definition.ClosedFor, engine) {
+			spec.Type, spec.Control = "enum", "select"
+		}
 		value := definition.Default
 		if override, ok := definition.DefaultByEngine[engine]; ok {
 			value = override
@@ -228,6 +231,12 @@ func canonicalValue(spec engineParam, value any) (any, bool) {
 			// (EAGLE3, BFloat16). Case is not meaning, so it is folded here and
 			// the dictionary's own spelling is what the configuration stores -
 			// everything downstream then compares one spelling.
+			text = canonical
+		} else if canonical, known := canonicalEnumValue(spec.Enum, text); known {
+			// A free-text key's options are suggestions, not a gate: a value
+			// none of them names passes as written. One that names an option
+			// in another case takes the option's spelling, which is the
+			// engine's - SGLang refuses "eagle3" and vLLM "MTP".
 			text = canonical
 		}
 		return text, true

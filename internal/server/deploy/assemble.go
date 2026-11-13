@@ -61,7 +61,11 @@ type ResolveLaunchInput struct {
 	PreStartScript  string
 	RuntimeAssets   []proto.RuntimeAsset
 	ComponentMounts []proto.MountSpec
-	APIContract     any
+	// ModelPaths is where each model an extra mount row names is on the
+	// launch's node (ContainerMount.ModelID). A preview leaves it empty and
+	// the rows show ModelMountPlaceholder.
+	ModelPaths  map[uint]string
+	APIContract any
 	// PlacementVariables are the placement resolver's variables; the launch
 	// adds the facts it owns (launchVariables) before expanding the template.
 	PlacementVariables map[string]any
@@ -272,7 +276,7 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 	if err != nil {
 		return ResolvedLaunch{}, nil, fmt.Errorf("resolve launch: %w", err)
 	}
-	launch.Mounts = convertMounts(overrides.ExtraMounts)
+	launch.Mounts = convertMounts(overrides.ExtraMounts, input.ModelPaths)
 	launch.Mounts = append(launch.Mounts, input.ComponentMounts...)
 	// The disk KV tier writes into a container path that has to survive the
 	// container and stay measurable, so the launch asks the agent for a managed

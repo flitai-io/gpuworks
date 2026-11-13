@@ -111,6 +111,10 @@ type paramDefinition struct {
 	Aliases map[string]string
 	// DefaultByEngine overrides Default for the named engines.
 	DefaultByEngine map[string]any
+	// ClosedFor names the engines where a free-text row with options is a
+	// closed list (an enum picked from a select) instead of a combobox: a
+	// value none of the options names is refused there rather than passed.
+	ClosedFor []string
 }
 
 func number(value float64) *float64 { return &value }
@@ -155,8 +159,19 @@ var (
 // spells it: its model hooks compare the raw --speculative-algorithm string
 // against upper-case names before normalizing it, so "dspark" fails an
 // assertion that "DSPARK" passes. MTP is NEXTN there and a separate draft
-// model is STANDALONE; vLLM's method names are not SGLang algorithms.
+// model is STANDALONE; vLLM's method names are not SGLang algorithms. The list
+// stays closed for SGLang (ClosedFor): a stored configuration renames vLLM's
+// names to these (storedValueRenames), which only holds while a value outside
+// the list is never read into the field.
 var sglangSpeculativeAlgorithms = options("EAGLE", "EAGLE3", "NEXTN", "DSPARK", "NGRAM", "STANDALONE")
+
+// vllmSpeculativeMethods are suggestions for the form's combobox, like the
+// parser lists above, not a gate: any other method, typed or in a template,
+// reaches --speculative-config as written, and whether the engine in the
+// chosen image knows it is the deployer's to check. dflash and dspark need a
+// draft the deployment mounts (an extra mount of a registered model) unless
+// the checkpoint fuses its own draft module.
+var vllmSpeculativeMethods = []string{"eagle", "eagle3", "mtp", "ngram", "draft_model", "dflash", "dspark"}
 
 func technicalOptions(values ...string) []ParamOption {
 	out := options(values...)
@@ -238,7 +253,7 @@ var parameterDefinitions = []paramDefinition{
 	// form: turning it off means emitting nothing.
 	{ParamDefinition: ParamDefinition{Key: "enforce_eager", Type: "boolean", Control: "switch", Group: "performance", Default: false, Layout: "quick", Order: 35}, Flags: map[string]flagPair{EngineVLLM: {On: "--enforce-eager"}, EngineSGLang: {On: "--disable-cuda-graph"}}},
 
-	{ParamDefinition: ParamDefinition{Key: "speculative_algorithm", Type: "enum", Control: "select", Group: "speculative", Options: options("eagle", "eagle3", "mtp", "ngram", "draft_model"), Layout: "quick", Order: 32}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-algorithm"}}, Options: map[string][]ParamOption{EngineSGLang: sglangSpeculativeAlgorithms}},
+	{ParamDefinition: ParamDefinition{Key: "speculative_algorithm", Type: "string", Control: "combobox", Group: "speculative", Options: options(vllmSpeculativeMethods...), Layout: "quick", Order: 32}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-algorithm"}}, Options: map[string][]ParamOption{EngineSGLang: sglangSpeculativeAlgorithms}, ClosedFor: []string{EngineSGLang}},
 	{ParamDefinition: ParamDefinition{Key: "speculative_draft_model", Type: "string", Control: "text", Group: "speculative"}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-draft-model-path"}}},
 	{ParamDefinition: ParamDefinition{Key: "speculative_tokens", Type: "integer", Control: "number", Group: "speculative", Min: number(1), Step: number(1)}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-num-draft-tokens"}}},
 	{ParamDefinition: ParamDefinition{Key: "speculative_num_steps", Type: "integer", Control: "number", Group: "speculative", Min: number(1), Step: number(1)}, Flags: map[string]flagPair{EngineSGLang: {On: "--speculative-num-steps"}}},

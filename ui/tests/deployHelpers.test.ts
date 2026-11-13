@@ -775,6 +775,26 @@ test("container overrides carry every stated row", () => {
   });
 });
 
+// A mount row may name a registered model. It travels as a numeric model_id,
+// always read-only and without a host path or volume; a model row whose model
+// is not picked yet is still being filled in and is not sent.
+test("a model mount row travels as model_id only", () => {
+  const { payload } = buildPayload({
+    engine: "vllm",
+    container_mount_rows: [
+      { model_id: 42, host_path: "", container_path: "/draft", purpose: "models", read_only: false },
+      { model_id: null, container_path: "/pending", purpose: "models" },
+      { host_path: "/srv/data", container_path: "/data", model_id: undefined },
+    ],
+  });
+  assert.deepEqual(payload.container_overrides, {
+    extra_mounts: [
+      { model_id: 42, container_path: "/draft", purpose: "models", read_only: true },
+      { host_path: "/srv/data", container_path: "/data", read_only: false },
+    ],
+  });
+});
+
 test("VRAM summary uses backend fit and capacity without recomputing segments", () => {
   const summary = formatVRAMFitSummary({
     per_gpu_bytes: 12.7 * 1024 ** 3,

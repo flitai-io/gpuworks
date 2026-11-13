@@ -156,6 +156,8 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// the same moment it learns everything else about the draft.
 	if err := validateMountRowRequest(req, mountRowTargets(selection.Components, requestModelMount(req))); err != nil {
 		errs.add(FieldContainerMounts, err)
+	} else if err := s.ValidateMountModels(req); err != nil {
+		errs.add(FieldContainerMounts, err)
 	}
 	// Each replica is placed as its own unit; this tree admits no joint
 	// multi-replica group, so the scope is always per-replica. The response

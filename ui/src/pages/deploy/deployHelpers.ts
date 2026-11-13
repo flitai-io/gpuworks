@@ -300,16 +300,34 @@ export function buildPayload(
   const mountRows = Array.isArray(v.container_mount_rows)
     ? (v.container_mount_rows as Array<Record<string, unknown>>)
     : [];
+  // A row mounts a host path, a named volume or a registered model; one with
+  // no source or no container path is still being filled in and not sent.
   const mounts = mountRows
     .filter(
       (row) =>
-        String(row?.host_path || row?.volume || "").trim() &&
+        (String(row?.host_path || row?.volume || "").trim() ||
+          Number(row?.model_id) > 0) &&
         String(row?.container_path || "").trim(),
     )
-    .map((row) => ({
-      ...row,
-      read_only: Boolean(row.read_only),
-    }));
+    .map((row) => {
+      const out: Record<string, unknown> = {
+        ...row,
+        read_only: Boolean(row.read_only),
+      };
+      if (Number(row.model_id) > 0) {
+        out.model_id = Number(row.model_id);
+        out.read_only = true;
+        delete out.host_path;
+        delete out.volume;
+      } else {
+        delete out.model_id;
+      }
+      // Switching a row's source leaves the fields it cleared behind as
+      // undefined; they state nothing.
+      for (const key of ["host_path", "volume"])
+        if (out[key] === undefined) delete out[key];
+      return out;
+    });
   if (mounts.length) containerOverrides.extra_mounts = mounts;
   const dockerArgs = Array.isArray(v.container_docker_args)
     ? v.container_docker_args.filter(

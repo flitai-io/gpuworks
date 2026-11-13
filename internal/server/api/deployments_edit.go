@@ -223,6 +223,9 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	if err := deployment.ValidateHealthCheckThreshold(req); err != nil {
 		return bad(err)
 	}
+	if err := a.deployments().ValidateMountModels(req); err != nil {
+		return bad(err)
+	}
 	model, err := a.d.Store.GetModel(dep.ModelID)
 	if err != nil {
 		return internal(err)

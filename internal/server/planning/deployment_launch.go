@@ -175,6 +175,20 @@ func DeploymentLaunch(dep *store.Deployment, reqs map[string][]string, node *sto
 			Purpose: "model_component:" + component.Role,
 		})
 	}
+	source := LaunchSourceFromDeployment(dep)
+	var modelPaths map[uint]string
+	if paths != nil {
+		for _, id := range source.Overrides.ModelMountIDs() {
+			path := paths.Components[id]
+			if path == "" {
+				return LaunchRequest{}, templateLayer, "", fmt.Errorf("deployment %d mounts model %d, which is not present on node %s", dep.ID, id, node.UUID)
+			}
+			if modelPaths == nil {
+				modelPaths = map[uint]string{}
+			}
+			modelPaths[id] = path
+		}
+	}
 	served := dep.ServedName
 	if served == "" && model != nil {
 		served = model.Name
@@ -183,8 +197,8 @@ func DeploymentLaunch(dep *store.Deployment, reqs map[string][]string, node *sto
 		StartTimeoutSec: dep.StartTimeoutSec,
 		Engine:          dep.Engine, Model: model, Node: node,
 		Selection: templateLayer, Placement: placement,
-		Source: LaunchSourceFromDeployment(dep), Quick: quick, ExtraArgs: extra,
-		ModelMount: modelMount, ModelHostPath: modelHostPath, ComponentMounts: componentMounts,
+		Source: source, Quick: quick, ExtraArgs: extra,
+		ModelMount: modelMount, ModelHostPath: modelHostPath, ComponentMounts: componentMounts, ModelPaths: modelPaths,
 		ServedName: served, Sleepable: dep.Sleepable, MasterAddr: dep.MasterAddr, MasterPort: dep.MasterPort,
 		YieldPolicy:    dep.YieldPolicy,
 		VRAMLimitBytes: dep.VRAMLimitBytes, PartitionBackend: dep.PartitionBackend,
