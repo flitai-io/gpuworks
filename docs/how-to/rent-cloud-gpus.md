@@ -17,7 +17,7 @@ agent → 实例作为“计算节点”上线。**控制台里的“外部平�
 ## 添加云账号
 
 1. 左侧菜单“算力资源”分组下打开“外部平台”页（路径 `/providers`）。
-2. 点“添加外部平台”，或点页面中部“快速接入”里的某个厂商卡片（会预选该类型）。卡片下方是厂商官网链接。
+2. 点“添加外部平台”，或点页面中部“快速接入”里的某个厂商卡片（会预选该类型）。卡片上厂商名称旁的小图标打开厂商官网。
 3. 在“外部平台”字段选择厂商，填写“名称”（自定义，必填）和“认证信息”里的字段，点“添加”。
 
 各类型的凭据字段（以界面显示为准，带“可选”的可以不填）：
@@ -43,21 +43,22 @@ RunPod 只支持 Secure Cloud 的 Pod，不支持 Community Cloud（添加账号
 
 ## 同步实例并确认机型、区域和价格
 
-1. 在“已接入的外部平台”列表里点某个账号的“同步”（或页面上方“同步全部”一次同步所有外部平台）。列表的“外部平台”列显示厂商（如阿里云、RunPod），“平台类型”列为公有云。完成后提示“同步完成，发现 N 个实例”。
-2. 点开该账号所在行左侧的展开箭头，看实例表：
+1. 在“已接入的外部平台”列表里点某个账号的“同步”（或列表工具栏最左侧的“同步全部”，一次同步所有支持同步的外部平台；旁边的“最近一次同步：<时间>”是所有账号里最新的一次）。列表的“外部平台”列显示厂商（如阿里云、RunPod），“平台类型”列为公有云。完成后提示“同步完成，发现 N 个实例”。
+2. 点开该账号所在行左侧的展开箭头，看实例表。有托管 Kubernetes 的厂商（阿里云、DigitalOcean）展开后是一张分组的表，账号自己的实例在“独立实例”组里，后面每个托管集群一组（见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)）；其他厂商展开后只有实例，不分组。实例先显示 10 台，更多的点表格末尾的“再显示 N 台”：
 
    | 列 | 含义 |
    |---|---|
-   | 实例名称 / 实例 ID | 云厂商侧的名称与 ID |
-   | GPU 型号 / GPU 卡数 | 云厂商返回的规格；拿不到时显示“未返回” |
-   | 连接方式 | 云厂商提供的入口：“直连”或“外部平台代理”（SSH，可复制 `ssh` 命令；标注“仅终端”的入口只能连接，不能用来装 agent），阿里云还有“云助手”（无需 SSH） |
+   | 实例 | 云厂商侧的名称，下面一行是实例 ID |
+   | GPU | 云厂商返回的型号和卡数（如 `L20 ×1`）；拿不到型号时显示“未返回” |
    | 状态 | 运行中 / 已停止 / 未知 |
-   | 费用 | 每小时价格（如 `¥1.98/时`）；云厂商没返回价格时可能显示 `¥0.00/时`，不代表免费 |
-   | 区域、类型 | 区域；类型为“容器”或“虚拟机” |
+   | 费用 | 每小时价格（如 `¥1.98/时`）；云厂商没返回价格时可能显示 `¥0.00/时`，不代表免费。厂商提供价格时才有这一列 |
+   | 区域、类型 | 区域（专有云没有这一列）；类型为“容器”或“虚拟机”，只在厂商的实例不止一种时才有这一列 |
+   | 连接方式 | 云厂商提供的入口：“直连”或“外部平台代理”（SSH，可复制 `ssh` 命令；标注“仅终端”的入口只能连接，不能用来装 agent），阿里云还有“云助手”（无需 SSH） |
+   | 操作 | “开机”或“关机”（厂商支持开关机时）和“一键装 Agent”；已经接入的实例显示“已接入” |
 
 3. 账号状态会随同步结果变化：同步失败会把账号标为“异常”，页面上方出现“存在异常的外部平台”提示，按提示检查凭据和云厂商 API 可用性，再重新同步。
 
-列表每 15 秒自动刷新一次账号状态，但实例清单来自上一次“同步”的结果，想看云端最新情况请重新点“同步”。容器实例通常没有可用的 Docker 守护进程，agent 在无法使用 Docker 时使用内置 runveil；即使容器内是 root，也不等于能运行宿主机 Docker。
+列表每 15 秒自动刷新一次账号状态，但实例清单来自上一次“同步”的结果，想看云端最新情况请重新点“同步”。展开账号后最上面一行是“同步”和“上次同步时间：<时间>”（从未同步过时为“还没有同步过实例”）：这里的“同步”与这一行操作列的“同步”相同，向云厂商重新列出实例，同步后托管集群也会重新读取。不支持列出实例的厂商既没有这个“同步”，也不显示同步时间。托管集群不保存在同步结果里，展开账号时由 gpuworks 向云厂商读取。容器实例通常没有可用的 Docker 守护进程，agent 在无法使用 Docker 时使用内置 runveil；即使容器内是 root，也不等于能运行宿主机 Docker。
 
 ## 安装 agent，让实例出现在“计算节点”
 
@@ -214,7 +215,7 @@ GPUWORKS 不会自动释放云实例，删除云账号也不会。到云厂商�
 | `ecs:RunCommand`、`ecs:DescribeInvocationResults` | 经云助手执行安装前检查和安装，并读取结果 |
 | `ecs:StartInstance`、`ecs:StopInstance` | 开机、关机；不需要可以去掉 |
 | `ecs:DescribeSecurityGroupAttribute` | Server 发起连接时读取入站安全组规则；不使用此检查时可不授予 |
-| `cs:DescribeClustersV1`、`cs:DescribeClusterNodePools`、`ecs:DescribeInstanceTypes` | 「Kubernetes 集群」页签列出 ACK 集群及其 GPU 节点池；不接入 ACK 可以去掉 |
+| `cs:DescribeClustersV1`、`cs:DescribeClusterNodePools`、`ecs:DescribeInstanceTypes` | 展开账号后列出 ACK 集群及其 GPU 节点池；不接入 ACK 可以去掉 |
 | `cs:DescribeClusterUserKubeconfig` | 由 GPUWORKS 把接入 manifest 应用到 ACK 集群时签发 15 分钟有效的 kubeconfig；只用 kubectl 接入可以去掉 |
 
 ```json
@@ -299,9 +300,9 @@ server 调用 `RunCommand`，让实例以 root 执行与**添加节点**相同�
 
 云助手会记录执行命令，保留期限以阿里云设置和文档为准。命令包含节点接入 token，agent 之后持续用它连接 server；有权查看调用记录（`ecs:DescribeInvocations`）的阿里云用户能读到 token。节点删除后，该 token 随之失效。
 
-**ACK 集群**：账号展开后的「Kubernetes 集群」页签实时列出账号下的 ACK 集群（Serverless 与 ACS 集群的 Pod 跑在虚拟节点上，不能运行 agent 的 DaemonSet，不列出）和其中的 GPU 节点池：节点池的实例规格都带同一型号的 GPU 才算，自动模式节点池（不指定规格）不列出。选一个节点池「接入」，会建一个节点选择器为 `alibabacloud.com/nodepool-id=<节点池 ID>` 的 Kubernetes 集群条目，之后可以由 GPUWORKS 应用 manifest，也可以自己执行 kubectl，见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)。ACK 集群的节点本身也是 GPU 实例，会出现在实例表里，标为「集群节点」，不能单独安装 agent。
+**ACK 集群**：账号展开后，「独立实例」组下面实时列出账号下的 ACK 集群（Serverless 与 ACS 集群的 Pod 跑在虚拟节点上，不能运行 agent 的 DaemonSet，不列出），每个集群一组，组内列出它的 GPU 节点池等信息：节点池的实例规格都带同一型号的 GPU 才算，自动模式节点池（不指定规格）不列出。点集群组头的「接入」，在打开的抽屉里选定节点池（默认全选，不要的移除，移除的可以从「添加节点池」加回）后接入，会建一个 Kubernetes 集群条目，agent 只在所选节点池的节点上运行（按节点标签 `alibabacloud.com/nodepool-id` 选中），之后可以由 GPUWORKS 应用 manifest，也可以自己执行 kubectl，见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)。ACK 集群的节点本身也是 GPU 实例，但不出现在「独立实例」组里，也不在集群的分组里逐台列出，随集群接入，不能单独安装 agent。
 
-由 GPUWORKS 应用 manifest 需要：集群的 API Server 有公网地址（创建集群时勾选「使用 EIP 暴露 API Server」，没有的显示「仅内网 API」，只能用 kubectl 接入）；用 RAM 子账号时，这个子账号还要在 ACK 控制台「授权管理」里获得该集群的管理员（或能创建 Namespace、RBAC、DaemonSet、PriorityClass 的）RBAC 权限，否则签发出的 kubeconfig 会被集群拒绝，GPUWORKS 会把集群的拒绝原因原样显示出来。
+由 GPUWORKS 应用 manifest 需要：集群的 API Server 有公网地址（创建集群时勾选「使用 EIP 暴露 API Server」，没有的显示「仅内网可访问」，只能用 kubectl 接入）；用 RAM 子账号时，这个子账号还要在 ACK 控制台「授权管理」里获得该集群的管理员（或能创建 Namespace、RBAC、DaemonSet、PriorityClass 的）RBAC 权限，否则签发出的 kubeconfig 会被集群拒绝，GPUWORKS 会把集群的拒绝原因原样显示出来。
 
 **开关机**：关机使用“普通停机”（继续计费），保留实例的 GPU、固定公网 IP 等资源；“节省停机模式”会释放这些资源，再开机时可能没有库存，GPUWORKS 不使用它。
 
@@ -312,7 +313,7 @@ server 调用 `RunCommand`，让实例以 root 执行与**添加节点**相同�
 登记平台公钥要 ssh_key 的写入，签发 DOKS 的 kubeconfig 要 kubernetes 的相应权限（自定义权限的组合未逐项实测，缺权限时界面会显示 DigitalOcean 返回的原因）。
 
 **同步**：实例表只列出 GPU Droplet（规格带 GPU 的），型号、卡数和每小时价格来自规格。DigitalOcean 的 GPU 规格要账号开通，
-控制台和 API 里看不到某个规格时先在控制台申请。DOKS 集群的节点也是 GPU Droplet，标为「集群节点」，不能单独安装 agent。
+控制台和 API 里看不到某个规格时先在控制台申请。DOKS 集群的节点也是 GPU Droplet，但不出现在「独立实例」组里，随集群接入，不能单独安装 agent。
 
 **安装**：走 SSH（`root@<公网 IP>:22`）。添加账号时平台公钥登记为账号的 SSH Key，之后经 GPUWORKS 创建的 Droplet 自带它，
 不用填凭据；DigitalOcean 不能给已经存在的 Droplet 追加账号 Key，别处创建的 Droplet 在安装的「高级设置」里提供一次私钥或密码。
@@ -320,6 +321,6 @@ server 调用 `RunCommand`，让实例以 root 执行与**添加节点**相同�
 
 **开关机与释放**：开机、关机对应 Droplet 的 power on / power off（关机后仍计费）；释放即删除 Droplet，数据一并删除。
 
-**DOKS 集群**：「Kubernetes 集群」页签列出账号下的 DOKS 集群与 NVIDIA GPU 节点池（AMD 节点池不列出），接入后节点选择器为
-`doks.digitalocean.com/node-pool-id=<节点池 ID>`；可以由 GPUWORKS 用 15 分钟有效的 kubeconfig 应用 manifest，也可以自己执行
+**DOKS 集群**：账号展开后，「独立实例」组下面列出账号下的 DOKS 集群，每个集群一组，组内列出它的 NVIDIA GPU 节点池（AMD 节点池不列出）；
+点组头的「接入」、在抽屉里选定节点池（默认全选）后接入，agent 只在所选节点池的节点上运行（按节点标签 `doks.digitalocean.com/node-pool-id` 选中）；可以由 GPUWORKS 用 15 分钟有效的 kubeconfig 应用 manifest，也可以自己执行
 kubectl，见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)。
