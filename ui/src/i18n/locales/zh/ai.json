@@ -124,7 +124,21 @@
     "onThisPage": "当前页面",
     "emptyTitle": "从页面上选一个任务，或在下面直接提问",
     "emptyHint": "打开某个部署、节点或失败实例的详情，这里就会出现对应的任务；模型、失败实例、调度不上的部署和节点旁也有 AI 按钮。",
-    "followUps": "推荐追问"
+    "followUps": "推荐追问",
+    "history": "历史会话",
+    "historyHint": "会话保存在当前浏览器，打开一个即可接着聊。",
+    "noThreads": "还没有保存的会话",
+    "untitled": "未命名会话",
+    "deleteThread": "删除会话“{{title}}”",
+    "attachImage": "添加图片",
+    "attachHint": "添加图片，也可以直接粘贴截图或拖进来",
+    "attached": "已附加的图片",
+    "imageAlt": "图片 {{n}}",
+    "removeImage": "移除图片 {{n}}",
+    "imagesOff": "当前 AI 服务未开启「支持图片输入」，不能发送图片。可在设置 → 集成 → AI 服务中检测并打开。",
+    "imagesTooMany": "每条消息最多 {{count}} 张图片，多出的未添加。",
+    "image_format": "“{{name}}”不是支持的图片格式（PNG、JPEG、WebP、GIF）。",
+    "image_too_large": "“{{name}}”压缩后仍超过 {{mb}} MB。"
   },
   "subject": {
     "instance": "实例",

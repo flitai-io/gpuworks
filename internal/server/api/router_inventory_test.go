@@ -126,6 +126,7 @@ GET /api/v1/ai/available
 GET /api/v1/ai/configs
 GET /api/v1/ai/instances/{uuid}/findings
 GET /api/v1/ai/models/{id}/fit
+GET /api/v1/ai/presets
 GET /api/v1/analytics/gpu-time
 GET /api/v1/analytics/gpus
 GET /api/v1/analytics/key-usage

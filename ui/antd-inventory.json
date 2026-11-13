@@ -1,11 +1,11 @@
 {
   "components": {
-    "Alert": 326,
+    "Alert": 328,
     "AutoComplete": 5,
     "Avatar": 2,
     "Badge": 11,
     "Breadcrumb": 1,
-    "Button": 494,
+    "Button": 496,
     "Card": 114,
     "Checkbox": 33,
     "Col": 108,
@@ -18,8 +18,8 @@
     "Dropdown": 8,
     "Empty": 30,
     "Flex": 7,
-    "Form": 477,
-    "Input": 163,
+    "Form": 482,
+    "Input": 164,
     "InputNumber": 54,
     "List": 6,
     "Modal": 70,
@@ -31,14 +31,14 @@
     "Result": 3,
     "Row": 40,
     "Segmented": 25,
-    "Select": 109,
+    "Select": 110,
     "Skeleton": 17,
     "Slider": 1,
-    "Space": 563,
+    "Space": 564,
     "Spin": 43,
     "Statistic": 6,
     "Steps": 2,
-    "Switch": 38,
+    "Switch": 39,
     "Table": 52,
     "Tabs": 11,
     "Tag": 278,
@@ -360,7 +360,7 @@
     "ui/src/pages/scheduling/TimelineStats.tsx": {"components":{"Tag":1,"Tooltip":1,"Typography":1},"icons":1,"imports":["Tag","Tooltip","Typography"],"sites":3,"types":[]},
     "ui/src/pages/scheduling/WindowPicker.tsx": {"components":{"Segmented":0},"icons":0,"imports":["Segmented"],"sites":0,"types":[]},
     "ui/src/pages/settings/AIConfigCard.tsx": {"components":{"Alert":2,"Button":3,"Card":1,"Popconfirm":1,"Space":1,"Table":0,"Tag":1,"Tooltip":1,"Typography":1,"message":2},"icons":0,"imports":["Alert","Button","Card","Popconfirm","Space","Table","Tag","Tooltip","Typography","message"],"sites":13,"types":["ColumnsType"]},
-    "ui/src/pages/settings/AIConfigModal.tsx": {"components":{"Alert":1,"Button":1,"Form":8,"Input":4,"Modal":1,"Select":1,"Space":1,"Switch":1,"message":4},"icons":0,"imports":["Alert","Button","Form","Input","Modal","Select","Space","Switch","message"],"sites":22,"types":[]},
+    "ui/src/pages/settings/AIConfigModal.tsx": {"components":{"Alert":3,"Button":3,"Form":13,"Input":5,"Modal":1,"Select":2,"Space":2,"Switch":2,"message":4},"icons":0,"imports":["Alert","Button","Form","Input","Modal","Select","Space","Switch","message"],"sites":35,"types":[]},
     "ui/src/pages/settings/BrandingCard.tsx": {"components":{"Alert":2,"Button":4,"Card":1,"Form":5,"Input":3,"Space":2,"Typography":1,"Upload":1,"message":3},"icons":1,"imports":["Alert","Button","Card","Form","Input","Space","Typography","Upload","message"],"sites":22,"types":[]},
     "ui/src/pages/settings/DataRetentionCard.tsx": {"components":{"Alert":3,"Button":2,"Card":3,"Form":2,"InputNumber":1,"Modal":1,"Select":1,"Skeleton":1,"Space":7,"Switch":1,"Tag":1,"Typography":8,"message":2},"icons":0,"imports":["Alert","Button","Card","Form","InputNumber","Modal","Select","Skeleton","Space","Switch","Tag","Typography","message"],"sites":33,"types":[]},
     "ui/src/pages/settings/DebugSessionCard.tsx": {"components":{"Alert":3,"Button":2,"Card":1,"Descriptions":5,"Form":5,"InputNumber":2,"Popconfirm":2,"Select":2,"Space":2,"Table":0,"Tag":2,"Typography":2,"message":4},"icons":0,"imports":["Alert","Button","Card","Descriptions","Form","InputNumber","Popconfirm","Select","Space","Table","Tag","Typography","message"],"sites":32,"types":[]},
@@ -421,5 +421,5 @@
     "ui/src/ui-kit/Spinner.tsx": {"components":{},"icons":1,"imports":[],"sites":0,"types":[]},
     "ui/src/ui-kit/feedback/index.tsx": {"components":{},"icons":1,"imports":[],"sites":0,"types":[]}
   },
-  "summary": {"antRules":209,"antdFiles":347,"cssFilesWithAntRules":12,"iconFiles":103,"iconImports":246,"sites":5086}
+  "summary": {"antRules":209,"antdFiles":347,"cssFilesWithAntRules":12,"iconFiles":103,"iconImports":246,"sites":5099}
 }

@@ -40,6 +40,8 @@ import ComputerTerminal01 from "@hugeicons/core-free-icons/ComputerTerminal01Ico
 import PencilEdit01 from "@hugeicons/core-free-icons/PencilEdit01Icon";
 import File02 from "@hugeicons/core-free-icons/File02Icon";
 import Unlink01 from "@hugeicons/core-free-icons/Unlink01Icon";
+import ImageAdd01 from "@hugeicons/core-free-icons/ImageAdd01Icon";
+import WorkHistory from "@hugeicons/core-free-icons/WorkHistoryIcon";
 
 /**
  * The console's own icons (side menu, top bar), drawn from the same
@@ -89,4 +91,6 @@ export const ConsoleIcon = {
   manifest: createHugeIcon(File02),
   edit: createHugeIcon(PencilEdit01),
   terminal: createHugeIcon(ComputerTerminal01),
+  imageAdd: createHugeIcon(ImageAdd01),
+  history: createHugeIcon(WorkHistory),
 };
