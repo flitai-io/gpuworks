@@ -408,6 +408,8 @@
     "MODEL_SOURCE_REQUIRES_NEWER_AGENT": "This node's agent is too old to download from an HTTP directory. Upgrade the agent, then try again.",
     "MODEL_SOURCE_URL_REQUIRED": "Enter the HTTP directory the model is served from.",
     "MODEL_SOURCE_URL_INVALID": "Enter a valid absolute HTTP or HTTPS directory URL without embedded credentials.",
+    "IMAGE_ARCHIVE_PATH_INVALID": "Local import requires an absolute archive file path on the target node, without another source or relay.",
+    "IMAGE_ARCHIVE_PATH_REQUIRED": "Choose the archive file on the node again to retry the local import.",
     "IMAGE_ARCHIVE_URL_REQUIRED": "An image archive URL is required.",
     "IMAGE_ARCHIVE_URL_INVALID": "That image archive URL cannot be used. Use an http or https address without embedded credentials.",
     "IMAGE_ARCHIVE_URL_UNREACHABLE": "The image archive at {{host}} could not be read.",

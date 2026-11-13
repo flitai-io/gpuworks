@@ -215,6 +215,7 @@ func TestKubeDaemonSetDeployChatKind(t *testing.T) {
 	if nodeInfo.Scheduling != "schedulable" {
 		t.Fatalf("freshly enrolled node should be schedulable: %+v", nodeInfo)
 	}
+	t.Run("node-local-image-import", func(t *testing.T) { testKubeLocalImageImport(t, api, k, nodeInfo.UUID) })
 
 	// ---- 8. model + deployment.
 	step(t, "create the model directory inside the node and register it")

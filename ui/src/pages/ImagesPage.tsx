@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Form, message } from "antd";
+import { toast } from "../components/ui/toast";
 import { useTranslation } from "react-i18next";
 import {
   api,
@@ -154,9 +155,9 @@ export default function ImagesPage() {
   const availablePeer = (version: ImageCatalogEntry, target: ImageNode) =>
     peerSources(version, target).length > 0;
   // A node pulls through the pull settings unless the operator chose another
-  // way for it (a peer copy or an archive URL), each of which has its own dialog.
+  // way for it (peer copy, archive URL or node file), each with its own dialog.
   const modeFor = (version: ImageCatalogEntry, target: ImageNode): FetchMode =>
-    sourceByNode[`${version.id}:${target.node_uuid}`] || autoSourceValue;
+    sourceByNode[`${version.id}:${target.node_uuid}`] || (target.state === "failed" && target.source === "local" ? "local" : autoSourceValue);
   const setMode = (
     version: ImageCatalogEntry,
     nodeUUID: string,
@@ -182,7 +183,7 @@ export default function ImagesPage() {
         await api.syncImage(version.id, nodeUUID, undefined, { force: true });
         message.success(t("action.repullSubmitted"));
       } else {
-        if (retry) await api.retryImage(version.id, nodeUUID);
+        if (retry && nodeRow(version, nodeUUID)?.source !== "local") await api.retryImage(version.id, nodeUUID);
         else await api.syncImage(version.id, nodeUUID);
         message.success(t("action.pullSubmitted"));
       }
@@ -268,6 +269,15 @@ export default function ImagesPage() {
     message.success(t("action.submitted", { source: archiveURLHost(url) }));
     await refreshDetail(version.series_id || detail?.id || 0);
     versions.refetch();
+  };
+  const importFromPath = async (version: ImageCatalogEntry, nodeUUID: string, path: string) => {
+    try {
+      await api.syncImage(version.id, nodeUUID, "local", { archive_path: path });
+      toast.success(t("action.submitted", { source: t("nodeTable.sourceLocal") }));
+    } finally {
+      await refreshDetail(version.series_id || detail?.id || 0);
+      versions.refetch();
+    }
   };
   // recordArchiveURL appends a pasted archive address to a catalog version's
   // declared sources, which is what makes it selectable on every node and
@@ -485,6 +495,7 @@ export default function ImagesPage() {
         probeImage={(version, nodeUUID, sourceNode) => api.probeImage(version.id, nodeUUID, sourceNode)}
         syncFromPeer={syncFromPeer}
         pullFromURL={pullFromURL}
+        importFromPath={importFromPath}
         cancelTransfer={(version, nodeUUID) => void cancelTransfer(version, nodeUUID)}
         removeFromNode={(version, nodeUUID) => void removeFromNode(version, nodeUUID)}
         inspectVersion={(version, nodeUUID) =>

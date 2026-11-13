@@ -51,7 +51,13 @@ Directories downloaded by `huggingface-cli` contain `.cache/huggingface/`. Keep 
 
 Copy the files directly to one compute node if possible:
 
-**Images**: After copying the archive to the node, import it into the node's container runtime:
+**Images**: After copying the archive to the node, open the corresponding image series and version on the Images page, then open “Node Distribution.” In the target node's “Acquisition Method,” select “Import from node file…”. Enter the absolute path of the tar file on that node, start the import, and wait for the status to become “Present.” The original archive is kept. Directories, paths on the management server, and archives unsupported by the node's runtime fail with an error. Both the server and the target agent must support this feature.
+
+For Kubernetes nodes, enter the file path on the worker host, such as `/data/runner.tar`. Both the file check and the load run in the host environment; the file does not need to be placed inside the Agent Pod or the shared state directory. The image is loaded into containerd's `k8s.io` namespace used by kubelet.
+
+If the image is not registered yet, first add a custom image with its image reference, engine, framework, and other required metadata. Importing a file only updates the registered image's state on the target node; it does not create an image series. After a failure, select the file again or switch to another acquisition method.
+
+Alternatively, log in to the node and import the archive into its container runtime:
 
 ```bash
 # Docker nodes

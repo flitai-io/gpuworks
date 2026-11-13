@@ -493,6 +493,8 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 		return n.rpcRuntimeRestart(ctx)
 	case proto.RPCImageLoadURL:
 		return n.rpcImageLoadURL(ctx, params)
+	case proto.RPCImageLoadPath:
+		return n.rpcImageLoadPath(ctx, params)
 	case proto.RPCImageCancel:
 		return n.rpcImageCancel(ctx, params)
 	case proto.RPCImageRemove:
