@@ -9,8 +9,8 @@
 - 节点已接入并上报 GPU（见[接入节点](connect-nodes.md)）。
 - NVIDIA：x86_64、glibc ≥ 2.17，宿主机驱动提供动态库（`libcuda.so.1`、`libnvidia-ml.so.1`）。
 - 昇腾：宿主机的 device-share 权限满足 vcann-rt 的要求，所选推理镜像提供 glibc ≥ 2.33；能接入并整卡运行，不代表宿主机已允许 dGPU 设备共享。
-- PPU：配额语义是显存限额加繁忙时的加权 QoS。20/80 配置表示繁忙时的相对吞吐权重，不是硬 SM 分区。
-- AMD：x86_64、Docker、nerdctl 或 runveil，rocm-slicing-shim（libvrocm.so）做硬显存限额，不支持算力（SM/CU）上限；当前只在 MI300X（gfx942）上实测。
+- PPU：配额语义是显存限额加繁忙时的加权 QoS。20/80 配置表示繁忙时的相对吞吐权重，不是硬 SM 分区。Docker 与 Kubernetes 节点都支持（Kubernetes 上已在 PPU-ZW810E 实测）。
+- AMD：x86_64、Docker、nerdctl、runveil 或 Kubernetes，rocm-slicing-shim（libvrocm.so）做硬显存限额，不支持算力（SM/CU）上限；已在 MI300X、MI325X（gfx942）上实测（MI325X 为 Kubernetes）。
 - 海光 Z100 / K100_AI / BW：实验性，支持 x86_64 上的 Docker 或 runveil/udocker，每实例一张卡；需安装原生 helper、宿主 DTK/HYHAL/DCGM 库并通过逐卡探针。CU 随显存比例分配，不支持独立算力配额；仅报告系列 K100 或其他未适配型号时仍只支持整卡。PRoot 不提供独立 cgroup 或内核只读挂载，不代表敌对程序的安全隔离。详见[海光 Z100 / K100_AI / BW dGPU](../reference/support-matrix.md#海光-z100--k100_ai--bw-dgpu)。
 - 想先走一遍完整流程，见[一张 GPU 跑两个模型](../tutorials/one-gpu-two-models.md)；语义与边界见 [dGPU 是什么、又不是什么](../explanation/dgpu.md)。
 
