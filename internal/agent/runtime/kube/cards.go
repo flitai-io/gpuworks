@@ -431,6 +431,21 @@ func (p *cardPool) reapUsers(ctx context.Context) {
 	}
 }
 
+// setIdleReturn replaces how long an unused borrowed card is kept and returns
+// the previous value; the next sweep uses the new one.
+func (p *cardPool) setIdleReturn(v time.Duration) (old time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	old, p.idleReturn = p.idleReturn, v
+	return old
+}
+
+func (p *cardPool) idleReturnSetting() time.Duration {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.idleReturn
+}
+
 // sweep drops the users whose pod vanished and returns the cards that have
 // been idle longer than idleReturn.
 func (p *cardPool) sweep(ctx context.Context) {

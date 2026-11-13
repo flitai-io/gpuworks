@@ -4,6 +4,7 @@ package api
 type nodeSyncCallbacks struct {
 	full    func(string) error
 	network func(string)
+	kube    func(uint)
 }
 
 func (c nodeSyncCallbacks) SyncNode(uuid string) error {
@@ -17,4 +18,10 @@ func (c nodeSyncCallbacks) RequestNetworkSync(uuid string) {
 		panic("unexpected network-only node sync")
 	}
 	c.network(uuid)
+}
+func (c nodeSyncCallbacks) PushKubeSettings(clusterID uint) {
+	if c.kube == nil {
+		panic("unexpected Kubernetes settings push")
+	}
+	c.kube(clusterID)
 }

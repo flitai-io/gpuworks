@@ -20,8 +20,7 @@ func sample() Params {
 		ClusterName: "prod", Namespace: "gpuworks-system", ServerURL: "https://gw.example:8800",
 		Token: "enroll-token", AgentImage: "registry.example/gpuworks/gpuworks-agent:v1.2.3",
 		NodeSelector: map[string]string{"nvidia.com/gpu.present": "true", "gpuworks.ai/pool": "a"},
-		RuntimeClass: "nvidia", EnginePorts: "40000-42767",
-		Priority: 10000,
+		Priority:     10000,
 	}
 }
 
@@ -107,7 +106,7 @@ func TestRenderedObjects(t *testing.T) {
 		t.Fatalf("daemonset pod spec = %#v", spec)
 	}
 	args := dig(t, spec, "containers", 0, "args").([]any)
-	want := []string{"run", "--server=https://gw.example:8800", "--state=/opt/gpuworks", "--driver=kube", "--engine-ports=40000-42767"}
+	want := []string{"run", "--server=https://gw.example:8800", "--state=/opt/gpuworks", "--driver=kube"}
 	if len(args) != len(want) {
 		t.Fatalf("args = %v, want %v", args, want)
 	}
@@ -127,7 +126,7 @@ func TestRenderedObjects(t *testing.T) {
 
 func TestRenderWithoutOptionalFields(t *testing.T) {
 	p := sample()
-	p.NodeSelector, p.RuntimeClass, p.EnginePorts = nil, "", ""
+	p.NodeSelector = nil
 	out, err := Render(p)
 	if err != nil {
 		t.Fatal(err)
@@ -145,10 +144,6 @@ func TestRenderWithoutOptionalFields(t *testing.T) {
 		}
 		if _, ok := spec["imagePullSecrets"]; ok {
 			t.Fatal("imagePullSecrets rendered without one")
-		}
-		// No RuntimeClass: each agent picks the instance pods' own.
-		if env := envOf(t, spec); env["GPUWORKS_KUBE_RUNTIME_CLASS"] != "" {
-			t.Fatalf("agent env without a RuntimeClass = %v", env)
 		}
 	}
 }
@@ -220,7 +215,7 @@ func TestRenderCarriesNoVendor(t *testing.T) {
 		t.Fatal("the manifest still decides where vendor CLIs run")
 	}
 	if env["NVIDIA_VISIBLE_DEVICES"] != "all" || env["NVIDIA_DRIVER_CAPABILITIES"] != "compute,utility" ||
-		env["GPUWORKS_KUBE_RUNTIME_CLASS"] != "nvidia" || env["GPUWORKS_KUBE_CONTAINERD_SOCKET"] != "/run/k3s/containerd/containerd.sock" ||
+		env["GPUWORKS_KUBE_CONTAINERD_SOCKET"] != "/run/k3s/containerd/containerd.sock" ||
 		env["KUBERNETES_SERVICE_HOST"] != "10.0.0.5" || env["KUBERNETES_SERVICE_PORT"] != "6443" {
 		t.Fatalf("env = %v", env)
 	}
@@ -261,7 +256,6 @@ func TestValidate(t *testing.T) {
 		"server":       func(p *Params) { p.ServerURL = "gw.example" },
 		"token":        func(p *Params) { p.Token = " " },
 		"image":        func(p *Params) { p.AgentImage = "" },
-		"runtimeclass": func(p *Params) { p.RuntimeClass = "No" },
 		"pullsecret":   func(p *Params) { p.ImagePullSecret = "Reg Cred" },
 		"pullsecret-l": func(p *Params) { p.ImagePullSecret = strings.Repeat("a", 254) },
 		"socket":       func(p *Params) { p.ContainerdSocket = "run/containerd.sock" },

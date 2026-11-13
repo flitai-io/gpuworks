@@ -541,6 +541,8 @@ func (c *Conn) handleInbound(env proto.Envelope) {
 			// net, not the primary propagation path for image add/delete.
 			c.requestStatus(ctx)
 		}
+	case proto.TKubeSettings:
+		c.handleKubeSettings(ctx, env)
 	case proto.TRPCReq:
 		go c.handleRPC(ctx, env)
 	default:

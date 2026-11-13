@@ -53,11 +53,6 @@ type Params struct {
 	// Both or neither.
 	PoolLabel string
 	PoolIDs   []string
-	// RuntimeClass is the class that injects NVIDIA devices into the
-	// instance pods of NVIDIA nodes; empty lets each agent decide (the
-	// cluster's "nvidia" class when there is one, the node's default runtime
-	// otherwise). The agents themselves run under the default runtime.
-	RuntimeClass string
 	// ImagePullSecret names a docker-registry Secret in Namespace the agent
 	// image is pulled with; the agents hand it on to the pods they start
 	// from that image.
@@ -65,7 +60,6 @@ type Params struct {
 	// ContainerdSocket overrides the containerd socket the agent finds on
 	// its own (the usual, k3s and RKE2 places); empty lets it look.
 	ContainerdSocket string
-	EnginePorts      string
 	// StateDir is the agent's directory on the host; empty is DefaultStateDir.
 	StateDir string
 	// APIServer is the API server address the agents use instead of the
@@ -78,10 +72,6 @@ type Params struct {
 	// pod, and off renders preemptionPolicy: Never.
 	Priority        int
 	AllowPreemption bool
-	// IdleReturnSeconds is the entry's grace period for borrowed cards. The
-	// agents learn it when they enroll, on start; the pod template carries
-	// it so that changing it restarts them.
-	IdleReturnSeconds int
 }
 
 // PriorityClass names the PriorityClass of the hold and instance pods of the
@@ -188,8 +178,6 @@ func (p Params) Validate() error {
 		return fmt.Errorf("enrollment token is empty")
 	case strings.TrimSpace(p.AgentImage) == "":
 		return fmt.Errorf("agent image is empty")
-	case p.RuntimeClass != "" && (len(p.RuntimeClass) > 63 || !dnsLabel.MatchString(p.RuntimeClass)):
-		return fmt.Errorf("runtime class %q is not a DNS label", p.RuntimeClass)
 	case p.ImagePullSecret != "" && !ValidSecretName(p.ImagePullSecret):
 		return fmt.Errorf("image pull secret %q is not a Secret name", p.ImagePullSecret)
 	case (p.PoolLabel == "") != (len(p.PoolIDs) == 0):
@@ -230,6 +218,13 @@ func validLabelKey(s string) bool {
 
 // ValidSecretName says whether s can name a Secret (a DNS subdomain).
 func ValidSecretName(s string) bool { return len(s) <= 253 && dnsName.MatchString(s) }
+
+// ValidRuntimeClass says whether s can name a RuntimeClass (a DNS label); the
+// empty string is valid and leaves the choice to each agent. A RuntimeClass is
+// no part of the manifest: the server hands it to the agents live.
+func ValidRuntimeClass(s string) bool {
+	return s == "" || (len(s) <= 63 && dnsLabel.MatchString(s))
+}
 
 func cleanAbs(s string) bool {
 	return strings.HasPrefix(s, "/") && path.Clean(s) == s && !strings.ContainsAny(s, "\"\n")
@@ -398,8 +393,6 @@ spec:
       labels:
         app.kubernetes.io/name: {{.Agent}}
         app.kubernetes.io/managed-by: gpuworks
-      annotations:
-        gpuworks.ai/idle-return-seconds: {{q (printf "%d" .P.IdleReturnSeconds)}}
     spec:
       serviceAccountName: {{.Agent}}
 {{- if .P.ImagePullSecret}}
@@ -444,9 +437,6 @@ spec:
             - {{q (printf "--server=%s" .P.ServerURL)}}
             - {{q (printf "--state=%s" .StateDir)}}
             - "--driver=kube"
-{{- if .P.EnginePorts}}
-            - {{q (printf "--engine-ports=%s" .P.EnginePorts)}}
-{{- end}}
           env:
             - name: GPUWORKS_KUBE_ENROLL_TOKEN
               valueFrom:
@@ -465,8 +455,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: GPUWORKS_KUBE_RUNTIME_CLASS
-              value: {{q .P.RuntimeClass}}
             - name: GPUWORKS_KUBE_PRIORITY_CLASS
               value: {{q .Priority}}
 {{- if .APIHost}}

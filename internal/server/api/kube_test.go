@@ -131,6 +131,7 @@ func TestKubeClusterValidation(t *testing.T) {
 		{`{"name":"a","server_url":"gw"}`, "manifest"},
 		{`{"name":"a","server_url":"https://gw","engine_ports":"9-1"}`, "engine_ports"},
 		{`{"name":"a","server_url":"https://gw","idle_return_seconds":-2}`, "idle_return_seconds"},
+		{`{"name":"a","server_url":"https://gw","runtime_class":"No_Class"}`, "runtime_class"},
 		{`{"name":"a","server_url":"https://gw","namespace":"Bad_NS"}`, "manifest"},
 		{`{"name":"a","server_url":"https://gw","node_selector":"novalue"}`, "manifest"},
 		{`{"name":"a","server_url":"https://gw","state_dir":"opt/x"}`, "manifest"},
@@ -155,11 +156,14 @@ func TestKubeClusterValidation(t *testing.T) {
 		t.Fatalf("named runtime class, pull secret and keep = %d %s", rec.Code, rec.Body)
 	}
 	manifest := rig.do(rig.session, http.MethodGet, "/api/v1/kube/clusters/"+b["uuid"].(string)+"/manifest", "").Body.String()
-	// The RuntimeClass is the NVIDIA instance pods'; the agent runs under the
-	// default runtime and passes it on.
-	for _, want := range []string{"imagePullSecrets:\n        - name: \"regcred\"", "- name: GPUWORKS_KUBE_RUNTIME_CLASS\n              value: \"nvidia\""} {
-		if !strings.Contains(manifest, want) {
-			t.Fatalf("manifest lacks %s:\n%s", want, manifest)
+	// The RuntimeClass is the NVIDIA instance pods'; the server hands it to the
+	// agents live, so the manifest carries neither it nor the idle return.
+	if want := "imagePullSecrets:\n        - name: \"regcred\""; !strings.Contains(manifest, want) {
+		t.Fatalf("manifest lacks %s:\n%s", want, manifest)
+	}
+	for _, banned := range []string{"GPUWORKS_KUBE_RUNTIME_CLASS", "idle-return", "--engine-ports"} {
+		if strings.Contains(manifest, banned) {
+			t.Fatalf("manifest carries %s:\n%s", banned, manifest)
 		}
 	}
 	if rec := rig.do(rig.session, http.MethodPost, "/api/v1/kube/clusters", `{"name":"c","server_url":"https://gw","image_pull_secret":"Reg Cred"}`); rec.Code != http.StatusBadRequest ||

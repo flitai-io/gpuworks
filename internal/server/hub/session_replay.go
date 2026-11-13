@@ -85,12 +85,29 @@ func (s *Session) pushInitialState() (err error) {
 		return err
 	}
 
-	s.completeNetworkConfig(node.ID, &ds.Network)
+	if err := s.completeNetworkConfig(node, &ds.Network); err != nil {
+		return err
+	}
 	if err := s.hydrateRuntimeAssetContent(ds.Instances); err != nil {
 		return err
 	}
 	s.omitCachedAssetContent(ds.Instances)
-	return s.send(proto.TStateSync, 0, ds)
+	if err := s.send(proto.TStateSync, 0, ds); err != nil {
+		return err
+	}
+	// The replay is on the wire: a failure to follow it with the entry's
+	// settings must not read as a failed replay (which would keep buffered
+	// updates the snapshot already contains). The next connection, or the
+	// next edit of the entry, sends them again.
+	if s.kubeSettingsSent.CompareAndSwap(false, true) {
+		if err := s.pushKubeSettings(node.KubeClusterID); err != nil {
+			s.kubeSettingsSent.Store(false)
+			if !errors.Is(err, errSessionClosed) {
+				s.hub.log.Warn("kubernetes settings push failed", "node", s.NodeUUID, "err", err)
+			}
+		}
+	}
+	return nil
 }
 
 // errSessionClosed reports a replay abandoned because its session ended first.
