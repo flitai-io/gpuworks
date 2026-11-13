@@ -510,12 +510,19 @@ func (h *Hub) register(s *Session) {
 		}
 	}
 	h.mu.Lock()
-	if old, ok := h.sessions[s.NodeUUID]; ok {
+	old := h.sessions[s.NodeUUID]
+	if old != nil {
 		old.Close()
 	}
-	h.copies.ForgetNode(s.nodeID)
 	h.sessions[s.NodeUUID] = s
 	h.mu.Unlock()
+	if old != nil {
+		// A report write the old session validated under applyCurrent lands
+		// before anything this session reports (session_reports.go), and
+		// before the copy observations it may have recorded are dropped.
+		old.fenceReports()
+	}
+	h.copies.ForgetNode(s.nodeID)
 	_ = h.store.SetNodeState(s.NodeUUID, store.NodeStateOnline)
 	_ = h.store.ClearNodeRecovery(s.NodeUUID)
 	h.trackSessionWork(func() { h.resumeDirectImageTransfers(s.NodeUUID) })
@@ -538,10 +545,13 @@ func (h *Hub) waitSessionWork() { h.sessionWork.Wait() }
 func (h *Hub) deregister(s *Session) {
 	h.mu.Lock()
 	if cur, ok := h.sessions[s.NodeUUID]; ok && cur == s {
-		h.copies.ForgetNode(s.nodeID)
 		delete(h.sessions, s.NodeUUID)
 		h.mu.Unlock()
 		h.statusQ.forget(s.NodeUUID) // a stale report would mark it online again
+		// A report write already validated lands before the offline mark and
+		// before its copy observations are dropped.
+		s.fenceReports()
+		h.copies.ForgetNode(s.nodeID)
 		_ = h.store.SetNodeState(s.NodeUUID, store.NodeStateOffline)
 		if h.onNodeGone != nil {
 			h.onNodeGone(s.NodeUUID)

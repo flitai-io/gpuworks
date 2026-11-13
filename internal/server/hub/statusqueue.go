@@ -193,26 +193,6 @@ func newTouchQueue(log *slog.Logger, st *store.Store) *nodeQueue[time.Time] {
 	return q
 }
 
-// applyNodeStatus persists a queued status report. A status write also marks
-// the node online, so a report still queued when its session ended must not
-// land after deregister marked the node offline: a node without a session
-// would read as online until the stale sweep. Reports of an ended session are
-// skipped, and one that raced the deregister is followed by restoring offline
-// (deregister removes the session before writing, so whichever write is last
-// in store order says offline).
-func (h *Hub) applyNodeStatus(nodeUUID string, st proto.NodeStatus) error {
-	if !h.Online(nodeUUID) {
-		return nil
-	}
-	if err := h.store.UpdateNodeStatus(nodeUUID, st); err != nil {
-		return err
-	}
-	if !h.Online(nodeUUID) {
-		return h.store.SetNodeState(nodeUUID, store.NodeStateOffline)
-	}
-	return nil
-}
-
 // handleHeartbeat records the liveness timestamp and queues the persisted
 // bump: a fleet's heartbeats must never queue behind the store on the read
 // loop.

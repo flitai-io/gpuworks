@@ -14,6 +14,11 @@ type queuedNodeStatus struct {
 	imageRevision uint64
 }
 
+// applyQueuedNodeStatus persists a status report from the node's current
+// session only (applyCurrent): a status write also marks the node online, so
+// one from an ended session would leave a node without a session reading as
+// online until the stale sweep. deregister fences the session before it
+// writes offline, so that write is always the later one.
 func (h *Hub) applyQueuedNodeStatus(nodeUUID string, queued queuedNodeStatus) error {
 	s := queued.session
 	if s == nil {
@@ -21,15 +26,13 @@ func (h *Hub) applyQueuedNodeStatus(nodeUUID string, queued queuedNodeStatus) er
 	}
 	s.imageStatusMu.Lock()
 	defer s.imageStatusMu.Unlock()
-	if h.session(nodeUUID) != s {
-		return nil
-	}
 	if s.imageStatusRevision.Load() != queued.imageRevision {
 		// This also protects work already popped by the worker, not just entries
 		// still pending. Preserve non-image facts from the original inventory.
 		queued.status.Images = nil
 	}
-	return h.applyNodeStatus(nodeUUID, queued.status)
+	_, err := s.applyCurrent(func(uint) error { return h.store.UpdateNodeStatus(nodeUUID, queued.status) })
+	return err
 }
 
 // handleImageStatus stays synchronous: reports arrive only on change (rare),
@@ -48,10 +51,11 @@ func (s *Session) handleImageStatus(raw json.RawMessage) {
 		return
 	}
 	s.imageStatusRevision.Add(1)
-	node, err := s.hub.store.NodeByUUID(s.NodeUUID)
-	if err == nil {
-		if image, imageErr := s.hub.store.ImageByRef(st.ImageRef); imageErr == nil {
-			_ = s.hub.store.ApplyImageNodeStatus(image.ID, node.ID, st)
+	_, _ = s.applyCurrent(func(nodeID uint) error {
+		image, err := s.hub.store.ImageByRef(st.ImageRef)
+		if err != nil {
+			return err
 		}
-	}
+		return s.hub.store.ApplyImageNodeStatus(image.ID, nodeID, st)
+	})
 }

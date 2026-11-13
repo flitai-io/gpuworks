@@ -44,6 +44,7 @@ type Session struct {
 	writeMu             sync.Mutex
 	imageStatusMu       sync.Mutex // serializes image inventory and operation persistence
 	imageStatusRevision atomic.Uint64
+	reportMu            sync.Mutex // fences status writes against session replacement (session_reports.go)
 	// Network saves coalesce independently from resource reconciliation.
 	networkSyncOnce   sync.Once
 	networkSyncNotify chan struct{}
@@ -289,11 +290,8 @@ func (s *Session) handle(env proto.Envelope) {
 			s.hub.log.Warn("bad status.storage", "node", s.NodeUUID, "err", err)
 			return
 		}
-		node, err := s.hub.store.NodeByUUID(s.NodeUUID)
-		if err == nil {
-			if err := s.hub.store.ApplyStorageStatus(node.ID, report); err != nil {
-				s.hub.log.Warn("apply status.storage failed", "node", s.NodeUUID, "err", err)
-			}
+		if _, err := s.applyCurrent(func(nodeID uint) error { return s.hub.store.ApplyStorageStatus(nodeID, report) }); err != nil {
+			s.hub.log.Warn("apply status.storage failed", "node", s.NodeUUID, "err", err)
 		}
 	case proto.TStatusBenchmark:
 		var st proto.BenchmarkStatus
@@ -301,19 +299,23 @@ func (s *Session) handle(env proto.Envelope) {
 			s.hub.log.Warn("bad status.benchmark", "node", s.NodeUUID, "err", err)
 			return
 		}
-		node, err := s.hub.store.NodeByUUID(s.NodeUUID)
-		if err != nil {
-			return
-		}
-		if err := s.hub.store.ApplyBenchmarkStatus(node.ID, st); err != nil {
-			s.hub.log.Debug("apply status.benchmark", "id", st.ID, "err", err)
-			return
-		}
-		if len(st.Sample) > 0 && st.PointIndex > 0 {
-			var sample metrics.ProcessSample
-			if json.Unmarshal(st.Sample, &sample) == nil {
-				_ = s.hub.store.AppendBenchmarkCurveSample(st.ID, st.PointIndex, time.Now().UTC(), sample)
+		accepted, err := s.applyCurrent(func(nodeID uint) error {
+			if err := s.hub.store.ApplyBenchmarkStatus(nodeID, st); err != nil {
+				return err
 			}
+			if len(st.Sample) > 0 && st.PointIndex > 0 {
+				var sample metrics.ProcessSample
+				if json.Unmarshal(st.Sample, &sample) == nil {
+					_ = s.hub.store.AppendBenchmarkCurveSample(st.ID, st.PointIndex, time.Now().UTC(), sample)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			s.hub.log.Debug("apply status.benchmark", "id", st.ID, "err", err)
+		}
+		if !accepted {
+			return
 		}
 		if (len(st.DetailChunk) > 0 || st.DetailFinal) && s.hub.onBenchmarkDetail != nil {
 			s.hub.onBenchmarkDetail(s.NodeUUID, st)

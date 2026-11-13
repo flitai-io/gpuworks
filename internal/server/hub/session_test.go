@@ -157,7 +157,8 @@ func TestAgentBenchmarkStatusPersistsProcessCurve(t *testing.T) {
 	}
 	h := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	session := newSession(h, nil, nil)
-	session.NodeUUID = node.UUID
+	session.NodeUUID, session.nodeID = node.UUID, node.ID
+	h.sessions[node.UUID] = session
 	session.handle(proto.Envelope{T: proto.TStatusBenchmark, D: statusRaw})
 
 	persistedRun, err := st.GetBenchmarkRun(run.ID)
@@ -202,7 +203,8 @@ func TestAgentBenchmarkStatusFromWrongNodeCannotWriteCurve(t *testing.T) {
 	statusRaw, _ := json.Marshal(proto.BenchmarkStatus{ID: run.ID, State: "running", PointIndex: 1, Sample: sampleRaw})
 	h := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	session := newSession(h, nil, nil)
-	session.NodeUUID = other.UUID
+	session.NodeUUID, session.nodeID = other.UUID, other.ID
+	h.sessions[other.UUID] = session // current, so only the store's owner check refuses it
 	session.handle(proto.Envelope{T: proto.TStatusBenchmark, D: statusRaw})
 	if _, err := st.GetBenchmarkPoint(run.ID, 1); err != store.ErrNotFound {
 		t.Fatalf("wrong node wrote a curve point: err=%v", err)
