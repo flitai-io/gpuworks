@@ -547,7 +547,7 @@ macOS 忽略 `no_systemd`。
 | GET | `/api/v1/storages` | 存储列表（类型、路径或导出、节点汇总与问题节点、模型数、在用部署） | JWT |
 | GET | `/api/v1/storages/{id}` | 单个存储；`?all_nodes=1` 返回每个节点的状态 | JWT |
 | POST | `/api/v1/storages` | 添加存储；NFS 类先在一台节点上试挂，写不进去的保存为停用（只读）。校验错误按原因区分，均为 400：`STORAGE_PATH_INVALID`（路径格式不对，`params.path`）、`STORAGE_PATH_DENIED`（位于 `storage_denied_paths` 下，`params.path`）、`STORAGE_PATH_REQUIRED`（缺目录）、`STORAGE_CACHE_LIMIT_NEGATIVE`（缓存上限为负）；修改、试挂与节点覆盖同样适用 | admin |
-| PATCH | `/api/v1/storages/{id}` | 修改名称、启用、默认、节点范围、路径、挂载选项、缓存目录与上限、`nfs`↔`nfs_cache` 类型；`nfs_cache` 改为 `nfs` 时节点缓存须先清空，否则 409 `STORAGE_CACHE_NOT_EMPTY`（`params` 为剩余项数、节点数、传输中项数）；可带读取时的 `expected_updated_at` 防止覆盖并发修改，版本变化返回409 `STORAGE_CONFIG_CHANGED` | admin |
+| PATCH | `/api/v1/storages/{id}` | 修改名称、启用、默认、节点范围、路径、挂载选项、缓存目录与上限、`nfs`↔`nfs_cache` 类型；`nfs_cache` 改为 `nfs` 时节点缓存须先清空，否则 409 `STORAGE_CACHE_NOT_EMPTY`（`params`：`entries`、`nodes`、`transferring`、`node_uuids`）；可带读取时的 `expected_updated_at` 防止覆盖并发修改，版本变化返回409 `STORAGE_CONFIG_CHANGED` | admin |
 | DELETE | `/api/v1/storages/{id}` | 移除存储对象（不删文件），并从模型列表移除只存放在此存储上的模型；有部署绑定、或部署所用模型只存放在此存储上时 409 `STORAGE_IN_USE` | admin |
 | POST | `/api/v1/storages/probe` | 在一台节点上试挂一个存储定义，不留下挂载。结果含实际 `node_uuid`、`node_name`、`target`（本次实际检查的 export 或目录 path）及 `checked_at`（控制面收到并解码结果的时间），只说明这台节点这次检查的结果；旧版本响应可缺后两字段 | admin |
 | GET | `/api/v1/storages/{id}/control-planes` | 共享存储上还有哪些 gpuworks 在用（心跳） | JWT |
@@ -556,7 +556,7 @@ macOS 忽略 `no_systemd`。
 | GET | `/api/v1/storages/{id}/model-files` | 存储里的模型文件：共享存储每个模型一行，本地存储与 `nfs_cache` 的节点缓存每台节点一行（含最近使用时间与绑定的部署） | JWT |
 | POST | `/api/v1/storages/{id}/scan` | 扫描共享存储里的模型目录，分页（`cursor`） | admin |
 | POST | `/api/v1/storages/{id}/import` | 导入扫描到的目录，只写数据库 | admin |
-| DELETE | `/api/v1/storages/{id}/cache` | 淘汰 `nfs_cache` 存储所有可淘汰的节点缓存，`?node_uuid=` 限一台 | admin |
+| DELETE | `/api/v1/storages/{id}/cache` | 淘汰 `nfs_cache` 存储所有可淘汰的节点缓存，`?node_uuid=` 限一台；返回 `removed`、`freed_bytes` 与 `failed`（每项 `node_uuid`、`node_name`、`message`）；有失败时 409 `STORAGE_CACHE_CLEAR_FAILED`（`params`：`failed` 节点数、`node` 首个节点名），离线且没有这份缓存的节点不算失败 | admin |
 | GET | `/api/v1/storages/{id}/files` | 浏览存储里的文件（[ADR 0053](../adr/0053-storage-files.md)）：`?path=`（相对存储根，空为根）`&cursor=&limit=`（每页至多 500，按名字字节序，`next_cursor` 为空即最后一页）；返回 `{path, node_uuid, writable, items[{name, path, dir, symlink, size, mtime, writable}], next_cursor}`。顶层 `writable` 表示当前目录能否新建子项，条目 `writable` 表示能否改名/删除；符号链接只列出、不跟随。共享存储可省略 `node_uuid`（自动选在线、ready、agent 支持且数据通道已连接的节点，优先可写节点），本地存储必填，否则 400 `STORAGE_FILE_NODE_REQUIRED`；`nfs_cache` 浏览的是 NFS 本身，不是节点缓存 | admin |
 | GET | `/api/v1/storages/{id}/files/download` | 下载文件或目录：`?node_uuid=&path=&format=zip\|tar.gz`。文件原样返回（`Content-Length`、`application/octet-stream`）；目录边打包边传（默认 zip，`application/zip` 或 `application/gzip`，无 `Content-Length`），符号链接跳过并在包内 `SKIPPED_SYMLINKS.txt` 列出；`Content-Disposition: attachment` 带文件名（目录加 `.zip`/`.tar.gz`）。开始传字节之前的错误返回 JSON，之后出错直接断开连接。存储停用时仍可下载 | admin |
 | PUT | `/api/v1/storages/{id}/files/upload` | 单请求流式上传：`?node_uuid=&path=&extract=tar\|tar.gz\|zip&overwrite=true\|false`，请求体为文件字节（`application/octet-stream`）。`path` 不解压时是目标文件，解压时是解压到的目标目录。server 不落盘、不缓存，`Content-Length` 作为预期大小（缺省为未知）；agent 先写入 `.gpuworks/incoming/` 暂存，完成（含解压）后原子改名到目标再回结果，返回 `{path, bytes, files}`。所有不需要 agent 的检查都在读请求体之前完成 | admin |

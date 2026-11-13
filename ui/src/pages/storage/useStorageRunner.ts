@@ -27,5 +27,5 @@ export function useStorageRunner(onChanged: () => void) {
       setBusy(null);
     }
   };
-  return { busy, error, clearError: () => setError(null), run };
+  return { busy, error, clearError: () => setError(null), run, reload: onChanged };
 }

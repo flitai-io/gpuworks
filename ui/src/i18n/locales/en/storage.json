@@ -237,7 +237,7 @@
     "switchTo": "Switch to {{type}}",
     "switchConfirm": "Switch this storage to {{type}}?",
     "switchHelp": "Only later starts are affected; the files on the NFS stay where they are.",
-    "switchFromCacheHelp": "Node caches are removed first; the files on the NFS stay. The switch stops if a node is offline or a cached model is in use, copying, or kept only in a node cache.",
+    "switchFromCacheHelp": "Node caches are cleared first; the files on the NFS stay, and cleared caches are not restored. The switch stops if a node is unreachable or a cached model is in use, still copying, failed to copy, or has no copy on the NFS.",
     "switch": "Switch",
     "switched": "{{name}} is now {{type}}",
     "deleteDefaultBlocked": "The default storage cannot be deleted. Set another storage as the default first.",

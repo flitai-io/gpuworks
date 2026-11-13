@@ -15,6 +15,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/version"
@@ -295,24 +296,38 @@ func (a *apiHandlers) clearStorageCache(w http.ResponseWriter, r *http.Request) 
 		}
 		matched = true
 		if a.d.Online != nil && !a.d.Online(node.UUID) {
-			failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": "node is offline"})
+			// An offline node with nothing cached here has nothing to clear;
+			// failing on it would stop a switch the server would accept.
+			entries, err := a.d.Store.NodeCacheEntries(row.ID, node.ID)
+			if err == nil {
+				var pending []store.ModelFile
+				pending, err = a.d.Store.PendingCacheDeletions(row.ID, node.ID)
+				if err == nil && len(entries) == 0 && len(pending) == 0 {
+					continue
+				}
+			}
+			message := "node is offline"
+			if err != nil {
+				message = err.Error()
+			}
+			failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": message})
 			continue
 		}
 		func() {
 			release, reserved := a.d.Store.TryEvictNodeCache(node.ID)
 			if !reserved {
-				failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": "cache is being prepared for a launch; retry later"})
+				failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": "cache is being prepared for a launch; retry later"})
 				return
 			}
 			defer release()
 			entries, err := a.d.Store.NodeCacheEntries(row.ID, node.ID)
 			if err != nil {
-				failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": err.Error()})
+				failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": err.Error()})
 				return
 			}
 			pending, err := a.d.Store.PendingCacheDeletions(row.ID, node.ID)
 			if err != nil {
-				failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": err.Error()})
+				failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": err.Error()})
 				return
 			}
 			ids := make([]uint, 0, len(entries)+len(pending))
@@ -327,16 +342,16 @@ func (a *apiHandlers) clearStorageCache(w http.ResponseWriter, r *http.Request) 
 			for _, id := range ids {
 				file, err := a.d.Store.ModelFileByID(id)
 				if err != nil {
-					failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": err.Error()})
+					failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": err.Error()})
 					continue
 				}
 				if err := a.d.Store.InvalidateCacheDisk(row.ID, node.ID); err != nil {
-					failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": err.Error()})
+					failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": err.Error()})
 					continue
 				}
 				file, err = a.d.Store.BeginCacheDeletion(file)
 				if err != nil {
-					failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": err.Error()})
+					failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": err.Error()})
 					continue
 				}
 				ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
@@ -353,18 +368,18 @@ func (a *apiHandlers) clearStorageCache(w http.ResponseWriter, r *http.Request) 
 					}
 				}
 				if err != nil {
-					failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": err.Error()})
+					failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": err.Error()})
 					continue
 				}
 				if err := a.d.Store.InvalidateCacheDisk(row.ID, node.ID); err != nil {
-					failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": err.Error()})
+					failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": err.Error()})
 					continue
 				}
 				if a.d.Store.CompleteCacheDeletion(file) == nil {
 					freed += max(file.SizeBytes, file.Downloaded)
 					removed++
 				} else {
-					failures = append(failures, map[string]string{"node_uuid": node.UUID, "message": "cache index deletion failed"})
+					failures = append(failures, map[string]string{"node_uuid": node.UUID, "node_name": node.DisplayName(), "message": "cache index deletion failed"})
 				}
 			}
 		}()
@@ -373,11 +388,26 @@ func (a *apiHandlers) clearStorageCache(w http.ResponseWriter, r *http.Request) 
 		writeProductError(w, http.StatusBadRequest, ErrorFieldInvalid, "node is unknown or outside storage scope", nil)
 		return
 	}
-	status := http.StatusOK
-	if len(failures) > 0 {
-		status = http.StatusConflict
+	body := map[string]any{"removed": removed, "freed_bytes": freed, "failed": failures}
+	if len(failures) == 0 {
+		writeJSON(w, http.StatusOK, body)
+		return
 	}
-	writeJSON(w, status, map[string]any{"removed": removed, "freed_bytes": freed, "failed": failures})
+	// A failed clear is a product error too, so a client shows why. The body
+	// keeps the counts and the per-file failures it always returned; the
+	// error counts nodes, since one node can fail on several files.
+	failedNodes := map[string]bool{}
+	for _, f := range failures {
+		failedNodes[f["node_uuid"]] = true
+	}
+	first := failures[0]
+	params := map[string]any{"failed": len(failedNodes), "node": first["node_name"]}
+	body["code"] = messages.ErrorStorageCacheClearFailed
+	body["error"] = fmt.Sprintf("cache could not be cleared on %d node(s); first %s: %s", len(failedNodes), first["node_name"], first["message"])
+	body["params"] = params
+	w.Header().Set(usageErrorHeader, messages.ErrorStorageCacheClearFailed)
+	noteProductError(w, messages.ErrorStorageCacheClearFailed, params)
+	writeJSON(w, http.StatusConflict, body)
 }
 
 // storageUsage combines control-plane managed bytes with each node's statfs

@@ -225,6 +225,16 @@ test("a local storage lists each node's copy and deletes it from that node", asy
   await waitFor(() => assert.deepEqual(calls.deleteModelOnNode, [[7, "n1", 1]]));
 });
 
+test("a disabled NFS cache still lets an admin remove a node's cache, while its library stays protected", async () => {
+  stubDetail({ storage: { ...cacheStorage, enabled: false, writable: false }, files: cacheFiles });
+  renderDetail("/storage/3?tab=files");
+  const rows = await screen.findAllByRole("link", { name: "Qwen3-8B" });
+  const library = rows[0].closest("tr") as HTMLElement;
+  const cached = rows[1].closest("tr") as HTMLElement;
+  assert.equal((within(cached).getByRole("button", { name: s.files.evictCache }) as HTMLButtonElement).disabled, false);
+  assert.equal((within(library).getByRole("button", { name: models.action.deleteModelFiles }) as HTMLButtonElement).disabled, true);
+});
+
 test("a read-only storage's delete buttons are disabled; a viewer has no actions column", async () => {
   const roStorage = nfsStorage({ enabled: false, writable: false, nodes: { total: 1, ready: 1, problems: [] } });
   stubDetail({ storage: roStorage, files: [modelFile()] });
