@@ -70,6 +70,11 @@ type Store struct {
 	// observer receives the events the scheduling activity counts
 	// (scheduling_activity.go).
 	observer atomic.Pointer[EventObserver]
+	// eventRetentionBatchHook, when set, is called after each batch of
+	// events the retention trim deletes, with the write connection free
+	// again (event_retention.go). Same-package tests set it; nil in
+	// production.
+	eventRetentionBatchHook func(deleted int64)
 }
 
 func (s *Store) SetSecretbox(box *auth.Secretbox) { s.secretbox = box }
