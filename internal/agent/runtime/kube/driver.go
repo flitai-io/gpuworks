@@ -236,12 +236,12 @@ func (d *Driver) nvidiaRuntimeClass(ctx context.Context) string {
 	err := d.o.API.Get(ctx, kubeapi.RuntimeClassPath("nvidia"), &struct{}{})
 	switch {
 	case err == nil:
-		d.o.Log.Info("instance pods use the cluster's nvidia RuntimeClass")
+		d.o.Log.Info("NVIDIA instance pods use the cluster's nvidia RuntimeClass; other vendors' pods take their devices from the agent's device plugin")
 		return "nvidia"
 	case kubeapi.IsNotFound(err):
-		d.o.Log.Info("the cluster has no nvidia RuntimeClass; instance pods use the node's default runtime")
+		d.o.Log.Info("the cluster has no nvidia RuntimeClass; NVIDIA instance pods use the node's default runtime")
 	default:
-		d.o.Log.Warn("cannot read the nvidia RuntimeClass; instance pods use the node's default runtime", "err", err)
+		d.o.Log.Warn("cannot read the nvidia RuntimeClass; NVIDIA instance pods use the node's default runtime", "err", err)
 	}
 	return ""
 }
