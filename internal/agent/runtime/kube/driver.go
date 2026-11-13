@@ -87,8 +87,8 @@ type Options struct {
 	// StartTimeout bounds how long Run waits for the container to start.
 	StartTimeout time.Duration
 	// HostRoot is the host's file system (HostRoot); when set, Detect
-	// prepares nerdctl for the node's containerd and learns whether it
-	// enables CDI. Tests leave it empty and set CDI themselves.
+	// prepares nerdctl for the node's containerd, and instance pods name
+	// NVIDIA cards the way the node's CDI specs do (nvidia_cdi.go).
 	HostRoot string
 	// StateDir is the agent's state directory, the same path on the host.
 	StateDir string
@@ -383,6 +383,7 @@ func (d *Driver) Run(ctx context.Context, spec runtime.WorkloadSpec) (string, er
 	}
 	opts := podOptions{Namespace: d.o.Namespace, NodeName: d.o.NodeName, RuntimeClass: d.o.RuntimeClass, PriorityClass: d.o.PriorityClass, Owner: d.cards.owner, Cards: cards,
 		Group: func(name string) (int64, error) { return groupID(firstNonEmpty(d.o.HostRoot, "/"), name) }}
+	opts.NVIDIAVisible = d.nvidiaVisible(ctx)
 	if len(devices) > 0 {
 		plan, err := d.devicePlan(ctx)
 		if err == nil {

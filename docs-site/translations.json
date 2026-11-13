@@ -90,7 +90,7 @@
   "how-to/benchmark.md": "e1d2a6e771bf0a6130c7eb2f65b15a7cc1c316bbf7d627f219577cd7657c6b2e",
   "how-to/configure-networks.md": "f66b4f040af4f64c5e265795abcd0538775d15cf6f6beb694d3bfc13f59aab1f",
   "how-to/configure-pull-settings.md": "12c4282be93e77803a46ee9a1a8cbb1a562a6e28ac5e8a268520538f13ace3e8",
-  "how-to/connect-kubernetes.md": "f3ba1828f0d32d854184010e1c7b562be3be4097a71fcc39eb09cdd55b90fb2a",
+  "how-to/connect-kubernetes.md": "c1f880bb58dac4fd84ce5096b21491b6dc5e329704110d0b56abb331ca3b4b31",
   "how-to/connect-managed-kubernetes.md": "703ae3f1268618462e5f7723e6751460dabeef8bf2848e5e2c888c7f557ed6c4",
   "how-to/connect-nodes.md": "8a048d178612a4b77411c05214a33dd36fda18f104da0833f51df7e8b5d6426c",
   "how-to/declare-engine-metrics.md": "be1fb8eef925f9a4b1fbc20d8dbf3bc4eef9ba3b4ddb4ebc98e0581ff0ca8a49",
