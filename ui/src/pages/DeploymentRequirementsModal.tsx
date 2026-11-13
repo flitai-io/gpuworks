@@ -1,4 +1,6 @@
-import { Alert, Button, Form, Modal, Radio, Select, Space, Tag, Typography, message } from "antd";
+import { Form, Modal, Radio, Select, Space, Typography, message } from "antd";
+import { Alert, Tag } from "../pages/DeploymentControls";
+import { Button } from "../components/ui/button";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -51,7 +53,7 @@ export function EditRequirementsButton({ dep, onChanged }: { dep: Deployment; on
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="small" type="link" disabled={dep.desired_state === "deleting"} onClick={() => setOpen(true)}>
+      <Button variant="tertiary" size="xs" disabled={dep.desired_state === "deleting"} onClick={() => setOpen(true)}>
         {t("detail.placement.edit.open")}
       </Button>
       {open && <RequirementsModal dep={dep} onClose={() => setOpen(false)} onChanged={(next) => { setOpen(false); onChanged(next); }} />}

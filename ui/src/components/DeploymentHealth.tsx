@@ -7,6 +7,8 @@ import { agoText } from "../format";
 import type { InferenceAPIOperation } from "../inferenceApi";
 import { formatMS } from "../pages/monitor/requestShape";
 import { colors } from "../theme/tokens";
+import { detailBadgeTone } from "../pages/state";
+import { Badge as StatusBadge } from "./ui/badge";
 
 // The server's health check of a deployment (dto/deployment_health.go): a
 // minimal request through the gateway every minute. These pieces show it the
@@ -103,8 +105,10 @@ export function ProbeLines({
 // check's time when it answered; hover for the details.
 export function HealthTag({
   health,
+  detail = false,
 }: {
   health: DeploymentHealth | undefined;
+  detail?: boolean;
 }) {
   const { t } = useTranslation("common");
   if (!health) return <>—</>;
@@ -113,9 +117,10 @@ export function HealthTag({
     health.status === "ok" && health.last
       ? `${text} · ${formatMS(health.last.latency_ms)}`
       : text;
-  const badge = (
-    <Badge status={BADGE[health.status] ?? "default"} text={label} />
-  );
+  const status = BADGE[health.status] ?? "default";
+  const badge = detail
+    ? <StatusBadge variant="plain" size="sm" status={detailBadgeTone[status]}>{label}</StatusBadge>
+    : <Badge status={status} text={label} />;
   if (health.status === "off" || health.status === "pending") return badge;
   return (
     <Tooltip

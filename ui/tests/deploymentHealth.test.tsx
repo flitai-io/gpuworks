@@ -9,6 +9,7 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
+dom.window.HTMLElement.prototype.setPointerCapture = () => {};
 for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
@@ -22,7 +23,7 @@ const i18n = createInstance();
 await i18n.use(initReactI18next).init({
   lng: "en",
   fallbackLng: "en",
-  resources: { en: { common } },
+  resources: { en: { common, deployments: JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/deployments.json", import.meta.url), "utf8")) } },
   defaultNS: "common",
   interpolation: { escapeValue: false },
 });
@@ -142,9 +143,14 @@ test("the detail turns the check off and saves a new threshold, and says why a c
   };
   let changed = 0;
   const dep = { id: 5, operations: [{ type: "openai.chat" }], health: health({ status: "ok", threshold_sec: 60 }) } as unknown as Deployment;
-  render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={dep} onChanged={() => changed++} /></I18nextProvider>);
+  const view = render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={dep} onChanged={() => changed++} /></I18nextProvider>);
   const user = userEvent.setup({ document: dom.window.document });
 
+  assert.equal((screen.getByRole("spinbutton", { name: "Threshold" }) as HTMLInputElement).value, "60");
+  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "30" } });
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  assert.deepEqual(calls, []);
+  assert.equal((screen.getByRole("spinbutton") as HTMLInputElement).value, "60");
   const save = screen.getByRole("button", { name: "Save" }) as HTMLButtonElement;
   assert.equal(save.disabled, true, "nothing to save yet");
   const threshold = screen.getByRole("spinbutton", { name: "Threshold" });
@@ -153,6 +159,9 @@ test("the detail turns the check off and saves a new threshold, and says why a c
   await user.click(save);
   await waitFor(() => assert.deepEqual(calls, [[5, true, 20]]));
   await waitFor(() => assert.equal(changed, 1));
+  assert.ok(screen.getByRole("spinbutton", { name: "Threshold" }));
+  view.rerender(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={{ ...dep, health: health({ threshold_sec: 20 }) }} onChanged={() => changed++} /></I18nextProvider>);
+  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "40" } });
 
   await user.click(screen.getByRole("switch", { name: "Health check" }));
   await waitFor(() => assert.deepEqual(calls[1], [5, false, 20]));
@@ -166,10 +175,12 @@ test("the detail turns the check off and saves a new threshold, and says why a c
 test("a deployment that cannot be checked can still turn an old check off, but not on", () => {
   const off = { id: 6, operations: [{ type: "openai.rerank" }], health: health({ status: "off" }) } as unknown as Deployment;
   render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={off} onChanged={() => {}} /></I18nextProvider>);
-  assert.equal((screen.getByRole("switch", { name: "Health check" }) as HTMLButtonElement).disabled, true);
+  const toggle = screen.getByRole("switch", { name: "Health check" });
+  assert.ok(screen.getByText("Off").compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.equal(toggle.getAttribute("aria-disabled"), "true");
   assert.equal(screen.queryByRole("spinbutton", { name: "Threshold" }), null);
   cleanup();
   const on = { id: 7, operations: [{ type: "openai.rerank" }], health: health({ status: "failed" }) } as unknown as Deployment;
   render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={on} onChanged={() => {}} /></I18nextProvider>);
-  assert.equal((screen.getByRole("switch", { name: "Health check" }) as HTMLButtonElement).disabled, false);
+  assert.equal(screen.getByRole("switch", { name: "Health check" }).getAttribute("aria-disabled"), null);
 });

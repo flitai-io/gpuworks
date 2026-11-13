@@ -1,7 +1,7 @@
 /* Resource detail drawers: tabs, titled sections, tables that keep cells on
    one line, expanded rows, hints. See DetailDrawer.tsx. */
 
-.detail-section + .detail-section { margin-top: 24px; }
+:where(:not(.deployment-overview-groups, .deployment-instance-groups)) > .detail-section + .detail-section { margin-top: 24px; }
 .detail-section > h5.ant-typography {
   display: flex;
   align-items: center;
@@ -9,14 +9,20 @@
   margin: 0 0 10px !important;
   font-size: 14px !important;
 }
-.detail-section > h5.ant-typography::before {
-  content: "";
+.detail-section > h5.ant-typography::before,
+.deployment-detail-tabs :is(.deployment-card-header > h5, .deployment-card-disclosure, .deployment-section-title)::before {
+  content: var(--detail-section-marker, "");
   width: 3px;
   height: 14px;
+  flex-shrink: 0;
   border-radius: 2px;
   background: #005bd4;
 }
-.detail-section .ant-descriptions-item-label { width: 140px; }
+.deployment-detail-content :is(.deployment-copy-value, .instance-launch-value) [data-slot="button-icon"] svg {
+  width: 12px;
+  height: 12px;
+}
+.detail-section .ant-descriptions-item-label { width: var(--detail-label-cell-width, 140px); }
 .detail-section .detail-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
 /* Flex and grid items default to their content's width; a wide table would
    push the whole drawer sideways instead of scrolling inside its own box. */
@@ -24,6 +30,27 @@
 .detail-body .ant-card,
 .detail-body .ant-table-wrapper { min-width: 0; max-width: 100%; }
 .detail-section .detail-block { margin-top: 12px; }
+
+.detail-notice {
+  width: var(--detail-notice-width, fit-content);
+  max-width: var(--detail-notice-max-width, 100%);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 2px 6px;
+  padding: 4px 8px;
+  overflow-wrap: anywhere;
+}
+.detail-notice [data-slot="alert-icon"] { align-self: start; margin: 0; }
+.detail-notice [data-slot="alert-title"] { font-size: var(--font-size-label); line-height: var(--line-height-body); }
+.detail-notice [data-slot="alert-action"] { grid-column: 2; grid-row: auto; margin: 0; }
+.detail-notice-actions { display: flex; flex-wrap: wrap; align-items: start; gap: 4px; }
+.deployment-table-value .detail-notice-actions { min-width: 0; max-width: 100%; }
+.deployment-table-value .detail-notice-actions [data-slot="button"] {
+  height: auto;
+  min-height: var(--control-height-sm);
+  max-width: 100%;
+  white-space: normal;
+}
 
 /* The tab bar stays in view while a long tab scrolls. */
 .detail-tabs > .ant-tabs-nav {

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import socket
+import sys
 import subprocess
 import threading
 import time
@@ -230,7 +231,12 @@ def ready(page, server, token, report, dep_id, count):
         check(containers.docker_running(item["container_id"]) == "true", "replica container not running")
         inspected = json.loads(docker("inspect", item["container_id"]))[0]
         check(inspected["Image"] == report["fake_engine_image_id"], "runtime image differs from preflight image ID")
-        check(inspected["HostConfig"]["NetworkMode"] == "host", "expected host networking")
+        if sys.platform.startswith("linux"):
+            check(inspected["HostConfig"]["NetworkMode"] == "host", "expected host networking")
+        else:
+            port = str(item["api_port"])
+            strict(inspected["HostConfig"]["PortBindings"].get(port + "/tcp"),
+                   [{"HostIp": "127.0.0.1", "HostPort": port}], "loopback engine port on Docker Desktop")
         check(inspected["Config"]["Image"] == report["fixture_deployment_body"]["image"], "unexpected runtime image")
     return document
 

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Alert, Button, Checkbox, InputNumber, Modal, Popconfirm, Space, Typography, message } from "antd";
+import { Modal, Popconfirm, Space, Typography, message } from "antd";
+import { Alert, Checkbox, InputNumber } from "../pages/DeploymentControls";
+import { Button } from "../components/ui/button";
 import { useTranslation } from "react-i18next";
 import { api, type Deployment, type Instance, type Node, type PdScaleUnitInput, type ScheduleMessage } from "../api";
 import NodePicker from "../nodes/NodePicker";
@@ -9,30 +11,21 @@ import { scheduleText } from "./deploy/deploySchedule";
 import SleepModeDialog, { type SleepMode } from "../components/SleepModeDialog";
 import { ConfirmOrderModal } from "./OrderDialogs";
 import { useOrder } from "./useOrder";
-import { isFollower } from "./instanceGroups";
 
 // replicaCount is how many replicas the deployment asks for: a PD
 // deployment's are its roles' units.
-function replicaCount(dep: Deployment): number {
+export function replicaCount(dep: Deployment): number {
   if (dep.pd) return dep.pd.roles.reduce((sum, role) => sum + role.desired, 0);
   return dep.replicas;
 }
 
-// ReplicaActions are an instance panel's restart, remove, and sleep or wake
-// actions. They show only when the deployment has more than one replica (a
-// single one is handled from the drawer header) and only on an instance the
-// server says fills a replica; a follower says it goes with its leader. A
-// replica is changed through the instance that leads it.
-export function ReplicaActions({ dep, inst, onChanged }: { dep: Deployment; inst: Instance; onChanged: () => void }) {
+export function ReplicaActions({ dep, inst, label, onChanged }: { dep: Deployment; inst: Instance; label: string; onChanged: () => void }) {
   const { t } = useTranslation("deployments");
   const [restartOpen, setRestartOpen] = useState(false);
   const [drain, setDrain] = useState(true);
   const removal = useOrder();
   const replica = inst.replica;
   if (dep.desired_state !== "active" || replicaCount(dep) <= 1 || !replica) return null;
-  if (isFollower(inst)) {
-    return <div style={{ marginTop: 8 }}><Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("replica.followerHint")}</Typography.Text></div>;
-  }
   // Removing one named replica is a scale-down of an ordinary deployment: a
   // count naming the instance, or the multi-node list without the replica
   // this instance leads. A PD deployment removes units in Scale roles.
@@ -51,19 +44,19 @@ export function ReplicaActions({ dep, inst, onChanged }: { dep: Deployment; inst
     onChanged();
   };
   return (
-    <Space size={8} style={{ marginTop: 8 }}>
-      <Button size="small" onClick={() => setRestartOpen(true)}>{t("replica.restart")}</Button>
+    <div className="inline-flex max-w-full flex-wrap items-center gap-1 [&>button]:px-1.5">
+      <Button variant="tertiary" size="sm" onClick={() => setRestartOpen(true)}>{t("replica.restart")}</Button>
+      <ReplicaSleepAction inst={inst} wakeOnRequest={dep.sleep_wakes_on_request} onChanged={onChanged} />
       {removable && (
-        <Popconfirm title={t("replica.removeConfirm")} onConfirm={() => void remove()} okText={t("replica.remove")} cancelText={t("detail.cancel")}>
-          <Button size="small" danger loading={removal.busy}>{t("replica.remove")}</Button>
+        <Popconfirm title={t("replica.removeNamed", { label })} onConfirm={() => void remove()} okText={t("replica.remove")} cancelText={t("detail.cancel")}>
+          <Button variant="destructive" size="sm" loading={removal.busy}>{t("replica.remove")}</Button>
         </Popconfirm>
       )}
-      <ReplicaSleepAction inst={inst} wakeOnRequest={dep.sleep_wakes_on_request} onChanged={onChanged} />
       {/* Draining is the default: the instance finishes the requests it
           holds while its replacement starts. */}
       <ConfirmOrderModal
         open={restartOpen}
-        title={t("replica.restartTitle")}
+        title={t("replica.restartNamed", { label })}
         okText={t("replica.restart")}
         failKey="replica.restartFailed"
         order={() => api.restartInstance(inst.uuid, drain)}
@@ -76,7 +69,7 @@ export function ReplicaActions({ dep, inst, onChanged }: { dep: Deployment; inst
         <Typography.Paragraph>{t("replica.restartDescription")}</Typography.Paragraph>
         <Checkbox checked={drain} onChange={(e) => setDrain(e.target.checked)}>{t("replica.drain")}</Checkbox>
       </ConfirmOrderModal>
-    </Space>
+    </div>
   );
 }
 
@@ -101,7 +94,7 @@ function ReplicaSleepAction({ inst, wakeOnRequest, onChanged }: { inst: Instance
   if (inst.asleep) {
     if (!inst.can_wake_alone) return null;
     return (
-      <Button size="small" type="primary" loading={busy} onClick={() => void order(() => api.wakeInstance(inst.uuid), t("replica.wakeStarted"), "sleep.wakeFailed")}>
+      <Button variant="primary" size="sm" loading={busy} onClick={() => void order(() => api.wakeInstance(inst.uuid), t("replica.wakeStarted"), "sleep.wakeFailed")}>
         {t("replica.wake")}
       </Button>
     );
@@ -109,7 +102,7 @@ function ReplicaSleepAction({ inst, wakeOnRequest, onChanged }: { inst: Instance
   if (!inst.can_sleep_alone) return null;
   return (
     <>
-      <Button size="small" loading={busy} onClick={() => setAsking(true)}>{t("replica.sleep")}</Button>
+      <Button variant="tertiary" size="sm" loading={busy} onClick={() => setAsking(true)}>{t("replica.sleep")}</Button>
       <SleepModeDialog
         open={asking}
         level={1}
@@ -136,17 +129,23 @@ export function ReplicasEditor({ dep, onChanged }: { dep: Deployment; onChanged:
   const { t } = useTranslation("deployments");
   const { t: tDeploy } = useTranslation("deploy");
   const { t: tCommon } = useTranslation("common");
-  const [value, setValue] = useState<number | null>(dep.replicas);
+  const [draft, setDraft] = useState<number | null>();
+  const value = draft === undefined ? dep.replicas : draft;
   const [firstNodes, setFirstNodes] = useState<string[]>([]);
   const { busy, run } = useOrder();
   const [listOpen, setListOpen] = useState(false);
   const ranks = dep.nnodes ?? 1;
-  if (dep.pd || dep.desired_state === "deleting") return <>{dep.replicas}</>;
+  const startingReplicas = new Set((dep.instances ?? []).filter(inst => inst.replica && ["pulling", "starting", "optimizing"].includes(inst.state))
+    .map(inst => `${inst.replica!.role ?? ""}:${inst.replica!.index}`)).size;
+  const readyLabel = dep.ready_replicas != null && <Typography.Text>{t("detailLayout.ready", { ready: dep.ready_replicas, total: replicaCount(dep) })}{startingReplicas > 0 && ` · ${t("detailLayout.starting", { count: startingReplicas })}`}</Typography.Text>;
+  const desiredLabel = dep.ready_replicas == null && <span>{t("detail.desiredReplicas", { desired: dep.replicas })}</span>;
+  if (dep.pd || dep.desired_state === "deleting") return <Space size={8}>{readyLabel}{desiredLabel}</Space>;
   if (ranks > 1) {
     return (
-      <Space size={8}>
-        {dep.replicas}
-        <Button size="small" onClick={() => setListOpen(true)}>{t("replica.editUnits")}</Button>
+      <Space size={8} wrap>
+        {readyLabel}
+        {desiredLabel}
+        <Button variant="tertiary" size="sm" onClick={() => setListOpen(true)}>{t("replica.editUnits")}</Button>
         {listOpen && (dep.placement_mode === "auto"
           ? <AutoReplicasDialog dep={dep} ranks={ranks} onClose={() => setListOpen(false)} onChanged={onChanged} />
           : <MultiNodeReplicasDialog dep={dep} ranks={ranks} onClose={() => setListOpen(false)} onChanged={onChanged} />)}
@@ -169,6 +168,8 @@ export function ReplicasEditor({ dep, onChanged }: { dep: Deployment; onChanged:
       message.error(t("replica.scaleFailed", { detail: refused }));
       return;
     }
+    setDraft(undefined);
+    setFirstNodes([]);
     message.success(t("replica.scaled", { count: value }));
     onChanged();
   };
@@ -176,11 +177,13 @@ export function ReplicasEditor({ dep, onChanged }: { dep: Deployment; onChanged:
   const unpickable = (node: Node) => node.state !== "online" || (node.scheduling ?? "schedulable") !== "schedulable";
   return (
     <Space size={8} wrap>
-      <InputNumber id="deployment-replicas" size="small" min={1} max={dep.max_replicas} value={value} onChange={(next) => setValue(next)} aria-label={t("detail.replicas")} />
+      {readyLabel}
+      <span>{t("detail.desiredCount")}</span>
+      <InputNumber disabled={busy} precision={0} id="deployment-replicas" size="small" style={{ width: 64 }} min={1} max={dep.max_replicas} value={value} onChange={setDraft} aria-label={t("detail.replicas")} />
       {added > 0 && (
         <NodePicker
           mode="multiple"
-          style={{ minWidth: 220 }}
+          style={{ width: 220, maxWidth: "100%" }}
           size="small"
           maxCount={added}
           placeholder={t("replica.placeOn.placeholder", { count: added })}
@@ -190,8 +193,11 @@ export function ReplicasEditor({ dep, onChanged }: { dep: Deployment; onChanged:
           onChange={(next) => setFirstNodes(Array.isArray(next) ? next : [])}
         />
       )}
-      <Button size="small" loading={busy} disabled={value == null || value === dep.replicas} onClick={() => void apply()}>{t("replica.apply")}</Button>
-      {added > 0 && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("replica.placeOn.hint")}</Typography.Text>}
+      <Space size={4}>
+        <Button variant="tertiary" size="sm" loading={busy} disabled={value == null || value < 1 || value > (dep.max_replicas ?? Infinity) || value === dep.replicas} onClick={() => void apply()}>{t("replica.apply")}</Button>
+        {value !== dep.replicas && <Button variant="tertiary" size="sm" disabled={busy} onClick={() => { setDraft(undefined); setFirstNodes([]); }}>{t("detail.cancel")}</Button>}
+      </Space>
+      {added > 0 && <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-label)" }}>{t("replica.placeOn.hint")}</Typography.Text>}
     </Space>
   );
 }
@@ -285,16 +291,16 @@ function MultiNodeReplicasDialog({ dep, ranks, onClose, onChanged }: { dep: Depl
                 onChange={(node) => setRank(unit, rank, node as string)}
               />
             ))}
-            <Button size="small" disabled={units.length <= 1} onClick={() => setUnits((current) => current.filter((_, index) => index !== unit))}>
+            <Button variant="tertiary" size="sm" disabled={units.length <= 1} onClick={() => setUnits((current) => current.filter((_, index) => index !== unit))}>
               {t("replica.removeUnit", { index: unit + 1 })}
             </Button>
           </Space>
         ))}
         <Space wrap>
-          <Button size="small" disabled={dep.max_replicas !== undefined && units.length >= dep.max_replicas} onClick={() => setUnits((current) => [...current, Array.from({ length: ranks }, () => "")])}>
+          <Button variant="tertiary" size="sm" disabled={dep.max_replicas !== undefined && units.length >= dep.max_replicas} onClick={() => setUnits((current) => [...current, Array.from({ length: ranks }, () => "")])}>
             {t("replica.addUnit")}
           </Button>
-          <Button size="small" loading={suggesting} disabled={dep.max_replicas !== undefined && units.length >= dep.max_replicas} onClick={() => void suggest()}>
+          <Button variant="tertiary" size="sm" loading={suggesting} disabled={dep.max_replicas !== undefined && units.length >= dep.max_replicas} onClick={() => void suggest()}>
             {t("replica.suggestUnit")}
           </Button>
         </Space>

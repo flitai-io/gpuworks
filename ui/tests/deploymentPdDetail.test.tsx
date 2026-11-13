@@ -1,3 +1,4 @@
+import { installCanvas } from "./helpers/analyticsFixtures.ts";
 import assert from "node:assert/strict";
 import { listPage, cursorPage, list } from "./helpers/listPage.ts";
 import fs from "node:fs";
@@ -15,12 +16,13 @@ import { I18nextProvider, initReactI18next } from "react-i18next";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "MutationObserver", "ShadowRoot", "File", "Blob"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "localStorage", { value: dom.window.localStorage, configurable: true });
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
+installCanvas(dom);
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
 Object.defineProperties(dom.window.HTMLElement.prototype, {
@@ -42,7 +44,7 @@ await i18n.use(initReactI18next).init({
 const deploymentsLocale = i18n.getResourceBundle("en", "deployments");
 
 const { MemoryRouter } = await import("react-router-dom");
-const { cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
+const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 
 class Events {
   static listeners = new Map<string, Set<EventListener>>();
@@ -56,6 +58,7 @@ class Events {
 }
 Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: true });
 
+const { selectInstance } = await import("./helpers/selectInstance.ts");
 const { api } = await import("../src/api.ts");
 const { APIError } = await import("../src/apiError.ts");
 const { default: DeploymentsPage } = await import("../src/pages/DeploymentsPage.tsx");
@@ -109,11 +112,11 @@ async function openDetail() {
   await screen.findAllByText("pd-deployment");
 }
 
-test("a running PD deployment shows its mode, state, role ratios and role-grouped instances", async () => {
+test("a running PD deployment shows its mode, state, role ratios and the role of the selected instance", async () => {
   stub("deploymentsPage", async () => listPage([pdDeploymentBase]));
   stub("deployment", async () => ({
     ...pdDeploymentBase,
-    instances: [pdInstance("inst-decode", "decode", "node-decode"), pdInstance("inst-prefill", "prefill", "node-prefill")],
+    instances: [pdInstance("inst-prefill", "prefill", "node-prefill"), pdInstance("inst-decode", "decode", "node-decode")],
     pd: {
       mode: "vllm-nixl", fallback: "decode", kv_load_failure: "fail",
       state: "running", short: false,
@@ -134,12 +137,14 @@ test("a running PD deployment shows its mode, state, role ratios and role-groupe
   assert.ok(screen.getByText("Decode · TP 2 · 1/1 ready"));
   assert.ok(screen.getByText("Prefill · TP 1 · 1/1 ready"));
 
-  // Both instances render, each tagged with its own role badge, and the
-  // decode instance appears before the prefill one (dep.pd.roles' order).
-  const roleTags = screen.getAllByText(/^(Decode|Prefill)$/);
-  assert.ok(roleTags.length >= 4, "role appears in the summary tags and beside each instance");
-  const instanceUUIDs = screen.getAllByText(/^inst-(decode|prefill)/).map((el) => el.textContent);
-  assert.deepEqual(instanceUUIDs, ["inst-decode", "inst-prefill"]);
+  selectInstance("inst-decode");
+  assert.ok(document.getElementById("instance-inst-decode"));
+  assert.ok(screen.getByText("TP 2 · 1/1"));
+  assert.equal(document.getElementById("instance-inst-prefill"), null);
+  selectInstance("inst-prefill");
+  assert.ok(document.getElementById("instance-inst-prefill"));
+  assert.ok(screen.getByText("TP 1 · 1/1"));
+  assert.equal(document.getElementById("instance-inst-decode"), null);
 });
 
 test("a partial PD deployment with a short role shows the short notice", async () => {
@@ -162,8 +167,31 @@ test("a partial PD deployment with a short role shows the short notice", async (
   await waitFor(() => assert.ok(screen.getByText("Partially ready")));
   assert.ok(screen.getByText(deploymentsLocale.detail.pd.short));
   assert.ok(screen.getByText("Prefill · TP 1 · 0/2 ready"));
+  selectInstance("inst-decode");
   // No prefill instance exists yet, so only the decode instance renders.
-  assert.ok(screen.getByText("inst-decode".slice(0, 12)));
+  assert.ok(within(screen.getByRole("group", { name: deploymentsLocale.detail.switchInstance })).getByText("inst-decode"));
+});
+
+test("a stopped PD deployment retains its role targets without reporting a running capacity shortage", async () => {
+  const stopped = {
+    ...pdDeploymentBase, desired_state: "stopped", runtime_state: "stopped", instances: [],
+    pd: {
+      mode: "vllm-nixl", state: "not_ready", short: true,
+      roles: ["decode", "prefill"].map((role) => ({ role, tp: 1, desired: 1, ready: 0, units: [] })),
+    },
+  };
+  stub("deploymentsPage", async () => listPage([stopped]));
+  stub("deployment", async () => stopped);
+  await openDetail();
+  const pd = (await screen.findByText(deploymentsLocale.detail.pd.title)).closest("section")!;
+  const overview = screen.getByRole("heading", { name: deploymentsLocale.detail.serviceOverview }).closest("section")!;
+  assert.ok(!overview.contains(pd), "role targets are managed outside the service overview");
+  assert.ok(within(pd).getByText(i18n.t("detail.pd.readyUnits", { ready: 0, desired: 2 })));
+  assert.ok(within(pd).getByText("Decode · TP 1 · 0/1 ready"));
+  assert.ok(within(pd).getByText("Prefill · TP 1 · 0/1 ready"));
+  assert.ok(within(pd).getByRole("button", { name: deploymentsLocale.detail.pd.scale.action }));
+  assert.equal(screen.queryByText(deploymentsLocale.detail.pd.short), null);
+  assert.equal(screen.queryByRole("spinbutton", { name: deploymentsLocale.detail.replicas }), null);
 });
 
 test("an ordinary deployment renders exactly as before: no PD summary, no role grouping", async () => {
@@ -191,7 +219,11 @@ test("an ordinary deployment renders exactly as before: no PD summary, no role g
     </I18nextProvider>,
   );
   await screen.findAllByText("ordinary-deployment");
-  await screen.findByText("inst-plain".slice(0, 12));
+  selectInstance("inst-plain");
+  const records = await screen.findByRole("group", { name: deploymentsLocale.detail.switchInstance });
+  assert.ok(within(records).getByText("inst-plain"));
+  assert.ok(screen.getByRole("button", { name: "All 1", pressed: true }));
+  assert.ok(within(records).getByRole("combobox"));
 
   assert.equal(screen.queryByText(deploymentsLocale.detail.pd.title), null, "no PD section for an ordinary deployment");
   assert.equal(screen.queryByText("Decode"), null);
@@ -233,7 +265,8 @@ test("a unit that gave up shows its failures and a Retry that sends that unit", 
     .replace("{{role}}", "Prefill").replace("{{index}}", "1").replace("{{node}}", "Prefill Node")
     .replace("{{attempts}}", "3").replace("{{reason}}", "image pull timed out");
   await waitFor(() => assert.ok(screen.getByText(text)));
-  const retry = screen.getByRole("button", { name: deploymentsLocale.detail.retry.action });
+  const pd = screen.getByText(deploymentsLocale.detail.pd.title).closest("section")!;
+  const retry = within(pd).getByRole("button", { name: deploymentsLocale.detail.retry.action });
   fireEvent.click(retry);
   await waitFor(() => assert.equal(calls.length, 1));
   assert.deepEqual(calls[0], { id: 1, unit: { role: "prefill", index: 0 } });

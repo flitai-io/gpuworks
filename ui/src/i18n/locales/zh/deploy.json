@@ -576,6 +576,7 @@
     },
     "segment": {
       "weights": "权重",
+      "graph": "CUDA 图捕获",
       "multimodal": "多模态编码器",
       "reserve": "引擎预留",
       "kvPool": "KV pool（估算）"

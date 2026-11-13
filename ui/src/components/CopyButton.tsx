@@ -46,6 +46,7 @@ export function useCopy(): [(text: string, options?: CopyOptions) => Promise<boo
 }
 
 const COPIED_FEEDBACK_MS = 2000;
+const copyButtonSizes = { xs: "xs", small: "sm", middle: "md", large: "lg" } as const;
 
 interface CopyButtonProps {
   /** The text to copy, or a function evaluated at click time. */
@@ -54,7 +55,7 @@ interface CopyButtonProps {
   label: string;
   success?: string;
   manualTitle?: string;
-  size?: "small" | "middle" | "large";
+  size?: keyof typeof copyButtonSizes;
   type?: "text" | "default" | "primary" | "dashed" | "link";
   disabled?: boolean;
   className?: string;
@@ -79,7 +80,7 @@ export default function CopyButton({ text, label, success, manualTitle, size, ty
       <Tooltip content={copied ? t("copy.copied") : label}>
         <Button
           className={className}
-          size={size === "small" ? "sm" : size === "large" ? "lg" : "md"}
+          size={copyButtonSizes[size ?? "middle"]}
           variant={type === "primary" ? "primary" : type === "default" || type === "dashed" ? "neutral" : "ghost"}
           disabled={disabled}
           iconOnly={!children}

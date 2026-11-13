@@ -1,11 +1,16 @@
-import { Alert, Card, Col, Row, Statistic, Tooltip, Typography } from "antd";
+import { MetricCard } from "./ui/metric-card";
+import { Tooltip, Typography } from "antd";
+import { Alert } from "../pages/DeploymentControls";
 import { InfoCircleOutlined } from "@ant-design/icons";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { api, usePolling, type MetricPoint, type MetricSeries } from "../api";
+import { Activity, useCallback, useMemo, useState, type ReactNode } from "react";
+import { type MetricPoint, type MetricSeries } from "../api";
 import TimeSeriesChart, { autoValueFmt, defaultSeriesName } from "./TimeSeriesChart";
-import TimeRangePicker from "./TimeRangePicker";
+import { useInstanceMetricSeries, rateSeries } from "../instanceMetricSeries";
+import { StageCharts, useInstanceStages } from "./InstanceStagePanel";
+import { RangeHeader, useMetricWindow } from "./MetricWindow";
 import { colors } from "../theme/tokens";
-import { RETENTION_WARNING_DAYS, resolveRange, stepString, type TimeRangeSelection } from "../timeRange";
+import { Tabs, TabsList, TabItem, TabPanel } from "./ui/tabs";
+import { resolveRange, type TimeRangeSelection } from "../timeRange";
 import { useTranslation } from "react-i18next";
 
 const METRICS = {
@@ -22,32 +27,28 @@ const METRICS = {
   specAcceptRateInstant: "gpuworks_infer_spec_accept_rate",
 } as const;
 
-// One metrics query bound to the selected window: quick ranges poll at the
-// window's cadence, a custom range is a one-shot fetch (pollMs 0).
-function useMetricSeries(metric: string, instanceUuid: string, selection: TimeRangeSelection) {
-  const eff = resolveRange(selection, Date.now());
-  return usePolling(
-    () => api.metricsQuery(metric, { instance: instanceUuid, start: eff.startMS, end: eff.endMS, step: stepString(eff.stepMS) }),
-    eff.pollMs,
-    [instanceUuid, selection.kind === "quick" ? selection.key : `custom-${selection.startMS}-${selection.endMS}`],
-  );
-}
-
-export default function InferenceMetricsPanel({ instanceUuid }: { instanceUuid: string }) {
+export default function InferenceMetricsPanel({ instanceUuid, historical = false, gpu, cacheTiers }: {
+  instanceUuid: string;
+  historical?: boolean;
+  gpu?: (selection: TimeRangeSelection) => ReactNode;
+  cacheTiers?: ReactNode;
+}) {
   const { t } = useTranslation("deployments");
-  const [selection, setSelection] = useState<TimeRangeSelection>({ kind: "quick", key: "15m" });
+  const [selection, setSelection] = useMetricWindow();
+  const [selectedGroup, setGroup] = useState("requests");
+  const group = selectedGroup === "gpu" && !gpu ? "requests" : selectedGroup;
   const eff = resolveRange(selection, Date.now());
-  const running = useMetricSeries(METRICS.running, instanceUuid, selection);
-  const waiting = useMetricSeries(METRICS.waiting, instanceUuid, selection);
-  const cache = useMetricSeries(METRICS.cache, instanceUuid, selection);
-  const promptTokens = useMetricSeries(METRICS.promptTokens, instanceUuid, selection);
-  const generationTokens = useMetricSeries(METRICS.generationTokens, instanceUuid, selection);
-  const kvHits = useMetricSeries(METRICS.kvHits, instanceUuid, selection);
-  const kvQueries = useMetricSeries(METRICS.kvQueries, instanceUuid, selection);
-  const kvHitRateInstant = useMetricSeries(METRICS.kvHitRateInstant, instanceUuid, selection);
-  const specAcceptedTokens = useMetricSeries(METRICS.specAcceptedTokens, instanceUuid, selection);
-  const specDraftTokens = useMetricSeries(METRICS.specDraftTokens, instanceUuid, selection);
-  const specAcceptRateInstant = useMetricSeries(METRICS.specAcceptRateInstant, instanceUuid, selection);
+  const running = useInstanceMetricSeries(METRICS.running, instanceUuid, selection);
+  const waiting = useInstanceMetricSeries(METRICS.waiting, instanceUuid, selection);
+  const cache = useInstanceMetricSeries(METRICS.cache, instanceUuid, selection);
+  const promptTokens = useInstanceMetricSeries(METRICS.promptTokens, instanceUuid, selection);
+  const generationTokens = useInstanceMetricSeries(METRICS.generationTokens, instanceUuid, selection);
+  const kvHits = useInstanceMetricSeries(METRICS.kvHits, instanceUuid, selection);
+  const kvQueries = useInstanceMetricSeries(METRICS.kvQueries, instanceUuid, selection);
+  const kvHitRateInstant = useInstanceMetricSeries(METRICS.kvHitRateInstant, instanceUuid, selection);
+  const specAcceptedTokens = useInstanceMetricSeries(METRICS.specAcceptedTokens, instanceUuid, selection);
+  const specDraftTokens = useInstanceMetricSeries(METRICS.specDraftTokens, instanceUuid, selection);
+  const specAcceptRateInstant = useInstanceMetricSeries(METRICS.specAcceptRateInstant, instanceUuid, selection);
 
   const promptRate = useMemo(() => rateSeries(promptTokens.data?.items ?? []), [promptTokens.data]);
   const generationRate = useMemo(() => rateSeries(generationTokens.data?.items ?? []), [generationTokens.data]);
@@ -85,28 +86,13 @@ export default function InferenceMetricsPanel({ instanceUuid }: { instanceUuid: 
   // engine not exposing the metric at all.
   const kvCountersReported = hasPoints(kvHits.data?.items) || hasPoints(kvQueries.data?.items);
   const specCountersReported = hasPoints(specAcceptedTokens.data?.items) || hasPoints(specDraftTokens.data?.items);
-  const hasAnyMetric =
-    hasPoints(running.data?.items) ||
-    hasPoints(waiting.data?.items) ||
-    hasPoints(cache.data?.items) ||
-    hasPoints(promptTokens.data?.items) ||
-    hasPoints(generationTokens.data?.items);
-
-  if (!hasAnyMetric && !running.loading && !waiting.loading && !cache.loading) {
-    return (
-      <div>
-        <Alert
-          style={{ marginBottom: 12 }}
-          type="info"
-          showIcon
-          message={t("instanceMetrics.waiting")}
-          description={t("instanceMetrics.waitingDescription")}
-        />
-        <RangeHeader selection={selection} onChange={setSelection} />
-      </div>
-    );
-  }
-
+  const stages = useInstanceStages(instanceUuid, selection);
+  const queries = [running, waiting, cache, promptTokens, generationTokens, kvHits, kvQueries, kvHitRateInstant,
+    specAcceptedTokens, specDraftTokens, specAcceptRateInstant];
+  const error = queries.find((query) => query.error)?.error;
+  const all = [...queries, ...Object.values(stages)];
+  const empty = !all.some((query) => query.error || hasPoints(query.data?.items));
+  const settled = all.every((query) => !query.loading);
   const runningNow = latest(running.data?.items ?? []);
   const waitingNow = latest(waiting.data?.items ?? []);
   // Cache gauges are 0..1 fractions on both engines; percentScaled renders
@@ -116,99 +102,76 @@ export default function InferenceMetricsPanel({ instanceUuid }: { instanceUuid: 
   const generationNow = latest(generationRate);
 
   return (
-    <div>
-      {/* Live readings first; the window control only governs the charts. */}
-      <Row gutter={[12, 12]}>
-        <Col xs={24} sm={12} xl={4}>
-          <MetricStat title={t("instanceMetrics.running")} value={runningNow} />
-        </Col>
-        <Col xs={24} sm={12} xl={4}>
-          <MetricStat title={t("instanceMetrics.waitingRequests")} value={waitingNow} />
-        </Col>
-        <Col xs={24} sm={12} xl={5}>
-          <MetricStat title={t("instanceMetrics.gpuCache")} value={cacheNow != null ? percentScaled(cacheNow) : undefined} suffix="%" />
-        </Col>
-        <Col xs={24} sm={12} xl={5}>
-          <MetricStat title={t("instanceMetrics.promptThroughput")} value={promptNow} suffix="tok/s" precision={1} />
-        </Col>
-        <Col xs={24} sm={12} xl={6}>
-          <MetricStat title={t("instanceMetrics.generationThroughput")} value={generationNow} suffix="tok/s" precision={1} />
-        </Col>
-      </Row>
-
-      <RangeHeader selection={selection} onChange={setSelection} beyondRetention={eff.beyondRetention} />
-
-      <Row gutter={[12, 12]}>
-        <Col xs={24} xl={12}>
-          <ChartCard title={t("instanceMetrics.requestConcurrency")} description={t("instanceMetrics.requestConcurrencyDescription")}>
-            <TimeSeriesChart
-              height={190}
-              series={concurrencySeries}
-              seriesName={concurrencySeriesName}
-              valueFmt={(v) => v.toFixed(0)}
-              integer
-            />
-          </ChartCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <ChartCard title={t("instanceMetrics.cacheUsage")} description={t("instanceMetrics.cacheUsageDescription")}>
-            <TimeSeriesChart height={190} series={cache.data?.items ?? []} unit="%" valueFmt={(v) => percentScaled(v).toFixed(0)} />
-          </ChartCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <ChartCard title={t("instanceMetrics.promptToken")} description={t("instanceMetrics.counterRate")}>
-            <TimeSeriesChart height={190} series={promptRate} unit="tok/s" valueFmt={autoValueFmt} />
-          </ChartCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <ChartCard title={t("instanceMetrics.generationToken")} description={t("instanceMetrics.counterRate")}>
-            <TimeSeriesChart height={190} series={generationRate} unit="tok/s" valueFmt={autoValueFmt} />
-          </ChartCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <ChartCard
-            title={t("instanceMetrics.specAcceptRate")}
-            description={t("instanceMetrics.specAcceptRateDescription")}
-            hint={t("instanceMetrics.specAcceptRateScopeHint")}
-          >
-            <RatioChart series={specCardSeries} countersReported={specCountersReported} />
-          </ChartCard>
-        </Col>
-        <Col xs={24} xl={12}>
-          <ChartCard
-            title={t("instanceMetrics.kvHitRate")}
-            description={t("instanceMetrics.kvHitRateDescription")}
-            hint={t("instanceMetrics.kvHitRateScopeHint")}
-          >
-            <RatioChart series={kvCardSeries} countersReported={kvCountersReported} />
-          </ChartCard>
-        </Col>
-      </Row>
-    </div>
-  );
-}
-
-function RangeHeader({
-  selection,
-  onChange,
-  beyondRetention,
-}: {
-  selection: TimeRangeSelection;
-  onChange: (next: TimeRangeSelection) => void;
-  beyondRetention?: boolean;
-}) {
-  const { t } = useTranslation("deployments");
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <TimeRangePicker value={selection} onChange={(next) => next && onChange(next)} />
-      {beyondRetention && (
-        <Alert
-          style={{ marginTop: 8 }}
-          type="warning"
-          showIcon
-          message={t("timeRange.beyondRetention", { days: RETENTION_WARNING_DAYS })}
-        />
+    <div className="deployment-metric-panel">
+      {error ? <Alert type="error" showIcon message={t("metrics.loadFailed")} description={error.message} style={{ marginBottom: 12 }} /> :
+        empty && <Alert type="info" showIcon role="status" style={{ marginBottom: 12 }}
+          message={(historical || selection.kind === "custom") && settled ? t("metrics.emptyWindow") : t("instanceMetrics.waiting")}
+          description={historical || selection.kind === "custom" ? undefined : t("instanceMetrics.waitingDescription")} />}
+      {(historical || selection.kind === "custom") && [runningNow, waitingNow, cacheNow, promptNow, generationNow].some(v => v != null) && (
+        <Typography.Text type="secondary">{t("instanceMetrics.lastInWindow")}</Typography.Text>
       )}
+      <div className="deployment-metrics-summary" role="region" aria-label={t("instance.tab.metrics")} tabIndex={0}>
+        <MetricStat title={t("instanceMetrics.running")} value={runningNow} />
+        <MetricStat title={t("instanceMetrics.waitingRequests")} value={waitingNow} />
+        <MetricStat title={t("instanceMetrics.gpuCache")} value={cacheNow != null ? percentScaled(cacheNow) : undefined} suffix="%" />
+        <MetricStat title={t("instanceMetrics.promptThroughput")} value={promptNow} suffix="tok/s" precision={1} />
+        <MetricStat title={t("instanceMetrics.generationThroughput")} value={generationNow} suffix="tok/s" precision={1} />
+      </div>
+      <Tabs variant="segment" value={group} onValueChange={setGroup}>
+        <RangeHeader selection={selection} onChange={setSelection} beyondRetention={eff.beyondRetention}>
+          <TabsList aria-label={t("instanceMetrics.groupLabel")} className="max-w-full overflow-x-auto">
+            <TabItem value="requests" label={t("instanceMetrics.requestsGroup")} />
+            <TabItem value="cache" label={t("instanceMetrics.cacheGroup")} />
+            {gpu && <TabItem value="gpu" label={t("instanceMetrics.gpuGroup")} />}
+          </TabsList>
+        </RangeHeader>
+        <TabPanel value="requests">
+          <div className="deployment-metric-charts">
+            <ChartCard title={t("instanceMetrics.requestConcurrency")} description={t("instanceMetrics.requestConcurrencyDescription")}>
+              <TimeSeriesChart
+                height={190}
+                series={concurrencySeries}
+                seriesName={concurrencySeriesName}
+                valueFmt={(v) => v.toFixed(0)}
+                integer
+              />
+            </ChartCard>
+            <StageCharts {...stages} />
+            <ChartCard title={t("metrics.tokenThroughput")} description={t("instanceMetrics.counterRate")}>
+              <TimeSeriesChart height={190} series={[...withMetricLabel(promptRate, "prompt"), ...withMetricLabel(generationRate, "generation")]}
+                seriesName={labels => t(labels.metric === "prompt" ? "instanceMetrics.promptThroughput" : "instanceMetrics.generationThroughput")}
+                unit="tok/s" valueFmt={autoValueFmt} />
+            </ChartCard>
+          </div>
+        </TabPanel>
+        <TabPanel value="cache">
+          <div className="deployment-metric-charts">
+            <ChartCard title={t("instanceMetrics.cacheUsage")} description={t("instanceMetrics.cacheUsageDescription")}>
+              <TimeSeriesChart height={190} series={cache.data?.items ?? []} unit="%" valueFmt={(v) => percentScaled(v).toFixed(0)} />
+            </ChartCard>
+            <ChartCard
+              title={t("instanceMetrics.specAcceptRate")}
+              description={t("instanceMetrics.specAcceptRateDescription")}
+              hint={t("instanceMetrics.specAcceptRateScopeHint")}
+            >
+              <RatioChart series={specCardSeries} countersReported={specCountersReported} />
+            </ChartCard>
+            <ChartCard
+              title={t("instanceMetrics.kvHitRate")}
+              description={t("instanceMetrics.kvHitRateDescription")}
+              hint={t("instanceMetrics.kvHitRateScopeHint")}
+            >
+              <RatioChart series={kvCardSeries} countersReported={kvCountersReported} />
+            </ChartCard>
+          </div>
+          {group === "cache" && cacheTiers}
+        </TabPanel>
+        {gpu && (
+          <TabPanel value="gpu" keepMounted>
+            <Activity mode={group === "gpu" ? "visible" : "hidden"}>{gpu(selection)}</Activity>
+          </TabPanel>
+        )}
+      </Tabs>
     </div>
   );
 }
@@ -247,24 +210,6 @@ function withMetricLabel(series: MetricSeries[], metric: string): MetricSeries[]
   }));
 }
 
-function MetricStat({
-  title,
-  value,
-  suffix,
-  precision = 0,
-}: {
-  title: string;
-  value?: number;
-  suffix?: string;
-  precision?: number;
-}) {
-  return (
-    <Card size="small">
-      <Statistic title={title} value={value ?? "—"} precision={precision} suffix={value == null ? undefined : suffix} />
-    </Card>
-  );
-}
-
 function ChartCard({
   title,
   description,
@@ -277,16 +222,16 @@ function ChartCard({
   children: ReactNode;
 }) {
   return (
-    <div style={{ border: `1px solid ${colors.borderSoft}`, borderRadius: 4, padding: 16, background: colors.white }}>
+    <div className="deployment-trend-card">
       <Typography.Text strong>
         {title}
         {hint && (
-          <Tooltip title={hint}>
-            <InfoCircleOutlined style={{ marginLeft: 6, color: colors.muted }} aria-label={description} />
+          <Tooltip title={hint} trigger={["hover", "focus"]}>
+            <InfoCircleOutlined tabIndex={0} style={{ marginLeft: 6, color: colors.muted }} aria-label={description} />
           </Tooltip>
         )}
       </Typography.Text>
-      <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 8 }}>
+      <Typography.Text type="secondary" style={{ display: "block", fontSize: "var(--font-size-label)", marginBottom: 8 }}>
         {description}
       </Typography.Text>
       {children}
@@ -304,26 +249,6 @@ function latest(series: MetricSeries[]): number | undefined {
     if (points?.length) return points[points.length - 1][1];
   }
   return undefined;
-}
-
-function rateSeries(series: MetricSeries[]): MetricSeries[] {
-  return series.map((item) => ({
-    labels: item.labels,
-    points: toRatePoints(item.points ?? []),
-  }));
-}
-
-function toRatePoints(points: MetricPoint[]): MetricPoint[] {
-  const out: MetricPoint[] = [];
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const cur = points[i];
-    const seconds = (cur[0] - prev[0]) / 1000;
-    if (seconds <= 0) continue;
-    const delta = cur[1] - prev[1];
-    out.push([cur[0], Math.max(0, delta / seconds)]);
-  }
-  return out;
 }
 
 // ratioSeries derives a windowed ratio (e.g. cache hits / queries) from two
@@ -358,4 +283,22 @@ function toRatioPoints(num: MetricPoint[], den: MetricPoint[]): MetricPoint[] {
     prev = { timeMS: point[0], num: point[1], den: denValue };
   }
   return out;
+}
+
+export function MetricStat({
+  title,
+  value,
+  suffix,
+  precision = 0,
+}: {
+  title: string;
+  value?: number;
+  suffix?: string;
+  precision?: number;
+}) {
+  return (
+    <MetricCard label={title} labelClassName="text-body text-fg-subtle font-normal" valueClassName="text-title font-semibold"
+      value={value == null ? "—" : value.toLocaleString(undefined, {minimumFractionDigits:precision, maximumFractionDigits:precision})}
+      unit={value==null ? undefined : suffix} />
+  );
 }

@@ -1,5 +1,31 @@
 import type { Instance } from "../api";
 
+export type InstanceChoice = Pick<Instance, "uuid"> & Partial<Pick<Instance, "state" | "asleep" | "sleep_level">>;
+
+export function instanceSummaryState(instance: InstanceChoice): string {
+  if (instance.state === "running" && instance.asleep) return (instance.sleep_level ?? 0) > 0 ? "asleep" : "sleeping";
+  return instance.state ?? "historical";
+}
+
+function summaryPriority(state: string): number {
+  if (state === "running") return 0;
+  if (state === "failed" || state === "stopped" || state === "historical") return 2;
+  return 1;
+}
+
+export function instanceStatusGroups<T>(records: T[], stateOf: (record: T) => string): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const record of records) {
+    const state = stateOf(record);
+    const group = groups.get(state);
+    if (group) group.push(record);
+    else groups.set(state, [record]);
+  }
+  return [...groups.entries()]
+    .sort(([a, left], [b, right]) => summaryPriority(a) - summaryPriority(b) || right.length - left.length)
+    .map(([, group]) => group);
+}
+
 // A rank of a multi-node replica as the instance list shows it: rank 0 leads
 // and serves, the rest are headless followers; a follower names its
 // generation's leader so several multi-node replicas of one role can be told
@@ -27,33 +53,6 @@ export function isFollower(inst: Instance): boolean {
 function generationKey(inst: Instance): string | undefined {
   if (!isMultiNodeRank(inst) || !inst.dist_group) return undefined;
   return `${inst.dist_group}#${inst.dist_attempt ?? 0}`;
-}
-
-function rankOrder(a: Instance, b: Instance): number {
-  const byRole = Number(isFollower(a)) - Number(isFollower(b));
-  return byRole || (a.node_rank ?? 0) - (b.node_rank ?? 0);
-}
-
-// orderByGeneration keeps the list order but moves each generation's ranks
-// next to each other, leader first and followers by rank, where the first of
-// them appeared. Single-rank replicas and rows without a generation stay put.
-export function orderByGeneration(instances: Instance[]): Instance[] {
-  const groups = new Map<string, Instance[]>();
-  const slots: Array<Instance | string> = [];
-  for (const inst of instances) {
-    const key = generationKey(inst);
-    if (!key) {
-      slots.push(inst);
-      continue;
-    }
-    const group = groups.get(key);
-    if (group) group.push(inst);
-    else {
-      groups.set(key, [inst]);
-      slots.push(key);
-    }
-  }
-  return slots.flatMap((slot) => (typeof slot === "string" ? [...groups.get(slot)!].sort(rankOrder) : [slot]));
 }
 
 // launchedUnit is the unit class a leader was started for. The server keeps
@@ -101,16 +100,6 @@ export function previousAttempts(instances: Instance[], replicas: number): Set<s
     if (!recorded && slots === 1 && unkeyedFilled === 1) previous.add(inst.uuid);
   }
   return previous;
-}
-
-// orderInstances keeps a generation's ranks together, then lists whatever
-// fills a replica before the previous attempts of that same replica.
-export function orderInstances(instances: Instance[], replicas: number): { instances: Instance[]; previous: Set<string> } {
-  const previous = previousAttempts(instances, replicas);
-  const current: Instance[] = [];
-  const past: Instance[] = [];
-  for (const inst of orderByGeneration(instances)) (previous.has(inst.uuid) ? past : current).push(inst);
-  return { instances: [...current, ...past], previous };
 }
 
 // distRank describes a multi-node rank, undefined for a single-rank replica.

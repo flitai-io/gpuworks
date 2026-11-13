@@ -6,7 +6,6 @@ import { api, type InstanceEvent, type LogEntry } from "../api";
 import { ansiToSegments, decodeLogEvent } from "./logStream";
 import { formatTimeShort } from "../i18n/datetime";
 import { instanceEventText, phaseSummaryText } from "./instanceEvents";
-import { colors } from "../theme/tokens";
 import { mergeLiveSystemLines, mergeSystemLines, type TimelineLogInput } from "./instanceTimeline";
 import type { EventTimelineState } from "./useInstanceEvents";
 import type { TimeRangeValue } from "../components/TimeRangePicker";
@@ -37,12 +36,14 @@ export function LogStream({
   follow,
   range,
   timeline,
+  runtimeLine,
 }: {
   uuid: string;
   live: boolean;
   follow: boolean;
   range?: TimeRangeValue;
   timeline?: EventTimelineState;
+  runtimeLine?: string;
 }) {
   const { t } = useTranslation("deployments");
   const { t: tCommon } = useTranslation("common");
@@ -149,6 +150,9 @@ export function LogStream({
   }, [historical, uuid, streamAttempt]);
 
   const events = timeline?.events ?? [];
+  const currentOutput = !runtimeLine || range ||
+    events.some(event => event.params?.detail === runtimeLine || event.message === runtimeLine) ||
+    lines.some(line => line.text === runtimeLine) ? undefined : runtimeLine;
   // receivedAtRef is mutated by the effect above rather than read from state,
   // so recomputing on [lines, events, historical] is sufficient.
   const merged = useMemo(() => {
@@ -160,7 +164,7 @@ export function LogStream({
     // When follow is re-enabled, this also snaps the view forward to the
     // newest line instead of waiting for the next log event.
     if (follow && preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
-  }, [merged, follow]);
+  }, [merged, follow, currentOutput]);
 
   const showEventsUnavailable = !!timeline?.error;
   const showEarlierHidden = !!timeline?.hasMore && !showEventsUnavailable;
@@ -174,27 +178,27 @@ export function LogStream({
   return (
     <div>
       {showHistoryHint && (
-        <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, margin: "4px 0" }}>
+        <Typography.Text type="secondary" style={{ display: "block", fontSize: "var(--font-size-code)", margin: "4px 0" }}>
           {t("instance.logsHistoryHint")}
         </Typography.Text>
       )}
       {showTruncated && (
-        <Typography.Text type="warning" style={{ display: "block", fontSize: 12, margin: "4px 0" }}>
+        <Typography.Text type="warning" style={{ display: "block", fontSize: "var(--font-size-code)", margin: "4px 0" }}>
           {t("instance.logsTruncated", { count: LOG_TAIL_LIMIT })}
         </Typography.Text>
       )}
       <pre
         ref={preRef}
         style={{
-          background: "#0d1117",
-          color: "#e6edf3",
+          background: "var(--inverse-background)",
+          color: "var(--fg-on-inverse)",
           padding: 12,
-          borderRadius: 2,
+          borderRadius: "var(--radius-md)",
           margin: 0,
           height: 320,
           overflowY: "auto",
-          fontFamily: "monospace",
-          fontSize: 12,
+          fontFamily: "var(--font-mono, ui-monospace, monospace)",
+          fontSize: "var(--font-size-code)",
           tabSize: 4,
         }}
       >
@@ -205,7 +209,7 @@ export function LogStream({
               <button
                 type="button"
                 onClick={timeline?.reload}
-                style={{ background: "none", border: "none", color: colors.chartTeal, textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
+                style={{ background: "none", border: "none", color: "var(--info-surface-raised)", textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
               >
                 {t("instance.log.retry")}
               </button>
@@ -229,7 +233,7 @@ export function LogStream({
                   <button
                     type="button"
                     onClick={() => setStreamAttempt((attempt) => attempt + 1)}
-                    style={{ background: "none", border: "none", color: colors.chartTeal, textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
+                    style={{ background: "none", border: "none", color: "var(--info-surface-raised)", textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
                   >
                     {t("instance.log.retry")}
                   </button>
@@ -243,7 +247,7 @@ export function LogStream({
           <Fragment key={entry.kind === "system" ? `system-${entry.event.id}` : `log-${index}`}>
             {entry.kind === "log" ? (
               <span style={levelStyle(entry.level)}>
-                {historical ? <span style={{ color: "#7d8590" }}>[{formatTimeShort(entry.timeMS)}] </span> : null}
+                {historical ? <span style={{ color: "var(--neutral-status-surface-raised)" }}>[{formatTimeShort(entry.timeMS)}] </span> : null}
                 {ansiToSegments(entry.text).map((segment, segmentIndex) => (
                   <span key={segmentIndex} style={segment.style}>{segment.text}</span>
                 ))}
@@ -255,7 +259,11 @@ export function LogStream({
             )}
             {index < merged.length - 1 ? "\n" : null}
           </Fragment>
-        )) : !showEventsUnavailable && !showEarlierHidden ? t(range ? "instance.noLogsInRange" : live ? "instance.waitingLogs" : "instance.noLogs") : null}
+        )) : !showEventsUnavailable && !showEarlierHidden && !currentOutput ? t(range ? "instance.noLogsInRange" : live ? "instance.waitingLogs" : "instance.noLogs") : null}
+        {currentOutput && <>
+          {merged.length > 0 && "\n"}
+          <span aria-label={t("instance.currentLineAria")}>{currentOutput}</span>
+        </>}
       </pre>
     </div>
   );
@@ -267,8 +275,8 @@ export function LogStream({
 // pre's own default color.
 function levelStyle(level: string | undefined): React.CSSProperties | undefined {
   switch (level) {
-    case "warn": return { color: colors.warningText };
-    case "error": return { color: colors.dangerText };
+    case "warn": return { color: "var(--warning-surface-raised)" };
+    case "error": return { color: "var(--danger-surface-raised)" };
     default: return undefined;
   }
 }
@@ -284,7 +292,7 @@ function systemLineText(event: InstanceEvent, t: TFunction<"deployments">, tComm
 
 function SystemLine({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ background: "#1c2333", color: colors.chartTeal, borderRadius: 2, padding: "0 4px" }}>
+    <span style={{ background: "var(--inverse-background-hover)", color: "var(--info-surface-raised)", borderRadius: "var(--radius-md)", padding: "0 4px" }}>
       {children}
     </span>
   );

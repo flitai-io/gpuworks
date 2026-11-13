@@ -82,12 +82,3 @@ function scheduleSummary(t: TFunction<"deployments">, { rows, error }: Schedules
   if (upcoming.length === 0) return count + t("schedulingPolicy.scheduleAllOff");
   return count + t("schedulingPolicy.scheduleNext", { time: formatTime(upcoming[0].next_at), order: scheduleOrderText(t, upcoming[0]) });
 }
-
-// policySummary is the one line the collapsed card shows: each visible
-// section's name and what it is set to.
-export function policySummary(t: TFunction<"deployments">, context: PolicyContext): string {
-  return policySections
-    .filter((section) => section.visible(context.dep))
-    .map((section) => t("schedulingPolicy.item", { label: t(section.summaryLabel ?? section.label), value: section.summary(t, context) }))
-    .join(t("schedulingPolicy.separator"));
-}

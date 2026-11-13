@@ -1,6 +1,7 @@
 // Shared machine-state presentation. Human-readable text always comes from the
 // caller's active i18n instance so a language switch updates existing views.
 export type BadgeStatus = "success" | "default" | "error" | "warning" | "processing";
+export const detailBadgeTone = { success: "success", default: "neutral", error: "danger", warning: "warning", processing: "info" } as const;
 type Translate = (key: string) => string;
 
 const table: Record<string, { status: BadgeStatus; key: string }> = {

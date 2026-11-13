@@ -10,7 +10,7 @@ import { I18nextProvider, initReactI18next } from "react-i18next";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLHtmlElement", "NodeFilter", "HTMLInputElement", "HTMLButtonElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "localStorage", { value: dom.window.localStorage, configurable: true });
@@ -208,12 +208,8 @@ test("deployment detail renders server-owned routing policies and muted help", a
     { value: "failover", label: { en: "Failover", zh: "主备" }, description: { en: "Use backup", zh: "使用备用" } },
   ]);
   render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/deployments?deployment=44"]}><Routes><Route path="/deployments" element={<DeploymentsPage />} /></Routes></MemoryRouter></I18nextProvider>);
-  // The list's state filter is a combobox too; the routing select is the
-  // drawer's, rendered once the detail has loaded.
   assert.ok(await screen.findByText("Prefix affinity"));
-  const combos = screen.getAllByRole("combobox");
-  const combo = combos[combos.length - 1];
-  if (!combo) throw new Error("routing policy select should render");
+  const combo = screen.getByLabelText(i18n.t("deployments:detail.routingPolicy"));
   const help = screen.getByRole("img", { name: "Explain routing policies" });
   assert.equal(help.getAttribute("title"), "Explain routing policies");
   assert.notEqual(help.getAttribute("style")?.includes("orange"), true);
@@ -284,4 +280,63 @@ test("deployment detail links its model and every node", async () => {
   assert.ok(screen.getByRole("link", { name: "gpu-a" }));
   await userEvent.setup().click(screen.getByRole("link", { name: "gpu-b" }));
   await waitFor(() => assert.equal(screen.getByRole("status").textContent, "/nodes:uuid-b"));
+});
+
+test("a detail opened by URL recovers from a failed read without reopening the drawer", async () => {
+  const record = {
+    id: 19, name: "retry-service", model_name: "model", model_id: 1, served_name: "public-name",
+    engine: "vllm", node_uuid: "", desired_state: "stopped", runtime_state: "stopped", replicas: 1,
+    sleepable: false, health: { status: "off", threshold_sec: 60, last: null, recent_mean_ms: null, recent_ok: 0, recent: [] },
+    template_deviated: false, created_at: "2026-09-05T00:00:00Z", operations: [], instances: [],
+  } as const;
+  api.deploymentsPage = async () => listPage([record]);
+  let unavailable = true;
+  api.deployment = async () => {
+    if (unavailable) throw new Error("Connection interrupted");
+    return record;
+  };
+  render(<React.StrictMode><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/deployments?deployment=19"]}><DeploymentsPage /></MemoryRouter></I18nextProvider></React.StrictMode>);
+  await screen.findByText("Connection interrupted");
+  unavailable = false;
+  const retry = screen.getByRole("button", { name: i18n.t("common:actions.retry") });
+  retry.focus();
+  await userEvent.setup().keyboard("{Enter}");
+  const dialog = within(screen.getByRole("dialog"));
+  await dialog.findByRole("heading", { name: /retry-service/ });
+  assert.equal(dialog.queryByText("Connection interrupted"), null);
+  await userEvent.setup().click(dialog.getByRole("tab", { name: i18n.t("detail.instanceDetails") }));
+  assert.ok(await dialog.findByText(i18n.t("detail.noInstances")));
+});
+
+test("detail actions open the editor or a clone with the correct deployment, including stopped and deleting services", async () => {
+  for (const [state, action, destination] of [
+    ["active", "page.edit", "/deploy?edit=7"],
+    ["stopped", "page.edit", "/deploy?edit=7"],
+    ["deleting", "page.cloneModify", "/deploy?from=7"],
+  ] as const) {
+    const record = {
+      id: 7, name: "qwen", model_name: "qwen", model_id: 1, served_name: "qwen", engine: "vllm",
+      node_uuid: "", desired_state: state, runtime_state: "stopped", replicas: 1, sleepable: false,
+      health: { status: "off", threshold_sec: 60, last: null, recent_mean_ms: null, recent_ok: 0, recent: [] },
+      template_deviated: false, created_at: "2026-09-05T00:00:00Z", operations: [], instances: [],
+    } as const;
+    api.deploymentsPage = async () => listPage([record]);
+    api.deployment = async () => record;
+    const user = userEvent.setup();
+    const view = render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/deployments?deployment=7"]}>
+      <Routes><Route path="/deployments" element={<DeploymentsPage />} /><Route path="/deploy" element={<Destination />} /></Routes>
+    </MemoryRouter></I18nextProvider>);
+    const dialog = within(await screen.findByRole("dialog"));
+    const more = await dialog.findByRole("button", { name: i18n.t("detailLayout.more") });
+    if (state === "stopped") assert.ok(dialog.getByRole("button", { name: i18n.t("detail.start") }));
+    more.focus();
+    await user.keyboard("{ArrowDown}");
+    if (state === "deleting") {
+      const edit = await screen.findByRole("menuitem", { name: i18n.t("page.edit") });
+      assert.equal(edit.getAttribute("aria-disabled"), "true");
+    }
+    await user.click(await screen.findByRole("menuitem", { name: i18n.t(action) }));
+    await waitFor(() => assert.equal(screen.getByRole("status").textContent, destination));
+    view.unmount();
+  }
 });

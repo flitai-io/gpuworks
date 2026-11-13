@@ -1,4 +1,7 @@
-import { Button, Progress, Space, Tooltip, Typography, message } from "antd";
+import DetailSection from "../components/detail/DetailSection";
+import StartupStatusIcon, { type StartupStatus } from "./StartupStatusIcon";
+import { Space, Tooltip, Typography, message } from "antd";
+import { Button, Progress } from "../pages/DeploymentControls";
 import { storageDetailPath } from "./storage/storageLinks";
 import { useState } from "react";
 import { apiErrorText } from "../apiError";
@@ -15,7 +18,7 @@ import { rateLabel, transferOrigin } from "./models/modelPresenceDisplay";
 export function PreparationLabel({ item }: { item: ModelNodePresence }) {
   const { t } = useTranslation("deployments");
   const view = item.preparation;
-  const key = view?.reason ? `preparation.reason.${view.reason}` : `preparation.phase.${view?.phase ?? "waiting"}`;
+  const key = view?.reason ? `preparation.reason.${view.reason}` : `preparation.phase.${view?.phase ?? item.state}`;
   return <>{t(key, { defaultValue: t("preparation.phase.waiting") })}</>;
 }
 
@@ -25,6 +28,21 @@ export function PreparationLabel({ item }: { item: ModelNodePresence }) {
 export function RetryHint() {
   const { t } = useTranslation("deployments");
   return <Typography.Text type="secondary">{t("preparation.noAutoRetry")}</Typography.Text>;
+}
+
+function isDownloading(item: ModelNodePresence) {
+  const phase = item.preparation?.phase ?? item.state;
+  return phase === "downloading" || (phase === "waiting" && item.state === "downloading" &&
+    item.acquisition === "download" && item.rate_bps > 0);
+}
+
+function transferStatus(item: ModelNodePresence): StartupStatus {
+  const reason = item.preparation?.reason;
+  if (["failed", "canceled", "insufficient_disk_space"].includes(item.state) ||
+    ["MODEL_PREPARATION_FAILED", "MODEL_CACHE_DISK_FULL", "MODEL_CACHE_EVICTION_FAILED"].includes(reason ?? "")) return "failed";
+  if (item.state === "download_required" || (reason && reason !== "MODEL_PREPARATION_WAITING")) return "blocked";
+  if (item.preparation ? item.preparation.phase === "waiting" : !["downloading", "syncing"].includes(item.state)) return "waiting";
+  return "active";
 }
 
 export function DeploymentPreparation({ rows, onChanged }: { rows?: ModelNodePresence[]; onChanged?: () => void }) {
@@ -38,43 +56,60 @@ export function DeploymentPreparation({ rows, onChanged }: { rows?: ModelNodePre
     catch (error) { message.error(apiErrorText(tCommon, error)); }
     finally { setBusy(null); }
   };
-  const pending = rows?.filter((item) => !isModelFileReady(item.state)) ?? [];
-  if (pending.length === 0) return null;
-  return <section style={{ marginTop: 16 }} aria-label={t("detail.modelPreparation")}>
-    <Typography.Title level={5}>{t("detail.modelPreparation")}</Typography.Title>
-    {pending.map((item) => {
+  const sharedDownloads = new Set<string>();
+  const visible = (rows ?? []).filter(item => {
+    if (isModelFileReady(item.state)) return false;
+    const downloading = isDownloading(item);
+    const shared = ["nfs", "nfs_cache", "shared_dir"].includes(item.storage_type ?? "");
+    if (!shared || !downloading || !item.storage_id || !item.model_id) return true;
+    const key = `${item.storage_id}:${item.model_id}:${item.transfer_id ?? ""}`;
+    if (sharedDownloads.has(key)) return false;
+    sharedDownloads.add(key);
+    return true;
+  });
+  if (!visible.length) return null;
+  return <DetailSection title={t("detail.modelPreparation")}>
+    {visible.map((item) => {
+      const key = `${item.node_uuid}:${item.model_id}:${item.storage_id}`;
       const view = item.preparation;
-      const measurable = Boolean(view?.total_known) && item.size_bytes > 0;
+      const phase = view?.phase ?? item.state;
+      const downloading = isDownloading(item);
+      const compact = phase === "syncing" || phase === "copying";
+      const measurable = (view?.total_known ?? item.size_bytes > 0) && item.size_bytes > 0;
+      const percent = Math.min(100, Math.max(0, Math.round(item.downloaded / item.size_bytes * 100)));
+      const transmitted = item.transferred_bytes || item.downloaded || 0;
+      const sharedDownload = downloading && ["nfs", "nfs_cache", "shared_dir"].includes(item.storage_type ?? "");
       const origin = transferOrigin(item);
       // A failure is the operator's to act on; its message is the agent's own
       // words about why, so it is never hidden behind a source line.
       const failed = view?.reason === "MODEL_PREPARATION_FAILED";
       const diskFull = view?.reason === "MODEL_CACHE_DISK_FULL";
-      return <div key={`${item.node_uuid}:${item.model_id}:${item.storage_id}`} style={{ marginTop: 12 }}>
+      return <div key={key} className="mt-2 first:mt-0">
         <Space wrap>
-          <Typography.Text strong>{item.node_name || item.node_uuid.slice(0, 12)}</Typography.Text>
+          <StartupStatusIcon status={transferStatus(item)} />
+          <Typography.Text strong>{sharedDownload ? item.storage_name || t("preparation.storage") : item.node_name || item.node_uuid.slice(0, 12)}</Typography.Text>
           {item.model_name && <Typography.Text>{item.model_name}</Typography.Text>}
           <Typography.Text type={view?.reason && view.reason !== "MODEL_PREPARATION_WAITING" ? "warning" : "secondary"}><PreparationLabel item={item} /></Typography.Text>
-          {item.storage_id && <Link to={storageDetailPath(item.storage_id)}>{item.storage_name || t("preparation.storage")}</Link>}
+          {compact && <Typography.Text type="secondary">{measurable ? `${percent}%` : t("detailLayout.transferred", { size: formatBytes(transmitted) })}</Typography.Text>}
+          {!sharedDownload && item.storage_id && <Link to={storageDetailPath(item.storage_id)}>{item.storage_name || t("preparation.storage")}</Link>}
         </Space>
-        {measurable && <Progress aria-label={t("preparation.progress")} percent={Math.min(100, Math.round(item.progress * 100))} size="small" />}
-        <div><Typography.Text type="secondary">
+        {downloading && measurable && <Progress aria-label={t("detailLayout.modelDownload")} percent={percent} size="small" />}
+        {downloading && <div><Typography.Text type="secondary">
           {origin ? `${"node" in origin ? t("detail.modelFromNode", { node: origin.node }) : t("detail.modelFromHost", { host: origin.host })} · ` : ""}
           {measurable ? `${formatBytes(item.downloaded)} / ${formatBytes(item.size_bytes)}` : `${formatBytes(item.downloaded)} · ${t("preparation.unknownTotal")}`}
           {item.rate_bps > 0 ? ` · ${rateLabel(item.rate_bps)}` : ""}
           {view?.eta_seconds ? ` · ${t("preparation.eta", { seconds: view.eta_seconds })}` : ""}
-          {view?.reason === "MODEL_COPY_STALLED" ? ` · ${t("preparation.idle", { seconds: view.idle_seconds })}` : ""}
-        </Typography.Text></div>
+        </Typography.Text></div>}
         {view?.retryable && <Space wrap>
           <Button aria-label={t("preparation.retry")} size="small" loading={busy === `${item.node_uuid}:${item.model_id}:${item.storage_id}`} disabled={busy !== null} onClick={() => void retry(item)}>{t("preparation.retry")}</Button>
           <RetryHint />
         </Space>}
         {failed && !view?.retryable && <Typography.Text type="secondary">{t("preparation.retryUnavailable")}</Typography.Text>}
-        {item.message && (!origin || failed || diskFull) && <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{item.message}</Typography.Paragraph>}
-        {view?.reason === "MODEL_COPY_STALLED" && <Typography.Paragraph>{t("preparation.waitForIO")}</Typography.Paragraph>}
+        {item.message && ((!compact && !origin) || failed || diskFull) && <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{item.message}</Typography.Paragraph>}
+        {view?.reason === "MODEL_COPY_STALLED" && <Typography.Paragraph>{t("preparation.idle", { seconds: view.idle_seconds })} · {t("preparation.waitForIO")}</Typography.Paragraph>}
       </div>;
     })}
-  </section>;
+  </DetailSection>;
 }
 
 // ListPreparationAction is the same retry, where the operator reads the failed
@@ -99,5 +134,5 @@ export function ListPreparationAction({ item, onChanged }: { item: ModelNodePres
     </Tooltip>;
   }
   if (view?.reason !== "MODEL_PREPARATION_FAILED") return null;
-  return <Tooltip title={t("preparation.retryUnavailable")}><Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("preparation.retryUnavailableShort")}</Typography.Text></Tooltip>;
+  return <Tooltip title={t("preparation.retryUnavailable")}><Typography.Text type="secondary" style={{ fontSize: "var(--font-size-label)" }}>{t("preparation.retryUnavailableShort")}</Typography.Text></Tooltip>;
 }

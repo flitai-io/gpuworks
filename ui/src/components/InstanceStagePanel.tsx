@@ -1,40 +1,44 @@
+import { Notice } from "../ui-kit/Notice";
 import { Typography } from "antd";
 import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { api, usePolling, type MetricSeries, type MonitorSeries } from "../api";
+import { type MetricSeries } from "../api";
+import { rateSeries, useInstanceMetricSeries } from "../instanceMetricSeries";
+import type { TimeRangeSelection } from "../timeRange";
 import TimeSeriesChart, { defaultSeriesName } from "./TimeSeriesChart";
-import { colors } from "../theme/tokens";
 
-// Stage duration p95 and preemption rate come from the deployment monitor
-// snapshot (GET /api/v1/monitor/deployments/{id}), which already computes
-// windowed p95s and preemption rates server-side (internal/server/monitor).
-// There is no separate gpuworks_infer_* metric for either number, and there
-// must not be one invented here: a client-side name the agent/engine never
-// emit would just be a second, unmaintained source of truth.
-const RANGE = "1h";
+export function useInstanceStages(instanceUuid: string, selection: TimeRangeSelection) {
+  const queue = useInstanceMetricSeries("gpuworks_infer_queue_time_seconds", instanceUuid, selection);
+  const prefill = useInstanceMetricSeries("gpuworks_infer_prefill_time_seconds", instanceUuid, selection);
+  const decode = useInstanceMetricSeries("gpuworks_infer_decode_time_seconds", instanceUuid, selection);
+  const preemptions = useInstanceMetricSeries("gpuworks_infer_preemptions_total", instanceUuid, selection);
+  return { queue, prefill, decode, preemptions };
+}
 
-export default function InstanceStagePanel({ instanceUuid, deploymentId }: { instanceUuid: string; deploymentId: number }) {
+export default function InstanceStagePanel({ instanceUuid, selection }: { instanceUuid: string; selection: TimeRangeSelection }) {
+  const stages = useInstanceStages(instanceUuid, selection);
+  return (
+    <div className="deployment-metric-panel">
+      <div className="deployment-metric-charts"><StageCharts {...stages} /></div>
+    </div>
+  );
+}
+
+export function StageCharts({ queue, prefill, decode, preemptions }: ReturnType<typeof useInstanceStages>) {
   const { t } = useTranslation("deployments");
-  // Every open instance panel polls this endpoint independently by
-  // deploymentId; the server's 10s snapshot cache (internal/server/monitor)
-  // absorbs the duplicate requests from replicas of the same deployment, so
-  // this does not multiply load with the number of panels open.
-  const snapshot = usePolling(() => api.monitorDeployment(deploymentId, RANGE), 10000, [deploymentId]);
-
-  const stageSeries = useMemo(
-    () => filterByInstance(snapshot.data?.charts.stage_time, instanceUuid),
-    [snapshot.data, instanceUuid],
-  );
-  const preemptSeries = useMemo(
-    () => filterByInstance(snapshot.data?.charts.preemptions, instanceUuid),
-    [snapshot.data, instanceUuid],
-  );
+  const stageSeries = useMemo(() => [
+    ...stageP95Millis(queue.data?.items, "queue_ms"),
+    ...stageP95Millis(prefill.data?.items, "prefill_ms"),
+    ...stageP95Millis(decode.data?.items, "decode_ms"),
+  ], [queue.data, prefill.data, decode.data]);
+  const preemptSeries = useMemo(() => rateSeries(preemptions.data?.items ?? []), [preemptions.data]);
   const seriesName = useCallback((labels: Record<string, string>, index: number) => stageSeriesName(labels, index, t), [t]);
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
+    <>
       <StageCard title={t("instanceStages.stageTitle")} description={t("instanceStages.stageDescription")}>
+        {(queue.error || prefill.error || decode.error) && <Notice tone="danger" title={t("metrics.loadFailed")}>{(queue.error || prefill.error || decode.error)?.message}</Notice>}
         {hasPoints(stageSeries) ? (
           <TimeSeriesChart height={190} series={stageSeries} seriesName={seriesName} unit="ms" valueFmt={(v) => v.toFixed(0)} />
         ) : (
@@ -42,21 +46,17 @@ export default function InstanceStagePanel({ instanceUuid, deploymentId }: { ins
         )}
       </StageCard>
       <StageCard title={t("instanceStages.preemptTitle")} description={t("instanceStages.preemptDescription")}>
+        {preemptions.error && <Notice tone="danger" title={t("metrics.loadFailed")}>{preemptions.error.message}</Notice>}
         {hasPoints(preemptSeries) ? (
           <TimeSeriesChart height={190} series={preemptSeries} seriesName={seriesName} unit="/s" valueFmt={(v) => v.toFixed(2)} />
         ) : (
           <NotCollected text={t("instanceStages.notCollected")} />
         )}
       </StageCard>
-    </div>
+    </>
   );
 }
 
-// stageSeriesName names the stage_time chart's three lines (labels.metric =
-// queue_ms/prefill_ms/decode_ms, per internal/server/monitorapi's wire
-// contract) through the product's own translated stage vocabulary. Matching
-// "queue"/"prefill"/"decode" instead - names the wire never carried - left
-// the legend reading the raw label ("metric queue_ms").
 export function stageSeriesName(labels: Record<string, string>, index: number, t: TFunction<"deployments">): string {
   switch (labels.metric) {
     case "queue_ms": return t("instanceStages.queue");
@@ -66,15 +66,11 @@ export function stageSeriesName(labels: Record<string, string>, index: number, t
   }
 }
 
-// filterByInstance narrows a deployment-wide chart to this replica's own
-// series when the server labels them by instance. A chart that carries no
-// instance label at all (only ever aggregated at the deployment level) is
-// shown unfiltered rather than hidden.
-function filterByInstance(series: MonitorSeries[] | undefined, instanceUuid: string): MonitorSeries[] {
-  const all = series ?? [];
-  const labeled = all.filter((item) => item.labels?.instance != null);
-  if (labeled.length === 0) return all;
-  return labeled.filter((item) => item.labels.instance === instanceUuid);
+export function stageP95Millis(series: MetricSeries[] | undefined, metric: string): MetricSeries[] {
+  return (series ?? []).filter((item) => item.labels.quantile === "0.95").map((item) => ({
+    labels: { ...item.labels, metric },
+    points: item.points.map(([time, seconds]) => [time, seconds * 1000]),
+  }));
 }
 
 function hasPoints(series?: MetricSeries[] | null): boolean {
@@ -91,9 +87,9 @@ function NotCollected({ text }: { text: string }) {
 
 function StageCard({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
-    <div style={{ border: `1px solid ${colors.borderSoft}`, borderRadius: 4, padding: 16, background: colors.white }}>
+    <div className="deployment-trend-card">
       <Typography.Text strong>{title}</Typography.Text>
-      <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 8 }}>{description}</Typography.Text>
+      <Typography.Text type="secondary" style={{ display: "block", fontSize: "var(--font-size-label)", marginBottom: 8 }}>{description}</Typography.Text>
       {children}
     </div>
   );

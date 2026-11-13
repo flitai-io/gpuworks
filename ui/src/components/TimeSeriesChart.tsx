@@ -21,6 +21,7 @@ interface Props {
   unit?: string;
   valueFmt?: (v: number) => string;
   seriesName?: (labels: Record<string, string>, index: number) => string;
+  onSeriesClick?: (labels: Record<string, string>) => void;
   resetKey?: string | number;
   // group joins this chart's crosshair/tooltip to every other mounted
   // TimeSeriesChart sharing the same group id via echarts.connect. Optional
@@ -55,7 +56,7 @@ export function applyChartGroup(chart: { group: string } | null | undefined, gro
   echarts.connect(group);
 }
 
-export default function TimeSeriesChart({ series, height = 200, unit, valueFmt = autoValueFmt, seriesName = defaultSeriesName, resetKey, group, markLines, yRange, integer, leftName, rightAxis, connectNulls }: Props) {
+export default function TimeSeriesChart({ series, height = 200, unit, valueFmt = autoValueFmt, seriesName = defaultSeriesName, resetKey, group, markLines, yRange, integer, leftName, rightAxis, connectNulls, onSeriesClick }: Props) {
   const { t } = useTranslation("common");
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null);
@@ -89,9 +90,20 @@ export default function TimeSeriesChart({ series, height = 200, unit, valueFmt =
       chart.clear();
       previousResetKey.current = resetKey;
     }
-    const option = buildTimeSeriesOption(visibleSeries, { unit, valueFmt, seriesName, markLines, yRange, integer, leftName, rightAxis, connectNulls });
+    const option = buildTimeSeriesOption(visibleSeries, { unit, valueFmt, seriesName, markLines, yRange, integer, leftName, rightAxis, connectNulls, triggerLineEvent: !!onSeriesClick });
     chart.setOption(option, { notMerge: false, lazyUpdate: true, replaceMerge: ["series", "legend", "yAxis"] });
-  }, [resetKey, seriesName, unit, valueFmt, visibleSeries, markLines, yRange?.[0], yRange?.[1], integer, leftName, rightAxis, connectNulls]);
+  }, [resetKey, seriesName, unit, valueFmt, visibleSeries, markLines, yRange?.[0], yRange?.[1], integer, leftName, rightAxis, connectNulls, onSeriesClick]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || !onSeriesClick) return;
+    const inspect = (event: { seriesIndex?: number }) => {
+      const series = event.seriesIndex == null ? undefined : visibleSeries[event.seriesIndex];
+      if (series) onSeriesClick(series.labels);
+    };
+    chart.on("click", "series.line", inspect);
+    return () => { chart.off("click", inspect); };
+  }, [onSeriesClick, visibleSeries]);
 
   return <div style={{ position: "relative", height }}>
     <div ref={hostRef} role="img" aria-label={t("timeSeries.ariaLabel")} style={{ width: "100%", height }} />

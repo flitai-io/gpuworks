@@ -16,10 +16,11 @@ afterEach(() => { cleanup(); api.retryModelCache = original; });
 after(() => dom.window.close());
 function row(overrides: Partial<ModelNodePresence> = {}) { return { path: "/cache/weights", transferred_bytes: 40, acquisition: "copy", node_uuid: "node", node_name: "GPU", model_id: 1, model_name: "weights", storage_id: 2, storage_name: "NFS", cache: true, state: "downloading", downloaded: 40, size_bytes: 100, progress: 0.4, rate_bps: 10, preparation: { phase: "copying", total_known: true, idle_seconds: 0, eta_seconds: 6 }, ...overrides } as ModelNodePresence; }
 function show(rows: ReturnType<typeof row>[], changed = () => { }) { return render(<I18nextProvider i18n={i18n}><MemoryRouter><DeploymentPreparation rows={rows} onChanged={changed}/></MemoryRouter></I18nextProvider>); }
-test("preparation shows real bytes, phase and storage link", async () => {
+test("copying shows its measured percentage, phase and storage link", async () => {
     show([row()]);
     assert.ok(screen.getByText(labels.phase.copying));
-    assert.ok(screen.getByText(/40 B \/ 100 B/));
+    assert.ok(screen.getByText("40%"));
+    assert.equal(screen.queryByRole("progressbar"), null);
     assert.equal(screen.getByRole("link", { name: "NFS" }).getAttribute("href"), "/storage?storage=2");
     const user = userEvent.setup({ document: dom.window.document });
     await user.tab();
@@ -28,18 +29,17 @@ test("preparation shows real bytes, phase and storage link", async () => {
 test("old agent, unknown total and checking have no invented percentage", () => {
     show([row({ rate_bps: 0, preparation: { phase: "checking", total_known: false, idle_seconds: 0 } })]);
     assert.ok(screen.getByText(labels.phase.checking));
-    assert.ok(screen.getByText(new RegExp(labels.unknownTotal)));
-    assert.ok(screen.getByText(/40 B/));
+    assert.equal(screen.queryByText(/%/), null);
     assert.equal(screen.queryByRole("progressbar"), null);
     cleanup();
-    show([row({ rate_bps: 0, preparation: undefined })]);
+    show([row({ state: "pending", downloaded: 0, size_bytes: 0, rate_bps: 0, preparation: undefined })]);
     assert.ok(screen.getByText(labels.phase.waiting));
     assert.equal(screen.queryByRole("progressbar"), null);
 });
 test("stall and disconnection show no speed or ETA once the server zeroes them", () => {
     show([row({ rate_bps: 0, preparation: { phase: "copying", reason: "MODEL_COPY_STALLED", total_known: true, idle_seconds: 120 } })]);
     assert.ok(screen.getByText(labels.reason.MODEL_COPY_STALLED));
-    assert.ok(screen.getByText(labels.waitForIO));
+    assert.ok(screen.getByText(labels.waitForIO, { exact: false }));
     assert.equal(screen.queryByRole("button"), null);
     cleanup();
     show([row({ rate_bps: 0, preparation: { phase: "waiting", reason: "MODEL_NODE_OFFLINE", total_known: false, idle_seconds: 0 } })]);
@@ -105,7 +105,8 @@ test("shared storage downloads expose their phase and bytes before a total is kn
 test("shared model sync progress keeps the server phase", () => {
     show([row({ cache: false, acquisition: "peer", preparation: { phase: "syncing", total_known: true, idle_seconds: 0 } })]);
     assert.ok(screen.getByText("Syncing model"));
-    assert.ok(screen.getByText(/40 B \/ 100 B/));
+    assert.ok(screen.getByText("40%"));
+    assert.equal(screen.queryByRole("progressbar"), null);
 });
 
 // The Jira's "no retry entry, no automatic retry, and nobody says so": the

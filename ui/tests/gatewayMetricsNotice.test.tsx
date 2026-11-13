@@ -69,17 +69,16 @@ function noEngineSeries() {
   api.metricsQuery = (async () => list([])) as typeof api.metricsQuery;
 }
 
-// statValue is the whole displayed value of the stat card titled title
-// (antd renders the integer and decimal parts as separate elements).
+// Read the displayed number independently of its unit.
 function statValue(title: string): string | null | undefined {
-  return screen.getByText(title).closest(".ant-statistic")?.querySelector(".ant-statistic-content-value")?.textContent;
+  return screen.getByText(title).closest("[data-slot='metric-card']")?.querySelector("[data-slot='metric-card-value-row'] > span")?.firstChild?.textContent;
 }
 
 function snapshotWith(sources: Record<string, string>, charts: Record<string, unknown> = {}) {
   const requested: Array<[number, string]> = [];
   api.monitorDeployment = (async (id: number, range: string) => {
     requested.push([id, range]);
-    return { ...fixture, sources, charts: { ...fixture.charts, ...charts } };
+    return { ...fixture, deployment: { ...fixture.deployment, id }, sources, charts: { ...fixture.charts, ...charts } };
   }) as typeof api.monitorDeployment;
   return requested;
 }
@@ -103,7 +102,7 @@ test("an engine without metrics shows what the gateway measured, with the way to
   // The newest point of each line; the absent waiting message stays absent.
   assert.equal(statValue("TTFT p95"), "812");
   assert.equal(statValue("End-to-end latency p95"), "4,300");
-  assert.equal(statValue("Generation Throughput"), "88.5");
+  assert.equal(statValue("Total Generation Throughput"), "88.5");
   assert.equal(statValue("In-flight requests"), "3");
   assert.equal(screen.queryByText("Waiting for Deployment Metrics"), null);
   const link = screen.getByRole("link", { name: "Open the service monitor" });
@@ -115,8 +114,8 @@ test("a gateway signal the snapshot has no line for reads as a dash, not a zero"
   snapshotWith({ ttft: "gateway" }, { latency: [{ labels: { metric: "ttft_p95" }, points: [[2000, 640]] }], throughput: [], concurrency: [] });
   renderPanel();
   await waitFor(() => assert.equal(statValue("TTFT p95"), "640"));
-  for (const title of ["End-to-end latency p95", "Generation Throughput", "In-flight requests"]) {
-    assert.equal(statValue(title), "-", title);
+  for (const title of ["End-to-end latency p95", "Total Generation Throughput", "In-flight requests"]) {
+    assert.equal(statValue(title), "—", title);
   }
 });
 

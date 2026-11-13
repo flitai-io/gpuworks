@@ -20,27 +20,22 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * InstanceProgressLine renders the two lines that change constantly: the byte
- * counter and the runtime's current line.
- *
- * Both are overwritten in place. The agent now reports at most once a second
+ * The agent reports at most once a second
  * per instance, so the byte counter is interpolated from the reported rate
  * between updates - never past the total, never once the rate has gone stale,
  * and not at all when the viewer asked for reduced motion.
  */
 export default function InstanceProgressLine({
-  message, bytesDone, bytesTotal, rateBps, live,
+  bytesDone, bytesTotal, rateBps,
 }: {
-  message?: string;
   bytesDone?: number;
   bytesTotal?: number;
   rateBps?: number;
-  live: boolean;
 }) {
   const { t } = useTranslation("deployments");
   const reported = bytesDone ?? 0;
   const total = bytesTotal ?? 0;
-  const rate = rateBps ?? 0;
+  const rate = total > 0 && reported >= total ? 0 : Math.max(0, rateBps ?? 0);
   const [displayed, setDisplayed] = useState(reported);
   const since = useRef(Date.now());
 
@@ -50,7 +45,7 @@ export default function InstanceProgressLine({
   }, [reported, total, rate]);
 
   useEffect(() => {
-    if (!live || rate <= 0 || reported <= 0 || prefersReducedMotion()) return;
+    if (rate <= 0 || reported <= 0 || prefersReducedMotion()) return;
     const timer = setInterval(() => {
       const elapsed = Date.now() - since.current;
       if (elapsed > RATE_STALE_MS) return;
@@ -58,27 +53,12 @@ export default function InstanceProgressLine({
       setDisplayed(total > 0 ? Math.min(total, projected) : projected);
     }, TICK_MS);
     return () => clearInterval(timer);
-  }, [live, rate, reported, total]);
+  }, [rate, reported, total]);
 
   const hasBytes = total > 0 || reported > 0 || rate > 0;
   return (
-    <>
-      {hasBytes ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {formatSize(displayed)} / {formatSize(total)}{rate ? ` · ${formatSize(rate)}/s` : ""}
-        </Typography.Text>
-      ) : (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("instance.bytesUnknown")}</Typography.Text>
-      )}
-      {message ? (
-        <Typography.Text
-          type="secondary"
-          aria-label={t("instance.currentLineAria")}
-          style={{ fontSize: 12, fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}
-        >
-          {message}
-        </Typography.Text>
-      ) : null}
-    </>
+    <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-label)" }}>
+      {hasBytes ? <>{formatSize(displayed)} / {formatSize(total)}{rate > 0 && ` · ${formatSize(rate)}/s`}</> : t("instance.bytesUnknown")}
+    </Typography.Text>
   );
 }

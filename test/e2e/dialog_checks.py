@@ -83,11 +83,13 @@ def _drawer_focus(dialog):
     # rc-drawer focuses the outer .ant-drawer panel, not the role=dialog node.
     # Its two aria-hidden sentinels sit in that panel, outside role=dialog.
     return dialog.evaluate("""element => {
-        const panel = element.closest('.ant-drawer');
+        const panel = element.closest('.ant-drawer, [data-placement=right]');
         const active = document.activeElement;
         const inside = !!(active && element.contains(active));
         const onPanel = !!(active && active === panel);
-        const sentinel = !!(active && panel && panel.contains(active) && !inside && !onPanel
+        const adjacentGuard = active?.hasAttribute('data-base-ui-focus-guard')
+            && (active.previousElementSibling === element || active.nextElementSibling === element);
+        const sentinel = adjacentGuard || !!(active && panel && panel.contains(active) && !inside && !onPanel
             && active.tagName === 'DIV' && active.getAttribute('aria-hidden') === 'true'
             && !active.getAttribute('role'));
         const nodes = [...element.querySelectorAll('button, a[href], input, select, textarea, [tabindex]')];
@@ -147,10 +149,10 @@ def drawer_regions(dialog):
         };
         return {
             box: rect(element),
-            header: rect(element.querySelector('.ant-drawer-header')),
-            title: rect(element.querySelector('.ant-drawer-title')),
-            body: rect(element.querySelector('.ant-drawer-body')),
-            extra: rect(element.querySelector('.ant-drawer-extra')),
+            header: rect(element.querySelector('.ant-drawer-header') ?? [...element.children].find(el => el.querySelector('h2'))),
+            title: rect(element.querySelector('.ant-drawer-title, h2')),
+            body: rect(element.querySelector('.ant-drawer-body, .detail-body')),
+            extra: rect(element.querySelector('.ant-drawer-extra, .deployment-detail-actions')),
         };
     }""")
 
@@ -190,16 +192,18 @@ def assert_drawer_identity(page, dialog, name, first_step, absent):
     kind = dialog.evaluate("""element => ({
         className: String(element.className),
         ariaModal: element.getAttribute('aria-modal'),
-        inDrawer: !!element.closest('.ant-drawer'),
+        backgroundHidden: document.querySelector('#root')?.getAttribute('aria-hidden') === 'true'
+            || !!document.querySelector('#root')?.inert,
+        inDrawer: !!element.closest('.ant-drawer') || element.matches('[data-placement=right]'),
         inModal: !!element.closest('.ant-modal')
     })""")
-    check(kind["inDrawer"] and not kind["inModal"] and "ant-drawer-content" in kind["className"],
+    check(kind["inDrawer"] and not kind["inModal"],
           f"opened component is not a drawer: {kind}")
-    check(kind["ariaModal"] == "true", f"drawer is not modal: {kind}")
-    title = dialog.locator(".ant-drawer-title")
+    check(kind["ariaModal"] == "true" or kind["backgroundHidden"], f"drawer is not modal: {kind}")
+    title = dialog.locator(".ant-drawer-title, h2").first
     expect(title).to_be_visible()
     check(title.inner_text() == name, f"drawer title {title.inner_text()!r} is not {name!r}")
-    expect(dialog.locator(".ant-drawer-close")).to_be_visible()
+    expect(dialog.locator('.ant-drawer-close, button[aria-label="Close"], button[aria-label="关闭"]').first).to_be_visible()
     expect(dialog.locator(".ant-modal-close")).to_have_count(0)
     expect(first_step).to_be_visible()
     expect(absent).to_have_count(0)
@@ -237,7 +241,7 @@ def assert_drawer_shell(page, dialog, name, first_step, absent):
     """Drawer identity and focus. Focus is a separate cycle from identity."""
     evidence = assert_drawer_identity(page, dialog, name, first_step, absent)
     page.wait_for_function("""element => {
-        const panel = element.closest('.ant-drawer');
+        const panel = element.closest('.ant-drawer, [data-placement=right]');
         const active = document.activeElement;
         return !!(active && panel && (active === panel || element.contains(active)));
     }""", arg=dialog.element_handle(), timeout=5000)

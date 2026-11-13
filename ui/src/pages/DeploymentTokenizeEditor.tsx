@@ -1,4 +1,6 @@
-import { Space, Switch, Typography, message } from "antd";
+import { message } from "antd";
+import { Badge } from "../components/ui/badge";
+import { Switch } from "../components/ui/switch";
 import { useTranslation } from "react-i18next";
 import { api, type Deployment } from "../api";
 import { useOrder } from "./useOrder";
@@ -25,17 +27,19 @@ export function TokenizeEditor({
     onChanged();
   };
   return (
-    <Space size={8} wrap>
-      <Switch
-        size="small"
-        checked={dep.tokenize_enabled}
-        loading={busy}
-        aria-label={t("tokenize.enable")}
-        onChange={(on) => void save(on)}
-      />
-      <Typography.Text type={dep.tokenize_enabled ? undefined : "secondary"}>
+    <span className="deployment-switch-status">
+      <Badge variant="plain" size="sm" status={dep.tokenize_enabled ? "success" : "neutral"}>
         {dep.tokenize_enabled ? t("tokenize.on") : t("tokenize.off")}
-      </Typography.Text>
-    </Space>
+      </Badge>
+      <Switch
+        className="p-0"
+        labelVisibility="sr-only"
+        checked={dep.tokenize_enabled}
+        aria-busy={busy}
+        disabled={busy}
+        label={t("tokenize.enable")}
+        onCheckedChange={(on) => void save(on)}
+      />
+    </span>
   );
 }

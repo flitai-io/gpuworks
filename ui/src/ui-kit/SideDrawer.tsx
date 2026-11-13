@@ -5,15 +5,19 @@ import { Button } from "../components/ui/button";
 import { ConsoleIcon } from "./consoleIcons";
 
 /** Product dimensions and scroll ownership; Zeron owns portal, motion and focus. */
-export function SideDrawer({ open, onClose, title, subtitle, children, extra, footer, width = 720, className, busy = false }: {
+export function SideDrawer({ open, onClose, title, subtitle, children, extra, footer, width = 720, className, busy = false, deferEscapeToModal = false }: {
   open: boolean; onClose: () => void; title: ReactNode; children?: ReactNode;
   /** A line under the title (identifiers, tags). */
   subtitle?: ReactNode;
   /** Actions on the title row, right-aligned beside the close button, at their own size. */
-  extra?: ReactNode; footer?: ReactNode; width?: number | string; className?: string; busy?: boolean;
+  extra?: ReactNode; footer?: ReactNode; width?: number | string; className?: string; busy?: boolean; deferEscapeToModal?: boolean;
 }) {
   const { t } = useTranslation("common");
-  return <Dialog open={open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
+  return <Dialog open={open} onOpenChange={(next, details) => {
+    if (next || busy) return;
+    if (deferEscapeToModal && details.reason === "escape-key" && Array.from(document.querySelectorAll<HTMLElement>(".ant-modal-wrap")).some(modal => modal.getClientRects().length > 0)) return;
+    onClose();
+  }}>
     <DialogContent placement="right" className={`flex flex-col overflow-hidden ${className ?? ""}`}
       style={{ width: typeof width === "number" ? `min(${width}px, calc(100vw - 32px))` : width, maxWidth: "calc(100vw - 32px)" }}
       // The close button sits in the header row below. Zeron's own one is a

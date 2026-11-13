@@ -38,7 +38,7 @@ await i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, render, screen, waitFor } = await import("@testing-library/react");
+const { cleanup, render, screen, fireEvent, waitFor } = await import("@testing-library/react");
 const { api } = await import("../src/api.ts");
 const { default: InstanceMetricsTab } = await import("../src/pages/InstanceMetricsTab.tsx");
 const originalMetricsQuery = api.metricsQuery;
@@ -75,20 +75,72 @@ function baseInstance(overrides: Partial<Instance> = {}): Instance {
   } as Instance;
 }
 
-test("a stopped instance shows the no-metrics placeholder instead of stale panels", async () => {
-  stubMetrics({});
+test("a stopped instance can inspect retained samples without showing the current GPU occupant", async () => {
+  stubMetrics({ gpuworks_infer_requests_waiting: [{ labels: {}, points: [[1000, 3]] }] });
   stubMonitorDeployment();
   render(<I18nextProvider i18n={i18n}><InstanceMetricsTab inst={baseInstance({ state: "stopped" })} /></I18nextProvider>);
-  await waitFor(() => assert.ok(screen.getByText("The instance is not running; no inference metrics are available")));
+  await waitFor(() => assert.match(screen.getByRole("region", { name: "Instance Metrics" }).textContent ?? "", /Waiting Requests3/));
+  assert.ok(screen.getByText("Last readings in the selected time range"));
+  assert.equal(screen.queryByText("Per-GPU Telemetry"), null);
 });
 
-test("a running instance's metrics tab includes the KV tier panel and the GPU strip", async () => {
+test("the metric group changes the diagnostics for the same instance without stacking the groups", async () => {
   stubMetrics({});
   stubMonitorDeployment();
   render(<I18nextProvider i18n={i18n}><InstanceMetricsTab inst={baseInstance()} params={{ kv_offloading_size: 8 }} /></I18nextProvider>);
-  await waitFor(() => assert.ok(screen.getByText("KV Tiers")));
-  assert.ok(screen.getByText("8 GiB"), "KVTierPanel reads the deployment params passed through");
-  assert.ok(screen.getByText("Per-GPU Telemetry"));
+  assert.deepEqual(screen.getAllByRole("tab").map(tab => tab.textContent), ["Requests & latency", "Cache & engine", "GPU & memory"]);
   assert.ok(screen.getByText("Stage Duration p95"));
   assert.ok(screen.getByText("Preemptions /s"));
+  assert.equal(screen.queryByText("KV Tiers"), null);
+  fireEvent.click(screen.getByRole("tab", { name: "GPU & memory" }));
+  const hardware = await screen.findByRole("tabpanel", { name: "GPU & memory" });
+  assert.ok(await screen.findByText("Waiting for GPU Telemetry"));
+  assert.equal(hardware.querySelector("canvas"), null);
+  assert.equal(screen.queryByText("Stage Duration p95"), null);
+  fireEvent.click(screen.getByRole("tab", { name: "Cache & engine" }));
+  assert.ok(await screen.findByText("KV Tiers"));
+  assert.ok(screen.getByText("8 GiB"));
+  assert.equal(screen.queryByText("GPU utilization"), null);
+  assert.equal(screen.getByRole("region", { name: "Instance Metrics" }).querySelectorAll("[data-slot='metric-card']").length, 5);
+});
+
+test("a historical instance keeps the selected tab visible when switching between cache and requests", async () => {
+  stubMetrics({});
+  render(<I18nextProvider i18n={i18n}><InstanceMetricsTab inst={baseInstance({ state: "failed" })} /></I18nextProvider>);
+  const tabs = screen.getAllByRole("tab");
+  assert.deepEqual(tabs.map(tab => tab.textContent), ["Requests & latency", "Cache & engine"]);
+  // The selected background is measured from its trigger. JSDOM supplies no layout boxes.
+  for (const tab of tabs) Object.defineProperty(tab, "offsetWidth", { value: 96 });
+  const tablist = screen.getByRole("tablist");
+  for (const tab of [tabs[1], tabs[0], tabs[1]]) {
+    fireEvent.click(tab);
+    await screen.findByRole("tabpanel", { name: tab.textContent! });
+    await waitFor(() => assert.ok(tablist.querySelector(":scope > .bg-brand"), "the selected label needs its contrasting background"));
+  }
+});
+
+test("GPU cards keep their last readings on return and only report missing telemetry after a response", async () => {
+  let resume!: () => void;
+  let pending = new Promise<void>(resolve => { resume = resolve; });
+  let gpuCalls = 0;
+  api.metricsQuery = async metric => {
+    if (metric !== "gpuworks_gpu_utilization") return list([]);
+    gpuCalls++;
+    await pending;
+    return list([{ labels: { node: "node-1", gpu: "0" }, points: [[1000, 42]] }]);
+  };
+  render(<I18nextProvider i18n={i18n}><InstanceMetricsTab inst={baseInstance()} /></I18nextProvider>);
+  assert.equal(gpuCalls, 0);
+  const gpuTab = screen.getByRole("tab", { name: "GPU & memory" });
+  fireEvent.click(gpuTab);
+  assert.ok(screen.getByText("GPU0"));
+  assert.equal(screen.queryByText("Waiting for GPU Telemetry"), null);
+  resume();
+  await screen.findByText("42%");
+  fireEvent.click(screen.getByRole("tab", { name: "Requests & latency" }));
+  pending = new Promise<void>(resolve => { resume = resolve; });
+  fireEvent.click(gpuTab);
+  assert.ok(screen.getByText("42%"));
+  assert.equal(screen.queryByText("Waiting for GPU Telemetry"), null);
+  resume();
 });
