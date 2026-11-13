@@ -55,7 +55,9 @@
     "count": "{{filtered}}/{{total}} nodes",
     "search": "Search by name, hostname or ID"
   },
+  "source": { "manual": "Added by hand", "cluster": "Cluster {{name}}", "clusterOf": "Cluster {{name}} ({{provider}})", "standaloneCluster": "Kubernetes cluster", "selected": "The chosen source" },
   "column": {
+    "source": "Source",
     "status": "Status",
     "name": "Name",
     "createdAt": "Created",

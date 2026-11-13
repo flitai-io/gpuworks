@@ -270,6 +270,8 @@ export interface Node {
   // from the written ones because they cannot be edited. A key appears once
   // per value the node carries for it.
   system_labels?: SystemLabel[];
+  /** The external platform the node joined through; absent for a node added by hand. */
+  source?: NodeSource;
   // The address the node's agent reaches the server from: its address on the
   // management network.
   management_address?: string;
@@ -1421,6 +1423,17 @@ export interface NodePage extends ListPage<Node> {
   all: number;
   /** Every user label key=value across all nodes, whatever the filters. */
   labels: Array<{ key: string; values: string[] }>;
+  /** Every source a node came from, whatever the filters: what the source filter offers. */
+  sources: NodeSourceOption[];
+}
+
+/** One value of the node list's source filter (dto.NodeSourceOption): an account ("provider:<id>"), a cluster ("cluster:<uuid>") or "manual". */
+export interface NodeSourceOption {
+  value: string;
+  provider_name?: string;
+  provider_kind?: string;
+  cluster_name?: string;
+  nodes: number;
 }
 
 /** What GET /nodes/facets says about the nodes its filters match. */
@@ -2556,6 +2569,28 @@ export interface DataRetentionStatus {
 
 export type ProviderCategory = "public_cloud" | "private_cloud";
 
+/** What an external platform hands over to become compute nodes (provider.Resource). */
+export type PlatformResource = "vm" | "container" | "host" | "kubernetes";
+
+/** A resource a provider kind connects, with the vendor's own product name for it when it has one (ECS, ACK). */
+export interface KindResource {
+  type: PlatformResource;
+  product?: string;
+}
+
+/** The external platform a node joined through (dto.NodeSource). */
+export interface NodeSource {
+  /** What the node is on the platform; empty when the platform's kind does not say. */
+  resource: PlatformResource | "";
+  /** The account; absent for a cluster connected on its own. */
+  provider_id?: number;
+  provider_name?: string;
+  provider_kind?: string;
+  /** The cluster entry of a cluster node. */
+  cluster_uuid?: string;
+  cluster_name?: string;
+}
+
 export interface CloudProvider {
   id: number;
   name: string;
@@ -2564,6 +2599,12 @@ export interface CloudProvider {
   category: ProviderCategory;
   state: string;
   instance_count: number;
+  /** What the account's kind connects, in the order to list it. */
+  resources: KindResource[];
+  /** Compute nodes that joined through the account, on its instances or through its clusters. */
+  node_count: number;
+  /** When the account's instances were last listed; absent before its first sync. */
+  synced_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -2612,6 +2653,10 @@ export interface ProviderKindInfo {
   server_dial_auto_port?: boolean;
   /** The account's managed Kubernetes clusters can be listed and connected (GET /providers/{id}/clusters). */
   can_list_clusters?: boolean;
+  /** What the kind connects, in the order to list it. */
+  resources: KindResource[];
+  /** The platform type the kind's accounts are filed under; the platform choice is grouped by it. Empty for a kind that declares none. */
+  category: ProviderCategory | "";
 }
 
 /** A managed Kubernetes cluster of a cloud account (dto.ProviderCluster), listed live. */
@@ -2620,6 +2665,9 @@ export interface ProviderCluster {
   name: string;
   region: string;
   version: string;
+  /** The vendor's product the cluster is (ack_managed, doks…) and its name; absent when the driver cannot tell. */
+  type?: string;
+  type_label?: LocalizedText;
   /** The vendor's own word for the cluster's state. */
   state: string;
   running: boolean;
@@ -2659,9 +2707,7 @@ export interface ProviderInstance {
   ssh_connections: SSHConnection[];
   kind: string;
   node_id: number;
-  /** The instance is a node of this Kubernetes cluster of the account; it joins through the cluster. */
-  managed_cluster?: string;
-  /** What the instance allows now: power_on | power_off | install | delete. Empty for a cluster node. */
+  /** What the instance allows now: power_on | power_off | install | delete. */
   actions: string[];
 }
 

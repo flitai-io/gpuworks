@@ -602,7 +602,7 @@
     "KUBE_CLUSTER_SOURCE_TAKEN": "账号下的集群 {{cluster}} 已经接入过，一个集群只有一个条目；要用它的更多节点池，请修改那个条目的节点池。",
     "KUBE_CLUSTER_NO_SOURCE": "这个集群不是从云账号接入的（或云账号已删除），gpuworks 无法访问它；请在集群里执行 kubectl 命令。",
     "KUBE_CLUSTER_OPERATION_FAILED": "操作集群失败（{{step}}）：{{reason}}",
-    "PROVIDER_INSTANCE_IN_CLUSTER": "这台实例是 Kubernetes 集群 {{cluster}} 的节点，由集群管理：不能单独安装 agent，也不能在这里开关机、释放或调整规格。请在「Kubernetes 集群」页签接入并管理该集群。",
+    "PROVIDER_INSTANCE_IN_CLUSTER": "这台实例是 Kubernetes 集群 {{cluster}} 的节点，由集群管理：不能单独安装 agent，也不能在这里开关机、释放或调整规格。请在「外部平台」页展开该账号，在这个集群的分组里接入并管理它。",
     "PEER_TRANSFER_OBSERVATION_UNAVAILABLE": "节点传输观测暂时不可用。",
     "PEER_TRANSFER_QUERY_INVALID": "请指定一个非空、最多 128 个字符的传输 ID。",
     "PEER_RELAY_BUSY": "管理节点中继暂时繁忙，请稍后重试；已选择的源节点会保留。",
@@ -620,6 +620,7 @@
     "title": "页面不存在"
   },
   "actions": {
+    "more": "更多",
     "showPassword": "显示密码",
     "hidePassword": "隐藏密码",
     "refresh": "刷新",
@@ -683,7 +684,6 @@
     "monitor": "监控中心",
     "analytics": "用量分析",
     "platforms": "外部平台",
-    "kubernetes": "Kubernetes",
     "nodes": "计算节点",
     "gpus": "GPU 设备",
     "models": "模型仓库",

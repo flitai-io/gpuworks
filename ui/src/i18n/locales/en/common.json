@@ -602,7 +602,7 @@
     "KUBE_CLUSTER_SOURCE_TAKEN": "Cluster {{cluster}} of the account is already connected; a cluster has one entry. To use more of its node pools, edit that entry's node pools.",
     "KUBE_CLUSTER_NO_SOURCE": "This cluster was not connected from a cloud account (or the account was deleted), so gpuworks cannot reach it; run the kubectl command in the cluster.",
     "KUBE_CLUSTER_OPERATION_FAILED": "The cluster operation failed ({{step}}): {{reason}}",
-    "PROVIDER_INSTANCE_IN_CLUSTER": "This instance is a node of Kubernetes cluster {{cluster}}, which owns it: it cannot get an agent of its own or be powered, released or resized here. Connect and manage the cluster from the Kubernetes clusters tab.",
+    "PROVIDER_INSTANCE_IN_CLUSTER": "This instance is a node of Kubernetes cluster {{cluster}}, which owns it: it cannot get an agent of its own or be powered, released or resized here. Expand the account on the External Platforms page and connect and manage the cluster from its group there.",
     "PEER_TRANSFER_OBSERVATION_UNAVAILABLE": "Peer transfer observations are unavailable.",
     "PEER_TRANSFER_QUERY_INVALID": "Specify one non-empty transfer ID of at most 128 characters.",
     "PEER_RELAY_BUSY": "The management server is busy relaying another transfer. Retry shortly; the selected source is retained.",
@@ -620,6 +620,7 @@
     "title": "Page not found"
   },
   "actions": {
+    "more": "More",
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "refresh": "Refresh",
@@ -683,7 +684,6 @@
     "monitor": "Monitor Center",
     "analytics": "Usage analytics",
     "platforms": "External Platforms",
-    "kubernetes": "Kubernetes",
     "nodes": "Compute Nodes",
     "gpus": "GPU Devices",
     "models": "Model Repository",

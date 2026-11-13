@@ -1469,6 +1469,19 @@
       "translations": { "zh": "平台密钥" }
     },
     {
+      "term_en": "Platform Resource",
+      "translations": { "zh": "平台资源" }
+    },
+    {
+      "term_en": "Local Kubernetes Cluster",
+      "translations": { "zh": "本地 Kubernetes 集群" },
+      "forbidden": { "zh": ["其他 Kubernetes 集群"] }
+    },
+    {
+      "term_en": "Node Source",
+      "translations": { "zh": "节点来源" }
+    },
+    {
       "term_en": "External Platform",
       "translations": { "zh": "外部平台" },
       "forbidden": { "zh": ["第三方平台", "接入平台", "算力来源"] }

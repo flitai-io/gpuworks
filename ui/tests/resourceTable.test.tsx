@@ -217,6 +217,23 @@ test("row presentation and expandable details survive refresh without nested act
   assert.equal(screen.getAllByRole("button", { name: "Collapse row" }).length, 1);
 });
 
+// A table wider than its container scrolls sideways; the detail under a row must not scroll away with it.
+test("an expanded row's detail sits in a container pinned to the visible width, alone in a cell that spans every column", async () => {
+  renderTable({ data: rows.slice(0, 2), pagination: false, expandable: { expandedRowRender: (row) => <div>Details {row.name}</div> } });
+  await userEvent.setup().click(screen.getAllByRole("button", { name: "Expand row" })[0]);
+  const holder = screen.getByText("Details node-01").parentElement as HTMLElement;
+  assert.equal(holder.tagName, "DIV");
+  // Sticky at the cell's 12px padding and as wide as the scroll container less that padding on both sides.
+  assert.deepEqual([...holder.classList].sort(), ["left-3", "sticky", "w-[calc(100cqw-1.5rem)]"]);
+  const cell = holder.parentElement as HTMLTableCellElement;
+  assert.equal(cell.tagName, "TD");
+  assert.equal(cell.children.length, 1, "the container is all the cell holds");
+  const rowCells = within(screen.getByText("node-01").closest("tr") as HTMLElement).getAllByRole("cell");
+  assert.equal(cell.colSpan, rowCells.length, "the detail cell spans the expander and every shown column");
+  assert.equal((cell.parentElement as HTMLElement).children.length, 1);
+  assert.equal(screen.queryAllByText("Details node-02").length, 0, "only the opened row has a detail");
+});
+
 test("refreshing inline column callbacks preserves the focused row action", () => {
   const tree = () => <I18nextProvider i18n={i18n}><ResourceTable<Row> tableId="stable-actions" rowKey="id" data={rows.slice(0, 1)} columns={columns()} pagination={false} /></I18nextProvider>;
   const view = render(tree());

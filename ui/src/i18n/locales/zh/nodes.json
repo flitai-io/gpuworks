@@ -55,7 +55,9 @@
     "count": "{{filtered}}/{{total}} 个计算节点",
     "search": "按名称、主机名或 ID 搜索"
   },
+  "source": { "manual": "手动添加", "cluster": "集群 {{name}}", "clusterOf": "集群 {{name}}（{{provider}}）", "standaloneCluster": "Kubernetes 集群", "selected": "所选来源" },
   "column": {
+    "source": "来源",
     "status": "状态",
     "name": "名称",
     "createdAt": "创建时间",

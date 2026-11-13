@@ -86,13 +86,18 @@ export default function KubePoolsDrawer({ cluster, onClose, onSaved }: { cluster
       <div className="flex flex-col gap-4">
         {saved ? <KubePoolsSaved cluster={saved} onApplied={onSaved} /> : (
           <>
-            <span className="text-fg-muted">{t("pools.intro")}</span>
             {cluster && cluster.pool_ids.length === 0 && <Notice tone="warning" title={t("pools.legacy")} children={t("pools.legacyHelp", { selector: cluster.node_selector })} />}
             {error && <Notice tone="danger" title={error} />}
             {loadError && <Notice tone="danger" title={t("pools.loadFailed")} children={loadError} />}
             {!pools && !loadError && <Spinner label={t("pools.loading")} />}
             {pools && pools.length === 0 && <span className="text-fg-muted">{t("pools.none")}</span>}
-            {pools && pools.length > 0 && <KubePoolPicker pools={pools} selected={selected} onChange={setSelected} disabled={saving} label={t("pools.group")} />}
+            {pools && pools.length > 0 && (
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <span className="px-1.5 text-body font-medium text-fg-muted">{t("pools.group")}</span>
+                <KubePoolPicker pools={pools} selected={selected} onChange={setSelected} disabled={saving} label={t("pools.group")} held={cluster?.pool_ids ?? []} />
+                <span className="px-1.5 text-label text-fg-subtle">{t("pools.autoJoin")}</span>
+              </div>
+            )}
           </>
         )}
       </div>

@@ -3,13 +3,15 @@ import { Badge } from "../../components/ui/badge";
 import { Tooltip as ZeronTooltip } from "../../components/ui/tooltip";
 import { CodeOutlined, DeleteOutlined, MoreOutlined } from "@ant-design/icons";
 import type { TFunction } from "i18next";
-import type { GPU, Node } from "../../api";
+import type { GPU, Node, NodeSourceOption } from "../../api";
+import { NODE_SOURCE_MANUAL } from "../../nodeSources";
 import type { ResourceColumn } from "../../components/resourceTable/ResourceTable";
 import CellTags from "../../components/resourceTable/CellTags";
 import { NodeSchedulingTag } from "../../components/NodeSchedulingModal";
 import { NodeConnectionBadge } from "../../components/NodeConnectionBadge";
 import { NODE_CONNECTION_STATES } from "../../nodes/connectionState";
 import { systemLabelName, systemLabelValue } from "../../components/SystemLabelTags";
+import NodeSourceCell from "./NodeSourceCell";
 import { formatTime } from "../../i18n/datetime";
 import type { UpgradePhase } from "../../agentUpgrade";
 
@@ -42,6 +44,9 @@ export interface NodeColumnContext {
   /** The state filter the list was asked for. */
   states: string[];
   showCheckReason?: boolean;
+  /** The source filter the list was asked for, and every source the fleet has to choose from. */
+  sources: string[];
+  sourceOptions: NodeSourceOption[];
   upgradeErrors?: Record<string, string> | null;
   upgradePhase: (uuid: string) => UpgradePhase | undefined;
   onOpen: (node: Node) => void;
@@ -54,7 +59,7 @@ export interface NodeColumnContext {
  * The node list's columns. Keys are the server's sort keys where the column
  * sorts, so a header click asks GET /nodes for that order.
  */
-export function nodeColumns({ t, states, showCheckReason, upgradeErrors, upgradePhase, onOpen, onEditLabels, onScheduling, onDelete }: NodeColumnContext): ResourceColumn<Node>[] {
+export function nodeColumns({ t, states, showCheckReason, sources, sourceOptions, upgradeErrors, upgradePhase, onOpen, onEditLabels, onScheduling, onDelete }: NodeColumnContext): ResourceColumn<Node>[] {
   return [
     {
       key: "name",
@@ -120,6 +125,20 @@ export function nodeColumns({ t, states, showCheckReason, upgradeErrors, upgrade
           </div>
         );
       },
+    },
+    {
+      // The external platform the node joined through, linked to its row there. Its filter is the server's:
+      // the choices are every source the fleet has, and one the address names stays listed even with no node.
+      key: "source",
+      title: t("column.source"),
+      width: 190,
+      filters: [
+        ...sourceOptions.map((option) => ({ value: option.value, text: sourceOptionText(t, option) })),
+        ...sources.filter((value) => !sourceOptions.some((option) => option.value === value)).map((value) => ({ value, text: sourceOptionText(t, { value, nodes: 0 }) })),
+      ],
+      filterSearch: true,
+      filteredValue: sources,
+      render: (_: unknown, node: Node) => <NodeSourceCell source={node.source} />,
     },
     {
       key: "system_labels",
@@ -194,4 +213,11 @@ export function nodeColumns({ t, states, showCheckReason, upgradeErrors, upgrade
       ),
     },
   ];
+}
+
+/** How a source reads in the filter: an account by its name, a cluster by its name and the account it was connected from, the rest as added by hand. */
+export function sourceOptionText(t: TFunction<"nodes">, option: NodeSourceOption): string {
+  if (option.value === NODE_SOURCE_MANUAL) return t("source.manual");
+  if (option.cluster_name) return option.provider_name ? t("source.clusterOf", { name: option.cluster_name, provider: option.provider_name }) : t("source.cluster", { name: option.cluster_name });
+  return option.provider_name || t("source.selected");
 }
