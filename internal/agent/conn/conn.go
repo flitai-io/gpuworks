@@ -139,6 +139,7 @@ type Conn struct {
 	statusMu            sync.Mutex
 	statusRunning       bool
 	statusTrailing      bool
+	statusCtx           context.Context // latest status request's; see requestStatus
 	// enginePorts is the server's engine port range from the last state sync.
 	enginePorts atomic.Pointer[proto.PortRange]
 

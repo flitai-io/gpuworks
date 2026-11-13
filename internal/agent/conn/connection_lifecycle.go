@@ -188,8 +188,13 @@ func (c *Conn) runYamuxClient(ctx context.Context, netConn net.Conn, lane string
 		go c.runDataLane(dctx)
 	}
 
-	// Report initial status immediately, then run the periodic loops.
-	c.reportStatus(ctx)
+	// Report initial status immediately, then run the periodic loops. The
+	// collection runs beside the inbound reader, never ahead of it: it asks
+	// the container runtime (daemon info, one inspect per catalog image),
+	// which on a loaded Docker daemon takes seconds, and until the reader
+	// starts the server's first state.sync and RPCs sit unread while the node
+	// already reads as online.
+	c.requestStatus(ctx)
 	return c.serve(ctx)
 }
 

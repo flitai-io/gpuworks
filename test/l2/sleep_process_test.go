@@ -70,9 +70,7 @@ func TestProcessSleepWakeReconcilesTheRealEngine(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { stopProcess(agent) })
-	waitNode(t, base, adminToken, func(candidate processNode) bool {
-		return candidate.UUID == seed.UUID && candidate.State == "online"
-	})
+	waitNodeWithCards(t, base, adminToken, seed.UUID)
 
 	modelDir := filepath.Join(t.TempDir(), "model")
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
