@@ -103,6 +103,16 @@ func (s *Server) UpdateNode(name string, fn func(*kubeapi.Node)) {
 	fn(s.nodes[name])
 }
 
+// AddNode adds another node of the cluster with the given labels.
+func (s *Server) AddNode(name string, labels map[string]string) {
+	n := &kubeapi.Node{Metadata: kubeapi.ObjectMeta{Name: name, UID: "node-uid-" + name, Labels: labels}}
+	n.Status.Allocatable = map[string]string{}
+	n.Status.Capacity = map[string]string{}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nodes[name] = n
+}
+
 // SetNodeLabel sets a node label.
 func (s *Server) SetNodeLabel(node, key, value string) {
 	s.UpdateNode(node, func(n *kubeapi.Node) {

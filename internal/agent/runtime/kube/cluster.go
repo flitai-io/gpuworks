@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 	"net/url"
+	"slices"
 
 	"gpuworks.ai/gpuworks/internal/agent/runtime/kube/kubeapi"
 )
@@ -28,6 +29,42 @@ func (d *Driver) NodeExists(ctx context.Context, name string) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// NodesSelected reports, for each named node, whether its labels match a node
+// selection: every selector pair, and when poolLabel is set its value of
+// that label is one of poolIDs. It reads each node, as the manifest's
+// nodeSelector and nodeAffinity are matched against the node's labels; a node
+// that no longer exists is not selected, and an API failure on any other read
+// is an error rather than a guess.
+func (d *Driver) NodesSelected(ctx context.Context, names []string, selector map[string]string, poolLabel string, poolIDs []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(names))
+	for _, name := range names {
+		var n kubeapi.Node
+		err := d.o.API.Get(ctx, kubeapi.NodePath(name), &n)
+		switch {
+		case kubeapi.IsNotFound(err):
+			out[name] = false
+			continue
+		case err != nil:
+			return nil, err
+		}
+		out[name] = nodeMatches(n.Metadata.Labels, selector, poolLabel, poolIDs)
+	}
+	return out, nil
+}
+
+func nodeMatches(labels, selector map[string]string, poolLabel string, poolIDs []string) bool {
+	for k, v := range selector {
+		if got, ok := labels[k]; !ok || got != v {
+			return false
+		}
+	}
+	if poolLabel == "" {
+		return true
+	}
+	got, ok := labels[poolLabel]
+	return ok && slices.Contains(poolIDs, got)
 }
 
 // AgentOn reports whether an agent pod of this agent's DaemonSet is on the

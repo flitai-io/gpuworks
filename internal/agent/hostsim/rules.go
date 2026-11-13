@@ -78,7 +78,8 @@ var rpcRules = map[string]rule{
 	proto.RPCSourceProbe:         refuse,
 	// A simulated node is never a Kubernetes node: these reach the
 	// cluster's API server.
-	proto.RPCKubeNodeExists: refuse,
+	proto.RPCKubeNodeExists:    refuse,
+	proto.RPCKubeNodesSelected: refuse,
 }
 
 // streamRules classifies every stream kind (TestEveryStreamIsClassified): a
