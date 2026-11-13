@@ -320,13 +320,13 @@ This section corresponds to steps 2 to 4 of the overview and moves back and fort
 
 ### Step 2: Create the Cluster Entry and Copy the Command
 
-1. Open “External Platforms” under “Compute” in the left navigation, click “Add External Platform” at the top right, and under “External platform” choose “Local Kubernetes cluster” (a self-managed cluster, and a cluster on a cloud that has no account to connect, both go this way); the “Local Kubernetes cluster” card under “Quick Connect” (shown to administrators only) opens the same dialog with this already chosen. Each cluster connected this way takes one row in the “Connected external platforms” list, with Kubernetes in both the “External platform” and “Platform type” columns, and the “Actions” column shows “Edit” and “Copy connect command” directly, with the rest in the “More” menu: “View manifest”, then below a rule “Uninstall” (gpuworks cannot reach such a cluster, so “Uninstall” lists the `kubectl` commands for you to run), “Revoke”, and “Delete” (for a cluster created more than 5 minutes ago with no node joined yet, “Troubleshoot” appears next to “Not connected yet” in the “Status” column; see [When No Node Appears](#没有节点出现时)):
+1. Open “External Platforms” under “Compute” in the left navigation, click “Add External Platform” at the top right, and under “External platform” choose “Kubernetes cluster” (a self-managed cluster, and a cluster on a cloud that has no account to connect, both go this way); the “Kubernetes cluster” card under “Quick Connect” (shown to administrators only) opens the same dialog with this already chosen. Each cluster connected this way takes one row in the “Connected external platforms” list, with “—” in the “Vendor” column and Kubernetes in the “Platform type” column, and the “Actions” column shows “Edit” and “Copy connect command” directly, with the rest in the “More” menu: “View manifest”, then below a rule “Uninstall” (gpuworks cannot reach such a cluster, so “Uninstall” lists the `kubectl` commands for you to run), “Revoke”, and “Delete” (for a cluster created more than 5 minutes ago with no node joined yet, “Troubleshoot” appears next to “Not connected yet” in the “Status” column; see [When No Node Appears](#没有节点出现时)):
 
-   ![The “External Platforms” page: the “Local Kubernetes cluster” card under “Quick Connect”, and the cluster's row in the “Connected external platforms” list (its actions are “Edit”, “Copy connect command”, and “More”)](../assets/screenshots/k8s-clusters.png)
+   ![The “External Platforms” page: the “Kubernetes cluster” card under “Quick Connect”, and the cluster's row in the “Connected external platforms” list (its actions are “Edit”, “Copy connect command”, and “More”)](../assets/screenshots/k8s-clusters.png)
 
 2. Fill in the cluster form in the dialog. The figure below uses ACK as an example; for DOKS and Nebius, use the values from their own “Connect in gpuworks” sections. Expand “Advanced” to see the agent image registry:
 
-   ![The “Local Kubernetes cluster” tab of the “Add External Platform” dialog: the cluster form filled in for ACK as an example](../assets/screenshots/k8s-connect-form.png)
+   ![The “Kubernetes cluster” tab of the “Add External Platform” dialog: the cluster form filled in for ACK as an example](../assets/screenshots/k8s-connect-form.png)
 
    | Form field | What to enter |
    |---|---|
@@ -366,7 +366,7 @@ kubectl -n gpuworks-system get daemonset,pods -o wide
 
 ## When No Node Appears
 
-If no node has joined 5 minutes after the cluster is created, “Troubleshoot” appears next to “Not connected yet” on this cluster's row of the “External Platforms” page; click it for the commands to run and common causes:
+If no node has joined 5 minutes after the cluster is created, this cluster's row reads “Not connected for long”, with “Troubleshoot” next to it, of the “External Platforms” page; click it for the commands to run and common causes:
 
 ![The commands and common causes shown by clicking “Troubleshoot”](../assets/screenshots/k8s-troubleshoot.png)
 

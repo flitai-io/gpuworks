@@ -41,7 +41,7 @@ Successful credential validation confirms access to the API checked at that step
 
 ## Synchronize Hosts and GPUs
 
-1. In the **Connected external platforms** list, find the environment (its External platform column shows ZStack Cloud and its Platform type column shows Private cloud) and click **Sync**. **Sync All** synchronizes every platform in the list that supports it, public cloud accounts included.
+1. In the **Connected external platforms** list, find the environment (its Vendor column shows ZStack Cloud and its Platform type column shows Private cloud) and click **Sync**. **Sync All** synchronizes every platform in the list that supports it, public cloud accounts included.
 2. Expand the environment row and check the synchronized hosts, management addresses, and GPU models and counts. Instances in this list represent KVM hosts managed by Cloud.
 3. If synchronization fails, inspect the account state and error message, fix API, permission, or version issues, and synchronize again.
 
