@@ -23,9 +23,9 @@ import (
 // golden-image builders.
 const (
 	defaultModelPath = goldenimage.DefaultModelPath
-	// defaultDockerImage is the CUDA 12.9 runner: the image's NVIDIA driver
-	// (nvidiaDriverVersion, R570) runs CUDA 12.x through minor version
-	// compatibility but not the CUDA 13.0 builds, which need R580.
+	// defaultDockerImage is the CUDA 12.9 runner: unlike the CUDA 13.0
+	// builds it still carries Turing kernels, and CompShare's cheapest card
+	// is the 2080 Ti.
 	defaultDockerImage = goldenimage.TuringDockerImage
 	// defaultPullSources are tried in order when the source image does not
 	// carry -docker-image yet; the final tag is -docker-image.

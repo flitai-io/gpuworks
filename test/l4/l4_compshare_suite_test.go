@@ -30,9 +30,9 @@ import (
 )
 
 // compshareTestImage is the vLLM runner the CompShare golden images carry
-// (prepare-compshare-golden's default): the CUDA 12.9 build, because their
-// R570 driver runs CUDA 12.x through minor version compatibility but not the
-// CUDA 13.0 builds. COMPSHARE_TEST_IMAGE overrides it.
+// (prepare-compshare-golden's default): the CUDA 12.9 build, which unlike
+// the CUDA 13.0 ones still carries Turing kernels for the 2080 Ti.
+// COMPSHARE_TEST_IMAGE overrides it.
 func compshareTestImage() string {
 	if image := strings.TrimSpace(os.Getenv("COMPSHARE_TEST_IMAGE")); image != "" {
 		return image

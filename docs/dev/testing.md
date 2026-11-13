@@ -318,13 +318,15 @@ nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。
   Pascal（P40，sm_61）没有任何镜像能跑，该用例不再租它。镜像须先构建并发布（`build.sh` 然后 `publish.py`）。
   `COMPSHARE_GPU_MODELS`（逗号分隔，如 `V100S`）替换租机的卡型候选顺序，用来把一次运行对准某个卡型。
 - `prepare-compshare-golden-image` 创建并验证新模板，但不会删除旧模板或修改 CI 变量。
-  模板里同时存放同一版 NVIDIA 驱动（当前 570.153.02）的开源与闭源两套内核模块，开机时
+  模板里同时存放同一版 NVIDIA 驱动（当前 580.95.05）的开源与闭源两套内核模块，开机时
   `gpuworks-nvidia-kmod.service` 先加载开源版（RTX 5090 等 Blackwell 卡只能用它），没有初始化出 GPU
   时换成闭源版（V100S、P40 这类没有 GSP 的卡只能用它），选中的是哪套写在 `/run/gpuworks-nvidia-kmod`。
 
   模板里的 runner 是 `gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2`，模型是 Qwen3-0.6B（`/opt/gpuworks/test-fixtures/models/qwen3-0.6b`，
-  对应 `COMPSHARE_PRELOADED_MODEL_PATH`）。570 驱动靠 CUDA 小版本兼容能跑 CUDA 12.x 的构建，跑不了要求 580 驱动的 CUDA 13.0 构建，
-  所以这里不用阿里云模板上的 `cuda13.0` 镜像。源模板里没有该 runner 时，工具按 `-pull-sources`（默认华为云 SWR、quay.io、Docker Hub）
+  对应 `COMPSHARE_PRELOADED_MODEL_PATH`）；不用 `cuda13.0` 镜像，是因为它不带 Turing 内核，跑不了最便宜的 2080 Ti。
+  源模板的驱动不是这一版时，工具先换掉用户态驱动：runner 镜像要求驱动不低于其 CUDA 版本（toolkit 按 `NVIDIA_REQUIRE_CUDA`
+  拒绝启动），而靠镜像自带的前向兼容库补差在 GeForce 卡上不可用（`Error 804`），580 是仍支持 Pascal、Volta 的最后一个分支。
+  源模板里没有该 runner 时，工具按 `-pull-sources`（默认华为云 SWR、quay.io、Docker Hub）
   拉取；`-remove-images` 列出的旧 runner 会从 Docker 存储里删掉，免得留在新模板里。验证时每个卡型都在 runner 里做一次真实的
   CUDA 调用，证明驱动带得动 runner 的 CUDA 运行时。
 
