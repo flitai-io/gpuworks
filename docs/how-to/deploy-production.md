@@ -190,6 +190,8 @@ server 直接改数据库时才要等缓存过期。每个调用方使用独立�
 
 长请求与升级：server 重启或升级会断开全部在途的流，已经开始的响应不会重试；节点 agent
 断线会断开该节点上的全部流。长生成业务的升级应安排在低峰，或先在调用方做好断流重试。
+正在等休眠部署唤醒的请求在正常停止时立即得到 503 与 `Retry-After: 10`，进程被强杀时连接断开；
+调用方对这两种情况重试，退避总长覆盖一次重启（通常 10 秒内），重发的请求会重新等唤醒。
 
 网关指标（在监控中心与 `/api/v1/metrics/query` 可查）：`gpuworks_proxy_requests_total`、
 `gpuworks_proxy_request_duration_ms_*`、`gpuworks_proxy_requests_inflight`，以及副本分布

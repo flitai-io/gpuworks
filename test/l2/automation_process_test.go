@@ -209,6 +209,13 @@ func startDockerAutomationRigOn(t *testing.T, name, fakeGPU string) (string, str
 		return candidate.UUID == seed.UUID && candidate.State == "online"
 	})
 
+	return base, adminToken, seed.UUID, registerFixtureModel(t, base, adminToken, seed.UUID, name)
+}
+
+// registerFixtureModel registers a tiny local model directory on the node, as
+// the fake engine serves it, and returns its id.
+func registerFixtureModel(t *testing.T, base, adminToken, nodeUUID, name string) uint {
+	t.Helper()
 	modelDir := filepath.Join(t.TempDir(), "model")
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -220,7 +227,7 @@ func startDockerAutomationRigOn(t *testing.T, name, fakeGPU string) (string, str
 	if err := os.WriteFile(filepath.Join(modelDir, "model.safetensors"), []byte("fixture"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	localBody, _ := json.Marshal(map[string]any{"node_uuid": seed.UUID, "path": modelDir, "name": name + "-model"})
+	localBody, _ := json.Marshal(map[string]any{"node_uuid": nodeUUID, "path": modelDir, "name": name + "-model"})
 	localResp, localData := authedDo(t, http.MethodPost, base, adminToken, "/api/v1/models/local", localBody)
 	if localResp.StatusCode != http.StatusCreated {
 		t.Fatalf("register local model status=%d body=%s", localResp.StatusCode, localData)
@@ -232,5 +239,5 @@ func startDockerAutomationRigOn(t *testing.T, name, fakeGPU string) (string, str
 		t.Fatal(err)
 	}
 
-	return base, adminToken, seed.UUID, model.ID
+	return model.ID
 }

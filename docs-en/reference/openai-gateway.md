@@ -45,6 +45,7 @@ Deployments with multiple replicas use least-request selection by default, prefe
 - After a connection-level failure, the gateway retries on another replica only if the request can still be replayed.
 - Once an upstream response is received, including a 5xx response, the gateway does not retry.
 - If an instance cannot serve because it is sleeping, starting, or has a nonzero rank, the gateway returns 503 and preserves retry semantics.
+- When the server stops gracefully, a request waiting for a sleeping deployment to wake returns 503 with `Retry-After: 10` and the message `the server is restarting; send the request again`; send it again.
 
 A deployment can select `least_request`, `prefix_affinity`, or `failover` through the management API `PUT /api/v1/deployments/{id}/routing`. Prefix affinity first reads `X-GPUWorks-Affinity-Key` and also supports extracting a stable key from chat messages, prompt, or input. This header is not forwarded to the engine.
 

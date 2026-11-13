@@ -20,7 +20,16 @@ const (
 	// wakeHoldRecheck is how often a held request looks again even when no
 	// route change has signalled it, so a missed signal costs at most this.
 	wakeHoldRecheck = time.Second
+	// restartRetryAfter is the Retry-After of a request refused because the
+	// server stops: about what a restart takes (a service manager's 3 s
+	// restart delay, then the start), so a client that honours it lands on
+	// the next process.
+	restartRetryAfter = 10 * time.Second
 )
+
+// stoppingMessage tells a client of a request refused because the server
+// stops that the request is safe to send again.
+const stoppingMessage = "the server is restarting; send the request again"
 
 // wakeHold holds the requests for deployments the platform put to sleep
 // while they wake (docs/explanation/service-levels.md). A request waits until
@@ -46,6 +55,11 @@ type wakeHold struct {
 	// deployment (drain.go). Each set is replaced, never changed in place,
 	// so a request reads the one it took under the lock after letting go.
 	draining map[uint]map[string]bool
+	// stopping is closed once the server stops (stop): a request held for a
+	// wake then would end without an answer when the connections close, so
+	// it is refused at once with a Retry-After instead.
+	stopping chan struct{}
+	stopped  bool
 }
 
 type heldRequest struct{ since time.Time }
@@ -53,8 +67,38 @@ type heldRequest struct{ since time.Time }
 func newWakeHold() *wakeHold {
 	return &wakeHold{
 		held: map[uint]map[*heldRequest]struct{}{}, changed: make(chan struct{}), now: time.Now, draining: map[uint]map[string]bool{}, wakes: map[uint]bool{},
-		holdMax: func(dep *store.Deployment) time.Duration { return dep.Policy().HoldMax() },
+		holdMax:  func(dep *store.Deployment) time.Duration { return dep.Policy().HoldMax() },
+		stopping: make(chan struct{}),
 	}
+}
+
+// stop refuses the held requests and every request held from now on.
+func (h *wakeHold) stop() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.stopped {
+		h.stopped = true
+		close(h.stopping)
+	}
+}
+
+// resume holds requests again after stop: an App that runs again on the same
+// gateway (the in-process restart) serves as a new process would.
+func (h *wakeHold) resume() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopped {
+		h.stopped = false
+		h.stopping = make(chan struct{})
+	}
+}
+
+// stopSignal is the channel closed when the server stops, read under the
+// lock because resume replaces it.
+func (h *wakeHold) stopSignal() <-chan struct{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.stopping
 }
 
 // signal wakes every held request to look at the routes again.
@@ -136,6 +180,18 @@ func (p *Proxy) SetWakeDemand(fn func(deploymentID uint)) {
 	p.hold.mu.Unlock()
 }
 
+// StopHolding is the server stopping: the requests held for a wake, and any
+// that would be held from now on, are refused at once with a 503 and a
+// Retry-After that covers a restart. A held request would otherwise end with
+// no answer when the connections close, which a client reads as a broken
+// connection rather than a refusal it may retry. Requests already being
+// served are not touched.
+func (p *Proxy) StopHolding() {
+	if p != nil && p.hold != nil {
+		p.hold.stop()
+	}
+}
+
 // HeldRequests is how many requests the gateway holds for the deployment's
 // wake and since when the oldest has waited.
 func (p *Proxy) HeldRequests(deploymentID uint) (int, time.Time) {
@@ -184,6 +240,16 @@ func (p *Proxy) holdForWake(ctx context.Context, w http.ResponseWriter, modelNam
 	if demand == nil || !p.wakesOnRequest(dep) {
 		return refuse()
 	}
+	stopping := func() (*store.Deployment, target, int, string, bool) {
+		w.Header().Set("Retry-After", strconv.Itoa(int(restartRetryAfter.Seconds())))
+		return dep, target{}, http.StatusServiceUnavailable, stoppingMessage, true
+	}
+	stop := p.hold.stopSignal()
+	select {
+	case <-stop:
+		return stopping()
+	default:
+	}
 	req, changed, ok := p.hold.enter(dep.ID)
 	if !ok {
 		w.Header().Set("Retry-After", strconv.Itoa(int(wakeHoldRecheck.Seconds())*30))
@@ -203,6 +269,8 @@ func (p *Proxy) holdForWake(ctx context.Context, w http.ResponseWriter, modelNam
 		case <-deadline.C:
 			w.Header().Set("Retry-After", strconv.Itoa(max(int(hold.Seconds()), 1)))
 			return refuse()
+		case <-stop:
+			return stopping()
 		case <-changed:
 			changed = p.hold.next()
 		case <-recheck.C:

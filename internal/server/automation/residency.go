@@ -19,98 +19,23 @@ const (
 	TriggerPreempt = "preempt"
 )
 
-// Waiter is a deployment with requests held for its wake, or (Place) one
-// whose next replica waits for room to be placed.
-type Waiter struct {
-	DeploymentID uint
-	Policy       yieldpolicy.Policy
-	// Since is when its oldest held request came, or its replica started
-	// waiting.
-	Since time.Time
-	// Place says it has nothing asleep to wake: what blocks it is what keeps
-	// its replica from being placed, and once that sleeps the controller
-	// places it.
-	Place bool
-}
-
-// Holder is an awake replica on cards a waiting deployment needs, and the
-// deployment it serves.
-type Holder struct {
-	DeploymentID uint
-	Name         string
-	Policy       yieldpolicy.Policy
-	// Instances are the replica's instances, put to sleep together.
-	Instances []string
-	// Starting says the replica is still starting: it has served nothing
-	// yet. Only the replica's own instances say so; another replica of its
-	// deployment starting or waiting to be placed does not.
-	Starting bool
-}
-
-// Blocking is what keeps a waiting deployment's sleepers from waking: the
-// awake replicas on the cards they need, or an occupant nothing can put to
-// sleep (a process outside the platform, a deployment that cannot sleep).
-type Blocking struct {
-	Holders []Holder
-	Blocked bool
-}
-
-// Activity is a deployment's traffic as the gateway sees it.
-type Activity struct {
-	InFlight    int
-	Held        int
-	LastRequest time.Time
-}
-
-// ResidencySource is what the residency arbiter reads.
-type ResidencySource interface {
-	// Waiters are the deployments with a request held for their wake whose
-	// sleep a request may end (not held by an operator or a schedule).
-	Waiters() ([]Waiter, error)
-	// Wakeable says the deployment is active and has a sleeper the
-	// platform put to sleep (one a request wakes), with its policy; a
-	// deployment whose sleepers an operator or a schedule all holds is not.
-	Wakeable(deploymentID uint) (policy yieldpolicy.Policy, ok bool)
-	// Blocking is what keeps the deployment's waiting sleepers from waking.
-	Blocking(deploymentID uint) (Blocking, error)
-	// Activity is the deployment's traffic.
-	Activity(deploymentID uint) Activity
-	// InstancesInFlight is how many requests run on the instances: what a
-	// holder's replica drains before it sleeps, its siblings serving on.
-	InstancesInFlight(instances []string) int
-	// Settling says the deployment is not serving yet: its replica waits to
-	// be placed, or an instance of it is still starting. It is asked of a
-	// deployment a holder gave its cards to (stillWakingFor); whether a
-	// holder itself is starting is its own replica's (Holder.Starting).
-	Settling(deploymentID uint) bool
-}
-
-// ResidencyActions is how the residency arbiter acts.
-type ResidencyActions interface {
-	// Yield puts a holder's replica to sleep for another deployment, cutting
-	// its requests off when abort; it returns the level it chose (the
-	// holder's sleep level preference, yieldpolicy.Policy.SleepLevel).
-	Yield(deploymentID uint, instances []string, abort bool) (int, error)
-	// Drain stops (on) or resumes routing new requests to the deployment's
-	// instances; its other replicas take them, and with none left they are
-	// held as if it slept.
-	Drain(deploymentID uint, instances []string, on bool)
-}
-
 // DefaultDemandSettle gathers the demand of a burst of requests for sleeping
 // deployments into one look.
 const DefaultDemandSettle = 100 * time.Millisecond
 
-// residencyState is the arbiter's memory. It is not persisted: after a
-// restart a deployment put to sleep for another resumes only when a request
-// comes for it.
+// residencyState is the arbiter's memory. It is not persisted; what a server
+// that has just started can tell again from the event log it reads back
+// (residency_restart.go): the resume list, and the start of a time-sliced
+// holder's turn.
 type residencyState struct {
 	source  ResidencySource
 	actions ResidencyActions
 	demand  chan struct{}
 	// awakeAt is when the arbiter woke each deployment, the start of its
-	// turn.
-	awakeAt map[uint]time.Time
+	// turn as the arbiter saw it begin; awakeSeen, as the instance events
+	// say it began, for a turn the arbiter did not see.
+	awakeAt   map[uint]time.Time
+	awakeSeen map[uint]seenAwake
 	// preempted are deployments put to sleep for another, since when: they
 	// take their cards back once they may.
 	preempted map[uint]time.Time
@@ -136,11 +61,18 @@ type residencyState struct {
 	// starting are holders last seen still starting: once one serves, its
 	// turn and idle time count from then.
 	starting map[uint]bool
+	// restored says the resume list was read back from the event log, which
+	// the first look does (restorePreempted); a failed read is tried again
+	// on the next.
+	restored bool
 }
 
 type yielded struct {
 	to uint
 	at time.Time
+	// restored says the yield was read back from the event log: its end
+	// leaves the turn of the one it was for to that one's own events.
+	restored bool
 }
 
 // yieldGuard is how long a holder leaves the cards it gave up to the one it
@@ -182,7 +114,7 @@ func (e *Evaluator) WithResidency(source ResidencySource, actions ResidencyActio
 	e.res = &residencyState{
 		source: source, actions: actions, demand: make(chan struct{}, 1),
 		awakeAt: map[uint]time.Time{}, preempted: map[uint]time.Time{}, draining: map[uint]drain{}, wokeAt: map[uint]time.Time{},
-		yieldedFor: map[uint]yielded{}, wakeTrigger: map[uint]string{}, starting: map[uint]bool{},
+		yieldedFor: map[uint]yielded{}, wakeTrigger: map[uint]string{}, starting: map[uint]bool{}, awakeSeen: map[uint]seenAwake{},
 	}
 	return e
 }
@@ -215,6 +147,7 @@ func (e *Evaluator) residency(now time.Time) {
 		return
 	}
 	r.next = time.Time{}
+	e.restorePreempted()
 	e.finishDrains(now)
 	waiters, err := r.source.Waiters()
 	if err != nil {
@@ -426,11 +359,14 @@ func (e *Evaluator) holderState(now time.Time, h Holder) yieldpolicy.Holder {
 		delete(r.starting, h.DeploymentID)
 		r.awakeAt[h.DeploymentID] = now
 	}
+	// Idle time counts from no earlier than this process began watching: a
+	// request cut off by a restart left no record of having run, so the time
+	// before it cannot be told idle.
 	since := e.started
 	if at, ok := r.awakeAt[h.DeploymentID]; ok && at.After(since) {
 		since = at
 	}
-	out := yieldpolicy.Holder{Policy: h.Policy, AwakeFor: now.Sub(since)}
+	out := yieldpolicy.Holder{Policy: h.Policy, AwakeFor: now.Sub(e.turnStart(now, h, since))}
 	act := r.source.Activity(h.DeploymentID)
 	out.Busy = act.InFlight > 0 || act.Held > 0
 	if !out.Busy {
@@ -522,6 +458,7 @@ func (e *Evaluator) sleepHolder(id uint, instances []string, abort bool, params 
 	params["level"] = level
 	e.actions.Record(id, EventAutoSleep, params)
 	delete(r.awakeAt, id)
+	delete(r.awakeSeen, id)
 	if to, ok := params["for_deployment"].(uint); ok {
 		r.yieldedFor[id] = yielded{to: to, at: e.now()}
 	}
@@ -565,8 +502,10 @@ func (e *Evaluator) stillWakingFor(now time.Time, id uint) bool {
 		return true
 	}
 	// The one it gave way to serves now: its turn, and its idle time,
-	// count from here.
-	if at, ok := r.awakeAt[y.to]; !ok || at.Before(y.at) {
+	// count from here. A yield read back from the event log ended while the
+	// server was down, or is first seen ending long after it did: the one it
+	// was for is told by its own events (turnStart).
+	if at, ok := r.awakeAt[y.to]; !y.restored && (!ok || at.Before(y.at)) {
 		r.awakeAt[y.to] = now
 	}
 	delete(r.yieldedFor, id)
