@@ -159,6 +159,10 @@ func TestProviderKindsEndpointReturnsSchema(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"kind":"runpod","label":{"en":"RunPod","zh":"RunPod"},"homepage":"https://www.runpod.io",`) {
 		t.Fatalf("runpod homepage missing from wire JSON: %s", rec.Body.String())
 	}
+	// What the kind connects and the platform type it is filed under travel with the schema.
+	if !strings.Contains(rec.Body.String(), `"resources":[{"type":"container","product":"Pod"}],"category":"public_cloud"}`) {
+		t.Fatalf("runpod resources and category missing from wire JSON: %s", rec.Body.String())
+	}
 	// RunPod pods are dialed through a TCP port they expose; AutoDL Pro
 	// instances open HTTP ports only, so the server cannot dial them.
 	if !runpod.ServerDialSupported || runpod.DefaultServerDialListen != "" {

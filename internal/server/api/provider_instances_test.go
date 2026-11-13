@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -152,10 +153,19 @@ func TestProviderInstanceReleaseAndSyncDropReleasedRows(t *testing.T) {
 	const rowA = `{"external_id":"uhost-a","name":"gpu-a","gpu_model":"4090","gpu_count":2,"power":"running","price_per_hr":2.5,"region":"cn-wlcb","public_ip":"203.0.113.9","ssh_port":22,"ssh_user":"root","ssh_connections":[{"id":"direct","type":"direct","label":{"en":"Direct"},"host":"203.0.113.9","port":22,"user":"root","install_supported":true}],"kind":"vm","node_id":0,"actions":["install","delete"]}`
 	const rowB = `{"external_id":"uhost-b","name":"gpu-b","gpu_model":"4090","gpu_count":2,"power":"running","price_per_hr":2.5,"region":"cn-wlcb","public_ip":"203.0.113.10","ssh_port":22,"ssh_user":"root","ssh_connections":[{"id":"direct","type":"direct","label":{"en":"Direct"},"host":"203.0.113.10","port":22,"user":"root","install_supported":true}],"kind":"vm","node_id":0,"actions":["install","delete"]}`
 
+	// An account that was never synced has no sync time on the wire.
+	if rec := call(http.MethodGet, "/api/v1/providers", token); rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), `"synced_at"`) {
+		t.Fatalf("provider list before a sync: %d %s", rec.Code, rec.Body.String())
+	}
 	if rec := call(http.MethodPost, base+"/sync", token); rec.Code != http.StatusOK {
 		t.Fatalf("sync status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	expect(call(http.MethodGet, base+"/instances", token), http.StatusOK, `{"items":[`+rowA+","+rowB+`],"total":2}`)
+	// The sync's time sits between the node count and the creation time, in RFC 3339.
+	listed := call(http.MethodGet, "/api/v1/providers", token).Body.String()
+	if !regexp.MustCompile(`"node_count":0,"synced_at":"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ","created_at":`).MatchString(listed) {
+		t.Fatalf("provider list after a sync lacks its time: %s", listed)
+	}
 
 	// Unauthenticated release is rejected before reaching the vendor.
 	if rec := call(http.MethodDelete, base+"/instances/uhost-a", ""); rec.Code != http.StatusUnauthorized {
@@ -222,11 +232,11 @@ func (d *clusterNodeDriver) ResizeInstance(_ context.Context, _ provider.Credent
 	return nil
 }
 
-// A node of a managed Kubernetes cluster is the cluster's: the server says it
-// allows no action, and powering it, releasing it or resizing it is refused
-// with PROVIDER_INSTANCE_IN_CLUSTER before the vendor hears of it, while a
-// plain instance of the same account keeps its actions.
-func TestProviderClusterNodeAllowsNoActionAndRefusesThem(t *testing.T) {
+// A node of a managed Kubernetes cluster is the cluster's: neither a sync nor
+// the account's instance list shows it, and powering it, releasing it or
+// resizing it is refused with PROVIDER_INSTANCE_IN_CLUSTER before the vendor
+// hears of it, while a plain instance of the same account keeps its actions.
+func TestProviderClusterNodeIsNotListedAndItsOperationsAreRefused(t *testing.T) {
 	node := inventoryInstance("i-node", "ack-node", "203.0.113.20")
 	node.Cluster = "c-1"
 	drv := &clusterNodeDriver{apiInventoryDriver: apiInventoryDriver{instances: map[string]provider.Instance{
@@ -264,8 +274,9 @@ func TestProviderClusterNodeAllowsNoActionAndRefusesThem(t *testing.T) {
 		router.ServeHTTP(rec, req)
 		return rec
 	}
-	if rec := call(http.MethodPost, base+"/sync", ""); rec.Code != http.StatusOK {
-		t.Fatalf("sync = %d %s", rec.Code, rec.Body)
+	synced := call(http.MethodPost, base+"/sync", "")
+	if synced.Code != http.StatusOK || !strings.Contains(synced.Body.String(), `{"count":1,"instances":[{"external_id":"i-plain",`) || strings.Contains(synced.Body.String(), "i-node") {
+		t.Fatalf("sync = %d %s, want the plain instance alone", synced.Code, synced.Body)
 	}
 	rec := call(http.MethodGet, base+"/instances", "")
 	var list struct {
@@ -273,21 +284,19 @@ func TestProviderClusterNodeAllowsNoActionAndRefusesThem(t *testing.T) {
 			ExternalID string   `json:"external_id"`
 			Actions    []string `json:"actions"`
 		} `json:"items"`
+		Total int `json:"total"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Items) != 2 {
-		t.Fatalf("instances = %s err=%v", rec.Body, err)
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil || len(list.Items) != 1 || list.Total != 1 || list.Items[0].ExternalID != "i-plain" {
+		t.Fatalf("instances = %s err=%v, want the plain instance alone", rec.Body, err)
 	}
-	for _, it := range list.Items {
-		want := `["power_off","install","delete"]`
-		if it.ExternalID == "i-node" {
-			want = `[]`
-		}
-		if got, _ := json.Marshal(it.Actions); string(got) != want {
-			t.Fatalf("%s actions = %s, want %s (body %s)", it.ExternalID, got, want, rec.Body)
-		}
+	if got, _ := json.Marshal(list.Items[0].Actions); string(got) != `["power_off","install","delete"]` {
+		t.Fatalf("i-plain actions = %s (body %s)", got, rec.Body)
 	}
-	if !strings.Contains(rec.Body.String(), `"managed_cluster":"c-1"`) {
-		t.Fatalf("the cluster node lost managed_cluster: %s", rec.Body)
+	if strings.Contains(rec.Body.String(), "managed_cluster") {
+		t.Fatalf("an instance names a cluster: %s", rec.Body)
+	}
+	if rec := call(http.MethodGet, "/api/v1/providers", ""); !strings.Contains(rec.Body.String(), `"instance_count":1,`) {
+		t.Fatalf("provider list = %s, want instance_count 1", rec.Body)
 	}
 
 	for _, req := range []struct{ method, path, body string }{

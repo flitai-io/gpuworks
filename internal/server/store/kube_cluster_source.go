@@ -47,3 +47,21 @@ func (s *Store) KubeClustersFromProvider(providerID uint) (map[string]KubeCluste
 	}
 	return out, nil
 }
+
+// KubeClusterAccounts maps each cluster entry made from a cloud account to
+// that account's id; entries made by hand are absent. It reads only the two
+// id columns, never an entry's enrollment token or manifest settings.
+func (s *Store) KubeClusterAccounts() (map[uint]uint, error) {
+	var rows []struct {
+		ID         uint
+		ProviderID uint
+	}
+	if err := s.reader().Model(&KubeCluster{}).Select("id, provider_id").Where("provider_id IS NOT NULL").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[uint]uint, len(rows))
+	for _, r := range rows {
+		out[r.ID] = r.ProviderID
+	}
+	return out, nil
+}

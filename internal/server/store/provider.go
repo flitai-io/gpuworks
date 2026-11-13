@@ -112,6 +112,10 @@ func upsertProviderInstance(db *gorm.DB, pi *ProviderInstance) error {
 func (s *Store) SyncProviderInstances(providerID uint, listed []ProviderInstance) error {
 	var stopped []string
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// The listing is the account's as of now, recorded with it. UpdateColumn leaves updated_at, which edits own.
+		if err := tx.Model(&Provider{}).Where("id = ?", providerID).UpdateColumn("synced_at", time.Now().UTC()).Error; err != nil {
+			return err
+		}
 		keep := make([]string, 0, len(listed))
 		for i := range listed {
 			pi := listed[i]
@@ -375,6 +379,36 @@ func (s *Store) NodeProviders(nodeIDs []uint) (map[uint]NodeProvider, error) {
 	}
 	for _, row := range rows {
 		out[row.NodeID] = NodeProvider{Kind: strings.TrimSpace(row.Kind), Region: strings.TrimSpace(row.Region)}
+	}
+	return out, nil
+}
+
+// ProviderInstanceCounts is how many instances of its own an account holds
+// and how many of them carry a node. A managed Kubernetes cluster's node is
+// the cluster's, not an instance of the account, and is not counted.
+type ProviderInstanceCounts struct {
+	Instances int
+	Nodes     int
+}
+
+// ProviderInstanceCountsByProvider counts every account's own instances in
+// one grouped query, keyed by provider id; an account without any is absent.
+func (s *Store) ProviderInstanceCountsByProvider() (map[uint]ProviderInstanceCounts, error) {
+	var rows []struct {
+		ProviderID uint
+		Instances  int
+		Nodes      int
+	}
+	err := s.reader().Model(&ProviderInstance{}).
+		Select("provider_id, COUNT(*) AS instances, SUM(CASE WHEN node_id <> 0 THEN 1 ELSE 0 END) AS nodes").
+		Where("managed_cluster = '' OR managed_cluster IS NULL").
+		Group("provider_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint]ProviderInstanceCounts, len(rows))
+	for _, r := range rows {
+		out[r.ProviderID] = ProviderInstanceCounts{Instances: r.Instances, Nodes: r.Nodes}
 	}
 	return out, nil
 }

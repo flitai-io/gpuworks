@@ -4,6 +4,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/planning"
+	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -37,7 +38,12 @@ func (a *apiHandlers) fillResolvedNodeFields(nodes []store.Node, out []dto.Node)
 		providers = nil
 	}
 	facts := planning.NodeFacts{Networks: resolved, Storages: storages, Providers: providers, KubeClusters: planning.LoadKubeClusters(a.d.Store, nodes)}
+	// An unreadable source is no source, as a node added by hand shows.
+	sources, _ := a.d.Store.NodeSources(nodes)
 	for i := range nodes {
+		if source, ok := sources[nodes[i].ID]; ok {
+			out[i].Source = nodeSourceDTO(source)
+		}
 		if r, ok := resolved.For(nodes[i].ID, netplan.RoleCompute); ok {
 			out[i].ComputeNetwork, out[i].ComputeAddress = r.Network.Name, r.IP
 		}
@@ -55,6 +61,19 @@ func systemLabelsDTO(labels []planning.SystemLabel) []dto.SystemLabel {
 			Key: label.Key, Value: label.Value,
 			Display: label.Display, DisplayCode: label.DisplayCode,
 		})
+	}
+	return out
+}
+
+// nodeSourceDTO names the external platform a node joined through and what
+// the node is there.
+func nodeSourceDTO(source store.NodeSource) *dto.NodeSource {
+	out := &dto.NodeSource{ProviderID: source.ProviderID, ProviderName: source.ProviderName, ProviderKind: source.ProviderKind,
+		ClusterUUID: source.ClusterUUID, ClusterName: source.ClusterName}
+	if source.ClusterUUID != "" {
+		out.Resource = string(provider.ResourceKubernetes)
+	} else {
+		out.Resource = string(provider.InstanceResource(source.ProviderKind, source.InstanceKind))
 	}
 	return out
 }

@@ -109,6 +109,11 @@ type KindInfo struct {
 	// CanListClusters: the driver lists managed Kubernetes clusters
 	// (ClusterProvider).
 	CanListClusters bool `json:"can_list_clusters"`
+	// Resources are what the kind connects, in the order to list them.
+	Resources []KindResource `json:"resources"`
+	// Category is the platform type the kind's accounts are filed under,
+	// which a client groups the kinds by; empty for a kind that declares none.
+	Category Category `json:"category"`
 }
 
 // CreateInstanceRequest carries generic create/rent parameters for future
@@ -407,6 +412,8 @@ func KindInfos() []KindInfo {
 			ServerDialSupported:     ServerDialSupported(kind),
 			ServerDialAutoPort:      isPortMapper(drv),
 			CanListClusters:         isClusterProvider(drv),
+			Resources:               ResourcesOf(kind),
+			Category:                CategoryOf(kind),
 		})
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Kind < infos[j].Kind })

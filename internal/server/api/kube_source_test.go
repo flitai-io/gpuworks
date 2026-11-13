@@ -41,7 +41,7 @@ func (d *apiClusterDriver) ListClusters(context.Context, provider.Credentials) (
 	const label = "alibabacloud.com/nodepool-id"
 	return []provider.Cluster{
 		// Three GPU node pools, two of NVIDIA cards and one of PPU cards.
-		{ExternalID: "c-gpu", Name: "ack-gpu", Region: "cn-shanghai", Version: "1.35.7", State: "running", Running: true, PublicAPI: true,
+		{ExternalID: "c-gpu", Name: "ack-gpu", Region: "cn-shanghai", Version: "1.35.7", Type: provider.ClusterTypeACKManaged, State: "running", Running: true, PublicAPI: true,
 			GPUPools: []provider.ClusterPool{
 				{ID: "np-1", Name: "l20", GPUModel: "NVIDIA L20", GPUCount: 1, Nodes: 1, Vendor: "nvidia", LabelKey: label},
 				{ID: "np-2", Name: "a10", GPUModel: "NVIDIA A10", GPUCount: 1, Nodes: 2, Vendor: "nvidia", LabelKey: label},
@@ -190,6 +190,13 @@ func TestAClusterOfACloudAccountBecomesAnEntryOnce(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), `"entry"`) {
 		t.Fatal("an entry before any was made")
+	}
+	// The cluster's product travels as a code with its name; a cluster whose driver cannot tell carries neither.
+	if !strings.Contains(rec.Body.String(), `"external_id":"c-gpu","name":"ack-gpu","region":"cn-shanghai","version":"1.35.7","type":"ack_managed","type_label":{"en":"ACK managed","zh":"ACK 托管版"},"state":"running"`) {
+		t.Fatalf("c-gpu lacks its type: %s", rec.Body)
+	}
+	if strings.Count(rec.Body.String(), `"type"`) != 1 || strings.Count(rec.Body.String(), `"type_label"`) != 1 {
+		t.Fatalf("a cluster without a type carries one: %s", rec.Body)
 	}
 
 	body := fmt.Sprintf(`{"name":"ack-gpu","server_url":"https://gw.example","provider_pool_ids":["np-2","np-1"],"provider_id":%d,"provider_cluster_id":"c-gpu"}`, rig.provider)

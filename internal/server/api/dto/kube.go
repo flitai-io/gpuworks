@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/pkg/localization"
 )
 
 // KubeCluster is a Kubernetes cluster whose GPU nodes join through one
@@ -209,15 +210,19 @@ type KubeClusterSource struct {
 // ProviderCluster is a managed Kubernetes cluster in a cloud account
 // (provider.Cluster) and the entry made from it, if any.
 type ProviderCluster struct {
-	ExternalID string                `json:"external_id"`
-	Name       string                `json:"name"`
-	Region     string                `json:"region"`
-	Version    string                `json:"version"`
-	State      string                `json:"state"`
-	Running    bool                  `json:"running"`
-	PublicAPI  bool                  `json:"public_api"`
-	GPUPools   []ProviderClusterPool `json:"gpu_pools"`
-	Entry      *KubeClusterRef       `json:"entry,omitempty"`
+	ExternalID string `json:"external_id"`
+	Name       string `json:"name"`
+	Region     string `json:"region"`
+	Version    string `json:"version"`
+	// Type is the vendor's product the cluster is (provider.ClusterType…)
+	// and TypeLabel its name; both absent when the driver cannot tell.
+	Type      string                `json:"type,omitempty"`
+	TypeLabel localization.Text     `json:"type_label,omitempty"`
+	State     string                `json:"state"`
+	Running   bool                  `json:"running"`
+	PublicAPI bool                  `json:"public_api"`
+	GPUPools  []ProviderClusterPool `json:"gpu_pools"`
+	Entry     *KubeClusterRef       `json:"entry,omitempty"`
 	// AgentImageSource is the registry an entry made from the cluster pulls
 	// the published agent image from unless the request names another: the
 	// one its region reaches.

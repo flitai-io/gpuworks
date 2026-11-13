@@ -215,7 +215,7 @@ Cookie 设置为 `HttpOnly`、`SameSite=Lax`，其中保存的是不透明会话
 | GET | `/api/v1/peer-transfers` | 当前管理节点进程的 peer 传输观测；可选单个 `transfer_id`，返回有效中继预算、活动中继数、带宽额度等待数、累计结果及有界运行观测。无对应观测返回空列表，未接入观测能力返回 503；非法筛选返回 400。计数为内层 TLS 流字节，不代表文件校验进度。 | JWT |
 | GET | `/healthz` | 健康检查（无需登录，供探活/负载均衡） | 无 |
 | GET | `/api/v1/engines?target_vendor=amd` | 面向指定厂商的引擎参数字典（省略 `target_vendor` 时使用通用 profile，未知厂商返回 400）；AMD profile 只表示实现准入范围，不证明特定 GPU/ROCm 版本已通过真机验收 | JWT |
-| GET | `/api/v1/nodes` | 节点列表；带 `page`/`page_size` 时分页并可按 `q`/`state`/`label` 筛选（见“错误与响应约定”）；从 Kubernetes 集群接入的节点带系统标签 `gpuworks.ai/kubernetes-cluster` 与 `gpuworks.ai/kubernetes-node`（见“节点标签：写入的与生成的”），被 Kubernetes cordon 时 `cordon_reason` 为 `kube_unschedulable` | JWT |
+| GET | `/api/v1/nodes` | 节点列表；带 `page`/`page_size` 时分页并可按 `q`/`state`/`label` 筛选（见“错误与响应约定”）；`source=` 按来源筛选，逗号分隔的几个值任一满足即可：`provider:<外部平台账号 id>` 是经该账号接入的节点（装在它的实例上，或经由它接入的集群），`cluster:<集群条目 uuid>` 是经该集群接入的节点，`manual` 是手动添加的节点；不存在的账号或集群匹配不到任何节点，格式不对的值回 400 `LIST_FILTER_INVALID`；分页响应另带 `sources`：全部节点（不受筛选影响）有哪些来源可选，每项 `{value,provider_name?,provider_kind?,cluster_name?,nodes}`，`value` 即上面的筛选值，账号在前、集群其次、`manual` 最后，账号的 `nodes` 含它的集群的节点；每项的 `source` 是节点经由的外部平台 `{resource,provider_id?,provider_name?,provider_kind?,cluster_uuid?,cluster_name?}`（`resource` 为 `vm`、`container`、`host` 或 `kubernetes`，判断不出资源类型时（账号的类型能接入几种实例、而实例没有说明自己是哪种，或类型未知）为空字符串，字段仍然出现；自行接入的集群没有 `provider_*`；手动添加的节点没有 `source`）；从 Kubernetes 集群接入的节点带系统标签 `gpuworks.ai/kubernetes-cluster` 与 `gpuworks.ai/kubernetes-node`（见“节点标签：写入的与生成的”），被 Kubernetes cordon 时 `cordon_reason` 为 `kube_unschedulable` | JWT |
 | GET | `/api/v1/nodes/facets` | 筛选项及节点数量分布；查询参数 `q`、`state`、`label` 同节点列表，返回用户标签、系统标签与卡型号分布（含已报告的 `arch_id`），见[节点列表](#节点列表的筛选与返回字段) | JWT |
 | GET | `/api/v1/dashboard/summary` | 仪表盘汇总：节点按状态计数与硬件合计、部署按状态计数、按厂商与按标签（`label_key`，缺省或无节点带该 key 时取最常用的 key）分组的容量；另含当前 GPU 指标、卡占用、在途任务，字段见[仪表盘汇总](#仪表盘汇总的返回字段) | JWT |
 | POST | `/api/v1/nodes` | 创建待接入节点，返回安装命令与 token；完整字段与条件见[创建节点的连接参数](#创建节点的连接参数) | JWT(admin) |
@@ -1645,16 +1645,16 @@ extra_args 解析（`EXTRA_ARGS_INVALID`）、挂载（`MOUNT_CONTAINER_PATH`/`M
 
 | Method | Path | 说明 | 鉴权 |
 |---|---|---|---|
-| GET | `/api/v1/providers/kinds` | 支持的云厂商种类，含各自的凭据字段（`credential_fields[].default_value` 为可选的非敏感字段创建默认值，`placeholder` 仅为提示）、默认 `server_dial` 监听地址，以及 `server_dial_supported`（AutoDL 为 false：Pro 实例只开放 HTTP 端口）与 `server_dial_auto_port`（Vast、RunPod 为 true：驱动按平台的端口映射自选监听端口与接入地址） | JWT |
-| GET | `/api/v1/providers` | 已配置的云厂商账号列表；每项的 `category` 是该类型所属的平台类型（ZStack Cloud 为 `private_cloud`，公有云厂商为 `public_cloud`），由 `kind` 推导，不单独保存 | JWT |
+| GET | `/api/v1/providers/kinds` | 支持的云厂商种类，含各自的凭据字段（`credential_fields[].default_value` 为可选的非敏感字段创建默认值，`placeholder` 仅为提示）、默认 `server_dial` 监听地址，以及 `server_dial_supported`（AutoDL 为 false：Pro 实例只开放 HTTP 端口）与 `server_dial_auto_port`（Vast、RunPod 为 true：驱动按平台的端口映射自选监听端口与接入地址），以及 `resources`：该类型能接入的资源 `[{type,product?}]`，`type` 为 `vm`（虚拟机）、`container`（容器实例）、`host`（物理机）或 `kubernetes`，`product` 是厂商自己的产品名（如 `ECS`、`ACK`），实例类在前、Kubernetes 在后；`category` 是该类型的账号所属的平台类型（`public_cloud`、`private_cloud`），供客户端分组 | JWT |
+| GET | `/api/v1/providers` | 已配置的云厂商账号列表；每项的 `category` 是该类型所属的平台类型（ZStack Cloud 为 `private_cloud`，公有云厂商为 `public_cloud`），由 `kind` 推导，不单独保存；`resources` 同 `/providers/kinds`；`instance_count` 是上次同步到的实例数（不含托管 Kubernetes 集群的节点）；`node_count` 是经该账号接入的计算节点数（它的实例上的节点加它的集群的节点，同一台机器只计一次）；`synced_at` 是上次成功列出该账号实例的时间（RFC 3339），从未同步过时省略，同步失败不改它 | JWT |
 | POST | `/api/v1/providers` | 新增云厂商账号 | JWT |
 | GET | `/api/v1/providers/{id}` | 编辑回读：已保存的 endpoint/public_key 及字典声明的非 secret extra；不回填厂商默认值，不返回密钥。读取凭据失败返回 500，列表仍可用 | 登录会话（平台令牌及 AI/MCP 不可读） |
 | PUT | `/api/v1/providers/{id}` | 更新云厂商账号 | JWT |
 | DELETE | `/api/v1/providers/{id}` | 删除云厂商账号 | JWT |
-| POST | `/api/v1/providers/{id}/sync` | 同步该账号下的实例：列出的实例写入/更新，云端已不存在的实例行移除（关联节点保留，带外恢复置 `stopped`）；列举失败返回 424、不改动实例行 | JWT |
-| GET | `/api/v1/providers/{id}/clusters` | 该账号下的托管 Kubernetes 集群，实时向云厂商读取、不落库：`{items:[{external_id,name,region,version,state,running,public_api,gpu_pools:[{id,name,gpu_model,gpu_count,nodes,vendor,in_entry}],entry?:{uuid,name},agent_image_source}],total}`；`agent_image_source` 是由它建条目时默认的 agent 镜像仓库（按地域）；`entry` 是已由它建的集群条目，`in_entry` 说明该节点池是否已在条目里（DaemonSet 在它的节点上运行）；驱动没有集群能力回 501，云厂商报错回 424 | JWT |
+| POST | `/api/v1/providers/{id}/sync` | 同步该账号下的实例：列出的实例写入/更新，云端已不存在的实例行移除（关联节点保留，带外恢复置 `stopped`）；返回的 `count` 与 `instances` 同实例列表，不含托管 Kubernetes 集群的节点；成功时把当前时间记为账号的 `synced_at`；列举失败返回 424、不改动实例行和 `synced_at` | JWT |
+| GET | `/api/v1/providers/{id}/clusters` | 该账号下的托管 Kubernetes 集群，实时向云厂商读取、不落库：`{items:[{external_id,name,region,version,type?,type_label?,state,running,public_api,gpu_pools:[{id,name,gpu_model,gpu_count,nodes,vendor,in_entry}],entry?:{uuid,name},agent_image_source}],total}`；`type` 是集群属于厂商的哪种产品（`ack_managed`、`ack_dedicated`、`ack_edge`、`ack_lingjun`、`ack_registered`、`doks`），`type_label` 是它的中英文名称，驱动分辨不出时两者都不出现；Pod 运行在虚拟节点上的集群（ACK Serverless、ACS）没有能运行 agent 的节点，不列出；`agent_image_source` 是由它建条目时默认的 agent 镜像仓库（按地域）；`entry` 是已由它建的集群条目，`in_entry` 说明该节点池是否已在条目里（DaemonSet 在它的节点上运行）；驱动没有集群能力回 501，云厂商报错回 424 | JWT |
 | POST | `/api/v1/providers/{id}/instances` | 租用新实例；云厂商报错返回 424（不支持返回 501） | JWT |
-| GET | `/api/v1/providers/{id}/instances` | 该账号下的实例列表；`managed_cluster` 表示实例是该账号某个托管 Kubernetes 集群的节点（随集群接入，不能单独安装、开关机、释放或调整规格）；`actions` 是实例现在允许的操作（`power_on`、`power_off`、`install`、`delete` 中的若干个，托管集群的节点为空数组），客户端按它展示、不自行推断 | JWT |
+| GET | `/api/v1/providers/{id}/instances` | 该账号自己的实例列表；账号下托管 Kubernetes 集群的节点（云厂商也把它们列为实例）不在其中，它们随集群接入，对其开关机、释放或调整规格返回 409 `PROVIDER_INSTANCE_IN_CLUSTER`；`actions` 是实例现在允许的操作（`power_on`、`power_off`、`install`、`delete` 中的若干个），客户端按它展示、不自行推断 | JWT |
 | DELETE | `/api/v1/providers/{id}/instances/{externalID}` | 释放/删除实例；云厂商确认后移除该实例行；云厂商报错返回 424（不支持返回 501），实例行不变；托管集群的节点回 409 `PROVIDER_INSTANCE_IN_CLUSTER`（`cluster`），不调用云厂商 | JWT |
 | POST | `/api/v1/providers/{id}/instances/{externalID}/power` | 开关机；云厂商报错返回 424（不支持返回 501）；托管集群的节点回 409 `PROVIDER_INSTANCE_IN_CLUSTER` | JWT |
 | POST | `/api/v1/providers/{id}/instances/{externalID}/resize` | 变更实例规格；云厂商报错返回 424（不支持返回 501）；托管集群的节点回 409 `PROVIDER_INSTANCE_IN_CLUSTER` | JWT |

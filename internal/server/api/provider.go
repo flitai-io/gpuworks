@@ -43,23 +43,57 @@ func (a *apiHandlers) listProviders(w http.ResponseWriter, r *http.Request) {
 		Category      provider.Category `json:"category"`
 		State         string            `json:"state"`
 		InstanceCount int               `json:"instance_count"`
-		CreatedAt     string            `json:"created_at"`
-		UpdatedAt     string            `json:"updated_at"`
+		// Resources are what the account's kind connects (provider.ResourcesOf).
+		Resources []provider.KindResource `json:"resources"`
+		// NodeCount is the compute nodes that joined through the account, on
+		// its instances or through its clusters.
+		NodeCount int `json:"node_count"`
+		// SyncedAt is when the account's instances were last listed; absent before the first sync.
+		SyncedAt  string `json:"synced_at,omitempty"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+	}
+	// Every account's counts are read in a few grouped queries, however many accounts and instances there are.
+	counts, err := a.d.Store.ProviderInstanceCountsByProvider()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	accounts, err := a.d.Store.KubeClusterAccounts()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	byVendor, err := a.d.Store.KubeClusterNodeVendors()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	// The nodes that joined through the clusters connected from each account.
+	clusterNodes := map[uint]int{}
+	for id, vendors := range byVendor {
+		if account, ok := accounts[id]; ok {
+			n, _ := kubeVendorNodes(vendors)
+			clusterNodes[account] += n
+		}
 	}
 	out := make([]providerDTO, 0, len(ps))
 	for _, p := range ps {
-		insts, err := a.d.Store.ProviderInstances(p.ID)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err)
-			return
-		}
+		// A managed cluster's node is the cluster's, not an instance of the
+		// account: it is neither listed nor counted as one, and the node on
+		// it is counted with its cluster.
+		own := counts[p.ID]
+		instances, nodes := own.Instances, own.Nodes+clusterNodes[p.ID]
 		out = append(out, providerDTO{
 			ID:            p.ID,
 			Name:          p.Name,
 			Kind:          p.Kind,
 			Category:      provider.CategoryOf(p.Kind),
 			State:         p.State,
-			InstanceCount: len(insts),
+			InstanceCount: instances,
+			Resources:     provider.ResourcesOf(p.Kind),
+			NodeCount:     nodes,
+			SyncedAt:      syncedAt(p.SyncedAt),
 			CreatedAt:     p.CreatedAt.UTC().Format(time.RFC3339),
 			UpdatedAt:     p.UpdatedAt.UTC().Format(time.RFC3339),
 		})
@@ -168,9 +202,19 @@ func (a *apiHandlers) syncProvider(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, statusProviderFailed, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"count": len(insts), "instances": insts})
+	// What a sync found is what the account's instance list shows.
+	listed := make([]provider.Instance, 0, len(insts))
+	for _, inst := range insts {
+		if inst.Cluster == "" {
+			listed = append(listed, inst)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": len(listed), "instances": listed})
 }
 
+// providerInstances lists the account's own instances. The nodes of its
+// managed Kubernetes clusters are left out: the vendor lists them as
+// instances too, but they join through their cluster and are the cluster's.
 func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) {
 	id := parseUint(chi.URLParam(r, "id"))
 	pis, err := a.d.Store.ProviderInstances(id)
@@ -198,16 +242,15 @@ func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) 
 		SSHConnections []provider.SSHConnection `json:"ssh_connections"`
 		Kind           string                   `json:"kind"`
 		NodeID         uint                     `json:"node_id"`
-		// ManagedCluster: the instance is a node of this Kubernetes cluster
-		// of the account and joins through it, not by its own install.
-		ManagedCluster string `json:"managed_cluster,omitempty"`
 		// Actions are the operations the instance allows now (power_on |
-		// power_off | install | delete); empty for a cluster node. A client
-		// offers exactly these.
+		// power_off | install | delete). A client offers exactly these.
 		Actions []string `json:"actions"`
 	}
 	out := make([]instanceDTO, 0, len(pis))
 	for _, p := range pis {
+		if p.ManagedCluster != "" {
+			continue
+		}
 		connections := []provider.SSHConnection{}
 		if strings.TrimSpace(p.SSHConnections) != "" {
 			_ = json.Unmarshal([]byte(p.SSHConnections), &connections)
@@ -216,8 +259,7 @@ func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) 
 			ExternalID: p.ExternalID, Name: p.Name, GPUModel: p.GPUModel, GPUCount: p.GPUCount,
 			Power: p.Power, PricePerHr: p.PricePerHr, Region: p.Region, PublicIP: p.PublicIP,
 			SSHPort: p.SSHPort, SSHUser: p.SSHUser, SSHConnections: connections, Kind: p.Kind, NodeID: p.NodeID,
-			ManagedCluster: p.ManagedCluster,
-			Actions:        provider.InstanceActions(caps, p.Power, p.NodeID, p.ManagedCluster),
+			Actions: provider.InstanceActions(caps, p.Power, p.NodeID, p.ManagedCluster),
 		})
 	}
 	writeJSON(w, http.StatusOK, dto.NewList(out))
@@ -488,3 +530,11 @@ func (a *apiHandlers) putSetting(w http.ResponseWriter, r *http.Request) {
 }
 
 const errNoProviders = staticErr("cloud providers not available")
+
+// syncedAt is an account's last sync time as the list carries it; empty before the first.
+func syncedAt(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}

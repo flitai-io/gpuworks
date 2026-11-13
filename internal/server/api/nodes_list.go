@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
@@ -36,7 +37,11 @@ var nodeListSorters = listSorters[store.Node]{
 // node's system labels. A page row leaves out the topology and path usage,
 // which GET /nodes/{uuid} carries. Without page parameters it returns every
 // node the filters match, in full. A page is ordered by sort (one of nodeListSorters, "-" for
-// descending), after filtering and before paging.
+// descending), after filtering and before paging. source (comma separated
+// alternatives) keeps the nodes that came from any of them: provider:<id> is
+// an external platform account, on one of whose instances or through one of
+// whose clusters the node joined; cluster:<uuid> is one cluster entry; manual
+// is the nodes added by hand. A page lists every source there is in sources.
 func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 	query, err := parseListQuery(r, nodeListStates)
 	if err != nil {
@@ -63,6 +68,28 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, listFilterError("agent_upgrade", mode))
 		return
 	}
+	fleet := nodes
+	wanted, err := parseNodeSourceFilter(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	// Where every node came from is read once, for the filter and for the
+	// choices a page offers; a list that needs neither does not read it.
+	var sources map[uint]store.NodeSource
+	if wanted != nil || query.paged {
+		if sources, err = a.d.Store.FleetNodeSources(fleet); err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	if wanted != nil {
+		// The label choices and the total stay the whole fleet's, as with every other filter.
+		nodes = slices.DeleteFunc(slices.Clone(nodes), func(n store.Node) bool {
+			source, joined := sources[n.ID]
+			return !wanted.matches(source, joined)
+		})
+	}
 	if !query.paged {
 		// Every match in full; the filters and order apply either way.
 		matched := a.filterNodes(nodes, query, reqs)
@@ -71,9 +98,9 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	facets := map[string]map[string]bool{}
-	for i := range nodes {
+	for i := range fleet {
 		// A node whose labels cannot be read has none, as the DTO shows it.
-		nodeLabels, _ := store.NodeLabels(nodes[i].Labels)
+		nodeLabels, _ := store.NodeLabels(fleet[i].Labels)
 		for key, value := range nodeLabels {
 			if facets[key] == nil {
 				facets[key] = map[string]bool{}
@@ -85,7 +112,8 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 	var summary *dto.AgentFleetSummary
 	var statuses map[string]nodeAgentStatus
 	if mode != "" {
-		summary, statuses, err = a.nodeAgentSummary(r, nodes)
+		// The summary is the whole fleet's, as the label choices and the total are.
+		summary, statuses, err = a.nodeAgentSummary(r, fleet)
 		if mode != "all" {
 			if err != nil {
 				writeErr(w, http.StatusServiceUnavailable, err)
@@ -114,7 +142,7 @@ func (a *apiHandlers) listNodes(w http.ResponseWriter, r *http.Request) {
 		}
 		return items
 	})
-	writeJSON(w, http.StatusOK, dto.NodePage{AgentFleet: summary, ListPage: page, All: len(nodes), Labels: nodeLabelFacets(facets)})
+	writeJSON(w, http.StatusOK, dto.NodePage{AgentFleet: summary, ListPage: page, All: len(fleet), Labels: nodeLabelFacets(facets), Sources: nodeSourceOptions(fleet, sources)})
 }
 
 // filterNodes keeps the nodes a list query and label requirements match, in
@@ -256,4 +284,108 @@ func (a *apiHandlers) agentFleetSummary(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
+}
+
+// The values of the node list's source filter.
+const (
+	nodeSourceManual         = "manual"
+	nodeSourceProviderPrefix = "provider:"
+	nodeSourceClusterPrefix  = "cluster:"
+)
+
+// nodeSourceFilter is the sources a node list was asked for: a node from any
+// of them matches.
+type nodeSourceFilter struct {
+	manual    bool
+	providers map[uint]bool
+	clusters  map[string]bool
+}
+
+// parseNodeSourceFilter reads the source parameter; nil when it is absent. A
+// value of no known form is refused rather than matching nothing, while a
+// well-formed one that names no account or cluster simply has no nodes.
+func parseNodeSourceFilter(r *http.Request) (*nodeSourceFilter, error) {
+	raw, ok := listParam(r.URL.Query(), "source")
+	if !ok {
+		return nil, nil
+	}
+	filter := &nodeSourceFilter{providers: map[uint]bool{}, clusters: map[string]bool{}}
+	for _, value := range strings.Split(raw, ",") {
+		value = strings.TrimSpace(value)
+		switch {
+		case value == nodeSourceManual:
+			filter.manual = true
+		case strings.HasPrefix(value, nodeSourceProviderPrefix):
+			id, err := strconv.ParseUint(strings.TrimPrefix(value, nodeSourceProviderPrefix), 10, 64)
+			if err != nil || id == 0 {
+				return nil, listFilterError("source", value)
+			}
+			filter.providers[uint(id)] = true
+		case strings.HasPrefix(value, nodeSourceClusterPrefix) && value != nodeSourceClusterPrefix:
+			filter.clusters[strings.TrimPrefix(value, nodeSourceClusterPrefix)] = true
+		default:
+			return nil, listFilterError("source", value)
+		}
+	}
+	return filter, nil
+}
+
+func (f *nodeSourceFilter) matches(source store.NodeSource, joined bool) bool {
+	if !joined {
+		return f.manual
+	}
+	return (source.ProviderID != 0 && f.providers[source.ProviderID]) || (source.ClusterUUID != "" && f.clusters[source.ClusterUUID])
+}
+
+// nodeSourceOptions lists every source a node of the fleet came from, with
+// how many: accounts by name, then clusters by name, then the nodes added by
+// hand. An account's count takes in its clusters' nodes, as its filter does.
+func nodeSourceOptions(fleet []store.Node, sources map[uint]store.NodeSource) []dto.NodeSourceOption {
+	providers := map[uint]*dto.NodeSourceOption{}
+	clusters := map[string]*dto.NodeSourceOption{}
+	manual := 0
+	for i := range fleet {
+		source, joined := sources[fleet[i].ID]
+		if !joined {
+			manual++
+			continue
+		}
+		if source.ProviderID != 0 {
+			option := providers[source.ProviderID]
+			if option == nil {
+				option = &dto.NodeSourceOption{Value: nodeSourceProviderPrefix + strconv.FormatUint(uint64(source.ProviderID), 10),
+					ProviderName: source.ProviderName, ProviderKind: source.ProviderKind}
+				providers[source.ProviderID] = option
+			}
+			option.Nodes++
+		}
+		if source.ClusterUUID != "" {
+			option := clusters[source.ClusterUUID]
+			if option == nil {
+				option = &dto.NodeSourceOption{Value: nodeSourceClusterPrefix + source.ClusterUUID,
+					ProviderName: source.ProviderName, ProviderKind: source.ProviderKind, ClusterName: source.ClusterName}
+				clusters[source.ClusterUUID] = option
+			}
+			option.Nodes++
+		}
+	}
+	out := make([]dto.NodeSourceOption, 0, len(providers)+len(clusters)+1)
+	for _, option := range providers {
+		out = append(out, *option)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return compareText(out[i].ProviderName, out[j].ProviderName) < 0 || (out[i].ProviderName == out[j].ProviderName && out[i].Value < out[j].Value)
+	})
+	byName := make([]dto.NodeSourceOption, 0, len(clusters))
+	for _, option := range clusters {
+		byName = append(byName, *option)
+	}
+	sort.Slice(byName, func(i, j int) bool {
+		return compareText(byName[i].ClusterName, byName[j].ClusterName) < 0 || (byName[i].ClusterName == byName[j].ClusterName && byName[i].Value < byName[j].Value)
+	})
+	out = append(out, byName...)
+	if manual > 0 {
+		out = append(out, dto.NodeSourceOption{Value: nodeSourceManual, Nodes: manual})
+	}
+	return out
 }

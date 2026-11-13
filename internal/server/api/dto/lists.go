@@ -105,12 +105,27 @@ type DeploymentListItem struct {
 // NodePage is one page of GET /api/v1/nodes?page=…, newest first. Total
 // counts the nodes the filters match and All every node. Labels lists every
 // user label key=value pair across all nodes, whatever the filters, so a
-// label filter can offer them.
+// label filter can offer them; Sources lists, the same way, every source a
+// node came from, for the source filter.
 type NodePage struct {
 	ListPage[Node]
 	AgentFleet *AgentFleetSummary `json:"agent_fleet,omitempty"`
 	All        int                `json:"all"`
 	Labels     []NodeLabelValues  `json:"labels"`
+	Sources    []NodeSourceOption `json:"sources"`
+}
+
+// NodeSourceOption is one value the node list's source filter takes, with
+// what names it and how many nodes it holds: an external platform account
+// ("provider:<id>", its instances' nodes and its clusters' nodes together), a
+// Kubernetes cluster ("cluster:<uuid>", connected from an account or on its
+// own) or "manual" for the nodes added by hand.
+type NodeSourceOption struct {
+	Value        string `json:"value"`
+	ProviderName string `json:"provider_name,omitempty"`
+	ProviderKind string `json:"provider_kind,omitempty"`
+	ClusterName  string `json:"cluster_name,omitempty"`
+	Nodes        int    `json:"nodes"`
 }
 
 // NodeLabelValues is one user label key and the values nodes give it, both
