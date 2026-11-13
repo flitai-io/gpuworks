@@ -51,6 +51,20 @@ const (
 	metricsDropWarnInterval = 5 * time.Second
 )
 
+// proxyMetricsSink adapts an Accountant flush batch to observability's tsdb
+// ingest path, the same one every agent-reported metric batch already goes
+// through. It always runs on the Accountant's own single writer goroutine
+// (see proxy.Accountant), never on a request-handling goroutine.
+func proxyMetricsSink(obs *observability) func([]tsdb.Sample) {
+	return func(samples []tsdb.Sample) {
+		batch := make([]proto.MetricSample, 0, len(samples))
+		for _, s := range samples {
+			batch = append(batch, proto.MetricSample{Metric: s.Metric, Labels: s.Labels, Value: s.Value, TimeMS: s.TimeMS})
+		}
+		obs.ingestMetrics("server", batch)
+	}
+}
+
 // ingestMetrics converts an agent (or the proxy accountant's) metric batch to
 // the tsdb wire shape and hands it to the ingest queue; it never touches the
 // store and can never block the caller. Deployment-label backfill and

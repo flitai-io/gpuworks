@@ -42,7 +42,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/proxy"
 	"gpuworks.ai/gpuworks/internal/server/recovery"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"gpuworks.ai/gpuworks/internal/server/tsdb"
 	"gpuworks.ai/gpuworks/internal/server/webterm"
 	"gpuworks.ai/gpuworks/internal/server/webui"
 )
@@ -90,20 +89,6 @@ type App struct {
 	// (planning.Scaling, which the handlers share), for the scheduling
 	// automation's replica schedules.
 	scaleReplicas func(deploymentID uint, role string, replicas int) error
-}
-
-// proxyMetricsSink adapts an Accountant flush batch to observability's tsdb
-// ingest path, the same one every agent-reported metric batch already goes
-// through. It always runs on the Accountant's own single writer goroutine
-// (see proxy.Accountant), never on a request-handling goroutine.
-func proxyMetricsSink(obs *observability) func([]tsdb.Sample) {
-	return func(samples []tsdb.Sample) {
-		batch := make([]proto.MetricSample, 0, len(samples))
-		for _, s := range samples {
-			batch = append(batch, proto.MetricSample{Metric: s.Metric, Labels: s.Labels, Value: s.Value, TimeMS: s.TimeMS})
-		}
-		obs.ingestMetrics("server", batch)
-	}
 }
 
 // New builds the server from config.
@@ -317,6 +302,8 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 
 	metadataClient := &http.Client{Transport: outbound.TransportWithPrivateHosts(func() (proto.NetworkConfig, error) { return planning.ControlPlaneNetwork(st) }, readPrivateHosts)}
 	apiDeps := api.Deps{
+		NodeDoctor: newNodeDoctor(st, h, nodeInstaller),
+
 		Store:         st,
 		Bus:           b,
 		Log:           log,
