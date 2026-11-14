@@ -1,4 +1,5 @@
 import { Alert, Form, Space, Typography } from "antd";
+import WarningCommandFixes from "./WarningCommandFixes";
 import { useTranslation } from "react-i18next";
 import type { EvaluateResponse } from "../../api";
 import VRAMBreakdown from "../../components/VRAMBreakdown";
@@ -88,6 +89,7 @@ export default function DeployStepSummary({
             type="warning"
             showIcon
             message={warningText(t, warning)}
+            description={<WarningCommandFixes warning={warning} />}
           />
         ))}
         {result?.eviction?.map((suggestion) => (

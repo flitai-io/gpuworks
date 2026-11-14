@@ -68,7 +68,7 @@ PD 分离把一个模型的推理拆成两组实例：prefill 实例只算提示
   跳过后没有节点可放就返回通常的 `UNIT_PLACEMENT_NONE`，`params` 另有 `ucx_netlink_hang`（被排除的个数）与
   `ucx_netlink_nodes`（前几个节点名）；失联重调度找不到节点时事件里同样列出它们。
 - 手动指定节点（`placement_mode: manual`）时不拒绝也不替你换节点：评估给警告（`PD_UCX_NETLINK_HANG`，`params` 含
-  `nodes`、`fixes` 与 `fix`），部署表单的 PD 区块列出可复制的修复命令，部署照常创建；不先修复的话引擎很可能一直起不来。
+  `nodes`、`fixes` 与 `fix`），部署表单评估结论里的这条警告下列出可复制的修复命令，部署照常创建；不先修复的话引擎很可能一直起不来。
 - 在主机 RDMA 参数网络上都不排除，只给较弱的警告（`PD_UCX_NETLINK_HANG_RDMA`），因为 UCX 此时只用 RDMA 传输，可能不触发该检查。
 - 修复：在该节点上关闭**整机** IPv6（这会让这台主机不再使用 IPv6；只关单个网卡无效）。立即生效，到下次重启：
 

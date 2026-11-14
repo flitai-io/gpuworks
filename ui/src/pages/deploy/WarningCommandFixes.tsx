@@ -1,9 +1,7 @@
-import { Alert } from "antd";
 import { useTranslation } from "react-i18next";
 
-import type { EvaluateResponse } from "../../api";
+import type { ProductWarning } from "../../api";
 import CommandFixes, { type CommandFix } from "../../components/CommandFixes";
-import { warningText } from "./deployWarnings";
 
 // The warnings evaluate returns when a node the operator placed a PD instance
 // on hangs UCX (NIXL): over Ethernet the engine will likely never finish
@@ -22,19 +20,17 @@ function fixesOf(params: Record<string, unknown> | undefined): CommandFix[] {
 }
 
 /**
- * PdUCXNetlinkFixes shows, in the PD section, the server's warning that a
- * chosen node hangs UCX and the commands it generated to end the hang, exactly
- * as received and with a copy button for each. The deployment can still be
- * created.
+ * WarningCommandFixes lists, under an evaluate warning in the summary's one
+ * warning list, the fix commands the server put in its params (a node that
+ * hangs UCX), exactly as received and with a copy button for each. A warning
+ * without fixes renders nothing.
  */
-export default function PdUCXNetlinkFixes({ result }: { result: EvaluateResponse | null }) {
+export default function WarningCommandFixes({ warning }: { warning: ProductWarning }) {
   const { t } = useTranslation("deploy");
-  const warning = result?.warnings?.find((item) => UCX_NETLINK_HANG.includes(item.code));
-  const fixes = fixesOf(warning?.params);
-  if (!warning || fixes.length === 0) return null;
+  const fixes = UCX_NETLINK_HANG.includes(warning.code) ? fixesOf(warning.params) : [];
+  if (fixes.length === 0) return null;
   return (
-    <div className="flex flex-col gap-2" data-testid="pd-ucx-netlink-fixes" style={{ marginBottom: 12 }}>
-      <Alert type="warning" showIcon message={warningText(t, warning)} />
+    <div className="flex flex-col gap-2" data-testid="pd-ucx-netlink-fixes">
       <strong>{t("pd.ucxNetlinkHang.fixesTitle")}</strong>
       <CommandFixes
         fixes={fixes}

@@ -108,7 +108,7 @@
   "how-to/multi-node-inference.md": "45a3772fa6718e651775afd2137d1846cb578fd4b5fc9933bbdbed854d690be2",
   "how-to/node-failover.md": "fc465d2f59f0ee9eba8d6d0e2f570eae87dd842695b31e64c07156eedfa2462d",
   "how-to/onboard-zstack-cloud.md": "664d1b359d3fbc019f188e9180526e9834de75919b6b3ab36c0c189e862a8e62",
-  "how-to/pd-disaggregation.md": "78907f6cfdae5000a24285ad985a73dedad149c428058ec05dae906789995c42",
+  "how-to/pd-disaggregation.md": "9998b76d3dcd4ac87b607ae37f1fb2db200d3e1d9041b9edd15ca18317c8d24c",
   "how-to/peer-sync-models.md": "30b806dc7264c71c3a898f25db45602827530feec7e354efed2fa320379e8407",
   "how-to/rent-cloud-gpus.md": "fb640f96c1407038d46dffa3531f4e227ca8f1672824135a26d6b0e365429186",
   "how-to/save-deployment-as-template.md": "3b100cf74fb9a1d2980a58faeeadd44263959bb6255553812aaff2cbe8908147",

@@ -8,10 +8,9 @@ const zh = (await createI18n(["nodes", "deploy", "common"], "zh")).i18n;
 const en = (await createI18n(["nodes", "deploy", "common"], "en")).i18n;
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const { default: UCXNetlinkHangNotice, UCXNetlinkHangTag } = await import("../src/components/NodeUCXNetlinkHang.tsx");
-const { default: PdUCXNetlinkFixes } = await import("../src/pages/deploy/PdUCXNetlinkFixes.tsx");
+const { default: WarningCommandFixes } = await import("../src/pages/deploy/WarningCommandFixes.tsx");
 const { default: NodeDoctorReport } = await import("../src/components/NodeDoctorReport.tsx");
 type Node = import("../src/api.ts").Node;
-type EvaluateResponse = import("../src/api.ts").EvaluateResponse;
 
 afterEach(() => cleanup());
 
@@ -66,43 +65,35 @@ test("the notice without a kernel release and the tag are reachable by keyboard"
   for (const pre of screen.getAllByLabelText(/disable_ipv6_/)) assert.equal(pre.getAttribute("tabindex"), "0");
 });
 
-const refused = (params: Record<string, unknown> | undefined, code = "PD_UCX_NETLINK_HANG"): EvaluateResponse => ({
-  ok: true,
-  warnings: [{ code, params }],
-}) as unknown as EvaluateResponse;
+const warned = (params: Record<string, unknown> | undefined, code = "PD_UCX_NETLINK_HANG") => ({ code, params });
 
-// A node the operator chose is not refused: the PD section warns, says the
-// deployment can still be created, and lists the server's commands to copy.
-test("the deploy form warns of PD_UCX_NETLINK_HANG and lists its commands to copy", async () => {
-  wrap(<PdUCXNetlinkFixes result={refused({ names: "pd-a", mode: "vllm-nixl", nodes: [{ node_uuid: "pd-a", node_name: "pd-a", kernel: "k" }], fixes })} />);
+// The warning is one of evaluate's warnings, in the summary's one list; under
+// it are the server's commands to copy. The deployment can still be created.
+test("the commands of a PD_UCX_NETLINK_HANG warning are listed under it and copied", async () => {
+  wrap(<WarningCommandFixes warning={warned({ names: "pd-a", mode: "vllm-nixl", fixes })} />);
   const region = within(screen.getByTestId("pd-ucx-netlink-fixes"));
-  assert.match(region.getByRole("alert").textContent ?? "", /节点 pd-a 的内核会让 UCX 卡住.*vllm-nixl.*部署仍允许创建/);
   assert.ok(region.getByText("解除卡死（在该节点上执行）"));
   assert.equal(region.getByLabelText("disable_ipv6_now").textContent, NOW);
   fireEvent.click(region.getAllByRole("button", { name: "复制命令" })[0]);
   await waitFor(() => assert.equal(copied, NOW));
 });
 
-test("the deploy form shows nothing for other answers, and skips a malformed fix", () => {
-  for (const result of [
-    null,
-    { ok: true } as unknown as EvaluateResponse,
-    { ok: false, errors: [{ field: "placement.pd", code: "PD_UCX_NETLINK_HANG", params: { fixes } }] } as unknown as EvaluateResponse,
-    refused({ fixes }, "PD_GPU_MODELS_DIFFER"),
-    refused(undefined),
-    refused({ fixes: "nope" }),
-    refused({ fixes: [{ code: 3 }, null, { code: "x" }] }),
+test("another warning, or one without usable fixes, lists nothing; a malformed fix is skipped", () => {
+  for (const warning of [
+    warned({ fixes }, "PD_GPU_MODELS_DIFFER"),
+    warned(undefined),
+    warned({ fixes: "nope" }),
+    warned({ fixes: [{ code: 3 }, null, { code: "x" }] }),
   ]) {
-    const { container } = wrap(<PdUCXNetlinkFixes result={result} />);
+    const { container } = wrap(<WarningCommandFixes warning={warning} />);
     assert.equal(container.textContent, "");
     cleanup();
   }
-  wrap(<PdUCXNetlinkFixes result={refused({ fixes: [{ code: "disable_ipv6_now", commands: [NOW, 7] }, null] })} />);
+  wrap(<WarningCommandFixes warning={warned({ fixes: [{ code: "disable_ipv6_now", commands: [NOW, 7] }, null] })} />);
   assert.equal(screen.getByLabelText("disable_ipv6_now").textContent, NOW);
   cleanup();
   // Over host RDMA the softer warning carries the same commands.
-  wrap(<PdUCXNetlinkFixes result={refused({ names: "pd-b", network: "fabric", fix: NOW, fixes }, "PD_UCX_NETLINK_HANG_RDMA")} />, en);
-  assert.match(screen.getByRole("alert").textContent ?? "", /pd-b.*RDMA network fabric/);
+  wrap(<WarningCommandFixes warning={warned({ fixes }, "PD_UCX_NETLINK_HANG_RDMA")} />, en);
   assert.equal(screen.getByLabelText("disable_ipv6_persist").textContent, PERSIST);
 });
 
