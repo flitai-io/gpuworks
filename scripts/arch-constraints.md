@@ -273,6 +273,21 @@ go list -e -f '{{.ImportPath}}{{"\t"}}{{join .Imports " "}}' ./... \
 推导、模型准备观测），不依赖 `net/http` 与 `api`（依赖方向检查守护）；`api` 的 handler 只做解码、调用、映射。该包按 store 写入
 与读取，`store_concrete_importers` 22→23；`api` 仍为其余 handler 依赖 store，故没有随之减少。
 
+### store_db_accessor_callers（初值 0，2026-11-14）
+
+意图：store 之外的生产代码不拿原始 `*gorm.DB`。`(*store.Store).DB()` 只留给测试；
+其他包经 `Store` 的方法读写，ZStack Cloud 的主机与租约台账经 `(*store.Store).CloudLedger()`。
+
+```sh
+grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' \
+  | grep -v '_test\.go' | grep -v '^internal/server/store/' | grep -c .
+```
+
+排除：`*_test.go` 与 `internal/server/store/` 自身（store 内部对 `*gorm.DB` 取连接池的 `gdb.DB()` 不算）。
+模式按文本匹配任何 `.DB()`，所以 store 之外直接持有 gorm 再取 `*sql.DB` 也会计入——那同样是绕过 store，计入是有意的。
+建立时实测 0：ZStack Cloud 的三处调用改走 `CloudLedger()`，`scripts/seeddemo` 改为按节点接入的真实路径写入
+（`RegisterNode` + `UpdateNodeStatus`，拓扑以 `nvidia-smi topo -m` 文本给出）。
+
 ### api_fanout（初值 36）
 
 意图：`api` 包扇出全仓最高（计划 B1）。计数为 `api` 直接 import 的**本仓库**包数。
