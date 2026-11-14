@@ -46,6 +46,29 @@ type nodeFailover struct {
 	restored  map[uint]bool           // deployments whose moves were read back from the events (node_failover_restore.go)
 }
 
+// forgetStopped drops what node replacement keeps about a deployment's
+// running units: its drain surges, which are worked out again from its units,
+// and the times that space out its no-candidate events and re-picks, so a
+// deployment started again reports and re-picks at once.
+func (f *nodeFailover) forgetStopped(dep uint) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.noneSince, dep)
+	delete(f.drains, dep)
+	delete(f.repicked, dep)
+}
+
+// forgetMoves drops a deployment's moves. They are kept while it is stopped:
+// it starts again where they put its ranks, and reading them back from its
+// events (restoreFailovers) only goes so far back and misses a move whose
+// event was not written.
+func (f *nodeFailover) forgetMoves(dep uint) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.moves, dep)
+	delete(f.restored, dep)
+}
+
 func (f *nodeFailover) get(dep uint) []failoverMove {
 	f.mu.Lock()
 	defer f.mu.Unlock()

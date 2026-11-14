@@ -16,6 +16,15 @@ func (c *Controller) markDGPULimitPush(depID uint) {
 	c.dgpuPending[depID] = true
 }
 
+// forgetDGPULimitPush drops a deployment's pending limit push: once it has
+// stopped there are no running containers to hold to the new limit, and its
+// instances carry the limit when they start again.
+func (c *Controller) forgetDGPULimitPush(depID uint) {
+	c.dgpuMu.Lock()
+	defer c.dgpuMu.Unlock()
+	delete(c.dgpuPending, depID)
+}
+
 // pushDGPULimits hands the nodes of a deployment whose memory limit changed
 // in place the desired state of each live slice, so the agent holds the
 // running container to the limit it now carries (engine

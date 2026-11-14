@@ -70,3 +70,10 @@ func (c *Controller) drainedUnits(depID uint, draining []store.Instance) []store
 	}
 	return ready
 }
+
+// forgetDrainClocks drops the drain clocks of a deployment's instances.
+func (c *Controller) forgetDrainClocks(depID uint) {
+	c.drainMu.Lock()
+	defer c.drainMu.Unlock()
+	delete(c.draining, depID)
+}

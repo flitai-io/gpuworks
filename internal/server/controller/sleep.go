@@ -78,16 +78,10 @@ func (c *Controller) recordSleepPushed(depID uint, spec proto.InstanceDesiredSta
 	c.sleepPushed[depID][spec.UUID] = sleepOrder{level: spec.DesiredSleep, mode: spec.SleepMode}
 }
 
-// forgetDeployment drops what the controller keeps in memory about a
-// deployment that stopped or is gone: its drain clocks, sleep pushes and
-// pool refusals.
-func (c *Controller) forgetDeployment(depID uint) {
-	c.forgetPool(depID)
-	c.placements.forget(depID)
+// forgetSleepPushes drops the sleep intents pushed for a deployment's
+// instances.
+func (c *Controller) forgetSleepPushes(depID uint) {
 	c.sleepMu.Lock()
+	defer c.sleepMu.Unlock()
 	delete(c.sleepPushed, depID)
-	c.sleepMu.Unlock()
-	c.drainMu.Lock()
-	delete(c.draining, depID)
-	c.drainMu.Unlock()
 }
