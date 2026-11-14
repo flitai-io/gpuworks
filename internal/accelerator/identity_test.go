@@ -168,6 +168,19 @@ func TestUnifiedMemoryMatchesTheWholeModelToken(t *testing.T) {
 		"GeForce RTX 5090":        false,
 		"Tesla GB10":              false,
 		"910B4":                   false,
+		// RTX Spark: raw probe name, stored name, and bare family name.
+		"NVIDIA RTX Spark N1X":                               true,
+		"NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU)": true,
+		"RTX Spark N1X (6144-core Blackwell RTX GPU)":        true,
+		"RTX Spark":     true,
+		"rtx spark n1x": true,
+		// Every other RTX card stays discrete: the second token is the guard.
+		"RTX 5090":        false,
+		"RTX 4090":        false,
+		"RTX A6000":       false,
+		"RTX 6000 Ada":    false,
+		"NVIDIA RTX 4090": false,
+		"RTX":             false,
 		// Apple silicon, by generation, raw and stored.
 		"Apple M1 Max": true,
 		"M1 Max":       true,
