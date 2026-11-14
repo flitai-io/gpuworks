@@ -29,6 +29,12 @@ make test-coverage-report
 `make vet` 和 `git diff --check`。缺少外部能力时普通测试才可 `t.Skip`；
 `GPUWORKS_TEST_STRICT=1` 下关键依赖缺失应失败。
 
+`internal/testenv` 起的 server/agent 日志默认丢弃。`GPUWORKS_TESTENV_LOG=<path>` 全量写入文件；
+`GPUWORKS_TESTENV_FAILURE_LOG_DIR=<dir>` 只保留失败用例的日志：每个用例在内存里留最后 1 MiB，失败时写成
+`<dir>/<用例名>.log`，通过就丢弃。GitLab 的 `core-l3` 开启后者；`core-l2`/`core-l3` 失败时还把内层 dockerd
+日志、容器列表与各容器最后几行写进 `failure-evidence/`，作为 job artifact 上传（总量封顶 10 MiB，保留 14 天），
+用来查本地复现不了的偶发失败。
+
 ## 负载用例（默认 suite 之外）
 
 这些用例测量实际经过的时间（墙钟时间）和资源消耗，默认测试集（suite）不跑，`GPUWORKS_TEST_PERF=1` 显式开启。

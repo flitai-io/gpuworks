@@ -167,10 +167,14 @@ type Env struct {
 // behaviour, not on log text, and 1000 in-process agents would drown the test
 // output. Setting GPUWORKS_TESTENV_LOG to a path turns the real server and
 // agent logs on, which is how a load case is diagnosed when it reports
-// something the assertions alone cannot explain.
+// something the assertions alone cannot explain. GPUWORKS_TESTENV_FAILURE_LOG_DIR
+// keeps them only for the cases that fail (see failureLogger).
 func harnessLogger(t testing.TB) *slog.Logger {
 	path := strings.TrimSpace(os.Getenv("GPUWORKS_TESTENV_LOG"))
 	if path == "" {
+		if dir := strings.TrimSpace(os.Getenv("GPUWORKS_TESTENV_FAILURE_LOG_DIR")); dir != "" {
+			return failureLogger(t, dir)
+		}
 		return slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
