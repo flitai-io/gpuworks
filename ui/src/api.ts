@@ -2264,6 +2264,9 @@ export interface Deployment {
   // server's decisions, which the pages render and do not re-derive.
   yield_policy_eligible: Eligibility;
   schedule_capabilities: ScheduleCapabilities;
+  // Whether the health check can be turned on: the server's decision, shown
+  // as is.
+  health_checkable: boolean;
 }
 
 
@@ -3851,6 +3854,11 @@ export interface EvaluateResponse {
   // Whether the draft may be created with a yield policy other than never,
   // the create's own check; absent until the draft's engine is known.
   yield_policy_eligible?: Eligibility;
+  // Whether a deployment created from this draft can have a health check, the
+  // create's own rule on the contract the deployment will get (a template
+  // draft's includes the template's operations); absent until the draft's
+  // model is resolved.
+  health_checkable?: boolean;
 }
 
 export interface GPUCandidates {

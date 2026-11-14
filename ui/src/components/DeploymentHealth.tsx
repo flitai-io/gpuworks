@@ -4,7 +4,6 @@ import type { BadgeProps } from "antd";
 import { useTranslation } from "react-i18next";
 import type { DeploymentHealth, HealthProbe, HealthStatus } from "../api";
 import { agoText } from "../format";
-import type { InferenceAPIOperation } from "../inferenceApi";
 import { formatMS } from "../pages/monitor/requestShape";
 import { colors } from "../theme/tokens";
 import { detailBadgeTone } from "../pages/state";
@@ -13,17 +12,6 @@ import { Badge as StatusBadge } from "./ui/badge";
 // The server's health check of a deployment (dto/deployment_health.go): a
 // minimal request through the gateway every minute. These pieces show it the
 // same way on the deployment list, its detail and the service monitor.
-
-// healthCheckable says whether a deployment serving operations can be
-// checked: the check asks chat, else text completion, else embeddings, else a
-// System One decision (inferenceapi.CheckOperation).
-export function healthCheckable(
-  operations: Pick<InferenceAPIOperation, "type">[] | undefined,
-): boolean {
-  return (operations ?? []).some(
-    (op) => op.type === "openai.chat" || op.type === "openai.completions" || op.type === "openai.embeddings" || op.type === "systemone.decide",
-  );
-}
 
 const BADGE: Record<HealthStatus, BadgeProps["status"]> = {
   ok: "success",

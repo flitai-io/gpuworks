@@ -157,6 +157,11 @@ type EvaluateResponse struct {
 	// policy other than never (planning.DraftYieldPolicyRefusal), the check
 	// the create makes; absent until the draft's engine is known.
 	YieldPolicyEligible *Eligibility `json:"yield_policy_eligible,omitempty"`
+	// HealthCheckable says whether a deployment created from this draft can
+	// have a health check: the create's own rule applied to the contract the
+	// deployment will get, which for a template draft includes the operations
+	// the template declares. Absent until the draft's model is resolved.
+	HealthCheckable *bool `json:"health_checkable,omitempty"`
 }
 
 type GPUCandidates struct {

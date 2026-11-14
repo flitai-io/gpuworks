@@ -152,6 +152,7 @@ func (a *apiHandlers) deploymentDTOFrom(rows deployment.Rows, d *store.Deploymen
 	if model != nil && d.ModelID != 0 {
 		contract = inferenceapi.ModelContract(model)
 	}
+	out.HealthCheckable = d.ModelID != 0 && deployment.HealthCheckable(model)
 	for _, definition := range inferenceapi.Definitions() {
 		for _, operation := range contract.Operations {
 			if operation.Type == definition.Type {
