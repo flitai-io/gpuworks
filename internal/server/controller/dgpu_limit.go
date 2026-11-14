@@ -1,28 +1,46 @@
 package controller
 
 import (
+	"sync"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-// markDGPULimitPush notes that a deployment's dGPU memory limit was changed
-// in place: the instances it rewrote are to be handed to their nodes.
-func (c *Controller) markDGPULimitPush(depID uint) {
-	c.dgpuMu.Lock()
-	defer c.dgpuMu.Unlock()
-	if c.dgpuPending == nil {
-		c.dgpuPending = map[uint]bool{}
-	}
-	c.dgpuPending[depID] = true
+// dgpuLimitPushes holds the deployments whose dGPU memory limit was changed
+// in place and whose rewritten instances are not yet handed to their nodes.
+// Its zero value is ready to use.
+type dgpuLimitPushes struct {
+	mu      sync.Mutex
+	pending map[uint]bool
 }
 
-// forgetDGPULimitPush drops a deployment's pending limit push: once it has
-// stopped there are no running containers to hold to the new limit, and its
-// instances carry the limit when they start again.
-func (c *Controller) forgetDGPULimitPush(depID uint) {
-	c.dgpuMu.Lock()
-	defer c.dgpuMu.Unlock()
-	delete(c.dgpuPending, depID)
+// mark notes that dep's limit changed in place.
+func (p *dgpuLimitPushes) mark(dep uint) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.pending == nil {
+		p.pending = map[uint]bool{}
+	}
+	p.pending[dep] = true
+}
+
+// take reports whether dep has a push pending and clears it.
+func (p *dgpuLimitPushes) take(dep uint) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pending := p.pending[dep]
+	delete(p.pending, dep)
+	return pending
+}
+
+// forget drops dep's pending push: once it has stopped there are no running
+// containers to hold to the new limit, and its instances carry the limit
+// when they start again.
+func (p *dgpuLimitPushes) forget(dep uint) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.pending, dep)
 }
 
 // pushDGPULimits hands the nodes of a deployment whose memory limit changed
@@ -33,11 +51,7 @@ func (c *Controller) forgetDGPULimitPush(depID uint) {
 // the full desired state every agent is handed when it connects. A failed
 // push is retried.
 func (c *Controller) pushDGPULimits(dep *store.Deployment, insts []store.Instance) {
-	c.dgpuMu.Lock()
-	pending := c.dgpuPending[dep.ID]
-	delete(c.dgpuPending, dep.ID)
-	c.dgpuMu.Unlock()
-	if !pending {
+	if !c.dgpuPushes.take(dep.ID) {
 		return
 	}
 	byNode := map[uint][]proto.InstanceDesiredState{}
@@ -62,7 +76,7 @@ func (c *Controller) pushDGPULimits(dep *store.Deployment, insts []store.Instanc
 		}
 		if err := c.hub.PushToNode(node.UUID, proto.StateUpdate{Instances: specs}); err != nil {
 			c.log.Warn("dGPU limit push failed; will retry", "dep", dep.ID, "node", node.UUID, "err", err)
-			c.markDGPULimitPush(dep.ID)
+			c.dgpuPushes.mark(dep.ID)
 			c.q.addAfter(depKey(dep.ID), c.retryBackoff)
 			continue
 		}

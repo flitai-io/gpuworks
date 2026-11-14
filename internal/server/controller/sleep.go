@@ -2,6 +2,7 @@ package controller
 
 import (
 	"maps"
+	"sync"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -13,6 +14,50 @@ type sleepOrder struct {
 	mode  string
 }
 
+// sleepPushes is the sleep intent last pushed to each instance, by
+// deployment. Its zero value is ready to use.
+type sleepPushes struct {
+	mu    sync.Mutex
+	byDep map[uint]map[string]sleepOrder
+}
+
+// last is a copy of what was last pushed to dep's instances, by instance.
+func (p *sleepPushes) last(dep uint) map[string]sleepOrder {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return maps.Clone(p.byDep[dep])
+}
+
+// set replaces what was pushed to dep's instances.
+func (p *sleepPushes) set(dep uint, pushed map[string]sleepOrder) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.byDep == nil {
+		p.byDep = map[uint]map[string]sleepOrder{}
+	}
+	p.byDep[dep] = pushed
+}
+
+// record notes the order pushed to one of dep's instances.
+func (p *sleepPushes) record(dep uint, instance string, order sleepOrder) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.byDep == nil {
+		p.byDep = map[uint]map[string]sleepOrder{}
+	}
+	if p.byDep[dep] == nil {
+		p.byDep[dep] = map[string]sleepOrder{}
+	}
+	p.byDep[dep][instance] = order
+}
+
+// forget drops what was pushed to dep's instances.
+func (p *sleepPushes) forget(dep uint) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.byDep, dep)
+}
+
 // syncSleep pushes each instance's sleep intent to its node when the agent
 // has not been handed it yet. The intent lives in the instance's desired state
 // (the store writes it for deployment-wide and per-instance orders alike); the
@@ -21,9 +66,7 @@ type sleepOrder struct {
 // from the intent: a server restart reconnects every agent, and the reconnect
 // hands each one its full desired state.
 func (c *Controller) syncSleep(dep *store.Deployment, insts []store.Instance) {
-	c.sleepMu.Lock()
-	pushed := maps.Clone(c.sleepPushed[dep.ID])
-	c.sleepMu.Unlock()
+	pushed := c.sleepPushes.last(dep.ID)
 	next := map[string]sleepOrder{}
 	updatesByNode := map[string][]proto.InstanceDesiredState{}
 	for i := range insts {
@@ -62,26 +105,11 @@ func (c *Controller) syncSleep(dep *store.Deployment, insts []store.Instance) {
 			c.log.Info("pushed sleep level", "dep", dep.ID, "instance", spec.UUID, "level", spec.DesiredSleep, "node", nodeUUID)
 		}
 	}
-	c.sleepMu.Lock()
-	c.sleepPushed[dep.ID] = next
-	c.sleepMu.Unlock()
+	c.sleepPushes.set(dep.ID, next)
 }
 
 // recordSleepPushed notes the sleep intent a launch push carried, so a sleep
 // order written between the instance's creation and its push is pushed again.
 func (c *Controller) recordSleepPushed(depID uint, spec proto.InstanceDesiredState) {
-	c.sleepMu.Lock()
-	defer c.sleepMu.Unlock()
-	if c.sleepPushed[depID] == nil {
-		c.sleepPushed[depID] = map[string]sleepOrder{}
-	}
-	c.sleepPushed[depID][spec.UUID] = sleepOrder{level: spec.DesiredSleep, mode: spec.SleepMode}
-}
-
-// forgetSleepPushes drops the sleep intents pushed for a deployment's
-// instances.
-func (c *Controller) forgetSleepPushes(depID uint) {
-	c.sleepMu.Lock()
-	defer c.sleepMu.Unlock()
-	delete(c.sleepPushed, depID)
+	c.sleepPushes.record(depID, spec.UUID, sleepOrder{level: spec.DesiredSleep, mode: spec.SleepMode})
 }

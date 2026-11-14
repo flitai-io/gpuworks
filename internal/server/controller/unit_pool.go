@@ -138,7 +138,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 			params["detail"] = pool.UnmetDetail
 		}
 		c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPoolEmpty, Params: params})
-		c.rememberPoolWait(dep.ID)
+		c.pool.wait(dep.ID, c.now())
 		return nil, false
 	}
 	// Candidates refused within poolRefusalMemory go to the back of the
@@ -148,7 +148,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 	order := make([]int, 0, len(pool.Ranked))
 	var refusedRecently []int
 	for index := range pool.Ranked {
-		if c.poolRefusedRecently(dep.ID, pool.Ranked[index].Node.ID) {
+		if c.pool.refusedRecently(dep.ID, pool.Ranked[index].Node.ID, c.now()) {
 			refusedRecently = append(refusedRecently, index)
 			continue
 		}
@@ -204,7 +204,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 			candidate.FreeGPUs -= pool.need
 			picked := candidate.Node
 			pool.Ranked = planning.RankPool(pool.Ranked, dep.PlacementStrategy, pool.need)
-			c.forgetPoolWait(dep.ID)
+			c.pool.settled(dep.ID)
 			return picked, true
 		}
 		if err != nil {
@@ -220,14 +220,14 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 			}
 			continue
 		}
-		c.rememberPoolRefusal(dep.ID, candidate.Node.ID)
+		c.pool.refuse(dep.ID, candidate.Node.ID, c.now())
 		if len(closest) < poolClosest {
 			closest = append(closest, map[string]any{"node": candidate.Node.UUID, "name": candidate.Node.DisplayName(), "reason": *refusal})
 		}
 	}
 	if yieldWait != nil {
 		c.recordRefusal(dep, *yieldWait, waitsFor, nil)
-		c.rememberPoolWait(dep.ID)
+		c.pool.wait(dep.ID, c.now())
 		return nil, false
 	}
 	params := map[string]any{
@@ -241,7 +241,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 		params["node"], params["first"], params["first_reason"], params["closest"] = closest[0]["name"], first.Code, first, closest
 	}
 	c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPoolNoFit, Params: params})
-	c.rememberPoolWait(dep.ID)
+	c.pool.wait(dep.ID, c.now())
 	return nil, false
 }
 
@@ -269,39 +269,10 @@ func (c *Controller) trialPoolNode(ctx context.Context, dep *store.Deployment, n
 	return refusal, plan.YieldWait(refusal), err
 }
 
-func (c *Controller) poolRefusedRecently(depID, nodeID uint) bool {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	at, ok := c.poolRefused[depID][nodeID]
-	if !ok {
-		return false
-	}
-	if c.now().Sub(at) >= poolRefusalMemory {
-		delete(c.poolRefused[depID], nodeID)
-		return false
-	}
-	return true
-}
-
-func (c *Controller) rememberPoolRefusal(depID, nodeID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	if c.poolRefused == nil {
-		c.poolRefused = map[uint]map[uint]time.Time{}
-	}
-	if c.poolRefused[depID] == nil {
-		c.poolRefused[depID] = map[uint]time.Time{}
-	}
-	c.poolRefused[depID][nodeID] = c.now()
-}
-
 // forgetPool drops what the controller remembers about a deployment's pool,
 // for a deployment that is gone or whose requirements changed.
 func (c *Controller) forgetPool(depID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	delete(c.poolRefused, depID)
-	delete(c.poolWaiting, depID)
+	c.pool.forget(depID)
 	c.waits.Done(depID)
 }
 
@@ -313,34 +284,3 @@ func (c *Controller) forgetPool(depID uint) {
 // directly - a node coming online, labels, edited requirements, its own
 // instances - still reconcile it at once.
 const poolSettleBackoff = 20 * time.Second
-
-func (c *Controller) rememberPoolWait(depID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	if c.poolWaiting == nil {
-		c.poolWaiting = map[uint]time.Time{}
-	}
-	c.poolWaiting[depID] = c.now()
-}
-
-func (c *Controller) forgetPoolWait(depID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	delete(c.poolWaiting, depID)
-}
-
-// poolWaitingRecently reports whether a deployment's last pass found no node
-// within poolSettleBackoff.
-func (c *Controller) poolWaitingRecently(depID uint) bool {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	at, ok := c.poolWaiting[depID]
-	if !ok {
-		return false
-	}
-	if c.now().Sub(at) >= poolSettleBackoff {
-		delete(c.poolWaiting, depID)
-		return false
-	}
-	return true
-}

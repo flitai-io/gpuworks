@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"sync"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -32,38 +33,17 @@ const (
 // clock. The clock lives in memory: after a server restart the wait starts
 // over, which only lengthens it.
 func (c *Controller) drainedUnits(depID uint, draining []store.Instance) []store.Instance {
-	c.drainMu.Lock()
-	defer c.drainMu.Unlock()
-	if c.draining == nil {
-		c.draining = map[uint]map[string]time.Time{}
+	uuids := make([]string, len(draining))
+	for i := range draining {
+		uuids[i] = draining[i].UUID
 	}
-	// The deployment's clocks are rebuilt each pass from the instances still
-	// draining, so one that left some other way leaves no clock behind.
-	clocks := c.draining[depID]
-	next := map[string]time.Time{}
-	now := c.now()
+	busy := func(uuid string) bool { return c.drainProbe != nil && c.drainProbe.InFlight(uuid) > 0 }
+	done, waiting := c.drainClocks.advance(depID, uuids, c.now(), busy)
 	var ready []store.Instance
-	waiting := false
-	for _, inst := range draining {
-		since, seen := clocks[inst.UUID]
-		if !seen {
-			next[inst.UUID] = now
-			waiting = true
-			continue
+	for i := range draining {
+		if done[draining[i].UUID] {
+			ready = append(ready, draining[i])
 		}
-		elapsed := now.Sub(since)
-		busy := c.drainProbe != nil && c.drainProbe.InFlight(inst.UUID) > 0
-		if elapsed >= drainMax || (elapsed >= drainMin && !busy) {
-			ready = append(ready, inst)
-			continue
-		}
-		next[inst.UUID] = since
-		waiting = true
-	}
-	if len(next) == 0 {
-		delete(c.draining, depID)
-	} else {
-		c.draining[depID] = next
 	}
 	if waiting {
 		c.q.addAfter(depKey(depID), drainPoll)
@@ -71,9 +51,53 @@ func (c *Controller) drainedUnits(depID uint, draining []store.Instance) []store
 	return ready
 }
 
-// forgetDrainClocks drops the drain clocks of a deployment's instances.
-func (c *Controller) forgetDrainClocks(depID uint) {
-	c.drainMu.Lock()
-	defer c.drainMu.Unlock()
-	delete(c.draining, depID)
+// drainClocks is when each draining instance was first seen draining, by
+// deployment. Its zero value is ready to use.
+type drainClocks struct {
+	mu    sync.Mutex
+	byDep map[uint]map[string]time.Time // by deployment, then instance
+}
+
+// advance moves dep's clocks to now for the instances still draining and
+// says which may be removed (drained for drainMax, or for drainMin while not
+// busy) and whether any is still waiting. The clocks are rebuilt each pass
+// from the instances still draining, so one that left some other way leaves
+// no clock behind.
+func (d *drainClocks) advance(dep uint, draining []string, now time.Time, busy func(string) bool) (ready map[string]bool, waiting bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	clocks := d.byDep[dep]
+	next := map[string]time.Time{}
+	ready = map[string]bool{}
+	for _, uuid := range draining {
+		since, seen := clocks[uuid]
+		if !seen {
+			next[uuid] = now
+			waiting = true
+			continue
+		}
+		elapsed := now.Sub(since)
+		if elapsed >= drainMax || (elapsed >= drainMin && !busy(uuid)) {
+			ready[uuid] = true
+			continue
+		}
+		next[uuid] = since
+		waiting = true
+	}
+	if len(next) == 0 {
+		delete(d.byDep, dep)
+		return ready, waiting
+	}
+	if d.byDep == nil {
+		d.byDep = map[uint]map[string]time.Time{}
+	}
+	d.byDep[dep] = next
+	return ready, waiting
+}
+
+// forget drops the clocks of dep's instances.
+func (d *drainClocks) forget(dep uint) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.byDep, dep)
 }

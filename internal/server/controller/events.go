@@ -35,7 +35,7 @@ func (c *Controller) onEvent(ev bus.Event) {
 				c.forgetPool(uint(id))
 			}
 			if ev.Reason == store.DeploymentChangeDGPUQuota {
-				c.markDGPULimitPush(uint(id))
+				c.dgpuPushes.mark(uint(id))
 			}
 			c.q.add(depKey(uint(id)))
 		}

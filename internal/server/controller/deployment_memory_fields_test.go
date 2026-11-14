@@ -12,9 +12,8 @@ import (
 func TestEveryControllerFieldIsClassified(t *testing.T) {
 	// Dropped by deploymentMemories (TestForgetDeploymentLeavesNoMemory).
 	forgotten := map[string]bool{
-		"poolRefused": true, "poolWaiting": true, "waits": true, "placements": true,
-		"sleepPushed": true, "draining": true, "dgpuPending": true, "imageWaits": true,
-		"failover": true,
+		"pool": true, "waits": true, "placements": true, "sleepPushes": true,
+		"drainClocks": true, "dgpuPushes": true, "imageWaits": true, "failover": true,
 	}
 	notByDeployment := map[string]string{
 		"cacheCopies":          "by deployment, but released by withdrawCacheCopies, which talks to nodes and is retried",
@@ -43,10 +42,6 @@ func TestEveryControllerFieldIsClassified(t *testing.T) {
 		"q":                    "the work queue",
 		"cacheQ":               "the work queue",
 		"syncMu":               "guards modelSyncs",
-		"drainMu":              "guards draining",
-		"sleepMu":              "guards sleepPushed",
-		"poolMu":               "guards poolRefused and poolWaiting",
-		"dgpuMu":               "guards dgpuPending",
 	}
 	seen := map[string]bool{}
 	ty := reflect.TypeOf(Controller{})

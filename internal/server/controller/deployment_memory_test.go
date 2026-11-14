@@ -43,13 +43,13 @@ func TestForgetDeploymentLeavesNoMemory(t *testing.T) {
 		deps = append(deps, dep)
 		t.Cleanup(func() { planning.HintPlacement(dep.ID, nil) })
 		id := dep.ID
-		c.rememberPoolRefusal(id, node.ID)
-		c.rememberPoolWait(id)
+		c.pool.refuse(id, node.ID, now)
+		c.pool.wait(id, now)
 		c.waits.Wait(id, placewait.Cards{NodeID: node.ID, GPUIndexes: []int{0}}, []string{"holder"}, now)
 		c.placements.set(&store.Deployment{ID: id, UpdatedAt: now}, []uint{node.ID})
 		c.recordSleepPushed(id, proto.InstanceDesiredState{UUID: "inst"})
 		c.drainedUnits(id, []store.Instance{{UUID: "inst"}})
-		c.markDGPULimitPush(id)
+		c.dgpuPushes.mark(id)
 		c.imageWaits.set(id, waitedImage)
 		c.restoreFailovers(dep, &unitDeployment{}, nil)
 		c.failover.set(id, []failoverMove{{Unit: 1, From: "a", To: "b", MovedAt: now}})
@@ -103,20 +103,12 @@ func TestAForgottenDeploymentIsNotQueuedByItsImage(t *testing.T) {
 // memoryOf reports, for each piece of per-deployment memory, whether the
 // controller holds any for the deployment.
 func memoryOf(c *Controller, dep uint) map[string]bool {
-	c.poolMu.Lock()
-	_, refused := c.poolRefused[dep]
-	_, poolWaiting := c.poolWaiting[dep]
-	c.poolMu.Unlock()
+	refused := c.pool.refusals(dep) > 0
+	poolWaiting := c.pool.waitingRecently(dep, c.now())
 	_, cardWait := c.waits.Get(dep, c.now())
-	c.sleepMu.Lock()
-	_, sleepPushed := c.sleepPushed[dep]
-	c.sleepMu.Unlock()
-	c.drainMu.Lock()
-	_, draining := c.draining[dep]
-	c.drainMu.Unlock()
-	c.dgpuMu.Lock()
-	dgpu := c.dgpuPending[dep]
-	c.dgpuMu.Unlock()
+	sleepPushed := c.sleepPushes.last(dep) != nil
+	draining := c.drainClocks.of(dep) != nil
+	dgpu := c.dgpuPushes.isPending(dep)
 	imageWait := false
 	for _, d := range c.imageWaits.waiting(waitedImage) {
 		imageWait = imageWait || d == dep

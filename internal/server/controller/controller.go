@@ -76,34 +76,25 @@ type Controller struct {
 	startTimeout int
 	syncMu       sync.Mutex
 	modelSyncs   map[string]*modelSyncRun
-	// drainProbe and draining time the instances being drained (drain.go).
-	drainProbe DrainProbe
-	drainMu    sync.Mutex
-	draining   map[uint]map[string]time.Time // by deployment, then instance
-	// sleepPushed is the sleep intent last pushed per instance, by
-	// deployment (sleep.go).
-	sleepMu     sync.Mutex
-	sleepPushed map[uint]map[string]sleepOrder
+	// drainProbe and drainClocks time the instances being drained (drain.go).
+	drainProbe  DrainProbe
+	drainClocks drainClocks
+	// sleepPushes is the sleep intent last pushed per instance (sleep.go).
+	sleepPushes sleepPushes
+	// pool remembers each deployment's refusing candidates and last empty
+	// pass (pool_memory.go).
+	pool poolMemory
+	// dgpuPushes holds the deployments whose dGPU memory limit changed in
+	// place and is not yet handed to their nodes (dgpu_limit.go).
+	dgpuPushes dgpuLimitPushes
 	// now is the controller's clock; tests replace it.
 	now func() time.Time
-	// poolRefused remembers, by deployment, the candidates whose trial plan
-	// refused a replica recently (unit_pool.go).
 	// nodeStatusDirty is set by routine node status reports and cleared by
 	// the settle tick that acts on them (settleNodeStatus).
 	nodeStatusDirty atomic.Bool
 	// routes holds what other events said changed until the next
 	// flushEventRoutes tick (event_routes.go).
-	routes      eventRoutes
-	poolMu      sync.Mutex
-	poolRefused map[uint]map[uint]time.Time
-	// dgpuPending holds the deployments whose instances' memory limits were
-	// rewritten in place and are not yet handed to their nodes
-	// (dgpu_limit.go).
-	dgpuMu      sync.Mutex
-	dgpuPending map[uint]bool
-	// poolWaiting is when each deployment's last pass found no node; see
-	// poolSettleBackoff.
-	poolWaiting          map[uint]time.Time
+	routes               eventRoutes
 	inferenceNodeHandler provider.InferenceNodeLifecycleHandler
 	// observation coalesces catalog changes into in-place refreshes of the
 	// instances' observation (observation.go).
@@ -165,7 +156,7 @@ func New(st *store.Store, hub HubPusher, log *slog.Logger) *Controller {
 	c := &Controller{
 		store: st, networks: network.New(st, network.StoreCatalog{Store: st}), hub: hub, log: log, q: newWorkq(300 * time.Millisecond), cacheQ: newWorkq(300 * time.Millisecond),
 		retryBackoff: 15 * time.Second, offlineGrace: 2 * time.Minute,
-		maxAttempts: 3, modelSyncs: map[string]*modelSyncRun{}, sleepPushed: map[uint]map[string]sleepOrder{},
+		maxAttempts: 3, modelSyncs: map[string]*modelSyncRun{},
 		now: time.Now, observation: newObservationRefresh(), evictions: prepobs.NewPhases[store.FileRef](),
 		waits: placewait.New(), imageRefsNotify: make(chan struct{}, 1),
 	}

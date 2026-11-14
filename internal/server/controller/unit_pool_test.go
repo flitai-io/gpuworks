@@ -266,9 +266,7 @@ func TestPoolPassIsBoundedAtAThousandNodes(t *testing.T) {
 	}
 	// The two rounds planned different candidates: every one refused so far
 	// is remembered, and there are twice the budget of them.
-	c.poolMu.Lock()
-	refused := len(c.poolRefused[full.ID])
-	c.poolMu.Unlock()
+	refused := c.pool.refusals(full.ID)
 	if refused != 2*poolTrialBudget {
 		t.Fatalf("refused candidates remembered = %d, want %d", refused, 2*poolTrialBudget)
 	}
@@ -313,11 +311,7 @@ func TestPoolFollowsEditedRequirements(t *testing.T) {
 	if got := replicaNodes(t, st, dep.ID); len(got) != 0 {
 		t.Fatalf("placed %v on a full node", got)
 	}
-	remembered := func() int {
-		c.poolMu.Lock()
-		defer c.poolMu.Unlock()
-		return len(c.poolRefused[dep.ID])
-	}
+	remembered := func() int { return c.pool.refusals(dep.ID) }
 	if remembered() != 1 {
 		t.Fatalf("refusals remembered = %d, want the pinned node", remembered())
 	}
@@ -399,7 +393,7 @@ func TestWaitingPoolSitsOutStatusBatchesForABackoff(t *testing.T) {
 	if got := replicaNodes(t, st, dep.ID); got[nodes[0].ID] != 1 {
 		t.Fatalf("replicas run on %v after the card was freed", got)
 	}
-	if c.poolWaitingRecently(dep.ID) {
+	if c.pool.waitingRecently(dep.ID, c.now()) {
 		t.Fatal("a placed deployment is still remembered as waiting")
 	}
 }
