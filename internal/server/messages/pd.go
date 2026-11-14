@@ -60,6 +60,12 @@ const (
 	// over UCX on a host RDMA network. NIXL registers the KV cache with the
 	// NIC, and an engine that slept cannot allocate it again on waking.
 	ErrorPDSleepRDMAUnsupported = "PD_SLEEP_RDMA_UNSUPPORTED"
+	// ErrorPDUCXNetlinkHang: a node of the placement has a kernel whose IPv6
+	// route dump hangs UCX 1.20-1.22 (bundled with NIXL), and the mode moves
+	// the KV with NIXL over Ethernet (ADR 0028). Params: nodes (uuid, name and
+	// kernel of each), names, fixes (code and literal commands each), fix (the
+	// first fix's command).
+	ErrorPDUCXNetlinkHang = "PD_UCX_NETLINK_HANG"
 	// ErrorPDNotPD: a PD-only operation on an ordinary deployment.
 	ErrorPDNotPD = "PD_NOT_PD"
 	// ErrorPDImmutable: a runtime change to what an instance was launched
@@ -77,4 +83,8 @@ const (
 	// WarningPDKVOffloadPrefillOnly: the deployment's KV offload runs on the
 	// prefill role only; decode never carries a KV cache tier.
 	WarningPDKVOffloadPrefillOnly = "PD_KV_OFFLOAD_PREFILL_ONLY"
+	// WarningPDUCXNetlinkHangRDMA: the same node fact as ErrorPDUCXNetlinkHang
+	// on a host RDMA network, where UCX is held to RDMA transports and may not
+	// run the route check; it is not refused, the node may still hang.
+	WarningPDUCXNetlinkHangRDMA = "PD_UCX_NETLINK_HANG_RDMA"
 )

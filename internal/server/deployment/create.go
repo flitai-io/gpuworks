@@ -132,7 +132,7 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 	}
 	pdReq, err := s.preparePDDeployRequest(&req, "")
 	if err == nil && pdReq != nil {
-		_, err = s.pdGroup(pdReq)
+		_, _, err = s.pdGroup(pdReq)
 	}
 	if err != nil {
 		return nil, invalid(err)

@@ -255,6 +255,9 @@ type PeerSyncHooks struct {
 // the node is offline; read from the live session, never stored).
 type NodeRuntimeHooks interface {
 	NVIDIAIsolation(uuid string) *proto.NVIDIAIsolation
+	// UCXNetlinkHang is whether a node's kernel hangs UCX (NIXL): nil when it
+	// does not, was not reported, or the node is offline; live, never stored.
+	UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang
 	RuntimeProxy(uuid string) *proto.RuntimeProxyStatus
 	RestartRuntime(ctx context.Context, uuid string) (*proto.RuntimeProxyStatus, error)
 }

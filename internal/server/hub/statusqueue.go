@@ -231,6 +231,7 @@ func (s *Session) handleStatusNode(raw json.RawMessage) {
 		return
 	}
 	s.nvidiaIsolation.Store(st.NVIDIAIsolation)
+	s.ucxNetlinkHang.Store(st.UCXNetlinkHang)
 	if st.RuntimeProxy != nil {
 		s.runtimeProxy.Store(st.RuntimeProxy)
 	}
