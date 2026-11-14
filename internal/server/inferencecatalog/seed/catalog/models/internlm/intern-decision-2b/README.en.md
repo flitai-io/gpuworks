@@ -29,7 +29,7 @@ curl "$GPUWORKS_URL/v1/systemone" -H "Authorization: Bearer $GPUWORKS_API_KEY" -
 }'
 ```
 
-Images go in an `images` array as `data:image/png;base64,...` (jpeg and webp also work), at most 16 MiB each.
+Images go in an `images` array as `data:image/png;base64,...` (jpeg and webp also work), at most 4 MiB each.
 The reply's `usage.input_tokens` counts input tokens; `usage.output_tokens` counts answered questions, not generated tokens.
 
 ## Good for

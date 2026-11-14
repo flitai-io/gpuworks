@@ -30,13 +30,33 @@ FAKE_INFERENCE = textwrap.dedent('''
     def validate_request(request):
         if not isinstance(request, dict) or "state" not in request:
             raise ValueError("Supply a JSON object containing state and questions.")
+        images = request.get("images") or []
+        if images:
+            if not isinstance(images, list) or not 1 <= len(images) <= 8:
+                raise ValueError("Upload 1-8 images.")
+            if not all(isinstance(image, str) and bool(image) for image in images):
+                raise ValueError("Images must be nonempty local file paths.")
         questions = request.get("questions")
         if not isinstance(questions, dict) or not 1 <= len(questions) <= 16:
             raise ValueError("Supply 1-16 questions.")
-        for image in request.get("images") or []:
-            if not isinstance(image, str) or not image:
-                raise ValueError("Images must be nonempty local file paths.")
-        return request
+        clean = {}
+        for name, question in questions.items():
+            if not isinstance(name, str) or not name:
+                raise ValueError("Question names must be nonempty strings.")
+            if not isinstance(question, dict) or question.get("type") not in {"choice", "score", "noul"}:
+                raise ValueError("Question type must be choice, score, or noul.")
+            criteria = question.get("criteria")
+            if question["type"] == "choice" and not isinstance(criteria, dict):
+                raise ValueError("Choice criteria must be an object.")
+            if question["type"] == "score" and not isinstance(criteria, (list, dict)):
+                raise ValueError("Score criteria must be a list or object.")
+            if question["type"] != "noul" and not 1 <= len(criteria) <= 62:
+                raise ValueError("Supply 1-62 options.")
+            clean[name] = {key: question[key] for key in ("type", "instructions", "criteria") if key in question}
+        row = {"state": request["state"], "questions": clean}
+        if images:
+            row["images"] = list(images)
+        return row
 
     class DecisionEngine:
         def __init__(self, checkpoint=None, *, media_root=".", device="cuda", dtype="bfloat16", max_length=8192):
@@ -108,6 +128,14 @@ class SystemOneAdapterTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "refusing to run it"):
             self.adapter_module.create(self.model.name, {"inference_sha256": "0" * 64})
 
+    def test_a_failed_load_removes_its_media_root(self):
+        self.script.write_text(FAKE_INFERENCE.replace("self.fail = None", "raise RuntimeError('no GPU')"))
+        digest = hashlib.sha256(self.script.read_bytes()).hexdigest()
+        before = set(pathlib.Path(tempfile.gettempdir()).glob("gpuworks-systemone-*"))
+        with self.assertRaisesRegex(RuntimeError, "no GPU"):
+            self.adapter_module.create(self.model.name, {"inference_sha256": digest})
+        self.assertEqual(set(pathlib.Path(tempfile.gettempdir()).glob("gpuworks-systemone-*")), before)
+
     def test_loads_engine_with_template_options_and_warms_up(self):
         adapter = self.create(dtype="float16", device="cuda:0", max_length=4096)
         self.assertEqual(adapter.engine.options, {"checkpoint": self.model.name, "device": "cuda:0", "dtype": "float16", "max_length": 4096})
@@ -132,6 +160,11 @@ class SystemOneAdapterTest(unittest.TestCase):
         self.assertEqual(missing_state.exception.http_status, 400)
         with self.assertRaisesRegex(RequestError, "1-16 questions"):
             adapter.invoke("systemone.decide", {"state": "x", "questions": {}}, {})
+        with self.assertRaisesRegex(RequestError, "Choice criteria"):
+            adapter.invoke("systemone.decide", {"state": "x", "questions": {"q": {"type": "choice", "criteria": ["a"]}}}, {})
+        # The real validator's set lookup raises TypeError on an unhashable type.
+        with self.assertRaisesRegex(RequestError, "unhashable"):
+            adapter.invoke("systemone.decide", {"state": "x", "questions": {"q": {"type": []}}}, {})
         with self.assertRaises(RequestError) as too_long:
             adapter.invoke("systemone.decide", {"state": "too long", "questions": QUESTIONS}, {})
         self.assertEqual(too_long.exception.code, "context_length_exceeded")
@@ -152,6 +185,7 @@ class SystemOneAdapterTest(unittest.TestCase):
 
     @unittest.skipUnless(have_pillow(), "Pillow is not installed")
     def test_rejects_image_sources_other_than_checked_data_urls(self):
+        self.assertEqual(self.create().max_image_bytes, 4 << 20, "8 images of the default size must fit the 64 MiB request limit")
         adapter = self.create(max_images=2, max_image_bytes=1024)
         RequestError = self.adapter_module.RequestError
         good = "data:image/png;base64," + base64.b64encode(PNG_1x1).decode()

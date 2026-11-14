@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { invokeJSON } from "./api";
@@ -9,6 +9,7 @@ import type { PlaygroundCatalog, PlaygroundOperation } from "./types";
 import EmptyState from "../../components/EmptyState";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { FileUpload } from "../../ui-kit/FileUpload";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
 import { ConsoleIcon } from "../../ui-kit/consoleIcons";
@@ -66,6 +67,15 @@ export function draftsFromExample(questions: unknown): QuestionDraft[] {
   });
 }
 
+// questionNameProblem says why the drafts cannot become a request: a question
+// is keyed by its name, so an empty or repeated name would silently drop one.
+export function questionNameProblem(drafts: QuestionDraft[]): "empty" | "duplicate" | undefined {
+  const names = drafts.map((draft) => draft.name.trim());
+  if (names.some((name) => !name)) return "empty";
+  if (new Set(names).size !== names.length) return "duplicate";
+  return undefined;
+}
+
 // questionsBody is the wire form of the drafts.
 export function questionsBody(drafts: QuestionDraft[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -102,6 +112,9 @@ export default function DecisionPage({ catalog }: { catalog: PlaygroundCatalog }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [result, setResult] = useState<DecisionResult>();
+  // Each send gets a number; a reply to an older send (another model, a
+  // request replaced meanwhile) is dropped.
+  const sent = useRef(0);
 
   useEffect(() => {
     const next = new URLSearchParams(search);
@@ -110,9 +123,15 @@ export default function DecisionPage({ catalog }: { catalog: PlaygroundCatalog }
     if (next.toString() !== search.toString()) setSearch(next, { replace: true });
   }, [modelID, search, setSearch]);
 
-  // Start from the server's example whenever the operation changes.
+  // Start from the server's example when the model or its example changes.
+  // A refreshed catalog is a new object with the same content: keying on the
+  // content keeps what the user has typed.
   const example = operation?.example?.request.body;
+  const exampleKey = `${modelID}\n${JSON.stringify(example ?? null)}`;
   useEffect(() => {
+    sent.current++;
+    setImages([]);
+    setLoading(false);
     if (!example) return;
     const state = example.state;
     setStateFormat(typeof state === "string" ? "text" : "json");
@@ -120,44 +139,50 @@ export default function DecisionPage({ catalog }: { catalog: PlaygroundCatalog }
     setDrafts(draftsFromExample(example.questions));
     setResult(undefined);
     setError(undefined);
-  }, [example]);
+  }, [exampleKey]);
 
   const body = (): Record<string, unknown> => {
     const state = stateFormat === "json" ? JSON.parse(stateText) as unknown : stateText;
     const out: Record<string, unknown> = { state, questions: questionsBody(drafts) };
-    if (images.length) out.images = images.map((image) => image.dataURL);
+    if (acceptsImages && images.length) out.images = images.map((image) => image.dataURL);
     return out;
   };
   let preview: Record<string, unknown> = {};
   try { preview = { model: modelID, ...body() }; } catch { preview = { model: modelID }; }
 
   const send = async (op: PlaygroundOperation, request: Record<string, unknown>) => {
+    const id = ++sent.current;
     setLoading(true); setError(undefined); setResult(undefined);
-    try { setResult(await invokeJSON(op, modelID, request) as DecisionResult); }
-    catch (next) { setError((next as Error).message); }
-    finally { setLoading(false); }
+    try {
+      const reply = await invokeJSON(op, modelID, request) as DecisionResult;
+      if (id === sent.current) setResult(reply);
+    } catch (next) {
+      if (id === sent.current) setError((next as Error).message);
+    } finally {
+      if (id === sent.current) setLoading(false);
+    }
   };
   const submit = () => {
-    if (!operation) return;
+    if (!operation || loading) return;
+    const problem = questionNameProblem(drafts);
+    if (problem) { setError(t(`decision.names.${problem}`)); return; }
     let request: Record<string, unknown>;
     try { request = body(); } catch { setError(t("decision.invalidJSON")); return; }
     void send(operation, request);
   };
   const update = (key: string, patch: Partial<QuestionDraft>) => setDrafts((rows) => rows.map((row) => row.key === key ? { ...row, ...patch } : row));
-  const addImages = async (files: FileList | null) => {
-    const read = await Promise.all(Array.from(files || []).map((file) => new Promise<{ name: string; dataURL: string }>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve({ name: file.name, dataURL: String(reader.result || "") });
-      reader.onerror = () => reject(new Error(t("decision.imageReadFailed", { name: file.name })));
-      reader.readAsDataURL(file);
-    }))).catch((next: Error) => { setError(next.message); return []; });
-    setImages((current) => [...current, ...read]);
+  const addImage = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setImages((current) => [...current, { name: file.name, dataURL: String(reader.result || "") }]);
+    reader.onerror = () => setError(t("decision.imageReadFailed", { name: file.name }));
+    reader.readAsDataURL(file);
   };
   const typeOptions = questionTypes.map((type) => ({ value: type, label: t(`decision.type.${type}`) }));
 
   return <div className="playground-operation-page">
     <div className="playground-operation-toolbar flex flex-wrap items-center gap-2">
-      <RequestDrawer operation={operation} model={modelID} body={preview} onSend={(raw) => { if (!operation) return; try { void send(operation, JSON.parse(raw)); } catch { setError(t("decision.invalidJSON")); } }} />
+      <RequestDrawer operation={operation} model={modelID} body={preview} onSend={(raw) => { if (!operation || loading) return; try { void send(operation, JSON.parse(raw)); } catch { setError(t("decision.invalidJSON")); } }} />
       <div className="playground-model-select"><OptionSelect aria-label={t("decision.model")} placeholder={t("decision.modelPlaceholder")} value={modelID || undefined} options={models.map((item) => ({ value: item.id, label: item.label }))} onChange={(value) => { const next = new URLSearchParams(search); next.set("model", value); setSearch(next, { replace: true }); }} /></div>
     </div>
     {requested && !operation ? <UnsupportedModel modelID={requested} models={catalog.models} /> : !models.length ? <EmptyState description={t("decision.noModels")} /> : <div className="playground-operation-grid">
@@ -169,7 +194,7 @@ export default function DecisionPage({ catalog }: { catalog: PlaygroundCatalog }
         <Textarea aria-label={t("decision.state")} value={stateText} onChange={(event) => setStateText(event.target.value)} rows={3} />
         {acceptsImages && <div className="flex flex-col gap-2">
           <h5 className="text-fg-default font-medium">{t("decision.images")}</h5>
-          <input aria-label={t("decision.addImages")} type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => { void addImages(event.target.files); event.target.value = ""; }} />
+          <FileUpload aria-label={t("decision.addImages")} accept="image/png,image/jpeg,image/webp" value={null} onChange={addImage} />
           <div className="flex flex-wrap gap-2">{images.map((image, index) => <Badge key={`${image.name}-${index}`} color="gray">{image.name}<Button variant="ghost" size="xs" iconOnly leadingIcon={ConsoleIcon.close} aria-label={t("decision.removeImage", { name: image.name })} onClick={() => setImages((current) => current.filter((_, at) => at !== index))} /></Badge>)}</div>
         </div>}
         <h5 className="text-fg-default font-medium">{t("decision.questions")}</h5>

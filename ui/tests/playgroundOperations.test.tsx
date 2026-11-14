@@ -818,3 +818,49 @@ test("Decision page without a decision model says how to get one", async () => {
   renderAt(<DecisionPage catalog={{ ...catalog, models: catalog.models.filter((item) => item.id !== "decision-model") }} />, "/playground/decision");
   assert.ok(screen.getByText(/No decision model is available/));
 });
+
+test("Decision page keeps the user's edits when the catalog is refreshed with the same content", async () => {
+  globalThis.fetch = (async (input) => me(input) ?? jsonResponse({})) as typeof fetch;
+  const view = renderAt(<DecisionPage catalog={catalog} />, "/playground/decision");
+  const state = screen.getByRole("textbox", { name: "State" });
+  await userEvent.setup().clear(state);
+  await userEvent.setup().type(state, "edited");
+  view.rerender(<ConversationStoreContext.Provider value={stores[stores.length - 1]}><I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/playground/decision"]}><LocationProbe /><Routes><Route path="*" element={<DecisionPage catalog={JSON.parse(JSON.stringify(catalog)) as PlaygroundCatalog} />} /></Routes></MemoryRouter></I18nextProvider></ConversationStoreContext.Provider>);
+  assert.equal((screen.getByRole("textbox", { name: "State" }) as HTMLTextAreaElement).value, "edited");
+});
+
+test("Decision page sends uploaded images as data URLs only to a model that takes them, and refuses unnamed questions", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = (async (input, init) => {
+    const user = me(input);
+    if (user) return user;
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return jsonResponse({ answers: {} });
+  }) as typeof fetch;
+  const textOnly = { ...catalog.models.find((item) => item.id === "decision-model")!, id: "text-decision-model", label: "text-decision-model", input_modalities: ["text"] };
+  renderAt(<DecisionPage catalog={{ ...catalog, models: [...catalog.models, textOnly] }} />, "/playground/decision");
+  const user = userEvent.setup();
+
+  await user.upload(screen.getByLabelText("Add images"), new File([new Uint8Array([137, 80, 78, 71])], "frame.png", { type: "image/png" }));
+  assert.ok(await screen.findByText("frame.png"));
+  await user.click(screen.getByRole("button", { name: "Decide" }));
+  await waitFor(() => assert.equal(bodies.length, 1));
+  assert.deepEqual(bodies[0].images, ["data:image/png;base64,iVBORw=="]);
+
+  await user.click(screen.getByRole("button", { name: "Remove image frame.png" }));
+  await user.clear(screen.getByRole("textbox", { name: "Name of question 1" }));
+  await user.click(screen.getByRole("button", { name: "Decide" }));
+  assert.ok(await screen.findByText("Every question needs a name"));
+  await user.type(screen.getByRole("textbox", { name: "Name of question 1" }), "topic");
+  await user.click(screen.getByRole("button", { name: "Decide" }));
+  assert.ok(await screen.findByText("Question names must be unique"));
+  assert.equal(bodies.length, 1, "a request with unnamed or repeated questions is never sent");
+
+  await user.click(screen.getByRole("combobox", { name: "Decision model" }));
+  await user.click(await screen.findByRole("option", { name: "text-decision-model" }));
+  await waitFor(() => assert.equal(screen.queryByLabelText("Add images"), null));
+  await user.click(screen.getByRole("button", { name: "Decide" }));
+  await waitFor(() => assert.equal(bodies.length, 2));
+  assert.equal(bodies[1].model, "text-decision-model");
+  assert.equal("images" in bodies[1], false);
+});

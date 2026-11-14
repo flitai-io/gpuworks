@@ -3,6 +3,7 @@ import { Alert, Button, Segmented, Skeleton, Space, Tag, Typography } from "antd
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import PageHeader from "../../components/PageHeader";
+import { ConsoleIcon } from "../../ui-kit/consoleIcons";
 import { getPlaygroundCatalog } from "./api";
 import AudioPage from "./AudioPage";
 import ChatPage from "./ChatPage";
@@ -68,7 +69,7 @@ export default function PlaygroundPage() {
                 { value: "image", label: <span><FileImageOutlined /> {t("page.image")}</span> },
                 { value: "video", label: <span><VideoCameraOutlined /> {t("page.video")}</span> },
                 { value: "realtime", label: <span><ThunderboltOutlined /> {t("page.realtime")}</span> },
-                { value: "decision", label: <span>% {t("page.decision")}</span> },
+                { value: "decision", label: <span><ConsoleIcon.filter size={14} /> {t("page.decision")}</span> },
               ]}
               onChange={(value) => navigate(`/playground/${value}`)}
             />

@@ -54,7 +54,7 @@ specs:
     PYTHONDONTWRITEBYTECODE: '1'
   assets:
   - file: assets/gpuworks-systemone-runtime.tar.gz
-    sha256: ef76633c08b1811f71cd01d426e9cba0b602dadb8acd23807d16b5a993d1cfb0
+    sha256: f152a18d7d5346b3bf4fa75bc210d116948e9048a3c383cdc14c191fdfce9303
     unpack_to: /opt/gpuworks/runtime
   entrypoint:
   - python3

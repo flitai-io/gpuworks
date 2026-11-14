@@ -112,7 +112,6 @@ print(','.join(sorted(set(v.values()))) if len(set(v.values())) > 1 else '')
     [ -z "${out}" ] || FAILED+=("opencv: coexisting opencv-* distributions have different versions (${out}); cv2/ is shared")
 }
 
-# 运行期环境里不许带厂商内网的包源/地址（base 继承下来的 ENV 不会被构建仓的 ARG 覆盖）。
 # systemone：System One 决策模型线（cuda/Dockerfile.systemone）的 Python 栈。推理代码随权重仓库，
 # 镜像要保证的是它依赖的东西：Python ≥3.12（inference.py 用了 3.12 的 f-string 语法）、钉住版本的
 # torch 与 transformers，以及 Qwen3.5 的模型类能从 transformers 里取到。
@@ -131,6 +130,7 @@ check_systemone() {
     echo "  systemone: torch ${torch:-absent}, transformers ${transformers:-absent}"
 }
 
+# 运行期环境里不许带厂商内网的包源/地址（base 继承下来的 ENV 不会被构建仓的 ARG 覆盖）。
 check_no_vendor_internal_env() {
     local hit
     hit="$(env | grep -i -E 't-head\.cn|eng\.t-head|zstack\.(io|ai)|sourcefind' | sed -E 's/=.*//' | tr '\n' ' ' || true)"

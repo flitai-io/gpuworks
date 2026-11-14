@@ -29,7 +29,7 @@ curl "$GPUWORKS_URL/v1/systemone" -H "Authorization: Bearer $GPUWORKS_API_KEY" -
 }'
 ```
 
-图片放在 `images` 数组里，写成 `data:image/png;base64,...`（也接受 jpeg、webp），单张不超过 16 MiB。
+图片放在 `images` 数组里，写成 `data:image/png;base64,...`（也接受 jpeg、webp），单张不超过 4 MiB。
 回复的 `usage.input_tokens` 是输入 token 数；`usage.output_tokens` 是回答的问题数，不是生成的 token。
 
 ## 适合做什么

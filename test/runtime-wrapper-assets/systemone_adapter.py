@@ -61,20 +61,28 @@ class SystemOneAdapter:
             raise RuntimeError(f"{script.name} has SHA-256 {actual}, the template pins {expected}; refusing to run it")
         self.module = load_inference_module(script, source)
         self.max_images = int(config.get("max_images", 8))
-        self.max_image_bytes = int(config.get("max_image_bytes", 16 << 20))
+        # Eight images of 4 MiB stay under gpuworks_serve's default 64 MiB
+        # request limit once base64-encoded; a larger limit here would only
+        # ever be met by a 413 from the server first.
+        self.max_image_bytes = int(config.get("max_image_bytes", 4 << 20))
         self.max_image_pixels = int(config.get("max_image_pixels", 40_000_000))
-        self.media_root = Path(tempfile.mkdtemp(prefix="gpuworks-systemone-"))
         self.lock = threading.Lock()
-        self.engine = self.module.DecisionEngine(
-            str(root),
-            media_root=str(self.media_root),
-            device=str(config.get("device", "cuda")),
-            dtype=str(config.get("dtype", "bfloat16")),
-            max_length=int(config.get("max_length", 8192)),
-        )
-        # The first forward pass initialises CUDA kernels; do it before /health
-        # reports ready, so the first user request is not the slow one.
-        self.predict(WARMUP_REQUEST)
+        self.media_root = Path(tempfile.mkdtemp(prefix="gpuworks-systemone-"))
+        try:
+            self.engine = self.module.DecisionEngine(
+                str(root),
+                media_root=str(self.media_root),
+                device=str(config.get("device", "cuda")),
+                dtype=str(config.get("dtype", "bfloat16")),
+                max_length=int(config.get("max_length", 8192)),
+            )
+            # The first forward pass initialises CUDA kernels; do it before
+            # /health reports ready, so the first user request is not the
+            # slow one.
+            self.predict(WARMUP_REQUEST)
+        except BaseException:
+            self.close()
+            raise
 
     def invoke(self, operation: str, payload: dict[str, Any], _files: dict[str, Any]) -> dict[str, Any]:
         if operation != OPERATION:
@@ -98,7 +106,9 @@ class SystemOneAdapter:
     def predict(self, request: dict[str, Any]) -> dict[str, Any]:
         try:
             self.module.validate_request(request)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
+            # TypeError: a malformed field the validator meets with a set
+            # lookup or comparison ({"type": []} is unhashable).
             raise RequestError(str(exc)) from exc
         with self.lock:
             try:
