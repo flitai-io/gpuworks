@@ -131,6 +131,33 @@ def log_range_queries_store(page: Page, capture) -> None:
     expect(drawer.get_by_text(re.compile("persisted logs in the selected range"))).to_be_visible()
 
 
+def check_narrow_detail(page: Page, capture) -> None:
+    page.set_viewport_size({"width": 320, "height": 892})
+    drawer = page.get_by_role("dialog")
+    tabs = drawer.get_by_role("tablist", name="Deployment Details")
+    for overview in (True, False):
+        name = "Deployment Details" if overview else re.compile(r"^Instance details \(")
+        tabs.get_by_role("tab", name=name, exact=True).click()
+        panel = drawer.locator(".deployment-detail-tabs > [role=tabpanel]:visible")
+        pane = panel if overview else panel.locator("#deployment-instances > section")
+        table = pane.locator(".deployment-field-table").first
+        expect(table).to_be_visible()
+        clearance = table.evaluate("""table => {
+            const pane = table.closest("#deployment-instances > section, [role=tabpanel]");
+            return pane.getBoundingClientRect().left + pane.clientLeft + pane.clientWidth
+                - table.getBoundingClientRect().right;
+        }""")
+        assert clearance >= 15, f"Data table touches the scrollbar ({clearance}px clearance)"
+        assert pane.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), "Drawer requires horizontal scrolling"
+        pinned = [tabs] if overview else [tabs, panel.locator(".replica-cascade")]
+        before = [control.bounding_box()["y"] for control in pinned]
+        pane.evaluate("e => e.scrollTop = e.scrollHeight")
+        assert pane.evaluate("e => e.scrollTop > 0")
+        for control, top in zip(pinned, before):
+            assert abs(control.bounding_box()["y"] - top) < 1, "Navigation moved with the content"
+        capture("narrow-deployment-metrics" if overview else "narrow-instance-metrics")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8802")
@@ -161,6 +188,7 @@ def main() -> None:
             beyond_retention_warns(page, capture)
             log_range_queries_store(page, capture)
             capture("deployment-detail-time-range")
+            check_narrow_detail(page, capture)
         except Exception:
             page.screenshot(path=str(args.artifact_dir / "failure.png"), full_page=True)
             print(f"failure URL: {page.url}")

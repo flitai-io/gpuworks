@@ -50,7 +50,7 @@ export default function ReplicaCascade({ dep, replicas, replica, filter, visible
       </div>
       {allInstances.length > 0 && <div className="cascade-instance-group" role="group" aria-label={t("detail.switchInstance")}>
         <div className="cascade-field">
-          <InstanceRecordPicker popupClassName="w-max min-w-[var(--anchor-width)] [&_.cascade-choice]:flex-nowrap [&_[data-slot=combobox-item]]:px-1.5" label={t("detail.switchInstance")} choices={instanceOptions} emptyText="—" selected={current?.uuid} onSelect={onInstance} />
+          <InstanceRecordPicker label={t("detail.switchInstance")} choices={instanceOptions} emptyText="—" selected={current?.uuid} onSelect={onInstance} />
         </div>
         <div className="cascade-stepper">
           <Button iconOnly size="sm" variant="tertiary" aria-label={t("detail.previousInstance")} title={t("detail.previousInstance")} disabled={index <= 0} onClick={() => onInstance(visible[index - 1].uuid)}>

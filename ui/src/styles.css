@@ -1381,6 +1381,16 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
   --detail-notice-width: 100%; --detail-notice-max-width: 100%; margin-inline-start: 0;
 }
 .deployment-detail-tabs .instance-launch-buttons { margin: 6px 0; }
+.deployment-detail-tabs :is(.instance-launch-buttons, .instance-runtime-fields) button {
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+}
+.deployment-detail-tabs :is(.instance-launch-buttons, .instance-runtime-fields) [data-slot="button-label"] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .deployment-top-tabs { z-index: 4; background: var(--surface-floating); }
 .deployment-card-header {
   display: flex;
@@ -1418,6 +1428,7 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
 .deployment-detail-tabs .deployment-card-disclosure > svg { margin-inline-start: auto; }
 .deployment-detail-tabs .instance-startup-progress[open] > summary { margin-bottom: 8px; }
 .deployment-logs { min-width: 0; margin-block-start: 8px; }
+.deployment-logs pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .deployment-log-toolbar, .deployment-log-controls, .deployment-log-range {
   display: flex;
   flex-wrap: wrap;
@@ -1445,6 +1456,11 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
 .deployment-detail-content :is(.instance-runtime-fields,.deployment-paired-fields) [data-variant="plain"] [data-slot="badge-label"] {font-size:var(--font-size-body)}
 .deployment-detail-content :is(.deployment-startup-row,.deployment-startup-step) strong { font-weight: 600; color: var(--fg-default); }
 .deployment-detail-content .detail-section { background: var(--surface-floating); }
+.deployment-detail-content .deployment-metrics-summary {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(auto-fit, minmax(min(106px, 100%), 1fr));
+  overflow: visible;
+}
 .deployment-metrics-summary > [data-slot="metric-card"] { height:100%; }
 
 .deployment-detail-tabs {
@@ -1472,10 +1488,10 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
 }
 .cascade-replica-group, .cascade-instance-group { min-width: 0; gap: 4px; }
 .cascade-field { display: grid; grid-template-columns: minmax(0, 1fr); max-width: 100%; min-width: 0; }
-.cascade-replica-group .cascade-field { width: var(--replica-picker-width); }
-.cascade-instance-group .cascade-field { width: var(--instance-picker-width); }
+.cascade-replica-group .cascade-field { width: max-content; min-width: min(var(--replica-picker-width), 100cqi); }
+.cascade-instance-group .cascade-field { width: max-content; min-width: min(var(--instance-picker-width), 100cqi); }
 .cascade-field .deployment-instance-picker { width: 100%; max-width: 100%; }
-.cascade-choice { min-width: 0; flex-wrap: wrap; gap: 2px 4px; }
+.cascade-choice { min-width: 0; white-space: nowrap; gap: 4px; }
 .cascade-choice .deployment-instance-id { font-size: var(--font-size-label); line-height: var(--line-height-label); }
 .cascade-choice strong { font-weight: 500; }
 @container deployment-detail (max-width: 480px) {
@@ -1486,6 +1502,8 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  margin-inline-end: -12px;
+  padding-inline-end: 0;
   scrollbar-gutter: auto;
 }
 .deployment-detail-content:has(.deployment-detail-tabs), .deployment-detail-tabs, .deployment-detail-tabs > [role="tabpanel"]:not([hidden]):has(> #deployment-instances),
@@ -1495,13 +1513,14 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
   flex-direction: column;
   min-height: 0;
 }
-.deployment-detail-tabs > [role="tablist"], .deployment-detail-tabs .replica-cascade { flex: none; position: relative; top: auto; }
+.deployment-detail-tabs > [role="tablist"], .deployment-detail-tabs .replica-cascade { flex: none; position: relative; top: auto; margin-inline-end: 16px; }
 .deployment-detail-tabs > [role="tabpanel"]:not([hidden]),
 .deployment-detail-tabs #deployment-instances > section {
   overflow: auto;
   scrollbar-gutter: stable;
+  padding-inline-end: 16px;
   min-height: 0;
 }
-.deployment-detail-tabs > [role="tabpanel"]:not([hidden]):has(> #deployment-instances > .replica-cascade) { overflow: hidden; scrollbar-gutter: auto; }
+.deployment-detail-tabs > [role="tabpanel"]:not([hidden]):has(> #deployment-instances > .replica-cascade) { overflow: hidden; scrollbar-gutter: auto; padding-inline-end: 0; }
 .deployment-detail-tabs #deployment-instances > section { flex: 1; }
 .deployment-detail-tabs #deployment-instances :is(.instance-startup-progress, [tabindex="-1"]) { scroll-margin-top: 8px; }
