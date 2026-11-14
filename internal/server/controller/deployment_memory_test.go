@@ -54,7 +54,7 @@ func TestForgetDeploymentLeavesNoMemory(t *testing.T) {
 		c.restoreFailovers(dep, &unitDeployment{}, nil)
 		c.failover.set(id, []failoverMove{{Unit: 1, From: "a", To: "b", MovedAt: now}})
 		c.failover.setSurges(id, []drainSurge{{}})
-		c.recordNoCandidate(dep, map[string]bool{"lost-node": true}, &unitDeployment{})
+		c.recordNoCandidate(dep, map[string]bool{"lost-node": true}, &unitDeployment{}, planning.UnitSuggestFacts{})
 		c.autoRepickFailed(id)
 		planning.HintPlacement(id, []string{"node-a"})
 	}
