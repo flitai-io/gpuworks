@@ -14,6 +14,7 @@ func TestEveryControllerFieldIsClassified(t *testing.T) {
 	forgotten := map[string]bool{
 		"pool": true, "waits": true, "placements": true, "sleepPushes": true,
 		"drainClocks": true, "dgpuPushes": true, "imageWaits": true, "failover": true,
+		"orders": true, // its placement hints; the order lock is not by deployment
 	}
 	notByDeployment := map[string]string{
 		"cacheCopies":          "by deployment, but released by withdrawCacheCopies, which talks to nodes and is retried",

@@ -503,7 +503,7 @@ func TestAHintedReplicaStartsOnItsNamedNodeOnce(t *testing.T) {
 	if first[0].NodeID == named.ID {
 		named = f.nodes[1]
 	}
-	planning.HintPlacement(dep.ID, []string{named.UUID})
+	f.c.orders.HintPlacement(dep.ID, []string{named.UUID})
 	if err := f.st.ScaleDeploymentReplicas(dep.ID, 1, 2, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -518,7 +518,7 @@ func TestAHintedReplicaStartsOnItsNamedNodeOnce(t *testing.T) {
 	if len(insts) != 2 || onNamed != 1 {
 		t.Fatalf("replicas after growing with a named node = %+v, want one on %s", insts, named.UUID)
 	}
-	if _, queued := planning.NextPlacementHint(dep.ID); queued {
+	if _, queued := f.c.orders.NextPlacementHint(dep.ID); queued {
 		t.Fatal("the hint outlived the replica start it was for")
 	}
 }

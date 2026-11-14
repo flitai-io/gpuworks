@@ -23,7 +23,7 @@ import (
 // sleepInstance orders the replica an instance fills to sleep (?level=1|2,
 // ?mode=wait|abort, ?wake_on_request=true|false, as for the deployment).
 func (a *apiHandlers) sleepInstance(w http.ResponseWriter, r *http.Request) {
-	defer planning.LockLifecycle()()
+	defer a.orders().Lock()()
 	level, mode, ok := sleepOrderParams(w, r)
 	if !ok {
 		return
@@ -49,7 +49,7 @@ func (a *apiHandlers) sleepInstance(w http.ResponseWriter, r *http.Request) {
 // wakeInstance wakes the replica an instance fills once its GPUs can take it
 // back, the same admission as for the deployment, for this replica alone.
 func (a *apiHandlers) wakeInstance(w http.ResponseWriter, r *http.Request) {
-	defer planning.LockLifecycle()()
+	defer a.orders().Lock()()
 	dep, members, ok := a.instanceSleepTarget(w, r, false)
 	if !ok {
 		return

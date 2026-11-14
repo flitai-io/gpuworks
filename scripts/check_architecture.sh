@@ -641,7 +641,7 @@ leaf_is_waived() {
   return 1
 }
 
-for leaf in inferenceapi messages placement acquisition chipmatch partitioncap netplan pdmode nodelabel uxrecord uxstore tracecontext traceexport usagereport yieldpolicy; do
+for leaf in inferenceapi messages placement acquisition chipmatch partitioncap netplan pdmode nodelabel uxrecord uxstore tracecontext traceexport usagereport yieldpolicy lifecycle; do
   if pkg_imports "./internal/server/$leaf" | grep -qF 'gpuworks/internal/server/store'; then
     if leaf_is_waived "$leaf"; then
       echo "  WAIVED: leaf package $leaf still imports store (planned removal)"

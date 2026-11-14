@@ -322,6 +322,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		AgentUpgrades: api.AgentUpgradeHooks{Service: agentUpgradeAPI{service: a.agentUpgrades}, Errors: h.UpgradeErrors},
 		UIHandler:     withDL(dlDir, offlinepkg.NewServer(filepath.Join(cfg.DataDir, "offline"), version.String(), readAgent), webui.Handler(), a.agentUpgrades.DownloadBinary),
 		Online:        h.Online,
+		Orders:        ctrl.Orders(),
 		KickNode:      h.Kick,
 		NodeSync:      h,
 		CallNode:      h.CallNode,
@@ -469,9 +470,9 @@ func (a *App) Run(ctx context.Context) error {
 	// Background: verify each PD prefill instance's KV handoff once.
 	goBG(func() { runPDVerifier(ctx, a.store, a.proxy, a.obs.tsdb) })
 	// Background: schedules, waiting wakes, residency.
-	waits := a.ctrl.PlacementWaits()
+	waits, orders := a.ctrl.PlacementWaits(), a.ctrl.Orders()
 	goBG(func() {
-		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, a.obs.hostMemory(), a.scaleReplicas, waits, a.log)
+		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, a.obs.hostMemory(), a.scaleReplicas, waits, orders, a.log)
 	}) // Background: schedules, waiting wakes, residency.
 	goBG(func() { a.health.Run(ctx) }) // Background: the deployments' health checks.
 	goBG(func() { a.cards.run(ctx) })  // Background: the cards' failure records.

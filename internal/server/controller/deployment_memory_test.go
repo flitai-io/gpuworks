@@ -41,7 +41,6 @@ func TestForgetDeploymentLeavesNoMemory(t *testing.T) {
 			t.Fatal(err)
 		}
 		deps = append(deps, dep)
-		t.Cleanup(func() { planning.HintPlacement(dep.ID, nil) })
 		id := dep.ID
 		c.pool.refuse(id, node.ID, now)
 		c.pool.wait(id, now)
@@ -56,7 +55,7 @@ func TestForgetDeploymentLeavesNoMemory(t *testing.T) {
 		c.failover.setSurges(id, []drainSurge{{}})
 		c.recordNoCandidate(dep, map[string]bool{"lost-node": true}, &unitDeployment{}, planning.UnitSuggestFacts{})
 		c.autoRepickFailed(id)
-		planning.HintPlacement(id, []string{"node-a"})
+		c.orders.HintPlacement(id, []string{"node-a"})
 	}
 	dep, other := deps[0].ID, deps[1].ID
 	keptWhileStopped := map[string]bool{"node replacement moves": true, "restored moves marker": true, "placement hint": true}
@@ -120,7 +119,7 @@ func memoryOf(c *Controller, dep uint) map[string]bool {
 	_, repicked := c.failover.repicked[dep]
 	_, restored := c.failover.restored[dep]
 	c.failover.mu.Unlock()
-	_, hint := planning.NextPlacementHint(dep)
+	_, hint := c.orders.NextPlacementHint(dep)
 	c.placements.mu.Lock()
 	_, placement := c.placements.nodes[dep]
 	c.placements.mu.Unlock()
@@ -159,14 +158,13 @@ func TestAStoppedDeploymentKeepsItsPlacementHint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { planning.HintPlacement(dep.ID, nil) })
 	c := New(st, nil, nil)
-	planning.HintPlacement(dep.ID, []string{node.UUID})
+	c.orders.HintPlacement(dep.ID, []string{node.UUID})
 
 	if err := c.reconcileDeployment(context.Background(), dep.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := planning.NextPlacementHint(dep.ID); !ok || got != node.UUID {
+	if got, ok := c.orders.NextPlacementHint(dep.ID); !ok || got != node.UUID {
 		t.Fatalf("after a pass over the stopped deployment the hint is %q, %v; want %q", got, ok, node.UUID)
 	}
 
@@ -176,7 +174,7 @@ func TestAStoppedDeploymentKeepsItsPlacementHint(t *testing.T) {
 	if err := c.reconcileDeployment(context.Background(), dep.ID); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := planning.NextPlacementHint(dep.ID); ok {
+	if got, ok := c.orders.NextPlacementHint(dep.ID); ok {
 		t.Fatalf("the deleted deployment kept its hint %q", got)
 	}
 }
@@ -197,9 +195,8 @@ func TestADeletedDeploymentDropsItsPlacementHintWithItsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { planning.HintPlacement(dep.ID, nil) })
 	c := New(st, nil, nil)
-	planning.HintPlacement(dep.ID, []string{node.UUID})
+	c.orders.HintPlacement(dep.ID, []string{node.UUID})
 
 	// No instances are left to tear down: this pass removes the row.
 	if err := c.reconcileDeployment(context.Background(), dep.ID); err != nil {
@@ -208,7 +205,7 @@ func TestADeletedDeploymentDropsItsPlacementHintWithItsRow(t *testing.T) {
 	if _, err := st.GetDeployment(dep.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("the deployment row is still there: %v", err)
 	}
-	if got, ok := planning.NextPlacementHint(dep.ID); ok {
+	if got, ok := c.orders.NextPlacementHint(dep.ID); ok {
 		t.Fatalf("the deleted deployment kept its hint %q", got)
 	}
 }

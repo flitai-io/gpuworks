@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/planning"
@@ -87,6 +88,9 @@ type Controller struct {
 	// pool remembers each deployment's refusing candidates and last empty
 	// pass (pool_memory.go).
 	pool poolMemory
+	// orders is the server's order lock and placement hints, shared with
+	// the API and the automation (Orders).
+	orders *lifecycle.Orders
 	// dgpuPushes holds the deployments whose dGPU memory limit changed in
 	// place and is not yet handed to their nodes (dgpu_limit.go).
 	dgpuPushes dgpuLimitPushes
@@ -161,11 +165,16 @@ func New(st *store.Store, hub HubPusher, log *slog.Logger) *Controller {
 		retryBackoff: 15 * time.Second, offlineGrace: 2 * time.Minute,
 		maxAttempts: 3, modelSyncs: map[string]*modelSyncRun{},
 		now: time.Now, observation: newObservationRefresh(), evictions: prepobs.NewPhases[store.FileRef](),
-		waits: placewait.New(), imageRefsNotify: make(chan struct{}, 1),
+		waits: placewait.New(), imageRefsNotify: make(chan struct{}, 1), orders: &lifecycle.Orders{},
 	}
 	c.SetEnginePorts(defaultEnginePorts.Start, defaultEnginePorts.End)
 	return c
 }
+
+// Orders is the server's sleep and wake order lock and the placement hints
+// its replica starts read. The app hands the same Orders to the API and the
+// automation, so every order and hint goes through one.
+func (c *Controller) Orders() *lifecycle.Orders { return c.orders }
 
 // SetRetryPolicy overrides the failed-instance retry backoff and attempt cap
 // (used by tests to exercise the bound quickly).

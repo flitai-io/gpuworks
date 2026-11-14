@@ -242,7 +242,7 @@ func (a *apiHandlers) endWakeWaiting(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, err)
 		return
 	}
-	defer planning.LockLifecycle()()
+	defer a.orders().Lock()()
 	insts, err := a.d.Store.InstancesForDeployment(dep.ID)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

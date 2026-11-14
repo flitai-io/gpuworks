@@ -23,8 +23,8 @@ import (
 // follower nodes in rank order; a replica left out drains and goes. PD scales
 // its roles with PUT /deployments/{id}/pd instead. A single-node deployment
 // that grows may name in PlaceOn the nodes its new replicas start on first
-// (planning.HintPlacement): only where they first start, afterwards they are
-// ordinary replicas.
+// (lifecycle.Orders.HintPlacement): only where they first start, afterwards
+// they are ordinary replicas.
 type replicasRequest struct {
 	Replicas *int              `json:"replicas,omitempty"`
 	Remove   []string          `json:"remove,omitempty"`
@@ -145,7 +145,7 @@ func (a *apiHandlers) scaleReplicas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(req.PlaceOn) > 0 {
-		planning.HintPlacement(dep.ID, req.PlaceOn)
+		a.orders().HintPlacement(dep.ID, req.PlaceOn)
 	}
 	a.recordReplicasChanged(r, dep.ID, current, replicas)
 	updated, err := a.d.Store.GetDeployment(dep.ID)
