@@ -67,3 +67,39 @@ func TestDeploymentAndInstanceListsShareTheSnapshot(t *testing.T) {
 		t.Fatalf("instance page = %+v, want the reported message", page.Items)
 	}
 }
+
+// The dashboard counts the deployments by the snapshot's states: with nothing
+// changed it reads no deployment or instance row, and its counts are those
+// the per-request read gives. The list's state filter and state order read
+// the same states.
+func TestDashboardAndStateFilterReadTheSnapshotStates(t *testing.T) {
+	f := newListFixture(t, 3)
+	plain := &apiHandlers{d: Deps{Store: f.st}}
+	f.handler.d.Lists = deployment.NewLists(f.st, nil, nil)
+	var tableReads atomic.Int64
+	if err := f.st.DB().Callback().Query().After("gorm:query").Register("test:dashboard_table_reads", func(tx *gorm.DB) {
+		if wholeListRead.MatchString(strings.TrimSpace(tx.Statement.SQL.String())) {
+			tableReads.Add(1)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = f.st.DB().Callback().Query().Remove("test:dashboard_table_reads") })
+	for _, path := range []string{"/api/v1/dashboard/summary", "/api/v1/deployments?page=1&page_size=50&state=running", "/api/v1/deployments?page=1&page_size=50&sort=-state"} {
+		serve, plainServe := f.handler.dashboardSummary, plain.dashboardSummary
+		if strings.Contains(path, "/deployments") {
+			serve, plainServe = f.handler.listDeployments, plain.listDeployments
+		}
+		f.get(t, serve, path)
+		want := f.get(t, plainServe, path)
+		tableReads.Store(0)
+		for range 3 {
+			if got := f.get(t, serve, path); string(got) != string(want) {
+				t.Fatalf("%s from the snapshot differs from the per-request read:\n%s\nwant\n%s", path, got, want)
+			}
+		}
+		if n := tableReads.Load(); n != 0 {
+			t.Fatalf("%s: 3 unchanged requests read every deployment or instance %d times, want 0", path, n)
+		}
+	}
+}

@@ -30,13 +30,22 @@ import (
 type monitorInventoryAdapter struct {
 	store       *store.Store
 	preparation deployment.ModelPreparation
+	// lists is the server's list snapshot; nil reads the rows per request.
+	lists *deployment.Lists
 }
 
 // newMonitorAPIService builds the monitorapi.Service app.go wires into
 // api.Deps.Monitor. now defaults to time.Now (nil is only ever passed by
 // tests that want a fixed clock).
 func newMonitorAPIService(st *store.Store, ts tsdb.Store, now func() time.Time, requests monitorapi.RequestSource, health func(uint) healthcheck.Health, preparation deployment.ModelPreparation) *monitorapi.Service {
-	a := &monitorInventoryAdapter{store: st, preparation: preparation}
+	return newMonitorAPIServiceOn(nil, st, ts, now, requests, health, preparation)
+}
+
+// newMonitorAPIServiceOn is newMonitorAPIService reading its inventory from
+// lists, the server's snapshot of every deployment and instance; nil reads
+// them per request.
+func newMonitorAPIServiceOn(lists *deployment.Lists, st *store.Store, ts tsdb.Store, now func() time.Time, requests monitorapi.RequestSource, health func(uint) healthcheck.Health, preparation deployment.ModelPreparation) *monitorapi.Service {
+	a := &monitorInventoryAdapter{store: st, preparation: preparation, lists: lists}
 	return monitorapi.New(monitorapi.Deps{
 		TSDB:             ts,
 		Inventory:        a.inventory,
@@ -66,19 +75,12 @@ func (a *monitorInventoryAdapter) inventory(ctx context.Context) (monitor.Invent
 	if err := ctx.Err(); err != nil {
 		return monitor.Inventory{}, err
 	}
-	deployments, err := a.store.ListDeployments()
+	rows, err := a.rows()
 	if err != nil {
 		return monitor.Inventory{}, err
 	}
-	instances, err := a.store.ListInstances()
-	if err != nil {
-		return monitor.Inventory{}, err
-	}
+	deployments, instances, states := rows.Deployments(), rows.AllInstances(), rows.States()
 	nodes, err := a.store.FleetNodes()
-	if err != nil {
-		return monitor.Inventory{}, err
-	}
-	states, err := deployment.EffectiveStates(a.store, a.preparation, deployments, instances)
 	if err != nil {
 		return monitor.Inventory{}, err
 	}
@@ -127,6 +129,15 @@ func (a *monitorInventoryAdapter) inventory(ctx context.Context) (monitor.Invent
 		}
 	}
 	return inv, nil
+}
+
+// rows are every deployment and instance with their states: the server's
+// list snapshot, or read for this request without one.
+func (a *monitorInventoryAdapter) rows() (*deployment.ListRows, error) {
+	if a.lists != nil {
+		return a.lists.Rows()
+	}
+	return deployment.ReadListRows(a.store, a.preparation)
 }
 
 // deploymentEvents adapts store.DeploymentTimeline's page (newest-first,

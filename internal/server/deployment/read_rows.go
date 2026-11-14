@@ -190,6 +190,8 @@ type ListRows struct {
 	// fresh holds what Fresh read again: the page's deployments' instances
 	// (an absent deployment has none) and their models' files.
 	fresh *freshRows
+	// states memoizes States for the rows (and the copies Fresh makes).
+	states *listStates
 }
 
 // freshRows is what Fresh read again for a page.
@@ -217,6 +219,7 @@ func NewListRows(st *store.Store, prep ModelPreparation, deployments []store.Dep
 // kept across reads must answer for whichever node prepares later.
 func newListRows(st *store.Store, prep ModelPreparation, deployments []store.Deployment, instances []store.Instance, nodes []store.Node, everyNode bool) (*ListRows, error) {
 	l := &ListRows{
+		states:                &listStates{},
 		deploymentRows:        deployments,
 		instanceRows:          instances,
 		st:                    st,

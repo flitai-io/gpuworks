@@ -34,13 +34,16 @@ func (a *apiHandlers) listDeployments(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Every deployment's state, worked out once for the snapshot: the state
+	// filter and the state order read it.
+	states := rows.States()
 	matched := make([]*store.Deployment, 0, len(deps))
 	for i := range deps {
-		if deploymentMatches(rows, &deps[i], query) {
+		if deploymentMatches(rows, states, &deps[i], query) {
 			matched = append(matched, &deps[i])
 		}
 	}
-	deploymentListSorters(rows).apply(matched, order)
+	deploymentListSorters(rows, states).apply(matched, order)
 	// The rows shown read their progress again; which rows match, and their
 	// order, come from the list as a whole.
 	shown := matched
@@ -75,32 +78,21 @@ func (a *apiHandlers) listDeployments(w http.ResponseWriter, r *http.Request) {
 
 // deploymentListSorts names the orders GET /deployments offers; the
 // comparisons read the lookup, so the ones that sort are built per request.
-var deploymentListSorts = deploymentListSorters(nil)
+var deploymentListSorts = deploymentListSorters(nil, nil)
 
 // deploymentListSorters are the orders GET /deployments offers, by the
-// deployment list's column keys. A state is worked out once per deployment
-// and only when the list is sorted by it.
-func deploymentListSorters(rows deployment.Rows) listSorters[*store.Deployment] {
+// deployment list's column keys; states are the rows' (ListRows.States).
+func deploymentListSorters(rows deployment.Rows, states map[uint]string) listSorters[*store.Deployment] {
 	modelName := func(d *store.Deployment) string {
 		if model := rows.Model(d.ModelID); model != nil {
 			return model.Name
 		}
 		return ""
 	}
-	states := map[uint]string{}
-	state := func(d *store.Deployment) string {
-		if s, ok := states[d.ID]; ok {
-			return s
-		}
-		insts := rows.Instances(d.ID)
-		runtime := deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d))
-		states[d.ID] = deployment.EffectiveState(d, runtime, deployment.FactsFor(rows, d, insts))
-		return states[d.ID]
-	}
 	return listSorters[*store.Deployment]{
 		"name":  func(a, b *store.Deployment) int { return compareText(a.Name, b.Name) },
 		"model": func(a, b *store.Deployment) int { return compareText(modelName(a), modelName(b)) },
-		"state": func(a, b *store.Deployment) int { return cmp.Compare(state(a), state(b)) },
+		"state": func(a, b *store.Deployment) int { return cmp.Compare(states[a.ID], states[b.ID]) },
 		"replicas": func(a, b *store.Deployment) int {
 			return cmp.Compare(deploymentListReplicas(a), deploymentListReplicas(b))
 		},
@@ -118,7 +110,7 @@ func deploymentListReplicas(d *store.Deployment) int {
 }
 
 // deploymentMatches applies a list query's filters to one deployment.
-func deploymentMatches(rows deployment.Rows, d *store.Deployment, query listQuery) bool {
+func deploymentMatches(rows deployment.Rows, states map[uint]string, d *store.Deployment, query listQuery) bool {
 	modelName := ""
 	if model := rows.Model(d.ModelID); model != nil {
 		modelName = model.Name
@@ -129,9 +121,7 @@ func deploymentMatches(rows deployment.Rows, d *store.Deployment, query listQuer
 	if len(query.states) == 0 {
 		return true
 	}
-	insts := rows.Instances(d.ID)
-	runtime := deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d))
-	return query.matchesState(deployment.EffectiveState(d, runtime, deployment.FactsFor(rows, d, insts)))
+	return query.matchesState(states[d.ID])
 }
 
 // deploymentListItem is the list row of a deployment DTO; preparation is the
