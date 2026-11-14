@@ -95,7 +95,7 @@
   "how-to/connect-nodes.md": "8a048d178612a4b77411c05214a33dd36fda18f104da0833f51df7e8b5d6426c",
   "how-to/declare-engine-metrics.md": "be1fb8eef925f9a4b1fbc20d8dbf3bc4eef9ba3b4ddb4ebc98e0581ff0ca8a49",
   "how-to/deploy-models.md": "a8f17dbf5b2d5d49250414b2895f321d78a85e5a19db1a38bb315ca6a32dd84b",
-  "how-to/deploy-offline.md": "52f5c2c82737e4082f4fdc3023db5d96607e432547cf011e1bbb7a4fa78771e7",
+  "how-to/deploy-offline.md": "db7b5e72843d401af6b1edfd57fe988585405046991aee3ecda01551361f22fd",
   "how-to/deploy-production.md": "691ff3f61f6d9be6f7bc10b9546535dad35fa1aedc700c4692bcf95437d43330",
   "how-to/dgpu.md": "769a571c3cd06f2c49c05ce3275002140d64bc19866018ac266be6b856425d8b",
   "how-to/download-and-sync-models.md": "e6a6a5d35a4404de7514769cdfc55fd3df0de257381a886a5c4e47a3532af23d",
