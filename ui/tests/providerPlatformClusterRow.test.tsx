@@ -94,7 +94,9 @@ test("a cluster the server calls stalled offers the commands and causes to look 
   await user.click(within(await rowOf("doks")).getByRole("button", { name: k.clusterUid.troubleshoot }));
   assert.ok(await screen.findByText(k.stalled.title));
   assert.ok(screen.getByText(k.stalled.intro));
-  for (const key of ["pull", "runtimeClass", "selector", "connect"] as const) assert.ok(screen.getByText(k.stalled[key]));
+  for (const key of ["pull", "selector", "connect"] as const) assert.ok(screen.getByText(k.stalled[key]));
+  // The agent Pod has no RuntimeClass, so a missing one cannot keep nodes from joining.
+  assert.doesNotMatch(document.body.textContent ?? "", /RuntimeClass/);
   const commands = screen.getByLabelText(k.stalled.copy, { selector: "pre" }).textContent ?? "";
   assert.ok(commands.includes("kubectl -n gpu-edge describe daemonset gpuworks-agent"), commands);
   await user.click(screen.getByRole("button", { name: k.stalled.copy }));

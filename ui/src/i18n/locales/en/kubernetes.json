@@ -49,7 +49,6 @@
     "intro": "The cluster has waited a while for its first node and none has joined. Look at the agent DaemonSet and its Pods in the cluster:",
     "causes": "Common causes",
     "pull": "Pods in ImagePullBackOff: the agent image cannot be pulled. For a registry that needs a login, create a docker-registry Secret in the namespace and name it as the image pull secret when creating the cluster.",
-    "runtimeClass": "A DaemonSet event says the RuntimeClass does not exist: the cluster has no such RuntimeClass; leave it empty and the agent decides.",
     "selector": "The DaemonSet wants 0 Pods: the node selector selects no node.",
     "connect": "Pods run but no node appears: the agents cannot reach the management node address; read the agent log.",
     "copy": "Copy commands"
