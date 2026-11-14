@@ -19,7 +19,10 @@ const fieldContainerCmd = "container_cmd"
 // launching. A command the overrides cannot decode is refused elsewhere.
 func checkManualCommandRanks(req *dto.DeployRequest) error {
 	overrides, err := RequestContainerOverrides(req.ContainerOverrides)
-	if err != nil || deploy.CommandMode(overrides.CommandMode) != deploy.CommandManual || strings.TrimSpace(overrides.CmdDisplay) == "" {
+	if err != nil {
+		return nil //nolint:nilerr // Overrides that do not decode are refused by the request validation, with its own error.
+	}
+	if deploy.CommandMode(overrides.CommandMode) != deploy.CommandManual || strings.TrimSpace(overrides.CmdDisplay) == "" {
 		return nil
 	}
 	nnodes := req.NNodes
