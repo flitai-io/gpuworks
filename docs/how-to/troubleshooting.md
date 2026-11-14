@@ -130,6 +130,33 @@ gpuworks-agent doctor --connectivity --state /opt/gpuworks --json
 时钟偏差**不是** reject 原因：握手里没有时间戳校验，`server_dial` 的 HMAC 只签一次性 nonce，不含时间。
 server_dial 节点的密钥不符时 agent 报 `invalid server_dial proof`。
 
+## Kubernetes 节点不加入或不上线
+
+**现象**：从 Kubernetes 集群接入的条目迟迟没有节点出现在节点页；「外部平台」页该集群的状态是「未接入」，超过 5 分钟变成「长时间未接入」；
+或节点出现了，但离线、被拒绝，或实例起不来。接入步骤与各项设置见[接入 Kubernetes 集群](connect-kubernetes.md)，本节按症状指到对应位置，不重复其中的说明。
+节点已经出现、只是一直「连接中」或反复离线时，先看上一节。
+
+**怎么确认**：在集群里执行下面的命令，`<namespace>` 是接入时的命名空间（默认 `gpuworks-system`），`<agent-pod>` 是 `get pods` 列出的 agent Pod。在「外部平台」页点集群状态旁的「排查」，
+给出的是同样的命令和常见原因（长时间未接入时才有这个入口）：
+
+```bash
+kubectl -n <namespace> get daemonset,pods -o wide
+kubectl -n <namespace> describe pod <agent-pod>
+kubectl -n <namespace> logs ds/gpuworks-agent
+```
+
+| 症状 | 看什么 | 处理 |
+|---|---|---|
+| agent Pod 是 `ImagePullBackOff` / `ErrImagePull`，或「长时间未接入」 | `describe pod` 的 Events 里写着拉取哪个镜像、失败原因；401 / 403 是缺拉取凭据或凭据不对 | 节点拉不到所选仓库：改选能访问的仓库（中国内地选华为云 SWR），或填自己的镜像、配镜像拉取凭据，见[接入](connect-kubernetes.md#接入)里「高级」的 agent 镜像仓库、agent 镜像与镜像拉取凭据；保存后重新应用，逐条的操作见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md#没有节点出现时)；离线集群的镜像归档见[离线环境部署](deploy-offline.md#kubernetes-集群的-agent-镜像) |
+| 实例 Pod 事件 `RuntimeClass "…" not found`，实例起不来 | `kubectl get runtimeclass` 看集群里有没有条目里填的那个；`kubectl -n <namespace> describe pod <实例 Pod>` 看事件。RuntimeClass 只影响 NVIDIA 的实例 Pod，agent Pod 不用它 | 编辑集群条目，把 RuntimeClass 改成集群里有的名字，或留空由 agent 自己判断；保存后立即对在线 agent 生效，不用重新应用，只影响之后新起的实例 Pod，见[修改集群条目](connect-kubernetes.md#修改集群条目) |
+| `get daemonset` 的 DESIRED 是 0 | 节点选择器没有选中任何节点：`kubectl get nodes --show-labels` 核对标签 | 编辑条目修正节点选择器（留空表示所有节点），改动要重新应用才进入集群，见[接入](connect-kubernetes.md#接入)与[修改集群条目](connect-kubernetes.md#修改集群条目)；云账号接入的条目改的是节点池 |
+| agent Pod 在运行，但节点不出现，agent 日志反复连接失败 | `kubectl -n <namespace> logs ds/gpuworks-agent` 里的连接错误；节点上能否访问「管理节点接入地址」 | 地址必须是集群节点能解析、能访问的（agent 用节点自己的 DNS，不能写集群内的 Service 名；agent 主动外连，不需要节点入站端口）。地址在条目创建后不能改，要改就删掉条目重建，见[接入](connect-kubernetes.md#接入)；连通性的通用检查见上一节 |
+| agent Pod 在运行、已连上 server，但节点不出现，或出现后又消失 | `describe pod <agent-pod>` 的 Events 里有 Warning `GpuworksEnrollRefused`：注册被拒绝，事件里写明原因（`node_taken`、`unknown_token`、`other_cluster`）和处理办法；没有这条事件、日志里也没有拒绝时，多半是节点没有受支持的加速卡，agent 待命不注册 | `node_taken`：同集群的另一个条目占着这个节点，等它在该节点离线超过 15 分钟，或调整两个条目的节点选择器；`unknown_token`：接入令牌被吊销，重新创建条目；`other_cluster`：令牌属于另一个集群。详见[加速卡厂商：自动识别](connect-kubernetes.md#加速卡厂商自动识别)。事件需要 manifest 的 Role 里有 `events` 的 `create`，旧 manifest 重新应用后才有，没有时只是看不到事件 |
+| 节点在线，GPU 设备上有「GPU 设备为软隔离」标签 | 节点详情「基础信息」里的标签和下面的原因、命令 | 不是故障：集群用 HAMi 等 device plugin 取代了 NVIDIA 的，NVIDIA 容器工具包又处在 CDI 模式，实例能跑，但 Pod 看得到节点的全部 GPU 设备、只有 CUDA 被 `CUDA_VISIBLE_DEVICES` 限制。需要严格隔离时按标签里的命令改，见[加速卡厂商：自动识别](connect-kubernetes.md#加速卡厂商自动识别) |
+| 实例起来了，但经网关访问不通、端口像被「吃掉」，或集群里有 NodePort 服务 | 条目的引擎端口段（默认 `40000-42767`）是否与集群的 NodePort 范围（默认 `30000-32767`，由 API server 的 `--service-node-port-range` 决定）重叠 | kube-proxy 会把发往本机地址的 NodePort 流量转走。编辑条目改引擎端口段，保存后立即生效，已在跑的实例保持原端口、之后分配的端口用新范围，保存响应会列出落在新范围之外的运行中实例（`KUBE_ENGINE_PORTS_OUTSIDE`），见[接入](connect-kubernetes.md#接入)与[修改集群条目](connect-kubernetes.md#修改集群条目) |
+
+修好后确认节点出现在「计算节点」页且在线。以上都对不上时，保留 `describe pod` 的 Events 与 agent 日志，见本页末尾「仍未解决？」。
+
 ## 节点掉线后的自愈与 recovery
 
 **现象**：节点从「在线」变「离线」，节点详情出现「带外恢复」卡片。

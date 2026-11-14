@@ -16,7 +16,7 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
    （`kube-system` namespace 的 UID）；hub 握手不变。server 不持有 kubeconfig、不连 apiserver（2026-10-22 由 [ADR 0063](0063-apply-to-cloud-clusters.md) 修订：从云账号接入的集群，经用户确认后用云厂商现发的短期 kubeconfig 应用 manifest，不保存）。
 3. **每张卡一个分配者**：有 device plugin 时卡归 kubelet，gpuworks 为要用的卡起只申请 1 张卡的占位 Pod。device plugin
    不接受指定设备，所以借卡时一次为全部空闲卡各起一个占位 Pod（kubelet 没有选择余地），经 kubelet PodResources 认出
-   每个占位 Pod 拿到的卡，退回不需要的；最后一个实例停止超过集群的空闲时间（默认 60 秒，2026-10-20 由 600 秒改定；-1 常驻）后归还。分给其他
+   每个占位 Pod 拿到的卡，退回不需要的；最后一个实例停止超过集群的空闲时间（默认 60 秒，2026-10-20 由 600 秒改定；-1 常驻；该时间由 server 实时下发，见 2026-11-14 修订）后归还。分给其他
    Pod 的卡作为外部占用上报，沿用“卡被平台外占用则不调度”的规则，调度器不改。
 4. **只依赖标准库**：apiserver 用最小 REST 客户端（in-cluster ServiceAccount），PodResources 用标准库 h2c 与手写
    protobuf 解码；镜像操作委托 `k8s.io` 命名空间的 nerdctl。不引 client-go 与 gRPC。
@@ -30,10 +30,10 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
    在节点自己的路径与版本上（PPU SDK 需要 glibc 2.38，agent 镜像是 2.36）。NVIDIA 的 CLI 由 NVIDIA 运行时注入：集群
    条目指定 RuntimeClass 时 agent 在其下运行；不指定时（默认）agent 容器用节点的默认运行时，托管 Kubernetes 的默认运行时就是
    NVIDIA 的，注入了 `nvidia-smi`，没注入时（k3s 默认 runc）agent 在节点上运行它；实例 Pod 用集群的 `nvidia` RuntimeClass，
-   没有就用默认运行时（这几句关于 agent 运行时与 `nvidia-smi` 的做法已由 2026-11-12 修订取代：agent 一律在默认运行时下运行，`nvidia-smi` 的查找见修订）。kubelet 用的 containerd 按 agent 容器的 shim 的 `-address` 认定，不按 socket 位置猜。
+   没有就用默认运行时（实例 Pod 的 RuntimeClass 现由 server 实时下发，见 2026-11-14 修订；这几句关于 agent 运行时与 `nvidia-smi` 的做法已由 2026-11-12 修订取代：agent 一律在默认运行时下运行，`nvidia-smi` 的查找见修订）。kubelet 用的 containerd 按 agent 容器的 shim 的 `-address` 认定，不按 socket 位置猜。
    一个集群条目一个厂商（已由 2026-11-12 修订取代：条目没有厂商）。device plugin 以非整卡分配（time-slicing、MIG、没有 HAMi 登记的 vNPU）时不借卡，卡报为外部占用并带原因；HAMi 与 ACK 共享 GPU 见第 7 条。
 6. **生命周期跟随 Kubernetes**：节点 cordon 时平台同样 cordon；离线 15 分钟的节点经同集群在线 agent 确认已不存在且无实例时
-   移除；节点自报引擎端口段，避开 NodePort 范围。升级见第 8 条（2026-11-12 修订，此前是把 DaemonSet 换到与 server 同版本的镜像）。
+   移除；节点自报引擎端口段，避开 NodePort 范围（已由 2026-11-14 修订取代：引擎端口段由条目决定，server 下发）。升级见第 8 条（2026-11-12 修订，此前是把 DaemonSet 换到与 server 同版本的镜像）。
 7. **借卡方式随节点上的分配者而定**（2026-11-10 补充）：HAMi 与 ACK 共享 GPU 不是"一份一张卡"，按下面的办法借整卡，其余切分仍拒绝并写明原因（MIG、time-slicing、没有 HAMi 登记的 vNPU 模板）。
    - HAMi（节点有 `hami.io/node-*-register` 注解）：占位 Pod 写 `schedulerName`（默认 `hami-scheduler`，环境变量 `GPUWORKS_KUBE_HAMI_SCHEDULER` 覆盖）与 `nodeSelector kubernetes.io/hostname`，不写 `nodeName`（绕过调度器的 Pod HAMi 的 device plugin 不分配）；
      申请整张并按 UUID 指定，所以要哪张借哪张，不再先借全部再退。卡的归属以 HAMi 写在占位 Pod 上的 `hami.io/vgpu-devices-allocated` 为准并核对是整卡（kubelet 的设备 ID 是 `<UUID>-<份额号>`，不能按卡号解析）。
@@ -97,4 +97,15 @@ server 里有 30 余处依赖“节点后面有一个 agent”，agent 承担探
 
 ## 修订（2026-11-12）：AMD 与昆仑芯
 
-Kubernetes 上的厂商由 `accelerator.RunsOnKube` 决定，加入 AMD 与昆仑芯（整卡）。第 3 条的“待命”因此只对这几家之外的卡成立。做法沿用上一修订：设备节点经宿主机根目录（`lstat`、glob）检查宿主机实时的 `/dev`，`xpu-smi` 在宿主机的 `PATH` 目录与 `/usr/local/xpu/bin` 里找，AMD 的 ROCm 版本文件读宿主机根；昆仑芯的注入在驱动为 `kube` 时不写 `--runtime runc`（Pod 没有这个选项，它会变成不存在的 RuntimeClass `runc`）。AMD 的 device plugin 用卡的 PCI 地址给设备命名，所以 kube 运行时除 UUID 外也按 PCI 地址把设备 ID 对到卡。AMD 的 dGPU 切分不开放给 Kubernetes（它的运行时约束仍只有 Docker、nerdctl 与 udocker）。某张卡的设备注入失败时，该卡不提供，不再让整个节点的设备计划失败。
+Kubernetes 上的厂商由 `accelerator.RunsOnKube` 决定，加入 AMD 与昆仑芯（整卡）。第 3 条的“待命”因此只对这几家之外的卡成立。做法沿用上一修订：设备节点经宿主机根目录（`lstat`、glob）检查宿主机实时的 `/dev`，`xpu-smi` 在宿主机的 `PATH` 目录与 `/usr/local/xpu/bin` 里找，AMD 的 ROCm 版本文件读宿主机根；昆仑芯的注入在驱动为 `kube` 时不写 `--runtime runc`（Pod 没有这个选项，它会变成不存在的 RuntimeClass `runc`）。AMD 的 device plugin 用卡的 PCI 地址给设备命名，所以 kube 运行时除 UUID 外也按 PCI 地址把设备 ID 对到卡。AMD 的 dGPU 切分不开放给 Kubernetes（它的运行时约束仍只有 Docker、nerdctl 与 udocker）（已由 2026-11-14 修订取代：AMD 与 PPU 的 dGPU 切分在 Kubernetes 上可用）。某张卡的设备注入失败时，该卡不提供，不再让整个节点的设备计划失败。
+
+## 修订（2026-11-14）：设置实时下发、AMD 与 PPU 的 dGPU、NVIDIA CDI 软隔离、注册拒绝的事件
+
+1. **RuntimeClass、引擎端口段与空闲归还由 server 实时下发，不再是 manifest 或 agent 一侧的设置。** server 在节点连上（初始状态回放之后）和条目被修改之后，把它们发给该条目的每个在线 agent：RuntimeClass 与空闲归还是控制消息 `kube.settings`（`internal/proto/kube_settings.go`，每次都是完整的当前值而不是增量），引擎端口段随节点的网络配置（`NetworkConfig.EnginePorts`）下发，并以条目的值为准；离线的 agent 重新连上时拿到。agent 在原地更换：之后新起的 NVIDIA 实例 Pod 用新的 RuntimeClass（运行中的 Pod 不变），之后分配的实例端口来自新端口段（运行中实例的端口不变），借来的卡按新的空闲时间归还（改成常驻时立即借下空闲的卡）。不用重新应用、不重启 agent。早于此的 manifest 里的 `--engine-ports` 参数、`GPUWORKS_KUBE_RUNTIME_CLASS` 环境变量与 Pod 模板注解仍然有效，只是第一条消息到达前的初值，之后以 server 的值为准，下次重新渲染 manifest 时不再出现。因此第 3、5、6 条里“agent 自己判断 RuntimeClass”“节点自报引擎端口段”的说法以本条为准；RuntimeClass 留空时 agent 仍按“集群有 `nvidia` 类就用它、没有就用节点默认运行时”判断。
+2. **AMD 与 PPU 的 dGPU 切分在 Kubernetes 上可用。** NVIDIA HAMi-core 与昇腾 vcann-rt 借到整卡之后本来就能切分（第 7 条）；PPU 的 ppu-slicing-shim 与 AMD 的 rocm-slicing-shim 现在也允许 `kube` 运行时（`accelerator.RuntimeConstraint`）。这两个后端的跨进程账本在其他运行时上是宿主机 `/dev/shm` 下的实例专属文件，靠容器 `--ipc=host` 共享；Kubernetes 上 agent 的 `/dev/shm` 是 agent Pod 私有的 tmpfs，所以 agent 经宿主 root（`/proc/1/root`）在宿主机的 `/dev/shm` 里预先建好这个账本文件（0666），再以 hostPath 把同一个宿主路径挂进实例 Pod，账本路径与环境变量不变，清理同样经宿主 root 删除。PPU 要逐卡行为探针，探针 Pod 在 Kubernetes 上用 host 网络（它不需要网络，不应依赖集群的网络插件，与实例 Pod 一致）；AMD 豁免行为探针。海光的原生 vdev 仍只支持 Docker 与 udocker，在 Kubernetes 上不可用，这些卡只做整卡部署；昆仑芯没有 dGPU。上一条同名修订里“AMD 的 dGPU 切分不开放给 Kubernetes”由本条取代。
+3. **NVIDIA CDI 模式下没有逐卡名字时，退到软隔离而不是让 Pod 起不来。** NVIDIA 容器工具包处在 CDI 模式（GPU Operator 的默认）时，把 `NVIDIA_VISIBLE_DEVICES` 的卡号或 UUID 当 `management.nvidia.com/gpu` 的设备名读，而这个规格里只有 `all`。NVIDIA 自己的 device plugin 运行时会写出按 UUID 命名的逐卡规格，agent 用这个名字让 Pod 只拿到分到的那张卡（严格隔离）。集群用 HAMi 或别的 device plugin 取代了 NVIDIA 的之后，没有任何 CDI 规格按 UUID 给这张卡命名（`internal/agent/runtime/kube/nvidia_cdi.go`）：agent 把 Pod 的 `NVIDIA_VISIBLE_DEVICES` 设为 `management.nvidia.com/gpu=all`，再用 `CUDA_VISIBLE_DEVICES`（宿主机卡号）把引擎限制在分到的卡上，并设 `CUDA_DEVICE_ORDER=PCI_BUS_ID` 使卡号与宿主机 `nvidia-smi` 一致。节点把这种状态随状态上报带给 server（`NVIDIAIsolation`），节点详情显示「GPU 设备为软隔离」标签，并给出原因和可复制的恢复命令（保持 GPU Operator 自带的 device plugin，或把工具包切到 legacy 模式）。取舍：在这类集群上实例能跑起来，代价是 Pod 看得到节点的全部 GPU 设备、只有 CUDA 受限制，不遵守 `CUDA_VISIBLE_DEVICES` 或直接打开设备节点的程序能访问别的卡；需要严格隔离的环境照标签里的命令改回严格模式。曾经的行为是这种情况下 Pod 因 `unresolvable CDI devices` 起不来。
+4. **注册被拒绝时在 agent Pod 上写 Kubernetes 事件。** agent 除了写日志，还在自己的 Pod 上记一条 Warning 事件（原因 `GpuworksEnrollRefused`），写明拒绝原因（`node_taken`、`unknown_token`、`other_cluster`）和处理办法，`kubectl describe pod -n <命名空间> <agent Pod>` 的 Events 里能看到；同一原因持续期间每 10 分钟刷新一次，原因变了立刻写新的。这需要 manifest 的 Role 里有 agent 自己命名空间内 `events` 的 `create`；旧 manifest 要重新应用才有，没有时只是看不到事件，注册重试不受影响。
+
+原因：引擎端口段、RuntimeClass 与空闲归还写在 manifest 里时，改一次要重新应用并让 DaemonSet 滚动，agent 重启；而它们是 server 已经知道的条目设置。软隔离让 HAMi 一类的集群也能接入，而不是在 CDI 模式下整个节点不可用。
+
+后果：没有新增持久化事实；agent 与 server 之间多一条控制消息 `kube.settings`（老 agent 忽略它，非 Kubernetes 节点也忽略）；节点状态上报多一个可选字段 `NVIDIAIsolation`。

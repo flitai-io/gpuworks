@@ -4,7 +4,7 @@
 |---|---|---|---|---|
 | NVIDIA / CUDA | nvidia-smi、sysfs | Docker、runveil、nerdctl | HAMi libvgpu.so（x86_64，glibc ≥ 2.17） | 支持 CUDA/NCCL 拓扑；驱动库由宿主机提供 |
 | 昇腾 / CANN | npu-smi、驱动和 CANN 事实 | Docker + Ascend runtime；部分环境 runveil | vcann-rt；能力取决于宿主机 device-share 权限 | 外层/内层 CANN 版本不能混为一个结论 |
-| AMD / ROCm | amdgpu sysfs、KFD | Linux amd64、Docker/nerdctl/runveil/Kubernetes（整卡）；上游 vLLM ROCm 镜像已在 MI325X（gfx942）与 AMD395（gfx1151）单卡 BF16 文本推理实测，其余组合逐档待验 | amd-dgpu 显存配额（rocm-slicing-shim，用户态；已在 MI300X/gfx942 的 Docker 与 runveil 下实测，Docker/nerdctl/runveil/Kubernetes） | 多机与 PP 经 vLLM mp 后端运行（RCCL 读取 NCCL_* 网络变量，已在两台 MI325X 上实测 PP=2 与跨机 TP=2）；vLLM sleep/wake（L1/L2）与 PD（`vllm-nixl`，以太网 UCX TCP）已在 MI300X 上实测；这不是对所有 AMD 卡或 ROCm 组合的兼容性承诺 |
+| AMD / ROCm | amdgpu sysfs、KFD | Linux amd64、Docker/nerdctl/runveil/Kubernetes 上的整卡部署；上游 vLLM ROCm 镜像已在 MI325X（gfx942）与 AMD395（gfx1151）单卡 BF16 文本推理实测，其余组合逐档待验 | amd-dgpu 显存配额（rocm-slicing-shim，用户态；已在 MI300X/gfx942 的 Docker 与 runveil、MI325X 的 Kubernetes 下实测；Docker/nerdctl/runveil/Kubernetes） | 多机与 PP 经 vLLM mp 后端运行（RCCL 读取 NCCL_* 网络变量，已在两台 MI325X 上实测 PP=2 与跨机 TP=2）；vLLM sleep/wake（L1/L2）与 PD（`vllm-nixl`，以太网 UCX TCP）已在 MI300X 上实测；这不是对所有 AMD 卡或 ROCm 组合的兼容性承诺 |
 | PPU / HGGC | ppu-smi | provider/runtime 依赖 | ppu-slicing-shim 显存配额与加权 QoS（Docker、Kubernetes） | 20/80 长负载已证明繁忙时吞吐权重，不是硬 SM 分区 |
 | 海光 / DTK | hy-smi | 由目录 spec 和 runtime 决定 | Z100 / K100_AI / BW 原生 vdev（实验性，x86_64，Docker 或 runveil/udocker） | 需可选原生 helper、宿主库和逐卡行为探针；其他型号仍只支持整卡 |
 | Apple / Metal | sysctl、ioreg（macOS 15+，Apple silicon） | host（引擎为宿主机进程，镜像是 darwin 环境包） | 无；一台 Mac 按统一内存同时跑多个实例 | 1 张统一内存卡，显存为 Metal 工作集；不支持引擎休眠、多机、KV 磁盘层；见 [ADR 0044](../adr/0044-mac-engines-as-host-processes.md) |
