@@ -2,14 +2,11 @@
 // selected-background merge/split it draws through useMergeSplitBlocks
 // (ui/src/hooks/use-merge-split.tsx). The app uses it in the column filter
 // popover (ui/src/ui-kit/ColumnFilter.tsx) and in DataTableFacetedFilter.
-import { dom } from "./helpers/dom.ts";
-import { installPlainAnimationFrames } from "./helpers/plainAnimationFrames.ts";
+import { dom, pendingFrameCount } from "./helpers/dom.ts";
 import assert from "node:assert/strict";
 import { afterEach, test as nodeTest } from "node:test";
 import React, { useState } from "react";
 
-// Before framer-motion loads (the imports below): see helpers/plainAnimationFrames.ts.
-const { pendingFrameCount } = installPlainAnimationFrames();
 for (const name of ["KeyboardEvent", "Document"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }

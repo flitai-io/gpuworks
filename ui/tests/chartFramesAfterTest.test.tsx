@@ -1,5 +1,5 @@
 // A chart disposed while its progressive layer still has frames to paint must
-// not fail the run: the frames belong to the test that scheduled them (see
+// not fail the run: what those frames throw once the test has ended is dropped (see
 // tests/helpers/dom.ts). zrender paints at most 15 ms per frame; a getTime
 // that advances 20 ms per call makes every frame run out, which is what a
 // loaded CI runner does to the analytics heat map.
