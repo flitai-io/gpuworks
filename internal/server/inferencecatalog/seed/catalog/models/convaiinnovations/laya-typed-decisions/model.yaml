@@ -1,0 +1,71 @@
+model_id: convaiinnovations/laya-typed-decisions
+source: upstream
+display_title: Laya Typed Decisions
+parameter_count: 0.4B
+architecture: ModernBERT-large / System One decision head
+input_modalities: [text]
+model_config: {kv_cache: false}
+readme_zh_cn: README.zh-CN.md
+readme_en: README.en.md
+release_date: '2026-09-18'
+specs:
+- name: fp16-callable-nvidia
+  display_name_zh_cn: NVIDIA Turing 及更新 · FP16
+  display_name_en: NVIDIA Turing and newer · FP16
+  scenario: latency
+  engine: callable
+  image: gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  image_sources:
+  - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  - quay.io/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  - registry.zstack.ai/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
+  weights:
+    quantization: fp16
+    sources:
+    - huggingface:
+        repo_id: convaiinnovations/laya-typed-decisions
+        revision: e929ae5cf69bc34259cd2f95c9e91145b818b1f0
+    - modelscope:
+        repo_id: convaiinnovations/laya-typed-decisions
+        revision: 99d56fb09deb8c89e11efc35af94a423e1d40647
+  weight_bytes: 846203738
+  gpus:
+    vendor: nvidia
+    cc: '>=7.5'
+  args:
+  - --model
+  - ${MODEL_PATH}
+  - --host
+  - ${API_HOST}
+  - --port
+  - ${API_PORT}
+  - --adapter
+  - laya_adapter
+  - --operation
+  - systemone.decide
+  - --max-concurrency
+  - '8'
+  - --request-timeout
+  - '120'
+  - --adapter-config
+  - '{"device":"cuda"}'
+  env:
+    PYTHONPATH: /opt/gpuworks/runtime
+    PYTHONDONTWRITEBYTECODE: '1'
+    HF_HUB_OFFLINE: '1'
+  assets:
+  - file: assets/gpuworks-laya-runtime.tar.gz
+    sha256: 2fa9e4443d882eb5c02c9244a37d94c730826eb1e900a6dc4254e549cb4bf730
+    unpack_to: /opt/gpuworks/runtime
+  entrypoint:
+  - python3
+  - /opt/gpuworks/runtime/gpuworks_serve.py
+  placement:
+    language: starlark
+    resolver: "def resolve(gpu):\n    if gpu.count != 1:\n        return reject(\"runs on one GPU\")\n    if gpu.min_memory_gib < 4:\n        return reject(\"needs a GPU with at least 4 GiB\")\n    return accept(gpu_memory_mib_per_device=4096)\n"
+  api:
+    health_endpoint: /health
+    operations:
+    - type: systemone.decide
+      endpoint: /v1/systemone
+      mode: sync

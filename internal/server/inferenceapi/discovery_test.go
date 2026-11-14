@@ -7,7 +7,7 @@ import (
 )
 
 func TestDiscoveryAndPrimaryInputsHaveExactProtocolDefinitions(t *testing.T) {
-	inputs := [][]string{{"messages"}, {"prompt"}, {"input"}, {"query", "documents"}, {"file"}, {"input"}, {"prompt"}, {"prompt", "image"}, {"prompt"}, {}}
+	inputs := [][]string{{"messages"}, {"prompt"}, {"input"}, {"query", "documents"}, {"file"}, {"input"}, {"prompt"}, {"prompt", "image"}, {"prompt"}, {}, {"state", "questions"}}
 	for index, def := range Definitions() {
 		want := []DiscoveryRoute{{"models", "/v1/models"}, {"openapi", "/openapi.json"}}
 		if def.Type == OperationAudioSpeech {

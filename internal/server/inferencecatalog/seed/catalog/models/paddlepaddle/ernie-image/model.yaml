@@ -42,7 +42,7 @@ specs:
     PYTHONPATH: /opt/gpuworks/runtime
   assets:
   - file: assets/gpuworks-diffusers-runtime.tar.gz
-    sha256: a6e777b827411d117afb736bc5d8a5c9bfe36b5b2c3c843d50997aaf759cf933
+    sha256: a07fafc4e8273d278d2322a68ecd1fc6eec3aa18b9fd4e6540ffc877948a8ffa
     unpack_to: /opt/gpuworks/runtime
   entrypoint:
   - python3

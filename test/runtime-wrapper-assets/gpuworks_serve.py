@@ -26,6 +26,7 @@ OPERATIONS = {
     "openai.audio.speech": "/v1/audio/speech",
     "openai.image.generate": "/v1/images/generations",
     "openai.video.generate": "/v1/videos",
+    "systemone.decide": "/v1/systemone",
 }
 
 
@@ -205,6 +206,14 @@ def make_handler(state: RuntimeState, max_request_bytes: int):
             except ServiceError as exc:
                 self.send_error_json(exc)
             except Exception as exc:
+                status = getattr(exc, "http_status", None)
+                if isinstance(status, int) and 400 <= status < 500:
+                    # An adapter rejects a request the model cannot take by
+                    # raising an exception that carries its 4xx status (it
+                    # cannot import this module's ServiceError: this file runs
+                    # as __main__).
+                    self.send_error_json(ServiceError(status, str(getattr(exc, "code", "invalid_request")), str(exc)))
+                    return
                 traceback.print_exc()
                 self.send_error_json(ServiceError(500, "adapter_error", f"{type(exc).__name__}: {exc}"))
 
@@ -274,6 +283,9 @@ def validate_request(operation: str, payload: dict[str, Any], files: dict[str, d
     missing = [name for name in required.get(operation, ()) if payload.get(name) in (None, "", [])]
     if operation == "openai.audio.transcribe" and "file" not in files:
         missing.append("file")
+    if operation == "systemone.decide":
+        # Any JSON value is a state, including "" and 0; only its absence is missing.
+        missing = [name for name in ("state", "questions") if name not in payload]
     if missing:
         raise ServiceError(400, "missing_required_field", "required field(s): " + ", ".join(missing))
 

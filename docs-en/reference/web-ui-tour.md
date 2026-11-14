@@ -101,6 +101,7 @@ Manage deployed services in “Inference Services” and create new ones with �
 | Playground · Image | `/playground/image` | Image generation API | Same as above |
 | Playground · Video | `/playground/video` | Video generation API | Same as above |
 | Playground · Realtime | `/playground/realtime` | Realtime API | Same as above |
+| Playground · Decision | `/playground/decision` | System One decision API (`/v1/systemone`): starts from the server's example; edit the state (text or JSON), images (when the model declares image input) and questions (yes/no, choice, score); each question's result shows its option probabilities, decision and confidence | Same as above |
 | Evaluations | `/evaluations` | Evaluation history list: “New Evaluation” wizard (“Choose Question”, “Set Target”, “Configure Load”); view, “Run Again”, and “Delete” on each row; select multiple evaluations to compare them (up to 5) | [Run Evaluations and Interpret Reports](../how-to/benchmark.md) |
 | Evaluation details (secondary page, titled with the evaluation name) | `/evaluations/:id` | Verdict summary for a single evaluation, “Target Under Test”, the “Point Results” table and curves, and report export | [Run Evaluations and Interpret Reports](../how-to/benchmark.md) |
 | Evaluation comparison | `/evaluations/compare` | Align multiple evaluations across modes by concurrency (arrival rate for open-loop points). Data without shared points remains as isolated points | [Run Evaluations and Interpret Reports](../how-to/benchmark.md) |

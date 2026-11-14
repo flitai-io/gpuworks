@@ -86,7 +86,7 @@
 
 **token 只取引擎报告的 `usage`**，不按流式 chunk（数据块）计数：一个 chunk 可能含多个 token，网关也不估算 token 数。
 
-- 哪种操作的 `usage` 在哪些字段，由协议注册表（`inferenceapi.Usage`）定义；目前支持 `openai.chat`、`openai.completions` 与 `openai.embeddings`。
+- 哪种操作的 `usage` 在哪些字段，由协议注册表（`inferenceapi.Usage`）定义；目前支持 `openai.chat`、`openai.completions`、`openai.embeddings` 与 `systemone.decide`。决策不生成文本，只记 `usage.input_tokens`：引擎回复的 `output_tokens` 是回答的问题数，不是生成的 token，所以不计入输出 token。
 - 补全流的文本在 choice 的 `text` 里（没有 `delta`），首 token 按它计时。
 - 网关只读回复末尾 4 KiB，usage 必须在回复的最后一个事件或 JSON 对象里。
 - 被压缩（`Content-Encoding` 非 identity）或非 JSON / SSE 的回复不读 usage。

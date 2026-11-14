@@ -60,7 +60,7 @@ curl --silent --show-error -X POST \
   http://<server>/api/v1/deployments/<deployment-id>/catalog-template
 ```
 
-Before writing the template, the server sends the smallest request to each chat, completions and embeddings operation the deployment declares (the same request the health check sends; it is not metered). Video, image, speech and other operations that are slow or costly to test get no request; a comment marks them as not tested, and the export still succeeds.
+Before writing the template, the server sends the smallest request to each chat, completions, embeddings and System One decision operation the deployment declares (the same request the health check sends; it is not metered). Video, image, speech and other operations that are slow or costly to test get no request; a comment marks them as not tested, and the export still succeeds.
 
 The returned `yaml` starts with comments, for example:
 

@@ -69,6 +69,7 @@ var registrationInferredOperationTypes = []string{
 	"openai.image.generate",
 	"openai.image.edit",
 	"openai.video.generate",
+	"systemone.decide",
 }
 
 func isBareOperation(raw string, allowedTypes ...string) bool {

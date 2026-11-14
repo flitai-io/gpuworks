@@ -424,7 +424,7 @@ api:
 Operation vocabulary (`internal/server/inferenceapi` is the single source): `openai.chat`,
 `openai.completions` (`/v1/completions`, continues the prompt as-is without applying a chat template), `openai.embeddings`, `openai.rerank`, `openai.audio.transcribe`,
 `openai.audio.speech`, `openai.image.generate`, `openai.image.edit`, `openai.video.generate`,
-and `openai.realtime`. Operation types must not repeat within a contract.
+`openai.realtime`, and `systemone.decide` (`/v1/systemone`, a System One decision: a shared `state` and typed questions in, a probability distribution per question out, nothing generated; the wire format is TypeSafe's System One API). Operation types must not repeat within a contract.
 
 Special cases:
 `openai.video.generate` must use `async` on `/v1/videos` and

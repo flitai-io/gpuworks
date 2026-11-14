@@ -50,9 +50,12 @@ d = json.load(open("/opt/gpuworks/image.json"))
 print("REQUIRES=%r" % " ".join(d.get("requires") or []))
 print("ENGINE=%r" % (d.get("engine") or ""))
 print("ENGINE_VERSION=%r" % (d.get("engine_version") or ""))
+print("TORCH_VERSION=%r" % (d.get("torch") or ""))
+print("TRANSFORMERS_VERSION=%r" % (d.get("transformers") or ""))
+print("LAYA_VERSION=%r" % (d.get("laya") or ""))
 PY
 )"
-        export REQUIRES ENGINE ENGINE_VERSION
+        export REQUIRES ENGINE ENGINE_VERSION TORCH_VERSION TRANSFORMERS_VERSION LAYA_VERSION
         bash /opt/gpuworks/shared/assert_requires.sh
       ' 2>&1 | sed 's/^/  /'; then
     echo "  FAIL: requires assertion failed"; FAIL=1

@@ -425,7 +425,7 @@ api:
 操作词表（`internal/server/inferenceapi` 唯一产地）：`openai.chat`、
 `openai.completions`（`/v1/completions`，原样续写提示词，不套聊天模板）、`openai.embeddings`、`openai.rerank`、`openai.audio.transcribe`、
 `openai.audio.speech`、`openai.image.generate`、`openai.image.edit`、`openai.video.generate`、
-`openai.realtime`。同一契约内操作类型不可重复。
+`openai.realtime`、`systemone.decide`（`/v1/systemone`，System One 决策：共享的 `state` 加一组带类型的问题，回每个问题的概率分布，不生成文本；线格式同 TypeSafe 的 System One API）。同一契约内操作类型不可重复。
 
 特例：
 `openai.video.generate` 在 `/v1/videos` 上必须 `async`、在 `/v1/videos/sync`

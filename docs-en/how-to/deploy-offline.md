@@ -29,7 +29,7 @@ Then download the corresponding archive from Aliyun Drive. You do not need Docke
 <https://bj20013.apps.aliyunfile.com/disk/s/pweW8krgZfw?domainId=bj20013>
 
 - Directories are organized by engine and framework: `vllm-cuda/`, `sglang-cuda/`, `vllm-omni-cuda/`, `vllm-cann/`, `sglang-cann/`, `vllm-omni-cann/`,
-  `vllm-dtk/`, `sglang-dtk/`, `vllm-hggc/`, `sglang-hggc/`, and `vllm-rocm/`.
+  `vllm-dtk/`, `sglang-dtk/`, `vllm-hggc/`, `sglang-hggc/`, and `vllm-rocm/`; the System One decision model image is in `systemone-cuda/`.
 - Filenames use `gpuworks-runner_<tag>_linux-<architecture>.tar.gz`. Select `amd64` or `arm64` for the compute node's CPU architecture (most Ascend servers use `arm64`).
   In Ascend filenames, `910b`, `a3`, `310p`, and `950` identify chip models.
 - Archives already contain canonical image references, so no retagging is needed after import. Aliyun Drive usually contains only the current version of each series. For other versions, see [Export Images with Docker](#用-docker-自己导出镜像).

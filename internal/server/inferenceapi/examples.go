@@ -95,6 +95,19 @@ func BuildExample(operation Operation, model string) (Example, error) {
 		}
 	case OperationRealtime:
 		request.Method = "GET"
+	case OperationDecide:
+		request.ContentType = "application/json"
+		request.Body = mustJSON(map[string]any{
+			"model": model,
+			"state": "Customer message: my order arrived broken and I want my money back today.",
+			"questions": map[string]any{
+				"refund": map[string]any{"type": "noul", "instructions": "Does the customer ask for a refund?"},
+				"topic": map[string]any{"type": "choice", "instructions": "What is the message about?", "criteria": map[string]any{
+					"billing": "Payments, refunds or invoices", "shipping": "Delivery or damaged goods", "account": "Login or profile", "other": "Anything else",
+				}},
+				"urgency": map[string]any{"type": "score", "instructions": "How urgent is the message?", "criteria": []string{"Not urgent", "Somewhat urgent", "Very urgent"}},
+			},
+		})
 	default:
 		return Example{}, fmt.Errorf("unsupported operation %q", operation.Type)
 	}

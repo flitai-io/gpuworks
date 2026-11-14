@@ -54,3 +54,20 @@ func TestChecksTestsCheapOperationsAndListsTheRest(t *testing.T) {
 		t.Fatalf("no replica = %+v", noReplica[0])
 	}
 }
+
+// A decision template is verified with the health check's one-question
+// decision, the cheapest request it serves.
+func TestChecksAskADecisionModelOneQuestion(t *testing.T) {
+	contract := inferenceapi.Contract{Operations: []inferenceapi.Operation{{Type: inferenceapi.OperationDecide, Endpoint: "/v1/systemone"}}}
+	var payloads []map[string]any
+	checks := Checks(context.Background(), func(_ context.Context, _ uint, _ string, path string, payload map[string]any) ProbeReply {
+		if path != "/v1/systemone" {
+			t.Errorf("path = %s", path)
+		}
+		payloads = append(payloads, payload)
+		return ProbeReply{HTTPStatus: 200}
+	}, 7, "inst", contract)
+	if len(checks) != 1 || !checks[0].Tested || !checks[0].Passed || len(payloads) != 1 || payloads[0]["state"] != "1" || payloads[0]["questions"] == nil {
+		t.Fatalf("checks = %+v, payloads = %v", checks, payloads)
+	}
+}

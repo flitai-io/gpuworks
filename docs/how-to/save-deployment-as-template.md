@@ -60,7 +60,7 @@ curl --silent --show-error -X POST \
   http://<server>/api/v1/deployments/<deployment-id>/catalog-template
 ```
 
-导出时 server 先对部署声明的 chat、completions、embeddings 操作各发一个最小请求（与健康检查相同，不计入用量）。视频、图片、语音等实测成本高的操作不发请求，在注释里标为未实测，照样可以导出。
+导出时 server 先对部署声明的 chat、completions、embeddings、System One 决策操作各发一个最小请求（与健康检查相同，不计入用量）。视频、图片、语音等实测成本高的操作不发请求，在注释里标为未实测，照样可以导出。
 
 返回的 `yaml` 开头是注释，例如：
 

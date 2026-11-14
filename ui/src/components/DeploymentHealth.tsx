@@ -15,13 +15,13 @@ import { Badge as StatusBadge } from "./ui/badge";
 // same way on the deployment list, its detail and the service monitor.
 
 // healthCheckable says whether a deployment serving operations can be
-// checked: the check asks chat, else text completion, else embeddings
-// (inferenceapi.CheckOperation).
+// checked: the check asks chat, else text completion, else embeddings, else a
+// System One decision (inferenceapi.CheckOperation).
 export function healthCheckable(
   operations: Pick<InferenceAPIOperation, "type">[] | undefined,
 ): boolean {
   return (operations ?? []).some(
-    (op) => op.type === "openai.chat" || op.type === "openai.completions" || op.type === "openai.embeddings",
+    (op) => op.type === "openai.chat" || op.type === "openai.completions" || op.type === "openai.embeddings" || op.type === "systemone.decide",
   );
 }
 

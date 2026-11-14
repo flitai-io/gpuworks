@@ -86,7 +86,7 @@ Stored names use `gpuworks_proxy_<short-name>`, with the labels `deployment` and
 
 **Token counts come only from the engine-reported `usage`**, not from counting streaming chunks: a chunk can contain multiple tokens, and the gateway does not estimate token counts.
 
-- The protocol registry (`inferenceapi.Usage`) defines which fields contain `usage` for each operation. Currently, it supports `openai.chat`, `openai.completions`, and `openai.embeddings`.
+- The protocol registry (`inferenceapi.Usage`) defines which fields contain `usage` for each operation. Currently, it supports `openai.chat`, `openai.completions`, `openai.embeddings`, and `systemone.decide`. A decision generates no text and records only `usage.input_tokens`: the `output_tokens` the engine replies with counts answered questions, not generated tokens, so it is not counted as output tokens.
 - Completion streams carry text in a choice's `text` field (there is no `delta`), which is used for first-token timing.
 - The gateway reads only the final 4 KiB of a response; usage must be in the response's last event or JSON object.
 - Usage is not read from compressed responses (non-identity `Content-Encoding`) or responses that are neither JSON nor SSE.

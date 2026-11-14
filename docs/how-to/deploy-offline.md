@@ -29,7 +29,7 @@
 <https://bj20013.apps.aliyunfile.com/disk/s/pweW8krgZfw?domainId=bj20013>
 
 - 按「引擎-框架」分目录：`vllm-cuda/`、`sglang-cuda/`、`vllm-omni-cuda/`、`vllm-cann/`、`sglang-cann/`、`vllm-omni-cann/`、
-  `vllm-dtk/`、`sglang-dtk/`、`vllm-hggc/`、`sglang-hggc/`、`vllm-rocm/`。
+  `vllm-dtk/`、`sglang-dtk/`、`vllm-hggc/`、`sglang-hggc/`、`vllm-rocm/`，System One 决策模型的镜像在 `systemone-cuda/`。
 - 文件名是 `gpuworks-runner_<tag>_linux-<架构>.tar.gz`。按计算节点的 CPU 架构选 `amd64` 或 `arm64`（昇腾服务器多为 `arm64`）；
   昇腾文件名里的 `910b`、`a3`、`310p`、`950` 是芯片型号。
 - 归档里已经是规范镜像引用，导入后不需要再打 tag。网盘上通常只有各系列的当前版本，其他版本见[用 Docker 自己导出镜像](#用-docker-自己导出镜像)。

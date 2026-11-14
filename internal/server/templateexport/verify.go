@@ -68,6 +68,8 @@ func checkKind(operation string) (healthcheck.Kind, bool) {
 		return healthcheck.KindCompletions, true
 	case inferenceapi.OperationEmbeddings:
 		return healthcheck.KindEmbeddings, true
+	case inferenceapi.OperationDecide:
+		return healthcheck.KindDecision, true
 	}
 	return "", false
 }

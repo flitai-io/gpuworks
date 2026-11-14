@@ -33,12 +33,12 @@ const DefaultRegistry = "gpuworks/gpuworks-runner"
 // releases b<build> and is written llama.cpp-b<build>.
 var tagPattern = regexp.MustCompile(`^(?P<backend>cuda|cann|dtk|hggc|metal|rocm)(?P<fwver>[0-9]+(\.[0-9]+)*)(-(?P<model>910b|a3|310p|950|v100|gfx1151))?-(?:(?P<engine>` +
 	regexp.QuoteMeta(engines.VLLMOmni) + `|` + regexp.QuoteMeta(engines.VLLM) + `|` + regexp.QuoteMeta(engines.SGLang) +
-	`|mlx-vlm|mlx-audio)(?P<engver>[0-9][0-9A-Za-z.]*)|(?P<llamacpp>llama\.cpp)-(?P<llamabuild>b[0-9]+))$`)
+	`|mlx-vlm|mlx-audio|systemone)(?P<engver>[0-9][0-9A-Za-z.]*)|(?P<llamacpp>llama\.cpp)-(?P<llamabuild>b[0-9]+))$`)
 
 // callableServers are the runner tags whose engine is a server the inference
 // templates start through the callable engine (with the gpuworks adapter in
 // the package), named the way their projects write them.
-var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp"}
+var callableServers = map[string]string{"mlx-vlm": "MLX-VLM", "mlx-audio": "MLX Audio", "llama.cpp": "llama.cpp", "systemone": "System One"}
 
 // catalogEngine is the image catalog's engine for a tag's engine.
 func catalogEngine(tagEngine string) string {
