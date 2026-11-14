@@ -8,8 +8,8 @@ interface Choice {
   content?: ReactNode;
 }
 
-export default function InstanceRecordPicker({ choices, selected, label, emptyText, popupClassName, onSelect }: {
-  choices: Choice[]; selected?: string; label: string; emptyText?: string; popupClassName?: string; onSelect: (id: string) => void;
+export default function InstanceRecordPicker({ choices, selected, label, emptyText, onSelect }: {
+  choices: Choice[]; selected?: string; label: string; emptyText?: string; onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation("deployments");
   const current = choices.find(choice => choice.id === selected);
@@ -18,7 +18,7 @@ export default function InstanceRecordPicker({ choices, selected, label, emptyTe
     filter={(choice, query) => choice.text.toLowerCase().includes(query.trim().toLowerCase())}
     onValueChange={choice => choice && onSelect(choice.id)}>
     <ComboboxTrigger className="deployment-instance-picker min-w-0 h-auto min-h-control-sm px-[5px] gap-0.5" aria-label={label}>{current?.content ?? current?.text ?? emptyText}</ComboboxTrigger>
-    <ComboboxContent className={popupClassName}>
+    <ComboboxContent className="w-max min-w-[var(--anchor-width)] [&_[data-slot=combobox-item]]:px-1.5">
       <ComboboxInput aria-label={label} placeholder={label} showTrigger={false} />
       <ComboboxEmpty>{t("detailLayout.noMatches")}</ComboboxEmpty>
       <ComboboxList>{(choice: Choice) => <ComboboxItem key={choice.id} value={choice} title={choice.text} aria-label={choice.text}>
