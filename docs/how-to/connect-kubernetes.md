@@ -6,7 +6,7 @@
 
 **前置条件**：
 
-- server 已经启动，集群节点能访问 server 地址（agent 主动外连，不需要节点入站端口）。
+- server 已经启动，集群节点能访问 server 地址（接入时填在「管理节点接入地址」里；agent 主动外连，不需要节点入站端口）。
 - 集群使用 containerd（kubeadm、k3s、RKE2、microk8s、GPU Operator 环境都是）。CRI-O（OpenShift）与 Docker 节点不支持，
   agent 启动时会拒绝并写明原因。
 - 节点上装好厂商驱动：Kubernetes 上支持 NVIDIA、昇腾、海光（DCU）、PPU、AMD 与昆仑芯，一个集群条目可以同时覆盖这几种厂商的节点，
@@ -119,7 +119,8 @@ agent 已知工具包属于 GPU Operator 还是装在节点上时，节点详情
 用旧 manifest 接入的集群重新 `kubectl apply` 才有这条权限，没有时只是看不到事件，注册的重试不受影响。
 
 同一个 Kubernetes 集群接入两个条目时，**两个条目要用不同的命名空间**：manifest 里的对象按命名空间命名，同名命名空间下后应用的
-会覆盖先应用的，前一个条目的节点就悄悄转到了后一个条目。可能属于同一集群、又用了同一命名空间的条目，列表里名称旁会标「命名空间重复」
+会覆盖先应用的，前一个条目的节点就悄悄转到了后一个条目。可能属于同一集群、又用了同一命名空间的条目会标「命名空间重复」：独立接入的集群标在列表那一行的名称旁，
+从云账号接入的集群标在它分组的组头
 （还没有节点接入的条目不知道是哪个集群，也算在内；已知属于不同集群的不标）。命名空间创建后不能改，删掉其中一个换个命名空间重建。
 
 ## 集群用 HAMi、ACK 共享 GPU 或其他切分时
@@ -183,8 +184,10 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
 
 ## 接入
 
-1. 在「Kubernetes」页点「接入集群」，填名称、server 地址（集群节点访问 server 用的地址），按需填节点选择器
-   （例如 `nvidia.com/gpu.present=true`，留空表示所有节点）。没有厂商这一项：每个节点上的 agent 自己识别加速卡，集群里
+1. 在「外部平台」页点右上角「添加外部平台」，在「外部平台」下选「Kubernetes 集群」（自建的集群，以及没有云账号可接入的
+   其他云上的集群，都从这里接入）；也可以点「快速接入」区的「Kubernetes 集群」卡片（只有管理员能看到），打开的是同一个弹窗，已经选好。弹窗里填名称、
+   「管理节点接入地址」（集群里的 agent 连接 GPUWorks 管理节点用的地址，须能从集群的 Pod 访问到，不是 Kubernetes API Server
+   的地址），按需填节点选择器（例如 `nvidia.com/gpu.present=true`，留空表示所有节点）。没有厂商这一项：每个节点上的 agent 自己识别加速卡，集群里
    有多个厂商的节点时一个条目就够了；没有加速卡或厂商暂不支持的节点保持待命，不会成为平台的节点。
 2. 「高级」里的选项：
    - 状态目录：agent 在节点上的目录，默认 `/opt/gpuworks`。节点上已经装着一个 gpuworks agent 时换一个目录（例如
@@ -208,26 +211,32 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
    - 空闲归还（保存后立即生效）：借来的卡在最后一个实例停止后保留多久，默认 60 秒（每 30 秒检查一次，实际在 60 到 90 秒之间归还）；「常驻」表示一直不还，节点池整体交给 gpuworks。
    - 优先级：gpuworks 的占位 Pod 与实例 Pod 所用 PriorityClass（`gpuworks-inference-<命名空间>`）的数值，默认 10000，范围 0 到 1000000000，越大越优先；普通 Pod 是 0。它也决定节点内存、磁盘紧张时的驱逐顺序：优先级低的先被驱逐。
    - 允许抢占：默认关闭（PriorityClass 写 `preemptionPolicy: Never`），借卡放不下时占位 Pod 只会等待，调度器不会为它驱逐你的其他 Pod。开启后，HAMi 与 ACK 共享 GPU 模式下（占位 Pod 经调度器）调度器可能驱逐优先级更低的 Pod；普通 device plugin 模式的占位 Pod 与所有实例 Pod 直接绑定节点，不经调度器，不受这个开关影响。
-3. 复制生成的命令在集群里执行：
+3. 点「接入」，弹窗里显示要在集群里执行的 `kubectl apply` 命令（按钮变为「关闭」），复制后在集群里执行：
 
    ```bash
    kubectl apply -f 'https://server.example/kube/manifest.yaml?token=…'
    ```
 
-   被选中的节点会自动出现在节点页，带系统标签 `gpuworks.ai/kubernetes-cluster`（值是集群的 UUID，显示集群名）和 `gpuworks.ai/kubernetes-node`（Kubernetes 里的节点名），节点页可据此筛选，部署的节点条件也可以用它们限定在某个集群上；扩容出来的节点同样自动加入。创建 5 分钟后仍没有
-   节点加入时，列表上的「排查」给出要执行的 `kubectl` 命令和常见原因（拉不到 agent 镜像、RuntimeClass 不存在、节点
+   被选中的节点会自动出现在节点页，带系统标签 `gpuworks.ai/kubernetes-cluster`（值是集群的 UUID，显示集群名）和 `gpuworks.ai/kubernetes-node`（Kubernetes 里的节点名），节点页可据此筛选，部署的节点条件也可以用它们限定在某个集群上；扩容出来的节点同样自动加入。
+   集群在「已接入的外部平台」列表里占一行，「厂商」列显示「—」，「平台类型」列显示 Kubernetes，「已接入节点」列的数字点开是只列这些节点的
+   「计算节点」页；展开这一行，是两列“标签 值”：接入方式、节点选择器、命名空间、卡归还、创建时间和已接入节点（节点数和按厂商的分布，
+   如“2 个节点 · NVIDIA ×2”，有节点时可点开「计算节点」页），还没有节点接入时下面是接入命令。集群名旁出现「命名空间重复」时，
+   表示另有条目用了同一命名空间（见上文[与集群里的其他业务共存](#与集群里的其他业务共存)）。管理员在「操作」列直接点「编辑」「复制接入命令」，
+   其余在「更多」菜单里：「查看 manifest」，分隔线下是「卸载」（见下文「卸载」）「吊销」「删除」；吊销、删除都先弹确认框。创建 5 分钟后仍没有
+   节点加入时，「状态」列改为「长时间未接入」，旁边的「排查」给出要执行的 `kubectl` 命令和常见原因（拉不到 agent 镜像、RuntimeClass 不存在、节点
    选择器没选中节点、agent 连不上 server）。
 
 命令里带着集群的接入令牌，只给管理员看。吊销接入令牌后新节点不能再加入，已加入的节点不受影响。
 
-列表里每个条目按厂商列出已加入的节点数（节点最多的厂商在前；没有上报加速卡的节点单独归为一类）。
+展开后的“已接入节点”一项按厂商列出已加入的节点数（节点最多的厂商在前；没有上报加速卡的节点单独归为一类）。
 
 ## 修改集群条目
 
-在「Kubernetes」页点条目的「编辑」（管理员，接口是 `PUT /api/v1/kube/clusters/{uuid}`）。可以改：名称、节点选择器、agent 镜像与镜像仓库、
+在「外部平台」页，独立接入的集群在它那一行的「操作」列点「编辑」，从云账号接入的集群在云账号展开后、该集群分组的组头操作里点「编辑」
+（管理员，接口是 `PUT /api/v1/kube/clusters/{uuid}`），打开的是接入时的同一个集群表单。可以改：名称、节点选择器、agent 镜像与镜像仓库、
 镜像拉取凭据、RuntimeClass、containerd socket、API server 地址、引擎端口段、空闲归还、优先级与允许抢占，校验规则与创建时一致。
-命名空间、server 地址与状态目录创建后固定，要改就删掉条目重建。从云账号接入的条目按节点池选节点，不能改节点选择器，
-改它的节点池（见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)）。
+命名空间、管理节点接入地址与状态目录创建后固定，要改就删掉条目重建。从云账号接入的条目按节点池选节点，不能改节点选择器，
+改它的节点池：集群分组里“GPU 节点池”一项下面的「修改」（见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)）。
 
 **RuntimeClass、引擎端口段、空闲归还这三项不在 manifest 里，保存后立即对在线的 agent 生效**：不用重新应用、不重启 agent、网关不中断。
 server 把它们直接发给该条目的每个在线 agent（离线的在重新连上时拿到），agent 在原地更换：新起的 NVIDIA 实例 Pod 用新的 RuntimeClass
@@ -241,7 +250,7 @@ server 把它们直接发给该条目的每个在线 agent（离线的在重新�
 
 保存其余设置只改 gpuworks 里的记录，manifest 随即按新设置渲染，**集群里跑的仍是旧的，直到再应用一次**：
 
-- 手动接入的条目（没有吊销）：保存后页面给出一行 `kubectl` 命令，先删条目的 PriorityClass 再应用 manifest
+- 手动接入的条目（没有吊销）：保存后弹窗给出一行 `kubectl` 命令，先删条目的 PriorityClass 再应用 manifest
   （`kubectl delete priorityclass gpuworks-inference-<命名空间> --ignore-not-found && kubectl apply -f ...`）：Kubernetes 不能原地修改
   PriorityClass 的数值与 `preemptionPolicy`，只能删了重建；之前改过优先级却没应用时，单独的 `kubectl apply` 会因此失败，
   所以每次都带上删除。写成一行是为了两步之间不留没有 PriorityClass 的空档。
@@ -268,7 +277,8 @@ server 不知道集群里节点的标签，所以请条目里一个在线的 age
 
 ## 卸载
 
-条目的「卸载」给出把它的 agent 从集群里移走的 `kubectl` 命令（管理员可见，吊销过的条目也有），按顺序执行：
+gpuworks 不能替你卸载的条目（独立接入的集群，以及 API Server 只有内网地址的云集群），操作里有「卸载」（管理员可见，吊销过的条目也有），
+弹窗列出把它的 agent 从集群里移走的 `kubectl` 命令，按顺序执行：
 
 ```bash
 kubectl -n <namespace> delete daemonset gpuworks-agent --ignore-not-found --wait
@@ -280,7 +290,8 @@ kubectl delete namespace <namespace> --ignore-not-found
 
 删 DaemonSet 时实例 Pod 与占位 Pod 一起被删除，卡还给 Kubernetes。这些命令不需要接入令牌；`kubectl delete -f <manifest 地址>`
 则要用令牌取 manifest，吊销令牌后就不能用了。server 够得着集群的条目（从云账号接入）由 server 代为执行（「从集群卸载」，先检查、确认后删除）。
-节点都从节点页消失后才能删除条目（还有节点时拒绝，`KUBE_CLUSTER_HAS_NODES`）。
+节点都从节点页消失后才能删除条目（还有节点时拒绝，`KUBE_CLUSTER_HAS_NODES`）：仍有节点时点「删除」，确认框写明还有几个节点，
+并给出「从集群卸载」或「卸载」的入口。
 
 ## 日常运维
 

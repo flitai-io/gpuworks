@@ -156,6 +156,12 @@ type Node struct {
 	// facts (planning.SystemLabels). They are kept apart from Labels, which
 	// an operator writes, because only one of the two can be edited.
 	SystemLabels []SystemLabel `json:"system_labels,omitempty"`
+	// Source is the external platform the node joined through; absent for a
+	// node added by hand.
+	Source *NodeSource `json:"source,omitempty"`
+	// SourceUnknown: where the node came from could not be read, so Source
+	// is absent without the node having been added by hand.
+	SourceUnknown bool `json:"source_unknown,omitempty"`
 	// ManagementAddress is the address the node's agent reaches the server
 	// from: its address on the management network.
 	ManagementAddress string `json:"management_address,omitempty"`
@@ -262,4 +268,22 @@ type NodeReplica struct {
 // run.
 type NodeEviction struct {
 	Evicted []string `json:"evicted"`
+}
+
+// NodeSource is the external platform a node joined through
+// (store.NodeSource): an instance of a platform account an agent was
+// installed on, or a Kubernetes cluster whose DaemonSet runs the agent.
+type NodeSource struct {
+	// Resource is what the node is on the platform (a provider.Resource):
+	// vm | container | host for an instance, kubernetes for a cluster node;
+	// empty when the platform's kind does not say.
+	Resource string `json:"resource"`
+	// ProviderID, ProviderName and ProviderKind name the account; absent for
+	// a cluster connected on its own.
+	ProviderID   uint   `json:"provider_id,omitempty"`
+	ProviderName string `json:"provider_name,omitempty"`
+	ProviderKind string `json:"provider_kind,omitempty"`
+	// ClusterUUID and ClusterName name the cluster entry of a cluster node.
+	ClusterUUID string `json:"cluster_uuid,omitempty"`
+	ClusterName string `json:"cluster_name,omitempty"`
 }

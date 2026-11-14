@@ -84,7 +84,7 @@ export function compareSortValues(a: SortValue, b: SortValue): number {
 const EMPTY_ROWS: never[] = [];
 export default function ResourceTable<T extends object>({ tableId, columns, data, rowKey, loading, error, onRefresh, updatedAt,
   toolbar, toolbarExtra, pagination, sort, onSortChange, onFiltersChange, rowSelection, expandable, onRow,
-  emptyDescription, emptyKind = "data", emptyAction, columnSettings = true,
+  emptyDescription, emptyKind = "data", emptyAction, filteredEmptyDescription, columnSettings = true,
 }: {
   tableId: string; columns: ResourceColumn<T>[]; data?: T[]; rowKey: TableProps<T>["rowKey"];
   loading?: boolean; error?: Error | null; onRefresh?: () => void; updatedAt?: Date | null;
@@ -92,7 +92,10 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
   sort?: ServerSort | null; onSortChange?: (sort: ServerSort | null) => void;
   onFiltersChange?: (filters: Record<string, string[]>) => void;
   rowSelection?: TableProps<T>["rowSelection"]; expandable?: TableProps<T>["expandable"]; onRow?: TableProps<T>["onRow"];
-  emptyDescription?: string; emptyKind?: EmptyStateKind; emptyAction?: ReactNode; columnSettings?: boolean;
+  emptyDescription?: string; emptyKind?: EmptyStateKind; emptyAction?: ReactNode;
+  /** What an empty list says when column filters are in effect: nothing matches them, with a way to clear them. A list
+   *  without it keeps emptyDescription, which its owner may already word for filtering. */
+  filteredEmptyDescription?: string; columnSettings?: boolean;
 }) {
   const { t } = useTranslation("common");
   const rows = data ?? EMPTY_ROWS;
@@ -269,11 +272,17 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
               {rowSelection && <TableCell className="resource-table-pinned resource-table-cell" style={{ position: "sticky", left: 0, zIndex: 1, backgroundColor: row.getIsSelected() ? "var(--selection)" : "var(--surface-floating)" }}><Checkbox title={checkboxProps?.title} aria-label={checkboxProps?.["aria-label"] ?? t("resourceTable.selectRow", { name: row.id })} checked={row.getIsSelected()} disabled={!row.getCanSelect()} onCheckedChange={(checked) => row.toggleSelected(checked)} onClick={(event) => event.stopPropagation()} /></TableCell>}
               {expandable && <TableCell className="resource-table-pinned resource-table-cell" style={{ position: "sticky", left: rowSelection ? 48 : 0, zIndex: 1, backgroundColor: "var(--surface-floating)" }}>{row.getCanExpand() && (expandable.expandIcon ? expandable.expandIcon({ prefixCls: "resource-table", expanded: row.getIsExpanded(), expandable: true, record: row.original, onExpand: (_record, event) => { event.stopPropagation(); expand(); } }) : <Button size="xs" variant="ghost" iconOnly aria-label={t(row.getIsExpanded() ? "resourceTable.collapseRow" : "resourceTable.expandRow")} aria-expanded={row.getIsExpanded()} onClick={(event) => { event.stopPropagation(); expand(); }}>{row.getIsExpanded() ? <ExpandedIcon size={16} /> : <CollapsedIcon size={16} />}</Button>)}</TableCell>}
               {row.getVisibleCells().map((cell, cellIndex) => <TableCell key={cell.id} className={["resource-table-cell whitespace-nowrap", arranged[cellIndex].role === "actions" ? "" : "overflow-hidden text-ellipsis", arranged[cellIndex].role === "name" ? "resource-table-name" : "", arranged[cellIndex].role === "name" || arranged[cellIndex].role === "actions" ? "resource-table-pinned" : "", arranged[cellIndex].className].filter(Boolean).join(" ")} style={{ ...pinnedStyle(arranged[cellIndex], cellIndex), ...(row.getIsSelected() ? { background: "var(--selection)" } : {}) }}>{typeof cell.column.columnDef.cell === "function" ? cell.column.columnDef.cell(cell.getContext()) : cell.column.columnDef.cell}</TableCell>)}
-            </TableRow>{row.getIsExpanded() && expandable?.expandedRowRender && <TableRow><TableCell colSpan={arranged.length + (rowSelection ? 1 : 0) + 1}>{expandable.expandedRowRender(row.original, row.index, 0, true)}</TableCell></TableRow>}</Fragment>;
+            </TableRow>{row.getIsExpanded() && expandable?.expandedRowRender && <TableRow><TableCell colSpan={arranged.length + (rowSelection ? 1 : 0) + 1}>
+              {/* A row's detail holds to the visible part of a table wider than its container, as the empty state does: its far side is never scrolled out of view. */}
+              <div className="sticky left-3 w-[calc(100cqw-1.5rem)]">{expandable.expandedRowRender(row.original, row.index, 0, true)}</div>
+            </TableCell></TableRow>}</Fragment>;
           })}
           {!table.getRowModel().rows.length && <TableRow><TableCell colSpan={arranged.length + (rowSelection ? 1 : 0) + (expandable ? 1 : 0)}>{/* The empty state holds to the visible part of a table wider than its container (100cqw
               is the container's width, the cell pads 12px a side), so it centers in what the user sees. */}
-            {!loading && <div className="sticky left-3 w-[calc(100cqw-1.5rem)]"><EmptyState kind={emptyKind} description={emptyDescription ?? t("dataTable.empty")} action={emptyAction} /></div>}</TableCell></TableRow>}
+            {/* Filtered down to nothing is not "no data": say the filters match nothing, and offer to clear them. */}
+            {!loading && <div className="sticky left-3 w-[calc(100cqw-1.5rem)]">{activeFilters.length > 0 && filteredEmptyDescription
+              ? <EmptyState kind={emptyKind} description={filteredEmptyDescription} action={<Button variant="secondary" onClick={() => table.resetColumnFilters()}>{t("resourceTable.clearFilters")}</Button>} />
+              : <EmptyState kind={emptyKind} description={emptyDescription ?? t("dataTable.empty")} action={emptyAction} />}</div>}</TableCell></TableRow>}
         </TableBody>
       </Table>
       {/* One footer row: the total on the left, Zeron's pager on the right, both in its 12px label size. */}

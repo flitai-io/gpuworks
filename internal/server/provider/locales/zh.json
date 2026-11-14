@@ -23,5 +23,13 @@
     "cloud_assistant": "云助手",
     "direct": "直连",
     "proxy": "平台代理"
+  },
+  "cluster_types": {
+    "ack_managed": "ACK 托管版",
+    "ack_dedicated": "ACK 专有版",
+    "ack_edge": "ACK Edge",
+    "ack_lingjun": "ACK 灵骏",
+    "ack_registered": "ACK 注册集群",
+    "doks": "DOKS"
   }
 }

@@ -3,6 +3,7 @@ import { afterEach, test } from "node:test";
 import React from "react";
 import { I18nextProvider } from "react-i18next";
 import { createI18n } from "./helpers/dom.ts";
+import { kindCategories } from "./helpers/platformFixtures.ts";
 
 const { i18n } = await createI18n(["providers"], "en");
 const { cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
@@ -78,7 +79,7 @@ test("adding an AutoDL key says only Pro container instances are listed", () => 
   ];
   const open = (kind: string) => render(
     <I18nextProvider i18n={i18n}>
-      <ProviderConfigModal open defaultKind={kind} kindInfos={kinds} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} />
+      <ProviderConfigModal open defaultKind={kind} kindInfos={kinds} categories={kindCategories(kinds)} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} />
     </I18nextProvider>,
   );
   open("autodl");
@@ -95,7 +96,7 @@ test("adding a RunPod key says only Secure Cloud pods are supported", () => {
   ];
   const open = (kind: string) => render(
     <I18nextProvider i18n={i18n}>
-      <ProviderConfigModal open defaultKind={kind} kindInfos={kinds} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} />
+      <ProviderConfigModal open defaultKind={kind} kindInfos={kinds} categories={kindCategories(kinds)} providerLabel="Public Cloud" onClose={() => {}} onSaved={() => {}} />
     </I18nextProvider>,
   );
   open("runpod");

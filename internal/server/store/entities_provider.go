@@ -9,8 +9,12 @@ type Provider struct {
 	Kind        string `gorm:"size:32;index"` // runpod | compshare | autodl | vast
 	CredsCipher string `gorm:"type:text"`     // ciphertext (AES-GCM, base64) of JSON provider.Credentials
 	State       string `gorm:"size:16"`       // valid | invalid
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// SyncedAt is when the vendor last listed the account's instances
+	// successfully (a sync); nil until the first one. A failed listing leaves
+	// it as it was.
+	SyncedAt  *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // ProviderInstance is a vendor instance discovered under a provider account.

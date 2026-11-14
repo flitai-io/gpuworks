@@ -112,6 +112,10 @@ func upsertProviderInstance(db *gorm.DB, pi *ProviderInstance) error {
 func (s *Store) SyncProviderInstances(providerID uint, listed []ProviderInstance) error {
 	var stopped []string
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// The listing is the account's as of now, recorded with it. UpdateColumn leaves updated_at, which edits own.
+		if err := tx.Model(&Provider{}).Where("id = ?", providerID).UpdateColumn("synced_at", time.Now().UTC()).Error; err != nil {
+			return err
+		}
 		keep := make([]string, 0, len(listed))
 		for i := range listed {
 			pi := listed[i]
@@ -375,6 +379,41 @@ func (s *Store) NodeProviders(nodeIDs []uint) (map[uint]NodeProvider, error) {
 	}
 	for _, row := range rows {
 		out[row.NodeID] = NodeProvider{Kind: strings.TrimSpace(row.Kind), Region: strings.TrimSpace(row.Region)}
+	}
+	return out, nil
+}
+
+// accountInstances keeps the instances that are an account's own. A managed
+// Kubernetes cluster's node is listed by the vendor among the account's
+// instances, but it is the cluster's: it joins through the cluster, and its
+// lifecycle is the node pool's. This is the one place that rule is written.
+func accountInstances(db *gorm.DB) *gorm.DB {
+	return db.Where("managed_cluster = '' OR managed_cluster IS NULL")
+}
+
+// AccountInstances are an account's own instances, in id order: what its
+// instance list shows and its instance count counts.
+func (s *Store) AccountInstances(providerID uint) ([]ProviderInstance, error) {
+	var pis []ProviderInstance
+	err := accountInstances(s.reader().Where("provider_id = ?", providerID)).Order("id asc").Find(&pis).Error
+	return pis, err
+}
+
+// AccountInstanceCounts counts every account's own instances in one grouped
+// query, keyed by provider id; an account without any is absent.
+func (s *Store) AccountInstanceCounts() (map[uint]int, error) {
+	var rows []struct {
+		ProviderID uint
+		Instances  int
+	}
+	err := accountInstances(s.reader().Model(&ProviderInstance{})).
+		Select("provider_id, COUNT(*) AS instances").Group("provider_id").Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint]int, len(rows))
+	for _, r := range rows {
+		out[r.ProviderID] = r.Instances
 	}
 	return out, nil
 }

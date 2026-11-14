@@ -20,7 +20,7 @@ Whichever provider you use, the flow is the same: first prepare the cluster in t
 flowchart LR
   p0["Step 0<br/>Prepare the server address<br/>and kubectl"]
   c1["1. Create the cluster<br/>and GPU node pool in the cloud"]
-  g2["2. gpuworks “Kubernetes” page<br/>Connect the cluster (choose the agent image registry), copy the command"]
+  g2["2. gpuworks “External Platforms” page<br/>Connect the cluster (choose the agent image registry), copy the command"]
   a3["3. Run kubectl apply<br/>in the cluster"]
   n4["4. The node appears on the Nodes page<br/>Deploy a model and chat"]
   p0 --> c1 --> g2 --> a3 --> n4
@@ -34,7 +34,7 @@ Yellow steps are done in the cloud, in a local command line, or with `kubectl`; 
 
 | Step | Where | How to confirm |
 |---|---|---|
-| 0. Prepare | Local machine | The server address is reachable from the cloud; the local machine has `kubectl` |
+| 0. Prepare | Local machine | The server address (“Management node address” in the UI) is reachable from the cloud; the local machine has `kubectl` |
 | 1. Create the cluster and GPU nodes | Cloud console or command line | `kubectl` can reach the cluster, and the GPU nodes carry the label in the “GPU node label” row of the table below |
 | 2. Connect in gpuworks | gpuworks UI | The agent image registry is chosen, and the page gives a `kubectl apply` command |
 | 3. Run apply | `kubectl` | The agent Pod is `Running` |
@@ -65,30 +65,23 @@ flowchart LR
 
 ## Shortcut: Connect from a Cloud Account (Alibaba Cloud ACK, DigitalOcean DOKS)
 
-When the cloud account has already been added on the “Public Cloud” page, you need neither to find the node label nor to run `kubectl apply` yourself:
+When the cloud account has already been added on the “External Platforms” page, you need neither to find the node label nor to run `kubectl apply` yourself:
 
-1. On the “Public Cloud” page, expand the account and switch to the “Kubernetes clusters” tab. gpuworks reads the account's managed clusters and GPU node pools live from the cloud provider (for the extra permissions Alibaba Cloud needs, see [Rent Cloud GPUs · Alibaba Cloud](rent-cloud-gpus.md#阿里云)):
+1. In the “Connected external platforms” list on the “External Platforms” page, expand the account. The expanded area starts with a line holding “Sync” and “Last synced”: this “Sync” is the same as the row's own “Sync” in the actions column; it lists the instances from the cloud provider again, and the managed clusters are read again after it. Below it is one table grouped by what the machines belong to: the “Standalone instances” group first (the account's own instances), then one group per managed cluster (ACK clusters for Alibaba Cloud, DOKS clusters for DigitalOcean); each group can be collapsed. gpuworks reads the managed clusters and GPU node pools from the cloud provider (for the extra permissions Alibaba Cloud needs, see [Rent Cloud GPUs · Alibaba Cloud](rent-cloud-gpus.md#阿里云)). A cluster's group header shows the cluster name, the cluster type (such as “ACK managed”, “ACK dedicated”, or “DOKS”), and the status (“Not connected yet” for a cluster that has not been connected), plus “Connect” for a cluster not connected yet; the group shows the cluster's facts as “label value” pairs in two columns, with nothing to choose: cluster ID, region, version, API server (“Publicly reachable” or “Private network only”), and GPU node pools (all of the cluster's GPU node pools while it is not connected). The cluster's nodes are not listed one by one here. Clusters whose Pods run on virtual nodes (ACK Serverless, ACS) are not listed.
 
-   ![The “Kubernetes clusters” tab of a cloud account](../assets/screenshots/k8s-cloud-clusters.png)
-
-2. Tick the GPU node pools you want (a cluster may have several ticked, and node pools of different vendors may share one entry) and click “Connect” on that cluster. In the drawer, the name is already filled in from the node pools and the selected pools are listed, which you can change; the Server address requirement is the same as in step 0 below, and “Agent image registry” is preselected by the cluster's region (an ACK cluster in mainland China gets “Huawei Cloud SWR”) and can be changed under “Advanced”. Click “Connect”. A cloud cluster has only one entry: to use more of its node pools later, edit that entry's node pools instead of connecting again. An entry has no vendor setting; the agent on each node detects its accelerator itself.
+2. Click “Connect” in the header of that cluster's group to open the cluster form (a drawer): the name is already filled in from the cluster; “GPU node pools” is the list of the chosen pools (all by default): remove one you do not want with the button on its line, and add a removed one back from the “Add a node pool” list below it; the last one cannot be removed. A cluster may have several chosen, and node pools of different vendors may share one entry. The Management node address requirement is the same as in step 0 below, and “Agent image registry” is preselected by the cluster's region (an ACK cluster in mainland China gets “Huawei Cloud SWR”) and can be changed under “Advanced”. Click “Connect”. A cloud cluster has only one entry: to use more of its node pools later, change that entry's node pools (see step 5) instead of connecting again. An entry has no vendor setting; the agent on each node detects its accelerator itself.
 3. The drawer offers two choices:
-   - **Check and apply**: gpuworks uses temporary cluster credentials it fetches from the cloud account on the spot (valid for 15 minutes, discarded after use, never stored) to first have the cluster run a check (dry run), lists each object to be created or updated, and applies for real only after you click “Apply”:
-
-     ![The check result before applying; nothing runs until you confirm](../assets/screenshots/k8s-cloud-apply.png)
-
+   - **Check and apply**: gpuworks uses temporary cluster credentials it fetches from the cloud account on the spot (valid for 15 minutes, discarded after use, never stored) to first have the cluster run a check (dry run), lists each object to be created or updated, and applies for real only after you click “Apply”.
    - Or, as before, copy the `kubectl apply` command and run it yourself (see step 3 below).
-4. About half a minute later the node appears on the Nodes page. The “Source” column of the “Kubernetes” page shows which cluster of which cloud account the entry came from; afterwards, “Apply to the cluster” on this entry can apply again (for example after the node pool was rebuilt), and “Remove from the cluster” likewise checks first and deletes after confirmation:
-
-   ![The Source column of the Kubernetes page, with “Apply to the cluster” and “Remove from the cluster”](../assets/screenshots/k8s-cloud-source.png)
+4. About half a minute later the node appears on the Compute Nodes page, where the “Source” column shows which external platform the node joined through; click it to go back to the External Platforms page, with the account expanded and this cluster's group scrolled into view. The header of the “Source” column is a filter: tick an external platform or a cluster to see only the nodes that joined through it. The cluster's group now lists under “GPU node pools” only the pools its entry holds, with “Change” under them for administrators, and shows four more items: nodes joined (the count and the split by vendor, such as “Nodes: 2 · NVIDIA ×2”, the vendor with the most nodes first; it opens the Compute Nodes page listing only these nodes), namespace, card return, and creation time. In the group header “Connect” gives way to the administrator actions: the common ones, “Edit” and “Apply to the cluster”, are shown in the header, and the rest are in the “More” menu: “Copy connect command” and “View manifest”, then below a rule “Remove from the cluster”, “Revoke”, and “Delete” (plus “Uninstall” when the API server has only a private address and gpuworks cannot remove it for you; see [Connect a Kubernetes Cluster](connect-kubernetes.md#uninstall)). Every action for this cluster is in this group. “Apply to the cluster” can apply again (for example after the node pool was rebuilt), and “Remove from the cluster” likewise checks first and deletes after confirmation.
 
    Removal deletes the whole `gpuworks-system` namespace, including an image pull secret created in it beforehand if you use your own registry, so it must be created again before reconnecting.
 
-5. To add or remove node pools later, change the ticks on the cluster's row on the “Public Cloud” page and click “Save node pools”, or use the entry's “Node pools” action on the “Kubernetes” page. Saving changes only gpuworks's record: click “Apply to the cluster” again (or re-run `kubectl apply`) for the DaemonSet to follow. Agents on node pools taken away exit and their nodes go offline; after 15 minutes offline, the platform asks another online agent of the same entry whether the node still exists and still runs one of the entry's agent Pods, and when two checks in a row say no, and the node has no instances, the node record is removed automatically (when the entry has no other online node, nothing is removed automatically; delete the node by hand on the Nodes page). The cluster's row shows whether each node pool is already in the entry. When a node pool taken away has nodes that still run instances, saving is refused and lists those nodes and their deployments; after you click “Stop instances and save”, the server first asks the instances on those nodes to stop (replicas on other nodes are left alone) and then saves, `stopped_instances` in the response lists the instances that were asked to stop, and the notice after saving shows them too; the rules are in [Connect a Kubernetes Cluster](connect-kubernetes.md#edit-a-cluster-entry).
+5. To add or remove node pools later, click “Change” under the “GPU node pools” item in the cluster's group (administrators), remove or add node pools in the drawer that opens, and click “Save node pools”; taking out a pool the entry holds says in the drawer that its nodes will leave. Saving changes only gpuworks's record, and the manifest must be applied again for the DaemonSet to follow: click “Check and apply…” in the notice that appears after saving, or “Apply to the cluster” in the group header, or re-run `kubectl apply`. Agents on node pools taken away exit and their nodes go offline; after 15 minutes offline, the platform asks another online agent of the same entry whether the node still exists and still runs one of the entry's agent Pods, and when two checks in a row say no, and the node has no instances, the node record is removed automatically (when the entry has no other online node, nothing is removed automatically; delete the node by hand on the Compute Nodes page). If a node pool taken out still has nodes running instances, saving is refused with those nodes and their deployments listed; after you click “Stop instances and save”, the server first asks the instances on those nodes to stop (replicas on other nodes are left alone) and then saves, `stopped_instances` in the response lists the instances that were asked to stop, and the notice after saving shows them too; the rules are in [Connect a Kubernetes Cluster](connect-kubernetes.md#edit-a-cluster-entry).
 
-   The entry's other settings are changed with “Edit” on the “Kubernetes” page: RuntimeClass, engine port range, and idle return take effect at once on the online agents when saved, with no apply; settings written into the manifest, such as priority and allow preemption, take effect in the cluster only after another apply; when priority or allow preemption changed, the server deletes and recreates the PriorityClass itself (the action of that item in the apply result is `replace`). Which settings can change and which are fixed at creation is in [Connect a Kubernetes Cluster](connect-kubernetes.md#edit-a-cluster-entry).
+   The entry's other settings are changed with “Edit” in the header of the cluster's group: RuntimeClass, engine port range, and idle return take effect at once on the online agents when saved, with no apply; settings written into the manifest, such as priority and allow preemption, take effect in the cluster only after another apply; when priority or allow preemption changed, the server deletes and recreates the PriorityClass itself (the action of that item in the apply result is `replace`). Which settings can change and which are fixed at creation is in [Connect a Kubernetes Cluster](connect-kubernetes.md#edit-a-cluster-entry).
 
-Prerequisite: the cluster's API Server has a public address (the list shows “Public API”); a cluster showing “Private API only” can only use the copied command, run from inside the cluster's network. Nodes that belong to a managed cluster are marked “Cluster node” in the “Instances” tab and cannot have an agent installed individually, nor be powered, released or resized there (the cluster scales its node pools). Nebius has no cloud account connection yet; connect it manually as described below.
+Prerequisite: the cluster's API Server has a public address (“API server” in the cluster's group shows “Publicly reachable”); a cluster showing “Private network only” can only use the copied command, run from inside the cluster's network. The machines of a managed cluster's node pools do not appear in the account's “Standalone instances” group (the vendor counts them as instances too, but they join through the cluster and cannot have an agent installed individually, nor be powered, released or resized; the cluster scales its node pools); once joined they are on the “Compute Nodes” page, where “Source” names their cluster. Nebius has no cloud account connection yet; connect it manually as described below.
 
 ## Facts Common to All Three
 
@@ -327,18 +320,18 @@ This section corresponds to steps 2 to 4 of the overview and moves back and fort
 
 ### Step 2: Create the Cluster Entry and Copy the Command
 
-1. Open “Kubernetes” under “Compute” in the left navigation and click “Connect cluster” at the top right. Connected clusters are listed here (for a cluster created more than 5 minutes ago with no node joined yet, “Troubleshoot” appears next to “Not connected yet”; see [When No Node Appears](#没有节点出现时)):
+1. Open “External Platforms” under “Compute” in the left navigation, click “Add External Platform” at the top right, and under “External platform” choose “Kubernetes cluster” (a self-managed cluster, and a cluster on a cloud that has no account to connect, both go this way); the “Kubernetes cluster” card under “Quick Connect” (shown to administrators only) opens the same dialog with this already chosen. Each cluster connected this way takes one row in the “Connected external platforms” list, with “—” in the “Vendor” column and Kubernetes in the “Platform type” column, and the “Actions” column shows “Edit” and “Copy connect command” directly, with the rest in the “More” menu: “View manifest”, then below a rule “Uninstall” (gpuworks cannot reach such a cluster, so “Uninstall” lists the `kubectl` commands for you to run), “Revoke”, and “Delete” (for a cluster created more than 5 minutes ago with no node joined yet, “Troubleshoot” appears next to “Not connected yet” in the “Status” column; see [When No Node Appears](#没有节点出现时)):
 
-   ![The Kubernetes page: the cluster list and the “Connect cluster” button](../assets/screenshots/k8s-clusters.png)
+   ![The “External Platforms” page: the “Kubernetes cluster” card under “Quick Connect”, and the cluster's row in the “Connected external platforms” list (its actions are “Edit”, “Copy connect command”, and “More”)](../assets/screenshots/k8s-clusters.png)
 
-2. Fill in the drawer that opens. The figure below uses ACK as an example; for DOKS and Nebius, use the values from their own “Connect in gpuworks” sections. Expand “Advanced” to see the agent image registry:
+2. Fill in the cluster form in the dialog. The figure below uses ACK as an example; for DOKS and Nebius, use the values from their own “Connect in gpuworks” sections. Expand “Advanced” to see the agent image registry:
 
-   ![Connect a Kubernetes cluster: the filled-in form for ACK as an example](../assets/screenshots/k8s-connect-form.png)
+   ![The “Kubernetes cluster” tab of the “Add External Platform” dialog: the cluster form filled in for ACK as an example](../assets/screenshots/k8s-connect-form.png)
 
    | Form field | What to enter |
    |---|---|
    | Name | Any, for example `ack-shanghai` |
-   | Server address | The public address from step 0, for example `https://gpuworks.example.com` |
+   | Management node address | The public address from step 0, for example `https://gpuworks.example.com` |
    | Node selector | The label in each cloud's “Connect in gpuworks” table |
    | Advanced → Namespace | Keep `gpuworks-system` |
    | Advanced → Agent image registry | The value in each cloud's “Connect in gpuworks” table |
@@ -346,9 +339,9 @@ This section corresponds to steps 2 to 4 of the overview and moves back and fort
 
    The other fields under “Advanced” need no changes in this guide; for their meaning, see [Connect a Kubernetes Cluster](connect-kubernetes.md).
 
-3. Click “Connect”; the drawer switches to the connect command; click “Copy connect command”:
+3. Click “Connect”; the dialog switches to the connect command (the button at the bottom becomes “Close”); click “Copy connect command”:
 
-   ![The connect command after the cluster is created](../assets/screenshots/k8s-connect-command.png)
+   ![The connect command shown in the “Add External Platform” dialog after the cluster is created](../assets/screenshots/k8s-connect-command.png)
 
    > **Note**: The command contains the cluster's connect token (`token=…` in the figure is an elided form). Treat it like a password and show it only to administrators.
 
@@ -373,7 +366,7 @@ kubectl -n gpuworks-system get daemonset,pods -o wide
 
 ## When No Node Appears
 
-If no node has joined 5 minutes after the cluster is created, “Troubleshoot” appears next to “Not connected yet” on this row of the “Kubernetes” page; click it for the commands to run and common causes:
+If no node has joined 5 minutes after the cluster is created, this cluster's row reads “Not connected for long”, with “Troubleshoot” next to it, of the “External Platforms” page; click it for the commands to run and common causes:
 
 ![The commands and common causes shown by clicking “Troubleshoot”](../assets/screenshots/k8s-troubleshoot.png)
 
@@ -389,7 +382,7 @@ flowchart TD
   f1["The node selector selects no node<br/>check labels with kubectl get nodes --show-labels"]
   f2["The nodes cannot reach the chosen registry<br/>choose a reachable one; for your own private image, check the pull credentials"]
   f3["The node stays in stand-by, or enrollment is refused (node_taken)<br/>see vendor auto-detection in “Connect a Kubernetes Cluster”"]
-  f4["The agent cannot reach the server<br/>read the agent log, confirm the node can reach the Server address"]
+  f4["The agent cannot reach the server<br/>read the agent log, confirm the node can reach the Management node address"]
   start --> q1
   q1 -- Yes --> f1
   q1 -- No --> q2
@@ -408,13 +401,13 @@ Cause and fix for each symptom:
 | Instance Pod event `RuntimeClass "nvidia" not found` | The cluster entry has a RuntimeClass the cluster does not have (managed clusters have none). Edit the cluster entry and leave RuntimeClass empty; once saved, new instance Pods stop using it, with no apply needed |
 | DaemonSet desired count is 0 | The node selector selects no node; check labels with `kubectl get nodes --show-labels` |
 | Pod is running, but no node appears (the agent can reach the server) | A node with no supported accelerator (other than NVIDIA, Ascend, Hygon, PPU, AMD, Kunlunxin) stays in stand-by and does not enroll; or the node is already held by another entry of the same cluster (enrollment refused, reason `node_taken`; the events of `kubectl -n gpuworks-system describe pod <agent Pod>` show `GpuworksEnrollRefused`); see [Connect a Kubernetes Cluster](connect-kubernetes.md#accelerator-vendor-detected-automatically) |
-| Pod is running, but no node appears (the agent cannot reach the server) | The agent cannot reach the server: read the error with `kubectl -n gpuworks-system logs ds/gpuworks-agent` and confirm the node can reach the Server address |
+| Pod is running, but no node appears (the agent cannot reach the server) | The agent cannot reach the server: read the error with `kubectl -n gpuworks-system logs ds/gpuworks-agent` and confirm the node can reach the Management node address |
 
 ## Clean Up When Done
 
 When you finish, clean up in this order:
 
 1. Delete the deployments in gpuworks;
-2. For a cluster connected from a cloud account, click “Remove from the cluster” on the “Kubernetes” page (checks first, deletes after confirmation); for other clusters click “Uninstall” on the entry and run the `kubectl` commands it gives, in order (see [Connect a Kubernetes Cluster](connect-kubernetes.md#uninstall); no connect token is needed). Both delete the DaemonSet, placeholder Pods, and instance Pods, and the cards go back to the cluster;
-3. Delete these nodes on the gpuworks Nodes page and delete the cluster entry on the “Kubernetes” page;
+2. For a cluster connected from a cloud account, expand the cloud account on the “External Platforms” page and click “Remove from the cluster” in the header of this cluster's group (checks first, deletes after confirmation); for other clusters click “Uninstall” in their actions and run the `kubectl` commands it gives, in order (see [Connect a Kubernetes Cluster](connect-kubernetes.md#uninstall); no connect token is needed). Both delete the DaemonSet, placeholder Pods, and instance Pods, and the cards go back to the cluster;
+3. Delete these nodes on the gpuworks Compute Nodes page, then delete the cluster entry (for a cluster connected from a cloud account, in the header of its group under the cloud account; for other clusters, on its row on the “External Platforms” page);
 4. In the cloud console, delete the cluster (together with node pools, load balancers, and EIPs) to avoid further charges.

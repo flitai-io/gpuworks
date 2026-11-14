@@ -1469,6 +1469,14 @@
       "translations": { "zh": "平台密钥" }
     },
     {
+      "term_en": "Platform Resource",
+      "translations": { "zh": "平台资源" }
+    },
+    {
+      "term_en": "Node Source",
+      "translations": { "zh": "节点来源" }
+    },
+    {
       "term_en": "External Platform",
       "translations": { "zh": "外部平台" },
       "forbidden": { "zh": ["第三方平台", "接入平台", "算力来源"] }
@@ -1561,7 +1569,8 @@
     { "term_en": "Batch", "translations": { "zh": "批处理任务" } },
     {
       "term_en": "Kubernetes Cluster",
-      "translations": { "zh": "Kubernetes 集群" }
+      "translations": { "zh": "Kubernetes 集群" },
+      "forbidden": { "zh": ["本地 Kubernetes 集群", "其他 Kubernetes 集群"] }
     },
     {
       "term_en": "Enrollment Token",

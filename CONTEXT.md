@@ -487,8 +487,8 @@ agent 升级机制：下载新二进制 → smoke 握手通过 → 原子替换�
 _Avoid_: 重启升级、滚动升级
 
 **Kubernetes 集群 — Kubernetes Cluster**:
-以一个 DaemonSet 接入的一组 GPU 节点，记录接入令牌与 manifest 参数（`kube_clusters`）。集群里的每个节点仍是普通节点。
-_Avoid_: 集群分组（标签的事）、k8s 节点池
+以一个 DaemonSet 接入的一组 GPU 节点，记录接入令牌与 manifest 参数（`kube_clusters`）。集群里的每个节点仍是普通节点。条目有两种来历：从云账号的托管集群接入的，归在账号之下，GPUWorks 可以用云账号现取的临时凭据代为应用 manifest；不经云账号、由管理员自己在集群里执行 `kubectl apply` 接入的（如自建的 k3s，以及没有云账号可接入的其他云上的托管集群），自己算一个[[外部平台]]，在列表里单独占一行（「厂商」列为「—」，「平台类型」列写 Kubernetes）。「快速接入」的卡片和「添加外部平台」弹窗的页签都叫“Kubernetes 集群”，指后一种接入方式。需要和从云账号接入的集群区分时，写“独立接入的 Kubernetes 集群”。删除云账号后，从它接入的条目改为独立接入的条目，节点照常工作，GPUWorks 不再能代为应用或从集群卸载。
+_Avoid_: 集群分组（标签的事）、k8s 节点池、本地 Kubernetes 集群（“本地”容易被理解为集群所在的位置）、其他 Kubernetes 集群、自建集群（云上的托管集群也可能独立接入）
 
 **接入令牌 — Enrollment Token**:
 集群级凭证，只用来让 DaemonSet 的 agent 换取各自的节点 token（`POST /kube/enroll`），首次使用时绑定集群。吊销后新节点不能再加入，已加入的节点照常。
@@ -551,8 +551,16 @@ _Avoid_: agent 监听端口、agent 接入地址、节点端口
 _Avoid_: agent 互联地址、SSH 地址、agent 接入地址
 
 **外部平台 — External Platform**:
-GPUWorks 之外、把机器交给 GPUWorks 纳管的平台：公有云厂商的账号、ZStack Cloud 专有云环境，以及以后的 Kubernetes 集群。控制台在“外部平台”页把它们列在一起，用平台类型（公有云、专有云）区分。界面上单说“平台”分不清指谁：指这些对象写“外部平台”，指 GPUWorks 自己的密钥写“GPUWorks 平台密钥”。
+GPUWorks 之外、把机器交给 GPUWorks 纳管的平台：公有云厂商的账号、ZStack Cloud 专有云环境，以及不经云账号、自行执行 `kubectl apply` 接入的 Kubernetes 集群。控制台在“外部平台”页把它们列在一起，列表的「厂商」列写云厂商（独立接入的 Kubernetes 集群为「—」），「平台类型」列写公有云、专有云或 Kubernetes；「添加外部平台」弹窗里对应的三个页签是公有云、专有云和[[Kubernetes 集群]]；从云账号接入的托管集群归在它的账号之下，不单独算一个外部平台。界面上单说“平台”分不清指谁：指这些对象写“外部平台”，指 GPUWorks 自己的密钥写“GPUWorks 平台密钥”。
 _Avoid_: 第三方平台（ZStack Cloud 与客户自己的私有云不是第三方）、接入平台、算力来源
+
+**平台资源 — Platform Resource**:
+一个外部平台交给 GPUWorks、能变成计算节点的东西属于哪一类：虚拟机（`vm`）、容器实例（`container`）、物理机（`host`）或 Kubernetes 集群（`kubernetes`）。前三类是实例，逐台安装 agent；集群以一个 DaemonSet 接入，选中的 GPU 节点自动成为计算节点。一个平台可以有几类（阿里云有虚拟机和 Kubernetes）；厂商对它有自己的产品名时，界面上的标签写产品名（“ECS”“ACK”），没有时写类型名。由 server 的平台字典给出。
+_Avoid_: 资源类型（单说容易与 GPU、存储等混淆）、实例类型（那是云厂商的机型规格）
+
+**节点来源 — Node Source**:
+一个计算节点经哪个[[外部平台]]或集群接入：某个云账号的实例，或某个[[Kubernetes 集群]]（云账号下的集群或独立接入的集群）的节点；手动添加（安装命令或 SSH 向导）的节点为“手动添加”；server 读不到来源时显示“来源读取失败”，不当作手动添加。「计算节点」页的「来源」列显示它，可按它筛选，点开回到外部平台页里对应的那一行；接口里是节点的 `source`。
+_Avoid_: 模型来源、来源规则（那是拉取镜像与模型的地址规则）
 
 ### 控制面安装与升级
 

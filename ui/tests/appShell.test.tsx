@@ -307,13 +307,32 @@ test("the old models address lands on the models entry with its query", async ()
   await waitFor(() => assert.equal(within(menu()).getByRole("link", { name: common.navigation.models }).getAttribute("aria-current"), "page"));
 });
 
-// The private cloud page became the external platforms list (ui/src/pages/CloudProvidersPage.tsx) opened on private clouds.
+// The private cloud page and the Kubernetes page became the external platforms list
+// (ui/src/pages/CloudProvidersPage.tsx), opened on private clouds and on what connects Kubernetes.
+// The accounts as GET /api/v1/providers answers them, each with its kind's category and resources and the
+// nodes that joined through it; the cluster entries as GET /api/v1/kube/clusters does: one connected on its
+// own, which is a row of the list, and one made from the Alibaba Cloud account's cluster, which is not.
+const kubeEntry = {
+  id: 1, uuid: "7c1b6f0e-0000-4000-8000-000000000001", name: "edge-k3s", namespace: "gpuworks-system", server_url: "http://localhost", agent_image: "",
+  agent_image_source: "dockerhub", effective_agent_image: "gpuworks/gpuworks-agent:v1",
+  node_selector: "", state_dir: "/opt/gpuworks", runtime_class: "", image_pull_secret: "", containerd_socket: "", api_server: "",
+  engine_ports: "40000-42767", idle_return_seconds: 60, priority: 10000, allow_preemption: false, cluster_uid: "0f7d2c1a-0000-4000-8000-00000000000a", revoked: false,
+  node_count: 2, vendors: [{ vendor: "nvidia", nodes: 2 }],
+  created_at: "2026-11-01T08:00:00Z", apply_command: "kubectl apply -f 'http://localhost/kube/manifest.yaml?token=t'", stalled: false, pool_ids: [], namespace_shared_with: [],
+  can_apply: false, can_remove: false, operation_blocked: "no_source", state: "active", category: "kubernetes", resources: [{ type: "kubernetes" }],
+};
 const platforms = {
   "/api/v1/providers": () => Response.json({ items: [
-    { id: 1, name: "Pods", kind: "runpod", category: "public_cloud", state: "valid", instance_count: 3, created_at: "", updated_at: "" },
-    { id: 2, name: "Hosts", kind: "zstack", category: "private_cloud", state: "valid", instance_count: 2, created_at: "", updated_at: "" },
+    { id: 1, name: "Pods", kind: "runpod", category: "public_cloud", state: "valid", instance_count: 3, resources: [{ type: "container", product: "Pod" }], node_count: 1, created_at: "2026-11-01T08:00:00Z", updated_at: "2026-11-01T08:00:00Z" },
+    { id: 2, name: "Hosts", kind: "zstack", category: "private_cloud", state: "valid", instance_count: 2, resources: [{ type: "host" }], node_count: 0, created_at: "2026-11-01T08:00:00Z", updated_at: "2026-11-01T08:00:00Z" },
+    { id: 3, name: "Ali", kind: "aliyun", category: "public_cloud", state: "valid", instance_count: 5, resources: [{ type: "vm", product: "ECS" }, { type: "kubernetes", product: "ACK" }], node_count: 4, created_at: "2026-11-01T08:00:00Z", updated_at: "2026-11-01T08:00:00Z" },
+  ], total: 3 }),
+  "/api/v1/providers/kinds": () => Response.json({ items: [], total: 0, categories: [{ id: "kubernetes", resources: [{ type: "kubernetes" }], kube_cluster: true, kinds: [] }] }),
+  "/api/v1/kube/clusters": () => Response.json({ items: [
+    kubeEntry,
+    { ...kubeEntry, id: 2, uuid: "7c1b6f0e-0000-4000-8000-000000000002", name: "ack-prod", node_count: 4, pool_ids: ["np-l20"], can_apply: true, can_remove: true, operation_blocked: undefined,
+      source: { provider_id: 3, provider_name: "Ali", provider_kind: "aliyun", cluster_id: "c-ack-prod" } },
   ], total: 2 }),
-  "/api/v1/providers/kinds": () => Response.json({ items: [], total: 0 }),
 };
 
 test("the old private cloud address opens the external platforms page on the private clouds", async () => {
@@ -364,6 +383,30 @@ test("going back from the old private cloud address returns to the page before i
   } finally {
     restoreRequest();
   }
+});
+
+test("the old Kubernetes address opens the external platforms page on what connects Kubernetes", async () => {
+  serve(platforms);
+  await mountApp("/kubernetes");
+  assert.ok(await screen.findByRole("heading", { level: 2, name: locale.providers.platforms.title }));
+  // What the old page listed, where it is now: the cluster connected on its own and the account whose clusters connect.
+  assert.ok(await screen.findByText("edge-k3s"));
+  assert.ok(screen.getByText("Ali"));
+  assert.equal(screen.queryAllByText("Pods").length, 0, "an account that connects no Kubernetes is filtered out");
+  assert.equal(screen.queryAllByText("Hosts").length, 0);
+  assert.ok(within(screen.getByRole("group", { name: "Filtered" })).getByRole("button", { name: /^Clear filter: Connects Kubernetes/ }));
+  assert.equal(within(menu()).getByRole("link", { name: common.navigation.platforms }).getAttribute("aria-current"), "page");
+});
+
+test("going back from the old Kubernetes address returns to the page before it, not to the old address", async () => {
+  serve(platforms);
+  const router = createMemoryRouter([{ path: "*", element: <App /> }], { initialEntries: ["/apikeys", "/kubernetes"], initialIndex: 1 });
+  render(<I18nextProvider i18n={i18n}><ConfigProvider theme={{ token: { motion: false } }}><RouterProvider router={router} /></ConfigProvider></I18nextProvider>);
+  await screen.findByRole("heading", { level: 2, name: locale.providers.platforms.title });
+  assert.equal(router.state.location.pathname + router.state.location.search, "/providers?resource=kubernetes");
+  await act(() => router.navigate(-1));
+  assert.equal(router.state.location.pathname, "/apikeys");
+  assert.ok(await screen.findByRole("heading", { level: 2, name: locale.apikeys.title }));
 });
 
 test("without a session the frame is not shown, only the sign-in form", async () => {

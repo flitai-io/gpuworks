@@ -3,7 +3,19 @@ import { afterEach, test } from "node:test";
 import React from "react";
 import { createI18n, dom } from "./helpers/dom.ts";
 import { I18nextProvider } from "react-i18next";
-import { list } from "./helpers/listPage.ts";
+
+// Editing a cluster entry (ui/src/pages/kubernetes/KubeEntryActions.tsx opens
+// ui/src/pages/kubernetes/KubeClusterDrawer.tsx in its edit mode, the form of
+// ui/src/pages/kubernetes/useKubeClusterForm.tsx): what is fixed, what is sent,
+// and what follows when the cluster has to be brought in line. The same
+// buttons sit on the row of a cluster connected on its own and in the header of
+// a cloud cluster's group; that a viewer gets none of them is checked on the
+// page at the end. Uninstalling by hand and the delete confirmation are in
+// tests/kubeEntryActions.test.tsx; how the vendors of an entry's nodes read
+// where they are shown is in tests/providerPlatformClusterRow.test.tsx and
+// tests/providerClusterEntries.test.tsx (vendorsText itself is here).
+import { servePlatforms } from "./helpers/platformFixtures.ts";
+import { rowActions } from "./helpers/rowActions.ts";
 
 const { i18n, locale } = await createI18n(["kubernetes", "providers", "deploy"]);
 const { MemoryRouter } = await import("react-router-dom");
@@ -11,13 +23,15 @@ const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@t
 const { default: userEvent } = await import("@testing-library/user-event");
 const { api } = await import("../src/api.ts");
 const { APIError } = await import("../src/apiError.ts");
-const { default: KubernetesPage } = await import("../src/pages/KubernetesPage.tsx");
+const { default: KubeEntryActions } = await import("../src/pages/kubernetes/KubeEntryActions.tsx");
+const { default: CloudProvidersPage } = await import("../src/pages/CloudProvidersPage.tsx");
+const { FeedbackHost, message } = await import("../src/ui-kit/feedback/index.tsx");
 const { vendorsText } = await import("../src/kubeClusters.ts");
 import type { KubeCluster, KubeClusterEdit, KubeClusterUpdate, KubeDefaults } from "../src/api";
 
 const k = locale.kubernetes;
 const originals = { ...api };
-afterEach(() => { cleanup(); Object.assign(api, originals); });
+afterEach(() => { message.destroy(); cleanup(); Object.assign(api, originals); });
 
 const DEFAULTS: KubeDefaults = {
   namespace: "gpuworks-system", state_dir: "/opt/gpuworks", engine_ports: "40000-42767", idle_return_seconds: 60, idle_return_keep: -1,
@@ -35,7 +49,8 @@ function cluster(overrides: Partial<KubeCluster> = {}): KubeCluster {
     effective_agent_image: "gpuworks/gpuworks-agent:r1", node_selector: "gpu=a100", runtime_class: "", image_pull_secret: "", containerd_socket: "", api_server: "",
     engine_ports: "40000-42767", idle_return_seconds: 600, priority: 10000, allow_preemption: false, cluster_uid: "uid-1", revoked: false, node_count: 4,
     created_at: "2026-10-19T08:30:00Z", apply_command: "kubectl apply -f 'https://gpuworks.example/m.yaml'", remove_commands: REMOVE,
-    stalled: false, pool_ids: [], namespace_shared_with: [], can_apply: false, can_remove: false, operation_blocked: "no_source", ...overrides,
+    stalled: false, pool_ids: [], namespace_shared_with: [], can_apply: false, can_remove: false, operation_blocked: "no_source",
+    state: "active", category: "kubernetes", resources: [{ type: "kubernetes" }], ...overrides,
   };
 }
 const cloud = (overrides: Partial<KubeCluster> = {}) => cluster({
@@ -43,11 +58,11 @@ const cloud = (overrides: Partial<KubeCluster> = {}) => cluster({
 });
 
 type Calls = Record<string, unknown[][]>;
-function stubApi(clusters: KubeCluster[], options: { admin?: boolean; edit?: (uuid: string, body: KubeClusterUpdate) => KubeClusterEdit | Error } = {}) {
+let served: KubeCluster[] = [];
+function stubApi(clusters: KubeCluster[], options: { edit?: (uuid: string, body: KubeClusterUpdate) => KubeClusterEdit | Error } = {}) {
   const calls: Calls = {};
+  served = clusters;
   const note = (name: string, args: unknown[]) => { (calls[name] ??= []).push(args); };
-  api.me = (async () => ({ role: options.admin === false ? "viewer" : "admin" })) as never;
-  api.kubeClusters = (async () => list(clusters)) as never;
   api.kubeDefaults = (async () => DEFAULTS) as never;
   api.updateKubeCluster = (async (uuid: string, body: KubeClusterUpdate) => {
     note("updateKubeCluster", [uuid, body]);
@@ -69,15 +84,24 @@ function stubApi(clusters: KubeCluster[], options: { admin?: boolean; edit?: (uu
   return calls;
 }
 
-function renderPage() {
+/** The entry's action buttons as an administrator gets them, beside the entry's name (a row of a local cluster or a cloud cluster's group header). */
+let changes = 0;
+function renderActions(entries: KubeCluster[]) {
+  changes = 0;
   render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={["/kubernetes"]}><KubernetesPage /></MemoryRouter>
+      <MemoryRouter>
+        <FeedbackHost />
+        <table><tbody>
+          {entries.map((entry) => <tr key={entry.uuid}><td>{entry.name}</td><td><KubeEntryActions cluster={entry} onChanged={() => { changes += 1; }} /></td></tr>)}
+        </tbody></table>
+      </MemoryRouter>
     </I18nextProvider>,
   );
   return userEvent.setup({ document: dom.window.document });
 }
-const rowOf = async (name: string) => (await screen.findByText(name)).closest("tr") as HTMLElement;
+const renderPage = () => renderActions(served);
+const rowOf = async (name: string) => (await screen.findByText(name, { selector: "td" })).closest("tr") as HTMLElement;
 const dialog = () => within(screen.getByRole("dialog"));
 const field = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( \\*)?$`);
 const escape = () => fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape", code: "Escape", keyCode: 27 });
@@ -88,8 +112,6 @@ async function openEdit(user: ReturnType<typeof userEvent.setup>, name: string) 
   await form.findByDisplayValue(name);
   return form;
 }
-// The confirmation is a popover beside the row's button.
-const popover = () => within([...document.querySelectorAll('[data-slot="popover-content"]')].at(-1) as HTMLElement);
 
 test("the vendors of a cluster's nodes read most first with their counts; no accelerator and no node have their own words", () => {
   const t = i18n.getFixedT("en", "kubernetes");
@@ -98,13 +120,6 @@ test("the vendors of a cluster's nodes read most first with their counts; no acc
   assert.equal(vendorsText(t, tCommon, [{ vendor: "somenew", nodes: 1 }]), "somenew ×1", "a vendor this UI does not know keeps the server's name");
   assert.equal(vendorsText(t, tCommon, []), "—");
   assert.equal(vendorsText(t, tCommon, undefined), "—");
-});
-
-test("the list shows the vendors column from the server's counts", async () => {
-  stubApi([cluster(), cluster({ id: 3, uuid: "c-3", name: "empty", node_count: 0, vendors: [] })]);
-  renderPage();
-  assert.ok(within(await rowOf("prod-gpu")).getByText(`${locale.common.vendor.nvidia} ×3 · ${locale.common.vendor.ascend} ×1`));
-  assert.ok(within(await rowOf("empty")).getByText("—"));
 });
 
 test("editing opens the entry's values; the namespace, server address and state directory are fixed", async () => {
@@ -143,7 +158,9 @@ test("saving sends only the changed fields; when the cluster needs nothing appli
   assert.deepEqual(calls.updateKubeCluster[0], ["c-1", { name: "prod-gpu-2", node_selector: "gpu=h100", runtime_class: "nvidia" }],
     "nothing else is sent, least of all the namespace, server address or state directory");
   await noDialog();
-  assert.ok(screen.queryByText(k.edit.savedTitle.replace("{{name}}", "prod-gpu")) === null, "no apply step when nothing needs applying");
+  assert.equal(screen.queryByText(k.edit.savedHelp), null, "no apply step when nothing needs applying");
+  assert.ok(await screen.findByText(k.edit.saved.replace("{{name}}", "prod-gpu")), "a toast says it was saved");
+  assert.equal(changes, 1, "the owner is told, so its list follows");
 });
 
 test("a cleared field is sent empty so the server clears it, a retyped number travels as a number, and an untouched priority is not sent", async () => {
@@ -259,70 +276,17 @@ test("a name another entry has, or a field the server refuses, is shown at the f
   await noDialog();
 });
 
-test("a viewer has no edit or uninstall action", async () => {
-  stubApi([cluster()], { admin: false });
-  renderPage();
-  await rowOf("prod-gpu");
-  assert.equal(screen.queryByRole("button", { name: k.actions.edit }), null);
-  assert.equal(screen.queryByRole("button", { name: k.actions.uninstall }), null);
-});
-
-test("uninstall lists the commands that remove the agents and the pods they started, and what follows", async () => {
-  const calls = stubApi([cluster(), cloud()]);
-  const user = renderPage();
-  assert.equal(within(await rowOf("ack-gpu")).queryByRole("button", { name: k.actions.uninstall }), null, "an entry the server removes itself keeps the remove flow");
-  await user.click(within(await rowOf("prod-gpu")).getByRole("button", { name: k.actions.uninstall }));
-  const modal = dialog();
-  assert.ok(await modal.findByText(k.uninstall.title.replace("{{name}}", "prod-gpu")));
-  assert.ok(modal.getByText(k.uninstall.intro));
-  assert.ok(modal.getByText(k.uninstall.next));
-  assert.equal(modal.getByLabelText("Command 1").textContent, REMOVE[0]);
-  assert.equal(modal.getByLabelText("Command 2").textContent, REMOVE[1]);
-  await user.click(modal.getByRole("button", { name: "Copy command 2" }));
-  assert.equal(await navigator.clipboard.readText(), REMOVE[1]);
-  assert.equal(calls.kubeClusterOperation, undefined, "nothing is sent from the modal");
-  await user.click(modal.getAllByRole("button", { name: k.uninstall.close }).at(-1) as HTMLElement);
-  await noDialog();
-});
-
-test("an entry without remove commands (or whose removal the server does) shows no uninstall", async () => {
-  stubApi([cluster({ remove_commands: undefined })]);
-  renderPage();
-  assert.equal(within(await rowOf("prod-gpu")).queryByRole("button", { name: k.actions.uninstall }), null);
-});
-
-test("a revoked entry can still be uninstalled by hand", async () => {
-  stubApi([cluster({ revoked: true })]);
-  const user = renderPage();
-  const button = within(await rowOf("prod-gpu")).getByRole("button", { name: k.actions.uninstall }) as HTMLButtonElement;
-  assert.equal(button.disabled, false);
-  await user.click(button);
-  assert.ok(await dialog().findByLabelText("Command 1"));
-});
-
-test("deleting an entry that has nodes says to uninstall first and offers it; one without nodes just confirms", async () => {
-  stubApi([cluster(), cluster({ id: 3, uuid: "c-3", name: "empty", node_count: 0, vendors: [], remove_commands: undefined })]);
-  const user = renderPage();
-  await user.click(within(await rowOf("prod-gpu")).getByRole("button", { name: k.actions.delete }));
-  const confirm = await waitFor(() => { const p = [...document.querySelectorAll('[data-slot="popover-content"]')].at(-1); assert.ok(p); return within(p as HTMLElement); });
-  assert.ok(await confirm.findByText(k.actions.deleteHasNodes_other.replace("{{count}}", "4")));
-  await user.click(confirm.getByRole("button", { name: k.actions.uninstall }));
-  assert.ok(await screen.findByLabelText("Command 1"), "the uninstall commands open");
-  await user.click(dialog().getAllByRole("button", { name: k.uninstall.close }).at(-1) as HTMLElement);
-  await noDialog();
-
-  await user.click(within(await rowOf("empty")).getByRole("button", { name: k.actions.delete }));
-  await waitFor(() => assert.ok(popover().getByText(k.actions.deleteHelp)));
-  assert.equal(popover().queryByText(/cannot be deleted yet/), null);
-});
-
-test("deleting an entry with nodes that the server can remove offers its remove flow", async () => {
-  stubApi([cloud({ node_count: 1, vendors: [{ vendor: "nvidia", nodes: 1 }] })]);
-  const user = renderPage();
-  await user.click(within(await rowOf("ack-gpu")).getByRole("button", { name: k.actions.delete }));
-  await waitFor(() => assert.ok(popover().getByText(k.actions.deleteHasNodes_one.replace("{{count}}", "1"))));
-  await user.click(popover().getByRole("button", { name: k.actions.remove }));
-  assert.ok(await screen.findByText(k.operation.removeTitle.replace("{{name}}", "ack-gpu")));
+test("on the page only an administrator gets the edit button and the uninstall item of a local cluster's row", async () => {
+  for (const admin of [true, false]) {
+    servePlatforms(api, { clusters: [cluster()], admin });
+    render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/providers"]}><CloudProvidersPage /></MemoryRouter></I18nextProvider>);
+    const row = await rowOf("prod-gpu");
+    if (admin) await waitFor(() => assert.ok(within(row).getByRole("button", { name: k.actions.edit })));
+    const { shown, folded } = await rowActions(row);
+    const offered = [shown.includes(k.actions.edit), folded.includes(k.actions.uninstall)];
+    assert.deepEqual(offered, admin ? [true, true] : [false, false], admin ? "an administrator edits, and uninstalls from More" : "a viewer does neither");
+    cleanup();
+  }
 });
 
 // A node selector that leaves out nodes still running instances is refused by the server until confirmed.

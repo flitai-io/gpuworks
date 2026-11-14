@@ -14,6 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/kubemanifest"
+	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -63,12 +64,48 @@ func kubeClusterDTO(c store.KubeCluster, v kubeEntryView) dto.KubeCluster {
 		Stalled: kubeClusterStalled(c, time.Now().UTC()), PoolIDs: append([]string{}, v.poolIDs...),
 		NamespaceSharedWith: append([]string{}, v.sharedNS...),
 	}
+	out.State = kubeClusterState(c, out.Stalled)
+	out.Category, out.Resources = kubeClusterCategory()
 	out.CanApply, out.CanRemove, out.OperationBlocked = kubeClusterOperations(c, v.privateAPI)
 	if v.admin && c.RevokedAt == nil {
 		out.ApplyCommand = "kubectl apply -f '" + kubeManifestURL(c) + "'"
 	}
 	if v.admin {
 		out.RemoveCommands = kubemanifest.RemoveCommands(c.Namespace)
+	}
+	return out
+}
+
+// kubeClusterState is where an entry stands, the one value the console shows
+// and filters by: revoked, stalled (no node joined for too long), pending (no
+// node yet) or active (a node joined).
+func kubeClusterState(c store.KubeCluster, stalled bool) string {
+	switch {
+	case c.RevokedAt != nil:
+		return "revoked"
+	case stalled:
+		return "stalled"
+	case c.ClusterUID == "":
+		return "pending"
+	}
+	return "active"
+}
+
+// kubeClusterCategory is the platform type a cluster connected on its own is
+// listed under, and what it connects, as provider.Categories declares them.
+func kubeClusterCategory() (string, []dto.PlatformResource) {
+	for _, c := range provider.Categories() {
+		if c.KubeCluster {
+			return string(c.ID), platformResources(c.Resources)
+		}
+	}
+	return "", []dto.PlatformResource{}
+}
+
+func platformResources(in []provider.KindResource) []dto.PlatformResource {
+	out := make([]dto.PlatformResource, 0, len(in))
+	for _, r := range in {
+		out = append(out, dto.PlatformResource{Type: string(r.Type), Product: r.Product})
 	}
 	return out
 }

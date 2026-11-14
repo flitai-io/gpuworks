@@ -171,6 +171,9 @@ function nodesServer(nodes: Node[]) {
       items: matched.slice(start, start + query.page_size),
       page: query.page, page_size: query.page_size, total: matched.length, all: nodes.length,
       labels: [...facets].sort(([a], [b]) => a.localeCompare(b)).map(([key, values]) => ({ key, values: [...values].sort() })),
+      // Every source the fleet has, whatever the filters. No node of this file joined through an external
+      // platform, so the only one is "added by hand" (the source filter itself is in tests/nodeSource.test.tsx).
+      sources: nodes.length ? [{ value: "manual", nodes: nodes.length }] : [],
     };
   };
 }
@@ -288,7 +291,7 @@ test("the table uses a fixed layout with explicit widths; the name leads frozen 
   assert.equal(table.style.tableLayout, "fixed");
   const cols = Array.from(table.querySelectorAll("thead th"));
   assert.ok(screen.getByRole("columnheader", { name: /Agent version/i }));
-  assert.equal(cols.length, 12);
+  assert.equal(cols.length, 13, "master's twelve and the Source column");
   assert.equal((cols[1] as HTMLElement).style.width, "220px");
   assert.equal((cols[cols.length - 1] as HTMLElement).style.width, "110px");
   const headers = screen.getAllByRole("columnheader");
@@ -296,6 +299,9 @@ test("the table uses a fixed layout with explicit widths; the name leads frozen 
   assert.equal((headers[1] as HTMLElement).style.left, "48px");
   assert.equal(headers.at(-1)?.textContent, "Actions");
   assert.equal((headers.at(-1) as HTMLElement).style.right, "0px");
+  // Where a node came from follows what it has (its GPUs and its agent's version) and leads its labels.
+  assert.deepEqual(headers.slice(3, 7).map((header) => header.textContent), ["GPU", "Agent version", "Source", "System labels"]);
+  assert.equal((headers[5] as HTMLElement).style.width, "190px");
 });
 
 function rowOf(text: string) {
@@ -597,6 +603,7 @@ test("the node list asks the server for one page and counts matches against the 
   stubApi(fleet);
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("node-00")));
+  // No source in the address: the request names none, beside the agent upgrade filter the list always sends.
   assert.deepEqual(pageQueries[0], { extra: { agent_upgrade: ["all"] }, page: 1, page_size: 20, q: "", label: [], state: [] });
   assert.ok(screen.getByText("23/23 nodes"));
   assert.ok(!screen.queryByText("node-20"), `"node-20" is still shown`);

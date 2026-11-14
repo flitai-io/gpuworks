@@ -21,12 +21,60 @@ func readAll(r *http.Request) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(r.Body, 1<<20))
 }
 
+// providerKindsDTO lists the kinds an account can be added for, and the
+// platform types to offer them under, in order, each naming its kinds.
+type providerKindsDTO struct {
+	Items      []provider.KindInfo   `json:"items"`
+	Total      int                   `json:"total"`
+	Categories []providerCategoryDTO `json:"categories"`
+}
+
+type providerCategoryDTO struct {
+	provider.CategoryInfo
+	// Kinds are the kinds filed under the type, in the order of items; none
+	// for the Kubernetes type, which is added as a cluster entry.
+	Kinds []string `json:"kinds"`
+}
+
+// providerCategoryOther files the kinds no platform type declares.
+const providerCategoryOther provider.Category = "other"
+
 func (a *apiHandlers) providerKinds(w http.ResponseWriter, r *http.Request) {
-	if a.d.Providers == nil {
-		writeJSON(w, http.StatusOK, dto.NewList([]provider.KindInfo{}))
-		return
+	kinds := []provider.KindInfo{}
+	if a.d.Providers != nil {
+		kinds = a.d.Providers.AvailableKinds()
 	}
-	writeJSON(w, http.StatusOK, dto.NewList(a.d.Providers.AvailableKinds()))
+	writeJSON(w, http.StatusOK, providerKindsDTO{Items: kinds, Total: len(kinds), Categories: providerCategories(kinds)})
+}
+
+// providerCategories are the platform types in provider.Categories order,
+// keeping a vendor type only when one of kinds is filed under it, then one for
+// the kinds filed under none, and the Kubernetes cluster type last.
+func providerCategories(kinds []provider.KindInfo) []providerCategoryDTO {
+	byCategory := map[provider.Category][]string{}
+	for _, k := range kinds {
+		c := k.Category
+		if c == "" {
+			c = providerCategoryOther
+		}
+		byCategory[c] = append(byCategory[c], k.Kind)
+	}
+	out := []providerCategoryDTO{}
+	var clusters []providerCategoryDTO
+	for _, c := range provider.Categories() {
+		if c.KubeCluster {
+			clusters = append(clusters, providerCategoryDTO{CategoryInfo: c, Kinds: []string{}})
+			continue
+		}
+		if names := byCategory[c.ID]; len(names) > 0 {
+			out = append(out, providerCategoryDTO{CategoryInfo: c, Kinds: names})
+		}
+		delete(byCategory, c.ID)
+	}
+	if names := byCategory[providerCategoryOther]; len(names) > 0 {
+		out = append(out, providerCategoryDTO{CategoryInfo: provider.CategoryInfo{ID: providerCategoryOther}, Kinds: names})
+	}
+	return append(out, clusters...)
 }
 
 func (a *apiHandlers) listProviders(w http.ResponseWriter, r *http.Request) {
@@ -43,23 +91,40 @@ func (a *apiHandlers) listProviders(w http.ResponseWriter, r *http.Request) {
 		Category      provider.Category `json:"category"`
 		State         string            `json:"state"`
 		InstanceCount int               `json:"instance_count"`
-		CreatedAt     string            `json:"created_at"`
-		UpdatedAt     string            `json:"updated_at"`
+		// Resources are what the account's kind connects (provider.ResourcesOf).
+		Resources []provider.KindResource `json:"resources"`
+		// NodeCount is the compute nodes that joined through the account, on
+		// its instances or through its clusters.
+		NodeCount int `json:"node_count"`
+		// SyncedAt is when the account's instances were last listed; absent before the first sync.
+		SyncedAt  string `json:"synced_at,omitempty"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+	}
+	// Every account's counts are read in two grouped queries, however many accounts and instances there are.
+	instances, err := a.d.Store.AccountInstanceCounts()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	// The same derivation as the node list's source filter, so "nodes joined" is what that filter lists.
+	nodes, err := a.d.Store.NodeCountsByProvider()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
 	}
 	out := make([]providerDTO, 0, len(ps))
 	for _, p := range ps {
-		insts, err := a.d.Store.ProviderInstances(p.ID)
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err)
-			return
-		}
 		out = append(out, providerDTO{
 			ID:            p.ID,
 			Name:          p.Name,
 			Kind:          p.Kind,
 			Category:      provider.CategoryOf(p.Kind),
 			State:         p.State,
-			InstanceCount: len(insts),
+			InstanceCount: instances[p.ID],
+			Resources:     provider.ResourcesOf(p.Kind),
+			NodeCount:     nodes[p.ID],
+			SyncedAt:      syncedAt(p.SyncedAt),
 			CreatedAt:     p.CreatedAt.UTC().Format(time.RFC3339),
 			UpdatedAt:     p.UpdatedAt.UTC().Format(time.RFC3339),
 		})
@@ -163,17 +228,37 @@ func (a *apiHandlers) syncProvider(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, errNoProviders)
 		return
 	}
-	insts, err := a.d.Providers.Sync(r.Context(), parseUint(chi.URLParam(r, "id")))
+	id := parseUint(chi.URLParam(r, "id"))
+	insts, err := a.d.Providers.Sync(r.Context(), id)
 	if err != nil {
 		writeErr(w, statusProviderFailed, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"count": len(insts), "instances": insts})
+	// What a sync found is what the account's instance list shows: its own instances, as stored.
+	own, err := a.d.Store.AccountInstances(id)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	kept := make(map[string]bool, len(own))
+	for _, p := range own {
+		kept[p.ExternalID] = true
+	}
+	listed := make([]provider.Instance, 0, len(own))
+	for _, inst := range insts {
+		if kept[inst.ExternalID] {
+			listed = append(listed, inst)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"count": len(listed), "instances": listed})
 }
 
+// providerInstances lists the account's own instances. The nodes of its
+// managed Kubernetes clusters are left out: the vendor lists them as
+// instances too, but they join through their cluster and are the cluster's.
 func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) {
 	id := parseUint(chi.URLParam(r, "id"))
-	pis, err := a.d.Store.ProviderInstances(id)
+	pis, err := a.d.Store.AccountInstances(id)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -198,12 +283,8 @@ func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) 
 		SSHConnections []provider.SSHConnection `json:"ssh_connections"`
 		Kind           string                   `json:"kind"`
 		NodeID         uint                     `json:"node_id"`
-		// ManagedCluster: the instance is a node of this Kubernetes cluster
-		// of the account and joins through it, not by its own install.
-		ManagedCluster string `json:"managed_cluster,omitempty"`
 		// Actions are the operations the instance allows now (power_on |
-		// power_off | install | delete); empty for a cluster node. A client
-		// offers exactly these.
+		// power_off | install | delete). A client offers exactly these.
 		Actions []string `json:"actions"`
 	}
 	out := make([]instanceDTO, 0, len(pis))
@@ -216,8 +297,7 @@ func (a *apiHandlers) providerInstances(w http.ResponseWriter, r *http.Request) 
 			ExternalID: p.ExternalID, Name: p.Name, GPUModel: p.GPUModel, GPUCount: p.GPUCount,
 			Power: p.Power, PricePerHr: p.PricePerHr, Region: p.Region, PublicIP: p.PublicIP,
 			SSHPort: p.SSHPort, SSHUser: p.SSHUser, SSHConnections: connections, Kind: p.Kind, NodeID: p.NodeID,
-			ManagedCluster: p.ManagedCluster,
-			Actions:        provider.InstanceActions(caps, p.Power, p.NodeID, p.ManagedCluster),
+			Actions: provider.InstanceActions(caps, p.Power, p.NodeID, p.ManagedCluster),
 		})
 	}
 	writeJSON(w, http.StatusOK, dto.NewList(out))
@@ -488,3 +568,11 @@ func (a *apiHandlers) putSetting(w http.ResponseWriter, r *http.Request) {
 }
 
 const errNoProviders = staticErr("cloud providers not available")
+
+// syncedAt is an account's last sync time as the list carries it; empty before the first.
+func syncedAt(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}

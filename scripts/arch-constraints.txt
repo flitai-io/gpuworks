@@ -11,8 +11,8 @@ pending_removal_literal	0	max
 deployment_state_literal	0	max
 engine_literal_server	2	max
 engine_literal_ui	5	max
-ui_antd_import_files	348	max	# raised: master added antd before this ratchet existed (ModelSourceIDField, OutboundPolicyCard, the benchmark report export in benchmarkReportExport.css and EvaluationDetailPage, and the deploy diagnostics in DeployDiagnostics and DeploySubmissionError); the per-file snapshot (ui/antd-inventory.json) starts from that tree
-ui_antd_icon_import_files	104	warn
+ui_antd_import_files	344	max	# raised: master added antd before this ratchet existed (ModelSourceIDField, OutboundPolicyCard, the benchmark report export in benchmarkReportExport.css and EvaluationDetailPage, and the deploy diagnostics in DeployDiagnostics and DeploySubmissionError); the per-file snapshot (ui/antd-inventory.json) starts from that tree
+ui_antd_icon_import_files	102	warn
 ui_bundle_gzip_kb	2450	warn
 ui_untested_shared_files	0	max
 ui_copy_long_strings	0	max

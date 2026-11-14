@@ -68,6 +68,8 @@ export function fakeFleet(fleet: FleetNode[]) {
         items: matched.slice(start, start + query.page_size) as Node[],
         page: query.page, page_size: query.page_size, total: matched.length, all: fleet.length,
         labels: [...facets].sort(([a], [b]) => a.localeCompare(b)).map(([key, values]) => ({ key, values: [...values].sort() })),
+        // The fixture nodes were all added by hand: the one source the fleet has, when it has nodes.
+        sources: fleet.length ? [{ value: "manual", nodes: fleet.length }] : [],
       };
     },
     node: async (uuid: string): Promise<Node> => {

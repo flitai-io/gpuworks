@@ -3,11 +3,13 @@ import { afterEach, test } from "node:test";
 import React from "react";
 import { I18nextProvider } from "react-i18next";
 import { createI18n } from "./helpers/dom.ts";
+import { account, aliyunKind } from "./helpers/platformFixtures.ts";
 
 const { i18n } = await createI18n(["providers"], "en");
 const { cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
 const { default: ProviderInstallModal } = await import("../src/components/ProviderInstallModal.tsx");
-const { default: ProviderInstancesTable } = await import("../src/components/ProviderInstancesTable.tsx");
+const { default: ProviderResources } = await import("../src/pages/platforms/ProviderResources.tsx");
+const { MemoryRouter } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
 type ProviderInstance = import("../src/api.ts").ProviderInstance;
 
@@ -22,8 +24,9 @@ const instance: ProviderInstance = {
 };
 
 test("the instance list shows Cloud Assistant as a path without SSH", async () => {
-  Object.assign(api, { providerInstances: async () => ({ items: [instance], total: 1 }) });
-  render(<I18nextProvider i18n={i18n}><ProviderInstancesTable providerId={1} refreshKey="x" /></I18nextProvider>);
+  // An Alibaba Cloud account's detail (ui/src/pages/platforms/ProviderResources.tsx); it has no managed cluster.
+  Object.assign(api, { providerInstances: async () => ({ items: [instance], total: 1 }), providerClusters: async () => ({ items: [], total: 0 }) });
+  render(<I18nextProvider i18n={i18n}><MemoryRouter><ProviderResources provider={account(1, "ali", "aliyun")} kindInfo={aliyunKind} refreshKey="x" entries={{}} onEntriesChanged={() => {}} admin={false} /></MemoryRouter></I18nextProvider>);
   await screen.findByText("gpu-1");
   assert.ok(screen.getByText("Cloud Assistant"));
   assert.ok(screen.getByText("no SSH needed"));

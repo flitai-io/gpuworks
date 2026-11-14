@@ -43,6 +43,14 @@ test("console icons are distinct: no two names draw the same picture", () => {
   }
 });
 
+test("the icons the external platforms page names exist: edit for an account's pencil, external for a vendor's site, chevrons for folding a group", () => {
+  for (const name of ["edit", "external", "chevronDown", "chevronRight", "kubernetes"] as const) {
+    const { container, unmount } = render(React.createElement(ConsoleIcon[name], { size: 14 }));
+    assert.equal(container.querySelector("svg")?.getAttribute("width"), "14", name);
+    unmount();
+  }
+});
+
 test("a console icon passes the stroke width and decorative attributes through", () => {
   const { container } = render(<ConsoleIcon.filter strokeWidth={1.5} aria-hidden className="text-fg-subtle" />);
   const svg = container.querySelector("svg")!;
