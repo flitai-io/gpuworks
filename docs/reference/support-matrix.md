@@ -107,7 +107,7 @@ server 收到节点上报时把型号名规范化后再存（`accelerator.Normal
 agent 探测不到任何加速卡（各厂商 CLI 都不应答、都没装、也没有厂商设备文件）时节点厂商为空，不再按 NVIDIA 上报。
 
 昆仑芯使用 `kunlunxin` 厂商与 `xre` framework；CUDA 兼容版本不作为 CUDA 身份或 XRE 版本。
-能力由 `internal/accelerator` 统一声明，按候选卡及所选卡判断。P800 支持整卡 TP、PP 和引擎 DP，不开放 PD、分区或 sleep；所需宿主为 Linux amd64 和 Docker/nerdctl，或 Kubernetes 节点（整卡，经 agent 的 device plugin 取得设备节点），runveil 尚未开放。不兼容的卡返回结构化放置拒绝，不阻止继续尝试其他候选。2026-11-10 已实测单卡生产启动、网关 chat、设备覆盖清理与 agent 重启并通过；单机多卡越过 loopback 接口问题后仍受测试环境 XRE OAM/XLink 初始化错误阻断，跨机未测，不能据此声明多卡或跨机已验收。
+能力由 `internal/accelerator` 统一声明，按候选卡及所选卡判断。P800 支持整卡 TP、PP 和引擎 DP，不开放 PD、分区或 sleep；所需宿主为 Linux amd64 和 Docker/nerdctl，或 Kubernetes 节点（整卡，经 agent 的 device plugin 取得设备节点），runveil 尚未开放。不兼容的卡返回结构化放置拒绝，不阻止继续尝试其他候选。2026-11-10 已实测单卡生产启动、网关 chat、设备覆盖清理与 agent 重启并通过；单机多卡越过 loopback 接口问题后仍受测试环境 XRE OAM/XLink 初始化错误阻断，跨机未测，不能据此声明多卡或跨机已验收。2026-11-14 在 P800 真机上用临时 k3s 实测 Kubernetes 节点：自动识别、agent 的 device plugin 只把所选卡（`/dev/xpuN` 与 `/dev/xpuctrl`）交给实例 Pod、单卡 vLLM 经网关 chat、删除后清理均通过；vLLM 须带模板的 `--enforce-eager` 等参数，否则 CUDA graph 捕获时 `speculative_attention` 失败（与运行时无关）。
 
 昆仑必须显式选择非空卡组；手写未知命令按 `LAUNCH_FEATURES_UNKNOWN` / `launch_features_unknown` fail closed。启动时先清理模板或用户参数中由后端接管的 XPU/XDR 设备映射与冲突 runtime 选项，再注入本次选卡，保留无关设备映射。单机多卡还需非 loopback 集合通信接口，启动装配使用节点管理网络上报的真实接口，agent 派生 `BKCL_SOCKET_IFNAME`；缺失时在容器创建前拒绝，单卡不受此限制。
 
