@@ -410,6 +410,8 @@ macOS 忽略 `no_systemd`。
 
 `GET /api/v1/nodes/{uuid}` 对 NVIDIA 实例 Pod 只靠 `CUDA_VISIBLE_DEVICES` 限定到自己那张卡（软隔离：Pod 能看到节点的全部 GPU 设备）的 Kubernetes 节点带 `gpu_isolation`：`level`（`soft`）、`reason`（`cdi_names_missing`：工具包按 CDI 名解析 `NVIDIA_VISIBLE_DEVICES`，而没有 CDI spec 给卡命名）、`toolkit`（`gpu_operator` 或 `host`，agent 能判断时给出）、`cards`，以及 `fixes`：每项有 `code` 与按顺序原样执行的 `commands`，由 server 按 `toolkit` 选出适用的。它来自 agent 最近一次状态上报，不入库：节点离线、严格隔离或旧 agent 时没有这个字段；节点列表不带它。
 
+`GET /api/v1/nodes/{uuid}` 对内核会让 UCX（NIXL 自带，PD 的 `vllm-nixl`、`sglang-nixl` 经它传 KV）卡住的节点带 `ucx_netlink_hang`：`kernel`（内核版本，读不到时省略）与 `fixes`——每项有 `code`（`disable_ipv6_now`、`disable_ipv6_persist`）与按顺序原样执行的 `commands`（关闭整机 IPv6，前者到重启前有效，后者写入 `/etc/sysctl.d/90-gpuworks-ucx.conf` 持久化）。它来自 agent 最近一次状态上报（每 15 分钟复查），不入库：节点离线、不受影响或旧 agent 时没有这个字段；节点列表不带它。
+
 `PATCH /api/v1/nodes/{uuid}/accelerator` 供一机多厂商选择管理哪家的卡。agent 接受后原地重启，选择才保存。
 返回节点的 `accelerator_preference` 表示选择；`accelerator_vendors` 列出主机各厂商的 `{vendor, cards, model}`。
 
@@ -1572,6 +1574,10 @@ extra_args 解析（`EXTRA_ARGS_INVALID`）、挂载（`MOUNT_CONTAINER_PATH`/`M
 - 与 `nnodes`、`node_uuids`、`replicas > 1` 同时给出时返回 `PD_SHAPE_CONFLICT`；自动放置用 `placement_mode: "auto"` 且单元不写 `node_uuid`（见[自动放置多机与 PD 部署](#自动放置多机与-pd-部署)）；其余校验错误码以
   `PD_` 开头（字段 `placement.pd`）。可休眠（`sleepable`）且 KV 经 UCX 走主机 RDMA 网络时，创建与评估返回
   `PD_SLEEP_RDMA_UNSUPPORTED`（`params`：`mode`、`network`）。
+  放置里有节点的内核会让 UCX 卡住（见上文节点的 `ucx_netlink_hang`）而模式经 UCX 传 KV 时：参数网络是以太网（含管理网）返回 400
+  `PD_UCX_NETLINK_HANG`（字段 `placement.pd`），在主机 RDMA 网络上评估只给警告 `PD_UCX_NETLINK_HANG_RDMA`、创建照常；
+  两者的 `params` 相同：`mode`、`network`、`nodes`（`[{node_uuid, node_name, kernel}]`，只含受影响的节点）、`names`（节点名，逗号分隔）、
+  `fixes`（`[{code, commands[]}]`，与节点的 `fixes` 相同）、`fix`（第一条修复命令）。
 - 部署详情的 `pd` 字段：`mode`、`fallback`、`kv_load_failure`、`state`（`not_ready|partial|running`）、`short`、
   `roles[]`（`role`、`tp`、`pp`、`desired`、`ready`、`may_be_empty`（模式允许该角色为空，即可以单独休眠）、`units[]`，含 `followers[]`）；实例带 `role`。
   每个 unit 另有 `failed_attempts`、`last_failure` 与 `retry_exhausted`（控制器已放弃重建，可用上面的 retry 接口重试）。

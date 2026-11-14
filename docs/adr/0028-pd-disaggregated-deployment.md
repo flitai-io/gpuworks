@@ -61,6 +61,25 @@ TP 规则违反时报与规则对应的错误码。引擎档位按 `pdmode.ForEn
 `VLLM_SSM_CONV_STATE_LAYOUT=DS`：NixlConnector 只按 dim-first 布局传输 Mamba 类层（gated delta net、KDA、short conv）
 的 conv 状态，其他布局下拒绝启动，而该变量对没有这类层的模型不生效；模板或部署显式设置的值优先。所有 PD 实例用 host 网络。
 
+**经以太网的 NIXL 在部分内核上会卡住（UCX 缺陷，平台拒绝而不绕过）。** UCX 1.20–1.22（NIXL 1.4.1 自带 UCX 1.22.0）
+启动时用 netlink 判断对端是否可达：`ucs_netlink_route_exists` 对 `AF_INET6` 发 `RTM_GETROUTE | NLM_F_DUMP`，只检查
+**每个数据报的第一条消息**是否为 `NLMSG_DONE`（openucx/ucx 6d96bec1a0）。较新的内核（实测 Ubuntu 5.15.0-198、-203）把最后
+几条路由与 `NLMSG_DONE` 放进同一个数据报，UCX 看不到结束标记，再调 `recv()` 就永远阻塞，同时另一个线程空转占满一个核，
+引擎初始化 NIXL 时挂住；旧内核（5.15.0-177）把 DONE 单独发一个 20 字节的数据报，没有 IPv6 路由时整个 dump 就只有 DONE，
+都不受影响，IPv4 dump 在三种内核上都正常。上游已在 openucx/ucx 32c7a90a45（#12182）修复，尚未进入发布版。
+UCX 的环境变量里只有 `UCX_NET_DEVICES=lo` 能避开，但它无法跨机。唯一实测有效的办法是**整机**关闭 IPv6
+（`net.ipv6.conf.all.disable_ipv6=1` 与 `net.ipv6.conf.default.disable_ipv6=1`；只关单个网卡无效）。
+
+平台不替运维关 IPv6（它会改变整台主机的网络行为），而是把它做成可见的事实与明确的拒绝：agent 启动时用纯 Go 的
+`NETLINK_ROUTE` 套接字发同样的 dump，若某个数据报里「路由消息之后紧跟 DONE」就判定受影响，之后与节点的运行时检查同频（每
+15 分钟）复查，因为 sysctl 随时可能改。探测在独立 goroutine 里以非阻塞套接字加几秒的截止时间运行，读取受数据报数与字节数
+上限约束，超时就放弃并记为「未知」而不是「受影响」，任何时候同一进程里至多一个探测在跑，也不起外部命令。结果作为
+`NodeStatus.UCXNetlinkHang` 随状态上报，server 只挂在在线会话上、不入库（与 `NVIDIAIsolation` 同一路径），节点详情的
+`ucx_netlink_hang` 带 `kernel` 与 `fixes`（字面命令）。创建与评估 PD 部署时，若模式走 UCX（`vllm-nixl`、`sglang-nixl`）、
+放置里有节点上报了该事实：参数网络是以太网（含管理网）则拒绝 `PD_UCX_NETLINK_HANG`（400，字段 `placement.pd`），在
+主机 RDMA 网络上 UCX 被限定为 RDMA 传输、可能根本不做这项检查，所以只给警告 `PD_UCX_NETLINK_HANG_RDMA`，评估里两者
+都保留。`gpuworks-agent doctor` 报告同一项（`ucx_netlink_hang`）。自动放置在创建时挑完节点后同样经过这个校验。
+
 **端口一次分配、全部落库。** controller 为一个实例一次取齐 API 端口与 side channel 端口块，全部写进
 `Instance.Ports`，后续分配据此避让。
 
