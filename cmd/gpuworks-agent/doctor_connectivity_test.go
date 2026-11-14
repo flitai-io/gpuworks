@@ -166,6 +166,45 @@ func TestDoctorConnectivityPlainDoctorDispatchAndSource(t *testing.T) {
 	}
 }
 
+// TestDoctorConnectivityEnablesHostCLIsInKubePod: `doctor` runs as its own
+// process (typically `kubectl exec` into the running agent pod), so unlike
+// `run` it never calls prepareKubeRun on its own. Without this, its GPU
+// checks look for every vendor CLI (nvidia-smi included) only in the
+// agent's own container, never finding a driver the GPU Operator's driver
+// container (or the host) publishes, and reporting "no accelerator tool
+// found" on a node that plainly has one.
+func TestDoctorConnectivityEnablesHostCLIsInKubePod(t *testing.T) {
+	previousEnv, previousEnable := doctorEnvironment, enableHostCLIsForKubeDoctor
+	defer func() { doctorEnvironment, enableHostCLIsForKubeDoctor = previousEnv, previousEnable }()
+	doctorEnvironment = func(context.Context, io.Writer, string) {}
+
+	calls := 0
+	enableHostCLIsForKubeDoctor = func() { calls++ }
+	var out, stderr bytes.Buffer
+	if err := doctor(context.Background(), slog.Default(), []string{"--state", t.TempDir()}, &out, &stderr); err != nil {
+		t.Fatalf("doctor without GPUWORKS_KUBE_NODE_NAME: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("host CLIs enabled off Kubernetes: %d calls", calls)
+	}
+
+	t.Setenv("GPUWORKS_KUBE_NODE_NAME", "node-a")
+	if err := doctor(context.Background(), slog.Default(), []string{"--state", t.TempDir()}, &out, &stderr); err != nil {
+		t.Fatalf("doctor with GPUWORKS_KUBE_NODE_NAME: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("host CLIs not enabled in a Kubernetes pod: %d calls", calls)
+	}
+
+	// --connectivity never touches the GPU checks, so it must not flip the
+	// switch either (an unconfigured node fails the connection check itself,
+	// which is not what this asserts).
+	_ = doctor(context.Background(), slog.Default(), []string{"--connectivity"}, &out, &stderr)
+	if calls != 1 {
+		t.Fatalf("--connectivity enabled host CLIs: %d calls", calls)
+	}
+}
+
 func TestDoctorConnectivityValidatesServerDialListen(t *testing.T) {
 	for _, entry := range launchEnv {
 		t.Setenv(entry.name, "")

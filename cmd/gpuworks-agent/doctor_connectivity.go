@@ -14,11 +14,18 @@ import (
 
 	agentapp "gpuworks.ai/gpuworks/internal/agent/app"
 	agentconn "gpuworks.ai/gpuworks/internal/agent/conn"
+	"gpuworks.ai/gpuworks/internal/agent/gpu"
 	"gpuworks.ai/gpuworks/internal/agentconf"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 var doctorEnvironment = agentapp.DoctorForState
+
+// enableHostCLIsForKubeDoctor is gpu.RunCLIsOnHost; a test overrides it to
+// observe the decision without flipping the real, one-way switch gpu.go's
+// cliOnHost is (it is shared by the whole test binary, the same seaming
+// reason doctor_nvidia.go's pythonCommand and cliOnHostForDoctor exist).
+var enableHostCLIsForKubeDoctor = gpu.RunCLIsOnHost
 
 func doctor(ctx context.Context, log *slog.Logger, args []string, out, stderr io.Writer) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
@@ -51,6 +58,15 @@ func doctor(ctx context.Context, log *slog.Logger, args []string, out, stderr io
 		state := launch.state
 		if state == "" {
 			state = defaultStateDir()
+		}
+		// `doctor` runs as its own process (typically `kubectl exec` into
+		// the running agent pod), so it never goes through `run`'s
+		// prepareKubeRun, which is what otherwise turns this switch on. A
+		// Kubernetes DaemonSet pod's env still carries the node name the
+		// manifest sets either way, so that alone says every vendor CLI and
+		// device file must be looked up on the host, not in this container.
+		if strings.TrimSpace(os.Getenv("GPUWORKS_KUBE_NODE_NAME")) != "" {
+			enableHostCLIsForKubeDoctor()
 		}
 		doctorEnvironment(ctx, out, state)
 		return nil
