@@ -529,7 +529,6 @@ specs:
   image_sources:
   - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/deepinfer:774ce24-r9
   - quay.io/gpuworks/deepinfer:774ce24-r9
-  - registry.zstack.ai/gpuworks/deepinfer:774ce24-r9
   weights:
     quantization: fp4
     sources:
@@ -597,7 +596,6 @@ specs:
   image_sources:
   - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/deepinfer:774ce24-r9
   - quay.io/gpuworks/deepinfer:774ce24-r9
-  - registry.zstack.ai/gpuworks/deepinfer:774ce24-r9
   weights:
     quantization: fp4
     sources:

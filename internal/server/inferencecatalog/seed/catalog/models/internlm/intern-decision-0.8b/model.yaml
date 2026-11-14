@@ -18,7 +18,6 @@ specs:
   image_sources:
   - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
   - quay.io/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
-  - registry.zstack.ai/gpuworks/gpuworks-runner:cuda12.8-systemone1.0-r1
   weights:
     quantization: bf16
     sources:

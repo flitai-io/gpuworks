@@ -62,6 +62,7 @@ make demo       # 起 server + agent，验证接入/心跳/重连
 - **依赖方向由 `make check-architecture` 强制**：叶子包不依赖 `store`、`api` 与 `controller` 互不依赖、`pkg` 不依赖 `internal`、agent 不依赖 server、`proto` 无本仓库依赖；另有 `scripts/arch-constraints.txt` 棘轮预算（`max` 只降不升、`min` 只升不降，上调须带 `# raised: <原因>`，由脚本对比基线强制，误报修模式不调预算，规则说明见 `scripts/arch-constraints.md`）。
 - **过程/里程碑标签（`M1`、`S0`、`G2`、`P3` 之类）禁止出现在生产代码**的标识符、注释与文件名里，由 `process_name_refs` 预算守护；测试文件不受限。
 - **内置镜像命名**：推理模板要用的内置（主推）镜像一律发布为 `gpuworks/gpuworks-runner:<backend><框架版本>[-<型号>]-<engine><版本>-rN`（文法见 `cmd/gpuworks-image-manifest` 的 `tagPattern`，如 `cuda13.0-sglang0.5.21-r2`、`metal15.0-vllm0.31.0-r1`），不另起仓库名；只有非主推的内置镜像可以单独命名。
+- **内置推理模板的镜像必须能从公网直接拉取**：模板的 `image` 与 `image_sources` 只写 Docker Hub、quay.io、华为 SWR 这类普通用户无需内网即可拉取的地址，不写 `registry.zstack.ai` 等内网仓库（发布流程会推到那里，但不进模板；内网镜像由各站点自己配拉取源规则）。由 `seed` 的 `TestBuiltinTemplateImagesArePubliclyPullable` 守护。
 - 敏感信息（云厂商 key、测试机地址等）放本地 `secrets/`（.gitignore），绝不进仓库。
 
 ## 文档与计划
