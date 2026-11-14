@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -313,4 +314,70 @@ func waitStreamed(t *testing.T, n *NodeRuntime, uuid string) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("%s was never streamed", uuid)
+}
+
+// tqdm redraws its bar with '\r' and ends the line only when it closes, so the
+// followed stream delivers every redraw as one line. The log center stores
+// what a terminal shows: the final frame, with the lines around it intact.
+func TestFollowerShipsTheFinalProgressFrame(t *testing.T) {
+	driver := &drainTestDriver{}
+	n, shipped := newDrainTestNode(t, driver)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go n.runLogShipper(ctx, 10*time.Millisecond, logShipperDeps{
+		running: func() []string { return []string{"inst-vllm"} },
+		follow: func(uuid string, f *logFollower) {
+			go n.followOne(f.ctx, uuid, f)
+		},
+	})
+	waitForFollows(t, driver, 1)
+	waitStreamed(t, n, "inst-vllm")
+	driver.write(t,
+		"(EngineCore pid=192) INFO 11-14 13:36:15 [monitor.py:81] Initial profiling/warmup run took 0.12 s",
+		"Capturing CUDA graphs (FULL):   0%|          | 0/2 [00:00<?, ?it/s]\r"+
+			"Capturing CUDA graphs (FULL): 100%|██████████| 2/2 [00:00<00:00, 18.17it/s]\r"+
+			"Capturing CUDA graphs (FULL): 100%|██████████| 2/2 [00:00<00:00, 18.14it/s]",
+		"(EngineCore pid=192) INFO 11-14 13:36:26 [model_runner.py:1087] Graph capturing finished in 9 secs, took 0.05 GiB")
+	shipped.waitFor(t,
+		"(EngineCore pid=192) INFO 11-14 13:36:15 [monitor.py:81] Initial profiling/warmup run took 0.12 s",
+		"Capturing CUDA graphs (FULL): 100%|██████████| 2/2 [00:00<00:00, 18.14it/s]",
+		"(EngineCore pid=192) INFO 11-14 13:36:26 [model_runner.py:1087] Graph capturing finished in 9 secs, took 0.05 GiB")
+}
+
+// The live log view (logtail) gets the same terminal view as the log center:
+// the vLLM CUDA-graph bar arrives as its final frame, CRLF loses its '\r', and
+// a last line the container left unterminated is still delivered.
+func TestStreamLogsCollapsesProgressBarRedraws(t *testing.T) {
+	driver := &drainTestDriver{followEOF: "(EngineCore pid=192) INFO 11-14 13:36:15 [monitor.py:81] Initial profiling/warmup run took 0.12 s\n" +
+		"Capturing CUDA graphs (FULL):   0%|          | 0/2 [00:00<?, ?it/s]\r" +
+		"Capturing CUDA graphs (FULL): 100%|██████████| 2/2 [00:00<00:00, 18.17it/s]\r" +
+		"Capturing CUDA graphs (FULL): 100%|██████████| 2/2 [00:00<00:00, 18.14it/s]\n" +
+		"(EngineCore pid=192) INFO 11-14 13:36:26 [model_runner.py:1087] Graph capturing finished in 9 secs\r\n" +
+		"\tunterminated"}
+	n, _ := newDrainTestNode(t, driver)
+	var out strings.Builder
+	if err := n.StreamLogs(t.Context(), "inst-vllm", true, &out); err != nil {
+		t.Fatalf("StreamLogs: %v", err)
+	}
+	want := "(EngineCore pid=192) INFO 11-14 13:36:15 [monitor.py:81] Initial profiling/warmup run took 0.12 s\n" +
+		"Capturing CUDA graphs (FULL): 100%|██████████| 2/2 [00:00<00:00, 18.14it/s]\n" +
+		"(EngineCore pid=192) INFO 11-14 13:36:26 [model_runner.py:1087] Graph capturing finished in 9 secs\n" +
+		"\tunterminated\n"
+	if out.String() != want {
+		t.Fatalf("streamed\n%q\nwant\n%q", out.String(), want)
+	}
+}
+
+type failingWriter struct{ err error }
+
+func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
+
+// A server that hung up mid-stream surfaces as the write error, not success.
+func TestStreamLogsReturnsTheWriteError(t *testing.T) {
+	driver := &drainTestDriver{followEOF: "one\ntwo\n"}
+	n, _ := newDrainTestNode(t, driver)
+	hungUp := errors.New("stream closed")
+	if err := n.StreamLogs(t.Context(), "inst", true, failingWriter{err: hungUp}); !errors.Is(err, hungUp) {
+		t.Fatalf("StreamLogs = %v, want %v", err, hungUp)
+	}
 }

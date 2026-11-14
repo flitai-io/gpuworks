@@ -141,6 +141,7 @@
 - `engines`（引擎名唯一产地，纯叶子无依赖：`VLLM`/`SGLang`/`Callable`，`Callable` 承载目录自带的 Serve Adapter、无日志方言与参数字典，需要方言/字典时用 `DialectNames()` 而非 `Names()`；`deploy` 再导出为 `EngineVLLM`/`EngineSGLang`/`DefaultEngine`，因为 `modelmeta` 经 `inferenceapi` 被 `deploy` 依赖、agent 又不能依赖 server，两侧只能共用这个叶子包）、
 - `logging`（server+agent 共用的按大小轮转文件日志，`--log-file`/`--log-max-size`/`--log-keep`）、
 - `logthrottle`（server+agent 共用的相同日志限频：同一类记录每 30 秒限量写入，其余计数后补一条汇总）、
+- `logtext`（server+agent 共用的容器输出切行：按终端语义只保留一行中最后一个 `\r` 之后的内容，进度条重绘只剩最终一帧；超长行截断而不让日志流因 `ErrTooLong` 中断）、
 - `debuglog`（限时限量的调试会话：会话期间把 debug 及以上的记录另写一个文件，进程本身的日志级别不变）、
 - `accelerator`（dGPU 后端注册表 + **vendor 身份唯一产地**：`VendorNVIDIA/AMD/Ascend/PPU/Hygon` 常量、`NormalizeVendor`/`VendorKey`/`FrameworkVendor`/`InferVendor`/`KnownVendors`/`RequiresVendorCatalogImage`/`IsDomestic`，以及加速卡自带网口的能力 `CardNetworkOf`（rail 命名、集合通信库要的环境变量、容器要的主机文件）、加速卡健康词汇（`health.go`：正常/告警/故障三级、稳定的发现码、取证行 `FormatHealthEvidence`/`ParseHealthEvidence`，`health_guide.go`：按厂商+码+BDF 派生取证/复核/处理命令 `HealthGuideFor`），server+agent 共享，新增后端必须显式改这里）、
 - `assets`（内嵌原生资产：libvgpu、partition probe、ib_write_bw 等）、
