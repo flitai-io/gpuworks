@@ -29,6 +29,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/kube"
 	"gpuworks.ai/gpuworks/internal/agent/storagemount"
+	"gpuworks.ai/gpuworks/internal/agent/ucxnetlink"
 	"gpuworks.ai/gpuworks/internal/assets"
 	"gpuworks.ai/gpuworks/internal/debuglog"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -63,6 +64,10 @@ type NodeRuntime struct {
 	pcie pcieWatch
 	// nvlink follows each card's active NVLinks (card_nvlink.go).
 	nvlink nvlinkWatch
+	// ucxNetlink probes the host's IPv6 route dump for the UCX hang
+	// (ucx_netlink.go), built on first use.
+	ucxNetlinkOnce sync.Once
+	ucxNetlink     *ucxnetlink.Monitor
 	// xid follows the kernel log for NVIDIA Xid events; nil off NVIDIA.
 	xid atomic.Pointer[gpu.XidWatcher]
 	// checks is each card's check states and last runs (card_checks.go).

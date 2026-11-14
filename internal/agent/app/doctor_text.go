@@ -146,6 +146,7 @@ var findingSummary = map[string]string{
 	proto.DoctorMultiGPUCheckFailed:       "a multi-GPU check failed",
 	proto.DoctorMacOSUnsupported:          "this macOS is older than Mac nodes support",
 	proto.DoctorPeerMemoryMissing:         "the RDMA NICs cannot register the cards' memory because the peer-memory module is not loaded; PD over RDMA cannot run here until the fix command is run",
+	proto.DoctorUCXNetlinkHang:            "this kernel answers an IPv6 route dump in a way that hangs UCX (bundled with NIXL), so a PD engine using NIXL never finishes starting here; run the fix command (it turns IPv6 off on the host) or use a different kernel",
 	proto.DoctorMacOSIdleSleep:            "the Mac sleeps when idle on this power source and then drops off the cluster while no instance runs; to keep it awake on AC power: sudo pmset -c sleep 0",
 }
 

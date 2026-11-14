@@ -150,6 +150,10 @@ const (
 	// cards' memory and PD over RDMA cannot move KV between nodes. Evidence:
 	// the module and the command that loads it.
 	DoctorPeerMemoryMissing = "peer_memory_missing"
+	// DoctorUCXNetlinkHang: the host kernel answers an IPv6 route dump in a
+	// way that hangs UCX 1.20-1.22 (bundled with NIXL), so PD over NIXL cannot
+	// start here. Evidence: the kernel release and the commands that stop it.
+	DoctorUCXNetlinkHang = "ucx_netlink_hang"
 )
 
 // DoctorFinding is one item that needs attention.
