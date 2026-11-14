@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -32,6 +33,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/ucxnetlink"
 	"gpuworks.ai/gpuworks/internal/assets"
 	"gpuworks.ai/gpuworks/internal/debuglog"
+	"gpuworks.ai/gpuworks/internal/logtext"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/selflog"
 )
@@ -557,13 +559,26 @@ func (n *NodeRuntime) StreamLogs(ctx context.Context, ref string, follow bool, w
 		return err
 	}
 	defer rc.Close()
-	// Close the log reader when the server hangs up so io.Copy unblocks.
+	// Close the log reader when the server hangs up so the scan unblocks.
 	go func() {
 		<-ctx.Done()
 		_ = rc.Close()
 	}()
-	_, err = io.Copy(w, rc)
-	return err
+	// Ship lines as a terminal shows them: progress-bar redraws collapse to
+	// their final frame, and an overlong line is broken instead of ending the
+	// server's line scanner.
+	sc := logtext.NewScanner(rc)
+	bw := bufio.NewWriter(w)
+	for sc.Scan() {
+		// Bytes aliases the scanner's buffer: append would overwrite unread
+		// input, so the newline is written separately.
+		_, _ = bw.Write(sc.Bytes())
+		_ = bw.WriteByte('\n')
+		if err := bw.Flush(); err != nil {
+			return err
+		}
+	}
+	return sc.Err()
 }
 
 // listContainers lists the active runtime's container names (for orphan

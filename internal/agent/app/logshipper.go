@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"context"
 	"io"
 	"sync"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/agent/logline"
+	"gpuworks.ai/gpuworks/internal/logtext"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -273,8 +273,7 @@ func (n *NodeRuntime) shipFinalLogs(ctx context.Context, uuid string) {
 		return
 	}
 	defer rc.Close()
-	sc := bufio.NewScanner(rc)
-	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	sc := logtext.NewScanner(rc)
 	// Drivers honor the tail; the window guards against one that does not.
 	var lines []string
 	for sc.Scan() {
@@ -364,8 +363,7 @@ func (n *NodeRuntime) followOne(ctx context.Context, uuid string, f *logFollower
 		n.instanceLogs.markStreamed(uuid, f)
 	}
 
-	sc := bufio.NewScanner(rc)
-	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	sc := logtext.NewScanner(rc)
 	batch := make([]proto.LogLine, 0, 64)
 	flush := time.NewTicker(2 * time.Second)
 	defer flush.Stop()
