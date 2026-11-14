@@ -51,6 +51,10 @@ make demo       # 起 server + agent，验证接入/心跳/重连
 - **评测信息与报告契约**：修改评测负载、采集、聚合、存储、API、UI、CLI 或导出前，必须阅读并遵守 [评测信息与报告规范](docs/dev/benchmark-reporting-standard.md)。区分计划、观测与推导，保留会话/轮次/请求关联，明确来源、统计分母、有效样本和未知值；相关改动须验证受影响的口径，不得把尚未采集的信息写成已实现能力。
 - **规模目标 1000 节点 / 3000 实例**，fleet 用例（`make test-fleet-perf-processes`、`test-fleet-log-scale-processes`、`test-fleet-benchmark-processes`，以及 `TestFleetGatewayLoadAcrossProcesses`）是它的守门人；server 进程里跑的负载（server 发压评测等）与控制面共享 CPU 和内存，同样要有带 RSS/CPU 预算的规模用例。会被逐节点、逐实例、逐事件或逐请求触发的路径（controller reconcile、部署创建/详情 API、bus 事件订阅者、状态/心跳写入、路由表、日志/指标读、评测压测的逐请求回调与进度上报）不得每次全量读节点、实例或目录，不得每次对已累积的全部历史重新汇总或排序（进度、统计按时间节流或增量维护），也不得每条事件一个写事务：钉住节点就只读这些节点，高频事件做合并或批量，派生索引按版本缓存，SQL 先看 `EXPLAIN QUERY PLAN` 有没有全表排序。改动这些路径后，用 `GPUWORKS_FLEET_NODES=200` 跑 churn 用例，对比 server CPU-seconds 与改动前（2026-10 的累积退化就是这样漏进来的，见 `artifacts/archive/2026-10-04-l2-fleet-register-timeout/`）。
 - **单文件 > 600 行触发拆分**。controller/reconcile 每资源一个文件，严禁上帝文件。
+- **三个枢纽不再长胖**（`controller_struct_*`、`planning_*`、`app_*` 预算守护，总单 GWKS-313）：
+  - controller 里按部署、节点或实例记的内存状态，收进自带锁的具名类型并实现纯内存的 `Forget`，不在 `Controller` 上直接放 map 和锁；带 I/O、会失败的清理不算 `Forget`，留在 reconcile 里显式调用并重试。
+  - `planning` 是无状态的规则包：不新增包级锁和可变变量（现有两处由 GWKS-305 移走）；读库走本包声明的窄读接口（`*store.Store` 原样满足），不新增 `*store.Store` 形参；新规则先写不开库的测试。
+  - `app` 只做装配：新功能的业务实现放自己的包，app 只留构造与适配；不往 `Run` 里直接加协程。
 - **新增持久化事实必须谨慎，存储形式不是豁免**：只有确实必要、且无法从现有数据推断/推导/计算得到时才新增。新增 JSON/text 列、往已有 JSON 里加 key，与加列加表同等对待。
 - **持久化默认用带类型的列/表**。JSON 列只用于整体读写的不透明快照（数据库不按其内部字段查询、排序、关联或局部更新），且必须：对应唯一一个具名 Go 类型并在列注释写明；不重复其他列已有的事实；形状变更同样要迁移或读时兼容，并带旧数据测试。禁止 `map[string]any` / `Extra` / `Meta` 式通用口袋，禁止一列多形态。
 - server + agent 各为单静态二进制，`CGO_ENABLED=0`。

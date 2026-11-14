@@ -300,6 +300,65 @@ grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' \
 建立时实测 0：ZStack Cloud 的三处调用改走 `CloudLedger()`，`scripts/seeddemo` 改为按节点接入的真实路径写入
 （`RegisterNode` + `UpdateNodeStatus`，拓扑以 `nvidia-smi topo -m` 文本给出）。
 
+### Controller、planning、app 三个枢纽（2026-11-14，初值取当日主线 0a0b5fa6c 实测）
+
+意图：这三个包是每个功能都要改的地方（架构评审 R-20）。拆分工作见总单 GWKS-313（子单 GWKS-303 至 GWKS-312）；
+这组预算先把现状钉住，拆分落地时在同一个 MR 里把对应限额收紧到新实测值。
+
+| 键 | 初值 | 方向 | 守护什么 |
+|---|---|---|---|
+| `controller_struct_fields` | 39 | max | `Controller` 结构体的字段行数 |
+| `controller_struct_mutexes` | 5 | max | 直接放在 `Controller` 上的锁 |
+| `controller_struct_maps` | 6 | max | 直接放在 `Controller` 上的 map |
+| `controller_exported_methods` | 18 | max | `*Controller` 的导出方法（API 操作挂在 Controller 上） |
+| `planning_concrete_store_refs` | 72 | max | planning 生产代码里含 `*store.Store` 的非注释行 |
+| `planning_sync_files` | 2 | max | planning 中 import `sync` / `sync/atomic` 的生产文件（包级锁） |
+| `app_new_lines` | 300 | max | `app.New` 的行数 |
+| `app_run_lines` | 192 | max | `(*App).Run` 的行数 |
+| `app_run_goroutines` | 23 | max | `(*App).Run` 里直接起的协程 |
+| `app_prod_lines` | 10012 | warn | app 生产代码总行数 |
+
+结构体与函数的五项由 `decl_count 目录 声明模式 行模式 [body]` 测量：在该包的非测试文件里找到匹配声明模式的顶层声明，
+从它数到第一个顶格的 `}`，只数匹配行模式的行（行模式为空时数全部行；`body` 表示不数声明行本身）：
+
+```sh
+decl_count internal/server/controller '^type Controller struct' '^[[:blank:]][*A-Za-z_]' body   # fields
+decl_count internal/server/controller '^type Controller struct' \
+  '^[[:blank:]](\*?sync\.(RW)?Mutex|[A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+sync\.(RW)?Mutex)' body # mutexes
+decl_count internal/server/controller '^type Controller struct' \
+  '^[[:blank:]][A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+map\[' body                                    # maps
+decl_count internal/server/app '^func New\(' ''                                                   # app_new_lines
+decl_count internal/server/app '^func \(a \*App\) Run\(' ''                                       # app_run_lines
+decl_count internal/server/app '^func \(a \*App\) Run\(' '^[[:blank:]]+(goBG\(|bg\.start\(|go[[:blank:]])' # app_run_goroutines
+```
+
+其余四项：
+
+```sh
+grep -rnE '^func \(c \*Controller\) [A-Z]' internal/server/controller --include='*.go' | grep -v '_test\.go' | grep -c .
+grep -rnE '\*store\.Store' internal/server/planning --include='*.go' | grep -v '_test\.go' \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | grep -c .
+grep -rlE '^[[:space:]]*"sync(/atomic)?"|^import "sync(/atomic)?"' internal/server/planning --include='*.go' \
+  | grep -v '_test\.go' | grep -c .
+find internal/server/app -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -exec cat {} + | grep -c ''
+```
+
+- 声明在包内换文件仍照常测量；整个声明找不到（改名、搬出包）时 `decl_count` 输出 `NOTFOUND`，预算循环直接失败——
+  搬走声明的 MR 必须把测量一起搬走，不能让预算静默变成 0。
+- 模式经环境变量传给 awk（`awk -v` 会吃掉反斜杠转义），并用 `[[:blank:]]` 而不是 `\t`（busybox awk 在动态正则里
+  不展开 `\t`）。gawk、mawk、busybox awk 实测结果一致。字段、map、锁的行模式要求恰好一级缩进，嵌套结构体的成员不计。
+- 已知口径：多名字段（`a, b int`）算一行；`sync.Map`、具名 map 类型、`atomic.*` 不计入锁或 map；
+  有多个文件声明同一个名字时（build tag 变体）只量文件名排序的第一个；
+  `app_run_goroutines` 只数行首的 `goBG(`、`bg.start(`、`go `，再别名、`wg.Go`、写在同一行的 `if … { go … }` 数不到；它只看 `Run` 本身，`Run` 之外起的协程（如 `automation_adapter.go:56`）由 GWKS-308 收进组件表。
+  把 `Run` 的一段搬进辅助方法会同时降低 `app_run_lines` 与 `app_run_goroutines`，这两项防的是 `Run` 变长，不是协程总数。
+- 状态收进自带锁的具名类型后（`nodeFailover`、`imageWaits` 等），字段仍计入 `controller_struct_fields`，锁和 map
+  不再计入——这正是要的方向。
+- 不用 planning 中 import store 的文件数（57）：其中 30 个只用实体类型，压它就要另建一套平行的行类型，
+  `store_concrete_importers` 的 `# raised` 已否掉这条路；用 `*store.Store` 引用代替。包级可变变量（如 `placementHints`
+  的 map）没有单独的计量，现有的两处由 `planning_sync_files` 覆盖，GWKS-305 把它们移走后该项归零。
+- 不量 `forgetDeployment` 的行数：缺陷正是它太短（漏清 5 份状态）。改用 `controller_struct_maps` 加 GWKS-303 的完整性测试。
+- `app_prod_lines` 是软预算：搬出功能服务会降它，新的装配代码合理地会涨它，只要在评审里被看见。
+
 ### api_fanout（初值 36）
 
 意图：`api` 包扇出全仓最高（计划 B1）。计数为 `api` 直接 import 的**本仓库**包数。
