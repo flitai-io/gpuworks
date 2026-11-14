@@ -15,6 +15,8 @@ The only exception is an explicit administrator switch: the `inference_open_acce
 
 The rule covers every `/v1` route, including `/v1/models`, `/v1/files`, `/v1/batches`, `/v1/tokenize`, and `/v1/detokenize`. The 401 body depends on the entry point: gateway routes return `{"error":{"message":"invalid or missing API key","type":"gpuworks_proxy"}}`, while Files and Batches return the OpenAI-format `invalid_api_key`; see [Differences and Troubleshooting](#differences-and-troubleshooting).
 
+`GET /v1/models` lists the served names the gateway can route right now (read from the gateway's event-driven route table, not the database): active deployments only, each served name once, in name order; a scoped key sees only the served names of deployments it may call. A deployment just created or stopped appears or disappears once the route table rebuilds: at most about 0.5 s after the deployment's event, and every 2 s regardless.
+
 ## Supported Operations
 
 | Operation | Default endpoint | Encoding/mode |

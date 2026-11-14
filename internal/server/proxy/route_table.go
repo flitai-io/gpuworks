@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -432,6 +433,34 @@ func (r *routeTable) deployment(id uint) *routeDeployment {
 		return nil
 	}
 	return s.byID[id]
+}
+
+// servedNames are the served names of the current snapshot that some
+// deployment allow accepts routes under, each once, in name order. A
+// deployment the snapshot does not route (stopped, unreadable PD placement)
+// has none.
+func (r *routeTable) servedNames(allow func(deploymentID uint) bool) []string {
+	if r == nil {
+		return nil
+	}
+	s := r.current.Load()
+	if s == nil {
+		return nil
+	}
+	names := make([]string, 0, len(s.byName))
+	for name, deps := range s.byName {
+		if name == "" {
+			continue
+		}
+		for _, d := range deps {
+			if allow(d.id) {
+				names = append(names, name)
+				break
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (r *routeTable) snapshot(name string) ([]*routeDeployment, bool) {
