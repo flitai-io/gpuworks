@@ -284,7 +284,7 @@ func (l *httpDirLister) get(ctx context.Context, rawURL string) (string, error) 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", &StatusError{URL: requestURL, Code: resp.StatusCode, Detail: fmt.Sprintf("http directory listing: http %d: url=%s source=%s", resp.StatusCode, requestURL, SourceURL)}
+		return "", throttleError(resp, requestURL, fmt.Sprintf("http directory listing: http %d: url=%s source=%s", resp.StatusCode, requestURL, SourceURL))
 	}
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" && !strings.Contains(strings.ToLower(contentType), "html") {
 		return "", fmt.Errorf("http directory listing is not an HTML directory index: content-type=%s url=%s source=%s",

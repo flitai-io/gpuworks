@@ -138,7 +138,7 @@ func fetchChunk(ctx context.Context, opts Options, c *chunk, f *os.File, limiter
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusPartialContent {
-		return &StatusError{Code: resp.StatusCode, Detail: fmt.Sprintf("download: chunk %d expected 206, got %d", c.index, resp.StatusCode)}
+		return statusError(resp, fmt.Sprintf("download: chunk %d expected 206, got %d", c.index, resp.StatusCode))
 	}
 	rangeStart, rangeEnd, ok := parseContentRangeBounds(resp.Header.Get("Content-Range"))
 	if !ok || rangeStart != off || rangeEnd != c.end {

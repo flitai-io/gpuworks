@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"gpuworks.ai/gpuworks/internal/agent/modelfetch"
 	"gpuworks.ai/gpuworks/internal/agent/modelscan"
@@ -157,6 +158,78 @@ func fetchCandidates(mf proto.ModelFileTask, net proto.NetworkConfig) []proto.Mo
 // the console reads the host from it (ui modelPresenceDisplay.transferOrigin).
 func downloadingFrom(host string) string {
 	return "downloading from " + host
+}
+
+// fetchMessage keeps a repository download's progress status: the counters
+// of its last progress report, and a message saying where the files come
+// from (downloadingFrom, switchedMessage) and, while the source has asked the
+// download to wait, when it asks again. Every status it sends carries the
+// counters reached, so announcing a switch or a wait never shows the download
+// back at zero.
+type fetchMessage struct {
+	send func(proto.ModelFileStatus)
+
+	mu       sync.Mutex
+	last     proto.ModelFileStatus
+	address  string
+	wait     string // " (rate limited ...)" while a throttled wait lasts
+	waitFrom int64  // BytesDone when the wait began
+}
+
+func newFetchMessage(base proto.ModelFileStatus, send func(proto.ModelFileStatus)) *fetchMessage {
+	return &fetchMessage{send: send, last: base}
+}
+
+// set replaces the address part and announces it; a wait belonged to the
+// address before.
+func (m *fetchMessage) set(message string) {
+	m.mu.Lock()
+	m.address, m.wait = message, ""
+	st := m.quietLocked()
+	m.mu.Unlock()
+	m.send(st)
+}
+
+// at records the counters a file starts from, without announcing them.
+func (m *fetchMessage) at(done, total int64, revision string) {
+	m.mu.Lock()
+	m.last.BytesDone, m.last.BytesTotal, m.last.Revision = done, total, revision
+	m.mu.Unlock()
+}
+
+// retrying notes a retry after err: when err is the source asking the
+// download to wait (429/503), the status says so until bytes flow again.
+func (m *fetchMessage) retrying(err error, wait time.Duration) {
+	if _, throttled := modelfetch.ThrottleWait(err); !throttled {
+		return
+	}
+	m.mu.Lock()
+	m.wait = " (rate limited by the source; retrying in " + wait.Round(time.Second).String() + ")"
+	m.waitFrom = m.last.BytesDone
+	st := m.quietLocked()
+	m.mu.Unlock()
+	m.send(st)
+}
+
+// progress sends a progress report with the current message; bytes beyond
+// those a throttled wait began at end the wait's note.
+func (m *fetchMessage) progress(st proto.ModelFileStatus) {
+	m.mu.Lock()
+	if m.wait != "" && st.BytesDone > m.waitFrom {
+		m.wait = ""
+	}
+	st.Message = m.address + m.wait
+	m.last = st
+	m.mu.Unlock()
+	m.send(st)
+}
+
+// quietLocked is the last status with the current message and no rate: an
+// announcement is made while nothing is flowing.
+func (m *fetchMessage) quietLocked() proto.ModelFileStatus {
+	st := m.last
+	st.Message, st.RateBytesPerS = m.address+m.wait, 0
+	return st
 }
 
 // switchedMessage is downloadingFrom after the download left an address,
