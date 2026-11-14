@@ -63,64 +63,70 @@ func attachHostRDMA(t *testing.T, st *store.Store) {
 	}
 }
 
-// A PD deployment whose KV moves with NIXL over Ethernet is refused, when it
-// is evaluated and when it is created, if a node it places an instance on has a
-// kernel that hangs UCX. The refusal names only the affected nodes and carries
-// the literal commands; a clean cluster is not affected.
-func TestPDOverEthernetIsRefusedOnANodeThatHangsUCX(t *testing.T) {
+// A PD deployment whose KV moves with NIXL over Ethernet, placed by hand on a
+// node whose kernel hangs UCX, is the operator's choice: evaluate warns with
+// the affected nodes and the literal commands, and create goes ahead. A clean
+// cluster is not warned.
+func TestPDOverEthernetWarnsOnANamedNodeThatHangsUCX(t *testing.T) {
 	h, modelID, st := pdAPIFixture(t)
 	body := pdBody(modelID, pdOneEach, "")
 	ucxHangOn(h, map[string]*proto.UCXNetlinkHang{"pd-a": {Kernel: "5.15.0-203-generic"}})
 
 	resp := evaluatePD(t, h, body)
-	if resp.OK || len(resp.Errors) != 1 || resp.Errors[0].Field != "placement.pd" || resp.Errors[0].Code != messages.ErrorPDUCXNetlinkHang {
-		t.Fatalf("evaluate ok=%t errors=%+v, want one placement.pd PD_UCX_NETLINK_HANG", resp.OK, resp.Errors)
+	warning := findWarning(resp, messages.WarningPDUCXNetlinkHang)
+	if !resp.OK || len(resp.Errors) != 0 || warning == nil || hasWarning(resp, messages.WarningPDUCXNetlinkHangRDMA) {
+		t.Fatalf("evaluate ok=%t errors=%+v warnings=%+v, want one PD_UCX_NETLINK_HANG warning", resp.OK, resp.Errors, resp.Warnings)
 	}
-	jsonEqual(t, resp.Errors[0].Params, `{
+	jsonEqual(t, warning.Params, `{
 		"mode":"vllm-nixl","network":"management","names":"pd-a",
 		"nodes":[{"node_uuid":"pd-a","node_name":"pd-a","kernel":"5.15.0-203-generic"}],
 		"fixes":`+wantUCXFixes+`,
 		"fix":"`+wantUCXFixNow+`"}`)
 
-	rec := httptest.NewRecorder()
-	h.createDeployment(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"code":"`+messages.ErrorPDUCXNetlinkHang+`"`) ||
-		!strings.Contains(rec.Body.String(), "this disables IPv6 for the whole host") {
-		t.Fatalf("create = %d %s", rec.Code, rec.Body.String())
-	}
-	if deps, _ := st.ListDeployments(); len(deps) != 0 {
-		t.Fatalf("a refused request left %d deployments", len(deps))
-	}
-
 	// Both nodes affected: each is named once, decode (pd-b) first as the placement orders them.
 	ucxHangOn(h, map[string]*proto.UCXNetlinkHang{"pd-a": {Kernel: "5.15.0-198-generic"}, "pd-b": {}})
 	resp = evaluatePD(t, h, body)
-	if len(resp.Errors) != 1 {
-		t.Fatalf("errors = %+v", resp.Errors)
+	warning = findWarning(resp, messages.WarningPDUCXNetlinkHang)
+	if !resp.OK || warning == nil {
+		t.Fatalf("ok=%t errors=%+v warnings=%+v", resp.OK, resp.Errors, resp.Warnings)
 	}
-	jsonEqual(t, resp.Errors[0].Params["nodes"], `[{"node_uuid":"pd-b","node_name":"pd-b"},{"node_uuid":"pd-a","node_name":"pd-a","kernel":"5.15.0-198-generic"}]`)
-	if resp.Errors[0].Params["names"] != "pd-b, pd-a" {
-		t.Fatalf("names = %v", resp.Errors[0].Params["names"])
+	jsonEqual(t, warning.Params["nodes"], `[{"node_uuid":"pd-b","node_name":"pd-b"},{"node_uuid":"pd-a","node_name":"pd-a","kernel":"5.15.0-198-generic"}]`)
+	if warning.Params["names"] != "pd-b, pd-a" {
+		t.Fatalf("names = %v", warning.Params["names"])
 	}
 
 	// An unaffected node, a node nobody reported on, and a server without a
 	// hub to ask all leave the request alone.
 	for name, rt := range map[string]*fakeNodeRuntime{"none affected": {}, "other node affected": {ucxHang: map[string]*proto.UCXNetlinkHang{"elsewhere": {Kernel: "k"}}}} {
 		h.d.NodeRuntime = rt
-		if resp := evaluatePD(t, h, body); !resp.OK || len(resp.Errors) != 0 || hasWarning(resp, messages.WarningPDUCXNetlinkHangRDMA) {
+		if resp := evaluatePD(t, h, body); !resp.OK || len(resp.Errors) != 0 || hasWarning(resp, messages.WarningPDUCXNetlinkHang) || hasWarning(resp, messages.WarningPDUCXNetlinkHangRDMA) {
 			t.Fatalf("%s: evaluate ok=%t errors=%+v warnings=%+v", name, resp.OK, resp.Errors, resp.Warnings)
 		}
 	}
 	h.d.NodeRuntime = nil
-	if resp := evaluatePD(t, h, body); !resp.OK || len(resp.Errors) != 0 {
-		t.Fatalf("without a hub: ok=%t errors=%+v", resp.OK, resp.Errors)
+	if resp := evaluatePD(t, h, body); !resp.OK || len(resp.Errors) != 0 || hasWarning(resp, messages.WarningPDUCXNetlinkHang) {
+		t.Fatalf("without a hub: ok=%t errors=%+v warnings=%+v", resp.OK, resp.Errors, resp.Warnings)
 	}
-	ucxHangOn(h, nil)
-	rec = httptest.NewRecorder()
+
+	// The warning does not stop the operator: create goes ahead.
+	ucxHangOn(h, map[string]*proto.UCXNetlinkHang{"pd-a": {Kernel: "5.15.0-203-generic"}})
+	rec := httptest.NewRecorder()
 	h.createDeployment(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
 	if rec.Code != http.StatusCreated {
-		t.Fatalf("create on a clean cluster = %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("create on a named affected node = %d %s", rec.Code, rec.Body.String())
 	}
+	if deps, _ := st.ListDeployments(); len(deps) != 1 {
+		t.Fatalf("deployments = %d, want the one created", len(deps))
+	}
+}
+
+func findWarning(resp dto.EvaluateResponse, code string) *messages.Warning {
+	for i := range resp.Warnings {
+		if resp.Warnings[i].Code == code {
+			return &resp.Warnings[i]
+		}
+	}
+	return nil
 }
 
 func hasWarning(resp dto.EvaluateResponse, code string) bool {
@@ -173,12 +179,10 @@ func TestOrdinaryDeploymentOnANodeThatHangsUCXIsUntouched(t *testing.T) {
 	ucxHangOn(h, map[string]*proto.UCXNetlinkHang{"pd-a": {Kernel: "5.15.0-203-generic"}, "pd-b": {Kernel: "5.15.0-203-generic"}})
 	body := fmt.Sprintf(`{"name":"plain","model_id":%d,"engine":"vllm","image":"vllm/vllm-openai:v0.25.1","quick_params":{"max_model_len":4096},"node_uuid":"pd-a"}`, modelID)
 	resp := evaluatePD(t, h, body)
-	for _, e := range resp.Errors {
-		if e.Code == messages.ErrorPDUCXNetlinkHang {
-			t.Fatalf("an ordinary deployment was refused: %+v", e)
-		}
+	if len(resp.Errors) != 0 {
+		t.Fatalf("an ordinary deployment was refused: %+v", resp.Errors)
 	}
-	if hasWarning(resp, messages.WarningPDUCXNetlinkHangRDMA) {
+	if hasWarning(resp, messages.WarningPDUCXNetlinkHang) || hasWarning(resp, messages.WarningPDUCXNetlinkHangRDMA) {
 		t.Fatalf("an ordinary deployment was warned: %+v", resp.Warnings)
 	}
 	rec := httptest.NewRecorder()

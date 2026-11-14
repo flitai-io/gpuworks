@@ -131,6 +131,7 @@
     "ENGRAM_MANUAL_UNCHECKED": "The manual command mentions Engram ({{flag}}) but is too dynamic to read, so the platform did not derive shared-memory and locked-memory settings from it. Make sure the shared memory and memlock are sufficient, or use engine mode.",
     "ASCEND_SLEEP_EXPANDABLE_SEGMENTS_DISABLED": "Sleep mode on Ascend cannot run with expandable segments, so {{variable}} was changed to {{value}}; if memory runs out, lower gpu_memory_utilization or max_model_len, or turn sleep off.",
     "KUBE_ENGINE_PORTS_OUTSIDE": "Running instances hold ports outside the new engine port range {{range}}: {{instances}}. They keep their ports and keep running; only instances started later use the new range.",
+    "PD_UCX_NETLINK_HANG": "The kernel of {{names}} makes UCX hang (its IPv6 route dump ends in a way UCX cannot read), and PD mode {{mode}} moves the KV with NIXL over Ethernet, so the engine will likely never finish starting. The deployment can still be created; turn IPv6 off on the node first (this disables IPv6 for the whole host); the commands are listed in the PD section.",
     "PD_UCX_NETLINK_HANG_RDMA": "The kernel of {{names}} makes UCX hang (its IPv6 route dump ends in a way UCX cannot read). On the RDMA network {{network}} UCX is held to RDMA transports and may not run that check, so this PD deployment is allowed; if its engine hangs while starting, turn IPv6 off on the node (this disables IPv6 for the whole host): {{fix}}"
   },
   "warningFeature": {

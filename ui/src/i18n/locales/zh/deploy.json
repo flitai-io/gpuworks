@@ -131,6 +131,7 @@
     "ENGRAM_MANUAL_UNCHECKED": "手写命令中出现了 Engram（{{flag}}），但写法过于动态无法解析，平台没有据此推导共享内存和锁定内存设置。请确认共享内存与 memlock 足够，或改用引擎模式。",
     "ASCEND_SLEEP_EXPANDABLE_SEGMENTS_DISABLED": "昇腾上休眠不能与 expandable segments 共存，已把 {{variable}} 改为 {{value}}；如显存不足，请调低 gpu_memory_utilization 或 max_model_len 或关闭“可休眠”。",
     "KUBE_ENGINE_PORTS_OUTSIDE": "有运行中的实例占用的端口在新的引擎端口段 {{range}} 之外：{{instances}}。它们保留原端口、继续运行；只有之后启动的实例才使用新范围。",
+    "PD_UCX_NETLINK_HANG": "节点 {{names}} 的内核会让 UCX 卡住，而 PD 模式 {{mode}} 经以太网用 NIXL 传 KV，引擎很可能一直起不来。部署仍允许创建；请先在该节点上关闭整机 IPv6，修复命令见 PD 配置区域。",
     "PD_UCX_NETLINK_HANG_RDMA": "节点 {{names}} 的内核会让 UCX 卡住。网络 {{network}} 走 RDMA，UCX 可能不触发该问题，部署允许创建；若引擎启动卡住，请在该节点关闭整机 IPv6：{{fix}}"
   },
   "warningFeature": {
