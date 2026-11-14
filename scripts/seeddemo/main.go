@@ -6,14 +6,17 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
+	"strings"
 
+	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/app"
+	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"gpuworks.ai/gpuworks/pkg/topoparse"
 )
 
 func main() {
@@ -26,55 +29,72 @@ func main() {
 	if err := app.SyncInferenceCatalog(st); err != nil {
 		log.Fatal(err)
 	}
-	g := st.DB()
-
-	// 8x H100 node, two NVLink cliques of 4 across two NUMA nodes.
-	topo := topoparse.Topology{
-		GPUs:          make([]topoparse.GPU, 8),
-		Matrix:        make([][]topoparse.Link, 8),
-		NVLinkCliques: [][]int{{0, 1, 2, 3}, {4, 5, 6, 7}},
-		NUMAGroups:    map[int][]int{0: {0, 1, 2, 3}, 1: {4, 5, 6, 7}},
+	// The node arrives the way an agent's does: registered, then described
+	// by a status report whose topology is `nvidia-smi topo -m` output.
+	// 8x H100, two NVLink cliques of 4 across two NUMA nodes.
+	// The seed is for an empty database: rerunning it would add a second
+	// deployment and instance next to the first.
+	const nodeUUID = "demo-dgx-8xh100"
+	if _, err := st.NodeByUUID(nodeUUID); err == nil {
+		log.Fatalf("%s already holds the demo node; seed an empty database", *db)
 	}
+	// No agent connects as the demo node, so its token is random and unknown.
+	if _, err := st.RegisterNode(nodeUUID, store.HashToken(auth.NewToken(32)), "dgx-a"); err != nil {
+		log.Fatal(err)
+	}
+	var topo strings.Builder
 	for i := 0; i < 8; i++ {
-		topo.GPUs[i] = topoparse.GPU{Index: i, NUMANode: i / 4, CPUAffinity: "0-47"}
-		topo.Matrix[i] = make([]topoparse.Link, 8)
+		fmt.Fprintf(&topo, "\tGPU%d", i)
+	}
+	topo.WriteString("\tCPU Affinity\tNUMA Affinity\n")
+	cards := make([]proto.GPUInfo, 0, 8)
+	for i := 0; i < 8; i++ {
+		fmt.Fprintf(&topo, "GPU%d", i)
 		for j := 0; j < 8; j++ {
 			switch {
 			case i == j:
-				topo.Matrix[i][j] = topoparse.Link{Raw: "X", Class: topoparse.LinkSelf}
+				topo.WriteString("\t X ")
 			case i/4 == j/4:
-				topo.Matrix[i][j] = topoparse.Link{Raw: "NV18", Class: topoparse.LinkNVLink, NVLinkBonds: 18}
+				topo.WriteString("\tNV18")
 			default:
-				topo.Matrix[i][j] = topoparse.Link{Raw: "SYS", Class: topoparse.LinkSYS}
+				topo.WriteString("\tSYS")
 			}
 		}
-	}
-	topoJSON, _ := json.Marshal(topo)
-
-	node := &store.Node{
-		UUID: "demo-dgx-8xh100", State: store.NodeStateOnline, Hostname: "dgx-a",
-		OS: "linux", Arch: "amd64", Kernel: "6.5.0", CPUModel: "AMD EPYC 9654", CPUCores: 96,
-		MemTotalKB: 2 << 30, DiskTotalKB: 8 << 30, GPUCount: 8, NvidiaDriver: "550.90.07",
-		TopoJSON: string(topoJSON),
-	}
-	g.Create(node)
-	for i := 0; i < 8; i++ {
-		g.Create(&store.GPU{
-			NodeID: node.ID, Index: i, UUID: "GPU-demo-" + string(rune('a'+i)),
-			Name: "H100 80GB HBM3", ComputeCapability: "9.0", Vendor: "nvidia",
-			MemoryTotal: 80 << 30, NUMANode: i / 4,
+		fmt.Fprintf(&topo, "\t0-47\t%d\n", i/4)
+		cards = append(cards, proto.GPUInfo{
+			Index: i, UUID: "GPU-demo-" + string(rune('a'+i)), Name: "H100 80GB HBM3",
+			ComputeCapability: "9.0", Vendor: "nvidia", MemoryTotalBytes: 80 << 30, NUMANode: i / 4,
+			Healthy: true, Ownership: accelerator.CardOwnedByNode,
 		})
+	}
+	if err := st.UpdateNodeStatus(nodeUUID, proto.NodeStatus{
+		Sys: proto.SysInfo{
+			Hostname: "dgx-a", OS: "linux", Arch: "amd64", Kernel: "6.5.0", CPUModel: "AMD EPYC 9654", CPUCores: 96,
+			MemTotalKB: 2 << 30, DiskTotalKB: 8 << 30, NvidiaDriver: "550.90.07",
+		},
+		GPUs:    cards,
+		TopoRaw: topo.String(),
+	}); err != nil {
+		log.Fatal(err)
+	}
+	node, err := st.NodeByUUID(nodeUUID)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	cfg := `{"architectures":["Qwen2ForCausalLM"],"model_type":"qwen2","num_hidden_layers":64,"hidden_size":5120,"num_attention_heads":40,"num_key_value_heads":8,"head_dim":128,"max_position_embeddings":32768,"vocab_size":152064,"torch_dtype":"bfloat16"}`
-	model := &store.Model{Source: "modelscope", SourceID: "Qwen/Qwen2.5-32B-Instruct", Revision: "master",
+	model, err := st.UpsertModel(&store.Model{Source: "modelscope", SourceID: "Qwen/Qwen2.5-32B-Instruct", Revision: "master",
 		Name: "Qwen2.5-32B-Instruct", Arch: "Qwen2ForCausalLM", WeightBytes: 65 << 30, Dtype: "bfloat16",
-		Meta: cfg}
-	g.Create(model)
+		Meta: cfg})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	dep := &store.Deployment{Name: "qwen32b", ModelID: model.ID, NodeID: node.ID, ServedName: "qwen2.5-32b",
-		State: "active", Replicas: 1}
-	g.Create(dep)
+	dep, err := st.CreateDeployment(&store.Deployment{Name: "qwen32b", ModelID: model.ID, NodeID: node.ID, ServedName: "qwen2.5-32b",
+		State: "active", Replicas: 1})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	explain := map[string]any{
 		"explain": map[string]any{
@@ -106,9 +126,11 @@ func main() {
 		UUID: "demo-inst-1", DeploymentID: dep.ID, DesiredState: "running", Engine: "vllm",
 		Image: "vllm/vllm-openai:latest", GPUIndexes: []int{0, 1, 2, 3}, Ports: []int{30000}, APIPort: 30000,
 	})
-	g.Create(&store.Instance{UUID: "demo-inst-1", DeploymentID: dep.ID, NodeID: node.ID, State: "running",
+	if _, err := st.CreateInstance(&store.Instance{UUID: "demo-inst-1", DeploymentID: dep.ID, NodeID: node.ID, State: "running",
 		GPUIndexes: "[0,1,2,3]", Ports: "[30000]", APIPort: 30000, Image: "vllm/vllm-openai:latest",
-		DesiredStateJSON: string(desired), ScheduleExpl: string(explJSON), Measured: string(measured), DirectAddr: "127.0.0.1:30000"})
+		DesiredStateJSON: string(desired), ScheduleExpl: string(explJSON), Measured: string(measured), DirectAddr: "127.0.0.1:30000"}); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Println("seeded demo node + deployment into", *db)
 }
