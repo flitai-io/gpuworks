@@ -127,7 +127,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 	}
 	if !p.Headless {
 		b.injectKV("--host", p.Host)
-		b.injectKV("--port", strconv.Itoa(p.APIPort))
+		b.injectKV("--port", p.apiPortText())
 	}
 	if p.APIKey != "" {
 		b.injectKV("--api-key", p.APIKey)
@@ -151,7 +151,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 	if p.NNodes > 1 {
 		b.injectKV("--distributed-executor-backend", "mp")
 		b.injectKV("--nnodes", strconv.Itoa(p.NNodes))
-		b.injectKV("--node-rank", strconv.Itoa(p.NodeRank))
+		b.injectKV("--node-rank", p.nodeRankText())
 		if p.Headless {
 			b.injectFlag("--headless")
 		}
@@ -159,7 +159,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 			b.injectKV("--master-addr", p.MasterAddr)
 		}
 		if p.MasterPort > 0 {
-			b.injectKV("--master-port", strconv.Itoa(p.MasterPort))
+			b.injectKV("--master-port", p.masterPortText())
 		}
 		if p.NodeAddress != "" {
 			env["VLLM_HOST_IP"] = p.NodeAddress
@@ -357,7 +357,7 @@ func vllmKVTransferConfig(p Params) (string, bool) {
 	role := mode.ConnectorRole(p.PD.Role)
 	pd := map[string]any{"kv_connector": mode.Connector, "kv_role": role}
 	if mode.ConnectorPortKey != "" && p.PD.SideChannelPort > 0 {
-		pd[mode.ConnectorPortKey] = strconv.Itoa(p.PD.SideChannelPort)
+		pd[mode.ConnectorPortKey] = p.sideChannelPortText()
 	}
 	if mode.ConnectorParallelism {
 		sides := map[string]any{}

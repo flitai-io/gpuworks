@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { launchCommand } from "./launchCommand";
 import CopyButton from "../../components/CopyButton";
 import DeployMountPreview, { mountClipboardText } from "./DeployMountPreview";
+import { warningText } from "./deployWarnings";
 
 // PdLaunch is one rank of a PD role unit, labelled by role, instance and
 // node: a unit's ranks each run on their own node, so the node tells a
@@ -59,20 +60,31 @@ export default function DeployRuntimeCommand({
           ? [result]
           : [];
   const ready = !loading && !error;
+  const multiRank = launches.length > 1;
   const singleLaunch = launches.length === 1 ? launches[0] : undefined;
-  const generated = singleLaunch ? launchCommand(singleLaunch).script : "";
+  // Several launches share one manual command: the server writes the script
+  // they start from, with the platform variables it fills in per rank, and
+  // says why when it cannot (MANUAL_DRAFT_UNAVAILABLE).
+  const draft = multiRank ? result?.manual_command_draft || "" : "";
+  const generated = singleLaunch ? launchCommand(singleLaunch).script : draft;
   const generatedPreview = singleLaunch
     ? [generated, mountClipboardText(singleLaunch.mounts || [])]
         .filter(Boolean)
         .join("\n")
-    : "";
+    : draft;
   const canEdit = ready && Boolean(generated);
+  const draftUnavailable = result?.warnings?.find(
+    (warning) => warning.code === "MANUAL_DRAFT_UNAVAILABLE",
+  );
+  const variables = result?.manual_command_variables ?? [];
 
   const enterManualMode = () =>
     form.setFieldsValue({
       command_edit_previous_mode: commandMode || "engine",
       command_mode: "manual",
-      command_includes_preparation: true,
+      // A single launch's script carries its own preparation; the shared
+      // draft does not, so the platform keeps preparing every rank.
+      command_includes_preparation: !multiRank,
       container_cmd: generated,
     });
   const returnToForm = () =>
@@ -136,18 +148,33 @@ export default function DeployRuntimeCommand({
           />
         </Space>
       </div>
-      {launches.length > 1 && (
+      {multiRank && (
         <Alert
           type="info"
           showIcon
-          message={t(
+          message={
             manual
-              ? "catalog.sharedManualCommand"
-              : "catalog.multiRankManualUnavailable",
-          )}
+              ? t("catalog.sharedManualCommand")
+              : draft
+                ? t("catalog.multiRankManualDraft")
+                : draftUnavailable
+                  ? warningText(t, draftUnavailable)
+                  : t("catalog.multiRankManualUnavailable")
+          }
+          description={
+            manual &&
+            variables.length > 0 && (
+              <p className="deploy-manual-variables">
+                {t("runtimeCommand.variablesHint")}{" "}
+                {variables.map((name) => (
+                  <code key={name}>{`\${${name}}`}</code>
+                ))}
+              </p>
+            )
+          }
         />
       )}
-      {manual ? (
+      {manual && (
         <>
           <Alert
             type="warning"
@@ -164,7 +191,8 @@ export default function DeployRuntimeCommand({
             />
           </Form.Item>
         </>
-      ) : loading || error || !result ? (
+      )}
+      {manual && !multiRank ? null : loading || error || !result ? (
         <pre>
           {loading
             ? t("runtimeCommand.generating")

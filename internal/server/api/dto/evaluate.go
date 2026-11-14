@@ -144,6 +144,15 @@ type EvaluateResponse struct {
 	// PD previews a PD disaggregated draft instance by instance; the command
 	// fields above then describe the first decode instance.
 	PD *EvaluatePD `json:"pd,omitempty"`
+	// ManualCommandDraft is the script a multi-node or PD draft's manual
+	// command starts from: one shell script for every rank, written with the
+	// platform variables the server expands per rank. Absent for a single
+	// launch (the form starts from that launch's own command) and when no
+	// faithful script exists (a MANUAL_DRAFT_UNAVAILABLE warning says so).
+	ManualCommandDraft string `json:"manual_command_draft,omitempty"`
+	// ManualCommandVariables are the prefixed variable names this draft's
+	// launches state, sorted: what a manual command may reference.
+	ManualCommandVariables []string `json:"manual_command_variables,omitempty"`
 	// YieldPolicyEligible says whether the draft may be created with a yield
 	// policy other than never (planning.DraftYieldPolicyRefusal), the check
 	// the create makes; absent until the draft's engine is known.

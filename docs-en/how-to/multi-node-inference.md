@@ -37,6 +37,11 @@ After completing this guide, all ranks of a replica are ready, and you can compl
 6. Wait for all ranks to become ready in deployment details, then send a request through Playground or `/v1` using the deployment's service name.
    Seeing rank 0 created or beginning to load does not mean the entire replica is available. On failure, inspect the affected rank's events and logs.
 
+To write the launch command yourself, click **Edit Command Text** in the command preview. The editor starts from a script the server generates; every rank shares
+that one script, and variables such as `${GPUWORKS_NODE_RANK}`, `${GPUWORKS_HEADLESS}`, and `${GPUWORKS_MASTER_ADDR}` are replaced with each rank's values before it starts.
+Below the editor, each rank's result after replacement is shown. The command must reference `${GPUWORKS_NODE_RANK}` or `${GPUWORKS_HEADLESS}`; otherwise evaluation and creation return
+`MANUAL_COMMAND_RANK_BLIND`. See [Manual Commands for Multi-Node and PD Deployments](../explanation/launch-config.md#多机与-pd-的手工命令).
+
 If the deployment keeps waiting for nodes, check `DEPLOYMENT_UNSCHEDULABLE` in the timeline. It lists the ranks that cannot be placed, their nodes, and the reasons.
 All ranks of a replica must simultaneously meet the model, image, port, GPU, and GPU memory requirements before they are created together;
 the leader does not reserve GPUs first, and this wait does not consume replica retries. Once you supply the missing resources indicated by the reasons, the platform continues automatically. The same applies to multi-node units in PD deployments.

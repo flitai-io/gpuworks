@@ -106,7 +106,7 @@ models:                       # FlatCatalog：顶层只有一个 models 列表
 | `name` | 必填，模型内唯一 | |
 | `display_name_zh_cn` / `display_name_en` | 可选；单行，分别不超过 56 / 72 个字符；同一模型、同一引擎内各自唯一（忽略大小写与多余空格） | 档位的中英文显示名，界面按语言显示，缺一种时用另一种，都没有时显示 `name`。内置档位两个都写。写法见下文[显示名](#显示名) |
 | `scenario` | `latency` \| `balanced` \| `throughput` | |
-| `engine` | 必填；部署时按注册表解析，合法值 `vllm` / `sglang` / `callable`（`internal/engines` 唯一产地） | `callable` 承载目录自带 Serve Adapter，无日志方言与参数字典；**命令行完全归模板**，引擎不追加任何参数，模型路径、端口、多机 rank 等平台事实由模板用[变量](#变量展开)自己摆放，且必须引用 `${API_PORT}`（ADR 0036） |
+| `engine` | 必填；部署时按注册表解析，合法值 `vllm` / `sglang` / `callable`（`internal/engines` 唯一产地） | `callable` 承载目录自带 Serve Adapter，无日志方言与参数字典；**命令行完全归模板**，引擎不追加任何参数，模型路径、端口、多机 rank 等平台事实由模板用[变量](#变量展开)自己摆放，且必须引用 `${GPUWORKS_API_PORT}`（或旧写法 `${API_PORT}`，ADR 0036） |
 | `image` | 必填 | 镜像引用语法与漂移问题见 [镜像家族](image-families.md) 与 todo.md T2 |
 | `image_sources[]` | 可选；每项 trim 后非空、不含空白、不含 `://`、≤ 512 个字符，不重复；与 `image` 相同的项被丢弃（引用的比较方式见下文） | 模板自己声明的镜像来源，在节点启动副本时作为镜像自身副本参与候选，详见 [image_sources](#image_sources模板声明的镜像来源) |
 | `weights.quantization` | 必填，小写 | |
@@ -324,28 +324,32 @@ placement:
 
 ### 变量展开
 
-`args` / `env` / `entrypoint` / `pre_start_*` 中的 `${NAME}` 在每次部署时展开，与有没有 placement
-无关。可用变量 = resolver 返回值 + 平台为这次启动给出的事实（唯一产地
-`internal/server/placement/expand.go` 的词表与 `internal/server/deploy/launch_variables.go`）：
+`args` / `env` / `entrypoint` / `pre_start_*` 中的变量引用在每次部署时展开，与有没有 placement
+无关。规范写法带 `GPUWORKS_` 前缀，如 `${GPUWORKS_NODE_RANK}`；不带前缀的旧写法（`${NODE_RANK}`）在这些模板字段里
+作为别名同样展开。可用变量 = resolver 返回值 + 平台为这次启动给出的事实（唯一产地
+`internal/server/placement/expand.go` 的词表与 `internal/server/deploy/launch_variables.go`），下表按带前缀的写法列出：
 
 | 变量 | 值 | 何时存在 |
 |---|---|---|
-| resolver 返回的任意变量 | placement 结果（如 `SP_DEGREE`） | 有 resolver 时 |
-| `GPU_COUNT` | 本节点分配到的 GPU 数（resolver 返回的同名值会被覆盖） | 放置已确定 |
-| `TP_SIZE` | 整个部署的张量并行度；resolver 返回则以它为准 | 放置已确定 |
-| `PP_SIZE` | **故意无默认**：多机流水线并行已有唯一 owner（引擎按节点数注入），只能由 resolver 返回 | 仅 resolver 返回时 |
-| `MODEL_PATH` | 主权重在容器里的挂载路径（含 primary 组件或部署覆盖） | 总是 |
-| `SERVED_MODEL_NAME` | 部署的服务名，即网关与健康检查发给引擎的 `model` | 总是 |
-| `API_HOST` | 服务应绑定的地址：callable 为 `0.0.0.0`，其他引擎 `127.0.0.1` | 总是 |
-| `API_PORT` | 平台为本实例保留、网关与健康检查会访问的端口；headless rank 为 `0` | 总是 |
-| `NNODES` / `NODE_RANK` | 节点数与本 rank 序号；单机为 `1` / `0` | 总是 |
-| `HEADLESS` | 本 rank 不对外服务时为 `1`，否则 `0` | 总是 |
-| `NODE_ADDR` | 本 rank 所在节点的可路由地址（不是 rank 0 的） | 仅多机 |
-| `MASTER_ADDR` / `MASTER_PORT` | 多机 rank 0 的地址与 rendezvous 端口 | 仅多机 |
+| resolver 返回的任意变量 | placement 结果（resolver 返回 `SP_DEGREE`，引用写 `${GPUWORKS_SP_DEGREE}`） | 有 resolver 时 |
+| `GPUWORKS_GPU_COUNT` | 本节点分配到的 GPU 数（resolver 返回的同名值会被覆盖） | 放置已确定 |
+| `GPUWORKS_TP_SIZE` | 整个部署的张量并行度；resolver 返回则以它为准 | 放置已确定 |
+| `GPUWORKS_PP_SIZE` | **故意无默认**：多机流水线并行已有唯一 owner（引擎按节点数注入），只能由 resolver 返回 | 仅 resolver 返回时 |
+| `GPUWORKS_MODEL_PATH` | 主权重在容器里的挂载路径（含 primary 组件或部署覆盖） | 总是 |
+| `GPUWORKS_SERVED_MODEL_NAME` | 部署的服务名，即网关与健康检查发给引擎的 `model` | 总是 |
+| `GPUWORKS_API_HOST` | 服务应绑定的地址：callable 为 `0.0.0.0`，其他引擎 `127.0.0.1` | 总是 |
+| `GPUWORKS_API_PORT` | 平台为本实例保留、网关与健康检查会访问的端口；headless rank 为 `0` | 总是 |
+| `GPUWORKS_NNODES` / `GPUWORKS_NODE_RANK` | 节点数与本 rank 序号；单机为 `1` / `0` | 总是 |
+| `GPUWORKS_HEADLESS` | 本 rank 不对外服务时为 `1`，否则 `0` | 总是 |
+| `GPUWORKS_NODE_ADDR` | 本 rank 所在节点的可路由地址（不是 rank 0 的） | 仅多机 |
+| `GPUWORKS_MASTER_ADDR` / `GPUWORKS_MASTER_PORT` | 多机 rank 0 的地址与 rendezvous 端口 | 仅多机 |
+| `GPUWORKS_PD_ROLE` | 本实例的 PD 角色：`prefill` 或 `decode` | PD 实例 |
+| `GPUWORKS_PD_SIDE_CHANNEL_HOST` | 本实例 KV side channel 的监听地址 | PD 实例且地址已知 |
+| `GPUWORKS_PD_SIDE_CHANNEL_PORT` | 本实例额外端口段的首端口，即 KV side channel 端口 | PD 实例且端口已分配 |
 
 规则：
 
-- **平台事实不能由 resolver 返回**：`MODEL_PATH`、`SERVED_MODEL_NAME`、`API_*`、`NNODES`、`NODE_RANK`、`HEADLESS`、`NODE_ADDR`、`MASTER_*`
+- **平台事实不能由 resolver 返回**：`MODEL_PATH`、`SERVED_MODEL_NAME`、`API_*`、`NNODES`、`NODE_RANK`、`HEADLESS`、`NODE_ADDR`、`MASTER_*`、`PD_*`
   出现在 resolver 结果里直接报错——resolver 运行时还没有节点、端口和 rank。
 - **缺变量即失败**：args / env / entrypoint / `pre_start_argv` 里未解析的名字在部署时报错；没有 resolver 的
   spec 引用词表外的名字（如拼错的 `${NODE_RNAK}`、无 resolver 的 `${PP_SIZE}`）在导入时就被拒绝。单机部署
@@ -359,7 +363,9 @@ placement:
   （端口为预览固定的 `30000`）。
 - 附加组件（如 DFlash draft）的挂载路径由 spec 自己的 `components[].mount_path` 决定，直接写字面路径即可，
   不需要变量；校验要求该路径出现在启动字段里。
-- 用户在部署表单输入的参数与命令覆盖**从不展开**。
+- 用户在部署表单输入的参数与 `engine` / `image-entry` 模式的命令覆盖**从不展开**。`manual` 模式的手写命令只展开
+  带前缀的名字，不带前缀的 `${MODEL_PATH}` 与本次启动没有给出的前缀名都原样留给 shell，见
+  [多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。
 
 callable 档位的最小写法：
 

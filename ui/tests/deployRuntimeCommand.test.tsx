@@ -210,6 +210,64 @@ test("PD runtime commands display and copy each rank of every role unit, followe
   assert.equal(copyAll.disabled, true, "no single command stands for every PD rank");
 });
 
+// Two ranks of a multi-node draft, each with its own resolved command.
+function multiRankResult(extra: Partial<EvaluateResponse> = {}): EvaluateResponse {
+  const ranks = [0, 1].map((rank) => ({
+    ...launch, node_uuid: `n${rank}`, node_rank: rank, role: rank ? "follower" : "leader", headless: Boolean(rank),
+    command: ["/bin/sh", "-c", `exec vllm serve /model --node-rank ${rank}`], env: { VLLM_HOST_IP: `10.0.0.${rank + 1}` },
+  }));
+  return { ...launch, rank_commands: ranks as never, ...extra };
+}
+
+test("several launches enter manual mode from the server's shared script", async () => {
+  const user = userEvent.setup();
+  const draft = 'set -eu\ncase "${GPUWORKS_HEADLESS}" in\n  0)\n    exec vllm serve /model --node-rank ${GPUWORKS_NODE_RANK}\n    ;;\nesac';
+  const variables = ["GPUWORKS_HEADLESS", "GPUWORKS_NODE_RANK"];
+  const result = multiRankResult({ manual_command_draft: draft, manual_command_variables: variables });
+  const { container } = show(result);
+  assert.ok(screen.getByText(locale.catalog.multiRankManualDraft));
+  const edit = screen.getByRole("button", { name: new RegExp(locale.runtimeCommand.edit) }) as HTMLButtonElement;
+  assert.equal(edit.disabled, false, "a server draft makes the command editable");
+  await user.click(edit);
+  await user.click(screen.getByRole("button", { name: locale.runtimeCommand.enter, exact: true }));
+  const editor = screen.getByRole("textbox") as HTMLTextAreaElement;
+  assert.equal(editor.value, draft, "the editor starts from the server's script, not one rank's command");
+  const overrides = buildPayload(currentForm.getFieldsValue(true)).payload.container_overrides;
+  assert.equal(overrides?.command_mode, "manual");
+  assert.equal(overrides?.command_includes_preparation, undefined, "the platform keeps preparing every rank (false is the omitted default)");
+  assert.equal(currentForm.getFieldValue("command_includes_preparation"), false);
+
+  // Under the editor: every rank's resolved launch as evaluate returned it,
+  // and the variables the server listed.
+  assert.ok(screen.getByText(locale.catalog.sharedManualCommand));
+  assert.ok(screen.getByText(locale.runtimeCommand.variablesHint));
+  for (const name of variables) assert.ok(screen.getByText(`\${${name}}`));
+  const launches = Array.from(container.querySelectorAll(".deploy-rank-launch"));
+  assert.equal(launches.length, 2);
+  assert.ok(launches[0].textContent?.includes("--node-rank 0"));
+  assert.ok(launches[1].textContent?.includes("--node-rank 1"));
+  assert.ok(launches[1].textContent?.includes("VLLM_HOST_IP"));
+  assert.equal(screen.queryByText(locale.catalog.multiRankManualDraft), null);
+});
+
+test("several launches without a server script keep editing off and say why", () => {
+  show(multiRankResult({ warnings: [{ code: "MANUAL_DRAFT_UNAVAILABLE" }] }));
+  const edit = screen.getByRole("button", { name: new RegExp(locale.runtimeCommand.edit) }) as HTMLButtonElement;
+  assert.equal(edit.disabled, true);
+  assert.ok(screen.getByText(locale.warning.MANUAL_DRAFT_UNAVAILABLE));
+  assert.equal(screen.queryByText(locale.catalog.multiRankManualUnavailable), null);
+});
+
+test("a single launch still enters manual mode with its own preparation", async () => {
+  const user = userEvent.setup();
+  show({ ...launch, manual_command_draft: "ignored for one launch" });
+  await user.click(screen.getByRole("button", { name: new RegExp(locale.runtimeCommand.edit) }));
+  await user.click(screen.getByRole("button", { name: locale.runtimeCommand.enter, exact: true }));
+  assert.ok((screen.getByRole("textbox") as HTMLTextAreaElement).value.includes(script));
+  assert.equal(currentForm.getFieldValue("command_includes_preparation"), true);
+  assert.equal(screen.queryByText(locale.catalog.sharedManualCommand), null);
+});
+
 test("loading, empty, and error states do not claim a launch command", () => {
   for (const [result, loading, error, text] of [
     [null, true, null, locale.runtimeCommand.generating],

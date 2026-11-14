@@ -136,9 +136,11 @@ sleep、LoRA、投机解码、KV 卸载等特性只在对应字典字段被声�
 |---|---|---|---|
 | `engine`（默认） | 引擎生成；覆盖 entrypoint > 模板 entrypoint | 引擎参数 + 模板剩余 + 用户剩余 | 系统 → 模板 → 用户 |
 | `image-entry` | 空（使用镜像 ENTRYPOINT），可覆盖 | 覆盖命令（若有）+ 引擎参数向量 | 系统 → 模板 → 用户 |
-| `manual`（手写命令） | `/bin/sh -c`，整段脚本由用户写 | `--port`、`--served-model-name` 会被改写成平台分配值 | **不含系统层**，只有模板 → 用户 |
+| `manual`（手写命令） | `/bin/sh -c`，整段脚本由用户写 | 带 `GPUWORKS_` 前缀的平台变量按 rank 展开；`--port`、`--served-model-name` 会被改写成平台分配值 | 单机非 PD **不含系统层**，只有模板 → 用户；多机 rank 与 PD 实例为系统 → 模板 → 用户 |
 
-手写命令勾选「命令已包含准备脚本」后，模板的准备脚本不再执行，避免重复。
+手写命令勾选「命令已包含准备脚本」后，模板的准备脚本不再执行，避免重复。多机与 PD 的手写命令由所有 rank 共用，
+必须引用能区分 rank 的变量，否则评估与创建返回 `MANUAL_COMMAND_RANK_BLIND`，见
+[多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。
 
 ### 容器覆盖字段
 
@@ -225,11 +227,13 @@ udocker 运行时（runveil 与 udocker CLI 两种启动器）在非国产卡上
 
 ## 变量展开
 
-每次启动都展开，作用于模板的 args、env、entrypoint 与准备脚本；用户输入**从不展开**。
-可用变量：解析器输出，加上平台给出的 `GPU_COUNT`、`TP_SIZE`、`MODEL_PATH`、`SERVED_MODEL_NAME`、`API_HOST`、`API_PORT`、
-`NNODES`、`NODE_RANK`、`HEADLESS`，多机时另有 `NODE_ADDR`、`MASTER_ADDR`、`MASTER_PORT`；`PP_SIZE` 没有默认值。
-写法 `${NAME}`，名称为大写字母、数字与下划线。完整词表、出现条件与报错规则见
-[推理目录语法](inference-catalog-spec.md#变量展开)。
+每次启动都展开，作用于模板的 args、env、entrypoint 与准备脚本，以及 `manual` 模式的手写命令；其余用户输入**从不展开**。
+写法 `${GPUWORKS_NAME}`，名称为大写字母、数字与下划线。可用变量：解析器输出，加上平台给出的 `GPUWORKS_GPU_COUNT`、
+`GPUWORKS_TP_SIZE`、`GPUWORKS_MODEL_PATH`、`GPUWORKS_SERVED_MODEL_NAME`、`GPUWORKS_API_HOST`、`GPUWORKS_API_PORT`、
+`GPUWORKS_NNODES`、`GPUWORKS_NODE_RANK`、`GPUWORKS_HEADLESS`，多机时另有 `GPUWORKS_NODE_ADDR`、`GPUWORKS_MASTER_ADDR`、
+`GPUWORKS_MASTER_PORT`，PD 实例另有 `GPUWORKS_PD_ROLE`、`GPUWORKS_PD_SIDE_CHANNEL_HOST`、`GPUWORKS_PD_SIDE_CHANNEL_PORT`；
+`PP_SIZE` 没有默认值。模板字段里不带前缀的旧写法（`${NODE_RANK}`）仍然展开；手写命令只展开带前缀的名字，其余 `${...}`
+留给 shell。完整词表、出现条件与报错规则见[推理目录语法](inference-catalog-spec.md#变量展开)。
 
 ## agent 注入
 

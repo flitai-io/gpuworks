@@ -105,6 +105,11 @@ type LaunchPlan struct {
 	Output   Output
 	Params   deploy.Params
 	Resolved deploy.ResolvedLaunch
+	// LaunchInput is the resolver input Resolved was built from, kept so a
+	// caller that derives another launch from this one (the manual command
+	// draft re-resolves it in engine mode) starts from what was planned, not
+	// from a copy it assembled itself. Read-only, like Input.
+	LaunchInput deploy.ResolveLaunchInput
 	// Warnings are what the platform cannot prove about the resolved launch.
 	// They are for the preview to show; a plan never fails on them.
 	Warnings  []messages.Warning
@@ -195,7 +200,7 @@ func PlanLaunch(ctx context.Context, st *store.Store, networks Networks, req Lau
 		}
 		return plan, &LaunchResolveError{DeploymentID: req.Source.DeploymentID, Err: err}
 	}
-	plan.Params, plan.Profile = allocated.Params, allocated.Profile
+	plan.Params, plan.Profile, plan.LaunchInput = allocated.Params, allocated.Profile, allocated.LaunchInput
 	plan.Resolved, plan.Warnings = allocated.Resolved, allocated.Warnings
 	plan.Resolved.StartupEstimate = launchStartupEstimate(req, plan.Resolved)
 	return plan, nil

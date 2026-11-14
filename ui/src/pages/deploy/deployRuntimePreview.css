@@ -82,3 +82,12 @@
 .deploy-mount-row {
   overflow-wrap: anywhere;
 }
+
+.deploy-manual-variables {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}

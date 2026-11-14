@@ -91,6 +91,16 @@
 
 `engine` 与 `image-entry` 不是例外：它们的引擎参数全部来自那一份启动配置。
 
+### 多机与 PD 的手工命令
+
+一个部署只存一段手工命令，多机的每个 rank、PD 的每个实例都运行它；各 rank 的差别靠平台变量表达：
+
+- 手工命令里写成 `${GPUWORKS_NODE_RANK}` 这样**带 `GPUWORKS_` 前缀**的名字，服务端在每个 rank 启动前把它们换成该 rank 的值，然后才交给 shell。变量词表见[推理目录语法 · 变量展开](../reference/inference-catalog-spec.md#变量展开)。
+- 手工命令只认带前缀的名字。不带前缀的 `${MODEL_PATH}`、`${API_PORT}` 以及脚本自己的变量都原样留给 shell，所以已有的单机手工命令逐字不变；本次启动没有给出的前缀名（单机上的 `${GPUWORKS_MASTER_ADDR}`）同样原样留下。
+- 多机 rank 与 PD 实例的手工启动**保留系统层环境变量**（`VLLM_HOST_IP`、参数网络网卡、PD side channel 等按 rank、按节点才知道的事实），层次与 `engine` 相同：系统 → 模板 → 用户；脚本里自己 `export` 的值最后生效。单机非 PD 的手工启动仍不含系统层。
+- 部署页在多机或 PD 时点「编辑命令文本」，编辑框从服务端生成的脚本初稿开始：每类 rank（PD 角色 × 是否 headless）一条引擎命令，放在一个按 `${GPUWORKS_PD_ROLE}/${GPUWORKS_HEADLESS}`（非 PD 时只按 `${GPUWORKS_HEADLESS}`）分支的 `case` 里。初稿不含准备脚本与环境变量，准备脚本仍由平台按 rank 执行。同一类 rank 的命令有变量表达不了的差异（例如两个节点的 RDMA 设备名不同）时没有初稿，评估给出 `MANUAL_DRAFT_UNAVAILABLE` 提醒，命令不能从表单编辑。
+- 评估与创建拒绝看不出 rank 的手工命令：多机的命令必须引用 `${GPUWORKS_NODE_RANK}` 或 `${GPUWORKS_HEADLESS}`，PD 的命令必须引用 `${GPUWORKS_PD_ROLE}`（PD 实例跨多机时两条都要满足），否则返回 `MANUAL_COMMAND_RANK_BLIND`。这条规则不作用于已经存下的部署，它们照常启动。
+
 ## 配置环境与镜像环境
 
 镜像是运行制品。引擎版本、框架、架构、获取地址，以及镜像里实际的 OCI ENTRYPOINT/CMD/ENV，都是**镜像事实**；它们与“本次配置的启动输入”是两类东西：
