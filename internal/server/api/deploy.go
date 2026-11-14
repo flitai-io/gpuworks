@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -15,7 +16,24 @@ import (
 
 // ---- instances ----
 
+// instanceListStates are the states GET /instances can be filtered by: an
+// instance's own state.
+var instanceListStates = []string{
+	proto.InstPending, proto.InstPulling, proto.InstStarting, proto.InstOptimizing, proto.InstRunning,
+	proto.InstDraining, proto.InstRemoving, proto.InstStopped, proto.InstFailed, proto.InstPendingRemoval,
+}
+
+// listInstances answers GET /instances. With page or page_size it returns one
+// dto.ListPage of instances, newest first, filtered by q (a substring of the
+// instance UUID, its deployment's name or its node's name) and state (the
+// instance's own states, comma separated); without them, every instance.
+// Either way only the rows returned are turned into DTOs.
 func (a *apiHandlers) listInstances(w http.ResponseWriter, r *http.Request) {
+	query, err := parseListQuery(r, instanceListStates)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
 	insts, err := a.d.Store.ListInstances()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -31,7 +49,37 @@ func (a *apiHandlers) listInstances(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.NewList(a.instanceDTOs(rows, insts)))
+	matched := insts
+	if query.search != "" || len(query.states) > 0 {
+		matched = make([]store.Instance, 0, len(insts))
+		for i := range insts {
+			if instanceMatches(rows, &insts[i], query) {
+				matched = append(matched, insts[i])
+			}
+		}
+	}
+	if !query.paged {
+		writeJSON(w, http.StatusOK, dto.NewList(a.instanceDTOs(rows, matched)))
+		return
+	}
+	writeJSON(w, http.StatusOK, pageOf(matched, query, func(page []store.Instance) []dto.Instance {
+		return a.instanceDTOs(rows, page)
+	}))
+}
+
+// instanceMatches applies a list query's filters to one instance.
+func instanceMatches(rows deployment.Rows, in *store.Instance, query listQuery) bool {
+	if !query.matchesState(in.State) {
+		return false
+	}
+	deploymentName, nodeName := "", ""
+	if dep := rows.Deployment(in.DeploymentID); dep != nil {
+		deploymentName = dep.Name
+	}
+	if node := rows.Node(in.NodeID); node != nil {
+		nodeName = nodeDisplayName(node)
+	}
+	return query.matchesSearch(in.UUID, deploymentName, nodeName)
 }
 
 func (a *apiHandlers) getInstance(w http.ResponseWriter, r *http.Request) {

@@ -136,6 +136,9 @@ export function toCsv(entries: LogEntry[]): string {
   return [head, ...rows].join("\n");
 }
 
+/** How many instances one search offers; typing narrows the list on the server. */
+const INSTANCE_PICKER_PAGE_SIZE = 50;
+
 export default function LogsPage() {
   const { t } = useTranslation("logs");
   // Seeds the instance filter and, when both bounds are present, an absolute
@@ -231,10 +234,16 @@ export default function LogsPage() {
     [effectiveQuery, instance, node, level, source, fromMS, toMS, range, absoluteWindow],
   );
 
-  // Load facet options once; failure keeps plain text inputs usable.
+  // Instances are searched on the server, one page at a time, as typed;
+  // failure keeps the plain text input usable.
+  const [instanceSearch, setInstanceSearch] = useState("");
   useEffect(() => {
-    api.instances().then((list) => setInstanceOptions(list.items.map((i) => ({ uuid: i.uuid, state: i.state })))).catch(() => {});
-  }, []);
+    let current = true;
+    api.instancesPage({ page: 1, page_size: INSTANCE_PICKER_PAGE_SIZE, q: instanceSearch })
+      .then((page) => { if (current) setInstanceOptions(page.items.map((i) => ({ uuid: i.uuid, state: i.state }))); })
+      .catch(() => {});
+    return () => { current = false; };
+  }, [instanceSearch]);
 
   useEffect(() => {
     runSearch(false);
@@ -350,13 +359,12 @@ export default function LogsPage() {
               allowClear
               style={{ minWidth: 220 }}
               placeholder={t("search.instancePlaceholder")}
+              aria-label={t("search.instancePlaceholder")}
               value={instance}
               onChange={(v) => setInstance(v || undefined)}
-              options={instanceOptions.map((i) => ({ value: i.uuid, label: `${shortId(i.uuid)} · ${i.state}` }))}
-              filterOption={(input, opt) => {
-                const hay = `${opt?.value ?? ""} ${opt?.label ?? ""}`.toLowerCase();
-                return hay.includes(input.toLowerCase());
-              }}
+              onSearch={setInstanceSearch}
+              options={instanceOptions.map((i) => ({ value: i.uuid, title: i.uuid, label: `${shortId(i.uuid)} · ${i.state}` }))}
+              filterOption={false}
             />
             {/* Nodes are searched on the server, not listed whole. */}
             <NodePicker
