@@ -62,7 +62,7 @@
     "rolesHint": "Select all three for an all-in-one network. Internal testing covers storage sync and compute networks.",
     "rolesRequired": "Select at least one role",
     "type": "Type",
-    "typeHint": "Host Ethernet is TCP on a host interface. Host RDMA uses the host's RDMA ports, InfiniBand and RoCE alike; which one a node has is read from its ports. Accelerator RDMA uses the RoCE ports on the accelerator cards themselves (Ascend NPUs), one rail per card. The type decides the NCCL/UCX/HCCL settings and device injection; only nodes on the same network are treated as reachable.",
+    "typeHint": "Only nodes on the same network are treated as reachable.",
     "cidr": "Default CIDR",
     "cidrHint": "Traffic uses the interface whose address is in this subnet.",
     "interface": "Default interface name",
@@ -75,7 +75,8 @@
     "rdmaInferred": "Nothing to fill in: once nodes are attached, each node's bootstrap IP, HCAs and HCA IPs are inferred. You can then add or remove HCAs in the node list.",
     "acceleratorInferred": "No selector is needed: once nodes are attached, each node's rails are the accelerator cards whose port is up and has an address, and you can add or remove cards in the node list. The handshake uses a host address (the management address by default); data moves on the cards' ports.",
     "acceleratorBootstrapCidrHint": "For the handshake only (HCCL rootInfo, MASTER_ADDR): it moves to the host interface inside this subnet. Data moves on the cards' ports, which are not in this subnet.",
-    "roleNotOnType": "Accelerator RDMA carries compute traffic only: host processes cannot bind the address of a card's port, so storage sync and serving cannot use it."
+    "roleNotOnType": "Accelerator RDMA carries compute traffic only: host processes cannot bind the address of a card's port, so storage sync and serving cannot use it.",
+    "typeHelp": "Host Ethernet is TCP on a host interface. Host RDMA uses the host's RDMA ports, InfiniBand or RoCE as read from each node's ports. Accelerator RDMA uses the RoCE ports on the accelerator cards themselves (Ascend NPUs), one rail per card. The type decides the NCCL/UCX/HCCL settings and device injection."
   },
   "detail": {
     "selector": "Default selector",
@@ -85,12 +86,14 @@
     "noNodes": "No node resolves to this network yet",
     "overrides": "Overrides: {{value}}",
     "attachedAt": "Attached {{time}}",
-    "rdmaInferred": "Each node uses its fastest active RDMA ports (a RoCE port needs an IPv4 address on its interface) as HCAs, and the first HCA's interface address as bootstrap; InfiniBand without IPoIB uses the management address. Add or remove HCAs, or change the bootstrap, per node below.",
-    "acceleratorInferred": "Each node's rails are the accelerator cards whose port is up and has an address. The bootstrap is the host address the handshake uses, the management address by default; data moves on the cards' ports. Add or remove cards, or change the bootstrap, per node in the table below.",
+    "rdmaInferredHelp": "Each node uses its fastest active RDMA ports (a RoCE port needs an IPv4 address on its interface) as HCAs, and the first HCA's interface address as bootstrap; InfiniBand without IPoIB uses the management address.",
+    "acceleratorInferredHelp": "Each node's rails are the accelerator cards whose port is up and has an address. The bootstrap is the host address the handshake uses, the management address by default; data moves on the cards' ports.",
     "title": "Network details",
     "retry": "Retry",
     "expand": "Show details",
-    "collapse": "Hide details"
+    "collapse": "Hide details",
+    "rdmaEditHint": "Add or remove HCAs, or change the bootstrap, per node below.",
+    "acceleratorEditHint": "Add or remove cards, or change the bootstrap, per node in the table below."
   },
   "nodeTable": {
     "node": "Node",

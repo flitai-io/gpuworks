@@ -16,6 +16,7 @@ import { nodeRefusals, nodeConditionSummary } from "./deployPlacementRefusal";
 import DeployNodeRefusals from "./DeployNodeRefusals";
 import AutoGroupPreview from "./DeployAutoGroupPreview";
 import { DeployEditContext, LockedGroup } from "./DeployEditContext";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const ONLINE = { state: ["online"] };
 
@@ -120,6 +121,14 @@ export default function NodeSection({
   // matches" would hide the reasons the deployer can act on.
   const refusals = autoSelected ? [] : nodeRefusals(t, result);
   const conditions = !loading ? nodeConditionSummary(result) : null;
+  // The node funnel and the planning funnel share one line of facts.
+  const funnel = [
+    eligibleNodes && !loading && (conditions
+      ? t("workbench.node.conditionFunnel", { total: conditions.total, matched: conditions.matched.length, eligible: conditions.eligible })
+      : t("workbench.node.poolMatches", { count: eligibleNodes.filter((node) => node.eligible).length, total: fleet?.total ?? 0 })),
+    conditions && conditions.eligible > 0 && mode === "auto"
+      && t("workbench.node.planningFunnel", { passed: conditions.passed, tried: conditions.tried, untried: conditions.untried }),
+  ].filter(Boolean).join(" · ");
   const vendorPool = useMemo(
     () => ({ ...ONLINE, label: targetVendor ? [`gpuworks.ai/vendor=${targetVendor}`] : [] }),
     [targetVendor],
@@ -193,6 +202,7 @@ export default function NodeSection({
               : unitsAuto
                 ? t("workbench.node.autoUnitsDescription")
                 : t("workbench.node.manualUnitsDescription")}
+            {!single && <HelpTip className="ml-1" content={t(unitsAuto ? "workbench.node.autoUnitsHelp" : "workbench.node.manualUnitsHelp")} />}
           </Typography.Paragraph>
           {/* What the server attributes to the placement choice itself:
               nothing to place on (UNIT_PLACEMENT_NONE), a missing TP, a
@@ -205,21 +215,12 @@ export default function NodeSection({
               <Input type="hidden" />
             </Form.Item>
           )}
-          {single && eligibleNodes && !loading && (
-            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-              {conditions
-                ? t("workbench.node.conditionFunnel", { total: conditions.total, matched: conditions.matched.length, eligible: conditions.eligible })
-                : t("workbench.node.poolMatches", { count: eligibleNodes.filter((node) => node.eligible).length, total: fleet?.total ?? 0 })}
-            </Typography.Paragraph>
-          )}
-          {single && conditions && conditions.eligible > 0 && mode === "auto" && (
-            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
-              {t("workbench.node.planningFunnel", { passed: conditions.passed, tried: conditions.tried, untried: conditions.untried })}
-            </Typography.Paragraph>
+          {single && funnel && (
+            <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{funnel}</Typography.Paragraph>
           )}
           {single && mode === "auto" && (
             <LockedGroup controls={["node_requirements"]} hint={false}>
-              <Form.Item name="pool_nodes" label={t("workbench.node.poolNodes")} extra={t("workbench.node.poolNodesHelp")} style={{ margin: "8px 0 0" }}>
+              <Form.Item name="pool_nodes" label={<span className="inline-flex items-center gap-1">{t("workbench.node.poolNodes")}<HelpTip content={t("workbench.node.poolNodesHelp")} /></span>} style={{ margin: "8px 0 0" }}>
                 <NodePicker
                   mode="multiple"
                   allowClear

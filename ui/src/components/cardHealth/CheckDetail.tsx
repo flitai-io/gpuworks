@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, type CardCheckDetail, type CardCheckRun, type CardRef } from "../../api";
 import { apiErrorText } from "../../apiError";
 import CopyButton from "../CopyButton";
+import { HelpTip } from "../../ui-kit/HelpTip";
 import { checkName, localTime, reasonText, stateName } from "./text";
 
 const stateColor: Record<string, string> = { pass: "green", warn: "orange", fail: "red" };
@@ -102,7 +103,10 @@ export default function CheckDetail({
   return (
     <div className="card-check-detail">
       <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }} wrap>
-        <Typography.Text strong>{t("cardHealth.detail.title", { card: cardLabel, check: checkName(t, check) })}</Typography.Text>
+        <span className="inline-flex items-center gap-1">
+          <Typography.Text strong>{t("cardHealth.detail.title", { card: cardLabel, check: checkName(t, check) })}</Typography.Text>
+          {detail?.agent_started_at && <HelpTip content={t("cardHealth.detail.agentSinceHelp", { time: localTime(detail.agent_started_at) })} />}
+        </span>
         {check === "runtime" && canRecheck && (
           <Button size="small" loading={rechecking} onClick={recheck}>
             {t("cardHealth.recheck")}
@@ -116,9 +120,6 @@ export default function CheckDetail({
           {detail.last ? <Run title={t("cardHealth.detail.last")} run={detail.last} /> : <Typography.Text type="secondary">{t("cardHealth.detail.noRuns")}</Typography.Text>}
           {detail.last_ran && <Run title={t("cardHealth.detail.lastRan")} run={detail.last_ran} />}
           {detail.last_problem && <Run title={t("cardHealth.detail.lastProblem")} run={detail.last_problem} />}
-          {detail.agent_started_at && (
-            <Typography.Text type="secondary">{t("cardHealth.detail.agentSince", { time: localTime(detail.agent_started_at) })}</Typography.Text>
-          )}
         </Space>
       )}
     </div>

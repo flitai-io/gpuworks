@@ -14,6 +14,7 @@ import { useReducer } from "react";
 import { useTranslation } from "react-i18next";
 import { api, usePolling } from "../../api";
 import { OptionSelect } from "../../ui-kit/OptionSelect";
+import { HelpTip } from "../../ui-kit/HelpTip";
 import ModelPicker from "./ModelPicker";
 
 type Props = {
@@ -138,7 +139,7 @@ export default function ContainerOverridesEditor({
       <Form.Item
         label={t("containerOverrides.envUnset")}
         htmlFor={envUnsetID}
-        extra={t("containerOverrides.envUnsetHelp")}
+        extra={<span className="inline-flex items-center gap-1">{t("containerOverrides.envUnsetLine")}<HelpTip content={t("containerOverrides.envUnsetHelp")} /></span>}
         style={{ marginBottom: 0 }}
       >
         <Form.Item name={envUnsetName} noStyle>
@@ -172,11 +173,14 @@ export default function ContainerOverridesEditor({
         htmlFor={shmID}
         name={shmName}
         extra={
-          shmResolvedGiB
-            ? t("containerOverrides.shmHelpResolved", { size: shmResolvedGiB })
-            : shmDefaultGiB
-              ? t("containerOverrides.shmHelpDefault", { size: shmDefaultGiB })
-              : t("containerOverrides.shmHelp")
+          <span className="inline-flex items-center gap-1">
+            {shmResolvedGiB
+              ? t("containerOverrides.shmEmptyResolved", { size: shmResolvedGiB })
+              : shmDefaultGiB
+                ? t("containerOverrides.shmEmptyDefault", { size: shmDefaultGiB })
+                : t("containerOverrides.shmEmptyEngine")}
+            <HelpTip content={t("containerOverrides.shmHelp")} />
+          </span>
         }
         style={{ marginBottom: 0 }}
       >
@@ -195,11 +199,14 @@ export default function ContainerOverridesEditor({
         htmlFor={startTimeoutID}
         name={startTimeoutName}
         extra={
-          startTimeoutDefaultSec
-            ? t("containerOverrides.startTimeoutHelpDefault", {
-                seconds: startTimeoutDefaultSec,
-              })
-            : t("containerOverrides.startTimeoutHelp")
+          <span className="inline-flex items-center gap-1">
+            {startTimeoutDefaultSec
+              ? t("containerOverrides.startTimeoutEmptyDefault", {
+                  seconds: startTimeoutDefaultSec,
+                })
+              : t("containerOverrides.startTimeoutEmpty")}
+            <HelpTip content={t("containerOverrides.startTimeoutHelp")} />
+          </span>
         }
         style={{ marginBottom: 0 }}
       >
@@ -219,7 +226,7 @@ export default function ContainerOverridesEditor({
       <Form.Item
         label={t("containerOverrides.mounts")}
         htmlFor={mountAddID}
-        extra={t("containerOverrides.mountsHelp")}
+        extra={<span className="inline-flex items-center gap-1">{t("containerOverrides.mountsLine")}<HelpTip content={t("containerOverrides.mountsHelp")} /></span>}
         style={{ marginBottom: 0 }}
       >
         <Form.List name={mountsName}>

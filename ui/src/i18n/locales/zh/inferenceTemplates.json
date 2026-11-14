@@ -34,8 +34,8 @@
     "title_other": "已导入，有 {{count}} 项需要确认",
     "CATALOG_CALLABLE_METRICS_UNDECLARED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎但没有声明 api.metrics：除非引擎的 /metrics 恰好使用 vLLM 或 SGLang 的指标名，监控中心不会有它的引擎指标。",
     "CATALOG_HEALTH_ENDPOINT_UNDECLARED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎但没有声明 api.health_endpoint：就绪探测会使用默认的 /health。",
-    "CATALOG_CALLABLE_SERVED_NAME_FIXED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎，但 --served-model-name 写死为 {{name}}，没有用 ${SERVED_MODEL_NAME}：网关与健康检查发送的是部署的服务名，会校验模型名的引擎（如 vLLM）会拒绝请求，除非部署时服务名恰好填成这个值。",
-    "CATALOG_DISPLAY_PROFILE_RETIRED": "{{model_id}} 的档位“{{spec}}”还写着 display_profile 或 gpus.display_target，这两个字段已经不再使用，导入时已忽略；请改用 display_name_zh_cn 和 display_name_en 给档位命名。",
+    "CATALOG_CALLABLE_SERVED_NAME_FIXED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎，但 --served-model-name 写死为 {{name}}，会校验模型名的引擎会拒绝网关请求；请改用 ${SERVED_MODEL_NAME}。",
+    "CATALOG_DISPLAY_PROFILE_RETIRED": "{{model_id}} 的档位“{{spec}}”用了已停用的 display_profile 或 gpus.display_target，导入时已忽略；请改用 display_name_zh_cn 和 display_name_en。",
     "CATALOG_ARG_PASSED_THROUGH": "{{model_id}} 的档位“{{spec}}”给 {{flag}} 写了 {{value}}，平台参数字典读不出这个值。它会原样传给引擎，但部署表单和显存估算看不到它。"
   },
   "detail": {

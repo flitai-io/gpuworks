@@ -5,6 +5,7 @@ import { Collapse, Form, Input, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import type { EngineParamSpec } from "../../api";
 import DeployParamField from "./DeployParamField";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 type Props = {
   advancedSpecs: EngineParamSpec[];
@@ -39,7 +40,7 @@ export default function DeployAdvancedSection({
               <Form.Item
                 label={t("advanced.customArgs")}
                 name="extra_args"
-                extra={t("launchConfig.extraArgsHelp")}
+                extra={<span className="inline-flex items-center gap-1">{t("launchConfig.extraArgsLine")}<HelpTip content={t("launchConfig.extraArgsHelp")} /></span>}
               >
                 <Input.TextArea
                   autoSize={{ minRows: 2, maxRows: 8 }}

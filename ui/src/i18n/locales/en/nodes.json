@@ -131,8 +131,8 @@
     "installDirPlaceholder": "Leave empty for the default directory (/opt/gpuworks or ~/gpuworks)",
     "installDirTooltip": "On nodes without docker the runveil runtime keeps images and container root filesystems here too, so choose a local filesystem; a network volume that refuses ':' in file names (such as RunPod's /workspace) does not work.",
     "useSystemd": "Start via systemd",
-    "useSystemdTooltip": "On: the agent is registered as the gpuworks-agent systemd service, started at boot and restarted when it crashes. Off: the agent runs in the background under nohup, with agent-restart.sh in the install directory for restarting it by hand; the host's existing gpuworks-agent service and agents in other directories are left alone, so another install directory adds one more agent to the same host. Hosts without systemd, or without root or passwordless sudo, always use nohup; macOS nodes use launchd regardless.",
-    "useSystemdOffHelp": "The agent does not start at boot and is not restarted when it exits",
+    "useSystemdHelp": "On: the agent is registered as the gpuworks-agent systemd service, started at boot and restarted when it crashes. Off: it runs under nohup, with agent-restart.sh in the install directory for restarting it by hand; the host's existing agent service and agents in other directories are left alone (another install directory adds one more agent to the host). Without systemd, or without root or passwordless sudo, nohup is always used; macOS uses launchd.",
+    "useSystemdOff": "The agent does not start at boot and is not restarted when it exits",
     "agentListenAddress": "Agent listen address",
     "agentListenAddressHelp": "Where the agent listens on this host (or in its container): its --listen.",
     "offlineInstructions": "The node cannot reach the management node, so it installs from the offline package: download it, copy it to the node (scp, a web terminal or JupyterLab upload), and run the command below in the directory that holds it. The package holds no token and is the same for every node.",
@@ -306,14 +306,14 @@
     "tag": "GPU devices are soft-isolated",
     "summary": "Instances on this node can see every GPU device of the node; CUDA_VISIBLE_DEVICES keeps each one to the card it was given. Software that ignores CUDA_VISIBLE_DEVICES, or opens /dev/nvidiaN directly, can reach the other cards.",
     "reason": {
-      "cdi_names_missing": "NVIDIA's container toolkit runs in CDI mode and no CDI spec on the node names {{cards}} of its NVIDIA cards, typically because HAMi or another device plugin replaced NVIDIA's, which is what writes the per-card names. Instances therefore get every card, and are held to theirs by CUDA only."
+      "cdi_names_missing": "No CDI spec on the node names its {{cards}} NVIDIA cards (usually because HAMi or another device plugin replaced NVIDIA's), so instances get every card and are held to theirs by CUDA only."
     },
     "fixesTitle": "Restore strict isolation (choose one)",
     "fix": {
       "gpu_operator_device_plugin": "The cluster uses the GPU Operator and no other GPU device plugin: keep the Operator's own device plugin enabled, which writes the per-card CDI names. Do not run it next to HAMi or another device plugin; both would advertise the same GPUs.",
       "gpu_operator_toolkit_legacy_append": "Switch the Operator's toolkit to legacy mode, which isolates by card index. Use this when spec.toolkit.env already exists: it appends to the list and keeps its entries.",
       "gpu_operator_toolkit_legacy_create": "Use this one instead when the command above fails because spec.toolkit.env does not exist yet: it creates the list (and would replace one that exists).",
-      "host_toolkit_legacy": "The toolkit is installed on the node without the GPU Operator: switch it to legacy mode on the node (nvidia-ctk edits /etc/nvidia-container-runtime/config.toml), then restart the container runtime (containerd; use rke2-agent, k3s or your distribution's service name if it differs)."
+      "host_toolkit_legacy": "The toolkit is installed on the node without the GPU Operator: run the commands below to switch it to legacy mode, then restart the container runtime (containerd, or rke2-agent, k3s or your distribution's service)."
     },
     "copy": "Copy commands",
     "copied": "Commands copied",
@@ -482,7 +482,7 @@
       "description": "{{reason}}\n\nEvery deployment placed here would fail when its container starts. The platform cordoned the node for this reason and will do so again on its next report unless the cause is fixed.",
       "reason": {
         "gpu_plugin_missing": "The container runtime {{runtime}} needs the vendor GPU plugin {{plugin}}, which is not installed, so a container cannot be given this node's accelerators.",
-        "gpu_runtime_unconfigured": "{{runtime}} is running with no GPU support configured, so a container cannot be given this node's accelerators. Installing the vendor plugin is not enough; {{runtime}} has to be told to use it (NVIDIA: nvidia-ctk runtime configure --runtime=docker, then restart Docker)."
+        "gpu_runtime_unconfigured": "{{runtime}} has no GPU support configured, so a container cannot be given this node's accelerators. Point {{runtime}} at the vendor plugin (NVIDIA: nvidia-ctk runtime configure --runtime=docker, then restart Docker)."
       }
     },
     "state": {
@@ -797,7 +797,16 @@
     "historyItem": "Batch {{id}} · {{version}}",
     "runTitle": "Agent upgrade batch {{id}}",
     "processed": "Processed {{processed}} / {{total}} nodes",
-    "results": "Succeeded {{succeeded}} · Failed {{failed}} · Skipped {{skipped}} · Cancelled {{cancelled}} · Interrupted {{interrupted}} · Unconfirmed {{unconfirmed}} · Queued {{queued}} · Active {{active}}",
+    "result": {
+      "succeeded": "Succeeded {{value}}",
+      "failed": "Failed {{value}}",
+      "skipped": "Skipped {{value}}",
+      "cancelled": "Cancelled {{value}}",
+      "interrupted": "Interrupted {{value}}",
+      "unconfirmed": "Unconfirmed {{value}}",
+      "queued": "Queued {{value}}",
+      "active": "Active {{value}}"
+    },
     "processingNotSuccess": "Processing progress includes failures and skipped nodes; 100% does not mean all Agents upgraded successfully.",
     "blocked": "The earlier upgrade on {{name}} still requires verification. Further upgrades are blocked.",
     "unconfirmedHelp": "An unconfirmed attempt may still replace the Agent. Check the node and its logs before releasing the reservation. Starting another batch cannot bypass it.",
@@ -965,7 +974,7 @@
     "removed": "Removed",
     "lastChecked": "Checked {{ago}}",
     "banner": {
-      "offline": "The node is offline; below are the last known results, not what holds now.",
+      "offline": "The node is offline; below are the last known results.",
       "stale": "No report for more than two report periods; the results below may be out of date.",
       "noReports": "This node's agent is too old to report card health checks. Upgrade the agent to see them all.",
       "waiting": "No report from this node yet."
@@ -985,7 +994,7 @@
       "evidence": "Evidence",
       "probe": "Recheck command",
       "noRuns": "This check has not run since the agent started.",
-      "agentSince": "The agent started at {{time}} and knows only what came after.",
+      "agentSinceHelp": "The agent started at {{time}}; only results since then are known.",
       "noEvidence": "No problem; no evidence recorded."
     },
     "records": {
@@ -1025,7 +1034,7 @@
     "attempts": "{{count}} recovery attempts",
     "recoveryError": "Last recovery error",
     "exposure": "Public entry: last observation",
-    "lastObserved": "Last observed at {{time}}; this is not a live availability check.",
+    "lastObserved": "Last observed at {{time}}",
     "result": "Observation",
     "vantage": "Check location",
     "target": "Checked address",
@@ -1074,7 +1083,7 @@
       "offline": "No live Agent control session; current node-side evidence could not be requested."
     },
     "guidance": {
-      "snapshot_scope": "A configuration snapshot does not prove the running process has adopted it. Check the selected state directory, startup flags and environment overrides; never share TOKEN or full process arguments.",
+      "snapshot_scope": "The running process may not use this configuration snapshot. Check the selected state directory, startup flags and environment overrides; never share TOKEN or full process arguments.",
       "http_scope": "An HTTP health response does not prove WebSocket, Agent authentication, inference streaming or a user’s network path is working. SSH curl uses the SSH session environment, which may differ from the running Agent’s proxy and NO_PROXY settings.",
       "test_from_node": "On the affected node, run gpuworks-agent smoke --state <actual-state-directory> and inspect agent.log from the same directory.",
       "manual_address_update": "This check does not repair addresses. A change requires an administrator to verify both the platform record and the Agent configuration. In-place address migration is not provided by this diagnostic. Use a stable address for long-term connections.",
@@ -1155,7 +1164,7 @@
           "unknown": "Data channel state not observed"
         },
         "outcome": {
-          "ok": "The listed observations completed; full-path health is not established",
+          "ok": "The listed observations completed",
           "failed": "The recorded connection attempt failed",
           "invalid_configuration": "Invalid connection configuration",
           "not_applicable": "Not applicable for this connection direction",

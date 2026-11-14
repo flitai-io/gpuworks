@@ -41,6 +41,7 @@ await i18n.use(initReactI18next).init({
 });
 
 const { cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
+const { default: userEvent } = await import("@testing-library/user-event");
 const { NodeSSHAccess } = await import("../src/components/NodeRecoveryControls");
 const { default: PlatformSSHKeyCard } = await import("../src/pages/settings/PlatformSSHKeyCard");
 const { default: ProviderInstallModal } = await import("../src/components/ProviderInstallModal");
@@ -206,6 +207,9 @@ for (const kind of ["runpod", "vast", "compshare", "autodl"] as const) {
     const installs = stub("installAgent", () => ({ checks: [{ name: "SSH authentication", status: "ok" }] }));
     wrap(<ProviderInstallModal providerId={7} providerKind={kind} inst={instance} onClose={() => {}} onDone={() => {}} />);
     assert.ok(screen.getByText(providers.install.autoAuth[kind]));
+    assert.equal(screen.queryByText(providers.install.autoAuth[`${kind}Help`]), null, "the details wait behind the help mark");
+    await userEvent.setup().hover(screen.getByRole("button", { name: "More information" }));
+    assert.equal((await screen.findByRole("tooltip")).textContent, providers.install.autoAuth[`${kind}Help`]);
     fireEvent.click(screen.getByRole("button", { name: providers.install.install }));
     await waitFor(() => assert.equal(installs.length, 1));
     const [id, body] = installs[0];

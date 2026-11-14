@@ -277,10 +277,16 @@ test("a running batch whose requests wait says for which model, in what state, s
 
 test("a batch with no request waiting shows no waiting notice", async () => {
   serve([batch({ id: "batch_fine", status: "in_progress" })]);
-  mount("/batches?detail=batch_fine");
+  const user = mount("/batches?detail=batch_fine");
   const dialog = await screen.findByRole("dialog");
   await within(dialog).findByText("batch_fine", { selector: "code" });
   assert.ok(!(within(dialog).queryByText(b.detail.waiting.title)), "expected the element to be absent");
+  // What counts as not finished is behind the help mark beside the label.
+  const counts = within(dialog).getByRole("region", { name: b.detail.sections.counts });
+  assert.ok(within(counts).getByText(b.detail.pending));
+  assert.equal(screen.queryByText(b.detail.pendingHelp), null);
+  await user.hover(within(counts).getByRole("button", { name: c.helpTip.label }));
+  assert.ok(within(await screen.findByRole("tooltip")).getByText(b.detail.pendingHelp));
 });
 
 test("downloads are links for files that exist and disabled buttons for those that do not", async () => {

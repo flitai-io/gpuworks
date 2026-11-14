@@ -175,6 +175,12 @@ measure() {
   ui_untested_shared_files)
     untested_shared_ui | grep -c . || true
     ;;
+  ui_copy_long_strings)
+    node scripts/ui_copy_audit.mjs long
+    ;;
+  ui_copy_caveat_strings)
+    node scripts/ui_copy_audit.mjs caveat
+    ;;
   ui_bundle_gzip_kb)
     # Needs a fresh UI build; measured by scripts/check_ui_bundle_size.sh.
     echo "EXTERNAL"

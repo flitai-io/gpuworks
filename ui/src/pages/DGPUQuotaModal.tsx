@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 
 import { api, usePolling, type DGPUQuotaResult } from "../api";
 import { apiErrorText } from "../apiError";
+import { HelpTip } from "../ui-kit/HelpTip";
 
 const GIB = 1024 ** 3;
 
@@ -111,13 +112,12 @@ export default function DGPUQuotaModal({ deploymentID, onClose, onChanged }: { d
               name="vram_limit_gib"
               label={t("quota.limit")}
               rules={[{ required: true, message: t("quota.required") }, { type: "number", min: 0.5, message: t("quota.min") }]}
-              extra={t("quota.help")}
+              extra={<span className="inline-flex items-center gap-1">{t("quota.hint")}<HelpTip content={t("quota.noteHelp")} /></span>}
             >
               <InputNumber min={0.5} step={0.5} precision={1} suffix="GiB" style={{ width: 200 }} autoFocus />
             </Form.Item>
           </Form>
           {error && <Alert type="error" showIcon message={error} />}
-          <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>{t("quota.note")}</Typography.Paragraph>
         </>
       )}
     </Modal>

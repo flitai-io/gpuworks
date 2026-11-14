@@ -114,7 +114,7 @@ test("a cell can be chosen from the keyboard", async () => {
   let asked = 0;
   apiAny.nodeHealthChecks = async () => table();
   apiAny.nodeHealthRecords = async () => records();
-  apiAny.cardCheckDetail = async () => { asked++; return { ident: "uuid:GPU-a", check: "vendor_health", last: { state: "pass", at: now, evidence: [] } }; };
+  apiAny.cardCheckDetail = async () => { asked++; return { ident: "uuid:GPU-a", check: "vendor_health", last: { state: "pass", at: now, evidence: [] }, agent_started_at: now }; };
   show(<NodeHealthTab nodeUUID="n-1" />);
   await screen.findByText(ch.check.vendor_health);
   const first = screen.getAllByRole("button").find((b) => b.getAttribute("data-state") === "pass")!;
@@ -122,6 +122,10 @@ test("a cell can be chosen from the keyboard", async () => {
   await user.keyboard("{Enter}");
   await screen.findByText(ch.detail.noEvidence);
   assert.equal(asked, 1);
+  // When the agent started is a caveat on every answer: it waits behind the help mark.
+  assert.equal(screen.queryByText(/only results since then/), null);
+  await user.hover(screen.getByRole("button", { name: "More information" }));
+  assert.match((await screen.findByRole("tooltip")).textContent ?? "", /^The agent started at .+; only results since then are known\.$/);
 });
 
 test("rechecking a card's runtime check reports its answer and reads the table again", async () => {

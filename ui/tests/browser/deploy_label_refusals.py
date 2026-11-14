@@ -71,8 +71,7 @@ class LabelRefusals(unittest.TestCase):
                 expect(page.locator('.deploy-node-refusals').first).to_contain_text('>=8.0')
                 expect(page.get_by_text('集群 14 台 → 节点条件匹配 1 台 → 硬件及调度条件通过 0 台',exact=True)).to_be_visible()
             else:
-                expect(page.get_by_text('集群 14 台 → 节点条件匹配 1 台 → 硬件及调度条件通过 1 台',exact=True)).to_be_visible()
-                expect(page.get_by_text('资源规划：通过 0 台 / 已评估 1 台；未评估 0 台',exact=True)).to_be_visible()
+                expect(page.get_by_text('集群 14 台 → 节点条件匹配 1 台 → 硬件及调度条件通过 1 台 · 资源规划：通过 0 台 / 已评估 1 台；未评估 0 台',exact=True)).to_be_visible()
             more=page.get_by_role('button',name='展开其他 13 个被拒绝节点')
             more.focus()
             page.keyboard.press('Enter')

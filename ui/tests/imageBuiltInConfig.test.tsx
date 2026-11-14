@@ -1,41 +1,17 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import { after, afterEach, test } from "node:test";
-import { JSDOM } from "jsdom";
+import { afterEach, test } from "node:test";
 import React from "react";
-import { createInstance } from "i18next";
-import { I18nextProvider, initReactI18next } from "react-i18next";
-import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
+import { I18nextProvider } from "react-i18next";
+import { createI18n } from "./helpers/dom.ts";
 
-const closeChannels = trackMessageChannels();
-
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLInputElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
-  Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
-}
-Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
-Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
-class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
-Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
-
-const imagesLocale = JSON.parse(fs.readFileSync(new URL("../src/i18n/locales/en/images.json", import.meta.url), "utf8"));
-const i18n = createInstance();
-await i18n.use(initReactI18next).init({
-  lng: "en",
-  fallbackLng: "en",
-  resources: { en: { images: imagesLocale } },
-  defaultNS: "images",
-  interpolation: { escapeValue: false },
-});
+const { i18n, locale } = await createI18n(["images"]);
+const imagesLocale = locale.images;
 
 const { cleanup, render, screen } = await import("@testing-library/react");
+const { default: userEvent } = await import("@testing-library/user-event");
 const ImageBuiltInConfig = (await import("../src/pages/images/ImageBuiltInConfig.tsx")).default;
 
 afterEach(() => cleanup());
-after(() => {
-  closeChannels();
-  dom.window.close();
-});
 
 const version = {
   id: 9, series_id: 1, name: "runner", image_ref: "example/runner:v1", source: "community",
@@ -53,10 +29,14 @@ function renderDrawer(inspection: unknown) {
 // The catalog carries no launch configuration (ADR 0031): before a node is
 // inspected the card only says how to read the image's own configuration, and
 // nothing about it is editable.
-test("an uninspected version explains how to read the image's own configuration", () => {
+test("an uninspected version explains how to read the image's own configuration", async () => {
   renderDrawer(null);
   assert.ok(screen.getByText(imagesLocale.detail.builtInTitle));
   assert.ok(screen.getByText(imagesLocale.detail.builtInHint));
+  // That deployments inherit none of it sits behind the help mark.
+  assert.equal(screen.queryByText(imagesLocale.detail.builtInHelp), null);
+  await userEvent.setup().hover(screen.getByRole("button", { name: locale.common.helpTip.label }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, imagesLocale.detail.builtInHelp);
   assert.ok(screen.queryByText(/^ENTRYPOINT:/) === null, "nothing is shown before an inspection");
   assert.equal(screen.queryAllByRole("textbox").length, 0, "no launch default can be edited");
 });

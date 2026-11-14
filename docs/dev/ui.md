@@ -161,6 +161,30 @@ Confirmed 2026-11-06. Check every migrated page against this, by screenshot.
 | Overlays | While antd and Zeron coexist, both libraries' overlays sit on one 1000 layer (`src/theme/layers.css`): the one opened last is on top. Right-side drawers of either library open beside the AI assistant. |
 | Status words | Show a state as Zeron `Badge` with `status`, not as coloured text: dark success text reads as black. |
 
+## Copy on the page
+
+Confirmed 2026-11-13. A page states facts and what to do next. How a number
+is computed, what it does not mean and where it comes from belong in a
+`HelpTip` (ⓘ beside the label, `ui-kit/HelpTip`) or in the docs, not in grey
+lines under the content. Check new text against this before adding it; an
+agent writing UI text checks it too.
+
+| Rule | Detail |
+| --- | --- |
+| One helper line | A field, a value or a block gets at most one line of helper text, 40 Chinese characters or 80 English ones. More goes into a `HelpTip`; past 200 Chinese characters, link the docs instead. |
+| Never inline | Formulas, aggregation and sampling rules, data sources, internal names (endpoints, packages, file paths the user does not type) and caveats such as "not guaranteed", "does not mean", "for reference only" go into a `HelpTip`. |
+| No stacked caveats | At most one caveat per block, and none when the label already says it: "estimated" needs no "not guaranteed"; a fact shown on the block is not restated as a caveat. |
+| Facts as values | Related numbers share one line, `label value · label value`, not one sentence each. |
+| Warnings act | A warning (`Notice`, amber text) names the problem and the next step in one sentence; text with no next step is not a warning. |
+| Empty states | A title, at most one sentence, and the action. |
+
+A locale key whose name ends in `Help` holds `HelpTip` content and is shown
+only there; text shown on the page uses any other name. `ui_copy_long_strings`
+and `ui_copy_caveat_strings` in `scripts/arch-constraints.txt` (max, ratchet
+down) count Chinese strings over 120 characters (200 for `Help` keys) and
+non-`Help` strings carrying a caveat phrase; a new string over the limit is cut
+or moved into the docs, not covered by a raised budget.
+
 ## Choosing a component
 
 Zeron first: a new or replaced component comes from Zeron, installed with
@@ -176,6 +200,7 @@ speed (measure first).
 | Overview blocks | `Container` tray with white panels (Page look, Blocks); Zeron `card` for a standalone card |
 | Charts | Zeron charts (`bar-chart`, `line-chart`, `area-chart`, `pie-chart`, `heatmap-chart`, …). Check bundle size (`ui_bundle_gzip_kb`) and, for large data such as the scheduling heatmap or long series, speed against the ECharts version before switching |
 | Status | Zeron `Badge` with `status` |
+| Explanation beside a label or value | `ui-kit/HelpTip` (see "Copy on the page") |
 | Confirm, toast, empty, progress, upload, number, segmented | `ui-kit/` compositions (`ConfirmPopover`, `feedback`, `EmptyState`, `Progress`, `FileUpload`, `NumberInput`, `Segmented`) |
 
 The registry is pinned (`ui/src/theme/zeron/source.json`); upstream changes do

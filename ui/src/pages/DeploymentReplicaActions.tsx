@@ -5,7 +5,7 @@ import { Button } from "../components/ui/button";
 import { useTranslation } from "react-i18next";
 import { api, type Deployment, type Instance, type Node, type PdScaleUnitInput, type ScheduleMessage } from "../api";
 import NodePicker from "../nodes/NodePicker";
-import { apiErrorText } from "../apiError";
+import { apiErrorText, placementShortfall } from "../apiError";
 import AutoReplicasDialog, { placeOnRefusal } from "./DeploymentAutoReplicas";
 import { scheduleText } from "./deploy/deploySchedule";
 import SleepModeDialog, { type SleepMode } from "../components/SleepModeDialog";
@@ -240,7 +240,7 @@ function MultiNodeReplicasDialog({ dep, ranks, onClose, onChanged }: { dep: Depl
         type: "warning",
         text: reason?.code === "unit_no_fit"
           ? t("replica.suggest.noFit", { node: params.node, reason: params.first_reason ? scheduleText(tDeploy, params.first_reason as ScheduleMessage) : "" })
-          : t("replica.suggest.none", params),
+          : t("replica.suggest.none", { ...params, reasons: placementShortfall(tCommon, params) }),
       });
     } catch (err) {
       setSuggested({ type: "warning", text: t("replica.suggest.failed", { detail: apiErrorText(tCommon, err) }) });

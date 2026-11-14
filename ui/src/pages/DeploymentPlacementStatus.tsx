@@ -198,11 +198,6 @@ export function CandidatesModal({ dep, onClose }: { dep: Deployment; onClose: ()
           <RequirementTags dep={dep} />
           {dep.placement_strategy && <Tag color="blue">{t(`detail.placement.strategy.${dep.placement_strategy}`, { defaultValue: dep.placement_strategy })}</Tag>}
         </Space>
-        {data && (
-          <Typography.Text type="secondary">
-            {t("detail.placement.summary", { nodes: data.nodes, room: counts?.room ?? 0, busy: counts?.busy ?? 0, unmet: counts?.unmet ?? 0, cordoned: counts?.cordoned ?? 0, offline: counts?.offline ?? 0 })}
-          </Typography.Text>
-        )}
         <Segmented label={t("detail.placement.view")}
           options={options}
           value={filter}

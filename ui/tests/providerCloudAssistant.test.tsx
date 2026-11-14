@@ -51,7 +51,11 @@ test("the install dialog offers Cloud Assistant by name and reports it was used"
       <ProviderInstallModal providerId={1} providerKind="aliyun" inst={instance} onClose={() => {}} onDone={() => {}} />
     </I18nextProvider>,
   );
-  assert.ok(screen.getByText(/through Alibaba Cloud Cloud Assistant/));
+  assert.ok(screen.getByText("Installs as root via Cloud Assistant; no SSH credential or public IP needed."));
+  assert.equal(screen.queryByText(/through Alibaba Cloud Cloud Assistant/), null, "the fallback detail waits behind the help mark");
+  fireEvent.focus(screen.getByRole("button", { name: "More information" }));
+  assert.match((await screen.findByRole("tooltip")).textContent ?? "", /through Alibaba Cloud Cloud Assistant.*falls back to SSH/);
+  fireEvent.blur(screen.getByRole("button", { name: "More information" }));
   assert.ok(screen.getByText("Connection"));
   fireEvent.mouseDown(document.querySelector(".ant-select-selector") as HTMLElement);
   await waitFor(() => assert.ok(document.querySelectorAll(".ant-select-item-option").length >= 3));

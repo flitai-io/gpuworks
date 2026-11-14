@@ -11,6 +11,7 @@ import { api, type ModelNodePresence } from "../api";
 import { formatBytes } from "../format";
 import { isModelFileReady } from "../storageTypes";
 import { rateLabel, transferOrigin } from "./models/modelPresenceDisplay";
+import { HelpTip } from "../ui-kit/HelpTip";
 
 // All classification, timing and what may be retried comes from the server's
 // preparation view; the server also zeroes a rate that is not meaningful.
@@ -106,7 +107,7 @@ export function DeploymentPreparation({ rows, onChanged }: { rows?: ModelNodePre
         </Space>}
         {failed && !view?.retryable && <Typography.Text type="secondary">{t("preparation.retryUnavailable")}</Typography.Text>}
         {item.message && ((!compact && !origin) || failed || diskFull) && <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>{item.message}</Typography.Paragraph>}
-        {view?.reason === "MODEL_COPY_STALLED" && <Typography.Paragraph>{t("preparation.idle", { seconds: view.idle_seconds })} · {t("preparation.waitForIO")}</Typography.Paragraph>}
+        {view?.reason === "MODEL_COPY_STALLED" && <Typography.Paragraph className="flex items-center gap-1">{t("preparation.idle", { seconds: view.idle_seconds })} · {t("preparation.waitForIO")}<HelpTip content={t("preparation.waitForIOHelp")} /></Typography.Paragraph>}
       </div>;
     })}
   </DetailSection>;

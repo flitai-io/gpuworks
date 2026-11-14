@@ -431,12 +431,20 @@ test("the automatic check switch says what is sent, saves, and checks again", as
     renderCard();
     const toggle = await waitFor(() => screen.getByRole("switch", { name: u.autoCheck }) as HTMLButtonElement);
     assert.equal(toggle.getAttribute("aria-checked"), "true");
-    assert.ok(screen.getByText(u.autoCheckOnHelp), "while on, the page lists what the check tells the publisher");
+    // What the check sends sits behind the help mark beside the switch, not on the page.
+    assert.equal(screen.queryByText(u.autoCheckOnHelp), null);
+    const help = () => within(toggle.closest(".ant-space") as HTMLElement).getByRole("button", { name: commonLocale.helpTip.label });
+    await userEvent.hover(help());
+    assert.equal((await screen.findByRole("tooltip")).textContent, u.autoCheckOnHelp, "while on, the help mark lists what the check tells the publisher");
+    await userEvent.unhover(help());
+    await waitFor(() => assert.equal(screen.queryByRole("tooltip"), null));
     toggle.focus();
     await userEvent.keyboard(" ");
     await waitFor(() => assert.deepEqual(s.calls, ["autoCheck:false"]));
     await waitFor(() => assert.equal(s.checks(), 2));
-    await waitFor(() => assert.ok(screen.getByText(u.autoCheckOffHelp)));
+    await waitFor(() => assert.equal(screen.getByRole("switch", { name: u.autoCheck }).getAttribute("aria-checked"), "false"));
+    await userEvent.hover(help());
+    await waitFor(async () => assert.equal((await screen.findByRole("tooltip")).textContent, u.autoCheckOffHelp));
     assert.equal(screen.getByRole("switch", { name: u.autoCheck }).getAttribute("aria-checked"), "false");
     // Nothing has been checked: the page says so instead of calling the channel unreachable.
     assert.ok(screen.getByText(u.notChecked));

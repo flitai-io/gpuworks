@@ -233,6 +233,8 @@ test("creating a network sends the server dictionary values and opens the detail
 
   await user.type(within(dialog).getByLabelText(n.form.name), "ib-a");
   await user.click(within(dialog).getByLabelText(n.role.compute));
+  assert.ok(within(dialog).getByText(n.form.typeHint));
+  assert.equal(within(dialog).queryByText(n.form.typeHelp), null, "what each type means waits behind the help mark");
   await user.click(within(dialog).getByText(n.type.host_rdma));
   // An RDMA network asks for nothing: the interface glob is gone and the
   // bootstrap CIDR is an advanced option.
@@ -318,7 +320,8 @@ test("an accelerator network's rails are picked from the node's cards", async ()
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
-  assert.ok(screen.getByText(n.detail.acceleratorInferred));
+  assert.ok(screen.getByText(n.detail.acceleratorEditHint));
+  assert.equal(screen.queryByText(n.detail.acceleratorInferredHelp), null, "how rails are picked waits behind the help mark");
   assert.ok(screen.getAllByText(n.type.accelerator_rdma).length > 0);
   await expandNodeRows();
   const row = screen.getByText("203.0.113.59").closest("tr") as HTMLElement;
@@ -339,7 +342,10 @@ test("network detail lists each node's bootstrap and HCAs with their IPs", async
   stub("network", async () => detailFixture);
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
-  assert.ok(screen.getByText(n.detail.rdmaInferred));
+  assert.ok(screen.getByText(n.detail.rdmaEditHint));
+  assert.equal(screen.queryByText(n.detail.rdmaInferredHelp), null, "how HCAs are picked is not on the page");
+  await userEvent.setup().hover(screen.getByRole("button", { name: "More information" }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, n.detail.rdmaInferredHelp);
   assert.equal(screen.queryByRole("columnheader", { name: n.nodeTable.endpoint }), null, "RDMA shows bootstrap, not interface / IP");
   await expandNodeRows();
   assert.ok(screen.getAllByText(n.nodeTable.bootstrap).length > 0, "each node's detail names its bootstrap");

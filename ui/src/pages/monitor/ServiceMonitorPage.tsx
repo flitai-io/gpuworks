@@ -91,7 +91,7 @@ function ServiceMonitorPageContent() {
       <Col key={key} xs={24} md={12} xl={8}>
         <Card
           size="small"
-          title={<InfoTitle title={t(`deployment.charts.${key}`)} help={t(`deployment.help.${key}`)} />}
+          title={<InfoTitle title={t(`deployment.charts.${key}`)} help={t(`deployment.${key}Help`)} />}
         >
           {hasData ? (
             <TimeSeriesChart
@@ -213,7 +213,7 @@ function ServiceMonitorPageContent() {
           {tab === "overview" && (
             <>
               {layoutData.alignment && (
-                <Card size="small" style={{ marginBottom: 16 }} title={<InfoTitle title={t("deployment.alignment")} help={t("deployment.help.alignment")} />}>
+                <Card size="small" style={{ marginBottom: 16 }} title={<InfoTitle title={t("deployment.alignment")} help={t("deployment.alignmentHelp")} />}>
                   <Space size={16} wrap>
                     <Typography.Text>{t("deployment.alignmentProxy")}: {layoutData.alignment.proxy_requests}</Typography.Text>
                     <Typography.Text>{t("deployment.alignmentEngine")}: {layoutData.alignment.engine_completed}</Typography.Text>
@@ -252,7 +252,7 @@ function ServiceMonitorPageContent() {
               </Row>
               <Card
                 style={{ marginTop: 16 }}
-                title={<InfoTitle title={t("deployment.replicas")} help={t("deployment.help.replicas")} />}
+                title={<InfoTitle title={t("deployment.replicas")} help={t("deployment.replicasHelp")} />}
               >
                 <ReplicaTable replicas={layoutData.replicas} deploymentId={deploymentId} loading={loading && !data} />
               </Card>

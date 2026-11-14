@@ -336,7 +336,7 @@ test("a soft-isolated node says so in the detail and offers the server's command
   // The label beside the status, and the explanation with its reason.
   await waitFor(() => assert.ok(drawer.getAllByText("GPU devices are soft-isolated").length >= 2));
   const alert = drawer.getAllByRole("alert").find((item) => /soft-isolated/.test(item.textContent ?? ""));
-  assert.match(alert?.textContent ?? "", /no CDI spec on the node names 2 of its NVIDIA cards/);
+  assert.match(alert?.textContent ?? "", /No CDI spec on the node names its 2 NVIDIA cards/);
   // Each fix shows its commands exactly as the server wrote them, and copies them.
   const fixes = (await drawer.findAllByLabelText("gpu_operator_toolkit_legacy_append")) as HTMLElement[];
   assert.equal(fixes[0].textContent, append);

@@ -62,7 +62,7 @@
     "rolesHint": "三个都勾选即 all in one。内部测试只覆盖存储同步和参数网络。",
     "rolesRequired": "至少选择一个角色",
     "type": "类型",
-    "typeHint": "主机以太网走主机网卡的 TCP；主机 RDMA 走主机的 RDMA 端口，包含 InfiniBand 和 RoCE，每个节点是哪一种由其端口自动识别；加速器 RDMA 走加速卡自带的 RoCE 口（昇腾 NPU），每张卡是一条 rail。类型决定 NCCL/UCX/HCCL 配置和设备注入；只有同一个网络上的节点被视为可以互通。",
+    "typeHint": "只有同一网络上的节点被视为可以互通。",
     "cidr": "默认网段（CIDR）",
     "cidrHint": "流量走地址落在这个网段内的网卡。",
     "interface": "默认网卡名",
@@ -75,7 +75,8 @@
     "rdmaInferred": "不需要填写选择器：加载节点后自动为每个节点推断 bootstrap IP、HCA 和 HCA IP，之后可以在节点列表里增删 HCA。",
     "acceleratorInferred": "不需要填写选择器：加载节点后，每个节点的 rail 自动取链路 UP 且配了地址的加速卡，之后可以在节点列表里增删。握手走主机地址（默认是管理网地址），数据走加速卡网口。",
     "acceleratorBootstrapCidrHint": "只用于握手（HCCL rootInfo、MASTER_ADDR）：握手改走这个网段内的主机网卡。数据走加速卡网口，不在这个网段里。",
-    "roleNotOnType": "加速器 RDMA 只能承载参数流量：主机进程无法绑定加速卡网口的地址，存储同步和服务都走不了。"
+    "roleNotOnType": "加速器 RDMA 只能承载参数流量：主机进程无法绑定加速卡网口的地址，存储同步和服务都走不了。",
+    "typeHelp": "主机以太网走主机网卡的 TCP；主机 RDMA 走主机的 RDMA 端口（InfiniBand 或 RoCE，按各节点的端口自动识别）；加速器 RDMA 走加速卡自带的 RoCE 口（昇腾 NPU），每张卡是一条 rail。类型决定 NCCL/UCX/HCCL 配置和设备注入。"
   },
   "detail": {
     "selector": "默认选择器",
@@ -85,12 +86,14 @@
     "noNodes": "还没有节点解析到这个网络",
     "overrides": "覆盖：{{value}}",
     "attachedAt": "加载于 {{time}}",
-    "rdmaInferred": "每个节点的 HCA 取已激活、速率最高的一组 RDMA 端口（RoCE 端口要求网卡有 IPv4 地址）；bootstrap 取第一条 HCA 所在网卡的地址，没有 IPoIB 的 InfiniBand 用管理网地址。可以在下表逐个节点增删 HCA 或改 bootstrap。",
-    "acceleratorInferred": "每个节点的 rail 取链路 UP 且配了地址的加速卡；bootstrap 是握手用的主机地址，默认取管理网地址，数据走加速卡网口。可以在下表逐个节点增删加速卡或改 bootstrap。",
+    "rdmaInferredHelp": "每个节点的 HCA 取已激活、速率最高的一组 RDMA 端口（RoCE 端口要求网卡有 IPv4 地址）；bootstrap 取第一条 HCA 所在网卡的地址，没有 IPoIB 的 InfiniBand 用管理网地址。",
+    "acceleratorInferredHelp": "每个节点的 rail 取链路 UP 且配了地址的加速卡；bootstrap 是握手用的主机地址，默认取管理网地址，数据走加速卡网口。",
     "title": "网络详情",
     "retry": "重试",
     "expand": "展开详情",
-    "collapse": "收起详情"
+    "collapse": "收起详情",
+    "rdmaEditHint": "可以在下表逐个节点增删 HCA 或改 bootstrap。",
+    "acceleratorEditHint": "可以在下表逐个节点增删加速卡或改 bootstrap。"
   },
   "nodeTable": {
     "node": "节点",
