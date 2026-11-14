@@ -27,6 +27,11 @@ const { MemoryRouter } = await import("react-router-dom");
 const { cleanup, render, screen, fireEvent, waitFor } = await import("@testing-library/react");
 
 const nodeCalls: string[] = [];
+const instanceCalls: string[] = [];
+const fleetInstances = [
+	{ uuid: "6f9a1c2daaaa", state: "running" },
+	{ uuid: "b0b0c0c0dddd", state: "stopped" },
+];
 const fleetNodes = [
 	{ uuid: "n1", name: "gpu-alpha", hostname: "alpha", state: "online", gpus: [], labels: {} },
 	{ uuid: "n2", name: "gpu-beta", hostname: "beta", state: "online", gpus: [], labels: {} },
@@ -52,7 +57,12 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
 		}), { status: 200 });
 	}
 	if (url.includes("/api/v1/instances")) {
-		return new Response(JSON.stringify({ items: [{ uuid: "6f9a1c2daaaa", state: "running" }], total: 1 }), { status: 200 });
+		// One page searched on the server, as GET /instances does with page
+		// parameters.
+		instanceCalls.push(url);
+		const q = new URL(url, "http://localhost").searchParams.get("q")?.toLowerCase() ?? "";
+		const items = fleetInstances.filter((inst) => !q || inst.uuid.includes(q));
+		return new Response(JSON.stringify({ items, page: 1, page_size: 50, total: items.length }), { status: 200 });
 	}
 	if (url.includes("/api/v1/nodes")) {
 		// The node filter searches one page on the server, as GET /nodes does
@@ -300,6 +310,22 @@ test("the node filter searches nodes on the server and filters the logs by the o
 	assert.equal(document.querySelector('.ant-select-item-option[title="gpu-alpha"]'), null);
 	fireEvent.click(option!);
 	await waitFor(() => assert.ok(searchCalls.at(-1)!.includes("node=n2"), `expected the node filter in ${searchCalls.at(-1)}`));
+});
+
+test("the instance filter searches instances on the server instead of listing them all", async () => {
+	searchResponse = { total: 0, items: [] };
+	instanceCalls.length = 0;
+	render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/logs"]}><LogsPage /></MemoryRouter></I18nextProvider>);
+	const picker = await screen.findByRole("combobox", { name: i18n.t("search.instancePlaceholder") });
+	await waitFor(() => assert.ok(instanceCalls.length > 0));
+	assert.ok(instanceCalls.every((url) => url.includes("page=1") && url.includes("page_size=50")), `the instance list was fetched whole: ${instanceCalls}`);
+	fireEvent.change(picker, { target: { value: "b0b0" } });
+	await waitFor(() => assert.ok(instanceCalls.at(-1)!.includes("q=b0b0"), `expected a server search: ${instanceCalls.at(-1)}`));
+	let option: Element | null = null;
+	await waitFor(() => assert.ok((option = document.querySelector('.ant-select-item-option[title="b0b0c0c0dddd"]'))));
+	assert.equal(document.querySelector('.ant-select-item-option[title="6f9a1c2daaaa"]'), null);
+	fireEvent.click(option!);
+	await waitFor(() => assert.ok(searchCalls.at(-1)!.includes("instance=b0b0c0c0dddd"), `expected the instance filter in ${searchCalls.at(-1)}`));
 });
 
 // Phase 0: selected text alone does not name an AntD combobox for assistive technology.

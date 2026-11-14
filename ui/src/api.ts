@@ -4516,7 +4516,8 @@ export const api = {
   nodeFacets: (filter: NodeFilter = {}) => getJSON<NodeFacets>(`/api/v1/nodes/facets?${nodeFilterString(filter)}`),
   dashboardSummary: (labelKey?: string) =>
     getJSON<DashboardSummary>(`/api/v1/dashboard/summary${labelKey ? `?label_key=${encodeURIComponent(labelKey)}` : ""}`),
-  instances: () => getJSON<List<Instance>>("/api/v1/instances"),
+  /** One page of GET /instances, newest first, searched on the server. */
+  instancesPage: (query: ListQuery) => getJSON<ListPage<Instance>>(`/api/v1/instances?${listQueryString(query)}`),
   instanceLaunchFacts: (uuid: string) =>
     getJSON<InstanceLaunchFacts>(
       `/api/v1/instances/${encodeURIComponent(uuid)}/launch-facts`,
