@@ -26,6 +26,7 @@ import {
   pdModesForVendor,
   pdPolicyValue,
 } from "./deployPd";
+import PdUCXNetlinkFixes from "./PdUCXNetlinkFixes";
 import PdUnitRow, { PdAutoUnitRow } from "./PdUnitFields";
 
 function PdRoleSection({
@@ -328,6 +329,7 @@ export default function DeployPdSection({
               ) : null;
             }}
           </Form.Item>
+          <PdUCXNetlinkFixes result={result} />
           <Row gutter={16}>
             {PD_ROLE_ORDER.map((role) => (
               <Col xs={24} md={12} key={role}>

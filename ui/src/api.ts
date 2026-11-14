@@ -181,6 +181,14 @@ export interface NodeGPUIsolation {
   fixes: Array<{ code: string; commands: string[] }>;
 }
 
+/** A node whose kernel hangs UCX, and so NIXL, the PD KV transport (Node.ucx_netlink_hang). */
+export interface NodeUCXNetlinkHang {
+  /** The node's kernel release. */
+  kernel?: string;
+  /** Ways to stop it (disable_ipv6_now, disable_ipv6_persist); run each fix's commands in order, as written. */
+  fixes: Array<{ code: string; commands: string[] }>;
+}
+
 export interface Node {
   uuid: string;
   // scheduling is whether the node takes new replicas: cordoned takes none,
@@ -235,6 +243,9 @@ export interface Node {
    * server offers and their literal commands. Absent when strict.
    */
   gpu_isolation?: NodeGPUIsolation;
+  // ucx_netlink_hang is set while the node's kernel hangs UCX (NIXL): PD
+  // disaggregation over NIXL cannot start on it.
+  ucx_netlink_hang?: NodeUCXNetlinkHang;
   /**
    * When the current streak of failed vendor-tool probes started; kept
    * across consecutive failures and absent once a probe succeeds.

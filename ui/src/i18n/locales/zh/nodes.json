@@ -321,6 +321,20 @@
     "copied": "命令已复制",
     "manualCopyTitle": "复制命令"
   },
+  "ucxNetlinkHang": {
+    "tag": "UCX/NIXL 在此节点会卡住（PD 分离不可用）",
+    "summary": "该节点的内核返回 IPv6 路由 dump 的方式让 UCX 1.20-1.22（NIXL 自带）读不出结束标记，用 NIXL 传 KV 的 PD 引擎在这里会一直起不来，且有一个线程空转占满 CPU。",
+    "kernel": "内核：{{kernel}}",
+    "impact": "普通部署不受影响；NIXL 模式、经以太网的 PD 部署在此节点上会被拒绝。关闭该节点的 IPv6 即可解除，这会让整台主机不再使用 IPv6（只关单个网卡无效）。检查每 15 分钟重做一次，解除后提示会自动消失。",
+    "fixesTitle": "解除卡死（在该节点上执行）",
+    "fix": {
+      "disable_ipv6_now": "立即关闭整机 IPv6（重启前有效）：",
+      "disable_ipv6_persist": "重启后也保持关闭："
+    },
+    "copy": "复制命令",
+    "copied": "命令已复制",
+    "manualCopyTitle": "复制命令"
+  },
   "gpuProbeFailed": {
     "tag": "厂商工具未响应",
     "detail": "自 {{at}} 起厂商工具没有返回，所以这台节点上本机自用的卡，凡是只有厂商工具才知道的信息（显存、UUID、健康），都还是上一次拿到的：{{detail}}\n\n哪些卡在机器里、归谁、插在哪，来自 PCI 总线，不受影响。"
@@ -694,6 +708,11 @@
         "label": "GPUDirect RDMA 不可用",
         "summary": "这台宿主有 RDMA 网卡，但未加载 peer memory 模块 {{module}}，网卡无法注册卡的显存。",
         "impact": "实例仍可正常运行，但经 RDMA 传 KV 的 PD 模式不能放到这个节点。在节点上执行证据中的修复命令（同时设置开机自动加载），然后重新诊断。"
+      },
+      "ucx_netlink_hang": {
+        "label": "UCX/NIXL 在此内核上会卡住",
+        "summary": "该内核返回 IPv6 路由 dump 的方式让 UCX 1.20-1.22（NIXL 自带）读不出结束标记，一直阻塞。",
+        "impact": "用 NIXL 传 KV 的 PD 引擎在这个节点上会一直起不来。执行证据里的修复命令（它会关闭整机 IPv6；第二条让重启后仍保持关闭），然后重新诊断。"
       }
     },
     "facts": "信息",

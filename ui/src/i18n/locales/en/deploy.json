@@ -130,7 +130,8 @@
     "ENGRAM_CONFIG_UNCERTAIN": "The Engram configuration ({{flag}}) cannot be read; if it shares memory it needs about {{shm_gib}} GiB of /dev/shm and unlimited locked memory, which {{runtime}} takes from the host, so check the configuration and the host.",
     "ENGRAM_MANUAL_UNCHECKED": "The manual command mentions Engram ({{flag}}) but is too dynamic to read, so the platform did not derive shared-memory and locked-memory settings from it. Make sure the shared memory and memlock are sufficient, or use engine mode.",
     "ASCEND_SLEEP_EXPANDABLE_SEGMENTS_DISABLED": "Sleep mode on Ascend cannot run with expandable segments, so {{variable}} was changed to {{value}}; if memory runs out, lower gpu_memory_utilization or max_model_len, or turn sleep off.",
-    "KUBE_ENGINE_PORTS_OUTSIDE": "Running instances hold ports outside the new engine port range {{range}}: {{instances}}. They keep their ports and keep running; only instances started later use the new range."
+    "KUBE_ENGINE_PORTS_OUTSIDE": "Running instances hold ports outside the new engine port range {{range}}: {{instances}}. They keep their ports and keep running; only instances started later use the new range.",
+    "PD_UCX_NETLINK_HANG_RDMA": "The kernel of {{names}} makes UCX hang (its IPv6 route dump ends in a way UCX cannot read). On the RDMA network {{network}} UCX is held to RDMA transports and may not run that check, so this PD deployment is allowed; if its engine hangs while starting, turn IPv6 off on the node (this disables IPv6 for the whole host): {{fix}}"
   },
   "warningFeature": {
     "dgpu": "dynamic GPU (dGPU)",
@@ -960,7 +961,17 @@
     "previewTitle": "PD preview",
     "unitFits": "Fits",
     "unitDoesNotFit": "Does not fit",
-    "replicasUnavailable": "Replicas do not apply to a PD deployment; instance counts come from each role's units."
+    "replicasUnavailable": "Replicas do not apply to a PD deployment; instance counts come from each role's units.",
+    "ucxNetlinkHang": {
+      "fixesTitle": "End the hang (run on the node)",
+      "fix": {
+        "disable_ipv6_now": "Turn IPv6 off on the whole host until the next reboot:",
+        "disable_ipv6_persist": "Keep it off after a reboot as well:"
+      },
+      "copy": "Copy commands",
+      "copied": "Commands copied",
+      "manualCopyTitle": "Copy the commands"
+    }
   },
   "validation": {
     "json": "{{label}} must be valid JSON",

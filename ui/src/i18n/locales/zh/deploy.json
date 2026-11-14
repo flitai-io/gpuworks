@@ -130,7 +130,8 @@
     "ENGRAM_CONFIG_UNCERTAIN": "无法解析 Engram 配置（{{flag}}）；如果它使用共享内存，需要约 {{shm_gib}} GiB /dev/shm 和不受限的锁定内存，而 {{runtime}} 直接沿用宿主机设置，请检查配置和宿主机。",
     "ENGRAM_MANUAL_UNCHECKED": "手写命令中出现了 Engram（{{flag}}），但写法过于动态无法解析，平台没有据此推导共享内存和锁定内存设置。请确认共享内存与 memlock 足够，或改用引擎模式。",
     "ASCEND_SLEEP_EXPANDABLE_SEGMENTS_DISABLED": "昇腾上休眠不能与 expandable segments 共存，已把 {{variable}} 改为 {{value}}；如显存不足，请调低 gpu_memory_utilization 或 max_model_len 或关闭“可休眠”。",
-    "KUBE_ENGINE_PORTS_OUTSIDE": "有运行中的实例占用的端口在新的引擎端口段 {{range}} 之外：{{instances}}。它们保留原端口、继续运行；只有之后启动的实例才使用新范围。"
+    "KUBE_ENGINE_PORTS_OUTSIDE": "有运行中的实例占用的端口在新的引擎端口段 {{range}} 之外：{{instances}}。它们保留原端口、继续运行；只有之后启动的实例才使用新范围。",
+    "PD_UCX_NETLINK_HANG_RDMA": "节点 {{names}} 的内核会让 UCX 卡住。网络 {{network}} 走 RDMA，UCX 可能不触发该问题，部署允许创建；若引擎启动卡住，请在该节点关闭整机 IPv6：{{fix}}"
   },
   "warningFeature": {
     "dgpu": "动态 GPU（dGPU）",
@@ -960,7 +961,17 @@
     "previewTitle": "PD 预览",
     "unitFits": "可容纳",
     "unitDoesNotFit": "不可容纳",
-    "replicasUnavailable": "PD 部署不使用副本数；实例数量由各角色的实例列表决定。"
+    "replicasUnavailable": "PD 部署不使用副本数；实例数量由各角色的实例列表决定。",
+    "ucxNetlinkHang": {
+      "fixesTitle": "解除卡死（在该节点上执行）",
+      "fix": {
+        "disable_ipv6_now": "立即关闭整机 IPv6（重启前有效）：",
+        "disable_ipv6_persist": "重启后也保持关闭："
+      },
+      "copy": "复制命令",
+      "copied": "命令已复制",
+      "manualCopyTitle": "复制命令"
+    }
   },
   "validation": {
     "json": "{{label}}必须是合法 JSON",

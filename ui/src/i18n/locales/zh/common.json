@@ -608,7 +608,8 @@
     "PEER_TRANSFER_QUERY_INVALID": "请指定一个非空、最多 128 个字符的传输 ID。",
     "PEER_RELAY_BUSY": "管理节点中继暂时繁忙，请稍后重试；已选择的源节点会保留。",
     "PEER_TRANSFER_CANCELED": "节点间传输已取消。可重试原来源或选择下载。",
-    "IMAGE_REFETCH_FAILED": "重新获取失败，该节点保留原有镜像。原因：{{reason}}"
+    "IMAGE_REFETCH_FAILED": "重新获取失败，该节点保留原有镜像。原因：{{reason}}",
+    "PD_UCX_NETLINK_HANG": "节点 {{names}} 的内核会让 UCX 卡住，而 PD 模式 {{mode}} 经以太网用 NIXL 传 KV，引擎会一直起不来。请在该节点上关闭整机 IPv6，命令见下方。"
   },
   "httpError": {
     "proxyPage": "HTTP {{status}}：浏览器与 gpuworks 之间的反向代理或隧道返回了它自己的错误页，server 给出的原因丢失了。直接通过 server 自身地址访问并重试，可以看到原因。"

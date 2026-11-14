@@ -321,6 +321,20 @@
     "copied": "Commands copied",
     "manualCopyTitle": "Copy the commands"
   },
+  "ucxNetlinkHang": {
+    "tag": "UCX/NIXL hangs on this node (PD disaggregation unavailable)",
+    "summary": "This node's kernel answers an IPv6 route dump in a way UCX 1.20-1.22 (bundled with NIXL) cannot read, so a PD engine that moves its KV with NIXL never finishes starting here, with one thread spinning at 100% CPU.",
+    "kernel": "Kernel: {{kernel}}",
+    "impact": "Ordinary deployments are not affected; PD deployments in the NIXL modes over Ethernet are refused on this node. Turning IPv6 off on the node ends it, and this disables IPv6 for the whole host (turning it off on single interfaces does not help). The check runs again every 15 minutes, so the notice goes away by itself.",
+    "fixesTitle": "End the hang (run on the node)",
+    "fix": {
+      "disable_ipv6_now": "Turn IPv6 off on the whole host until the next reboot:",
+      "disable_ipv6_persist": "Keep it off after a reboot as well:"
+    },
+    "copy": "Copy commands",
+    "copied": "Commands copied",
+    "manualCopyTitle": "Copy the commands"
+  },
   "gpuProbeFailed": {
     "tag": "Vendor tool did not answer",
     "detail": "Since {{at}} the vendor tool has not answered, so for this node's own cards anything only that tool knows — memory, UUID, health — is still what it last reported: {{detail}}\n\nWhich cards are in the machine, whose they are and where they sit comes from the PCI bus and is unaffected."
@@ -694,6 +708,11 @@
         "label": "GPUDirect RDMA unavailable",
         "summary": "This host has RDMA NICs, but the peer-memory module {{module}} is not loaded, so the NICs cannot register the cards' memory.",
         "impact": "Instances still run, but PD modes that move KV over RDMA cannot be placed on this node. Run the fix command in the evidence on the node (it also loads the module at boot), then diagnose again."
+      },
+      "ucx_netlink_hang": {
+        "label": "UCX/NIXL hangs on this kernel",
+        "summary": "This kernel answers an IPv6 route dump in a way UCX 1.20-1.22 (bundled with NIXL) cannot read: it misses the end of the dump and blocks for good.",
+        "impact": "A PD engine that moves its KV with NIXL never finishes starting on this node. Run the fix command in the evidence (it turns IPv6 off for the whole host; the second one keeps it off after a reboot), then diagnose again."
       }
     },
     "facts": "Information",
