@@ -108,6 +108,7 @@ func buildDoctorReportWith(ctx context.Context, p gpu.Prober, disks []proto.Path
 	}
 	if r.Accelerators != nil && !gpu.IsSynthetic(p) {
 		doctorPeerMemory(&r, p.Vendor())
+		doctorUCXNetlinkHang(ctx, &r)
 	}
 	if doctorOnMac {
 		doctorMacChecks(ctx, &r, gpus)

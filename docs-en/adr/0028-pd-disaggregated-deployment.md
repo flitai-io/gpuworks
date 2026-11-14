@@ -61,6 +61,28 @@ inference, and `UCX_TLS` is restricted to RDMA and CUDA transports so misconfigu
 `VLLM_SSM_CONV_STATE_LAYOUT=DS`: NixlConnector transfers the conv state of Mamba-style layers (gated delta net, KDA, short conv) only in the dim-first
 layout and refuses to start otherwise, while the variable has no effect on models without such layers; a value the template or deployment sets wins. All PD instances use host networking.
 
+**NIXL over Ethernet hangs on some kernels (a UCX bug the platform refuses rather than works around).** UCX 1.20-1.22 (NIXL 1.4.1
+bundles UCX 1.22.0) decides whether a peer is reachable over netlink when it starts: `ucs_netlink_route_exists` sends
+`RTM_GETROUTE | NLM_F_DUMP` for `AF_INET6` and only checks whether the **first message of each datagram** is `NLMSG_DONE`
+(openucx/ucx 6d96bec1a0). Newer kernels (measured on Ubuntu 5.15.0-198 and -203) put the last routes and `NLMSG_DONE` in one
+datagram, so UCX never sees the end marker, its next `recv()` blocks for good, and another thread spins at 100% of a core: the engine hangs
+while initialising NIXL. Older kernels (5.15.0-177) send DONE as a 20-byte datagram of its own, and with no IPv6 routes the whole dump is
+just DONE, so they are unaffected; IPv4 dumps were fine on all three kernels. It is fixed upstream in openucx/ucx 32c7a90a45 (#12182), not in a
+release yet. Among UCX's environment variables only `UCX_NET_DEVICES=lo` avoids it, and it cannot cross hosts. The one measured workaround is to turn IPv6
+off for the **whole host** (`net.ipv6.conf.all.disable_ipv6=1` and `net.ipv6.conf.default.disable_ipv6=1`; turning it off on single interfaces does not help).
+
+The platform does not turn IPv6 off for the operator (it changes the whole host's networking). It makes the condition a visible fact and a clear refusal
+instead: at start the agent sends the same dump over a pure-Go `NETLINK_ROUTE` socket and judges the host affected when some datagram holds a
+route message followed by DONE, then checks again at the cadence of the node's runtime checks (every 15 minutes), since a sysctl can change at any time.
+The probe runs in a goroutine of its own on a non-blocking socket with a deadline of a few seconds, reads at most a bounded number of datagrams and bytes,
+is abandoned at the deadline and counted as "unknown" rather than "affected", never runs more than one at a time in the process, and starts no external
+command. The result travels with the status as `NodeStatus.UCXNetlinkHang`; the server holds it on the live session only and never stores it (the path
+`NVIDIAIsolation` takes), and the node detail's `ucx_netlink_hang` carries `kernel` and `fixes` (literal commands). When a PD deployment is created or
+evaluated and its mode moves the KV over UCX (`vllm-nixl`, `sglang-nixl`) and a node of the placement reports the fact, an Ethernet network (the management network
+included) is refused with `PD_UCX_NETLINK_HANG` (400, field `placement.pd`); on a host RDMA network UCX is held to RDMA transports and may never run that check, so
+it is only the warning `PD_UCX_NETLINK_HANG_RDMA`, and evaluate keeps both. `gpuworks-agent doctor` reports the same condition (`ucx_netlink_hang`).
+Automatic placement goes through the same check after create has picked the nodes.
+
 **Allocate all ports once and persist them all.** The controller allocates an instance's API port and side-channel port block together and writes all of them to
 `Instance.Ports`; subsequent allocations avoid those ports.
 

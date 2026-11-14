@@ -73,7 +73,7 @@ function AcceleratorFinding({ finding }: { finding: DoctorFinding }) {
 const nodeFindingCodes = new Set([
   "disk_low", "runtime_unavailable", "runtime_provision_failed", "runtime_state_untraversable", "path_noexec", "path_read_only", "path_ephemeral",
   "accelerator_probe_failed", "accelerator_unrecognized", "cuda_init_failed", "multi_gpu_check_failed", "macos_unsupported", "macos_idle_sleep",
-  "peer_memory_missing",
+  "peer_memory_missing", "ucx_netlink_hang",
 ]);
 
 /** Filesystem type and the mount flags that matter to the reader. */

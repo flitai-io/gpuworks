@@ -57,6 +57,31 @@ PD 分离把一个模型的推理拆成两组实例：prefill 实例只算提示
 `${GPUWORKS_PD_ROLE}`（实例跨多机时还要引用 `${GPUWORKS_NODE_RANK}` 或 `${GPUWORKS_HEADLESS}`），否则评估与创建返回
 `MANUAL_COMMAND_RANK_BLIND`。详见[多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。
 
+### 内核让 UCX 卡住
+
+`vllm-nixl`、`sglang-nixl` 的 KV 经 NIXL 内置的 UCX 传输。UCX 1.20–1.22 在部分内核上（实测 Ubuntu 5.15.0-198、-203）读 IPv6
+路由时找不到结束标记而永久阻塞，引擎初始化 NIXL 时挂住、一个线程占满 CPU，实例一直起不来。agent 会探测这一点：
+
+- 节点详情出现提示「UCX/NIXL 在此节点会卡住（PD 分离不可用）」，带内核版本和可复制的修复命令；**诊断** 报告也列出
+  `ucx_netlink_hang`。节点没有该问题时没有这个字段，修复后下一次探测（每 15 分钟）提示自动消失。
+- 部署表单与 API 的评估、创建：KV 走以太网（含管理网）参数网络且放置里有这样的节点时被拒绝
+  （`PD_UCX_NETLINK_HANG`，400，`params` 含 `nodes`、`fixes` 与 `fix`）；在主机 RDMA 参数网络上只给警告
+  （`PD_UCX_NETLINK_HANG_RDMA`），因为 UCX 此时只用 RDMA 传输，可能不触发该检查。
+- 修复：在该节点上关闭**整机** IPv6（这会让这台主机不再使用 IPv6；只关单个网卡无效）。立即生效，到下次重启：
+
+  ```bash
+  sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1
+  ```
+
+  重启后仍保持：
+
+  ```bash
+  printf 'net.ipv6.conf.all.disable_ipv6=1\nnet.ipv6.conf.default.disable_ipv6=1\n' | sudo tee /etc/sysctl.d/90-gpuworks-ucx.conf && sudo sysctl --system
+  ```
+
+  上游已在 openucx/ucx #12182 修复，随后的 UCX 发布版带上它之后就不再需要。原因与取舍见
+  [ADR 0028](../adr/0028-pd-disaggregated-deployment.md)。
+
 ### PPU 经 RDMA 传 KV
 
 `sglang-ppu-mooncake`、`vllm-ppu-mooncake` 用 Mooncake 经主机的 RoCE/IB 网卡直接读写卡的显存，所以：

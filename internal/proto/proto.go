@@ -518,6 +518,9 @@ type NodeStatus struct {
 	// card, or does not run on Kubernetes). Every report states it afresh,
 	// so absent also clears an earlier one.
 	NVIDIAIsolation *NVIDIAIsolation `json:"nvidia_isolation,omitempty"`
+	// UCXNetlinkHang is set while the host's kernel hangs UCX (NIXL), absent
+	// otherwise; every report states it afresh, so absent clears it.
+	UCXNetlinkHang *UCXNetlinkHang `json:"ucx_netlink_hang,omitempty"`
 }
 
 // RuntimeProxyStatus is what an agent observes about the proxy its container

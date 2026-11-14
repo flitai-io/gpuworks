@@ -35,6 +35,18 @@ func (h *Hub) NVIDIAIsolation(uuid string) *proto.NVIDIAIsolation {
 	return s.nvidiaIsolation.Load()
 }
 
+// UCXNetlinkHang is whether a node's kernel answers an IPv6 route dump in a
+// way that hangs UCX (so NIXL, the PD KV transport), as its agent last
+// reported it; nil when it does not, was not reported, or the node is
+// offline.
+func (h *Hub) UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang {
+	s := h.session(uuid)
+	if s == nil {
+		return nil
+	}
+	return s.ucxNetlinkHang.Load()
+}
+
 // RestartRuntime asks a node to restart its container runtime daemon so a
 // changed proxy takes effect, and records the proxy it reports afterwards.
 func (h *Hub) RestartRuntime(ctx context.Context, uuid string) (*proto.RuntimeProxyStatus, error) {

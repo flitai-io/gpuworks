@@ -194,6 +194,10 @@ type Node struct {
 	// their own card by CUDA alone (soft isolation); absent when strict, and
 	// while the node is offline.
 	GPUIsolation *NodeGPUIsolation `json:"gpu_isolation,omitempty"`
+	// UCXNetlinkHang is set while the node's kernel hangs UCX (NIXL), so PD
+	// over NIXL cannot start on it; absent otherwise, and while the node is
+	// offline.
+	UCXNetlinkHang *NodeUCXNetlinkHang `json:"ucx_netlink_hang,omitempty"`
 }
 
 // SystemLabel is one generated node label: a key in the reserved

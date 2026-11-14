@@ -6,6 +6,7 @@ import type { UpgradePhase } from "../../agentUpgrade";
 import KVDiskKernelWarning from "../../components/KVDiskKernelWarning";
 import { GPUProbeFailedTag } from "../../components/NodeAcceleratorWarnings";
 import GPUIsolationNotice, { GPUIsolationTag } from "../../components/NodeGPUIsolation";
+import UCXNetlinkHangNotice, { UCXNetlinkHangTag } from "../../components/NodeUCXNetlinkHang";
 import { NodeConnectionBadge } from "../../components/NodeConnectionBadge";
 import NodeNetworksCard from "../../components/NodeNetworksCard";
 import NodePullProxy from "../../components/NodePullProxy";
@@ -57,6 +58,7 @@ export default function NodeBasicTab({
               <NodeConnectionBadge node={node} />
               <GPUProbeFailedTag node={node} />
               <GPUIsolationTag node={node} />
+              <UCXNetlinkHangTag node={node} />
             </Space>
             <div>
               {t("connectionDiagnostics.lastSeen")}: {formatTime(node.last_seen_at, t("connectionDiagnostics.unknown"))}
@@ -129,6 +131,7 @@ export default function NodeBasicTab({
               )}
               <RuntimeFallbackNotice node={node} />
               <GPUIsolationNotice node={node} />
+              <UCXNetlinkHangNotice node={node} />
             </Space>
           </Descriptions.Item>
           <Descriptions.Item label={t("detail.runtimePlugin")}>

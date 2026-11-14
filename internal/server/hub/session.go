@@ -87,7 +87,10 @@ type Session struct {
 	// to their own card, as its last report said (nil: strictly, or not
 	// reported). Not stored either: each report states it afresh.
 	nvidiaIsolation atomic.Pointer[proto.NVIDIAIsolation]
-	rpcSeq          atomic.Uint64
+	// ucxNetlinkHang is the host's UCX hang as the last status stated it:
+	// non-nil while its IPv6 route dump hangs UCX (NIXL). Live, never stored.
+	ucxNetlinkHang atomic.Pointer[proto.UCXNetlinkHang]
+	rpcSeq         atomic.Uint64
 
 	// caps is what the agent advertised in its hello. Written during handshake,
 	// which completes before hub.register publishes the session; every reader

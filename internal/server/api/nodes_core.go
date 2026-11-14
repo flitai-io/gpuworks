@@ -203,6 +203,7 @@ func (a *apiHandlers) getNode(w http.ResponseWriter, r *http.Request) {
 	views := []dto.Node{view}
 	a.fillResolvedNodeFields([]store.Node{*n}, views, nil)
 	a.fillNodeGPUIsolation(views)
+	a.fillNodeUCXNetlinkHang(views)
 	writeJSON(w, http.StatusOK, views[0])
 }
 

@@ -21,7 +21,9 @@ type fakeNodeRuntime struct {
 	proxies map[string]*proto.RuntimeProxyStatus
 	// isolation is the soft-isolation notice each node last reported.
 	isolation map[string]*proto.NVIDIAIsolation
-	restarts  []string
+	// ucxHang is the UCX hang each node last reported.
+	ucxHang  map[string]*proto.UCXNetlinkHang
+	restarts []string
 	// afterRestart is what the daemon reports once restarted, per node.
 	afterRestart map[string]*proto.RuntimeProxyStatus
 	failWith     error
@@ -31,6 +33,12 @@ func (f *fakeNodeRuntime) NVIDIAIsolation(uuid string) *proto.NVIDIAIsolation {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.isolation[uuid]
+}
+
+func (f *fakeNodeRuntime) UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ucxHang[uuid]
 }
 
 func (f *fakeNodeRuntime) RuntimeProxy(uuid string) *proto.RuntimeProxyStatus {

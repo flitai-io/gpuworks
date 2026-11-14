@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/packages"
 	"gpuworks.ai/gpuworks/internal/server/modelmeta"
 	"gpuworks.ai/gpuworks/internal/server/network"
@@ -18,6 +19,10 @@ type Deps struct {
 	Log   *slog.Logger
 	// Online reports whether a node's agent is connected.
 	Online func(uuid string) bool
+	// UCXNetlinkHang is the live fact a node's agent last reported about its
+	// kernel hanging UCX (NIXL): nil when it does not, was not reported, or
+	// the node is offline. Nil means no node is known to.
+	UCXNetlinkHang func(uuid string) *proto.UCXNetlinkHang
 	// NodeSync pushes a node its desired state again.
 	NodeSync interface{ SyncNode(uuid string) error }
 	// CallNode is a short RPC to a node's agent.

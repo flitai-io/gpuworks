@@ -59,6 +59,33 @@ To write the launch command yourself, click **Edit Command Text** in the command
 `${GPUWORKS_PD_ROLE}` (and `${GPUWORKS_NODE_RANK}` or `${GPUWORKS_HEADLESS}` when an instance spans several nodes); otherwise evaluation and creation return
 `MANUAL_COMMAND_RANK_BLIND`. See [Manual Commands for Multi-Node and PD Deployments](../explanation/launch-config.md#多机与-pd-的手工命令).
 
+### Kernels that hang UCX
+
+`vllm-nixl` and `sglang-nixl` move the KV over the UCX that NIXL bundles. On some kernels (measured on Ubuntu 5.15.0-198 and -203) UCX 1.20-1.22 cannot
+find the end of its IPv6 route dump and blocks for good: the engine hangs while initialising NIXL, one thread spins at 100% CPU, and the instance never starts.
+The agent probes for this:
+
+- The node detail shows the notice "UCX/NIXL hangs on this node (PD disaggregation unavailable)" with the kernel release and copyable fix commands; the **Diagnose**
+  report lists `ucx_netlink_hang` too. A node without the problem has no such field, and after a fix the notice goes away by itself at the next probe (every 15 minutes).
+- Evaluating or creating a PD deployment in the deploy form or the API is refused when the KV goes over an Ethernet parameter network (the management network
+  included) and the placement has such a node (`PD_UCX_NETLINK_HANG`, 400, `params` carry `nodes`, `fixes` and `fix`). On a host RDMA parameter network it is only a
+  warning (`PD_UCX_NETLINK_HANG_RDMA`), because UCX is then held to RDMA transports and may never run that check.
+- The fix: turn IPv6 off for the **whole host** on that node (this stops the host using IPv6 altogether; turning it off on single interfaces does not help). Right away,
+  until the next reboot:
+
+  ```bash
+  sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1
+  ```
+
+  And to keep it across reboots:
+
+  ```bash
+  printf 'net.ipv6.conf.all.disable_ipv6=1\nnet.ipv6.conf.default.disable_ipv6=1\n' | sudo tee /etc/sysctl.d/90-gpuworks-ucx.conf && sudo sysctl --system
+  ```
+
+  It is fixed upstream in openucx/ucx #12182; once a UCX release that carries it ships in NIXL the workaround is no longer needed. The cause and the trade-off are in
+  [ADR 0028](../adr/0028-pd-disaggregated-deployment.md).
+
 ### PPU KV over RDMA
 
 `sglang-ppu-mooncake` and `vllm-ppu-mooncake` use Mooncake to read and write the cards' memory directly through the host's RoCE/IB NICs, so:

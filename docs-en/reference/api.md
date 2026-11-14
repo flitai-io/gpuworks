@@ -410,6 +410,8 @@ After the platform stops scheduling, setting `schedulable` through this endpoint
 
 `GET /api/v1/nodes/{uuid}` carries `gpu_isolation` for a Kubernetes node whose NVIDIA instance pods are held to their own card by `CUDA_VISIBLE_DEVICES` alone (soft isolation: the pods can see every GPU device of the node): `level` (`soft`), `reason` (`cdi_names_missing`: the toolkit resolves `NVIDIA_VISIBLE_DEVICES` as CDI names and no CDI spec names the card), `toolkit` (`gpu_operator` or `host`, when the agent can tell), `cards`, and `fixes`: each has a `code` and `commands` to run in order, exactly as written, chosen by the server from `toolkit`. It comes from the agent's latest status report and is not stored: it is absent while the node is offline, strictly isolated, or runs an older agent, and the node list does not carry it.
 
+`GET /api/v1/nodes/{uuid}` carries `ucx_netlink_hang` for a node whose kernel hangs UCX (bundled with NIXL, which PD's `vllm-nixl` and `sglang-nixl` move the KV over): `kernel` (the kernel release, omitted when it cannot be read) and `fixes`, each with a `code` (`disable_ipv6_now`, `disable_ipv6_persist`) and `commands` to run in order, as written (turn IPv6 off for the whole host; the first lasts until the next reboot, the second writes `/etc/sysctl.d/90-gpuworks-ucx.conf` to keep it). It comes from the agent's latest status report (checked again every 15 minutes) and is never stored: a node that is offline, unaffected or runs an older agent has no such field; the node list does not carry it.
+
 `PATCH /api/v1/nodes/{uuid}/accelerator` selects which vendor's cards to manage on a host with multiple vendors. The selection is saved only after the agent accepts it and restarts in place.
 The returned node's `accelerator_preference` indicates the selection; `accelerator_vendors` lists `{vendor, cards, model}` for each vendor on the host.
 
@@ -1564,6 +1566,10 @@ Scripts and third-party clients cannot directly reuse vLLM parameters for SGLang
 - Specifying it together with `nnodes`, `node_uuids`, or `replicas > 1` returns `PD_SHAPE_CONFLICT`; use `placement_mode: "auto"` with units that omit `node_uuid` for automatic placement (see [Automatically Placed Multi-Node and PD Deployments](#自动放置多机与-pd-部署)). Other validation error codes start with
   `PD_` (field `placement.pd`). When the deployment is sleepable (`sleepable`) and KV uses the host RDMA network through UCX, creation and evaluation return
   `PD_SLEEP_RDMA_UNSUPPORTED` (`params`: `mode`, `network`).
+  When a node of the placement has a kernel that hangs UCX (the node's `ucx_netlink_hang` above) and the mode moves the KV over UCX: an Ethernet parameter network (the management network
+  included) returns 400 `PD_UCX_NETLINK_HANG` (field `placement.pd`); on a host RDMA network evaluate gives only the warning `PD_UCX_NETLINK_HANG_RDMA` and create proceeds.
+  Both carry the same `params`: `mode`, `network`, `nodes` (`[{node_uuid, node_name, kernel}]`, only the affected nodes), `names` (their names, comma-separated),
+  `fixes` (`[{code, commands[]}]`, the same as the node's `fixes`) and `fix` (the first fix command).
 - The `pd` field in deployment details contains `mode`, `fallback`, `kv_load_failure`, `state` (`not_ready|partial|running`), `short`,
   and `roles[]` (`role`, `tp`, `pp`, `desired`, `ready`, `may_be_empty` (the mode allows this role to be empty, meaning it can sleep independently), and `units[]`, including `followers[]`). Instances carry `role`.
   Each unit also has `failed_attempts`, `last_failure`, and `retry_exhausted` (the controller has given up rebuilding it; use the retry endpoint above to retry).

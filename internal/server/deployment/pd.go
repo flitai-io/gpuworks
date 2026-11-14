@@ -85,7 +85,7 @@ func (s *Service) preparePDDeployRequest(req *dto.DeployRequest, engine string) 
 // its nodes share none or the one they share cannot carry the mode's
 // transport. Creating and previewing a deployment both ask it, as the
 // controller does again at every launch.
-func (s *Service) pdGroup(p *pdRequest) (netplan.Group, error) {
+func (s *Service) pdGroup(p *pdRequest) (netplan.Group, []messages.Warning, error) {
 	plain := make([]store.Node, len(p.nodes))
 	for i, n := range p.nodes {
 		plain[i] = *n
@@ -96,9 +96,13 @@ func (s *Service) pdGroup(p *pdRequest) (netplan.Group, error) {
 		if _, mapped := s.ComputeGroup(p.nodes); mapped != nil {
 			err = mapped
 		}
-		return group, err
+		return group, nil, err
 	}
-	return group, planning.CheckPDNetwork(p.mode, plain, group, p.sleepable)
+	if err := planning.CheckPDNetwork(p.mode, plain, group, p.sleepable); err != nil {
+		return group, nil, err
+	}
+	warnings, err := s.checkPDUCXNetlink(p, group)
+	return group, warnings, err
 }
 
 // checkEngine rejects a PD request whose engine, settled only after the
@@ -202,12 +206,13 @@ func (s *Service) evaluatePD(env evaluatePDEnv) {
 	if mode.Unverified {
 		resp.Warnings = append(resp.Warnings, messages.Warning{Code: messages.WarningPDUnverified, Params: map[string]any{"feature": "mode", "mode": mode.Name}})
 	}
-	group, err := s.pdGroup(prepared)
+	group, groupWarnings, err := s.pdGroup(prepared)
 	if err != nil {
 		env.errs.add(fieldPDPlacement, err)
 		out.fieldErrors(resp, env.errs)
 		return
 	}
+	resp.Warnings = append(resp.Warnings, groupWarnings...)
 	resp.Warnings = append(resp.Warnings, computeFallbackWarning(group)...)
 	byUUID := map[string]*store.Node{}
 	for _, n := range prepared.nodes {
