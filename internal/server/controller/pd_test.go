@@ -259,7 +259,7 @@ func TestPDReconcileDrainsInstancesWithoutUnit(t *testing.T) {
 		t.Fatalf("the unclaimed instance is %s, want draining", row.State)
 	}
 	// Past the minimum but still holding work: keep waiting.
-	f.ctrl.draining[f.dep.ID][extra] = time.Now().Add(-drainMin - time.Second)
+	f.ctrl.drainClocks.startedAt(f.dep.ID, extra, time.Now().Add(-drainMin-time.Second))
 	if got := removing(); len(got) != 0 {
 		t.Fatalf("removed while busy: %v", got)
 	}
@@ -277,12 +277,12 @@ func TestPDDrainGivesUpAfterTheBound(t *testing.T) {
 	if got := c.drainedUnits(1, excess); len(got) != 0 {
 		t.Fatal("removed on first sight")
 	}
-	c.draining[1]["busy"] = time.Now().Add(-drainMax)
+	c.drainClocks.startedAt(1, "busy", time.Now().Add(-drainMax))
 	if got := c.drainedUnits(1, excess); len(got) != 1 {
 		t.Fatal("a stuck request held the drain past its bound")
 	}
-	if _, kept := c.draining[1]; kept {
-		t.Fatalf("a finished drain kept its clock: %v", c.draining)
+	if clocks := c.drainClocks.of(1); clocks != nil {
+		t.Fatalf("a finished drain kept its clock: %v", clocks)
 	}
 }
 
@@ -295,12 +295,12 @@ func TestDrainClocksFollowTheDrainingInstances(t *testing.T) {
 	c.drainedUnits(2, []store.Instance{{UUID: "c"}})
 	// b left draining some other way (the deployment restarted it at once).
 	c.drainedUnits(1, []store.Instance{{UUID: "a"}})
-	if _, kept := c.draining[1]["b"]; kept || len(c.draining[1]) != 1 {
-		t.Fatalf("deployment 1 clocks = %v, want only a", c.draining[1])
+	if clocks := c.drainClocks.of(1); len(clocks) != 1 || clocks["a"].IsZero() {
+		t.Fatalf("deployment 1 clocks = %v, want only a", clocks)
 	}
 	c.forgetDeployment(2, false)
-	if _, kept := c.draining[2]; kept {
-		t.Fatalf("a forgotten deployment kept its clocks: %v", c.draining)
+	if clocks := c.drainClocks.of(2); clocks != nil {
+		t.Fatalf("a forgotten deployment kept its clocks: %v", clocks)
 	}
 }
 

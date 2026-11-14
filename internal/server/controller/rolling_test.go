@@ -58,7 +58,7 @@ func TestRollingRestartHoldsWhileAReplicaIsUnavailable(t *testing.T) {
 	}
 	// Drained and confirmed gone: the replacement starts, and while it is not
 	// running the roll still holds.
-	f.ctrl.draining[f.dep.ID][drained] = time.Now().Add(-drainMax)
+	f.ctrl.drainClocks.startedAt(f.dep.ID, drained, time.Now().Add(-drainMax))
 	if got := statesOf(f.reconcile(t)); got[proto.InstRemoving] != 1 {
 		t.Fatalf("the drained replica was not retired: %v", got)
 	}

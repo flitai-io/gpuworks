@@ -33,9 +33,9 @@ func (c *Controller) deploymentMemories() []deploymentMemory {
 	return []deploymentMemory{
 		forgetFunc(c.forgetPool),
 		forgetFunc(c.placements.forget),
-		forgetFunc(c.forgetSleepPushes),
-		forgetFunc(c.forgetDrainClocks),
-		forgetFunc(c.forgetDGPULimitPush),
+		forgetFunc(c.sleepPushes.forget),
+		forgetFunc(c.drainClocks.forget),
+		forgetFunc(c.dgpuPushes.forget),
 		forgetFunc(c.imageWaits.forget),
 		forgetFunc(c.failover.forgetStopped),
 		forgetGoneFunc(c.failover.forgetMoves),

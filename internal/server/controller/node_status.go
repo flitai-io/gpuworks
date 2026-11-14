@@ -43,7 +43,7 @@ func (c *Controller) settleNodeStatus() {
 		return
 	}
 	for _, fact := range facts {
-		if !deploymentSettled(fact) && !c.poolWaitingRecently(fact.ID) {
+		if !deploymentSettled(fact) && !c.pool.waitingRecently(fact.ID, c.now()) {
 			c.q.add(depKey(fact.ID))
 		}
 	}
