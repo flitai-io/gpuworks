@@ -322,6 +322,14 @@ func (p *cardPool) claim(ctx context.Context, instance string, indexes []int) ([
 	if err := p.load(ctx); err != nil {
 		return nil, false, err
 	}
+	// Before relying on a card this pool believes is already borrowed,
+	// confirm the hold pod that claims it is still there: an operator's own
+	// kubectl delete of it would otherwise go unnoticed until this agent
+	// restarts, and the card never gets borrowed again for the next
+	// instance.
+	if err := p.reconcileHeld(ctx); err != nil {
+		p.log.Warn("cannot confirm the node's hold pods still exist; keeping the platform's held cards as they were", "err", err)
+	}
 	if p.view.shared != "" {
 		return nil, false, errors.New(p.view.shared)
 	}
@@ -454,6 +462,12 @@ func (p *cardPool) sweep(ctx context.Context) {
 	if !p.loaded {
 		p.mu.Unlock()
 		return
+	}
+	// A card whose hold pod is gone (an operator's own kubectl delete)
+	// stops looking held even when nothing has tried to acquire it since:
+	// the next acquire must still see it as free to borrow again.
+	if err := p.reconcileHeld(ctx); err != nil {
+		p.log.Warn("cannot confirm the node's hold pods still exist; keeping the platform's held cards as they were", "err", err)
 	}
 	// A hold pod made for another mode than the node's now is of no use to
 	// the platform; it goes as soon as no instance runs on its card.
