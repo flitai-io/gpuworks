@@ -1,7 +1,5 @@
 package controller
 
-import "gpuworks.ai/gpuworks/internal/server/planning"
-
 // deploymentMemory is something the controller keeps in memory about each
 // deployment and drops once the deployment stops (gone false) or is gone
 // (gone true). Dropping it is memory only: no I/O, nothing that can fail, and
@@ -40,9 +38,9 @@ func (c *Controller) deploymentMemories() []deploymentMemory {
 		forgetFunc(c.failover.forgetStopped),
 		forgetGoneFunc(c.failover.forgetMoves),
 		// An operator may name the nodes of a stopped deployment's next
-		// replicas (the replicas API takes place_on while it is stopped); an
-		// empty hint drops the queue once the deployment is gone.
-		forgetGoneFunc(func(depID uint) { planning.HintPlacement(depID, nil) }),
+		// replicas (the replicas API takes place_on while it is stopped); the
+		// queue goes once the deployment is gone.
+		forgetGoneFunc(c.orders.ForgetPlacementHint),
 	}
 }
 

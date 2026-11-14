@@ -1,23 +1,9 @@
 package planning
 
 import (
-	"sync"
-
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
-
-// lifecycleMu serializes sleep, wake and replica orders, whoever gives them.
-// Admission reads
-// the ledger and then writes an intent the ledger reads next, so two wakes
-// checked at once could both fit a card only one of them gets.
-var lifecycleMu sync.Mutex
-
-// LockLifecycle takes the lifecycle order lock and returns its release.
-func LockLifecycle() (unlock func()) {
-	lifecycleMu.Lock()
-	return lifecycleMu.Unlock
-}
 
 // DeploymentMatch is how a deployment's instances fill its replicas, read
 // from the store: its units over the nodes it lists, matched to insts.
@@ -77,7 +63,8 @@ func Sleepers(insts []store.Instance) []store.Instance {
 // deployment: when all of them wake, the deployment-wide sleep order is
 // withdrawn with them; otherwise only the woken instances' intents change
 // (a wake of some instances withdraws the deployment-wide order too, as
-// store.OrderInstancesSleep does). The caller holds LockLifecycle.
+// store.OrderInstancesSleep does). The caller holds the server's order lock
+// (lifecycle.Orders.Lock).
 func OrderWake(st *store.Store, dep *store.Deployment, match UnitMatch, named []store.Instance, partial, whole bool) ([]store.Instance, []WakeRefusal, error) {
 	woken, refused, err := AdmitWake(st, WakeGroups(match, named), partial)
 	if err != nil {

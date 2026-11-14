@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/proxy"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -28,7 +29,7 @@ func heldFixture(t *testing.T) (*automationAdapter, *residencyAdapter, *store.St
 		}
 	}
 	px := proxy.New(st, noServingNetworks{}, nil, nil, 0)
-	return auto, &residencyAdapter{store: st, proxy: px}, st, dep
+	return auto, &residencyAdapter{store: st, proxy: px, orders: &lifecycle.Orders{}}, st, dep
 }
 
 // asleepAt reports each instance's sleep to the store, as its agent would.

@@ -323,6 +323,11 @@ grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' \
 部署/实例列表快照（300 → 307），planning 新增两个以节点快照为参数的入口（72 → 74，GWKS-309 会把这些读改走窄接口），
 `app_prod_lines` 随之到 10043。
 
+GWKS-305：sleep/wake 的顺序锁与放置提示从 planning 的包级全局变量移进叶子包 `internal/server/lifecycle` 的 `Orders`，
+由 controller 建、经 `Controller.Orders` 交给 app，再交给 API（`Deps.Orders`）与自动化。状态本身没有增加，只是从隐藏的
+全局变量变成显式传递：`planning_sync_files` 2 → 0；`controller_struct_fields` 34 → 35、`controller_exported_methods`
+18 → 19、`api_deps_fields` 63 → 64、`api_fanout` 48 → 49、`app_new_lines` 307 → 308，各带 `# raised:` 理由。
+
 结构体与函数的五项由 `decl_count 目录 声明模式 行模式 [body]` 测量：在该包的非测试文件里找到匹配声明模式的顶层声明，
 从它数到第一个顶格的 `}`，只数匹配行模式的行（行模式为空时数全部行；`body` 表示不数声明行本身）：
 
@@ -360,7 +365,7 @@ find internal/server/app -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -e
   不再计入——这正是要的方向。
 - 不用 planning 中 import store 的文件数（57）：其中 30 个只用实体类型，压它就要另建一套平行的行类型，
   `store_concrete_importers` 的 `# raised` 已否掉这条路；用 `*store.Store` 引用代替。包级可变变量（如 `placementHints`
-  的 map）没有单独的计量，现有的两处由 `planning_sync_files` 覆盖，GWKS-305 把它们移走后该项归零。
+  的 map）没有单独的计量，原有的两处由 `planning_sync_files` 覆盖；GWKS-305 把它们移进叶子包 `lifecycle` 后该项为 0。
 - 不量 `forgetDeployment` 的行数：缺陷正是它太短（漏清 5 份状态）。改用 `controller_struct_maps` 加 GWKS-303 的完整性测试。
 - `app_prod_lines` 是软预算：搬出功能服务会降它，新的装配代码合理地会涨它，只要在评审里被看见。
 

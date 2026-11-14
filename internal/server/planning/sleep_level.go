@@ -73,7 +73,7 @@ type SleepOrder struct {
 // deployment cannot sleep (SleepEligibility), or an L1 preference the hosts
 // cannot hold - writes nothing. err is a store failure; an instance named
 // that is no longer the deployment's is store.ErrNotFound. The caller holds
-// the lifecycle lock (LockLifecycle).
+// the server's order lock (lifecycle.Orders.Lock).
 func OrderSleep(st *store.Store, dep *store.Deployment, order SleepOrder, host HostMemory) (int, *SleepRefusal, error) {
 	if code := SleepEligibility(dep); code != "" {
 		return 0, &SleepRefusal{Code: code, Params: map[string]any{"engine": dep.Engine}}, nil

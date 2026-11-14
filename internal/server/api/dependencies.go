@@ -22,6 +22,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/community"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/packages"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/modelmeta"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/provider"
@@ -120,6 +121,11 @@ type Deps struct {
 	RecentRejects func() []dto.AgentReject
 	AgentUpgrades AgentUpgradeHooks
 	UIHandler     http.Handler // embedded SPA (may be nil in dev)
+
+	// Orders is the server's sleep and wake order lock and the placement
+	// hints a scale-up names (the controller's); a handler built without one
+	// keeps its own (apiHandlers.orders).
+	Orders *lifecycle.Orders
 
 	// Hub integration.
 	Online func(uuid string) bool
@@ -268,6 +274,7 @@ type apiHandlers struct {
 	sessionPolicy       auth.SessionPolicy
 	loginThrottle       loginThrottle
 	d                   Deps
+	ordersOnce          sync.Once
 	gpuCacheMu          sync.Mutex
 	gpuCacheAt          time.Time
 	gpuCache            *gpuInventoryCache
@@ -284,4 +291,15 @@ type apiHandlers struct {
 	// aiAsks and mcpCalls count each user's questions and MCP tool calls
 	// in flight (ai.go, mcp.go).
 	aiAsks, mcpCalls inFlightLimiter
+}
+
+// orders is the server's order lock and placement hints: Deps.Orders, or for
+// a handler built without them one of its own that all its requests share.
+func (a *apiHandlers) orders() *lifecycle.Orders {
+	a.ordersOnce.Do(func() {
+		if a.d.Orders == nil {
+			a.d.Orders = &lifecycle.Orders{}
+		}
+	})
+	return a.d.Orders
 }

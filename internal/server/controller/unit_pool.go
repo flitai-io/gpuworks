@@ -156,8 +156,8 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 	}
 	order = append(order, refusedRecently...)
 	// A replica an operator asked to start on a named node tries it first,
-	// once (planning.HintPlacement).
-	hinted, hasHint := planning.NextPlacementHint(dep.ID)
+	// once (lifecycle.Orders.HintPlacement).
+	hinted, hasHint := c.orders.NextPlacementHint(dep.ID)
 	if hasHint {
 		for i, index := range order {
 			if pool.Ranked[index].Node.UUID == hinted {
@@ -165,7 +165,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 				break
 			}
 		}
-		planning.ConsumePlacementHint(dep.ID, hinted)
+		c.orders.ConsumePlacementHint(dep.ID, hinted)
 	}
 	// A replica waiting for the holders of cards on one node to yield
 	// (placewait) is rechecked every placewait.Recheck: that node is tried
