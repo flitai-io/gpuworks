@@ -78,10 +78,19 @@ The probe runs in a goroutine of its own on a non-blocking socket with a deadlin
 is abandoned at the deadline and counted as "unknown" rather than "affected", never runs more than one at a time in the process, and starts no external
 command. The result travels with the status as `NodeStatus.UCXNetlinkHang`; the server holds it on the live session only and never stores it (the path
 `NVIDIAIsolation` takes), and the node detail's `ucx_netlink_hang` carries `kernel` and `fixes` (literal commands). When a PD deployment is created or
-evaluated and its mode moves the KV over UCX (`vllm-nixl`, `sglang-nixl`) and a node of the placement reports the fact, an Ethernet network (the management network
-included) is refused with `PD_UCX_NETLINK_HANG` (400, field `placement.pd`); on a host RDMA network UCX is held to RDMA transports and may never run that check, so
+evaluated and its mode moves the KV over UCX (`vllm-nixl`, `sglang-nixl`) and a node of the placement reports the fact, that node cannot take a rank on an Ethernet network (the management network
+included); on a host RDMA network UCX is held to RDMA transports and may never run that check, so
 it is only the warning `PD_UCX_NETLINK_HANG_RDMA`, and evaluate keeps both. `gpuworks-agent doctor` reports the same condition (`ucx_netlink_hang`).
-Automatic placement goes through the same check after create has picked the nodes.
+
+**The rule lives in one place: the candidate facts.** The rule (a node whose kernel hangs UCX cannot take a rank when the mode moves the KV over UCX and the network is not
+host RDMA) is part of the candidate facts in `planning` (`UnitSuggestFacts`; like online state, the caller injects the hub's live fact, and nothing is read from the
+store), shared by every path that chooses nodes: automatic placement at create and evaluate, the controller's re-pick of an automatically placed unit, the replacement
+node after a node loss or during a drain, and PD replica scaling. These paths **skip** an affected node rather than pick it and fail afterwards. The earlier check ran only
+after create had picked the nodes, so a later controller re-pick or failover could still put a rank on a node that hangs. When skipping leaves no candidate the existing "no
+node can take it" answer applies (`UNIT_PLACEMENT_NONE`, the event `NODE_REPLACE_NO_CANDIDATE`), with the number of nodes left out and the first few names added to its
+params (`ucx_netlink_hang`, `ucx_netlink_nodes`), so the operator knows which to fix. A node the operator **names** is not swapped for another: it is refused by the same
+rule with `PD_UCX_NETLINK_HANG` and the fixes (error code, `params` and `fixes` unchanged). On a host RDMA network nothing is left out, only warned. The fact is an in-memory
+lookup once per candidate: no new full scan and no new persisted fact.
 
 **Allocate all ports once and persist them all.** The controller allocates an instance's API port and side-channel port block together and writes all of them to
 `Instance.Ports`; subsequent allocations avoid those ports.

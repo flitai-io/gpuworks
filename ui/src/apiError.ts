@@ -54,7 +54,13 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
   });
 }
 
-const placementChecks = ["unmet", "cordoned", "offline", "busy", "no_network"] as const;
+const placementChecks = ["unmet", "cordoned", "offline", "busy", "no_network", "ucx_netlink_hang"] as const;
+
+// The first few nodes left out for a kernel that hangs UCX, as the server names them.
+function ucxNetlinkNames(params: Record<string, unknown>): string {
+  const names = params.ucx_netlink_nodes;
+  return Array.isArray(names) ? names.filter((name): name is string => typeof name === "string").join(", ") : "";
+}
 
 /** The node counts of a placement refusal, joined with " · ": only the checks
  * that left nodes out, then the largest group sharing a network and GPU
@@ -63,7 +69,7 @@ const placementChecks = ["unmet", "cordoned", "offline", "busy", "no_network"] a
 export function placementShortfall(t: APIErrorTranslator, params: Record<string, unknown>): string {
   const parts = placementChecks
     .filter((check) => Number(params[check]) > 0)
-    .map((check) => t(`placementShortfall.${check === "busy" && params.per_rank != null ? "busyPerRank" : check}`, { n: params[check], per_rank: params.per_rank }));
+    .map((check) => t(`placementShortfall.${check === "busy" && params.per_rank != null ? "busyPerRank" : check}`, { n: params[check], per_rank: params.per_rank, names: ucxNetlinkNames(params) }));
   if (params.largest != null) parts.push(t("placementShortfall.largest", { n: params.largest }));
   return parts.join(" · ");
 }

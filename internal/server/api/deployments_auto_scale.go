@@ -21,7 +21,7 @@ import (
 // scaling is the replica scaling the handlers share with the automation
 // (planning.Scaling).
 func (a *apiHandlers) scaling() planning.Scaling {
-	return planning.Scaling{Store: a.d.Store, Resolve: a.networks().Resolve, Online: a.d.Online}
+	return planning.Scaling{Store: a.d.Store, Resolve: a.networks().Resolve, Online: a.d.Online, UCXNetlinkHang: a.ucxNetlinkHangOf()}
 }
 
 // writeScaleErr answers a scaling failure with the HTTP status of its kind

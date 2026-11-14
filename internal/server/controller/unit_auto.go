@@ -131,7 +131,7 @@ func (c *Controller) repickUnit(ctx context.Context, deployment *unitDeployment,
 			}
 		}
 	}
-	facts, err := planning.LoadUnitSuggestFacts(c.store, c.networks.Resolve, dep, deployment.requirements, listed, c.hub.Online, 1, c.rankGPUs(deployment, role, unit))
+	facts, err := c.unitFacts(deployment, listed, c.rankGPUs(deployment, role, unit))
 	if err != nil {
 		return unit, false, err
 	}

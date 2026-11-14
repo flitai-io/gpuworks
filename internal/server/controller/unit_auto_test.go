@@ -195,6 +195,13 @@ func TestAnAutomaticPDRoleMovesOffATakenNode(t *testing.T) {
 // the same network, with the model, online.
 func addPDSpare(t *testing.T, f *pdFixture, name string) *store.Node {
 	t.Helper()
+	return addPDSpareAt(t, f, name, "10.0.0.3")
+}
+
+// addPDSpareAt is addPDSpare with the address its management interface has,
+// for a fixture that needs more than one spare.
+func addPDSpareAt(t *testing.T, f *pdFixture, name, ip string) *store.Node {
+	t.Helper()
 	spare, err := f.st.RegisterNode(name, store.HashToken("token-"+name), name)
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +216,7 @@ func addPDSpare(t *testing.T, f *pdFixture, name string) *store.Node {
 	for _, node := range []*store.Node{f.nodes["n1"], f.nodes["n2"], spare} {
 		updates := map[string]any{"state": store.NodeStateOnline, "last_seen_at": now}
 		if node.ID == spare.ID {
-			updates["network_inventory"] = `{"interfaces":[{"name":"eth0","addrs":["10.0.0.3/24"]}],"rdma_ports":[],"management":{"interface":"eth0","ip":"10.0.0.3"}}`
+			updates["network_inventory"] = fmt.Sprintf(`{"interfaces":[{"name":"eth0","addrs":["%[1]s/24"]}],"rdma_ports":[],"management":{"interface":"eth0","ip":"%[1]s"}}`, ip)
 			updates["gpu_count"] = 1
 		}
 		if err := f.st.DB().Model(&store.Node{}).Where("id = ?", node.ID).Updates(updates).Error; err != nil {

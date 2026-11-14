@@ -28,6 +28,18 @@ test("nothing to place on says how many nodes each check left out", async () => 
   );
 });
 
+test("nodes left out for a kernel that hangs UCX are counted and named", async () => {
+  const params = { ...none, unmet: 0, cordoned: 0, offline: 0, busy: 0, no_network: 0, largest: 0, ucx_netlink_hang: 2, ucx_netlink_nodes: ["gpu-a", "gpu-b"] };
+  assert.equal(
+    await textFor("en", "UNIT_PLACEMENT_NONE", params),
+    "No group of nodes can take this deployment (of 12 nodes): 2 have a kernel that hangs UCX, which NIXL uses (gpu-a, gpu-b) · largest group sharing a network and GPU architecture: 0",
+  );
+  assert.equal(
+    await textFor("zh", "UNIT_PLACEMENT_NONE", params),
+    "没有能放下该部署的节点组（共 12 个节点）：2 个内核会让 NIXL 使用的 UCX 卡住（gpu-a, gpu-b） · 同网络同架构最多 0 个节点",
+  );
+});
+
 test("a check that left no node out is not listed", async () => {
   assert.equal(
     await textFor("zh", "UNIT_PLACEMENT_NONE", { nodes: 4, unmet: 0, cordoned: 0, offline: 1, busy: 3, no_network: 0, largest: 1 }),

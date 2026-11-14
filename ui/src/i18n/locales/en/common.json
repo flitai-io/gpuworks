@@ -1058,6 +1058,7 @@
     "busy": "{{n}} lack free GPUs",
     "busyPerRank": "{{n}} lack {{per_rank}} free GPU(s)",
     "no_network": "{{n}} without a compute network",
+    "ucx_netlink_hang": "{{n}} have a kernel that hangs UCX, which NIXL uses ({{names}})",
     "largest": "largest group sharing a network and GPU architecture: {{n}}"
   },
   "peerTransfer": {

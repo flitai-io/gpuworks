@@ -1058,6 +1058,7 @@
     "busy": "{{n}} 个空闲 GPU 不够",
     "busyPerRank": "{{n}} 个空闲 GPU 不足 {{per_rank}} 张",
     "no_network": "{{n}} 个没有参数网络",
+    "ucx_netlink_hang": "{{n}} 个内核会让 NIXL 使用的 UCX 卡住（{{names}}）",
     "largest": "同网络同架构最多 {{n}} 个节点"
   },
   "peerTransfer": {

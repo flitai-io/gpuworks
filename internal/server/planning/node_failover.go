@@ -14,7 +14,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
-	"gpuworks.ai/gpuworks/internal/server/pdmode"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -58,8 +57,11 @@ type ListedRank struct {
 // the deployment holds yet claims its cards.
 //
 // online says a node's agent is connected (the hub's Online); nil reads the
-// nodes' stored state, from the nodes this already reads.
-func LoadUnitSuggestFacts(st *store.Store, resolve func([]store.Node) (netplan.Resolution, error), dep *store.Deployment, reqs nodelabel.Requirements, listed []ListedRank, online func(string) bool, ranks, perRank int) (UnitSuggestFacts, error) {
+// nodes' stored state, from the nodes this already reads. ucxHang is the
+// hub's live UCX hang fact: for a PD deployment in a mode whose KV moves over
+// UCX it leaves the affected nodes out of every choice (UCXNetlinkBlocks);
+// nil leaves none out.
+func LoadUnitSuggestFacts(st *store.Store, resolve func([]store.Node) (netplan.Resolution, error), dep *store.Deployment, reqs nodelabel.Requirements, listed []ListedRank, online func(string) bool, ucxHang UCXNetlinkHangOf, ranks, perRank int) (UnitSuggestFacts, error) {
 	nodes, err := st.ListNodes()
 	if err != nil {
 		return UnitSuggestFacts{}, err
@@ -119,6 +121,7 @@ func LoadUnitSuggestFacts(st *store.Store, resolve func([]store.Node) (netplan.R
 	return UnitSuggestFacts{
 		Nodes: nodes, Held: held, Claimed: claimed, Leaders: leaders, Files: files, Facts: facts,
 		Online: online, Requirements: reqs, Ranks: ranks, PerRank: perRank, PeerMemory: needsPeerMemory(dep),
+		UCXNetlinkAffects: ucxHang != nil && ucxNetlinkAffects(dep), UCXNetlinkHang: ucxHang,
 	}, nil
 }
 
@@ -168,11 +171,7 @@ func WithRankOn(unit PDUnit, rank int, node string) PDUnit {
 // the KV over RDMA, so its instances go only where the NICs can register the
 // cards' memory.
 func needsPeerMemory(dep *store.Deployment) bool {
-	pd, err := PDOf(dep.Placement)
-	if err != nil || pd == nil {
-		return false
-	}
-	mode, ok := pdmode.Lookup(pd.Mode)
+	mode, ok := pdModeOf(dep)
 	return ok && mode.PeerMemory
 }
 

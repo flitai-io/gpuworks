@@ -392,7 +392,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		apiDeps.Diagnostics = diag
 	}
 	handler := api.Router(apiDeps, auth.SessionPolicy{IdleTimeout: cfg.SessionIdleTimeout, MaxLifetime: cfg.SessionMaxLifetime, Proxies: proxies, Cookie: cfg.sessionCookie()})
-	a.scaleReplicas = planning.Scaling{Store: st, Resolve: networks.Resolve, Online: h.Online}.ScaleScheduled
+	a.scaleReplicas = planning.Scaling{Store: st, Resolve: networks.Resolve, Online: h.Online, UCXNetlinkHang: h.UCXNetlinkHang}.ScaleScheduled
 	handler = api.WithSecurityHeaders(proxies, accessLogHandlerFor(log, cfg.DataDir, a.routeByFunction(cfg.experienceGuard(handler))))
 
 	// No read/write timeouts: the agent WS and SSE are long-lived. The WS
