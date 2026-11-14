@@ -2,11 +2,19 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/batch"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
+	"gpuworks.ai/gpuworks/internal/server/monitorapi"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -115,5 +123,77 @@ func TestMonitorAndBatchHeadlessRankIsNotAServingReplica(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].State != batch.ModelFailed {
 		t.Errorf("batch models = %+v, want one failed", entries)
+	}
+}
+
+// With the server's list snapshot, the monitor's inventory and the batches'
+// model list read no deployment or instance row while nothing changes, and
+// show the states the per-request read gives.
+func TestMonitorAndBatchReadTheListSnapshot(t *testing.T) {
+	st, ts := newMonitorTestStore(t), newMonitorTestTSDB(t)
+	node, err := st.RegisterNode("snap-node", store.HashToken("snap"), "snap-node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetNodeState(node.UUID, store.NodeStateOnline); err != nil {
+		t.Fatal(err)
+	}
+	for i, state := range []string{proto.InstRunning, proto.InstPulling, proto.InstFailed} {
+		dep, err := st.CreateDeployment(&store.Deployment{Name: fmt.Sprintf("snap-%d", i), ServedName: fmt.Sprintf("snap-%d", i), Engine: "vllm", NodeID: node.ID, Replicas: 1, State: store.DeployActive})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.CreateInstance(&store.Instance{UUID: fmt.Sprintf("snap-inst-%d", i), DeploymentID: dep.ID, NodeID: node.ID, State: state, GPUIndexes: "[0]"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lists := deployment.NewLists(st, nil, nil)
+	snapshot := newMonitorAPIServiceOn(lists, st, ts, time.Now, nil, nil, nil)
+	perRequest := newMonitorAPIService(st, ts, time.Now, nil, nil, nil)
+	var reads atomic.Int64
+	if err := st.DB().Callback().Query().After("gorm:query").Register("test:monitor_table_reads", func(tx *gorm.DB) {
+		if regexp.MustCompile("^SELECT \\* FROM [`\"]?(deployments|instances)[`\"]? ORDER BY id desc$").MatchString(strings.TrimSpace(tx.Statement.SQL.String())) {
+			reads.Add(1)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.DB().Callback().Query().Remove("test:monitor_table_reads") })
+	states := func(svc *monitorapi.Service) map[string]string {
+		t.Helper()
+		ov, err := svc.Overview(context.Background(), time.Hour)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, s := range ov.Services {
+			out[s.Name] = s.State
+		}
+		return out
+	}
+	want := states(perRequest)
+	wantBatch, err := batchModels{st: st}.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	states(snapshot)
+	if _, err := (batchModels{st: st, lists: lists}).List(); err != nil {
+		t.Fatal(err)
+	}
+	reads.Store(0)
+	for range 3 {
+		if got := states(snapshot); fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("monitor states from the snapshot %v, per request %v", got, want)
+		}
+		got, err := batchModels{st: st, lists: lists}.List()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fmt.Sprint(got) != fmt.Sprint(wantBatch) {
+			t.Fatalf("batch models from the snapshot %v, per request %v", got, wantBatch)
+		}
+	}
+	if n := reads.Load(); n != 0 {
+		t.Fatalf("3 unchanged monitor overviews and batch lists read every deployment or instance %d times, want 0", n)
 	}
 }

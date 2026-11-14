@@ -65,7 +65,7 @@ func (s *Store) NodesForStorageStatus() ([]Node, error) {
 // for a (model, node) pair is the one ModelFileByModelNode returns.
 func (s *Store) ListModelFiles() ([]ModelFile, error) {
 	var mfs []ModelFile
-	err := s.db.Order("id asc").Find(&mfs).Error
+	err := s.reader().Order("id asc").Find(&mfs).Error
 	return mfs, err
 }
 
@@ -73,9 +73,9 @@ func (s *Store) ListModelFiles() ([]ModelFile, error) {
 // same row FirstScheduleEvent returns for one deployment.
 func (s *Store) FirstScheduleEvents() (map[uint]InstanceEvent, error) {
 	var events []InstanceEvent
-	firsts := s.db.Model(&InstanceEvent{}).Select("MIN(id)").
+	firsts := s.reader().Model(&InstanceEvent{}).Select("MIN(id)").
 		Where("kind = ? AND deployment_id <> 0", EventKindSchedule).Group("deployment_id")
-	if err := s.db.Where("id IN (?)", firsts).Find(&events).Error; err != nil {
+	if err := s.reader().Where("id IN (?)", firsts).Find(&events).Error; err != nil {
 		return nil, err
 	}
 	out := make(map[uint]InstanceEvent, len(events))
@@ -89,9 +89,9 @@ func (s *Store) FirstScheduleEvents() (map[uint]InstanceEvent, error) {
 // one query for a list: what the deployment's placement status shows.
 func (s *Store) LatestScheduleEvents() (map[uint]InstanceEvent, error) {
 	var events []InstanceEvent
-	latest := s.db.Model(&InstanceEvent{}).Select("MAX(id)").
+	latest := s.reader().Model(&InstanceEvent{}).Select("MAX(id)").
 		Where("kind = ? AND deployment_id <> 0", EventKindSchedule).Group("deployment_id")
-	if err := s.db.Where("id IN (?)", latest).Find(&events).Error; err != nil {
+	if err := s.reader().Where("id IN (?)", latest).Find(&events).Error; err != nil {
 		return nil, err
 	}
 	out := make(map[uint]InstanceEvent, len(events))

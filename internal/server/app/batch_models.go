@@ -22,6 +22,9 @@ type batchModels struct {
 	// prep reads model preparation, which tells a deployment whose download
 	// failed from one still being prepared; nil reads none.
 	prep deployment.ModelPreparation
+	// lists is the server's list snapshot List reads; nil reads the rows
+	// per call.
+	lists *deployment.Lists
 }
 
 func (m batchModels) Lookup(name string) (batch.ModelEntry, error) {
@@ -52,23 +55,24 @@ func (m batchModels) Lookup(name string) (batch.ModelEntry, error) {
 // its state: the deployments, their instances and their models are each read
 // once, as the monitor's inventory reads them.
 func (m batchModels) List() ([]batch.ModelEntry, error) {
-	deployments, err := m.st.ListDeployments()
+	var rows *deployment.ListRows
+	var err error
+	if m.lists != nil {
+		rows, err = m.lists.Rows()
+	} else {
+		rows, err = deployment.ReadListRows(m.st, m.prep)
+	}
 	if err != nil {
 		return nil, err
 	}
-	instances, err := m.st.ListInstances()
-	if err != nil {
-		return nil, err
+	deployments, instances := rows.Deployments(), rows.AllInstances()
+	byID := make(map[uint]*store.Model)
+	for i := range deployments {
+		if model := rows.Model(deployments[i].ModelID); model != nil {
+			byID[model.ID] = model
+		}
 	}
-	models, err := m.st.ListModels()
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[uint]*store.Model, len(models))
-	for i := range models {
-		byID[models[i].ID] = &models[i]
-	}
-	entries, err := m.entries(deployments, instances, byID)
+	entries, err := m.entriesWith(deployments, instances, byID, rows.States())
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +108,12 @@ func (m batchModels) modelsOf(rows []store.Deployment) (map[uint]*store.Model, e
 // entry per name: its best state and the endpoints any of its deployments
 // exposes, in no particular order.
 func (m batchModels) entries(deployments []store.Deployment, instances []store.Instance, models map[uint]*store.Model) ([]batch.ModelEntry, error) {
+	return m.entriesWith(deployments, instances, models, nil)
+}
+
+// entriesWith is entries with every deployment's state already worked out
+// (ListRows.States); nil works the kept deployments' states out.
+func (m batchModels) entriesWith(deployments []store.Deployment, instances []store.Instance, models map[uint]*store.Model, states map[uint]string) ([]batch.ModelEntry, error) {
 	var kept []store.Deployment
 	for _, d := range deployments {
 		if d.ServedName != "" && (d.State == store.DeployActive || d.State == store.DeployStopped) {
@@ -113,9 +123,11 @@ func (m batchModels) entries(deployments []store.Deployment, instances []store.I
 	if len(kept) == 0 {
 		return nil, nil
 	}
-	states, err := deployment.EffectiveStates(m.st, m.prep, kept, instances)
-	if err != nil {
-		return nil, err
+	if states == nil {
+		var err error
+		if states, err = deployment.EffectiveStates(m.st, m.prep, kept, instances); err != nil {
+			return nil, err
+		}
 	}
 	byDeployment := map[uint][]store.Instance{}
 	for _, in := range instances {

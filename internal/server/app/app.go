@@ -28,6 +28,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/controller"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/expose"
 	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 	"gpuworks.ai/gpuworks/internal/server/hub"
@@ -258,8 +259,11 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	ai.log = log
 	ai.readPrivateHosts = readPrivateHosts
 	health := healthcheck.New(healthSource{store: st}, healthSender{proxy: px})
-	batches := batch.New(batchRepo{st}, batchSender{px}, batch.Config{Dir: filepath.Join(cfg.DataDir, "batch-files"), Models: batchModels{st, modelPreparation{h, ctrl}}, Log: log})
-	monSvc := newMonitorAPIService(st, obs.tsdb, nil, newRequestSource(st, px.LiveRequests, obs.ux), health.Health, modelPreparation{h, ctrl})
+	// The deployment and instance lists, the dashboard, the monitor and the
+	// batches' model list share one snapshot of every deployment and instance.
+	lists := deployment.NewLists(st, modelPreparation{h, ctrl}, nil)
+	batches := batch.New(batchRepo{st}, batchSender{px}, batch.Config{Dir: filepath.Join(cfg.DataDir, "batch-files"), Models: batchModels{st, modelPreparation{h, ctrl}, lists}, Log: log})
+	monSvc := newMonitorAPIServiceOn(lists, st, obs.tsdb, nil, newRequestSource(st, px.LiveRequests, obs.ux), health.Health, modelPreparation{h, ctrl})
 
 	a := &App{cfg: cfg, log: log, store: st, bus: b, hub: h, ctrl: ctrl, obs: obs, ops: ops, selfLog: cfg.SelfLog, proxyAcct: acct, proxy: px, health: health, batches: batches, telemetry: telemetry}
 	var restart func()
@@ -333,6 +337,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		},
 		CancelModelSync: ctrl.CancelModelSync,
 		Preparation:     modelPreparation{h, ctrl},
+		Lists:           lists,
 		NodeRuntime:     h,
 		Outside:         outside,
 		ImageFetch: api.ImageFetchHooks{

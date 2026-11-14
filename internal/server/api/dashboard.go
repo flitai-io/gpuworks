@@ -20,21 +20,12 @@ func (a *apiHandlers) dashboardSummary(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	deps, err := a.d.Store.ListDeployments()
+	rows, deps, _, err := a.listRows()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	instances, err := a.d.Store.ListInstances()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, instances)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
+	states := rows.States()
 	out := summarizeNodes(nodes, strings.TrimSpace(r.URL.Query().Get("label_key")))
 	out.CurrentMetrics = a.dashboardCurrentMetrics(nodes)
 	out.Cards = a.dashboardCards()
@@ -47,8 +38,7 @@ func (a *apiHandlers) dashboardSummary(w http.ResponseWriter, r *http.Request) {
 		}
 		// A sleeping or asleep deployment serves nothing, so it is counted as
 		// sleeping, not running; whatever no bucket names is Other.
-		insts := rows.Instances(d.ID)
-		switch deployment.EffectiveState(d, deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d)), deployment.FactsFor(rows, d, insts)) {
+		switch states[d.ID] {
 		case "running":
 			out.Deployments.Running++
 		case "pulling", "starting":

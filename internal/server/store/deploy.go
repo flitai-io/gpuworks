@@ -182,7 +182,7 @@ func (s *Store) SetModelInferenceConfig(id uint, operations, inputModalities str
 
 // ListModels returns models newest-first, optionally limited to repository IDs.
 func (s *Store) ListModels(sourceIDs ...string) ([]Model, error) {
-	query := s.db
+	query := s.reader()
 	if len(sourceIDs) > 0 {
 		ids := make([]string, len(sourceIDs))
 		for i, id := range sourceIDs {
@@ -652,6 +652,17 @@ func (s *Store) InstancesForDeployment(depID uint) ([]Instance, error) {
 	return is, err
 }
 
+// InstancesForDeployments lists the deployments' instances in the order
+// ListInstances and InstancesForDeployment share, newest first.
+func (s *Store) InstancesForDeployments(ids []uint) ([]Instance, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var is []Instance
+	err := s.reader().Where("deployment_id IN ?", ids).Order("id desc").Find(&is).Error
+	return is, err
+}
+
 // ListInstances returns all instances.
 func (s *Store) ListInstances() ([]Instance, error) {
 	var is []Instance
@@ -994,9 +1005,18 @@ func (s *Store) AddDeploymentEventCode(deploymentID uint, kind, code string, par
 func (s *Store) addEvent(ev *InstanceEvent, kind, code string, params map[string]any) {
 	params, cards := s.schedulingPlacement(code, ev.InstanceUUID, params)
 	if addEventTo(s.db, ev, kind, code, params) == nil {
+		if kind == EventKindSchedule {
+			s.scheduleEvents.Add(1)
+		}
 		s.observe(*ev, cards)
 	}
 }
+
+// ScheduleEventCount counts the scheduling events (placement refusals,
+// retries given up) this store has written. They publish nothing on the bus,
+// but a deployment list shows them: deployment.Lists reads the count to know
+// its rows are stale.
+func (s *Store) ScheduleEventCount() uint64 { return s.scheduleEvents.Load() }
 
 func addEventTo(tx *gorm.DB, ev *InstanceEvent, kind, code string, params map[string]any) error {
 	data, err := json.Marshal(params)
