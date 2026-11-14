@@ -130,18 +130,26 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 		}
 	}
 	variables := launchVariables(input.Engine, params, modelMount, input.PlacementVariables, input.AllowUnresolved)
-	params.TemplateArgs, err = expandValues(params.TemplateArgs, variables, input.AllowUnresolved)
+	expand := func(values []string) ([]string, error) {
+		if params.Symbolic {
+			// The rank-owned names stay ${NAME}: the manual script they end
+			// up in is expanded again for each rank.
+			return placementeval.Expand(values, variables, true)
+		}
+		return expandValues(values, variables, input.AllowUnresolved)
+	}
+	params.TemplateArgs, err = expand(params.TemplateArgs)
 	if err == nil {
-		params.TemplateEnv, err = placementeval.ExpandMap(params.TemplateEnv, variables, input.AllowUnresolved)
+		params.TemplateEnv, err = placementeval.ExpandMap(params.TemplateEnv, variables, input.AllowUnresolved || params.Symbolic)
 	}
 	if err == nil {
-		entrypoint, err = expandValues(entrypoint, variables, input.AllowUnresolved)
+		entrypoint, err = expand(entrypoint)
 	}
 	if err == nil {
-		preStartArgv, err = expandValues(preStartArgv, variables, input.AllowUnresolved)
+		preStartArgv, err = expand(preStartArgv)
 	}
 	if err == nil && preStartScript != "" {
-		preStartScript, err = expandScript(preStartScript, variables, input.AllowUnresolved)
+		preStartScript, err = expandScript(preStartScript, variables, input.AllowUnresolved || params.Symbolic)
 	}
 	if err != nil {
 		return ResolvedLaunch{}, nil, fmt.Errorf("resolve launch variables: %w", err)
@@ -190,10 +198,20 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 	if command.templateEntrypoint {
 		finalEntrypoint = entrypoint
 	}
+	if mode == CommandManual {
+		// A manual command shares the template's variables: the names this
+		// launch states are replaced here, per rank, and every other ${NAME}
+		// is the shell's.
+		if manualScript != "" {
+			manualScript = expandManualCommand([]string{manualScript}, variables)[0]
+		}
+		commandArgv = expandManualCommand(commandArgv, variables)
+	}
 	launch := AssembleCommand(input.Engine, built, ImageCommand{
-		Mode:       mode,
-		Entrypoint: finalEntrypoint,
-		Cmd:        commandArgv,
+		Mode:          mode,
+		Entrypoint:    finalEntrypoint,
+		Cmd:           commandArgv,
+		KeepSystemEnv: params.multiRank(),
 	})
 	for key, value := range built.EnvLayers.Template {
 		launch.Env[key] = value

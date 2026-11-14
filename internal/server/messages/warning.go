@@ -34,6 +34,12 @@ const (
 	// WarningPlanningKVBelowContext is an uncertain KV capacity prediction,
 	// not a startup/resource refusal. Params: kv_tokens, max_model_len.
 	WarningPlanningKVBelowContext = "PLANNING_KV_BELOW_CONTEXT"
+	// WarningManualDraftUnavailable: a multi-node or PD draft has no manual
+	// command script that runs every rank's own engine command, because ranks
+	// of one kind differ in something no platform variable carries (the RDMA
+	// device names of two nodes, say). The command cannot be edited from the
+	// form; no params.
+	WarningManualDraftUnavailable = "MANUAL_DRAFT_UNAVAILABLE"
 )
 
 // WarningKubeEnginePortsOutside: an edit of a Kubernetes entry's engine_ports

@@ -54,6 +54,11 @@ one deployment with one service name. Send requests to `/v1` as usual; the gatew
    If two machines are directly connected by card number without a switch, P and D must select matching card numbers that are actually connected.
    First run **Card reachability · full card matrix** under the network's **Internal test** to check cabling. Deployment validation does not verify card-to-card links for you.
 
+To write the launch command yourself, click **Edit Command Text** in the command preview. The editor starts from a script the server generates: the prefill and decode commands sit in a
+`case` that branches on `${GPUWORKS_PD_ROLE}`, and values known only per instance, such as the side channel address and port, come from variables or from environment variables the platform injects. The command must reference
+`${GPUWORKS_PD_ROLE}` (and `${GPUWORKS_NODE_RANK}` or `${GPUWORKS_HEADLESS}` when an instance spans several nodes); otherwise evaluation and creation return
+`MANUAL_COMMAND_RANK_BLIND`. See [Manual Commands for Multi-Node and PD Deployments](../explanation/launch-config.md#多机与-pd-的手工命令).
+
 ### PPU KV over RDMA
 
 `sglang-ppu-mooncake` and `vllm-ppu-mooncake` use Mooncake to read and write the cards' memory directly through the host's RoCE/IB NICs, so:

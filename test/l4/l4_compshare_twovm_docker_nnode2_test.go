@@ -58,7 +58,7 @@ func runTwoVMDockerDistributed(t *testing.T, b *vmBackend) {
 	t.Logf("TIMING preloaded model registration on both nodes=%s", time.Since(modelStarted).Round(time.Second))
 
 	deploymentStarted := time.Now()
-	d := createHostedDeployment(t, harness, map[string]any{
+	body := map[string]any{
 		"model_id": model.ID, "node_uuid": harness.Nodes[0].UUID,
 		"node_uuids":  []string{harness.Nodes[0].UUID, harness.Nodes[1].UUID},
 		"served_name": b.servedName("twovm-docker-nnode2"),
@@ -67,7 +67,8 @@ func runTwoVMDockerDistributed(t *testing.T, b *vmBackend) {
 		"placement":           map[string]any{"tp": 2, "pp": 2},
 		"quick_params":        map[string]any{"max_model_len": 1024},
 		"container_overrides": distributedVLLMContainerOverrides(),
-	}, 2, compshareTwoVMDockerDeploymentTimeout)
+	}
+	d := createHostedDeployment(t, harness, body, 2, compshareTwoVMDockerDeploymentTimeout)
 	readyAt := time.Now()
 	t.Logf("TIMING deployment create-to-both-running=%s", readyAt.Sub(deploymentStarted).Round(time.Second))
 
@@ -79,6 +80,23 @@ func runTwoVMDockerDistributed(t *testing.T, b *vmBackend) {
 	t.Logf("TIMING gateway chat=%s", time.Since(chatStarted).Round(time.Millisecond))
 	t.Logf("two real %s VMs completed gpuworks Docker nnodes=2 gateway chat", b.Name)
 	d.stop(t)
+
+	// The same group again, started from one manual script shared by both
+	// ranks: each rank must run it with its own rank number.
+	manualStarted := time.Now()
+	manual := hostedCreateWithManualDraft(t, harness, body, b.servedName("twovm-docker-manual"),
+		"rank=${GPUWORKS_NODE_RANK} headless=${GPUWORKS_HEADLESS}", 2, compshareTwoVMDockerDeploymentTimeout)
+	for _, instance := range manual.instances {
+		rank := instance.NodeRank
+		if rank < 0 || rank > 1 || instance.NodeUUID != harness.Nodes[rank].UUID {
+			t.Fatalf("manual instance rank %d on node %s", rank, instance.NodeUUID)
+		}
+		assertManualCommandRan(t, harness.VMs[rank], instance, fmt.Sprintf("rank=%d headless=%d", rank, rank),
+			fmt.Sprintf("case \"%d\" in", rank), fmt.Sprintf("--node-rank %d ", rank), "--master-addr "+harness.VMs[0].Instance.PrivateIP+" ")
+	}
+	manual.chat(t)
+	manual.stop(t)
+	t.Logf("TIMING manual-command redeploy+chat=%s", time.Since(manualStarted).Round(time.Second))
 	t.Logf("TIMING complete two-VM Docker case=%s", time.Since(testStarted).Round(time.Second))
 }
 

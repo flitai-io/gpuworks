@@ -22,6 +22,12 @@ type ImageCommand struct {
 	Mode       CommandMode
 	Entrypoint []string
 	Cmd        []string
+	// KeepSystemEnv keeps the engine and compute-network environment under a
+	// manual command. A rank of a multi-node group or a PD instance needs it:
+	// that environment holds facts of one rank on one node (its address, its
+	// interfaces, its side channel) that one script shared by every rank
+	// cannot write down.
+	KeepSystemEnv bool
 }
 
 // AssembleCommand applies the image command contract to an engine result. The
@@ -47,7 +53,9 @@ func AssembleCommand(engine Engine, built ResolvedLaunch, image ImageCommand) Re
 	case CommandManual:
 		out.Entrypoint = append([]string(nil), image.Entrypoint...)
 		out.Argv = append([]string(nil), image.Cmd...)
-		out.Env = map[string]string{}
+		if !image.KeepSystemEnv {
+			out.Env = map[string]string{}
+		}
 	}
 	return out
 }

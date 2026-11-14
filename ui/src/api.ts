@@ -3768,6 +3768,12 @@ export interface EvaluateResponse {
   // PD previews a PD disaggregated draft instance by instance (ADR 0028); the
   // command fields above then describe the first decode instance.
   pd?: EvaluatePd;
+  // The shell script a multi-node or PD draft's manual command starts from,
+  // written with platform variables the server expands per rank. Absent for a
+  // single launch and when no faithful script exists (MANUAL_DRAFT_UNAVAILABLE).
+  manual_command_draft?: string;
+  // The prefixed platform variable names these launches state, sorted.
+  manual_command_variables?: string[];
   // Whether the draft may be created with a yield policy other than never,
   // the create's own check; absent until the draft's engine is known.
   yield_policy_eligible?: Eligibility;

@@ -52,6 +52,11 @@ PD 分离把一个模型的推理拆成两组实例：prefill 实例只算提示
    没有交换机、两台机器按卡号直连时，P、D 要选择实际互通的同号卡。
    可先在网络**内部测试**中运行**卡连通性 · 全卡矩阵**确认布线；部署校验不会替你验证卡间链路。
 
+需要手写启动命令时，在命令预览点「编辑命令文本」：编辑框从服务端生成的脚本开始，prefill 与 decode 的命令放在按
+`${GPUWORKS_PD_ROLE}` 分支的 `case` 里，side channel 地址与端口等按实例才知道的值由变量或平台注入的环境变量给出。命令必须引用
+`${GPUWORKS_PD_ROLE}`（实例跨多机时还要引用 `${GPUWORKS_NODE_RANK}` 或 `${GPUWORKS_HEADLESS}`），否则评估与创建返回
+`MANUAL_COMMAND_RANK_BLIND`。详见[多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。
+
 ### PPU 经 RDMA 传 KV
 
 `sglang-ppu-mooncake`、`vllm-ppu-mooncake` 用 Mooncake 经主机的 RoCE/IB 网卡直接读写卡的显存，所以：

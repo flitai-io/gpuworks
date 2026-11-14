@@ -68,4 +68,9 @@ const (
 	// (repo_id@revision is the source the spec resolved). The server refuses
 	// the choice rather than substituting another model.
 	ErrorTemplateModelMismatch = "TEMPLATE_MODEL_MISMATCH"
+	// ErrorManualCommandRankBlind: a multi-node or PD request's manual
+	// command references none of the variables that tell its launches apart,
+	// so every rank would start as the same rank in the same role. missing
+	// lists the prefixed variable names the command has to reference.
+	ErrorManualCommandRankBlind = "MANUAL_COMMAND_RANK_BLIND"
 )

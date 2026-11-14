@@ -62,6 +62,7 @@ func (s *Service) evaluateRanks(env evaluateRankEnv) bool {
 		}
 		resp.Warnings = append(resp.Warnings, computeFallbackWarning(group)...)
 	}
+	var draftInputs []deploy.ResolveLaunchInput
 	for rank, rankNode := range rankNodes {
 		modelMount, componentMounts := previewComponentMounts(s.d.Store, selection.Components, rankNode)
 		topology := planning.DistTopology{NNodes: req.NNodes, NodeRank: rank, Role: "standalone"}
@@ -92,6 +93,7 @@ func (s *Service) evaluateRanks(env evaluateRankEnv) bool {
 			return false
 		}
 		res := plan.Resolved
+		draftInputs = append(draftInputs, plan.LaunchInput)
 		resp.Warnings = append(resp.Warnings, plan.Warnings...)
 		resp.Warnings = append(resp.Warnings, plan.Output.Warnings...)
 		if dynamicTPPreview {
@@ -119,6 +121,9 @@ func (s *Service) evaluateRanks(env evaluateRankEnv) bool {
 		}
 	}
 	if len(resp.RankCommands) > 0 {
+		if req.NNodes > 1 {
+			setManualCommandDraft(resp, draftInputs)
+		}
 		return true
 	}
 	return s.evaluateRankFallback(env)

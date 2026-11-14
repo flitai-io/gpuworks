@@ -91,6 +91,16 @@ Command mode selects **how to interpret the launch command** for a deployment. T
 
 `engine` and `image-entry` are not exceptions: all their engine parameters come from the single launch configuration.
 
+### Manual Commands for Multi-Node and PD Deployments
+
+A deployment stores one manual command, and every rank of a multi-node group and every PD instance runs it; platform variables express how the ranks differ:
+
+- Write names **with the `GPUWORKS_` prefix**, such as `${GPUWORKS_NODE_RANK}`, in the manual command. Before each rank starts, the server replaces them with that rank's values and only then hands the script to the shell. For the variable vocabulary, see [Inference Catalog Syntax · Variable Expansion](../reference/inference-catalog-spec.md#变量展开).
+- A manual command recognizes prefixed names only. Unprefixed `${MODEL_PATH}` and `${API_PORT}`, as well as the script's own variables, are left unchanged for the shell, so existing single-node manual commands stay exactly as written; a prefixed name this launch does not state (`${GPUWORKS_MASTER_ADDR}` on a single node) is left unchanged too.
+- A manual launch of a multi-node rank or a PD instance **keeps the system environment layer** (facts known only per rank and per node, such as `VLLM_HOST_IP`, compute-network interfaces, and the PD side channel), layered as in `engine` mode: system → template → user; values the script `export`s itself take effect last. A single-node, non-PD manual launch still has no system layer.
+- For a multi-node or PD deployment, **Edit Command Text** on the deployment page starts the editor from a script draft the server generates: one engine command per class of rank (PD role × headless or not), inside a `case` that branches on `${GPUWORKS_PD_ROLE}/${GPUWORKS_HEADLESS}` (only `${GPUWORKS_HEADLESS}` without PD). The draft contains no preparation script or environment variables; the platform still runs the preparation per rank. When ranks of one class differ in something no variable carries (for example the RDMA device names of two nodes), there is no draft, the evaluation reports a `MANUAL_DRAFT_UNAVAILABLE` warning, and the command cannot be edited from the form.
+- Evaluation and creation refuse a manual command that cannot tell ranks apart: a multi-node command must reference `${GPUWORKS_NODE_RANK}` or `${GPUWORKS_HEADLESS}`, and a PD command must reference `${GPUWORKS_PD_ROLE}` (both apply when a PD instance spans several nodes); otherwise they return `MANUAL_COMMAND_RANK_BLIND`. The rule does not apply to deployments already stored, which keep launching as before.
+
 ## Configured Environment and Image Environment
 
 An image is a runtime artifact. The engine version, framework, architecture, download locations, and actual OCI ENTRYPOINT/CMD/ENV inside the image are all **image facts**. They are distinct from the launch inputs configured for this deployment:

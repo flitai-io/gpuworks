@@ -214,6 +214,7 @@ func (s *Service) evaluatePD(env evaluatePDEnv) {
 		byUUID[n.UUID] = n
 	}
 	resp.PD = &dto.EvaluatePD{Mode: mode.Name, Fallback: pd.EffectiveFallback(), KVLoadFailure: pd.EffectiveKVLoadFailure()}
+	var draftInputs []deploy.ResolveLaunchInput
 	for _, role := range mode.Roles {
 		row := dto.EvaluatePDRole{Role: role, TP: pd.TP(role), PP: pd.Roles[role].PP}
 		for _, unit := range pd.Units(role) {
@@ -238,6 +239,7 @@ func (s *Service) evaluatePD(env evaluatePDEnv) {
 					out.fieldErrors(resp, env.errs)
 					return
 				}
+				draftInputs = append(draftInputs, plan.LaunchInput)
 				resp.Warnings = append(resp.Warnings, plan.Warnings...)
 				resp.Warnings = append(resp.Warnings, plan.Output.Warnings...)
 				if !preview.Fits {
@@ -259,6 +261,10 @@ func (s *Service) evaluatePD(env evaluatePDEnv) {
 	}
 	resp.Replicas = pd.InstanceCount()
 	resp.PlanScope = "per_instance"
+	setManualCommandDraft(resp, draftInputs)
+	if err := checkManualCommandRanks(req); err != nil {
+		env.errs.add(fieldContainerCmd, err)
+	}
 	if !env.errs.empty() {
 		resp.OK = false
 		resp.Errors = env.errs.items

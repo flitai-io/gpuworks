@@ -37,7 +37,7 @@ func runPDDeployChatTwoVMDocker(t *testing.T, b *vmBackend) {
 	})
 	model := hostedPrepareRealModel(t, harness)
 	prefillNode, decodeNode := harness.Nodes[0], harness.Nodes[1]
-	d := createHostedDeployment(t, harness, map[string]any{
+	body := map[string]any{
 		"model_id": model.ID, "served_name": b.servedName("pd"),
 		"engine": "vllm", "image": b.DistributedImage,
 		"quick_params": map[string]any{"max_model_len": 4096},
@@ -45,7 +45,8 @@ func runPDDeployChatTwoVMDocker(t *testing.T, b *vmBackend) {
 			"prefill": map[string]any{"tp": 1, "units": []any{map[string]any{"node_uuid": prefillNode.UUID, "gpus": []int{0}}}},
 			"decode":  map[string]any{"tp": 1, "units": []any{map[string]any{"node_uuid": decodeNode.UUID, "gpus": []int{0}}}},
 		}}},
-	}, 2, compsharePDDeploymentTimeout)
+	}
+	d := createHostedDeployment(t, harness, body, 2, compsharePDDeploymentTimeout)
 
 	var prefill, decode dto.Instance
 	for _, inst := range d.instances {
@@ -96,6 +97,27 @@ func runPDDeployChatTwoVMDocker(t *testing.T, b *vmBackend) {
 		t.Fatalf("decode local prompt tokens %v -> %v: the fallback request did not reach the decoder", local, after)
 	}
 	d.stop(t)
+
+	// The same PD deployment again, started from one manual script shared by
+	// both roles: each instance must run its own role's branch, and the KV
+	// still has to cross from the prefill instance to the decoder.
+	manual := hostedCreateWithManualDraft(t, harness, body, b.servedName("pd-manual"),
+		"role=${GPUWORKS_PD_ROLE}", 2, compsharePDDeploymentTimeout)
+	var manualPrefill dto.Instance
+	for _, inst := range manual.instances {
+		vm := harness.VMs[1]
+		if inst.Role == "prefill" {
+			manualPrefill, vm = inst, harness.VMs[0]
+		}
+		// The script holds both roles' branches; the expanded case subject
+		// is what selects this instance's.
+		assertManualCommandRan(t, vm, inst, "role="+inst.Role, fmt.Sprintf("case %q in", inst.Role+"/0"))
+	}
+	if verified := hostedWaitPDHandoff(t, harness, manualPrefill.UUID, 10*time.Minute); verified.Code != "PD_HANDOFF_VERIFIED" {
+		t.Fatalf("manual PD handoff check = %s %v, want PD_HANDOFF_VERIFIED", verified.Code, verified.Params)
+	}
+	manual.chat(t)
+	manual.stop(t)
 }
 
 // hostedWaitPDHandoff waits for the server's handoff check on a prefill

@@ -8,7 +8,8 @@ import (
 // ResolveAllocatedLaunch resolves executable fields for an existing allocation.
 // It does no scheduling, estimates, I/O or resource admission. PlanLaunch calls
 // it after scheduling; template export calls it with the instance's captured
-// allocation. Only Params/Profile/Resolved/Warnings of the returned plan are set.
+// allocation. Only Params/Profile/LaunchInput/Resolved/Warnings of the returned
+// plan are set.
 func ResolveAllocatedLaunch(req LaunchRequest, indexes []int, assigned int, parallel parallelism.Spec, apiPort int, variables map[string]any, weightBytes int64, unresolved bool) (LaunchPlan, error) {
 	plan := LaunchPlan{}
 	gpu, err := launchGPU(req.Node, indexes)
@@ -28,7 +29,7 @@ func ResolveAllocatedLaunch(req LaunchRequest, indexes []int, assigned int, para
 	if err != nil {
 		return plan, err
 	}
-	plan.Resolved, plan.Warnings, err = deploy.ResolveLaunchWithWarnings(deploy.ResolveLaunchInput{
+	plan.LaunchInput = deploy.ResolveLaunchInput{
 		StartTimeoutSec: req.StartTimeoutSec, DefaultStartTimeoutSec: req.DefaultStartTimeoutSec,
 		Engine: engine, Params: plan.Params, Image: req.Source.Image, TargetValidation: deploy.ValidateAssignedTarget,
 		ContainerOverrides: req.Source.Overrides, ComponentModelMount: componentModelMount(req),
@@ -37,6 +38,7 @@ func ResolveAllocatedLaunch(req LaunchRequest, indexes []int, assigned int, para
 		ComponentMounts: req.ComponentMounts, ModelPaths: req.ModelPaths, TemplateShmBytes: req.Selection.ShmBytes, TemplateMemlockUnlimited: req.Selection.MemlockUnlimited,
 		APIContract: req.APIContract, PlacementVariables: variables, AllowUnresolved: unresolved,
 		HealthPath: plan.Profile.HealthPath, ModelWeightBytes: weightBytes,
-	})
+	}
+	plan.Resolved, plan.Warnings, err = deploy.ResolveLaunchWithWarnings(plan.LaunchInput)
 	return plan, err
 }

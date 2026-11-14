@@ -495,6 +495,11 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	}) {
 		return
 	}
+	// Checked once the ranks are previewed, so the form shows the refusal
+	// beside the launches and the draft that would satisfy it.
+	if err := checkManualCommandRanks(req); err != nil {
+		errs.add(fieldContainerCmd, err)
+	}
 	// The create resolves its launch on the per-node card count the request
 	// states, where the plan above used the cards the scheduler assigned; a
 	// memory-limited draft can get fewer cards than it states. The same

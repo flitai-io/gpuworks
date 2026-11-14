@@ -397,6 +397,11 @@ type Params struct {
 	// RuntimeDriver is the container runtime the target node reports
 	// ("docker", "udocker", "host", ...); empty when no node is known.
 	RuntimeDriver string
+	// Symbolic makes the engine write the facts only one rank's launch knows
+	// (API port, node rank, master port, PD side channel port) as their
+	// ${NAME} references instead of this rank's values. It builds the command
+	// a manual script starts from (ManualCommandDraft), never a launch.
+	Symbolic bool
 }
 
 // ResolvedLaunch is the single launch contract shared with the agent protocol.
