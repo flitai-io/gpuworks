@@ -17,3 +17,14 @@
 - antd and Zeron coexist while pages migrate; check docs/dev/ui.md before assuming a component exists.
 
 See [UI development](../docs/dev/ui.md) for sources, directories and verification.
+
+## Semantic charts and code typography
+
+- Applies to every chart, SVG, capacity bar and timeline, including legacy antd/ECharts views. Status outcomes use `colors.success` / `colors.warning` / `colors.danger` and their CSS equivalents. Never use `chart-N` or ordinal aliases for success/failure: categorical palette order can change independently.
+- Queueing, sleeping, idle capacity, external occupancy and selection do not by themselves indicate a warning. Preserve explicit threshold/failure warnings. Models, deployments, memory composition and ordinary metric series remain categorical; keep labels and legends.
+- Shared code typography lives in `src/theme/layers.css`: Zeron `--font-size-body` (14px at the default root, matching body text), `--line-height-code`, monospace. Plain `pre` is covered, so newly added command blocks do not inherit a drawer's 16px default. Do not alter the HTML root size to fix local text.
+- Log text uses the same 14px body size on a fixed dark surface. Platform events use information blue, warning/error use their semantic foreground tokens; source ANSI colours remain source-defined. Shared log styles live beside the terminal theme.
+- xterm uses `src/theme/terminalTheme.ts`: fixed dark surface, explicit ANSI palette, minimum text contrast 4.5. Preserve ANSI hue meanings, including magenta; do not force all shell output to white.
+- Regression checks: `tests/semanticVisuals.test.ts` and `node tests/browser/semantic-visuals.mjs /absolute/output/path`. The browser check uses synthetic code/terminal data, real production CSS, light/dark themes, Chinese/English and 1440/768px views. Add new command-area selectors here when introducing an overriding style; screenshots alone are insufficient—assert computed typography and overflow.
+
+- `node tests/browser/log-command-layout.mjs /absolute/output/path` exercises production drawers, instance/service log components, Kubernetes commands, deployment preview/manual editor and AI log evidence with deterministic API data and the production theme providers. It does not validate live SSH or server behavior.

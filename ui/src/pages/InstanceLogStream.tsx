@@ -1,3 +1,4 @@
+import { logColors, logSurfaceStyle, logEventStyle } from "../theme/terminalTheme";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Typography } from "antd";
 import { useTranslation } from "react-i18next";
@@ -178,27 +179,26 @@ export function LogStream({
   return (
     <div>
       {showHistoryHint && (
-        <Typography.Text type="secondary" style={{ display: "block", fontSize: "var(--font-size-code)", margin: "4px 0" }}>
+        <Typography.Text type="secondary" style={{ display: "block", fontSize: "var(--font-size-body)", margin: "4px 0" }}>
           {t("instance.logsHistoryHint")}
         </Typography.Text>
       )}
       {showTruncated && (
-        <Typography.Text type="warning" style={{ display: "block", fontSize: "var(--font-size-code)", margin: "4px 0" }}>
+        <Typography.Text type="warning" style={{ display: "block", fontSize: "var(--font-size-body)", margin: "4px 0" }}>
           {t("instance.logsTruncated", { count: LOG_TAIL_LIMIT })}
         </Typography.Text>
       )}
       <pre
         ref={preRef}
         style={{
-          background: "var(--inverse-background)",
-          color: "var(--fg-on-inverse)",
+          ...logSurfaceStyle,
           padding: 12,
           borderRadius: "var(--radius-md)",
           margin: 0,
           height: 320,
           overflowY: "auto",
           fontFamily: "var(--font-mono, ui-monospace, monospace)",
-          fontSize: "var(--font-size-code)",
+          fontSize: "var(--font-size-body)",
           tabSize: 4,
         }}
       >
@@ -209,7 +209,7 @@ export function LogStream({
               <button
                 type="button"
                 onClick={timeline?.reload}
-                style={{ background: "none", border: "none", color: "var(--info-surface-raised)", textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
+                style={{ background: "none", border: "none", color: logColors.info, textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
               >
                 {t("instance.log.retry")}
               </button>
@@ -233,7 +233,7 @@ export function LogStream({
                   <button
                     type="button"
                     onClick={() => setStreamAttempt((attempt) => attempt + 1)}
-                    style={{ background: "none", border: "none", color: "var(--info-surface-raised)", textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
+                    style={{ background: "none", border: "none", color: logColors.info, textDecoration: "underline", cursor: "pointer", font: "inherit", padding: 0 }}
                   >
                     {t("instance.log.retry")}
                   </button>
@@ -247,7 +247,7 @@ export function LogStream({
           <Fragment key={entry.kind === "system" ? `system-${entry.event.id}` : `log-${index}`}>
             {entry.kind === "log" ? (
               <span style={levelStyle(entry.level)}>
-                {historical ? <span style={{ color: "var(--neutral-status-surface-raised)" }}>[{formatTimeShort(entry.timeMS)}] </span> : null}
+                {historical ? <span style={{ color: logColors.muted }}>[{formatTimeShort(entry.timeMS)}] </span> : null}
                 {ansiToSegments(entry.text).map((segment, segmentIndex) => (
                   <span key={segmentIndex} style={segment.style}>{segment.text}</span>
                 ))}
@@ -275,8 +275,8 @@ export function LogStream({
 // pre's own default color.
 function levelStyle(level: string | undefined): React.CSSProperties | undefined {
   switch (level) {
-    case "warn": return { color: "var(--warning-surface-raised)" };
-    case "error": return { color: "var(--danger-surface-raised)" };
+    case "warn": return { color: logColors.warning };
+    case "error": return { color: logColors.error };
     default: return undefined;
   }
 }
@@ -292,7 +292,7 @@ function systemLineText(event: InstanceEvent, t: TFunction<"deployments">, tComm
 
 function SystemLine({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ background: "var(--inverse-background-hover)", color: "var(--info-surface-raised)", borderRadius: "var(--radius-md)", padding: "0 4px" }}>
+    <span style={logEventStyle}>
       {children}
     </span>
   );

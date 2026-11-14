@@ -155,14 +155,14 @@
   border-radius: 7px;
   background: #101828;
   color: #e5ebf4;
-  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font: var(--font-size-body)/var(--line-height-code) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
 }
 
 .template-operation-usage { padding-bottom: 14px; border-bottom: 1px solid #edf0f4; }
 .template-operation-usage:last-child { border-bottom: 0; }
 .template-operation-usage h5.ant-typography { margin: 0; }
-.template-operation-usage pre { max-height: 360px; overflow: auto; padding: 12px; border-radius: 6px; background: #101828; color: #e5ebf4; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; }
+.template-operation-usage pre { max-height: 360px; overflow: auto; padding: 12px; border-radius: 6px; background: #101828; color: #e5ebf4; font: var(--font-size-body)/var(--line-height-code) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; }
 
 @media (max-width: 900px) {
   .template-model-catalog-row,

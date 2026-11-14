@@ -434,3 +434,9 @@ test("request details do not invent zero prefill for a queue-only report", () =>
   assert.ok(screen.getByText("Queue 20 s"));
   assert.equal(screen.queryByText("Prefill 0 ms"), null);
 });
+
+test("PD prefill, decode prefill and queue remain visually distinguishable", async () => {
+  const { SEGMENT_STYLE } = await import("../src/pages/monitor/RequestRow.tsx");
+  assert.equal(new Set([SEGMENT_STYLE.pd_prefill, SEGMENT_STYLE.prefill, SEGMENT_STYLE.queue]).size, 3);
+  assert.notEqual(SEGMENT_STYLE.thinking, SEGMENT_STYLE.answering);
+});

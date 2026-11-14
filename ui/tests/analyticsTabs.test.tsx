@@ -4,6 +4,7 @@ import React from "react";
 import { I18nextProvider } from "react-i18next";
 import { createI18n, dom } from "./helpers/dom.ts";
 import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
+import { colors } from "../src/theme/tokens";
 import * as fx from "./helpers/analyticsFixtures.ts";
 
 const closeChannels = trackMessageChannels();
@@ -223,6 +224,10 @@ test("the outcome chart sits above the first-token chart, which leaves a gap whe
   assert.equal(ttft.series[0].data[3], null);
   assert.equal(ttft.series[0].data[0], 0.5);
   assert.equal(ttft.series[1].data[0], 1.5);
+  const outcomes = option(a.quality.chart.resultsAria);
+  assert.equal(outcomes.color[outcomes.series.findIndex((s: { name: string }) => s.name === a.quality.outcome.completed)], colors.success);
+  assert.equal(outcomes.color[outcomes.series.findIndex((s: { name: string }) => s.name === a.quality.outcome.interrupted)], colors.warning);
+  assert.equal(outcomes.color[outcomes.series.findIndex((s: { name: string }) => s.name === a.quality.outcome.error)], colors.danger);
   const all = option(a.quality.chart.resultsAria).series.map((s: { name: string }) => s.name);
   assert.deepEqual(all, [a.quality.outcome.completed, a.quality.outcome.length, a.quality.outcome.client_closed, a.quality.outcome.interrupted, a.quality.outcome.error]);
   await choose(user, a.quality.chart.modeBad);
@@ -279,7 +284,7 @@ test("the GPU table groups by card model, tints the idle groups and counts cards
   await waitFor(() => assert.equal(bodyRows().length, 2));
   const ppu = rowNamed("PPU 810E");
   assert.ok(within(ppu).getByText(a.gpus.table.idle));
-  assert.equal(ppu.style.background.replace(/\s/g, ""), "rgb(255,248,229)");
+  assert.equal(ppu.style.background.replace(/\s/g, ""), "rgb(246,248,251)");
   const rtx = rowNamed("RTX 6000D");
   assert.ok(within(rtx).queryByText(a.gpus.table.idle) === null, "(62.5 + 3.2 + one card without samples) averages above the idle line");
   assert.ok(within(rtx).getByText(i18n.t("analytics:gpus.table.removedCount", { count: 1 })));

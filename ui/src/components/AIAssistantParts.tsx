@@ -30,7 +30,7 @@ export function FindingCards({ findings }: { findings: AIFinding[] }) {
           description={
             <Space direction="vertical" size={6} style={{ width: "100%" }}>
               <span>{t(`finding.${f.code}.fix`, { defaultValue: "" })}</span>
-              <pre aria-label={t("finding.evidence")} style={{ margin: 0, fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", background: "rgba(0,0,0,0.04)", padding: "6px 8px", borderRadius: 4 }}>
+              <pre aria-label={t("finding.evidence")} style={{ margin: 0, fontSize: "var(--font-size-body)", whiteSpace: "pre-wrap", wordBreak: "break-all", background: "rgba(0,0,0,0.04)", padding: "6px 8px", borderRadius: 4 }}>
                 {f.evidence.map((e) => e.line).join("\n")}
               </pre>
             </Space>

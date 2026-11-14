@@ -11,8 +11,8 @@ const EVENT_COLOR: Record<MonitorEvent["kind"], string> = {
   instance_running: colors.successText,
   instance_failed: colors.dangerText,
   instance_stopped: colors.muted,
-  sleep: colors.warningText,
-  wake: colors.chartTeal,
+  sleep: colors.chartTeal,
+  wake: colors.successText,
   node_offline: colors.dangerText,
   node_online: colors.successText,
 };

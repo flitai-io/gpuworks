@@ -12,7 +12,7 @@ export function buildParetoOption(plotted: ParetoDatum[], selectedSeq: number | 
 		yAxis: { type: "value", min: 0, name: labels.yAxis, nameLocation: "middle", nameGap: 52, axisLabel: { color: colors.chartTick }, axisLine: { show: false }, splitLine: { show: true, lineStyle: { color: colors.chartGrid, type: "dashed" } } },
 		series: [
 			{ id: "pareto-line", type: "line", silent: true, showSymbol: false, data: ordered.map((datum) => [datum.x, datum.y]), lineStyle: { color: colors.chartPrimary, width: 2 } },
-			{ id: "pareto-points", type: "scatter", data: plotted.map((datum) => ({ ...datum, value: [datum.x, datum.y], symbolSize: datum.seq === selectedSeq ? 16 : 10, itemStyle: { color: datum.seq === selectedSeq ? colors.warning : colors.chartPrimary, borderColor: colors.white, borderWidth: 2 } })), emphasis: { scale: 1.35 } },
+			{ id: "pareto-points", type: "scatter", data: plotted.map((datum) => ({ ...datum, value: [datum.x, datum.y], symbolSize: datum.seq === selectedSeq ? 16 : 10, itemStyle: { color: datum.seq === selectedSeq ? colors.primaryActive : colors.chartPrimary, borderColor: colors.white, borderWidth: 2 } })), emphasis: { scale: 1.35 } },
 		],
 	};
 }

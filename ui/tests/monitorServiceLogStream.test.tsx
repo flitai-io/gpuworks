@@ -134,6 +134,10 @@ test("system lines from each replica's own events merge into the stream, newest 
   assert.ok(lines[0].includes("log a2"));
   assert.ok(lines[1].includes(`[${SHORT_A}]`) && lines[1].includes("State changed to Running"), `expected a system line: ${lines[1]}`);
   assert.ok(lines[2].includes("log a1"));
+  const eventLine = [...container.querySelectorAll<HTMLSpanElement>("pre span")].find(el => el.textContent?.includes("State changed to Running") && el.style.background);
+  assert.ok(eventLine);
+  assert.equal(eventLine.style.color, "rgb(161, 210, 254)", "platform events use readable information blue");
+  assert.equal(container.querySelector("pre")?.style.fontSize, "var(--font-size-body)");
 });
 
 test("a per-replica filter chip hides that replica's lines and events", async () => {
