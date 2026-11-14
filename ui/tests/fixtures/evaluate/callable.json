@@ -378,5 +378,6 @@
   "yield_policy_eligible": {
     "ok": false,
     "reason": "SLEEP_NOT_ENABLED"
-  }
+  },
+  "health_checkable": false
 }

@@ -1,9 +1,11 @@
 package deployment
 
 import (
+	"context"
 	"fmt"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -58,4 +60,37 @@ func CreateHealthCheck(req *dto.DeployRequest, model *store.Model) (bool, int, e
 		return false, threshold, HealthUncheckableError()
 	}
 	return *req.HealthCheck, threshold, nil
+}
+
+// draftHealthCheckable is the answer to "can a deployment of this draft be
+// checked" that create enforces (CreateHealthCheck) and evaluation reports: it
+// judges the candidate contract the deployment will get, so a model whose
+// operations are still empty is judged by the operations its template
+// declares, exactly as the create seeds them.
+func (s *Service) draftHealthCheckable(selection *templateSelection, model *store.Model) (bool, error) {
+	candidate, _, err := s.initTemplateModelInferenceConfig(selection, model)
+	if err != nil {
+		return false, err
+	}
+	return HealthCheckable(candidate), nil
+}
+
+// noteHealthCheckableOf records draftHealthCheckable on the evaluation; a
+// contract that cannot be built leaves the answer absent (unknown).
+func (s *Service) noteHealthCheckableOf(resp *dto.EvaluateResponse, selection *templateSelection, model *store.Model) {
+	if checkable, err := s.draftHealthCheckable(selection, model); err == nil {
+		resp.HealthCheckable = &checkable
+	}
+}
+
+// noteHealthCheckable resolves the draft's model on a copy of the selection
+// (resolution binds components) for an evaluation that stopped on a field
+// error before it got to the model.
+func (s *Service) noteHealthCheckable(ctx context.Context, resp *dto.EvaluateResponse, req *dto.DeployRequest, selection templateSelection) {
+	selection.Components = append([]deploy.ComponentBinding(nil), selection.Components...)
+	model, err := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
+	if err != nil {
+		return
+	}
+	s.noteHealthCheckableOf(resp, &selection, model)
 }

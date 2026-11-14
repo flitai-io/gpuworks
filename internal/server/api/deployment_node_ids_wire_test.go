@@ -37,8 +37,8 @@ func TestDeploymentDTONodeIDsWire(t *testing.T) {
 	// count may be scheduled, a multi-node one placed by hand may not.
 	const notSleepable = `"wake_wait_limit_sec":1800,"yield_policy_eligible":{"ok":false,"reason":"SLEEP_NOT_ENABLED"},` +
 		`"schedule_capabilities":{"sleep":{"ok":false,"reason":"SLEEP_NOT_ENABLED"},"wake":{"ok":false,"reason":"SLEEP_NOT_ENABLED"},"replicas":`
-	const single = notSleepable + `[{"minimum":1,"maximum":1024,"ok":true}]},`
-	const multi = notSleepable + `[{"minimum":1,"maximum":1024,"ok":false,"reason":"SCHEDULE_REPLICAS_MANUAL_PLACEMENT"}]},`
+	const single = notSleepable + `[{"minimum":1,"maximum":1024,"ok":true}]},"health_checkable":false,`
+	const multi = notSleepable + `[{"minimum":1,"maximum":1024,"ok":false,"reason":"SCHEDULE_REPLICAS_MANUAL_PLACEMENT"}]},"health_checkable":false,`
 	// A multi-node deployment carries who places it; a single-node one has
 	// no placement_mode key.
 	const manual = `"placement_mode":"manual",`

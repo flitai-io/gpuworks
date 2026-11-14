@@ -185,6 +185,10 @@ type Deployment struct {
 	// ScheduleCapabilities what its schedule may order.
 	YieldPolicyEligible  Eligibility          `json:"yield_policy_eligible"`
 	ScheduleCapabilities ScheduleCapabilities `json:"schedule_capabilities"`
+	// HealthCheckable says whether the deployment's model serves an operation
+	// the health check can send (deployment.HealthCheckable); the check
+	// switch is only offered when it is true.
+	HealthCheckable bool `json:"health_checkable"`
 	// PlacementMode is "auto" when the platform picks a multi-node or PD
 	// deployment's nodes whenever a unit starts, "manual" when they are the
 	// operator's; absent for a single-node deployment, whose draft says it.

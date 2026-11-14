@@ -32,12 +32,12 @@ const { cleanup, render, screen, waitFor, fireEvent } = await import("@testing-l
 const userEvent = (await import("@testing-library/user-event")).default;
 const { Form } = await import("antd");
 const { api } = await import("../src/api.ts");
-const { HealthTag, healthCheckable } = await import("../src/components/DeploymentHealth.tsx");
+const { HealthTag } = await import("../src/components/DeploymentHealth.tsx");
 const { default: HealthCheckFields } = await import("../src/pages/deploy/HealthCheckFields.tsx");
 const { HealthCheckEditor } = await import("../src/pages/DeploymentHealthEditor.tsx");
 const { buildPayload } = await import("../src/pages/deploy/deployHelpers.ts");
 import type { FormInstance } from "antd";
-import type { Deployment, DeploymentHealth, Model } from "../src/api";
+import type { Deployment, DeploymentHealth } from "../src/api";
 
 const original = api.setDeploymentHealthCheck;
 afterEach(() => {
@@ -49,37 +49,28 @@ after(() => {
   dom.window.close();
 });
 
-const chatModel = { id: 1, name: "chat", operations: [{ type: "openai.chat", endpoint: "/v1/chat/completions", mode: "sync" }] } as unknown as Model;
-const rerankModel = { id: 2, name: "rerank", operations: [{ type: "openai.rerank", endpoint: "/v1/rerank", mode: "sync" }] } as unknown as Model;
-
 function health(over: Partial<DeploymentHealth> = {}): DeploymentHealth {
   return { status: "ok", threshold_sec: 60, last: null, recent_mean_ms: null, recent_ok: 0, recent: [], ...over };
 }
 
-test("only a chat, text completion or embedding deployment can be checked", () => {
-  assert.equal(healthCheckable([{ type: "openai.embeddings" }]), true);
-  assert.equal(healthCheckable([{ type: "openai.completions" }]), true);
-  assert.equal(healthCheckable([{ type: "openai.rerank" }, { type: "openai.chat" }]), true);
-  assert.equal(healthCheckable([{ type: "openai.rerank" }]), false);
-  assert.equal(healthCheckable(undefined), false);
-});
-
-test("the deploy form shows the check on for a chat model and sends only what the operator states", async () => {
+// The form shows the server's health_checkable of the evaluation and decides
+// nothing itself: no operation list reaches the component.
+test("the deploy form shows the check on when the server says the draft is checkable and sends only what the operator states", async () => {
   let form: FormInstance | undefined;
-  function Host({ model }: { model: Model }) {
+  function Host({ checkable }: { checkable: boolean | undefined }) {
     const [instance] = Form.useForm();
     form = instance;
     return (
       <Form form={instance} initialValues={{ engine: "vllm" }}>
-        <HealthCheckFields selectedModel={model} />
+        <HealthCheckFields healthCheckable={checkable} />
       </Form>
     );
   }
-  const view = render(<I18nextProvider i18n={i18n}><Host model={chatModel} /></I18nextProvider>);
+  const view = render(<I18nextProvider i18n={i18n}><Host checkable={true} /></I18nextProvider>);
   const user = userEvent.setup({ document: dom.window.document });
   const box = screen.getByRole("checkbox", { name: "Health check" }) as HTMLInputElement;
   const threshold = screen.getByRole("spinbutton", { name: "Threshold" }) as HTMLInputElement;
-  assert.equal(box.checked, true, "unstated, a chat model is checked, as the server will do");
+  assert.equal(box.checked, true, "unstated, a checkable draft is checked, as the server will do");
   assert.equal(threshold.placeholder, "60");
   assert.equal("health_check" in buildPayload(form!.getFieldsValue(true)).payload, false, "the default is the server's");
 
@@ -95,9 +86,18 @@ test("the deploy form shows the check on for a chat model and sends only what th
   assert.equal(payload.health_check, true);
   assert.equal(payload.health_check_threshold_sec, 15);
 
-  // A model that serves neither cannot be checked: the box says so and the
-  // choice made for the chat model is dropped.
-  view.rerender(<I18nextProvider i18n={i18n}><Host model={rerankModel} /></I18nextProvider>);
+  // Until the next evaluation answers the value is unknown: the box offers
+  // nothing, says nothing is wrong and keeps the operator's choice.
+  view.rerender(<I18nextProvider i18n={i18n}><Host checkable={undefined} /></I18nextProvider>);
+  assert.equal((screen.getByRole("checkbox", { name: "Health check" }) as HTMLInputElement).disabled, true);
+  assert.equal(screen.queryByText(common.healthCheck.unsupported), null, "unknown is not unsupported");
+  assert.equal(form!.getFieldValue("health_check"), true, "an unknown answer keeps the choice");
+  view.rerender(<I18nextProvider i18n={i18n}><Host checkable={true} /></I18nextProvider>);
+  assert.equal((screen.getByRole("checkbox", { name: "Health check" }) as HTMLInputElement).checked, true);
+
+  // The server says the draft cannot be checked: the box says so and the
+  // choice made while it could be is dropped.
+  view.rerender(<I18nextProvider i18n={i18n}><Host checkable={false} /></I18nextProvider>);
   await waitFor(() => assert.equal((screen.getByRole("checkbox", { name: "Health check" }) as HTMLInputElement).checked, false));
   assert.equal((screen.getByRole("checkbox", { name: "Health check" }) as HTMLInputElement).disabled, true);
   screen.getByText(common.healthCheck.unsupported);
@@ -142,7 +142,7 @@ test("the detail turns the check off and saves a new threshold, and says why a c
     return {} as Deployment;
   };
   let changed = 0;
-  const dep = { id: 5, operations: [{ type: "openai.chat" }], health: health({ status: "ok", threshold_sec: 60 }) } as unknown as Deployment;
+  const dep = { id: 5, health_checkable: true, health: health({ status: "ok", threshold_sec: 60 }) } as unknown as Deployment;
   const view = render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={dep} onChanged={() => changed++} /></I18nextProvider>);
   const user = userEvent.setup({ document: dom.window.document });
 
@@ -173,14 +173,31 @@ test("the detail turns the check off and saves a new threshold, and says why a c
 });
 
 test("a deployment that cannot be checked can still turn an old check off, but not on", () => {
-  const off = { id: 6, operations: [{ type: "openai.rerank" }], health: health({ status: "off" }) } as unknown as Deployment;
+  const off = { id: 6, health_checkable: false, health: health({ status: "off" }) } as unknown as Deployment;
   render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={off} onChanged={() => {}} /></I18nextProvider>);
   const toggle = screen.getByRole("switch", { name: "Health check" });
   assert.ok(screen.getByText("Off").compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING);
   assert.equal(toggle.getAttribute("aria-disabled"), "true");
   assert.equal(screen.queryByRole("spinbutton", { name: "Threshold" }), null);
   cleanup();
-  const on = { id: 7, operations: [{ type: "openai.rerank" }], health: health({ status: "failed" }) } as unknown as Deployment;
+  const on = { id: 7, health_checkable: false, health: health({ status: "failed" }) } as unknown as Deployment;
   render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={on} onChanged={() => {}} /></I18nextProvider>);
   assert.equal(screen.getByRole("switch", { name: "Health check" }).getAttribute("aria-disabled"), null);
+});
+
+test("a deployment the server marks checkable can turn the check on even when its operations list is empty", async () => {
+  // The model's operations may still be empty on the wire; the switch follows
+  // health_checkable only.
+  const calls: Array<[number, boolean, number]> = [];
+  api.setDeploymentHealthCheck = async (id, enabled, threshold = 0) => {
+    calls.push([id, enabled, threshold]);
+    return {} as Deployment;
+  };
+  const off = { id: 8, operations: [], health_checkable: true, health: health({ status: "off" }) } as unknown as Deployment;
+  render(<I18nextProvider i18n={i18n}><HealthCheckEditor dep={off} onChanged={() => {}} /></I18nextProvider>);
+  const toggle = screen.getByRole("switch", { name: "Health check" });
+  assert.equal(toggle.getAttribute("aria-disabled"), null);
+  const user = userEvent.setup({ document: dom.window.document });
+  await user.click(toggle);
+  await waitFor(() => assert.deepEqual(calls, [[8, true, 60]]));
 });

@@ -183,7 +183,15 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		resp.EligibleNodes, resp.PoolPartitionCapability = s.evaluateEligibleNodes(selection, pool, poolErr, IsAutomaticPlacement(req) && req.NNodes <= 1, requests)
 		eligibleLoaded = true
 	}
-	writeFieldErrors := func() { loadEligible(nil); out.fieldErrors(&resp, errs) }
+	writeFieldErrors := func() {
+		loadEligible(nil)
+		// A draft with a field error still answers whether it can be checked,
+		// so the switch does not flicker while the deployer fixes the field.
+		if resp.HealthCheckable == nil {
+			s.noteHealthCheckable(ctx, &resp, req, selection)
+		}
+		out.fieldErrors(&resp, errs)
+	}
 
 	// A placement read failure was collected above; the zero placement keeps
 	// the rest of the answer renderable.
@@ -223,6 +231,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		writeFieldErrors()
 		return
 	}
+	s.noteHealthCheckableOf(&resp, &selection, model)
 	// A quick registration may not have metadata yet. Keep evaluation and
 	// scheduling usable, but tell clients that the VRAM estimate is incomplete.
 	if model.WeightBytes <= 0 && (selection.Spec == nil || (selection.Spec.WeightBytes <= 0 && selection.Spec.RuntimeWeightBytes <= 0)) {

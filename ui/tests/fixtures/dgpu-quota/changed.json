@@ -109,6 +109,7 @@
         }
       ]
     },
+    "health_checkable": false,
     "nnodes": 1,
     "node_rank": 0,
     "created_at": "2026-10-18T08:00:00Z",

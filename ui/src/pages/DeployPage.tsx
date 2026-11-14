@@ -435,7 +435,7 @@ function DeployForm({ opened }: { opened?: OpenedDeployment }) {
                 </Form.Item>
               ) : null}
             </Form.Item>
-            <HealthCheckFields selectedModel={selectedModel} />
+            <HealthCheckFields healthCheckable={evalResult?.health_checkable} />
             <TokenizeField />
           </section>
           <div className="deploy-config-layout">
