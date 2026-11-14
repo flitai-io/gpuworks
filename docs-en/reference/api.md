@@ -1566,8 +1566,8 @@ Scripts and third-party clients cannot directly reuse vLLM parameters for SGLang
 - Specifying it together with `nnodes`, `node_uuids`, or `replicas > 1` returns `PD_SHAPE_CONFLICT`; use `placement_mode: "auto"` with units that omit `node_uuid` for automatic placement (see [Automatically Placed Multi-Node and PD Deployments](#自动放置多机与-pd-部署)). Other validation error codes start with
   `PD_` (field `placement.pd`). When the deployment is sleepable (`sleepable`) and KV uses the host RDMA network through UCX, creation and evaluation return
   `PD_SLEEP_RDMA_UNSUPPORTED` (`params`: `mode`, `network`).
-  When a node of a **manually named** placement has a kernel that hangs UCX (the node's `ucx_netlink_hang` above) and the mode moves the KV over UCX (automatic placement simply skips such nodes): an Ethernet parameter network (the management network
-  included) returns 400 `PD_UCX_NETLINK_HANG` (field `placement.pd`); on a host RDMA network evaluate gives only the warning `PD_UCX_NETLINK_HANG_RDMA` and create proceeds.
+  When a node of a **manually named** placement has a kernel that hangs UCX (the node's `ucx_netlink_hang` above) and the mode moves the KV over UCX (automatic placement simply skips such nodes): nothing is refused and create proceeds, while evaluate warns: `PD_UCX_NETLINK_HANG` on an Ethernet parameter network (the management network
+  included; the engine will likely never finish starting until IPv6 is off), the softer `PD_UCX_NETLINK_HANG_RDMA` on a host RDMA network.
   Both carry the same `params`: `mode`, `network`, `nodes` (`[{node_uuid, node_name, kernel}]`, only the affected nodes), `names` (their names, comma-separated),
   `fixes` (`[{code, commands[]}]`, the same as the node's `fixes`) and `fix` (the first fix command).
 - The `pd` field in deployment details contains `mode`, `fallback`, `kv_load_failure`, `state` (`not_ready|partial|running`), `short`,

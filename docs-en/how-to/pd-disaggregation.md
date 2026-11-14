@@ -70,9 +70,9 @@ The agent probes for this:
 - Automatic placement (including later re-placement and rescheduling after a node loss) **skips** such a node: when the KV goes over an Ethernet parameter network (the
   management network included), no PD instance is put on it. If skipping leaves no node, the usual `UNIT_PLACEMENT_NONE` is returned, with `ucx_netlink_hang` (how many
   nodes were left out) and `ucx_netlink_nodes` (the first few names) in its `params`; the event of a rescheduling that finds no node lists them too.
-- When you name the nodes yourself (`placement_mode: manual`), evaluating or creating in the deploy form or the API refuses such a node (`PD_UCX_NETLINK_HANG`, 400,
-  `params` carry `nodes`, `fixes` and `fix`); it does not swap in another node.
-- On a host RDMA parameter network nothing is skipped or refused, only warned (`PD_UCX_NETLINK_HANG_RDMA`), because UCX is then held to RDMA transports and may never run that check.
+- When you name the nodes yourself (`placement_mode: manual`), such a node is neither refused nor swapped: evaluate warns (`PD_UCX_NETLINK_HANG`, `params` carry
+  `nodes`, `fixes` and `fix`), the deploy form lists the fix commands to copy under that warning in the evaluation summary, and the deployment is created; unless you fix the node first, the engine will likely never finish starting.
+- On a host RDMA parameter network nothing is skipped, only warned more softly (`PD_UCX_NETLINK_HANG_RDMA`), because UCX is then held to RDMA transports and may never run that check.
 - The fix: turn IPv6 off for the **whole host** on that node (this stops the host using IPv6 altogether; turning it off on single interfaces does not help). Right away,
   until the next reboot:
 

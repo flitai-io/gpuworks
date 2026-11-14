@@ -608,8 +608,7 @@
     "PEER_TRANSFER_QUERY_INVALID": "Specify one non-empty transfer ID of at most 128 characters.",
     "PEER_RELAY_BUSY": "The management server is busy relaying another transfer. Retry shortly; the selected source is retained.",
     "PEER_TRANSFER_CANCELED": "Peer transfer canceled. Retry from the selected source or choose a download.",
-    "IMAGE_REFETCH_FAILED": "The re-fetch failed; this node keeps the image it already had. Reason: {{reason}}",
-    "PD_UCX_NETLINK_HANG": "The kernel of {{names}} makes UCX hang (its IPv6 route dump ends in a way UCX cannot read), and PD mode {{mode}} moves the KV with NIXL over Ethernet, so the engine would never finish starting. Turn IPv6 off on the node (this disables IPv6 for the whole host); the commands are listed below the PD section."
+    "IMAGE_REFETCH_FAILED": "The re-fetch failed; this node keeps the image it already had. Reason: {{reason}}"
   },
   "httpError": {
     "proxyPage": "HTTP {{status}}: a reverse proxy or tunnel between the browser and gpuworks answered with its own error page, so the server's reason was lost. Retry from the server's own address to see it."

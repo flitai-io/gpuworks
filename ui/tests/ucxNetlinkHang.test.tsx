@@ -8,10 +8,9 @@ const zh = (await createI18n(["nodes", "deploy", "common"], "zh")).i18n;
 const en = (await createI18n(["nodes", "deploy", "common"], "en")).i18n;
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const { default: UCXNetlinkHangNotice, UCXNetlinkHangTag } = await import("../src/components/NodeUCXNetlinkHang.tsx");
-const { default: PdUCXNetlinkFixes } = await import("../src/pages/deploy/PdUCXNetlinkFixes.tsx");
+const { default: WarningCommandFixes } = await import("../src/pages/deploy/WarningCommandFixes.tsx");
 const { default: NodeDoctorReport } = await import("../src/components/NodeDoctorReport.tsx");
 type Node = import("../src/api.ts").Node;
-type EvaluateResponse = import("../src/api.ts").EvaluateResponse;
 
 afterEach(() => cleanup());
 
@@ -66,15 +65,12 @@ test("the notice without a kernel release and the tag are reachable by keyboard"
   for (const pre of screen.getAllByLabelText(/disable_ipv6_/)) assert.equal(pre.getAttribute("tabindex"), "0");
 });
 
-const refused = (params: Record<string, unknown> | undefined): EvaluateResponse => ({
-  ok: false,
-  errors: [{ field: "placement.pd", code: "PD_UCX_NETLINK_HANG", params }],
-}) as unknown as EvaluateResponse;
+const warned = (params: Record<string, unknown> | undefined, code = "PD_UCX_NETLINK_HANG") => ({ code, params });
 
-// The deploy form's PD section already shows the refusal's text beside the
-// control; the commands below it are the structured part of the same error.
-test("the deploy form lists the commands of a PD_UCX_NETLINK_HANG refusal and copies them", async () => {
-  wrap(<PdUCXNetlinkFixes result={refused({ nodes: [{ node_uuid: "pd-a", node_name: "pd-a", kernel: "k" }], fixes })} />);
+// The warning is one of evaluate's warnings, in the summary's one list; under
+// it are the server's commands to copy. The deployment can still be created.
+test("the commands of a PD_UCX_NETLINK_HANG warning are listed under it and copied", async () => {
+  wrap(<WarningCommandFixes warning={warned({ names: "pd-a", mode: "vllm-nixl", fixes })} />);
   const region = within(screen.getByTestId("pd-ucx-netlink-fixes"));
   assert.ok(region.getByText("解除卡死（在该节点上执行）"));
   assert.equal(region.getByLabelText("disable_ipv6_now").textContent, NOW);
@@ -82,21 +78,23 @@ test("the deploy form lists the commands of a PD_UCX_NETLINK_HANG refusal and co
   await waitFor(() => assert.equal(copied, NOW));
 });
 
-test("the deploy form shows nothing for other answers, and skips a malformed fix", () => {
-  for (const result of [
-    null,
-    { ok: true } as unknown as EvaluateResponse,
-    { ok: false, errors: [{ field: "placement.pd", code: "PD_GPU_OVERLAP", params: { fixes } }] } as unknown as EvaluateResponse,
-    refused(undefined),
-    refused({ fixes: "nope" }),
-    refused({ fixes: [{ code: 3 }, null, { code: "x" }] }),
+test("another warning, or one without usable fixes, lists nothing; a malformed fix is skipped", () => {
+  for (const warning of [
+    warned({ fixes }, "PD_GPU_MODELS_DIFFER"),
+    warned(undefined),
+    warned({ fixes: "nope" }),
+    warned({ fixes: [{ code: 3 }, null, { code: "x" }] }),
   ]) {
-    const { container } = wrap(<PdUCXNetlinkFixes result={result} />);
+    const { container } = wrap(<WarningCommandFixes warning={warning} />);
     assert.equal(container.textContent, "");
     cleanup();
   }
-  wrap(<PdUCXNetlinkFixes result={refused({ fixes: [{ code: "disable_ipv6_now", commands: [NOW, 7] }, null] })} />);
+  wrap(<WarningCommandFixes warning={warned({ fixes: [{ code: "disable_ipv6_now", commands: [NOW, 7] }, null] })} />);
   assert.equal(screen.getByLabelText("disable_ipv6_now").textContent, NOW);
+  cleanup();
+  // Over host RDMA the softer warning carries the same commands.
+  wrap(<WarningCommandFixes warning={warned({ fixes }, "PD_UCX_NETLINK_HANG_RDMA")} />, en);
+  assert.equal(screen.getByLabelText("disable_ipv6_persist").textContent, PERSIST);
 });
 
 test("the diagnosis explains a ucx_netlink_hang finding with the fix commands in its evidence", () => {
@@ -118,16 +116,15 @@ test("the diagnosis explains a ucx_netlink_hang finding with the fix commands in
   assert.ok(findings.getByText(NOW));
 });
 
-const { apiErrorText, APIError } = await import("../src/apiError.ts");
 const { warningText } = await import("../src/pages/deploy/deployWarnings.ts");
 
-// The server's params are what the texts interpolate: the refusal names the
-// nodes and the mode (the text field of the PD section), the RDMA warning the
-// first command as well.
-test("the refusal and the RDMA warning read well in both languages with the server's params", () => {
+// The server's params are what the texts interpolate: the Ethernet warning
+// names the nodes and the mode and says creation goes ahead, the RDMA warning
+// carries the first command as well.
+test("the Ethernet and the RDMA warnings read well in both languages with the server's params", () => {
   const params = { mode: "vllm-nixl", network: "management", names: "pd-a, pd-b", fix: NOW, nodes: [], fixes };
-  for (const [i18n, expected] of [[zh, /节点 pd-a, pd-b 的内核会让 UCX 卡住.*vllm-nixl.*关闭整机 IPv6/], [en, /The kernel of pd-a, pd-b makes UCX hang.*vllm-nixl.*IPv6 for the whole host/]] as const) {
-    const text = apiErrorText(i18n.getFixedT(null, "common") as never, new APIError("PD_UCX_NETLINK_HANG", params, "x", 400));
+  for (const [i18n, expected] of [[zh, /节点 pd-a, pd-b 的内核会让 UCX 卡住.*vllm-nixl.*部署仍允许创建.*关闭整机 IPv6/], [en, /The kernel of pd-a, pd-b makes UCX hang.*vllm-nixl.*can still be created.*IPv6 for the whole host/]] as const) {
+    const text = warningText(i18n.getFixedT(null, "deploy"), { code: "PD_UCX_NETLINK_HANG", params });
     assert.match(text, expected);
     const warning = warningText(i18n.getFixedT(null, "deploy"), { code: "PD_UCX_NETLINK_HANG_RDMA", params });
     assert.ok(warning.includes(NOW) && warning.includes("pd-a, pd-b") && warning.includes("management"), warning);
