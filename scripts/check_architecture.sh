@@ -130,6 +130,32 @@ untested_shared_ui() {
   done
 }
 
+# decl_count looks in the non-test Go files of package directory $1 for the
+# top-level declaration matching extended regular expression $2 and counts the
+# lines from it to its closing brace that match $3 (every line when $3 is
+# empty; with $4 = body the declaration line itself is skipped, for a struct's
+# fields). It prints NOTFOUND when no file declares it, which the budget loop
+# fails: a declaration moved to another package must take its budget along.
+# When several files declare it (build-tag variants), the first by name wins.
+# Patterns go through the environment because awk -v strips their backslash
+# escapes, and use [[:blank:]] rather than \t, which busybox awk does not
+# expand in a dynamic pattern.
+decl_count() {
+  for f in "$1"/*.go; do
+    case "$f" in *_test.go) continue ;; esac
+    DECL="$2" LINE="$3" BODY="${4:-}" awk '
+      !inside && $0 ~ ENVIRON["DECL"] {inside=1; if (ENVIRON["BODY"] == "body") next}
+      inside && /^}/ {if (ENVIRON["LINE"] == "") n++; found=1; exit}
+      inside && (ENVIRON["LINE"] == "" || $0 ~ ENVIRON["LINE"]) {n++}
+      END {if (found) print n+0}' "$f" 2>/dev/null
+  done | head -n 1 | grep . || echo NOTFOUND
+}
+
+# controller_struct_count counts the Controller struct's lines matching $1.
+controller_struct_count() {
+  decl_count internal/server/controller '^type Controller struct' "$1" body
+}
+
 # --- measurements ----------------------------------------------------------
 measure() {
   key="$1"
@@ -219,6 +245,41 @@ measure() {
   store_db_accessor_callers)
     grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' 2>/dev/null \
       | grep -v '_test\.go' | grep -v '^internal/server/store/' | grep -c . || true
+    ;;
+  controller_struct_fields)
+    # One per field line (a, b int is one), embedded fields included.
+    controller_struct_count '^[[:blank:]][*A-Za-z_]'
+    ;;
+  controller_struct_mutexes)
+    controller_struct_count '^[[:blank:]](\*?sync\.(RW)?Mutex|[A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+sync\.(RW)?Mutex)'
+    ;;
+  controller_struct_maps)
+    controller_struct_count '^[[:blank:]][A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+map\['
+    ;;
+  controller_exported_methods)
+    grep -rnE '^func \(c \*Controller\) [A-Z]' internal/server/controller --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -c . || true
+    ;;
+  planning_concrete_store_refs)
+    grep -rnE '\*store\.Store' internal/server/planning --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | grep -c . || true
+    ;;
+  planning_sync_files)
+    grep -rlE '^[[:space:]]*"sync(/atomic)?"|^import "sync(/atomic)?"' internal/server/planning --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -c . || true
+    ;;
+  app_new_lines)
+    decl_count internal/server/app '^func New\(' ''
+    ;;
+  app_run_lines)
+    decl_count internal/server/app '^func \(a \*App\) Run\(' ''
+    ;;
+  app_run_goroutines)
+    # goBG is Run's alias for bg.start; a bare go statement counts too.
+    decl_count internal/server/app '^func \(a \*App\) Run\(' '^[[:blank:]]+(goBG\(|bg\.start\(|go[[:blank:]])'
+    ;;
+  app_prod_lines)
+    find internal/server/app -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -exec cat {} + | grep -c '' || true
     ;;
   api_fanout)
     go list -e -f '{{join .Imports "\n"}}' ./internal/server/api 2>/dev/null \
@@ -353,6 +414,7 @@ process_name_hits() {
 soft_budget_hint() {
   case "$1" in
   ui_antd_icon_import_files) printf '%s' ": use ui/src/ui-kit/consoleIcons.ts instead of @ant-design/icons" ;;
+  app_prod_lines) printf '%s' ": put a feature's logic in its own package; app keeps construction and adapters" ;;
   esac
 }
 
@@ -376,6 +438,11 @@ while IFS= read -r line || [ -n "$line" ]; do
   measured=$(measure "$key" | tr -d '[:space:]')
   if [ "$measured" = "UNKNOWN" ]; then
     echo "  FAIL: unknown budget key '$key'; add a measurement to check_architecture.sh" >&2
+    failures=$((failures + 1))
+    continue
+  fi
+  if [ "$measured" = "NOTFOUND" ]; then
+    echo "  FAIL: $key: the declaration it measures was not found; move the measurement with it" >&2
     failures=$((failures + 1))
     continue
   fi
