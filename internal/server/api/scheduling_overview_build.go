@@ -16,7 +16,7 @@ const overviewYieldWindow = time.Hour
 // the ledger of every node (planning.FleetCards) and the fleet's contention,
 // each read once. Nothing here is per node.
 func (a *apiHandlers) buildOverview(now time.Time) (*dto.SchedulingOverview, error) {
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, err
 	}

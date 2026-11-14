@@ -85,7 +85,7 @@ type State struct {
 
 // State loads every node and network and resolves them.
 func (s *Service) State() (State, error) {
-	nodes, err := s.store.ListNodes()
+	nodes, err := s.store.FleetNodes()
 	if err != nil {
 		return State{}, err
 	}

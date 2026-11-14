@@ -117,7 +117,7 @@ func (a *apiHandlers) inventoryGeneration() uint64 {
 }
 
 func (a *apiHandlers) buildGPUInventory() (*gpuInventoryCache, error) {
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, err
 	}

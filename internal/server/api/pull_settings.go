@@ -45,7 +45,7 @@ func writePullSettingError(w http.ResponseWriter, err error) {
 // nodes are read once and the facts the selectors need loaded once.
 func (a *apiHandlers) matchedNodeCounts(selectors []map[string][]string) ([]int, error) {
 	counts := make([]int, len(selectors))
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, err
 	}

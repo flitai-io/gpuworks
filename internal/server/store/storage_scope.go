@@ -120,7 +120,7 @@ func effectiveStorage(storage Storage, targets []StorageNode, nodeID uint, label
 
 // NodesForStorage lists the nodes a storage applies to.
 func (s *Store) NodesForStorage(storage *Storage) ([]Node, error) {
-	nodes, err := s.ListNodes()
+	nodes, err := s.FleetNodes()
 	if err != nil {
 		return nil, err
 	}

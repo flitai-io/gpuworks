@@ -15,7 +15,7 @@ import (
 // node and deployment to count them. label_key picks the label the capacity
 // is grouped by.
 func (a *apiHandlers) dashboardSummary(w http.ResponseWriter, r *http.Request) {
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
