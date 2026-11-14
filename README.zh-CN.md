@@ -35,10 +35,10 @@ NVIDIA、AMD Instinct 与 Ryzen AI Max、华为昇腾、平头哥 PPU、海光 D
 - **验证过的模型 × 芯片组合，一键部署。** 内置目录为 392 个模型提供 1,235 份启动规格：每种卡型对应的镜像、引擎、启动参数和固定的权重版本。
   我们在 NVIDIA、AMD、昇腾、PPU 和 Apple 真机上跑通过的组合都带着已知可用的启动配置，选好模型点部署即可，不用自己摸索参数。
   覆盖 Qwen、DeepSeek、GLM、Kimi、MiniMax、Llama、Gemma、gpt-oss，以及 embedding、rerank、语音、图像和视频模型。
-- **异构加速器，统一调度。** NVIDIA、AMD、昇腾、PPU、海光和 Apple Silicon 节点接入同一个集群，调度器把每个部署放到其启动规格支持的硬件上。
+- **异构加速器，统一调度。** NVIDIA、AMD、昇腾、PPU、海光、昆仑芯和 Apple Silicon 节点接入同一个集群，调度器把每个部署放到其启动规格支持的硬件上。
 - **公有云与私有云混合调度。** 从 RunPod、优云智算（CompShare）、AutoDL、Vast.ai、阿里云同步云主机，或从 ZStack Cloud 同步虚拟机，
   一键安装 agent，和自有服务器放在同一个资源池里调度。
-- **接入已有的 Kubernetes 集群，与集群里的其他业务共存。** 应用一份 manifest 即可接入，不替换集群已装的 device plugin，
+- **接入已有的 Kubernetes 集群，与集群里的其他业务共存。** 应用一份 manifest 即可接入，各节点的加速卡自动识别，一个集群条目可以同时包含多个厂商的节点；不替换集群已装的 device plugin，
   也兼容 HAMi 与 ACK 共享 GPU。GPUWorks 只借用要用的卡，用完归还，两边的调度互相感知：GPUWorks 占用的卡 Kubernetes
   不会再分给别的 Pod，别的 Pod 占着的卡 GPUWorks 也不会调度。
 - **超轻量。** server 和 agent 各是一个静态二进制（`CGO_ENABLED=0`），server 内嵌 Web 界面（中文 / English）和各平台的 agent，

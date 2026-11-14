@@ -49,7 +49,6 @@
     "intro": "集群已等了一阵，仍没有节点接入。先在集群里看 agent 的 DaemonSet 和 Pod：",
     "causes": "常见原因",
     "pull": "Pod 处于 ImagePullBackOff：拉不到 agent 镜像。镜像在需要登录的仓库时，在命名空间里建好 docker-registry Secret，并在新建集群时填写“镜像拉取凭据”。",
-    "runtimeClass": "DaemonSet 事件提示 RuntimeClass 不存在：填写的 RuntimeClass 在集群里没有；留空即可，由 agent 自动判断。",
     "selector": "DaemonSet 的 DESIRED 为 0：节点选择器没有选中任何节点。",
     "connect": "Pod 在运行但节点没出现：agent 连不上管理节点接入地址，看 agent 日志。",
     "copy": "复制命令"

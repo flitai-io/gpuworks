@@ -20,7 +20,7 @@ function StalledHelp({ cluster }: { cluster: KubeCluster }) {
       </div>
       <strong className="font-semibold text-fg-default">{t("stalled.causes")}</strong>
       <ul className="m-0 list-disc ps-5">
-        {(["pull", "runtimeClass", "selector", "connect"] as const).map((key) => <li key={key}>{t(`stalled.${key}`)}</li>)}
+        {(["pull", "selector", "connect"] as const).map((key) => <li key={key}>{t(`stalled.${key}`)}</li>)}
       </ul>
     </div>
   );
