@@ -29,6 +29,12 @@ Before committing, also run `go test -race` for relevant packages, perform compi
 `make vet` and `git diff --check`. Only ordinary tests may use `t.Skip` when external capabilities are unavailable;
 with `GPUWORKS_TEST_STRICT=1`, missing critical dependencies must cause a failure.
 
+Server and agent logs from `internal/testenv` are discarded by default. `GPUWORKS_TESTENV_LOG=<path>` writes all of them to a file;
+`GPUWORKS_TESTENV_FAILURE_LOG_DIR=<dir>` keeps only those of failed cases: each case keeps its last 1 MiB in memory, written as
+`<dir>/<case name>.log` when it fails and dropped when it passes. GitLab's `core-l3` enables the latter; when `core-l2`/`core-l3` fail they also
+write the inner dockerd log, the container list and each container's last lines to `failure-evidence/`, uploaded as job artifacts (capped at 10 MiB
+in total, kept 14 days), to diagnose intermittent failures that do not reproduce locally.
+
 ## Load Tests (Outside the Default Suite)
 
 These tests measure elapsed time (wall-clock time) and resource consumption. They are excluded from the default test suite and explicitly enabled with `GPUWORKS_TEST_PERF=1`.

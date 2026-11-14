@@ -556,6 +556,7 @@ core-lint:
       -e GPUWORKS_TEST_STRICT=1
       -e CI_NODE_INDEX
       -e CI_NODE_TOTAL
+      -e GPUWORKS_TESTENV_FAILURE_LOG_DIR
       -e GPUWORKS_L3_RUNTIME_BASE_IMAGE="$GPUWORKS_L3_RUNTIME_BASE_IMAGE"
       -e GPUWORKS_L3_SHELL_BASE_IMAGE="$GPUWORKS_L3_SHELL_BASE_IMAGE"
       -e GPUWORKS_L3_NO_PYTHON_IMAGE="$GPUWORKS_L3_NO_PYTHON_IMAGE"
@@ -564,15 +565,34 @@ core-lint:
   after_script:
     # On failure keep what is needed to tell a wedged inner dockerd (docker run
     # never creating the container, stop/rm/inspect all killed by their
-    # timeouts) from a test bug: the DinD daemon's own timestamped log plus the
-    # host load/pressure at the end of the job. The job trace alone only shows
-    # the CLI side. Read-only and best effort, so it cannot change the result.
+    # timeouts) from a test bug, as files uploaded with the job (artifacts
+    # below, failure-evidence/): the DinD daemon's own timestamped log, its
+    # containers and their last lines, the host load/pressure at the end of the
+    # job, and next to them the server and agent logs of each failed case
+    # (GPUWORKS_TESTENV_FAILURE_LOG_DIR, 1 MiB tail per case). Every piece is
+    # tailed and the whole is capped at 10 MiB; nothing is kept for a passing
+    # job. Read-only and best effort, so it cannot change the result.
     - |
       if [ "$CI_JOB_STATUS" = failed ]; then
-        echo "== host load at job end: $(cat /proc/loadavg 2>/dev/null)"
-        for p in cpu io memory; do echo "== /proc/pressure/$p: $(cat /proc/pressure/$p 2>/dev/null | tr '\n' ' ')"; done
-        echo "== inner dockerd log (last 300 lines)"
-        docker logs --timestamps --tail 300 "ci-gpuworks-docker-core-dind-$CI_JOB_ID" 2>&1 || true
+        ev="$CI_PROJECT_DIR/failure-evidence"; dind="ci-gpuworks-docker-core-dind-$CI_JOB_ID"
+        mkdir -p "$ev/containers"
+        { echo "loadavg: $(cat /proc/loadavg 2>/dev/null)"
+          for p in cpu io memory; do echo "pressure/$p: $(cat /proc/pressure/$p 2>/dev/null | tr '\n' ' ')"; done; } > "$ev/host.txt"
+        cat "$ev/host.txt"
+        timeout 60 docker logs --timestamps --tail 5000 "$dind" > "$ev/dockerd.log" 2>&1 || true
+        timeout 30 docker exec "$dind" docker info > "$ev/docker-info.txt" 2>&1 || true
+        timeout 30 docker exec "$dind" docker ps -a --no-trunc > "$ev/docker-ps.txt" 2>&1 || true
+        for c in $(timeout 30 docker exec "$dind" docker ps -aq 2>/dev/null | head -30); do
+          timeout 30 docker exec "$dind" docker logs --timestamps --tail 200 "$c" > "$ev/containers/$c.log" 2>&1 || true
+        done
+        # Over the cap, drop the largest per-case logs first: the daemon side is
+        # what the job trace cannot show at all.
+        while [ "$(du -sk "$ev" | cut -f1)" -gt 10240 ]; do
+          big=$(find "$ev" -type f -name '*.log' -printf '%s %p\n' | sort -rn | head -1 | cut -d' ' -f2-)
+          [ -n "$big" ] || break
+          echo "failure-evidence over 10 MiB: dropping $big"; rm -f "$big"
+        done
+        echo "failure evidence kept: $(du -sh "$ev" | cut -f1) in failure-evidence/ (job artifacts)"
       fi
     # -v: the DinD image declares /var/lib/docker as an anonymous volume;
     # without it every job leaked ~1.6 GB and filled the runner's root disk.
@@ -604,6 +624,7 @@ core-l2:
     when: always
     paths:
       - coverage-l2.out
+      - failure-evidence/
     expire_in: 14 days
 
 core-l3:
@@ -612,10 +633,13 @@ core-l3:
   retry: 1
   variables:
     DOCKER_TEST_COMMAND: "make test-l3 GO_TEST_FLAGS=-v COVERPROFILE=coverage-l3.out"
+    # In-process server and agent logs of each failed case (see .docker-core).
+    GPUWORKS_TESTENV_FAILURE_LOG_DIR: "$CI_PROJECT_DIR/failure-evidence/cases"
   artifacts:
     when: always
     paths:
       - coverage-l3.out
+      - failure-evidence/
     expire_in: 14 days
 
 # Control-plane scale cases, all gated by FLEET_REDEPLOY_CHURN=1 from a
