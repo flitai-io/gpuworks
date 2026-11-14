@@ -34,17 +34,7 @@ func (a *apiHandlers) listInstances(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	insts, err := a.d.Store.ListInstances()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	deps, err := a.d.Store.ListDeployments()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, insts)
+	rows, _, insts, err := a.listRows()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -58,13 +48,52 @@ func (a *apiHandlers) listInstances(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if !query.paged {
-		writeJSON(w, http.StatusOK, dto.NewList(a.instanceDTOs(rows, matched)))
+	shown := matched
+	if query.paged {
+		start, end := query.window(len(matched))
+		shown = matched[start:end]
+	}
+	pageRows, shown, err := freshInstances(rows, shown)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, pageOf(matched, query, func(page []store.Instance) []dto.Instance {
-		return a.instanceDTOs(rows, page)
-	}))
+	if !query.paged {
+		writeJSON(w, http.StatusOK, dto.NewList(a.instanceDTOs(pageRows, shown)))
+		return
+	}
+	page := pageOf(matched, query, func([]store.Instance) []dto.Instance { return a.instanceDTOs(pageRows, shown) })
+	writeJSON(w, http.StatusOK, page)
+}
+
+// freshInstances reads the shown instances and their deployments' other
+// instances again (ListRows.Fresh): which instances match, and their order,
+// come from the list as a whole, what they show is current. An instance gone
+// since keeps the row the list read.
+func freshInstances(rows *deployment.ListRows, shown []store.Instance) (*deployment.ListRows, []store.Instance, error) {
+	seen := map[uint]bool{}
+	var ids []uint
+	for i := range shown {
+		if id := shown[i].DeploymentID; !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	fresh, err := rows.Fresh(ids)
+	if err != nil || fresh == rows {
+		return fresh, shown, err
+	}
+	out := make([]store.Instance, len(shown))
+	for i := range shown {
+		out[i] = shown[i]
+		for _, inst := range fresh.Instances(shown[i].DeploymentID) {
+			if inst.ID == shown[i].ID {
+				out[i] = inst
+				break
+			}
+		}
+	}
+	return fresh, out, nil
 }
 
 // instanceMatches applies a list query's filters to one instance.

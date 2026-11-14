@@ -29,17 +29,7 @@ func (a *apiHandlers) listDeployments(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	deps, err := a.d.Store.ListDeployments()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	instances, err := a.d.Store.ListInstances()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, instances)
+	rows, deps, _, err := a.listRows()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -51,12 +41,24 @@ func (a *apiHandlers) listDeployments(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	deploymentListSorters(rows).apply(matched, order)
+	// The rows shown read their progress again; which rows match, and their
+	// order, come from the list as a whole.
+	shown := matched
+	if query.paged {
+		start, end := query.window(len(matched))
+		shown = matched[start:end]
+	}
+	pageRows, err := rows.Fresh(deploymentIDsOf(shown))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	// Without page parameters every match comes back in full; the filters
 	// and order apply either way.
 	if !query.paged {
 		out := make([]dto.Deployment, 0, len(matched))
 		for _, d := range matched {
-			out = append(out, a.deploymentDTOFrom(rows, d, false))
+			out = append(out, a.deploymentDTOFrom(pageRows, d, false))
 		}
 		writeJSON(w, http.StatusOK, dto.NewList(out))
 		return
@@ -64,7 +66,7 @@ func (a *apiHandlers) listDeployments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pageOf(matched, query, func(page []*store.Deployment) []dto.DeploymentListItem {
 		items := make([]dto.DeploymentListItem, 0, len(page))
 		for _, d := range page {
-			full := a.deploymentDTOFrom(rows, d, false)
+			full := a.deploymentDTOFrom(pageRows, d, false)
 			items = append(items, deploymentListItem(full, deploymentPreparationSummary(d, full.ModelProgress)))
 		}
 		return items

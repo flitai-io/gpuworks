@@ -154,11 +154,19 @@ func (l StoreRows) ModelSource(id uint, node *store.Node, rules store.SourceRule
 }
 
 func (l *ListRows) ModelSource(id uint, node *store.Node, rules store.SourceRules) store.ModelSource {
+	if l.fresh != nil {
+		return l.fresh.sources.Source(id, node.ID, rules)
+	}
 	return l.sources.Source(id, node.ID, rules)
 }
 
-func (l *ListRows) loadPreparationSources(deployments []store.Deployment, files []store.ModelFile) error {
+func (l *ListRows) loadPreparationSources(deployments []store.Deployment, files []store.ModelFile, everyNode bool) error {
 	nodeIDs := map[uint]bool{}
+	if everyNode {
+		for id := range l.nodes {
+			nodeIDs[id] = true
+		}
+	}
 	for i := range deployments {
 		for _, id := range l.PreparationNodes(&deployments[i]) {
 			nodeIDs[id] = true

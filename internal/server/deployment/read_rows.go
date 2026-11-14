@@ -180,10 +180,45 @@ type ListRows struct {
 	// st is the store the list was read from.
 	st *store.Store
 	PreparationReads
+	// deploymentRows and instanceRows are the rows the list was built from,
+	// in their read order.
+	deploymentRows []store.Deployment
+	instanceRows   []store.Instance
+	// shared marks rows a Lists snapshot hands to every reader: they are
+	// read-only, and Fresh reads a page's progress again.
+	shared bool
+	// fresh holds what Fresh read again: the page's deployments' instances
+	// (an absent deployment has none) and their models' files.
+	fresh *freshRows
 }
 
+// freshRows is what Fresh read again for a page.
+type freshRows struct {
+	instances map[uint][]store.Instance
+	files     map[modelNodeKey]*store.ModelFile
+	models    map[uint]bool
+	nodes     map[uint]bool
+	sources   *store.ModelSourceSnapshot
+}
+
+// NewListRows reads everything a list of deployments and instances joins
+// against, once.
 func NewListRows(st *store.Store, prep ModelPreparation, deployments []store.Deployment, instances []store.Instance) (*ListRows, error) {
+	nodes, err := st.NodeIdentities()
+	if err != nil {
+		return nil, err
+	}
+	return newListRows(st, prep, deployments, instances, nodes, false)
+}
+
+// newListRows is NewListRows over nodes already read. everyNode resolves
+// model sources on every node rather than on the nodes preparing now (which
+// the controller holds in memory and announces no change of): a snapshot
+// kept across reads must answer for whichever node prepares later.
+func newListRows(st *store.Store, prep ModelPreparation, deployments []store.Deployment, instances []store.Instance, nodes []store.Node, everyNode bool) (*ListRows, error) {
 	l := &ListRows{
+		deploymentRows:        deployments,
+		instanceRows:          instances,
 		st:                    st,
 		PreparationReads:      PreparationReads{prep},
 		instancesByDeployment: map[uint][]store.Instance{},
@@ -201,12 +236,10 @@ func NewListRows(st *store.Store, prep ModelPreparation, deployments []store.Dep
 	for _, inst := range instances {
 		l.instancesByDeployment[inst.DeploymentID] = append(l.instancesByDeployment[inst.DeploymentID], inst)
 	}
-	nodes, err := st.NodeIdentities()
-	if err != nil {
-		return nil, err
-	}
+	l.byUUID = make(map[string]*store.Node, len(nodes))
 	for i := range nodes {
 		l.nodes[nodes[i].ID] = &nodes[i]
+		l.byUUID[nodes[i].UUID] = &nodes[i]
 	}
 	models, err := st.ListModels()
 	if err != nil {
@@ -257,7 +290,7 @@ func NewListRows(st *store.Store, prep ModelPreparation, deployments []store.Dep
 	for id, reqs := range all {
 		l.reqs[id] = reqs
 	}
-	if err := l.loadPreparationSources(deployments, modelFiles); err != nil {
+	if err := l.loadPreparationSources(deployments, modelFiles, everyNode); err != nil {
 		return nil, err
 	}
 	return l, nil
@@ -291,17 +324,16 @@ func (l *ListRows) loadReads(st *store.Store, instances []store.Instance, fileBy
 
 func (l *ListRows) ModelReads(instanceID uint) []dto.InstanceModelFile { return l.reads[instanceID] }
 
-func (l *ListRows) NodeByUUID(uuid string) *store.Node {
-	if l.byUUID == nil {
-		l.byUUID = make(map[string]*store.Node, len(l.nodes))
-		for _, node := range l.nodes {
-			l.byUUID[node.UUID] = node
-		}
-	}
-	return l.byUUID[uuid]
-}
+// NodeByUUID is built with the rows, never on first use: a snapshot's rows
+// are read by many requests at once.
+func (l *ListRows) NodeByUUID(uuid string) *store.Node { return l.byUUID[uuid] }
 
 func (l *ListRows) Instances(deploymentID uint) []store.Instance {
+	if l.fresh != nil {
+		if insts, ok := l.fresh.instances[deploymentID]; ok {
+			return insts
+		}
+	}
 	return l.instancesByDeployment[deploymentID]
 }
 
@@ -312,6 +344,9 @@ func (l *ListRows) Node(id uint) *store.Node { return l.nodes[id] }
 func (l *ListRows) Model(id uint) *store.Model { return l.models[id] }
 
 func (l *ListRows) ModelFile(modelID, nodeID uint) *store.ModelFile {
+	if l.fresh != nil && l.fresh.models[modelID] && l.fresh.nodes[nodeID] {
+		return l.fresh.files[modelNodeKey{modelID, nodeID}]
+	}
 	return l.modelFiles[modelNodeKey{modelID, nodeID}]
 }
 

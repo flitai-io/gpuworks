@@ -134,6 +134,9 @@ type Deps struct {
 	CancelModelSync func(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error)
 	// Preparation is model preparation as the hub and the controller hold it.
 	Preparation deployment.ModelPreparation
+	// Lists is the server's shared snapshot of every deployment and instance
+	// the deployment and instance lists read; nil reads them per request.
+	Lists *deployment.Lists
 	// NodeRuntime reads and restarts a node's container runtime daemon.
 	NodeRuntime     NodeRuntimeHooks
 	ImageFetch      ImageFetchHooks

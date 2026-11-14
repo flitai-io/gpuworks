@@ -42,7 +42,7 @@ func (e *StorageInUseError) Is(target error) bool { return target == ErrStorageI
 // ListStorages returns every storage, the default first.
 func (s *Store) ListStorages() ([]Storage, error) {
 	var rows []Storage
-	err := s.db.Order("is_default desc, name asc").Find(&rows).Error
+	err := s.reader().Order("is_default desc, name asc").Find(&rows).Error
 	return rows, err
 }
 

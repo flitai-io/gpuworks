@@ -28,6 +28,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/controller"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/expose"
 	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 	"gpuworks.ai/gpuworks/internal/server/hub"
@@ -333,6 +334,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		},
 		CancelModelSync: ctrl.CancelModelSync,
 		Preparation:     modelPreparation{h, ctrl},
+		Lists:           deployment.NewLists(st, modelPreparation{h, ctrl}, nil),
 		NodeRuntime:     h,
 		Outside:         outside,
 		ImageFetch: api.ImageFetchHooks{
