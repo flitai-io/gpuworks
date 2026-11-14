@@ -2,14 +2,11 @@
 // proximity-hover overlays and an acknowledged close. The app uses it through
 // OptionSelect (ui/src/ui-kit/OptionSelect.tsx) and the rows-per-page control of
 // DataTablePagination.
-import { dom } from "./helpers/dom.ts";
-import { installPlainAnimationFrames } from "./helpers/plainAnimationFrames.ts";
+import { dom, pendingFrameCount } from "./helpers/dom.ts";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test as nodeTest } from "node:test";
 import React, { useState } from "react";
 
-// Before framer-motion loads (the imports below): see helpers/plainAnimationFrames.ts.
-const { pendingFrameCount } = installPlainAnimationFrames();
 for (const name of ["KeyboardEvent", "Document", "AbortController", "AbortSignal"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }

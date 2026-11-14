@@ -44,9 +44,13 @@ Object.defineProperty(globalThis, "MessageChannel", { value: ShimMessageChannel,
 // still pending when the test ends, cleanup disposes the chart, and the
 // pending frame then reads the disposed painter ("Cannot read properties of
 // null (reading 'layerStack')"), which node:test reports against the test
-// that just finished. Frames belong to the test that scheduled them: once it
-// ends they are dropped. Installed before ECharts is imported, since zrender
-// binds requestAnimationFrame when its module loads.
+// that just finished. A frame that outlives the test that scheduled it still
+// runs, but what it throws is dropped: it belongs to a test already decided.
+// It is not dropped itself: framer-motion's frame loop is process-wide and
+// asks for the next frame only once the previous one has run, so one dropped
+// frame would leave it waiting forever and hang every later exit animation
+// (AnimatePresence mode="wait") in the file. Installed before ECharts and
+// framer-motion are imported, since both bind requestAnimationFrame on load.
 let frameGeneration = 0;
 const pendingFrames = new Map<number, ReturnType<typeof setTimeout>>();
 let nextFrame = 0;
@@ -58,7 +62,15 @@ Object.defineProperties(dom.window, {
       const generation = frameGeneration;
       pendingFrames.set(id, setTimeout(() => {
         pendingFrames.delete(id);
-        if (generation === frameGeneration) callback(performance.now());
+        if (generation === frameGeneration) {
+          callback(performance.now());
+          return;
+        }
+        try {
+          callback(performance.now());
+        } catch {
+          // A finished test's frame: see above.
+        }
       }, 16));
       return id;
     },
@@ -75,7 +87,7 @@ Object.defineProperties(dom.window, {
 for (const name of ["requestAnimationFrame", "cancelAnimationFrame"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
-/** Frames scheduled and not yet run (or dropped); a test can wait for 0. */
+/** Frames scheduled and not yet run; a test can wait for 0. */
 export const pendingFrameCount = () => pendingFrames.size;
 afterEach(() => {
   frameGeneration += 1;
