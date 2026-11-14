@@ -459,7 +459,7 @@ export default function LogsPage() {
                   }}
                 />
               </Space>
-              <div style={{ fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12 }}>
+              <div style={{ fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: "var(--font-size-body)" }}>
                 {context.rows.map((e, i) => (
                   <div
                     key={`${e.time_ms}-${e.id}`}
@@ -488,7 +488,7 @@ export default function LogsPage() {
                 <div key={key}>
                   <div
                     data-testid="log-row"
-                    style={{ display: "flex", gap: 12, padding: "3px 12px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12, borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap", alignItems: "baseline" }}
+                    style={{ display: "flex", gap: 12, padding: "3px 12px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: "var(--font-size-body)", borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap", alignItems: "baseline" }}
                   >
                     <span style={{ color: "rgba(0,0,0,0.45)", flex: "none" }}>{formatTimeSec(e.time_ms)}</span>
                     <span
@@ -539,7 +539,7 @@ export default function LogsPage() {
                     )}
                   </div>
                   {block && expandedBlocks.has(key) && (
-                    <div style={{ background: "#fff7f6", borderBottom: "1px solid #f0f2f5", padding: "4px 12px 6px 60px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12 }}>
+                    <div style={{ background: "#fff7f6", borderBottom: "1px solid #f0f2f5", padding: "4px 12px 6px 60px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: "var(--font-size-body)" }}>
                       {block.frames.map((f) => (
                         <div key={`${f.time_ms}-${f.id}`} style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", color: levelColor("error") }}>
                           {f.line}

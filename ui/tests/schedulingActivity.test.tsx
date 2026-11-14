@@ -76,7 +76,7 @@ test("the chart stacks one series per reason the server names, in its order and 
   assert.deepEqual(series.map((one) => one.name), REASONS.map((key) => `name:${key}`));
   assert.ok(series.every((one) => one.stack === "activity"));
   assert.deepEqual(series[1].data, [0, 1, 2]);
-  assert.equal(series[5].itemStyle.color, colors.chartSlate);
+  assert.equal(series[5].itemStyle.color, colors.text);
   assert.equal(series[6].itemStyle.color, colors.danger);
   // Every reason the server names has a colour of its own.
   assert.equal(new Set(series.map((one) => one.itemStyle.color)).size, REASONS.length);

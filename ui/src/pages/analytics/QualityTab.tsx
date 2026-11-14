@@ -92,7 +92,7 @@ export default function QualityTab({ from, to, granularity, deployment, tz, relo
       { key: "completed", color: SERIES_COLORS.ok },
       { key: "length", color: SERIES_COLORS.miss },
       { key: "client_closed", color: SERIES_COLORS.grey },
-      { key: "interrupted", color: SERIES_COLORS.thinking },
+      { key: "interrupted", color: SERIES_COLORS.interrupted },
       { key: "error", color: SERIES_COLORS.err },
     ] as const;
     const results = stackedBarOption({

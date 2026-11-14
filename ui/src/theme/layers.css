@@ -29,3 +29,21 @@
   ul:not([data-slot]) { list-style: disc; }
   ol:not([data-slot]) { list-style: decimal; }
 }
+
+/* Code typography is independent of surrounding drawer/heading/body inheritance.
+   Do not change html's root size: Zeron's rem scale assumes the browser root. */
+pre,
+.code-block,
+.markdown-content pre code,
+.playground-code,
+.playground-preview-source,
+.deploy-command-preview,
+.deploy-command-preview pre,
+.deploy-runtime-command pre,
+.deploy-command-editor,
+.template-command-preview,
+.template-operation-usage pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-code);
+}

@@ -5,18 +5,17 @@ import type { MonitorRequest } from "../../monitorRequestsApi";
 import { colors } from "../../theme/tokens";
 import { formatMS, formatTokens, liveEventRate, requestPhases, requestSpeeds, type SegmentKind } from "./requestShape";
 
-// Phase colours: categorical, validated for colour-vision deficiency in the
-// order they sit on the bar. The unsplit wait is a neutral hatch - it means
+// Phase colours distinguish stages; successful generation uses the success token. The unsplit wait is a neutral hatch - it means
 // "queue and prefill, not told apart".
 export const SEGMENT_STYLE: Record<SegmentKind, string> = {
   gateway: colors.border,
   pd_prefill: colors.chartPrimary,
   preprocess: colors.chartViolet,
-  queue: colors.chartSecondary,
-  prefill: colors.chartTeal,
+  queue: colors.muted,
+  prefill: colors.chartSecondary,
   waiting: `repeating-linear-gradient(135deg, ${colors.weak} 0 3px, ${colors.controlBorder} 3px 6px)`,
-  thinking: colors.chartQuaternary,
-  answering: colors.chartTertiary,
+  thinking: colors.chartTeal,
+  answering: colors.success,
   tail: colors.borderSoft,
 };
 

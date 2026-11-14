@@ -91,6 +91,10 @@ test("an instance event merges into the non-live log stream in time order, tagge
   assert.ok(/^\[\d\d-\d\d \d\d:\d\d:\d\d\] line a$/.test(lines[0]), `the earliest log line stays first: ${lines[0]}`);
   assert.ok(/^\[\d\d-\d\d \d\d:\d\d:\d\d\] line b$/.test(lines[2]), `the latest log line stays last: ${lines[2]}`);
   assert.ok(lines[1].includes("[System]"), "the event line carries the system tag");
+  const eventLine = [...container.querySelectorAll<HTMLSpanElement>("pre span")].find(el => el.textContent?.includes("State changed to running") && el.style.background);
+  assert.ok(eventLine);
+  assert.equal(eventLine.style.color, "rgb(161, 210, 254)", "platform events use readable information blue");
+  assert.equal(container.querySelector("pre")?.style.fontSize, "var(--font-size-body)");
   assert.ok(lines[1].includes("State changed to running"), "the event line renders the instance event's own text");
 });
 

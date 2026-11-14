@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Alert, Button, Space, Tag, Typography } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
+import { terminalOptions } from "../theme/terminalTheme";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -49,17 +50,11 @@ export default function NodeTerminal({ nodeUUID, hostname, target = "host", ref_
     let disposed = false;
     const term = new Terminal({
       cursorBlink: true,
-      fontSize: 13,
-      fontFamily: '"SFMono-Regular", "JetBrains Mono", Menlo, Consolas, "Courier New", monospace',
+      ...terminalOptions,
       scrollback: 5000,
       // Matches the TERM=xterm-256color the agent exports.
       allowProposedApi: true,
-      theme: {
-        background: "#12161c",
-        foreground: "#d7dde5",
-        cursor: "#5b9dd9",
-        selectionBackground: "#2c5378",
-      },
+
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -153,7 +148,7 @@ export default function NodeTerminal({ nodeUUID, hostname, target = "host", ref_
   const closed = status.kind === "exited" || status.kind === "error";
 
   return (
-    <div className="node-terminal">
+    <div className="node-terminal" style={{ background: terminalOptions.theme.background }}>
       <div className="node-terminal-bar">
         <Space size={8} wrap>
           <Typography.Text strong style={{ color: "#e6edf5" }}>

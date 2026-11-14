@@ -886,7 +886,7 @@ tbody tr:hover > .resource-table-pinned { background-image: linear-gradient(var(
   border-radius: var(--radius-sm);
   background: var(--muted);
   color: var(--fg-muted);
-  font-size: var(--font-size-code);
+  font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   vertical-align: baseline;
   overflow-wrap: anywhere;
