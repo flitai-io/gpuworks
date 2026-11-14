@@ -143,7 +143,7 @@ func (c *Controller) anotherNodeMayRun(deployment *unitDeployment, lost []store.
 	for _, inst := range lost {
 		gone[inst.NodeID] = true
 	}
-	nodes, err := c.store.ListNodes()
+	nodes, err := c.store.FleetNodes()
 	if err != nil {
 		return false
 	}

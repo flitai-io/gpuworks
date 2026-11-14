@@ -276,3 +276,35 @@ func TestFleetNodesWithoutTheSnapshotReadsEachTime(t *testing.T) {
 		t.Fatalf("nodes = %+v err %v, want the direct write seen", nodes, err)
 	}
 }
+
+// RefreshFleetNodes takes every report so far, inside the report window too:
+// the controller calls it once per status batch, so the deployments the batch
+// enqueues read the reports that enqueued them.
+func TestRefreshFleetNodesTakesTheReportsInsideTheWindow(t *testing.T) {
+	f := newFleetFixture(t)
+	f.fleet(t)
+	if err := f.st.UpdateNodeStatus("fleet-1", proto.NodeStatus{
+		Sys:  proto.SysInfo{Hostname: "reported", GPUVendor: "nvidia"},
+		GPUs: []proto.GPUInfo{{Index: 0, UUID: "GPU-fleet-1", Name: "NVIDIA A100", Vendor: "nvidia", MemoryTotalBytes: 80 << 30, Healthy: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.now = f.now.Add(100 * time.Millisecond)
+	if got, _ := f.fleet(t); nodeByUUID(got, "fleet-1").Hostname == "reported" {
+		t.Fatal("the report was seen inside the window before a refresh: the window is not in force")
+	}
+	if err := f.st.RefreshFleetNodes(); err != nil {
+		t.Fatal(err)
+	}
+	got, rebuilt := f.fleet(t)
+	if rebuilt || nodeByUUID(got, "fleet-1").Hostname != "reported" {
+		t.Fatalf("after a refresh: rebuilt again %v, hostname %q; want the report from the refresh", rebuilt, nodeByUUID(got, "fleet-1").Hostname)
+	}
+	before := f.reads.Load()
+	if err := f.st.RefreshFleetNodes(); err != nil {
+		t.Fatal(err)
+	}
+	if f.reads.Load() != before {
+		t.Fatal("a refresh with nothing new read the fleet")
+	}
+}

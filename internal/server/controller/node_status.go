@@ -29,6 +29,12 @@ func (c *Controller) settleNodeStatus() {
 	if !c.nodeStatusDirty.Swap(false) {
 		return
 	}
+	// The deployments this batch enqueues plan on the server's node snapshot,
+	// which takes routine reports once per window: take this batch's now, so
+	// they plan on the reports that enqueued them.
+	if err := c.store.RefreshFleetNodes(); err != nil {
+		c.log.Warn("could not refresh the node snapshot", "err", err)
+	}
 	facts, err := c.store.DeploymentSettleFacts()
 	if err != nil {
 		// Unknown is unsettled: fall back to reconciling everything.

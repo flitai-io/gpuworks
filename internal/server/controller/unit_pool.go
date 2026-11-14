@@ -103,7 +103,7 @@ func (c *Controller) poolModelFiles(modelID uint, nodes []store.Node, others int
 func (c *Controller) poolNodes(reqs nodelabel.Requirements) (nodes []store.Node, others int, err error) {
 	named := reqs[nodelabel.KeyNode]
 	if len(named) == 0 {
-		nodes, err = c.store.ListNodes()
+		nodes, err = c.store.FleetNodes()
 		return nodes, 0, err
 	}
 	if nodes, err = c.store.NodesByUUID(named); err != nil {
