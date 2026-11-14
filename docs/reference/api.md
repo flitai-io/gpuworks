@@ -1429,7 +1429,7 @@ PD 请求（`placement.pd`）：单元可以不写 `node_uuid`，写了的单元
 2. 组之间：RDMA 网络（主机 RDMA、加速器 RDMA）优先于以太网，再看已有模型文件的节点多的组。
 3. 组内：已有模型的节点优先，再按 `placement_strategy`（没写时多机与 PD 是 `binpack`）：`binpack` 取空闲卡最少但够用的，`spread` 取最多的，最后按节点编号定。PD 在 `binpack` 下，一台节点放得下全部单元就都放这一台；`spread` 下 prefill 与 decode 尽量不在同一台。
 
-没有一组放得下返回 409 `UNIT_PLACEMENT_NONE`，`params` 为 `nodes`（节点总数）、`unmet`（不满足节点条件）、`cordoned`、`offline`、`busy`（空闲卡不够）、`no_network`（没有可用的计算网络）、`no_peer_memory`（PD 模式经 RDMA 传 KV 而节点未加载 peer memory 模块）、`largest`（最大的一组有几台）。PD 模式经 RDMA 传 KV、且有节点因未加载 peer memory 模块被排除时，改为 409 `PD_PEER_MEMORY_NONE`（`params`：`mode`、`nodes`、`no_peer_memory`、`module`、`fix` 修复命令）；手动放置到这样的节点返回 `PD_PEER_MEMORY_MISSING`（`mode`、`role`、`node`、`module`、`fix`、`state`）。评估对这些失败不返回 HTTP 错误，而是 `ok=false`、`errors[]` 里 `field` 为 `placement_mode`，响应带 `auto_placed: true`。
+没有一组放得下返回 409 `UNIT_PLACEMENT_NONE`，`params` 为 `nodes`（节点总数）、`unmet`（不满足节点条件）、`cordoned`、`offline`、`busy`（空闲卡不够）、`no_network`（没有可用的计算网络）、`no_peer_memory`（PD 模式经 RDMA 传 KV 而节点未加载 peer memory 模块）、`largest`（最大的一组有几台）；PD 模式经 UCX 传 KV、参数网络不是主机 RDMA、且有节点内核会让 UCX 卡住（见节点的 `ucx_netlink_hang`）而被跳过时另有 `ucx_netlink_hang`（个数）与 `ucx_netlink_nodes`（前几个节点名），否则没有这两个字段。PD 模式经 RDMA 传 KV、且有节点因未加载 peer memory 模块被排除时，改为 409 `PD_PEER_MEMORY_NONE`（`params`：`mode`、`nodes`、`no_peer_memory`、`module`、`fix` 修复命令）；手动放置到这样的节点返回 `PD_PEER_MEMORY_MISSING`（`mode`、`role`、`node`、`module`、`fix`、`state`）。评估对这些失败不返回 HTTP 错误，而是 `ok=false`、`errors[]` 里 `field` 为 `placement_mode`，响应带 `auto_placed: true`。
 
 评估成功时响应带 `auto_placed: true`，预览按此刻挑中的节点算；创建时重新挑一次，所以两次的节点可能不同；创建不提交评估选中的节点，也就没有单机自动放置那样的 `AUTOMATIC_PLACEMENT_STALE`，资源在评估后被占走时，由单元启动时的重新挑选处理。部署保存的是挑中的节点（写在多机的 `node_uuids` 或 PD 的单元里），详情的 `placement_mode` 为 `auto`。
 
@@ -1574,7 +1574,7 @@ extra_args 解析（`EXTRA_ARGS_INVALID`）、挂载（`MOUNT_CONTAINER_PATH`/`M
 - 与 `nnodes`、`node_uuids`、`replicas > 1` 同时给出时返回 `PD_SHAPE_CONFLICT`；自动放置用 `placement_mode: "auto"` 且单元不写 `node_uuid`（见[自动放置多机与 PD 部署](#自动放置多机与-pd-部署)）；其余校验错误码以
   `PD_` 开头（字段 `placement.pd`）。可休眠（`sleepable`）且 KV 经 UCX 走主机 RDMA 网络时，创建与评估返回
   `PD_SLEEP_RDMA_UNSUPPORTED`（`params`：`mode`、`network`）。
-  放置里有节点的内核会让 UCX 卡住（见上文节点的 `ucx_netlink_hang`）而模式经 UCX 传 KV 时：参数网络是以太网（含管理网）返回 400
+  **手动指定**的放置里有节点的内核会让 UCX 卡住（见上文节点的 `ucx_netlink_hang`）而模式经 UCX 传 KV 时（自动放置直接跳过这些节点）：参数网络是以太网（含管理网）返回 400
   `PD_UCX_NETLINK_HANG`（字段 `placement.pd`），在主机 RDMA 网络上评估只给警告 `PD_UCX_NETLINK_HANG_RDMA`、创建照常；
   两者的 `params` 相同：`mode`、`network`、`nodes`（`[{node_uuid, node_name, kernel}]`，只含受影响的节点）、`names`（节点名，逗号分隔）、
   `fixes`（`[{code, commands[]}]`，与节点的 `fixes` 相同）、`fix`（第一条修复命令）。

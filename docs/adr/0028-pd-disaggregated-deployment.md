@@ -76,9 +76,18 @@ UCX 的环境变量里只有 `UCX_NET_DEVICES=lo` 能避开，但它无法跨机
 上限约束，超时就放弃并记为「未知」而不是「受影响」，任何时候同一进程里至多一个探测在跑，也不起外部命令。结果作为
 `NodeStatus.UCXNetlinkHang` 随状态上报，server 只挂在在线会话上、不入库（与 `NVIDIAIsolation` 同一路径），节点详情的
 `ucx_netlink_hang` 带 `kernel` 与 `fixes`（字面命令）。创建与评估 PD 部署时，若模式走 UCX（`vllm-nixl`、`sglang-nixl`）、
-放置里有节点上报了该事实：参数网络是以太网（含管理网）则拒绝 `PD_UCX_NETLINK_HANG`（400，字段 `placement.pd`），在
-主机 RDMA 网络上 UCX 被限定为 RDMA 传输、可能根本不做这项检查，所以只给警告 `PD_UCX_NETLINK_HANG_RDMA`，评估里两者
-都保留。`gpuworks-agent doctor` 报告同一项（`ucx_netlink_hang`）。自动放置在创建时挑完节点后同样经过这个校验。
+放置里有节点上报了该事实：参数网络是以太网（含管理网）则该节点不能放，在主机 RDMA 网络上 UCX 被限定为 RDMA 传输、
+可能根本不做这项检查，所以只给警告 `PD_UCX_NETLINK_HANG_RDMA`，评估里两者都保留。`gpuworks-agent doctor` 报告同一项
+（`ucx_netlink_hang`）。
+
+**规则只有一处：候选节点的事实。** 这条规则（模式走 UCX 且网络不是主机 RDMA 时，内核会让 UCX 卡住的节点不能放）写在
+`planning` 的候选事实里（`UnitSuggestFacts`，与在线状态一样由调用方注入 hub 的实时事实，不读库），所有选节点的路径共用：
+创建与评估的自动放置、controller 对自动放置单元的重新挑选、节点失联后的重调度与排空时的替换节点、PD 副本扩缩容。
+这些路径**跳过**受影响节点，而不是挑中后再失败——之前的校验只在创建时挑完节点之后做，controller 后来重新挑选或故障转移
+仍可能把一个 rank 放到会卡住的节点上。跳过之后没有候选时沿用原来的「没有节点可放」（`UNIT_PLACEMENT_NONE`，事件
+`NODE_REPLACE_NO_CANDIDATE`），并在参数里加上被排除的数量与前几个节点名（`ucx_netlink_hang`、`ucx_netlink_nodes`），
+运维知道该去修哪几台。**手动指定**的节点不替运维换：仍按同一条规则拒绝 `PD_UCX_NETLINK_HANG` 并带修复命令（错误码、
+`params`、`fixes` 不变）。主机 RDMA 网络上不排除，只给警告。事实是内存里的查表，每个候选一次，不新增全量扫描，也不新增持久化事实。
 
 **端口一次分配、全部落库。** controller 为一个实例一次取齐 API 端口与 side channel 端口块，全部写进
 `Instance.Ports`，后续分配据此避让。
