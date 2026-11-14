@@ -119,7 +119,22 @@ func TestKubeAgentUpgradesInPlaceKind(t *testing.T) {
 	api.login()
 	waitAgent(t, api, node, "l3kind-one")
 	step(t, "upgrade the node")
-	status, body, err := api.do(http.MethodPost, "/api/v1/nodes/"+node1.UUID+"/upgrade", nil)
+	// Right after the server restarts, the node row still reads online from
+	// before while the agent's new session has not announced its
+	// capabilities yet, and the upgrade is refused as having no eligible
+	// node. An operator retries; so does the test, for a bounded time.
+	var (
+		status int
+		body   []byte
+		err    error
+	)
+	eventually(t, "the node accepts the in-place upgrade", time.Minute, 2*time.Second, func() (bool, string) {
+		status, body, err = api.do(http.MethodPost, "/api/v1/nodes/"+node1.UUID+"/upgrade", nil)
+		if err == nil && status == http.StatusBadRequest && strings.Contains(string(body), "no eligible nodes remain") {
+			return false, string(body)
+		}
+		return true, ""
+	})
 	if err != nil || status != http.StatusAccepted || !strings.Contains(string(body), `"status":"upgrading"`) {
 		t.Fatalf("upgrade = %d %s %v; want the in-place upgrade, not a DaemonSet roll", status, body, err)
 	}
