@@ -306,14 +306,14 @@
     "tag": "GPU 设备为软隔离",
     "summary": "这台节点上的实例能看到节点的全部 GPU 设备，由 CUDA_VISIBLE_DEVICES 把每个实例限制在分到的卡上。不遵守 CUDA_VISIBLE_DEVICES、或直接打开 /dev/nvidiaN 的程序可以访问其他卡。",
     "reason": {
-      "cdi_names_missing": "NVIDIA 容器工具包运行在 CDI 模式，而节点上没有任何 CDI spec 给 {{cards}} 张 NVIDIA 卡命名，通常是 HAMi 或其他设备插件取代了 NVIDIA 的设备插件（逐卡的名字由它写出）。所以实例拿到全部卡，只靠 CUDA 限定到自己的卡。"
+      "cdi_names_missing": "节点上没有 CDI spec 为这 {{cards}} 张 NVIDIA 卡命名（常见于 HAMi 等插件替换了 NVIDIA 设备插件），实例会拿到全部卡，只靠 CUDA 限定到自己的卡。"
     },
     "fixesTitle": "恢复严格隔离（任选其一）",
     "fix": {
       "gpu_operator_device_plugin": "集群使用 GPU Operator，且没有用别的 GPU 设备插件：保持启用 Operator 自带的设备插件，它会写出逐卡的 CDI 名称。不要和 HAMi 或其他设备插件同时运行，两者会重复上报同一批 GPU。",
       "gpu_operator_toolkit_legacy_append": "把 Operator 的 toolkit 切到 legacy 模式，按卡序号隔离。spec.toolkit.env 已经存在时用这条：往列表末尾追加，不动原有条目。",
       "gpu_operator_toolkit_legacy_create": "上一条命令因为 spec.toolkit.env 还不存在而失败时改用这条：它创建这个列表（列表已存在时会被替换）。",
-      "host_toolkit_legacy": "工具包装在节点上、没有用 GPU Operator：在该节点上用 nvidia-ctk 把它切到 legacy 模式（修改 /etc/nvidia-container-runtime/config.toml），再重启容器运行时（containerd；如果服务名不同，改用 rke2-agent、k3s 或你的发行版对应的服务）。"
+      "host_toolkit_legacy": "工具包直接装在节点上（没用 GPU Operator）：执行下面的命令切到 legacy 模式，再重启容器运行时（containerd，或 rke2-agent、k3s 等对应服务）。"
     },
     "copy": "复制命令",
     "copied": "命令已复制",
