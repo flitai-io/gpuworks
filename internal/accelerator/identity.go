@@ -247,6 +247,14 @@ func ArchBrand(family string) string {
 // host's memory figure as its capacity, and a unified part wrongly called
 // discrete is sized as if the host needed nothing.
 //
+// An entry may carry more than one token ("RTX Spark"): the NVIDIA desktop
+// unified-memory family (RTX Spark, reported as e.g. "NVIDIA RTX Spark N1X
+// (6144-core Blackwell RTX GPU)") starts with "RTX", which every discrete
+// GeForce card starts with too, so the family only becomes distinctive at the
+// second token. Every token still has to match whole (see UnifiedMemory), so
+// "RTX Spark" never answers for "RTX 5090". New NVIDIA desktop unified-memory
+// SKUs land here by hand, not by pattern.
+//
 // Apple silicon is listed by generation: the stored name drops the "Apple"
 // brand word, so "Apple M4 Pro" is "M4 Pro" and its first token is the
 // generation. A Mac's card is already sized net of the OS (the Metal working
@@ -254,12 +262,14 @@ func ArchBrand(family string) string {
 // it on purpose: that working set is the ceiling for every GPU user on the
 // Mac - the window server and the owner's own applications - not the engine's
 // alone.
-var unifiedMemoryModels = []string{"GB10", "M1", "M2", "M3", "M4", "M5", "M6"}
+var unifiedMemoryModels = []string{"GB10", "RTX Spark", "M1", "M2", "M3", "M4", "M5", "M6"}
 
 // UnifiedMemory reports whether this GPU model addresses the host's memory
 // pool instead of its own device memory. name may be raw, as a probe reports
-// it ("NVIDIA GB10"), or normalized, as the server stores it ("GB10"); the
-// model token must match whole, so GB100 is not GB10.
+// it ("NVIDIA GB10"), or normalized, as the server stores it ("GB10"). Every
+// model token must match whole, so GB100 is not GB10, and a multi-token model
+// ("RTX Spark") must match the name's leading tokens, so it never answers for
+// "RTX 5090" or a bare "RTX".
 //
 // It is the one place this is decided. The agent reads it to know that a card
 // reporting no memory.total of its own should be sized from host MemTotal, and
@@ -268,11 +278,19 @@ var unifiedMemoryModels = []string{"GB10", "M1", "M2", "M3", "M4", "M5", "M6"}
 // side carries a rule of its own and nothing about it is persisted.
 func UnifiedMemory(name string) bool {
 	fields := strings.Fields(NormalizeGPUName(name))
-	if len(fields) == 0 {
-		return false
-	}
 	for _, model := range unifiedMemoryModels {
-		if strings.EqualFold(fields[0], model) {
+		tokens := strings.Fields(model)
+		if len(tokens) == 0 || len(tokens) > len(fields) {
+			continue
+		}
+		unified := true
+		for i, token := range tokens {
+			if !strings.EqualFold(fields[i], token) {
+				unified = false
+				break
+			}
+		}
+		if unified {
 			return true
 		}
 	}
