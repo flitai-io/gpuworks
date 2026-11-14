@@ -8,7 +8,7 @@
 
 安装包含此目录的 GPUWorks 版本后，打开「推理模板 → Qwen3.8-Flash-Next 125B（Strata）」，选择与权重对应的「Turing 及以上 · <量化> · Strata r5」。服务启动时会自动提供四个规格，无需导入或复制模板。新部署请选择 r5；gw6 标为「旧镜像」，只为已有部署保留，其规格 ID 和已发布的镜像来源不变。
 
-四种规格统一使用已发布的 `quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5`，另有 `registry.zstack.ai/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5` 副本。两个仓库的 manifest 摘要均为 `sha256:19216f47d43e59068266bb4d6d0150f3dea74f202a97e2e3142eeca8240bde9d`。模板声明这两处镜像来源，节点可直接拉取，无需预先导入本地镜像。SWR 的同名标签尚未通过公开读取验证，因此暂不作为回退来源。
+四种规格统一使用已发布的 `quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5`，manifest 摘要为 `sha256:19216f47d43e59068266bb4d6d0150f3dea74f202a97e2e3142eeca8240bde9d`，节点可直接从公网拉取，无需预先导入本地镜像。SWR 的同名标签尚未通过公开读取验证，因此暂不作为回退来源。
 
 在「镜像仓库 → 社区镜像 → 添加社区镜像」中，可打开 GPUWorks runner 仓库、搜索 `strata0.1.38-amd64-slot31-r5` 并选择该标签。表单会识别 Callable、CUDA 13.0、引擎版本 0.1.38 和 amd64 架构。r5 保持相同固定版本的 Strata，修复了模型链接和入口兼容性。新增规格 ID 不包含镜像版本号，版本只体现在显示名和镜像引用中。镜像上传不会自动更新旧版 GPUWorks 内置目录，需安装包含此目录的 GPUWorks 版本。
 

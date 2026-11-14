@@ -1,7 +1,6 @@
 package seed
 
 import (
-	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -17,17 +16,15 @@ const strataRunnerImage = "quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.3
 func TestStrataRunnerBuiltInContract(t *testing.T) {
 	_, original := catalogSpec(t, strataModelID, "iq2xs-strata-nvidia-single-gpu")
 	_, runner := catalogSpec(t, strataModelID, strataRunnerSpecName)
-	if original.Image != "gpuworks/strata:0.1-gw6" || len(original.ImageSources) != 3 {
+	if original.Image != "gpuworks/strata:0.1-gw6" || len(original.ImageSources) != 2 {
 		t.Fatal("the published gw6 profile and its mirrors must remain available")
 	}
 	if original.DisplayNameZHCN != "Turing 及以上 · IQ2_XS · Strata gw6（旧镜像）" ||
 		original.DisplayNameEN != "Turing+ · IQ2_XS · Strata gw6 (legacy image)" {
 		t.Fatal("the gw6 display names must identify the legacy image")
 	}
-	if runner.Image != strataRunnerImage || !reflect.DeepEqual(runner.ImageSources, []string{
-		"registry.zstack.ai/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5",
-	}) {
-		t.Fatal("all profiles must select the verified r5 image and its published mirrors")
+	if runner.Image != strataRunnerImage || len(runner.ImageSources) != 0 {
+		t.Fatal("all profiles must select the verified r5 image without inheriting the gw6 mirrors")
 	}
 	if runner.DisplayNameZHCN != "Turing 及以上 · IQ2_XS · Strata r5" ||
 		runner.DisplayNameEN != "Turing+ · IQ2_XS · Strata r5" {
@@ -114,14 +111,8 @@ func TestStrataRunnerSeedsWithoutImport(t *testing.T) {
 						if runnerIDs[spec.Name] != 0 && spec.ID != runnerIDs[spec.Name] {
 							t.Error("repeated startup replaced the runner spec identity")
 						}
-						var sources []string
-						if err := json.Unmarshal([]byte(spec.ImageSources), &sources); err != nil {
-							t.Fatal(err)
-						}
-						if !reflect.DeepEqual(sources, []string{
-							"registry.zstack.ai/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5",
-						}) {
-							t.Error("startup must persist the published runner mirror")
+						if spec.ImageSources != "" {
+							t.Errorf("startup persisted runner mirrors %s; the runner lists none", spec.ImageSources)
 						}
 						runnerIDs[spec.Name] = spec.ID
 					}
