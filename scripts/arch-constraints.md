@@ -318,6 +318,11 @@ grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' \
 | `app_run_goroutines` | 23 | max | `(*App).Run` 里直接起的协程 |
 | `app_prod_lines` | 10012 | warn | app 生产代码总行数 |
 
+2026-11-14 合入后校正：GWKS-304（!1154）把 `Controller` 上的 4 组锁和 map 收进自带锁的类型，三项收紧为 34 / 1 / 1；
+预算 MR 的 CI 跑完到合入之间，r32-fleet-nodes、r32-list-states、r32-controller-nodes 先合入，`app.New` 增加共享的节点快照与
+部署/实例列表快照（300 → 307），planning 新增两个以节点快照为参数的入口（72 → 74，GWKS-309 会把这些读改走窄接口），
+`app_prod_lines` 随之到 10043。
+
 结构体与函数的五项由 `decl_count 目录 声明模式 行模式 [body]` 测量：在该包的非测试文件里找到匹配声明模式的顶层声明，
 从它数到第一个顶格的 `}`，只数匹配行模式的行（行模式为空时数全部行；`body` 表示不数声明行本身）：
 
