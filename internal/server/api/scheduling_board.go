@@ -45,7 +45,7 @@ func (a *apiHandlers) schedulingBoard(w http.ResponseWriter, r *http.Request) {
 	// queues=1 asks for the fleet-wide lists alone, which is what the
 	// overview page reads beside its heatmap: no node is read for it.
 	if r.URL.Query().Get("queues") != "1" {
-		nodes, err := a.d.Store.ListNodes()
+		nodes, err := a.d.Store.FleetNodes()
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return

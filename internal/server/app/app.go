@@ -108,6 +108,9 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The node lists, the dashboard and the monitor share one snapshot of the
+	// fleet instead of each reading every node and card per request.
+	st.EnableFleetNodeSnapshot(nil)
 	embedded, err := startEmbeddedCatalogs(st, log)
 	if err != nil {
 		_ = st.Close()

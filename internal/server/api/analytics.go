@@ -191,7 +191,7 @@ func (a *apiHandlers) labelNodes(r *http.Request) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, err
 	}

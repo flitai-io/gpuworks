@@ -110,7 +110,7 @@ func (a *apiHandlers) probeNode(nodeUUID string, row *store.Storage, targets []s
 		}
 		return node, nil
 	}
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, err
 	}
@@ -414,7 +414,7 @@ func (a *apiHandlers) clearStorageCache(w http.ResponseWriter, r *http.Request) 
 // snapshot of its models disk. A shared storage is one row of its own and is
 // not counted on any node.
 func (a *apiHandlers) storageUsage(w http.ResponseWriter, r *http.Request) {
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

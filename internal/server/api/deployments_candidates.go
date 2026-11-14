@@ -82,7 +82,7 @@ func (a *apiHandlers) deploymentCandidates(w http.ResponseWriter, r *http.Reques
 // makes: nodes, held GPUs, the model's files, its own instances, and the
 // networks when a requirement names one.
 func (a *apiHandlers) deploymentPool(dep *store.Deployment) (*planning.Pool, int, error) {
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, 0, err
 	}

@@ -175,6 +175,7 @@ func nodeGPUDriver(st proto.NodeStatus) string {
 
 // publishNode tells the bus this node changed, naming what changed it.
 func (s *Store) publishNode(uuid, reason string) {
+	s.noteNodeChange(reason)
 	if s.Bus == nil {
 		return
 	}

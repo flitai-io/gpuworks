@@ -239,7 +239,7 @@ grep -rn 'deploy\.InferVendor(' internal pkg cmd --include='*.go' | grep -v '_te
 
 排除：`*_test.go`。原 4 处调用（`api/deployments_evaluate.go`、`api/deployments_node_helpers.go`、`api/deployments_chipmatch.go`、`controller/schedule.go`）已全部改调 `accelerator.InferVendor`。
 
-### store_list_nodes_callers / store_list_deployments_callers / store_list_instances_callers（初值 23 / 10 / 5，2026-11-14）
+### store_list_nodes_callers / store_list_deployments_callers / store_list_instances_callers（初值 23 / 10 / 5，2026-11-14；ListNodes → 11，节点快照）
 
 意图：`store.ListNodes()`（每个节点的整行加全部卡）、`ListDeployments()`、`ListInstances()`（整表整行）不再是各层默认的读法。只要节点的标识、状态、标签或一个计数的读用已有窄读（`NodeIdentities`、`NodeUUIDsByID`、`NodesForAgentUpgrade`、`CountNodes`）；需要全机群整行的热路径（列表、仪表盘、对账）由机群快照统一读一次（架构评审 R-32）。预算只降不升；新增调用点先问能否用窄读或快照。
 
@@ -249,7 +249,7 @@ grep -rnE '\.ListDeployments\(\)' internal pkg cmd --include='*.go' | grep -v '_
 grep -rnE '\.ListInstances\(\)' internal pkg cmd --include='*.go' | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c .
 ```
 
-排除：`*_test.go` 与 `internal/testenv/`（进程内测试夹具）。`\(\)` 只匹配无参调用，云厂商驱动的 `ListInstances(ctx, …)` 不计入。初值 `ListNodes` 39 → 23：`/healthz` 改用 `CountNodes`；放置选择（`LoadUnitSuggestFacts` 的调用方）不再为构造回退的在线判断先读一遍；存储、镜像、节点同步、镜像引用推送、agent 升级明细、部署运行时状态推导改用窄读。
+排除：`*_test.go` 与 `internal/testenv/`（进程内测试夹具）。`\(\)` 只匹配无参调用，云厂商驱动的 `ListInstances(ctx, …)` 不计入。初值 `ListNodes` 39 → 23：`/healthz` 改用 `CountNodes`；放置选择（`LoadUnitSuggestFacts` 的调用方）不再为构造回退的在线判断先读一遍；存储、镜像、节点同步、镜像引用推送、agent 升级明细、部署运行时状态推导改用窄读。`ListNodes` 23 → 11：节点列表、筛选项、仪表盘、存储用量与节点探测、监控清单、`/gpus`、调度中心概览与看板、部署候选池、用量分析、拉取规则计数、网络状态、`NodesForStorage` 改读 `store.FleetNodes()`（节点快照，`store/fleet_nodes.go` 内部的 2 处调用计入）。
 
 ### store_concrete_importers（初值 17）
 

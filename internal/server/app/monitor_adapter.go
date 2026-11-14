@@ -74,7 +74,7 @@ func (a *monitorInventoryAdapter) inventory(ctx context.Context) (monitor.Invent
 	if err != nil {
 		return monitor.Inventory{}, err
 	}
-	nodes, err := a.store.ListNodes()
+	nodes, err := a.store.FleetNodes()
 	if err != nil {
 		return monitor.Inventory{}, err
 	}

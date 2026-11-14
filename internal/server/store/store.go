@@ -27,6 +27,8 @@ type Store struct {
 	Bus *bus.Bus
 	// sharing keeps SharingDeployments' rows between deployment changes.
 	sharing sharingCache
+	// fleetNodes is FleetNodes' snapshot of every node.
+	fleetNodes fleetNodeCache
 	// readDB is a second connection pool (same database file) dedicated to
 	// hot, pure-read paths (ListNodes, ListDeployments, ListInstances, the
 	// timeline reads, InstanceByUUID — see reader()): under WAL, readers do
@@ -535,6 +537,6 @@ func (s *Store) DeleteNode(uuid string) error {
 	for _, ev := range removals {
 		s.observe(ev, nil)
 	}
-	s.Bus.PublishChange("node", uuid, fmt.Sprintf("deleted:%d", nodeID))
+	s.publishNode(uuid, fmt.Sprintf("deleted:%d", nodeID))
 	return nil
 }
