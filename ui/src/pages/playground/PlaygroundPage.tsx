@@ -1,4 +1,4 @@
-import { AudioOutlined, BranchesOutlined, EditOutlined, FileImageOutlined, MessageOutlined, ReloadOutlined, ThunderboltOutlined, VideoCameraOutlined } from "@ant-design/icons";
+import { AudioOutlined, EditOutlined, FileImageOutlined, MessageOutlined, ReloadOutlined, ThunderboltOutlined, VideoCameraOutlined } from "@ant-design/icons";
 import { Alert, Button, Segmented, Skeleton, Space, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -13,6 +13,7 @@ import VideoPage from "./VideoPage";
 import RealtimePage from "./RealtimePage";
 import DecisionPage from "./DecisionPage";
 import type { PlaygroundCatalog } from "./types";
+import { ConsoleIcon } from "../../ui-kit/consoleIcons";
 import { useTranslation } from "react-i18next";
 
 export default function PlaygroundPage() {
@@ -68,7 +69,7 @@ export default function PlaygroundPage() {
                 { value: "image", label: <span><FileImageOutlined /> {t("page.image")}</span> },
                 { value: "video", label: <span><VideoCameraOutlined /> {t("page.video")}</span> },
                 { value: "realtime", label: <span><ThunderboltOutlined /> {t("page.realtime")}</span> },
-                { value: "decision", label: <span><BranchesOutlined /> {t("page.decision")}</span> },
+                { value: "decision", label: <span><ConsoleIcon.decision size={14} className="inline-block align-[-0.125em]" /> {t("page.decision")}</span> },
               ]}
               onChange={(value) => navigate(`/playground/${value}`)}
             />

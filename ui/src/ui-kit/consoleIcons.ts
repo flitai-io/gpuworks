@@ -45,6 +45,7 @@ import WorkHistory from "@hugeicons/core-free-icons/WorkHistoryIcon";
 import LinkSquare02 from "@hugeicons/core-free-icons/LinkSquare02Icon";
 import MoreHorizontal from "@hugeicons/core-free-icons/MoreHorizontalIcon";
 import Copy01 from "@hugeicons/core-free-icons/Copy01Icon";
+import GitBranch from "@hugeicons/core-free-icons/GitBranchIcon";
 
 /**
  * The console's own icons (side menu, top bar), drawn from the same
@@ -99,4 +100,5 @@ export const ConsoleIcon = {
   external: createHugeIcon(LinkSquare02),
   more: createHugeIcon(MoreHorizontal),
   copy: createHugeIcon(Copy01),
+  decision: createHugeIcon(GitBranch),
 };

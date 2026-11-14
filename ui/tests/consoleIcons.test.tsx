@@ -23,8 +23,8 @@ test("every console icon draws an svg at the size its slot gives", () => {
   }
 });
 
-test("the assistant's attach-image and history icons are part of the set", () => {
-  for (const name of ["imageAdd", "history"] as const) {
+test("the assistant's attach-image and history icons and the playground's decision icon are part of the set", () => {
+  for (const name of ["imageAdd", "history", "decision"] as const) {
     const Icon = ConsoleIcon[name];
     const { container, unmount } = render(<Icon size={16} />);
     assert.ok(drawing(container.querySelector("svg")!).length > 0, `${name} draws something`);
