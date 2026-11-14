@@ -9,6 +9,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -254,7 +255,7 @@ func TestDeploymentScaleDownKeepsAwakeExcessReplicaReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	row := f.row(t, "partial")
-	if row.State == deploymentStateAsleep || row.State == deploymentStateSleeping {
+	if row.State == deployment.StateAsleep || row.State == deployment.StateSleeping {
 		t.Fatalf("state = %q, want the running state: the awake excess replica still serves", row.State)
 	}
 	if row.ReadyReplicas == nil || *row.ReadyReplicas != 1 {
@@ -269,7 +270,7 @@ func TestDeploymentScaleDownKeepsAwakeExcessReplicaReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	row = f.row(t, "partial")
-	if row.State != deploymentStateAsleep {
+	if row.State != deployment.StateAsleep {
 		t.Fatalf("state = %q, want asleep", row.State)
 	}
 	if row.ReadyReplicas == nil || *row.ReadyReplicas != 0 {
@@ -362,7 +363,7 @@ func TestDeploymentUncertainSleepStillReadsAsleep(t *testing.T) {
 	// Nothing can serve: the one instance failed. The row must not present the
 	// deployment as asleep either, because nothing is left to wake; both the
 	// gateway and the row say the deployment is down.
-	if row.State == deploymentStateAsleep || row.State == deploymentStateSleeping {
+	if row.State == deployment.StateAsleep || row.State == deployment.StateSleeping {
 		t.Fatalf("state = %q with a failed instance, want the failure's own state", row.State)
 	}
 	if row.AsleepReplicas != 0 {

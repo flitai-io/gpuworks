@@ -16,12 +16,12 @@ import (
 // never reads ready in one field and asleep in another, and the sleep state of
 // the deployment is read against the roles the gateway needs (a prefill role
 // its mode serves without does not make the deployment asleep when empty).
-func deploymentPDDTO(rows deployment.Rows, d *store.Deployment, insts []store.Instance, view replicaView, facts deploymentFacts) *dto.DeploymentPD {
+func deploymentPDDTO(rows deployment.Rows, d *store.Deployment, insts []store.Instance, view replicaView, facts deployment.Facts) *dto.DeploymentPD {
 	pd, err := planning.PDOf(d.Placement)
 	if err != nil || pd == nil {
 		return nil
 	}
-	names, match := view.names, view.match
+	names, match := view.names, view.Match
 	mode, _ := pdmode.Lookup(pd.Mode)
 	slots := map[string]planning.UnitSlot{}
 	for _, slot := range match.Slots {
@@ -29,7 +29,7 @@ func deploymentPDDTO(rows deployment.Rows, d *store.Deployment, insts []store.In
 	}
 	out := &dto.DeploymentPD{Mode: pd.Mode, Fallback: pd.EffectiveFallback(), KVLoadFailure: pd.EffectiveKVLoadFailure(),
 		State: pdStateOf(view, facts), Roles: []dto.DeploymentPDRole{}}
-	for _, role := range view.roles() {
+	for _, role := range view.Roles() {
 		counts := facts.Roles[role]
 		unitCount := len(pd.Units(role))
 		row := dto.DeploymentPDRole{Role: role, TP: pd.TP(role), PP: pd.Roles[role].PP, Desired: unitCount, Ready: counts.Awake,
@@ -58,9 +58,9 @@ func deploymentPDDTO(rows deployment.Rows, d *store.Deployment, insts []store.In
 // nothing is awake and the roles are asleep (or absent), and the same states
 // distinguish a role asleep from a role down the way the deployment's own
 // state does.
-func pdStateOf(view replicaView, facts deploymentFacts) string {
+func pdStateOf(view replicaView, facts deployment.Facts) string {
 	anyAwake := false
-	for _, role := range view.roles() {
+	for _, role := range view.Roles() {
 		if facts.Roles[role].Awake > 0 {
 			anyAwake = true
 		}
@@ -68,9 +68,9 @@ func pdStateOf(view replicaView, facts deploymentFacts) string {
 	if !anyAwake {
 		return planning.PDStateNotReady
 	}
-	for _, role := range view.roles() {
+	for _, role := range view.Roles() {
 		counts := facts.Roles[role]
-		if counts.Awake > 0 || !view.roleRequired(role, counts) {
+		if counts.Awake > 0 || !view.RoleRequired(role, counts) {
 			continue
 		}
 		return planning.PDStatePartial

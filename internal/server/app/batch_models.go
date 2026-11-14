@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"sort"
 
-	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/batch"
 	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
@@ -17,7 +16,7 @@ import (
 // what each is to a batch. The create check (Lookup) and the list a client
 // chooses from (List) both judge a name by nameEntry, so they cannot disagree.
 // A deployment's state is the one the deployment list shows
-// (deployment.RuntimeStates), refined by sleep as the gateway judges it.
+// (deployment.EffectiveStates).
 type batchModels struct {
 	st *store.Store
 	// prep reads model preparation, which tells a deployment whose download
@@ -114,7 +113,7 @@ func (m batchModels) entries(deployments []store.Deployment, instances []store.I
 	if len(kept) == 0 {
 		return nil, nil
 	}
-	states, err := deployment.RuntimeStates(m.st, m.prep, kept, instances)
+	states, err := deployment.EffectiveStates(m.st, m.prep, kept, instances)
 	if err != nil {
 		return nil, err
 	}
@@ -161,18 +160,16 @@ func endpointRank(endpoint string) int {
 	return len(batch.Endpoints)
 }
 
-// deploymentState is what one deployment is to a batch, from the runtime
-// state the deployment list shows: a running deployment some of whose
-// running replicas are awake serves; with every running replica asleep
-// (planning.InstanceAsleep on their leaders) a request wakes it when one of
-// them wakes on request (planning.RequestWakes, the gateway's rule), and
-// otherwise every sleep is held.
-func deploymentState(d *store.Deployment, runtimeState string, insts []store.Instance) batch.ModelState {
-	switch runtimeState {
+// deploymentState is what one deployment is to a batch, from the state the
+// deployment list shows (deployment.EffectiveState): a running deployment
+// serves; one the gateway refuses for sleep is woken by a request when one of
+// its replicas wakes on request (planning.RequestWakes, the gateway's rule),
+// and otherwise every sleep is held.
+func deploymentState(d *store.Deployment, state string, insts []store.Instance) batch.ModelState {
+	switch state {
 	case "running":
-		if anyReplicaServes(insts) || !replicasAsleep(insts) {
-			return batch.ModelRunning
-		}
+		return batch.ModelRunning
+	case deployment.StateAsleep, deployment.StateSleeping:
 		if planning.RequestWakes(d, insts) {
 			return batch.ModelAsleep
 		}
@@ -181,39 +178,9 @@ func deploymentState(d *store.Deployment, runtimeState string, insts []store.Ins
 		return batch.ModelOffline
 	case "failed":
 		return batch.ModelFailed
-	case "stopped":
+	case "stopped", deployment.StateDeleting:
 		return batch.ModelStopped
 	default: // pending, pulling, starting
 		return batch.ModelStarting
 	}
-}
-
-// anyReplicaServes says a running replica takes requests: its leader is not
-// asleep and is not ordered to sleep.
-func anyReplicaServes(insts []store.Instance) bool {
-	for i := range insts {
-		in := &insts[i]
-		if in.State == proto.InstRunning && !in.Headless && !planning.InstanceAsleep(in) {
-			return true
-		}
-	}
-	return false
-}
-
-// replicasAsleep says the deployment has running replicas and every one is
-// asleep. A follower of a multi-node replica sleeps with its leader and is not
-// judged on its own.
-func replicasAsleep(insts []store.Instance) bool {
-	running := 0
-	for i := range insts {
-		in := &insts[i]
-		if in.State != proto.InstRunning || in.Headless {
-			continue
-		}
-		running++
-		if !planning.InstanceAsleep(in) {
-			return false
-		}
-	}
-	return running > 0
 }

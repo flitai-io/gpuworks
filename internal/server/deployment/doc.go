@@ -9,7 +9,8 @@
 // run - resolving the template and its weights, admitting the model, planning
 // placement, preparing the image and the shared download - and the
 // deployment read model the list, the monitor and the batches share
-// (StoreRows, ListRows, RuntimeStates). The requests and previews
+// (StoreRows, ListRows, and EffectiveState, the one state every page shows
+// for a deployment). The requests and previews
 // are the API's own types (api/dto): the use cases answer exactly what the
 // API sends.
 //

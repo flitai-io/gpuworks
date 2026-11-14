@@ -48,12 +48,12 @@ func (a *apiHandlers) dashboardSummary(w http.ResponseWriter, r *http.Request) {
 		// A sleeping or asleep deployment serves nothing, so it is counted as
 		// sleeping, not running; whatever no bucket names is Other.
 		insts := rows.Instances(d.ID)
-		switch effectiveDeploymentState(d, deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d)), deploymentFactsFor(rows, d, insts)) {
+		switch deployment.EffectiveState(d, deployment.RuntimeState(rows, d, insts, deployment.RecordedModelProgress(rows, d)), deployment.FactsFor(rows, d, insts)) {
 		case "running":
 			out.Deployments.Running++
 		case "pulling", "starting":
 			out.Deployments.Warming++
-		case deploymentStateSleeping, deploymentStateAsleep:
+		case deployment.StateSleeping, deployment.StateAsleep:
 			out.Deployments.Sleeping++
 		case "pending":
 			out.Deployments.Pending++

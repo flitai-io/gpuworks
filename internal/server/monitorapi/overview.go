@@ -67,7 +67,7 @@ func (s *Service) buildOverview(ctx context.Context, rng time.Duration) (dto.Mon
 		insts := instByDep[row.DeploymentID]
 		dep := depByID[row.DeploymentID]
 		health := s.Health(row.DeploymentID, dep.HealthCheck, dep.HealthCheckThresholdSec)
-		services = append(services, serviceRowDTO(row, deploymentPlacement(dep, insts, nodeNames), deploymentState(dep, insts), health))
+		services = append(services, serviceRowDTO(row, deploymentPlacement(dep, insts, nodeNames), deploymentState(dep), health))
 	}
 	sortByHealth(services)
 

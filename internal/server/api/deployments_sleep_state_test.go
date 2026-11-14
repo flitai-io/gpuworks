@@ -9,6 +9,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -271,7 +272,7 @@ func TestDeploymentWithoutServingReplicaIsNotAsleep(t *testing.T) {
 				t.Fatal(err)
 			}
 			row := f.row(t, tc.name)
-			if row.State == deploymentStateAsleep || row.State == deploymentStateSleeping {
+			if row.State == deployment.StateAsleep || row.State == deployment.StateSleeping {
 				t.Fatalf("state = %q with no serving replica", row.State)
 			}
 			if row.AsleepReplicas != 0 {
