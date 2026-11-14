@@ -131,12 +131,12 @@ func (a *apiHandlers) requestOnlineNetworkSync() {
 	if a.d.NodeSync == nil {
 		return
 	}
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.NodeUUIDsByID()
 	if err != nil {
 		return
 	}
-	for i := range nodes {
-		a.requestNetworkSync(nodes[i].UUID)
+	for _, uuid := range nodes {
+		a.requestNetworkSync(uuid)
 	}
 }
 

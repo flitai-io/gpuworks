@@ -38,12 +38,26 @@ func (s *Store) NodeUUIDsByID() (map[uint]string, error) {
 // schedule events. These readers fetch each of those once for the whole list,
 // so the query count stays constant as the fleet grows.
 
-// NodeIdentities returns only what is needed to name a node. GPUs and
-// credential flags are left out: a list of a thousand nodes would otherwise
-// load every GPU row to print a label.
+// NodeIdentities returns only what is needed to name a node and show its
+// connection, newest first as ListNodes orders them: identity, state, labels
+// and recovery_phase (Node.ConnectionState shows a node being restored as
+// connecting). GPUs and credential flags are left out: a list of a thousand
+// nodes would otherwise load every GPU row to print a label.
 func (s *Store) NodeIdentities() ([]Node, error) {
 	var nodes []Node
-	err := s.db.Select("id", "uuid", "name", "hostname", "state", "labels").Find(&nodes).Error
+	err := s.reader().Select(nodeIdentityColumns).Order("id desc").Find(&nodes).Error
+	return nodes, err
+}
+
+// nodeIdentityColumns are the columns NodeIdentities reads.
+var nodeIdentityColumns = []string{"id", "uuid", "name", "hostname", "state", "labels", "recovery_phase"}
+
+// NodesForStorageStatus is NodeIdentities with the disk usage each node last
+// reported (path_usage and when it was observed): what a storage's per-node
+// status, capacity and cache budget are read from, newest first.
+func (s *Store) NodesForStorageStatus() ([]Node, error) {
+	var nodes []Node
+	err := s.reader().Select(append(append([]string(nil), nodeIdentityColumns...), "path_usage", "path_usage_observed_at")).Order("id desc").Find(&nodes).Error
 	return nodes, err
 }
 

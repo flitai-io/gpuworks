@@ -82,17 +82,6 @@ func PDPlacementNone(mode pdmode.Mode, vendor string, counts UnitSuggestCounts) 
 		map[string]any{"mode": mode.Name, "nodes": counts.Nodes, "no_peer_memory": counts.NoPeerMemory, "module": module, "fix": fix})
 }
 
-func (s Scaling) online(nodes []store.Node) func(string) bool {
-	if s.Online != nil {
-		return s.Online
-	}
-	online := make(map[string]bool, len(nodes))
-	for i := range nodes {
-		online[nodes[i].UUID] = nodes[i].State == store.NodeStateOnline
-	}
-	return func(uuid string) bool { return online[uuid] }
-}
-
 // ScaleScheduled sets a deployment's replica count for a caller inside the
 // server (the scheduling automation) the way the API does for an operator:
 // a single-node deployment records the desired count, a multi-node
@@ -243,11 +232,7 @@ func (s Scaling) AutoPDRoles(dep *store.Deployment, current *PDPlacement, roles 
 	if err != nil {
 		return err
 	}
-	nodes, err := s.Store.ListNodes()
-	if err != nil {
-		return err
-	}
-	facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, ListedPDRanks(current, fixed), s.online(nodes), 1, 1)
+	facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, ListedPDRanks(current, fixed), s.Online, 1, 1)
 	if err != nil {
 		return err
 	}

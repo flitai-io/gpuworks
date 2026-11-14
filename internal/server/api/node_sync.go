@@ -40,13 +40,13 @@ func (a *apiHandlers) requestSyncAllNodes() {
 	if a.d.NodeSync == nil {
 		return
 	}
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.NodeUUIDsByID()
 	if err != nil {
 		return
 	}
 	uuids := make([]string, 0, len(nodes))
-	for i := range nodes {
-		uuids = append(uuids, nodes[i].UUID)
+	for _, uuid := range nodes {
+		uuids = append(uuids, uuid)
 	}
 	a.requestSyncNodes(uuids)
 }

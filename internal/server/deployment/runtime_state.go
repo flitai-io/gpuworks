@@ -112,7 +112,7 @@ func EffectiveStates(st *store.Store, preparation ModelPreparation, deployments 
 		preparing = append(preparing, deployment)
 	}
 	if len(running) > 0 {
-		nodes, err := st.ListNodes()
+		nodes, err := st.NodeIdentities()
 		if err != nil {
 			return nil, err
 		}

@@ -130,7 +130,7 @@ func (s *Service) Items(ctx context.Context, id uint, page, size int, state stri
 			selected = append(selected, i)
 		}
 	}
-	nodes, err := s.st.ListNodes()
+	nodes, err := s.st.NodesForAgentUpgrade()
 	if err != nil {
 		return ItemPage{}, err
 	}
