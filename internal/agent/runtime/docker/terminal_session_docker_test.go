@@ -22,15 +22,51 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/terminal"
 )
 
+// dockerCLITimeout bounds one docker CLI call; terminalStepTimeout bounds a
+// wait for the container to show an effect of what the terminal wrote or an
+// owned session close. Both are ceilings for a hung daemon: every wait returns
+// as soon as its condition holds, so a healthy run is unaffected.
+const (
+	dockerCLITimeout    = 2 * time.Minute
+	terminalStepTimeout = time.Minute
+)
+
 func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	host, ok := localDockerHost()
 	if !ok || !strings.Contains(host, "gpuworks-e2e") {
 		t.Fatal("explicit real test requires a dedicated gpuworks-e2e Unix daemon")
 	}
+	// Every CLI call may share the daemon with a busy CI host: in a Docker-in-
+	// Docker job a single `run -d` or `rm -f` has taken longer than 15s while
+	// other test binaries compiled and ran beside it. A killed client leaves
+	// the container behind, so the bound only has to catch a daemon that is
+	// really hung, not one that is slow.
 	docker := func(args ...string) ([]byte, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), dockerCLITimeout)
 		defer cancel()
 		return exec.CommandContext(ctx, "docker", args...).CombinedOutput()
+	}
+	// containerFile polls a file the shell inside the container writes. A shell
+	// redirection creates the file before its content is written, so a bare
+	// "cat succeeded" can observe it empty; accept only content the caller
+	// recognizes as complete.
+	containerFile := func(container, path string, complete func(string) bool) (string, error) {
+		deadline := time.Now().Add(terminalStepTimeout)
+		var last string
+		var lastErr error
+		for time.Now().Before(deadline) {
+			output, err := docker("exec", container, "cat", path)
+			last, lastErr = strings.TrimSpace(string(output)), err
+			if err == nil && complete(last) {
+				return last, nil
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		return last, fmt.Errorf("%s never completed: last=%q err=%v", path, last, lastErr)
+	}
+	isPID := func(value string) bool {
+		pid, err := strconv.Atoi(value)
+		return err == nil && pid > 1
 	}
 	var nonce [12]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
@@ -58,7 +94,7 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 					t.Errorf("owned local close: %v", err)
 				}
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), terminalStepTimeout)
 			if err := session.close(ctx); err != nil {
 				t.Errorf("owned remote close: %v", err)
 			}
@@ -93,18 +129,9 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 		if _, err = session.local.Write([]byte("printf '%s' \"$$\" > " + path + "\n")); err != nil {
 			t.Fatal(err)
 		}
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			output, err = docker("exec", container, "cat", path)
-			if err == nil {
-				session.pid = strings.TrimSpace(string(output))
-				break
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
-		pid, err := strconv.Atoi(session.pid)
-		if err != nil || pid <= 1 {
-			t.Fatalf("owned shell PID missing: %q", session.pid)
+		session.pid, err = containerFile(container, path, isPID)
+		if err != nil {
+			t.Fatalf("owned shell PID missing: %v", err)
 		}
 		output, err = docker("exec", container, "cat", "/proc/"+session.pid+"/stat")
 		if err != nil {
@@ -126,18 +153,9 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	if _, err = first.local.Write([]byte("/bin/sh -c 'setsid sleep 300 & echo $! > " + escapedPath + "; wait' &\n")); err != nil {
 		t.Fatal(err)
 	}
-	escapedPID := ""
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		output, err = docker("exec", container, "cat", escapedPath)
-		if err == nil {
-			escapedPID = strings.TrimSpace(string(output))
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if pid, parseErr := strconv.Atoi(escapedPID); parseErr != nil || pid <= 1 {
-		t.Fatalf("escaped descendant PID missing: %q", escapedPID)
+	escapedPID, err := containerFile(container, escapedPath, isPID)
+	if err != nil {
+		t.Fatalf("escaped descendant PID missing: %v", err)
 	}
 	output, err = docker("exec", container, "cat", "/proc/"+escapedPID+"/stat")
 	if err != nil {
@@ -149,7 +167,7 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	}
 	closeOwned := func(session *owned) {
 		t.Helper()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), terminalStepTimeout)
 		defer cancel()
 		if err := session.close(ctx); err != nil {
 			t.Fatal(err)
@@ -184,16 +202,8 @@ func TestDockerTerminalSessionsRemainIsolatedOnClose(t *testing.T) {
 	if _, err = second.local.Write([]byte(command)); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		output, err = docker("exec", container, "cat", path)
-		if err == nil && string(output) == marker {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if err != nil || string(output) != marker {
-		t.Fatalf("unrelated shell no longer executes: err=%v output=%s", err, output)
+	if got, err := containerFile(container, path, func(value string) bool { return value == marker }); err != nil {
+		t.Fatalf("unrelated shell no longer executes: %v (got %q)", err, got)
 	}
 	closeOwned(second)
 	output, err = docker("exec", container, "/bin/sh", "-c", `set -- /tmp/gpuworks-webterm-*; [ "$1" = '/tmp/gpuworks-webterm-*' ]`)

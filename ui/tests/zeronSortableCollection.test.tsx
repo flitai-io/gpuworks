@@ -2,11 +2,15 @@
 // ordered list reordered by keyboard or pointer, with optional add, remove and
 // edit. The app reaches it through DataTableViewOptions and the column
 // settings drawer.
-import { dom, pendingFrameCount } from "./helpers/dom.ts";
+import { dom } from "./helpers/dom.ts";
+import { installPlainAnimationFrames } from "./helpers/plainAnimationFrames.ts";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test as nodeTest } from "node:test";
 import React, { useState } from "react";
 
+// Before framer-motion loads (the component import below): a frame dropped when a
+// test ends would leave its process-wide frame loop dead for the rest of the file.
+const { pendingFrameCount } = installPlainAnimationFrames();
 for (const name of ["KeyboardEvent", "Document", "AbortController", "AbortSignal"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }

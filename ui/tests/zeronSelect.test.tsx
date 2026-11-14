@@ -2,11 +2,14 @@
 // proximity-hover overlays and an acknowledged close. The app uses it through
 // OptionSelect (ui/src/ui-kit/OptionSelect.tsx) and the rows-per-page control of
 // DataTablePagination.
-import { dom, pendingFrameCount } from "./helpers/dom.ts";
+import { dom } from "./helpers/dom.ts";
+import { installPlainAnimationFrames } from "./helpers/plainAnimationFrames.ts";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test as nodeTest } from "node:test";
 import React, { useState } from "react";
 
+// Before framer-motion loads (the imports below): see helpers/plainAnimationFrames.ts.
+const { pendingFrameCount } = installPlainAnimationFrames();
 for (const name of ["KeyboardEvent", "Document", "AbortController", "AbortSignal"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
@@ -43,6 +46,51 @@ const frame = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
 const trigger = (name = "Engine") => screen.getByRole("combobox", { name });
 const isOpen = () => screen.queryByRole("listbox") !== null;
 
+// The acknowledgment window (selectionAckMs, 300ms in select.tsx) is shorter than
+// one click and the next assertion can take on a loaded CI runner, so a test about
+// what happens during the acknowledgment holds that one timer back and fires it
+// itself when it is done looking. No real time passes in between, whatever the
+// machine is doing.
+// select.tsx starts that timer with window.setTimeout but cancels it with the
+// bare clearTimeout. In a browser they are one API; under jsdom the bare one is
+// Node's and ignores jsdom's numeric ids, so route those to jsdom here.
+function holdAcknowledgment() {
+  const realSetTimeout = dom.window.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const held = new Map<number, () => void>();
+  dom.window.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]) => {
+    if (ms !== 300 || typeof handler !== "function") return realSetTimeout(handler, ms, ...args);
+    // A placeholder jsdom timer so the id is a real one that clearTimeout accepts.
+    const id = realSetTimeout(() => {}, 600_000);
+    held.set(id, handler as () => void);
+    return id;
+  }) as typeof dom.window.setTimeout;
+  globalThis.clearTimeout = ((id?: Parameters<typeof clearTimeout>[0]) => {
+    if (typeof id !== "number") return realClearTimeout(id);
+    held.delete(id);
+    dom.window.clearTimeout(id);
+  }) as typeof clearTimeout;
+  const restore = () => {
+    dom.window.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    for (const id of held.keys()) dom.window.clearTimeout(id);
+    held.clear();
+  };
+  return {
+    /** Acknowledgment timers started and not cancelled or fired. */
+    pending: () => held.size,
+    /** Lets every pending acknowledgment run out now. */
+    expire: () => act(async () => {
+      for (const [id, handler] of [...held]) {
+        held.delete(id);
+        dom.window.clearTimeout(id);
+        handler();
+      }
+    }),
+    restore,
+  };
+}
+
 function Engine(props: Partial<React.ComponentProps<typeof Select>> & { triggerProps?: Partial<React.ComponentProps<typeof SelectTrigger>>; contentProps?: Partial<React.ComponentProps<typeof SelectContent>> }) {
   const { triggerProps, contentProps, ...root } = props;
   return <Select {...root}>
@@ -67,13 +115,21 @@ test("the trigger shows the placeholder until a value is chosen, then the chosen
 });
 
 test("picking an option holds the popup open briefly to acknowledge the choice, then closes", async () => {
-  render(<Engine />);
-  const user = userEvent.setup();
-  await user.click(trigger());
-  await user.click(await screen.findByRole("option", { name: "vLLM" }));
-  assert.ok(isOpen(), "the popup stays open during the acknowledgment");
-  await waitFor(() => assert.equal(screen.getByRole("option", { name: "vLLM" }).getAttribute("aria-selected"), "true"));
-  await waitFor(() => assert.equal(trigger().getAttribute("aria-expanded"), "false"));
+  const ack = holdAcknowledgment();
+  try {
+    render(<Engine />);
+    const user = userEvent.setup();
+    await user.click(trigger());
+    await user.click(await screen.findByRole("option", { name: "vLLM" }));
+    assert.ok(isOpen(), "the popup stays open during the acknowledgment");
+    assert.equal(ack.pending(), 1, "the close is deferred to the acknowledgment timer");
+    await waitFor(() => assert.equal(screen.getByRole("option", { name: "vLLM" }).getAttribute("aria-selected"), "true"));
+    assert.ok(isOpen(), "still open until the acknowledgment runs out");
+    await ack.expire();
+    await waitFor(() => assert.equal(trigger().getAttribute("aria-expanded"), "false"));
+  } finally {
+    ack.restore();
+  }
 });
 
 test("Escape closes the popup immediately without changing the value", async () => {
@@ -154,18 +210,7 @@ test("controlled open state follows the caller and reports requested changes", a
 });
 
 test("defaultOpen opens the list on mount, and re-picking during the acknowledgment restarts it", async () => {
-  // The acknowledgment window (selectionAckMs, 300ms in select.tsx) is shorter than
-  // two clicks can take on a loaded CI runner, so this test stretches that one
-  // timer to 5s: the second pick then always lands inside the window.
-  // select.tsx starts that timer with window.setTimeout but cancels it with the
-  // bare clearTimeout. In a browser they are one API; under jsdom the bare one is
-  // Node's and ignores jsdom's numeric ids, so route those to jsdom here.
-  const realSetTimeout = dom.window.setTimeout;
-  const realClearTimeout = globalThis.clearTimeout;
-  dom.window.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]) =>
-    realSetTimeout(handler, ms === 300 ? 5000 : ms, ...args)) as typeof dom.window.setTimeout;
-  globalThis.clearTimeout = ((id?: Parameters<typeof clearTimeout>[0]) =>
-    typeof id === "number" ? dom.window.clearTimeout(id) : realClearTimeout(id)) as typeof clearTimeout;
+  const ack = holdAcknowledgment();
   try {
     const opens: boolean[] = [];
     render(<Engine defaultOpen onOpenChange={(next) => opens.push(next)} />);
@@ -175,12 +220,13 @@ test("defaultOpen opens the list on mount, and re-picking during the acknowledgm
     await user.click(screen.getByRole("option", { name: "SGLang" }));
     await waitFor(() => assert.equal(trigger().textContent, "SGLang"));
     assert.deepEqual(opens, [], "still acknowledging: the second pick restarted the window instead of closing");
-    await waitFor(() => assert.deepEqual(opens, [false]), { timeout: 8000 });
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(ack.pending(), 1, "the first pick's timer was cancelled: one acknowledgment is left, not one per pick");
+    await ack.expire();
+    await waitFor(() => assert.deepEqual(opens, [false]));
+    assert.equal(ack.pending(), 0);
     assert.deepEqual(opens, [false], "one close after the last acknowledgment, not one per pick");
   } finally {
-    dom.window.setTimeout = realSetTimeout;
-    globalThis.clearTimeout = realClearTimeout;
+    ack.restore();
   }
 });
 
