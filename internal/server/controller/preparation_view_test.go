@@ -30,7 +30,7 @@ func TestPreparationNodesFollowTheDeploymentVersion(t *testing.T) {
 	if c.PreparationNodes(dep) == nil {
 		t.Fatal("placement lapsed")
 	}
-	c.forgetDeployment(dep.ID)
+	c.forgetDeployment(dep.ID, false)
 	if c.PreparationNodes(dep) != nil {
 		t.Fatal("a forgotten deployment keeps its placement")
 	}

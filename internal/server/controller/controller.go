@@ -356,7 +356,7 @@ func (c *Controller) reconcileDeployment(ctx context.Context, id uint) error {
 		if err := c.withdrawCacheCopies(ctx, id); err != nil {
 			return err
 		}
-		c.forgetDeployment(id) // deleted
+		c.forgetDeployment(id, true) // deleted
 		return nil
 	}
 	if _, err := c.store.NodeByID(dep.NodeID); err != nil {
@@ -433,7 +433,7 @@ func (c *Controller) reconcileDeployment(ctx context.Context, id uint) error {
 		if err := c.withdrawCacheCopies(ctx, dep.ID); err != nil {
 			return err
 		}
-		c.forgetDeployment(dep.ID)
+		c.forgetDeployment(dep.ID, false)
 		var pending []string
 		for _, in := range insts {
 			if in.State != proto.InstStopped {
@@ -488,7 +488,7 @@ func (c *Controller) reconcileDeployment(ctx context.Context, id uint) error {
 			if err := c.store.DeleteDeployment(dep.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
 				return err
 			}
-			c.forgetDeployment(dep.ID)
+			c.forgetDeployment(dep.ID, true)
 		}
 		return nil
 	}

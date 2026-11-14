@@ -298,7 +298,7 @@ func TestDrainClocksFollowTheDrainingInstances(t *testing.T) {
 	if _, kept := c.draining[1]["b"]; kept || len(c.draining[1]) != 1 {
 		t.Fatalf("deployment 1 clocks = %v, want only a", c.draining[1])
 	}
-	c.forgetDeployment(2)
+	c.forgetDeployment(2, false)
 	if _, kept := c.draining[2]; kept {
 		t.Fatalf("a forgotten deployment kept its clocks: %v", c.draining)
 	}
