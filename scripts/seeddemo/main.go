@@ -5,6 +5,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -29,17 +30,24 @@ func main() {
 	if err := app.SyncInferenceCatalog(st); err != nil {
 		log.Fatal(err)
 	}
-	// The node arrives the way an agent's does: registered, then described
-	// by a status report whose topology is `nvidia-smi topo -m` output.
-	// 8x H100, two NVLink cliques of 4 across two NUMA nodes.
+	// The node is registered under a fixed UUID with only a token hash, then
+	// described the way an agent describes it: a status report whose topology
+	// is `nvidia-smi topo -m` output. 8x H100, two NVLink cliques of 4 across
+	// two NUMA nodes.
 	// The seed is for an empty database: rerunning it would add a second
 	// deployment and instance next to the first.
 	const nodeUUID = "demo-dgx-8xh100"
 	if _, err := st.NodeByUUID(nodeUUID); err == nil {
 		log.Fatalf("%s already holds the demo node; seed an empty database", *db)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		log.Fatal(err)
 	}
 	// No agent connects as the demo node, so its token is random and unknown.
-	if _, err := st.RegisterNode(nodeUUID, store.HashToken(auth.NewToken(32)), "dgx-a"); err != nil {
+	token := auth.NewToken(32)
+	if token == "" {
+		log.Fatal("generate node token")
+	}
+	if _, err := st.RegisterNode(nodeUUID, store.HashToken(token), "dgx-a"); err != nil {
 		log.Fatal(err)
 	}
 	var topo strings.Builder
