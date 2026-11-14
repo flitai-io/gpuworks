@@ -38,7 +38,7 @@ func HostDump(ctx context.Context) ([][]byte, error) {
 	if err := sock.SetDeadline(deadline); err != nil {
 		return nil, fmt.Errorf("set socket deadline: %w", err)
 	}
-	stop := context.AfterFunc(ctx, func() { sock.SetDeadline(time.Now()) })
+	stop := context.AfterFunc(ctx, func() { _ = sock.SetDeadline(time.Now()) })
 	defer stop()
 	// A write on a netlink socket with no address goes to the kernel.
 	if _, err := sock.Write(routeDumpRequest()); err != nil {
