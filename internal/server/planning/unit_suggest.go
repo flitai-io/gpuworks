@@ -45,6 +45,13 @@ type UnitSuggestFacts struct {
 	// cards' memory: the deployment is a PD mode over RDMA
 	// (pdmode.Mode.PeerMemory).
 	PeerMemory bool
+	// UCXNetlinkAffects is set when the deployment is a PD mode whose KV
+	// moves over UCX (pdmode.Mode.UCXNetlinkAffects); with UCXNetlinkHang it
+	// leaves out the nodes whose kernel hangs UCX, on any network but host
+	// RDMA (UCXNetlinkBlocks). The hang is a live fact, injected like Online;
+	// nil leaves no node out.
+	UCXNetlinkAffects bool
+	UCXNetlinkHang    UCXNetlinkHangOf
 }
 
 // UnitGroup is a set of nodes that could carry one replica: they share a
@@ -64,6 +71,11 @@ type UnitSuggestCounts struct {
 	// NoPeerMemory are the nodes left out because the peer-memory module is
 	// not loaded (UnitSuggestFacts.PeerMemory).
 	NoPeerMemory int
+	// UCXNetlink are the nodes left out because their kernel hangs UCX
+	// (UnitSuggestFacts.UCXNetlinkHang), and UCXNetlinkNodes names the first
+	// few of them.
+	UCXNetlink      int
+	UCXNetlinkNodes []string
 	// Largest is the most nodes any group has, short of Ranks.
 	Largest int
 }
@@ -106,6 +118,13 @@ func SuggestUnitGroups(f UnitSuggestFacts) ([]UnitGroup, UnitSuggestCounts) {
 			counts.NoNetwork++
 			continue
 		}
+		if f.UCXNetlinkAffects && f.UCXNetlinkHang != nil && UCXNetlinkBlocks(true, compute.Network) && f.UCXNetlinkHang(node.UUID) != nil {
+			counts.UCXNetlink++
+			if len(counts.UCXNetlinkNodes) < ucxNetlinkNamed {
+				counts.UCXNetlinkNodes = append(counts.UCXNetlinkNodes, node.DisplayName())
+			}
+			continue
+		}
 		k := key{network: compute.Network.ID, arch: nodeArch(node)}
 		group := groups[k]
 		if group == nil {
@@ -115,6 +134,7 @@ func SuggestUnitGroups(f UnitSuggestFacts) ([]UnitGroup, UnitSuggestCounts) {
 		}
 		group.Nodes = append(group.Nodes, PoolCandidate{Node: node, FreeGPUs: free, Model: ModelLocalityOf(fileOn[node.ID])})
 	}
+	sort.Strings(counts.UCXNetlinkNodes) // the first few found, in a stable order
 	var out []UnitGroup
 	for _, k := range order {
 		group := groups[k]

@@ -35,6 +35,8 @@ func (h *panicOnlineHub) Online(uuid string) bool {
 	return false
 }
 
+func (h *panicOnlineHub) UCXNetlinkHang(string) *proto.UCXNetlinkHang { return nil }
+
 func (h *panicOnlineHub) calls(uuid string) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()

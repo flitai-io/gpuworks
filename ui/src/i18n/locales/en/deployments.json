@@ -1053,6 +1053,7 @@
     "saveFailed": "Failed to save node-loss rescheduling: {{detail}}",
     "movedTo": "rescheduled to {{node}}",
     "movedElsewhere": "is rebuilt on another node",
+    "ucxNetlinkSkipped": ". Left out because their kernel hangs UCX, which this PD mode's NIXL uses: {{nodes}}. Turn IPv6 off on them to use them (see the node page).",
     "placedFrom": " (was on {{from}})",
     "placedCause": ": {{reason}}",
     "placedReason": {

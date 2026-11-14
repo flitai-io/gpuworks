@@ -1053,6 +1053,7 @@
     "saveFailed": "保存节点失联重调度失败：{{detail}}",
     "movedTo": "已重调度到 {{node}}",
     "movedElsewhere": "正在别的节点重建",
+    "ucxNetlinkSkipped": "。因内核会让该 PD 模式的 NIXL 所用的 UCX 卡住而被排除：{{nodes}}。关闭这些节点的 IPv6 后即可使用（见节点页）。",
     "placedFrom": "（原在 {{from}}）",
     "placedCause": "：{{reason}}",
     "placedReason": {

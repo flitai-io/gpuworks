@@ -54,7 +54,7 @@ func (s Scaling) AutoReplicaUnits(dep *store.Deployment, replicas int, placeOn, 
 				listed = append(listed, ListedRank{NodeUUID: rank.NodeUUID, GPUs: perRank, Leader: i == 0})
 			}
 		}
-		facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, listed, s.Online, dep.NNodes, perRank)
+		facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, listed, s.Online, s.UCXNetlinkHang, dep.NNodes, perRank)
 		if err != nil {
 			return nil, err
 		}

@@ -296,7 +296,7 @@ func sameUnit(a, b planning.PDUnit) bool {
 
 // recordNoCandidate says, at most every ten minutes, that a lost node's ranks
 // found no node to move to.
-func (c *Controller) recordNoCandidate(dep *store.Deployment, lost map[string]bool, deployment *unitDeployment) {
+func (c *Controller) recordNoCandidate(dep *store.Deployment, lost map[string]bool, deployment *unitDeployment, facts planning.UnitSuggestFacts) {
 	c.failover.mu.Lock()
 	if c.failover.noneSince == nil {
 		c.failover.noneSince = map[uint]time.Time{}
@@ -319,7 +319,16 @@ func (c *Controller) recordNoCandidate(dep *store.Deployment, lost map[string]bo
 	for _, uuid := range uuids {
 		names = append(names, c.nodeName(deployment, uuid))
 	}
-	c.store.AddDeploymentEventCode(dep.ID, nodeReplaceEventKind, EventNodeReplaceNoCandidate, map[string]any{"nodes": names, store.EventParamNodeUUIDs: uuids})
+	params := map[string]any{"nodes": names, store.EventParamNodeUUIDs: uuids}
+	// Nodes left out only because their kernel hangs UCX are the ones the
+	// operator can bring back: name them (planning.UCXNetlinkBlocks). Read
+	// here, after the throttle, so a deployment that keeps finding none does
+	// not walk the nodes again on every pass.
+	if _, counts := planning.SuggestUnitGroups(facts); counts.UCXNetlink > 0 {
+		params["ucx_netlink_hang"] = counts.UCXNetlink
+		params["ucx_netlink_nodes"] = counts.UCXNetlinkNodes
+	}
+	c.store.AddDeploymentEventCode(dep.ID, nodeReplaceEventKind, EventNodeReplaceNoCandidate, params)
 	c.q.addAfter(depKey(dep.ID), time.Minute)
 }
 

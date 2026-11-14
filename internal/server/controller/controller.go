@@ -30,6 +30,9 @@ import (
 // HubPusher is the controller's view of the agent hub.
 type HubPusher interface {
 	Online(uuid string) bool
+	// UCXNetlinkHang is the live fact a node's agent reported about its kernel
+	// hanging UCX (NIXL); nil when it does not, or the node is offline.
+	UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang
 	PushToNode(uuid string, su proto.StateUpdate) error
 	// RequestImageRefs hands a node the latest image refs to send on its
 	// own, without waiting for the agent.

@@ -34,6 +34,10 @@ test("node replacement entries name the node, the wait, the replica and where it
   assert.equal(text("NODE_REPLACED", { from: "gpu-a", to: "gpu-b", after_sec: 7200, unit: 1, role: "prefill" }), "Reschedule on node loss: node gpu-a stayed offline for over 2 h, replica Prefill 1 rescheduled to gpu-b");
   assert.equal(text("NODE_REPLACE_REVERTED", { from: "gpu-b", to: "gpu-a", unit: 2, rank: 0 }), "Node gpu-a came back before replica 2 ran on gpu-b: the rescheduling is undone");
   assert.equal(text("NODE_REPLACE_NO_CANDIDATE", { nodes: ["gpu-a", "gpu-c"] }), "Nodes gpu-a, gpu-c stayed offline, but no other node can take their replicas");
+  assert.equal(
+    text("NODE_REPLACE_NO_CANDIDATE", { nodes: ["gpu-a"], ucx_netlink_hang: 1, ucx_netlink_nodes: ["gpu-c"] }),
+    "Nodes gpu-a stayed offline, but no other node can take their replicas. Left out because their kernel hangs UCX, which this PD mode's NIXL uses: gpu-c. Turn IPv6 off on them to use them (see the node page).",
+  );
   assert.equal(text("NODE_DRAIN_MOVED", { unit: 3 }), "replica 3 moved off a draining node");
 });
 

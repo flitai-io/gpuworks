@@ -44,8 +44,7 @@ func (c *Controller) planFailover(ctx context.Context, deployment *unitDeploymen
 	if err != nil {
 		return nil, err
 	}
-	resolve := c.networks.Resolve
-	facts, err := planning.LoadUnitSuggestFacts(c.store, resolve, dep, deployment.requirements, listed, c.hub.Online, 1, 1)
+	facts, err := c.unitFacts(deployment, listed, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +82,7 @@ func (c *Controller) planFailover(ctx context.Context, deployment *unitDeploymen
 		}
 	}
 	if noCandidate {
-		c.recordNoCandidate(dep, lost, deployment)
+		c.recordNoCandidate(dep, lost, deployment, facts)
 	}
 	if len(plan.moves) == 0 {
 		return nil, nil
@@ -324,4 +323,13 @@ func (c *Controller) writeUnits(dep *store.Deployment, deployment *unitDeploymen
 		primary = nodeIDs[0]
 	}
 	return c.store.SetDeploymentPlacement(dep.ID, encoded, string(ids), primary)
+}
+
+// unitFacts reads what a choice of nodes for one rank of a deployment is
+// decided from, with the hub's live facts - which nodes are connected, and
+// which have a kernel that hangs UCX (planning.UCXNetlinkBlocks) - so a
+// re-pick, a failover and a drain choose among the same nodes that creating
+// the deployment did.
+func (c *Controller) unitFacts(deployment *unitDeployment, listed []planning.ListedRank, perRank int) (planning.UnitSuggestFacts, error) {
+	return planning.LoadUnitSuggestFacts(c.store, c.networks.Resolve, deployment.dep, deployment.requirements, listed, c.hub.Online, c.hub.UCXNetlinkHang, 1, perRank)
 }

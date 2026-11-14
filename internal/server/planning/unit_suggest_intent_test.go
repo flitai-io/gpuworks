@@ -72,7 +72,7 @@ func TestUnitSuggestDoesNotDoubleChargeACardHeldByAnOrderedSleeper(t *testing.T)
 	// The deployment lists one rank taking one card on this node: the rank the
 	// existing replica already fills.
 	listed := []ListedRank{{NodeUUID: node.UUID, GPUs: 1, Leader: true}}
-	facts, err := LoadUnitSuggestFacts(st, resolve, dep, nodelabel.Requirements{}, listed, func(string) bool { return true }, 1, 1)
+	facts, err := LoadUnitSuggestFacts(st, resolve, dep, nodelabel.Requirements{}, listed, func(string) bool { return true }, nil, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

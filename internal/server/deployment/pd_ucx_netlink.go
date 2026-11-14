@@ -7,6 +7,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/pdmode"
+	"gpuworks.ai/gpuworks/internal/server/planning"
 )
 
 // pdUCXNetlinkNode is one node of a PD placement whose agent reports that its
@@ -17,14 +18,14 @@ type pdUCXNetlinkNode struct {
 	Kernel   string `json:"kernel,omitempty"`
 }
 
-// checkPDUCXNetlink guards a PD placement against the kernel behaviour that
-// hangs UCX 1.20-1.22, which NIXL bundles (ADR 0028): the engine of a mode
-// whose KV moves over UCX never finishes starting on such a node. Over an
-// Ethernet network UCX walks the IPv6 route dump on start, so the placement is
-// refused with the commands that end it. On a host RDMA network UCX is held to
-// RDMA transports and may never run that check, so the same fact is a warning.
-// Creating and previewing a deployment both ask it. The fact is live: each
-// node's agent reports it with its status, and nothing is stored.
+// checkPDUCXNetlink guards a PD placement that names its nodes against the
+// kernel behaviour that hangs UCX 1.20-1.22, which NIXL bundles (ADR 0028).
+// The rule is planning.UCXNetlinkBlocks, the one automatic placement leaves
+// such nodes out by (planning.UnitSuggestFacts): a named node it blocks refuses
+// the placement with the commands that end the hang; on a host RDMA network
+// the same fact is a warning. Creating and previewing a deployment both ask
+// it, after automatic placement has filled the nodes it picks. The fact is
+// live: each node's agent reports it with its status, and nothing is stored.
 func (s *Service) checkPDUCXNetlink(p *pdRequest, group netplan.Group) ([]messages.Warning, error) {
 	if s.d.UCXNetlinkHang == nil || !p.mode.UCXNetlinkAffects() {
 		return nil, nil
@@ -47,7 +48,7 @@ func (s *Service) checkPDUCXNetlink(p *pdRequest, group netplan.Group) ([]messag
 		"mode": p.mode.Name, "network": group.Network.Name,
 		"nodes": affected, "names": strings.Join(names, ", "), "fixes": fixes, "fix": fixes[0].Commands[0],
 	}
-	if group.Network.Type == netplan.TypeHostRDMA {
+	if !planning.UCXNetlinkBlocks(p.mode.UCXNetlinkAffects(), group.Network) {
 		return []messages.Warning{messages.NewWarning(messages.WarningPDUCXNetlinkHangRDMA, params)}, nil
 	}
 	return nil, productError(messages.ErrorPDUCXNetlinkHang,

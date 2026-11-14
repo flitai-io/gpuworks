@@ -23,6 +23,8 @@ type distributedTestHub struct {
 	pushErr error
 	// pushFails fails pushes to these nodes only.
 	pushFails map[string]error
+	// ucxHang is what each node's agent reports about its kernel hanging UCX.
+	ucxHang map[string]*proto.UCXNetlinkHang
 }
 
 // groupFixture is a two-node multi-node deployment and one generation of it
@@ -318,6 +320,15 @@ func TestMultiNodeOfflineRankGetsGraceThenFailsItsGeneration(t *testing.T) {
 }
 
 func (h *distributedTestHub) Online(uuid string) bool { return h.online[uuid] }
+
+// UCXNetlinkHang is the reported fact of a connected node; the real hub keeps
+// it on the session, so an offline node has none.
+func (h *distributedTestHub) UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang {
+	if !h.online[uuid] {
+		return nil
+	}
+	return h.ucxHang[uuid]
+}
 
 // RequestImageRefs records the refs as the push the hub would send.
 func (h *distributedTestHub) RequestImageRefs(uuid string, refs []string) {

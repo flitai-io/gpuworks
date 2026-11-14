@@ -36,6 +36,8 @@ type modelSyncHub struct {
 
 func (h *modelSyncHub) Online(uuid string) bool { return h.online[uuid] }
 
+func (h *modelSyncHub) UCXNetlinkHang(string) *proto.UCXNetlinkHang { return nil }
+
 // RequestImageRefs records the refs as the push the hub would send.
 func (h *modelSyncHub) RequestImageRefs(uuid string, refs []string) {
 	_ = h.PushToNode(uuid, proto.StateUpdate{ImageRefs: refs})

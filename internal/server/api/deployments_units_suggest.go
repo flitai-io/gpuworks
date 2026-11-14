@@ -120,7 +120,7 @@ func (a *apiHandlers) unitSuggestFacts(dep *store.Deployment, listed []dto.UnitI
 			ranks = append(ranks, planning.ListedRank{NodeUUID: uuid, GPUs: perRank, Leader: i == 0})
 		}
 	}
-	return planning.LoadUnitSuggestFacts(a.d.Store, a.networks().Resolve, dep, reqs, ranks, a.d.Online, dep.NNodes, perRank)
+	return planning.LoadUnitSuggestFacts(a.d.Store, a.networks().Resolve, dep, reqs, ranks, a.d.Online, a.ucxNetlinkHangOf(), dep.NNodes, perRank)
 }
 
 // trialUnit plans every rank of a proposed replica as the controller would

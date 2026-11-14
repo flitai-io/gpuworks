@@ -34,7 +34,7 @@ func (s *Service) autoPlaceRequest(req *dto.DeployRequest) (bool, error) {
 	if pd != nil {
 		named = planning.ListedPDRanks(pd, namedPDUnits(pd))
 	}
-	facts, err := planning.LoadUnitSuggestFacts(s.d.Store, s.networks().Resolve, &store.Deployment{ModelID: req.ModelID}, reqs, named, s.d.Online, 1, 1)
+	facts, err := planning.LoadUnitSuggestFacts(s.d.Store, s.networks().Resolve, &store.Deployment{ModelID: req.ModelID}, reqs, named, s.d.Online, s.d.UCXNetlinkHang, 1, 1)
 	if err != nil {
 		return false, err
 	}
@@ -155,6 +155,9 @@ func autoPlacePD(req *dto.DeployRequest, pd *planning.PDPlacement, facts plannin
 	}
 	// A mode over RDMA places only where the NICs can register the cards.
 	facts.PeerMemory = mode.PeerMemory
+	// A mode whose KV moves over UCX leaves out the nodes whose kernel hangs
+	// it, unless the network is host RDMA (planning.UCXNetlinkBlocks).
+	facts.UCXNetlinkAffects = mode.UCXNetlinkAffects()
 	chosen, counts, ok := planning.ChoosePDUnits(facts, needs, fixed, strategy, func(map[string][]planning.PDUnit) string { return "" })
 	if !ok {
 		vendor := ""
