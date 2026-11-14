@@ -166,6 +166,48 @@ func (s *Server) SetUnschedulable(node string, v bool) {
 	s.nodes[node].Spec.Unschedulable = v
 }
 
+// SetDaemonSetSelection replaces the agent DaemonSet's pod template
+// selection — nodeSelector and, when poolLabel is non-empty, the single
+// pool nodeAffinity term kubemanifest.Render writes (one
+// requiredDuringSchedulingIgnoredDuringExecution term, one matchExpressions
+// entry, operator In) — the way reapplying a manifest with a narrowed node
+// selector or node pool would. An empty nodeSelector and poolLabel removes
+// both, as a DaemonSet with neither has.
+func (s *Server) SetDaemonSetSelection(nodeSelector map[string]string, poolLabel string, poolIDs []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	spec := s.daemonSet["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+	delete(spec, "nodeSelector")
+	delete(spec, "affinity")
+	if len(nodeSelector) > 0 {
+		sel := make(map[string]any, len(nodeSelector))
+		for k, v := range nodeSelector {
+			sel[k] = v
+		}
+		spec["nodeSelector"] = sel
+	}
+	if poolLabel == "" {
+		return
+	}
+	values := make([]any, len(poolIDs))
+	for i, id := range poolIDs {
+		values[i] = id
+	}
+	spec["affinity"] = map[string]any{
+		"nodeAffinity": map[string]any{
+			"requiredDuringSchedulingIgnoredDuringExecution": map[string]any{
+				"nodeSelectorTerms": []any{
+					map[string]any{
+						"matchExpressions": []any{
+							map[string]any{"key": poolLabel, "operator": "In", "values": values},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // Pod returns a copy of a pod, or nil.
 func (s *Server) Pod(ns, name string) *kubeapi.Pod {
 	s.mu.Lock()
