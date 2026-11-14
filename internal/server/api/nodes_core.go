@@ -22,7 +22,7 @@ import (
 )
 
 func (a *apiHandlers) health(w http.ResponseWriter, r *http.Request) {
-	nodes, _ := a.d.Store.ListNodes()
+	nodes, _ := a.d.Store.CountNodes()
 	sessions := 0
 	if a.d.SessionCount != nil {
 		sessions = a.d.SessionCount()
@@ -30,7 +30,7 @@ func (a *apiHandlers) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.Health{
 		Status:   "ok",
 		Version:  version.Version,
-		Nodes:    len(nodes),
+		Nodes:    nodes,
 		Sessions: sessions,
 	})
 }

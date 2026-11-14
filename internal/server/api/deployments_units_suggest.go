@@ -120,11 +120,7 @@ func (a *apiHandlers) unitSuggestFacts(dep *store.Deployment, listed []dto.UnitI
 			ranks = append(ranks, planning.ListedRank{NodeUUID: uuid, GPUs: perRank, Leader: i == 0})
 		}
 	}
-	nodes, err := a.d.Store.ListNodes()
-	if err != nil {
-		return planning.UnitSuggestFacts{}, err
-	}
-	return planning.LoadUnitSuggestFacts(a.d.Store, a.networks().Resolve, dep, reqs, ranks, a.onlineOf(nodes), dep.NNodes, perRank)
+	return planning.LoadUnitSuggestFacts(a.d.Store, a.networks().Resolve, dep, reqs, ranks, a.d.Online, dep.NNodes, perRank)
 }
 
 // trialUnit plans every rank of a proposed replica as the controller would
@@ -188,9 +184,5 @@ func (a *apiHandlers) onlineOf(nodes []store.Node) func(string) bool {
 	if a.d.Online != nil {
 		return a.d.Online
 	}
-	online := make(map[string]bool, len(nodes))
-	for i := range nodes {
-		online[nodes[i].UUID] = nodes[i].State == store.NodeStateOnline
-	}
-	return func(uuid string) bool { return online[uuid] }
+	return planning.StoredOnline(nodes)
 }

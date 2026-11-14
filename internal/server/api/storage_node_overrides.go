@@ -90,7 +90,7 @@ func (a *apiHandlers) patchStorageNodeOverrides(w http.ResponseWriter, r *http.R
 		return
 	}
 	a.syncNodesIfOnline(nodeUUIDs...)
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.NodesForStorageStatus()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

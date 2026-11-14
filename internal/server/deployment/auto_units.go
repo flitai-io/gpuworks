@@ -30,15 +30,11 @@ func (s *Service) autoPlaceRequest(req *dto.DeployRequest) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	nodes, err := s.d.Store.ListNodes()
-	if err != nil {
-		return false, err
-	}
 	var named []planning.ListedRank
 	if pd != nil {
 		named = planning.ListedPDRanks(pd, namedPDUnits(pd))
 	}
-	facts, err := planning.LoadUnitSuggestFacts(s.d.Store, s.networks().Resolve, &store.Deployment{ModelID: req.ModelID}, reqs, named, s.onlineOf(nodes), 1, 1)
+	facts, err := planning.LoadUnitSuggestFacts(s.d.Store, s.networks().Resolve, &store.Deployment{ModelID: req.ModelID}, reqs, named, s.d.Online, 1, 1)
 	if err != nil {
 		return false, err
 	}

@@ -29,7 +29,7 @@ func (a *apiHandlers) listStorages(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	nodes, _ := a.d.Store.ListNodes()
+	nodes, _ := a.d.Store.NodesForStorageStatus()
 	out := make([]dto.Storage, 0, len(rows))
 	for i := range rows {
 		out = append(out, a.storageDTO(&rows[i], nodes, false))
@@ -43,7 +43,7 @@ func (a *apiHandlers) getStorage(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	nodes, _ := a.d.Store.ListNodes()
+	nodes, _ := a.d.Store.NodesForStorageStatus()
 	writeJSON(w, http.StatusOK, a.storageDTO(row, nodes, r.URL.Query().Get("all_nodes") == "1"))
 }
 
@@ -355,7 +355,7 @@ func (a *apiHandlers) createStorage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.syncStorageNodes(created)
-	nodes, _ := a.d.Store.ListNodes()
+	nodes, _ := a.d.Store.NodesForStorageStatus()
 	writeJSON(w, http.StatusCreated, a.storageDTO(created, nodes, false))
 }
 
@@ -467,7 +467,7 @@ func (a *apiHandlers) patchStorage(w http.ResponseWriter, r *http.Request) {
 	}
 	a.syncNodes(nodesBefore)
 	a.syncStorageNodes(updated)
-	nodes, _ := a.d.Store.ListNodes()
+	nodes, _ := a.d.Store.NodesForStorageStatus()
 	writeJSON(w, http.StatusOK, a.storageDTO(updated, nodes, false))
 }
 

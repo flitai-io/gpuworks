@@ -68,11 +68,11 @@ func (c *Controller) pushImageRefs() {
 	for _, image := range images {
 		refs = append(refs, image.ImageRef)
 	}
-	nodes, err := c.store.ListNodes()
+	nodes, err := c.store.NodeUUIDsByID()
 	if err != nil {
 		return
 	}
-	for _, node := range nodes {
-		c.hub.RequestImageRefs(node.UUID, refs)
+	for _, uuid := range nodes {
+		c.hub.RequestImageRefs(uuid, refs)
 	}
 }

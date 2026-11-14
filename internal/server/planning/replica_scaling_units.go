@@ -46,10 +46,6 @@ func (s Scaling) AutoReplicaUnits(dep *store.Deployment, replicas int, placeOn, 
 	if err != nil || perRank < 1 {
 		perRank = 1
 	}
-	nodes, err := s.Store.ListNodes()
-	if err != nil {
-		return nil, err
-	}
 	units := append([]PDUnit(nil), current...)
 	for k := 0; k < added; k++ {
 		var listed []ListedRank
@@ -58,7 +54,7 @@ func (s Scaling) AutoReplicaUnits(dep *store.Deployment, replicas int, placeOn, 
 				listed = append(listed, ListedRank{NodeUUID: rank.NodeUUID, GPUs: perRank, Leader: i == 0})
 			}
 		}
-		facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, listed, s.online(nodes), dep.NNodes, perRank)
+		facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, listed, s.Online, dep.NNodes, perRank)
 		if err != nil {
 			return nil, err
 		}

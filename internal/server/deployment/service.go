@@ -57,15 +57,3 @@ func (s *Service) networks() *network.Service {
 	}
 	return s.d.Networks
 }
-
-// onlineOf is Deps.Online, or the nodes' stored state when it is nil.
-func (s *Service) onlineOf(nodes []store.Node) func(string) bool {
-	if s.d.Online != nil {
-		return s.d.Online
-	}
-	online := make(map[string]bool, len(nodes))
-	for i := range nodes {
-		online[nodes[i].UUID] = nodes[i].State == store.NodeStateOnline
-	}
-	return func(uuid string) bool { return online[uuid] }
-}

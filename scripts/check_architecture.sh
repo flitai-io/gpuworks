@@ -198,6 +198,18 @@ measure() {
     grep -rn 'deploy\.InferVendor(' internal pkg cmd --include='*.go' 2>/dev/null \
       | grep -v '_test\.go' | grep -c . || true
     ;;
+  store_list_nodes_callers)
+    grep -rnE '\.ListNodes\(\)' internal pkg cmd --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c . || true
+    ;;
+  store_list_deployments_callers)
+    grep -rnE '\.ListDeployments\(\)' internal pkg cmd --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c . || true
+    ;;
+  store_list_instances_callers)
+    grep -rnE '\.ListInstances\(\)' internal pkg cmd --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c . || true
+    ;;
   store_concrete_importers)
     go_imports \
       | grep -v '\.test$' \

@@ -56,10 +56,16 @@ type ListedRank struct {
 // the nodes' resolved networks. listed are the ranks the deployment lists: a
 // leader there cannot lead another replica, and a listed rank no instance of
 // the deployment holds yet claims its cards.
+//
+// online says a node's agent is connected (the hub's Online); nil reads the
+// nodes' stored state, from the nodes this already reads.
 func LoadUnitSuggestFacts(st *store.Store, resolve func([]store.Node) (netplan.Resolution, error), dep *store.Deployment, reqs nodelabel.Requirements, listed []ListedRank, online func(string) bool, ranks, perRank int) (UnitSuggestFacts, error) {
 	nodes, err := st.ListNodes()
 	if err != nil {
 		return UnitSuggestFacts{}, err
+	}
+	if online == nil {
+		online = StoredOnline(nodes)
 	}
 	held, err := HeldGPUs(st, dep.YieldPolicy)
 	if err != nil {
@@ -168,4 +174,14 @@ func needsPeerMemory(dep *store.Deployment) bool {
 	}
 	mode, ok := pdmode.Lookup(pd.Mode)
 	return ok && mode.PeerMemory
+}
+
+// StoredOnline is an online check from the nodes' stored state, for a server
+// running without a hub.
+func StoredOnline(nodes []store.Node) func(string) bool {
+	online := make(map[string]bool, len(nodes))
+	for i := range nodes {
+		online[nodes[i].UUID] = nodes[i].State == store.NodeStateOnline
+	}
+	return func(uuid string) bool { return online[uuid] }
 }

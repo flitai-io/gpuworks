@@ -244,7 +244,7 @@ func (a *apiHandlers) imageDTOs(images []store.Image, withNodes bool) []dto.Imag
 	var nodes []store.Node
 	totalNodes, _ := a.d.Store.CountNodes()
 	if withNodes {
-		nodes, _ = a.d.Store.ListNodes()
+		nodes, _ = a.d.Store.NodeIdentities()
 	}
 	seriesByID := map[uint]*store.ImageSeries{}
 	for i := range images {
