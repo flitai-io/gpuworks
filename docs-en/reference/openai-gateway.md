@@ -31,7 +31,7 @@ The rule covers every `/v1` route, including `/v1/models`, `/v1/files`, `/v1/bat
 | image editing | /v1/images/edits | multipart; the source image must be uploaded as the `image` file field |
 | video generation | /v1/videos | JSON or multipart; supports async |
 | realtime | /v1/realtime | WebSocket |
-| decision (System One) | /v1/systemone | JSON; a `state` and 1–16 typed questions (`noul` yes/no, `choice`, `score`), answered with a probability distribution per question and no generated text. The wire format is TypeSafe's System One API; usage records only `usage.input_tokens` |
+| decision (System One) | /v1/systemone | JSON; a `state` and a set of typed questions (`noul` yes/no, `choice`, `score`; the model sets the per-request limits on questions and options, such as 16 questions for Intern-Decision and 64 for Laya), answered with a probability distribution per question and no generated text. The wire format is TypeSafe's System One API; usage records only `usage.input_tokens` |
 | batch (Files and Batches) | /v1/files, /v1/batches | JSON; file upload is multipart. Asynchronous batches, see [Batches](#批处理files-与-batches) |
 
 Each spec's API contract declares the operations and endpoints available for that deployment. The two entry points apply different checks:

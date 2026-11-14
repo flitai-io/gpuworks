@@ -71,8 +71,9 @@
 #                                   （patches/vllm_dtk/001），且 mooncake 在位
 #                 mooncake_hybrid   GDN/Mamba 混合模型的 vllm-mooncake PD 补丁在位
 #                                   （patches/vllm_dtk/002、003、004），且 mooncake_load_errors 成立
-#                 systemone         System One 决策模型线的 Python 栈：Python >= 3.12，torch 与
-#                                   transformers 是 args 钉的版本，Qwen3_5ForConditionalGeneration 可取
+#                 systemone         System One 决策模型线的 Python 栈：Python >= 3.12，torch、
+#                                   transformers 与 laya 是 args 钉的版本，Qwen3_5ForConditionalGeneration
+#                                   与 laya.load 可取
 #   base_requires_clean_history
 #               true = 该 base 的 image history 里有内网凭据，必须先用
 #               prepare-base.sh 在 base 这一层压掉 history，再以干净 base 构建；
@@ -281,9 +282,9 @@ items:
   # -----------------------------------------------------------------------
   # NVIDIA：System One 决策模型（目录引擎 callable）
   # -----------------------------------------------------------------------
-  # Intern-Decision 等决策模型没有 vLLM / SGLang 实现，推理代码随权重仓库走原生 Transformers。
-  # 本档只装它们共用的 Python 栈；adapter（gpuworks_serve.py + systemone_adapter.py）随推理模板的
-  # assets 发布。引擎版本 1.0 是这条线自己的配方版本，torch / transformers 的实际版本见 args 与镜像的
+  # Intern-Decision、Laya 等决策模型没有 vLLM / SGLang 实现：Intern-Decision 的推理代码随权重仓库走原生
+  # Transformers，Laya 的是 PyPI 包 laya。本档只装它们共用的 Python 栈；adapter（gpuworks_serve.py +
+  # systemone_adapter.py / laya_adapter.py）随推理模板的 assets 发布。引擎版本 1.0 是这条线自己的配方版本，torch / transformers 的实际版本见 args 与镜像的
   # /opt/gpuworks/image.json。
 
   - id: cuda12.8-systemone1.0
@@ -306,10 +307,12 @@ items:
       TORCH_VERSION: "2.9.1"
       TORCHVISION_VERSION: "0.24.1"
       TRANSFORMERS_VERSION: "5.14.1"
+      LAYA_VERSION: "0.4.31"
     requires: [systemone]
     note: >-
       System One 决策模型档（目录引擎 callable）：torch 2.9.1+cu128、torchvision 0.24.1、
-      transformers 5.14.1、Pillow，照 Intern-Decision 的 requirements.txt 钉版。CUDA 12.8 构建支持
+      transformers 5.14.1、Pillow，照 Intern-Decision 的 requirements.txt 钉版；laya 0.4.31 不带依赖装
+      （它的 vegaml 依赖要 transformers >= 5.17，只用于图片 / 语音 lane，本档不装）。CUDA 12.8 构建支持
       Turing（sm_75）及以后的卡，驱动要求 >= 570。不含 vllm / sglang；模板以
       python3 /opt/gpuworks/runtime/gpuworks_serve.py 启动资产里的 adapter。
 

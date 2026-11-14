@@ -751,7 +751,7 @@ test("Decision page starts from the server's example, sends the System One reque
     requests.push({ url: String(input), body: JSON.parse(String(init?.body)) as Record<string, unknown> });
     return jsonResponse({ model: "decision-model", usage: { input_tokens: 42, output_tokens: 3 }, answers: {
       refund: { type: "noul", noul: 0.9, probabilities: { no: 0.1, yes: 0.9 }, confidence: 0.9, decision: "yes" },
-      topic: { type: "choice", choice: "shipping", probabilities: { billing: 0.25, shipping: 0.75 }, confidence: 0.75, decision: "shipping" },
+      topic: { type: "choice", choice: "shipping", probabilities: { billing: 0.25, shipping: 0.75 }, confidence: 0.75 },
       urgency: { type: "score", score: 0.4, legend: { 0: "Low", 1: "High" }, probabilities: { 0: 0.6, 1: 0.4 }, confidence: 0.6, decision: "0" },
     } });
   }) as typeof fetch;

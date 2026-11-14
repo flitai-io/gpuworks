@@ -39,6 +39,7 @@ interface Answer {
   probabilities?: Record<string, number>;
   confidence?: number;
   decision?: string;
+  choice?: string;
   noul?: number;
   score?: number;
   legend?: Record<string, string>;
@@ -228,11 +229,13 @@ function DecisionAnswers({ result }: { result: DecisionResult }) {
   return <div className="flex flex-col gap-3">
     {Object.entries(result.answers || {}).map(([name, answer]) => {
       const probabilities = Object.entries(answer.probabilities || {}).sort((a, b) => b[1] - a[1]);
+      // `choice` is the System One contract's answer; some models also send `decision`.
+      const verdict = answer.decision ?? answer.choice;
       return <section key={name} aria-label={name} className="flex flex-col gap-2 rounded-lg border border-border p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-fg-default font-medium">{name}</span>
           {answer.type && <Badge color="gray" size="sm">{t(`decision.type.${answer.type}`, { defaultValue: answer.type })}</Badge>}
-          {answer.decision !== undefined && <Badge color="blue" size="sm">{t("decision.decision", { value: label(answer, answer.decision) })}</Badge>}
+          {verdict !== undefined && <Badge color="blue" size="sm">{t("decision.decision", { value: label(answer, verdict) })}</Badge>}
         </div>
         {answer.noul !== undefined && <span className="text-fg-default">{t("decision.yesProbability", { value: percent(answer.noul) })}</span>}
         {answer.score !== undefined && <span className="text-fg-default">{t("decision.expectedScore", { value: answer.score.toFixed(2) })}</span>}

@@ -31,7 +31,7 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 | image editing | /v1/images/edits | multipart；必须以源图作为 `image` 文件字段 |
 | video generation | /v1/videos | JSON 或 multipart；可 async |
 | realtime | /v1/realtime | WebSocket |
-| decision（System One） | /v1/systemone | JSON；`state` 加 1–16 个带类型的问题（`noul` 是/否、`choice` 单选、`score` 打分），回每个问题的概率分布，不生成文本。线格式同 TypeSafe 的 System One API；用量只记 `usage.input_tokens` |
+| decision（System One） | /v1/systemone | JSON；`state` 加一组带类型的问题（`noul` 是/否、`choice` 单选、`score` 打分；每次的问题数与选项数上限由模型决定，如 Intern-Decision 16 个问题、Laya 64 个），回每个问题的概率分布，不生成文本。线格式同 TypeSafe 的 System One API；用量只记 `usage.input_tokens` |
 | batch（Files 与 Batches） | /v1/files、/v1/batches | JSON；上传文件为 multipart。异步批处理，见[批处理](#批处理files-与-batches) |
 
 每个档位（spec）的 API contract（接口契约）声明该部署可用的操作和 endpoint（接口路径）。两个入口的检查范围不同：

@@ -118,16 +118,21 @@ print(','.join(sorted(set(v.values()))) if len(set(v.values())) > 1 else '')
 check_systemone() {
     py "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" \
         || FAILED+=("systemone: python $(python3 -c 'import sys; print(sys.version.split()[0])') < 3.12")
-    local torch transformers
+    local torch transformers laya
     torch="$(dist_version torch || true)"
     transformers="$(dist_version transformers || true)"
+    laya="$(dist_version laya || true)"
     [ -n "${TORCH_VERSION:-}" ] && [ "${torch%%+*}" != "${TORCH_VERSION}" ] \
         && FAILED+=("systemone: torch ${torch:-absent} != expected ${TORCH_VERSION}")
     [ -n "${TRANSFORMERS_VERSION:-}" ] && [ "${transformers}" != "${TRANSFORMERS_VERSION}" ] \
         && FAILED+=("systemone: transformers ${transformers:-absent} != expected ${TRANSFORMERS_VERSION}")
     py "from transformers import AutoProcessor, AutoTokenizer, Qwen3_5ForConditionalGeneration; import PIL" \
         || FAILED+=("systemone: transformers cannot provide Qwen3_5ForConditionalGeneration / AutoProcessor, or Pillow is missing")
-    echo "  systemone: torch ${torch:-absent}, transformers ${transformers:-absent}"
+    [ -n "${LAYA_VERSION:-}" ] && [ "${laya}" != "${LAYA_VERSION}" ] \
+        && FAILED+=("systemone: laya ${laya:-absent} != expected ${LAYA_VERSION}")
+    py "import laya, laya.agent; assert callable(laya.load)" \
+        || FAILED+=("systemone: laya.load cannot be imported")
+    echo "  systemone: torch ${torch:-absent}, transformers ${transformers:-absent}, laya ${laya:-absent}"
 }
 
 # 运行期环境里不许带厂商内网的包源/地址（base 继承下来的 ENV 不会被构建仓的 ARG 覆盖）。

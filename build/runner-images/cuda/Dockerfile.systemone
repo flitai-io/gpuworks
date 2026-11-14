@@ -1,17 +1,18 @@
 # gpuworks-runner: NVIDIA CUDA System One 决策模型线
 #
-# System One 决策模型（Intern-Decision 等“开源版 Jev”）不生成文本：一次前向给每个问题的候选打分。
-# 它们没有 vLLM / SGLang 实现，推理代码随权重仓库（inference.py）走原生 Hugging Face
-# Transformers，平台用 callable 引擎 + 模板资产里的 gpuworks_serve.py / systemone_adapter.py
-# 对外提供 /v1/systemone。本镜像只提供它们共用的 Python 栈，不内置 adapter：
-# adapter 随模板资产发布，改它不用重打镜像。
+# System One 决策模型（Intern-Decision、Laya 等“开源版 Jev”）不生成文本：一次前向给每个问题的候选打分。
+# 它们没有 vLLM / SGLang 实现：Intern-Decision 的推理代码随权重仓库（inference.py）走原生 Hugging Face
+# Transformers，Laya 的推理代码是 PyPI 包 laya。平台用 callable 引擎 + 模板资产里的 gpuworks_serve.py
+# 与各家 adapter（systemone_adapter.py / laya_adapter.py）对外提供 /v1/systemone。本镜像只提供它们
+# 共用的 Python 栈，不内置 adapter：adapter 随模板资产发布，改它不用重打镜像。
 #
 # 内容 = Ubuntu 24.04（自带 Python 3.12；inference.py 用了 3.12 的 f-string 语法。不用 nvidia/cuda：
 #          torch 的 cu128 wheel 自带 CUDA 运行时，驱动库由容器运行时注入）
 #       + Python 3.12 venv（/opt/venv 在 PATH 上，python3 指向它）
 #       + torch / torchvision（CUDA 12.8 构建，先单独装并断言）
 #       + transformers（Qwen3.5 的 Qwen3_5ForConditionalGeneration）+ Pillow
-# 版本照 Intern-Decision 的 requirements.txt 钉死。
+#       + laya（不带依赖装，见下）
+# torch / transformers 版本照 Intern-Decision 的 requirements.txt 钉死。
 #
 # 刻意没有：nvcc（不即时编译内核）、vllm / sglang、补丁层。
 ARG BASE_IMAGE=docker.io/library/ubuntu:24.04
@@ -23,6 +24,7 @@ ARG FRAMEWORK_VERSION=12.8
 ARG TORCH_VERSION=2.9.1
 ARG TORCHVISION_VERSION=0.24.1
 ARG TRANSFORMERS_VERSION=5.14.1
+ARG LAYA_VERSION=0.4.31
 # torch 的 CUDA 12.8 构建所在的 find-links 目录（阿里云镜像；直连 download.pytorch.org 在国内很慢）。
 ARG TORCH_FIND_LINKS=https://mirrors.aliyun.com/pytorch-wheels/cu128/
 ARG IMAGE_ID=unknown
@@ -90,6 +92,25 @@ RUN <<EOF
     pip check
 EOF
 
+## laya：Laya 检查点的推理包（纯 Python）
+#
+# 不带依赖装：它声明的 vegaml 只用于图片 / 语音 lane（Router(vega=...) 与 Agent(vegaml=...)，
+# 懒加载），却要求 transformers >= 5.17，会顶掉 Intern-Decision 钉的版本。其余依赖
+# （safetensors、huggingface_hub、numpy）transformers 已带，cryptography 只用于验签策略文件，补上。
+# pip check 因此只允许“laya 缺 vegaml”这一条。
+RUN <<EOF
+    set -eux
+    pip freeze | grep -E '^(torch|torchvision|triton|transformers|nvidia-[^=]*)==' | sort > /tmp/stack.txt
+    pip install --no-cache-dir -i "${PIP_INDEX_URL}" --no-deps "laya==${LAYA_VERSION}"
+    pip install --no-cache-dir -i "${PIP_INDEX_URL}" "cryptography>=41"
+    pip freeze | grep -E '^(torch|torchvision|triton|transformers|nvidia-[^=]*)==' | sort > /tmp/stack.after
+    changed="$(comm -23 /tmp/stack.txt /tmp/stack.after)"
+    test -z "${changed}" || { echo "laya changed the pinned stack:" >&2; echo "${changed}" >&2; exit 1; }
+    rm -f /tmp/stack.txt /tmp/stack.after
+    problems="$(pip check 2>&1 | grep -v -E '^laya [0-9.]+ requires vegaml, which is not installed\.$' || true)"
+    test -z "${problems}" || { echo "pip check:" >&2; echo "${problems}" >&2; exit 1; }
+EOF
+
 ## 自描述清单 + requires 断言
 COPY shared/assert_requires.sh /opt/gpuworks/shared/assert_requires.sh
 RUN <<EOF
@@ -107,11 +128,12 @@ json.dump({
     "torch": os.environ["TORCH_VERSION"],
     "torchvision": os.environ["TORCHVISION_VERSION"],
     "transformers": os.environ["TRANSFORMERS_VERSION"],
+    "laya": os.environ["LAYA_VERSION"],
 }, open("/dev/stdout", "w"), indent=2, sort_keys=True)
 PY
     REQUIRES="${REQUIRES}" ENGINE=systemone ENGINE_VERSION="${ENGINE_VERSION}" \
         TORCH_VERSION="${TORCH_VERSION}" TRANSFORMERS_VERSION="${TRANSFORMERS_VERSION}" \
-        bash /opt/gpuworks/shared/assert_requires.sh
+        LAYA_VERSION="${LAYA_VERSION}" bash /opt/gpuworks/shared/assert_requires.sh
 EOF
 
 LABEL org.opencontainers.image.title="gpuworks-runner" \
