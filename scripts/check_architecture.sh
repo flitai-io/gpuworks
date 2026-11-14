@@ -204,6 +204,10 @@ measure() {
       | awk -F'\t' '$2 ~ /gpuworks\/internal\/server\/store( |$)/ {print $1}' \
       | sort -u | grep -c . || true
     ;;
+  store_db_accessor_callers)
+    grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/server/store/' | grep -c . || true
+    ;;
   api_fanout)
     go list -e -f '{{join .Imports "\n"}}' ./internal/server/api 2>/dev/null \
       | grep '^gpuworks\.ai/gpuworks/' | sort -u | grep -c . || true

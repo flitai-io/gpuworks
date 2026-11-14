@@ -5,14 +5,13 @@ import (
 	"fmt"
 
 	"gpuworks.ai/gpuworks/internal/server/provider"
-	cloudstore "gpuworks.ai/gpuworks/internal/server/store/zstack/cloud"
 )
 
 func (d *Driver) PreDeleteCheck(ctx context.Context, providerID uint) error {
 	if d.store == nil {
 		return fmt.Errorf("Cloud resource store is not configured")
 	}
-	ledger := cloudstore.New(d.store.DB())
+	ledger := d.store.CloudLedger()
 	linked, err := ledger.HasProviderNodes(ctx, providerID)
 	if err != nil {
 		return err
