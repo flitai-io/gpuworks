@@ -50,14 +50,19 @@ func (a *apiHandlers) events(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-authTicker.C:
+			// The clock catches what no event here announces: a login
+			// that expires, and one revoked by another process (reset-password).
 			if !a.managementStreamAllowed(r, false) {
 				return
 			}
 		case ev := <-sub.C():
-			if !a.managementStreamAllowed(r, false) {
-				return
-			}
+			// Only a change to a login can revoke this one: re-reading it
+			// for every other change made the session table's read rate the
+			// fleet's change rate times the open consoles.
 			if ev.Topic == "management-session" {
+				if !a.managementStreamAllowed(r, false) {
+					return
+				}
 				continue
 			}
 			if ev.Topic == "node" && ev.Reason == store.NodeChangeStatus {
