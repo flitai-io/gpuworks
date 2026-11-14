@@ -791,6 +791,8 @@ test("Decision page edits questions, sends a JSON state from the keyboard and re
   renderAt(<DecisionPage catalog={catalog} />, "/playground/decision");
   const user = userEvent.setup();
 
+  // An icon-only button shows its children, not leadingIcon: without an icon child it renders blank.
+  for (const index of [1, 2, 3]) assert.ok(screen.getByRole("button", { name: `Remove question ${index}` }).querySelector("svg"), `remove button ${index} shows an icon`);
   for (const index of [3, 2]) await user.click(screen.getByRole("button", { name: `Remove question ${index}` }));
   await user.click(screen.getByRole("tab", { name: "JSON" }));
   const state = screen.getByRole("textbox", { name: "State" });

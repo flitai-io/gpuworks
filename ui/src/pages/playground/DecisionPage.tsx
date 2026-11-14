@@ -196,14 +196,14 @@ export default function DecisionPage({ catalog }: { catalog: PlaygroundCatalog }
         {acceptsImages && <div className="flex flex-col gap-2">
           <h5 className="text-fg-default font-medium">{t("decision.images")}</h5>
           <FileUpload aria-label={t("decision.addImages")} accept="image/png,image/jpeg,image/webp" value={null} onChange={addImage} />
-          <div className="flex flex-wrap gap-2">{images.map((image, index) => <Badge key={`${image.name}-${index}`} color="gray">{image.name}<Button variant="ghost" size="xs" iconOnly leadingIcon={ConsoleIcon.close} aria-label={t("decision.removeImage", { name: image.name })} onClick={() => setImages((current) => current.filter((_, at) => at !== index))} /></Badge>)}</div>
+          <div className="flex flex-wrap gap-2">{images.map((image, index) => <Badge key={`${image.name}-${index}`} color="gray">{image.name}<Button variant="ghost" size="xs" iconOnly aria-label={t("decision.removeImage", { name: image.name })} onClick={() => setImages((current) => current.filter((_, at) => at !== index))}><ConsoleIcon.close /></Button></Badge>)}</div>
         </div>}
         <h5 className="text-fg-default font-medium">{t("decision.questions")}</h5>
         {drafts.map((draft, index) => <div key={draft.key} className="flex flex-col gap-2 rounded-lg border border-border p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Input className="w-40" aria-label={t("decision.questionName", { index: index + 1 })} value={draft.name} onChange={(event) => update(draft.key, { name: event.target.value })} />
             <div className="w-36"><OptionSelect aria-label={t("decision.questionType", { index: index + 1 })} value={draft.type} options={typeOptions} onChange={(type) => update(draft.key, { type: type as QuestionType })} /></div>
-            <Button className="ml-auto" variant="ghost" size="sm" iconOnly leadingIcon={ConsoleIcon.delete} aria-label={t("decision.removeQuestion", { index: index + 1 })} onClick={() => setDrafts((rows) => rows.filter((row) => row.key !== draft.key))} />
+            <Button className="ml-auto" variant="ghost" size="sm" iconOnly aria-label={t("decision.removeQuestion", { index: index + 1 })} onClick={() => setDrafts((rows) => rows.filter((row) => row.key !== draft.key))}><ConsoleIcon.delete /></Button>
           </div>
           <Input aria-label={t("decision.instructions", { index: index + 1 })} placeholder={t("decision.instructionsPlaceholder")} value={draft.instructions} onChange={(event) => update(draft.key, { instructions: event.target.value })} />
           {draft.type !== "noul" && <Textarea aria-label={t("decision.criteria", { index: index + 1 })} placeholder={t(`decision.criteriaPlaceholder.${draft.type}`)} value={draft.criteria} onChange={(event) => update(draft.key, { criteria: event.target.value })} rows={3} />}
