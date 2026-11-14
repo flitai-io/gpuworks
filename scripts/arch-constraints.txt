@@ -20,7 +20,7 @@ ui_copy_caveat_strings	0	max
 setting_key_literal	0	max
 vendor_normalize_funcs	1	max
 infer_vendor_callers	0	max
-store_list_nodes_callers	11	max
+store_list_nodes_callers	9	max
 store_list_deployments_callers	6	max
 store_list_instances_callers	1	max
 store_concrete_importers	23	max	# raised: the deployment use cases (internal/server/deployment) create and evaluate a deployment and keep its read model (row lookups, runtime state) over the store, moved out of the HTTP handlers so the automation, batches and MCP can call them; api still imports store for the handlers not yet moved; earlier: the scheduling activity (internal/server/schedactivity) counts the events the store hands over (store.ObservedEvent, store.ResidencyMachine) and reads the replay and the deployments it names from the store; earlier: Cloud resource ownership moved into provider/zstack/cloud/resourceclaim; cloud retains host onboarding, while resourceclaim owns node/GPU reads and lease lifecycle state; internal/server/analytics answers the usage analytics queries over the usage tables, whose rows are store's own typed entities (UsageCounts, UsageGroup, the deployment and user name lookups) - a narrow interface would need a parallel set of row types for the same tables

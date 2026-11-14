@@ -331,5 +331,7 @@ func (c *Controller) writeUnits(dep *store.Deployment, deployment *unitDeploymen
 // re-pick, a failover and a drain choose among the same nodes that creating
 // the deployment did.
 func (c *Controller) unitFacts(deployment *unitDeployment, listed []planning.ListedRank, perRank int) (planning.UnitSuggestFacts, error) {
-	return planning.LoadUnitSuggestFacts(c.store, c.networks.Resolve, deployment.dep, deployment.requirements, listed, c.hub.Online, c.hub.UCXNetlinkHang, 1, perRank)
+	// A reconcile plans on the server's node snapshot: the status batch that
+	// enqueued it refreshed the snapshot first (settleNodeStatus).
+	return planning.LoadUnitSuggestFactsFromSnapshot(c.store, c.networks.Resolve, deployment.dep, deployment.requirements, listed, c.hub.Online, c.hub.UCXNetlinkHang, 1, perRank)
 }

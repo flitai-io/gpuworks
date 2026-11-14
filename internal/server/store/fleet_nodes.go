@@ -76,15 +76,24 @@ func (s *Store) FleetNodes() ([]Node, error) {
 	if c.fresh(arrived) {
 		return cloneNodes(c.rows), nil
 	}
-	// The counts are read before the rows: a change that lands while the
-	// rows are read makes the next read rebuild again.
+	if err := s.rebuildFleetNodes(arrived); err != nil {
+		return nil, err
+	}
+	return cloneNodes(c.rows), nil
+}
+
+// rebuildFleetNodes reads the fleet into the snapshot; the caller holds the
+// lock. The counts are read before the rows: a change that lands while the
+// rows are read makes the next read rebuild again.
+func (s *Store) rebuildFleetNodes(now time.Time) error {
+	c := &s.fleetNodes
 	changes, reports := c.changes.Load(), c.reports.Load()
 	rows, err := s.ListNodes()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	c.rows, c.ok, c.started, c.changesAt, c.reportsAt = rows, true, arrived, changes, reports
-	return cloneNodes(rows), nil
+	c.rows, c.ok, c.started, c.changesAt, c.reportsAt = rows, true, now, changes, reports
+	return nil
 }
 
 // fresh reports whether the snapshot may answer a read arriving at now.
@@ -97,6 +106,23 @@ func (c *fleetNodeCache) fresh(now time.Time) bool {
 		return false
 	}
 	return c.reports.Load() == c.reportsAt || age < fleetNodesReportWindow
+}
+
+// RefreshFleetNodes rebuilds the snapshot now if a node report or change has
+// landed since it was built, inside the report window too: the controller
+// calls it once per batch of status reports, so the deployments the batch
+// enqueues plan on those reports. Off, it does nothing.
+func (s *Store) RefreshFleetNodes() error {
+	c := &s.fleetNodes
+	if !c.enabled.Load() {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.ok && c.changes.Load() == c.changesAt && c.reports.Load() == c.reportsAt {
+		return nil
+	}
+	return s.rebuildFleetNodes(c.now())
 }
 
 // noteNodeChange counts a node change for FleetNodes: a routine status report

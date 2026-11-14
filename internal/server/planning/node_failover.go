@@ -61,11 +61,32 @@ type ListedRank struct {
 // hub's live UCX hang fact: for a PD deployment in a mode whose KV moves over
 // UCX it leaves the affected nodes out of every choice (UCXNetlinkBlocks);
 // nil leaves none out.
+//
+// It reads the nodes as they are now: an operator's choice (a scale, a
+// suggestion, a create) answers on the report the agent just sent.
 func LoadUnitSuggestFacts(st *store.Store, resolve func([]store.Node) (netplan.Resolution, error), dep *store.Deployment, reqs nodelabel.Requirements, listed []ListedRank, online func(string) bool, ucxHang UCXNetlinkHangOf, ranks, perRank int) (UnitSuggestFacts, error) {
 	nodes, err := st.ListNodes()
 	if err != nil {
 		return UnitSuggestFacts{}, err
 	}
+	return UnitSuggestFactsOn(st, nodes, resolve, dep, reqs, listed, online, ucxHang, ranks, perRank)
+}
+
+// LoadUnitSuggestFactsFromSnapshot is LoadUnitSuggestFacts on the server's
+// node snapshot (store.FleetNodes), for the controller's reconciles: a
+// reconcile a status batch enqueued plans on that batch (the controller
+// refreshes the snapshot before enqueueing), and a round of reconciles reads
+// the fleet once rather than once each.
+func LoadUnitSuggestFactsFromSnapshot(st *store.Store, resolve func([]store.Node) (netplan.Resolution, error), dep *store.Deployment, reqs nodelabel.Requirements, listed []ListedRank, online func(string) bool, ucxHang UCXNetlinkHangOf, ranks, perRank int) (UnitSuggestFacts, error) {
+	nodes, err := st.FleetNodes()
+	if err != nil {
+		return UnitSuggestFacts{}, err
+	}
+	return UnitSuggestFactsOn(st, nodes, resolve, dep, reqs, listed, online, ucxHang, ranks, perRank)
+}
+
+// UnitSuggestFactsOn is LoadUnitSuggestFacts over nodes already read.
+func UnitSuggestFactsOn(st *store.Store, nodes []store.Node, resolve func([]store.Node) (netplan.Resolution, error), dep *store.Deployment, reqs nodelabel.Requirements, listed []ListedRank, online func(string) bool, ucxHang UCXNetlinkHangOf, ranks, perRank int) (UnitSuggestFacts, error) {
 	if online == nil {
 		online = StoredOnline(nodes)
 	}
