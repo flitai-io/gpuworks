@@ -15,6 +15,8 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 
 这条规则覆盖全部 `/v1` 路由，包括 `/v1/models`、`/v1/files`、`/v1/batches`、`/v1/tokenize` 与 `/v1/detokenize`。401 的响应形态按入口不同：网关路由返回 `{"error":{"message":"invalid or missing API key","type":"gpuworks_proxy"}}`，Files 与 Batches 返回 OpenAI 格式的 `invalid_api_key`，见[差异与排查](#差异与排查)。
 
+`GET /v1/models` 列出网关此刻能路由的服务名（来自网关按事件更新的路由表，不读数据库）：只含活跃部署，每个服务名一次，按名字排序；带范围的 key 只看到它能调用的部署的服务名。刚创建或刚停止的部署在路由表重建后出现或消失：部署事件后最多约 0.5 秒，没有事件时也每 2 秒刷新一次。
+
 ## 支持的操作
 
 | 操作 | 默认 endpoint | 编码/模式 |
