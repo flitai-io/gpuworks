@@ -925,6 +925,12 @@ The agent checks containers of running instances every 15 seconds. Whether cause
 
 Containers of sleeping instances are still running and are not treated as exited. If a container check such as `docker inspect` fails, only that check cycle is skipped.
 
+### Engine Stops Responding After Reaching Running
+
+While the container is running, the agent also requests the engine's health endpoint (default `/health`) every 15 seconds. After a failed or timed-out request (3 seconds each) it retries every 5 seconds; any single success restarts the clock. Only after **3 consecutive minutes of failures** does it clean up the container, report `failed` with `ENGINE_UNRESPONSIVE`, and enter retry, with the message `engine health check failed continuously for …`. Busy periods such as the prefill of a long prompt or a kernel compile triggered by the first request are usually far shorter than 3 minutes and do not get the instance cleaned up; a truly hung engine is detected at most about 3 minutes later.
+
+SGLang's default `/health` submits a request that generates a single token to the scheduler, and it does not return while the scheduler is busy with a long prefill. The platform sets `SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION=0` for every SGLang instance so that `/health` bypasses the scheduler; during startup it still returns 200 only after the engine's own warmup generation completes, so readiness is unaffected. A hung scheduler is ended by SGLang's `--watchdog-timeout`, which terminates the process; that is then handled as the container exit in the previous section. A deployment's environment variables can override or remove this setting.
+
 ### Retry After Fixing the Cause
 
 The platform recreates instances through the controller. Containers use `--restart no` and do not rely on Docker restart policies.

@@ -50,12 +50,14 @@
   ],
   "env": {
     "HF_HUB_OFFLINE": "1",
+    "SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION": "0",
     "SGLANG_LOGGING_CONFIG_PATH": "/tmp/gpuworks-sglang-logging.json",
     "TRANSFORMERS_OFFLINE": "1"
   },
   "env_layers": {
     "system": {
       "HF_HUB_OFFLINE": "1",
+      "SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION": "0",
       "SGLANG_LOGGING_CONFIG_PATH": "/tmp/gpuworks-sglang-logging.json",
       "TRANSFORMERS_OFFLINE": "1"
     }
@@ -113,6 +115,7 @@
       ],
       "env": {
         "HF_HUB_OFFLINE": "1",
+        "SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION": "0",
         "SGLANG_LOGGING_CONFIG_PATH": "/tmp/gpuworks-sglang-logging.json",
         "TRANSFORMERS_OFFLINE": "1"
       },
@@ -122,6 +125,7 @@
       "env_layers": {
         "system": {
           "HF_HUB_OFFLINE": "1",
+          "SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION": "0",
           "SGLANG_LOGGING_CONFIG_PATH": "/tmp/gpuworks-sglang-logging.json",
           "TRANSFORMERS_OFFLINE": "1"
         }

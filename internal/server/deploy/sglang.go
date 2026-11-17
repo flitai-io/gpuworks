@@ -20,6 +20,10 @@ type sglangEngine struct{ BaseEngine }
 // and the harness are in scripts/estimate-calib/.
 const sglangReserveBase int64 = 205 << 20
 
+// sglangHealthGenerationEnv switches SGLang's /health between a scheduler
+// round trip (the default) and a check of the HTTP server's own state.
+const sglangHealthGenerationEnv = "SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION"
+
 func (sglangEngine) Name() string { return EngineSGLang }
 
 // TPFlags: SGLang accepts the same three spellings as vLLM and injects
@@ -186,6 +190,14 @@ func (sglangEngine) Build(p Params) ResolvedLaunch {
 		b.injectDictionary("lora", true)
 	}
 	env := map[string]string{"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
+	// SGLang's /health otherwise queues a one-token generation behind the
+	// scheduler's work, so a long chunked prefill or a first-request kernel
+	// compile leaves it unanswered and the agent's liveness probe would retire
+	// a busy engine. With generation off, /health still answers 503 until the
+	// engine's own warmup generation has passed, so startup readiness keeps
+	// its meaning; a hung scheduler is SGLang's watchdog's to end. Images that
+	// predate the variable already serve a cheap /health.
+	env[sglangHealthGenerationEnv] = "0"
 	sglangPD(b, p, env)
 	entry := append([]string{"python", "-m", "sglang.launch_server"}, b.args()...)
 	entry = append(entry, templateArgs...)

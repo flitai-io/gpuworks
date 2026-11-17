@@ -174,6 +174,9 @@ func (e *Engine) checkServing(ctx context.Context, spec proto.InstanceDesiredSta
 		return
 	}
 	delete(e.servingEpoch, spec.UUID)
+	// An HTTP probe may still be inside its failure window; the exit decides
+	// this generation, so the probe has nothing left to watch.
+	e.cancelHealthProbeLocked(spec.UUID)
 	e.inFlight[spec.UUID] = true
 	attemptCtx, cancel := context.WithCancel(ctx)
 	e.inFlightCancel[spec.UUID] = cancel

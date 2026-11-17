@@ -39,7 +39,7 @@ func TestRunningHealthRetriesBeforeRetiring(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/health" && checking.Load() {
 					call := calls.Add(1)
-					if !recover || call < 3 {
+					if !recover || call < 10 {
 						w.WriteHeader(http.StatusServiceUnavailable)
 					}
 				}
@@ -48,32 +48,75 @@ func TestRunningHealthRetriesBeforeRetiring(t *testing.T) {
 			driver := newLivenessDriver()
 			e, reports := newLivenessEngine(t, driver)
 			e.healthProbeInterval = time.Millisecond
+			// A recovering engine fails nine times inside a long window; a
+			// dead one keeps failing past a short one.
+			e.healthFailureWindow = time.Minute
+			if !recover {
+				e.healthFailureWindow = 50 * time.Millisecond
+			}
 			spec := runningSpec("health-retries", serverPort(t, server))
 			spec.Engine = engines.VLLM
 			serve(t, e, reports, spec)
 			checking.Store(true)
 			e.checkLiveness(context.Background())
 			waitHealthProbes(t, e)
-			if calls.Load() != 3 {
-				t.Fatalf("probe calls=%d, want 3", calls.Load())
-			}
 			failed := reports.states(proto.InstFailed)
 			if recover {
-				if len(failed) != 0 || !driver.exists(containerName(spec.UUID)) {
-					t.Fatalf("transient failure retired the instance: %+v", reports.snapshot())
+				if calls.Load() != 10 || len(failed) != 0 || !driver.exists(containerName(spec.UUID)) {
+					t.Fatalf("transient failures retired the instance: calls=%d reports=%+v", calls.Load(), reports.snapshot())
 				}
 			} else {
-				if len(failed) != 1 || !strings.Contains(failed[0].Message, "HTTP 503") || driver.exists(containerName(spec.UUID)) {
-					t.Fatalf("persistent HTTP failure was not retired: %+v", reports.snapshot())
+				if calls.Load() < 2 || len(failed) != 1 || !strings.Contains(failed[0].Message, "HTTP 503") || driver.exists(containerName(spec.UUID)) {
+					t.Fatalf("persistent HTTP failure was not retired: calls=%d reports=%+v", calls.Load(), reports.snapshot())
 				}
+				if !strings.Contains(failed[0].Message, "failed continuously") {
+					t.Fatalf("failure reason = %q", failed[0].Message)
+				}
+				probed := calls.Load()
 				for range 3 {
 					e.checkLiveness(context.Background())
 				}
-				if calls.Load() != 3 || len(reports.states(proto.InstFailed)) != 1 {
+				if calls.Load() != probed || len(reports.states(proto.InstFailed)) != 1 {
 					t.Fatal("failed instance was probed or reported again")
 				}
 			}
 		})
+	}
+}
+
+// A container that exits while its HTTP probe is still inside the failure
+// window is decided by the exit: the probe stops and nothing is reported twice.
+func TestRunningHealthContainerExitEndsTheProbe(t *testing.T) {
+	var failing atomic.Bool
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" && failing.Load() {
+			calls.Add(1)
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	t.Cleanup(server.Close)
+	driver := newLivenessDriver()
+	e, reports := newLivenessEngine(t, driver)
+	e.healthProbeInterval = time.Millisecond
+	e.healthFailureWindow = time.Hour
+	spec := runningSpec("exit-during-window", serverPort(t, server))
+	serve(t, e, reports, spec)
+	failing.Store(true)
+	e.checkLiveness(context.Background())
+	deadline := time.Now().Add(5 * time.Second)
+	for calls.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	driver.exit(containerName(spec.UUID), 9, false)
+	e.checkLiveness(context.Background())
+	failed := reports.waitFor(t, proto.InstFailed, 1)
+	waitHealthProbes(t, e)
+	if strings.Contains(failed[0].Message, "engine health check") {
+		t.Fatalf("exit was reported as unresponsive: %+v", failed)
+	}
+	if len(reports.states(proto.InstFailed)) != 1 {
+		t.Fatalf("instance reported twice: %+v", reports.snapshot())
 	}
 }
 
