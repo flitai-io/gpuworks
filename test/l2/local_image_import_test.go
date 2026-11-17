@@ -39,7 +39,7 @@ func TestLocalImageImportRetriesNodeFileWithoutFetchingURL(t *testing.T) {
 	}
 	post(syncPath, map[string]string{"source": "local", "archive_path": filepath.Dir(path)}, http.StatusConflict)
 	failed := c.nodeRow(t, findArchiveImportVersion(t, c.base, c.adminToken, c.imageRef))
-	if failed.State != "failed" || failed.Source != "local" || failed.TransferID == "" {
+	if failed.State != "failed" || failed.Source != "local" || failed.TransferID != "" {
 		t.Fatalf("invalid node file did not leave a retryable local failure: %+v", failed)
 	}
 	data := post(syncPath+"/retry", map[string]any{}, http.StatusBadRequest)
@@ -49,12 +49,21 @@ func TestLocalImageImportRetriesNodeFileWithoutFetchingURL(t *testing.T) {
 	if err := json.Unmarshal(data, &problem); err != nil || problem.Code != "IMAGE_ARCHIVE_PATH_REQUIRED" {
 		t.Fatalf("empty retry must require the file again: %s", data)
 	}
-	post(syncPath+"/retry", map[string]string{"source": "local", "archive_path": "  " + path + "  "}, http.StatusAccepted)
+	data = post(syncPath+"/retry", map[string]string{"source": "local", "archive_path": "  " + path + "  "}, http.StatusAccepted)
+	var accepted struct {
+		TransferID string `json:"transfer_id"`
+	}
+	if err := json.Unmarshal(data, &accepted); err != nil || accepted.TransferID == "" {
+		t.Fatalf("retry must acknowledge its new attempt: %s", data)
+	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		current := findArchiveImportVersion(t, c.base, c.adminToken, c.imageRef)
 		row := c.nodeRow(t, current)
-		if row.TransferID != failed.TransferID && row.State == "present" {
+		if row.State == "present" {
+			if row.TransferID != "" {
+				t.Fatalf("completed import retained an active attempt: %+v", row)
+			}
 			if row.Source != "local" || row.SizeBytes != int64(len(c.archive)) || row.TransferredBytes != row.SizeBytes {
 				t.Fatalf("local import result = %+v", row)
 			}
@@ -63,7 +72,7 @@ func TestLocalImageImportRetriesNodeFileWithoutFetchingURL(t *testing.T) {
 			}
 			break
 		}
-		if (row.TransferID != failed.TransferID && row.State == "failed") || time.Now().After(deadline) {
+		if row.State == "failed" || time.Now().After(deadline) {
 			t.Fatalf("local retry did not complete: %+v", row)
 		}
 		time.Sleep(100 * time.Millisecond)

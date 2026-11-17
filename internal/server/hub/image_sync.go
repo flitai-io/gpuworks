@@ -99,33 +99,74 @@ func (h *Hub) syncImageDirect(ctx context.Context, imageID uint, targetNodeUUID,
 	}
 	transferID := auth.NewUUID()
 	sizeBytes := source.SizeBytes
+	var targetRow *store.ImageNode
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		current, err := h.store.ImageNode(image.ID, target.ID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return nil, err
+		}
+		if errors.Is(err, store.ErrNotFound) {
+			current = nil
+		}
+		if current != nil && h.reuseImageSync(current, force) {
+			return current, nil
+		}
+		var started bool
+		targetRow, started, err = h.store.TryStartImageTransfer(ctx, current, &store.ImageNode{
+			ImageID: image.ID, NodeID: target.ID, State: store.ImageStateSyncing, SizeBytes: sizeBytes,
+			TransferID: transferID, SourceNodeID: source.NodeID, Source: "peer", RateLimitKiB: rateLimitKiB,
+			Message: "starting direct peer sync",
+		})
+		if err != nil {
+			return nil, err
+		}
+		if started {
+			break
+		}
+	}
 	copyCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	h.imageSyncMu.Lock()
-	// Recheck after source validation: another caller may have started this slot.
-	if current, e := h.store.ImageNode(image.ID, target.ID); e == nil && (current.State == store.ImageStateSyncing || current.State == store.ImageStatePulling) && (!force || h.imageSyncOwners[current.TransferID] != nil) && !(current.TransferErrorCode == messages.ErrorPeerRelayBusy && h.imageSyncOwners[current.TransferID] == nil) {
-		h.imageSyncMu.Unlock()
-		cancel()
-		return current, nil
-	}
 	if h.imageSyncOwners == nil {
 		h.imageSyncOwners = make(map[string]context.CancelFunc)
 	}
 	h.imageSyncOwners[transferID] = cancel
-	targetRow, err := h.store.UpsertImageNode(&store.ImageNode{ImageID: image.ID, NodeID: target.ID, State: store.ImageStateSyncing, SizeBytes: sizeBytes, TransferID: transferID, SourceNodeID: source.NodeID, Source: "peer", RateLimitKiB: rateLimitKiB})
-	if err == nil {
-		err = h.store.BeginDirectImageSync(image.ID, target.ID, source.NodeID, transferID, sizeBytes, rateLimitKiB)
-	}
-	if err != nil {
-		delete(h.imageSyncOwners, transferID)
-		cancel()
-	}
 	h.imageSyncMu.Unlock()
-	if err != nil {
-		return nil, err
+	// A cancellation can win after the database claim but before this local
+	// cancel function was registered. Do not launch that already-stopped work.
+	current, err := h.store.ImageNode(image.ID, target.ID)
+	if err != nil || current.TransferID != transferID || current.State != store.ImageStateSyncing {
+		h.imageSyncMu.Lock()
+		delete(h.imageSyncOwners, transferID)
+		h.imageSyncMu.Unlock()
+		cancel()
+		return current, err
 	}
 	h.watchDirectImageTransfer(image.ID, target.ID)
 	go h.runDirectImageSync(copyCtx, image, target, sourceNode, target.ID, transferID, sizeBytes, rateLimitKiB)
 	return targetRow, nil
+}
+
+// reuseImageSync preserves peer recovery while respecting another acquisition
+// source's live attempt. Force is never permission to steal a fresh local load
+// or registry pull observed after source validation.
+func (h *Hub) reuseImageSync(row *store.ImageNode, force bool) bool {
+	if row.Source != "peer" {
+		return imageRowActive(row) && !(force && row.State == store.ImageStatePresent)
+	}
+	if row.State == store.ImageStatePresent {
+		return !force
+	}
+	if row.State != store.ImageStateSyncing && row.State != store.ImageStatePulling {
+		return false
+	}
+	owned := h.ownsImageSync(row.TransferID)
+	if row.TransferErrorCode == messages.ErrorPeerRelayBusy && !owned {
+		return false
+	}
+	return !force || owned || time.Since(row.UpdatedAt) < 2*time.Minute
 }
 
 // RetryImageSync resets a failed transfer and starts it again. Docker save is

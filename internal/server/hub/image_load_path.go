@@ -17,17 +17,14 @@ func (h *Hub) loadImageArchivePath(ctx context.Context, image *store.Image, targ
 	if !filepath.IsAbs(path) {
 		return nil, errors.New("archive_path must be an absolute file path on the target node")
 	}
-	if row, err := h.store.ImageNode(image.ID, target.ID); err == nil && imageRowActive(row) {
-		return row, nil
-	}
 	transferID := auth.NewUUID()
-	row, err := h.store.UpsertImageNode(&store.ImageNode{
+	row, started, err := h.beginImageFetch(ctx, &store.ImageNode{
 		ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID,
 		State: store.ImageStateSyncing, Source: imagecatalog.FetchSourceLocal,
 		TransferID: transferID, Message: "loading image archive from node file",
-	})
-	if err != nil {
-		return nil, err
+	}, false)
+	if err != nil || !started {
+		return row, err
 	}
 	if _, err := h.CallNode(ctx, target.UUID, proto.RPCImageLoadPath, proto.ImageLoadPathParams{
 		CanonicalRef: image.ImageRef, ArchivePath: path, TransferID: transferID,
@@ -36,11 +33,7 @@ func (h *Hub) loadImageArchivePath(ctx context.Context, image *store.Image, targ
 		if strings.Contains(strings.ToLower(err.Error()), "unknown rpc method: "+proto.RPCImageLoadPath) {
 			message = "the target node is running an older agent that cannot import a local image archive; upgrade the agent first"
 		}
-		_, _ = h.store.UpsertImageNode(&store.ImageNode{
-			ID: row.ID, ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID,
-			State: store.ImageStateFailed, Source: imagecatalog.FetchSourceLocal,
-			TransferID: transferID, Message: boundedPullMessage(message),
-		})
+		_ = h.store.FailImageTransferIfActive(image.ID, target.ID, transferID, boundedPullMessage(message))
 		return nil, errors.New(message)
 	}
 	h.watchDirectImageTransfer(image.ID, target.ID)

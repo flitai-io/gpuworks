@@ -56,13 +56,6 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 		}
 		return nil, err
 	}
-	if row, rowErr := h.store.ImageNode(image.ID, target.ID); rowErr == nil {
-		// Force only gets past a finished pull. Two transfers for one image on
-		// one node would race on the same tag.
-		if imageRowActive(row) && !(fetch.Force && row.State == store.ImageStatePresent) {
-			return row, nil
-		}
-	}
 	// One id for the whole attempt chain: it is what a cancel names, and what
 	// keeps a late status from an abandoned attempt out of the row that replaced
 	// it.
@@ -70,9 +63,9 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 	session := h.session(target.UUID)
 	walks := session != nil && session.HasCap(proto.CapImagePullCandidates)
 	source, message := pullStartMessage(candidates, walks)
-	row, err := h.store.UpsertImageNode(&store.ImageNode{ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID, State: store.ImageStatePulling, Source: source, TransferID: transferID, Message: message})
-	if err != nil {
-		return nil, err
+	row, started, err := h.beginImageFetch(ctx, &store.ImageNode{ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID, State: store.ImageStatePulling, Source: source, TransferID: transferID, Message: message}, fetch.Force)
+	if err != nil || !started {
+		return row, err
 	}
 	if walks {
 		all := make([]proto.ImagePullCandidate, 0, len(candidates))
@@ -85,14 +78,38 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 			return row, nil
 		}
 		message := boundedPullMessage("image pull failed to start: " + callErr.Error())
-		_, _ = h.store.UpsertImageNode(&store.ImageNode{ID: row.ID, ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID, State: store.ImageStateFailed, Source: candidates[0].Source, Message: message})
+		_ = h.store.FailImageTransferIfActive(image.ID, target.ID, transferID, message)
 		return nil, callErr
+	}
+	pullCtx, release := h.ownImagePullFallback(ctx, transferID)
+	watching := false
+	defer func() {
+		if !watching {
+			release()
+		}
+	}()
+	current, err := h.store.ImageNode(image.ID, target.ID)
+	if err != nil || current.TransferID != transferID || current.State != store.ImageStatePulling {
+		return current, err
 	}
 	immediateFailures := make([]string, 0, len(candidates))
 	var productErr error
 	for index, candidate := range candidates {
+		if err := pullCtx.Err(); err != nil {
+			return nil, err
+		}
 		if index > 0 {
-			_, _ = h.store.UpsertImageNode(&store.ImageNode{ID: row.ID, ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID, State: store.ImageStatePulling, Source: candidate.Source, TransferID: transferID, Message: boundedPullMessage(strings.Join(immediateFailures, " | ") + " | trying " + candidate.Source + " " + candidate.Ref)})
+			current, readErr := h.store.ImageNode(image.ID, target.ID)
+			if readErr != nil || !imagePullAttemptCurrent(current, transferID) {
+				return current, readErr
+			}
+			row, started, err = h.store.TryStartImageTransfer(pullCtx, current, &store.ImageNode{ImageID: image.ID, NodeID: target.ID, State: store.ImageStatePulling, Source: candidate.Source, TransferID: transferID, Message: boundedPullMessage(strings.Join(immediateFailures, " | ") + " | trying " + candidate.Source + " " + candidate.Ref)})
+			if err != nil {
+				return nil, err
+			}
+			if !started {
+				return h.store.ImageNode(image.ID, target.ID)
+			}
 		}
 		_, callErr := h.CallNode(ctx, target.UUID, proto.RPCImagePull, proto.ImagePullParams{EffectiveRef: candidate.Ref, CanonicalRef: image.ImageRef, TransferID: transferID})
 		if callErr == nil {
@@ -100,7 +117,11 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 			// operation finishes. Watch terminal failure and advance to the next
 			// source without making the HTTP request wait for a large image.
 			if len(candidates) > index+1 {
-				go h.watchImagePullCandidates(image.ID, target.ID, target.UUID, row.ID, image.ImageRef, candidates, index)
+				watching = true
+				go func() {
+					defer release()
+					h.watchImagePullCandidates(pullCtx, image.ID, target.ID, target.UUID, image.ImageRef, transferID, candidates, index)
+				}()
 			}
 			// The node is doing the work, so the row only moves while the agent
 			// reports. Watch for that reporting to stop, whatever the source.
@@ -122,7 +143,7 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 		}
 	}
 	message = "all image sources failed: " + strings.Join(immediateFailures, " | ")
-	_, _ = h.store.UpsertImageNode(&store.ImageNode{ID: row.ID, ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID, State: store.ImageStateFailed, Source: candidates[len(candidates)-1].Source, Message: message})
+	_ = h.store.FailImageTransferIfActive(image.ID, target.ID, transferID, message)
 	if productErr != nil {
 		return nil, productErr
 	}

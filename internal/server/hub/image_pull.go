@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -107,15 +108,30 @@ func (h *Hub) planReplayImages(node *store.Node, imageRules []pullref.SourceRule
 // after the agent reports an asynchronous terminal failure. The initial HTTP
 // request remains quick, while image_nodes.message retains one audit entry per
 // attempted ref.
-func (h *Hub) watchImagePullCandidates(imageID, nodeID uint, nodeUUID string, rowID uint, canonical string, candidates []imagePullCandidate, current int) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+func (h *Hub) watchImagePullCandidates(parent context.Context, imageID, nodeID uint, nodeUUID, canonical, transferID string, candidates []imagePullCandidate, current int) {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
 	defer cancel()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	failures := make([]string, 0, len(candidates))
+	defer func() {
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return
+		}
+		message := "image pull source fallback timed out"
+		if len(failures) > 0 {
+			message = "all image sources failed or timed out: " + strings.Join(failures, " | ")
+		}
+		if fresh, err := h.store.ImageNode(imageID, nodeID); err == nil && imagePullAttemptCurrent(fresh, transferID) {
+			_ = h.store.FinishImagePullIfUnchanged(context.Background(), fresh, boundedPullMessage(message))
+		}
+	}()
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		row, err := h.store.ImageNode(imageID, nodeID)
-		if err != nil {
+		if err != nil || !imagePullAttemptCurrent(row, transferID) {
 			return
 		}
 		if row.State == store.ImageStatePresent {
@@ -129,27 +145,20 @@ func (h *Hub) watchImagePullCandidates(imageID, nodeID uint, nodeUUID string, ro
 			failures = append(failures, row.Source+": "+failure)
 			current++
 			if current >= len(candidates) {
-				_, _ = h.store.UpsertImageNode(&store.ImageNode{ID: rowID, ImageVersionID: imageID, ImageID: imageID, NodeID: nodeID, State: store.ImageStateFailed, Source: row.Source, Message: boundedPullMessage("all image sources failed: " + strings.Join(failures, " | "))})
+				_ = h.store.FinishImagePullIfUnchanged(ctx, row, boundedPullMessage("all image sources failed: "+strings.Join(failures, " | ")))
 				return
 			}
 			next := candidates[current]
-			_, _ = h.store.UpsertImageNode(&store.ImageNode{ID: rowID, ImageVersionID: imageID, ImageID: imageID, NodeID: nodeID, State: store.ImageStatePulling, Source: next.Source, Message: boundedPullMessage(strings.Join(failures, " | ") + " | trying " + next.Source + " " + next.Ref)})
-			if _, callErr := h.CallNode(ctx, nodeUUID, proto.RPCImagePull, proto.ImagePullParams{EffectiveRef: next.Ref, CanonicalRef: canonical}); callErr != nil {
-				failures = append(failures, next.Source+": "+callErr.Error())
-				current++
-				if current >= len(candidates) {
-					_, _ = h.store.UpsertImageNode(&store.ImageNode{ID: rowID, ImageVersionID: imageID, ImageID: imageID, NodeID: nodeID, State: store.ImageStateFailed, Source: next.Source, Message: boundedPullMessage("all image sources failed: " + strings.Join(failures, " | "))})
-					return
-				}
+			_, started, err := h.store.TryStartImageTransfer(ctx, row, &store.ImageNode{ImageID: imageID, NodeID: nodeID, State: store.ImageStatePulling, Source: next.Source, TransferID: transferID, Message: boundedPullMessage(strings.Join(failures, " | ") + " | trying " + next.Source + " " + next.Ref)})
+			if err != nil || !started {
+				return
+			}
+			if _, callErr := h.CallNode(ctx, nodeUUID, proto.RPCImagePull, proto.ImagePullParams{EffectiveRef: next.Ref, CanonicalRef: canonical, TransferID: transferID}); callErr != nil {
+				_ = h.store.FailImageTransferIfActive(imageID, nodeID, transferID, next.Source+": "+callErr.Error())
 			}
 		}
 		select {
 		case <-ctx.Done():
-			message := "image pull source fallback timed out"
-			if len(failures) > 0 {
-				message = "all image sources failed or timed out: " + strings.Join(failures, " | ")
-			}
-			_, _ = h.store.UpsertImageNode(&store.ImageNode{ID: rowID, ImageVersionID: imageID, ImageID: imageID, NodeID: nodeID, State: store.ImageStateFailed, Source: row.Source, Message: boundedPullMessage(message)})
 			return
 		case <-ticker.C:
 		}

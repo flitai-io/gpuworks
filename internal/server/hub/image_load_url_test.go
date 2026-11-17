@@ -64,6 +64,9 @@ func newArchiveURLHub(t *testing.T, dsn string, reply func(env proto.Envelope) s
 	session := newSession(h, nil, server)
 	session.NodeUUID = node.UUID
 	h.register(session)
+	// Finish registration's store reads before tests install query barriers or
+	// fault callbacks; GORM callback registration is not concurrent with use.
+	h.waitSessionWork()
 	t.Cleanup(func() { h.deregister(session) })
 	go func() {
 		decoder := json.NewDecoder(server)

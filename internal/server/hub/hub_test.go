@@ -148,6 +148,7 @@ func TestWatchImagePullCandidatesAdvancesAndAuditsFailures(t *testing.T) {
 		State:          store.ImageStateFailed,
 		Source:         "mirror-a",
 		Message:        "first source failed",
+		LastTransferID: "watch-attempt",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -189,25 +190,18 @@ func TestWatchImagePullCandidatesAdvancesAndAuditsFailures(t *testing.T) {
 		resp := proto.Envelope{T: proto.TRPCResp, ID: env.ID, D: json.RawMessage(`{"result":{}}`)}
 		line, _ := json.Marshal(resp)
 		_, _ = client.Write(append(line, '\n'))
-		_, _ = st.UpsertImageNode(&store.ImageNode{
-			ID:             row.ID,
-			ImageVersionID: image.ID,
-			ImageID:        image.ID,
-			NodeID:         node.ID,
-			State:          store.ImageStateFailed,
-			Source:         "mirror-b",
-			Message:        "second source failed",
-		})
+		_ = st.ApplyImageNodeStatus(image.ID, node.ID, proto.ImageNodeStatus{State: store.ImageStateFailed, TransferID: req.Params.TransferID, Message: "second source failed"})
 	}()
 
 	done := make(chan struct{})
 	go func() {
 		h.watchImagePullCandidates(
+			context.Background(),
 			image.ID,
 			node.ID,
 			node.UUID,
-			row.ID,
 			image.ImageRef,
+			row.LastTransferID,
 			[]imagePullCandidate{
 				{ImagePullCandidate: proto.ImagePullCandidate{Ref: "mirror-a/example/watch:v1"}, Source: "mirror-a"},
 				{ImagePullCandidate: proto.ImagePullCandidate{Ref: "mirror-b/example/watch:v1"}, Source: "mirror-b"},

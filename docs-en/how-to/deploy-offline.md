@@ -57,6 +57,8 @@ For Kubernetes nodes, enter the file path on the worker host, such as `/data/run
 
 If the image is not registered yet, first add a custom image with its image reference, engine, framework, and other required metadata. Importing a file only updates the registered image's state on the target node; it does not create an image series. After a failure, select the file again or switch to another acquisition method.
 
+While a transfer for an image version and target node is active, concurrent node-file imports, URL imports, automatic pulls, or peer copies do not start duplicate transfers. You can submit a new request after cancellation; a late failure from an older attempt cannot overwrite the new one.
+
 Alternatively, log in to the node and import the archive into its container runtime:
 
 ```bash
