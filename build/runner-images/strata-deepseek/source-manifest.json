@@ -1,0 +1,17 @@
+{
+  "strata": {
+    "repo": "https://github.com/Niko1221/Strata.git",
+    "commit": "d2f096475817d4666c364c820b0ca830f751cfc5",
+    "archive_url": "https://codeload.github.com/Niko1221/Strata/tar.gz/d2f096475817d4666c364c820b0ca830f751cfc5",
+    "archive_sha256": "7093283d24ad4f9bc9a379607340678261c60e4539919c763c7555b1b5669195",
+    "archive_size": 35089983,
+    "release": "0.2.13"
+  },
+  "vendored_ggml": {
+    "path": "third_party/strata-ggml",
+    "upstream_repo": "https://github.com/ggml-org/llama.cpp.git",
+    "upstream_commit": "3cf03257f219afbe7334045ff7c6a06ac68c627d",
+    "manifest": "third_party/strata-ggml/UPSTREAM.md",
+    "verify": "python3 tools/check_vendored.py"
+  }
+}

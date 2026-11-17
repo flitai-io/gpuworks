@@ -1,0 +1,64 @@
+# Rebuild Strata v0.2.13 from its pinned archive using the prior runner's
+# cached compiler and Python dependencies. No old native engine is reused.
+# This recipe retains inherited image layers; the clean recipe is Dockerfile.
+ARG BASE_IMAGE=sha256:ca5b5160de2fa822f1dce6772517dcaeaf87e9d09768aa82687cb57fb12ddac0
+FROM ${BASE_IMAGE}
+USER root
+ENV PATH=/opt/strata/.venv/bin:${PATH}
+ARG STRATA_ARCHIVE_SHA256
+ARG BUILD_JOBS=4
+ARG CUDA_ARCHITECTURES="75-real;86-real;89-real;89-virtual"
+COPY source/strata-archive /tmp/dsv41-input/
+# Reject a self-consistent but different archive before assigning the pinned build identity.
+RUN test "${STRATA_ARCHIVE_SHA256}" = 7093283d24ad4f9bc9a379607340678261c60e4539919c763c7555b1b5669195 \
+    && printf '%s  %s\n' "${STRATA_ARCHIVE_SHA256}" /tmp/dsv41-input/strata-archive \
+       | sha256sum --check --strict \
+    && mkdir /tmp/dsv41-source \
+    && tar --extract --gzip --file /tmp/dsv41-input/strata-archive --directory /tmp/dsv41-source --strip-components=1 \
+    && printf '%s\n' d2f096475 > /tmp/dsv41-source/BUILD_ID \
+    && printf '%s\n' d2f096475817d4666c364c820b0ca830f751cfc5 > /tmp/dsv41-source/SOURCE_REVISION \
+    && printf '%s\n' "${STRATA_ARCHIVE_SHA256}" > /tmp/dsv41-source/SOURCE_ARCHIVE_SHA256 \
+    && test "$(cut -d ' ' -f1 /tmp/dsv41-source/third_party/ggml/VERSION.txt)" = 3cf03257f219afbe7334045ff7c6a06ac68c627d \
+    && /opt/strata/.venv/bin/python /tmp/dsv41-source/tools/check_vendored.py
+RUN /opt/strata/.venv/bin/cmake -S /tmp/dsv41-source -B /tmp/dsv41-build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release -DSTRATA_ENABLE_CUDA=ON -DSTRATA_BUILD_DSV41=ON \
+    -DSTRATA_BUILD_TESTS=OFF -DSTRATA_NATIVE_EXPERTS=ON -DSTRATA_PORTABLE=ON \
+    "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}" \
+    && /opt/strata/.venv/bin/cmake --build /tmp/dsv41-build --target strata-dsv41 --parallel "${BUILD_JOBS}" \
+    && /tmp/dsv41-build/strata-dsv41 --version
+# Commit compiler output before packaging/moving the cached Python environment.
+RUN mkdir /tmp/dsv41-source/engine-dsv41 \
+    && cp /tmp/dsv41-build/strata-dsv41 /tmp/dsv41-source/engine-dsv41/ \
+    && test -s /tmp/dsv41-build/libstrata_kq.so \
+    && /opt/strata/.venv/bin/python /tmp/dsv41-source/packaging/collect_libs.py \
+       --binary /tmp/dsv41-build/strata-dsv41 --also 'libstrata_kq.so*' --search /tmp/dsv41-build \
+       --search /usr/local/cuda/lib64 --out /tmp/dsv41-source/engine-dsv41 \
+    && mv /opt/strata/.venv /tmp/dsv41-source/.venv \
+    && rm -rf /opt/strata \
+    && mv /tmp/dsv41-source /opt/strata \
+    && rm -rf /tmp/dsv41-input /tmp/dsv41-build
+# Install only from the image's existing environment: an incompatible cache
+# fails import/check rather than silently downloading a different environment.
+RUN /opt/strata/.venv/bin/python -c 'import numpy, jinja2, regex, yaml, requests, psutil' \
+    && /opt/strata/.venv/bin/pip check
+COPY entrypoint.py model-manifest.json source-manifest.json /opt/gpuworks/strata-deepseek/
+COPY image.json /opt/gpuworks/image.json
+COPY metadata/DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf /opt/gpuworks/strata-deepseek/metadata/DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf
+RUN test "$(stat --format=%s /opt/gpuworks/strata-deepseek/metadata/DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf)" = 5780589 \
+    && printf '%s  %s\n' cc15d470afcb030558bbc4d8e2ccd840182e2e95de1a95198138efe63a5fd99f /opt/gpuworks/strata-deepseek/metadata/DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf | sha256sum --check --strict
+RUN chmod 0755 /opt/gpuworks/strata-deepseek/entrypoint.py \
+    && LD_LIBRARY_PATH=/opt/strata/engine-dsv41 /opt/strata/engine-dsv41/strata-dsv41 --version
+ENV PYTHONUNBUFFERED=1 PYTHONNOUSERSITE=1 \
+    LD_LIBRARY_PATH=/opt/strata/engine-dsv41:${LD_LIBRARY_PATH} \
+    HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 STRATA_OFFLINE=1 \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+WORKDIR /opt/strata
+LABEL org.opencontainers.image.title="GPUWorks Strata DeepSeek runner (cached toolchain build)" \
+    org.opencontainers.image.version="0.1.59-deepseek41-amd64-r4" \
+    org.opencontainers.image.revision="d2f096475817d4666c364c820b0ca830f751cfc5" \
+    ai.gpuworks.strata.release="0.2.13" \
+    ai.gpuworks.strata.revision="d2f096475817d4666c364c820b0ca830f751cfc5" \
+    ai.gpuworks.engine="callable" ai.gpuworks.callable.family="strata-deepseek41" \
+    ai.gpuworks.build.recipe="Dockerfile.cached"
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/opt/gpuworks/strata-deepseek/entrypoint.py"]

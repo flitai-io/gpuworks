@@ -1,0 +1,4 @@
+# Pinned downloads are build inputs, not repository contents.
+metadata/*.gguf
+upstream/
+source/

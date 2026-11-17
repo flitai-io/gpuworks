@@ -1,0 +1,33 @@
+{
+  "id": "cuda13.0-strata0.1.59-deepseek41-amd64",
+  "revision": "r4",
+  "engine": "callable",
+  "engine_version": "0.1.59",
+  "framework": "cuda",
+  "framework_version": "13.0",
+  "architecture": "amd64",
+  "callable_family": "strata-deepseek41",
+  "strata_commit": "d2f096475817d4666c364c820b0ca830f751cfc5",
+  "cuda_architectures": [
+    "75-real",
+    "86-real",
+    "89-real",
+    "89-virtual"
+  ],
+  "input_modalities": [
+    "text"
+  ],
+  "model_manifest": "/opt/gpuworks/strata-deepseek/model-manifest.json",
+  "source_project_version": "0.1.59",
+  "external_model_components": 6,
+  "embedded_metadata": {
+    "filename": "DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf",
+    "repo": "unsloth/DeepSeek-V4.1-Flash-1017-GGUF",
+    "revision": "8a6ec9cf118e785a362ea94ee123c61c70553be6",
+    "path": "UD-Q8_K_XL/DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf",
+    "size": 5780589,
+    "sha256": "cc15d470afcb030558bbc4d8e2ccd840182e2e95de1a95198138efe63a5fd99f",
+    "image_path": "/opt/gpuworks/strata-deepseek/metadata/DeepSeek-V4.1-Flash-1017-UD-Q8_K_XL-00001-of-00009.gguf"
+  },
+  "strata_release": "0.2.13"
+}
