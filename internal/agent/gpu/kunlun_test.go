@@ -227,109 +227,112 @@ func TestKunlunProbeFailureAndEmpty(t *testing.T) {
 	}
 }
 func TestKunlunSelectedDevicesIsolation(t *testing.T) {
-	for _, kind := range []string{"single", "multi", "empty", "duplicate", "absent", "renumbered", "other-model", "other-arch", "missing-device", "regular-file", "wrong-rdev", "wrong-sysfs", "wrong-vendor", "missing-control", "control-rdev", "udocker"} {
-		t.Run(kind, func(t *testing.T) {
-			p, raw := kunlunFixture(t)
-			if _, e := p.Probe(t.Context()); e != nil {
-				t.Fatal(e)
-			}
-			indexes := []int{1}
-			driver := "docker"
-			switch kind {
-			case "multi":
-				indexes = []int{1, 0}
-			case "empty":
-				indexes = nil
-			case "duplicate":
-				indexes = []int{1, 1}
-			case "absent":
-				indexes = []int{9}
-			case "renumbered":
-				*raw = strings.Replace(*raw, "GPU-fixture-2", "GPU-other", 1)
-			case "other-model":
-				*raw = strings.Replace(*raw, "<product_name>P800 PCIe</product_name>", "<product_name>Other Kunlun</product_name>", 1)
-				indexes = []int{0}
-			case "other-arch":
-				*raw = strings.Replace(*raw, "<product_architecture>KL3</product_architecture>", "<product_architecture>KL2</product_architecture>", 1)
-				indexes = []int{0}
-			case "udocker":
-				driver = "udocker"
-			}
-			originalStat := p.stat
-			p.stat = func(path string) (os.FileInfo, error) {
-				if kind == "missing-device" && path == "/dev/xpu1" || kind == "missing-control" && path == "/dev/xpuctrl" {
-					return nil, os.ErrNotExist
+	for _, product := range []string{"P800 PCIe", "P800 OAM", " p800 oam "} {
+		for _, kind := range []string{"single", "multi", "empty", "duplicate", "absent", "renumbered", "other-model", "other-arch", "missing-device", "regular-file", "wrong-rdev", "wrong-sysfs", "wrong-vendor", "missing-control", "control-rdev", "udocker"} {
+			t.Run(product+"/"+kind, func(t *testing.T) {
+				p, raw := kunlunFixture(t)
+				*raw = strings.ReplaceAll(*raw, "P800 PCIe", product)
+				if _, e := p.Probe(t.Context()); e != nil {
+					t.Fatal(e)
 				}
-				s, e := originalStat(path)
-				if e != nil {
-					return s, e
+				indexes := []int{1}
+				driver := "docker"
+				switch kind {
+				case "multi":
+					indexes = []int{1, 0}
+				case "empty":
+					indexes = nil
+				case "duplicate":
+					indexes = []int{1, 1}
+				case "absent":
+					indexes = []int{9}
+				case "renumbered":
+					*raw = strings.Replace(*raw, "GPU-fixture-2", "GPU-other", 1)
+				case "other-model":
+					*raw = strings.Replace(*raw, "<product_name>"+product+"</product_name>", "<product_name>Other Kunlun</product_name>", 1)
+					indexes = []int{0}
+				case "other-arch":
+					*raw = strings.Replace(*raw, "<product_architecture>KL3</product_architecture>", "<product_architecture>KL2</product_architecture>", 1)
+					indexes = []int{0}
+				case "udocker":
+					driver = "udocker"
 				}
-				d := s.(kunlunDeviceInfo)
-				if kind == "regular-file" {
-					d.mode = 0600
+				originalStat := p.stat
+				p.stat = func(path string) (os.FileInfo, error) {
+					if kind == "missing-device" && path == "/dev/xpu1" || kind == "missing-control" && path == "/dev/xpuctrl" {
+						return nil, os.ErrNotExist
+					}
+					s, e := originalStat(path)
+					if e != nil {
+						return s, e
+					}
+					d := s.(kunlunDeviceInfo)
+					if kind == "regular-file" {
+						d.mode = 0600
+					}
+					if kind == "wrong-rdev" || kind == "control-rdev" && path == "/dev/xpuctrl" {
+						d.minor = 4
+					}
+					return d, nil
 				}
-				if kind == "wrong-rdev" || kind == "control-rdev" && path == "/dev/xpuctrl" {
-					d.minor = 4
+				originalRead := p.readFile
+				p.readFile = func(path string) ([]byte, error) {
+					if kind == "wrong-sysfs" && strings.HasSuffix(path, "/xpu1/dev") {
+						return []byte("195:0"), nil
+					}
+					if kind == "wrong-vendor" && strings.HasSuffix(path, "/vendor") {
+						return []byte("0x8086"), nil
+					}
+					return originalRead(path)
 				}
-				return d, nil
-			}
-			originalRead := p.readFile
-			p.readFile = func(path string) ([]byte, error) {
-				if kind == "wrong-sysfs" && strings.HasSuffix(path, "/xpu1/dev") {
-					return []byte("195:0"), nil
+				got := p.RuntimeInjectionForDriver(indexes, driver)
+				pass := kind == "single" || kind == "multi" || kind == "empty"
+				if !pass {
+					wantCause := map[string]string{
+						"duplicate":       "invalid or duplicate Kunlun device selection",
+						"absent":          "invalid or duplicate Kunlun device selection",
+						"renumbered":      "Kunlun device identity changed since probe",
+						"other-model":     "Kunlun device is not a supported P800 PCIe or OAM/KL3",
+						"other-arch":      "Kunlun device is not a supported P800 PCIe or OAM/KL3",
+						"missing-device":  "Kunlun character device unavailable: /dev/xpu1",
+						"regular-file":    "Kunlun character device unavailable: /dev/xpu1",
+						"wrong-rdev":      "Kunlun character device major/minor mismatch",
+						"wrong-sysfs":     "Kunlun sysfs minor mismatch",
+						"wrong-vendor":    "Kunlun PCI vendor cannot be verified",
+						"missing-control": "Kunlun control device unavailable",
+						"control-rdev":    "Kunlun character device major/minor mismatch",
+						"udocker":         "runtime_unsupported:",
+					}[kind]
+					if !strings.Contains(got.UnsupportedReason, wantCause) {
+						t.Fatalf("%s cause = %q, want %q", kind, got.UnsupportedReason, wantCause)
+					}
+					if got.UnsupportedReason == "" || len(got.DockerArgs) != 0 || len(got.Env) != 0 {
+						t.Fatalf("unsafe injection %+v", got)
+					}
+					return
 				}
-				if kind == "wrong-vendor" && strings.HasSuffix(path, "/vendor") {
-					return []byte("0x8086"), nil
-				}
-				return originalRead(path)
-			}
-			got := p.RuntimeInjectionForDriver(indexes, driver)
-			pass := kind == "single" || kind == "multi" || kind == "empty"
-			if !pass {
-				wantCause := map[string]string{
-					"duplicate":       "invalid or duplicate Kunlun device selection",
-					"absent":          "invalid or duplicate Kunlun device selection",
-					"renumbered":      "Kunlun device identity changed since probe",
-					"other-model":     "Kunlun device is not a supported P800 PCIe/KL3",
-					"other-arch":      "Kunlun device is not a supported P800 PCIe/KL3",
-					"missing-device":  "Kunlun character device unavailable: /dev/xpu1",
-					"regular-file":    "Kunlun character device unavailable: /dev/xpu1",
-					"wrong-rdev":      "Kunlun character device major/minor mismatch",
-					"wrong-sysfs":     "Kunlun sysfs minor mismatch",
-					"wrong-vendor":    "Kunlun PCI vendor cannot be verified",
-					"missing-control": "Kunlun control device unavailable",
-					"control-rdev":    "Kunlun character device major/minor mismatch",
-					"udocker":         "runtime_unsupported:",
-				}[kind]
-				if !strings.Contains(got.UnsupportedReason, wantCause) {
-					t.Fatalf("%s cause = %q, want %q", kind, got.UnsupportedReason, wantCause)
-				}
-				if got.UnsupportedReason == "" || len(got.DockerArgs) != 0 || len(got.Env) != 0 {
-					t.Fatalf("unsafe injection %+v", got)
-				}
-				return
-			}
-			if got.UnsupportedReason != "" {
-				t.Fatal(got)
-			}
-			if kind == "empty" {
-				if len(got.Env) != 0 || len(got.DockerArgs) != 0 {
+				if got.UnsupportedReason != "" {
 					t.Fatal(got)
 				}
-				return
-			}
+				if kind == "empty" {
+					if len(got.Env) != 0 || len(got.DockerArgs) != 0 {
+						t.Fatal(got)
+					}
+					return
+				}
 
-			want := []string{"--runtime", "runc", "--device", "/dev/xpu1:/dev/xpu1:rwm"}
-			wantEnv := map[string]string{"XPU_VISIBLE_DEVICES": "0"}
-			if kind == "multi" {
-				want = append(want, "--device", "/dev/xpu0:/dev/xpu0:rwm")
-				wantEnv["XPU_VISIBLE_DEVICES"] = "0,1"
-			}
-			want = append(want, "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm")
-			if !reflect.DeepEqual(got.DockerArgs, want) || !reflect.DeepEqual(got.Env, wantEnv) {
-				t.Fatal(got, want, wantEnv)
-			}
-		})
+				want := []string{"--runtime", "runc", "--device", "/dev/xpu1:/dev/xpu1:rwm"}
+				wantEnv := map[string]string{"XPU_VISIBLE_DEVICES": "0"}
+				if kind == "multi" {
+					want = append(want, "--device", "/dev/xpu0:/dev/xpu0:rwm")
+					wantEnv["XPU_VISIBLE_DEVICES"] = "0,1"
+				}
+				want = append(want, "--device", "/dev/xpuctrl:/dev/xpuctrl:rwm")
+				if !reflect.DeepEqual(got.DockerArgs, want) || !reflect.DeepEqual(got.Env, wantEnv) {
+					t.Fatal(got, want, wantEnv)
+				}
+			})
+		}
 	}
 }
 func TestKunlunCommandTimeout(t *testing.T) {

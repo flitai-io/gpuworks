@@ -85,8 +85,13 @@ func (p *KunlunProber) runtimeInjectionForDriver(ctx context.Context, indexes []
 		if !ok || seen[n] {
 			return fail("invalid or duplicate Kunlun device selection")
 		}
-		if !strings.EqualFold(strings.TrimSpace(c.Name), "P800 PCIe") || !strings.EqualFold(strings.TrimSpace(c.Arch), "KL3") {
-			return fail("Kunlun device is not a supported P800 PCIe/KL3")
+		// PCIe and OAM are P800 form factors with the same KL3 device
+		// injection contract. Keep the explicit model and architecture gate;
+		// the PCI identity and character-device checks below still apply.
+		name := strings.TrimSpace(c.Name)
+		p800 := strings.EqualFold(name, "P800 PCIe") || strings.EqualFold(name, "P800 OAM")
+		if !p800 || !strings.EqualFold(strings.TrimSpace(c.Arch), "KL3") {
+			return fail("Kunlun device is not a supported P800 PCIe or OAM/KL3")
 		}
 		ecc, eccErr := strconv.ParseUint(strings.TrimSpace(c.ECC), 10, 64)
 		if eccErr == nil && ecc > 0 {
