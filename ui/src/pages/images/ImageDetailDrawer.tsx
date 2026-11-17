@@ -71,6 +71,7 @@ type Props = {
     url: string,
     relay: boolean,
   ) => Promise<void>;
+  importFromPath: (version: ImageCatalogEntry, nodeUUID: string, path: string) => Promise<void>;
   inspectVersion: (version: ImageCatalogEntry, nodeUUID: string) => void;
   cancelTransfer: (version: ImageCatalogEntry, nodeUUID: string) => void;
   removeFromNode: (version: ImageCatalogEntry, nodeUUID: string) => void;
@@ -99,6 +100,7 @@ export default function ImageDetailDrawer({
   probeImage,
   syncFromPeer,
   pullFromURL,
+  importFromPath,
   inspectVersion,
   cancelTransfer,
   removeFromNode,
@@ -243,6 +245,7 @@ export default function ImageDetailDrawer({
                             probeImage={probeImage}
                             syncFromPeer={syncFromPeer}
                             pullFromURL={pullFromURL}
+                            importFromPath={importFromPath}
                             inspectVersion={inspectVersion}
                             cancelTransfer={cancelTransfer}
                             removeFromNode={removeFromNode}

@@ -133,6 +133,17 @@
     "olderVersion": "旧版本"
   },
   "nodeTable": {
+    "localOption": "从节点本地文件导入…",
+    "localAction": "导入本地文件…",
+    "sourceLocal": "节点本地文件",
+    "localLoading": "正在加载镜像…",
+    "localDialog": {
+      "title": "从 {{node}} 的本地文件导入",
+      "start": "开始导入",
+      "description": "将归档加载为镜像 {{ref}}。导入只更新此节点的镜像状态，不创建镜像系列。",
+      "path": "镜像归档文件路径",
+      "help": "填写此计算节点上已有 tar 文件的绝对路径，不是目录或管理节点路径。格式需受节点容器运行时支持；导入后保留原文件。"
+    },
     "column": {
       "node": "节点",
       "status": "状态",

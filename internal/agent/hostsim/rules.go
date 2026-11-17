@@ -64,6 +64,7 @@ var rpcRules = map[string]rule{
 	proto.RPCImageSyncStop:       refuse,
 	proto.RPCImageSyncProbe:      refuse,
 	proto.RPCImageLoadURL:        refuse,
+	proto.RPCImageLoadPath:       refuse,
 	proto.RPCRuntimeRestart:      refuse,
 	proto.RPCBenchProbe:          refuse,
 	proto.RPCAgentUpgrade:        refuse,

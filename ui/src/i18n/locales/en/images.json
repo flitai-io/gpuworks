@@ -133,6 +133,17 @@
     "olderVersion": "Older version"
   },
   "nodeTable": {
+    "localOption": "Import from node file…",
+    "localAction": "Import local file…",
+    "sourceLocal": "Node file",
+    "localLoading": "Loading image…",
+    "localDialog": {
+      "title": "Import a local file on {{node}}",
+      "start": "Start import",
+      "description": "Load the archive as {{ref}}. This updates the image on this node without creating an image series.",
+      "path": "Image archive file path",
+      "help": "Enter the absolute path of an existing tar file on this compute node, not a directory or a management server path. The node runtime must support its format. The original file is kept."
+    },
     "column": {
       "node": "Node",
       "status": "Status",

@@ -31,8 +31,8 @@ controller_struct_mutexes	0	max
 controller_struct_maps	0	max
 agent_node_runtime_fields	77	max
 agent_node_runtime_mutexes	12	max
-agent_node_runtime_methods	233	max
-agent_onrpc_cases	51	max
+agent_node_runtime_methods	234	max	# raised: node-local image archive import adds rpcImageLoadPath, an adapter over the existing image operation lifecycle and runtime loader; no new NodeRuntime fields or locks
+agent_onrpc_cases	52	max	# raised: image.load_path is the new RPC for importing an archive already on the target node; it shares image cancellation, status reporting and runtime loading
 agent_engine_struct_maps	9	max
 controller_exported_methods	15	max	# lowered by GWKS-306 (the five model transfer methods became Controller.Transfers); earlier raised: the server's sleep and wake order lock and the placement hints moved from package globals in planning (lifecycleMu, placementHints) into lifecycle.Orders, built by the controller and handed to the API and the automation (GWKS-305); Controller.Orders hands it to the app
 planning_concrete_store_refs	74	max	# raised: the controller plans unit suggestions on the fleet node snapshot (LoadUnitSuggestFactsFromSnapshot, UnitSuggestFactsOn), merged with r32-controller-nodes before this budget landed; GWKS-309 moves these reads behind a narrow interface

@@ -28,6 +28,8 @@ func (h *Hub) loadImageArchiveURL(ctx context.Context, image *store.Image, targe
 		if imageRowActive(row) && !(fetch.Force && row.State == store.ImageStatePresent) {
 			return row, nil
 		}
+	} else if !errors.Is(rowErr, store.ErrNotFound) {
+		return nil, rowErr
 	}
 	// Best effort: a mirror that answers HEAD lets the node run its disk
 	// admission check and show a real progress bar. One that does not still
@@ -43,17 +45,22 @@ func (h *Hub) loadImageArchiveURL(ctx context.Context, image *store.Image, targe
 	}
 	transferID := auth.NewUUID()
 	host := imagecatalog.ArchiveURLHost(archiveURL)
+	source, message := imagecatalog.FetchSourceURL, "downloading image archive from "+host
 	if fetch.Relay {
-		return h.relayImageArchiveURL(ctx, image, target, archiveURL, transferID, sizeBytes, host)
+		source, message = imagecatalog.FetchSourceURLRelay, "relaying image archive from "+host
 	}
-	row, err := h.store.UpsertImageNode(&store.ImageNode{
+	row, started, err := h.beginImageFetch(ctx, &store.ImageNode{
 		ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID,
-		State: store.ImageStateSyncing, Source: imagecatalog.FetchSourceURL,
+		State: store.ImageStateSyncing, Source: source,
 		SizeBytes: sizeBytes, TransferID: transferID,
-		Message: "downloading image archive from " + host,
-	})
-	if err != nil {
-		return nil, err
+		Message: message,
+	}, fetch.Force)
+	if err != nil || !started {
+		return row, err
+	}
+	if fetch.Relay {
+		h.relayImageArchiveURL(ctx, image, target, archiveURL, transferID, sizeBytes)
+		return row, nil
 	}
 	if _, callErr := h.CallNode(ctx, target.UUID, proto.RPCImageLoadURL, proto.ImageLoadURLParams{
 		CanonicalRef: image.ImageRef, ArchiveURL: archiveURL, SizeBytes: sizeBytes, TransferID: transferID,
@@ -62,10 +69,7 @@ func (h *Hub) loadImageArchiveURL(ctx context.Context, image *store.Image, targe
 		if errors.Is(callErr, proto.ErrRPCUnknownMethod) {
 			message = "the target node is running an older agent that cannot download an image archive from a URL; upgrade the agent first"
 		}
-		_, _ = h.store.UpsertImageNode(&store.ImageNode{
-			ID: row.ID, ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID,
-			State: store.ImageStateFailed, Source: imagecatalog.FetchSourceURL, Message: boundedPullMessage(message),
-		})
+		_ = h.store.FailImageTransferIfActive(image.ID, target.ID, transferID, boundedPullMessage(message))
 		return nil, errors.New(message)
 	}
 	// The node downloads the archive itself, so the row only moves while the
@@ -79,18 +83,8 @@ func (h *Hub) loadImageArchiveURL(ctx context.Context, image *store.Image, targe
 // ledger row is the same one a peer transfer uses, driven by the same
 // trackImageTransfer state machine; only the source of the bytes differs, and
 // that is what ImageNode.Source records.
-func (h *Hub) relayImageArchiveURL(ctx context.Context, image *store.Image, target *store.Node, archiveURL, transferID string, sizeBytes int64, host string) (*store.ImageNode, error) {
-	row, err := h.store.UpsertImageNode(&store.ImageNode{
-		ImageVersionID: image.ID, ImageID: image.ID, NodeID: target.ID,
-		State: store.ImageStateSyncing, Source: imagecatalog.FetchSourceURLRelay,
-		SizeBytes: sizeBytes, TransferID: transferID,
-		Message: "relaying image archive from " + host,
-	})
-	if err != nil {
-		return nil, err
-	}
+func (h *Hub) relayImageArchiveURL(ctx context.Context, image *store.Image, target *store.Node, archiveURL, transferID string, sizeBytes int64) {
 	h.trackImageTransfer(ctx, image.ID, target.ID, transferID, sizeBytes, func(copyCtx context.Context, progress func(int64)) (int64, error) {
 		return h.CopyImageArchiveURL(copyCtx, archiveURL, target.UUID, image.ImageRef, transferID, progress)
 	})
-	return row, nil
 }

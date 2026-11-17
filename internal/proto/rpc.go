@@ -36,6 +36,7 @@ const (
 	RPCImageSyncProbe      = "image.sync.probe"
 	RPCImagePull           = "image.pull"
 	RPCImageLoadURL        = "image.load_url"
+	RPCImageLoadPath       = "image.load_path"
 	RPCImageCancel         = "image.cancel"
 	RPCImageRemove         = "image.remove"
 	RPCImageInspect        = "image.inspect"
@@ -140,6 +141,17 @@ type ImageLoadURLParams struct {
 	RateLimitKBs int    `json:"rate_limit_kbs,omitempty"`
 	// TransferID names this attempt; see ImagePullParams.
 	TransferID string `json:"transfer_id,omitempty"`
+}
+
+type ImageLoadPathParams struct {
+	CanonicalRef string `json:"canonical_ref"`
+	ArchivePath  string `json:"archive_path"`
+	TransferID   string `json:"transfer_id"`
+}
+
+type ImageLoadPathResult struct {
+	State        string `json:"state"`
+	CanonicalRef string `json:"canonical_ref"`
 }
 
 // ImageCancelParams asks the node to stop one image operation. The transfer id

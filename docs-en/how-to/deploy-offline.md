@@ -51,7 +51,15 @@ Directories downloaded by `huggingface-cli` contain `.cache/huggingface/`. Keep 
 
 Copy the files directly to one compute node if possible:
 
-**Images**: After copying the archive to the node, import it into the node's container runtime:
+**Images**: After copying the archive to the node, open the corresponding image series and version on the Images page, then open “Node Distribution.” In the target node's “Acquisition Method,” select “Import from node file…”. Enter the absolute path of the tar file on that node, start the import, and wait for the status to become “Present.” The original archive is kept. Directories, paths on the management server, and archives unsupported by the node's runtime fail with an error. Both the server and the target agent must support this feature.
+
+For Kubernetes nodes, enter the file path on the worker host, such as `/data/runner.tar`. Both the file check and the load run in the host environment; the file does not need to be placed inside the Agent Pod or the shared state directory. The image is loaded into containerd's `k8s.io` namespace used by kubelet.
+
+If the image is not registered yet, first add a custom image with its image reference, engine, framework, and other required metadata. Importing a file only updates the registered image's state on the target node; it does not create an image series. After a failure, select the file again or switch to another acquisition method.
+
+While a transfer for an image version and target node is active, concurrent node-file imports, URL imports, automatic pulls, or peer copies do not start duplicate transfers. You can submit a new request after cancellation; a late failure from an older attempt cannot overwrite the new one.
+
+Alternatively, log in to the node and import the archive into its container runtime:
 
 ```bash
 # Docker nodes
@@ -193,7 +201,7 @@ Configuring offline sources does not disconnect the operating system from the ne
 - Model directories or image archives already hosted on a private HTTP file server: [Import Models and Images from an HTTP File Server](import-from-http.md)
 - Downloads, caching, and how “already present locally” is determined: [Download, Cache, and Sync Models Between Nodes](download-and-sync-models.md)
 
-<!-- translation-source-sha256: db7b5e72843d401af6b1edfd57fe988585405046991aee3ecda01551361f22fd -->
+<!-- translation-source-sha256: ff73f5a893223af725fffa6ee454130c98a391f6049e5d10cbe2e45b9e493f37 -->
 <!-- translation-localized-code-block: c717c0459f55443287bf882bfa1df2c29a02f63e677ed105a6b9f0cfa648769b fb1f692b5059c1a518bf7610bc04b414fbac8c14c412eb611037ff1567010f7c Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
 <!-- translation-localized-code-block: 02989a499c64fa46ffdb61c1d644c92435ac76da6d226fe734a210745b3e8a0a 0f5116535f0bd45f3e3eff27d33b8cf064e261a7dab15ef84c529acd212a8ccf Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
 <!-- translation-localized-code-block: e0baf1bbf17d7510b11d7a5aa8e9e820fbea43761101fa63db5b2afc691e9ac2 053400b1c9f5dbf83f869d2d57b5498e3a982ac5ffa9457381f740b0c01dd791 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
