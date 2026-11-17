@@ -42,15 +42,20 @@ func TestImageLoadPathDispatchesToTargetWithoutReadingServerFile(t *testing.T) {
 }
 
 func TestImageLoadPathOldAgentLeavesRetryableFailure(t *testing.T) {
-	h := newArchiveURLHub(t, "file:hub_local_old_agent?mode=memory&cache=shared", func(proto.Envelope) string {
-		return `{"error":"unknown rpc method: image.load_path"}`
-	})
-	_, err := h.hub.PullImage(context.Background(), h.image.ID, h.node.UUID, imagecatalog.FetchRequest{Source: imagecatalog.FetchSourceLocal, ArchivePath: "/data/image.tar"})
-	if err == nil || !strings.Contains(err.Error(), "upgrade the agent") {
-		t.Fatalf("expected upgrade message, got %v", err)
-	}
-	row, err := h.store.ImageNode(h.image.ID, h.node.ID)
-	if err != nil || row.State != store.ImageStateFailed || row.Source != imagecatalog.FetchSourceLocal {
-		t.Fatalf("failed import = %+v, %v", row, err)
+	for name, reply := range map[string]string{
+		"legacy": `{"error":"unknown rpc method: image.load_path"}`,
+		"coded":  `{"error":"method unavailable","code":"RPC_UNKNOWN_METHOD"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newArchiveURLHub(t, "file:"+t.Name()+"?mode=memory&cache=shared", func(proto.Envelope) string { return reply })
+			_, err := h.hub.PullImage(context.Background(), h.image.ID, h.node.UUID, imagecatalog.FetchRequest{Source: imagecatalog.FetchSourceLocal, ArchivePath: "/data/image.tar"})
+			if err == nil || !strings.Contains(err.Error(), "upgrade the agent") {
+				t.Fatalf("expected upgrade message, got %v", err)
+			}
+			row, err := h.store.ImageNode(h.image.ID, h.node.ID)
+			if err != nil || row.State != store.ImageStateFailed || row.Source != imagecatalog.FetchSourceLocal {
+				t.Fatalf("failed import = %+v, %v", row, err)
+			}
+		})
 	}
 }

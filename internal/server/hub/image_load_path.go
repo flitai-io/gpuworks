@@ -30,7 +30,7 @@ func (h *Hub) loadImageArchivePath(ctx context.Context, image *store.Image, targ
 		CanonicalRef: image.ImageRef, ArchivePath: path, TransferID: transferID,
 	}); err != nil {
 		message := "node image archive could not be loaded: " + err.Error()
-		if strings.Contains(strings.ToLower(err.Error()), "unknown rpc method: "+proto.RPCImageLoadPath) {
+		if errors.Is(err, proto.ErrRPCUnknownMethod) {
 			message = "the target node is running an older agent that cannot import a local image archive; upgrade the agent first"
 		}
 		_ = h.store.FailImageTransferIfActive(image.ID, target.ID, transferID, boundedPullMessage(message))
