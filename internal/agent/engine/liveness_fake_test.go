@@ -257,6 +257,9 @@ func newLivenessEngine(t *testing.T, driver runtime.Driver) (*Engine, *statusLog
 	e := New(driver, log.report, slog.Default(), t.TempDir())
 	e.headlessProbeInterval = time.Millisecond
 	e.headlessStableChecks = 1
+	// One failed HTTP check retires; tests that exercise the failure window
+	// set their own.
+	e.healthFailureWindow = 0
 	t.Cleanup(e.stopHealthProbes)
 	return e, log
 }

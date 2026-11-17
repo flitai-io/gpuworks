@@ -926,6 +926,12 @@ agent 每 15 秒检查一次运行中实例的容器。被 `docker stop`、进�
 
 休眠实例的容器仍在运行，不会被当作退出。`docker inspect` 等容器检查失败时，只跳过本轮。
 
+### 已经 running，随后引擎不再响应
+
+容器仍在运行时，agent 每 15 秒还会请求一次引擎的健康检查端点（默认 `/health`）。请求失败或超时（单次 3 秒）后每 5 秒重试；中间只要成功一次就重新计时，**连续失败满 3 分钟**才回收容器，以 `ENGINE_UNRESPONSIVE` 报告 `failed` 并进入重试，消息为 `engine health check failed continuously for …`。长 prompt 的 prefill、首个请求触发的内核编译等引擎忙碌期通常远短于 3 分钟，不会因此被回收；真正卡死的引擎最多晚约 3 分钟被发现。
+
+SGLang 默认的 `/health` 会向调度器提交一个只生成 1 个 token 的请求，调度器忙于长 prefill 时迟迟不返回。平台为每个 SGLang 实例设置 `SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION=0`，让 `/health` 不经过调度器；启动阶段它仍要等引擎自身的预热生成完成才返回 200，所以就绪判断不受影响。调度器本身卡死由 SGLang 的 `--watchdog-timeout` 结束进程，再按上一节的容器退出处理。部署的环境变量可以覆盖或删除这项设置。
+
 ### 修复后重试
 
 平台通过 controller 重建实例，容器使用 `--restart no`，不依赖 Docker 重启策略。

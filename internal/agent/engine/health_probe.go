@@ -14,8 +14,14 @@ import (
 const (
 	engineHealthTimeout       = 3 * time.Second
 	engineHealthRetryInterval = 2 * time.Second
-	// A running engine must fail three consecutive requests before it is retired.
-	runningHealthAttempts = 3
+	// runningHealthFailureWindow is how long a running engine's health check
+	// must keep failing, with no success in between, before the engine is
+	// retired. Engines may answer /health only between batches (SGLang's
+	// generating check, a first-request kernel compile), so the window has to
+	// outlast a long prefill; a truly hung engine is retired minutes late.
+	runningHealthFailureWindow = 3 * time.Minute
+	// runningHealthRetryInterval spaces the retries inside that window.
+	runningHealthRetryInterval = 5 * time.Second
 )
 
 var errInvalidHealthEndpoint = errors.New("invalid engine health endpoint")
@@ -28,17 +34,20 @@ func engineHealthRequest(ctx context.Context, spec proto.InstanceDesiredState) (
 	return http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d%s", spec.APIPort, path), nil)
 }
 
-// probeEngineHealth retries only the HTTP check. The caller owns the successful
-// response and any engine-specific readiness interpretation or failure action.
-func probeEngineHealth(ctx context.Context, spec proto.InstanceDesiredState, client *http.Client, attempts int, interval time.Duration) (*http.Response, error) {
+// probeEngineHealth retries only the HTTP check, until it succeeds or has
+// failed continuously for the window (a zero window makes one attempt). The
+// caller owns the successful response and any engine-specific readiness
+// interpretation or failure action.
+func probeEngineHealth(ctx context.Context, spec proto.InstanceDesiredState, client *http.Client, window, interval time.Duration) (*http.Response, error) {
 	req, err := engineHealthRequest(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errInvalidHealthEndpoint, err)
 	}
-	if attempts < 1 {
-		return nil, fmt.Errorf("health probe attempts must be positive")
+	if window < 0 {
+		return nil, fmt.Errorf("health probe failure window must not be negative")
 	}
-	for attempt := 0; attempt < attempts; attempt++ {
+	failingSince := time.Now()
+	for attempt := 1; ; attempt++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -54,20 +63,20 @@ func probeEngineHealth(ctx context.Context, spec proto.InstanceDesiredState, cli
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 			resp.Body.Close()
 		}
-		if attempt+1 < attempts {
-			timer := time.NewTimer(interval)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return nil, ctx.Err()
-			case <-timer.C:
-			}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if failing := time.Since(failingSince); failing >= window {
+			return nil, fmt.Errorf("engine health check failed continuously for %s (%d attempts): %w", failing.Round(time.Second), attempt, err)
+		}
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
 		}
 	}
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
-	return nil, fmt.Errorf("engine health check failed after %d attempts: %w", attempts, err)
 }
 
 type healthProbeTask struct {

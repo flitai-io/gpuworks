@@ -16,12 +16,15 @@ func TestProbeEngineHealthRetriesHTTPFailures(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		statuses  []int
+		window    time.Duration
 		wantCalls int
 		wantError bool
 	}{
-		{"healthy", []int{200}, 1, false},
-		{"recovers", []int{503, 500, 200}, 3, false},
-		{"unhealthy", []int{503}, 3, true},
+		{"healthy", []int{200}, time.Minute, 1, false},
+		{"recovers", []int{503, 500, 200}, time.Minute, 3, false},
+		// Failures shorter than the window never decide anything, however many.
+		{"recovers after many failures", append(repeatStatus(503, 20), 200), time.Minute, 21, false},
+		{"no window", []int{503}, 0, 1, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var calls atomic.Int32
@@ -36,7 +39,7 @@ func TestProbeEngineHealthRetriesHTTPFailures(t *testing.T) {
 			defer server.Close()
 			spec := runningSpec("probe", serverPort(t, server))
 			spec.HealthPath = "/custom-health"
-			resp, err := probeEngineHealth(context.Background(), spec, server.Client(), 3, time.Millisecond)
+			resp, err := probeEngineHealth(context.Background(), spec, server.Client(), tc.window, time.Millisecond)
 			if (err != nil) != tc.wantError || int(calls.Load()) != tc.wantCalls {
 				t.Fatalf("calls=%d error=%v", calls.Load(), err)
 			}
@@ -51,6 +54,34 @@ func TestProbeEngineHealthRetriesHTTPFailures(t *testing.T) {
 	}
 }
 
+func repeatStatus(status, n int) []int {
+	out := make([]int, n)
+	for i := range out {
+		out[i] = status
+	}
+	return out
+}
+
+// The engine is given up only once it has failed for the whole window: the
+// probe keeps retrying until then and names the duration and the last error.
+func TestProbeEngineHealthFailsOnlyAfterTheWindow(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	const window = 150 * time.Millisecond
+	started := time.Now()
+	_, err := probeEngineHealth(context.Background(), runningSpec("window", serverPort(t, server)), server.Client(), window, 10*time.Millisecond)
+	if elapsed := time.Since(started); elapsed < window {
+		t.Fatalf("gave up after %s, before the %s window", elapsed, window)
+	}
+	if err == nil || calls.Load() < 3 || !strings.Contains(err.Error(), "failed continuously") || !strings.Contains(err.Error(), "HTTP 503") {
+		t.Fatalf("calls=%d error=%v", calls.Load(), err)
+	}
+}
+
 func TestProbeEngineHealthRetriesRequestTimeouts(t *testing.T) {
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,8 +90,8 @@ func TestProbeEngineHealthRetriesRequestTimeouts(t *testing.T) {
 	}))
 	defer server.Close()
 	spec := runningSpec("timeout", serverPort(t, server))
-	_, err := probeEngineHealth(context.Background(), spec, &http.Client{Timeout: 50 * time.Millisecond}, 3, time.Millisecond)
-	if err == nil || calls.Load() != 3 || !strings.Contains(err.Error(), "3 attempts") {
+	_, err := probeEngineHealth(context.Background(), spec, &http.Client{Timeout: 50 * time.Millisecond}, 120*time.Millisecond, time.Millisecond)
+	if err == nil || calls.Load() < 2 || !strings.Contains(err.Error(), "failed continuously") {
 		t.Fatalf("calls=%d error=%v", calls.Load(), err)
 	}
 }
@@ -81,9 +112,14 @@ func TestProbeEngineHealthClosesEachFailedResponse(t *testing.T) {
 	client := &http.Client{Transport: healthProbeTransport(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 503, Header: make(http.Header), Body: healthProbeBody{Reader: strings.NewReader("unavailable"), closed: func() { closed++ }}}, nil
 	})}
-	_, err := probeEngineHealth(context.Background(), runningSpec("close", 1), client, 3, 0)
-	if err == nil || closed != 3 {
-		t.Fatalf("closed=%d error=%v", closed, err)
+	var calls int
+	counting := &http.Client{Transport: healthProbeTransport(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return client.Transport.RoundTrip(req)
+	})}
+	_, err := probeEngineHealth(context.Background(), runningSpec("close", 1), counting, 20*time.Millisecond, time.Millisecond)
+	if err == nil || calls < 2 || closed != calls {
+		t.Fatalf("calls=%d closed=%d error=%v", calls, closed, err)
 	}
 }
 
@@ -109,7 +145,7 @@ func TestProbeEngineHealthCancellationIsNotAnEngineFailure(t *testing.T) {
 			})}
 			done := make(chan error, 1)
 			go func() {
-				_, err := probeEngineHealth(ctx, runningSpec("cancel", 1), client, 3, time.Minute)
+				_, err := probeEngineHealth(ctx, runningSpec("cancel", 1), client, time.Hour, time.Minute)
 				done <- err
 			}()
 			<-entered
