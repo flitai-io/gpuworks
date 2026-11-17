@@ -1,0 +1,141 @@
+# This is the ISTA-DAS 2.00 bpw GGUF set, not the original safetensors.
+# The pinned ISTA repository is flat: select every input file explicitly so
+# acquiring this recipe never downloads the other quantizations.
+# Strata v0.2.13, native engine 0.1.59. Revision d2f096475817d4666c364c820b0ca830f751cfc5 supplies the
+# DeepSeek pack recipe and the separate strata-dsv41 engine. Its entrypoint
+# packs indexes while six external inputs and its built-in metadata stay read-only.
+model_id: ista-daslab/deepseek-v4.1-flash-1017-strata
+source: upstream
+display_title: DeepSeek-V4.1-Flash-1017 (Strata)
+parameter_count: 748B (552B backbone + 196B Engram)
+architecture: DeepseekV41ForCausalLM
+input_modalities: [text]
+context_length: 1048576
+release_date: '2026-10-17'
+# No KV estimate: the engine's cache allocation has not been measured here.
+specs:
+- name: iq2-xxs-strata-nvidia
+  display_name_zh_cn: RTX 8000 / RTX 3080 · ISTA-DAS 2.00 bpw · Strata
+  display_name_en: RTX 8000 / RTX 3080 · ISTA-DAS 2.00 bpw · Strata
+  scenario: balanced
+  engine: callable
+  # Candidate image; publishing and hardware validation are separate checks.
+  image: quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.59-deepseek41-amd64-r4
+  weights: &primary_weights
+    quantization: gsq-rco iq2_xxs
+    sources:
+    - huggingface:
+        repo_id: ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF
+        revision: cb02422c900df489cea5833e8a92171224059b3c
+        subfolder: DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00001-of-00004.gguf
+  # Primary artifact only. Storage planning adds the five auxiliary components.
+  weight_bytes: 39075714624
+  gpus:
+    vendor: nvidia
+    cc: '7.5..8.6'
+    name: (^|[^A-Za-z0-9])RTX[ _-]?(?:8000|3080)$
+  entrypoint:
+  - /opt/gpuworks/strata-deepseek/entrypoint.py
+  args:
+  - --model
+  - ${MODEL_PATH}
+  - --host
+  - ${API_HOST}
+  - --port
+  - ${API_PORT}
+  - --context
+  - '8192'
+  env:
+    STRATA_DSV41_SHARD2_DIR: /models/deepseek-shard2
+    STRATA_DSV41_SHARD3_DIR: /models/deepseek-shard3
+    STRATA_DSV41_SHARD4_DIR: /models/deepseek-shard4
+    STRATA_DSV41_ENGRAM_DIR: /models/deepseek-engram
+    STRATA_DSV41_DSPARK_DIR: /models/deepseek-dspark
+  components:
+  - name: target
+    role: primary
+    weights: *primary_weights
+    weight_bytes: 39075714624
+    mount_path: /model
+  - name: shard2
+    role: auxiliary
+    weights:
+      quantization: gsq-rco iq2_xxs
+      sources:
+      - huggingface:
+          repo_id: ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF
+          revision: cb02422c900df489cea5833e8a92171224059b3c
+          subfolder: DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00002-of-00004.gguf
+    weight_bytes: 39388449504
+    mount_path: /models/deepseek-shard2
+  - name: shard3
+    role: auxiliary
+    weights:
+      quantization: gsq-rco iq2_xxs
+      sources:
+      - huggingface:
+          repo_id: ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF
+          revision: cb02422c900df489cea5833e8a92171224059b3c
+          subfolder: DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00003-of-00004.gguf
+    weight_bytes: 39246891616
+    mount_path: /models/deepseek-shard3
+  - name: shard4
+    role: auxiliary
+    weights:
+      quantization: gsq-rco iq2_xxs
+      sources:
+      - huggingface:
+          repo_id: ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF
+          revision: cb02422c900df489cea5833e8a92171224059b3c
+          subfolder: DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ2_XXS-00004-of-00004.gguf
+    weight_bytes: 20527837312
+    mount_path: /models/deepseek-shard4
+  - name: engram
+    role: auxiliary
+    weights:
+      quantization: iq4_nl
+      sources:
+      - huggingface:
+          repo_id: ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF
+          revision: cb02422c900df489cea5833e8a92171224059b3c
+          subfolder: DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf
+    weight_bytes: 110595290816
+    mount_path: /models/deepseek-engram
+  - name: dspark
+    role: auxiliary
+    weights:
+      quantization: q8_0
+      sources:
+      - huggingface:
+          repo_id: unsloth/DeepSeek-V4.1-Flash-1017-GGUF
+          revision: 8a6ec9cf118e785a362ea94ee123c61c70553be6
+          subfolder: dspark-DeepSeek-V4.1-Flash-1017-Q8_0.gguf
+    weight_bytes: 7976914240
+    mount_path: /models/deepseek-dspark
+  placement:
+    language: starlark
+    resolver: |
+      def resolve(gpu):
+          if gpu.min_memory_gib < 12:
+              return reject("Strata DeepSeek requires at least 12 GiB VRAM on every card")
+          return accept(gpu_memory_mib_per_device=12288)
+  api:
+    tokenizer_ref: hf://deepseek-ai/DeepSeek-V4.1-Flash-1017@1bae0e1088993b9b82de08f59de5be5a34e42170
+    health_endpoint: /health
+    operations:
+    - type: openai.chat
+      endpoint: /v1/chat/completions
+      mode: stream
+    metrics:
+      endpoint: /metrics/prometheus
+      map:
+        llamacpp:requests_processing: requests_running
+        llamacpp:requests_deferred: requests_waiting
+        llamacpp:prompt_tokens_total: prompt_tokens_total
+        llamacpp:tokens_predicted_total: generation_tokens_total
+        strata:drafts_offered_total: spec_draft_tokens_total
+        strata:drafts_accepted_total: spec_accepted_tokens_total
+    # Native engine times only; this image does not carry the Qwen queue patch.
+    request_stats:
+      timings.prompt_ms: {to: prefill_seconds, scale: 0.001}
+      timings.predicted_ms: {to: decode_seconds, scale: 0.001}

@@ -81,7 +81,7 @@
     "acceleratorInferred": "No selector is needed: once nodes are attached, each node's rails are the accelerator cards whose port is up and has an address, and you can add or remove cards in the node list. The handshake uses a host address (the management address by default); data moves on the cards' ports.",
     "acceleratorBootstrapCidrHint": "For the handshake only (HCCL rootInfo, MASTER_ADDR): it moves to the host interface inside this subnet. Data moves on the cards' ports, which are not in this subnet.",
     "roleNotOnType": "Accelerator networks ($t(networks:typeGroup.accelerator)) carry compute traffic only: host processes cannot bind the address of a card's port, so storage sync and serving cannot use them.",
-    "typeHelp": "$t(networks:type.host_ethernet) is TCP on a host interface. $t(networks:type.host_rdma) uses the host's RDMA ports (InfiniBand or RoCE). $t(networks:type.accelerator_rdma) uses the accelerator cards' RoCE ports. $t(networks:type.accelerator_hccs) uses the A3/910C HCCS/HIXL link and reported vNICs. The type decides the NCCL/UCX/HCCL settings and device injection."
+    "typeHelp": "$t(networks:type.host_ethernet): host TCP; $t(networks:type.host_rdma): host InfiniBand/RoCE; $t(networks:type.accelerator_rdma): accelerator RoCE; $t(networks:type.accelerator_hccs): A3/910C HCCS/HIXL and vNICs. The type selects communication settings and device injection."
   },
   "detail": {
     "selector": "Default selector",
