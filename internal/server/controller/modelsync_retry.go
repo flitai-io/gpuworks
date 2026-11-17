@@ -61,16 +61,16 @@ func (c *Controller) copyModelWithRelayRetry(ctx context.Context, key string, ru
 			return result, checkErr
 		}
 		nextID := auth.NewUUID()
-		c.syncMu.Lock()
-		if c.modelSyncs[key] != run || run.canceled.Load() || ctx.Err() != nil {
-			c.syncMu.Unlock()
+		c.syncs.mu.Lock()
+		if c.syncs.byKey[key] != run || run.canceled.Load() || ctx.Err() != nil {
+			c.syncs.mu.Unlock()
 			return result, errModelSyncOwnerChanged
 		}
 		changed, checkErr = c.store.RestartModelSyncIfActive(refOf(file), run.transferID, nextID, src.node.ID, src.sizeBytes, rate)
 		if changed {
 			run.transferID = nextID
 		}
-		c.syncMu.Unlock()
+		c.syncs.mu.Unlock()
 		if checkErr != nil {
 			return result, checkErr
 		}

@@ -185,6 +185,16 @@ type QualityAnalytics struct {
 	Totals QualityFigures   `json:"totals"`
 	Series []QualityFigures `json:"series"`
 	Rows   []QualityRow     `json:"rows"`
+	// Classes splits the totals by the priority class the gateway ran the
+	// requests at, most requests first; the class "" holds the requests
+	// recorded before classes existed (whose class is unknown, not none).
+	Classes []QualityClassRow `json:"classes"`
+}
+
+// QualityClassRow is the quality of the requests run at one priority class.
+type QualityClassRow struct {
+	PriorityClass string `json:"priority_class"`
+	QualityFigures
 }
 
 // GPUFigures are a card's or a group's statistics: means over the samples,

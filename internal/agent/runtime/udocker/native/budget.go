@@ -88,8 +88,8 @@ func (c *Client) BudgetKey(ctx context.Context, ref Ref) string {
 	return ref.Registry
 }
 
-// statusError is a registry answer that is not a blob. Its text keeps the
-// "<operation>: <status>" shape retryable() reads.
+// statusError is a registry answer that is not a blob; retryable() and
+// isThrottled() read its status, never its text.
 type statusError struct {
 	msg        string
 	status     int
@@ -145,14 +145,6 @@ func reportFailure(sess *connbudget.Session, ctx context.Context, err error) {
 // isReset reports whether err is a connection that was torn down under the
 // client (reset, closed early, handshake dropped) as opposed to a timeout.
 func isReset(err error) bool {
-	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-		return true
-	}
-	text := err.Error()
-	for _, marker := range []string{"connection reset", "broken pipe", "unexpected EOF", "TLS handshake", "EOF"} {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
+	return errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNABORTED) ||
+		errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF)
 }

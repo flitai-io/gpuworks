@@ -67,3 +67,49 @@ func TestFleetAllocationsMatchThePerNodeLedger(t *testing.T) {
 		t.Fatalf("a node with no instances charges %v, want nothing", got[idle.ID])
 	}
 }
+
+// A memory-limited slice is charged its limit plus the engine's reserve,
+// sized by its deployment's gpu_memory_utilization. The fleet pass reads that from the
+// deployments it is handed; the figures are the per-node ledger's, for a
+// deployment that sets it, one that does not, and one whose quick params do
+// not parse.
+func TestFleetAllocationsChargeSlicesAsThePerNodeLedger(t *testing.T) {
+	c := newYieldCards(t, 3)
+	for i, quick := range []string{`{"gpu_memory_utilization":0.55}`, ``, `not json`} {
+		dep := c.deployment(t, "slice-"+string(rune('a'+i)), "never")
+		if err := c.st.DB().Model(&store.Deployment{}).Where("id = ?", dep.ID).Update("quick_params", quick).Error; err != nil {
+			t.Fatal(err)
+		}
+		uuid := "slice-inst-" + string(rune('a'+i))
+		c.instance(t, dep, uuid, "["+string(rune('0'+i))+"]", 0)
+		spec, _ := json.Marshal(proto.InstanceDesiredState{UUID: uuid, DesiredState: "running", Engine: "vllm", VRAMLimitBytes: 8 << 30})
+		if err := c.st.DB().Model(&store.Instance{}).Where("uuid = ?", uuid).Select("DesiredStateJSON").Updates(&store.Instance{DesiredStateJSON: string(spec)}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	instances, err := c.st.ListInstances()
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployments, err := c.st.ListDeployments()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := FleetAllocations(c.st, []store.Node{*c.node}, instances, deployments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := GPUAllocations(c.st, c.node)
+	for index := 0; index < 3; index++ {
+		g, w := got[c.node.ID][index], want[index]
+		if w.AllocatedBytes == 0 {
+			t.Fatalf("card %d: the per-node ledger charges the slice nothing; the fixture is wrong", index)
+		}
+		if g.AllocatedBytes != w.AllocatedBytes {
+			t.Errorf("card %d: fleet charges %d, per-node ledger %d", index, g.AllocatedBytes, w.AllocatedBytes)
+		}
+	}
+	if want[0].AllocatedBytes == want[1].AllocatedBytes {
+		t.Fatal("gpu_memory_utilization 0.55 and the default charge the same: the case does not exercise the deployment's setting")
+	}
+}

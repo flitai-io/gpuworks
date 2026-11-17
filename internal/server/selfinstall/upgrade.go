@@ -27,9 +27,7 @@ type UpgradeRequest struct {
 	// Archive is a release archive already on this machine, for hosts that
 	// cannot reach any source.
 	Archive string
-	// Version pins the release to install. A channel or site offers one release
-	// at a time, so a pin that is not what it offers is an error rather than a
-	// silent upgrade to something else.
+	// Version pins an entry in the signed channel index, or the exact release from a site or archive.
 	Version string
 	Force   bool
 	Check   bool
@@ -106,7 +104,7 @@ func (i *Installer) Upgrade(ctx context.Context, req UpgradeRequest) (UpgradeRep
 	case strings.TrimSpace(req.BaseURL) != "":
 		src, err = i.siteSource(ctx, req.BaseURL)
 	default:
-		src, err = i.channelSource(ctx, req.Sources, req.Channel, inst.Config.UpdateChannel)
+		src, err = i.channelSource(ctx, req.Sources, req.Channel, inst.Config.UpdateChannel, strings.TrimSpace(req.Version))
 	}
 	if err != nil {
 		return UpgradeReport{}, err
@@ -205,6 +203,11 @@ func (i *Installer) runUpgrade(ctx context.Context, req UpgradeRequest, inst ins
 	if err := i.prepareDirs(ctx); err != nil {
 		return err
 	}
+	// So is a history removed by hand: recreated after the handoff by the
+	// audit line below, it would be root's again (see createHistory).
+	if err := i.createHistory(ctx, i.layout.HistoryPath(), 0o600); err != nil {
+		i.io.Warn("warning: could not create the install history: %v", err)
+	}
 	if err := i.chownTree(ctx, inst.ServiceUser); err != nil {
 		return err
 	}
@@ -278,7 +281,9 @@ func (i *Installer) rollback(ctx context.Context, svc Service, serviceUser, back
 	if restoreErr == nil {
 		// The snapshot is unpacked by root, which would leave the database and
 		// the master key unreadable for the service account that has to open
-		// them; the tree is handed back before the service is started again.
+		// them; the tree is handed back before the service is started again,
+		// with the history the failure is about to be recorded in.
+		_ = i.createHistory(ctx, i.layout.HistoryPath(), 0o600)
 		restoreErr = i.chownTree(ctx, serviceUser)
 	}
 	if restoreErr == nil {

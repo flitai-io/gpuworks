@@ -4,75 +4,99 @@ import { useSessionUser } from "../../components/sessionUser";
 import { lastSessionChange, subscribeSessionChanges } from "../../session";
 
 type Attempt = Pick<ServerUpgradeStarted, "from" | "to"> & {
-  phase: "restarting" | "restored";
+  id?: string;
+  backup?: string;
+  phase: "download" | "restarting" | "unknown" | "rollback" | "restored" | "failed";
   deadline: number;
 };
+type LastCheck = { at: number; reason: "offline" | "unconfirmed"; version?: string };
 
 const refreshKey = "gpuworks.console-upgrade";
 const restartWindow = 5 * 60_000;
 const noticeWindow = 30 * 60_000;
 
-function fromRefresh(user: number | undefined): Attempt | null {
+function readAttempt(user: number | undefined): Attempt | null {
   try {
-    const nav = window.performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-    if (nav?.type !== "reload" || new URL(nav.name).pathname !== window.location.pathname) return null;
     const saved = JSON.parse(window.sessionStorage.getItem(refreshKey) ?? "null");
-    const attempt = saved?.attempt;
-    if (saved?.url === window.location.href && saved?.user === user && saved.session === lastSessionChange() &&
-        typeof attempt?.to === "string" && typeof attempt.from === "string" &&
-        (attempt.phase === "restarting" || attempt.phase === "restored") && attempt.deadline > Date.now()) return attempt;
-  } catch { /* The notice still works in the current document when storage is unavailable. */ }
-  return null;
+    const a = saved?.attempt;
+    if (!a || saved.user !== user || saved.session !== lastSessionChange() ||
+        typeof a.to !== "string" || typeof a.from !== "string" || !Number.isFinite(a.deadline)) return null;
+    if (a.phase === "restored" && a.deadline <= Date.now()) return null;
+    return a;
+  } catch { return null; }
 }
 
 export function useConsoleUpgrade(onResult: (release: string, recovered: boolean) => void) {
   const user = useSessionUser()?.id;
-  const [attempt, setAttempt] = useState<Attempt | null>(() => fromRefresh(user));
-  const dismiss = useCallback(() => setAttempt(null), []);
+  const [attempt, setAttempt] = useState<Attempt | null>(() => readAttempt(user));
+  const [revision, setRevision] = useState(0);
+  const [lastCheck, setLastCheck] = useState<LastCheck>();
+  const [checkingResult, setCheckingResult] = useState(false);
+  const dismiss = useCallback(() => { setAttempt(null); setLastCheck(undefined); }, []);
+  const probeVersion = () => setRevision(value => value + 1);
 
   useEffect(() => {
-    // Transfer only a page being unloaded. SPA remounts and ordinary visits start clean.
-    try { window.sessionStorage.removeItem(refreshKey); } catch { /* Storage is optional. */ }
-    const save = () => {
-      if (!attempt) return;
-      try {
-        window.sessionStorage.setItem(refreshKey, JSON.stringify({ url: window.location.href, user, session: lastSessionChange(), attempt }));
-      } catch { /* Storage is optional. */ }
-    };
-    const onShow = (event: PageTransitionEvent) => { if (event.persisted) dismiss(); };
-    window.addEventListener("pagehide", save);
-    window.addEventListener("pageshow", onShow);
-    const unsubscribe = subscribeSessionChanges(dismiss);
-    return () => {
-      window.removeEventListener("pagehide", save);
-      window.removeEventListener("pageshow", onShow);
-      unsubscribe();
-    };
-  }, [attempt, dismiss, user]);
+    try {
+      if (attempt) window.sessionStorage.setItem(refreshKey, JSON.stringify({ user, session: lastSessionChange(), attempt }));
+      else window.sessionStorage.removeItem(refreshKey);
+    } catch { /* Storage may be unavailable in a private window. */ }
+    return subscribeSessionChanges(dismiss);
+  }, [attempt, user, dismiss]);
 
   useEffect(() => {
-    if (!attempt) return;
+    if (!attempt || attempt.phase === "rollback" || attempt.phase === "failed") return;
+    if (attempt.phase === "restored") {
+      const timeout = setTimeout(dismiss, Math.max(0, attempt.deadline - Date.now()));
+      return () => clearTimeout(timeout);
+    }
     const controller = new AbortController();
+    const { signal } = controller;
     let retry: ReturnType<typeof setTimeout>;
-    const timeout = setTimeout(() => {
+    const deadline = attempt.phase === "unknown" ? undefined : setTimeout(() => {
       controller.abort();
-      dismiss();
-      if (attempt.phase === "restarting") onResult(attempt.to, false);
+      setAttempt({ ...attempt, phase: "unknown" });
+      onResult(attempt.to, false);
     }, Math.max(0, attempt.deadline - Date.now()));
     const probe = async () => {
+      if (signal.aborted) return;
+      setCheckingResult(true);
+      let running: string | undefined;
+      const bounded = AbortSignal.any([signal, AbortSignal.timeout(8000)]);
       try {
-        const res = await fetch("/healthz", { cache: "no-store", signal: controller.signal });
-        if (res.ok && (await res.json()).version === attempt.to && !controller.signal.aborted && Date.now() < attempt.deadline) {
+        const res = await fetch("/healthz", { cache: "no-store", signal: bounded });
+        if (res.ok) running = (await res.json()).version;
+        if (signal.aborted) return;
+        if (running === attempt.to) {
           setAttempt({ ...attempt, phase: "restored", deadline: Date.now() + noticeWindow });
           onResult(attempt.to, true);
           return;
         }
-      } catch { /* A restarting server can temporarily refuse connections. */ }
-      if (!controller.signal.aborted) retry = setTimeout(probe, 2000);
+        if (running && (attempt.id || attempt.backup)) {
+          const p = await api.serverUpgradeResult(attempt.id || "", attempt.backup || "", bounded);
+          if (signal.aborted) return;
+          if (p.phase === "rollback" && running === attempt.from && p.to === attempt.to && p.from === running) {
+            setAttempt({ ...attempt, phase: "rollback" });
+            onResult(running, false);
+            return;
+          }
+          if (p.phase === "failed" && p.to === attempt.to) {
+            setAttempt({ ...attempt, phase: "failed" });
+            return;
+          }
+          if (attempt.phase === "download" && p.phase === "restart") {
+            setAttempt({ ...attempt, phase: "restarting", deadline: Date.now() + restartWindow });
+            return;
+          }
+        }
+      } catch { /* A restart can interrupt either request. Continue observing this attempt. */ }
+      finally { if (!signal.aborted) setCheckingResult(false); }
+      if (signal.aborted) return;
+      setLastCheck({ at: Date.now(), reason: running ? "unconfirmed" : "offline", version: running });
+      retry = setTimeout(probe, attempt.phase === "unknown" ? 15_000 : 2000);
     };
-    if (attempt.phase === "restarting") void probe();
-    return () => { controller.abort(); clearTimeout(retry); clearTimeout(timeout); };
-  }, [attempt, dismiss, onResult]);
+    void probe();
+    return () => { controller.abort(); clearTimeout(retry); clearTimeout(deadline); };
+  }, [attempt, revision, dismiss, onResult]);
 
   const restored = attempt?.phase === "restored" ? attempt : null;
   const fleet = usePolling(async () => restored ? { attempt: restored, summary: await api.agentFleetSummary() } : null,
@@ -86,8 +110,16 @@ export function useConsoleUpgrade(onResult: (release: string, recovered: boolean
   }, [data, sameTarget, visible, dismiss]);
 
   return {
-    begin: ({ from, to }: ServerUpgradeStarted) => setAttempt({ from, to, phase: "restarting", deadline: Date.now() + restartWindow }),
-    upgrading: attempt?.phase === "restarting" ? attempt : null,
+    trackDownload: (id: string, from: string, to: string) => {
+      setLastCheck(undefined);
+      setAttempt({ id, from, to, phase: "download", deadline: Date.now() + 10 * 60_000 + restartWindow });
+    },
+    begin: ({ from, to, backup }: ServerUpgradeStarted, id?: string) =>
+      setAttempt(current => {
+        if (id && (current?.id !== id || current.phase === "restored" || current.phase === "rollback")) return current;
+        return { id, from, to, backup, phase: "restarting", deadline: Date.now() + restartWindow };
+      }),
+    attempt, checkingResult, probeVersion, lastCheck,
     summary: visible ? data : null,
     dismiss,
   };

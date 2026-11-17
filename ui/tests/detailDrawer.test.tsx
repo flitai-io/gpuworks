@@ -127,3 +127,15 @@ test("by default a click anywhere on an expandable row expands it", async () => 
   fireEvent.click(screen.getByText("b"));
   assert.equal(document.querySelectorAll(".detail-extra").length, 1, "a row that cannot expand does not");
 });
+
+test("an absent recovery banner leaves tabs directly in the body and an active banner precedes them", async () => {
+  function Recovery({ active }: { active: boolean }) { return active ? <section aria-label="Recovery">Recovered</section> : null; }
+  const view = mount(<DetailDrawer open onClose={() => {}} title="GPU server" banner={<Recovery active={false} />} tabs={tabs} />);
+  const dialog = await screen.findByRole("dialog", { name: "GPU server" });
+  assert.equal(within(dialog).queryByRole("region", { name: "Recovery" }), null);
+  const body = dialog.querySelector(".detail-body")!;
+  assert.ok(body.firstElementChild?.contains(within(dialog).getByRole("tablist")), "no empty banner wrapper reserves space");
+  view.rerender(<I18nextProvider i18n={i18n}><DetailDrawer open onClose={() => {}} title="GPU server" banner={<Recovery active />} tabs={tabs} /></I18nextProvider>);
+  const banner = within(dialog).getByRole("region", { name: "Recovery" });
+  assert.ok(banner.compareDocumentPosition(within(dialog).getByRole("tablist")) & Node.DOCUMENT_POSITION_FOLLOWING);
+});

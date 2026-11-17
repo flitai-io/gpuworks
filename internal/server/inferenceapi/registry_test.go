@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-func TestRegistryCoversTenExecutableOperations(t *testing.T) {
+func TestRegistryCoversElevenExecutableOperations(t *testing.T) {
 	definitions := Definitions()
-	if len(definitions) != 10 {
-		t.Fatalf("definitions=%d, want 10", len(definitions))
+	if len(definitions) != 11 {
+		t.Fatalf("definitions=%d, want 11", len(definitions))
 	}
 	for _, definition := range definitions {
 		if definition.Type == "" || definition.DefaultEndpoint == "" || len(definition.AllowedEndpoints) == 0 || len(definition.RequestEncodings) == 0 || len(definition.Modes) == 0 || definition.Renderer == "" || definition.Response == "" {
@@ -19,6 +19,33 @@ func TestRegistryCoversTenExecutableOperations(t *testing.T) {
 	video, ok := Lookup(OperationVideoGenerate)
 	if !ok || video.Async == nil || video.Async.PollEndpoint != "{endpoint}/{id}" || video.Async.ContentEndpoint != "{endpoint}/{id}/content" || video.Async.CancelMethod != "DELETE" {
 		t.Fatalf("video async lifecycle = %+v", video.Async)
+	}
+}
+
+// A System One decision is one JSON request to /v1/systemone and one JSON
+// reply, rendered by the Playground's decision page.
+func TestSystemOneDecisionIsASynchronousJSONOperation(t *testing.T) {
+	decide, ok := Lookup(OperationDecide)
+	if !ok {
+		t.Fatal("systemone.decide is not registered")
+	}
+	if decide.DefaultEndpoint != "/v1/systemone" || strings.Join(decide.AllowedEndpoints, ",") != "/v1/systemone" ||
+		strings.Join(decide.Modes, ",") != "sync" || strings.Join(decide.RequestEncodings, ",") != EncodingJSON ||
+		decide.Renderer != "decision" || decide.Response != ResponseJSON || strings.Join(decide.PrimaryInputs, ",") != "state,questions" {
+		t.Fatalf("definition = %+v", decide)
+	}
+	contract, err := NormalizeContract(Contract{Operations: []Operation{{Type: OperationDecide}}})
+	if err != nil || contract.Operations[0].Endpoint != "/v1/systemone" || contract.Operations[0].Mode != "sync" {
+		t.Fatalf("normalized = %+v, %v", contract, err)
+	}
+	if !AllowsRequest(contract.Operations[0], "POST", "/v1/systemone") || AllowsRequest(contract.Operations[0], "POST", "/v1/chat/completions") {
+		t.Fatal("a decision deployment must serve exactly its own route")
+	}
+	if _, err := NormalizeContract(Contract{Operations: []Operation{{Type: OperationDecide, Endpoint: "/v1/decisions"}}}); err == nil {
+		t.Fatal("an endpoint outside the registered one must be rejected")
+	}
+	if _, err := NormalizeContract(Contract{Operations: []Operation{{Type: OperationDecide, Inputs: []InputField{{Name: "questions", Kind: "json"}}}}}); err == nil {
+		t.Fatal("a declared input may not shadow the questions primary input")
 	}
 }
 
@@ -280,5 +307,46 @@ func TestExampleInputIsAWorkingValueForATextPrimaryInput(t *testing.T) {
 	var back Operation
 	if err := json.Unmarshal(wire, &back); err != nil || back.ExampleInput["prompt"] != prompt || !strings.Contains(string(wire), `"example_input":{"prompt":`) {
 		t.Fatalf("round trip = %s", wire)
+	}
+}
+
+// The decision example is the request the Playground starts from and the
+// template page shows: it must be a complete System One request with one
+// question of each type, and the curl snippet must send exactly that body.
+func TestDecisionExampleIsACompleteSystemOneRequest(t *testing.T) {
+	example, err := BuildExample(Operation{Type: OperationDecide}, "svc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if example.Request.Method != "POST" || example.Request.Endpoint != "/v1/systemone" || example.Request.ContentType != "application/json" {
+		t.Fatalf("request = %+v", example.Request)
+	}
+	var body struct {
+		Model     string `json:"model"`
+		State     string `json:"state"`
+		Questions map[string]struct {
+			Type         string          `json:"type"`
+			Instructions string          `json:"instructions"`
+			Criteria     json.RawMessage `json:"criteria"`
+		} `json:"questions"`
+	}
+	if err := json.Unmarshal(example.Request.Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	types := map[string]bool{}
+	for name, question := range body.Questions {
+		types[question.Type] = true
+		if question.Instructions == "" {
+			t.Errorf("%s has no instructions", name)
+		}
+		if question.Type != "noul" && len(question.Criteria) == 0 {
+			t.Errorf("%s (%s) has no criteria", name, question.Type)
+		}
+	}
+	if body.Model != "svc" || body.State == "" || !types["noul"] || !types["choice"] || !types["score"] || len(types) != 3 {
+		t.Fatalf("body = %+v", body)
+	}
+	if !strings.Contains(example.Curl, "/v1/systemone") || !strings.Contains(example.Curl, `"questions"`) {
+		t.Fatalf("curl = %s", example.Curl)
 	}
 }

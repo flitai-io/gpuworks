@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -10,6 +9,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/agent/logline"
+	"gpuworks.ai/gpuworks/internal/logtext"
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
@@ -96,8 +96,7 @@ func (n *NodeRuntime) shipNodeLogs(ctx context.Context) {
 // per-minute rate cap, and node-source batches.
 func (n *NodeRuntime) followNodeLogs(ctx context.Context, rc io.ReadCloser) {
 	defer rc.Close()
-	sc := bufio.NewScanner(rc)
-	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	sc := logtext.NewScanner(rc)
 
 	batch := make([]proto.LogLine, 0, 32)
 	var window []time.Time

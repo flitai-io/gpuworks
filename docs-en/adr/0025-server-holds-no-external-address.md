@@ -41,3 +41,5 @@ There is a similar issue on the serving-network side: `serving_source` requires 
 - [ADR 0030](0030-network-objects.md): node network objects and the definition of the serving-network role
 - [Configure Node Networks](../how-to/configure-networks.md): operating instructions for listen addresses and "how others connect"
 - `artifacts/archive/2026-09-27-server-address-cleanup/plan.md`: the plan and acceptance records for this change
+
+<!-- translation-source-sha256: 03f4d56e1d3d19a88b728df3509ffb0b7c23d0b5a9d8473f718d2be737cf20d2 -->

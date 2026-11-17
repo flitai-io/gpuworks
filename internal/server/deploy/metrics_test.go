@@ -28,16 +28,3 @@ func TestSGLangMetricsComeOnlyFromExplicitParameters(t *testing.T) {
 		})
 	}
 }
-
-func TestSGLangEmptyServedNameUsesEngineDefault(t *testing.T) {
-	engine, err := SelectEngine(EngineSGLang)
-	if err != nil {
-		t.Fatal(err)
-	}
-	launch := engine.Build(Params{ModelPath: "/model"})
-	for _, arg := range launch.Entrypoint {
-		if arg == "--served-model-name" {
-			t.Fatalf("empty served name must not inject --served-model-name: %v", launch.Entrypoint)
-		}
-	}
-}

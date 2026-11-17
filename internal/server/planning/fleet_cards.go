@@ -1,7 +1,10 @@
 package planning
 
 import (
+	"encoding/json"
+
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -24,7 +27,7 @@ type CardState string
 const (
 	CardOffline     CardState = "offline"      // its node is not online
 	CardUnhealthy   CardState = "unhealthy"    // faulty or unusable for a reason other than being held
-	CardHeldOutside CardState = "held_outside" // a process outside the platform uses it
+	CardHeldOutside CardState = "held_outside" // a process outside the platform uses it, and nothing of ours serves there
 	CardAwake       CardState = "awake"        // an instance claims memory on it
 	CardAsleep      CardState = "asleep"       // only sleepers' residue is on it
 	CardFree        CardState = "free"
@@ -40,7 +43,9 @@ func (c FleetCard) State(online bool) CardState {
 		return CardOffline
 	case c.Unhealthy:
 		return CardUnhealthy
-	case c.HeldOutside:
+	case c.HeldOutside && c.AwakeBytes <= 0:
+		// A held card our instances serve on - partitions beside the
+		// holders (ADR 0068), or work an operator allowed - is serving.
 		return CardHeldOutside
 	case c.AwakeBytes > 0:
 		return CardAwake
@@ -119,10 +124,27 @@ func FleetCards(st *store.Store, nodes []store.Node) (*FleetLedger, error) {
 // the node's instances per node. Only the models of the sleepers are read,
 // once. The figures are the per-node ledger's, charged by the same
 // arithmetic (allocateInstances).
+//
+// The deployments are full rows: a memory-limited slice's claim reads its
+// deployment's gpu_mem_util (QuickParams) from them rather than one row at a
+// time.
 func FleetAllocations(st *store.Store, nodes []store.Node, instances []store.Instance, deployments []store.Deployment) (map[uint]map[int]GPUAllocation, error) {
 	charge, err := newFleetCharge(st, instances, deployments)
 	if err != nil {
 		return nil, err
+	}
+	utils := make(map[uint]float64, len(deployments))
+	for i := range deployments {
+		var quick deploy.LaunchConfig
+		if json.Unmarshal([]byte(deployments[i].QuickParams), &quick) == nil {
+			utils[deployments[i].ID] = quick.GPUMemUtil
+		} else {
+			utils[deployments[i].ID] = 0
+		}
+	}
+	charge.residue.gpuMemUtil = func(id uint) (float64, bool) {
+		util, ok := utils[id]
+		return util, ok
 	}
 	out := make(map[uint]map[int]GPUAllocation, len(nodes))
 	for i := range nodes {

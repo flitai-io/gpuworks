@@ -20,6 +20,7 @@ export interface NodeConnectionDiagnostics {
   recovery_attempts: number;
   last_probe_at: string | null;
   last_recovery_error: string;
+  last_recovery_code?: string;
   last_reject_reason?: string;
   last_reject_at?: string;
   agent_report?: NodeDoctorReport;

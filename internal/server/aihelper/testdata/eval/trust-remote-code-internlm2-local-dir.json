@@ -48,7 +48,7 @@
     "(APIServer pid=1)  You can inspect the repository content at https://hf.co//model.",
     "(APIServer pid=1) Please pass the argument `trust_remote_code=True` to allow custom code to be run."
   ],
-  "expect_signature": "trust_remote_code_required",
+  "expect_signature": "TRUST_REMOTE_CODE_REQUIRED",
   "expect_keywords": [
     [
       "--trust-remote-code",

@@ -46,5 +46,10 @@ func (s *Store) SetNodeServingForward(uuid string, st ServingForwardStatus) erro
 	if err != nil {
 		return err
 	}
-	return s.db.Model(&Node{}).Where("id = ?", node.ID).Update("serving_forward", string(b)).Error
+	if err := s.db.Model(&Node{}).Where("id = ?", node.ID).Update("serving_forward", string(b)).Error; err != nil {
+		return err
+	}
+	// No event, but the node list shows it: the next FleetNodes reads it.
+	s.noteNodeChange("serving_forward")
+	return nil
 }

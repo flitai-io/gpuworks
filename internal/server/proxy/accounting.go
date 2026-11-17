@@ -489,7 +489,7 @@ func (a *Accountant) awaitPreviousWriter() {
 }
 
 // writeLoop is the single writer: it is the only goroutine that ever calls
-// sink, so a sink that mutates shared state (like observability.ingestMetrics
+// sink, so a sink that mutates shared state (like obsingest.Pipeline.IngestMetrics
 // writing to SQLite) needs no locking of its own on that account. On stop it
 // drains whatever is already sitting in the queue before returning, so a
 // flush enqueued right before shutdown (typically Run's own final flush)

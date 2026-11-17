@@ -129,7 +129,7 @@ func (h *Hub) PullImage(ctx context.Context, imageID uint, targetNodeUUID string
 			return row, nil
 		}
 		err = callErr
-		if strings.Contains(strings.ToLower(err.Error()), "unknown rpc method: image.pull") {
+		if errors.Is(err, proto.ErrRPCUnknownMethod) {
 			err = messages.NewProductError(
 				messages.ErrorAgentUpgradeRequired,
 				"The target node is running an older agent. Upgrade the agent before pulling images.",
@@ -294,7 +294,7 @@ func (s *Session) call(ctx context.Context, method string, params any) (json.Raw
 			return nil, err
 		}
 		if resp.Error != "" {
-			return nil, &rpcRemoteError{detail: resp.Error}
+			return nil, remoteRPCError(method, resp.Code, resp.Error, resp.Params)
 		}
 		return resp.Result, nil
 	}
@@ -321,6 +321,10 @@ type rpcRequest struct {
 type rpcResponse struct {
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
+	// Code and Params are the agent's proto.RPCCoder refusal; agents older
+	// than codes send neither (see remoteRPCError).
+	Code   string         `json:"code,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // ---- hub-level routing ----

@@ -46,8 +46,8 @@ test("a switch with its name and the hint on the icon, and nothing else", async 
   stub({ enabled: true, editable: true, last_day: "2026-10-21" });
   renderSwitch();
   await waitFor(() => assert.equal(toggle().getAttribute("aria-checked"), "true"));
-  assert.ok(screen.getByLabelText(u.hint));
-  assert.equal(screen.queryByRole("button"), null);
+  await userEvent.hover(screen.getByRole("button"));
+  assert.equal((await screen.findByRole("tooltip")).textContent, u.hint);
   assert.equal(screen.queryByText(/2026-10-21/), null);
 });
 
@@ -75,8 +75,9 @@ test("a failed save leaves the switch where it was", async () => {
 test("without server.yaml the switch cannot be changed and the hint says where", async () => {
   stub({ enabled: true, editable: false });
   renderSwitch();
-  await waitFor(() => assert.ok(toggle().disabled));
-  assert.ok(screen.getByLabelText(`${u.hint} ${u.readOnly}`));
+  await waitFor(() => assert.ok(toggle().hasAttribute("data-disabled")));
+  await userEvent.hover(screen.getByRole("button"));
+  assert.equal((await screen.findByRole("tooltip")).textContent, `${u.hint} ${u.readOnly}`);
 });
 
 test("a server that cannot say shows no switch", async () => {

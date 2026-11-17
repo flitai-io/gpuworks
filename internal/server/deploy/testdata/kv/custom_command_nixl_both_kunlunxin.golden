@@ -1,0 +1,35 @@
+{
+  "materialize": {
+    "quick": {
+      "performance_mode": "balanced",
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "gpu_memory_utilization": 0.9
+    }
+  },
+  "launch": {
+    "error": {
+      "code": "ACCELERATOR_FEATURE_UNSUPPORTED",
+      "params": {
+        "feature": "prefill_decode_disaggregation",
+        "vendor": "Kunlunxin"
+      },
+      "text": "target does not support requested accelerator feature"
+    },
+    "shm_bytes": 0,
+    "requested_features": {
+      "command_known": true,
+      "prefill_decode_disaggregation": true
+    }
+  },
+  "export": {
+    "args": [
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9"
+    ]
+  }
+}

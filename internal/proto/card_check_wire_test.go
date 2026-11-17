@@ -9,16 +9,16 @@ import (
 // check does not have.
 func TestCardCheckWire(t *testing.T) {
 	got, err := json.Marshal(GPUInfo{Index: 0, UUID: "GPU-1", Checks: []CardCheck{
-		{ID: "vendor_health", State: "pass"},
-		{ID: "runtime", State: "skip", Reason: "busy", AgeS: 388, MS: 812},
-		{ID: "pcie_link", State: "warn", Reason: "pcie_link_degraded", Evidence: []DoctorField{{Name: "PCIe Link 0000:3f:00.0", Value: "x8 of x16"}}},
+		{ID: "vendor_health", Status: CheckPass},
+		{ID: "runtime", Status: CheckSkip, Code: CardCheckSkipBusy, AgeS: 388, MS: 812},
+		{ID: "pcie_link", Status: CheckWarn, Code: "PCIE_LINK_DEGRADED", Evidence: []DoctorField{{Name: "PCIe Link 0000:3f:00.0", Value: "x8 of x16"}}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := `{"index":0,"uuid":"GPU-1","name":"","memory_total_bytes":0,"compute_capability":"","numa_node":0,"healthy":false,` +
-		`"checks":[{"id":"vendor_health","s":"pass"},{"id":"runtime","s":"skip","r":"busy","age":388,"ms":812},` +
-		`{"id":"pcie_link","s":"warn","r":"pcie_link_degraded","e":[{"name":"PCIe Link 0000:3f:00.0","value":"x8 of x16"}]}]}`
+		`"checks":[{"id":"vendor_health","s":"pass"},{"id":"runtime","s":"skip","r":"CARD_CHECK_SKIPPED_BUSY","age":388,"ms":812},` +
+		`{"id":"pcie_link","s":"warn","r":"PCIE_LINK_DEGRADED","e":[{"name":"PCIe Link 0000:3f:00.0","value":"x8 of x16"}]}]}`
 	if string(got) != want {
 		t.Fatalf("wire =\n%s\nwant\n%s", got, want)
 	}
@@ -36,7 +36,7 @@ func TestCardCheckWire(t *testing.T) {
 
 func TestCardCheckDetailWire(t *testing.T) {
 	got, err := json.Marshal(CardCheckDetail{Ident: "GPU-1", Check: "runtime", AgentStartedAt: "2026-11-01T00:00:00Z",
-		Last: &CardCheckRun{State: "pass", At: "2026-11-01T01:00:00Z", DurationMS: 812, Probe: "python3 -c ..."}})
+		Last: &CardCheckRun{Status: CheckPass, At: "2026-11-01T01:00:00Z", DurationMS: 812, Probe: "python3 -c ..."}})
 	if err != nil {
 		t.Fatal(err)
 	}

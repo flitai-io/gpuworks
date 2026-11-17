@@ -1469,6 +1469,14 @@
       "translations": { "zh": "平台密钥" }
     },
     {
+      "term_en": "Platform Resource",
+      "translations": { "zh": "平台资源" }
+    },
+    {
+      "term_en": "Node Source",
+      "translations": { "zh": "节点来源" }
+    },
+    {
       "term_en": "External Platform",
       "translations": { "zh": "外部平台" },
       "forbidden": { "zh": ["第三方平台", "接入平台", "算力来源"] }
@@ -1545,6 +1553,10 @@
     { "term_en": "Node Replacement", "translations": { "zh": "节点失联重调度" }, "forbidden": { "zh": ["故障转移"] } },
     { "term_en": "Sleep Residue", "translations": { "zh": "休眠残留" } },
     { "term_en": "Automatic Placement", "translations": { "zh": "自动放置" } },
+    { "term_en": "Placement Policy", "translations": { "zh": "放置策略" } },
+    { "term_en": "Card Gate", "translations": { "zh": "卡准入闸" } },
+    { "term_en": "Card Preference", "translations": { "zh": "卡偏好档" } },
+    { "term_en": "Instance Note", "translations": { "zh": "实例提示" } },
     { "term_en": "Lifecycle Schedule", "translations": { "zh": "定时计划" } },
     { "term_en": "Yield Policy", "translations": { "zh": "出让策略" } },
     { "term_en": "Idle Time", "translations": { "zh": "闲置时间" } },
@@ -1561,7 +1573,8 @@
     { "term_en": "Batch", "translations": { "zh": "批处理任务" } },
     {
       "term_en": "Kubernetes Cluster",
-      "translations": { "zh": "Kubernetes 集群" }
+      "translations": { "zh": "Kubernetes 集群" },
+      "forbidden": { "zh": ["本地 Kubernetes 集群", "其他 Kubernetes 集群"] }
     },
     {
       "term_en": "Enrollment Token",
@@ -1574,6 +1587,30 @@
     {
       "term_en": "Hold Pod / Card Borrowing",
       "translations": { "zh": "占位 Pod / 借卡" }
+    },
+    {
+      "term_en": "Failure Code",
+      "translations": { "zh": "失败码" }
+    },
+    {
+      "term_en": "Check ID",
+      "translations": { "zh": "检查 id" }
+    },
+    {
+      "term_en": "Check Status",
+      "translations": { "zh": "检查状态" }
+    },
+    {
+      "term_en": "Runtime Failure",
+      "translations": { "zh": "运行期失败原因" }
+    },
+    {
+      "term_en": "Boundary Classification",
+      "translations": { "zh": "外部边界分类" }
+    },
+    {
+      "term_en": "KV Offload Backend",
+      "translations": { "zh": "KV 卸载后端" }
     }
   ],
   "do_not_translate": [

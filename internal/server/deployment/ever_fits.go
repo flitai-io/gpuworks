@@ -42,7 +42,7 @@ func (s *Service) checkPoolCanEverFit(ctx context.Context, req *dto.DeployReques
 			Topology:   planning.DistTopology{NNodes: 1, Role: "standalone"},
 			Source:     planning.LaunchSourceFromRequest(req.Image, overrides),
 			ModelMount: modelMount, ComponentMounts: componentMounts,
-			ServedName: servedName, Sleepable: req.Sleepable, YieldPolicy: requestYield(req.YieldPolicy),
+			ServedName: servedName, Sleepable: req.Sleepable, PriorityScheduling: requestsPriorityScheduling(req), YieldPolicy: requestYield(req.YieldPolicy),
 			VRAMLimitBytes: int64(req.VRAMLimitGiB * (1 << 30)), PartitionBackend: req.PartitionBackend,
 			APIContract: previewSelection.APIContract,
 			// A model larger than the storage's cache cap never fits; the

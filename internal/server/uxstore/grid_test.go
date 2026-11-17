@@ -162,6 +162,7 @@ func TestQueryPlans(t *testing.T) {
 		{DeploymentID: 1, FromMS: 1, ToMS: ms(day0)},
 		{DeploymentID: 1, APIKeyID: 3},
 		{DeploymentID: 1, Results: []uxrecord.Result{uxrecord.ResultLength, uxrecord.ResultError}, MinEndMS: 1000, InstanceUUID: "i"},
+		{DeploymentID: 1, MinTTFTMS: 500, MaxTTFTMS: 2000, MaxEndMS: 9000},
 	} {
 		p := plan(requestSQL("20261012", q, cur, 51))
 		if strings.Contains(p, "TEMP B-TREE") || !strings.Contains(p, "USING INDEX req_20261012_") {

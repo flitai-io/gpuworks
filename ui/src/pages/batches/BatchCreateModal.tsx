@@ -18,6 +18,8 @@ import { batchSampleJSONL, downloadBatchSample, sampleFileName } from "./batchSa
 import { modelsInFile, FILE_MODEL_SCAN_MAX_BYTES } from "./batchModels";
 import BatchFileModels from "./BatchFileModels";
 import BatchModelField, { useModelStateText } from "./BatchModelField";
+import { usePriorityClasses } from "../apikeys/KeyPriority";
+import { classLabel } from "../settings/PrioritySettingsCard";
 
 export const BATCH_FILE_ACCEPT = ".jsonl";
 
@@ -92,6 +94,10 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
   const [error, setError] = useState<BatchErrorText | null>(null);
   const [showWaiting, setShowWaiting] = useState(false);
   const [sampleModel, setSampleModel] = useState<string>("");
+  // The class the batch's requests run at; the dictionary's when none is chosen.
+  const [chosenClass, setChosenClass] = useState<string>("");
+  const priorityClasses = usePriorityClasses();
+  const priorityClass = chosenClass || dictionary?.priority_class || "";
   const [chosenSampleEndpoint, setSampleEndpoint] = useState<string | undefined>(undefined);
   // The endpoint of the sample to download or use; the batch itself takes the file's.
   const sampleEndpoint = (chosenSampleEndpoint ?? dictionary?.endpoints[0] ?? "") as BatchEndpoint;
@@ -132,6 +138,7 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
     setError(null);
     setShowWaiting(false);
     setSampleModel("");
+    setChosenClass("");
   };
   const changeShowWaiting = (show: boolean) => {
     setShowWaiting(show);
@@ -149,7 +156,7 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
     setSubmitting(true);
     setError(null);
     try {
-      const batch = await batchApi.create(file, { model, completionWindowHours: windowHours ?? undefined });
+      const batch = await batchApi.create(file, { model, completionWindowHours: windowHours ?? undefined, priorityClass: chosenClass || undefined });
       reset();
       onCreated(batch);
     } catch (e) {
@@ -185,6 +192,17 @@ export default function BatchCreateModal({ open, onClose, onCreated }: {
             min={bounds.min} max={bounds.max} precision={0} disabled={submitting} className="w-40" /><span>{t("create.window.unit")}</span></div>}
         </FormField>
         <BatchModelField options={modelOptions} value={model} onChange={setModel} disabled={submitting} showWaiting={showWaiting} onShowWaitingChange={changeShowWaiting} />
+        <div className="batch-create-field">
+          <label htmlFor="batch-create-priority-class">{t("create.priority.label")}</label>
+          <OptionSelect
+            id="batch-create-priority-class"
+            value={priorityClass}
+            onChange={setChosenClass}
+            disabled={submitting || !priorityClasses}
+            options={(priorityClasses?.items ?? []).map((c) => ({ value: c.name, label: `${classLabel(c)} (${c.value})` }))}
+          />
+          <span className="batch-create-help text-label text-fg-muted">{t("create.priority.help", { name: dictionary.priority_class })}</span>
+        </div>
         <div className="batch-create-field">
           <label htmlFor="batch-create-sample-model">{t("create.sample.title")}</label>
           <div className="batch-create-sample">

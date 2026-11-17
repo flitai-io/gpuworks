@@ -37,7 +37,12 @@ type BenchmarkStatus struct {
 	Sample       json.RawMessage        `json:"sample,omitempty"`
 	CurrentPoint *BenchmarkCurrentPoint `json:"current_point,omitempty"`
 	Message      string                 `json:"message,omitempty"`
-	Warnings     []string               `json:"warnings,omitempty"`
+	// Code and Params classify a failed run (for example
+	// BENCHMARK_DATASET_LOAD_FAILED with {"dataset": "multiturn"}); Message
+	// stays the English fallback. Agents older than codes send neither.
+	Code     string         `json:"code,omitempty"`
+	Params   map[string]any `json:"params,omitempty"`
+	Warnings []string       `json:"warnings,omitempty"`
 	// StopReason records why the search ended. The server uses this explicit
 	// execution fact when computing a persisted verdict; it deliberately does
 	// not guess a reason for statuses from older agents.

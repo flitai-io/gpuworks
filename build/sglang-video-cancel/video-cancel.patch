@@ -1,0 +1,795 @@
+Backport of SGLang PR 47055, commit 8b0f2f929f05a4eb447fe143ecd3ba54e688f33a.
+Source: https://github.com/sgl-project/sglang/pull/47055 (Apache-2.0).
+Adapted to the 0.5.21 runner without newer GC, progress transport, or async-save changes.
+
+diff --git a/python/sglang/multimodal_gen/runtime/entrypoints/http_server.py b/python/sglang/multimodal_gen/runtime/entrypoints/http_server.py
+--- a/python/sglang/multimodal_gen/runtime/entrypoints/http_server.py
++++ b/python/sglang/multimodal_gen/runtime/entrypoints/http_server.py
+@@ -27,6 +27,10 @@
+     realtime_video_api,
+ )
+ from sglang.multimodal_gen.runtime.entrypoints.openai.utils import build_sampling_params
++from sglang.multimodal_gen.runtime.entrypoints.openai.video_cancel import (
++    start_cancel_publisher,
++    stop_cancel_publisher,
++)
+ from sglang.multimodal_gen.runtime.entrypoints.post_training import (
+     rollout_api,
+     weights_api,
+@@ -130,6 +134,8 @@
+ 
+     # 2. Start the ZMQ Broker in the background to handle offline requests
+     broker_task = asyncio.create_task(run_zeromq_broker(server_args))
++    if server_args.cancel_endpoint is not None:
++        start_cancel_publisher(server_args.cancel_endpoint, server_args.dp_size)
+     warmup_task = None
+     if server_args.warmup_mode == "server":
+         warmup_task = asyncio.create_task(
+@@ -159,6 +165,7 @@
+         broker_task.cancel()
+         with suppress(asyncio.CancelledError):
+             await broker_task
++        stop_cancel_publisher()
+         async_scheduler_client.close()
+ 
+ 
+diff --git a/python/sglang/multimodal_gen/runtime/entrypoints/openai/utils.py b/python/sglang/multimodal_gen/runtime/entrypoints/openai/utils.py
+--- a/python/sglang/multimodal_gen/runtime/entrypoints/openai/utils.py
++++ b/python/sglang/multimodal_gen/runtime/entrypoints/openai/utils.py
+@@ -28,6 +28,9 @@
+ from sglang.multimodal_gen.runtime.entrypoints.utils import (
+     format_lora_message,
+     save_outputs,
++)
++from sglang.multimodal_gen.runtime.managers.request_cancel_error import (
++    RequestCancelledError,
+ )
+ from sglang.multimodal_gen.runtime.pipelines_core.schedule_batch import OutputBatch
+ from sglang.multimodal_gen.runtime.scheduler_client import AsyncSchedulerClient
+@@ -470,6 +473,8 @@
+             scheduler_batches if scheduler_batches is not None else [batch]
+         )
+ 
++        if result.cancelled:
++            raise RequestCancelledError(batch.client_request_ids())
+         if (
+             result.output is None
+             and result.output_file_paths is None
+diff --git a/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py b/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py
+--- a/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py
++++ b/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_api.py
+@@ -50,6 +50,10 @@
+     request_extra_value,
+     resolve_sampling_params_cls,
+     save_image_to_path,
++)
++from sglang.multimodal_gen.runtime.entrypoints.openai.video_cancel import (
++    CancelDeliveryError,
++    publish_cancel,
+ )
+ from sglang.multimodal_gen.runtime.entrypoints.utils import prepare_request
+ from sglang.multimodal_gen.runtime.pipelines_core.schedule_batch import Req
+@@ -437,6 +441,10 @@
+         update_fields.update(final_media_fields)
+         await VIDEO_STORE.update_fields(job_id, update_fields)
+     except Exception as e:
++        if await VIDEO_STORE.get(job_id) is None:
++            # DELETE removed the job and stopped its generation
++            logger.info("Video job %s was deleted: %s", job_id, e)
++            return
+         logger.exception("Video job %s failed", job_id)
+         await VIDEO_STORE.update_fields(
+             job_id,
+@@ -746,6 +754,7 @@
+             sampling_params=sampling_params,
+             external_trace_header=trace_headers,
+         )
++        batch.cancellable = True
+         # Add diffusers_kwargs if provided.
+         if req.diffusers_kwargs:
+             batch.extra["diffusers_kwargs"] = req.diffusers_kwargs
+@@ -819,11 +828,25 @@
+     return VideoResponse(**job)
+ 
+ 
+-# TODO: support aborting a job.
+ @router.delete("/{video_id}", response_model=VideoResponse)
+ async def delete_video(video_id: str = Path(...)):
++    job = await VIDEO_STORE.get(video_id)
++    if not job:
++        raise HTTPException(status_code=404, detail="Video not found")
++    # A queued job does not start; a running job stops after its current
++    # denoising step. Publish also when the job task is done: a job that hit
++    # the scheduler RPC timeout is marked failed but still runs on the GPU.
++    if job["status"] != "completed":
++        try:
++            publish_cancel(video_id)
++        except CancelDeliveryError as e:
++            raise HTTPException(
++                status_code=503,
++                detail="Cancellation unavailable; retry DELETE with the same video ID",
++                headers={"Retry-After": "1"},
++            ) from e
+     job = await VIDEO_STORE.pop(video_id)
+-    if not job:
++    if job is None:
+         raise HTTPException(status_code=404, detail="Video not found")
+     # Mark as deleted in response semantics
+     job["status"] = "deleted"
+diff --git a/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_cancel.py b/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_cancel.py
+--- /dev/null
++++ b/python/sglang/multimodal_gen/runtime/entrypoints/openai/video_cancel.py
+@@ -0,0 +1,68 @@
++"""Publishes the ids of deleted video jobs to the replica drivers, see managers/request_cancel.py."""
++
++import os
++from contextlib import suppress
++
++import zmq
++
++
++class CancelDeliveryError(RuntimeError):
++    """The caller must retain the job and retry cancellation."""
++
++
++class CancelPublisher:
++    """Enqueue cancellations for all replica drivers, or reject for retry."""
++
++    def __init__(self, endpoint: str, replicas: int = 1):
++        self._endpoint = endpoint
++        self._replicas = replicas
++        self._subscribers = 0
++        self._context = zmq.Context()
++        self._socket = self._context.socket(zmq.XPUB)
++        self._socket.setsockopt(zmq.LINGER, 0)
++        # cancellation is a control command: backpressure must not silently drop it
++        self._socket.setsockopt(zmq.XPUB_NODROP, 1)
++        self._socket.setsockopt(zmq.XPUB_VERBOSER, 1)
++        try:
++            self._socket.bind(endpoint)
++        except zmq.ZMQError:
++            self._context.destroy(linger=0)
++            raise
++
++    def publish(self, request_id: str) -> None:
++        try:
++            while self._socket.poll(0, zmq.POLLIN):
++                subscribed = self._socket.recv(zmq.NOBLOCK)
++                self._subscribers += 1 if subscribed[0] else -1
++            if self._subscribers < self._replicas:
++                raise CancelDeliveryError("Not all replica drivers are connected")
++            self._socket.send(request_id.encode(), flags=zmq.NOBLOCK)
++        except zmq.ZMQError as e:
++            raise CancelDeliveryError(
++                "Cancellation channel is unavailable or full"
++            ) from e
++
++    def close(self) -> None:
++        self._context.destroy(linger=0)
++        with suppress(FileNotFoundError):
++            os.unlink(self._endpoint.removeprefix("ipc://"))
++
++
++_publisher: CancelPublisher | None = None
++
++
++def start_cancel_publisher(endpoint: str, replicas: int = 1) -> None:
++    global _publisher
++    _publisher = CancelPublisher(endpoint, replicas)
++
++
++def stop_cancel_publisher() -> None:
++    global _publisher
++    if _publisher is not None:
++        _publisher.close()
++        _publisher = None
++
++
++def publish_cancel(request_id: str) -> None:
++    if _publisher is not None:
++        _publisher.publish(request_id)
+diff --git a/python/sglang/multimodal_gen/runtime/managers/cancel_tqdm.py b/python/sglang/multimodal_gen/runtime/managers/cancel_tqdm.py
+--- /dev/null
++++ b/python/sglang/multimodal_gen/runtime/managers/cancel_tqdm.py
+@@ -0,0 +1,29 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Run cancellation checks at step boundaries even when tqdm is disabled."""
++
++from collections.abc import Callable
++from typing import Any
++
++from tqdm.auto import tqdm
++
++
++class CancelAwareTqdm(tqdm):
++    def __init__(self, *args: Any, on_step: Callable[[], None], **kwargs: Any):
++        super().__init__(*args, **kwargs)
++        self._on_step = on_step
++        self._iterating = False
++
++    def update(self, n: float | None = 1) -> bool | None:
++        displayed = super().update(n)
++        if not self._iterating and n is not None and n > 0:
++            self._on_step()
++        return displayed
++
++    def __iter__(self):
++        self._iterating = True
++        try:
++            for obj in super().__iter__():
++                yield obj
++                self._on_step()
++        finally:
++            self._iterating = False
+diff --git a/python/sglang/multimodal_gen/runtime/managers/gpu_worker.py b/python/sglang/multimodal_gen/runtime/managers/gpu_worker.py
+--- a/python/sglang/multimodal_gen/runtime/managers/gpu_worker.py
++++ b/python/sglang/multimodal_gen/runtime/managers/gpu_worker.py
+@@ -66,6 +66,10 @@
+ )
+ from sglang.multimodal_gen.runtime.managers.memory_managers.memory_occupation_controller import (
+     MemoryOccupationController,
++)
++from sglang.multimodal_gen.runtime.managers.request_cancel import (
++    RequestCancelledError,
++    raise_if_cancelled,
+ )
+ from sglang.multimodal_gen.runtime.observability.metrics import (
+     DiffusionMetrics,
+@@ -546,11 +550,25 @@
+     def execute_forward_sequentially(self, batch: list[Req]) -> Iterator[OutputBatch]:
+         """Yield grouped results after each request finishes its terminal stage."""
+         assert self.pipeline is not None
+-        results = self.pipeline.forward_batch_sequentially(batch, self.server_args)
++        # Check before the group starts, so a cancelled request does not run.
++        # Each rank checks the same requests, so the check stays a collective.
++        cancel_errors = [self._cancel_error(req) for req in batch]
++        live_reqs = [req for req, e in zip(batch, cancel_errors) if e is None]
++        results = (
++            self.pipeline.forward_batch_sequentially(live_reqs, self.server_args)
++            if live_reqs
++            else iter(())
++        )
+         group_start_time = time.monotonic()
+ 
+         try:
+-            for req in batch:
++            for req, cancel_error in zip(batch, cancel_errors):
++                if cancel_error is not None:
++                    logger.info(
++                        "Stopped grouped request %s: %s", req.request_id, cancel_error
++                    )
++                    yield OutputBatch(error=str(cancel_error), cancelled=True)
++                    continue
+                 output_count = (
+                     max(1, int(req.num_outputs_per_prompt or 1))
+                     if self.server_args.pipeline_config.supports_sequential_multi_output_inference()
+@@ -569,6 +587,9 @@
+                     error_context=f"grouped request {req.request_id}",
+                     execution_start_time=group_start_time,
+                     propagate_forward_errors=True,
++                    # checked above; the group already runs this request, so a
++                    # skipped request would leave its output to the next one
++                    check_cancelled=False,
+                 )
+                 assert isinstance(output_batch, OutputBatch)
+                 yield output_batch
+@@ -577,6 +598,14 @@
+             close = getattr(results, "close", None)
+             if close is not None:
+                 close()
++
++    @staticmethod
++    def _cancel_error(req: Req) -> RequestCancelledError | None:
++        try:
++            raise_if_cancelled([req])
++        except RequestCancelledError as e:
++            return e
++        return None
+ 
+     def _collect_sequential_outputs(
+         self,
+@@ -618,10 +647,12 @@
+         error_context: str,
+         execution_start_time: float | None = None,
+         propagate_forward_errors: bool = False,
++        check_cancelled: bool = True,
+     ) -> OutputBatch | Req:
+         """
+         Args:
+             forward_fn: the actual forward function for reqs
++            check_cancelled: skip the forward when the client cancelled log_reqs
+         """
+         output_batch = None
+         forward_failed = False
+@@ -699,6 +730,8 @@
+ 
+             for item in log_reqs:
+                 item.log(server_args=self.server_args)
++            if check_cancelled:
++                raise_if_cancelled(log_reqs)
+             with ExitStack() as stack:
+                 for item in log_reqs:
+                     stack.enter_context(
+@@ -770,6 +803,14 @@
+                     meta={"model": self.server_args.model_path},
+                     tag="server_perf_dump",
+                 )
++        except RequestCancelledError as e:
++            if propagate_forward_errors and forward_failed:
++                raise
++            logger.info("Stopped %s: %s", error_context, e)
++            if output_batch is None:
++                output_batch = OutputBatch()
++            output_batch.error = str(e)
++            output_batch.cancelled = True
+         except Exception as e:
+             if propagate_forward_errors and forward_failed:
+                 if isinstance(e, StopIteration):
+@@ -1328,6 +1369,7 @@
+     ) -> None:
+         if output_batch.error is not None and merged.error is None:
+             merged.error = output_batch.error
++            merged.cancelled = output_batch.cancelled
+         merged.peak_memory_mb = max(merged.peak_memory_mb, output_batch.peak_memory_mb)
+         if output_batch.usage is not None:
+             if merged.usage is None:
+diff --git a/python/sglang/multimodal_gen/runtime/managers/request_cancel.py b/python/sglang/multimodal_gen/runtime/managers/request_cancel.py
+--- /dev/null
++++ b/python/sglang/multimodal_gen/runtime/managers/request_cancel.py
+@@ -0,0 +1,148 @@
++# SPDX-License-Identifier: Apache-2.0
++"""Stops cancelled requests before their forward and at each denoising step.
++
++The HTTP server publishes the id of each cancelled request. A replica driver
++cannot read its request socket while a forward runs, so it subscribes to these
++ids on a separate socket and reads them at each check. The driver then
++broadcasts its decision, so that every rank of the replica stops at the same
++step and no rank waits in a collective that the others left.
++"""
++
++from __future__ import annotations
++
++from collections import OrderedDict
++from collections.abc import Callable
++from typing import TYPE_CHECKING
++
++import torch
++import zmq
++
++from sglang.multimodal_gen.runtime.distributed.parallel_state import (
++    get_replica_group,
++    model_parallel_is_initialized,
++)
++from sglang.multimodal_gen.runtime.managers.request_cancel_error import (
++    RequestCancelledError,
++)
++from sglang.multimodal_gen.runtime.utils.logging_utils import init_logger
++
++if TYPE_CHECKING:
++    from sglang.multimodal_gen.runtime.pipelines_core.schedule_batch import Req
++
++logger = init_logger(__name__)
++
++# a driver forgets the oldest cancelled ids first; most of them belong to
++# requests of other replicas or requests that already finished
++_MAX_CANCELLED_IDS = 4096
++
++
++def _split_output_request_id(request_id: str) -> tuple[str, int] | None:
++    parent, _, index = request_id.rpartition(":")
++    if not parent or not index.isdigit():
++        return None
++    return parent, int(index)
++
++
++class CancelListener:
++    """Receives cancelled request ids on a replica driver.
++
++    Only the scheduler thread of the driver uses it.
++    """
++
++    def __init__(self, context: zmq.Context, endpoint: str):
++        self._split_output_request_id = _split_output_request_id
++        self._socket = context.socket(zmq.SUB)
++        self._socket.setsockopt(zmq.LINGER, 0)
++        self._socket.setsockopt(zmq.SUBSCRIBE, b"")
++        self._socket.connect(endpoint)
++        self._cancelled: OrderedDict[str, None] = OrderedDict()
++
++    def is_cancelled(self, request_ids: list[str]) -> bool:
++        """Return True when each request, or the job that it is an output of, is cancelled."""
++        self._receive()
++        if not self._cancelled:
++            return False
++        return bool(request_ids) and all(
++            self._is_cancelled(request_id) for request_id in request_ids
++        )
++
++    def _receive(self) -> None:
++        while True:
++            try:
++                request_id = self._socket.recv(zmq.NOBLOCK).decode(errors="replace")
++            except zmq.Again:
++                return
++            self._cancelled[request_id] = None
++            self._cancelled.move_to_end(request_id)
++            if len(self._cancelled) > _MAX_CANCELLED_IDS:
++                self._cancelled.popitem(last=False)
++
++    def _is_cancelled(self, request_id: str) -> bool:
++        if request_id in self._cancelled:
++            return True
++        # a job with n outputs may run as n requests, see expand_request_outputs
++        output = self._split_output_request_id(request_id)
++        return output is not None and output[0] in self._cancelled
++
++
++_enabled = False
++_listener: CancelListener | None = None
++
++
++def poll_cancellations() -> None:
++    """Drain idle drivers too, so they do not backpressure other replicas."""
++    if _listener is not None:
++        _listener._receive()
++
++
++def init_request_cancel(endpoint: str, context: zmq.Context | None) -> None:
++    """Enable the checks on this rank; a replica driver also gives its context."""
++    global _enabled, _listener
++    _enabled = True
++    if context is None:
++        return
++    try:
++        _listener = CancelListener(context=context, endpoint=endpoint)
++    except zmq.ZMQError as e:
++        # the other ranks still take part in each decision, which is then False
++        logger.warning(
++            "Failed to connect cancel endpoint %s, request cancellation disabled: %s",
++            endpoint,
++            e,
++        )
++
++
++def _is_checked(req: Req) -> bool:
++    return req.cancellable and not req.is_warmup
++
++
++def raise_if_cancelled(reqs: list[Req]) -> None:
++    """Raise RequestCancelledError when the client cancelled each of reqs.
++
++    On a replica of more than one rank this is a collective: each rank must
++    call it at the same point for the same requests.
++    """
++    if not _enabled or not reqs or not all(_is_checked(req) for req in reqs):
++        return
++    request_ids = [
++        request_id for req in reqs for request_id in req.client_request_ids()
++    ]
++    cancelled = _listener is not None and _listener.is_cancelled(request_ids)
++    if model_parallel_is_initialized():
++        group = get_replica_group()
++        if group.world_size > 1:
++            # gloo on the CPU group, so the check does not wait for the GPU
++            decision = torch.tensor([int(cancelled)], dtype=torch.int32)
++            torch.distributed.broadcast(
++                decision, src=group.ranks[0], group=group.cpu_group
++            )
++            cancelled = bool(decision.item())
++    if cancelled:
++        raise RequestCancelledError(request_ids)
++
++
++def step_cancel_check(batch: Req | None) -> Callable[[], None] | None:
++    """Return the check to run after each denoising step of batch, or None."""
++    if not _enabled or batch is None or not _is_checked(batch):
++        return None
++    return lambda: raise_if_cancelled([batch])
+diff --git a/python/sglang/multimodal_gen/runtime/managers/request_cancel_error.py b/python/sglang/multimodal_gen/runtime/managers/request_cancel_error.py
+--- /dev/null
++++ b/python/sglang/multimodal_gen/runtime/managers/request_cancel_error.py
+@@ -0,0 +1,12 @@
++# SPDX-License-Identifier: Apache-2.0
++"""The error of a cancelled request.
++
++This module imports nothing, so the logging and profiling utilities can import
++it at module level.
++"""
++
++
++class RequestCancelledError(RuntimeError):
++    def __init__(self, request_ids: list[str]):
++        self.request_ids = request_ids
++        super().__init__(f"Request {', '.join(request_ids)} was cancelled")
+diff --git a/python/sglang/multimodal_gen/runtime/managers/scheduler.py b/python/sglang/multimodal_gen/runtime/managers/scheduler.py
+--- a/python/sglang/multimodal_gen/runtime/managers/scheduler.py
++++ b/python/sglang/multimodal_gen/runtime/managers/scheduler.py
+@@ -48,6 +48,10 @@
+     BatchAdmissionController,
+ )
+ from sglang.multimodal_gen.runtime.managers.gpu_worker import GPUWorker
++from sglang.multimodal_gen.runtime.managers.request_cancel import (
++    init_request_cancel,
++    poll_cancellations,
++)
+ from sglang.multimodal_gen.runtime.observability.metrics import DiffusionMetrics
+ from sglang.multimodal_gen.runtime.pipelines_core import Req
+ from sglang.multimodal_gen.runtime.pipelines_core.request_utils import (
+@@ -133,6 +137,13 @@
+             )
+         else:
+             self.receiver = None
++        if server_args.cancel_endpoint is not None:
++            # every rank takes part in each stop decision; only the driver
++            # receives the cancelled request ids
++            init_request_cancel(
++                endpoint=server_args.cancel_endpoint,
++                context=self.context if self.receiver is not None else None,
++            )
+         from sglang.multimodal_gen.runtime.platforms import current_platform
+ 
+         Exec_worker = CPUWorker if current_platform.is_cpu() else GPUWorker
+@@ -286,6 +297,39 @@
+     ):
+         """Dispatch generation requests, merging compatible requests when allowed."""
+         reqs = self._normalize_generation_reqs(reqs)
++        if (
++            allow_dynamic_batching
++            and len(reqs) > 1
++            and any(req.cancellable for req in reqs)
++        ):
++            # filter before merging; a running mixed batch cannot stop just one member
++            errors = [GPUWorker._cancel_error(req) for req in reqs]
++            if any(error is not None for error in errors):
++                live = [req for req, error in zip(reqs, errors) if error is None]
++                outputs = (
++                    self._handle_generation(
++                        live, allow_dynamic_batching=allow_dynamic_batching
++                    )
++                    if live
++                    else []
++                )
++                streaming = isinstance(outputs, _SequentiallyReturnedOutputs)
++                if streaming:
++                    outputs = outputs.outputs
++                elif not isinstance(outputs, list):
++                    outputs = [outputs]
++                live_outputs = iter(outputs)
++                restored = (
++                    OutputBatch(error=str(error), cancelled=True)
++                    if error is not None
++                    else next(live_outputs)
++                    for error in errors
++                )
++                return (
++                    _SequentiallyReturnedOutputs(restored)
++                    if streaming
++                    else list(restored)
++                )
+         if self.worker.is_sleeping():
+             raise RuntimeError(
+                 "Server is sleeping. Call resume_memory_occupation first."
+@@ -324,6 +368,11 @@
+             batch_size = len(reqs)
+             try:
+                 output_batch = self.worker.execute_forward([merged_req])
++                if output_batch.cancelled:
++                    # the worker logged the cancel
++                    return self._build_dynamic_batch_error_outputs(
++                        reqs=reqs, error_msg=output_batch.error, cancelled=True
++                    )
+                 if output_batch.error:
+                     logger.error(
+                         "Dynamic batch execution returned error. Skipping sequential fallback and returning errors: %s",
+@@ -373,6 +422,11 @@
+ 
+         try:
+             output_batch = self.worker.execute_forward(reqs)
++            if output_batch.cancelled:
++                # the worker logged the cancel
++                return self._build_dynamic_batch_error_outputs(
++                    reqs=reqs, error_msg=output_batch.error, cancelled=True
++                )
+             if output_batch.error:
+                 logger.error(
+                     "Native grouped execution returned error. Returning per-request errors: %s",
+@@ -746,8 +800,9 @@
+         self,
+         reqs: List[Req],
+         error_msg: str,
++        cancelled: bool = False,
+     ) -> List[OutputBatch]:
+-        return [OutputBatch(error=error_msg) for _ in reqs]
++        return [OutputBatch(error=error_msg, cancelled=cancelled) for _ in reqs]
+ 
+     def _should_return_lightweight_warmup_result(self, processed_req: Any) -> bool:
+         req = get_first_generation_req(processed_req)
+@@ -924,6 +979,14 @@
+                         req.output_file_path(req.num_outputs_per_prompt, output_idx)
+                     )
+             merged_req.extra["dynamic_batch_output_paths"] = dynamic_output_paths
++        merged_req.merged_request_ids = [
++            req.request_id
++            for req in reqs
++            if req.request_id is not None
++        ]
++        merged_req.cancellable = all(req.cancellable for req in reqs) and len(
++            merged_req.merged_request_ids
++        ) == len(reqs)
+         merged_req.request_id = f"dynamic_batch::{merged_req.request_id}"
+ 
+         return merged_req
+@@ -1200,6 +1263,7 @@
+         tensors on NCCL so per-step latents do not pickle onto the gloo group.
+         """
+         if self.receiver is not None:
++            poll_cancellations()
+             try:
+                 recv_reqs: list[tuple[bytes, Any]] = []
+                 while len(recv_reqs) < _MAX_RECV_REQS_PER_POLL:
+diff --git a/python/sglang/multimodal_gen/runtime/pipelines_core/executors/pipeline_executor.py b/python/sglang/multimodal_gen/runtime/pipelines_core/executors/pipeline_executor.py
+--- a/python/sglang/multimodal_gen/runtime/pipelines_core/executors/pipeline_executor.py
++++ b/python/sglang/multimodal_gen/runtime/pipelines_core/executors/pipeline_executor.py
+@@ -17,6 +17,10 @@
+     conditioning_cache_group,
+ )
+ from sglang.multimodal_gen.runtime.distributed import get_world_rank
++from sglang.multimodal_gen.runtime.managers.request_cancel import (
++    RequestCancelledError,
++    raise_if_cancelled,
++)
+ from sglang.multimodal_gen.runtime.pipelines_core.schedule_batch import OutputBatch, Req
+ from sglang.multimodal_gen.runtime.platforms import current_platform
+ from sglang.multimodal_gen.runtime.server_args import ServerArgs
+@@ -277,7 +281,15 @@
+                         time.monotonic() - sequential_start_time,
+                     )
+                 try:
++                    # each rank yields the same outputs, so the check stays a
++                    # collective; after a cancel, each later output stops here
++                    raise_if_cancelled([batch])
+                     output = self.execute(remaining_stages, batch, server_args)
++                except RequestCancelledError as e:
++                    logger.info("Stopped request %s: %s", batch.request_id, e)
++                    output = OutputBatch(
++                        error=str(e), cancelled=True, metrics=batch.metrics
++                    )
+                 except Exception as e:
+                     logger.error(
+                         "Sequential DiT/VAE inference failed for request %s: %s",
+diff --git a/python/sglang/multimodal_gen/runtime/pipelines_core/schedule_batch.py b/python/sglang/multimodal_gen/runtime/pipelines_core/schedule_batch.py
+--- a/python/sglang/multimodal_gen/runtime/pipelines_core/schedule_batch.py
++++ b/python/sglang/multimodal_gen/runtime/pipelines_core/schedule_batch.py
+@@ -202,6 +202,11 @@
+     condition_inputs: dict[str, Any] = field(default_factory=dict)
+ 
+     is_warmup: bool = False
++    # the client can cancel it by request id, see managers/request_cancel.py
++    cancellable: bool = False
++
++    # request ids merged into this dynamic batch
++    merged_request_ids: list[str] | None = None
+ 
+     # STA parameters
+     STA_param: list | None = None
+@@ -240,6 +245,11 @@
+     output: torch.Tensor | None = None
+     audio: torch.Tensor | None = None
+     audio_sample_rate: int | None = None
++
++    def client_request_ids(self) -> list[str]:
++        if self.merged_request_ids:
++            return self.merged_request_ids
++        return [self.request_id] if self.request_id else []
+ 
+     def __init__(self, **kwargs):
+         # Initialize dataclass fields
+@@ -495,6 +505,8 @@
+     rollout_trajectory_data: RolloutTrajectoryData | None = None
+     trajectory_decoded: list[torch.Tensor] | None = None
+     error: str | None = None
++    # the client cancelled the request; error tells which one
++    cancelled: bool = False
+     output_file_paths: list[str] | None = None
+ 
+     # logged metrics info, directly from Req.timings
+diff --git a/python/sglang/multimodal_gen/runtime/pipelines_core/stages/base.py b/python/sglang/multimodal_gen/runtime/pipelines_core/stages/base.py
+--- a/python/sglang/multimodal_gen/runtime/pipelines_core/stages/base.py
++++ b/python/sglang/multimodal_gen/runtime/pipelines_core/stages/base.py
+@@ -25,6 +25,10 @@
+ from sglang.multimodal_gen.runtime.managers.memory_managers.component_manager import (
+     ComponentUse,
+ )
++from sglang.multimodal_gen.runtime.managers.cancel_tqdm import (
++    CancelAwareTqdm,
++)
++from sglang.multimodal_gen.runtime.managers.request_cancel import step_cancel_check
+ from sglang.multimodal_gen.runtime.pipelines_core.schedule_batch import Req
+ from sglang.multimodal_gen.runtime.pipelines_core.stages.dedup import StageDedupMixin
+ from sglang.multimodal_gen.runtime.pipelines_core.stages.validators import (
+@@ -132,6 +136,20 @@
+     ) -> tqdm:
+         is_main_rank = not world_group_is_initialized() or get_world_rank() == 0
+         disable = disable or (batch is not None and batch.is_warmup)
++        on_step = step_cancel_check(batch)
++        if on_step is not None and self.parallelism_type in (
++            StageParallelismType.MAIN_RANK_ONLY,
++            StageParallelismType.MAIN_RANK_ONLY_AND_SEND_TO_OTHERS,
++        ):
++            on_step = None
++        if on_step is not None:
++            return CancelAwareTqdm(
++                iterable=iterable,
++                total=total,
++                disable=disable or not is_main_rank,
++                on_step=on_step,
++                **kwargs,
++            )
+         return tqdm(
+             iterable=iterable,
+             total=total,
+diff --git a/python/sglang/multimodal_gen/runtime/server_args/server_args.py b/python/sglang/multimodal_gen/runtime/server_args/server_args.py
+--- a/python/sglang/multimodal_gen/runtime/server_args/server_args.py
++++ b/python/sglang/multimodal_gen/runtime/server_args/server_args.py
+@@ -631,6 +631,13 @@
+         return self.port + 1
+ 
+     @property
++    def cancel_endpoint(self) -> str | None:
++        # the HTTP server publishes cancelled request ids here to every replica driver
++        if self.port is None or self.disagg_role != RoleType.MONOLITHIC:
++            return None
++        return f"ipc://{tempfile.gettempdir()}/sglang-diffusion-cancel-{self.port}"
++
++    @property
+     def is_local_mode(self) -> bool:
+         """
+         If no server is running when a generation task begins, 'local_mode' will be enabled: a dedicated server will be launched
+diff --git a/python/sglang/multimodal_gen/runtime/utils/logging_utils.py b/python/sglang/multimodal_gen/runtime/utils/logging_utils.py
+--- a/python/sglang/multimodal_gen/runtime/utils/logging_utils.py
++++ b/python/sglang/multimodal_gen/runtime/utils/logging_utils.py
+@@ -19,6 +19,10 @@
+ from logging import Logger
+ from types import MethodType
+ from typing import Any, cast
++
++from sglang.multimodal_gen.runtime.managers.request_cancel_error import (
++    RequestCancelledError,
++)
+ 
+ import sglang.multimodal_gen.envs as envs
+ 
+@@ -688,7 +692,9 @@
+             timer.duration,
+         )
+     except Exception as e:
+-        if request_idx is not None:
++        if isinstance(e, RequestCancelledError):
++            logger.info("Stopped generation: %s", e)
++        elif request_idx is not None:
+             logger.error(
+                 "Failed to generate output for prompt %d: %s",
+                 request_idx,
+diff --git a/python/sglang/multimodal_gen/runtime/utils/perf_logger.py b/python/sglang/multimodal_gen/runtime/utils/perf_logger.py
+--- a/python/sglang/multimodal_gen/runtime/utils/perf_logger.py
++++ b/python/sglang/multimodal_gen/runtime/utils/perf_logger.py
+@@ -17,6 +17,9 @@
+ 
+ import sglang
+ import sglang.multimodal_gen.envs as envs
++from sglang.multimodal_gen.runtime.managers.request_cancel_error import (
++    RequestCancelledError,
++)
+ from sglang.multimodal_gen.runtime.observability.metrics import get_metrics
+ from sglang.multimodal_gen.runtime.platforms import current_platform
+ from sglang.multimodal_gen.runtime.utils.logging_utils import (
+@@ -361,6 +364,9 @@
+         execution_time_s = time.perf_counter() - self.start_time
+ 
+         if exc_type:
++            # each rank stops a cancelled request; the worker logs it once
++            if issubclass(exc_type, RequestCancelledError):
++                return False
+             self.logger.error(
+                 "[%s] Error during execution after %.4f ms: %s",
+                 self.stage_name,

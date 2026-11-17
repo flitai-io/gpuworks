@@ -2,12 +2,14 @@ package deployment
 
 import (
 	"context"
+	"errors"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/planning"
+	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/server/yieldpolicy"
 )
@@ -54,6 +56,8 @@ func (s *Service) evaluateAutomaticPlacement(ctx context.Context, req *dto.Deplo
 	modelMount, componentMounts := previewComponentMounts(s.d.Store, selection.Components, nil)
 	previewSelection := snapshotTemplateSelection(selection, "")
 	var selected *dto.PlacementNode
+	// The controller's pool placement picks the same way (planning.FitPicker).
+	var picker planning.FitPicker[*dto.PlacementNode]
 	for index, candidate := range ranked {
 		if index == planning.PoolTrialBudget || selected != nil {
 			break
@@ -62,18 +66,22 @@ func (s *Service) evaluateAutomaticPlacement(ctx context.Context, req *dto.Deplo
 		entry := dto.PlacementCandidate{NodeUUID: node.UUID, NodeName: names[node.UUID]}
 		backend, err := ResolvePartitionBackend(node, req.VRAMLimitGiB, req.PartitionBackend)
 		if err != nil {
-			entry.Reason = dto.ScheduleReason{Code: "partition_unavailable", Message: err.Error()}
+			entry.Reason = dto.ScheduleReason{Code: scheduler.ReasonPartitionUnavailable, Message: err.Error()}
+			var refusal *messages.ProductError
+			if errors.As(err, &refusal) {
+				entry.Reason.Params = refusal.Params()
+			}
 			candidates = append(candidates, entry)
 			continue
 		}
-		plan, planErr := planning.PlanLaunch(ctx, s.d.Store, s.networks(), planning.LaunchRequest{
+		plan, planErr := s.planLaunch(ctx, planning.LaunchRequest{
 			StartTimeoutSec: req.StartTimeoutSec,
 			Preview:         true, AllowUnresolvedImage: true, ExcludeDeploymentID: excludeDeployment, Engine: engine.Name(), Model: model, Node: node,
 			Selection: previewSelection, Placement: placement, Quick: quick, ExtraArgs: userExtraArgs,
 			Topology:   planning.DistTopology{NNodes: 1, Role: "standalone"},
 			Source:     planning.LaunchSourceFromRequest(image, requestOverrides),
 			ModelMount: modelMount, ComponentMounts: componentMounts,
-			ServedName: servedName, Sleepable: req.Sleepable, YieldPolicy: requestYield(req.YieldPolicy), ExplainHolders: true,
+			ServedName: servedName, Sleepable: req.Sleepable, PriorityScheduling: requestsPriorityScheduling(req), YieldPolicy: requestYield(req.YieldPolicy), ExplainHolders: true,
 			MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
 			VRAMLimitBytes: int64(req.VRAMLimitGiB * (1 << 30)), PartitionBackend: backend,
 			APIContract: previewSelection.APIContract,
@@ -93,9 +101,15 @@ func (s *Service) evaluateAutomaticPlacement(ctx context.Context, req *dto.Deplo
 		entry.Reason = scheduleReasonOf(plan.Output, node, requestYield(req.YieldPolicy))
 		if plan.Output.Result.OK && plan.Output.Result.Plan != nil {
 			entry.OK = true
-			selected = &dto.PlacementNode{UUID: node.UUID, Name: names[node.UUID], Reasons: selectedReasons(plan.Output.Result)}
+			fit := &dto.PlacementNode{UUID: node.UUID, Name: names[node.UUID], Reasons: selectedReasons(plan.Output.Result)}
+			if picker.Offer(fit, plan.Output.Result.Plan.Concessions) {
+				selected = fit
+			}
 		}
 		candidates = append(candidates, entry)
+	}
+	if selected == nil {
+		selected, _ = picker.Fallback()
 	}
 	return selected, candidates
 }
@@ -177,14 +191,14 @@ func selectedReasons(result planning.ScheduleResult) []dto.ScheduleReason {
 // silent re-placement or a row the controller will fail to schedule.
 func (s *Service) revalidateAutomaticPlacement(ctx context.Context, req *dto.DeployRequest, engine deploy.Engine, model *store.Model, selection templateSelection, placement planning.Placement, quick deploy.LaunchConfig, userExtraArgs []string, servedName string, node *store.Node, modelMount string, componentMounts []proto.MountSpec, requestOverrides deploy.ContainerOverrides, weightStorageID uint) error {
 	previewSelection := snapshotTemplateSelection(selection, req.Image)
-	plan, planErr := planning.PlanLaunch(ctx, s.d.Store, s.networks(), planning.LaunchRequest{
+	plan, planErr := s.planLaunch(ctx, planning.LaunchRequest{
 		StartTimeoutSec: req.StartTimeoutSec,
 		Preview:         true, Engine: engine.Name(), Model: model, Node: node,
 		Selection: previewSelection, Placement: placement, Quick: quick, ExtraArgs: userExtraArgs,
 		Topology:   planning.DistTopology{NNodes: 1, Role: "standalone"},
 		Source:     planning.LaunchSourceFromRequest(req.Image, requestOverrides),
 		ModelMount: modelMount, ComponentMounts: componentMounts,
-		ServedName: servedName, Sleepable: req.Sleepable, YieldPolicy: requestYield(req.YieldPolicy),
+		ServedName: servedName, Sleepable: req.Sleepable, PriorityScheduling: requestsPriorityScheduling(req), YieldPolicy: requestYield(req.YieldPolicy),
 		MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
 		VRAMLimitBytes: int64(req.VRAMLimitGiB * (1 << 30)), PartitionBackend: req.PartitionBackend,
 		APIContract: previewSelection.APIContract,

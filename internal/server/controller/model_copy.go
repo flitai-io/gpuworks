@@ -9,13 +9,13 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-// CopyModelFile copies a model's files from one location to another. Both
+// copyModelFile copies a model's files from one location to another. Both
 // ends are a storage plus, for a local storage, a node. The agent has two
 // primitives and this picks one: a copy on one node when a single node can
 // read the source and write the target (a local directory or a mounted NFS
 // on that node), and the node-to-node direct transfer otherwise. A write into
 // a shared storage is executed by one node, the writer.
-func (c *Controller) CopyModelFile(ctx context.Context, modelID uint, src, dst store.FileRef, rateLimitKiB int) (*store.ModelFile, error) {
+func (c *Controller) copyModelFile(ctx context.Context, modelID uint, src, dst store.FileRef, rateLimitKiB int) (*store.ModelFile, error) {
 	model, err := c.store.GetModel(modelID)
 	if err != nil {
 		return nil, err

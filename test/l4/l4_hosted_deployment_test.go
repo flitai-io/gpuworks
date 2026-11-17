@@ -21,14 +21,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/testenv/apiwire"
 )
 
-// gpustackMirrorEndpoints are the replacement addresses of the
-// gpustack/ image source rule that CompShare cases set, the way an operator
-// does under /api/v1/pull/source-rules: CompShare's UAAA route is tuned for the
-// domestic SWR mirror, so a fresh VM does not spend the acceptance window on a
-// multi-gigabyte pull from a far registry. (The retired image_registry_rewrites
-// setting answers 410 SETTING_REMOVED.)
-var gpustackMirrorEndpoints = []string{"swr.cn-south-1.myhuaweicloud.com/gpustack", "quay.io/gpustack"}
-
 type hostedDeployment struct {
 	harness    *hostedControlPlane
 	id         uint
@@ -71,13 +63,6 @@ func registerHostedModel(ctx context.Context, api *hostedAPIClient, input map[st
 func hostedPrepareRealModel(t *testing.T, harness *hostedControlPlane) dto.Model {
 	t.Helper()
 	backend := harness.backend
-	if len(backend.PullMirror) > 0 {
-		allowUpstream := true
-		mirror := dto.PullSourceRuleRequest{Match: "gpustack/", Endpoints: backend.PullMirror, AllowUpstream: &allowUpstream}
-		if err := harness.API.PostJSON(t.Context(), "/api/v1/pull/source-rules", mirror, nil); err != nil {
-			t.Fatalf("configure hosted image source rule: %v", err)
-		}
-	}
 	var model dto.Model
 	if err := registerHostedModel(t.Context(), harness.API, map[string]any{
 		"source": "modelscope", "source_id": backend.Model.SourceID,
@@ -141,13 +126,15 @@ func hostedRequireDistributedPreflight(t *testing.T, harness *hostedControlPlane
 	var result struct {
 		OK    bool `json:"ok"`
 		Pairs []struct {
-			SourceUUID      string  `json:"source_uuid"`
-			TargetUUID      string  `json:"target_uuid"`
-			Reachable       bool    `json:"reachable"`
-			BandwidthTested bool    `json:"bandwidth_tested"`
-			Gbps            float64 `json:"gbps"`
-			Error           string  `json:"error"`
-			BandwidthError  string  `json:"bandwidth_error"`
+			SourceUUID        string  `json:"source_uuid"`
+			TargetUUID        string  `json:"target_uuid"`
+			Reachable         bool    `json:"reachable"`
+			BandwidthTested   bool    `json:"bandwidth_tested"`
+			Gbps              float64 `json:"gbps"`
+			Status            string  `json:"status"`
+			Code              string  `json:"code"`
+			Evidence          string  `json:"evidence"`
+			BandwidthEvidence string  `json:"bandwidth_evidence"`
 		} `json:"pairs"`
 	}
 	if err := harness.API.PostJSON(t.Context(), "/api/v1/deployments/preflight", map[string]any{
@@ -161,7 +148,7 @@ func hostedRequireDistributedPreflight(t *testing.T, harness *hostedControlPlane
 		t.Fatalf("hosted distributed preflight result=%+v", result)
 	}
 	for _, pair := range result.Pairs {
-		if !pair.Reachable || !pair.BandwidthTested || pair.Gbps <= 0 || pair.Error != "" || pair.BandwidthError != "" {
+		if !pair.Reachable || !pair.BandwidthTested || pair.Gbps <= 0 || pair.Status != "pass" || pair.Evidence != "" || pair.BandwidthEvidence != "" {
 			t.Fatalf("hosted distributed preflight pair failed: %+v", pair)
 		}
 		t.Logf("hosted private network %s -> %s: %.3f Gbps", pair.SourceUUID, pair.TargetUUID, pair.Gbps)

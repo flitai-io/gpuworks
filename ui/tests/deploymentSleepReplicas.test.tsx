@@ -1,3 +1,4 @@
+import { installCanvas } from "./helpers/analyticsFixtures.ts";
 import assert from "node:assert/strict";
 import { fakeFleet } from "./helpers/fakeFleet.ts";
 import { listPage, cursorPage, list } from "./helpers/listPage.ts";
@@ -17,12 +18,13 @@ import * as shapes from "./helpers/deploymentCapabilities.ts";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement", "HTMLHtmlElement", "NodeFilter", "HTMLInputElement", "HTMLButtonElement"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "localStorage", { value: dom.window.localStorage, configurable: true });
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
+installCanvas(dom);
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
 const scrolled: string[] = [];
@@ -61,6 +63,7 @@ class Events {
 }
 Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: true });
 
+const { selectInstance } = await import("./helpers/selectInstance.ts");
 const { api } = await import("../src/api.ts");
 const { default: DeploymentsPage } = await import("../src/pages/DeploymentsPage.tsx");
 
@@ -133,7 +136,7 @@ async function openDetail(search = "?deployment=1") {
 }
 
 function drawer(): HTMLElement {
-  return document.querySelector(".ant-drawer-content") as HTMLElement;
+  return screen.getByRole("dialog", { name: "lifecycle-deployment" });
 }
 
 const { APIError } = await import("../src/apiError.ts");
@@ -167,10 +170,12 @@ test("a sleepable replica's panel sleeps that replica in the chosen mode", async
   const orders: unknown[][] = [];
   stub("sleepInstance", async (...args: unknown[]) => { orders.push(args); });
   await openDetail();
+  selectInstance("inst-b");
   const panel = document.getElementById("instance-inst-b") as HTMLElement;
-  fireEvent.click(within(panel).getByRole("button", { name: locale.replica.sleep }));
+  fireEvent.click(within(screen.getByRole("group", { name: locale.detailLayout.replicaControls })).getByRole("button", { name: locale.replica.sleep }));
   await confirmSleepMode();
   await waitFor(() => assert.deepEqual(orders, [["inst-b", 1, "wait", undefined]]));
+  selectInstance("inst-a");
   assert.equal(within(document.getElementById("instance-inst-a") as HTMLElement).queryByRole("button", { name: locale.replica.wake }), null);
 });
 
@@ -195,10 +200,12 @@ test("no replica sleep where the deployment cannot sleep; a multi-node replica s
   const orders: unknown[][] = [];
   stub("sleepInstance", async (...args: unknown[]) => { orders.push(args); });
   await openDetail();
+  selectInstance("follow");
   const follower = document.getElementById("instance-follow") as HTMLElement;
   assert.equal(within(follower).queryByRole("button", { name: locale.replica.sleep }), null);
   assert.ok(within(follower).getByText(locale.replica.followerHint));
-  fireEvent.click(within(document.getElementById("instance-lead") as HTMLElement).getByRole("button", { name: locale.replica.sleep }));
+  selectInstance("lead");
+  fireEvent.click(within(screen.getByRole("group", { name: locale.detailLayout.replicaControls })).getByRole("button", { name: locale.replica.sleep }));
   await confirmSleepMode();
   await waitFor(() => assert.deepEqual(orders, [["lead", 1, "wait", undefined]]));
 });
@@ -218,13 +225,19 @@ test("one replica asleep reads as partly asleep; its panel wakes it, the drawer 
   await openDetail();
   assert.ok(within(drawer()).getByText(i18n.t("sleep.partial", { asleep: 2, total: 3 })));
   // Sleeping the rest stays on offer while some replica is awake.
-  assert.ok(within(drawer()).getByRole("button", { name: locale.sleep.quickAction }));
+  const sleepField = within(drawer()).getByText(locale.detail.sleepable).closest("tr")! as HTMLElement;
+  assert.ok(within(sleepField).getByRole("button", { name: locale.sleep.quickAction }));
+  assert.ok(within(sleepField).getByRole("button", { name: locale.sleep.deepAction }));
+  selectInstance("inst-a");
+  assert.ok(within(document.getElementById("instance-inst-a") as HTMLElement).getByText(i18n.t("instance.sleeping", { level: 1, storage: locale.instance.memory })));
+  selectInstance("inst-b");
+  selectInstance("inst-b");
   const panel = document.getElementById("instance-inst-b") as HTMLElement;
   // The order counts at once: the panel says it is on its way to sleep.
   assert.ok(within(panel).getByText(i18n.t("instance.fallingAsleep", { level: 1 })));
-  assert.ok(within(document.getElementById("instance-inst-a") as HTMLElement).getByText(i18n.t("instance.sleeping", { level: 1, storage: locale.instance.memory })));
-  fireEvent.click(within(panel).getByRole("button", { name: locale.replica.wake }));
+  fireEvent.click(within(screen.getByRole("group", { name: locale.detailLayout.replicaControls })).getByRole("button", { name: locale.replica.wake }));
   await waitFor(() => assert.deepEqual(wakes, [["instance", "inst-b"]]));
+  fireEvent.click(screen.getByRole("tab", { name: locale.detail.title }));
   fireEvent.click(within(drawer()).getByRole("button", { name: locale.sleep.wakeAll }));
   await waitFor(() => assert.deepEqual(wakes[1], ["deployment", 1, { partial: false }]));
 });
@@ -241,7 +254,9 @@ test("each replica says its own hold, and the drawer says the mix the server rea
   await openDetail();
   assert.ok(within(drawer()).getByText(locale.sleep.someHeldHint));
   assert.equal(within(drawer()).queryByText(locale.sleep.heldHint), null);
+  selectInstance("inst-a");
   assert.ok(within(document.getElementById("instance-inst-a") as HTMLElement).getByText(locale.instance.held));
+  selectInstance("inst-b");
   assert.equal(within(document.getElementById("instance-inst-b") as HTMLElement).queryByText(locale.instance.held), null);
 });
 
@@ -332,10 +347,14 @@ test("a PD deployment sleeps the role its mode runs without, and only that one",
   const orders: unknown[][] = [];
   stub("sleepDeployment", async (...args: unknown[]) => { orders.push(args); });
   await openDetail();
+  selectInstance("decode-0");
   assert.equal(within(document.getElementById("instance-decode-0") as HTMLElement).queryByRole("button", { name: locale.replica.sleep }), null);
-  assert.ok(within(document.getElementById("instance-prefill-0") as HTMLElement).getByRole("button", { name: locale.replica.sleep }));
+  selectInstance("prefill-0");
+  assert.ok(within(screen.getByRole("group", { name: locale.detailLayout.replicaControls })).getByRole("button", { name: locale.replica.sleep }));
+  fireEvent.click(screen.getByRole("tab", { name: locale.detail.title }));
   const prefill = locale.detail.pd.role.prefill;
-  const sleepPrefill = await within(drawer()).findByRole("button", { name: i18n.t("sleep.role.sleep", { role: prefill }) });
+  const pdSection = within(drawer()).getByText(locale.detail.pd.title).closest("section")!;
+  const sleepPrefill = await within(pdSection).findByRole("button", { name: i18n.t("sleep.role.sleep", { role: prefill }) });
   assert.equal(within(drawer()).queryByRole("button", { name: i18n.t("sleep.role.sleep", { role: locale.detail.pd.role.decode }) }), null);
   fireEvent.click(sleepPrefill);
   await confirmSleepMode();
@@ -372,15 +391,13 @@ test("a partly asleep PD deployment shows the server's pair, not the stored coun
   stub("deploymentsPage", async () => listPage([pd]));
   stub("deployment", async () => pd);
   await openDetail();
-  // The drawer's status row prints the server's pair; the sleep controls print
-  // their own summary from the same replicas, so both read 2 of 3.
-  assert.ok(within(drawer()).getAllByText(i18n.t("sleep.partial", { asleep: 2, total: 3 })).length >= 1);
+  assert.ok(within(drawer()).getByText(i18n.t("sleep.partial", { asleep: 2, total: 3 })));
   // A denominator smaller than the numerator is the defect: never render the
   // stored 1 beside a count of 2 sleepers.
   assert.equal(within(drawer()).queryAllByText(i18n.t("sleep.partial", { asleep: 2, total: 1 })).length, 0);
   // ready_replicas is filled for a PD deployment now, so the drawer prints the
   // ready count beside the same denominator instead of hiding the row.
-  assert.ok(within(drawer()).getByText(i18n.t("detail.readyReplicas", { ready: 1, desired: 3 })));
+  assert.ok(within(drawer()).getByText(i18n.t("detail.pd.readyUnits", { ready: 1, desired: 3 })));
 });
 
 test("a refused sleep order leaves the last sleep failure shown", async () => {

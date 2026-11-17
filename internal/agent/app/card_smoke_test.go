@@ -167,7 +167,7 @@ func TestACardServingAnInstanceIsNotChecked(t *testing.T) {
 			asked = append(asked, card.Visible)
 			return nil
 		},
-		Busy: func(card cardsmoke.Card) bool { ours, _ := n.cardsInUse(); return ours[card.Ident] },
+		Busy: func(card cardsmoke.Card) bool { ours, _, _ := n.cardsInUse(); return ours[card.Ident] > 0 },
 	})
 	n.cardSmoke.RunOnce(context.Background())
 	if len(asked) != 1 || asked[0] != "GPU-3f" {
@@ -287,7 +287,7 @@ func TestAFailedInstanceMakesItsCardsAnswer(t *testing.T) {
 	n.cardSmoke = cardsmoke.New(cardsmoke.Config{
 		Cards:    func(ctx context.Context) []cardsmoke.Card { return n.smokeCards(ctx, check) },
 		Try:      cardSmokeAttempt(answering),
-		Busy:     func(card cardsmoke.Card) bool { ours, _ := n.cardsInUse(); return ours[card.Ident] },
+		Busy:     func(card cardsmoke.Card) bool { ours, _, _ := n.cardsInUse(); return ours[card.Ident] > 0 },
 		Interval: time.Hour,
 	})
 	n.cardSmokeCtx = context.Background()

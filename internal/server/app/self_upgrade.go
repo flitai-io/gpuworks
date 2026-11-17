@@ -72,7 +72,33 @@ func (s *serverSettings) SelfUpgradeBlocker() string {
 	return blocker
 }
 
-func (s *serverSettings) Upgrade(ctx context.Context, archive io.Reader, by string) (dto.ServerUpgradeStarted, error) {
+func (s *serverSettings) RollbackResult(attempt, backup string) (dto.ServerUpgradeProgress, error) {
+	unknown := dto.ServerUpgradeProgress{Phase: "unknown"}
+	layout, blocker := configuredInstallLayout(s.cfg, s.executable())
+	if blocker != "" || (attempt == "" && backup == "") {
+		return unknown, nil
+	}
+	entries, err := selfinstall.ReadHistory(layout.HistoryPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return unknown, nil
+	}
+	if err != nil {
+		return unknown, err
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if e.Action != selfinstall.ActionUpgrade || !(attempt != "" && e.Attempt == attempt || backup != "" && e.Backup == backup) {
+			continue
+		}
+		if e.ConfirmedRollback() && e.PreviousReleaseID == version.Version {
+			return dto.ServerUpgradeProgress{Attempt: e.Attempt, Phase: "rollback", From: e.PreviousReleaseID, To: e.ReleaseID}, nil
+		}
+		break
+	}
+	return unknown, nil
+}
+
+func (s *serverSettings) Upgrade(ctx context.Context, archive io.Reader, by string, target dto.ServerUpgradeSelection) (dto.ServerUpgradeStarted, error) {
 	layout, blocker := s.installLayout()
 	if blocker != "" {
 		return dto.ServerUpgradeStarted{}, &api.ServerSettingsError{Code: api.ErrorServerUpgradeUnavailable,
@@ -83,7 +109,7 @@ func (s *serverSettings) Upgrade(ctx context.Context, archive io.Reader, by stri
 		return dto.ServerUpgradeStarted{}, errors.New("no database to snapshot")
 	}
 	installer := selfinstall.New(layout, selfinstall.NewDeps(io.Discard), &selfinstall.IO{Out: io.Discard, Err: io.Discard, Quiet: true})
-	up, err := installer.StageInService(ctx, version.Version, archive, s.snapshot, strings.TrimSpace(by))
+	up, err := installer.StageSelectedInService(ctx, version.Version, archive, s.snapshot, strings.TrimSpace(by), target.Version, target.Attempt)
 	var archiveErr *selfinstall.ArchiveError
 	var tooLarge *http.MaxBytesError
 	switch {

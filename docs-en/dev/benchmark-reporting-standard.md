@@ -163,3 +163,7 @@ it does not claim that existing automated tests already cover them:
 
 Submission notes must list the affected categories, definition or compatibility changes, verification evidence, and remaining uncovered gaps.
 Updating only this standard or the inventory does not complete feature acceptance. When adding or extending automated gates, record their actual coverage.
+
+<!-- translation-source-sha256: 6cc691705ea887a81d7152c95722f822e1a9d61f14a709982ae6f395bd815d5e -->
+<!-- translation-localized-code-block: 977144588ed733c0dadfd47e149c044f60bba423c5b93e11b83c5513e1614dff 6b511c4b3f0f41683b442a4e6cb0a145a99b4e27746207c44f3779b6d591bcdc Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->
+<!-- translation-localized-code-block: 4c924402689a27813f3d7761be0409e453871ab4f5fb56bdc20093d442152dbe 7f4166cdce26676d6792f6702d52311a6771e8c4729d36cab34b5144e363572d Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->

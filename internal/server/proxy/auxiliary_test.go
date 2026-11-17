@@ -156,16 +156,8 @@ func TestTokenizeTurnedOffIsNotForwarded(t *testing.T) {
 
 	for _, path := range []string{"/v1/tokenize", "/v1/detokenize"} {
 		rec := postGateway(p, apiKey, http.MethodPost, path, `{"model":"omni","prompt":"x","tokens":[1]}`)
-		var body struct {
-			Error struct {
-				Message string `json:"message"`
-				Type    string `json:"type"`
-			} `json:"error"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-			t.Fatalf("%s: body %s", path, rec.Body)
-		}
-		if rec.Code != http.StatusNotFound || body.Error.Type != "gpuworks_proxy" || body.Error.Message != "deployment omni does not expose POST "+path+": tokenize is turned off for it" {
+		want := `{"error":{"message":"deployment omni does not expose POST ` + path + `: tokenize is turned off for it","type":"not_found_error","code":"TOKENIZE_DISABLED","param":null,"params":{"method":"POST","model":"omni","path":"` + path + `"}}}` + "\n"
+		if rec.Code != http.StatusNotFound || rec.Body.String() != want {
 			t.Fatalf("%s = %d %s", path, rec.Code, rec.Body)
 		}
 	}
@@ -202,7 +194,7 @@ func TestTokenizeRefusals(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
 		rec := postGateway(p, apiKey, method, "/v1/tokenize", `{"model":"omni","prompt":"x"}`)
 		if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != http.MethodPost ||
-			rec.Body.String() != `{"error":{"message":"/v1/tokenize only accepts POST","type":"gpuworks_proxy"}}`+"\n" {
+			rec.Body.String() != `{"error":{"message":"/v1/tokenize only accepts POST","type":"invalid_request_error","code":"METHOD_NOT_ALLOWED","param":null,"params":{"method":"POST","path":"/v1/tokenize"}}}`+"\n" {
 			t.Fatalf("%s = %d allow=%q %s", method, rec.Code, rec.Header().Get("Allow"), rec.Body)
 		}
 	}

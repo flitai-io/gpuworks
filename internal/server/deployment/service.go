@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/packages"
 	"gpuworks.ai/gpuworks/internal/server/modelmeta"
 	"gpuworks.ai/gpuworks/internal/server/network"
@@ -18,6 +19,10 @@ type Deps struct {
 	Log   *slog.Logger
 	// Online reports whether a node's agent is connected.
 	Online func(uuid string) bool
+	// UCXNetlinkHang is the live fact a node's agent last reported about its
+	// kernel hanging UCX (NIXL): nil when it does not, was not reported, or
+	// the node is offline. Nil means no node is known to.
+	UCXNetlinkHang func(uuid string) *proto.UCXNetlinkHang
 	// NodeSync pushes a node its desired state again.
 	NodeSync interface{ SyncNode(uuid string) error }
 	// CallNode is a short RPC to a node's agent.
@@ -41,6 +46,11 @@ type Deps struct {
 	// the picked cards in that window, the race a fleet of concurrent creates
 	// hits.
 	AfterAutomaticPick func(nodeUUID string)
+	// NodeCaps is what a connected node's agent advertised, nil for an
+	// offline one (hub.Hub.NodeCaps). A preview reads it to build the command
+	// the controller will send that node (planning.TranslatesServedName); nil
+	// counts every agent as offline.
+	NodeCaps func(nodeUUID string) []string
 }
 
 // Service runs the deployment use cases over Deps. It keeps no state of its
@@ -56,16 +66,4 @@ func (s *Service) networks() *network.Service {
 		return network.New(s.d.Store, network.StoreCatalog{Store: s.d.Store})
 	}
 	return s.d.Networks
-}
-
-// onlineOf is Deps.Online, or the nodes' stored state when it is nil.
-func (s *Service) onlineOf(nodes []store.Node) func(string) bool {
-	if s.d.Online != nil {
-		return s.d.Online
-	}
-	online := make(map[string]bool, len(nodes))
-	for i := range nodes {
-		online[nodes[i].UUID] = nodes[i].State == store.NodeStateOnline
-	}
-	return func(uuid string) bool { return online[uuid] }
 }

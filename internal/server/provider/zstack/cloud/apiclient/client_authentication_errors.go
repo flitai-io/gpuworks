@@ -13,7 +13,9 @@ const (
 
 // AccessKeyManagerImpl.doAuth and RestServer.checkTime use the same HTTP 403
 // envelope for these failures. Only recognize their known details; never retain
-// or expose the remote text, which can contain an AccessKey ID.
+// or expose the remote text, which can contain an AccessKey ID. External text:
+// the ZStack Cloud API error envelope's details, read where the response is
+// decoded (client_request.go) and turned into an AuthenticationReason there.
 func authenticationReason(details string) AuthenticationReason {
 	switch details {
 	case "wrong accessKey signature":

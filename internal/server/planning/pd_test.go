@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/pdmode"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -222,12 +223,16 @@ func TestCheckPDArgsAndWarnings(t *testing.T) {
 	if err := CheckPDArgs("unknown-engine", []string{"--kv-transfer-config", "{}"}); err != nil {
 		t.Fatalf("an unknown engine composes nothing: %v", err)
 	}
-	got := PDFeatureWarnings(true, true)
-	if len(got) != 2 || got[0].Code != messages.WarningPDKVOffloadPrefillOnly || got[1].Params["feature"] != "dgpu" {
+	got := PDFeatureWarnings([]string{pdmode.RolePrefill}, true)
+	if len(got) != 2 || got[0].Code != messages.WarningPDKVOffloadPrefillOnly || got[0].Params != nil || got[1].Params["feature"] != "dgpu" {
 		t.Fatalf("warnings = %+v", got)
 	}
-	if len(PDFeatureWarnings(false, false)) != 0 {
+	if len(PDFeatureWarnings(nil, false)) != 0 {
 		t.Fatal("no feature, no warning")
+	}
+	// Offload kept on both roles is not prefill only.
+	if got := PDFeatureWarnings([]string{pdmode.RolePrefill, pdmode.RoleDecode}, false); len(got) != 0 {
+		t.Fatalf("offload on both roles warned: %+v", got)
 	}
 }
 
@@ -401,5 +406,39 @@ func TestValidatePDChecksPoliciesAgainstTheMode(t *testing.T) {
 	}
 	if _, err := ValidatePD(sglang("", "fail"), "sglang"); productCode(err) != messages.ErrorPDKVLoadFailureInvalid {
 		t.Fatalf("sglang kv_load_failure: %v", err)
+	}
+}
+
+// TestCheckPDArgsSpellings pins which spellings of the composed vLLM flags
+// CheckPDArgs refuses today: the exact flag and its --flag=value form. The
+// underscore spelling vLLM's parser also accepts passes, which the KV offload
+// backend seam leaves as it is (changing it changes native outcomes).
+func TestCheckPDArgsSpellings(t *testing.T) {
+	config := `{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}`
+	for _, tc := range []struct {
+		args    []string
+		refused bool
+	}{
+		{[]string{"--kv-transfer-config", config}, true},
+		{[]string{"--kv-transfer-config=" + config}, true},
+		{[]string{"--kv_transfer_config", config}, false},
+		{[]string{"--kv_transfer_config=" + config}, false},
+		{[]string{"--kv-offloading-size", "8"}, true},
+		{[]string{"--kv-offloading-size=8"}, true},
+		{[]string{"--kv_offloading_size", "8"}, false},
+		{[]string{"--kv-offloading-backend", "native"}, true},
+		{[]string{"--kv_offloading_backend=native"}, false},
+		{[]string{"'--kv-transfer-config'", config}, false},
+	} {
+		for _, layer := range []string{"template", "user"} {
+			layers := [][]string{tc.args, nil}
+			if layer == "user" {
+				layers = [][]string{nil, tc.args}
+			}
+			err := CheckPDArgs("vllm", layers...)
+			if refused := productCode(err) == messages.ErrorPDConnectorArgConflict; refused != tc.refused {
+				t.Fatalf("%s %v: refused=%v (%v), want %v", layer, tc.args, refused, err, tc.refused)
+			}
+		}
 	}
 }

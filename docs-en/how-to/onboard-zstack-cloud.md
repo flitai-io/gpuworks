@@ -4,9 +4,23 @@ Add an existing ZStack Cloud environment to GPUWorks, synchronize its KVM hosts 
 
 ## Version and Environment Requirements
 
-**Requires ZStack Cloud 5.4.2 or later.** The credentials form displays this notice when adding or editing ZStack Cloud.
+**Requires ZStack Cloud 4.8.0 or later.** The credentials form displays this notice when adding or editing ZStack Cloud.
 
-This minimum is based on the current implementation's source dependencies: the AK request date format requires the parsing support introduced in Cloud 5.4.0, and the GPU `allocateStatus` field was introduced in Cloud 5.4.2. Adding an environment, resource synchronization, agent installation, and GPU reservation and release have not yet been tested end to end on 5.4.2; this minimum does not mean that version has passed full compatibility validation.
+GPUWorks uses ZStack Cloud 4.8.0 as the minimum version for its integration and adapts to different versions according to their API capabilities. This minimum requirement does not mean that every later version has been tested in a real environment.
+
+GPUWorks handles physical GPUs according to the data Cloud provides:
+
+| Protocol shape | Ownership determination |
+|---|---|
+| PCI device query only | PCI device status and VM ownership |
+| GPU query without a separate allocation field | Reuses PCI status and VM ownership already included in the GPU response, without extra requests |
+| GPU query with a separate allocation field | Cloud's reported GPU allocation state |
+
+A missing allocation field does not mean that a GPU is free: PCI information must establish that the physical GPU is unoccupied before it can be used. An explicitly occupied, empty, or unknown allocation value is never made available through PCI interpretation. GPU disabling, enabling, and IOMMU group effects retain Cloud's behavior.
+
+AK request dates use a format accepted by these protocols. When CPU reservations cannot be configured per host, GPUWorks reads the global value and leaves host CPU reservations unchanged. Adding an environment confirms credential validation; resource synchronization and GPU use still require the corresponding permissions and valid states.
+
+These protocols are covered by source-based HTTP fixtures, including reservation, release, and sharing. Real-environment validation has passed on Cloud 4.8.0 Enterprise with one node and one GPU, and on Cloud 5.5.32 with one node and two GPUs: AK onboarding, synchronization, agent installation, inference, release on stop while preserving the original description, and inference after restarting. The 5.5.32 validation also covered regular and streaming inference, the browser Playground, and independent deployment and release on the two GPUs. Other versions, multiple nodes, vGPU, and GPU sharing still require their own real-environment validation.
 
 Before onboarding, confirm that:
 
@@ -41,7 +55,7 @@ Successful credential validation confirms access to the API checked at that step
 
 ## Synchronize Hosts and GPUs
 
-1. In the **Connected external platforms** list, find the environment (its External platform column shows ZStack Cloud and its Platform type column shows Private cloud) and click **Sync**. **Sync All** synchronizes every platform in the list that supports it, public cloud accounts included.
+1. In the **Connected external platforms** list, find the environment (its Vendor column shows ZStack Cloud and its Platform type column shows Private cloud) and click **Sync**. **Sync All** synchronizes every platform in the list that supports it, public cloud accounts included.
 2. Expand the environment row and check the synchronized hosts, management addresses, and GPU models and counts. Instances in this list represent KVM hosts managed by Cloud.
 3. If synchronization fails, inspect the account state and error message, fix API, permission, or version issues, and synchronize again.
 
@@ -61,3 +75,5 @@ See [Connect Nodes and Upgrade or Uninstall the Agent](connect-nodes.md) for ins
 Click **Edit** for the environment in the **Connected external platforms** list to update the name, endpoint, or AccessKey. Credential fields left blank retain their existing values; the **External platform** field cannot be changed. After saving, synchronize again to confirm that the new credentials can query resources.
 
 Credentials are encrypted at rest, and the Secret is not displayed in the edit form.
+
+<!-- translation-source-sha256: 4d2f97e1d38047cd1a35b98007e5f709641bf8413e9d08e7f9879bba6f31edb9 -->

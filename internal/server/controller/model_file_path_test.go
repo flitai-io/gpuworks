@@ -36,7 +36,7 @@ func TestCopyModelFileRejectsOccupiedSharedPath(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = f.c.CopyModelFile(context.Background(), f.model.ID,
+			_, err = f.c.Transfers().Copy(context.Background(), f.model.ID,
 				store.FileRef{StorageID: local, NodeID: f.node.ID}, store.FileRef{StorageID: f.nfs.ID}, -1)
 			var conflict *store.ModelFilePathOccupiedError
 			if !errors.As(err, &conflict) || conflict.Path != path || conflict.ModelID != owner.ID {

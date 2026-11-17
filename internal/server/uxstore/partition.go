@@ -104,7 +104,8 @@ func partitionDDL(day string) []string {
 			pd_prefill_queue_ms INTEGER NOT NULL DEFAULT -1,
 			pd_prefill_compute_ms INTEGER NOT NULL DEFAULT -1,
 			pd_prefill_instance TEXT NOT NULL DEFAULT '',
-			pd_fallback TEXT NOT NULL DEFAULT ''
+			pd_fallback TEXT NOT NULL DEFAULT '',
+			priority_class TEXT NOT NULL DEFAULT ''
 		)`, req),
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %[1]s_dep ON %[1]s(deployment_id, ts, seq)`, req),
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS %[1]s_key ON %[1]s(api_key_id, ts, seq)`, req),
@@ -175,6 +176,8 @@ var addedColumns = []struct {
 		{"pd_prefill_compute_ms", `ALTER TABLE %s ADD COLUMN pd_prefill_compute_ms INTEGER NOT NULL DEFAULT -1`},
 		{"pd_prefill_instance", `ALTER TABLE %s ADD COLUMN pd_prefill_instance TEXT NOT NULL DEFAULT ''`},
 		{"pd_fallback", `ALTER TABLE %s ADD COLUMN pd_fallback TEXT NOT NULL DEFAULT ''`},
+		// The priority class the gateway ran the request at; '' before.
+		{"priority_class", `ALTER TABLE %s ADD COLUMN priority_class TEXT NOT NULL DEFAULT ''`},
 	}},
 	{latPrefix, []struct{ name, ddl string }{
 		{"pd_prefill_ms", `ALTER TABLE %s ADD COLUMN pd_prefill_ms REAL NOT NULL DEFAULT 0`},

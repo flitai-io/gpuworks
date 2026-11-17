@@ -9,6 +9,7 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
+dom.window.HTMLElement.prototype.setPointerCapture = () => {};
 for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
@@ -104,20 +105,21 @@ test("the detail turns tokenize off and on, shows it is busy while saving, and s
   const dep = { id: 9, engine: "vllm", tokenize_enabled: true } as unknown as Deployment;
   const view = render(<I18nextProvider i18n={i18n}><TokenizeEditor dep={dep} onChanged={() => changed++} /></I18nextProvider>);
   const user = userEvent.setup({ document: dom.window.document });
-  screen.getByText("Exposed");
-
-  const toggle = screen.getByRole("switch", { name: "Expose tokenize" }) as HTMLButtonElement;
+  const toggle = screen.getByRole("switch", { name: "Expose tokenize" });
+  assert.ok(screen.getByText("Exposed").compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(view.container.querySelector('[data-status="success"] [data-slot="badge-marker"]'));
   assert.equal(toggle.getAttribute("aria-checked"), "true");
   await user.click(toggle);
   await waitFor(() => assert.deepEqual(calls, [[9, false]]));
-  await waitFor(() => assert.equal((screen.getByRole("switch", { name: "Expose tokenize" }) as HTMLButtonElement).disabled, true, "busy while saving"));
+  await waitFor(() => assert.equal(screen.getByRole("switch", { name: "Expose tokenize" }).getAttribute("aria-disabled"), "true", "busy while saving"));
   release!();
   await waitFor(() => assert.equal(changed, 1));
 
   // The detail reloads with the new state; the keyboard turns it back on.
   view.rerender(<I18nextProvider i18n={i18n}><TokenizeEditor dep={{ ...dep, tokenize_enabled: false }} onChanged={() => changed++} /></I18nextProvider>);
-  screen.getByText("Not exposed");
-  const off = screen.getByRole("switch", { name: "Expose tokenize" }) as HTMLButtonElement;
+  const off = screen.getByRole("switch", { name: "Expose tokenize" });
+  assert.ok(screen.getByText("Not exposed").compareDocumentPosition(off) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.ok(view.container.querySelector('[data-status="neutral"] [data-slot="badge-marker"]'));
   assert.equal(off.getAttribute("aria-checked"), "false");
   off.focus();
   await user.keyboard("{Enter}");

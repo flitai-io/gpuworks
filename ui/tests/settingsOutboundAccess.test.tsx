@@ -41,6 +41,13 @@ function outboundFixture(reply?: (call: Call, policy: Policy) => Response | unde
       policy = { ...policy, allow_private_hosts: body.allow_private_hosts as string[], revision: "r2" };
       return json(policy);
     }
+    if (path === "/api/v1/ai/presets" && method === "GET") return json({
+      presets: [
+        { name: "deepseek", base_url: "https://api.deepseek.com", model: "deepseek-flash", image_input: true },
+        { name: "custom", base_url: "", model: "", image_input: false },
+      ],
+      proxy_modes: ["management", "direct", "custom"],
+    });
     if (path === "/api/v1/ai/configs/test" && method === "POST") {
       const host = new URL(String(body?.base_url)).hostname;
       return json({ outcome: policy.allow_private_hosts.includes(host) ? "ok" : "blocked", base_url: body?.base_url, latency_ms: 3 });
@@ -81,7 +88,7 @@ test("the collector test can allow its endpoint without treating the browser tra
 test("an AI service edit explicitly allows its current host before testing without replacing existing permissions", async () => {
   const fixture = outboundFixture();
   render(<I18nextProvider i18n={i18n}><AIConfigModal open editing={{
-    id: 7, name: "Internal AI", preset: "custom", base_url: "http://ai.internal:8080/v1", model: "qwen", is_default: true,
+    id: 7, name: "Internal AI", preset: "custom", base_url: "http://ai.internal:8080/v1", model: "qwen", is_default: true, proxy_mode: "management", image_input: false,
   }} onClose={() => {}} onDone={() => {}} /></I18nextProvider>);
   const user = userEvent.setup();
   const dialog = screen.getByRole("dialog");
@@ -217,7 +224,7 @@ test("creating an AI service saves its explicit host permission by keyboard befo
   render(<I18nextProvider i18n={i18n}><AIConfigModal open onClose={() => {}} onDone={() => {}} /></I18nextProvider>);
   const user = userEvent.setup();
   const dialog = screen.getByRole("dialog");
-  fireEvent.change(within(dialog).getByLabelText(locale.settings.ai.name), { target: { value: "Internal AI" } });
+  fireEvent.change(await within(dialog).findByLabelText(locale.settings.ai.name), { target: { value: "Internal AI" } });
   fireEvent.change(within(dialog).getByLabelText(locale.settings.ai.baseUrl), { target: { value: "http://new-ai.internal:8080/v1" } });
   fireEvent.change(within(dialog).getByLabelText(locale.settings.ai.upstreamKey), { target: { value: "synthetic-key" } });
   const allow = await within(dialog).findByRole("checkbox", { name: /new-ai\.internal/ });
@@ -235,7 +242,7 @@ test("creating an AI service saves its explicit host permission by keyboard befo
 test("changing an AI address clears the previous host consent and an unchecked test cannot change the allowlist", async () => {
   const fixture = outboundFixture();
   render(<I18nextProvider i18n={i18n}><AIConfigModal open editing={{
-    id: 7, name: "Internal AI", preset: "custom", base_url: "http://ai.internal/v1", model: "qwen", is_default: true,
+    id: 7, name: "Internal AI", preset: "custom", base_url: "http://ai.internal/v1", model: "qwen", is_default: true, proxy_mode: "management", image_input: false,
   }} onClose={() => {}} onDone={() => {}} /></I18nextProvider>);
   const user = userEvent.setup();
   await user.click(await screen.findByRole("checkbox", { name: /ai\.internal/ }));

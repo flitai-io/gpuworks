@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	compsharedriver "gpuworks.ai/gpuworks/internal/server/provider/compshare"
 )
 
 // ErrCompshareOutOfStock marks a walk over the candidate card types in which
@@ -12,27 +14,26 @@ import (
 // and the whole walk is worth repeating later.
 var ErrCompshareOutOfStock = errors.New("compshare: every candidate create was refused for lack of supply")
 
-// compshareSupplyMarkers are the create refusals that mean "CompShare has no
+// compshareSupplyRetCodes are the create refusals that mean "CompShare has no
 // such machine right now or here", as opposed to a credential, balance or
-// request error. Each one leaves nothing rented.
-var compshareSupplyMarkers = []string{
-	"requested capacity unavailable", // driver placement found no zone with room
-	"RetCode 226604:",                // out of resources
-	"RetCode 8433:",                  // transient service blip while placing
-	"RetCode 230:",                   // machine type not configured for the zone
-	"RetCode 226641:",                // zone does not support the image
-	"RetCode 226603:",                // GPU type not supported by the image
+// request error. Each one leaves nothing rented; so does a placement that
+// found no zone with room (compsharedriver.ErrCapacityUnavailable).
+var compshareSupplyRetCodes = []compsharedriver.RetCode{
+	226604, // out of resources
+	8433,   // transient service blip while placing
+	230,    // machine type not configured for the zone
+	226641, // zone does not support the image
+	226603, // GPU type not supported by the image
 }
 
 // IsCompshareSupplyRefusal reports whether err is a CompShare create refusal
 // for lack of supply, the only kind a stock wait retries.
 func IsCompshareSupplyRefusal(err error) bool {
-	if err == nil {
-		return false
+	if errors.Is(err, compsharedriver.ErrCapacityUnavailable) {
+		return true
 	}
-	message := err.Error()
-	for _, marker := range compshareSupplyMarkers {
-		if strings.Contains(message, marker) {
+	for _, code := range compshareSupplyRetCodes {
+		if errors.Is(err, code) {
 			return true
 		}
 	}

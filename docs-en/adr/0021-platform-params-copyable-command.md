@@ -20,3 +20,5 @@ The result makes the flag column untruthful: `/engines` would claim that a key i
 - Benefits: every flag in `/engines` is trustworthy; the promise that copied command previews run is testable; adding a platform parameter requires only one dictionary row and one marker.
 - Costs and constraints: `ParamDefinition` gains a platform marker and an explicit engine list (new structure is necessary because neither "this key is not sent to the engine" nor "which engines it applies to" can be derived from existing data). The frontend can no longer group platform parameters under a layer based on "the same flag"; platform parameters render normally according to their `Group`.
 - First example: `kv_disk_limit_gib` (disk KV cache capacity limit, in GiB), marked `Automatic`. When unset, it is twice the GPU memory occupied by model weights; you can enter a value manually.
+
+<!-- translation-source-sha256: 828eff4fa613639a87ac7001f33232e7d5077ab5fe2bbae0e316f8ce56eb2dfd -->

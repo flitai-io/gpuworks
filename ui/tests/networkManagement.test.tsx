@@ -37,6 +37,7 @@ const userEvent = userEventModule.default ?? userEventModule;
 const { MemoryRouter, Route, Routes } = await import("react-router-dom");
 const { ConfigProvider } = await import("antd");
 const apiModule = await import("../src/api.ts");
+const { FeedbackHost } = await import("../src/ui-kit/feedback/index.tsx");
 const NetworksPage = (await import("../src/pages/networks/NetworksPage.tsx")).default;
 const { default: NetworkDetailDrawer } = await import("../src/pages/networks/NetworkDetailDrawer.tsx");
 const { useParams: useRouteParams } = await import("react-router-dom");
@@ -73,7 +74,7 @@ afterEach(() => {
 
 function wrap(element: React.ReactElement, path = "/", pattern = "/") {
   return render(
-    <I18nextProvider i18n={i18n}>
+    <I18nextProvider i18n={i18n}><FeedbackHost />
       <MemoryRouter initialEntries={[path]}>
         <Routes><Route path={pattern} element={element} /></Routes>
       </MemoryRouter>
@@ -136,14 +137,14 @@ const roleSwitch = (node: string, role: "serving" | "storage_sync" | "compute") 
 test("following a node's link does not also expand its row, in either node table", async () => {
   // No routes: the link only changes the location, so the table stays to be read.
   const drawer = (id: number) => render(
-    <I18nextProvider i18n={i18n}><MemoryRouter><NetworkDetailDrawer id={id} onTab={() => {}} onClose={() => {}} onChanged={() => {}} /></MemoryRouter></I18nextProvider>,
+    <I18nextProvider i18n={i18n}><FeedbackHost /><MemoryRouter><NetworkDetailDrawer id={id} onTab={() => {}} onClose={() => {}} onChanged={() => {}} /></MemoryRouter></I18nextProvider>,
   );
   // Taken once the table has settled: an earlier render's link may be gone.
   const followDoesNotExpand = (name: string) => {
     const link = screen.getAllByRole("link", { name })[0];
     const row = link.closest("tr") as HTMLElement;
     fireEvent.click(link);
-    assert.equal(row.nextElementSibling?.classList.contains("ant-table-expanded-row") ?? false, false, `${name}'s row stays folded`);
+    assert.equal(within(row).getByRole("button", { name: "Expand row" }).getAttribute("aria-expanded"), "false", `${name}'s row stays folded`);
   };
   stubManagement("admin");
   drawer(0);
@@ -163,13 +164,18 @@ test("members see the management network's per-node roles read-only", async () =
   const a = screen.getByRole("link", { name: "gpu-a" }).closest("tr")! as HTMLElement;
   assert.ok(within(a).getByText("eth0 · 172.25.0.11"));
   // A node's labels sit in its row's expanded detail.
-  await userEvent.click(within(a).getByRole("button", { name: n.detail.expand }));
+  await userEvent.click(within(a).getByRole("button", { name: /Show details|Expand row/ }));
   assert.ok(await within(a.nextElementSibling as HTMLElement).findByText("site=lab"));
   // Storage sync is allowed on gpu-a but a dedicated network carries it.
   assert.equal(roleSwitch("gpu-a", "storage_sync").getAttribute("aria-checked"), "true");
-  assert.ok(within(a).getByText(n.management.dedicated));
+  // The cell keeps a short mark that fits the role column; the full wording is its title.
+  assert.equal(within(a).getByText(n.management.dedicatedShort).getAttribute("title"), n.management.dedicated);
+  // What a switch does is on its header: a dotted, focusable title with a tooltip, no icon.
+  const header = screen.getByText(n.role.storage_sync, { selector: ".header-help" });
+  header.focus();
+  await waitFor(() => assert.ok(screen.getAllByRole("tooltip").some((tip) => tip.textContent === n.management.roleTip.storage_sync)));
   assert.equal(roleSwitch("gpu-b", "serving").getAttribute("aria-checked"), "false");
-  for (const role of ["serving", "storage_sync", "compute"] as const) assert.ok(roleSwitch("gpu-b", role).hasAttribute("disabled"));
+  for (const role of ["serving", "storage_sync", "compute"] as const) assert.equal(roleSwitch("gpu-b", role).getAttribute("aria-disabled"), "true");
   assert.equal(screen.queryAllByRole("checkbox").length, 0, "no bulk selection for members");
   assert.equal(screen.queryByRole("button", { name: n.management.bulk.apply }), null);
   for (const name of [n.actions.edit, n.actions.delete, n.actions.attach]) {
@@ -310,7 +316,7 @@ test("an administrator filters by search and label, selects the result and sets 
 
   const choose = async (role: "serving" | "compute", label: string) => {
     await userEvent.click(screen.getByRole("combobox", { name: `${n.management.bulk.title} ${n.role[role]}` }));
-    const options = await screen.findAllByTitle(label);
+    const options = await screen.findAllByRole("option", { name: label });
     await userEvent.click(options[options.length - 1]);
   };
   await choose("compute", n.management.bulk.deny);
@@ -328,15 +334,16 @@ test("the label filter narrows the table and a failed bulk change shows the erro
   stub("updateManagementRoles", async () => { throw new Error("node gone"); });
   wrap(<NetworkDetailPage />, "/networks/0", "/networks/:id");
   await screen.findByRole("link", { name: "gpu-a" });
-  for (const button of screen.getAllByRole("button", { name: n.detail.expand })) await userEvent.click(button);
+  for (const button of screen.getAllByRole("button", { name: /Show details|Expand row/ })) await userEvent.click(button);
   await screen.findAllByText("site=lab");
   await userEvent.click(screen.getByRole("combobox", { name: n.management.labelFilter }));
-  await userEvent.click((await screen.findAllByTitle("pool=cpu")).at(-1)!);
+  await userEvent.click((await screen.findAllByRole("option", { name: "pool=cpu" })).at(-1)!);
+  await userEvent.keyboard("{Escape}");
   await waitFor(() => assert.equal(screen.queryByRole("link", { name: "gpu-a" }), null));
   assert.ok(screen.getByRole("link", { name: "gpu-b" }));
   await userEvent.click(screen.getByRole("button", { name: "Select filtered (1)" }));
   await userEvent.click(screen.getByRole("combobox", { name: `${n.management.bulk.title} ${n.role.serving}` }));
-  await userEvent.click((await screen.findAllByTitle(n.management.bulk.allow)).at(-1)!);
+  await userEvent.click((await screen.findAllByRole("option", { name: n.management.bulk.allow })).at(-1)!);
   await userEvent.click(screen.getByRole("button", { name: n.management.bulk.apply }));
   await userEvent.click(screen.getAllByRole("button", { name: n.management.bulk.apply }).at(-1)!);
   assert.ok(await screen.findByText(/node gone/));

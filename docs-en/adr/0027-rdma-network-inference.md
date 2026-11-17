@@ -27,3 +27,5 @@ Tests on the same day establish the basis for inference: bootstrap need not use 
 - Inference also selects storage RDMA ports with the same speed; you remove them from the node list. Nodes with fixed settings no longer automatically track newly appearing ports, relying on warnings such as `hca_unusable` and "Restore Automatic" as safeguards.
 - The built-in tool covers only hosts with RDMA userspace libraries installed but without perftest. Hosts without the userspace libraries still need perftest installed (the package manager installs the libraries alongside it). The built-in version introduces a `libpci.so.3` dependency and an `IBVERBS_1.12` minimum (rdma-core 33+), enforced by `make check-perftest`.
 - Deployments do not set NCCL's GID index: the RoCE v2 IPv4 GID automatically selected by NCCL 2.21+ matches the tests. Custom images with earlier versions must set `NCCL_IB_GID_INDEX` themselves.
+
+<!-- translation-source-sha256: f539670be7c0277a886fbd0cc834b8f953b042905f21636d84a2f742481ebb9c -->

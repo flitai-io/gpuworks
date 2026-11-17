@@ -10,11 +10,10 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-const fieldQuickParamsUnset = "quick_params_unset"
-
-const fieldExtraArgs = "extra_args"
+const fieldExtraArgs = deploy.ParamFieldExtraArgs
 
 const FieldContainerMounts = "container_mount_rows"
 
@@ -96,30 +95,21 @@ func launchErrorField(fallback string, productErr *messages.ProductError) string
 }
 
 // launchErrorFieldFor answers the form field a plain launch-materialization
-// error belongs to, classified by the message shape it has always had.
+// error belongs to: the field its rule names (deploy.ParamError), else the
+// caller's.
 func launchErrorFieldFor(fallback string, err error) string {
-	message := err.Error()
-	switch {
-	case strings.HasPrefix(message, "invalid quick_params_unset"):
-		return fieldQuickParamsUnset
-	case strings.HasPrefix(message, "argument text"), strings.HasPrefix(message, "parse argument JSON"):
-		return fieldExtraArgs
-	case strings.HasPrefix(message, "invalid quick_params: "):
-		// Every rule behind that prefix starts its sentence with the key it
-		// judges; the exceptions are typed as ProductErrors with a key param.
-		key, _, _ := strings.Cut(strings.TrimPrefix(message, "invalid quick_params: "), " ")
-		if key != "" {
-			return key
-		}
+	var paramErr *deploy.ParamError
+	if errors.As(err, &paramErr) && paramErr.Key != "" {
+		return paramErr.Key
 	}
 	return fallback
 }
 
 // validateMountRowRequest checks the extra mounts a request states against the
-// same rules the assembled launch holds them to, plus the two the form used to
-// own: a host path must be an absolute non-root directory, and the deployment's
-// own mount targets are reserved. Rows the form left half-empty are not sent,
-// so only complete rows are judged here.
+// same rules the assembled launch holds them to, plus the ones the form used
+// to own: a host path must be an absolute non-root directory, the deployment's
+// own mount targets are reserved, and a row mounts exactly one source. Rows
+// the form left half-empty are not sent, so only complete rows are judged here.
 func validateMountRowRequest(req *dto.DeployRequest, reservedTargets []string) error {
 	rows, ok := requestExtraMounts(req)
 	if !ok {
@@ -138,6 +128,9 @@ func validateMountRowRequest(req *dto.DeployRequest, reservedTargets []string) e
 		if source == "" && target == "" {
 			continue
 		}
+		if row.ModelID != 0 && (strings.TrimSpace(row.HostPath) != "" || strings.TrimSpace(row.Volume) != "") {
+			return productError(messages.ErrorFieldInvalid, "a mount row names a model and a host path or volume", map[string]any{"detail": "a mount row mounts one source: a host path, a volume or a model"})
+		}
 		if !absoluteNonRoot(target) {
 			return productError(messages.ErrorMountContainerPath, "a mount's container path must be an absolute non-root path", map[string]any{"target": row.ContainerPath})
 		}
@@ -153,6 +146,24 @@ func validateMountRowRequest(req *dto.DeployRequest, reservedTargets []string) e
 			}
 		}
 		targets = append(targets, target)
+	}
+	return nil
+}
+
+// ValidateMountModels refuses an extra-mount row naming a model the store
+// does not have. A row only names it by id, so a model deleted after the form
+// listed it would otherwise surface as a launch that waits for it forever.
+func (s *Service) ValidateMountModels(req *dto.DeployRequest) error {
+	rows, ok := requestExtraMounts(req)
+	if !ok {
+		return nil
+	}
+	for _, id := range (deploy.ContainerOverrides{ExtraMounts: rows}).ModelMountIDs() {
+		if _, err := s.d.Store.GetModel(id); errors.Is(err, store.ErrNotFound) {
+			return productError(messages.ErrorMountModelNotFound, fmt.Sprintf("mounted model %d does not exist", id), map[string]any{"model_id": id})
+		} else if err != nil {
+			return err
+		}
 	}
 	return nil
 }

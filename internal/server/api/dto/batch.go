@@ -28,7 +28,10 @@ type Batch struct {
 	CompletionWindow string `json:"completion_window"`
 	// Model is the served name every request of the batch is sent to, replacing
 	// the model of its lines; absent when each line names its own.
-	Model         string            `json:"model,omitempty"`
+	Model string `json:"model,omitempty"`
+	// PriorityClass is the request priority class the batch's requests run
+	// at: the one it was created with, the batch class otherwise.
+	PriorityClass string            `json:"priority_class"`
 	RequestCounts BatchRequestCount `json:"request_counts"`
 	Metadata      map[string]string `json:"metadata"`
 	// Failure says why a failed batch failed.
@@ -99,6 +102,9 @@ type BatchDictionary struct {
 	// refused; one that waits for someone to act (asleep_held, offline,
 	// failed, stopped) is accepted with a warning.
 	Models []BatchModel `json:"models"`
+	// PriorityClass is the request priority class a batch created without
+	// one runs at; a create may name any class (GET /priority-classes).
+	PriorityClass string `json:"priority_class"`
 }
 
 // BatchWindowHours bounds a batch's completion window in whole hours and

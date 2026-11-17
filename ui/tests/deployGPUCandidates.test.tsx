@@ -82,13 +82,16 @@ test("a whole-GPU allocation warning stays selectable and removable", async () =
   assert.deepEqual(form.getFieldValue("gpu_indexes"), []);
 });
 
-test("inventory schedulability gates selection regardless of evaluated resource availability", () => {
+// A busy card stays selectable (the deployment waits for it); a card that
+// takes no work is selectable only when the server evaluated it as hosting
+// this request - a partition beside a process outside the platform.
+test("inventory schedulability or the server's verdict for this request gates selection", () => {
   const view = render(<Grid value={candidates(true)} />);
   for (const schedulable of [false, true]) {
     for (const available of [false, true]) {
       view.rerender(<Grid value={candidates(available)} cards={gpus.map((gpu) => ({ ...gpu, schedulable }))} />);
       const button = screen.getByRole("button", { name: "0" }) as HTMLButtonElement;
-      assert.equal(button.disabled, !schedulable);
+      assert.equal(button.disabled, !schedulable && !available);
       assert.equal(button.classList.contains("is-degraded"), schedulable && !available);
     }
   }
@@ -143,7 +146,7 @@ test("dropdown availability is informational and missing device indexes remain d
     for (const available of [false, true]) {
       const cards = gpus.map((gpu) => ({ ...gpu, schedulable }));
       const result = gpuSelectOptions(cards, tc, { nodeUUID: node.uuid, candidates: candidates(available), t });
-      assert.equal(result[0].disabled, !schedulable);
+      assert.equal(result[0].disabled, !schedulable && !available);
       assert.equal(result[0].value, 0);
       if (schedulable && !available) assert.match(result[0].label, /This GPU has no free resources/);
     }

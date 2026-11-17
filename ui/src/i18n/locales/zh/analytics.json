@@ -60,7 +60,9 @@
     "deletedDeployment": "已删除的部署",
     "deploymentId": "部署 #{{id}}",
     "batch": "批处理（{{user}}）",
-    "batchAnonymous": "批处理"
+    "batchAnonymous": "批处理",
+    "evaluation": "评测（{{user}}）",
+    "evaluationAnonymous": "评测"
   },
   "usage": {
     "filters": {
@@ -79,7 +81,8 @@
     "source": {
       "api": "API",
       "playground": "Playground",
-      "batch": "批处理"
+      "batch": "批处理",
+      "evaluation": "评测"
     },
     "keyPrefixMissing": "API 令牌 {{prefix}} 在所选时间段内没有用量，列表未做筛选；可以换更长的时间段。",
     "cards": {
@@ -147,6 +150,18 @@
     }
   },
   "quality": {
+    "byClass": {
+      "title": "按请求优先级",
+      "help": "按网关给请求的优先级类分别统计。高优先级持续占满引擎时，低优先级可能长时间排队，全局指标看不出来，这里分开看。「未记录」是启用优先级之前的请求，类未知。",
+      "class": "优先级",
+      "requests": "请求数",
+      "success": "成功率",
+      "ttftP50": "TTFT P50",
+      "ttftP95": "TTFT P95",
+      "e2eP50": "端到端 P50",
+      "e2eP95": "端到端 P95",
+      "unknown": "未记录"
+    },
     "cards": {
       "requests": "请求数",
       "completed": "正常完成 {{count}}",
@@ -237,9 +252,9 @@
       "memPerCard": "平均每卡 {{value}}",
       "power": "总功耗均值",
       "powerPerCard": "平均每卡 {{value}}",
-      "idle": "长期闲置卡数",
+      "idle": "低负载卡数",
       "idleSub": "利用率均值 < {{threshold}}% · {{total}} 张卡中 {{measured}} 张有利用率采样，{{missing}} 张无采样",
-      "idleTip": "统计期内利用率均值低于 {{threshold}}% 的卡，既包括已分配但几乎没有流量的卡，也包括未分配给任何部署的卡。",
+      "idleTip": "统计期内利用率均值低于 {{threshold}}% 的卡，只看负载、不看归属：已分配但几乎没有流量的卡、未分配给任何部署的卡，以及被平台外的程序占用但负载低的卡都算在内。",
       "idleNeedsDetail": "筛选到 {{limit}} 张卡以内后统计"
     },
     "chart": {
@@ -259,13 +274,13 @@
         "node": "明细（按节点）",
         "gpu": "明细（按卡）"
       },
-      "hint": "点击表头排序；底色高亮的是利用率均值低于 {{threshold}}% 的闲置卡",
+      "hint": "点击表头排序；底色高亮的是利用率均值低于 {{threshold}}% 的低负载卡",
       "unit": {
         "model": "卡型",
         "node": "节点",
         "gpu": "卡"
       },
-      "idle": "闲置",
+      "idle": "低负载",
       "removed": "已移除",
       "removedCount": "{{count}} 张已移除",
       "utilAvg": "利用率均值",

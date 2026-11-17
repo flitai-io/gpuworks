@@ -47,7 +47,7 @@
     "(EngineCore_DP0 pid=214) ERROR 10-09 07:30:12 [core.py:708] ValueError: Bfloat16 is only supported on GPUs with compute capability of at least 8.0. Your Tesla T4 GPU has compute capability 7.5. You can use float16 instead by explicitly setting the `dtype` flag in CLI, for example: --dtype=half.",
     "(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}"
   ],
-  "expect_signature": "dtype_unsupported",
+  "expect_signature": "DTYPE_UNSUPPORTED",
   "expect_keywords": [
     [
       "--dtype",

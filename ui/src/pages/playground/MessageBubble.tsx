@@ -59,6 +59,7 @@ const MessageBubble = memo(function MessageBubble({ message: item }: { message: 
           <Metric label="Prefill" help={t("metrics.prefill")} value={formatNumber(metrics.prefillTPS, " tok/s")} />
           <Metric label="Token" help={t(metrics.approximate ? "metrics.tokensApproximate" : "metrics.tokens")} value={approx((metrics.outputTokens ?? item.usage?.completion_tokens)?.toLocaleString() || "—")} />
           {cacheHit !== undefined && <Metric label="Cache hit" value={cacheHit} />}
+          {item.priorityClass && <Metric label={t("metrics.priorityLabel")} help={t("metrics.priority")} value={item.priorityClass} />}
         </div>
       )}
     </article>

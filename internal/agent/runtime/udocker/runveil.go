@@ -140,11 +140,14 @@ func (d *Driver) runveilCommand(spec runtime.WorkloadSpec, entrypoint, cmd []str
 // the run user's own groups plus every group that owns a bound accelerator
 // device node. The udocker CLI path gets the same set from `runuser -G`.
 func (d *Driver) runveilIdentity(spec runtime.WorkloadSpec) (runveil.Identity, error) {
+	if err := d.prepareDeviceAccess(context.Background(), spec); err != nil {
+		return runveil.Identity{}, err
+	}
 	owned, err := identityGroupIDs(d.runUser, d.runGID)
 	if err != nil {
 		return runveil.Identity{}, err
 	}
-	missing, _, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, owned, os.Stat, user.LookupGroupId)
+	missing, _, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, owned, os.Stat, user.LookupGroupId, false)
 	if err != nil {
 		return runveil.Identity{}, err
 	}

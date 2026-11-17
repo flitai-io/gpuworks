@@ -55,7 +55,16 @@
     "count": "{{filtered}}/{{total}} 个计算节点",
     "search": "按名称、主机名或 ID 搜索"
   },
+  "source": {
+    "manual": "手动添加",
+    "unknown": "来源读取失败",
+    "cluster": "集群 {{name}}",
+    "clusterOf": "集群 {{name}}（{{provider}}）",
+    "standaloneCluster": "Kubernetes 集群",
+    "selected": "所选来源"
+  },
   "column": {
+    "source": "来源",
     "status": "状态",
     "name": "名称",
     "createdAt": "创建时间",
@@ -131,8 +140,8 @@
     "installDirPlaceholder": "留空使用默认目录（/opt/gpuworks 或 ~/gpuworks）",
     "installDirTooltip": "没有 docker 的节点使用 runveil 运行时，镜像和容器根文件系统也放在这里，所以要选本地文件系统；不允许文件名带冒号的网络卷（例如 RunPod 的 /workspace）不能用。",
     "useSystemd": "通过 systemd 启动",
-    "useSystemdTooltip": "开启时把 agent 注册为 systemd 服务 gpuworks-agent：开机自启、崩溃自动拉起。关闭时 agent 以 nohup 后台运行，安装目录里的 agent-restart.sh 用于手动重启；主机上已有的 gpuworks-agent 服务和其他目录里的 agent 都不受影响，换一个安装目录即可在同一台主机上再加一个 agent。主机没有 systemd 或没有 root/免密 sudo 时总是 nohup；macOS 节点使用 launchd，不受此项影响。",
-    "useSystemdOffHelp": "agent 不随开机启动，进程退出后也不会自动拉起",
+    "useSystemdHelp": "开启：注册为 systemd 服务 gpuworks-agent，开机自启、崩溃自动拉起。关闭：以 nohup 后台运行，用安装目录里的 agent-restart.sh 手动重启，不动主机上已有的 agent 服务和其他目录的 agent（换个安装目录可在同一主机再加一个 agent）。没有 systemd 或 root/免密 sudo 时总用 nohup；macOS 用 launchd。",
+    "useSystemdOff": "agent 不随开机启动，进程退出后也不会自动拉起",
     "agentListenAddress": "Agent 监听地址",
     "agentListenAddressHelp": "agent 在这台主机（或容器）里监听的地址，即 --listen。",
     "offlineInstructions": "节点访问不到管理节点，所以从离线包安装：下载离线包，把它传到节点上（scp、Web 终端或 JupyterLab 上传均可），在它所在的目录执行下面的命令。离线包里没有 token，所有节点通用。",
@@ -165,12 +174,10 @@
       "item": "检查项",
       "status": "状态",
       "detail": "详情",
-      "ok": "通过",
-      "warn": "警告",
-      "error": "失败",
       "okCount": "通过 {{count}}",
       "warnCount": "警告 {{count}}",
-      "errorCount": "失败 {{count}}"
+      "errorCount": "失败 {{count}}",
+      "skipCount": "未检查 {{count}}"
     }
   },
   "rejects": {
@@ -218,10 +225,26 @@
     "autoCurrent": "auto（当前 {{runtime}}）",
     "copyConfigureCommand": "复制配置命令",
     "configureCopied": "配置命令已复制",
+    "copySocketCommand": "复制命令",
+    "socketCommandCopied": "命令已复制",
+    "socketCommandTitle": "复制命令",
     "fallback": {
-      "gpu_plugin_missing": "检测到 {{from}}，但未安装 {{plugin}}，已改用 runveil。建议安装 {{plugin}}；安装后节点空闲时自动切回 {{from}}。", "daemon_not_ready": "{{from}} 已安装但 agent 启动时没有响应（可能仍在启动或正忙），已暂用 runveil。agent 每分钟重试；{{from}} 响应后，节点空闲时自动切回。",
+      "gpu_plugin_missing": "检测到 {{from}}，但未安装 {{plugin}}，已改用 runveil。建议安装 {{plugin}}；安装后节点空闲时自动切回 {{from}}。",
+      "daemon_not_ready": "{{from}} 已安装但 agent 启动时没有响应（可能仍在启动或正忙），已暂用 runveil。agent 每分钟重试；{{from}} 响应后，节点空闲时自动切回。",
       "gpu_runtime_unconfigured": "检测到 {{from}} 且已安装 {{plugin}}，但 {{from}} 未配置 GPU 支持，已改用 runveil。建议配置后重启 {{from}}；之后节点空闲时自动切回。",
-      "gpu_ready": "{{from}} 已可用，可切换；节点空闲时将自动切换。"
+      "gpu_ready": "{{from}} 已可用，可切换；节点空闲时将自动切换。",
+      "socket_permission_denied": "{{from}} 的 socket {{socket}} 属于{{group}}，agent 的账号 {{account}} 无权打开，已暂用 runveil。请把 {{account}} 加入该组再重启 agent（它只有启动时的组）。",
+      "socket_restart_pending": "{{account}} 已加入{{group}}（{{from}} 的 socket {{socket}} 属于该组），但 agent 是在此之前启动的，仍只有启动时的组，重启 agent 之前节点继续使用 runveil。",
+      "socketSameName": "{{account}} 所在的另一个组也叫 {{name}}（gid {{sameGid}}），很可能来自 NIS、LDAP 等目录服务；socket 属于本机自己的 {{name}} 组（gid {{gid}}），只有这个组能打开它。",
+      "socketRestartHow": "重启 agent：sudo systemctl restart gpuworks-agent；不用 systemd 的安装，先停掉 agent，再以 {{account}} 运行状态目录下的 agent-restart.sh。",
+      "socketGroup": "组 {{group}}（gid {{gid}}）",
+      "socketGid": "gid 为 {{gid}} 的组",
+      "socket_group_held": "agent 已在{{group}}中，{{from}} 的 socket {{socket}} 仍拒绝账号 {{account}}，已暂用 runveil。拒绝来自 socket 权限位或 SELinux、AppArmor，加组无效。",
+      "socket_root_group": "{{from}} 的 socket {{socket}} 属于 root 组，账号 {{account}} 不应加入，已暂用 runveil。请给 socket 设专用组并把 {{account}} 加入，再重启 agent。",
+      "socket_unknown": "agent 的账号 {{account}} 无权打开 {{from}} 的 socket {{socket}}，且读不到 socket 所属的组，已暂用 runveil。",
+      "socketRestartEffect": "重启后 agent 改用 {{from}}。runveil 上的实例不会迁移：agent 停止后其进程仍在运行，重启后的 agent 又会在 {{from}} 中再启动一份，请先停掉该节点上的部署。",
+      "socketOptOut": "如果 {{account}} 本就不该用 {{from}}，把节点运行时设为 runveil（udocker），提示和每分钟的复查随之停止。",
+      "socketAccountUnknown": "（未知）"
     }
   },
   "accelerator": {
@@ -300,6 +323,37 @@
     "online": "在线",
     "offline": "离线",
     "connecting": "连接中"
+  },
+  "gpuIsolation": {
+    "tag": "GPU 设备为软隔离",
+    "summary": "这台节点上的实例能看到节点的全部 GPU 设备，由 CUDA_VISIBLE_DEVICES 把每个实例限制在分到的卡上。不遵守 CUDA_VISIBLE_DEVICES、或直接打开 /dev/nvidiaN 的程序可以访问其他卡。",
+    "reason": {
+      "cdi_names_missing": "节点上没有 CDI spec 为这 {{cards}} 张 NVIDIA 卡命名（常见于 HAMi 等插件替换了 NVIDIA 设备插件），实例会拿到全部卡，只靠 CUDA 限定到自己的卡。"
+    },
+    "fixesTitle": "恢复严格隔离（任选其一）",
+    "fix": {
+      "gpu_operator_device_plugin": "集群使用 GPU Operator，且没有用别的 GPU 设备插件：保持启用 Operator 自带的设备插件，它会写出逐卡的 CDI 名称。不要和 HAMi 或其他设备插件同时运行，两者会重复上报同一批 GPU。",
+      "gpu_operator_toolkit_legacy_append": "把 Operator 的 toolkit 切到 legacy 模式，按卡序号隔离。spec.toolkit.env 已经存在时用这条：往列表末尾追加，不动原有条目。",
+      "gpu_operator_toolkit_legacy_create": "上一条命令因为 spec.toolkit.env 还不存在而失败时改用这条：它创建这个列表（列表已存在时会被替换）。",
+      "host_toolkit_legacy": "工具包直接装在节点上（没用 GPU Operator）：执行下面的命令切到 legacy 模式，再重启容器运行时（containerd，或 rke2-agent、k3s 等对应服务）。"
+    },
+    "copy": "复制命令",
+    "copied": "命令已复制",
+    "manualCopyTitle": "复制命令"
+  },
+  "ucxNetlinkHang": {
+    "tag": "UCX/NIXL 在此节点会卡住（PD 分离不可用）",
+    "summary": "该节点的内核返回 IPv6 路由 dump 的方式让 UCX 1.20-1.22（NIXL 自带）读不出结束标记，用 NIXL 传 KV 的 PD 引擎在这里会一直起不来，且有一个线程空转占满 CPU。",
+    "kernel": "内核：{{kernel}}",
+    "impact": "普通部署不受影响；NIXL 模式、经以太网的 PD 部署在此节点上会被拒绝。关闭该节点的 IPv6 即可解除，这会让整台主机不再使用 IPv6（只关单个网卡无效）。检查每 15 分钟重做一次，解除后提示会自动消失。",
+    "fixesTitle": "解除卡死（在该节点上执行）",
+    "fix": {
+      "disable_ipv6_now": "立即关闭整机 IPv6（重启前有效）：",
+      "disable_ipv6_persist": "重启后也保持关闭："
+    },
+    "copy": "复制命令",
+    "copied": "命令已复制",
+    "manualCopyTitle": "复制命令"
   },
   "gpuProbeFailed": {
     "tag": "厂商工具未响应",
@@ -385,6 +439,18 @@
       "recovered": "带外恢复成功，Agent 已重新上线",
       "probeComplete": "带外探测已完成",
       "probeFailed": "带外探测失败：{{detail}}"
+    },
+    "skipped": {
+      "RECOVERY_SKIPPED_DISABLED": "本服务器已关闭带外恢复。",
+      "RECOVERY_SKIPPED_IN_PROGRESS": "该节点的恢复已在进行中。",
+      "RECOVERY_SKIPPED_ONLINE": "节点在线。",
+      "RECOVERY_SKIPPED_NEVER_CONNECTED": "节点从未连接过，无需恢复。",
+      "RECOVERY_SKIPPED_STOPPED": "节点的云实例已不存在。",
+      "RECOVERY_SKIPPED_NO_SSH_CREDENTIAL": "节点没有 SSH 凭据。",
+      "RECOVERY_SKIPPED_GRACE_PERIOD": "节点刚离线，正在等待其重新连接。",
+      "RECOVERY_SKIPPED_BACKOFF": "正在等待下一次恢复尝试。",
+      "RECOVERY_SKIPPED_SERVER_DIAL_BACKOFF": "服务器仍在尝试拨号连接 agent。",
+      "RECOVERY_SKIPPED_REDIAL": "云厂商更换了 agent 的地址，服务器改为拨号到新地址。"
     }
   },
   "telemetry": {
@@ -464,7 +530,7 @@
       "description": "{{reason}}\n\n放到这里的部署都会在容器启动时失败。平台因此停止了该节点的调度，如果原因未解决，下一次上报时还会再次停止。",
       "reason": {
         "gpu_plugin_missing": "容器运行时 {{runtime}} 需要厂商 GPU 插件 {{plugin}}，而它没有安装，因此容器拿不到这台节点的加速卡。",
-        "gpu_runtime_unconfigured": "{{runtime}} 在运行，但没有配置 GPU 支持，因此容器拿不到这台节点的加速卡。装好厂商插件后还要让 {{runtime}} 用上它（NVIDIA：nvidia-ctk runtime configure --runtime=docker，然后重启 Docker）。"
+        "gpu_runtime_unconfigured": "{{runtime}} 没有配置 GPU 支持，容器拿不到加速卡。请让 {{runtime}} 用上厂商插件（NVIDIA：nvidia-ctk runtime configure --runtime=docker，再重启 Docker）。"
       }
     },
     "state": {
@@ -604,76 +670,110 @@
     "card": "加速卡 {{index}}（{{bdf}}）",
     "runningProcess": "卡上仍有进程 {{pid}} {{name}}，请先停止。",
     "rerun": "无对应的单条命令，请重新执行诊断。",
+    "notChecked": "未检查：{{reason}}",
     "finding": {
-      "disk_low": {
+      "DISK_LOW": {
         "label": "磁盘空间不足",
         "summary": "{{path}} 可用 {{avail}}，占总容量 {{total}} 的 {{percent}}%。",
         "impact": "镜像拉取、模型下载可能失败。"
       },
-      "runtime_unavailable": {
+      "RUNTIME_UNAVAILABLE": {
         "label": "容器运行时无响应",
         "summary": "已选用的容器运行时查询失败。",
         "impact": "本节点无法启动推理实例。"
       },
-      "runtime_provision_failed": {
+      "RUNTIME_PROVISION_FAILED": {
         "label": "运行时初始化失败",
         "summary": "本节点的容器运行时无法完成初始化，最近一次尝试失败，错误见下。",
         "impact": "在问题修复前，本节点上的所有部署都会失败。代理会自动重试：首次失败后等待 30 秒，之后最长间隔 5 分钟。"
       },
-      "runtime_state_untraversable": {
+      "RUNTIME_STATE_UNTRAVERSABLE": {
         "label": "运行时用户无法访问代理目录",
         "summary": "{{directory}} 不允许工作负载的运行用户 {{user}} 进入，因此它无法访问代理目录 {{stateDir}}。",
         "impact": "本节点上每次启动工作负载都会因运行时自身文件“权限不足”而失败。请执行 `{{fix}}` 开放该目录（只授予进入权限，不能列目录或写入），或把代理重装到不在该目录之下的安装目录。"
       },
-      "path_noexec": {
+      "PATH_NOEXEC": {
         "label": "路径挂载为 noexec",
         "summary": "{{path}} 位于 {{point}}（{{fstype}}），该挂载带有 noexec。",
         "impact": "运行时无法从该路径启动程序。请把代理安装到允许执行的文件系统上，或去掉 noexec 重新挂载。"
       },
-      "path_read_only": {
+      "PATH_READ_ONLY": {
         "label": "路径挂载为只读",
         "summary": "{{path}} 位于 {{point}}（{{fstype}}），该挂载为只读。",
         "impact": "代理无法在此写入模型、镜像或运行时状态。请改用可写目录，或以读写方式重新挂载。"
       },
-      "path_ephemeral": {
+      "PATH_EPHEMERAL": {
         "label": "数据位于容器层",
         "summary": "{{path}} 位于本容器自身的文件系统层（{{point}} 上的 {{fstype}}），而不是数据卷。",
         "impact": "容器被重建时，模型、镜像和运行时状态都会丢失。实例有本地文件系统的持久卷时，请把代理安装到那里；不允许文件名带冒号的网络卷（如 RunPod 的 /workspace）放不了 runveil 运行时的镜像。"
       },
-      "accelerator_probe_failed": {
+      "ACCELERATOR_PROBE_FAILED": {
         "label": "加速卡探测失败",
         "summary": "厂商工具执行失败。",
         "impact": "本节点的加速卡不可分配。"
       },
-      "accelerator_unrecognized": {
+      "ACCELERATOR_UNRECOGNIZED": {
         "label": "有未识别的加速卡设备",
         "summary": "本机上有属于已支持厂商的 PCI 设备，但不符合该厂商任何一条识别规则，通常是我们还没见过的新型号。",
         "impact": "这些设备不会出现在加速卡列表里，也不参与调度。请把下面的 PCI 标识发给我们以便补充识别规则。"
       },
-      "cuda_init_failed": {
+      "CUDA_INIT_FAILED": {
         "label": "CUDA 初始化失败",
         "summary": "CUDA 驱动初始化失败。复核命令输出 0 表示初始化成功。",
         "impact": "本节点无法运行 CUDA 推理。"
       },
-      "multi_gpu_check_failed": {
+      "MULTI_GPU_CHECK_FAILED": {
         "label": "多卡通信检查失败",
         "summary": "多卡通信检查未通过。",
         "impact": "多卡张量并行可能无法启动。"
       },
-      "macos_unsupported": {
+      "MACOS_UNSUPPORTED": {
         "label": "macOS 版本过低",
         "summary": "Mac 节点需要 macOS {{required}} 或更高版本，这台 Mac 的版本见证据。",
         "impact": "环境包无法在此运行，本节点不能部署推理实例。升级 macOS 后重新诊断。"
       },
-      "macos_idle_sleep": {
+      "MACOS_IDLE_SLEEP": {
         "label": "空闲时会睡眠",
         "summary": "按当前电源的设置，这台 Mac 空闲一段时间后会睡眠。有实例运行时代理会阻止空闲睡眠，没有实例时则不会。",
         "impact": "Mac 睡眠后节点离线，新部署无法调度到这里，直到它被唤醒。需要它常驻时，可在接电源时关闭空闲睡眠：sudo pmset -c sleep 0（平台不修改此设置）。"
       },
-      "peer_memory_missing": {
+      "PEER_MEMORY_MISSING": {
         "label": "GPUDirect RDMA 不可用",
         "summary": "这台宿主有 RDMA 网卡，但未加载 peer memory 模块 {{module}}，网卡无法注册卡的显存。",
         "impact": "实例仍可正常运行，但经 RDMA 传 KV 的 PD 模式不能放到这个节点。在节点上执行证据中的修复命令（同时设置开机自动加载），然后重新诊断。"
+      },
+      "MOUNT_TABLE_UNREADABLE": {
+        "label": "未检查挂载",
+        "summary": "读不到挂载表，没有检查任何路径是否挂成 noexec、只读或在容器层上。"
+      },
+      "CUDA_CHECK_NOT_PASSED": {
+        "label": "未检查：CUDA 未通过",
+        "summary": "这项检查需要 CUDA 驱动，而 CUDA 检查没有通过。先解决它，再重新诊断。"
+      },
+      "CHECK_PREREQUISITE_MISSING": {
+        "label": "未检查：缺少前提",
+        "summary": "宿主缺少这项检查需要的东西，证据里写明了缺什么。"
+      },
+      "CHECK_TOOL_FAILED": {
+        "label": "未检查：命令失败",
+        "summary": "这项检查读取的命令失败或没有返回可用结果，证据里是它的输出。"
+      },
+      "CHECK_CANCELLED": {
+        "label": "未检查：诊断已取消",
+        "summary": "诊断在检查这些卡之前被取消了。"
+      },
+      "CHECK_BUDGET_EXHAUSTED": {
+        "label": "未检查：超出时间",
+        "summary": "诊断在检查这些卡之前用完了时间，它们不算通过。"
+      },
+      "CARD_UNADDRESSABLE": {
+        "label": "未检查：没有设备号",
+        "summary": "厂商工具没有给这些卡可用于检查的设备号。"
+      },
+      "UCX_NETLINK_HANG": {
+        "label": "UCX/NIXL 在此内核上会卡住",
+        "summary": "该内核返回 IPv6 路由 dump 的方式让 UCX 1.20-1.22（NIXL 自带）读不出结束标记，一直阻塞。",
+        "impact": "用 NIXL 传 KV 的 PD 引擎在这个节点上会一直起不来。执行证据里的修复命令（它会关闭整机 IPv6；第二条让重启后仍保持关闭），然后重新诊断。"
       }
     },
     "facts": "信息",
@@ -779,7 +879,16 @@
     "historyItem": "批次 {{id}} · {{version}}",
     "runTitle": "Agent 升级批次 {{id}}",
     "processed": "已处理 {{processed}} / {{total}} 个节点",
-    "results": "成功 {{succeeded}} · 失败 {{failed}} · 跳过 {{skipped}} · 已取消 {{cancelled}} · 已中断 {{interrupted}} · 未确认 {{unconfirmed}} · 等待 {{queued}} · 执行中 {{active}}",
+    "result": {
+      "succeeded": "成功 {{value}}",
+      "failed": "失败 {{value}}",
+      "skipped": "跳过 {{value}}",
+      "cancelled": "已取消 {{value}}",
+      "interrupted": "已中断 {{value}}",
+      "unconfirmed": "未确认 {{value}}",
+      "queued": "等待 {{value}}",
+      "active": "执行中 {{value}}"
+    },
     "processingNotSuccess": "处理进度包含失败和跳过的节点；100% 不表示全部升级成功。",
     "blocked": "{{name}} 的上次升级仍待核实，后续升级已阻止。",
     "unconfirmedHelp": "未确认的旧操作仍可能替换 Agent。请先检查节点及日志，再核实释放占用；新建其他批次不能绕过。",
@@ -926,33 +1035,33 @@
       "pass": "通过",
       "warn": "告警",
       "fail": "失败",
-      "skip": "跳过",
-      "pending": "等待",
+      "skip": "未检查",
       "na": "不适用",
       "stale": "陈旧"
     },
     "skip": {
-      "busy": "卡正在服务",
-      "foreign": "被平台外进程占用",
-      "deferred": "平台还不知道节点在跑什么",
-      "not_held": "这张卡没有借给平台（归 Kubernetes 调度）",
-      "unavailable": "宿主暂时不能检查",
-      "probe_failed": "厂商工具本轮没应答"
+      "CARD_CHECK_SKIPPED_BUSY": "卡正在服务",
+      "CARD_CHECK_SKIPPED_FOREIGN": "被平台外进程占用",
+      "CARD_CHECK_SKIPPED_DEFERRED": "平台还不知道节点在跑什么",
+      "CARD_CHECK_SKIPPED_NOT_HELD": "这张卡没有借给平台（归 Kubernetes 调度）",
+      "CARD_CHECK_SKIPPED_UNAVAILABLE": "宿主暂时不能检查",
+      "CARD_CHECK_SKIPPED_PROBE_FAILED": "厂商工具本轮没应答",
+      "CARD_CHECK_NOT_RUN_YET": "agent 启动后还没运行过"
     },
     "reason": {
-      "foreign_processes": "有平台外进程",
-      "peer_memory_missing": "未加载 peer memory 模块"
+      "FOREIGN_PROCESSES": "有平台外进程",
+      "PEER_MEMORY_MISSING": "未加载 peer memory 模块"
     },
     "card": "卡 {{index}}",
     "removed": "已移除",
     "lastChecked": "{{ago}}检查",
     "banner": {
-      "offline": "节点离线，下面是最后已知的结果，不代表现在。",
+      "offline": "节点离线，下面是最后已知的结果。",
       "stale": "超过两个上报周期没有新的上报，下面的结果可能已过时。",
       "noReports": "该节点的 agent 版本过旧，不上报卡的健康检查。升级 agent 后可以看到全部检查。",
       "waiting": "还没有收到该节点的上报。"
     },
-    "summary": "{{cards}} 张卡 · {{fail}} 项失败 · {{warn}} 项告警",
+    "summary": "{{cards}} 张卡 · {{fail}} 项失败 · {{warn}} 项告警 · {{skip}} 项未检查",
     "recheck": "重新检查这张卡",
     "recheckDone": "运行时检查通过",
     "recheckFailed": "运行时检查失败：{{reason}}",
@@ -967,7 +1076,7 @@
       "evidence": "依据",
       "probe": "复核命令",
       "noRuns": "agent 启动后这项检查还没做过。",
-      "agentSince": "agent 自 {{time}} 启动，只知道此后的结果。",
+      "agentSinceHelp": "agent 自 {{time}} 启动，这里只有此后的结果。",
       "noEvidence": "没有问题，未记录依据。"
     },
     "records": {
@@ -1007,7 +1116,7 @@
     "attempts": "已尝试恢复 {{count}} 次",
     "recoveryError": "最近恢复错误",
     "exposure": "公网入口：最近观测",
-    "lastObserved": "观测于 {{time}}，不代表当前可用。",
+    "lastObserved": "观测于 {{time}}",
     "result": "观测结果",
     "vantage": "检查位置",
     "target": "检查地址",
@@ -1056,7 +1165,7 @@
       "offline": "当前没有 Agent 控制会话，无法请求节点当前证据。"
     },
     "guidance": {
-      "snapshot_scope": "配置快照不代表运行中进程已经采用该配置。请核对指定 state 目录、启动参数和环境变量覆盖；不要分享 TOKEN 或完整进程参数。",
+      "snapshot_scope": "运行中的进程不一定采用了这份配置快照，请核对指定的 state 目录、启动参数和环境变量覆盖；不要分享 TOKEN 或完整进程参数。",
       "http_scope": "HTTP 健康响应不能证明 WebSocket、Agent 认证、推理流式输出或用户侧网络正常。 SSH 中的 curl 使用 SSH 会话环境，可能与运行中 Agent 的代理和 NO_PROXY 设置不同。",
       "test_from_node": "在故障节点执行 gpuworks-agent smoke --state <实际 state 目录>，并查看同一目录下的 agent.log。",
       "manual_address_update": "本检查不修复地址。地址变更需要管理员核对平台记录和 Agent 配置；此诊断不提供原位地址迁移。长期连接应使用稳定地址。",
@@ -1137,7 +1246,7 @@
           "unknown": "未观测到数据通道状态"
         },
         "outcome": {
-          "ok": "所列观察已完成，不代表全链路健康",
+          "ok": "所列观察已完成",
           "failed": "记录的连接尝试失败",
           "invalid_configuration": "连接配置无效",
           "not_applicable": "此连接方向不适用",
@@ -1190,6 +1299,96 @@
       },
       "elapsed": "观察到的阶段耗时",
       "milliseconds": "{{count}} ms"
+    }
+  },
+  "doctorChecks": {
+    "rerun": "重新诊断",
+    "checkedAt": "本次诊断：{{time}}",
+    "result": "检查结果",
+    "evidence": "依据与下一步",
+    "vantage": "检查位置",
+    "target": "目标地址",
+    "source": "证据来源",
+    "observedAt": "证据观测时间",
+    "unknown": "未提供观测时间",
+    "status": {
+      "pass": "通过",
+      "warn": "告警",
+      "fail": "失败",
+      "skip": "未检查",
+      "na": "不适用"
+    },
+    "stage": {
+      "ssh": "SSH 取证通道",
+      "installation": "Agent 安装",
+      "process": "Agent 进程",
+      "connection": "连接建立",
+      "authentication": "身份认证",
+      "host": "主机与磁盘检查",
+      "runtimes": "运行时检查",
+      "accelerators": "GPU 与驱动检查",
+      "finding": "检查发现"
+    },
+    "vantageName": {
+      "node": "计算节点",
+      "control_plane": "管理节点（Server）"
+    },
+    "sourceName": {
+      "ssh": "SSH 本次采集",
+      "tcp_probe": "本次 TCP 探测",
+      "http_probe": "本次节点侧 HTTP 探测",
+      "agent_rpc": "本次 Agent 自检"
+    },
+    "summary": {
+      "fail": "诊断完成，存在失败项，请查看原因与处理建议。",
+      "warn": "诊断完成，存在需要关注的项目。",
+      "skip": "诊断完成，但部分检查没有运行，请查看原因。",
+      "pass": "诊断完成，请查看检查结果和详细信息。",
+      "na": "诊断完成，没有适用于这个节点的检查。"
+    },
+    "code": {
+      "CREDENTIALS_UNAVAILABLE": "缺少可用的 SSH 登录信息，暂时无法登录计算节点执行检查",
+      "CREDENTIAL_ERROR": "无法读取已保存的 SSH 凭据，请检查节点的 SSH 连接配置。",
+      "SSH_UNAVAILABLE": "SSH 连接不可用，请核对 SSH 地址、凭据和网络。",
+      "SSH_CONNECTED": "本次 SSH 连接成功；这仅证明 SSH 取证通道可用。",
+      "INSPECTION_UNAVAILABLE": "无法读取节点信息，请检查 SSH 账号权限及节点上的必要工具。",
+      "NOT_INSTALLED": "目标安装目录中没有 Agent 程序，请核对安装目录和安装结果。",
+      "INSTALLED": "目标安装目录中存在 Agent 程序。",
+      "NOT_RUNNING": "本次检查未发现目标 Agent 服务或进程，请检查服务状态。",
+      "RUNNING": "本次检查发现目标安装目录对应的 Agent 服务或进程正在运行。",
+      "ADMINISTRATOR_REQUIRED": "节点接入取证需要管理员权限，请使用管理员账号执行诊断。",
+      "INVALID_ADDRESS": "缺少有效的目标连接地址，请检查节点连接配置。",
+      "TCP_CONNECTED": "目标 TCP 端口已连通",
+      "DNS": "目标名称解析失败，请检查发起端的 DNS 配置。",
+      "CONNECT": "目标连接失败，请检查地址、端口及网络路径。",
+      "REFUSED": "目标 TCP 连接被拒绝，请检查监听地址、服务状态及拒绝策略。",
+      "TLS": "TLS 建立失败，请检查证书、系统时间及目标协议。",
+      "TIMEOUT": "连接超时，尚不能确定阻断位置；请检查两端之间的路由及访问策略。",
+      "CANCELLED": "本次检查已取消，未得到完整结果。",
+      "TRANSPORT": "连接传输阶段发生错误，请检查两端连接记录。",
+      "IDENTITY_UNVERIFIED": "无法确认安装配置属于当前节点，未执行节点侧网络探测；请核对节点身份与安装目录。",
+      "HTTP_CONNECTED": "计算节点可访问管理节点的健康检查接口",
+      "HTTP_ERROR": "Server 健康检查接口返回异常 HTTP 状态，请检查目标地址、服务及代理配置。",
+      "TOOL_MISSING": "节点缺少 curl，无法执行本次 HTTP 探测。",
+      "AUTHENTICATION_NOT_CHECKED": "本次仅检查可达性，没有执行 Agent 身份认证，因此无法判断认证结果。",
+      "REQUIRES_AGENT": "需要 Agent 已连接后才能执行检查。",
+      "NOT_REPORTED": "Agent 未返回此项结构化结果，无法判断；可查看原始报告。",
+      "INFORMATION_COLLECTED": "已取得此项详细信息；具体异常列在检查列表中。"
+    }
+  },
+  "placementPolicy": {
+    "title": "放置策略",
+    "loadFailed": "无法加载放置策略设置。",
+    "saveFailed": "设置未保存：{{detail}}",
+    "empty": "此节点没有放置策略设置。",
+    "notApplicable": "当前在此节点上不生效：{{reason}}",
+    "share_with_foreign": {
+      "label": "允许分区与平台外进程共卡",
+      "help": "显存够时，带显存上限的 dGPU 分区可以放到同时被平台外进程使用的卡上；总是先尝试没有这类进程的卡。显存隔离，算力与带宽不隔离。关闭后已运行的实例不受影响，但重新放置（重启、故障替换、扩容）按新设置；滚动重启会停住等待，而不会丢副本。"
+    },
+    "reason": {
+      "NODE_PLACEMENT_POLICY_NO_PARTITION_BACKEND": "此节点没有就绪的 dGPU 分区后端；在有之前此设置不生效。",
+      "NODE_PLACEMENT_POLICY_AGENT_TOO_OLD": "请升级此节点的 agent，使其在共用卡上持续跟踪平台外进程；在此之前此设置不生效。"
     }
   }
 }

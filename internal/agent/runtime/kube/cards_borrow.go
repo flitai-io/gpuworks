@@ -287,6 +287,28 @@ func (p *cardPool) deletePods(ctx context.Context, names []string) {
 	}
 }
 
+// releaseAllHeld deletes every hold pod of this node, returning every card
+// it claims to Kubernetes, regardless of this pool's own in-memory belief
+// about which cards are held, idle or stale: the agent calls this only
+// when it is leaving the node for good (ReleaseCardsIfNodeUnselected), so
+// nothing is left to borrow these cards again, and nothing is waited for
+// (waitReleased would spend the whole shutdown budget on a kubelet that is
+// free to take its time once the agent is gone anyway).
+func (p *cardPool) releaseAllHeld(ctx context.Context) error {
+	pods, err := p.holdPods(ctx)
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(pods))
+	for _, pod := range pods {
+		if pod.Metadata.DeletionTimestamp == nil {
+			names = append(names, pod.Metadata.Name)
+		}
+	}
+	p.deletePods(ctx, names)
+	return nil
+}
+
 // returnUnused deletes the hold pods of borrowed cards nobody uses, keeping
 // the ones in keep, and waits until the kubelet has freed their cards: the
 // next borrow counts a card free only once no pod is allocated it.

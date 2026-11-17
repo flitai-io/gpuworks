@@ -15,29 +15,33 @@ type benchmarkTargetSnapshot struct {
 	TargetKind string `json:"target_kind"`
 	// Entry is gateway or instance for a managed target; Role is the PD role
 	// of a directly measured instance, whose result is then not end-to-end.
-	Entry          string                 `json:"entry,omitempty"`
-	Role           string                 `json:"role,omitempty"`
-	DeploymentID   uint                   `json:"deployment_id,omitempty"`
-	DeploymentName string                 `json:"deployment_name,omitempty"`
-	InstanceUUID   string                 `json:"instance_uuid,omitempty"`
-	ServedName     string                 `json:"served_name,omitempty"`
-	Model          string                 `json:"model"`
-	ModelSourceID  string                 `json:"model_source_id,omitempty"`
-	BaseURL        string                 `json:"base_url,omitempty"`
-	LoadOrigin     string                 `json:"load_origin"`
-	Engine         string                 `json:"engine,omitempty"`
-	Image          string                 `json:"image,omitempty"`
-	CommandMode    string                 `json:"command_mode,omitempty"`
-	Entrypoint     []string               `json:"entrypoint,omitempty"`
-	Argv           []string               `json:"argv,omitempty"`
-	Env            map[string]string      `json:"env,omitempty"`
-	DockerArgs     []string               `json:"docker_args,omitempty"`
-	GPUIndexes     []int                  `json:"gpu_indexes,omitempty"`
-	GPUs           []benchmarkSnapshotGPU `json:"gpus,omitempty"`
-	NumGPUs        int                    `json:"num_gpus"`
-	TensorParallel int                    `json:"tensor_parallel,omitempty"`
-	NodeID         uint                   `json:"node_id,omitempty"`
-	NodeName       string                 `json:"node_name,omitempty"`
+	Entry          string `json:"entry,omitempty"`
+	Role           string `json:"role,omitempty"`
+	DeploymentID   uint   `json:"deployment_id,omitempty"`
+	DeploymentName string `json:"deployment_name,omitempty"`
+	InstanceUUID   string `json:"instance_uuid,omitempty"`
+	ServedName     string `json:"served_name,omitempty"`
+	Model          string `json:"model"`
+	ModelSourceID  string `json:"model_source_id,omitempty"`
+	BaseURL        string `json:"base_url,omitempty"`
+	LoadOrigin     string `json:"load_origin"`
+	Engine         string `json:"engine,omitempty"`
+	// PriorityScheduling says whether the measured instance was launched
+	// with its engine's priority scheduling, so a requested class orders its
+	// requests; absent for an external endpoint and runs from before it.
+	PriorityScheduling *bool                  `json:"priority_scheduling,omitempty"`
+	Image              string                 `json:"image,omitempty"`
+	CommandMode        string                 `json:"command_mode,omitempty"`
+	Entrypoint         []string               `json:"entrypoint,omitempty"`
+	Argv               []string               `json:"argv,omitempty"`
+	Env                map[string]string      `json:"env,omitempty"`
+	DockerArgs         []string               `json:"docker_args,omitempty"`
+	GPUIndexes         []int                  `json:"gpu_indexes,omitempty"`
+	GPUs               []benchmarkSnapshotGPU `json:"gpus,omitempty"`
+	NumGPUs            int                    `json:"num_gpus"`
+	TensorParallel     int                    `json:"tensor_parallel,omitempty"`
+	NodeID             uint                   `json:"node_id,omitempty"`
+	NodeName           string                 `json:"node_name,omitempty"`
 }
 
 type benchmarkSnapshotGPU struct {
@@ -148,6 +152,8 @@ func (a *apiHandlers) benchmarkTargetSnapshot(targetKind, entry, baseURL, model,
 		}
 	}
 	snapshot.Engine = spec.Engine
+	scheduling := deploy.SpecRunsPriority(leader.DesiredStateJSON)
+	snapshot.PriorityScheduling = &scheduling
 	snapshot.Image = spec.Image
 	snapshot.CommandMode = spec.CommandMode
 	snapshot.Entrypoint = append([]string(nil), spec.Entrypoint...)

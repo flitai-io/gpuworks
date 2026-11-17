@@ -1,4 +1,5 @@
-import { DatePicker, Select } from "antd";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "./ui/select";
+import { DatePicker, Select as AntSelect } from "antd";
 import type { Dayjs } from "dayjs";
 import dayjs from "dayjs";
 import { useState } from "react";
@@ -18,12 +19,14 @@ interface Props {
   // The quick ranges to offer, in QUICK_RANGES order; all of them when unset.
   quickRanges?: readonly QuickRangeKey[];
   size?: "small";
+  deploymentDetail?: boolean;
+  className?: string;
 }
 
 const LIVE_OPTION = "live";
 const CUSTOM_OPTION = "custom";
 
-export default function TimeRangePicker({ value, onChange, liveLabel, quickRanges, size }: Props) {
+export default function TimeRangePicker({ value, onChange, liveLabel, quickRanges, size, deploymentDetail = false, className = "inline-flex items-center gap-2" }: Props) {
   const { t } = useTranslation("deployments");
   // Picking 自定义 only reveals the range picker; the selection is emitted
   // once the user confirms concrete dates there.
@@ -52,15 +55,19 @@ export default function TimeRangePicker({ value, onChange, liveLabel, quickRange
   };
 
   return (
-    <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
-      <Select
-        size={size}
-        style={{ width: liveLabel ? 110 : 130 }}
-        value={selectValue}
-        options={options}
-        onChange={handleSelect}
-        aria-label={t("timeRange.ariaLabel")}
-      />
+    <span className={className}>
+      {deploymentDetail ? (
+        <Select size={size === "small" ? "sm" : "md"} value={showCustomPicker ? CUSTOM_OPTION : selectValue} onValueChange={handleSelect}>
+          <SelectTrigger className="min-w-0" wrapperClassName="time-range-select"
+            style={{ width: liveLabel ? 110 : 130 }} aria-label={t("timeRange.ariaLabel")} />
+          <SelectContent animated={false}>
+            {options.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      ) : (
+        <AntSelect size={size} style={{ width: liveLabel ? 110 : 130 }} value={selectValue}
+          options={options} onChange={handleSelect} aria-label={t("timeRange.ariaLabel")} />
+      )}
       {showCustomPicker && (
         <DatePicker.RangePicker
           size={size}

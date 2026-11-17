@@ -38,3 +38,14 @@ type CloudResource struct {
 	SSHUser string `json:"-"`
 	SSHPort int    `json:"-"`
 }
+
+// GPUDevice keeps the host identity alongside the shared GPU inventory.
+type GPUDevice struct {
+	HostUUID string
+	GPU      CloudGPU
+}
+
+type CPUReservation struct {
+	Value                 int64
+	HostOverrideAvailable bool
+}

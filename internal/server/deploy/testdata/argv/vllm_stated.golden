@@ -37,7 +37,7 @@
   "--prefix-caching-hash-algo",
   "xxhash",
   "--speculative-config",
-  "{\"method\":\"draft_model\",\"model\":\"example\",\"num_speculative_tokens\":1}",
+  "{\"method\":\"example\",\"model\":\"example\",\"num_speculative_tokens\":1}",
   "-O3",
   "--async-scheduling",
   "--cpu-offload-gb",

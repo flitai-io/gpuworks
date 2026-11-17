@@ -87,6 +87,7 @@ func (a *apiHandlers) playgroundModels(w http.ResponseWriter, r *http.Request) {
 			ID: dep.ServedName, Label: dep.ServedName, Operations: playgroundOperations(contract, dep.ServedName),
 			InputModalities: modelView.InputModalities, ContextLength: model.ContextLength,
 			Sleeping: sleeping, WakesOnRequest: sleeping && planning.RequestWakes(dep, candidate.instances), DeploymentID: dep.ID, TemplateID: dep.TemplateID, TemplateSpecSource: dep.TemplateSpecSource, TemplateSpecName: dep.TemplateSpecName, PublicDataPlane: true,
+			RequestPriority: true, PriorityScheduling: dep.PriorityScheduling,
 			ExtraParameterPresets: playgroundPresets(playgroundThinkingSwitchFor(dep.Engine, dep.ServedName, model, hasChat)),
 		})
 	}

@@ -1,0 +1,87 @@
+{
+  "materialize": {
+    "quick": {
+      "performance_mode": "balanced",
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "gpu_memory_utilization": 0.9
+    },
+    "role_quick": {
+      "performance_mode": "balanced",
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "gpu_memory_utilization": 0.9
+    }
+  },
+  "launch": {
+    "command": [
+      "vllm",
+      "serve",
+      "/model",
+      "--served-model-name",
+      "qwen",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "30000",
+      "--tensor-parallel-size",
+      "1",
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"MooncakeConnector\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"tcp\"},\"kv_load_failure_policy\":\"fail\",\"kv_role\":\"kv_consumer\"}"
+    ],
+    "env": {
+      "GLOO_SOCKET_IFNAME": "lo",
+      "HF_HUB_OFFLINE": "1",
+      "NCCL_SOCKET_IFNAME": "lo",
+      "NO_PROXY": "localhost,127.0.0.1,::1,0.0.0.0,10.0.0.5",
+      "TRANSFORMERS_OFFLINE": "1",
+      "VLLM_HOST_IP": "10.0.0.5",
+      "no_proxy": "localhost,127.0.0.1,::1,0.0.0.0,10.0.0.5"
+    },
+    "shm_bytes": 17179869184,
+    "requested_features": {
+      "command_known": true,
+      "prefill_decode_disaggregation": true
+    },
+    "reverse_params": {
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "gpu_memory_utilization": 0.9
+    },
+    "reverse_residual": [
+      "--served-model-name",
+      "qwen",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "30000",
+      "--tensor-parallel-size",
+      "1",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"MooncakeConnector\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"tcp\"},\"kv_load_failure_policy\":\"fail\",\"kv_role\":\"kv_consumer\"}"
+    ]
+  },
+  "export": {
+    "args": [
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9"
+    ]
+  },
+  "unsettable": [
+    {
+      "source": "argv",
+      "value": "{\"kv_connector\":\"MooncakeConnector\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"tcp\"},\"kv_load_failure_policy\":\"fail\",\"kv_role\":\"kv_consumer\"}",
+      "unsettable": false
+    }
+  ]
+}

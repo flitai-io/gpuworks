@@ -12,11 +12,12 @@ func TestCatalogUsesTwoLevelNVIDIAClassification(t *testing.T) {
 		category string
 		arch     string
 	}{
-		"NVIDIA B300":         {10.3, CategoryDataCenter, "Blackwell"},
-		"NVIDIA H100":         {9.0, CategoryDataCenter, "Hopper"},
-		"GeForce RTX 4090":    {8.9, CategoryWorkstation, "Ada"},
-		"GeForce RTX 2080 Ti": {7.5, CategoryWorkstation, "Turing"},
-		"NVIDIA V100":         {7.0, CategoryDataCenter, "Volta"},
+		"NVIDIA B300":          {10.3, CategoryDataCenter, "Blackwell"},
+		"NVIDIA H100":          {9.0, CategoryDataCenter, "Hopper"},
+		"NVIDIA RTX Spark N1X": {12.1, CategoryWorkstation, "Blackwell"},
+		"GeForce RTX 4090":     {8.9, CategoryWorkstation, "Ada"},
+		"GeForce RTX 2080 Ti":  {7.5, CategoryWorkstation, "Turing"},
+		"NVIDIA V100":          {7.0, CategoryDataCenter, "Volta"},
 	}
 	for _, gpu := range List() {
 		expected, exists := want[gpu.Name]

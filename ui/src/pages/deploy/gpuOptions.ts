@@ -1,19 +1,20 @@
 import type { TFunction } from "i18next";
 import type { GPU } from "../../api";
 import { gpuStateReason } from "../../components/GPUHealth";
-import { cardKey, cardOrdinal, cardPickable } from "../../nodes/cardIdentity";
-import { gpuResourceHint, type GPUResourceContext } from "./gpuResourceHint";
+import { cardKey, cardOrdinal } from "../../nodes/cardIdentity";
+import { gpuPickable, gpuResourceHint, type GPUResourceContext } from "./gpuResourceHint";
 
 /**
  * The options of a GPU multi-select for one node. Every card is listed so
  * the operator sees the whole node; one that cannot be picked (no device
- * number, or the server says it takes no work) is greyed with the reason.
+ * number, or the server says it takes no work and cannot host this request)
+ * is greyed with the reason.
  * Evaluated numbered cards keep their index so an invalidated selection
  * remains removable. Unnumbered cards retain their own distinct keys.
  */
 export function gpuSelectOptions(gpus: GPU[] | undefined, tc: TFunction, context?: GPUResourceContext): { value: number | string; label: string; disabled: boolean }[] {
   return (gpus ?? []).map((gpu) => {
-    const pickable = cardPickable(gpu);
+    const pickable = gpuPickable(gpu, context);
     const reason = pickable ? gpuResourceHint(gpu, context)?.text : gpuStateReason(tc, gpu);
     const base = `GPU ${cardOrdinal(gpu)} · ${gpu.name}`;
     return {

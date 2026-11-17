@@ -1,8 +1,8 @@
 import type { TFunction } from "i18next";
-import type { CardCheckState } from "../../api";
+import type { CheckStatus } from "../../api";
 
 // Wording for card checks. Every value here comes from the server (check ids,
-// states, reasons); this only names them in the reader's language.
+// statuses, codes); this only names them in the reader's language.
 
 export function checkName(t: TFunction, id: string): string {
   return t(`cardHealth.check.${id}`, { ns: "nodes", defaultValue: id });
@@ -12,16 +12,19 @@ export function checkHelp(t: TFunction, id: string): string {
   return t(`cardHealth.checkHelp.${id}`, { ns: "nodes", defaultValue: "" });
 }
 
-export function stateName(t: TFunction, state: CardCheckState | "stale"): string {
-  return t(`cardHealth.state.${state}`, { ns: "nodes", defaultValue: state });
+export function statusName(t: TFunction, status: CheckStatus | "stale"): string {
+  return t(`cardHealth.state.${status}`, { ns: "nodes", defaultValue: status });
 }
 
-/** Why a check warned, failed or was skipped, in words. */
-export function reasonText(t: TFunction, state: CardCheckState, reason?: string): string {
-  if (!reason) return "";
-  if (state === "skip") return t(`cardHealth.skip.${reason}`, { ns: "nodes", defaultValue: reason });
-  if (reason === "foreign_processes" || reason === "peer_memory_missing") return t(`cardHealth.reason.${reason}`, { ns: "nodes" });
-  return t(`gpuHealth.code.${reason}.label`, { ns: "common", defaultValue: reason });
+/** The codes a card check reports beyond the accelerator health codes. */
+const checkCodes = new Set(["FOREIGN_PROCESSES", "PEER_MEMORY_MISSING"]);
+
+/** What a check found, or why it was skipped, in words; the code itself when this client does not know it. */
+export function codeText(t: TFunction, status: CheckStatus, code?: string): string {
+  if (!code) return "";
+  if (status === "skip") return t(`cardHealth.skip.${code}`, { ns: "nodes", defaultValue: code });
+  if (checkCodes.has(code)) return t(`cardHealth.reason.${code}`, { ns: "nodes" });
+  return t(`gpuHealth.code.${code}.label`, { ns: "common", defaultValue: code });
 }
 
 export function periodText(t: TFunction, seconds: number): string {

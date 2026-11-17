@@ -59,7 +59,7 @@
     "Last error:",
     "Error while creating shared memory segment /dev/shm/nccl-v2jS20 (size 9637888)"
   ],
-  "expect_signature": "shm_insufficient",
+  "expect_signature": "SHM_INSUFFICIENT",
   "expect_keywords": [
     [
       "shm-size",

@@ -17,6 +17,11 @@ type candidate struct {
 	// bootstrap server on concurrent modes), read from its schedule record.
 	kvHost string
 	kvPort int
+	// routedAt is one more than the routing generation (routingGeneration)
+	// the route snapshot holding this candidate was built at, 0 for a
+	// candidate read another way: while the generation has not moved, the
+	// candidate's row is still what it was read as (instanceRowsUnchanged).
+	routedAt uint64
 }
 
 type instanceState struct {

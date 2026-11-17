@@ -61,3 +61,12 @@ test("warmup recovery shows readable progress without claiming measured requests
  assert.ok(screen.getByText("warmup recovery exhausted: engine restarting"));
  assert.equal(screen.queryByText("正在预热，尚未开始正式采样"),null);
 });
+
+test("a coded failure is rendered from its code in the reader's language, not from the English message", async () => {
+	const zh = (await import("../src/i18n/locales/zh/evaluations.json", { with: { type: "json" } })).default as { benchmarkError: Record<string, string> };
+	i18n.addResource("zh", "evaluations", "benchmarkError.BENCHMARK_DATASET_LOAD_FAILED", zh.benchmarkError.BENCHMARK_DATASET_LOAD_FAILED);
+	const failure = { code: "BENCHMARK_DATASET_LOAD_FAILED", params: { dataset: "multiturn" }, message: "load the built-in multiturn dataset: unexpected EOF" };
+	render(<I18nextProvider i18n={i18n}><BenchmarkCurveNotice active={false} loading={false} hasResponse hasSamples={false} runState="failed" completed={0} runError={failure.message} runFailure={failure} onRetry={() => {}} /></I18nextProvider>);
+	assert.ok(screen.getByText("内置数据集 multiturn 加载失败，评测在发出请求前已终止。"));
+	assert.equal(screen.queryByText(/unexpected EOF/), null);
+});

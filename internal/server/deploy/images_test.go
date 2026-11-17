@@ -45,6 +45,20 @@ func TestPPUDoesNotFallBackToCUDAImage(t *testing.T) {
 }
 
 func TestResolveImageDefaultOverride(t *testing.T) {
+	// The override is process-wide: restore it so later tests (the profile
+	// goldens among them) see the engine's own default image.
+	enginesMu.RLock()
+	previous, had := defaultImages["sglang"]
+	enginesMu.RUnlock()
+	t.Cleanup(func() {
+		enginesMu.Lock()
+		defer enginesMu.Unlock()
+		if had {
+			defaultImages["sglang"] = previous
+		} else {
+			delete(defaultImages, "sglang")
+		}
+	})
 	SetDefaultImage("sglang", "example/sglang:test")
 	if got := ResolveImage(ImageTarget{Engine: "sglang", Vendor: "nvidia"}); got != "example/sglang:test" {
 		t.Fatalf("default image override = %q", got)

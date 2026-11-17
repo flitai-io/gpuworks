@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/obsingest"
 	"gpuworks.ai/gpuworks/internal/server/proxy"
 	"gpuworks.ai/gpuworks/internal/server/tsdb"
 )
@@ -15,7 +16,7 @@ import (
 // proto.MetricSample -> tsdb.Sample round trip unchanged.
 func TestProxyMetricsSinkAdaptsSamplesToIngestMetrics(t *testing.T) {
 	fake := &fakeTSDBStore{}
-	obs := &observability{tsdb: fake, now: time.Now, deployCache: map[string]deploymentLookup{}}
+	obs := &observability{obsingest.New(obsingest.Stores{TSDB: fake})}
 	sink := proxyMetricsSink(obs)
 
 	sink([]tsdb.Sample{

@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -233,14 +234,14 @@ func (d *Driver) call(ctx context.Context, creds provider.Credentials, params ma
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("compshare: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &APIError{Status: resp.StatusCode, Message: strings.TrimSpace(string(body))}
 	}
 	var out ucloudResp
 	if err := json.Unmarshal(body, &out); err != nil {
 		return nil, fmt.Errorf("compshare: decode response: %w", err)
 	}
 	if out.RetCode != 0 {
-		return nil, fmt.Errorf("compshare: API RetCode %d: %s", out.RetCode, out.Message)
+		return nil, &APIError{Status: resp.StatusCode, RetCode: out.RetCode, Message: out.Message}
 	}
 	return &out, nil
 }
@@ -341,7 +342,7 @@ func (d *Driver) CreateInstance(ctx context.Context, creds provider.Credentials,
 		}
 		selected, ok := selectCapacitySpec(capacity.Specs, gpuCount, cpu, memoryMB, cpuExplicit, memoryExplicit)
 		if !ok {
-			placementErrs = append(placementErrs, fmt.Errorf("compshare: requested capacity unavailable in %s/%s: gpu=%s x%d", region, zone, params["GpuType"], gpuCount))
+			placementErrs = append(placementErrs, fmt.Errorf("%w in %s/%s: gpu=%s x%d", ErrCapacityUnavailable, region, zone, params["GpuType"], gpuCount))
 			continue
 		}
 		params["CPU"] = strconv.Itoa(selected.CPU)
@@ -405,14 +406,8 @@ func (e placementErrors) Error() string {
 func (e placementErrors) Unwrap() []error { return e }
 
 func isCreateTransientError(err error) bool {
-	if err == nil {
-		return false
-	}
-	s := strings.ToLower(err.Error())
-	// 8433 is CompShare's "Service error, please retry" capacity/backend
-	// blip: it was observed (2026-09 CI) to make a whole zone's capacity
-	// answers vanish for a query round, so it must ride the same retry.
-	return strings.Contains(s, "retcode 226645") || strings.Contains(s, "retcode 8433") || strings.Contains(s, "service unavailable") || strings.Contains(s, "http 5")
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.transient()
 }
 
 type resourceCapacityParams struct {
@@ -511,11 +506,8 @@ func selectCapacitySpec(specs []capacitySpec, gpuCount, cpu, memoryMB int, cpuEx
 }
 
 func isNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "not found") || strings.Contains(message, "not exist") || strings.Contains(message, "does not exist") || strings.Contains(message, "不存在") || strings.Contains(message, "已删除")
+	var apiErr *APIError
+	return errors.Is(err, errInstanceNotFound) || (errors.As(err, &apiErr) && apiErr.notFound())
 }
 
 func normalizeGPUType(model string) string {

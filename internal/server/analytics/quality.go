@@ -65,6 +65,7 @@ func (s *Service) Quality(ctx context.Context, q Query, deploymentID uint) (dto.
 	}
 	series := make([]rollup.Quality, len(sp.buckets))
 	byDep := map[uint]*rollup.Quality{}
+	byClass := map[string]*rollup.Quality{}
 	var total rollup.Quality
 	for i, part := range parts {
 		rows, err := s.Stats.Quality(ctx, part, deploymentID)
@@ -85,10 +86,25 @@ func (s *Service) Quality(ctx context.Context, q Query, deploymentID uint) (dto.
 				byDep[row.DeploymentID] = cur
 			}
 			cur.Add(row.Quality)
+			class := byClass[row.PriorityClass]
+			if class == nil {
+				class = &rollup.Quality{}
+				byClass[row.PriorityClass] = class
+			}
+			class.Add(row.Quality)
 			total.Add(row.Quality)
 		}
 	}
-	out := dto.QualityAnalytics{Totals: qualityFigures(total), Series: make([]dto.QualityFigures, len(series)), Rows: []dto.QualityRow{}}
+	out := dto.QualityAnalytics{Totals: qualityFigures(total), Series: make([]dto.QualityFigures, len(series)), Rows: []dto.QualityRow{}, Classes: []dto.QualityClassRow{}}
+	for name, q := range byClass {
+		out.Classes = append(out.Classes, dto.QualityClassRow{PriorityClass: name, QualityFigures: qualityFigures(*q)})
+	}
+	sort.Slice(out.Classes, func(i, j int) bool {
+		if out.Classes[i].Requests != out.Classes[j].Requests {
+			return out.Classes[i].Requests > out.Classes[j].Requests
+		}
+		return out.Classes[i].PriorityClass < out.Classes[j].PriorityClass
+	})
 	for i, b := range series {
 		out.Series[i] = qualityFigures(b)
 	}

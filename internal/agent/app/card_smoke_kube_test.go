@@ -94,7 +94,7 @@ func TestKubeNodeAsksOnlyTheCardsThePlatformHolds(t *testing.T) {
 	if !outcomes["pci:0000:96:00.0"].OK || len(skips) != 2 {
 		t.Fatalf("outcomes %+v skips %+v", outcomes, skips)
 	}
-	if got := runtimeSkipReason(cardsmoke.SkipNotHeld); got != accelerator.CheckSkipNotHeld {
+	if got := runtimeSkipReason(cardsmoke.SkipNotHeld); got != proto.CardCheckSkipNotHeld {
 		t.Fatalf("the check catalog's word for it = %q", got)
 	}
 

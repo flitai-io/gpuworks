@@ -28,7 +28,7 @@ func TestDeploymentDTONodeIDsWire(t *testing.T) {
 	const tail = `"node_requirements":{},"placement_strategy":"spread","served_name":"","desired_state":"active","runtime_state":"pending","state":"pending","sleepable":false,"replicas":0,"max_replicas":1024,"routing_policy":"least_request",`
 	// No replica runs, and the check is off.
 	const ready = `"ready_replicas":0,`
-	const health = `"health":{"status":"off","threshold_sec":60,"last":null,"recent_mean_ms":null,"recent_ok":0,"recent":[]},"tokenize_enabled":true,` +
+	const health = `"health":{"status":"off","threshold_sec":60,"last":null,"recent_mean_ms":null,"recent_ok":0,"recent":[]},"tokenize_enabled":true,"priority_scheduling":false,` +
 		// A new deployment is resident (never yields, no auto sleep) and moves a
 		// replica off a node offline for ten minutes.
 		`"node_replacement":{"after_sec":600},"yield_policy":{"policy":"never"},"sleep_held":false,"sleep_wakes_on_request":false,`
@@ -37,8 +37,8 @@ func TestDeploymentDTONodeIDsWire(t *testing.T) {
 	// count may be scheduled, a multi-node one placed by hand may not.
 	const notSleepable = `"wake_wait_limit_sec":1800,"yield_policy_eligible":{"ok":false,"reason":"SLEEP_NOT_ENABLED"},` +
 		`"schedule_capabilities":{"sleep":{"ok":false,"reason":"SLEEP_NOT_ENABLED"},"wake":{"ok":false,"reason":"SLEEP_NOT_ENABLED"},"replicas":`
-	const single = notSleepable + `[{"minimum":1,"maximum":1024,"ok":true}]},`
-	const multi = notSleepable + `[{"minimum":1,"maximum":1024,"ok":false,"reason":"SCHEDULE_REPLICAS_MANUAL_PLACEMENT"}]},`
+	const single = notSleepable + `[{"minimum":1,"maximum":1024,"ok":true}]},"health_checkable":false,`
+	const multi = notSleepable + `[{"minimum":1,"maximum":1024,"ok":false,"reason":"SCHEDULE_REPLICAS_MANUAL_PLACEMENT"}]},"health_checkable":false,`
 	// A multi-node deployment carries who places it; a single-node one has
 	// no placement_mode key.
 	const manual = `"placement_mode":"manual",`

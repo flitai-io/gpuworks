@@ -532,7 +532,7 @@ func TestValidateQuickParamsBoundsAndDtype(t *testing.T) {
 		"dtype":     func(q *LaunchConfig) { q.Dtype = "int8" },
 		"util high": func(q *LaunchConfig) { q.GPUMemUtil = 1.01 },
 		"util low":  func(q *LaunchConfig) { q.GPUMemUtil = -0.1 },
-		"length":    func(q *LaunchConfig) { q.MaxModelLen = -1 },
+		"length":    func(q *LaunchConfig) { q.MaxModelLen = -2 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := ValidateLaunchConfig(configured(t, EngineVLLM, apply)); err == nil {

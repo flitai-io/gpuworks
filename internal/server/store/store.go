@@ -27,6 +27,12 @@ type Store struct {
 	Bus *bus.Bus
 	// sharing keeps SharingDeployments' rows between deployment changes.
 	sharing sharingCache
+	// fleetNodes is FleetNodes' snapshot of every node.
+	fleetNodes fleetNodeCache
+	// scheduleEvents counts the scheduling events written (ScheduleEventCount).
+	scheduleEvents atomic.Uint64
+	// priorityGen counts priority class changes (PriorityClassGeneration).
+	priorityGen atomic.Uint64
 	// readDB is a second connection pool (same database file) dedicated to
 	// hot, pure-read paths (ListNodes, ListDeployments, ListInstances, the
 	// timeline reads, InstanceByUUID — see reader()): under WAL, readers do
@@ -70,6 +76,11 @@ type Store struct {
 	// observer receives the events the scheduling activity counts
 	// (scheduling_activity.go).
 	observer atomic.Pointer[EventObserver]
+	// eventRetentionBatchHook, when set, is called after each batch of
+	// events the retention trim deletes, with the write connection free
+	// again (event_retention.go). Same-package tests set it; nil in
+	// production.
+	eventRetentionBatchHook func(deleted int64)
 }
 
 func (s *Store) SetSecretbox(box *auth.Secretbox) { s.secretbox = box }
@@ -105,6 +116,10 @@ func HashToken(tok string) string {
 
 var ErrNotFound = errors.New("not found")
 var ErrReferenced = errors.New("resource is referenced")
+
+// ErrCatalogManaged refuses deleting an official (catalog-managed) image
+// version or series: the catalog deprecates them instead.
+var ErrCatalogManaged = errors.New("official images are managed by the catalog")
 
 // ---- node queries ----
 
@@ -530,6 +545,6 @@ func (s *Store) DeleteNode(uuid string) error {
 	for _, ev := range removals {
 		s.observe(ev, nil)
 	}
-	s.Bus.PublishChange("node", uuid, fmt.Sprintf("deleted:%d", nodeID))
+	s.publishNode(uuid, fmt.Sprintf("deleted:%d", nodeID))
 	return nil
 }

@@ -24,8 +24,8 @@ func TestVLLMOmniLaunchStatesNoGPUMemoryShare(t *testing.T) {
 		{name: "--omni as a value is not the switch", templateArgs: []string{"--served-model-name", "omni"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			// A release with per-request metrics, so the only key an omni
-			// launch leaves to the engine is the memory share.
+			// An omni launch keeps stage-specific memory shares and context
+			// lengths even on a release accepting the plain-vLLM defaults.
 			out, err := Materialize(MaterializeInput{Engine: EngineVLLM, Command: &command, TemplateArgs: test.templateArgs, ExtraArgs: test.extraArgs, EngineVersion: "0.30.0"})
 			if err != nil {
 				t.Fatal(err)
@@ -33,7 +33,7 @@ func TestVLLMOmniLaunchStatesNoGPUMemoryShare(t *testing.T) {
 			launch := BuildVLLM(Params{ModelPath: "/model", APIPort: 30000, TensorParallel: 1, Quick: out.Quick, TemplateArgs: test.templateArgs, ExtraArgs: test.extraArgs})
 			emitted := slices.Contains(launch.Argv, "--gpu-memory-utilization")
 			if test.omni {
-				if out.Quick.GPUMemUtil != 0 || emitted || !reflect.DeepEqual(out.EngineDecidesParamKeys, []string{"gpu_memory_utilization"}) {
+				if out.Quick.GPUMemUtil != 0 || emitted || !reflect.DeepEqual(out.EngineDecidesParamKeys, []string{"gpu_memory_utilization", "max_model_len"}) {
 					t.Fatalf("omni launch quick=%v engine decides=%v argv=%v", out.Quick.GPUMemUtil, out.EngineDecidesParamKeys, launch.Argv)
 				}
 				return

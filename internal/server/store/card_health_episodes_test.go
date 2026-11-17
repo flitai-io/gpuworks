@@ -8,7 +8,7 @@ import (
 )
 
 func episodeOn(nodeID uint, ident, check string, started time.Time, ended *time.Time) *CardHealthEpisode {
-	return &CardHealthEpisode{NodeID: nodeID, CardIdent: ident, CheckID: check, Level: "fail", Reason: "runtime_unusable",
+	return &CardHealthEpisode{NodeID: nodeID, CardIdent: ident, CheckID: check, Level: "fail", Reason: "RUNTIME_UNUSABLE",
 		StartedAt: started, EndedAt: ended, LastSeenAt: started, Count: 1, FirstEvidence: "Detail=cuCtxCreate=999", LatestEvidence: "Detail=cuCtxCreate=999"}
 }
 

@@ -60,7 +60,7 @@ curl --silent --show-error -X POST \
   http://<server>/api/v1/deployments/<deployment-id>/catalog-template
 ```
 
-Before writing the template, the server sends the smallest request to each chat, completions and embeddings operation the deployment declares (the same request the health check sends; it is not metered). Video, image, speech and other operations that are slow or costly to test get no request; a comment marks them as not tested, and the export still succeeds.
+Before writing the template, the server sends the smallest request to each chat, completions, embeddings and System One decision operation the deployment declares (the same request the health check sends; it is not metered). Video, image, speech and other operations that are slow or costly to test get no request; a comment marks them as not tested, and the export still succeeds.
 
 The returned `yaml` starts with comments, for example:
 
@@ -115,3 +115,5 @@ For 409 `TEMPLATE_EXPORT_UNAVAILABLE`, read `params.reason`:
 | `no_gpu_facts`, `template_missing`, `model_missing` | The instance is not bound to specific cards, or the source template or model has been deleted |
 
 409 `LAUNCH_NOT_EXPORTABLE` means the exported arguments cannot rebuild the deployment's original command line, and the platform refuses to give an approximation; report the deployment's launch arguments and engine version to the maintainers.
+
+<!-- translation-source-sha256: 3b100cf74fb9a1d2980a58faeeadd44263959bb6255553812aaff2cbe8908147 -->

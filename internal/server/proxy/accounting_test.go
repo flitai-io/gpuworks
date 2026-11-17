@@ -101,7 +101,7 @@ func TestSelectDeploymentInstanceDistributedAsleepFlag(t *testing.T) {
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"dist-a": true, "dist-b": true}}, nil, 0)
 	t.Cleanup(p.Close)
-	selected, _, status, message, asleep := p.selectDeploymentInstance("dist")
+	selected, _, status, message, asleep := p.selectStatus("dist")
 	if status != http.StatusServiceUnavailable || !strings.Contains(message, "asleep") || !asleep {
 		t.Fatalf("status=%d message=%q asleep=%v, want 503 asleep=true", status, message, asleep)
 	}

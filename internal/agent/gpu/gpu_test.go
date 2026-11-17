@@ -485,18 +485,18 @@ func TestParseNVIDIAInfoHealthLevels(t *testing.T) {
 	}{
 		{"clean", "0, 0, No, No, No", true, "OK", "", ""},
 		{"fields the card does not support are not judged", "[N/A], [N/A], [N/A], [N/A], [N/A]", true, "OK", "", ""},
-		{"volatile errors stop scheduling", "3, 8, No, No, No", false, "Error", "memory_uncorrectable_errors",
+		{"volatile errors stop scheduling", "3, 8, No, No, No", false, "Error", "MEMORY_UNCORRECTABLE_ERRORS",
 			"ecc.errors.uncorrected.volatile.total=3\necc.errors.uncorrected.aggregate.total=8"},
 		// The aggregate counter is lifetime history a reset never clears.
-		{"aggregate history stays healthy", "0, 1, No, [N/A], [N/A]", true, "OK", "memory_error_history",
+		{"aggregate history stays healthy", "0, 1, No, [N/A], [N/A]", true, "OK", "MEMORY_ERROR_HISTORY",
 			"ecc.errors.uncorrected.aggregate.total=1"},
-		{"pending row replacement stays schedulable", "0, 0, [N/A], Yes, No", true, "Warning", "memory_repair_pending",
+		{"pending row replacement stays schedulable", "0, 0, [N/A], Yes, No", true, "Warning", "MEMORY_REPAIR_PENDING",
 			"remapped_rows.pending=Yes"},
-		{"pending page retirement stays schedulable", "0, 0, Yes, [N/A], [N/A]", true, "Warning", "memory_repair_pending",
+		{"pending page retirement stays schedulable", "0, 0, Yes, [N/A], [N/A]", true, "Warning", "MEMORY_REPAIR_PENDING",
 			"retired_pages.pending=Yes"},
-		{"failed replacement stops scheduling", "0, 0, No, Yes, Yes", false, "Error", "memory_remap_failed",
+		{"failed replacement stops scheduling", "0, 0, No, Yes, Yes", false, "Error", "MEMORY_REMAP_FAILED",
 			"remapped_rows.pending=Yes\nremapped_rows.failure=Yes"},
-		{"older driver answers only the ECC pair", "3, 8", false, "Error", "memory_uncorrectable_errors",
+		{"older driver answers only the ECC pair", "3, 8", false, "Error", "MEMORY_UNCORRECTABLE_ERRORS",
 			"ecc.errors.uncorrected.volatile.total=3\necc.errors.uncorrected.aggregate.total=8"},
 	}
 	for _, tc := range cases {
@@ -535,7 +535,7 @@ func TestNVIDIAProbeFallsBackWhenDriverRejectsHealthFields(t *testing.T) {
 	if len(queries) != 3 || strings.Contains(queries[2], "remapped_rows") || !strings.Contains(queries[2], "ecc.errors.uncorrected.aggregate.total") {
 		t.Fatalf("queries = %q", queries)
 	}
-	if gpus[0].Healthy || gpus[0].HealthCode != "memory_uncorrectable_errors" {
+	if gpus[0].Healthy || gpus[0].HealthCode != "MEMORY_UNCORRECTABLE_ERRORS" {
 		t.Fatalf("gpu = %+v", gpus[0])
 	}
 	// The next probe starts where this driver answered: the fields it does
@@ -613,6 +613,45 @@ func TestApplyUnifiedMemoryFallbackFillsGB10FromHost(t *testing.T) {
 	}
 	if gpus[0].MIGEnabled {
 		t.Fatalf("unified fallback must not mark the GPU as MIG: %+v", gpus[0])
+	}
+}
+
+// Probe end to end on unified-memory hosts: nvidia-smi answers [N/A] for
+// memory.total, so the card's size comes from the host's MemTotal read under
+// hostRoot. The rows are what the driver prints, raw name and all, so a
+// change in how the CSV is split or the name normalized breaks this before it
+// reaches a node. A discrete card that answers [N/A] keeps its honest 0.
+func TestProbeSizesUnifiedMemoryCardsFromHostMemTotal(t *testing.T) {
+	const memTotalKiB = 127598832
+	for _, tc := range []struct {
+		row  string
+		want int64
+	}{
+		{"0, GPU-n1x, NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU), [N/A], 12.1, 0000000F:01:00.0, 580.95.05, [N/A]", memTotalKiB * 1024},
+		{"0, GPU-gb10, NVIDIA GB10, [N/A], 12.1, 0000000F:01:00.0, 580.95.05, [N/A]", memTotalKiB * 1024},
+		{"0, GPU-5090, NVIDIA GeForce RTX 5090, [N/A], 12.0, 00000000:01:00.0, 580.95.05, 575.00", 0},
+	} {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "proc"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		meminfo := fmt.Sprintf("MemTotal:       %d kB\nMemFree:        1024 kB\n", memTotalKiB)
+		if err := os.WriteFile(filepath.Join(root, "proc/meminfo"), []byte(meminfo), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		p := &SMIProber{hostRoot: root, runner: func(_ context.Context, args ...string) (string, error) {
+			if args[0] == "-L" {
+				return "", nil
+			}
+			return tc.row + "\n", nil
+		}}
+		gpus, err := p.Probe(t.Context())
+		if err != nil || len(gpus) != 1 {
+			t.Fatalf("%s: probe = %+v, %v", tc.row, gpus, err)
+		}
+		if gpus[0].MemoryTotalBytes != tc.want || gpus[0].MIGEnabled {
+			t.Fatalf("%s: memory_total_bytes = %d (mig %v), want %d", tc.row, gpus[0].MemoryTotalBytes, gpus[0].MIGEnabled, tc.want)
+		}
 	}
 }
 

@@ -5,6 +5,23 @@ import { mergedExtraJSON } from "./extraPreset";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { localizedText } from "../../i18n/localizedText";
+import type { PriorityClasses } from "../../api";
+import { HelpTip } from "../../ui-kit/HelpTip";
+import { OptionSelect } from "../../ui-kit/OptionSelect";
+import { classLabel } from "../settings/PrioritySettingsCard";
+
+// The select needs a non-empty value for "ask for no class" (the default).
+const DEFAULT_CLASS = "__default__";
+
+/**
+ * The request priority class of the model's requests. Shown for a model whose
+ * requests take one (the server says which); classes is null while they load.
+ */
+export interface PriorityChoice {
+  classes: PriorityClasses | null;
+  /** The engine orders requests by their class; without it the class is only recorded. */
+  scheduling: boolean;
+}
 
 export function initialParameterState(definitions: ParameterDefinition[], streamOptions: StreamOptionDefinition[] = []): ParameterState {
   return {
@@ -22,12 +39,14 @@ export default function ParametersPanel({
   streamOptions = [],
   value,
   onChange,
+  priority,
 }: {
   definitions: ParameterDefinition[];
   presets: ExtraParameterPreset[];
   streamOptions?: StreamOptionDefinition[];
   value: ParameterState;
   onChange: (value: ParameterState) => void;
+  priority?: PriorityChoice;
 }) {
   const { t, i18n } = useTranslation("playground");
   const language = i18n.resolvedLanguage || i18n.language;
@@ -56,8 +75,32 @@ export default function ParametersPanel({
     }
   };
 
+  const defaultClass = priority?.classes?.items.find((c) => c.default);
+  const priorityOptions = [
+    { value: DEFAULT_CLASS, label: defaultClass ? t("parameters.priorityDefault", { name: classLabel(defaultClass) }) : t("parameters.priorityDefaultUnnamed") },
+    ...(priority?.classes?.items ?? []).map((c) => ({ value: c.name, label: `${classLabel(c)} (${c.value})` })),
+  ];
+
   return (
     <div className="playground-parameters">
+      {priority && (
+        <div className="playground-field">
+          <span className="flex items-center gap-1">
+            <strong id="playground-priority-class-label">{t("parameters.priority")}</strong>
+            <HelpTip content={t("parameters.priorityHelp")} />
+          </span>
+          <OptionSelect
+            id="playground-priority-class"
+            aria-labelledby="playground-priority-class-label"
+            size="sm"
+            disabled={!priority.classes}
+            options={priorityOptions}
+            value={value.priorityClass || DEFAULT_CLASS}
+            onChange={(next) => onChange({ ...value, priorityClass: next === DEFAULT_CLASS ? "" : next })}
+          />
+          {!priority.scheduling && <span className="text-label text-fg-muted">{t("parameters.priorityNotScheduled")}</span>}
+        </div>
+      )}
       <div className="playground-field">
         <Typography.Text strong>System prompt</Typography.Text>
         <Input.TextArea

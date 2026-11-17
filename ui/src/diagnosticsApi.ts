@@ -50,13 +50,18 @@ export interface DebugSessionStart {
   node_uuids?: string[];
 }
 
+/** One part of a collection, as a check: pass (collected whole), warn (cut at
+ * its size bound), skip (not read; code says why) or fail. */
 export interface DiagnosticsBundleItem {
-  name: string;
-  // collected, skipped (reason offline / unsupported) or failed.
-  state: string;
-  reason?: string;
+  id: string;
+  path: string;
+  status: string;
+  code?: string;
+  params?: Record<string, unknown>;
+  message?: string;
+  /** The failed read's own error text. */
+  evidence?: string;
   bytes: number;
-  truncated?: boolean;
 }
 
 export interface DiagnosticsBundle {

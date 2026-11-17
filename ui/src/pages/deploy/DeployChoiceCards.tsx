@@ -4,8 +4,8 @@ import { Form, Typography } from "antd";
 import type { Node } from "../../api";
 import { useTranslation } from "react-i18next";
 import { gpuHealthStatus, gpuStateReason } from "../../components/GPUHealth";
-import { cardKey, cardOrdinal, cardPickable } from "../../nodes/cardIdentity";
-import { gpuResourceHint, type GPUResourceContext } from "./gpuResourceHint";
+import { cardKey, cardOrdinal } from "../../nodes/cardIdentity";
+import { gpuPickable, gpuResourceHint, type GPUResourceContext } from "./gpuResourceHint";
 
 export function GPUGrid({
   node,
@@ -40,10 +40,12 @@ export function GPUGrid({
         const numbered = gpu.index >= 0;
         const active = numbered && picked.includes(gpu.index);
         // The server's verdict, not a guess from health: a card held by a
-        // process outside the platform is healthy and still takes no work,
-        // and one lent to a virtual machine is not faulty. A card with no
-        // device number cannot be named to the engine at all.
-        const usable = cardPickable(gpu);
+        // process outside the platform is healthy and still takes no work
+        // unless the server evaluated it as hosting this request (a
+        // partition beside that process), and one lent to a virtual machine
+        // is not faulty. A card with no device number cannot be named to
+        // the engine at all.
+        const usable = gpuPickable(gpu, resourceContext);
         const disabled = nodeMode === "auto" || (!usable && !active);
         const hint = gpuResourceHint(gpu, resourceContext);
         const status = gpuHealthStatus(gpu);

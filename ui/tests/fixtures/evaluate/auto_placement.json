@@ -14,7 +14,7 @@
     "checks": [
       {
         "id": "model-record:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -34,7 +34,7 @@
       },
       {
         "id": "model-source:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -54,7 +54,7 @@
       },
       {
         "id": "model-metadata:1:0:0",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -78,20 +78,7 @@
     "/model"
   ],
   "argv": [
-    "--host",
-    "127.0.0.1",
-    "--port",
-    "30000",
-    "--tensor-parallel-size",
-    "1",
-    "--enable-prompt-tokens-details",
-    "--enable-per-request-metrics",
-    "--gpu-memory-utilization",
-    "0.9"
-  ],
-  "command": [
-    "vllm",
-    "serve",
+    "--served-model-name",
     "/model",
     "--host",
     "127.0.0.1",
@@ -99,8 +86,33 @@
     "30000",
     "--tensor-parallel-size",
     "1",
+    "--scheduling-policy",
+    "priority",
     "--enable-prompt-tokens-details",
     "--enable-per-request-metrics",
+    "--max-model-len",
+    "auto",
+    "--gpu-memory-utilization",
+    "0.9"
+  ],
+  "command": [
+    "vllm",
+    "serve",
+    "/model",
+    "--served-model-name",
+    "/model",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "30000",
+    "--tensor-parallel-size",
+    "1",
+    "--scheduling-policy",
+    "priority",
+    "--enable-prompt-tokens-details",
+    "--enable-per-request-metrics",
+    "--max-model-len",
+    "auto",
     "--gpu-memory-utilization",
     "0.9"
   ],
@@ -139,20 +151,7 @@
         "/model"
       ],
       "argv": [
-        "--host",
-        "127.0.0.1",
-        "--port",
-        "30000",
-        "--tensor-parallel-size",
-        "1",
-        "--enable-prompt-tokens-details",
-        "--enable-per-request-metrics",
-        "--gpu-memory-utilization",
-        "0.9"
-      ],
-      "command": [
-        "vllm",
-        "serve",
+        "--served-model-name",
         "/model",
         "--host",
         "127.0.0.1",
@@ -160,8 +159,33 @@
         "30000",
         "--tensor-parallel-size",
         "1",
+        "--scheduling-policy",
+        "priority",
         "--enable-prompt-tokens-details",
         "--enable-per-request-metrics",
+        "--max-model-len",
+        "auto",
+        "--gpu-memory-utilization",
+        "0.9"
+      ],
+      "command": [
+        "vllm",
+        "serve",
+        "/model",
+        "--served-model-name",
+        "/model",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "30000",
+        "--tensor-parallel-size",
+        "1",
+        "--scheduling-policy",
+        "priority",
+        "--enable-prompt-tokens-details",
+        "--enable-per-request-metrics",
+        "--max-model-len",
+        "auto",
         "--gpu-memory-utilization",
         "0.9"
       ],
@@ -468,6 +492,7 @@
     "extra_args": "",
     "gpu_memory_utilization": 0.9,
     "kv_cache_dtype": "auto",
+    "max_model_len": -1,
     "performance_mode": "balanced",
     "served_model_name": ""
   },
@@ -482,11 +507,16 @@
     "enable_request_metrics": true,
     "gpu_memory_utilization": 0.9,
     "kv_cache_dtype": "auto",
+    "max_model_len": -1,
     "performance_mode": "balanced",
     "served_model_name": ""
   },
   "yield_policy_eligible": {
     "ok": false,
     "reason": "SLEEP_NOT_ENABLED"
+  },
+  "health_checkable": false,
+  "priority_scheduling": {
+    "ok": true
   }
 }

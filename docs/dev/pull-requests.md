@@ -41,8 +41,8 @@ git switch -c fix/agent-reconnect upstream/TARGET_BRANCH
 取消和边界路径。API 改动核对 wire JSON 契约；UI 改动核对用户交互、状态和键盘操作。
 
 同步更新受影响的文档。中文页面放在 `docs/`，英文译文放在 `docs-en/` 的相同相对路径。
-按[贡献指南](../../CONTRIBUTING.zh-CN.md#文档约定)复核两版内容，更新
-`docs-site/translations.json` 中的原文哈希。
+按[贡献指南](../../CONTRIBUTING.zh-CN.md#文档约定)复核两版内容，用
+`python3 docs-site/check_translations.py --write` 更新英文页末尾记录的原文哈希。
 
 运行项目要求的提交前检查；将下面的包路径替换为实际修改的包：
 

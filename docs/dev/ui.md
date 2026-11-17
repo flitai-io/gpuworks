@@ -152,14 +152,38 @@ Confirmed 2026-11-06. Check every migrated page against this, by screenshot.
 | Frame | Top bar, side menu and frame share `surface-base`; the page is a white panel (radius 12, hairline `border`) 12px clear of the right and bottom edges (`--app-frame-gap`). No rule between menu and page. |
 | Side menu | 200px (56 folded), folds to icons below 1280px; items 32px, 36px apart; group names `fg-subtle`; collapse button pinned at the bottom under a rule, its icon in the menu icons' column. |
 | Icons | Shell icons come from `ui-kit/consoleIcons.ts` (HugeIcons, the set Zeron draws with): 16px in the menu and across the top bar, stroke 1.5. Top bar text 14px. No antd icons in the shell. |
-| Page header | `PageHeader` only. Title 18/600 (Zeron `text-title`) behind the 4x18 blue bar; description 14px, one line. Breadcrumb only on pages below a menu page (`parents`), 12px above the title. Page-wide controls (`toolbar`) 12px under the title row, flush left. |
+| Page header | `PageHeader` only. Title 18/600 (Zeron `text-title`) behind the 4x18 blue bar; description 14px, one line. Breadcrumb only on pages below a menu page (`parents`), 12px above the title: menu section / linked parents / current page. Parent links use the brand color; the current title is non-clickable and marked aria-current="page". Rich titles supply a plain `breadcrumbTitle` so status badges and controls are not duplicated. Page-wide controls (`toolbar`) 12px under the title row, flush left. |
 | Spacing | 16px from the header to the content and between top-level blocks; 24px between overview sections. Pages that fill the viewport subtract `--app-header-height`, `--app-frame-gap` and the panel borders. |
 | Blocks | Section title 16/600 above a `Container` tray (radius 16, `rounded-2xl`); white panels inside at radius 12 (`rounded-xl`), panel title 14/600. |
 | Controls | Zeron component defaults; do not restyle buttons or inputs per page. |
 | Tables | `ResourceTable`: a sortable title is Zeron's `DataTableColumnHeader` (up/down mark, menu Ascending / Descending / Clear); a filterable column shows a funnel (`ui-kit/ColumnFilter`, blue while applied), the only place column filters are set; filters in effect are listed between the toolbar and the table as "column: values" chips, each clearable, plus "clear filters". The toolbar holds search and page-specific controls only. Its refresh and column-settings buttons, and the row expand chevron, are part of `ResourceTable` and use `ui-kit/consoleIcons` at 16px; pages do not add their own. Pinned header cells keep the header grey. |
-| Table text | Cells 14px regular (medium-size Zeron table); a second line or a tag is 12px. Names are not bold; a name link starts flush with its title. Titles are 14/600 and never overlap: an unresized column is at least as wide as its title and marks, a narrowed one cuts the title with an ellipsis. |
+| Table text | A header row is as tall as the shortest body row of its table's density (one line of text); rows with buttons or tags may be taller, the header does not follow them (`src/theme/tableDimensions.css`). Cells 14px regular (medium-size Zeron table); a second line or a tag is 12px. Names are not bold; a name link starts flush with its title. Text links in table cells use the brand color and underline on hover; shared product CSS covers Zeron and legacy antd tables, excluding button links and disabled controls. Titles are 14/600 and never overlap: an unresized column is at least as wide as its title and marks, a narrowed one cuts the title with an ellipsis. |
 | Overlays | While antd and Zeron coexist, both libraries' overlays sit on one 1000 layer (`src/theme/layers.css`): the one opened last is on top. Right-side drawers of either library open beside the AI assistant. |
 | Status words | Show a state as Zeron `Badge` with `status`, not as coloured text: dark success text reads as black. |
+
+## Copy on the page
+
+Confirmed 2026-11-13. A page states facts and what to do next. How a number
+is computed, what it does not mean and where it comes from belong in a
+`HelpTip` (ⓘ beside the label, `ui-kit/HelpTip`) or in the docs, not in grey
+lines under the content. Check new text against this before adding it; an
+agent writing UI text checks it too.
+
+| Rule | Detail |
+| --- | --- |
+| One helper line | A field, a value or a block gets at most one line of helper text, 40 Chinese characters or 80 English ones. More goes into a `HelpTip`; past 200 Chinese characters, link the docs instead. |
+| Never inline | Formulas, aggregation and sampling rules, data sources, internal names (endpoints, packages, file paths the user does not type) and caveats such as "not guaranteed", "does not mean", "for reference only" go into a `HelpTip`. |
+| No stacked caveats | At most one caveat per block, and none when the label already says it: "estimated" needs no "not guaranteed"; a fact shown on the block is not restated as a caveat. |
+| Facts as values | Related numbers share one line, `label value · label value`, not one sentence each. |
+| Warnings act | A warning (`Notice`, amber text) names the problem and the next step in one sentence; text with no next step is not a warning. |
+| Empty states | A title, at most one sentence, and the action. |
+
+A locale key whose name ends in `Help` holds `HelpTip` content and is shown
+only there; text shown on the page uses any other name. `ui_copy_long_strings`
+and `ui_copy_caveat_strings` in `scripts/arch-constraints.txt` (max, ratchet
+down) count Chinese strings over 120 characters (200 for `Help` keys) and
+non-`Help` strings carrying a caveat phrase; a new string over the limit is cut
+or moved into the docs, not covered by a raised budget.
 
 ## Choosing a component
 
@@ -176,9 +200,37 @@ speed (measure first).
 | Overview blocks | `Container` tray with white panels (Page look, Blocks); Zeron `card` for a standalone card |
 | Charts | Zeron charts (`bar-chart`, `line-chart`, `area-chart`, `pie-chart`, `heatmap-chart`, …). Check bundle size (`ui_bundle_gzip_kb`) and, for large data such as the scheduling heatmap or long series, speed against the ECharts version before switching |
 | Status | Zeron `Badge` with `status` |
+| Explanation beside a label or value | `ui-kit/HelpTip` (see "Copy on the page") |
 | Confirm, toast, empty, progress, upload, number, segmented | `ui-kit/` compositions (`ConfirmPopover`, `feedback`, `EmptyState`, `Progress`, `FileUpload`, `NumberInput`, `Segmented`) |
 
 The registry is pinned (`ui/src/theme/zeron/source.json`); upstream changes do
 not reach the console until the pin moves. Move it when a needed component or
 fix exists only upstream, in its own change: new pin, reinstall, then the full
 checks above (unit tests, browser check with comparison).
+
+## Product typography defaults
+
+Console body text is 14px (`--font-size-body`) with the shared body line height.
+Both `body` and portal dialog roots inherit these product defaults from
+`styles.css`; bare text in a dialog must not fall back to the browser's 16px
+default. Keep Zeron managed sources unchanged. Use `text-body` for ordinary
+content, `text-label` for 12px supporting text, and `text-title` for 18px page
+or dialog titles. A list toolbar title uses body size and semibold weight.
+Do not rely on an ancestor inside the page to size a portal, or use an arbitrary
+font-size on each new dialog.
+
+After changing typography or popup composition, run the Chromium geometry
+checks at 1280 and 1920 widths, including both themes.
+`make test-ui-template-catalog-layout` checks the chip editor's computed body
+size and title size, the filter header's hit targets, and the gap between
+monitor signal cards and the service toolbar. Build the UI before this target;
+React unit tests alone do not verify computed sizes or overlaps.
+
+Organization avatars keep official images when available. Missing or failed images use white initials on stable, organization-keyed saturated blue, cyan, amber, green and violet backgrounds. The deeper artwork shades are defined by --organization-avatar-1 through -5, shared by light and dark themes with at least 4.5:1 contrast. Do not mix gray into these colors or switch initials to black. Do not reassign colors on refresh or locale changes.
+
+
+### Resource navigation checks
+
+Resource names that open a drawer use the native link button variant (`variant="link"` for Zeron, `type="link"` for legacy antd). Names that navigate use actual links. Do not use ghost buttons for resource names, and do not make inert names look clickable. Icon/action buttons and disabled controls keep their own styles.
+
+`tests/tableNameAffordance.test.ts` runs in the normal UI test gate and scans name-column renderers across product pages. `ui-check` also runs `tests/browser/table-link-rules.mjs` against every visited page/drawer, including full-page details reached from a list: visible table text links and clickable resource names must resolve to the theme color, including nested text. Its unit tests exercise failures and exclusions; real computed colors require the browser job. When changing shared navigation, test breadcrumbs through the current page and click the parent link; use heading roles when the resource name also appears in the breadcrumb.

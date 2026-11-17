@@ -25,6 +25,9 @@ type Scaling struct {
 	// Online says a node's agent is connected; nil reads the node's stored
 	// state.
 	Online func(nodeUUID string) bool
+	// UCXNetlinkHang is the live UCX hang fact of a node (the hub's); nil
+	// leaves no node out of a PD placement.
+	UCXNetlinkHang UCXNetlinkHangOf
 }
 
 // ScaleErrorKind is what a scaling failure is, for the caller's response:
@@ -63,10 +66,17 @@ func ScaleErrorKindOf(err error) (ScaleErrorKind, error) {
 // UnitPlacementNone says no group of nodes can take the request, with how
 // many nodes each check left out.
 func UnitPlacementNone(counts UnitSuggestCounts) error {
-	return messages.NewProductError(messages.ErrorUnitPlacementNone, "no group of nodes can take the deployment now", map[string]any{
+	params := map[string]any{
 		"nodes": counts.Nodes, "unmet": counts.Unmet, "cordoned": counts.Cordoned, "offline": counts.Offline,
 		"busy": counts.Busy, "no_network": counts.NoNetwork, "no_peer_memory": counts.NoPeerMemory, "largest": counts.Largest,
-	})
+	}
+	if counts.UCXNetlink > 0 {
+		// Nodes left out because their kernel hangs UCX, and the first few
+		// by name, so the operator knows which to fix (pdmode.UCXNetlinkFixes).
+		params["ucx_netlink_hang"] = counts.UCXNetlink
+		params["ucx_netlink_nodes"] = counts.UCXNetlinkNodes
+	}
+	return messages.NewProductError(messages.ErrorUnitPlacementNone, "no group of nodes can take the deployment now", params)
 }
 
 // PDPlacementNone is UnitPlacementNone for a PD mode over RDMA when the
@@ -80,17 +90,6 @@ func PDPlacementNone(mode pdmode.Mode, vendor string, counts UnitSuggestCounts) 
 	return messages.NewProductError(messages.ErrorPDPeerMemoryNone,
 		fmt.Sprintf("no node can take the deployment: %d of %d nodes cannot register their cards' memory with the RDMA NIC (%s not loaded); run on them: %s", counts.NoPeerMemory, counts.Nodes, module, fix),
 		map[string]any{"mode": mode.Name, "nodes": counts.Nodes, "no_peer_memory": counts.NoPeerMemory, "module": module, "fix": fix})
-}
-
-func (s Scaling) online(nodes []store.Node) func(string) bool {
-	if s.Online != nil {
-		return s.Online
-	}
-	online := make(map[string]bool, len(nodes))
-	for i := range nodes {
-		online[nodes[i].UUID] = nodes[i].State == store.NodeStateOnline
-	}
-	return func(uuid string) bool { return online[uuid] }
 }
 
 // ScaleScheduled sets a deployment's replica count for a caller inside the
@@ -243,11 +242,7 @@ func (s Scaling) AutoPDRoles(dep *store.Deployment, current *PDPlacement, roles 
 	if err != nil {
 		return err
 	}
-	nodes, err := s.Store.ListNodes()
-	if err != nil {
-		return err
-	}
-	facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, ListedPDRanks(current, fixed), s.online(nodes), 1, 1)
+	facts, err := LoadUnitSuggestFacts(s.Store, s.Resolve, dep, reqs, ListedPDRanks(current, fixed), s.Online, s.UCXNetlinkHang, 1, 1)
 	if err != nil {
 		return err
 	}

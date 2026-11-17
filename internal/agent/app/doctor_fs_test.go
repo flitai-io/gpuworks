@@ -165,7 +165,7 @@ func TestDoctorWarnsWhenPersistentPathsAreOnTheContainerLayer(t *testing.T) {
 		t.Fatalf("ephemeral findings = %+v", found)
 	}
 	f := found[0]
-	if f.Level != proto.DoctorLevelWarning || f.Probe != "/proc/self/mountinfo" || f.Recheck != "findmnt -T /opt/gpuworks/models" || f.Disk == nil || f.Disk.Kind != "models" {
+	if f.Status != proto.CheckWarn || f.Probe != "/proc/self/mountinfo" || f.Recheck != "findmnt -T /opt/gpuworks/models" || f.Disk == nil || f.Disk.Kind != "models" {
 		t.Fatalf("finding = %+v", f)
 	}
 	want := []proto.DoctorField{
@@ -219,7 +219,7 @@ func TestDoctorFlagsExecutionAndWritesTheMountForbids(t *testing.T) {
 		usage("models", "/mnt/my disk/models"),
 	}, &provisioningDriver{})
 	noexec := findingsByCode(r, proto.DoctorPathNoExec)
-	if len(noexec) != 1 || noexec[0].Level != proto.DoctorLevelError || noexec[0].Disk.Path != "/data/gpuworks/udocker" ||
+	if len(noexec) != 1 || noexec[0].Status != proto.CheckFail || noexec[0].Disk.Path != "/data/gpuworks/udocker" ||
 		noexec[0].Recheck != "findmnt -T /data/gpuworks/udocker" || noexec[0].Evidence[0].Value != "/data" || noexec[0].Evidence[1].Value != "xfs" {
 		t.Fatalf("noexec = %+v", noexec)
 	}
@@ -227,7 +227,7 @@ func TestDoctorFlagsExecutionAndWritesTheMountForbids(t *testing.T) {
 		t.Fatalf("options evidence = %+v", noexec[0].Evidence)
 	}
 	readOnly := findingsByCode(r, proto.DoctorPathReadOnly)
-	if len(readOnly) != 1 || readOnly[0].Level != proto.DoctorLevelError || readOnly[0].Disk.Kind != doctorKindAgent || readOnly[0].Disk.Path != "/archive/gpuworks" {
+	if len(readOnly) != 1 || readOnly[0].Status != proto.CheckFail || readOnly[0].Disk.Kind != doctorKindAgent || readOnly[0].Disk.Path != "/archive/gpuworks" {
 		t.Fatalf("read-only = %+v", readOnly)
 	}
 	if got := findingsByCode(r, proto.DoctorPathEphemeral); len(got) != 0 {
@@ -237,7 +237,7 @@ func TestDoctorFlagsExecutionAndWritesTheMountForbids(t *testing.T) {
 		t.Fatalf("mount of a path with a space = %+v", m)
 	}
 	// Errors sort before the warnings of the same report.
-	if len(r.Findings) < 2 || r.Findings[0].Level != proto.DoctorLevelError {
+	if len(r.Findings) < 2 || r.Findings[0].Status != proto.CheckFail {
 		t.Fatalf("findings = %+v", r.Findings)
 	}
 }
@@ -256,6 +256,15 @@ func TestDoctorWithoutAReadableMountTableReportsNoMounts(t *testing.T) {
 		if got := findingsByCode(r, code); len(got) != 0 {
 			t.Fatalf("%s without a table: %+v", code, got)
 		}
+	}
+	// The mount checks did not run, and the report says so with why.
+	skipped := findingsByCode(r, proto.DoctorSkipMountTableUnreadable)
+	if len(skipped) != 1 || skipped[0].ID != proto.DoctorCheckMounts || skipped[0].Status != proto.CheckSkip ||
+		skipped[0].Evidence[0].Value != context.DeadlineExceeded.Error() {
+		t.Fatalf("skip = %+v", skipped)
+	}
+	if !strings.Contains(r.Report, "[not checked] MOUNT_TABLE_UNREADABLE") {
+		t.Fatalf("report text lacks the skip:\n%s", r.Report)
 	}
 }
 
@@ -294,7 +303,7 @@ func TestDoctorTextShowsFilesystemsAndPathFindings(t *testing.T) {
 	})
 	for _, want := range []string{
 		"/workspace/udocker  200.0 GiB total, 150.0 GiB available (75%)  [nfs4, network]",
-		"[warning] path_ephemeral: /opt/gpuworks/models\n",
+		"[warning] PATH_EPHEMERAL: /opt/gpuworks/models\n",
 		"container layer",
 		"recheck   findmnt -T /opt/gpuworks/models",
 		"network filesystem /workspace is nfs4 (10.1.2.3:/volumes/abcd1234); holds runveil /workspace/udocker",

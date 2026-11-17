@@ -222,3 +222,8 @@ After the configuration takes effect, check from a client that uses the actual e
 3. If you configured an inference endpoint, use the call example for a deployed model that supports streaming output to send a `stream: true` request through the new HTTPS `/v1` endpoint. Confirm that output arrives continuously and finishes normally. Use the deployment's actual model type, model name, and API key; opening the page does not replace inference verification.
 
 If verification fails, first check the server and reverse proxy logs. Check trusted proxy addresses, forwarded headers, upstream listeners, and timeout settings separately, then repeat the corresponding checks after correcting the configuration.
+
+<!-- translation-source-sha256: 691ff3f61f6d9be6f7bc10b9546535dad35fa1aedc700c4692bcf95437d43330 -->
+<!-- translation-localized-code-block: b9f0ff7e24801b61361f174f58cb4bf4e0289d4ac22ee08fe498f0700e7e3332 ebf9b53f86336622e196e80e77241ebedc8e44b4c9b7d406d7458163d1d55406 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
+<!-- translation-localized-code-block: fd7ea10d8cc1f307458fbadfea50f2e737556c5911abe820ea3bea73c5bea8e7 79eb89d2bfd4c89f0cb2c677658b50d4e0ab41fddb57f1547a31530c06570133 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
+<!-- translation-localized-code-block: 0175e6cb54fd74da958ba053ae4fda8a38db6cab82cf94c2f859f4a443dbfd63 9cf026a019796cac04e148e868f41bf926be178c46cda3e8335d0ea1d77732e1 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->

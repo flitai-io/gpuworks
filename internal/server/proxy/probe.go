@@ -80,9 +80,9 @@ func (p *Proxy) ProbeForInstance(ctx context.Context, deploymentID uint, instanc
 		return ProbeReply{Message: err.Error()}
 	}
 	req.Header.Set(instanceHeader, instanceUUID)
-	selected, tgt, pinned, status, message, _ := p.pinnedTarget(req, dep.ServedName)
-	if !pinned || status != 0 || selected == nil || selected.ID != deploymentID {
-		return ProbeReply{NoReplica: true, HTTPStatus: status, Message: message}
+	selected, tgt, pinned, rejection, _ := p.pinnedTarget(req, dep.ServedName)
+	if !pinned || rejection != nil || selected == nil || selected.ID != deploymentID {
+		return ProbeReply{NoReplica: true, HTTPStatus: rejection.status(), Message: rejection.message()}
 	}
 	return p.probeSelected(ctx, deploymentID, path, payload, dep.ServedName, tgt)
 }
@@ -143,8 +143,8 @@ func (p *Proxy) probeTarget(id uint) (servedName string, tgt target, ok bool) {
 	if err != nil || dep == nil {
 		return "", target{}, false
 	}
-	tgt, status, _, _ := p.selectDeploymentInstances(dep, dep.ServedName, "")
-	if status != 0 {
+	tgt, rejection, _ := p.selectDeploymentInstances(dep, dep.ServedName, "")
+	if rejection != nil {
 		return "", target{}, false
 	}
 	return dep.ServedName, tgt, true

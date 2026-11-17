@@ -191,8 +191,8 @@ The control plane must be managed by systemd, launchd, or `serve --supervise`, m
 
 1. As an administrator, open **Settings → General → Version and updates** and check the current version of **Server**.
 2. Under **Update channel**, select **Release** (stable releases) or **Nightly** (rolling previews), click **Check for updates**, and verify the latest server version.
-3. Click **Upgrade** on the **Server** row. Check the target version and interruption notice in the confirmation page, then click **Upgrade**.
-4. Wait for the page to recover. Confirm that it reports that the server now runs the target version, and that the **Current** version matches the target. If the new version does not respond within 5 minutes, the page reports an issue. Follow [Troubleshooting](#排查) to check the actual version and logs; do not assume a timeout means the upgrade succeeded or rolled back.
+3. Click **Select upgrade version** on the **Server** row. Choose a published release or build, review the current version, target and restart impact, then click **Confirm upgrade**.
+4. Wait for the page to recover. Confirm that it reports that the server now runs the target version, and that the **Current** version matches the target. If the new version does not respond within 5 minutes, the result remains unconfirmed. The page checks every 15 seconds, and **Recheck running version** checks immediately. A confirmed return to the previous version displays a rollback notice. See [Troubleshooting](#排查).
 
 **If the server cannot access the release source**, click **Upload release** in the same row and select a `gpuworks-<release_id>-<os>-<arch>.tar.gz` matching the server's operating system and architecture. **Selecting the file immediately starts upload and upgrade; the online upgrade confirmation page does not appear again.** After completion, verify the result as described in step 4.
 
@@ -306,7 +306,7 @@ Run `./gpuworks` in the table from the actual installation directory. Confirm `<
 | The console reports that the channel has no version yet | Switch to a channel with a published release, or wait for a release on this channel and check again |
 | Release index signature verification fails | Check the server's outbound proxy, gateway, or login interception. As a temporary alternative, use a matching local upgrade package |
 | Cannot connect to the release source | Check the server's outbound connectivity and proxy. Without internet access, upload a release package or perform an offline upgrade |
-| Console upgrade times out or fails | Check the service logs and `install-history.jsonl` in the actual data directory, then check the running version through `/healthz`. A page timeout alone does not prove rollback. If the server still cannot start after rollback, follow [Upgrades and Version Compatibility](upgrade-and-compatibility.md) to check and restore the backup |
+| Console upgrade times out or fails | Check the service logs and `install-history.jsonl` in the actual data directory, then check the running version through `/healthz`. A page timeout alone does not prove rollback. If the upgrade succeeded but the history has no entry for it, the service log shows `console upgrade confirmed without an install history entry`: usually an earlier version, installed as root, left that file to root. Run `gpuworks upgrade` once as root (it hands the installation tree to the service account again) or `chown gpuworks <data>/install-history.jsonl` to repair it. If the server still cannot start after rollback, follow [Upgrades and Version Compatibility](upgrade-and-compatibility.md) to check and restore the backup |
 | All nodes are offline after an upgrade | Check whether **Listen addresses** on the **Settings** page matches the reverse proxy/NAT, then check node versions. See [Configure Node Networks](configure-networks.md#监听地址与别人怎么连过来) |
 
 ## Additional Details
@@ -327,3 +327,13 @@ After verification passes, `VACUUM INTO` creates a database snapshot. The snapsh
 The page waits only 5 minutes, less than the server's confirmation window. You must therefore still check the actual version and logs after a page timeout.
 
 </details>
+
+<!-- translation-source-sha256: a4254a5f958784c069aed12cc62cf2364c69785d05ba4681e476cc86c0945d75 -->
+<!-- translation-localized-code-block: 5846ca9eedd24f71306cab5c0c641ac91d93017a204a10590d0da44869aca60c d30b290861df40db339879702ea834f9a0133c1811b5c3e1b4315db3810ae76b Translate the editorial arrow annotation for the password prompt; actual CLI prompt text unchanged. -->
+<!-- translation-localized-code-block: 5e39ad4e967ab522280dcf50bf738ec0bda0ead57e8cc62bfb507186fc142032 3b97e82a02b8ad42b870dad3ff601553828968e7146d828efc110fde90a6eea5 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: a2a7d849742d4bc1b49eee629e9d586337d74603ea8592f6d24f2d3add8c1044 a51c2a29d1d5cfacb1af2136ca8e39aa3fcad8ea6674d3de2abc2c7c8f624e7b Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: f0b38b5e68e138a05b5cbd313cf1014cb6614ad9ef5469dfa703fcdd1cc9155f 0d3b3889d02db3ff61a19c7ca7ad3712d1bb6010a6416388d4488fee5cbd52bf Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
+<!-- translation-localized-code-block: 065bb64e923f37496561b5ef8420b692b7d61b90d1fd7c1d642b2dc252b829ef 47722574ed1a0f86b771369b5e2cc33be3416bdbae43abc3f6493e06a142d86e Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
+<!-- translation-localized-code-block: dd7dcfa87a47cb4e7eb1762482c6a41e9622441dd96fe931d82eb60234fcb76d 55149b6b9b5b3f803f1cb0340e7fc5c2a9fba5bef9e13d94db5fcd8716475a55 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
+<!-- translation-localized-code-block: 5d9d6a97de49d41542d0693348156b71b71f4aac3570a2edcb13c74d522ee646 d224002af04a37e1c10bfbe1d9a27e3f7c4ca840be60632da8f7618625d16438 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
+<!-- translation-localized-code-block: d7ad60dbe1d54b38ab45eb37338d3402b04c9ec20d64909b986fe2c8c81370d7 0babf541726d9ba15196366f47ba5af457f2d3b0e96681b5db9bbcf8707c49e7 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->

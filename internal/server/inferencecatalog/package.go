@@ -24,12 +24,21 @@ import (
 )
 
 // PackageSchemaVersion is the package format this server writes and the
-// newest it reads. 2 added spec display names (display_name_zh_cn /
-// display_name_en): a server that only knows 1 parses model.yaml strictly
-// and would fail on them, so it must see the newer version and treat the
-// package as incompatible rather than download it. Packages of 1 still read
-// here; their retired display_profile keys are ignored with a warning.
-const PackageSchemaVersion = 2
+// newest it reads. A server that sees a newer version on its channel treats
+// the catalog as incompatible rather than download it.
+//
+//   - 2 added spec display names (display_name_zh_cn / display_name_en).
+//     Packages of 1 still read here; their retired display_profile keys are
+//     ignored with a warning.
+//   - 3 marks the catalogs that state gpus.arch_id and api tokenizer_ref.
+//     The servers that know only 2 parse model.yaml strictly and fail on
+//     them, so they must be told the catalog is not for them.
+//
+// A server that knows 3 reads an official package tolerantly
+// (LoadPackageTolerant), so a field or rule added to model.yaml no longer
+// needs a new version. The version moves when the package layout or the
+// manifest changes in a way an older server cannot skip.
+const PackageSchemaVersion = 3
 
 // oldestPackageSchemaVersion is the oldest package format this server reads.
 const oldestPackageSchemaVersion = 1
@@ -55,110 +64,19 @@ type Archive struct {
 	FS      fs.FS
 }
 
-// LoadPackage reads a catalog rooted at fsys. It rejects files outside the
-// model-owned layout so an embedded, downloaded, and offline-imported package
-// all have the same authority boundary.
-func LoadPackage(fsys fs.FS) (Package, error) {
-	manifestData, err := fs.ReadFile(fsys, "manifest.yaml")
-	if err != nil {
-		return Package{}, fmt.Errorf("read inference catalog package manifest: %w", err)
-	}
-	manifest, err := parsePackageManifest(manifestData)
-	if err != nil {
-		return Package{}, err
-	}
-
-	var modelFiles []string
-	err = fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if name == "." || entry.IsDir() {
-			return nil
-		}
-		if !entry.Type().IsRegular() {
-			return fmt.Errorf("inference catalog package contains non-regular file %s", name)
-		}
-		if err := validatePackageFileName(name); err != nil {
-			return err
-		}
-		if path.Base(name) == "model.yaml" {
-			modelFiles = append(modelFiles, name)
-		}
-		return nil
-	})
-	if err != nil {
-		return Package{}, fmt.Errorf("walk inference catalog package: %w", err)
-	}
-	if len(modelFiles) == 0 {
-		return Package{}, errors.New("inference catalog package requires at least one models/**/model.yaml")
-	}
-	sort.Strings(modelFiles)
-
-	catalog := FlatCatalog{Models: make([]InferenceModel, 0, len(modelFiles))}
-	for _, name := range modelFiles {
-		data, err := fs.ReadFile(fsys, name)
-		if err != nil {
-			return Package{}, fmt.Errorf("read inference catalog model %s: %w", name, err)
-		}
-		model, err := parseModelYAML(data)
-		if err != nil {
-			return Package{}, fmt.Errorf("parse inference catalog model %s: %w", name, err)
-		}
-		modelDirectory := path.Dir(name)
-		if _, err := fs.Stat(fsys, modelDirectory+"/README.zh-CN.md"); err == nil {
-			model.ReadmeZHCN = "README.zh-CN.md"
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return Package{}, fmt.Errorf("inspect model %s Chinese README: %w", model.ModelID, err)
-		}
-		if _, err := fs.Stat(fsys, modelDirectory+"/README.en.md"); err == nil {
-			model.ReadmeEN = "README.en.md"
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return Package{}, fmt.Errorf("inspect model %s English README: %w", model.ModelID, err)
-		}
-		catalog.Models = append(catalog.Models, model)
-	}
-	if err := ValidateFlatCatalog(&catalog); err != nil {
-		return Package{}, err
-	}
-	for i, name := range modelFiles {
-		expected, err := modelFileName(catalog.Models[i].ModelID)
-		if err != nil {
-			return Package{}, err
-		}
-		if name != expected {
-			return Package{}, fmt.Errorf("model %s must be stored at %s, found %s", catalog.Models[i].ModelID, expected, name)
-		}
-	}
-	if err := validatePackageAssets(fsys, &catalog); err != nil {
-		return Package{}, err
-	}
-	// Filesystem ordering includes the trailing "/model.yaml", so it is not
-	// equivalent to ordering bare model IDs (for example "foo-2" sorts before
-	// "foo/model.yaml"). Keep the public catalog order independent of layout.
-	sort.Slice(catalog.Models, func(i, j int) bool {
-		return catalog.Models[i].ModelID < catalog.Models[j].ModelID
-	})
-
-	specs := countSpecs(catalog)
-	if manifest.Models != len(catalog.Models) || manifest.Specs != specs {
-		return Package{}, fmt.Errorf("inference catalog manifest says %d models/%d specs, package contains %d/%d", manifest.Models, manifest.Specs, len(catalog.Models), specs)
-	}
-	return Package{Manifest: manifest, Catalog: catalog}, nil
-}
-
-func LoadPackageDirectory(root string) (Package, error) {
-	return LoadPackage(os.DirFS(root))
-}
-
 // ReadPackageArchive decodes the distribution form without touching disk.
 // Link-like entries, ambiguous paths, duplicate names, and oversized streams
 // are rejected before the regular package validator sees the files.
 func ReadPackageArchive(reader io.Reader) (Archive, error) {
+	archive, _, err := readPackageArchive(reader, false)
+	return archive, err
+}
+
+func readPackageArchive(reader io.Reader, tolerant bool) (Archive, []Skipped, error) {
 	limited := &countingReader{reader: io.LimitReader(reader, catalogasset.MaxPackageBytes+1)}
 	gz, err := gzip.NewReader(limited)
 	if err != nil {
-		return Archive{}, fmt.Errorf("open inference catalog package gzip: %w", err)
+		return Archive{}, nil, fmt.Errorf("open inference catalog package gzip: %w", err)
 	}
 	gz.Multistream(false)
 	tarReader := tar.NewReader(gz)
@@ -170,48 +88,48 @@ func ReadPackageArchive(reader io.Reader) (Archive, error) {
 			break
 		}
 		if err != nil {
-			return Archive{}, fmt.Errorf("read inference catalog package tar: %w", err)
+			return Archive{}, nil, fmt.Errorf("read inference catalog package tar: %w", err)
 		}
 		name := path.Clean(strings.ReplaceAll(header.Name, "\\", "/"))
 		if name == "." || name != header.Name || path.IsAbs(header.Name) || !fs.ValidPath(name) || strings.HasPrefix(name, "../") {
-			return Archive{}, fmt.Errorf("unsafe inference catalog package path %q", header.Name)
+			return Archive{}, nil, fmt.Errorf("unsafe inference catalog package path %q", header.Name)
 		}
 		if header.Typeflag == tar.TypeDir {
 			continue
 		}
 		if header.Typeflag != tar.TypeReg {
-			return Archive{}, fmt.Errorf("inference catalog package entry %s is not a regular file", name)
+			return Archive{}, nil, fmt.Errorf("inference catalog package entry %s is not a regular file", name)
 		}
 		if _, duplicate := files[name]; duplicate {
-			return Archive{}, fmt.Errorf("duplicate inference catalog package path %q", name)
+			return Archive{}, nil, fmt.Errorf("duplicate inference catalog package path %q", name)
 		}
 		if header.Size < 0 {
-			return Archive{}, fmt.Errorf("inference catalog package entry %s has a negative size", name)
+			return Archive{}, nil, fmt.Errorf("inference catalog package entry %s has a negative size", name)
 		}
 		expanded += header.Size
 		if expanded > 64<<20 {
-			return Archive{}, errors.New("inference catalog package expands beyond 64 MiB")
+			return Archive{}, nil, errors.New("inference catalog package expands beyond 64 MiB")
 		}
 		data, err := io.ReadAll(io.LimitReader(tarReader, header.Size+1))
 		if err != nil {
-			return Archive{}, fmt.Errorf("read inference catalog package entry %s: %w", name, err)
+			return Archive{}, nil, fmt.Errorf("read inference catalog package entry %s: %w", name, err)
 		}
 		if int64(len(data)) != header.Size {
-			return Archive{}, fmt.Errorf("short inference catalog package entry %s", name)
+			return Archive{}, nil, fmt.Errorf("short inference catalog package entry %s", name)
 		}
 		files[name] = &fstest.MapFile{Data: data, Mode: 0o644}
 	}
 	if err := gz.Close(); err != nil {
-		return Archive{}, fmt.Errorf("close inference catalog package gzip: %w", err)
+		return Archive{}, nil, fmt.Errorf("close inference catalog package gzip: %w", err)
 	}
 	if limited.bytes > catalogasset.MaxPackageBytes {
-		return Archive{}, fmt.Errorf("compressed inference catalog package exceeds %d bytes", catalogasset.MaxPackageBytes)
+		return Archive{}, nil, fmt.Errorf("compressed inference catalog package exceeds %d bytes", catalogasset.MaxPackageBytes)
 	}
-	pkg, err := LoadPackage(files)
+	pkg, skipped, err := loadPackage(files, tolerant)
 	if err != nil {
-		return Archive{}, err
+		return Archive{}, nil, err
 	}
-	return Archive{Package: pkg, FS: files}, nil
+	return Archive{Package: pkg, FS: files}, skipped, nil
 }
 
 // PackageDigest identifies the exact deterministic distribution archive.
@@ -334,7 +252,9 @@ func WritePackageDirectoryWithFiles(root, publishedAt string, catalog FlatCatalo
 // PackPackage writes a deterministic tar.gz representation of a validated
 // package. It intentionally carries no host timestamps, ownership, or modes.
 func PackPackage(writer io.Writer, fsys fs.FS) error {
-	if _, err := LoadPackage(fsys); err != nil {
+	// A stored official package may hold specs this build skips; it is packed
+	// as it was published.
+	if _, _, err := loadPackage(fsys, true); err != nil {
 		return err
 	}
 	var files []string
@@ -407,10 +327,10 @@ func (writer *countingWriter) Write(data []byte) (int, error) {
 	return written, err
 }
 
-func parsePackageManifest(data []byte) (PackageManifest, error) {
+func parsePackageManifest(data []byte, knownFields bool) (PackageManifest, error) {
 	var manifest PackageManifest
 	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	decoder.KnownFields(true)
+	decoder.KnownFields(knownFields)
 	if err := decoder.Decode(&manifest); err != nil {
 		return PackageManifest{}, fmt.Errorf("parse inference catalog package manifest: %w", err)
 	}
@@ -492,7 +412,10 @@ func validatePackageFileName(name string) error {
 	return fmt.Errorf("inference catalog package asset type is not allowed: %s", name)
 }
 
-func validatePackageAssets(fsys fs.FS, catalog *FlatCatalog) error {
+// validatePackageAssets checks every asset a spec names and refuses a file
+// no spec names, except under the model directories in partial: a tolerant
+// load left specs of those out, and their assets with them.
+func validatePackageAssets(fsys fs.FS, catalog *FlatCatalog, partial map[string]struct{}) error {
 	referenced := map[string]struct{}{}
 	sizes := map[string]int64{}
 	for modelIndex := range catalog.Models {
@@ -543,6 +466,9 @@ func validatePackageAssets(fsys fs.FS, catalog *FlatCatalog) error {
 			return walkErr
 		}
 		if _, ok := referenced[name]; !ok {
+			if _, left := partial[name[:strings.Index(name, "/assets/")]]; left {
+				return nil
+			}
 			return fmt.Errorf("inference catalog package contains unreferenced asset %s", name)
 		}
 		return nil

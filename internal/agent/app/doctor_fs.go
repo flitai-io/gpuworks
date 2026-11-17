@@ -201,8 +201,20 @@ func describeMount(e mountEntry, container bool) *proto.DoctorMount {
 // what the mount makes impossible or fragile. A network filesystem is stated
 // as a fact only: shared NFS storage is a supported setup.
 func doctorFilesystems(r *proto.DoctorReport, runtimeName string) {
+	if doctorOnMac {
+		// macOS has no mount table of this form, and the mount checks
+		// judge Linux mount options: they do not apply.
+		return
+	}
 	data, err := doctorMountTable()
 	if err != nil {
+		// No path's mount can be judged: say so, or the report reads as if
+		// every path were fine.
+		r.Findings = append(r.Findings, proto.DoctorFinding{
+			ID: proto.DoctorCheckMounts, Status: proto.CheckSkip, Code: proto.DoctorSkipMountTableUnreadable,
+			Probe: "/proc/self/mountinfo", Evidence: []proto.DoctorField{{Name: "error", Value: err.Error()}},
+			Recheck: "findmnt",
+		})
 		return
 	}
 	entries := parseMountInfo(data)
@@ -215,19 +227,19 @@ func doctorFilesystems(r *proto.DoctorReport, runtimeName string) {
 	}
 
 	type check struct {
-		code    string
-		kinds   map[string]bool
-		write   bool
-		flagged func(*proto.DoctorMount) bool
+		id, code string
+		kinds    map[string]bool
+		write    bool
+		flagged  func(*proto.DoctorMount) bool
 	}
 	for _, c := range []check{
-		{proto.DoctorPathNoExec, doctorExecKinds, false, func(m *proto.DoctorMount) bool { return m.NoExec }},
-		{proto.DoctorPathReadOnly, doctorWriteKinds, true, func(m *proto.DoctorMount) bool { return m.ReadOnly }},
-		{proto.DoctorPathEphemeral, doctorPersistedKinds, true, func(m *proto.DoctorMount) bool { return m.Ephemeral }},
+		{proto.DoctorCheckPathExec, proto.DoctorPathNoExec, doctorExecKinds, false, func(m *proto.DoctorMount) bool { return m.NoExec }},
+		{proto.DoctorCheckPathWrite, proto.DoctorPathReadOnly, doctorWriteKinds, true, func(m *proto.DoctorMount) bool { return m.ReadOnly }},
+		{proto.DoctorCheckPathPersist, proto.DoctorPathEphemeral, doctorPersistedKinds, true, func(m *proto.DoctorMount) bool { return m.Ephemeral }},
 	} {
-		level := proto.DoctorLevelError
+		status := proto.CheckFail
 		if c.code == proto.DoctorPathEphemeral {
-			level = proto.DoctorLevelWarning
+			status = proto.CheckWarn
 		}
 		var order []string
 		groups := map[string][]proto.DoctorDisk{}
@@ -245,7 +257,7 @@ func doctorFilesystems(r *proto.DoctorReport, runtimeName string) {
 			first := disks[0]
 			m := first.Mount
 			finding := proto.DoctorFinding{
-				Code: c.code, Level: level, Disk: &first, Probe: "/proc/self/mountinfo",
+				ID: c.id, Status: status, Code: c.code, Disk: &first, Probe: "/proc/self/mountinfo",
 				Evidence: []proto.DoctorField{{Name: "TARGET", Value: m.Point}, {Name: "FSTYPE", Value: m.FSType}, {Name: "OPTIONS", Value: m.Options}},
 				Recheck:  "findmnt -T " + first.Path,
 			}

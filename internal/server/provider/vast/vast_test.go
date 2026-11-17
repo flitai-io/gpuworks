@@ -13,8 +13,8 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
-// sample /instances/ body: one running instance with ssh access, one stopped.
-const instancesBody = `{"instances":[
+// Sample v1 instance page: one running instance with ssh access, one stopped.
+const instancesBody = `{"success":true,"instances_found":2,"total_instances":2,"next_token":null,"instances":[
   {
     "id": 12345,
     "machine_id": 678,
@@ -48,13 +48,13 @@ func newTestDriver(t *testing.T, h http.HandlerFunc) *Driver {
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	d := New()
-	d.baseURL = srv.URL // override base URL to hit the mock
+	d.baseURL = srv.URL + "/api/v0" // preserve the real default API prefix
 	return d
 }
 
 func TestListInstances(t *testing.T) {
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/instances/" {
+		if r.URL.Path != "/api/v1/instances/" {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer key123" {
@@ -135,7 +135,7 @@ func TestValidateCredentials(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.status)
-				w.Write([]byte(`{"instances":[]}`))
+				writeInstancePage(w, 1, 0, 0, nil)
 			})
 			err := d.ValidateCredentials(context.Background(), provider.Credentials{APIKey: "k"})
 			if tc.wantErr && err == nil {
@@ -150,7 +150,7 @@ func TestValidateCredentials(t *testing.T) {
 
 func TestPowerState(t *testing.T) {
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(instancesBody))
+		writeFilteredInstanceFixture(t, w, r, instancesBody)
 	})
 	cases := []struct {
 		id   string
@@ -175,7 +175,7 @@ func TestPowerState(t *testing.T) {
 
 func TestSearchOffers(t *testing.T) {
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/bundles/" {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v0/bundles/" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
 		if got := r.Header.Get("Content-Type"); got != "application/json" {
@@ -223,7 +223,7 @@ func TestCreateInstanceRequiresExplicitOffer(t *testing.T) {
 
 func TestAttachSSHKey(t *testing.T) {
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/instances/9988/ssh/" {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v0/instances/9988/ssh/" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
 		var body map[string]string
@@ -242,7 +242,7 @@ func TestAttachSSHKey(t *testing.T) {
 
 func TestCreateInstanceFromOffer(t *testing.T) {
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut || r.URL.Path != "/asks/7654/" {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/v0/asks/7654/" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
 		data, err := io.ReadAll(r.Body)
@@ -289,7 +289,7 @@ func TestDeleteInstanceIsIdempotent(t *testing.T) {
 	var calls int
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		if r.Method != http.MethodDelete || r.URL.Path != "/instances/9988/" {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v0/instances/9988/" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
 		if calls == 1 {
@@ -343,7 +343,7 @@ func TestInstallScriptCommandRunsTheSharedScriptInstall(t *testing.T) {
 			t.Fatalf("install command ignores the operator's choices: %s", cmd)
 		}
 	}
-	if got := agentProcessCheck("__GPUWORKS_AGENT_PROCESS_OK__", "/data/gpuworks"); got.Status != "ok" || !strings.Contains(got.Detail, "/data/gpuworks") {
+	if got := agentProcessCheck("__GPUWORKS_AGENT_PROCESS_OK__", "/data/gpuworks"); got.Status != "pass" || !strings.Contains(checkText(got), "/data/gpuworks") {
 		t.Fatalf("agentProcessCheck success = %+v", got)
 	}
 	if got := agentProcessCheck("__GPUWORKS_AGENT_PROCESS_WARN__", ""); got.Status != "warn" {
@@ -374,17 +374,17 @@ func TestAuthorizePublicKeyAttachesToTheInstance(t *testing.T) {
 	calls := 0
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		if r.Method != http.MethodPost || r.URL.Path != "/instances/9988/ssh/" {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v0/instances/9988/ssh/" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`{"success":true}`))
 	})
 	// Before the instance exists there is nothing to attach to.
-	if detail, err := d.AuthorizePublicKey(t.Context(), provider.Credentials{APIKey: "key"}, "", "ssh-ed25519 AAAA gpuworks@s"); err != nil || detail != "" || calls != 0 {
-		t.Fatalf("no instance: detail=%q err=%v calls=%d", detail, err, calls)
+	if check, err := d.AuthorizePublicKey(t.Context(), provider.Credentials{APIKey: "key"}, "", "ssh-ed25519 AAAA gpuworks@s"); err != nil || check.ID != "" || calls != 0 {
+		t.Fatalf("no instance: check=%+v err=%v calls=%d", check, err, calls)
 	}
-	detail, err := d.AuthorizePublicKey(t.Context(), provider.Credentials{APIKey: "key"}, "9988", "ssh-ed25519 AAAA gpuworks@s")
-	if err != nil || detail != "attached to the Vast instance" || calls != 1 {
-		t.Fatalf("detail=%q err=%v calls=%d", detail, err, calls)
+	check, err := d.AuthorizePublicKey(t.Context(), provider.Credentials{APIKey: "key"}, "9988", "ssh-ed25519 AAAA gpuworks@s")
+	if err != nil || check.Status != "pass" || check.Code != "CHECK_PLATFORM_KEY_INSTANCE_ATTACHED" || check.Message != "attached to the Vast instance" || calls != 1 {
+		t.Fatalf("check=%+v err=%v calls=%d", check, err, calls)
 	}
 }

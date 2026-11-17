@@ -93,7 +93,7 @@ func (c *Client) ChatStream(ctx context.Context, messages []Message, tools []Too
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-		return Message{}, Usage{}, fmt.Errorf("llm http %d: %s", resp.StatusCode, string(raw))
+		return Message{}, Usage{}, &UpstreamError{Status: resp.StatusCode, Body: string(raw)}
 	}
 
 	var (

@@ -44,7 +44,10 @@ PRODUCT_FILES = ['ui/src/pages/LogsPage.tsx', 'ui/src/i18n/locales/en/logs.json'
 
 def validate_csv(raw, entries):
     """Decode downloaded bytes independently of the product CSV serializer."""
-    text = raw.decode('utf-8-sig')  # BOM is optional in this product's contract.
+    check(raw[:3] == b'\xef\xbb\xbf',
+          'CSV must start with UTF-8 BOM EF BB BF; got ' + raw[:3].hex(' ').upper())
+    check(raw[3:6] != b'\xef\xbb\xbf', 'CSV contains a duplicate leading UTF-8 BOM')
+    text = raw[3:].decode('utf-8')
     rows = list(csv.reader(io.StringIO(text, newline=''), strict=True))
     expected = [CSV_FIELDS] + [[str(e[k]) for k in ('time_ms', 'level', 'source', 'instance', 'node', 'line')] for e in entries]
     check(rows == expected, 'CSV columns/rows differ from the actual loaded entries')
@@ -358,7 +361,8 @@ def test_log_filter_export(page, context, server, artifacts, report, locale):
     # Back to a query that matches, so the export below is not disabled by the last probe.
     loaded = result(lambda: search.fill(query), selected_query, [target], 'restore target after characters')
 
-    # Consume the real download bytes, including Chinese and CSV escaping, not just its name.
+    # Consume the finished file: one UTF-8 BOM, then exact loaded rows and CSV escaping.
+    report['last_step'] = 'logs-csv-download-encoding-and-content'
     with page.expect_download() as download_event:
         export.click()
     download = download_event.value
@@ -370,7 +374,7 @@ def test_log_filter_export(page, context, server, artifacts, report, locale):
     check('中文'.encode('utf-8') in raw and b'""' in raw, 'download lacks actual UTF-8/CSV escaping bytes')
     check(download.suggested_filename.startswith('gpuworks-logs-') and download.suggested_filename.endswith('.csv'), 'CSV filename contract changed')
     report['evidence'].append({'layer': 'download', 'file': destination.name, 'sha256': digest(destination),
-        'bytes': len(raw), 'encoding': 'UTF-8', 'bom': raw.startswith(b'\xef\xbb\xbf'), 'parsed_fields': parsed,
+        'bytes': len(raw), 'encoding': 'UTF-8', 'bom': raw[:3] == b'\xef\xbb\xbf', 'parsed_fields': parsed,
         'contract': 'current loaded entries; not server-wide export'})
 
     result(page.reload, base_query, [], 'reload resets source query level; preserves URL custom time')

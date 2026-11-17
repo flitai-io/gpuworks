@@ -8,7 +8,7 @@ import { I18nextProvider, initReactI18next } from "react-i18next";
 import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "HTMLBodyElement", "HTMLInputElement", "getComputedStyle"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "CustomEvent", "ShadowRoot", "File", "HTMLBodyElement", "HTMLInputElement", "getComputedStyle"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
@@ -33,6 +33,7 @@ const userEventModule = await import("@testing-library/user-event");
 const userEvent = userEventModule.default ?? userEventModule;
 const apiModule = await import("../src/api.ts");
 const { APIError } = await import("../src/apiError.ts");
+const { formatTime } = await import("../src/i18n/datetime.ts");
 const UpdatesCard = (await import("../src/pages/settings/UpdatesCard.tsx")).default;
 type UpdateStatus = import("../src/api.ts").UpdateStatus;
 
@@ -44,6 +45,7 @@ afterEach(() => {
 after(() => closeChannels());
 
 const u = settingsLocale.updates;
+const picker = settingsLocale.versionPicker;
 
 function statusFixture(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
   return {
@@ -115,6 +117,23 @@ test("shows each item against the channel without naming the sources", async () 
   }
 });
 
+test("the running build shows when its binary was built even if the channel index was republished later", async () => {
+  const value = statusFixture();
+  const build = { version: value.server.current, kind: "prerelease" as const, build_channel: value.channel,
+    built_at: "2026-11-09T04:30:00Z", published_at: "2026-11-16T10:34:00Z", published_version: value.server.current };
+  value.server.current_build = build;
+  const s = stub([value]);
+  try {
+    renderCard();
+    const summary = await screen.findByRole("region", { name: u.currentBuild });
+    assert.equal(within(summary).getByText(u.buildFields.builtAt).nextElementSibling?.textContent, formatTime(build.built_at));
+    assert.ok(within(summary).getByText(u.buildFields.matched));
+    assert.equal(within(summary).queryByText(formatTime(build.published_at)), null);
+  } finally {
+    s.restore();
+  }
+});
+
 test("updating a catalog applies it and checks again", async () => {
   const s = stub([statusFixture(), statusFixture({ template_catalog: { current: "2026-10-11.aabbccdd", latest: "2026-10-11.aabbccdd", update_available: false, compatible: true } })]);
   try {
@@ -125,6 +144,34 @@ test("updating a catalog applies it and checks again", async () => {
     await waitFor(() => assert.deepEqual(s.calls, ["syncTemplates"]));
     await waitFor(() => assert.equal(s.checks(), 2));
     await waitFor(() => assert.ok(within(row(u.templates)).getByText(u.upToDate)));
+  } finally {
+    s.restore();
+  }
+});
+
+test("a template update names what needs a newer server and keeps it on the page", async () => {
+  const s = stub([statusFixture(), statusFixture({ template_catalog: { current: "2026-10-11.aabbccdd", latest: "2026-10-11.aabbccdd", update_available: false, compatible: true } })]);
+  const skipped = [
+    { model_id: "org/whole", reason: "field future_field not found in type inferencecatalog.InferenceModel" },
+    { model_id: "org/partial", spec: "bf16-next", reason: "field future_spec_field not found in type inferencecatalog.InferenceSpec" },
+    ...Array.from({ length: 21 }, (_, index) => ({ model_id: `org/many-${index}`, spec: "s", reason: "newer" })),
+  ];
+  apiModule.api.syncInferenceTemplates = async () => { s.calls.push("syncTemplates"); return { models: 380, package_digest: "aabbccdd", version: "2026-10-11.aabbccdd", skipped }; };
+  try {
+    renderCard();
+    assert.equal(screen.queryByRole("list", { name: u.templatesSkippedList }), null, "nothing is listed before an update");
+    const apply = await waitFor(() => within(row(u.templates)).getByRole("button", { name: u.apply }));
+    await userEvent.click(apply);
+    const list = await waitFor(() => screen.getByRole("list", { name: u.templatesSkippedList }));
+    assert.ok(screen.getByText(u.templatesSkipped_other.replace("{{count}}", "23")));
+    assert.ok(screen.getByText(u.templatesSkippedHelp));
+    assert.ok(within(list).getByText("org/whole"));
+    assert.equal(within(list).getByText("org/partial · bf16-next").closest("li")?.title, skipped[1].reason);
+    assert.equal(within(list).getAllByRole("listitem").length, 20, "a long list is cut");
+    assert.ok(screen.getByText(u.templatesSkippedMore_other.replace("{{count}}", "3")));
+    // The list outlives the status refresh that follows the update.
+    await waitFor(() => assert.ok(within(row(u.templates)).getByText(u.upToDate)));
+    assert.ok(screen.getByRole("list", { name: u.templatesSkippedList }));
   } finally {
     s.restore();
   }
@@ -181,7 +228,7 @@ test("a template download failure preserves server and image updates", async () 
     assert.equal(within(row(u.templates)).queryByText(u.needsServer), null);
     assert.ok((within(row(u.templates)).getByRole("button", { name: u.apply }) as HTMLButtonElement).disabled);
     assert.equal((within(row(u.images)).getByRole("button", { name: u.apply }) as HTMLButtonElement).disabled, false);
-    assert.equal((within(row(u.server)).getByRole("button", { name: u.upgrade }) as HTMLButtonElement).disabled, false);
+    assert.equal((within(row(u.server)).getByRole("button", { name: picker.title }) as HTMLButtonElement).disabled, false);
   } finally {
     s.restore();
   }
@@ -199,9 +246,17 @@ test("a failed check is shown in the reader's words", async () => {
 
 function stubServerUpgrade(answers: Array<UpdateStatus>, healthVersions: string[]) {
   const s = stub(answers);
-  const original = { upgradeServer: apiModule.api.upgradeServer, uploadServerArchive: apiModule.api.uploadServerArchive };
+  const original = { serverVersions: apiModule.api.serverVersions, upgradeServer: apiModule.api.upgradeServer, uploadServerArchive: apiModule.api.uploadServerArchive };
   const originalFetch = globalThis.fetch;
-  apiModule.api.upgradeServer = async () => { s.calls.push("upgradeServer"); return { from: "f62e36c0", to: "f90e474e", backup: "/opt/gpuworks/server/backups/b.tar.gz" }; };
+  apiModule.api.serverVersions = async channel => ({ channel, platform:"linux/arm64", versions:[
+    { version:"newer-head", built_at:"2026-10-12", sha256:"head" },
+    { version:"f90e474e", built_at:"2026-10-11", sha256:"selected" },
+  ] });
+  apiModule.api.upgradeServer = async target => {
+    assert.equal(target?.channel, "nightly");
+    assert.equal(target?.version, "f90e474e");
+    assert.equal(target?.sha256, "selected");
+    s.calls.push("upgradeServer"); return { from: "f62e36c0", to: "f90e474e", backup: "/opt/gpuworks/server/backups/b.tar.gz" }; };
   apiModule.api.uploadServerArchive = async (file: File) => { s.calls.push(`uploadServer:${file.name}`); return { from: "f62e36c0", to: "f90e474e", backup: "/opt/gpuworks/server/backups/b.tar.gz" }; };
   let probe = 0;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -220,7 +275,7 @@ function stubServerUpgrade(answers: Array<UpdateStatus>, healthVersions: string[
 const selfUpgradable = { current: "f62e36c0", latest: "f90e474e", built_at: "2026-10-11T01:03:15+08:00", update_available: true, installable: true, self_upgrade: true };
 
 function requireServerUpgradeReady() {
-  const button = within(row(u.server)).getByRole("button", { name: u.upgrade }) as HTMLButtonElement;
+  const button = within(row(u.server)).getByRole("button", { name: picker.title }) as HTMLButtonElement;
   assert.ok(!screen.queryByText(u.checking), "the update check has not finished");
   assert.ok(!button.closest(".ant-spin-blur"), "the update table is still loading");
   assert.equal(button.disabled, false);
@@ -231,6 +286,43 @@ function readyServerUpgrade() {
   return waitFor(requireServerUpgradeReady);
 }
 
+test("long histories keep the preferred target visible and filter by release or signed commit without selecting a hidden package", async () => {
+  const s = stubServerUpgrade([statusFixture({ server: selfUpgradable })], []);
+  const releases = Array.from({ length: 8 }, (_, index) => ({
+    version: `v26.11.${8 - index}`, built_at: "2026-11-01", sha256: String(index),
+    reason: index < 5 ? "arch" as const : undefined,
+    commit: index === 7 ? "abcdef1234567890" : undefined,
+  }));
+  apiModule.api.serverVersions = async channel => ({ channel, platform: "linux/arm64", versions: releases });
+  try {
+    renderCard();
+    await userEvent.click(await readyServerUpgrade());
+    const drawer = within(await screen.findByRole("dialog"));
+    await drawer.findByRole("radio", { name: "v26.11.3", checked: true });
+    assert.equal(drawer.getAllByRole("radio").length, 6);
+    assert.equal(drawer.queryByRole("radio", { name: "v26.11.1" }), null);
+    await userEvent.click(drawer.getByRole("button", { name: picker.showAll.replace("{{count}}", "8") }));
+    assert.equal(drawer.getAllByRole("radio").length, 8);
+    const input = drawer.getByRole("searchbox", { name: picker.search });
+    await userEvent.type(input, "not-found");
+    assert.ok(drawer.getByText(picker.noMatch));
+    const proceed = (version: string) => drawer.getByRole("button", { name: picker.upgradeTo.replace("{{version}}", version) }) as HTMLButtonElement;
+    assert.equal(proceed(picker.selectedTarget).disabled, true);
+    await userEvent.clear(input);
+    await userEvent.type(input, " ABCDEF12 ");
+    assert.equal(drawer.getAllByRole("radio").length, 1);
+    assert.equal(drawer.queryByText(picker.latest), null);
+    await userEvent.click(drawer.getByRole("radio", { name: "v26.11.1" }));
+    await userEvent.click(drawer.getByRole("button", { name: picker.showRecent }));
+    assert.ok(drawer.getByRole("radio", { name: "v26.11.1", checked: true }));
+    await userEvent.click(proceed("v26.11.1"));
+    assert.ok(await screen.findByRole("dialog", { name: picker.confirmTitle.replace("{{version}}", "v26.11.1") }));
+    assert.deepEqual(s.calls, []);
+  } finally {
+    s.restore();
+  }
+});
+
 test("the console upgrades the server after confirming and waits for the new version", async () => {
   const after = statusFixture({ server: { ...selfUpgradable, current: "f90e474e", update_available: false } });
   const s = stubServerUpgrade([statusFixture({ server: selfUpgradable }), after], ["f90e474e"]);
@@ -239,15 +331,18 @@ test("the console upgrades the server after confirming and waits for the new ver
     renderCard();
     const upgrade = await readyServerUpgrade();
     await userEvent.click(upgrade);
-    const dialog = await screen.findByRole("dialog");
-    assert.ok(within(dialog).getAllByText("Upgrade the server to f90e474e?").length > 0);
+    const drawer = await screen.findByRole("dialog");
+    await userEvent.click(await within(drawer).findByRole("radio", { name: "f90e474e" }));
+    await userEvent.click(within(drawer).getByRole("button", { name: picker.upgradeTo.replace("{{version}}", "f90e474e") }));
+    const dialog = await screen.findByRole("dialog", { name: picker.confirmTitle.replace("{{version}}", "f90e474e") });
     assert.deepEqual(s.calls, [], "nothing happens before the confirmation");
     assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
-    await userEvent.click(within(dialog).getByRole("button", { name: u.upgrade }));
+    await userEvent.click(within(dialog).getByRole("button", { name: picker.confirm }));
     await waitFor(() => assert.deepEqual(s.calls, ["upgradeServer"]));
     await waitFor(() => assert.ok(s.probes() >= 1));
     await waitFor(() => assert.equal(s.checks(), 2));
     await waitFor(() => assert.ok(within(row(u.server)).getByText(u.upToDate)));
+    assert.equal((within(row(u.server)).getByRole("button", { name: picker.title }) as HTMLButtonElement).disabled, true);
     const notice = (await screen.findByRole("link", { name: u.viewNodes })).closest("tr")!;
     assert.equal(notice.previousElementSibling, row(u.server));
     assert.equal(notice.nextElementSibling, row(u.images));
@@ -260,6 +355,31 @@ test("the console upgrades the server after confirming and waits for the new ver
     within(notice).getByRole("button", { name: "Close" }).focus();
     await userEvent.keyboard("{Enter}");
     await waitFor(() => assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden"));
+  } finally {
+    s.restore();
+  }
+});
+
+test("a current server locks only the picker and can still switch to an earlier release on another channel", async () => {
+  const server = { ...selfUpgradable, current: selfUpgradable.latest, update_available: false,
+    current_build: { version: selfUpgradable.latest, kind: "prerelease" as const, build_channel: "nightly" } };
+  const current = statusFixture({ server });
+  const release = statusFixture({ channel: "release", server: { ...server, latest: "v26.11.0" } });
+  const s = stub([current, release]);
+  try {
+    renderCard();
+    await waitFor(() => assert.ok(within(row(u.server)).getByText(u.upToDate)));
+    const button = within(row(u.server)).getByRole("button", { name: picker.title }) as HTMLButtonElement;
+    assert.equal(button.disabled, true);
+    await userEvent.click(button);
+    assert.equal(screen.queryByRole("dialog"), null);
+    assert.equal((within(row(u.server)).getByRole("button", { name: u.uploadServer }) as HTMLButtonElement).disabled, false);
+    assert.equal((within(row(u.templates)).getByRole("button", { name: u.apply }) as HTMLButtonElement).disabled, false);
+
+    await userEvent.click(screen.getByRole("combobox"));
+    await userEvent.click(await screen.findByRole("option", { name: u.channelRelease }));
+    await readyServerUpgrade();
+    assert.ok(within(row(u.server)).getByText(u.differentChannelVersion));
   } finally {
     s.restore();
   }
@@ -279,7 +399,7 @@ test("a held update check keeps the upgrade behind the loading veil until its an
     await userEvent.click(screen.getByRole("button", { name: new RegExp(u.check) }));
     await waitFor(() => assert.deepEqual(s.refreshes, [false, true]));
     assert.ok(screen.getByText(u.checking));
-    const upgrade = within(row(u.server)).getByRole("button", { name: u.upgrade });
+    const upgrade = within(row(u.server)).getByRole("button", { name: picker.title });
     assert.ok(upgrade.closest(".ant-spin-blur"), "the existing button is present but cannot receive a pointer");
     assert.deepEqual(s.calls, []);
     assert.throws(requireServerUpgradeReady, /the update check has not finished/);
@@ -375,6 +495,19 @@ test("switching the channel shows it at once, checks it, and says when it is emp
   }
 });
 
+test("a saved channel never shows the previous channel's offers if its check fails", async () => {
+  const s = stub([statusFixture(), new Error("check failed")]);
+  try {
+    renderCard();
+    await screen.findByText("f90e474e");
+    await userEvent.click(screen.getByRole("combobox"));
+    await userEvent.click(await screen.findByRole("option", {name:u.channelRelease}));
+    await screen.findByText("check failed");
+    assert.ok(screen.getByText(u.channelReleaseHelp));
+    assert.equal(within(row(u.server)).queryByText("f90e474e"), null);
+  } finally { s.restore(); }
+});
+
 test("a channel that cannot be saved goes back to the one in use", async () => {
   const s = stub([statusFixture()]);
   apiModule.api.setUpdateChannel = async () => { throw new Error("server.yaml is read-only"); };
@@ -431,12 +564,20 @@ test("the automatic check switch says what is sent, saves, and checks again", as
     renderCard();
     const toggle = await waitFor(() => screen.getByRole("switch", { name: u.autoCheck }) as HTMLButtonElement);
     assert.equal(toggle.getAttribute("aria-checked"), "true");
-    assert.ok(screen.getByText(u.autoCheckOnHelp), "while on, the page lists what the check tells the publisher");
+    // What the check sends sits behind the help mark beside the switch, not on the page.
+    assert.equal(screen.queryByText(u.autoCheckOnHelp), null);
+    const help = () => within(toggle.closest(".ant-space") as HTMLElement).getByRole("button", { name: commonLocale.helpTip.label });
+    await userEvent.hover(help());
+    assert.equal((await screen.findByRole("tooltip")).textContent, u.autoCheckOnHelp, "while on, the help mark lists what the check tells the publisher");
+    await userEvent.unhover(help());
+    await waitFor(() => assert.equal(screen.queryByRole("tooltip"), null));
     toggle.focus();
     await userEvent.keyboard(" ");
     await waitFor(() => assert.deepEqual(s.calls, ["autoCheck:false"]));
     await waitFor(() => assert.equal(s.checks(), 2));
-    await waitFor(() => assert.ok(screen.getByText(u.autoCheckOffHelp)));
+    await waitFor(() => assert.equal(screen.getByRole("switch", { name: u.autoCheck }).getAttribute("aria-checked"), "false"));
+    await userEvent.hover(help());
+    await waitFor(async () => assert.equal((await screen.findByRole("tooltip")).textContent, u.autoCheckOffHelp));
     assert.equal(screen.getByRole("switch", { name: u.autoCheck }).getAttribute("aria-checked"), "false");
     // Nothing has been checked: the page says so instead of calling the channel unreachable.
     assert.ok(screen.getByText(u.notChecked));
@@ -466,7 +607,10 @@ test("a switch that cannot be saved keeps its position and a server without serv
   try {
     renderCard();
     const toggle = await waitFor(() => screen.getByRole("switch", { name: u.autoCheck }) as HTMLButtonElement);
-    assert.ok(toggle.disabled);
+    assert.ok(toggle.hasAttribute("data-disabled"));
+    toggle.focus();
+    await userEvent.keyboard(" ");
+    assert.deepEqual(readOnly.calls, []);
   } finally {
     readOnly.restore();
   }
@@ -576,10 +720,43 @@ test("a restart which returns the old release never opens the follow-up", async 
     reloadAttempt(Date.now() + 650, "restarting");
     renderCard();
     await waitFor(() => assert.ok(s.probes() > 0));
-    await waitFor(() => assert.ok(screen.getByText(u.serverNotBack.replace("{{version}}", "f90e474e"))), { timeout: 2500 });
+    await waitFor(() => assert.ok(screen.getByRole("button", { name: picker.recheckRunning })), { timeout: 2500 });
     assert.equal(calls, 0);
     assert.ok(!screen.queryByRole("link", { name: u.viewNodes }), "the upgrade notice is hidden");
   } finally { s.restore(); }
+});
+
+test("a pending result survives navigation until this attempt has a confirmed rollback", async () => {
+  const s = stubServerUpgrade([statusFixture()], ["old"]);
+  const original = apiModule.api.serverUpgradeResult;
+  let rolledBack = false;
+  let checks = 0;
+  apiModule.api.serverUpgradeResult = async (id) => {
+    assert.equal(id, "pending-one");
+    checks++;
+    return rolledBack ? {phase:"rollback",from:"old",to:"candidate"} : {phase:"unknown"};
+  };
+  try {
+    dom.window.sessionStorage.setItem("gpuworks.console-upgrade", JSON.stringify({
+      session: null, attempt: {id:"pending-one",from:"old",to:"candidate",phase:"unknown",deadline:Date.now()-1000},
+    }));
+    const first = renderCard();
+    await waitFor(() => assert.ok(checks > 0));
+    assert.ok(screen.getByText(picker.unknown));
+    assert.equal(screen.queryByText(picker.restored.replace("{{version}}","old")), null);
+    first.unmount();
+    renderCard();
+    const recheck = await waitFor(() => {
+      const button = within(row(u.server).nextElementSibling as HTMLElement).getByRole("button", {name:picker.recheckRunning}) as HTMLButtonElement;
+      assert.ok(!button.disabled);
+      return button;
+    });
+    rolledBack = true;
+    await userEvent.click(recheck);
+    await screen.findByText(picker.restored.replace("{{version}}","old"));
+    await userEvent.click(screen.getByRole("button",{name:picker.acknowledge}));
+    await waitFor(() => assert.equal(dom.window.sessionStorage.getItem("gpuworks.console-upgrade"), null));
+  } finally { apiModule.api.serverUpgradeResult = original; s.restore(); }
 });
 
 test("logging in again cannot restore the previous session's upgrade", async () => {

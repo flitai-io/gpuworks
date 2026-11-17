@@ -34,7 +34,7 @@ func (a *aiService) errorContext(instanceUUID string) (aihelper.ErrorContext, er
 	command, _ := instanceLaunchCommand(*in)
 	c := aihelper.ErrorContext{
 		InstanceUUID: in.UUID, DeploymentID: in.DeploymentID, State: in.State, Phase: in.Phase,
-		Message: in.Message, Image: in.Image, Command: command, GPUIndexes: instanceGPUs(*in),
+		Message: in.Message, Failure: in.Failure(), Image: in.Image, Command: command, GPUIndexes: instanceGPUs(*in),
 		TailLines: seedTailLines, ErrorLines: seedErrorLines,
 	}
 	if dep, err := a.store.GetDeployment(in.DeploymentID); err == nil {
@@ -61,7 +61,7 @@ func (a *aiService) errorContext(instanceUUID string) (aihelper.ErrorContext, er
 		return aihelper.ErrorContext{}, err
 	}
 	c.Logs = logs
-	c.Findings = aihelper.Match(findingLines(in.Message, logs))
+	c.Findings = aihelper.Findings(c.Failure, findingLines(in.Message, logs))
 	return c, nil
 }
 
@@ -72,11 +72,11 @@ func (a *aiService) seedLogs(instanceUUID string) ([]aihelper.LogLine, error) {
 	if a.obs == nil {
 		return nil, nil
 	}
-	tail, err := a.obs.logs.Tail(instanceUUID, seedTailLines)
+	tail, err := a.obs.Logs().Tail(instanceUUID, seedTailLines)
 	if err != nil {
 		return nil, err
 	}
-	errs, err := a.obs.logs.Search(logstore.Filter{Instance: instanceUUID, Level: logstore.LevelError, Limit: seedErrorLines})
+	errs, err := a.obs.Logs().Search(logstore.Filter{Instance: instanceUUID, Level: logstore.LevelError, Limit: seedErrorLines})
 	if err != nil {
 		return nil, err
 	}
@@ -106,8 +106,9 @@ func (a *aiService) seedLogs(instanceUUID string) ([]aihelper.LogLine, error) {
 	return out, nil
 }
 
-// findingLines is what the known-failure table reads: the failure message the
-// agent reported, then the log lines.
+// findingLines is what the known-failure table reads for an instance without
+// a structured failure reason: the failure message the agent reported, then
+// the log lines.
 func findingLines(message string, logs []aihelper.LogLine) []string {
 	lines := make([]string, 0, len(logs)+1)
 	if message != "" {

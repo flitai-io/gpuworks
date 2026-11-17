@@ -65,7 +65,7 @@ func TestDialSSHKeyboardInteractivePassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome.Used != "keyboard_interactive" || outcome.Check().Status != "ok" {
+	if outcome.Used != "keyboard_interactive" || outcome.Check().Status != "pass" {
 		t.Fatalf("outcome = %+v, check = %+v", outcome, outcome.Check())
 	}
 }
@@ -138,7 +138,7 @@ func TestDialSSHKeyboardInteractiveAcceptedInformationalChallenge(t *testing.T) 
 		return nil, err
 	})
 	_, outcome, err := dial(t, srv, SSHAuth{Mode: AuthKeyboardInteractive, Password: "keyboard-secret"})
-	if err != nil || outcome.Used != AuthKeyboardInteractive || outcome.Check().Status != "ok" {
+	if err != nil || outcome.Used != AuthKeyboardInteractive || outcome.Check().Status != "pass" {
 		t.Fatalf("accepted keyboard-interactive must be reported as accepted: outcome=%+v err=%v", outcome, err)
 	}
 }

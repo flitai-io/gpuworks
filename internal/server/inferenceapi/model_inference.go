@@ -12,6 +12,8 @@ func OperationsForTasks(tasks []string) []Operation {
 			operation = OperationRerank
 		case "feature-extraction":
 			operation = OperationEmbeddings
+		case "decision":
+			operation = OperationDecide
 		case "text-generation", "text2text-generation", "image-text-to-text":
 			operation = OperationChat
 		case "automatic-speech-recognition":

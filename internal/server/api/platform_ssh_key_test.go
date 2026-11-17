@@ -180,9 +180,9 @@ func (f *fakeKeyInstaller) InstallSSH(context.Context, provision.SSHInstallReque
 func (f *fakeKeyInstaller) AuthorizePlatformKey(_ context.Context, req provision.SSHProbeRequest) (provision.CheckResult, bool) {
 	f.authReq = req
 	if f.authorized {
-		return provision.CheckResult{Name: "Platform key", Status: "ok", Detail: "added to /root/.ssh/authorized_keys"}, true
+		return provision.CheckResult{ID: "platform_key", Status: "pass", Message: "added to /root/.ssh/authorized_keys"}, true
 	}
-	return provision.CheckResult{Name: "Platform key", Status: "warn", Detail: "could not log in"}, false
+	return provision.CheckResult{ID: "platform_key", Status: "warn", Message: "could not log in"}, false
 }
 
 func (f *fakeKeyInstaller) Probe(_ context.Context, req provision.SSHProbeRequest) provision.ProbeResult {

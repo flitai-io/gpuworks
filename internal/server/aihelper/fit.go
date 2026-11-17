@@ -28,8 +28,10 @@ type AskRequest struct {
 	Task     string
 	Target   Target
 	Question string
-	History  []Message
-	Locale   string
+	// Images are the data: URLs sent with the question (ValidateImages).
+	Images  []string
+	History []Message
+	Locale  string
 	// API is the platform API as the asking user reads it; the tools read
 	// through it. Without it the API tools answer that it is unavailable.
 	API APIReader
@@ -48,7 +50,7 @@ func (r AskRequest) TaskSubjectSet() bool {
 	case TaskNodeHealth:
 		return r.Target.NodeUUID != ""
 	case TaskAsk:
-		return r.Question != ""
+		return r.Question != "" || len(r.Images) > 0
 	}
 	return false
 }

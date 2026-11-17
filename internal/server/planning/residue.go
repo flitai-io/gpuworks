@@ -19,6 +19,11 @@ type residues struct {
 	// caller loaded in bulk (FleetCards), so a pass over the fleet reads
 	// neither deployments nor models one at a time.
 	known func(deploymentID uint) float64
+	// gpuMemUtil, when set, answers a deployment's gpu_mem_util from rows
+	// the caller loaded in bulk (FleetAllocations), for a memory-limited
+	// slice's claim; ok is false for a deployment it does not hold, which is
+	// read from the store as before.
+	gpuMemUtil func(deploymentID uint) (util float64, ok bool)
 }
 
 func newResidues(st *store.Store) *residues {

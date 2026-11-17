@@ -74,9 +74,12 @@ type NodeSelector struct {
 	Terms []NodeSelectorTerm `json:"nodeSelectorTerms"`
 }
 
-// NodeSelectorTerm is one term; the agent reads its field requirements.
+// NodeSelectorTerm is one term; the agent reads its field and label
+// requirements (the latter only to read back the pool term its own
+// DaemonSet manifest renders, kubemanifest.Render's PoolLabel/PoolIDs).
 type NodeSelectorTerm struct {
-	MatchFields []NodeSelectorRequirement `json:"matchFields,omitempty"`
+	MatchFields      []NodeSelectorRequirement `json:"matchFields,omitempty"`
+	MatchExpressions []NodeSelectorRequirement `json:"matchExpressions,omitempty"`
 }
 
 // NodeSelectorRequirement is "Key Operator Values".
@@ -270,17 +273,14 @@ type Namespace struct {
 	Metadata ObjectMeta `json:"metadata"`
 }
 
-// DaemonSet is read for its UID and image and patched to upgrade.
+// DaemonSet is read for its UID and image, for its pod template's
+// nodeSelector and nodeAffinity (does it still select this node?), and
+// patched to upgrade.
 type DaemonSet struct {
 	Metadata ObjectMeta `json:"metadata"`
 	Spec     struct {
 		Template struct {
-			Spec struct {
-				Containers []struct {
-					Name  string `json:"name"`
-					Image string `json:"image"`
-				} `json:"containers"`
-			} `json:"spec"`
+			Spec PodSpec `json:"spec"`
 		} `json:"template"`
 	} `json:"spec"`
 }

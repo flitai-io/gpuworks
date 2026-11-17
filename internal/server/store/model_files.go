@@ -102,7 +102,7 @@ func (s *Store) ModelFilesForModel(modelID uint) ([]ModelFile, error) {
 }
 
 // ModelFilesForModels reads the requested models' shared rows, the target's
-// own rows and local-storage peer rows. Other nodes' caches cannot serve the
+// own rows and local-storage peer rows, oldest first. Other nodes' caches cannot serve the
 // target. A nodeID of zero retains every location before a target is selected.
 func (s *Store) ModelFilesForModels(modelIDs []uint, nodeID uint) ([]ModelFile, error) {
 	if len(modelIDs) == 0 {
@@ -114,8 +114,19 @@ func (s *Store) ModelFilesForModels(modelIDs []uint, nodeID uint) ([]ModelFile, 
 		query = query.Where("node_id IN ? OR storage_id IN (?)", []uint{0, nodeID}, localStorages)
 	}
 	var files []ModelFile
-	err := query.Find(&files).Error
+	err := query.Order("id asc").Find(&files).Error
 	return files, err
+}
+
+// ModelFilesForModelsOnNodes are the rows of the models on the nodes (node 0 is
+// a shared storage's row), oldest first.
+func (s *Store) ModelFilesForModelsOnNodes(modelIDs, nodeIDs []uint) ([]ModelFile, error) {
+	if len(modelIDs) == 0 || len(nodeIDs) == 0 {
+		return nil, nil
+	}
+	var mfs []ModelFile
+	err := s.reader().Where("model_id IN ? AND node_id IN ?", modelIDs, nodeIDs).Order("id asc").Find(&mfs).Error
+	return mfs, err
 }
 
 // ModelFilesForModelOnNodes is ModelFilesForModel restricted to rows on the

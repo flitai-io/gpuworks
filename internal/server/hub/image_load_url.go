@@ -3,7 +3,6 @@ package hub
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
@@ -67,7 +66,7 @@ func (h *Hub) loadImageArchiveURL(ctx context.Context, image *store.Image, targe
 		CanonicalRef: image.ImageRef, ArchiveURL: archiveURL, SizeBytes: sizeBytes, TransferID: transferID,
 	}); callErr != nil {
 		message := "image archive download could not be started: " + callErr.Error()
-		if strings.Contains(strings.ToLower(callErr.Error()), "unknown rpc method: "+proto.RPCImageLoadURL) {
+		if errors.Is(callErr, proto.ErrRPCUnknownMethod) {
 			message = "the target node is running an older agent that cannot download an image archive from a URL; upgrade the agent first"
 		}
 		_ = h.store.FailImageTransferIfActive(image.ID, target.ID, transferID, boundedPullMessage(message))

@@ -1,5 +1,6 @@
 import type { BenchmarkMeta, BenchmarkModeDefaults, BenchmarkPoint, BenchmarkPointSummary, BenchmarkRun } from "../../api.ts";
 import type { TFunction } from "i18next";
+import type { ProductMessage } from "../../apiError.ts";
 
 export type BenchmarkMode = BenchmarkRun["mode"];
 
@@ -209,11 +210,17 @@ function tr(t: TFunction | undefined, key: string, fallback: string, params: Rec
 	return fallback.replace(/{{(\w+)}}/g, (_match, name: string) => String(params[name] ?? ""));
 }
 
-export const benchmarkErrorCodes = ["BENCHMARK_SERVER_RESTARTED"] as const;
+export const benchmarkErrorCodes = ["BENCHMARK_SERVER_RESTARTED", "BENCHMARK_DATASET_LOAD_FAILED"] as const;
 
 const knownBenchmarkErrorCodes = new Set<string>(benchmarkErrorCodes);
 
-export function benchmarkErrorText(t: TFunction | undefined, value: string | undefined): string {
+/** The run's failure in the reader's language: from its code when the server sent one, else its English text. */
+export function benchmarkErrorText(t: TFunction | undefined, value: string | undefined, failure?: ProductMessage): string {
+	if (failure && knownBenchmarkErrorCodes.has(failure.code)) {
+		const fallback = failure.message || value?.trim() || "";
+		if (!t) return fallback;
+		return String(t(`benchmarkError.${failure.code}`, { ...failure.params, defaultValue: fallback }));
+	}
 	const text = value?.trim() ?? "";
 	if (!knownBenchmarkErrorCodes.has(text)) return text;
 	return tr(t, `benchmarkError.${text}`, "The server restarted and interrupted the evaluation; completed points were retained.");
@@ -273,7 +280,7 @@ export function verdictPresentation(run: BenchmarkRun, t?: TFunction): VerdictPr
 	}
 	if (run.state === "canceled") return { tone: "warning", title: tr(t, "utility.verdict.canceledTitle", "Evaluation Canceled"), description: tr(t, "utility.verdict.canceledDescription", "No new requests will be sent; completed points remain available.") };
 	if (run.state === "failed" || verdict?.kind === "failed") {
-		return { tone: "error", title: run.points?.length ? tr(t, "utility.verdict.partialTitle", "Evaluation Partially Complete") : tr(t, "utility.verdict.failedTitle", "Evaluation Failed"), description: benchmarkErrorText(t, run.error) || tr(t, "utility.verdict.failedDescription", "An error occurred during execution; completed points were retained.") };
+		return { tone: "error", title: run.points?.length ? tr(t, "utility.verdict.partialTitle", "Evaluation Partially Complete") : tr(t, "utility.verdict.failedTitle", "Evaluation Failed"), description: benchmarkErrorText(t, run.error, run.failure) || tr(t, "utility.verdict.failedDescription", "An error occurred during execution; completed points were retained.") };
 	}
 
 	switch (verdict?.kind) {

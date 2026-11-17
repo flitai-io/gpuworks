@@ -25,6 +25,26 @@ type Placement struct {
 	// leader node and follower nodes, in rank order. Without it the
 	// deployment is one replica over its stored node list.
 	Units []PDUnit `json:"units,omitempty"`
+
+	// operatorChose records that GPUIndexes came from the "gpus" key, the
+	// cards an operator picked, rather than a plan echoed back
+	// ("gpu_indexes") or indexes the platform filled in (OperatorPinned).
+	operatorChose bool
+}
+
+// OperatorPinned is whether the placement pins cards an operator chose: its
+// indexes came from the "gpus" key of a request or stored document. A
+// placement built in code, the echoed plan ("gpu_indexes") and one whose
+// indexes were cleared are not, so the platform's own pins (a per-card
+// probe, a unit suggestion, a replica the pool places) never count as the
+// operator's consent (ADR 0068).
+func (p Placement) OperatorPinned() bool { return p.operatorChose && len(p.GPUIndexes) > 0 }
+
+// WithoutOperatorChoice is the placement with its indexes no longer the
+// operator's, for a caller that replaces them with its own.
+func (p Placement) WithoutOperatorChoice() Placement {
+	p.operatorChose = false
+	return p
 }
 
 // ParallelismSpec is package parallelism's spec, named here for the same
@@ -110,6 +130,8 @@ func placementFromDocument(document map[string]any) (Placement, error) {
 	indexes, present := document["gpus"]
 	if !present || indexes == nil {
 		indexes = document["gpu_indexes"]
+	} else {
+		placement.operatorChose = true
 	}
 	placement.GPUIndexes = placementIndexes(indexes)
 	pd, err := parsePD(document)

@@ -21,7 +21,7 @@ import traceback
 from urllib.parse import urlsplit
 import uuid
 
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeout, expect, sync_playwright
 
 from local_browser_fixture import Artifacts, LocalServer, ROOT, digest, http
 
@@ -142,6 +142,22 @@ def theme_color(locator, property_name, token_name):
         ctx.fillRect(0, 0, 1, 1);
         return Array.from(ctx.getImageData(0, 0, 1, 1).data).every((value, i) => value === expected[i]);
     }""", arg={"el": locator.element_handle(), "property": property_name, "expected": expected}, timeout=5000)
+
+
+def theme_shadow_color(locator, property_name, token_name):
+    mode = locator.page.evaluate(
+        "() => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'")
+    generated = (ROOT / "ui/src/theme/zeron.generated.ts").read_text()
+    value = re.search(rf'"{re.escape(token_name)}": "(#[0-9a-fA-F]{{6}})"',
+                      generated.split(f'"{mode}": {{', 1)[-1], re.M)
+    check(value is not None, f"theme shadow color {token_name} absent from the {mode} generated tokens")
+    expected = [int(value[1][i:i + 2], 16) for i in (1, 3, 5)]
+    try:
+        locator.page.wait_for_function("""({el, property, expected}) => getComputedStyle(el)[property].includes(expected.join(', '))""",
+                                       arg={"el": locator.element_handle(), "property": property_name, "expected": expected}, timeout=5000)
+    except PlaywrightTimeout:
+        actual = locator.evaluate("(el, property) => getComputedStyle(el)[property]", property_name)
+        check(False, f"expected {token_name} {expected} in {property_name}, got {actual!r}")
 
 
 # Contract: gpuworks/platform-token/read-create-revoke

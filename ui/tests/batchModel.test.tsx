@@ -265,3 +265,36 @@ test("the list and the detail drawer show the model a batch was given, and the p
   await within(drawer).findByText(b.detail.model);
   assert.ok(within(drawer).getByText("qwen-chat"));
 });
+
+test("the request priority defaults to the server's batch class and a chosen class is sent with the batch", async () => {
+  const originalClasses = api.priorityClasses;
+  api.priorityClasses = async () => ({
+    min_value: -100, max_value: 100, policies: [], default_policy: "", ceiling_policies: [],
+    items: [
+      { name: "high", display_name: "", description: "", value: 20, builtin: true, default: false, deletable: false, created_at: "" },
+      { name: "batch", display_name: "", description: "", value: -40, builtin: true, default: false, deletable: false, created_at: "" },
+    ],
+  });
+  try {
+    const sent: Array<string | undefined> = [];
+    batchApi.create = async (_file, options) => { sent.push(options?.priorityClass); return batch({ id: "batch_prio", status: "validating", priority_class: options?.priorityClass || "batch" }); };
+    batchApi.get = async () => batch({ id: "batch_prio", status: "validating", priority_class: "high" });
+    const user = mountPage();
+    const dialog = await openCreate(user);
+    const trigger = within(dialog).getByRole("combobox", { name: b.create.priority.label });
+    await waitFor(() => assert.equal(trigger.textContent, "batch (-40)"));
+    assert.ok(within(dialog).getByText(b.create.priority.help.replace("{{name}}", "batch")));
+    await user.upload(within(dialog).getByLabelText(b.create.file, { exact: false }), jsonl(requests("qwen-chat")));
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    await user.click(await screen.findByRole("option", { name: "high (20)" }));
+    await user.click(submitButton(dialog));
+    await waitFor(() => assert.deepEqual(sent, ["high"]));
+    // The detail names the class the batch runs at.
+    const drawer = await screen.findByRole("dialog", { name: b.detail.title.replace("{{id}}", "batch_prio") });
+    await within(drawer).findByText(b.detail.priorityClass);
+    within(drawer).getByText("high");
+  } finally {
+    api.priorityClasses = originalClasses;
+  }
+});

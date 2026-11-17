@@ -70,8 +70,8 @@ func (e *Engine) SwitchDriver(ctx context.Context, driver runtime.Driver) error 
 	}
 	e.driver = driver
 	e.runtimeMounts = newRuntimeMountManager(e.stateDir, driver)
-	e.prewarmed = map[string]bool{}
-	e.l1HostHeld = map[string]bool{}
+	// Every engine process went with the old runtime's containers.
+	e.processes = map[string]*processFacts{}
 	// The old runtime's containers are gone and the new runtime has none yet:
 	// nothing serves until reconcileAll adopts or starts each instance again.
 	e.servingEpoch = map[string]uint64{}

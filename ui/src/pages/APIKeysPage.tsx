@@ -26,6 +26,7 @@ import { fmtCompact, fmtInt } from "./analytics/format";
 import PlatformTokensCard from "./apikeys/PlatformTokensCard";
 import { ALL_DEPLOYMENTS, KeyScopeCell, KeyScopeInput, KeyScopeModal, scopeRequest, scopeRule } from "./apikeys/KeyScope";
 import SecretModal from "./apikeys/SecretModal";
+import { KeyPriorityCell, usePriorityClasses } from "./apikeys/KeyPriority";
 
 const { Paragraph, Text } = Typography;
 
@@ -40,6 +41,7 @@ export default function APIKeysPage() {
   // Token usage is a convenience beside the keys: while it loads, or if it
   // fails, its columns read as a dash and the table is unaffected.
   const usage = usePolling<KeyUsageList>(() => analyticsApi.keyUsage(), 60000);
+  const priorityClasses = usePriorityClasses();
   const usageByPrefix = new Map((usage.data?.items ?? []).map((u) => [u.prefix, u]));
   const keys = data?.items ?? [];
   const revokedCount = keys.filter((k) => k.revoked_at).length;
@@ -79,6 +81,7 @@ export default function APIKeysPage() {
         ),
     },
     { key: "scope", title: t("table.scope"), width: 240, render: (_: unknown, k: ApiKey) => <KeyScopeCell apiKey={k} /> },
+    { key: "priority", title: t("table.priority"), width: 220, render: (_: unknown, k: ApiKey) => <KeyPriorityCell apiKey={k} classes={priorityClasses} onChanged={refetch} /> },
     {
       key: "tokens_today",
       title: t("table.tokensToday"),

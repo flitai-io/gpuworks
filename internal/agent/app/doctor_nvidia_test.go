@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -84,8 +85,13 @@ func TestDoctorNVIDIAChecksSpareASlowBrokenDriver(t *testing.T) {
 	for _, f := range r.Findings {
 		codes = append(codes, f.Code)
 	}
-	if len(codes) != 1 || codes[0] != proto.DoctorCUDAInitFailed {
-		t.Fatalf("findings = %v, want only %s", codes, proto.DoctorCUDAInitFailed)
+	// The CUDA failure, and the two checks it held back, each skipped with
+	// why: not run is not passed.
+	if want := []string{proto.DoctorCUDAInitFailed, proto.DoctorSkipCUDANotPassed, proto.DoctorSkipCUDANotPassed}; !reflect.DeepEqual(codes, want) {
+		t.Fatalf("findings = %v, want %v", codes, want)
+	}
+	if r.Findings[1].ID != proto.DoctorCheckPeerAccess || r.Findings[2].ID != proto.DoctorCheckNCCL || r.Findings[1].Status != proto.CheckSkip {
+		t.Fatalf("skipped checks = %+v", r.Findings[1:])
 	}
 }
 
@@ -108,6 +114,53 @@ func TestDoctorNVIDIAChecksRunMultiGPUChecksAfterCUDAPasses(t *testing.T) {
 	doctorNVIDIAChecks(context.Background(), &r, 1, t.TempDir())
 	if got := fact(r, proto.DoctorFactPeerAccess); got != "SKIP (fewer than 2 GPUs)" {
 		t.Fatalf("one-card peer access = %q", got)
+	}
+	// One card has nothing for a multi-GPU check to look at: not
+	// applicable, so no skip is reported for them.
+	for _, f := range r.Findings {
+		if f.ID == proto.DoctorCheckPeerAccess || f.ID == proto.DoctorCheckNCCL {
+			t.Fatalf("a one-card host reports a multi-GPU finding: %+v", f)
+		}
+	}
+}
+
+// A CUDA check that cannot run on this host, and a multi-GPU check whose
+// script says it cannot (no torch), are skips with why, never passes.
+func TestDoctorNVIDIAChecksThatCannotRunAreSkipped(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\necho 'SKIP (torch is not installed)'\n"
+	if err := os.WriteFile(filepath.Join(dir, "python3"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	stubCUDACheck(t, "SKIP (python3 is not installed; the periodic per-card runtime check does not run either)")
+	r := proto.DoctorReport{Accelerators: &proto.DoctorAccelerators{Vendor: "nvidia"}}
+	doctorNVIDIAChecks(context.Background(), &r, 2, t.TempDir())
+	got := map[string]proto.DoctorFinding{}
+	for _, f := range r.Findings {
+		got[f.ID] = f
+	}
+	cuda := got[proto.DoctorCheckCUDAInit]
+	if cuda.Status != proto.CheckSkip || cuda.Code != proto.DoctorSkipPrerequisiteMissing || !strings.Contains(cuda.Evidence[0].Value, "python3 is not installed") {
+		t.Fatalf("cuda = %+v", cuda)
+	}
+	// The CUDA check did not pass, so the multi-GPU checks are held back
+	// for that reason, not for their own.
+	for _, id := range []string{proto.DoctorCheckPeerAccess, proto.DoctorCheckNCCL} {
+		if f := got[id]; f.Status != proto.CheckSkip || f.Code != proto.DoctorSkipCUDANotPassed {
+			t.Fatalf("%s = %+v", id, f)
+		}
+	}
+
+	stubCUDACheck(t, "PASS cuInit=ok")
+	r = proto.DoctorReport{Accelerators: &proto.DoctorAccelerators{Vendor: "nvidia"}}
+	doctorNVIDIAChecks(context.Background(), &r, 2, t.TempDir())
+	got = map[string]proto.DoctorFinding{}
+	for _, f := range r.Findings {
+		got[f.ID] = f
+	}
+	if f := got[proto.DoctorCheckNCCL]; f.Status != proto.CheckSkip || f.Code != proto.DoctorSkipPrerequisiteMissing || f.Evidence[0].Value != "SKIP (torch is not installed)" {
+		t.Fatalf("nccl = %+v, all = %+v", f, r.Findings)
 	}
 }
 

@@ -55,9 +55,9 @@ def bounds(box, viewport, label):
 def layout(page, drawer, spin, apply, report):
     report['last_step'] = 'replica-scale-drawer-layout'
     boxes = {name: control.bounding_box() for name, control in (
-        ('title', drawer.locator('.ant-drawer-title')), ('count', spin), ('apply', apply),
-        ('close', drawer.locator('.ant-drawer-close')))}
-    for index, control in enumerate(drawer.locator('.ant-drawer-extra button').all()):
+        ('title', drawer.get_by_role('heading', level=2)), ('count', spin), ('apply', apply),
+        ('close', drawer.get_by_role('button', name=re.compile(r'^(Close|关闭)$', re.I))))}
+    for index, control in enumerate(drawer.locator('.deployment-detail-actions button').all()):
         boxes['header-action-' + str(index)] = control.bounding_box()
     for name, box in boxes.items():
         bounds(box, page.viewport_size, name)
@@ -84,6 +84,33 @@ def _release_held_reads(page, pattern, handler, held):
         errors.append(error)
     if errors:
         raise ExceptionGroup('could not release replica detail reads', errors)
+
+
+def expect_saved_count(drawer, labels, count):
+    expect(drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)).to_have_value(str(count))
+
+
+
+def check_overview_text_alignment(drawer, labels):
+    overview = drawer.locator('.deployment-overview-groups')
+    for key in ('state', 'replicaCapacity', 'health', 'tokenize'):
+        label = re.compile('^' + re.escape(labels['detail'][key]) + '$')
+        field = overview.locator('th').filter(has_text=label).locator('..')
+        aligned = field.evaluate("""row => {
+            function firstLine(cell) {
+                const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+                let text;
+                while ((text = walker.nextNode()) && !text.textContent.trim()) {}
+                const range = document.createRange();
+                range.selectNodeContents(text);
+                return range.getBoundingClientRect();
+            }
+            const label = firstLine(row.querySelector('th'));
+            const value = firstLine(row.querySelector('td'));
+            const center = (value.top + value.bottom) / 2;
+            return center >= label.top && center <= label.bottom;
+        }""")
+        check(aligned, f'{key} value must start on the same line as its label')
 
 
 def first_open(page, server, token, data, labels, report, requests, expected_count):
@@ -132,8 +159,10 @@ def first_open(page, server, token, data, labels, report, requests, expected_cou
         integer(body.get('replicas'), expected_count, 'first-open replica count')
         check(body.get('name') == data['body']['name'], 'first-open deployment name differs')
         drawer = page.get_by_role('dialog', name=data['body']['name'], exact=True)
-        expect(drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)).to_have_value(str(expected_count))
-        expect(drawer.get_by_role('button', name=button_name(labels['replica']['apply']))).to_be_disabled()
+        drawer.get_by_role('tab', name=labels['detail']['title'], exact=True).click()
+        expect_saved_count(drawer, labels, expected_count)
+        check_overview_text_alignment(drawer, labels)
+        expect(drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)).to_be_disabled()
         integer(get_document(server, token, ident).get('replicas'), expected_count, 'independent first-open count')
         check(requests == [], 'opening detail submitted an incomplete mutation')
         report['replica_first_open'] = {'request': {'method': 'GET', 'path': path},
@@ -163,14 +192,15 @@ def navigation_reentry(page, drawer, server, data, labels, report, expected_coun
     page.reload()
     drawer = page.get_by_role('dialog', name=data['body']['name'], exact=True)
     expect(drawer).to_be_visible()
-    expect(drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)).to_have_value(str(expected_count))
+    drawer.get_by_role('tab', name=labels['detail']['title'], exact=True).click()
+    expect_saved_count(drawer, labels, expected_count)
     report.setdefault('replica_navigation', {}).update(deep_link=page.url, reload_same_identity=True)
     return drawer
 
 
 def count_editor(page, drawer, server, token, data, labels, report, requests, reopen, expected_count):
     spin = drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)
-    apply = drawer.get_by_role('button', name=button_name(labels['replica']['apply']))
+    apply = drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)
     before = stable(get_document(server, token, data['deployment']['id']))
     integer(before['replicas'], expected_count, 'saved editor count')
     if active(report, 'numeric'):
@@ -183,8 +213,8 @@ def count_editor(page, drawer, server, token, data, labels, report, requests, re
         ceiling = get_document(server, token, data['deployment']['id']).get('max_replicas')
         check(type(ceiling) is int and ceiling >= 1,
               f'server replica range is not a usable JSON integer: {ceiling!r}')
-        expect(spin).to_have_attribute('aria-valuemin', '1')
-        expect(spin).to_have_attribute('aria-valuemax', str(ceiling))
+        expect(spin).to_have_attribute('min', '1')
+        expect(spin).to_have_attribute('max', str(ceiling))
         expect(spin).to_have_value(str(expected_count))
         spin.press('ArrowUp')
         expect(spin).to_have_value(str(expected_count + 1))
@@ -195,7 +225,7 @@ def count_editor(page, drawer, server, token, data, labels, report, requests, re
         check(requests == [], 'empty replica draft submitted a mutation')
         spin.fill(str(expected_count))
         expect(apply).to_be_disabled()
-        report['replica_count_metadata'] = {'saved': expected_count, 'min': 1, 'max': 32, 'step': 1,
+        report['replica_count_metadata'] = {'saved': expected_count, 'min': 1, 'max': ceiling, 'step': 1,
             'unit': 'replicas', 'empty_submit_disabled': True}
     if active(report, 'keyboard'):
         report['last_step'] = 'replica-keyboard-no-implicit-order'
@@ -211,23 +241,27 @@ def count_editor(page, drawer, server, token, data, labels, report, requests, re
     if active(report, 'cancel'):
         report['last_step'] = 'replica-draft-cancel-no-write'
         observed = []
-        for dismissal in ('close', 'escape'):
+        for dismissal in ('cancel', 'close', 'escape'):
             spin = drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)
             spin.fill(str(expected_count + 1))
-            expect(drawer.get_by_role('button', name=button_name(labels['replica']['apply']))).to_be_enabled()
-            if dismissal == 'close':
-                drawer.locator('.ant-drawer-close').click()
+            expect(drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)).to_be_enabled()
+            if dismissal == 'cancel':
+                button(drawer, labels['detail']['cancel']).click()
+            elif dismissal == 'close':
+                drawer.get_by_role('button', name=re.compile(r'^(Close|关闭)$', re.I)).click()
             else:
                 page.keyboard.press('Escape')
-            expect(drawer).to_be_hidden()
+            if dismissal != 'cancel':
+                expect(drawer).to_be_hidden()
             check(requests == [], 'discarding replica draft wrote to server')
             check(stable(get_document(server, token, data['deployment']['id'])) == before,
                   'discarding replica draft changed persisted deployment configuration')
-            drawer = reopen()
-            expect(drawer.get_by_role('spinbutton', name=labels['detail']['replicas'], exact=True)).to_have_value(str(expected_count))
-            expect(drawer.get_by_role('button', name=button_name(labels['replica']['apply']))).to_be_disabled()
+            if dismissal != 'cancel':
+                drawer = reopen()
+            expect_saved_count(drawer, labels, expected_count)
+            expect(drawer.get_by_role('button', name=labels['replica']['apply'], exact=True)).to_be_disabled()
             observed.append(dismissal)
-        report['replica_draft_cancel'] = {'dismissals': observed, 'cancel_button': 'not provided by inline editor',
+        report['replica_draft_cancel'] = {'dismissals': observed, 'cancel_button': labels['detail']['cancel'],
             'mutation_count': 0, 'saved_config': before, 'reopened_count': expected_count}
     return drawer
 

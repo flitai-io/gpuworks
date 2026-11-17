@@ -19,16 +19,16 @@ type ProductError struct {
 const (
 	ErrorSleepEngineUnsupported             = "SLEEP_ENGINE_UNSUPPORTED"
 	ErrorAgentUpgradeRequired               = "AGENT_UPGRADE_REQUIRED"
-	ErrorLaunchFeaturesUnknown              = "LAUNCH_FEATURES_UNKNOWN"
+	ErrorLaunchFeaturesUnknown              = proto.ErrorLaunchFeaturesUnknown
 	ErrorSleepTargetUnresolved              = "SLEEP_TARGET_UNRESOLVED"
-	ErrorAcceleratorFeatureUnsupported      = "ACCELERATOR_FEATURE_UNSUPPORTED"
+	ErrorAcceleratorFeatureUnsupported      = proto.ErrorAcceleratorFeatureUnsupported
 	ErrorAcceleratorDeviceSelectionRequired = proto.ErrorAcceleratorDeviceSelectionRequired
 	// ErrorAcceleratorSMLimitUnsupported reports a compute/SM limit requested
 	// on a vendor whose logical partition backend (if any) enforces GPU
 	// memory only, such as AMD's amd-dgpu (ROCm enforces compute quotas in
 	// hardware through HSA_CU_MASK, outside what a preloaded library can
 	// verify; see docs/explanation/dgpu.md).
-	ErrorAcceleratorSMLimitUnsupported = "ACCELERATOR_SM_LIMIT_UNSUPPORTED"
+	ErrorAcceleratorSMLimitUnsupported = proto.ErrorAcceleratorSMLimitUnsupported
 
 	// The experience environment's console (internal/experience) refuses
 	// what would act on the host or leave the environment, and deployments

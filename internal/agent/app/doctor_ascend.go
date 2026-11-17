@@ -17,7 +17,7 @@ import (
 // The Ascend check only Doctor runs on demand: the same per-die runtime check
 // the agent repeats every 15 minutes (internal/agent/gpu HostRuntimeCheck),
 // asked now, so that a user who clicks Diagnose sees every die the automatic
-// check would already have marked runtime_unusable. Doctor is the place a
+// check would already have marked RUNTIME_UNUSABLE. Doctor is the place a
 // person looks for "what is wrong with this node"; a die the platform has
 // stopped scheduling for that reason must not read as fine there.
 
@@ -53,9 +53,11 @@ type doctorDie struct {
 	label   string
 }
 
-// doctorDieNotChecked is a die the run did not ask, and why.
+// doctorDieNotChecked is a die the run did not ask, and why: the code the
+// report's skip finding carries and the English the summary fact says.
 type doctorDieNotChecked struct {
 	die    doctorDie
+	code   string
 	reason string
 }
 
@@ -93,7 +95,7 @@ func doctorCardRuntimeChecks(ctx context.Context, r *proto.DoctorReport, gpus []
 		die := doctorDie{gpu: g, label: dieLabel(g)}
 		visible, named := check.Visible(g)
 		if !named {
-			unnamed = append(unnamed, doctorDieNotChecked{die: die, reason: "the vendor tool gave it no device number"})
+			unnamed = append(unnamed, doctorDieNotChecked{die: die, code: proto.DoctorSkipCardUnaddressable, reason: "the vendor tool gave it no device number"})
 			continue
 		}
 		die.visible = visible
@@ -115,7 +117,7 @@ func doctorCardRuntimeChecks(ctx context.Context, r *proto.DoctorReport, gpus []
 	}
 	if reason := smokeUnavailable(check); reason != "" {
 		run.stopped = reason
-		run.notChecked = append(run.notChecked, notChecked(dies, "the run did not start")...)
+		run.notChecked = append(run.notChecked, notChecked(dies, proto.CardCheckSkipUnavailable, "the run did not start")...)
 	} else {
 		run.ask(ctx, dies)
 	}
@@ -124,10 +126,10 @@ func doctorCardRuntimeChecks(ctx context.Context, r *proto.DoctorReport, gpus []
 	r.Facts = append(r.Facts, proto.DoctorFact{Code: proto.DoctorFactCardRuntime, Value: run.summary(total)})
 }
 
-func notChecked(dies []doctorDie, reason string) []doctorDieNotChecked {
+func notChecked(dies []doctorDie, code, reason string) []doctorDieNotChecked {
 	out := make([]doctorDieNotChecked, 0, len(dies))
 	for _, die := range dies {
-		out = append(out, doctorDieNotChecked{die: die, reason: reason})
+		out = append(out, doctorDieNotChecked{die: die, code: code, reason: reason})
 	}
 	return out
 }
@@ -172,24 +174,24 @@ func (run *doctorDieRun) ask(ctx context.Context, dies []doctorDie) {
 	}
 	for i, die := range dies {
 		if ctx.Err() != nil {
-			run.notChecked = append(run.notChecked, notChecked(dies[i:], "the diagnosis was cancelled")...)
+			run.notChecked = append(run.notChecked, notChecked(dies[i:], proto.DoctorSkipCancelled, "the diagnosis was cancelled")...)
 			return
 		}
 		if !holdersKnown {
-			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, reason: "which instances hold this " + run.unit + " is not known yet; a context on a serving " + run.unit + " can disturb it"})
+			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, code: proto.CardCheckSkipDeferred, reason: "which instances hold this " + run.unit + " is not known yet; a context on a serving " + run.unit + " can disturb it"})
 			continue
 		}
 		if held[accelerator.CardIdent(die.gpu.UUID, die.gpu.PCIeBDF)] {
-			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, reason: "an instance is serving on it; a context on a serving " + run.unit + " can disturb it"})
+			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, code: proto.CardCheckSkipBusy, reason: "an instance is serving on it; a context on a serving " + run.unit + " can disturb it"})
 			continue
 		}
 		if foreign(accelerator.CardIdent(die.gpu.UUID, die.gpu.PCIeBDF)) {
-			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, reason: "a process outside the platform is using it"})
+			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, code: proto.CardCheckSkipForeign, reason: "a process outside the platform is using it"})
 			continue
 		}
 		remaining := time.Until(deadline) - doctorAscendReserve
 		if remaining < doctorAscendMinAttempt {
-			run.notChecked = append(run.notChecked, notChecked(dies[i:], "the diagnosis time budget ran out")...)
+			run.notChecked = append(run.notChecked, notChecked(dies[i:], proto.DoctorSkipBudgetExhausted, "the diagnosis time budget ran out")...)
 			return
 		}
 		budgetCut := remaining < timeout
@@ -205,8 +207,8 @@ func (run *doctorDieRun) ask(ctx context.Context, dies []doctorDie) {
 		case expired && (budgetCut || ctx.Err() != nil):
 			// Our own cut-off, not the die: it had less time than the
 			// automatic check gives it, so it has no verdict.
-			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, reason: "the diagnosis time budget ran out while this " + run.unit + " was being checked"})
-			run.notChecked = append(run.notChecked, notChecked(dies[i+1:], "the diagnosis time budget ran out")...)
+			run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, code: proto.DoctorSkipBudgetExhausted, reason: "the diagnosis time budget ran out while this " + run.unit + " was being checked"})
+			run.notChecked = append(run.notChecked, notChecked(dies[i+1:], proto.DoctorSkipBudgetExhausted, "the diagnosis time budget ran out")...)
 			return
 		case expired:
 			// The automatic check grades a die that does not answer within
@@ -216,12 +218,12 @@ func (run *doctorDieRun) ask(ctx context.Context, dies []doctorDie) {
 			doctorRecordOutcome(ctx, die, errors.New(detail))
 		default:
 			if why := cardsmoke.NotHeldReason(err); why != "" {
-				run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, reason: why})
+				run.notChecked = append(run.notChecked, doctorDieNotChecked{die: die, code: proto.CardCheckSkipNotHeld, reason: why})
 				continue
 			}
 			if reason := gpu.HostRuntimeUnavailable(err); reason != "" {
 				run.stopped = reason
-				run.notChecked = append(run.notChecked, notChecked(dies[i:], "the runtime could not be used on this host")...)
+				run.notChecked = append(run.notChecked, notChecked(dies[i:], proto.CardCheckSkipUnavailable, "the runtime could not be used on this host")...)
 				return
 			}
 			doctorRecordOutcome(ctx, die, err)
@@ -330,13 +332,36 @@ func doctorHeldCards(ctx context.Context) (map[string]bool, bool) {
 	return held()
 }
 
-// findings is one runtime_unusable finding naming each failing die, with the
-// evidence the agent records when its own check fails the die.
+// findings is one RUNTIME_UNUSABLE finding naming each failing die, with the
+// evidence the agent records when its own check fails the die, and one skip
+// finding for each reason dies were left unasked.
 func (run *doctorDieRun) findings() []proto.DoctorFinding {
+	out := run.failedFinding()
+	byCode := map[string]int{}
+	for _, n := range run.notChecked {
+		i, seen := byCode[n.code]
+		if !seen {
+			i = len(out)
+			byCode[n.code] = i
+			finding := proto.DoctorFinding{ID: proto.DoctorCheckCardRuntime, Status: proto.CheckSkip, Code: n.code}
+			if run.stopped != "" && n.code == proto.CardCheckSkipUnavailable {
+				finding.Evidence = []proto.DoctorField{{Name: "stopped", Value: run.stopped}}
+			}
+			out = append(out, finding)
+		}
+		out[i].Targets = append(out[i].Targets, proto.DoctorTarget{
+			Index: n.die.gpu.Index, PCIeBDF: n.die.gpu.PCIeBDF,
+			Evidence: []proto.DoctorField{{Name: "reason", Value: n.reason}},
+		})
+	}
+	return out
+}
+
+func (run *doctorDieRun) failedFinding() []proto.DoctorFinding {
 	if len(run.failed) == 0 {
 		return nil
 	}
-	finding := proto.DoctorFinding{Code: accelerator.HealthRuntimeUnusable, Level: proto.DoctorLevelError}
+	finding := proto.DoctorFinding{ID: proto.DoctorCheckCardRuntime, Status: proto.CheckFail, Code: accelerator.HealthRuntimeUnusable}
 	for _, f := range run.failed {
 		target := proto.DoctorTarget{Index: f.die.gpu.Index, PCIeBDF: f.die.gpu.PCIeBDF}
 		// The same guide the card carries when the periodic check failed it,

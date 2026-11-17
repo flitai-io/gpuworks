@@ -107,17 +107,22 @@ func acceleratorReportUpdates(updates map[string]any, st proto.NodeStatus, now t
 // reconcileAcceleratorReport writes the cards of a report adoptCards
 // accepted and keeps the instances placed on them pointing at the same
 // hardware.
-func reconcileAcceleratorReport(tx *gorm.DB, nodeID uint, st proto.NodeStatus, adopt cardAdoption) error {
-	renumbered, err := reconcileGPUs(tx, nodeID, st.GPUs, adopt)
+//
+// cardsChanged is whether any card row was created, rewritten or deleted, or
+// an operator's allowance on one expired: a report that changed a card's
+// facts (its health, a process outside the platform, the card set) changes
+// what placement decides on.
+func reconcileAcceleratorReport(tx *gorm.DB, nodeID uint, st proto.NodeStatus, adopt cardAdoption) (cardsChanged bool, err error) {
+	renumbered, cardsChanged, err := reconcileGPUs(tx, nodeID, st.GPUs, adopt)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !renumbered {
 		// Only a probe that moved a card can have moved an instance's
 		// cards, so a fleet whose cards stay put pays nothing for this.
-		return nil
+		return cardsChanged, nil
 	}
-	return realignInstanceGPUs(tx, nodeID, st.GPUs)
+	return cardsChanged, realignInstanceGPUs(tx, nodeID, st.GPUs)
 }
 
 // newCardRow is the one place a card's row is built from a probe's report.
@@ -245,10 +250,10 @@ func cardIdent(g proto.GPUInfo) string {
 // every card after one that appears or goes. Keying on it is what used to
 // make this function juggle rows through negative indexes to get past its
 // own unique constraint.
-func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdoption) (renumbered bool, err error) {
+func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdoption) (renumbered, changed bool, err error) {
 	var current []GPU
 	if err := tx.Where("node_id = ?", nodeID).Find(&current).Error; err != nil {
-		return false, err
+		return false, false, err
 	}
 	existing := make(map[string]GPU, len(current))
 	for _, row := range current {
@@ -262,8 +267,9 @@ func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdo
 		old, known := existing[ident]
 		if !known {
 			if err := tx.Create(&row).Error; err != nil {
-				return false, err
+				return false, false, err
 			}
+			changed = true
 			// A second card reporting the same key would otherwise take
 			// this path again and fail the unique index, and because the
 			// cards are written inside the node's own status transaction
@@ -287,20 +293,23 @@ func reconcileGPUs(tx *gorm.DB, nodeID uint, gpus []proto.GPUInfo, adopt cardAdo
 		}
 		if err := tx.Model(&GPU{}).Where("id = ?", old.ID).Select(cardRowColumns).
 			Updates(&row).Error; err != nil {
-			return false, err
+			return false, false, err
 		}
+		changed = true
 	}
 	for _, old := range current {
 		if !reported[old.Ident] {
 			if err := tx.Delete(&GPU{}, old.ID).Error; err != nil {
-				return false, err
+				return false, false, err
 			}
+			changed = true
 		}
 	}
-	if err := expireCardAllowances(tx, current, time.Now().UTC()); err != nil {
-		return false, err
+	expired, err := expireCardAllowances(tx, current, time.Now().UTC())
+	if err != nil {
+		return false, false, err
 	}
-	return renumbered, nil
+	return renumbered, changed || expired, nil
 }
 
 // sameCardRow reports whether writing row over old would change any column

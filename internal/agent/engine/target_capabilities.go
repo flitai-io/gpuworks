@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	goruntime "runtime"
 	"strings"
@@ -47,7 +48,7 @@ func (e *Engine) validateTargetDesiredForDriver(spec proto.InstanceDesiredState,
 		// Legacy servers expose only structural facts; their argv is never parsed.
 		snapshot = &proto.RequestedFeatures{EngineSleep: structuralSleep, MultiNode: structuralMulti, KVDiskTier: structuralKV}
 	} else if structuralSleep && !snapshot.EngineSleep || structuralMulti && !snapshot.MultiNode || structuralKV && !snapshot.KVDiskTier {
-		return fmt.Errorf("launch feature snapshot contradicts desired topology or resources")
+		return withFailure(proto.RuntimeFailure{Code: proto.ErrorLaunchFeaturesContradictory}, errors.New("launch feature snapshot contradicts desired topology or resources"))
 	}
 
 	var requested []accelerator.Feature
@@ -56,10 +57,12 @@ func (e *Engine) validateTargetDesiredForDriver(spec proto.InstanceDesiredState,
 	}
 
 	if missing := accelerator.Unsupported(vendor, requested...); len(missing) > 0 {
-		return fmt.Errorf("%s does not support requested accelerator features: %s", accelerator.VendorBrand(vendor), strings.Join(featureNames(missing), ", "))
+		return withFailure(proto.RuntimeFailure{Code: proto.ErrorAcceleratorFeatureUnsupported, Vendor: vendor, Feature: string(missing[0])},
+			fmt.Errorf("%s does not support requested accelerator features: %s", accelerator.VendorBrand(vendor), strings.Join(featureNames(missing), ", ")))
 	}
 	if spec.RequestedFeatures != nil && !snapshot.CommandKnown && accelerator.RequiresKnownLaunchFeatures(vendor) {
-		return fmt.Errorf("launch_features_unknown: %s needs a recognizable executable entrypoint", accelerator.VendorBrand(vendor))
+		return withFailure(proto.RuntimeFailure{Code: proto.ErrorLaunchFeaturesUnknown, Vendor: vendor},
+			fmt.Errorf("launch_features_unknown: %s needs a recognizable executable entrypoint", accelerator.VendorBrand(vendor)))
 	}
 	host := accelerator.HostRuntime{OS: goruntime.GOOS, Arch: goruntime.GOARCH}
 	if e.hostRuntimeFacts != nil {
@@ -81,12 +84,14 @@ func (e *Engine) validateTargetDesiredForDriver(spec proto.InstanceDesiredState,
 		// another vendor and never a compute/SM limit, which no such backend
 		// currently exposes.
 		if spec.SMLimitPct != 0 && spec.SMLimitPct != 100 {
-			return fmt.Errorf("%s does not support a compute/SM limit", accelerator.VendorBrand(vendor))
+			return withFailure(proto.RuntimeFailure{Code: proto.ErrorAcceleratorSMLimitUnsupported, Vendor: vendor},
+				fmt.Errorf("%s does not support a compute/SM limit", accelerator.VendorBrand(vendor)))
 		}
 		if spec.PartitionBackend != "" || spec.VRAMLimitBytes != 0 {
 			backend, ok := accelerator.Lookup(spec.PartitionBackend)
 			if !ok || !backend.Matches(vendor, "") {
-				return fmt.Errorf("%s requires a whole-device partition contract", accelerator.VendorBrand(vendor))
+				return withFailure(proto.RuntimeFailure{Code: proto.ErrorAcceleratorPartitionContract, Vendor: vendor},
+					fmt.Errorf("%s requires a whole-device partition contract", accelerator.VendorBrand(vendor)))
 			}
 		}
 	}

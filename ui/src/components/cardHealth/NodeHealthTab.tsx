@@ -52,7 +52,7 @@ export default function NodeHealthTab({ nodeUUID }: { nodeUUID: string }) {
           {data.cards.length > 0 && (
             <>
               <Typography.Text type="secondary">
-                {t("cardHealth.summary", { cards: data.cards.length, fail: data.summary.fail ?? 0, warn: data.summary.warn ?? 0 })}
+                {t("cardHealth.summary", { cards: data.cards.length, fail: data.summary.fail ?? 0, warn: data.summary.warn ?? 0, skip: data.summary.skip ?? 0 })}
               </Typography.Text>
               <div style={{ overflowX: "auto" }}>
                 <table className="card-health-table" style={{ borderCollapse: "separate", borderSpacing: 4 }}>

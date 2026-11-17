@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -24,20 +25,22 @@ func TestJudgeProviderInstallCheck(t *testing.T) {
 		accepted   bool
 		queuedDial bool
 	}{
-		{"server_dial ok", "server_dial", provision.CheckResult{Name: "server_dial", Status: "ok", Detail: "connected to 1.2.3.4:5"}, true, false},
-		{"server_dial queued for reconnection", "server_dial", provision.CheckResult{Name: "server_dial", Status: "warn", Detail: queued}, true, true},
-		{"server_dial warn for another reason", "server_dial", provision.CheckResult{Name: "server_dial", Status: "warn", Detail: "server_dial address is empty"}, false, false},
-		{"server_dial not configured", "server_dial", provision.CheckResult{Name: "server_dial", Status: "warn", Detail: "server_dial is not configured"}, false, false},
-		{"server_dial error even with the queued text", "server_dial", provision.CheckResult{Name: "server_dial", Status: "error", Detail: queued}, false, false},
-		{"queued text on the wrong check", "agent_dial", provision.CheckResult{Name: "agent_dial", Status: "warn", Detail: queued}, false, false},
-		{"queued text under another name", "server_dial", provision.CheckResult{Name: "agent_dial", Status: "warn", Detail: queued}, false, false},
-		{"agent_dial ok", "agent_dial", provision.CheckResult{Name: "agent_dial", Status: "ok"}, true, false},
-		{"agent_dial waiting for first session", "agent_dial", provision.CheckResult{Name: "agent_dial", Status: "warn", Detail: "agent started; waiting for its first session"}, true, false},
-		{"agent_dial other warn", "agent_dial", provision.CheckResult{Name: "agent_dial", Status: "warn", Detail: "no session"}, false, false},
-		{"precheck warn", "precheck", provision.CheckResult{Name: "precheck", Status: "warn", Detail: "Docker missing"}, true, false},
-		{"precheck error", "precheck", provision.CheckResult{Name: "precheck", Status: "error"}, false, false},
-		{"install agent warn", "install agent", provision.CheckResult{Name: "install agent", Status: "warn"}, false, false},
-		{"wrong check at the position", "install agent", provision.CheckResult{Name: "precheck", Status: "ok"}, false, false},
+		{"server_dial pass", "server_dial", provision.CheckResult{ID: "server_dial", Status: "pass", Code: messages.CheckServerDialConnected}, true, false},
+		{"server_dial queued for reconnection", "server_dial", provision.CheckResult{ID: "server_dial", Status: "warn", Code: messages.CheckServerDialNotConnected, Evidence: queued}, true, true},
+		{"server_dial no address", "server_dial", provision.CheckResult{ID: "server_dial", Status: "skip", Code: messages.CheckServerDialNoAddress}, false, false},
+		{"server_dial not configured", "server_dial", provision.CheckResult{ID: "server_dial", Status: "skip", Code: messages.CheckServerDialUnconfigured}, false, false},
+		{"server_dial warn for another code", "server_dial", provision.CheckResult{ID: "server_dial", Status: "warn", Code: messages.CheckAgentSessionWaiting}, false, false},
+		{"server_dial fail even with the queued code", "server_dial", provision.CheckResult{ID: "server_dial", Status: "fail", Code: messages.CheckServerDialNotConnected, Evidence: queued}, false, false},
+		{"queued code on the wrong check", "agent_dial", provision.CheckResult{ID: "agent_dial", Status: "warn", Code: messages.CheckServerDialNotConnected}, false, false},
+		{"queued code under another id", "server_dial", provision.CheckResult{ID: "agent_dial", Status: "warn", Code: messages.CheckServerDialNotConnected}, false, false},
+		{"agent_dial pass", "agent_dial", provision.CheckResult{ID: "agent_dial", Status: "pass"}, true, false},
+		{"agent_dial waiting for first session", "agent_dial", provision.CheckResult{ID: "agent_dial", Status: "warn", Code: messages.CheckAgentSessionWaiting}, true, false},
+		{"agent_dial session not observable", "agent_dial", provision.CheckResult{ID: "agent_dial", Status: "skip", Code: messages.CheckAgentSessionUnobserved}, false, false},
+		{"precheck warn", "precheck", provision.CheckResult{ID: "precheck", Status: "warn", Code: messages.CheckPrecheckAttention}, true, false},
+		{"precheck fail", "precheck", provision.CheckResult{ID: "precheck", Status: "fail"}, false, false},
+		{"precheck skip is not a pass", "precheck", provision.CheckResult{ID: "precheck", Status: "skip"}, false, false},
+		{"install agent warn", "install_agent", provision.CheckResult{ID: "install_agent", Status: "warn"}, false, false},
+		{"wrong check at the position", "install_agent", provision.CheckResult{ID: "precheck", Status: "pass"}, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

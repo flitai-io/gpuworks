@@ -17,15 +17,24 @@ class CsvEvidenceTests(unittest.TestCase):
         writer = csv.writer(text)
         writer.writerow(CSV_FIELDS)
         writer.writerow([self.entry[k] for k in ('time_ms', 'level', 'source', 'instance', 'node', 'line')])
-        self.raw = text.getvalue().encode('utf-8')
+        self.raw = b'\xef\xbb\xbf' + text.getvalue().encode('utf-8')
 
     def test_unicode_quotes_commas_and_newlines_roundtrip(self):
-        for prefix in (b'', b'\xef\xbb\xbf'):
-            rows = validate_csv(prefix + self.raw, [self.entry])
-            self.assertEqual(rows[1][-1], self.entry['line'])
+        rows = validate_csv(self.raw, [self.entry])
+        self.assertEqual(rows[0], ['TimeMS', 'Level', 'Source', 'Instance', 'Node', 'Line'])
+        self.assertEqual(rows[1][-1], self.entry['line'])
+
+    def test_rejects_missing_utf8_bom(self):
+        with self.assertRaisesRegex(AssertionError, 'must start with UTF-8 BOM EF BB BF'):
+            validate_csv(self.raw[3:], [self.entry])
+
+    def test_rejects_duplicate_utf8_bom(self):
+        with self.assertRaisesRegex(AssertionError, 'duplicate leading UTF-8 BOM'):
+            validate_csv(b'\xef\xbb\xbf' + self.raw, [self.entry])
 
     def test_rejects_wrong_encoding_html_and_missing_or_extra_rows(self):
-        for raw in (b'\xff', b'<html>login</html>', b','.join(x.encode() for x in CSV_FIELDS), self.raw + self.raw):
+        for raw in (b'\xef\xbb\xbf\xff', b'\xef\xbb\xbf<html>login</html>',
+                    b'\xef\xbb\xbf' + b','.join(x.encode() for x in CSV_FIELDS), self.raw + self.raw[3:]):
             with self.subTest(raw=raw), self.assertRaises((AssertionError, UnicodeDecodeError)):
                 validate_csv(raw, [self.entry])
 

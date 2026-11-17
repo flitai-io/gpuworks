@@ -11,11 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/seed"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/server/templateexport"
 )
@@ -57,7 +59,7 @@ func TestQwen3TemplateExportImportsAndRedeploysTheSameCommand(t *testing.T) {
 				Quick: created.Quick, TemplateArgs: created.TemplateResidual, UserArgs: userArgs, TemplateEnv: spec.Env,
 				Template: &model, TemplateSpec: &spec,
 				GPUs: []templateexport.GPUFact{{Name: "NVIDIA H20", Vendor: "nvidia", MemoryMiB: 97871, ComputeCap: "9.0"}}, GPUCount: 1,
-				Checks: []templateexport.Check{{Operation: "openai.chat", Endpoint: "/v1/chat/completions", Tested: true, Passed: true, HTTPStatus: 200}},
+				Checks: []templateexport.Check{{ID: templateexport.CheckOperationReply, Operation: "openai.chat", Endpoint: "/v1/chat/completions", Status: proto.CheckPass, Code: messages.CheckTemplateOperationAnswered, HTTPStatus: 200}},
 			})
 			if err != nil {
 				t.Fatal(err)

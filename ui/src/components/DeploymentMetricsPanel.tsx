@@ -1,12 +1,15 @@
-import { Alert, Card, Col, Row, Statistic, Typography } from "antd";
-import { useMemo, useState, type ReactNode } from "react";
+import { Typography } from "antd";
+import { Alert } from "../pages/DeploymentControls";
+import { Select, SelectContent, SelectTrigger, SelectItem } from "./ui/select";
+import { useMemo, type ComponentProps } from "react";
 import { api, usePolling, type Instance, type MetricPoint, type MetricSeries } from "../api";
 import TimeSeriesChart, { autoValueFmt } from "./TimeSeriesChart";
-import GatewayMetricsNotice from "./GatewayMetricsNotice";
-import TimeRangePicker from "./TimeRangePicker";
-import { percentScaled } from "./InferenceMetricsPanel";
-import { colors } from "../theme/tokens";
-import { RETENTION_WARNING_DAYS, resolveRange, stepString, type TimeRangeSelection } from "../timeRange";
+import EmptyState from "./EmptyState";
+import GatewayMetricsNotice, { useGatewayOnlyMetrics } from "./GatewayMetricsNotice";
+import { RangeHeader, useMetricWindow } from "./MetricWindow";
+import { rateSeries } from "../instanceMetricSeries";
+import { MetricStat, percentScaled } from "./InferenceMetricsPanel";
+import { resolveRange, stepString, type TimeRangeSelection } from "../timeRange";
 import { useTranslation } from "react-i18next";
 
 const LIVE_STATES = new Set(["running", "starting", "optimizing"]);
@@ -36,206 +39,131 @@ function selectionKey(selection: TimeRangeSelection): string {
   return selection.kind === "quick" ? selection.key : `custom-${selection.startMS}-${selection.endMS}`;
 }
 
-export default function DeploymentMetricsPanel({ instances, deploymentId }: { instances: Instance[]; deploymentId?: number }) {
+export default function DeploymentMetricsPanel({ instances, deploymentId, onSelectInstance }: { instances: Instance[]; deploymentId?: number; onSelectInstance?: (uuid: string) => void }) {
   const { t } = useTranslation("deployments");
-  const [selection, setSelection] = useState<TimeRangeSelection>({ kind: "quick", key: "15m" });
+  const [selection, setSelection] = useMetricWindow();
   const liveInstances = useMemo(
     () => instances.filter((inst) => LIVE_STATES.has(inst.state)),
     [instances],
   );
-  const liveKey = useMemo(() => liveInstances.map((inst) => inst.uuid).sort().join(","), [liveInstances]);
-  const eff = useMemo(() => resolveRange(selection, Date.now()), [selection]);
-  const effKey = selectionKey(selection);
-  const metrics = usePolling<MetricData>(
-    () => loadMetricData(liveInstances, selection),
-    eff.pollMs,
-    // pollMs must be a dep or a widened window would keep the old cadence.
-    [liveKey, effKey, eff.pollMs],
+  const instanceKey = instances.map((inst) => inst.uuid).sort().join(",");
+  const eff = resolveRange(selection, Date.now());
+  const queryKey = `${deploymentId}/${instanceKey}/${selectionKey(selection)}`;
+  const metrics = usePolling(async () => ({
+    queryKey, ...await loadMetricData(instances, deploymentId, selection),
+  }), eff.pollMs, [queryKey]);
+  const result = metrics.data?.queryKey === queryKey ? metrics.data : null;
+  const data = result?.data ?? EMPTY_DATA;
+  const hasAnyMetric = Object.values(data).some(hasPoints);
+  const gateway = useGatewayOnlyMetrics(
+    result && !result.error && selection.kind === "quick" && !eff.beyondRetention && liveInstances.length > 0 && !hasAnyMetric ? deploymentId : undefined,
+    eff.endMS - eff.startMS,
+    eff.pollMs || 15000,
+    liveInstances.every((inst) => inst.state === "running"),
   );
-  const data = metrics.data ?? EMPTY_DATA;
 
-  if (instances.length === 0) {
-    return <Alert type="info" showIcon message={t("metrics.noInstances")} description={t("metrics.noInstancesDescription")} />;
-  }
-
-  if (liveInstances.length === 0) {
-    return (
-      <Alert
-        type="info"
-        showIcon
-        message={t("metrics.noRunning")}
-        description={t("metrics.noRunningDescription")}
-      />
-    );
-  }
+  const rangeHeader = (
+    <RangeHeader selection={selection} onChange={setSelection} beyondRetention={eff.beyondRetention} />
+  );
+  if (gateway) return (
+    <div className="flex flex-col gap-3">
+      <GatewayMetricsNotice data={gateway} />
+      {rangeHeader}
+    </div>
+  );
 
   const promptRate = rateSeries(data.promptTokens);
   const generationRate = rateSeries(data.generationTokens);
-  const runningNow = latestSum(data.running);
-  const waitingNow = latestSum(data.waiting);
-  const cachePeak = latestMax(data.cache);
+  const activeIds = new Set(liveInstances.map((inst) => inst.uuid));
+  const runningNow = liveCardValue(data.running, activeIds);
+  const waitingNow = liveCardValue(data.waiting, activeIds);
+  const cachePeak = liveCardValue(data.cache, activeIds, "max");
+  const liveGeneration = liveCardValue(data.generationTokens, activeIds, "rate");
   const promptNow = latestSum(promptRate);
   const generationNow = latestSum(generationRate);
-  const hasAnyMetric = (Object.keys(data) as MetricKey[]).some((key) => hasPoints(data[key]));
 
   const concurrencySeries = [
-    aggregateSeries(data.running, { metric: t("metrics.runningRequests") }),
-    aggregateSeries(data.waiting, { metric: t("metrics.waitingRequests") }),
+    aggregateSeries(data.running, { metric: t("metrics.totalRunningRequests") }),
+    aggregateSeries(data.waiting, { metric: t("metrics.totalWaitingRequests") }),
   ];
   const tokenSeries = [
     aggregateSeries(promptRate, { metric: "Prompt tok/s" }),
     aggregateSeries(generationRate, { metric: "Generation tok/s" }),
   ];
 
+  const sampled = new Map<string, string>();
+  for (const series of Object.values(data).flat()) {
+    if (!series.points.length) continue;
+    const uuid = series.labels.instance;
+    const role = instances.find((inst) => inst.uuid === uuid)?.role || series.labels.role;
+    sampled.set(uuid, [role && t(`detail.pd.role.${role}`, { defaultValue: role }), uuid.slice(0, 12)].filter(Boolean).join(" · "));
+  }
+  const historical = selection.kind === "custom" || liveInstances.length === 0;
+  const empty = !hasPoints(concurrencySeries) && !hasPoints(tokenSeries) && !hasPoints(data.cache);
   return (
-    <div>
-      {/* Stat cards are live readings, not filtered by the window, so the
-          range control sits between them and the charts it actually drives. */}
-      {metrics.error && !hasAnyMetric ? (
-        <Alert type="warning" showIcon message={t("metrics.loadFailed")} description={metrics.error.message} />
-      ) : !hasAnyMetric ? (
-        // No engine series: the engine may report none at all, in which case
-        // the gateway's measurements are what there is to show.
-        deploymentId != null ? (
-          <GatewayMetricsNotice
-            deploymentId={deploymentId}
-            sinceMS={Date.now() - eff.startMS}
-            pollMs={eff.pollMs || 15000}
-            allRunning={liveInstances.every((inst) => inst.state === "running")}
-            fallback={<Alert type="info" showIcon message={t("metrics.waiting")} description={t("metrics.waitingDescription")} />}
-          />
-        ) : (
-          <Alert type="info" showIcon message={t("metrics.waiting")} description={t("metrics.waitingDescription")} />
-        )
-      ) : (
-        <Row gutter={[12, 12]}>
-          <Col xs={24} sm={12} xl={4}>
-            <MetricStat title={t("metrics.runningInstances")} value={liveInstances.length} />
-          </Col>
-          <Col xs={24} sm={12} xl={5}>
-            <MetricStat title={t("metrics.runningRequests")} value={runningNow} />
-          </Col>
-          <Col xs={24} sm={12} xl={5}>
-            <MetricStat title={t("metrics.waitingRequests")} value={waitingNow} />
-          </Col>
-          <Col xs={24} sm={12} xl={5}>
-            <MetricStat title={t("metrics.peakCache")} value={cachePeak != null ? percentScaled(cachePeak) : undefined} suffix="%" />
-          </Col>
-          <Col xs={24} sm={12} xl={5}>
-            <MetricStat title={t("metrics.generationThroughput")} value={generationNow} suffix="tok/s" precision={1} />
-          </Col>
-        </Row>
+    <div className="deployment-metric-panel">
+      {result?.error ? (
+        <Alert type="error" showIcon message={t("metrics.loadFailed")} description={result.error.message} style={{ marginBottom: 12 }} />
+      ) : empty && (
+        <Alert type="info" role="status" showIcon
+          message={historical && result ? t("metrics.emptyWindow") : t("metrics.waiting")}
+          description={historical && result ? undefined : t("metrics.waitingDescription")} style={{ marginBottom: 12 }} />
       )}
+      <div className="deployment-metrics-summary" role="region" aria-label={t("detail.metrics")} tabIndex={0}>
+        <MetricStat title={t("metrics.runningInstances")} value={liveInstances.length} />
+        <MetricStat title={t("metrics.runningRequests")} value={runningNow} />
+        <MetricStat title={t("metrics.waitingRequests")} value={waitingNow} />
+        <MetricStat title={t("metrics.peakCache")} value={cachePeak != null ? percentScaled(cachePeak) : undefined} suffix="%" />
+        <MetricStat title={t("metrics.generationThroughput")} value={liveGeneration} suffix="tok/s" precision={1} />
+      </div>
+      {rangeHeader}
 
-      <RangeHeader selection={selection} onChange={setSelection} beyondRetention={eff.beyondRetention} />
-
-      {hasAnyMetric && (
-        <Row gutter={[12, 12]}>
-          <Col xs={24} xl={12}>
-            <ChartCard title={t("metrics.concurrency")} description={t("metrics.concurrencyDescription")}>
-              <TimeSeriesChart
-                height={190}
-                series={concurrencySeries}
-                valueFmt={(v) => v.toFixed(0)}
-                integer
-              />
-            </ChartCard>
-          </Col>
-          <Col xs={24} xl={12}>
-            <ChartCard title={t("metrics.tokenThroughput")} description={t("metrics.tokenDescription", { prompt: promptNow.toFixed(1), generation: generationNow.toFixed(1) })}>
-              <TimeSeriesChart height={190} series={tokenSeries} unit="tok/s" valueFmt={autoValueFmt} />
-            </ChartCard>
-          </Col>
-          <Col xs={24}>
-            <ChartCard title={t("metrics.instanceCache")} description={t("metrics.instanceCacheDescription")}>
-              <TimeSeriesChart height={210} series={data.cache} unit="%" valueFmt={(v) => percentScaled(v).toFixed(0)} />
-            </ChartCard>
-          </Col>
-        </Row>
-      )}
+      <div className="deployment-metric-charts">
+        <ChartCard title={t("metrics.concurrency")} description={t("metrics.concurrencyDescription")}>
+          <MetricPlot series={concurrencySeries} height={190} valueFmt={(v) => v.toFixed(0)} integer />
+        </ChartCard>
+        <ChartCard title={t("metrics.tokenThroughput")} description={t("metrics.tokenDescription", {
+          prompt: promptNow?.toFixed(1) ?? "—", generation: generationNow?.toFixed(1) ?? "—",
+        })}>
+          <MetricPlot series={tokenSeries} height={190} unit="tok/s" valueFmt={autoValueFmt} />
+        </ChartCard>
+        <ChartCard title={t("metrics.instanceCache")} description={t("metrics.instanceCacheDescription")}
+          action={onSelectInstance && sampled.size > 0 && (
+            <Select size="sm" value="" onValueChange={onSelectInstance}>
+              <SelectTrigger aria-label={t("metrics.inspectInstance")} placeholder={t("metrics.inspectInstance")} contentSized />
+              <SelectContent>{Array.from(sampled, ([uuid,label])=><SelectItem key={uuid} value={uuid}>{label}</SelectItem>)}</SelectContent>
+            </Select>
+          )}>
+          <MetricPlot series={data.cache} height={210} unit="%" valueFmt={v => percentScaled(v).toFixed(0)}
+            onSeriesClick={onSelectInstance && (labels => onSelectInstance(labels.instance))} />
+        </ChartCard>
+      </div>
     </div>
   );
 }
 
-function RangeHeader({
-  selection,
-  onChange,
-  beyondRetention,
-}: {
-  selection: TimeRangeSelection;
-  onChange: (next: TimeRangeSelection) => void;
-  beyondRetention?: boolean;
-}) {
-  const { t } = useTranslation("deployments");
-  return (
-    <div style={{ marginBottom: 12 }}>
-      {/* Metrics always have a concrete window, so the picker's null (live)
-          value cannot occur here; filter it for the state setter's type. */}
-      <TimeRangePicker value={selection} onChange={(next) => next && onChange(next)} />
-      {beyondRetention && (
-        <Alert
-          style={{ marginTop: 8 }}
-          type="warning"
-          showIcon
-          message={t("timeRange.beyondRetention", { days: RETENTION_WARNING_DAYS })}
-        />
-      )}
-    </div>
-  );
-}
-
-// loadMetricData fans one query per instance per metric out into the
-// panel-level MetricData, tagging every series with its instance so the
-// per-instance cache chart can tell the lines apart.
-async function loadMetricData(liveInstances: Instance[], selection: TimeRangeSelection): Promise<MetricData> {
-  if (liveInstances.length === 0) return EMPTY_DATA;
+async function loadMetricData(instances: Instance[], deploymentId: number | undefined, selection: TimeRangeSelection) {
   const eff = resolveRange(selection, Date.now());
   const params = { start: eff.startMS, end: eff.endMS, step: stepString(eff.stepMS) };
-  const perInstance = await Promise.all(
-    liveInstances.map(async (inst) => {
-      const entries = await Promise.all(
-        (Object.keys(METRICS) as MetricKey[]).map(async (key) => ({
-          key,
-          series: withInstanceLabel(
-            (await api.metricsQuery(METRICS[key], { instance: inst.uuid, ...params })).items,
-            inst.uuid,
-          ),
-        })),
-      );
-      return entries;
-    }),
-  );
-
   const next: MetricData = { ...EMPTY_DATA };
-  for (const entries of perInstance) {
-    for (const { key, series } of entries) next[key] = next[key].concat(series);
-  }
-  return next;
+  const reads = await Promise.allSettled((Object.keys(METRICS) as MetricKey[]).map(async (key) => {
+    const groups = await Promise.all(instances.map(async ({ uuid }) => {
+      const { items } = await api.metricsQuery(METRICS[key], { ...params, instance: uuid });
+      return withInstanceLabel(items.filter(({ labels }) =>
+        (!labels.instance || labels.instance === uuid) &&
+        (!labels.deployment || deploymentId == null || labels.deployment === String(deploymentId))), uuid);
+    }));
+    next[key] = groups.flat();
+  }));
+  const failed = reads.find((read) => read.status === "rejected");
+  return { data: next, error: failed ? new Error(String(failed.reason?.message ?? failed.reason)) : null };
 }
 
-function MetricStat({
-  title,
-  value,
-  suffix,
-  precision = 0,
-}: {
-  title: string;
-  value?: number;
-  suffix?: string;
-  precision?: number;
-}) {
+function ChartCard({ title, description, action, children }: { title: string; description: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <Card size="small">
-      <Statistic title={title} value={value ?? 0} precision={precision} suffix={suffix} />
-    </Card>
-  );
-}
-
-function ChartCard({ title, description, children }: { title: string; description: string; children: ReactNode }) {
-  return (
-    <div style={{ border: `1px solid ${colors.borderSoft}`, borderRadius: 4, padding: 16, background: colors.white }}>
-      <Typography.Text strong>{title}</Typography.Text>
-      <Typography.Text type="secondary" style={{ display: "block", fontSize: 12, marginBottom: 8 }}>
+    <div className="deployment-trend-card">
+      <div className="flex flex-wrap items-center justify-between gap-2"><Typography.Text strong>{title}</Typography.Text>{action}</div>
+      <Typography.Text type="secondary" style={{ display: "block", fontSize: "var(--font-size-label)", marginBottom: 8 }}>
         {description}
       </Typography.Text>
       {children}
@@ -243,9 +171,16 @@ function ChartCard({ title, description, children }: { title: string; descriptio
   );
 }
 
+function MetricPlot(chart: ComponentProps<typeof TimeSeriesChart>) {
+  const { t } = useTranslation("common");
+  return hasPoints(chart.series) ? <TimeSeriesChart {...chart} /> : (
+    <div style={{ height: chart.height }}><EmptyState compact description={t("dataTable.empty")} /></div>
+  );
+}
+
 function withInstanceLabel(series: MetricSeries[], instanceUuid: string): MetricSeries[] {
   return series.map((item) => ({
-    labels: { instance: instanceUuid, ...item.labels },
+    labels: { ...item.labels, instance: instanceUuid },
     points: item.points ?? [],
   }));
 }
@@ -254,42 +189,32 @@ function hasPoints(series?: MetricSeries[] | null): boolean {
   return !!series?.some((item) => item.points?.length > 0);
 }
 
-function latestSum(series: MetricSeries[]): number {
-  return latestValues(series).reduce((sum, value) => sum + value, 0);
+function latestSum(series: MetricSeries[]): number | undefined {
+  const values = latestValues(series);
+  return values.length ? values.reduce((sum, value) => sum + value, 0) : undefined;
 }
 
-function latestMax(series: MetricSeries[]): number | undefined {
-  const values = latestValues(series);
-  return values.length ? Math.max(...values) : undefined;
+function liveCardValue(series: MetricSeries[], activeIds: Set<string>, aggregation: "sum" | "max" | "rate" = "sum"): number | undefined {
+  const values: number[] = [];
+  for (const item of series) {
+    const last = item.points[item.points.length - 1];
+    if (!last || !activeIds.has(item.labels.instance)) continue;
+    if (aggregation === "rate") {
+      const previous = item.points[item.points.length - 2];
+      if (!previous || previous[0] >= last[0]) continue;
+      values.push(Math.max(0, last[1] - previous[1]) / ((last[0] - previous[0]) / 1000));
+    } else {
+      values.push(last[1]);
+    }
+  }
+  if (!values.length) return undefined;
+  return aggregation === "max" ? Math.max(...values) : values.reduce((sum, value) => sum + value, 0);
 }
 
 function latestValues(series: MetricSeries[]): number[] {
-  const values: number[] = [];
-  for (const item of series) {
-    const point = item.points?.[item.points.length - 1];
-    if (point) values.push(point[1]);
-  }
-  return values;
-}
-
-function rateSeries(series: MetricSeries[]): MetricSeries[] {
-  return series.map((item) => ({
-    labels: item.labels,
-    points: toRatePoints(item.points ?? []),
-  }));
-}
-
-function toRatePoints(points: MetricPoint[]): MetricPoint[] {
-  const out: MetricPoint[] = [];
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const cur = points[i];
-    const seconds = (cur[0] - prev[0]) / 1000;
-    if (seconds <= 0) continue;
-    const delta = cur[1] - prev[1];
-    out.push([cur[0], Math.max(0, delta / seconds)]);
-  }
-  return out;
+  const latest = series.flatMap((item) => item.points?.slice(-1) ?? []);
+  const time = Math.max(...latest.map(([at]) => at));
+  return latest.filter(([at]) => at === time).map(([, value]) => value);
 }
 
 function aggregateSeries(series: MetricSeries[], labels: Record<string, string>): MetricSeries {

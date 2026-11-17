@@ -30,6 +30,7 @@ func TestHealthSourceListsTheCheckedDeploymentsAndWhatToAsk(t *testing.T) {
 	chat := model("chat", `[{"type":"openai.embeddings","endpoint":"/v1/embeddings"},{"type":"openai.chat","endpoint":"/v1/chat/completions"}]`)
 	emb := model("emb", `[{"type":"openai.embeddings","endpoint":"/v1/embeddings"}]`)
 	rerank := model("rerank", `[{"type":"openai.rerank","endpoint":"/v1/rerank"}]`)
+	decision := model("decision", `[{"type":"systemone.decide","endpoint":"/v1/systemone"}]`)
 	completion := model("completion", `[{"type":"openai.embeddings","endpoint":"/v1/embeddings"},{"type":"openai.completions","endpoint":"/v1/completions"}]`)
 	deployment := func(name string, modelID uint, state store.DeploymentState, on bool, threshold int) uint {
 		d, err := st.CreateDeployment(&store.Deployment{Name: name, ServedName: name, ModelID: modelID, State: state})
@@ -47,6 +48,7 @@ func TestHealthSourceListsTheCheckedDeploymentsAndWhatToAsk(t *testing.T) {
 	deployment("off", chat, store.DeployActive, false, 60)
 	deployment("ranker", rerank, store.DeployActive, true, 60)
 	d := deployment("translate", completion, store.DeployActive, true, 30)
+	e := deployment("triage", decision, store.DeployActive, true, 10)
 
 	got, err := healthSource{store: st}.Targets(context.Background())
 	if err != nil {
@@ -57,6 +59,7 @@ func TestHealthSourceListsTheCheckedDeploymentsAndWhatToAsk(t *testing.T) {
 		{DeploymentID: b, Kind: healthcheck.KindEmbeddings, Path: "/v1/embeddings", Threshold: 5 * time.Second, Active: true},
 		{DeploymentID: c, Kind: healthcheck.KindChat, Path: "/v1/chat/completions", Threshold: time.Minute},
 		{DeploymentID: d, Kind: healthcheck.KindCompletions, Path: "/v1/completions", Threshold: 30 * time.Second, Active: true},
+		{DeploymentID: e, Kind: healthcheck.KindDecision, Path: "/v1/systemone", Threshold: 10 * time.Second, Active: true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("targets =\n%+v\nwant\n%+v", got, want)

@@ -1,5 +1,7 @@
+import DetailSection from "./detail/DetailSection";
 import { Space, Tag, Typography } from "antd";
 import type { Breakdown, Measured } from "../api";
+import { Badge } from "./ui/badge";
 import { colors } from "../theme/tokens";
 import { formatVRAMFitSummary } from "../pages/deploy/vramDisplay";
 import { useTranslation } from "react-i18next";
@@ -30,7 +32,9 @@ interface Seg {
 export default function VRAMBreakdown({
   breakdown,
   measured,
+  inDetailCard = false,
 }: {
+  inDetailCard?: boolean;
   breakdown: Breakdown;
   measured?: Measured;
 }) {
@@ -71,23 +75,32 @@ export default function VRAMBreakdown({
         { key: "graph", label: t("vram.segment.graph"), color: COLORS.graph, gib: measured!.GraphCaptureGiB },
       ]
     : [];
-	const measuredTotalGiB = measSegs.reduce((sum, segment) => sum + segment.gib, 0);
+  const measuredTotalGiB = measSegs.reduce((sum, segment) => sum + segment.gib, 0);
+  const measuredOnly = hasMeasured && !showEstimated;
+  const measuredKvSummary = hasMeasured && measured.KVCacheTokens > 0
+    ? t("vram.measuredKvSummary", { value: measured.KVCacheGiB.toFixed(1), tokens: measured.KVCacheTokens.toLocaleString() })
+    : undefined;
+  function allocationTag(label: string, calibrated = false) {
+    return measuredOnly
+      ? <Badge size="sm" status={calibrated ? "success" : undefined}>{label}</Badge>
+      : <Tag color={calibrated ? "green" : undefined}>{label}</Tag>;
+  }
+  const metadata = (
+    <>
+      {breakdown.source === "measured" && allocationTag(t("vram.measuredCalibration"), true)}
+      {showEstimated && <Tag color={grade.color}>{t("vram.confidence", { value: grade.text })}</Tag>}
+      {breakdown.tensor_parallel > 1 && allocationTag(`tp=${breakdown.tensor_parallel}`)}
+      {!!breakdown.vram_limit_bytes && breakdown.vram_limit_bytes > 0 && allocationTag(t("vram.partitionCapacity", { value: toGiB(breakdown.vram_limit_bytes).toFixed(1) }))}
+      {breakdown.max_model_len > 0 && (
+        <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-label)" }}>
+          {t("vram.context", { value: breakdown.max_model_len })}
+        </Typography.Text>
+      )}
+    </>
+  );
 
-  return (
-    <div>
-      <Space wrap size="middle" style={{ marginBottom: 8 }}>
-        <Typography.Text strong>{t("vram.title")}</Typography.Text>
-        {breakdown.source === "measured" && <Tag color="green">{t("vram.measuredCalibration")}</Tag>}
-        {showEstimated && <Tag color={grade.color}>{t("vram.confidence", { value: grade.text })}</Tag>}
-        {breakdown.tensor_parallel > 1 && <Tag>tp={breakdown.tensor_parallel}</Tag>}
-		{breakdown.vram_limit_bytes && breakdown.vram_limit_bytes > 0 && <Tag>{t("vram.partitionCapacity", { value: toGiB(breakdown.vram_limit_bytes).toFixed(1) })}</Tag>}
-        {breakdown.max_model_len > 0 && (
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {t("vram.context", { value: breakdown.max_model_len })}
-          </Typography.Text>
-        )}
-      </Space>
-
+  const body = (
+    <>
       {showEstimated && <Typography.Text type={fitSummary.tone} strong style={{ display: "block", marginBottom: 8 }}>
 		  {fitSummary.text}
 		</Typography.Text>}
@@ -97,15 +110,16 @@ export default function VRAMBreakdown({
         </Typography.Text>
       )}
 
-      {showEstimated && <Bar label={t("vram.estimated")} segs={estSegs} denom={denom} total={displayEstimateTotal} capacity={capacityGiB} utilizationLabel={(value) => t("vram.utilization", { value })} />}
+      {showEstimated && <Bar label={t("vram.estimated")} segs={estSegs} denom={denom} total={displayEstimateTotal} capacity={capacityGiB} />}
       {hasMeasured && (
         <Bar
           label={t("vram.measured")}
           segs={measSegs}
           denom={denom}
-          total={measSegs.reduce((s, x) => s + x.gib, 0)}
+          total={measuredTotalGiB}
           capacity={capacityGiB}
-          utilizationLabel={(value) => t("vram.utilization", { value })}
+          compact={measuredOnly}
+          note={measuredOnly ? measuredKvSummary : undefined}
         />
       )}
 
@@ -118,20 +132,17 @@ export default function VRAMBreakdown({
               style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 16, marginBottom: 4 }}
             >
               <span
-                style={{ width: 12, height: 12, borderRadius: 3, background: s.color, display: "inline-block" }}
+                style={{ width: 12, height: 12, borderRadius: "var(--radius-sm)", background: s.color, display: "inline-block" }}
               />
-              <Typography.Text style={{ fontSize: 12 }}>
+              <Typography.Text style={{ fontSize: "var(--font-size-label)" }}>
                 {s.label} {s.gib.toFixed(1)} GiB
               </Typography.Text>
             </span>
           ))}
       </div>}
-      {hasMeasured && measured!.KVCacheTokens > 0 && (
+      {!measuredOnly && measuredKvSummary && (
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 6 }}>
-          {t("vram.measuredKvSummary", {
-            value: measured!.KVCacheGiB.toFixed(1),
-            tokens: measured!.KVCacheTokens.toLocaleString(),
-          })}
+          {measuredKvSummary}
         </Typography.Text>
       )}
       {showEstimated && (breakdown.kv_pool_bytes != null || breakdown.estimated_kv_tokens != null) && (
@@ -151,11 +162,20 @@ export default function VRAMBreakdown({
                 })}
         </Typography.Text>
       )}
-      {showEstimated
-        ? <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>{t("vram.startupMinimum", { value: startupMinimumGiB.toFixed(1) })}</Typography.Text>
-        : hasMeasured && <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>{t("vram.actualTotal", { value: measuredTotalGiB.toFixed(1) })}</Typography.Text>}
-    </div>
+      {showEstimated && <Typography.Text type="secondary" style={{ display: "block", marginTop: 4 }}>{t("vram.startupMinimum", { value: startupMinimumGiB.toFixed(1) })}</Typography.Text>}
+    </>
   );
+  if (inDetailCard) return (
+    <DetailSection title={t("vram.title")} controls={<Space wrap size={[8, 2]}>{metadata}</Space>}>
+      {body}
+    </DetailSection>
+  );
+  return <div>
+    <Space wrap size={measuredOnly ? [8, 2] : "middle"} style={{ marginBottom: measuredOnly ? 3 : 8 }}>
+      <Typography.Text strong>{t("vram.title")}</Typography.Text>{metadata}
+    </Space>
+    {body}
+  </div>;
 }
 
 function Bar({
@@ -164,33 +184,35 @@ function Bar({
   denom,
   total,
   capacity,
-  utilizationLabel,
+  compact = false,
+  note,
 }: {
   label: string;
   segs: Seg[];
   denom: number;
   total: number;
   capacity?: number;
-  utilizationLabel: (value: string) => string;
+  compact?: boolean;
+  note?: string;
 }) {
+  const { t } = useTranslation("deploy");
   const util = capacity ? (total / capacity) * 100 : undefined;
+  const amount = capacity ? `${total.toFixed(1)} / ${capacity.toFixed(1)}` : total.toFixed(1);
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {label}
+    <div style={{ marginBottom: compact ? 0 : 8 }}>
+      {!compact && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "2px 8px", marginBottom: 3 }}>
+        <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-label)" }}>{label}</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: "var(--font-size-label)" }}>
+          {amount} GiB
+          {util != null && t("vram.utilization", { value: util.toFixed(0) })}
         </Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {total.toFixed(1)}
-          {capacity ? ` / ${capacity.toFixed(1)} GiB` : " GiB"}
-          {util != null ? utilizationLabel(util.toFixed(0)) : ""}
-        </Typography.Text>
-      </div>
+      </div>}
       <div
-        style={{
+        className={compact ? "flex h-2 w-full overflow-hidden rounded-full bg-emphasis" : undefined}
+        style={compact ? undefined : {
           display: "flex",
           height: 26,
-          borderRadius: 2,
+          borderRadius: "var(--radius-md)",
           overflow: "hidden",
           background: colors.borderSoft,
           border: `1px solid ${colors.border}`,
@@ -206,6 +228,13 @@ function Bar({
             />
           ))}
       </div>
+      {compact && <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", marginTop: 4, fontSize: "var(--font-size-label)", color: colors.muted }}>
+        <span>
+          {t("vram.actualTotal", { value: amount })}
+          {util != null && t("vram.utilization", { value: util.toFixed(0) })}
+        </span>
+        {note && <span>{note}</span>}
+      </div>}
     </div>
   );
 }

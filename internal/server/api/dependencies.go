@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,10 +18,12 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deployment"
+	"gpuworks.ai/gpuworks/internal/server/diagnostics"
 	"gpuworks.ai/gpuworks/internal/server/distribution"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/community"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/packages"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/modelmeta"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/provider"
@@ -103,7 +106,13 @@ type NodeStreams interface {
 	OpenStorageDownload(ctx context.Context, nodeUUID string, hdr proto.StreamHeader) (proto.StorageDownloadHead, io.ReadCloser, error)
 }
 
+type NodeDoctor interface {
+	Diagnose(context.Context, string, bool) (diagnostics.DoctorReport, error)
+}
+
 type Deps struct {
+	NodeDoctor NodeDoctor
+
 	Store         *store.Store
 	Bus           *bus.Bus
 	Log           *slog.Logger
@@ -114,19 +123,28 @@ type Deps struct {
 	AgentUpgrades AgentUpgradeHooks
 	UIHandler     http.Handler // embedded SPA (may be nil in dev)
 
+	// Orders is the server's sleep and wake order lock and the placement
+	// hints a scale-up names (the controller's); a handler built without one
+	// keeps its own (apiHandlers.orders).
+	Orders *lifecycle.Orders
+
 	// Hub integration.
 	Online func(uuid string) bool
 	// WakeHeld counts the requests the gateway holds for each deployment's
 	// wake right now (the scheduling overview's contention); nil reads none.
-	WakeHeld        func() map[uint]int
-	KickNode        func(uuid string)
-	NodeSync        NodeSync
-	CallNode        func(ctx context.Context, uuid, method string, params any) (json.RawMessage, error)
-	SyncModel       func(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error)
-	PeerSync        PeerSyncHooks
-	CancelModelSync func(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error)
+	WakeHeld func() map[uint]int
+	KickNode func(uuid string)
+	NodeSync NodeSync
+	CallNode func(ctx context.Context, uuid, method string, params any) (json.RawMessage, error)
+	// ModelTransfers are the model file transfers an operator asks for
+	// (the controller's); nil answers that model sync is not configured.
+	ModelTransfers ModelTransfers
+	PeerSync       PeerSyncHooks
 	// Preparation is model preparation as the hub and the controller hold it.
 	Preparation deployment.ModelPreparation
+	// Lists is the server's shared snapshot of every deployment and instance
+	// the deployment and instance lists read; nil reads them per request.
+	Lists *deployment.Lists
 	// NodeRuntime reads and restarts a node's container runtime daemon.
 	NodeRuntime     NodeRuntimeHooks
 	ImageFetch      ImageFetchHooks
@@ -230,37 +248,55 @@ type Deps struct {
 // PeerSyncHooks groups explicitly sourced model/image operations
 // so the API dependency surface remains stable as the peer protocol grows.
 type PeerSyncHooks struct {
-	RetryImage           func(ctx context.Context, imageID uint, nodeUUID string) (*store.ImageNode, error)
-	SyncModelWithOptions func(ctx context.Context, modelID uint, nodeUUID, sourceNodeUUID string, rateLimitKiB int) (*store.ModelFile, error)
-	ProbeModel           func(ctx context.Context, modelID uint, targetNodeUUID, sourceNodeUUID string) error
-	SyncImageWithRate    func(ctx context.Context, imageID uint, nodeUUID, sourceNodeUUID string, rateLimitKiB int64) (*store.ImageNode, error)
-	ProbeImage           func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) error
-	ProbeImageResult     func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) (proto.ImageSyncCopyResult, error)
-	// CopyModel copies a model's files between two locations (storage, and
-	// node for a local storage); see controller.CopyModelFile.
-	CopyModel func(ctx context.Context, modelID uint, src, dst store.FileRef, rateLimitKiB int) (*store.ModelFile, error)
+	RetryImage        func(ctx context.Context, imageID uint, nodeUUID string) (*store.ImageNode, error)
+	SyncImageWithRate func(ctx context.Context, imageID uint, nodeUUID, sourceNodeUUID string, rateLimitKiB int64) (*store.ImageNode, error)
+	ProbeImage        func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) error
+	ProbeImageResult  func(ctx context.Context, imageID uint, targetNodeUUID, sourceNodeUUID string) (proto.ImageSyncCopyResult, error)
 }
 
-// NodeRuntimeHooks is the hub's view of a node's container runtime daemon:
-// the proxy it uses as the agent last reported it, and a restart so a changed
-// proxy takes effect.
+// ModelTransfers start, probe and cancel a model's peer transfer to a node
+// and copy its files between two locations (a storage, and a node for a
+// local storage): controller.ModelTransfers.
+type ModelTransfers interface {
+	// Sync starts or retries the peer transfer; an empty source lets the
+	// controller choose, and a rate of -1 keeps the one recorded.
+	Sync(ctx context.Context, modelID uint, nodeUUID, sourceNodeUUID string, rateLimitKiB int) (*store.ModelFile, error)
+	Probe(ctx context.Context, modelID uint, targetNodeUUID, sourceNodeUUID string) error
+	Cancel(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error)
+	Copy(ctx context.Context, modelID uint, src, dst store.FileRef, rateLimitKiB int) (*store.ModelFile, error)
+}
+
+// NodeRuntimeHooks is the hub's view of a node's container runtime: the
+// proxy its daemon uses as the agent last reported it, a restart so a
+// changed proxy takes effect, and how strictly a Kubernetes node keeps its
+// NVIDIA instance pods to their own card (nil when strict, not reported, or
+// the node is offline; read from the live session, never stored).
 type NodeRuntimeHooks interface {
+	NVIDIAIsolation(uuid string) *proto.NVIDIAIsolation
+	// UCXNetlinkHang is whether a node's kernel hangs UCX (NIXL): nil when it
+	// does not, was not reported, or the node is offline; live, never stored.
+	UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang
 	RuntimeProxy(uuid string) *proto.RuntimeProxyStatus
 	RestartRuntime(ctx context.Context, uuid string) (*proto.RuntimeProxyStatus, error)
 }
 type apiHandlers struct {
-	sessionPolicy       auth.SessionPolicy
-	loginThrottle       loginThrottle
-	d                   Deps
-	gpuCacheMu          sync.Mutex
-	gpuCacheAt          time.Time
-	gpuCache            *gpuInventoryCache
-	gpuCacheGeneration  uint64
-	overview            overviewCache // the scheduling overview (scheduling_overview.go)
-	benchmarkMu         sync.Mutex
-	benchmarkExecutions map[uint]*benchmarkExecution
-	updates             distribution.CheckCache
-	templateUpdate      templateUpdateCheck
+	sessionPolicy        auth.SessionPolicy
+	loginThrottle        loginThrottle
+	d                    Deps
+	ordersOnce           sync.Once
+	gpuCacheMu           sync.Mutex
+	gpuCacheAt           time.Time
+	gpuCache             *gpuInventoryCache
+	gpuCacheGeneration   uint64
+	overview             overviewCache // the scheduling overview (scheduling_overview.go)
+	benchmarkMu          sync.Mutex
+	benchmarkExecutions  map[uint]*benchmarkExecution
+	serverUpgradeMu      sync.Mutex
+	verifiedRunningBuild atomic.Pointer[dto.ServerBuildInfo]
+	progressMu           sync.Mutex
+	upgradeProgress      dto.ServerUpgradeProgress
+	updates              distribution.CheckCache
+	templateUpdate       templateUpdateCheck
 	// mux is the router the handlers are mounted on, for the assistant's
 	// in-process reads (ai_reader.go).
 	mux *chi.Mux
@@ -268,4 +304,15 @@ type apiHandlers struct {
 	// aiAsks and mcpCalls count each user's questions and MCP tool calls
 	// in flight (ai.go, mcp.go).
 	aiAsks, mcpCalls inFlightLimiter
+}
+
+// orders is the server's order lock and placement hints: Deps.Orders, or for
+// a handler built without them one of its own that all its requests share.
+func (a *apiHandlers) orders() *lifecycle.Orders {
+	a.ordersOnce.Do(func() {
+		if a.d.Orders == nil {
+			a.d.Orders = &lifecycle.Orders{}
+		}
+	})
+	return a.d.Orders
 }

@@ -42,26 +42,39 @@ const modelOrganizationNames: Record<string, string> = {
 
 export const modelOrganizationIconOrganizations = [
   "allenai",
+  "alpha-ai",
   "arcee-ai",
+  "ath-maas",
   "baai",
   "baichuan-inc",
   "baidu",
+  "baseten",
   "bigcode",
   "black-forest-labs",
+  "blazingcustoms",
+  "bosonai",
   "bytedance-seed",
   "cohereforai",
+  "convaiinnovations",
+  "craneailabs",
   "deepseek-ai",
   "dots-studio",
   "eleutherai",
+  "fishaudio",
   "funaudiollm",
   "google",
+  "hugging-quants",
   "huggingfacetb",
   "huihui-ai",
   "hygon",
   "ibm-granite",
   "iic",
   "inclusionai",
+  "incoai",
+  "indexteam",
+  "inferact",
   "internlm",
+  "ista-daslab",
   "jetbrains",
   "jinaai",
   "lgai-exaone",
@@ -69,6 +82,7 @@ export const modelOrganizationIconOrganizations = [
   "lightseekorg",
   "liquidai",
   "lmms-lab",
+  "lmsys",
   "meituan-longcat",
   "meta-llama",
   "meta-models",
@@ -76,30 +90,38 @@ export const modelOrganizationIconOrganizations = [
   "mindlab-research",
   "minimaxai",
   "mistralai",
+  "modal-labs",
   "moonshotai",
   "nvidia",
   "openai",
   "openbmb",
+  "opendatalab",
   "opengvlab",
   "openmoss-team",
+  "openonerec",
   "orionstarai",
   "paddlepaddle",
   "pfnet",
   "poolside",
   "qwen",
+  "redhatai",
   "sgl-npu",
   "shanghai_ai_laboratory",
   "skywork",
   "stabilityai",
   "stepfun-ai",
   "tencent",
+  "tencent-hunyuan",
   "thinkingmachines",
+  "tinyllama",
   "tongyi-mai",
   "upstage",
   "vllm-ascend",
   "wan-ai",
+  "weiboai",
   "xiaomimimo",
   "xverse",
+  "z-lab",
   "zai-org",
 ] as const;
 
@@ -137,4 +159,15 @@ export function modelOrganizationGroups(items: Array<{ model_id: string }>, t: T
 export function modelOrganizationIcon(modelID: string) {
   const organization = modelOrganizationKey(modelID);
   return modelOrganizationIconSet.has(organization) ? `/model-org-icons/${organization}.webp` : undefined;
+}
+
+// Stable by organization identity, independent of language, ordering or refresh.
+// Deeper product artwork shades keep the categorical hues and white initials.
+export function modelOrganizationColor(organization: string): string {
+  const key = organization.trim().toLowerCase();
+  // The pinned personal catalog starts with a vivid purple identity.
+  if (key === "my-templates") return "var(--organization-avatar-5)";
+  let hash = 0;
+  for (const character of key) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
+  return `var(--organization-avatar-${[1, 2, 3, 4, 5][hash % 5]})`;
 }

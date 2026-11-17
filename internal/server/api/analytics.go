@@ -170,7 +170,7 @@ func analyticsQuery(r *http.Request) (AnalyticsQuery, error) {
 		q.APIKeyID = uint(id)
 	}
 	switch q.Source = v.Get("source"); q.Source {
-	case "", "api", "playground", "batch":
+	case "", "api", "playground", "batch", "evaluation":
 	default:
 		return q, bad("source")
 	}
@@ -191,7 +191,7 @@ func (a *apiHandlers) labelNodes(r *http.Request) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, err
 	}

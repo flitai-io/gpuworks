@@ -294,12 +294,12 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 	// The cards this instance is bound to may carry different device indexes
 	// than when it was placed; everything below works in current indexes.
 	if err := e.resolveBoundCards(ctx, &spec); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", err.Error())
+		e.failLaunch(spec, err, proto.ErrorAcceleratorCardMissing, proto.PhaseContainerPrepare, err.Error())
 		return
 	}
-	ws := toWorkloadSpec(spec, name)
+	ws := e.instanceWorkloadSpec(spec, name)
 	if err := applyDistributedNetworkInterface(&ws, spec, e.proberVendor(), e.networkInterfaceName); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", "distributed network interface selection failed: "+err.Error())
+		e.failLaunch(spec, err, proto.ErrorDistributedNetworkUnavailable, proto.PhaseContainerPrepare, "distributed network interface selection failed: "+err.Error())
 		return
 	}
 
@@ -339,7 +339,7 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 			// restart. It has already served traffic, so repeating the cold
 			// sleep/wake prewarm would create an avoidable 503 window.
 			e.mu.Lock()
-			e.prewarmed[spec.UUID] = true
+			e.processLocked(spec.UUID).prewarmed = true
 			e.mu.Unlock()
 			if spec.Sleepable {
 				// Keep an exact level already applied by this agent. The engine
@@ -367,14 +367,14 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 	// directory, so an unmounted NFS would otherwise start the engine on an
 	// empty /model and leave a stray directory under the mount point.
 	if err := checkModelPaths(spec); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", err.Error())
+		e.failLaunch(spec, err, proto.ErrorModelPathUnavailable, proto.PhaseContainerPrepare, err.Error())
 		return
 	}
 	// A port taken since the server last saw this node's listeners fails
 	// now, so the server picks another, instead of after the engine loaded
 	// its weights and could not bind.
 	if err := e.checkPorts(spec); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", err.Error())
+		e.failLaunch(spec, err, proto.ErrorEnginePortRefused, proto.PhaseContainerPrepare, err.Error())
 		return
 	}
 
@@ -389,7 +389,7 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 	ws.Image = launchImage
 
 	if err := e.applyRuntimeAssets(&ws, spec); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", "runtime asset preparation failed: "+err.Error())
+		e.failLaunch(spec, err, proto.ErrorRuntimeAssetPrepareFailed, proto.PhaseAssetPrepare, "runtime asset preparation failed: "+err.Error())
 		return
 	}
 	if len(spec.RuntimeAssets) > 0 {
@@ -400,12 +400,12 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 	}
 
 	if err := e.applyPreStart(&ws, spec); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", "pre-start preparation failed: "+err.Error())
+		e.failLaunch(spec, err, proto.ErrorPreStartPrepareFailed, proto.PhaseContainerPrepare, "pre-start preparation failed: "+err.Error())
 		return
 	}
 
 	if err := e.applyKVDiskMount(&ws, spec); err != nil {
-		e.reportState(spec, proto.InstFailed, "", "", "KV disk tier preparation failed: "+err.Error())
+		e.failLaunch(spec, err, proto.ErrorKVDiskPrepareFailed, proto.PhaseContainerPrepare, "KV disk tier preparation failed: "+err.Error())
 		return
 	}
 
@@ -414,10 +414,11 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 		return
 	}
 	if ok, reason := e.applyPartition(ctx, &ws, spec); !ok {
+		failure := proto.RuntimeFailure{Code: proto.ErrorDGPUPartitionFailed, Phase: proto.PhaseContainerPrepare, Detail: reason}
 		if err := e.cleanupPartitionState(spec.UUID); err != nil {
-			e.report(proto.InstanceStatus{UUID: spec.UUID, State: proto.InstRemoving, Message: reason + "; partition cleanup pending: " + err.Error()})
+			e.reportCleanupPending(spec.UUID, failure, reason+"; partition cleanup pending: "+err.Error(), nil)
 		} else {
-			e.reportState(spec, proto.InstFailed, "", "", reason)
+			e.reportFailed(spec.UUID, failure, reason, failedStatus{})
 		}
 		return
 	}
@@ -433,6 +434,10 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 	for _, note := range ws.PreparationNotes {
 		e.reportStateProgress(spec, proto.InstStarting, name, "", note, proto.PhaseContainerPrepare, 0, 0, 0, 0)
 	}
+	// The container created here is a new engine process: nothing learned
+	// about an earlier process under this UUID holds for it, however that one
+	// went (ADR 0066).
+	e.forgetProcess(spec.UUID)
 	e.reportStateProgress(spec, proto.InstStarting, name, "", "preparing container", proto.PhaseContainerPrepare, 0, 0, 0, 0)
 	runDone := make(chan struct {
 		id  string
@@ -483,7 +488,7 @@ func (e *Engine) startOrAdoptEpoch(ctx context.Context, spec proto.InstanceDesir
 runFinished:
 	id, err := runResult.id, runResult.err
 	if err != nil {
-		e.failAfterContainer(ctx, spec, "run failed: "+err.Error())
+		e.failAfterContainer(ctx, spec, proto.RuntimeFailure{Code: proto.ErrorContainerRunFailed, Phase: proto.PhaseContainerLaunch, Detail: err.Error()}, "run failed: "+err.Error())
 		return
 	}
 	e.collectAndPublishRuntimeObservation(ctx, spec, id, id, epoch)

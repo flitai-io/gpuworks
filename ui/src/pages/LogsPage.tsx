@@ -136,6 +136,11 @@ export function toCsv(entries: LogEntry[]): string {
   return [head, ...rows].join("\n");
 }
 
+/** How many instances one search offers; typing narrows the list on the server. */
+const INSTANCE_PICKER_PAGE_SIZE = 50;
+/** How long typing in the instance filter pauses before the server is searched. */
+const INSTANCE_SEARCH_DEBOUNCE_MS = 250;
+
 export default function LogsPage() {
   const { t } = useTranslation("logs");
   // Seeds the instance filter and, when both bounds are present, an absolute
@@ -165,6 +170,7 @@ export default function LogsPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const [instanceOptions, setInstanceOptions] = useState<{ uuid: string; state: string }[]>([]);
+  const [instanceStatus, setInstanceStatus] = useState<"loading" | "ready" | "error">("loading");
 
   // Context window: anchored on one hit, grep -C style, N is user-adjustable.
   const [context, setContext] = useState<{ anchor: LogEntry; rows: LogEntry[]; matchIndex: number } | null>(null);
@@ -231,10 +237,28 @@ export default function LogsPage() {
     [effectiveQuery, instance, node, level, source, fromMS, toMS, range, absoluteWindow],
   );
 
-  // Load facet options once; failure keeps plain text inputs usable.
+  // Instances are searched on the server, one page at a time, once typing
+  // pauses. A failed search offers nothing rather than an earlier input's
+  // results; the plain text input stays usable either way.
+  const [instanceSearch, setInstanceSearch] = useState("");
   useEffect(() => {
-    api.instances().then((list) => setInstanceOptions(list.items.map((i) => ({ uuid: i.uuid, state: i.state })))).catch(() => {});
-  }, []);
+    let current = true;
+    setInstanceStatus("loading");
+    const timer = window.setTimeout(() => {
+      api.instancesPage({ page: 1, page_size: INSTANCE_PICKER_PAGE_SIZE, q: instanceSearch })
+        .then((page) => {
+          if (!current) return;
+          setInstanceOptions(page.items.map((i) => ({ uuid: i.uuid, state: i.state })));
+          setInstanceStatus("ready");
+        })
+        .catch(() => {
+          if (!current) return;
+          setInstanceOptions([]);
+          setInstanceStatus("error");
+        });
+    }, INSTANCE_SEARCH_DEBOUNCE_MS);
+    return () => { current = false; window.clearTimeout(timer); };
+  }, [instanceSearch]);
 
   useEffect(() => {
     runSearch(false);
@@ -248,7 +272,8 @@ export default function LogsPage() {
   }, [auto, runSearch]);
 
   const exportCsv = () => {
-    const blob = new Blob([toCsv(entries)], { type: "text/csv;charset=utf-8" });
+    // A leading BOM lets spreadsheets identify the downloaded text as UTF-8.
+    const blob = new Blob(["\uFEFF", toCsv(entries)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -350,13 +375,17 @@ export default function LogsPage() {
               allowClear
               style={{ minWidth: 220 }}
               placeholder={t("search.instancePlaceholder")}
+              aria-label={t("search.instancePlaceholder")}
               value={instance}
               onChange={(v) => setInstance(v || undefined)}
-              options={instanceOptions.map((i) => ({ value: i.uuid, label: `${shortId(i.uuid)} · ${i.state}` }))}
-              filterOption={(input, opt) => {
-                const hay = `${opt?.value ?? ""} ${opt?.label ?? ""}`.toLowerCase();
-                return hay.includes(input.toLowerCase());
-              }}
+              onSearch={setInstanceSearch}
+              options={instanceOptions.map((i) => ({ value: i.uuid, title: i.uuid, label: `${shortId(i.uuid)} · ${i.state}` }))}
+              notFoundContent={
+                instanceStatus === "error"
+                  ? <span role="alert" style={{ color: "var(--fg-danger)" }}>{t("search.instanceError")}</span>
+                  : t(instanceStatus === "loading" ? "search.instanceLoading" : "search.instanceEmpty")
+              }
+              filterOption={false}
             />
             {/* Nodes are searched on the server, not listed whole. */}
             <NodePicker
@@ -451,7 +480,7 @@ export default function LogsPage() {
                   }}
                 />
               </Space>
-              <div style={{ fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12 }}>
+              <div style={{ fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: "var(--font-size-body)" }}>
                 {context.rows.map((e, i) => (
                   <div
                     key={`${e.time_ms}-${e.id}`}
@@ -480,7 +509,7 @@ export default function LogsPage() {
                 <div key={key}>
                   <div
                     data-testid="log-row"
-                    style={{ display: "flex", gap: 12, padding: "3px 12px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12, borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap", alignItems: "baseline" }}
+                    style={{ display: "flex", gap: 12, padding: "3px 12px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: "var(--font-size-body)", borderBottom: "1px solid #f0f2f5", whiteSpace: "nowrap", alignItems: "baseline" }}
                   >
                     <span style={{ color: "rgba(0,0,0,0.45)", flex: "none" }}>{formatTimeSec(e.time_ms)}</span>
                     <span
@@ -531,7 +560,7 @@ export default function LogsPage() {
                     )}
                   </div>
                   {block && expandedBlocks.has(key) && (
-                    <div style={{ background: "#fff7f6", borderBottom: "1px solid #f0f2f5", padding: "4px 12px 6px 60px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: 12 }}>
+                    <div style={{ background: "#fff7f6", borderBottom: "1px solid #f0f2f5", padding: "4px 12px 6px 60px", fontFamily: "SFMono-Regular, Menlo, Consolas, monospace", fontSize: "var(--font-size-body)" }}>
                       {block.frames.map((f) => (
                         <div key={`${f.time_ms}-${f.id}`} style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", color: levelColor("error") }}>
                           {f.line}

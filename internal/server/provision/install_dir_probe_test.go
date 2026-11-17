@@ -339,7 +339,7 @@ func checkByName(t *testing.T, checks []CheckResult, name string) CheckResult {
 	t.Helper()
 	var found []CheckResult
 	for _, c := range checks {
-		if c.Name == name {
+		if c.ID == name {
 			found = append(found, c)
 		}
 	}
@@ -353,11 +353,15 @@ func wantCheck(t *testing.T, checks []CheckResult, name, status string, details 
 	t.Helper()
 	c := checkByName(t, checks, name)
 	if c.Status != status {
-		t.Fatalf("%s status = %s, want %s: %s", name, c.Status, status, c.Detail)
+		t.Fatalf("%s status = %s, want %s: %s", name, c.Status, status, c.text())
+	}
+	// A check that is not a plain pass says why with a code (ADR 0067).
+	if c.Status != "pass" && c.Code == "" {
+		t.Fatalf("%s %s check has no code: %+v", name, c.Status, c)
 	}
 	for _, d := range details {
-		if !strings.Contains(c.Detail, d) {
-			t.Fatalf("%s detail missing %q: %s", name, d, c.Detail)
+		if !strings.Contains(c.text(), d) {
+			t.Fatalf("%s detail missing %q: %s", name, d, c.text())
 		}
 	}
 }
@@ -376,18 +380,18 @@ func TestInstallDirProbeRunPodWorkspaceNFS(t *testing.T) {
 	if out.Noexec {
 		t.Fatal("rw nfs4 mount was reported noexec")
 	}
-	wantCheck(t, out.Checks, checkInstallDir, "ok", dir, "filesystem nfs4", "mounted at "+dir, "900.0 GiB free", "writable by root")
-	if d := checkByName(t, out.Checks, checkInstallDir).Detail; strings.Contains(d, "vers=4.1") || strings.Contains(d, "rsize") {
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", dir, "filesystem nfs4", "mounted at "+dir, "900.0 GiB free", "writable by root")
+	if d := checkByName(t, out.Checks, CheckIDInstallDir).text(); strings.Contains(d, "vers=4.1") || strings.Contains(d, "rsize") {
 		t.Fatalf("mount options leaked into the install directory row: %s", d)
 	}
-	wantCheck(t, out.Checks, checkInstallDirOwnership, "warn",
+	wantCheck(t, out.Checks, CheckIDInstallDirOwnership, "warn",
 		"runveil workloads will run as the agent's own user (root) instead of the dedicated runtime user",
 		"chown: changing ownership of '"+dir+"/.gpuworks-probe.", "/owner': Operation not permitted")
-	wantCheck(t, out.Checks, checkInstallDirFilesystem, "warn", "nfs4", "model loading")
-	wantCheck(t, out.Checks, checkInstallDirSpace, "ok", "900.0 GiB free of 1024.0 GiB")
+	wantCheck(t, out.Checks, CheckIDInstallDirFilesystem, "warn", "nfs4", "model loading")
+	wantCheck(t, out.Checks, CheckIDInstallDirSpace, "pass", "900.0 GiB free of 1024.0 GiB")
 	// A container on a mounted volume is the persistent case, not a warning.
-	wantCheck(t, out.Checks, checkInstallDirPersistence, "ok")
-	wantCheck(t, out.Checks, checkInstallDirNames, "error",
+	wantCheck(t, out.Checks, CheckIDInstallDirPersistence, "pass")
+	wantCheck(t, out.Checks, CheckIDInstallDirNames, "fail",
 		"does not allow ':' in file names", "dpkg/info", "cannot run deployments from here", "choose an install directory on a local filesystem",
 		"touch: cannot touch '"+dir+"/.gpuworks-probe.", "/name:probe': Invalid argument")
 	if len(out.Checks) != 7 {
@@ -395,7 +399,7 @@ func TestInstallDirProbeRunPodWorkspaceNFS(t *testing.T) {
 	}
 	// Root and the dedicated user would otherwise be judged on a chown that
 	// workloads never get: they run as root, so no ancestor matters.
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "ok", "not needed", "agent's own user")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "na", "not needed", "agent's own user")
 }
 
 func TestInstallDirProbeLeavesNothingBehind(t *testing.T) {
@@ -411,13 +415,13 @@ func TestInstallDirProbeLocalDiskIsAllOK(t *testing.T) {
 	dir := realTempDir(t)
 	out := probeScenario(t, dirScenario{mounts: overlayRootLine + "\n/dev/nvme0n1p2 %DIR% ext4 rw,relatime 0 0"}, dir, dir, "vm")
 	for _, c := range out.Checks {
-		if c.Status != "ok" {
-			t.Fatalf("%s = %s: %s", c.Name, c.Status, c.Detail)
+		if c.Status != "pass" {
+			t.Fatalf("%s = %s: %s", c.ID, c.Status, c.text())
 		}
 	}
-	wantCheck(t, out.Checks, checkInstallDirOwnership, "ok", "dedicated runtime user")
-	wantCheck(t, out.Checks, checkInstallDirFilesystem, "ok", "ext4 (local)")
-	wantCheck(t, out.Checks, checkInstallDirNames, "ok", "':' is allowed in file names")
+	wantCheck(t, out.Checks, CheckIDInstallDirOwnership, "pass", "dedicated runtime user")
+	wantCheck(t, out.Checks, CheckIDInstallDirFilesystem, "pass", "ext4 (local)")
+	wantCheck(t, out.Checks, CheckIDInstallDirNames, "pass", "':' is allowed in file names")
 }
 
 func TestInstallDirProbeNoexecMountBlocks(t *testing.T) {
@@ -426,9 +430,9 @@ func TestInstallDirProbeNoexecMountBlocks(t *testing.T) {
 	if !out.Noexec {
 		t.Fatal("noexec mount not detected")
 	}
-	wantCheck(t, out.Checks, checkInstallDir, "error", "mounted noexec", "agent binary", "PRoot", "mounted at "+dir)
+	wantCheck(t, out.Checks, CheckIDInstallDir, "fail", "mounted noexec", "agent binary", "PRoot", "mounted at "+dir)
 	err := noexecInstallError(out)
-	if err == nil || !strings.Contains(err.Error(), "noexec") || !strings.Contains(err.Error(), checkInstallDir) {
+	if err == nil || !strings.Contains(err.Error(), "noexec") || !strings.Contains(err.Error(), "install directory") {
 		t.Fatalf("install error = %v", err)
 	}
 }
@@ -446,19 +450,19 @@ func TestInstallDirProbeOverlayInContainerWarnsAboutPersistence(t *testing.T) {
 	dir := realTempDir(t)
 	sc := dirScenario{mounts: overlayRootLine + "\n" + procLine, statfs: "overlayfs", dfSource: "overlay", totalKiB: 100 << 20, availKiB: 20 << 20}
 	out := probeScenario(t, sc, dir, dir, "container")
-	wantCheck(t, out.Checks, checkInstallDirPersistence, "warn", "container's writable layer", "lost when the instance is recreated", "/workspace")
-	wantCheck(t, out.Checks, checkInstallDir, "ok", "filesystem overlay", "mounted at /")
-	wantCheck(t, out.Checks, checkInstallDirSpace, "warn", "20.0 GiB free of 100.0 GiB", "50.0 GiB")
+	wantCheck(t, out.Checks, CheckIDInstallDirPersistence, "warn", "container's writable layer", "lost when the instance is recreated", "/workspace")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", "filesystem overlay", "mounted at /")
+	wantCheck(t, out.Checks, CheckIDInstallDirSpace, "warn", "20.0 GiB free of 100.0 GiB", "50.0 GiB")
 
 	// The marker file the container runtime drops is enough without a hint.
 	sc.container = true
 	out = probeScenario(t, sc, dir, dir, "")
-	wantCheck(t, out.Checks, checkInstallDirPersistence, "warn", "container's writable layer")
+	wantCheck(t, out.Checks, CheckIDInstallDirPersistence, "warn", "container's writable layer")
 
 	// The same overlay on a host that is not a container is nothing to warn about.
 	sc.container = false
 	out = probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirPersistence, "ok")
+	wantCheck(t, out.Checks, CheckIDInstallDirPersistence, "pass")
 }
 
 // A cloud provider's one-click flow fixes the install directory: the overlay
@@ -470,10 +474,10 @@ func TestInstallDirProbeProviderContainerOverlayWarnsWithoutAdvice(t *testing.T)
 	host, port := startFakeSSHServer(t, "root", "pw", scenarioHandler(t, sc, dir))
 	client := dialFakeSSH(t, host, port, "root", "pw")
 	out := ProbeInstallDir(t.Context(), client, dir, "container", "runpod")
-	wantCheck(t, out.Checks, checkInstallDirPersistence, "warn", "container disk", "runpod", "deleted or recreated", "install the agent again")
+	wantCheck(t, out.Checks, CheckIDInstallDirPersistence, "warn", "container disk", "runpod", "deleted or recreated", "install the agent again")
 	for _, c := range out.Checks {
-		if c.Name == checkInstallDirPersistence && strings.Contains(c.Detail, "persistent volume") {
-			t.Fatalf("one-click detail must not advise a persistent volume: %s", c.Detail)
+		if c.ID == CheckIDInstallDirPersistence && strings.Contains(c.text(), "persistent volume") {
+			t.Fatalf("one-click detail must not advise a persistent volume: %s", c.text())
 		}
 	}
 }
@@ -483,19 +487,19 @@ func TestInstallDirProbeProviderContainerOverlayWarnsWithoutAdvice(t *testing.T)
 func TestInstallDirProbeDoesNotDumpMountOptions(t *testing.T) {
 	dir := t.TempDir()
 	out := probeScenario(t, dirScenario{mounts: overlayRootLine + "\n" + procLine, statfs: "overlayfs", dfSource: "overlay"}, dir, dir, "container")
-	d := checkByName(t, out.Checks, checkInstallDir).Detail
+	d := checkByName(t, out.Checks, CheckIDInstallDir).text()
 	for _, leaked := range []string{"lowerdir", "upperdir", "workdir", "relatime"} {
 		if strings.Contains(d, leaked) {
 			t.Fatalf("mount option %q leaked into %q", leaked, d)
 		}
 	}
-	wantCheck(t, out.Checks, checkInstallDir, "ok", "filesystem overlay, mounted at /")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", "filesystem overlay, mounted at /")
 }
 
 func TestInstallDirProbeMemoryBackedDirectoryWarns(t *testing.T) {
 	dir := realTempDir(t)
 	out := probeScenario(t, dirScenario{mounts: "tmpfs %DIR% tmpfs rw,nosuid,nodev 0 0", statfs: "tmpfs"}, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirPersistence, "warn", "tmpfs", "lost on reboot")
+	wantCheck(t, out.Checks, CheckIDInstallDirPersistence, "warn", "tmpfs", "lost on reboot")
 }
 
 func TestInstallDirProbeNetworkFilesystems(t *testing.T) {
@@ -513,9 +517,9 @@ func TestInstallDirProbeNetworkFilesystems(t *testing.T) {
 	} {
 		dir := realTempDir(t)
 		out := probeScenario(t, dirScenario{mounts: tc.source + " %DIR% " + tc.fstype + " rw,relatime 0 0"}, dir, dir, "vm")
-		c := checkByName(t, out.Checks, checkInstallDirFilesystem)
+		c := checkByName(t, out.Checks, CheckIDInstallDirFilesystem)
 		if (c.Status == "warn") != tc.network {
-			t.Fatalf("%s: status %s, network=%v: %s", tc.fstype, c.Status, tc.network, c.Detail)
+			t.Fatalf("%s: status %s, network=%v: %s", tc.fstype, c.Status, tc.network, c.text())
 		}
 	}
 }
@@ -527,14 +531,14 @@ func TestInstallDirProbeNotRootNoSudo(t *testing.T) {
 	unwritable := unwritableDir(t)
 	requested := filepath.Join(unwritable, "gpuworks")
 	out := probeScenario(t, dirScenario{uid: "1000", user: "ubuntu", mounts: overlayRootLine + "\n" + procLine}, realTempDir(t), requested, "vm")
-	wantCheck(t, out.Checks, checkInstallDir, "error", unwritable+" is not writable by ubuntu", "no passwordless sudo", "/tmp/gpuworks")
-	wantCheck(t, out.Checks, checkInstallDirOwnership, "ok", "not checked", "ubuntu is not root")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "fail", unwritable+" is not writable by ubuntu", "no passwordless sudo", "/tmp/gpuworks")
+	wantCheck(t, out.Checks, CheckIDInstallDirOwnership, "na", "not checked", "ubuntu is not root")
 }
 
 func TestInstallDirProbeSudoThatCannotWriteEither(t *testing.T) {
 	out := probeScenario(t, dirScenario{uid: "1000", user: "ubuntu", sudo: true, mounts: overlayRootLine + "\n" + procLine}, realTempDir(t), filepath.Join(unwritableDir(t), "gpuworks"), "vm")
-	wantCheck(t, out.Checks, checkInstallDir, "error", "even through sudo")
-	wantCheck(t, out.Checks, checkInstallDirOwnership, "ok", "not checked", "no file could be created")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "fail", "even through sudo")
+	wantCheck(t, out.Checks, CheckIDInstallDirOwnership, "skip", "not checked", "no file could be created")
 }
 
 // Non-root with passwordless sudo: the chown test runs through sudo, because
@@ -542,15 +546,15 @@ func TestInstallDirProbeSudoThatCannotWriteEither(t *testing.T) {
 func TestInstallDirProbeSudoRunsTheOwnershipTest(t *testing.T) {
 	dir := realTempDir(t)
 	out := probeScenario(t, dirScenario{uid: "1000", user: "ubuntu", sudo: true, chownErr: true, mounts: "10.0.0.2:/export %DIR% nfs4 rw,relatime 0 0"}, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDir, "ok", "writable by ubuntu")
-	wantCheck(t, out.Checks, checkInstallDirOwnership, "warn", "Operation not permitted")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", "writable by ubuntu")
+	wantCheck(t, out.Checks, CheckIDInstallDirOwnership, "warn", "Operation not permitted")
 }
 
 func TestInstallDirProbeMissingDirectoryUsesNearestExistingAncestor(t *testing.T) {
 	parent := realTempDir(t)
 	requested := filepath.Join(parent, "models", "gpuworks")
 	out := probeScenario(t, dirScenario{mounts: overlayRootLine + "\n/dev/sda1 %DIR% ext4 rw,relatime 0 0"}, parent, requested, "vm")
-	wantCheck(t, out.Checks, checkInstallDir, "ok", requested, "does not exist yet", "nearest existing parent "+parent, "mounted at "+parent)
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", requested, "does not exist yet", "nearest existing parent "+parent, "mounted at "+parent)
 	if _, err := os.Stat(filepath.Join(parent, "models")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the precheck created a directory: %v", err)
 	}
@@ -563,7 +567,7 @@ func TestInstallDirProbeRegularFileIsNotADirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := probeScenario(t, dirScenario{mounts: "/dev/sda1 %DIR% ext4 rw,relatime 0 0"}, dir, file, "vm")
-	wantCheck(t, out.Checks, checkInstallDir, "error", file+" exists but is not a directory")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "fail", file+" exists but is not a directory")
 }
 
 // findmnt, when the host has it, is preferred over /proc/mounts.
@@ -576,7 +580,7 @@ func TestInstallDirProbePrefersFindmnt(t *testing.T) {
 	if !out.Noexec {
 		t.Fatal("findmnt options ignored")
 	}
-	wantCheck(t, out.Checks, checkInstallDir, "error", "mounted at /mnt/vol one", "filesystem nfs4")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "fail", "mounted at /mnt/vol one", "filesystem nfs4")
 }
 
 func TestInstallDirProbeLongestMountPrefixWins(t *testing.T) {
@@ -588,7 +592,7 @@ func TestInstallDirProbeLongestMountPrefixWins(t *testing.T) {
 	}
 }
 
-func TestInstallDirProbeFailureIsAWarningNotAVerdict(t *testing.T) {
+func TestInstallDirProbeFailureIsASkipNotAVerdict(t *testing.T) {
 	host, port := startFakeSSHServer(t, "root", "pw", func(string, io.Reader) (string, string, uint32) {
 		return "", "sh: 1: cannot create /dev/null: Permission denied\n", 2
 	})
@@ -597,7 +601,7 @@ func TestInstallDirProbeFailureIsAWarningNotAVerdict(t *testing.T) {
 	if out.Noexec || len(out.Checks) != 1 {
 		t.Fatalf("outcome = %+v", out)
 	}
-	wantCheck(t, out.Checks, checkInstallDir, "warn", "could not inspect /opt/gpuworks")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "skip", "could not inspect /opt/gpuworks")
 
 	// Output from a login banner but no probe facts is not a verdict either.
 	host, port = startFakeSSHServer(t, "root", "pw", func(string, io.Reader) (string, string, uint32) {
@@ -605,7 +609,7 @@ func TestInstallDirProbeFailureIsAWarningNotAVerdict(t *testing.T) {
 	})
 	client = dialFakeSSH(t, host, port, "root", "pw")
 	out = ProbeInstallDir(t.Context(), client, "/opt/gpuworks", "vm", "")
-	wantCheck(t, out.Checks, checkInstallDir, "warn", "incomplete probe output")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "skip", "incomplete probe output")
 }
 
 func TestInstallDirProbeTimesOutOnAHungMount(t *testing.T) {
@@ -622,7 +626,7 @@ func TestInstallDirProbeTimesOutOnAHungMount(t *testing.T) {
 	if time.Since(start) > 2*time.Second {
 		t.Fatalf("probe waited %v on a hung host", time.Since(start))
 	}
-	wantCheck(t, out.Checks, checkInstallDir, "warn", "could not inspect /workspace", "deadline")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "skip", "could not inspect /workspace", "deadline")
 }
 
 // With the host's real id/stat/df/chown and only the two host-file seams
@@ -662,7 +666,7 @@ func TestInstallDirProbeRunsWithTheHostsRealTools(t *testing.T) {
 func TestInstallDirAccessCheckSudoWritable(t *testing.T) {
 	f := installDirFacts{requested: "/opt/gpuworks", probed: "/opt", exists: "no", uid: "1000", user: "ubuntu", sudo: true, privWritable: true, mount: "/", fstype: "ext4", options: "rw", availKiB: 80 << 20, haveSpace: true, chown: "ok"}
 	c := installDirAccessCheck(f, false)
-	if c.Status != "ok" || !strings.Contains(c.Detail, "writable through passwordless sudo") {
+	if c.Status != "pass" || !strings.Contains(c.text(), "writable through passwordless sudo") {
 		t.Fatalf("check = %+v", c)
 	}
 }
@@ -675,10 +679,10 @@ func TestParseInstallDirFactsRejectsOutputWithoutFacts(t *testing.T) {
 
 func TestMergeChecksReplacesByName(t *testing.T) {
 	got := mergeChecks(
-		[]CheckResult{{Name: "SSH", Status: "ok"}, {Name: checkInstallDir, Status: "error", Detail: "old"}},
-		[]CheckResult{{Name: checkInstallDir, Status: "ok", Detail: "new"}, {Name: checkInstallDirSpace, Status: "ok"}},
+		[]CheckResult{{ID: "ssh", Status: "pass"}, {ID: CheckIDInstallDir, Status: "fail", Message: "old"}},
+		[]CheckResult{{ID: CheckIDInstallDir, Status: "pass", Message: "new"}, {ID: CheckIDInstallDirSpace, Status: "pass"}},
 	)
-	if len(got) != 3 || got[1].Detail != "new" || got[2].Name != checkInstallDirSpace {
+	if len(got) != 3 || got[1].text() != "new" || got[2].ID != CheckIDInstallDirSpace {
 		t.Fatalf("merged = %+v", got)
 	}
 }
@@ -707,9 +711,9 @@ func TestPrecheckSSHReportsInstallDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantCheck(t, report.Checks, checkInstallDir, "ok", dir)
-	wantCheck(t, report.Checks, checkInstallDirOwnership, "warn", "Operation not permitted")
-	wantCheck(t, report.Checks, "OS/Arch", "ok")
+	wantCheck(t, report.Checks, CheckIDInstallDir, "pass", dir)
+	wantCheck(t, report.Checks, CheckIDInstallDirOwnership, "warn", "Operation not permitted")
+	wantCheck(t, report.Checks, "os_arch", "pass")
 
 	report, err = p.PrecheckSSH(t.Context(), SSHPrecheckRequest{
 		Target: "root@" + host, Port: port, SSHAuth: SSHAuth{Mode: AuthPassword, Password: "pw"},
@@ -717,8 +721,8 @@ func TestPrecheckSSHReportsInstallDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := checkByName(t, report.Checks, checkInstallDir); !strings.Contains(c.Detail, installDir("")) {
-		t.Fatalf("default install directory not probed: %s", c.Detail)
+	if c := checkByName(t, report.Checks, CheckIDInstallDir); !strings.Contains(c.text(), installDir("")) {
+		t.Fatalf("default install directory not probed: %s", c.text())
 	}
 }
 
@@ -762,18 +766,18 @@ func TestInstallSSHAppendsInstallDirectoryChecksAndOnlyWarns(t *testing.T) {
 	if run.err == nil || !strings.Contains(run.err.Error(), "agent binary is not available") {
 		t.Fatalf("install error = %v", run.err)
 	}
-	wantCheck(t, run.report.Checks, checkInstallDir, "ok", dir)
-	wantCheck(t, run.report.Checks, checkInstallDirOwnership, "warn", "Operation not permitted")
-	wantCheck(t, run.report.Checks, checkInstallDirFilesystem, "warn", "nfs4")
+	wantCheck(t, run.report.Checks, CheckIDInstallDir, "pass", dir)
+	wantCheck(t, run.report.Checks, CheckIDInstallDirOwnership, "warn", "Operation not permitted")
+	wantCheck(t, run.report.Checks, CheckIDInstallDirFilesystem, "warn", "nfs4")
 }
 
 func TestInstallSSHStopsBeforeUploadOnNoexecDirectory(t *testing.T) {
 	dir := realTempDir(t)
 	run := runInstallUntilBinaryRead(t, dirScenario{mounts: "/dev/sdb1 %DIR% ext4 rw,noexec,relatime 0 0"}, dir)
-	if run.err == nil || !strings.Contains(run.err.Error(), "Install directory") || !strings.Contains(run.err.Error(), "noexec") {
+	if run.err == nil || !strings.Contains(run.err.Error(), "install directory") || !strings.Contains(run.err.Error(), "noexec") {
 		t.Fatalf("install error = %v", run.err)
 	}
-	wantCheck(t, run.report.Checks, checkInstallDir, "error", "mounted noexec")
+	wantCheck(t, run.report.Checks, CheckIDInstallDir, "fail", "mounted noexec")
 	assertStoppedAtTheProbe(t, run)
 }
 
@@ -824,7 +828,7 @@ func TestInstallDirProbeReportsABackslashPathVerbatim(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := probeScenario(t, dirScenario{mounts: "/dev/sda1 / ext4 rw,relatime 0 0"}, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDir, "ok", dir+": filesystem ext4")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", dir+": filesystem ext4")
 }
 
 // A relative install directory is refused before anything runs on the host:
@@ -839,7 +843,7 @@ func TestInstallDirProbeRefusesARelativeDirectory(t *testing.T) {
 	client := dialFakeSSH(t, host, port, "root", "pw")
 	for _, dir := range []string{"gpuworks", "-dash"} {
 		out := ProbeInstallDir(t.Context(), client, dir, "vm", "")
-		if len(out.Checks) != 1 || out.Checks[0].Name != checkInstallDir || out.Checks[0].Status != "error" || !strings.Contains(out.Checks[0].Detail, "not an absolute path") {
+		if len(out.Checks) != 1 || out.Checks[0].ID != CheckIDInstallDir || out.Checks[0].Status != "fail" || !strings.Contains(out.Checks[0].text(), "not an absolute path") {
 			t.Fatalf("%q: checks = %+v", dir, out.Checks)
 		}
 	}
@@ -860,7 +864,7 @@ func TestInstallDirProbeRootThatCannotWrite(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 	out := probeScenario(t, dirScenario{mounts: "nfs:/export %DIR% nfs4 rw 0 0", statfs: "nfs"}, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDir, "error", "not writable even by root", "maps root to an unprivileged user")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "fail", "not writable even by root", "maps root to an unprivileged user")
 }
 
 // A filesystem that refuses ':' fails the check on a node without docker; with
@@ -870,9 +874,9 @@ func TestInstallDirProbeFileNamesWithAndWithoutDocker(t *testing.T) {
 		dir := realTempDir(t)
 		out := probeScenario(t, dirScenario{mounts: runpodNFS4Line, statfs: "nfs", colonErr: true, docker: docker}, dir, dir, "container")
 		if docker {
-			wantCheck(t, out.Checks, checkInstallDirNames, "warn", "this node has docker", "Invalid argument")
+			wantCheck(t, out.Checks, CheckIDInstallDirNames, "warn", "this node has docker", "Invalid argument")
 		} else {
-			wantCheck(t, out.Checks, checkInstallDirNames, "error", "cannot run deployments from here", "Invalid argument")
+			wantCheck(t, out.Checks, CheckIDInstallDirNames, "fail", "cannot run deployments from here", "Invalid argument")
 		}
 	}
 }
@@ -894,13 +898,13 @@ func TestInstallDirProbeMacHomeIsOnTheDataVolume(t *testing.T) {
 	if out.Noexec {
 		t.Fatal("the data volume was reported noexec")
 	}
-	wantCheck(t, out.Checks, checkInstallDir, "ok", "filesystem apfs", "mounted at /System/Volumes/Data")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", "filesystem apfs", "mounted at /System/Volumes/Data")
 	for _, c := range out.Checks {
-		if strings.Contains(c.Detail, "-c") && c.Name == checkInstallDirFilesystem {
+		if strings.Contains(c.text(), "-c") && c.ID == CheckIDInstallDirFilesystem {
 			t.Fatalf("BSD stat's echo leaked into the filesystem type: %+v", c)
 		}
 	}
-	wantCheck(t, out.Checks, checkInstallDirFilesystem, "ok", "apfs (local)")
+	wantCheck(t, out.Checks, CheckIDInstallDirFilesystem, "pass", "apfs (local)")
 }
 
 func TestInstallDirProbeMacNoexecVolumeBlocks(t *testing.T) {
@@ -914,7 +918,7 @@ func TestInstallDirProbeMacNoexecVolumeBlocks(t *testing.T) {
 func TestInstallDirProbeMacMountPointWithSpaces(t *testing.T) {
 	dir := t.TempDir()
 	out := probeScenario(t, dirScenario{mac: true, macMount: macMountOutput, dfMount: "/Volumes/千问办公 Installer", dfSource: "/dev/disk5s1", uid: "501"}, dir, dir, "")
-	wantCheck(t, out.Checks, checkInstallDir, "ok", "filesystem hfs", "mounted at /Volumes/千问办公 Installer,")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", "filesystem hfs", "mounted at /Volumes/千问办公 Installer,")
 }
 
 func probeMacScenario(t *testing.T, sc dirScenario, requested string, admin bool) InstallDirOutcome {
@@ -932,16 +936,16 @@ func probeMacScenario(t *testing.T, sc dirScenario, requested string, admin bool
 func TestInstallDirProbeMacDirectoryTheInstallerCreatesWithSudo(t *testing.T) {
 	sc := dirScenario{mac: true, macMount: macMountOutput, dfMount: "/System/Volumes/Data", dfSource: "/dev/disk3s5", uid: "501", user: "huangsheng"}
 	out := probeMacScenario(t, sc, "/proc/gpuworks", true)
-	wantCheck(t, out.Checks, checkInstallDir, "ok", "created by the installer with administrator rights", "mounted at /System/Volumes/Data")
-	wantCheck(t, out.Checks, checkInstallDirOwnership, "ok", "not needed on a Mac")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "pass", "created by the installer with administrator rights", "mounted at /System/Volumes/Data")
+	wantCheck(t, out.Checks, CheckIDInstallDirOwnership, "na", "not needed on a Mac")
 	for _, c := range out.Checks {
-		if strings.Contains(c.Detail, "/tmp/gpuworks") {
+		if strings.Contains(c.text(), "/tmp/gpuworks") {
 			t.Fatalf("a Mac check names the Linux fallback: %+v", c)
 		}
 	}
 
 	out = probeMacScenario(t, sc, "/proc/gpuworks", false)
-	wantCheck(t, out.Checks, checkInstallDir, "error", "/proc is not writable by huangsheng", "leave the directory empty to install in ~/gpuworks", "account password")
+	wantCheck(t, out.Checks, CheckIDInstallDir, "fail", "/proc is not writable by huangsheng", "leave the directory empty to install in ~/gpuworks", "account password")
 }
 
 func TestExpandRemoteHome(t *testing.T) {

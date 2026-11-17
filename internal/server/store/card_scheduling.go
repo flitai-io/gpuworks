@@ -93,7 +93,7 @@ func (s *Store) SetCardScheduling(nodeUUID, ident string, to CardScheduling) (*G
 // expireCardAllowances clears the allowances a report outlives: the report
 // judges those cards afresh. It costs a write only on a node an operator
 // recently allowed a card on.
-func expireCardAllowances(tx *gorm.DB, cards []GPU, now time.Time) error {
+func expireCardAllowances(tx *gorm.DB, cards []GPU, now time.Time) (expired bool, err error) {
 	var ids []uint
 	for _, c := range cards {
 		if c.SchedulingAllowedAt != nil && now.Sub(*c.SchedulingAllowedAt) >= cardAllowanceWindow {
@@ -101,9 +101,9 @@ func expireCardAllowances(tx *gorm.DB, cards []GPU, now time.Time) error {
 		}
 	}
 	if len(ids) == 0 {
-		return nil
+		return false, nil
 	}
-	return tx.Model(&GPU{}).Where("id IN ?", ids).Update("scheduling_allowed_at", nil).Error
+	return true, tx.Model(&GPU{}).Where("id IN ?", ids).Update("scheduling_allowed_at", nil).Error
 }
 
 // SchedulingActions are what an operator may do to the card now: stop it

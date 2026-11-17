@@ -251,7 +251,7 @@ func (a *apiHandlers) refreshModelMetadata(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if notice := a.metadataNotice(meta, entity.Source, entity.SourceURL); notice != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": notice.Message, "code": notice.Code, "params": notice.Params})
+		writeProductError(w, http.StatusBadGateway, notice.Code, notice.Message, notice.Params)
 		return
 	}
 	a.applyFetchedMetadata(r.Context(), entity, meta)

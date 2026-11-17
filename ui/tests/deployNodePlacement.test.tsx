@@ -27,7 +27,7 @@ Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub,
 const read = (ns: string) => JSON.parse(fs.readFileSync(new URL(`../src/i18n/locales/en/${ns}.json`, import.meta.url), "utf8"));
 const deployLocale = read("deploy");
 const i18n = createInstance();
-await i18n.use(initReactI18next).init({ lng: "en", fallbackLng: "en", resources: { en: { deploy: deployLocale, nodes: read("nodes") } }, defaultNS: "deploy", interpolation: { escapeValue: false } });
+await i18n.use(initReactI18next).init({ lng: "en", fallbackLng: "en", resources: { en: { deploy: deployLocale, nodes: read("nodes"), common: read("common") } }, defaultNS: "deploy", interpolation: { escapeValue: false } });
 
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
@@ -77,6 +77,11 @@ test("a single-node replica chooses automatic or pinned candidates; multi-node a
   assert.ok(screen.getByText(node.autoPoolDescription));
   assert.ok(screen.getByText(i18n.t("workbench.node.poolMatches", { count: 2, total: 3 })));
   const user = userEvent.setup({ document: dom.window.document });
+  // "Only these nodes" explains itself behind the help mark on its label.
+  assert.equal(screen.queryByText(node.poolNodesHelp), null);
+  await user.hover(screen.getByRole("button", { name: read("common").helpTip.label }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, node.poolNodesHelp);
+  await user.unhover(screen.getByRole("button", { name: read("common").helpTip.label }));
   // The candidate choice is a radio group, reachable by keyboard.
   const manual = screen.getByRole("radio", { name: node.manual });
   manual.focus();

@@ -62,6 +62,7 @@ func (s *Service) evaluateRanks(env evaluateRankEnv) bool {
 		}
 		resp.Warnings = append(resp.Warnings, computeFallbackWarning(group)...)
 	}
+	var draftInputs []deploy.ResolveLaunchInput
 	for rank, rankNode := range rankNodes {
 		modelMount, componentMounts := previewComponentMounts(s.d.Store, selection.Components, rankNode)
 		topology := planning.DistTopology{NNodes: req.NNodes, NodeRank: rank, Role: "standalone"}
@@ -73,14 +74,14 @@ func (s *Service) evaluateRanks(env evaluateRankEnv) bool {
 		if rankImage == "" {
 			rankImage = resp.Image
 		}
-		plan, planErr := planning.PlanLaunch(ctx, s.d.Store, s.networks(), planning.LaunchRequest{
+		plan, planErr := s.planLaunch(ctx, planning.LaunchRequest{
 			StartTimeoutSec: req.StartTimeoutSec,
 			Preview:         true, AllowUnresolvedImage: true, ExcludeDeploymentID: env.excludeDeployment, Engine: eng.Name(), Model: model, Node: rankNode,
 			Selection: rankSelection, Placement: placement, Quick: quick, ExtraArgs: userExtraArgs,
 			Topology:   topology,
 			Source:     planning.LaunchSourceFromRequest(rankImage, requestOverrides),
 			ModelMount: modelMount, ComponentMounts: componentMounts,
-			ServedName: servedName, Sleepable: req.Sleepable, YieldPolicy: requestYield(req.YieldPolicy),
+			ServedName: servedName, Sleepable: req.Sleepable, PriorityScheduling: requestsPriorityScheduling(req), YieldPolicy: requestYield(req.YieldPolicy),
 			MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
 			VRAMLimitBytes: int64(req.VRAMLimitGiB * (1 << 30)), PartitionBackend: req.PartitionBackend,
 			RuntimeImageCached: nodeImageCached, APIContract: rankSelection.APIContract,
@@ -92,6 +93,7 @@ func (s *Service) evaluateRanks(env evaluateRankEnv) bool {
 			return false
 		}
 		res := plan.Resolved
+		draftInputs = append(draftInputs, plan.LaunchInput)
 		resp.Warnings = append(resp.Warnings, plan.Warnings...)
 		resp.Warnings = append(resp.Warnings, plan.Output.Warnings...)
 		if dynamicTPPreview {
@@ -119,6 +121,9 @@ func (s *Service) evaluateRanks(env evaluateRankEnv) bool {
 		}
 	}
 	if len(resp.RankCommands) > 0 {
+		if req.NNodes > 1 {
+			setManualCommandDraft(resp, draftInputs)
+		}
 		return true
 	}
 	return s.evaluateRankFallback(env)
@@ -154,7 +159,7 @@ func (s *Service) evaluateRankFallback(env evaluateRankEnv) bool {
 	}
 	params := deploy.Params{
 		ModelPath: modelMount, ServedName: servedName, APIPort: planning.PreviewAPIPort,
-		AssignedGPUs: perNode, TensorParallel: parallel.TP, PipelineParallel: parallel.PP, Sleepable: req.Sleepable, Quick: quick, TemplateArgs: templateArgs,
+		AssignedGPUs: perNode, TensorParallel: parallel.TP, PipelineParallel: parallel.PP, Sleepable: req.Sleepable, PriorityScheduling: requestsPriorityScheduling(req), Quick: quick, TemplateArgs: templateArgs,
 		TemplateEnv: templateEnv, ExtraArgs: userExtraArgs,
 		Arch: arch, ArchID: archID, Vendor: vendor, ModelType: model.Arch,
 	}

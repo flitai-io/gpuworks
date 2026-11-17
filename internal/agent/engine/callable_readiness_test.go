@@ -28,7 +28,7 @@ func TestCallableStartupFailureBoundsUntrustedError(t *testing.T) {
 		if err := json.Unmarshal([]byte(tc.body), &state); err != nil {
 			t.Fatal(err)
 		}
-		if got := callableStartupFailure(resp, state); got != tc.want {
+		if failure, got := callableStartupFailure(resp, state); got != tc.want || failure.Code != proto.ErrorCallableInitFailed {
 			t.Fatalf("message=%q want=%q", got, tc.want)
 		}
 	}

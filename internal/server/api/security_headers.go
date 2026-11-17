@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // WithSecurityHeaders also covers responses emitted before the API router,
@@ -50,7 +51,7 @@ func (a *apiHandlers) routingError(status int) http.HandlerFunc {
 			}
 		}
 		if r.URL.Path == "/api/v1" || strings.HasPrefix(r.URL.Path, "/api/v1/") {
-			writeJSON(w, status, map[string]string{"error": http.StatusText(status)})
+			writeProductError(w, status, messages.GenericErrorCode(status), http.StatusText(status), nil)
 			return
 		}
 		http.Error(w, http.StatusText(status), status)

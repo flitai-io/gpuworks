@@ -23,5 +23,13 @@
     "cloud_assistant": "Cloud Assistant",
     "direct": "Direct",
     "proxy": "Platform Proxy"
+  },
+  "cluster_types": {
+    "ack_managed": "ACK managed",
+    "ack_dedicated": "ACK dedicated",
+    "ack_edge": "ACK Edge",
+    "ack_lingjun": "ACK Lingjun",
+    "ack_registered": "ACK registered cluster",
+    "doks": "DOKS"
   }
 }

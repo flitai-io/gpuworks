@@ -58,7 +58,7 @@ func runTwoVMDockerDistributed(t *testing.T, b *vmBackend) {
 	t.Logf("TIMING preloaded model registration on both nodes=%s", time.Since(modelStarted).Round(time.Second))
 
 	deploymentStarted := time.Now()
-	d := createHostedDeployment(t, harness, map[string]any{
+	body := map[string]any{
 		"model_id": model.ID, "node_uuid": harness.Nodes[0].UUID,
 		"node_uuids":  []string{harness.Nodes[0].UUID, harness.Nodes[1].UUID},
 		"served_name": b.servedName("twovm-docker-nnode2"),
@@ -67,7 +67,8 @@ func runTwoVMDockerDistributed(t *testing.T, b *vmBackend) {
 		"placement":           map[string]any{"tp": 2, "pp": 2},
 		"quick_params":        map[string]any{"max_model_len": 1024},
 		"container_overrides": distributedVLLMContainerOverrides(),
-	}, 2, compshareTwoVMDockerDeploymentTimeout)
+	}
+	d := createHostedDeployment(t, harness, body, 2, compshareTwoVMDockerDeploymentTimeout)
 	readyAt := time.Now()
 	t.Logf("TIMING deployment create-to-both-running=%s", readyAt.Sub(deploymentStarted).Round(time.Second))
 
@@ -79,6 +80,23 @@ func runTwoVMDockerDistributed(t *testing.T, b *vmBackend) {
 	t.Logf("TIMING gateway chat=%s", time.Since(chatStarted).Round(time.Millisecond))
 	t.Logf("two real %s VMs completed gpuworks Docker nnodes=2 gateway chat", b.Name)
 	d.stop(t)
+
+	// The same group again, started from one manual script shared by both
+	// ranks: each rank must run it with its own rank number.
+	manualStarted := time.Now()
+	manual := hostedCreateWithManualDraft(t, harness, body, b.servedName("twovm-docker-manual"),
+		"rank=${GPUWORKS_NODE_RANK} headless=${GPUWORKS_HEADLESS}", 2, compshareTwoVMDockerDeploymentTimeout)
+	for _, instance := range manual.instances {
+		rank := instance.NodeRank
+		if rank < 0 || rank > 1 || instance.NodeUUID != harness.Nodes[rank].UUID {
+			t.Fatalf("manual instance rank %d on node %s", rank, instance.NodeUUID)
+		}
+		assertManualCommandRan(t, harness.VMs[rank], instance, fmt.Sprintf("rank=%d headless=%d", rank, rank),
+			fmt.Sprintf("case \"%d\" in", rank), fmt.Sprintf("--node-rank %d ", rank), "--master-addr "+harness.VMs[0].Instance.PrivateIP+" ")
+	}
+	manual.chat(t)
+	manual.stop(t)
+	t.Logf("TIMING manual-command redeploy+chat=%s", time.Since(manualStarted).Round(time.Second))
 	t.Logf("TIMING complete two-VM Docker case=%s", time.Since(testStarted).Round(time.Second))
 }
 
@@ -243,15 +261,23 @@ case "${ID:-}" in ubuntu|debian) ;; *) echo "unsupported Docker apt distribution
 codename="${VERSION_CODENAME:-}"
 [ -n "$codename" ]
 arch="$(dpkg --print-architecture)"
-$root install -m 0755 -d /etc/apt/keyrings
-$root install -m 0755 -d /etc/apt/sources.list.d
-curl -fsSL "https://download.docker.com/linux/$ID/gpg" | $root tee /etc/apt/keyrings/docker.asc >/dev/null
-$root chmod a+r /etc/apt/keyrings/docker.asc
-printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' "$arch" "$ID" "$codename" | $root tee /etc/apt/sources.list.d/docker.list >/dev/null
-apt_retry $root apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
-docker_version="$(apt-cache madison docker-ce | awk '$3 ~ /^5:29\./ {print $3; exit}')"
-[ -n "$docker_version" ] || { echo 'Docker CE 29.x package is unavailable' >&2; exit 1; }
-DEBIAN_FRONTEND=noninteractive apt_retry $root apt-get install -y --allow-downgrades docker-ce="$docker_version" docker-ce-cli="$docker_version" containerd.io docker-buildx-plugin docker-compose-plugin
+# Images that already ship Docker 29 (Ubuntu docker.io on the cn-sh2 golden
+# image) keep it: download.docker.com stalls from some CompShare regions.
+preinstalled="$($root docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+case "$preinstalled" in
+29.*) echo "keeping preinstalled Docker $preinstalled" ;;
+*)
+  $root install -m 0755 -d /etc/apt/keyrings
+  $root install -m 0755 -d /etc/apt/sources.list.d
+  curl -fsSL "https://download.docker.com/linux/$ID/gpg" | $root tee /etc/apt/keyrings/docker.asc >/dev/null
+  $root chmod a+r /etc/apt/keyrings/docker.asc
+  printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' "$arch" "$ID" "$codename" | $root tee /etc/apt/sources.list.d/docker.list >/dev/null
+  apt_retry $root apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+  docker_version="$(apt-cache madison docker-ce | awk '$3 ~ /^5:29\./ {print $3; exit}')"
+  [ -n "$docker_version" ] || { echo 'Docker CE 29.x package is unavailable' >&2; exit 1; }
+  DEBIAN_FRONTEND=noninteractive apt_retry $root apt-get install -y --allow-downgrades docker-ce="$docker_version" docker-ce-cli="$docker_version" containerd.io docker-buildx-plugin docker-compose-plugin
+;;
+esac
 if ! command -v nvidia-ctk >/dev/null 2>&1; then
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | $root gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
   curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | $root tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null
@@ -264,6 +290,10 @@ try: d=json.load(open(p))
 except Exception: pass
 d["dns"]=["100.90.90.90","100.90.90.100"]
 json.dump(d,open(p,"w"))'
+# Replacing Ubuntu's docker.io with docker-ce leaves docker.socket failed, and
+# dockerd -H fd:// then exits with "no sockets found via socket activation".
+$root systemctl reset-failed docker.socket docker.service 2>/dev/null || true
+$root systemctl restart docker.socket 2>/dev/null || true
 $root systemctl restart docker 2>/dev/null || $root service docker restart
 if [ "$(id -u)" -ne 0 ]; then
   $root usermod -aG docker "$(id -un)"

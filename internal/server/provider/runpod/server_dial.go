@@ -169,7 +169,7 @@ func (d *Driver) listeningPorts(ctx context.Context, inst provider.Instance, aut
 // where the server reaches it, exposing a port (a restart) when the pod has
 // no spare one and the operator agreed. It returns the pod as the install
 // should reach it: the edit renumbers SSH too.
-func (d *Driver) serverDialPort(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) (listen, address string, inst provider.Instance, check provider.InstallCheck, err error) {
+func (d *Driver) serverDialPort(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) (listen, address string, inst provider.Instance, check provision.CheckResult, err error) {
 	p, err := d.getPod(ctx, creds, req.Instance.ExternalID)
 	if err != nil {
 		return "", "", provider.Instance{}, check, err
@@ -187,7 +187,7 @@ func (d *Driver) serverDialPort(ctx context.Context, creds provider.Credentials,
 	preferred := provider.PortOf(req.ServerDialListen)
 	if port, ok := provider.ChooseMappedPort(mapped, listening, preferred); ok {
 		address = net.JoinHostPort(ip, strconv.Itoa(mapped[port]))
-		check = provider.InstallCheck{Name: "Server-dial port", Status: "ok", Detail: fmt.Sprintf("container port %d, exposed as %s", port, address)}
+		check = provider.ServerDialPortCheck(port, address, false, false, fmt.Sprintf("container port %d, exposed as %s", port, address))
 		return provider.ListenOnPort(port), address, inst, check, nil
 	}
 	if !req.AllowInstanceRestart {
@@ -203,6 +203,6 @@ func (d *Driver) serverDialPort(ctx context.Context, creds provider.Credentials,
 	}
 	ip, mapped = p.tcpMappings()
 	address = net.JoinHostPort(ip, strconv.Itoa(mapped[port]))
-	check = provider.InstallCheck{Name: "Server-dial port", Status: "ok", Detail: fmt.Sprintf("exposed container port %d as %s; the pod restarted", port, address)}
+	check = provider.ServerDialPortCheck(port, address, true, true, fmt.Sprintf("exposed container port %d as %s; the pod restarted", port, address))
 	return provider.ListenOnPort(port), address, p.toInstance(), check, nil
 }

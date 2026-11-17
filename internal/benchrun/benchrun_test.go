@@ -3,6 +3,8 @@ package benchrun
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/pkg/bench/dataset"
 	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
 	"gpuworks.ai/gpuworks/pkg/bench/metrics"
 )
@@ -234,6 +237,39 @@ func TestWarmupFailureFailsTheRunBeforeAnyPoint(t *testing.T) {
 	}
 	if len(rec.points(t)) != 0 || len(endpoint.requests()) != 3 {
 		t.Fatalf("points = %d, endpoint requests = %d", len(rec.points(t)), len(endpoint.requests()))
+	}
+}
+
+// A coded failure reaches the terminal status with its code and params; a
+// failure without one (the warmup above) carries neither.
+func TestTerminalStatusCarriesTheCodeOfACodedFailure(t *testing.T) {
+	loadErr := fmt.Errorf("point 1: %w", &dataset.LoadError{Dataset: "multiturn", Err: errors.New("unexpected EOF")})
+	code, params := failureCode(loadErr)
+	if code != dataset.LoadErrorCode || params["dataset"] != "multiturn" {
+		t.Fatalf("code = %q params = %v", code, params)
+	}
+	if code, params := failureCode(errors.New("BENCHMARK_DATASET_LOAD_FAILED: multiturn: x")); code != "" || params != nil {
+		t.Fatalf("text classified: %q %v", code, params)
+	}
+	raw, err := json.Marshal(proto.BenchmarkStatus{ID: 9, State: "failed", Message: loadErr.Error(), Code: code, Params: params, StopReason: proto.BenchmarkStopFatal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"id":9,"state":"failed","message":"point 1: load the built-in multiturn dataset: unexpected EOF","code":"BENCHMARK_DATASET_LOAD_FAILED","params":{"dataset":"multiturn"},"stop_reason":"fatal"}`
+	if string(raw) != want {
+		t.Fatalf("wire = %s\nwant %s", raw, want)
+	}
+	var back proto.BenchmarkStatus
+	if err := json.Unmarshal(raw, &back); err != nil || back.Code != code || back.Params["dataset"] != "multiturn" {
+		t.Fatalf("round trip = %+v %v", back, err)
+	}
+	endpoint := &fakeEndpoint{fail: true, failureStatus: http.StatusBadRequest}
+	rec := &recorder{}
+	Execute(context.Background(), Run{TokenizerRef: testTokenizerRef(t), ID: 3, Model: "m", Client: loadgen.Client{BaseURL: endpoint.serve(t).URL},
+		Dataset: json.RawMessage(`{"kind":"random"}`), Search: json.RawMessage(`{"concurrency":4,"isl":[8],"osl":[3],"warmup_requests":3}`),
+	}, rec.hooks())
+	if last := rec.last(); last.State != "failed" || last.Code != "" || last.Params != nil {
+		t.Fatalf("uncoded failure = %+v", last)
 	}
 }
 

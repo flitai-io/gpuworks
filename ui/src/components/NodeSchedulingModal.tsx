@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { api, type Node, type NodeReplica, type NodeReplicas, type NodeScheduling, type ScheduleMessage } from "../api";
 import { apiErrorText } from "../apiError";
+import { runtimeFailureText } from "../runtimeFailure";
 import { nodeDisplayName } from "../nodeDisplay";
 import { formatDate } from "../i18n/datetime";
 import { scheduleText } from "../pages/deploy/deploySchedule";
@@ -131,7 +132,7 @@ export function NodeSchedulingModal({ node, onClose, onChanged }: { node: Node; 
     return <Space direction="vertical" size={0}>
       {rendered && <Typography.Text>{t("scheduling.lastFeedback", { reason: rendered })}</Typography.Text>}
       {item.drain_reason_at && <Typography.Text type="secondary">{formatDate(item.drain_reason_at)}</Typography.Text>}
-      {item.drain_message && <Typography.Text type="danger">{t("scheduling.lastFailedAttempt", { message: item.drain_message })}</Typography.Text>}
+      {item.drain_message && <Typography.Text type="danger">{t("scheduling.lastFailedAttempt", { message: item.drain_failure ? runtimeFailureText(tCommon, item.drain_failure) : item.drain_message })}</Typography.Text>}
       {!rendered && !item.drain_message && <Typography.Text type="secondary">{t("scheduling.awaitingReason")}</Typography.Text>}
     </Space>;
   };

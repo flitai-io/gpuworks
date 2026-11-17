@@ -180,3 +180,21 @@ func TestExplicitProxyHonorsItsNoProxy(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateAcceptsWhatProxyUsesAndNeverRepeatsTheURL(t *testing.T) {
+	for _, ok := range []string{"http://proxy:3128", "https://u:p@proxy:443", "socks5://proxy:1080", "socks5h://u:p@proxy:1080/", "proxy.example:3128"} {
+		if err := httpproxy.Validate(ok); err != nil {
+			t.Errorf("Validate(%q) = %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "   ", "ftp://u:s3cret@proxy:21", "http://u:s3cret@proxy:3128/path", "http://u:s3cret@proxy:3128?x=1", "http://u:s3cret@"} {
+		err := httpproxy.Validate(bad)
+		if err == nil {
+			t.Errorf("Validate(%q) accepted", bad)
+			continue
+		}
+		if strings.Contains(err.Error(), "s3cret") {
+			t.Errorf("Validate(%q) error leaks the password: %v", bad, err)
+		}
+	}
+}

@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -40,7 +42,12 @@ import (
 // (2000) clients for GPUWORKS_GATEWAY_SECONDS (60); engine shape
 // GPUWORKS_GATEWAY_TTFT_MS (200), _TPOT_MS (20), _DELTAS (64);
 // GPUWORKS_GATEWAY_PROMPT_BYTES pads each prompt (long-context requests);
-// GPUWORKS_GATEWAY_TRACE_EXPORT=1 runs with the request trace export on.
+// GPUWORKS_GATEWAY_TRACE_EXPORT=1 runs with the request trace export on;
+// GPUWORKS_GATEWAY_MAX_SERVER_CPU_US_PER_REQUEST budgets the server's CPU per
+// request (the nightly job sets it for its runner: the figure depends on the
+// host's CPU); GPUWORKS_GATEWAY_PRIORITY_CLASS=high binds the clients' key to that request
+// priority class, so every request has its engine priority written into the
+// body (the deployments run priority scheduling by default).
 func TestFleetGatewayLoadAcrossProcesses(t *testing.T) {
 	if os.Getenv("GPUWORKS_TEST_PERF") != "1" {
 		t.Skip("gateway load case; set GPUWORKS_TEST_PERF=1 on an idle host to run (full command in the test's doc comment)")
@@ -51,12 +58,16 @@ func TestFleetGatewayLoadAcrossProcesses(t *testing.T) {
 	duration := time.Duration(fleet.EnvInt("GPUWORKS_GATEWAY_SECONDS", 60)) * time.Second
 	rampUp := time.Duration(fleet.EnvInt("GPUWORKS_GATEWAY_RAMP_SECONDS", 5)) * time.Second
 	promptBytes := fleet.EnvInt("GPUWORKS_GATEWAY_PROMPT_BYTES", 0)
+	priorityClass := os.Getenv("GPUWORKS_GATEWAY_PRIORITY_CLASS")
 	ttft := time.Duration(fleet.EnvInt("GPUWORKS_GATEWAY_TTFT_MS", 200)) * time.Millisecond
 	tpot := time.Duration(fleet.EnvInt("GPUWORKS_GATEWAY_TPOT_MS", 20)) * time.Millisecond
 	deltas := fleet.EnvInt("GPUWORKS_GATEWAY_DELTAS", 64)
 	maxErrorPermille := fleet.EnvInt("GPUWORKS_GATEWAY_MAX_ERROR_PERMILLE", 1)
 	ttftOverheadBudget := time.Duration(fleet.EnvInt("GPUWORKS_GATEWAY_TTFT_OVERHEAD_P99_MS", 1000)) * time.Millisecond
 	maxImbalancePercent := fleet.EnvInt("GPUWORKS_GATEWAY_MAX_IMBALANCE_PERCENT", 25)
+	// The server's CPU per request, in microseconds; 0 checks nothing. A
+	// figure for one host only: set it where the case runs on fixed hardware.
+	maxServerCPUPerRequest := fleet.EnvInt("GPUWORKS_GATEWAY_MAX_SERVER_CPU_US_PER_REQUEST", 0)
 	if gpus > 32 {
 		t.Fatalf("GPUWORKS_GATEWAY_GPUS_PER_NODE=%d: one deployment per node cannot exceed 32 replicas", gpus)
 	}
@@ -154,8 +165,15 @@ func TestFleetGatewayLoadAcrossProcesses(t *testing.T) {
 	var key struct {
 		Key string `json:"key"`
 	}
-	if err := client.PostJSON("/api/v1/apikeys", []byte(`{"name":"gateway-load"}`), &key); err != nil || key.Key == "" {
+	keyRequest := []byte(`{"name":"gateway-load"}`)
+	if priorityClass != "" {
+		keyRequest = fmt.Appendf(nil, `{"name":"gateway-load","priority":{"class":%q,"policy":"fixed"}}`, priorityClass)
+	}
+	if err := client.PostJSON("/api/v1/apikeys", keyRequest, &key); err != nil || key.Key == "" {
 		t.Fatalf("create an API key: %v", err)
+	}
+	if priorityClass != "" {
+		requireGatewayPriority(t, client, base, key.Key, models[0], priorityClass, len(models))
 	}
 	// GPUWORKS_GATEWAY_TRACE_EXPORT=1 turns the request trace export on
 	// (ADR 0046), every trace sampled, to a collector in this process that
@@ -196,6 +214,8 @@ func TestFleetGatewayLoadAcrossProcesses(t *testing.T) {
 	seconds := report.Elapsed.Seconds()
 	t.Logf("server process: %.2f cores busy (%.1f CPU-s), RSS peak %.0f MiB, now %.0f MiB",
 		serverCPU/seconds, serverCPU, peak.max(), readProcessRSSMiB(server.Process.Pid))
+	perRequest := serverCPU * 1e6 / float64(max(report.Requests, 1))
+	t.Logf("server CPU per request: %.0f µs", perRequest)
 	t.Logf("fleet process (agents + engines): %.2f cores busy (%.1f CPU-s)", hostCPU/seconds, hostCPU)
 	t.Logf("request bodies spooled to disk at once (peak): %d", peak.spooled())
 
@@ -247,9 +267,51 @@ func TestFleetGatewayLoadAcrossProcesses(t *testing.T) {
 	if permille := report.Errors * 1000 / max(report.Requests, 1); permille > int64(maxErrorPermille) {
 		t.Errorf("%d of %d requests failed (%d‰, budget %d‰): %v", report.Errors, report.Requests, permille, maxErrorPermille, report.Failures())
 	}
+	if maxServerCPUPerRequest > 0 && perRequest > float64(maxServerCPUPerRequest) {
+		t.Errorf("server CPU per request is %.0f µs (budget %d µs)", perRequest, maxServerCPUPerRequest)
+	}
 	if overhead := report.TTFT.Percentile(0.99) - ttft; overhead > ttftOverheadBudget {
 		t.Errorf("gateway adds %s to TTFT at p99 (budget %s)", overhead.Round(time.Millisecond), ttftOverheadBudget)
 	}
+}
+
+// requireGatewayPriority fails the run unless it measures what it says: every
+// deployment runs priority scheduling, and the gateway answers a request on
+// the key at the class it is bound to.
+func requireGatewayPriority(t *testing.T, client *fleet.Client, base, key, model, class string, deployments int) {
+	t.Helper()
+	var rows apiwire.List[struct {
+		PriorityScheduling bool `json:"priority_scheduling"`
+	}]
+	if err := client.GetJSON("/api/v1/deployments", &rows); err != nil {
+		t.Fatalf("list deployments: %v", err)
+	}
+	on := 0
+	for _, row := range rows.Items {
+		if row.PriorityScheduling {
+			on++
+		}
+	}
+	if on != deployments {
+		t.Fatalf("%d of %d deployments run priority scheduling", on, deployments)
+	}
+	body := fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":1}`, model)
+	req, err := http.NewRequest(http.MethodPost, base+"/v1/chat/completions", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("probe the class: %v", err)
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	if got := resp.Header.Get("X-GPUWorks-Priority-Class"); resp.StatusCode != http.StatusOK || got != class {
+		t.Fatalf("probe answered %d at class %q, want %q", resp.StatusCode, got, class)
+	}
+	t.Logf("all %d deployments run priority scheduling; the key's requests run at class %q", deployments, class)
 }
 
 // waitGatewayInstancesRunning polls the instance list until want instances

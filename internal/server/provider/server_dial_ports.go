@@ -7,6 +7,9 @@ import (
 	"net"
 	"sort"
 	"strconv"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
 // InboundRuleChecker is an optional driver capability: read, changing
@@ -14,7 +17,7 @@ import (
 // lets the server reach a server-dialed agent's TCP port. The precheck adds
 // the row it returns.
 type InboundRuleChecker interface {
-	CheckInbound(ctx context.Context, creds Credentials, inst Instance, port int) InstallCheck
+	CheckInbound(ctx context.Context, creds Credentials, inst Instance, port int) provision.CheckResult
 }
 
 // ServerDialPortMapper is an optional driver capability for providers that
@@ -126,4 +129,12 @@ func (s *Service) ServerDialAddress(ctx context.Context, providerID uint, extern
 		return "", err
 	}
 	return mapper.ServerDialAddressFor(ctx, creds, externalID, listen)
+}
+
+// ServerDialPortCheck is the row of a driver that chose the container port a
+// server-dialed agent listens on: port, the address the server reaches it at,
+// whether the install opened it and whether the instance restarted for it.
+func ServerDialPortCheck(port int, address string, opened, restarted bool, message string) provision.CheckResult {
+	return provision.PassCheck(provision.CheckIDServerDialPort, messages.CheckServerDialPortChosen, message,
+		map[string]any{"port": port, "address": address, "opened": opened, "restarted": restarted})
 }

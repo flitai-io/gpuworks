@@ -22,6 +22,8 @@ const (
 // HistoryEntry is one line of <data>/install-history.jsonl: an append-only
 // record of every install and upgrade, including the ones that failed.
 type HistoryEntry struct {
+	Attempt           string `json:"attempt,omitempty"`
+	RolledBack        bool   `json:"rolled_back,omitempty"`
 	Action            string `json:"action"`
 	Result            string `json:"result"` // ok | failed
 	ReleaseID         string `json:"release_id"`
@@ -55,25 +57,43 @@ func AppendHistory(path string, entry HistoryEntry, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
+	return appendHistoryBytes(path, line, mode)
+}
+
+func appendHistoryBytes(path string, line []byte, mode os.FileMode) error {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, mode)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	_, err = f.Write(line)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
 	return err
 }
 
 // appendInstalled appends one audit line, falling back to `sudo tee -a` the
 // same way the other tree writes do.
 func (i *Installer) appendInstalled(ctx context.Context, path string, entry HistoryEntry, mode os.FileMode) error {
-	if err := AppendHistory(path, entry, mode); err == nil {
-		return nil
-	} else if !i.canSudo() {
-		return err
-	}
 	line, err := historyLine(entry)
 	if err != nil {
+		return err
+	}
+	return i.appendHistoryLine(ctx, path, line, mode)
+}
+
+// createHistory makes sure the audit log exists, without an entry. The
+// install calls it before its last chownTree: a log first created after the
+// handoff belongs to whoever ran the install (root), and the service account
+// that confirms a console upgrade could not append to it.
+func (i *Installer) createHistory(ctx context.Context, path string, mode os.FileMode) error {
+	return i.appendHistoryLine(ctx, path, nil, mode)
+}
+
+func (i *Installer) appendHistoryLine(ctx context.Context, path string, line []byte, mode os.FileMode) error {
+	if err := appendHistoryBytes(path, line, mode); err == nil {
+		return nil
+	} else if !i.canSudo() {
 		return err
 	}
 	if err := i.deps.Run.Run(ctx, Command{Path: "tee", Args: []string{"-a", path}, Sudo: true,

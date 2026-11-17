@@ -56,17 +56,17 @@ func cardHealthFixture(t *testing.T) (*apiHandlers, *store.Store, *fakeCardHealt
 	received := time.Now().Add(-10 * time.Second).UTC().Truncate(time.Second)
 	checks := func(link string, reason string) []proto.CardCheck {
 		return []proto.CardCheck{
-			{ID: accelerator.CheckVendorHealth, State: accelerator.CheckPass},
-			{ID: accelerator.CheckPCIeLink, State: link, Reason: reason},
-			{ID: accelerator.CheckNVLink, State: accelerator.CheckNotApplicable},
-			{ID: accelerator.CheckRuntime, State: accelerator.CheckPass, AgeS: 120, MS: 812},
+			{ID: accelerator.CheckVendorHealth, Status: proto.CheckPass},
+			{ID: accelerator.CheckPCIeLink, Status: link, Code: reason},
+			{ID: accelerator.CheckNVLink, Status: proto.CheckNA},
+			{ID: accelerator.CheckRuntime, Status: proto.CheckPass, AgeS: 120, MS: 812},
 		}
 	}
 	fake := &fakeCardHealth{nodes: map[string]cardhealth.NodeSnapshot{"drain-a": {
 		NodeID: node.ID, ReceivedAt: received, Online: true, Reports: true,
 		Cards: []cardhealth.CardSnapshot{
-			{Ident: accelerator.CardIdent("GPU-a", "0000:3f:00.0"), UUID: "GPU-a", PCIeBDF: "0000:3f:00.0", Name: "H20", Index: 0, Checks: checks(accelerator.CheckPass, "")},
-			{Ident: accelerator.CardIdent("GPU-b", "0000:40:00.0"), UUID: "GPU-b", PCIeBDF: "0000:40:00.0", Name: "H20", Index: 1, Checks: checks(accelerator.CheckWarn, accelerator.HealthPCIeLinkDegraded)},
+			{Ident: accelerator.CardIdent("GPU-a", "0000:3f:00.0"), UUID: "GPU-a", PCIeBDF: "0000:3f:00.0", Name: "H20", Index: 0, Checks: checks(proto.CheckPass, "")},
+			{Ident: accelerator.CardIdent("GPU-b", "0000:40:00.0"), UUID: "GPU-b", PCIeBDF: "0000:40:00.0", Name: "H20", Index: 1, Checks: checks(proto.CheckWarn, accelerator.HealthPCIeLinkDegraded)},
 		},
 	}}}
 	online := true
@@ -111,7 +111,7 @@ func TestNodeHealthChecks(t *testing.T) {
 		t.Fatalf("second card = %v", second)
 	}
 	link := second["cells"].([]any)[1].(map[string]any)
-	if link["state"] != "warn" || link["reason"] != "pcie_link_degraded" || link["stale"] != false || link["checked_at"] == nil {
+	if link["status"] != "warn" || link["code"] != "PCIE_LINK_DEGRADED" || link["stale"] != false || link["checked_at"] == nil || link["state"] != nil || link["reason"] != nil {
 		t.Fatalf("link cell = %v", link)
 	}
 	runtime := second["cells"].([]any)[2].(map[string]any)
@@ -164,15 +164,15 @@ func TestNodeHealthRecords(t *testing.T) {
 	node, _ := st.NodeByUUID("drain-a")
 	started := time.Now().Add(-2 * time.Hour).UTC().Truncate(time.Second)
 	ended := started.Add(30 * time.Minute)
-	closed := &store.CardHealthEpisode{NodeID: node.ID, CardIdent: "uuid:GPU-gone", CheckID: "runtime", Level: "fail", Reason: "runtime_unusable",
+	closed := &store.CardHealthEpisode{NodeID: node.ID, CardIdent: "uuid:GPU-gone", CheckID: "runtime", Level: "fail", Reason: accelerator.HealthRuntimeUnusable,
 		StartedAt: started, EndedAt: &ended, LastSeenAt: ended, Count: 3, FirstEvidence: "Detail=cuCtxCreate=999", LatestEvidence: "Detail=cuCtxCreate=999"}
 	open := &store.CardHealthEpisode{NodeID: node.ID, CardIdent: accelerator.CardIdent("GPU-b", "0000:40:00.0"), CheckID: "pcie_link", Level: "warn",
-		Reason: "pcie_link_degraded", StartedAt: started, LastSeenAt: started, Count: 1}
+		Reason: accelerator.HealthPCIeLinkDegraded, StartedAt: started, LastSeenAt: started, Count: 1}
 	if err := st.SaveCardHealthEpisodes([]*store.CardHealthEpisode{closed, open}); err != nil {
 		t.Fatal(err)
 	}
-	fake.live = []cardhealth.Episode{{ID: open.ID, NodeID: node.ID, CardIdent: open.CardIdent, CheckID: open.CheckID, Level: open.Level,
-		Reason: open.Reason, StartedAt: open.StartedAt, LastSeenAt: open.LastSeenAt, Count: 50, Flapping: true}}
+	fake.live = []cardhealth.Episode{{ID: open.ID, NodeID: node.ID, CardIdent: open.CardIdent, CheckID: open.CheckID, Status: open.Level,
+		Code: open.Reason, StartedAt: open.StartedAt, LastSeenAt: open.LastSeenAt, Count: 50, Flapping: true}}
 
 	code, body := callNode(t, a.nodeHealthRecords, http.MethodGet, "drain-a", "/health-records", "")
 	if code != http.StatusOK {
@@ -186,6 +186,12 @@ func TestNodeHealthRecords(t *testing.T) {
 	first, second := records[0].(map[string]any), records[1].(map[string]any)
 	if first["ongoing"] != true || first["count"] != float64(50) || first["flapping"] != true || first["card_index"] != float64(1) || first["removed"] != false {
 		t.Fatalf("open record = %v", first)
+	}
+	if first["status"] != "warn" || first["code"] != "PCIE_LINK_DEGRADED" || first["level"] != nil || first["reason"] != nil {
+		t.Fatalf("open record result = %v", first)
+	}
+	if second["status"] != "fail" || second["code"] != "RUNTIME_UNUSABLE" {
+		t.Fatalf("closed record = %v", second)
 	}
 	if second["removed"] != true || second["duration_seconds"] != float64(1800) ||
 		second["first_evidence"].([]any)[0].(map[string]any)["value"] != "cuCtxCreate=999" {
@@ -202,6 +208,11 @@ func TestNodeHealthRecords(t *testing.T) {
 	if code, _ := callNode(t, a.nodeHealthRecords, http.MethodGet, "drain-a", "/health-records?page=0", ""); code != http.StatusBadRequest {
 		t.Fatalf("page 0 = %d", code)
 	}
+	// A page whose offset overflows an int is past the end, not page one.
+	code, body = callNode(t, a.nodeHealthRecords, http.MethodGet, "drain-a", "/health-records?page=9223372036854775807&page_size=200", "")
+	if out := decode(t, body); code != http.StatusOK || out["total"] != float64(2) || len(out["records"].([]any)) != 0 {
+		t.Fatalf("huge page = %d %v", code, out)
+	}
 }
 
 // The detail asks the agent through the bounded fetcher, and is refused with
@@ -209,9 +220,9 @@ func TestNodeHealthRecords(t *testing.T) {
 func TestNodeHealthCheckDetail(t *testing.T) {
 	a, _, fake, online, caps := cardHealthFixture(t)
 	fake.detail = proto.CardCheckDetail{Ident: "uuid:GPU-a", Check: "runtime", AgentStartedAt: "2026-11-01T00:00:00Z",
-		Last: &proto.CardCheckRun{State: "pass", At: "2026-11-01T01:00:00Z", DurationMS: 812, Probe: "python3 -c ...", Evidence: []proto.DoctorField{{Name: "Detail", Value: "ok"}}}}
+		Last: &proto.CardCheckRun{Status: "pass", At: "2026-11-01T01:00:00Z", DurationMS: 812, Probe: "python3 -c ...", Evidence: []proto.DoctorField{{Name: "Detail", Value: "ok"}}}}
 	code, body := callNode(t, a.nodeHealthCheckDetail, http.MethodGet, "drain-a", "/health-checks/detail?uuid=GPU-a&check=runtime", "")
-	want := `{"ident":"uuid:GPU-a","check":"runtime","last":{"state":"pass","at":"2026-11-01T01:00:00Z","duration_ms":812,"probe":"python3 -c ...","evidence":[{"name":"Detail","value":"ok"}]},"agent_started_at":"2026-11-01T00:00:00Z"}`
+	want := `{"ident":"uuid:GPU-a","check":"runtime","last":{"status":"pass","at":"2026-11-01T01:00:00Z","duration_ms":812,"probe":"python3 -c ...","evidence":[{"name":"Detail","value":"ok"}]},"agent_started_at":"2026-11-01T00:00:00Z"}`
 	if code != http.StatusOK || strings.TrimSpace(body) != want {
 		t.Fatalf("= %d %s\nwant %s", code, body, want)
 	}
@@ -255,10 +266,11 @@ func TestRecheckCard(t *testing.T) {
 	a.d.CallNode = func(_ context.Context, uuid, method string, params any) (json.RawMessage, error) {
 		raw, _ := json.Marshal(params)
 		calls = append(calls, uuid+" "+method+" "+string(raw))
-		return json.RawMessage(`{"ident":"uuid:GPU-b","check":"runtime","last":{"state":"pass","at":"2026-11-01T01:00:00Z"},"agent_started_at":"2026-11-01T00:00:00Z"}`), nil
+		// An agent that predates check statuses: its skip reason in words.
+		return json.RawMessage(`{"ident":"uuid:GPU-b","check":"runtime","last":{"state":"skip","reason":"busy","at":"2026-11-01T01:00:00Z"},"agent_started_at":"2026-11-01T00:00:00Z"}`), nil
 	}
 	code, body := callNode(t, a.recheckCard, http.MethodPost, "drain-a", "/gpus/recheck", `{"uuid":"GPU-b"}`)
-	if code != http.StatusOK || !strings.Contains(body, `"last":{"state":"pass"`) {
+	if code != http.StatusOK || !strings.Contains(body, `"last":{"status":"skip","code":"CARD_CHECK_SKIPPED_BUSY","at":"2026-11-01T01:00:00Z"`) {
 		t.Fatalf("= %d %s", code, body)
 	}
 	if len(calls) != 1 || calls[0] != `drain-a node.card_recheck {"ident":"uuid:GPU-b"}` {

@@ -15,7 +15,7 @@ const { Form, Input, message } = await import("antd");
 const { default: useDeploySubmit } = await import("../src/pages/deploy/useDeploySubmit.ts");
 const { default: DeploySubmitBar } = await import("../src/pages/deploy/DeploySubmitBar.tsx");
 const { api } = await import("../src/api.ts");
-const { APIError } = await import("../src/apiError.ts");
+const { APIError, apiErrorText } = await import("../src/apiError.ts");
 type EvaluateResponse = import("../src/api.ts").EvaluateResponse;
 const originalCreate = api.createDeployment;
 afterEach(() => { cleanup(); message.destroy(); api.createDeployment = originalCreate; });
@@ -93,12 +93,12 @@ test("a group the server found nothing to place on is reported as the server say
   const run = mount({ node_selection_mode: "multi", nnodes: 2, tp: 4 }, evaluated({ ok: false, preflight: undefined, errors: [none] }));
   await run.click();
   assert.deepEqual(run.requests, []);
-  await screen.findByText(i18n.t("common:apiError.UNIT_PLACEMENT_NONE", none.params));
+  await screen.findByText(apiErrorText((key, options) => i18n.t(`common:${key}`, options), new APIError(none.code, none.params, "none", 409)));
 });
 
 test("a create the server refuses for lack of nodes shows its reason", async () => {
   const run = mount({ node_selection_mode: "pd", nnodes: 1, pd_mode: "vllm-nixl", pd_roles: pdRoles }, evaluated());
   api.createDeployment = (async () => { throw new APIError("UNIT_PLACEMENT_NONE", { nodes: 2, unmet: 0, cordoned: 0, offline: 0, busy: 2, no_network: 0, largest: 0 }, "none", 409); }) as never;
   await run.click();
-  await waitFor(() => assert.ok(document.body.textContent?.includes("No group of nodes can take this deployment now")));
+  await waitFor(() => assert.ok(document.body.textContent?.includes("No group of nodes can take this deployment (of 2 nodes): 2 lack free GPUs")));
 });

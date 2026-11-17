@@ -1,5 +1,7 @@
 package accelerator
 
+import "strings"
+
 // Optional backend capabilities. A backend implements one of these interfaces
 // only when the capability applies; every consumer goes through the helper
 // below, so a backend without the capability never needs a stub method and
@@ -8,9 +10,9 @@ package accelerator
 // RuntimeConstrainer is implemented by backends that can only run under
 // specific container runtime drivers.
 type RuntimeConstrainer interface {
-	// RuntimeConstraint returns a human-readable reason the backend cannot
-	// run under the given runtime driver, or "" when it can.
-	RuntimeConstraint(driver string) string
+	// SupportedRuntimes lists the runtime drivers the backend is verified
+	// under, in the order they are named to an operator.
+	SupportedRuntimes() []string
 }
 
 // ProbeExempt is implemented by backends that rely on embedded assets and
@@ -42,13 +44,22 @@ func LiveMemoryLimit(b Backend) bool {
 	return false
 }
 
-// RuntimeConstraint reports why the backend cannot run under the given
-// container runtime driver, or "" when it can.
-func RuntimeConstraint(b Backend, driver string) string {
-	if c, ok := b.(RuntimeConstrainer); ok {
-		return c.RuntimeConstraint(driver)
+// RuntimeConstraint reports the runtime drivers the backend is limited to
+// when driver is not one of them, or nil when the backend can run under
+// driver. The caller turns the list into a reason code and its parameters.
+func RuntimeConstraint(b Backend, driver string) []string {
+	c, ok := b.(RuntimeConstrainer)
+	if !ok {
+		return nil
 	}
-	return ""
+	supported := c.SupportedRuntimes()
+	driver = strings.ToLower(strings.TrimSpace(driver))
+	for _, runtime := range supported {
+		if runtime == driver {
+			return nil
+		}
+	}
+	return append([]string(nil), supported...)
 }
 
 // SkipsBehaviorProbe reports whether the backend is exempt from the

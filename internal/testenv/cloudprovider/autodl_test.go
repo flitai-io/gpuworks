@@ -3,6 +3,7 @@ package cloudprovider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -141,8 +142,8 @@ func TestAutoDLRentFallsBackWhenSpecIsOutOfStock(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	driver := &fakeAutoDLDriver{
 		createErrs: map[string]error{
-			autodlDefaultGPUModel: errors.New("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试"),
-			"RTX 4090D":           errors.New("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试"),
+			autodlDefaultGPUModel: fmt.Errorf("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试: %w", autodldriver.ErrOutOfStock),
+			"RTX 4090D":           fmt.Errorf("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试: %w", autodldriver.ErrOutOfStock),
 		},
 		create: serverprovider.Instance{ExternalID: "pro-fallback"},
 		snapshot: autodldriver.Snapshot{Instance: serverprovider.Instance{
@@ -165,7 +166,7 @@ func TestAutoDLRentFallsBackWhenSpecIsOutOfStock(t *testing.T) {
 
 func TestAutoDLRentNeverSwapsANamedCardOrMasksOtherErrors(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	stock := errors.New("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试")
+	stock := fmt.Errorf("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试: %w", autodldriver.ErrOutOfStock)
 	driver := &fakeAutoDLDriver{createErrs: map[string]error{autodlDefaultGPUModel: stock}}
 	p, _ := newAutoDL(driver, serverprovider.Credentials{APIKey: "token"}, "run", "base-image", 5)
 	if _, err := p.Rent(t.Context(), GPUSpec{GPUModel: autodlDefaultGPUModel}); !errors.Is(err, stock) || len(driver.tried) != 1 {

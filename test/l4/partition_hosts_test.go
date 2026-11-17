@@ -77,7 +77,14 @@ func TestPartitionHardwarePreflight(t *testing.T) {
 func TestPPUDockerPartitionQuota(t *testing.T) {
 	host := requiredHostEnv(t, "GPUWORKS_PPU_HOST")
 	jump := hostEnv("GPUWORKS_PPU_SSH_JUMP", "gpu3")
-	image := hostEnv("GPUWORKS_PPU_L4_IMAGE", "swr.cn-south-1.myhuaweicloud.com/gpustack/runner:hggc13.0-vllm0.23.0")
+	image := hostEnv("GPUWORKS_PPU_L4_IMAGE", "gpuworks/gpuworks-runner:hggc13.0-vllm0.23.0-r2")
+	// GPUWORKS_PPU_L4_DEVICE is the kernel minor N of /dev/alixpu_ppu<N> to
+	// probe (not the ppu-smi index); pick another idle card when 0 is busy or
+	// needs a reset.
+	device := hostEnv("GPUWORKS_PPU_L4_DEVICE", "0")
+	if strings.Trim(device, "0123456789") != "" {
+		t.Fatalf("GPUWORKS_PPU_L4_DEVICE=%q is not a device minor", device)
+	}
 	runID := "gpuworks-ppu-docker-l4-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	remoteDir := "/tmp/" + runID
 	name := runID
@@ -136,7 +143,7 @@ if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
   exit 1
 fi
 docker run --rm --name "$name" \
-  --device /dev/alixpu --device /dev/alixpu_ctl --device /dev/alixpu_ppu0 \
+  --device /dev/alixpu --device /dev/alixpu_ctl --device /dev/alixpu_ppu%s \
   -e CUDA_VISIBLE_DEVICES=0 -e NVIDIA_VISIBLE_DEVICES=void \
   -e HGGC_DEVICE_MEMORY_LIMIT_0=1024 -e HGGC_DEVICE_SM_LIMIT_0=100 \
   -e HGGC_LEDGER_PATH=/dev/shm/"$name" \
@@ -155,7 +162,7 @@ except torch.OutOfMemoryError as error:
     print("over_quota_denied", str(error).splitlines()[0])
 else:
     raise SystemExit("unexpected: 2 GiB allocation succeeded under 1 GiB quota")
-PY'`, shellQuoteL4(name), shellQuoteL4(remoteDir), shellQuoteL4(image))
+PY'`, shellQuoteL4(name), shellQuoteL4(remoteDir), device, shellQuoteL4(image))
 	out, err := runSSH(command)
 	archivePartitionEvidence(t, strings.ReplaceAll(t.Name(), "/", "-")+".txt", out)
 	if err != nil {
@@ -167,7 +174,7 @@ PY'`, shellQuoteL4(name), shellQuoteL4(remoteDir), shellQuoteL4(image))
 func TestNVIDIADockerHAMiPartitionQuota(t *testing.T) {
 	host := hostEnv("GPUWORKS_NVIDIA_HOST", "gpu3")
 	jump := hostEnv("GPUWORKS_NVIDIA_SSH_JUMP", "")
-	image := hostEnv("GPUWORKS_NVIDIA_L4_IMAGE", "quay.io/gpustack/runner:cuda13.0-vllm0.25.1")
+	image := hostEnv("GPUWORKS_NVIDIA_L4_IMAGE", "gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4")
 	runID := "gpuworks-nvidia-dgpu-l4-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	remoteDir := "/tmp/" + runID
 	name := runID

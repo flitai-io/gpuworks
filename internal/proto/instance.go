@@ -22,6 +22,10 @@ type RequestedFeatures struct {
 	KVDiskTier       bool `json:"kv_disk_tier,omitempty"`
 	PipelineParallel bool `json:"pipeline_parallelism,omitempty"`
 	DataParallel     bool `json:"data_parallelism,omitempty"`
+	// ExternalKVCache: a KV offload backend outside the engine keeps the KV
+	// cache. An agent that predates the field ignores it; the server's
+	// target check is what enforces the backend's vendors.
+	ExternalKVCache bool `json:"external_kv_cache,omitempty"`
 }
 
 // Names returns the stable capability identifiers represented by the snapshot.
@@ -33,7 +37,7 @@ func (f *RequestedFeatures) Names() []string {
 	for _, entry := range []struct {
 		name    string
 		enabled bool
-	}{{"engine_sleep", f.EngineSleep}, {"multi_node", f.MultiNode}, {"prefill_decode_disaggregation", f.PD}, {"kv_disk_tier", f.KVDiskTier}, {"pipeline_parallelism", f.PipelineParallel}, {"data_parallelism", f.DataParallel}} {
+	}{{"engine_sleep", f.EngineSleep}, {"multi_node", f.MultiNode}, {"prefill_decode_disaggregation", f.PD}, {"kv_disk_tier", f.KVDiskTier}, {"pipeline_parallelism", f.PipelineParallel}, {"data_parallelism", f.DataParallel}, {"external_kv_cache", f.ExternalKVCache}} {
 		if entry.enabled {
 			out = append(out, entry.name)
 		}

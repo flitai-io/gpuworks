@@ -93,7 +93,7 @@ a.dashboard-figure:hover, a.dashboard-figure:hover b { color: var(--brand); text
 .dashboard-ring-arc.is-awake, .dashboard-ring-row em.is-awake { stroke: var(--chart-1); background: var(--chart-1); }
 .dashboard-ring-arc.is-asleep, .dashboard-ring-row em.is-asleep { stroke: var(--chart-5); background: var(--chart-5); }
 .dashboard-ring-arc.is-free, .dashboard-ring-row em.is-free { stroke: var(--border); background: var(--border); }
-.dashboard-ring-arc.is-held_outside, .dashboard-ring-row em.is-held_outside { stroke: var(--chart-3); background: var(--chart-3); }
+.dashboard-ring-arc.is-held_outside, .dashboard-ring-row em.is-held_outside { stroke: var(--fg-muted); background: var(--fg-muted); }
 .dashboard-ring-arc.is-unhealthy, .dashboard-ring-row em.is-unhealthy { stroke: var(--danger-strong); background: var(--danger-strong); }
 .dashboard-ring-arc.is-offline, .dashboard-ring-row em.is-offline { stroke: var(--fg-subtle); background: var(--fg-subtle); }
 .dashboard-ring-legend { display: grid; flex: 1; grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, auto); column-gap: 18px; min-width: 0; }

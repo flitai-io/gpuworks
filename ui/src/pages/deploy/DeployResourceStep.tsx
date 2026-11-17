@@ -21,6 +21,8 @@ import type {
   PreflightSummary,
 } from "../../api";
 import { useTranslation } from "react-i18next";
+import { productMessageText } from "../../apiError";
+import { CheckStatusBadge } from "../../checkStatus";
 import { nodeDisplayName } from "../../nodeDisplay";
 import PartitionCapability from "../../components/PartitionCapability";
 import NodePlacementLabels from "../../components/NodePlacementLabels";
@@ -304,11 +306,14 @@ export default function DeployResourceStep({
                         : "resource.preflightFailed",
                     )}
                   </Tag>
-                  {(preflight.checks ?? []).map((check, index) => (
-                    <Tag key={index} color="red">
-                      {check.message || String(check.code ?? "")}
-                    </Tag>
-                  ))}
+                  {(preflight.checks ?? [])
+                    .filter((check) => check.status !== "pass")
+                    .map((check, index) => (
+                      <span key={`${check.id}-${index}`}>
+                        <CheckStatusBadge status={check.status} />{" "}
+                        {productMessageText(tc, { code: check.code, params: check.params, message: check.message ?? "" })}
+                      </span>
+                    ))}
                 </Space>
               )}
             </Col>

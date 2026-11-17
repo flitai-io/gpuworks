@@ -42,19 +42,23 @@ func TestLatestDrainFailureIgnoresRetainedGenerationsWithBoundedReads(t *testing
 	}
 	t.Cleanup(func() { _ = st.DB().Callback().Query().Remove("test:bounded-drain-read") })
 	got, err := st.LatestDrainFailure(dep.ID, node.ID, source.ID)
-	if err != nil || got != "" {
-		t.Fatalf("historical failure leaked: %q, %v", got, err)
+	if err != nil || got != nil {
+		t.Fatalf("historical failure leaked: %+v, %v", got, err)
 	}
 	if rows > 3 {
 		t.Fatalf("read %d rows across retained history", rows)
 	}
-	if err := st.SetInstanceState("latest-follower", proto.InstFailed, "current follower failed"); err != nil {
+	exit := 1
+	if err := st.SetInstanceFailed("latest-follower", proto.RuntimeFailure{Code: proto.ErrorContainerExited, ExitCode: &exit}, "current follower failed"); err != nil {
 		t.Fatal(err)
 	}
 	rows = 0
 	got, err = st.LatestDrainFailure(dep.ID, node.ID, source.ID)
-	if err != nil || got != "current follower failed" {
-		t.Fatalf("current follower hidden: %q, %v", got, err)
+	if err != nil || got == nil || got.Message != "current follower failed" {
+		t.Fatalf("current follower hidden: %+v, %v", got, err)
+	}
+	if f := got.Failure(); f == nil || f.Code != proto.ErrorContainerExited || f.ExitCode == nil || *f.ExitCode != 1 {
+		t.Fatalf("failure reason = %+v", f)
 	}
 	if rows > 3 {
 		t.Fatalf("read %d rows across retained history", rows)

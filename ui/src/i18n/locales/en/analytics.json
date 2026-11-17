@@ -60,7 +60,9 @@
     "deletedDeployment": "Deleted deployment",
     "deploymentId": "Deployment #{{id}}",
     "batch": "Batch ({{user}})",
-    "batchAnonymous": "Batch"
+    "batchAnonymous": "Batch",
+    "evaluation": "Evaluation ({{user}})",
+    "evaluationAnonymous": "Evaluation"
   },
   "usage": {
     "filters": {
@@ -79,7 +81,8 @@
     "source": {
       "api": "API",
       "playground": "Playground",
-      "batch": "Batch"
+      "batch": "Batch",
+      "evaluation": "Evaluation"
     },
     "keyPrefixMissing": "The API token {{prefix}} has no usage in this range, so the list is not filtered. Try a longer range.",
     "cards": {
@@ -147,6 +150,18 @@
     }
   },
   "quality": {
+    "byClass": {
+      "title": "By request priority",
+      "help": "Counted per priority class the gateway ran requests at. A low class can queue for long while a high one keeps the engine saturated, which the totals hide; this splits them. \"Unrecorded\" are requests from before priority classes, whose class is unknown.",
+      "class": "Class",
+      "requests": "Requests",
+      "success": "Success rate",
+      "ttftP50": "TTFT P50",
+      "ttftP95": "TTFT P95",
+      "e2eP50": "E2E P50",
+      "e2eP95": "E2E P95",
+      "unknown": "Unrecorded"
+    },
     "cards": {
       "requests": "Requests",
       "completed": "Completed: {{count}}",
@@ -237,9 +252,9 @@
       "memPerCard": "{{value}} per card",
       "power": "Average total power",
       "powerPerCard": "{{value}} per card",
-      "idle": "Long-idle cards",
+      "idle": "Low-load cards",
       "idleSub": "Average utilization < {{threshold}}% · {{measured}} of {{total}} cards sampled; {{missing}} without utilization samples",
-      "idleTip": "Cards whose average utilization over the range is below {{threshold}}%: both cards given to a deployment that gets little traffic and cards given to none.",
+      "idleTip": "Cards whose average utilization over the range is below {{threshold}}%, by load alone, whoever uses them: cards given to a deployment that gets little traffic, cards given to none, and cards that a program outside the platform holds but barely uses.",
       "idleNeedsDetail": "Counted once filtered to at most {{limit}} cards"
     },
     "chart": {
@@ -265,7 +280,7 @@
         "node": "Node",
         "gpu": "Card"
       },
-      "idle": "Idle",
+      "idle": "Low load",
       "removed": "Removed",
       "removedCount": "{{count}} removed",
       "utilAvg": "Mean utilization",

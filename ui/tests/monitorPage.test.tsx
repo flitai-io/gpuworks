@@ -57,12 +57,13 @@ await i18n.use(initReactI18next).init({
 });
 
 const { MemoryRouter } = await import("react-router-dom");
-const { cleanup, render, screen, waitFor, act } = await import("@testing-library/react");
+const { cleanup, render, screen, waitFor, act, within } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { api } = await import("../src/api.ts");
 const { formatTimeSec } = await import("../src/i18n/datetime.ts");
 const { default: MonitorPage } = await import("../src/pages/monitor/MonitorPage.tsx");
 import type { MonitorOverview } from "../src/api";
+import { sortColumn } from "./helpers/sortColumn";
 
 const overview = JSON.parse(fs.readFileSync(new URL("./fixtures/monitor-overview.json", import.meta.url), "utf8")) as MonitorOverview;
 const originalOverview = api.monitorOverview;
@@ -85,6 +86,8 @@ afterEach(() => {
   api.monitorDistributions = DISTRIBUTIONS;
   distributionCalls.length = 0;
 });
+
+const pressed = (name: string) => screen.getByRole("button", { name, exact: true }).getAttribute("aria-pressed");
 
 function renderPage() {
   return render(
@@ -125,7 +128,7 @@ test("renders signals, the service state counts and the service table on success
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
   assert.ok(screen.getByRole("button", { name: /Ready replicas/ }));
-  assert.ok(screen.getByText("Service state"));
+  assert.ok(screen.getByRole("group", { name: "Service state" }));
   assert.equal(screen.queryByText("Health checks"), null);
   // One link per state present, serving first.
   const counts = ["Running 8", "Starting 1", "Asleep 1", "Failed 1"];
@@ -166,10 +169,48 @@ test("clicking the ready replicas tile narrows the table to the services short o
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
   screen.getByRole("button", { name: /^Ready replicas/ }).click();
-  await waitFor(() => assert.ok(screen.getByText("Clear filter")));
+  await waitFor(() => assert.ok(screen.getByRole("button", { name: "Clear filter: Signal Ready replicas" })));
   assert.ok(screen.getByText("Llama-3.1-70B"));
   assert.ok(screen.getByText("ChatGLM3-6B"));
   assert.equal(screen.queryByText("Qwen3-32B"), null);
+});
+
+test("a signal filter follows each refresh: a service that falls short later joins the table, and All is not shown as the selection", async () => {
+  let qwenShort = false;
+  api.monitorOverview = async () => qwenShort
+    ? { ...overview, services: overview.services.map((s) => s.name === "Qwen3-32B" ? { ...s, replicas: { ...s.replicas, ready: 1 } } : s) }
+    : overview;
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  assert.equal(screen.getByRole("button", { name: /^All 11/ }).getAttribute("aria-pressed"), "true");
+  screen.getByRole("button", { name: /^Ready replicas/ }).click();
+  await waitFor(() => assert.equal(document.querySelector("tbody")?.textContent?.includes("Qwen3-32B"), false, "Qwen3-32B has all its replicas"));
+  assert.notEqual(screen.getByRole("button", { name: /^All 11/ }).getAttribute("aria-pressed"), "true", "the table shows the signal's services, not all");
+  qwenShort = true;
+  screen.getByRole("button", { name: "Refresh data" }).click();
+  await waitFor(() => assert.ok(document.querySelector("tbody")?.textContent?.includes("Qwen3-32B"), "the refreshed overview's short service joins the narrowed table"));
+  assert.ok(screen.getByText("Llama-3.1-70B"));
+  assert.ok(screen.getByRole("button", { name: "Clear filter: Signal Ready replicas" }));
+});
+
+test("state shortcuts replace signal narrowing and signal shortcuts replace state narrowing", async () => {
+  api.monitorOverview = async () => overview;
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  screen.getByRole("button", { name: /^Ready replicas/ }).click();
+  await waitFor(() => assert.ok(screen.queryByText("Qwen3-32B") === null));
+  screen.getByRole("button", { name: "Running 8", exact: true }).click();
+  await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  assert.equal(screen.queryByText("Llama-3.1-70B"), null);
+  assert.equal(screen.queryByRole("button", { name: "Clear filter: Signal Ready replicas" }), null);
+  screen.getByRole("button", { name: /^Ready replicas/ }).click();
+  await waitFor(() => assert.ok(screen.getByText("Llama-3.1-70B")));
+  assert.ok(screen.getByText("ChatGLM3-6B"));
+  assert.equal(screen.queryByText("Qwen3-32B"), null);
+  assert.equal(screen.queryByRole("button", { name: "Clear filter: State Running" }), null);
+  assert.equal(pressed("Running 8"), "false");
+  // The signal narrows the table, so "All" is not the selection (review on !1169).
+  assert.equal(pressed("All 11"), "false");
 });
 
 test("clicking a service state count narrows the table to the services in that state", async () => {
@@ -177,11 +218,14 @@ test("clicking a service state count narrows the table to the services in that s
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
   screen.getByRole("button", { name: "Starting 1" }).click();
-  await waitFor(() => assert.ok(screen.getByText("Clear filter")));
+  await waitFor(() => assert.equal(pressed("Starting 1"), "true"));
   assert.ok(screen.getByText("Llama-3.1-70B"));
   assert.equal(screen.queryByText("Qwen3-32B"), null);
-  screen.getByText("Clear filter").click();
+  // The pressed count is the filter's only mark: no "State: Starting" chip repeats it.
+  assert.equal(screen.queryByRole("button", { name: "Clear filter: State Starting" }), null);
+  screen.getByRole("button", { name: "All 11" }).click();
   await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  assert.equal(pressed("Starting 1"), "false");
 });
 
 test("a fleet total signal has no per-service verdict behind it: clicking it clears any filter instead of narrowing", async () => {
@@ -189,9 +233,11 @@ test("a fleet total signal has no per-service verdict behind it: clicking it cle
   renderPage();
   await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
   screen.getByRole("button", { name: "Starting 1" }).click();
-  await waitFor(() => assert.ok(screen.getByText("Clear filter")));
+  await waitFor(() => assert.equal(pressed("Starting 1"), "true"));
   screen.getByRole("button", { name: /^Waiting p95/ }).click();
-  await waitFor(() => assert.equal(screen.queryByText("Clear filter") === null, true));
+  await waitFor(() => assert.equal(pressed("Starting 1"), "false"));
+  assert.equal(pressed("All 11"), "true");
+  assert.equal(screen.queryByRole("button", { name: /^Clear filter/ }), null);
   assert.ok(screen.getByText("Qwen3-32B"));
   assert.ok(screen.getByText("Qwen2.5-7B-Instruct"));
 });
@@ -209,7 +255,7 @@ test("an uncollected signal tile is not clickable and is marked aria-disabled", 
   assert.equal(tpotTile.getAttribute("aria-disabled"), "true");
   tpotTile.click();
   // Clicking must not produce a filter chip - there is nothing to filter by.
-  assert.equal(screen.queryByText("Clear filter"), null);
+  assert.equal(screen.queryByRole("button", { name: /^Clear filter/ }), null);
 });
 
 test("the request_rate signal is collected:false in the fixture and renders the muted not-collected state", async () => {
@@ -341,7 +387,7 @@ test("changing range preserves the selected service filter", async () => {
   await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
   await userEvent.setup().click(screen.getByRole("button", { name: "Starting 1" }));
   await userEvent.setup().click(screen.getByText("24h"));
-  await waitFor(() => assert.ok(screen.getByText("Clear filter")));
+  await waitFor(() => assert.equal(pressed("Starting 1"), "true"));
   assert.ok(screen.getByText("Llama-3.1-70B"));
   assert.equal(screen.queryByText("Qwen3-32B"), null);
 });
@@ -360,4 +406,82 @@ test("changing range preserves the open metric explorer and its aggregation", as
   await user.click(screen.getByText("24h"));
   await waitFor(() => assert.ok(screen.getByRole("combobox", { name: "Aggregation" })));
   assert.ok(screen.getByText(/fn=max/));
+});
+
+test("the state summary shows the server's state_counts, even where they disagree with the rows", async () => {
+  api.monitorOverview = async () => ({ ...overview, state_counts: [
+    { state: "running", count: 40 }, { state: "starting", count: 0 }, { state: "asleep", count: 0 },
+    { state: "offline", count: 3 }, { state: "failed", count: 2 }, { state: "stopped", count: 5 },
+  ] });
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  const summary = screen.getByRole("group", { name: "Service state" });
+  assert.deepEqual(within(summary).getAllByRole("button").map((button) => button.textContent), ["All 50", "Running 40", "Offline 3", "Failed 2", "Stopped 5"]);
+  assert.equal(within(summary).getByRole("button", { name: "Offline 3" }).querySelector('[data-slot="badge"]')?.getAttribute("data-status"), "warning");
+  assert.equal(within(summary).getByRole("button", { name: "Failed 2" }).querySelector('[data-slot="badge"]')?.getAttribute("data-status"), "danger");
+});
+
+test("a signal narrowing is a chip in the table toolbar, with no separate line above the table, and clears from there", async () => {
+  api.monitorOverview = async () => overview;
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /^Ready replicas/ }));
+  const chip = await screen.findByRole("button", { name: "Clear filter: Signal Ready replicas" });
+  const toolbar = screen.getByRole("heading", { name: "Inference Services" }).closest(".resource-table-toolbar") as HTMLElement;
+  assert.ok(within(toolbar).getByRole("group", { name: "Filtered" }).contains(chip));
+  assert.equal(screen.queryByText(/filtered service/), null);
+  // The footer total is what is visible: the two services short of replicas.
+  assert.ok(screen.getByText("2 items"));
+  await user.click(chip);
+  await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  assert.equal(screen.queryByRole("group", { name: "Filtered" }), null);
+  assert.ok(screen.getByText("11 items"));
+});
+
+test("a state filter picked from the column funnel replaces a signal narrowing too", async () => {
+  api.monitorOverview = async () => overview;
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("Qwen3-32B")));
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /^Ready replicas/ }));
+  await screen.findByRole("button", { name: "Clear filter: Signal Ready replicas" });
+  await user.click(screen.getByRole("button", { name: "Filter by State" }));
+  await user.click(await screen.findByRole("checkbox", { name: /Running/ }));
+  await user.keyboard("{Escape}");
+  await waitFor(() => assert.equal(pressed("Running 8"), "true"));
+  assert.equal(screen.queryByRole("button", { name: "Clear filter: Signal Ready replicas" }), null);
+  assert.ok(screen.getByText("Qwen3-32B"));
+  assert.ok(screen.getByText("8 items"));
+});
+
+test("clicking a signal tile keeps the table's sort, page and other column filters", async () => {
+  // 30 services, the first 25 short of a replica, so the narrowed list still has a second page.
+  const many = Array.from({ length: 30 }, (_, i) => ({
+    ...overview.services[0], deployment_id: 5000 + i, name: `svc-${String(i).padStart(2, "0")}`,
+    replicas: { ready: i < 25 ? 0 : 1, desired: 1 },
+  }));
+  api.monitorOverview = async () => ({ ...overview, services: many });
+  renderPage();
+  await waitFor(() => assert.ok(screen.getByText("svc-00")));
+  const user = userEvent.setup();
+  await sortColumn("Service name", "Descending");
+  await waitFor(() => assert.ok(screen.getByText("svc-29")));
+  await user.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => assert.ok(screen.getByText("Page 2 of 2")));
+  // A health filter every row passes, so it narrows nothing but must survive.
+  await user.click(screen.getByRole("button", { name: /^Filter by health/i }));
+  await user.click(await screen.findByRole("checkbox", { name: /Healthy/ }));
+  await user.keyboard("{Escape}");
+  const healthChip = await screen.findByRole("button", { name: /^Clear filter: health Healthy/i });
+  await user.click(screen.getByRole("button", { name: "Next page" }));
+  await waitFor(() => assert.ok(screen.getByText("Page 2 of 2")));
+  await user.click(screen.getByRole("button", { name: /^Ready replicas/ }));
+  await screen.findByRole("button", { name: "Clear filter: Signal Ready replicas" });
+  assert.ok(healthChip.isConnected, "the table was not remounted: the health filter chip is the same element");
+  // Still descending and on page 2: 25 narrowed rows, page 2 holds svc-04 .. svc-00.
+  assert.ok(screen.getByText("Page 2 of 2"));
+  assert.equal(screen.getByRole("columnheader", { name: "Service name" }).getAttribute("aria-sort"), "descending");
+  const names = screen.getAllByRole("link").map((link) => link.textContent).filter((name) => name?.startsWith("svc-"));
+  assert.deepEqual(names, ["svc-04", "svc-03", "svc-02", "svc-01", "svc-00"]);
 });

@@ -43,7 +43,7 @@
     "    sock.bind((\"\", args.port))",
     "OSError: [Errno 98] Address already in use"
   ],
-  "expect_signature": "port_in_use",
+  "expect_signature": "PORT_IN_USE",
   "expect_keywords": [
     [
       "lsof",

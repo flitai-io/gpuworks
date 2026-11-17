@@ -90,9 +90,11 @@ func boundUpstreamError(resp *http.Response) error {
 			text = boundedDiagnostic(string(raw))
 		}
 	}
-	encoded, _ := json.Marshal(map[string]any{"error": map[string]string{"message": text, "type": "upstream_error"}})
+	// The engine's own text, bounded, under the gateway's code for an
+	// upstream refusal; its status stays the engine's.
+	encoded := apiErrorBody(ErrorUpstreamRejected, map[string]any{"detail": text}, resp.StatusCode)
 	if len(encoded) > 4096 {
-		encoded = []byte(`{"error":{"message":"The upstream error was too large to display.","type":"upstream_error"}}`)
+		encoded = apiErrorBody(ErrorUpstreamRejected, map[string]any{"detail": "The upstream error was too large to display."}, resp.StatusCode)
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(encoded))
 	resp.ContentLength = int64(len(encoded))

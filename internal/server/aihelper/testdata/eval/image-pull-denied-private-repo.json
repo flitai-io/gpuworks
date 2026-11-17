@@ -37,7 +37,7 @@
     "[pulling] image source failed: myorg/vllm-custom:v0.11.0-patched: docker pull: exit status 1: Error response from daemon: pull access denied for myorg/vllm-custom, repository does not exist or may require 'docker login': denied: requested access to the resource is denied",
     "[failed] all image sources failed: registry.local:5000/myorg/vllm-custom:v0.11.0-patched: docker pull: exit status 1: Error response from daemon: manifest for registry.local:5000/myorg/vllm-custom:v0.11.0-patched not found: manifest unknown: manifest unknown | myorg/vllm-custom:v0.11.0-patched: docker pull: exit status 1: Error response from daemon: pull access denied for myorg/vllm-custom, repository does not exist or may require 'docker login': denied: requested access to the resource is denied"
   ],
-  "expect_signature": "image_pull_denied",
+  "expect_signature": "IMAGE_PULL_DENIED",
   "expect_keywords": [
     [
       "docker login",

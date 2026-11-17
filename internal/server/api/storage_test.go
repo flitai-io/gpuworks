@@ -27,6 +27,7 @@ func TestStorageUsageAggregatesManagedBytesAndDiskWatermark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = st.Close() })
 	node, err := st.RegisterNode("node-storage", store.HashToken("t"), "storage")
 	if err != nil {
 		t.Fatal(err)
@@ -322,8 +323,9 @@ func TestRescanReconcilesSharedModelFiles(t *testing.T) {
 				p := params.(proto.FSStatParams).Path
 				stats = append(stats, p)
 				if p == "/mnt/gpuworks/team-nfs/Qwen/Qwen3-8B" {
-					// The agent's error text for a missing path, as os.Stat words it.
-					return nil, fmt.Errorf("stat %s: no such file or directory", p)
+					// The agent's coded refusal for a missing path, with the
+					// sentence os.Stat writes.
+					return nil, &proto.RPCError{Code: proto.ErrorPathNotFound, Message: fmt.Sprintf("stat %s: no such file or directory", p)}
 				}
 				return json.Marshal(proto.FSStatResult{Path: p, Dir: true})
 			}

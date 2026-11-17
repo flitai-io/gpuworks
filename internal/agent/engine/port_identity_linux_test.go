@@ -20,7 +20,7 @@ func TestCheckEnginePortsRefusesALoopbackOnlyListener(t *testing.T) {
 	defer busy.Close()
 	port := busy.Addr().(*net.TCPAddr).Port
 	err = checkEnginePorts(proto.InstanceDesiredState{APIPort: port, Ports: []int{port}})
-	if err == nil || !strings.HasPrefix(err.Error(), EnginePortRefused) {
+	if err == nil || !strings.HasPrefix(err.Error(), proto.ErrorEnginePortRefused) {
 		t.Fatalf("loopback listener: err = %v", err)
 	}
 }

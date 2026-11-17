@@ -24,7 +24,7 @@ func TestZStackCloudInstallPrechecksTheHostItInstalls(t *testing.T) {
 		// The Cloud fixture refuses the platform-key authorization (HTTP 503),
 		// which the precheck reports as a warning next to its own rows.
 		{"reachable", false, "warn"},
-		{"unreachable", true, "error"},
+		{"unreachable", true, "fail"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cloud := cloudInventoryFixture(t)
@@ -32,7 +32,7 @@ func TestZStackCloudInstallPrechecksTheHostItInstalls(t *testing.T) {
 			var installs atomic.Int32
 			env := newCloudEnvPrechecking(t, installerFunc(func(context.Context, provision.SSHInstallRequest) (provision.SSHInstallReport, error) {
 				installs.Add(1)
-				return provision.SSHInstallReport{Checks: []provision.CheckResult{{Name: "Agent process", Status: "ok"}}}, nil
+				return provision.SSHInstallReport{Checks: []provision.CheckResult{{ID: "agent_process", Status: "pass"}}}, nil
 			}), precheck)
 			path := addedProvider(t, env, cloud.URL)
 			requestJSON(t, env, "POST", path+"/sync", `{}`, 200)
@@ -58,19 +58,19 @@ func TestZStackCloudInstallPrechecksTheHostItInstalls(t *testing.T) {
 			}
 			var row *provision.CheckResult
 			for i := range result.Checks {
-				if result.Checks[i].Name == "precheck" {
+				if result.Checks[i].ID == "precheck" {
 					row = &result.Checks[i]
 				}
 			}
 			if row == nil || row.Status != tc.want {
 				t.Fatalf("precheck row = %+v, want status %s in %s", row, tc.want, raw)
 			}
-			if tc.unreachable && !strings.Contains(row.Detail, "connection refused") {
-				t.Fatalf("precheck detail %q does not say why", row.Detail)
+			if tc.unreachable && !strings.Contains(checkText(*row), "connection refused") {
+				t.Fatalf("precheck detail %q does not say why", checkText(*row))
 			}
 			authenticated := false
 			for _, check := range result.PrecheckDetails {
-				authenticated = authenticated || (check.Name == "SSH authentication" && check.Status == "ok")
+				authenticated = authenticated || (check.ID == "ssh_auth" && check.Status == "pass")
 			}
 			if authenticated == tc.unreachable {
 				t.Fatalf("precheck details %+v: the SSH row must come from the precheck exactly when the host answered", result.PrecheckDetails)

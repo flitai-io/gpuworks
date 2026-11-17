@@ -98,3 +98,5 @@ runtime logs and client-side PDF parsing logs remain in their respective environ
 
 See the [MinerU model card](https://huggingface.co/opendatalab/MinerU2.5-2509-1.2B)
 and [GPUStack remote backend integration](https://github.com/gpustack/community-inference-backends/tree/main/mineru).
+
+<!-- translation-source-sha256: d15ff3f71b23cc9eb22ae3c970eb5cbfcb743fdd644d5dd10e8a0f179d03228c -->

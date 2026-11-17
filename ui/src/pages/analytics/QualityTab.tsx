@@ -10,6 +10,7 @@ import EChart from "./EChart";
 import { useExportModel } from "./exportContext";
 import { DASH, fmtFixed, fmtInt, fmtPct, fmtSeconds, ratio } from "./format";
 import { DeploymentCell } from "./names";
+import QualityClassTable from "./QualityClassTable";
 import QueryState from "./QueryState";
 import RateBar from "./RateBar";
 import StatCards, { type StatItem } from "./StatCards";
@@ -92,7 +93,7 @@ export default function QualityTab({ from, to, granularity, deployment, tz, relo
       { key: "completed", color: SERIES_COLORS.ok },
       { key: "length", color: SERIES_COLORS.miss },
       { key: "client_closed", color: SERIES_COLORS.grey },
-      { key: "interrupted", color: SERIES_COLORS.thinking },
+      { key: "interrupted", color: SERIES_COLORS.interrupted },
       { key: "error", color: SERIES_COLORS.err },
     ] as const;
     const results = stackedBarOption({
@@ -173,6 +174,7 @@ export default function QualityTab({ from, to, granularity, deployment, tz, relo
                 )}
               />
             </Card>
+            <QualityClassTable rows={d.classes ?? []} />
             <BackfillNote range={d.range} kind="quality" />
             <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "4px 0 0" }}>{t("quality.foot")} {t("zoneNote", { zone: d.range.time_zone || tz })}</Typography.Paragraph>
           </>

@@ -3,6 +3,8 @@ package accelerator
 import (
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // Each vendor gets the checks that exist for its cards, in the catalog's
@@ -33,19 +35,19 @@ func TestCardChecksPerVendor(t *testing.T) {
 	}
 }
 
-func TestCheckStateFollowsTheCodesLevel(t *testing.T) {
+func TestCheckStatusFollowsTheCodesLevel(t *testing.T) {
 	for code, want := range map[string]string{
-		"":                        CheckPass,
-		HealthMemoryErrorHistory:  CheckPass,
-		HealthPCIeLinkDegraded:    CheckWarn,
-		HealthRuntimeUnusable:     CheckFail,
-		"some_code_from_tomorrow": CheckFail,
+		"":                        proto.CheckPass,
+		HealthMemoryErrorHistory:  proto.CheckPass,
+		HealthPCIeLinkDegraded:    proto.CheckWarn,
+		HealthRuntimeUnusable:     proto.CheckFail,
+		"SOME_CODE_FROM_TOMORROW": proto.CheckFail,
 	} {
-		if got := CheckStateFor(code); got != want {
+		if got := CheckStatusFor(code); got != want {
 			t.Errorf("%q = %s, want %s", code, got, want)
 		}
 	}
-	if CheckProblem(CheckSkip) || CheckProblem(CheckPass) || !CheckProblem(CheckWarn) || !CheckProblem(CheckFail) {
+	if CheckProblem(proto.CheckSkip) || CheckProblem(proto.CheckPass) || !CheckProblem(proto.CheckWarn) || !CheckProblem(proto.CheckFail) {
 		t.Error("CheckProblem")
 	}
 }

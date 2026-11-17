@@ -273,9 +273,16 @@ func TestExplicitRefusalAndRollbackAreNotConfusedWithUnconfirmedTransport(t *tes
 	r := f.create(t, "rollback", nil, 0)
 	f.tick(t)
 	f.tr.set("n1", Connection{SessionID: "rolled-back-session", Version: "old", Ready: false})
+	// The words alone, from a session that is not the baseline, are not a
+	// rollback: the hub turns an agent's report into the code.
 	f.s.Observe(Observation{NodeUUID: "n1", SessionID: "rolled-back-session", Version: "old", State: "failed", Error: "rolled back: new binary never registered", At: f.now})
 	f.tick(t)
-	if i := f.item(t, r.Record.ID, "n1"); i.Phase != "failed" || i.Reason != "agent_failed" {
+	if i := f.item(t, r.Record.ID, "n1"); i.Phase == "failed" {
+		t.Fatalf("an uncoded observation was read as a rollback: %+v", i)
+	}
+	f.s.Observe(Observation{NodeUUID: "n1", SessionID: "rolled-back-session", Version: "old", State: "failed", Error: "rolled back: new binary never registered", Code: proto.ErrorAgentUpgradeRolledBack, At: f.now})
+	f.tick(t)
+	if i := f.item(t, r.Record.ID, "n1"); i.Phase != "failed" || i.Reason != "rolled_back" || i.Error != "rolled back: new binary never registered" {
 		t.Fatalf("rollback result was lost before first heartbeat: %+v", i)
 	}
 }

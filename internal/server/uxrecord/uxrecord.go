@@ -35,15 +35,21 @@ const (
 	// SourceBatch is a batch's request, sent by the batch executor for a
 	// batch created through /v1/batches or the console.
 	SourceBatch Source = 2
+	// SourceEvaluation is a server-origin evaluation's request, which goes
+	// through the playground's entry and says it is one
+	// (X-GPUWorks-Benchmark-Run).
+	SourceEvaluation Source = 3
 )
 
-// String is the source's wire name: api, playground or batch.
+// String is the source's wire name: api, playground, batch or evaluation.
 func (s Source) String() string {
 	switch s {
 	case SourcePlayground:
 		return "playground"
 	case SourceBatch:
 		return "batch"
+	case SourceEvaluation:
+		return "evaluation"
 	}
 	return "api"
 }
@@ -82,6 +88,10 @@ func (o Outcome) String() string {
 type Request struct {
 	// ID is the gateway request id (the X-Request-ID the client saw).
 	ID string
+	// PriorityClass is the priority class the gateway ran the request at
+	// (the class's name when it ran; "" for a request from before classes,
+	// or one refused before the gateway decided it).
+	PriorityClass string
 	// Trace is the gateway's span of the request (W3C trace context, ADR
 	// 0046). The request store keeps its trace id; the span id, the
 	// caller's span, the sampling decision and the tracestate only travel
@@ -154,16 +164,7 @@ type Request struct {
 
 // FirstTokenMS is the time to the first generated token of any kind, or
 // Unknown.
-func (r *Request) FirstTokenMS() int32 {
-	switch {
-	case r.FirstThinkMS >= 0 && r.FirstAnswerMS >= 0:
-		return min(r.FirstThinkMS, r.FirstAnswerMS)
-	case r.FirstThinkMS >= 0:
-		return r.FirstThinkMS
-	default:
-		return r.FirstAnswerMS
-	}
-}
+func (r *Request) FirstTokenMS() int32 { return FirstTokenOf(r.FirstThinkMS, r.FirstAnswerMS) }
 
 // UncachedTokens is the prompt the engine had to compute, or Unknown when the
 // cache figure or usage is missing.

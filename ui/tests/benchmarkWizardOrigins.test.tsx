@@ -207,3 +207,20 @@ test("selected-origin polling makes one detail request per tick and stops when c
 	assert.ok(clearIntervalSpy.mock.calls.some((call) => call.arguments[0] === pollTimer), "closing clears the polling timer");
 	assert.deepEqual(detailCalls, [7, 7, 7], "closing does not fetch another deployment");
 });
+
+test("a request priority applies from the server only: a node origin calls the instance directly", async () => {
+	mock.method(api, "priorityClasses", async () => ({
+		min_value: -100, max_value: 100, policies: [], default_policy: "", ceiling_policies: [],
+		items: [{ name: "normal", display_name: "", description: "", value: 0, builtin: true, default: true, deletable: false, created_at: "" }],
+	}));
+	render(wizard());
+	const priority = await screen.findByRole("combobox", { name: locale.wizard.priorityClass });
+	const disabled = () => !!priority.closest(".ant-select")?.classList.contains("ant-select-disabled");
+	await waitFor(() => assert.equal(disabled(), false));
+	screen.getByText(locale.wizard.priorityClassHelp);
+	const user = await originChoices();
+	await screen.findByText("Target node · leader");
+	await user.click(screen.getAllByText("Target node · leader").at(-1)!);
+	await screen.findByText(locale.wizard.priorityClassGateway);
+	assert.equal(disabled(), true);
+});

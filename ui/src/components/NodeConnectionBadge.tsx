@@ -4,10 +4,11 @@ import { useTranslation } from "react-i18next";
 
 import type { Node } from "../api";
 import { nodeConnection } from "../nodes/connectionState";
+import { recoveryErrorText } from "../nodes/recoveryError";
 import { colors } from "../theme/tokens";
 import { formatTime } from "../i18n/datetime";
 
-type ConnectionNode = Pick<Node, "state" | "recovery_phase" | "last_recovery_error" | "last_seen_at" | "last_probe_at" | "recovery_attempts">;
+type ConnectionNode = Pick<Node, "state" | "recovery_phase" | "last_recovery_error" | "last_recovery_code" | "last_seen_at" | "last_probe_at" | "recovery_attempts">;
 
 /**
  * A node's connection, shown the same way wherever it appears. Recovery is
@@ -18,7 +19,7 @@ export function NodeConnectionBadge({ node }: { node: ConnectionNode }) {
   const { t } = useTranslation("nodes");
   const connection = nodeConnection(node);
   const note = connection.noteKey ? t(connection.noteKey) : "";
-  const detail = [note, node.last_recovery_error].filter(Boolean).join("\n");
+  const detail = [note, recoveryErrorText(t, node.last_recovery_code, node.last_recovery_error)].filter(Boolean).join("\n");
   return (
     <Tooltip trigger={["hover", "focus"]} title={<ConnectionHistory node={node} detail={detail} />}>
       <span tabIndex={0} aria-label={t(connection.labelKey) + " · " + (detail || t("connectionDiagnostics.historyTitle"))}>

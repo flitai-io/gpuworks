@@ -12,6 +12,8 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/agentconf"
 	"gpuworks.ai/gpuworks/internal/launchd"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // manualAgentLine is how `ps axww` listed an agent started by hand on the PPU
@@ -26,30 +28,31 @@ func TestExistingAgentCheckWarnsBeforeAnInstallReplacesAnAgent(t *testing.T) {
 		name   string
 		host   *unitHost
 		status string
+		code   string
 		detail string
 	}{
-		{name: "clean-host", host: &unitHost{}, status: "ok", detail: "no gpuworks agent on the host"},
+		{name: "clean-host", host: &unitHost{}, status: "pass", code: messages.CheckExistingAgentNone, detail: "no gpuworks agent on the host"},
 		{name: "own-unit", host: &unitHost{unitServer: self + "/", active: true, processes: []string{ownUnitLine}},
-			status: "warn", detail: "the gpuworks-agent service on the host already runs for this server; installing replaces it and the node it belongs to goes offline"},
+			status: "warn", code: messages.CheckExistingAgentThisServer, detail: "the gpuworks-agent service on the host already runs for this server; installing replaces it and the node it belongs to goes offline"},
 		{name: "another-servers-unit", host: &unitHost{unitServer: "http://192.0.2.156:8800", active: true},
-			status: "warn", detail: "the gpuworks-agent service on the host belongs to another server (http://192.0.2.156:8800); installing replaces it and that server loses this host"},
+			status: "warn", code: messages.CheckExistingAgentOtherServer, detail: "the gpuworks-agent service on the host belongs to another server (http://192.0.2.156:8800); installing replaces it and that server loses this host"},
 		{name: "another-servers-stopped-unit", host: &unitHost{unitServer: "http://192.0.2.156:8800"},
-			status: "warn", detail: "the gpuworks-agent service on the host belongs to another server (http://192.0.2.156:8800); installing replaces it and that server loses this host"},
+			status: "warn", code: messages.CheckExistingAgentOtherServer, detail: "the gpuworks-agent service on the host belongs to another server (http://192.0.2.156:8800); installing replaces it and that server loses this host"},
 		{name: "agent-started-by-hand", host: &unitHost{processes: []string{manualAgentLine}},
-			status: "warn", detail: "agents for other servers (http://192.0.2.60:8800) run outside the gpuworks-agent service; installing leaves them running"},
+			status: "warn", code: messages.CheckExistingAgentOthers, detail: "agents for other servers (http://192.0.2.60:8800) run outside the gpuworks-agent service; installing leaves them running"},
 		// What 192.0.2.210 looked like to its own server on 2026-10-14.
 		{name: "own-unit-and-another-by-hand", host: &unitHost{unitServer: self, active: true, processes: []string{manualAgentLine, ownUnitLine}},
-			status: "warn", detail: "the gpuworks-agent service on the host already runs for this server; installing replaces it and the node it belongs to goes offline; " +
+			status: "warn", code: messages.CheckExistingAgentThisServer, detail: "the gpuworks-agent service on the host already runs for this server; installing replaces it and the node it belongs to goes offline; " +
 				"agents for other servers (http://192.0.2.60:8800) run outside the gpuworks-agent service; installing leaves them running"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			host, port := startFakeSSHServer(t, "root", "pw", tc.host.handler(t))
 			got := existingAgentCheck(t.Context(), dialFakeSSH(t, host, port, "root", "pw"), self)
-			if got.Name != checkExistingAgent || got.Status != tc.status || got.Detail != tc.detail {
+			if got.ID != CheckIDExistingAgent || got.Status != tc.status || got.Code != tc.code || got.text() != tc.detail {
 				t.Fatalf("check = %+v, want status %q detail containing %q", got, tc.status, tc.detail)
 			}
-			if strings.Contains(got.Detail, "86daa49d") || strings.Contains(got.Detail, "9a7fc99f") {
-				t.Fatalf("check leaked a node token: %q", got.Detail)
+			if strings.Contains(got.text(), "86daa49d") || strings.Contains(got.text(), "9a7fc99f") {
+				t.Fatalf("check leaked a node token: %q", got.text())
 			}
 		})
 	}
@@ -91,7 +94,7 @@ func TestGuardedInstallStopsBeforeChangingAHostWithAnAgent(t *testing.T) {
 	}
 	found := false
 	for _, check := range report.Checks {
-		if check.Name == checkExistingAgent && check.Status == "warn" && strings.Contains(check.Detail, "replaced on request") {
+		if check.ID == CheckIDExistingAgent && check.Status == "warn" && strings.Contains(check.text(), "replaced on request") {
 			found = true
 		}
 	}
@@ -216,7 +219,7 @@ func TestGuardedNohupInstallAsksOnlyAboutItsOwnDirectory(t *testing.T) {
 		t.Fatalf("install beside the unit err = %v", err)
 	}
 	for _, check := range report.Checks {
-		if check.Name == checkExistingAgent {
+		if check.ID == CheckIDExistingAgent {
 			t.Fatalf("an install that replaces nothing reported a replaced agent: %+v", check)
 		}
 	}

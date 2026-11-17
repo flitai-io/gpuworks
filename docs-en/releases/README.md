@@ -23,3 +23,5 @@ The "Upgrade notes" section of each version page lists behavior changes to check
 The one-line installer `get.sh` picks the fastest of `dl.gpuworks.ai`, Alibaba Cloud OSS, and Huawei Cloud OBS and checks the archive against `SHA256SUMS` before installing;
 upgrades from the console read the ed25519-signed release index. For a manual download, archives live under `https://dl.gpuworks.ai/releases/<version>/`,
 and `SHA256SUMS` in the same directory lists the checksum of each platform's archive. The download sources keep every release's archives permanently and the most recent 30 nightly builds.
+
+<!-- translation-source-sha256: c8562b5389ce2818fe02f0867905ff7b13e09c85d5028b6f39a0b8a5d8d7402d -->

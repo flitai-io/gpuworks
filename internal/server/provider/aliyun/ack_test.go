@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"gpuworks.ai/gpuworks/internal/server/provider"
 )
 
 // ackClusterJSON is shaped like a DescribeClustersV1 item (2026-10-22, fields
@@ -101,6 +103,7 @@ func TestListClustersFindsGPUNodePoolsAndSkipsVirtualNodeClusters(t *testing.T) 
 		ackClusterJSON("c-acs", "acs", "cn-hangzhou", "running", "Acs", ""),
 		ackClusterJSON("c-new", "ack-new", "cn-beijing", "initial", "Default", ""),
 	}
+	page1[1]["cluster_type"] = "Kubernetes" // a dedicated cluster, whose profile is still Default
 	pools := map[string][]map[string]any{
 		"c-gpu": {
 			ackNodePoolJSON("np-cpu", "default", []string{"ecs.g7.xlarge"}, 2),
@@ -124,6 +127,9 @@ func TestListClustersFindsGPUNodePoolsAndSkipsVirtualNodeClusters(t *testing.T) 
 		t.Fatalf("clusters = %v", names)
 	}
 	gpu, private, fresh := got[2], got[1], got[0]
+	if gpu.Type != provider.ClusterTypeACKManaged || private.Type != provider.ClusterTypeACKDedicated {
+		t.Fatalf("cluster types = %q, %q", gpu.Type, private.Type)
+	}
 	if !gpu.Running || !gpu.PublicAPI || gpu.Version != "1.35.7-aliyun.1" || len(gpu.GPUPools) != 2 {
 		t.Fatalf("gpu cluster = %+v", gpu)
 	}
@@ -206,4 +212,22 @@ func decodeInstance(t *testing.T, raw map[string]any) apiInstance {
 		t.Fatal(err)
 	}
 	return inst
+}
+
+func TestACKClusterTypeNamesTheProduct(t *testing.T) {
+	for _, c := range []struct{ clusterType, profile, want string }{
+		{"ManagedKubernetes", "Default", provider.ClusterTypeACKManaged},
+		{"ManagedKubernetes", "", provider.ClusterTypeACKManaged},
+		{"ManagedKubernetes", "Edge", provider.ClusterTypeACKEdge},
+		{"ManagedKubernetes", "Lingjun", provider.ClusterTypeACKLingjun},
+		{"Kubernetes", "Default", provider.ClusterTypeACKDedicated},
+		{"ExternalKubernetes", "Default", provider.ClusterTypeACKRegistered},
+		// A product ACK adds later is left unnamed rather than called something it is not.
+		{"ManagedKubernetes", "Quantum", ""},
+		{"", "", ""},
+	} {
+		if got := (ackCluster{ClusterType: c.clusterType, Profile: c.profile}).clusterType(); got != c.want {
+			t.Errorf("cluster_type %q profile %q = %q, want %q", c.clusterType, c.profile, got, c.want)
+		}
+	}
 }

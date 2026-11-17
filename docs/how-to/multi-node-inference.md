@@ -37,6 +37,11 @@
 6. 在部署详情等待全部 rank 就绪，再通过该部署的服务名在 Playground 或 `/v1` 发起一次请求。
    只看到 rank 0 创建或开始加载不代表整个副本已经可用；失败时查看对应 rank 的事件和日志。
 
+需要手写启动命令时，在命令预览点「编辑命令文本」：编辑框从服务端生成的脚本开始，所有 rank 共用这一段脚本，
+`${GPUWORKS_NODE_RANK}`、`${GPUWORKS_HEADLESS}`、`${GPUWORKS_MASTER_ADDR}` 等变量在每个 rank 启动前替换成该 rank 的值，
+编辑框下方逐 rank 展示替换后的结果。命令必须引用 `${GPUWORKS_NODE_RANK}` 或 `${GPUWORKS_HEADLESS}`，否则评估与创建返回
+`MANUAL_COMMAND_RANK_BLIND`。详见[多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。
+
 如果部署一直等待节点，查看时间线中的 `DEPLOYMENT_UNSCHEDULABLE`：它列出放不下的 rank、节点和原因。
 一个副本的全部 rank 必须同时满足模型、镜像、端口、GPU 与显存条件，才会一起创建；
 不会先让 leader 占卡，也不消耗副本重试次数。按原因补齐资源后平台自动继续。PD 部署的多机单元同样如此。

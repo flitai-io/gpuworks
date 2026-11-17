@@ -71,9 +71,9 @@ func (c *Controller) syncModelWithin(ctx context.Context, dstNode *store.Node, m
 	}
 	key := store.ModelFileKey(dstMF.ID)
 	if dstMF.State == proto.MFSyncing {
-		c.syncMu.Lock()
-		_, active := c.modelSyncs[key]
-		c.syncMu.Unlock()
+		c.syncs.mu.Lock()
+		_, active := c.syncs.byKey[key]
+		c.syncs.mu.Unlock()
 		if active {
 			return true, nil
 		}
@@ -110,9 +110,9 @@ func (c *Controller) syncModelWithin(ctx context.Context, dstNode *store.Node, m
 		if err != nil {
 			continue
 		}
-		c.syncMu.Lock()
-		if _, active := c.modelSyncs[key]; active {
-			c.syncMu.Unlock()
+		c.syncs.mu.Lock()
+		if _, active := c.syncs.byKey[key]; active {
+			c.syncs.mu.Unlock()
 			return true, nil
 		}
 		transferID := dstMF.TransferID
@@ -121,7 +121,7 @@ func (c *Controller) syncModelWithin(ctx context.Context, dstNode *store.Node, m
 		}
 		copyCtx, cancel := context.WithCancel(ctx)
 		run := &modelSyncRun{transferID: transferID, cancel: cancel, automatic: automatic}
-		c.modelSyncs[key] = run
+		c.syncs.put(key, run)
 		var beginErr error
 		if dstMF.State == proto.MFSyncing && dstMF.TransferErrorCode == messages.ErrorPeerRelayBusy {
 			var changed bool
@@ -133,12 +133,12 @@ func (c *Controller) syncModelWithin(ctx context.Context, dstNode *store.Node, m
 			beginErr = c.store.BeginModelSync(refOf(dstMF), src.node.ID, transferID, src.sizeBytes, copyRateLimit(dstMF.RateLimit, src.rateLimitKiB))
 		}
 		if beginErr != nil {
-			delete(c.modelSyncs, key)
-			c.syncMu.Unlock()
+			delete(c.syncs.byKey, key)
+			c.syncs.mu.Unlock()
 			run.cancel()
 			return true, nil //nolint:nilerr // Failed peer setup clears the active sync and leaves acquisition for reconciliation.
 		}
-		c.syncMu.Unlock()
+		c.syncs.mu.Unlock()
 		c.log.Info("starting peer model sync", "model", model.ID, "src", src.node.UUID, "dst", dstNode.UUID, "transfer", transferID)
 		go c.runModelSync(copyCtx, key, run, src, dstNode, dstMF, path)
 		return true, nil
@@ -339,18 +339,7 @@ func (c *Controller) fallbackModelDownload(model *store.Model, node *store.Node,
 	return true, nil
 }
 
-// SyncModelToNode explicitly starts or retries peer acquisition for one model.
-func (c *Controller) SyncModelToNode(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error) {
-	return c.syncModelToNode(ctx, modelID, nodeUUID, "", -1)
-}
-
-// SyncModelToNodeWithOptions starts a strictly source-selected peer transfer.
-// rateLimitKiB is per target transfer; -1 means use the stored retry snapshot.
-func (c *Controller) SyncModelToNodeWithOptions(ctx context.Context, modelID uint, nodeUUID, sourceUUID string, rateLimitKiB int) (*store.ModelFile, error) {
-	return c.syncModelToNode(ctx, modelID, nodeUUID, sourceUUID, rateLimitKiB)
-}
-
-func (c *Controller) ProbeModelSync(ctx context.Context, modelID uint, targetUUID, sourceUUID string) error {
+func (c *Controller) probeModelSync(ctx context.Context, modelID uint, targetUUID, sourceUUID string) error {
 	model, err := c.store.GetModel(modelID)
 	if err != nil {
 		return err
@@ -477,27 +466,27 @@ func peerSyncTargetPath(existing, fallback string) string {
 	return existing
 }
 
-// CancelModelSync stops both the local coordinator and the target listener.
-func (c *Controller) CancelModelSync(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error) {
+// cancelModelSync stops both the local coordinator and the target listener.
+func (c *Controller) cancelModelSync(ctx context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error) {
 	node, err := c.store.NodeByUUID(nodeUUID)
 	if err != nil {
 		return nil, err
 	}
-	c.syncMu.Lock()
+	c.syncs.mu.Lock()
 	mf, err := c.store.SyncingModelFile(modelID, node.ID)
 	if err != nil {
-		c.syncMu.Unlock()
+		c.syncs.mu.Unlock()
 		return nil, errors.New("model sync is not active")
 	}
 	key := store.ModelFileKey(mf.ID)
-	run := c.modelSyncs[key]
+	run := c.syncs.byKey[key]
 	if run != nil {
 		run.canceled.Store(true)
 		run.cancel()
 	}
 	message := "Peer sync canceled. Retry peer sync or choose public download."
 	err = c.store.SetModelSyncDownloadRequiredCode(refOf(mf), mf.TransferID, message, messages.ErrorPeerTransferCanceled)
-	c.syncMu.Unlock()
+	c.syncs.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +509,7 @@ func (c *Controller) runModelSync(ctx context.Context, key string, run *modelSyn
 	result, err := c.copyModelWithRelayRetry(ctx, key, run, src, dstNode, dstMF, path)
 	if err != nil {
 		if run.canceled.Load() || errors.Is(err, errModelSyncOwnerChanged) || ctx.Err() != nil {
-			// An operator canceled it: CancelModelSync records the outcome, and
+			// An operator canceled it: cancelModelSync records the outcome, and
 			// an automatic copy must not turn the cancel into a public download.
 			c.log.Info("peer sync canceled", "model_file", key, "transfer", run.transferID)
 			return
@@ -561,11 +550,11 @@ func (c *Controller) runModelSync(ctx context.Context, key string, run *modelSyn
 }
 
 func (c *Controller) clearModelSync(key string, run *modelSyncRun) {
-	c.syncMu.Lock()
-	if c.modelSyncs[key] == run {
-		delete(c.modelSyncs, key)
+	c.syncs.mu.Lock()
+	if c.syncs.byKey[key] == run {
+		delete(c.syncs.byKey, key)
 	}
-	c.syncMu.Unlock()
+	c.syncs.mu.Unlock()
 	run.cancel()
 }
 

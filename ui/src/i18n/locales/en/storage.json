@@ -333,7 +333,7 @@
     "target": "Probe target",
     "receivedAt": "Result received by control plane",
     "unknown": "Unknown (not reported)",
-    "scope": "This result applies only to this node and this check. It does not establish access from other nodes or continued availability."
+    "scopeHelp": "This result applies only to this node and this check. It does not establish access from other nodes or continued availability."
   },
   "scan": {
     "title": "Scan and import: {{name}}",

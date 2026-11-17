@@ -6,30 +6,32 @@ import (
 )
 
 type targetSnapshot struct {
-	Entry          string            `json:"entry"`
-	Role           string            `json:"role"`
-	DeploymentID   uint              `json:"deployment_id"`
-	InstanceUUID   string            `json:"instance_uuid"`
-	TensorParallel int               `json:"tensor_parallel"`
-	NodeID         uint              `json:"node_id"`
-	NodeName       string            `json:"node_name"`
-	GPUIndexes     []int             `json:"gpu_indexes"`
-	GPUs           []snapshotGPU     `json:"gpus"`
-	TargetKind     string            `json:"target_kind"`
-	DeploymentName string            `json:"deployment_name"`
-	Model          string            `json:"model"`
-	ModelSourceID  string            `json:"model_source_id"`
-	ServedName     string            `json:"served_name"`
-	BaseURL        string            `json:"base_url"`
-	LoadOrigin     string            `json:"load_origin"`
-	Engine         string            `json:"engine"`
-	Image          string            `json:"image"`
-	CommandMode    string            `json:"command_mode"`
-	Entrypoint     []string          `json:"entrypoint"`
-	Argv           []string          `json:"argv"`
-	Env            map[string]string `json:"env"`
-	DockerArgs     []string          `json:"docker_args"`
-	NumGPUs        int               `json:"num_gpus"`
+	Entry          string        `json:"entry"`
+	Role           string        `json:"role"`
+	DeploymentID   uint          `json:"deployment_id"`
+	InstanceUUID   string        `json:"instance_uuid"`
+	TensorParallel int           `json:"tensor_parallel"`
+	NodeID         uint          `json:"node_id"`
+	NodeName       string        `json:"node_name"`
+	GPUIndexes     []int         `json:"gpu_indexes"`
+	GPUs           []snapshotGPU `json:"gpus"`
+	TargetKind     string        `json:"target_kind"`
+	DeploymentName string        `json:"deployment_name"`
+	Model          string        `json:"model"`
+	ModelSourceID  string        `json:"model_source_id"`
+	ServedName     string        `json:"served_name"`
+	BaseURL        string        `json:"base_url"`
+	LoadOrigin     string        `json:"load_origin"`
+	Engine         string        `json:"engine"`
+	// PriorityScheduling is nil when the snapshot does not say.
+	PriorityScheduling *bool             `json:"priority_scheduling"`
+	Image              string            `json:"image"`
+	CommandMode        string            `json:"command_mode"`
+	Entrypoint         []string          `json:"entrypoint"`
+	Argv               []string          `json:"argv"`
+	Env                map[string]string `json:"env"`
+	DockerArgs         []string          `json:"docker_args"`
+	NumGPUs            int               `json:"num_gpus"`
 }
 
 type snapshotGPU struct {
@@ -45,7 +47,7 @@ type snapshotGPU struct {
 func targetProperties(target targetSnapshot) [][2]string {
 	candidates := [][2]string{
 		{"Target type", target.TargetKind}, {"Entry", target.Entry}, {"Role", target.Role}, {"Deployment ID", optionalInt(int(target.DeploymentID))}, {"Instance UUID", target.InstanceUUID}, {"Model", target.Model}, {"Model source ID", target.ModelSourceID}, {"Served name", target.ServedName}, {"Node", target.NodeName}, {"Node ID", optionalInt(int(target.NodeID))}, {"Tensor parallel", optionalInt(target.TensorParallel)}, {"Deployment", target.DeploymentName}, {"Endpoint", target.BaseURL},
-		{"Load origin", target.LoadOrigin}, {"Engine", target.Engine}, {"Image", target.Image},
+		{"Load origin", target.LoadOrigin}, {"Engine", target.Engine}, {"Priority scheduling", optionalBool(target.PriorityScheduling)}, {"Image", target.Image},
 		{"GPU count", optionalInt(target.NumGPUs)}, {"Command mode", target.CommandMode},
 		{"Entrypoint", strings.Join(target.Entrypoint, " ")}, {"argv", strings.Join(target.Argv, " ")}, {"Docker args", strings.Join(target.DockerArgs, " ")},
 	}
@@ -71,4 +73,15 @@ func targetProperties(target targetSnapshot) [][2]string {
 		properties = append(properties, [2]string{"Snapshot source", "saved run target snapshot; launch configuration is not runtime kernel evidence"})
 	}
 	return properties
+}
+
+// optionalBool is enabled or disabled, and nothing when the fact is unknown.
+func optionalBool(value *bool) string {
+	switch {
+	case value == nil:
+		return ""
+	case *value:
+		return "enabled"
+	}
+	return "disabled"
 }

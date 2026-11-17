@@ -55,7 +55,7 @@ func doctorStateAccess(r *proto.DoctorReport, reporter runtime.StateAccessReport
 		identity = "the runtime user"
 	}
 	r.Findings = append(r.Findings, proto.DoctorFinding{
-		Code: proto.DoctorRuntimeStateUntraversable, Level: proto.DoctorLevelError,
+		ID: proto.DoctorCheckRuntimeStateAccess, Status: proto.CheckFail, Code: proto.DoctorRuntimeStateUntraversable,
 		Probe: fmt.Sprintf("search permission on every directory above %s for %s (uid %d, gid %d)", stateDir, identity, blocked.Owner.UID, blocked.Owner.GID),
 		Evidence: []proto.DoctorField{
 			{Name: "directory", Value: blocked.Dir},

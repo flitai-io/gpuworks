@@ -35,3 +35,5 @@ Adopt a **flat spec format** derived from gpustack's `model-catalog.yaml`: one f
 - Deferred items (add only when needed; reserve no structure): value-level gating (mechanical lint mapping flag values → CC thresholds), local_verified, script upload facilities, and three-way readiness classification.
 
 2026-11-13 addition: weight sources also accept `local`, reusing the logical identity in `WeightSource` to reference a registered local model. It carries no node, absolute path or database ID and is not a public download provider. Existing models, copies, storage permissions and sync-group rules remain authoritative. Missing registrations create no empty model and are never replaced by public repositories with the same name. Existing mirror and local-copy reuse for HF/ModelScope templates keeps its rules.
+
+<!-- translation-source-sha256: d116ceb0f7e4aabd7d4f43eb1e91953be37e76fc80c71bfc7fdd611444a3c68a -->

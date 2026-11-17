@@ -32,6 +32,7 @@ export default function VendorLogo({
   const asset = VENDOR_ASSETS[vendor === "ppu" ? "thead" : vendor];
   return (
     <span
+      className={`vendor-logo vendor-logo-${vendor}`}
       title={`${label} · ${(vendorName || framework || t("vendor.unknownFramework")).toUpperCase()}`}
       style={{ display: "inline-flex", alignItems: "center", gap: 6, ...style }}
     >

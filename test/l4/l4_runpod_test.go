@@ -33,8 +33,11 @@ type runpodDeployment struct {
 }
 
 const (
-	runpodDefaultVLLMImage   = "gpustack/runner:cuda12.8-vllm0.17.1"
-	runpodDefaultSGLangImage = "gpustack/runner:cuda12.8-sglang0.5.9"
+	// The CUDA 12.9 builds run on any R525+ driver through CUDA minor
+	// version compatibility; RunPod hosts are not guaranteed the R580 driver
+	// the CUDA 13.0 builds need.
+	runpodDefaultVLLMImage   = "gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2"
+	runpodDefaultSGLangImage = "gpuworks/gpuworks-runner:cuda12.9-sglang0.5.18-r2"
 )
 
 // RunPod containers do not necessarily run systemd. When no service manager
@@ -98,9 +101,9 @@ func runpodInferenceTemplateFakeImage() string {
 // (test/fake-engine/IMAGES.md) and carries the same multi-arch index. With
 // this rule the deployment's pull chain becomes
 // [quay.io/zstackai/fake-engine:test, docker.io/wangweinoo1/fake-engine:test]
-// instead of the single direct ref. The gpustack rule does the same for the
-// engine images, which the built-in catalog does not know at the pinned tags.
-// It names quay.io only (no swr.cn-south-1.myhuaweicloud.com): RunPod pods run
+// instead of the single direct ref. The engine images need no rule: they are
+// catalog images whose fetch addresses already include their quay.io copy.
+// The rule names quay.io only (no swr.cn-south-1.myhuaweicloud.com): RunPod pods run
 // outside China, where a China-hosted mirror is the slowest source, and a
 // source that is merely slow would cost a full
 // crawl-detection window (imagepull.CrawlWindow) before the walk reaches the
@@ -108,9 +111,15 @@ func runpodInferenceTemplateFakeImage() string {
 func mirrorFakeEngineThroughQuay(t *testing.T, env *cloudTestEnv) {
 	t.Helper()
 	createPullSourceRules(t, env.Control.API(t),
-		l4PullSourceRule{Match: "docker.io/gpustack", Endpoints: []string{"quay.io/gpustack"}},
 		l4PullSourceRule{Match: "docker.io/wangweinoo1", Endpoints: []string{"quay.io/zstackai"}},
 	)
+}
+
+// runpodTestModel is the model the RunPod deployment cases download: from
+// Hugging Face, because RunPod pods run outside China and ModelScope's file
+// listing API answers their egress with HTTP 403 (observed 2026-11-13).
+func runpodTestModel(t *testing.T, env *cloudTestEnv) *store.Model {
+	return cloudTestModelSource(t, env, "huggingface", "Qwen/Qwen2-0.5B-Instruct", "main")
 }
 
 func deployRunpodModel(t *testing.T, env *cloudTestEnv, model *store.Model, engine, image, servedName string, sleepable bool, timeout time.Duration, extraQuick map[string]any) *runpodDeployment {
@@ -198,7 +207,7 @@ func TestRunpodVLLMSGLangLifecycle(t *testing.T) {
 		d.stop(t)
 	})
 
-	model := cloudTestModel(t, env)
+	model := runpodTestModel(t, env)
 	prepareCloudModelDownload(t, env, model)
 
 	t.Run("vllm", func(t *testing.T) {
@@ -323,7 +332,7 @@ func testRunpodHAMi(t *testing.T) {
 	// artifacts on the rented host. Leave enough headroom for all of them.
 	d := setupCloudNode(t, testenv.New(t), runpodProvider(t), cloudprovider.GPUSpec{GPUModel: "auto", GPUCount: 2, MinVRAMMB: 8192, DiskGB: 120})
 	// Reuse the deployment flow after provisioning the two-card node.
-	model := cloudTestModel(t, d)
+	model := runpodTestModel(t, d)
 	node, err := d.Control.Store().NodeByUUID(d.NodeUUID)
 	if err != nil {
 		t.Fatal(err)

@@ -844,9 +844,9 @@ def test_instance_diagnostics(page, context, server, artifacts, report, locale, 
     report["step"] = "engine metric wire and browser ranges"
     gauges(page, drawer, panel, server, data, report, text)
     report["step"] = "Docker facts and exact rendering"
+    panel.get_by_role("tab", name=text["instance"]["tab"]["details"], exact=True).click()
     launch_facts(page, panel, server, data, report, text)
     report["step"] = "persisted log range then stop"
-    panel.get_by_role("tab", name=text["instance"]["tab"]["logs"], exact=True).click()
     log_path = "/api/v1/logs/search"
     with page.expect_response(lambda r: urlsplit(r.url).path == log_path
                               and parse_qs(urlsplit(r.url).query).get("instance") == [inst["uuid"]]) as searched:

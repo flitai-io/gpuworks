@@ -45,7 +45,7 @@ func writePullSettingError(w http.ResponseWriter, err error) {
 // nodes are read once and the facts the selectors need loaded once.
 func (a *apiHandlers) matchedNodeCounts(selectors []map[string][]string) ([]int, error) {
 	counts := make([]int, len(selectors))
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		return nil, err
 	}
@@ -271,21 +271,8 @@ func (a *apiHandlers) deleteSyncGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// syncOnlineNodes re-sends every online node its desired state.
-func (a *apiHandlers) syncOnlineNodes() {
-	if a.d.NodeSync == nil {
-		return
-	}
-	nodes, err := a.d.Store.ListNodes()
-	if err != nil {
-		return
-	}
-	for i := range nodes {
-		if a.d.Online == nil || a.d.Online(nodes[i].UUID) {
-			_ = a.d.NodeSync.SyncNode(nodes[i].UUID)
-		}
-	}
-}
+// syncOnlineNodes asks for every online node's desired state to be re-sent.
+func (a *apiHandlers) syncOnlineNodes() { a.requestSyncAllNodes() }
 
 // nodeRuntime is the node's container runtime and, for a daemon runtime, the
 // proxy it really uses against the one the node is configured with.

@@ -14,6 +14,7 @@ import { Alert, Button, Checkbox, Input, Popconfirm, Segmented, Skeleton, Space,
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api as platformAPI } from "../../api";
+import { usePlaygroundPriorityClasses } from "./priorityClasses";
 import ChatPane from "./ChatPane";
 import ConversationSidebar from "./ConversationSidebar";
 import { isEmpty, MAX_COLUMNS, type ConversationMode } from "./conversations/model";
@@ -41,6 +42,7 @@ function readCollapsed(): boolean {
 export default function ChatPage({ catalog, onCatalogChanged }: { catalog: PlaygroundCatalog; onCatalogChanged: () => void }) {
   const { t } = useTranslation("playground");
   const [store, state] = useConversations();
+  const priorityClasses = usePlaygroundPriorityClasses();
   const [searchParams, setSearchParams] = useSearchParams();
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -223,6 +225,7 @@ export default function ChatPage({ catalog, onCatalogChanged }: { catalog: Playg
                 onCatalogChanged={onCatalogChanged}
                 follow={follow}
                 onScrollAway={stopFollowing}
+                priorityClasses={priorityClasses}
               />
             ))}
           </div>

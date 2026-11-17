@@ -1,26 +1,35 @@
-import { Badge, Button, Space, Typography } from "antd";
 import { useTranslation } from "react-i18next";
-import type { MonitorService } from "../../api";
-import { STATE_BADGE, STATE_ORDER } from "./ServiceTable";
+import type { MonitorService, MonitorStateCount } from "../../api";
+import { Badge } from "../../components/ui/badge";
+import { FilterChips } from "../../ui-kit/FilterChips";
+import { STATE_BADGE, offeredStates } from "./serviceStates";
 
-// StateSummary is the line under the signal row: how many services are in
-// each state, each count a link that narrows the services table to them.
-// Health check results stay a column (and column filter) of the table.
-export default function StateSummary({ services, onFilter }: { services: MonitorService[]; onFilter: (deploymentIds: number[]) => void }) {
+const ALL = "all";
+
+/**
+ * StateSummary is the service table's state filter as one-choice chips:
+ * "All N" and each state the server counted, in the server's order
+ * (overview state_counts). It shows the state column filter's own
+ * selection: none lights "All", exactly one lights that state, and a
+ * multi-state pick from the column lights none (the toolbar chip names it).
+ */
+export default function StateSummary({ counts, selected, narrowed = false, onSelect }: {
+  counts: MonitorStateCount[]; selected: string[];
+  /** Another filter (a signal tile's) narrows the table, so "All" is not what it shows. */
+  narrowed?: boolean;
+  onSelect: (state: MonitorService["state"] | null) => void;
+}) {
   const { t } = useTranslation("monitoring");
-  const byState = new Map<MonitorService["state"], number[]>();
-  for (const s of services) {
-    byState.set(s.state, [...(byState.get(s.state) ?? []), s.deployment_id]);
-  }
-  return (
-    <Space size={[16, 4]} wrap align="center">
-      <Typography.Text>{t("stateSummary.title")}</Typography.Text>
-      {STATE_ORDER.filter((state) => byState.has(state)).map((state) => (
-        <Button key={state} type="link" size="small" style={{ padding: 0, height: "auto" }} onClick={() => onFilter(byState.get(state)!)}>
-          <Badge status={STATE_BADGE[state]} />
-          {t("stateSummary.count", { state: t(`states.${state}`), count: byState.get(state)!.length })}
-        </Button>
-      ))}
-    </Space>
-  );
+  const total = counts.reduce((sum, item) => sum + item.count, 0);
+  const shown = offeredStates(counts, selected);
+  const value = selected.length === 0 ? (narrowed ? "" : ALL) : selected.length === 1 ? selected[0] : "";
+  return <FilterChips label={t("stateSummary.title")} value={value}
+    onChange={(next) => onSelect(next === ALL ? null : next as MonitorService["state"])}
+    items={[
+      { value: ALL, label: t("stateSummary.all", { count: total }) },
+      ...shown.map((item) => ({
+        value: item.state as string,
+        label: <Badge variant="plain" status={STATE_BADGE[item.state] ?? "neutral"}>{t("stateSummary.count", { state: t(`states.${item.state}`, { defaultValue: item.state }), count: item.count })}</Badge>,
+      })),
+    ]} />;
 }

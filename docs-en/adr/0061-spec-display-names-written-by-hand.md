@@ -24,3 +24,5 @@ What really tells sibling specs apart is the chip generation, the quantization a
 
 - Existing user specs have no names and show their spec `name` until edited. Built-in specs get their names with the catalog upgrade.
 - ADR 0009's "the named classes' Chinese display names disappear, and the UI has to compute labels from predicates" no longer holds: display names are back in catalog data, but written on each spec rather than on a named chip class.
+
+<!-- translation-source-sha256: 4a31f299b87d236fbd207f0ac03cdde11b4760f337acc286eaa6d1253f188805 -->

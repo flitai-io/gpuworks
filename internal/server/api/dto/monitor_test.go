@@ -36,6 +36,10 @@ func TestMonitorOverviewWireContract(t *testing.T) {
 			 "prompt_tok_s": 3100, "generation_tok_s": 1820,
 			 "health": {"status":"ok","threshold_sec":60,"last":null,"recent_mean_ms":null,"recent_ok":0,"recent":[]}}
 		],
+		"state_counts": [
+			{"state": "running", "count": 1}, {"state": "starting", "count": 0}, {"state": "asleep", "count": 0},
+			{"state": "offline", "count": 0}, {"state": "failed", "count": 0}, {"state": "stopped", "count": 0}
+		],
 		"vram_by_node": [
 			{"node_uuid": "n1", "name": "gpu3", "gpu_count": 8, "total_bytes": 0, "allocated_bytes": 0, "used_bytes": 0, "used_as_of": 0}
 		],
@@ -85,6 +89,9 @@ func TestMonitorOverviewWireContract(t *testing.T) {
 	if svc.Health.Recent == nil || len(svc.Health.Recent) != 0 {
 		t.Fatalf("health.recent must decode as an empty (non-nil) slice: %#v", svc.Health.Recent)
 	}
+	if len(decoded.StateCounts) != 6 || decoded.StateCounts[0] != (MonitorStateCount{State: "running", Count: 1}) || decoded.StateCounts[5] != (MonitorStateCount{State: "stopped", Count: 0}) {
+		t.Fatalf("state_counts = %+v", decoded.StateCounts)
+	}
 	if len(decoded.VRAMByNode) != 1 || decoded.VRAMByNode[0].UsedBytes == nil || *decoded.VRAMByNode[0].UsedBytes != 0 {
 		t.Fatalf("vram_by_node = %+v", decoded.VRAMByNode)
 	}
@@ -108,6 +115,7 @@ func TestMonitorOverviewWireContract(t *testing.T) {
 		`"request_rate":null`, `"ttft_p95_ms":null`,
 		`"health":{"status":"ok","threshold_sec":60,"last":null,"recent_mean_ms":null,"recent_ok":0,"recent":[]}`,
 		`{"key":"error_rate","collected":false}`, `{"key":"preemptions","collected":false}`,
+		`"state_counts":[{"state":"running","count":1},{"state":"starting","count":0},{"state":"asleep","count":0},{"state":"offline","count":0},{"state":"failed","count":0},{"state":"stopped","count":0}]`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("marshaled overview missing %q in %s", want, body)
@@ -237,9 +245,10 @@ func TestMonitorSignalNoRecentRequestsDetailRoundTrips(t *testing.T) {
 
 func TestMonitorOverviewEmptyListsAreEmptyNotNull(t *testing.T) {
 	overview := MonitorOverview{
-		Signals:    []MonitorSignal{},
-		Services:   []MonitorServiceRow{},
-		VRAMByNode: []MonitorVRAMNode{},
+		Signals:     []MonitorSignal{},
+		Services:    []MonitorServiceRow{},
+		StateCounts: []MonitorStateCount{},
+		VRAMByNode:  []MonitorVRAMNode{},
 		ClusterTokens: MonitorClusterTokens{
 			Prompt:     MonitorSeries{Labels: map[string]string{}, Points: []Point{}},
 			Generation: MonitorSeries{Labels: map[string]string{}, Points: []Point{}},
@@ -252,7 +261,7 @@ func TestMonitorOverviewEmptyListsAreEmptyNotNull(t *testing.T) {
 	}
 	body := string(raw)
 	for _, want := range []string{
-		`"signals":[]`, `"services":[]`, `"vram_by_node":[]`,
+		`"signals":[]`, `"services":[]`, `"state_counts":[]`, `"vram_by_node":[]`,
 		`"labels":{}`, `"points":[]`, `"events":[]`,
 	} {
 		if !strings.Contains(body, want) {

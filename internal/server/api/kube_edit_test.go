@@ -49,16 +49,13 @@ func TestEditingAnEntryMadeByHandOverTheWire(t *testing.T) {
 		t.Fatalf("empty engine ports = %d %s", rec.Code, rec.Body)
 	}
 
-	// The grace period only reaches the agents when they enroll, on start:
-	// the manifest carries it, so applying it restarts them.
+	// The grace period, the RuntimeClass and the engine ports go to the
+	// running agents live and are no part of the manifest: nothing to apply
+	// (TestEditingLiveSettingsNeedsNoReapply).
 	rec = rig.do(rig.session, http.MethodPut, base, `{"idle_return_seconds":-1}`)
 	got = decodeKube[map[string]any](t, rec)
-	if rec.Code != http.StatusOK || got["reapply"] != true || got["cluster"].(map[string]any)["idle_return_seconds"] != float64(-1) {
+	if rec.Code != http.StatusOK || got["reapply"] != false || got["cluster"].(map[string]any)["idle_return_seconds"] != float64(-1) {
 		t.Fatalf("idle return edit = %d %s", rec.Code, rec.Body)
-	}
-	manifest := rig.do(rig.session, http.MethodGet, base+"/manifest", "")
-	if !strings.Contains(manifest.Body.String(), `gpuworks.ai/idle-return-seconds: "-1"`) {
-		t.Fatalf("manifest lacks the grace period:\n%s", manifest.Body)
 	}
 
 	// An empty string clears an optional setting.

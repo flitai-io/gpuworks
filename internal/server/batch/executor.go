@@ -90,6 +90,13 @@ func (r *run) execute(ctx context.Context) {
 		r.cause.CompareAndSwap(causeNone, causeCancel)
 		cancelDisp()
 	}
+	// A batch resumed after its deadline (the server was down when it passed)
+	// is stopped here, before the first request. The watch's timer would fire
+	// at once too, but from another goroutine: the dispatch could send first.
+	if !s.cfg.Clock.Now().Before(r.b.ExpiresAt) && r.cause.CompareAndSwap(causeNone, causeExpired) {
+		cancelDisp()
+		cancelSend()
+	}
 
 	stopCheckpoints := make(chan struct{})
 	var checkpoints sync.WaitGroup
@@ -254,6 +261,12 @@ func (r *run) process(dispCtx, sendCtx context.Context, l requestLine) {
 		select {
 		case s.global <- struct{}{}:
 		case <-dispCtx.Done():
+			return
+		}
+		// select picks at random when both are ready: a slot freed in the
+		// same instant as a cancel or the expiry must not start an attempt.
+		if dispCtx.Err() != nil {
+			<-s.global
 			return
 		}
 		attemptCtx, cancel := context.WithTimeout(sendCtx, s.cfg.AttemptTimeout)

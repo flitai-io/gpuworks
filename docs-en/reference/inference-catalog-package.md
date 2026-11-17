@@ -26,7 +26,7 @@ models/<model-id>/assets/<small-file>
 
 Catalog packages are identified by a content digest. The server validates path safety and the schema (file structure and field constraints) within the package and computes its content digest. Packages with the same digest can be reused. If the cache is corrupted, it must no longer be served under the old digest.
 
-The `schema_version` in `manifest.yaml` is the package format version, currently 2 (specs gained `display_name_zh_cn` / `display_name_en`). A server reads versions up to its own and refuses newer ones; an older server that knows only 1 marks a version-2 catalog on its channel as incompatible and does not download it, because it parses `model.yaml` strictly and would fail on the new fields.
+The `schema_version` in `manifest.yaml` is the package format version, currently 3. A server reads versions up to its own and refuses newer ones; when it sees a newer version on its channel it marks the catalog update as incompatible and does not download it. From 2 on, specs carry `display_name_zh_cn` / `display_name_en`; 3 marks the catalogs that carry `gpus.arch_id` and `tokenizer_ref`, which a server that knows only 2 cannot read because it parses `model.yaml` strictly, field by field. A server that knows 3 reads an official catalog package tolerantly (see "What an Official Package Carries That This Server Cannot Read" below), so a new field in `model.yaml` no longer raises the version; it is raised only when the file layout or the manifest of the package changes.
 The database stores the digest and structured records extracted from the package; file contents are stored in the package repository.
 
 ### Relationship Between model.yaml and Specs
@@ -110,6 +110,17 @@ DELETE /api/v1/inference-templates/spec?model_id=…&spec=…
 
 Deletion is rejected while any deployment still references the spec. Therefore, after removing a spec from a package, the publisher must also arrange this explicit deletion step.
 
+### What an Official Package Carries That This Server Cannot Read
+
+The official catalog is written for the newest server. On "check for updates" or an official package upload, the parts an older server cannot read are skipped and everything else is applied as usual (see [ADR 0065](../adr/0065-official-catalog-read-tolerantly.md) for the rationale):
+
+- A spec that cannot be parsed or validated: that spec is skipped.
+- A model whose own fields cannot be read: the whole model is skipped, and so are the specs that reference it as a component.
+- A skipped model or spec that was imported before stays as it is and can still be deployed; a new one is not shown on this server yet.
+- `skipped` in the response lists the `model_id`, `spec` (omitted when the whole model is skipped) and `reason` of each, and the settings page keeps the list on screen. After a server upgrade, updating once more reads everything.
+
+The checks on the package itself are not relaxed: any mismatch in the file layout, the model and spec counts in the manifest, or the asset digests of the specs that are kept refuses the whole package. This tolerance applies to official catalog packages only; through "Import templates" an unknown field is still an error.
+
 ## Delivering and Using Auxiliary Files
 
 ### Asset Delivery Path
@@ -188,3 +199,5 @@ When checking weight indexes, also account for these differences:
 
 - The DeepSeek-V3 family may have one more MTP layer than the configuration specifies (61+1); vision and audio encoders may contain multiple parallel stacks. `-verify` already classifies these cases.
 - The `dots-studio/dots3-note-prev` checkpoint has one more layer than its config. The serving engine constructs the model from the config, so the config takes precedence.
+
+<!-- translation-source-sha256: 29039837d5399a351989a6b01249271b1061df159581b1aeb6681bb2e7431a79 -->

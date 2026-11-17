@@ -75,10 +75,24 @@ func (p *Proxy) identifyKey(r *http.Request) (uxrecord.Caller, store.APIKeyIdent
 	return caller, identity, true
 }
 
+// DoOption adjusts an in-process request.
+type DoOption func(*http.Request)
+
+// WithPriorityClass names the class the request asks for, as a client's
+// X-GPUWorks-Priority-Class header does; the caller's Source decides what
+// the name may do (a batch's request runs at it).
+func WithPriorityClass(name string) DoOption {
+	return func(r *http.Request) {
+		if name != "" {
+			r.Header.Set(priorityClassHeader, name)
+		}
+	}
+}
+
 // Do posts body to path (a /v1 path) as caller's request and returns the
 // response; the caller's Source says which entry the request stands for
 // (a batch's, say). ctx bounds it, the wake hold included.
-func (p *Proxy) Do(ctx context.Context, caller uxrecord.Caller, path string, body []byte) InProcessReply {
+func (p *Proxy) Do(ctx context.Context, caller uxrecord.Caller, path string, body []byte, opts ...DoOption) InProcessReply {
 	caller.ReceivedMS = time.Now().UnixMilli()
 	reqCtx := uxrecord.WithCaller(ctx, caller)
 	if caller.APIKeyID != 0 {
@@ -95,6 +109,9 @@ func (p *Proxy) Do(ctx context.Context, caller uxrecord.Caller, path string, bod
 		return InProcessReply{Err: err}
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for _, opt := range opts {
+		opt(req)
+	}
 	w := &replyWriter{header: http.Header{}, limit: inProcessReplyLimit}
 	p.serveAuthenticated(w, req)
 	out := InProcessReply{Status: w.status, Body: w.body.Bytes(), TooLarge: w.tooLarge, RequestID: w.header.Get("X-Request-ID")}

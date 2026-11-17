@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/agentconf"
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/agentbin"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	serverprovider "gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -65,8 +67,6 @@ type providerInstallReport struct {
 // and 270s backoff steps after the install returns).
 const serverDialQueuedOnlineTimeout = 5 * time.Minute
 
-const queuedForReconnectionPrefix = "queued for reconnection: "
-
 // providerInstallVerdict is how one provider install check is judged.
 type providerInstallVerdict struct {
 	Accepted bool
@@ -84,30 +84,30 @@ type providerInstallVerdict struct {
 // is still waiting for its first session, and server_dial may report that the
 // server queued the node for reconnection after its first dial failed (a
 // freshly mapped pod port can take a while to answer). The last two are only
-// accepted with their exact product detail; any other warn or error on them,
-// and any non-ok status elsewhere, fails.
+// accepted with their exact codes; any other warn or fail on them, and any
+// status other than pass elsewhere, fails.
 func judgeProviderInstallCheck(want string, check provision.CheckResult) providerInstallVerdict {
-	verdict := providerInstallVerdict{Want: "ok"}
+	verdict := providerInstallVerdict{Want: proto.CheckPass}
 	switch {
-	case want == "precheck":
-		verdict.Want = "ok/warn"
-		verdict.Accepted = check.Status == "ok" || check.Status == "warn"
-	case want == "agent_dial" && check.Status == "warn" && check.Detail == "agent started; waiting for its first session":
+	case want == provision.CheckIDPrecheck:
+		verdict.Want = "pass/warn"
+		verdict.Accepted = check.Status == proto.CheckPass || check.Status == proto.CheckWarn
+	case want == provision.CheckIDAgentDial && check.Status == proto.CheckWarn && check.Code == messages.CheckAgentSessionWaiting:
 		// The management API observes the first session for three seconds.
 		// A cold VM may need longer; setupCloudNode still waits for this exact
 		// node to become online, and the suite subsequently requires GPUs.
-		verdict.Want = "ok/warn(waiting for first session)"
+		verdict.Want = "pass/warn(" + messages.CheckAgentSessionWaiting + ")"
 		verdict.Accepted = true
-	case want == "server_dial" && check.Status == "warn" && strings.HasPrefix(check.Detail, queuedForReconnectionPrefix):
+	case want == provision.CheckIDServerDial && check.Status == proto.CheckWarn && check.Code == messages.CheckServerDialNotConnected:
 		// The install tries the first dial a few times and otherwise hands
 		// the node to the server's reconnect loop (internal/server/api/provision.go).
-		verdict.Want = "ok/warn(queued for reconnection)"
+		verdict.Want = "pass/warn(" + messages.CheckServerDialNotConnected + ")"
 		verdict.Accepted = true
 		verdict.QueuedDial = true
 	default:
-		verdict.Accepted = check.Status == "ok"
+		verdict.Accepted = check.Status == proto.CheckPass
 	}
-	if check.Name != want {
+	if check.ID != want {
 		verdict.Accepted = false
 		verdict.QueuedDial = false
 	}
@@ -286,19 +286,19 @@ func installCloudAgentViaProviderAPI(ctx context.Context, t *testing.T, env *tes
 			return "", fmt.Errorf("Vast auto install SSH attempts=%+v", result.SSHAttempts)
 		}
 	}
-	wantChecks := []string{"precheck", "install agent", "agent_dial"}
+	wantChecks := []string{provision.CheckIDPrecheck, provision.CheckIDInstallAgent, provision.CheckIDAgentDial}
 	if serverDial {
-		wantChecks[2] = "server_dial"
+		wantChecks[2] = provision.CheckIDServerDial
 	}
 	if len(result.Checks) != len(wantChecks) {
 		return "", fmt.Errorf("provider install checks=%+v, want %v", result.Checks, wantChecks)
 	}
 	var checkErr error
 	for i, want := range wantChecks {
-		t.Logf("provider install check: %s=%s %s", result.Checks[i].Name, result.Checks[i].Status, result.Checks[i].Detail)
+		t.Logf("provider install check: %s=%s %s %s", result.Checks[i].ID, result.Checks[i].Status, result.Checks[i].Code, checkText(result.Checks[i]))
 		verdict := judgeProviderInstallCheck(want, result.Checks[i])
 		if verdict.QueuedDial && report != nil {
-			report.QueuedDial = result.Checks[i].Detail
+			report.QueuedDial = checkText(result.Checks[i])
 		}
 		if checkErr == nil && !verdict.Accepted {
 			checkErr = fmt.Errorf("provider install check %d=%+v, want %s=%s", i, result.Checks[i], want, verdict.Want)
@@ -321,11 +321,11 @@ ls -l /usr/bin/python* /usr/local/bin/python* /root/miniconda3/bin/python* 2>&1 
 	var platformKey *provision.CheckResult
 	assistantInstall := false
 	for i := range result.Details {
-		t.Logf("provider install detail: %s=%s %s", result.Details[i].Name, result.Details[i].Status, result.Details[i].Detail)
-		if result.Details[i].Name == "Platform key" {
+		t.Logf("provider install detail: %s=%s %s %s", result.Details[i].ID, result.Details[i].Status, result.Details[i].Code, checkText(result.Details[i]))
+		if result.Details[i].ID == provision.CheckIDPlatformKey {
 			platformKey = &result.Details[i]
 		}
-		if result.Details[i].Name == "Cloud Assistant" && result.Details[i].Status == "ok" {
+		if result.Details[i].ID == provision.CheckIDCloudAssistant && result.Details[i].Status == proto.CheckPass {
 			assistantInstall = true
 		}
 	}
@@ -334,7 +334,7 @@ ls -l /usr/bin/python* /usr/local/bin/python* /root/miniconda3/bin/python* 2>&1 
 	// through Cloud Assistant, which is how that connection recovers it.
 	if platformKey == nil && assistantInstall {
 		t.Log("agent installed through Cloud Assistant: no SSH platform key was added, by design")
-	} else if platformKey == nil || platformKey.Status != "ok" {
+	} else if platformKey == nil || platformKey.Status != proto.CheckPass {
 		return "", fmt.Errorf("provider install did not authorize the platform key: %+v", platformKey)
 	}
 	if serverDial {
@@ -492,7 +492,7 @@ func installCloudAgentViaAPI(ctx context.Context, t *testing.T, env *testenv.Env
 			return fmt.Errorf("installer report server_url=%q, want %q", report.ServerURL, wantServerURL)
 		}
 		for _, check := range report.Checks {
-			t.Logf("one-click install check: %s=%s %s", check.Name, check.Status, check.Detail)
+			t.Logf("one-click install check: %s=%s %s %s", check.ID, check.Status, check.Code, checkText(check))
 		}
 	}
 	if connectMode == "server_dial" {

@@ -11,6 +11,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/launchd"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/installscript"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // remoteOS reports the target's kernel name as Go names it ("linux",
@@ -28,7 +29,8 @@ type macSudo struct {
 	admin    bool   // the install runs with administrator rights
 	prefix   string // prepended to the install command; "" runs it as the SSH user
 	password string // fed to sudo -S on stdin (runWithInput ends the line)
-	detail   string
+	code     string // the messages.CheckMac* outcome
+	detail   string // its English fallback
 }
 
 // macPrivilege finds administrator rights for the install. A Mac's sudo
@@ -38,17 +40,17 @@ type macSudo struct {
 // rights the agent becomes a launch agent of the user's login session.
 func macPrivilege(ctx context.Context, client *ssh.Client, auth SSHAuth) macSudo {
 	if out, err := run(ctx, client, "id -u"); err == nil && strings.TrimSpace(out) == "0" {
-		return macSudo{admin: true, detail: "root: installs a launch daemon"}
+		return macSudo{admin: true, code: messages.CheckMacRoot, detail: "root: installs a launch daemon"}
 	}
 	if _, err := run(ctx, client, "sudo -n true"); err == nil {
-		return macSudo{admin: true, prefix: "sudo -n ", detail: "passwordless sudo: installs a launch daemon that runs as the SSH user"}
+		return macSudo{admin: true, prefix: "sudo -n ", code: messages.CheckMacSudo, detail: "passwordless sudo: installs a launch daemon that runs as the SSH user"}
 	}
 	if auth.Password != "" {
 		if _, err := runWithInput(ctx, client, "sudo -S -p '' true", auth.Password); err == nil {
-			return macSudo{admin: true, prefix: "sudo -S -p '' ", password: auth.Password, detail: "sudo with the SSH password: installs a launch daemon that runs as the SSH user"}
+			return macSudo{admin: true, prefix: "sudo -S -p '' ", password: auth.Password, code: messages.CheckMacSudoPassword, detail: "sudo with the SSH password: installs a launch daemon that runs as the SSH user"}
 		}
 	}
-	return macSudo{detail: "no administrator rights: installs a launch agent of the user's login session, which runs only while that user is logged in"}
+	return macSudo{code: messages.CheckMacNoAdmin, detail: "no administrator rights: installs a launch agent of the user's login session, which runs only while that user is logged in"}
 }
 
 // installMac installs the agent on an Apple silicon Mac. It runs the same
@@ -63,22 +65,22 @@ func (i *SSHInstaller) installMac(ctx context.Context, client *ssh.Client, req S
 		err = fmt.Errorf("macOS nodes need Apple silicon; this Mac reports %s", strings.TrimSpace(archOut))
 	}
 	if err != nil {
-		report.Checks = append(report.Checks, CheckResult{Name: "Arch", Status: "error", Detail: err.Error()})
+		report.Checks = append(report.Checks, macArchFailedCheck(archOut, err))
 		return report, err
 	}
 	report.Arch = goarch
 	report.BinaryName = proto.AgentBinaryName("darwin", goarch)
-	report.Checks = append(report.Checks, CheckResult{Name: "Arch", Status: "ok", Detail: "Darwin " + strings.TrimSpace(archOut) + " -> darwin/" + goarch})
+	report.Checks = append(report.Checks, archCheck("Darwin "+strings.TrimSpace(archOut), "darwin/"+goarch))
 
 	if err := notifyInstallPhase(req, "artifact_check"); err != nil {
 		return report, err
 	}
 	bin, err := i.ReadBin(report.BinaryName)
 	if err != nil {
-		report.Checks = append(report.Checks, CheckResult{Name: "Agent binary", Status: "error", Detail: err.Error()})
-		return report, fmt.Errorf("read agent binary %s: %w", report.BinaryName, err)
+		report.Checks = append(report.Checks, agentBinaryMissingCheck(report.BinaryName, err))
+		return report, failure(messages.ErrorAgentInstallBinaryUnavailable, fmt.Errorf("read agent binary %s: %w", report.BinaryName, err))
 	}
-	report.Checks = append(report.Checks, CheckResult{Name: "Agent binary", Status: "ok", Detail: fmt.Sprintf("%s (%d bytes)", report.BinaryName, len(bin))})
+	report.Checks = append(report.Checks, agentBinaryReadyCheck(report.BinaryName, len(bin)))
 
 	// Stage the binary and the installer in the user's home, which is
 	// writable whatever rights the account has; the installer copies the
@@ -86,7 +88,7 @@ func (i *SSHInstaller) installMac(ctx context.Context, client *ssh.Client, req S
 	stage, err := run(ctx, client, `d="$HOME/.gpuworks-install" && mkdir -p "$d" && chmod 700 "$d" && printf '%s' "$d"`)
 	stage = strings.TrimSpace(stage)
 	if err != nil || stage == "" {
-		report.Checks = append(report.Checks, CheckResult{Name: "Upload", Status: "error", Detail: fmt.Sprintf("create staging directory: %s %v", stage, err)})
+		report.Checks = append(report.Checks, uploadFailedCheck("~/.gpuworks-install", stage, err))
 		return report, fmt.Errorf("create staging directory: %w", err)
 	}
 	defer func() { _, _ = run(context.WithoutCancel(ctx), client, "rm -rf "+shellQuote(stage)) }()
@@ -102,19 +104,19 @@ func (i *SSHInstaller) installMac(ctx context.Context, client *ssh.Client, req S
 		exec bool
 	}{{stagedBin, bin, true}, {stagedScript, []byte(installscript.Script), false}} {
 		if err := uploadDataContext(ctx, client, file.path, file.data, file.exec, i.uploadTimeout()); err != nil {
-			report.Checks = append(report.Checks, CheckResult{Name: "Upload", Status: "error", Detail: err.Error()})
+			report.Checks = append(report.Checks, uploadFailedCheck(file.path, "", err))
 			return report, err
 		}
 	}
-	report.Checks = append(report.Checks, CheckResult{Name: "Upload", Status: "ok", Detail: stagedBin})
+	report.Checks = append(report.Checks, uploadedCheck(stagedBin))
 
 	if err := notifyInstallPhase(req, "verifying"); err != nil {
 		return report, err
 	}
 	sudo := macPrivilege(ctx, client, req.SSHAuth)
-	privilege := CheckResult{Name: "Privilege", Status: "ok", Detail: sudo.detail}
+	privilege := PassCheck(CheckIDPrivilege, sudo.code, sudo.detail, nil)
 	if !sudo.admin {
-		privilege.Status = "warn"
+		privilege = WarnCheck(CheckIDPrivilege, sudo.code, sudo.detail, nil)
 	}
 	report.Checks = append(report.Checks, privilege)
 
@@ -145,12 +147,12 @@ func (i *SSHInstaller) installMac(ctx context.Context, client *ssh.Client, req S
 	}
 	out = strings.TrimSpace(out)
 	if err != nil {
-		report.Checks = append(report.Checks, CheckResult{Name: "Start agent", Status: "error", Detail: out + ": " + err.Error()})
+		report.Checks = append(report.Checks, startFailedCheck(out, err))
 		// The error is all an API caller sees of a failed install: carry the
 		// installer's last words, which say why.
 		return report, fmt.Errorf("install agent: %w: %s", err, lastLines(out, 3))
 	}
-	report.Checks = append(report.Checks, CheckResult{Name: "Start agent", Status: "ok", Detail: out})
+	report.Checks = append(report.Checks, startedCheck(out))
 	return report, nil
 }
 
@@ -174,7 +176,7 @@ elif [ -e "$HOME/` + launchd.AgentPlist("") + `" ]; then echo "gui/$(id -u)"; fi
 // another server is left alone, so the caller reinstalls it for this node.
 func (i *SSHInstaller) restartMacAgent(ctx context.Context, client *ssh.Client, serverURL string) error {
 	if found, err := detectExistingAgent(ctx, client); err == nil && found.Unit && found.UnitServer != "" && found.UnitServer != trimServer(serverURL) {
-		return fmt.Errorf("the gpuworks launchd job is installed for another server (%s); not restarting it", found.UnitServer)
+		return failure(messages.ErrorAgentInstallForeignServer, fmt.Errorf("the gpuworks launchd job is installed for another server (%s); not restarting it", found.UnitServer))
 	}
 	out, err := run(ctx, client, macJobDomainCommand)
 	domain := strings.TrimSpace(out)
@@ -197,4 +199,13 @@ func (i *SSHInstaller) restartMacAgent(ctx context.Context, client *ssh.Client, 
 		return fmt.Errorf("restart the agent's launchd job: %s: %w", strings.TrimSpace(out), err)
 	}
 	return nil
+}
+
+// macArchFailedCheck is the arch row of a Mac the agent cannot run on: an
+// Intel Mac, or one whose architecture could not be read.
+func macArchFailedCheck(archOut string, err error) CheckResult {
+	if uname := strings.TrimSpace(archOut); uname != "" && uname != "arm64" {
+		return FailCheck(CheckIDArch, messages.CheckArchMacIntel, "macOS nodes need Apple silicon; this Mac reports "+uname, map[string]any{"uname": uname})
+	}
+	return FailCheck(CheckIDArch, messages.CheckArchUnsupported, "no supported architecture was detected", nil).WithEvidence(err.Error())
 }

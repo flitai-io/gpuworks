@@ -24,13 +24,16 @@ type DetailRecord struct {
 	Canceled     bool            `json:"canceled,omitempty"`
 	ErrorStage   string          `json:"error_stage,omitempty"`
 	HTTPStatus   int             `json:"http_status,omitempty"`
-	LocalInput   *int            `json:"local_input"`
-	LocalOutput  *int            `json:"local_output"`
-	InputSource  string          `json:"input_source"`
-	OutputSource string          `json:"output_source"`
-	OutputBudget int             `json:"output_budget"`
-	Stream       bool            `json:"stream"`
-	Text         string          `json:"text"`
+	// PriorityClass is the class the gateway says the request ran at;
+	// absent when it said none.
+	PriorityClass string `json:"priority_class,omitempty"`
+	LocalInput    *int   `json:"local_input"`
+	LocalOutput   *int   `json:"local_output"`
+	InputSource   string `json:"input_source"`
+	OutputSource  string `json:"output_source"`
+	OutputBudget  int    `json:"output_budget"`
+	Stream        bool   `json:"stream"`
+	Text          string `json:"text"`
 }
 
 type DetailMetrics struct {
@@ -52,7 +55,7 @@ type DetailMetrics struct {
 func NewDetailRecord(r Result) DetailRecord {
 	m := r.Metrics
 	d := DetailRecord{Version: 1, SessionID: m.SessionID, Turn: m.Turn, PlannedTurns: m.PlannedTurns, Attempt: 1,
-		Usage: r.UsageJSON, FinishReason: m.FinishReason, ErrorStage: m.ErrorStage, HTTPStatus: m.HTTPStatus, Canceled: m.Canceled,
+		Usage: r.UsageJSON, FinishReason: m.FinishReason, ErrorStage: m.ErrorStage, HTTPStatus: m.HTTPStatus, PriorityClass: m.PriorityClass, Canceled: m.Canceled,
 		LocalInput: m.LocalInputTokens, LocalOutput: m.LocalOutputTokens, InputSource: m.InputSource, OutputSource: m.OutputSource,
 		OutputBudget: r.OutputBudget, Stream: r.Stream, Text: r.Text}
 	if m.Error != nil {

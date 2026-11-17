@@ -14,7 +14,7 @@ import (
 // gets it, and entrypoint as its command. Nothing else of an instance's is
 // added — no model, no ports, no partition.
 func (e *Engine) BuildCardSmokeWorkload(image string, gpuIndex int, name string, entrypoint []string) (agentruntime.WorkloadSpec, error) {
-	ws := toWorkloadSpec(proto.InstanceDesiredState{UUID: name, Image: image, GPUIndexes: []int{gpuIndex}}, name)
+	ws := e.workloadSpec(proto.InstanceDesiredState{UUID: name, Image: image, GPUIndexes: []int{gpuIndex}}, name)
 	if err := e.applyDeviceInjection(&ws, ws.GPUIndexes); err != nil {
 		return agentruntime.WorkloadSpec{}, err
 	}

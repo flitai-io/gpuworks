@@ -16,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/estimate"
 	"gpuworks.ai/gpuworks/internal/server/logstore"
+	"gpuworks.ai/gpuworks/internal/server/obsingest"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/pkg/topoparse"
 )
@@ -48,7 +49,7 @@ func newAIFixture(t *testing.T, name string) *aiFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &aiFixture{st: st, logs: ls, ai: newAIService(st, &observability{logs: ls}, nil), node: node, dep: dep}
+	return &aiFixture{st: st, logs: ls, ai: newAIService(st, &observability{obsingest.New(obsingest.Stores{Logs: ls})}, nil), node: node, dep: dep}
 }
 
 func (f *aiFixture) instance(t *testing.T, uuid, state, message string, argv []string) *store.Instance {
@@ -99,8 +100,8 @@ func TestErrorContextSeedsTailErrorLinesEventsAndHypotheses(t *testing.T) {
 	if !strings.Contains(c.Logs[0].Line, "CUDA out of memory") || c.Logs[len(c.Logs)-1].Line != "shutdown step 200" {
 		t.Fatalf("logs are not oldest-first with the early error line kept: first %q last %q", c.Logs[0].Line, c.Logs[len(c.Logs)-1].Line)
 	}
-	if len(c.Findings) != 1 || c.Findings[0].Code != "cuda_oom" {
-		t.Fatalf("findings = %+v, want cuda_oom", c.Findings)
+	if len(c.Findings) != 1 || c.Findings[0].Code != "CUDA_OOM" {
+		t.Fatalf("findings = %+v, want CUDA_OOM", c.Findings)
 	}
 	if !reflect.DeepEqual(c.Command, []string{"vllm", "serve", "/models/qwen3-32b", "--max-model-len", "32768"}) || !reflect.DeepEqual(c.GPUIndexes, []int{0}) {
 		t.Fatalf("command %v gpus %v", c.Command, c.GPUIndexes)
@@ -109,13 +110,13 @@ func TestErrorContextSeedsTailErrorLinesEventsAndHypotheses(t *testing.T) {
 		t.Fatalf("events = %+v", c.Events)
 	}
 	prompt := c.Prompt()
-	for _, want := range []string{"failure message: engine exited with code 1", "--max-model-len 32768", "unverified", "[cuda_oom]", "GET /api/v1/logs/search", "compare_with_healthy_replica"} {
+	for _, want := range []string{"failure message: engine exited with code 1", "--max-model-len 32768", "unverified", "[CUDA_OOM]", "GET /api/v1/logs/search", "compare_with_healthy_replica"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt lacks %q:\n%s", want, prompt)
 		}
 	}
 	findings, err := f.ai.InstanceFindings(in.UUID)
-	if err != nil || len(findings) != 1 || findings[0].Code != "cuda_oom" {
+	if err != nil || len(findings) != 1 || findings[0].Code != "CUDA_OOM" {
 		t.Fatalf("InstanceFindings = %+v, %v", findings, err)
 	}
 }
@@ -139,8 +140,46 @@ func TestErrorContextWithoutLogStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(c.Logs) != 0 || len(c.Findings) != 1 || c.Findings[0].Code != "image_pull_denied" {
+	if len(c.Logs) != 0 || len(c.Findings) != 1 || c.Findings[0].Code != "IMAGE_PULL_DENIED" {
 		t.Fatalf("logs %d findings %+v: the failure message alone should still match", len(c.Logs), c.Findings)
+	}
+}
+
+// An instance whose agent reported a structured reason is diagnosed by its
+// codes: the reported causes are the findings, and the prompt names the code,
+// even when the stored logs would match something else.
+func TestErrorContextDiagnosesByReportedCode(t *testing.T) {
+	f := newAIFixture(t, "app_ai_error_context_reported")
+	in := f.instance(t, "ai-ctx-reported", proto.InstStarting, "", nil)
+	exit := 1
+	if err := f.st.UpdateInstanceStatus(proto.InstanceStatus{UUID: in.UUID, State: proto.InstFailed, Message: "container exited (code 1): ValueError: KV cache",
+		RuntimeFailure: &proto.RuntimeFailure{Code: proto.ErrorContainerExited, ExitCode: &exit, Phase: proto.PhaseHealthCheck,
+			Causes: []proto.FailureCause{{Code: "KV_CACHE_INSUFFICIENT", Evidence: []string{"ValueError: larger than the maximum number of tokens that can be stored in KV cache"}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.logs.Append([]logstore.Entry{{Instance: in.UUID, Level: logstore.LevelError, Source: logstore.SourceInstance, TimeMS: time.Now().UnixMilli(),
+		Line: "torch.OutOfMemoryError: CUDA out of memory"}}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := f.ai.errorContext(in.UUID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Findings) != 1 || c.Findings[0].Code != "KV_CACHE_INSUFFICIENT" {
+		t.Fatalf("findings = %+v, want the reported cause only", c.Findings)
+	}
+	prompt := c.Prompt()
+	for _, want := range []string{"failure code: CONTAINER_EXITED", `"exit_code":1`, "[KV_CACHE_INSUFFICIENT]"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt lacks %q:\n%s", want, prompt)
+		}
+	}
+	if strings.Contains(prompt, "[CUDA_OOM]") {
+		t.Fatalf("prompt re-guessed from logs:\n%s", prompt)
+	}
+	findings, err := f.ai.InstanceFindings(in.UUID)
+	if err != nil || len(findings) != 1 || findings[0].Code != "KV_CACHE_INSUFFICIENT" {
+		t.Fatalf("InstanceFindings = %+v, %v", findings, err)
 	}
 }
 

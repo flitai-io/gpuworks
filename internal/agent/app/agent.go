@@ -161,9 +161,22 @@ func (a *Agent) Run(ctx context.Context) error {
 	if kd, ok := node.runtimeDriver().(*kube.Driver); ok {
 		kd.SetIdleReturn(a.cfg.KubeIdleReturn)
 		go kd.Start(ctx)
+		// Run's ctx is already done by the time this fires (SIGTERM, or
+		// any other reason Run is about to return), so the check below
+		// gets its own short-lived context instead of reusing it.
+		defer releaseUnselectedKubeCards(kd)
 	}
 	node.accelerator.preference = acceleratorPreference
 	node.accelerator.census = host
+	if host != nil && !prober.Available() {
+		// The chosen accelerator has no usable CLI or cards yet (a
+		// Kubernetes DaemonSet pod started before the GPU Operator's driver
+		// container published nvidia-smi, or any host whose driver is
+		// installed after the agent started): watch for one to answer and
+		// restart once it does, instead of staying this way until
+		// something restarts the agent by hand.
+		go node.startLateAcceleratorWatch(ctx, func() gpu.Prober { return host.ProberFor(acceleratorPreference) })
+	}
 	node.serverURL = serverURL
 	if a.cfg.Driver == nil && goruntime.GOOS == "linux" {
 		// An injected driver means a test; the real host's Docker daemon is
@@ -176,7 +189,20 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	// Start metrics/log background loops once the node identity is known.
 	var bgOnce sync.Once
+	ownerStateDir := a.cfg.StateDir
+	if abs, err := filepath.Abs(ownerStateDir); err == nil {
+		ownerStateDir = abs
+	}
+	// Containers are labelled with who launched them (engine.WorkloadOwner);
+	// the node UUID joins the server and state directory at registration.
+	setOwner := func(uuid string) {
+		if node.engine != nil {
+			node.engine.SetWorkloadOwner(engine.WorkloadOwner{ServerURL: serverURL, NodeUUID: uuid, StateDir: ownerStateDir})
+		}
+	}
+	setOwner("")
 	startBG := func(uuid string) {
+		setOwner(uuid)
 		if uuid != "" {
 			bgOnce.Do(func() { node.StartBackground(ctx, uuid) })
 		}

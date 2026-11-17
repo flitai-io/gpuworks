@@ -52,3 +52,5 @@ For real-hardware acceptance, verify each node on one card first, then collectiv
 See the [vendor support matrix](../reference/support-matrix.md) for related boundaries.
 
 The hardware catalog displays `Kunlunxin P800 PCIe` and stores vendor `kunlunxin`; `NormalizeGPUName` removes the brand before spec matching, so the reviewed `^P800 PCIe$` predicate still matches. Hardware identity feeds capability selection as runtime and model combinations are validated. Partition availability comes from the dynamic partition capability check; there is no static Partition feature axis. The engine Profile still defines engine PD modes. Vendor restrictions are defined only in the accelerator capability table; `ProfileForTarget` derives the modes available on that target from it.
+
+<!-- translation-source-sha256: be74f42353132c9cf644ab0fadf965b3e39719b3f28863566b87c5b25dafb802 -->

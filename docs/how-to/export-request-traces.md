@@ -165,7 +165,7 @@ span 的类型是 SERVER，名字是 `chat <模型名>`、`text_completion <模�
 | `gpuworks.deployment.id`、`gpuworks.instance.uuid` | 部署与处理它的副本 |
 | `gpuworks.api_key.id`、`gpuworks.user.id`、`gpuworks.request.source` | 调用方（API key 或控制台用户）与入口（`api` / `playground`） |
 | `gpuworks.request.body_bytes`、`gpuworks.request.images` | 请求体大小、图片数 |
-| `gpuworks.stream.events`、`gpuworks.stream.max_gap_ms` | 流式块数与最长停顿 |
+| `gpuworks.stream.events`、`gpuworks.stream.max_gap_ms` | 流式 chunk 数与最长停顿 |
 | `gpuworks.pd.prefill_instance`、`gpuworks.pd.fallback` | PD 分离部署：处理 prefill 的实例；prefill 不可用、由 decode 单独完成时的原因（如 `prefill_5xx`） |
 | `gpuworks.phase.<阶段>_ms` | 请求视图的阶段拆分里网关这一侧的部分，毫秒：`gateway`（网关自身）、`pd_prefill`（PD 的 prefill 阶段）、`preprocess`（引擎预处理）、`waiting`（引擎没报排队时的等首字）、`thinking`、`answering`、`tail`。它们加上引擎的排队与 Prefill 等于端到端；引擎自报的时间长于网关看到的等待时（两边计时起点不同），请求视图按比例收进等待里，这里给的引擎值是原值 |
 

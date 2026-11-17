@@ -2,6 +2,7 @@ package logstore
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -181,17 +182,26 @@ func likeEscape(s string) string {
 	return r.Replace(s)
 }
 
-// errFTSSyntax detects an invalid FTS5 query so the caller can retry the input
-// as a quoted phrase instead of surfacing a syntax error to the UI. FTS5
-// reports bad user input in two shapes: a parser error ("fts5: syntax error")
-// and unknown-column errors from `word:` column-filter syntax on a query that
-// has no such column ("no such column: x").
-func errFTSSyntax(err error) bool {
+// errFTSSyntax marks a query SQLite's FTS5 rejected as invalid user input, so
+// the caller can retry the input as a quoted phrase instead of surfacing a
+// syntax error to the UI.
+var errFTSSyntax = errors.New("invalid full-text query")
+
+// ftsQueryError converts the SQLite driver's error for invalid FTS5 input into
+// errFTSSyntax. The driver (glebarez/go-sqlite) reports both shapes only as
+// SQLITE_ERROR text, so they are recognized here, on the error of the query
+// this package ran (external text: SQLite): a parser error ("fts5: syntax
+// error near ...") and the unknown-column error from `word:` column-filter
+// syntax on a query that has no such column ("no such column: x").
+func ftsQueryError(err error) error {
 	if err == nil {
-		return false
+		return nil
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "fts5: syntax error") || strings.Contains(msg, "no such column: ")
+	if strings.Contains(msg, "fts5: syntax error") || strings.Contains(msg, "no such column: ") {
+		return fmt.Errorf("%w: %w", errFTSSyntax, err)
+	}
+	return err
 }
 
 // Search returns the newest-arrival-first page for the filter, walking
@@ -206,14 +216,15 @@ func (s *sqliteStore) Search(filter Filter) (Result, error) {
 		return Result{}, err
 	}
 	res, err := s.searchOnce(filter)
-	if errFTSSyntax(err) && filter.Query != "" {
+	if errors.Is(err, errFTSSyntax) && filter.Query != "" {
 		filter.Query = quotePhrase(filter.Query)
 		return s.searchOnce(filter)
 	}
 	return res, err
 }
 
-func (s *sqliteStore) searchOnce(filter Filter) (Result, error) {
+func (s *sqliteStore) searchOnce(filter Filter) (_ Result, err error) {
+	defer func() { err = ftsQueryError(err) }()
 	if filter.Limit <= 0 {
 		filter.Limit = DefaultLimit
 	}
@@ -356,14 +367,15 @@ func (s *sqliteStore) Histogram(filter Filter, bucketMS int64) ([]Bucket, error)
 		return nil, err
 	}
 	buckets, err := s.histogramOnce(filter, bucketMS)
-	if errFTSSyntax(err) && filter.Query != "" {
+	if errors.Is(err, errFTSSyntax) && filter.Query != "" {
 		filter.Query = quotePhrase(filter.Query)
 		return s.histogramOnce(filter, bucketMS)
 	}
 	return buckets, err
 }
 
-func (s *sqliteStore) histogramOnce(filter Filter, bucketMS int64) ([]Bucket, error) {
+func (s *sqliteStore) histogramOnce(filter Filter, bucketMS int64) (_ []Bucket, err error) {
+	defer func() { err = ftsQueryError(err) }()
 	if bucketMS <= 0 {
 		bucketMS = 60_000
 	}

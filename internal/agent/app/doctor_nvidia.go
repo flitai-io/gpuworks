@@ -74,27 +74,47 @@ printf 'fabric_manager=%s fabric_manager_version=%s\n' "$fm" "$fmver"`)
 		proto.DoctorFact{Code: proto.DoctorFactCUDARuntime, Value: cuda},
 		proto.DoctorFact{Code: proto.DoctorFactPeerAccess, Value: peer},
 		proto.DoctorFact{Code: proto.DoctorFactNCCL, Value: nccl})
+	if diagnosticSkipped(cuda) {
+		r.Findings = append(r.Findings, proto.DoctorFinding{
+			ID: proto.DoctorCheckCUDAInit, Status: proto.CheckSkip, Code: proto.DoctorSkipPrerequisiteMissing,
+			Probe: cudaInitProbe, Evidence: []proto.DoctorField{{Name: "result", Value: cuda}}, Recheck: cudaRecheck,
+		})
+	}
 	if diagnosticFailed(cuda) {
 		// The fabric manager state is a lead, not a verdict: only NVSwitch
 		// systems need it, so it is shown next to the failure rather than
 		// reported on its own.
 		r.Findings = append(r.Findings, proto.DoctorFinding{
-			Code: proto.DoctorCUDAInitFailed, Level: proto.DoctorLevelError,
+			ID: proto.DoctorCheckCUDAInit, Status: proto.CheckFail, Code: proto.DoctorCUDAInitFailed,
 			Probe:    cudaInitProbe,
 			Evidence: []proto.DoctorField{{Name: "result", Value: cuda}, {Name: "driver/fabric", Value: fabric}},
 			Recheck:  cudaRecheck,
 		})
 	}
-	for _, check := range []struct{ probe, result string }{
-		{"python3 -c " + accelerator.ShellSingleQuote(peerAccessScript), peer},
+	for _, check := range []struct{ id, probe, result string }{
+		{proto.DoctorCheckPeerAccess, "python3 -c " + accelerator.ShellSingleQuote(peerAccessScript), peer},
 		// mp.spawn needs the script to be an importable __main__, so this
 		// one runs from a file; the check does the same (runPythonFileDiagnostic).
-		{"f=$(mktemp /tmp/gpuworks-doctor-XXXXXX.py) && cat > \"$f\" <<'GPUWORKS_NCCL'\n" +
+		{proto.DoctorCheckNCCL, "f=$(mktemp /tmp/gpuworks-doctor-XXXXXX.py) && cat > \"$f\" <<'GPUWORKS_NCCL'\n" +
 			ncclScript + "\nGPUWORKS_NCCL\npython3 \"$f\"; rm -f \"$f\"", nccl},
 	} {
-		if diagnosticFailed(check.result) {
+		switch {
+		case gpuCount < 2:
+			// Nothing for a multi-GPU check to look at: not applicable.
+		case diagnosticFailed(check.result):
 			r.Findings = append(r.Findings, proto.DoctorFinding{
-				Code: proto.DoctorMultiGPUCheckFailed, Level: proto.DoctorLevelWarning,
+				ID: check.id, Status: proto.CheckWarn, Code: proto.DoctorMultiGPUCheckFailed,
+				Probe: check.probe, Evidence: []proto.DoctorField{{Name: "result", Value: check.result}},
+			})
+		case check.result == cudaDependentSkip:
+			// Not run: it would only fail the way the CUDA check did.
+			r.Findings = append(r.Findings, proto.DoctorFinding{
+				ID: check.id, Status: proto.CheckSkip, Code: proto.DoctorSkipCUDANotPassed,
+				Probe: check.probe, Evidence: []proto.DoctorField{{Name: "cuda", Value: cuda}},
+			})
+		case diagnosticSkipped(check.result):
+			r.Findings = append(r.Findings, proto.DoctorFinding{
+				ID: check.id, Status: proto.CheckSkip, Code: proto.DoctorSkipPrerequisiteMissing,
 				Probe: check.probe, Evidence: []proto.DoctorField{{Name: "result", Value: check.result}},
 			})
 		}
@@ -105,7 +125,12 @@ printf 'fabric_manager=%s fabric_manager_version=%s\n' "$fm" "$fmver"`)
 // not pass.
 const cudaDependentSkip = "SKIP (the CUDA runtime check did not pass)"
 
+// diagnosticFailed and diagnosticSkipped read the first word of a diagnostic
+// command's output (PASS, FAIL or SKIP), which the scripts above print and
+// the Go checks return in the same form.
 func diagnosticFailed(result string) bool { return strings.HasPrefix(result, "FAIL") }
+
+func diagnosticSkipped(result string) bool { return strings.HasPrefix(result, "SKIP") }
 
 func runDiagnostic(ctx context.Context, name string, args ...string) string {
 	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()

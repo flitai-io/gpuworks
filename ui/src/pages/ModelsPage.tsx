@@ -1,19 +1,23 @@
+import { Button as ZeronButton } from "../components/ui/button";
+import { ConsoleIcon } from "../ui-kit/consoleIcons";
+import { createHugeIcon } from "../lib/huge-icon";
+import GridViewIcon from "@hugeicons/core-free-icons/GridViewIcon";
+import ListViewIcon from "@hugeicons/core-free-icons/ListViewIcon";
+import OnlineCatalog from "./models/discovery/OnlineCatalog";
+import type { Provider } from "./models/discovery/hubs";
+import { useSearchParams } from "react-router-dom";
+import { Tabs, TabsList, TabItem } from "../components/ui/tabs";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Button, Card, Dropdown, Input, Modal, Pagination, Segmented, Select, Space, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Card, Dropdown, Input, Modal, Pagination, Select, Space, Tooltip, Typography, message } from "antd";
 import { FilterChips } from "../ui-kit/FilterChips";
 import {
-  AppstoreOutlined,
-  BarsOutlined,
   CloudDownloadOutlined,
   CopyOutlined,
   DeleteOutlined,
   FolderAddOutlined,
   MoreOutlined,
-  PlusOutlined,
-  ReloadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, useEvents, usePolling, type Model, type ModelCore, type ModelListItem } from "../api";
 import { usePagedList } from "../pagedList";
@@ -26,8 +30,8 @@ import PageHeader from "../components/PageHeader";
 import {
   DownloadModal,
   Modalities,
-  ModelDetailModal,
   ModelLogo,
+  ModelDetailModal,
 	ModelSourceTag,
   ModelTile,
   modelDate,
@@ -44,6 +48,11 @@ const modelOperationOptions: Array<{ value: "all" | OperationType; labelKey: str
   { value: "all", labelKey: allOperationsLabelKey },
   ...operationTypes.map((value) => ({ value, labelKey: operationLabelKey[value] })),
 ];
+
+const registeredViews = [
+  { value: "grid", labelKey: "view.grid", icon: createHugeIcon(GridViewIcon) },
+  { value: "list", labelKey: "view.list", icon: createHugeIcon(ListViewIcon) },
+] as const;
 
 const MODEL_TABLE_ID = "models";
 
@@ -95,6 +104,30 @@ export default function ModelsPage() {
     void refresh();
   });
 
+  const [onlineTab, setOnlineTab] = useState(false);
+  const [bases, setBases] = useState<Partial<Record<Provider, string[]>>>({});
+  useEffect(() => {
+    let current = true;
+    const load = () => {
+      for (const source of ["modelscope", "huggingface"] as const) {
+        api.metadataSources(source).then(({bases}) => {
+          if (current) setBases(prev => ({...prev, [source]: bases}));
+        }).catch(() => {});
+      }
+    };
+    load();
+    window.addEventListener("focus", load);
+    return () => { current = false; window.removeEventListener("focus", load); };
+  }, []);
+  const offline = bases.modelscope?.length === 0 && bases.huggingface?.length === 0;
+  const browsing = onlineTab && !offline && !openID;
+  const [hub, setHub] = useState<Provider>(() => localStorage.getItem("model-catalog-source") === "huggingface" ? "huggingface" : "modelscope");
+  const [onlineModelId, setOnlineModelId] = useState("");
+  const [manualSeed, setManualSeed] = useState<{source: string; id: string; offline: boolean; revision?: string}>({source: hub, id: "", offline: false});
+  function openManual(source: string, id: string, offline: boolean, revision?: string) {
+    setManualSeed({source, id, offline, revision});
+    setRegisterOpen(true);
+  }
   const [registerOpen, setRegisterOpen] = useState(false);
   const [downloadFor, setDownloadFor] = useState<Model | null>(null);
   const [pathFor, setPathFor] = useState<Model | null>(null);
@@ -157,7 +190,7 @@ export default function ModelsPage() {
       serverSort: true,
       render: (_: unknown, model: ModelListItem) => <span className="model-name-cell"><ModelLogo model={model} size="small" /><Button type="link" className="model-name-link" onClick={() => openDetail(model)}>{model.name || model.source_id || "—"}</Button></span>,
     },
-    { key: "source", title: t("column.source"), width: 130, serverSort: true, render: (_: unknown, model: ModelListItem) => <ModelSourceTag source={model.source} /> },
+    { key: "source", title: t("column.source"), width: 130, serverSort: true, render: (_: unknown, model: ModelListItem) => <ModelSourceTag source={model.source} badge /> },
     {
       key: "presence",
       title: t("column.nodePresence"),
@@ -179,14 +212,14 @@ export default function ModelsPage() {
       key: "operations",
       title: t("column.operations"),
       width: 200,
-      render: (_: unknown, m: ModelListItem) => <CellTags tags={operationTypesOf(m.operations).map((type) => ({ key: type, text: t(operationLabelKey[type]), color: "blue" }))} />,
+      render: (_: unknown, m: ModelListItem) => <CellTags badgeColor="blue" tags={operationTypesOf(m.operations).map((type) => ({ key: type, text: t(operationLabelKey[type]) }))} />,
     },
     {
       key: "input_modalities",
       title: t("column.inputModalities"),
       width: 160,
       defaultHidden: true,
-      render: (_: unknown, m: ModelListItem) => <Modalities values={m.input_modalities} />,
+      render: (_: unknown, m: ModelListItem) => <Modalities values={m.input_modalities} badge />,
     },
     {
       key: "action",
@@ -232,6 +265,21 @@ export default function ModelsPage() {
       ),
     },
   ];
+  const warehouseSummary = (
+    <div className="model-summary-strip model-summary-inline" role="group" aria-label={t("summary.aria")}>
+      <div className="model-summary-item"><span>{t("summary.registered")}</span><strong>{summary?.registered ?? "—"}</strong></div>
+      <div className="model-summary-item"><span>{t("files.count")}</span><strong>{summary?.ready_files ?? "—"}</strong></div>
+      <div className="model-summary-item"><span>{t("summary.sources")}</span><strong>{summary?.sources ?? "—"}</strong></div>
+      <div className="model-summary-item"><span>{t("summary.totalWeight")}</span><strong>{summary?.weight_gib ? `${summary.weight_gib.toFixed(1)} GiB` : "—"}</strong></div>
+    </div>
+  );
+  const refreshButton = (
+    <ZeronButton variant="tertiary" iconOnly loading={loading}
+      aria-label={t("action.refresh")} title={t("action.refresh")}
+      onClick={refetch}>
+      <ConsoleIcon.refresh aria-hidden />
+    </ZeronButton>
+  );
   // Search and source sit above the rows, where every list keeps them; the
   // card view has the same bar without the column settings.
   const filterBar = (
@@ -271,40 +319,42 @@ export default function ModelsPage() {
       <PageHeader
         title={t("page.title")}
         description={t("page.description")}
-        extra={
-          <Segmented
-            aria-label={t("view.aria")}
-            value={view}
-            onChange={changeView}
-            options={[
-              { value: "grid", label: <Tooltip title={t("view.grid")}><AppstoreOutlined aria-label={t("view.grid")} /></Tooltip> },
-              { value: "list", label: <Tooltip title={t("view.list")}><BarsOutlined aria-label={t("view.list")} /></Tooltip> },
-            ]}
-          />
-        }
+        extra={<ZeronButton variant="primary" leadingIcon={ConsoleIcon.add} onClick={() => openManual(browsing ? hub : "", browsing ? onlineModelId : "", offline)}>{t("action.register")}</ZeronButton>}
       />
-      <FilterChips className="model-type-filter" label={t("filter.operationAria")} value={modelOperation} onChange={setModelOperation}
-        items={modelOperationOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }))} />
-      <Card className="model-resource-card">
-        <div className="model-content-toolbar">
-          <div className="model-toolbar-actions">
-            <Tooltip title={t("action.refresh")}>
-              <Button icon={<ReloadOutlined />} loading={loading} onClick={() => { refetch(); if (openID) void detail.refresh(); }} aria-label={t("action.refresh")} />
-            </Tooltip>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setRegisterOpen(true)}>{t("action.register")}</Button>
-          </div>
-          <div className="model-summary-strip model-summary-inline" aria-label={t("summary.aria")}>
-            <div className="model-summary-item"><span>{t("summary.registered")}</span><strong>{summary?.registered ?? "—"}</strong></div>
-            <div className="model-summary-item"><span>{t("files.count")}</span><strong>{summary?.ready_files ?? "—"}</strong></div>
-            <div className="model-summary-item"><span>{t("summary.sources")}</span><strong>{summary?.sources ?? "—"}</strong></div>
-            <div className="model-summary-item"><span>{t("summary.totalWeight")}</span><strong>{summary?.weight_gib ? `${summary.weight_gib.toFixed(1)} GiB` : "—"}</strong></div>
-          </div>
+      <div className="repository-tab-row">
+        <Tabs variant="underline" value={browsing ? "online" : "registered"} onValueChange={v => setOnlineTab(v === "online")}>
+        <TabsList aria-label={t("catalog.tablist")}><TabItem value="registered" label={t("catalog.registeredTab")} />
+          {!offline && <TabItem value="online" label={t("catalog.onlineTab")} />}</TabsList>
+        </Tabs>
+        {!browsing && warehouseSummary}
+      </div>
+      {!offline && <section className="repository-discovery" hidden={!browsing}>
+        <OnlineCatalog active={browsing && !registerOpen} provider={hub} onProvider={setHub}
+          onManual={openManual} onQuery={setOnlineModelId} />
+      </section>}
+      <section hidden={browsing}>
+      <Card className="model-resource-card mt-3">
+        <div className="flex items-start justify-between gap-4 px-4 pt-4">
+          <FilterChips label={t("filter.operationAria")} value={modelOperation} onChange={setModelOperation}
+            items={modelOperationOptions.map((option) => ({ value: option.value, label: t(option.labelKey) }))} />
+          <Tabs variant="segment" value={view} onValueChange={changeView} className="shrink-0">
+            <TabsList aria-label={t("view.aria")}>
+              {registeredViews.map(({ value, labelKey, icon }) => (
+                <TabItem key={value} value={value} icon={icon} label=""
+                  aria-label={t(labelKey)} title={t(labelKey)}
+                  className="w-control-md justify-center gap-0 px-0" />
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
         {error ? (
           <Alert type="error" showIcon message={t("error.loadFailed")} description={error.message} action={<Button onClick={refetch}>{t("action.retry")}</Button>} />
         ) : view === "grid" ? (
           <div className="model-grid-region" aria-live="polite">
-            <div className="resource-table-toolbar"><div className="resource-table-toolbar-left">{filterBar}</div></div>
+            <div className="resource-table-toolbar">
+              <div className="resource-table-toolbar-left">{filterBar}</div>
+              <div className="resource-table-toolbar-right">{refreshButton}</div>
+            </div>
             {rows.length > 0 ? (
               <>
                 <div className="model-tile-grid">
@@ -336,7 +386,7 @@ export default function ModelsPage() {
               <EmptyState
                 kind="models"
                 description={t(filtering ? "empty.filtered" : "empty.all")}
-                action={filtering ? undefined : <Button type="primary" onClick={() => setRegisterOpen(true)}>{t("action.register")}</Button>}
+                action={filtering ? undefined : <ZeronButton variant="primary" leadingIcon={ConsoleIcon.add} onClick={() => openManual("", "", offline)}>{t("action.register")}</ZeronButton>}
               />
             )}
           </div>
@@ -352,11 +402,14 @@ export default function ModelsPage() {
             sort={sort}
             onSortChange={setSort}
             toolbar={filterBar}
+            toolbarExtra={refreshButton}
             emptyDescription={t(filtering ? "empty.filtered" : "empty.all")}
             emptyKind="models"
-            emptyAction={filtering ? undefined : <Button type="primary" onClick={() => setRegisterOpen(true)}>{t("action.register")}</Button>}
+            emptyAction={filtering ? undefined : <ZeronButton variant="primary" leadingIcon={ConsoleIcon.add} onClick={() => openManual("", "", offline)}>{t("action.register")}</ZeronButton>}
           />
         )}
+      </Card>
+      </section>
         <ModelDetailModal
           model={openID ? detail.data : null}
           onClose={closeDetail}
@@ -370,6 +423,8 @@ export default function ModelsPage() {
           }}
         />
         <RegisterModal
+          key={String(registerOpen)}
+          manualSeed={manualSeed}
 			open={registerOpen}
 			onClose={() => setRegisterOpen(false)}
 			onDone={() => {
@@ -412,7 +467,6 @@ export default function ModelsPage() {
           refetch();
         }}
       />
-      </Card>
     </div>
   );
 }

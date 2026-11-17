@@ -14,6 +14,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/diagnostics"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/rpccontext"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -21,7 +22,7 @@ import (
 )
 
 func (a *apiHandlers) health(w http.ResponseWriter, r *http.Request) {
-	nodes, _ := a.d.Store.ListNodes()
+	nodes, _ := a.d.Store.CountNodes()
 	sessions := 0
 	if a.d.SessionCount != nil {
 		sessions = a.d.SessionCount()
@@ -29,7 +30,7 @@ func (a *apiHandlers) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.Health{
 		Status:   "ok",
 		Version:  version.Version,
-		Nodes:    len(nodes),
+		Nodes:    nodes,
 		Sessions: sessions,
 	})
 }
@@ -200,7 +201,9 @@ func (a *apiHandlers) getNode(w http.ResponseWriter, r *http.Request) {
 		view = toNodeDTOWithToken(n)
 	}
 	views := []dto.Node{view}
-	a.fillResolvedNodeFields([]store.Node{*n}, views)
+	a.fillResolvedNodeFields([]store.Node{*n}, views, nil)
+	a.fillNodeGPUIsolation(views)
+	a.fillNodeUCXNetlinkHang(views)
 	writeJSON(w, http.StatusOK, views[0])
 }
 
@@ -214,6 +217,24 @@ func (a *apiHandlers) getNode(w http.ResponseWriter, r *http.Request) {
 const nodeDoctorTimeout = 2 * time.Minute
 
 func (a *apiHandlers) nodeDoctor(w http.ResponseWriter, r *http.Request) {
+	if a.d.NodeDoctor != nil {
+		claims, ok := a.claimsFromRequest(r)
+		out, err := a.d.NodeDoctor.Diagnose(r.Context(), chi.URLParam(r, "uuid"), ok && claims.Role == "admin")
+		if err != nil {
+			status := http.StatusConflict
+			if errors.Is(err, store.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			if errors.Is(err, diagnostics.ErrDoctorResponse) {
+				status = http.StatusBadGateway
+			}
+			writeErr(w, status, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+
 	if a.d.CallNode == nil {
 		writeProductError(w, http.StatusServiceUnavailable, ErrorNodeRPCUnavailable, "node RPC is not configured", nil)
 		return
@@ -226,14 +247,13 @@ func (a *apiHandlers) nodeDoctor(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
-	// The agent's structured report is passed through as the agent typed it;
-	// an agent that predates it sends only the text report.
+	// Normalize Agent results without losing hardware details or legacy text.
 	var out proto.DoctorReport
 	if err := json.Unmarshal(raw, &out); err != nil {
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, diagnostics.AgentDoctorReport(out))
 }
 
 func (a *apiHandlers) updateNodeRuntime(w http.ResponseWriter, r *http.Request) {

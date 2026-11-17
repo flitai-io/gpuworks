@@ -108,15 +108,28 @@ func buildDoctorReportWith(ctx context.Context, p gpu.Prober, disks []proto.Path
 	}
 	if r.Accelerators != nil && !gpu.IsSynthetic(p) {
 		doctorPeerMemory(&r, p.Vendor())
+		doctorUCXNetlinkHang(ctx, &r)
 	}
 	if doctorOnMac {
 		doctorMacChecks(ctx, &r, gpus)
 	}
 	sort.SliceStable(r.Findings, func(i, j int) bool {
-		return r.Findings[i].Level == proto.DoctorLevelError && r.Findings[j].Level != proto.DoctorLevelError
+		return doctorFindingRank(r.Findings[i].Status) < doctorFindingRank(r.Findings[j].Status)
 	})
 	r.Report = renderDoctorText(r)
 	return r
+}
+
+// doctorFindingRank orders findings as the report lists them: failures,
+// then warnings, then the checks that did not run.
+func doctorFindingRank(status string) int {
+	switch status {
+	case proto.CheckFail:
+		return 0
+	case proto.CheckWarn:
+		return 1
+	}
+	return 2
 }
 
 // doctorOnMac selects the macOS checks; a report test sets it.
@@ -167,7 +180,7 @@ func doctorHost(r *proto.DoctorReport, extra []proto.PathUsage, runtimeName stri
 			paths[i] = d.Path
 		}
 		finding := proto.DoctorFinding{
-			Code: proto.DoctorDiskLow, Level: proto.DoctorLevelWarning, Disk: &disk,
+			ID: proto.DoctorCheckDiskFree, Status: proto.CheckWarn, Code: proto.DoctorDiskLow, Disk: &disk,
 			Probe: "statfs(" + strings.Join(paths, ", ") + ")", Recheck: "df -h " + strings.Join(paths, " "),
 		}
 		if len(paths) > 1 {
@@ -227,7 +240,7 @@ func doctorRuntimes(ctx context.Context, r *proto.DoctorReport, driver runtime.D
 		listed = listed || rt.Selected
 		if rt.Selected && result.status != proto.DoctorRuntimeOK {
 			r.Findings = append(r.Findings, proto.DoctorFinding{
-				Code: proto.DoctorRuntimeUnavailable, Level: proto.DoctorLevelError,
+				ID: proto.DoctorCheckRuntimeAvailable, Status: proto.CheckFail, Code: proto.DoctorRuntimeUnavailable,
 				Probe: rt.Command, Evidence: []proto.DoctorField{{Name: "result", Value: result.detail}},
 				Recheck: check.recheck,
 			})
@@ -256,7 +269,7 @@ func doctorUnrecognizedFunctions(r *proto.DoctorReport) {
 		evidence = append(evidence, proto.DoctorField{Name: fn.BDF, Value: fn.Label()})
 	}
 	r.Findings = append(r.Findings, proto.DoctorFinding{
-		Code: proto.DoctorAcceleratorUnrecognized, Level: proto.DoctorLevelWarning,
+		ID: proto.DoctorCheckAcceleratorRecognized, Status: proto.CheckWarn, Code: proto.DoctorAcceleratorUnrecognized,
 		Probe: "read /sys/bus/pci/devices", Evidence: evidence,
 		Recheck: "lspci -nn -k",
 	})
@@ -289,7 +302,7 @@ func doctorAccelerators(ctx context.Context, r *proto.DoctorReport, p gpu.Prober
 		// doctor on that list is the point: returning here showed eight
 		// 910B4 as none (198.51.100.31, 2026-10-15).
 		r.Findings = append(r.Findings, proto.DoctorFinding{
-			Code: proto.DoctorAcceleratorProbeFailed, Level: proto.DoctorLevelError,
+			ID: proto.DoctorCheckAcceleratorInventory, Status: proto.CheckFail, Code: proto.DoctorAcceleratorProbeFailed,
 			Probe: accelerator.ToolCommand(vendor), Evidence: []proto.DoctorField{{Name: "error", Value: err.Error()}},
 			Recheck: accelerator.ToolCommand(vendor),
 		})
@@ -310,11 +323,11 @@ func doctorAccelerators(ctx context.Context, r *proto.DoctorReport, p gpu.Prober
 		}
 		finding := byCode[g.HealthCode]
 		if finding == nil {
-			level := proto.DoctorLevelWarning
+			checkStatus := proto.CheckWarn
 			if status == accelerator.HealthError {
-				level = proto.DoctorLevelError
+				checkStatus = proto.CheckFail
 			}
-			finding = &proto.DoctorFinding{Code: g.HealthCode, Level: level}
+			finding = &proto.DoctorFinding{ID: proto.DoctorCheckAcceleratorHealth, Status: checkStatus, Code: g.HealthCode}
 			byCode[g.HealthCode] = finding
 			order = append(order, g.HealthCode)
 		}

@@ -8,6 +8,7 @@ package planning
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -410,11 +411,15 @@ func CheckPDArgs(engine string, layers ...[]string) error {
 }
 
 // PDFeatureWarnings are the notices for combinations that are allowed but
-// not verified, and where KV offload runs. Sleep is no longer one: it is
-// verified with KV over Ethernet and refused over RDMA (CheckPDNetwork).
-func PDFeatureWarnings(kvOffload, partitioned bool) []messages.Warning {
+// not verified, and where KV offload runs: kvOffloadRoles are the PD roles
+// that keep the launch's KV offload (deploy.KVOffloadPDRoles), none when it
+// has none. Every KV offload backend is kept on prefill (kvbackend.New), so
+// offload that the decoder does not keep is offload on prefill only. Sleep is
+// no longer one: it is verified with KV over Ethernet and refused over RDMA
+// (CheckPDNetwork).
+func PDFeatureWarnings(kvOffloadRoles []string, partitioned bool) []messages.Warning {
 	var out []messages.Warning
-	if kvOffload {
+	if len(kvOffloadRoles) > 0 && !slices.Contains(kvOffloadRoles, pdmode.RoleDecode) {
 		out = append(out, messages.Warning{Code: messages.WarningPDKVOffloadPrefillOnly})
 	}
 	if partitioned {

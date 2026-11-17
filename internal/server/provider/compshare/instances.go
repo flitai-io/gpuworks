@@ -114,7 +114,7 @@ func (d *Driver) GetInstance(ctx context.Context, creds provider.Credentials, ex
 			return mapInstance(h), nil
 		}
 	}
-	return provider.Instance{}, fmt.Errorf("compshare: instance %s not found", externalID)
+	return provider.Instance{}, fmt.Errorf("%w: %s", errInstanceNotFound, externalID)
 }
 
 func (d *Driver) PowerState(ctx context.Context, creds provider.Credentials, externalID string) (provider.PowerState, error) {

@@ -21,6 +21,11 @@ type observationHub struct {
 	pushed chan proto.StateUpdate
 }
 
+// RequestImageRefs records the refs as the push the hub would send.
+func (h *observationHub) RequestImageRefs(uuid string, refs []string) {
+	_ = h.PushToNode(uuid, proto.StateUpdate{ImageRefs: refs})
+}
+
 func (h *observationHub) PushToNode(uuid string, update proto.StateUpdate) error {
 	_ = h.modelSyncHub.PushToNode(uuid, update)
 	if h.pushed != nil {

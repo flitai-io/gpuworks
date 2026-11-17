@@ -1,6 +1,9 @@
 package native
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // unpackReserve is room left after an unpack for what a launch still writes:
 // the driver libraries copied into the rootfs and the container's log.
@@ -12,6 +15,10 @@ const unpackReserve = 2 << 30
 // a disk that fills up mid-unpack - and a full disk then breaks the launch in
 // ways that do not name it (a driver library that cannot be written, a log
 // that stays empty). Unknown free space is not a reason to refuse.
+// errUnpackSpace marks checkUnpackSpace's refusal so callers can tell a full
+// disk from other unpack failures.
+var errUnpackSpace = errors.New("not enough disk space to unpack the image")
+
 func (e *Engine) checkUnpackSpace(dir string, layers []Descriptor) error {
 	free := e.freeSpace(dir)
 	if free < 0 {
@@ -22,8 +29,8 @@ func (e *Engine) checkUnpackSpace(dir string, layers []Descriptor) error {
 		need += layer.Size
 	}
 	if free < need {
-		return fmt.Errorf("not enough disk space to unpack the image under %s: %s free, at least %s needed (its layers plus %s for the launch); free up space on the node",
-			dir, humanBytes(free), humanBytes(need), humanBytes(unpackReserve))
+		return fmt.Errorf("%w under %s: %s free, at least %s needed (its layers plus %s for the launch); free up space on the node",
+			errUnpackSpace, dir, humanBytes(free), humanBytes(need), humanBytes(unpackReserve))
 	}
 	return nil
 }

@@ -72,7 +72,7 @@ func (w *imageWaits) set(dep, image uint) {
 	w.byDep[dep] = image
 }
 
-func (w *imageWaits) clear(dep uint) {
+func (w *imageWaits) forget(dep uint) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	delete(w.byDep, dep)
@@ -112,7 +112,7 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 	}
 	image, err := c.store.ResolveImageRef(dep.Image)
 	if err != nil {
-		c.imageWaits.clear(dep.ID)
+		c.imageWaits.forget(dep.ID)
 		return imageDelivery{present: true}
 	}
 	now := c.now()
@@ -120,7 +120,7 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 	if err == nil {
 		switch row.State {
 		case store.ImageStatePresent:
-			c.imageWaits.clear(dep.ID)
+			c.imageWaits.forget(dep.ID)
 			return imageDelivery{present: true}
 		case store.ImageStateSyncing, store.ImageStatePulling:
 			if watcher, ok := c.hub.(interface{ WatchImageTransfer(uint, uint) }); ok {
@@ -147,7 +147,7 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 	source, rate := c.imageCopySource(image.ID, node, now)
 	syncer, ok := c.hub.(imagePeerSyncer)
 	if source == nil || !ok {
-		c.imageWaits.clear(dep.ID)
+		c.imageWaits.forget(dep.ID)
 		return imageDelivery{present: true}
 	}
 	if _, err := syncer.SyncImageFromRate(ctx, image.ID, node.UUID, source.UUID, rate); err != nil {
@@ -157,7 +157,7 @@ func (c *Controller) deploymentImageDelivery(ctx context.Context, dep *store.Dep
 		}
 		c.log.Info("image copy not started; the replica pulls the image itself", "dep", dep.ID, "image", image.ImageRef, "node", node.UUID, "source", source.UUID, "err", err)
 		c.peerCool.cool(source.ID, node.ID, now)
-		c.imageWaits.clear(dep.ID)
+		c.imageWaits.forget(dep.ID)
 		return imageDelivery{present: true}
 	}
 	c.imageWaits.set(dep.ID, image.ID)

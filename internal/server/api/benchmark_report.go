@@ -30,7 +30,7 @@ func (a *apiHandlers) downloadBenchmarkReport(w http.ResponseWriter, r *http.Req
 	}
 	input := benchreport.Run{
 		Error: run.Error, ID: run.ID, Name: run.Name, EvaluationURL: a.managementRequestOrigin(r) + "/evaluations/" + chi.URLParam(r, "id"), State: run.State, Mode: run.Mode, Model: run.Model,
-		TokenizerRef: run.TokenizerRef, Dataset: json.RawMessage(run.Dataset), Search: json.RawMessage(run.Search),
+		TokenizerRef: run.TokenizerRef, PriorityClass: run.PriorityClass, Dataset: json.RawMessage(run.Dataset), Search: json.RawMessage(run.Search),
 		TargetSnapshot: json.RawMessage(run.TargetSnapshot), CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, EndedAt: run.EndedAt,
 		Verdict: json.RawMessage(run.Verdict), KeepDetail: run.KeepDetail, DetailCapMB: run.DetailCapMB,
 	}

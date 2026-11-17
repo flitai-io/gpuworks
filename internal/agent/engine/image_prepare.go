@@ -92,7 +92,7 @@ func (e *Engine) prepareImage(ctx context.Context, driver runtime.Driver, spec p
 	}
 	if errors.Is(imageCheckErr, runtime.ErrRuntimeUnavailable) {
 		// No source can help: the runtime itself is not usable on this node.
-		e.failRuntimeUnavailable(spec, imageCheckErr)
+		e.failRuntimeUnavailable(spec, driver.Name(), imageCheckErr)
 		return "", false
 	}
 	if imageCheckErr == nil && e.importFromOtherRuntime(ctx, driver, spec, name) {
@@ -163,9 +163,9 @@ func (e *Engine) prepareImage(ctx context.Context, driver runtime.Driver, spec p
 	})
 	if walkErr != nil {
 		if errors.Is(walkErr, runtime.ErrRuntimeUnavailable) {
-			e.failRuntimeUnavailable(spec, walkErr)
+			e.failRuntimeUnavailable(spec, driver.Name(), walkErr)
 		} else {
-			e.reportState(spec, proto.InstFailed, "", "", walkErr.Error())
+			e.reportFailed(spec.UUID, proto.RuntimeFailure{Code: proto.ErrorImagePullFailed, Phase: proto.PhaseImagePull, Detail: walkErr.Error()}, walkErr.Error(), failedStatus{})
 		}
 		return "", false
 	}
@@ -192,8 +192,9 @@ func (e *Engine) prepareImage(ctx context.Context, driver runtime.Driver, spec p
 
 // failRuntimeUnavailable reports an instance that cannot start because its
 // runtime could not be set up on the node, naming the runtime and the cause.
-func (e *Engine) failRuntimeUnavailable(spec proto.InstanceDesiredState, err error) {
-	e.reportState(spec, proto.InstFailed, "", "", err.Error())
+func (e *Engine) failRuntimeUnavailable(spec proto.InstanceDesiredState, runtimeName string, err error) {
+	failure := proto.RuntimeFailure{Code: proto.ErrorContainerRuntimeUnavailable, Phase: proto.PhaseImageVerify, Runtime: runtimeName, Detail: err.Error()}
+	e.reportFailed(spec.UUID, failure, err.Error(), failedStatus{})
 }
 
 // launchNote names the reference a container is launched from when that is not

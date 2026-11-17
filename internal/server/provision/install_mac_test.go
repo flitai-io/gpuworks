@@ -113,7 +113,7 @@ func installOnFakeMac(t *testing.T, mac *fakeMac, auth SSHAuth, installDir strin
 
 func checkNamed(checks []CheckResult, name string) (CheckResult, bool) {
 	for _, c := range checks {
-		if c.Name == name {
+		if c.ID == name {
 			return c, true
 		}
 	}
@@ -165,10 +165,10 @@ func TestInstallSSHOnAMacRunsTheInstallScriptWithSudoFromThePassword(t *testing.
 	if mac.stdin != "pw\n" {
 		t.Errorf("sudo read %q on stdin, want the password", mac.stdin)
 	}
-	if c, _ := checkNamed(report.Checks, "Privilege"); c.Status != "ok" || !strings.Contains(c.Detail, "launch daemon") {
+	if c, _ := checkNamed(report.Checks, "privilege"); c.Status != "pass" || !strings.Contains(c.text(), "launch daemon") {
 		t.Errorf("privilege = %+v", c)
 	}
-	if c, _ := checkNamed(report.Checks, "Start agent"); c.Status != "ok" || !strings.Contains(c.Detail, "pid 4242") {
+	if c, _ := checkNamed(report.Checks, "start_agent"); c.Status != "pass" || !strings.Contains(c.text(), "pid 4242") {
 		t.Errorf("start agent = %+v", c)
 	}
 	if !mac.removed {
@@ -185,7 +185,7 @@ func TestInstallSSHOnAMacWithoutAdminRightsInstallsALaunchAgent(t *testing.T) {
 	if strings.HasPrefix(mac.install, "sudo") || !strings.Contains(mac.install, "--install-dir '/Users/me/agent'") {
 		t.Fatalf("install command = %s", mac.install)
 	}
-	if c, _ := checkNamed(report.Checks, "Privilege"); c.Status != "warn" || !strings.Contains(c.Detail, "launch agent") {
+	if c, _ := checkNamed(report.Checks, "privilege"); c.Status != "warn" || !strings.Contains(c.text(), "launch agent") {
 		t.Fatalf("privilege = %+v", c)
 	}
 	if report.InstallDir != "/Users/me/agent" {
@@ -238,7 +238,7 @@ func TestInstallSSHOnAnIntelMacStopsBeforeUploading(t *testing.T) {
 	if len(mac.uploads) != 0 || mac.install != "" {
 		t.Fatalf("uploaded %v / ran %q on an Intel Mac", mac.uploads, mac.install)
 	}
-	if c, _ := checkNamed(report.Checks, "Arch"); c.Status != "error" {
+	if c, _ := checkNamed(report.Checks, "arch"); c.Status != "fail" {
 		t.Fatalf("arch check = %+v", c)
 	}
 }
@@ -249,8 +249,8 @@ func TestInstallSSHOnAMacReportsTheInstallerFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "not logged in") {
 		t.Fatalf("a launch agent without a session = %v; the error must say why", err)
 	}
-	c, _ := checkNamed(report.Checks, "Start agent")
-	if c.Status != "error" || !strings.Contains(c.Detail, "not logged in") {
+	c, _ := checkNamed(report.Checks, "start_agent")
+	if c.Status != "fail" || !strings.Contains(c.text(), "not logged in") {
 		t.Fatalf("start check = %+v", c)
 	}
 	if !mac.removed {

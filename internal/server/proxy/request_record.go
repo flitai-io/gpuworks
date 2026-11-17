@@ -58,6 +58,8 @@ type requestFacts struct {
 	body         bodyFacts
 	// pd is the request's PD prefill stage; nil when it had none.
 	pd *uxrecord.PDStage
+	// priorityClass is the class the request ran at (priority.go).
+	priorityClass string
 }
 
 // msSince converts an offset from dispatch into milliseconds since receipt.
@@ -88,7 +90,7 @@ func buildRecord(f requestFacts, instanceUUID string, status int, duration time.
 		Status:   status, Outcome: outcome, FinishReason: stats.finishReason,
 		Usage: stats.usage, CachedTokens: uxrecord.Unknown, ReasoningTokens: uxrecord.Unknown,
 		EngineQueueMS: uxrecord.Unknown, EnginePrefillMS: uxrecord.Unknown, EngineDecodeMS: uxrecord.Unknown,
-		Weight: 1, PD: f.pd,
+		Weight: 1, PD: f.pd, PriorityClass: f.priorityClass,
 	}
 	if !firstByte.IsZero() {
 		rec.FirstByteMS = msSince(dispatchMS, firstByte.Sub(f.dispatchedAt))

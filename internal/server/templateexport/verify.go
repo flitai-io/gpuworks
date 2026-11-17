@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // CheckTimeout bounds each operation request an export sends.
@@ -33,27 +35,40 @@ type Prober func(ctx context.Context, deploymentID uint, instanceUUID, path stri
 func Checks(ctx context.Context, probe Prober, deploymentID uint, instanceUUID string, contract inferenceapi.Contract) []Check {
 	checks := make([]Check, 0, len(contract.Operations))
 	for _, op := range contract.Operations {
-		check := Check{Operation: op.Type, Endpoint: op.Endpoint}
+		check := Check{ID: CheckOperationReply, Operation: op.Type, Endpoint: op.Endpoint, Status: proto.CheckSkip}
 		kind, cheap := checkKind(op.Type)
-		if !cheap || probe == nil || op.Endpoint == "" {
+		switch {
+		case op.Endpoint == "":
+			check.Code = messages.CheckTemplateOperationNoEndpoint
+		case !cheap || probe == nil:
+			check.Code = messages.CheckTemplateOperationNotProbed
+		}
+		if check.Code != "" {
 			checks = append(checks, check)
 			continue
 		}
-		check.Tested = true
 		cctx, cancel := context.WithTimeout(ctx, CheckTimeout)
 		reply := probe(cctx, deploymentID, instanceUUID, op.Endpoint, healthcheck.Payload(kind))
 		contextErr := cctx.Err()
 		cancel()
-		check.HTTPStatus, check.Message = reply.HTTPStatus, reply.Message
+		check.Status, check.HTTPStatus, check.Evidence = proto.CheckFail, reply.HTTPStatus, reply.Message
 		switch {
 		case reply.NoReplica:
-			check.Message = "no running replica"
+			check.Code = messages.CheckTemplateOperationNoReplica
 		case contextErr != nil:
-			check.Message = contextErr.Error()
-		case reply.Message != "":
-			// A probe may have received HTTP headers before its body failed.
-		case reply.HTTPStatus >= http.StatusOK && reply.HTTPStatus < http.StatusMultipleChoices:
-			check.Passed = true
+			check.Code = messages.CheckTemplateOperationTimedOut
+			if check.Evidence == "" {
+				check.Evidence = contextErr.Error()
+			}
+		case reply.HTTPStatus != 0 && (reply.HTTPStatus < http.StatusOK || reply.HTTPStatus >= http.StatusMultipleChoices):
+			// Evidence is the error body the gateway or engine answered.
+			check.Code = messages.CheckTemplateOperationHTTPError
+		case reply.Message != "" || reply.HTTPStatus == 0:
+			// The request failed, or a 2xx arrived and its body then broke
+			// off: the status proves nothing.
+			check.Code = messages.CheckTemplateOperationReplyIncomplete
+		default:
+			check.Status, check.Code = proto.CheckPass, messages.CheckTemplateOperationAnswered
 		}
 		checks = append(checks, check)
 	}
@@ -68,6 +83,8 @@ func checkKind(operation string) (healthcheck.Kind, bool) {
 		return healthcheck.KindCompletions, true
 	case inferenceapi.OperationEmbeddings:
 		return healthcheck.KindEmbeddings, true
+	case inferenceapi.OperationDecide:
+		return healthcheck.KindDecision, true
 	}
 	return "", false
 }

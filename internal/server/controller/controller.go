@@ -12,11 +12,11 @@ import (
 	"log/slog"
 	"slices"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/planning"
@@ -30,7 +30,13 @@ import (
 // HubPusher is the controller's view of the agent hub.
 type HubPusher interface {
 	Online(uuid string) bool
+	// UCXNetlinkHang is the live fact a node's agent reported about its kernel
+	// hanging UCX (NIXL); nil when it does not, or the node is offline.
+	UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang
 	PushToNode(uuid string, su proto.StateUpdate) error
+	// RequestImageRefs hands a node the latest image refs to send on its
+	// own, without waiting for the agent.
+	RequestImageRefs(uuid string, refs []string)
 	SyncNode(uuid string) error
 	CopyModelPath(ctx context.Context, req proto.ModelSyncCopyRequest) (proto.ModelSyncCopyResult, error)
 	StopModelSync(ctx context.Context, nodeUUID, key, transferID string) error
@@ -71,33 +77,30 @@ type Controller struct {
 	// startTimeout is the harness override of the instance health budget
 	// (SetStartTimeout); zero leaves it to the deployment and the policy.
 	startTimeout int
-	syncMu       sync.Mutex
-	modelSyncs   map[string]*modelSyncRun
-	// drainProbe and draining time the instances being drained (drain.go).
-	drainProbe DrainProbe
-	drainMu    sync.Mutex
-	draining   map[uint]map[string]time.Time // by deployment, then instance
-	// sleepPushed is the sleep intent last pushed per instance, by
-	// deployment (sleep.go).
-	sleepMu     sync.Mutex
-	sleepPushed map[uint]map[string]sleepOrder
+	// syncs are the peer model syncs this controller runs (model_sync_runs.go).
+	syncs modelSyncRuns
+	// drainProbe and drainClocks time the instances being drained (drain.go).
+	drainProbe  DrainProbe
+	drainClocks drainClocks
+	// sleepPushes is the sleep intent last pushed per instance (sleep.go).
+	sleepPushes sleepPushes
+	// pool remembers each deployment's refusing candidates and last empty
+	// pass (pool_memory.go).
+	pool poolMemory
+	// orders is the server's order lock and placement hints, shared with
+	// the API and the automation (Orders).
+	orders *lifecycle.Orders
+	// dgpuPushes holds the deployments whose dGPU memory limit changed in
+	// place and is not yet handed to their nodes (dgpu_limit.go).
+	dgpuPushes dgpuLimitPushes
 	// now is the controller's clock; tests replace it.
 	now func() time.Time
-	// poolRefused remembers, by deployment, the candidates whose trial plan
-	// refused a replica recently (unit_pool.go).
 	// nodeStatusDirty is set by routine node status reports and cleared by
 	// the settle tick that acts on them (settleNodeStatus).
 	nodeStatusDirty atomic.Bool
-	poolMu          sync.Mutex
-	poolRefused     map[uint]map[uint]time.Time
-	// dgpuPending holds the deployments whose instances' memory limits were
-	// rewritten in place and are not yet handed to their nodes
-	// (dgpu_limit.go).
-	dgpuMu      sync.Mutex
-	dgpuPending map[uint]bool
-	// poolWaiting is when each deployment's last pass found no node; see
-	// poolSettleBackoff.
-	poolWaiting          map[uint]time.Time
+	// routes holds what other events said changed until the next
+	// flushEventRoutes tick (event_routes.go).
+	routes               eventRoutes
 	inferenceNodeHandler provider.InferenceNodeLifecycleHandler
 	// observation coalesces catalog changes into in-place refreshes of the
 	// instances' observation (observation.go).
@@ -106,6 +109,8 @@ type Controller struct {
 	// (image_acquisition.go).
 	peerCool   pairCooldown
 	imageWaits imageWaits
+	// imageRefsNotify asks the image refs worker for a push (image_refs.go).
+	imageRefsNotify chan struct{}
 	// failover is node replacement's memory (node_failover.go).
 	failover nodeFailover
 }
@@ -130,19 +135,6 @@ func (c *Controller) SetEnginePorts(start, end int) {
 // EnginePorts is the host-port range engine instances are allocated from.
 func (c *Controller) EnginePorts() proto.PortRange { return *c.enginePorts.Load() }
 
-type modelSyncRun struct {
-	transferID string
-	cancel     context.CancelFunc
-	// automatic marks a copy whose source the controller chose itself. Its
-	// failure is no one's recorded choice, so the model falls back to the
-	// public download rather than waiting on an operator's retry.
-	automatic bool
-	// canceled is set by an operator's cancel before it cancels the copy: the
-	// copy's own error is then that cancel, not a failure to fall back from,
-	// and CancelModelSync records the outcome.
-	canceled atomic.Bool
-}
-
 const modelSyncConfirmationTimeout = 2 * time.Minute
 
 // quotaChangeRemovalPending is what an instance retired for a partition
@@ -157,13 +149,18 @@ func New(st *store.Store, hub HubPusher, log *slog.Logger) *Controller {
 	c := &Controller{
 		store: st, networks: network.New(st, network.StoreCatalog{Store: st}), hub: hub, log: log, q: newWorkq(300 * time.Millisecond), cacheQ: newWorkq(300 * time.Millisecond),
 		retryBackoff: 15 * time.Second, offlineGrace: 2 * time.Minute,
-		maxAttempts: 3, modelSyncs: map[string]*modelSyncRun{}, sleepPushed: map[uint]map[string]sleepOrder{},
-		now: time.Now, observation: newObservationRefresh(), evictions: prepobs.NewPhases[store.FileRef](),
-		waits: placewait.New(),
+		maxAttempts: 3,
+		now:         time.Now, observation: newObservationRefresh(), evictions: prepobs.NewPhases[store.FileRef](),
+		waits: placewait.New(), imageRefsNotify: make(chan struct{}, 1), orders: &lifecycle.Orders{},
 	}
 	c.SetEnginePorts(defaultEnginePorts.Start, defaultEnginePorts.End)
 	return c
 }
+
+// Orders is the server's sleep and wake order lock and the placement hints
+// its replica starts read. The app hands the same Orders to the API and the
+// automation, so every order and hint goes through one.
+func (c *Controller) Orders() *lifecycle.Orders { return c.orders }
 
 // SetRetryPolicy overrides the failed-instance retry backoff and attempt cap
 // (used by tests to exercise the bound quickly).
@@ -211,6 +208,10 @@ func (c *Controller) Run(ctx context.Context) {
 	cacheDone := make(chan struct{})
 	go func() { defer close(cacheDone); c.cacheWorker(ctx) }()
 	defer func() { c.cacheQ.close(); <-cacheDone }()
+	imageRefsCtx, stopImageRefs := context.WithCancel(ctx)
+	imageRefsDone := make(chan struct{})
+	go func() { defer close(imageRefsDone); c.imageRefsWorker(imageRefsCtx) }()
+	defer func() { stopImageRefs(); <-imageRefsDone }()
 	c.cacheQ.add("waiting")
 	if storages, err := c.store.ListStorages(); err == nil {
 		for _, storage := range storages {
@@ -253,6 +254,8 @@ func (c *Controller) Run(ctx context.Context) {
 
 	settle := time.NewTicker(nodeStatusSettle)
 	defer settle.Stop()
+	routeTick := time.NewTicker(eventRouteSettle)
+	defer routeTick.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -268,21 +271,13 @@ func (c *Controller) Run(ctx context.Context) {
 			c.onEvent(ev)
 		case <-settle.C:
 			c.settleNodeStatus()
+		case <-routeTick.C:
+			c.flushEventRoutes()
 		}
 	}
 }
 
-func (c *Controller) cancelAllModelSyncs() {
-	c.syncMu.Lock()
-	cancels := make([]context.CancelFunc, 0, len(c.modelSyncs))
-	for _, run := range c.modelSyncs {
-		cancels = append(cancels, run.cancel)
-	}
-	c.syncMu.Unlock()
-	for _, cancel := range cancels {
-		cancel()
-	}
-}
+func (c *Controller) cancelAllModelSyncs() { c.syncs.cancelAll() }
 
 func (c *Controller) worker(ctx context.Context) {
 	for {
@@ -340,7 +335,7 @@ func (c *Controller) reconcileDeployment(ctx context.Context, id uint) error {
 		if err := c.withdrawCacheCopies(ctx, id); err != nil {
 			return err
 		}
-		c.forgetDeployment(id) // deleted
+		c.forgetDeployment(id, true) // deleted
 		return nil
 	}
 	if _, err := c.store.NodeByID(dep.NodeID); err != nil {
@@ -417,7 +412,7 @@ func (c *Controller) reconcileDeployment(ctx context.Context, id uint) error {
 		if err := c.withdrawCacheCopies(ctx, dep.ID); err != nil {
 			return err
 		}
-		c.forgetDeployment(dep.ID)
+		c.forgetDeployment(dep.ID, false)
 		var pending []string
 		for _, in := range insts {
 			if in.State != proto.InstStopped {
@@ -472,7 +467,7 @@ func (c *Controller) reconcileDeployment(ctx context.Context, id uint) error {
 			if err := c.store.DeleteDeployment(dep.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
 				return err
 			}
-			c.forgetDeployment(dep.ID)
+			c.forgetDeployment(dep.ID, true)
 		}
 		return nil
 	}

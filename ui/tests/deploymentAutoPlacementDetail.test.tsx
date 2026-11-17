@@ -85,14 +85,18 @@ function mountMode(dep: Deployment, onChanged = () => {}) {
   return userEvent.setup();
 }
 
-test("an automatic deployment says so, with its strategy, and offers the switch to manual", () => {
-  mountMode(deployment({ placement_mode: "auto", placement_strategy: "binpack" }));
-  assert.ok(screen.getByText(up.auto));
-  assert.ok(screen.getByText(locale.deployments.detail.placement.strategy.binpack));
-  assert.ok(screen.getByText(up.autoHint));
-  assert.ok(screen.getByRole("button", { name: up.toManual }));
-  assert.equal(screen.queryByRole("button", { name: up.toAuto }), null);
-});
+for (const strategy of ["binpack", "spread"] as const) {
+  test(`automatic placement shows its ${strategy} strategy before the action to switch modes`, () => {
+    mountMode(deployment({ placement_mode: "auto", placement_strategy: strategy }));
+    const modeTag = screen.getByText(up.auto);
+    const strategyTag = screen.getByText(locale.deployments.detail.placement.strategy[strategy]);
+    const switchButton = screen.getByRole("button", { name: up.toManual });
+    assert.ok(modeTag.compareDocumentPosition(strategyTag) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(strategyTag.compareDocumentPosition(switchButton) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(screen.getByText(up.autoHint));
+    assert.equal(screen.queryByRole("button", { name: up.toAuto }), null);
+  });
+}
 
 test("a manual deployment says so and offers the switch to automatic", () => {
   mountMode(deployment({ placement_mode: "manual" }));
@@ -193,6 +197,10 @@ test("growing offers a slot per rank of each new replica, all scheduled automati
   await openAuto();
   setCount("3");
   assert.ok(screen.getByText(up.scale.autoNote));
+  // The rank order rule is behind the help mark beside the note.
+  assert.equal(screen.queryByText(up.scale.prefixHelp), null);
+  await userEvent.setup().hover(screen.getByRole("button", { name: locale.common.helpTip.label }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, up.scale.prefixHelp);
   assert.ok(screen.getByText(up.scale.newReplica.replace("{{index}}", "1")));
   assert.ok(screen.getByText(up.scale.newReplica.replace("{{index}}", "2")));
   assert.equal(screen.getAllByText(up.scale.automatic).length, 4, "2 new replicas x 2 ranks");
@@ -265,7 +273,7 @@ test("no group of nodes for the new replica is the server's own explanation", as
   const user = await openAuto();
   setCount("2");
   await user.click(save());
-  await within(screen.getByRole("dialog")).findByText(i18n.t("deployments:replica.scaleFailed", { detail: i18n.t("common:apiError.UNIT_PLACEMENT_NONE", { nodes: 4, unmet: 0, cordoned: 0, offline: 1, busy: 3, no_network: 0, largest: 1 }) }));
+  await within(screen.getByRole("dialog")).findByText(i18n.t("deployments:replica.scaleFailed", { detail: "No group of nodes can take this deployment (of 4 nodes): 1 offline · 3 lack free GPUs · largest group sharing a network and GPU architecture: 1" }));
 });
 
 // ---- scaling an automatically placed PD deployment ------------------------
@@ -346,5 +354,5 @@ test("an unplaceable new PD unit is the server's explanation inside the dialog",
   await screen.findByRole("dialog");
   await user.click(addUnit("decode"));
   await user.click(saveRoles());
-  await within(screen.getByRole("dialog")).findByText(i18n.t("deployments:detail.pd.scale.failed", { detail: i18n.t("common:apiError.UNIT_PLACEMENT_NONE", { nodes: 2, unmet: 0, cordoned: 0, offline: 0, busy: 2, no_network: 0, largest: 0 }) }));
+  await within(screen.getByRole("dialog")).findByText(i18n.t("deployments:detail.pd.scale.failed", { detail: "No group of nodes can take this deployment (of 2 nodes): 2 lack free GPUs · largest group sharing a network and GPU architecture: 0" }));
 });

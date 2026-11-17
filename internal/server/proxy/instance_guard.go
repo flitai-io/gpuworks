@@ -110,7 +110,13 @@ func (g *instanceGuard) roundTrip(base http.RoundTripper, req *http.Request, can
 	g.add(candidate.instanceUUID, call)
 	var once sync.Once
 	release := func() { once.Do(func() { g.remove(candidate.instanceUUID, call); cancel(nil) }) }
-	g.check(candidate.instanceUUID) // Close registration versus state-event race.
+	// Close registration versus state-event race: a change announced before
+	// the call was registered is checked here, one announced after reaches
+	// the registered call through the route table's subscription. With no
+	// change at all since the candidate was read, there is nothing to check.
+	if !instanceRowsUnchanged(g.store, candidate.routedAt) {
+		g.check(candidate.instanceUUID)
+	}
 	resp, err := base.RoundTrip(req.Clone(ctx))
 	if err != nil {
 		if errors.Is(context.Cause(ctx), errInstanceUnavailable) {

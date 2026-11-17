@@ -125,7 +125,7 @@ specs:
   gpus:
     vendor: nvidia
     cc: '>=10.0'
-    name: (?:DGX[ _-]?Spark|GB10|RTX[ _-]?PRO[ _-]?6000)
+    name: (?:DGX[ _-]?Spark|GB10|RTX[ _-]?Spark|RTX[ _-]?PRO[ _-]?6000)
   args:
   - --trust-remote-code
   - --enable-auto-tool-choice

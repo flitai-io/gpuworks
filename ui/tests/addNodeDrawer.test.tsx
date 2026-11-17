@@ -406,9 +406,10 @@ test("the precheck sends the install directory and lists each directory verdict"
   const precheck = stubAPI("precheckNode", {
     target: "root@203.0.113.7:51223", user: "root", host: "203.0.113.7", port: 51223,
     checks: [
-      { name: "Install directory", status: "error", detail: "/workspace is mounted noexec" },
-      { name: "Install directory ownership", status: "warn", detail },
-      { name: "Install directory persistence", status: "ok", detail: "not on a container's writable layer" },
+      { id: "install_dir", status: "fail", code: "CHECK_INSTALL_DIR_NOEXEC", params: { dir: "/workspace/gpuworks", mount: "/workspace" }, message: "/workspace is mounted noexec" },
+      { id: "install_dir_ownership", status: "warn", code: "CHECK_INSTALL_DIR_CHOWN_REFUSED", params: { dir: "/workspace/gpuworks" }, message: "runveil workloads will run as the agent's own user (root) instead of the dedicated runtime user", evidence: detail },
+      { id: "install_dir_persistence", status: "pass", code: "CHECK_INSTALL_DIR_PERSISTENT", message: "not on a container's writable layer" },
+      { id: "install_dir_space", status: "skip", code: "CHECK_INSTALL_DIR_SPACE_UNKNOWN", message: "free space unknown (df reported nothing)" },
     ],
   });
   try {
@@ -423,10 +424,16 @@ test("the precheck sends the install directory and lists each directory verdict"
 
     await screen.findByText("Install directory ownership");
     const rows = screen.getAllByRole("row").map((row) => row.textContent ?? "");
-    const rowFor = (name: string) => rows.find((text) => [nodes.add.check.ok, nodes.add.check.warn, nodes.add.check.error].some((status) => text.startsWith(name + status))) ?? "";
-    assert.ok(rowFor("Install directory").includes(nodes.add.check.error + "/workspace is mounted noexec"), rows.join(" | "));
-    assert.ok(rowFor("Install directory ownership").includes(nodes.add.check.warn + detail), rows.join(" | "));
-    assert.ok(rowFor("Install directory persistence").includes(nodes.add.check.ok), rows.join(" | "));
+    const status = common.checkStatus as Record<string, string>;
+    const rowFor = (name: string) => rows.find((text) => Object.values(status).some((label) => text.startsWith(name + label))) ?? "";
+    // Each row reads from its code; the command's own words stay as evidence.
+    assert.ok(rowFor("Install directory").includes(status.fail + "/workspace/gpuworks is on a noexec mount (/workspace)"), rows.join(" | "));
+    assert.ok(rowFor("Install directory ownership").includes(status.warn + "/workspace/gpuworks refuses ownership changes"), rows.join(" | "));
+    assert.ok(rowFor("Install directory ownership").includes(detail), rows.join(" | "));
+    assert.ok(rowFor("Install directory persistence").includes(status.pass), rows.join(" | "));
+    // Free space that could not be read is not a pass.
+    assert.ok(rowFor("Install directory free space").includes(status.skip), rows.join(" | "));
+    assert.ok(!rowFor("Install directory free space").includes(status.pass), rows.join(" | "));
     // A failed check is not "installation can still continue": a noexec
     // directory stops the install.
     await screen.findByText(nodes.add.message.precheckWithErrors);
@@ -439,13 +446,14 @@ test("the precheck sends the install directory and lists each directory verdict"
 test("a failed precheck echoes a parsed target and hides an empty one", async () => {
   const refused = stubAPI("precheckNode", {
     target: "root@203.0.113.7", user: "", host: "", port: 0,
-    checks: [{ name: "SSH", status: "error", detail: "connection refused" }],
+    checks: [{ id: "ssh", status: "fail", code: "CHECK_SSH_CONNECT_FAILED", params: { target: "root@203.0.113.7" }, message: "the server could not open an SSH session", evidence: "connection refused" }],
   });
   try {
     renderDrawer();
     fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
     fireEvent.click(screen.getByRole("button", { name: nodes.add.startPrecheck }));
-    await screen.findByText("connection refused");
+    await screen.findByText("The server could not open an SSH session to root@203.0.113.7.");
+    assert.ok(screen.getByText("connection refused"));
     assert.ok(screen.queryByText("@:0") === null, "Expected the element to be absent");
   } finally {
     refused.restore();
@@ -454,7 +462,7 @@ test("a failed precheck echoes a parsed target and hides an empty one", async ()
 
   const parsed = stubAPI("precheckNode", {
     target: "root@203.0.113.7", user: "root", host: "203.0.113.7", port: 22,
-    checks: [{ name: "SSH", status: "error", detail: "connection refused" }],
+    checks: [{ id: "ssh", status: "fail", code: "CHECK_SSH_CONNECT_FAILED", params: { target: "root@203.0.113.7" }, message: "the server could not open an SSH session", evidence: "connection refused" }],
   });
   try {
     renderDrawer();
@@ -623,8 +631,8 @@ test("nonfatal runtime capability errors still observe the installed node", asyn
   // installDirNamesCheck emits an error without Docker but does not stop installation.
   const detail = "/workspace does not allow ':' in file names, which container images need (image layers are named sha256:<hex>, and Debian-based images hold /var/lib/dpkg/info/<package>:amd64.list), so the runveil runtime used on nodes without docker cannot run deployments from here; choose an install directory on a local filesystem (on a container instance such as RunPod, a path on the container disk sized for the images)";
   const install = stubAPI("installNode", { ...installReport, checks: [
-    { name: "Install directory file names", status: "error", detail },
-    { name: "Start agent", status: "ok", detail: "agent started" },
+    { id: "install_dir_names", status: "fail", code: "CHECK_INSTALL_DIR_COLON_REFUSED", params: { dir: "/workspace" }, message: detail },
+    { id: "start_agent", status: "pass", code: "CHECK_AGENT_STARTED", message: "the installer started the agent", evidence: "agent started" },
   ] });
   const original = apiModule.api.node;
   let finish: (value: never) => void = () => {};
@@ -635,7 +643,7 @@ test("nonfatal runtime capability errors still observe the installed node", asyn
     renderDrawer(() => { closes++; });
     fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
     fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
-    await screen.findByText(detail);
+    await screen.findByText("/workspace refuses ':' in file names, which container images need, so the runveil runtime cannot run deployments from it.");
     await screen.findByText(nodes.add.waitingForConnection);
     assert.deepEqual(requests, [installReport.node_uuid]);
     assert.equal(closes, 0);
@@ -726,7 +734,7 @@ test("starting via systemd is on by default and can be switched off", async () =
     fireEvent.click(screen.getByText(nodes.add.advanced));
     const toggle = screen.getByRole("switch", { name: nodes.add.useSystemd });
     assert.equal(toggle.getAttribute("aria-checked"), "true");
-    assert.ok(screen.queryByText(nodes.add.useSystemdOffHelp) === null, "Expected the element to be absent");
+    assert.ok(screen.queryByText(nodes.add.useSystemdOff) === null, "Expected the element to be absent");
     fireEvent.change(screen.getByPlaceholderText("root@192.0.2.10:22"), { target: { value: "root@203.0.113.7" } });
     fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
     await waitFor(() => assert.equal(install.bodies.length, 1));
@@ -735,7 +743,7 @@ test("starting via systemd is on by default and can be switched off", async () =
     // The switch works from the keyboard: the left arrow turns it off.
     fireEvent.keyDown(toggle, { key: "ArrowLeft", keyCode: 37 });
     assert.equal(toggle.getAttribute("aria-checked"), "false");
-    assert.ok(screen.getByText(nodes.add.useSystemdOffHelp));
+    assert.ok(screen.getByText(nodes.add.useSystemdOff));
     fireEvent.click(screen.getByRole("button", { name: nodes.add.installAgent }));
     await waitFor(() => assert.equal(install.bodies.length, 2));
     assert.equal(install.bodies[1].no_systemd, true);

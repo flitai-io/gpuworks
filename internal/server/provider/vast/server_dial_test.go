@@ -35,11 +35,11 @@ func TestTCPMappingsReadTheInstancesPorts(t *testing.T) {
 // port; the server learns the new address from the instance list.
 func TestServerDialAddressForReadsTheCurrentMapping(t *testing.T) {
 	d := newTestDriver(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/instances/" || r.Header.Get("Authorization") != "Bearer key" {
+		if r.URL.Path != "/api/v1/instances/" || r.Header.Get("Authorization") != "Bearer key" {
 			http.Error(w, "unexpected", http.StatusBadRequest)
 			return
 		}
-		_, _ = w.Write([]byte(`{"instances":[{"id":56735911,"public_ipaddr":"47.224.206.51","ports":` + realPorts + `}]}`))
+		writeFilteredInstanceFixture(t, w, r, `{"instances":[{"id":56735911,"public_ipaddr":"47.224.206.51","ports":`+realPorts+`}]}`)
 	})
 	creds := provider.Credentials{APIKey: "key"}
 	got, err := d.ServerDialAddressFor(context.Background(), creds, "56735911", "0.0.0.0:10100")

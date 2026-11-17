@@ -21,6 +21,12 @@ var imageDigestPattern = regexp.MustCompile(`^(sha256:[0-9a-f]{64}|sha384:[0-9a-
 
 func (d *Driver) InspectWorkload(ctx context.Context, id string) (runtime.WorkloadInspection, error) {
 	out, err := d.output(ctx, 10*time.Second, "container", "inspect", "--format", "{{json .}}", id)
+	if cliAnswered(err) && cliNoSuchContainer(out) {
+		return runtime.WorkloadInspection{}, fmt.Errorf("nerdctl container inspect: %w: %s", runtime.ErrContainerNotFound, strings.TrimSpace(out))
+	}
+	if cliAnswered(err) && cliPermissionDenied(out) {
+		return runtime.WorkloadInspection{}, fmt.Errorf("nerdctl container inspect: %w: %s", runtime.ErrPermissionDenied, strings.TrimSpace(out))
+	}
 	if err != nil {
 		return runtime.WorkloadInspection{}, err
 	}

@@ -86,6 +86,8 @@ udocker 拒绝以 root 运行，runveil 沿用这个约定：root 运行的 agen
 
 非 root 的 agent 直接以自己运行；加速卡设备节点的权限用 `gpuworks-agent grant-device-access` 补。
 
+root 运行的 agent 通过补充组让专用账号访问设备节点。宿主机上只有 root 能访问的设备节点（`root:root` 且组和其他用户无任何权限）没有可用的属组，agent 每次启动工作负载前会把它们交给系统组 `gpuworks-runtime` 并加上组读写，工作负载以该组身份访问；其他节点保持宿主机原样。
+
 ## 线程很多的工作负载
 
 PRoot 是单线程的 ptrace 跟踪器：容器里所有线程的每一次被跟踪的系统调用（路径类系统调用，seccomp 加速后 futex、mmap、

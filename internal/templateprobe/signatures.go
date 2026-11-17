@@ -5,22 +5,24 @@ import (
 	"strings"
 )
 
+// FailureFamily is the code of a classified launch failure (ADR 0067:
+// UPPER_SNAKE). L1 findings that predict the same failure reuse its code.
 type FailureFamily string
 
 const (
-	FailureArchitecture    FailureFamily = "architecture_not_registered"
-	FailureQuantKernel     FailureFamily = "quantization_kernel_unavailable"
-	FailureArgv            FailureFamily = "argv_rejected"
-	FailureConfig          FailureFamily = "config_validation_failure"
-	FailureMissingOperator FailureFamily = "missing_operator"
-	FailureDependency      FailureFamily = "dependency_conflict"
+	FailureArchitecture    FailureFamily = "ARCHITECTURE_NOT_REGISTERED"
+	FailureQuantKernel     FailureFamily = "QUANTIZATION_KERNEL_UNAVAILABLE"
+	FailureArgv            FailureFamily = "ARGV_REJECTED"
+	FailureConfig          FailureFamily = "CONFIG_VALIDATION_FAILURE"
+	FailureMissingOperator FailureFamily = "MISSING_OPERATOR"
+	FailureDependency      FailureFamily = "DEPENDENCY_CONFLICT"
 	// FailureCatalogAsset is a container that cannot open a file the launch
 	// contract references - a plugin, a template, a model file. It is a defect
 	// in what the catalog declared and what the deployment supplied, not a
 	// statement about the model or the engine, and it is the family the
 	// nano_v3 plugin defect belongs to.
-	FailureCatalogAsset  FailureFamily = "catalog_asset_missing"
-	FailureForwardKernel FailureFamily = "forward_kernel_failure"
+	FailureCatalogAsset  FailureFamily = "CATALOG_ASSET_MISSING"
+	FailureForwardKernel FailureFamily = "FORWARD_KERNEL_FAILURE"
 )
 
 type ClassifyOptions struct {

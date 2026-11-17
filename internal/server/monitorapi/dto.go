@@ -167,54 +167,55 @@ func deploymentPlacement(dep monitor.DeploymentRef, instances []monitor.Instance
 	return b.String()
 }
 
-// deploymentState rolls a deployment's instances up into the single
-// running|starting|stopped|failed|asleep|offline state the wire contract's
-// services[].state carries (replicaState below is its per-instance
-// sibling for replicas[].state). Serving replicas outrank retired failures
-// and warming replacements; deployment policy supplies the state before an
-// instance exists. An explicitly stopped deployment stays stopped while its
-// containers are being reclaimed.
-//
-// Sleep is read as instanceRef.Asleep, the gateway's own judgement
-// (planning.InstanceAsleep), and not from the reported level: an instance
-// already under a sleep order its engine has not carried out is refused by the
-// gateway, so a deployment whose every instance is so ordered is asleep here
-// too rather than reading running while the gateway 503s.
-func deploymentState(deployment monitor.DeploymentRef, instances []monitor.InstanceRef) string {
-	if deployment.RuntimeState == "stopped" || deployment.RuntimeState == "offline" {
-		return deployment.RuntimeState
+// deploymentState is the state the deployment list shows
+// (monitor.DeploymentRef.State, deployment.EffectiveState) in the
+// running|starting|stopped|failed|asleep|offline vocabulary the wire
+// contract's services[].state carries (replicaState below is its
+// per-instance sibling for replicas[].state). It derives nothing of its own,
+// so the monitor cannot read a deployment differently from its list row: a
+// deployment reads asleep exactly when the gateway refuses it for sleep.
+func deploymentState(deployment monitor.DeploymentRef) string {
+	switch deployment.State {
+	case serviceRunning, serviceOffline, serviceFailed:
+		return deployment.State
+	case "asleep", "sleeping":
+		return serviceAsleep
+	case "pending", "pulling", "starting":
+		return serviceStarting
+	default: // stopped, deleting
+		return serviceStopped
 	}
-	hasFailed, hasStarting, running, awake := false, false, 0, 0
-	for _, inst := range instances {
-		if inst.Headless {
-			continue
-		}
-		switch inst.State {
-		case proto.InstFailed:
-			hasFailed = true
-		case proto.InstRunning:
-			running++
-			if !inst.Asleep {
-				awake++
-			}
-		case proto.InstPending, proto.InstPulling, proto.InstStarting, proto.InstOptimizing:
-			hasStarting = true
-		}
+}
+
+// The service states deploymentState returns. serviceStates lists them all;
+// a state added to deploymentState is added here, and
+// TestDeploymentStateStaysWithinServiceStates fails until it is.
+const (
+	serviceRunning  = "running"
+	serviceStarting = "starting"
+	serviceAsleep   = "asleep"
+	serviceOffline  = "offline"
+	serviceFailed   = "failed"
+	serviceStopped  = "stopped"
+)
+
+// serviceStates is deploymentState's whole vocabulary in the order the
+// overview's state summary lists it: serving first, then the ones that need
+// a look, then the deliberately stopped.
+var serviceStates = []string{serviceRunning, serviceStarting, serviceAsleep, serviceOffline, serviceFailed, serviceStopped}
+
+// stateCountsDTO counts the overview's own rows by state, one entry per
+// serviceStates state: it reads nothing beyond the rows already built.
+func stateCountsDTO(rows []dto.MonitorServiceRow) []dto.MonitorStateCount {
+	counts := make(map[string]int, len(serviceStates))
+	for _, row := range rows {
+		counts[row.State]++
 	}
-	switch {
-	case running > 0 && awake == 0:
-		return "asleep"
-	case running > 0:
-		return "running"
-	case hasStarting:
-		return "starting"
-	case deployment.RuntimeState == "failed" || hasFailed:
-		return "failed"
-	case deployment.RuntimeState == "pending", deployment.RuntimeState == "pulling", deployment.RuntimeState == "starting", deployment.RuntimeState == "running":
-		return "starting"
-	default:
-		return "stopped"
+	out := make([]dto.MonitorStateCount, 0, len(serviceStates))
+	for _, state := range serviceStates {
+		out = append(out, dto.MonitorStateCount{State: state, Count: counts[state]})
 	}
+	return out
 }
 
 // replicaState is deploymentState's per-instance sibling, for

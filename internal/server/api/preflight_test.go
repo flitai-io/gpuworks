@@ -11,6 +11,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -112,6 +113,9 @@ func TestDistributedPreflightOrchestratesAuthenticatedDirectedPairs(t *testing.T
 		t.Fatalf("result=%+v starts=%d probes=%d stops=%d", result, starts, probes, stops)
 	}
 	for _, pair := range result.Pairs {
+		if pair.ID != "node_pair" || pair.Status != proto.CheckPass || pair.Code != messages.CheckPreflightPairReachable || pair.Params.Source != pair.SourceUUID {
+			t.Fatalf("pair check=%+v", pair)
+		}
 		if !pair.Reachable || !pair.BandwidthTested || pair.Gbps != 12.5 || pair.BytesReceived != 1000 {
 			t.Fatalf("pair=%+v", pair)
 		}
@@ -123,15 +127,65 @@ func TestDistributedPreflightOrchestratesAuthenticatedDirectedPairs(t *testing.T
 
 func TestPreflightPairRequiresRequestedBandwidth(t *testing.T) {
 	result := distributedPreflightResponse{OK: true}
-	result.addPair(preflightPair{SourceUUID: "a", TargetUUID: "b", Reachable: true, RTTP50MS: 1}, true)
-	if result.OK || len(result.Warnings) != 1 || len(result.Pairs) != 1 {
+	result.addPair(preflightPair{SourceUUID: "a", TargetUUID: "b", Target: "10.0.0.2:29500", Reachable: true, RTTP50MS: 1}, true, 29500)
+	if result.OK || len(result.Pairs) != 1 || result.Pairs[0].Status != proto.CheckFail || result.Pairs[0].Code != messages.CheckPreflightBandwidthNotMeasured {
 		t.Fatalf("result=%+v", result)
 	}
 
 	latencyOnly := distributedPreflightResponse{OK: true}
-	latencyOnly.addPair(preflightPair{SourceUUID: "a", TargetUUID: "b", Reachable: true, RTTP50MS: 1}, false)
-	if !latencyOnly.OK {
+	latencyOnly.addPair(preflightPair{SourceUUID: "a", TargetUUID: "b", Reachable: true, RTTP50MS: 1}, false, 29500)
+	if !latencyOnly.OK || latencyOnly.Pairs[0].Status != proto.CheckPass {
 		t.Fatalf("latency-only result=%+v", latencyOnly)
+	}
+}
+
+// Every way a pair fails has its own code; what the agent or the RPC said is
+// evidence, never the message.
+func TestPreflightPairFailureCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		pair preflightPair
+		code string
+	}{
+		{"listener", preflightPair{failure: messages.CheckPreflightListenerFailed, Evidence: "node offline"}, messages.CheckPreflightListenerFailed},
+		{"probe call", preflightPair{failure: messages.CheckPreflightProbeFailed, Evidence: "rpc timeout"}, messages.CheckPreflightProbeFailed},
+		{"unreachable", preflightPair{Evidence: "dial tcp 10.0.0.2:29500: connection refused"}, messages.CheckPreflightPairUnreachable},
+		{"agent error", preflightPair{Reachable: true, Evidence: "token rejected"}, messages.CheckPreflightPairUnreachable},
+		{"bandwidth", preflightPair{Reachable: true, BandwidthTested: true, BandwidthEvidence: "short read"}, messages.CheckPreflightBandwidthNotMeasured},
+	} {
+		result := distributedPreflightResponse{OK: true}
+		tc.pair.SourceUUID, tc.pair.TargetUUID, tc.pair.Target = "a", "b", "10.0.0.2:29500"
+		result.addPair(tc.pair, true, 29500)
+		got := result.Pairs[0]
+		if result.OK || got.Status != proto.CheckFail || got.Code != tc.code || got.ID != "node_pair" {
+			t.Fatalf("%s: %+v", tc.name, got)
+		}
+		if strings.Contains(got.Message, tc.pair.Evidence) && tc.pair.Evidence != "" || got.Evidence != tc.pair.Evidence {
+			t.Fatalf("%s: evidence leaked into the message or was lost: %+v", tc.name, got)
+		}
+	}
+}
+
+func TestPreflightPairWireShape(t *testing.T) {
+	result := distributedPreflightResponse{OK: true}
+	result.addPair(preflightPair{SourceUUID: "a", TargetUUID: "b", Target: "10.0.0.2:29500", failure: messages.CheckPreflightListenerFailed, Evidence: "listener opened unexpected port 1"}, false, 29500)
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `{"ok":false,"pairs":[{"id":"node_pair","status":"fail","code":"PREFLIGHT_LISTENER_FAILED",` +
+		`"params":{"address":"10.0.0.2:29500","port":29500,"source":"a","target":"b"},"message":"node b did not open the probe listener on port 29500",` +
+		`"source_uuid":"a","target_uuid":"b","target":"10.0.0.2:29500","reachable":false,"rtt_ms_p50":0,"rtt_ms_p99":0,"bandwidth_tested":false,` +
+		`"evidence":"listener opened unexpected port 1"}]}`
+	if string(encoded) != want {
+		t.Fatalf("wire shape\n got %s\nwant %s", encoded, want)
+	}
+	var decoded distributedPreflightResponse
+	if err := json.Unmarshal([]byte(want), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.OK || decoded.Pairs[0].Code != messages.CheckPreflightListenerFailed || decoded.Pairs[0].Evidence != "listener opened unexpected port 1" || decoded.Pairs[0].Params != (preflightPairParams{Address: "10.0.0.2:29500", Port: 29500, Source: "a", Target: "b"}) {
+		t.Fatalf("round trip = %+v", decoded)
 	}
 }
 

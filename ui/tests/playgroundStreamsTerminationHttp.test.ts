@@ -28,6 +28,7 @@ for (const terminal of ['done', 'error-frame', 'premature-eof'] as const) {
     const saved: { save: string; message: ChatMessage }[] = [];
     const counts: number[] = [];
     let observedPartialWhileOpen = false;
+    let sawPartial = false;
     let sentEnd = false;
     const host: StreamHost = {
       clock: () => performance.now(),
@@ -38,7 +39,11 @@ for (const terminal of ['done', 'error-frame', 'premature-eof'] as const) {
         const after = update(before); // Only the production callback determines state.
         column.messages = column.messages.map((message) => message.id === messageID ? after : message);
         saved.push({ save, message: structuredClone(after) });
-        if (after.content === PARTIAL && after.streaming === true) {
+        // Only the first partial patch says whether the body was still open: the
+        // 250ms metrics tick patches the same content with streaming still true, and
+        // on a loaded machine it can land after the server has ended the response.
+        if (!sawPartial && after.content === PARTIAL && after.streaming === true) {
+          sawPartial = true;
           observedPartialWhileOpen = !sentEnd;
           firstPatched.resolve();
         }

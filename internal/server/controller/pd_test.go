@@ -185,7 +185,7 @@ func TestPDReconcileRebuildsOnlyTheFailedInstance(t *testing.T) {
 	if err := f.st.SetInstanceState(decode.UUID, proto.InstRunning, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.st.SetInstanceState(prefill.UUID, proto.InstFailed, "boom"); err != nil {
+	if err := f.st.SetInstanceFailed(prefill.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "boom"); err != nil {
 		t.Fatal(err)
 	}
 	insts = f.reconcile(t)
@@ -202,7 +202,7 @@ func TestPDReconcileRebuildsOnlyTheFailedInstance(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		for _, inst := range insts {
 			if inst.Role == pdmode.RolePrefill && inst.State == proto.InstPending && strings.Contains(inst.GPUIndexes, "0") {
-				_ = f.st.SetInstanceState(inst.UUID, proto.InstFailed, "boom")
+				_ = f.st.SetInstanceFailed(inst.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "boom")
 			}
 		}
 		insts = f.reconcile(t)
@@ -259,7 +259,7 @@ func TestPDReconcileDrainsInstancesWithoutUnit(t *testing.T) {
 		t.Fatalf("the unclaimed instance is %s, want draining", row.State)
 	}
 	// Past the minimum but still holding work: keep waiting.
-	f.ctrl.draining[f.dep.ID][extra] = time.Now().Add(-drainMin - time.Second)
+	f.ctrl.drainClocks.startedAt(f.dep.ID, extra, time.Now().Add(-drainMin-time.Second))
 	if got := removing(); len(got) != 0 {
 		t.Fatalf("removed while busy: %v", got)
 	}
@@ -277,12 +277,12 @@ func TestPDDrainGivesUpAfterTheBound(t *testing.T) {
 	if got := c.drainedUnits(1, excess); len(got) != 0 {
 		t.Fatal("removed on first sight")
 	}
-	c.draining[1]["busy"] = time.Now().Add(-drainMax)
+	c.drainClocks.startedAt(1, "busy", time.Now().Add(-drainMax))
 	if got := c.drainedUnits(1, excess); len(got) != 1 {
 		t.Fatal("a stuck request held the drain past its bound")
 	}
-	if _, kept := c.draining[1]; kept {
-		t.Fatalf("a finished drain kept its clock: %v", c.draining)
+	if clocks := c.drainClocks.of(1); clocks != nil {
+		t.Fatalf("a finished drain kept its clock: %v", clocks)
 	}
 }
 
@@ -295,12 +295,12 @@ func TestDrainClocksFollowTheDrainingInstances(t *testing.T) {
 	c.drainedUnits(2, []store.Instance{{UUID: "c"}})
 	// b left draining some other way (the deployment restarted it at once).
 	c.drainedUnits(1, []store.Instance{{UUID: "a"}})
-	if _, kept := c.draining[1]["b"]; kept || len(c.draining[1]) != 1 {
-		t.Fatalf("deployment 1 clocks = %v, want only a", c.draining[1])
+	if clocks := c.drainClocks.of(1); len(clocks) != 1 || clocks["a"].IsZero() {
+		t.Fatalf("deployment 1 clocks = %v, want only a", clocks)
 	}
-	c.forgetDeployment(2)
-	if _, kept := c.draining[2]; kept {
-		t.Fatalf("a forgotten deployment kept its clocks: %v", c.draining)
+	c.forgetDeployment(2, false)
+	if clocks := c.drainClocks.of(2); clocks != nil {
+		t.Fatalf("a forgotten deployment kept its clocks: %v", clocks)
 	}
 }
 
@@ -322,7 +322,7 @@ func TestPDRebuildFollowsTheCurrentNetwork(t *testing.T) {
 		}
 		if strings.Contains(inst.GPUIndexes, "0") {
 			failed = inst.UUID
-			_ = f.st.SetInstanceState(inst.UUID, proto.InstFailed, "boom")
+			_ = f.st.SetInstanceFailed(inst.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "boom")
 		}
 	}
 	insts = f.reconcile(t)
@@ -426,7 +426,7 @@ func TestPDRetryBackoffFollowsTheControllerClock(t *testing.T) {
 			decode = inst
 		}
 	}
-	if err := f.st.SetInstanceState(decode.UUID, proto.InstFailed, "boom"); err != nil {
+	if err := f.st.SetInstanceFailed(decode.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "boom"); err != nil {
 		t.Fatal(err)
 	}
 	if insts = f.reconcile(t); len(insts) != 3 {
@@ -472,7 +472,7 @@ func TestUnitRetryExhaustionIsRecordedOnce(t *testing.T) {
 			decode = inst
 		}
 	}
-	if err := f.st.SetInstanceState(decode.UUID, proto.InstFailed, "image pull timed out"); err != nil {
+	if err := f.st.SetInstanceFailed(decode.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "image pull timed out"); err != nil {
 		t.Fatal(err)
 	}
 	for pass := 0; pass < 3; pass++ {
@@ -510,7 +510,7 @@ func TestAttemptsOfARemovedUnitAreRetired(t *testing.T) {
 	if pinned.UUID == "" {
 		t.Fatal("no prefill instance on the pinned unit")
 	}
-	if err := f.st.SetInstanceState(pinned.UUID, proto.InstFailed, "image pull timed out"); err != nil {
+	if err := f.st.SetInstanceFailed(pinned.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "image pull timed out"); err != nil {
 		t.Fatal(err)
 	}
 	f.reconcile(t)
@@ -548,7 +548,7 @@ func TestPDRebuildIsNotHeldByADifferentImage(t *testing.T) {
 	if _, err := f.st.UpsertImageNode(&store.ImageNode{ImageVersionID: image.ID, ImageID: image.ID, NodeID: f.nodes["n2"].ID, State: store.ImageStatePresent, ImageDigestID: "sha256:loaded-elsewhere"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.st.SetInstanceState(decode.UUID, proto.InstFailed, "crashed"); err != nil {
+	if err := f.st.SetInstanceFailed(decode.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "crashed"); err != nil {
 		t.Fatal(err)
 	}
 	rebuilt := false

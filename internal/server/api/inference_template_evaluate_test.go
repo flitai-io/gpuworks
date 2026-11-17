@@ -149,7 +149,7 @@ func TestEvaluateInferenceTemplatesReportsParseAndValidationErrors(t *testing.T)
 			}
 			var imp map[string]any
 			_ = json.Unmarshal(rec.Body.Bytes(), &imp)
-			if code, _ := imp["code"].(string); code != "" && code != test.code {
+			if code, _ := imp["code"].(string); code != test.code {
 				t.Fatalf("import code=%q, evaluate code=%q", code, test.code)
 			}
 		})

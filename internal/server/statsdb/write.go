@@ -34,25 +34,25 @@ func (s *Store) AddQualityBackfill(ctx context.Context, delta map[rollup.Quality
 
 func addQualityTx(ctx context.Context, tx *sql.Tx, delta map[rollup.QualityKey]rollup.Quality) error {
 	read, err := tx.PrepareContext(ctx, `SELECT requests, completed, length, client_closed, interrupted, error,
-		ttft_hist, e2e_hist, output_tokens, decode_ms FROM quality_hourly WHERE hour_ms = ? AND deployment_id = ?`)
+		ttft_hist, e2e_hist, output_tokens, decode_ms FROM quality_hourly WHERE hour_ms = ? AND deployment_id = ? AND priority_class = ?`)
 	if err != nil {
 		return err
 	}
 	defer read.Close()
-	write, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO quality_hourly (hour_ms, deployment_id,
+	write, err := tx.PrepareContext(ctx, `INSERT OR REPLACE INTO quality_hourly (hour_ms, deployment_id, priority_class,
 		requests, completed, length, client_closed, interrupted, error, ttft_hist, e2e_hist, output_tokens, decode_ms)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer write.Close()
 	for k, d := range delta {
-		cur, err := scanQuality(read.QueryRowContext(ctx, k.HourMS, k.DeploymentID))
+		cur, err := scanQuality(read.QueryRowContext(ctx, k.HourMS, k.DeploymentID, k.PriorityClass))
 		if err != nil && err != sql.ErrNoRows {
 			return err
 		}
 		cur.Add(d)
-		if _, err := write.ExecContext(ctx, append([]any{k.HourMS, k.DeploymentID}, qualityArgs(cur)...)...); err != nil {
+		if _, err := write.ExecContext(ctx, append([]any{k.HourMS, k.DeploymentID, k.PriorityClass}, qualityArgs(cur)...)...); err != nil {
 			return err
 		}
 	}
@@ -257,15 +257,15 @@ func (s *Store) RollupDay(ctx context.Context, day rollup.Day, loc *time.Locatio
 		if err != nil {
 			return err
 		}
-		stmt, err := tx.PrepareContext(ctx, `INSERT INTO quality_daily (day, deployment_id,
+		stmt, err := tx.PrepareContext(ctx, `INSERT INTO quality_daily (day, deployment_id, priority_class,
 			requests, completed, length, client_closed, interrupted, error, ttft_hist, e2e_hist, output_tokens, decode_ms)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if err != nil {
 			return err
 		}
 		defer stmt.Close()
-		for dep, q := range days {
-			if _, err := stmt.ExecContext(ctx, append([]any{int64(day), dep}, qualityArgs(q)...)...); err != nil {
+		for k, q := range days {
+			if _, err := stmt.ExecContext(ctx, append([]any{int64(day), k.dep, k.class}, qualityArgs(q)...)...); err != nil {
 				return err
 			}
 		}
@@ -274,23 +274,29 @@ func (s *Store) RollupDay(ctx context.Context, day rollup.Day, loc *time.Locatio
 	})
 }
 
-func rollQualityDay(ctx context.Context, tx *sql.Tx, from, to int64) (map[uint]rollup.Quality, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT deployment_id, requests, completed, length, client_closed, interrupted, error,
+// qualityDayKey is a day row's deployment and priority class.
+type qualityDayKey struct {
+	dep   uint
+	class string
+}
+
+func rollQualityDay(ctx context.Context, tx *sql.Tx, from, to int64) (map[qualityDayKey]rollup.Quality, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT deployment_id, priority_class, requests, completed, length, client_closed, interrupted, error,
 		ttft_hist, e2e_hist, output_tokens, decode_ms FROM quality_hourly WHERE hour_ms >= ? AND hour_ms < ?`, from, to)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[uint]rollup.Quality{}
+	out := map[qualityDayKey]rollup.Quality{}
 	for rows.Next() {
-		var dep uint
-		q, err := scanQuality(scanPrefixed{rows, &dep})
+		var k qualityDayKey
+		q, err := scanQuality(scanPrefixed{rows, &k.dep, &k.class})
 		if err != nil {
 			return nil, err
 		}
-		cur := out[dep]
+		cur := out[k]
 		cur.Add(q)
-		out[dep] = cur
+		out[k] = cur
 	}
 	return out, rows.Err()
 }
@@ -300,10 +306,16 @@ func rollQualityDay(ctx context.Context, tx *sql.Tx, from, to int64) (map[uint]r
 type scanPrefixed struct {
 	rows  *sql.Rows
 	first any
+	// second, when set, is a second leading column.
+	second any
 }
 
 func (p scanPrefixed) Scan(dest ...any) error {
-	return p.rows.Scan(append([]any{p.first}, dest...)...)
+	lead := []any{p.first}
+	if p.second != nil {
+		lead = append(lead, p.second)
+	}
+	return p.rows.Scan(append(lead, dest...)...)
 }
 
 // RolledDay reports whether day's rows are rolled up.

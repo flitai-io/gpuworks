@@ -113,16 +113,18 @@ test("the candidate table pages and filters on the server, from the keyboard", a
   const modal = (await screen.findByText(locale.candidates)).closest(".ant-modal") as HTMLElement;
   await within(modal).findByText("gpu-1");
   assert.deepEqual(asked[0], { status: undefined, offset: 0, limit: 50 });
-  // The counts cover the whole cluster, not the page.
-  assert.ok(within(modal).getByText(i18n.t("detail.placement.summary", { nodes: 1000, room: 3, busy: 895, unmet: 90, cordoned: 5, offline: 7 })));
+  // The counts cover the whole cluster, not the page, and are read once: on the filter tabs.
+  for (const [status, count] of [["all", 1000], ["room", 3], ["busy", 895], ["unmet", 90], ["cordoned", 5], ["offline", 7]] as const) {
+    assert.ok(within(modal).getByRole("tab", { name: `${locale.status[status]} ${count}` }));
+  }
   assert.ok(within(modal).getByText("gpuworks.ai/vendor=nvidia") && within(modal).getByText("pool=a | b"));
 
   await user.click(within(modal).getByTitle("2"));
   await within(modal).findByText("gpu-51");
   assert.deepEqual(asked.at(-1), { status: undefined, offset: 50, limit: 50 });
 
-  // The status filter is a radio group: reach it with the keyboard.
-  const unmet = within(modal).getByRole("radio", { name: new RegExp(locale.status.unmet) });
+  // The status filter is a tab list: reach it with the keyboard.
+  const unmet = within(modal).getByRole("tab", { name: new RegExp(locale.status.unmet) });
   unmet.focus();
   await user.keyboard(" ");
   await within(modal).findByText("node gpu-1 does not satisfy pool ∈ {a, b}");
@@ -184,7 +186,7 @@ test("a failed model preparation explains the missing replicas, not the GPU verd
   assert.equal(screen.queryByText(locale.closest), null);
   assert.equal(screen.queryByText(i18n.t("detail.placement.waiting", { count: 2 })), null);
   // A failure is a warning, never an info notice.
-  assert.ok(document.querySelector(".ant-alert-error"), "a failed preparation is an error-styled alert");
+  assert.ok(document.querySelector('[role="alert"][data-status="danger"]'), "a failed preparation is an error-styled alert");
 });
 
 // The other half: with no preparation problem at all the GPU refusal is the

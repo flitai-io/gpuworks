@@ -29,6 +29,12 @@ make test-coverage-report
 `make vet` 和 `git diff --check`。缺少外部能力时普通测试才可 `t.Skip`；
 `GPUWORKS_TEST_STRICT=1` 下关键依赖缺失应失败。
 
+`internal/testenv` 起的 server/agent 日志默认丢弃。`GPUWORKS_TESTENV_LOG=<path>` 全量写入文件；
+`GPUWORKS_TESTENV_FAILURE_LOG_DIR=<dir>` 只保留失败用例的日志：每个用例在内存里留最后 1 MiB，失败时写成
+`<dir>/<用例名>.log`，通过就丢弃。GitLab 的 `core-l3` 开启后者；`core-l2`/`core-l3` 失败时还把内层 dockerd
+日志、容器列表与各容器最后几行写进 `failure-evidence/`，作为 job artifact 上传（总量封顶 10 MiB，保留 14 天），
+用来查本地复现不了的偶发失败。
+
 ## 负载用例（默认 suite 之外）
 
 这些用例测量实际经过的时间（墙钟时间）和资源消耗，默认测试集（suite）不跑，`GPUWORKS_TEST_PERF=1` 显式开启。
@@ -42,7 +48,7 @@ CI 引用的两个多进程用例有 Make target；其余直接用 `go test` 跑
 | `make test-fleet-perf-processes` | `TestFleet1000NodesRedeployChurnAcrossProcesses` | 同一负载，但 server 是独立进程、fleet 是另一个进程 |
 | `go test`（见测试注释） | `TestFleetLogCenterScale` | 日志中心在 fleet 负载下的读目标（单进程） |
 | `make test-fleet-log-scale-processes` | `TestFleetLogCenterScaleAcrossProcesses` | 同一日志中心负载，server 与 fleet 分进程 |
-| `go test`（见测试注释） | `TestFleetGatewayLoadAcrossProcesses` | `/v1` 数据面：server 进程 + 多卡 fleet（流式 fake 引擎）+ 流式客户端群，报告 req/s、TTFT/E2E、server 核数与内存、副本分布；`GPUWORKS_GATEWAY_*` 调形态，基线见 `artifacts/archive/2026-09-24-gateway-load-acceptance/gateway-load-gpu2-2026-09-24/` |
+| `make test-fleet-gateway-load-processes` | `TestFleetGatewayLoadAcrossProcesses` | `/v1` 数据面：server 进程 + 多卡 fleet（流式 fake 引擎）+ 流式客户端群，报告 req/s、TTFT/E2E、server 核数与内存、每请求 server CPU、副本分布；make 目标默认 1000 路客户端跑 30 s，`GPUWORKS_GATEWAY_*` 调形态，基线见 `artifacts/archive/2026-09-24-gateway-load-acceptance/gateway-load-gpu2-2026-09-24/` |
 
 fleet 用例默认 1000 个 agent，其中一半循环执行 部署→拉镜像→running→删除。数据库写入磁盘，
 以测量真实写入代价；`:memory:` 不执行 fsync（把数据同步到磁盘），测不出这部分开销。用例断言：
@@ -75,7 +81,10 @@ RSS（进程驻留内存）与 CPU。
 `l2-fleet-redeploy-churn` job 跑多进程形态，只在 `FLEET_REDEPLOY_CHURN=1` 的 schedule / web / api
 流水线里出现（每晚定时任务带这个变量）；job 以 `GPUWORKS_TEST_STRICT=1` 运行，文件描述符上限不够
 会失败而不是跳过，两个进程的日志压缩成一个 tar.gz（按进程拆开的 40 个日志文件曾因上传体积被网关以 413 拒绝）作为 artifact 保留 14 天。掉线重连数与接口 p99 目前只报数不断言，
-看 nightly 的趋势，积累足够运行后再定阈值。
+看 nightly 的趋势，积累足够运行后再定阈值。网关用例另外断言每请求 server CPU
+（`GPUWORKS_GATEWAY_MAX_SERVER_CPU_US_PER_REQUEST`）：每请求的读库、复制之类的开销逐次累加时，
+吞吐和延迟要等到饱和才显出来，CPU 预算在每一步都能拦住。这个数与 CPU 型号有关，job 里的预算按最慢的
+runner（2.2 GHz Xeon Silver 4210）定，落在更快的 runner 上只会更低。
 
 多进程形态可用预编译二进制运行，**没有 Go 工具链的机器只能这样跑**：
 
@@ -318,9 +327,20 @@ nightly）在 master 上运行，用来与 GitLab 同一提交的结果对比。
   Pascal（P40，sm_61）没有任何镜像能跑，该用例不再租它。镜像须先构建并发布（`build.sh` 然后 `publish.py`）。
   `COMPSHARE_GPU_MODELS`（逗号分隔，如 `V100S`）替换租机的卡型候选顺序，用来把一次运行对准某个卡型。
 - `prepare-compshare-golden-image` 创建并验证新模板，但不会删除旧模板或修改 CI 变量。
-  模板里同时存放同一版 NVIDIA 驱动（当前 570.153.02）的开源与闭源两套内核模块，开机时
+  模板里同时存放同一版 NVIDIA 驱动（当前 580.95.05）的开源与闭源两套内核模块，开机时
   `gpuworks-nvidia-kmod.service` 先加载开源版（RTX 5090 等 Blackwell 卡只能用它），没有初始化出 GPU
   时换成闭源版（V100S、P40 这类没有 GSP 的卡只能用它），选中的是哪套写在 `/run/gpuworks-nvidia-kmod`。
+
+  模板里的 runner 是 `gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2`，模型是 Qwen3-0.6B（`/opt/gpuworks/test-fixtures/models/qwen3-0.6b`，
+  对应 `COMPSHARE_PRELOADED_MODEL_PATH`）；不用 `cuda13.0` 镜像，是因为它不带 Turing 内核，跑不了最便宜的 2080 Ti。
+  源模板的驱动不是这一版时，工具先换掉用户态驱动：runner 镜像要求驱动不低于其 CUDA 版本（toolkit 按 `NVIDIA_REQUIRE_CUDA`
+  拒绝启动），而靠镜像自带的前向兼容库补差在 GeForce 卡上不可用（`Error 804`），580 是仍支持 Pascal、Volta 的最后一个分支。
+  源模板里没有该 runner 时，工具按 `-pull-sources`（默认华为云 SWR、quay.io、Docker Hub）
+  拉取；`-remove-images` 列出的旧 runner 会从 Docker 存储里删掉，免得留在新模板里。验证时每个卡型都在 runner 里做一次真实的
+  CUDA 调用，证明驱动带得动 runner 的 CUDA 运行时。工具还把 Docker 切到 cgroupfs cgroup 驱动（与阿里云模板相同）：新模板首次开机时
+  systemd 会 reload 两次，systemd 驱动下这会收回正在运行的容器的 GPU 设备权限，容器里随即报 `No CUDA GPUs are available`。
+  验证失败时加 `-keep-failed-validation` 保留验证机（登录凭据写在当前目录的 `<run-id>.ssh`，查完用 `cleanup-leaked -run-id` 删除），
+  `-revalidate-image <id>` 只对已有模板重做单机验证。
 
   工具做完模板后按 `-validate-gpus` 逐个卡型开机验证，也可用 `-validate-image <id>` 只验证已有模板；
   没货或被 CompShare 拒绝的卡型只报告不判失败。工具也会在镜像缺 nvidia-container-toolkit 时装上与华北模板相同的版本并配置 Docker 运行时

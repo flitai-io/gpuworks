@@ -85,7 +85,7 @@ func (s *Service) preparePDDeployRequest(req *dto.DeployRequest, engine string) 
 // its nodes share none or the one they share cannot carry the mode's
 // transport. Creating and previewing a deployment both ask it, as the
 // controller does again at every launch.
-func (s *Service) pdGroup(p *pdRequest) (netplan.Group, error) {
+func (s *Service) pdGroup(p *pdRequest) (netplan.Group, []messages.Warning, error) {
 	plain := make([]store.Node, len(p.nodes))
 	for i, n := range p.nodes {
 		plain[i] = *n
@@ -96,9 +96,13 @@ func (s *Service) pdGroup(p *pdRequest) (netplan.Group, error) {
 		if _, mapped := s.ComputeGroup(p.nodes); mapped != nil {
 			err = mapped
 		}
-		return group, err
+		return group, nil, err
 	}
-	return group, planning.CheckPDNetwork(p.mode, plain, group, p.sleepable)
+	if err := planning.CheckPDNetwork(p.mode, plain, group, p.sleepable); err != nil {
+		return group, nil, err
+	}
+	warnings, err := s.checkPDUCXNetlink(p, group)
+	return group, warnings, err
 }
 
 // checkEngine rejects a PD request whose engine, settled only after the
@@ -197,23 +201,24 @@ func (s *Service) evaluatePD(env evaluatePDEnv) {
 		}
 		resp.Acquisition.Nodes = s.evaluateNodeAcquisition(env.ctx, uuids, resp.Image, templateImageSources(env.selection, resp.Image), env.model, store.SourceRules{Pinned: store.StoragePins(req.NodeRequirements), SaveTo: s.previewSaveToStorageID(req.ModelSource, env.model, prepared.nodes[0])}, nil)
 	}
-	q := env.launch.Quick
-	resp.Warnings = append(resp.Warnings, planning.PDFeatureWarnings(q.KVOffloadingSize > 0 || q.KVDiskOffload, req.VRAMLimitGiB > 0)...)
+	resp.Warnings = append(resp.Warnings, planning.PDFeatureWarnings(deploy.KVOffloadPDRoles(env.engine.Name(), env.launch.Quick), req.VRAMLimitGiB > 0)...)
 	if mode.Unverified {
 		resp.Warnings = append(resp.Warnings, messages.Warning{Code: messages.WarningPDUnverified, Params: map[string]any{"feature": "mode", "mode": mode.Name}})
 	}
-	group, err := s.pdGroup(prepared)
+	group, groupWarnings, err := s.pdGroup(prepared)
 	if err != nil {
 		env.errs.add(fieldPDPlacement, err)
 		out.fieldErrors(resp, env.errs)
 		return
 	}
+	resp.Warnings = append(resp.Warnings, groupWarnings...)
 	resp.Warnings = append(resp.Warnings, computeFallbackWarning(group)...)
 	byUUID := map[string]*store.Node{}
 	for _, n := range prepared.nodes {
 		byUUID[n.UUID] = n
 	}
 	resp.PD = &dto.EvaluatePD{Mode: mode.Name, Fallback: pd.EffectiveFallback(), KVLoadFailure: pd.EffectiveKVLoadFailure()}
+	var draftInputs []deploy.ResolveLaunchInput
 	for _, role := range mode.Roles {
 		row := dto.EvaluatePDRole{Role: role, TP: pd.TP(role), PP: pd.Roles[role].PP}
 		for _, unit := range pd.Units(role) {
@@ -238,6 +243,7 @@ func (s *Service) evaluatePD(env evaluatePDEnv) {
 					out.fieldErrors(resp, env.errs)
 					return
 				}
+				draftInputs = append(draftInputs, plan.LaunchInput)
 				resp.Warnings = append(resp.Warnings, plan.Warnings...)
 				resp.Warnings = append(resp.Warnings, plan.Output.Warnings...)
 				if !preview.Fits {
@@ -259,6 +265,10 @@ func (s *Service) evaluatePD(env evaluatePDEnv) {
 	}
 	resp.Replicas = pd.InstanceCount()
 	resp.PlanScope = "per_instance"
+	setManualCommandDraft(resp, draftInputs)
+	if err := checkManualCommandRanks(req); err != nil {
+		env.errs.add(fieldContainerCmd, err)
+	}
 	if !env.errs.empty() {
 		resp.OK = false
 		resp.Errors = env.errs.items
@@ -290,13 +300,13 @@ func (s *Service) previewPDRank(env evaluatePDEnv, pd *planning.PDPlacement, mod
 		Selection: rankSelection, Quick: env.launch.Quick, ExtraArgs: env.launch.UserResidual,
 		Source:     planning.LaunchSourceFromRequest(env.response.Image, env.requestOverrides),
 		ModelMount: modelMount, ComponentMounts: componentMounts,
-		ServedName: env.servedName, Sleepable: req.Sleepable, YieldPolicy: requestYield(req.YieldPolicy), ExplainHolders: true,
+		ServedName: env.servedName, Sleepable: req.Sleepable, PriorityScheduling: requestsPriorityScheduling(req), YieldPolicy: requestYield(req.YieldPolicy), ExplainHolders: true,
 		VRAMLimitBytes: int64(req.VRAMLimitGiB * (1 << 30)), PartitionBackend: req.PartitionBackend,
 		APIContract: rankSelection.APIContract,
 		ModelRules:  store.SourceRules{Pinned: store.StoragePins(req.NodeRequirements), SaveTo: s.previewSaveToStorageID(req.ModelSource, env.model, target)},
 	}
 	pd.RankLaunch(mode, role, unit, rankIndex, topology, ports).Apply(&launch)
-	plan, err := planning.PlanLaunch(env.ctx, s.d.Store, s.networks(), launch)
+	plan, err := s.planLaunch(env.ctx, launch)
 	if err != nil {
 		return dto.EvaluatePDUnit{}, plan, err
 	}

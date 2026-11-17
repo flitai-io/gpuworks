@@ -135,7 +135,7 @@ func TestParseAscendInfo(t *testing.T) {
 	if gpus[1].Index != 4 || gpus[1].ArchID != "910B4" || gpus[1].Name != "Ascend 910B4" {
 		t.Fatalf("gpu1 identity = %+v", gpus[1])
 	}
-	if !gpus[1].Healthy || gpus[1].HealthStatus != "Warning" || gpus[1].HealthCode != "vendor_health_warning" {
+	if !gpus[1].Healthy || gpus[1].HealthStatus != "Warning" || gpus[1].HealthCode != "VENDOR_HEALTH_WARNING" {
 		t.Fatalf("a Warning GPU stays schedulable at Warning: %+v", gpus[1])
 	}
 	if gpus[1].PCIeBDF != "0000:c2:00.0" {
@@ -254,7 +254,7 @@ Error Information : node type=PORT, sensor type=Safety State,
 
 func TestEnrichAscendHealthDetailsOnlyQueriesFlaggedGPUs(t *testing.T) {
 	flagged := func(index, npu, chip int) ascendChip {
-		return ascendChip{gpu: proto.GPUInfo{Index: index, Healthy: true, HealthStatus: "Warning", HealthCode: "vendor_health_warning",
+		return ascendChip{gpu: proto.GPUInfo{Index: index, Healthy: true, HealthStatus: "Warning", HealthCode: "VENDOR_HEALTH_WARNING",
 			HealthMessage: accelerator.FormatHealthEvidence(ascendEvidence(npu, chip, "Warning"))}, npu: npu, chip: chip}
 	}
 	chips := []ascendChip{
@@ -276,7 +276,7 @@ func TestEnrichAscendHealthDetailsOnlyQueriesFlaggedGPUs(t *testing.T) {
 		t.Fatalf("calls = %+v, want %v", calls, want)
 	}
 	wantEvidence := "NPU=3\nChip=1\nHealth=Warning\nHealth Status=Warning\nError Code=81078603\nError Information=port link status change(up to down)"
-	if chips[2].gpu.HealthMessage != wantEvidence || chips[1].gpu.HealthCode != "vendor_health_warning" || !chips[1].gpu.Healthy {
+	if chips[2].gpu.HealthMessage != wantEvidence || chips[1].gpu.HealthCode != "VENDOR_HEALTH_WARNING" || !chips[1].gpu.Healthy {
 		t.Fatalf("flagged detail = %+v", chips)
 	}
 	if chips[0].gpu.HealthCode != "" || chips[0].gpu.HealthMessage != "" {
@@ -287,12 +287,12 @@ func TestEnrichAscendHealthDetailsOnlyQueriesFlaggedGPUs(t *testing.T) {
 // The detail view can be more severe than the summary row; the chip takes the
 // more severe verdict.
 func TestEnrichAscendHealthDetailsEscalatesToDetailVerdict(t *testing.T) {
-	chips := []ascendChip{{gpu: proto.GPUInfo{Index: 4, Healthy: true, HealthStatus: "Warning", HealthCode: "vendor_health_warning",
+	chips := []ascendChip{{gpu: proto.GPUInfo{Index: 4, Healthy: true, HealthStatus: "Warning", HealthCode: "VENDOR_HEALTH_WARNING",
 		HealthMessage: accelerator.FormatHealthEvidence(ascendEvidence(4, 0, "Warning"))}, npu: 4}}
 	enrichAscendHealthDetails(context.Background(), chips, func(context.Context, ...string) (string, error) {
 		return "Health Status: Critical\nError Code: 80CB8009\nError Information: HBM multi-bit ECC\n", nil
 	})
-	if g := chips[0].gpu; g.Healthy || g.HealthStatus != "Error" || g.HealthCode != "vendor_health_fault" {
+	if g := chips[0].gpu; g.Healthy || g.HealthStatus != "Error" || g.HealthCode != "VENDOR_HEALTH_FAULT" {
 		t.Fatalf("detail verdict ignored: %+v", g)
 	}
 }
@@ -302,7 +302,7 @@ func TestEnrichAscendHealthDetailsEscalatesToDetailVerdict(t *testing.T) {
 func TestEnrichAscendHealthDetailsStopsAtUnresponsiveCLI(t *testing.T) {
 	var chips []ascendChip
 	for i := 0; i < 4; i++ {
-		chips = append(chips, ascendChip{gpu: proto.GPUInfo{Index: i, Healthy: true, HealthStatus: "Warning", HealthCode: "vendor_health_warning"}, npu: i})
+		chips = append(chips, ascendChip{gpu: proto.GPUInfo{Index: i, Healthy: true, HealthStatus: "Warning", HealthCode: "VENDOR_HEALTH_WARNING"}, npu: i})
 	}
 	calls := 0
 	enrichAscendHealthDetails(context.Background(), chips, func(context.Context, ...string) (string, error) {
@@ -313,14 +313,14 @@ func TestEnrichAscendHealthDetailsStopsAtUnresponsiveCLI(t *testing.T) {
 		t.Fatalf("npu-smi health calls after a stall = %d, want 1", calls)
 	}
 	for _, c := range chips {
-		if c.gpu.HealthCode != "vendor_health_warning" || !c.gpu.Healthy {
+		if c.gpu.HealthCode != "VENDOR_HEALTH_WARNING" || !c.gpu.Healthy {
 			t.Fatalf("summary verdict changed: %+v", c.gpu)
 		}
 	}
 }
 
 func TestAscendHealthLevels(t *testing.T) {
-	for raw, code := range map[string]string{"OK": "", "Warning": "vendor_health_warning", "Alarm": "vendor_health_fault", "Critical": "vendor_health_fault", "": ""} {
+	for raw, code := range map[string]string{"OK": "", "Warning": "VENDOR_HEALTH_WARNING", "Alarm": "VENDOR_HEALTH_FAULT", "Critical": "VENDOR_HEALTH_FAULT", "": ""} {
 		if got := ascendHealthCode(raw); got != code {
 			t.Errorf("ascendHealthCode(%q) = %q, want %q", raw, got, code)
 		}
@@ -332,11 +332,11 @@ func TestAscendHealthLevels(t *testing.T) {
 
 func TestEnrichAscendHealthDetailsKeepsSummaryWhenQueryFails(t *testing.T) {
 	summary := accelerator.FormatHealthEvidence(ascendEvidence(4, 0, "Warning"))
-	chips := []ascendChip{{gpu: proto.GPUInfo{Index: 4, Healthy: true, HealthStatus: "Warning", HealthCode: "vendor_health_warning", HealthMessage: summary}, npu: 4}}
+	chips := []ascendChip{{gpu: proto.GPUInfo{Index: 4, Healthy: true, HealthStatus: "Warning", HealthCode: "VENDOR_HEALTH_WARNING", HealthMessage: summary}, npu: 4}}
 	enrichAscendHealthDetails(context.Background(), chips, func(context.Context, ...string) (string, error) {
 		return "", errors.New("npu-smi detail unavailable")
 	})
-	if g := chips[0].gpu; !g.Healthy || g.HealthStatus != "Warning" || g.HealthCode != "vendor_health_warning" || g.HealthMessage != summary {
+	if g := chips[0].gpu; !g.Healthy || g.HealthStatus != "Warning" || g.HealthCode != "VENDOR_HEALTH_WARNING" || g.HealthMessage != summary {
 		t.Fatalf("summary was not preserved: %+v", g)
 	}
 }

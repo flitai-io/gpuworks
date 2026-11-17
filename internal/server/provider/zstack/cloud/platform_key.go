@@ -15,17 +15,17 @@ import (
 
 // AuthorizePublicKey uses Cloud's existing host SSH access. KvmRunShell runs
 // as the host inventory's SSH user, also used by cloudHostInstance.
-func (d *Driver) AuthorizePublicKey(ctx context.Context, creds provider.Credentials, externalID, publicKey string) (string, error) {
+func (d *Driver) AuthorizePublicKey(ctx context.Context, creds provider.Credentials, externalID, publicKey string) (provision.CheckResult, error) {
 	if strings.TrimSpace(externalID) == "" {
-		return "", fmt.Errorf("zstack: a target host is required for SSH key authorization")
+		return provision.CheckResult{}, fmt.Errorf("zstack: a target host is required for SSH key authorization")
 	}
 	key, _, options, rest, err := ssh.ParseAuthorizedKey([]byte(publicKey))
 	if err != nil || len(options) != 0 || len(strings.TrimSpace(string(rest))) != 0 {
-		return "", fmt.Errorf("zstack: invalid SSH public key")
+		return provision.CheckResult{}, fmt.Errorf("zstack: invalid SSH public key")
 	}
 	c, err := d.newClient(creds)
 	if err != nil {
-		return "", err
+		return provision.CheckResult{}, err
 	}
 	var request struct {
 		RunShell struct {
@@ -45,19 +45,19 @@ func (d *Driver) AuthorizePublicKey(ctx context.Context, creds provider.Credenti
 		} `json:"inventory"`
 	}
 	if err := c.PutActionResult(ctx, "/hosts/kvm/actions", request, &reply); err != nil {
-		return "", fmt.Errorf("zstack: SSH key authorization failed: %w", err)
+		return provision.CheckResult{}, fmt.Errorf("zstack: SSH key authorization failed: %w", err)
 	}
 	result := reply.Inventory[externalID]
 	if result == nil || result.ReturnCode == nil {
-		return "", fmt.Errorf("zstack: missing host SSH key authorization result")
+		return provision.CheckResult{}, fmt.Errorf("zstack: missing host SSH key authorization result")
 	}
 	if len(result.ErrorCode) != 0 && string(result.ErrorCode) != "null" {
-		return "", fmt.Errorf("zstack: Cloud could not execute SSH key authorization on the host")
+		return provision.CheckResult{}, fmt.Errorf("zstack: Cloud could not execute SSH key authorization on the host")
 	}
 	if *result.ReturnCode != 0 {
-		return "", fmt.Errorf("zstack: host SSH key authorization exited with code %d", *result.ReturnCode)
+		return provision.CheckResult{}, fmt.Errorf("zstack: host SSH key authorization exited with code %d", *result.ReturnCode)
 	}
-	return "authorized the platform key on the selected Cloud host", nil
+	return provider.PlatformKeyInstanceCheck("zstack", "authorized the platform key on the selected Cloud host"), nil
 }
 
 var _ provider.PublicKeyAuthorizer = (*Driver)(nil)

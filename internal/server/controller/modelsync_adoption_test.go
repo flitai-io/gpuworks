@@ -21,7 +21,7 @@ func TestModelSyncAdoptionAndTerminalEventsKeepTheSameOwner(t *testing.T) {
 		c := New(st, hub, nil)
 		ctx, cancel := context.WithCancel(context.Background())
 		run := &modelSyncRun{transferID: "requested", cancel: cancel}
-		c.modelSyncs[key] = run
+		c.syncs.register(key, run)
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -36,8 +36,8 @@ func TestModelSyncAdoptionAndTerminalEventsKeepTheSameOwner(t *testing.T) {
 		}()
 		wg.Wait()
 		current, err := st.ModelFileByID(mf.ID)
-		if err != nil || current.State != proto.MFSyncing || current.TransferID != "adopted" || c.modelSyncs[key] != run || ctx.Err() != nil {
-			t.Fatalf("adoption lost ownership: row=%+v err=%v registered=%v context=%v", current, err, c.modelSyncs[key] == run, ctx.Err())
+		if err != nil || current.State != proto.MFSyncing || current.TransferID != "adopted" || c.syncs.current(key) != run || ctx.Err() != nil {
+			t.Fatalf("adoption lost ownership: row=%+v err=%v registered=%v context=%v", current, err, c.syncs.current(key) == run, ctx.Err())
 		}
 		c.clearModelSync(key, run)
 	}
@@ -57,13 +57,13 @@ func TestModelSyncLateAdoptionCannotOverwriteReplacement(t *testing.T) {
 	defer replacementCancel()
 	oldRun := &modelSyncRun{transferID: "old-request", cancel: oldCancel}
 	replacement := &modelSyncRun{transferID: "replacement", cancel: replacementCancel}
-	c.modelSyncs[key] = replacement
+	c.syncs.register(key, replacement)
 	// An already buffered InProgress reply may arrive after the old run was
 	// released and a replacement acquired the same model-file slot.
 	c.runModelSync(oldCtx, key, oldRun, peerSource{node: src, path: "/models/Qwen3", sizeBytes: 12}, dst, mf, netplan.StoragePath{})
 	current, err := st.ModelFileByID(mf.ID)
-	if err != nil || current.State != proto.MFSyncing || current.TransferID != "replacement" || c.modelSyncs[key] != replacement || replacementCtx.Err() != nil {
-		t.Fatalf("late receiver reply overwrote replacement: row=%+v err=%v registered=%v context=%v", current, err, c.modelSyncs[key] == replacement, replacementCtx.Err())
+	if err != nil || current.State != proto.MFSyncing || current.TransferID != "replacement" || c.syncs.current(key) != replacement || replacementCtx.Err() != nil {
+		t.Fatalf("late receiver reply overwrote replacement: row=%+v err=%v registered=%v context=%v", current, err, c.syncs.current(key) == replacement, replacementCtx.Err())
 	}
 	c.clearModelSync(key, replacement)
 }

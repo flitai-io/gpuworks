@@ -34,7 +34,7 @@ func (d *Driver) prepareHostForAgent(ctx context.Context, creds provider.Credent
 		if err != nil {
 			return err
 		}
-		return cloudstore.New(d.store.DB()).SaveCloudHostSnapshot(cloudstore.CloudHost{
+		return d.store.CloudLedger().SaveCloudHostSnapshot(cloudstore.CloudHost{
 			ProviderID: instance.ProviderID, ExternalID: resource.ExternalID, NodeUUID: node.UUID,
 			Snapshot: string(raw), InitialCPUReserved: resource.CPU.Reserved, InitialMemoryReserved: resource.Memory.Reserved,
 		})

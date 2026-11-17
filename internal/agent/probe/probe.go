@@ -47,6 +47,19 @@ func New(driver runtime.Driver, builder WorkloadBuilder, vendor string) *Runner 
 	}
 }
 
+// kubeProbeTimeout is the behavioral budget on Kubernetes, where the probe is
+// a pod: creating its sandbox and starting it alone takes 10 to 20 seconds,
+// which the docker budget does not allow for.
+const kubeProbeTimeout = 60 * time.Second
+
+// probeTimeout is the behavioral budget for the current driver.
+func (r *Runner) probeTimeout() time.Duration {
+	if r.driver != nil && r.driver.Name() == "kube" && r.timeout < kubeProbeTimeout {
+		return kubeProbeTimeout
+	}
+	return r.timeout
+}
+
 // SetDriver invalidates results after a runtime switch. The builder remains
 // the same engine, whose driver has already been switched by the caller.
 func (r *Runner) SetDriver(driver runtime.Driver) {
@@ -155,7 +168,7 @@ func (r *Runner) runOne(parent context.Context, backend string, gpuIndex int) (s
 	// Keep the behavioral assertion on its own short budget. Cold udocker
 	// provisioning and offline image import can take longer, but must not make a
 	// hung quota container appear acceptable.
-	ctx, cancel := context.WithTimeout(parent, r.timeout)
+	ctx, cancel := context.WithTimeout(parent, r.probeTimeout())
 	defer cancel()
 	probeID := fmt.Sprintf("probe-%s-%d", backend, gpuIndex)
 	// The probe name and state key are stable per physical GPU. A prior failed

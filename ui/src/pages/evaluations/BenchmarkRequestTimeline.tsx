@@ -11,7 +11,7 @@ interface Props {
   onRetry: () => void;
 }
 
-const colors = { wait: themeColors.chartPrimary, generate: themeColors.chartTertiary, finish: themeColors.muted, content: themeColors.warning, failure: themeColors.danger };
+const colors = { wait: themeColors.chartPrimary, generate: themeColors.success, finish: themeColors.muted, content: themeColors.chartTeal, failure: themeColors.danger };
 const pageSize = 25;
 function time(value: string | null | undefined): number | null {
   if (!value) return null;

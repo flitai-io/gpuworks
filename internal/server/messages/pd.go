@@ -77,4 +77,16 @@ const (
 	// WarningPDKVOffloadPrefillOnly: the deployment's KV offload runs on the
 	// prefill role only; decode never carries a KV cache tier.
 	WarningPDKVOffloadPrefillOnly = "PD_KV_OFFLOAD_PREFILL_ONLY"
+	// WarningPDUCXNetlinkHang: a node the operator placed an instance on has a
+	// kernel whose IPv6 route dump hangs UCX 1.20-1.22 (bundled with NIXL),
+	// and the mode moves the KV with NIXL over Ethernet (ADR 0028). Automatic
+	// placement leaves such nodes out; a named one is allowed, and the engine
+	// will likely never finish starting until IPv6 is off on the node. Params:
+	// mode, network, nodes (uuid, name and kernel of each), names, fixes (code
+	// and literal commands each), fix (the first fix's command).
+	WarningPDUCXNetlinkHang = "PD_UCX_NETLINK_HANG"
+	// WarningPDUCXNetlinkHangRDMA: the same node fact as WarningPDUCXNetlinkHang
+	// on a host RDMA network, where UCX is held to RDMA transports and may not
+	// run the route check; it is not refused, the node may still hang.
+	WarningPDUCXNetlinkHangRDMA = "PD_UCX_NETLINK_HANG_RDMA"
 )

@@ -101,6 +101,9 @@ type Owner struct {
 	UserID   uint
 	APIKeyID uint
 	All      bool
+	// PriorityClass is the class the owner's batch runs at, set on the
+	// owner a batch sends its requests as (Batch.Owner).
+	PriorityClass string
 }
 
 // Sees reports whether the owner may see a row created by userID.
@@ -131,7 +134,10 @@ type Batch struct {
 	CompletionWindow string
 	// Model is the served name every request is sent to, replacing its line's
 	// own body.model; empty when each line names its own.
-	Model            string
+	Model string
+	// PriorityClass is the request priority class the batch's requests run
+	// at; empty runs them at the batch class.
+	PriorityClass    string
 	Status           string
 	ErrorCode        string
 	ErrorMessage     string
@@ -179,7 +185,9 @@ type Warning struct {
 }
 
 // Owner is the owner a batch acts for when it sends requests.
-func (b Batch) Owner() Owner { return Owner{UserID: b.UserID, APIKeyID: b.APIKeyID} }
+func (b Batch) Owner() Owner {
+	return Owner{UserID: b.UserID, APIKeyID: b.APIKeyID, PriorityClass: b.PriorityClass}
+}
 
 // Progress is an executor checkpoint: the requests with a result so far and
 // the byte length of the partial result file that holds them.
@@ -206,6 +214,9 @@ var (
 	ErrNotFound  = errors.New("not found")
 	ErrFileInUse = errors.New("a batch that has not finished uses the file")
 	ErrTerminal  = errors.New("the batch has finished")
+	// ErrPriorityClassGone: the batch's class was deleted while it was
+	// being created.
+	ErrPriorityClassGone = errors.New("the priority class does not exist")
 )
 
 // Repo persists files and batches. Its writes are per state change or per
@@ -344,6 +355,10 @@ type Reply struct {
 	Err error
 }
 
+// PriorityClasses says whether a request priority class of the name exists
+// (names are lowercase).
+type PriorityClasses func(name string) (bool, error)
+
 // Sender sends one request through the gateway as the owner's: the same
 // routing, wake hold and accounting as a client's request.
 type Sender interface {
@@ -395,6 +410,7 @@ const (
 	CodeEmptyFile            = "empty_file"
 	CodeTooManyRequests      = "too_many_requests"
 	CodeInvalidFileExtension = "invalid_file_extension"
+	CodePriorityClass        = "priority_class_not_found"
 )
 
 // Request fields a refusal or warning about models is about: the model every

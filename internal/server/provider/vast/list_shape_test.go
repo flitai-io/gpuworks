@@ -18,8 +18,8 @@ func TestListInstancesRejectsUnknownShapes(t *testing.T) {
 		wantIDs []string
 		wantErr bool
 	}{
-		{name: "empty envelope", body: `{"instances":[]}`, wantIDs: []string{}},
-		{name: "bare array", body: `[{"id":7}]`, wantIDs: []string{"7"}},
+		{name: "empty envelope", body: `{"success":true,"instances":[],"instances_found":0,"total_instances":0,"next_token":null}`, wantIDs: []string{}},
+		{name: "bare array without pagination metadata", body: `[{"id":7}]`, wantErr: true},
 		{name: "error object with 200", body: `{"success":false,"msg":"rate limited"}`, wantErr: true},
 		{name: "null instances", body: `{"instances":null}`, wantErr: true},
 		{name: "null body", body: `null`, wantErr: true},

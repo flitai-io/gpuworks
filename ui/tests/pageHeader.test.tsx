@@ -47,8 +47,10 @@ test("a page reached from the menu shows no breadcrumb, only its title", () => {
 
 test("a detail page adds its parents after the section, as links back", () => {
   at("/monitor/d/7", <PageHeader title="qwen" parents={[<Link key="list" to="/monitor">Monitor Center</Link>]} />);
-  assert.deepEqual(crumbs(), ["Monitoring & Analytics", "Monitor Center"]);
+  assert.deepEqual(crumbs(), ["Monitoring & Analytics", "Monitor Center", "qwen"]);
   assert.equal(screen.getByRole("link", { name: "Monitor Center" }).getAttribute("href"), "/monitor");
+  assert.equal(document.querySelector('[aria-current="page"]')?.textContent, "qwen");
+  assert.equal(screen.queryByRole("link", { name: "qwen" }), null);
 });
 
 test("the overview entry omits its section even when the title text differs", () => {
@@ -58,7 +60,7 @@ test("the overview entry omits its section even when the title text differs", ()
 
 test("a page below a menu page names the section and its parents, whatever its title", () => {
   at("/deploy", <PageHeader title="Inference" parents={[<Link key="list" to="/deployments">Inference Services</Link>]} />);
-  assert.deepEqual(crumbs(), ["Inference", "Inference Services"]);
+  assert.deepEqual(crumbs(), ["Inference", "Inference Services", "Inference"]);
 });
 
 test("a nested route selects the menu item key, not the first path segment", () => {
@@ -79,4 +81,10 @@ test("actions sit beside the title and page controls in their own row below", ()
   const toolbar = header.querySelector(".page-header-toolbar") as HTMLElement;
   assert.equal(toolbar.previousElementSibling, row, "the toolbar follows the title row");
   assert.ok(within(toolbar).getByRole("textbox", { name: "Request ID" }));
+});
+
+test("a rich visual title can provide a plain current breadcrumb without duplicating controls", () => {
+  at("/deploy", <PageHeader title={<><span>Edit qwen</span><button>Title action</button></>} breadcrumbTitle="Edit qwen" parents={[<Link key="list" to="/deployments">Inference Services</Link>]} />);
+  assert.equal(document.querySelector('[aria-current="page"]')?.textContent, "Edit qwen");
+  assert.equal(screen.getAllByRole("button", { name: "Title action" }).length, 1);
 });

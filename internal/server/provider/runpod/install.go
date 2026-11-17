@@ -26,7 +26,7 @@ func (d *Driver) InstallAgentWithReport(ctx context.Context, creds provider.Cred
 	}
 	req.Instance = instance
 	listen, address := req.ServerDialListen, req.ServerDialAddress
-	var portCheck provider.InstallCheck
+	var portCheck provision.CheckResult
 	if req.ConnectMode == "server_dial" && strings.TrimSpace(address) == "" {
 		var err error
 		listen, address, instance, portCheck, err = d.serverDialPort(ctx, creds, req)
@@ -82,13 +82,13 @@ func (d *Driver) InstallAgentWithReport(ctx context.Context, creds provider.Cred
 	// actually logged in.
 	out.SSHHost, out.SSHPort = instance.PublicIP, instance.SSHPort
 	out.PlatformKeyVolatile = d.platformKeyVolatile(ctx, creds, req, out)
-	if keyCheck.Name != "" {
-		out.Checks = append([]provider.InstallCheck{keyCheck}, out.Checks...)
+	if keyCheck.ID != "" {
+		out.Checks = append([]provision.CheckResult{keyCheck}, out.Checks...)
 	}
 	if req.ConnectMode == "server_dial" {
 		out.ServerDialListen, out.ServerDialAddress = providerInstallListen(listen), address
-		if portCheck.Name != "" {
-			out.Checks = append([]provider.InstallCheck{portCheck}, out.Checks...)
+		if portCheck.ID != "" {
+			out.Checks = append([]provision.CheckResult{portCheck}, out.Checks...)
 		}
 	}
 	return out, nil

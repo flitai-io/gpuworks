@@ -28,6 +28,9 @@ type engineParam struct {
 	// Composed repeats flagPair.Composed for readers that only hold the
 	// resolved row: the adapter writes this flag itself (see flagPair).
 	Composed bool
+	// Selector repeats paramDefinition.Selector: the row selects a KV
+	// offload backend and carries no flag of its own.
+	Selector bool
 }
 
 // engineParams returns the dictionary rows that are part of this engine's
@@ -45,6 +48,12 @@ func engineParams(engine string) map[string]engineParam {
 	}
 	out := make(map[string]engineParam, len(parameterDefinitions))
 	for _, definition := range parameterDefinitions {
+		if definition.Selector {
+			if selector, published := kvBackendSelector(definition, engine); published {
+				out[definition.Key] = selector
+			}
+			continue
+		}
 		flags := definition.Flags[engine]
 		if definition.Platform {
 			if !containsString(definition.Engines, engine) {
@@ -58,6 +67,9 @@ func engineParams(engine string) map[string]engineParam {
 		spec.Aliases = definition.Aliases
 		spec.Options = definition.optionsFor(engine)
 		spec.Enum = optionValues(spec.Options)
+		if containsString(definition.ClosedFor, engine) {
+			spec.Type, spec.Control = "enum", "select"
+		}
 		value := definition.Default
 		if override, ok := definition.DefaultByEngine[engine]; ok {
 			value = override
@@ -184,6 +196,9 @@ func canonicalValue(spec engineParam, value any) (any, bool) {
 		return nil, false
 	case "integer":
 		if text, ok := value.(string); ok {
+			if isVLLMContextAuto(spec, -1) && strings.EqualFold(strings.TrimSpace(text), "auto") {
+				return int64(-1), true
+			}
 			parsed, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
 			return parsed, err == nil
 		}
@@ -228,6 +243,12 @@ func canonicalValue(spec engineParam, value any) (any, bool) {
 			// (EAGLE3, BFloat16). Case is not meaning, so it is folded here and
 			// the dictionary's own spelling is what the configuration stores -
 			// everything downstream then compares one spelling.
+			text = canonical
+		} else if canonical, known := canonicalEnumValue(spec.Enum, text); known {
+			// A free-text key's options are suggestions, not a gate: a value
+			// none of them names passes as written. One that names an option
+			// in another case takes the option's spelling, which is the
+			// engine's - SGLang refuses "eagle3" and vLLM "MTP".
 			text = canonical
 		}
 		return text, true
@@ -288,7 +309,7 @@ func paramDictForEngine(engine string) map[string]string {
 	params := engineParams(engine)
 	out := make(map[string]string, len(params))
 	for key, spec := range params {
-		if spec.Platform {
+		if spec.Platform || spec.Selector {
 			continue
 		}
 		if spec.Flag != "" {
@@ -311,7 +332,7 @@ func structuredParams(engine string, dict map[string]string) []ParamDefinition {
 			continue
 		}
 		flag, published := dict[definition.Key]
-		if !published && !spec.Platform {
+		if !published && !spec.Platform && !spec.Selector {
 			continue
 		}
 		wire := spec.ParamDefinition

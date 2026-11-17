@@ -25,6 +25,8 @@ type AgentUpgradeStatus struct {
 	State   string `json:"state"` // failed | verified
 	Version string `json:"version,omitempty"`
 	Error   string `json:"error,omitempty"`
+	// Code is the RPCError code of a coded failure (ErrorAgentUpgradeInProgress).
+	Code string `json:"code,omitempty"`
 }
 
 // DesiredState is the payload of a state.sync (full) message.

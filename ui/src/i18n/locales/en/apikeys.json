@@ -27,6 +27,7 @@
     "copied": "API token copied"
   },
   "table": {
+    "priority": "Priority",
     "createdAt": "Created",
     "lastUsed": "Last used",
     "name": "Name",
@@ -97,5 +98,6 @@
     "editHelp": "The token's next request uses the new scope.",
     "saved": "Updated",
     "saveFailed": "Could not save: {{detail}}"
-  }
+  },
+  "priority": {"title": "Request priority of {{name}}", "class": "Class", "useDefault": "Use the default class (now {{name}})", "policy": "What clients may ask for", "policyHelp": "Clients name a class with the X-GPUWorks-Priority-Class request header. Within ceiling: any class up to the ceiling, a higher one is lowered to it; Fixed: the header is ignored; Down only: only classes up to the key's own.", "policies": {"within_ceiling": "Within ceiling", "fixed": "Fixed", "down_only": "Down only"}, "ceiling": "Ceiling", "ownClass": "The key's own class", "save": "Save", "edit": "Edit", "editAria": "Edit the request priority of {{name}}", "defaultClass": "Default"}
 }

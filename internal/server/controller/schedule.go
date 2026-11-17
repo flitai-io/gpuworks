@@ -49,6 +49,7 @@ func (c *Controller) pickPorts(node *store.Node, sizes ...int) ([]int, *schedule
 			r = *own
 		}
 	}
+	r = c.kubeEnginePorts(node, r)
 	out := make([]int, len(sizes))
 	next := r.Start
 	for i, size := range sizes {

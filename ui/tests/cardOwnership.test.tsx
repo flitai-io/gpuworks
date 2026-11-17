@@ -37,7 +37,7 @@ test("a card owned elsewhere shows whose it is, not a health verdict", () => {
 test("a card its driver could not bring up reads as a fault", () => {
   show(card({
     pcie_bdf: "0000:1c:00.0", index: -1,
-    health_status: "Error", health_code: "driver_init_failed",
+    health_status: "Error", health_code: "DRIVER_INIT_FAILED",
     health_message: "PCI Address: 0000:1c:00.0",
   }));
   assert.ok(screen.getByText("驱动初始化失败"));

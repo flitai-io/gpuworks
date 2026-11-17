@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,24 +16,26 @@ import (
 
 func TestModelSyncAndCancelEndpoints(t *testing.T) {
 	var syncModelID, cancelModelID uint
-	var syncNode, cancelNode string
-	h := apiHandlers{d: Deps{
-		SyncModel: func(_ context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error) {
-			syncModelID, syncNode = modelID, nodeUUID
+	var syncNode, syncSource, cancelNode string
+	syncRate := 0
+	h := apiHandlers{d: Deps{ModelTransfers: &fakeTransfers{
+		sync: func(modelID uint, nodeUUID, sourceUUID string, rate int) (*store.ModelFile, error) {
+			syncModelID, syncNode, syncSource, syncRate = modelID, nodeUUID, sourceUUID, rate
 			return &store.ModelFile{State: proto.MFSyncing, TransferID: "transfer-1"}, nil
 		},
-		CancelModelSync: func(_ context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error) {
+		cancel: func(modelID uint, nodeUUID string) (*store.ModelFile, error) {
 			cancelModelID, cancelNode = modelID, nodeUUID
 			return &store.ModelFile{State: proto.MFDownloadRequired, TransferID: "transfer-1", Message: "canceled"}, nil
 		},
-	}}
+	}}}
 
 	syncReq := httptest.NewRequest(http.MethodPost, "/api/v1/models/7/nodes/node-1/sync", nil)
 	syncReq = syncReq.WithContext(chiRouteContext(syncReq.Context(), map[string]string{"id": "7", "uuid": "node-1"}))
 	syncRec := httptest.NewRecorder()
 	h.syncModelToNode(syncRec, syncReq)
-	if syncRec.Code != http.StatusAccepted || syncModelID != 7 || syncNode != "node-1" || !strings.Contains(syncRec.Body.String(), "transfer-1") {
-		t.Fatalf("sync response/call = %d %s id=%d node=%q", syncRec.Code, syncRec.Body.String(), syncModelID, syncNode)
+	// No body: the controller chooses the source and keeps the recorded rate.
+	if syncRec.Code != http.StatusAccepted || syncModelID != 7 || syncNode != "node-1" || syncSource != "" || syncRate != -1 || !strings.Contains(syncRec.Body.String(), "transfer-1") {
+		t.Fatalf("sync response/call = %d %s id=%d node=%q source=%q rate=%d", syncRec.Code, syncRec.Body.String(), syncModelID, syncNode, syncSource, syncRate)
 	}
 
 	cancelReq := httptest.NewRequest(http.MethodPost, "/api/v1/models/7/nodes/node-1/sync/cancel", nil)
@@ -109,14 +112,14 @@ func TestModelSyncOptionalRateLimit(t *testing.T) {
 	} {
 		t.Run(tc.body, func(t *testing.T) {
 			called := false
-			legacy := func(context.Context, uint, string) (*store.ModelFile, error) {
-				t.Fatal("legacy sync called")
-				return nil, nil
+			wantSource := ""
+			if strings.Contains(tc.body, "source_node") {
+				wantSource = "src"
 			}
-			h := apiHandlers{d: Deps{SyncModel: legacy, PeerSync: PeerSyncHooks{SyncModelWithOptions: func(_ context.Context, _ uint, _ string, _ string, rate int) (*store.ModelFile, error) {
+			h := apiHandlers{d: Deps{ModelTransfers: &fakeTransfers{sync: func(modelID uint, node, source string, rate int) (*store.ModelFile, error) {
 				called = true
-				if rate != tc.rate {
-					t.Fatalf("rate=%d want %d", rate, tc.rate)
+				if modelID != 7 || node != "dst" || source != wantSource || rate != tc.rate {
+					t.Fatalf("sync(%d, %q, %q, %d), want (7, dst, %q, %d)", modelID, node, source, rate, wantSource, tc.rate)
 				}
 				return &store.ModelFile{State: proto.MFSyncing}, nil
 			}}}}
@@ -126,4 +129,76 @@ func TestModelSyncOptionalRateLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A probe names the target from the path and the source from the body.
+func TestModelProbeNamesTargetAndSource(t *testing.T) {
+	var got [3]any
+	h := apiHandlers{d: Deps{ModelTransfers: &fakeTransfers{probe: func(modelID uint, target, source string) error {
+		got = [3]any{modelID, target, source}
+		return nil
+	}}}}
+	rec := postJSON(t, h.probeModelToNode, "/api/v1/models/7/nodes/dst/probe", `{"source_node":"src"}`, map[string]string{"id": "7", "uuid": "dst"})
+	if rec.Code != http.StatusOK || got != [3]any{uint(7), "dst", "src"} {
+		t.Fatalf("probe = %d %s, called with %v", rec.Code, rec.Body, got)
+	}
+	// A failed probe is the caller's conflict, with the reason.
+	h.d.ModelTransfers = &fakeTransfers{probe: func(uint, string, string) error { return errors.New("target refused the path") }}
+	rec = postJSON(t, h.probeModelToNode, "/api/v1/models/7/nodes/dst/probe", `{"source_node":"src"}`, map[string]string{"id": "7", "uuid": "dst"})
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "target refused the path") {
+		t.Fatalf("failed probe = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Without the controller's transfers every transfer endpoint answers that
+// model sync is not configured, and touches nothing.
+func TestModelTransferEndpointsWithoutTransfers(t *testing.T) {
+	h := apiHandlers{}
+	for name, call := range map[string]func(http.ResponseWriter, *http.Request){
+		"sync": h.syncModelToNode, "probe": h.probeModelToNode, "cancel": h.cancelModelSync,
+	} {
+		rec := postJSON(t, call, "/api/v1/models/7/nodes/dst/"+name, `{"source_node":"src"}`, map[string]string{"id": "7", "uuid": "dst"})
+		if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), ErrorModelSyncUnavailable) {
+			t.Fatalf("%s without transfers = %d %s", name, rec.Code, rec.Body)
+		}
+	}
+}
+
+// fakeTransfers answers each transfer with the function a test gives it and
+// fails one it was not given, so an unexpected call cannot pass as success.
+type fakeTransfers struct {
+	sync   func(modelID uint, nodeUUID, sourceUUID string, rate int) (*store.ModelFile, error)
+	probe  func(modelID uint, targetUUID, sourceUUID string) error
+	cancel func(modelID uint, nodeUUID string) (*store.ModelFile, error)
+	copy   func(modelID uint, src, dst store.FileRef, rate int) (*store.ModelFile, error)
+}
+
+var errUnexpectedTransfer = errors.New("unexpected model transfer")
+
+func (f *fakeTransfers) Sync(_ context.Context, modelID uint, nodeUUID, sourceUUID string, rate int) (*store.ModelFile, error) {
+	if f.sync == nil {
+		return nil, errUnexpectedTransfer
+	}
+	return f.sync(modelID, nodeUUID, sourceUUID, rate)
+}
+
+func (f *fakeTransfers) Probe(_ context.Context, modelID uint, targetUUID, sourceUUID string) error {
+	if f.probe == nil {
+		return errUnexpectedTransfer
+	}
+	return f.probe(modelID, targetUUID, sourceUUID)
+}
+
+func (f *fakeTransfers) Cancel(_ context.Context, modelID uint, nodeUUID string) (*store.ModelFile, error) {
+	if f.cancel == nil {
+		return nil, errUnexpectedTransfer
+	}
+	return f.cancel(modelID, nodeUUID)
+}
+
+func (f *fakeTransfers) Copy(_ context.Context, modelID uint, src, dst store.FileRef, rate int) (*store.ModelFile, error) {
+	if f.copy == nil {
+		return nil, errUnexpectedTransfer
+	}
+	return f.copy(modelID, src, dst, rate)
 }

@@ -60,6 +60,10 @@ type Profile struct {
 	// rules the deploy form applies (package pdmode is their catalog); the
 	// form offers exactly these and restates none of their rules.
 	PDModes []PDModeProfile `json:"pd_modes,omitempty"`
+	// KVBackends are the KV offload backends a deployment of this engine can
+	// select besides the engine's own offload (ADR 0069); absent when there
+	// are none. A target's profile lists those that run on its vendor.
+	KVBackends []KVBackendProfile `json:"kv_backends,omitempty"`
 	// MultiNodeSupported is set only when a target-specific capability policy
 	// overrides the engine profile. Nil leaves the engine's existing behavior
 	// intact; a pointer allows an explicit false to reach clients.
@@ -133,6 +137,16 @@ type EngineHooks interface {
 	// would replace the composed connector and silently turn the instance
 	// into an ordinary replica, so a PD deployment refuses them.
 	PDConnectorFlags() []string
+	// KVConflictFlags lists the flags that would replace the configuration
+	// a KV offload backend renders (ADR 0069), matched in every spelling the
+	// engine accepts (matchConflictFlags).
+	KVConflictFlags() []string
+	// RecognizeKVBackend reads a flag/value pair back into the KV offload
+	// backend whose configuration it is, with the backend's own dictionary
+	// values: the inverse of the backend's renderer, so a template exported
+	// from a deployment selects the backend again instead of carrying an
+	// opaque connector.
+	RecognizeKVBackend(flag, value string) (KVBackendRecognition, bool)
 	// APIBindHost is the address the served API binds when the launch names
 	// none; the template variable ${API_HOST} states it.
 	APIBindHost() string
@@ -181,6 +195,20 @@ func (BaseEngine) SplitCommand(launch ResolvedLaunch) ([]string, []string) {
 func (BaseEngine) TPFlags() []string { return nil }
 
 func (BaseEngine) PDConnectorFlags() []string { return nil }
+
+func (BaseEngine) KVConflictFlags() []string { return nil }
+
+func (BaseEngine) RecognizeKVBackend(string, string) (KVBackendRecognition, bool) {
+	return KVBackendRecognition{}, false
+}
+
+// KVBackendRecognition is a stated configuration read back as a KV offload
+// backend's selection: the backend's id, and the values of its own
+// dictionary keys the configuration states.
+type KVBackendRecognition struct {
+	ID     string
+	Values map[string]any
+}
 
 func (BaseEngine) APIBindHost() string { return "127.0.0.1" }
 
@@ -326,6 +354,7 @@ func ProfileForEngine(name string) (Profile, error) {
 	}
 	profile := profileWithOverrides(e)
 	profile.PDModes = pdModeProfiles(profile.Name)
+	profile.KVBackends = kvBackendProfiles(profile.Name, "")
 	return profile, nil
 }
 

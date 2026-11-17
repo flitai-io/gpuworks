@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
@@ -21,27 +20,27 @@ import (
 func (p *Proxy) serveAuxiliary(w http.ResponseWriter, r *http.Request, route inferenceapi.AuxiliaryRoute) {
 	if r.Method != route.Method {
 		w.Header().Set("Allow", route.Method)
-		writeErr(w, http.StatusMethodNotAllowed, fmt.Sprintf("%s only accepts %s", route.Path, route.Method))
+		writeAPIError(w, r, ErrorMethodNotAllowed, map[string]any{"path": route.Path, "method": route.Method})
 		return
 	}
 	modelName, cleanup, err := extractModel(r, p.maxBodyBytes)
 	defer cleanup()
 	if err != nil {
-		writeErr(w, statusForExtractError(err), err.Error())
+		writeRefusal(w, r, requestRefusal(err))
 		return
 	}
 	if modelName == "" {
-		writeErr(w, http.StatusBadRequest, "request body must specify a model")
+		writeAPIError(w, r, ErrorModelRequired, nil)
 		return
 	}
-	dep, tgt, status, msg, _ := p.selectForRequest(r.Context(), modelName, p.affinityKey(modelName, r))
-	if status != 0 {
-		writeErr(w, status, msg)
+	dep, tgt, rejection, _ := p.selectForRequest(r.Context(), modelName, p.affinityKey(modelName, r))
+	if rejection != nil {
+		writeRefusal(w, r, rejection)
 		return
 	}
 	if dep.TokenizeDisabled {
 		p.releaseTarget(tgt)
-		writeErr(w, http.StatusNotFound, fmt.Sprintf("deployment %s does not expose %s %s: tokenize is turned off for it", modelName, r.Method, route.Path))
+		writeAPIError(w, r, ErrorTokenizeDisabled, map[string]any{"model": modelName, "method": r.Method, "path": route.Path})
 		return
 	}
 	tgt.upstreamPath = route.Upstream

@@ -28,3 +28,5 @@ In Playground conversations, code blocks with the language `html` / `htm` / `xht
 - Use a separate preview domain (similar to an artifact sandbox domain): this requires deployers to configure an additional domain and certificate, which is impractical for common single-binary deployments accessed directly by IP over HTTP. An opaque origin already provides equivalent session isolation.
 - Provide separate HTTP/HTTPS network levels: administrators need two clear states, "blocked" or "allowed." An intermediate level (HTTPS only) still reaches HTTPS intranet services and only adds complexity.
 - Debounce and rerender every chunk: this reruns scripts, replays animations, and can execute a partially written `<script>`.
+
+<!-- translation-source-sha256: 8f4d313eca586d740f43e8fde04bd339a13d00e6ddf9c69c85d74d6cfe0a15d0 -->

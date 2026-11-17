@@ -72,7 +72,7 @@ func (c *Client) baseURL(ctx context.Context, host string) string {
 	switch {
 	case err == nil:
 		resp.Body.Close()
-	case errors.Is(err, http.ErrSchemeMismatch) || strings.Contains(err.Error(), "server gave HTTP response to HTTPS client"):
+	case errors.Is(err, http.ErrSchemeMismatch):
 		scheme = "http"
 	default:
 		// Unreachable for now: do not remember a guess.

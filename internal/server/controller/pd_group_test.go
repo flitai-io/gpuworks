@@ -106,7 +106,7 @@ func TestPDMultiNodeFollowerFailureRebuildsOnlyItsUnit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := f.st.SetInstanceState(follower.UUID, proto.InstFailed, "NCCL timeout"); err != nil {
+	if err := f.st.SetInstanceFailed(follower.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "NCCL timeout"); err != nil {
 		t.Fatal(err)
 	}
 	insts = f.reconcile(t)

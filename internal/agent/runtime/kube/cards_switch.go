@@ -194,6 +194,40 @@ func (p *cardPool) resync(ctx context.Context, first bool) error {
 	return nil
 }
 
+// reconcileHeld drops a card from the held set when the hold pod this pool
+// believes holds it no longer exists: an operator's own kubectl delete of
+// a gpuworks-hold-* pod bypasses this pool's bookkeeping entirely (it is
+// not the deletePods/returning path, which only tracks pods this pool
+// itself deleted), so without this p.held would say the card is borrowed
+// forever, and claim would never borrow it again for the next instance.
+// mu is held. An API error is left for the caller to decide whether it is
+// fatal; a stale entry it could not check is kept rather than guessed at.
+func (p *cardPool) reconcileHeld(ctx context.Context) error {
+	if p.view.resource == "" || len(p.held) == 0 {
+		return nil
+	}
+	pods, err := p.holdPods(ctx)
+	if err != nil {
+		return err
+	}
+	present := map[string]bool{}
+	for _, pod := range pods {
+		if pod.Metadata.DeletionTimestamp == nil {
+			present[pod.Metadata.Name] = true
+		}
+	}
+	for card, pod := range p.held {
+		if present[pod] {
+			continue
+		}
+		p.log.Warn("a hold pod is gone though the platform still believed it held the card; it will be borrowed again when needed",
+			"card", card, "hold_pod", pod)
+		delete(p.held, card)
+		delete(p.idleSince, card)
+	}
+	return nil
+}
+
 // isStale says the card is held for another mode than the node's now and
 // the platform holds it in no way that is good now: when a hold pod of the
 // node's mode holds it too (the node's scheduler counted the card to a new

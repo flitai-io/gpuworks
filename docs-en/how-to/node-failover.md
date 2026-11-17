@@ -119,3 +119,5 @@ curl --fail-with-body -sS -X PUT \
 - Card-to-card connectivity tests and Ascend direct wiring are not conditions for choosing a node; the risk of crossing switches or of RDMA not working remains for you to confirm at creation, and manually created mixed-architecture deployments only get a warning, with no stricter check.
 - Replacement does not change the model, image, or configuration; the models and images the new node needs are obtained as described in [Download, Cache, and Sync Models Between Nodes](download-and-sync-models.md).
 - The first-placement hint lives only in server memory and does not survive a restart; the undo record is read back from the events after one (see above).
+
+<!-- translation-source-sha256: fc465d2f59f0ee9eba8d6d0e2f570eae87dd842695b31e64c07156eedfa2462d -->

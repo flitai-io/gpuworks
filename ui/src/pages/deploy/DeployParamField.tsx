@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ComponentProps, type ReactNode } from "react";
 import {
   AutoComplete,
   Form,
@@ -11,6 +11,7 @@ import {
   Switch,
   Typography,
 } from "antd";
+import { Button } from "../../components/ui/button";
 import type { EngineParamSpec } from "../../api";
 import { localizedText } from "../../i18n/localizedText";
 import { useTranslation } from "react-i18next";
@@ -18,6 +19,47 @@ import DeployMetricsField from "./DeployMetricsField";
 import DeployLogLevelField from "./DeployLogLevelField";
 import { useEngineDecides } from "./deployParamApplicability";
 import type { Rule } from "antd/es/form";
+
+function NumberControl({
+  spec,
+  engineDecides,
+  ...inputProps
+}: ComponentProps<typeof InputNumber<number>> & {
+  spec: EngineParamSpec;
+  engineDecides: boolean;
+}) {
+  const { t, i18n } = useTranslation("deploy");
+  // A numeric automatic sentinel belongs to the server dictionary. Keep it
+  // numeric in the draft and payload, while showing its meaning to people.
+  const numericAutomatic = spec.automatic && spec.default === -1;
+  const input = (
+    <InputNumber
+      {...inputProps}
+      style={{ width: "100%" }}
+      min={spec.min}
+      max={spec.max}
+      step={spec.step}
+      placeholder={spec.automatic
+        ? t("shared.automatic")
+        : localizedText(spec.placeholder, i18n.resolvedLanguage || i18n.language) || undefined}
+      aria-valuetext={numericAutomatic && inputProps.value === -1 ? t("shared.automatic") : undefined}
+      formatter={numericAutomatic
+        ? (current, info) => info.userTyping
+          ? info.input
+          : Number(current) === -1 ? t("shared.automatic") : String(current ?? "")
+        : undefined}
+    />
+  );
+  if (!numericAutomatic || engineDecides) return input;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {input}
+      <Button variant="tertiary" size="md" disabled={inputProps.disabled} onClick={() => inputProps.onChange?.(-1)}>
+        {t("shared.automatic")}
+      </Button>
+    </div>
+  );
+}
 
 function SliderControl({
   value,
@@ -200,14 +242,7 @@ export default function DeployParamField({
     spec.control === "number"
   ) {
     control = (
-      <InputNumber
-        style={{ width: "100%" }}
-        disabled={manualCommand}
-        min={spec.min}
-        max={spec.max}
-        step={spec.step}
-        placeholder={spec.automatic ? t("shared.automatic") : placeholder}
-      />
+      <NumberControl spec={spec} disabled={manualCommand} engineDecides={engineDecides} />
     );
   } else if (spec.type === "json" || spec.control === "json") {
     control = (

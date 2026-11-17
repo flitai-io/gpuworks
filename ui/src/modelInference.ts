@@ -11,6 +11,7 @@ export const operationTypes: readonly OperationType[] = [
   "openai.image.edit",
   "openai.video.generate",
   "openai.realtime",
+  "systemone.decide",
 ];
 
 export const operationLabelKey: Record<OperationType, string> = {
@@ -24,6 +25,7 @@ export const operationLabelKey: Record<OperationType, string> = {
   "openai.image.edit": "common:operation.imageEdit",
   "openai.video.generate": "common:operation.videoGenerate",
   "openai.realtime": "common:operation.realtime",
+  "systemone.decide": "common:operation.decide",
 };
 export const allOperationsLabelKey = "common:operation.all";
 

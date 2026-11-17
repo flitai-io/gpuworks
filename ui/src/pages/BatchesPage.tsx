@@ -87,7 +87,7 @@ export default function BatchesPage({ pollMs = BATCH_POLL_MS }: { pollMs?: numbe
     {
       key: "id", title: t("columns.id"), width: 210, role: "name",
       render: (_: unknown, batch) => (
-        <Button variant="ghost" style={{ padding: 0 }} onClick={() => openDetail(batch.id)} aria-label={t("action.open", { id: batch.id })}>{batch.id}</Button>
+        <Button variant="link" className="no-underline hover:underline" style={{ padding: 0 }} onClick={(event) => { event.stopPropagation(); openDetail(batch.id); }} aria-label={t("action.open", { id: batch.id })}>{batch.id}</Button>
       ),
     },
     {

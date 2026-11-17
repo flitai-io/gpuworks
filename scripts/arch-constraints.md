@@ -119,6 +119,18 @@ grep -rlE "['\"]antd(/[^'\"]*)?['\"]" ui/src --include='*.ts' --include='*.tsx' 
 文件数只能拦"新文件引入 antd"，拦不住已有文件里继续加 antd 用法；逐文件的棘轮由下面的
 `ui/antd-inventory.json` 负责。
 
+### ui_copy_long_strings / ui_copy_caveat_strings（基线 0 / 0，2026-11-13）
+
+意图：页面只写事实和下一步，公式、口径、免责放进 `ui-kit/HelpTip` 或文档（`docs/dev/ui.md` "Copy on the page"）。
+`ui_copy_long_strings` 数中文 locale 里超过 120 字（key 以 `Help` 结尾的 HelpTip 内容放宽到 200 字）的字符串；
+`ui_copy_caveat_strings` 数非 `Help` key 中带免责短语（不保证、仅供参考、不代表、未经实测、并不意味、不改变、仅用于界面演示）的字符串。只降不升。
+
+```sh
+node scripts/ui_copy_audit.mjs long     # 或 caveat；list 逐条列出
+```
+
+排除：无。超长说明改写或移进文档；"不包含模型文件"这类事实不算免责，正则不收。
+
 ### ui_untested_shared_files（基线 0，2026-11-11）
 
 意图：每个页面都会复用的 UI 构件各有自己的单元测试，改它的人改得到对应测试，新加的构件不会没有测试就进来。范围：
@@ -227,6 +239,35 @@ grep -rn 'deploy\.InferVendor(' internal pkg cmd --include='*.go' | grep -v '_te
 
 排除：`*_test.go`。原 4 处调用（`api/deployments_evaluate.go`、`api/deployments_node_helpers.go`、`api/deployments_chipmatch.go`、`controller/schedule.go`）已全部改调 `accelerator.InferVendor`。
 
+### store_list_nodes_callers / store_list_deployments_callers / store_list_instances_callers（初值 23 / 10 / 5，2026-11-14；ListNodes → 11，节点快照；→ 9，控制器对账；ListDeployments → 9、ListInstances → 4，列表快照；→ 6 / 1，状态记忆）
+
+意图：`store.ListNodes()`（每个节点的整行加全部卡）、`ListDeployments()`、`ListInstances()`（整表整行）不再是各层默认的读法。只要节点的标识、状态、标签或一个计数的读用已有窄读（`NodeIdentities`、`NodeUUIDsByID`、`NodesForAgentUpgrade`、`CountNodes`）；需要全机群整行的热路径（列表、仪表盘、对账）由机群快照统一读一次（架构评审 R-32）。预算只降不升；新增调用点先问能否用窄读或快照。
+
+```sh
+grep -rnE '\.ListNodes\(\)' internal pkg cmd --include='*.go' | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c .
+grep -rnE '\.ListDeployments\(\)' internal pkg cmd --include='*.go' | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c .
+grep -rnE '\.ListInstances\(\)' internal pkg cmd --include='*.go' | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c .
+```
+
+排除：`*_test.go` 与 `internal/testenv/`（进程内测试夹具）。`\(\)` 只匹配无参调用，云厂商驱动的 `ListInstances(ctx, …)` 不计入。初值 `ListNodes` 39 → 23：`/healthz` 改用 `CountNodes`；放置选择（`LoadUnitSuggestFacts` 的调用方）不再为构造回退的在线判断先读一遍；存储、镜像、节点同步、镜像引用推送、agent 升级明细、部署运行时状态推导改用窄读。`ListNodes` 23 → 11：节点列表、筛选项、仪表盘、存储用量与节点探测、监控清单、`/gpus`、调度中心概览与看板、部署候选池、用量分析、拉取规则计数、网络状态、`NodesForStorage` 改读 `store.FleetNodes()`（节点快照，`store/fleet_nodes.go` 内部的 2 处调用计入）。`ListDeployments` 10 → 9、`ListInstances` 5 → 4：部署与实例列表改读 `deployment.Lists`（列表快照）；按请求读的回退也收进 `deployment.ReadListRows`，两条路径共用 `list_snapshot.go` 里的一处整表读。`ListDeployments` 9 → 6、`ListInstances` 4 → 1：仪表盘、监控清单与批处理模型列表改读同一份快照及其 `ListRows.States()`（每份快照只算一次全部部署的状态）。剩下的 `ListDeployments`：快照内部、启动时的启动配置规整与缓存拷贝认领、下载依赖索引、试验场、PD 校验；`ListInstances` 只剩快照内部。`ListNodes` 11 → 9：控制器的池副本放置、节点失联替换（`anotherNodeMayRun`、`planning.LoadUnitSuggestFactsFromSnapshot`）改读 `FleetNodes()`；控制器每批状态上报入队前先 `RefreshFleetNodes()`。运维者的交互式选择（部署评估 `evaluateEligibleNodes`、`rankEligible`、`CandidateNodes`，扩缩、建议与自动放置经 `planning.LoadUnitSuggestFacts`）保留直读：它们要按 agent 刚发来的上报回答，快照的 2 s 上报窗口会让刚报的磁盘不足在评估里晚 2 s 出现（`TestExistingModelDirectoryCanBeRegisteredAfterDiskRefusal`）。剩下的：快照内部 2 处、上述 4 处交互式选择、诊断包、网络测试、agent 升级预览。
+
+### agent_node_runtime_fields / agent_node_runtime_mutexes / agent_node_runtime_methods / agent_onrpc_cases / agent_engine_struct_maps（初值 77 / 12 / 233 / 51 / 9，2026-11-15）
+
+意图：agent 的组合根只做接线（ADR 0066）。`NodeRuntime` 的字段、互斥锁、方法与 `OnRPC` 分发的 RPC 数只降不升：镜像、模型文件、卡健康、doctor 各自成为带锁的子系统，`NodeRuntime` 每个子系统一个字段，RPC 改为「方法 → handler」表。方法数守护行为：只把字段搬进子系统、方法仍挂在 `NodeRuntime` 上直接碰那些状态，不算拆开。`Engine` 的 map 字段只降不升：一个实例的状态按生命周期收进记录（`processFacts` 是引擎进程那一份），不再加按 UUID 的并行 map；`TestEveryEngineFieldIsClassified` 与 `TestRemovingAnInstanceLeavesNothingUnderItsUUID` 要求每个新字段分类、按实例的真的随移除清理。
+
+```sh
+# scripts/structcount 解析非测试文件的语法树，打印一个数
+go run ./scripts/structcount -dir internal/agent/app    -type NodeRuntime -measure fields    # 77
+go run ./scripts/structcount -dir internal/agent/app    -type NodeRuntime -measure mutexes   # 12
+go run ./scripts/structcount -dir internal/agent/app    -type NodeRuntime -measure methods   # 233
+go run ./scripts/structcount -dir internal/agent/app    -type NodeRuntime -measure rpcs      # 51
+go run ./scripts/structcount -dir internal/agent/engine -type Engine      -measure maps      # 9
+```
+
+口径（`scripts/structcount/main_test.go` 的夹具逐条覆盖）：一行多个名字按名字计；指针锁、`sync.Map`、包内声明的 map 类型都计；匿名 struct 里的字段、锁与 map 照样计（包一层不算离开）；具名类型的字段只计这一个字段（移进具名子系统类型才算离开）；方法按接收者计，值与指针都算；`rpcs` 是包内所有 switch 的 case 里出现的不同 `proto.RPC*` 常量数，`OnRPC` 转交给辅助 switch（`kubeRPC`）的也计。
+
+初值是 R-23 第一个 MR（GWKS-321）之后的值：`Engine` 的 12 张按 UUID 的 map 中，描述引擎进程的四张（睡眠级别、预热、L1 主机缓冲、卡上进程）收成 `processes map[string]*processFacts`，12 → 9。
+
 ### store_concrete_importers（初值 17）
 
 意图：`*store.Store` 具体类型贯穿全服务端，无窄接口（计划 B6）。
@@ -260,6 +301,102 @@ go list -e -f '{{.ImportPath}}{{"\t"}}{{join .Imports " "}}' ./... \
 2026-11-12：部署用例（用例层拆分的第一组）。新包 `internal/server/deployment` 承接部署的创建、评估与读模型（行查找、运行时状态
 推导、模型准备观测），不依赖 `net/http` 与 `api`（依赖方向检查守护）；`api` 的 handler 只做解码、调用、映射。该包按 store 写入
 与读取，`store_concrete_importers` 22→23；`api` 仍为其余 handler 依赖 store，故没有随之减少。
+
+### store_db_accessor_callers（初值 0，2026-11-14）
+
+意图：store 之外的生产代码不拿原始 `*gorm.DB`。`(*store.Store).DB()` 只留给测试；
+其他包经 `Store` 的方法读写，ZStack Cloud 的主机与租约台账经 `(*store.Store).CloudLedger()`。
+
+```sh
+grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' \
+  | grep -v '_test\.go' | grep -v '^internal/server/store/' | grep -c .
+```
+
+排除：`*_test.go` 与 `internal/server/store/` 自身（store 内部对 `*gorm.DB` 取连接池的 `gdb.DB()` 不算）。
+模式按文本匹配任何 `.DB()`，所以 store 之外直接持有 gorm 再取 `*sql.DB` 也会计入——那同样是绕过 store，计入是有意的。
+建立时实测 0：ZStack Cloud 的三处调用改走 `CloudLedger()`，`scripts/seeddemo` 改为按节点接入的真实路径写入
+（`RegisterNode` + `UpdateNodeStatus`，拓扑以 `nvidia-smi topo -m` 文本给出）。
+
+### Controller、planning、app 三个枢纽（2026-11-14，初值取当日主线 0a0b5fa6c 实测）
+
+意图：这三个包是每个功能都要改的地方（架构评审 R-20）。拆分工作见总单 GWKS-313（子单 GWKS-303 至 GWKS-312）；
+这组预算先把现状钉住，拆分落地时在同一个 MR 里把对应限额收紧到新实测值。
+
+| 键 | 初值 | 方向 | 守护什么 |
+|---|---|---|---|
+| `controller_struct_fields` | 39 | max | `Controller` 结构体的字段行数 |
+| `controller_struct_mutexes` | 5 | max | 直接放在 `Controller` 上的锁 |
+| `controller_struct_maps` | 6 | max | 直接放在 `Controller` 上的 map |
+| `controller_exported_methods` | 18 | max | `*Controller` 的导出方法（API 操作挂在 Controller 上） |
+| `planning_concrete_store_refs` | 72 | max | planning 生产代码里含 `*store.Store` 的非注释行 |
+| `planning_sync_files` | 2 | max | planning 中 import `sync` / `sync/atomic` 的生产文件（包级锁） |
+| `app_new_lines` | 300 | max | `app.New` 的行数 |
+| `app_run_lines` | 192 | max | `(*App).Run` 的行数 |
+| `app_run_goroutines` | 23 | max | `(*App).Run` 里直接起的协程 |
+| `app_prod_lines` | 10012 | warn | app 生产代码总行数 |
+
+2026-11-14 合入后校正：GWKS-304（!1154）把 `Controller` 上的 4 组锁和 map 收进自带锁的类型，三项收紧为 34 / 1 / 1；
+预算 MR 的 CI 跑完到合入之间，r32-fleet-nodes、r32-list-states、r32-controller-nodes 先合入，`app.New` 增加共享的节点快照与
+部署/实例列表快照（300 → 307），planning 新增两个以节点快照为参数的入口（72 → 74，GWKS-309 会把这些读改走窄接口），
+`app_prod_lines` 随之到 10043。
+
+GWKS-305：sleep/wake 的顺序锁与放置提示从 planning 的包级全局变量移进叶子包 `internal/server/lifecycle` 的 `Orders`，
+由 controller 建、经 `Controller.Orders` 交给 app，再交给 API（`Deps.Orders`）与自动化。状态本身没有增加，只是从隐藏的
+全局变量变成显式传递：`planning_sync_files` 2 → 0；`controller_struct_fields` 34 → 35、`controller_exported_methods`
+18 → 19、`api_deps_fields` 63 → 64、`api_fanout` 48 → 49、`app_new_lines` 307 → 308，各带 `# raised:` 理由。
+
+GWKS-306：模型传输的 API 操作移出 Controller。`SyncModelToNode`、`SyncModelToNodeWithOptions`、`ProbeModelSync`、
+`CancelModelSync`、`CopyModelFile` 五个导出方法改为 `Controller.Transfers()` 返回的 `ModelTransfers`（Sync / Probe / Cancel /
+Copy），api 只依赖一个 `ModelTransfers` 接口（`Deps.SyncModel`、`Deps.CancelModelSync` 与 `PeerSyncHooks` 里三个模型钩子合为
+`Deps.ModelTransfers`）；传输运行表 `syncMu`/`modelSyncs` 收进 `modelSyncRuns`。收紧为 `controller_struct_fields` 34、
+`controller_struct_mutexes` 0、`controller_struct_maps` 0、`controller_exported_methods` 15、`api_deps_fields` 63，
+`app_new_lines` 304、`app_prod_lines` 10046。这只是第一步：`ModelTransfers` 指回 Controller，传输的实现与运行表仍在
+Controller 上，收窄的是 api 的依赖面与 Controller 的导出面，不是把传输逻辑搬出 Controller。
+
+GWKS-307：指标与日志的采集管线（队列、单写者、deployment 标签回填、直方图分位数折算、TTL 缓存淘汰）从 app 搬进叶子包
+`internal/server/obsingest`（约 1,140 行），app 只留约 150 行的适配：把 store 读成 API、自动化与 AI 助手要的形状。
+`app_prod_lines` 10046 → 8973；依赖方向检查新增「obsingest 只依赖 proto、selflog、logstore、tsdb、uxstore」。
+
+结构体与函数的五项由 `decl_count 目录 声明模式 行模式 [body]` 测量：在该包的非测试文件里找到匹配声明模式的顶层声明，
+从它数到第一个顶格的 `}`，只数匹配行模式的行（行模式为空时数全部行；`body` 表示不数声明行本身）：
+
+```sh
+decl_count internal/server/controller '^type Controller struct' '^[[:blank:]][*A-Za-z_]' body   # fields
+decl_count internal/server/controller '^type Controller struct' \
+  '^[[:blank:]](\*?sync\.(RW)?Mutex|[A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+sync\.(RW)?Mutex)' body # mutexes
+decl_count internal/server/controller '^type Controller struct' \
+  '^[[:blank:]][A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+map\[' body                                    # maps
+decl_count internal/server/app '^func New\(' ''                                                   # app_new_lines
+decl_count internal/server/app '^func \(a \*App\) Run\(' ''                                       # app_run_lines
+decl_count internal/server/app '^func \(a \*App\) Run\(' '^[[:blank:]]+(goBG\(|bg\.start\(|go[[:blank:]])' # app_run_goroutines
+```
+
+其余四项：
+
+```sh
+grep -rnE '^func \(c \*Controller\) [A-Z]' internal/server/controller --include='*.go' | grep -v '_test\.go' | grep -c .
+grep -rnE '\*store\.Store' internal/server/planning --include='*.go' | grep -v '_test\.go' \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | grep -c .
+grep -rlE '^[[:space:]]*"sync(/atomic)?"|^import "sync(/atomic)?"' internal/server/planning --include='*.go' \
+  | grep -v '_test\.go' | grep -c .
+find internal/server/app -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -exec cat {} + | grep -c ''
+```
+
+- 声明在包内换文件仍照常测量；整个声明找不到（改名、搬出包）时 `decl_count` 输出 `NOTFOUND`，预算循环直接失败——
+  搬走声明的 MR 必须把测量一起搬走，不能让预算静默变成 0。
+- 模式经环境变量传给 awk（`awk -v` 会吃掉反斜杠转义），并用 `[[:blank:]]` 而不是 `\t`（busybox awk 在动态正则里
+  不展开 `\t`）。gawk、mawk、busybox awk 实测结果一致。字段、map、锁的行模式要求恰好一级缩进，嵌套结构体的成员不计。
+- 已知口径：多名字段（`a, b int`）算一行；`sync.Map`、具名 map 类型、`atomic.*` 不计入锁或 map；
+  有多个文件声明同一个名字时（build tag 变体）只量文件名排序的第一个；
+  `app_run_goroutines` 只数行首的 `goBG(`、`bg.start(`、`go `，再别名、`wg.Go`、写在同一行的 `if … { go … }` 数不到；它只看 `Run` 本身，`Run` 之外起的协程（如 `automation_adapter.go:56`）由 GWKS-308 收进组件表。
+  把 `Run` 的一段搬进辅助方法会同时降低 `app_run_lines` 与 `app_run_goroutines`，这两项防的是 `Run` 变长，不是协程总数。
+- 状态收进自带锁的具名类型后（`nodeFailover`、`imageWaits` 等），字段仍计入 `controller_struct_fields`，锁和 map
+  不再计入——这正是要的方向。
+- 不用 planning 中 import store 的文件数（57）：其中 30 个只用实体类型，压它就要另建一套平行的行类型，
+  `store_concrete_importers` 的 `# raised` 已否掉这条路；用 `*store.Store` 引用代替。包级可变变量（如 `placementHints`
+  的 map）没有单独的计量，原有的两处由 `planning_sync_files` 覆盖；GWKS-305 把它们移进叶子包 `lifecycle` 后该项为 0。
+- 不量 `forgetDeployment` 的行数：缺陷正是它太短（漏清 5 份状态）。改用 `controller_struct_maps` 加 GWKS-303 的完整性测试。
+- `app_prod_lines` 是软预算：搬出功能服务会降它，新的装配代码合理地会涨它，只要在评审里被看见。
 
 ### api_fanout（初值 36）
 
@@ -652,6 +789,27 @@ find internal/server/store -type f -name '*.go' ! -name '*_test.go' | sort \
 
 ---
 
+### kv_backend_id_literals（初值 0，2026-11-16）
+
+意图：KV 卸载后端（[ADR 0069](../docs/adr/0069-kv-offload-backends.md)）只是 `internal/server/kvbackend` 的一行
+加适配器里的一个渲染函数；后端 id 若以字面量出现在别处（Go 的 `== "lmcache"`、TS 的卡片判断），就是把
+本应由注册表下发的规则又写了一遍。计数单位是**行数**。
+
+```sh
+{
+  grep -rnE '"(lmcache|mooncake_store|hicache)"' internal pkg cmd --include='*.go' \
+    | grep -v '_test\.go' | grep -v '^internal/server/kvbackend/' \
+    | grep -v '^internal/server/deploy/kv_render_'
+  grep -rnE "['\"](lmcache|mooncake_store|hicache)['\"]" ui/src --include='*.ts' --include='*.tsx' \
+    | grep -v '\.test\.'
+} | grep -c .
+```
+
+排除：测试文件；`internal/server/kvbackend/`（后端目录本身）；`internal/server/deploy/kv_render_*.go`
+（各后端的引擎配置渲染）。名单里是已规划的三个后端 id，新增后端时把它的 id 加进正则。
+
+---
+
 ## 依赖方向检查
 
 `check_architecture.sh` 除预算外还执行计划 §5.3 的依赖方向检查。这些**不是预算**，
@@ -663,6 +821,8 @@ find internal/server/store -type f -name '*.go' ! -name '*_test.go' | sort \
 - `pkg/**` 不得 import `internal/**`；
 - `internal/agent/**` 不得 import `internal/server/**`；
 - `internal/proto` 不得 import 本仓库任何包；
+- `internal/server/kvbackend` 是叶子包，本仓库内只许 import `internal/accelerator`、`internal/engines`
+  与 `internal/server/pdmode`（它只是一张后端描述表，渲染与门禁在 `internal/server/deploy`）；
 - `internal/server/distribution`（发布通道客户端，CLI 升级与 api 共用）不得 import 本仓库任何包，
   免得 `selfinstall` 经由它依赖到 server 其余部分（ADR 0040）。
 
@@ -673,3 +833,65 @@ find internal/server/store -type f -name '*.go' ! -name '*_test.go' | sort \
 
 `internal/proto` 那条只匹配 import 列表，绝不匹配包自身的 import path——否则
 `./internal/proto` 会因为自己的路径里含 `gpuworks/` 而永远"违规"。
+
+### ADR 0067 guards（初值均为 0）
+
+意图：失败、拒绝与检查结果以「码 + 参数」表达，不以英文散文表达，也不让下游再去解析散文
+（[ADR 0067](../docs/adr/0067-runtime-outcomes-as-codes.md)）。五个键都只许保持 0；实测命令即
+`scripts/check_architecture.sh` 中同名的 `*_hits` 函数，非测试 Go 文件。另有一条不走预算、由
+`make i18n-check` 直接拦截的规则：`internal/proto`、`internal/server/messages` 中的每个 UPPER_SNAKE
+常量，以及别处名为 `Error…`/`Warning…`/`Failure…`/`Reason…`/`Code…` 的 UPPER_SNAKE 常量，都必须在
+`ui/src/i18n/locales/{en,zh}` 中有文案。
+
+#### error_text_classification
+
+按错误文本判断类别：`strings.Contains/HasPrefix/Cut…` 作用于 `err`/`msg`/`message`/`detail`/`reason`/
+`stderr`/`output`，`err.Error() ==`，`switch x.Error()`，以及对 `.Error()` 的正则匹配。仓库自己产生的
+error 一律用 `errors.Is/As`。排除的是**调用外部系统的适配器**，每个文件只在那里按文本识别并当场转成
+哨兵或码：
+
+| 文件 | 包装的外部系统 |
+|---|---|
+| `internal/agent/modelfetch/retry.go` | Go net/http 的 HTTP/2、TLS 错误（类型未导出） |
+| `internal/agent/runtime/docker/cli_answers.go` | docker CLI 的输出 |
+| `internal/server/logstore/query.go` | glebarez SQLite 驱动的 FTS5 语法错误（只给通用 SQLITE_ERROR） |
+| `internal/server/uxstore/query.go` | 同一驱动的 "no such table" |
+| `internal/server/provider/compshare/api_error.go` | CompShare（UCloud）API 的错误消息 |
+| `internal/server/provider/vast/vast.go` | vast.ai 绑定 SSH 公钥的 "already associated" |
+| `internal/server/provision/ssh_failure.go` | x/crypto/ssh 未导出类型的认证耗尽错误 |
+| `internal/server/provision/install_command.go`、`probe.go` | 远端主机上安装/探测命令的标准输出 |
+| `internal/server/inferencecatalog/package_tolerant.go` | gopkg.in/yaml 的解码错误：只取第一行作为跳过原因，不据此分类 |
+| `internal/server/hub/benchmark_failure_code.go` | 老 agent 的评测失败消息（混合版本集群的长期读入边界） |
+| `internal/server/store/instance_runtime_failure.go` | 老 agent 端口拒绝的消息前缀（同上） |
+| `internal/testenv/cloudprovider/aliyun_api.go`、`aliyun_infra.go` | 阿里云 ECS 的锁定原因与错误码（测试 harness） |
+| `internal/integrationtest/fleet/gateway.go` | 去掉网络错误里的端口以归并报告行，不做分类（测试 harness） |
+
+不匹配正则、但同样只在适配器里识别文本的还有 `runtime/nerdctl/cli_answers.go`、`runtime/pull_failure.go`、
+`expose/stream.go`、`storagemount/classify.go`、`autodl/api_answer.go`、`hub/rpc_remote_error.go`。
+
+#### instance_failed_without_reason
+
+不经结构化原因就把实例置为 `failed`：`State: proto.InstFailed`、`SetInstanceState(…InstFailed)`、
+`reportState(…InstFailed)`、`Update("state", InstFailed)`，以及按消息前缀判断端口拒绝。agent 侧唯一入口是
+`internal/agent/engine/runtime_failure.go` 的 `reportFailed`（排除），server 侧唯一入口是
+`store.SetInstanceFailed`（以参数传 `proto.InstFailed`，模式不匹配）。
+
+#### gateway_error_bypass
+
+绕过网关码表写错误：`proxy` 包里的 `writeErr(`、`"gpuworks_proxy"` 类型字面量、API/网关/hub/batch 里的
+`http.Error(`、server 里手写的 `{"error":` JSON。排除：`api/security_headers.go`（非 `/api` 路径的纯文本
+分支）、两个写入器本身（`messages/http.go`、`api/responses.go`）、`api/inference_templates_official.go`
+（参数键恰好名为 `error`）。
+
+#### legacy_check_vocabulary
+
+检查结果的旧词与字面量：`DoctorFinding`/`CardCheck` 字面量里写死的状态/码/id 字符串、`DoctorLevel`、
+`accelerator.Check*`、卡检查的 `"pending"`、provision/provider 的 `ok|error|passed|failed|skipped`、
+`InstallCheck` 副本、部署诊断的 `passed|failed|blocked|unknown|pending|not_applicable`、节点诊断的
+`info|incomplete|completed|unavailable`。排除：`internal/proto/check_compat.go`，老 agent 旧词的唯一读入边界。
+
+#### console_unlinked_code_packages
+
+`make i18n-check` 不要求其码有 locale 文案的包（目前只有 `internal/templateprobe`：目录维护者的 CLI 以英文输出它的
+失败族）必须不被 `cmd/gpuworks`、`cmd/gpuworks-agent` 链接。计数是这两个二进制依赖图里出现该包的次数。
+一旦控制台要展示这些码，就从 i18n-check 的排除表里删掉它并补文案，而不是放宽这条预算。

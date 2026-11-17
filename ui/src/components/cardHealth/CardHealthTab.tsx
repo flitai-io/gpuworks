@@ -7,7 +7,7 @@ import CheckCell from "./CheckCell";
 import CheckDetail from "./CheckDetail";
 import HealthRecords from "./HealthRecords";
 import { HealthBanner } from "./NodeHealthTab";
-import { checkName, periodText, reasonText, stateName } from "./text";
+import { checkName, codeText, periodText, statusName } from "./text";
 import { useCardHealthChecks, useCardHealthRecords } from "./useCardHealth";
 
 // CardHealthTab is one card's health checks: each check on a line of its own
@@ -38,14 +38,14 @@ export default function CardHealthTab({ nodeUUID, card, cardLabel }: { nodeUUID:
           dataSource={row.cells}
           rowKey={(cell) => cell.check}
           renderItem={(cell) => {
-            const reason = reasonText(t, cell.state, cell.reason);
+            const reason = codeText(t, cell.status, cell.code);
             const ago = cell.checked_at ? agoText(t, (Date.now() - new Date(cell.checked_at).getTime()) / 1000) : "";
             return (
-              <List.Item style={{ cursor: cell.state === "na" ? "default" : "pointer" }} onClick={() => cell.state !== "na" && select(selected === cell.check ? undefined : cell.check)}>
+              <List.Item style={{ cursor: cell.status === "na" ? "default" : "pointer" }} onClick={() => cell.status !== "na" && select(selected === cell.check ? undefined : cell.check)}>
                 <Space size={12} wrap>
                   <CheckCell cell={cell} selected={selected === cell.check} />
                   <Typography.Text strong>{checkName(t, cell.check)}</Typography.Text>
-                  <Typography.Text>{stateName(t, cell.stale ? "stale" : cell.state)}</Typography.Text>
+                  <Typography.Text>{statusName(t, cell.stale ? "stale" : cell.status)}</Typography.Text>
                   {reason && <Typography.Text type="secondary">{reason}</Typography.Text>}
                   {ago && <Typography.Text type="secondary">{t("cardHealth.lastChecked", { ago })}</Typography.Text>}
                   {!!cell.duration_ms && <Typography.Text type="secondary">{`${cell.duration_ms} ms`}</Typography.Text>}

@@ -91,6 +91,15 @@ test("nothing is shown when everything is current, the catalog needs a newer ser
   assert.equal(screen.queryByRole("button", { name: new RegExp(label) }), null);
 });
 
+test("a different channel offers a manual version choice without triggering a server update notice", () => {
+  const value = status({ server: { current: "v26.11.2", latest: "abc12345", update_available: true, installable: true,
+    current_build: { version: "v26.11.2", kind: "stable", build_channel: "release" } } });
+  assert.equal(noticeModule.serverUpdateState(value), "differentChannelVersion");
+  assert.equal(noticeModule.hasUpdate(value), false);
+  value.image_catalog.update_available = true;
+  assert.equal(noticeModule.hasUpdate(value), true);
+});
+
 test("the notice follows a check made on the settings page", async () => {
   apiModule.api.updates = async () => status({ image_catalog: { current: "x", latest: "y", update_available: true, compatible: true } });
   renderNotice();

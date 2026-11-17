@@ -231,7 +231,7 @@ func (m *Manager) startNodes(ctx context.Context, id string, until time.Time, uu
 			switch {
 			case err == nil:
 				out[i].State = "collecting"
-			case strings.Contains(err.Error(), "unknown rpc method"):
+			case errors.Is(err, proto.ErrRPCUnknownMethod):
 				out[i].State, out[i].Reason = "skipped", "unsupported"
 			default:
 				out[i].State, out[i].Reason = "failed", err.Error()

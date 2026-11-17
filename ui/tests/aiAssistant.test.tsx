@@ -146,7 +146,7 @@ test("unmounting an open assistant releases its global layout state without remo
 test("one click runs the task in the side panel: rule finding first, then steps, reasoning and text stream in", async () => {
   const stream = liveStream();
   const asked = fakeServer({
-    findings: () => json({ items: [{ code: "cuda_oom", evidence: [{ line: "torch.OutOfMemoryError: CUDA out of memory" }] }], total: 1 }),
+    findings: () => json({ items: [{ code: "CUDA_OOM", evidence: [{ line: "torch.OutOfMemoryError: CUDA out of memory" }] }], total: 1 }),
     ask: stream.respond,
   });
   renderInstance();
@@ -266,7 +266,7 @@ test("an empty page says how to start", async () => {
 
 test("without an AI service the platform checks still show, with a pointer to Settings", async () => {
   fakeServer({
-    findings: () => json({ items: [{ code: "image_pull_denied", evidence: [{ line: "pull access denied" }] }], total: 1 }),
+    findings: () => json({ items: [{ code: "IMAGE_PULL_DENIED", evidence: [{ line: "pull access denied" }] }], total: 1 }),
     ask: () => json({ error: "no AI endpoint configured", code: "AI_ENDPOINT_NOT_CONFIGURED" }, 503),
   });
   renderInstance();
@@ -313,7 +313,7 @@ test("a stream that closes without done or error is not passed off as an answer"
 
 test("stop keeps the text that arrived and the platform checks", async () => {
   const stream = liveStream();
-  fakeServer({ findings: () => json({ items: [{ code: "port_in_use", evidence: [{ line: "address already in use" }] }], total: 1 }), ask: stream.respond });
+  fakeServer({ findings: () => json({ items: [{ code: "PORT_IN_USE", evidence: [{ line: "address already in use" }] }], total: 1 }), ask: stream.respond });
   renderInstance();
   fireEvent.click(screen.getByRole("button", { name: "AI diagnose" }));
   await waitFor(() => assert.ok(screen.getByText("Port already in use")));

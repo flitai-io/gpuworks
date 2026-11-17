@@ -101,6 +101,10 @@
       "health": { "status": "ok", "threshold_sec": 60, "last": { "at_ms": 1758182640000, "status": "ok", "latency_ms": 85, "http_status": 200 }, "recent_mean_ms": 90, "recent_ok": 2, "recent": [{ "at_ms": 1758182580000, "status": "ok", "latency_ms": 95, "http_status": 200 }, { "at_ms": 1758182640000, "status": "ok", "latency_ms": 85, "http_status": 200 }] }
     }
   ],
+  "state_counts": [
+    { "state": "running", "count": 8 }, { "state": "starting", "count": 1 }, { "state": "asleep", "count": 1 },
+    { "state": "offline", "count": 0 }, { "state": "failed", "count": 1 }, { "state": "stopped", "count": 0 }
+  ],
   "vram_by_node": [
     { "node_uuid": "node-gpu3", "name": "gpu3", "gpu_count": 8, "total_bytes": 687194767360, "allocated_bytes": 549755813888, "used_bytes": 214748364800, "used_as_of": 1758182650000 },
     { "node_uuid": "node-gpu4", "name": "gpu4", "gpu_count": 8, "total_bytes": 687194767360, "allocated_bytes": 343597383680, "used_bytes": 300647710720, "used_as_of": 1758182650000 },

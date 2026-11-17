@@ -45,6 +45,9 @@ func ReadUninstallInventory(ctx context.Context, path string) []uninstallcheck.I
 		return unknown()
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Queries name the migrated columns, not the Go fields: GORM spells
+	// Instance.GPUIndexes' column "gp_uindexes", so it is aliased back to the
+	// readable name the checklist details print.
 	checks := []struct {
 		id, table, query, action string
 		classify                 func([]string) string
@@ -60,7 +63,7 @@ func ReadUninstallInventory(ctx context.Context, path string) []uninstallcheck.I
 				return uninstallcheck.Unknown
 			}
 		}},
-		{"server.instances", "instances", `SELECT id, uuid, deployment_id, node_id, state, container_id, api_port, gpu_indexes FROM instances ORDER BY id`, "Stop or migrate these instances and verify their containers, GPU allocations and API ports on the corresponding nodes. Database state alone cannot confirm remote cleanup.", func(v []string) string {
+		{"server.instances", "instances", `SELECT id, uuid, deployment_id, node_id, state, container_id, api_port, gp_uindexes AS gpu_indexes FROM instances ORDER BY id`, "Stop or migrate these instances and verify their containers, GPU allocations and API ports on the corresponding nodes. Database state alone cannot confirm remote cleanup.", func(v []string) string {
 			switch v[4] {
 			case proto.InstStopped, proto.InstFailed:
 				return uninstallcheck.Warn

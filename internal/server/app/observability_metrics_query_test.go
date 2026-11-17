@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/obsingest"
 	"gpuworks.ai/gpuworks/internal/server/tsdb"
 )
 
@@ -27,7 +28,7 @@ func TestQueryMetricsAnswersWireSeriesWithPointPairs(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	o := &observability{tsdb: td}
+	o := &observability{obsingest.New(obsingest.Stores{TSDB: td})}
 
 	series, err := o.queryMetrics("gpu_util", map[string]string{"node": "gpu3"}, 0, 5000, 1000)
 	if err != nil {

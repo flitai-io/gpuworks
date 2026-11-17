@@ -83,3 +83,5 @@ parameters.
 - **The fields and automatic resolution stay the same**: HCCS carries only Compute; card addresses, state, speed, and bootstrap are inferred from the existing inventory, while the network object records the LingQu fabric boundary.
 - **Launch protocol is explicit**: PD and multi-node launches inject `ASCEND_GLOBAL_RESOURCE_CONFIG`, `ACL_OP_INIT_MODE`, and `ASCEND_ENABLE_USE_FABRIC_MEM` for HCCS, and retain a read-only `/etc/hccn.conf` mount for CANN.
 - **Old networks remain compatible**: `accelerator_rdma` keeps its API, card tests, and RoCE command; an older agent treats an omitted protocol as the original `-ping` behavior.
+
+<!-- translation-source-sha256: a1b5693b86a689d692fcfb46bbacff4cf1cdc26c49d1f45057d51966593f2155 -->

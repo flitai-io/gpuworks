@@ -49,14 +49,16 @@ var ErrBadHistoryQuery = errors.New("monitor: bad history query")
 
 // HistoryQuery selects a page of a deployment's finished requests.
 type HistoryQuery struct {
-	DeploymentID       uint
-	FromMS, ToMS       int64
-	APIKeyID           uint
-	InstanceUUID       string
-	Results            []uxrecord.Result
-	MinEndMS, MaxEndMS int32
-	Limit              int
-	Cursor             string
+	DeploymentID         uint
+	FromMS, ToMS         int64
+	APIKeyID             uint
+	InstanceUUID         string
+	PriorityClass        string
+	Results              []uxrecord.Result
+	MinEndMS, MaxEndMS   int32
+	MinTTFTMS, MaxTTFTMS int32
+	Limit                int
+	Cursor               string
 }
 
 const (
@@ -117,8 +119,8 @@ func (s *Service) Requests(ctx context.Context, id uint, q dto.MonitorRequestsQu
 	}
 	records, next, err := src.History(ctx, HistoryQuery{
 		DeploymentID: id, FromMS: from, ToMS: to,
-		APIKeyID: q.APIKeyID, InstanceUUID: q.InstanceUUID, Results: results,
-		MinEndMS: q.MinEndMS, MaxEndMS: q.MaxEndMS, Limit: q.Limit, Cursor: q.Cursor,
+		APIKeyID: q.APIKeyID, InstanceUUID: q.InstanceUUID, PriorityClass: q.PriorityClass, Results: results,
+		MinEndMS: q.MinEndMS, MaxEndMS: q.MaxEndMS, MinTTFTMS: q.MinTTFTMS, MaxTTFTMS: q.MaxTTFTMS, Limit: q.Limit, Cursor: q.Cursor,
 	})
 	if errors.Is(err, ErrBadHistoryQuery) {
 		return dto.MonitorRequests{}, s.badQuery()
@@ -205,7 +207,8 @@ func liveDTO(r uxrecord.Live, names map[uint]string) dto.MonitorRequest {
 		Stream: r.Stream, BodyBytes: r.BodyBytes, Images: r.Images,
 		DispatchMS: ms(r.DispatchMS), FirstThinkMS: ms(r.FirstThinkMS), FirstAnswerMS: ms(r.FirstAnswerMS),
 		LastChunkMS: ms(r.LastEventMS), Events: r.Events, ThinkEvents: r.ThinkEvents, Weight: 1,
-		Segments: segmentsDTO(uxrecord.LiveSegments(r)),
+		Segments: segmentsDTO(uxrecord.LiveSegments(r), r.Stream), // still waiting is the first-token stage so far
+		TTFTMS:   ttftMS(r.Stream, r.FirstThinkMS, r.FirstAnswerMS),
 		PD:       livePDDTO(r),
 	}
 }
@@ -234,27 +237,49 @@ func pdDTOOf(pd *uxrecord.PDStage) *dto.MonitorRequestPD {
 	}
 }
 
-func segmentsDTO(segments []uxrecord.Segment) []dto.MonitorRequestSegment {
+// segmentsDTO labels each segment with its stage when the request is staged
+// (see uxrecord.StageOf).
+func segmentsDTO(segments []uxrecord.Segment, staged bool) []dto.MonitorRequestSegment {
 	out := make([]dto.MonitorRequestSegment, len(segments))
 	for i, s := range segments {
-		out[i] = dto.MonitorRequestSegment{Kind: string(s.Kind), MS: s.MS}
+		out[i] = dto.MonitorRequestSegment{Kind: string(s.Kind), MS: s.MS, Stage: string(uxrecord.StageOf(s.Kind, staged))}
 	}
 	return out
+}
+
+// ttftMS is a streamed reply's time to its first token; a reply that does
+// not stream has none to see.
+func ttftMS(stream bool, firstThinkMS, firstAnswerMS int32) *int32 {
+	if !stream {
+		return nil
+	}
+	return ms(uxrecord.FirstTokenOf(firstThinkMS, firstAnswerMS))
+}
+
+// rate is a speed, or null when SpeedsOf could not work it out.
+func rate(v float64) *float64 {
+	if v <= 0 {
+		return nil
+	}
+	return &v
 }
 
 func recordDTO(r uxrecord.Request, names map[uint]string) dto.MonitorRequest {
 	status := r.Status
 	out := dto.MonitorRequest{
 		ID: r.ID, TraceID: r.Trace.Trace.String(), DeploymentID: r.DeploymentID, ReceivedMS: r.ReceivedMS, Phase: "done", InstanceUUID: r.InstanceUUID,
-		APIKeyID: r.APIKeyID, APIKeyName: names[r.APIKeyID], UserID: r.UserID, Source: r.Source.String(),
+		APIKeyID: r.APIKeyID, APIKeyName: names[r.APIKeyID], PriorityClass: r.PriorityClass, UserID: r.UserID, Source: r.Source.String(),
 		Stream: r.Stream, BodyBytes: r.BodyBytes, Images: r.Images,
 		DispatchMS: ms(r.DispatchMS), FirstByteMS: ms(r.FirstByteMS), FirstThinkMS: ms(r.FirstThinkMS),
 		FirstAnswerMS: ms(r.FirstAnswerMS), LastChunkMS: ms(r.LastChunkMS), EndMS: ms(r.EndMS),
 		Events: r.Events, ThinkEvents: r.ThinkEvents, MaxGapMS: ms(r.MaxGapMS),
 		Status: &status, Outcome: r.Outcome.String(), FinishReason: r.FinishReason, Result: string(uxrecord.ResultOf(r)),
 		EngineQueueMS: ms(r.EngineQueueMS), EnginePrefillMS: ms(r.EnginePrefillMS), EngineDecodeMS: ms(r.EngineDecodeMS),
-		Weight: max(r.Weight, 1), Segments: segmentsDTO(uxrecord.SegmentsOf(r)), PD: pdDTOOf(r.PD),
+		Weight: max(r.Weight, 1), Segments: segmentsDTO(uxrecord.SegmentsOf(r), r.Stream && r.FirstTokenMS() >= 0), PD: pdDTOOf(r.PD),
+		TTFTMS: ttftMS(r.Stream, r.FirstThinkMS, r.FirstAnswerMS),
 	}
+	speeds := uxrecord.SpeedsOf(r)
+	out.TPOTMS, out.PrefillTokS, out.DecodeTokS = rate(speeds.TPOTMS), rate(speeds.PrefillTokS), rate(speeds.DecodeTokS)
 	if r.Usage {
 		out.PromptTokens, out.CompletionTokens = ms(r.PromptTokens), ms(r.CompletionTokens)
 		out.CachedTokens, out.ReasoningTokens = ms(r.CachedTokens), ms(r.ReasoningTokens)

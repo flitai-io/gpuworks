@@ -13,14 +13,15 @@ import (
 // JSONL requests and optionally, in any order, an "endpoint" (the url the
 // file's requests ask for when absent), a "completion_window"
 // (CompletionWindow by default, MinWindowHours to MaxWindowHours) and a
-// "model" that every request is sent to. The file is validated while it is
+// "model" that every request is sent to and a "priority_class" its requests
+// run at. The file is validated while it is
 // saved; one that is refused, or an endpoint it does
 // not fit, leaves nothing behind.
 func (s *Service) CreateFromUpload(owner Owner, mr *multipart.Reader) (Batch, error) {
 	var (
-		endpoint, window, model string
-		saved                   *File
-		stats                   inputStats
+		endpoint, window, model, class string
+		saved                          *File
+		stats                          inputStats
 	)
 	window = CompletionWindow
 	for {
@@ -33,13 +34,15 @@ func (s *Service) CreateFromUpload(owner Owner, mr *multipart.Reader) (Batch, er
 			return Batch{}, invalid("invalid_multipart", "", "the multipart body cannot be read: "+err.Error())
 		}
 		switch part.FormName() {
-		case "endpoint", "completion_window", "model":
+		case "endpoint", "completion_window", "model", "priority_class":
 			raw, _ := io.ReadAll(io.LimitReader(part, 256))
 			switch part.FormName() {
 			case "endpoint":
 				endpoint = strings.TrimSpace(string(raw))
 			case "model":
 				model = strings.TrimSpace(string(raw))
+			case "priority_class":
+				class = strings.TrimSpace(string(raw))
 			default:
 				window = strings.TrimSpace(string(raw))
 			}
@@ -65,7 +68,7 @@ func (s *Service) CreateFromUpload(owner Owner, mr *multipart.Reader) (Batch, er
 		}
 		endpoint = saved.Endpoint
 	}
-	b, err := s.CreateBatch(owner, CreateRequest{InputFileID: saved.ID, Endpoint: endpoint, CompletionWindow: window, Model: model})
+	b, err := s.CreateBatch(owner, CreateRequest{InputFileID: saved.ID, Endpoint: endpoint, CompletionWindow: window, Model: model, PriorityClass: class})
 	if err != nil {
 		s.discard(owner, saved)
 		return Batch{}, err

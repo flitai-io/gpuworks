@@ -21,13 +21,16 @@ func (a *apiHandlers) runServerBenchmark(ctx context.Context, run *store.Benchma
 	client := a.benchmarkHTTPClient(run)
 	defer client.CloseIdleConnections()
 	apiKey, _ := store.DecryptAIKey(a.d.AISecretbox, run.APIKey)
+	// Only this server's own gateway is told the run, and only its answer
+	// headers say which class a request ran at.
+	own := a.benchmarkObservesPriorityClass(run)
 	var detailMu sync.Mutex
 	var detail *benchmarkDetail
 	detailSeq := 0
 	benchrun.Execute(ctx, benchrun.Run{
 		ID: run.ID, Model: run.Model, Mode: run.Mode,
 		Dataset: json.RawMessage(run.Dataset), Search: json.RawMessage(run.Search), TokenizerRef: run.TokenizerRef,
-		Client: loadgen.Client{HTTP: client, BaseURL: run.BaseURL, APIKey: apiKey},
+		Client: loadgen.Client{HTTP: client, BaseURL: run.BaseURL, APIKey: apiKey, Header: benchmarkRequestHeader(run.ID, run.PriorityClass, own), ObservePriorityClass: own},
 	}, benchrun.Hooks{
 		Report: func(st proto.BenchmarkStatus) {
 			if st.CurrentPoint != nil && !st.CurrentPoint.Warmup && len(st.Sample) > 0 {

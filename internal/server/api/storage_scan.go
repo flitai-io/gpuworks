@@ -102,7 +102,7 @@ func (a *apiHandlers) goneFromStorage(ctx context.Context, row *store.Storage, n
 		statCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		_, err := a.d.CallNode(statCtx, node.UUID, proto.RPCFSStat, proto.FSStatParams{Path: host})
-		return err != nil && strings.Contains(err.Error(), "no such file or directory")
+		return errors.Is(err, proto.ErrPathNotFound)
 	}
 }
 

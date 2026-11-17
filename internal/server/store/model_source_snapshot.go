@@ -107,3 +107,32 @@ func (s *ModelSourceSnapshot) Source(modelID, nodeID uint, rules SourceRules) Mo
 	}
 	return result
 }
+
+// WithModelFiles is s with the files of modelIDs on nodeIDs replaced by
+// files: the same storages and node states, those models' rows on those
+// nodes as read again, every other row as it was. s is unchanged.
+func (s *ModelSourceSnapshot) WithModelFiles(modelIDs, nodeIDs []uint, files []ModelFile) *ModelSourceSnapshot {
+	out := *s
+	out.files = make(map[uint]map[uint]map[uint]*ModelFile, len(s.files)+len(modelIDs))
+	for id, byNode := range s.files {
+		out.files[id] = byNode
+	}
+	for _, modelID := range modelIDs {
+		byNode := make(map[uint]map[uint]*ModelFile, len(s.files[modelID])+len(nodeIDs))
+		for nodeID, byStorage := range s.files[modelID] {
+			byNode[nodeID] = byStorage
+		}
+		for _, nodeID := range nodeIDs {
+			delete(byNode, nodeID)
+		}
+		out.files[modelID] = byNode
+	}
+	for i := range files {
+		row := &files[i]
+		if out.files[row.ModelID][row.NodeID] == nil {
+			out.files[row.ModelID][row.NodeID] = map[uint]*ModelFile{}
+		}
+		out.files[row.ModelID][row.NodeID][row.StorageID] = row
+	}
+	return &out
+}

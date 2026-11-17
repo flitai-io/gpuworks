@@ -24,11 +24,11 @@ import (
 
 // schemaVersion is stored in PRAGMA user_version. A file written by a newer
 // schema is refused rather than misread.
-const schemaVersion = 3
+const schemaVersion = 4
 
 // schemaSteps take a file from one version to the next: step i makes
 // version i+1.
-var schemaSteps = [][]string{schemaV1, schemaV2, schemaV3}
+var schemaSteps = [][]string{schemaV1, schemaV2, schemaV3, schemaV4}
 
 // Store is stats.db.
 type Store struct {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 var variablePattern = regexp.MustCompile(`\$\{([A-Z][A-Z0-9_]*)\}`)
@@ -26,7 +27,47 @@ const (
 	VarNodeAddr        = "NODE_ADDR"
 	VarMasterAddr      = "MASTER_ADDR"
 	VarMasterPort      = "MASTER_PORT"
+	// A PD disaggregated instance also states which role it plays and where
+	// its KV side channel listens (the first port of its extra port block).
+	VarPDRole            = "PD_ROLE"
+	VarPDSideChannelHost = "PD_SIDE_CHANNEL_HOST"
+	VarPDSideChannelPort = "PD_SIDE_CHANNEL_PORT"
 )
+
+// VariablePrefix is the documented spelling of every platform variable:
+// ${GPUWORKS_NODE_RANK}. The bare names are older and stay valid in a
+// template's launch fields; a manual command, which runs in a shell with
+// variables of its own, is given the prefixed names only.
+const VariablePrefix = "GPUWORKS_"
+
+// Canonical is the name a variable is stated under: the bare one.
+func Canonical(name string) string {
+	if bare, ok := strings.CutPrefix(name, VariablePrefix); ok && bare != "" {
+		return bare
+	}
+	return name
+}
+
+// Prefixed is the variable set under the prefixed names only.
+func Prefixed(variables map[string]any) map[string]any {
+	out := make(map[string]any, len(variables))
+	for name, value := range variables {
+		out[VariablePrefix+Canonical(name)] = value
+	}
+	return out
+}
+
+// Lookup finds a variable by either spelling.
+func Lookup(variables map[string]any, name string) (any, bool) {
+	if value, ok := variables[name]; ok {
+		return value, true
+	}
+	if bare := Canonical(name); bare != name {
+		value, ok := variables[bare]
+		return value, ok
+	}
+	return nil, false
+}
 
 // launchOwned are the variables only the launch can know. A placement resolver
 // may not return them: a resolver runs before a node, a port or a rank exists,
@@ -36,11 +77,12 @@ const (
 var launchOwned = map[string]struct{}{
 	VarModelPath: {}, VarServedModelName: {}, VarAPIHost: {}, VarAPIPort: {}, VarNNodes: {}, VarNodeRank: {},
 	VarHeadless: {}, VarNodeAddr: {}, VarMasterAddr: {}, VarMasterPort: {},
+	VarPDRole: {}, VarPDSideChannelHost: {}, VarPDSideChannelPort: {},
 }
 
 // LaunchOwned reports whether name is a variable only the launch states.
 func LaunchOwned(name string) bool {
-	_, owned := launchOwned[name]
+	_, owned := launchOwned[Canonical(name)]
 	return owned
 }
 
@@ -48,6 +90,7 @@ func LaunchOwned(name string) bool {
 // the launch-owned facts plus GPU_COUNT and TP_SIZE. A template without a
 // placement resolver can reference nothing else.
 func PlatformVariable(name string) bool {
+	name = Canonical(name)
 	return LaunchOwned(name) || name == VarGPUCount || name == VarTPSize
 }
 
@@ -75,7 +118,7 @@ func Expand(values []string, variables map[string]any, allowUnresolved bool) ([]
 				return match
 			}
 			name := variablePattern.FindStringSubmatch(match)[1]
-			replacement, ok := variables[name]
+			replacement, ok := Lookup(variables, name)
 			if !ok {
 				if !allowUnresolved {
 					expandErr = fmt.Errorf("template variable %s is unresolved", name)

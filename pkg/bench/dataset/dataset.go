@@ -7,6 +7,7 @@ import (
 	"embed"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -52,7 +53,6 @@ type Profile struct {
 }
 
 const (
-	LoadErrorCode               = "BENCHMARK_DATASET_LOAD_FAILED"
 	DefaultImportedOutputTokens = 32
 )
 
@@ -168,10 +168,10 @@ func multiturnFS(c Config, n int, fsys fs.FS) ([]Sample, error) {
 	}
 	conversations, err := loadConversationSamplesFS(fsys, "data/multiturn.jsonl", c.Turns)
 	if err != nil {
-		return nil, fmt.Errorf("%s: multiturn: %w", LoadErrorCode, err)
+		return nil, &LoadError{Dataset: "multiturn", Err: err}
 	}
 	if len(conversations) == 0 {
-		return nil, fmt.Errorf("%s: multiturn: dataset contains no samples", LoadErrorCode)
+		return nil, &LoadError{Dataset: "multiturn", Err: errors.New("dataset contains no samples")}
 	}
 	r := rand.New(rand.NewSource(c.Seed))
 	order := r.Perm(len(conversations))

@@ -103,12 +103,27 @@ type DiagnosticsBundle struct {
 	Items         []DiagnosticsBundleItem `json:"items"`
 }
 
-// DiagnosticsBundleItem is one part: collected, skipped (reason offline or
-// unsupported) or failed.
+// DiagnosticsBundleItem is one part of a collection, as a check (ADR 0067).
+// ID names the kind of part (server_log, node_agent_log, ...), Path its place
+// in the archive. Status is pass (collected whole), warn (cut at its size
+// bound), skip (not read: the node is offline or its agent predates the read)
+// or fail; Code and Params render the reason for every status but pass, and
+// Message is the English fallback. Evidence is the failed read's own error
+// text.
 type DiagnosticsBundleItem struct {
-	Name      string `json:"name"`
-	State     string `json:"state"`
-	Reason    string `json:"reason,omitempty"`
-	Bytes     int64  `json:"bytes"`
-	Truncated bool   `json:"truncated,omitempty"`
+	ID       string                       `json:"id"`
+	Path     string                       `json:"path"`
+	Status   string                       `json:"status"`
+	Code     string                       `json:"code,omitempty"`
+	Params   *DiagnosticsBundleItemParams `json:"params,omitempty"`
+	Message  string                       `json:"message,omitempty"`
+	Evidence string                       `json:"evidence,omitempty"`
+	Bytes    int64                        `json:"bytes"`
+}
+
+// DiagnosticsBundleItemParams are the values the text of an item's code
+// interpolates: the part's path and, for a node's part, the node.
+type DiagnosticsBundleItemParams struct {
+	Path string `json:"path"`
+	Node string `json:"node,omitempty"`
 }

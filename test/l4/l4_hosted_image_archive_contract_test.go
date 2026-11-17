@@ -30,7 +30,7 @@ import (
 	"gpuworks.ai/gpuworks/test/ocifixture"
 )
 
-const archiveTestImage = "gpustack/runner:cuda12.8-vllm0.17.1"
+const archiveTestImage = "gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2"
 
 func requireTool(t *testing.T, names ...string) {
 	t.Helper()
@@ -237,7 +237,7 @@ func TestHostedArchiveSaveLeavesAWholeFileOrNone(t *testing.T) {
 		t.Fatalf("the .part file is still there: %v", err)
 	}
 
-	for _, image := range []string{"gpustack/runner:not-on-this-vm", "partial"} {
+	for _, image := range []string{"gpuworks/gpuworks-runner:not-on-this-vm", "partial"} {
 		dir := t.TempDir()
 		save := runArchiveSave(t, env, dir, image)
 		if save.Done || !strings.Contains(save.Detail, "docker save "+image+" failed") {
@@ -435,13 +435,13 @@ func TestHostedCustomImageBodyIsWhatTheConsoleSends(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := json.Marshal(body)
-	const want = `{"series":[{"engine":"vllm","framework":"cuda","name":"gpustack/runner","source":"custom","versions":[` +
-		`{"arch":"multi","engine_version":"0.17.1","framework_version":"12.8","image_ref":"gpustack/runner:cuda12.8-vllm0.17.1",` +
+	const want = `{"series":[{"engine":"vllm","framework":"cuda","name":"gpuworks/gpuworks-runner","source":"custom","versions":[` +
+		`{"arch":"multi","engine_version":"0.31.0","framework_version":"12.9","image_ref":"gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2",` +
 		`"registry_sources":["http://10.0.0.4:18881/runner.tar","http://10.0.0.5:18881/runner.tar"],"rolling_tag":false,"source":"custom"}]}]}`
 	if string(got) != want {
 		t.Fatalf("body:\n got %s\nwant %s", got, want)
 	}
-	for _, ref := range []string{"gpustack/runner", "gpustack/runner:rocm6-vllm0.17.1", "gpustack/runner:cuda12.8", ""} {
+	for _, ref := range []string{"gpuworks/gpuworks-runner", "gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1", "gpuworks/gpuworks-runner:cuda12.9", ""} {
 		if _, err := hostedCustomImageBody(ref, nil); err == nil {
 			t.Fatalf("hostedCustomImageBody(%q) was accepted", ref)
 		}
@@ -449,19 +449,19 @@ func TestHostedCustomImageBodyIsWhatTheConsoleSends(t *testing.T) {
 }
 
 func TestHostedMergeSourcesKeepsRegistryReferencesAndDoesNotDuplicate(t *testing.T) {
-	got := hostedMergeSources([]string{"quay.io/gpustack/runner:x", "http://a/x.tar"}, []string{"http://a/x.tar", "http://b/x.tar"})
-	if strings.Join(got, " ") != "quay.io/gpustack/runner:x http://a/x.tar http://b/x.tar" {
+	got := hostedMergeSources([]string{"quay.io/gpuworks/gpuworks-runner:x", "http://a/x.tar"}, []string{"http://a/x.tar", "http://b/x.tar"})
+	if strings.Join(got, " ") != "quay.io/gpuworks/gpuworks-runner:x http://a/x.tar http://b/x.tar" {
 		t.Fatalf("merged = %v", got)
 	}
 }
 
 func TestHostedRequireArchiveCarries(t *testing.T) {
-	ok := dto.ImageArchivePreview{URL: "http://a/runner.tar", SizeBytes: 10, RepoTags: []string{"docker.io/gpustack/runner:cuda12.8-vllm0.17.1"}, Previewable: true}
+	ok := dto.ImageArchivePreview{URL: "http://a/runner.tar", SizeBytes: 10, RepoTags: []string{"docker.io/gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2"}, Previewable: true}
 	if warning, err := hostedRequireArchiveCarries(ok, archiveTestImage); warning != "" || err != nil {
 		t.Fatalf("the same reference spelled with docker.io: warning=%q err=%v", warning, err)
 	}
 	other := ok
-	other.RepoTags = []string{"gpustack/runner:cuda13.0-vllm0.25.1"}
+	other.RepoTags = []string{"gpuworks/gpuworks-runner:cuda13.0-vllm0.30.0-r4"}
 	if _, err := hostedRequireArchiveCarries(other, archiveTestImage); err == nil {
 		t.Fatal("an archive of another image was accepted")
 	}
@@ -620,7 +620,7 @@ func (f *fakeImageAPI) handler() http.Handler {
 			f.writeError(w, status, "IMAGE_ARCHIVE_URL_UNREACHABLE", "the image archive could not be read", `{"host":"10.0.0.5:18881","detail":"the image archive could not be read"}`)
 			return
 		}
-		fmt.Fprintf(w, `{"url":%q,"size_bytes":53687091200,"repo_tags":["gpustack/runner:cuda12.8-vllm0.17.1"],"previewable":true}`, body.URL)
+		fmt.Fprintf(w, `{"url":%q,"size_bytes":53687091200,"repo_tags":["gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2"],"previewable":true}`, body.URL)
 	})
 	mux.HandleFunc("POST /api/v1/images/{id}/nodes/{uuid}/sync", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -663,7 +663,7 @@ func (f *fakeImageAPI) handler() http.Handler {
 		for _, uuid := range f.nodes {
 			f.polls[uuid]++
 		}
-		fmt.Fprintf(w, `{"id":7,"name":"gpustack/runner","engine":"vllm","purpose":"inference","framework":"cuda","source":"custom","enabled":true,"version_count":%d,"present_nodes":0,"total_nodes":%d,"versions":[%s]}`, len(versions), len(f.nodes), strings.Join(versions, ","))
+		fmt.Fprintf(w, `{"id":7,"name":"gpuworks/gpuworks-runner","engine":"vllm","purpose":"inference","framework":"cuda","source":"custom","enabled":true,"version_count":%d,"present_nodes":0,"total_nodes":%d,"versions":[%s]}`, len(versions), len(f.nodes), strings.Join(versions, ","))
 	})
 	return mux
 }
@@ -703,13 +703,13 @@ func TestHostedDeclareArchiveImageCreatesACustomImageWithBothAddresses(t *testin
 func TestHostedDeclareArchiveImageAppendsToAnExistingImageAndKeepsItsRegistrySources(t *testing.T) {
 	fake, api := newFakeImageAPI(t, "n0")
 	fake.versions = []*fakeImageVersion{{id: 4, seriesID: 7, ref: archiveTestImage, source: "official",
-		sources: []string{"quay.io/gpustack/runner:cuda12.8-vllm0.17.1"}, rows: map[string][]string{}}}
+		sources: []string{"quay.io/gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2"}, rows: map[string][]string{}}}
 	urls := []string{"http://10.0.0.4:18881/runner.tar"}
 	image, err := hostedDeclareArchiveImage(t.Context(), api, archiveTestImage, urls)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "quay.io/gpustack/runner:cuda12.8-vllm0.17.1 http://10.0.0.4:18881/runner.tar"
+	want := "quay.io/gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2 http://10.0.0.4:18881/runner.tar"
 	if image.ID != 4 || strings.Join(image.RegistrySources, " ") != want || len(fake.imports) != 0 {
 		t.Fatalf("image = %+v imports=%v, want sources %q and no import", image, fake.imports, want)
 	}

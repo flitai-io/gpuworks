@@ -8,7 +8,7 @@ import (
 )
 
 // FreePortRefusals is how many launches refused for a taken host port
-// (proto.EnginePortRefused) a unit gets without charging its retry budget.
+// (proto.ErrorEnginePortRefused) a unit gets without charging its retry budget.
 // Such a launch started nothing, and each retry avoids the ports every
 // earlier attempt was given (their rows keep them reserved), so a few in a
 // row are expected on a host where other processes listen in the engine port
@@ -26,7 +26,7 @@ func ChargedAttempts(attempts []store.Instance) []store.Instance {
 	charged := make([]store.Instance, 0, len(ordered))
 	free := 0
 	for _, inst := range ordered {
-		if proto.IsEnginePortRefusal(inst.Message) && free < FreePortRefusals {
+		if portRefusal(inst) && free < FreePortRefusals {
 			free++
 			continue
 		}
@@ -42,7 +42,7 @@ func RetryAtOnce(attempts []store.Instance) bool {
 		return false
 	}
 	newest := NewestAttempt(attempts)
-	if !proto.IsEnginePortRefusal(newest.Message) {
+	if !portRefusal(newest) {
 		return false
 	}
 	for _, inst := range ChargedAttempts(attempts) {
@@ -51,4 +51,12 @@ func RetryAtOnce(attempts []store.Instance) bool {
 		}
 	}
 	return true
+}
+
+// portRefusal says a failed attempt was a launch refused for a taken host
+// port, by its code (an older agent's row reads as that code too; see
+// store.Instance.Failure).
+func portRefusal(inst store.Instance) bool {
+	failure := inst.Failure()
+	return failure != nil && failure.Code == proto.ErrorEnginePortRefused
 }

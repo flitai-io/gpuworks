@@ -17,7 +17,7 @@ import (
 // downloaded from the source that answered, falling back to the others and
 // resuming where a transfer stopped. Without --channel the installation's
 // update_channel applies, then the channel the binary was built for.
-func (i *Installer) channelSource(ctx context.Context, sources []string, channel, configured string) (upgradeSource, error) {
+func (i *Installer) channelSource(ctx context.Context, sources []string, channel, configured, pin string) (upgradeSource, error) {
 	channel = strings.TrimSpace(channel)
 	if channel == "" {
 		channel = strings.TrimSpace(configured)
@@ -37,6 +37,13 @@ func (i *Installer) channelSource(ctx context.Context, sources []string, channel
 		return upgradeSource{}, err
 	}
 	release := fetched.Index.Server
+	if pin != "" {
+		selected, ok := fetched.Index.FindServer(pin)
+		if !ok {
+			return upgradeSource{}, fmt.Errorf("--version %s is not what the %s channel offers: it is at %s", pin, channel, release.ReleaseID)
+		}
+		release = selected
+	}
 	goos, goarch := currentPlatform()
 	asset, err := release.Asset(goos, goarch)
 	if err != nil {
@@ -63,6 +70,15 @@ func (i *Installer) channelSource(ctx context.Context, sources []string, channel
 			staged := i.stagedBinary()
 			if err := extractBinary(archive, staged); err != nil {
 				return "", err
+			}
+			if pin != "" {
+				build, err := i.binaryBuild(ctx, staged)
+				if err != nil {
+					return "", err
+				}
+				if build.ReleaseID != pin {
+					return "", fmt.Errorf("selected %s but the archive contains %s", pin, build.ReleaseID)
+				}
 			}
 			return staged, nil
 		},

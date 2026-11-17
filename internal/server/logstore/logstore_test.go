@@ -3,6 +3,7 @@ package logstore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -584,5 +585,34 @@ func TestRetainInvalidatesPartitionMemo(t *testing.T) {
 	res, err := s.Search(Filter{Instance: "inst-late", FromMS: old.Add(-time.Minute).UnixMilli(), Limit: 10})
 	if err != nil || len(res.Entries) != 1 {
 		t.Fatalf("late row not searchable: %v %+v", err, res.Entries)
+	}
+}
+
+// The FTS5 errors come from the real SQLite driver, so the classification is
+// pinned against what it actually says for each invalid input.
+func TestFTSQueryErrorClassifiesTheDriversAnswer(t *testing.T) {
+	db, err := openPooled(filepath.Join(t.TempDir(), "fts.db"), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE VIRTUAL TABLE t USING fts5(line)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{`memory: (out)`, `nosuchcol:word`, `AND`} {
+		_, qerr := db.Exec(`SELECT * FROM t WHERE t MATCH ?`, query)
+		if qerr == nil {
+			t.Fatalf("SQLite accepted %q", query)
+		}
+		if got := ftsQueryError(qerr); !errors.Is(fmt.Errorf("search: %w", got), errFTSSyntax) || got.Error() == "" {
+			t.Fatalf("%q: %v not classified as errFTSSyntax", query, qerr)
+		}
+	}
+	_, missing := db.Exec(`SELECT * FROM no_such_partition`)
+	if missing == nil || errors.Is(ftsQueryError(missing), errFTSSyntax) {
+		t.Fatalf("missing table classified as FTS syntax: %v", missing)
+	}
+	if ftsQueryError(nil) != nil || errors.Is(ftsQueryError(errors.New("disk I/O error")), errFTSSyntax) {
+		t.Fatal("unrelated errors must pass through")
 	}
 }

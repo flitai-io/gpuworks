@@ -12,7 +12,7 @@ Apple silicon Mac 的 GPU 只有 macOS 宿主机上的进程能经 Metal 使用�
 
 1. **新运行时 `host`**（`internal/agent/runtime/hostproc`）：引擎是 agent 用户的普通进程组，在 macOS 上优先于 Docker Desktop 被选中（`--driver host` 可强制）。进程托管（pid、退出码、组停止、日志）与 runveil 共用 `runtime/procgroup`。
 2. **镜像是环境包**：darwin/arm64 的 OCI 镜像，内容是一个可搬迁的根（python-build-standalone、装进其 site-packages 的引擎、`/bin` 下的入口），由 `build/host-envs` 在 Linux 上交叉构建，按 `gpuworks-runner:metal<最低 macOS>-<引擎><版本>-rN` 发布（`CLAUDE.md`「内置镜像命名」）。拉取、离线导入、镜像源与目录沿用现有机制（runveil 的原生拉取，按 OS/架构选 manifest）。
-3. **按容器语义翻译路径**：每个 manifest 解包一次，供它的所有实例共享；解包时把包内的绝对符号链接与 venv 的 `pyvenv.cfg` 重定根；启动时把 argv、环境变量、`PATH`、工作目录里的挂载目标（`/model`）换成宿主机源路径，包内路径换成解包位置。服务端照旧下发容器形状的启动参数，不知道节点是否有容器。
+3. **按容器语义翻译路径**：每个 manifest 解包一次，供它的所有实例共享；解包时把包内的绝对符号链接与 venv 的 `pyvenv.cfg` 重定根；启动时把 argv、环境变量、`PATH`、工作目录里的挂载目标（`/model`）换成宿主机源路径，包内路径换成解包位置；`--served-model-name` 的值是名称不是路径，原样保留（未设别名的部署以 `/model` 为名，网关按这个名字请求）；不宣告 `launch.name_verbatim` 的旧 agent 会翻译这个值，服务端对这类节点的未设别名启动不带该参数、也不期望挂载路径名，部署预览同样如此。服务端与 agent 都升级之前已放置在 Mac 节点上的未设别名实例，保存的启动参数不会自动重建，需滚动重启或重新部署一次才会带上名称，否则网关按 `/model` 请求仍得到 404。服务端照旧下发容器形状的启动参数，不知道节点是否有容器。
 4. **实例隔离**：每个实例独立的 `HOME`、短路径 `TMPDIR`（`/tmp/gpuworks-host-<uid>/…`，Unix socket 路径不超过 macOS 的 104 字节）、按环境包共享的缓存；不继承 agent 的 `PATH`、`DYLD_*` 与 Python 变量；运行期间持有 `caffeinate -i` 防空闲睡眠。引擎只绑 127.0.0.1，网关经 hub 隧道访问。
 5. **厂商 `apple`、框架 `metal`**：GPU 报 1 张统一内存卡，显存为 Metal 允许 GPU 常驻的工作集（`iogpu.wired_limit_mb`，未设时内存 ≤32 GiB 取 2/3，以上取 3/4）；平台不修改该值。driver 版本即 macOS 版本，镜像兼容性按最低 macOS 判断。
 6. **平台功能按厂商声明**（`accelerator.Supports`）：Apple 节点不提供引擎休眠（vllm-metal 的 `/sleep` 返回 200 但不释放内存）、多机与 KV 磁盘层，调度器按需要的功能过滤节点。

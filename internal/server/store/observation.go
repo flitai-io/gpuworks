@@ -86,7 +86,10 @@ func (s *Store) DeploymentsForObservation(templateIDs []uint) ([]ObservedDeploym
 // observation fields alone: nothing else in a running instance's desired
 // state may change in place. No event is
 // published: nothing the controller or the gateway decides depends on it, and
-// the caller pushes the changed states to their agents itself.
+// the caller pushes the changed states to their agents itself. The instance
+// generation still moves (Bus.Advance) when a row changed: the whole desired
+// state is written back, and the gateway trusts its route snapshot only while
+// no instance row was written since.
 func (s *Store) RewriteObservations(instances []Instance, change func(*Instance, *proto.InstanceDesiredState) bool) ([]Instance, error) {
 	var changed []Instance
 	err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -107,6 +110,9 @@ func (s *Store) RewriteObservations(instances []Instance, change func(*Instance,
 	})
 	if err != nil {
 		return nil, err
+	}
+	if len(changed) > 0 && s.Bus != nil {
+		s.Bus.Advance("instance")
 	}
 	return changed, nil
 }

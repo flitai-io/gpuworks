@@ -26,3 +26,25 @@ const (
 	// not ready to download).
 	ErrorDiagnosticsBundleNotFound = "DIAGNOSTICS_BUNDLE_NOT_FOUND"
 )
+
+// Diagnostics collection items (ADR 0067): why a part of a collection was
+// not collected whole. {path} is the part's place in the archive, {node} the
+// node a node part belongs to; a failed read's own error text is the item's
+// evidence.
+const (
+	// CheckDiagnosticsItemTruncated (warn): the part reached its size bound
+	// and only its start was kept.
+	CheckDiagnosticsItemTruncated = "DIAGNOSTICS_ITEM_TRUNCATED"
+	// CheckDiagnosticsNodeOffline (skip): the node was offline, so nothing
+	// was read from it.
+	CheckDiagnosticsNodeOffline = "DIAGNOSTICS_NODE_OFFLINE"
+	// CheckDiagnosticsAgentUnsupported (skip): the node's agent predates the
+	// diagnostics read.
+	CheckDiagnosticsAgentUnsupported = "DIAGNOSTICS_AGENT_UNSUPPORTED"
+	// CheckDiagnosticsItemReadFailed (fail): reading the part from its source
+	// (a log, a node, the records) failed.
+	CheckDiagnosticsItemReadFailed = "DIAGNOSTICS_ITEM_READ_FAILED"
+	// CheckDiagnosticsItemStageFailed (fail): the part could not be written
+	// to the server's work directory.
+	CheckDiagnosticsItemStageFailed = "DIAGNOSTICS_ITEM_STAGE_FAILED"
+)

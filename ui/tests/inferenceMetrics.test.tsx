@@ -40,7 +40,7 @@ await i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, render, screen, waitFor } = await import("@testing-library/react");
+const { cleanup, render, screen, fireEvent, waitFor } = await import("@testing-library/react");
 const { api } = await import("../src/api.ts");
 const { default: InferenceMetricsPanel, percentScaled, ratioSeries } = await import("../src/components/InferenceMetricsPanel.tsx");
 const originalMetricsQuery = api.metricsQuery;
@@ -59,9 +59,13 @@ function stubMetrics(byMetric: Record<string, MetricSeries[]>) {
   api.metricsQuery = (async (metric: string) => list(byMetric[metric] ?? [])) as typeof api.metricsQuery;
 }
 
+function summary() {
+  return screen.getByRole("region", { name: "Instance Metrics" });
+}
+
 function card(title: string): HTMLElement {
   const heading = screen.getByText(title);
-  return heading.closest('div[style*="border"]') as HTMLElement;
+  return heading.closest('.deployment-trend-card') as HTMLElement;
 }
 
 test("ratioSeries divides counter windows and skips resets and unaligned samples", () => {
@@ -97,9 +101,10 @@ test("vLLM counter data renders the KV card and leaves spec decode unavailable",
     gpuworks_infer_kv_queries_total: series([[1000, 200], [2000, 400]]),
   });
   render(<I18nextProvider i18n={i18n}><InferenceMetricsPanel instanceUuid="inst-1" /></I18nextProvider>);
+  fireEvent.click(screen.getByRole("tab", { name: "Cache & engine" }));
 
   await waitFor(() => assert.ok(card("KV Cache Hit Rate").querySelector("canvas")));
-  assert.ok(screen.getAllByText("55").length >= 1, "cache gauge 0.55 must render as 55");
+  assert.match(summary().textContent ?? "", /GPU Cache55%/, "cache gauge 0.55 must render as 55%");
   assert.ok(!card("KV Cache Hit Rate").textContent?.includes("Engine did not report this metric"));
   assert.ok(card("Speculative Accept Rate").textContent?.includes("Engine did not report this metric"));
   assert.ok(card("KV Cache Hit Rate").querySelector('[aria-label="Share of prompt tokens reused from the prefix cache"]'));
@@ -117,6 +122,7 @@ test("counters reported without traffic show the no-traffic state, not unreporte
     gpuworks_infer_spec_accepted_tokens_total: series([[1000, 0], [2000, 0]]),
   });
   render(<I18nextProvider i18n={i18n}><InferenceMetricsPanel instanceUuid="inst-1" /></I18nextProvider>);
+  fireEvent.click(screen.getByRole("tab", { name: "Cache & engine" }));
 
   await waitFor(() => assert.ok(card("KV Cache Hit Rate").textContent?.includes("no qualifying traffic yet")));
   assert.ok(card("Speculative Accept Rate").textContent?.includes("no qualifying traffic yet"));
@@ -130,6 +136,7 @@ test("SGLang instant gauges fall back when counter pairs are absent", async () =
     gpuworks_infer_spec_accept_rate: series([[1000, 0.81]]),
   });
   render(<I18nextProvider i18n={i18n}><InferenceMetricsPanel instanceUuid="inst-1" /></I18nextProvider>);
+  fireEvent.click(screen.getByRole("tab", { name: "Cache & engine" }));
 
   await waitFor(() => assert.ok(card("KV Cache Hit Rate").querySelector("canvas")));
   assert.ok(card("Speculative Accept Rate").querySelector("canvas"));
@@ -141,7 +148,10 @@ test("a panel without any engine metrics keeps showing the waiting alert", async
   render(<I18nextProvider i18n={i18n}><InferenceMetricsPanel instanceUuid="inst-1" /></I18nextProvider>);
 
   await waitFor(() => assert.ok(screen.getByText("Waiting for Inference Metrics")));
-  assert.equal(screen.queryByText("KV Cache Hit Rate"), null);
+  assert.deepEqual([...summary().querySelectorAll("[data-slot='metric-card-value-row']")].map(el => el.textContent), Array(5).fill("—"));
+  assert.ok(screen.getByText("Stage Duration p95"));
+  fireEvent.click(screen.getByRole("tab", { name: "Cache & engine" }));
+  assert.ok(await screen.findByText("KV Cache Hit Rate"));
 });
 
 test("missing numeric metrics stay unknown while an observed zero remains zero", async () => {
@@ -150,11 +160,19 @@ test("missing numeric metrics stay unknown while an observed zero remains zero",
     gpuworks_infer_requests_waiting: series([[1000, 0]]),
   });
   render(<I18nextProvider i18n={i18n}><InferenceMetricsPanel instanceUuid="inst-1" /></I18nextProvider>);
-  const stat = (title: string) => screen.getByText(title).closest(".ant-statistic")!;
-  await waitFor(() => assert.equal(stat("Running Requests").querySelector(".ant-statistic-content-value")?.textContent, "2"));
-  assert.equal(stat("Waiting Requests").querySelector(".ant-statistic-content-value")?.textContent, "0");
-  for (const title of ["GPU Cache", "Prompt Throughput", "Generation Throughput"]) {
-    assert.equal(stat(title).querySelector(".ant-statistic-content-value")?.textContent, "—", title);
-    assert.equal(stat(title).querySelector(".ant-statistic-content-suffix"), null, `${title}: missing value has no numeric unit`);
-  }
+  await waitFor(() => assert.deepEqual([...summary().querySelectorAll("[data-slot='metric-card-value-row']")].map(el => el.textContent), ["2", "0", "—", "—", "—"]));
+  assert.deepEqual([...summary().querySelectorAll("[data-slot='metric-card-label']")].map(el => el.textContent), [
+    "Running Requests", "Waiting Requests", "GPU Cache", "Prompt Throughput", "Generation Throughput",
+  ]);
+});
+
+test("failed metric reads remain explicit and do not suppress the other diagnostics", async () => {
+  api.metricsQuery = async (metric) => {
+    if (metric.endsWith("requests_waiting")) throw new Error("read unavailable");
+    return list([]);
+  };
+  render(<I18nextProvider i18n={i18n}><InferenceMetricsPanel instanceUuid="inst-1" /></I18nextProvider>);
+  assert.ok(await screen.findByText("read unavailable"));
+  assert.equal(screen.queryByText("Waiting for Inference Metrics"), null);
+  assert.ok(screen.getByText("Stage Duration p95"));
 });

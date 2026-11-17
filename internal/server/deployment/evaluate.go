@@ -156,6 +156,8 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// the same moment it learns everything else about the draft.
 	if err := validateMountRowRequest(req, mountRowTargets(selection.Components, requestModelMount(req))); err != nil {
 		errs.add(FieldContainerMounts, err)
+	} else if err := s.ValidateMountModels(req); err != nil {
+		errs.add(FieldContainerMounts, err)
 	}
 	// Each replica is placed as its own unit; this tree admits no joint
 	// multi-replica group, so the scope is always per-replica. The response
@@ -172,7 +174,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// drafts. Requirements that cannot be read leave every node ineligible
 	// rather than every node eligible.
 	pool, poolErr := requestPool(req)
-	placement, _ := planning.ParsePlacement(req.Placement)
+	placement := evaluationPlacement(req)
 	eligibleLoaded := false
 	loadEligible := func(requests func(*store.Node) map[int]planning.TargetCardRequest) {
 		if eligibleLoaded {
@@ -181,7 +183,15 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		resp.EligibleNodes, resp.PoolPartitionCapability = s.evaluateEligibleNodes(selection, pool, poolErr, IsAutomaticPlacement(req) && req.NNodes <= 1, requests)
 		eligibleLoaded = true
 	}
-	writeFieldErrors := func() { loadEligible(nil); out.fieldErrors(&resp, errs) }
+	writeFieldErrors := func() {
+		loadEligible(nil)
+		// A draft with a field error still answers whether it can be checked,
+		// so the switch does not flicker while the deployer fixes the field.
+		if resp.HealthCheckable == nil {
+			s.noteHealthCheckable(ctx, &resp, req, selection)
+		}
+		out.fieldErrors(&resp, errs)
+	}
 
 	// A placement read failure was collected above; the zero placement keeps
 	// the rest of the answer renderable.
@@ -211,12 +221,17 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	if resp.Image == "" {
 		resp.Image = profile.DefaultImage
 	}
+	// The selection as the create's launch preflight sees it: before the model
+	// binds the components and its API contract (evaluateLaunchPreflight).
+	preflightSelection := selection
+	preflightSelection.Components = append([]deploy.ComponentBinding(nil), selection.Components...)
 	model, err := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
 	if err != nil {
 		errs.add("model_id", err)
 		writeFieldErrors()
 		return
 	}
+	s.noteHealthCheckableOf(&resp, &selection, model)
 	// A quick registration may not have metadata yet. Keep evaluation and
 	// scheduling usable, but tell clients that the VRAM estimate is incomplete.
 	if model.WeightBytes <= 0 && (selection.Spec == nil || (selection.Spec.WeightBytes <= 0 && selection.Spec.RuntimeWeightBytes <= 0)) {
@@ -230,7 +245,13 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// One materialization decides this deployment's launch configuration. The
 	// preview below, the estimate, and a create submitted from this form all
 	// read the same object.
-	launch, err := materializeDeployRequest(eng.Name(), req, selection, DeployTargetCards(profileNode, req.Placement), s.requestEngineVersion(eng.Name(), req, selection, targetVendor, profileNode))
+	var storedArgs *deploy.StoredLaunchConfig
+	if evaluateReq.DeploymentID != 0 {
+		if stored, err := s.d.Store.GetDeployment(evaluateReq.DeploymentID); err == nil {
+			storedArgs = &deploy.StoredLaunchConfig{Engine: stored.Engine, ExtraArgsText: stored.ExtraArgs}
+		}
+	}
+	launch, err := materializeDeployRequestWithStoredArgs(eng.Name(), req, selection, DeployTargetCards(profileNode, req.Placement), s.requestEngineVersion(eng.Name(), req, selection, targetVendor, profileNode), storedArgs)
 	if err != nil {
 		// ProductErrors that name a key land on that key's control; the
 		// extra-args parse error is the one that starts on the text box.
@@ -240,6 +261,14 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	}
 	quick := launch.Quick
 	userExtraArgs := launch.UserResidual
+	// Materialization parsed this text already. Compare the original user
+	// tokens before any flags moved into fields or were derived for a task.
+	submittedExtra, _ := deploy.ParseArgsText(req.ExtraArgs)
+	if command, err := effectiveRequestCommand(req, selection); err == nil && command.InterpretEngineDialect && !sameStoredExtraArgs(eng.Name(), submittedExtra, storedArgs) {
+		resp.Warnings = append(resp.Warnings, deploy.ExtraArgsEngineWarnings(eng.Name(), userExtraArgs)...)
+	}
+	priority := PrioritySchedulingOf(eng.Name(), targetVendor, placementPD(req) != nil, launch.TemplateResidual, userExtraArgs)
+	resp.PriorityScheduling = &priority
 	resp.EffectiveParams = launchConfigMap(quick)
 	// FormValues is the same configuration read as a display instruction: the
 	// effective values plus the argument text after the moved flags left it.
@@ -330,7 +359,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 			// when the draft stated none, is what the form shows and what
 			// the plan below runs with.
 			req.Placement = normalized.Placement
-			placement, _ = planning.ParsePlacement(req.Placement)
+			placement = evaluationPlacement(req)
 			resp.FormValues["tp"], resp.FormValues["pp"] = placement.TP, placement.PP
 		}
 		for _, n := range nodes {
@@ -489,6 +518,22 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	}) {
 		return
 	}
+	// Checked once the ranks are previewed, so the form shows the refusal
+	// beside the launches and the draft that would satisfy it.
+	if err := checkManualCommandRanks(req); err != nil {
+		errs.add(fieldContainerCmd, err)
+	}
+	// The create resolves its launch on the per-node card count the request
+	// states, where the plan above used the cards the scheduler assigned; a
+	// memory-limited draft can get fewer cards than it states. The same
+	// preflight here makes what the create would refuse a blocking error.
+	if errs.empty() {
+		if err := s.evaluateLaunchPreflight(eng, req, preflightSelection, targetVendor, profileNode, rankNodes, &resp, storedArgs); err != nil {
+			errs.add("", err)
+			writeFieldErrors()
+			return
+		}
+	}
 	if !errs.empty() {
 		resp.OK = false
 		resp.Errors = errs.items
@@ -541,4 +586,11 @@ func evaluateParallelism(placement planning.Placement, nnodes, scheduledTP int, 
 		return nil, err
 	}
 	return &dto.EvaluateParallelism{TP: spec.TP, PP: spec.PP, Nodes: spec.NNodes, GPUsPerNode: perNode}, nil
+}
+
+// evaluationPlacement is the draft's placement as the evaluation plans it
+// (requestPlacement), a malformed one read as empty.
+func evaluationPlacement(req *dto.DeployRequest) planning.Placement {
+	placement, _ := requestPlacement(req)
+	return placement
 }

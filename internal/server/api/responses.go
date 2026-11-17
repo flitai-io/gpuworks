@@ -20,7 +20,7 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
 		code = http.StatusInternalServerError
-		body = []byte(`{"code":"RESPONSE_ENCODING_FAILED","error":"response data could not be encoded as JSON"}`)
+		body = []byte(`{"code":"` + ErrorResponseEncodingFailed + `","error":"response data could not be encoded as JSON"}`)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -28,7 +28,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 }
 
 // WriteError answers err as the API does: a product error with its stable
-// code and params, any other error with its text. It is for a handler in
+// code and params, any other error with its text and its status's generic
+// code (messages.GenericErrorCode). It is for a handler in
 // front of the router (the experience environment's guard), so a refusal
 // there reads like one from the API.
 func WriteError(w http.ResponseWriter, status int, err error) { writeErr(w, status, err) }
@@ -46,22 +47,23 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 	if report != nil {
 		response["diagnostics"] = report
 	}
-	if errors.As(err, &productErr) {
-		response["code"] = productErr.Code()
-		w.Header().Set(usageErrorHeader, productErr.Code())
-		if params := productErr.Params(); len(params) > 0 {
-			response["params"] = params
-		}
-		params := productErr.Params()
-		if summary := diagnosticLogSummary(report); summary != nil {
-			params = make(map[string]any, len(productErr.Params())+1)
-			for key, value := range productErr.Params() {
-				params[key] = value
-			}
-			params["diagnostics"] = summary
-		}
-		noteProductError(w, productErr.Code(), params)
+	// An error without a code of its own gets its status's generic code, so
+	// every error response has one; its text keeps the detail.
+	errorCode, errorParams := messages.HTTPErrorCode(code, err)
+	response["code"] = errorCode
+	w.Header().Set(usageErrorHeader, errorCode)
+	if len(errorParams) > 0 {
+		response["params"] = errorParams
 	}
+	noted := errorParams
+	if summary := diagnosticLogSummary(report); summary != nil {
+		noted = make(map[string]any, len(errorParams)+1)
+		for key, value := range errorParams {
+			noted[key] = value
+		}
+		noted["diagnostics"] = summary
+	}
+	noteProductError(w, errorCode, noted)
 	writeJSON(w, code, response)
 }
 
@@ -121,3 +123,7 @@ func noteProductError(w http.ResponseWriter, code string, params map[string]any)
 		w = unwrapper.Unwrap()
 	}
 }
+
+// errStreamingUnsupported answers a streaming route whose response writer
+// cannot flush.
+var errStreamingUnsupported = errors.New("streaming unsupported")

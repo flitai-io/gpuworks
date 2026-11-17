@@ -61,7 +61,7 @@ func TestNativeTLSProtectsPublicListenersAndPreservesLocalMaintenance(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { app.proxy.Close(); app.obs.close(); _ = app.store.Close() })
+	t.Cleanup(func() { app.proxy.Close(); app.obs.Close(); _ = app.store.Close() })
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- app.Run(ctx) }()

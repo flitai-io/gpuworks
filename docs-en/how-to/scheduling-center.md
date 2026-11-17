@@ -42,7 +42,7 @@ Open **Scheduling Analysis** from the “Overview” group of the left menu (`/s
   | Grey, hatched | Its node is offline (as last reported, so possibly stale) |
   | Black inner outline | An instance on the card is starting, going to sleep, waking or draining |
 
-  A card has exactly one state, which the server derives in a fixed order (its node is offline, faulty, held by a process outside the platform, serving, asleep, free: the first that holds); the summary, the heatmap colours and the card states in the node drawer all use that one result, and the page only maps a state to its colour and words.
+  A card has exactly one state, which the server derives in a fixed order (its node is offline, faulty, held by a process outside the platform with no instance of the platform serving on it, serving, asleep, free: the first that holds; a card where a memory-limited partition shares the card with processes outside the platform counts as serving); the summary, the heatmap colours and the card states in the node drawer all use that one result, and the page only maps a state to its colour and words.
 
   Hover or keyboard-focus a cell to see the card's details: node, card index, model, memory, the shares that are serving, asleep and free, and its occupants (deployment, yield policy, serving or asleep). The heatmap itself carries no occupant detail, so even a thousand-card fleet costs one read of about 290 KB (about 25 KB gzipped).
 - **Filters and view**: filter by GPU model (several allowed), node label (`key=value`) and node state (has free cards, has sleepers, has cards held outside, offline); type a part of a deployment name in "Find a deployment" and the cards it occupies get a red ring while the rest fade, with a count of the occupied cards. Group by node (the default), by GPU model, or by the value of a node label; sort by name, by free capacity (the unclaimed memory of the cards, not counting offline, faulty or externally held cards) or by contention (sleepers waiting to wake, plus the requests held for deployments asleep on the node, plus the yields of deployments that have cards on it). **Clear filters and view** returns to the default.
@@ -453,3 +453,5 @@ For the events of node-loss rescheduling after a node is lost and of drain moves
 - Yield policies other than never yield automatically apply only to single-node deployments; a multi-node or PD deployment whose cards are held still waits as one that does not fit.
 - A scheduled replica count applies only to single-node deployments and automatically placed multi-node and PD ones, not to multi-node or PD deployments placed by hand; a PD entry changes one role, so changing both takes two entries.
 - The evaluator runs inside the server process; nothing happens automatically while the server is down, and after it recovers only the newest entry within 12 hours is made up.
+
+<!-- translation-source-sha256: e2c51bcbd90ebf3a2eeeb1b90d082a7aeee55f4e4d6f1134696df09300ad5a60 -->

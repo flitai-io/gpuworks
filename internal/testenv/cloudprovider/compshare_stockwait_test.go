@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	compsharedriver "gpuworks.ai/gpuworks/internal/server/provider/compshare"
 )
 
 // scriptedWalk rents from a per-round script: rounds[i][model] is the error
@@ -40,11 +42,11 @@ func (s *scriptedWalk) walk() CompshareWalk {
 }
 
 var (
-	errNoRoom  = errors.New("compshare: requested capacity unavailable in cn-bj2/cn-bj2-03: gpu=4090 x1")
-	errOOR     = errors.New("compshare: create in cn-sh2/cn-sh2-01: compshare: API RetCode 226604: out of resources")
-	errBlip    = errors.New("compshare: API RetCode 8433: service busy")
-	errNotZone = errors.New("compshare: API RetCode 230: machine type not configured for zone")
-	errNoImage = errors.New("compshare: API RetCode 226641: The current availability zone does not support this image.")
+	errNoRoom  = fmt.Errorf("%w in cn-bj2/cn-bj2-03: gpu=4090 x1", compsharedriver.ErrCapacityUnavailable)
+	errOOR     = fmt.Errorf("compshare: create in cn-sh2/cn-sh2-01: %w", &compsharedriver.APIError{Status: 200, RetCode: 226604, Message: "out of resources"})
+	errBlip    = &compsharedriver.APIError{Status: 200, RetCode: 8433, Message: "service busy"}
+	errNotZone = &compsharedriver.APIError{Status: 200, RetCode: 230, Message: "machine type not configured for zone"}
+	errNoImage = &compsharedriver.APIError{Status: 200, RetCode: 226641, Message: "The current availability zone does not support this image."}
 )
 
 func allOut() map[string]error {
@@ -53,15 +55,17 @@ func allOut() map[string]error {
 
 func TestCompshareSupplyRefusalClassification(t *testing.T) {
 	for _, err := range []error{errNoRoom, errOOR, errBlip, errNotZone, errNoImage,
-		errors.New("compshare: API RetCode 226603: gpu type is not support current image")} {
+		&compsharedriver.APIError{Status: 200, RetCode: 226603, Message: "gpu type is not support current image"}} {
 		if !IsCompshareSupplyRefusal(err) {
 			t.Errorf("%v should be a supply refusal", err)
 		}
 	}
 	for _, err := range []error{nil,
-		errors.New("compshare: API RetCode 100: invalid signature"),
-		errors.New("compshare: API RetCode 230001: another code that merely starts with 230"),
-		errors.New("compshare: API RetCode 8001: insufficient balance"),
+		&compsharedriver.APIError{Status: 200, RetCode: 100, Message: "invalid signature"},
+		&compsharedriver.APIError{Status: 200, RetCode: 230001, Message: "another code that merely starts with 230"},
+		&compsharedriver.APIError{Status: 200, RetCode: 8001, Message: "insufficient balance"},
+		// Text alone is not a refusal any more: only the driver's typed answer is.
+		errors.New("compshare: API RetCode 226604: out of resources"),
 		errors.New("wait for compshare ssh endpoint: timeout")} {
 		if IsCompshareSupplyRefusal(err) {
 			t.Errorf("%v must not be a supply refusal", err)

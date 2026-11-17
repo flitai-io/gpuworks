@@ -1,15 +1,15 @@
 {
   "breadcrumb": { "services": "推理服务", "templates": "推理模板" },
-  "page": { "title": "推理模板", "loadFailed": "推理模板加载失败：{{detail}}" },
+  "page": { "loading": "正在加载推理模板…", "title": "推理模板", "loadFailed": "推理模板加载失败：{{detail}}" },
   "organization": { "other": "其他", "title": "模型组织", "aria": "模型组织" },
   "models": { "view": "查看 {{title}}", "count": "{{count}} 个模型" },
-  "chips": { "mine": "我的芯片", "add": "添加芯片", "selectToFilter": "选择后才筛选", "noOnlineNode": "暂无探测或假想芯片" },
-  "filters": { "all": "全部", "operationAria": "按任务类型筛选" },
+  "chips": {"edit": "编辑芯片", "remove": "移除 {{name}}", "saveSelection": "保存选择", "detected": "环境已接入", "search": "搜索品牌或型号",  "mine": "芯片型号", "noOnlineNode": "暂无芯片型号" },
+  "filters": { "clear": "清空筛选", "title": "筛选", "modelType": "模型类型", "all": "全部", "operationAria": "按任务类型筛选" },
   "columns": { "model": "模型", "inputModalities": "输入模态", "weightVariants": "权重制品", "vendor": "GPU 厂商", "engine": "引擎" },
   "vendor": { "nvidia": "英伟达", "amd": "AMD", "ascend": "昇腾", "hygon": "海光", "ppu": "平头哥", "kunlunxin": "昆仑芯", "apple": "Apple", "hygonAlt": "海光" },
   "scenario": { "general": "通用" },
   "weightSources": { "title": "权重来源", "huggingface": "Hugging Face", "modelscope": "ModelScope", "local": "已注册的本地权重" },
-  "flat": { "description": "浏览扁平目录中的可部署模型档位", "hypotheticalPrompt": "GPU 型号名称", "vendorPrompt": "GPU 厂商", "importTemplates": "导入模板", "importHint": "支持扁平 YAML，或带适配器资产与说明文档的 .gpuworks-catalog.tar.gz 模板包", "imported": "模板已导入", "overwritePrompt": "同名用户档位已存在，是否覆盖？{{detail}}", "overwritten": "同名用户档位已覆盖", "overwriteTitle": "覆盖同名用户档位？", "overwriteOk": "覆盖", "cancel": "取消", "search": "搜索模型或权重仓库", "modelCount": "{{count}} 个原始模型", "deployableCount": "{{count}} 个可部署档位", "selectedChip": "已选芯片：{{chip}}", "retry": "重试", "empty": "没有符合筛选条件的模型", "myTemplates": "我的模板", "saved": "模板已保存", "edit": "编辑", "context": "上下文", "specCount": "档位数", "specID": "档位标识", "builtInSource": "内置", "userSource": "用户", "details": "详情", "emptySpecs": "该引擎没有档位", "gpus": "适用 GPU", "sources": "下载源", "imageSources": "镜像来源", "commandPreview": "服务端命令预览", "editYAML": "编辑扁平 YAML", "save": "保存", "addHypothetical": "添加假想芯片", "chooseChip": "从静态硬件目录选择芯片", "add": "添加", "alternativeAvailable": "当前集群还有其他量化的可部署档位。" },
+  "flat": { "description": "浏览扁平目录中的可部署模型档位", "hypotheticalPrompt": "GPU 型号名称", "vendorPrompt": "GPU 厂商", "importTemplates": "导入模板", "importHint": "支持扁平 YAML，或带适配器资产与说明文档的 .gpuworks-catalog.tar.gz 模板包", "imported": "模板已导入", "overwritePrompt": "同名用户档位已存在，是否覆盖？{{detail}}", "overwritten": "同名用户档位已覆盖", "overwriteTitle": "覆盖同名用户档位？", "overwriteOk": "覆盖", "cancel": "取消", "search": "搜索模型或权重仓库", "modelCount": "{{count}} 个原始模型", "deployableCount": "{{count}} 个可部署档位", "selectedChip": "已选芯片：{{chip}}", "retry": "重试", "empty": "没有符合筛选条件的模型", "myTemplates": "我的模板", "saved": "模板已保存", "edit": "编辑", "context": "上下文", "specCount": "档位数", "specID": "档位标识", "builtInSource": "内置", "userSource": "用户", "details": "详情", "emptySpecs": "该引擎没有档位", "gpus": "适用 GPU", "sources": "下载源", "imageSources": "镜像来源", "commandPreview": "服务端命令预览", "editYAML": "编辑扁平 YAML", "save": "保存", "addHypothetical": "添加芯片", "chooseChip": "从静态硬件目录选择芯片", "add": "添加", "alternativeAvailable": "当前集群还有其他量化的可部署档位。" },
   "editor": {
     "reset": "重置",
     "saveFailed": "保存失败",
@@ -34,8 +34,8 @@
     "title_other": "已导入，有 {{count}} 项需要确认",
     "CATALOG_CALLABLE_METRICS_UNDECLARED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎但没有声明 api.metrics：除非引擎的 /metrics 恰好使用 vLLM 或 SGLang 的指标名，监控中心不会有它的引擎指标。",
     "CATALOG_HEALTH_ENDPOINT_UNDECLARED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎但没有声明 api.health_endpoint：就绪探测会使用默认的 /health。",
-    "CATALOG_CALLABLE_SERVED_NAME_FIXED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎，但 --served-model-name 写死为 {{name}}，没有用 ${SERVED_MODEL_NAME}：网关与健康检查发送的是部署的服务名，会校验模型名的引擎（如 vLLM）会拒绝请求，除非部署时服务名恰好填成这个值。",
-    "CATALOG_DISPLAY_PROFILE_RETIRED": "{{model_id}} 的档位“{{spec}}”还写着 display_profile 或 gpus.display_target，这两个字段已经不再使用，导入时已忽略；请改用 display_name_zh_cn 和 display_name_en 给档位命名。",
+    "CATALOG_CALLABLE_SERVED_NAME_FIXED": "{{model_id}} 的档位“{{spec}}”使用 callable 引擎，但 --served-model-name 写死为 {{name}}，会校验模型名的引擎会拒绝网关请求；请改用 ${SERVED_MODEL_NAME}。",
+    "CATALOG_DISPLAY_PROFILE_RETIRED": "{{model_id}} 的档位“{{spec}}”用了已停用的 display_profile 或 gpus.display_target，导入时已忽略；请改用 display_name_zh_cn 和 display_name_en。",
     "CATALOG_ARG_PASSED_THROUGH": "{{model_id}} 的档位“{{spec}}”给 {{flag}} 写了 {{value}}，平台参数字典读不出这个值。它会原样传给引擎，但部署表单和显存估算看不到它。"
   },
   "detail": {

@@ -6,9 +6,9 @@ import "gpuworks.ai/gpuworks/internal/server/store"
 // still owns this model-file slot. Event handling observes the same lock, so
 // it cannot mix a terminal row from one attempt with another run's identity.
 func (c *Controller) adoptActiveModelSync(key string, run *modelSyncRun, src peerSource, dstMF *store.ModelFile, transferID string) bool {
-	c.syncMu.Lock()
-	defer c.syncMu.Unlock()
-	if c.modelSyncs[key] != run {
+	c.syncs.mu.Lock()
+	defer c.syncs.mu.Unlock()
+	if c.syncs.byKey[key] != run {
 		return false
 	}
 	if transferID == "" || transferID == run.transferID {

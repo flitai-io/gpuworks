@@ -6,12 +6,17 @@
   "saveable": false,
   "checks": [
     {
+      "id": "operation_reply",
       "operation": "openai.chat",
-      "endpoint": "/v1/chat/completions",
-      "tested": true,
-      "passed": false,
-      "http_status": 500,
-      "message": "engine error"
+      "status": "fail",
+      "code": "TEMPLATE_OPERATION_HTTP_ERROR",
+      "params": {
+        "operation": "openai.chat",
+        "endpoint": "/v1/chat/completions",
+        "http_status": 500
+      },
+      "message": "openai.chat answered with HTTP 500",
+      "evidence": "engine error"
     }
   ],
   "notes": [

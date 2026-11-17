@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -183,7 +182,7 @@ func (p *Prober) probeOne(ctx context.Context, client *http.Client, host string)
 		res.Failure = probeFailure(err)
 		// A plain-HTTP registry answers a TLS handshake with an HTTP error:
 		// that is still an answer.
-		if strings.Contains(err.Error(), "server gave HTTP response to HTTPS client") {
+		if errors.Is(err, http.ErrSchemeMismatch) {
 			res.Reachable = true
 			res.LatencyMS = p.now().Sub(start).Milliseconds()
 			res.Failure = "http_on_https"

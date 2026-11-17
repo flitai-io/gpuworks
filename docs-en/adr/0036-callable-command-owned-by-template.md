@@ -43,3 +43,5 @@ it decides the adapter's CLI on the author's behalf.
   reimport of a corrected package. The old injection behavior is not retained as a compatibility mode.
 - Managed writable directories (such as the KV disk tier) can currently be requested only through vLLM's argument dictionary, so callable cannot request them and no corresponding variables are exposed yet.
   When generic managed directories are added for callable, add paired "path + capacity limit" entries to the vocabulary.
+
+<!-- translation-source-sha256: cbae84292f573126fc66cc70f86110b341dca3c9d605236ff16ab00b62f1ef55 -->

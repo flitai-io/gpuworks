@@ -142,10 +142,10 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(({ classNam
 });
 DialogContent.displayName = "DialogContent";
 function DialogHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-    return (<div className={cn("flex flex-col gap-1.5 mb-4", className)} {...props}/>);
+    return (<div data-slot="dialog-header" className={cn("flex flex-col gap-1.5 mb-4", className)} {...props}/>);
 }
 function DialogFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-    return (<div className={cn("flex justify-end gap-2 mt-6", className)} {...props}/>);
+    return (<div data-slot="dialog-footer" className={cn("flex justify-end gap-2 mt-6", className)} {...props}/>);
 }
 const DialogTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => (<DialogPrimitive.Title ref={ref} className={cn("text-title text-fg-default font-bold", className)} {...props}/>));
 DialogTitle.displayName = "DialogTitle";

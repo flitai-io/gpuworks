@@ -27,7 +27,7 @@
     "checks": [
       {
         "id": "model-record:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -47,7 +47,7 @@
       },
       {
         "id": "model-source:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -67,7 +67,7 @@
       },
       {
         "id": "model-metadata:1:0:0",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -99,12 +99,16 @@
     "/model"
   ],
   "argv": [
+    "--served-model-name",
+    "/model",
     "--host",
     "127.0.0.1",
     "--port",
     "30000",
     "--tensor-parallel-size",
     "1",
+    "--scheduling-policy",
+    "priority",
     "--enable-prompt-tokens-details",
     "--max-model-len",
     "32768",
@@ -115,12 +119,16 @@
     "vllm",
     "serve",
     "/model",
+    "--served-model-name",
+    "/model",
     "--host",
     "127.0.0.1",
     "--port",
     "30000",
     "--tensor-parallel-size",
     "1",
+    "--scheduling-policy",
+    "priority",
     "--enable-prompt-tokens-details",
     "--max-model-len",
     "32768",
@@ -170,12 +178,16 @@
         "/model"
       ],
       "argv": [
+        "--served-model-name",
+        "/model",
         "--host",
         "127.0.0.1",
         "--port",
         "30000",
         "--tensor-parallel-size",
         "1",
+        "--scheduling-policy",
+        "priority",
         "--enable-prompt-tokens-details",
         "--max-model-len",
         "32768",
@@ -186,12 +198,16 @@
         "vllm",
         "serve",
         "/model",
+        "--served-model-name",
+        "/model",
         "--host",
         "127.0.0.1",
         "--port",
         "30000",
         "--tensor-parallel-size",
         "1",
+        "--scheduling-policy",
+        "priority",
         "--enable-prompt-tokens-details",
         "--max-model-len",
         "32768",
@@ -459,10 +475,15 @@
     "max_model_len": 32768
   },
   "engine_decides_param_keys": [
-    "enable_request_metrics"
+    "enable_request_metrics",
+    "max_model_len"
   ],
   "yield_policy_eligible": {
     "ok": false,
     "reason": "SLEEP_NOT_ENABLED"
+  },
+  "health_checkable": false,
+  "priority_scheduling": {
+    "ok": true
   }
 }

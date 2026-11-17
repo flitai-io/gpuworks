@@ -92,12 +92,12 @@ func TestCloudAuthorizePublicKeyChecksHostResult(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				detail, err := d.AuthorizePublicKey(t.Context(), provider.Credentials{Endpoint: server.URL, PublicKey: "test-access-key", PrivateKey: "test-access-secret"}, "host-a", key.PublicKey)
+				check, err := d.AuthorizePublicKey(t.Context(), provider.Credentials{Endpoint: server.URL, PublicKey: "test-access-key", PrivateKey: "test-access-secret"}, "host-a", key.PublicKey)
 				if tc.wantError == "" {
-					if err != nil || detail == "" {
-						t.Fatalf("authorization detail=%q err=%v", detail, err)
+					if err != nil || check.Status != "pass" || check.Code != "CHECK_PLATFORM_KEY_INSTANCE_ATTACHED" {
+						t.Fatalf("authorization check=%+v err=%v", check, err)
 					}
-				} else if detail != "" || err == nil || !strings.Contains(err.Error(), tc.wantError) || strings.Contains(err.Error(), "sensitive-output") {
+				} else if check.ID != "" || err == nil || !strings.Contains(err.Error(), tc.wantError) || strings.Contains(err.Error(), "sensitive-output") {
 					t.Fatalf("err=%v, want %q without remote output", err, tc.wantError)
 				}
 				if submissions != 1 || (async && polls != 2) {

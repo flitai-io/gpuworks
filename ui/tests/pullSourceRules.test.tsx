@@ -43,7 +43,9 @@ async function pickLabel(user: ReturnType<typeof userEvent.setup>, combobox: HTM
   await user.type(combobox, label);
   fireEvent.keyDown(combobox, { key: "Enter", keyCode: 13, which: 13 });
 }
-const rows = () => within(screen.getByRole("region", { name: text.tableLabel })).getAllByRole("row").slice(1);
+// antd renders the empty state as a body row (tr.ant-table-placeholder): counting it as a
+// rule made "one row" true while a just-saved rule was still waiting for the refetch.
+const rows = () => within(screen.getByRole("region", { name: text.tableLabel })).getAllByRole("row").slice(1).filter((row) => !row.classList.contains("ant-table-placeholder"));
 const rowText = (row: HTMLElement) => row.textContent ?? "";
 
 test("rules load with a spinner first, then show match, ordered endpoints, upstream, nodes and credential status", async () => {

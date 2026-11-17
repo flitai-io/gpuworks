@@ -82,7 +82,7 @@ func TestUnitChoiceCountsTheCardsSleepersKeep(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			st, node, _, dep := reservedNode(t, tc.nnodes, tc.pd)
 			resolve := func([]store.Node) (netplan.Resolution, error) { return netplan.Resolution{}, nil }
-			facts, err := LoadUnitSuggestFacts(st, resolve, dep, nodelabel.Requirements{}, nil, func(string) bool { return true }, 1, 1)
+			facts, err := LoadUnitSuggestFacts(st, resolve, dep, nodelabel.Requirements{}, nil, func(string) bool { return true }, nil, 1, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -124,7 +124,7 @@ func TestAMultiNodeRankRefusedForASleepersCardNamesIt(t *testing.T) {
 	if scheduler.Schedule(req, nodeSnapshot(st, node, true, "", view)).OK {
 		t.Fatal("the sleeper's card was free to a never launch")
 	}
-	reserved := launchReserved(st, node, nodeInstances(t, st, node), req, true, "", false, view)
+	reserved := launchReserved(st, node, nodeInstances(t, st, node), req, true, "", view)
 	if reserved == nil || !slices.Equal(reserved.GPUIndexes, []int{0}) || len(reserved.Sleepers) != 1 || reserved.Sleepers[0].DeploymentID != chat.ID {
 		t.Fatalf("reserved = %+v, want card 0 kept by chat", reserved)
 	}

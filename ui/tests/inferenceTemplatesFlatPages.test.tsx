@@ -112,7 +112,10 @@ function renderCatalogFlow(initialEntry = "/inference-templates") {
 }
 
 // Tests that open the editor get the server-written document of the model they show.
+const { FeedbackHost } = await import("../src/ui-kit/feedback/index.tsx");
+
 beforeEach(() => {
+  render(<I18nextProvider i18n={i18n}><FeedbackHost /></I18nextProvider>);
   api.inferenceTemplateYAML = (async (modelID: string) => serverYAML(modelID)) as never;
 });
 
@@ -128,10 +131,14 @@ test("flat catalog exposes loading, success, keyboard navigation, and chip filte
   api.detectedInferenceTemplateChips = (async () => list([{ vendor: "nvidia", name: "NVIDIA H100", cc: "9.0" }])) as never;
   api.inferenceTemplateChips = (async () => list([{ vendor: "nvidia", name: "NVIDIA H100", cc: 9, category: "Data Center", architecture: "Hopper" }])) as never;
   const { container } = renderList();
-  assert.ok(container.querySelector(".ant-spin-spinning"));
+  assert.ok(screen.getByRole("status"));
+  const importButton = screen.getByRole("button", { name: "Import Templates" });
+  assert.ok(importButton.classList.contains("text-fg-on-primary-action"));
+  assert.ok(importButton.querySelector('[data-slot="button-leading-icon"]'));
+  assert.ok(screen.getByRole("button", { name: "Edit chips" }).classList.contains("text-fg-default"));
   resolvePage({ items: [upstreamModel], page: 1, page_size: 200, total: 1 } as never);
   assert.equal((await screen.findByText("DeepSeek Model")).textContent, "DeepSeek Model");
-  const open = screen.getByRole("button", { name: "DeepSeek Model" });
+  const open = screen.getByRole("link", { name: "DeepSeek Model" });
   open.focus();
   await userEvent.setup().keyboard("{Enter}");
   assert.equal(dom.window.location.pathname, "/", "MemoryRouter navigation remains isolated from the browser URL");
@@ -157,7 +164,9 @@ test("catalog starts unfiltered, keeps organization logos and cross-organization
   assert.equal((await screen.findByText("Qwen Model")).textContent, "Qwen Model");
   assert.equal(screen.getByText("GPTQ · quant-factory/Qwen-GPTQ").textContent, "GPTQ · quant-factory/Qwen-GPTQ");
   assert.ok(container.querySelector('img[src="/model-org-icons/qwen.webp"]'), "the reviewed organization logo is rendered");
-  for (const logo of container.querySelectorAll<HTMLElement>(".ant-avatar-image")) {
+  const organizationLogos = container.querySelectorAll<HTMLElement>("img.template-organization-logo");
+  assert.ok(organizationLogos.length > 0);
+  for (const logo of organizationLogos) {
     assert.equal(logo.style.background, "", "a published logo draws without a tinted disc behind it");
     assert.ok(logo.classList.contains("template-organization-logo"));
   }
@@ -165,6 +174,110 @@ test("catalog starts unfiltered, keeps organization logos and cross-organization
   await userEvent.setup().click(screen.getByRole("button", { name: "H100" }));
   await waitFor(() => assert.equal(screen.queryByRole("button", { name: /Qwen/ }) === null, true));
   assert.equal((await screen.findByText("DeepSeek Model")).textContent, "DeepSeek Model");
+});
+
+test("catalog filters are labelled, start expanded, and retain chip and task choices when collapsed", async () => {
+  api.inferenceTemplates = (async () => list([upstreamModel])) as never;
+  api.detectedInferenceTemplateChips = (async () => list([{ vendor: "nvidia", name: "NVIDIA H100", cc: "9.0" }])) as never;
+  api.inferenceTemplateChips = (async () => list([])) as never;
+  renderList();
+  await screen.findByText("DeepSeek Model");
+  const user = userEvent.setup();
+  assert.ok(screen.getByText("Chip models"));
+  assert.ok(screen.getByText("Model type"));
+  assert.equal(screen.getByRole("button", { name: "Filters", exact: true }).getAttribute("aria-expanded"), "true");
+  await user.click(screen.getByRole("button", { name: "H100", exact: true }));
+  await user.click(within(screen.getByRole("group", { name: "Filter by task type" })).getByRole("button", { name: /^Chat/ }));
+  assert.equal(screen.getByRole("button", { name: /Filters.*H100.*Chat/ }).getAttribute("aria-expanded"), "true");
+  await user.click(screen.getByRole("button", { name: /Filters.*H100.*Chat/ }));
+  const collapsed = screen.getByRole("button", { name: /Filters.*H100.*Chat/ });
+  assert.equal(collapsed.getAttribute("aria-expanded"), "false");
+  await user.click(collapsed);
+  assert.equal(screen.getByRole("button", { name: "H100", exact: true }).getAttribute("aria-pressed"), "true");
+  assert.equal(within(screen.getByRole("group", { name: "Filter by task type" })).getByRole("button", { name: /^Chat/ }).getAttribute("aria-pressed"), "true");
+  assert.ok(screen.getByRole("link", { name: "DeepSeek Model" }));
+});
+
+test("the filter header summarizes choices when open or closed and clears only the panel without toggling it", async () => {
+  api.inferenceTemplates = (async () => list([upstreamModel])) as never;
+  api.detectedInferenceTemplateChips = (async () => list([{ vendor: "nvidia", name: "NVIDIA H100", cc: "9.0" }])) as never;
+  api.inferenceTemplateChips = (async () => list([])) as never;
+  renderList();
+  await screen.findByText("DeepSeek Model");
+  const user = userEvent.setup();
+  const clear = screen.getByRole("button", { name: "Clear filters", exact: true });
+  assert.equal(clear.hasAttribute("disabled"), true);
+  await user.type(screen.getByPlaceholderText("Search models or weight repositories"), "DeepSeek");
+  await user.click(screen.getByRole("button", { name: "H100", exact: true }));
+  await user.click(within(screen.getByRole("group", { name: "Filter by task type" })).getByRole("button", { name: /^Chat/ }));
+  await user.click(within(screen.getByRole("group", { name: "Engine" })).getByRole("button", { name: "vLLM", exact: true }));
+  const toggle = screen.getByRole("button", { name: /Filters.*H100.*Chat.*vLLM/ });
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.ok(screen.queryByText(/Selected chip:/) === null);
+  await user.click(toggle);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  await user.click(clear);
+  const reset = screen.getByRole("button", { name: "Filters", exact: true });
+  assert.equal(reset.getAttribute("aria-expanded"), "false");
+  assert.equal((screen.getByPlaceholderText("Search models or weight repositories") as HTMLInputElement).value, "DeepSeek");
+  await user.click(reset);
+  assert.equal(screen.getByRole("button", { name: "H100", exact: true }).getAttribute("aria-pressed"), "false");
+  const engines = within(screen.getByRole("group", { name: "Engine" }));
+  assert.equal(engines.getByRole("button", { name: "All", exact: true }).getAttribute("aria-pressed"), "true");
+  await user.click(engines.getByRole("button", { name: "vLLM", exact: true }));
+  await user.click(clear);
+  assert.equal(screen.getByRole("button", { name: "Filters", exact: true }).getAttribute("aria-expanded"), "true");
+  assert.equal(engines.getByRole("button", { name: "All", exact: true }).getAttribute("aria-pressed"), "true");
+});
+
+test("a column filter set in one organization does not carry into the next", async () => {
+  const qwen = { ...upstreamModel, id: 8, model_id: "qwen/qwen-model", display_title: "Qwen Model", specs: [h100Spec] };
+  api.inferenceTemplates = (async () => list([upstreamModel, qwen])) as never;
+  api.detectedInferenceTemplateChips = (async () => list([])) as never;
+  api.inferenceTemplateChips = (async () => list([])) as never;
+  renderList();
+  const user = userEvent.setup();
+  await screen.findByText("DeepSeek Model");
+  await user.click(screen.getByRole("button", { name: /DeepSeek/ }));
+  await user.click(screen.getByRole("button", { name: "Filter by GPU vendor" }));
+  await user.click(await screen.findByRole("checkbox", { name: /Ascend/ }));
+  await waitFor(() => assert.ok(screen.getByRole("button", { name: /^Clear filter: GPU vendor/ })));
+  await user.keyboard("{Escape}");
+  await waitFor(() => assert.equal(screen.queryByRole("checkbox", { name: /Ascend/ }), null));
+  await user.click(screen.getByRole("button", { name: /Qwen/ }));
+  const table = () => document.querySelector<HTMLElement>(".template-organization-main tbody");
+  await waitFor(() => assert.ok(table() && within(table()!).queryByRole("link", { name: "Qwen Model" }), "the NVIDIA-only organization is not emptied by the Ascend filter"));
+  assert.equal(document.querySelector('[aria-label^="Clear filter"]'), null, "no filter chip is carried over");
+});
+
+test("an organization's heading shows its display name and model count once without the internal identifier", async () => {
+  api.inferenceTemplates = (async () => list([{ ...upstreamModel, source: "user" }])) as never;
+  api.detectedInferenceTemplateChips = (async () => list([])) as never;
+  api.inferenceTemplateChips = (async () => list([])) as never;
+  const { container } = renderList();
+  await screen.findByRole("heading", { name: "My Templates", exact: true });
+  const main = container.querySelector<HTMLElement>(".template-organization-main")!;
+  assert.equal(within(main).getAllByText("1 models").length, 1);
+  assert.ok(within(main).queryByText("my-templates") === null);
+});
+
+test("an organization logo that fails to load falls back to colored initials, and My Templates keeps the pinned purple", async () => {
+  api.inferenceTemplates = (async () => list([upstreamModel, { ...upstreamModel, id: 8, model_id: "custom/model", source: "user" }])) as never;
+  api.detectedInferenceTemplateChips = (async () => list([])) as never;
+  api.inferenceTemplateChips = (async () => list([])) as never;
+  const { container } = renderList();
+  await screen.findByRole("heading", { name: "My Templates", exact: true });
+  const sidebar = container.querySelector<HTMLElement>(".template-organization-sidebar")!;
+  const mine = within(sidebar).getByRole("button", { name: /My Templates/ });
+  assert.equal(mine.querySelector("[data-color]")?.getAttribute("data-color"), "var(--organization-avatar-5)");
+  const deepseek = within(sidebar).getByRole("button", { name: /DeepSeek/ });
+  const logo = deepseek.querySelector("img");
+  assert.ok(logo, "a known organization shows its official logo first");
+  fireEvent.error(logo);
+  await waitFor(() => assert.equal(deepseek.querySelector("img"), null));
+  const fallback = deepseek.querySelector<HTMLElement>("[data-color]");
+  assert.match(fallback?.textContent ?? "", /^[A-Z0-9]{1,2}$/);
+  assert.match(fallback?.getAttribute("data-color") ?? "", /^var\(--organization-avatar-[1-5]\)$/);
 });
 
 test("my chips use short GPU names and reserve compute capability for an unknown vGPU model", async () => {
@@ -209,10 +322,10 @@ test("operation counts intersect with the selected chip and engine", async () =>
   await waitFor(() => assert.equal(operationButton("Chat").textContent, "Chat0"));
   assert.equal(operationButton("Image generation").textContent, "Image generation1");
   assert.equal(operationButton("Embeddings").textContent, "Embeddings1");
-  await userEvent.setup().click(screen.getByRole("tab", { name: "SGLang" }));
+  await userEvent.setup().click(within(screen.getByRole("group", { name: "Engine" })).getByRole("button", { name: "SGLang" }));
   await waitFor(() => assert.equal(operationButton("Chat").textContent, "Chat0"));
   assert.equal(operationButton("Embeddings").textContent, "Embeddings0", "chip and engine must match the same spec");
-  await userEvent.setup().click(screen.getByRole("tab", { name: "vLLM" }));
+  await userEvent.setup().click(within(screen.getByRole("group", { name: "Engine" })).getByRole("button", { name: "vLLM" }));
   await userEvent.setup().click(screen.getByRole("button", { name: "H100" }));
   await userEvent.setup().click(operationButton("Image generation"));
   await waitFor(() => assert.ok(screen.getByText("1 original models")));
@@ -250,11 +363,11 @@ test("returning from any model detail restores the catalog organization and filt
   await screen.findByText("DeepSeek Model");
   await userEvent.setup().click(screen.getByRole("button", { name: /PaddlePaddle/ }));
   await userEvent.setup().click(screen.getByRole("button", { name: "H100" }));
-  await userEvent.setup().click(screen.getByRole("tab", { name: "vLLM" }));
+  await userEvent.setup().click(within(screen.getByRole("group", { name: "Engine" })).getByRole("button", { name: "vLLM" }));
   await userEvent.setup().click(screen.getByText("Chat"));
   const search = screen.getByPlaceholderText("Search models or weight repositories");
   await userEvent.setup().type(search, "Paddle");
-  await userEvent.setup().click(screen.getByRole("button", { name: "PaddleOCR VL 1.6" }));
+  await userEvent.setup().click(screen.getByRole("link", { name: "PaddleOCR VL 1.6" }));
 
   assert.ok((await screen.findAllByText("paddlepaddle/paddleocr-vl-1.6")).length >= 1);
   await userEvent.setup().click(screen.getByRole("button", { name: /Back to List/ }));
@@ -262,7 +375,7 @@ test("returning from any model detail restores the catalog organization and filt
   assert.match(container.querySelector(".template-organization-sidebar button.is-active")?.textContent || "", /PaddlePaddle/);
   assert.equal((screen.getByPlaceholderText("Search models or weight repositories") as HTMLInputElement).value, "Paddle");
   assert.equal(screen.getByRole("button", { name: "H100" }).getAttribute("aria-pressed"), "true");
-  assert.ok(screen.getByRole("tab", { name: "vLLM" }).getAttribute("aria-selected") === "true");
+  assert.ok(within(screen.getByRole("group", { name: "Engine" })).getByRole("button", { name: "vLLM" }).getAttribute("aria-pressed") === "true");
   assert.equal(screen.getByText("Chat").closest("button")?.getAttribute("aria-pressed"), "true");
 });
 
@@ -276,7 +389,7 @@ test("returning without a search term keeps the requested organization while the
   api.inferenceTemplateChips = (async () => list([])) as never;
   const { container } = renderCatalogFlow("/inference-templates/baai/bge-reranker-v2-m3?from=organization%3Dbaai%26engine%3Dvllm");
 
-  await screen.findByText("BGE Reranker");
+  await screen.findByRole("heading", { name: "BGE Reranker" });
   // The breadcrumb returns to the same filtered list as the back button.
   const crumb = container.querySelector(".page-header-breadcrumb a") as HTMLAnchorElement;
   assert.equal(crumb.getAttribute("href"), "/inference-templates?organization=baai&engine=vllm");
@@ -285,7 +398,7 @@ test("returning without a search term keeps the requested organization while the
 
   await screen.findByText("BGE Reranker");
   assert.match(container.querySelector(".template-organization-sidebar button.is-active")?.textContent || "", /BAAI/);
-  assert.ok(screen.getByRole("tab", { name: "vLLM" }).getAttribute("aria-selected") === "true");
+  assert.ok(within(screen.getByRole("group", { name: "Engine" })).getByRole("button", { name: "vLLM" }).getAttribute("aria-pressed") === "true");
   assert.equal(screen.queryByPlaceholderText("Search models or weight repositories")?.getAttribute("value") || "", "");
 });
 
@@ -300,7 +413,7 @@ test("models inside one organization are ordered by creation date descending", a
 
   await screen.findByText("Newest Model");
   assert.deepEqual(
-    [...container.querySelectorAll(".template-model-title")].map((item) => item.textContent),
+    [...container.querySelectorAll(".resource-table-name a")].map((item) => item.textContent),
     ["Same Day Model", "Newest Model", "Older Model"],
   );
 });
@@ -860,14 +973,10 @@ test("a hypothetical AMD chip retains its architecture selector", async () => {
   api.detectedInferenceTemplateChips = (async () => list([])) as never;
   api.inferenceTemplateChips = (async () => list([{ vendor: "amd", name: "AMD Radeon 8060S", category: "workstation-consumer", architecture: "RDNA 3.5", arch_id: "gfx1151" }])) as never;
   render(<I18nextProvider i18n={i18n}><MemoryRouter><InferenceTemplatesPage /></MemoryRouter></I18nextProvider>);
-  fireEvent.click(await screen.findByRole("button", { name: /Add Chip/ }));
-  const dialog = await screen.findByRole("dialog", { name: "Add a hypothetical GPU" });
-  fireEvent.mouseDown(within(dialog).getByRole("combobox"));
-  await waitFor(() => assert.equal(document.querySelectorAll(".ant-select-item-option").length > 0, true));
-  const option = [...document.querySelectorAll(".ant-select-item-option")].find((el) => el.textContent?.includes("gfx1151"));
-  assert.equal(option !== undefined, true);
-  fireEvent.click(option!);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Add", exact: true }));
+  fireEvent.click(await screen.findByRole("button", { name: /Edit chips/ }));
+  const dialog = await screen.findByRole("dialog", { name: "Edit chips" });
+  await userEvent.setup().click(within(dialog).getByRole("checkbox", { name: /gfx1151/ }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Save selection", exact: true }));
   const { loadHypotheticalChips } = await import("../src/pages/InferenceTemplatesPage.tsx");
   await waitFor(() => assert.equal(loadHypotheticalChips().some((chip) => chip.vendor === "amd" && chip.arch_id === "gfx1151"), true));
 });
@@ -912,4 +1021,33 @@ test("detail displays server support warnings and preferred engine without re-ev
   assert.equal((await screen.findByText("910B (A2) · INT8 W8A8 spec")).textContent, "910B (A2) · INT8 W8A8 spec");
   assert.ok(screen.getByText("server unsupported rule"));
   assert.ok(screen.getByText(i18n.t("flat.alternativeAvailable")));
+});
+
+test("removing the selected hypothetical chip clears its filter, persists removal, and preserves detected chips", async () => {
+  const hypothetical = { vendor: "amd", name: "AMD Radeon 8060S", arch_id: "gfx1151" };
+  localStorage.setItem("gpuworks.inferenceTemplates.hypotheticalChips", JSON.stringify([hypothetical]));
+  api.inferenceTemplates = (async () => list([upstreamModel])) as never;
+  api.detectedInferenceTemplateChips = (async () => list([{ vendor: "nvidia", name: "NVIDIA H100", cc: "9.0" }])) as never;
+  api.inferenceTemplateChips = (async () => list([])) as never;
+  renderList();
+  await screen.findByText("DeepSeek Model");
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: /Radeon 8060S/ }));
+  assert.ok(screen.getByRole("button", { name: /Filters.*8060S/ }));
+  await user.click(screen.getByRole("button", { name: "Edit chips", exact: true }));
+  const picker = within(screen.getByRole("dialog", { name: "Edit chips" }));
+  assert.equal(picker.getByRole("checkbox", { name: /H100/ }).getAttribute("aria-disabled"), "true");
+  await user.click(picker.getByRole("button", { name: "AMD", exact: true }));
+  await user.click(picker.getByRole("checkbox", { name: /gfx1151/ }));
+  await user.click(picker.getByRole("button", { name: "Save selection" }));
+  await waitFor(() => assert.ok(screen.queryByRole("dialog", { name: "Edit chips" }) === null));
+  assert.deepEqual(JSON.parse(localStorage.getItem("gpuworks.inferenceTemplates.hypotheticalChips")!), []);
+  assert.ok(screen.queryByRole("button", { name: /8060S/ }) === null);
+  assert.ok(screen.getByRole("button", { name: "Filters", exact: true }));
+  assert.ok(screen.getByRole("button", { name: "H100", exact: true }));
+  cleanup();
+  renderList();
+  await screen.findByText("DeepSeek Model");
+  assert.ok(screen.queryByRole("button", { name: /8060S/ }) === null);
+  assert.ok(screen.getByRole("button", { name: "H100", exact: true }));
 });

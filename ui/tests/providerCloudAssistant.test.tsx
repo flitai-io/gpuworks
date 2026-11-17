@@ -3,11 +3,13 @@ import { afterEach, test } from "node:test";
 import React from "react";
 import { I18nextProvider } from "react-i18next";
 import { createI18n } from "./helpers/dom.ts";
+import { account, aliyunKind } from "./helpers/platformFixtures.ts";
 
 const { i18n } = await createI18n(["providers"], "en");
 const { cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
 const { default: ProviderInstallModal } = await import("../src/components/ProviderInstallModal.tsx");
-const { default: ProviderInstancesTable } = await import("../src/components/ProviderInstancesTable.tsx");
+const { default: ProviderResources } = await import("../src/pages/platforms/ProviderResources.tsx");
+const { MemoryRouter } = await import("react-router-dom");
 const { api } = await import("../src/api.ts");
 type ProviderInstance = import("../src/api.ts").ProviderInstance;
 
@@ -22,8 +24,9 @@ const instance: ProviderInstance = {
 };
 
 test("the instance list shows Cloud Assistant as a path without SSH", async () => {
-  Object.assign(api, { providerInstances: async () => ({ items: [instance], total: 1 }) });
-  render(<I18nextProvider i18n={i18n}><ProviderInstancesTable providerId={1} refreshKey="x" /></I18nextProvider>);
+  // An Alibaba Cloud account's detail (ui/src/pages/platforms/ProviderResources.tsx); it has no managed cluster.
+  Object.assign(api, { providerInstances: async () => ({ items: [instance], total: 1 }), providerClusters: async () => ({ items: [], total: 0 }) });
+  render(<I18nextProvider i18n={i18n}><MemoryRouter><ProviderResources provider={account(1, "ali", "aliyun")} kindInfo={aliyunKind} refreshKey="x" entries={{}} onEntriesChanged={() => {}} admin={false} /></MemoryRouter></I18nextProvider>);
   await screen.findByText("gpu-1");
   assert.ok(screen.getByText("Cloud Assistant"));
   assert.ok(screen.getByText("no SSH needed"));
@@ -39,9 +42,9 @@ test("the install dialog offers Cloud Assistant by name and reports it was used"
       return {
         status: "installing", connect_mode: "agent_dial", ssh_connection: assistant,
         checks: [
-          { name: "precheck", status: "ok", detail: "all 5 checks passed" },
-          { name: "install agent", status: "ok", detail: "gpuworks: agent started via systemd." },
-          { name: "agent_dial", status: "ok", detail: "agent session established" },
+          { id: "precheck", status: "pass", code: "CHECK_PRECHECK_PASSED", params: { total: "5" }, message: "all 5 precheck items passed" },
+          { id: "install_agent", status: "pass", code: "CHECK_AGENT_STARTED", message: "agent started", evidence: "gpuworks: agent started via systemd." },
+          { id: "agent_dial", status: "pass", code: "CHECK_AGENT_SESSION_ESTABLISHED", message: "agent session established" },
         ],
       };
     },
@@ -51,7 +54,11 @@ test("the install dialog offers Cloud Assistant by name and reports it was used"
       <ProviderInstallModal providerId={1} providerKind="aliyun" inst={instance} onClose={() => {}} onDone={() => {}} />
     </I18nextProvider>,
   );
-  assert.ok(screen.getByText(/through Alibaba Cloud Cloud Assistant/));
+  assert.ok(screen.getByText("Installs as root via Cloud Assistant; no SSH credential or public IP needed."));
+  assert.equal(screen.queryByText(/through Alibaba Cloud Cloud Assistant/), null, "the fallback detail waits behind the help mark");
+  fireEvent.focus(screen.getByRole("button", { name: "More information" }));
+  assert.match((await screen.findByRole("tooltip")).textContent ?? "", /through Alibaba Cloud Cloud Assistant.*falls back to SSH/);
+  fireEvent.blur(screen.getByRole("button", { name: "More information" }));
   assert.ok(screen.getByText("Connection"));
   fireEvent.mouseDown(document.querySelector(".ant-select-selector") as HTMLElement);
   await waitFor(() => assert.ok(document.querySelectorAll(".ant-select-item-option").length >= 3));

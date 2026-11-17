@@ -84,8 +84,9 @@ test("saving a local deployment explains that the template references registered
 test("the dialog says it is testing, then shows the checks, the notes and the YAML", async () => {
   const dialog = await open();
   await within(dialog).findByText(text.verified.replace("{{model}}", exported.model_id).replace("{{spec}}", exported.spec_name));
-  assert.ok(within(dialog).getByText("openai.chat"));
-  assert.ok(within(dialog).getByText(text.check.passed.replace("{{status}}", "200")));
+  const checks = within(dialog).getByRole("region", { name: text.checks });
+  assert.ok(within(checks).getByText(common.checkStatus.pass));
+  assert.ok(within(checks).getByText(common.apiError.TEMPLATE_OPERATION_ANSWERED.replace("{{operation}}", "openai.chat").replace("{{http_status}}", "200")));
   assert.ok(within(dialog).getByText(text.note.verified_on.replace("{{count}}", "1").replace("{{gpu}}", "NVIDIA H20")));
   assert.ok(within(dialog).getByText(text.note.env_excluded.replace("{{keys}}", "HF_TOKEN, VLLM_LOGGING_LEVEL")));
   const yaml = within(dialog).getByRole("textbox", { name: text.yaml }) as HTMLTextAreaElement;
@@ -157,8 +158,43 @@ test("a failed check is shown and the template cannot be saved", async () => {
   exportAnswers = [Response.json(checkFailed)];
   const dialog = await open();
   await within(dialog).findByText(text.notVerified);
-  assert.ok(within(dialog).getByText(text.check.failed.replace("{{status}}", "500").replace("{{detail}}", "engine error")));
+  const checks = within(dialog).getByRole("region", { name: text.checks });
+  assert.ok(within(checks).getByText(common.checkStatus.fail));
+  assert.ok(within(checks).getByText(common.apiError.TEMPLATE_OPERATION_HTTP_ERROR.replace("{{operation}}", "openai.chat").replace("{{http_status}}", "500")));
+  // What the engine answered is shown as evidence, not as the message.
+  assert.ok(within(checks).getByText("engine error"));
   assert.equal((await within(dialog).findByRole("button", { name: new RegExp(text.save) }) as HTMLButtonElement).disabled, true);
+});
+
+test("an operation that was not tested reads as not checked, never as passed", async () => {
+  exportAnswers = [Response.json({ ...exported, checks: [
+    ...exported.checks,
+    { id: "operation_reply", operation: "openai.video.generate", status: "skip", code: "TEMPLATE_OPERATION_NOT_PROBED", params: { operation: "openai.video.generate" }, message: "no test request is sent for openai.video.generate" },
+  ] })];
+  const dialog = await open();
+  const checks = await within(dialog).findByRole("region", { name: text.checks });
+  assert.equal(within(checks).getAllByText(common.checkStatus.pass).length, 1);
+  assert.ok(within(checks).getByText(common.checkStatus.skip));
+  assert.ok(within(checks).getByText(common.apiError.TEMPLATE_OPERATION_NOT_PROBED.replace("{{operation}}", "openai.video.generate")));
+});
+
+test("the checks read in Chinese from their codes", async () => {
+  const zh = (ns: string) => JSON.parse(fs.readFileSync(new URL(`../src/i18n/locales/zh/${ns}.json`, import.meta.url), "utf8"));
+  const zhCommon = zh("common");
+  await i18n.addResourceBundle("zh", "deployments", zh("deployments"));
+  await i18n.addResourceBundle("zh", "common", zhCommon);
+  await i18n.changeLanguage("zh");
+  try {
+    exportAnswers = [Response.json(checkFailed)];
+    const dialog = await open();
+    const checks = await within(dialog).findByRole("region", { name: zh("deployments").catalogTemplate.checks });
+    assert.ok(within(checks).getByText(zhCommon.checkStatus.fail));
+    assert.ok(within(checks).getByText(zhCommon.apiError.TEMPLATE_OPERATION_HTTP_ERROR.replace("{{operation}}", "openai.chat").replace("{{http_status}}", "500")));
+  } finally {
+    await i18n.changeLanguage("en");
+    i18n.removeResourceBundle("zh", "deployments");
+    i18n.removeResourceBundle("zh", "common");
+  }
 });
 
 test("a refusal says why in the reader's language and can be retried", async () => {

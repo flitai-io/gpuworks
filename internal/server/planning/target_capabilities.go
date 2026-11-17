@@ -463,6 +463,7 @@ func targetRequestsFor(req LaunchRequest, validator func(store.GPU) error, cache
 		resolution, ok := cache[key]
 		if !ok {
 			cardRequest := req
+			cardRequest.Placement = cardRequest.Placement.WithoutOperatorChoice()
 			cardRequest.Placement.GPUIndexes = []int{gpu.Index}
 			snapshot, err := resolve(cardRequest)
 			resolution.snapshot = snapshot

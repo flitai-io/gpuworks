@@ -48,7 +48,7 @@
     "",
     "[2026-10-05 09:12:14] Received sigquit from a child process. It usually means the child failed."
   ],
-  "expect_signature": "gpu_arch_unsupported",
+  "expect_signature": "GPU_ARCH_UNSUPPORTED",
   "expect_keywords": [
     [
       "sm_75",

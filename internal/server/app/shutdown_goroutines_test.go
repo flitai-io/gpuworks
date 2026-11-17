@@ -29,8 +29,8 @@ func backgroundLoopMarkers() []string {
 		"internal/server/controller.(*Controller).Run(",
 		"internal/server/app.runPDVerifier(",
 		"internal/server/app.(*opsStats).run(",
-		"internal/server/app.(*observability).logIngestLoop(",
-		"internal/server/app.(*observability).selfLogLoop(",
+		"internal/server/obsingest.(*Pipeline).RunLogs(",
+		"internal/server/obsingest.(*Pipeline).RunSelfLogs(",
 	}
 }
 
@@ -83,7 +83,7 @@ func startShutdownTestApp(t *testing.T) (a *App, ctx context.Context, cancel con
 	// Start from DefaultConfig rather than a bare Config{} literal: recovery.Run
 	// returns immediately when RecoveryEnabled is false (its zero value), which
 	// would make the recovery loop marker below never match anything -
-	// production always runs with the real defaults applied. selfLogLoop has
+	// production always runs with the real defaults applied. RunSelfLogs has
 	// the same shape (returns immediately when SelfLog is nil), so wire in a
 	// real collector too.
 	cfg := DefaultConfig()

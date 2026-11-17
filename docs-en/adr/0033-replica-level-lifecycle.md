@@ -51,3 +51,5 @@ When a PD mode allows an empty prefill role, sleeping all prefill instances is e
   (verified on hardware with vLLM 0.25; a two-node PD decode replica uses the same launch method as a regular multi-node replica). The intent of a command for one replica is written to all of its ranks.
   Followers do not report a sleep level; the ledger uses the reported level of their generation's leader to account for residual usage and wake admission. Partial wake operates at replica granularity.
 - Creation does not accept a list of multi-node replicas; create one first, then add more.
+
+<!-- translation-source-sha256: 82dd17d7efba24387286f0d4dff957a8f63548a38d70a3ca9aff6e8b792a9c60 -->

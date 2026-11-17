@@ -38,3 +38,5 @@ Choose D:
 - Use only `dlopen`: it proves only that a library loads, not the end-to-end semantics of dsmi/HGML quota views, device mounts, environment variables, and driver flags.
 - Put health and resource admission in the backend: the backend would depend on live scheduling state and could not serve as a stable, reusable execution contract.
 - Replace the explicit registry with plugin self-registration: this hides initialization order and the supported scope, making exhaustive contract testing and security audits harder.
+
+<!-- translation-source-sha256: 2a4f3fa4a27e9cc1e8d62ba29540c56bdda9fa971193925a7a2f1885a2852134 -->

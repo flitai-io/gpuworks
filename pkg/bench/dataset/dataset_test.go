@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -135,8 +137,13 @@ func TestBuiltinDatasetLoadFailureDoesNotFallBackToRandom(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := generate()
-			if err == nil || !strings.Contains(err.Error(), LoadErrorCode) {
-				t.Fatalf("error = %v, want explicit %s", err, LoadErrorCode)
+			var loadErr *LoadError
+			if !errors.As(fmt.Errorf("point 1: %w", err), &loadErr) || loadErr.Code() != LoadErrorCode || loadErr.Params()["dataset"] != "multiturn" {
+				t.Fatalf("error = %v, want a *LoadError with %s", err, LoadErrorCode)
+			}
+			// The code is not spelled into the sentence any more.
+			if strings.Contains(err.Error(), LoadErrorCode) || !strings.HasPrefix(err.Error(), "load the built-in multiturn dataset: ") {
+				t.Fatalf("text = %q", err)
 			}
 		})
 	}

@@ -8,6 +8,7 @@ import { useIsAdmin } from "../../components/useIsAdmin";
 import { formatBytes } from "../../format";
 import { nodeDisplayName } from "../../nodeDisplay";
 import type { DebugSession, DebugSessionNode } from "../../diagnosticsApi";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const { Paragraph, Text } = Typography;
 
@@ -95,7 +96,7 @@ export default function DebugSessionCard() {
   return (
     <div id={DIAGNOSTICS_ANCHOR}>
       <Card title={t("diagnostics.debug.title")} extra={open ? <Tag color="processing">{t("diagnostics.debug.collecting")}</Tag> : null}>
-        <Paragraph type="secondary">{t("diagnostics.debug.description")}</Paragraph>
+        <Paragraph type="secondary">{t("diagnostics.debug.description")} <HelpTip content={t("diagnostics.debug.descriptionHelp")} /></Paragraph>
         {state.error && <Alert type="error" showIcon message={apiErrorText(tCommon, state.error)} style={{ marginBottom: 12 }} />}
         {!isAdmin && <Alert type="info" showIcon message={t("diagnostics.adminOnly")} style={{ marginBottom: 12 }} />}
         {session && (

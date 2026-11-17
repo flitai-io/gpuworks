@@ -77,7 +77,8 @@ export function buildTimeSeriesOption(
     leftName,
     rightAxis,
     connectNulls = true,
-  }: { unit?: string; valueFmt?: (v: number) => string; seriesName?: (labels: Record<string, string>, index: number) => string; markLines?: ChartMarkLine[]; yRange?: [number, number]; integer?: boolean; leftName?: string; rightAxis?: RightAxis; connectNulls?: boolean },
+    triggerLineEvent = false,
+  }: { unit?: string; valueFmt?: (v: number) => string; seriesName?: (labels: Record<string, string>, index: number) => string; markLines?: ChartMarkLine[]; yRange?: [number, number]; integer?: boolean; leftName?: string; rightAxis?: RightAxis; connectNulls?: boolean; triggerLineEvent?: boolean },
 ): EChartsOption {
   const legend = visibleSeries.map((entry, index) => seriesName(entry.labels, index));
   // About five time labels whatever the window or width: ECharts' time axis
@@ -138,6 +139,7 @@ export function buildTimeSeriesOption(
       type: "line",
       ...(dualAxis ? { yAxisIndex: onRight[index] ? 1 : 0 } : {}),
       showSymbol: false,
+      triggerLineEvent,
       smooth: false,
       connectNulls,
       emphasis: { focus: "series" },

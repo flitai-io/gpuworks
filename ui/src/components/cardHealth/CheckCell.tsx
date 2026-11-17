@@ -3,11 +3,12 @@ import { Tooltip, theme } from "antd";
 import { useTranslation } from "react-i18next";
 import type { CardHealthCell } from "../../api";
 import { agoText } from "../../format";
-import { checkName, reasonText, stateName } from "./text";
+import { checkName, codeText, statusName } from "./text";
 
 // CheckCell is one check on one card: a coloured square for what it found,
 // grey with an icon for a check that did not run (paused), has not run yet
-// (dots) or whose report is too old to say (clock). Stale is never green.
+// (dots) or whose report is too old to say (clock), and a dashed outline for
+// one that does not apply. Only a pass is green; stale never is.
 export default function CheckCell({
   cell,
   selected,
@@ -24,37 +25,37 @@ export default function CheckCell({
     warn: token.colorWarning,
     fail: token.colorError,
     skip: token.colorFillSecondary,
-    pending: token.colorFillQuaternary,
     na: "transparent",
   };
-  const shown = cell.stale ? "stale" : cell.state;
-  const background = cell.stale ? token.colorFillSecondary : colors[cell.state] ?? token.colorFillSecondary;
-  const icon = cell.stale ? <ClockCircleOutlined /> : cell.state === "skip" ? <PauseOutlined /> : cell.state === "pending" ? <EllipsisOutlined /> : null;
-  const reason = reasonText(t, cell.state, cell.reason);
+  const notRunYet = cell.status === "skip" && cell.code === "CARD_CHECK_NOT_RUN_YET";
+  const shown = cell.stale ? "stale" : cell.status;
+  const background = cell.stale ? token.colorFillSecondary : notRunYet ? token.colorFillQuaternary : colors[cell.status] ?? token.colorFillSecondary;
+  const icon = cell.stale ? <ClockCircleOutlined /> : notRunYet ? <EllipsisOutlined /> : cell.status === "skip" ? <PauseOutlined /> : null;
+  const reason = codeText(t, cell.status, cell.code);
   const ago = cell.checked_at ? agoText(t, (Date.now() - new Date(cell.checked_at).getTime()) / 1000) : "";
-  const label = [checkName(t, cell.check), stateName(t, shown), reason, ago && t("cardHealth.lastChecked", { ago })].filter(Boolean).join(" · ");
+  const label = [checkName(t, cell.check), statusName(t, shown), reason, ago && t("cardHealth.lastChecked", { ago })].filter(Boolean).join(" · ");
   return (
     <Tooltip title={label}>
       <button
         type="button"
         aria-label={label}
         aria-pressed={selected}
-        data-state={shown}
-        disabled={cell.state === "na"}
+        data-status={shown}
+        disabled={cell.status === "na"}
         onClick={onSelect}
         style={{
           width: 24,
           height: 24,
           padding: 0,
           borderRadius: 4,
-          cursor: cell.state === "na" ? "default" : "pointer",
+          cursor: cell.status === "na" ? "default" : "pointer",
           background,
           color: token.colorTextSecondary,
           fontSize: 12,
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          border: cell.state === "na" ? `1px dashed ${token.colorBorder}` : selected ? `2px solid ${token.colorPrimary}` : "1px solid transparent",
+          border: cell.status === "na" ? `1px dashed ${token.colorBorder}` : selected ? `2px solid ${token.colorPrimary}` : "1px solid transparent",
         }}
       >
         {icon}

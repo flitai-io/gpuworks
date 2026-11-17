@@ -9,8 +9,8 @@
 - 节点已接入并上报 GPU（见[接入节点](connect-nodes.md)）。
 - NVIDIA：x86_64、glibc ≥ 2.17，宿主机驱动提供动态库（`libcuda.so.1`、`libnvidia-ml.so.1`）。
 - 昇腾：宿主机的 device-share 权限满足 vcann-rt 的要求，所选推理镜像提供 glibc ≥ 2.33；能接入并整卡运行，不代表宿主机已允许 dGPU 设备共享。
-- PPU：配额语义是显存限额加繁忙时的加权 QoS。20/80 配置表示繁忙时的相对吞吐权重，不是硬 SM 分区。
-- AMD：x86_64、Docker、nerdctl 或 runveil，rocm-slicing-shim（libvrocm.so）做硬显存限额，不支持算力（SM/CU）上限；当前只在 MI300X（gfx942）上实测。
+- PPU：配额语义是显存限额加繁忙时的加权 QoS。20/80 配置表示繁忙时的相对吞吐权重，不是硬 SM 分区。Docker 与 Kubernetes 节点都支持（Kubernetes 上已在 PPU-ZW810E 实测）。
+- AMD：x86_64、Docker、nerdctl、runveil 或 Kubernetes，rocm-slicing-shim（libvrocm.so）做硬显存限额，不支持算力（SM/CU）上限；已在 MI300X、MI325X（gfx942）上实测（MI325X 为 Kubernetes）。
 - 海光 Z100 / K100_AI / BW：实验性，支持 x86_64 上的 Docker 或 runveil/udocker，每实例一张卡；需安装原生 helper、宿主 DTK/HYHAL/DCGM 库并通过逐卡探针。CU 随显存比例分配，不支持独立算力配额；仅报告系列 K100 或其他未适配型号时仍只支持整卡。PRoot 不提供独立 cgroup 或内核只读挂载，不代表敌对程序的安全隔离。详见[海光 Z100 / K100_AI / BW dGPU](../reference/support-matrix.md#海光-z100--k100_ai--bw-dgpu)。
 - 想先走一遍完整流程，见[一张 GPU 跑两个模型](../tutorials/one-gpu-two-models.md)；语义与边界见 [dGPU 是什么、又不是什么](../explanation/dgpu.md)。
 
@@ -22,10 +22,10 @@
 2. 在[部署模型](deploy-models.md)时填写 **dGPU 显存上限**，检查候选节点与显存评估结果，再提交。平台根据节点硬件选择已就绪的后端；NVIDIA 对应 HAMi-core、昇腾对应 vcann-rt、PPU 对应 ppu-slicing-shim、AMD 对应 rocm-slicing-shim、海光 Z100 / K100_AI / BW 对应原生 vdev，无需手动指定。
 3. 实例启动后，回到 **GPU 设备 → dGPU**，确认切片所属部署、节点和显存上限。需要验证两个模型共卡时，按[一张 GPU 跑两个模型](../tutorials/one-gpu-two-models.md)完成调用检查。
 
-能力以页面返回的 `status` 和 `reason` 为准：
+能力以页面返回的 `status` 和原因码 `reason_code` 为准（码与参数见[排障](troubleshooting.md#dgpu-能力-unavailable)）：
 
 - `ready`：运行时、dGPU 资产及该后端要求的逐卡探针条件全部满足，可以创建带配额的实例；NVIDIA 与 AMD 豁免行为探针。
-- `unavailable`：任一条件不满足，`reason` 说明具体原因，例如 agent 版本过旧未上报探针、
+- `unavailable`：任一条件不满足，`reason_code` 说明具体原因，例如 agent 版本过旧未上报探针、
   缺少 dGPU 资产、运行时未验证容器推理、探针尚未完成或探针失败。
 
 | 不可用原因 | 处理 |
@@ -40,6 +40,11 @@
 的结果，不等同于上面的 `status`。
 
 `unavailable` 时改成整卡部署不能作为 dGPU 验证通过的证据。
+
+卡上还有平台外的计算进程时，带显存上限的部署可以按剩余显存与它们共用这张卡，但默认只在你手工选中这张卡时才放上去；
+要让自动放置也使用这类卡，在节点详情「概览」的「放置策略」里打开「允许分区与平台外进程共卡」。即使打开，
+调度也先用没有这类进程的卡。共卡只隔离显存，算力与带宽共享，实例面板会给出共卡提示。详见
+[卡被平台外进程占用](troubleshooting.md#卡被平台外进程占用)。
 
 ## 调整 dGPU 配额
 

@@ -20,3 +20,5 @@ A card's health used to come only from the vendor tool's state fields (ECC count
 
 - Requiring evidence of recovery for event signals keeps a card on a node without a runtime check (no runtime on the host and no inference image on the node to borrow) stopped after a fatal error until the host reboots; an administrator can open it by hand to verify. Better to stop one card too many than to give a card that just had a fatal error to a new deployment a minute later.
 - AER counters are counted from when the agent starts: an agent restart loses the increases before it, and does not take the history since boot as new errors.
+
+<!-- translation-source-sha256: 8df92de8e08e009da35393c77eb14527a9dde33c27ba4efd48cd8bcca1afa48b -->

@@ -53,9 +53,20 @@ func newRestartProbe(err error) *restartProbe {
 func (r *restartProbe) restart() error {
 	r.mu.Lock()
 	r.calls++
+	err := r.err
 	r.mu.Unlock()
 	r.done <- struct{}{}
-	return r.err
+	return err
+}
+
+// setErr changes what the next restart() call returns; a test that wants a
+// restart to fail and then succeed sets this between the two instead of
+// writing the field directly, which would race restart() reading it from
+// another goroutine.
+func (r *restartProbe) setErr(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.err = err
 }
 
 func (r *restartProbe) count() int {

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -27,7 +28,7 @@ func TestReleasedProviderInstanceRowStopsRecoveryWithoutProbing(t *testing.T) {
 		t.Fatal(err)
 	}
 	probeAt := r.now().Add(-11 * time.Minute)
-	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseUnreachable, 6, &probeAt, "offline"); err != nil {
+	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseUnreachable, 6, &probeAt, store.RecoveryError{Message: "offline"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -52,7 +53,7 @@ func TestReleasedProviderInstanceRowStopsRecoveryWithoutProbing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome.Action != "skipped" || outcome.SkippedReason != store.RecoveryStoppedProviderInstanceGone {
+	if outcome.Action != "skipped" || outcome.SkippedCode != messages.RecoverySkippedStopped || outcome.SkippedReason != store.RecoveryStoppedProviderInstanceGone {
 		t.Fatalf("outcome=%+v", outcome)
 	}
 	if providers.calls != 0 || fake.probes.Load() != 0 {

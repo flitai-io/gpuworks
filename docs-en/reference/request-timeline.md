@@ -120,3 +120,5 @@ When the prefill instance is unavailable and decode handles the request alone (`
 - `prefill` is displayed as “First-token recompute”: KV has already been transferred, and decode recomputes only the last prompt token.
 
 Engines do not export per-request KV transfer durations (vLLM's NIXL connector provides only aggregate metrics, and vllm-ascend's Mooncake connector writes only a line in the decode log), so there is no separate phase. Aggregate transfer statistics appear in the PD card on the service monitoring page (see [PD Disaggregated Deployments](../how-to/pd-disaggregation.md#运行中)).
+
+<!-- translation-source-sha256: ab22d664427675989fde76600f9d720254dada5cf1765260c861cf0e6014084c -->

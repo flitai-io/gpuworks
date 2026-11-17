@@ -168,33 +168,27 @@ the pair drifts — `make check-doc-links` verifies links, not that a pair match
 fields and CLI output stay verbatim in both editions.
 
 `make check-translations` (also part of `make test-unit`) checks more than the pairing: every
-`docs-en/` page must match the *reviewed* SHA-256 of its `docs/` source, recorded in
-`docs-site/translations.json`, and must carry the same headings and code blocks. Editing a
-paired page therefore takes three steps, not two:
+`docs-en/` page must match the *reviewed* SHA-256 of its `docs/` source, recorded in a
+`<!-- translation-source-sha256: ... -->` comment at the end of the English page itself, and
+must carry the same headings and code blocks. The marker block never reaches the published
+site. Editing a paired page therefore takes three steps, not two:
 
 1. edit the Chinese page under `docs/`;
 2. edit the English page under `docs-en/`, and review that translation against the change —
    a hash that says "reviewed" when nobody read the English text defeats the check;
-3. record that review by recomputing the source hash, then run the check:
+3. record that review by writing the current source hash into the English page, then run the
+   check:
 
 ```bash
-python3 - <<'PY'
-import hashlib, json, pathlib
-
-page = "how-to/connect-nodes.md"   # path relative to docs/, same key as translations.json
-digest = hashlib.sha256(pathlib.Path("docs", page).read_bytes()).hexdigest()
-
-path = pathlib.Path("docs-site/translations.json")
-data = json.loads(path.read_text())
-data[page] = digest
-path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-PY
+python3 docs-site/check_translations.py --write docs/how-to/connect-nodes.md
 make check-translations
 ```
 
 If a code block legitimately differs between the two editions (translated comments, a localised
-example), record the reviewed pair in `docs-site/localized-code-blocks.json`; otherwise the
-check reports a block that changed without review. A failure on a page your change does not
+example), review it and add `--approve-code-blocks` to the `--write` command: it records a
+`<!-- translation-localized-code-block: <source sha256> <translation sha256> [reason] -->` line
+for every block the English page currently changes and drops approvals that no longer apply.
+Otherwise the check reports a block that changed without review. A failure on a page your change does not
 touch is a pre-existing gap: leave it to whoever owns that page instead of pasting the source
 hash over it.
 

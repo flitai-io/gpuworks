@@ -23,7 +23,7 @@ export function summaryText(t: TFunction<"scheduling">, slice: TimelineSummary, 
 
 /** BoundaryLine is the dashed line where summarizing ends, drawn across a lane. */
 export function BoundaryLine({ x }: { x: number }) {
-  return <line x1={x} x2={x} y1={0} y2={LANE_HEIGHT} stroke={colors.chartSlate} strokeWidth={1.5} strokeDasharray="3 2" vectorEffect="non-scaling-stroke" aria-hidden="true" />;
+  return <line x1={x} x2={x} y1={0} y2={LANE_HEIGHT} stroke={colors.muted} strokeWidth={1.5} strokeDasharray="3 2" vectorEffect="non-scaling-stroke" aria-hidden="true" />;
 }
 
 /** HatchPattern is the stripes drawn over a summarized block; id is the pattern's id in the lane's svg. */

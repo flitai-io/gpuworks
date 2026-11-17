@@ -221,7 +221,7 @@ func (a *apiHandlers) nodeTokenizerFileExists(ctx context.Context, nodeUUID, pat
 	defer cancel()
 	raw, err := a.d.CallNode(statCtx, nodeUUID, proto.RPCFSStat, proto.FSStatParams{Path: path})
 	if err != nil {
-		return strings.Contains(strings.ToLower(err.Error()), "unknown rpc method: "+proto.RPCFSStat)
+		return errors.Is(err, proto.ErrRPCUnknownMethod)
 	}
 	var stat proto.FSStatResult
 	if err := json.Unmarshal(raw, &stat); err != nil {

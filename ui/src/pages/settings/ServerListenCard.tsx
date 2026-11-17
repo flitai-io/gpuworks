@@ -3,6 +3,7 @@ import { Alert, Button, Card, Collapse, Form, Input, Space, Tag, Typography, mes
 import { useTranslation } from "react-i18next";
 import { api, type ServerListen } from "../../api";
 import { apiErrorText } from "../../apiError";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const { Text } = Typography;
 
@@ -111,7 +112,7 @@ export default function ServerListenCard() {
       extra={<Button type="primary" loading={saving} disabled={!editable} onClick={() => void save()}>{t("common.save")}</Button>}
     >
       <Space direction="vertical" size={12} style={{ width: "100%", maxWidth: 860 }}>
-        <Text type="secondary">{t("listen.description")}</Text>
+        <Text type="secondary">{t("listen.description")} <HelpTip content={t("listen.descriptionHelp")} /></Text>
         {loadError && <Alert type="error" showIcon message={loadError} />}
         {listen && !listen.editable && (
           <Alert type="info" showIcon message={listen.overridden ? t("listen.overridden") : t("listen.noConfig")} />

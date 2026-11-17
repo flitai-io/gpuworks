@@ -26,7 +26,7 @@
     "checks": [
       {
         "id": "model-record:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -46,7 +46,7 @@
       },
       {
         "id": "model-source:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -66,7 +66,7 @@
       },
       {
         "id": "model-metadata:1:0:0",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -101,6 +101,11 @@
     "127.0.0.1",
     "--port",
     "30000",
+    "--served-model-name",
+    "/model",
+    "--enable-priority-scheduling",
+    "--default-priority-value",
+    "0",
     "--log-level",
     "info",
     "--enable-metrics",
@@ -121,6 +126,11 @@
     "127.0.0.1",
     "--port",
     "30000",
+    "--served-model-name",
+    "/model",
+    "--enable-priority-scheduling",
+    "--default-priority-value",
+    "0",
     "--log-level",
     "info",
     "--enable-metrics",
@@ -164,6 +174,11 @@
         "127.0.0.1",
         "--port",
         "30000",
+        "--served-model-name",
+        "/model",
+        "--enable-priority-scheduling",
+        "--default-priority-value",
+        "0",
         "--log-level",
         "info",
         "--enable-metrics",
@@ -184,6 +199,11 @@
         "127.0.0.1",
         "--port",
         "30000",
+        "--served-model-name",
+        "/model",
+        "--enable-priority-scheduling",
+        "--default-priority-value",
+        "0",
         "--log-level",
         "info",
         "--enable-metrics",
@@ -441,5 +461,9 @@
   "yield_policy_eligible": {
     "ok": false,
     "reason": "SLEEP_NOT_ENABLED"
+  },
+  "health_checkable": false,
+  "priority_scheduling": {
+    "ok": true
   }
 }

@@ -83,3 +83,5 @@ Private files retain their own 0600 permissions.
 - The web terminal is subject to a kill switch, concurrency limits, idle timeouts, and audit policies.
 
 For security model tradeoffs (reliance on reverse proxy TLS, token visibility in target processes, and trust boundaries), see [Security Model](../explanation/security-model.md). Production deployments should also back up the database and master key, and rotate the admin password/API key.
+
+<!-- translation-source-sha256: d87eff96b106525214b2d6a0ab4e2b6f711e6afcc2424bc80b215ae1c552b25c -->

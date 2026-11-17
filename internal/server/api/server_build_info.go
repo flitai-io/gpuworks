@@ -23,7 +23,26 @@ func (a *apiHandlers) agentUpgradeBuildInfo(target string) dto.ServerBuildInfo {
 	if err != nil {
 		fetched = nil
 	}
-	return serverBuildInfo(target, fetched)
+	return a.runningBuildInfo(target, fetched)
+}
+
+// The selected channel describes upgrade candidates. Switching it cannot
+// change the identity already verified for this running process.
+func (a *apiHandlers) runningBuildInfo(target string, fetched *distribution.Fetched) dto.ServerBuildInfo {
+	info := serverBuildInfo(target, fetched)
+	if target != version.Version || fetched == nil {
+		return info
+	}
+	if fetched.Index.Channel == version.Channel {
+		if info.PublishedVersion == "" {
+			a.verifiedRunningBuild.Store(nil)
+		} else {
+			a.verifiedRunningBuild.Store(&info)
+		}
+	} else if prior := a.verifiedRunningBuild.Load(); prior != nil && prior.Version == target && prior.Commit == info.Commit {
+		return *prior
+	}
+	return info
 }
 
 func serverBuildInfo(target string, fetched *distribution.Fetched) dto.ServerBuildInfo {
@@ -47,13 +66,16 @@ func serverBuildInfo(target string, fetched *distribution.Fetched) dto.ServerBui
 	if fetched == nil || buildErr != nil || built.IsZero() || !fullBuildCommit.MatchString(version.Commit) {
 		return info
 	}
-	release := fetched.Index.Server
+	release, found := fetched.Index.FindServer(target)
+	if !found {
+		return info
+	}
 	publishedBuild, err := time.Parse(time.RFC3339, release.BuiltAt)
 	if release.ReleaseID != target || !strings.EqualFold(release.Commit, version.Commit) || err != nil || !built.Equal(publishedBuild) {
 		return info
 	}
 	info.PublishedVersion = release.ReleaseID
-	if !fetched.Index.PublishedAt.IsZero() {
+	if release.ReleaseID == fetched.Index.Server.ReleaseID && !fetched.Index.PublishedAt.IsZero() {
 		info.PublishedAt = fetched.Index.PublishedAt.UTC().Format(time.RFC3339Nano)
 	}
 	switch fetched.Index.Channel {

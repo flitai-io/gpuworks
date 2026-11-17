@@ -65,7 +65,7 @@ func TestPeerMemoryChecksWarnWithTheFix(t *testing.T) {
 	round := checkRound{}
 	n.peerMemoryChecks(gpus, now, round)
 	got, ok := round[accelerator.CardIdent("GPU-a", "0000:01:00.0")][accelerator.CheckPeerMemory]
-	if !ok || got.state != accelerator.CheckWarn || got.reason != accelerator.CheckReasonPeerMemoryMissing {
+	if !ok || got.status != proto.CheckWarn || got.code != proto.DoctorPeerMemoryMissing {
 		t.Fatalf("missing module: %+v", got)
 	}
 	fields := map[string]string{}
@@ -82,7 +82,7 @@ func TestPeerMemoryChecksWarnWithTheFix(t *testing.T) {
 	peerMemoryRoot = fakeSys(t, []string{"mlx5_0"}, []string{"alixpu_peermem"})
 	round = checkRound{}
 	n.peerMemoryChecks(gpus, now, round)
-	if got := round[accelerator.CardIdent("GPU-a", "0000:01:00.0")][accelerator.CheckPeerMemory]; got.state != accelerator.CheckPass {
+	if got := round[accelerator.CardIdent("GPU-a", "0000:01:00.0")][accelerator.CheckPeerMemory]; got.status != proto.CheckPass {
 		t.Fatalf("loaded module: %+v", got)
 	}
 
@@ -112,7 +112,7 @@ func TestDoctorPeerMemory(t *testing.T) {
 	for _, e := range f.Evidence {
 		fields[e.Name] = e.Value
 	}
-	if f.Code != proto.DoctorPeerMemoryMissing || f.Level != proto.DoctorLevelWarning || fields["module"] != "alixpu_peermem" ||
+	if f.Code != proto.DoctorPeerMemoryMissing || f.Status != proto.CheckWarn || fields["module"] != "alixpu_peermem" ||
 		fields["fix"] != accelerator.PeerMemoryFix(accelerator.VendorPPU) || f.Recheck != "lsmod | grep alixpu_peermem" {
 		t.Fatalf("finding = %+v", f)
 	}

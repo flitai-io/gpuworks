@@ -228,6 +228,10 @@ func TestAnalyticsRoutes(t *testing.T) {
 	if code, _ := call("/api/v1/analytics/usage?from=1&to=2&key=none", viewer); code != http.StatusOK || !fake.queries[1].Keyless {
 		t.Fatalf("keyless = %d %+v", code, fake.queries[1])
 	}
+	if code, _ := call("/api/v1/analytics/usage?from=1&to=2&source=evaluation", viewer); code != http.StatusOK || fake.queries[2].Source != "evaluation" {
+		t.Fatalf("evaluation source = %d %+v", code, fake.queries[2])
+	}
+	fake.queries = fake.queries[:2]
 	if code, _ := call("/api/v1/analytics/gpus?from=1&to=2&group_by=node&metric=temp&model=RTX", viewer); code != http.StatusOK {
 		t.Fatalf("gpus = %d", code)
 	}

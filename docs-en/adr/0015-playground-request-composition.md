@@ -37,3 +37,5 @@ Three consumers share the same assembly logic: the Playground, the example code 
 - Security: expert mode does not relax the proxy allowlist; only read-only discovery routes are added. External models (LLMs in Settings) still support chat only.
 - Tests: `inferenceapi` validation and example snapshots; proxy allowlisting of discovery routes and rejection of non-GET requests; literal JSON round-trip for DTOs; RTL coverage of entry routes, declarative inputs rendering, discovery degradation, and unchanged raw-mode submission; template-probe L3 assembly.
 - Follow-up: initially store per-user presets in localStorage. “Save as inference template” writes the current expert request back to `request_defaults` in a user-source spec, feeding expert usage back into the catalog.
+
+<!-- translation-source-sha256: 37fbba5252f46ac7beca005130388b02a9fd63754b63eb8fd8a954e114b7d0fc -->

@@ -180,8 +180,11 @@ func TestMonitorOverviewNilServiceReturnsEmptyShape(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Services == nil || got.Signals == nil || got.VRAMByNode == nil || got.Events == nil {
+	if got.Services == nil || got.Signals == nil || got.StateCounts == nil || got.VRAMByNode == nil || got.Events == nil {
 		t.Fatalf("nil-Monitor overview must still carry empty (non-nil) lists: %+v", got)
+	}
+	if !strings.Contains(rec.Body.String(), `"state_counts":[]`) {
+		t.Fatalf("nil-Monitor overview body = %s, want \"state_counts\":[]", rec.Body.String())
 	}
 }
 

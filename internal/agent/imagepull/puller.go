@@ -58,12 +58,11 @@ type DiskSpaceError struct{ Err error }
 func (e *DiskSpaceError) Error() string { return "insufficient disk space: " + e.Err.Error() }
 func (e *DiskSpaceError) Unwrap() error { return e.Err }
 
+// diskSpaceFailure reports a pull that ran the node out of disk. The runtime
+// drivers mark it where the runtime ran (runtime.ErrNoSpace); a write this
+// agent made itself fails with ENOSPC.
 func diskSpaceFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "no space left on device") || strings.Contains(message, "insufficient disk space")
+	return err != nil && (errors.Is(err, runtime.ErrNoSpace) || runtime.DiskFull(err))
 }
 
 // Config wires a Puller to the node. Every field is optional.
@@ -401,14 +400,5 @@ func nodeProxy(cfg proto.NetworkConfig) string {
 // cooling it would push a working registry behind slower ones for every
 // other image.
 func registryAnswered(err error) bool {
-	text := strings.ToLower(err.Error())
-	for _, answer := range []string{
-		"not found", "manifest unknown", "name unknown", "was deleted or has expired",
-		"unauthorized", "authentication required", "denied", "forbidden",
-	} {
-		if strings.Contains(text, answer) {
-			return true
-		}
-	}
-	return false
+	return errors.Is(err, runtime.ErrRegistryRefused)
 }

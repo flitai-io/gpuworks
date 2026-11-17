@@ -36,3 +36,5 @@ Item 1's “the user picks one GPU node pool to connect, and the node selector i
 - Not storing the kubeconfig costs one extra cloud API call per operation, and the cloud account must have permission to issue cluster credentials (ACK also requires the sub-account to have permissions in the cluster's RBAC).
 - There is no “automatic sync” or background reconciliation: cluster changes (node pool scaling) are followed by the DaemonSet itself, so the server does not need a standing connection.
 - client-go is not introduced: the manifest has only nine kinds of objects, a minimal REST client is enough, and it matches the agent side (item 4 of ADR 0052).
+
+<!-- translation-source-sha256: e8be4715b60825361afbb4ef4857b31d1483e5c87ef65e4fc269a6c2143153de -->

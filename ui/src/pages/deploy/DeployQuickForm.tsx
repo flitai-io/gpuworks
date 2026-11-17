@@ -444,6 +444,7 @@ export default function DeployQuickForm({
         kvDiskSpec={kvDiskSpec}
         kvDiskCompanionSpecs={kvDiskCompanionSpecs}
         manualCommand={manualCommand}
+        backends={profile?.kv_backends}
       />
 
       <div className="deploy-workbench-row">

@@ -54,3 +54,5 @@ digest, the node rejects it before pulling.
 - Each spec in the template DTO (`GET /inference-templates*`) gains an optional `image_sources`. Evaluation's `acquisition.image.providers` puts template sources first,
   with `reason` set to `image source declared by the inference template`.
 - Sources are retained with the spec when exporting or cloning a template; the deployment page requires no new controls.
+
+<!-- translation-source-sha256: bea43beeede04311d23205053818813993a7f1777a1a06b61af954edb196acee -->

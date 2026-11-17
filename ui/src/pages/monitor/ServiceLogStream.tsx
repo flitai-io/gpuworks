@@ -1,3 +1,4 @@
+import { logColors, logSurfaceStyle, logEventStyle, logReplicaColors } from "../../theme/terminalTheme";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Alert, Button, Skeleton, Space, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
@@ -31,6 +32,7 @@ interface FetchWindow {
 interface ReplicaInfo {
   uuid: string;
   color: string;
+  logColor: string;
 }
 
 function shortId(uuid: string): string {
@@ -150,7 +152,7 @@ export default function ServiceLogStream({ logInstances, range }: { logInstances
 
   const replicaByShort = useMemo(() => {
     const map = new Map<string, ReplicaInfo>();
-    logInstances.forEach((uuid, index) => map.set(shortId(uuid), { uuid, color: PALETTE[index % PALETTE.length] }));
+    logInstances.forEach((uuid, index) => map.set(shortId(uuid), { uuid, color: PALETTE[index % PALETTE.length], logColor: logReplicaColors[index % logReplicaColors.length] }));
     return map;
   }, [key]);
 
@@ -239,15 +241,12 @@ export default function ServiceLogStream({ logInstances, range }: { logInstances
       ) : (
         <pre
           style={{
-            background: "#0d1117",
-            color: "#e6edf3",
+            ...logSurfaceStyle,
             padding: 12,
             borderRadius: 2,
             margin: 0,
             height: 320,
             overflowY: "auto",
-            fontFamily: "monospace",
-            fontSize: 12,
             tabSize: 4,
           }}
         >
@@ -283,8 +282,8 @@ function lineKey(entry: TimelineLine, index: number): string {
 
 function levelStyle(level: string | undefined): React.CSSProperties | undefined {
   switch (level) {
-    case "warn": return { color: colors.warningText };
-    case "error": return { color: colors.dangerText };
+    case "warn": return { color: logColors.warning };
+    case "error": return { color: logColors.error };
     default: return undefined;
   }
 }
@@ -350,7 +349,7 @@ function LogLine({
   const replica = prefix ? replicaByShort.get(prefix) : undefined;
   return (
     <LineRow textStyle={levelStyle(level)} uuid={replica?.uuid} fetchWindow={fetchWindow} linkLabel={linkLabel}>
-      {prefix && <span style={{ color: replica?.color, marginRight: 6 }}>[{prefix}]</span>}
+      {prefix && <span style={{ color: replica?.logColor, marginRight: 6 }}>[{prefix}]</span>}
       {ansiToSegments(rest).map((segment, index) => (
         <span key={index} style={segment.style}>{segment.text}</span>
       ))}
@@ -370,12 +369,12 @@ function SystemLine({
   linkLabel: (replica: string) => string;
 }) {
   const id = shortId(event.replicaUuid);
-  const color = replicaByShort.get(id)?.color;
+  const color = replicaByShort.get(id)?.logColor;
   const text = instanceEventText(t, tCommon, event);
   const summary = phaseSummaryText(event, t);
   return (
     <LineRow
-      textStyle={{ background: "#1c2333", color: colors.chartTeal, borderRadius: 2, padding: "0 4px" }}
+      textStyle={logEventStyle}
       uuid={event.replicaUuid}
       fetchWindow={fetchWindow}
       linkLabel={linkLabel}

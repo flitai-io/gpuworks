@@ -26,13 +26,13 @@ func TestInstallDirTraversalBlockedByPrivateAncestor(t *testing.T) {
 	dir := realTempDir(t)
 	private := filepath.Dir(dir)
 	out := probeScenario(t, blockedScenario(dir), dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "error",
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "fail",
 		private+" (mode 700, owner 0:0)", "udocker, uid 1001", "permission denied",
 		"chmod o+x "+private, "choose an install directory outside it, such as /opt/gpuworks")
 	if !out.Untraversable || out.Noexec {
 		t.Fatalf("outcome = %+v", out)
 	}
-	wantCheck(t, out.Checks, checkInstallDirOwnership, "ok")
+	wantCheck(t, out.Checks, CheckIDInstallDirOwnership, "pass")
 	if !errors.Is(out.blockingError(), ErrInstallDirUntraversable) || !strings.Contains(out.blockingError().Error(), "chmod o+x "+private) {
 		t.Fatalf("blocking error = %v", out.blockingError())
 	}
@@ -49,22 +49,22 @@ func TestInstallDirTraversalVerdictTable(t *testing.T) {
 		blocks  bool
 		detail  string
 	}{
-		{name: "nothing else answers: runveil is the pick", status: "error", blocks: true},
-		{name: "explicit udocker", runtime: "udocker", status: "error", blocks: true},
-		{name: "explicit auto", runtime: "auto", status: "error", blocks: true},
-		{name: "explicit udocker beats a docker that answers", runtime: "udocker", mutate: func(s *dirScenario) { s.docker = true }, status: "error", blocks: true},
-		{name: "explicit udocker beats a nerdctl that answers", runtime: "udocker", mutate: func(s *dirScenario) { s.nerdctl = true }, status: "error", blocks: true},
+		{name: "nothing else answers: runveil is the pick", status: "fail", blocks: true},
+		{name: "explicit udocker", runtime: "udocker", status: "fail", blocks: true},
+		{name: "explicit auto", runtime: "auto", status: "fail", blocks: true},
+		{name: "explicit udocker beats a docker that answers", runtime: "udocker", mutate: func(s *dirScenario) { s.docker = true }, status: "fail", blocks: true},
+		{name: "explicit udocker beats a nerdctl that answers", runtime: "udocker", mutate: func(s *dirScenario) { s.nerdctl = true }, status: "fail", blocks: true},
 		{name: "docker answers", mutate: func(s *dirScenario) { s.docker = true }, status: "warn", detail: "this node has docker"},
 		{name: "nerdctl answers without docker (Ascend k8s node)", mutate: func(s *dirScenario) { s.nerdctl = true }, status: "warn", detail: "this node has nerdctl"},
 		{name: "docker and nerdctl answer", mutate: func(s *dirScenario) { s.docker, s.nerdctl = true, true }, status: "warn", detail: "this node has docker"},
 		{name: "explicit docker", runtime: "docker", status: "warn", detail: "selects the docker runtime"},
 		{name: "explicit nerdctl", runtime: "nerdctl", status: "warn", detail: "selects the nerdctl runtime"},
-		{name: "the filesystem refuses chown: workloads run as the agent", mutate: func(s *dirScenario) { s.chownErr = true }, status: "ok", detail: "not needed: workloads run as the agent's own user"},
-		{name: "account missing but useradd can create it", mutate: func(s *dirScenario) { s.runtimeID = "" }, status: "error", blocks: true, detail: "created at install"},
+		{name: "the filesystem refuses chown: workloads run as the agent", mutate: func(s *dirScenario) { s.chownErr = true }, status: "na", detail: "not needed: workloads run as the agent's own user"},
+		{name: "account missing but useradd can create it", mutate: func(s *dirScenario) { s.runtimeID = "" }, status: "fail", blocks: true, detail: "created at install"},
 		{name: "account missing and no useradd: the fallback to the agent's user", mutate: func(s *dirScenario) { s.runtimeID, s.useradd = "", false }, status: "warn", detail: "no useradd"},
 		{name: "unsupported architecture has no runveil", mutate: func(s *dirScenario) { s.arch = "riscv64" }, status: "warn", detail: "does not support the riscv64 architecture"},
-		{name: "arm64 has the embedded PRoot", mutate: func(s *dirScenario) { s.arch = "aarch64" }, status: "error", blocks: true},
-		{name: "not root and no sudo: the agent runs as that user", mutate: func(s *dirScenario) { s.uid, s.user, s.useradd = "1000", "ubuntu", false }, status: "ok", detail: "ubuntu is not root"},
+		{name: "arm64 has the embedded PRoot", mutate: func(s *dirScenario) { s.arch = "aarch64" }, status: "fail", blocks: true},
+		{name: "not root and no sudo: the agent runs as that user", mutate: func(s *dirScenario) { s.uid, s.user, s.useradd = "1000", "ubuntu", false }, status: "na", detail: "ubuntu is not root"},
 		// Under systemd the unit runs as root, under nohup the script starts
 		// the agent as the SSH user: the probe cannot tell which this host gets.
 		{name: "passwordless sudo: root only under systemd, so not certain", mutate: func(s *dirScenario) { s.uid, s.user, s.sudo = "1000", "ubuntu", true }, status: "warn", detail: "a nohup install runs as ubuntu"},
@@ -78,15 +78,15 @@ func TestInstallDirTraversalVerdictTable(t *testing.T) {
 			}
 			sc.aclDir = strings.ReplaceAll(sc.aclDir, "%ANCESTOR%", filepath.Dir(dir))
 			out := probeScenarioRuntime(t, sc, dir, dir, "vm", tc.runtime)
-			c := checkByName(t, out.Checks, checkInstallDirTraversal)
+			c := checkByName(t, out.Checks, CheckIDInstallDirTraversal)
 			if c.Status != tc.status || out.Untraversable != tc.blocks {
-				t.Fatalf("status %s, blocks %v; want %s, %v: %s", c.Status, out.Untraversable, tc.status, tc.blocks, c.Detail)
+				t.Fatalf("status %s, blocks %v; want %s, %v: %s", c.Status, out.Untraversable, tc.status, tc.blocks, c.text())
 			}
-			if tc.detail != "" && !strings.Contains(c.Detail, tc.detail) {
-				t.Fatalf("detail lacks %q: %s", tc.detail, c.Detail)
+			if tc.detail != "" && !strings.Contains(c.text(), tc.detail) {
+				t.Fatalf("detail lacks %q: %s", tc.detail, c.text())
 			}
-			if tc.status == "warn" && !strings.Contains(c.Detail, "not stopping the install") {
-				t.Fatalf("a warning must say why it does not stop the install: %s", c.Detail)
+			if tc.status == "warn" && !strings.Contains(c.text(), "not stopping the install") {
+				t.Fatalf("a warning must say why it does not stop the install: %s", c.text())
 			}
 			if (out.blockingError() != nil) != tc.blocks {
 				t.Fatalf("blocking error = %v", out.blockingError())
@@ -101,7 +101,7 @@ func TestInstallDirTraversalVerdictOnFactsTheProbeCouldNotEstablish(t *testing.T
 		requested: "/root/gpuworks", uid: "0", user: "root", chown: "ok", ancestors: "blocked", runtimeUID: "1001",
 		ancestorDir: "/root", ancestorMode: "700", ancestorUID: "0", ancestorGID: "0", ancestorACL: "no", arch: "x86_64",
 	}
-	if v := installDirTraversalVerdict(base); !v.blocks || v.status != "error" {
+	if v := installDirTraversalVerdict(base); !v.blocks || v.status != "fail" {
 		t.Fatalf("complete chain = %+v", v)
 	}
 	untested := base
@@ -128,12 +128,12 @@ func TestInstallDirTraversalVerdictOnFactsTheProbeCouldNotEstablish(t *testing.T
 	}
 	unreadable := base
 	unreadable.ancestors = "unknown"
-	if v := installDirTraversalVerdict(unreadable); v.blocks || v.status != "ok" || !strings.Contains(v.detail, "not checked") {
+	if v := installDirTraversalVerdict(unreadable); v.blocks || v.status != "skip" || !strings.Contains(v.detail, "not checked") {
 		t.Fatalf("unreadable = %+v", v)
 	}
 	mac := base
 	mac.mac = true
-	if v := installDirTraversalVerdict(mac); v.blocks || v.status != "ok" {
+	if v := installDirTraversalVerdict(mac); v.blocks || v.status != "na" {
 		t.Fatalf("mac = %+v", v)
 	}
 }
@@ -146,12 +146,12 @@ func TestInstallSSHStopsBeforeUploadOnUntraversableInstallDirectory(t *testing.T
 	if !errors.Is(run.err, ErrInstallDirUntraversable) {
 		t.Fatalf("install error = %v", run.err)
 	}
-	for _, want := range []string{"Install directory path access", "chmod o+x " + filepath.Dir(dir), "permission denied"} {
+	for _, want := range []string{"install directory path access", "chmod o+x " + filepath.Dir(dir), "permission denied"} {
 		if !strings.Contains(run.err.Error(), want) {
 			t.Fatalf("install error lacks %q: %v", want, run.err)
 		}
 	}
-	wantCheck(t, run.report.Checks, checkInstallDirTraversal, "error", filepath.Dir(dir))
+	wantCheck(t, run.report.Checks, CheckIDInstallDirTraversal, "fail", filepath.Dir(dir))
 	assertStoppedAtTheProbe(t, run)
 }
 
@@ -195,7 +195,7 @@ func TestInstallSSHGoesOnWhenTheRuntimeIsNotCertain(t *testing.T) {
 func TestPrecheckReportsTheSameVerdictAsTheInstall(t *testing.T) {
 	dir := realTempDir(t)
 	out := probeScenarioRuntime(t, blockedScenario(dir), dir, dir, "vm", "udocker")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "error")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "fail")
 }
 
 func TestInstallDirTraversalQuotesAnAwkwardDirectoryInTheFix(t *testing.T) {
@@ -203,7 +203,7 @@ func TestInstallDirTraversalQuotesAnAwkwardDirectoryInTheFix(t *testing.T) {
 		requested: "/home/my user/gpuworks", uid: "0", chown: "ok", ancestors: "blocked", ancestorDir: "/home/my user",
 		ancestorMode: "700", ancestorUID: "1000", ancestorGID: "1000", ancestorACL: "no", runtimeUID: "1001", arch: "x86_64",
 	})
-	if v.status != "error" || !strings.Contains(v.detail, "`chmod o+x '/home/my user'`") {
+	if v.status != "fail" || !strings.Contains(v.detail, "`chmod o+x '/home/my user'`") {
 		t.Fatalf("verdict = %+v", v)
 	}
 }
@@ -235,9 +235,9 @@ func TestInstallDirTraversalPicksTheClassTheKernelPicks(t *testing.T) {
 			sc.modes = map[string]string{filepath.Dir(dir): tc.mode}
 			out := probeScenario(t, sc, dir, dir, "vm")
 			if tc.blocked {
-				wantCheck(t, out.Checks, checkInstallDirTraversal, "error", "mode "+strings.Fields(tc.mode)[0])
+				wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "fail", "mode "+strings.Fields(tc.mode)[0])
 			} else {
-				wantCheck(t, out.Checks, checkInstallDirTraversal, "ok", "can be searched")
+				wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "pass", "can be searched")
 			}
 		})
 	}
@@ -252,13 +252,13 @@ func TestInstallDirTraversalNamesTheNearestClosedAncestor(t *testing.T) {
 	sc := blockedScenario(dir)
 	sc.modes = map[string]string{grand: "700 0 0", parent: "750 0 0"}
 	out := probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "error", parent+" (mode 750")
-	if strings.Contains(checkByName(t, out.Checks, checkInstallDirTraversal).Detail, grand+" (mode") {
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "fail", parent+" (mode 750")
+	if strings.Contains(checkByName(t, out.Checks, CheckIDInstallDirTraversal).text(), grand+" (mode") {
 		t.Fatalf("reported the farther directory: %+v", out.Checks)
 	}
 	sc.modes = map[string]string{grand: "700 0 0", parent: "755 0 0"}
 	out = probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "error", grand+" (mode 700")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "fail", grand+" (mode 700")
 }
 
 // The install directory itself is the installer's: it opens it (0711), so its
@@ -268,7 +268,7 @@ func TestInstallDirTraversalDoesNotJudgeTheInstallDirectoryItself(t *testing.T) 
 	sc := blockedScenario(dir)
 	sc.modes = map[string]string{dir: "700 0 0"}
 	out := probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "ok", "can be searched")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "pass", "can be searched")
 	if out.Untraversable {
 		t.Fatal("the install directory's own mode stopped the install")
 	}
@@ -282,7 +282,7 @@ func TestInstallDirTraversalOfADirectoryNotCreatedYet(t *testing.T) {
 	sc := blockedScenario(parent)
 	sc.modes = map[string]string{parent: "700 0 0"}
 	out := probeScenario(t, sc, parent, requested, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "error", parent+" (mode 700", "chmod o+x "+parent)
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "fail", parent+" (mode 700", "chmod o+x "+parent)
 }
 
 // Passwordless sudo makes the agent root, and stat runs with its privileges
@@ -292,7 +292,7 @@ func TestInstallDirTraversalNotNeededWithoutRoot(t *testing.T) {
 	sc := blockedScenario(dir)
 	sc.uid, sc.user = "1000", "ubuntu"
 	out := probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "ok", "not needed", "ubuntu is not root")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "na", "not needed", "ubuntu is not root")
 }
 
 // A stat that fails says nothing about the node: reported as not checked, not
@@ -302,7 +302,7 @@ func TestInstallDirTraversalUnreadableAncestorIsNotAVerdict(t *testing.T) {
 	sc := blockedScenario(dir)
 	sc.modes = map[string]string{filepath.Dir(dir): "unreadable"}
 	out := probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "ok", "not checked", "could not be read")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "skip", "not checked", "could not be read")
 	if out.Untraversable {
 		t.Fatal("an unreadable ancestor stopped the install")
 	}
@@ -310,7 +310,7 @@ func TestInstallDirTraversalUnreadableAncestorIsNotAVerdict(t *testing.T) {
 
 func TestInstallDirTraversalNotNeededOnAMac(t *testing.T) {
 	c := installDirTraversalCheck(installDirFacts{mac: true, ancestors: "blocked", ancestorDir: "/Users/x"})
-	if c.Status != "ok" || !strings.Contains(c.Detail, "not needed on a Mac") {
+	if c.Status != "na" || !strings.Contains(c.text(), "not needed on a Mac") {
 		t.Fatalf("check = %+v", c)
 	}
 }
@@ -333,10 +333,10 @@ func TestInstallDirTraversalCountsSupplementaryGroups(t *testing.T) {
 	sc := blockedScenario(dir)
 	sc.modes = map[string]string{filepath.Dir(dir): "710 0 44"}
 	out := probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "error", "mode 710")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "fail", "mode 710")
 	sc.groups = "1001 44 109"
 	out = probeScenario(t, sc, dir, dir, "vm")
-	wantCheck(t, out.Checks, checkInstallDirTraversal, "ok", "can be searched")
+	wantCheck(t, out.Checks, CheckIDInstallDirTraversal, "pass", "can be searched")
 	if out.Untraversable {
 		t.Fatal("a directory the user reaches through a supplementary group stopped the install")
 	}
@@ -374,5 +374,5 @@ func TestInstallSSHKeepsReinstallingAnAgentUnderAClosedAncestor(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "agent binary is not available") {
 		t.Fatalf("install error = %v", err)
 	}
-	wantCheck(t, report.Checks, checkInstallDirTraversal, "warn", "not stopping the reinstall")
+	wantCheck(t, report.Checks, CheckIDInstallDirTraversal, "warn", "not stopping the reinstall")
 }

@@ -45,3 +45,5 @@ see [ADR 0037](../adr/0037-playground-html-preview-isolation.md).
 Web terminals are subject to concurrency, idle, and kill-switch policies and generate audit records. The instance contract restricts the OpenAI
 paths an instance exposes. Sleeping instances return 503 instead of sending requests to stale ports. Logs and external commands are redacted, but release acceptance still needs to
 record digests and summaries of commands and environments so that results can be reproduced without exposing secrets.
+
+<!-- translation-source-sha256: 29bc9abf840125835b5fe3009311a2b8ef6baa4715766765bb13fb1bc90f3efe -->

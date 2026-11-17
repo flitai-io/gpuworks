@@ -60,7 +60,17 @@ export type ResourceColumn<T> = Omit<ColumnType<T>, "key" | "width" | "fixed" | 
   sortValue?: (row: T) => SortValue;
   /** The list is sorted by the server under this column's key. */
   serverSort?: boolean;
+  /** false: the owner shows this column's filter itself (a pressed shortcut), so the toolbar lists no chip for it. */
+  filterChip?: boolean;
 };
+
+/** A filter the owner applies outside the columns (a narrowing from elsewhere on the page), listed beside the column filters. */
+export interface ToolbarFilter {
+  key: string;
+  name: string;
+  value: string;
+  onClear: () => void;
+}
 
 export interface ServerSort {
   key: string;
@@ -82,17 +92,25 @@ export function compareSortValues(a: SortValue, b: SortValue): number {
 
 
 const EMPTY_ROWS: never[] = [];
+const EMPTY_FILTERS: ToolbarFilter[] = [];
 export default function ResourceTable<T extends object>({ tableId, columns, data, rowKey, loading, error, onRefresh, updatedAt,
-  toolbar, toolbarExtra, pagination, sort, onSortChange, onFiltersChange, rowSelection, expandable, onRow,
-  emptyDescription, emptyKind = "data", emptyAction, columnSettings = true,
+  toolbar, toolbarExtra, pagination, sort, onSortChange, onFiltersChange, onFilterStateChange, rowSelection, expandable, onRow,
+  emptyDescription, emptyKind = "data", emptyAction, filteredEmptyDescription, columnSettings = true, extraFilters = EMPTY_FILTERS,
 }: {
   tableId: string; columns: ResourceColumn<T>[]; data?: T[]; rowKey: TableProps<T>["rowKey"];
   loading?: boolean; error?: Error | null; onRefresh?: () => void; updatedAt?: Date | null;
   toolbar?: ReactNode; toolbarExtra?: ReactNode; pagination?: TablePaginationConfig | false;
   sort?: ServerSort | null; onSortChange?: (sort: ServerSort | null) => void;
   onFiltersChange?: (filters: Record<string, string[]>) => void;
+  /** Observe local filters without opting into server-side filtering. */
+  onFilterStateChange?: (filters: Record<string, string[]>) => void;
   rowSelection?: TableProps<T>["rowSelection"]; expandable?: TableProps<T>["expandable"]; onRow?: TableProps<T>["onRow"];
-  emptyDescription?: string; emptyKind?: EmptyStateKind; emptyAction?: ReactNode; columnSettings?: boolean;
+  emptyDescription?: string; emptyKind?: EmptyStateKind; emptyAction?: ReactNode;
+  /** What an empty list says when column filters are in effect: nothing matches them, with a way to clear them. A list
+   *  without it keeps emptyDescription, which its owner may already word for filtering. */
+  filteredEmptyDescription?: string; columnSettings?: boolean;
+  /** Filters set outside the columns, applied by the owner to data: listed and cleared with the column filters. */
+  extraFilters?: ToolbarFilter[];
 }) {
   const { t } = useTranslation("common");
   const rows = data ?? EMPTY_ROWS;
@@ -165,7 +183,9 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
       const next = typeof updater === "function" ? updater(allFilters) : updater;
       setFilters(next);
       if (!pagination) setLocalPage((current) => ({ ...current, pageIndex: 0 }));
-      onFiltersChange?.(Object.fromEntries(columns.filter((column) => column.filters).map((column) => [column.key, (next.find((item) => item.id === column.key)?.value as unknown[] ?? []).map(String)])));
+      const values = Object.fromEntries(columns.filter(column => column.filters).map(column => [column.key, (next.find(item => item.id === column.key)?.value as unknown[] ?? []).map(String)]));
+      onFilterStateChange?.(values);
+      onFiltersChange?.(values);
     },
     onRowSelectionChange: (updater) => {
       const next = typeof updater === "function" ? updater(selection) : updater;
@@ -199,26 +219,37 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
     const text = (key: string) => { const option = column.filters!.find((item) => String(item.value) === key); return option && typeof option.text === "string" ? option.text : key; };
     return { column, values: picked.map(text) };
   }).filter((item) => item.values.length > 0);
+  const chips = activeFilters.filter(({ column }) => column.filterChip !== false);
+  const chipCount = chips.length + extraFilters.length;
+  // "Clear filters" counts every filter in effect, including one whose chip a page hides.
+  const filterCount = activeFilters.length + extraFilters.length;
+  const filtered = filterCount > 0;
+  const clearAll = () => { table.resetColumnFilters(); extraFilters.forEach((filter) => filter.onClear()); };
+  const chipButton = (key: string, name: string, values: string, onClick: () => void) => <Button key={key} size="xs" variant="tertiary" className="resource-table-filter-chip" trailingIcon={ClearIcon}
+    aria-label={t("resourceTable.clearFilter", { name, values })} onClick={onClick}>
+    <span className="font-semibold">{name}</span>{t("resourceTable.filterValues", { values })}
+  </Button>;
+  // A table with nothing to put above it (no search, filters, refresh or column settings) starts at its header.
+  const hasToolbar = toolbar != null || chipCount > 0 || toolbarExtra != null || !!updatedAt || !!onRefresh || !!columnSettings;
   return <div className="resource-table">
-    <div className="resource-table-toolbar">
-      <div className="resource-table-toolbar-left">{toolbar}</div>
+    {hasToolbar && <div className="resource-table-toolbar">
+      <div className="resource-table-toolbar-left">{toolbar}
+        {/* Filters are set from the column header funnels; the ones in effect are listed here
+            as "column: values" so a filter on an off-screen column is never invisible. */}
+        {chipCount > 0 && <div className="resource-table-filters flex flex-wrap items-center gap-1.5" role="group" aria-label={t("resourceTable.activeFilters")}>
+          <span className="text-label text-fg-subtle">{t("resourceTable.activeFilters")}</span>
+          {chips.map(({ column, values }) => chipButton(column.key, labelOf(column), values.join(t("resourceTable.valueSeparator")),
+            () => table.setColumnFilters((current) => current.filter((item) => item.id !== column.key))))}
+          {extraFilters.map((filter) => chipButton(`extra:${filter.key}`, filter.name, filter.value, filter.onClear))}
+          {filterCount > 1 && <Button size="xs" variant="ghost" className="text-fg-brand" onClick={clearAll}>{t("resourceTable.clearFilters")}</Button>}
+        </div>}
+      </div>
       <div className="resource-table-toolbar-right flex flex-nowrap items-center gap-2">
         {toolbarExtra}{updatedAt && <span className="resource-table-updated whitespace-nowrap text-label text-fg-muted" title={t("dataTable.updatedAt", { time: formatTime(updatedAt) })}>{t("dataTable.updatedAt", { time: formatClock(updatedAt) })}</span>}
         {/* Same family and size as the menu and top bar: HugeIcons at 16px in a 32px control that lines up with the search box. */}
         {onRefresh && <Button iconOnly variant="tertiary" className="[&_svg]:size-4!" aria-label={t("dataTable.refresh")} onClick={onRefresh}><RefreshIcon /></Button>}
         {columnSettings && <Button iconOnly variant="tertiary" className="[&_svg]:size-4!" aria-label={t("resourceTable.settings")} onClick={() => setSettingsOpen(true)}><ColumnsIcon /></Button>}
       </div>
-    </div>
-    {/* Filters are set from the column header funnels; the ones in effect are listed here
-        as "column: values" so a filter on an off-screen column is never invisible. */}
-    {activeFilters.length > 0 && <div className="resource-table-filters flex flex-wrap items-center gap-1.5" role="group" aria-label={t("resourceTable.activeFilters")}>
-      <span className="text-label text-fg-subtle">{t("resourceTable.activeFilters")}</span>
-      {activeFilters.map(({ column, values }) => <Button key={column.key} size="xs" variant="tertiary" className="resource-table-filter-chip" trailingIcon={ClearIcon}
-        aria-label={t("resourceTable.clearFilter", { name: labelOf(column), values: values.join(t("resourceTable.valueSeparator")) })}
-        onClick={() => table.setColumnFilters((current) => current.filter((item) => item.id !== column.key))}>
-        <span className="font-semibold">{labelOf(column)}</span>{t("resourceTable.filterValues", { values: values.join(t("resourceTable.valueSeparator")) })}
-      </Button>)}
-      {activeFilters.length > 1 && <Button size="xs" variant="ghost" className="text-fg-brand" onClick={() => table.resetColumnFilters()}>{t("resourceTable.clearFilters")}</Button>}
     </div>}
     {error ? <div role="alert" className="flex flex-wrap items-center gap-2 text-fg-danger"><strong>{t("dataTable.loadFailed")}</strong><span>{error.message}</span>{onRefresh && <Button onClick={onRefresh}>{t("actions.retry")}</Button>}</div> : <>
       {loading && <Spinner label={t("dataTable.refresh")} />}
@@ -269,11 +300,17 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
               {rowSelection && <TableCell className="resource-table-pinned resource-table-cell" style={{ position: "sticky", left: 0, zIndex: 1, backgroundColor: row.getIsSelected() ? "var(--selection)" : "var(--surface-floating)" }}><Checkbox title={checkboxProps?.title} aria-label={checkboxProps?.["aria-label"] ?? t("resourceTable.selectRow", { name: row.id })} checked={row.getIsSelected()} disabled={!row.getCanSelect()} onCheckedChange={(checked) => row.toggleSelected(checked)} onClick={(event) => event.stopPropagation()} /></TableCell>}
               {expandable && <TableCell className="resource-table-pinned resource-table-cell" style={{ position: "sticky", left: rowSelection ? 48 : 0, zIndex: 1, backgroundColor: "var(--surface-floating)" }}>{row.getCanExpand() && (expandable.expandIcon ? expandable.expandIcon({ prefixCls: "resource-table", expanded: row.getIsExpanded(), expandable: true, record: row.original, onExpand: (_record, event) => { event.stopPropagation(); expand(); } }) : <Button size="xs" variant="ghost" iconOnly aria-label={t(row.getIsExpanded() ? "resourceTable.collapseRow" : "resourceTable.expandRow")} aria-expanded={row.getIsExpanded()} onClick={(event) => { event.stopPropagation(); expand(); }}>{row.getIsExpanded() ? <ExpandedIcon size={16} /> : <CollapsedIcon size={16} />}</Button>)}</TableCell>}
               {row.getVisibleCells().map((cell, cellIndex) => <TableCell key={cell.id} className={["resource-table-cell whitespace-nowrap", arranged[cellIndex].role === "actions" ? "" : "overflow-hidden text-ellipsis", arranged[cellIndex].role === "name" ? "resource-table-name" : "", arranged[cellIndex].role === "name" || arranged[cellIndex].role === "actions" ? "resource-table-pinned" : "", arranged[cellIndex].className].filter(Boolean).join(" ")} style={{ ...pinnedStyle(arranged[cellIndex], cellIndex), ...(row.getIsSelected() ? { background: "var(--selection)" } : {}) }}>{typeof cell.column.columnDef.cell === "function" ? cell.column.columnDef.cell(cell.getContext()) : cell.column.columnDef.cell}</TableCell>)}
-            </TableRow>{row.getIsExpanded() && expandable?.expandedRowRender && <TableRow><TableCell colSpan={arranged.length + (rowSelection ? 1 : 0) + 1}>{expandable.expandedRowRender(row.original, row.index, 0, true)}</TableCell></TableRow>}</Fragment>;
+            </TableRow>{row.getIsExpanded() && expandable?.expandedRowRender && <TableRow><TableCell colSpan={arranged.length + (rowSelection ? 1 : 0) + 1}>
+              {/* A row's detail holds to the visible part of a table wider than its container, as the empty state does: its far side is never scrolled out of view. */}
+              <div className="sticky left-3 w-[calc(100cqw-1.5rem)]">{expandable.expandedRowRender(row.original, row.index, 0, true)}</div>
+            </TableCell></TableRow>}</Fragment>;
           })}
           {!table.getRowModel().rows.length && <TableRow><TableCell colSpan={arranged.length + (rowSelection ? 1 : 0) + (expandable ? 1 : 0)}>{/* The empty state holds to the visible part of a table wider than its container (100cqw
               is the container's width, the cell pads 12px a side), so it centers in what the user sees. */}
-            {!loading && <div className="sticky left-3 w-[calc(100cqw-1.5rem)]"><EmptyState kind={emptyKind} description={emptyDescription ?? t("dataTable.empty")} action={emptyAction} /></div>}</TableCell></TableRow>}
+            {/* Filtered down to nothing is not "no data": say the filters match nothing, and offer to clear them. */}
+            {!loading && <div className="sticky left-3 w-[calc(100cqw-1.5rem)]">{filtered && filteredEmptyDescription
+              ? <EmptyState kind={emptyKind} description={filteredEmptyDescription} action={<Button variant="secondary" onClick={clearAll}>{t("resourceTable.clearFilters")}</Button>} />
+              : <EmptyState kind={emptyKind} description={emptyDescription ?? t("dataTable.empty")} action={emptyAction} />}</div>}</TableCell></TableRow>}
         </TableBody>
       </Table>
       {/* One footer row: the total on the left, Zeron's pager on the right, both in its 12px label size. */}

@@ -68,10 +68,10 @@ func TestAgentRunningCheckFollowsTheInstallDirectory(t *testing.T) {
 	if cmd := AgentRunningCheckCommand(""); !strings.Contains(cmd, "dir='/opt/gpuworks'") {
 		t.Fatalf("default command = %s", cmd)
 	}
-	if got := AgentRunningCheck(agentRunningOK, "/data/gpuworks"); got.Status != "ok" || got.Detail != "running with state directory /data/gpuworks" {
+	if got := AgentRunningCheck(agentRunningOK, "/data/gpuworks"); got.Status != "pass" || got.text() != "running with state directory /data/gpuworks" {
 		t.Fatalf("ok check = %+v", got)
 	}
-	if got := AgentRunningCheck(agentRunningWarn, ""); got.Status != "warn" || !strings.Contains(got.Detail, "/opt/gpuworks") {
+	if got := AgentRunningCheck(agentRunningWarn, ""); got.Status != "warn" || !strings.Contains(got.text(), "/opt/gpuworks") {
 		t.Fatalf("warn check = %+v", got)
 	}
 }

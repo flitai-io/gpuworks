@@ -91,6 +91,13 @@ func (r *officialCatalogRun) upstreamDigest() string {
 // official catalog.
 func republishedCatalog(t *testing.T) ([]byte, string) {
 	t.Helper()
+	return editedCatalog(t, nil)
+}
+
+// editedCatalog is republishedCatalog with edit applied to every model.yaml,
+// the way a publisher for a newer server would write them.
+func editedCatalog(t *testing.T, edit func(name string, data []byte) []byte) ([]byte, string) {
+	t.Helper()
 	archive, _, _, err := seed.Published()
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +126,9 @@ func republishedCatalog(t *testing.T) ([]byte, string) {
 			if err != nil {
 				return err
 			}
+		}
+		if edit != nil && path.Base(name) == "model.yaml" {
+			data = edit(name, data)
 		}
 		tree[name] = &fstest.MapFile{Data: data, Mode: 0o644}
 		return nil
@@ -199,23 +209,131 @@ func TestTemplateUploadOfOfficialCatalog(t *testing.T) {
 }
 
 // A package written for a newer server carries fields this build does not
-// know; check for updates names that cause and keeps the parser's error.
-func TestTemplateCheckForUpdatesRefusesAPackageThisServerCannotParse(t *testing.T) {
+// know. Check for updates applies everything else, reports what it left out,
+// and leaves the rows it already had for those untouched.
+func TestTemplateCheckForUpdatesSkipsWhatThisServerCannotRead(t *testing.T) {
 	run := newOfficialCatalogRun(t)
-	published, _, _, err := seed.Published()
+	before, err := run.store.ListInferenceModels()
 	if err != nil {
 		t.Fatal(err)
 	}
-	read, err := inferencecatalog.ReadPackageArchive(bytes.NewReader(published))
+	// One model stated whole in a newer form, one spec of another model.
+	var whole, partial, partialSpec string
+	for _, model := range before {
+		if len(model.Specs) == 0 || model.Source != "upstream" {
+			continue
+		}
+		if whole == "" {
+			whole = model.ModelID
+		} else if len(model.Specs) > 1 && model.ModelID != whole {
+			partial, partialSpec = model.ModelID, model.Specs[0].Name
+			break
+		}
+	}
+	if whole == "" || partial == "" {
+		t.Fatal("the embedded catalog has no model to edit")
+	}
+	archive, digest := editedCatalog(t, func(name string, data []byte) []byte {
+		switch name {
+		case "models/" + whole + "/model.yaml":
+			return append(data, []byte("future_field: true\n")...)
+		case "models/" + partial + "/model.yaml":
+			marker := "name: " + partialSpec + "\n"
+			index := bytes.Index(data, []byte(marker))
+			if index < 0 {
+				t.Fatalf("spec %s not found in %s", partialSpec, name)
+			}
+			indent := index - bytes.LastIndexByte(data[:index], '\n') - 1
+			line := strings.Repeat(" ", indent) + "future_spec_field: true\n"
+			return append(append(append([]byte(nil), data[:index+len(marker)]...), line...), data[index+len(marker):]...)
+		}
+		return data
+	})
+	channel := newTestChannel(t)
+	channel.publishTemplateCatalogAs(archive, digest, inferencecatalog.PackageSchemaVersion, "2026-10-20.abababab")
+	run.useChannel(channel)
+	statusRun := &imageManifestRun{t: t, store: run.store, router: run.router, admin: run.admin}
+	if c := getUpdateStatus(t, statusRun).TemplateCatalog; !c.Compatible || !c.UpdateAvailable {
+		t.Fatalf("a catalog this server reads in part is an update: %+v", c)
+	}
+	rec := run.do(http.MethodPost, "/api/v1/inference-templates/sync", nil)
+	var result dto.OfficialInferenceCatalogResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("sync = %d %s: %v", rec.Code, rec.Body.String(), err)
+	}
+	if result.PackageDigest != digest {
+		t.Fatalf("package digest = %s, want the published %s", result.PackageDigest, digest)
+	}
+	skipped := map[string]string{}
+	for _, item := range result.Skipped {
+		skipped[item.ModelID+"#"+item.Spec] = item.Reason
+	}
+	if !strings.Contains(skipped[whole+"#"], "future_field") || !strings.Contains(skipped[partial+"#"+partialSpec], "future_spec_field") {
+		t.Fatalf("skipped = %+v", result.Skipped)
+	}
+	if !strings.Contains(rec.Body.String(), `"model_id":"`+whole+`","reason":"`) || !strings.Contains(rec.Body.String(), `"model_id":"`+partial+`","spec":"`+partialSpec+`","reason":"`) {
+		t.Fatalf("wire form of skipped: %s", rec.Body.String())
+	}
+	digests := func(modelID string) map[string]string {
+		t.Helper()
+		model, err := run.store.InferenceModelByModelID(modelID)
+		if err != nil {
+			t.Fatalf("%s: %v", modelID, err)
+		}
+		out := map[string]string{}
+		for _, spec := range model.Specs {
+			if spec.Source == "upstream" {
+				out[spec.Name] = spec.PackageDigest
+			}
+		}
+		return out
+	}
+	for name, got := range digests(whole) {
+		if got != run.embedded {
+			t.Fatalf("%s spec %s moved to %s; a skipped model keeps its rows", whole, name, got)
+		}
+	}
+	for name, got := range digests(partial) {
+		want := digest
+		if name == partialSpec {
+			want = run.embedded
+		}
+		if got != want {
+			t.Fatalf("%s spec %s is on %s, want %s", partial, name, got, want)
+		}
+	}
+	// The catalog in force is the published one, and the package the kept
+	// rows came from is still stored for their assets.
+	if got := run.upstreamDigest(); got != digest {
+		t.Fatalf("upstream digest = %s, want %s", got, digest)
+	}
+	if c := getUpdateStatus(t, statusRun).TemplateCatalog; c.UpdateAvailable || !c.Compatible {
+		t.Fatalf("status after a partial update = %+v", c)
+	}
+	for _, stored := range []string{digest, run.embedded} {
+		if _, err := run.packages.Load(stored); err != nil {
+			t.Fatalf("package %s: %v", stored, err)
+		}
+	}
+	// The same package stays strict as a user's own import.
+	imported := run.do(http.MethodPost, "/api/v1/inference-templates/import", archive)
+	if imported.Code != http.StatusBadRequest || !strings.Contains(imported.Body.String(), "future_") {
+		t.Fatalf("user import of the package = %d %s", imported.Code, imported.Body.String())
+	}
+}
+
+// A package nobody could read is refused whole and changes nothing.
+func TestTemplateCheckForUpdatesRefusesADamagedPackage(t *testing.T) {
+	run := newOfficialCatalogRun(t)
+	archive, digest := republishedCatalog(t)
+	read, err := inferencecatalog.ReadPackageArchive(bytes.NewReader(archive))
 	if err != nil {
 		t.Fatal(err)
 	}
-	// PackPackage validates, and this server cannot validate the package, so
-	// the archive is written by hand the way a newer publisher would.
-	var archive bytes.Buffer
-	gz := gzip.NewWriter(&archive)
+	// Written by hand: PackPackage refuses a manifest that miscounts.
+	var damaged bytes.Buffer
+	gz := gzip.NewWriter(&damaged)
 	tw := tar.NewWriter(gz)
-	edited := ""
 	if err := fs.WalkDir(read.FS, ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil || entry.IsDir() {
 			return walkErr
@@ -224,9 +342,12 @@ func TestTemplateCheckForUpdatesRefusesAPackageThisServerCannotParse(t *testing.
 		if err != nil {
 			return err
 		}
-		if edited == "" && path.Base(name) == "model.yaml" {
-			edited = name
-			data = append(data, []byte("future_field: true\n")...)
+		if name == "manifest.yaml" {
+			manifest := read.Package.Manifest
+			manifest.Specs++
+			if data, err = yaml.Marshal(manifest); err != nil {
+				return err
+			}
 		}
 		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg}); err != nil {
 			return err
@@ -243,23 +364,14 @@ func TestTemplateCheckForUpdatesRefusesAPackageThisServerCannotParse(t *testing.
 		t.Fatal(err)
 	}
 	channel := newTestChannel(t)
-	channel.publishTemplateCatalogAs(archive.Bytes(), strings.Repeat("ab", 32), inferencecatalog.PackageSchemaVersion, "2026-10-20.abababab")
+	channel.publishTemplateCatalogAs(damaged.Bytes(), digest, inferencecatalog.PackageSchemaVersion, "2026-10-20.abababab")
 	run.useChannel(channel)
 	statusRun := &imageManifestRun{t: t, store: run.store, router: run.router, admin: run.admin}
-	if c := getUpdateStatus(t, statusRun).TemplateCatalog; c.Compatible || !c.UpdateAvailable || c.Latest != "2026-10-20.abababab" {
-		t.Fatalf("an unreadable catalog must be incompatible before sync: %+v", c)
+	if c := getUpdateStatus(t, statusRun).TemplateCatalog; c.Compatible || !c.UpdateAvailable {
+		t.Fatalf("a damaged catalog must be incompatible before sync: %+v", c)
 	}
 	rec := run.do(http.MethodPost, "/api/v1/inference-templates/sync", nil)
-	var body struct {
-		Code   string         `json:"code"`
-		Params map[string]any `json:"params"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("sync = %d %s: %v", rec.Code, rec.Body.String(), err)
-	}
-	reason, _ := body.Params["error"].(string)
-	if rec.Code != http.StatusBadRequest || body.Code != ErrorOfficialCatalogNeedsNewerServer ||
-		!strings.Contains(reason, "parse inference catalog model "+edited) || !strings.Contains(reason, "field future_field not found") {
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), ErrorOfficialCatalogNeedsNewerServer) || !strings.Contains(rec.Body.String(), "manifest says") {
 		t.Fatalf("sync = %d %s", rec.Code, rec.Body.String())
 	}
 	if got := run.upstreamDigest(); got != run.embedded {

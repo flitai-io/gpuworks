@@ -48,8 +48,9 @@ paths. Check wire JSON contracts for API changes, and user interactions, states,
 operation for UI changes.
 
 Update affected documentation. Chinese pages live under `docs/`, with English translations at
-the same relative paths under `docs-en/`. Review both editions and update the source hashes in
-`docs-site/translations.json`, following [CONTRIBUTING.md](../../CONTRIBUTING.md#documentation-conventions).
+the same relative paths under `docs-en/`. Review both editions and update the source hash recorded
+at the end of the English page with `python3 docs-site/check_translations.py --write`, following
+[CONTRIBUTING.md](../../CONTRIBUTING.md#documentation-conventions).
 
 Run the project's pre-submission checks; replace the package path with the packages changed:
 
@@ -156,3 +157,5 @@ Before merging, confirm review feedback is addressed, required checks pass, and 
 external acceptance has a named next step. An authorized maintainer decides whether the change
 is ready and merges it under repository policy. Include required user documentation, upgrade
 instructions, and rollback limitations with the change.
+
+<!-- translation-source-sha256: 3075a94208871058f0d4a72049b534cf00915487500379c29c34999567d80a84 -->

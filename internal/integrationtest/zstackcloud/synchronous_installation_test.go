@@ -44,7 +44,7 @@ func TestCloudInstallWaitsForSSHAndCleansUpFailure(t *testing.T) {
 				if outcome == "failure" {
 					return provision.SSHInstallReport{}, errors.New("remote failure with host-password")
 				}
-				return provision.SSHInstallReport{Checks: []provision.CheckResult{{Name: "Agent process", Status: "ok"}}}, nil
+				return provision.SSHInstallReport{Checks: []provision.CheckResult{{ID: "agent_process", Status: "pass"}}}, nil
 			}))
 			p, err := service.Add(t.Context(), "zstack", "Cloud", provider.Credentials{Endpoint: inventory.URL, PublicKey: "test-access-key", PrivateKey: "test-access-secret"})
 			if err != nil {
@@ -102,7 +102,7 @@ func TestCloudInstallWaitsForSSHAndCleansUpFailure(t *testing.T) {
 				}
 				return
 			}
-			if installErr != nil || result.NodeUUID == "" || !slices.Contains(result.InstallChecks, provider.InstallCheck{Name: "Agent process", Status: "ok"}) {
+			if installErr != nil || result.NodeUUID == "" || !slices.ContainsFunc(result.InstallChecks, func(c provision.CheckResult) bool { return c.ID == "agent_process" && c.Status == "pass" }) {
 				t.Fatalf("installation result = %+v err=%v", result, installErr)
 			}
 			if len(nodes) != 1 || nodes[0].State != store.NodeStateConnecting {

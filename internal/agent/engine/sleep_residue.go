@@ -84,7 +84,7 @@ func (e *Engine) measureSleepResidue(ctx context.Context, spec proto.InstanceDes
 	}
 	if len(own) > 0 {
 		e.mu.Lock()
-		e.sleepPIDs[spec.UUID] = own
+		e.processLocked(spec.UUID).sleepPIDs = own
 		e.mu.Unlock()
 	}
 	return residue
@@ -106,8 +106,9 @@ func (e *Engine) SleepingCardPIDs() map[string]map[int]bool {
 		if spec.DesiredState != "running" {
 			continue
 		}
-		pids := e.sleepPIDs[uuid]
-		asleep := e.sleepLevel[uuid] > 0
+		process := e.processOfLocked(uuid)
+		pids := process.sleepPIDs
+		asleep := process.sleepLevel > 0
 		for ident := range pids {
 			if !asleep {
 				blocked[ident] = true

@@ -8,9 +8,12 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/api"
+	"gpuworks.ai/gpuworks/internal/server/proxy"
 	"gpuworks.ai/gpuworks/internal/server/serverconfig"
 )
 
@@ -96,11 +99,25 @@ func (a *App) routeByFunction(next http.Handler) http.Handler {
 		fns, ok := r.Context().Value(listenerFunctionsKey{}).([]string)
 		fn := serverconfig.FunctionOf(r.URL.Path)
 		if ok && fn != "" && !slices.Contains(fns, fn) {
-			http.NotFound(w, r)
+			notServedHere(w, r, fn)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// notServedHere answers 404 for a path whose function this socket does not
+// serve, in the shape its function answers errors with: the gateway's for
+// /v1, the management API's for /api/, plain text for downloads and pages.
+func notServedHere(w http.ResponseWriter, r *http.Request, fn string) {
+	switch {
+	case fn == serverconfig.FunctionGateway:
+		proxy.WriteRouteNotFound(w, r)
+	case strings.HasPrefix(r.URL.Path, "/api/"):
+		api.WriteError(w, http.StatusNotFound, fmt.Errorf("%s is not served on this address", r.URL.Path))
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 func (l *trackingListener) Accept() (net.Conn, error) {

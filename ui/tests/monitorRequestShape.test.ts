@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { MonitorRequest } from "../src/monitorRequestsApi";
 const {
-  formatMS, formatTokens, gridView, liveEventRate, requestPhases, requestSpeeds, shareOf, tokenBucketLabel, ttftBucketLabel,
+  formatMS, formatTokens, gridView, liveEventRate, requestPhases, shareOf, tokenBucketLabel, ttftBucketLabel,
 } = await import("../src/pages/monitor/requestShape.ts");
 
 const BUCKETS = [0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048];
@@ -13,7 +13,7 @@ function request(over: Partial<MonitorRequest>): MonitorRequest {
     source: "api", stream: true, body_bytes: 0, images: 0, dispatch_ms: null, first_byte_ms: null, first_think_ms: null,
     first_answer_ms: null, last_chunk_ms: null, end_ms: null, events: 0, think_events: 0, max_gap_ms: null, status: 200,
     outcome: "ok", finish_reason: "stop", prompt_tokens: null, cached_tokens: null, completion_tokens: null,
-    reasoning_tokens: null, engine_queue_ms: null, engine_prefill_ms: null, engine_decode_ms: null, weight: 1, result: "completed",
+    reasoning_tokens: null, engine_queue_ms: null, engine_prefill_ms: null, engine_decode_ms: null, ttft_ms: null, tpot_ms: null, prefill_tok_s: null, decode_tok_s: null, weight: 1, result: "completed",
     segments: [], ...over,
   };
 }
@@ -70,32 +70,12 @@ test("phases read the server's segments: total, first token, empty segments drop
   assert.equal(waiting.firstTokenMS, null);
 });
 
-test("speeds come from the engine's times when it gave them, else from the stream", () => {
-  const engine = requestSpeeds(request({ prompt_tokens: 3000, cached_tokens: 1000, completion_tokens: 201, engine_prefill_ms: 500, engine_decode_ms: 2000 }));
-  assert.equal(engine.uncached, 2000);
-  assert.equal(engine.prefillTokS, 4000);
-  assert.equal(engine.decodeTokS, 100.5);
-  const stream = requestSpeeds(request({ prompt_tokens: 10, completion_tokens: 101, first_answer_ms: 100, last_chunk_ms: 2100 }));
-  assert.equal(stream.prefillTokS, null);
-  assert.equal(stream.decodeTokS, 50);
-  assert.equal(requestSpeeds(request({})).uncached, null);
-  // A PD handoff's prompt is computed by the prefill instance, in its own
-  // prefill time; a request the decoder computed alone uses the decoder's.
-  const pd = { prefill_instance_uuid: "p", prefill_ms: 790, prefill_queue_ms: 2, prefill_compute_ms: 640, fallback: "" };
-  const handoff = request({ prompt_tokens: 1036, cached_tokens: 512, engine_prefill_ms: 25, pd });
-  assert.equal(requestSpeeds(handoff).prefillTokS, (524 * 1000) / 640);
-  assert.equal(requestSpeeds({ ...handoff, pd: { ...pd, prefill_compute_ms: null } }).prefillTokS, null);
-  assert.equal(requestSpeeds({ ...handoff, pd: { ...pd, prefill_instance_uuid: "", fallback: "prefill_5xx" } }).prefillTokS, (524 * 1000) / 25);
-  assert.equal(liveEventRate(request({ phase: "answering", events: 11, first_answer_ms: 0, last_chunk_ms: 1000 })), 10);
-  assert.equal(liveEventRate(request({ phase: "waiting", events: 0 })), null);
-});
-
 test("request view URLs carry only the set filters", async () => {
   const { monitorDistributionsURL, monitorRequestsURL } = await import("../src/monitorRequestsApi.ts");
   assert.equal(monitorRequestsURL(7, { view: "live", limit: 20, key: 0 }), "/api/v1/monitor/deployments/7/requests?view=live&limit=20");
   assert.equal(
-    monitorRequestsURL(7, { view: "history", range: "6h", limit: 20, key: 3, instance: "i-1", results: ["length", "error"], minMs: 1500.4, maxMs: 9000, cursor: "a b" }),
-    "/api/v1/monitor/deployments/7/requests?view=history&range=6h&limit=20&key=3&instance=i-1&results=length%2Cerror&min_ms=1500&max_ms=9000&cursor=a+b",
+    monitorRequestsURL(7, { view: "history", range: "6h", limit: 20, key: 3, instance: "i-1", results: ["length", "error"], minMs: 1500.4, maxMs: 9000, minTtftMs: 300, maxTtftMs: 2500, cursor: "a b" }),
+    "/api/v1/monitor/deployments/7/requests?view=history&range=6h&limit=20&key=3&instance=i-1&results=length%2Cerror&min_ms=1500&max_ms=9000&min_ttft_ms=300&max_ttft_ms=2500&cursor=a+b",
   );
   // An explicit range is sent only when both ends are set, and replaces the
   // preset; a picked page range is sent as from/to.
@@ -112,3 +92,8 @@ test("request view URLs carry only the set filters", async () => {
   assert.equal(monitorDistributionsURL("24h", 9), "/api/v1/monitor/distributions?range=24h&deployment=9");
 });
 
+
+test("a live stream's chunk rate counts the chunks after the first over the time since it", () => {
+  assert.equal(liveEventRate(request({ phase: "answering", events: 11, first_answer_ms: 0, last_chunk_ms: 1000 })), 10);
+  assert.equal(liveEventRate(request({ phase: "waiting", events: 0 })), null);
+});

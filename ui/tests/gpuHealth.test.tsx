@@ -17,7 +17,7 @@ const wrap = (node: React.ReactNode) => render(<I18nextProvider i18n={i18n}>{nod
 const pendingGPU = {
   schedulable: true,
   health_status: "Warning",
-  health_code: "memory_repair_pending",
+  health_code: "MEMORY_REPAIR_PENDING",
   health_message: "remapped_rows.pending=Yes\nremapped_rows.uncorrectable=0",
   health_evidence: [{ name: "remapped_rows.pending", value: "Yes" }, { name: "remapped_rows.uncorrectable", value: "0" }],
   health_guide: {
@@ -52,7 +52,7 @@ test("a card waiting for a reset shows the short label and explains it on demand
 
 test("a failed replacement stops scheduling and names no command to run", async () => {
   wrap(<GPUHealthTag gpu={{
-    schedulable: false, health_status: "Error", health_code: "memory_remap_failed",
+    schedulable: false, health_status: "Error", health_code: "MEMORY_REMAP_FAILED",
     health_evidence: [{ name: "remapped_rows.failure", value: "Yes" }],
     health_guide: { probe: "ppu-smi --query-ppu=pci.bus_id,remapped_rows.failure --format=csv -i 0000:c6:00.0", recheck: "ppu-smi -q -d ROW_REMAPPER -i 0000:c6:00.0" },
   }} />);
@@ -113,12 +113,12 @@ const structured: ReportT = {
     vendor: "ppu", driver: "1.6.1-f3016a",
     gpus: [
       { index: 0, name: "PPU-ZW810E", memory_bytes: 96 * 1024 ** 3, pcie_bdf: "0001:c8:00.0", numa_node: 3, health_status: "OK" },
-      { index: 5, name: "PPU-ZW810E", memory_bytes: 96 * 1024 ** 3, pcie_bdf: "0000:7e:00.0", numa_node: 0, health_status: "Warning", health_code: "memory_repair_pending" },
+      { index: 5, name: "PPU-ZW810E", memory_bytes: 96 * 1024 ** 3, pcie_bdf: "0000:7e:00.0", numa_node: 0, health_status: "Warning", health_code: "MEMORY_REPAIR_PENDING" },
     ],
   },
   findings: [
     {
-      code: "memory_repair_pending", level: "warning",
+      code: "MEMORY_REPAIR_PENDING", status: "warn",
       targets: [{
         index: 5, pcie_bdf: "0000:7e:00.0",
         evidence: [{ name: "remapped_rows.pending", value: "Yes" }],
@@ -128,8 +128,8 @@ const structured: ReportT = {
         processes: [{ pid: 135707, name: "sglang::scheduler" }],
       }],
     },
-    { code: "disk_low", level: "warning", disk: { kind: "root", path: "/", total_bytes: 200 * 1024 ** 3, avail_bytes: 14 * 1024 ** 3 }, probe: "statfs(/)", recheck: "df -h /" },
-    { code: "multi_gpu_check_failed", level: "warning", probe: "torch.distributed all_reduce (backend nccl)", evidence: [{ name: "result", value: "FAIL: nccl timeout" }] },
+    { code: "DISK_LOW", status: "warn", disk: { kind: "root", path: "/", total_bytes: 200 * 1024 ** 3, avail_bytes: 14 * 1024 ** 3 }, probe: "statfs(/)", recheck: "df -h /" },
+    { code: "MULTI_GPU_CHECK_FAILED", status: "warn", probe: "torch.distributed all_reduce (backend nccl)", evidence: [{ name: "result", value: "FAIL: nccl timeout" }] },
   ],
   facts: [{ code: "device_injection", value: "explicit" }, { code: "runtime_plugin", value: "none" }],
 };
@@ -186,7 +186,7 @@ test("cards sharing a finding get its explanation once, and their own commands e
 const runtimeUnusableGPU = {
   schedulable: false,
   health_status: "Error",
-  health_code: "runtime_unusable",
+  health_code: "RUNTIME_UNUSABLE",
   health_evidence: [{ name: "Runtime Check", value: "failed" }, { name: "Detail", value: "Ascend ACL runtime smoke failed: aclrtSetDevice=507033" }],
   health_guide: {
     probe: ["die='0'", "", "# the logical ACL device id of this die", "acl_id=\"$(npu-smi info -m | awk -v d=\"$die\" '...')\"", "python3 -c 'import ctypes, os'", "print(1)"].join("\n"),
@@ -229,14 +229,14 @@ test("a short command is shown in full with no expander", async () => {
 
 
 test("missing telemetry is a visible warning, not a reported CLI failure", () => {
-  wrap(<GPUHealthTag gpu={{ schedulable: true, health_status: "Warning", health_code: "telemetry_unavailable", health_message: "ecc_errors.volatile.dram_uncorrectable=N/A" }} />);
+  wrap(<GPUHealthTag gpu={{ schedulable: true, health_status: "Warning", health_code: "TELEMETRY_UNAVAILABLE", health_message: "ecc_errors.volatile.dram_uncorrectable=N/A" }} />);
   assert.equal(screen.queryByText("诊断数据缺失") !== null, true);
   assert.equal(screen.queryByText("不可读取") === null, true);
 });
 
 
 test("incomplete driver inventory is visible without disabling verified cards", async () => {
- wrap(<GPUHealthTag gpu={{ schedulable: true, health_status: "Warning", health_code: "inventory_incomplete", health_message: "attached_xpus=8\ninventory_rows=7" }} />);
+ wrap(<GPUHealthTag gpu={{ schedulable: true, health_status: "Warning", health_code: "INVENTORY_INCOMPLETE", health_message: "attached_xpus=8\ninventory_rows=7" }} />);
  assert.equal(screen.queryByText("设备清单不完整") !== null, true);
  fireEvent.click(screen.getByRole("button", { name: "查看健康详情" }));
  await waitFor(() => assert.equal(screen.queryByText(/驱动报告的卡数与设备清单行数不一致/) !== null, true));

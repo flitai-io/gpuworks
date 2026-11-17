@@ -5,7 +5,7 @@ import { getJSON } from "./api";
 export type Granularity = "hour" | "day";
 export type GpuGroupBy = "model" | "node" | "gpu";
 export type GpuMetric = "util" | "power" | "temp" | "mem";
-export type UsageSource = "api" | "playground" | "batch";
+export type UsageSource = "api" | "playground" | "batch" | "evaluation";
 
 /** The span a statistics answer covers, as the server resolved it. */
 export interface AnalyticsRange {
@@ -87,6 +87,12 @@ export interface QualityAnalytics {
   totals: QualityFigures;
   series: QualityFigures[];
   rows: QualityRow[];
+  /** The totals split by the priority class requests ran at; "" is unknown (recorded before classes). */
+  classes: QualityClassRow[];
+}
+
+export interface QualityClassRow extends QualityFigures {
+  priority_class: string;
 }
 
 /** A card's or a group's statistics; null without samples of that kind. */

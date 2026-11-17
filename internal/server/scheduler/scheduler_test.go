@@ -510,6 +510,9 @@ func TestFiltersRejectANodeWithoutAFeatureTheDeploymentNeeds(t *testing.T) {
 		accelerator.FeatureMultiNode:   ReasonMultiNodeUnsupportedOnNode,
 		accelerator.FeaturePD:          ReasonPDUnsupportedOnNode,
 		accelerator.FeatureKVDiskTier:  ReasonKVDiskUnsupportedOnNode,
+		// No vendor row denies an external KV cache (the backend's own
+		// vendor list does); Apple denies every feature.
+		accelerator.FeatureExternalKVCache: ReasonKVBackendUnsupportedOnNode,
 	} {
 		ok, reason := runFilters(Request{Features: []accelerator.Feature{feature}}, mac)
 		if ok || reason.Code != code || reason.Params["vendor"] != "Apple" || reason.Params["feature"] != string(feature) {

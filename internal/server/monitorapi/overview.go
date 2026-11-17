@@ -67,7 +67,7 @@ func (s *Service) buildOverview(ctx context.Context, rng time.Duration) (dto.Mon
 		insts := instByDep[row.DeploymentID]
 		dep := depByID[row.DeploymentID]
 		health := s.Health(row.DeploymentID, dep.HealthCheck, dep.HealthCheckThresholdSec)
-		services = append(services, serviceRowDTO(row, deploymentPlacement(dep, insts, nodeNames), deploymentState(dep, insts), health))
+		services = append(services, serviceRowDTO(row, deploymentPlacement(dep, insts, nodeNames), deploymentState(dep), health))
 	}
 	sortByHealth(services)
 
@@ -83,11 +83,12 @@ func (s *Service) buildOverview(ctx context.Context, rng time.Duration) (dto.Mon
 
 	asOfMS := timeMillis(snap.AsOf)
 	return dto.MonitorOverview{
-		AsOf:       asOfMS,
-		Stale:      snap.Stale,
-		Signals:    signalsDTO(snap.Signals),
-		Services:   services,
-		VRAMByNode: vramNodesDTO(snap.VRAMByNode, gpuCountByNode(inv.GPUs)),
+		AsOf:        asOfMS,
+		Stale:       snap.Stale,
+		Signals:     signalsDTO(snap.Signals),
+		Services:    services,
+		StateCounts: stateCountsDTO(services),
+		VRAMByNode:  vramNodesDTO(snap.VRAMByNode, gpuCountByNode(inv.GPUs)),
 		ClusterTokens: dto.MonitorClusterTokens{
 			Prompt:     seriesFromPoints(promptPoints),
 			Generation: seriesFromPoints(snap.ClusterTokenRate),

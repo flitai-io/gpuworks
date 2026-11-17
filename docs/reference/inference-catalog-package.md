@@ -26,7 +26,7 @@ models/<model-id>/assets/<small-file>
 
 目录包按内容摘要（digest）标识。server 校验包内路径安全、schema（文件结构和字段约束），并计算内容摘要；同一 digest 的包可以复用。缓存损坏后，不能继续以旧 digest 提供服务。
 
-`manifest.yaml` 的 `schema_version` 是包格式版本，当前为 2（档位新增 `display_name_zh_cn` / `display_name_en`）。server 读取不高于自己的版本、拒绝更高的版本；只认 1 的旧 server 在发布渠道里看到 2 时会把目录更新标为不兼容，不去下载，因为它逐字段严格解析 `model.yaml`，遇到新字段会报错。
+`manifest.yaml` 的 `schema_version` 是包格式版本，当前为 3。server 读取不高于自己的版本、拒绝更高的版本；在发布渠道里看到更高的版本时把目录更新标为不兼容，不去下载。2 起档位带 `display_name_zh_cn` / `display_name_en`；3 标记含 `gpus.arch_id` 与 `tokenizer_ref` 的目录，只认 2 的 server 逐字段严格解析 `model.yaml`，读不了它们。认识 3 的 server 对官方目录包容错读取（见下文「官方目录包里读不懂的内容」），此后 `model.yaml` 新增字段不再提升版本，只有包的文件布局或清单发生变化时才提升。
 数据库保存 digest 和从包中提取的结构化记录，包的文件内容保存在包仓库中。
 
 ### model.yaml 与 spec 的关系
@@ -109,6 +109,17 @@ DELETE /api/v1/inference-templates/spec?model_id=…&spec=…
 ```
 
 仍有部署引用该 spec 时，删除会被拒绝。因此发布方从包中移除 spec 后，还需要安排这一步显式删除。
+
+### 官方目录包里读不懂的内容
+
+官方目录按最新的 server 编写。「检查更新」或上传官方目录包时，旧 server 读不懂的部分被跳过，其余照常应用（设计依据见 [ADR 0065](../adr/0065-official-catalog-read-tolerantly.md)）：
+
+- 某个 spec 解析不了或校验不过：跳过这个 spec。
+- 模型自己的字段读不懂：跳过整个模型。引用了它作为组件的 spec 也一并跳过。
+- 被跳过的模型或 spec 如果以前已经导入过，保持原样、仍可部署；新增的在这台 server 上暂不可见。
+- 响应的 `skipped` 列出每一项的 `model_id`、`spec`（跳过整个模型时省略）和 `reason`，设置页会一直显示这份列表。升级 server 后再更新一次即可读全。
+
+包本身的校验不放宽：文件布局、清单里的模型与 spec 数、保留下来的 spec 的 assets 摘要有任何不符，整包拒绝。这种容错只用于官方目录包；通过「导入模板」导入时，未知字段照旧报错。
 
 ## 辅助文件如何交付和使用
 

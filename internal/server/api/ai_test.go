@@ -214,10 +214,10 @@ func TestAIAskErrors(t *testing.T) {
 }
 
 func TestAIInstanceFindingsWire(t *testing.T) {
-	ai := &fakeAI{findings: []aihelper.Finding{{Code: "cuda_oom", Evidence: []aihelper.Evidence{{Index: 4, Line: "CUDA out of memory"}}}}}
+	ai := &fakeAI{findings: []aihelper.Finding{{Code: "CUDA_OOM", Evidence: []aihelper.Evidence{{Index: 4, Line: "CUDA out of memory"}}}}}
 	h, token := aiRouter(t, ai)
 	rec := aiDo(t, h, token, "GET", "/api/v1/ai/instances/i-42/findings", "")
-	want := `{"items":[{"code":"cuda_oom","evidence":[{"line":"CUDA out of memory"}]}],"total":1}`
+	want := `{"items":[{"code":"CUDA_OOM","evidence":[{"line":"CUDA out of memory"}]}],"total":1}`
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want || ai.target.InstanceUUID != "i-42" {
 		t.Fatalf("%d %s (uuid %q)", rec.Code, rec.Body, ai.target.InstanceUUID)
 	}
@@ -373,7 +373,7 @@ func TestAIReadsRouteOnTheirOwnFromInsideTheAsk(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("ask = %d %s", rec.Code, rec.Body)
 	}
-	if ai.readErr != nil || ai.readStatus != http.StatusOK || strings.TrimSpace(ai.readBody) != `{"available":true}` {
+	if ai.readErr != nil || ai.readStatus != http.StatusOK || strings.TrimSpace(ai.readBody) != `{"available":true,"image_input":false}` {
 		t.Fatalf("read inside the ask = %d %q %v", ai.readStatus, ai.readBody, ai.readErr)
 	}
 }

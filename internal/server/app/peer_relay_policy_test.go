@@ -28,7 +28,7 @@ func TestNewWiresCustomPeerRelayPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { app.obs.close(); app.store.Close() })
+	t.Cleanup(func() { app.obs.Close(); app.store.Close() })
 	want, err := cfg.PeerRelay.Policy()
 	if err != nil {
 		t.Fatal(err)

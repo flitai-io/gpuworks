@@ -196,7 +196,7 @@ func TestServerDialPortOpensAPortWhenNoneIsFree(t *testing.T) {
 	if listen != "0.0.0.0:3389" || address != "cpod-1wtznikn04ks-s3.podtcp.compshare.cn:30006" {
 		t.Fatalf("listen=%q address=%q", listen, address)
 	}
-	if check.Status != "ok" || !strings.Contains(check.Detail, "opened container port 3389") {
+	if check.Status != "pass" || !strings.Contains(checkText(check), "opened container port 3389") {
 		t.Fatalf("check = %+v", check)
 	}
 	if len(api.updates) != 1 {
@@ -230,7 +230,7 @@ func TestServerDialPortUsesAnOpenFreePort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if listen != "0.0.0.0:7000" || address != "cpod-1wtznikn04ks-s3.podtcp.compshare.cn:31000" || !strings.Contains(check.Detail, "already open") {
+	if listen != "0.0.0.0:7000" || address != "cpod-1wtznikn04ks-s3.podtcp.compshare.cn:31000" || !strings.Contains(checkText(check), "already open") {
 		t.Fatalf("listen=%q address=%q check=%+v", listen, address, check)
 	}
 	if len(api.updates) != 0 {

@@ -24,10 +24,13 @@ type Endpoint struct {
 	Model   string
 }
 
-// Message is a chat message.
+// Message is a chat message. Images are data: URLs sent with a user message;
+// a message with images is written as OpenAI's content parts (MarshalJSON),
+// one without as a plain string, which every endpoint accepts.
 type Message struct {
 	Role       string     `json:"role"`
 	Content    string     `json:"content"`
+	Images     []string   `json:"-"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Name       string     `json:"name,omitempty"`
@@ -100,7 +103,13 @@ func NewClient(ep Endpoint, allowPrivateHosts ...string) *Client {
 // NewClientWithPrivateHosts checks the live administrator policy on each call,
 // including subsequent calls made by an already-running assistant task.
 func NewClientWithPrivateHosts(ep Endpoint, readHosts func() []string) *Client {
-	transport := outbound.TransportWithPrivateHosts(func() (proto.NetworkConfig, error) { return proto.NetworkConfig{}, nil }, readHosts)
+	return NewClientRouted(ep, readHosts, func() (outbound.Route, error) { return outbound.Route{}, nil })
+}
+
+// NewClientRouted is NewClientWithPrivateHosts sending each call the way
+// readRoute answers: the service's own proxy choice (ProxyRoute).
+func NewClientRouted(ep Endpoint, readHosts func() []string, readRoute func() (outbound.Route, error)) *Client {
+	transport := outbound.TransportWithRoute(readRoute, readHosts)
 	return &Client{ep: ep, http: &http.Client{Timeout: 120 * time.Second, Transport: transport}, stream: &http.Client{Transport: transport}}
 }
 
@@ -125,7 +134,7 @@ func (c *Client) Chat(ctx context.Context, messages []Message, tools []ToolDef) 
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode >= 300 {
-		return Message{}, Usage{}, fmt.Errorf("llm http %d: %s", resp.StatusCode, string(raw))
+		return Message{}, Usage{}, &UpstreamError{Status: resp.StatusCode, Body: string(raw)}
 	}
 	var cr ChatResponse
 	if err := json.Unmarshal(raw, &cr); err != nil {
@@ -135,13 +144,4 @@ func (c *Client) Chat(ctx context.Context, messages []Message, tools []ToolDef) 
 		return Message{}, cr.Usage, fmt.Errorf("llm returned no choices")
 	}
 	return cr.Choices[0].Message, cr.Usage, nil
-}
-
-// Presets are the built-in endpoint presets (fill BaseURL; user adds key+model).
-var Presets = map[string]Endpoint{
-	"deepseek":    {BaseURL: "https://api.deepseek.com", Model: "deepseek-v4-flash"},
-	"bailian":     {BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1", Model: "qwen-plus"},
-	"siliconflow": {BaseURL: "https://api.siliconflow.cn/v1", Model: "deepseek-ai/DeepSeek-V3"},
-	"openrouter":  {BaseURL: "https://openrouter.ai/api/v1", Model: "deepseek/deepseek-chat"},
-	"poe":         {BaseURL: "https://api.poe.com/v1", Model: "GPT-5"},
 }

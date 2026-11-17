@@ -31,3 +31,5 @@ The monitoring center previously used 16 diagnostic rules (KV saturation, prefil
 - Five fewer groups of tsdb queries per monitoring snapshot (37 → 32 calls for a cluster snapshot).
 - Remove `GET /monitor/rules`, validation for `PUT /settings/monitor.rules`, and `MONITOR_RULES_INVALID` together.
 - Documentation: [Health Checks for Model Deployments](../how-to/deploy-models.md), [Health Checks in the API](../reference/api.md), [View Metrics and Search Logs](../how-to/monitor-and-logs.md).
+
+<!-- translation-source-sha256: 59b7ed7d311312c8398d2a3060a2120841117916d17da1a846ed76bcb380b98f -->

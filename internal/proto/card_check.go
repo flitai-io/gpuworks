@@ -1,7 +1,42 @@
 package proto
 
-// Card checks on the wire. The ids, states and skip reasons are the ones in
-// accelerator's card check catalog; proto only carries them.
+// Card checks on the wire. The ids and periods are accelerator's card check
+// catalog; the statuses are the five check statuses (check.go); the codes a
+// check reports are below, or an accelerator health code for what the vendor
+// tool, the PCIe, Xid, NVLink and runtime checks found.
+
+// Card check codes that are not accelerator health codes.
+const (
+	// CardCheckForeignProcesses: the occupancy check warns because processes
+	// outside the platform use the card.
+	CardCheckForeignProcesses = "FOREIGN_PROCESSES"
+	// The peer-memory check warns with DoctorPeerMemoryMissing.
+)
+
+// Why a card check was skipped.
+const (
+	// CardCheckNotRunYet: the check has not run on the card since the agent
+	// started.
+	CardCheckNotRunYet = "CARD_CHECK_NOT_RUN_YET"
+	// CardCheckSkipBusy: an instance is serving on the card; the check would
+	// disturb it, and serving is itself the answer.
+	CardCheckSkipBusy = "CARD_CHECK_SKIPPED_BUSY"
+	// CardCheckSkipForeign: somebody outside the platform uses the card.
+	CardCheckSkipForeign = "CARD_CHECK_SKIPPED_FOREIGN"
+	// CardCheckSkipDeferred: what the node runs is not known yet.
+	CardCheckSkipDeferred = "CARD_CHECK_SKIPPED_DEFERRED"
+	// CardCheckSkipNotHeld: the platform does not hold the card (a Kubernetes
+	// node whose kubelet may give it to another pod), so the check does not
+	// touch it.
+	CardCheckSkipNotHeld = "CARD_CHECK_SKIPPED_NOT_HELD"
+	// CardCheckSkipUnavailable: the host cannot run the check right now (the
+	// driver is not answering, the runtime is missing, an earlier check has
+	// not returned).
+	CardCheckSkipUnavailable = "CARD_CHECK_SKIPPED_UNAVAILABLE"
+	// CardCheckSkipProbeFailed: the vendor tool did not answer this round,
+	// so nothing it would have said is known.
+	CardCheckSkipProbeFailed = "CARD_CHECK_SKIPPED_PROBE_FAILED"
+)
 
 // CapCardChecks: the agent reports each card's checks (GPUInfo.Checks) and
 // answers RPCNodeCardCheckDetail and RPCNodeCardRecheck.
@@ -19,12 +54,15 @@ const (
 	RPCNodeCardRecheck = "node.card_recheck"
 )
 
-// CardCheck is one check's state on a card, as a status report carries it.
+// CardCheck is one check's result on a card, as a status report carries it.
 // Short keys: every report carries one per card and check.
 type CardCheck struct {
-	ID     string `json:"id"`
-	State  string `json:"s"`
-	Reason string `json:"r,omitempty"`
+	ID string `json:"id"`
+	// Status is one of the five check statuses.
+	Status string `json:"s"`
+	// Code is what a warning or failing check found, or why a skipped one
+	// did not run; empty for pass and na.
+	Code string `json:"r,omitempty"`
 	// AgeS is how many seconds before this report the check last ran, for a
 	// check that does not run with every report; 0 for one that does.
 	AgeS int32 `json:"age,omitempty"`
@@ -52,8 +90,9 @@ type CardRecheckRequest struct {
 
 // CardCheckRun is one run of a check on a card.
 type CardCheckRun struct {
-	State  string `json:"state"`
-	Reason string `json:"reason,omitempty"`
+	// Status and Code are a CardCheck's; the keys predate the names.
+	Status string `json:"state"`
+	Code   string `json:"reason,omitempty"`
 	// At is when the run finished, RFC 3339 in UTC.
 	At         string `json:"at"`
 	DurationMS int64  `json:"duration_ms,omitempty"`

@@ -47,15 +47,17 @@ func (p *PDLaunch) mode() pdmode.Mode {
 }
 
 // PDRoleLaunchConfig is the launch configuration a role runs with. KV offload
-// belongs to the prefill role only: on the decoder the PD connector always
-// supplies the prefix first, so a cache tier there only writes (measured: 14
-// GB written, 0 bytes read back) and was reported to crash on first hit. The
-// deployment keeps one configuration; this is where the decode role drops the
-// tiers, for the argv and the disk mount alike.
-func PDRoleLaunchConfig(q LaunchConfig, role string) LaunchConfig {
-	if role != pdmode.RoleDecode {
+// belongs to the roles the selected backend keeps (kvbackend.Backend.PDRoles;
+// the engine's own offload is kept on prefill only): on the decoder the PD
+// connector always supplies the prefix first, so a cache tier there only
+// writes (measured: 14 GB written, 0 bytes read back) and was reported to
+// crash on first hit. The deployment keeps one configuration; this is where
+// another role drops the offload, for the argv and the disk mount alike.
+func PDRoleLaunchConfig(engine string, q LaunchConfig, role string) LaunchConfig {
+	if kvBackendKeptOn(engine, q, role) {
 		return q
 	}
+	q.KVOffloadBackend = ""
 	q.KVOffloadingSize = 0
 	q.KVDiskOffload = false
 	q.SharedKVDir = ""

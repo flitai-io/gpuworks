@@ -48,3 +48,5 @@ The built-in AMD specs declare an exact `gpus.arch_id` (`gfx942` or `gfx1151`). 
 For each engine, retain image ID/archive digest, host and driver facts, model revision, actual command and device mapping, GPU/host-memory observations, health and request results, and every skipped or failed item. A check that cannot run in a CPU-only environment because no HIP device is available remains unverified.
 
 Software fixtures cover damaged fields, partial inventories, duplicate identities, and mismatched device numbers. Do not modify real sysfs or device nodes to manufacture a failure. Injection checks apply the assigned devices; they are not a security sandbox for administrator-supplied container configuration.
+
+<!-- translation-source-sha256: 3220b213c1296422816f73ca65d5d998c527b63af1677d3de3df4c2804e2a053 -->

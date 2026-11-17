@@ -27,7 +27,7 @@ func (i *cloudHostInstaller) InstallSSH(_ context.Context, req provision.SSHInst
 	if i.err != nil {
 		return provision.SSHInstallReport{}, i.err
 	}
-	return provision.SSHInstallReport{Checks: []provision.CheckResult{{Name: "Agent process", Status: "ok", Detail: "systemd"}}}, nil
+	return provision.SSHInstallReport{Checks: []provision.CheckResult{{ID: "agent_process", Status: "pass", Message: "systemd"}}}, nil
 }
 
 func TestInstallAgentOnHostWithoutGPUs(t *testing.T) {
@@ -95,7 +95,7 @@ func TestInstallAgentOnHostWithoutGPUs(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || len(report.Checks) != 1 || report.Checks[0].Name != "Agent process" || report.Checks[0].Status != "ok" {
+			if err != nil || len(report.Checks) != 1 || report.Checks[0].ID != "agent_process" || report.Checks[0].Status != "pass" {
 				t.Fatalf("installation result = %+v, %v", report, err)
 			}
 			host, err := cloudstore.New(st.DB()).CloudHostByNodeUUID(node.UUID)

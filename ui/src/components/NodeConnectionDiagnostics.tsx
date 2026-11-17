@@ -5,6 +5,7 @@ import type { NodeDoctorReport } from "../api";
 import { formatTime } from "../i18n/datetime";
 import { nodeConnectionApi, type NodeConnectionCheck, type NodeConnectionDiagnostics as Report } from "../nodeConnectionApi";
 import { recoveryLabel } from "../nodes/recoveryPhase";
+import { recoveryErrorText } from "../nodes/recoveryError";
 import { useIsAdmin } from "./useIsAdmin";
 
 const outcomes = new Set(["runtime_snapshot", "offline", "unsupported", "credentials_unavailable", "credential_error", "unavailable", "not_checked", "not_applicable", "invalid_address", "unverified_identity", "ssh_failed", "cancelled", "timeout", "connected", "command_failed", "invalid_response", "snapshot", "tool_missing", "http_error", "http_ok", "dns", "connect", "tls", "transport"]);
@@ -155,7 +156,7 @@ export default function NodeConnectionDiagnostics({ nodeUUID }: { nodeUUID: stri
             <Descriptions.Item label={t("connectionDiagnostics.lastSeen")}>{report.last_seen_at ? formatTime(report.last_seen_at) : t("connectionDiagnostics.unknown")}</Descriptions.Item>
             <Descriptions.Item label={t("connectionDiagnostics.recoveryPhase")}>{recoveryLabel[report.recovery_phase] ? t(recoveryLabel[report.recovery_phase].key) : t("connectionDiagnostics.unknown")}</Descriptions.Item>
             <Descriptions.Item label={t("connectionDiagnostics.lastRecovery")}>{report.last_probe_at ? formatTime(report.last_probe_at) : t("connectionDiagnostics.unknown")} · {t("connectionDiagnostics.attempts", { count: report.recovery_attempts })}</Descriptions.Item>
-            {report.last_recovery_error && <Descriptions.Item label={t("connectionDiagnostics.recoveryError")}>{report.last_recovery_error}</Descriptions.Item>}
+            {report.last_recovery_error && <Descriptions.Item label={t("connectionDiagnostics.recoveryError")}><span style={{ whiteSpace: "pre-line" }}>{recoveryErrorText(t, report.last_recovery_code, report.last_recovery_error)}</span></Descriptions.Item>}
             {report.last_reject_reason && rejectReasons.has(report.last_reject_reason) && <Descriptions.Item label={t("connectionDiagnostics.lastReject")}>{t(`connectionDiagnostics.runtime.value.reason.${report.last_reject_reason}`)}{report.last_reject_at ? ` · ${displayTime(report.last_reject_at)}` : ""}</Descriptions.Item>}
             <Descriptions.Item label={t("connectionDiagnostics.exposure")}>
               {report.exposure ? <Space direction="vertical" size={0}><span>{displayURL(report.exposure.url) || t("connectionDiagnostics.unknown")}</span><span>{t(`connectionDiagnostics.exposureState.${exposureStates.has(report.exposure.state) ? report.exposure.state : "unknown"}`)}</span><Typography.Text type="secondary">{t("connectionDiagnostics.lastObserved", { time: displayTime(report.exposure.observed_at) || t("connectionDiagnostics.unknown") })}</Typography.Text></Space> : t("connectionDiagnostics.unknown")}

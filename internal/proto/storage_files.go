@@ -175,9 +175,10 @@ type StorageFilesDeleteParams struct {
 	Path      string `json:"path"`
 }
 
-// Storage-files error codes. The agent reports a refusal as an error whose
-// text is FormatStorageFilesError's; the server maps the code to a product
-// error and keeps the rest as detail.
+// Storage-files error codes. The agent reports a refusal as a
+// StorageFilesError: on an rpc.resp as the code StorageFilesRPCCode names plus
+// a "detail" param (its text keeps the "storage_files:<code>: <detail>" shape
+// older servers read), and on an upload/download answer in the Code field.
 const (
 	StorageFilesErrPathInvalid    = "path_invalid"    // not a clean path, or resolves outside the root
 	StorageFilesErrRegionReadonly = "region_readonly" // outside the writable regions
@@ -190,6 +191,9 @@ const (
 
 const storageFilesErrPrefix = "storage_files:"
 
+// storageFilesRPCCodePrefix namespaces the storage-files codes on an rpc.resp.
+const storageFilesRPCCodePrefix = "STORAGE_FILES_"
+
 // StorageFilesError is a storage-files refusal with a stable code.
 type StorageFilesError struct {
 	Code   string
@@ -198,6 +202,16 @@ type StorageFilesError struct {
 
 func (e *StorageFilesError) Error() string {
 	return storageFilesErrPrefix + e.Code + ": " + e.Detail
+}
+
+// RPCCode is the refusal's code on an rpc.resp, e.g. STORAGE_FILES_NOT_FOUND.
+func (e *StorageFilesError) RPCCode() string {
+	return storageFilesRPCCodePrefix + strings.ToUpper(e.Code)
+}
+
+// RPCParams carries the detail on an rpc.resp.
+func (e *StorageFilesError) RPCParams() map[string]any {
+	return map[string]any{"detail": e.Detail}
 }
 
 // NewStorageFilesError builds a refusal; an unknown code becomes failed.
@@ -211,17 +225,15 @@ func NewStorageFilesError(code, format string, args ...any) *StorageFilesError {
 	return &StorageFilesError{Code: code, Detail: fmt.Sprintf(format, args...)}
 }
 
-// ParseStorageFilesError reads a code back out of an error text (an RPC error
-// string, or StorageFilesStatus.Error). Text that is not a storage-files
-// refusal comes back as failed with the whole text as detail.
-func ParseStorageFilesError(text string) *StorageFilesError {
-	rest, ok := strings.CutPrefix(text, storageFilesErrPrefix)
-	if ok {
-		if code, detail, found := strings.Cut(rest, ": "); found {
-			return NewStorageFilesError(code, "%s", detail)
-		}
+// storageFilesErrorFromRPC rebuilds the refusal an rpc.resp code names; ok is
+// false for a code outside the storage-files namespace.
+func storageFilesErrorFromRPC(code string, params map[string]any) (*StorageFilesError, bool) {
+	name, ok := strings.CutPrefix(code, storageFilesRPCCodePrefix)
+	if !ok {
+		return nil, false
 	}
-	return &StorageFilesError{Code: StorageFilesErrFailed, Detail: text}
+	detail, _ := params["detail"].(string)
+	return NewStorageFilesError(strings.ToLower(name), "%s", detail), true
 }
 
 // StorageFilesStatus is the agent's one-line answer at the end of an upload.

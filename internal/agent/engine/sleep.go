@@ -43,7 +43,7 @@ func (e *Engine) reconcileSleep(ctx context.Context, spec proto.InstanceDesiredS
 		return
 	}
 	e.mu.Lock()
-	cur := e.sleepLevel[spec.UUID]
+	cur := e.processOfLocked(spec.UUID).sleepLevel
 	e.mu.Unlock()
 	if cur == spec.DesiredSleep {
 		return
@@ -103,7 +103,7 @@ func (e *Engine) reconcileSleep(ctx context.Context, spec proto.InstanceDesiredS
 			// it as a successful transition so the UI does not show a false
 			// failure.
 			e.mu.Lock()
-			e.sleepLevel[spec.UUID] = target
+			e.setSleepLevelLocked(spec.UUID, target)
 			e.mu.Unlock()
 			e.report(proto.InstanceStatus{
 				UUID: spec.UUID, State: proto.InstRunning, ContainerID: containerName(spec.UUID),
@@ -122,12 +122,13 @@ func (e *Engine) reconcileSleep(ctx context.Context, spec proto.InstanceDesiredS
 	}
 
 	e.mu.Lock()
-	e.sleepLevel[spec.UUID] = spec.DesiredSleep
+	e.setSleepLevelLocked(spec.UUID, spec.DesiredSleep)
+	process := e.processLocked(spec.UUID)
 	if spec.DesiredSleep == 0 {
-		delete(e.sleepPIDs, spec.UUID)
+		process.sleepPIDs = nil
 	}
 	if spec.DesiredSleep == proto.SleepLevelL1 {
-		e.l1HostHeld[spec.UUID] = true
+		process.l1HostHeld = true
 	}
 	e.mu.Unlock()
 	target := spec.DesiredSleep
@@ -155,11 +156,9 @@ func (e *Engine) reportUncertainSleep(spec proto.InstanceDesiredState, orderErr,
 	e.mu.Lock()
 	delete(e.servingEpoch, spec.UUID)
 	e.mu.Unlock()
-	e.report(proto.InstanceStatus{
-		UUID: spec.UUID, State: proto.InstFailed, ContainerID: containerName(spec.UUID),
-		Phase: proto.PhaseSleep, SleepLevel: 0,
-		Message: fmt.Sprintf("sleep level uncertain after %v: %v", orderErr, recoveryErr),
-	})
+	detail := fmt.Sprintf("%v: %v", orderErr, recoveryErr)
+	e.reportFailed(spec.UUID, proto.RuntimeFailure{Code: proto.ErrorSleepStateUncertain, Phase: proto.PhaseSleep, Detail: detail},
+		"sleep level uncertain after "+detail, failedStatus{ContainerID: containerName(spec.UUID), Phase: proto.PhaseSleep})
 }
 
 // applySleepLevel issues the orders that take the engine from level cur to
@@ -220,15 +219,15 @@ func (e *Engine) prewarmSleep(ctx context.Context, spec proto.InstanceDesiredSta
 		return err
 	}
 	e.mu.Lock()
-	e.sleepLevel[spec.UUID] = 1
-	e.l1HostHeld[spec.UUID] = true
+	e.setSleepLevelLocked(spec.UUID, 1)
+	e.processLocked(spec.UUID).l1HostHeld = true
 	e.mu.Unlock()
 	if err := e.vllmPost(ctx, base+"/wake_up", nil); err != nil {
 		e.log.Debug("prewarm wake failed", "uuid", spec.UUID, "err", err)
 		return err
 	}
 	e.mu.Lock()
-	e.sleepLevel[spec.UUID] = 0
+	e.setSleepLevelLocked(spec.UUID, 0)
 	e.mu.Unlock()
 	e.log.Info("sleep prewarm complete", "uuid", spec.UUID)
 	return nil
@@ -247,7 +246,7 @@ func (e *Engine) prewarmSleep(ctx context.Context, spec proto.InstanceDesiredSta
 // wake leaves an L2 sleeper serving from empty buffers.
 func (e *Engine) adoptSleepLevel(ctx context.Context, spec proto.InstanceDesiredState) error {
 	e.mu.Lock()
-	_, known := e.sleepLevel[spec.UUID]
+	known := e.processOfLocked(spec.UUID).sleepKnown
 	e.mu.Unlock()
 	if known {
 		return nil
@@ -264,21 +263,9 @@ func (e *Engine) adoptSleepLevel(ctx context.Context, spec proto.InstanceDesired
 		}
 	}
 	e.mu.Lock()
-	e.sleepLevel[spec.UUID] = level
+	e.setSleepLevelLocked(spec.UUID, level)
 	e.mu.Unlock()
 	return nil
-}
-
-// forgetSleepState drops what the agent knew about an instance's sleep once
-// its container is gone, so a container created later under the same UUID is
-// adopted from what the engine says rather than from stale memory.
-func (e *Engine) forgetSleepState(uuid string) {
-	e.mu.Lock()
-	delete(e.sleepLevel, uuid)
-	delete(e.prewarmed, uuid)
-	delete(e.sleepPIDs, uuid)
-	delete(e.l1HostHeld, uuid)
-	e.mu.Unlock()
 }
 
 // holdsL1HostBuffer says the engine of uuid completed an L1 sleep since its
@@ -290,7 +277,7 @@ func (e *Engine) forgetSleepState(uuid string) {
 func (e *Engine) holdsL1HostBuffer(uuid string) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.l1HostHeld[uuid]
+	return e.processOfLocked(uuid).l1HostHeld
 }
 
 func (e *Engine) vllmPost(ctx context.Context, url string, body []byte) error {

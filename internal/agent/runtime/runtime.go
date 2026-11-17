@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"strings"
 
@@ -17,9 +18,49 @@ import (
 // ErrDaemonNotReady is what Detect returns for a runtime whose CLI and local
 // socket are present but whose daemon did not answer: still starting, or too
 // busy to answer in time. It is a state that passes, unlike a missing
-// runtime or one the agent may not use (permission denied), which Detect
-// reports as plain false.
+// runtime (plain false) or one the agent may not use (*SocketDeniedError).
 var ErrDaemonNotReady = errors.New("container daemon is installed but not answering")
+
+// SocketDeniedError is what Detect returns for a runtime whose daemon
+// answers but refuses the agent's account its local socket: the CLI said
+// permission denied connecting to Socket. It matches ErrPermissionDenied.
+// Unlike ErrDaemonNotReady it does not pass by waiting.
+type SocketDeniedError struct {
+	// Socket is the path of the socket the CLI could not open; Detail the
+	// CLI's own first line, for the log.
+	Socket, Detail string
+}
+
+func (e *SocketDeniedError) Error() string {
+	return fmt.Sprintf("permission denied on the container daemon socket %s: %s", e.Socket, e.Detail)
+}
+
+// Unwrap makes the refusal an ErrPermissionDenied.
+func (e *SocketDeniedError) Unwrap() error { return ErrPermissionDenied }
+
+// ErrImageNotFound is what an ImageInspector returns when the runtime itself
+// answered that the image is not in its local store, as opposed to a runtime
+// that could not be asked. Drivers recognize the answer in their CLI adapter
+// and wrap this sentinel; callers use errors.Is.
+var ErrImageNotFound = errors.New("image is not in the local store")
+
+// ErrContainerNotFound is what InspectWorkload returns when the runtime
+// answered that no such container (or pod container) exists. Drivers
+// recognize the answer where they asked and wrap this sentinel.
+var ErrContainerNotFound = errors.New("no such container")
+
+// ErrPermissionDenied is what an inspection returns when the runtime refused
+// the agent: the CLI could not reach its socket for lack of permission, or
+// the API server answered 403. Drivers recognize the refusal in their adapter
+// and wrap this sentinel; an os error (EACCES, EPERM) matches it as well
+// through IsPermissionDenied.
+var ErrPermissionDenied = errors.New("runtime refused the agent permission")
+
+// IsPermissionDenied reports whether err is a runtime refusal of permission:
+// ErrPermissionDenied from a driver, or an os-level EACCES/EPERM.
+func IsPermissionDenied(err error) bool {
+	return errors.Is(err, ErrPermissionDenied) || errors.Is(err, fs.ErrPermission)
+}
 
 type pullProxyContextKey struct{}
 
@@ -146,14 +187,18 @@ type Mount struct {
 
 // WorkloadSpec is a driver-agnostic container spec (plan §3).
 type WorkloadSpec struct {
-	Name        string
-	Image       string
-	Cmd         []string // args (appended to the image entrypoint)
-	Entrypoint  []string // override entrypoint (empty = image default)
-	Env         map[string]string
-	Mounts      []Mount
-	GPUIndexes  []int // physical GPU indexes to expose
-	DockerArgs  []string
+	Name       string
+	Image      string
+	Cmd        []string // args (appended to the image entrypoint)
+	Entrypoint []string // override entrypoint (empty = image default)
+	Env        map[string]string
+	Mounts     []Mount
+	GPUIndexes []int // physical GPU indexes to expose
+	DockerArgs []string
+	// Labels are container labels naming who launched the workload (see
+	// engine.WorkloadOwner). Runtimes with labels (docker, nerdctl) render
+	// them; the others ignore them. They identify, they never select.
+	Labels      map[string]string
 	HostNetwork bool
 	ShmBytes    int64
 	Ports       []int // published ports (ignored under host network)

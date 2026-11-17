@@ -1,0 +1,1711 @@
+{
+  "operation_definitions": [
+    {
+      "primary_inputs": [
+        "messages"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.chat",
+      "default_endpoint": "/v1/chat/completions",
+      "allowed_endpoints": [
+        "/v1/chat/completions"
+      ],
+      "request_encodings": [
+        "json"
+      ],
+      "modes": [
+        "stream",
+        "sync"
+      ],
+      "renderer": "chat",
+      "response": "sse"
+    },
+    {
+      "primary_inputs": [
+        "prompt"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.completions",
+      "default_endpoint": "/v1/completions",
+      "allowed_endpoints": [
+        "/v1/completions"
+      ],
+      "request_encodings": [
+        "json"
+      ],
+      "modes": [
+        "stream",
+        "sync"
+      ],
+      "renderer": "completion",
+      "response": "sse"
+    },
+    {
+      "primary_inputs": [
+        "input"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.embeddings",
+      "default_endpoint": "/v1/embeddings",
+      "allowed_endpoints": [
+        "/v1/embeddings"
+      ],
+      "request_encodings": [
+        "json"
+      ],
+      "modes": [
+        "sync"
+      ],
+      "renderer": "vector",
+      "response": "json"
+    },
+    {
+      "primary_inputs": [
+        "query",
+        "documents"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.rerank",
+      "default_endpoint": "/v1/rerank",
+      "allowed_endpoints": [
+        "/v1/rerank",
+        "/rerank"
+      ],
+      "request_encodings": [
+        "json"
+      ],
+      "modes": [
+        "sync"
+      ],
+      "renderer": "rerank",
+      "response": "json"
+    },
+    {
+      "primary_inputs": [
+        "file"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.audio.transcribe",
+      "default_endpoint": "/v1/audio/transcriptions",
+      "allowed_endpoints": [
+        "/v1/audio/transcriptions"
+      ],
+      "request_encodings": [
+        "multipart"
+      ],
+      "modes": [
+        "sync"
+      ],
+      "renderer": "audio",
+      "response": "json"
+    },
+    {
+      "primary_inputs": [
+        "input"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        },
+        {
+          "name": "voices",
+          "endpoint": "/v1/audio/voices"
+        }
+      ],
+      "type": "openai.audio.speech",
+      "default_endpoint": "/v1/audio/speech",
+      "allowed_endpoints": [
+        "/v1/audio/speech",
+        "/v1/audio/generate"
+      ],
+      "request_encodings": [
+        "json"
+      ],
+      "modes": [
+        "sync",
+        "stream"
+      ],
+      "renderer": "audio",
+      "response": "audio"
+    },
+    {
+      "primary_inputs": [
+        "prompt"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.image.generate",
+      "default_endpoint": "/v1/images/generations",
+      "allowed_endpoints": [
+        "/v1/images/generations"
+      ],
+      "request_encodings": [
+        "json",
+        "multipart"
+      ],
+      "modes": [
+        "sync"
+      ],
+      "renderer": "image",
+      "response": "image"
+    },
+    {
+      "primary_inputs": [
+        "prompt",
+        "image"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.image.edit",
+      "default_endpoint": "/v1/images/edits",
+      "allowed_endpoints": [
+        "/v1/images/edits"
+      ],
+      "request_encodings": [
+        "multipart"
+      ],
+      "modes": [
+        "sync"
+      ],
+      "renderer": "image",
+      "response": "image"
+    },
+    {
+      "primary_inputs": [
+        "prompt"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.video.generate",
+      "default_endpoint": "/v1/videos",
+      "allowed_endpoints": [
+        "/v1/videos",
+        "/v1/videos/sync"
+      ],
+      "request_encodings": [
+        "json",
+        "multipart"
+      ],
+      "modes": [
+        "async",
+        "sync"
+      ],
+      "renderer": "video",
+      "response": "video",
+      "async": {
+        "id_field": "id",
+        "status_field": "status",
+        "success_statuses": [
+          "completed"
+        ],
+        "failure_statuses": [
+          "failed",
+          "cancelled",
+          "deleted"
+        ],
+        "poll_method": "GET",
+        "poll_endpoint": "{endpoint}/{id}",
+        "content_method": "GET",
+        "content_endpoint": "{endpoint}/{id}/content",
+        "cancel_method": "DELETE",
+        "cancel_endpoint": "{endpoint}/{id}"
+      }
+    },
+    {
+      "primary_inputs": [],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "openai.realtime",
+      "default_endpoint": "/v1/realtime",
+      "allowed_endpoints": [
+        "/v1/realtime"
+      ],
+      "request_encodings": [
+        "websocket"
+      ],
+      "modes": [
+        "realtime"
+      ],
+      "renderer": "realtime",
+      "response": "websocket"
+    },
+    {
+      "primary_inputs": [
+        "state",
+        "questions"
+      ],
+      "discovery": [
+        {
+          "name": "models",
+          "endpoint": "/v1/models"
+        },
+        {
+          "name": "openapi",
+          "endpoint": "/openapi.json"
+        }
+      ],
+      "type": "systemone.decide",
+      "default_endpoint": "/v1/systemone",
+      "allowed_endpoints": [
+        "/v1/systemone"
+      ],
+      "request_encodings": [
+        "json"
+      ],
+      "modes": [
+        "sync"
+      ],
+      "renderer": "decision",
+      "response": "json"
+    }
+  ],
+  "name": "sglang",
+  "default_image": "lmsysorg/sglang:latest",
+  "health_path": "/health",
+  "shm_bytes": 17179869184,
+  "metric_path": "/metrics",
+  "sleep": {
+    "supported": false
+  },
+  "metric_prefix": "sglang",
+  "metric_map": {
+    "sglang:cache_hit_rate": "gpuworks_infer_kv_hit_rate_instant",
+    "sglang:e2e_request_latency_seconds": "gpuworks_infer_e2e_seconds",
+    "sglang:generation_tokens_total": "gpuworks_infer_generation_tokens_total",
+    "sglang:inter_token_latency_seconds": "gpuworks_infer_tpot_seconds",
+    "sglang:num_queue_reqs": "gpuworks_infer_requests_waiting",
+    "sglang:num_requests_running": "gpuworks_infer_requests_running",
+    "sglang:num_requests_waiting": "gpuworks_infer_requests_waiting",
+    "sglang:num_retracted_requests_total": "gpuworks_infer_preemptions_total",
+    "sglang:num_running_reqs": "gpuworks_infer_requests_running",
+    "sglang:prompt_tokens_total": "gpuworks_infer_prompt_tokens_total",
+    "sglang:queue_time_seconds": "gpuworks_infer_queue_time_seconds",
+    "sglang:spec_accept_length": "gpuworks_infer_spec_accept_length",
+    "sglang:spec_accept_rate": "gpuworks_infer_spec_accept_rate",
+    "sglang:time_to_first_token_seconds": "gpuworks_infer_ttft_seconds",
+    "sglang:token_usage": "gpuworks_infer_gpu_cache_usage_percent"
+  },
+  "param_dict": {
+    "data_parallel_size": "--dp-size",
+    "dtype": "--dtype",
+    "enable_auto_tool_choice": "--enable-auto-tool-choice",
+    "enable_cache_report": "--enable-cache-report",
+    "enable_metrics": "--enable-metrics",
+    "enable_prefix_caching": "--disable-radix-cache",
+    "enforce_eager": "--disable-cuda-graph",
+    "gpu_memory_utilization": "--mem-fraction-static",
+    "kv_cache_dtype": "--kv-cache-dtype",
+    "log_level": "--log-level",
+    "lora": "--enable-lora",
+    "max_model_len": "--context-length",
+    "max_num_batched_tokens": "--chunked-prefill-size",
+    "max_num_seqs": "--max-running-requests",
+    "quantization": "--quantization",
+    "reasoning_parser": "--reasoning-parser",
+    "speculative_algorithm": "--speculative-algorithm",
+    "speculative_draft_model": "--speculative-draft-model-path",
+    "speculative_eagle_top_k": "--speculative-eagle-topk",
+    "speculative_num_steps": "--speculative-num-steps",
+    "speculative_tokens": "--speculative-num-draft-tokens",
+    "tool_call_parser": "--tool-call-parser",
+    "trust_remote_code": "--trust-remote-code"
+  },
+  "param_specs": [
+    {
+      "key": "log_level",
+      "flag": "--log-level",
+      "aliases": {
+        "fatal": "critical",
+        "warn": "warning"
+      },
+      "label": {
+        "en": "Log level",
+        "zh": "日志级别"
+      },
+      "type": "enum",
+      "control": "select",
+      "group": "performance",
+      "enum": [
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "critical",
+        "notset"
+      ],
+      "options": [
+        {
+          "value": "debug",
+          "label": {
+            "en": "DEBUG",
+            "zh": "DEBUG"
+          }
+        },
+        {
+          "value": "info",
+          "label": {
+            "en": "INFO",
+            "zh": "INFO"
+          }
+        },
+        {
+          "value": "warning",
+          "label": {
+            "en": "WARNING",
+            "zh": "WARNING"
+          }
+        },
+        {
+          "value": "error",
+          "label": {
+            "en": "ERROR",
+            "zh": "ERROR"
+          }
+        },
+        {
+          "value": "critical",
+          "label": {
+            "en": "CRITICAL",
+            "zh": "CRITICAL"
+          }
+        },
+        {
+          "value": "notset",
+          "label": {
+            "en": "NOTSET",
+            "zh": "NOTSET"
+          }
+        }
+      ],
+      "default": "info",
+      "help": {
+        "en": "Set the log level and include severity in supported SGLang launch logs.",
+        "zh": "设置日志级别，并为支持的 SGLang 启动日志补充级别标识。"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 36
+    },
+    {
+      "key": "enable_metrics",
+      "flag": "--enable-metrics",
+      "label": {
+        "en": "Enable Inference Metrics",
+        "zh": "推理监控指标"
+      },
+      "type": "boolean",
+      "control": "switch",
+      "group": "performance",
+      "default": true,
+      "help": {
+        "en": "Expose engine inference metrics for GPUWorks monitoring",
+        "zh": "向 GPUWorks 提供引擎推理指标；关闭后无法查看实例级推理监控数据"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 37
+    },
+    {
+      "key": "max_model_len",
+      "flag": "--context-length",
+      "label": {
+        "en": "Maximum Context Length",
+        "zh": "最大上下文长度"
+      },
+      "type": "integer",
+      "control": "number",
+      "group": "model",
+      "placeholder": {
+        "en": "Automatic",
+        "zh": "自动"
+      },
+      "help": {
+        "en": "Specify a fixed length, or choose automatic memory fitting on supported vLLM versions. The model limit is not the observed runtime limit.",
+        "zh": "可指定固定长度；支持的 vLLM 版本可选择自动按可用内存适配。模型上限不等于实际可用长度。"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "automatic": true,
+      "layout": "quick",
+      "order": 10
+    },
+    {
+      "key": "dtype",
+      "flag": "--dtype",
+      "aliases": {
+        "float": "float32",
+        "half": "float16"
+      },
+      "label": {
+        "en": "Weight Precision",
+        "zh": "权重精度"
+      },
+      "type": "enum",
+      "control": "select",
+      "group": "model",
+      "enum": [
+        "auto",
+        "float16",
+        "bfloat16",
+        "float32"
+      ],
+      "options": [
+        {
+          "value": "auto",
+          "label": {
+            "en": "Automatic",
+            "zh": "自动"
+          }
+        },
+        {
+          "value": "float16",
+          "label": {
+            "en": "Float16",
+            "zh": "Float16"
+          }
+        },
+        {
+          "value": "bfloat16",
+          "label": {
+            "en": "BFloat16",
+            "zh": "BFloat16"
+          }
+        },
+        {
+          "value": "float32",
+          "label": {
+            "en": "Float32",
+            "zh": "Float32"
+          }
+        }
+      ],
+      "default": "auto",
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "quantization",
+      "flag": "--quantization",
+      "label": {
+        "en": "Quantization Method",
+        "zh": "量化方式"
+      },
+      "type": "string",
+      "control": "text",
+      "group": "model",
+      "placeholder": {
+        "en": "For example, awq",
+        "zh": "例如 awq"
+      },
+      "help": {
+        "en": "The quantization format is determined jointly by the model and image",
+        "zh": "量化格式由模型和镜像共同决定"
+      },
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "trust_remote_code",
+      "flag": "--trust-remote-code",
+      "label": {
+        "en": "Trust Remote Code",
+        "zh": "信任远程代码"
+      },
+      "type": "boolean",
+      "control": "switch",
+      "group": "model",
+      "default": false,
+      "help": {
+        "en": "Allow custom code from the model repository to be loaded",
+        "zh": "允许加载模型仓库中的自定义代码"
+      },
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "reasoning_parser",
+      "flag": "--reasoning-parser",
+      "label": {
+        "en": "Reasoning Content Parser",
+        "zh": "推理内容解析器"
+      },
+      "type": "string",
+      "control": "combobox",
+      "group": "model",
+      "enum": [
+        "apertus2509",
+        "cohere_command4",
+        "deepseek-r1",
+        "deepseek-v3",
+        "deepseek-v4",
+        "deepseek-v41",
+        "dots",
+        "gemma4",
+        "gigachat35",
+        "glm45",
+        "gpt-oss",
+        "granite_thinking_parser",
+        "hunyuan",
+        "inkling",
+        "interns1",
+        "iquest_q1",
+        "k2_horizon",
+        "kimi",
+        "kimi_k2",
+        "kimi_k3",
+        "ling3",
+        "mimo",
+        "minimax",
+        "minimax-append-think",
+        "minimax-m3",
+        "mistral",
+        "muse",
+        "nanbeige",
+        "nemotron_3",
+        "poolside_v1",
+        "qwen3",
+        "qwen3-thinking",
+        "step3",
+        "step3p5"
+      ],
+      "options": [
+        {
+          "value": "apertus2509",
+          "label": {
+            "en": "apertus2509",
+            "zh": "apertus2509"
+          }
+        },
+        {
+          "value": "cohere_command4",
+          "label": {
+            "en": "cohere_command4",
+            "zh": "cohere_command4"
+          }
+        },
+        {
+          "value": "deepseek-r1",
+          "label": {
+            "en": "deepseek-r1",
+            "zh": "deepseek-r1"
+          }
+        },
+        {
+          "value": "deepseek-v3",
+          "label": {
+            "en": "deepseek-v3",
+            "zh": "deepseek-v3"
+          }
+        },
+        {
+          "value": "deepseek-v4",
+          "label": {
+            "en": "deepseek-v4",
+            "zh": "deepseek-v4"
+          }
+        },
+        {
+          "value": "deepseek-v41",
+          "label": {
+            "en": "deepseek-v41",
+            "zh": "deepseek-v41"
+          }
+        },
+        {
+          "value": "dots",
+          "label": {
+            "en": "dots",
+            "zh": "dots"
+          }
+        },
+        {
+          "value": "gemma4",
+          "label": {
+            "en": "gemma4",
+            "zh": "gemma4"
+          }
+        },
+        {
+          "value": "gigachat35",
+          "label": {
+            "en": "gigachat35",
+            "zh": "gigachat35"
+          }
+        },
+        {
+          "value": "glm45",
+          "label": {
+            "en": "glm45",
+            "zh": "glm45"
+          }
+        },
+        {
+          "value": "gpt-oss",
+          "label": {
+            "en": "gpt-oss",
+            "zh": "gpt-oss"
+          }
+        },
+        {
+          "value": "granite_thinking_parser",
+          "label": {
+            "en": "granite_thinking_parser",
+            "zh": "granite_thinking_parser"
+          }
+        },
+        {
+          "value": "hunyuan",
+          "label": {
+            "en": "hunyuan",
+            "zh": "hunyuan"
+          }
+        },
+        {
+          "value": "inkling",
+          "label": {
+            "en": "inkling",
+            "zh": "inkling"
+          }
+        },
+        {
+          "value": "interns1",
+          "label": {
+            "en": "interns1",
+            "zh": "interns1"
+          }
+        },
+        {
+          "value": "iquest_q1",
+          "label": {
+            "en": "iquest_q1",
+            "zh": "iquest_q1"
+          }
+        },
+        {
+          "value": "k2_horizon",
+          "label": {
+            "en": "k2_horizon",
+            "zh": "k2_horizon"
+          }
+        },
+        {
+          "value": "kimi",
+          "label": {
+            "en": "kimi",
+            "zh": "kimi"
+          }
+        },
+        {
+          "value": "kimi_k2",
+          "label": {
+            "en": "kimi_k2",
+            "zh": "kimi_k2"
+          }
+        },
+        {
+          "value": "kimi_k3",
+          "label": {
+            "en": "kimi_k3",
+            "zh": "kimi_k3"
+          }
+        },
+        {
+          "value": "ling3",
+          "label": {
+            "en": "ling3",
+            "zh": "ling3"
+          }
+        },
+        {
+          "value": "mimo",
+          "label": {
+            "en": "mimo",
+            "zh": "mimo"
+          }
+        },
+        {
+          "value": "minimax",
+          "label": {
+            "en": "minimax",
+            "zh": "minimax"
+          }
+        },
+        {
+          "value": "minimax-append-think",
+          "label": {
+            "en": "minimax-append-think",
+            "zh": "minimax-append-think"
+          }
+        },
+        {
+          "value": "minimax-m3",
+          "label": {
+            "en": "minimax-m3",
+            "zh": "minimax-m3"
+          }
+        },
+        {
+          "value": "mistral",
+          "label": {
+            "en": "mistral",
+            "zh": "mistral"
+          }
+        },
+        {
+          "value": "muse",
+          "label": {
+            "en": "muse",
+            "zh": "muse"
+          }
+        },
+        {
+          "value": "nanbeige",
+          "label": {
+            "en": "nanbeige",
+            "zh": "nanbeige"
+          }
+        },
+        {
+          "value": "nemotron_3",
+          "label": {
+            "en": "nemotron_3",
+            "zh": "nemotron_3"
+          }
+        },
+        {
+          "value": "poolside_v1",
+          "label": {
+            "en": "poolside_v1",
+            "zh": "poolside_v1"
+          }
+        },
+        {
+          "value": "qwen3",
+          "label": {
+            "en": "qwen3",
+            "zh": "qwen3"
+          }
+        },
+        {
+          "value": "qwen3-thinking",
+          "label": {
+            "en": "qwen3-thinking",
+            "zh": "qwen3-thinking"
+          }
+        },
+        {
+          "value": "step3",
+          "label": {
+            "en": "step3",
+            "zh": "step3"
+          }
+        },
+        {
+          "value": "step3p5",
+          "label": {
+            "en": "step3p5",
+            "zh": "step3p5"
+          }
+        }
+      ],
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 31
+    },
+    {
+      "key": "tool_call_parser",
+      "flag": "--tool-call-parser",
+      "label": {
+        "en": "Tool Call Parser",
+        "zh": "工具调用解析器"
+      },
+      "type": "string",
+      "control": "combobox",
+      "group": "model",
+      "enum": [
+        "apertus2509",
+        "cohere_command4",
+        "deepseekv3",
+        "deepseekv31",
+        "deepseekv32",
+        "deepseekv4",
+        "deepseekv41",
+        "dots",
+        "gemma4",
+        "gigachat3",
+        "gigachat35",
+        "glm",
+        "glm45",
+        "glm47",
+        "gpt-oss",
+        "hermes",
+        "hunyuan",
+        "inkling",
+        "interns1",
+        "iquest_q1",
+        "k2_horizon",
+        "kimi_k2",
+        "kimi_k3",
+        "lfm2",
+        "ling3",
+        "llama3",
+        "mimo",
+        "minicpm5",
+        "minimax-m2",
+        "minimax-m3",
+        "mistral",
+        "muse",
+        "nanbeige",
+        "poolside_v1",
+        "pythonic",
+        "qwen",
+        "qwen25",
+        "qwen3_coder",
+        "spark25",
+        "step3",
+        "step3p5",
+        "trinity"
+      ],
+      "options": [
+        {
+          "value": "apertus2509",
+          "label": {
+            "en": "apertus2509",
+            "zh": "apertus2509"
+          }
+        },
+        {
+          "value": "cohere_command4",
+          "label": {
+            "en": "cohere_command4",
+            "zh": "cohere_command4"
+          }
+        },
+        {
+          "value": "deepseekv3",
+          "label": {
+            "en": "deepseekv3",
+            "zh": "deepseekv3"
+          }
+        },
+        {
+          "value": "deepseekv31",
+          "label": {
+            "en": "deepseekv31",
+            "zh": "deepseekv31"
+          }
+        },
+        {
+          "value": "deepseekv32",
+          "label": {
+            "en": "deepseekv32",
+            "zh": "deepseekv32"
+          }
+        },
+        {
+          "value": "deepseekv4",
+          "label": {
+            "en": "deepseekv4",
+            "zh": "deepseekv4"
+          }
+        },
+        {
+          "value": "deepseekv41",
+          "label": {
+            "en": "deepseekv41",
+            "zh": "deepseekv41"
+          }
+        },
+        {
+          "value": "dots",
+          "label": {
+            "en": "dots",
+            "zh": "dots"
+          }
+        },
+        {
+          "value": "gemma4",
+          "label": {
+            "en": "gemma4",
+            "zh": "gemma4"
+          }
+        },
+        {
+          "value": "gigachat3",
+          "label": {
+            "en": "gigachat3",
+            "zh": "gigachat3"
+          }
+        },
+        {
+          "value": "gigachat35",
+          "label": {
+            "en": "gigachat35",
+            "zh": "gigachat35"
+          }
+        },
+        {
+          "value": "glm",
+          "label": {
+            "en": "glm",
+            "zh": "glm"
+          }
+        },
+        {
+          "value": "glm45",
+          "label": {
+            "en": "glm45",
+            "zh": "glm45"
+          }
+        },
+        {
+          "value": "glm47",
+          "label": {
+            "en": "glm47",
+            "zh": "glm47"
+          }
+        },
+        {
+          "value": "gpt-oss",
+          "label": {
+            "en": "gpt-oss",
+            "zh": "gpt-oss"
+          }
+        },
+        {
+          "value": "hermes",
+          "label": {
+            "en": "hermes",
+            "zh": "hermes"
+          }
+        },
+        {
+          "value": "hunyuan",
+          "label": {
+            "en": "hunyuan",
+            "zh": "hunyuan"
+          }
+        },
+        {
+          "value": "inkling",
+          "label": {
+            "en": "inkling",
+            "zh": "inkling"
+          }
+        },
+        {
+          "value": "interns1",
+          "label": {
+            "en": "interns1",
+            "zh": "interns1"
+          }
+        },
+        {
+          "value": "iquest_q1",
+          "label": {
+            "en": "iquest_q1",
+            "zh": "iquest_q1"
+          }
+        },
+        {
+          "value": "k2_horizon",
+          "label": {
+            "en": "k2_horizon",
+            "zh": "k2_horizon"
+          }
+        },
+        {
+          "value": "kimi_k2",
+          "label": {
+            "en": "kimi_k2",
+            "zh": "kimi_k2"
+          }
+        },
+        {
+          "value": "kimi_k3",
+          "label": {
+            "en": "kimi_k3",
+            "zh": "kimi_k3"
+          }
+        },
+        {
+          "value": "lfm2",
+          "label": {
+            "en": "lfm2",
+            "zh": "lfm2"
+          }
+        },
+        {
+          "value": "ling3",
+          "label": {
+            "en": "ling3",
+            "zh": "ling3"
+          }
+        },
+        {
+          "value": "llama3",
+          "label": {
+            "en": "llama3",
+            "zh": "llama3"
+          }
+        },
+        {
+          "value": "mimo",
+          "label": {
+            "en": "mimo",
+            "zh": "mimo"
+          }
+        },
+        {
+          "value": "minicpm5",
+          "label": {
+            "en": "minicpm5",
+            "zh": "minicpm5"
+          }
+        },
+        {
+          "value": "minimax-m2",
+          "label": {
+            "en": "minimax-m2",
+            "zh": "minimax-m2"
+          }
+        },
+        {
+          "value": "minimax-m3",
+          "label": {
+            "en": "minimax-m3",
+            "zh": "minimax-m3"
+          }
+        },
+        {
+          "value": "mistral",
+          "label": {
+            "en": "mistral",
+            "zh": "mistral"
+          }
+        },
+        {
+          "value": "muse",
+          "label": {
+            "en": "muse",
+            "zh": "muse"
+          }
+        },
+        {
+          "value": "nanbeige",
+          "label": {
+            "en": "nanbeige",
+            "zh": "nanbeige"
+          }
+        },
+        {
+          "value": "poolside_v1",
+          "label": {
+            "en": "poolside_v1",
+            "zh": "poolside_v1"
+          }
+        },
+        {
+          "value": "pythonic",
+          "label": {
+            "en": "pythonic",
+            "zh": "pythonic"
+          }
+        },
+        {
+          "value": "qwen",
+          "label": {
+            "en": "qwen",
+            "zh": "qwen"
+          }
+        },
+        {
+          "value": "qwen25",
+          "label": {
+            "en": "qwen25",
+            "zh": "qwen25"
+          }
+        },
+        {
+          "value": "qwen3_coder",
+          "label": {
+            "en": "qwen3_coder",
+            "zh": "qwen3_coder"
+          }
+        },
+        {
+          "value": "spark25",
+          "label": {
+            "en": "spark25",
+            "zh": "spark25"
+          }
+        },
+        {
+          "value": "step3",
+          "label": {
+            "en": "step3",
+            "zh": "step3"
+          }
+        },
+        {
+          "value": "step3p5",
+          "label": {
+            "en": "step3p5",
+            "zh": "step3p5"
+          }
+        },
+        {
+          "value": "trinity",
+          "label": {
+            "en": "trinity",
+            "zh": "trinity"
+          }
+        }
+      ],
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 30
+    },
+    {
+      "key": "enable_auto_tool_choice",
+      "flag": "--enable-auto-tool-choice",
+      "label": {
+        "en": "Automatic Tool Selection",
+        "zh": "自动选择工具"
+      },
+      "type": "boolean",
+      "control": "switch",
+      "group": "model",
+      "default": false,
+      "help": {
+        "en": "Allow the model to select tools automatically for each request",
+        "zh": "允许模型根据请求自动选择工具"
+      },
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "gpu_memory_utilization",
+      "flag": "--mem-fraction-static",
+      "label": {
+        "en": "GPU Memory Utilization",
+        "zh": "显存使用率"
+      },
+      "type": "number",
+      "control": "slider",
+      "group": "performance",
+      "default": 0.88,
+      "min": 0.01,
+      "max": 0.98,
+      "step": 0.01,
+      "help": {
+        "en": "Per-GPU memory limit for this instance; divide capacity manually when multiple instances share a GPU",
+        "zh": "本实例的每卡显存上限；同卡多实例时需自行分摊"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 11
+    },
+    {
+      "key": "max_num_batched_tokens",
+      "flag": "--chunked-prefill-size",
+      "label": {
+        "en": "Maximum Batched Tokens",
+        "zh": "单批最大 Token 数"
+      },
+      "type": "integer",
+      "control": "number",
+      "group": "performance",
+      "placeholder": {
+        "en": "Automatic",
+        "zh": "自动"
+      },
+      "help": {
+        "en": "Leave empty to derive the value from the GPU model and performance profile",
+        "zh": "留空时按卡型和性能档位推导"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "automatic": true
+    },
+    {
+      "key": "max_num_seqs",
+      "flag": "--max-running-requests",
+      "label": {
+        "en": "Maximum Concurrent Sequences",
+        "zh": "最大并发序列数"
+      },
+      "type": "integer",
+      "control": "number",
+      "group": "performance",
+      "placeholder": {
+        "en": "Automatic",
+        "zh": "自动"
+      },
+      "help": {
+        "en": "Leave empty to derive the value from available GPU memory",
+        "zh": "留空时按显存容量推导"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "automatic": true
+    },
+    {
+      "key": "enable_prefix_caching",
+      "flag": "--disable-radix-cache",
+      "flag_off": "--disable-radix-cache",
+      "label": {
+        "en": "Prefix Caching",
+        "zh": "前缀缓存"
+      },
+      "type": "boolean",
+      "control": "switch",
+      "group": "performance",
+      "help": {
+        "en": "Required for KV Offload",
+        "zh": "KV Offload 的前置条件"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 33
+    },
+    {
+      "key": "enable_cache_report",
+      "flag": "--enable-cache-report",
+      "label": {
+        "en": "Cache Hit Stats",
+        "zh": "返回缓存命中统计"
+      },
+      "type": "boolean",
+      "control": "switch",
+      "group": "performance",
+      "default": true,
+      "help": {
+        "en": "Include prefix-cache hit token counts in each response's usage",
+        "zh": "开启后推理响应的 usage 携带前缀缓存命中 token 数"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 34
+    },
+    {
+      "key": "kv_cache_dtype",
+      "flag": "--kv-cache-dtype",
+      "label": {
+        "en": "KV Cache Precision",
+        "zh": "KV Cache 精度"
+      },
+      "type": "enum",
+      "control": "select",
+      "group": "performance",
+      "enum": [
+        "auto",
+        "bfloat16",
+        "fp8_e4m3",
+        "fp8_e5m2",
+        "mxfp8",
+        "nvfp4",
+        "fp4_mx_block16"
+      ],
+      "options": [
+        {
+          "value": "auto",
+          "label": {
+            "en": "Automatic",
+            "zh": "自动"
+          }
+        },
+        {
+          "value": "bfloat16",
+          "label": {
+            "en": "BF16",
+            "zh": "BF16"
+          }
+        },
+        {
+          "value": "fp8_e4m3",
+          "label": {
+            "en": "FP8 E4M3",
+            "zh": "FP8 E4M3"
+          }
+        },
+        {
+          "value": "fp8_e5m2",
+          "label": {
+            "en": "FP8 E5M2",
+            "zh": "FP8 E5M2"
+          }
+        },
+        {
+          "value": "mxfp8",
+          "label": {
+            "en": "MXFP8",
+            "zh": "MXFP8"
+          }
+        },
+        {
+          "value": "nvfp4",
+          "label": {
+            "en": "NVFP4",
+            "zh": "NVFP4"
+          }
+        },
+        {
+          "value": "fp4_mx_block16",
+          "label": {
+            "en": "FP4 MX block-16",
+            "zh": "FP4 MX block-16"
+          }
+        }
+      ],
+      "default": "auto",
+      "placeholder": {
+        "en": "auto",
+        "zh": "auto"
+      },
+      "help": {
+        "en": "FP8 can significantly increase KV capacity, but requires support from the model and engine version",
+        "zh": "FP8 可显著增加 KV 容量，但需模型与引擎版本支持"
+      },
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "enforce_eager",
+      "flag": "--disable-cuda-graph",
+      "label": {
+        "en": "Enforce Eager Mode",
+        "zh": "强制 Eager"
+      },
+      "type": "boolean",
+      "control": "switch",
+      "group": "performance",
+      "default": false,
+      "help": {
+        "en": "Starts faster and uses less GPU memory, but reduces steady-state decoding performance",
+        "zh": "启动更快且更省显存，但会降低稳态解码性能"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 35
+    },
+    {
+      "key": "speculative_algorithm",
+      "flag": "--speculative-algorithm",
+      "label": {
+        "en": "Speculative Decoding Algorithm",
+        "zh": "投机解码算法"
+      },
+      "type": "enum",
+      "control": "select",
+      "group": "speculative",
+      "enum": [
+        "EAGLE",
+        "EAGLE3",
+        "NEXTN",
+        "DSPARK",
+        "NGRAM",
+        "STANDALONE"
+      ],
+      "options": [
+        {
+          "value": "EAGLE",
+          "label": {
+            "en": "EAGLE",
+            "zh": "EAGLE"
+          }
+        },
+        {
+          "value": "EAGLE3",
+          "label": {
+            "en": "EAGLE 3",
+            "zh": "EAGLE 3"
+          }
+        },
+        {
+          "value": "NEXTN",
+          "label": {
+            "en": "NextN (MTP)",
+            "zh": "NextN（MTP）"
+          }
+        },
+        {
+          "value": "DSPARK",
+          "label": {
+            "en": "DSpark",
+            "zh": "DSpark"
+          }
+        },
+        {
+          "value": "NGRAM",
+          "label": {
+            "en": "N-gram",
+            "zh": "N-gram"
+          }
+        },
+        {
+          "value": "STANDALONE",
+          "label": {
+            "en": "Standalone Draft Model",
+            "zh": "独立草稿模型"
+          }
+        }
+      ],
+      "placeholder": {
+        "en": "Choose an algorithm",
+        "zh": "选择算法"
+      },
+      "help": {
+        "en": "For vLLM the list is only suggestions: type any method name the engine supports and it is passed as written; whether the chosen image supports it is yours to check. For SGLang, choose from the list. For an algorithm that needs a draft, such as DFlash, mount a registered model under Extra Mounts and enter its container path as the draft model.",
+        "zh": "vLLM 的列表只是建议，可直接输入引擎支持的任意方法名，原样传给引擎，所选镜像是否支持由部署者自行确认；SGLang 只能从列表中选择。DFlash 等需要 draft 的算法，可在“额外挂载”中挂载一个已注册模型，再把它的容器路径填到 Draft 模型。"
+      },
+      "engines": [
+        "sglang"
+      ],
+      "layout": "quick",
+      "order": 32
+    },
+    {
+      "key": "speculative_draft_model",
+      "flag": "--speculative-draft-model-path",
+      "label": {
+        "en": "Draft Model",
+        "zh": "Draft 模型"
+      },
+      "type": "string",
+      "control": "text",
+      "group": "speculative",
+      "placeholder": {
+        "en": "Container path, such as /draft for a model mounted under Extra Mounts; or a model ID",
+        "zh": "容器内路径，例如在额外挂载中挂载的模型 /draft；或模型 ID"
+      },
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "speculative_tokens",
+      "flag": "--speculative-num-draft-tokens",
+      "label": {
+        "en": "Speculative Tokens per Step",
+        "zh": "每步投机 Token 数"
+      },
+      "type": "integer",
+      "control": "number",
+      "group": "speculative",
+      "min": 1,
+      "step": 1,
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "speculative_num_steps",
+      "flag": "--speculative-num-steps",
+      "label": {
+        "en": "Speculative Steps",
+        "zh": "投机步数"
+      },
+      "type": "integer",
+      "control": "number",
+      "group": "speculative",
+      "min": 1,
+      "step": 1,
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "speculative_eagle_top_k",
+      "flag": "--speculative-eagle-topk",
+      "label": {
+        "en": "EAGLE Top K",
+        "zh": "EAGLE Top K"
+      },
+      "type": "integer",
+      "control": "number",
+      "group": "speculative",
+      "min": 1,
+      "step": 1,
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "data_parallel_size",
+      "flag": "--dp-size",
+      "label": {
+        "en": "Data Parallel Size",
+        "zh": "数据并行数"
+      },
+      "type": "integer",
+      "control": "number",
+      "group": "parallel",
+      "min": 1,
+      "step": 1,
+      "engines": [
+        "sglang"
+      ]
+    },
+    {
+      "key": "lora",
+      "flag": "--enable-lora",
+      "label": {
+        "en": "Enable LoRA",
+        "zh": "启用 LoRA"
+      },
+      "type": "boolean",
+      "control": "switch",
+      "group": "model",
+      "default": false,
+      "engines": [
+        "sglang"
+      ]
+    }
+  ],
+  "quick_form_keys": [
+    "enable_metrics",
+    "log_level",
+    "max_model_len",
+    "dtype",
+    "quantization",
+    "gpu_memory_utilization",
+    "max_num_seqs",
+    "max_num_batched_tokens",
+    "enable_prefix_caching",
+    "data_parallel_size",
+    "enable_cache_report",
+    "kv_cache_dtype",
+    "reasoning_parser",
+    "tool_call_parser",
+    "enable_auto_tool_choice",
+    "trust_remote_code",
+    "enforce_eager"
+  ],
+  "pd_modes": [
+    {
+      "name": "sglang-nixl",
+      "vendors": [
+        "nvidia"
+      ],
+      "roles": [
+        "decode",
+        "prefill"
+      ],
+      "scalable_to_zero": [],
+      "tp_rule": "equal",
+      "max_units_per_role": 32,
+      "fallbacks": [
+        "fail"
+      ],
+      "kv_load_failures": [],
+      "unverified": true
+    }
+  ]
+}

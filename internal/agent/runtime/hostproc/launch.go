@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -26,9 +27,11 @@ import (
 //
 // Only whole tokens are translated, plus the value of a "--flag=value" or
 // "KEY=value" token and each element of a colon-separated path list, because
-// those are the places a launch puts a path. A shell script (an argument with
+// those are the places a launch puts a path. The value of a flag in nameFlags
+// is a name, not a path, and is kept as written. A shell script (an argument with
 // whitespace) gets its mount targets translated where they stand as words: a
-// pre-start script names the model mount that way.
+// pre-start script names the model mount that way. A manual command is such a
+// script too, so there the value of a nameFlags flag is likewise kept.
 type pathMap struct {
 	root   string          // unpacked environment package
 	mounts []runtime.Mount // longest target first
@@ -99,6 +102,47 @@ func (m pathMap) value(v string) string {
 // to be translated.
 var flagOrKey = regexp.MustCompile(`^(-{1,2}[A-Za-z0-9][A-Za-z0-9._-]*|[A-Za-z_][A-Za-z0-9_]*)=`)
 
+// nameFlags are the flags whose value is a name that merely looks like a path.
+// A launch with no model alias names the model after its mount target
+// ("--served-model-name /model"), and that is the name the gateway asks for:
+// translating it would leave the engine answering under the host path.
+var nameFlags = []string{"--served-model-name"}
+
+// isNameFlag reports whether tok is a flag in nameFlags.
+func isNameFlag(tok string) bool {
+	return slices.Contains(nameFlags, tok)
+}
+
+// scriptNameValue matches a nameFlags flag in a shell script and captures its
+// value: after "=" or blanks (line continuations included), bare or quoted.
+// The flag itself may be quoted ("--served-model-name" /model), since the
+// server's deploy.ParseArgsText reads that as the same flag and expects the
+// engine under the name that follows.
+var scriptNameValue = func() *regexp.Regexp {
+	flags := make([]string, len(nameFlags))
+	for i, flag := range nameFlags {
+		flags[i] = regexp.QuoteMeta(flag)
+	}
+	return regexp.MustCompile(`(?:^|[\s"'(;&|])(?:` + strings.Join(flags, "|") + `)["']?(?:=|(?:[ \t]|\\\n)+)("[^"]*"|'[^']*'|[^\s"';)&|<>]+)`)
+}()
+
+// args translates a whole argv, keeping the values of nameFlags.
+func (m pathMap) args(argv []string) []string {
+	out := make([]string, len(argv))
+	for i, tok := range argv {
+		if i > 0 && isNameFlag(argv[i-1]) {
+			out[i] = tok
+			continue
+		}
+		if flag, _, ok := strings.Cut(tok, "="); ok && isNameFlag(flag) {
+			out[i] = tok
+			continue
+		}
+		out[i] = m.arg(tok)
+	}
+	return out
+}
+
 // arg translates one argv token.
 func (m pathMap) arg(tok string) string {
 	if strings.ContainsAny(tok, " \t\n") {
@@ -130,12 +174,24 @@ func (m pathMap) script(s string) string {
 	if len(targets) == 0 {
 		return s
 	}
-	word := regexp.MustCompile(`(?:^|[\s"'=:(])(` + strings.Join(targets, "|") + `)`)
+	word := regexp.MustCompile(`(?:^|[` + regexp.QuoteMeta(wordStart) + `])(` + strings.Join(targets, "|") + `)`)
+	names := scriptNameValue.FindAllStringSubmatchIndex(s, -1)
+	isName := func(at int) bool {
+		for _, loc := range names {
+			if at >= loc[2] && at < loc[3] {
+				return true
+			}
+		}
+		return false
+	}
 	var out strings.Builder
 	last := 0
 	for _, loc := range word.FindAllStringSubmatchIndex(s, -1) {
 		start, end := loc[2], loc[3]
-		if end < len(s) && !strings.ContainsRune(`/ \t\n"';)`, rune(s[end])) {
+		if isName(start) {
+			continue // a name, kept as written (nameFlags)
+		}
+		if !endsWord(s, end) {
 			continue // a longer word that only begins with the target
 		}
 		out.WriteString(s[last:start])
@@ -144,6 +200,24 @@ func (m pathMap) script(s string) string {
 	}
 	out.WriteString(s[last:])
 	return out.String()
+}
+
+// wordStart and wordEnd are the characters that may stand right before and
+// right after a mount target for it to be a word of a shell script: blanks,
+// quotes and shell operators, "=" or ":" before a value ("--x=/model",
+// "PATH=/a:/model"), and "/" after it for a path below the target.
+const (
+	wordStart = " \t\n\"'=:(;&|<>"
+	wordEnd   = "/ \t\n\"');&|<>"
+)
+
+// endsWord reports whether a word of s that runs up to s[end] ends there: at
+// the end of s, at a wordEnd character or at a line continuation.
+func endsWord(s string, end int) bool {
+	if end >= len(s) || strings.IndexByte(wordEnd, s[end]) >= 0 {
+		return true
+	}
+	return strings.HasPrefix(s[end:], "\\\n")
 }
 
 // instanceDirs are the per-instance and per-environment directories a host
@@ -195,9 +269,7 @@ func planLaunch(root string, config oci.ImageConfig, spec runtime.WorkloadSpec, 
 	if len(argv) == 0 {
 		return launch{}, fmt.Errorf("workload %s has no command: neither the spec nor image %s names one", spec.Name, spec.Image)
 	}
-	for i, tok := range argv {
-		argv[i] = paths.arg(tok)
-	}
+	argv = paths.args(argv)
 
 	env := map[string]string{}
 	for _, key := range hostEnvKeys {

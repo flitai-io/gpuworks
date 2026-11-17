@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -142,6 +143,9 @@ func (s *Store) DeletePlatformToken(userID, id uint) (*PlatformToken, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Open streams re-check their credential on this topic, so one opened
+	// with this token ends before it forwards another change.
+	s.publishManagementSession(strconv.FormatUint(uint64(row.ID), 10), "platform-token-revoked")
 	return &row, nil
 }
 

@@ -240,12 +240,12 @@ func TestCopyModelFilePicksTheTransfer(t *testing.T) {
 	}
 	f.ready(t, f.node, proto.StorageStatus{ID: f.nfs.ID, State: proto.StorageStateReady, Path: "/mnt/a", Writable: true})
 	// NFS to the local storage of a node that mounts it: a copy on that node.
-	row, err := f.c.CopyModelFile(context.Background(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, store.FileRef{StorageID: local, NodeID: f.node.ID}, -1)
+	row, err := f.c.Transfers().Copy(context.Background(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, store.FileRef{StorageID: local, NodeID: f.node.ID}, -1)
 	if err != nil || row.Acquisition != proto.ModelAcquireCopy || row.TransferSourceStorageID != f.nfs.ID {
 		t.Fatalf("copy on the node = %+v err=%v", row, err)
 	}
 	// NFS to a node that does not mount it: a peer transfer from one that does.
-	row, err = f.c.CopyModelFile(context.Background(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, store.FileRef{StorageID: local, NodeID: f.other.ID}, 0)
+	row, err = f.c.Transfers().Copy(context.Background(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, store.FileRef{StorageID: local, NodeID: f.other.ID}, 0)
 	if err != nil || row.TransferSourceNodeID != f.node.ID {
 		t.Fatalf("peer copy = %+v err=%v", row, err)
 	}
@@ -254,7 +254,7 @@ func TestCopyModelFilePicksTheTransfer(t *testing.T) {
 	if _, err := f.st.UpdateStorage(local, store.StoragePatch{Enabled: &disabled}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.c.CopyModelFile(context.Background(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, store.FileRef{StorageID: local, NodeID: f.other.ID}, 0); err == nil {
+	if _, err := f.c.Transfers().Copy(context.Background(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, store.FileRef{StorageID: local, NodeID: f.other.ID}, 0); err == nil {
 		t.Fatal("copy into a disabled storage accepted")
 	}
 	// Local storage on n1 into the NFS: the node that holds it and mounts the
@@ -270,12 +270,12 @@ func TestCopyModelFilePicksTheTransfer(t *testing.T) {
 	if _, err := f.st.UpsertModelFile(&store.ModelFile{ModelID: other.ID, StorageID: local, NodeID: f.node.ID, Path: "/data/other", State: proto.MFPresent}); err != nil {
 		t.Fatal(err)
 	}
-	row, err = f.c.CopyModelFile(context.Background(), other.ID, store.FileRef{StorageID: local, NodeID: f.node.ID}, store.FileRef{StorageID: f.nfs.ID}, -1)
+	row, err = f.c.Transfers().Copy(context.Background(), other.ID, store.FileRef{StorageID: local, NodeID: f.node.ID}, store.FileRef{StorageID: f.nfs.ID}, -1)
 	if err != nil || row.NodeID != 0 || row.WriterNodeID != f.node.ID || row.Path != "org/other" || row.Acquisition != proto.ModelAcquireCopy {
 		t.Fatalf("copy into the NFS = %+v err=%v", row, err)
 	}
 	// A source that does not hold the model is refused.
-	if _, err := f.c.CopyModelFile(context.Background(), other.ID, store.FileRef{StorageID: local, NodeID: f.other.ID}, store.FileRef{StorageID: f.nfs.ID}, -1); err == nil {
+	if _, err := f.c.Transfers().Copy(context.Background(), other.ID, store.FileRef{StorageID: local, NodeID: f.other.ID}, store.FileRef{StorageID: f.nfs.ID}, -1); err == nil {
 		t.Fatal("copy from a node without the model accepted")
 	}
 }

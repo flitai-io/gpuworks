@@ -453,3 +453,17 @@ func TestNewInNamespacePinsEveryCommandToThatNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildRunArgsRendersWorkloadLabels(t *testing.T) {
+	args := New().buildRunArgs(runtime.WorkloadSpec{
+		Name:   "gpuworks-test",
+		Image:  "vllm/vllm-openai:latest",
+		Labels: map[string]string{"gpuworks.server": "https://gw.example:8800", "gpuworks.node": "node-a"},
+	})
+
+	assertContainsPair(t, args, "--label", "gpuworks.server=https://gw.example:8800")
+	assertContainsPair(t, args, "--label", "gpuworks.node=node-a")
+	if i := slices.Index(args, "vllm/vllm-openai:latest"); i < 0 || slices.Index(args, "--label") > i {
+		t.Fatalf("labels must come before the image: %q", args)
+	}
+}

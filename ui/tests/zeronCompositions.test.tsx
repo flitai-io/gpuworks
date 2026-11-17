@@ -316,3 +316,11 @@ test("an adapted antd icon is hidden from assistive technology, sized by its slo
   assert.equal(svg.getAttribute("class"), "lead");
   assert.equal(svg.style.fontSize, "18px");
 });
+
+test("compact resource subtitles preserve the accessible title and header actions", async () => {
+  mount(<SideDrawer open inlineSubtitle onClose={() => {}} title="GPU server" subtitle="gpu-host.example" extra={<button>Inspect node</button>}><p>Details</p></SideDrawer>);
+  const dialog = await screen.findByRole("dialog", { name: "GPU server" });
+  assert.ok(dialog.contains(screen.getByText("gpu-host.example")));
+  assert.ok(dialog.contains(screen.getByRole("button", { name: "Inspect node" })));
+  assert.ok(screen.getByRole("heading", { name: "GPU server" }));
+});

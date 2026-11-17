@@ -169,13 +169,13 @@ func TestRequestsHistoryMapsRecords(t *testing.T) {
 	src := &fakeRequests{deployments: map[uint]bool{7: true}, history: []uxrecord.Request{record, noUsage}, next: "more", names: map[uint]string{}, coverage: [3]int64{1234, 0, 0}}
 	out, err := requestsService(src).Requests(context.Background(), 7,
 		dto.MonitorRequestsQuery{View: "history", RangeMS: 3_600_000, Limit: 20, Cursor: "c", APIKeyID: 2,
-			InstanceUUID: "inst-a", Results: []string{"client_closed", "error"}, MinEndMS: 500, MaxEndMS: 9000})
+			InstanceUUID: "inst-a", Results: []string{"client_closed", "error"}, MinEndMS: 500, MaxEndMS: 9000, MinTTFTMS: 20, MaxTTFTMS: 3000})
 	if err != nil {
 		t.Fatal(err)
 	}
 	wantQ := HistoryQuery{DeploymentID: 7, FromMS: requestsNow.UnixMilli() - 3_600_000, ToMS: requestsNow.UnixMilli(),
 		APIKeyID: 2, InstanceUUID: "inst-a", Results: []uxrecord.Result{uxrecord.ResultClientClosed, uxrecord.ResultError},
-		MinEndMS: 500, MaxEndMS: 9000, Limit: 20, Cursor: "c"}
+		MinEndMS: 500, MaxEndMS: 9000, MinTTFTMS: 20, MaxTTFTMS: 3000, Limit: 20, Cursor: "c"}
 	if len(src.historyArgs) != 1 || !reflect.DeepEqual(src.historyArgs[0], wantQ) {
 		t.Fatalf("history query = %+v, want %+v", src.historyArgs, wantQ)
 	}
@@ -188,9 +188,19 @@ func TestRequestsHistoryMapsRecords(t *testing.T) {
 	if out.Requests[0].Result != "client_closed" || out.Requests[1].Result != "error" {
 		t.Fatalf("results = %q %q", out.Requests[0].Result, out.Requests[1].Result)
 	}
-	// A queue-only report splits off its known queue; the remainder stays waiting.
-	if fmt.Sprint(out.Requests[0].Segments) != "[{gateway 2} {queue 5} {waiting 24} {thinking 369} {answering 500} {tail 1}]" {
+	// A queue-only report splits off its known queue; the remainder stays
+	// waiting. The segments up to the first token add up to the TTFT.
+	if fmt.Sprint(out.Requests[0].Segments) != "[{gateway 2 first_token} {queue 5 first_token} {waiting 24 first_token} {thinking 369 decode} {answering 500 decode} {tail 1 tail}]" {
 		t.Fatalf("segments = %v", out.Requests[0].Segments)
+	}
+	// TTFT is the first reasoning; decode is the engine's: 200 tokens in
+	// 800 ms. Without a cache figure the prefill speed is unknown.
+	if r := out.Requests[0]; r.TTFTMS == nil || *r.TTFTMS != 31 || r.TPOTMS == nil || *r.TPOTMS != 4 || r.DecodeTokS == nil || *r.DecodeTokS != 250 || r.PrefillTokS != nil {
+		t.Fatalf("ttft %v tpot %v decode %v prefill %v", r.TTFTMS, r.TPOTMS, r.DecodeTokS, r.PrefillTokS)
+	}
+	// A reply that does not stream has no TTFT, and its segments no stage.
+	if r := out.Requests[1]; r.TTFTMS != nil || r.TPOTMS != nil || (len(r.Segments) > 0 && r.Segments[0].Stage != "") {
+		t.Fatalf("bare ttft %v tpot %v segments %v", r.TTFTMS, r.TPOTMS, r.Segments)
 	}
 
 	// An explicit range replaces the one ending now; an unknown result is a
@@ -214,6 +224,35 @@ func TestRequestsHistoryMapsRecords(t *testing.T) {
 	if bare.PromptTokens != nil || bare.CompletionTokens != nil || bare.DispatchMS != nil || *bare.EndMS != 3 ||
 		bare.Outcome != "upstream_error" || bare.Weight != 1 || *bare.MaxGapMS != 0 {
 		t.Fatalf("usage-less record = %+v", bare)
+	}
+}
+
+// A stream that ended without a token, an upstream error say, has no first
+// token to split at: no TTFT, and its segments sit under no stage, even when
+// the engine reported its queue, prefill and decode.
+func TestRequestsHistoryStreamWithoutTokenHasNoStages(t *testing.T) {
+	for _, r := range []uxrecord.Request{
+		{ID: "err", Stream: true, DispatchMS: 1, FirstByteMS: uxrecord.Unknown, FirstThinkMS: uxrecord.Unknown, FirstAnswerMS: uxrecord.Unknown,
+			LastChunkMS: uxrecord.Unknown, EndMS: 3000, Status: 502, Outcome: uxrecord.OutcomeUpstreamError, CachedTokens: uxrecord.Unknown,
+			ReasoningTokens: uxrecord.Unknown, EngineQueueMS: uxrecord.Unknown, EnginePrefillMS: uxrecord.Unknown, EngineDecodeMS: uxrecord.Unknown},
+		{ID: "empty", Stream: true, DispatchMS: 1, FirstByteMS: 20, FirstThinkMS: uxrecord.Unknown, FirstAnswerMS: uxrecord.Unknown,
+			LastChunkMS: 900, EndMS: 950, Events: 3, Status: 200, FinishReason: "stop", Usage: true, PromptTokens: 100, CompletionTokens: 5,
+			CachedTokens: 0, ReasoningTokens: uxrecord.Unknown, EngineQueueMS: 10, EnginePrefillMS: 40, EngineDecodeMS: 800},
+	} {
+		src := &fakeRequests{deployments: map[uint]bool{7: true}, history: []uxrecord.Request{r}, names: map[uint]string{}}
+		out, err := requestsService(src).Requests(context.Background(), 7, dto.MonitorRequestsQuery{View: "history", RangeMS: 3_600_000, Limit: 20})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := out.Requests[0]
+		if got.TTFTMS != nil || len(got.Segments) == 0 {
+			t.Fatalf("%s: ttft %v segments %v", r.ID, got.TTFTMS, got.Segments)
+		}
+		for _, s := range got.Segments {
+			if s.Stage != "" {
+				t.Fatalf("%s: segments %v, want no stage", r.ID, got.Segments)
+			}
+		}
 	}
 }
 

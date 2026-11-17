@@ -250,6 +250,11 @@ test("a storage the form chose by itself follows the evaluation; one the person 
   fireEvent.mouseDown(screen.getByRole("combobox", { name: text("saveTo") }));
   fireEvent.click(optionRow(targetName("scratch", "local")));
   await waitFor(() => assert.equal(screen.queryAllByText(text("storageGone")).length, 0));
+  // antd keeps the field's explain block through its collapse motion and only then
+  // resets the field's reserved height. Flagging the field again before that ends
+  // lets the stale reset hide the new message (the field turns red, explains nothing),
+  // so the next step waits for the block to be gone, as a person's next action would.
+  await waitFor(() => assert.equal(document.querySelector(".ant-form-item-explain"), null));
   assert.deepEqual(requested(), { storage_id: 3 });
   assert.equal(weightStorageInvalid(second, form.getFieldValue("model_source")), false);
 

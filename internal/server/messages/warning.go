@@ -27,6 +27,11 @@ const (
 	WarningImageCatalogNoMatchDomestic     = "IMAGE_CATALOG_NO_MATCH_DOMESTIC"
 	WarningImageCatalogUnavailableDomestic = "IMAGE_CATALOG_UNAVAILABLE_DOMESTIC"
 	WarningImageDriverCompatibility        = "IMAGE_DRIVER_COMPATIBILITY"
+	// WarningExtraArgsEngineUnverified: a residual user flag is documented by
+	// another engine's dictionary, not this target's. It remains passthrough;
+	// dictionary absence is not evidence that the target CLI refuses it.
+	// Params: flag, engine, documented_engine.
+	WarningExtraArgsEngineUnverified = "EXTRA_ARGS_ENGINE_UNVERIFIED"
 	// WarningComputeNetworkFallback: some ranks have a compute network of
 	// their own, but not all share it, so the group runs over the management
 	// network.
@@ -34,7 +39,20 @@ const (
 	// WarningPlanningKVBelowContext is an uncertain KV capacity prediction,
 	// not a startup/resource refusal. Params: kv_tokens, max_model_len.
 	WarningPlanningKVBelowContext = "PLANNING_KV_BELOW_CONTEXT"
+	// WarningManualDraftUnavailable: a multi-node or PD draft has no manual
+	// command script that runs every rank's own engine command, because ranks
+	// of one kind differ in something no platform variable carries (the RDMA
+	// device names of two nodes, say). The command cannot be edited from the
+	// form; no params.
+	WarningManualDraftUnavailable = "MANUAL_DRAFT_UNAVAILABLE"
 )
+
+// WarningKubeEnginePortsOutside: an edit of a Kubernetes entry's engine_ports
+// left the ports some running instances hold outside the new range. The edit
+// is saved and those instances keep their ports; only ports allocated later
+// come from the new range. Params: range ("START-END"), instances (instance_uuid,
+// deployment and ports, the ports outside the range, of each).
+const WarningKubeEnginePortsOutside = "KUBE_ENGINE_PORTS_OUTSIDE"
 
 // Launch warnings: the platform cannot prove a launch will work, or knows it
 // depends on host conditions it cannot see. Evaluate reports them; create and

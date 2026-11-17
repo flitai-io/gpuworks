@@ -206,7 +206,7 @@ func (a *apiHandlers) locationRef(modelID uint, loc locationRequest) (store.File
 
 // copyModel copies a model's files between two locations.
 func (a *apiHandlers) copyModel(w http.ResponseWriter, r *http.Request) {
-	if a.d.PeerSync.CopyModel == nil {
+	if a.d.ModelTransfers == nil {
 		writeProductError(w, http.StatusServiceUnavailable, ErrorModelSyncUnavailable, "model copy is not configured", nil)
 		return
 	}
@@ -249,7 +249,7 @@ func (a *apiHandlers) copyModel(w http.ResponseWriter, r *http.Request) {
 		}
 		rate = *req.RateLimitKiB
 	}
-	mf, err := a.d.PeerSync.CopyModel(r.Context(), modelID, src, dst, rate)
+	mf, err := a.d.ModelTransfers.Copy(r.Context(), modelID, src, dst, rate)
 	if err != nil {
 		err = deployment.ModelFilePathProductError(err)
 		if errors.Is(err, store.ErrStorageDisabled) || errors.Is(err, store.ErrStorageNotWritable) || errors.Is(err, store.ErrNotFound) {
@@ -308,8 +308,8 @@ func (a *apiHandlers) evictModelNode(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if mf != nil && mf.State == proto.MFSyncing && a.d.CancelModelSync != nil {
-		if _, err := a.d.CancelModelSync(r.Context(), modelID, node.UUID); err != nil {
+	if mf != nil && mf.State == proto.MFSyncing && a.d.ModelTransfers != nil {
+		if _, err := a.d.ModelTransfers.Cancel(r.Context(), modelID, node.UUID); err != nil {
 			writeErr(w, http.StatusConflict, err)
 			return
 		}

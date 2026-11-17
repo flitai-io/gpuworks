@@ -59,8 +59,28 @@ type Hooks struct {
 func Execute(ctx context.Context, run Run, hooks Hooks) {
 	e := &execution{run: run, hooks: hooks}
 	if err := e.execute(ctx); err != nil && ctx.Err() == nil {
-		e.report(proto.BenchmarkStatus{ID: run.ID, State: "failed", Message: err.Error(), StopReason: proto.BenchmarkStopFatal})
+		status := proto.BenchmarkStatus{ID: run.ID, State: "failed", Message: err.Error(), StopReason: proto.BenchmarkStopFatal}
+		status.Code, status.Params = failureCode(err)
+		e.report(status)
 	}
+}
+
+// codedFailure is a failure that knows its stable code, such as
+// *dataset.LoadError.
+type codedFailure interface {
+	error
+	Code() string
+	Params() map[string]any
+}
+
+// failureCode is the code and params of the coded failure in err's chain;
+// an uncoded failure reports none and is shown by its message.
+func failureCode(err error) (string, map[string]any) {
+	var coded codedFailure
+	if errors.As(err, &coded) {
+		return coded.Code(), coded.Params()
+	}
+	return "", nil
 }
 
 type execution struct {

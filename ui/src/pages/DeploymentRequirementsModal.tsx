@@ -1,4 +1,6 @@
-import { Alert, Button, Form, Modal, Radio, Select, Space, Tag, Typography, message } from "antd";
+import { Form, Modal, Radio, Select, Space, Typography, message } from "antd";
+import { Alert, Tag } from "../pages/DeploymentControls";
+import { Button } from "../components/ui/button";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,6 +10,7 @@ import SystemLabelConditions, { systemConditionsToRequirements } from "../compon
 import { systemLabelValue } from "../components/SystemLabelTags";
 import NodePicker from "../nodes/NodePicker";
 import { useNodeFacets } from "../nodes/useNodeFacets";
+import { HelpTip } from "../ui-kit/HelpTip";
 
 const NODE_KEY = "gpuworks.ai/node";
 const VENDOR_KEY = "gpuworks.ai/vendor";
@@ -51,7 +54,7 @@ export function EditRequirementsButton({ dep, onChanged }: { dep: Deployment; on
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="small" type="link" disabled={dep.desired_state === "deleting"} onClick={() => setOpen(true)}>
+      <Button variant="tertiary" size="xs" disabled={dep.desired_state === "deleting"} onClick={() => setOpen(true)}>
         {t("detail.placement.edit.open")}
       </Button>
       {open && <RequirementsModal dep={dep} onClose={() => setOpen(false)} onChanged={(next) => { setOpen(false); onChanged(next); }} />}
@@ -112,14 +115,14 @@ function RequirementsModal({ dep, onClose, onChanged }: { dep: Deployment; onClo
       confirmLoading={saving}
       width={640}
     >
-      <Typography.Paragraph type="secondary">{t("detail.placement.edit.help")}</Typography.Paragraph>
+      <Typography.Paragraph type="secondary">{t("detail.placement.edit.intro")}</Typography.Paragraph>
       <Form form={form} layout="vertical" initialValues={initial} onFinish={save}>
         {vendor && (
           <Form.Item label={t("detail.placement.edit.vendor")} extra={t("detail.placement.edit.vendorFixed")}>
             <Tag>{vendorLabel ? systemLabelValue(vendorLabel, tNodes) : vendor}</Tag>
           </Form.Item>
         )}
-        <Form.Item name="nodes" label={t("detail.placement.edit.nodes")} extra={t("detail.placement.edit.nodesHelp")}>
+        <Form.Item name="nodes" label={t("detail.placement.edit.nodes")} extra={<span className="inline-flex items-center gap-1">{t("detail.placement.edit.nodesHint")}<HelpTip content={t("detail.placement.edit.nodesHelp")} /></span>}>
           <NodePicker
             mode="multiple"
             allowClear
@@ -130,7 +133,7 @@ function RequirementsModal({ dep, onClose, onChanged }: { dep: Deployment; onClo
           />
         </Form.Item>
         <SystemLabelConditions facets={facets.data?.system_labels} />
-        <Form.Item name="label_conditions" label={t("detail.placement.edit.labels")} extra={t("detail.placement.edit.labelsHelp")}>
+        <Form.Item name="label_conditions" label={t("detail.placement.edit.labels")} extra={t("detail.placement.edit.labelsHint")}>
           <Select mode="tags" allowClear options={labelOptions} placeholder={t("detail.placement.edit.labelsPlaceholder")} />
         </Form.Item>
         <Form.Item name="placement_strategy" label={t("detail.placement.edit.strategy")}>

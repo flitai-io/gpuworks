@@ -11,6 +11,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/server/yieldpolicy"
@@ -73,7 +74,7 @@ func cardsWakeFixture(t *testing.T, replicas ...string) (*automationAdapter, *st
 	}
 	waits := placewait.New()
 	waits.Wait(chat.ID, placewait.Cards{NodeID: node.ID, GPUIndexes: []int{1}}, nil, time.Now())
-	adapter := &automationAdapter{store: st, now: time.Now, log: slog.New(slog.NewTextHandler(io.Discard, nil)), waits: waits}
+	adapter := &automationAdapter{store: st, now: time.Now, log: slog.New(slog.NewTextHandler(io.Discard, nil)), waits: waits, orders: &lifecycle.Orders{}}
 	return adapter, st, dep, waits
 }
 

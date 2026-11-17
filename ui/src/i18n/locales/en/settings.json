@@ -16,9 +16,58 @@
     "failed": "The outbound policy could not be loaded or saved. Retry without changing the draft.",
     "saved": "Outbound policy saved and applied."
   },
+  "versionPicker": {
+    "title": "Select upgrade version",
+    "browse": "View available versions",
+    "source": "Update channel · {{channel}}",
+    "runningVersion": "Running version",
+    "runningChannel": "Current build channel",
+    "available": "Available versions",
+    "showAll": "View all {{count}} versions",
+    "showRecent": "Show recent versions",
+    "search": "Search by version or commit",
+    "noMatch": "No matching versions.",
+    "recheck": "Check again",
+    "loading": "Loading versions…",
+    "empty": "No versions are available in this channel.",
+    "latest": "Latest in channel",
+    "upgradeTo": "Upgrade to {{version}}",
+    "selectedTarget": "selected version",
+    "lookupFailed": "Could not load the version list. Check again.",
+    "cannotInstall": "Console upgrade unavailable",
+    "useHost": "Run the upgrade on the host.",
+    "recoveryTitle": "How to restore an earlier version",
+    "recoveryHelp": "Restore the database, configuration and binary from the pre-upgrade backup for that version, then verify the running server version.",
+    "confirmTitle": "Upgrade to {{version}}?",
+    "back": "Back to versions",
+    "confirm": "Confirm upgrade",
+    "download": "Downloading and verifying {{version}}",
+    "downloadHelp": "The server will back up and restart after verification.",
+    "restarting": "Restarting the server into {{version}}",
+    "unknown": "Upgrade result unconfirmed",
+    "recheckRunning": "Recheck running version",
+    "unknownHelp": "No response from {{version}} within five minutes. This page rechecks every 15 seconds. See the server log and install-history.jsonl for details.",
+    "probe": {
+      "offline": "The server was still unreachable at {{time}}.",
+      "unconfirmed": "{{version}} responded at {{time}}. Rollback for this upgrade is still unconfirmed."
+    },
+    "acknowledge": "Got it",
+    "restored": "Restored to {{version}}",
+    "restoredHelp": "Target {{version}} could not start. The previous version is running again.",
+    "reasons": {
+      "installed": "Installed",
+      "arch": "No {{platform}} package",
+      "older": "Older than running version",
+      "backup": "Restore matching backup"
+    },
+    "failed": "Could not install {{version}}. Check again and select a version."
+  },
   "updates": {
+    "buildFields": {"channel": "Build channel", "builtAt": "Built", "matched": "Matching release"},
+    "updateItem": "Update item",
+    "channelLatest": "Latest in channel",
     "title": "Version and updates",
-    "description": "Check and update the server, the system image catalog and the inference template catalog here. With automatic checks on, the console checks when it opens (the server reaches out at most once an hour); Check for updates asks again right away. Without internet access, upload the files instead.",
+    "description": "Check and update the server, the system image catalog and the inference template catalog here; without internet access, upload the files instead.",
     "check": "Check for updates",
     "unavailable": "Updates cannot be checked right now",
     "unavailableHelp": "Make sure the server can reach the internet (set HTTPS_PROXY on its host if it needs a proxy). Without internet access, upload the system image catalog and the inference template catalog here, and upgrade the server with an uploaded release or gpuworks upgrade --archive.", "checking": "Checking…", "unpublished": "Nothing has been published on the {{channel}} channel yet", "unpublishedHelp": "The sources can be reached; this channel just has nothing on it yet. Switch to the other channel, or check again once a release is published. The system image catalog and the inference template catalog can still be updated here by uploading a file.", "invalidIndex": "The sources answered with something that did not pass signature verification", "invalidIndexHelp": "The server reached the sources but did not get a valid release index back, which usually means a gateway or proxy that requires signing in intercepted the request. Check the outbound proxy and gateway of the server's host and check again later; meanwhile, update by uploading files here.",
@@ -33,6 +82,7 @@
     "unknown": "Unknown",
     "notPublished": "Not published",
     "upToDate": "Up to date",
+    "differentChannelVersion": "Different channel version",
     "available": "Update available",
     "needsServer": "Upgrade the server first",
     "apply": "Update",
@@ -40,6 +90,12 @@
     "uploadPackage": "Upload package",
     "imagesApplied": "System image catalog updated to {{version}}",
     "templatesApplied": "Inference template catalog updated to {{version}} ({{count}} models)",
+    "templatesSkipped_one": "{{count}} inference template needs a newer server and was not updated",
+    "templatesSkipped_other": "{{count}} inference templates need a newer server and were not updated",
+    "templatesSkippedHelp": "Everything else was updated. The models and specs below are written in a form this server does not support yet: the ones you already have are unchanged and still usable, new ones are not shown. Install a newer server, then update again.",
+    "templatesSkippedList": "Models and specs not updated",
+    "templatesSkippedMore_one": "{{count}} more not listed",
+    "templatesSkippedMore_other": "{{count}} more not listed",
     "serverHelp": "Where supported, upgrade the server here: it backs up first and rolls back when the new version does not come up. You can also run sudo gpuworks upgrade on its host; inside the office add --base-url for the internal release site, and an offline host uses --archive with a local release archive.",
     "upgrade": "Upgrade",
     "uploadServer": "Upload release",
@@ -116,7 +172,8 @@
   "error": { "save": "Failed to save: {{detail}}", "update": "Failed to update: {{detail}}", "import": "Failed to import: {{detail}}", "delete": "Failed to delete: {{detail}}", "add": "Failed to add: {{detail}}" },
   "pull": {
     "title": "Pull settings",
-    "description": "Where nodes get images and models from, and which proxy they go out through. Source rules say which alternative addresses to try first for image registries and model sites, proxies give the matching nodes their outbound proxy, sync groups (shared by images and models) say which nodes copy from one another, and credentials log in to private registries and give model sites a token. A deployment carries no source of its own; every node reads these settings when it pulls.",
+    "description": "Where nodes get images and models from and which proxy they go out through; every node reads these settings when it pulls.",
+    "descriptionHelp": "Source rules say which alternative addresses to try first for image registries and model sites; proxies give the matching nodes their outbound proxy; sync groups (shared by images and models) say which nodes copy from one another; credentials log in to private registries and give model sites a token. A deployment carries no source of its own.",
     "loadFailed": "Failed to load: {{detail}}",
     "invalidField": "The “{{field}}” setting is invalid: {{detail}}",
     "tabs": {
@@ -160,7 +217,8 @@
       "countUnknown": "The number of matching nodes is unavailable right now."
     },
     "rules": {
-      "intro": "When the platform pulls an image or a model it tries the alternative addresses of the rules that match first, works down the list until one works, and finally goes back to the original address unless a rule turns that off. An image download moves on after a failure or 3 minutes without new bytes. For a model, an address that errors is skipped at once (and cooled for 30 minutes on that node); a connection that receives no data for 5 minutes counts as a stall, and two stalls in a row at the same address move on to the next. Image rules match registries; model site rules match an http(s) site root. Without a rule, the node probes each registry and orders them by reachability and latency.",
+      "intro": "A pull tries the alternative addresses of the matching rules in order until one works, then the original address unless a rule turns that off.",
+      "introHelp": "An image download moves on after a failure or 3 minutes without new bytes. For a model, an address that errors is skipped at once (and cooled for 30 minutes on that node); a connection that receives no data for 5 minutes counts as a stall, and two stalls in a row at the same address move on to the next. Image rules match registries; model site rules match an http(s) site root. Without a rule, the node probes each registry and orders them by reachability and latency.",
       "orderHint": "Rules are matched from top to bottom.",
       "new": "New rule",
       "tableLabel": "Source rules",
@@ -334,14 +392,15 @@
   },
   "sshKey": { "title": "SSH Key", "description": "The server's own SSH key pair. Adding nodes, prechecks and out-of-band recovery sign in with it, so a node only has to authorize the public key below once. The private key is stored encrypted and never shown.", "publicKey": "Public key", "fingerprint": "Fingerprint", "createdAt": "Created", "authorizeCommand": "Authorize command", "import": "Import key", "importTitle": "Import an existing private key", "importHelp": "Use a key your nodes already trust as the platform key. Only unencrypted OpenSSH or PKCS#8 private keys are accepted; it replaces the current key.", "privateKey": "Private key", "imported": "Platform SSH key imported", "importFailed": "Import failed: {{detail } }", "rotate": "Regenerate", "rotateConfirm": "Regenerate the platform SSH key?", "rotateWarning": "Nodes that only authorized the current public key will stop accepting the server, and their out-of-band recovery fails until they authorize the new one.", "rotated": "Platform SSH key regenerated", "rotateFailed": "Regenerating failed: {{detail } }", "loadFailed": "Could not load the platform SSH key: {{detail } }" },
   "deployment": {"title": "Deployment", "saved": "Deployment settings saved", "description": "Defaults for every deployment in the cluster; a deployment can set its own in the deploy form's Runtime section.", "startTimeout": "Start timeout (default)", "startTimeoutHelp": "How long a started instance may take to pass the engine health check before the start counts as failed and is retried. Deployments that set no timeout of their own use this value; a change applies to instances started afterwards. Range {{min}}–{{max}} s.", "seconds": "s"},
-  "terminal": { "title": "Web Terminal", "saved": "Web terminal settings saved", "description": "The Web Terminal opens a compute node's host shell directly in the browser and is available only to administrators. Auditing records metadata only (operator, node, duration, and transferred bytes).", "privacy": "No terminal input or output content is recorded.", "enabled": "Enable Web Terminal", "enabledHelp": "When disabled, terminal entry points on all nodes stop working immediately and existing sessions are denied reconnection.", "idle": "Idle Timeout (minutes)", "idleHelp": "Only operator input counts as activity; continuously producing commands such as watch nvidia-smi do not renew the timeout.", "grace": "Process Cleanup Grace Period (seconds)", "graceHelp": "Closing a session sends SIGTERM first. If the process does not exit within this period, the entire session receives SIGKILL to prevent leftover processes from occupying VRAM.", "nodeLimit": "Per-node Concurrency Limit", "nodeLimitHelp": "New terminal requests return 429 after this limit is reached.", "globalLimit": "Platform Concurrency Limit", "globalLimitHelp": "Must not be lower than the per-node limit." },
+  "terminal": { "title": "Web Terminal", "saved": "Web terminal settings saved", "description": "Opens a compute node's host shell directly in the browser; available only to administrators.", "auditHelp": "Auditing records metadata only: operator, node, duration and transferred bytes.", "privacy": "No terminal input or output content is recorded.", "enabled": "Enable Web Terminal", "enabledHelp": "When disabled, terminal entry points on all nodes stop working immediately and existing sessions are denied reconnection.", "idle": "Idle Timeout (minutes)", "idleHelp": "Only operator input counts as activity; continuously producing commands such as watch nvidia-smi do not renew the timeout.", "grace": "Process Cleanup Grace Period (seconds)", "graceHelp": "Closing a session sends SIGTERM first. If the process does not exit within this period, the entire session receives SIGKILL to prevent leftover processes from occupying VRAM.", "nodeLimit": "Per-node Concurrency Limit", "nodeLimitHelp": "New terminal requests return 429 after this limit is reached.", "globalLimit": "Platform Concurrency Limit", "globalLimitHelp": "Must not be lower than the per-node limit." },
   "orphanCleanup": { "title": "Orphan Container Cleanup", "description": "When enabled, each agent removes gpuworks-named containers that are absent from its desired state on every state sync.", "enabled": "Enable orphan container cleanup" },
   "security": { "title": "Security", "description": "Platform-wide switches that trade convenience for exposure. Change them only if you understand who can reach what.", "previewNetwork": "Allow playground HTML previews to make network requests", "previewNetworkHelp": "Off: a preview may load scripts, styles and images from HTTPS sites, but its fetch, XHR and WebSocket calls and any plain-HTTP resources are blocked. On: no network restrictions apply, so a page generated by a model can reach any address the viewer's browser can, including intranet services and this console's own address. The preview never gets the console's login session either way.", "inferenceOpenAccess": "Accept /v1 inference requests without a token", "inferenceOpenAccessHelp": "Off: every /v1 request must present an inference token; a request without one is refused. On: a request that presents no token is served anonymously, so anyone who can reach this server can call the deployed models and consume their GPUs. A request that does present a token is still verified. Revoking the last token no longer opens the gateway; only this switch does.", "adminOnly": "Only administrators can change security settings.", "saved": "Security settings saved" },
-  "telemetry": {"title": "Request trace export (OpenTelemetry)", "description": "Send every gateway request as an OTLP span to your OpenTelemetry Collector, which forwards it to Jaeger, Tempo, Grafana Cloud, Datadog or another tracing backend. When the upstream gateway sends a traceparent, the platform's span joins its trace. Spans carry the model, tokens, cache hits, the time of each phase (queue, prefill, reasoning, answer) and the result. Prompts and replies are never exported.", "adminOnly": "Only administrators can change the export settings.", "settingError": "The saved export settings cannot be applied, so export is stopped. Save the settings again to recover.", "enabled": "Export", "endpoint": "Collector address", "endpointHelp": "The OTLP/HTTP address, for example http://otel-collector:4318; /v1/traces is added when the path is not already that. The server must reach it; nodes need not.", "headers": "Headers", "headersHelp": "Sent with every export, for example an authorization token or a tenant id. Values are stored encrypted and not shown again; leave a saved one empty to keep it.", "headerName": "Name of header {{n}}", "headerValue": "Value", "headerValueOf": "Value of header {{n}}", "headerKept": "Saved; leave empty to keep", "removeHeader": "Remove header {{n}}", "addHeader": "Add header", "sampleRatio": "Sample ratio", "sampleRatioHelp": "Applies to the traces the gateway starts itself; a trace whose upstream already decided keeps that decision. The platform's own request view is not affected.", "traceLink": "Trace link", "traceLinkHelp": "A tracing backend URL containing {trace_id}; with it, a trace id in the request details opens there. Optional.", "test": "Send a test span", "testHelp": "Sends one span named gpuworks test span with what is filled in now (no need to save first).", "testOK": "The collector accepted the test span", "testFailed": "Test failed", "testTrace": "Search the tracing backend for this trace id:", "status": "Status (since the server started)", "sendingTo": "Sending to", "notSending": "Not exporting", "counts": "Counts", "countsText": "exported {{exported}} · dropped {{dropped}} · failed {{failed}} · queued {{queued}}", "lastExport": "Last success", "lastError": "Last error", "saved": "Export settings saved", "state": {"on": "Exporting", "off": "Off", "failing": "Failing", "broken": "Settings unusable"}},
+  "telemetry": {"title": "Request trace export (OpenTelemetry)", "description": "Sends every gateway request as an OTLP span to your OpenTelemetry Collector. Prompts and replies are never exported.", "descriptionHelp": "The collector forwards the spans to Jaeger, Tempo, Grafana Cloud, Datadog or another tracing backend. When the upstream gateway sends a traceparent, the platform's span joins its trace. Spans carry the model, tokens, cache hits, the time of each phase (queue, prefill, reasoning, answer) and the result.", "adminOnly": "Only administrators can change the export settings.", "settingError": "The saved export settings cannot be applied, so export is stopped. Save the settings again to recover.", "enabled": "Export", "endpoint": "Collector address", "endpointHelp": "The OTLP/HTTP address, for example http://otel-collector:4318; /v1/traces is added when the path is not already that. The server must reach it; nodes need not.", "headers": "Headers", "headersHelp": "Sent with every export, for example an authorization token or a tenant id. Values are stored encrypted and not shown again; leave a saved one empty to keep it.", "headerName": "Name of header {{n}}", "headerValue": "Value", "headerValueOf": "Value of header {{n}}", "headerKept": "Saved; leave empty to keep", "removeHeader": "Remove header {{n}}", "addHeader": "Add header", "sampleRatio": "Sample ratio", "sampleRatioHelp": "Applies to the traces the gateway starts itself; a trace whose upstream already decided keeps that decision. The platform's own request view is not affected.", "traceLink": "Trace link", "traceLinkHelp": "A tracing backend URL containing {trace_id}; with it, a trace id in the request details opens there. Optional.", "test": "Send a test span", "testHelp": "Sends one span named gpuworks test span with what is filled in now (no need to save first).", "testOK": "The collector accepted the test span", "testFailed": "Test failed", "testTrace": "Search the tracing backend for this trace id:", "status": "Status (since the server started)", "sendingTo": "Sending to", "notSending": "Not exporting", "counts": "Counts", "countsText": "exported {{exported}} · dropped {{dropped}} · failed {{failed}} · queued {{queued}}", "lastExport": "Last success", "lastError": "Last error", "saved": "Export settings saved", "state": {"on": "Exporting", "off": "Off", "failing": "Failing", "broken": "Settings unusable"}},
   "mcp": {"title": "MCP service", "on": "On", "off": "Off", "switch": "Turn on the MCP service", "turnedOn": "MCP service turned on", "turnedOff": "MCP service turned off", "description": "Lets AI tools such as Claude Code and Cursor read this platform over MCP: the cluster overview, API search and reads, the metric catalog and GPU topology. The tools are the AI assistant's own: read-only, reading with the token owner's permissions, with credentials redacted the same way.", "adminOnly": "Only an administrator can turn it on or off.", "endpoint": "Endpoint", "auth": "Authentication", "authText": "Send a platform API token (read is enough): Authorization: Bearer gwp_…", "createToken": "Create a token", "tools": "Tools", "claudeCode": "Claude Code", "otherClients": "Other clients with HTTP transport", "dataNotice": "An MCP client hands what it reads to the model it is configured with; where the data goes is the client's choice, not the platform's AI service setting."},
   "listen": {
     "title": "Listen addresses",
-    "description": "The addresses this server binds on this host (plus 127.0.0.1 for local tools), stored in server.yaml. They only decide where this server answers; nodes, users and API clients choose the address they use to reach it, and a domain, reverse proxy or NAT forwarding to these works as well.",
+    "description": "The addresses this server binds on this host, stored in server.yaml.",
+    "descriptionHelp": "127.0.0.1 is bound as well, for local tools. These only decide where this server answers; nodes, users and API clients choose the address they use to reach it, and a domain, reverse proxy or NAT forwarding to these works as well.",
     "console": "Console address",
     "consoleHelp": "IP:port the Web console and management API bind on this host. Separate several with commas. Node connections and the inference API use it too unless set under Advanced.",
     "consoleRequired": "Enter at least one IP:port",
@@ -365,7 +424,7 @@
       "gateway": "inference API"
     }
   },
-  "ai": { "empty": "No AI service configured", "service": "AI Services", "notice": "The platform is fully usable without AI configuration. Configure a service to enable deployment advice, error diagnosis, and model Q&A.", "egressNotice": "The assistant reads the platform data the asking user can see - nodes, deployments, models, logs and metrics - and sends what it reads to the AI service in use ({{host}}). To keep it inside the platform, use a model served by this platform.", "name": "Name", "preset": "Preset", "model": "Model", "default": "Default", "deleteConfirm": "Delete “{{name}}”? The assistant stops using it in this configuration.", "deleted": "Configuration deleted", "deletedPromoted": "Configuration deleted. The assistant now uses “{{name}}”.", "addService": "Add AI Service", "added": "AI service added", "baseUrl": "Base URL", "upstreamKey": "Upstream API Key", "setDefault": "Set as Default", "defaultLocked": "This is the service the assistant uses. Mark another service as the default to move it.", "nameRequired": "Enter a name", "namePlaceholder": "For example, deepseek-primary", "baseUrlRequired": "Enter the base URL", "modelRequired": "Enter a model name", "keyRequired": "Enter the upstream API key", "editService": "Edit AI Service", "updated": "AI service updated", "baseUrlHint": "Fill the address up to /v1. Do not include /chat/completions: the platform appends it.", "keyKeep": "Leave blank to keep the stored key", "test": "Test connection", "testOk": "The service answered", "testConnection": "Cannot reach the address: check the host, the port and the network", "testBlocked": "The platform's outbound policy refuses this address; an administrator must allow the host", "testAuth": "The API key was rejected: check the upstream key", "testPath": "The address answered 404 but named no model, so the path is wrong. Fill it up to /v1, without /chat/completions", "testModel": "The service does not serve this model: check the model name", "testHttp": "The service answered with an unexpected status", "testAddress": "Address tested: {{url}}", "testLatency": "{{ms}} ms", "presetName": { "deepseek": "DeepSeek (default)", "bailian": "Alibaba Cloud Model Studio", "siliconflow": "SiliconFlow", "openrouter": "OpenRouter", "poe": "Poe", "custom": "Custom" } },
+  "ai": { "empty": "No AI service configured", "service": "AI Services", "notice": "The platform is fully usable without AI configuration. Configure a service to enable deployment advice, error diagnosis, and model Q&A.", "egressNotice": "The assistant reads the platform data the asking user can see - nodes, deployments, models, logs and metrics - and sends what it reads to the AI service in use ({{host}}). To keep it inside the platform, use a model served by this platform.", "name": "Name", "preset": "Preset", "model": "Model", "default": "Default", "deleteConfirm": "Delete “{{name}}”? The assistant stops using it in this configuration.", "deleted": "Configuration deleted", "deletedPromoted": "Configuration deleted. The assistant now uses “{{name}}”.", "addService": "Add AI Service", "added": "AI service added", "baseUrl": "Base URL", "upstreamKey": "Upstream API Key", "setDefault": "Set as Default", "defaultLocked": "This is the service the assistant uses. Mark another service as the default to move it.", "nameRequired": "Enter a name", "namePlaceholder": "For example, deepseek-primary", "baseUrlRequired": "Enter the base URL", "modelRequired": "Enter a model name", "keyRequired": "Enter the upstream API key", "editService": "Edit AI Service", "updated": "AI service updated", "baseUrlHint": "Fill the address up to /v1. Do not include /chat/completions: the platform appends it.", "keyKeep": "Leave blank to keep the stored key", "test": "Test connection", "testOk": "The service answered", "testConnection": "Cannot reach the address: check the host, the port and the network", "testBlocked": "The platform's outbound policy refuses this address; an administrator must allow the host", "testAuth": "The API key was rejected: check the upstream key", "testPath": "The address answered 404 but named no model, so the path is wrong. Fill it up to /v1, without /chat/completions", "testModel": "The service does not serve this model: check the model name", "testHttp": "The service answered with an unexpected status", "testAddress": "Address tested: {{url}}", "testLatency": "{{ms}} ms", "proxy": "Outbound proxy", "proxyMode": {"management": "Management node outbound proxy", "direct": "Direct", "custom": "Custom proxy"}, "proxyModeHint": {"management": "Uses the proxy marked “Use for management node outbound access” under Pull settings → Proxies, as image catalog and model metadata requests do; without one, the server process's proxy environment variables apply.", "direct": "Calls the service without any proxy, ignoring the server process's proxy environment variables too.", "custom": "A proxy for this AI service only."}, "proxyUrl": "Proxy URL", "proxyUrlHint": "http, https, socks5 or socks5h, login allowed, such as http://user:password@proxy.example.com:3128. Stored encrypted.", "proxyUrlStored": "Stored: {{url}}. Leave blank to keep it.", "proxyUrlRequired": "Enter the proxy URL", "imageInput": "Accepts image input", "imageInputHint": "Turn on when the model can read images; only then does the assistant accept pasted images. Upstream models change: Check sends a small image with the current address, model and proxy to find out.", "imageCheck": "Check", "imageAccepted": "The model accepted the image; image input is on", "imageIgnored": "The model answered without seeing the image (the upstream may have dropped it silently); image input is off", "imageRejected": "The model refused the image; image input is off", "imageUnknown": "Could not tell whether the model accepts images; the switch is unchanged", "presetsLoading": "Loading presets", "presetsFailed": "Could not load presets: {{detail}}", "retry": "Retry", "presetName": { "deepseek": "DeepSeek (default)", "bailian": "Alibaba Cloud Model Studio", "siliconflow": "SiliconFlow", "openrouter": "OpenRouter", "poe": "Poe", "custom": "Custom" } },
   "dataRetention": {
     "title": "Data retention",
     "description": "How long each kind of data is kept, how much space it may take, and the time zone daily statistics are counted in. Saving applies at once; what a shorter retention no longer keeps is deleted in the background.",
@@ -456,7 +515,8 @@
     "adminOnly": "Only administrators can start debug collection and collect diagnostics.",
     "bundle": {
       "title": "Collect diagnostics",
-      "description": "Packs the server log for a time range, the related nodes' agent logs and diagnosis reports, instance logs, debug collection records, and the related nodes, deployments, events, images, storages, settings and request records into one archive to download and send to support. Credentials keep only their first 8 characters; prompts and replies are not included (except in requests a debug collection recorded). Archives are kept for {{days}} days.",
+      "description": "Packs logs and related records for a time range into one archive to download and send to support. Archives are kept for {{days}} days.",
+      "descriptionHelp": "Includes the server log, the related nodes' agent logs and diagnosis reports, instance logs, debug collection records, and the related nodes, deployments, events, images, storages, settings and request records. Credentials keep only their first 8 characters; prompts and replies are not included (except in requests a debug collection recorded).",
       "window": "Time range",
       "lastHours_one": "Last {{count}} hour",
       "lastHours_other": "Last {{count}} hours",
@@ -480,25 +540,16 @@
       "download": "Download",
       "item": "Content",
       "note": "Note",
-      "truncated": "Reached its size limit; only part was kept",
       "bundleState": {
         "running": "Collecting",
         "ready": "Ready",
         "failed": "Failed"
-      },
-      "itemState": {
-        "collected": "Collected",
-        "skipped": "Skipped",
-        "failed": "Failed"
-      },
-      "itemReason": {
-        "offline": "Node offline",
-        "unsupported": "The node's agent version does not support it"
       }
     },
     "debug": {
       "title": "Debug collection",
-      "description": "For a while, writes the server's and the chosen nodes' agent debug logs to separate files, and records each request of the chosen deployments in full (the request, every frame the engine returned and every frame the client received, and how it ended). Regular log levels are unchanged; it ends by itself when the time is up or the size is reached. Collecting diagnostics picks up debug collections that overlap its time range.",
+      "description": "For a set time, records the debug logs of the server and the chosen nodes and each request of the chosen deployments in full; it ends when the time is up or the size is reached.",
+      "descriptionHelp": "Debug logs go to separate files; regular log levels stay as they are. A recorded request holds the request, every frame the engine returned, every frame the client received and how it ended. Collecting diagnostics picks up debug collections that overlap its time range.",
       "collecting": "Collecting",
       "last": "Last debug collection",
       "startedAt": "Started",
@@ -540,5 +591,6 @@
       "stopConfirm": "Stop debug collection now?",
       "stopped": "Debug collection stopped."
     }
-  }
+  },
+  "priority": {"title": "Request priority", "help": "A priority class decides the priority the gateway gives a request: larger values are more important. Deployments with request priority on queue requests by it in the engine; an API key may be bound to a class, and clients choose within what the key allows with the X-GPUWorks-Priority-Class request header. Keys bound to no class and requests without a key run at the default class; the playground, evaluations and batches run at the class chosen on the page. Built-in classes keep their names and values and cannot be deleted.", "helpLabel": "About request priority", "create": "New class", "createTitle": "New priority class", "editTitle": "Edit priority class {{name}}", "class": "Class", "name": "Name", "nameHelp": "Lowercase letters, digits and hyphens, starting with a letter, at most 32 characters; clients use this name in the request header", "displayName": "Display name", "value": "Value", "valueHelp": "{{min}} to {{max}}, larger is more important; a difference above 10 lets SGLang preempt running lower-priority requests", "builtinValue": "A built-in class keeps its value", "description": "Description", "default": "Default", "builtin": "Built-in", "makeDefault": "Make default", "defaultSet": "{{name}} is now the default class", "deleteConfirm": "Delete priority class {{name}}?", "deleted": "Priority class deleted", "saved": "Priority class saved", "adminOnly": "Only administrators can change priority classes.", "save": "Save", "delete": "Delete", "edit": "Edit"}
 }

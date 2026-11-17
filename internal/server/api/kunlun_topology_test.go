@@ -11,6 +11,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -140,7 +141,12 @@ func TestKunlunFollowerRankReportsItsOwnSleepRefusal(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if rec.Code != http.StatusOK || !result.OK {
+	// The create refuses this request on the follower rank's own sleep
+	// support (ACCELERATOR_FEATURE_UNSUPPORTED), and the preview runs the
+	// same launch preflight, so it is a blocking error here too; the rank
+	// commands and the follower's eligibility reason still render.
+	if rec.Code != http.StatusOK || result.OK || len(result.Errors) != 1 || result.Errors[0].Code != messages.ErrorAcceleratorFeatureUnsupported ||
+		result.Errors[0].Params["feature"] != "engine_sleep" || result.Errors[0].Params["vendor"] != "Kunlunxin" {
 		t.Fatalf("rank preview=%d %s", rec.Code, rec.Body.String())
 	}
 	if len(result.RankCommands) != 2 || result.RankCommands[0].NodeUUID != "nvidia-a" || len(result.RankCommands[0].Command) == 0 || result.RankCommands[1].NodeUUID != "p800-b" || len(result.RankCommands[1].Command) != 0 {

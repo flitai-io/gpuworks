@@ -1,7 +1,13 @@
 package proto
 
-// Metrics and log shipping over the ctrl stream (JSON batches every ~10s).
-// High-frequency but small at v1 scale; the tsdb/logstore ingest them.
+// Metric and log batches are JSON Lines envelopes. Against a server that
+// advertises CapTelemetryStream, an agent with a data lane sends them on its
+// own StreamTelemetry streams there; otherwise (an older server, a connection
+// with no data lane, or one whose data lane has not attached within 30 s of
+// the handshake, until it does) they share the ctrl stream with heartbeats and
+// RPC responses. Metric batches are best-effort; log batches
+// wait in a bounded agent-side buffer while the node cannot send them, and a
+// marker line reports any that buffer had to drop.
 
 const (
 	TMetrics = "metrics" // agent→server metric batch

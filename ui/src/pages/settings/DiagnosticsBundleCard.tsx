@@ -4,11 +4,13 @@ import { DownloadOutlined } from "@ant-design/icons";
 import dayjs, { type Dayjs } from "dayjs";
 import { useTranslation } from "react-i18next";
 import { api, usePolling } from "../../api";
-import { apiErrorText } from "../../apiError";
+import { apiErrorText, productMessageText } from "../../apiError";
+import { CheckStatusBadge } from "../../checkStatus";
 import { useIsAdmin } from "../../components/useIsAdmin";
 import { formatBytes } from "../../format";
 import { nodeDisplayName } from "../../nodeDisplay";
 import { diagnosticsBundleDownloadURL, type DiagnosticsBundle, type DiagnosticsBundleItem } from "../../diagnosticsApi";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const { Paragraph } = Typography;
 
@@ -20,7 +22,7 @@ function when(iso?: string): string {
 }
 
 function stateColor(state: string) {
-  return state === "ready" || state === "collected" ? "success" : state === "running" ? "processing" : state === "failed" ? "error" : "default";
+  return state === "ready" ? "success" : state === "running" ? "processing" : state === "failed" ? "error" : "default";
 }
 
 /**
@@ -69,12 +71,14 @@ export default function DiagnosticsBundleCard() {
     }
   };
 
-  const itemReason = (item: DiagnosticsBundleItem) =>
-    item.reason ? t(`diagnostics.bundle.itemReason.${item.reason}`, { defaultValue: item.reason }) : item.truncated ? t("diagnostics.bundle.truncated") : "";
+  const itemNote = (item: DiagnosticsBundleItem) => item.code ? <>
+    {productMessageText(tCommon, { code: item.code, params: item.params, message: item.message ?? "" })}
+    {item.evidence && <>{" "}<Typography.Text code>{item.evidence}</Typography.Text></>}
+  </> : null;
 
   return (
     <Card title={t("diagnostics.bundle.title")}>
-      <Paragraph type="secondary">{t("diagnostics.bundle.description", { days: limits?.keep_days ?? 7 })}</Paragraph>
+      <Paragraph type="secondary">{t("diagnostics.bundle.description", { days: limits?.keep_days ?? 7 })} <HelpTip content={t("diagnostics.bundle.descriptionHelp")} /></Paragraph>
       {bundles.error && <Alert type="error" showIcon message={apiErrorText(tCommon, bundles.error)} style={{ marginBottom: 12 }} />}
       <Form layout="vertical" disabled={!isAdmin}>
         <Space wrap size={16} align="start">
@@ -135,14 +139,14 @@ export default function DiagnosticsBundleCard() {
           expandedRowRender: (b) => (
             <Table<DiagnosticsBundleItem>
               size="small"
-              rowKey="name"
+              rowKey="path"
               pagination={false}
               dataSource={b.items}
               columns={[
-                { title: t("diagnostics.bundle.item"), dataIndex: "name" },
-                { title: t("diagnostics.bundle.state"), render: (_, it) => <Tag color={stateColor(it.state)}>{t(`diagnostics.bundle.itemState.${it.state}`)}</Tag> },
+                { title: t("diagnostics.bundle.item"), dataIndex: "path" },
+                { title: t("diagnostics.bundle.state"), render: (_, it) => <CheckStatusBadge status={it.status} /> },
                 { title: t("diagnostics.bundle.size"), render: (_, it) => formatBytes(it.bytes) },
-                { title: t("diagnostics.bundle.note"), render: (_, it) => itemReason(it) },
+                { title: t("diagnostics.bundle.note"), render: (_, it) => itemNote(it) },
               ]}
             />
           ),

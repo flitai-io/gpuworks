@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/rollup"
 	"gpuworks.ai/gpuworks/internal/server/schedactivity"
 	"gpuworks.ai/gpuworks/internal/server/statsdb"
@@ -115,7 +116,7 @@ func newOpsStats(dataDir string, metricsRetention time.Duration, st *store.Store
 	}
 	o.liveSinceMS = state.LiveSinceMS
 	o.applyRequestLogLimits(current)
-	obs.onSamples = o.observeSamples
+	obs.OnSamples(o.observeSamples)
 	o.newSchedulingActivity()
 	return o, nil
 }
@@ -162,8 +163,8 @@ func (o *opsStats) SetRetention(r store.DataRetention) error {
 }
 
 func (o *opsStats) applyRequestLogLimits(r store.DataRetention) {
-	if o.obs != nil && o.obs.ux != nil {
-		o.obs.ux.SetLimits(time.Duration(r.RequestLogDays)*24*time.Hour, int64(r.RequestLogMaxMB)<<20)
+	if o.obs != nil && o.obs.UX() != nil {
+		o.obs.UX().SetLimits(time.Duration(r.RequestLogDays)*24*time.Hour, int64(r.RequestLogMaxMB)<<20)
 	}
 }
 
@@ -225,6 +226,34 @@ func atoiOK(s string) (int, bool) {
 	return n, true
 }
 
+// partitionMayShare is whether the scheduler may place a partition on a card
+// held outside the platform (planning.PartitionMayShareHeldCard). The
+// snapshot's lean columns answer for every other card; only a held card
+// whose holders' memory is known reads its node, once per sample, so the
+// sampler's cost does not grow with the fleet.
+func (o *opsStats) partitionMayShare(c store.GPU, nodes map[uint]*store.Node) bool {
+	if _, shared := c.SharesMemoryWithForeign(); !shared {
+		return false
+	}
+	node, ok := nodes[c.NodeID]
+	if !ok {
+		var err error
+		if node, err = o.store.NodeByID(c.NodeID); err != nil {
+			node = nil
+		}
+		nodes[c.NodeID] = node
+	}
+	if node == nil {
+		return false
+	}
+	for i := range node.GPUs {
+		if node.GPUs[i].ID == c.ID {
+			return planning.PartitionMayShareHeldCard(node, &node.GPUs[i])
+		}
+	}
+	return false
+}
+
 // sampleGPUTime counts the cards held over the last interval and refreshes
 // the card models the GPU rows are written with.
 func (o *opsStats) sampleGPUTime(at time.Time, interval time.Duration) error {
@@ -251,13 +280,17 @@ func (o *opsStats) sampleGPUTime(at time.Time, interval time.Duration) error {
 		ident string
 	}
 	byIdent := make(map[cardKey]store.GPU, len(snap.Cards))
+	nodes := map[uint]*store.Node{}
 	cards := make([]rollup.Card, 0, len(snap.Cards))
 	for _, c := range snap.Cards {
 		byIdent[cardKey{c.NodeID, c.Ident}] = c
 		if c.Ownership != "" {
 			continue // owned elsewhere: never the platform's to schedule
 		}
-		cards = append(cards, rollup.Card{Model: c.Name, Schedulable: c.CanTakeWork()})
+		// A held card the scheduler may place a partition on by memory
+		// (ADR 0068) is capacity the platform schedules on, and its
+		// partitions' time is charged to it.
+		cards = append(cards, rollup.Card{Model: c.Name, Schedulable: c.CanTakeWork() || o.partitionMayShare(c, nodes)})
 	}
 	holdings := make([]rollup.Holding, 0, len(snap.Holdings))
 	for _, h := range snap.Holdings {
@@ -492,8 +525,8 @@ func (o *opsStats) retain(ctx context.Context) {
 	if o.obs != nil {
 		// Both honour ctx between batches; what a stop cuts short resumes on
 		// the next pass.
-		note("metrics", o.obs.tsdb.Retain(ctx, now.Add(-time.Duration(r.MetricsHours)*time.Hour).UnixMilli()))
-		note("logs", o.obs.logs.Retain(ctx, now.Add(-time.Duration(r.LogsHours)*time.Hour).UnixMilli()))
+		note("metrics", o.obs.TSDB().Retain(ctx, now.Add(-time.Duration(r.MetricsHours)*time.Hour).UnixMilli()))
+		note("logs", o.obs.Logs().Retain(ctx, now.Add(-time.Duration(r.LogsHours)*time.Hour).UnixMilli()))
 	}
 	o.mu.Lock()
 	o.last.retainAt, o.last.retainErr = now, strings.Join(errs, "; ")

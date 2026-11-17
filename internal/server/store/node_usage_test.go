@@ -11,6 +11,7 @@ import (
 // computed with two queries per node.
 func TestNodeDiskUsageSumsPerNodeInOneRead(t *testing.T) {
 	s := newTestStore(t)
+	t.Cleanup(func() { _ = s.Close() })
 	a, err := s.RegisterNode("usage-a", HashToken("t"), "usage-a")
 	if err != nil {
 		t.Fatal(err)

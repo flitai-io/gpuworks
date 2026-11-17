@@ -151,7 +151,7 @@ func TestPutSettingOrphanCleanupValidatesBoolAndResyncsOnlineNodes(t *testing.T)
 	h := &apiHandlers{d: Deps{
 		Store:    st,
 		Online:   func(string) bool { return true },
-		NodeSync: nodeSyncCallbacks{full: func(uuid string) error { synced = append(synced, uuid); return nil }},
+		NodeSync: nodeSyncCallbacks{request: func(uuid string) { synced = append(synced, uuid) }},
 	}}
 	put := func(body string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()

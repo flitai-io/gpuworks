@@ -46,3 +46,5 @@ The publisher also needs a way to deliver security advisories, important release
 - Add `GET /api/v1/usage-report`, `PUT /api/v1/usage-report/enabled`, `GET /api/v1/usage-report/preview`, `GET /api/v1/notices`, and `POST /api/v1/notices/read`;
   add the `notice_reads` table (migration 166).
 - The publisher signs and uploads `build/notices/notices.json` using `scripts/publish_notices.sh`; distribution source cache rules must disable caching for `/notices.json`, just as for `*/index.json`.
+
+<!-- translation-source-sha256: e9c75c3e7e1ea8c2f1333ca0ed44af787a9abf8b424e762754d44be39311b7d5 -->

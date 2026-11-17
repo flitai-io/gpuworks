@@ -141,6 +141,9 @@ type CreateRequest struct {
 	// request of the batch is sent to, whatever its line says (a gpuworks
 	// extension of the OpenAI batch request).
 	Model string
+	// PriorityClass, when set, is the request priority class the batch's
+	// requests run at instead of the batch class (the console's choice).
+	PriorityClass string
 }
 
 // CreateBatch validates the request against the input file and starts the
@@ -158,6 +161,10 @@ func (s *Service) CreateBatch(owner Owner, req CreateRequest) (Batch, error) {
 			fmt.Sprintf("completion_window must be a whole number of hours from %dh to %dh, such as %q", MinWindowHours, MaxWindowHours, CompletionWindow))
 	}
 	if err := checkMetadata(req.Metadata); err != nil {
+		return Batch{}, err
+	}
+	class, err := s.checkPriorityClass(req.PriorityClass)
+	if err != nil {
 		return Batch{}, err
 	}
 	in, err := s.repo.GetFile(req.InputFileID)
@@ -192,14 +199,34 @@ func (s *Service) CreateBatch(owner Owner, req CreateRequest) (Batch, error) {
 	b := Batch{
 		ID: randomID("batch_"), UserID: owner.UserID, APIKeyID: owner.APIKeyID, Endpoint: req.Endpoint,
 		InputFileID: in.ID, CompletionWindow: req.CompletionWindow, Status: StatusValidating, Total: in.Lines,
-		Metadata: req.Metadata, Model: req.Model, CreatedAt: now, ExpiresAt: now.Add(window),
+		Metadata: req.Metadata, Model: req.Model, PriorityClass: class, CreatedAt: now, ExpiresAt: now.Add(window),
 	}
 	if err := s.repo.CreateBatch(b); err != nil {
+		if errors.Is(err, ErrPriorityClassGone) {
+			return Batch{}, invalid(CodePriorityClass, "priority_class", "no request priority class is named "+class)
+		}
 		return Batch{}, err
 	}
 	s.launch(b)
 	b.Warnings = warnings
 	return b, nil
+}
+
+// checkPriorityClass refuses a priority class that does not exist and
+// returns the name as stored; none is always fine.
+func (s *Service) checkPriorityClass(name string) (string, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" || s.cfg.PriorityClasses == nil {
+		return name, nil
+	}
+	ok, err := s.cfg.PriorityClasses(name)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", invalid(CodePriorityClass, "priority_class", "no request priority class is named "+name)
+	}
+	return name, nil
 }
 
 // checkModel refuses a model no deployment serves, or one whose deployments

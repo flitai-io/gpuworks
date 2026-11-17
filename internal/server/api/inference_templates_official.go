@@ -1,12 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // The official inference template catalog (ADR 0040): "check for updates"
@@ -61,12 +64,24 @@ func (a *apiHandlers) applyOfficialInferenceCatalog(w http.ResponseWriter, raw [
 		writeProductError(w, http.StatusBadRequest, ErrorOfficialCatalogPackageRequired, "an official inference template catalog must be a .tar.gz catalog package", nil)
 		return
 	}
-	catalog, digest, created, err := a.decodeInferenceCatalog(raw)
+	if a.d.CatalogPackages == nil {
+		writeOfficialCatalogRejected(w, errors.New("catalog package storage is unavailable"))
+		return
+	}
+	// An official package is read tolerantly: the models and specs this build
+	// cannot read are left out and reported, the rest is applied (a user's own
+	// import stays strict, see decodeInferenceCatalog).
+	archive, _, err := inferencecatalog.ReadPackageArchiveTolerant(bytes.NewReader(raw))
 	if err != nil {
 		writeOfficialCatalogRejected(w, err)
 		return
 	}
-	models, err := a.importedStoreModels(catalog)
+	pkg, skipped, digest, created, err := a.d.CatalogPackages.PutOfficial(archive.FS)
+	if err != nil {
+		writeOfficialCatalogRejected(w, err)
+		return
+	}
+	models, err := a.importedStoreModels(pkg.Catalog)
 	if err != nil {
 		a.removeCatalogPackageOnFailure(digest, created)
 		writeOfficialCatalogRejected(w, err)
@@ -80,13 +95,21 @@ func (a *apiHandlers) applyOfficialInferenceCatalog(w http.ResponseWriter, raw [
 			models[index].Specs[specIndex].PackageDigest = digest
 		}
 	}
-	if err := a.d.Store.ReconcileInferenceCatalog(models); err != nil {
+	// What was skipped keeps the row this server already has, if any: an
+	// update must not take away a spec that works today.
+	keep := make([]store.InferenceCatalogKeep, len(skipped))
+	left := make([]dto.OfficialInferenceCatalogSkipped, len(skipped))
+	for index, item := range skipped {
+		keep[index] = store.InferenceCatalogKeep{ModelID: item.ModelID, Spec: item.Spec}
+		left[index] = dto.OfficialInferenceCatalogSkipped{ModelID: item.ModelID, Spec: item.Spec, Reason: item.Reason}
+	}
+	if err := a.d.Store.ReconcileInferenceCatalogKeeping(models, keep); err != nil {
 		a.removeCatalogPackageOnFailure(digest, created)
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	a.pruneUnreferencedCatalogPackages()
-	writeJSON(w, http.StatusOK, dto.OfficialInferenceCatalogResult{Models: len(models), PackageDigest: digest, Version: a.inferenceCatalogVersion(digest)})
+	writeJSON(w, http.StatusOK, dto.OfficialInferenceCatalogResult{Models: len(models), PackageDigest: digest, Version: a.inferenceCatalogVersion(digest), Skipped: left})
 }
 
 // writeOfficialCatalogRejected reports an official package this server cannot

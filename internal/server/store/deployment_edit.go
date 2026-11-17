@@ -143,7 +143,7 @@ func editColumnValues(next *Deployment) map[string]any {
 		"placement": next.Placement, "node_id": next.NodeID,
 		"replicas": next.Replicas, "routing_policy": next.RoutingPolicy,
 		"health_check": next.HealthCheck, "health_check_threshold_sec": next.HealthCheckThresholdSec,
-		"tokenize_disabled": next.TokenizeDisabled, "start_timeout_sec": next.StartTimeoutSec,
+		"tokenize_disabled": next.TokenizeDisabled, "priority_scheduling": next.PriorityScheduling, "start_timeout_sec": next.StartTimeoutSec,
 		"placement_strategy": next.PlacementStrategy,
 	}
 }

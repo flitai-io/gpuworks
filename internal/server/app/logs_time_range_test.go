@@ -17,6 +17,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/logstore"
+	"gpuworks.ai/gpuworks/internal/server/obsingest"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -77,7 +78,7 @@ func TestLogsTimeRangesWithRealStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	o := &observability{logs: ls}
+	o := &observability{obsingest.New(obsingest.Stores{Logs: ls})}
 	router := api.Router(api.Deps{Store: st, AuthSigner: signer, LogsSearch: o.searchLogs, LogsHistogram: o.histogramLogs})
 	get := func(t *testing.T, path string, params url.Values, out any) {
 		t.Helper()

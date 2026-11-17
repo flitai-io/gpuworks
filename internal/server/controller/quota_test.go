@@ -121,7 +121,7 @@ func TestDGPULimitChangeIsPushedInPlace(t *testing.T) {
 	if err := st.SetDeploymentDGPUQuota(dep.ID, 7<<30, []string{old.UUID}); err != nil {
 		t.Fatal(err)
 	}
-	c.markDGPULimitPush(dep.ID)
+	c.dgpuPushes.mark(dep.ID)
 	hub.pushErr = errors.New("connection reset")
 	c.pushDGPULimits(dep, instancesOf(t, st, dep.ID))
 	hub.pushErr = nil
@@ -129,7 +129,7 @@ func TestDGPULimitChangeIsPushedInPlace(t *testing.T) {
 	if got := pushed()[before:]; len(got) != 2 || got[1].VRAMLimitBytes != 7<<30 {
 		t.Fatalf("pushed after a failed push = %+v", got)
 	}
-	c.markDGPULimitPush(dep.ID)
+	c.dgpuPushes.mark(dep.ID)
 	hub.online[node.UUID] = false
 	c.pushDGPULimits(dep, instancesOf(t, st, dep.ID))
 	hub.online[node.UUID] = true
@@ -142,7 +142,7 @@ func TestDGPULimitChangeIsPushedInPlace(t *testing.T) {
 	if err := st.SetDeploymentDGPUQuota(dep.ID, 3<<30, nil); err != nil {
 		t.Fatal(err)
 	}
-	c.markDGPULimitPush(dep.ID)
+	c.dgpuPushes.mark(dep.ID)
 	for range 2 {
 		if err := c.reconcileDeployment(context.Background(), dep.ID); err != nil {
 			t.Fatal(err)

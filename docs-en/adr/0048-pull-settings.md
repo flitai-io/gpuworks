@@ -38,3 +38,5 @@ Image sources were previously determined in five places: the acquisition method 
 - Add `/api/v1/pull/source-rules`, `/api/v1/pull/sync-groups`, `/api/v1/pull/registry-credentials`, and `POST /api/v1/nodes/{uuid}/runtime/restart`; endpoints such as `PUT /settings/image_registry_rewrites` return 410.
 - Add the agent capability `image.pull.candidates`: `image.pull` receives the entire candidate list at once and handles fallback itself; for older agents, the server still dispatches candidates one at a time.
 - Source rules for model downloads (replacing Hugging Face mirrors in node URL rewrites) and “Disable Xet” are a subsequent step. This ADR covers only images and the sync groups shared by images and models.
+
+<!-- translation-source-sha256: 6912c4e63c81e1c562ebff15172cdbaaed563ff4c00438198fb747b134776f9c -->

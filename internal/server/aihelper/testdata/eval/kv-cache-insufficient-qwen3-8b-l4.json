@@ -50,7 +50,7 @@
     "(EngineCore_DP0 pid=209) ERROR 10-10 02:16:00 [core.py:708] ValueError: To serve at least one request with the model's max seq len (40960), (5.62 GiB KV cache is needed, which is larger than the available KV cache memory (3.12 GiB). Based on the available memory, the estimated maximum model length is 22704. Try increasing `gpu_memory_utilization` or decreasing `max_model_len` when initializing the engine. See https://docs.vllm.ai/en/latest/configuration/conserving_memory/ for more details.",
     "(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}"
   ],
-  "expect_signature": "kv_cache_insufficient",
+  "expect_signature": "KV_CACHE_INSUFFICIENT",
   "expect_keywords": [
     [
       "max-model-len",

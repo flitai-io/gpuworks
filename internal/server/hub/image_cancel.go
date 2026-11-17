@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -51,7 +52,14 @@ func (h *Hub) cancelImageTransferRow(ctx context.Context, image *store.Image, ta
 		cancel()
 		delete(h.imageSyncOwners, row.TransferID)
 	}
-	_, failErr := h.store.CancelImageNodeTransferIfActive(image.ID, target.ID, row.TransferID, message)
+	// A peer receiver reports the load the stop kills; the code keeps that
+	// report from replacing the reason. A pull or URL fetch has no such code:
+	// the node reports its own cancellation for those.
+	code := ""
+	if row.Source == "peer" {
+		code = messages.ErrorPeerTransferCanceled
+	}
+	_, failErr := h.store.CancelImageNodeTransferIfActive(image.ID, target.ID, row.TransferID, message, code)
 	h.imageSyncMu.Unlock()
 	if failErr != nil {
 		return nil, failErr

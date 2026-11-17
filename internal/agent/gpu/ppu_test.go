@@ -96,22 +96,22 @@ func TestParsePPUHealthLevels(t *testing.T) {
 		{"clean", "0, 0, 0, No, 0, No, No, [N/A], [N/A], [N/A]", true, "OK", "", ""},
 		// Only the fields that contributed are evidence; the rest of the
 		// state is what the recheck command shows.
-		{"pending remap stays schedulable", "0, 0, 0, No, 0, Yes, No, [N/A], [N/A], [N/A]", true, "Warning", "memory_repair_pending",
+		{"pending remap stays schedulable", "0, 0, 0, No, 0, Yes, No, [N/A], [N/A], [N/A]", true, "Warning", "MEMORY_REPAIR_PENDING",
 			"remapped_rows.pending=Yes"},
-		{"pending page retirement stays schedulable", "0, 0, 0, Yes, 0, No, No, [N/A], [N/A], [N/A]", true, "Warning", "memory_repair_pending",
+		{"pending page retirement stays schedulable", "0, 0, 0, Yes, 0, No, No, [N/A], [N/A], [N/A]", true, "Warning", "MEMORY_REPAIR_PENDING",
 			"retired_pages.pending=Yes"},
 		// Lifetime counters of handled errors are history, not a fault: a
 		// reset never clears them, so treating them as a fault would retire
 		// the card for good.
-		{"handled history stays healthy", "0, 2, 1, No, 3, No, No, [N/A], [N/A], [N/A]", true, "OK", "memory_error_history",
+		{"handled history stays healthy", "0, 2, 1, No, 3, No, No, [N/A], [N/A], [N/A]", true, "OK", "MEMORY_ERROR_HISTORY",
 			"ecc.errors.uncorrected.aggregate.dram=2\nretired_pages.double_bit.count=1\nremapped_rows.uncorrectable=3"},
-		{"errors since reset stop scheduling", "4, 4, 0, No, 0, Yes, No, [N/A], [N/A], [N/A]", false, "Error", "memory_uncorrectable_errors",
+		{"errors since reset stop scheduling", "4, 4, 0, No, 0, Yes, No, [N/A], [N/A], [N/A]", false, "Error", "MEMORY_UNCORRECTABLE_ERRORS",
 			"ecc.errors.uncorrected.volatile.dram=4\necc.errors.uncorrected.aggregate.dram=4\nremapped_rows.pending=Yes"},
-		{"failed replacement stops scheduling", "0, 0, 0, No, 0, No, Yes, [N/A], [N/A], [N/A]", false, "Error", "memory_remap_failed",
+		{"failed replacement stops scheduling", "0, 0, 0, No, 0, No, Yes, [N/A], [N/A], [N/A]", false, "Error", "MEMORY_REMAP_FAILED",
 			"remapped_rows.failure=Yes"},
-		{"reset event", "0, 0, 0, No, 0, No, No, 17, [N/A], [N/A]", false, "Error", "reset_required",
+		{"reset event", "0, 0, 0, No, 0, No, No, 17, [N/A], [N/A]", false, "Error", "RESET_REQUIRED",
 			"xid.correctable.ppu_reset=17"},
-		{"most severe wins and every contributing field is kept", "2, 0, 1, Yes, 3, Yes, Yes, 17, [N/A], 79", false, "Error", "power_cycle_required",
+		{"most severe wins and every contributing field is kept", "2, 0, 1, Yes, 3, Yes, Yes, 17, [N/A], 79", false, "Error", "POWER_CYCLE_REQUIRED",
 			"ecc.errors.uncorrected.volatile.dram=2\nretired_pages.double_bit.count=1\nretired_pages.pending=Yes\nremapped_rows.uncorrectable=3\nremapped_rows.pending=Yes\nremapped_rows.failure=Yes\nxid.correctable.ppu_reset=17\nxid.correctable.cold_reboot=79"},
 	}
 	for _, tc := range cases {

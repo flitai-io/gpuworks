@@ -83,23 +83,23 @@ func TestStartupPassesOverADaemonThatNeverAnswers(t *testing.T) {
 }
 
 // Only a daemon that is coming up is waited for. One this agent may not use
-// is not going to change, and the recheck asks without waiting.
+// does not pass by waiting, and the recheck asks without waiting.
 func TestNoWaitForADaemonTheAgentMayNotUseOrOnRecheck(t *testing.T) {
 	fastDaemonRetry(t)
 	for _, tc := range []struct {
 		name, failing string
 		wait          time.Duration
-		fallback      runtimeFallback
+		reason        string
 	}{
-		{"permission denied at startup", daemonNoAccess, time.Minute, runtimeFallback{}},
-		{"not answering on recheck", daemonStarting, 0, runtimeFallback{from: "docker", reason: proto.RuntimeFallbackDaemonNotReady}},
+		{"permission denied at startup", daemonNoAccess, time.Minute, proto.RuntimeFallbackSocketPermissionDenied},
+		{"not answering on recheck", daemonStarting, 0, proto.RuntimeFallbackDaemonNotReady},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			host := newFakeDockerHost(t, daemonWithNVIDIA)
 			asked := host.liveness(tc.failing, -1, daemonWithNVIDIA)
 			got := detectDriverWaiting(slog.New(slog.DiscardHandler), t.TempDir(), "", nil, tc.wait)
-			if driverName(got.driver) != "udocker" || got.fallback != tc.fallback {
-				t.Fatalf("selection = %q/%+v, want udocker/%+v", driverName(got.driver), got.fallback, tc.fallback)
+			if driverName(got.driver) != "udocker" || got.fallback.from != "docker" || got.fallback.reason != tc.reason {
+				t.Fatalf("selection = %q/%+v, want udocker/docker/%s", driverName(got.driver), got.fallback, tc.reason)
 			}
 			if n := asked(); n != 1 {
 				t.Fatalf("liveness asked %d times, want once", n)
@@ -124,7 +124,7 @@ func TestRecheckSwitchesToDockerOnceItsDaemonAnswers(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q while dockerd is not answering", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != proto.RuntimeFallbackDaemonNotReady {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != proto.RuntimeFallbackDaemonNotReady {
 		t.Fatalf("fallback = %q/%q, want docker/%s", from, reason, proto.RuntimeFallbackDaemonNotReady)
 	}
 
@@ -133,7 +133,7 @@ func TestRecheckSwitchesToDockerOnceItsDaemonAnswers(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q: switched with an instance on the node", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUReady {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUReady {
 		t.Fatalf("fallback = %q/%q, want docker/%s", from, reason, accelerator.RuntimeGPUReady)
 	}
 
@@ -143,7 +143,7 @@ func TestRecheckSwitchesToDockerOnceItsDaemonAnswers(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "docker" {
 		t.Fatalf("runtime = %q, want docker once the node is idle", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "" || reason != "" {
+	if from, reason, _ := n.RuntimeFallback(); from != "" || reason != "" {
 		t.Fatalf("fallback = %q/%q after switching", from, reason)
 	}
 }

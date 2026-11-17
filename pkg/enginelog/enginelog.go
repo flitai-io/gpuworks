@@ -138,42 +138,6 @@ var vllmPatterns = []pattern{
 	},
 }
 
-var glibcMissingRE = regexp.MustCompile("(?i)(?:version [`']?)?(GLIBC_[0-9]+(?:\\.[0-9]+)+)(?:[`']? not found|[^\\n]*required)")
-
-// HumanizeStartupFailure maps dynamic-loader failures that otherwise look like
-// an opaque exit 127 into an operator-facing partition compatibility reason.
-func HumanizeStartupFailure(logText string) string {
-	match := glibcMissingRE.FindStringSubmatch(logText)
-	if len(match) > 1 {
-		return "container glibc too old: missing " + strings.ToUpper(match[1]) + "; Ascend dGPU images require glibc 2.33 or newer"
-	}
-	return ""
-}
-
-// hamiOOMRE is the line HAMi-core (the NVIDIA dGPU interposer) prints when it
-// refuses an allocation because it would take the instance past its memory
-// limit: "Device <cuda index> OOM <bytes the instance would hold> / <limit>".
-var hamiOOMRE = regexp.MustCompile(`HAMI-core ERROR[^\n]*?Device (\d+) OOM (\d+) / (\d+)`)
-
-// DGPULimitExceeded says, in words, that an engine ran into its dGPU memory
-// limit, from the last such refusal in its output; empty when there is none.
-// The engine's own report of the refusal is a generic error raised far from
-// it (a 500 to a request, or an initialization failure), so without this the
-// failure names a symptom and not the limit.
-func DGPULimitExceeded(logText string) string {
-	matches := hamiOOMRE.FindAllStringSubmatch(logText, -1)
-	if len(matches) == 0 {
-		return ""
-	}
-	m := matches[len(matches)-1]
-	wanted, _ := strconv.ParseFloat(m[2], 64)
-	limit, _ := strconv.ParseFloat(m[3], 64)
-	const gib = 1 << 30
-	return "dGPU memory limit reached on GPU " + m[1] + ": the engine needed " +
-		strconv.FormatFloat(wanted/gib, 'f', 1, 64) + " GiB, its limit is " +
-		strconv.FormatFloat(limit/gib, 'f', 1, 64) + " GiB"
-}
-
 var (
 	ansiRE      = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
 	errorLineRE = regexp.MustCompile(`(?i)(^|[\s:])[a-z_.]*(error|exception)\b|\berror:`)

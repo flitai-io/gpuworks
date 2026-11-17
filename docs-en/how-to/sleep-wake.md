@@ -177,3 +177,5 @@ When one instance fails to sleep, only its own desired state and any still-activ
 - The engine's sleep endpoint is enabled by `VLLM_SERVER_DEV_MODE=1`, on the condition that the engine listens only locally and is accessed through the agent tunnel.
   Reassess this requirement if the deployment architecture changes.
 - Stopping an instance differs from sleep: stop actually stops and removes the running container. Click **Start** in deployment details (`POST /api/v1/deployments/{id}/start`) to recover.
+
+<!-- translation-source-sha256: bc3720fdb8244a90e7c3663f322b636f8090fbdc1bec40fedd7fbfe5cc013ee5 -->

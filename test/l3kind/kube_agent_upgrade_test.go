@@ -119,11 +119,35 @@ func TestKubeAgentUpgradesInPlaceKind(t *testing.T) {
 	api.login()
 	waitAgent(t, api, node, "l3kind-one")
 	step(t, "upgrade the node")
-	status, body, err := api.do(http.MethodPost, "/api/v1/nodes/"+node1.UUID+"/upgrade", nil)
+	// Right after the server restarts, the node row still reads online from
+	// before while the agent's new session has not announced its
+	// capabilities yet, and the upgrade is refused as having no eligible
+	// node. An operator retries; so does the test, for a bounded time.
+	var (
+		status int
+		body   []byte
+		err    error
+	)
+	eventually(t, "the node accepts the in-place upgrade", time.Minute, 2*time.Second, func() (bool, string) {
+		status, body, err = api.do(http.MethodPost, "/api/v1/nodes/"+node1.UUID+"/upgrade", nil)
+		if err == nil && status == http.StatusBadRequest && strings.Contains(string(body), "no eligible nodes remain") {
+			return false, string(body)
+		}
+		return true, ""
+	})
 	if err != nil || status != http.StatusAccepted || !strings.Contains(string(body), `"status":"upgrading"`) {
 		t.Fatalf("upgrade = %d %s %v; want the in-place upgrade, not a DaemonSet roll", status, body, err)
 	}
 	waitAgent(t, api, node, "l3kind-two")
+	// The restarted agent must keep the node's nerdctl a binary: taking the
+	// wrapper on its PATH for nerdctl once made every image operation after
+	// an in-place upgrade loop forever.
+	if head := mustRun(t, time.Minute, "docker", "exec", node, "sh", "-c", "head -c 2 /opt/gpuworks/kube-tools/nerdctl | od -An -c"); strings.Contains(head, "#") {
+		t.Fatalf("the node's nerdctl became a script after the upgrade: %q", head)
+	}
+	if out, err := command(2*time.Minute, "docker", "exec", node, "timeout", "60", "/opt/gpuworks/kube-tools/nerdctl", "--address", "/run/containerd/containerd.sock", "-n", "k8s.io", "image", "ls", "-q"); err != nil {
+		t.Fatalf("nerdctl after the upgrade: %v\n%s", err, tail(out, 2000))
+	}
 	after := k.agentPods()
 	if len(after) != 1 || after[0].Metadata.UID != pod.Metadata.UID {
 		t.Fatalf("the agent pod was replaced by the upgrade: %v -> %v", pod.Metadata.UID, after)

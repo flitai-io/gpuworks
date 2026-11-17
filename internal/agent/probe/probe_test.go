@@ -348,3 +348,23 @@ func TestRunnerFailsWhenEmbeddedProbeImageCannotLoad(t *testing.T) {
 		t.Fatalf("results=%+v", got)
 	}
 }
+
+type namedDriver struct {
+	fakeDriver
+	name string
+}
+
+func (d *namedDriver) Name() string { return d.name }
+
+// On Kubernetes the probe is a pod whose sandbox alone takes 10 to 20
+// seconds to start, so its budget is longer than the docker one.
+func TestProbeBudgetAllowsForAPodOnKubernetes(t *testing.T) {
+	r := New(&namedDriver{name: "kube"}, nil, "ppu")
+	if got := r.probeTimeout(); got != kubeProbeTimeout {
+		t.Fatalf("kube budget = %s, want %s", got, kubeProbeTimeout)
+	}
+	r = New(&namedDriver{name: "docker"}, nil, "ppu")
+	if got := r.probeTimeout(); got != 15*time.Second {
+		t.Fatalf("docker budget = %s, want 15s", got)
+	}
+}

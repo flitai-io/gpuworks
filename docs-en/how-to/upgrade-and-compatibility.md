@@ -20,9 +20,9 @@ Use the console or command line for an online upgrade. If the control plane cann
 Sign in to the console with an administrator account.
 
 1. Open **Settings → General → Version and updates**, and check the current **Server** version.
-2. Select an **Update channel**, click **Check for updates**, and verify the target version.
-3. Click **Upgrade** in the **Server** row. Check the version and interruption notice in the confirmation page, then click **Upgrade**.
-4. Wait for the page to recover. Confirm that the **Current** version matches the target, then open **Compute Nodes** and wait for previously online nodes to come back online.
+2. Choose **release** or **nightly**. Switching channels checks the server and both catalogs. Installing a server version requires separate confirmation.
+3. In the **Server** row, click **Select upgrade version**. The running channel lists the installed version and newer builds. Switching channels lists builds published in the selected channel. The drawer initially shows the five most recent entries. For a longer list, click **View all** to search by version or Git commit. Choose a published build, review the running version, target and restart impact, then confirm. Older indexes may list only one build. Each catalog has its own update and upload actions.
+4. Wait for the selected version to respond. After five minutes the page checks every 15 seconds. You can also click **Recheck running version**. A confirmed rollback can be acknowledged. If Agents need attention, open **Compute Nodes** and verify their target against the running server.
 
 If the page indicates that console upgrades are unsupported, follow its guidance or use the command-line method below.
 
@@ -103,7 +103,7 @@ If you can sign in to the node, you can also rerun `/install.sh` to update the a
 2. Follow the [Connection Guide](connect-nodes.md#升级) to rerun the installation script with the original connection parameters. Nodes using **Server-initiated connections** use an [Offline Package](connect-nodes.md#离线包).
 3. Confirm that the node is back online and its version matches the server, then proceed to the next node.
 
-`gpuworks-agent upgrade` is only for environments where you run the agent manually without a persistent agent service. For options, see the [CLI Reference](../reference/cli.md#gpuworks-agent-upgrade). It runs in the foreground and does not restart the original service. Do not start this command alongside an existing persistent agent. Nodes with server-initiated connections cannot use it to download upgrades.
+`gpuworks-agent upgrade` is only for environments where you run the agent manually without a persistent agent service. For options, see the [CLI Reference](../reference/cli.md#gpuworks-agent-upgrade). It runs in the foreground and does not restart the original service. If an agent is already running with the same state directory, the command refuses to run. Nodes with server-initiated connections cannot use it to download upgrades.
 
 ## Verify the Results
 
@@ -165,3 +165,7 @@ Run the following commands in the actual installation directory on the control p
 </details>
 
 For options and backup layout, see the [CLI Reference](../reference/cli.md#gpuworks-upgrade) and [Installation Layout](../reference/install-layout.md). For the connection mechanism, see [Architecture](../explanation/architecture.md#连接与流).
+
+<!-- translation-source-sha256: a88104ae50d3470288172ce35ae069bc3dfd4751f16d02a0d804f75df60963a5 -->
+<!-- translation-localized-code-block: 3922c94b253dd971ff8ee6ae0ddcc7cfd4f7c28127fe2cdc7a322efe51808c1c 4afd6537a965876c65d49343fb5e1f684063bc8ac4f4c50eda0eac4ed077140b Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: a55f0c19bcc94075a6148de522ad5e9559f13d4ecac8b070a5d0483f303608ab 853eb242efd6c57c33a48c52b2dee9bb32684441a0c5dd7ebbe8746ce3a92f39 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

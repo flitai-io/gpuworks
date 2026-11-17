@@ -25,42 +25,6 @@ func discardLog() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError + 100}))
 }
 
-// TestAcquireKubeAgentLockRefusesASecondHolder: two gpuworks agent
-// processes must never run one node's workload at once.
-func TestAcquireKubeAgentLockRefusesASecondHolder(t *testing.T) {
-	dir := t.TempDir()
-	first, err := acquireKubeAgentLock(dir)
-	if err != nil {
-		t.Fatalf("first lock = %v", err)
-	}
-	defer first.Close()
-	if _, err := acquireKubeAgentLock(dir); err == nil || !strings.Contains(err.Error(), "already runs") {
-		t.Fatalf("second lock on the same state directory = %v, want a refusal naming the reason", err)
-	}
-}
-
-// TestAcquireKubeAgentLockReleasesWhenTheFdCloses: the lock is a flock on
-// an open file description, not a process-wide lock, so closing the file
-// that holds it frees it for the next holder.
-func TestAcquireKubeAgentLockReleasesWhenTheFdCloses(t *testing.T) {
-	dir := t.TempDir()
-	first, err := acquireKubeAgentLock(dir)
-	if err != nil {
-		t.Fatalf("first lock = %v", err)
-	}
-	if _, err := acquireKubeAgentLock(dir); err == nil {
-		t.Fatal("a second holder was not refused while the first is open")
-	}
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
-	}
-	second, err := acquireKubeAgentLock(dir)
-	if err != nil {
-		t.Fatalf("lock after release = %v", err)
-	}
-	defer second.Close()
-}
-
 func TestWriteTerminationLogWritesTheReason(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "termination-log")
 	old := terminationLogPath

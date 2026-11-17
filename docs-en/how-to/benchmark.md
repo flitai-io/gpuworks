@@ -152,3 +152,5 @@ A single parameter scan does not establish the throughput ceiling, and stability
 
 Information that cannot be obtained automatically from external endpoints, such as GPU model, precision, and the actual kernel, appears as unknown. Managed deployments export snapshots of existing GPUs, TP,
 images, and startup arguments. Configuration values cannot substitute for logs or profiler evidence of the kernel actually running.
+
+<!-- translation-source-sha256: 5c8e0169bc3d87df701e48711c89ed598edc0abce56a2c34acae5e4f67e7593f -->

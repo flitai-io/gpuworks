@@ -365,7 +365,10 @@ func TestScanPullLinesEndsLinesAtCarriageReturnsAndDropsBlankRedraws(t *testing.
 }
 
 // A daemon still coming up is ErrDaemonNotReady, so startup can wait for it;
-// one this agent may not use is plain false, as before.
+// one that refuses this agent's account its socket is a *SocketDeniedError
+// naming the socket Detect resolved, so the operator can be told whom to
+// add to which group; anything else is plain false. The stderr lines are
+// what docker 24 and 27 print.
 func TestDetectSeparatesADaemonNotReadyFromOneThisAgentMayNotUse(t *testing.T) {
 	sock := shortUnixSocketPath(t)
 	ln, err := net.Listen("unix", sock)
@@ -376,13 +379,15 @@ func TestDetectSeparatesADaemonNotReadyFromOneThisAgentMayNotUse(t *testing.T) {
 	t.Setenv("DOCKER_CONTEXT", "")
 	t.Setenv("DOCKER_HOST", "unix://"+sock)
 	for _, tc := range []struct {
-		name, stderr string
-		notReady     bool
+		name, stderr     string
+		notReady, denied bool
 	}{
-		{"not up yet", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?", true},
-		{"refusing connections", "error during connect: dial unix /var/run/docker.sock: connect: connection refused", true},
-		{"permission denied", "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: connect: permission denied", false},
-		{"other failure", "unknown flag: --format", false},
+		{"not up yet", "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?", true, false},
+		{"refusing connections", "error during connect: dial unix /var/run/docker.sock: connect: connection refused", true, false},
+		{"permission denied", `permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.24/info": dial unix /var/run/docker.sock: connect: permission denied`, false, true},
+		{"permission denied, docker 25+", `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, false, true},
+		{"other failure", "unknown flag: --format", false, false},
+		{"a permission error that is not the socket", "open /root/.docker/config.json: permission denied", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			installFakeDocker(t, "echo '"+tc.stderr+"' >&2; exit 1")
@@ -390,15 +395,41 @@ func TestDetectSeparatesADaemonNotReadyFromOneThisAgentMayNotUse(t *testing.T) {
 			if ok || errors.Is(err, runtime.ErrDaemonNotReady) != tc.notReady {
 				t.Fatalf("detect = %t,%v; want not-ready=%t", ok, err, tc.notReady)
 			}
-			if tc.notReady && !strings.Contains(err.Error(), tc.stderr) {
-				t.Fatalf("error %q does not carry the daemon's answer", err)
+			var denied *runtime.SocketDeniedError
+			if errors.As(err, &denied) != tc.denied {
+				t.Fatalf("detect = %v; want socket denied=%t", err, tc.denied)
 			}
-			if !tc.notReady && err != nil {
-				t.Fatalf("detect error = %v, want none", err)
+			switch {
+			case tc.notReady:
+				if !strings.Contains(err.Error(), tc.stderr) {
+					t.Fatalf("error %q does not carry the daemon's answer", err)
+				}
+			case tc.denied:
+				if denied.Socket != sock || denied.Detail != tc.stderr || !runtime.IsPermissionDenied(err) {
+					t.Fatalf("denied = %+v (permission denied=%t), want socket %s and docker's line", denied, runtime.IsPermissionDenied(err), sock)
+				}
+			default:
+				if err != nil {
+					t.Fatalf("detect error = %v, want none", err)
+				}
 			}
 		})
 	}
 	if !daemonNotReady(context.DeadlineExceeded, "") {
 		t.Fatal("a docker info that outlived its timeout is a busy daemon")
+	}
+}
+
+func TestBuildRunArgsRendersWorkloadLabels(t *testing.T) {
+	args := buildRunArgs(runtime.WorkloadSpec{
+		Name:   "gpuworks-test",
+		Image:  "vllm/vllm-openai:latest",
+		Labels: map[string]string{"gpuworks.server": "https://gw.example:8800", "gpuworks.instance": "inst-1"},
+	})
+
+	assertContainsPair(t, args, "--label", "gpuworks.server=https://gw.example:8800")
+	assertContainsPair(t, args, "--label", "gpuworks.instance=inst-1")
+	if i := slices.Index(args, "vllm/vllm-openai:latest"); i < 0 || slices.Index(args, "--label") > i {
+		t.Fatalf("labels must come before the image: %q", args)
 	}
 }

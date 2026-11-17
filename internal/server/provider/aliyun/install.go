@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
@@ -55,13 +57,15 @@ func (d *Driver) installByAssistant(ctx context.Context, creds provider.Credenti
 	if err != nil {
 		return provider.InstallReport{}, fmt.Errorf("aliyun: Cloud Assistant: %w", err)
 	}
-	ran := provider.InstallCheck{Name: "Cloud Assistant", Status: "ok", Detail: fmt.Sprintf("ran the install script as root (invocation %s)", result.invokeID)}
+	ran := provision.PassCheck(provision.CheckIDCloudAssistant, messages.CheckCloudAssistantRan,
+		fmt.Sprintf("ran the install script as root (invocation %s)", result.invokeID), map[string]any{"invocation": result.invokeID})
 	if !result.succeeded() {
-		return provider.InstallReport{Checks: []provider.InstallCheck{ran}}, fmt.Errorf("aliyun: install script on %s %s: %s", inst.ExternalID, result.describe(), tail(result.output))
+		return provider.InstallReport{Checks: []provision.CheckResult{ran}}, fmt.Errorf("aliyun: install script on %s %s: %s", inst.ExternalID, result.describe(), tail(result.output))
 	}
-	return provider.InstallReport{InstallDir: req.InstallDir, Checks: []provider.InstallCheck{
+	dir := provision.ResolvedInstallDir(req.InstallDir)
+	return provider.InstallReport{InstallDir: req.InstallDir, Checks: []provision.CheckResult{
 		ran,
-		{Name: "Agent process", Status: "ok", Detail: tail(result.output)},
+		provision.PassCheck(provision.CheckIDAgentProcess, messages.CheckAgentRunning, "running with state directory "+dir, map[string]any{"dir": dir}).WithEvidence(tail(result.output)),
 	}}, nil
 }
 
@@ -98,8 +102,8 @@ func (d *Driver) installBySSH(ctx context.Context, creds provider.Credentials, r
 		return provider.InstallReport{}, fmt.Errorf("aliyun: install over SSH on %s: %w", inst.PublicIP, err)
 	}
 	out := provider.ReportFromSSHInstall(report)
-	if keyCheck.Name != "" {
-		out.Checks = append([]provider.InstallCheck{keyCheck}, out.Checks...)
+	if keyCheck.ID != "" {
+		out.Checks = append([]provision.CheckResult{keyCheck}, out.Checks...)
 	}
 	return out, nil
 }
@@ -108,29 +112,31 @@ func (d *Driver) installBySSH(ctx context.Context, creds provider.Credentials, r
 // authorized_keys through Cloud Assistant, once (a line already there is
 // left as it is). It never fails the install: without it the operator's own
 // credentials may still log in, and the SSH error then says what to do.
-func (d *Driver) authorizePlatformKey(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) provider.InstallCheck {
-	check := provider.InstallCheck{Name: "Platform key (Cloud Assistant)"}
+func (d *Driver) authorizePlatformKey(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) provision.CheckResult {
 	if req.PlatformKey == nil || strings.TrimSpace(req.PlatformKey.PublicKey) == "" {
-		return provider.InstallCheck{}
+		return provision.CheckResult{}
+	}
+	notAdded := func(evidence string) provision.CheckResult {
+		return provision.WarnCheck(provision.CheckIDPlatformKeyProvider, messages.CheckPlatformKeyProviderFailed, "the platform key was not added through Cloud Assistant",
+			map[string]any{"provider": "aliyun"}).WithEvidence(evidence)
 	}
 	waited, err := d.waitForAssistant(ctx, creds, req.Instance)
 	if err != nil {
-		check.Status, check.Detail = "warn", "not added: "+err.Error()
-		return check
+		return notAdded(err.Error())
 	}
 	result, err := d.runCommand(ctx, creds, req.Instance, "gpuworks-authorize-key", authorizeKeyScript(req.PlatformKey.PublicKey), authorizeKeyTimeout)
 	switch {
 	case err != nil:
-		check.Status, check.Detail = "warn", "not added: "+err.Error()
+		return notAdded(err.Error())
 	case !result.succeeded():
-		check.Status, check.Detail = "warn", "not added: the command "+result.describe()+": "+tail(result.output)
-	default:
-		check.Status, check.Detail = "ok", strings.TrimSpace(result.output)
-		if waited > 0 {
-			check.Detail += fmt.Sprintf(" (waited %s for Cloud Assistant to come online)", waited.Round(time.Second))
-		}
+		return notAdded("the command " + result.describe() + ": " + tail(result.output))
 	}
-	return check
+	message := "added the platform key through Cloud Assistant"
+	if waited > 0 {
+		message += fmt.Sprintf(" (waited %s for Cloud Assistant to come online)", waited.Round(time.Second))
+	}
+	return provision.PassCheck(provision.CheckIDPlatformKeyProvider, messages.CheckPlatformKeyInstanceAttached, message, map[string]any{"provider": "aliyun"}).
+		WithEvidence(result.output)
 }
 
 // assistantWaitTimeout bounds the wait for Cloud Assistant: on a freshly
@@ -176,14 +182,15 @@ func (d *Driver) waitForAssistant(ctx context.Context, creds provider.Credential
 
 // PlatformKeyAtInstall implements provider.InstallKeyAdder: the install
 // adds the key through Cloud Assistant, waiting for it to come online first.
-func (d *Driver) PlatformKeyAtInstall(ctx context.Context, creds provider.Credentials, inst provider.Instance, _ string) (provider.InstallCheck, bool) {
+func (d *Driver) PlatformKeyAtInstall(ctx context.Context, creds provider.Credentials, inst provider.Instance, _ string) (provision.CheckResult, bool) {
 	if inst.Region == "" {
-		return provider.InstallCheck{}, false
+		return provision.CheckResult{}, false
 	}
 	if d.requireAssistant(ctx, creds, inst) != nil {
-		return provider.InstallCheck{Status: "warn", Detail: fmt.Sprintf("the instance does not accept the platform key yet and Cloud Assistant is not online (an instance started a moment ago reports in about a minute); the install waits up to %s for it, then adds the key (the remaining checks run once SSH logs in)", assistantWaitTimeout)}, true
+		return provision.WarnCheck(provision.CheckIDSSH, messages.CheckPlatformKeyAssistantWait, fmt.Sprintf("the instance does not accept the platform key yet and Cloud Assistant is not online (an instance started a moment ago reports in about a minute); the install waits up to %s for it, then adds the key (the remaining checks run once SSH logs in)", assistantWaitTimeout),
+			map[string]any{"wait": assistantWaitTimeout.String()}), true
 	}
-	return provider.InstallCheck{Status: "warn", Detail: "the instance does not accept the platform key yet; the install adds it through Cloud Assistant (the remaining checks run once SSH logs in)"}, true
+	return provision.WarnCheck(provision.CheckIDSSH, messages.CheckPlatformKeyAssistantPending, "the instance does not accept the platform key yet; the install adds it through Cloud Assistant (the remaining checks run once SSH logs in)", nil), true
 }
 
 // authorizeKeyTimeout bounds the one-line key script.
@@ -210,55 +217,85 @@ fi`
 
 // PrecheckCommand implements provider.CommandPrechecker: the same read-only
 // facts the SSH precheck gathers, through Cloud Assistant. Each line the
-// script prints is "name<TAB>status<TAB>detail".
-func (d *Driver) PrecheckCommand(ctx context.Context, creds provider.Credentials, inst provider.Instance, connection provider.SSHConnection, req provider.CommandPrecheckRequest) ([]provider.InstallCheck, error) {
+// script prints is "id<TAB>status<TAB>code<TAB>evidence".
+func (d *Driver) PrecheckCommand(ctx context.Context, creds provider.Credentials, inst provider.Instance, connection provider.SSHConnection, req provider.CommandPrecheckRequest) ([]provision.CheckResult, error) {
 	if connection.Type != provider.ConnectionCloudAssistant {
 		return nil, fmt.Errorf("aliyun: cannot precheck through %q", connection.Type)
 	}
 	if err := d.requireAssistant(ctx, creds, inst); err != nil {
-		return []provider.InstallCheck{{Name: "Cloud Assistant", Status: "error", Detail: err.Error()}}, nil //nolint:nilerr // Cloud Assistant unavailability is returned as a failed precheck row.
+		return []provision.CheckResult{provision.FailCheck(provision.CheckIDCloudAssistant, messages.CheckCloudAssistantOffline, "Cloud Assistant is not online", nil).WithEvidence(err.Error())}, nil //nolint:nilerr // Cloud Assistant unavailability is returned as a failed precheck row.
 	}
 	result, err := d.runCommand(ctx, creds, inst, "gpuworks-precheck", precheckScript(req), precheckTimeout)
 	if err != nil {
 		return nil, err
 	}
-	checks := []provider.InstallCheck{{Name: "Cloud Assistant", Status: "ok", Detail: "online; checks ran as root"}}
+	checks := []provision.CheckResult{provision.PassCheck(provision.CheckIDCloudAssistant, messages.CheckCloudAssistantOnline, "online; checks ran as root", nil)}
 	checks = append(checks, parseCheckLines(result.output)...)
 	if !result.succeeded() {
-		checks = append(checks, provider.InstallCheck{Name: "Precheck script", Status: "warn", Detail: result.describe() + ": " + tail(result.output)})
+		checks = append(checks, provision.WarnCheck(provision.CheckIDPrecheckScript, messages.CheckPrecheckScriptFailed, "the precheck script "+result.describe(), nil).WithEvidence(tail(result.output)))
 	}
 	return checks, nil
 }
 
-// precheckScript prints one check per line. The names match the SSH
-// precheck's, so the connectivity verdict reads "Server reachability" the
-// same way whichever channel ran it.
+// precheckRow is one row the precheck script may print: the check it is,
+// and for a problem the code and English fallback the server reports.
+type precheckRow struct {
+	id, failStatus, failCode, failMessage string
+}
+
+// precheckRows are the checks the script runs. The ids match the SSH
+// precheck's, so the connectivity verdict reads server_reachability the same
+// way whichever channel ran it.
+var precheckRows = map[string]precheckRow{
+	provision.CheckIDOSArch: {id: provision.CheckIDOSArch},
+	provision.CheckIDGPU: {id: provision.CheckIDGPU, failStatus: proto.CheckWarn, failCode: messages.CheckGPUToolMissing,
+		failMessage: "no NVIDIA driver answered (nvidia-smi missing or failing); install the GPU driver before deploying"},
+	provision.CheckIDDocker: {id: provision.CheckIDDocker},
+	provision.CheckIDServerReachability: {id: provision.CheckIDServerReachability, failStatus: proto.CheckFail, failCode: messages.CheckServerUnreachableFromNode,
+		failMessage: "the node cannot reach the server"},
+}
+
+// precheckScript prints one check per line: its id, "pass" or "problem",
+// and what the command printed. The server decides the status and code of a
+// problem (precheckRows); the script reports only what it saw.
 func precheckScript(req provider.CommandPrecheckRequest) string {
 	var b strings.Builder
-	b.WriteString(`row() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
-row "OS/Arch" ok "$(uname -s) $(uname -m) $(uname -r)"
-if command -v nvidia-smi >/dev/null 2>&1 && gpus=$(nvidia-smi -L 2>&1); then row GPU ok "$(echo "$gpus" | head -n 8 | tr '\n' ';')"; else row GPU warn "no NVIDIA driver answered (nvidia-smi missing or failing); install the GPU driver before deploying"; fi
-if command -v docker >/dev/null 2>&1; then row Docker ok "$(docker --version 2>&1 | head -n 1)"; else row Docker ok "not installed; the agent uses its built-in runtime (udocker)"; fi
-`)
+	fmt.Fprintf(&b, `row() { printf '%%s\t%%s\t%%s\n' "$1" "$2" "$3"; }
+row %[1]s pass "$(uname -s) $(uname -m) $(uname -r)"
+if command -v nvidia-smi >/dev/null 2>&1 && gpus=$(nvidia-smi -L 2>&1); then row %[2]s pass "$(echo "$gpus" | head -n 8 | tr '\n' ';')"; else row %[2]s problem "nvidia-smi missing or failing"; fi
+if command -v docker >/dev/null 2>&1; then row %[3]s pass "$(docker --version 2>&1 | head -n 1)"; else row %[3]s pass "not installed; the agent uses its built-in runtime (udocker)"; fi
+`, provision.CheckIDOSArch, provision.CheckIDGPU, provision.CheckIDDocker)
 	if server := strings.TrimRight(strings.TrimSpace(req.ServerURL), "/"); server != "" && req.ConnectMode != "server_dial" {
-		fmt.Fprintf(&b, `if out=$(curl -fsS --connect-timeout 3 --max-time 10 %s 2>&1); then row %q ok "$out"; else row %q error "$(echo "$out" | head -n 1)"; fi
-`, shellWord(server+"/healthz"), "Server reachability", "Server reachability")
+		fmt.Fprintf(&b, `if out=$(curl -fsS --connect-timeout 3 --max-time 10 %s 2>&1); then row %[2]s pass "$out"; else row %[2]s problem "$(echo "$out" | head -n 1)"; fi
+`, shellWord(server+"/healthz"), provision.CheckIDServerReachability)
 	}
 	return b.String()
 }
 
 func shellWord(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-func parseCheckLines(output string) []provider.InstallCheck {
-	var checks []provider.InstallCheck
+// parseCheckLines reads precheckScript's rows. A line it does not know (an
+// id it did not ask for, a verdict other than pass or problem, stray output)
+// is ignored.
+func parseCheckLines(output string) []provision.CheckResult {
+	var checks []provision.CheckResult
 	for _, line := range strings.Split(output, "\n") {
 		parts := strings.SplitN(strings.TrimRight(line, "\r"), "\t", 3)
 		if len(parts) != 3 {
 			continue
 		}
-		switch parts[1] {
-		case "ok", "warn", "error":
-			checks = append(checks, provider.InstallCheck{Name: parts[0], Status: parts[1], Detail: strings.TrimRight(parts[2], ";")})
+		row, ok := precheckRows[parts[0]]
+		if !ok {
+			continue
+		}
+		evidence := strings.TrimRight(parts[2], ";")
+		switch {
+		case parts[1] == "pass":
+			checks = append(checks, provision.PassCheck(row.id, "", "", nil).WithEvidence(evidence))
+		case parts[1] == "problem" && row.failCode != "":
+			check := provision.WarnCheck(row.id, row.failCode, row.failMessage, nil)
+			check.Status = row.failStatus
+			checks = append(checks, check.WithEvidence(evidence))
 		}
 	}
 	return checks

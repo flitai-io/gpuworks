@@ -22,3 +22,5 @@ In practice, this cost is too high: quick tunnel addresses are assigned per conn
 - The address still resolves while the server is stopped, but returns an error page. In exchange, the address stays the same after server restarts and upgrades.
 - The default background process does not recover after a machine reboot, so you must run `up` again manually. Explicitly choose `--systemd` for automatic startup. This avoids changing the server unit or adding a boot service that the user did not request.
 - Each data directory can have only one connector service (using the existing supervisor lock). Restarting the connector service itself recreates the connector and changes the quick address.
+
+<!-- translation-source-sha256: a34b1e2ac1272ec825132353c4d695a4981f833e49368b534e53b4df00dd3173 -->

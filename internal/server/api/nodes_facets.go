@@ -26,7 +26,7 @@ func (a *apiHandlers) nodeFacets(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

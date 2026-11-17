@@ -2,6 +2,7 @@ package conn
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -221,4 +222,12 @@ func (c *Conn) runAcceptedData(ctx context.Context, raw net.Conn, proof proto.Se
 		}
 		go c.handleStream(ctx, stream)
 	}
+}
+
+func randomNonce() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }

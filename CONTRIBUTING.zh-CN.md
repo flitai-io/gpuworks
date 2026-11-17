@@ -155,31 +155,23 @@ git diff --check
 代码、API 字段和 CLI 输出在两版里都保持原文。
 
 `make check-translations`（同样包含在 `make test-unit` 里）比"成对"要求更多：每个 `docs-en/`
-页面都必须匹配 `docs-site/translations.json` 里记录的**已复核** SHA-256，且标题与代码块和中文
-版一致。所以改一页是三步，不是两步：
+页面都必须匹配该英文页末尾 `<!-- translation-source-sha256: ... -->` 注释里记录的**已复核**
+SHA-256，且标题与代码块和中文版一致。这段标记不会出现在发布的站点里。所以改一页是三步，不是两步：
 
 1. 改 `docs/` 下的中文页；
 2. 改 `docs-en/` 下的英文页，并对照这次改动复核译文——哈希写着"已复核"却没人读英文，等于把
    这项校验废掉；
-3. 用下面的脚本重新计算源文件哈希把这次复核记录下来，然后跑校验：
+3. 把当前源文件哈希写进英文页，记录这次复核，然后跑校验：
 
 ```bash
-python3 - <<'PY'
-import hashlib, json, pathlib
-
-page = "how-to/connect-nodes.md"   # 相对 docs/ 的路径，与 translations.json 的键一致
-digest = hashlib.sha256(pathlib.Path("docs", page).read_bytes()).hexdigest()
-
-path = pathlib.Path("docs-site/translations.json")
-data = json.loads(path.read_text())
-data[page] = digest
-path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-PY
+python3 docs-site/check_translations.py --write docs/how-to/connect-nodes.md
 make check-translations
 ```
 
-如果某个代码块在两版里本来就该不同（注释翻译、本地化示例），把复核过的这一对登记到
-`docs-site/localized-code-blocks.json`；否则校验会报"代码块变了但没复核"。若失败发生在这次
+如果某个代码块在两版里本来就该不同（注释翻译、本地化示例），复核后给 `--write` 加上
+`--approve-code-blocks`：它为英文页当前改动的每个代码块记录一行
+`<!-- translation-localized-code-block: <原块 sha256> <译块 sha256> [理由] -->`，并删掉已不适用的
+登记；否则校验会报"代码块变了但没复核"。若失败发生在这次
 改动没碰过的页面上，那是既有的缺口——留给那一页的维护者，不要直接把源文件哈希盖上去。
 
 写具体行为时先读代码。参考手册里的 flag 表必须以 `--help` 输出为准。相对链接和锚点由

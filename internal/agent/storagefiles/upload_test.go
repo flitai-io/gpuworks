@@ -71,7 +71,7 @@ func uploadCtx(t *testing.T, ctx context.Context, e *testEnv, hdr proto.StreamHe
 	if (err == nil) != (st.State == proto.StorageFilesDone) {
 		t.Fatalf("returned %v but answered %+v", err, st)
 	}
-	if err != nil && (st.Code != codeOf(t, err) || proto.ParseStorageFilesError(st.Error).Code != st.Code) {
+	if err != nil && (st.Code != codeOf(t, err) || st.Error != err.Error()) {
 		t.Fatalf("answer %+v does not carry the error's code %v", st, err)
 	}
 	// Whatever happened, no staging is left behind.

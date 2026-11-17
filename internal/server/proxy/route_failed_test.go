@@ -53,7 +53,7 @@ func TestSelectInstanceSaysDeploymentFailedWhenRetriesStopped(t *testing.T) {
 			}
 			p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"failed-node": true}}, nil, 0)
 			t.Cleanup(p.Close)
-			_, _, status, msg, asleep := p.selectDeploymentInstance("failed-model")
+			_, _, status, msg, asleep := p.selectStatus("failed-model")
 			if status != http.StatusServiceUnavailable || asleep || !strings.Contains(msg, tc.wantSub) {
 				t.Fatalf("status=%d message=%q asleep=%v, want 503 containing %q", status, msg, asleep, tc.wantSub)
 			}

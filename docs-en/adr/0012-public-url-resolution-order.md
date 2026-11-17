@@ -112,3 +112,5 @@ resolution order itself remains unchanged.
 - [CONTEXT.md § Server External Address](../../CONTEXT.md): terminology definitions and Avoid list
 - Commit `51777f2`: the original commit introducing `inferLocalPublicURL` prefilling
 - Incident evidence: see the symptoms section of the plan for the mirror1 live test record
+
+<!-- translation-source-sha256: f2e2741e66ccc3d73654e1733fcc5b5ac6f7d0bbfcc1a24c13d39c4158b344ed -->

@@ -160,7 +160,7 @@ func (a *apiHandlers) getUpdates(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, status)
 		return
 	}
-	status.Server.CurrentBuild = serverBuildInfo(version.Version, fetched)
+	status.Server.CurrentBuild = a.runningBuildInfo(version.Version, fetched)
 	index := fetched.Index
 	status.Available, status.Source = true, fetched.Source
 	status.Server.Latest, status.Server.BuiltAt = index.Server.ReleaseID, index.Server.BuiltAt
@@ -266,6 +266,42 @@ const serverDownloadTimeout = 10 * time.Minute
 // release (checked against the index) and upgrades the server with it. The
 // answer comes before the restart; the console then waits for the new version.
 func (a *apiHandlers) upgradeServerFromChannel(w http.ResponseWriter, r *http.Request) {
+	if !a.lockServerUpgrade(w) {
+		return
+	}
+	defer a.serverUpgradeMu.Unlock()
+	target, valid := readUpgradeSelection(http.MaxBytesReader(w, r.Body, 4096))
+	if !valid {
+		writeProductError(w, http.StatusBadRequest, ErrorUpgradeSelectionInvalid, "select a channel and version", nil)
+		return
+	}
+	if target.Channel != "" && !a.matchChannel(w, target.Channel) {
+		return
+	}
+	if target.Attempt != "" {
+		prior := a.currentUpgradeProgress()
+		if prior.Attempt == target.Attempt {
+			writeUpgradeBusy(w)
+			return
+		}
+		previous, err := a.serverSettings().RollbackResult(target.Attempt, "")
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		if previous.Phase == "rollback" {
+			writeProductError(w, http.StatusConflict, ErrorUpgradeAttemptFinished, "this upgrade already rolled back", nil)
+			return
+		}
+		a.setUpgradeProgress(dto.ServerUpgradeProgress{Attempt: target.Attempt, Phase: "download", From: version.Version, To: target.Version})
+		defer func() {
+			p := a.currentUpgradeProgress()
+			if p.Phase == "download" {
+				p.Phase = "failed"
+				a.setUpgradeProgress(p)
+			}
+		}()
+	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), serverDownloadTimeout)
 	defer cancel()
 	if blocker := a.serverSettings().SelfUpgradeBlocker(); blocker != "" {
@@ -277,11 +313,29 @@ func (a *apiHandlers) upgradeServerFromChannel(w http.ResponseWriter, r *http.Re
 		return
 	}
 	release := fetched.Index.Server
+	if target.Version != "" {
+		var found bool
+		release, found = fetched.Index.FindServer(target.Version)
+		if !found {
+			writeProductError(w, http.StatusConflict, ErrorUpgradeWithdrawn, "the selected version is no longer published", map[string]any{"version": target.Version})
+			return
+		}
+	}
 	if release.ReleaseID == version.Version {
 		writeProductError(w, http.StatusConflict, ErrorServerAlreadyAtRelease, "this server already runs "+release.ReleaseID, map[string]any{"release": release.ReleaseID})
 		return
 	}
-	if !release.NewerThan(version.Version, version.BuildDate) {
+	migration, err := a.d.Store.CurrentMigration()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	compatibility := upgradeCompatibility(release, fetched.Index.Channel, migration)
+	if target.Version != "" && compatibility == "backup" {
+		writeProductError(w, http.StatusConflict, ErrorUpgradeBackupRequired, "restore a matching backup for this database version", map[string]any{"version": release.ReleaseID})
+		return
+	}
+	if (target.Version == "" && !release.NewerThan(version.Version, version.BuildDate)) || compatibility != "" {
 		writeProductError(w, http.StatusConflict, ErrorServerNewerThanRelease, "this server runs "+version.Version+", which is newer than "+release.ReleaseID,
 			map[string]any{"current": version.Version, "release": release.ReleaseID})
 		return
@@ -289,6 +343,10 @@ func (a *apiHandlers) upgradeServerFromChannel(w http.ResponseWriter, r *http.Re
 	asset, err := release.Asset(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		writeNotPublished(w, "server_"+runtime.GOOS+"_"+runtime.GOARCH)
+		return
+	}
+	if target.SHA256 != "" && target.SHA256 != asset.SHA256 {
+		writeProductError(w, http.StatusConflict, ErrorUpgradeSelectionChanged, "the selected package changed; check again", nil)
 		return
 	}
 	dir, err := os.MkdirTemp("", "gpuworks-upgrade-")
@@ -308,7 +366,8 @@ func (a *apiHandlers) upgradeServerFromChannel(w http.ResponseWriter, r *http.Re
 		return
 	}
 	defer archive.Close()
-	a.upgradeServer(w, r.WithContext(ctx), archive)
+	target.Version = release.ReleaseID
+	a.upgradeServer(w, r.WithContext(ctx), archive, target)
 }
 
 // writeDownloadFailed answers a file the index lists that no source served
@@ -324,10 +383,14 @@ func (a *apiHandlers) upgradeServerFromUpload(w http.ResponseWriter, r *http.Req
 		writeServerUpgradeUnavailable(w, blocker)
 		return
 	}
-	a.upgradeServer(w, r, http.MaxBytesReader(w, r.Body, maxServerArchiveBytes))
+	if !a.lockServerUpgrade(w) {
+		return
+	}
+	defer a.serverUpgradeMu.Unlock()
+	a.upgradeServer(w, r, http.MaxBytesReader(w, r.Body, maxServerArchiveBytes), dto.ServerUpgradeSelection{})
 }
 
-func (a *apiHandlers) upgradeServer(w http.ResponseWriter, r *http.Request, archive io.Reader) {
+func (a *apiHandlers) upgradeServer(w http.ResponseWriter, r *http.Request, archive io.Reader, target dto.ServerUpgradeSelection) {
 	if a.d.AgentUpgrades.Service != nil {
 		finish, err := a.d.AgentUpgrades.Service.BeginServerUpgrade()
 		if err != nil {
@@ -336,24 +399,27 @@ func (a *apiHandlers) upgradeServer(w http.ResponseWriter, r *http.Request, arch
 		}
 		accepted := false
 		defer func() { finish(accepted) }()
-		a.upgradeServerWithAgentGuard(w, r, archive, &accepted)
+		a.upgradeServerWithAgentGuard(w, r, archive, target, &accepted)
 		return
 	}
-	a.upgradeServerWithAgentGuard(w, r, archive, nil)
+	a.upgradeServerWithAgentGuard(w, r, archive, target, nil)
 }
 
-func (a *apiHandlers) upgradeServerWithAgentGuard(w http.ResponseWriter, r *http.Request, archive io.Reader, accepted *bool) {
+func (a *apiHandlers) upgradeServerWithAgentGuard(w http.ResponseWriter, r *http.Request, archive io.Reader, target dto.ServerUpgradeSelection, accepted *bool) {
 	by := ""
 	if claims, ok := a.claimsFromRequest(r); ok {
 		by = claims.Username
 	}
-	started, err := a.serverSettings().Upgrade(r.Context(), archive, by)
+	started, err := a.serverSettings().Upgrade(r.Context(), archive, by, target)
 	if err != nil {
 		writeServerSettingsError(w, err)
 		return
 	}
 	if accepted != nil {
 		*accepted = true
+	}
+	if target.Attempt != "" {
+		a.setUpgradeProgress(dto.ServerUpgradeProgress{Attempt: target.Attempt, Phase: "restart", From: started.From, To: started.To})
 	}
 	writeJSON(w, http.StatusAccepted, started)
 }
@@ -372,6 +438,10 @@ func (a *apiHandlers) putUpdateChannel(w http.ResponseWriter, r *http.Request) {
 		writeProductError(w, http.StatusBadRequest, ErrorUpdateChannelInvalid, "invalid update channel request", map[string]any{"channel": ""})
 		return
 	}
+	if !a.lockServerUpgrade(w) {
+		return
+	}
+	defer a.serverUpgradeMu.Unlock()
 	if err := a.serverSettings().SetUpdateChannel(strings.TrimSpace(req.Channel)); err != nil {
 		writeServerSettingsError(w, err)
 		return

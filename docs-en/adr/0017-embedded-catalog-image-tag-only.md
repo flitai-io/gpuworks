@@ -27,3 +27,5 @@ Unaffected parts:
 ## Trade-Offs
 
 This gives up the guarantee that built-in catalog image references are frozen and reproducible at release time in exchange for availability: images remain pullable after upstream rebuilds a tag. The catalog itself no longer guarantees unchanged image contents; contents follow the tag's current upstream target. This is an accepted trade-off under this decision, no longer treated as a regression.
+
+<!-- translation-source-sha256: 255e0b51eabec297cc29d42a56741d9c47820b6bd7c0ebf454fa439d8b0cd4fc -->

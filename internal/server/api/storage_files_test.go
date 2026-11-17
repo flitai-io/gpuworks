@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -215,7 +216,11 @@ func TestStorageFilesAgentRefusalsMapToProductErrors(t *testing.T) {
 		{proto.NewStorageFilesError(proto.StorageFilesErrNotWritable, "read-only mount"), http.StatusConflict, ErrorStorageNotWritable},
 		{proto.NewStorageFilesError(proto.StorageFilesErrExtractFailed, "bad archive"), http.StatusUnprocessableEntity, ErrorStorageFileExtractFailed},
 		{proto.NewStorageFilesError(proto.StorageFilesErrFailed, "EIO"), http.StatusBadGateway, ErrorStorageFileOperationFailed},
-		{errors.New("rpc: " + proto.NewStorageFilesError(proto.StorageFilesErrExists, "x").Error()), http.StatusConflict, ErrorStorageFileExists},
+		{fmt.Errorf("rpc: %w", proto.NewStorageFilesError(proto.StorageFilesErrExists, "x")), http.StatusConflict, ErrorStorageFileExists},
+		// The hub turns an agent's refusal (coded or, from an older agent,
+		// worded) into the typed error before the API sees it; text alone is
+		// an operation that failed.
+		{errors.New("rpc: " + proto.NewStorageFilesError(proto.StorageFilesErrExists, "x").Error()), http.StatusBadGateway, ErrorStorageFileOperationFailed},
 		{errors.New("context deadline exceeded"), http.StatusBadGateway, ErrorStorageFileOperationFailed},
 	} {
 		rig.setAnswer(func(string, json.RawMessage) (json.RawMessage, error) { return nil, tc.err })

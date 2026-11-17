@@ -98,7 +98,7 @@ func TestRunningAgentProbeEndsOfflineAndRemainsRetryable(t *testing.T) {
 func TestLegacyFailedProbeKeepsRepeatedFailurePolicy(t *testing.T) {
 	r, st, _, provisioner := newRecoveryHarness(t)
 	node := newOfflineNode(t, st, true)
-	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseProbing, 1, timePtr(r.now()), "agent is running but has not connected"); err != nil {
+	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseProbing, 1, timePtr(r.now()), store.RecoveryError{Message: "agent is running but has not connected"}); err != nil {
 		t.Fatal(err)
 	}
 	provisioner.probeResult = provision.ProbeResult{Reachable: true, AgentInstalled: true, AgentRunning: true}

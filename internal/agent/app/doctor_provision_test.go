@@ -54,7 +54,7 @@ func TestDoctorReportsAFailedRuntimeSetupWithItsCauseAndRecheck(t *testing.T) {
 		{Name: "failed_at", Value: "2026-10-10T08:30:05Z"},
 		{Name: "retry_at", Value: "2026-10-10T08:30:35Z"},
 	}
-	if f.Level != proto.DoctorLevelError || f.Probe != driver.state.Probe || f.Recheck != driver.state.Recheck || !reflect.DeepEqual(f.Evidence, wantEvidence) {
+	if f.Status != proto.CheckFail || f.Probe != driver.state.Probe || f.Recheck != driver.state.Recheck || !reflect.DeepEqual(f.Evidence, wantEvidence) {
 		t.Fatalf("finding = %+v", f)
 	}
 	if got := factsByCode(r, proto.DoctorFactRuntimeIdentity); len(got) != 0 {
@@ -63,7 +63,7 @@ func TestDoctorReportsAFailedRuntimeSetupWithItsCauseAndRecheck(t *testing.T) {
 	if driver.reads != 1 {
 		t.Fatalf("state read %d times", driver.reads)
 	}
-	for _, want := range []string{"[error] runtime_provision_failed", "does not allow ':' in file names", "recheck   findmnt -T /workspace/gpuworks/udocker", "the selected runtime could not be set up"} {
+	for _, want := range []string{"[fail] RUNTIME_PROVISION_FAILED", "does not allow ':' in file names", "recheck   findmnt -T /workspace/gpuworks/udocker", "the selected runtime could not be set up"} {
 		if !strings.Contains(r.Report, want) {
 			t.Errorf("report text lacks %q:\n%s", want, r.Report)
 		}

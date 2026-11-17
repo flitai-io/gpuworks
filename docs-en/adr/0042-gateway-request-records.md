@@ -36,3 +36,5 @@ D4 of the inference metrics plan previously decided that the gateway would not i
 - Extra gateway overhead per request: one byte scan of the request body, one copy when injecting, one byte match and atomic counter update per event, and parsing the final 4 KiB at completion. The monitoring API reads only one deployment's in-flight table and indexed ranges in `ux.db`.
 - Running vLLM deployments do not need to restart: existing deployments lack this parameter in their startup configuration, and recreating them does not add it. Only new deployments include it by default.
 - Documentation: [Per-Request Statistics in the Inference Metrics Vocabulary](../reference/inference-metrics.md#逐请求统计), [`api.request_stats` Syntax](../reference/inference-catalog-spec.md#apirequest_stats回复里的逐请求统计), [View Metrics and Search Logs](../how-to/monitor-and-logs.md#2-看请求视图与请求分布).
+
+<!-- translation-source-sha256: 7b76d0ca52067f77973b4609ba73a9e41c541b188239e10204e0737d7c91643d -->

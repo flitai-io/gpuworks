@@ -5,9 +5,11 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,8 +128,28 @@ func (e *Engine) HasImage(image string) bool {
 // Pull resolves image, downloads every missing blob concurrently, and
 // registers the repository metadata. It writes the tag directory only after
 // all content has been verified, so an interrupted pull is never mistaken for
-// a complete one.
+// a complete one. A registry refusal and a full disk come back marked with
+// runtime.ErrRegistryRefused and runtime.ErrNoSpace.
 func (e *Engine) Pull(ctx context.Context, image string, onLine func(string)) error {
+	return pullFailure(e.pull(ctx, image, onLine))
+}
+
+// pullFailure marks the failures the image puller acts on: the registry
+// answering 401/403/404, and the node's disk filling up.
+func pullFailure(err error) error {
+	var status *statusError
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, errUnpackSpace) || runtime.DiskFull(err):
+		return runtime.MarkPullFailure(err, runtime.ErrNoSpace)
+	case errors.As(err, &status) && (status.status == http.StatusUnauthorized || status.status == http.StatusForbidden || status.status == http.StatusNotFound):
+		return runtime.MarkPullFailure(err, runtime.ErrRegistryRefused)
+	}
+	return err
+}
+
+func (e *Engine) pull(ctx context.Context, image string, onLine func(string)) error {
 	ref := ParseRef(image)
 	resolved, err := e.Client.Resolve(ctx, ref)
 	if err != nil {

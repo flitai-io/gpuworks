@@ -38,12 +38,26 @@ func (s *Store) NodeUUIDsByID() (map[uint]string, error) {
 // schedule events. These readers fetch each of those once for the whole list,
 // so the query count stays constant as the fleet grows.
 
-// NodeIdentities returns only what is needed to name a node. GPUs and
-// credential flags are left out: a list of a thousand nodes would otherwise
-// load every GPU row to print a label.
+// NodeIdentities returns only what is needed to name a node and show its
+// connection, newest first as ListNodes orders them: identity, state, labels
+// and recovery_phase (Node.ConnectionState shows a node being restored as
+// connecting). GPUs and credential flags are left out: a list of a thousand
+// nodes would otherwise load every GPU row to print a label.
 func (s *Store) NodeIdentities() ([]Node, error) {
 	var nodes []Node
-	err := s.db.Select("id", "uuid", "name", "hostname", "state", "labels").Find(&nodes).Error
+	err := s.reader().Select(nodeIdentityColumns).Order("id desc").Find(&nodes).Error
+	return nodes, err
+}
+
+// nodeIdentityColumns are the columns NodeIdentities reads.
+var nodeIdentityColumns = []string{"id", "uuid", "name", "hostname", "state", "labels", "recovery_phase"}
+
+// NodesForStorageStatus is NodeIdentities with the disk usage each node last
+// reported (path_usage and when it was observed): what a storage's per-node
+// status, capacity and cache budget are read from, newest first.
+func (s *Store) NodesForStorageStatus() ([]Node, error) {
+	var nodes []Node
+	err := s.reader().Select(append(append([]string(nil), nodeIdentityColumns...), "path_usage", "path_usage_observed_at")).Order("id desc").Find(&nodes).Error
 	return nodes, err
 }
 
@@ -51,7 +65,7 @@ func (s *Store) NodeIdentities() ([]Node, error) {
 // for a (model, node) pair is the one ModelFileByModelNode returns.
 func (s *Store) ListModelFiles() ([]ModelFile, error) {
 	var mfs []ModelFile
-	err := s.db.Order("id asc").Find(&mfs).Error
+	err := s.reader().Order("id asc").Find(&mfs).Error
 	return mfs, err
 }
 
@@ -59,9 +73,9 @@ func (s *Store) ListModelFiles() ([]ModelFile, error) {
 // same row FirstScheduleEvent returns for one deployment.
 func (s *Store) FirstScheduleEvents() (map[uint]InstanceEvent, error) {
 	var events []InstanceEvent
-	firsts := s.db.Model(&InstanceEvent{}).Select("MIN(id)").
+	firsts := s.reader().Model(&InstanceEvent{}).Select("MIN(id)").
 		Where("kind = ? AND deployment_id <> 0", EventKindSchedule).Group("deployment_id")
-	if err := s.db.Where("id IN (?)", firsts).Find(&events).Error; err != nil {
+	if err := s.reader().Where("id IN (?)", firsts).Find(&events).Error; err != nil {
 		return nil, err
 	}
 	out := make(map[uint]InstanceEvent, len(events))
@@ -75,9 +89,9 @@ func (s *Store) FirstScheduleEvents() (map[uint]InstanceEvent, error) {
 // one query for a list: what the deployment's placement status shows.
 func (s *Store) LatestScheduleEvents() (map[uint]InstanceEvent, error) {
 	var events []InstanceEvent
-	latest := s.db.Model(&InstanceEvent{}).Select("MAX(id)").
+	latest := s.reader().Model(&InstanceEvent{}).Select("MAX(id)").
 		Where("kind = ? AND deployment_id <> 0", EventKindSchedule).Group("deployment_id")
-	if err := s.db.Where("id IN (?)", latest).Find(&events).Error; err != nil {
+	if err := s.reader().Where("id IN (?)", latest).Find(&events).Error; err != nil {
 		return nil, err
 	}
 	out := make(map[uint]InstanceEvent, len(events))

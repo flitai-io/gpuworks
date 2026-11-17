@@ -181,3 +181,5 @@ This matches the current NVIDIA specs. Tightening this requires only a card-coun
 - `nvidia/nemotron-3.5-asr-streaming-0.6b`: The research ledger records `transformers-native`; the callable/native entrypoint, runtime assets, API contract, and image digest must be added from the original run records before it can become an official GPUWorks spec.
 - `zai-org/GLM-ASR-Nano-2512`: The research ledger records `transformers-native`; the callable/native entrypoint, runtime assets, API contract, and image digest must be added from the original run records before it can become an official GPUWorks spec.
 - `zai-org/GLM-TTS`: The research ledger records `asllm-2.0.0-vllm-omni`; the callable/native entrypoint, runtime assets, API contract, and image digest must be added from the original run records before it can become an official GPUWorks spec.
+
+<!-- translation-source-sha256: dd334db53ca533a4c76381995a3a97741ce847aed0731c5ab8e6b2f781b83fb3 -->

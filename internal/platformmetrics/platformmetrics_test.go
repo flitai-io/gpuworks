@@ -23,7 +23,6 @@ var metricLiteral = regexp.MustCompile(`^gpuworks_[a-z0-9]+(_[a-z0-9]+)*$`)
 // notMetrics are gpuworks_-prefixed literals that are not series names.
 var notMetrics = map[string]string{
 	"gpuworks_session":  "the management session cookie",
-	"gpuworks_proxy":    "the error type the gateway answers in OpenAI error bodies",
 	"gpuworks_callable": "the callable adapter's metric prefix, which the agent maps through inferencemetrics",
 }
 

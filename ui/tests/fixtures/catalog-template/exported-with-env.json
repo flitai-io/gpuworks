@@ -6,11 +6,16 @@
   "saveable": true,
   "checks": [
     {
+      "id": "operation_reply",
       "operation": "openai.chat",
-      "endpoint": "/v1/chat/completions",
-      "tested": true,
-      "passed": true,
-      "http_status": 200
+      "status": "pass",
+      "code": "TEMPLATE_OPERATION_ANSWERED",
+      "params": {
+        "operation": "openai.chat",
+        "endpoint": "/v1/chat/completions",
+        "http_status": 200
+      },
+      "message": "openai.chat answered with HTTP 200"
     }
   ],
   "notes": [

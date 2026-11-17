@@ -49,3 +49,11 @@ test("without its own tooltip a tag's hover text is its text", async () => {
   await user.hover(screen.getByText("H100"));
   assert.ok(await screen.findByRole("tooltip", { name: "H100" }));
 });
+
+test("model capability badges keep the overflow tooltip accessible", async () => {
+  const user = userEvent.setup();
+  render(<CellTags tags={tags} limit={2} badgeColor="blue" />);
+  assert.ok(screen.getByText("vllm").closest('[data-slot="badge"]'));
+  await user.hover(screen.getByText("+2"));
+  assert.ok(await screen.findByText("llama.cpp"));
+});

@@ -135,7 +135,7 @@ func TestNodeConnectionDiagnosticsRuntimePartialMatrix(t *testing.T) {
 	}{
 		{"offline", false, true, nil, "offline", 0, 1},
 		{"legacy", true, false, nil, "unsupported", 0, 1},
-		{"cap read then old session", true, true, errors.New("unknown rpc method: node.connection_diagnostics"), "unsupported", 1, 0},
+		{"cap read then old session", true, true, proto.UnknownRPCMethod(proto.RPCNodeConnectionDiagnostics), "unsupported", 1, 0},
 		{"timeout", true, true, context.DeadlineExceeded, "timeout", 1, 0},
 		{"cancelled", true, true, context.Canceled, "cancelled", 1, 0},
 		{"disconnect", true, true, errors.New("node session closed: private-token"), "unavailable", 1, 0},

@@ -15,21 +15,13 @@ import (
 const DefaultMaxBodyBytes = 256 << 20
 const maxMultipartModelBytes = 1 << 20
 
-type httpError struct {
-	status int
-	msg    string
-}
-
-func (e *httpError) Error() string { return e.msg }
+// statusForExtractError is the status the refusal of a request-reading
+// error answers with.
 func statusForExtractError(err error) int {
-	var he *httpError
-	if errors.As(err, &he) {
-		return he.status
-	}
-	return http.StatusBadRequest
+	return requestRefusal(err).status()
 }
 func tooLarge(maxBody int64) error {
-	return &httpError{status: http.StatusRequestEntityTooLarge, msg: fmt.Sprintf("request body exceeds %d bytes", maxBody)}
+	return refuse(ErrorRequestTooLarge, map[string]any{"max_bytes": maxBody})
 }
 
 func extractModel(r *http.Request, maxBody int64) (string, func(), error) {

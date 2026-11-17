@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/proxy"
@@ -39,7 +40,7 @@ func residencyFixture(t *testing.T) (*residencyAdapter, *automationAdapter, *sto
 		t.Fatal(err)
 	}
 	px := proxy.New(st, noServingNetworks{}, nil, nil, 0)
-	return &residencyAdapter{store: st, proxy: px, acct: nil}, auto, st, dep, other
+	return &residencyAdapter{store: st, proxy: px, acct: nil, orders: &lifecycle.Orders{}}, auto, st, dep, other
 }
 
 // noServingNetworks is a cluster with no serving network: the gateway reaches

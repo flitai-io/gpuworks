@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/netplan"
+	"gpuworks.ai/gpuworks/internal/server/pdmode"
 )
 
 func argValue(t *testing.T, argv []string, flag string) string {
@@ -32,7 +33,7 @@ func countFlag(argv []string, flag string) int {
 func pdParams(role string, q LaunchConfig, network ComputeNetwork) Params {
 	return Params{
 		ModelPath: "/model", ServedName: "qwen", APIPort: 30000, AssignedGPUs: 1, TensorParallel: 1,
-		Quick: PDRoleLaunchConfig(q, role), ComputeNetwork: network, NNodes: 1,
+		Quick: PDRoleLaunchConfig(EngineVLLM, q, role), ComputeNetwork: network, NNodes: 1,
 		PD: &PDLaunch{Mode: "vllm-nixl", Role: role, SideChannelHost: "10.0.0.5", SideChannelPort: 30001},
 	}
 }
@@ -176,10 +177,10 @@ func TestVLLMPDComposesKVOffloadOnPrefillOnly(t *testing.T) {
 	if config.Connector != "MultiConnector" || len(config.Extra.Connectors) != 2 || config.Extra.Connectors[1]["kv_connector"] != "OffloadingConnector" {
 		t.Fatalf("disk composition = %+v", config)
 	}
-	if got := PDRoleLaunchConfig(disk, "decode"); got.KVDiskOffload || got.SharedKVDir != "" || got.KVOffloadingSize != 0 {
+	if got := PDRoleLaunchConfig(EngineVLLM, disk, "decode"); got.KVDiskOffload || got.SharedKVDir != "" || got.KVOffloadingSize != 0 {
 		t.Fatalf("decode kept a tier: %+v", got)
 	}
-	if got := PDRoleLaunchConfig(disk, "prefill"); !reflect.DeepEqual(got, disk) {
+	if got := PDRoleLaunchConfig(EngineVLLM, disk, "prefill"); !reflect.DeepEqual(got, disk) {
 		t.Fatal("prefill config changed")
 	}
 }
@@ -375,5 +376,27 @@ func TestVLLMPPUMooncakeLaunch(t *testing.T) {
 		PD: &PDLaunch{Mode: "vllm-nixl", Role: "prefill", SideChannelHost: "10.0.0.5", SideChannelPort: 30001}})
 	if raw := argValue(t, nixl.Argv, "--kv-transfer-config"); strings.Contains(raw, "engine_id") || strings.Contains(raw, "device_name") {
 		t.Fatalf("vllm-nixl config = %s", raw)
+	}
+}
+
+// TestVLLMPDLaunchesStayPDWithKVOffload: every vLLM PD mode's launch is a PD
+// request in both roles, also when the prefill composes the PD connector with
+// a KV tier in one MultiConnector.
+func TestVLLMPDLaunchesStayPDWithKVOffload(t *testing.T) {
+	for _, name := range pdmode.ForEngine(EngineVLLM) {
+		mode, _ := pdmode.Lookup(name)
+		for _, role := range mode.Roles {
+			for _, quick := range []LaunchConfig{{}, {KVOffloadingSize: 8}, {KVOffloadingSize: 16, KVDiskOffload: true, SharedKVDir: "/kv-cache"}} {
+				p := pdParams(role, quick, ComputeNetwork{})
+				p.PD.Mode, p.Vendor = name, mode.Vendors[0]
+				launch, err := ResolveLaunch(ResolveLaunchInput{Engine: vLLMEngine{}, Params: p, TargetValidation: CollectTargetCapabilities})
+				if err != nil {
+					t.Fatalf("%s %s: %v", name, role, err)
+				}
+				if f := launch.RequestedFeatures; !f.PD || !f.CommandKnown {
+					t.Fatalf("%s %s %+v: requested features %+v", name, role, quick, f)
+				}
+			}
+		}
 	}
 }

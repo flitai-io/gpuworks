@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -45,11 +46,17 @@ type ContainerOverrides struct {
 	CommandIncludesPreparation bool `json:"command_includes_preparation,omitempty"`
 }
 
-// ContainerMount is one extra mount row: a host directory or a named volume
-// at a container path.
+// ContainerMount is one extra mount row: a host directory, a named volume or a
+// registered model at a container path.
 type ContainerMount struct {
-	HostPath      string `json:"host_path,omitempty"`
-	Volume        string `json:"volume,omitempty"`
+	HostPath string `json:"host_path,omitempty"`
+	Volume   string `json:"volume,omitempty"`
+	// ModelID names a registered model (store.Model) the row mounts read-only,
+	// such as a speculative draft. The deployment then depends on the model
+	// like on a template component: the controller makes it readable on the
+	// node from wherever its storage serves it, and the launch mounts the
+	// directory it found there (ModelPaths), not a path the row states.
+	ModelID       uint   `json:"model_id,omitempty"`
 	ContainerPath string `json:"container_path"`
 	SizeHint      string `json:"size_hint,omitempty"`
 	ReadOnly      bool   `json:"read_only,omitempty"`
@@ -111,8 +118,14 @@ func (o ContainerOverrides) Validate() error {
 			return errors.New("container overrides mount container_path must be absolute")
 		}
 		hostPath := strings.TrimSpace(mount.HostPath)
+		if mount.ModelID != 0 {
+			if hostPath != "" || strings.TrimSpace(mount.Volume) != "" {
+				return fmt.Errorf("container overrides mount %q states a model and a host_path or volume", mount.ContainerPath)
+			}
+			continue
+		}
 		if hostPath == "" && strings.TrimSpace(mount.Volume) == "" {
-			return fmt.Errorf("container overrides mount %q needs host_path or volume", mount.ContainerPath)
+			return fmt.Errorf("container overrides mount %q needs host_path, volume or model_id", mount.ContainerPath)
 		}
 		if hostPath == "/" || strings.Contains(mount.HostPath, "..") {
 			return fmt.Errorf("container overrides mount host_path %q is not allowed", mount.HostPath)
@@ -133,13 +146,44 @@ func validateUnsafeDockerArg(arg string) error {
 	return nil
 }
 
-func convertMounts(values []ContainerMount) []proto.MountSpec {
+// convertMounts turns the rows into mount specs. A model row mounts the
+// directory modelPaths gives for its model, read-only; without one (a preview
+// before the model is on the node) its source is ModelMountPlaceholder.
+func convertMounts(values []ContainerMount, modelPaths map[uint]string) []proto.MountSpec {
 	result := make([]proto.MountSpec, 0, len(values))
 	for _, mount := range values {
-		result = append(result, proto.MountSpec{
+		spec := proto.MountSpec{
 			Source: mount.HostPath, Volume: mount.Volume, Target: mount.ContainerPath,
 			ReadOnly: mount.ReadOnly, SizeHint: mount.SizeHint, Purpose: mount.Purpose,
-		})
+		}
+		if mount.ModelID != 0 {
+			spec.Source, spec.Volume, spec.ReadOnly = modelPaths[mount.ModelID], "", true
+			if spec.Source == "" {
+				spec.Source = ModelMountPlaceholder(mount.ModelID)
+			}
+			if spec.Purpose == "" {
+				spec.Purpose = "models"
+			}
+		}
+		result = append(result, spec)
 	}
 	return result
+}
+
+// ModelMountPlaceholder is a model row's source in a preview that has no node
+// path for the model yet, the way a template component previews as
+// $MODEL_COMPONENT_<NAME>_PATH.
+func ModelMountPlaceholder(modelID uint) string {
+	return fmt.Sprintf("$MODEL_%d_PATH", modelID)
+}
+
+// ModelMountIDs lists the models the rows mount, each once, in row order.
+func (o ContainerOverrides) ModelMountIDs() []uint {
+	var ids []uint
+	for _, mount := range o.ExtraMounts {
+		if mount.ModelID != 0 && !slices.Contains(ids, mount.ModelID) {
+			ids = append(ids, mount.ModelID)
+		}
+	}
+	return ids
 }

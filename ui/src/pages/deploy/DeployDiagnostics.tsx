@@ -1,9 +1,9 @@
-import { Space, Tag, Typography } from "antd";
+import { Space, Typography } from "antd";
 import { useTranslation } from "react-i18next";
+import { CheckStatusBadge } from "../../checkStatus";
 import type { DiagnosticCheck, DiagnosticReport } from "../../diagnosticChecks";
 import { diagnosticMessageText } from "./deployDiagnosticText";
 
-const statuses = new Set(["passed", "failed", "pending", "blocked", "unknown", "not_applicable"]);
 const observers = new Set(["control_plane", "agent_report", "management_node"]);
 
 function objectLabel(params: Record<string, unknown>, names: string[]): string {
@@ -29,12 +29,11 @@ export default function DeployDiagnostics({ report, requestId }: { report?: Diag
     <Space direction="vertical" style={{ width: "100%" }}>
       {requestId && <Typography.Text type="secondary" copyable={{ text: requestId }}>{t("diagnostics.request", { id: requestId })}</Typography.Text>}
       {!!report?.checks.length && (
-        <details open={report.checks.some((check) => check.status === "failed" || check.status === "blocked")}>
+        <details open={report.checks.some((check) => check.status === "fail" || (check.status === "skip" && !!check.blocked_by?.length))}>
           <summary style={{ cursor: "pointer" }}>{t("diagnostics.title", { count: report.checks.length })}</summary>
           <ul style={{ paddingInlineStart: 20, marginBottom: 0 }}>
             {report.checks.map((check) => {
               const params = check.message.params ?? {};
-              const status = statuses.has(check.status) ? check.status : "unknown";
               const observer = observers.has(String(params.observer)) ? String(params.observer) : "unknown";
               const objects = [
                 ["node", objectLabel(params, ["node", "node_name", "node_uuid", "node_id"])],
@@ -44,7 +43,7 @@ export default function DeployDiagnostics({ report, requestId }: { report?: Diag
               const dependencies = (check.blocked_by ?? []).map((id) => report.checks.find((item) => item.id === id)).filter((item): item is DiagnosticCheck => Boolean(item));
               return (
                 <li key={check.id} style={{ marginBlock: 8 }}>
-                  <Tag color={status === "failed" ? "error" : status === "passed" ? "success" : undefined}>{t(`diagnostics.status.${status}`)}</Tag>
+                  <CheckStatusBadge status={check.status} />{" "}
                   <span>{text(check)}</span>
                   {objects.length > 0 && <div><Typography.Text type="secondary">{objects.map(([kind, name]) => t(`diagnostics.object.${kind}`, { name })).join(" · ")}</Typography.Text></div>}
                   <div><Typography.Text type="secondary">{t(`diagnostics.observer.${observer}`)}</Typography.Text></div>

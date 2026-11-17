@@ -1,7 +1,7 @@
 import { Button, Collapse, Empty, List, Pagination, Space, Tag, Typography, theme } from "antd";
 import { useTranslation } from "react-i18next";
 import type { CardHealthRecord, CardHealthRecords } from "../../api";
-import { cardName, checkName, durationText, localTime, reasonText } from "./text";
+import { cardName, checkName, codeText, durationText, localTime, statusName } from "./text";
 
 // HealthRecords lists the stretches in which a check warned or failed: ongoing
 // ones first (the server orders them), each with how long it lasted, how many
@@ -78,7 +78,7 @@ function Record({ record: r, days, showCard }: { record: CardHealthRecord; days:
           </Typography.Text>
         )}
         <Typography.Text>{checkName(t, r.check)}</Typography.Text>
-        <Tag color={r.level === "fail" ? "red" : "orange"}>{reasonText(t, r.level, r.reason) || r.level}</Tag>
+        <Tag color={r.status === "fail" ? "red" : "orange"}>{codeText(t, r.status, r.code) || statusName(t, r.status)}</Tag>
         <Typography.Text type="secondary">
           {localTime(r.started_at)}
           {r.ended_at ? ` – ${localTime(r.ended_at)}` : ""}
@@ -96,7 +96,7 @@ function Record({ record: r, days, showCard }: { record: CardHealthRecord; days:
             width: `${width * 100}%`,
             height: 4,
             borderRadius: 2,
-            background: r.level === "fail" ? token.colorError : token.colorWarning,
+            background: r.status === "fail" ? token.colorError : token.colorWarning,
           }}
         />
       </div>

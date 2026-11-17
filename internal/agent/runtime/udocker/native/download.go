@@ -9,6 +9,8 @@ import (
 	"hash"
 	"io"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +70,9 @@ var (
 	// errRangeIgnored marks a registry that answered a range request with the
 	// whole blob.
 	errRangeIgnored = errors.New("registry ignored range request")
+	// errBlobMismatch marks a downloaded blob whose size or digest is not the
+	// one its descriptor names; a fresh download may well match.
+	errBlobMismatch = errors.New("blob does not match its descriptor")
 )
 
 // Downloader fetches blobs into a content-addressed directory. Layers are
@@ -297,7 +302,7 @@ func (d *Downloader) fetchOnce(ctx context.Context, sess *connbudget.Session, re
 		return err
 	}
 	if info, statErr := tmp.Stat(); statErr != nil || info.Size() != desc.Size {
-		return fmt.Errorf("size mismatch: got %d want %d", fileSize(tmp), desc.Size)
+		return fmt.Errorf("%w: size mismatch: got %d want %d", errBlobMismatch, fileSize(tmp), desc.Size)
 	}
 	// Verifying after the write (rather than hashing the stream) keeps the
 	// ranged path -- whose parts arrive out of order -- on the same code path
@@ -357,7 +362,7 @@ func verifyDigest(path, digest string) error {
 		return err
 	}
 	if got := hex.EncodeToString(hasher.Sum(nil)); got != want {
-		return fmt.Errorf("digest mismatch: got sha256:%s want %s", got, digest)
+		return fmt.Errorf("%w: digest mismatch: got sha256:%s want %s", errBlobMismatch, got, digest)
 	}
 	return nil
 }
@@ -366,21 +371,26 @@ func retryable(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, errIdle) || errors.Is(err, errSlow) || errors.Is(err, errRangeIgnored) || isThrottled(err) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+	if errors.Is(err, errIdle) || errors.Is(err, errSlow) || errors.Is(err, errRangeIgnored) || errors.Is(err, errBlobMismatch) || isThrottled(err) || isReset(err) {
 		return true
 	}
-	text := err.Error()
-	for _, marker := range []string{
-		"connection reset", "unexpected EOF", "broken pipe", "TLS handshake",
-		"timeout", "temporary failure", "no such host", "EOF",
-		"size mismatch", "digest mismatch",
-		": 429", ": 500", ": 502", ": 503", ": 504",
-	} {
-		if strings.Contains(text, marker) {
+	var status *statusError
+	if errors.As(err, &status) {
+		switch status.status {
+		case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 			return true
 		}
+		return false
 	}
-	return false
+	// A timed-out dial, TLS handshake or read, and a DNS lookup that failed
+	// (including "no such host" from a resolver that is still coming up) are
+	// all worth another attempt.
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr)
 }
 
 func fileSize(f *os.File) int64 {

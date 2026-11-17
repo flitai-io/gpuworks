@@ -27,10 +27,6 @@ const (
 	restartRetryAfter = 10 * time.Second
 )
 
-// stoppingMessage tells a client of a request refused because the server
-// stops that the request is safe to send again.
-const stoppingMessage = "the server is restarting; send the request again"
-
 // wakeHold holds the requests for deployments the platform put to sleep
 // while they wake (docs/explanation/service-levels.md). A request waits until
 // its deployment has an awake replica, its policy's HoldMax passes, or the
@@ -227,22 +223,22 @@ func (p *Proxy) wakesOnRequest(dep *store.Deployment) bool {
 // can serve it, then selects again. It returns the selection's result; a
 // request still not served when its time is up gets the asleep refusal with
 // a Retry-After.
-func (p *Proxy) holdForWake(ctx context.Context, w http.ResponseWriter, modelName, affinity string, dep *store.Deployment) (*store.Deployment, target, int, string, bool) {
-	refuse := func() (*store.Deployment, target, int, string, bool) {
-		return dep, target{}, http.StatusServiceUnavailable, asleepMessage(dep), true
+func (p *Proxy) holdForWake(ctx context.Context, w http.ResponseWriter, modelName, affinity string, dep *store.Deployment) (*store.Deployment, target, *refusal, bool) {
+	asleep := func() (*store.Deployment, target, *refusal, bool) {
+		return dep, target{}, asleepRefusal(dep), true
 	}
 	if p.hold == nil {
-		return refuse()
+		return asleep()
 	}
 	p.hold.mu.Lock()
 	demand := p.hold.demand
 	p.hold.mu.Unlock()
 	if demand == nil || !p.wakesOnRequest(dep) {
-		return refuse()
+		return asleep()
 	}
-	stopping := func() (*store.Deployment, target, int, string, bool) {
+	stopping := func() (*store.Deployment, target, *refusal, bool) {
 		w.Header().Set("Retry-After", strconv.Itoa(int(restartRetryAfter.Seconds())))
-		return dep, target{}, http.StatusServiceUnavailable, stoppingMessage, true
+		return dep, target{}, refuse(ErrorServerRestarting, nil), true
 	}
 	stop := p.hold.stopSignal()
 	select {
@@ -253,7 +249,7 @@ func (p *Proxy) holdForWake(ctx context.Context, w http.ResponseWriter, modelNam
 	req, changed, ok := p.hold.enter(dep.ID)
 	if !ok {
 		w.Header().Set("Retry-After", strconv.Itoa(int(wakeHoldRecheck.Seconds())*30))
-		return refuse()
+		return asleep()
 	}
 	defer p.leaveHold(dep.ID, req)
 	demand(dep.ID)
@@ -265,24 +261,24 @@ func (p *Proxy) holdForWake(ctx context.Context, w http.ResponseWriter, modelNam
 	for {
 		select {
 		case <-ctx.Done():
-			return dep, target{}, http.StatusServiceUnavailable, "the request ended while the model woke", true
+			return dep, target{}, refuse(ErrorWakeRequestEnded, nil), true
 		case <-deadline.C:
 			w.Header().Set("Retry-After", strconv.Itoa(max(int(hold.Seconds()), 1)))
-			return refuse()
+			return asleep()
 		case <-stop:
 			return stopping()
 		case <-changed:
 			changed = p.hold.next()
 		case <-recheck.C:
 		}
-		got, tgt, status, msg, asleep := p.selectForRequest(ctx, modelName, affinity)
-		if status == 0 || !asleep {
-			return got, tgt, status, msg, asleep
+		got, tgt, rejection, sleeping := p.selectForRequest(ctx, modelName, affinity)
+		if rejection == nil || !sleeping {
+			return got, tgt, rejection, sleeping
 		}
 		if got != nil && got.ID == dep.ID && !p.wakesOnRequest(got) {
 			// An operator or a schedule put its sleepers to sleep, or the
 			// platform's sleepers were woken by hand, meanwhile.
-			return got, tgt, status, msg, asleep
+			return got, tgt, rejection, sleeping
 		}
 	}
 }

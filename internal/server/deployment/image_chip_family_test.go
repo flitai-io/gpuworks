@@ -1,13 +1,11 @@
 package deployment
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
-	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -62,19 +60,13 @@ func TestAutomaticImageFollowsTheNodesChipFamily(t *testing.T) {
 		t.Fatalf("unknown family node: %+v", got)
 	}
 
-	// The image list a 910B4 node offers leaves the A3 build out.
+	// The family only orders the pick: the image list of a 910B4 node still
+	// offers the A3 build, and choosing it by hand is admitted.
 	options := s.deploymentImageOptions(deploymentImageTarget("vllm", "", ascendNodeOf("910B4", 2)), templateSelection{}, "", nil)
-	if !hasImageOptionContaining(options, "cann9.2-910b") || hasImageOptionContaining(options, "cann9.2-a3") {
+	if !hasImageOptionContaining(options, "cann9.2-910b") || !hasImageOptionContaining(options, "cann9.2-a3") {
 		t.Fatalf("910B4 node options = %+v", options)
 	}
-
-	// Choosing the A3 build by hand on a 910B4 node is refused at admission.
-	err = s.admitImagePlatforms("vllm", templateSelection{}, chipFamilyImageA3, []*store.Node{ascendNodeOf("910B4", 2)})
-	var product *messages.ProductError
-	if !errors.As(err, &product) || product.Code() != messages.WarningImageOverrideIncompatible || product.Params()["image"] != chipFamilyImageA3 {
-		t.Fatalf("manual A3 image on a 910B4 node: %v", err)
-	}
-	if err := s.admitImagePlatforms("vllm", templateSelection{}, chipFamilyImageA3, []*store.Node{ascendNodeOf("910C", 2)}); err != nil {
-		t.Fatalf("manual A3 image on a 910C node was refused: %v", err)
+	if err := s.admitImagePlatforms("vllm", templateSelection{}, chipFamilyImageA3, []*store.Node{ascendNodeOf("910B4", 2)}); err != nil {
+		t.Fatalf("manual A3 image on a 910B4 node was refused: %v", err)
 	}
 }

@@ -221,6 +221,40 @@ func hintFor(trouble []string) string {
 	return ""
 }
 
+// edgeTrouble is what a cloudflared trouble line says about the path to the
+// Cloudflare edge, as far as choosing another edge setting goes.
+type edgeTrouble int
+
+const (
+	edgeTroubleNone edgeTrouble = iota
+	// edgeTroubleRegistration: the quick-tunnel registration call to
+	// api.trycloudflare.com failed; no edge setting changes that path.
+	edgeTroubleRegistration
+	// edgeTroubleQUIC: the QUIC (UDP) edge connection did not come up.
+	edgeTroubleQUIC
+	// edgeTroubleIPv6: the edge address was unreachable, typically an IPv6
+	// edge on a host without an IPv6 route.
+	edgeTroubleIPv6
+)
+
+// edgeTroubleOf classifies one line of cloudflared's own output (external
+// text: cloudflared logs, e.g. `ERR Failed to dial to edge with quic: timeout:
+// no recent network activity`, `ERR ... dial udp [2606:4700::]:7844: connect:
+// network is unreachable`). This parser is the adapter that reads the
+// connector's output, so the text is classified here and nowhere else.
+func edgeTroubleOf(line string) edgeTrouble {
+	text := strings.ToLower(line)
+	switch {
+	case strings.Contains(text, "api.trycloudflare.com"):
+		return edgeTroubleRegistration
+	case strings.Contains(text, "quic"), strings.Contains(text, "no recent network activity"):
+		return edgeTroubleQUIC
+	case strings.Contains(text, "network is unreachable"), strings.Contains(text, "ipv6"):
+		return edgeTroubleIPv6
+	}
+	return edgeTroubleNone
+}
+
 func hostOf(rawURL string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
 }

@@ -29,10 +29,10 @@ func TestVMPrecheckCommands(t *testing.T) {
 	if len(checks) != 2 {
 		t.Fatalf("VM precheck command count = %d, want 2", len(checks))
 	}
-	if checks[0].name != "Docker" || !strings.Contains(checks[0].command, "docker --version") || checks[0].required || !strings.Contains(checks[0].command, "udocker") {
+	if checks[0].id != CheckIDDocker || !strings.Contains(checks[0].command, "docker --version") || checks[0].required || !strings.Contains(checks[0].command, "udocker") {
 		t.Fatalf("Docker check = %+v", checks[0])
 	}
-	if checks[1].name != "NVIDIA Container Toolkit" || !strings.Contains(checks[1].command, "nvidia-ctk") || checks[1].required || !strings.Contains(checks[1].command, "Docker runtime") {
+	if checks[1].id != CheckIDNvidiaToolkit || !strings.Contains(checks[1].command, "nvidia-ctk") || checks[1].required || !strings.Contains(checks[1].command, "Docker runtime") {
 		t.Fatalf("toolkit check = %+v", checks[1])
 	}
 }
@@ -41,7 +41,7 @@ func TestFUSEPrecheckIsInformational(t *testing.T) {
 	checks := basePrecheckCommands()
 	var fuse *precheckCommand
 	for i := range checks {
-		if checks[i].name == "FUSE" {
+		if checks[i].id == CheckIDFUSE {
 			fuse = &checks[i]
 		}
 	}
@@ -54,7 +54,7 @@ func TestPythonPrecheckSupportsNonInteractiveCondaPath(t *testing.T) {
 	checks := basePrecheckCommands()
 	var python *precheckCommand
 	for i := range checks {
-		if checks[i].name == "python3" {
+		if checks[i].id == CheckIDPython {
 			python = &checks[i]
 		}
 	}
@@ -296,7 +296,7 @@ func TestDeviceAccessPrecheckNamesTheDevicesARootlessAgentCannotOpen(t *testing.
 
 	var check *precheckCommand
 	for _, c := range basePrecheckCommands() {
-		if c.name == checkDeviceAccess {
+		if c.id == CheckIDDeviceAccess {
 			c := c
 			check = &c
 		}

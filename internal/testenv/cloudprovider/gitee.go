@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -92,10 +93,31 @@ func newGitee(token, zone, image, runID, endpoint string, client *http.Client) (
 // reveals supply. A refused create produces no instance.
 const giteeNoHostMarker = "没有找到符合条件的可用主机"
 
+// ErrGiteeNoHost marks Gitee's create refusal for lack of an available host,
+// the only Rent failure worth waiting out and retrying.
+var ErrGiteeNoHost = errors.New("gitee: no available host matches the profile")
+
 // IsGiteeNoHost reports whether err is Gitee's create refusal for lack of an
-// available host, the only Rent failure worth waiting out and retrying.
+// available host.
 func IsGiteeNoHost(err error) bool {
-	return err != nil && strings.Contains(err.Error(), giteeNoHostMarker)
+	return errors.Is(err, ErrGiteeNoHost)
+}
+
+// giteeNoHostError keeps the create failure's text and marks it
+// ErrGiteeNoHost.
+type giteeNoHostError struct{ err error }
+
+func (e *giteeNoHostError) Error() string   { return e.err.Error() }
+func (e *giteeNoHostError) Unwrap() []error { return []error{e.err, ErrGiteeNoHost} }
+
+// giteeCreateFailure classifies a failed create where it was answered.
+// External text: Gitee states "no qualifying available host" only in words,
+// in an HTTP error body or a per-instance result.
+func giteeCreateFailure(err error, answer string) error {
+	if strings.Contains(answer, giteeNoHostMarker) {
+		return &giteeNoHostError{err: err}
+	}
+	return err
 }
 
 func (p *Gitee) Name() string  { return "gitee" }
@@ -134,10 +156,11 @@ func (p *Gitee) Rent(ctx context.Context, spec GPUSpec) (*Instance, error) {
 	}
 	var created []giteeCreateResult
 	if err := p.post(ctx, "/compute/instances", body, &created); err != nil {
-		return nil, fmt.Errorf("gitee create compute instance: %w", err)
+		return nil, giteeCreateFailure(fmt.Errorf("gitee create compute instance: %w", err), err.Error())
 	}
 	if len(created) != 1 || !created[0].Success || strings.TrimSpace(created[0].ID) == "" {
-		return nil, fmt.Errorf("gitee create compute instance failed: %+v", created)
+		answer := fmt.Sprintf("%+v", created)
+		return nil, giteeCreateFailure(fmt.Errorf("gitee create compute instance failed: %s", answer), answer)
 	}
 	id := strings.TrimSpace(created[0].ID)
 	if err := addGiteeLedger(p.runID, id); err != nil {

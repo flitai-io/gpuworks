@@ -1,6 +1,7 @@
 import { Card, Space, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import type { ImageCatalogEntry, ImageInspection } from "../../api";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 const { Text } = Typography;
 
@@ -45,7 +46,7 @@ export default function ImageBuiltInConfig({ version, inspection, nodeName }: Pr
             )}
           </>
         ) : (
-          <Text type="secondary">{t("detail.builtInHint")}</Text>
+          <Text type="secondary">{t("detail.builtInHint")} <HelpTip content={t("detail.builtInHelp")} /></Text>
         )}
       </Space>
     </Card>

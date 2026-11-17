@@ -556,7 +556,7 @@ func TestCloudAssistantInstallRunsTheScriptAndReportsIt(t *testing.T) {
 	if run.query["CommandContent"] != want || run.query["Type"] != "RunShellScript" || run.query["InstanceId.1"] != "i-private" || run.query["Timeout"] != "600" || run.query["RegionId"] != "cn-shanghai" {
 		t.Fatalf("RunCommand = %+v", run.query)
 	}
-	if len(report.Checks) != 2 || report.Checks[1].Name != "Agent process" || report.Checks[1].Status != "ok" || !strings.Contains(report.Checks[1].Detail, "agent started via systemd") {
+	if len(report.Checks) != 2 || report.Checks[1].ID != "agent_process" || report.Checks[1].Status != "pass" || !strings.Contains(checkText(report.Checks[1]), "agent started via systemd") {
 		t.Fatalf("report = %+v", report)
 	}
 }
@@ -632,7 +632,9 @@ func TestSSHFallbackNeedsAPublicAddress(t *testing.T) {
 }
 
 func TestPrecheckThroughCloudAssistantParsesRows(t *testing.T) {
-	output := "OS/Arch\tok\tLinux x86_64 6.8.0\nGPU\twarn\tno NVIDIA driver answered\nDocker\tok\tnot installed\nServer reachability\terror\tcurl: (28) Connection timed out\nnoise line\n"
+	// What precheckScript prints: id, pass or problem, the command's output.
+	// A line it did not ask for (an unknown id, an old verdict word) is noise.
+	output := "os_arch\tpass\tLinux x86_64 6.8.0\ngpu\tproblem\tnvidia-smi missing or failing\ndocker\tpass\tnot installed\nserver_reachability\tproblem\tcurl: (28) Connection timed out\nOS/Arch\tok\told format\nmystery\tpass\tx\nnoise line\n"
 	d, fake := assistantFake(t, true, "Success", 0, output)
 	checks, err := d.PrecheckCommand(context.Background(), userCreds, assistantRequest().Instance, assistantConnection, provider.CommandPrecheckRequest{ServerURL: "http://172.16.0.9:8800", ConnectMode: "agent_dial"})
 	if err != nil {
@@ -640,10 +642,16 @@ func TestPrecheckThroughCloudAssistantParsesRows(t *testing.T) {
 	}
 	got := []string{}
 	for _, c := range checks {
-		got = append(got, c.Name+"="+c.Status)
+		got = append(got, c.ID+"="+c.Status)
 	}
-	if strings.Join(got, ",") != "Cloud Assistant=ok,OS/Arch=ok,GPU=warn,Docker=ok,Server reachability=error" {
+	if strings.Join(got, ",") != "cloud_assistant=pass,os_arch=pass,gpu=warn,docker=pass,server_reachability=fail" {
 		t.Fatalf("checks = %v", checks)
+	}
+	if gpu := checks[2]; gpu.Code != "CHECK_GPU_TOOL_MISSING" || gpu.Evidence != "nvidia-smi missing or failing" {
+		t.Fatalf("gpu = %+v", gpu)
+	}
+	if reach := checks[4]; reach.Code != "CHECK_SERVER_UNREACHABLE_FROM_NODE" || reach.Evidence != "curl: (28) Connection timed out" {
+		t.Fatalf("server reachability = %+v", reach)
 	}
 	var script string
 	for _, c := range fake.calls {
@@ -663,7 +671,7 @@ func TestPrecheckThroughCloudAssistantParsesRows(t *testing.T) {
 func TestPrecheckWithCloudAssistantOfflineSaysSo(t *testing.T) {
 	d, _ := assistantFake(t, false, "Success", 0, "")
 	checks, err := d.PrecheckCommand(context.Background(), userCreds, assistantRequest().Instance, assistantConnection, provider.CommandPrecheckRequest{})
-	if err != nil || len(checks) != 1 || checks[0].Status != "error" || !strings.Contains(checks[0].Detail, "not online") {
+	if err != nil || len(checks) != 1 || checks[0].Status != "fail" || !strings.Contains(checkText(checks[0]), "not online") {
 		t.Fatalf("checks = %+v, err = %v", checks, err)
 	}
 }
@@ -738,11 +746,11 @@ func TestPlatformKeyAtInstallSaysTheInstallWaitsForCloudAssistant(t *testing.T) 
 	for _, online := range []bool{true, false} {
 		d, fake := assistantFake(t, online, "Success", 0, "")
 		check, ok := d.PlatformKeyAtInstall(context.Background(), userCreds, assistantRequest().Instance, "ssh-ed25519 AAAAplatform")
-		if !ok || check.Status != "warn" || !strings.Contains(check.Detail, "Cloud Assistant") {
+		if !ok || check.Status != "warn" || !strings.Contains(checkText(check), "Cloud Assistant") {
 			t.Fatalf("online=%v: ok=%v check=%+v", online, ok, check)
 		}
-		if waits := strings.Contains(check.Detail, "waits up to 2m0s"); waits == online {
-			t.Fatalf("online=%v: detail = %q", online, check.Detail)
+		if waits := strings.Contains(checkText(check), "waits up to 2m0s"); waits == online {
+			t.Fatalf("online=%v: detail = %q", online, checkText(check))
 		}
 		if got := strings.Join(fake.actions(), ","); got != "DescribeCloudAssistantStatus" {
 			t.Fatalf("actions = %s", got)
@@ -776,7 +784,7 @@ func TestPlatformKeyWaitsForCloudAssistantToComeOnline(t *testing.T) {
 	req := assistantRequest()
 	req.PlatformKey = &provider.PlatformKey{PublicKey: "ssh-ed25519 AAAAplatform gpuworks@server"}
 	check := d.authorizePlatformKey(context.Background(), userCreds, req)
-	if check.Status != "ok" || !strings.Contains(check.Detail, "waited") || statuses != 3 {
+	if check.Status != "pass" || !strings.Contains(checkText(check), "waited") || statuses != 3 {
 		t.Fatalf("check = %+v after %d status calls (%v)", check, statuses, fake.actions())
 	}
 
@@ -784,7 +792,35 @@ func TestPlatformKeyWaitsForCloudAssistantToComeOnline(t *testing.T) {
 	never.assistantWait, never.assistantPoll = 30*time.Millisecond, 5*time.Millisecond
 	start := time.Now()
 	check = never.authorizePlatformKey(context.Background(), userCreds, req)
-	if check.Status != "warn" || !strings.Contains(check.Detail, "did not come online") || time.Since(start) < 30*time.Millisecond {
+	if check.Status != "warn" || !strings.Contains(checkText(check), "did not come online") || time.Since(start) < 30*time.Millisecond {
 		t.Fatalf("check = %+v after %s", check, time.Since(start))
+	}
+}
+
+// The script and the parser agree: what precheckScript prints on a host is
+// what parseCheckLines reads, row for row.
+func TestPrecheckScriptRowsParse(t *testing.T) {
+	bin := t.TempDir()
+	for name, body := range map[string]string{
+		"curl":       "echo 'curl: (7) Failed to connect' >&2; exit 7",
+		"nvidia-smi": "echo 'NVIDIA-SMI has failed' >&2; exit 9",
+	} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command("sh", "-c", precheckScript(provider.CommandPrecheckRequest{ServerURL: "http://172.16.0.9:8800", ConnectMode: "agent_dial"}))
+	cmd.Env = append(os.Environ(), "PATH="+bin+":/usr/bin:/bin")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script: %v\n%s", err, out)
+	}
+	got := []string{}
+	for _, c := range parseCheckLines(string(out)) {
+		got = append(got, c.ID+"="+c.Status+"/"+c.Code)
+	}
+	want := "os_arch=pass/,gpu=warn/CHECK_GPU_TOOL_MISSING,docker=pass/,server_reachability=fail/CHECK_SERVER_UNREACHABLE_FROM_NODE"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("rows = %s\nwant   %s\noutput:\n%s", strings.Join(got, ","), want, out)
 	}
 }

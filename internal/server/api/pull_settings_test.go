@@ -59,11 +59,10 @@ func newPullRig(t *testing.T) *pullRig {
 		Outside: OutsideSources{AllowPrivateHosts: []string{"127.0.0.1"}},
 		Store:   st, AuthSigner: signer, NodeRuntime: rig.runtime,
 		Online: func(uuid string) bool { rig.mu.Lock(); defer rig.mu.Unlock(); return rig.online[uuid] },
-		NodeSync: nodeSyncCallbacks{full: func(uuid string) error {
+		NodeSync: nodeSyncCallbacks{request: func(uuid string) {
 			rig.mu.Lock()
 			defer rig.mu.Unlock()
 			rig.synced = append(rig.synced, uuid)
-			return nil
 		}, network: func(uuid string) {
 			rig.mu.Lock()
 			defer rig.mu.Unlock()

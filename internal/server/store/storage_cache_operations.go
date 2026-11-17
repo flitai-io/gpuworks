@@ -11,6 +11,11 @@ import (
 
 const StorageCacheTopic = "storage_cache"
 
+// CacheOperationProtectedEntriesRemain is the outcome a completed clear
+// records in its error column when entries a running deployment still uses
+// were kept. It is a stored code, compared by value, never a sentence.
+const CacheOperationProtectedEntriesRemain = "protected_entries_remain"
+
 // StorageCacheOperation records user intent and execution outcomes. Capacity,
 // references, applicability and whether a budget is met are derived facts.
 type StorageCacheOperation struct {

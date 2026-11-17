@@ -5,10 +5,12 @@ import { JSDOM } from "jsdom";
 import React from "react";
 import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
-import type { MonitorDeployment, MonitorSeries } from "../src/api";
+import type { MetricSeries } from "../src/api";
+import type { TimeRangeSelection } from "../src/timeRange";
+import { list } from "./helpers/listPage.ts";
 
 // The server's deployment snapshot, generated from the real handler.
-const monitorFixture = JSON.parse(fs.readFileSync(new URL("./fixtures/monitor-deployment.json", import.meta.url), "utf8")) as MonitorDeployment;
+const monitorFixture = JSON.parse(fs.readFileSync(new URL("./fixtures/monitor-deployment.json", import.meta.url), "utf8"));
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
 for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
@@ -44,84 +46,73 @@ await i18n.use(initReactI18next).init({
 
 const { cleanup, render, screen, waitFor } = await import("@testing-library/react");
 const { api } = await import("../src/api.ts");
-const { default: InstanceStagePanel, stageSeriesName } = await import("../src/components/InstanceStagePanel.tsx");
-const originalMonitorDeployment = api.monitorDeployment;
+const { default: InstanceStagePanel, stageSeriesName, stageP95Millis } = await import("../src/components/InstanceStagePanel.tsx");
+const { rateSeries } = await import("../src/instanceMetricSeries.ts");
+const originalMetricsQuery = api.metricsQuery;
 const t = i18n.getFixedT("en", "deployments");
 
 afterEach(() => {
   cleanup();
-  api.monitorDeployment = originalMonitorDeployment;
+  api.metricsQuery = originalMetricsQuery;
 });
 
-function emptyCharts(): MonitorDeployment["charts"] {
-  return { latency: [], concurrency: [], kv: [], throughput: [], stage_time: [], preemptions: [] };
-}
+const quick = { kind: "quick", key: "15m" } as const;
+const noSamples = "No samples for this instance in the selected range";
 
-function snapshot(charts: Partial<MonitorDeployment["charts"]>): MonitorDeployment {
-  return {
-    as_of: 0,
-    stale: false,
-    deployment: { id: 1, name: "dep", engine: "vllm", placement: "", replicas: { ready: 1, desired: 1 } },
-    alignment: null,
-    ttft_breakdown: null,
-    charts: { ...emptyCharts(), ...charts },
-    replicas: [],
+test("stage duration and preemptions query the selected replica and respect a fixed historical range", async () => {
+  const calls: Array<[string, Parameters<typeof api.metricsQuery>[1]]> = [];
+  api.metricsQuery = async (metric, params) => {
+    calls.push([metric, params]);
+    return list([]);
   };
-}
-
-function stubMonitorDeployment(charts: Partial<MonitorDeployment["charts"]>) {
-  api.monitorDeployment = (async () => snapshot(charts)) as typeof api.monitorDeployment;
-}
-
-function series(labels: Record<string, string>, values: Array<[number, number]>): MonitorSeries {
-  return { labels, points: values };
-}
-
-test("neither stage p95 nor preemption rate are collected today, so both cards say so", async () => {
-  stubMonitorDeployment({});
-  render(<I18nextProvider i18n={i18n}><InstanceStagePanel instanceUuid="inst-1" deploymentId={1} /></I18nextProvider>);
-  await waitFor(() => assert.equal(screen.getAllByText(/Not collected yet/).length, 2));
-  assert.ok(screen.getByText("Stage Duration p95"));
-  assert.ok(screen.getByText("Preemptions /s"));
+  const panel = (instanceUuid: string, selection: TimeRangeSelection) =>
+    <I18nextProvider i18n={i18n}><InstanceStagePanel instanceUuid={instanceUuid} selection={selection} /></I18nextProvider>;
+  const view = render(panel("inst-one", quick));
+  await waitFor(() => assert.equal(calls.length, 4));
+  for (const [, params] of calls) {
+    assert.equal(params?.instance, "inst-one");
+    assert.equal(params!.end! - params!.start!, 15 * 60 * 1000);
+  }
+  calls.length = 0;
+  view.rerender(panel("inst-two", { kind: "custom", startMS: 10000, endMS: 20000 }));
+  await waitFor(() => assert.equal(calls.length, 4));
+  assert.deepEqual(calls.map(([metric]) => metric).sort(), [
+    "gpuworks_infer_decode_time_seconds", "gpuworks_infer_preemptions_total",
+    "gpuworks_infer_prefill_time_seconds", "gpuworks_infer_queue_time_seconds",
+  ]);
+  for (const [, params] of calls) {
+    assert.deepEqual(params, { instance: "inst-two", start: 10000, end: 20000, step: "10s" });
+  }
+  assert.equal(screen.getAllByText(noSamples, { exact: false }).length, 2);
 });
 
-test("a stage_time series labelled for this instance renders a chart, not the not-collected card", async () => {
-  stubMonitorDeployment({
-    stage_time: [series({ instance: "inst-1", metric: "queue" }, [[1000, 12], [2000, 18]])],
+test("the stage card selects p95 and converts seconds to milliseconds, including a real zero", () => {
+  const series = (quantile: string): MetricSeries => ({
+    labels: { instance: "inst-1", quantile }, points: [[1000, 0], [2000, 0.25]],
   });
-  render(<I18nextProvider i18n={i18n}><InstanceStagePanel instanceUuid="inst-1" deploymentId={1} /></I18nextProvider>);
-  await waitFor(() => assert.equal(screen.queryAllByText(/Not collected yet/).length, 1));
-  assert.ok(screen.getByText("Preemptions /s"), "the preemption card still has no data of its own");
+  assert.deepEqual(stageP95Millis([series("0.5"), series("0.95"), series("0.99")], "prefill_ms"), [{
+    labels: { instance: "inst-1", quantile: "0.95", metric: "prefill_ms" }, points: [[1000, 0], [2000, 250]],
+  }]);
 });
 
-test("a chart labelled for a different instance is filtered out, leaving the not-collected state", async () => {
-  stubMonitorDeployment({
-    stage_time: [series({ instance: "inst-other", metric: "queue" }, [[1000, 12], [2000, 18]])],
-  });
-  render(<I18nextProvider i18n={i18n}><InstanceStagePanel instanceUuid="inst-1" deploymentId={1} /></I18nextProvider>);
-  await waitFor(() => assert.equal(screen.getAllByText(/Not collected yet/).length, 2));
+test("a restarted engine counts preemptions observed since the reset", () => {
+  const [rate] = rateSeries([{ labels: { instance: "inst-1" }, points: [[1000, 40], [2000, 2], [3000, 2]] }]);
+  assert.deepEqual(rate.points, [[2000, 2], [3000, 0]]);
 });
 
-test("a chart with no instance label at all is shown unfiltered rather than hidden", async () => {
-  stubMonitorDeployment({
-    preemptions: [series({ deployment: "1" }, [[1000, 10], [2000, 20], [3000, 25]])],
-  });
-  render(<I18nextProvider i18n={i18n}><InstanceStagePanel instanceUuid="inst-1" deploymentId={1} /></I18nextProvider>);
-  await waitFor(() => assert.equal(screen.queryAllByText(/Not collected yet/).length, 1));
-  assert.ok(screen.getByText("Stage Duration p95"), "the stage card still has no data of its own");
+test("an instance counter needs two samples before it can show a preemption rate", async () => {
+  let samples: [number, number][] = [[1000, 3], [2000, 4]];
+  api.metricsQuery = async (metric, params) => list(metric.endsWith("preemptions_total")
+    ? [{ labels: { instance: params?.instance ?? "" }, points: samples }] : []);
+  const panel = (uuid: string) =>
+    <I18nextProvider i18n={i18n}><InstanceStagePanel instanceUuid={uuid} selection={quick} /></I18nextProvider>;
+  const view = render(panel("inst-1"));
+  await waitFor(() => assert.equal(screen.getAllByText(noSamples, { exact: false }).length, 1));
+  samples = [[3000, 0]];
+  view.rerender(panel("inst-2"));
+  await waitFor(() => assert.equal(screen.getAllByText(noSamples, { exact: false }).length, 2));
 });
 
-test("the panel polls the deployment snapshot by deploymentId, not by instance", async () => {
-  const requested: number[] = [];
-  api.monitorDeployment = (async (id: number) => { requested.push(id); return snapshot({}); }) as typeof api.monitorDeployment;
-  render(<I18nextProvider i18n={i18n}><InstanceStagePanel instanceUuid="inst-1" deploymentId={42} /></I18nextProvider>);
-  await waitFor(() => assert.deepEqual(requested, [42]));
-});
-
-// The stage_time chart carries three lines distinguished only by
-// labels.metric, named as the server's deployment snapshot names them (the
-// generated fixture, internal/server/monitorapi). Matching names the wire
-// never carried left the legend reading "metric queue_ms".
 test("stageSeriesName names the wire's stage lines through the translated stage vocabulary", () => {
   const wire = (monitorFixture.charts.stage_time as Array<{ labels: Record<string, string> }>).map((series) => series.labels);
   assert.deepEqual(wire.map((labels, index) => stageSeriesName(labels, index, t)), ["Queue", "Prefill", "Decode"]);

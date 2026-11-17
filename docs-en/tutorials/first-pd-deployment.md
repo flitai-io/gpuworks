@@ -152,3 +152,6 @@ The self-test displays `113 MiB over TCP`. This transfer belongs to the deployme
 **Completion criteria**: P and D each have one ready instance; the long-document summary request succeeds; request details show participation by both P and D without fallback; and you can find the KV handoff self-test result and open the corresponding instance logs to check for anomalies. Phase durations help you understand this call; performance still depends on the model, network, and business workload.
 
 For more modes, scaling operations, and monitoring information, see the [PD Disaggregation Deployment Guide](../how-to/pd-disaggregation.md).
+
+<!-- translation-source-sha256: 68a85b73db6b96c37c263fd87290548eaf9e30a8ff9d9eb4fa6236811cc904c6 -->
+<!-- translation-localized-code-block: 72dc08a2a75174c6d9f0be1839d5b681b8b34748cf3a5e06a32101bea03ee597 bc4fd77bfda54157577282ab2c885f548d169abac94ecd1be6323357eefa7009 Translate the natural-language summarization question; the page distinguishes translated practice input from historical screenshot measurements. -->

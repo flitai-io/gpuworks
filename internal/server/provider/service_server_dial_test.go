@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/pkg/localization"
 )
 
@@ -34,9 +35,9 @@ func (d *channelDriver) InstallAgent(ctx context.Context, creds Credentials, req
 	return err
 }
 
-func (d *channelDriver) CheckInbound(_ context.Context, _ Credentials, _ Instance, port int) InstallCheck {
+func (d *channelDriver) CheckInbound(_ context.Context, _ Credentials, _ Instance, port int) provision.CheckResult {
 	d.inbound = append(d.inbound, port)
-	return InstallCheck{Name: "Security group", Status: "error", Detail: "no inbound rule"}
+	return provision.CheckResult{ID: "security_group", Status: "fail", Message: "no inbound rule"}
 }
 
 // A command channel installs by having the instance download from the
@@ -84,7 +85,7 @@ func TestPrecheckAsksTheFirewallAboutTheDialedPort(t *testing.T) {
 		}
 		found := false
 		for _, c := range report.Checks {
-			found = found || (c.Name == "Security group" && c.Status == "error")
+			found = found || (c.ID == "security_group" && c.Status == "fail")
 		}
 		if found != (opts.ConnectMode == "server_dial") {
 			t.Fatalf("%+v: security group row present = %v in %+v", opts, found, report.Checks)

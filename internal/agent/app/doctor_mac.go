@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -27,19 +28,21 @@ var doctorMacRun = func(ctx context.Context, name string, args ...string) (strin
 const macFirewallTool = "/usr/libexec/ApplicationFirewall/socketfilterfw"
 
 func doctorMacChecks(ctx context.Context, r *proto.DoctorReport, gpus []proto.GPUInfo) {
-	sysctl, _ := doctorMacRun(ctx, "sysctl", "kern.osproductversion", "hw.memsize", "iogpu.wired_limit_mb")
+	sysctl, sysctlErr := doctorMacRun(ctx, "sysctl", "kern.osproductversion", "hw.memsize", "iogpu.wired_limit_mb")
 	facts := parseSysctlLines(sysctl)
 
-	if version := facts["kern.osproductversion"]; version != "" {
-		major, err := strconv.Atoi(strings.SplitN(version, ".", 2)[0])
-		if err == nil && major < accelerator.MinimumMacOSMajor {
-			r.Findings = append(r.Findings, proto.DoctorFinding{
-				Code: proto.DoctorMacOSUnsupported, Level: proto.DoctorLevelError,
-				Probe:    "sysctl kern.osproductversion",
-				Evidence: []proto.DoctorField{{Name: "macOS", Value: version}, {Name: "required", Value: strconv.Itoa(accelerator.MinimumMacOSMajor)}},
-				Recheck:  "sw_vers",
-			})
-		}
+	version := facts["kern.osproductversion"]
+	major, versionErr := strconv.Atoi(strings.SplitN(version, ".", 2)[0])
+	switch {
+	case version == "" || versionErr != nil:
+		r.Findings = append(r.Findings, doctorMacToolSkip(proto.DoctorCheckMacOSVersion, "sysctl kern.osproductversion", "sw_vers", sysctlErr, sysctl))
+	case major < accelerator.MinimumMacOSMajor:
+		r.Findings = append(r.Findings, proto.DoctorFinding{
+			ID: proto.DoctorCheckMacOSVersion, Status: proto.CheckFail, Code: proto.DoctorMacOSUnsupported,
+			Probe:    "sysctl kern.osproductversion",
+			Evidence: []proto.DoctorField{{Name: "macOS", Value: version}, {Name: "required", Value: strconv.Itoa(accelerator.MinimumMacOSMajor)}},
+			Recheck:  "sw_vers",
+		})
 	}
 
 	if value, ok := metalWorkingSetFact(facts, gpus); ok {
@@ -48,12 +51,14 @@ func doctorMacChecks(ctx context.Context, r *proto.DoctorReport, gpus []proto.GP
 
 	settings, settingsErr := doctorMacRun(ctx, "pmset", "-g")
 	battery, batteryErr := doctorMacRun(ctx, "pmset", "-g", "batt")
-	if settingsErr == nil && batteryErr == nil {
+	if err := errors.Join(settingsErr, batteryErr); err != nil {
+		r.Findings = append(r.Findings, doctorMacToolSkip(proto.DoctorCheckMacOSSleep, "pmset -g", "pmset -g", err, ""))
+	} else {
 		power := parsePmset(settings, battery)
 		r.Facts = append(r.Facts, proto.DoctorFact{Code: proto.DoctorFactPower, Value: power.text()})
 		if power.idleSleepMinutes > 0 && !power.sleepDisabled {
 			r.Findings = append(r.Findings, proto.DoctorFinding{
-				Code: proto.DoctorMacOSIdleSleep, Level: proto.DoctorLevelWarning,
+				ID: proto.DoctorCheckMacOSSleep, Status: proto.CheckWarn, Code: proto.DoctorMacOSIdleSleep,
 				Probe: "pmset -g",
 				Evidence: []proto.DoctorField{
 					{Name: "sleep", Value: power.sleepSetting},
@@ -66,6 +71,22 @@ func doctorMacChecks(ctx context.Context, r *proto.DoctorReport, gpus []proto.GP
 
 	if out, err := doctorMacRun(ctx, macFirewallTool, "--getglobalstate", "--getstealthmode"); err == nil {
 		r.Facts = append(r.Facts, proto.DoctorFact{Code: proto.DoctorFactMacOSFirewall, Value: strings.Join(strings.Fields(strings.ReplaceAll(strings.TrimSpace(out), "\n", "; ")), " ")})
+	}
+}
+
+// doctorMacToolSkip is a macOS check that could not read what it judges:
+// the command failed, or answered with nothing the check understands.
+func doctorMacToolSkip(id, probe, recheck string, err error, out string) proto.DoctorFinding {
+	detail := strings.TrimSpace(out)
+	if err != nil {
+		detail = err.Error()
+	}
+	if detail == "" {
+		detail = "no output"
+	}
+	return proto.DoctorFinding{
+		ID: id, Status: proto.CheckSkip, Code: proto.DoctorSkipToolFailed,
+		Probe: probe, Evidence: []proto.DoctorField{{Name: "result", Value: detail}}, Recheck: recheck,
 	}
 }
 

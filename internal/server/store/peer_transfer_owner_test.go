@@ -35,7 +35,7 @@ func TestPeerTransferOwnerFences(t *testing.T) {
 	if err := s.db.Create(row).Error; err != nil {
 		t.Fatal(err)
 	}
-	changed, err = s.CancelImageNodeTransferIfActive(991, 992, "old", "stale cancel")
+	changed, err = s.CancelImageNodeTransferIfActive(991, 992, "old", "stale cancel", "PEER_TRANSFER_CANCELED")
 	if err != nil || changed {
 		t.Fatalf("stale cancel: %v %v", changed, err)
 	}

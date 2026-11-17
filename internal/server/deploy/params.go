@@ -46,10 +46,12 @@ type LaunchConfig struct {
 	EnableCacheReport    *bool `json:"enable_cache_report,omitempty"`
 	// EnableRequestMetrics gets its default only on an image whose engine
 	// release takes the flag (vllmAcceptsRequestMetrics).
-	EnableRequestMetrics *bool  `json:"enable_request_metrics,omitempty"`
-	MaxModelLen          int    `json:"max_model_len,omitempty"`
-	Dtype                string `json:"dtype,omitempty"`          // auto|bfloat16|float16|float32
-	KVCacheDtype         string `json:"kv_cache_dtype,omitempty"` // auto|fp8|fp8_e5m2
+	EnableRequestMetrics *bool `json:"enable_request_metrics,omitempty"`
+	// MaxModelLen -1 is vLLM's explicit memory-fit intent, not a measured length.
+	// Zero remains unset, so stored deployments keep their original command.
+	MaxModelLen  int    `json:"max_model_len,omitempty"`
+	Dtype        string `json:"dtype,omitempty"`          // auto|bfloat16|float16|float32
+	KVCacheDtype string `json:"kv_cache_dtype,omitempty"` // auto|fp8|fp8_e5m2
 	// GPUMemUtil zero is unset: no --gpu-memory-utilization is emitted and the
 	// engine runs at its own default. Materialize rejects an explicit zero, so
 	// a zero here can only mean "not stated".
@@ -70,7 +72,12 @@ type LaunchConfig struct {
 	// keeps the disk tier directory under it, and no engine flag carries it.
 	// Zero is unset, and unset means the server derives the ceiling from the
 	// model's weight bytes without writing a number back here.
-	KVDiskLimitGiB          float64 `json:"kv_disk_limit_gib,omitempty"`
+	KVDiskLimitGiB float64 `json:"kv_disk_limit_gib,omitempty"`
+	// KVOffloadBackend selects the KV offload backend (package kvbackend,
+	// ADR 0069) by id; empty is the engine's own offload, which the native
+	// keys above configure. It is stored only where the engine publishes the
+	// key, i.e. has a backend besides its own.
+	KVOffloadBackend        string  `json:"kv_offload_backend,omitempty"`
 	KVOffloadBlockSize      int     `json:"kv_offload_block_size,omitempty"`
 	GPUBlockSize            int     `json:"gpu_block_size,omitempty"`
 	KVCacheMemoryBytes      int64   `json:"kv_cache_memory_bytes,omitempty"`
@@ -130,6 +137,9 @@ func ValidateLaunchConfig(q LaunchConfig) error {
 // other, and the parameters one engine does not support at all.
 func ValidateLaunchConfigForEngine(engine string, q LaunchConfig) error {
 	params := engineParams(engine)
+	if err := validateKVBackend(engine, q); err != nil {
+		return err
+	}
 	if err := validateAgainstDictionary(engine, params, q); err != nil {
 		return err
 	}
@@ -138,19 +148,19 @@ func ValidateLaunchConfigForEngine(engine string, q LaunchConfig) error {
 	}
 	_, chunkedPrefillSupported := params["enable_chunked_prefill"]
 	if chunkedPrefillSupported && q.EnableChunkedPrefill != nil && !*q.EnableChunkedPrefill && q.MaxNumBatchedTokens > 0 && q.MaxModelLen > 0 && q.MaxNumBatchedTokens < q.MaxModelLen {
-		return fmt.Errorf("max_num_batched_tokens must be at least max_model_len when chunked prefill is disabled")
+		return paramErrorf("max_num_batched_tokens", "max_num_batched_tokens must be at least max_model_len when chunked prefill is disabled")
 	}
 	if q.MaxNumBatchedTokens > 0 && q.MaxNumSeqs > 0 && q.MaxNumBatchedTokens < q.MaxNumSeqs {
-		return fmt.Errorf("max_num_batched_tokens must be at least max_num_seqs")
+		return paramErrorf("max_num_batched_tokens", "max_num_batched_tokens must be at least max_num_seqs")
 	}
 	if q.LongPrefillTokenThreshold > 0 && q.MaxModelLen > 0 && q.LongPrefillTokenThreshold > q.MaxModelLen {
-		return fmt.Errorf("long_prefill_token_threshold must not exceed max_model_len")
+		return paramErrorf("long_prefill_token_threshold", "long_prefill_token_threshold must not exceed max_model_len")
 	}
 	if q.LoRA && q.SpeculativeTokens > 0 && q.MaxNumBatchedTokens > 0 && q.MaxNumSeqs > 0 && q.MaxNumBatchedTokens < q.MaxNumSeqs*(q.SpeculativeTokens+1) {
-		return fmt.Errorf("max_num_batched_tokens is too small for LoRA speculative decoding")
+		return paramErrorf("max_num_batched_tokens", "max_num_batched_tokens is too small for LoRA speculative decoding")
 	}
 	if q.KVDiskOffload && q.KVOffloadingSize <= 0 {
-		return fmt.Errorf("disk KV offload requires the memory offload tier")
+		return paramErrorf("kv_disk_offload", "disk KV offload requires the memory offload tier")
 	}
 	if q.KVDiskOffload {
 		clean := filepath.Clean(q.SharedKVDir)
@@ -161,7 +171,7 @@ func ValidateLaunchConfigForEngine(engine string, q LaunchConfig) error {
 		}
 	}
 	if q.KVOffloadBlockSize > 0 && q.GPUBlockSize > 0 && q.KVOffloadBlockSize%q.GPUBlockSize != 0 {
-		return fmt.Errorf("KV offload block size must be a multiple of the GPU block size")
+		return paramErrorf("kv_offload_block_size", "KV offload block size must be a multiple of the GPU block size")
 	}
 	for name, value := range map[string]string{
 		"rope_scaling":        q.RopeScaling,
@@ -200,7 +210,7 @@ func validateParameterDependencyValues(params map[string]engineParam, q LaunchCo
 			continue
 		}
 		if !dependencyValueEnabled(values[spec.DependsOn]) {
-			return fmt.Errorf("%s requires %s to be enabled", key, spec.DependsOn)
+			return paramErrorf(key, "%s requires %s to be enabled", key, spec.DependsOn)
 		}
 	}
 	return nil
@@ -241,7 +251,7 @@ func neutralParameterValue(definition paramDefinition, engine string, value any)
 // and a number stays within the bounds its row declares. A zero integer or
 // float is how LaunchConfig spells "this optional parameter was not set", so
 // only a value that is actually present is measured - except that a negative
-// value is never a legitimate "unset" and is always rejected.
+// value is rejected except for the native vLLM context-auto sentinel.
 func validateAgainstDictionary(engine string, params map[string]engineParam, q LaunchConfig) error {
 	values := map[string]any{}
 	encoded, err := json.Marshal(q)
@@ -267,7 +277,7 @@ func validateAgainstDictionary(engine string, params map[string]engineParam, q L
 			if neutralParameterValue(definition, engine, value) {
 				continue
 			}
-			return fmt.Errorf("%s is not supported by %s", definition.Key, engine)
+			return paramErrorf(definition.Key, "%s is not supported by %s", definition.Key, engine)
 		}
 		switch spec.Type {
 		case "enum":
@@ -275,23 +285,23 @@ func validateAgainstDictionary(engine string, params map[string]engineParam, q L
 			if text == "" || len(spec.Enum) == 0 || containsString(spec.Enum, text) {
 				continue
 			}
-			return fmt.Errorf("%s %q is not supported by %s", spec.Key, text, engine)
+			return paramErrorf(spec.Key, "%s %q is not supported by %s", spec.Key, text, engine)
 		case "integer", "number":
 			number, ok := toFloat(value)
 			if !ok {
 				continue
 			}
-			if number < 0 {
-				return fmt.Errorf("%s must not be negative", spec.Key)
+			if number < 0 && !isVLLMContextAuto(spec, number) {
+				return paramErrorf(spec.Key, "%s must not be negative", spec.Key)
 			}
 			if number == 0 {
 				continue // nobody stated this parameter
 			}
 			if spec.Min != nil && number < *spec.Min {
-				return fmt.Errorf("%s must be at least %v", spec.Key, *spec.Min)
+				return paramErrorf(spec.Key, "%s must be at least %v", spec.Key, *spec.Min)
 			}
 			if spec.Max != nil && number > *spec.Max {
-				return fmt.Errorf("%s must be at most %v", spec.Key, *spec.Max)
+				return paramErrorf(spec.Key, "%s must be at most %v", spec.Key, *spec.Max)
 			}
 		}
 	}
@@ -359,23 +369,27 @@ type Params struct {
 	// engine injects, over the whole deployment (package parallelism): on N
 	// nodes each runs TensorParallel×PipelineParallel×DataParallel/N GPUs,
 	// which is AssignedGPUs.
-	TensorParallel    int
-	PipelineParallel  int
-	DataParallel      int
-	Sleepable         bool
-	VRAMLimitBytes    int64
-	SMLimitPct        int
-	Partitioned       bool
-	PartitionBackend  string
-	Quick             LaunchConfig
-	TemplateArgs      []string // template passthrough (below structured form values)
-	TemplateEnv       map[string]string
-	ExtraArgs         []string // user free-form (highest priority)
-	Arch              string   // architecture family / model type for quirks
-	ArchID            string   // vendor-specific arch identifier, e.g. sm_90, 910B4
-	ComputeCapability string   // NVIDIA compute capability, e.g. 7.5 or 8.0
-	Vendor            string   // nvidia | ascend | amd | hygon
-	ModelType         string
+	TensorParallel   int
+	PipelineParallel int
+	DataParallel     int
+	Sleepable        bool
+	// PriorityScheduling is the deployment's request for per-request
+	// priority scheduling; the engine adapter turns it on only when the
+	// launch allows it (PrioritySchedulingRefusal).
+	PriorityScheduling bool
+	VRAMLimitBytes     int64
+	SMLimitPct         int
+	Partitioned        bool
+	PartitionBackend   string
+	Quick              LaunchConfig
+	TemplateArgs       []string // template passthrough (below structured form values)
+	TemplateEnv        map[string]string
+	ExtraArgs          []string // user free-form (highest priority)
+	Arch               string   // architecture family / model type for quirks
+	ArchID             string   // vendor-specific arch identifier, e.g. sm_90, 910B4
+	ComputeCapability  string   // NVIDIA compute capability, e.g. 7.5 or 8.0
+	Vendor             string   // nvidia | ascend | amd | hygon
+	ModelType          string
 	// PositionalModel uses the modern `vllm serve <model>` CLI (model positional
 	// via Entrypoint) instead of the `--model` api_server flag. Default true.
 	PositionalModel bool
@@ -397,6 +411,18 @@ type Params struct {
 	// RuntimeDriver is the container runtime the target node reports
 	// ("docker", "udocker", "host", ...); empty when no node is known.
 	RuntimeDriver string
+	// ImplicitServedName leaves a launch with no alias to the engine's own
+	// default name instead of naming the model after ModelPath. It is set
+	// only for a host-process agent that predates
+	// proto.CapLaunchNameVerbatim: that agent translates the value of
+	// --served-model-name to the model's host path, so an explicit name would
+	// fail its port identity check while the engine still served the model.
+	ImplicitServedName bool
+	// Symbolic makes the engine write the facts only one rank's launch knows
+	// (API port, node rank, master port, PD side channel port) as their
+	// ${NAME} references instead of this rank's values. It builds the command
+	// a manual script starts from (ManualCommandDraft), never a launch.
+	Symbolic bool
 }
 
 // ResolvedLaunch is the single launch contract shared with the agent protocol.

@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { Badge, Button, Space, Tag, Typography } from "antd";
+import { Space, Typography } from "antd";
+import { Badge, Tag } from "../pages/DeploymentControls";
+import { Button } from "../components/ui/button";
 import { useTranslation } from "react-i18next";
 import { api, type Deployment, type DeploymentPd } from "../api";
+import DetailSection from "../components/detail/DetailSection";
 import DeploymentPdScaleModal from "./DeploymentPdScaleModal";
+import { replicaCount } from "./DeploymentReplicaActions";
+import { RoleSleepActions } from "./DeploymentSleepControls";
 import { UnitRetryAlert } from "./OrderDialogs";
 
 // pdStateBadge maps the derived PD state (never persisted, see ADR 0028) to
@@ -13,41 +18,42 @@ function pdStateBadge(state: DeploymentPd["state"]): "success" | "warning" | "de
   return "default";
 }
 
-// PdSummary renders a PD deployment's mode, derived state, the "some role is
-// short" notice, and each role's TP/ready/desired - the fields deployment.pd
-// carries (ADR 0028) - plus the "Scale roles" action that opens
-// DeploymentPdScaleModal. Restart is the drawer header's, for every shape.
-function PdSummary({ pd, onScale }: { pd: DeploymentPd; onScale: () => void }) {
+export default function DeploymentPdPanel({ dep, onChanged }: { dep: Deployment; onChanged: () => void }) {
   const { t } = useTranslation("deployments");
+  const [scaleOpen, setScaleOpen] = useState(false);
+  const pd = dep.pd;
+  if (!pd) return null;
+  const stopped = dep.desired_state === "stopped";
+  const ready = dep.ready_replicas ?? pd.roles.reduce((sum, role) => sum + role.ready, 0);
   return (
-    <div style={{ marginTop: 16 }}>
-      <Space align="center" style={{ width: "100%", justifyContent: "space-between" }} wrap>
-        <Typography.Title level={5} style={{ margin: 0 }}>
-          {t("detail.pd.title")}
-        </Typography.Title>
-        <Button size="small" onClick={onScale}>
-          {t("detail.pd.scale.action")}
-        </Button>
-      </Space>
-      <Space wrap style={{ marginTop: 8 }}>
-        <Tag color="blue">{t("detail.pd.mode", { mode: pd.mode })}</Tag>
-        <Badge status={pdStateBadge(pd.state)} text={t(`detail.pd.state.${pd.state}`)} />
-        {pd.short && <Tag color="orange">{t("detail.pd.short")}</Tag>}
-      </Space>
-      <Space wrap style={{ marginTop: 8 }}>
-        {pd.roles.map((role) => (
-          <Tag key={role.role} color={(role.asleep ?? 0) > 0 ? "orange" : undefined}>
-            {t("detail.pd.roleSummary", {
-              role: t(`detail.pd.role.${role.role}`),
-              tp: role.tp,
-              ready: role.ready,
-              desired: role.desired,
-            })}
-            {!!role.asleep && ` · ${t("detail.pd.roleAsleep", { count: role.asleep })}`}
-          </Tag>
-        ))}
-      </Space>
-    </div>
+    <DetailSection title={t("detail.pd.title")} extra={
+      <Button variant="tertiary" size="sm" onClick={() => setScaleOpen(true)}>{t("detail.pd.scale.action")}</Button>
+    }>
+      <div className="deployment-pd-summary">
+        <Space wrap>
+          <Tag color="blue">{t("detail.pd.mode", { mode: pd.mode })}</Tag>
+          {!stopped && <Badge status={pdStateBadge(pd.state)} text={t(`detail.pd.state.${pd.state}`)} />}
+          <Typography.Text type="secondary">{t("detail.pd.readyUnits", { ready, desired: replicaCount(dep) })}</Typography.Text>
+          {!stopped && pd.short && <Tag>{t("detail.pd.short")}</Tag>}
+        </Space>
+        <Space wrap>
+          {pd.roles.map((role) => (
+            <Tag key={role.role} color={(role.asleep ?? 0) > 0 ? "orange" : undefined}>
+              {t("detail.pd.roleSummary", {
+                role: t(`detail.pd.roleLabel.${role.role}`),
+                tp: role.tp,
+                ready: role.ready,
+                desired: role.desired,
+              })}
+              {!!role.asleep && ` · ${t("detail.pd.roleAsleep", { count: role.asleep })}`}
+            </Tag>
+          ))}
+        </Space>
+        {dep.schedule_capabilities?.sleep.ok && <RoleSleepActions dep={dep} onDone={onChanged} />}
+        <PdExhaustedUnits dep={dep} onChanged={onChanged} />
+      </div>
+      <DeploymentPdScaleModal open={scaleOpen} dep={dep} onClose={() => setScaleOpen(false)} onChanged={onChanged} />
+    </DetailSection>
   );
 }
 
@@ -66,7 +72,7 @@ function PdExhaustedUnits({ dep, onChanged }: { dep: Deployment; onChanged: () =
         <UnitRetryAlert
           key={`${role}/${index}`}
           message={t("detail.pd.retry.exhausted", {
-            role: t(`detail.pd.role.${role}`),
+            role: t(`detail.pd.roleLabel.${role}`),
             index: index + 1,
             node: unit.node_name || unit.node_uuid,
             attempts: unit.failed_attempts ?? 0,
@@ -77,33 +83,6 @@ function PdExhaustedUnits({ dep, onChanged }: { dep: Deployment; onChanged: () =
           editHref={`/deploy?edit=${dep.id}`}
         />
       ))}
-    </>
-  );
-}
-
-// DeploymentPdPanel is the whole PD section of the deployment detail drawer:
-// mode/state/short summary with its "Scale roles" action, the units that gave
-// up with their Retry action, and the scale modal. An ordinary deployment has
-// no dep.pd and never mounts this (ADR 0028).
-export default function DeploymentPdPanel({
-  dep,
-  onChanged,
-}: {
-  dep: Deployment;
-  onChanged: () => void;
-}) {
-  const [scaleOpen, setScaleOpen] = useState(false);
-  if (!dep.pd) return null;
-  return (
-    <>
-      <PdSummary pd={dep.pd} onScale={() => setScaleOpen(true)} />
-      <PdExhaustedUnits dep={dep} onChanged={onChanged} />
-      <DeploymentPdScaleModal
-        open={scaleOpen}
-        dep={dep}
-        onClose={() => setScaleOpen(false)}
-        onChanged={onChanged}
-      />
     </>
   );
 }

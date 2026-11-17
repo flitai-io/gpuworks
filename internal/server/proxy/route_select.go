@@ -1,8 +1,6 @@
 package proxy
 
 import (
-	"fmt"
-	"net/http"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -19,11 +17,11 @@ import (
 // The final bool return is asleep: it is true only when the returned 503 is
 // specifically a "model is asleep" rejection, so accounting can classify it as
 // asleep_503 by this explicit flag rather than by matching rejection text.
-func (p *Proxy) selectDeploymentInstance(modelName string) (*store.Deployment, target, int, string, bool) {
+func (p *Proxy) selectDeploymentInstance(modelName string) (*store.Deployment, target, *refusal, bool) {
 	return p.selectDeploymentInstanceWithKey(modelName, "")
 }
 
-func (p *Proxy) selectDeploymentInstanceWithKey(modelName, affinity string) (*store.Deployment, target, int, string, bool) {
+func (p *Proxy) selectDeploymentInstanceWithKey(modelName, affinity string) (*store.Deployment, target, *refusal, bool) {
 	return p.selectScopedDeploymentInstance(nil, modelName, affinity)
 }
 
@@ -31,7 +29,7 @@ func (p *Proxy) selectDeploymentInstanceWithKey(modelName, affinity string) (*st
 // deployments the caller's API key may call (nil: all). A name served only by
 // deployments outside the scope is 403; deployments outside it are never
 // touched, so a scoped caller cannot wake or load them.
-func (p *Proxy) selectScopedDeploymentInstance(scope *store.APIKeyIdentity, modelName, affinity string) (*store.Deployment, target, int, string, bool) {
+func (p *Proxy) selectScopedDeploymentInstance(scope *store.APIKeyIdentity, modelName, affinity string) (*store.Deployment, target, *refusal, bool) {
 	allowed := func(id uint) bool { return scope == nil || scope.Allows(id) }
 	if p.routes != nil {
 		deployments, ok := p.routes.snapshot(modelName)
@@ -41,7 +39,7 @@ func (p *Proxy) selectScopedDeploymentInstance(scope *store.APIKeyIdentity, mode
 					continue
 				}
 				if tgt, ok := p.pickRouted(rd, modelName, affinity, p.hold.drainingOf(rd.dep.ID)); ok {
-					return rd.dep, tgt, 0, "", false
+					return rd.dep, tgt, nil, false
 				}
 			}
 			// A dirty snapshot is refreshed asynchronously. The name-scoped store
@@ -53,7 +51,7 @@ func (p *Proxy) selectScopedDeploymentInstance(scope *store.APIKeyIdentity, mode
 	}
 	served, err := p.store.DeploymentsByServedName(modelName)
 	if err != nil || len(served) == 0 {
-		return nil, target{}, http.StatusNotFound, "no deployment serves model " + modelName, false
+		return nil, target{}, refuse(ErrorModelNotFound, map[string]any{"model": modelName}), false
 	}
 	deployments := served[:0:0]
 	for _, dep := range served {
@@ -62,10 +60,10 @@ func (p *Proxy) selectScopedDeploymentInstance(scope *store.APIKeyIdentity, mode
 		}
 	}
 	if len(deployments) == 0 {
-		return nil, target{}, http.StatusForbidden, deniedMessage(modelName), false
+		return nil, target{}, refuse(ErrorModelAccessDenied, map[string]any{"model": modelName}), false
 	}
-	message := "no running instance for " + modelName + " (still starting?)"
-	// attempted tracks which deployment the surfaced message (and asleep
+	rejection := refuse(ErrorModelNotReady, map[string]any{"model": modelName})
+	// attempted tracks which deployment the surfaced refusal (and asleep
 	// flag) belongs to, for accounting even when every candidate failed: it
 	// starts at the first candidate and is overridden whenever a later
 	// candidate is specifically the asleep case, mirroring the message
@@ -74,21 +72,17 @@ func (p *Proxy) selectScopedDeploymentInstance(scope *store.APIKeyIdentity, mode
 	asleep := false
 	for index := range deployments {
 		dep := &deployments[index]
-		tgt, status, candidateMessage, candidateAsleep := p.selectDeploymentInstances(dep, modelName, affinity)
-		if status == 0 {
-			return dep, tgt, 0, "", false
+		tgt, candidate, candidateAsleep := p.selectDeploymentInstances(dep, modelName, affinity)
+		if candidate == nil {
+			return dep, tgt, nil, false
 		}
 		if index == 0 || candidateAsleep {
-			message = candidateMessage
+			rejection = candidate
 			asleep = candidateAsleep
 			attempted = dep
 		}
 	}
-	return attempted, target{}, http.StatusServiceUnavailable, message, asleep
-}
-
-func deniedMessage(modelName string) string {
-	return "this API key may not call model " + modelName
+	return attempted, target{}, rejection, asleep
 }
 
 func (p *Proxy) pickRouted(rd *routeDeployment, modelName, affinity string, draining map[string]bool) (target, bool) {
@@ -101,8 +95,8 @@ func (p *Proxy) pickRouted(rd *routeDeployment, modelName, affinity string, drai
 		// snapshot still supplies the node UUID map, avoiding one NodeByID
 		// query for every rank.
 		insts, _ := p.store.InstancesForDeployment(rd.id)
-		tgt, status, _, _ := p.selectDistributedInstanceWithNodes(rd.dep, insts, modelName, affinity, rd.nodes)
-		return tgt, status == 0
+		tgt, rejection, _ := p.selectDistributedInstanceWithNodes(rd.dep, insts, modelName, affinity, rd.nodes)
+		return tgt, rejection == nil
 	}
 	candidates := withoutDraining(rd.candidates, draining)
 	if len(candidates) == 0 {
@@ -116,7 +110,7 @@ func (p *Proxy) pickRouted(rd *routeDeployment, modelName, affinity string, drai
 	return target{nodeUUID: lease.c.nodeUUID, port: lease.c.port, modelName: lease.c.modelName, instanceUUID: lease.c.instanceUUID, lease: lease, candidates: candidates, attempt: attempt, pd: rd.pd, affinity: affinity}, true
 }
 
-func (p *Proxy) selectDeploymentInstances(dep *store.Deployment, modelName, affinity string) (target, int, string, bool) {
+func (p *Proxy) selectDeploymentInstances(dep *store.Deployment, modelName, affinity string) (target, *refusal, bool) {
 	// Draining replicas take no new request; with none other left, the
 	// request is held as if the deployment slept (drain.go).
 	draining := p.hold.drainingOf(dep.ID)
@@ -132,7 +126,7 @@ func (p *Proxy) selectDeploymentInstances(dep *store.Deployment, modelName, affi
 	pd, err := pdRouteFor(dep)
 	if err != nil {
 		p.log.Warn("PD deployment not routed: placement cannot be read", "dep", dep.ID, "err", err)
-		return target{}, http.StatusServiceUnavailable, "the deployment's PD placement cannot be read", false
+		return target{}, refuse(ErrorPDPlacementUnreadable, nil), false
 	}
 	for _, in := range insts {
 		// An instance ordered to sleep, or still asleep, is "running" but cannot
@@ -182,7 +176,7 @@ func (p *Proxy) selectDeploymentInstances(dep *store.Deployment, modelName, affi
 		policy := deploy.NormalizeRoutingPolicy(dep.RoutingPolicy)
 		if lease := p.pickAwake(candidates, policy, affinity, true); lease != nil {
 			attempt := &routeAttempt{candidates: candidates, current: lease, tried: map[string]bool{lease.c.instanceUUID: true}, attempts: 1, started: time.Now(), modelName: lease.c.modelName, policy: policy, affinity: affinity, deploymentID: dep.ID, accountant: p.acct}
-			return target{nodeUUID: lease.c.nodeUUID, port: lease.c.port, modelName: lease.c.modelName, instanceUUID: lease.c.instanceUUID, lease: lease, candidates: candidates, attempt: attempt, pd: pd, affinity: affinity}, 0, "", false
+			return target{nodeUUID: lease.c.nodeUUID, port: lease.c.port, modelName: lease.c.modelName, instanceUUID: lease.c.instanceUUID, lease: lease, candidates: candidates, attempt: attempt, pd: pd, affinity: affinity}, nil, false
 		}
 	}
 	// Distinguish "sleeping" from "not ready" so the caller is told to wake
@@ -191,9 +185,9 @@ func (p *Proxy) selectDeploymentInstances(dep *store.Deployment, modelName, affi
 		return p.refuseAsleep(dep, planning.RequestWakes(dep, insts))
 	}
 	if instancesGaveUp(insts) {
-		return target{}, http.StatusServiceUnavailable, "deployment for " + modelName + " failed to start; see the deployment list", false
+		return target{}, refuse(ErrorDeploymentStartFailed, map[string]any{"model": modelName}), false
 	}
-	return target{}, http.StatusServiceUnavailable, "no running instance for " + modelName + " (still starting?)", false
+	return target{}, refuse(ErrorModelNotReady, map[string]any{"model": modelName}), false
 }
 
 // instancesGaveUp reports that this deployment stopped retrying. A pending,
@@ -223,11 +217,11 @@ func instancesGaveUp(insts []store.Instance) bool {
 // the deployment's routing policy, as for single-node replicas. A deployment
 // may list several multi-node replicas; each generation is its own group.
 // The final bool return is asleep; see selectDeploymentInstance.
-func (p *Proxy) selectDistributedInstance(dep *store.Deployment, insts []store.Instance, modelName, affinity string) (target, int, string, bool) {
+func (p *Proxy) selectDistributedInstance(dep *store.Deployment, insts []store.Instance, modelName, affinity string) (target, *refusal, bool) {
 	return p.selectDistributedInstanceWithNodes(dep, insts, modelName, affinity, nil)
 }
 
-func (p *Proxy) selectDistributedInstanceWithNodes(dep *store.Deployment, insts []store.Instance, modelName, affinity string, nodes map[uint]string) (target, int, string, bool) {
+func (p *Proxy) selectDistributedInstanceWithNodes(dep *store.Deployment, insts []store.Instance, modelName, affinity string, nodes map[uint]string) (target, *refusal, bool) {
 	nodeUUID := func(id uint) string {
 		if nodes != nil {
 			return nodes[id]
@@ -281,15 +275,15 @@ func (p *Proxy) selectDistributedInstanceWithNodes(dep *store.Deployment, insts 
 		if anySleeping {
 			return p.refuseAsleep(dep, planning.RequestWakes(dep, insts))
 		}
-		return target{}, http.StatusServiceUnavailable, fmt.Sprintf("distributed model %s is not ready: no replica has every rank running on an online node", modelName), false
+		return target{}, refuse(ErrorDistributedNotReady, map[string]any{"model": modelName}), false
 	}
 	policy := deploy.NormalizeRoutingPolicy(dep.RoutingPolicy)
 	lease := p.pickAwake(candidates, policy, affinity, true)
 	if lease == nil {
-		return target{}, http.StatusServiceUnavailable, "distributed model leader is offline for " + modelName, false
+		return target{}, refuse(ErrorDistributedLeaderOffline, map[string]any{"model": modelName}), false
 	}
 	attempt := &routeAttempt{candidates: candidates, current: lease, tried: map[string]bool{lease.c.instanceUUID: true}, attempts: 1, started: time.Now(), modelName: lease.c.modelName, policy: policy, affinity: affinity, deploymentID: dep.ID, accountant: p.acct}
-	return target{nodeUUID: lease.c.nodeUUID, port: lease.c.port, modelName: lease.c.modelName, instanceUUID: lease.c.instanceUUID, lease: lease, candidates: candidates, attempt: attempt, affinity: affinity}, 0, "", false
+	return target{nodeUUID: lease.c.nodeUUID, port: lease.c.port, modelName: lease.c.modelName, instanceUUID: lease.c.instanceUUID, lease: lease, candidates: candidates, attempt: attempt, affinity: affinity}, nil, false
 }
 
 // refuseAsleep is the refusal of a request for dep because its replicas
@@ -297,17 +291,15 @@ func (p *Proxy) selectDistributedInstanceWithNodes(dep *store.Deployment, insts 
 // wakes it (wakes: a sleeper of it wakes on request, planning.RequestWakes,
 // or its replicas drain for a yield). wakes is worked out from the instance
 // rows the refusal was read from, so the request path reads nothing more.
-func (p *Proxy) refuseAsleep(dep *store.Deployment, wakes bool) (target, int, string, bool) {
+func (p *Proxy) refuseAsleep(dep *store.Deployment, wakes bool) (target, *refusal, bool) {
 	if p.hold != nil {
 		p.hold.noteAsleep(dep.ID, wakes)
 	}
-	return target{}, http.StatusServiceUnavailable, asleepMessage(dep), true
+	return target{}, asleepRefusal(dep), true
 }
 
-// asleepMessage tells a client of a sleeping model what to do: wake it from
-// the console or the API, or wait for its schedule or a waiting wake. The
-// leading "model is asleep; wake it first" stays as it was, for clients that
-// match on it.
-func asleepMessage(dep *store.Deployment) string {
-	return fmt.Sprintf("model is asleep; wake it first (console, or POST /api/v1/deployments/%d/wake; a schedule or a waiting wake may also wake it)", dep.ID)
+// asleepRefusal tells a client of a sleeping model what to do: wake it from
+// the console or the API, or wait for its schedule or a waiting wake.
+func asleepRefusal(dep *store.Deployment) *refusal {
+	return refuse(ErrorModelAsleep, map[string]any{"deployment_id": dep.ID})
 }

@@ -197,7 +197,7 @@ func (c *Client) manifest(ctx context.Context, ref Ref, reference string) ([]byt
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("manifest %s: %s", reference, resp.Status)
+		return nil, &statusError{msg: fmt.Sprintf("manifest %s: %s", reference, resp.Status), status: resp.StatusCode}
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 }
@@ -283,7 +283,7 @@ func (c *Client) fetchToken(ctx context.Context, ref Ref) (string, time.Duration
 		return "", time.Hour, nil // open registry
 	}
 	if resp.StatusCode != http.StatusUnauthorized {
-		return "", 0, fmt.Errorf("registry probe: %s", resp.Status)
+		return "", 0, &statusError{msg: "registry probe: " + resp.Status, status: resp.StatusCode}
 	}
 	challenge := resp.Header.Get("Www-Authenticate")
 	login, haveLogin := runtime.RegistryAuthForHost(ctx, ref.Registry)
@@ -314,7 +314,7 @@ func (c *Client) fetchToken(ctx context.Context, ref Ref) (string, time.Duration
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("token endpoint: %s", resp.Status)
+		return "", 0, &statusError{msg: "token endpoint: " + resp.Status, status: resp.StatusCode}
 	}
 	var payload struct {
 		Token       string `json:"token"`

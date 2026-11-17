@@ -47,3 +47,5 @@ Image sources are already unified under pull settings (ADR 0048), but model down
 - The bench tokenizer is still fetched directly from huggingface.co by the agent using `http.DefaultClient` (`pkg/bench/tokenizer/ref.go`), bypassing proxies and rules (see `todo.md`).
 - ModelScope model logos use arbitrary CDN addresses outside the rules; an unreachable logo is silently omitted (see `todo.md`).
 - Credentials for ModelScope private repositories have not yet been confirmed; only Hugging Face is confirmed so far.
+
+<!-- translation-source-sha256: acc6b3181a0772c4d2f1348f9f609e8af2b8ec4b43765faa7ce1de51aa3d6dc7 -->

@@ -68,11 +68,11 @@ func (s *Session) CallOnDataStream(ctx context.Context, kind, method string, par
 	}
 	select {
 	case env := <-ch:
-		return peerRelayRPCResult(env)
+		return peerRelayRPCResult(method, env)
 	case <-dataClosed:
 		select {
 		case env := <-ch:
-			return peerRelayRPCResult(env)
+			return peerRelayRPCResult(method, env)
 		default:
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -82,26 +82,26 @@ func (s *Session) CallOnDataStream(ctx context.Context, kind, method string, par
 	case <-ctx.Done():
 		select {
 		case env := <-ch:
-			return peerRelayRPCResult(env)
+			return peerRelayRPCResult(method, env)
 		default:
 			return nil, ctx.Err()
 		}
 	case <-s.closed:
 		select {
 		case env := <-ch:
-			return peerRelayRPCResult(env)
+			return peerRelayRPCResult(method, env)
 		default:
 			return nil, errors.New("node session closed: " + s.NodeUUID)
 		}
 	}
 }
-func peerRelayRPCResult(env proto.Envelope) (json.RawMessage, error) {
+func peerRelayRPCResult(method string, env proto.Envelope) (json.RawMessage, error) {
 	var resp rpcResponse
 	if err := json.Unmarshal(env.D, &resp); err != nil {
 		return nil, err
 	}
 	if resp.Error != "" {
-		return nil, &rpcRemoteError{detail: resp.Error}
+		return nil, remoteRPCError(method, resp.Code, resp.Error, resp.Params)
 	}
 	return resp.Result, nil
 }

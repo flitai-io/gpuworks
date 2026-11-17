@@ -12,7 +12,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
-// Each card's checks, one state per check in every status report
+// Each card's checks, one result per check in every status report
 // (proto.GPUInfo.Checks), and the last run of each kept in memory for a person
 // who asks (RPCNodeCardCheckDetail).
 //
@@ -31,10 +31,10 @@ const vendorReleaseRounds = 3
 
 // checkResult is one check's answer this round on one card.
 type checkResult struct {
-	state, reason string
-	at            time.Time
-	took          time.Duration
-	evidence      []accelerator.HealthField
+	status, code string
+	at           time.Time
+	took         time.Duration
+	evidence     []accelerator.HealthField
 	// ownSchedule: the check runs on a schedule of its own, so its age is
 	// reported; the others ran for this very report.
 	ownSchedule bool
@@ -108,15 +108,15 @@ func (n *NodeRuntime) vendorChecks(gpus []proto.GPUInfo, cliAnswered bool, now t
 			continue
 		}
 		if card.HealthCode == accelerator.HealthCLIUnanswered || !cliAnswered {
-			round.put(ident, accelerator.CheckVendorCLI, checkResult{state: accelerator.CheckFail, reason: accelerator.HealthCLIUnanswered, at: now})
-			round.put(ident, accelerator.CheckVendorHealth, checkResult{state: accelerator.CheckSkip, reason: accelerator.CheckSkipProbeFailed, at: now})
+			round.put(ident, accelerator.CheckVendorCLI, checkResult{status: proto.CheckFail, code: accelerator.HealthCLIUnanswered, at: now})
+			round.put(ident, accelerator.CheckVendorHealth, checkResult{status: proto.CheckSkip, code: proto.CardCheckSkipProbeFailed, at: now})
 			continue
 		}
-		round.put(ident, accelerator.CheckVendorCLI, checkResult{state: accelerator.CheckPass, at: now})
+		round.put(ident, accelerator.CheckVendorCLI, checkResult{status: proto.CheckPass, at: now})
 		code := card.HealthCode
 		evidence := accelerator.ParseHealthEvidence(card.HealthMessage)
-		state := accelerator.CheckStateFor(code)
-		if accelerator.CheckProblem(state) {
+		status := accelerator.CheckStatusFor(code)
+		if accelerator.CheckProblem(status) {
 			m.held[ident] = vendorHold{code: code, evidence: evidence}
 		} else if hold, ok := m.held[ident]; ok {
 			hold.clean++
@@ -124,7 +124,7 @@ func (n *NodeRuntime) vendorChecks(gpus []proto.GPUInfo, cliAnswered bool, now t
 				delete(m.held, ident)
 			} else {
 				m.held[ident] = hold
-				code, state = hold.code, accelerator.CheckStateFor(hold.code)
+				code, status = hold.code, accelerator.CheckStatusFor(hold.code)
 				evidence = append(append([]accelerator.HealthField(nil), hold.evidence...),
 					accelerator.HealthField{Name: "Recovery", Value: fmt.Sprintf("%d of %d clean readings", hold.clean, vendorReleaseRounds)})
 				if accelerator.MostSevereHealth(card.HealthCode, code) == code {
@@ -132,11 +132,10 @@ func (n *NodeRuntime) vendorChecks(gpus []proto.GPUInfo, cliAnswered bool, now t
 				}
 			}
 		}
-		reason := ""
-		if accelerator.CheckProblem(state) {
-			reason = code
+		if !accelerator.CheckProblem(status) {
+			code = ""
 		}
-		round.put(ident, accelerator.CheckVendorHealth, checkResult{state: state, reason: reason, at: now, evidence: evidence})
+		round.put(ident, accelerator.CheckVendorHealth, checkResult{status: status, code: code, at: now, evidence: evidence})
 	}
 }
 
@@ -151,7 +150,7 @@ func (n *NodeRuntime) occupancyChecks(gpus []proto.GPUInfo, now time.Time, round
 			continue
 		}
 		if len(card.ForeignProcesses) == 0 {
-			round.put(ident, accelerator.CheckOccupancy, checkResult{state: accelerator.CheckPass, at: now})
+			round.put(ident, accelerator.CheckOccupancy, checkResult{status: proto.CheckPass, at: now})
 			continue
 		}
 		evidence := make([]accelerator.HealthField, 0, len(card.ForeignProcesses))
@@ -161,7 +160,7 @@ func (n *NodeRuntime) occupancyChecks(gpus []proto.GPUInfo, now time.Time, round
 				Value: fmt.Sprintf("%s, %d MiB", p.Name, p.MemoryBytes>>20),
 			})
 		}
-		round.put(ident, accelerator.CheckOccupancy, checkResult{state: accelerator.CheckWarn, reason: accelerator.CheckReasonForeignProcesses, at: now, evidence: evidence})
+		round.put(ident, accelerator.CheckOccupancy, checkResult{status: proto.CheckWarn, code: proto.CardCheckForeignProcesses, at: now, evidence: evidence})
 	}
 }
 
@@ -183,14 +182,14 @@ func putFinding(round checkRound, ident, check string, f finding, at, now time.T
 	if !f.known {
 		return
 	}
-	state, reason := accelerator.CheckStateFor(f.code), ""
-	if accelerator.CheckProblem(state) {
-		reason = f.code
+	status, code := accelerator.CheckStatusFor(f.code), ""
+	if accelerator.CheckProblem(status) {
+		code = f.code
 	}
 	if at.IsZero() || at.After(now) {
 		at = now
 	}
-	round.put(ident, check, checkResult{state: state, reason: reason, at: at, evidence: f.evidence, ownSchedule: ownSchedule})
+	round.put(ident, check, checkResult{status: status, code: code, at: at, evidence: f.evidence, ownSchedule: ownSchedule})
 }
 
 // runtimeChecks records each card's runtime check: its last answer, or why it
@@ -203,7 +202,7 @@ func (n *NodeRuntime) runtimeChecks(gpus []proto.GPUInfo, now time.Time, round c
 		for _, card := range gpus {
 			if accelerator.CardUsable(card.Ownership) {
 				round.put(accelerator.CardIdent(card.UUID, card.PCIeBDF), accelerator.CheckRuntime,
-					checkResult{state: accelerator.CheckSkip, reason: accelerator.CheckSkipUnavailable, at: now, ownSchedule: true})
+					checkResult{status: proto.CheckSkip, code: proto.CardCheckSkipUnavailable, at: now, ownSchedule: true})
 			}
 		}
 		return
@@ -219,20 +218,20 @@ func (n *NodeRuntime) runtimeChecks(gpus []proto.GPUInfo, now time.Time, round c
 		switch {
 		case answered && !outcome.OK:
 			// A failing card's backoff is not a skip: its failure stands.
-			round.put(ident, accelerator.CheckRuntime, checkResult{state: accelerator.CheckFail, reason: accelerator.HealthRuntimeUnusable,
+			round.put(ident, accelerator.CheckRuntime, checkResult{status: proto.CheckFail, code: accelerator.HealthRuntimeUnusable,
 				at: outcome.At, took: outcome.Duration, ownSchedule: true,
 				evidence: []accelerator.HealthField{{Name: "Detail", Value: outcome.Detail}}})
 		case skipped && (!answered || skip.At.After(outcome.At)):
-			round.put(ident, accelerator.CheckRuntime, checkResult{state: accelerator.CheckSkip, reason: runtimeSkipReason(skip.Reason), at: skip.At, ownSchedule: true})
+			round.put(ident, accelerator.CheckRuntime, checkResult{status: proto.CheckSkip, code: runtimeSkipReason(skip.Reason), at: skip.At, ownSchedule: true})
 		case answered:
-			round.put(ident, accelerator.CheckRuntime, checkResult{state: accelerator.CheckPass, at: outcome.At, took: outcome.Duration, ownSchedule: true})
+			round.put(ident, accelerator.CheckRuntime, checkResult{status: proto.CheckPass, at: outcome.At, took: outcome.Duration, ownSchedule: true})
 		}
 	}
 }
 
-// finishChecks puts each card's check states on it and keeps their runs. A
-// check this round said nothing about is pending until it has run once, and
-// not applicable on a card it has nothing to look at.
+// finishChecks puts each card's check results on it and keeps their runs. A
+// check this round said nothing about is skipped as not run yet until it has
+// run once, and not applicable on a card it has nothing to look at.
 func (n *NodeRuntime) finishChecks(gpus []proto.GPUInfo, now time.Time, round checkRound, cliAnswered bool) {
 	m := &n.checks
 	m.mu.Lock()
@@ -257,16 +256,16 @@ func (n *NodeRuntime) finishChecks(gpus []proto.GPUInfo, now time.Time, round ch
 		for _, spec := range accelerator.CardChecks(vendor) {
 			result, ok := round[ident][spec.ID]
 			if !ok {
-				result = checkResult{state: missingState(spec.ID, synthetic)}
+				result = missingResult(spec.ID, synthetic)
 			}
-			check := proto.CardCheck{ID: spec.ID, State: result.state, Reason: result.reason}
+			check := proto.CardCheck{ID: spec.ID, Status: result.status, Code: result.code}
 			if result.ownSchedule && !result.at.IsZero() {
 				check.AgeS = int32(now.Sub(result.at) / time.Second)
 			}
 			if result.took > 0 {
 				check.MS = int32(result.took / time.Millisecond)
 			}
-			if accelerator.CheckProblem(result.state) {
+			if accelerator.CheckProblem(result.status) {
 				check.Evidence = boundedEvidence(result.evidence)
 			}
 			card.Checks = append(card.Checks, check)
@@ -288,24 +287,25 @@ func (n *NodeRuntime) finishChecks(gpus []proto.GPUInfo, now time.Time, round ch
 	}
 }
 
-// missingState is what a check is when this round said nothing about it.
+// missingResult is what a check is when this round said nothing about it.
 // Every check that runs with each report speaks every round it can; the ones
 // that cannot have nothing to read (no AER, no NVLink, no kernel log) and are
-// not applicable. The runtime check is pending until it first answers, except
-// on cards that exist only in a fixture, which it never asks.
-func missingState(check string, synthetic bool) string {
+// not applicable. The runtime check is skipped as not run yet until it first
+// answers, except on cards that exist only in a fixture, which it never asks.
+// Neither is kept as a run.
+func missingResult(check string, synthetic bool) checkResult {
 	if check == accelerator.CheckRuntime && !synthetic {
-		return accelerator.CheckPending
+		return checkResult{status: proto.CheckSkip, code: proto.CardCheckNotRunYet}
 	}
-	return accelerator.CheckNotApplicable
+	return checkResult{status: proto.CheckNA}
 }
 
 func keepRun(runs map[string]*checkRuns, check string, card accelerator.HealthCard, result checkResult) {
-	if result.state == accelerator.CheckPending || result.state == accelerator.CheckNotApplicable {
+	if result.status == proto.CheckNA {
 		return
 	}
 	run := &proto.CardCheckRun{
-		State: result.state, Reason: result.reason,
+		Status: result.status, Code: result.code,
 		At:         result.at.UTC().Format(time.RFC3339),
 		DurationMS: result.took.Milliseconds(),
 		Probe:      accelerator.CardCheckProbe(check, card),
@@ -319,10 +319,10 @@ func keepRun(runs map[string]*checkRuns, check string, card accelerator.HealthCa
 		runs[check] = r
 	}
 	r.last = run
-	if run.State != accelerator.CheckSkip {
+	if run.Status != proto.CheckSkip {
 		r.lastRan = run
 	}
-	if accelerator.CheckProblem(run.State) {
+	if accelerator.CheckProblem(run.Status) {
 		r.lastProblem = run
 	}
 }
@@ -362,11 +362,11 @@ func (n *NodeRuntime) recheckCard(ctx context.Context, ident string) (proto.Card
 	outcome, skip := n.cardSmoke.CheckCard(ctx, ident)
 	switch {
 	case skip != "":
-		result = checkResult{state: accelerator.CheckSkip, reason: runtimeSkipReason(skip), at: n.checks.clock()}
+		result = checkResult{status: proto.CheckSkip, code: runtimeSkipReason(skip), at: n.checks.clock()}
 	case outcome.OK:
-		result = checkResult{state: accelerator.CheckPass, at: outcome.At, took: outcome.Duration}
+		result = checkResult{status: proto.CheckPass, at: outcome.At, took: outcome.Duration}
 	default:
-		result = checkResult{state: accelerator.CheckFail, reason: accelerator.HealthRuntimeUnusable, at: outcome.At, took: outcome.Duration,
+		result = checkResult{status: proto.CheckFail, code: accelerator.HealthRuntimeUnusable, at: outcome.At, took: outcome.Duration,
 			evidence: []accelerator.HealthField{{Name: "Detail", Value: outcome.Detail}}}
 	}
 	n.checks.mu.Lock()
@@ -393,15 +393,15 @@ func (n *NodeRuntime) vendor() string {
 func runtimeSkipReason(reason string) string {
 	switch reason {
 	case cardsmoke.SkipBusy:
-		return accelerator.CheckSkipBusy
+		return proto.CardCheckSkipBusy
 	case cardsmoke.SkipForeign:
-		return accelerator.CheckSkipForeign
+		return proto.CardCheckSkipForeign
 	case cardsmoke.SkipDeferred:
-		return accelerator.CheckSkipDeferred
+		return proto.CardCheckSkipDeferred
 	case cardsmoke.SkipNotHeld:
-		return accelerator.CheckSkipNotHeld
+		return proto.CardCheckSkipNotHeld
 	}
-	return accelerator.CheckSkipUnavailable
+	return proto.CardCheckSkipUnavailable
 }
 
 // boundedEvidence is as much of the evidence as fits a report's bound, whole

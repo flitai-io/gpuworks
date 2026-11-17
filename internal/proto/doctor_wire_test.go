@@ -14,9 +14,9 @@ func TestDoctorReportRuntimeAndFilesystemWireForm(t *testing.T) {
 		`{"kind":"root","path":"/","total_bytes":100,"avail_bytes":50,"mount":{"point":"/","fs_type":"overlay","source":"overlay","options":"rw,relatime","ephemeral":true}},` +
 		`{"kind":"udocker","path":"/workspace/udocker","total_bytes":100,"avail_bytes":90,"mount":{"point":"/workspace","fs_type":"nfs4","source":"10.1.2.3:/volumes/abcd","options":"rw,relatime,vers=4.1","network":true,"noexec":true,"read_only":true}}]},` +
 		`"findings":[` +
-		`{"code":"runtime_provision_failed","level":"error","probe":"set up the udocker runtime","evidence":[{"name":"error","value":"prepare udocker ownership: exit status 1"},{"name":"failed_at","value":"2026-10-10T08:30:05Z"}],"recheck":"findmnt -T /workspace/udocker"},` +
-		`{"code":"path_noexec","level":"error","disk":{"kind":"udocker","path":"/workspace/udocker","total_bytes":100,"avail_bytes":90,"mount":{"point":"/workspace","fs_type":"nfs4","noexec":true}},"probe":"/proc/self/mountinfo","evidence":[{"name":"TARGET","value":"/workspace"}],"recheck":"findmnt -T /workspace/udocker"},` +
-		`{"code":"path_read_only","level":"error"},{"code":"path_ephemeral","level":"warning"}],` +
+		`{"id":"runtime_provision","status":"fail","code":"RUNTIME_PROVISION_FAILED","probe":"set up the udocker runtime","evidence":[{"name":"error","value":"prepare udocker ownership: exit status 1"},{"name":"failed_at","value":"2026-10-10T08:30:05Z"}],"recheck":"findmnt -T /workspace/udocker"},` +
+		`{"id":"path_exec","status":"fail","code":"PATH_NOEXEC","disk":{"kind":"udocker","path":"/workspace/udocker","total_bytes":100,"avail_bytes":90,"mount":{"point":"/workspace","fs_type":"nfs4","noexec":true}},"probe":"/proc/self/mountinfo","evidence":[{"name":"TARGET","value":"/workspace"}],"recheck":"findmnt -T /workspace/udocker"},` +
+		`{"id":"path_write","status":"fail","code":"PATH_READ_ONLY"},{"id":"path_persist","status":"warn","code":"PATH_EPHEMERAL"},{"id":"mounts","status":"skip","code":"MOUNT_TABLE_UNREADABLE","evidence":[{"name":"error","value":"permission denied"}]}],` +
 		`"facts":[{"code":"runtime_identity","value":"dedicated user udocker (uid 1001)","identity":{"runtime":"runveil","user":"udocker","uid":1001}},` +
 		`{"code":"network_filesystem","value":"/workspace is nfs4","disks":[{"kind":"models","path":"/workspace/models","total_bytes":100,"avail_bytes":90,"mount":{"point":"/workspace","fs_type":"nfs4","network":true}}]}]}`
 
@@ -35,7 +35,7 @@ func TestDoctorReportRuntimeAndFilesystemWireForm(t *testing.T) {
 	for _, f := range report.Findings {
 		codes = append(codes, f.Code)
 	}
-	if !reflect.DeepEqual(codes, []string{DoctorRuntimeProvisionFailed, DoctorPathNoExec, DoctorPathReadOnly, DoctorPathEphemeral}) ||
+	if !reflect.DeepEqual(codes, []string{DoctorRuntimeProvisionFailed, DoctorPathNoExec, DoctorPathReadOnly, DoctorPathEphemeral, DoctorSkipMountTableUnreadable}) ||
 		report.Facts[0].Code != DoctorFactRuntimeIdentity || report.Facts[1].Code != DoctorFactNetworkFilesystem {
 		t.Fatalf("codes = %v facts = %+v", codes, report.Facts)
 	}
@@ -83,17 +83,17 @@ func TestDoctorDiskWithoutMountKeepsItsOldWireForm(t *testing.T) {
 // The untraversable-ancestor finding keeps its code string and evidence keys
 // on the wire: the node page interpolates its sentence from them by name.
 func TestDoctorRuntimeStateUntraversableWireForm(t *testing.T) {
-	if DoctorRuntimeStateUntraversable != "runtime_state_untraversable" {
+	if DoctorRuntimeStateUntraversable != "RUNTIME_STATE_UNTRAVERSABLE" {
 		t.Fatalf("code = %q", DoctorRuntimeStateUntraversable)
 	}
-	const wire = `{"code":"runtime_state_untraversable","level":"error","probe":"search permission on every directory above /root/gpuworks for udocker (uid 1001, gid 1001)",` +
+	const wire = `{"id":"runtime_state_access","status":"fail","code":"RUNTIME_STATE_UNTRAVERSABLE","probe":"search permission on every directory above /root/gpuworks for udocker (uid 1001, gid 1001)",` +
 		`"evidence":[{"name":"directory","value":"/root"},{"name":"mode","value":"0700"},{"name":"owner","value":"0:0"},{"name":"user","value":"udocker"},` +
 		`{"name":"state_dir","value":"/root/gpuworks"},{"name":"fix","value":"chmod o+x /root"}],"recheck":"namei -m /root/gpuworks"}`
 	var f DoctorFinding
 	if err := json.Unmarshal([]byte(wire), &f); err != nil {
 		t.Fatal(err)
 	}
-	if f.Code != DoctorRuntimeStateUntraversable || f.Level != DoctorLevelError || len(f.Evidence) != 6 || f.Evidence[5] != (DoctorField{Name: "fix", Value: "chmod o+x /root"}) {
+	if f.Code != DoctorRuntimeStateUntraversable || f.ID != DoctorCheckRuntimeStateAccess || f.Status != CheckFail || len(f.Evidence) != 6 || f.Evidence[5] != (DoctorField{Name: "fix", Value: "chmod o+x /root"}) {
 		t.Fatalf("finding = %+v", f)
 	}
 	out, err := json.Marshal(f)

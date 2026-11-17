@@ -1,41 +1,31 @@
-import { Alert, Card, Col, Row, Statistic } from "antd";
-import type { ReactNode } from "react";
+import { MetricStat } from "./InferenceMetricsPanel";
+import { Col, Row } from "antd";
+import { Alert } from "../pages/DeploymentControls";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { api, engineReportsNoMetrics, usePolling, type MonitorRange, type MonitorSeries } from "../api";
+import { api, engineReportsNoMetrics, usePolling, type MonitorDeployment, type MonitorRange, type MonitorSeries } from "../api";
 
-// GatewayMetricsNotice stands in for the deployment drawer's engine charts
-// when the engine reports no metrics of its own (Strata has no /metrics; a
-// callable template may declare no mapping). Which source a signal comes from
-// is the server's decision (monitor's signal sources, ADR 0039): the notice
-// only reads the resolved deployment snapshot, and renders `fallback` - the
-// usual "waiting for metrics" message - unless that snapshot says every
-// signal came from the gateway.
-//
-// sinceMS is how far back the drawer's selected window reaches from now; the
-// snapshot covers at least that much. allRunning says every live instance is
-// past starting: an engine that reports metrics has them by then, so a window
-// with nothing from the engine and nothing through the gateway is an idle
-// engine that reports none, not one still coming up.
-export default function GatewayMetricsNotice({
-  deploymentId,
-  sinceMS,
-  pollMs,
-  allRunning,
-  fallback,
-}: {
-  deploymentId: number;
-  sinceMS: number;
-  pollMs: number;
-  allRunning: boolean;
-  fallback: ReactNode;
-}) {
-  const { t } = useTranslation("deployments");
+// The server's signal sources distinguish an engine still starting from one
+// for which the gateway is the only source (ADR 0039).
+export function useGatewayOnlyMetrics(deploymentId: number | undefined, sinceMS: number, pollMs: number, allRunning: boolean) {
   const range = monitorRangeCovering(sinceMS);
-  const snapshot = usePolling(() => api.monitorDeployment(deploymentId, range), pollMs, [deploymentId, range, pollMs]);
-  const data = snapshot.data;
+  const interval = deploymentId == null ? 0 : pollMs;
+  const { data } = usePolling(
+    async () => deploymentId == null ? null : { range, snapshot: await api.monitorDeployment(deploymentId, range) },
+    interval,
+    [deploymentId, range, interval],
+  );
+  const snapshot = data?.range === range ? data.snapshot : null;
+  if (deploymentId == null || snapshot?.deployment.id !== deploymentId) return null;
+  if (allRunning && Object.keys(snapshot.sources ?? {}).length === 0) return snapshot;
+  return engineReportsNoMetrics(snapshot.sources) ? snapshot : null;
+}
+
+export default function GatewayMetricsNotice({ data }: { data: MonitorDeployment }) {
+  const { t } = useTranslation("deployments");
+  const deploymentId = data.deployment.id;
   const toServiceMonitor = <Link to={`/monitor/d/${deploymentId}`}>{t("metrics.openServiceMonitor")}</Link>;
-  if (data && allRunning && Object.keys(data.sources ?? {}).length === 0) {
+  if (Object.keys(data.sources ?? {}).length === 0) {
     return (
       <Alert
         type="info"
@@ -49,7 +39,6 @@ export default function GatewayMetricsNotice({
       />
     );
   }
-  if (!data || !engineReportsNoMetrics(data.sources)) return <>{fallback}</>;
 
   const ttft = latest(data.charts.latency, "ttft_p95");
   const e2e = latest(data.charts.latency, "e2e_p95");
@@ -71,7 +60,7 @@ export default function GatewayMetricsNotice({
       <Row gutter={[12, 12]}>
         <Stat title={t("metrics.gatewayTTFT")} value={ttft} suffix="ms" />
         <Stat title={t("metrics.gatewayE2E")} value={e2e} suffix="ms" />
-        <Stat title={t("metrics.generationThroughput")} value={generation} suffix="tok/s" precision={1} />
+        <Stat title={t("metrics.totalGenerationThroughput")} value={generation} suffix="tok/s" precision={1} />
         <Stat title={t("metrics.gatewayInflight")} value={inflight} />
       </Row>
     </div>
@@ -97,10 +86,7 @@ export function monitorRangeCovering(sinceMS: number): MonitorRange {
 function Stat({ title, value, suffix, precision = 0 }: { title: string; value?: number; suffix?: string; precision?: number }) {
   return (
     <Col xs={24} sm={12} xl={6}>
-      <Card size="small">
-        {/* An absent value reads as "-", never as a misleading zero. */}
-        <Statistic title={title} value={value ?? "-"} precision={value == null ? undefined : precision} suffix={value == null ? undefined : suffix} />
-      </Card>
+      <MetricStat title={title} value={value} precision={precision} suffix={suffix} />
     </Col>
   );
 }

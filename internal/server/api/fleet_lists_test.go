@@ -188,11 +188,12 @@ func TestLabelFilterEdgeCases(t *testing.T) {
 }
 
 func TestNodePageWireJSON(t *testing.T) {
-	got, err := json.Marshal(dto.NodePage{ListPage: dto.ListPage[dto.Node]{Items: []dto.Node{}, Page: 1, PageSize: 50, Total: 0}, All: 3, Labels: []dto.NodeLabelValues{{Key: "pool", Values: []string{"a"}}}})
+	got, err := json.Marshal(dto.NodePage{ListPage: dto.ListPage[dto.Node]{Items: []dto.Node{}, Page: 1, PageSize: 50, Total: 0}, All: 3, Labels: []dto.NodeLabelValues{{Key: "pool", Values: []string{"a"}}},
+		Sources: []dto.NodeSourceOption{{Value: "provider:7", ProviderName: "ali", ProviderKind: "aliyun", Nodes: 2}, {Value: "manual", Nodes: 1}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"items":[],"page":1,"page_size":50,"total":0,"all":3,"labels":[{"key":"pool","values":["a"]}]}`
+	const want = `{"items":[],"page":1,"page_size":50,"total":0,"all":3,"labels":[{"key":"pool","values":["a"]}],"sources":[{"value":"provider:7","provider_name":"ali","provider_kind":"aliyun","nodes":2},{"value":"manual","nodes":1}]}`
 	if string(got) != want {
 		t.Fatalf("wire JSON\n got: %s\nwant: %s", got, want)
 	}

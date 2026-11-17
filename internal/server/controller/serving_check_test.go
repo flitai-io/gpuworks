@@ -88,4 +88,18 @@ func TestServingPathIsCheckedBeforeAnInstanceStarts(t *testing.T) {
 	if c.networks.CanServe(*plain) {
 		t.Fatal("the scheduler would still place instances on the node")
 	}
+	// An instance placed there anyway is failed with the reason, coded.
+	inst, err := st.CreateInstance(&store.Instance{UUID: "no-serving-path", NodeID: plain.ID, State: proto.InstPending, DesiredStateJSON: `{"uuid":"no-serving-path","desired_state":"running"}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.startScheduledInstance(&store.Deployment{}, plain, inst); err != nil {
+		t.Fatal(err)
+	}
+	failed, _ := st.InstanceByUUID(inst.UUID)
+	f := failed.Failure()
+	if failed.State != proto.InstFailed || f == nil || f.Code != proto.ErrorServingPathUnavailable || f.Node != plain.DisplayName() ||
+		!strings.Contains(f.Detail, "no network that may carry serving") || failed.Message != f.Detail {
+		t.Fatalf("instance = %s %q reason %+v", failed.State, failed.Message, f)
+	}
 }

@@ -33,8 +33,33 @@ export class APIError extends Error {
   }
 }
 
+/** The codes the server gives an error that has no code of its own: one per
+ * HTTP status category (internal/server/messages/http.go, whose test keeps
+ * this list equal to the server's). Such a code names only the category; the
+ * English error text holds the detail. */
+export const GENERIC_API_ERROR_CODES = [
+  "BAD_REQUEST", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "METHOD_NOT_ALLOWED", "REQUEST_TIMEOUT",
+  "CONFLICT", "GONE", "REQUEST_TOO_LARGE", "UNSUPPORTED_MEDIA_TYPE", "RANGE_NOT_SATISFIABLE", "UNPROCESSABLE",
+  "FAILED_DEPENDENCY", "TOO_MANY_REQUESTS", "INTERNAL_ERROR", "NOT_IMPLEMENTED", "BAD_GATEWAY",
+  "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT", "INSUFFICIENT_STORAGE",
+] as const;
+
+const genericCodes: ReadonlySet<string> = new Set(GENERIC_API_ERROR_CODES);
+
+export function isGenericAPIErrorCode(code: string): boolean {
+  return genericCodes.has(code);
+}
+
 export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
   if (!(error instanceof APIError)) return error instanceof Error ? error.message : String(error ?? "");
+  if (isGenericAPIErrorCode(error.code)) {
+    // The category in the reader's language, then the server's own detail:
+    // the category alone would hide what actually went wrong.
+    const category = t(`apiError.${error.code}`, { defaultValue: error.code });
+    const detail = error.fallback.trim();
+    if (!detail) return category;
+    return t("apiErrorDetail", { category, detail, defaultValue: `${category}: ${detail}` });
+  }
   const params = { ...error.params };
   if (error.code === "PULL_SETTING_INVALID") {
     const field = String(params.field ?? "");
@@ -44,6 +69,7 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
   if (error.code === "ACCELERATOR_FEATURE_UNSUPPORTED") {
     return t("acceleratorFeature.unsupported", { ...acceleratorMessageParams(t, params), defaultValue: error.fallback || error.code });
   }
+  if (error.code === "UNIT_PLACEMENT_NONE") params.reasons = placementShortfall(t, params);
   if (error.code === "SERVER_STORAGE_FULL" && typeof params.path === "string" && typeof params.available_bytes === "number" && typeof params.total_bytes === "number") {
     return t("serverStorageFull.at", { path: params.path, available: formatBytes(params.available_bytes), total: formatBytes(params.total_bytes), defaultValue: error.fallback || error.code });
   }
@@ -51,6 +77,26 @@ export function apiErrorText(t: APIErrorTranslator, error: unknown): string {
     ...params,
     defaultValue: error.fallback || error.code,
   });
+}
+
+const placementChecks = ["unmet", "cordoned", "offline", "busy", "no_network", "ucx_netlink_hang"] as const;
+
+// The first few nodes left out for a kernel that hangs UCX, as the server names them.
+function ucxNetlinkNames(params: Record<string, unknown>): string {
+  const names = params.ucx_netlink_nodes;
+  return Array.isArray(names) ? names.filter((name): name is string => typeof name === "string").join(", ") : "";
+}
+
+/** The node counts of a placement refusal, joined with " · ": only the checks
+ * that left nodes out, then the largest group sharing a network and GPU
+ * architecture. busy names the GPUs each node lacks when the server sends
+ * per_rank. */
+export function placementShortfall(t: APIErrorTranslator, params: Record<string, unknown>): string {
+  const parts = placementChecks
+    .filter((check) => Number(params[check]) > 0)
+    .map((check) => t(`placementShortfall.${check === "busy" && params.per_rank != null ? "busyPerRank" : check}`, { n: params[check], per_rank: params.per_rank, names: ucxNetlinkNames(params) }));
+  if (params.largest != null) parts.push(t("placementShortfall.largest", { n: params.largest }));
+  return parts.join(" · ");
 }
 
 const pullSettingReasons = new Set(["name_required", "name_duplicate", "max_bytes", "nonnegative", "invalid_text", "requirements_invalid"]);

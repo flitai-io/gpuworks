@@ -85,11 +85,14 @@ const label = (name: string) => new RegExp(`^(loading)?${name}$`);
 const press = (name: string) => fireEvent.click(screen.getByRole("button", { name: label(name) }));
 const hasButton = (name: string) => screen.queryByRole("button", { name: label(name) }) !== null;
 
+// Rows as the server sends them (provision.CheckResult): id, one of the five
+// statuses, a code with params, the English fallback, the evidence.
 const okChecks = [
-  { name: "precheck", status: "ok", detail: "all 17 checks passed" },
-  { name: "install agent", status: "ok", detail: "agent process is running" },
-  { name: "agent_dial", status: "ok", detail: "agent session established" },
+  { id: "precheck", status: "pass", code: "CHECK_PRECHECK_PASSED", params: { total: 17 }, message: "all 17 checks passed" },
+  { id: "install_agent", status: "pass", code: "CHECK_AGENT_RUNNING", params: { dir: "/opt/gpuworks" }, message: "running with state directory /opt/gpuworks" },
+  { id: "agent_dial", status: "pass", code: "CHECK_AGENT_SESSION_ESTABLISHED", message: "agent session established" },
 ];
+const apiError = common.apiError as Record<string, string>;
 
 test("a finished install says so, and leaves only Done", async () => {
   const installs = stub("installAgent", () => ({ status: "installing", connect_mode: "agent_dial", checks: okChecks }));
@@ -122,10 +125,10 @@ test("closing a finished install with the window's close button also refreshes t
 test("a precheck warning is a note on a finished install, not a failure", async () => {
   stub("installAgent", () => ({
     status: "installing", connect_mode: "agent_dial",
-    checks: [{ name: "precheck", status: "warn", detail: "Install directory free space: 20.0 GiB free of 80.0 GiB" }, ...okChecks.slice(1)],
+    checks: [{ id: "precheck", status: "warn", code: "CHECK_PRECHECK_ATTENTION", params: { count: 1, total: 2, checks: "install_dir_space" }, message: "install_dir_space: 20.0 GiB free of 80.0 GiB" }, ...okChecks.slice(1)],
     precheck_details: [
-      { name: "OS/Arch", status: "ok", detail: "Linux x86_64" },
-      { name: "Install directory free space", status: "warn", detail: "20.0 GiB free of 80.0 GiB" },
+      { id: "os_arch", status: "pass", evidence: "Linux x86_64" },
+      { id: "install_dir_space", status: "warn", code: "CHECK_INSTALL_DIR_SPACE_LOW", params: { available: "20.0 GiB", total: "80.0 GiB", minimum: "50.0 GiB" }, message: "20.0 GiB free of 80.0 GiB" },
     ],
   }));
   const calls = open();
@@ -133,11 +136,14 @@ test("a precheck warning is a note on a finished install, not a failure", async 
   await waitFor(() => assert.ok(screen.getByText(o.installedWithNotes.title)));
   assert.ok(screen.getByText(o.installedWithNotes.description));
   assert.equal(screen.queryByText(o.failed.title), null);
-  // The summary row names the warning only; the passing items are one click away.
-  assert.ok(screen.getByText("Install directory free space: 20.0 GiB free of 80.0 GiB"));
+  // The summary row names the warning only, in words from its code; the
+  // passing items are one click away.
+  assert.ok(screen.getByText("1 of 2 precheck items need attention: install_dir_space."));
   assert.equal(screen.queryByText("Linux x86_64"), null);
   fireEvent.click(screen.getByText(providers.install.precheckDetails));
   await waitFor(() => assert.ok(screen.getByText("Linux x86_64")));
+  assert.ok(screen.getByText("20.0 GiB free of 80.0 GiB; engine images and model weights need about 50.0 GiB or more."));
+  assert.ok(screen.getByText(common.onboardingCheck.install_dir_space));
   press(providers.install.done);
   assert.equal(calls.done, 1);
 });
@@ -145,7 +151,7 @@ test("a precheck warning is a note on a finished install, not a failure", async 
 test("an agent that started but has not connected is reported as pending", async () => {
   stub("installAgent", () => ({
     status: "installing", connect_mode: "agent_dial",
-    checks: [okChecks[0], okChecks[1], { name: "agent_dial", status: "warn", detail: "agent started; waiting for its first session" }],
+    checks: [okChecks[0], okChecks[1], { id: "agent_dial", status: "warn", code: "CHECK_AGENT_SESSION_WAITING", message: "agent started; waiting for its first session" }],
   }));
   const calls = open();
   press(providers.install.install);
@@ -159,7 +165,7 @@ test("an agent that started but has not connected is reported as pending", async
 test("a server that cannot reach the agent yet points at the firewall, not the agent's way out", async () => {
   stub("installAgent", () => ({
     status: "installing", connect_mode: "server_dial",
-    checks: [okChecks[0], okChecks[1], { name: "server_dial", status: "warn", detail: "queued for reconnection: i/o timeout" }],
+    checks: [okChecks[0], okChecks[1], { id: "server_dial", status: "warn", code: "CHECK_SERVER_DIAL_NOT_CONNECTED", params: { address: "203.0.113.30:18800" }, message: "queued for reconnection to 203.0.113.30:18800", evidence: "i/o timeout" }],
   }));
   open();
   press(providers.install.install);
@@ -205,12 +211,15 @@ test("cancelling after a failure closes without refreshing", async () => {
 test("an install whose agent did not start is a failure even though the request succeeded", async () => {
   stub("installAgent", () => ({
     status: "installing", connect_mode: "agent_dial",
-    checks: [okChecks[0], { name: "install agent", status: "error", detail: "agent process exited: bad token" }, { name: "agent_dial", status: "warn", detail: "pending node UUID is empty" }],
+    checks: [okChecks[0], { id: "install_agent", status: "fail", code: "CHECK_AGENT_START_FAILED", message: "the installer failed", evidence: "agent process exited: bad token" }, { id: "agent_dial", status: "skip", code: "CHECK_AGENT_SESSION_UNOBSERVED", message: "the server cannot observe the agent's session here" }],
   }));
   const calls = open();
   press(providers.install.install);
   await waitFor(() => assert.ok(screen.getByText(o.failed.title)));
-  assert.ok(screen.getAllByText("agent process exited: bad token").length >= 1);
+  // The banner and the row say it from the code; the installer's output is
+  // kept as evidence behind the row.
+  assert.ok(screen.getAllByText(apiError.CHECK_AGENT_START_FAILED).length >= 2);
+  assert.ok(screen.getByText("agent process exited: bad token"));
   assert.ok(hasButton(providers.install.retry));
   assert.equal(calls.done, 0);
 });
@@ -234,8 +243,47 @@ test("installVerdict reads the deciding rows and ignores the host's precheck", (
   assert.equal(installVerdict({ ...base, checks: [] }, null)?.outcome, "installed");
   assert.equal(installVerdict({ ...base }, null)?.outcome, "installed");
   // A precheck error does not mean the install did not happen: the install goes on after it.
-  const precheckError = { name: "precheck", status: "error" as const, detail: "SSH: refused" };
+  const precheckError = { id: "precheck", status: "fail" as const, code: "CHECK_PRECHECK_ATTENTION" };
   assert.equal(installVerdict({ ...base, checks: [precheckError, okChecks[1], okChecks[2]] } as never, null)?.outcome, "installedWithNotes");
-  assert.equal(installVerdict({ ...base, checks: [okChecks[0], { name: "server_dial", status: "warn", detail: "queued" }] } as never, null)?.outcome, "waitingForServer");
-  assert.equal(installVerdict({ ...base, checks: [{ name: "agent_dial", status: "error", detail: "x" }] } as never, null)?.outcome, "failed");
+  // A skipped row is a note too, never a plain "installed"; na is not.
+  assert.equal(installVerdict({ ...base, checks: [{ id: "precheck", status: "skip", code: "CHECK_PRECHECK_EMPTY" }, okChecks[1], okChecks[2]] } as never, null)?.outcome, "installedWithNotes");
+  assert.equal(installVerdict({ ...base, checks: [okChecks[0], okChecks[1], okChecks[2], { id: "install_dir_ownership", status: "na", code: "CHECK_NOT_NEEDED_ON_MAC" }] } as never, null)?.outcome, "installed");
+  assert.equal(installVerdict({ ...base, checks: [okChecks[0], { id: "server_dial", status: "warn", code: "CHECK_SERVER_DIAL_NOT_CONNECTED" }] } as never, null)?.outcome, "waitingForServer");
+  // A connection the server could not observe is not known to be up.
+  assert.equal(installVerdict({ ...base, checks: [okChecks[0], okChecks[1], { id: "agent_dial", status: "skip", code: "CHECK_AGENT_SESSION_UNOBSERVED" }] } as never, null)?.outcome, "waitingForAgent");
+  assert.equal(installVerdict({ ...base, checks: [{ id: "agent_dial", status: "fail", code: "CHECK_SERVER_DIAL_NOT_CONNECTED" }] } as never, null)?.outcome, "failed");
+});
+
+test("each check status reads differently, and a skip or na never reads as passed", async () => {
+  stub("installAgent", () => ({
+    status: "installing", connect_mode: "agent_dial",
+    checks: okChecks,
+    install_details: [
+      { id: "arch", status: "pass", code: "CHECK_ARCH_DETECTED", params: { uname: "x86_64", arch: "amd64" }, message: "x86_64 -> amd64" },
+      { id: "provider_dns", status: "warn", code: "CHECK_PROVIDER_DNS_NOT_SET", message: "could not be set", evidence: "resolv.conf: read-only file system" },
+      { id: "udocker_bundle", status: "fail", code: "CHECK_UDOCKER_BUNDLE_FAILED", params: { path: "/opt/gpuworks/offline" }, message: "x" },
+      { id: "existing_agent", status: "skip", code: "CHECK_EXISTING_AGENT_UNREADABLE", message: "x" },
+      { id: "install_dir_ownership", status: "na", code: "CHECK_NOT_NEEDED_ON_MAC", message: "x" },
+      { id: "future_check", status: "later", code: "CHECK_FROM_A_NEWER_SERVER", message: "a newer server's fallback" },
+    ],
+  }));
+  open();
+  press(providers.install.install);
+  await waitFor(() => assert.ok(screen.getByText(o.installed.title)));
+  fireEvent.click(screen.getByText(providers.install.details));
+  await waitFor(() => assert.ok(screen.getByText("The host reports x86_64, which runs the amd64 agent.")));
+  for (const label of Object.values(common.checkStatus as Record<string, string>)) {
+    assert.ok(screen.getAllByText(label).length >= 1, label);
+  }
+  // pass appears for the three summary rows and the arch row only.
+  assert.equal(screen.getAllByText(common.checkStatus.pass).length, 4);
+  // A status this client does not know reads as not checked; an unknown code
+  // and id read as the server's fallback and the id itself.
+  assert.equal(screen.getAllByText(common.checkStatus.skip).length, 2);
+  assert.ok(screen.getByText("a newer server's fallback"));
+  assert.ok(screen.getByText("future_check"));
+  assert.ok(screen.getByText(apiError.CHECK_NOT_NEEDED_ON_MAC));
+  // The provider's own output stays behind a disclosure.
+  assert.ok(screen.getAllByText(common.onboardingCheckEvidence).length >= 1);
+  assert.ok(screen.getByText("resolv.conf: read-only file system"));
 });

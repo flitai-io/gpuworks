@@ -702,6 +702,9 @@ func TestHeadlessWorkerReportsContainerExit(t *testing.T) {
 	if st.State != proto.InstFailed || !strings.Contains(st.Message, "17") {
 		t.Fatalf("headless exit status = %+v", st)
 	}
+	if f := st.RuntimeFailure; f == nil || f.Code != proto.ErrorContainerExited || f.ExitCode == nil || *f.ExitCode != 17 {
+		t.Fatalf("headless exit reason = %+v", f)
+	}
 }
 
 func TestMetricSpecsExcludeHeadlessWorkers(t *testing.T) {
@@ -789,7 +792,7 @@ func TestReconcileSleepTransitionsAndRetainsLevelOnFailure(t *testing.T) {
 
 	spec.DesiredSleep = 1
 	e.reconcileSleep(context.Background(), spec)
-	if got := e.sleepLevel[spec.UUID]; got != 1 {
+	if got := e.processOfLocked(spec.UUID).sleepLevel; got != 1 {
 		t.Fatalf("level after L1 = %d, want 1", got)
 	}
 	if st := <-reported; st.SleepLevel != 1 || st.State != proto.InstRunning || st.Phase != "" {
@@ -798,7 +801,7 @@ func TestReconcileSleepTransitionsAndRetainsLevelOnFailure(t *testing.T) {
 
 	spec.DesiredSleep = 0
 	e.reconcileSleep(context.Background(), spec)
-	if got := e.sleepLevel[spec.UUID]; got != 0 {
+	if got := e.processOfLocked(spec.UUID).sleepLevel; got != 0 {
 		t.Fatalf("level after wake = %d, want 0", got)
 	}
 	if st := <-reported; st.SleepLevel != 0 {
@@ -806,12 +809,12 @@ func TestReconcileSleepTransitionsAndRetainsLevelOnFailure(t *testing.T) {
 	}
 
 	e.mu.Lock()
-	e.sleepLevel[spec.UUID] = 1
+	e.setSleepLevelLocked(spec.UUID, 1)
 	e.mu.Unlock()
 	spec.DesiredSleep = 2
 	spec.SleepMode = "abort"
 	e.reconcileSleep(context.Background(), spec)
-	if got := e.sleepLevel[spec.UUID]; got != 2 {
+	if got := e.processOfLocked(spec.UUID).sleepLevel; got != 2 {
 		t.Fatalf("level after L1→L2 = %d, want 2", got)
 	}
 	if st := <-reported; st.SleepLevel != 2 {
@@ -842,7 +845,7 @@ func TestReconcileSleepTransitionsAndRetainsLevelOnFailure(t *testing.T) {
 	h.status["/sleep"] = http.StatusInternalServerError
 	spec.DesiredSleep = 1
 	e.reconcileSleep(context.Background(), spec)
-	if got := e.sleepLevel[spec.UUID]; got != 0 {
+	if got := e.processOfLocked(spec.UUID).sleepLevel; got != 0 {
 		t.Fatalf("failed reconcile changed level to %d, want 0", got)
 	}
 	st := <-reported
@@ -855,7 +858,7 @@ func TestReconcileSleepTransitionsAndRetainsLevelOnFailure(t *testing.T) {
 
 	h.status["/sleep"] = 0
 	e.reconcileSleep(context.Background(), spec)
-	if got := e.sleepLevel[spec.UUID]; got != 1 || len(h.calls) != 3 {
+	if got := e.processOfLocked(spec.UUID).sleepLevel; got != 1 || len(h.calls) != 3 {
 		t.Fatalf("explicit retry: level=%d calls=%+v", got, h.calls)
 	}
 	if st := <-reported; st.SleepLevel != 1 || st.Phase != "" {
@@ -868,14 +871,14 @@ func TestReconcileSleepTreatsPartialL2WakeAsUncertain(t *testing.T) {
 	h.status["/wake_up"] = http.StatusInternalServerError
 	reported := make(chan proto.InstanceStatus, 1)
 	e := newHermeticEngine(&headlessTestDriver{}, func(st proto.InstanceStatus) { reported <- st }, slog.Default(), t.TempDir())
-	e.sleepLevel["partial-l2"] = 2
+	e.setSleepLevelLocked("partial-l2", 2)
 	e.reconcileSleep(context.Background(), proto.InstanceDesiredState{UUID: "partial-l2", Sleepable: true, DesiredSleep: 0, APIPort: h.port(t)})
 	st := <-reported
 	if st.State != proto.InstFailed || st.Phase != proto.PhaseSleep || !strings.Contains(st.Message, "uncertain") {
 		t.Fatalf("partial L2 report = %+v", st)
 	}
-	if e.sleepLevel["partial-l2"] != 2 {
-		t.Fatalf("partial L2 level changed to %d", e.sleepLevel["partial-l2"])
+	if e.processOfLocked("partial-l2").sleepLevel != 2 {
+		t.Fatalf("partial L2 level changed to %d", e.processOfLocked("partial-l2").sleepLevel)
 	}
 }
 
@@ -885,7 +888,7 @@ func TestReconcileSleepRestoresConfirmedL1AfterFailedWake(t *testing.T) {
 	h.probeBodies = []string{`{"is_sleeping":false}`, `{"is_sleeping":true}`}
 	reported := make(chan proto.InstanceStatus, 1)
 	e := newHermeticEngine(&headlessTestDriver{}, func(st proto.InstanceStatus) { reported <- st }, slog.Default(), t.TempDir())
-	e.sleepLevel["restore-l1"] = 1
+	e.setSleepLevelLocked("restore-l1", 1)
 	e.reconcileSleep(context.Background(), proto.InstanceDesiredState{UUID: "restore-l1", Sleepable: true, DesiredSleep: 0, APIPort: h.port(t)})
 	st := <-reported
 	if st.State != proto.InstRunning || st.SleepLevel != 1 || st.Phase != proto.PhaseSleep {
@@ -915,7 +918,7 @@ func TestReconcileSleepProbeErrorReportsUncertain(t *testing.T) {
 	h.body["/is_sleeping"] = `not-json`
 	reported := make(chan proto.InstanceStatus, 1)
 	e := newHermeticEngine(&headlessTestDriver{}, func(st proto.InstanceStatus) { reported <- st }, slog.Default(), t.TempDir())
-	e.sleepLevel["probe-error"] = 1
+	e.setSleepLevelLocked("probe-error", 1)
 	e.reconcileSleep(context.Background(), proto.InstanceDesiredState{UUID: "probe-error", Sleepable: true, DesiredSleep: 0, APIPort: h.port(t)})
 	st := <-reported
 	if st.State != proto.InstFailed || !strings.Contains(st.Message, "uncertain") {
@@ -953,10 +956,13 @@ func TestReconcileSleepRefusedByTheEngineYetSleepingIsUncertain(t *testing.T) {
 	e.servingEpoch["half-offloaded"] = 7
 	e.reconcileSleep(context.Background(), proto.InstanceDesiredState{UUID: "half-offloaded", Sleepable: true, DesiredSleep: 1, APIPort: h.port(t)})
 	st := <-reported
+	if f := st.RuntimeFailure; f == nil || f.Code != proto.ErrorSleepStateUncertain || f.Phase != proto.PhaseSleep || !strings.Contains(f.Detail, "http 500") {
+		t.Fatalf("runtime failure = %+v", f)
+	}
 	if st.State != proto.InstFailed || st.Phase != proto.PhaseSleep || !strings.Contains(st.Message, "uncertain") || !strings.Contains(st.Message, "http 500") {
 		t.Fatalf("refused sleep report = %+v, want a failed generation in the sleep phase", st)
 	}
-	if got := e.sleepLevel["half-offloaded"]; got != 0 {
+	if got := e.processOfLocked("half-offloaded").sleepLevel; got != 0 {
 		t.Fatalf("level = %d, want the level the agent last applied (0)", got)
 	}
 	if _, watched := e.servingEpoch["half-offloaded"]; watched {
@@ -1000,7 +1006,7 @@ func TestReconcileSleepReportsTheL1HostBuffer(t *testing.T) {
 	if st := <-reported; st.SleepLevel != 0 || !st.L1HostBufferHeld {
 		t.Fatalf("wake from L1 report = %+v, want the host buffer still held", st)
 	}
-	e.forgetSleepState(spec.UUID)
+	e.forgetProcess(spec.UUID)
 	if e.holdsL1HostBuffer(spec.UUID) {
 		t.Fatal("a forgotten instance still holds a host buffer")
 	}
@@ -1030,7 +1036,7 @@ func TestAdoptSleepLevelTakesTheLevelFromTheDesiredState(t *testing.T) {
 			if err := e.adoptSleepLevel(context.Background(), spec); err != nil {
 				t.Fatal(err)
 			}
-			if got := e.sleepLevel[spec.UUID]; got != tc.want {
+			if got := e.processOfLocked(spec.UUID).sleepLevel; got != tc.want {
 				t.Fatalf("adopted level = %d, want %d", got, tc.want)
 			}
 			// The next reconcile adopts the same container again with a
@@ -1040,7 +1046,7 @@ func TestAdoptSleepLevelTakesTheLevelFromTheDesiredState(t *testing.T) {
 			if err := e.adoptSleepLevel(context.Background(), spec); err != nil {
 				t.Fatal(err)
 			}
-			if got := e.sleepLevel[spec.UUID]; got != tc.want || len(h.calls) != calls {
+			if got := e.processOfLocked(spec.UUID).sleepLevel; got != tc.want || len(h.calls) != calls {
 				t.Fatalf("re-adoption changed level to %d (probe calls %d→%d)", got, calls, len(h.calls))
 			}
 		})
@@ -1139,7 +1145,7 @@ func TestAdoptRunningContainerSkipsPrewarm(t *testing.T) {
 			t.Fatalf("adopted container repeated prewarm: calls=%+v", h.calls)
 		}
 	}
-	if !e.prewarmed[spec.UUID] {
+	if !e.processOfLocked(spec.UUID).prewarmed {
 		t.Fatal("adopted container was not marked prewarmed")
 	}
 }
@@ -1171,6 +1177,7 @@ type imageToleranceDriver struct {
 	present   map[string]bool
 	tags      [][2]string
 	runImages []string
+	runSpecs  []runtime.WorkloadSpec
 	// hook runs at the start of every pull, to model an image that appears
 	// while the pull is failing.
 	hook func(ref string)
@@ -1237,6 +1244,7 @@ func (d *imageToleranceDriver) TagImage(_ context.Context, source, target string
 func (d *imageToleranceDriver) Run(_ context.Context, ws runtime.WorkloadSpec) (string, error) {
 	d.runCalls++
 	d.runImages = append(d.runImages, ws.Image)
+	d.runSpecs = append(d.runSpecs, ws)
 	d.status = runtime.Status{Exists: true, Running: true}
 	return "container", nil
 }

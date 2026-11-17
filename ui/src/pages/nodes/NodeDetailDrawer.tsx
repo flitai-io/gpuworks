@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Input, Modal, Space, message } from "antd";
 import { useTranslation } from "react-i18next";
 import {
@@ -50,6 +50,7 @@ export default function NodeDetailDrawer({
   const [full, setFull] = useState<Node | null>(null);
   const [doctor, setDoctor] = useState<NodeDoctorReportData>();
   const [doctorLoading, setDoctorLoading] = useState(false);
+  const doctorGeneration = useRef(0);
   const [renameLoading, setRenameLoading] = useState(false);
   const [runtimeLoading, setRuntimeLoading] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -58,6 +59,8 @@ export default function NodeDetailDrawer({
   useAssistantSubjects(node ? nodeSubjects(full ?? node, tAI) : null);
   useEffect(() => {
     setFull(null);
+    doctorGeneration.current++;
+    setDoctorLoading(false);
     setDoctor(undefined);
     setTab(initialTab ?? "basic");
     if (!node) return;
@@ -78,14 +81,18 @@ export default function NodeDetailDrawer({
 
   const runDoctor = async () => {
     if (!node) return;
+    const generation = ++doctorGeneration.current;
     setDoctorLoading(true);
+    setDoctor(undefined);
     try {
-      setDoctor(await api.nodeDoctor(node.uuid));
+      const report = await api.nodeDoctor(node.uuid);
+      if (generation !== doctorGeneration.current) return;
+      setDoctor(report);
       setTab("doctor");
     } catch (e) {
-      message.error(t("message.doctorFailed", { detail: (e as Error).message }));
+      if (generation === doctorGeneration.current) message.error(t("message.doctorFailed", { detail: (e as Error).message }));
     } finally {
-      setDoctorLoading(false);
+      if (generation === doctorGeneration.current) setDoctorLoading(false);
     }
   };
 
@@ -128,8 +135,8 @@ export default function NodeDetailDrawer({
         node && (
           <Space wrap>
             <NodeReconnectButton node={shown ?? node} onUpdated={setFull} />
-            <Button size="small" loading={doctorLoading} onClick={runDoctor}>
-              {t("action.doctor")}
+            <Button size="small" aria-label={doctor ? t("doctorChecks.rerun") : t("action.doctor")} loading={doctorLoading} onClick={runDoctor}>
+              {doctor ? t("doctorChecks.rerun") : t("action.doctor")}
             </Button>
             <AIAssistant task="node.health" subject={{ kind: "node", uuid: node.uuid, label: nodeDisplayName(node) }} buttonSize="small" />
             <AgentUpgradeButton online={node.state === "online"} phase={upgradePhase} onUpgrade={() => onUpgrade(node)} />

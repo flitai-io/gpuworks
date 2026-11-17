@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // The seed is the context the server gathers before the model sees anything:
@@ -53,6 +55,9 @@ type ErrorContext struct {
 	TailLines  int
 	ErrorLines int
 	Findings   []Finding
+	// Failure is the structured reason the instance failed; nil for an
+	// agent that predates it, whose Message is all there is.
+	Failure *proto.RuntimeFailure
 	// Question is the user's own question, if they asked one.
 	Question string
 }
@@ -94,6 +99,11 @@ func (c ErrorContext) Prompt() string {
 	}
 	if c.Message != "" {
 		fmt.Fprintf(&b, "failure message: %s\n", c.Message)
+	}
+	if c.Failure != nil {
+		// The code is what the agent observed, not a guess; its causes are
+		// below as hypotheses with the lines that showed them.
+		fmt.Fprintf(&b, "failure code: %s\nfailure facts: %s\n", c.Failure.Code, compactJSON(c.Failure))
 	}
 	if c.DeploymentID != 0 {
 		fmt.Fprintf(&b, "deployment: %s (deployment_id %d)\n", c.DeploymentName, c.DeploymentID)

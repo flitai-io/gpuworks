@@ -3,7 +3,6 @@ package expose
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"time"
 
@@ -283,7 +282,7 @@ func (s *Supervisor) waitRegistration(ctx context.Context, output *ConnectorOutp
 		child := s.child
 		s.mu.Unlock()
 		if child == nil || child.Exited() {
-			return stream, fmt.Errorf("the connector exited before it registered%s", troubleSuffix(stream))
+			return stream, newConnectorStartError(stream, "the connector exited before it registered")
 		}
 		select {
 		case <-ctx.Done():
@@ -294,7 +293,7 @@ func (s *Supervisor) waitRegistration(ctx context.Context, output *ConnectorOutp
 		// worker slot for ever, so the start gets a budget of its own: the
 		// failure then lands on the backoff ladder like any other.
 		if time.Now().After(deadline) {
-			return stream, fmt.Errorf("the connector did not register within %s%s", budget, troubleSuffix(stream))
+			return stream, newConnectorStartError(stream, "the connector did not register within %s", budget)
 		}
 	}
 }

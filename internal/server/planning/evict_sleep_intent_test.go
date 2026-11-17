@@ -41,7 +41,7 @@ func TestEvictionSkipsAnInstanceOrderedAsleepBeforeTheEngineReports(t *testing.T
 	req := scheduler.Request{WeightBytes: 8 << 30, HeadCount: 8, GPUMemUtil: deploy.DefaultGPUMemUtil("vllm")}
 	// Awake first: the instance is a legitimate eviction candidate, which is
 	// what makes its disappearance below meaningful.
-	if got := suggestEviction(st, node, req, false, ledgerView{}); len(got) != 1 || got[0].InstanceUUID != "sleep-intent" {
+	if got := suggestEviction(st, node, req, ledgerView{}); len(got) != 1 || got[0].InstanceUUID != "sleep-intent" {
 		t.Fatalf("awake instance not suggested: %+v", got)
 	}
 
@@ -56,7 +56,7 @@ func TestEvictionSkipsAnInstanceOrderedAsleepBeforeTheEngineReports(t *testing.T
 	if inst.SleepIntent() != 1 || inst.SleepLevel != 0 {
 		t.Fatalf("fixture intent=%d level=%d, want an order in flight (1, 0)", inst.SleepIntent(), inst.SleepLevel)
 	}
-	if got := suggestEviction(st, node, req, false, ledgerView{}); got != nil {
+	if got := suggestEviction(st, node, req, ledgerView{}); got != nil {
 		t.Fatalf("suggested evicting an instance already ordered to sleep: %+v", got)
 	}
 }

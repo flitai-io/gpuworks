@@ -9,6 +9,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/server/installscript"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // macPrecheckCommands are the checks for an Apple silicon Mac: the vendor GPU
@@ -16,10 +17,10 @@ import (
 func macPrecheckCommands() []precheckCommand {
 	minimum := strconv.Itoa(accelerator.MinimumMacOSMajor)
 	return []precheckCommand{
-		{name: "OS/Arch", required: true, command: `arch=$(uname -m); v=$(sw_vers -productVersion 2>/dev/null); printf 'macOS %s %s\n' "$v" "$arch"
+		{id: CheckIDOSArch, required: true, failCode: messages.CheckCommandFailed, failMessage: "this Mac does not meet the macOS node requirements", command: `arch=$(uname -m); v=$(sw_vers -productVersion 2>/dev/null); printf 'macOS %s %s\n' "$v" "$arch"
 [ "$arch" = arm64 ] || { echo "macOS nodes need Apple silicon; this is an Intel Mac"; exit 1; }
 [ "${v%%.*}" -ge ` + minimum + ` ] 2>/dev/null || { echo "macOS nodes need macOS ` + minimum + ` or later"; exit 1; }`},
-		{name: "GPU", required: true, command: `chip=$(sysctl -n machdep.cpu.brand_string 2>/dev/null); echo "$chip"
+		{id: CheckIDGPU, required: true, failCode: messages.CheckGPUToolMissing, failMessage: "no Apple silicon GPU found", command: `chip=$(sysctl -n machdep.cpu.brand_string 2>/dev/null); echo "$chip"
 case "$chip" in Apple*) ;; *) echo "no Apple silicon GPU found"; exit 1 ;; esac`},
 	}
 }
@@ -29,9 +30,9 @@ case "$chip" in Apple*) ;; *) echo "no Apple silicon GPU found"; exit 1 ;; esac`
 func macPrivilegeCheck(ctx context.Context, client *ssh.Client, auth SSHAuth) CheckResult {
 	sudo := macPrivilege(ctx, client, auth)
 	if sudo.admin {
-		return CheckResult{Name: "Sudo", Status: "ok", Detail: sudo.detail}
+		return PassCheck(CheckIDSudo, sudo.code, sudo.detail, nil)
 	}
-	return CheckResult{Name: "Sudo", Status: "warn", Detail: sudo.detail + "; sign in with the account password, or allow passwordless sudo, to install a launch daemon instead"}
+	return WarnCheck(CheckIDSudo, sudo.code, sudo.detail+"; sign in with the account password, or allow passwordless sudo, to install a launch daemon instead", nil)
 }
 
 // macInstallDir is where the installer puts the agent when the request names

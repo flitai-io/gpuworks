@@ -144,6 +144,14 @@ func TestEvaluateCollectsFieldErrorsInsteadOfRejecting(t *testing.T) {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"host_path":"/a","container_path":"/a"},{"host_path":"/b","container_path":"/a/b"}]}}`, model.ID),
 			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: ErrorMountTargetNested, Params: map[string]any{"parent": "/a", "child": "/a/b"}},
 		},
+		"mount names a model that is not registered": {
+			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"model_id":987654,"container_path":"/draft"}]}}`, model.ID),
+			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: "MOUNT_MODEL_NOT_FOUND", Params: map[string]any{"model_id": 987654}},
+		},
+		"mount names a model and a host path": {
+			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"model_id":%d,"host_path":"/srv/draft","container_path":"/draft"}]}}`, model.ID, model.ID),
+			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: ErrorFieldInvalid},
+		},
 		"mount rows do not decode": {
 			body: fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":"not-a-list"}}`, model.ID),
 			want: dto.FieldError{Field: deployment.FieldContainerMounts, Code: ErrorFieldInvalid},
@@ -222,16 +230,26 @@ func TestEvaluateAcceptsValidExtraMounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	draft, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/mounts-valid-draft", Revision: "main", Name: "mounts-valid-draft", WeightBytes: 1 << 28})
+	if err != nil {
+		t.Fatal(err)
+	}
 	h := evaluateFieldErrorFixture(t, st)
-	status, raw := evaluateForFieldErrors(t, h, fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":[{"host_path":"/data","container_path":"/data"}]}}`, model.ID))
-	if status != http.StatusOK {
-		t.Fatalf("status = %d", status)
-	}
-	if _, present := raw["errors"]; present {
-		t.Fatalf("valid mount produced errors: %s", raw["errors"])
-	}
-	if string(raw["ok"]) != "true" {
-		t.Fatalf("ok = %s body = %s", raw["ok"], raw)
+	for _, mounts := range []string{
+		`[{"host_path":"/data","container_path":"/data"}]`,
+		// A registered model mounted as a draft, read-only by default.
+		fmt.Sprintf(`[{"model_id":%d,"container_path":"/draft","purpose":"models"}]`, draft.ID),
+	} {
+		status, raw := evaluateForFieldErrors(t, h, fmt.Sprintf(`{"model_id":%d,"node_uuid":"field-errors-node","engine":"vllm","container_overrides":{"extra_mounts":%s}}`, model.ID, mounts))
+		if status != http.StatusOK {
+			t.Fatalf("%s: status = %d", mounts, status)
+		}
+		if _, present := raw["errors"]; present {
+			t.Fatalf("%s: valid mount produced errors: %s", mounts, raw["errors"])
+		}
+		if string(raw["ok"]) != "true" {
+			t.Fatalf("%s: ok = %s body = %s", mounts, raw["ok"], raw)
+		}
 	}
 }
 

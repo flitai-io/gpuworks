@@ -32,7 +32,7 @@ func TestPlaygroundCatalogIncludesDeploymentsWithoutAssistantConfigs(t *testing.
 		t.Fatal(err)
 	}
 	node, _ := st.RegisterNode("playground-node", store.HashToken("token"), "playground-node")
-	dep, err := st.CreateDeployment(&store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: "qwen-asr", State: "active", Engine: "vllm"})
+	dep, err := st.CreateDeployment(&store.Deployment{ModelID: model.ID, NodeID: node.ID, ServedName: "qwen-asr", State: "active", Engine: "vllm", PriorityScheduling: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,6 +103,11 @@ func TestPlaygroundCatalogIncludesDeploymentsWithoutAssistantConfigs(t *testing.
 	}
 	if strings.Contains(rec.Body.String(), "external:") || strings.Contains(rec.Body.String(), "GPT-5") {
 		t.Fatalf("assistant configuration leaked into Playground: %s", rec.Body)
+	}
+	// A deployment takes a request priority class, and says whether its
+	// engine orders requests by it.
+	if !strings.Contains(rec.Body.String(), `"public_data_plane":true,"request_priority":true,"priority_scheduling":true`) {
+		t.Fatalf("priority fields: %s", rec.Body)
 	}
 }
 

@@ -79,9 +79,10 @@ func EffectiveContract(explicit *Contract, input DefaultsInput) (Contract, error
 
 // CheckOperation is the operation the server's health check of a deployment
 // with this contract asks (internal/server/healthcheck): chat when it serves
-// chat, else text completion, else embeddings; false when it serves none.
+// chat, else text completion, else embeddings, else a System One decision;
+// false when it serves none.
 func (c Contract) CheckOperation() (Operation, bool) {
-	for _, want := range []string{OperationChat, OperationCompletions, OperationEmbeddings} {
+	for _, want := range []string{OperationChat, OperationCompletions, OperationEmbeddings, OperationDecide} {
 		for _, op := range c.Operations {
 			if op.Type == want {
 				return op, true

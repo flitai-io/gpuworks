@@ -37,18 +37,9 @@ const (
 // and a malformed one was measured to kill the vLLM engine core with a single
 // request. The value becomes null, which every engine reads as absent. Bodies
 // that do not mention the field are left untouched without a copy.
-func stripClientKVTransfer(r *http.Request, maxBody int64) (func(), error) {
-	if !isJSONRequest(r) || r.GetBody == nil {
+func stripClientKVTransfer(r *http.Request, maxBody int64, named bool) (func(), error) {
+	if !named {
 		return func() {}, nil
-	}
-	body, err := r.GetBody()
-	if err != nil {
-		return func() {}, err
-	}
-	found, err := readerContains(body, []byte(`"`+kvTransferField+`"`))
-	_ = body.Close()
-	if err != nil || !found {
-		return func() {}, err
 	}
 	return setRequestJSONField(r, kvTransferField, []byte("null"), false, maxBody)
 }

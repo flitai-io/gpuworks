@@ -287,7 +287,7 @@ func TestInstallUdockerBundleWarnsWhenSourceMissing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if check.Status != "warn" || !strings.Contains(check.Detail, "udocker_bundle_source") {
+	if check.Status != "warn" || !strings.Contains(check.text(), "udocker_bundle_source") {
 		t.Fatalf("check = %+v", check)
 	}
 }

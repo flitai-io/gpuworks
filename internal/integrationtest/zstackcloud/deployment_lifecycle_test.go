@@ -71,7 +71,7 @@ func TestZStackCloudDeploymentReservesGPUUntilAgentConfirmsRemoval(t *testing.T)
 			}
 			fmt.Fprintf(w, `{"inventories":[{"uuid":"gpu-a","hostUuid":"host-a","pciDeviceAddress":"0000:01:00.0","state":%q,"status":"Active","allocateStatus":"Unallocated","mode":"PCI"},{"uuid":"gpu-b","hostUuid":"host-b","pciDeviceAddress":"0000:02:00.0","state":"Enabled","allocateStatus":"Allocated"}]}`, state)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/pci-device/pci-devices/gpu-a":
-			fmt.Fprintf(w, `{"inventory":{"state":%q,"description":%q}}`, state, description.Load().(string))
+			fmt.Fprintf(w, `{"inventories":[{"uuid":"gpu-a","state":%q,"description":%q}]}`, state, description.Load().(string))
 		case r.Method == http.MethodPut && r.URL.Path == "/v1/pci-device/pci-devices/gpu-a/actions":
 			var action struct {
 				Update struct {

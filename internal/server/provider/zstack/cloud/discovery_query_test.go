@@ -54,7 +54,7 @@ func TestQueryAllPreservesFiltersAcrossPages(t *testing.T) {
 				t.Fatal(err)
 			}
 			path := "/hosts?" + url.Values{"q": filters}.Encode()
-			hosts, err := queryAll[hostInventory](t.Context(), client, path)
+			hosts, err := apiclient.QueryAll[hostInventory](t.Context(), client, path)
 			if requests.Load() != 2 {
 				t.Fatalf("page requests = %d, want 2", requests.Load())
 			}

@@ -118,6 +118,7 @@ function renderPage(entry = "/monitor/d/102") {
         <Link to="/monitor/d/103">Next deployment</Link>
         <Routes>
           <Route path="/monitor/d/:id" element={<ServiceMonitorPage />} />
+          <Route path="/monitor" element={<h1>Monitor list destination</h1>} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>,
@@ -475,4 +476,16 @@ test("changing range preserves the history latency filter", async () => {
   await user.type(screen.getByRole("spinbutton", { name: "End-to-end ≥" }), "12");
   await user.click(screen.getByText("24h"));
   await waitFor(() => assert.equal((screen.getByRole("spinbutton", { name: "End-to-end ≥" }) as HTMLInputElement).value, "12"));
+});
+
+test("service breadcrumb includes the current service and returns to its parent list", async () => {
+  api.monitorDeployment = async () => deployment;
+  renderPage();
+  await screen.findByRole("heading", { name: "Qwen2.5-7B-Instruct" });
+  const breadcrumb = screen.getByRole("navigation", { name: "breadcrumb" });
+  assert.equal(breadcrumb.querySelector('[aria-current="page"]')?.textContent, "Qwen2.5-7B-Instruct");
+  const parent = breadcrumb.querySelector<HTMLAnchorElement>('a[href="/monitor"]');
+  assert.ok(parent);
+  await userEvent.setup().click(parent);
+  assert.ok(await screen.findByRole("heading", { name: "Monitor list destination" }));
 });

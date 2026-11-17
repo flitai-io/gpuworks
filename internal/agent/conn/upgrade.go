@@ -72,7 +72,7 @@ func (c *Conn) handleUpgradeRPC(id uint64) {
 	// and exec begins, otherwise the server-side RPC times out while waiting
 	// for a process that is intentionally replacing itself.
 	if !upgradeMu.TryLock() {
-		_ = c.send(proto.TRPCResp, id, rpcRespBody{Error: "agent upgrade already in progress"})
+		_ = c.send(proto.TRPCResp, id, rpcErrorBody(proto.ErrAgentUpgradeInProgress))
 		return
 	}
 	_ = c.send(proto.TRPCResp, id, rpcRespBody{Result: map[string]string{"state": "upgrading"}})
@@ -155,7 +155,7 @@ func (c *Conn) handleUpgradePush(hdr proto.StreamHeader, stream net.Conn) {
 		return
 	}
 	if !upgradeMu.TryLock() {
-		reply(proto.AgentUpgradeStatus{State: "failed", Error: "agent upgrade already in progress"})
+		reply(proto.AgentUpgradeStatus{State: "failed", Error: proto.ErrAgentUpgradeInProgress.Message, Code: proto.ErrorAgentUpgradeInProgress})
 		return
 	}
 	defer upgradeMu.Unlock()
@@ -383,7 +383,7 @@ func (c *Conn) confirmUpgrade() {
 		return
 	}
 	if note := g.confirm(); note != "" {
-		_ = c.send(proto.TAgentUpgradeStatus, 0, proto.AgentUpgradeStatus{State: "failed", Error: "rolled back: " + note})
+		_ = c.send(proto.TAgentUpgradeStatus, 0, proto.AgentUpgradeStatus{State: "failed", Error: "rolled back: " + note, Code: proto.ErrorAgentUpgradeRolledBack})
 	}
 }
 

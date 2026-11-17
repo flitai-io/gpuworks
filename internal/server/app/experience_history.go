@@ -125,7 +125,7 @@ func (a *App) MetricSeries(metric string, sinceMS int64) ([]tsdb.Series, error) 
 	if a.obs == nil {
 		return nil, errors.New("metrics are not available")
 	}
-	return a.obs.tsdb.QueryRange(metric, nil, sinceMS, time.Now().UnixMilli(), 1000)
+	return a.obs.TSDB().QueryRange(metric, nil, sinceMS, time.Now().UnixMilli(), 1000)
 }
 
 // SeedMetrics writes past raw samples, bypassing the live statistics that
@@ -134,5 +134,5 @@ func (a *App) SeedMetrics(samples []tsdb.Sample) error {
 	if a.obs == nil {
 		return errors.New("metrics are not available")
 	}
-	return a.obs.tsdb.WriteBatch(samples)
+	return a.obs.TSDB().WriteBatch(samples)
 }

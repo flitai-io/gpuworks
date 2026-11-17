@@ -25,3 +25,5 @@ All SSH logins construct their authentication order in one place, `provision.Dia
 - Read `~/.ssh` for the user running the server: the default deployment runs as the `gpuworks` system user, whose `HOME` is the installation directory and has no `.ssh`; when the unit does not specify `User=`, `HOME` is empty. The key read is often not the one the administrator expects, and no UI shows which key it is.
 - Generate an independent key for each node: authorization and rotation must be performed node by node, while the resulting isolation does not hold if the server is compromised (all private keys are in the same database).
 - Continue storing passwords: passwords expire or change, and a database leak exposes reusable passwords.
+
+<!-- translation-source-sha256: 33cb5e62d408f7f76ec5d34b95515790223767fac6ed5fa03ae937334fdf4af0 -->

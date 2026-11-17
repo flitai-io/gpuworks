@@ -50,7 +50,7 @@ export default function PdCard({ pd }: { pd: MonitorDeploymentPd }) {
     <Card
       size="small"
       style={{ marginBottom: 16 }}
-      title={<InfoTitle title={t("deployment.pd.title")} help={t("deployment.help.pd")} />}
+      title={<InfoTitle title={t("deployment.pd.title")} help={t("deployment.pdHelp")} />}
       data-testid="pd-card"
     >
       {/* One row that wraps: the KV transfer stats sit in it too (display:

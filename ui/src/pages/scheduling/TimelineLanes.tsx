@@ -55,7 +55,7 @@ export function CardTrack({ gpu, span, ticks }: { gpu: TimelineGPU; span: Span; 
         const block = blockOf(slice, span);
         const text = [t("timeline.summary.legend"), ...slice.deployments.map(d => d.deployment + " · " + summaryText(t, slice, d))].join("\n");
         return <g key={slice.from}>
-          <rect {...block} y={2} height={LANE_HEIGHT - 4} fill={colors.chartSlate}/>
+          <rect {...block} y={2} height={LANE_HEIGHT - 4} fill={colors.muted}/>
           <rect {...block} y={2} height={LANE_HEIGHT - 4} className="timeline-block timeline-summary-block" fill={`url(#${id}-summary)`} {...hoverable(block, text)}/>
         </g>;
       })}

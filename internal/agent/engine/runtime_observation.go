@@ -134,11 +134,10 @@ func observationReason(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return proto.ObservationReasonTimeout
 	}
-	message := strings.ToLower(err.Error())
 	switch {
-	case strings.Contains(message, "permission denied") || strings.Contains(message, "operation not permitted"):
+	case runtime.IsPermissionDenied(err):
 		return proto.ObservationReasonPermission
-	case strings.Contains(message, "not found") || strings.Contains(message, "no such container"):
+	case errors.Is(err, runtime.ErrContainerNotFound) || errors.Is(err, runtime.ErrImageNotFound):
 		return proto.ObservationReasonNotRunning
 	default:
 		return proto.ObservationReasonInspectFailed

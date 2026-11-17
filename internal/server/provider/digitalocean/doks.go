@@ -118,7 +118,7 @@ func (d *Driver) ListClusters(ctx context.Context, creds provider.Credentials) (
 	for _, c := range all {
 		cluster := provider.Cluster{
 			ExternalID: c.ID, Name: c.Name, Region: c.Region, Version: c.Version,
-			State: c.Status.State, Running: c.Status.State == "running",
+			Type: provider.ClusterTypeDOKS, State: c.Status.State, Running: c.Status.State == "running",
 			PublicAPI: strings.TrimSpace(c.Endpoint) != "", GPUPools: []provider.ClusterPool{},
 		}
 		for _, p := range c.NodePools {

@@ -87,8 +87,7 @@ func (d *Driver) ImageExists(ctx context.Context, image string) (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	message := strings.ToLower(string(out))
-	if strings.Contains(message, "no such image:") || strings.Contains(message, "no such image or container:") {
+	if cliNoSuchImage(string(out)) {
 		return false, nil
 	}
 	return false, fmt.Errorf("nerdctl image inspect: %w: %s", err, strings.TrimSpace(string(out)))
@@ -122,6 +121,12 @@ func (d *Driver) InspectImage(ctx context.Context, image string) (runtime.ImageI
 func (d *Driver) inspectImage(ctx context.Context, image string) (runtime.ImageInspection, string, error) {
 	out, err := d.output(ctx, 10*time.Second, "image", "inspect", "--mode=native", "--format", "{{json .}}", image)
 	if err != nil {
+		if ctx.Err() == nil && cliAnswered(err) && cliNoSuchImage(out) {
+			return runtime.ImageInspection{}, "", fmt.Errorf("nerdctl image inspect: %w: %s", runtime.ErrImageNotFound, strings.TrimSpace(out))
+		}
+		if ctx.Err() == nil && cliAnswered(err) && cliPermissionDenied(out) {
+			return runtime.ImageInspection{}, "", fmt.Errorf("nerdctl image inspect: %w: %s", runtime.ErrPermissionDenied, strings.TrimSpace(out))
+		}
 		return runtime.ImageInspection{}, "", err
 	}
 	// nerdctl's `image inspect --format {{json .}}` prints one JSON object per
@@ -246,7 +251,7 @@ func (d *Driver) PullImage(ctx context.Context, image string, onLine func(string
 	if err != nil {
 		slog.Warn("runtime command failed", "runtime", "nerdctl", "args", []string{"-n", d.ns, "pull", image}, "err", err, "stderr_tail", scan.tail)
 		if scan.tail != "" {
-			return fmt.Errorf("nerdctl pull: %w: %s", err, scan.tail)
+			return runtime.MarkPullFailure(fmt.Errorf("nerdctl pull: %w: %s", err, scan.tail), runtime.PullOutputFailure(scan.tail))
 		}
 	}
 	return err
@@ -397,6 +402,7 @@ func (d *Driver) buildRunArgs(spec runtime.WorkloadSpec) []string {
 	}
 
 	args = append(args, expandDeviceDirs(spec.DockerArgs)...)
+	args = append(args, runtime.LabelArgs(spec.Labels)...)
 
 	if spec.ShmBytes > 0 {
 		args = append(args, "--shm-size", strconv.FormatInt(spec.ShmBytes, 10))
@@ -431,8 +437,7 @@ func (d *Driver) Stop(ctx context.Context, id string) error {
 // Remove force-deletes a container.
 func (d *Driver) Remove(ctx context.Context, id string) error {
 	out, err := d.outputMutating(ctx, 30*time.Second, "rm", "-f", id)
-	if err != nil && (strings.Contains(out, "no such container") || strings.Contains(out, "not found") ||
-		strings.Contains(err.Error(), "no such container") || strings.Contains(err.Error(), "not found")) {
+	if cliAnswered(err) && cliNoSuchContainer(out) {
 		return nil
 	}
 	return err
@@ -452,8 +457,7 @@ func (d *Driver) Status(ctx context.Context, id string) (runtime.Status, error) 
 	if err != nil {
 		// Only the CLI's own answer proves absence: a nerdctl binary that
 		// could not be executed fails with "executable file not found" too.
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && (strings.Contains(out, "no such object") || strings.Contains(out, "not found")) {
+		if cliAnswered(err) && cliNoSuchContainer(out) {
 			return runtime.Status{Exists: false}, nil
 		}
 		return runtime.Status{}, err

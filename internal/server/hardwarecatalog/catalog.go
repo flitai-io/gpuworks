@@ -89,7 +89,7 @@ var catalog = func() []GPU {
 	result = append(result, nvidia(CategoryDataCenter, 7.5, "NVIDIA T4")...)
 	result = append(result, nvidia(CategoryDataCenter, 7.0, "NVIDIA V100")...)
 
-	result = append(result, nvidia(CategoryWorkstation, 12.1, "NVIDIA GB10 (DGX Spark)")...)
+	result = append(result, nvidia(CategoryWorkstation, 12.1, "NVIDIA GB10 (DGX Spark)", "NVIDIA RTX Spark N1X")...)
 	result = append(result, nvidia(CategoryWorkstation, 12.0,
 		"NVIDIA RTX PRO 6000 Blackwell Workstation Edition", "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
 		"NVIDIA RTX PRO 5000 Blackwell", "NVIDIA RTX PRO 4500 Blackwell", "NVIDIA RTX PRO 4000 Blackwell",

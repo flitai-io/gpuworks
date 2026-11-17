@@ -322,7 +322,7 @@ func (p *SMIProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 	if listing, ok := p.layoutQuery(ctx, &p.layout.listing, inventory, "-L"); ok {
 		enrichSingleVisibleNVIDIAMIG(gpus, listing)
 	}
-	applyUnifiedMemoryFallback(gpus, nil)
+	applyUnifiedMemoryFallback(gpus, func() int64 { return hostMemoryBytes(p.hostRoot) })
 	// What the driver listed, placed on the roster of what is actually
 	// plugged in: a card it could not bring up, or that belongs to a VM,
 	// is part of this node's hardware either way.

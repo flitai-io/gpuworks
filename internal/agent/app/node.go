@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,8 +30,10 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/agent/runtime/kube"
 	"gpuworks.ai/gpuworks/internal/agent/storagemount"
+	"gpuworks.ai/gpuworks/internal/agent/ucxnetlink"
 	"gpuworks.ai/gpuworks/internal/assets"
 	"gpuworks.ai/gpuworks/internal/debuglog"
+	"gpuworks.ai/gpuworks/internal/logtext"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/selflog"
 )
@@ -63,6 +66,10 @@ type NodeRuntime struct {
 	pcie pcieWatch
 	// nvlink follows each card's active NVLinks (card_nvlink.go).
 	nvlink nvlinkWatch
+	// ucxNetlink probes the host's IPv6 route dump for the UCX hang
+	// (ucx_netlink.go), built on first use.
+	ucxNetlinkOnce sync.Once
+	ucxNetlink     *ucxnetlink.Monitor
 	// xid follows the kernel log for NVIDIA Xid events; nil off NVIDIA.
 	xid atomic.Pointer[gpu.XidWatcher]
 	// checks is each card's check states and last runs (card_checks.go).
@@ -159,6 +166,10 @@ type NodeRuntime struct {
 	// instanceLogs is the per-instance log shipping state that container
 	// removals drain (logshipper.go).
 	instanceLogs instanceLogs
+
+	// logOut holds log batches the node could not send yet (logoutbox.go).
+	logOutOnce sync.Once
+	logOut     *logOutbox
 
 	// runtimeGPU and occupancy carry the last real answer across a round in
 	// which the question could not be asked (runtime_gpu.go,
@@ -292,6 +303,7 @@ func newNodeRuntime(log *slog.Logger, driver runtime.Driver, modelsDir, forceDri
 		// mount.nfs, where instance pods see it.
 		mountRunner = kube.HostExec
 	}
+	n.occupancy.load(filepath.Join(stateDir, cardOccupancyFile))
 	n.storage = newStorageRuntime(stateDir, n.mountBusy, mountRunner)
 	n.servingForward = newServingForwarder(log, n.currentNodeToken, n.instanceAPIPort)
 	n.perftest = perftest.Host(stateDir)
@@ -540,7 +552,7 @@ func partitionAssetFingerprint(reports []proto.AssetReport) string {
 
 func (n *NodeRuntime) StreamLogs(ctx context.Context, ref string, follow bool, w io.Writer) error {
 	if n.engine == nil {
-		return errUnknownRPC("no runtime")
+		return errors.New("no container runtime is configured")
 	}
 	name := n.engine.ContainerNameFor(ref)
 	rc, err := n.engine.Driver().Logs(ctx, name, follow, 200)
@@ -548,13 +560,26 @@ func (n *NodeRuntime) StreamLogs(ctx context.Context, ref string, follow bool, w
 		return err
 	}
 	defer rc.Close()
-	// Close the log reader when the server hangs up so io.Copy unblocks.
+	// Close the log reader when the server hangs up so the scan unblocks.
 	go func() {
 		<-ctx.Done()
 		_ = rc.Close()
 	}()
-	_, err = io.Copy(w, rc)
-	return err
+	// Ship lines as a terminal shows them: progress-bar redraws collapse to
+	// their final frame, and an overlong line is broken instead of ending the
+	// server's line scanner.
+	sc := logtext.NewScanner(rc)
+	bw := bufio.NewWriter(w)
+	for sc.Scan() {
+		// Bytes aliases the scanner's buffer: append would overwrite unread
+		// input, so the newline is written separately.
+		_, _ = bw.Write(sc.Bytes())
+		_ = bw.WriteByte('\n')
+		if err := bw.Flush(); err != nil {
+			return err
+		}
+	}
+	return sc.Err()
 }
 
 // listContainers lists the active runtime's container names (for orphan
@@ -570,7 +595,4 @@ func (n *NodeRuntime) listContainers(ctx context.Context) ([]string, error) {
 	return driver.ListContainers(ctx)
 }
 
-type rpcError string
-
-func (e rpcError) Error() string   { return string(e) }
-func errUnknownRPC(m string) error { return rpcError("unknown rpc method: " + m) }
+func errUnknownRPC(m string) error { return proto.UnknownRPCMethod(m) }

@@ -49,6 +49,7 @@ export default function useTemplateWeightSource({
   selection,
   engineProfile,
   adoptedKey,
+  search,
 }: {
   form: FormInstance;
   template?: InferenceTemplate;
@@ -59,6 +60,7 @@ export default function useTemplateWeightSource({
   // its model, image and environment are the deployment's, not the spec's,
   // so choosing it again is not asked for.
   adoptedKey?: string;
+  search?: string;
 }) {
   const { t } = useTranslation("deploy");
   const [modalOpen, setModalOpen] = useState(false);
@@ -198,7 +200,10 @@ export default function useTemplateWeightSource({
     if (lookup?.key !== key || lookup.request !== lookupRequest.current) return;
     const picked =
       pickedRef.current?.key === key ? pickedRef.current : undefined;
-    if (!picked) {
+    const link = new URLSearchParams(search);
+    const linkedSource = link.get("template") === String(template.id) && link.get("spec") === selection.spec.name && link.get("spec_source") === selection.spec.source
+      ? sources.find(item => item.provider === link.get("provider") && item.repo_id === link.get("repo") && (item.revision || "") === (link.get("revision") || "") && (item.subfolder || "") === (link.get("subfolder") || "")) : undefined;
+    if (!picked && !linkedSource) {
       // A registered model serving a declared source is never taken
       // silently: the user confirms it, or picks a source.
       const found = lookup.models;
@@ -218,7 +223,7 @@ export default function useTemplateWeightSource({
     // A chosen source is served only by its own provider's model.
     const model =
       picked?.model ??
-      (picked?.source ? reusedModel(lookup, picked.source) : undefined);
+      (picked?.source ? reusedModel(lookup, picked.source) : linkedSource ? reusedModel(lookup, linkedSource) : undefined);
     if (model) {
       if (!engineProfile || engineProfile.name !== selection.spec.engine)
         return;
@@ -240,10 +245,10 @@ export default function useTemplateWeightSource({
       return;
     }
     if (stateRef.current.registering === key) return;
-    if (sources.length === 1 && !picked) {
-      void register(sources[0], key);
+    if ((linkedSource || sources.length === 1) && !picked) {
+      void register(linkedSource || sources[0], key);
     }
-  }, [engineProfile, lookup, selection, template]);
+  }, [engineProfile, lookup, selection, template, search]);
 
   const confirm = async () => {
     if (!selection || lookup?.key !== key || lookup.request !== lookupRequest.current) return;

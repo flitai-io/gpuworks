@@ -66,6 +66,11 @@ type Batch struct {
 	// ModelOverride is the served name every request of the batch is sent to,
 	// replacing its line's own body.model; empty when each line names its own.
 	ModelOverride string `gorm:"size:128;not null;default:''"`
+	// PriorityClass is the name of the request priority class the batch's
+	// requests run at; empty runs them at the batch class. A name rather
+	// than an id, so a finished batch still says what it ran at once the
+	// class is deleted.
+	PriorityClass string `gorm:"size:64;not null;default:''"`
 	Status        string `gorm:"size:16;not null;index"`
 	// ErrorCode and ErrorMessage say why a failed batch failed.
 	ErrorCode        string    `gorm:"size:64;not null;default:''"`

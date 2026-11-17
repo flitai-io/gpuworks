@@ -280,7 +280,11 @@ func (h *v1) createBatch(w http.ResponseWriter, r *http.Request) {
 		writeV1Error(w, invalid("invalid_json", "", "the body is not valid JSON of the batch request: "+err.Error()))
 		return
 	}
-	b, err := h.s.CreateBatch(h.owner(r), CreateRequest(body))
+	// A key's batch runs at the batch class: the key's binding says what its
+	// own requests may ask for, and the OpenAI request names no class.
+	b, err := h.s.CreateBatch(h.owner(r), CreateRequest{
+		InputFileID: body.InputFileID, Endpoint: body.Endpoint, CompletionWindow: body.CompletionWindow, Metadata: body.Metadata, Model: body.Model,
+	})
 	if err != nil {
 		h.fail(w, r, err)
 		return

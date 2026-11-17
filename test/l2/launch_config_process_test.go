@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -75,8 +77,9 @@ func TestLaunchConfigMaterializedThroughRealServer(t *testing.T) {
 	seed, nodeToken := createNode(t, base, adminToken, "launch-config-process")
 
 	recordPath := filepath.Join(t.TempDir(), "workload.json")
+	agentState := filepath.Join(t.TempDir(), "agent-state")
 	agent := exec.Command(agentBin, "run", "--server", base, "--token", nodeToken,
-		"--state", filepath.Join(t.TempDir(), "agent-state"))
+		"--state", agentState)
 	agent.Env = append(os.Environ(),
 		"GPUWORKS_FAKE_GPU=A100x2,81920",
 		// The recording runtime reports every image present and writes the
@@ -165,6 +168,15 @@ func TestLaunchConfigMaterializedThroughRealServer(t *testing.T) {
 	assertLaunchConfigArgv(t, "recorded workload", recordedArgv)
 	if !slices.Equal(recordedArgv, argv) {
 		t.Fatalf("the agent was asked to run a different command than the instance stores:\ndesired=%v\nrecorded=%v", argv, recordedArgv)
+	}
+	// The container names the agent that launched it, so several agents
+	// sharing one docker daemon can be told apart.
+	wantLabels := map[string]string{
+		"gpuworks.server": base, "gpuworks.node": node.UUID, "gpuworks.state-dir": agentState,
+		"gpuworks.instance": instance.UUID, "gpuworks.deployment": strconv.FormatUint(uint64(created.ID), 10),
+	}
+	if !maps.Equal(recorded.Labels, wantLabels) {
+		t.Fatalf("recorded container labels = %v, want %v", recorded.Labels, wantLabels)
 	}
 
 	// A deployment that states no parameters gets the dictionary's own

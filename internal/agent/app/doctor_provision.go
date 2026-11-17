@@ -36,7 +36,7 @@ func doctorProvision(r *proto.DoctorReport, driver runtime.Driver) {
 			evidence = append(evidence, proto.DoctorField{Name: "retry_at", Value: state.RetryAt.UTC().Format(time.RFC3339)})
 		}
 		r.Findings = append(r.Findings, proto.DoctorFinding{
-			Code: proto.DoctorRuntimeProvisionFailed, Level: proto.DoctorLevelError,
+			ID: proto.DoctorCheckRuntimeProvision, Status: proto.CheckFail, Code: proto.DoctorRuntimeProvisionFailed,
 			Probe: state.Probe, Evidence: evidence, Recheck: state.Recheck,
 		})
 	default:

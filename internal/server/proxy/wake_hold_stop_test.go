@@ -12,7 +12,7 @@ import (
 
 // stoppingBody is the literal wire body of a request refused because the
 // server stops.
-const stoppingBody = `{"error":{"message":"the server is restarting; send the request again","type":"gpuworks_proxy"}}` + "\n"
+const stoppingBody = `{"error":{"message":"the server is restarting; send the request again","type":"server_error","code":"SERVER_RESTARTING","param":null}}` + "\n"
 
 // waitHeld waits until the gateway holds n requests for the deployment.
 func waitHeld(t *testing.T, p *Proxy, depID uint, n int) {
@@ -105,7 +105,7 @@ func TestAHeldSleepKeepsItsRefusalAfterTheStop(t *testing.T) {
 // are refused.
 func TestTheStopLeavesAnAwakeDeploymentServing(t *testing.T) {
 	p, st, key, _, front := newSleepingProxy(t, false)
-	if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 0).Error; err != nil {
+	if err := updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 0}); err != nil {
 		t.Fatal(err)
 	}
 	p.SetWakeDemand(func(uint) {})
@@ -126,7 +126,7 @@ func TestStartHoldsRequestsAgainAfterAStop(t *testing.T) {
 	p.SetWakeDemand(func(uint) {
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			_ = st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 0).Error
+			_ = updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 0})
 		}()
 	})
 	resp := postChat(t, front, key)

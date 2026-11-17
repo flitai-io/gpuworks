@@ -74,6 +74,15 @@ func reasonMemoryShortfall(req Request, gpus []GPU, tp int, need int64) Reason {
 		params["sleeping_bytes"] = binding.SleepingBytes
 		params["sleeping_gib"] = gib(binding.SleepingBytes)
 	}
+	// So does a card shared with processes outside the platform: what they
+	// hold and the headroom kept beside it are not on offer (GPU.foreignHold)
+	// to a request whose capacity is the card's unclaimed memory. Whole-card
+	// capacity is the engine's share of the card and never subtracted them.
+	if binding.ForeignBytes > 0 && (req.PerGPULimitBytes > 0 || binding.SharedByMemory) {
+		headroom := binding.foreignHold() - binding.ForeignBytes
+		params["foreign_bytes"], params["foreign_gib"] = binding.ForeignBytes, gib(binding.ForeignBytes)
+		params["foreign_headroom_bytes"], params["foreign_headroom_gib"] = headroom, gib(headroom)
+	}
 	return Reason{Code: ReasonNoFit, Params: params}
 }
 

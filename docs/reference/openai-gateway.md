@@ -13,7 +13,9 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 - 读不到设置时按关闭处理：设置读取失败不会放行不带 key 的请求，只按「要求 key」处理。
 - 吊销 key 不改变这个判定：吊销最后一个 key 不会重新打开网关，`/v1` 会拒绝所有请求，直到再创建一个 key，或管理员打开上面这个开关。
 
-这条规则覆盖全部 `/v1` 路由，包括 `/v1/models`、`/v1/files`、`/v1/batches`、`/v1/tokenize` 与 `/v1/detokenize`。401 的响应形态按入口不同：网关路由返回 `{"error":{"message":"invalid or missing API key","type":"gpuworks_proxy"}}`，Files 与 Batches 返回 OpenAI 格式的 `invalid_api_key`，见[差异与排查](#差异与排查)。
+这条规则覆盖全部 `/v1` 路由，包括 `/v1/models`、`/v1/files`、`/v1/batches`、`/v1/tokenize` 与 `/v1/detokenize`。401 的码按入口不同：网关路由返回 `INVALID_API_KEY`（`type` 为 `authentication_error`，见[错误](#错误)），Files 与 Batches 返回 OpenAI 格式的 `invalid_api_key`。
+
+`GET /v1/models` 列出网关此刻能路由的服务名（来自网关按事件更新的路由表，不读数据库）：只含活跃部署，每个服务名一次，按名字排序；带范围的 key 只看到它能调用的部署的服务名。刚创建或刚停止的部署在路由表重建后出现或消失：部署事件后最多约 0.5 秒，没有事件时也每 2 秒刷新一次。
 
 ## 支持的操作
 
@@ -29,6 +31,7 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 | image editing | /v1/images/edits | multipart；必须以源图作为 `image` 文件字段 |
 | video generation | /v1/videos | JSON 或 multipart；可 async |
 | realtime | /v1/realtime | WebSocket |
+| System One | /v1/systemone | JSON；`state` 加一组带类型的问题（`noul` 是/否、`choice` 单选、`score` 打分；每次的问题数与选项数上限由模型决定，如 Intern-Decision 16 个问题、Laya 64 个），回每个问题的概率分布，不生成文本。线格式同 TypeSafe 的 System One API；用量只记 `usage.input_tokens` |
 | batch（Files 与 Batches） | /v1/files、/v1/batches | JSON；上传文件为 multipart。异步批处理，见[批处理](#批处理files-与-batches) |
 
 每个档位（spec）的 API contract（接口契约）声明该部署可用的操作和 endpoint（接口路径）。两个入口的检查范围不同：
@@ -45,7 +48,7 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 - 连接级失败时，请求仍可重放才会换副本重试。
 - 已经收到上游响应（包括 5xx）时，不会重试。
 - 实例休眠、启动中或 rank 非 0 不可服务时，返回 503，并保留重试语义。
-- server 正常停止时，正在等休眠部署唤醒的请求返回 503，带 `Retry-After: 10`，消息为 `the server is restarting; send the request again`，重发即可。
+- server 正常停止时，正在等休眠部署唤醒的请求返回 503 `SERVER_RESTARTING`，带 `Retry-After: 10`，重发即可。
 
 部署可以通过管理 API `PUT /api/v1/deployments/{id}/routing` 选择 `least_request`、`prefix_affinity` 或 `failover`。前缀亲和优先读取 `X-GPUWorks-Affinity-Key`，也支持从 chat messages、prompt 或 input 提取稳定 key；该请求头不会转发给引擎。
 
@@ -69,6 +72,12 @@ server 的 `/v1/*` 默认要求 API key 鉴权，规则见下文[认证](#认证
 分词不是推理流量：不计入网关的请求数、耗时与在途数，不留请求记录，不更新部署的最近请求时间，也不导出 trace。只接受 POST，其他方法网关回 405（带 `Allow: POST`）。根路径 `/tokenize` 归控制台，网关不接管。
 
 每个部署可以关掉分词转发：创建时 `tokenize_enabled: false`，或 `PUT /api/v1/deployments/{id}/tokenize`（见 [API 参考](api.md)）；默认开启。关掉后网关直接回 404（`deployment <model> does not expose POST /v1/tokenize: tokenize is turned off for it`），不联系引擎。开关随网关路由表生效，不重启实例。vLLM、SGLang 以外的引擎未必提供分词接口，届时请求收到引擎自己的错误。
+
+## 请求优先级
+
+请求的优先级由网关决定：按 API 令牌绑定的优先级类，以及客户端用请求头 `X-GPUWorks-Priority-Class: <名称>` 在令牌允许范围内的指定；批处理请求使用任务创建时选的类，通过 `/v1/batches` 创建的任务固定为 `batch` 类。名称不存在时返回 400。响应头 `X-GPUWorks-Priority-Class` 给出请求实际使用的类。
+
+部署开启了请求优先级时，网关把类的数值按引擎方向写进请求体的 `priority`；否则把已有的 `priority` 改为 `0`。客户端自带的 `priority` 字段和 `X-Vllm-Priority` 请求头都不会到达引擎，无论模型写在请求体、`?model=` 还是 `X-GPUWorks-Model` 里，也无论请求体声明的 Content-Type；声明为 JSON 或文本的请求体须为 UTF-8 编码，否则返回 400。详见[请求优先级](../explanation/request-priority.md)。
 
 ## Trace context
 
@@ -170,6 +179,59 @@ PD 分离将输入提示词计算和后续生成交给不同实例。vLLM 顺序
 
 替换只影响这个缓存命中数，`usage` 其他字段仍来自 decode。网关原地改写数字，数字变短时补空格，保持 `Content-Length` 不变；新值需要的位数超过原值时不改写。客户端、平台请求记录、网关计数和导出的 trace 使用同一个数。
 
+## 错误
+
+网关自己给出的错误（转发前的拒绝、到引擎的连接失败）都是 OpenAI 形状，`code` 是稳定的 UPPER_SNAKE 码：
+
+```json
+{"error": {"message": "no deployment serves model qwen", "type": "not_found_error", "code": "MODEL_NOT_FOUND", "param": "model", "params": {"model": "qwen"}}}
+```
+
+| 字段 | 用途 |
+|---|---|
+| `message` | 英文说明；不要靠匹配这段文字写处理分支 |
+| `type` | OpenAI 错误类型：`invalid_request_error`、`authentication_error`、`permission_error`、`not_found_error`、`server_error` |
+| `code` | 稳定的错误码，按它区分原因 |
+| `param` | 错误针对的请求字段，没有时为 `null` |
+| `params` | 填进 `message` 的取值，供客户端本地化；没有时省略 |
+
+每个 `/v1` 响应（包括转发前就被拒绝的请求）都带 `X-Request-ID`。引擎自己的错误响应在安全时原样转发，形状是引擎的；Files 与 Batches 按 OpenAI 的格式与小写码返回，见 [REST API 全量路由](api.md#batches批处理任务)。
+
+| `code` | 状态 | `type` | `param` | 含义 |
+|---|---|---|---|---|
+| `INVALID_API_KEY` | 401 | `authentication_error` | — | 缺少 API key 或 key 无效 |
+| `MODEL_ACCESS_DENIED` | 403 | `permission_error` | `model` | 这个 API key 无权调用该模型（`params.model`） |
+| `MODEL_REQUIRED` | 400 | `invalid_request_error` | `model` | 请求没有指定 `model` |
+| `REQUEST_BODY_INVALID` | 400 | `invalid_request_error` | — | 请求体无法读取（如 multipart 缺 boundary、不是 JSON 对象），`params.detail` 说明原因 |
+| `REQUEST_TOO_LARGE` | 413 | `invalid_request_error` | — | 请求体超过上限（`params.max_bytes`） |
+| `METHOD_NOT_ALLOWED` | 405 | `invalid_request_error` | — | 该路由只接受 `params.method`（如 `GET /v1/tokenize`），响应带 `Allow` |
+| `CHAT_INPUT_UNREADABLE` | 400 | `invalid_request_error` | `messages` | 无法校验对话输入的媒体类型 |
+| `MODEL_INPUT_MODALITY_UNSUPPORTED` | 400 | `invalid_request_error` | `messages` | 模型不接受这种输入（`params.modality`、`params.supported`） |
+| `MODEL_NOT_FOUND` | 404 | `not_found_error` | `model` | 没有部署提供该模型名 |
+| `MODEL_ROUTE_NOT_EXPOSED` | 404 | `not_found_error` | — | 部署的 contract 不提供该路由（试验场） |
+| `TOKENIZE_DISABLED` | 404 | `not_found_error` | — | 部署关闭了分词转发 |
+| `ROUTE_NOT_FOUND` | 404 | `not_found_error` | — | 这个监听地址不提供 `/v1`（只开了控制台或 agent 功能） |
+| `INSTANCE_NOT_FOUND` | 404 | `not_found_error` | — | 固定的实例不存在 |
+| `INSTANCE_MODEL_MISMATCH` | 404 | `not_found_error` | `model` | 固定的实例不提供该模型 |
+| `MODEL_ASLEEP` | 503 | `server_error` | — | 部署在睡眠；唤醒部署 `params.deployment_id`，或等定时唤醒、排队中的唤醒；可能带 `Retry-After` |
+| `INSTANCE_ASLEEP` | 503 | `server_error` | — | 固定的实例所属部署在睡眠 |
+| `INSTANCE_NOT_RUNNING` | 503 | `server_error` | — | 固定的实例没有在运行 |
+| `INSTANCE_OFFLINE` | 503 | `server_error` | — | 固定的实例所在节点离线 |
+| `MODEL_NOT_READY` | 503 | `server_error` | — | 还没有运行中的实例，可能仍在启动 |
+| `DEPLOYMENT_START_FAILED` | 503 | `server_error` | — | 部署已停止重试启动，查看部署列表 |
+| `DISTRIBUTED_NOT_READY` | 503 | `server_error` | — | 多机部署没有副本的全部 rank 都在在线节点上运行 |
+| `DISTRIBUTED_LEADER_OFFLINE` | 503 | `server_error` | — | 多机部署的 rank 0 所在节点离线 |
+| `PD_PLACEMENT_UNREADABLE` | 503 | `server_error` | — | PD 部署的放置信息无法读取 |
+| `PD_PREFILL_UNAVAILABLE` | 503 | `server_error` | — | 没有 prefill 实例能接收请求（`params.reason`），带 `Retry-After: 2` |
+| `WAKE_REQUEST_ENDED` | 503 | `server_error` | — | 等待唤醒期间客户端断开 |
+| `SERVER_RESTARTING` | 503 | `server_error` | — | server 正在停止，带 `Retry-After: 10`，重发即可 |
+| `UPSTREAM_UNAVAILABLE` | 502 | `server_error` | — | 到引擎的隧道或连接失败（`params.detail`） |
+| `DATA_LANE_UNAVAILABLE` | 503 | `server_error` | — | 节点数据通道断开，5 秒内没重连，带 `Retry-After: 2`，可重试 |
+| `INSTANCE_UNAVAILABLE` | 503 | `server_error` | — | 实例在请求途中停止或重启，带 `Retry-After: 2`，可重试 |
+| `UPSTREAM_REJECTED` | 引擎的状态 | 按状态 | — | 引擎的错误体过大或可能回显输入时，网关改写为这个码，`params.detail` 是截短后的引擎原文 |
+| `EXTERNAL_*` | 400/404/500/502 | 按状态 | — | 试验场外部模型的错误：`EXTERNAL_ROUTE_UNSUPPORTED`、`EXTERNAL_MODEL_INVALID`、`EXTERNAL_MODEL_NOT_FOUND`、`EXTERNAL_ENDPOINT_INVALID`、`EXTERNAL_KEY_UNREADABLE`、`EXTERNAL_REQUEST_INVALID`、`EXTERNAL_UPSTREAM_UNAVAILABLE` |
+| `INTERNAL_ERROR` | 500 | `server_error` | — | 网关内部出错 |
+
 ## Playground
 
 模型列表只展示已部署且声明了推理 API 操作的模型；全局设置中的外部模型供 AI 助手使用，不自动加入试验场。
@@ -184,9 +246,9 @@ PD 分离将输入提示词计算和后续生成交给不同实例。vLLM 顺序
 
 | 状态码 | 检查项 |
 |---|---|
-| 401 | 先检查 `Authorization: Bearer <key>`。完全不带 key 时，确认是否真的需要匿名访问（见[认证](#认证)）；`/v1` 默认拒绝一切不带 key 的请求 |
-| 404 | 检查 `model` 名称；试验场还要看 contract |
-| 503 | 检查实例状态、sleep/wake 和节点是否在线 |
-| 502 | 查看 tunnel 和引擎日志 |
+| 401 `INVALID_API_KEY` | 先检查 `Authorization: Bearer <key>`。完全不带 key 时，确认是否真的需要匿名访问（见[认证](#认证)）；`/v1` 默认拒绝一切不带 key 的请求 |
+| 404 `MODEL_NOT_FOUND` / `MODEL_ROUTE_NOT_EXPOSED` | 检查 `model` 名称；试验场还要看 contract |
+| 503 | 按 `code` 看[错误](#错误)：睡眠、启动中、节点离线或数据通道重连 |
+| 502 `UPSTREAM_UNAVAILABLE` | 查看 tunnel 和引擎日志 |
 
 流式 SSE 与二进制（例如 WAV）按原始 content type 转发，不截断响应。

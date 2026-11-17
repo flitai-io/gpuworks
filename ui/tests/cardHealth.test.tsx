@@ -45,15 +45,15 @@ const table = (extra: object = {}) => ({
   cards: [
     { ident: "uuid:GPU-a", uuid: "GPU-a", pcie_bdf: "0000:3f:00.0", name: "H20", index: 0, worst: "pass", can_recheck: true,
       cells: [
-        { check: "vendor_health", state: "pass", checked_at: now, stale: false },
-        { check: "pcie_link", state: "pass", checked_at: now, stale: false },
-        { check: "runtime", state: "skip", reason: "busy", checked_at: now, stale: false },
+        { check: "vendor_health", status: "pass", checked_at: now, stale: false },
+        { check: "pcie_link", status: "pass", checked_at: now, stale: false },
+        { check: "runtime", status: "skip", code: "CARD_CHECK_SKIPPED_BUSY", checked_at: now, stale: false },
       ] },
     { ident: "uuid:GPU-b", uuid: "GPU-b", pcie_bdf: "0000:40:00.0", name: "H20", index: 1, worst: "warn", can_recheck: true,
       cells: [
-        { check: "vendor_health", state: "pass", checked_at: now, stale: false },
-        { check: "pcie_link", state: "warn", reason: "pcie_link_degraded", checked_at: now, stale: false },
-        { check: "runtime", state: "fail", reason: "runtime_unusable", checked_at: now, duration_ms: 812, stale: false },
+        { check: "vendor_health", status: "pass", checked_at: now, stale: false },
+        { check: "pcie_link", status: "warn", code: "PCIE_LINK_DEGRADED", checked_at: now, stale: false },
+        { check: "runtime", status: "fail", code: "RUNTIME_UNUSABLE", checked_at: now, duration_ms: 812, stale: false },
       ] },
   ],
   summary: { pass: 3, warn: 1, fail: 1, skip: 1 },
@@ -61,8 +61,8 @@ const table = (extra: object = {}) => ({
 });
 const records = (list: object[] = []) => ({ records: list, total: list.length, page: 1, page_size: 50, retention_days: 30 });
 const record = {
-  id: 7, card_ident: "uuid:GPU-b", card_index: 1, card_name: "H20", pcie_bdf: "0000:40:00.0", removed: false, check: "runtime", level: "fail",
-  reason: "runtime_unusable", started_at: now, last_seen_at: now, duration_seconds: 7200, count: 9, flapping: true, ongoing: true,
+  id: 7, card_ident: "uuid:GPU-b", card_index: 1, card_name: "H20", pcie_bdf: "0000:40:00.0", removed: false, check: "runtime", status: "fail",
+  code: "RUNTIME_UNUSABLE", started_at: now, last_seen_at: now, duration_seconds: 7200, count: 9, flapping: true, ongoing: true,
   first_evidence: [{ name: "Detail", value: "cuCtxCreate=999" }], latest_evidence: [{ name: "Detail", value: "cuCtxCreate=999" }],
 };
 const show = (ui: React.ReactNode) => render(<I18nextProvider i18n={i18n}>{ui}</I18nextProvider>);
@@ -75,10 +75,10 @@ test("the table shows the server's columns and each card's cells, and the record
   await screen.findByText(ch.check.vendor_health);
   assert.ok(screen.getByText(ch.check.pcie_link));
   assert.ok(screen.getAllByText(ch.check.runtime).length >= 1);
-  assert.ok(screen.getByText(fill(ch.summary, { cards: 2, fail: 1, warn: 1 })));
-  const cells = screen.getAllByRole("button").filter((b) => b.getAttribute("data-state"));
-  assert.deepEqual(cells.map((b) => b.getAttribute("data-state")), ["pass", "pass", "skip", "pass", "warn", "fail"]);
-  assert.match(cells[2].getAttribute("aria-label") ?? "", new RegExp(ch.skip.busy));
+  assert.ok(screen.getByText(fill(ch.summary, { cards: 2, fail: 1, warn: 1, skip: 1 })));
+  const cells = screen.getAllByRole("button").filter((b) => b.getAttribute("data-status"));
+  assert.deepEqual(cells.map((b) => b.getAttribute("data-status")), ["pass", "pass", "skip", "pass", "warn", "fail"]);
+  assert.match(cells[2].getAttribute("aria-label") ?? "", new RegExp(ch.skip.CARD_CHECK_SKIPPED_BUSY));
   await screen.findByText(ch.records.ongoing);
   assert.ok(screen.getByText(ch.records.flapping));
   assert.ok(screen.getByText(fill(ch.records.count, { count: 9 })));
@@ -93,11 +93,11 @@ test("choosing a cell shows what the check last did and narrows the records to i
   apiAny.cardCheckDetail = async (...args: unknown[]) => {
     asked.push(args);
     return { ident: "uuid:GPU-b", check: "runtime", agent_started_at: now,
-      last: { state: "fail", reason: "runtime_unusable", at: now, duration_ms: 812, probe: "CUDA_VISIBLE_DEVICES='GPU-b' python3 -c ...", evidence: [{ name: "Detail", value: "cuCtxCreate=999" }] } };
+      last: { status: "fail", code: "RUNTIME_UNUSABLE", at: now, duration_ms: 812, probe: "CUDA_VISIBLE_DEVICES='GPU-b' python3 -c ...", evidence: [{ name: "Detail", value: "cuCtxCreate=999" }] } };
   };
   show(<NodeHealthTab nodeUUID="n-1" />);
   await screen.findByText(ch.check.runtime);
-  const failing = screen.getAllByRole("button").find((b) => b.getAttribute("data-state") === "fail")!;
+  const failing = screen.getAllByRole("button").find((b) => b.getAttribute("data-status") === "fail")!;
   await user.click(failing);
   await screen.findByText("cuCtxCreate=999");
   assert.deepEqual(asked[0], ["n-1", { pcie_bdf: "0000:40:00.0", uuid: "GPU-b" }, "runtime"]);
@@ -114,14 +114,18 @@ test("a cell can be chosen from the keyboard", async () => {
   let asked = 0;
   apiAny.nodeHealthChecks = async () => table();
   apiAny.nodeHealthRecords = async () => records();
-  apiAny.cardCheckDetail = async () => { asked++; return { ident: "uuid:GPU-a", check: "vendor_health", last: { state: "pass", at: now, evidence: [] } }; };
+  apiAny.cardCheckDetail = async () => { asked++; return { ident: "uuid:GPU-a", check: "vendor_health", last: { status: "pass", at: now, evidence: [] }, agent_started_at: now }; };
   show(<NodeHealthTab nodeUUID="n-1" />);
   await screen.findByText(ch.check.vendor_health);
-  const first = screen.getAllByRole("button").find((b) => b.getAttribute("data-state") === "pass")!;
+  const first = screen.getAllByRole("button").find((b) => b.getAttribute("data-status") === "pass")!;
   first.focus();
   await user.keyboard("{Enter}");
   await screen.findByText(ch.detail.noEvidence);
   assert.equal(asked, 1);
+  // When the agent started is a caveat on every answer: it waits behind the help mark.
+  assert.equal(screen.queryByText(/only results since then/), null);
+  await user.hover(screen.getByRole("button", { name: "More information" }));
+  assert.match((await screen.findByRole("tooltip")).textContent ?? "", /^The agent started at .+; only results since then are known\.$/);
 });
 
 test("rechecking a card's runtime check reports its answer and reads the table again", async () => {
@@ -130,11 +134,11 @@ test("rechecking a card's runtime check reports its answer and reads the table a
   const rechecked: unknown[] = [];
   apiAny.nodeHealthChecks = async () => { loads++; return table(); };
   apiAny.nodeHealthRecords = async () => records();
-  apiAny.cardCheckDetail = async () => ({ ident: "uuid:GPU-b", check: "runtime", last: { state: "fail", at: now, evidence: [] } });
-  apiAny.recheckCard = async (...args: unknown[]) => { rechecked.push(args); return { ident: "uuid:GPU-b", check: "runtime", last: { state: "pass", at: now, evidence: [] } }; };
+  apiAny.cardCheckDetail = async () => ({ ident: "uuid:GPU-b", check: "runtime", last: { status: "fail", at: now, evidence: [] } });
+  apiAny.recheckCard = async (...args: unknown[]) => { rechecked.push(args); return { ident: "uuid:GPU-b", check: "runtime", last: { status: "pass", at: now, evidence: [] } }; };
   show(<NodeHealthTab nodeUUID="n-1" />);
   await screen.findByText(ch.check.runtime);
-  await user.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-state") === "fail")!);
+  await user.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-status") === "fail")!);
   await user.click(await screen.findByRole("button", { name: ch.recheck }));
   await waitFor(() => assert.equal(rechecked.length, 1));
   assert.deepEqual(rechecked[0], ["n-1", { pcie_bdf: "0000:40:00.0", uuid: "GPU-b" }]);
@@ -169,7 +173,7 @@ test("a detail the agent cannot give says why", async () => {
   apiAny.cardCheckDetail = async () => { throw new APIError("NODE_OFFLINE", undefined, "the node is offline", 409); };
   show(<NodeHealthTab nodeUUID="n-1" />);
   await screen.findByText(ch.check.runtime);
-  await user.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-state") === "warn")!);
+  await user.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-status") === "warn")!);
   await waitFor(() => assert.ok(screen.getAllByRole("alert").length >= 1));
 });
 
@@ -182,11 +186,63 @@ test("one card's tab lists each check on its own line and narrows the records to
     return { ...t, cards: [t.cards[1]] };
   };
   apiAny.nodeHealthRecords = async (_n: string, opts: unknown) => { recordQueries.push(opts); return records([record]); };
-  apiAny.cardCheckDetail = async () => ({ ident: "uuid:GPU-b", check: "pcie_link", last: { state: "warn", reason: "pcie_link_degraded", at: now, evidence: [{ name: "PCIe Link 0000:40:00.0", value: "x8 of x16" }] } });
+  apiAny.cardCheckDetail = async () => ({ ident: "uuid:GPU-b", check: "pcie_link", last: { status: "warn", code: "PCIE_LINK_DEGRADED", at: now, evidence: [{ name: "PCIe Link 0000:40:00.0", value: "x8 of x16" }] } });
   show(<CardHealthTab nodeUUID="n-1" card={{ pcie_bdf: "0000:40:00.0", uuid: "GPU-b" }} cardLabel="GPU 1" />);
   await screen.findByText(ch.check.pcie_link);
   assert.ok(screen.getByText("812 ms"));
   await user.click(screen.getByText(ch.check.pcie_link));
   await screen.findByText("x8 of x16");
   await waitFor(() => assert.deepEqual(recordQueries.at(-1), { card: { pcie_bdf: "0000:40:00.0", uuid: "GPU-b" }, check: "pcie_link", page: 1 }));
+});
+
+// Each of the five statuses reads as itself: only a pass is called passed,
+// a skipped check names why it did not run, a check that has not run yet and
+// one that does not apply say so, and none of them looks like a pass.
+test("each check status renders in its own words and look", async () => {
+  const cells = [
+    { check: "vendor_health", status: "pass", checked_at: now, stale: false },
+    { check: "pcie_link", status: "warn", code: "PCIE_LINK_DEGRADED", checked_at: now, stale: false },
+    { check: "pcie_errors", status: "fail", code: "PCIE_FATAL_ERRORS", checked_at: now, stale: false },
+    { check: "runtime", status: "skip", code: "CARD_CHECK_SKIPPED_PROBE_FAILED", checked_at: now, stale: false },
+    { check: "xid", status: "skip", code: "CARD_CHECK_NOT_RUN_YET", stale: false },
+    { check: "nvlink", status: "na", stale: false },
+  ];
+  apiAny.nodeHealthChecks = async () => table({
+    checks: cells.map((c) => ({ id: c.check, period_seconds: 60 })),
+    cards: [{ ident: "uuid:GPU-a", uuid: "GPU-a", index: 0, worst: "fail", can_recheck: false, cells }],
+    summary: { pass: 1, warn: 1, fail: 1, skip: 2, na: 1 },
+  });
+  apiAny.nodeHealthRecords = async () => records();
+  show(<NodeHealthTab nodeUUID="n-1" />);
+  await screen.findByText(ch.check.vendor_health);
+  const buttons = screen.getAllByRole("button").filter((b) => b.getAttribute("data-status"));
+  const label = (i: number) => buttons[i].getAttribute("aria-label") ?? "";
+  assert.deepEqual(buttons.map((b) => b.getAttribute("data-status")), ["pass", "warn", "fail", "skip", "skip", "na"]);
+  const common = i18n.getResourceBundle("en", "common").gpuHealth.code;
+  assert.equal(label(0).split(" · ")[1], ch.state.pass);
+  assert.deepEqual(label(1).split(" · ").slice(1, 3), [ch.state.warn, common.PCIE_LINK_DEGRADED.label]);
+  assert.deepEqual(label(2).split(" · ").slice(1, 3), [ch.state.fail, common.PCIE_FATAL_ERRORS.label]);
+  assert.deepEqual(label(3).split(" · ").slice(1, 3), [ch.state.skip, ch.skip.CARD_CHECK_SKIPPED_PROBE_FAILED]);
+  assert.deepEqual(label(4).split(" · ").slice(1, 3), [ch.state.skip, ch.skip.CARD_CHECK_NOT_RUN_YET]);
+  assert.equal(label(5).split(" · ")[1], ch.state.na);
+  for (const i of [1, 2, 3, 4, 5]) assert.notEqual(label(i).split(" · ")[1], ch.state.pass, `cell ${i} reads as passed`);
+  // Not applicable cannot be chosen; a skipped check can, to see why.
+  assert.equal((buttons[5] as HTMLButtonElement).disabled, true);
+  assert.equal((buttons[3] as HTMLButtonElement).disabled, false);
+  assert.ok(screen.getByText(fill(ch.summary, { cards: 1, fail: 1, warn: 1, skip: 2 })));
+});
+
+test("a skipped run in the detail names why it did not run", async () => {
+  const user = userEvent.setup({ document: dom.window.document });
+  apiAny.nodeHealthChecks = async () => table();
+  apiAny.nodeHealthRecords = async () => records();
+  apiAny.cardCheckDetail = async () => ({ ident: "uuid:GPU-a", check: "runtime", agent_started_at: now,
+    last: { status: "skip", code: "CARD_CHECK_SKIPPED_BUSY", at: now, evidence: [] },
+    last_ran: { status: "pass", at: now, evidence: [] } });
+  show(<NodeHealthTab nodeUUID="n-1" />);
+  await screen.findByText(ch.check.runtime);
+  await user.click(screen.getAllByRole("button").find((b) => b.getAttribute("data-status") === "skip")!);
+  await screen.findByText(ch.detail.lastRan);
+  assert.ok(screen.getAllByText(ch.skip.CARD_CHECK_SKIPPED_BUSY).length >= 1);
+  assert.ok(screen.getAllByText(ch.state.skip).length >= 1);
 });

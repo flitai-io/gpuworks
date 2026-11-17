@@ -39,7 +39,7 @@ const { api } = await import("../src/api.ts");
 const { RequestDetailLines } = await import("../src/pages/monitor/RequestRow.tsx");
 const { default: RequestView } = await import("../src/pages/monitor/RequestView.tsx");
 const { default: DistributionHeatmap } = await import("../src/pages/monitor/DistributionHeatmap.tsx");
-import type { MonitorRequest, MonitorRequests, MonitorRequestsQuery } from "../src/monitorRequestsApi";
+import type { MonitorRequest, MonitorRequests, MonitorRequestSegment, MonitorRequestsQuery, SegmentKind, SegmentStage } from "../src/monitorRequestsApi";
 
 const original = api.monitorRequests;
 const originalTelemetry = api.telemetryExport;
@@ -55,18 +55,31 @@ after(() => {
   dom.window.close();
 });
 
-function request(over: Partial<MonitorRequest>): MonitorRequest {
-  return {
+// stage is the server's stage of a segment (uxrecord.StageOf), for the
+// fixtures' segments.
+function stage(kind: SegmentKind, stream = true): SegmentStage {
+  if (!stream) return "";
+  if (kind === "thinking" || kind === "answering") return "decode";
+  return kind === "tail" ? "tail" : "first_token";
+}
+const staged = (segments: { kind: SegmentKind; ms: number }[], stream = true): MonitorRequestSegment[] =>
+  segments.map((s) => ({ ...s, stage: stage(s.kind, stream) }));
+
+function request(over: Omit<Partial<MonitorRequest>, "segments"> & { segments?: { kind: SegmentKind; ms: number }[] }): MonitorRequest {
+  const base: MonitorRequest = {
     id: "r", trace_id: "4bf92f3577b34da6a3ce929d0e0e4736", deployment_id: 7, received_ms: Date.UTC(2026, 9, 12, 8, 30, 5), phase: "done", age_ms: null, instance_uuid: "a1b2c3d4e5f6", api_key_id: 3,
     api_key_name: "chat-app", user_id: 1, source: "api", stream: true, body_bytes: 2048, images: 0, dispatch_ms: 2,
     first_byte_ms: 20, first_think_ms: null, first_answer_ms: 502, last_chunk_ms: 1502, end_ms: 1502, events: 101,
     think_events: 0, max_gap_ms: 40, status: 200, outcome: "ok", finish_reason: "stop", prompt_tokens: 3000,
     cached_tokens: 1000, completion_tokens: 201, reasoning_tokens: null, engine_queue_ms: 100, engine_prefill_ms: 350,
-    engine_decode_ms: 1000, weight: 1, result: "completed",
-    segments: [{ kind: "gateway", ms: 2 }, { kind: "preprocess", ms: 50 }, { kind: "queue", ms: 100 }, { kind: "prefill", ms: 350 }, { kind: "answering", ms: 1000 }],
+    engine_decode_ms: 1000, ttft_ms: 502, tpot_ms: 4.975, prefill_tok_s: 5714.3, decode_tok_s: 201, weight: 1, result: "completed",
+    segments: staged([{ kind: "gateway", ms: 2 }, { kind: "preprocess", ms: 50 }, { kind: "queue", ms: 100 }, { kind: "prefill", ms: 350 }, { kind: "answering", ms: 1000 }]),
     pd: null,
-    ...over,
   };
+  const { segments, ...rest } = over;
+  // A reply that does not stream has no TTFT, as the server says.
+  const ttft = rest.stream === false && !("ttft_ms" in rest) ? { ttft_ms: null } : {};
+  return { ...base, ...rest, ...ttft, ...(segments ? { segments: staged(segments, rest.stream ?? base.stream) } : {}) };
 }
 
 // A live row carries no usage or engine stats yet.
@@ -160,17 +173,26 @@ test("history: rows split the wait with the engine's stats and say which replica
   assert.ok(within(row).getByText("out 201"));
   assert.ok(within(row).getByText(/Replica 1 · gpu-a/));
   assert.deepEqual(Array.from(row.querySelectorAll("[data-kind]")).map((el) => el.getAttribute("data-kind")), ["gateway", "preprocess", "queue", "prefill", "answering"]);
-  assert.deepEqual(calls[calls.length - 1], { view: "history", range: "6h", limit: 50, key: 0, instance: "", results: [], minMs: undefined, maxMs: undefined, cursor: "" });
+  assert.deepEqual(calls[calls.length - 1], { view: "history", range: "6h", limit: 50, key: 0, instance: "", results: [], minMs: undefined, maxMs: undefined, minTtftMs: undefined, maxTtftMs: undefined, cursor: "" });
 
-  // Focus (keyboard) shows the detail: times and speeds.
+  // The row leads its total with the TTFT.
+  assert.match(row.textContent ?? "", /502 ms · 1\.5 s/);
+  // Focus (keyboard) shows the detail: the time as a tree, then the speeds.
   row.focus();
-  await waitFor(() => assert.ok(screen.getByText("Prefill 350 ms · 5714 tok/s")));
-  assert.ok(screen.getByText("Queue 100 ms"));
-  // The gateway's own share and what the engine left out of its account are
-  // two lines.
-  assert.ok(screen.getByText("Gateway 2 ms"));
-  assert.ok(screen.getByText(/^Engine preprocessing 50 ms/));
+  await waitFor(() => assert.ok(screen.getByText("TTFT 502 ms")));
+  const detail = screen.getByTestId("request-detail");
+  const lines = Array.from(detail.querySelectorAll("span[style*='padding-left']")).map((el) => [el.textContent, (el as HTMLElement).style.paddingLeft]);
+  const total = lines.findIndex(([text]) => text === "Total 1.5 s");
+  assert.deepEqual(lines.slice(total, total + 8), [
+    ["Total 1.5 s", "0px"], ["TTFT 502 ms", "14px"], ["Gateway 2 ms", "28px"], ["Engine preprocessing 50 ms", "28px"],
+    ["Engine queue 100 ms", "28px"], ["Prefill 350 ms", "28px"], ["Decode 1 s", "14px"], ["Answer 1 s", "28px"],
+  ]);
+  // What the engine left out of its account is behind an icon, not a line.
+  assert.ok(within(detail).getByRole("button", { name: /tokenizing, waiting for the current step/ }));
+  assert.ok(screen.getByText("Prefill 5714 tok/s"));
   assert.ok(screen.getByText("Decode 201 tok/s"));
+  assert.ok(screen.getByText("TPOT 5.0 ms"));
+  assert.ok(screen.getByText("Output 201 tokens · 101 chunks"));
   assert.ok(screen.getByText("Input 3000 tokens · cached 1000 · uncached 2000"));
 
   // The key filter offers the keys seen so far, by name; the replica filter
@@ -363,6 +385,8 @@ test("history: a PD request shows its prefill stage in the row, the legend and t
           id: "pd-1", dispatch_ms: 816, engine_queue_ms: 700, engine_prefill_ms: 29,
           segments: [{ kind: "gateway", ms: 21 }, { kind: "pd_prefill", ms: 795 }, { kind: "preprocess", ms: 35 }, { kind: "queue", ms: 700 }, { kind: "prefill", ms: 29 }, { kind: "answering", ms: 1000 }],
           pd: { prefill_instance_uuid: "3107437e7517aaaa", prefill_ms: 795, prefill_queue_ms: 2, prefill_compute_ms: 640, fallback: "" },
+          // The server's speed: the prefill instance's uncached prompt over its own prefill.
+          prefill_tok_s: 3125,
         }),
       ],
       "",
@@ -382,11 +406,13 @@ test("history: a PD request shows its prefill stage in the row, the legend and t
   assert.ok(within(drawer).getAllByText("795 ms").length >= 1);
   assert.ok(within(drawer).getByText("640 ms"));
   assert.ok(within(drawer).getByText("Decode replica"));
-  assert.match(drawer.textContent ?? "", /PD prefill stage 795 ms/);
-  // The prefill speed is the prefill instance's: its uncached prompt over
-  // its own prefill.
-  assert.match(drawer.textContent ?? "", /of which the prefill instance queued 2 ms · computed 640 ms · 3125 tok\/s/);
-  assert.match(drawer.textContent ?? "", /KV transfer & queue 700 ms/);
+  // The PD stage is a part of the TTFT; the prefill instance's own account
+  // is behind its icon.
+  const detail = within(drawer).getByTestId("request-detail");
+  assert.match(detail.textContent ?? "", /TTFT 502 msGateway 21 msPD prefill 795 ms/);
+  assert.ok(within(detail).getByRole("button", { name: "The prefill instance queued 2 ms · computed 640 ms" }));
+  assert.match(detail.textContent ?? "", /KV transfer & queue 700 ms/);
+  assert.match(detail.textContent ?? "", /Prefill 3125 tok\/s/);
 });
 
 // A request decoded alone says why; an ordinary deployment's legend has no
@@ -413,12 +439,15 @@ for (const queue of [null, 0, 20300]) {
       segments: [{ kind: "gateway", ms: 2 }, { kind: queue == null ? "waiting" : "queue", ms: queue ?? 150 }, { kind: "prefill", ms: 350 }, { kind: "answering", ms: 1000 }],
     });
     render(<I18nextProvider i18n={i18n}><RequestDetailLines r={row} replica="" /></I18nextProvider>);
+    // An unreported queue is an unsplit wait, explained behind its icon.
+    const unreported = /did not report this request's queue and prefill/;
     if (queue == null) {
-      assert.ok(screen.getByText(/Engine queue time unavailable/));
-      assert.equal(screen.queryByText("Queue 0 ms"), null);
+      assert.ok(screen.getByText("Waiting for first token 150 ms"));
+      assert.ok(screen.getByRole("button", { name: unreported }));
+      assert.equal(screen.queryByText("Engine queue 0 ms"), null);
     } else {
-      assert.ok(screen.getByText(queue === 0 ? "Queue 0 ms" : "Queue 20 s"));
-      assert.equal(screen.queryByText(/Engine queue time unavailable/), null);
+      assert.ok(screen.getByText(queue === 0 ? "Engine queue 0 ms" : "Engine queue 20 s"));
+      assert.equal(screen.queryByRole("button", { name: unreported }), null);
     }
   });
 }
@@ -431,6 +460,52 @@ test("request details do not invent zero prefill for a queue-only report", () =>
     segments: [{ kind: "gateway", ms: 2 }, { kind: "queue", ms: 20300 }, { kind: "waiting", ms: 300 }, { kind: "answering", ms: 1000 }],
   });
   render(<I18nextProvider i18n={i18n}><RequestDetailLines r={row} replica="" /></I18nextProvider>);
-  assert.ok(screen.getByText("Queue 20 s"));
+  assert.ok(screen.getByText("Engine queue 20 s"));
   assert.equal(screen.queryByText("Prefill 0 ms"), null);
+});
+
+test("PD prefill, decode prefill and queue remain visually distinguishable", async () => {
+  const { SEGMENT_STYLE } = await import("../src/pages/monitor/RequestRow.tsx");
+  assert.equal(new Set([SEGMENT_STYLE.pd_prefill, SEGMENT_STYLE.prefill, SEGMENT_STYLE.queue]).size, 3);
+  assert.notEqual(SEGMENT_STYLE.thinking, SEGMENT_STYLE.answering);
+});
+
+// In flight, a row leads its age with the TTFT once the first token came; one
+// still waiting has only its age. A server-origin evaluation's request says so.
+test("live: a row shows its TTFT once it has one, and names an evaluation's request", async () => {
+  api.monitorRequests = async () =>
+    live([
+      request({ id: "w", phase: "waiting", age_ms: 3000, ttft_ms: null, first_answer_ms: null, last_chunk_ms: null, end_ms: null, status: null, outcome: "", result: "", prompt_tokens: null, completion_tokens: null, cached_tokens: null,
+        segments: [{ kind: "gateway", ms: 2 }, { kind: "waiting", ms: 2998 }] }),
+      request({ id: "e", phase: "answering", age_ms: 5000, ttft_ms: 800, api_key_name: "", api_key_id: 0, source: "evaluation", first_answer_ms: 800, status: null, outcome: "", result: "", prompt_tokens: null, completion_tokens: null, cached_tokens: null,
+        segments: [{ kind: "gateway", ms: 2 }, { kind: "waiting", ms: 798 }, { kind: "answering", ms: 4200 }] }),
+    ]);
+  renderView("live");
+  const list = await screen.findByRole("list", { name: /In flight|Live/ });
+  const [waiting, answering] = within(list).getAllByRole("listitem");
+  assert.doesNotMatch(waiting.textContent ?? "", /·\s*3 s$/);
+  assert.match(waiting.textContent ?? "", /3 s/);
+  assert.match(answering.textContent ?? "", /800 ms · 5 s/);
+  assert.match(answering.textContent ?? "", /^Evaluation/);
+  answering.focus();
+  await waitFor(() => assert.ok(screen.getByText("TTFT 800 ms")));
+  assert.ok(screen.getByText("5 s so far · Answering"));
+});
+
+test("history: the TTFT bounds go to the server", async () => {
+  const calls: MonitorRequestsQuery[] = [];
+  api.monitorRequests = async (_id, q) => {
+    calls.push(q);
+    return historyPage([request({ id: "h1" })], "");
+  };
+  renderView("history");
+  await screen.findByRole("list", { name: "History" });
+  const user = userEvent.setup();
+  await user.type(screen.getByRole("spinbutton", { name: "TTFT ≥" }), "500");
+  await user.type(screen.getByRole("spinbutton", { name: "TTFT ≤" }), "2000");
+  await waitFor(() => {
+    const last = calls[calls.length - 1];
+    assert.equal(last.minTtftMs, 500);
+    assert.equal(last.maxTtftMs, 2000);
+  });
 });

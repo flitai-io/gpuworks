@@ -92,8 +92,12 @@ func (s *Store) FailImageSyncIfActiveCode(imageID, nodeID uint, id, message, cod
 	return res.Error
 }
 
-func (s *Store) CancelImageNodeTransferIfActive(imageID, nodeID uint, id, message string) (bool, error) {
-	res := s.db.Model(&ImageNode{}).Where("image_version_id = ? AND node_id = ? AND transfer_id = ? AND state IN ?", imageID, nodeID, id, []string{ImageStatePulling, ImageStateSyncing}).Updates(map[string]any{"state": ImageStateFailed, "last_transfer_id": gorm.Expr("CASE WHEN COALESCE(transfer_id, '') <> '' THEN transfer_id ELSE last_transfer_id END"), "transfer_id": "", "rate_bps": 0, "last_rate_limit_kib": gorm.Expr("rate_limit_kib"), "rate_limit_kib": 0, "message": message, "transfer_error_code": ""})
+// CancelImageNodeTransferIfActive fails one in-flight attempt for an operator
+// stop. code is carried in transfer_error_code: a peer attempt is marked
+// PEER_TRANSFER_CANCELED so the receiver's own report of the load the stop
+// killed cannot replace the reason (see ApplyImageNodeStatus).
+func (s *Store) CancelImageNodeTransferIfActive(imageID, nodeID uint, id, message, code string) (bool, error) {
+	res := s.db.Model(&ImageNode{}).Where("image_version_id = ? AND node_id = ? AND transfer_id = ? AND state IN ?", imageID, nodeID, id, []string{ImageStatePulling, ImageStateSyncing}).Updates(map[string]any{"state": ImageStateFailed, "last_transfer_id": gorm.Expr("CASE WHEN COALESCE(transfer_id, '') <> '' THEN transfer_id ELSE last_transfer_id END"), "transfer_id": "", "rate_bps": 0, "last_rate_limit_kib": gorm.Expr("rate_limit_kib"), "rate_limit_kib": 0, "message": message, "transfer_error_code": code})
 	if res.Error == nil && res.RowsAffected > 0 {
 		s.Bus.PublishChange("image", uintKey(imageID), "node")
 	}

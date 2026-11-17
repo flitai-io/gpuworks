@@ -2,9 +2,11 @@ package deployment
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/partitioncap"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -36,4 +38,20 @@ func ResolvePartitionBackend(node *store.Node, limitGiB float64, requested strin
 		return "", err
 	}
 	return requested, nil
+}
+
+// distributedPartitionRefusal reports that the backend resolved on a group's
+// first node is unavailable on another member. refusal is that member's
+// ValidateReady error: its reason code (reason_code) and params ride along,
+// so a client can say why, and node names the member.
+func distributedPartitionRefusal(node *store.Node, backend string, refusal error) error {
+	params := map[string]any{"node": node.UUID, "backend": backend}
+	var product *messages.ProductError
+	if errors.As(refusal, &product) {
+		for key, value := range product.Params() {
+			params[key] = value
+		}
+		params["reason_code"] = product.Code()
+	}
+	return wrapProductError(messages.ErrorDistributedPartitionBackendUnavailable, fmt.Sprintf("node %s: %s", node.UUID, refusal), params, refusal)
 }

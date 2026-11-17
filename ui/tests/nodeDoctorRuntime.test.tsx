@@ -33,7 +33,7 @@ const runpod: ReportT = {
   runtimes: [{ name: "udocker", status: "ok", selected: true, command: "" }],
   findings: [
     {
-      code: "runtime_provision_failed", level: "error",
+      code: "RUNTIME_PROVISION_FAILED", status: "fail",
       probe: "set up the runveil runtime: run user, /workspace/gpuworks/udocker and /workspace/gpuworks/udocker-state, patched PRoot",
       evidence: [
         { name: "error", value: "prepare udocker ownership: chown -R udocker:udocker /workspace/gpuworks/udocker: exit status 1: Operation not permitted" },
@@ -42,7 +42,7 @@ const runpod: ReportT = {
       recheck: "findmnt -T /workspace/gpuworks/udocker; ls -ld /workspace/gpuworks/udocker /workspace/gpuworks/udocker-state",
     },
     {
-      code: "path_ephemeral", level: "warning",
+      code: "PATH_EPHEMERAL", status: "warn",
       disk: { kind: "models", path: "/opt/gpuworks/models", total_bytes: 100 * GiB, avail_bytes: 80 * GiB, mount: overlayRoot },
       probe: "/proc/self/mountinfo",
       evidence: [{ name: "TARGET", value: "/" }, { name: "FSTYPE", value: "overlay" }, { name: "container", value: "/.dockerenv" }],
@@ -115,8 +115,8 @@ test("the mount findings read their path, mount point and filesystem", () => {
   wrap(<NodeDoctorReport report={{
     ...runpod,
     findings: [
-      { code: "path_noexec", level: "error", disk: { ...disk, mount: { point: "/data", fs_type: "xfs", noexec: true } }, probe: "/proc/self/mountinfo", recheck: "findmnt -T /data/udocker" },
-      { code: "path_read_only", level: "error", disk: { ...disk, mount: { point: "/archive", fs_type: "ext4", read_only: true } } },
+      { code: "PATH_NOEXEC", status: "fail", disk: { ...disk, mount: { point: "/data", fs_type: "xfs", noexec: true } }, probe: "/proc/self/mountinfo", recheck: "findmnt -T /data/udocker" },
+      { code: "PATH_READ_ONLY", status: "fail", disk: { ...disk, mount: { point: "/archive", fs_type: "ext4", read_only: true } } },
     ],
   }} />);
   const findings = screen.getByRole("region", { name: "需要处理" });
@@ -153,7 +153,7 @@ const macbook: ReportT = {
   },
   runtimes: [{ name: "host", status: "ok", selected: true, command: "" }],
   findings: [{
-    code: "macos_idle_sleep", level: "warning", probe: "pmset -g",
+    code: "MACOS_IDLE_SLEEP", status: "warn", probe: "pmset -g",
     evidence: [{ name: "sleep", value: "1 (sleep prevented by powerd, UURemote)" }, { name: "power source", value: "Battery Power" }],
     recheck: "pmset -g",
   }],
@@ -177,7 +177,7 @@ test("a Mac that sleeps when idle is explained with the command that keeps it aw
   cleanup();
 
   const en = (await createI18n(["nodes"], "en")).i18n;
-  wrap(<NodeDoctorReport report={{ ...macbook, findings: [{ code: "macos_unsupported", level: "error", probe: "sysctl kern.osproductversion",
+  wrap(<NodeDoctorReport report={{ ...macbook, findings: [{ code: "MACOS_UNSUPPORTED", status: "fail", probe: "sysctl kern.osproductversion",
     evidence: [{ name: "macOS", value: "14.7.2" }, { name: "required", value: "15" }], recheck: "sw_vers" }] }} />, en);
   const enFindings = screen.getByRole("region", { name: "Action required" });
   assert.ok(within(enFindings).getByText("macOS too old"));
@@ -192,7 +192,7 @@ test("a Mac that sleeps when idle is explained with the command that keeps it aw
 const untraversable: ReportT = {
   ...runpod,
   findings: [{
-    code: "runtime_state_untraversable", level: "error",
+    code: "RUNTIME_STATE_UNTRAVERSABLE", status: "fail",
     probe: "search permission on every directory above /root/gpuworks for udocker (uid 1001, gid 1001)",
     evidence: [
       { name: "directory", value: "/root" }, { name: "mode", value: "0700" }, { name: "owner", value: "0:0" },

@@ -1,9 +1,6 @@
 package api
 
 import (
-	"errors"
-	"net/http"
-
 	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
@@ -11,6 +8,9 @@ import (
 // old clients receive an actionable error string; the UI translates the stable
 // code and params from common.json.
 const (
+	// ErrorResponseEncodingFailed: a response's data could not be encoded
+	// as JSON, so the server answered this error instead.
+	ErrorResponseEncodingFailed   = "RESPONSE_ENCODING_FAILED"
 	ErrorAgentUpgradeRefused      = "AGENT_UPGRADE_REFUSED"
 	ErrorModelCacheRetryBlocked   = "MODEL_CACHE_RETRY_BLOCKED"
 	ErrorNodeLabelsInvalid        = "NODE_LABELS_INVALID"
@@ -74,6 +74,9 @@ const (
 	ErrorAITaskInvalid                          = "AI_TASK_INVALID"
 	ErrorAITargetRequired                       = "AI_TARGET_REQUIRED"
 	ErrorAIAskBusy                              = "AI_ASK_BUSY"
+	ErrorAIImageInputOff                        = "AI_IMAGE_INPUT_OFF"
+	ErrorAIImageInvalid                         = "AI_IMAGE_INVALID"
+	ErrorAIImageRejected                        = "AI_IMAGE_REJECTED"
 	ErrorPlatformTokenReadOnly                  = "PLATFORM_TOKEN_READ_ONLY"
 	ErrorPlatformTokenNotAllowed                = "PLATFORM_TOKEN_NOT_ALLOWED"
 	ErrorPlatformTokenScopeInvalid              = "PLATFORM_TOKEN_SCOPE_INVALID"
@@ -218,93 +221,103 @@ const (
 	ErrorModelMetadataUnavailable         = "MODEL_METADATA_UNAVAILABLE"
 	// ErrorModelMetadataUnreachable: the management node reached none of
 	// {hosts}, the addresses the site rules give it for {source}.
-	ErrorModelMetadataUnreachable               = "MODEL_METADATA_UNREACHABLE"
-	ErrorModelMetadataForbidden                 = messages.ErrorModelMetadataForbidden
-	ErrorModelSourceUnavailable                 = messages.ErrorModelSourceUnavailable
-	ErrorPreflightMinimumNodes                  = messages.ErrorPreflightMinimumNodes
-	ErrorPreflightMaximumNodes                  = messages.ErrorPreflightMaximumNodes
-	ErrorPreflightNodeRequired                  = messages.ErrorPreflightNodeRequired
-	ErrorPreflightNodeWhitespace                = messages.ErrorPreflightNodeWhitespace
-	ErrorPreflightDuplicateNode                 = messages.ErrorPreflightDuplicateNode
-	ErrorPreflightPortInvalid                   = messages.ErrorPreflightPortInvalid
-	ErrorPreflightDurationInvalid               = messages.ErrorPreflightDurationInvalid
-	ErrorPreflightNodeInvalid                   = messages.ErrorPreflightNodeInvalid
-	ErrorPreflightNodeOffline                   = messages.ErrorPreflightNodeOffline
-	ErrorImageSeriesPatchInvalid                = "IMAGE_SERIES_PATCH_INVALID"
-	ErrorOfficialImageSeriesManaged             = "OFFICIAL_IMAGE_SERIES_MANAGED"
-	ErrorImageCommonArgFlagRequired             = "IMAGE_COMMON_ARG_FLAG_REQUIRED"
-	ErrorImageCommonEnvKeyRequired              = "IMAGE_COMMON_ENV_KEY_REQUIRED"
-	ErrorImageSeriesPatchEmpty                  = "IMAGE_SERIES_PATCH_EMPTY"
-	ErrorImageVersionPatchInvalid               = "IMAGE_VERSION_PATCH_INVALID"
-	ErrorImageVersionPatchEmpty                 = "IMAGE_VERSION_PATCH_EMPTY"
-	ErrorImageInUse                             = "IMAGE_IN_USE"
-	ErrorOfficialImageDeleteForbidden           = "OFFICIAL_IMAGE_DELETE_FORBIDDEN"
-	ErrorImageSyncUnavailable                   = "IMAGE_SYNC_UNAVAILABLE"
-	ErrorImageRetryUnavailable                  = "IMAGE_RETRY_UNAVAILABLE"
-	ErrorImageInspectionUnavailable             = "IMAGE_INSPECTION_UNAVAILABLE"
-	ErrorImageImportTooLarge                    = "IMAGE_IMPORT_TOO_LARGE"
-	ErrorImageFrameworkVersionRequired          = "IMAGE_FRAMEWORK_VERSION_REQUIRED"
-	ErrorImageSeriesVersionRequired             = "IMAGE_SERIES_VERSION_REQUIRED"
-	ErrorCatalogPackageDigestInvalid            = "CATALOG_PACKAGE_DIGEST_INVALID"
-	ErrorCatalogPackageRequiredForFiles         = "CATALOG_PACKAGE_REQUIRED_FOR_FILES"
-	ErrorImageImportInvalid                     = "IMAGE_IMPORT_INVALID"
-	ErrorImageImportUnsupported                 = "IMAGE_IMPORT_UNSUPPORTED"
-	ErrorImageImportConflict                    = "IMAGE_IMPORT_CONFLICT"
-	ErrorImageManifestInvalid                   = "IMAGE_MANIFEST_INVALID"
-	ErrorUpdateSourcesUnavailable               = "UPDATE_SOURCES_UNAVAILABLE"
-	ErrorUpdateDownloadFailed                   = "UPDATE_DOWNLOAD_FAILED"
-	ErrorUpdateNotPublished                     = "UPDATE_NOT_PUBLISHED"
-	ErrorUpdateCatalogIncompatible              = "UPDATE_CATALOG_INCOMPATIBLE"
-	ErrorOfficialCatalogPackageRequired         = "OFFICIAL_CATALOG_PACKAGE_REQUIRED"
-	ErrorOfficialCatalogNeedsNewerServer        = "OFFICIAL_CATALOG_NEEDS_NEWER_SERVER"
-	ErrorServerUpgradeUnavailable               = "SERVER_UPGRADE_UNAVAILABLE"
-	ErrorServerUpgradeArchiveInvalid            = "SERVER_UPGRADE_ARCHIVE_INVALID"
-	ErrorServerAlreadyAtRelease                 = "SERVER_ALREADY_AT_RELEASE"
-	ErrorServerNewerThanRelease                 = "SERVER_NEWER_THAN_RELEASE"
-	ErrorUpdateChannelReadOnly                  = "UPDATE_CHANNEL_READ_ONLY"
-	ErrorUpdateAutoCheckReadOnly                = "UPDATE_AUTO_CHECK_READ_ONLY"
-	ErrorUpdateAutoCheckInvalid                 = "UPDATE_AUTO_CHECK_INVALID"
-	ErrorUpdateChannelInvalid                   = "UPDATE_CHANNEL_INVALID"
-	ErrorUsageReportReadOnly                    = "USAGE_REPORT_READ_ONLY"
-	ErrorUsageReportInvalid                     = "USAGE_REPORT_INVALID"
-	ErrorUsageReportUnavailable                 = "USAGE_REPORT_UNAVAILABLE"
-	ErrorExperienceUnavailable                  = "EXPERIENCE_UNAVAILABLE"
-	ErrorExperienceInvalid                      = "EXPERIENCE_INVALID"
-	ErrorExperienceFailed                       = "EXPERIENCE_FAILED"
-	ErrorNoticeIDsInvalid                       = "NOTICE_IDS_INVALID"
-	ErrorImageRefRequired                       = "IMAGE_REF_REQUIRED"
-	ErrorImageTagRequired                       = "IMAGE_TAG_REQUIRED"
-	ErrorImagePurposeInvalid                    = "IMAGE_PURPOSE_INVALID"
-	ErrorImageEngineRequired                    = "IMAGE_ENGINE_REQUIRED"
-	ErrorStorageEnabledRequired                 = "STORAGE_ENABLED_REQUIRED"
-	ErrorStorageConfigChanged                   = "STORAGE_CONFIG_CHANGED"
-	ErrorStorageInUse                           = "STORAGE_IN_USE"
-	ErrorStorageIsDefault                       = "STORAGE_IS_DEFAULT"
-	ErrorStorageExportTaken                     = "STORAGE_EXPORT_ALREADY_REGISTERED"
-	ErrorStorageNameTaken                       = "STORAGE_NAME_TAKEN"
-	ErrorStorageDisabled                        = messages.ErrorStorageDisabled
-	ErrorStorageNotWritable                     = messages.ErrorStorageNotWritable
-	ErrorStorageTargetsRequired                 = "STORAGE_TARGETS_REQUIRED"
-	ErrorStorageNameInvalid                     = "STORAGE_NAME_INVALID"
-	ErrorStorageExportInvalid                   = "STORAGE_EXPORT_INVALID"
-	ErrorStorageOptionsInvalid                  = "STORAGE_OPTIONS_INVALID"
-	ErrorStorageTypeInvalid                     = "STORAGE_TYPE_INVALID"
-	ErrorStoragePathInvalid                     = "STORAGE_PATH_INVALID"
-	ErrorStoragePathDenied                      = "STORAGE_PATH_DENIED"
-	ErrorStoragePathRequired                    = "STORAGE_PATH_REQUIRED"
-	ErrorStorageCacheLimitNegative              = "STORAGE_CACHE_LIMIT_NEGATIVE"
-	ErrorStorageImportCountInvalid              = "STORAGE_IMPORT_COUNT_INVALID"
-	ErrorStorageProbeFailed                     = "STORAGE_PROBE_FAILED"
-	ErrorStorageUnavailableOnNode               = messages.ErrorStorageUnavailableOnNode
-	ErrorStorageScanFailed                      = "STORAGE_SCAN_FAILED"
-	ErrorModelMissingInStorage                  = "MODEL_MISSING_IN_STORAGE"
-	ErrorStorageSharedByOtherControlPlanes      = "STORAGE_SHARED_BY_OTHER_CONTROL_PLANES"
-	ErrorBenchmarkGPUCountNegative              = "BENCHMARK_GPU_COUNT_NEGATIVE"
-	ErrorBenchmarkDetailCapTooLarge             = "BENCHMARK_DETAIL_CAP_TOO_LARGE"
-	ErrorBenchmarkTargetInactive                = "BENCHMARK_TARGET_INACTIVE"
-	ErrorBenchmarkChatRequired                  = "BENCHMARK_CHAT_REQUIRED"
-	ErrorBenchmarkLeaderNotRunning              = "BENCHMARK_LEADER_NOT_RUNNING"
-	ErrorBenchmarkInstanceOrigin                = "BENCHMARK_INSTANCE_ORIGIN"
+	ErrorModelMetadataUnreachable          = "MODEL_METADATA_UNREACHABLE"
+	ErrorModelMetadataForbidden            = messages.ErrorModelMetadataForbidden
+	ErrorModelSourceUnavailable            = messages.ErrorModelSourceUnavailable
+	ErrorPreflightMinimumNodes             = messages.ErrorPreflightMinimumNodes
+	ErrorPreflightMaximumNodes             = messages.ErrorPreflightMaximumNodes
+	ErrorPreflightNodeRequired             = messages.ErrorPreflightNodeRequired
+	ErrorPreflightNodeWhitespace           = messages.ErrorPreflightNodeWhitespace
+	ErrorPreflightDuplicateNode            = messages.ErrorPreflightDuplicateNode
+	ErrorPreflightPortInvalid              = messages.ErrorPreflightPortInvalid
+	ErrorPreflightDurationInvalid          = messages.ErrorPreflightDurationInvalid
+	ErrorPreflightNodeInvalid              = messages.ErrorPreflightNodeInvalid
+	ErrorPreflightNodeOffline              = messages.ErrorPreflightNodeOffline
+	ErrorImageSeriesPatchInvalid           = "IMAGE_SERIES_PATCH_INVALID"
+	ErrorOfficialImageSeriesManaged        = "OFFICIAL_IMAGE_SERIES_MANAGED"
+	ErrorImageCommonArgFlagRequired        = "IMAGE_COMMON_ARG_FLAG_REQUIRED"
+	ErrorImageCommonEnvKeyRequired         = "IMAGE_COMMON_ENV_KEY_REQUIRED"
+	ErrorImageSeriesPatchEmpty             = "IMAGE_SERIES_PATCH_EMPTY"
+	ErrorImageVersionPatchInvalid          = "IMAGE_VERSION_PATCH_INVALID"
+	ErrorImageVersionPatchEmpty            = "IMAGE_VERSION_PATCH_EMPTY"
+	ErrorImageInUse                        = "IMAGE_IN_USE"
+	ErrorOfficialImageDeleteForbidden      = "OFFICIAL_IMAGE_DELETE_FORBIDDEN"
+	ErrorImageSyncUnavailable              = "IMAGE_SYNC_UNAVAILABLE"
+	ErrorImageRetryUnavailable             = "IMAGE_RETRY_UNAVAILABLE"
+	ErrorImageInspectionUnavailable        = "IMAGE_INSPECTION_UNAVAILABLE"
+	ErrorImageImportTooLarge               = "IMAGE_IMPORT_TOO_LARGE"
+	ErrorImageFrameworkVersionRequired     = "IMAGE_FRAMEWORK_VERSION_REQUIRED"
+	ErrorImageSeriesVersionRequired        = "IMAGE_SERIES_VERSION_REQUIRED"
+	ErrorCatalogPackageDigestInvalid       = "CATALOG_PACKAGE_DIGEST_INVALID"
+	ErrorCatalogPackageRequiredForFiles    = "CATALOG_PACKAGE_REQUIRED_FOR_FILES"
+	ErrorImageImportInvalid                = "IMAGE_IMPORT_INVALID"
+	ErrorImageImportUnsupported            = "IMAGE_IMPORT_UNSUPPORTED"
+	ErrorImageImportConflict               = "IMAGE_IMPORT_CONFLICT"
+	ErrorImageManifestInvalid              = "IMAGE_MANIFEST_INVALID"
+	ErrorUpdateSourcesUnavailable          = "UPDATE_SOURCES_UNAVAILABLE"
+	ErrorUpdateDownloadFailed              = "UPDATE_DOWNLOAD_FAILED"
+	ErrorUpdateNotPublished                = "UPDATE_NOT_PUBLISHED"
+	ErrorUpdateCatalogIncompatible         = "UPDATE_CATALOG_INCOMPATIBLE"
+	ErrorOfficialCatalogPackageRequired    = "OFFICIAL_CATALOG_PACKAGE_REQUIRED"
+	ErrorOfficialCatalogNeedsNewerServer   = "OFFICIAL_CATALOG_NEEDS_NEWER_SERVER"
+	ErrorServerUpgradeUnavailable          = "SERVER_UPGRADE_UNAVAILABLE"
+	ErrorServerUpgradeArchiveInvalid       = "SERVER_UPGRADE_ARCHIVE_INVALID"
+	ErrorServerAlreadyAtRelease            = "SERVER_ALREADY_AT_RELEASE"
+	ErrorServerNewerThanRelease            = "SERVER_NEWER_THAN_RELEASE"
+	ErrorUpdateChannelReadOnly             = "UPDATE_CHANNEL_READ_ONLY"
+	ErrorUpdateAutoCheckReadOnly           = "UPDATE_AUTO_CHECK_READ_ONLY"
+	ErrorUpdateAutoCheckInvalid            = "UPDATE_AUTO_CHECK_INVALID"
+	ErrorUpgradeInProgress                 = "SERVER_UPGRADE_IN_PROGRESS"
+	ErrorUpgradeSelectionChanged           = "SERVER_UPGRADE_SELECTION_CHANGED"
+	ErrorUpgradeAttemptFinished            = "SERVER_UPGRADE_ATTEMPT_FINISHED"
+	ErrorUpgradeBackupRequired             = "SERVER_UPGRADE_BACKUP_REQUIRED"
+	ErrorUpgradeSelectionInvalid           = "SERVER_UPGRADE_SELECTION_INVALID"
+	ErrorUpgradeWithdrawn                  = "SERVER_UPGRADE_WITHDRAWN"
+	ErrorUpdateChannelInvalid              = "UPDATE_CHANNEL_INVALID"
+	ErrorUsageReportReadOnly               = "USAGE_REPORT_READ_ONLY"
+	ErrorUsageReportInvalid                = "USAGE_REPORT_INVALID"
+	ErrorUsageReportUnavailable            = "USAGE_REPORT_UNAVAILABLE"
+	ErrorExperienceUnavailable             = "EXPERIENCE_UNAVAILABLE"
+	ErrorExperienceInvalid                 = "EXPERIENCE_INVALID"
+	ErrorExperienceFailed                  = "EXPERIENCE_FAILED"
+	ErrorNoticeIDsInvalid                  = "NOTICE_IDS_INVALID"
+	ErrorImageRefRequired                  = "IMAGE_REF_REQUIRED"
+	ErrorImageTagRequired                  = "IMAGE_TAG_REQUIRED"
+	ErrorImagePurposeInvalid               = "IMAGE_PURPOSE_INVALID"
+	ErrorImageEngineRequired               = "IMAGE_ENGINE_REQUIRED"
+	ErrorStorageEnabledRequired            = "STORAGE_ENABLED_REQUIRED"
+	ErrorStorageConfigChanged              = "STORAGE_CONFIG_CHANGED"
+	ErrorStorageInUse                      = "STORAGE_IN_USE"
+	ErrorStorageIsDefault                  = "STORAGE_IS_DEFAULT"
+	ErrorStorageExportTaken                = "STORAGE_EXPORT_ALREADY_REGISTERED"
+	ErrorStorageNameTaken                  = "STORAGE_NAME_TAKEN"
+	ErrorStorageDisabled                   = messages.ErrorStorageDisabled
+	ErrorStorageNotWritable                = messages.ErrorStorageNotWritable
+	ErrorStorageTargetsRequired            = "STORAGE_TARGETS_REQUIRED"
+	ErrorStorageNameInvalid                = "STORAGE_NAME_INVALID"
+	ErrorStorageExportInvalid              = "STORAGE_EXPORT_INVALID"
+	ErrorStorageOptionsInvalid             = "STORAGE_OPTIONS_INVALID"
+	ErrorStorageTypeInvalid                = "STORAGE_TYPE_INVALID"
+	ErrorStoragePathInvalid                = "STORAGE_PATH_INVALID"
+	ErrorStoragePathDenied                 = "STORAGE_PATH_DENIED"
+	ErrorStoragePathRequired               = "STORAGE_PATH_REQUIRED"
+	ErrorStorageCacheLimitNegative         = "STORAGE_CACHE_LIMIT_NEGATIVE"
+	ErrorStorageImportCountInvalid         = "STORAGE_IMPORT_COUNT_INVALID"
+	ErrorStorageProbeFailed                = "STORAGE_PROBE_FAILED"
+	ErrorStorageUnavailableOnNode          = messages.ErrorStorageUnavailableOnNode
+	ErrorStorageScanFailed                 = "STORAGE_SCAN_FAILED"
+	ErrorModelMissingInStorage             = "MODEL_MISSING_IN_STORAGE"
+	ErrorStorageSharedByOtherControlPlanes = "STORAGE_SHARED_BY_OTHER_CONTROL_PLANES"
+	ErrorBenchmarkGPUCountNegative         = "BENCHMARK_GPU_COUNT_NEGATIVE"
+	ErrorBenchmarkDetailCapTooLarge        = "BENCHMARK_DETAIL_CAP_TOO_LARGE"
+	ErrorBenchmarkTargetInactive           = "BENCHMARK_TARGET_INACTIVE"
+	ErrorBenchmarkChatRequired             = "BENCHMARK_CHAT_REQUIRED"
+	ErrorBenchmarkLeaderNotRunning         = "BENCHMARK_LEADER_NOT_RUNNING"
+	ErrorBenchmarkInstanceOrigin           = "BENCHMARK_INSTANCE_ORIGIN"
+	// ErrorBenchmarkPriorityClassGateway: a run names a request priority
+	// class but its requests do not go through the gateway (an external
+	// target, a node origin or a single instance), so no class applies.
+	ErrorBenchmarkPriorityClassGateway          = "BENCHMARK_PRIORITY_CLASS_GATEWAY"
 	ErrorBenchmarkExternalURLRequired           = "BENCHMARK_EXTERNAL_URL_REQUIRED"
 	ErrorBenchmarkServerActive                  = "BENCHMARK_SERVER_ACTIVE"
 	ErrorBenchmarkRunConflict                   = "BENCHMARK_RUN_CONFLICT"
@@ -414,18 +427,6 @@ const (
 // repair except by marking another row first.
 const ErrorAIDefaultRequired = "AI_DEFAULT_REQUIRED"
 
-func productError(code, fallback string, params map[string]any) error {
-	return messages.NewProductError(code, fallback, params)
-}
-
-func wrapProductError(code, fallback string, params map[string]any, cause error) error {
-	return messages.WrapProductError(code, fallback, params, cause)
-}
-
-func writeProductError(w http.ResponseWriter, status int, code, fallback string, params map[string]any) {
-	writeErr(w, status, productError(code, fallback, params))
-}
-
 // Automatic placement of multi-node and PD deployments (placement_mode
 // "auto"; deployments_auto_units.go).
 const (
@@ -495,12 +496,6 @@ const (
 	ErrorInstanceNotServing          = messages.ErrorInstanceNotServing
 	ErrorSleepRoleCannotEmpty        = messages.ErrorSleepRoleCannotEmpty
 )
-
-// containsProductCode reports whether err is, or wraps, the product error code.
-func containsProductCode(err error, code string) bool {
-	var product *messages.ProductError
-	return err != nil && errors.As(err, &product) && product.Code() == code
-}
 
 // Storage files codes (ADR 0053; storage_files*.go): why browsing, a transfer
 // or a change to a storage's files was refused.
@@ -580,6 +575,13 @@ const (
 	// ErrorKubeClusterOperationFailed: applying to or removing from the
 	// cluster failed at {step} (kubeconfig | api_server): {reason}.
 	ErrorKubeClusterOperationFailed = "KUBE_CLUSTER_OPERATION_FAILED"
+	// ErrorKubeSelectionDropsInstances: the new node selection leaves out
+	// nodes that still run instances ({nodes}: node_uuid, node_name,
+	// kube_node and deployments of each; {verified}: false when no agent
+	// could be asked, so they only may be affected). The request is repeated
+	// with confirm_drop_instances to go ahead, which first asks the instances
+	// on those nodes to stop.
+	ErrorKubeSelectionDropsInstances = "KUBE_SELECTION_DROPS_INSTANCES"
 	// ErrorProviderInstanceInCluster: the instance is a node of the
 	// account's Kubernetes cluster {cluster}; connect the cluster instead.
 	ErrorProviderInstanceInCluster = "PROVIDER_INSTANCE_IN_CLUSTER"

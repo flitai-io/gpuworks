@@ -26,13 +26,25 @@ type CatalogTemplateExport struct {
 	Evidence    string                 `json:"evidence"`
 }
 
-// CatalogTemplateCheck is one operation the export sent a request for
-// (tested) or lists without one (a slow or costly operation).
+// CatalogTemplateCheck is one operation the export sent a request for, or
+// lists without one (ADR 0067). ID is always "operation_reply"; Operation
+// names the operation. Status is pass, fail or skip (no request sent: Code
+// says why). Code and Params render the text; Message is its English
+// fallback; Evidence is what the gateway answered instead of an answer.
 type CatalogTemplateCheck struct {
+	ID        string                     `json:"id"`
+	Operation string                     `json:"operation"`
+	Status    string                     `json:"status"`
+	Code      string                     `json:"code"`
+	Params    CatalogTemplateCheckParams `json:"params"`
+	Message   string                     `json:"message"`
+	Evidence  string                     `json:"evidence,omitempty"`
+}
+
+// CatalogTemplateCheckParams are the values the text of a check's code
+// interpolates.
+type CatalogTemplateCheckParams struct {
 	Operation  string `json:"operation"`
 	Endpoint   string `json:"endpoint,omitempty"`
-	Tested     bool   `json:"tested"`
-	Passed     bool   `json:"passed"`
 	HTTPStatus int    `json:"http_status,omitempty"`
-	Message    string `json:"message,omitempty"`
 }

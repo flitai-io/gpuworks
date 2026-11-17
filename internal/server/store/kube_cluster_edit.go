@@ -22,7 +22,19 @@ var kubeClusterEditable = []string{
 // UpdateKubeCluster writes c's editable settings onto the entry with c's
 // UUID and returns the entry as stored.
 func (s *Store) UpdateKubeCluster(c KubeCluster) (*KubeCluster, error) {
+	out, _, err := s.UpdateKubeClusterLeaving(c, KubeLeave{})
+	return out, err
+}
+
+// UpdateKubeClusterLeaving is UpdateKubeCluster that also applies leave (the
+// instances to stop and the nodes to cordon) in the same transaction: a save
+// that fails (ErrNotFound, ErrKubeClusterNameTaken, any store error) stops and
+// cordons nothing. Events are published after the commit. It returns the
+// instances asked to stop.
+func (s *Store) UpdateKubeClusterLeaving(c KubeCluster, leave KubeLeave) (*KubeCluster, []StoppedInstance, error) {
 	var out KubeCluster
+	var rows []Instance
+	var stopped []StoppedInstance
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("uuid = ?", c.UUID).First(&out).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -45,10 +57,16 @@ func (s *Store) UpdateKubeCluster(c KubeCluster) (*KubeCluster, error) {
 		}).Error; err != nil {
 			return err
 		}
-		return tx.Where("id = ?", out.ID).First(&out).Error
+		if err := tx.Where("id = ?", out.ID).First(&out).Error; err != nil {
+			return err
+		}
+		var err error
+		rows, stopped, err = applyKubeLeaveTx(tx, leave)
+		return err
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &out, nil
+	s.announceKubeLeave(leave, rows)
+	return &out, stopped, nil
 }

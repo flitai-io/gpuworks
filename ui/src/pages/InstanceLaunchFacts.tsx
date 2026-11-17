@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Button, Collapse, Descriptions, Empty, Space, Spin, Tag, Typography } from "antd";
+import { Button, Collapse, Descriptions, Empty, Space, Spin, Typography } from "antd";
+import { Alert } from "../pages/DeploymentControls";
+import { Badge } from "../components/ui/badge";
 import { useTranslation } from "react-i18next";
 import {
   api,
@@ -10,13 +12,14 @@ import {
 } from "../api";
 import { formatTime, formatTimeSec } from "../i18n/datetime";
 import { shellQuote } from "./deploy/shellQuote";
+import InstanceLaunchValue from "./InstanceLaunchValue";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 
 function codeValue(value: unknown): React.ReactNode {
   if (value == null || value === "" || (Array.isArray(value) && value.length === 0)) return "—";
   const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-  return <Typography.Text code style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{text}</Typography.Text>;
+  return <InstanceLaunchValue>{text}</InstanceLaunchValue>;
 }
 
 function argvValue(values?: string[]): React.ReactNode {
@@ -26,13 +29,8 @@ function argvValue(values?: string[]): React.ReactNode {
 
 function statusTag(status: string, label: string): React.ReactNode {
   const color = status === "current" || status === "available" || status === "observed"
-    ? "green"
-    : status === "historical"
-      ? "orange"
-      : status === "unverified"
-        ? "gold"
-        : "default";
-  return <Tag color={color}>{label}</Tag>;
+    ? "green" : status === "historical" ? "orange" : status === "unverified" ? "amber" : "gray";
+  return <Badge size="sm" color={color}>{label}</Badge>;
 }
 
 function UnknownLayer({ reason }: { reason?: string }) {
@@ -172,9 +170,8 @@ function FactsBody({ facts, refresh }: { facts: LaunchFacts; refresh: () => void
   );
 }
 
-export default function InstanceLaunchFacts({ uuid }: { uuid: string }) {
+export default function InstanceLaunchFacts({ uuid, expanded }: { uuid: string; expanded: boolean }) {
   const { t } = useTranslation("deployments");
-  const [expanded, setExpanded] = useState(false);
   const [state, setState] = useState<LoadState>("idle");
   const [facts, setFacts] = useState<LaunchFacts | null>(null);
   const requestID = useRef(0);
@@ -202,29 +199,12 @@ export default function InstanceLaunchFacts({ uuid }: { uuid: string }) {
     if (expanded && state === "idle") load();
   }, [expanded, load, state]);
 
-  const open = (keys: string | string[]) => {
-    const isOpen = Array.isArray(keys) ? keys.includes("launch-facts") : keys === "launch-facts";
-    setExpanded(isOpen);
-  };
-
-  let children: React.ReactNode;
+  if (!expanded) return null;
   if (state === "loading") {
-    children = <div role="status" aria-label={t("instance.launchFacts.loading")} style={{ textAlign: "center", padding: 16 }}><Spin /></div>;
-  } else if (state === "error") {
-    children = <Alert type="error" showIcon message={t("instance.launchFacts.error")} action={<Button size="small" onClick={load}>{t("instance.launchFacts.retry")}</Button>} />;
-  } else if (facts) {
-    children = <FactsBody facts={facts} refresh={load} />;
-  } else {
-    children = null;
+    return <div role="status" aria-label={t("instance.launchFacts.loading")} style={{ textAlign: "center", padding: 16 }}><Spin /></div>;
   }
-
-  return (
-    <Collapse
-      ghost
-      style={{ marginTop: 8 }}
-      activeKey={expanded ? ["launch-facts"] : []}
-      onChange={open}
-      items={[{ key: "launch-facts", label: t("instance.launchFacts.title"), children }]}
-    />
-  );
+  if (state === "error") {
+    return <Alert type="error" showIcon message={t("instance.launchFacts.error")} action={<Button size="small" onClick={load}>{t("instance.launchFacts.retry")}</Button>} />;
+  }
+  return facts ? <FactsBody facts={facts} refresh={load} /> : null;
 }

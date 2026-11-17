@@ -165,7 +165,7 @@ const NodeGroup = memo(function NodeGroup({ item, matched, deployments, t, tDepl
   const { node, cards } = item;
   return (
     <div className={`hm-node${node.online ? "" : " is-offline"}`} role="group" aria-label={node.name} data-node={node.uuid}>
-      <button type="button" tabIndex={-1} className="hm-node-name" data-open="" data-node={node.uuid}
+      <button type="button" tabIndex={-1} className="hm-node-name text-fg-brand" data-open="" data-node={node.uuid}
         title={node.name} aria-label={t("heatmap.openNode", { node: node.name })}>
         {node.name}
       </button>

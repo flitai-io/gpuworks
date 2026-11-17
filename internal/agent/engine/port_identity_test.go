@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -34,7 +35,7 @@ func TestCheckEnginePortsRefusesAPortSomeoneListensOn(t *testing.T) {
 	free.Close()
 
 	err = checkEnginePorts(proto.InstanceDesiredState{APIPort: port, Ports: []int{port}})
-	if err == nil || !strings.HasPrefix(err.Error(), EnginePortRefused) || !strings.Contains(err.Error(), strconv.Itoa(port)) {
+	if err == nil || !strings.HasPrefix(err.Error(), proto.ErrorEnginePortRefused) || !strings.Contains(err.Error(), strconv.Itoa(port)) {
 		t.Fatalf("busy port: err = %v", err)
 	}
 	// A side-channel port of a PD instance counts as much as the API port.
@@ -170,8 +171,9 @@ func TestStartRefusesAPortTakenSinceAllocation(t *testing.T) {
 			done = true
 		}
 	}
-	if last.State != proto.InstFailed || !proto.IsEnginePortRefusal(last.Message) {
-		t.Fatalf("final status = %+v, want failed with %s", last, EnginePortRefused)
+	if last.State != proto.InstFailed || last.RuntimeFailure == nil || last.RuntimeFailure.Code != proto.ErrorEnginePortRefused || last.RuntimeFailure.Port != port ||
+		last.RuntimeFailure.Phase != proto.PhaseContainerPrepare {
+		t.Fatalf("final status = %+v, want failed with %s", last, proto.ErrorEnginePortRefused)
 	}
 }
 
@@ -219,10 +221,43 @@ func TestPortCheckAsksARuntimeThatBindsItsOwnPorts(t *testing.T) {
 		t.Fatalf("port free in the runtime's terms: err = %v", err)
 	}
 	err = check(proto.InstanceDesiredState{APIPort: 31001, Ports: []int{31001}})
-	if err == nil || !strings.HasPrefix(err.Error(), EnginePortRefused) {
+	if err == nil || !strings.HasPrefix(err.Error(), proto.ErrorEnginePortRefused) {
 		t.Fatalf("port the runtime holds: err = %v", err)
 	}
 	if len(driver.asked) != 2 {
 		t.Fatalf("runtime asked about %v, want both ports", driver.asked)
+	}
+}
+
+// A launch with no alias is named after its model mount ("/model"). An engine
+// that answers under that name is ours; one that answers under the model's
+// host path is what an agent that translated the name would have started, and
+// the gateway, which sends "/model", could not reach it. The bodies are vLLM's
+// /v1/models shape.
+func TestCheckServesOwnModelUnderTheMountName(t *testing.T) {
+	spec := func(port int) proto.InstanceDesiredState {
+		return proto.InstanceDesiredState{
+			APIPort: port, ServedModelName: "/model",
+			ResolvedLaunch: proto.ResolvedLaunch{Entrypoint: []string{"vllm", "serve", "/model"}, Argv: []string{"--served-model-name", "/model"}},
+		}
+	}
+	const model = `{"object":"list","data":[{"id":%q,"object":"model","created":1763337600,"owned_by":"vllm","root":"/Users/x/models/q06","parent":null,"max_model_len":2048,"permission":[]}]}`
+	for _, c := range []struct {
+		name    string
+		served  string
+		foreign bool
+	}{
+		{"named after the mount", "/model", false},
+		{"named after the host path", "/Users/x/models/q06", true},
+	} {
+		port, stop := modelsServer(t, 200, fmt.Sprintf(model, c.served))
+		err := checkServesOwnModel(context.Background(), &http.Client{}, spec(port))
+		stop()
+		if c.foreign != (err != nil) {
+			t.Errorf("%s: err = %v, want foreign=%v", c.name, err, c.foreign)
+		}
+		if c.foreign && failureOf(err, "", "").Code != proto.ErrorEnginePortInUse {
+			t.Errorf("%s: err = %v, want %s", c.name, err, proto.ErrorEnginePortInUse)
+		}
 	}
 }

@@ -17,6 +17,10 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/provider"
 )
 
+// Cloud's legacy "EEE, dd MMM yyyy HH:mm:ss z" parser requires a colon
+// in numeric timezone offsets, unlike time.RFC1123Z.
+const accessKeyDateLayout = "Mon, 02 Jan 2006 15:04:05 -07:00"
+
 // APIClient signs requests and manages retries, timeouts and asynchronous jobs.
 type APIClient struct {
 	endpoint, accessKeyID, accessKeySecret string
@@ -70,7 +74,7 @@ func (c *APIClient) newRequest(ctx context.Context, method, path string, body io
 		return nil, &APIError{Kind: ErrorRequest}
 	}
 	// Match the ZStack SDK's local timezone for legacy rest.checkTimeZone=false.
-	c.signRequest(req, uri.Path, time.Now().Format(time.RFC1123Z))
+	c.signRequest(req, uri.Path, time.Now().Format(accessKeyDateLayout))
 	return req, nil
 }
 

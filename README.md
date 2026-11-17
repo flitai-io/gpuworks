@@ -41,12 +41,13 @@ fine-tuning and training jobs on the same accelerators.
   on real NVIDIA, AMD, Ascend, PPU and Apple hardware come with launch settings that are known to work, so you pick a
   model and press deploy instead of hunting for flags. Qwen, DeepSeek, GLM, Kimi, MiniMax, Llama, Gemma, gpt-oss,
   plus embedding, rerank, speech, image and video models.
-- **Heterogeneous accelerators, one scheduler.** NVIDIA, AMD, Ascend, PPU, Hygon and Apple Silicon nodes join the same
-  cluster; the scheduler matches each deployment to hardware its launch spec supports.
+- **Heterogeneous accelerators, one scheduler.** NVIDIA, AMD, Ascend, PPU, Hygon, Kunlunxin and Apple Silicon nodes join
+  the same cluster; the scheduler matches each deployment to hardware its launch spec supports.
 - **Public and private cloud in one pool.** Sync instances from RunPod, CompShare, AutoDL, Vast.ai and Alibaba Cloud,
   or VMs from ZStack Cloud, install the agent in one click, and schedule them together with your own servers.
 - **Joins an existing Kubernetes cluster and coexists with its other workloads.** Apply one manifest to connect a
-  cluster. GPUWorks keeps the device plugin the cluster already runs and works with HAMi and ACK GPU sharing. It
+  cluster; each node's accelerator is detected automatically, so one cluster entry can hold nodes of several vendors.
+  GPUWorks keeps the device plugin the cluster already runs and works with HAMi and ACK GPU sharing. It
   borrows only the cards it uses and returns them when idle, and the two schedulers see each other: Kubernetes does
   not hand a card GPUWorks holds to another Pod, and GPUWorks does not schedule onto a card another Pod holds.
 - **Ultra-lightweight.** The server and the agent are each one static binary (`CGO_ENABLED=0`); the server embeds the
@@ -196,8 +197,8 @@ flowchart LR
   reconciles desired state, the scheduler, and storage for metrics, logs and request traces.
 - An **agent** runs on each GPU node. It probes the accelerators, runs engines through Docker, nerdctl, the built-in
   rootless runtime (runveil) or as host processes on macOS, and reports metrics and logs.
-- Agents connect out to the server and multiplex everything over two lanes: `ctrl` for commands, metrics and
-  terminals, `data` for inference traffic, logs and model/image transfer. Inference requests reach the engine
+- Agents connect out to the server and multiplex everything over two lanes: `ctrl` for commands and
+  terminals, `data` for inference traffic, metrics and logs, and model/image transfer. Inference requests reach the engine
   through that tunnel, so nodes never expose ports.
 
 More in [Architecture](docs-en/explanation/architecture.md) and the [ADRs](docs-en/adr/README.md).

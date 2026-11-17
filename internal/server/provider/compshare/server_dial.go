@@ -96,20 +96,20 @@ func (d *Driver) ServerDialAddressFor(ctx context.Context, creds provider.Creden
 // serverDialPort chooses the container port a server-dialed agent listens
 // on and the address the server reaches it at: an open TCP port nothing
 // holds, the operator's port first, else one it opens.
-func (d *Driver) serverDialPort(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) (string, string, provider.InstallCheck, error) {
+func (d *Driver) serverDialPort(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) (string, string, provision.CheckResult, error) {
 	h, err := d.describe(ctx, creds, req.Instance.ExternalID)
 	if err != nil {
-		return "", "", provider.InstallCheck{}, err
+		return "", "", provision.CheckResult{}, err
 	}
 	sshPort := firstPort(req.Instance.SSHPort)
 	client, _, err := provision.DialSSH(ctx, firstNonEmptyLocal(req.Instance.SSHUser, "root"), req.Instance.PublicIP, sshPort, req.SSHAuth(), 15*time.Second, d.hostKeys)
 	if err != nil {
-		return "", "", provider.InstallCheck{}, provider.RetryableSSHConnectionError("compshare: ssh "+net.JoinHostPort(req.Instance.PublicIP, strconv.Itoa(sshPort)), err)
+		return "", "", provision.CheckResult{}, provider.RetryableSSHConnectionError("compshare: ssh "+net.JoinHostPort(req.Instance.PublicIP, strconv.Itoa(sshPort)), err)
 	}
 	listening, err := provision.ListeningPorts(ctx, client)
 	_ = client.Close()
 	if err != nil {
-		return "", "", provider.InstallCheck{}, fmt.Errorf("compshare: %w", err)
+		return "", "", provision.CheckResult{}, fmt.Errorf("compshare: %w", err)
 	}
 	forwards := forwardsByPort(h.TcpForwards)
 	mapped := make(map[int]int, len(forwards))
@@ -122,22 +122,22 @@ func (d *Driver) serverDialPort(ctx context.Context, creds provider.Credentials,
 	}
 	if port, ok := provider.ChooseMappedPort(mapped, listening, preferred); ok {
 		address := forwards[port].address()
-		return provider.ListenOnPort(port), address, provider.InstallCheck{Name: "Server-dial port", Status: "ok",
-			Detail: fmt.Sprintf("container port %d, already open and forwarded from %s", port, address)}, nil
+		return provider.ListenOnPort(port), address, provider.ServerDialPortCheck(port, address, false, false,
+			fmt.Sprintf("container port %d, already open and forwarded from %s", port, address)), nil
 	}
 	port := preferred
 	for port <= 65535 && (listening[port] || port == 22) {
 		port++
 	}
 	if port > 65535 {
-		return "", "", provider.InstallCheck{}, fmt.Errorf("compshare: no free container port at or above %d for the agent", preferred)
+		return "", "", provision.CheckResult{}, fmt.Errorf("compshare: no free container port at or above %d for the agent", preferred)
 	}
 	f, err := d.openTCPPort(ctx, creds, h, port)
 	if err != nil {
-		return "", "", provider.InstallCheck{}, err
+		return "", "", provision.CheckResult{}, err
 	}
-	return provider.ListenOnPort(port), f.address(), provider.InstallCheck{Name: "Server-dial port", Status: "ok",
-		Detail: fmt.Sprintf("opened container port %d on the instance, forwarded from %s", port, f.address())}, nil
+	return provider.ListenOnPort(port), f.address(), provider.ServerDialPortCheck(port, f.address(), true, false,
+		fmt.Sprintf("opened container port %d on the instance, forwarded from %s", port, f.address())), nil
 }
 
 // openTCPPort adds port to the instance's open TCP ports. The API replaces

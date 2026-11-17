@@ -29,7 +29,7 @@ func newDiagnostics(cfg Config, st *store.Store, h *hub.Hub, obs *observability,
 	}
 	m := diagnostics.NewManager(filepath.Join(cfg.DataDir, "diagnostics"), cfg.DebugLog, h, diagnosticsScope{st}, log)
 	px.SetRequestRecorder(m)
-	m.SetSources(diagnosticsSources{st: st, hub: h, logs: obs.logs, ux: obs.ux, logFile: cfg.LogFile, dataDir: cfg.DataDir, backupsDir: installBackupsDir(cfg)})
+	m.SetSources(diagnosticsSources{st: st, hub: h, logs: obs.Logs(), ux: obs.UX(), logFile: cfg.LogFile, dataDir: cfg.DataDir, backupsDir: installBackupsDir(cfg)})
 	return m
 }
 
@@ -115,9 +115,9 @@ func CollectDiagnosticsOffline(ctx context.Context, in OfflineDiagnosticsRequest
 	if err != nil {
 		return diagnostics.Bundle{}, "", err
 	}
-	defer obs.close()
+	defer obs.Close()
 	m := diagnostics.NewManager(filepath.Join(in.DataDir, "diagnostics"), debuglog.New(slog.DiscardHandler), offlineNodes{}, diagnosticsScope{st}, log)
-	m.SetSources(diagnosticsSources{st: st, logs: obs.logs, ux: obs.ux, logFile: in.LogFile, dataDir: in.DataDir})
+	m.SetSources(diagnosticsSources{st: st, logs: obs.Logs(), ux: obs.UX(), logFile: in.LogFile, dataDir: in.DataDir})
 	if in.WorkDir != "" {
 		m.SetBundleDir(in.WorkDir)
 	}

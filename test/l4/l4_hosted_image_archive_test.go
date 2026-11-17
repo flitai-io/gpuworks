@@ -40,7 +40,7 @@ const (
 	// hostedArchiveImportTimeout bounds one node's download plus load. The pull
 	// it replaces takes 25-40 minutes.
 	hostedArchiveImportTimeout = 60 * time.Minute
-	hostedArchiveSeriesName    = "gpustack/runner"
+	hostedArchiveSeriesName    = "gpuworks/gpuworks-runner"
 )
 
 // hostedArchivePollInterval is how often a node's image row is read; the unit
@@ -400,10 +400,13 @@ func hostedCustomImageBody(ref string, archiveURLs []string) (map[string]any, er
 	if !ok || name == "" || tag == "" {
 		return nil, fmt.Errorf("image %q has no explicit tag", ref)
 	}
-	// gpustack/runner tags read <backend><version>-<engine><version>.
+	// Runner tags read <backend><version>-<engine><version>[-r<revision>].
 	backend, engine, ok := strings.Cut(tag, "-")
 	if !ok || !strings.HasPrefix(backend, "cuda") || !strings.HasPrefix(engine, "vllm") {
 		return nil, fmt.Errorf("image tag %q is not a <cuda version>-vllm<version> runner tag", tag)
+	}
+	if version, revision, cut := strings.Cut(engine, "-r"); cut && revision != "" && strings.Trim(revision, "0123456789") == "" {
+		engine = version
 	}
 	return map[string]any{"series": []any{map[string]any{
 		"name": hostedArchiveSeriesName, "engine": "vllm", "framework": "cuda", "source": "custom",

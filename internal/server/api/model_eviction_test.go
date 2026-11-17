@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -74,6 +75,49 @@ func TestModelFileEvictionSuccessAndIdempotencyWireContract(t *testing.T) {
 	}
 }
 
+// A file still arriving by peer sync has its transfer canceled before the
+// node deletes it, so the target does not go on writing into a removed
+// directory; a cancel that fails leaves the file in place.
+func TestModelFileEvictionCancelsAPeerSyncFirst(t *testing.T) {
+	for _, cancelErr := range []error{nil, errors.New("target unreachable")} {
+		st := modelEvictionStore(t, fmt.Sprintf("syncing-%v", cancelErr != nil))
+		model, node := modelEvictionFixture(t, st)
+		if _, err := st.UpsertModelFile(&store.ModelFile{ModelID: model.ID, NodeID: node.ID, State: proto.MFSyncing, Path: "org/model", Acquisition: proto.ModelAcquirePeer, TransferID: "t-1"}); err != nil {
+			t.Fatal(err)
+		}
+		var order []string
+		signer := modelEvictionSigner(t)
+		token, err := managementSessionTestToken(t, st, signer, auth.Claims{UserID: 1, Username: "admin", Role: "admin"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		router := Router(Deps{Store: st, AuthSigner: signer,
+			CallNode: func(context.Context, string, string, any) (json.RawMessage, error) {
+				order = append(order, "evict")
+				return json.RawMessage(`{}`), nil
+			},
+			ModelTransfers: &fakeTransfers{cancel: func(modelID uint, nodeUUID string) (*store.ModelFile, error) {
+				order = append(order, fmt.Sprintf("cancel %d %s", modelID, nodeUUID))
+				return &store.ModelFile{State: proto.MFDownloadRequired}, cancelErr
+			}},
+		})
+		rec := modelEvictionRequest(t, router, token, fmt.Sprintf("/api/v1/models/%d/nodes/%s", model.ID, node.UUID))
+		wantCancel := fmt.Sprintf("cancel %d %s", model.ID, node.UUID)
+		if cancelErr == nil {
+			if rec.Code != http.StatusOK || strings.Join(order, ",") != wantCancel+",evict" {
+				t.Fatalf("eviction = %d %s, calls %v; want the cancel, then the eviction", rec.Code, rec.Body, order)
+			}
+			continue
+		}
+		if rec.Code != http.StatusConflict || strings.Join(order, ",") != wantCancel {
+			t.Fatalf("failed cancel = %d %s, calls %v; want a conflict and no eviction", rec.Code, rec.Body, order)
+		}
+		if _, err := st.ModelFileByModelNode(model.ID, node.ID); err != nil {
+			t.Fatalf("a failed cancel removed the file: %v", err)
+		}
+	}
+}
+
 func TestModelFileEvictionConflictListsDeploymentIDs(t *testing.T) {
 	st := modelEvictionStore(t, "conflict")
 	model, node := modelEvictionFixture(t, st)
@@ -106,7 +150,7 @@ func TestModelFileEvictionNotFoundWireContract(t *testing.T) {
 		fmt.Sprintf("/api/v1/models/%d/nodes/missing-node", model.ID),
 	} {
 		response := modelEvictionRequest(t, router, token, path)
-		if response.Code != http.StatusNotFound || response.Body.String() != "{\"error\":\"not found\"}\n" {
+		if response.Code != http.StatusNotFound || response.Body.String() != "{\"code\":\"NOT_FOUND\",\"error\":\"not found\"}\n" {
 			t.Fatalf("path=%s response=%d %s", path, response.Code, response.Body.String())
 		}
 	}

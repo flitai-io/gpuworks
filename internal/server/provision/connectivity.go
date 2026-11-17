@@ -10,15 +10,8 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/agentconf"
-)
-
-// Check names of the two directions between the server and a node. "Server
-// reachability" (the node fetching <server>/healthz) is the agent → server
-// direction; it is named as it always was, since earlier reports carry it.
-const (
-	checkServerReachability = "Server reachability"
-	checkServerToAgent      = "Server to agent"
-	checkConnectivity       = "Connectivity"
+	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // DefaultServerDialListen is where a server_dial agent listens unless told
@@ -45,22 +38,24 @@ var dialServerToAgent = (&net.Dialer{}).DialContext
 func ServerToAgentProbe(ctx context.Context, host, listen string, timeout time.Duration) CheckResult {
 	address, err := serverDialProbeAddress(host, listen)
 	if err != nil {
-		return CheckResult{Name: checkServerToAgent, Status: "warn", Detail: err.Error()}
+		return SkipCheck(CheckIDServerToAgent, messages.CheckNodeAddressInvalid, "there is no valid address to reach the node at", map[string]any{"host": host, "listen": listen}).WithEvidence(err.Error())
 	}
+	params := map[string]any{"address": address}
 	dialCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	conn, err := dialServerToAgent(dialCtx, "tcp", address)
 	switch {
 	case err == nil:
 		_ = conn.Close()
-		return CheckResult{Name: checkServerToAgent, Status: "ok", Detail: fmt.Sprintf("the server reached %s", address)}
+		return PassCheck(CheckIDServerToAgent, messages.CheckServerReachedNode, fmt.Sprintf("the server reached %s", address), params)
 	case errors.Is(err, syscall.ECONNREFUSED):
-		return CheckResult{Name: checkServerToAgent, Status: "ok", Detail: fmt.Sprintf("the server reached %s (nothing listens there yet)", address)}
+		return PassCheck(CheckIDServerToAgent, messages.CheckServerReachedNodeNoListener, fmt.Sprintf("the server reached %s (nothing listens there yet)", address), params)
 	case isTimeout(err):
 		_, port, _ := net.SplitHostPort(address)
-		return CheckResult{Name: checkServerToAgent, Status: "warn", Detail: fmt.Sprintf("the server cannot reach %s: no answer within %s; check routing, security groups and firewalls, including inbound TCP %s on the node for the server", address, timeout, port)}
+		params["timeout"], params["port"] = timeout.String(), port
+		return WarnCheck(CheckIDServerToAgent, messages.CheckServerNodeTimeout, fmt.Sprintf("the server cannot reach %s: no answer within %s; check routing, security groups and firewalls, including inbound TCP %s on the node for the server", address, timeout, port), params)
 	default:
-		return CheckResult{Name: checkServerToAgent, Status: "warn", Detail: fmt.Sprintf("the server cannot reach %s: %v", address, err)}
+		return WarnCheck(CheckIDServerToAgent, messages.CheckServerNodeUnreachable, fmt.Sprintf("the server cannot reach %s", address), params).WithEvidence(err.Error())
 	}
 }
 
@@ -89,16 +84,18 @@ func serverDialProbeAddress(host, listen string) (string, error) {
 // agentToServer is the "Server reachability" row, nil when it was not run;
 // serverToAgent is nil when there was no address to probe.
 func ConnectivityVerdict(connectMode string, agentToServer, serverToAgent *CheckResult) *CheckResult {
-	a2s := agentToServer != nil && agentToServer.Status == "ok"
-	s2a := serverToAgent != nil && serverToAgent.Status == "ok"
+	a2s := agentToServer != nil && agentToServer.Passed()
+	s2a := serverToAgent != nil && serverToAgent.Passed()
 	serverDial := strings.TrimSpace(connectMode) == "server_dial"
 	switch {
 	case serverDial && s2a, !serverDial && a2s:
 		return nil
 	case serverDial && agentToServer != nil && a2s:
-		return &CheckResult{Name: checkConnectivity, Status: "warn", Detail: "the server cannot reach the agent's listen port, but the node reaches the server: choose agent-initiated connection (agent_dial)"}
+		check := WarnCheck(CheckIDConnectivity, messages.CheckConnectivityUseAgentDial, "the server cannot reach the agent's listen port, but the node reaches the server: choose agent-initiated connection (agent_dial)", nil)
+		return &check
 	case !serverDial && serverToAgent != nil && s2a:
-		return &CheckResult{Name: checkConnectivity, Status: "warn", Detail: "the node cannot reach the server, but the server reaches the node: choose server-initiated connection (server_dial), and allow its listen port in the node's firewall"}
+		check := WarnCheck(CheckIDConnectivity, messages.CheckConnectivityUseServerDial, "the node cannot reach the server, but the server reaches the node: choose server-initiated connection (server_dial), and allow its listen port in the node's firewall", nil)
+		return &check
 	case agentToServer == nil && serverToAgent == nil:
 		return nil
 	case serverDial && agentToServer == nil:
@@ -107,14 +104,15 @@ func ConnectivityVerdict(connectMode string, agentToServer, serverToAgent *Check
 		// "neither direction works" would claim the other one failed too.
 		return nil
 	default:
-		return &CheckResult{Name: checkConnectivity, Status: "warn", Detail: "the node and the server cannot reach each other in either direction checked, so the agent will not connect; see " + connectivityDocs}
+		check := WarnCheck(CheckIDConnectivity, messages.CheckConnectivityNone, "the node and the server cannot reach each other in either direction checked, so the agent will not connect; see "+connectivityDocs, nil)
+		return &check
 	}
 }
 
-// findCheck returns the named row, or nil.
-func findCheck(checks []CheckResult, name string) *CheckResult {
+// findCheck returns the row with id, or nil.
+func findCheck(checks []CheckResult, id string) *CheckResult {
 	for i := range checks {
-		if checks[i].Name == name {
+		if checks[i].ID == id {
 			return &checks[i]
 		}
 	}
@@ -128,7 +126,7 @@ func findCheck(checks []CheckResult, name string) *CheckResult {
 // when the node cannot reach the server: a node behind NAT that the server
 // cannot dial is the normal case for agent_dial, not a warning.
 func AppendConnectivity(ctx context.Context, checks []CheckResult, connectMode, host, listen string) []CheckResult {
-	agentToServer := findCheck(checks, checkServerReachability)
+	agentToServer := findCheck(checks, CheckIDServerReachability)
 	var a2s *CheckResult
 	if agentToServer != nil {
 		copied := *agentToServer
@@ -141,11 +139,11 @@ func AppendConnectivity(ctx context.Context, checks []CheckResult, connectMode, 
 		if strings.TrimSpace(connectMode) == "server_dial" {
 			// The one thing a server-dialed agent needs: an install that
 			// cannot be reached would never connect.
-			if probe.Status != "ok" {
-				probe.Status = "error"
+			if !probe.Passed() {
+				probe.Status = proto.CheckFail
 			}
 			checks = append(checks, probe)
-		} else if a2s == nil || a2s.Status != "ok" {
+		} else if a2s == nil || !a2s.Passed() {
 			checks = append(checks, probe)
 		}
 	}

@@ -274,6 +274,11 @@ func (i *Installer) finishInstall(ctx context.Context, config serverconfig.File,
 	if policyErr != nil {
 		return InstallReport{}, policyErr
 	}
+	// The log is created before the handoff so that it is handed over too;
+	// the "ok" line is written only once the handoff has succeeded.
+	if err := i.createHistory(ctx, i.layout.HistoryPath(), policy.Mode()); err != nil {
+		i.io.Warn("warning: could not create the install history: %v", err)
+	}
 	if err := i.chownTree(ctx, pf.ServiceUser); err != nil {
 		return InstallReport{}, fmt.Errorf("protect completed installation: %w", err)
 	}

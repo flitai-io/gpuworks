@@ -17,8 +17,8 @@ test("structured API errors translate by code with params", async () => {
 
 test("admission errors retain all diagnostic checks and their request correlation", async () => {
   const diagnostics = { checks: [
-    { id: "mount:7:3", status: "failed", message: { code: "STORAGE_UNAVAILABLE_ON_NODE", params: { node: "gpu-a", storage: "nfs", reason: "not_mounted" }, message: "storage is not mounted" } },
-    { id: "read:7:3", status: "blocked", blocked_by: ["mount:7:3"], message: { code: "MODEL_SOURCE_UNAVAILABLE", params: { reason: "storage_access_required" }, message: "model path was not checked" } },
+    { id: "mount:7:3", status: "fail", message: { code: "STORAGE_UNAVAILABLE_ON_NODE", params: { node: "gpu-a", storage: "nfs", reason: "not_mounted" }, message: "storage is not mounted" } },
+    { id: "read:7:3", status: "skip", blocked_by: ["mount:7:3"], message: { code: "MODEL_SOURCE_UNAVAILABLE", params: { reason: "storage_access_required" }, message: "model path was not checked" } },
   ] };
   const error = await apiResponseError(new Response(JSON.stringify({
     error: "model source is unavailable", code: "MODEL_SOURCE_UNAVAILABLE", diagnostics,
@@ -30,7 +30,7 @@ test("admission errors retain all diagnostic checks and their request correlatio
 
 test("malformed optional diagnostics never hide an otherwise useful API error", async () => {
   const error = await apiResponseError(new Response(JSON.stringify({
-    code: "MODEL_SOURCE_UNAVAILABLE", error: "useful fallback", diagnostics: { checks: [null, { status: "failed" }] },
+    code: "MODEL_SOURCE_UNAVAILABLE", error: "useful fallback", diagnostics: { checks: [null, { status: "fail" }] },
   }), { status: 400 }), "request failed");
   assert.ok(error instanceof APIError);
   assert.equal(error.fallback, "useful fallback");

@@ -58,7 +58,7 @@ func (d *Driver) ValidateCredentials(ctx context.Context, creds provider.Credent
 	}
 	apiCtx, cancel := client.OperationContext(ctx)
 	defer cancel()
-	_, err = queryAll[hostInventory](apiCtx, client, "/hosts")
+	_, err = apiclient.QueryAll[hostInventory](apiCtx, client, "/hosts")
 	return d.validationResult(ctx, creds.Endpoint, err)
 }
 

@@ -2,11 +2,13 @@ package deployment
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -40,11 +42,12 @@ func TestResolvePartitionBackend(t *testing.T) {
 		requested string
 		want      string
 		wantErr   string
+		wantCode  string
 	}{
 		{name: "unnamed on ascend", node: ascend, limitGiB: 8, want: accelerator.BackendAscendLogical},
 		{name: "unnamed on nvidia", node: nvidia, limitGiB: 8, want: accelerator.BackendNVIDIALogical},
 		{name: "named matches", node: ascend, limitGiB: 8, requested: accelerator.BackendAscendLogical, want: accelerator.BackendAscendLogical},
-		{name: "named elsewhere", node: ascend, limitGiB: 8, requested: accelerator.BackendNVIDIALogical, wantErr: "does not match the selected node"},
+		{name: "named elsewhere", node: ascend, limitGiB: 8, requested: accelerator.BackendNVIDIALogical, wantErr: "does not match the selected node", wantCode: messages.ErrorPartitionBackendNotOnNode},
 		{name: "no quota", node: nvidia, want: ""},
 		{name: "backend without quota", node: nvidia, requested: accelerator.BackendNVIDIALogical, wantErr: "requires a positive vram_limit_gib"},
 	} {
@@ -53,6 +56,10 @@ func TestResolvePartitionBackend(t *testing.T) {
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err = %v, want %q", err, tc.wantErr)
+				}
+				var product *messages.ProductError
+				if tc.wantCode != "" && (!errors.As(err, &product) || product.Code() != tc.wantCode) {
+					t.Fatalf("err = %v, want code %s", err, tc.wantCode)
 				}
 				return
 			}
@@ -66,7 +73,29 @@ func TestResolvePartitionBackend(t *testing.T) {
 	// complaint that NVIDIA's does not match an Ascend node.
 	ascend.PartitionProbes = "null"
 	_, err := ResolvePartitionBackend(ascend, 8, "")
-	if err == nil || !strings.Contains(err.Error(), accelerator.BackendAscendLogical) || strings.Contains(err.Error(), "does not match") {
+	var product *messages.ProductError
+	if !errors.As(err, &product) || product.Code() != messages.ErrorPartitionAgentUpgradeRequired || !strings.Contains(err.Error(), accelerator.BackendAscendLogical) {
 		t.Fatalf("err = %v, want the ascend backend's own unavailability", err)
+	}
+}
+
+// Another member of a distributed group refusing the backend chosen on the
+// first node keeps the group code, with that member's reason code and params.
+func TestDistributedPartitionRefusalCarriesTheMembersReason(t *testing.T) {
+	ascend := partitionTestNode(t, "ascend", accelerator.BackendAscendLogical, "910B4")
+	ascend.UUID, ascend.Name = "node-2", "npu-2"
+	ascend.PartitionProbes = `[{"backend":"ascend-dgpu","gpu_index":0,"status":"failed","detail":"quota mismatch"}]`
+	_, refusal := ResolvePartitionBackend(ascend, 8, accelerator.BackendAscendLogical)
+	err := distributedPartitionRefusal(ascend, accelerator.BackendAscendLogical, refusal)
+	var product *messages.ProductError
+	if !errors.As(err, &product) || product.Code() != messages.ErrorDistributedPartitionBackendUnavailable {
+		t.Fatalf("err = %v", err)
+	}
+	params := product.Params()
+	if params["node"] != "npu-2" || params["reason_code"] != messages.ErrorPartitionProbeFailed || params["probe_detail"] != "quota mismatch" || params["backend"] == "" {
+		t.Fatalf("params = %#v", params)
+	}
+	if _, leaked := params["detail"]; leaked {
+		t.Fatalf("params carry an English detail: %#v", params)
 	}
 }

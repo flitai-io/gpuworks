@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"path"
 	"slices"
@@ -222,14 +223,12 @@ func (a *apiHandlers) pickStorageFilesNode(storage *store.Storage, need storageF
 	return node, err
 }
 
-// storageFilesAgentErr maps an agent's refusal (an RPC error text or an upload
-// status) to a product error and its status.
-func storageFilesAgentErr(target *storageFilesTarget, text string) error {
-	if i := strings.Index(text, "storage_files:"); i > 0 {
-		// A transport that prefixes the agent's text still carries the code.
-		text = text[i:]
-	}
-	refusal := proto.ParseStorageFilesError(text)
+// storageFilesAgentErr maps an agent's refusal (an RPC error, or an
+// upload/download answer's code) to a product error and its status. Anything
+// that is not a proto.StorageFilesError is a failed operation.
+func storageFilesAgentErr(target *storageFilesTarget, err error) error {
+	refusal := &proto.StorageFilesError{Code: proto.StorageFilesErrFailed, Detail: err.Error()}
+	errors.As(err, &refusal)
 	detail := refusal.Detail
 	switch refusal.Code {
 	case proto.StorageFilesErrPathInvalid:
@@ -255,7 +254,7 @@ func (a *apiHandlers) callStorageFiles(ctx context.Context, target *storageFiles
 	defer cancel()
 	raw, err := a.d.CallNode(callCtx, target.node.UUID, method, params)
 	if err != nil {
-		return nil, storageFilesAgentErr(target, err.Error())
+		return nil, storageFilesAgentErr(target, err)
 	}
 	return raw, nil
 }
@@ -290,7 +289,7 @@ func (a *apiHandlers) listStorageFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	var page proto.StorageFilesListResult
 	if err := json.Unmarshal(raw, &page); err != nil {
-		writeStorageFilesErr(w, storageFilesAgentErr(target, "bad list answer: "+err.Error()))
+		writeStorageFilesErr(w, storageFilesAgentErr(target, fmt.Errorf("bad list answer: %w", err)))
 		return
 	}
 	writeJSON(w, http.StatusOK, storageFileListDTO(target, rel, page))

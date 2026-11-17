@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // The agent keeps its binary, the runtime's PRoot and unpacked images, and the
@@ -15,18 +18,6 @@ import (
 // (ownership changes), how fast models load (network filesystems) and whether
 // the install survives the instance being recreated (container overlay). The
 // precheck and the SSH install share this one probe so both say the same thing.
-
-// Names of the checks one probe produces. The UI lists them as separate rows
-// and keys rows by name, so each is unique within a report.
-const (
-	checkInstallDir            = "Install directory"
-	checkInstallDirOwnership   = "Install directory ownership"
-	checkInstallDirTraversal   = "Install directory path access"
-	checkInstallDirFilesystem  = "Install directory filesystem"
-	checkInstallDirPersistence = "Install directory persistence"
-	checkInstallDirSpace       = "Install directory free space"
-	checkInstallDirNames       = "Install directory file names"
-)
 
 // minInstallDirFreeKiB is the free space below which the install directory is
 // flagged: one inference engine image unpacks to 10-20 GiB under the udocker
@@ -270,58 +261,75 @@ func installDirChecks(f installDirFacts, instanceKind, providerKind string) (che
 // installDirNamesCheck reports a filesystem that refuses ':' in file names
 // (RunPod's /workspace answers EINVAL). The runveil runtime keeps its images
 // and unpacks their root filesystems under the install directory, and both
-// hold such names, so it cannot run anything from there: an error on a node
+// hold such names, so it cannot run anything from there: a failure on a node
 // without docker. A node with docker keeps its images with dockerd, so there
 // it is only a warning about the runtime the node does not use. The install is
 // not stopped either way.
 func installDirNamesCheck(f installDirFacts) CheckResult {
+	params := map[string]any{"dir": f.probed}
 	switch f.names {
 	case "ok":
-		return CheckResult{Name: checkInstallDirNames, Status: "ok", Detail: "':' is allowed in file names"}
+		return PassCheck(CheckIDInstallDirNames, messages.CheckInstallDirColonAllowed, "':' is allowed in file names", nil)
 	case "refused":
 		refusal := fmt.Sprintf("%s does not allow ':' in file names, which container images need (image layers are named sha256:<hex>, and Debian-based images hold /var/lib/dpkg/info/<package>:amd64.list)", f.probed)
-		cause := ""
-		if f.namesErr != "" {
-			cause = ": " + f.namesErr
-		}
 		if f.docker {
-			return CheckResult{Name: checkInstallDirNames, Status: "warn", Detail: refusal + "; this node has docker, which keeps images elsewhere, but the runveil runtime could not run from here" + cause}
+			return WarnCheck(CheckIDInstallDirNames, messages.CheckInstallDirColonRefusedDocker, refusal+"; this node has docker, which keeps images elsewhere, but the runveil runtime could not run from here", params).WithEvidence(f.namesErr)
 		}
-		return CheckResult{Name: checkInstallDirNames, Status: "error", Detail: refusal + ", so the runveil runtime used on nodes without docker cannot run deployments from here; choose an install directory on a local filesystem (on a container instance such as RunPod, a path on the container disk sized for the images)" + cause}
+		return FailCheck(CheckIDInstallDirNames, messages.CheckInstallDirColonRefused, refusal+", so the runveil runtime used on nodes without docker cannot run deployments from here; choose an install directory on a local filesystem (on a container instance such as RunPod, a path on the container disk sized for the images)", params).WithEvidence(f.namesErr)
 	default:
-		return CheckResult{Name: checkInstallDirNames, Status: "ok", Detail: fmt.Sprintf("not checked: no file could be created in %s", f.probed)}
+		return SkipCheck(CheckIDInstallDirNames, messages.CheckInstallDirNamesUntested, fmt.Sprintf("not checked: no file could be created in %s", f.probed), params)
 	}
 }
 
+// installDirProblem is one reason the install directory cannot hold the
+// agent; the first one found is the check's code.
+type installDirProblem struct {
+	code, message string
+}
+
 func installDirAccessCheck(f installDirFacts, noexec bool) CheckResult {
-	var problems []string
+	params := map[string]any{"dir": f.requested, "user": f.userLabel()}
+	if f.probed != f.requested {
+		params["probed"] = f.probed
+	}
+	if fs := f.filesystem(); fs != "" {
+		params["filesystem"] = fs
+	}
+	if f.mount != "" {
+		params["mount"] = f.mount
+	}
+	var problems []installDirProblem
 	if f.exists == "file" {
-		problems = append(problems, f.requested+" exists but is not a directory")
+		problems = append(problems, installDirProblem{messages.CheckInstallDirNotDirectory, f.requested + " exists but is not a directory"})
 	}
 	if noexec {
-		problems = append(problems, fmt.Sprintf("%s is mounted noexec, so the agent binary and the runtime's PRoot cannot run from it; choose a directory on a filesystem mounted with exec", f.mount))
+		problems = append(problems, installDirProblem{messages.CheckInstallDirNoexec, fmt.Sprintf("%s is mounted noexec, so the agent binary and the runtime's PRoot cannot run from it; choose a directory on a filesystem mounted with exec", f.mount)})
 	}
-	var access string
+	var access, accessCode string
 	switch {
 	case f.mac && !f.writable && f.macAdmin:
-		access = "created by the installer with administrator rights"
+		access, accessCode = "created by the installer with administrator rights", messages.CheckInstallDirMacAdmin
 	case f.mac && !f.writable:
-		problems = append(problems, fmt.Sprintf("%s is not writable by %s and the installer has no administrator rights; leave the directory empty to install in ~/gpuworks, or sign in with the account password so the installer can use sudo", f.probed, f.userLabel()))
+		problems = append(problems, installDirProblem{messages.CheckInstallDirMacNotWritable, fmt.Sprintf("%s is not writable by %s and the installer has no administrator rights; leave the directory empty to install in ~/gpuworks, or sign in with the account password so the installer can use sudo", f.probed, f.userLabel())})
 	case f.writable:
-		access = "writable by " + f.userLabel()
+		access, accessCode = "writable by "+f.userLabel(), messages.CheckInstallDirWritable
 	case f.sudo && f.privWritable:
-		access = "writable through passwordless sudo"
+		access, accessCode = "writable through passwordless sudo", messages.CheckInstallDirWritableSudo
 	case f.root():
-		problems = append(problems, fmt.Sprintf("%s is not writable even by root (a read-only mount, or a network filesystem that maps root to an unprivileged user); choose a writable directory (left empty, the install falls back to /tmp/gpuworks, which is lost on reboot)", f.probed))
+		problems = append(problems, installDirProblem{messages.CheckInstallDirRootNotWritable, fmt.Sprintf("%s is not writable even by root (a read-only mount, or a network filesystem that maps root to an unprivileged user); choose a writable directory (left empty, the install falls back to /tmp/gpuworks, which is lost on reboot)", f.probed)})
 	case f.sudo:
-		problems = append(problems, fmt.Sprintf("%s is not writable by %s, even through sudo; choose a writable directory (left empty, the install falls back to /tmp/gpuworks, which is lost on reboot)", f.probed, f.userLabel()))
+		problems = append(problems, installDirProblem{messages.CheckInstallDirSudoNotWritable, fmt.Sprintf("%s is not writable by %s, even through sudo; choose a writable directory (left empty, the install falls back to /tmp/gpuworks, which is lost on reboot)", f.probed, f.userLabel())})
 	default:
-		problems = append(problems, fmt.Sprintf("%s is not writable by %s and there is no passwordless sudo; choose a writable directory (left empty, the install falls back to /tmp/gpuworks, which is lost on reboot)", f.probed, f.userLabel()))
+		problems = append(problems, installDirProblem{messages.CheckInstallDirNotWritable, fmt.Sprintf("%s is not writable by %s and there is no passwordless sudo; choose a writable directory (left empty, the install falls back to /tmp/gpuworks, which is lost on reboot)", f.probed, f.userLabel())})
 	}
 	if len(problems) > 0 {
-		return CheckResult{Name: checkInstallDir, Status: "error", Detail: strings.Join(problems, "; ") + ". " + f.location()}
+		texts := make([]string, len(problems))
+		for i, p := range problems {
+			texts[i] = p.message
+		}
+		return FailCheck(CheckIDInstallDir, problems[0].code, strings.Join(texts, "; ")+". "+f.location(), params)
 	}
-	return CheckResult{Name: checkInstallDir, Status: "ok", Detail: f.location() + "; " + access}
+	return PassCheck(CheckIDInstallDir, accessCode, f.location()+"; "+access, params)
 }
 
 func (f installDirFacts) userLabel() string {
@@ -333,44 +341,49 @@ func (f installDirFacts) userLabel() string {
 
 func installDirOwnershipCheck(f installDirFacts) CheckResult {
 	if f.mac {
-		return CheckResult{Name: checkInstallDirOwnership, Status: "ok", Detail: "not needed on a Mac: engines run as the agent's own user"}
+		return NACheck(CheckIDInstallDirOwnership, messages.CheckNotNeededOnMac, "not needed on a Mac: engines run as the agent's own user", nil)
 	}
 	switch f.chown {
 	case "ok":
-		return CheckResult{Name: checkInstallDirOwnership, Status: "ok", Detail: "files can be handed to another user; runveil workloads run as the dedicated runtime user"}
+		return PassCheck(CheckIDInstallDirOwnership, messages.CheckInstallDirChownAllowed, "files can be handed to another user; runveil workloads run as the dedicated runtime user", nil)
 	case "refused":
-		detail := fmt.Sprintf("%s does not allow changing file ownership, so runveil workloads will run as the agent's own user (root) instead of the dedicated runtime user", f.probed)
-		if f.chownErr != "" {
-			detail += ": " + f.chownErr
-		}
-		return CheckResult{Name: checkInstallDirOwnership, Status: "warn", Detail: detail}
+		return WarnCheck(CheckIDInstallDirOwnership, messages.CheckInstallDirChownRefused,
+			fmt.Sprintf("%s does not allow changing file ownership, so runveil workloads will run as the agent's own user (root) instead of the dedicated runtime user", f.probed),
+			map[string]any{"dir": f.probed}).WithEvidence(f.chownErr)
 	default:
 		if !f.root() && !f.sudo {
-			return CheckResult{Name: checkInstallDirOwnership, Status: "ok", Detail: fmt.Sprintf("not checked: %s is not root and has no passwordless sudo, so the agent will run as that user anyway", f.userLabel())}
+			return NACheck(CheckIDInstallDirOwnership, messages.CheckInstallDirChownUnprivileged,
+				fmt.Sprintf("not checked: %s is not root and has no passwordless sudo, so the agent will run as that user anyway", f.userLabel()), map[string]any{"user": f.userLabel()})
 		}
-		return CheckResult{Name: checkInstallDirOwnership, Status: "ok", Detail: fmt.Sprintf("not checked: no file could be created in %s with privileges", f.probed)}
+		return SkipCheck(CheckIDInstallDirOwnership, messages.CheckInstallDirChownUntested,
+			fmt.Sprintf("not checked: no file could be created in %s with privileges", f.probed), map[string]any{"dir": f.probed})
 	}
 }
 
 func installDirFilesystemCheck(f installDirFacts) CheckResult {
 	if f.onNetworkFilesystem() {
-		return CheckResult{Name: checkInstallDirFilesystem, Status: "warn", Detail: fmt.Sprintf("%s is a network or userspace filesystem (%s); model loading and engine start-up speed depend on its throughput and latency", f.probed, f.filesystem())}
+		return WarnCheck(CheckIDInstallDirFilesystem, messages.CheckInstallDirNetworkFilesystem,
+			fmt.Sprintf("%s is a network or userspace filesystem (%s); model loading and engine start-up speed depend on its throughput and latency", f.probed, f.filesystem()),
+			map[string]any{"dir": f.probed, "filesystem": f.filesystem()})
 	}
 	if fs := f.filesystem(); fs != "" {
-		return CheckResult{Name: checkInstallDirFilesystem, Status: "ok", Detail: fs + " (local)"}
+		return PassCheck(CheckIDInstallDirFilesystem, messages.CheckInstallDirLocalFilesystem, fs+" (local)", map[string]any{"filesystem": fs})
 	}
-	return CheckResult{Name: checkInstallDirFilesystem, Status: "ok", Detail: "filesystem type unknown"}
+	return SkipCheck(CheckIDInstallDirFilesystem, messages.CheckInstallDirFilesystemUnknown, "filesystem type unknown", nil)
 }
 
 func installDirSpaceCheck(f installDirFacts) CheckResult {
 	if !f.haveSpace {
-		return CheckResult{Name: checkInstallDirSpace, Status: "ok", Detail: "free space unknown (df reported nothing)"}
+		return SkipCheck(CheckIDInstallDirSpace, messages.CheckInstallDirSpaceUnknown, "free space unknown (df reported nothing)", nil)
 	}
 	detail := fmt.Sprintf("%s free of %s", gib(f.availKiB), gib(f.totalKiB))
+	params := map[string]any{"available": gib(f.availKiB), "total": gib(f.totalKiB), "available_kib": f.availKiB, "total_kib": f.totalKiB}
 	if f.availKiB < minInstallDirFreeKiB {
-		return CheckResult{Name: checkInstallDirSpace, Status: "warn", Detail: fmt.Sprintf("%s; inference engine images and model weights need roughly %s or more", detail, gib(minInstallDirFreeKiB))}
+		params["minimum"] = gib(minInstallDirFreeKiB)
+		return WarnCheck(CheckIDInstallDirSpace, messages.CheckInstallDirSpaceLow,
+			fmt.Sprintf("%s; inference engine images and model weights need roughly %s or more", detail, gib(minInstallDirFreeKiB)), params)
 	}
-	return CheckResult{Name: checkInstallDirSpace, Status: "ok", Detail: detail}
+	return PassCheck(CheckIDInstallDirSpace, messages.CheckInstallDirSpaceOK, detail, params)
 }
 
 // installDirPersistenceCheck warns about an install directory whose contents
@@ -381,15 +394,17 @@ func installDirSpaceCheck(f installDirFacts) CheckResult {
 // cannot make there.
 func installDirPersistenceCheck(f installDirFacts, instanceKind, providerKind string) CheckResult {
 	container := f.container || strings.EqualFold(strings.TrimSpace(instanceKind), "container")
+	params := map[string]any{"dir": f.probed, "filesystem": f.filesystem()}
 	switch {
 	case f.onOverlay() && container && strings.TrimSpace(providerKind) != "":
-		return CheckResult{Name: checkInstallDirPersistence, Status: "warn", Detail: fmt.Sprintf("%s is on the instance's container disk (%s), the only place the agent can live on a %s container instance. It is lost when the instance is deleted or recreated, taking the agent, its identity and the model cache with it; install the agent again on the replacement", f.probed, f.filesystem(), strings.TrimSpace(providerKind))}
+		params["provider"] = strings.TrimSpace(providerKind)
+		return WarnCheck(CheckIDInstallDirPersistence, messages.CheckInstallDirProviderDisk, fmt.Sprintf("%s is on the instance's container disk (%s), the only place the agent can live on a %s container instance. It is lost when the instance is deleted or recreated, taking the agent, its identity and the model cache with it; install the agent again on the replacement", f.probed, f.filesystem(), strings.TrimSpace(providerKind)), params)
 	case f.onOverlay() && container:
-		return CheckResult{Name: checkInstallDirPersistence, Status: "warn", Detail: fmt.Sprintf("%s is on the container's writable layer (%s), which is lost when the instance is recreated, taking the agent, its identity and the model cache with it; install under a persistent volume on a local filesystem if the instance has one; a network volume that refuses ':' in file names (RunPod's /workspace) cannot hold the runveil runtime's images", f.probed, f.filesystem())}
+		return WarnCheck(CheckIDInstallDirPersistence, messages.CheckInstallDirContainerLayer, fmt.Sprintf("%s is on the container's writable layer (%s), which is lost when the instance is recreated, taking the agent, its identity and the model cache with it; install under a persistent volume on a local filesystem if the instance has one; a network volume that refuses ':' in file names (RunPod's /workspace) cannot hold the runveil runtime's images", f.probed, f.filesystem()), params)
 	case f.onMemory():
-		return CheckResult{Name: checkInstallDirPersistence, Status: "warn", Detail: fmt.Sprintf("%s is on %s, which lives in memory and is lost on reboot", f.probed, f.filesystem())}
+		return WarnCheck(CheckIDInstallDirPersistence, messages.CheckInstallDirInMemory, fmt.Sprintf("%s is on %s, which lives in memory and is lost on reboot", f.probed, f.filesystem()), params)
 	default:
-		return CheckResult{Name: checkInstallDirPersistence, Status: "ok", Detail: "not on a container's writable layer"}
+		return PassCheck(CheckIDInstallDirPersistence, messages.CheckInstallDirPersistent, "not on a container's writable layer", nil)
 	}
 }
 
@@ -430,9 +445,10 @@ func (o InstallDirOutcome) keepUntraversable() InstallDirOutcome {
 	}
 	checks := append([]CheckResult(nil), o.Checks...)
 	for i := range checks {
-		if checks[i].Name == checkInstallDirTraversal {
-			checks[i].Status = "warn"
-			checks[i].Detail += "; not stopping the reinstall of an agent that already runs from here"
+		if checks[i].ID == CheckIDInstallDirTraversal {
+			checks[i].Status = proto.CheckWarn
+			checks[i].Code = messages.CheckInstallDirPathClosedReinstall
+			checks[i].Message += "; not stopping the reinstall of an agent that already runs from here"
 		}
 	}
 	o.Checks, o.Untraversable, o.untraversable = checks, false, nil
@@ -458,18 +474,18 @@ func probeInstallDir(ctx context.Context, client *ssh.Client, dir, instanceKind,
 	if !strings.HasPrefix(dir, "/") {
 		// A relative directory lands wherever the SSH session starts, and a
 		// leading '-' would read as an option to every tool the probe runs.
-		return InstallDirOutcome{Checks: []CheckResult{{Name: checkInstallDir, Status: "error",
-			Detail: fmt.Sprintf("%q is not an absolute path; give the install directory as one, for example /opt/gpuworks", dir)}}}
+		return InstallDirOutcome{Checks: []CheckResult{FailCheck(CheckIDInstallDir, messages.CheckInstallDirNotAbsolute,
+			fmt.Sprintf("%q is not an absolute path; give the install directory as one, for example /opt/gpuworks", dir), map[string]any{"dir": dir})}}
 	}
 	ctx, cancel := context.WithTimeout(ctx, installDirProbeTimeout)
 	defer cancel()
 	out, err := runContext(ctx, client, installDirProbeCommand(dir))
 	if err != nil {
-		return InstallDirOutcome{Checks: []CheckResult{{Name: checkInstallDir, Status: "warn", Detail: fmt.Sprintf("could not inspect %s: %v", dir, err)}}}
+		return InstallDirOutcome{Checks: []CheckResult{installDirProbeFailed(dir, outputEvidence(out, err))}}
 	}
 	facts, err := parseInstallDirFacts(out)
 	if err != nil {
-		return InstallDirOutcome{Checks: []CheckResult{{Name: checkInstallDir, Status: "warn", Detail: fmt.Sprintf("could not inspect %s: %v", dir, err)}}}
+		return InstallDirOutcome{Checks: []CheckResult{installDirProbeFailed(dir, err.Error())}}
 	}
 	if adjust != nil {
 		adjust(&facts)
@@ -490,14 +506,20 @@ func ProbeMacInstallDir(ctx context.Context, client *ssh.Client, dir string, adm
 	return probeInstallDir(ctx, client, dir, "", "", func(f *installDirFacts) { f.mac, f.macAdmin = true, admin })
 }
 
-// mergeChecks adds checks to a report, replacing earlier rows of the same name
+// installDirProbeFailed is the row for a probe that could not run: it says
+// nothing about the directory, so the checks are skipped, not failed.
+func installDirProbeFailed(dir, evidence string) CheckResult {
+	return SkipCheck(CheckIDInstallDir, messages.CheckInstallDirProbeFailed, "could not inspect "+dir, map[string]any{"dir": dir}).WithEvidence(evidence)
+}
+
+// mergeChecks adds checks to a report, replacing earlier rows of the same id
 // so a re-probe after the install directory changed does not leave the old
 // directory's verdicts beside the new ones.
 func mergeChecks(existing, added []CheckResult) []CheckResult {
 	for _, c := range added {
 		replaced := false
 		for i := range existing {
-			if existing[i].Name == c.Name {
+			if existing[i].ID == c.ID {
 				existing[i], replaced = c, true
 				break
 			}
@@ -512,8 +534,8 @@ func mergeChecks(existing, added []CheckResult) []CheckResult {
 // noexecInstallError is the reason an install stops on a noexec directory.
 func noexecInstallError(outcome InstallDirOutcome) error {
 	for _, c := range outcome.Checks {
-		if c.Name == checkInstallDir {
-			return fmt.Errorf("%s: %s", c.Name, c.Detail)
+		if c.ID == CheckIDInstallDir {
+			return fmt.Errorf("install directory: %s", c.Message)
 		}
 	}
 	return fmt.Errorf("install directory is mounted noexec")

@@ -96,7 +96,7 @@ func (a *apiHandlers) fillStorageCaches(out *dto.Storage, storage *store.Storage
 			cache.State, cache.Reason = "pending", "directory_unverified"
 		case !known:
 			cache.State, cache.Reason = "pending", "disk_unverified"
-		case op.Mode == "clear" && op.State == "completed" && op.Error == "protected_entries_remain" && hasProtected:
+		case op.Mode == "clear" && op.State == "completed" && op.Error == store.CacheOperationProtectedEntriesRemain && hasProtected:
 			cache.State, cache.Reason = "blocked", "cache_full_in_use"
 		case op.State == "pending":
 			cache.State = "pending"

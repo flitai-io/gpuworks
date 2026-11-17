@@ -88,6 +88,10 @@ func atomicReplaceCommand(stagedPath, finalPath string) string {
 	return "mv -f " + shellQuote(stagedPath) + " " + shellQuote(finalPath)
 }
 
+// ResolvedInstallDir is dir as the installer uses it: trimmed, and the
+// default install directory when empty.
+func ResolvedInstallDir(dir string) string { return installDir(dir) }
+
 func installDir(dir string) string {
 	if strings.TrimSpace(dir) == "" {
 		return "/opt/gpuworks"
@@ -217,9 +221,9 @@ func AgentRunningCheckCommand(dir string) string {
 // output for the same dir.
 func AgentRunningCheck(output, dir string) CheckResult {
 	if strings.Contains(output, agentRunningOK) {
-		return CheckResult{Name: "Agent process", Status: "ok", Detail: "running with state directory " + installDir(dir)}
+		return agentRunningCheck(installDir(dir), "")
 	}
-	return CheckResult{Name: "Agent process", Status: "warn", Detail: "no agent was observed running with state directory " + installDir(dir) + "; the unit may need daemon-reload"}
+	return agentNotObservedCheck(installDir(dir), "")
 }
 
 func scriptInstallArgs(serverURL, token, connectMode, listen string) string {

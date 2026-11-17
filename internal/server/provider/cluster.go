@@ -16,6 +16,9 @@ type Cluster struct {
 	Name       string `json:"name"`
 	Region     string `json:"region"`
 	Version    string `json:"version,omitempty"`
+	// Type is the vendor's product the cluster is (a ClusterType constant);
+	// empty when the driver cannot tell.
+	Type string `json:"type,omitempty"`
 	// State is the vendor's own word for it ("running", "provisioning"...).
 	State string `json:"state"`
 	// Running: the vendor reports the cluster usable.

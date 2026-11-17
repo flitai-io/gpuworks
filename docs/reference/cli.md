@@ -146,7 +146,7 @@ gpuworks restarted (systemd)
 | `--source URL` | 内置的三个公共源 | 发布通道格式的源（`<URL>/<channel>/index.json`），可重复，替换内置源；用于客户自建镜像站 |
 | `--base-url URL` | 空 | 改读发布站（`<URL>/data/release.json` 与 `<URL>/downloads/`），例如自建在内网的发布站 |
 | `--archive FILE` | 空 | 本地发布包 `gpuworks-<release_id>-<os>-<arch>.tar.gz`，不发任何网络请求 |
-| `--version ID` | 空 | 期望的 release id；与渠道或站点当前版本（或发布包里的版本）不一致时报错，不会静默升到别的版本 |
+| `--version ID` | 空 | 指定渠道签名清单中的 release id；使用发布站点或本地包时须匹配该站点或包的版本 |
 | `--keep N` | `3` | 保留的升级前备份组数 |
 | `--force` | `false` | 允许替换没有 release id 的本地构建（`dev` / `-dirty`） |
 | `--check` | `false` | 只报告是否有新版，不做任何修改 |
@@ -164,7 +164,7 @@ gpuworks restarted (systemd)
 - `--base-url`：发布站的清单不签名，信任来自站点的 TLS，压缩包按清单里的 sha256 校验；用于内网发布站。
 - `--archive`：从包里解出 `gpuworks` 到 `<dir>/tmp/`，先执行一次它的 `version`，以输出里的 release id 作为目标版本，之后与在线路径相同。解不出、架构不对（先读 ELF 头比对，不靠试运行，装了 qemu binfmt 的主机也拦得住）、跑不起来或报不出 release id（本地构建）的包在停服前就被拒绝；发布包本身原样保留。完整性靠 gzip 自带校验，sha256 请拷到主机后用发布包的 `SHA256SUMS` 自行核对。
 - 用 `<dir>/.upgrade.lock` 互斥，并发升级直接失败；备份含数据库、`master.key`、`server.yaml` 和二进制。
-- 回滚还原的是升级前快照，升级窗口内的写入会丢；回滚后仍打印备份路径。每次安装/升级追加一行审计到 `<data>/install-history.jsonl`。
+- 回滚还原的是升级前快照，升级窗口内的写入会丢；回滚后仍打印备份路径。每次安装/升级追加一行审计到 `<data>/install-history.jsonl`；写入失败只告警，不影响升级结果。
 - 只升级控制面；节点上的 agent 不会随之自动升级。
 
 ## gpuworks restart
@@ -330,6 +330,7 @@ gpuworks uninstall --dir /opt/gpuworks/server --purge --dry-run --json
 - `--driver host` 把引擎作为宿主机进程运行，用于 macOS（Apple silicon）节点：Linux 容器在 macOS 上跑在虚拟机里，拿不到 Metal GPU。镜像是 darwin/arm64 的环境包，解包后由 agent 直接启动。
 - 不指定 driver 时，macOS 上直接选 host（即使 Docker Desktop 可用）；其他系统按 docker（daemon 可用）> nerdctl > runveil 的顺序探测；都不可用则该节点禁用部署。`--driver` 给了未知值，或给了当前系统用不了的运行时（Linux 上的 `host`、macOS 上的 `udocker`），会记录错误并且不启用任何运行时。
 - 日志同时写 stderr 和 `<state>/agent.log`（10 MiB 轮转，保留上一代 `agent.log.1`）；告警及以上的记录会上送 server 的日志中心。日志级别只由环境变量 `GPUWORKS_LOG_LEVEL` 控制，文件与 stderr 都按它过滤；重复的记录会被压缩，见[server 与 agent 自身的日志](../how-to/monitor-and-logs.md#server-与-agent-自身的日志)。
+- 同一个 state 目录同时只运行一个 agent：`run` 启动时对 `<state>/agent.lock` 加独占锁并写入自己的 PID。锁已被占用时最多等 15 秒（覆盖服务重启时旧进程尚未退出的交接），仍被占用就报错退出，错误里给出占用者的 PID。两个进程共用 state 目录就共用节点身份，会互相顶掉对方的连接。原地升级、回滚经 exec 换映像时锁自动释放，由新映像重新获取。Kubernetes DaemonSet 中的 agent 不等待，由 kubelet 重启。因锁竞争以外的原因加不上锁时（如部分 NFS 不支持加锁、锁文件属于其他用户），只记一条告警、照常运行。拒绝启动的原因同时写入 `<state>/agent.log`。
 - 合并后的配置按同一条规则校验，不通过时立即报错退出，并提示配置文件的路径：缺 token；`agent_dial` 缺 server；server URL 缺少协议头、带账号、查询串或片段；`server_dial` 的监听地址不是有效端口。`server_dial` 的 agent 只需要 token 和监听地址，从不连接 server，不需要也不使用 server 地址。
 
 ## gpuworks-agent smoke
@@ -355,6 +356,7 @@ gpuworks uninstall --dir /opt/gpuworks/server --purge --dry-run --json
 | `--driver NAME`、`--connect-mode MODE`、`--listen ADDR` | 同 `run` | 只在没有配置文件的老 agent 上传给替换后的 `run`；有配置文件时它们已在文件里 |
 
 - 仅支持 Linux；从 `<server>/dl/gpuworks-agent-linux-<arch>` 下载到 `<bin>.new`，10 秒内 `smoke` 通过后才把旧二进制改名 `<bin>.old` 并换上新版本，smoke 失败则旧二进制保持原样。
+- 该 state 目录已有 agent 在运行（systemd 或 nohup 常驻）时直接拒绝，下载前就退出：`upgrade` 换上的 `run` 不在原服务里，会和常驻 agent 共用节点身份、互相顶掉连接。常驻 agent 请在节点页「升级 Agent」。
 - `server_dial` 的 agent 不知道 server 地址，也无从下载：手工 `upgrade` 直接拒绝，提示它由 server 推送升级，在节点页「升级 Agent」操作。
 - 替换后的 `run` 在配置来自文件时只带 `--state <dir>`；没有配置文件的老 agent 则带 `--server --token --connect-mode --state`，`server_dial` 再加 `--listen`，有 driver 时加 `--driver`。都不携带 `--data-lane`、`--dcgm`、`--image-pull-max-connections`：替换后的进程继承当前环境变量，所以 `--dcgm` 可改用 `GPUWORKS_DCGM`、`--image-pull-max-connections` 可改用 `GPUWORKS_IMAGE_PULL_MAX_CONNECTIONS` 保留；`--data-lane` 没有对应环境变量，手工升级后恢复默认值 `true`。
 - 整个过程有 10 分钟预算；同一时刻只允许一个升级。替换后的进程同样要在确认期限内注册成功，否则回滚到 `<bin>.old`。节点页「升级 Agent」对支持推送的 agent 改由 server 经连接推送二进制，不经 `/dl/` 与 `smoke`，见[升级与版本兼容](../how-to/upgrade-and-compatibility.md)。
@@ -397,6 +399,7 @@ gpuworks-agent doctor --connectivity --state /opt/gpuworks --json
 
 - 探测本机加速卡，按与部署相同的规则算出要注入的设备节点，找出该用户缺少的属组；没有需要授权的设备、或已有读写权限时只打印说明并成功退出。
 - 需要补组时必须以 root 运行，执行 `usermod -aG <组> <用户>`；改动后需要重启 agent 才会生效。
+- 属主和属组都是 root、且组和其他用户都没有任何权限的设备节点（部分昇腾宿主机的 `davinci_manager`、`devmm_svm`、`hisi_hdc` 就是 `root:root 0600`），先交给系统组 `gpuworks-runtime`（不存在时创建）并加上组读写，再把用户加进该组。已有属组或已开放组/其他权限的节点保持宿主机原样。设备节点在重启或驱动重载后恢复原权限：以 root 运行的 agent 每次启动工作负载前都会重新执行这一步，非 root 的 agent 需要重启后再执行一次本命令。
 - 只作用于 runveil（`udocker`）驱动。节点安装脚本在「非 root + 可用 `sudo` + `--driver udocker`」时会自动调用 `grant-device-access --state <state> --user udocker --create-user`。
 
 ## gpuworks-agent bench

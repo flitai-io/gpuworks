@@ -29,7 +29,7 @@ type upgradingServer struct {
 func (s *upgradingServer) SelfUpgradeBlocker() string { return s.blocker }
 func (s *upgradingServer) InstallDir() string         { return s.installDir }
 
-func (s *upgradingServer) Upgrade(_ context.Context, archive io.Reader, by string) (dto.ServerUpgradeStarted, error) {
+func (s *upgradingServer) Upgrade(_ context.Context, archive io.Reader, by string, target dto.ServerUpgradeSelection) (dto.ServerUpgradeStarted, error) {
 	data, err := io.ReadAll(archive)
 	if err != nil {
 		return dto.ServerUpgradeStarted{}, err

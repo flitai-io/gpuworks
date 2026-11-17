@@ -23,6 +23,15 @@ test("every console icon draws an svg at the size its slot gives", () => {
   }
 });
 
+test("the assistant's attach-image and history icons and the playground's decision icon are part of the set", () => {
+  for (const name of ["imageAdd", "history", "decision"] as const) {
+    const Icon = ConsoleIcon[name];
+    const { container, unmount } = render(<Icon size={16} />);
+    assert.ok(drawing(container.querySelector("svg")!).length > 0, `${name} draws something`);
+    unmount();
+  }
+});
+
 test("console icons are distinct: no two names draw the same picture", () => {
   const seen = new Map<string, string>();
   for (const [name, Icon] of Object.entries(ConsoleIcon)) {
@@ -30,6 +39,14 @@ test("console icons are distinct: no two names draw the same picture", () => {
     const picture = drawing(container.querySelector("svg")!);
     assert.equal(seen.get(picture), undefined, `${name} draws the same icon as ${seen.get(picture)}`);
     seen.set(picture, name);
+    unmount();
+  }
+});
+
+test("the icons the external platforms page names exist: edit for an account's pencil, external for a vendor's site, chevrons for folding a group", () => {
+  for (const name of ["edit", "external", "chevronDown", "chevronRight", "kubernetes"] as const) {
+    const { container, unmount } = render(React.createElement(ConsoleIcon[name], { size: 14 }));
+    assert.equal(container.querySelector("svg")?.getAttribute("width"), "14", name);
     unmount();
   }
 });

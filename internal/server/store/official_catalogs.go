@@ -76,17 +76,20 @@ func (s *Store) RecordEmbeddedCatalogsApplied(build string) error {
 }
 
 // UpstreamInferencePackageDigest is the package the upstream inference specs
-// were reconciled from, which is the inference template catalog currently in
-// force. Every upstream reconcile stamps one digest on all of them; empty when
-// there are none.
+// were last reconciled from, which is the inference template catalog
+// currently in force; empty when there are none. A reconcile stamps its
+// digest on every spec it writes, and one that could read its catalog only
+// in part leaves the rows it skipped on the digest they had
+// (ReconcileInferenceCatalogKeeping), so the newest write names the catalog.
 func (s *Store) UpstreamInferencePackageDigest() (string, error) {
 	var digests []string
 	if err := s.reader().Model(&InferenceSpecRow{}).
 		Where("source = ? AND package_digest <> ''", "upstream").
-		Distinct().Limit(2).Pluck("package_digest", &digests).Error; err != nil {
+		Group("package_digest").Order("MAX(updated_at) DESC, COUNT(*) DESC").
+		Limit(1).Pluck("package_digest", &digests).Error; err != nil {
 		return "", err
 	}
-	if len(digests) != 1 {
+	if len(digests) == 0 {
 		return "", nil
 	}
 	return digests[0], nil

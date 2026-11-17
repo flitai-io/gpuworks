@@ -111,7 +111,9 @@ func Open(dsn string, b *bus.Bus, policies ...securefile.Policy) (result *Store,
 	return s, nil
 }
 
-// DB exposes the handle for advanced/read-only queries in other packages.
+// DB exposes the raw handle to tests. Production code outside the store goes
+// through Store's methods (or CloudLedger); the architecture check holds its
+// non-test callers at zero (store_db_accessor_callers).
 func (s *Store) DB() *gorm.DB { return s.db }
 
 // Close releases the underlying SQLite connection pool. Applications usually

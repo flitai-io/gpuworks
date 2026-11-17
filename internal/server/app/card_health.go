@@ -105,7 +105,7 @@ func (e episodeStore) DeleteEpisodesEndedBefore(before time.Time, limit int) (in
 
 func toEpisodeRow(ep cardhealth.Episode) store.CardHealthEpisode {
 	return store.CardHealthEpisode{
-		ID: ep.ID, NodeID: ep.NodeID, CardIdent: ep.CardIdent, CheckID: ep.CheckID, Level: ep.Level, Reason: ep.Reason,
+		ID: ep.ID, NodeID: ep.NodeID, CardIdent: ep.CardIdent, CheckID: ep.CheckID, Level: ep.Status, Reason: ep.Code,
 		StartedAt: ep.StartedAt, EndedAt: ep.EndedAt, LastSeenAt: ep.LastSeenAt, Count: ep.Count, Flapping: ep.Flapping,
 		FirstEvidence: ep.FirstEvidence, LatestEvidence: ep.LatestEvidence,
 	}
@@ -113,7 +113,7 @@ func toEpisodeRow(ep cardhealth.Episode) store.CardHealthEpisode {
 
 func fromEpisodeRow(r store.CardHealthEpisode) cardhealth.Episode {
 	return cardhealth.Episode{
-		ID: r.ID, NodeID: r.NodeID, CardIdent: r.CardIdent, CheckID: r.CheckID, Level: r.Level, Reason: r.Reason,
+		ID: r.ID, NodeID: r.NodeID, CardIdent: r.CardIdent, CheckID: r.CheckID, Status: r.Level, Code: r.Reason,
 		StartedAt: r.StartedAt, EndedAt: r.EndedAt, LastSeenAt: r.LastSeenAt, Count: r.Count, Flapping: r.Flapping,
 		FirstEvidence: r.FirstEvidence, LatestEvidence: r.LatestEvidence,
 	}

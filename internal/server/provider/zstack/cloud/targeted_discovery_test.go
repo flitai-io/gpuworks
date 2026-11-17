@@ -83,6 +83,8 @@ func TestQueryHostResourcesRejectsInvalidOrIncompleteInventory(t *testing.T) {
 		{name: "GPU missing", path: "/v1/gpu-device/gpu-devices", body: `{"inventories":[]}`},
 		{name: "GPU envelope missing", path: "/v1/gpu-device/gpu-devices", body: `{}`},
 		{name: "multiple GPUs returned", path: "/v1/gpu-device/gpu-devices", body: `{"inventories":[{"uuid":"gpu-1","hostUuid":"host-1"},{"uuid":"gpu-2","hostUuid":"host-1"}]}`},
+		{name: "legacy GPU identity mismatch", path: "/v1/pci-device/pci-devices", body: `{"inventories":[{"uuid":"gpu-2","hostUuid":"host-1","type":"GPU_3D_Controller"}]}`},
+		{name: "legacy GPU moved to another host", path: "/v1/pci-device/pci-devices", body: `{"inventories":[{"uuid":"gpu-1","hostUuid":"another-host","type":"GPU_3D_Controller"}]}`},
 		{name: "GPU identity mismatch", path: "/v1/gpu-device/gpu-devices", body: `{"inventories":[{"uuid":"gpu-2","hostUuid":"host-1"}]}`},
 		{name: "GPU moved to another host", path: "/v1/gpu-device/gpu-devices", body: `{"inventories":[{"uuid":"gpu-1","hostUuid":"another-host"}]}`},
 		{name: "GPU host missing", path: "/v1/gpu-device/gpu-devices", body: `{"inventories":[{"uuid":"gpu-1"}]}`},
@@ -91,6 +93,11 @@ func TestQueryHostResourcesRejectsInvalidOrIncompleteInventory(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				if tc.path == "/v1/pci-device/pci-devices" && r.URL.Path == "/v1/gpu-device/gpu-devices" {
+					w.WriteHeader(http.StatusNotFound)
+					fmt.Fprint(w, "no api mapping to "+r.URL.Path)
+					return
+				}
 				if r.URL.Path == tc.path {
 					if tc.code != 0 {
 						w.WriteHeader(tc.code)

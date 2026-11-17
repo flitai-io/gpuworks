@@ -28,6 +28,6 @@ func keyScopeFrom(ctx context.Context) *store.APIKeyIdentity {
 
 // selectForRequest selects a deployment instance within the request's key
 // scope.
-func (p *Proxy) selectForRequest(ctx context.Context, modelName, affinity string) (*store.Deployment, target, int, string, bool) {
+func (p *Proxy) selectForRequest(ctx context.Context, modelName, affinity string) (*store.Deployment, target, *refusal, bool) {
 	return p.selectScopedDeploymentInstance(keyScopeFrom(ctx), modelName, affinity)
 }

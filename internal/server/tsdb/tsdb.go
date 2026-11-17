@@ -511,7 +511,7 @@ const retainDropOrphanSeriesSQL = `DELETE FROM series WHERE NOT EXISTS (SELECT 1
 // see docs/reference/configuration.md's upgrade note) could otherwise turn
 // one Retain call into an unbounded loop; hitting it is logged (not an
 // error) and simply leaves the rest for the next scheduled call
-// (observability.retainLoop runs this every 6 hours). All three are vars
+// (the app's opsStats runs this every hour, retainEvery). All three are vars
 // (not consts) so tests can shrink them to exercise multi-batch and
 // hit-the-ceiling behavior without a huge table.
 var (

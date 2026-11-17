@@ -235,7 +235,9 @@ func (c *Controller) launchRequest(dep *store.Deployment, node *store.Node, mode
 	if err != nil {
 		return planning.LaunchRequest{}, deploy.CatalogSelection{}, "", fmt.Errorf("deployment %d node requirements: %w", dep.ID, err)
 	}
-	return planning.DeploymentLaunch(dep, reqs, node, model, files.paths())
+	req, templateLayer, modelHostPath, err := planning.DeploymentLaunch(dep, reqs, node, model, files.paths())
+	req.ImplicitServedName = c.translatesServedName(node)
+	return req, templateLayer, modelHostPath, err
 }
 
 // planInstanceLaunch assembles the launch and checks it against the node and
@@ -300,7 +302,7 @@ func scheduledInstance(dep *store.Deployment, plan planning.LaunchPlan, port int
 		LogDialect:          dep.Engine,
 		GPUIndexes:          gpus,
 		GPUIdents:           gpuIdents,
-		ServedModelName:     deploy.ServedModelName(plan.Resolved),
+		ServedModelName:     planning.ExpectedServedName(plan.Resolved, plan.Params.ImplicitServedName),
 		HostNetwork:         true,
 		Ports:               ports,
 		ModelPath:           modelHostPath,
@@ -366,7 +368,7 @@ func (c *Controller) startScheduledInstance(dep *store.Deployment, node *store.N
 		// The instance could never be reached: fail it with the reason instead
 		// of starting a container nobody can call.
 		c.log.Warn("instance not started: serving path unavailable", "dep", dep.ID, "instance", spec.UUID, "node", node.UUID, "err", err)
-		return c.store.SetInstanceState(spec.UUID, proto.InstFailed, err.Error())
+		return c.store.SetInstanceFailed(spec.UUID, proto.RuntimeFailure{Code: proto.ErrorServingPathUnavailable, Phase: proto.PhaseContainerPrepare, Node: node.DisplayName(), Detail: err.Error()}, err.Error())
 	}
 
 	if err := c.hub.PushToNode(node.UUID, proto.StateUpdate{Instances: []proto.InstanceDesiredState{spec}}); err != nil {

@@ -310,3 +310,6 @@ How a batch interacts with a yield-anytime deployment:
 | All requests land in the error file with status 404 | `model` does not match the deployment's served model name |
 | Reading the output file returns 404 | The batch ended more than 30 days ago and the file was deleted, or no request succeeded so the output file never existed |
 | 401 `invalid_api_key` | Check `Authorization: Bearer <key>` |
+
+<!-- translation-source-sha256: 8954b2ed6686c12aad3cf7de402807990af584df1d6e3126df98ee9d1b88be47 -->
+<!-- translation-localized-code-block: 99c27d4c7c0f7c7f316e94615dd19c248a756fda2cd3f87c48828bbb4ffa1f84 f0fd6c6bfd121918a8813d6f5c64fdaa9479e8d6b3991fbccfc9c66c4a2110d5 Shell prompt text is translated; the commands are unchanged. -->

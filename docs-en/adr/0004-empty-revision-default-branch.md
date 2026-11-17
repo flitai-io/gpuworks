@@ -21,3 +21,5 @@ An empty revision has first-class semantics: **follow the source platform's defa
 - Existing `modelscope + revision='main'` data must be migrated to empty revisions.
 - The actual downloaded commit becomes a runtime fact, reported with status and displayed in the UI's advanced information.
 - Test fixtures (fake hubs) must strictly simulate the platform's actual revision behavior; otherwise, this class of problem remains invisible locally. This requirement is now in CLAUDE.md.
+
+<!-- translation-source-sha256: 7c6bbbb35d79d97b297cf6dab71c5765c05c90a4be287e99d0efafc76c6dfd9c -->

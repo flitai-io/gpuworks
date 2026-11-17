@@ -1,8 +1,9 @@
 import { Alert, Button, Space, Spin, Typography } from "antd";
 import { useTranslation } from "react-i18next";
+import type { ProductMessage } from "../../apiError";
 import { benchmarkErrorText } from "./evaluationUtils";
 
-export default function BenchmarkCurveNotice({ active, loading, hasResponse, hasSamples, runState, completed, runError, error, onRetry, warmup }: {
+export default function BenchmarkCurveNotice({ active, loading, hasResponse, hasSamples, runState, completed, runError, runFailure, error, onRetry, warmup }: {
 	warmup?: boolean;
 	active: boolean;
 	loading: boolean;
@@ -11,6 +12,7 @@ export default function BenchmarkCurveNotice({ active, loading, hasResponse, has
 	runState?: string;
 	completed: number;
 	runError?: string;
+	runFailure?: ProductMessage;
 	error?: Error | null;
 	onRetry: () => void;
 }) {
@@ -24,7 +26,7 @@ export default function BenchmarkCurveNotice({ active, loading, hasResponse, has
 	}
 	if (!active && !hasSamples) {
 		const failedBeforeRequest = runState === "failed" && completed === 0;
-		return <Alert style={{ marginBottom: 12 }} type="info" showIcon message={t(failedBeforeRequest ? "detail.curveNoRequests" : "detail.curveLegacyMissing")} description={failedBeforeRequest && runError ? benchmarkErrorText(t, runError) : undefined} />;
+		return <Alert style={{ marginBottom: 12 }} type="info" showIcon message={t(failedBeforeRequest ? "detail.curveNoRequests" : "detail.curveLegacyMissing")} description={failedBeforeRequest && (runError || runFailure) ? benchmarkErrorText(t, runError, runFailure) : undefined} />;
 	}
 	if (error) {
 		return <Alert style={{ marginBottom: 12 }} type="warning" showIcon message={t("detail.curveRefreshFailed")} description={error.message} action={<Button data-report-exclude size="small" onClick={onRetry}>{t("common.retry")}</Button>} />;

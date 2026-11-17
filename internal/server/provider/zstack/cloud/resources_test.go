@@ -79,8 +79,11 @@ func TestInspectResourceReadsCurrentCloudState(t *testing.T) {
 			_, _ = w.Write([]byte(`{"value":"6"}`))
 		case "/v1/resource-configurations/host-1/kvm/reservedMemory":
 			_, _ = w.Write([]byte(`{"value":"10G"}`))
-		case "/v1/pci-device/pci-devices/gpu-1":
-			_, _ = w.Write([]byte(`{"state":"Disabled"}`))
+		case "/v1/gpu-device/gpu-devices":
+			if r.URL.Query().Get("q") != "uuid=gpu-1" {
+				t.Errorf("inspection must query its GPU: %s", r.URL)
+			}
+			_, _ = w.Write([]byte(`{"inventories":[{"uuid":"gpu-1","state":"Disabled","description":"operator note"}]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -97,8 +100,19 @@ func TestInspectResourceReadsCurrentCloudState(t *testing.T) {
 		t.Fatalf("memory observation = %+v, err=%v", memory, err)
 	}
 	gpu, err := driver.InspectResource(context.Background(), creds, resourceclaim.ResourceMutation{ResourceType: "gpu", ResourceID: "gpu-1"})
-	if err != nil || gpu.State != "Disabled" {
+	if err != nil || gpu.State != "Disabled" || gpu.Description != "operator note" {
 		t.Fatalf("GPU observation = %+v, err=%v", gpu, err)
+	}
+}
+
+func TestInspectResourceRejectsUnexpectedGPUIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"inventories":[{"uuid":"other-gpu","state":"Disabled","description":"another operator's note"}]}`))
+	}))
+	defer server.Close()
+	creds := provider.Credentials{Endpoint: server.URL, PublicKey: "test-access-key", PrivateKey: "test-access-secret"}
+	if _, err := New().InspectResource(t.Context(), creds, resourceclaim.ResourceMutation{ResourceType: "gpu", ResourceID: "gpu-1"}); err == nil {
+		t.Fatal("inspection accepted another GPU's state and description")
 	}
 }
 

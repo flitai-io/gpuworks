@@ -24,6 +24,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/agentupgrade"
 	"gpuworks.ai/gpuworks/internal/server/auth"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/network"
 	"gpuworks.ai/gpuworks/internal/server/prepobs"
 	"gpuworks.ai/gpuworks/internal/server/recovery"
@@ -53,16 +54,18 @@ type Hub struct {
 	// tsdb/logstore packages).
 	onMetrics         func(nodeUUID string, samples []proto.MetricSample)
 	onLogs            func(nodeUUID string, lines []proto.LogLine)
+	onLogsWait        func(ctx context.Context, nodeUUID string, lines []proto.LogLine) error // telemetry.go
 	onBenchmarkDetail func(nodeUUID string, status proto.BenchmarkStatus)
 	// onCardChecks and onNodeGone: card_checks.go.
 	onCardChecks func(nodeUUID string, nodeID uint, at time.Time, gpus []proto.GPUInfo)
 	onNodeGone   func(nodeUUID string)
 
 	// The node queues persist per-node reports (status, heartbeats, image
-	// presence) off the session read loops; see statusqueue.go for why those
-	// loops must never wait on the store.
-	statusQ *nodeQueue[queuedNodeStatus]
-	touchQ  *nodeQueue[time.Time]
+	// presence, storage) off the session read loops; see statusqueue.go for
+	// why those loops must never wait on the store.
+	statusQ  *nodeQueue[queuedNodeStatus]
+	touchQ   *nodeQueue[time.Time]
+	storageQ *nodeQueue[queuedStorageStatus]
 
 	// pushLimiter caps initial desired-state replays and network policy reads. A fleet
 	// connecting at once otherwise runs one multi-query replay per session
@@ -78,6 +81,7 @@ type Hub struct {
 	imageSyncMu      sync.Mutex
 	imageSyncOwners  map[string]context.CancelFunc
 	sessions         map[string]*Session             // keyed by node UUID
+	duplicates       duplicateAgents                 // agent processes trading a node (duplicate_agents.go)
 	imageWatches     map[[2]uint]map[string]struct{} // active image/node watchers, owned by transfer id
 	rejectMu         sync.Mutex
 	rejects          []RejectEvent
@@ -152,20 +156,22 @@ func New(st *store.Store, log *slog.Logger) *Hub {
 		copies:        prepobs.NewCopies(),
 	}
 	h.statusQ = newStatusQueue(h)
+	h.storageQ = newStorageQueue(h)
 	return h
 }
 
 // RunNodeQueues drains the per-node report queues (status, heartbeats,
-// image presence) until ctx ends. Call exactly once from the app's background
-// loops; submitting works without it (bounded, and the next periodic report
-// supersedes what was dropped), but reports would never persist. It returns
-// once both workers have stopped, so shutdown never closes the store under a
-// write in flight.
+// image presence, storage) until ctx ends. Call exactly once from the app's
+// background loops; submitting works without it (bounded, and the next
+// periodic report supersedes what was dropped), but reports would never
+// persist. It returns once all workers have stopped, so shutdown never closes
+// the store under a write in flight.
 func (h *Hub) RunNodeQueues(ctx context.Context) {
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 	go func() { defer wg.Done(); h.statusQ.run(ctx) }()
 	go func() { defer wg.Done(); h.touchQ.run(ctx) }()
+	go func() { defer wg.Done(); h.storageQ.run(ctx) }()
 	go func() { defer wg.Done(); h.RunPeerTransferMetrics(ctx) }()
 	wg.Wait()
 }
@@ -262,7 +268,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 	switch lane {
 	case "", proto.LaneCtrl, proto.LaneData:
 	default:
-		http.Error(w, "unknown lane", http.StatusBadRequest)
+		messages.WriteHTTPError(w, http.StatusBadRequest, errors.New("unknown lane"))
 		return
 	}
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
@@ -300,6 +306,8 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		_ = c.Close(websocket.StatusInternalError, "session")
 		return
 	}
+	h.sessionWork.Add(1)
+	defer h.sessionWork.Done()
 	h.serveSession(sess, cleanup, remote)
 }
 
@@ -366,7 +374,8 @@ func (h *Hub) dialAgentWithSecret(ctx context.Context, addr, secret string, tcpT
 		sess.dataMu.Unlock()
 		go h.runServerDialDataLane(sess, addr, secret)
 	}
-	go h.serveSession(sess, cleanup, addr)
+	// Counted before it starts, so a waitSessionWork that runs first waits.
+	h.trackSessionWork(func() { h.serveSession(sess, cleanup, addr) })
 	return nil
 }
 
@@ -482,9 +491,9 @@ func (h *Hub) acceptYamuxServer(netConn net.Conn, lane string, remoteOpt ...stri
 	return sess, cleanup, nil
 }
 
+// serveSession runs a session until it ends. Its caller counts it in the
+// session work, before it starts.
 func (h *Hub) serveSession(sess *Session, cleanup func(), remote string) {
-	h.sessionWork.Add(1)
-	defer h.sessionWork.Done()
 	defer cleanup()
 	h.log.Info("agent connected", "node", sess.NodeUUID, "remote", remote)
 	// Replay full desired state so the agent reconciles from a clean slate.
@@ -510,12 +519,23 @@ func (h *Hub) register(s *Session) {
 		}
 	}
 	h.mu.Lock()
-	if old, ok := h.sessions[s.NodeUUID]; ok {
+	old := h.sessions[s.NodeUUID]
+	if old != nil {
 		old.Close()
 	}
-	h.copies.ForgetNode(s.nodeID)
 	h.sessions[s.NodeUUID] = s
+	duplicate, flagged := h.duplicates.observe(s, old, h.now()) // under h.mu: in replacement order
 	h.mu.Unlock()
+	if flagged {
+		h.logDuplicateAgents(s, duplicate)
+	}
+	if old != nil {
+		// A report write the old session validated under applyCurrent lands
+		// before anything this session reports (session_reports.go), and
+		// before the copy observations it may have recorded are dropped.
+		old.fenceReports()
+	}
+	h.copies.ForgetNode(s.nodeID)
 	_ = h.store.SetNodeState(s.NodeUUID, store.NodeStateOnline)
 	_ = h.store.ClearNodeRecovery(s.NodeUUID)
 	h.trackSessionWork(func() { h.resumeDirectImageTransfers(s.NodeUUID) })
@@ -538,10 +558,14 @@ func (h *Hub) waitSessionWork() { h.sessionWork.Wait() }
 func (h *Hub) deregister(s *Session) {
 	h.mu.Lock()
 	if cur, ok := h.sessions[s.NodeUUID]; ok && cur == s {
-		h.copies.ForgetNode(s.nodeID)
 		delete(h.sessions, s.NodeUUID)
 		h.mu.Unlock()
 		h.statusQ.forget(s.NodeUUID) // a stale report would mark it online again
+		h.storageQ.forget(s.NodeUUID)
+		// A report write already validated lands before the offline mark and
+		// before its copy observations are dropped.
+		s.fenceReports()
+		h.copies.ForgetNode(s.nodeID)
 		_ = h.store.SetNodeState(s.NodeUUID, store.NodeStateOffline)
 		if h.onNodeGone != nil {
 			h.onNodeGone(s.NodeUUID)
@@ -570,13 +594,6 @@ func (h *Hub) serverHello() proto.Hello {
 		ProtoMin: proto.ProtoMin,
 		ProtoMax: proto.ProtoMax,
 		Version:  version.Version,
+		Caps:     []string{proto.CapTelemetryStream},
 	}
-}
-
-// slogWriter adapts yamux's io.Writer logging into slog at debug level.
-type slogWriter struct{ log *slog.Logger }
-
-func (w *slogWriter) Write(p []byte) (int, error) {
-	w.log.Debug("yamux", "msg", string(p))
-	return len(p), nil
 }

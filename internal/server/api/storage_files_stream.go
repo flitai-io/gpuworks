@@ -66,7 +66,7 @@ func (a *apiHandlers) uploadStorageFile(w http.ResponseWriter, r *http.Request) 
 		if code == "" {
 			code = proto.StorageFilesErrFailed
 		}
-		writeStorageFilesErr(w, storageFilesAgentErr(target, proto.NewStorageFilesError(code, "%s", status.Error).Error()))
+		writeStorageFilesErr(w, storageFilesAgentErr(target, proto.NewStorageFilesError(code, "%s", status.Error)))
 		return
 	}
 	writeJSON(w, http.StatusOK, dto.StorageFileUploadResult{Path: rel, Bytes: status.Bytes, Files: status.Files})
@@ -117,7 +117,7 @@ func (a *apiHandlers) downloadStorageFile(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if body == nil {
-		writeStorageFilesErr(w, storageFilesAgentErr(target, proto.NewStorageFilesError(head.Code, "%s", head.Error).Error()))
+		writeStorageFilesErr(w, storageFilesAgentErr(target, proto.NewStorageFilesError(head.Code, "%s", head.Error)))
 		return
 	}
 	defer body.Close()

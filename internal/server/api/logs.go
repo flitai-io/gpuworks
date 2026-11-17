@@ -29,7 +29,7 @@ func (a *apiHandlers) instanceLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	fl, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		writeErr(w, http.StatusInternalServerError, errStreamingUnsupported)
 		return
 	}
 

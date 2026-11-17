@@ -27,10 +27,10 @@ func TestARecoveringNodeReadsAsConnectingEverywhere(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := n.store.SetNodeRecoveryPhase("node-recovering", store.RecoveryPhaseUploading, 1, nil, ""); err != nil {
+	if err := n.store.SetNodeRecoveryPhase("node-recovering", store.RecoveryPhaseUploading, 1, nil, store.RecoveryError{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.store.SetNodeRecoveryPhase("node-gave-up", store.RecoveryPhaseUnreachable, 6, nil, "ssh: connection refused"); err != nil {
+	if err := n.store.SetNodeRecoveryPhase("node-gave-up", store.RecoveryPhaseUnreachable, 6, nil, store.RecoveryError{Message: "ssh: connection refused"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -59,7 +59,7 @@ func TestARecoveringNodeReadsAsConnectingEverywhere(t *testing.T) {
 		t.Fatalf("dashboard counts = %+v, want one connecting and one offline", summary.Nodes)
 	}
 
-	if err := n.store.SetNodeRecoveryPhase("node-recovering", store.RecoveryPhaseProbeFailed, 1, nil, "connection refused"); err != nil {
+	if err := n.store.SetNodeRecoveryPhase("node-recovering", store.RecoveryPhaseProbeFailed, 1, nil, store.RecoveryError{Message: "connection refused"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := json.Unmarshal(n.memberGet("/api/v1/nodes/node-recovering"), &detail); err != nil {

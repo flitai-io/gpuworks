@@ -24,6 +24,16 @@ type AIConfig struct {
 	APIKey    string `gorm:"size:512"` // enc:v1:<base64>; legacy plaintext is migrated on read
 	Model     string `gorm:"size:64"`
 	IsDefault bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// ProxyMode is how calls to the service leave the server
+	// (aihelper.ProxyMode): management, direct or custom. Rows stored before
+	// the choice existed were migrated to management.
+	ProxyMode string `gorm:"size:16"`
+	// ProxyURL is the custom proxy, login included, sealed like APIKey
+	// (enc:v1:<base64>); empty unless ProxyMode is custom.
+	ProxyURL string `gorm:"size:1024"`
+	// ImageInput is the operator's word that the model accepts images: upstream
+	// models change, so it is stored rather than derived from the model name.
+	ImageInput bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }

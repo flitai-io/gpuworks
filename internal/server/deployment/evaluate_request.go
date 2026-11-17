@@ -19,7 +19,7 @@ func evaluationLaunchRequest(env evaluatePlanEnv, node *store.Node) planning.Lau
 		Topology:   planning.DistTopology{NNodes: max(req.NNodes, 1), Role: "standalone"},
 		Source:     planning.LaunchSourceFromRequest(env.response.Image, env.requestOverrides),
 		ModelMount: env.modelMount, ComponentMounts: env.componentMounts,
-		ServedName: env.servedName, Sleepable: req.Sleepable, YieldPolicy: requestYield(req.YieldPolicy), ExplainHolders: true,
+		ServedName: env.servedName, Sleepable: req.Sleepable, PriorityScheduling: requestsPriorityScheduling(req), YieldPolicy: requestYield(req.YieldPolicy), ExplainHolders: true,
 		MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
 		VRAMLimitBytes: int64(req.VRAMLimitGiB * (1 << 30)), PartitionBackend: req.PartitionBackend,
 		RuntimeImageCached: env.nodeImageCached, APIContract: selection.APIContract,

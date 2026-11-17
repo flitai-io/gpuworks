@@ -53,10 +53,12 @@ func (u *Usage) Add(o Usage) {
 	u.CacheReportedPrompt += o.CacheReportedPrompt
 }
 
-// QualityKey is one row of the service quality: an hour and a deployment.
+// QualityKey is one row of the service quality: an hour, a deployment and
+// the priority class its requests ran at ("" before classes).
 type QualityKey struct {
-	HourMS       int64
-	DeploymentID uint
+	HourMS        int64
+	DeploymentID  uint
+	PriorityClass string
 }
 
 // Quality is how a deployment's requests of an hour turned out.
@@ -146,7 +148,7 @@ func (r *Requests) ObserveWeighted(rec uxrecord.Request, weight int64) {
 		s.usage[uk] = u
 	}
 	addUsage(u, &rec, weight)
-	qk := QualityKey{HourMS: hour, DeploymentID: rec.DeploymentID}
+	qk := QualityKey{HourMS: hour, DeploymentID: rec.DeploymentID, PriorityClass: rec.PriorityClass}
 	q := s.quality[qk]
 	if q == nil {
 		q = new(Quality)

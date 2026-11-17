@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -30,15 +31,19 @@ var archivePattern = regexp.MustCompile(`^gpuworks-([A-Za-z0-9._+-]+)-(linux|dar
 // ones embedded in this build, so the published catalogs are exactly what a
 // server built from the same commit carries.
 type assembleInput struct {
-	Channel     string
-	DistDir     string
-	OutDir      string
-	ReleaseID   string
-	Commit      string
-	BuiltAt     string
-	PublishedAt time.Time
-	KeyID       string
-	Key         ed25519.PrivateKey
+	Adopted           bool
+	DatabaseMigration int
+	Previous          string
+	Keep              int
+	Channel           string
+	DistDir           string
+	OutDir            string
+	ReleaseID         string
+	Commit            string
+	BuiltAt           string
+	PublishedAt       time.Time
+	KeyID             string
+	Key               ed25519.PrivateKey
 
 	ImageCatalog    []byte
 	TemplateArchive []byte
@@ -49,7 +54,11 @@ type assembleInput struct {
 func assembleCommand(args []string, stdout io.Writer) error {
 	fs := flag.NewFlagSet("assemble", flag.ContinueOnError)
 	in := assembleInput{}
+	fs.IntVar(&in.DatabaseMigration, "database-migration", 0, "database migration supported by the packaged build")
+	fs.BoolVar(&in.Adopted, "adopted", false, "archives were adopted from a prior publication")
 	var keyEnv string
+	fs.StringVar(&in.Previous, "previous-index", "", "prior signed channel index")
+	fs.IntVar(&in.Keep, "keep", 30, "number of nightly builds to advertise")
 	fs.StringVar(&in.Channel, "channel", "", "channel the index is for (nightly or release)")
 	fs.StringVar(&in.DistDir, "dist", "dist", "directory holding gpuworks-<id>-<os>-<arch>.tar.gz")
 	fs.StringVar(&in.OutDir, "out", "", "directory to write the tree into (must not exist)")
@@ -154,6 +163,39 @@ func assemble(in assembleInput) (distribution.Index, error) {
 		SchemaVersion: in.TemplateInfo.SchemaVersion,
 	}
 
+	if !in.Adopted {
+		index.Server.DatabaseMigration = in.DatabaseMigration
+	}
+	if in.Previous != "" {
+		raw, err := os.ReadFile(in.Previous)
+		if err != nil {
+			return distribution.Index{}, err
+		}
+		keys := distribution.TrustedKeys()
+		keys[in.KeyID] = in.Key.Public().(ed25519.PublicKey)
+		data, _, err := distribution.Open(raw, keys)
+		if err != nil {
+			return distribution.Index{}, err
+		}
+		previous, err := distribution.ParseIndex(data, in.Channel)
+		if err != nil {
+			return distribution.Index{}, err
+		}
+		if in.Adopted {
+			if original, ok := previous.FindServer(releaseID); ok && slices.Equal(original.Files, index.Server.Files) {
+				index.Server.DatabaseMigration = original.DatabaseMigration
+				index.Server.Commit = original.Commit
+			}
+		}
+		for _, release := range previous.Servers() {
+			if in.Channel == distribution.ChannelNightly && len(index.PreviousServers)+1 >= in.Keep {
+				break
+			}
+			if release.ReleaseID != releaseID {
+				index.PreviousServers = append(index.PreviousServers, release)
+			}
+		}
+	}
 	if err := index.Validate(); err != nil {
 		return distribution.Index{}, fmt.Errorf("assembled index is invalid: %w", err)
 	}

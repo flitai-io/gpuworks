@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -594,22 +595,64 @@ func TestExpiryEndsTheBatchAndMovesTheRestToTheErrorFile(t *testing.T) {
 	}
 }
 
-// A batch that was in flight at its expiry also ends at a restart after it.
-func TestExpiredBatchResumedAfterItsDeadlineEnds(t *testing.T) {
-	r := newRig(t, Config{PerBatch: 2}, func(ctx context.Context, _ Owner, _ string, _ []byte) Reply {
-		<-ctx.Done()
-		return Reply{Err: ctx.Err()}
-	})
-	stop := r.start()
-	b := r.batchOf(3)
-	eventually(t, "in flight", func() bool { return r.send.peakInFlight() == 2 })
-	stop()
-	r.clock.Advance(25 * time.Hour)
-	r.restart()
-	r.start()
-	done := r.await(b.ID, StatusExpired)
-	if done.Failed != 3 {
-		t.Fatalf("batch = %+v", done)
+// A batch that was in flight at its expiry ends at a restart after it, and
+// sends nothing when it is resumed: its requests are recorded as expired without a single
+// inference. The expiry used to arrive only through a zero-length timer in
+// another goroutine, so the dispatch could win the race and send first; the
+// loop gives that scheduling race many chances to show.
+func TestExpiredBatchResumedAfterItsDeadlineSendsNothing(t *testing.T) {
+	for round := 0; round < 40; round++ {
+		var resumed atomic.Bool
+		var sentAfterResume atomic.Int32
+		r := newRig(t, Config{PerBatch: 2}, func(ctx context.Context, _ Owner, _ string, _ []byte) Reply {
+			if resumed.Load() {
+				sentAfterResume.Add(1)
+				return okReply(`{"ok":1}`)
+			}
+			<-ctx.Done()
+			return Reply{Err: ctx.Err()}
+		})
+		stop := r.start()
+		b := r.batchOf(3)
+		eventually(t, "in flight", func() bool { return r.send.peakInFlight() == 2 })
+		stop()
+		r.clock.Advance(25 * time.Hour)
+		resumed.Store(true)
+		r.restart()
+		r.start()
+		done := r.await(b.ID, StatusExpired)
+		if n := sentAfterResume.Load(); n != 0 {
+			t.Fatalf("round %d: the expired batch sent %d inference requests after it was resumed", round, n)
+		}
+		if done.Failed != 3 || done.Completed != 0 {
+			t.Fatalf("round %d: batch = %+v", round, done)
+		}
+		for _, l := range r.resultLines(done.ErrorFileID) {
+			if l.Error == nil || l.Error.Code != "batch_expired" {
+				t.Fatalf("round %d: error line = %+v", round, l)
+			}
+		}
+	}
+}
+
+// A batch accepted but not yet started when its deadline passes (it waited
+// for an executor, or the server was down) goes from validating straight to
+// expired without a request.
+func TestBatchStartedAfterItsDeadlineSendsNothing(t *testing.T) {
+	for round := 0; round < 40; round++ {
+		r := newRig(t, Config{PerBatch: 2}, func(context.Context, Owner, string, []byte) Reply {
+			return okReply(`{"ok":1}`)
+		})
+		b := r.batchOf(3)
+		r.clock.Advance(25 * time.Hour)
+		r.start()
+		done := r.await(b.ID, StatusExpired)
+		r.send.mu.Lock()
+		sent := r.send.total
+		r.send.mu.Unlock()
+		if sent != 0 || done.Failed != 3 || done.Completed != 0 {
+			t.Fatalf("round %d: sent %d, batch = %+v", round, sent, done)
+		}
 	}
 }
 

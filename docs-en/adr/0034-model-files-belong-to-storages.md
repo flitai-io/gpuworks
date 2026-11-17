@@ -63,3 +63,5 @@ Deleting one row deleted the directory shared by everyone; two nodes downloading
   causing existing local model files on nodes to be ignored while hiding this restriction from node conditions. This is replaced with the rule above; see the
   [design document](../../artifacts/archive/2026-10-02-shared-storage/design-model-source-per-node.md) for the rationale.
 - Out of scope: deletion locks across control planes, periodic scans, kernel FS-Cache, docker's NFS volume driver, and direct reads from object storage.
+
+<!-- translation-source-sha256: 3e52d25acef16469d0a046750f981c88600219188952c45a17aa8279b5b96dec -->

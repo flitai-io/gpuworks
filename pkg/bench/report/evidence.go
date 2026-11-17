@@ -178,7 +178,7 @@ func reportContext(run Run, recommendation string, rows []pointRow) string {
 			}
 		}
 	}
-	return jsonValue(map[string]any{"run_id": run.ID, "state": run.State, "failure_diagnostic": run.Error, "warmup_attempts": run.Warmup, "run_name": run.Name, "model": run.Model, "mode": run.Mode, "created_at": run.CreatedAt, "started_at": run.StartedAt, "ended_at": run.EndedAt, "detail_configured": run.KeepDetail, "detail_cap_mb": run.DetailCapMB, "dataset": datasetContext(run.Dataset), "search": optionalContextJSON(run.Search), "tokenizer": run.TokenizerRef, "target_snapshot": target, "warnings": run.Warnings,
+	return jsonValue(map[string]any{"run_id": run.ID, "state": run.State, "failure_diagnostic": run.Error, "warmup_attempts": run.Warmup, "run_name": run.Name, "model": run.Model, "mode": run.Mode, "created_at": run.CreatedAt, "started_at": run.StartedAt, "ended_at": run.EndedAt, "detail_configured": run.KeepDetail, "detail_cap_mb": run.DetailCapMB, "dataset": datasetContext(run.Dataset), "search": optionalContextJSON(run.Search), "tokenizer": run.TokenizerRef, "priority_class": run.PriorityClass, "target_snapshot": target, "warnings": run.Warnings,
 		"point_eligibility": recommendationProperties(run, rows), "recommendation": recommendation, "persisted_verdict": optionalContextJSON(run.Verdict), "recommendation_scope": "best measured point in this run; no capacity upper bound", "repeats": "see point repeat; no uncertainty estimate"})
 }
 

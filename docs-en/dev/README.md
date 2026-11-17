@@ -43,7 +43,10 @@ The root [`CLAUDE.md`](../../CLAUDE.md) is authoritative for development convent
 - [Benchmark Information and Reporting Standards](benchmark-reporting-standard.md)
 - [Observability Limits of Per-Request Engine Queue Time](engine-queue-observation.md)
 - [Community Registry Browsing](community-registry-browse.md)
+- [Adding a KV offload backend](kv-offload-backends.md)
 - [Browser E2E Testing Standards](../../test/e2e/browser-e2e-testing-standard.md)
 - [Browser E2E Component Checklists](../../test/e2e/browser-e2e-component-checklists.md)
 - [Release Builds](release.md)
 - [Contributing and Documentation Rules](contributing.md)
+
+<!-- translation-source-sha256: d965958ea12badc9a9e18efcf025ca322da4d405e0acd3907816c092092991b5 -->

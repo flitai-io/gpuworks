@@ -17,6 +17,10 @@ type Request struct {
 	Canceled                 bool
 	FinishReason, ErrorStage string
 	HTTPStatus               int
+	// PriorityClass is the request priority class the endpoint says the
+	// request ran at (a gpuworks gateway's X-GPUWorks-Priority-Class); empty
+	// when it says none.
+	PriorityClass string
 
 	StartedAt      time.Time
 	FirstOutputAt  time.Time

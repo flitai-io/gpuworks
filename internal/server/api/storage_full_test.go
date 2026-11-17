@@ -77,9 +77,9 @@ func TestWriteErrLeavesOtherErrorsAsTheyWere(t *testing.T) {
 		err    error
 		want   map[string]any
 	}{
-		{"plain 500", http.StatusInternalServerError, errors.New("boom"), map[string]any{"error": "boom"}},
+		{"plain 500", http.StatusInternalServerError, errors.New("boom"), map[string]any{"error": "boom", "code": "INTERNAL_ERROR"}},
 		{"product error keeps its code", http.StatusConflict, product, map[string]any{"error": "node is offline", "code": "NODE_OFFLINE", "params": map[string]any{"node": "n1"}}},
-		{"look-alike text is not a full disk", http.StatusInternalServerError, errors.New("database or disk is full (13)"), map[string]any{"error": "database or disk is full (13)"}},
+		{"look-alike text is not a full disk", http.StatusInternalServerError, errors.New("database or disk is full (13)"), map[string]any{"error": "database or disk is full (13)", "code": "INTERNAL_ERROR"}},
 	}
 	for _, tc := range cases {
 		rec := httptest.NewRecorder()

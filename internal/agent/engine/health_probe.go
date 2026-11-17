@@ -79,7 +79,7 @@ func (e *Engine) startHealthProbe(ctx context.Context, serving servingInstance) 
 	e.mu.Lock()
 	current, ok := e.watchableLocked(serving.spec.UUID, serving.epoch)
 	if !ok || ctx.Err() != nil || current.Headless || current.APIPort <= 0 ||
-		current.DesiredSleep > 0 || e.sleepLevel[current.UUID] > 0 || e.healthProbes[current.UUID] != nil {
+		current.DesiredSleep > 0 || e.processOfLocked(current.UUID).sleepLevel > 0 || e.healthProbes[current.UUID] != nil {
 		e.mu.Unlock()
 		return
 	}

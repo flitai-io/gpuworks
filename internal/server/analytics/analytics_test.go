@@ -189,6 +189,23 @@ func TestQualityGPUAndCardTime(t *testing.T) {
 	if len(quality.Rows) != 1 || quality.Rows[0].DeploymentName != "glm" || quality.Rows[0].Error != 2 {
 		t.Fatalf("rows = %+v", quality.Rows)
 	}
+	// Rows from before classes count under the empty class.
+	if len(quality.Classes) != 1 || quality.Classes[0].PriorityClass != "" || quality.Classes[0].Requests != 20 {
+		t.Fatalf("classes = %+v", quality.Classes)
+	}
+	// A class's own rows split out, most requests first, while the
+	// deployment's row still adds them all up.
+	var low rollup.Quality
+	low.Requests, low.Completed = 30, 30
+	low.TTFT.Observe(9000)
+	if err := f.stats.AddQuality(ctx, map[rollup.QualityKey]rollup.Quality{{HourMS: f.at(22, 10), DeploymentID: f.dep, PriorityClass: "low"}: low}); err != nil {
+		t.Fatal(err)
+	}
+	split, err := f.svc.Quality(ctx, Query{FromMS: f.at(22, 0), ToMS: f.at(23, 0)}, 0)
+	if err != nil || len(split.Classes) != 2 || split.Classes[0].PriorityClass != "low" || split.Classes[0].Requests != 30 ||
+		split.Classes[1].PriorityClass != "" || split.Classes[1].Requests != 10 || len(split.Rows) != 1 || split.Rows[0].Requests != 40 {
+		t.Fatalf("split = %+v rows %+v %v", split.Classes, split.Rows, err)
+	}
 	empty, _ := f.svc.Quality(ctx, Query{FromMS: f.at(10, 0), ToMS: f.at(11, 0)}, 0)
 	if empty.Totals.TTFTP50MS != nil || empty.Totals.OutputTokensPerSec != nil || len(empty.Rows) != 0 {
 		t.Fatalf("empty = %+v", empty)

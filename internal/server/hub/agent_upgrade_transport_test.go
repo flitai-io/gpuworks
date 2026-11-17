@@ -254,11 +254,11 @@ func TestAgentUpgradeLateObservationKeepsItsOriginalIdentity(t *testing.T) {
 		t.Fatalf("replaced session emitted registration: %+v", e)
 	default:
 	}
-	old.observeUpgradeFailure("late installation failure")
+	old.observeUpgradeFailure(proto.AgentUpgradeStatus{State: "failed", Error: "late installation failure"})
 	event := <-events
 	if event.SessionID != old.upgradeSessionID || event.Version != "old" || event.State != "failed" {
 		t.Fatalf("late event rebound to replacement: %+v", event)
 	}
 	h.SetAgentUpgradeObserver(nil)
-	old.observeUpgradeFailure("observer removed")
+	old.observeUpgradeFailure(proto.AgentUpgradeStatus{State: "failed", Error: "observer removed"})
 }

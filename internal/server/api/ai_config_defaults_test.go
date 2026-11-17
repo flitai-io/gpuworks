@@ -54,7 +54,8 @@ func TestAIConfigRoutesExposeOnlyOneDefault(t *testing.T) {
 		t.Fatalf("list=%d %s err=%v", rec.Code, rec.Body.String(), err)
 	}
 	for _, row := range rows {
-		if len(row) != 6 || row["is_default"] != (row["name"] == "config-1") {
+		// Eight keys: proxy_url is present only for a custom proxy.
+		if len(row) != 8 || row["is_default"] != (row["name"] == "config-1") || row["proxy_mode"] != "management" || row["image_input"] != false {
 			t.Fatalf("unexpected wire row=%+v", row)
 		}
 		if _, ok := row["api_key"]; ok {

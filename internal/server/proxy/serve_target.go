@@ -45,7 +45,7 @@ func (p *Proxy) serveTarget(w http.ResponseWriter, r *http.Request, tgt target, 
 	live.dispatch(dispatched, tgt.instanceUUID, body)
 	caller := live.caller
 	facts := requestFacts{id: id, trace: ident.trace, model: ident.model, deploymentID: deploymentID, caller: caller, path: r.URL.Path,
-		dispatchedAt: dispatched, body: body, pd: tgt.stage.record(live.receivedAt)}
+		dispatchedAt: dispatched, body: body, pd: tgt.stage.record(live.receivedAt), priorityClass: priorityClassFrom(r.Context())}
 	ob := &copyObservation{
 		log:         p.log,
 		requestID:   id,

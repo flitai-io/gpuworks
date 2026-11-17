@@ -87,6 +87,9 @@ func TestStartupContainerDisappearance(t *testing.T) {
 				if len(reports) != 1 || reports[0].State != wantState || !strings.HasPrefix(reports[0].Message, wantMessage) {
 					t.Fatalf("reports = %+v, want one %s report for %q before startup times out", reports, wantState, wantMessage)
 				}
+				if f := reports[0].RuntimeFailure; f == nil || f.Code != proto.ErrorContainerDisappeared || f.Phase != proto.PhaseHealthCheck {
+					t.Fatalf("runtime failure = %+v", f)
+				}
 				if ctx.Err() != nil {
 					t.Fatal("disappearance was not reported before the test deadline")
 				}

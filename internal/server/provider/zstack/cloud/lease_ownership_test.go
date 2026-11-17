@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/provider"
@@ -10,7 +11,16 @@ import (
 )
 
 func TestSharedGPUStaysDisabledUntilLastConsumerStops(t *testing.T) {
-	st, svc, fixture := newCloudRuntimeFixture(t)
+	for _, protocol := range []string{"gpu-allocation", "pci", "gpu-pci-state"} {
+		t.Run(protocol, func(t *testing.T) {
+			testSharedGPUStaysDisabledUntilLastConsumerStops(t, protocol)
+		})
+	}
+}
+
+func testSharedGPUStaysDisabledUntilLastConsumerStops(t *testing.T, protocol string) {
+	t.Helper()
+	st, svc, fixture := newCloudRuntimeFixtureForGPUProtocol(t, protocol)
 	fixture.description.Store("operator note")
 	for _, instance := range []string{"first", "second"} {
 		if err := svc.BeforeCreate(t.Context(), provider.InferenceNodeCreateRequest{NodeUUID: "cloud-node", InstanceUUID: instance, GPUIndexes: []int{0}}); err != nil {
@@ -48,11 +58,16 @@ func TestSharedGPUStaysDisabledUntilLastConsumerStops(t *testing.T) {
 }
 
 func TestGPUAdmissionReadsCurrentCloudAllocation(t *testing.T) {
-	for _, occupied := range []string{"allocated", "disabled"} {
-		t.Run(occupied, func(t *testing.T) {
-			st, svc, fixture := newCloudRuntimeFixture(t)
-			fixture.allocated.Store(occupied == "allocated")
-			fixture.gpu.Store(occupied == "disabled")
+	for _, tc := range []struct {
+		protocol  string
+		allocated bool
+	}{
+		{"gpu-allocation", false}, {"gpu-allocation", true}, {"pci", false}, {"pci", true}, {"gpu-pci-state", false}, {"gpu-pci-state", true},
+	} {
+		t.Run(fmt.Sprintf("%s/allocated=%v", tc.protocol, tc.allocated), func(t *testing.T) {
+			st, svc, fixture := newCloudRuntimeFixtureForGPUProtocol(t, tc.protocol)
+			fixture.allocated.Store(tc.allocated)
+			fixture.gpu.Store(!tc.allocated)
 			if err := svc.BeforeCreate(t.Context(), provider.InferenceNodeCreateRequest{NodeUUID: "cloud-node", InstanceUUID: "rejected", GPUIndexes: []int{0}}); err == nil {
 				t.Fatal("stale available snapshot admitted a currently occupied GPU")
 			}

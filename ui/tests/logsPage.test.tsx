@@ -27,6 +27,11 @@ const { MemoryRouter } = await import("react-router-dom");
 const { cleanup, render, screen, fireEvent, waitFor } = await import("@testing-library/react");
 
 const nodeCalls: string[] = [];
+const instanceCalls: string[] = [];
+const fleetInstances = [
+	{ uuid: "6f9a1c2daaaa", state: "running" },
+	{ uuid: "b0b0c0c0dddd", state: "stopped" },
+];
 const fleetNodes = [
 	{ uuid: "n1", name: "gpu-alpha", hostname: "alpha", state: "online", gpus: [], labels: {} },
 	{ uuid: "n2", name: "gpu-beta", hostname: "beta", state: "online", gpus: [], labels: {} },
@@ -52,7 +57,15 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
 		}), { status: 200 });
 	}
 	if (url.includes("/api/v1/instances")) {
-		return new Response(JSON.stringify({ items: [{ uuid: "6f9a1c2daaaa", state: "running" }], total: 1 }), { status: 200 });
+		// One page searched on the server, as GET /instances does with page
+		// parameters.
+		instanceCalls.push(url);
+		const q = new URL(url, "http://localhost").searchParams.get("q")?.toLowerCase() ?? "";
+		if (q.includes("boom")) {
+			return new Response(JSON.stringify({ error: "instance list unavailable" }), { status: 500 });
+		}
+		const items = fleetInstances.filter((inst) => !q || inst.uuid.includes(q));
+		return new Response(JSON.stringify({ items, page: 1, page_size: 50, total: items.length }), { status: 200 });
 	}
 	if (url.includes("/api/v1/nodes")) {
 		// The node filter searches one page on the server, as GET /nodes does
@@ -302,6 +315,71 @@ test("the node filter searches nodes on the server and filters the logs by the o
 	await waitFor(() => assert.ok(searchCalls.at(-1)!.includes("node=n2"), `expected the node filter in ${searchCalls.at(-1)}`));
 });
 
+test("the instance filter searches instances on the server instead of listing them all", async () => {
+	searchResponse = { total: 0, items: [] };
+	instanceCalls.length = 0;
+	render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/logs"]}><LogsPage /></MemoryRouter></I18nextProvider>);
+	const picker = await screen.findByRole("combobox", { name: i18n.t("search.instancePlaceholder") });
+	await waitFor(() => assert.ok(instanceCalls.length > 0));
+	assert.ok(instanceCalls.every((url) => url.includes("page=1") && url.includes("page_size=50")), `the instance list was fetched whole: ${instanceCalls}`);
+	fireEvent.change(picker, { target: { value: "b0b0" } });
+	await waitFor(() => assert.ok(instanceCalls.at(-1)!.includes("q=b0b0"), `expected a server search: ${instanceCalls.at(-1)}`));
+	let option: Element | null = null;
+	await waitFor(() => assert.ok((option = document.querySelector('.ant-select-item-option[title="b0b0c0c0dddd"]'))));
+	assert.equal(document.querySelector('.ant-select-item-option[title="6f9a1c2daaaa"]'), null);
+	fireEvent.click(option!);
+	await waitFor(() => assert.ok(searchCalls.at(-1)!.includes("instance=b0b0c0c0dddd"), `expected the instance filter in ${searchCalls.at(-1)}`));
+});
+
+async function renderInstancePicker() {
+	searchResponse = { total: 0, items: [] };
+	render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/logs"]}><LogsPage /></MemoryRouter></I18nextProvider>);
+	const picker = await screen.findByRole("combobox", { name: i18n.t("search.instancePlaceholder") });
+	await waitFor(() => assert.ok(instanceCalls.length > 0));
+	return picker;
+}
+
+const instanceOption = (uuid: string) => document.querySelector(`.ant-select-item-option[title="${uuid}"]`);
+
+test("typing in the instance filter searches once the typing pauses, not per keystroke", async () => {
+	instanceCalls.length = 0;
+	const picker = await renderInstancePicker();
+	const before = instanceCalls.length;
+	for (const value of ["b", "b0", "b0b", "b0b0"]) fireEvent.change(picker, { target: { value } });
+	await waitFor(() => assert.ok(instanceCalls.at(-1)!.includes("q=b0b0"), `expected a search for the whole input: ${instanceCalls.at(-1)}`));
+	await new Promise((resolve) => setTimeout(resolve, 400));
+	const typed = instanceCalls.slice(before);
+	assert.deepEqual(typed.map((url) => new URL(url, "http://localhost").searchParams.get("q")), ["b0b0"], `one search per pause, got ${typed}`);
+	await waitFor(() => assert.ok(instanceOption("b0b0c0c0dddd")));
+});
+
+test("an instance search with no match says so instead of offering nothing", async () => {
+	instanceCalls.length = 0;
+	const picker = await renderInstancePicker();
+	fireEvent.change(picker, { target: { value: "zzzz" } });
+	await waitFor(() => assert.ok(instanceCalls.at(-1)!.includes("q=zzzz")));
+	assert.ok(await screen.findByText(i18n.t("search.instanceEmpty")));
+	assert.equal(instanceOption("6f9a1c2daaaa"), null);
+	assert.equal(instanceOption("b0b0c0c0dddd"), null);
+});
+
+test("a failed instance search drops the previous results and reports the failure", async () => {
+	instanceCalls.length = 0;
+	const picker = await renderInstancePicker();
+	fireEvent.change(picker, { target: { value: "b0b0" } });
+	await waitFor(() => assert.ok(instanceOption("b0b0c0c0dddd")));
+	fireEvent.change(picker, { target: { value: "b0b0boom" } });
+	await waitFor(() => assert.ok(instanceCalls.at(-1)!.includes("q=b0b0boom")));
+	assert.ok(await screen.findByText(i18n.t("search.instanceError")));
+	assert.equal(instanceOption("b0b0c0c0dddd"), null, "results for an earlier input must not stay offered");
+	// The plain text input stays usable: the typed value still filters logs.
+	assert.equal((picker as HTMLInputElement).value, "b0b0boom");
+	// Typing again recovers.
+	fireEvent.change(picker, { target: { value: "b0b0" } });
+	await waitFor(() => assert.ok(instanceOption("b0b0c0c0dddd")));
+	assert.equal(screen.queryByText(i18n.t("search.instanceError")), null);
+});
+
 // Phase 0: selected text alone does not name an AntD combobox for assistive technology.
 test("log filters and automatic refresh have localized accessible names", async () => {
   searchResponse = { items: [] };
@@ -411,4 +489,39 @@ test("histogram bars are inert images without onPick and keyboard buttons with i
 	fireEvent.keyDown(bars[1], { key: " " });
 	fireEvent.keyDown(bars[1], { key: "a" });
 	assert.deepEqual(picked, [1000, 2000]);
+});
+
+test("exported log CSV includes the UTF-8 BOM and preserves Chinese and CSV escaping", async () => {
+  searchResponse = { items: [
+    { id: 101, time_ms: 1740000000124, level: "warn", source: "server", instance: "", node: "n1", line: '中文,含"引号"\n第二行' },
+    { id: 102, time_ms: 1740000000123, level: "info", source: "instance", instance: "inst-2", node: "n2", line: "ready" },
+  ] };
+  let downloaded: Blob | undefined;
+  let filename = "";
+  let clickedURL = "";
+  const revoked: string[] = [];
+  const createURL = URL.createObjectURL;
+  const revokeURL = URL.revokeObjectURL;
+  const click = dom.window.HTMLAnchorElement.prototype.click;
+  URL.createObjectURL = (blob: Blob) => { downloaded = blob; return "blob:log-csv"; };
+  URL.revokeObjectURL = (url: string) => { revoked.push(url); };
+  dom.window.HTMLAnchorElement.prototype.click = function () { filename = this.download; clickedURL = this.href; };
+  try {
+    render(<I18nextProvider i18n={i18n}><MemoryRouter><LogsPage /></MemoryRouter></I18nextProvider>);
+    await waitFor(() => assert.equal(screen.getAllByTestId("log-row").length, 2));
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(i18n.t("search.export") + "$") }));
+    assert.ok(downloaded, "export creates the download Blob");
+    assert.equal(downloaded.type, "text/csv;charset=utf-8");
+    assert.match(filename, /^gpuworks-logs-\d{4}-\d{2}-\d{2}\d{6}\.csv$/);
+    assert.equal(clickedURL, "blob:log-csv");
+    assert.deepEqual(revoked, ["blob:log-csv"]);
+    const bytes = new Uint8Array(await downloaded.arrayBuffer());
+    assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], "Excel detects UTF-8 from the BOM bytes");
+    assert.equal(Buffer.from(bytes.subarray(3)).toString("utf8"),
+      'TimeMS,Level,Source,Instance,Node,Line\n1740000000124,warn,server,,n1,"中文,含""引号""\n第二行"\n1740000000123,info,instance,inst-2,n2,ready');
+  } finally {
+    URL.createObjectURL = createURL;
+    URL.revokeObjectURL = revokeURL;
+    dom.window.HTMLAnchorElement.prototype.click = click;
+  }
 });

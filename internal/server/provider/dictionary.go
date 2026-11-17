@@ -21,6 +21,7 @@ type providerLocale struct {
 	ProviderKinds    map[string]string                `json:"provider_kinds"`
 	CredentialFields map[string]credentialFieldLocale `json:"credential_fields"`
 	SSHConnections   map[string]string                `json:"ssh_connections"`
+	ClusterTypes     map[string]string                `json:"cluster_types"`
 }
 
 var knownProviderKinds = []string{"aliyun", "autodl", "compshare", "digitalocean", "runpod", "vast", "zstack"}
@@ -85,6 +86,9 @@ func validateProviderLocales(locales map[string]providerLocale) error {
 			return err
 		}
 		if err := validateProviderLabels(language, "SSH connection", knownSSHConnectionTypes, locale.SSHConnections); err != nil {
+			return err
+		}
+		if err := validateProviderLabels(language, "cluster type", knownClusterTypes, locale.ClusterTypes); err != nil {
 			return err
 		}
 	}

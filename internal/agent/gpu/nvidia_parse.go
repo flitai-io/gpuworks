@@ -6,6 +6,7 @@ package gpu
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -327,11 +328,8 @@ func splitCSV(line string) []string {
 // GPU whose memory.total merely failed to parse keeps its honest 0 — only the
 // models accelerator.UnifiedMemory names get a value, and that list is shared
 // with the server, which sizes the host's share of such a card from it.
-// hostBytes is injectable for hermetic tests.
+// hostBytes is the host's memory size, 0 when unknown.
 func applyUnifiedMemoryFallback(gpus []proto.GPUInfo, hostBytes func() int64) {
-	if hostBytes == nil {
-		hostBytes = hostMemoryBytes
-	}
 	total := hostBytes()
 	if total <= 0 {
 		return
@@ -343,10 +341,11 @@ func applyUnifiedMemoryFallback(gpus []proto.GPUInfo, hostBytes func() int64) {
 	}
 }
 
-// hostMemoryBytes reports MemTotal from /proc/meminfo; 0 when unavailable
-// (non-Linux hosts have no fallback and keep the parsed 0).
-func hostMemoryBytes() int64 {
-	data, err := os.ReadFile("/proc/meminfo")
+// hostMemoryBytes reports MemTotal from proc/meminfo under hostRoot (empty
+// means "/"); 0 when unavailable (non-Linux hosts have no fallback and keep
+// the parsed 0).
+func hostMemoryBytes(hostRoot string) int64 {
+	data, err := os.ReadFile(filepath.Join("/", hostRoot, "proc/meminfo"))
 	if err != nil {
 		return 0
 	}

@@ -2,7 +2,9 @@ package docker
 
 import (
 	"context"
-	"strings"
+	"errors"
+
+	"gpuworks.ai/gpuworks/internal/agent/runtime"
 )
 
 // ImagePresence uses the same inspection as metadata collection, avoiding a
@@ -10,7 +12,7 @@ import (
 func (d *Driver) ImagePresence(ctx context.Context, ref string) (bool, string, *int64, error) {
 	image, err := d.InspectImage(ctx, ref)
 	if err != nil {
-		if ctx.Err() == nil && strings.Contains(strings.ToLower(err.Error()), "no such image:") {
+		if errors.Is(err, runtime.ErrImageNotFound) {
 			return false, "", nil, nil
 		}
 		return false, "", nil, err

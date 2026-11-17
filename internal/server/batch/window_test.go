@@ -2,8 +2,10 @@ package batch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -148,5 +150,64 @@ func TestConsoleFormInfersTheEndpoint(t *testing.T) {
 	_, err = r.svc.CreateFromUpload(testOwner, multipartForm(t, map[string]string{"endpoint": EndpointEmbedding}, inputLines(1)))
 	if be, ok := err.(*Error); !ok || be.Code != "endpoint_mismatch" {
 		t.Fatalf("mismatch: %+v", err)
+	}
+}
+
+// The console form names the class the batch's requests run at: it is stored
+// as the class's name and every request goes out at it. A class that does
+// not exist is refused and leaves no file behind.
+func TestConsoleFormPriorityClass(t *testing.T) {
+	var mu sync.Mutex
+	var sent []string
+	classes := func(name string) (bool, error) { return name == "high", nil }
+	r := newRig(t, Config{PriorityClasses: classes}, func(_ context.Context, owner Owner, _ string, _ []byte) Reply {
+		mu.Lock()
+		sent = append(sent, owner.PriorityClass)
+		mu.Unlock()
+		return okReply(`{}`)
+	})
+	r.start()
+	form := func(class string) (Batch, error) {
+		return r.svc.CreateFromUpload(testOwner, multipartForm(t, map[string]string{"endpoint": EndpointChat, "priority_class": class}, inputLines(2)))
+	}
+	b, err := form(" High ")
+	if err != nil || b.PriorityClass != "high" {
+		t.Fatalf("high: %+v err=%v", b, err)
+	}
+	r.await(b.ID, StatusCompleted)
+	mu.Lock()
+	if len(sent) != 2 || sent[0] != "high" || sent[1] != "high" {
+		t.Fatalf("sent at %q", sent)
+	}
+	mu.Unlock()
+	if got, _ := r.repo.GetBatch(b.ID); got.PriorityClass != "high" {
+		t.Fatalf("stored %q", got.PriorityClass)
+	}
+	// None named: the batch class, which the gateway applies.
+	if b, err := form(""); err != nil || b.PriorityClass != "" {
+		t.Fatalf("none: %+v err=%v", b, err)
+	}
+	files := len(r.repo.files)
+	if _, err := form("platinum"); err == nil || err.(*Error).Code != CodePriorityClass || err.(*Error).Param != "priority_class" {
+		t.Fatalf("unknown: err = %v", err)
+	}
+	if len(r.repo.files) != files {
+		t.Fatalf("a refused class left a file behind: %d, was %d", len(r.repo.files), files)
+	}
+	// A class deleted between the check and the write is refused the same way.
+	r.repo.mu.Lock()
+	r.repo.createErr = ErrPriorityClassGone
+	r.repo.mu.Unlock()
+	if _, err := form("high"); err == nil || err.(*Error).Code != CodePriorityClass {
+		t.Fatalf("deleted meanwhile: err = %v", err)
+	}
+	r.repo.mu.Lock()
+	r.repo.createErr = nil
+	r.repo.mu.Unlock()
+	// A lookup that fails refuses the batch rather than guessing.
+	r.cfg.PriorityClasses = func(string) (bool, error) { return false, errors.New("database locked") }
+	r.svc = New(r.repo, r.send, r.cfg)
+	if _, err := form("high"); err == nil || err.Error() != "database locked" {
+		t.Fatalf("failed lookup: err = %v", err)
 	}
 }

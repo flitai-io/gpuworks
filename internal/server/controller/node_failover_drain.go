@@ -130,7 +130,7 @@ func (c *Controller) chooseDrainSurge(ctx context.Context, deployment *unitDeplo
 			}
 		}
 	}
-	facts, err := planning.LoadUnitSuggestFacts(c.store, c.networks.Resolve, deployment.dep, deployment.requirements, listed, c.hub.Online, 1, 1)
+	facts, err := c.unitFacts(deployment, listed, 1)
 	if err != nil {
 		return drainSurge{}, false
 	}

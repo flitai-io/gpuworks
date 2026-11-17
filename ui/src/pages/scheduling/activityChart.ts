@@ -13,10 +13,10 @@ const REASON_COLORS: Record<string, string> = {
   rank_preemption: colors.chartPrimary,
   timeslice_turn: colors.chartQuaternary,
   operator_yield: colors.chartViolet,
-  scheduled: colors.chartTertiary,
-  placement: colors.chartSlate,
+  scheduled: colors.success,
+  placement: colors.text,
   failure: colors.danger,
-  queued: colors.warning,
+  queued: colors.muted,
 };
 const FALLBACK = [colors.chartSecondary, colors.chartTick];
 

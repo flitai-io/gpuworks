@@ -144,7 +144,7 @@ func tofuHostKeyCallback(store HostKeyStore, endpoint string) ssh.HostKeyCallbac
 		got := hostKeyFingerprint(key)
 		if want, ok := store.Get(endpoint); ok {
 			if want != got {
-				return fmt.Errorf("ssh host key mismatch for %s", endpoint)
+				return &hostKeyMismatchError{endpoint: endpoint}
 			}
 			return nil
 		}

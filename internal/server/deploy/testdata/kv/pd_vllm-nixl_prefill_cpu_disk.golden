@@ -1,0 +1,108 @@
+{
+  "materialize": {
+    "quick": {
+      "performance_mode": "balanced",
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "gpu_memory_utilization": 0.9,
+      "kv_offloading_size": 16,
+      "kv_disk_offload": true,
+      "kv_offload_read_threads": 16,
+      "kv_offload_write_threads": 16,
+      "shared_kv_dir": "/kv-cache"
+    },
+    "role_quick": {
+      "performance_mode": "balanced",
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "gpu_memory_utilization": 0.9,
+      "kv_offloading_size": 16,
+      "kv_disk_offload": true,
+      "kv_offload_read_threads": 16,
+      "kv_offload_write_threads": 16,
+      "shared_kv_dir": "/kv-cache"
+    }
+  },
+  "launch": {
+    "command": [
+      "vllm",
+      "serve",
+      "/model",
+      "--served-model-name",
+      "qwen",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "30000",
+      "--tensor-parallel-size",
+      "1",
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"MultiConnector\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_producer\"},{\"kv_connector\":\"OffloadingConnector\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":17179869184,\"secondary_tiers\":[{\"n_read_threads\":16,\"n_write_threads\":16,\"root_dir\":\"/kv-cache\",\"type\":\"fs\"}],\"spec_name\":\"TieringOffloadingSpec\"},\"kv_role\":\"kv_both\"}]},\"kv_load_failure_policy\":\"fail\",\"kv_role\":\"kv_producer\"}"
+    ],
+    "env": {
+      "GLOO_SOCKET_IFNAME": "lo",
+      "HF_HUB_OFFLINE": "1",
+      "NCCL_SOCKET_IFNAME": "lo",
+      "TRANSFORMERS_OFFLINE": "1",
+      "VLLM_HOST_IP": "127.0.0.1",
+      "VLLM_NIXL_SIDE_CHANNEL_HOST": "10.0.0.5",
+      "VLLM_NIXL_SIDE_CHANNEL_PORT": "30001",
+      "VLLM_SSM_CONV_STATE_LAYOUT": "DS"
+    },
+    "mounts": [
+      {
+        "target": "/kv-cache",
+        "size_hint": "34359738368",
+        "purpose": "kv-disk"
+      }
+    ],
+    "shm_bytes": 34359738368,
+    "requested_features": {
+      "command_known": true,
+      "prefill_decode_disaggregation": true,
+      "kv_disk_tier": true
+    },
+    "reverse_params": {
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "gpu_memory_utilization": 0.9
+    },
+    "reverse_residual": [
+      "--served-model-name",
+      "qwen",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "30000",
+      "--tensor-parallel-size",
+      "1",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"MultiConnector\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_producer\"},{\"kv_connector\":\"OffloadingConnector\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":17179869184,\"secondary_tiers\":[{\"n_read_threads\":16,\"n_write_threads\":16,\"root_dir\":\"/kv-cache\",\"type\":\"fs\"}],\"spec_name\":\"TieringOffloadingSpec\"},\"kv_role\":\"kv_both\"}]},\"kv_load_failure_policy\":\"fail\",\"kv_role\":\"kv_producer\"}"
+    ]
+  },
+  "export": {
+    "args": [
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"OffloadingConnector\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":17179869184,\"secondary_tiers\":[{\"n_read_threads\":16,\"n_write_threads\":16,\"root_dir\":\"/kv-cache\",\"type\":\"fs\"}],\"spec_name\":\"TieringOffloadingSpec\"},\"kv_role\":\"kv_both\"}"
+    ]
+  },
+  "unsettable": [
+    {
+      "source": "argv",
+      "value": "{\"kv_connector\":\"MultiConnector\",\"kv_connector_extra_config\":{\"connectors\":[{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_producer\"},{\"kv_connector\":\"OffloadingConnector\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":17179869184,\"secondary_tiers\":[{\"n_read_threads\":16,\"n_write_threads\":16,\"root_dir\":\"/kv-cache\",\"type\":\"fs\"}],\"spec_name\":\"TieringOffloadingSpec\"},\"kv_role\":\"kv_both\"}]},\"kv_load_failure_policy\":\"fail\",\"kv_role\":\"kv_producer\"}",
+      "unsettable": false
+    }
+  ]
+}

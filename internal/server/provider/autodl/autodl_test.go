@@ -365,7 +365,7 @@ func TestInstallScriptCommandRunsTheSharedScriptInstall(t *testing.T) {
 			t.Fatalf("install command ignores the operator's choices: %s", cmd)
 		}
 	}
-	if got := agentProcessCheck("__GPUWORKS_AGENT_PROCESS_OK__", "/data/gpuworks"); got.Status != "ok" || !strings.Contains(got.Detail, "/data/gpuworks") {
+	if got := agentProcessCheck("__GPUWORKS_AGENT_PROCESS_OK__", "/data/gpuworks"); got.Status != "pass" || !strings.Contains(checkText(got), "/data/gpuworks") {
 		t.Fatalf("agentProcessCheck success = %+v", got)
 	}
 	if got := agentProcessCheck("__GPUWORKS_AGENT_PROCESS_WARN__", ""); got.Status != "warn" {

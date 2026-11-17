@@ -46,6 +46,27 @@ type ackCluster struct {
 	MasterURL string `json:"master_url"`
 }
 
+// clusterType names the ACK product a cluster is, from its cluster_type and
+// profile; empty for a combination ACK may add later.
+func (c ackCluster) clusterType() string {
+	switch c.ClusterType {
+	case "Kubernetes":
+		return provider.ClusterTypeACKDedicated
+	case "ExternalKubernetes":
+		return provider.ClusterTypeACKRegistered
+	case "ManagedKubernetes":
+		switch c.Profile {
+		case "", "Default":
+			return provider.ClusterTypeACKManaged
+		case "Edge":
+			return provider.ClusterTypeACKEdge
+		case "Lingjun":
+			return provider.ClusterTypeACKLingjun
+		}
+	}
+	return ""
+}
+
 func (c ackCluster) publicAPI() bool {
 	var m struct {
 		APIServerEndpoint string `json:"api_server_endpoint"`
@@ -99,7 +120,7 @@ func (d *Driver) ListClusters(ctx context.Context, creds provider.Credentials) (
 			continue
 		}
 		cluster := provider.Cluster{ExternalID: c.ClusterID, Name: c.Name, Region: c.RegionID, Version: c.CurrentVersion,
-			State: c.State, Running: c.State == "running", PublicAPI: c.publicAPI(), GPUPools: []provider.ClusterPool{}}
+			Type: c.clusterType(), State: c.State, Running: c.State == "running", PublicAPI: c.publicAPI(), GPUPools: []provider.ClusterPool{}}
 		if !cluster.Running {
 			out = append(out, cluster)
 			continue

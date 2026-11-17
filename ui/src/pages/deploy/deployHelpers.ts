@@ -5,6 +5,7 @@ import type {
   EvaluateResponse,
   InferenceSpec,
   InferenceTemplate,
+  KVBackendProfile,
   Node,
   PartitionCapability,
 } from "../../api";
@@ -72,6 +73,9 @@ export function findTemplateSpec(
 // the draft is one click. This is draft state, not a rule: which flags the
 // tier emits is the server's judgement.
 export const memoryTierKey = "kv_offloading_size";
+// The dictionary parameter that selects a KV offload backend (ADR 0069). Its
+// options and what each one replaces come from the profile's kv_backends.
+export const kvBackendKey = "kv_offload_backend";
 export const memoryTierEnabledField = "kv_memory_tier_enabled";
 const diskTierKey = "kv_disk_offload";
 
@@ -92,6 +96,17 @@ export function kvTierSpecs(specs: EngineParamSpec[] | undefined): {
       (spec) => spec.depends_on === diskTierKey && spec.key !== diskTierKey,
     ),
   };
+}
+
+// selectedKVBackend is the backend the draft selects, when the profile lists
+// it; an empty selection is the engine's own tiers.
+export function selectedKVBackend(
+  v: Record<string, unknown>,
+  profile?: Pick<EngineProfile, "kv_backends">,
+): KVBackendProfile | undefined {
+  const id = v[kvBackendKey];
+  if (typeof id !== "string" || id === "") return undefined;
+  return profile?.kv_backends?.find((backend) => backend.id === id);
 }
 
 // projectDraft is the form's one projection onto the parameter dictionary: the
@@ -137,6 +152,26 @@ export function projectDraft(
   } else if (tiers.disk && v[diskTierKey] === false) {
     unset.add(tiers.disk.key);
     for (const spec of tiers.companions) unset.add(spec.key);
+  }
+  // A selected backend replaces the native keys the server lists for it:
+  // their draft values stay in the form, and the payload tombstones them.
+  // A selection the profile does not list (the target changed to one the
+  // backend does not run on) is not one the cards show: it is tombstoned, so
+  // the payload matches the engine tiers the form shows instead.
+  const backend = selectedKVBackend(v, profile);
+  const statedBackend = v[kvBackendKey];
+  const selectorPublished = published.some((spec) => spec.key === kvBackendKey);
+  if (!backend && selectorPublished && typeof statedBackend === "string" && statedBackend !== "") {
+    delete quick[kvBackendKey];
+    unset.add(kvBackendKey);
+  }
+  if (backend) {
+    const publishedKeys = new Set(published.map((spec) => spec.key));
+    for (const key of backend.replaces) {
+      if (!publishedKeys.has(key)) continue;
+      delete quick[key];
+      unset.add(key);
+    }
   }
   return { quick, unset: [...unset] };
 }
@@ -249,6 +284,8 @@ export function buildPayload(
   // Unstated, the server opens tokenize, which is what the form shows.
   if (typeof v.tokenize_enabled === "boolean")
     payload.tokenize_enabled = v.tokenize_enabled;
+  if (typeof v.priority_scheduling === "boolean")
+    payload.priority_scheduling = v.priority_scheduling;
   const startTimeout = Number(v.start_timeout_sec);
   if (Number.isFinite(startTimeout) && startTimeout > 0)
     payload.start_timeout_sec = Math.round(startTimeout);
@@ -300,16 +337,34 @@ export function buildPayload(
   const mountRows = Array.isArray(v.container_mount_rows)
     ? (v.container_mount_rows as Array<Record<string, unknown>>)
     : [];
+  // A row mounts a host path, a named volume or a registered model; one with
+  // no source or no container path is still being filled in and not sent.
   const mounts = mountRows
     .filter(
       (row) =>
-        String(row?.host_path || row?.volume || "").trim() &&
+        (String(row?.host_path || row?.volume || "").trim() ||
+          Number(row?.model_id) > 0) &&
         String(row?.container_path || "").trim(),
     )
-    .map((row) => ({
-      ...row,
-      read_only: Boolean(row.read_only),
-    }));
+    .map((row) => {
+      const out: Record<string, unknown> = {
+        ...row,
+        read_only: Boolean(row.read_only),
+      };
+      if (Number(row.model_id) > 0) {
+        out.model_id = Number(row.model_id);
+        out.read_only = true;
+        delete out.host_path;
+        delete out.volume;
+      } else {
+        delete out.model_id;
+      }
+      // Switching a row's source leaves the fields it cleared behind as
+      // undefined; they state nothing.
+      for (const key of ["host_path", "volume"])
+        if (out[key] === undefined) delete out[key];
+      return out;
+    });
   if (mounts.length) containerOverrides.extra_mounts = mounts;
   const dockerArgs = Array.isArray(v.container_docker_args)
     ? v.container_docker_args.filter(

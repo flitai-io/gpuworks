@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
+	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
 // The server never changes an instance's security groups; for an agent it
@@ -41,29 +43,27 @@ type apiPermission struct {
 }
 
 // CheckInbound implements provider.InboundRuleChecker.
-func (d *Driver) CheckInbound(ctx context.Context, creds provider.Credentials, inst provider.Instance, port int) provider.InstallCheck {
-	check := provider.InstallCheck{Name: "Security group"}
+func (d *Driver) CheckInbound(ctx context.Context, creds provider.Credentials, inst provider.Instance, port int) provision.CheckResult {
+	unreadable := func(what string, err error) provision.CheckResult {
+		return provision.WarnCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupUnreadable, "could not read "+what, map[string]any{"port": port}).WithEvidence(err.Error())
+	}
 	found, err := d.findInstance(ctx, creds, inst.ExternalID)
 	if err != nil {
-		check.Status, check.Detail = "warn", "could not read the instance's security groups: "+err.Error()
-		return check
+		return unreadable("the instance's security groups", err)
 	}
 	groups := found.SecurityGroupIDs.SecurityGroupID
 	if len(groups) == 0 {
-		check.Status, check.Detail = "warn", "the instance lists no security group"
-		return check
+		return provision.WarnCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupNone, "the instance lists no security group", map[string]any{"port": port})
 	}
 	var rules []sgRule
 	for _, group := range groups {
 		groupRules, err := d.inboundRules(ctx, creds, found.RegionID, group)
 		if err != nil {
-			check.Status, check.Detail = "warn", fmt.Sprintf("could not read security group %s: %v", group, err)
-			return check
+			return unreadable("security group "+group, err)
 		}
 		rules = append(rules, groupRules...)
 	}
-	check.Status, check.Detail = inboundVerdict(rules, groups, port)
-	return check
+	return inboundVerdict(rules, groups, port)
 }
 
 func (d *Driver) inboundRules(ctx context.Context, creds provider.Credentials, region, group string) ([]sgRule, error) {
@@ -135,7 +135,7 @@ func (r sgRule) covers(port int) bool {
 // inboundVerdict decides from the rules covering port: the first rule from
 // anywhere (by priority, drops first at a tie) settles it, unless a rule for
 // specific sources came before it, which may treat the server differently.
-func inboundVerdict(rules []sgRule, groups []string, port int) (status, detail string) {
+func inboundVerdict(rules []sgRule, groups []string, port int) provision.CheckResult {
 	var matching []sgRule
 	for _, r := range rules {
 		if r.covers(port) {
@@ -156,21 +156,31 @@ func inboundVerdict(rules []sgRule, groups []string, port int) (status, detail s
 			continue
 		}
 		where := fmt.Sprintf("security group %s (priority %d)", r.group, r.priority)
+		params := map[string]any{"group": r.group, "priority": r.priority, "port": port}
+		// The rules for specific sources are the provider's own rule text.
+		others := strings.Join(specific, ", ")
 		switch {
 		case r.accept && len(specific) == 0:
-			return "ok", fmt.Sprintf("%s accepts TCP %d from anywhere", where, port)
+			return provision.PassCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupOpen, fmt.Sprintf("%s accepts TCP %d from anywhere", where, port), params)
 		case r.accept:
-			return "warn", fmt.Sprintf("%s accepts TCP %d from anywhere, after rules for specific sources that may decide first: %s", where, port, strings.Join(specific, ", "))
+			return provision.WarnCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupOpenAfterSpecific,
+				fmt.Sprintf("%s accepts TCP %d from anywhere, after rules for specific sources that may decide first: %s", where, port, others), params).WithEvidence(others)
 		case len(specific) == 0:
-			return "error", fmt.Sprintf("%s drops TCP %d from anywhere, so the server cannot connect; %s with a higher priority", where, port, open)
+			return provision.FailCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupDrops,
+				fmt.Sprintf("%s drops TCP %d from anywhere, so the server cannot connect; %s with a higher priority", where, port, open), params)
 		default:
-			return "warn", fmt.Sprintf("%s drops TCP %d from anywhere; only these rules may let the server in: %s", where, port, strings.Join(specific, ", "))
+			return provision.WarnCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupDropsExceptSpecific,
+				fmt.Sprintf("%s drops TCP %d from anywhere; only these rules may let the server in: %s", where, port, others), params).WithEvidence(others)
 		}
 	}
 	if len(specific) > 0 {
-		return "warn", fmt.Sprintf("TCP %d is accepted only from specific sources; the server must connect from one of them: %s", port, strings.Join(specific, ", "))
+		others := strings.Join(specific, ", ")
+		return provision.WarnCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupSpecificOnly,
+			fmt.Sprintf("TCP %d is accepted only from specific sources; the server must connect from one of them: %s", port, others), map[string]any{"port": port}).WithEvidence(others)
 	}
-	return "error", fmt.Sprintf("no inbound rule of security group %s accepts TCP %d, so the server cannot connect; %s", strings.Join(groups, ", "), port, open)
+	return provision.FailCheck(provision.CheckIDSecurityGroup, messages.CheckSecurityGroupNoRule,
+		fmt.Sprintf("no inbound rule of security group %s accepts TCP %d, so the server cannot connect; %s", strings.Join(groups, ", "), port, open),
+		map[string]any{"groups": strings.Join(groups, ", "), "port": port})
 }
 
 func policyWord(accept bool) string {

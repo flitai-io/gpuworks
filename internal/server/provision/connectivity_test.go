@@ -6,9 +6,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
-func row(name, status string) *CheckResult { return &CheckResult{Name: name, Status: status} }
+func row(id, status string) *CheckResult { return &CheckResult{ID: id, Status: status} }
 
 func TestConnectionDiagnosticTimeoutDoesNotAssertFirewallCause(t *testing.T) {
 	restore := dialServerToAgent
@@ -17,28 +19,28 @@ func TestConnectionDiagnosticTimeoutDoesNotAssertFirewallCause(t *testing.T) {
 		return nil, context.DeadlineExceeded
 	}
 	result := ServerToAgentProbe(context.Background(), "203.0.113.1", "", time.Second)
-	if strings.Contains(result.Detail, "so a security group or firewall drops") || !strings.Contains(result.Detail, "routing") {
+	if strings.Contains(result.text(), "so a security group or firewall drops") || !strings.Contains(result.text(), "routing") {
 		t.Fatalf("a timeout must retain possible causes instead of asserting one: %+v", result)
 	}
 }
 
 func TestConnectivityVerdict(t *testing.T) {
-	ok, bad := "ok", "warn"
+	ok, bad := "pass", "warn"
 	for _, tc := range []struct {
 		name     string
 		mode     string
 		a2s, s2a *CheckResult
 		want     string // "" for no row, else a substring of the detail
 	}{
-		{"agent_dial works", "agent_dial", row(checkServerReachability, ok), row(checkServerToAgent, bad), ""},
-		{"agent_dial works, server side not probed", "agent_dial", row(checkServerReachability, ok), nil, ""},
-		{"agent_dial broken, server_dial would work", "agent_dial", row(checkServerReachability, "error"), row(checkServerToAgent, ok), "choose server-initiated connection"},
-		{"agent_dial broken both ways", "agent_dial", row(checkServerReachability, "error"), row(checkServerToAgent, bad), "either direction"},
-		{"agent_dial broken, no address to probe", "agent_dial", row(checkServerReachability, "error"), nil, "either direction"},
-		{"server_dial works", "server_dial", nil, row(checkServerToAgent, ok), ""},
+		{"agent_dial works", "agent_dial", row(CheckIDServerReachability, ok), row(CheckIDServerToAgent, bad), ""},
+		{"agent_dial works, server side not probed", "agent_dial", row(CheckIDServerReachability, ok), nil, ""},
+		{"agent_dial broken, server_dial would work", "agent_dial", row(CheckIDServerReachability, "fail"), row(CheckIDServerToAgent, ok), "choose server-initiated connection"},
+		{"agent_dial broken both ways", "agent_dial", row(CheckIDServerReachability, "fail"), row(CheckIDServerToAgent, bad), "either direction"},
+		{"agent_dial broken, no address to probe", "agent_dial", row(CheckIDServerReachability, "fail"), nil, "either direction"},
+		{"server_dial works", "server_dial", nil, row(CheckIDServerToAgent, ok), ""},
 		// Only the needed direction was checked; its own row says what drops it.
-		{"server_dial broken, other direction unchecked", "server_dial", nil, row(checkServerToAgent, bad), ""},
-		{"server_dial broken, agent_dial would work", "server_dial", row(checkServerReachability, ok), row(checkServerToAgent, bad), "choose agent-initiated connection"},
+		{"server_dial broken, other direction unchecked", "server_dial", nil, row(CheckIDServerToAgent, bad), ""},
+		{"server_dial broken, agent_dial would work", "server_dial", row(CheckIDServerReachability, ok), row(CheckIDServerToAgent, bad), "choose agent-initiated connection"},
 		{"nothing checked", "agent_dial", nil, nil, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -49,11 +51,11 @@ func TestConnectivityVerdict(t *testing.T) {
 				}
 				return
 			}
-			if got == nil || got.Name != checkConnectivity || got.Status != "warn" || !strings.Contains(got.Detail, tc.want) {
+			if got == nil || got.ID != CheckIDConnectivity || got.Status != "warn" || !strings.Contains(got.text(), tc.want) {
 				t.Fatalf("verdict = %+v, want a warning containing %q", got, tc.want)
 			}
-			if strings.Contains(tc.want, "either direction") && !strings.Contains(got.Detail, "docs/how-to/connect-nodes.md") {
-				t.Fatalf("a dead end must point at the docs: %s", got.Detail)
+			if strings.Contains(tc.want, "either direction") && !strings.Contains(got.text(), "docs/how-to/connect-nodes.md") {
+				t.Fatalf("a dead end must point at the docs: %s", got.text())
 			}
 		})
 	}
@@ -67,11 +69,11 @@ func TestServerToAgentProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, port, _ := net.SplitHostPort(l.Addr().String())
-	if got := ServerToAgentProbe(context.Background(), "127.0.0.1", ":"+port, time.Second); got.Status != "ok" || strings.Contains(got.Detail, "nothing listens") {
+	if got := ServerToAgentProbe(context.Background(), "127.0.0.1", ":"+port, time.Second); got.Status != "pass" || strings.Contains(got.text(), "nothing listens") {
 		t.Fatalf("listening port = %+v", got)
 	}
 	_ = l.Close()
-	if got := ServerToAgentProbe(context.Background(), "127.0.0.1", ":"+port, time.Second); got.Status != "ok" || !strings.Contains(got.Detail, "nothing listens there yet") {
+	if got := ServerToAgentProbe(context.Background(), "127.0.0.1", ":"+port, time.Second); got.Status != "pass" || !strings.Contains(got.text(), "nothing listens there yet") {
 		t.Fatalf("refused port = %+v", got)
 	}
 	// A security group that drops the packets: the dial times out.
@@ -83,13 +85,13 @@ func TestServerToAgentProbe(t *testing.T) {
 		<-ctx.Done()
 		return nil, &net.OpError{Op: "dial", Net: network, Err: ctx.Err()}
 	}
-	if got := ServerToAgentProbe(context.Background(), "203.0.113.1", "", 50*time.Millisecond); got.Status != "warn" || dialed != "203.0.113.1:18800" || !strings.Contains(got.Detail, "cannot reach 203.0.113.1:18800") {
+	if got := ServerToAgentProbe(context.Background(), "203.0.113.1", "", 50*time.Millisecond); got.Status != "warn" || dialed != "203.0.113.1:18800" || !strings.Contains(got.text(), "cannot reach 203.0.113.1:18800") {
 		t.Fatalf("unreachable = %+v (dialed %s)", got, dialed)
 	}
-	if got := ServerToAgentProbe(context.Background(), "", "", time.Second); got.Status != "warn" {
+	if got := ServerToAgentProbe(context.Background(), "", "", time.Second); got.Status != "skip" || got.Code != messages.CheckNodeAddressInvalid {
 		t.Fatalf("no host = %+v", got)
 	}
-	if got := ServerToAgentProbe(context.Background(), "10.0.0.1", "nonsense", time.Second); got.Status != "warn" || !strings.Contains(got.Detail, "invalid listen address") {
+	if got := ServerToAgentProbe(context.Background(), "10.0.0.1", "nonsense", time.Second); got.Status != "skip" || !strings.Contains(got.text(), "invalid listen address") {
 		t.Fatalf("bad listen = %+v", got)
 	}
 }
@@ -103,14 +105,14 @@ func TestAppendConnectivityShowsTheServerSideOnlyWhenItMatters(t *testing.T) {
 	dialServerToAgent = func(context.Context, string, string) (net.Conn, error) {
 		return nil, &net.OpError{Op: "dial", Err: context.DeadlineExceeded}
 	}
-	healthy := []CheckResult{{Name: checkServerReachability, Status: "ok"}}
+	healthy := []CheckResult{{ID: CheckIDServerReachability, Status: "pass"}}
 	got := AppendConnectivity(ctx, healthy, "agent_dial", "203.0.113.1", "")
 	if len(got) != 1 {
 		t.Fatalf("healthy agent_dial rows = %+v", got)
 	}
-	broken := []CheckResult{{Name: checkServerReachability, Status: "error"}}
+	broken := []CheckResult{{ID: CheckIDServerReachability, Status: "fail"}}
 	got = AppendConnectivity(ctx, broken, "agent_dial", "203.0.113.1", "")
-	if len(got) != 3 || got[1].Name != checkServerToAgent || got[2].Name != checkConnectivity {
+	if len(got) != 3 || got[1].ID != CheckIDServerToAgent || got[2].ID != CheckIDConnectivity {
 		t.Fatalf("broken agent_dial rows = %+v", got)
 	}
 	got = AppendConnectivity(ctx, nil, "server_dial", "", "")
@@ -129,7 +131,7 @@ func TestServerDialProbeDialsTheMappedAddressAndFailsWhenDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer l.Close()
-	if got := ServerToAgentProbe(context.Background(), l.Addr().String(), "0.0.0.0:6006", time.Second); got.Status != "ok" || !strings.Contains(got.Detail, l.Addr().String()) {
+	if got := ServerToAgentProbe(context.Background(), l.Addr().String(), "0.0.0.0:6006", time.Second); got.Status != "pass" || !strings.Contains(got.text(), l.Addr().String()) {
 		t.Fatalf("mapped address = %+v", got)
 	}
 
@@ -145,11 +147,11 @@ func TestServerDialProbeDialsTheMappedAddressAndFailsWhenDropped(t *testing.T) {
 	if dialed != "connect.example.com:37145" {
 		t.Fatalf("dialed %q, want the mapped address", dialed)
 	}
-	probe := findCheck(got, checkServerToAgent)
-	if probe == nil || probe.Status != "error" ||
-		!strings.Contains(probe.Detail, "no answer within 3s") ||
-		!strings.Contains(probe.Detail, "check routing, security groups and firewalls") ||
-		!strings.Contains(probe.Detail, "inbound TCP 37145 on the node for the server") {
+	probe := findCheck(got, CheckIDServerToAgent)
+	if probe == nil || probe.Status != "fail" ||
+		!strings.Contains(probe.text(), "no answer within 3s") ||
+		!strings.Contains(probe.text(), "check routing, security groups and firewalls") ||
+		!strings.Contains(probe.text(), "inbound TCP 37145 on the node for the server") {
 		t.Fatalf("server_dial rows = %+v", got)
 	}
 }

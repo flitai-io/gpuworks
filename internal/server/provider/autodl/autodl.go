@@ -265,9 +265,7 @@ func (d *Driver) InstallAgentWithReport(ctx context.Context, creds provider.Cred
 	defer client.Close()
 	keyCheck, authorized := provision.AuthorizePlatformKey(ctx, client, auth, outcome)
 	report := provider.InstallReport{AuthUsed: outcome.Used, PlatformKeyAuthorized: authorized, InstallDir: req.InstallDir}
-	for _, check := range []provision.CheckResult{outcome.Check(), keyCheck} {
-		report.Checks = append(report.Checks, provider.InstallCheck{Name: check.Name, Status: check.Status, Detail: check.Detail})
-	}
+	report.Checks = append(report.Checks, outcome.Check(), keyCheck)
 
 	sess, err := client.NewSession()
 	if err != nil {
@@ -317,9 +315,8 @@ func loopbackNoProxyPrefix(serverURL string) string {
 	return `export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"; export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"; `
 }
 
-func agentProcessCheck(output, dir string) provider.InstallCheck {
-	check := provision.AgentRunningCheck(output, dir)
-	return provider.InstallCheck{Name: check.Name, Status: check.Status, Detail: check.Detail}
+func agentProcessCheck(output, dir string) provision.CheckResult {
+	return provision.AgentRunningCheck(output, dir)
 }
 
 // ---- helpers --------------------------------------------------------------

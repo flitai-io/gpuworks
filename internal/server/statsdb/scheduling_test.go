@@ -165,7 +165,7 @@ func TestSchemaV3AddsTheSchedulingTables(t *testing.T) {
 			t.Fatal(err)
 		}
 		var version, tables, gpu int
-		if err := s.reader.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
+		if err := s.reader.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != schemaVersion {
 			t.Fatalf("version = %d %v", version, err)
 		}
 		if err := s.reader.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'sched_%'`).Scan(&tables); err != nil || tables != 6 {

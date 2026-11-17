@@ -35,6 +35,7 @@ type NodeConnectionDiagnostics struct {
 	RecoveryAttempts  int                     `json:"recovery_attempts"`
 	LastProbeAt       *time.Time              `json:"last_probe_at"`
 	LastRecoveryError string                  `json:"last_recovery_error"`
+	LastRecoveryCode  string                  `json:"last_recovery_code,omitempty"`
 	LastRejectReason  string                  `json:"last_reject_reason,omitempty"`
 	LastRejectAt      *time.Time              `json:"last_reject_at,omitempty"`
 	Exposure          *NodeConnectionExposure `json:"exposure"`

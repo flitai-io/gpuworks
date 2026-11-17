@@ -53,7 +53,8 @@ type ServerSettings interface {
 	// Upgrade stages the release in archive, snapshots the installation, swaps
 	// the binary and restarts; the next start confirms or rolls back. by names
 	// who asked, for the install history.
-	Upgrade(ctx context.Context, archive io.Reader, by string) (dto.ServerUpgradeStarted, error)
+	RollbackResult(attempt, backup string) (dto.ServerUpgradeProgress, error)
+	Upgrade(ctx context.Context, archive io.Reader, by string, target dto.ServerUpgradeSelection) (dto.ServerUpgradeStarted, error)
 }
 
 // ServerSettingsError is a rejected change, carried to the client as a
@@ -108,7 +109,11 @@ func (s StaticServerSettings) SetAutoCheckUpdates(bool) error {
 func (s StaticServerSettings) InstallID() string          { return "" }
 func (s StaticServerSettings) SelfUpgradeBlocker() string { return "no_service_manager" }
 func (s StaticServerSettings) InstallDir() string         { return "" }
-func (s StaticServerSettings) Upgrade(context.Context, io.Reader, string) (dto.ServerUpgradeStarted, error) {
+func (s StaticServerSettings) RollbackResult(string, string) (dto.ServerUpgradeProgress, error) {
+	return dto.ServerUpgradeProgress{Phase: "unknown"}, nil
+}
+
+func (s StaticServerSettings) Upgrade(context.Context, io.Reader, string, dto.ServerUpgradeSelection) (dto.ServerUpgradeStarted, error) {
 	return dto.ServerUpgradeStarted{}, &ServerSettingsError{Code: ErrorServerUpgradeUnavailable, Fallback: "upgrade the server from its host",
 		Params: map[string]any{"reason": "no_service_manager"}}
 }

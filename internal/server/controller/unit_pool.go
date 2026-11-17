@@ -103,7 +103,7 @@ func (c *Controller) poolModelFiles(modelID uint, nodes []store.Node, others int
 func (c *Controller) poolNodes(reqs nodelabel.Requirements) (nodes []store.Node, others int, err error) {
 	named := reqs[nodelabel.KeyNode]
 	if len(named) == 0 {
-		nodes, err = c.store.ListNodes()
+		nodes, err = c.store.FleetNodes()
 		return nodes, 0, err
 	}
 	if nodes, err = c.store.NodesByUUID(named); err != nil {
@@ -138,7 +138,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 			params["detail"] = pool.UnmetDetail
 		}
 		c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPoolEmpty, Params: params})
-		c.rememberPoolWait(dep.ID)
+		c.pool.wait(dep.ID, c.now())
 		return nil, false
 	}
 	// Candidates refused within poolRefusalMemory go to the back of the
@@ -148,7 +148,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 	order := make([]int, 0, len(pool.Ranked))
 	var refusedRecently []int
 	for index := range pool.Ranked {
-		if c.poolRefusedRecently(dep.ID, pool.Ranked[index].Node.ID) {
+		if c.pool.refusedRecently(dep.ID, pool.Ranked[index].Node.ID, c.now()) {
 			refusedRecently = append(refusedRecently, index)
 			continue
 		}
@@ -156,8 +156,8 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 	}
 	order = append(order, refusedRecently...)
 	// A replica an operator asked to start on a named node tries it first,
-	// once (planning.HintPlacement).
-	hinted, hasHint := planning.NextPlacementHint(dep.ID)
+	// once (lifecycle.Orders.HintPlacement).
+	hinted, hasHint := c.orders.NextPlacementHint(dep.ID)
 	if hasHint {
 		for i, index := range order {
 			if pool.Ranked[index].Node.UUID == hinted {
@@ -165,7 +165,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 				break
 			}
 		}
-		planning.ConsumePlacementHint(dep.ID, hinted)
+		c.orders.ConsumePlacementHint(dep.ID, hinted)
 	}
 	// A replica waiting for the holders of cards on one node to yield
 	// (placewait) is rechecked every placewait.Recheck: that node is tried
@@ -192,20 +192,32 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 	// cards give them up: taken only when none fits outright.
 	var yieldWait *scheduler.Reason
 	var waitsFor *planning.LaunchYield
+	take := func(index int) (*store.Node, bool) {
+		candidate := &pool.Ranked[index]
+		candidate.Replicas++
+		candidate.FreeGPUs -= pool.need
+		picked := candidate.Node
+		pool.Ranked = planning.RankPool(pool.Ranked, dep.PlacementStrategy, pool.need)
+		c.pool.settled(dep.ID)
+		return picked, true
+	}
+	// A node that fits only by a pool-wide concession is kept while the
+	// search looks for one that fits without it (planning.FitPicker).
+	var picker planning.FitPicker[int]
 	for _, index := range order {
 		if tried == poolTrialBudget {
 			break
 		}
 		candidate := &pool.Ranked[index]
 		tried++
-		refusal, yield, err := c.trialPoolNode(ctx, dep, candidate.Node, model)
+		refusal, yield, concessions, err := c.trialPoolNode(ctx, dep, candidate.Node, model)
 		if err == nil && refusal == nil {
-			candidate.Replicas++
-			candidate.FreeGPUs -= pool.need
-			picked := candidate.Node
-			pool.Ranked = planning.RankPool(pool.Ranked, dep.PlacementStrategy, pool.need)
-			c.forgetPoolWait(dep.ID)
-			return picked, true
+			// A node the operator named is taken when it fits: preferences
+			// rank the nodes the scheduler chooses, not the operator's.
+			if picker.Offer(index, concessions) || (hasHint && candidate.Node.UUID == hinted) {
+				return take(index)
+			}
+			continue
 		}
 		if err != nil {
 			c.log.Warn("candidate trial plan", "dep", dep.ID, "node", candidate.Node.UUID, "err", err)
@@ -220,14 +232,17 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 			}
 			continue
 		}
-		c.rememberPoolRefusal(dep.ID, candidate.Node.ID)
+		c.pool.refuse(dep.ID, candidate.Node.ID, c.now())
 		if len(closest) < poolClosest {
 			closest = append(closest, map[string]any{"node": candidate.Node.UUID, "name": candidate.Node.DisplayName(), "reason": *refusal})
 		}
 	}
+	if index, ok := picker.Fallback(); ok {
+		return take(index)
+	}
 	if yieldWait != nil {
 		c.recordRefusal(dep, *yieldWait, waitsFor, nil)
-		c.rememberPoolWait(dep.ID)
+		c.pool.wait(dep.ID, c.now())
 		return nil, false
 	}
 	params := map[string]any{
@@ -241,7 +256,7 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 		params["node"], params["first"], params["first_reason"], params["closest"] = closest[0]["name"], first.Code, first, closest
 	}
 	c.recordUnschedulable(dep, scheduler.Reason{Code: scheduler.ReasonPoolNoFit, Params: params})
-	c.rememberPoolWait(dep.ID)
+	c.pool.wait(dep.ID, c.now())
 	return nil, false
 }
 
@@ -249,59 +264,34 @@ func (c *Controller) pickPoolNode(ctx context.Context, deployment *unitDeploymen
 // scheduler against the node's ledger and the template's hardware contract,
 // without the model being there yet, a port reserved or anything written. A
 // non-nil refusal is the scheduler's reason, or the model being stuck there;
-// yield is what a refusal that waits for holders to yield waits for.
-func (c *Controller) trialPoolNode(ctx context.Context, dep *store.Deployment, node *store.Node, model *store.Model) (refusal *scheduler.Reason, yield *planning.LaunchYield, err error) {
+// yield is what a refusal that waits for holders to yield waits for;
+// concessions are the card preferences a fitting plan gave up.
+func (c *Controller) trialPoolNode(ctx context.Context, dep *store.Deployment, node *store.Node, model *store.Model) (refusal *scheduler.Reason, yield *planning.LaunchYield, concessions []scheduler.Concession, err error) {
 	// A node where the model is stuck would take the replica and then hold
 	// it there; the pool passes it over until the model is sorted out.
 	if refusal, err := c.modelUnavailable(dep, node, model); refusal != nil || err != nil {
-		return refusal, nil, err
+		return refusal, nil, nil, err
 	}
 	req, templateLayer, _, err := c.launchRequest(dep, node, model, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	topology, err := planning.RankTopology(node, nil, planning.GroupRank{Ranks: 1})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	req.Preview, req.Topology = true, topology
 	plan, refusal, err := c.planInstanceLaunch(ctx, dep, node, req, templateLayer)
-	return refusal, plan.YieldWait(refusal), err
-}
-
-func (c *Controller) poolRefusedRecently(depID, nodeID uint) bool {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	at, ok := c.poolRefused[depID][nodeID]
-	if !ok {
-		return false
+	if refusal == nil && err == nil && plan.Output.Fits() {
+		concessions = plan.Output.Result.Plan.Concessions
 	}
-	if c.now().Sub(at) >= poolRefusalMemory {
-		delete(c.poolRefused[depID], nodeID)
-		return false
-	}
-	return true
-}
-
-func (c *Controller) rememberPoolRefusal(depID, nodeID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	if c.poolRefused == nil {
-		c.poolRefused = map[uint]map[uint]time.Time{}
-	}
-	if c.poolRefused[depID] == nil {
-		c.poolRefused[depID] = map[uint]time.Time{}
-	}
-	c.poolRefused[depID][nodeID] = c.now()
+	return refusal, plan.YieldWait(refusal), concessions, err
 }
 
 // forgetPool drops what the controller remembers about a deployment's pool,
 // for a deployment that is gone or whose requirements changed.
 func (c *Controller) forgetPool(depID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	delete(c.poolRefused, depID)
-	delete(c.poolWaiting, depID)
+	c.pool.forget(depID)
 	c.waits.Done(depID)
 }
 
@@ -313,34 +303,3 @@ func (c *Controller) forgetPool(depID uint) {
 // directly - a node coming online, labels, edited requirements, its own
 // instances - still reconcile it at once.
 const poolSettleBackoff = 20 * time.Second
-
-func (c *Controller) rememberPoolWait(depID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	if c.poolWaiting == nil {
-		c.poolWaiting = map[uint]time.Time{}
-	}
-	c.poolWaiting[depID] = c.now()
-}
-
-func (c *Controller) forgetPoolWait(depID uint) {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	delete(c.poolWaiting, depID)
-}
-
-// poolWaitingRecently reports whether a deployment's last pass found no node
-// within poolSettleBackoff.
-func (c *Controller) poolWaitingRecently(depID uint) bool {
-	c.poolMu.Lock()
-	defer c.poolMu.Unlock()
-	at, ok := c.poolWaiting[depID]
-	if !ok {
-		return false
-	}
-	if c.now().Sub(at) >= poolSettleBackoff {
-		delete(c.poolWaiting, depID)
-		return false
-	}
-	return true
-}

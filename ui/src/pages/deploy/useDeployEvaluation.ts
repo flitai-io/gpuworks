@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormInstance } from "antd";
-import type { EvaluateResponse } from "../../api";
+import type { EngineProfile, EvaluateResponse } from "../../api";
 import { api } from "../../api";
 import {
   APIError,
@@ -73,6 +73,7 @@ function hasRenderedControl(form: FormInstance, name: string): boolean {
 export default function useDeployEvaluation({
   form,
   signal,
+  profiles,
   buildPayload,
   translate,
   applyFormValues = () => true,
@@ -80,6 +81,8 @@ export default function useDeployEvaluation({
   form: FormInstance;
   // The watched form values: one identity per draft, driving the debounce.
   signal: unknown;
+  // Dictionaries own engine-specific automatic sentinels.
+  profiles?: EngineProfile[];
   buildPayload: () => Record<string, unknown> | null;
   translate: APIErrorTranslator;
   // Whether the answer's form_values may be written onto the form. A form
@@ -128,6 +131,17 @@ export default function useDeployEvaluation({
     // The answer on screen describes the previous draft from this moment on;
     // report "evaluating" through the debounce so nothing acts on it.
     setEvaluating(true);
+    // Another engine's displayed defaults leave the form first; clearing them
+    // is itself a draft change, which evaluates the cleaned draft.
+    const stale = quickParamsRef.current.takeStaleFor(
+      String(form.getFieldValue("engine") ?? ""),
+      form.getFieldsValue(true),
+      profiles,
+    );
+    if (stale.length) {
+      form.setFieldsValue(Object.fromEntries(stale.map((key) => [key, undefined])));
+      return;
+    }
     const timer = setTimeout(() => {
       const payload = buildPayload();
       if (!payload) {
@@ -142,7 +156,16 @@ export default function useDeployEvaluation({
       const unset = new Set((request.quick_params_unset ?? []) as string[]);
       // A user-cleared field remains a tombstone when the server omits it.
       // Clearing it to undefined would let the next template reintroduce it.
-      const previousKeys = appliedKeysRef.current.filter((key) => !unset.has(key));
+      const targetProfile = profiles?.find((profile) => profile.name === payload.engine);
+      const targetKeys = new Set(targetProfile?.param_specs?.map((spec) => spec.key));
+      const dictionaryKeys = new Set(profiles?.flatMap((profile) =>
+        (profile.param_specs ?? []).map((spec) => spec.key)));
+      // Source-only authored values are inactive draft state, not stale target
+      // values. Keep them when the target's answer omits them so switching back
+      // restores the user's choices; untouched source defaults left above.
+      const previousKeys = appliedKeysRef.current.filter((key) =>
+        !unset.has(key) && (!targetProfile || !dictionaryKeys.has(key) || targetKeys.has(key)));
+
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -201,7 +224,10 @@ export default function useDeployEvaluation({
           // Manual previews describe their command, not the structured draft
           // restored by explicit discard. Keep its keys and quick-param origins.
           if (!manual && applyFormValues()) {
-            quickParamsRef.current.accept(response);
+            quickParamsRef.current.accept(
+              response,
+              String(request.engine || response.defaults?.engine || ""),
+            );
             deferredRef.current = applyEvaluateFormValues(
               form,
               response,
@@ -239,7 +265,7 @@ export default function useDeployEvaluation({
         });
     }, 400);
     return () => clearTimeout(timer);
-  }, [signal, reevaluateSeq]);
+  }, [signal, reevaluateSeq, profiles]);
 
   // A skipped key takes the server's display value once the deployer leaves
   // its control: evaluate the draft again then, through the ordinary path.

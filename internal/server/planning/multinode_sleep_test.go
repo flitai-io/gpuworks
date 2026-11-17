@@ -82,7 +82,7 @@ func TestAFollowerGivesItsCardUpWithItsLeader(t *testing.T) {
 	}
 
 	st, _, nodeB, _ = multiNodeSleepFixture(t, 1)
-	if err := st.SetInstanceState("g1-leader", proto.InstFailed, "gone"); err != nil {
+	if err := st.SetInstanceFailed("g1-leader", proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "gone"); err != nil {
 		t.Fatal(err)
 	}
 	if got := GPUAllocations(st, nodeB)[0]; got.AllocatedBytes != 16<<30 {

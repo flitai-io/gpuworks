@@ -155,7 +155,7 @@ type ClusterSignals struct {
 	// quantile-at-ingest fold only emits a TTFT/TPOT sample for a tick that
 	// actually completed at least one request that tick (see
 	// applyQuantiles' "total <= 0" early return in
-	// internal/server/app/observability_quantile.go) - a quiet window has
+	// internal/server/obsingest/quantile.go) - a quiet window has
 	// literally no sample, even though the family has data earlier in rng.
 	// When true, HasTTFT/HasTPOT are forced true but TTFTP95Ms/TPOTP95Ms
 	// (and their P99 siblings) stay at their zero value and the wire signal

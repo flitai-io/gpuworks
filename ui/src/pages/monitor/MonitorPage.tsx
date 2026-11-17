@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Alert, Button, Card, Col, Row, Skeleton, Space, Typography } from "antd";
+import { Alert, Button, Card, Col, Row, Skeleton } from "antd";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import EmptyState from "../../components/EmptyState";
@@ -12,7 +12,6 @@ import ServiceTable from "./ServiceTable";
 import SignalTile from "./SignalTile";
 import { formatLatency, latencyUnit } from "./signalFormat";
 import TimeRangeControl, { PickedRangeNote, TimeRangeProvider, useTimeRange } from "./TimeRangeContext";
-import StateSummary from "./StateSummary";
 import InfoTitle from "./InfoTitle";
 import RequestLookup from "./RequestLookup";
 import { DistributionState, InputOutputHeatmap } from "./RequestShapeCards";
@@ -98,7 +97,21 @@ function MonitorPageContent() {
   if (data) lastData.current = data;
   const layoutData = data ?? lastData.current;
 
-  const [filterIds, setFilterIds] = useState<number[] | null>(null);
+  // The service table's narrowings: the state filter (summary and column
+  // funnel) and a signal tile's. Picking either replaces the other; both
+  // live here so the table keeps its sort, other filters and page.
+  const [stateFilter, setStateFilter] = useState<string[]>([]);
+  // A signal filter keeps the signal, not the services it matched when
+  // clicked: each refresh narrows the table to the services that match now.
+  const [signalFilter, setSignalFilter] = useState<string | null>(null);
+  const pickSignal = (key: string, services: MonitorService[]) => {
+    setSignalFilter(filterForSignal(key, services) ? key : null);
+    setStateFilter([]);
+  };
+  const pickStates = (states: string[]) => {
+    setStateFilter(states);
+    if (states.length > 0) setSignalFilter(null);
+  };
 
   return (
     <div>
@@ -140,33 +153,17 @@ function MonitorPageContent() {
                 detail={signalDetail(signal, t)}
                 valueLabel={signal.key === "token_rate" ? t("signals.tokenRateInput") : undefined}
                 denominatorLabel={signal.key === "token_rate" ? t("signals.tokenRateOutput") : undefined}
-                onClick={signal.collected ? () => setFilterIds(filterForSignal(signal.key, layoutData.services)) : undefined}
+                onClick={signal.collected ? () => pickSignal(signal.key, layoutData.services) : undefined}
                 tooltip={signalTooltip(signal, t)}
               />
             ))}
           </div>
 
-          <div style={{ margin: "12px 0" }}>
-            <StateSummary services={layoutData.services} onFilter={setFilterIds} />
+          <div className="monitor-services-section mt-4">
+          <ServiceTable services={layoutData.services} stateCounts={layoutData.state_counts} stateFilter={stateFilter} onStateFilterChange={pickStates}
+            signalFilter={signalFilter ? { label: t(`signals.${signalFilter}`), deploymentIds: filterForSignal(signalFilter, layoutData.services) ?? [] } : null} onClearSignalFilter={() => setSignalFilter(null)}
+            onRefresh={refetch} loading={loading && !data} />
           </div>
-
-          <Card
-            title={t("table.service")}
-            extra={
-              filterIds && (
-                <Space size={8}>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    {t("table.filtered", { count: filterIds.length })}
-                  </Typography.Text>
-                  <Button size="small" type="link" onClick={() => setFilterIds(null)}>
-                    {t("table.clearFilter")}
-                  </Button>
-                </Space>
-              )
-            }
-          >
-            <ServiceTable services={layoutData.services} filterDeploymentIds={filterIds} onRefresh={refetch} loading={loading && !data} />
-          </Card>
 
           <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
             <Col xs={24} xl={10}>

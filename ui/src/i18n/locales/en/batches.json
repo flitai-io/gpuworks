@@ -61,6 +61,7 @@
     "endpoint": "Endpoint",
     "model": "Model override",
     "completionWindow": "Completion window",
+    "priorityClass": "Request priority",
     "inputFilename": "Input file name",
     "owner": "Owner (user ID)",
     "apiKey": "API key ID",
@@ -68,7 +69,7 @@
     "completed": "Completed",
     "failed": "Failed",
     "pending": "Not finished (waiting or being retried)",
-    "pendingHint": "Requests the platform is retrying, for example while a deployment wakes, after a preemption by a higher-ranked deployment, or after a 429 or 5xx answer, are counted as not finished.",
+    "pendingHelp": "Requests the platform is retrying, for example while a deployment wakes, after a preemption by a higher-ranked deployment, or after a 429 or 5xx answer, are counted as not finished.",
     "waiting": {
       "title": "Requests are waiting to be retried",
       "line": "{{model}} ({{state}}): {{count}} requests waiting since {{since}}",
@@ -112,6 +113,10 @@
       "label": "Completion window",
       "unit": "hours",
       "help": "A whole number of hours from {{min}} to {{max}}, {{default}} by default. Requests without a result by then are treated as expired."
+    },
+    "priority": {
+      "label": "Request priority",
+      "help": "The priority class the batch's requests run at, {{name}} by default; a deployment with request priority on queues them by it."
     },
     "model": {
       "label": "Model",

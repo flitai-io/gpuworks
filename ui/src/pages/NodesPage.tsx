@@ -20,7 +20,8 @@ import {
   type Node,
   type TopoHighlight,
 } from "../api";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { nodeSourcesOf } from "../nodeSources";
 import { useTranslation } from "react-i18next";
 import ResourceTable, { storedPageSize, type ServerSort } from "../components/resourceTable/ResourceTable";
 import { NODE_TABLE_ID, nodeColumns } from "./nodes/nodeColumns";
@@ -73,12 +74,22 @@ export default function NodesPage() {
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [states, setStates] = useState<string[]>([]);
   const [sort, setSort] = useState<ServerSort | null>(null);
+  // The source filter lives in the address, so an external platform's node
+  // count can open this list on the nodes that joined through it (?source=).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sources = nodeSourcesOf(searchParams);
+  const setSources = (next: string[]) => {
+    const params = new URLSearchParams(searchParams);
+    if (next.length) params.set("source", next.join(","));
+    else params.delete("source");
+    setSearchParams(params, { replace: true });
+  };
   const { data, refetch, refresh, loading, error, updatedAt, pagination } = usePagedList(api.nodesPage, {
-    filters: { extra: { agent_upgrade: [fleetGroup] }, q: search, label: labelFilter, state: states, ...(sort ? { sort: `${sort.order === "desc" ? "-" : ""}${sort.key}` } : {}) },
+    filters: { q: search, label: labelFilter, state: states, extra: { agent_upgrade: [fleetGroup], ...(sources.length ? { source: sources } : {}) }, ...(sort ? { sort: `${sort.order === "desc" ? "-" : ""}${sort.key}` } : {}) },
     pageSize: storedPageSize(NODE_TABLE_ID, NODE_PAGE_SIZE),
     intervalMs: 8000,
   });
-  const filtering = fleetGroup !== "all" || search !== "" || labelFilter.length > 0 || states.length > 0;
+  const filtering = fleetGroup !== "all" || search !== "" || labelFilter.length > 0 || states.length > 0 || sources.length > 0;
   const serverHealth = usePolling(api.health, 30000);
   const upgradeErrors = usePolling(api.agentUpgradeErrors, 8000);
   // Engine profiles are static server configuration; one load feeds the detail
@@ -195,6 +206,8 @@ export default function NodesPage() {
     t,
     states,
     showCheckReason: fleetGroup === "check",
+    sources,
+    sourceOptions: data?.sources ?? [],
     upgradeErrors: upgradeErrors.data,
     upgradePhase: upgrades.phaseOf,
     onOpen: setDetail,
@@ -252,7 +265,12 @@ export default function NodesPage() {
           </>}
           sort={sort}
           onSortChange={setSort}
-          onFiltersChange={(filters) => setStates(filters.state ?? [])}
+          onFiltersChange={(filters) => {
+            setStates(filters.state ?? []);
+            // The address is rewritten only when the choice changed: every filter change reports them all.
+            const next = filters.source ?? [];
+            if (next.join(",") !== sources.join(",")) setSources(next);
+          }}
           toolbar={
             <>
               <Input.Search

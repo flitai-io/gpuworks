@@ -1,8 +1,10 @@
 package api
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -29,10 +31,11 @@ type gpuInventoryCache struct {
 }
 
 // The GPU inventory is rebuilt at most every gpuInventoryCacheTTL, and sooner
-// - but no more often than gpuInventoryRefreshFloor - once an instance or a
-// deployment changed since it was built: an instance claims or frees a card,
-// and a deployment's dGPU limit is what a slice still under an older one
-// shows it gets at restart. The page is refreshed on those events, so a 20 s
+// - but no more often than gpuInventoryRefreshFloor - once an instance, a
+// deployment or a node changed since it was built: an instance claims or
+// frees a card, a deployment's dGPU limit is what a slice still under an
+// older one shows it gets at restart, and a node's report carries its cards'
+// health, an operator's stop and its own connection. The page is refreshed on those events, so a 20 s
 // cache that ignored them answered the refresh with the cards as they were
 // before the change. The floor bounds a fleet whose instances change state
 // every second to one rebuild per interval.
@@ -42,7 +45,7 @@ const (
 )
 
 // gpuInventoryTopics are the bus topics whose changes invalidate it.
-var gpuInventoryTopics = []string{"instance", "deployment"}
+var gpuInventoryTopics = []string{"instance", "deployment", "node"}
 
 // listGPUs answers GET /gpus. With page or page_size it returns one
 // dto.GPUPage (see gpuPage); without them, every GPU with the overview.
@@ -116,8 +119,24 @@ func (a *apiHandlers) inventoryGeneration() uint64 {
 	return generation
 }
 
+// buildGPUInventory charges the whole fleet's cards in one pass over the
+// server's node and list snapshots (planning.FleetAllocations, the same
+// arithmetic as the per-node ledger), so a rebuild reads no more as the fleet
+// grows: a node report rebuilds it at most once per refresh floor.
 func (a *apiHandlers) buildGPUInventory() (*gpuInventoryCache, error) {
-	nodes, err := a.d.Store.ListNodes()
+	nodes, err := a.d.Store.FleetNodes()
+	if err != nil {
+		return nil, err
+	}
+	rows, deps, insts, err := a.listRows()
+	if err != nil {
+		return nil, err
+	}
+	// The per-node ledger charges a node's instances in their stored order
+	// (oldest first); the snapshot holds them newest first. The order is what
+	// a card lists its occupants and slices in.
+	slices.SortFunc(insts, func(x, y store.Instance) int { return cmp.Compare(x.ID, y.ID) })
+	fleet, err := planning.FleetAllocations(a.d.Store, nodes, insts, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -125,15 +144,7 @@ func (a *apiHandlers) buildGPUInventory() (*gpuInventoryCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	deployments := map[uint]*store.Deployment{}
-	deployment := func(id uint) *store.Deployment {
-		if found, ok := deployments[id]; ok {
-			return found
-		}
-		found, _ := a.d.Store.GetDeployment(id)
-		deployments[id] = found
-		return found
-	}
+	deployment := func(id uint) *store.Deployment { return rows.Deployment(id) }
 
 	out := &gpuInventoryCache{
 		physical: dto.GPUListResponse{Items: []dto.PhysicalGPU{}},
@@ -141,7 +152,10 @@ func (a *apiHandlers) buildGPUInventory() (*gpuInventoryCache, error) {
 	}
 	for nodeIndex := range nodes {
 		node := &nodes[nodeIndex]
-		allocations := planning.GPUAllocations(a.d.Store, node)
+		allocations := fleet[node.ID]
+		if allocations == nil {
+			allocations = map[int]planning.GPUAllocation{}
+		}
 		partitionReports := partitioncap.Decode(node)
 		gpuByIndex := map[int]store.GPU{}
 		// Every card the node has, not only the ones it may use. A card
@@ -201,8 +215,9 @@ func (a *apiHandlers) buildGPUInventory() (*gpuInventoryCache, error) {
 }
 
 func physicalGPU(node *store.Node, partitionReports partitioncap.Reports, gpu *store.GPU, allocation planning.GPUAllocation, deployment func(uint) *store.Deployment, metrics map[string]map[string]MetricLatest) dto.PhysicalGPU {
-	available := gpu.MemoryTotal - allocation.AllocatedBytes - allocation.SleepingBytes
-	if available < 0 || node.State != store.NodeStateOnline {
+	foreign, foreignKnown := planning.ForeignHold(node, gpu)
+	available := gpu.MemoryTotal - allocation.AllocatedBytes - allocation.SleepingBytes - foreign
+	if available < 0 || !foreignKnown || node.State != store.NodeStateOnline {
 		available = 0
 	}
 	arch := node.ArchOf(*gpu)

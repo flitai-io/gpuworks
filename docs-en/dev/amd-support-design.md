@@ -89,3 +89,5 @@ Tools connect only to an explicitly selected, authorized runtime; they never sta
 | HIP/ROCm, model quality, long context, OOM and multi-card isolation | AMD hardware, actual images and real weights; CPU simulation cannot substitute. |
 
 Before adding AMD models, partitioning or sleep/PD, establish device/engine and failure-path evidence, then update capability data and the backend. Current software checks do not inherit the retired AMD host's results or generalize one AMD395 to MI300 or other ASICs.
+
+<!-- translation-source-sha256: a029a001bc4b935cc19d9236f4e2ea7520b7393312ced7982533ebee97697e4a -->

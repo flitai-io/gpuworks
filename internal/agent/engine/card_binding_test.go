@@ -203,3 +203,21 @@ func TestHeldCardsKeepsAnInstanceUntilItsTeardownEnds(t *testing.T) {
 		t.Fatalf("after the teardown the card is still held: %+v", held)
 	}
 }
+
+// Memory-limited partitions repeat their cards in Partitions (or
+// PartitionIndexes), so the occupancy reading can tell a card holding only
+// partitions from one with a whole-card engine.
+func TestHeldCardsNamesThePartitionsCards(t *testing.T) {
+	e := &Engine{desired: map[string]proto.InstanceDesiredState{
+		"partition": {UUID: "partition", DesiredState: "running", GPUIndexes: []int{0}, GPUIdents: []string{"pci:0000:32:00.0"}, VRAMLimitBytes: 16 << 30},
+		"whole":     {UUID: "whole", DesiredState: "running", GPUIndexes: []int{1}, GPUIdents: []string{"pci:0000:33:00.0"}},
+		"legacy":    {UUID: "legacy", DesiredState: "running", GPUIndexes: []int{2}, VRAMLimitBytes: 8 << 30},
+	}}
+	held := e.HeldCards()
+	if len(held.Partitions) != 1 || held.Partitions[0] != "pci:0000:32:00.0" {
+		t.Fatalf("partitions = %v", held.Partitions)
+	}
+	if len(held.PartitionIndexes) != 1 || held.PartitionIndexes[0] != 2 {
+		t.Fatalf("partition indexes = %v", held.PartitionIndexes)
+	}
+}

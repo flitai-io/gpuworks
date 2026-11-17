@@ -15,6 +15,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/estimate"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/nodepolicy"
 	"gpuworks.ai/gpuworks/internal/server/parallelism"
 	"gpuworks.ai/gpuworks/internal/server/placement"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
@@ -56,8 +57,14 @@ type Input struct {
 	Quick              deploy.LaunchConfig
 	// Parallel is the deployment's parallelism; an unstated one lets the
 	// scheduler choose the GPU count on a single node.
-	Parallel       parallelism.Spec
-	GPUIndexes     []int // optional manual GPU selection
+	Parallel   parallelism.Spec
+	GPUIndexes []int // optional manual GPU selection
+	// Consent is what the request says about the cards beyond GPUIndexes:
+	// the operator chose them (Placement.OperatorPinned), which consents to
+	// sharing them with processes outside the platform. It is set in one
+	// place per path (launchInput; the deploy form's evaluation goes
+	// through it too); the platform's own pins leave it zero.
+	Consent        nodepolicy.Consent
 	VRAMLimitBytes int64 // > 0 = dGPU memory-limited (shareable) deployment
 	// Sleepable is the deployment's declaration that it may be put to sleep,
 	// a platform feature not every vendor provides.
@@ -81,6 +88,10 @@ type Input struct {
 	// instances: an edit of the deployment replaces them, so what they hold
 	// now is not in the way of the launch being previewed. Zero excludes none.
 	ExcludeDeploymentID uint
+	// ExcludeInstanceUUID previews the node without that one instance: a
+	// replacement checked before the instance it replaces goes (a rolling
+	// restart) is not charged what that instance holds. Empty excludes none.
+	ExcludeInstanceUUID string
 	// DeploymentID is the launching deployment's, zero for one not created
 	// yet: its own instances never give up their cards to it (launchYield).
 	DeploymentID uint
@@ -172,10 +183,11 @@ func (in Input) Evaluate(st *store.Store) Output {
 		out.Warnings = append(out.Warnings, messages.NewWarning(messages.WarningPlanningEngineUnavailable, map[string]any{"engine": in.Engine, "detail": err.Error()}))
 	}
 
-	maxLen := in.Quick.MaxModelLen
+	// Native fitting is an intent, never a negative token-count estimate.
+	maxLen := max(in.Quick.MaxModelLen, 0)
 	if maxLen <= 0 && cfg != nil {
-		// Estimate an unset context from the model limit; the engine's effective
-		// default may differ. This is not a node-sized context recommendation.
+		// Unset and native auto-fit contexts use the model limit as an estimate
+		// ceiling, not a prediction of the engine's eventual fitted length.
 		maxLen = cfg.MaxPositionEmbeddings
 	}
 	kvDtype := in.Quick.KVCacheDtype
@@ -210,15 +222,14 @@ func (in Input) Evaluate(st *store.Store) Output {
 		out.Warnings = append(out.Warnings, messages.NewWarning(messages.WarningPlanningGPUArchCaution, map[string]any{"detail": q}))
 	}
 
-	view := ledgerView{excludeDeployment: in.ExcludeDeploymentID, reserved: reservedAgainst(st, in.YieldPolicy)}
+	view := ledgerView{excludeDeployment: in.ExcludeDeploymentID, excludeInstance: in.ExcludeInstanceUUID, reserved: reservedAgainst(st, in.YieldPolicy), servingUnavailable: in.ServingUnavailable}
 	snap := nodeSnapshot(st, in.Node, dtypeOK, dtypeReason, view)
-	snap.ServingUnavailable = in.ServingUnavailable
 	if in.Unloaded {
 		// A card that is busy or unhealthy now is a reason to wait, not to
 		// refuse; so is a disk that is full now.
 		for i := range snap.GPUs {
 			snap.GPUs[i].AllocatedBytes, snap.GPUs[i].SleepingBytes, snap.GPUs[i].Schedulable = 0, 0, true
-			snap.GPUs[i].WholeGPUAllocated = false
+			snap.GPUs[i].WholeGPUAllocated, snap.GPUs[i].ForeignBytes = false, 0
 		}
 		diskNeedBytes, runtimeImageBytes = 0, 0
 		// A storage that is not ready here, or a cache full of models in use,
@@ -229,11 +240,12 @@ func (in Input) Evaluate(st *store.Store) Output {
 	} else if storageAdmit.AvailBytes > 0 {
 		snap.DiskAvailBytes = storageAdmit.AvailBytes
 	}
-	allGPUs := snap.GPUs
+	candidates := snap
+	candidates.GPUs = append([]scheduler.GPU(nil), snap.GPUs...)
 	// Inventory-only cards also need feedback, but never enter the scheduler's pool.
 	for _, gpu := range in.Node.GPUs {
 		if !accelerator.CardUsable(gpu.Ownership) {
-			allGPUs = append(allGPUs, scheduler.GPU{Index: gpu.Index})
+			candidates.GPUs = append(candidates.GPUs, scheduler.GPU{Index: gpu.Index})
 		}
 	}
 	if NeedsTargetPreflight(in.Node) {
@@ -265,6 +277,7 @@ func (in Input) Evaluate(st *store.Store) Output {
 		RuntimeDiskNeedBytes: runtimeImageBytes,
 		HeadCount:            estimate.HeadCount(cfg),
 		AllowedGPUIndexes:    in.GPUIndexes,
+		Consent:              in.Consent,
 		PerGPULimitBytes:     in.VRAMLimitBytes,
 		PartitionBackend:     in.PartitionBackend,
 		GPUMemUtil:           util,
@@ -297,7 +310,7 @@ func (in Input) Evaluate(st *store.Store) Output {
 			return scheduler.CandidateEvaluation{GPUMemoryBytesPerDevice: resolved.GPUMemoryMiBPerDevice << 20, Preference: resolved.Prefer}
 		}
 	}
-	out.GPUCandidates = scheduler.GPUCandidates(req, allGPUs)
+	out.GPUCandidates = scheduler.GPUCandidates(req, candidates)
 	out.Result = scheduler.Schedule(req, snap)
 	explainDiskRefusal(st, in, req, snap, &out.Result)
 	if candidateError != nil && !out.Result.OK {
@@ -339,7 +352,7 @@ func (in Input) Evaluate(st *store.Store) Output {
 	// No fit → suggest sleeping sleepable instances to free room (confirm-based;
 	// the platform never sleeps silently).
 	if !out.Result.OK {
-		out.Eviction = suggestEviction(st, in.Node, req, in.ServingUnavailable, view)
+		out.Eviction = suggestEviction(st, in.Node, req, view)
 		// Only a launch that shares cards by yield policy may wait for
 		// holders, and only one sleepers keep cards from may be refused by
 		// their name, or one whose evaluation asks who holds its cards
@@ -348,17 +361,17 @@ func (in Input) Evaluate(st *store.Store) Output {
 		shares := in.YieldPolicy != "" && in.YieldPolicy != yieldpolicy.Never
 		if !in.Unloaded && st != nil && (shares || view.reserved != nil || in.ExplainHolders) {
 			if insts, err := st.InstancesForNode(in.Node.ID); err == nil {
-				out.Yield = launchYield(st, in.Node, insts, in.DeploymentID, in.YieldPolicy, req, dtypeOK, dtypeReason, in.ServingUnavailable, view)
+				out.Yield = launchYield(st, in.Node, insts, in.DeploymentID, in.YieldPolicy, req, dtypeOK, dtypeReason, view)
 				if out.Yield == nil {
-					out.Reserved = launchReserved(st, in.Node, insts, req, dtypeOK, dtypeReason, in.ServingUnavailable, view)
+					out.Reserved = launchReserved(st, in.Node, insts, req, dtypeOK, dtypeReason, view)
 				}
 				if out.Yield == nil && out.Reserved == nil && in.ExplainHolders {
-					out.Held = launchHeld(st, in.Node, insts, in.DeploymentID, in.YieldPolicy, req, dtypeOK, dtypeReason, in.ServingUnavailable, view)
+					out.Held = launchHeld(st, in.Node, insts, in.DeploymentID, in.YieldPolicy, req, dtypeOK, dtypeReason, view)
 				}
 			}
 		}
 	}
-	if out.Result.OK && out.Breakdown.ContextExceedsKVPool() {
+	if out.Result.OK && !(in.Engine == deploy.EngineVLLM && in.Quick.MaxModelLen == -1) && out.Breakdown.ContextExceedsKVPool() {
 		// Deliberately non-blocking (GWKS-79): new attention layouts and engine
 		// versions can make the KV estimate wrong. Keep Fits, OK and the plan
 		// from startup/resource admission so evaluate, create and controller
@@ -471,7 +484,10 @@ func selectedGPUCapacity(node *store.Node, plan *scheduler.Plan) int64 {
 	}
 	var capacity int64
 	for _, gpu := range node.OwnedGPUs() {
-		if !gpu.CanTakeWork() || (len(selected) > 0 && !selected[gpu.Index]) {
+		// The scheduler's pick is the verdict: a card it chose for a
+		// partition may be one shared with processes outside the platform,
+		// which takes no whole-card work.
+		if (len(selected) > 0 && !selected[gpu.Index]) || (len(selected) == 0 && !gpu.CanTakeWork()) {
 			continue
 		}
 		if len(selected) > 0 {

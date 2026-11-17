@@ -11,9 +11,8 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/agentconf"
 	"gpuworks.ai/gpuworks/internal/launchd"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
-
-const checkExistingAgent = "Existing agent"
 
 // existingAgentCommand lists the servers of gpuworks agents already on a host:
 // "unit <server>" for the gpuworks-agent systemd unit, or on a Mac the
@@ -132,16 +131,45 @@ func detectExistingAgent(ctx context.Context, client *ssh.Client) (ExistingAgent
 func existingAgentCheck(ctx context.Context, client *ssh.Client, serverURL string) CheckResult {
 	found, err := detectExistingAgent(ctx, client)
 	if err != nil {
-		return CheckResult{Name: checkExistingAgent, Status: "warn", Detail: err.Error()}
+		return SkipCheck(CheckIDExistingAgent, messages.CheckExistingAgentUnreadable, "the host could not be searched for an existing agent", nil).WithEvidence(err.Error())
 	}
-	return CheckResult{Name: checkExistingAgent, Status: existingAgentStatus(found), Detail: existingAgentDetail(found, serverURL)}
+	return existingAgentResult(found, serverURL)
 }
 
-func existingAgentStatus(found ExistingAgent) string {
-	if found.Found() {
-		return "warn"
+// existingAgentResult is the check for what was found. Its code is the most
+// consequential finding (the service of another server first); the params
+// carry every server involved and the fallback names every finding.
+func existingAgentResult(found ExistingAgent, serverURL string) CheckResult {
+	detail := existingAgentDetail(found, serverURL)
+	if !found.Found() {
+		return PassCheck(CheckIDExistingAgent, messages.CheckExistingAgentNone, detail, nil)
 	}
-	return "ok"
+	own := trimServer(serverURL)
+	params := map[string]any{}
+	var others []string
+	outsideOwn := false
+	for _, server := range found.outsideUnit() {
+		if server == own {
+			outsideOwn = true
+		} else {
+			others = append(others, server)
+		}
+	}
+	if len(others) > 0 {
+		params["servers"] = strings.Join(others, ", ")
+	}
+	code := messages.CheckExistingAgentOthers
+	switch {
+	case found.Unit && found.UnitServer == "":
+		code = messages.CheckExistingAgentUnknownServer
+	case found.Unit && found.UnitServer == own:
+		code = messages.CheckExistingAgentThisServer
+	case found.Unit:
+		code, params["server"] = messages.CheckExistingAgentOtherServer, found.UnitServer
+	case outsideOwn, len(others) == 0:
+		code = messages.CheckExistingAgentOutside
+	}
+	return WarnCheck(CheckIDExistingAgent, code, detail, params)
 }
 
 func existingAgentDetail(found ExistingAgent, serverURL string) string {

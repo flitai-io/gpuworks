@@ -133,3 +133,5 @@ During scale-down, the platform chooses which replica to remove and lets it fini
 2. Wait for the deployment to disappear from the list, then confirm that it no longer occupies either GPU. The registered model, model files, and image remain available for reuse.
 3. Find `tutorial-replicas-distribution-en` in **Evaluations**. Export its report first if needed, then click **Delete**. Deletion removes the run's point results and per-request details.
 4. If you stopped other experimental deployments before starting, click **Start** in their deployment details. Wait for their original replicas to return and verify inference.
+
+<!-- translation-source-sha256: 93dc9c25f11625af4fb6157da7404538ca0b62699408fa5649f0de063cec15e9 -->

@@ -62,6 +62,7 @@ func nodeDTO(n *store.Node, includeToken bool) dto.Node {
 		RecoveryAttempts:      n.RecoveryAttempts,
 		LastProbeAt:           utcTimePtr(n.LastProbeAt),
 		LastRecoveryError:     n.LastRecoveryError,
+		LastRecoveryCode:      n.LastRecoveryCode,
 		HasSSHCredential:      n.HasSSHCredential,
 		CreatedAt:             utcTime(n.CreatedAt),
 		GPUs:                  make([]dto.GPU, 0, len(n.GPUs)),
@@ -88,6 +89,7 @@ func nodeDTO(n *store.Node, includeToken bool) dto.Node {
 		d.RuntimeFallbackFrom = n.RuntimeFallbackFrom
 		d.RuntimeFallbackReason = n.RuntimeFallbackReason
 		d.RuntimeFallbackPlugin = accelerator.RuntimeGPUPlugin(n.GPUVendor, n.RuntimeFallbackFrom)
+		d.RuntimeFallbackSocket = runtimeSocketDenialDTO(n.RuntimeSocketDenial())
 	}
 	d.AcceleratorPreference = n.AcceleratorPreference
 	d.AcceleratorVendors = acceleratorChoices(n)
@@ -97,6 +99,8 @@ func nodeDTO(n *store.Node, includeToken bool) dto.Node {
 		d.Topology = dto.ParseNodeTopology(n.TopoJSON)
 	}
 	partitionReports := partitioncap.Decode(n)
+	d.PlacementPolicy, d.PlacementPolicyAvailability = dto.NodePlacementPolicyOf(n.PlacementPolicy,
+		partitionBackendReady(d.PartitionCapabilities), n.PartitionSafetyProtocol >= proto.PartitionSafetyForeignTracked)
 	for i := range n.GPUs {
 		g := &n.GPUs[i]
 		arch := n.ArchOf(*g)
@@ -180,4 +184,15 @@ func nodeDTORuntimes(n *store.Node) []string {
 		return []string{n.RuntimeDriver}
 	}
 	return nil
+}
+
+// partitionBackendReady is whether any partition backend is ready on the
+// node, from the capabilities the DTO already derived.
+func partitionBackendReady(capabilities []proto.PartitionCapability) bool {
+	for _, capability := range capabilities {
+		if capability.Status == partitioncap.StatusReady {
+			return true
+		}
+	}
+	return false
 }

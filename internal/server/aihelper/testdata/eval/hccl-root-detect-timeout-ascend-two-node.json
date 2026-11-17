@@ -1,7 +1,7 @@
 {
   "id": "hccl-root-detect-timeout-ascend-two-node",
   "source": "artifacts/archive/2026-09-30-accelerator-parameter-network/evidence/ascend-multinode.md",
-  "note": "Ascend 910B4 two-node TP=2 with the platform's pre-fix container config (GLOO/NCCL ifname set, no HCCL_SOCKET_IFNAME/HCCL_IF_IP, no /etc/hccn.conf mount): HCCL root-info detection times out after HCCL_CONNECT_TIMEOUT. HCCL error lines verbatim from the record (captured with the same container config running an all-reduce script); framing as a vllm-ascend deployment and the INFO lines are constructed. HCCL is Ascend's NCCL counterpart, labeled nccl_failure.",
+  "note": "Ascend 910B4 two-node TP=2 with the platform's pre-fix container config (GLOO/NCCL ifname set, no HCCL_SOCKET_IFNAME/HCCL_IF_IP, no /etc/hccn.conf mount): HCCL root-info detection times out after HCCL_CONNECT_TIMEOUT. HCCL error lines verbatim from the record (captured with the same container config running an all-reduce script); framing as a vllm-ascend deployment and the INFO lines are constructed. HCCL is Ascend's NCCL counterpart, labeled NCCL_FAILURE.",
   "message": "container exited (code 1)",
   "command": [
     "vllm",
@@ -45,7 +45,7 @@
     "(EngineCore_DP0 pid=88) ERROR 09-30 10:14:30 [core.py:1231] Exception: WorkerProc initialization failed due to an exception in a background process. See stack trace for root cause.",
     "(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}"
   ],
-  "expect_signature": "nccl_failure",
+  "expect_signature": "NCCL_FAILURE",
   "expect_keywords": [
     [
       "HCCL_SOCKET_IFNAME"

@@ -1,8 +1,11 @@
 package storagemount
 
 import (
+	"errors"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestClassifyMountError(t *testing.T) {
@@ -10,7 +13,7 @@ func TestClassifyMountError(t *testing.T) {
 		{"mount: /mnt/x: bad option; for several filesystems (e.g. nfs, cifs) you might need a /sbin/mount.<type> helper program.", ReasonMissingClient},
 		{"mount: /mnt/x: wrong fs type, bad option, bad superblock on host:/p, missing codepage or helper program, or other error.", ReasonMissingClient},
 		{"mount: /mnt/x: unknown filesystem type 'nfs'.", ReasonMissingClient},
-		{`exec: "mount": executable file not found in $PATH`, ReasonMissingClient},
+		{"/bin/sh: 1: mount.nfs: not found", ReasonMissingClient},
 		{"mount.nfs: access denied by server while mounting host:/export", ReasonPermission},
 		{"mount.nfs: Operation not permitted", ReasonPermission},
 		{"mount: only root can do that", ReasonNotRoot},
@@ -60,5 +63,21 @@ func TestMountFailureTruncates(t *testing.T) {
 	reason, msg := mountFailure(mountResult{err: exitErr{127}}, 0)
 	if reason != ReasonOther || !strings.Contains(msg, "exit status 127") {
 		t.Errorf("empty output falls back to the error text, got %q %q", reason, msg)
+	}
+}
+
+// A mount program that does not exist is known by exec's error, not by its
+// wording.
+func TestMountFailureKnowsAMissingProgramByType(t *testing.T) {
+	missing := &exec.Error{Name: "mount", Err: exec.ErrNotFound}
+	if reason, message := mountFailure(mountResult{err: missing}, time.Second); reason != ReasonMissingClient || message != `mount failed: exec: "mount": executable file not found in $PATH` {
+		t.Fatalf("missing program = %q %q", reason, message)
+	}
+	exit := exec.Command("sh", "-c", "exit 32").Run()
+	if reason, _ := mountFailure(mountResult{out: []byte("mount.nfs: Connection refused"), err: exit}, time.Second); reason != ReasonUnreachable {
+		t.Fatalf("exit with output = %q", reason)
+	}
+	if reason, _ := mountFailure(mountResult{err: errors.New(`exec: "mount": executable file not found in $PATH`)}, time.Second); reason != ReasonOther {
+		t.Fatalf("text alone classified: %q", reason)
 	}
 }

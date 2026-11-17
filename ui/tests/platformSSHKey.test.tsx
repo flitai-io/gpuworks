@@ -41,6 +41,7 @@ await i18n.use(initReactI18next).init({
 });
 
 const { cleanup, fireEvent, render, screen, waitFor } = await import("@testing-library/react");
+const { default: userEvent } = await import("@testing-library/user-event");
 const { NodeSSHAccess } = await import("../src/components/NodeRecoveryControls");
 const { default: PlatformSSHKeyCard } = await import("../src/pages/settings/PlatformSSHKeyCard");
 const { default: ProviderInstallModal } = await import("../src/components/ProviderInstallModal");
@@ -101,7 +102,7 @@ test("saving a password reports that the platform key replaced it", async () => 
   stub("nodeSSH", () => { throw new Error("404"); });
   const puts = stub("putNodeSSH", () => ({
     host: "gpu-1", port: 22, user: "root", has_password: false, has_private_key: false, auth_mode: "platform_key",
-    platform_key: { name: "Platform key", status: "ok", detail: "added to /root/.ssh/authorized_keys" },
+    platform_key: { id: "platform_key", status: "pass", code: "CHECK_PLATFORM_KEY_ADDED", params: { file: "/root/.ssh/authorized_keys" }, message: "added to /root/.ssh/authorized_keys" },
   }));
   stub("node", () => sshNode);
   wrap(<NodeSSHAccess node={sshNode} onUpdated={() => {}} />);
@@ -121,7 +122,7 @@ test("the SSH editor selects keyboard-interactive for a saved password and sends
   stub("nodeSSH", () => ({ host: "gpu.example", port: 22, user: "root", has_password: true, has_private_key: false, auth_mode: "password" }));
   const puts = stub("putNodeSSH", () => ({
     host: "gpu.example", port: 22, user: "root", has_password: false, has_private_key: false, auth_mode: "platform_key",
-    platform_key: { name: "Platform key", status: "ok", detail: "added to /root/.ssh/authorized_keys" },
+    platform_key: { id: "platform_key", status: "pass", code: "CHECK_PLATFORM_KEY_ADDED", params: { file: "/root/.ssh/authorized_keys" }, message: "added to /root/.ssh/authorized_keys" },
   }));
   stub("node", () => sshNode);
   wrap(<NodeSSHAccess node={sshNode} onUpdated={() => {}} />);
@@ -206,6 +207,9 @@ for (const kind of ["runpod", "vast", "compshare", "autodl"] as const) {
     const installs = stub("installAgent", () => ({ checks: [{ name: "SSH authentication", status: "ok" }] }));
     wrap(<ProviderInstallModal providerId={7} providerKind={kind} inst={instance} onClose={() => {}} onDone={() => {}} />);
     assert.ok(screen.getByText(providers.install.autoAuth[kind]));
+    assert.equal(screen.queryByText(providers.install.autoAuth[`${kind}Help`]), null, "the details wait behind the help mark");
+    await userEvent.setup().hover(screen.getByRole("button", { name: "More information" }));
+    assert.equal((await screen.findByRole("tooltip")).textContent, providers.install.autoAuth[`${kind}Help`]);
     fireEvent.click(screen.getByRole("button", { name: providers.install.install }));
     await waitFor(() => assert.equal(installs.length, 1));
     const [id, body] = installs[0];
@@ -230,16 +234,20 @@ test("credentials given under Advanced are still sent", async () => {
 
 test("the install details behind the summary can be opened", async () => {
   stub("installAgent", () => ({
-    checks: [{ name: "precheck", status: "ok", detail: "fine" }],
+    checks: [{ id: "precheck", status: "pass", code: "CHECK_PRECHECK_PASSED", params: { total: "1" }, message: "all 1 precheck items passed" }],
     install_details: [
-      { name: "Platform key (provider)", status: "ok", detail: "added to the RunPod account SSH keys" },
-      { name: "SSH authentication", status: "ok", detail: "platform key SHA256:x accepted" },
+      { id: "platform_key_provider", status: "pass", code: "CHECK_PLATFORM_KEY_ACCOUNT_ADDED", params: { provider: "RunPod" }, message: "added to the RunPod account SSH keys" },
+      { id: "ssh_auth", status: "pass", code: "CHECK_SSH_LOGGED_IN", params: { method: "platform_key", attempts: "1" }, message: "logged in with platform_key", evidence: "platform key SHA256:x accepted" },
     ],
   }));
   wrap(<ProviderInstallModal providerId={7} providerKind="runpod" inst={instance} onClose={() => {}} onDone={() => {}} />);
   fireEvent.click(screen.getByRole("button", { name: providers.install.install }));
   await waitFor(() => assert.ok(screen.getByText(providers.install.details)));
   fireEvent.click(screen.getByText(providers.install.details));
+  // Each row reads from its code in the reader's language; the SSH library's
+  // own words stay behind the row's output disclosure.
+  await waitFor(() => assert.ok(screen.getByText(common.apiError.CHECK_PLATFORM_KEY_ACCOUNT_ADDED.replace("{{provider}}", "RunPod"))));
+  assert.equal(screen.queryByText("added to the RunPod account SSH keys"), null);
+  fireEvent.click(screen.getByText(common.onboardingCheckEvidence));
   await waitFor(() => assert.ok(screen.getByText("platform key SHA256:x accepted")));
-  assert.ok(screen.getByText("added to the RunPod account SSH keys"));
 });

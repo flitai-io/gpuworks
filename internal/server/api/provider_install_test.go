@@ -14,6 +14,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -52,44 +53,48 @@ func TestInstallAgentOnInstanceContinuesAfterPrecheckError(t *testing.T) {
 		t.Fatalf("install should proceed after precheck error, request = %+v", drv.req)
 	}
 	var body struct {
-		Checks []struct {
-			Name   string `json:"name"`
-			Status string `json:"status"`
-			Detail string `json:"detail"`
-		} `json:"checks"`
-		InstallDetails []struct {
-			Name   string `json:"name"`
-			Status string `json:"status"`
-			Detail string `json:"detail"`
-		} `json:"install_details"`
-		PrecheckDetails []struct {
-			Name   string `json:"name"`
-			Status string `json:"status"`
-			Detail string `json:"detail"`
-		} `json:"precheck_details"`
+		Checks          []provision.CheckResult `json:"checks"`
+		InstallDetails  []provision.CheckResult `json:"install_details"`
+		PrecheckDetails []provision.CheckResult `json:"precheck_details"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Checks) < 3 || body.Checks[0].Name != "precheck" || body.Checks[0].Status != "error" {
+	if len(body.Checks) < 3 || body.Checks[0].ID != "precheck" || body.Checks[0].Status != "fail" || body.Checks[0].Code != messages.CheckPrecheckAttention {
 		t.Fatalf("precheck error should be reported without blocking install: %+v", body.Checks)
 	}
-	// The failed item is behind the summary row too, with its reason.
-	// Preparing the platform key came first, then the SSH dial that failed.
-	if n := len(body.PrecheckDetails); n < 2 || body.PrecheckDetails[0].Name != "Platform key (provider)" ||
-		body.PrecheckDetails[n-1].Name != "SSH" || body.PrecheckDetails[n-1].Status != "error" || body.PrecheckDetails[n-1].Detail == "" {
+	// The failed item is behind the summary row too, with its reason as
+	// evidence. Preparing the platform key came first, then the SSH dial
+	// that failed.
+	if n := len(body.PrecheckDetails); n < 2 || body.PrecheckDetails[0].ID != "platform_key_provider" ||
+		body.PrecheckDetails[n-1].ID != "ssh" || body.PrecheckDetails[n-1].Status != "fail" || body.PrecheckDetails[n-1].Code != messages.CheckSSHConnectFailed || body.PrecheckDetails[n-1].Evidence == "" {
 		t.Fatalf("precheck_details = %+v", body.PrecheckDetails)
 	}
-	if !strings.Contains(body.Checks[0].Detail, "SSH: ssh dial") || !strings.Contains(body.Checks[0].Detail, "Platform key (provider)") {
-		t.Fatalf("precheck summary should name the failing items: %q", body.Checks[0].Detail)
+	if body.Checks[0].Params["checks"] != "platform_key_provider, ssh" || !strings.Contains(body.Checks[0].Evidence, "ssh: ssh dial") {
+		t.Fatalf("precheck summary should name the items that need attention: %+v", body.Checks[0])
 	}
-	if body.Checks[1].Name != "install agent" || body.Checks[1].Status != "warn" {
+	if body.Checks[1].ID != "install_agent" || body.Checks[1].Status != "warn" || body.Checks[1].Code != messages.CheckAgentNotObserved {
 		t.Fatalf("install result missing after precheck error: %+v", body.Checks)
 	}
 	// The steps behind the summary are returned too: here the server has no
 	// platform key, which the operator must be able to see.
-	if len(body.InstallDetails) == 0 || body.InstallDetails[0].Name != "Platform key (provider)" || body.InstallDetails[0].Status != "warn" {
+	if len(body.InstallDetails) == 0 || body.InstallDetails[0].ID != "platform_key_provider" || body.InstallDetails[0].Status != "skip" || body.InstallDetails[0].Code != messages.CheckPlatformKeyUnavailable {
 		t.Fatalf("install_details = %+v", body.InstallDetails)
+	}
+	// The old keys of a check are gone from the wire.
+	var raw struct {
+		Checks []map[string]any `json:"checks"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range raw.Checks {
+		if _, ok := check["name"]; ok {
+			t.Fatalf("check carries the old name key: %v", check)
+		}
+		if _, ok := check["detail"]; ok {
+			t.Fatalf("check carries the old detail key: %v", check)
+		}
 	}
 }
 
@@ -129,34 +134,48 @@ func TestInstallAgentOnInstanceRejectsInvalidServerURLBeforeCreatingNode(t *test
 	}
 }
 
-// The one-line precheck row names only what is not ok; the rest would bury the
-// warning among a dozen passing items (and, with the install directory's mount
-// options, run to thousands of characters).
-func TestSummarizePrecheckNamesOnlyTheItemsThatAreNotOK(t *testing.T) {
-	ok := func(name string) provision.CheckResult {
-		return provision.CheckResult{Name: name, Status: "ok", Detail: name + " is fine, details we do not want in the summary"}
+// The one precheck row names only what needs attention; the rest would bury
+// the warning among a dozen passing items (and, with the install directory's
+// mount options, run to thousands of characters). Its status is the worst of
+// the items, and a skipped item is never summarized as passed.
+func TestSummarizePrecheckNamesOnlyTheItemsThatNeedAttention(t *testing.T) {
+	ok := func(id string) provision.CheckResult {
+		return provision.PassCheck(id, "", id+" is fine, details we do not want in the summary", nil)
 	}
 	for _, tc := range []struct {
-		name   string
-		checks []provision.CheckResult
-		want   string
-		status string
+		name    string
+		checks  []provision.CheckResult
+		wire    string
+		message string
 	}{
-		{"no checks", nil, "provider precheck completed", "ok"},
-		{"all ok", []provision.CheckResult{ok("a"), ok("b"), ok("c")}, "all 3 checks passed", "ok"},
-		{"one warning among ok items",
-			[]provision.CheckResult{ok("a"), {Name: "Install directory free space", Status: "warn", Detail: "20.0 GiB free of 80.0 GiB"}, ok("c")},
-			"Install directory free space: 20.0 GiB free of 80.0 GiB", "warn"},
-		{"warning and error keep their order, an item without detail is still named",
-			[]provision.CheckResult{{Name: "FUSE", Status: "warn"}, ok("b"), {Name: "SSH", Status: "error", Detail: "connection refused"}},
-			"FUSE; SSH: connection refused", "error"},
+		{"no checks", nil,
+			`{"id":"precheck","status":"skip","code":"CHECK_PRECHECK_EMPTY","message":"the provider precheck reported no items"}`, ""},
+		{"all pass", []provision.CheckResult{ok("a"), ok("b"), provision.NACheck("c", messages.CheckNotNeededOnMac, "n/a", nil)},
+			`{"id":"precheck","status":"pass","code":"CHECK_PRECHECK_PASSED","params":{"total":"3"},"message":"all 3 checks passed"}`, ""},
+		{"one warning among passing items",
+			[]provision.CheckResult{ok("a"), provision.WarnCheck("install_dir_space", messages.CheckInstallDirSpaceLow, "20.0 GiB free of 80.0 GiB", nil), ok("c")},
+			`{"id":"precheck","status":"warn","code":"CHECK_PRECHECK_ATTENTION","params":{"checks":"install_dir_space","count":"1","total":"3"},"message":"install_dir_space: 20.0 GiB free of 80.0 GiB"}`, ""},
+		{"a skipped item is not a pass",
+			[]provision.CheckResult{ok("a"), provision.SkipCheck("install_dir", messages.CheckInstallDirProbeFailed, "could not inspect /opt/gpuworks", nil)},
+			"", "skip"},
+		{"warning and failure keep their order, evidence follows",
+			[]provision.CheckResult{{ID: "fuse", Status: "warn", Code: messages.CheckCommandFailed}, ok("b"), provision.FailCheck("ssh", messages.CheckSSHConnectFailed, "no session", nil).WithEvidence("connection refused")},
+			`{"id":"precheck","status":"fail","code":"CHECK_PRECHECK_ATTENTION","params":{"checks":"fuse, ssh","count":"2","total":"3"},"message":"fuse; ssh: no session","evidence":"ssh: connection refused"}`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := summarizePrecheck(tc.checks); got != tc.want {
-				t.Fatalf("summary = %q, want %q", got, tc.want)
+			got := summarizePrecheck(tc.checks)
+			if tc.message != "" {
+				if got.Status != tc.message {
+					t.Fatalf("status = %q, want %q (%+v)", got.Status, tc.message, got)
+				}
+				return
 			}
-			if got := summarizePrecheckStatus(tc.checks); got != tc.status {
-				t.Fatalf("status = %q, want %q", got, tc.status)
+			raw, err := json.Marshal(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(raw) != tc.wire {
+				t.Fatalf("summary = %s\nwant      %s", raw, tc.wire)
 			}
 		})
 	}
@@ -164,14 +183,19 @@ func TestSummarizePrecheckNamesOnlyTheItemsThatAreNotOK(t *testing.T) {
 
 func TestAgentDialInstallCheckReportsSessionState(t *testing.T) {
 	ctx := context.Background()
-	if got := agentDialInstallCheck(ctx, "node-1", func(uuid string) bool { return uuid == "node-1" }); got.Status != "ok" || got.Detail != "agent session established" {
+	if got := agentDialInstallCheck(ctx, "node-1", func(uuid string) bool { return uuid == "node-1" }); got.Status != "pass" || got.Code != messages.CheckAgentSessionEstablished {
 		t.Fatalf("online check = %+v", got)
 	}
-	if got := agentDialInstallCheck(ctx, "node-1", nil); got.Status != "warn" {
+	if got := agentDialInstallCheck(ctx, "node-1", nil); got.Status != "skip" || got.Code != messages.CheckAgentSessionUnobserved {
 		t.Fatalf("missing hub check = %+v", got)
 	}
-	if got := agentDialInstallCheck(ctx, "", func(string) bool { return true }); got.Status != "warn" {
+	if got := agentDialInstallCheck(ctx, "", func(string) bool { return true }); got.Status != "skip" || got.Code != messages.CheckAgentSessionUnobserved {
 		t.Fatalf("missing node UUID check = %+v", got)
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	if got := agentDialInstallCheck(waitCtx, "node-3", func(string) bool { return false }); got.Status != "warn" || got.Code != messages.CheckAgentSessionWaiting || got.Evidence == "" {
+		t.Fatalf("cancelled wait = %+v", got)
 	}
 	online := make(chan struct{})
 	go func() {
@@ -185,7 +209,7 @@ func TestAgentDialInstallCheckReportsSessionState(t *testing.T) {
 		default:
 			return false
 		}
-	}); got.Status != "ok" {
+	}); got.Status != "pass" {
 		t.Fatalf("delayed session check = %+v", got)
 	}
 }

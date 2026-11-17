@@ -49,8 +49,17 @@ func RecoveryUnderway(phase string) bool {
 }
 
 // RecoveryStoppedProviderInstanceGone is the recovery error recorded when a
-// node's vendor instance has been released.
+// node's vendor instance has been released; its code is
+// messages.ErrorRecoveryProviderInstanceGone.
 const RecoveryStoppedProviderInstanceGone = "provider instance no longer exists"
+
+// RecoveryError is the last out-of-band recovery failure recorded on a node:
+// the code that names it and its English text, the evidence. The zero value
+// clears both.
+type RecoveryError struct {
+	Code    string
+	Message string
+}
 
 // NodeSSHCredential stores only the SSH endpoint in clear text. Authentication
 // material is an AES-GCM ciphertext encrypted with the server master key.
@@ -221,10 +230,11 @@ func (s *Store) markNodeCredentialFlags(nodes []Node) error {
 
 // SetNodeRecoveryPhase persists one state-machine transition and emits a node
 // event after the update commits.
-func (s *Store) SetNodeRecoveryPhase(uuid, phase string, attempts int, lastProbeAt *time.Time, lastErr string) error {
+func (s *Store) SetNodeRecoveryPhase(uuid, phase string, attempts int, lastProbeAt *time.Time, lastErr RecoveryError) error {
 	updates := map[string]any{
 		"recovery_phase": phase, "recovery_attempts": attempts,
-		"last_probe_at": lastProbeAt, "last_recovery_error": strings.TrimSpace(lastErr),
+		"last_probe_at": lastProbeAt, "last_recovery_error": strings.TrimSpace(lastErr.Message),
+		"last_recovery_code": strings.TrimSpace(lastErr.Code),
 	}
 	res := s.db.Model(&Node{}).Where("uuid = ?", uuid).Updates(updates)
 	if res.Error != nil {
@@ -242,7 +252,7 @@ func (s *Store) SetNodeRecoveryPhase(uuid, phase string, attempts int, lastProbe
 }
 
 func (s *Store) ClearNodeRecovery(uuid string) error {
-	return s.SetNodeRecoveryPhase(uuid, "", 0, nil, "")
+	return s.SetNodeRecoveryPhase(uuid, "", 0, nil, RecoveryError{})
 }
 
 // NodesNeedingRecovery returns only previously connected offline nodes with a

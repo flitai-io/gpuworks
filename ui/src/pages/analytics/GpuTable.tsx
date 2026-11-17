@@ -3,6 +3,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
 import type { GpuGroupBy } from "../../analyticsApi";
 import { formatBytes } from "../../format";
+import { colors } from "../../theme/tokens";
 import { DASH, fmtCelsius, fmtPct, fmtWatts } from "./format";
 import { NameCell } from "./names";
 import { isIdle, type GpuRow } from "./gpuModel";
@@ -31,7 +32,7 @@ export default function GpuTable({ rows, group }: { rows: GpuRow[]; group: GpuGr
           title={r.title}
           sub={r.sub}
           tags={<>
-            {isIdle(r.utilAvg) && <Tag color="warning" style={{ marginLeft: 8 }}>{t("gpus.table.idle")}</Tag>}
+            {isIdle(r.utilAvg) && <Tag style={{ marginLeft: 8 }}>{t("gpus.table.idle")}</Tag>}
             {r.nodeDeleted && <Tag color="warning" style={{ marginLeft: 8 }}>{t("gpus.table.nodeDeleted")}</Tag>}
             {r.removed > 0 && !r.nodeDeleted && <Tag style={{ marginLeft: 8 }}>{group === "gpu" ? t("gpus.table.removed") : t("gpus.table.removedCount", { count: r.removed })}</Tag>}
           </>}
@@ -66,7 +67,7 @@ export default function GpuTable({ rows, group }: { rows: GpuRow[]; group: GpuGr
       dataSource={rows}
       pagination={rows.length > 50 ? { pageSize: 50, showSizeChanger: false } : false}
       scroll={{ x: 1100 }}
-      onRow={(r) => ({ style: isIdle(r.utilAvg) ? { background: "#fff8e5" } : undefined })}
+      onRow={(r) => ({ style: isIdle(r.utilAvg) ? { background: colors.canvas } : undefined })}
       locale={{ emptyText: t("state.noRows") }}
     />
   );

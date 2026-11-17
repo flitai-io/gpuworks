@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/diagnostics"
 )
@@ -52,10 +53,10 @@ func boundedDiagnosticReport(report *dto.DiagnosticReport) *dto.DiagnosticReport
 		}
 		check.Message.Message = diagnostics.RedactErrorText(check.Message.Message, 1024)
 		check.Message.Params = diagnosticParams(check.Message.Params)
-		switch check.Status {
-		case "passed", "failed", "pending", "blocked", "unknown", "not_applicable":
-		default:
-			check.Status = "unknown"
+		if !proto.ValidCheckStatus(check.Status) {
+			// A status outside the five is a check whose result is unknown:
+			// never let it read as passed.
+			check.Status = proto.CheckSkip
 		}
 		check.BlockedBy = append([]string(nil), check.BlockedBy...)
 		if len(check.BlockedBy) > maxDiagnosticChecks {
@@ -91,11 +92,11 @@ func boundedDiagnosticReport(report *dto.DiagnosticReport) *dto.DiagnosticReport
 
 func diagnosticPriority(status string) int {
 	switch status {
-	case "failed":
+	case proto.CheckFail:
 		return 0
-	case "blocked":
+	case proto.CheckSkip:
 		return 1
-	case "unknown", "pending":
+	case proto.CheckWarn:
 		return 2
 	default:
 		return 3
@@ -129,7 +130,7 @@ func diagnosticLogSummary(report *dto.DiagnosticReport) map[string]any {
 	checks := make([]map[string]any, 0)
 	relevant := 0
 	for _, check := range report.Checks {
-		if check.Status == "passed" || check.Status == "not_applicable" {
+		if check.Status == proto.CheckPass || check.Status == proto.CheckNA {
 			continue
 		}
 		relevant++
@@ -173,7 +174,7 @@ func prepareEvaluateResponse(w http.ResponseWriter, resp *dto.EvaluateResponse) 
 	}
 	if code == "" && resp.Diagnostics != nil {
 		for _, check := range resp.Diagnostics.Checks {
-			if check.Status == "failed" {
+			if check.Status == proto.CheckFail {
 				code = check.Message.Code
 				break
 			}

@@ -62,7 +62,7 @@ func TestSecurityGroupCheckReadsEveryPageOfTheGroups(t *testing.T) {
 		},
 	})
 	check := d.CheckInbound(context.Background(), userCreds, provider.Instance{ExternalID: "i-sg"}, 18800)
-	if check.Name != "Security group" || check.Status != "ok" || !strings.Contains(check.Detail, "sg-a (priority 100) accepts TCP 18800 from anywhere") {
+	if check.ID != "security_group" || check.Status != "pass" || !strings.Contains(checkText(check), "sg-a (priority 100) accepts TCP 18800 from anywhere") {
 		t.Fatalf("check = %+v", check)
 	}
 	for _, action := range fake.actions() {
@@ -79,26 +79,26 @@ func TestSecurityGroupCheckSaysWhyThePortIsClosed(t *testing.T) {
 		detail string
 	}{
 		"only SSH open": {perms: []map[string]any{permission("TCP", "22/22", "0.0.0.0/0", "Accept", "1")},
-			status: "error", detail: "no inbound rule of security group sg-a accepts TCP 18800"},
+			status: "fail", detail: "no inbound rule of security group sg-a accepts TCP 18800"},
 		"UDP is not TCP": {perms: []map[string]any{permission("UDP", "18800/18800", "0.0.0.0/0", "Accept", "1")},
-			status: "error", detail: "no inbound rule"},
+			status: "fail", detail: "no inbound rule"},
 		"all protocols and ports": {perms: []map[string]any{permission("ALL", "-1/-1", "0.0.0.0/0", "Accept", "1")},
-			status: "ok", detail: "accepts TCP 18800 from anywhere"},
+			status: "pass", detail: "accepts TCP 18800 from anywhere"},
 		"a drop decides first": {perms: []map[string]any{
 			permission("TCP", "18800/18800", "0.0.0.0/0", "Accept", "10"),
 			permission("TCP", "1/65535", "0.0.0.0/0", "Drop", "5"),
-		}, status: "error", detail: "(priority 5) drops TCP 18800 from anywhere"},
+		}, status: "fail", detail: "(priority 5) drops TCP 18800 from anywhere"},
 		"a drop wins a tie": {perms: []map[string]any{
 			permission("TCP", "18800/18800", "0.0.0.0/0", "Accept", "1"),
 			permission("TCP", "18800/18800", "0.0.0.0/0", "Drop", "1"),
-		}, status: "error", detail: "drops TCP 18800"},
+		}, status: "fail", detail: "drops TCP 18800"},
 		"only some sources": {perms: []map[string]any{permission("TCP", "18800/18800", "203.0.113.0/24", "Accept", "1")},
 			status: "warn", detail: "accepted only from specific sources; the server must connect from one of them: accepts from 203.0.113.0/24"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d, _ := sgFake(t, map[string][][]map[string]any{"sg-a": {tc.perms}})
 			check := d.CheckInbound(context.Background(), userCreds, provider.Instance{ExternalID: "i-sg"}, 18800)
-			if check.Status != tc.status || !strings.Contains(check.Detail, tc.detail) {
+			if check.Status != tc.status || !strings.Contains(checkText(check), tc.detail) {
 				t.Fatalf("check = %+v", check)
 			}
 		})
@@ -118,7 +118,7 @@ func TestSecurityGroupCheckWarnsWhenTheGroupsCannotBeRead(t *testing.T) {
 		return 403, map[string]string{"Code": "Forbidden.RAM", "Message": "User not authorized to operate on the specified resource."}
 	})
 	check := d.CheckInbound(context.Background(), userCreds, provider.Instance{ExternalID: "i-sg"}, 18800)
-	if check.Status != "warn" || !strings.Contains(check.Detail, "could not read security group sg-a") || !strings.Contains(check.Detail, "Forbidden.RAM") {
+	if check.Status != "warn" || !strings.Contains(checkText(check), "could not read security group sg-a") || !strings.Contains(checkText(check), "Forbidden.RAM") {
 		t.Fatalf("check = %+v", check)
 	}
 }

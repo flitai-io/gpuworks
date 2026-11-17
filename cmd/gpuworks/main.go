@@ -70,6 +70,8 @@ func run(log *slog.Logger, args []string, stderr io.Writer) int {
 		}
 	case "version", "-v", "--version":
 		fmt.Println("gpuworks", version.String())
+	case "database-migration":
+		fmt.Println(store.LatestMigration())
 	case selfinstall.ConsoleUpgradeProtocolCommand:
 		// Asked by a server about to install this release from the console.
 		fmt.Println(selfinstall.ConsoleUpgradeProtocol)

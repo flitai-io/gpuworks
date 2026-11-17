@@ -187,37 +187,33 @@ func (e *Engine) checkServing(ctx context.Context, spec proto.InstanceDesiredSta
 	// state queued behind this check runs next.
 	defer e.finishEnsure(current)
 
-	message := e.servingExitMessage(attemptCtx, current, name, st)
+	failure, message := e.servingExitFailure(attemptCtx, current, name, st)
 	e.log.Warn("running instance's container stopped", "uuid", current.UUID, "container", name, "exists", st.Exists, "exit_code", st.ExitCode, "reason", message)
-	e.retireStopped(attemptCtx, current, epoch, message)
+	e.retireStopped(attemptCtx, current, epoch, failure, message)
 }
 
-// servingExitMessage words the failure the way the startup probes do, with
+// servingExitFailure words the failure the way the startup probes do, with
 // the exit code always included. The OOM check reads the container's logs, so
 // it runs before the container is reclaimed.
-func (e *Engine) servingExitMessage(ctx context.Context, spec proto.InstanceDesiredState, name string, st runtime.Status) string {
+func (e *Engine) servingExitFailure(ctx context.Context, spec proto.InstanceDesiredState, name string, st runtime.Status) (proto.RuntimeFailure, string) {
 	subject := "container"
 	if spec.Headless {
 		subject = "headless worker"
 	}
 	if !st.Exists {
-		return subject + " disappeared while running (removed outside the agent)"
+		return proto.RuntimeFailure{Code: proto.ErrorContainerDisappeared, Phase: proto.PhaseServing}, subject + " disappeared while running (removed outside the agent)"
 	}
-	if e.detectOOM(ctx, name, st) {
-		return fmt.Sprintf("%s OOM-killed while running (code %d)", subject, st.ExitCode)
-	}
-	return e.exitMessage(ctx, name, fmt.Sprintf("%s exited while running (code %d)", subject, st.ExitCode))
+	return e.exitedFailure(ctx, name, st, proto.PhaseServing,
+		fmt.Sprintf("%s OOM-killed while running (code %d)", subject, st.ExitCode),
+		fmt.Sprintf("%s exited while running (code %d)", subject, st.ExitCode))
 }
 
 // retireStopped reclaims the dead generation and reports it failed, the same
 // order failAfterContainer uses at startup: the partition and pre-start state
 // go with the container, so the controller's rebuild never waits on them. A
 // removal that took the instance over meanwhile owns the outcome instead.
-func (e *Engine) retireStopped(ctx context.Context, spec proto.InstanceDesiredState, epoch uint64, message string) {
+func (e *Engine) retireStopped(ctx context.Context, spec proto.InstanceDesiredState, epoch uint64, failure proto.RuntimeFailure, message string) {
 	err := e.reclaimInstance(ctx, spec.UUID)
-	if err == nil {
-		e.forgetSleepState(spec.UUID)
-	}
 	e.mu.Lock()
 	current, desired := e.desired[spec.UUID]
 	_, cleanup := e.cleanupRequired[spec.UUID]
@@ -230,8 +226,8 @@ func (e *Engine) retireStopped(ctx context.Context, spec proto.InstanceDesiredSt
 		// Reported once like a startup failure whose cleanup failed; a later
 		// state sync retries the teardown.
 		e.log.Error("stopped instance cleanup pending", "uuid", spec.UUID, "err", err)
-		e.report(proto.InstanceStatus{UUID: spec.UUID, State: proto.InstRemoving, Message: message + "; cleanup pending: " + err.Error()})
+		e.reportCleanupPending(spec.UUID, failure, message+"; cleanup pending: "+err.Error(), nil)
 		return
 	}
-	e.reportState(spec, proto.InstFailed, "", "", message)
+	e.reportFailed(spec.UUID, failure, message, failedStatus{})
 }

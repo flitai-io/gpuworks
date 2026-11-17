@@ -50,10 +50,10 @@ func (n *NodeRuntime) peerMemoryChecks(gpus []proto.GPUInfo, now time.Time, roun
 		vendor := accelerator.NormalizeVendor(card.Vendor, n.vendor())
 		switch peerMemoryState(peerMemoryRoot, vendor) {
 		case proto.PeerMemoryLoaded:
-			round.put(ident, accelerator.CheckPeerMemory, checkResult{state: accelerator.CheckPass, at: now})
+			round.put(ident, accelerator.CheckPeerMemory, checkResult{status: proto.CheckPass, at: now})
 		case proto.PeerMemoryMissing:
 			round.put(ident, accelerator.CheckPeerMemory, checkResult{
-				state: accelerator.CheckWarn, reason: accelerator.CheckReasonPeerMemoryMissing, at: now,
+				status: proto.CheckWarn, code: proto.DoctorPeerMemoryMissing, at: now,
 				evidence: []accelerator.HealthField{
 					{Name: "module", Value: accelerator.PeerMemoryModule(vendor)},
 					{Name: "fix", Value: accelerator.PeerMemoryFix(vendor)},
@@ -72,7 +72,7 @@ func doctorPeerMemory(r *proto.DoctorReport, vendor string) {
 	}
 	module := accelerator.PeerMemoryModule(vendor)
 	r.Findings = append(r.Findings, proto.DoctorFinding{
-		Code: proto.DoctorPeerMemoryMissing, Level: proto.DoctorLevelWarning,
+		ID: proto.DoctorCheckPeerMemory, Status: proto.CheckWarn, Code: proto.DoctorPeerMemoryMissing,
 		Probe: "ls /sys/module/" + module,
 		Evidence: []proto.DoctorField{
 			{Name: "module", Value: module},

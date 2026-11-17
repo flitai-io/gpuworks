@@ -244,27 +244,24 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 		}
 	}
 	report(proto.ModelFileStatus{Key: mf.Key, State: proto.MFDownloading, Path: absTarget, Acquisition: proto.ModelAcquireDownload})
-	fail := func(message, revision string, total int64) {
+	fail := func(err error, revision string, total int64) {
 		state := proto.MFFailed
-		if isModelDiskSpaceFailure(message) {
+		if modelDiskFull(err) {
 			state = proto.MFInsufficientDisk
 		}
 		report(proto.ModelFileStatus{
 			Key: mf.Key, State: state, Path: absTarget, Revision: revision,
 			BytesTotal: total, BytesDone: modelRepoBytesDone(absTarget),
-			Message: message, Acquisition: proto.ModelAcquireDownload,
+			Message: err.Error(), Acquisition: proto.ModelAcquireDownload,
 		})
 	}
 
 	net := n.network()
 	// Where the files come from, as the console shows it while they arrive:
-	// the address the fetch is at, and why it left the one before.
-	var from atomic.Value
-	from.Store("")
-	say := func(message string) {
-		from.Store(message)
-		report(proto.ModelFileStatus{Key: mf.Key, State: proto.MFDownloading, Path: absTarget, Acquisition: proto.ModelAcquireDownload, Message: message})
-	}
+	// the address the fetch is at, why it left the one before, and a wait the
+	// source asked for.
+	from := newFetchMessage(proto.ModelFileStatus{Key: mf.Key, State: proto.MFDownloading, Path: absTarget, Acquisition: proto.ModelAcquireDownload}, report)
+	say := from.set
 	var cooler modelfetch.Cooler
 	if n.registries != nil {
 		cooler = n.registries
@@ -283,10 +280,11 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 		OnRetry: func(file string, attempt int, delay time.Duration, err error) {
 			n.log.Warn("model file download interrupted; retrying",
 				"file", file, "attempt", attempt, "retry_in", delay.String(), "err", err)
+			from.retrying(err, delay)
 		},
 	})
 	if err != nil {
-		fail("model source: "+err.Error(), "", 0)
+		fail(fmt.Errorf("model source: %w", err), "", 0)
 		return
 	}
 	say(downloadingFrom(fetcher.Host()))
@@ -295,18 +293,18 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 		if ctx.Err() != nil {
 			return
 		}
-		fail(err.Error(), "", 0)
+		fail(err, "", 0)
 		return
 	}
 	files, err = selectRepoSubfolder(files, mf.Subfolder)
 	if err != nil {
-		fail("select repository subfolder: "+err.Error(), "", 0)
+		fail(fmt.Errorf("select repository subfolder: %w", err), "", 0)
 		return
 	}
 	pinnedRevision := manifestRevision(files)
 	total, err := validateRepoManifest(files)
 	if err != nil {
-		fail("invalid repository manifest: "+err.Error(), "", 0)
+		fail(fmt.Errorf("invalid repository manifest: %w", err), "", 0)
 		return
 	}
 	// A source whose listing prints sizes for people cannot be held to them:
@@ -320,11 +318,11 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 		if _, err := validateModelDir(absTarget); err == nil {
 			measured, err := writeCompletionMarker(absTarget, mf, files)
 			if err != nil {
-				fail("write completion marker: "+err.Error(), pinnedRevision, total)
+				fail(fmt.Errorf("write completion marker: %w", err), pinnedRevision, total)
 				return
 			}
 			if err := installStagedModel(absTarget, finalTarget, mf); err != nil {
-				fail(err.Error(), pinnedRevision, total)
+				fail(err, pinnedRevision, total)
 				return
 			}
 			report(proto.ModelFileStatus{
@@ -348,7 +346,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 		remaining = 0
 	}
 	if err := n.checkDownloadSpace(mf.StorageID, absTarget, admissionBytes(remaining, approximate)); err != nil {
-		fail(err.Error(), pinnedRevision, total)
+		fail(err, pinnedRevision, total)
 		return
 	}
 
@@ -357,7 +355,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 	for index, f := range files {
 		dest, err := modelRepoDestination(absTarget, f.Path)
 		if err != nil {
-			fail(err.Error(), pinnedRevision, estimate.Total())
+			fail(err, pinnedRevision, estimate.Total())
 			return
 		}
 		if size, complete := repoFileMeasured(dest, f.Size, approximate); complete {
@@ -366,7 +364,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			fail(err.Error(), pinnedRevision, estimate.Total())
+			fail(err, pinnedRevision, estimate.Total())
 			return
 		}
 		downloadRevision := mf.Revision
@@ -374,6 +372,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 			downloadRevision = f.Revision
 		}
 		base := done.Load()
+		from.at(base, estimate.Total(), pinnedRevision)
 		err = fetcher.Fetch(ctx, modelfetch.File{
 			Path: f.Path, Revision: downloadRevision, Dest: dest,
 			Concurrency: 4, RateLimitKBs: mf.RateLimitKBs,
@@ -386,19 +385,19 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 			if approximate {
 				estimate.correct(index, p.Total)
 			}
-			report(proto.ModelFileStatus{
+			from.progress(proto.ModelFileStatus{
 				Key: mf.Key, State: proto.MFDownloading,
 				Revision:   pinnedRevision,
 				BytesTotal: estimate.Total(), BytesDone: base + p.Done,
 				RateBytesPerS: p.RateBytesPerS, Path: absTarget,
-				Acquisition: proto.ModelAcquireDownload, Message: from.Load().(string),
+				Acquisition: proto.ModelAcquireDownload,
 			})
 		})
 		if err != nil {
 			if ctx.Err() != nil {
 				return // shutting down
 			}
-			fail(err.Error(), pinnedRevision, estimate.Total())
+			fail(err, pinnedRevision, estimate.Total())
 			return
 		}
 		// Only a listing that could not state the size gets corrected from
@@ -416,20 +415,20 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 	}
 	manifest := estimate.Manifest()
 	if present, message := repoFilesPresent(absTarget, manifest, false); !present {
-		fail("download verification failed: "+message, pinnedRevision, estimate.Total())
+		fail(fmt.Errorf("download verification failed: %s", message), pinnedRevision, estimate.Total())
 		return
 	}
 	if _, err := validateModelDir(absTarget); err != nil {
-		fail("downloaded repository is not a model: "+err.Error(), pinnedRevision, estimate.Total())
+		fail(fmt.Errorf("downloaded repository is not a model: %w", err), pinnedRevision, estimate.Total())
 		return
 	}
 	measured, err := writeCompletionMarker(absTarget, mf, manifest)
 	if err != nil {
-		fail("write completion marker: "+err.Error(), pinnedRevision, estimate.Total())
+		fail(fmt.Errorf("write completion marker: %w", err), pinnedRevision, estimate.Total())
 		return
 	}
 	if err := installStagedModel(absTarget, finalTarget, mf); err != nil {
-		fail(err.Error(), pinnedRevision, estimate.Total())
+		fail(err, pinnedRevision, estimate.Total())
 		return
 	}
 	report(proto.ModelFileStatus{
@@ -438,11 +437,6 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 		Revision:    pinnedRevision,
 		Acquisition: proto.ModelAcquireDownload,
 	})
-}
-
-func isModelDiskSpaceFailure(message string) bool {
-	message = strings.ToLower(message)
-	return strings.Contains(message, "insufficient disk space") || strings.Contains(message, "no space left on device")
 }
 
 // selectRepoSubfolder selects one immutable repository subtree while preserving

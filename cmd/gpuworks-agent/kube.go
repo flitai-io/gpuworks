@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	goruntime "runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -56,6 +54,14 @@ func kubeAcquireTokenOrStandBy(log *slog.Logger, conf *agentconf.Config, cfg *ag
 	return false, nil
 }
 
+// kubeEnrollRetryDelay is the first wait between enrollment attempts (it
+// doubles up to a minute); a test shortens it.
+var kubeEnrollRetryDelay = 2 * time.Second
+
+// kubeEnrollRefusalEventInterval is how often a persisting refusal is
+// written again as an event on the agent's pod; a test shortens it.
+var kubeEnrollRefusalEventInterval = kube.EnrollRefusalEventInterval
+
 // enrollKubeNode makes an agent of a cluster's DaemonSet a node: it trades
 // the cluster's enrollment token for this node's token, retrying until the
 // server answers, since the DaemonSet may be applied before the server can
@@ -82,13 +88,20 @@ func enrollKubeNodeWith(ctx context.Context, log *slog.Logger, cfg agentapp.Conf
 	}
 	previous := kube.ReadIdentity(cfg.StateDir)
 	httpc := &http.Client{Timeout: 30 * time.Second}
-	delay := 2 * time.Second
+	delay := kubeEnrollRetryDelay
 	fallback := true
+	reporter := &kube.RefusalReporter{
+		API: api, Namespace: strings.TrimSpace(os.Getenv("GPUWORKS_KUBE_NAMESPACE")),
+		PodName: strings.TrimSpace(os.Getenv("GPUWORKS_KUBE_POD_NAME")), NodeName: nodeName, Log: log,
+		Interval: kubeEnrollRefusalEventInterval,
+	}
 	for {
 		id, err := kube.Enroll(ctx, api, httpc, cfg.ServerURL, enrollToken, nodeName, cfg.StateDir, fallback)
 		var refusal *kube.EnrollRefusal
 		if errors.As(err, &refusal) {
 			fallback = false // a refusal of this node's identity is not undone by a later outage
+			// Also show it on `kubectl describe pod`; never affects the retry.
+			reporter.Report(ctx, refusal)
 		}
 		if err == nil {
 			log.Info("enrolled as a Kubernetes node", "node", nodeName, "uuid", id.NodeUUID)
@@ -146,15 +159,12 @@ func prepareKubeRun(stateDir string) error {
 	// file system (internal/agent/gpu's hostexec.go).
 	gpu.RunCLIsOnHost()
 	// Only one gpuworks agent may run this node's workload at a time; see
-	// acquireKubeAgentLock. The lock is released only by this process
-	// exiting or an in-place re-exec (close-on-exec), never by Go's own
-	// garbage collector finalizing an unreachable local.
-	lock, err := acquireKubeAgentLock(stateDir)
-	if err != nil {
+	// acquireAgentLock. A pod does not wait for a previous holder: the
+	// kubelet restarts a refused one.
+	if _, err := acquireAgentLock(stateDir); err != nil {
 		writeTerminationLog(err.Error())
 		return err
 	}
-	goruntime.SetFinalizer(lock, nil)
 	return nil
 }
 
@@ -263,11 +273,6 @@ func reexecKubeAgent() error {
 	return syscall.Exec(bin, os.Args, os.Environ())
 }
 
-// kubeAgentLockFile is the kube agent's exclusive lock, under the state
-// directory (a hostPath, so any other gpuworks-agent process sharing this
-// node's state directory sees it too).
-const kubeAgentLockFile = "agent.lock"
-
 // terminationLogPath is where Kubernetes reads a failed container's last
 // words (kubectl describe shows it); a test overrides it so
 // writeTerminationLog does not touch the real special file.
@@ -278,30 +283,4 @@ var terminationLogPath = "/dev/termination-log"
 // does not get one; the error is not this process's problem to report.
 func writeTerminationLog(reason string) {
 	_ = os.WriteFile(terminationLogPath, []byte(reason+"\n"), 0o644)
-}
-
-// acquireKubeAgentLock takes an exclusive, non-blocking lock on this node's
-// state directory for the life of this process: two gpuworks-agent
-// processes must never run this node's DaemonSet pod's workload at once.
-// Go opens the file close-on-exec, so an in-place re-exec — a self-upgrade,
-// or kubeReexec's/accelerator_choice.go's own restart, both syscall.Exec —
-// releases it on the old process image automatically, and the new one
-// retakes it itself on its own first line of run. prepareKubeRun disables
-// the returned file's finalizer (so Go's GC never auto-closes it once its
-// local variable is unreachable) and otherwise never touches it again;
-// only an explicit Close (as a test does, to prove release) or the process
-// itself exiting lets another holder in.
-func acquireKubeAgentLock(stateDir string) (*os.File, error) {
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		return nil, err
-	}
-	f, err := os.OpenFile(filepath.Join(stateDir, kubeAgentLockFile), os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("another gpuworks agent already runs on this node with state directory %s", stateDir)
-	}
-	return f, nil
 }

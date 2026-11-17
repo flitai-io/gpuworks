@@ -205,11 +205,25 @@ func startDockerAutomationRigOn(t *testing.T, name, fakeGPU string) (string, str
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { stopProcess(agent) })
-	waitNode(t, base, adminToken, func(candidate processNode) bool {
-		return candidate.UUID == seed.UUID && candidate.State == "online"
-	})
+	waitNodeWithCards(t, base, adminToken, seed.UUID)
 
 	return base, adminToken, seed.UUID, registerFixtureModel(t, base, adminToken, seed.UUID, name)
+}
+
+// waitNodeWithCards waits for the agent's node to be online with its cards
+// inventoried. Online is the registration; the inventory comes with the node's
+// first status report, which the agent collects beside its control reader and
+// which follows one docker inspect per catalog image, so on a loaded Docker
+// daemon it takes seconds. A deployment created before it is refused as never
+// fitting, for lack of an owned GPU. The budget is the one a freshly started
+// control plane gets, not waitNode's 15s.
+func waitNodeWithCards(t *testing.T, base, adminToken, nodeUUID string) {
+	t.Helper()
+	if !waitNodeUntil(t, base, adminToken, serverHealthTimeout, func(candidate processNode) bool {
+		return candidate.UUID == nodeUUID && candidate.State == "online" && candidate.GPUCount > 0
+	}) {
+		t.Fatalf("node %s did not come online with its cards within %s", nodeUUID, serverHealthTimeout)
+	}
 }
 
 // registerFixtureModel registers a tiny local model directory on the node, as

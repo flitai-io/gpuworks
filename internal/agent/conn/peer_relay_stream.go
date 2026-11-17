@@ -60,7 +60,7 @@ func (c *Conn) handlePeerRelaySend(ctx context.Context, stream *yamux.Stream) {
 	}
 	body := rpcRespBody{Result: result}
 	if err != nil {
-		body.Error = err.Error()
+		body = rpcErrorBody(err)
 	}
 	_ = c.send(proto.TRPCResp, env.ID, body)
 }

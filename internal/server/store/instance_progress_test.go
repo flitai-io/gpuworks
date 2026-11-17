@@ -78,7 +78,11 @@ func TestUpdateInstanceStatusDoesNotOverwriteTerminalControllerState(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := st.SetInstanceState(inst.UUID, terminal, "controller terminal evidence"); err != nil {
+			setTerminal := st.SetInstanceState(inst.UUID, terminal, "controller terminal evidence")
+			if terminal == proto.InstFailed {
+				setTerminal = st.SetInstanceFailed(inst.UUID, proto.RuntimeFailure{Code: proto.ErrorServingPathUnavailable}, "controller terminal evidence")
+			}
+			if err := setTerminal; err != nil {
 				t.Fatal(err)
 			}
 

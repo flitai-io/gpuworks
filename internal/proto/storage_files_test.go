@@ -3,6 +3,7 @@ package proto
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -58,22 +59,25 @@ func TestStorageUploadStagingRel(t *testing.T) {
 
 func TestStorageFilesErrorRoundTrip(t *testing.T) {
 	err := NewStorageFilesError(StorageFilesErrExists, "target %s exists", "files/a")
+	// The text older servers read is unchanged.
 	if err.Error() != "storage_files:exists: target files/a exists" {
 		t.Fatalf("text = %q", err.Error())
 	}
-	back := ParseStorageFilesError(err.Error())
-	if back.Code != StorageFilesErrExists || back.Detail != "target files/a exists" {
-		t.Fatalf("parsed = %+v", back)
+	if err.RPCCode() != "STORAGE_FILES_EXISTS" || err.RPCParams()["detail"] != "target files/a exists" {
+		t.Fatalf("rpc code/params = %q %v", err.RPCCode(), err.RPCParams())
 	}
+	back := RPCErrorFromWire("storage_files_exists", err.Error(), map[string]any{"detail": "target files/a exists"})
 	var target *StorageFilesError
-	if !errors.As(error(err), &target) {
-		t.Fatal("not a StorageFilesError")
+	if !errors.As(fmt.Errorf("call: %w", back), &target) || target.Code != StorageFilesErrExists || target.Detail != "target files/a exists" {
+		t.Fatalf("from wire = %#v", back)
 	}
-	if got := ParseStorageFilesError("rpc timeout"); got.Code != StorageFilesErrFailed || got.Detail != "rpc timeout" {
-		t.Fatalf("plain text = %+v", got)
+	unknown := RPCErrorFromWire("STORAGE_FILES_BOGUS", "x", map[string]any{"detail": "x"})
+	if !errors.As(unknown, &target) || target.Code != StorageFilesErrFailed {
+		t.Fatalf("unknown code = %#v", unknown)
 	}
-	if got := ParseStorageFilesError("storage_files:bogus: x"); got.Code != StorageFilesErrFailed {
-		t.Fatalf("unknown code = %+v", got)
+	var coded *RPCError
+	if other := RPCErrorFromWire("RPC_UNKNOWN_METHOD", "unknown rpc method: x", nil); !errors.As(other, &coded) || !errors.Is(other, ErrRPCUnknownMethod) {
+		t.Fatalf("other code = %#v", other)
 	}
 }
 

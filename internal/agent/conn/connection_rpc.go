@@ -19,7 +19,7 @@ func (c *Conn) handleConnectionDiagnosticsRPC(ctx context.Context, env proto.Env
 	report, err := c.connectionDiagnostics(ctx, params)
 	resp := rpcRespBody{Result: report}
 	if err != nil {
-		resp = rpcRespBody{Error: err.Error()}
+		resp = rpcErrorBody(err)
 	}
 	_ = c.send(proto.TRPCResp, env.ID, resp)
 }

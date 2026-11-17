@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
@@ -23,10 +24,12 @@ func (s *Service) Precheck(ctx context.Context, providerID uint, externalID, ser
 	}
 	candidates, candidateErr := SSHInstallCandidates(*target, opts.SSHConnectionID)
 	if candidateErr != nil && target.Power == PowerStopped {
-		return provision.SSHPrecheckReport{Target: externalID, Checks: []provision.CheckResult{{Name: "SSH", Status: "error", Detail: stoppedInstanceError(*target).Error()}}}, nil
+		return provision.SSHPrecheckReport{Target: externalID, Checks: []provision.CheckResult{provision.FailCheck(provision.CheckIDSSH, messages.CheckInstanceStopped,
+			stoppedInstanceError(*target).Error(), map[string]any{"instance": externalID})}}, nil
 	}
 	if candidateErr != nil {
-		return provision.SSHPrecheckReport{Target: externalID, Checks: []provision.CheckResult{{Name: "SSH", Status: "warn", Detail: "provider did not expose an SSH endpoint; driver-native install will validate access"}}}, nil
+		return provision.SSHPrecheckReport{Target: externalID, Checks: []provision.CheckResult{provision.SkipCheck(provision.CheckIDSSH, messages.CheckSSHUnavailable,
+			"provider did not expose an SSH endpoint; driver-native install will validate access", nil)}}, nil
 	}
 	mode := normalizeInstallConnectMode(opts.ConnectMode)
 	selected := ServerDialCandidates(candidates, mode, opts.SSHConnectionID)[0]
@@ -61,16 +64,13 @@ func (s *Service) Precheck(ctx context.Context, providerID uint, externalID, ser
 		HostAddress: dialHost, SkipServerToAgent: dialHost == "", ProviderChoosesPort: providerChoosesPort(drv, *target, mode, opts),
 		SSHAuth: InstallRequest{SSHKeyPEM: opts.SSHKeyPEM, Password: opts.Password, PlatformKey: access.platformKey, InstancePassword: access.instancePassword}.SSHAuth(),
 	})
-	prepared := make([]provision.CheckResult, 0, len(access.checks))
-	for _, check := range access.checks {
-		prepared = append(prepared, provision.CheckResult{Name: check.Name, Status: check.Status, Detail: check.Detail})
-	}
+	prepared := append([]provision.CheckResult(nil), access.checks...)
 	if err != nil {
 		if check, ok := s.keyAddedAtInstall(ctx, drv, creds, *target, access, err); ok {
 			return provision.SSHPrecheckReport{Target: externalID, Checks: append(prepared, check)}, nil
 		}
 		// Keep what the server did to prepare access next to the SSH failure.
-		return provision.SSHPrecheckReport{Target: externalID, Checks: append(prepared, provision.CheckResult{Name: "SSH", Status: "error", Detail: err.Error()})}, nil
+		return provision.SSHPrecheckReport{Target: externalID, Checks: append(prepared, SSHConnectFailedCheck(selected.Host, err))}, nil
 	}
 	report.Checks = append(prepared, report.Checks...)
 	return report, nil
@@ -88,7 +88,8 @@ func (s *Service) keyAddedAtInstall(ctx context.Context, drv Driver, creds Crede
 	if !ok {
 		return provision.CheckResult{}, false
 	}
-	return provision.CheckResult{Name: "SSH", Status: check.Status, Detail: check.Detail}, true
+	check.ID = provision.CheckIDSSH
+	return check, true
 }
 
 // precheckCommand runs the precheck through a provider command channel.
@@ -96,15 +97,15 @@ func (s *Service) precheckCommand(ctx context.Context, drv Driver, creds Credent
 	report := provision.SSHPrecheckReport{Target: target.ExternalID}
 	prechecker, ok := drv.(CommandPrechecker)
 	if !ok {
-		report.Checks = []provision.CheckResult{{Name: connection.Type, Status: "warn", Detail: "the driver cannot precheck through this connection; the install will validate access"}}
+		report.Checks = []provision.CheckResult{provision.SkipCheck(provision.ConnectionCheckID(connection.Type), messages.CheckConnectionNoPrecheck,
+			"the driver cannot precheck through this connection; the install will validate access", map[string]any{"connection": connection.Type})}
 		return report
 	}
 	checks, err := prechecker.PrecheckCommand(ctx, creds, target, connection, CommandPrecheckRequest{ServerURL: serverURL, ConnectMode: mode})
-	for _, check := range checks {
-		report.Checks = append(report.Checks, provision.CheckResult{Name: check.Name, Status: check.Status, Detail: check.Detail})
-	}
+	report.Checks = append(report.Checks, checks...)
 	if err != nil {
-		report.Checks = append(report.Checks, provision.CheckResult{Name: connection.Type, Status: "error", Detail: err.Error()})
+		report.Checks = append(report.Checks, provision.FailCheck(provision.ConnectionCheckID(connection.Type), messages.CheckConnectionFailed,
+			"the "+connection.Type+" connection failed", map[string]any{"connection": connection.Type}).WithEvidence(err.Error()))
 		return report
 	}
 	report.Checks = provision.AppendConnectivity(ctx, report.Checks, mode, dialHost, listen)
@@ -155,4 +156,15 @@ func firstNonBlank(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// SSHConnectFailedCheck is the SSH row of a precheck whose login did not get
+// as far as running a check: the error the SSH dial returned is evidence.
+func SSHConnectFailedCheck(target string, err error) provision.CheckResult {
+	var authErr *provision.SSHAuthError
+	if errors.As(err, &authErr) {
+		return provision.FailCheck(provision.CheckIDSSH, messages.CheckSSHAuthRejected, "the target rejected every credential offered",
+			map[string]any{"target": target, "attempts": len(authErr.Outcome.Tried)}).WithEvidence(err.Error())
+	}
+	return provision.FailCheck(provision.CheckIDSSH, messages.CheckSSHConnectFailed, "the server could not open an SSH session", map[string]any{"target": target}).WithEvidence(err.Error())
 }

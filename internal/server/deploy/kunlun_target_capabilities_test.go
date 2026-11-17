@@ -105,3 +105,39 @@ func TestKunlunDevModeAndDisabledSleepAreNotSleepRequests(t *testing.T) {
 		}
 	}
 }
+
+// TestKunlunVLLMKVOffloadIsNotPD: the vLLM KV tiers on one instance are not
+// PD disaggregation, so a target that refuses PD (Kunlun) still takes them;
+// a connector that moves KV between instances stays refused there, whether
+// the platform composes it or the user writes it.
+func TestKunlunVLLMKVOffloadIsNotPD(t *testing.T) {
+	engine, _ := SelectEngine(EngineVLLM)
+	disk := LaunchConfig{KVOffloadingSize: 16, KVDiskOffload: true, SharedKVDir: "/kv-cache"}
+	nixl := `{"kv_connector":"NixlConnector","kv_role":"kv_both"}`
+	for _, tc := range []struct {
+		name    string
+		quick   LaunchConfig
+		args    []string
+		refused bool
+	}{
+		{"disk tier", disk, nil, false},
+		{"cpu tier", LaunchConfig{KVOffloadingSize: 16}, nil, false},
+		{"user offload connector", LaunchConfig{}, []string{"--kv-transfer-config", diskKVTransferConfig(disk)}, false},
+		{"user NIXL kv_both", LaunchConfig{}, []string{"--kv-transfer-config", nixl}, true},
+		{"user NIXL kv_both inline", LaunchConfig{}, []string{"--kv-transfer-config=" + nixl}, true},
+	} {
+		for _, mode := range []TargetValidationMode{ValidateTargetCapabilities, ValidateAssignedTarget} {
+			p := Params{Vendor: "kunlunxin", AssignedGPUs: 1, TensorParallel: 1, ModelPath: "/model", Quick: tc.quick, ExtraArgs: tc.args}
+			launch, err := ResolveLaunch(ResolveLaunchInput{Engine: engine, Params: p, TargetValidation: mode})
+			var productErr *messages.ProductError
+			refused := errors.As(err, &productErr) && productErr.Code() == messages.ErrorAcceleratorFeatureUnsupported &&
+				productErr.Params()["feature"] == "prefill_decode_disaggregation"
+			if refused != tc.refused || (!tc.refused && err != nil) {
+				t.Fatalf("%s (mode %d): err=%v, want refused=%v", tc.name, mode, err, tc.refused)
+			}
+			if err == nil && (launch.RequestedFeatures.PD || !launch.RequestedFeatures.CommandKnown) {
+				t.Fatalf("%s: requested features %+v", tc.name, launch.RequestedFeatures)
+			}
+		}
+	}
+}

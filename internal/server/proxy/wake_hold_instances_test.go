@@ -29,7 +29,7 @@ func TestARequestIsHeldWhileOneSleeperWakesOnRequest(t *testing.T) {
 		go func() {
 			time.Sleep(100 * time.Millisecond)
 			// The arbiter wakes the platform's sleeper, not the held one.
-			if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 0).Error; err != nil {
+			if err := updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 0}); err != nil {
 				t.Error(err)
 			}
 		}()
@@ -42,7 +42,7 @@ func TestARequestIsHeldWhileOneSleeperWakesOnRequest(t *testing.T) {
 
 	// Every sleeper held: refused at once, and nothing is asked to wake.
 	asked.Store(0)
-	if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Updates(map[string]any{"sleep_level": 1, "sleep_held": true}).Error; err != nil {
+	if err := updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 1, "sleep_held": true}); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now()

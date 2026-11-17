@@ -43,7 +43,7 @@ func TestSharedServedNameRoutesToTheNewestDeploymentThatCanAnswer(t *testing.T) 
 		t.Helper()
 		p.routes.rebuild()
 		for range 4 {
-			_, tgt, status, msg, _ := p.selectDeploymentInstance("shared")
+			_, tgt, status, msg, _ := p.selectStatus("shared")
 			if status != 0 || tgt.instanceUUID != uuid {
 				t.Fatalf("%s: selection = %d %q -> %q, want %s", phase, status, msg, tgt.instanceUUID, uuid)
 			}
@@ -73,7 +73,7 @@ func TestSharedServedNameRoutesToTheNewestDeploymentThatCanAnswer(t *testing.T) 
 		t.Fatal(err)
 	}
 	p.routes.rebuild()
-	if _, _, status, msg, _ := p.selectDeploymentInstance("shared"); status != http.StatusServiceUnavailable {
+	if _, _, status, msg, _ := p.selectStatus("shared"); status != http.StatusServiceUnavailable {
 		t.Fatalf("neither can answer: selection = %d %q, want 503", status, msg)
 	}
 }

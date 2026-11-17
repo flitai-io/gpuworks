@@ -30,14 +30,9 @@ func (hygonLogicalBackend) NeedsInstanceTeardown() bool { return true }
 
 // Native configuration is injected through structured mounts shared by Docker
 // and udocker/runveil. Other runtime paths require their own validation.
-func (hygonLogicalBackend) RuntimeConstraint(driver string) string {
-	switch strings.ToLower(strings.TrimSpace(driver)) {
-	case "docker", "udocker":
-		return ""
-	default:
-		return "Hygon dGPU currently requires the Docker or udocker runtime"
-	}
-}
+// SupportedRuntimes: Hygon dGPU needs Docker or udocker (native vdev is
+// unverified on Kubernetes).
+func (hygonLogicalBackend) SupportedRuntimes() []string { return []string{"docker", "udocker"} }
 
 var hygonProfiles = []PartitionProfile{
 	{Backend: BackendHygonLogical, Vendor: VendorHygon, Framework: "dtk", VersionPrefix: "26.04", VersionOptional: true, Architectures: []string{"x86_64"}, DisplayCompatibility: "Z100 / K100AI / BW × DTK 26.04.x × x86_64", ChipFamilies: []string{"Z100", "K100AI", "BW"}},

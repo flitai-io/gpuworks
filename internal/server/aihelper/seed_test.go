@@ -41,7 +41,7 @@ func TestErrorPromptCarriesManifestAndQuestion(t *testing.T) {
 		Findings: Match([]string{"CUDA out of memory"}),
 	}
 	p := c.Prompt()
-	for _, want := range []string{"Diagnose why", "deployment: qwen (deployment_id 3)", "launch command: vllm serve /m", "## Manifest", "newest 60 lines and up to 40 error-level", "GET /api/v1/logs/search (q, level, from/to, instances)", "GET /api/v1/instances/{uuid}/events", "search_metrics", "[cuda_oom]"} {
+	for _, want := range []string{"Diagnose why", "deployment: qwen (deployment_id 3)", "launch command: vllm serve /m", "## Manifest", "newest 60 lines and up to 40 error-level", "GET /api/v1/logs/search (q, level, from/to, instances)", "GET /api/v1/instances/{uuid}/events", "search_metrics", "[CUDA_OOM]"} {
 		if !strings.Contains(p, want) {
 			t.Fatalf("prompt lacks %q:\n%s", want, p)
 		}

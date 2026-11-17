@@ -70,6 +70,18 @@ interface StreamCallbacks {
   onUsage: (usage: Usage) => void;
   // Called for every chunk that carries content or reasoning text.
   onDelta: () => void;
+  // Called once the answer arrives, with the priority class it ran at.
+  onPriorityClass?: (name: string) => void;
+}
+
+/** The request priority class a request asks for, and the one the gateway answers. */
+export const PRIORITY_CLASS_HEADER = "X-GPUWorks-Priority-Class";
+
+/** requestHeaders are a generation request's headers: its body type and the class it asks for. */
+export function requestHeaders(parameters: ParameterState): Record<string, string> {
+  return parameters.priorityClass
+    ? { "Content-Type": "application/json", [PRIORITY_CLASS_HEADER]: parameters.priorityClass }
+    : { "Content-Type": "application/json" };
 }
 
 export interface StreamResult {
@@ -118,10 +130,12 @@ export async function streamChat(
   const response = await fetch(`${ROOT}/v1/chat/completions`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": "application/json" },
+    headers: requestHeaders(parameters),
     body: JSON.stringify(requestBody),
     signal,
   });
+  const ranAt = response.headers.get(PRIORITY_CLASS_HEADER);
+  if (ranAt) callbacks.onPriorityClass?.(ranAt);
   if (!response.ok) throw new Error(await responseError(response));
   if (!response.body) throw new Error("The browser did not receive a streaming response body");
 

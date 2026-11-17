@@ -126,9 +126,44 @@ gpuworks-agent doctor --connectivity --state /opt/gpuworks --json
 4. 协议版本不匹配，reason 为 `proto_mismatch`（detail 形如 `server supports 1-1`），需要升级 agent。
 5. `stale_session`：只出现在**数据通道**握手，表示它绑定的控制会话已过期。agent 只打 Debug 日志并退避
    重试，控制通道重连后自愈，见 [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md)；持续出现才需要处理。
+6. 两个 agent 用同一个节点身份：两边轮流接入、互相顶掉连接，节点页却一直「在线」（被顶掉的旧连接不会把节点标成离线），
+   表现是终端、日志跟随、模型或镜像传输反复中断；两台主机的 agent 日志都反复出现 `connection ended` 和 `reconnecting`，却没有 reject；
+   server 日志有 `AGENT_DUPLICATE_INSTANCE`，`host`/`remote` 与 `other_host`/`other_remote` 是互相顶替连接的两个 agent。
+   同一 state 目录的第二个 `run` 已被 `<state>/agent.lock` 挡住（见 [CLI 参考](../reference/cli.md)），剩下的多是
+   state 目录或 token 被复制到另一台主机（克隆的磁盘或镜像）、另一个 state 目录写了同一个 token，或本版本之前的旧 agent
+   与当前 agent 同用一个身份。识别靠 agent 握手时带的进程实例标识，至少一方是当前版本才会上报；两个都是旧版 agent 时
+   server 日志里没有这条记录，只能按上面的现象和两台主机上的进程排查。
+   停掉多余的 agent；克隆出来的主机删掉复制来的 state 目录，作为新节点重新接入。同一节点每小时最多记一次。
 
 时钟偏差**不是** reject 原因：握手里没有时间戳校验，`server_dial` 的 HMAC 只签一次性 nonce，不含时间。
 server_dial 节点的密钥不符时 agent 报 `invalid server_dial proof`。
+
+## Kubernetes 节点不加入或不上线
+
+**现象**：从 Kubernetes 集群接入的条目迟迟没有节点出现在节点页；「外部平台」页该集群的状态是「未接入」，超过 5 分钟变成「长时间未接入」；
+或节点出现了，但离线、被拒绝，或实例起不来。接入步骤与各项设置见[接入 Kubernetes 集群](connect-kubernetes.md)，本节按症状指到对应位置，不重复其中的说明。
+节点已经出现、只是一直「连接中」或反复离线时，先看上一节。
+
+**怎么确认**：在集群里执行下面的命令，`<namespace>` 是接入时的命名空间（默认 `gpuworks-system`），`<agent-pod>` 是 `get pods` 列出的 agent Pod。在「外部平台」页点集群状态旁的「排查」，
+给出的是同样的命令和常见原因（长时间未接入时才有这个入口）：
+
+```bash
+kubectl -n <namespace> get daemonset,pods -o wide
+kubectl -n <namespace> describe pod <agent-pod>
+kubectl -n <namespace> logs ds/gpuworks-agent
+```
+
+| 症状 | 看什么 | 处理 |
+|---|---|---|
+| agent Pod 是 `ImagePullBackOff` / `ErrImagePull`，或「长时间未接入」 | `describe pod` 的 Events 里写着拉取哪个镜像、失败原因；401 / 403 是缺拉取凭据或凭据不对 | 节点拉不到所选仓库：改选能访问的仓库（中国内地选华为云 SWR），或填自己的镜像、配镜像拉取凭据，见[接入](connect-kubernetes.md#接入)里「高级」的 agent 镜像仓库、agent 镜像与镜像拉取凭据；保存后重新应用，逐条的操作见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md#没有节点出现时)；离线集群的镜像归档见[离线环境部署](deploy-offline.md#kubernetes-集群的-agent-镜像) |
+| 实例 Pod 事件 `RuntimeClass "…" not found`，实例起不来 | `kubectl get runtimeclass` 看集群里有没有条目里填的那个；`kubectl -n <namespace> describe pod <实例 Pod>` 看事件。RuntimeClass 只影响 NVIDIA 的实例 Pod，agent Pod 不用它 | 编辑集群条目，把 RuntimeClass 改成集群里有的名字，或留空由 agent 自己判断；保存后立即对在线 agent 生效，不用重新应用，只影响之后新起的实例 Pod，见[修改集群条目](connect-kubernetes.md#修改集群条目) |
+| `get daemonset` 的 DESIRED 是 0 | 节点选择器没有选中任何节点：`kubectl get nodes --show-labels` 核对标签 | 编辑条目修正节点选择器（留空表示所有节点），改动要重新应用才进入集群，见[接入](connect-kubernetes.md#接入)与[修改集群条目](connect-kubernetes.md#修改集群条目)；云账号接入的条目改的是节点池 |
+| agent Pod 在运行，但节点不出现，agent 日志反复连接失败 | `kubectl -n <namespace> logs ds/gpuworks-agent` 里的连接错误；节点上能否访问「管理节点接入地址」 | 地址必须是集群节点能解析、能访问的（agent 用节点自己的 DNS，不能写集群内的 Service 名；agent 主动外连，不需要节点入站端口）。地址在条目创建后不能改，要改就删掉条目重建，见[接入](connect-kubernetes.md#接入)；连通性的通用检查见上一节 |
+| agent Pod 在运行、已连上 server，但节点不出现，或出现后又消失 | `describe pod <agent-pod>` 的 Events 里有 Warning `GpuworksEnrollRefused`：注册被拒绝，事件里写明原因（`node_taken`、`unknown_token`、`other_cluster`）和处理办法；没有这条事件、日志里也没有拒绝时，多半是节点没有受支持的加速卡，agent 待命不注册 | `node_taken`：同集群的另一个条目占着这个节点，等它在该节点离线超过 15 分钟，或调整两个条目的节点选择器；`unknown_token`：接入令牌被吊销，重新创建条目；`other_cluster`：令牌属于另一个集群。详见[加速卡厂商：自动识别](connect-kubernetes.md#加速卡厂商自动识别)。事件需要 manifest 的 Role 里有 `events` 的 `create`，旧 manifest 重新应用后才有，没有时只是看不到事件 |
+| 节点在线，GPU 设备上有「GPU 设备为软隔离」标签 | 节点详情「基础信息」里的标签和下面的原因、命令 | 不是故障：集群用 HAMi 等 device plugin 取代了 NVIDIA 的，NVIDIA 容器工具包又处在 CDI 模式，实例能跑，但 Pod 看得到节点的全部 GPU 设备、只有 CUDA 被 `CUDA_VISIBLE_DEVICES` 限制。需要严格隔离时按标签里的命令改，见[加速卡厂商：自动识别](connect-kubernetes.md#加速卡厂商自动识别) |
+| 实例起来了，但经网关访问不通、端口像被「吃掉」，或集群里有 NodePort 服务 | 条目的引擎端口段（默认 `40000-42767`）是否与集群的 NodePort 范围（默认 `30000-32767`，由 API server 的 `--service-node-port-range` 决定）重叠 | kube-proxy 会把发往本机地址的 NodePort 流量转走。编辑条目改引擎端口段，保存后立即生效，已在跑的实例保持原端口、之后分配的端口用新范围，保存响应会列出落在新范围之外的运行中实例（`KUBE_ENGINE_PORTS_OUTSIDE`），见[接入](connect-kubernetes.md#接入)与[修改集群条目](connect-kubernetes.md#修改集群条目) |
+
+修好后确认节点出现在「计算节点」页且在线。以上都对不上时，保留 `describe pod` 的 Events 与 agent 日志，见本页末尾「仍未解决？」。
 
 ## 节点掉线后的自愈与 recovery
 
@@ -137,7 +172,8 @@ server_dial 节点的密钥不符时 agent 报 `invalid server_dial proof`。
 ### 查看恢复进度
 
 在节点详情查看「带外恢复」的阶段、尝试次数、上次探测时间和最后错误，分别对应
-`recovery_phase`、`recovery_attempts`、`last_probe_at`、`last_recovery_error`。
+`recovery_phase`、`recovery_attempts`、`last_probe_at`、`last_recovery_error`；`last_recovery_code` 是最后错误的码
+（`SSH_*`、`AGENT_INSTALL_*`、`RECOVERY_*`），界面按它显示原因，错误原文作为证据列在下面。旧版本记下的错误没有码，原样显示。
 只有 `recovery_phase` 非空时才显示这张卡片。
 
 平台在 `--stale-after`（默认 90 秒）没有收到心跳后标记离线，依次尝试：
@@ -161,13 +197,13 @@ SSH 恢复通常执行 `systemctl restart gpuworks-agent`，没有 unit 时用 n
 - 已保存 SSH 凭据：立即尝试恢复，忽略等待窗口；仍跳过在线、未接入和无凭据的节点。凭据可通过 `PUT /api/v1/nodes/{uuid}/ssh` 写入。
 - 未保存 SSH 凭据：界面弹出 agent 安装命令，不执行 SSH 恢复；到节点运行该命令重新接入。
 - 阶段为 `stopped`：按钮置灰，悬停查看云实例已销毁的原因。
-- server 设置了 `--recovery-enabled=false`：手动触发返回 `recovery is disabled`。参数见[配置参考](../reference/configuration.md)。
+- server 设置了 `--recovery-enabled=false`：手动触发返回 `skipped_code` 为 `RECOVERY_SKIPPED_DISABLED`。参数见[配置参考](../reference/configuration.md)。
 
 ### 按最后错误处理
 
 **缺少 SSH 凭据或平台公钥**
 
-自动恢复会跳过无凭据节点；直接调用恢复 API 返回 `ssh credential is not configured`。
+自动恢复会跳过无凭据节点；直接调用恢复 API 返回 `skipped_code` 为 `RECOVERY_SKIPPED_NO_SSH_CREDENTIAL`。
 补充凭据后再重连。凭据只有地址时，平台使用平台密钥登录；出现 `has not authorized the platform key` 时，按错误给出的命令授权公钥。
 
 **还在等待，或已停止自动恢复**
@@ -178,7 +214,7 @@ SSH 恢复通常执行 `systemctl restart gpuworks-agent`，没有 unit 时用 n
 
 **agent 正在运行，但没有控制会话**
 
-错误为 `agent is running but has not established a control-plane session` 时，恢复不会重启或重装 agent。
+错误码为 `RECOVERY_AGENT_NOT_CONNECTED` 时，恢复不会重启或重装 agent。
 按[节点一直「连接中」或不上线](#节点一直连接中或不上线)检查 agent 日志和连接配置。
 
 平台用 unit 所指 agent 的 server 地址判断归属：读取配置文件，较早安装版本读取命令行 `--server`。
@@ -186,7 +222,7 @@ SSH 恢复通常执行 `systemctl restart gpuworks-agent`，没有 unit 时用 n
 
 **unit 属于另一个 server**
 
-`foreign_agent:` 后会写出另一个 server 的地址。所有安装共用 `gpuworks-agent` unit 名，后装的会覆盖先装的；恢复不会重启或重装正在运行的他人 unit。
+错误码为 `AGENT_INSTALL_FOREIGN_SERVER`，错误原文写出另一个 server 的地址。所有安装共用 `gpuworks-agent` unit 名，后装的会覆盖先装的；恢复不会重启或重装正在运行的他人 unit。
 
 确认那个 server 已不再使用这台主机后：
 
@@ -233,7 +269,7 @@ CLI 可在节点执行 `gpuworks-agent doctor`；退出码恒为 `0`，应读取
 | **已直通**、**未绑定驱动**、**被其它驱动占用** | 先确认卡的预期归属；这些卡不参与本节点调度，不要直接按硬件故障处理 |
 | 宿主能看到卡，容器看不到 | 查看 **运行时**或**运行时插件**提示；修复插件或工作负载用户的设备权限，再检查调度是否恢复 |
 | **被平台外的进程占用** | 核对显示的进程和显存占用，确认可以停止后再释放；不直接终止未知业务进程 |
-| `accelerator_unrecognized` | 保存报告中的 BDF、`vendor:device`、class 和驱动信息，用于补充设备识别 |
+| `ACCELERATOR_UNRECOGNIZED` | 保存报告中的 BDF、`vendor:device`、class 和驱动信息，用于补充设备识别 |
 
 处理后重新运行诊断，确认卡的健康、分配状态与实际设备一致；节点 **在线**只证明连接正常。
 
@@ -309,9 +345,9 @@ Xid / NVRM 报错。
 
 ### 某张卡运行时不可用或驱动初始化失败
 
-**`runtime_unusable`：加速卡运行时上下文创建失败**
+**`RUNTIME_UNUSABLE`：加速卡运行时上下文创建失败**
 
-某张卡健康是「运行时无法使用」（`runtime_unusable`）：加速卡运行时冒烟每 15 分钟逐卡跑一轮，
+某张卡健康是「运行时无法使用」（`RUNTIME_UNUSABLE`）：加速卡运行时冒烟每 15 分钟逐卡跑一轮，
 只点名这一张卡；正在跑实例的卡、被平台外进程占用的卡跳过，驱动不应答时整轮跳过，冒烟不改变节点连接状态。
 NVIDIA 需要 `python3` 和 `libcuda.so.1`，在这张卡上创建 CUDA 上下文；一张卡初始化失败常常让整机的
 `cuInit` 都失败，所以要连别的卡的结论一起看。昇腾在主机装有 CANN 时用 `python3` + `libascendcl.so`
@@ -327,9 +363,9 @@ NVIDIA 需要 `python3` 和 `libcuda.so.1`，在这张卡上创建 CUDA 上下�
 不在 udocker 上做。容器起不来、镜像里没有运行时或 python 都算主机的问题，不判卡故障。Apple 不做。
 
 **点「诊断」会立刻对 NVIDIA、昇腾、海光、PPU 做同一项逐卡（昇腾逐 die）检查**：节点详情的「诊断」与 `gpuworks-agent doctor` 对本节点拥有的每张 die 按需跑一遍上面这项运行时检查
-（和周期检查是同一段代码，不另写一套），所以周期检查已经判为 `runtime_unusable` 的 die，诊断里一定看得到。
-失败的 die 在加速卡表里显示「运行时无法使用」，并在 **需要处理** 里按 die 列出一项 `runtime_unusable`（级别「错误」，依据与周期检查记录的相同）；
-表里已有更具体的厂商结论（如 `reset_required`）时，表中仍显示那一条，`runtime_unusable` 照样单独列出。
+（和周期检查是同一段代码，不另写一套），所以周期检查已经判为 `RUNTIME_UNUSABLE` 的 die，诊断里一定看得到。
+失败的 die 在加速卡表里显示「运行时无法使用」，并在 **需要处理** 里按 die 列出一项 `RUNTIME_UNUSABLE`（结果「失败」，依据与周期检查记录的相同）；
+表里已有更具体的厂商结论（如 `RESET_REQUIRED`）时，表中仍显示那一条，`RUNTIME_UNUSABLE` 照样单独列出。
 「信息」里的 **逐卡运行时检查**（`card_runtime`）给出汇总：通过、失败、未检查各几张。
 NVIDIA 另有整机的 CUDA、P2P、NCCL 检查：整机 CUDA 检查让所有卡同时可见，只回答驱动能否初始化、第一张可见卡能否建 context，每张卡的结论看逐卡检查。
 
@@ -357,7 +393,7 @@ NVIDIA 另有整机的 CUDA、P2P、NCCL 检查：整机 CUDA 检查让所有卡
 
 直通给虚拟机的 die 不属于本节点，不在这项检查里，表中照旧显示「已直通」。独立运行 `gpuworks-agent doctor` 时没有 agent 的实例信息，会对所有 die 都做检查。
 
-只有检查明确说「是这张 die 失败」才会把卡判为 `runtime_unusable`：库加载不了、库不是 CANN、
+只有检查明确说「是这张 die 失败」才会把卡判为 `RUNTIME_UNUSABLE`：库加载不了、库不是 CANN、
 `aclInit` 失败、进程崩了或输出无法解读，都算宿主侧的结论（这些情况整机每张 die 都会一样失败），
 本轮就此中止、不记到任何卡上，原因可以在节点诊断（或 `gpuworks-agent doctor`）的「逐卡运行时检查」里看到。
 拿到 die 并分配成功之后的释放动作（`aclrtFree`、`aclrtResetDevice` 等）失败只打印不判故障，
@@ -370,17 +406,17 @@ NVIDIA 另有整机的 CUDA、P2P、NCCL 检查：整机 CUDA 检查让所有卡
 agent 不会再启动第二个检查去排在同一把驱动锁后面。这期间卡住的那张卡记为失败，其余卡保留上一次结果
 （没检查过的卡没有结论，不会被当成故障），原因同样在 `gpuworks-agent doctor` 里可见。
 
-**`driver_init_failed`：驱动没有带起这张卡**
+**`DRIVER_INIT_FAILED`：驱动没有带起这张卡**
 
-某张卡健康是「驱动初始化失败」（`driver_init_failed`，仅 NVIDIA）：卡在 PCI 上存在、仍绑定 nvidia 驱动，
+某张卡健康是「驱动初始化失败」（`DRIVER_INIT_FAILED`，仅 NVIDIA）：卡在 PCI 上存在、仍绑定 nvidia 驱动，
 但 `nvidia-smi` 列出的卡里没有它，通常是驱动没能把它带起来
 （`dmesg` 里有 `RmInitAdapter failed`、`Possible bad register read`、`GPU may need to be reset`）。
 这类卡仍然出现在加速卡列表里（卡插在机器上是既定事实，agent 直接读 sysfs 枚举 PCI，毫秒级，不依赖驱动），
 只是不可调度，型号取自 `pci.ids`。这类主机上 CUDA 往往整体不可用，部署前先在节点上确认，必要时复位这些卡。
 
-**`vendor_cli_unanswered`：暂时读不到卡的信息**
+**`VENDOR_CLI_UNANSWERED`：暂时读不到卡的信息**
 
-某张卡健康是「读不到信息」（`vendor_cli_unanswered`）：卡绑定着厂商驱动，但本轮厂商 CLI 根本没应答
+某张卡健康是「读不到信息」（`VENDOR_CLI_UNANSWERED`）：卡绑定着厂商驱动，但本轮厂商 CLI 根本没应答
 （超时，或没装），除 PCI 标识外一无所知——这不等于卡坏了。看节点的 GPU 探测错误，并在节点上手动跑一次 CLI。
 
 ### 宿主看得到卡，容器看不到
@@ -403,7 +439,30 @@ agent 每分钟复查一次：被跳过的运行时能用了，节点上没有�
 开机时 agent 早于 dockerd 启动，或 dockerd 正忙着拉大镜像、5 秒内没有应答时，自动选择运行时的 agent 在启动阶段最多再等 2 分钟；
 仍不应答才改用 runveil，节点详情的橙色提示说明原因（`daemon_not_ready`）。之后每分钟复查一次，Docker 应答且节点上没有实例时自动切回，
 有实例时同样提示「Docker 已可用，可切换」。agent 的 systemd 单元排在 `docker.service`、`containerd.service` 之后启动（只排顺序，
-没有 Docker 的主机不受影响）。agent 用户无权访问 Docker（不在 docker 组）不属于这种情况，不会等待。
+没有 Docker 的主机不受影响）。agent 用户无权访问 Docker（不在 docker 组）不属于这种情况，不会等待，见下一段。
+
+**agent 的账号打不开 Docker 的 socket**
+
+以普通账号运行的 agent，`docker info` 报 `permission denied while trying to connect to the Docker daemon socket` 时，
+自动选择运行时的 agent 改用 runveil，节点详情的橙色提示说明原因（`socket_permission_denied`），列出 socket 路径、它所属的组与 gid、
+agent 的账号，并附可复制的命令：`sudo gpasswd -a <账号> <组>`，再按安装方式重启 agent（systemd 安装为
+`sudo systemctl restart gpuworks-agent`；不用 systemd 的安装以该账号停掉命令行为 `gpuworks-agent run --state <状态目录>` 的进程
+（按命令行认，不信 pid 文件），确认它已退出后再运行状态目录下的 `agent-restart.sh`；30 秒内没退出就报错，不启动第二个 agent）。
+agent 看不出自己由什么拉起时，命令只含加组一行，提示里写明两种重启方式。
+
+重启后 agent 改用 Docker。runveil 上的实例不会迁移：runveil 的实例进程在 agent 停止后继续运行，重启后的 agent 又会在 Docker 中
+把这些实例再启动一份，所以重启前先停掉该节点上的部署。若该账号本就不该用 Docker，把节点的运行时设为 runveil（udocker），
+提示和每分钟的复查随之停止。
+
+加组不是原因时提示不给命令：agent 已经持有 socket 的属组仍被拒绝（socket 权限为 0600，或 SELinux、AppArmor 拦截）；
+socket 属于 root 组（不应让服务账号加入 root 组，应给 socket 设专用组）；读不到 socket 的属组。
+
+必须重启 agent：进程的附加组在启动时就定下了，加组之后正在运行的 agent 仍然打不开 socket，每分钟的复查也切不回去。
+复查照常进行（socket 的权限或属组被改掉、加了 ACL 时能直接切回），并在账号数据库已把账号列入该组、只差重启时把提示改为「重启 agent」；
+结果不变的复查不重复记日志。
+
+账号所在的组里有一个与 socket 属组同名、gid 不同的组时（典型是 NIS / LDAP 等目录服务里也定义了 `docker` 组），提示会点明：
+socket 属于本机自己的组（如 gid 999），目录服务里的同名组（如 gid 1002）打不开它，仍要用 `gpasswd` 把账号加进本机的组。
 
 **指定运行时的节点，或昇腾节点**
 
@@ -416,10 +475,10 @@ agent 每分钟复查一次：被跳过的运行时能用了，节点上没有�
 
 **有卡需要重启主机才能恢复时**
 
-卡报告 `reboot_required` 或 `power_cycle_required`（比如 NVIDIA Xid 79、驱动要求的恢复动作是重启）时，平台同样停止整个节点的调度：
+卡报告 `REBOOT_REQUIRED` 或 `POWER_CYCLE_REQUIRED`（比如 NVIDIA Xid 79、驱动要求的恢复动作是重启）时，平台同样停止整个节点的调度：
 重启主机之外没有办法让这张卡恢复，同一驱动下的其他卡也可能受影响。规则和上面一样——悬停「已停止调度」可看原因；
 管理员可以先手动恢复调度去试部署一个模型，原因还在时下一次上报（约 1 分钟）会再次停止；
-主机重启后卡恢复正常，第一次上报平台自动恢复调度。只需复位卡的故障（`reset_required`）不停止整个节点，只停这张卡。
+主机重启后卡恢复正常，第一次上报平台自动恢复调度。只需复位卡的故障（`RESET_REQUIRED`）不停止整个节点，只停这张卡。
 
 ### 卡已直通、未绑定驱动或被其他驱动占用
 
@@ -446,8 +505,8 @@ GPUDirect RDMA 只在宿主有 RDMA 网卡时检查厂商的 peer memory 模块�
 | 状态 | 含义 |
 |---|---|
 | 通过 / 告警 / 失败 | 这项检查最近一次的结论 |
-| 跳过 | 最近一次没做，带原因：卡正在服务、被平台外进程占用、平台还不知道节点在跑什么、宿主暂时不能检查（驱动无响应、运行时缺失、上一次检查还没返回），或厂商工具这一轮没应答 |
-| 等待 | agent 启动后这项检查还没做过 |
+| 未检查 | 最近一次没做，带原因：卡正在服务、被平台外进程占用、平台还不知道节点在跑什么、宿主暂时不能检查（驱动无响应、运行时缺失、上一次检查还没返回）、厂商工具这一轮没应答，或 agent 启动后还没运行过。未检查不算通过 |
+| 不适用 | 这张卡没有这项检查要看的东西（比如没有 NVLink、宿主不报 AER），格子是虚线框 |
 | 陈旧 | 超过两次上报周期（约 2.5 分钟）没有新的上报，或节点离线：显示最后已知的结论，不代表现在 |
 
 对节点上所有卡都不适用的检查（比如没有 NVLink）整列不显示。
@@ -473,12 +532,30 @@ server 重启后进行中的记录接着记；重启前最多一小时内的次�
 ### 卡被平台外进程占用
 
 卡标着「被平台外的进程占用」：卡上有不是平台启动的计算进程（比如用户自己起的 vLLM）。
-这张卡在这些进程退出前不参与调度，悬停可看进程名与显存占用。进程退出后要连续 3 次（约 3 分钟）读到空闲才解除，
+这张卡在这些进程退出前不接受整卡部署，悬停可看进程名与显存占用。进程退出后要连续 3 次（约 3 分钟）读到空闲才解除，
 期间仍显示最后一次看到的进程：别人每分钟起停一次的任务，否则会让卡随每次上报进出调度。agent 刚重启、还没收到自己
 该跑哪些实例之前不做这个判断——否则自己的实例会被当成外部进程；本轮探测失败时也不做，
 厂商工具刚答不出清单，再问它进程只会再等一个超时。
 平台按卡的硬件身份认出自己的实例；较早版本启动、期望状态里只记了设备序号的实例，
 升级 server 时迁移会补上身份，agent 也会按最近一次探测把序号对应到卡，同样算作平台自己的。
+
+**带显存上限的 dGPU 部署可以与这些进程共用这张卡，但需要同意**：节点的放置策略里「允许分区与平台外进程共卡」（`share_with_foreign`，默认关）打开时自动放置可以用它，
+且总是先用没有这类进程的卡（同节点和跨节点都是）；开关关闭时只有手工选中这张卡（部署表单里选卡，或请求的 `placement.gpus`）才会放上去。
+开关关闭时自动放置被拒绝的原因是 `held_outside_platform_not_allowed`，界面会说出开关的名字。开关在节点详情「概览」的「放置策略」里；
+节点没有就绪的分区后端或 agent 版本较旧时，开关旁会说明它暂不生效。关闭开关不会停掉已在运行的实例，但重新放置（重启、故障替换、扩容）按新设置：
+滚动重启会停住等待而不丢副本，崩溃后的替换会进入待放置。共卡只隔离显存，算力与带宽与这些进程共享。
+放置时按剩余显存放行：卡的总显存减去这些进程占用的显存、
+再减去在其旁保留的余量（卡的 5%，至少 4 GiB）、再减去平台已有实例的占用，够这个部署的显存上限加分区开销才放上去；
+放不下时拒绝原因（`no_fit`）会列出这些进程的占用和余量，部署表单里这张卡也只对这样的部署可选。以下情况仍然不共用、
+按「被平台外进程占用」拒绝：整卡部署；厂商工具没给出某个进程的显存、或占用者是 Kubernetes 分给别的 Pod 的卡
+（这些占用以后会长到多大不得而知）；节点 agent 版本较旧——共用要求 agent 在平台实例上卡之后继续上报卡上原有的外部进程
+（平台的每个引擎在卡上只留一个进程，超出平台实例个数的进程都算外部的，包括对方换了 PID 重启或在旁边新起的作业；退出的进程照样连读 3 次空闲才放出显存），直到卡上的平台实例全部休眠或离开、卡重新被完整检查，并把这份记录存在 agent 状态目录里、重启后接着用，旧 agent 会在第一个实例上卡后丢掉它们，
+卡就会被当成空闲。会休眠的部署也不放到这样的卡上（`held_outside_platform_sleep`）：这些进程还在时，休眠的实例在这张卡上唤不醒。
+只放着分区实例的卡，较新的 agent 也按同样的名额规则读，之后才在上面起的外部进程也会上报；放着整卡实例、且没有与外部进程共用过的卡不做这种检查：上面新出现的进程，agent 分不清是不是自己实例的，不报为外部进程。外部占用未知的被占用卡，原地调大 dGPU 配额会被拒绝，GPU 列表里的可用显存显示为 0。设计依据见 [ADR 0068](../adr/0068-partitions-share-cards-with-foreign-processes-by-memory.md)。
+
+**推理变慢：查看实例的共卡提示**。实例所在的卡与平台外进程共用时，实例面板的「提示」会写明是哪几张卡、外部进程占了多少显存（`INSTANCE_CARD_SHARED_OUTSIDE`，占用未知时为 `..._UNKNOWN`）：
+显存隔离，但算力与带宽与它们共享，推理可能因此变慢。外部进程上报后下一次刷新就出现，进程离开并解除后消失。
+放着整卡实例的卡上之后才起的外部进程，以及较旧的 agent，不会出现这条提示。
 
 这张卡同时不做周期运行时检查，实例启动失败后的补检也跳过它：别人的业务不该被打扰，
 卡的显存被别人占着也说明不了运行时能不能用它；卡保留上一次检查的结论，进程退出后恢复检查。
@@ -500,7 +577,7 @@ server 重启后进行中的记录接着记；重启前最多一小时内的次�
 
 ### 诊断发现未识别的加速卡
 
-doctor 里出现「有未识别的加速卡设备」（`accelerator_unrecognized`）：本机有属于已支持厂商的
+doctor 里出现「有未识别的加速卡设备」（`ACCELERATOR_UNRECOGNIZED`）：本机有属于已支持厂商的
 PCI 设备，但不符合该厂商任何一条识别规则——通常是我们还没见过的新型号。把报告里的 BDF、
 `vendor:device`、class 和绑定驱动发给我们即可补上。这类设备不在加速卡列表里，也不参与调度。
 
@@ -517,10 +594,16 @@ PCI 设备，但不符合该厂商任何一条识别规则——通常是我们�
 只有厂商工具本身给出恢复方式时，才提供 **处理** 命令，例如复位。
 
 检查项目包括加速卡健康（见下一节）、磁盘可用空间不足 10%（根分区、模型目录、容器数据目录、存储）、
-已选用的容器运行时无响应、加速卡工具执行失败，NVIDIA 的 CUDA 初始化失败和多卡通信检查失败，以及逐卡（昇腾逐 die）运行时检查失败（`runtime_unusable`）。被平台外进程占用的卡不检查，列为未检查。
+已选用的容器运行时无响应、加速卡工具执行失败，NVIDIA 的 CUDA 初始化失败和多卡通信检查失败，以及逐卡（昇腾逐 die）运行时检查失败（`RUNTIME_UNUSABLE`）。被平台外进程占用的卡不检查，列为未检查。
+
+每一项的结果是失败、告警或**未检查**之一。该做却没做成的检查不会省略，而是列为未检查并给出原因码：读不到挂载表（`MOUNT_TABLE_UNREADABLE`）、
+CUDA 检查没通过所以没跑多卡检查（`CUDA_CHECK_NOT_PASSED`）、宿主缺少检查需要的东西（`CHECK_PREREQUISITE_MISSING`，如没装 torch）、
+读取的命令失败（`CHECK_TOOL_FAILED`）、诊断被取消或超时（`CHECK_CANCELLED`、`CHECK_BUDGET_EXHAUSTED`）、卡没有设备号（`CARD_UNADDRESSABLE`），
+以及逐卡检查沿用卡健康检查的跳过原因（卡正在服务、被平台外进程占用等）。单卡主机的多卡检查不适用，不列出。
+「诊断」顶部的结论与每个阶段取其中最严重的一项：失败、告警、未检查、通过依次递减，有未检查的阶段不会显示为通过。
 
 运行时与文件系统方面另有五项（见[运行时初始化失败与容器节点的文件系统](#运行时初始化失败与容器节点的文件系统)）：
-`runtime_provision_failed`（运行时初始化失败）、`runtime_state_untraversable`（专用运行用户进不了 agent 目录）、`path_noexec`、`path_read_only`、`path_ephemeral`。
+`RUNTIME_PROVISION_FAILED`（运行时初始化失败）、`RUNTIME_STATE_UNTRAVERSABLE`（专用运行用户进不了 agent 目录）、`PATH_NOEXEC`、`PATH_READ_ONLY`、`PATH_EPHEMERAL`。
 
 **其他栏目**
 
@@ -538,9 +621,9 @@ PCI 设备，但不符合该厂商任何一条识别规则——通常是我们�
 
 | 级别 | 调度 | 含义 |
 |---|---|---|
-| 正常 | 照常 | 无发现，或只有已处理的历史错误（`memory_error_history`） |
-| 告警 | 照常，但健康卡不够时才用（评估结果带 `degraded_gpus_used`） | `memory_repair_pending`（待复位）、`vendor_health_warning`（厂商工具 Warning）、`pcie_link_degraded`（PCIe 链路降级）、`pcie_errors`（PCIe 可恢复错误）、`nvlink_down`（NVLink 掉线） |
-| 故障 | 停止 | `memory_uncorrectable_errors`、`memory_remap_failed`、`reset_required`、`reboot_required`、`power_cycle_required`、`vendor_health_fault`、`runtime_unusable`（运行时用不了这张卡）、`driver_init_failed`（驱动没带起来）、`vendor_cli_unanswered`（厂商 CLI 没应答，读不到信息）、`pcie_fatal_errors`（PCIe 致命错误） |
+| 正常 | 照常 | 无发现，或只有已处理的历史错误（`MEMORY_ERROR_HISTORY`） |
+| 告警 | 照常，但健康卡不够时才用（评估结果带 `degraded_gpus_used`） | `MEMORY_REPAIR_PENDING`（待复位）、`VENDOR_HEALTH_WARNING`（厂商工具 Warning）、`PCIE_LINK_DEGRADED`（PCIe 链路降级）、`PCIE_ERRORS`（PCIe 可恢复错误）、`NVLINK_DOWN`（NVLink 掉线） |
+| 故障 | 停止 | `MEMORY_UNCORRECTABLE_ERRORS`、`MEMORY_REMAP_FAILED`、`RESET_REQUIRED`、`REBOOT_REQUIRED`、`POWER_CYCLE_REQUIRED`、`VENDOR_HEALTH_FAULT`、`RUNTIME_UNUSABLE`（运行时用不了这张卡）、`DRIVER_INIT_FAILED`（驱动没带起来）、`VENDOR_CLI_UNANSWERED`（厂商 CLI 没应答，读不到信息）、`PCIE_FATAL_ERRORS`（PCIe 致命错误） |
 
 「能不能用」是一个结论，由 server 在存卡时判定一次（健康等级、卡的归属、平台外占用三者合一），
 API 的 `schedulable` 字段就是它，界面与调度都读这一个字段，不各自再推一遍。**不要读 `healthy`**：
@@ -584,8 +667,8 @@ API 的 `schedulable` 字段就是它，界面与调度都读这一个字段，�
 
 **现象**：所有部署都失败，出现 `runveil runtime unavailable: <原因>`；较早版本可能显示
 `udocker runtime unavailable` 或 `prepare udocker ownership`。节点诊断也可能报告
-`runtime_provision_failed`、`runtime_state_untraversable`、`path_noexec`、`path_read_only`、`path_ephemeral`。
-启动日志或实例报 `fork/exec …/udocker/bin/proot-…: permission denied` 时，先看 `runtime_state_untraversable`。
+`RUNTIME_PROVISION_FAILED`、`RUNTIME_STATE_UNTRAVERSABLE`、`PATH_NOEXEC`、`PATH_READ_ONLY`、`PATH_EPHEMERAL`。
+启动日志或实例报 `fork/exec …/udocker/bin/proot-…: permission denied` 时，先看 `RUNTIME_STATE_UNTRAVERSABLE`。
 
 ### 先确认出问题的路径
 
@@ -615,9 +698,9 @@ udocker 初始化会试建带 `:` 的文件；镜像层 `sha256:<hex>`、Debian 
 
 | 检查结果 | 处理 |
 |---|---|
-| `path_noexec`（错误） | udocker 或 agent 目录所在挂载带 `noexec`；调整挂载或换到允许执行的目录 |
-| `path_read_only`（错误） | 模型、udocker 或 agent 目录所在挂载只读；调整挂载或换到可写目录 |
-| `path_ephemeral`（告警） | 模型、udocker 或 agent 目录位于容器自身的 overlay 层；重建后丢失，按上面的持久性条件选目录 |
+| `PATH_NOEXEC`（失败） | udocker 或 agent 目录所在挂载带 `noexec`；调整挂载或换到允许执行的目录 |
+| `PATH_READ_ONLY`（失败） | 模型、udocker 或 agent 目录所在挂载只读；调整挂载或换到可写目录 |
+| `PATH_EPHEMERAL`（告警） | 模型、udocker 或 agent 目录位于容器自身的 overlay 层；重建后丢失，按上面的持久性条件选目录 |
 
 路径检查读取 `/proc/self/mountinfo`，可用 `findmnt -T <路径>` 复核。
 容器层检查用于存在 `/.dockerenv` 或 `/run/.containerenv` 的节点。
@@ -638,7 +721,7 @@ root agent 以专用用户 `udocker` 启动工作负载。agent 会自己开放�
 若其中某一级不允许 `udocker` 进入（典型是装在 `/root/…` 或 0700 的私有主目录下），每次启动都会报
 `fork/exec …/udocker/bin/proot-…: permission denied`，而其他功能（镜像管理、`runveil ps`）照常，不易看出原因。
 
-`runtime_state_untraversable`（错误）给出第一个挡住的目录、它的权限和属主、判断所用的运行用户，以及修复命令。处理：
+`RUNTIME_STATE_UNTRAVERSABLE`（失败）给出第一个挡住的目录、它的权限和属主、判断所用的运行用户，以及修复命令。处理：
 
 - 执行证据里的 `chmod o+x <目录>`：只授予进入权限，不能列目录或写入；
 - 或把 agent 重装到不在该目录之下的安装目录（如 `/opt/gpuworks`）。
@@ -650,7 +733,7 @@ root agent 以专用用户 `udocker` 启动工作负载。agent 会自己开放�
 
 **其他初始化失败**
 
-`runtime_provision_failed` 会保留目录创建、PRoot 释放、chown、文件名等错误全文；chown 错误包含命令的 stderr。
+`RUNTIME_PROVISION_FAILED` 会保留目录创建、PRoot 释放、chown、文件名等错误全文；chown 错误包含命令的 stderr。
 按其中的依据和复核命令处理。拉镜像遇到此错误时会立即以 `udocker runtime unavailable: <原因>` 失败，不逐一尝试镜像源，也不写成 `all image sources failed`；此时应修节点环境。
 
 ### 确认恢复
@@ -692,7 +775,7 @@ Docker Desktop 的容器在没有 Metal 的虚拟机里）；NVIDIA 节点上给
 runveil 只要 Linux 的 amd64 / arm64，
 默认启动器不需要 Python。三者都不可用时日志为
 `no usable container runtime (docker/nerdctl/udocker); deployments disabled on this node`，节点仍可上线、
-上报 GPU，但调度以 `runtime_unavailable` 拒绝，dGPU 原因为 `no usable docker/udocker runtime on the node`。
+上报 GPU，但调度以 `RUNTIME_UNAVAILABLE` 拒绝，dGPU 原因为 `no usable docker/udocker runtime on the node`。
 可用 `--driver` 或 `GPUWORKS_RUNTIME_DRIVER` 强制（`docker|udocker|nerdctl|host|none`；`host` 只在 macOS、`udocker` 只在 Linux 可用，
 强制了本机系统跑不了的 driver 或非法值时只在 agent 日志里记原因，节点按无运行时继续运行），
 或 `PATCH /api/v1/nodes/{uuid}/runtime` 改偏好（`auto/docker/nerdctl/udocker`）。
@@ -712,6 +795,34 @@ runveil 只要 Linux 的 amd64 / arm64，
 
 容器启动后退出时，失败信息带上引擎最后一行报错，例如 `container exited (code 2): vllm: error: unrecognized arguments: …`；
 完全没有输出时写 `… with no output`，这多半是磁盘已满、日志都写不进去。
+
+## 同一台机器上有多套 gpuworks 的容器
+
+**现象**：一台计算节点上跑着多个 agent（各用自己的 state 目录、各自接入不同的管理节点），`docker ps` 里一堆
+`gpuworks-…` 容器，分不清哪个是哪个管理节点起的。
+
+**怎么确认**
+
+docker 与 nerdctl 容器带归属标签（标签表见[部署启动参数来源](../reference/deployment-launch-sources.md#运行时拼装)），
+按管理节点地址或 agent 的 state 目录筛选：
+
+```bash
+docker ps -a --filter label=gpuworks.server=https://<管理节点地址>
+docker ps -a --filter label=gpuworks.state-dir=/opt/gpuworks
+docker inspect -f '{{json .Config.Labels}}' <容器名>
+```
+
+nerdctl 同样用 `--filter label=…`，加上 agent 使用的 `-n <namespace>`。`gpuworks.instance` 与 `gpuworks.deployment`
+对应管理界面里的实例 UUID 与部署 ID。
+
+**注意**
+
+- server_dial 节点不知道管理节点地址，容器上没有 `gpuworks.server`，用 `gpuworks.state-dir` 区分。
+- 标签在创建容器时写入：升级 agent 之前已在运行的容器没有标签，实例重建后才有。
+- runveil 容器本来就在各自的 state 目录下，互不可见，用 `gpuworks-agent runveil --state <目录> ps -a` 分别查看。
+- 孤儿容器清理（server 设置 `orphan_cleanup`，默认关闭）按容器名前缀 `gpuworks-` 判断，不看标签：
+  多个 agent 共用一个 docker 或 nerdctl 时打开它，会删掉其他 agent 的容器。
+- 多套管理节点各自调度，互不知道对方占用了哪些卡，可能把同一张卡排满，需要手工错开各自使用的卡。
 
 ## 模型下载卡住、失败或目录不完整
 
@@ -768,8 +879,9 @@ message 为 `insufficient disk space at <path>: available=… required=…`。
 
 | 失败类型 | 自动处理 |
 |---|---|
-| 文件列表获取失败 | 地址不可达、HTTP 错误或列表无法解析时，当前地址冷却 30 分钟，直接尝试下一候选 |
-| 不可重试的来源错误 | 下载返回 HTTP 错误（包括 404、401/403、429）或 TLS 证书验证失败等：不在原地址重试，冷却 30 分钟并换候选；没有下一候选时结束 |
+| 文件列表获取失败 | 地址不可达、HTTP 错误或列表无法解析时，当前地址冷却 30 分钟，直接尝试下一候选；限流（429、503）除外，按下方「源站限流」处理 |
+| 源站限流 | 文件列表或下载返回 429、503：按应答里的 `Retry-After` 或 `RateLimit` 头给出的重置时间等待（至少按退避间隔，最多 5 分 1 秒），在原地址重试，进度显示「rate limited by the source」。计入下一行的尝试次数，次数耗尽才冷却换址；最坏情况下一个文件在最后一个候选上可能等待约 75 分钟 |
+| 不可重试的来源错误 | 下载返回其他 HTTP 错误（包括 404、401/403）或 TLS 证书验证失败等：不在原地址重试，冷却 30 分钟并换候选；没有下一候选时结束 |
 | 可重试的传输错误 | 下载时连接被拒绝或重置、TLS 握手超时、EOF 等：先在原地址尝试，每文件最多 6 次，最后一个候选最多 16 次，均含首次。退避从 1 秒起，上限 15 秒；次数耗尽仍失败才冷却换址 |
 | 单次请求超时 | 单个 HTTP 请求持续超过 15 分钟时，切断并尝试续传，计入该地址的总尝试次数 |
 | 连续无数据 | 连续 5 分钟没有响应头或新数据时，切断并尝试续传；同一地址连续两次且还有候选时冷却换址。最后一个候选不再切换，仍受 16 次总尝试上限约束 |
@@ -872,13 +984,16 @@ runveil（udocker）节点拉取镜像时，agent 日志（`<state>/agent.log`�
 | `LAUNCH_CONFIG_CONFLICT` | 400 | 表单字段与自定义参数里同一个键取值不同；只保留一处（参数为 `key`、`field_value`、`flag`、`extra_value`） |
 | `ACQUISITION_CANDIDATE_STALE` | 400 / 409 | 请求指定的保存存储已不存在或不再存有模型，或所选权重来源已不在模板里；重新评估，服务端不会替换 |
 | `MODEL_SOURCE_UNAVAILABLE` | 409 | 本地模型在目标节点没有可用来源，或来源校验失败；查看错误详情，不将它等同于公网下载超时 |
+| `TEMPLATE_MODEL_MISMATCH` | 400 | 模板部署指定的模型（`params.model_id`）的仓库 ID 与模板任何一个权重来源都对不上（`params.repo_id`、`params.revision` 是模板解析出的来源）；平台不会改用别的模型。选该仓库的模型；本地模型可在模型详情里把来源 ID 改成模板的仓库 ID |
+| `MANUAL_COMMAND_RANK_BLIND` | 400 | 多机或 PD 部署的手工命令由所有 rank 共用，却没有引用能区分 rank 的变量（`params.missing` 列出缺少的变量名）。多机要引用 `${GPUWORKS_NODE_RANK}` 或 `${GPUWORKS_HEADLESS}`，PD 要引用 `${GPUWORKS_PD_ROLE}`；从部署页「编辑命令文本」得到的脚本初稿已经引用。已存下的部署不受影响 |
+| `COMMAND_OVERRIDE_RANK_BLIND` | 400 | 多机或 PD 部署在 `engine` 或 `image-entry` 模式下覆盖了 Cmd：这段参数会原样交给每个 rank，没有变量能区分它们。清空 Cmd 覆盖，或改用手工命令。 |
 | `DISTRIBUTED_*`、`REPLICAS_*`、`MASTER_PORT_INVALID` | 400 | 多机 / 副本参数不合法 |
 
 **显存不足**（`schedule` 原因码，见评估响应与 `schedule.explain`）：
 
 | 原因码 | 含义 |
 |---|---|
-| `no_fit` | 每卡启动固定需求 > 可用显存；参数含 `required_gib`、`available_gib`、`tp`、`gpu_memory_utilization` |
+| `no_fit` | 每卡启动固定需求 > 可用显存；参数含 `required_gib`、`available_gib`、`tp`、`gpu_memory_utilization`，卡与平台外进程共用时另带 `foreign_gib`（外部进程占用）与 `foreign_headroom_gib`（留出的余量） |
 | `insufficient_empty_gpus` / `insufficient_shared_gpus` | 空闲整卡 / 可共享的卡不够 |
 | `pinned_gpus_unavailable` | 手动放置的 PD 实例钉住的卡被其他部署占着；参数给出 `node`、`gpus`（钉住的卡号）和 `holders`（占卡的部署）。实例不会改用同节点的其他空卡，而是等钉住的卡空出来：停掉或迁走占卡的部署，或把这个部署切成自动放置（`PUT /deployments/{id}/placement-mode`），由平台改用空闲的卡。钉住的卡被平台外进程占着、不健康或空着仍放不下时，仍是对应的原因码 |
 | `waiting_for_yield` | 副本在共卡的部署按出让策略让出卡后放得下，正在等它们让卡；参数给出 `node`、`holders`（占卡的部署，各带 `at_once`，或 `idle_sec` 与按时自动出让的 `max_serve_sec`：它按什么条件把卡让给这个部署）和 `instances`。占卡者睡下后自行解决，见[新部署怎样放到共用的卡上](scheduling-center.md#新部署怎样放到共用的卡上)；不自动出让的占卡者从不被要求让卡 |
@@ -888,12 +1003,15 @@ runveil（udocker）节点拉取镜像时，agent 日志（`<state>/agent.log`�
 | `no_free_gpu` | 没有空闲的 GPU |
 | `no_healthy_gpu` | 节点自己的卡都不在能服务的健康级别 |
 | `no_owned_gpu` | 节点没有归本机使用的卡：一张都没有，或全部直通给虚拟机、未绑定驱动、被其他驱动持有 |
-| `gpus_held_outside_platform` | 卡本身健康，但能用的都被平台外的进程占着 |
+| `gpus_held_outside_platform` | 卡本身健康，但能用的（指定了卡时为指定的卡）都被平台外的进程占着，且这个部署不能与它们共用：整卡部署，或外部进程的显存未知，或节点 agent 较旧 |
+| `held_outside_platform_sleep` | 只有与平台外进程共用的卡能放这个带显存上限的部署，但它会休眠：这些进程还在时，它睡下后在这张卡上唤不醒。处理：关掉这个部署的休眠，或换一张卡 |
+| `held_outside_platform_not_allowed` | 能放这个带显存上限部署的卡上有平台外进程，而节点的放置策略不允许分区与它们共卡；参数 `setting`（开关的键）、`gpus`、`count`、`node`。节点上另有干净卡但忙或放不下时也报这个码。处理：在节点的放置策略里打开该开关，或手工选这张卡 |
+| `foreign_shared_gpus_used` | 方案说明（不是拒绝）：所选卡里有 `count` 张与平台外进程共用（外部占用最多 `foreign_gib` GiB），因为没有干净卡放得下 |
 | `tp_head_count_not_divisible` | TP 不能整除注意力头数 |
 | `sleep_residue_blocks_startup` | 休眠实例的残留显存挡住了启动 |
 | `engine_ports_exhausted` | 节点引擎端口区间用尽 |
 | `insufficient_disk` / `insufficient_runtime_disk` | 权重盘 / 运行时盘不足 |
-| `runtime_unavailable` / `serving_unavailable` | 节点没有容器运行时 / 没有可承担服务流量的网络 |
+| `RUNTIME_UNAVAILABLE` / `serving_unavailable` | 节点没有容器运行时 / 没有可承担服务流量的网络 |
 | `image_source_forbidden` | 节点适用的拉取来源规则让镜像无处可拉（参数 `node`、`image`），见[镜像拉取失败](#镜像拉取失败) |
 | `partition_unavailable` | 需要 dGPU 后端但节点没有就绪的，见 dGPU 一节 |
 
@@ -1031,49 +1149,52 @@ agent 每 15 秒检查一次运行中实例的容器。被 `docker stop`、进�
 
 ## 网关返回 401、404、503
 
-网关错误体形态与管理 API 不同：`{"error":{"message":"…","type":"gpuworks_proxy"}}`，没有 `code`，按 `message` 判断。
+网关错误体是 OpenAI 形状：`{"error":{"message":"…","type":"…","code":"…","param":…}}`，按 `code` 判断，`message` 是英文说明；每个响应带 `X-Request-ID`，可在请求记录里查。码表见 [OpenAI 兼容网关](../reference/openai-gateway.md#错误)。
 
-| 状态 | message | 原因与处理 |
+| 状态 | code | 原因与处理 |
 |---|---|---|
-| 401 | `invalid or missing API key` | 缺 `Authorization: Bearer <key>`、key 已删或无效。`/v1` 默认要求 key，库里**一个 key 都没有**时同样拒绝所有请求；确实需要无 key 访问时，由管理员在**设置 → 安全**打开「接受不带令牌的 /v1 推理请求」（`inference_open_access`） |
-| 400 | `request body must specify a model` | 请求体没有 `model` |
-| 404 | `no deployment serves model <name>` | 模型名不是部署的 served name（`GET /v1/models` 可列出），或部署已停止 |
-| 404 | `deployment <name> does not expose <METHOD> <path>` | 只有试验场（`/api/v1/playground/v1/*`）会做 contract 检查并返回它：该部署的 API contract 不包含这个接口（比如对 Chat 模型调 `/v1/embeddings`）；`GET /api/v1/playground/openapi.json` 可查看它声明了哪些接口。公网 `/v1` 不做这项检查，请求原样转给引擎，由引擎自己返回 404 等 |
-| 404 | （`/v1` 整个路径 404） | 访问的监听地址不承载推理 API，检查 `listen.gateway` |
-| 503 | `model is asleep; wake it first (console, or POST /api/v1/deployments/<id>/wake; a schedule or a waiting wake may also wake it)` | 没有可服务的清醒副本；在控制台或调用 `POST /api/v1/deployments/{id}/wake` 唤醒，定时计划或等位中的唤醒也会唤醒它，见[调度分析](scheduling-center.md)。休眠意图发出后，所选实例即不再接收新请求 |
-| 503 | `no running instance for <name> (still starting?)` | 没有 running 副本：还在启动、失败、被停止或节点离线；看实例状态 |
-| 503 | `distributed model <name> is not ready: rank N is unavailable`、`distributed model leader is offline for <name>`、`distributed model leader is not ready for <name>`、`distributed deployment node set is incomplete for <name>` | 多机部署的 rank 或 leader 没就绪 |
-| 503 + `Retry-After: 2` | `upstream error: … data lane unavailable: … did not reattach within 5s` | 节点数据通道断开后 5 秒内没重连；**可重试**，不会回落到控制通道 |
-| 503 + `Retry-After: 2` | `upstream error: … data lane unavailable: … data lane closed under an open stream: …` | 请求已经发到节点、还没收到响应时数据通道断开；**可重试**。响应开始返回之后才断开的，客户端看到的是被截断的响应 |
-| 503 + `Retry-After: 2` | `no prefill instance could take the request (…)` | PD 部署没有可用的 prefill 实例 |
-| 502 | `upstream error: …` | 到引擎的隧道或连接失败，查节点在线性和引擎日志 |
-| 413 | `request body exceeds N bytes` | 超过 `--proxy-max-body-bytes`（默认 256 MiB） |
+| 401 | `INVALID_API_KEY` | 缺 `Authorization: Bearer <key>`、key 已删或无效。`/v1` 默认要求 key，库里**一个 key 都没有**时同样拒绝所有请求；确实需要无 key 访问时，由管理员在**设置 → 安全**打开「接受不带令牌的 /v1 推理请求」（`inference_open_access`） |
+| 400 | `MODEL_REQUIRED` | 请求体没有 `model` |
+| 404 | `MODEL_NOT_FOUND` | 模型名不是部署的 served name（`GET /v1/models` 可列出），或部署已停止 |
+| 404 | `MODEL_ROUTE_NOT_EXPOSED` | 只有试验场（`/api/v1/playground/v1/*`）会做 contract 检查并返回它：该部署的 API contract 不包含这个接口（比如对 Chat 模型调 `/v1/embeddings`）；`GET /api/v1/playground/openapi.json` 可查看它声明了哪些接口。公网 `/v1` 不做这项检查，请求原样转给引擎，由引擎自己返回 404 等 |
+| 404 | `ROUTE_NOT_FOUND` | 访问的监听地址不承载推理 API，检查 `listen.gateway` |
+| 503 | `MODEL_ASLEEP` | 没有可服务的清醒副本；在控制台或调用 `POST /api/v1/deployments/{id}/wake` 唤醒，定时计划或等位中的唤醒也会唤醒它，见[调度分析](scheduling-center.md)。休眠意图发出后，所选实例即不再接收新请求 |
+| 503 | `MODEL_NOT_READY`、`DEPLOYMENT_START_FAILED` | 没有 running 副本：还在启动、失败、被停止或节点离线；看实例状态 |
+| 503 | `DISTRIBUTED_NOT_READY`、`DISTRIBUTED_LEADER_OFFLINE` | 多机部署的 rank 或 leader 没就绪 |
+| 503 + `Retry-After: 2` | `DATA_LANE_UNAVAILABLE`（`message` 含 `did not reattach within 5s`） | 节点数据通道断开后 5 秒内没重连；**可重试**，不会回落到控制通道 |
+| 503 + `Retry-After: 2` | `DATA_LANE_UNAVAILABLE`（`message` 含 `data lane closed under an open stream`） | 请求已经发到节点、还没收到响应时数据通道断开；**可重试**。响应开始返回之后才断开的，客户端看到的是被截断的响应 |
+| 503 + `Retry-After: 2` | `PD_PREFILL_UNAVAILABLE` | PD 部署没有可用的 prefill 实例 |
+| 502 | `UPSTREAM_UNAVAILABLE` | 到引擎的隧道或连接失败，查节点在线性和引擎日志 |
+| 413 | `REQUEST_TOO_LARGE` | 超过 `--proxy-max-body-bytes`（默认 256 MiB） |
 
-只有数据通道不可用和 PD 无 prefill 两类 503 带 `Retry-After`；休眠和启动中的 503 需要先处理实例，而不是重试。
+只有数据通道不可用、实例中途停止（`INSTANCE_UNAVAILABLE`）和 PD 无 prefill 三类 503 带 `Retry-After: 2`，server 停止（`SERVER_RESTARTING`）带 `Retry-After: 10`；休眠和启动中的 503 需要先处理实例，而不是重试。
 数据通道机制见 [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md)。其余差异见[OpenAI 兼容网关](../reference/openai-gateway.md)。
 
 ## dGPU 能力 unavailable
 
-**现象**：部署带显存上限时评估出现 `partition_unavailable`，或创建返回 400 `DISTRIBUTED_PARTITION_BACKEND_UNAVAILABLE`
-（文案 `partition backend <id> is unavailable: <reason>`）。
+**现象**：部署带显存上限时评估出现 `partition_unavailable`，或创建返回 400，码为下表中的原因码（多机部署的其他成员不可用时为
+`DISTRIBUTED_PARTITION_BACKEND_UNAVAILABLE`，`params.reason_code` 是该成员的原因码）。
 
 **读取状态**：`GET /api/v1/nodes` / `GET /api/v1/gpus` 响应里的 `partition_capabilities[]`，每项的 `status` 只有
-`ready` / `unavailable`，`reason` 是唯一原因来源；非 NVIDIA 后端另有 `probe_status`（`passed` / `skipped` / `failed`）。
+`ready` / `unavailable`；不可用时 `reason_code` 说明原因，`reason_params` 给出参数，`reason` 只是英文 fallback。
+非 NVIDIA 后端另有 `probe_status`（`passed` / `skipped` / `failed`）。
 
 **怎么确认与处理**：`nvidia-dgpu` 不需要探针，只看运行时与资产；`ascend-dgpu` / `ppu-dgpu` 要探针通过。
 探针每个 agent 进程默认跑一次并缓存（资产、GPU 或运行时变化时会重跑），修好环境后重启 agent 重新探测。不要退回整卡假装成功。
 细节见[启用和排查 dGPU](dgpu.md)、[支持矩阵](../reference/support-matrix.md)。
 
-**可能原因（`reason` 文案，按判断顺序）**
+**可能原因（`reason_code`，按判断顺序）**
 
-1. `container inference unverified: no usable docker/udocker runtime on the node`：节点没有可用运行时。
-2. `container inference unverified: <原因>`：后端对运行时有约束（如 PPU 只在 Docker 上验证）。
-3. `agent has not reported current dGPU safety capability; upgrade the agent`：agent 太旧。
-4. `missing dGPU assets: <文件列表>`：dGPU 资产缺失。
-5. `dGPU probe has not completed: …`：探针还没出结果，稍等或看 agent 日志。
-6. `dGPU probe failed: <detail>`：探针失败；探针 `skipped` 时回到 `container inference unverified: <探针 detail>`（如 `no container runtime available on the node`）。detail 来自探针容器，如
+1. `PARTITION_RUNTIME_MISSING`：节点没有可用运行时。
+2. `PARTITION_RUNTIME_UNSUPPORTED`：后端只在 `reason_params.supported_runtimes` 列出的运行时上可用，节点用的是 `runtime`（如 PPU 只在 Docker、Kubernetes 上验证）。
+3. `PARTITION_AGENT_UPGRADE_REQUIRED`：agent 太旧。
+4. `PARTITION_ASSETS_MISSING`：dGPU 资产缺失，`missing_assets` 列出文件。
+5. `PARTITION_PROBE_PENDING`：探针还没出结果（`gpu_index` 是没收到结果的卡），稍等或看 agent 日志。
+6. `PARTITION_PROBE_FAILED` / `PARTITION_PROBE_SKIPPED`：探针失败或被跳过，`probe_detail` 是探针自己的输出，如
    `the container runtime cannot load the embedded probe image`、`dGPU probe timed out`（15 秒）、
-   `probe container exited with code N`。
+   `probe container exited with code N`、`no container runtime available on the node`。
+
+请求指定了不存在的后端时为 `PARTITION_BACKEND_UNKNOWN`，指定的后端在该节点没有能用的卡时为 `PARTITION_BACKEND_NOT_ON_NODE`。
 
 有显存额度而未指定 `partition_backend` 时，平台按候选节点选择就绪的后端；没有可用后端时返回该节点的能力原因，
 并非固定使用 NVIDIA 后端。显式指定后端会限定该后端；给了后端却没给正数 `vram_limit_gib` 时，
@@ -1238,7 +1359,7 @@ server 停机错过的计划只补 12 小时内最新的一次。计划的 `next
 
 | 路径 | 内容 |
 |---|---|
-| `manifest.json` | 本次收集的范围、server 版本，以及每一项是已收集、已跳过（节点离线、agent 版本不支持）还是失败 |
+| `manifest.json` | 本次收集的范围、server 版本，以及每一项的检查结果：`pass` 完整收集、`warn` 达到大小上限只保留部分、`skip` 未读取（节点离线、agent 版本不支持）、`fail` 读取失败（附错误原文） |
 | `server/disk.json` | server 的数据、日志、备份目录与 SQLite 临时目录：所在文件系统的总量与剩余量，以及每个目录下各项的大小（从大到小） |
 | `server/gpuworks-server.log` | 时间范围内的 server 日志（含 info，日志页只有 warn 以上） |
 | `nodes/<uuid>/agent.log`、`doctor.json` | 所选节点（不选时为所选部署的实例所在节点）的 agent 日志与诊断报告 |

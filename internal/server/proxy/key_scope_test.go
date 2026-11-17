@@ -125,7 +125,7 @@ func TestScopedKeyReachesOnlyItsDeployments(t *testing.T) {
 	}
 	before := rig.upstreamHits.Load()
 	code, body := rig.chat(t, scoped, "beta")
-	if code != http.StatusForbidden || !strings.Contains(body, "may not call model beta") || !strings.Contains(body, `"type":"gpuworks_proxy"`) {
+	if code != http.StatusForbidden || !strings.Contains(body, "may not call model beta") || !strings.Contains(body, `"type":"permission_error","code":"MODEL_ACCESS_DENIED","param":"model"`) {
 		t.Fatalf("scoped key, beta = %d %s", code, body)
 	}
 	if rig.upstreamHits.Load() != before {
@@ -223,16 +223,16 @@ func TestScopedSelectionAmongDeploymentsSharingAName(t *testing.T) {
 	t.Cleanup(p.Close)
 
 	onlyPending := &store.APIKeyIdentity{Restricted: true, Deployments: map[uint]struct{}{pending.ID: {}}}
-	dep, _, status, _, _ := p.selectScopedDeploymentInstance(onlyPending, "shared", "")
+	dep, _, status, _, _ := p.selectScopedStatus(onlyPending, "shared", "")
 	if status != http.StatusServiceUnavailable || dep == nil || dep.ID != pending.ID {
 		t.Fatalf("only pending: status=%d dep=%+v, want 503 from the pending deployment", status, dep)
 	}
 	onlyServing := &store.APIKeyIdentity{Restricted: true, Deployments: map[uint]struct{}{serving.ID: {}}}
-	if dep, tgt, status, _, _ := p.selectScopedDeploymentInstance(onlyServing, "shared", ""); status != 0 || dep.ID != serving.ID || tgt.port != 30001 {
+	if dep, tgt, status, _, _ := p.selectScopedStatus(onlyServing, "shared", ""); status != 0 || dep.ID != serving.ID || tgt.port != 30001 {
 		t.Fatalf("only serving: status=%d dep=%+v", status, dep)
 	}
 	none := &store.APIKeyIdentity{Restricted: true}
-	if dep, _, status, msg, _ := p.selectScopedDeploymentInstance(none, "shared", ""); status != http.StatusForbidden || dep != nil || !strings.Contains(msg, "shared") {
+	if dep, _, status, msg, _ := p.selectScopedStatus(none, "shared", ""); status != http.StatusForbidden || dep != nil || !strings.Contains(msg, "shared") {
 		t.Fatalf("no grant: status=%d dep=%+v msg=%q", status, dep, msg)
 	}
 }

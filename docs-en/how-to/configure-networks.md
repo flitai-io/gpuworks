@@ -270,3 +270,5 @@ Node-pair status is determined by shape: All cards and Same-named only both supp
 If most node pairs have the same shape, the results give the corresponding conclusion and identify pairs that differ to help locate wiring or configuration problems. In the node-pair overview, All pairs shows a node × node table, and Ring shows a list; each cell displays that pair's shape.
 
 Click or press Enter to open a node pair: the full card matrix shows a source-card × target-card grid, while same-named cards shows a list of individual pairs. Hover to see both addresses, RTT, or the failure reason. When testing only one node pair, this grid is shown directly.
+
+<!-- translation-source-sha256: f66b4f040af4f64c5e265795abcd0538775d15cf6f6beb694d3bfc13f59aab1f -->

@@ -104,3 +104,5 @@ the image size is no longer deducted. Unknown cache status, due to an offline ag
 
 Parallelism is a runtime fact: ordinary specs derive tp from the number of allocated GPUs; multi-node or special topologies express it explicitly through args. This
 avoids duplicating tp/nodes in the catalog, where they could conflict with the actual GPU set, and lets the preview and actual controller share ResolveLaunch.
+
+<!-- translation-source-sha256: 5e03d200e91284d21fbf33f84bd6adc1988fe81e5fb6c6593da83e182e07c8fa -->

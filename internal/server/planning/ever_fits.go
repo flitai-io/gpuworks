@@ -2,6 +2,7 @@ package planning
 
 import (
 	"context"
+	"errors"
 
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/nodelabel"
@@ -28,9 +29,18 @@ type NeverFits struct {
 // hardware contract (PlanTemplateLaunch). facts are the nodes' networks and
 // storages, each nil when reqs name none. The result is nil when some node
 // fits.
+//
+// A shape whose launch cannot be resolved on its node (LaunchResolveError:
+// the cards it gets do not match the stated parallelism, say) cannot run the
+// deployment, but it does not veto the pool: the next shape is planned. When
+// no shape fits and one of them failed that way, the first such error is the
+// answer, as it was before other shapes were tried - it names what to change
+// more precisely than a refusal would. A canceled context, a failed build and
+// any other planning failure (a store read) stop the check as errors.
 func EverFits(ctx context.Context, st *store.Store, networks Networks, nodes []*store.Node, facts NodeFacts, reqs nodelabel.Requirements, build func(*store.Node) (LaunchRequest, deploy.CatalogSelection, error)) (*NeverFits, error) {
 	shapes := map[string]bool{}
 	out := &NeverFits{}
+	var unresolved error
 	for _, node := range nodes {
 		if MatchRequirements(node, facts, reqs) != nil {
 			continue
@@ -41,12 +51,22 @@ func EverFits(ctx context.Context, st *store.Store, networks Networks, nodes []*
 			continue
 		}
 		shapes[shape] = true
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		req, layer, err := build(node)
 		if err != nil {
 			return nil, err
 		}
 		req.Preview, req.Unloaded = true, true
 		_, refusal, err := PlanTemplateLaunch(ctx, st, networks, node, req, layer)
+		var resolveErr *LaunchResolveError
+		if errors.As(err, &resolveErr) {
+			if unresolved == nil {
+				unresolved = err
+			}
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -56,6 +76,9 @@ func EverFits(ctx context.Context, st *store.Store, networks Networks, nodes []*
 		if out.Node == "" {
 			out.Node, out.Reason = node.DisplayName(), *refusal
 		}
+	}
+	if unresolved != nil {
+		return nil, unresolved
 	}
 	out.Shapes = len(shapes)
 	return out, nil

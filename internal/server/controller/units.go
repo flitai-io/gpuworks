@@ -365,25 +365,35 @@ func (c *Controller) checkGeneration(dep *store.Deployment, deployment *unitDepl
 	for index, inst := range ranks {
 		node := deployment.nodes[slot.Unit.Ranks[index].Nodes[0]]
 		reason := ""
+		var failure proto.RuntimeFailure
 		switch {
 		case inst == nil:
-			reason = "the rank is gone"
+			reason, failure = "the rank is gone", proto.RuntimeFailure{Code: proto.ErrorUnitRankGone}
 		case inst.State == proto.InstFailed:
 			reason = inst.Message
+			if own := inst.Failure(); own != nil {
+				// The rank's own reason is the generation's.
+				failure = *own
+			} else {
+				failure = proto.RuntimeFailure{Code: proto.ErrorUnitRankFailed, Detail: inst.Message}
+			}
 		case node != nil && !c.hub.Online(node.UUID):
 			if remaining := c.offlineGraceRemaining(node, c.now()); remaining > 0 {
 				c.q.addAfter(depKey(dep.ID), remaining)
 				continue
 			}
-			reason = "node offline beyond reconnect grace"
+			reason, failure = "node offline beyond reconnect grace", proto.RuntimeFailure{Code: proto.ErrorUnitRankNodeOffline}
 		default:
 			continue
 		}
 		nodeName := ""
 		if node != nil {
 			nodeName = node.UUID
+			failure.Node = node.DisplayName()
 		}
-		return c.failGeneration(dep, insts, slot, fmt.Sprintf("rank %d on %s failed: %s", index, nodeName, reason))
+		rank := index
+		failure.Rank = &rank
+		return c.failGeneration(dep, insts, slot, failure, fmt.Sprintf("rank %d on %s failed: %s", index, nodeName, reason))
 	}
 	return nil
 }
@@ -391,7 +401,7 @@ func (c *Controller) checkGeneration(dep *store.Deployment, deployment *unitDepl
 // failGeneration ends a unit's generation: the leader becomes the failed
 // attempt the unit's retry budget counts, carrying the rank's reason, its
 // container is removed, and every follower goes.
-func (c *Controller) failGeneration(dep *store.Deployment, insts []store.Instance, slot planning.UnitSlot, reason string) error {
+func (c *Controller) failGeneration(dep *store.Deployment, insts []store.Instance, slot planning.UnitSlot, failure proto.RuntimeFailure, reason string) error {
 	// The leader's container goes first: a failed push leaves the generation
 	// as it is, and the next pass finds the same failure and tries again.
 	if err := c.pushRemoveOnline(insts, []string{slot.Inst.UUID}); err != nil {
@@ -399,7 +409,7 @@ func (c *Controller) failGeneration(dep *store.Deployment, insts []store.Instanc
 		return err
 	}
 	c.log.Warn("unit generation failed", "dep", dep.ID, "role", slot.Unit.Role, "unit", slot.Unit.Index, "leader", slot.Inst.UUID, "reason", reason)
-	if err := c.store.SetInstanceState(slot.Inst.UUID, proto.InstFailed, reason); err != nil {
+	if err := c.store.SetInstanceFailed(slot.Inst.UUID, failure, reason); err != nil {
 		return err
 	}
 	var followers []store.Instance

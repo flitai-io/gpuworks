@@ -21,15 +21,26 @@ func runFilters(req Request, node NodeSnapshot) (bool, Reason) {
 		}
 		return false, Reason{Code: ReasonDtypeUnsupported}
 	}
+	// A pin is what the request may use; the cards it does not name say
+	// nothing about it (pinnedGPUs).
+	gpus := pinnedGPUs(node.GPUs, req)
 	if req.PerGPULimitBytes > 0 {
 		partitionReady := false
-		for _, gpu := range node.GPUs {
-			if gpu.Schedulable && contains(gpu.PartitionBackends, req.PartitionBackend) {
+		for _, gpu := range gpus {
+			if gpu.takesWorkFor(req) && contains(gpu.PartitionBackends, req.PartitionBackend) {
 				partitionReady = true
 				break
 			}
 		}
-		if req.PartitionBackend == "" || !partitionReady {
+		if req.PartitionBackend == "" {
+			return false, Reason{Code: ReasonPartitionUnavailable}
+		}
+		if !partitionReady {
+			if countTaking(gpus, req) == 0 {
+				// None of the cards takes this request at all: that, not
+				// the backend, is what the operator must act on.
+				return false, noSchedulableGPUReason(req, node.UUID, gpus)
+			}
 			return false, Reason{Code: ReasonPartitionUnavailable}
 		}
 	}
@@ -39,10 +50,10 @@ func runFilters(req Request, node NodeSnapshot) (bool, Reason) {
 	if req.RuntimeDiskNeedBytes > 0 && node.RuntimeDiskAvailBytes > 0 && node.RuntimeDiskAvailBytes < req.RuntimeDiskNeedBytes {
 		return false, Reason{Code: ReasonInsufficientRuntimeDisk}
 	}
-	if countSchedulable(node.GPUs) == 0 {
-		return false, Reason{Code: noSchedulableGPUReason(node.GPUs)}
+	if countTaking(gpus, req) == 0 {
+		return false, noSchedulableGPUReason(req, node.UUID, gpus)
 	}
-	if countFree(node.GPUs) == 0 {
+	if countFree(gpus, req) == 0 {
 		return false, Reason{Code: ReasonNoFreeGPU}
 	}
 	return true, Reason{}
@@ -56,6 +67,7 @@ var featureReason = map[accelerator.Feature]string{
 	accelerator.FeatureKVDiskTier:       ReasonKVDiskUnsupportedOnNode,
 	accelerator.FeaturePipelineParallel: ReasonAcceleratorFeatureUnsupported,
 	accelerator.FeatureDataParallel:     ReasonAcceleratorFeatureUnsupported,
+	accelerator.FeatureExternalKVCache:  ReasonKVBackendUnsupportedOnNode,
 }
 
 // FeatureReason returns the scheduler refusal code for an unsupported
@@ -74,10 +86,22 @@ func contains(values []string, want string) bool {
 	return false
 }
 
-func countFree(gpus []GPU) int {
+func countFree(gpus []GPU, req Request) int {
 	n := 0
 	for _, g := range gpus {
-		if g.Schedulable && g.Available() > 0 {
+		if g.takesWorkFor(req) && g.unclaimed() > 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// countTaking counts the cards that may host this request at all
+// (GPU.takesWorkFor).
+func countTaking(gpus []GPU, req Request) int {
+	n := 0
+	for _, g := range gpus {
+		if g.takesWorkFor(req) {
 			n++
 		}
 	}
@@ -97,17 +121,18 @@ func countSchedulable(gpus []GPU) int {
 // noSchedulableGPUReason says why a node none of whose cards takes work
 // cannot take this request, naming what an operator would act on. A card
 // held outside the platform is named before a fault: freeing it is the
-// quicker remedy, and it is not something a health alert would show.
-func noSchedulableGPUReason(gpus []GPU) string {
+// quicker remedy, and it is not something a health alert would show. A
+// partition that could share such a card but sleeps is told that instead.
+func noSchedulableGPUReason(req Request, node string, gpus []GPU) Reason {
 	if len(gpus) == 0 {
-		return ReasonNoOwnedGPU
+		return Reason{Code: ReasonNoOwnedGPU}
 	}
 	for _, g := range gpus {
-		if g.HeldOutsidePlatform {
-			return ReasonGPUsHeldOutsidePlatform
+		if g.HeldOutsidePlatform || g.withheld > 0 {
+			return heldReason(req, node, gpus, g)
 		}
 	}
-	return ReasonNoHealthyGPU
+	return Reason{Code: ReasonNoHealthyGPU}
 }
 
 // usableGPUs returns the GPUs that can host the request at the given per-GPU

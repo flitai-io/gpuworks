@@ -29,6 +29,8 @@ func batchErr(err error) error {
 		return batch.ErrFileInUse
 	case errors.Is(err, store.ErrBatchTerminal):
 		return batch.ErrTerminal
+	case errors.Is(err, store.ErrPriorityClassGone):
+		return batch.ErrPriorityClassGone
 	}
 	return err
 }
@@ -46,7 +48,7 @@ func fileOf(f store.BatchFile) batch.File {
 func batchOf(b store.Batch, metadata map[string]string) batch.Batch {
 	return batch.Batch{
 		ID: b.ID, UserID: b.UserID, APIKeyID: b.APIKeyID, Endpoint: b.Endpoint, InputFileID: b.InputFileID,
-		OutputFileID: b.OutputFileID, ErrorFileID: b.ErrorFileID, CompletionWindow: b.CompletionWindow, Model: b.ModelOverride, Status: b.Status,
+		OutputFileID: b.OutputFileID, ErrorFileID: b.ErrorFileID, CompletionWindow: b.CompletionWindow, Model: b.ModelOverride, PriorityClass: b.PriorityClass, Status: b.Status,
 		ErrorCode: b.ErrorCode, ErrorMessage: b.ErrorMessage, Total: b.Total, Completed: b.Completed, Failed: b.Failed,
 		CheckpointOffset: b.CheckpointOffset, Metadata: metadata, CreatedAt: b.CreatedAt, ExpiresAt: b.ExpiresAt,
 		InProgressAt: b.InProgressAt, FinalizingAt: b.FinalizingAt, CompletedAt: b.CompletedAt, FailedAt: b.FailedAt,
@@ -93,10 +95,10 @@ func (r batchRepo) ListFiles(o batch.Owner, purpose, after string, limit int) ([
 func (r batchRepo) DeleteFile(id string) error { return batchErr(r.st.DeleteBatchFile(id)) }
 
 func (r batchRepo) CreateBatch(b batch.Batch) error {
-	return r.st.CreateBatch(&store.Batch{
+	return batchErr(r.st.CreateBatch(&store.Batch{
 		ID: b.ID, UserID: b.UserID, APIKeyID: b.APIKeyID, Endpoint: b.Endpoint, InputFileID: b.InputFileID,
-		CompletionWindow: b.CompletionWindow, ModelOverride: b.Model, Status: b.Status, Total: b.Total, CreatedAt: b.CreatedAt, ExpiresAt: b.ExpiresAt,
-	}, b.Metadata)
+		CompletionWindow: b.CompletionWindow, ModelOverride: b.Model, PriorityClass: b.PriorityClass, Status: b.Status, Total: b.Total, CreatedAt: b.CreatedAt, ExpiresAt: b.ExpiresAt,
+	}, b.Metadata))
 }
 
 func (r batchRepo) GetBatch(id string) (batch.Batch, error) {

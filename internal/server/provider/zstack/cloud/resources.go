@@ -8,6 +8,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provider/zstack/cloud/apiclient"
+	"gpuworks.ai/gpuworks/internal/server/provider/zstack/cloud/facade"
 	"gpuworks.ai/gpuworks/internal/server/provider/zstack/cloud/resourceclaim"
 )
 
@@ -56,11 +57,11 @@ func (d *Driver) InspectResource(ctx context.Context, creds provider.Credentials
 	switch strings.ToLower(strings.TrimSpace(mutation.ResourceType)) {
 	case "cpu", "memory":
 		if strings.EqualFold(mutation.ResourceType, "cpu") {
-			amount, _, err := readCPUReservation(ctx, c, mutation.ResourceID)
+			reservation, err := newAccess(c).cpu.Get(ctx, mutation.ResourceID)
 			if err != nil {
 				return resourceclaim.ResourceObservation{}, err
 			}
-			return resourceclaim.ResourceObservation{ResourceType: "cpu", ResourceID: mutation.ResourceID, Amount: amount}, nil
+			return resourceclaim.ResourceObservation{ResourceType: "cpu", ResourceID: mutation.ResourceID, Amount: reservation.Value}, nil
 		}
 		name := "reservedCpu"
 		memory := false
@@ -87,22 +88,14 @@ func (d *Driver) InspectResource(ctx context.Context, creds provider.Credentials
 		}
 		return resourceclaim.ResourceObservation{ResourceType: strings.ToLower(mutation.ResourceType), ResourceID: mutation.ResourceID, Amount: amount}, nil
 	case "gpu":
-		var device struct {
-			State       string `json:"state"`
-			Description string `json:"description"`
-			Inventory   *struct {
-				State       string `json:"state"`
-				Description string `json:"description"`
-			} `json:"inventory"`
-		}
-		if err := c.Get(ctx, "/pci-device/pci-devices/"+pathEscape(mutation.ResourceID), &device); err != nil {
+		device, err := newAccess(c).gpus.Get(ctx, mutation.ResourceID)
+		if err != nil {
 			return resourceclaim.ResourceObservation{}, err
 		}
-		state, description := device.State, device.Description
-		if device.Inventory != nil {
-			state, description = device.Inventory.State, device.Inventory.Description
+		if device.GPU.ExternalID != mutation.ResourceID {
+			return resourceclaim.ResourceObservation{}, fmt.Errorf("zstack: queried GPU identity does not match the target")
 		}
-		return resourceclaim.ResourceObservation{ResourceType: "gpu", ResourceID: mutation.ResourceID, State: state, Description: description}, nil
+		return resourceclaim.ResourceObservation{ResourceType: "gpu", ResourceID: mutation.ResourceID, State: device.GPU.State, Description: device.GPU.Description}, nil
 	default:
 		return resourceclaim.ResourceObservation{}, fmt.Errorf("zstack: unsupported resource type")
 	}
@@ -116,16 +109,17 @@ func updateReservation(ctx context.Context, c *apiclient.APIClient, hostID, name
 		Value *string `json:"value"`
 	}
 	if !memory {
-		current, resourceConfigAvailable, err := readCPUReservation(ctx, c, hostID)
+		reservation, err := newAccess(c).cpu.Get(ctx, hostID)
 		if err != nil {
 			return err
 		}
-		if !resourceConfigAvailable {
+		if !reservation.HostOverrideAvailable {
 			// A global kvm.reservedCpu value is a shared baseline. Do not write
 			// a host-specific lease into it; the GPUWorks lease ledger remains
 			// authoritative when this Cloud cannot bind the config to a host.
 			return nil
 		}
+		current := reservation.Value
 		if delta > 0 && current > (1<<63-1)-delta || delta < 0 && current+delta < 0 {
 			return fmt.Errorf("zstack: resource reservation overflow")
 		}
@@ -133,7 +127,7 @@ func updateReservation(ctx context.Context, c *apiclient.APIClient, hostID, name
 		writeErr := c.PutAction(ctx, "/resource-configurations/kvm/reservedCpu/"+pathEscape(hostID)+"/actions", map[string]any{
 			"updateResourceConfig": map[string]any{"resourceUuid": hostID, "category": "kvm", "name": "reservedCpu", "value": strconv.FormatInt(target, 10)},
 		})
-		if isMissingResourceConfig(writeErr) {
+		if facade.IsMissingResourceConfig(writeErr) {
 			return nil
 		}
 		return writeErr

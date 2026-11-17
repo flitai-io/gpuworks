@@ -120,6 +120,12 @@ specs:
   scenario: balanced
   engine: sglang
   image: gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2
+  assets:
+  - file: assets/sglang-video-cancel.tar.gz
+    sha256: f8762cc5bed7858ab6a7b082de96f9ec4ea031ec2feda8c9c115b45027931af0
+    size_bytes: 113763
+    unpack_to: /opt/gpuworks/sglang-video-cancel
+  pre_start_script: python3 /opt/gpuworks/sglang-video-cancel/apply_video_cancel.py
   # Verified end to end on A100-SXM4-40GB (TP=1): /health 200, POST /v1/videos
   # completed, h264 832x480 17-frame MP4. See
   # vendors/nvidia/runs/2026-09-14--manual-wan21-t2v-a100-video-validation/.

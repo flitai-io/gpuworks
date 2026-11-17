@@ -72,7 +72,7 @@ func startOutboundRuntimeApp(t *testing.T, path string) (*App, string) {
 			t.Error("outbound runtime app did not stop")
 			return
 		}
-		a.obs.close()
+		a.obs.Close()
 		if err := a.store.Close(); err != nil {
 			t.Error(err)
 		}

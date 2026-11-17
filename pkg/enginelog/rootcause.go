@@ -17,6 +17,11 @@ var (
 	processTagRE = regexp.MustCompile(`^\([A-Za-z][\w.-]*(?: pid=\d+)?\)\s*`)
 	// A logger header after the tag: "ERROR 11-05 13:39:46 [core.py:1183] ".
 	logHeaderRE = regexp.MustCompile(`^(?:DEBUG|INFO|WARNING|ERROR|CRITICAL)\s+\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?\s+\[[^\]]*\]\s*`)
+	// Accelerator engine builds also use a bracketed severity and PID fields.
+	applicationLogHeaderRE = regexp.MustCompile(`^\[(?:DEBUG|INFO|WARNING|ERROR|CRITICAL)\]\s+\d{4}-\d{2}-\d{2}[- ]\d{2}:\d{2}:\d{2}(?:\.\d+)?\s+(?:\(PID:[^)]*\)\s*)?`)
+	// Preserve both spellings emitted by engine builds; the code alone does
+	// not imply a wrapper when its message describes a concrete failure.
+	genericApplicationExceptionRE = regexp.MustCompile(`(?i)\bERR99999\s+UNKNOWN\s+appli(?:cation|caiton)\s+exception[.!]?\s*$`)
 	// The line a Python traceback ends with: an exception class, optionally
 	// dotted (torch.OutOfMemoryError), then its message.
 	exceptionLineRE = regexp.MustCompile(`^(?:[A-Za-z_][\w]*\.)*[A-Za-z_]\w*(?:Error|Exception|Exit|Interrupt|Warning)(?::\s|$)`)
@@ -60,10 +65,14 @@ func RootCause(logText string) string {
 func stripLinePrefix(line string) string {
 	line = strings.TrimSpace(line)
 	line = processTagRE.ReplaceAllString(line, "")
-	return strings.TrimSpace(logHeaderRE.ReplaceAllString(line, ""))
+	line = logHeaderRE.ReplaceAllString(line, "")
+	return strings.TrimSpace(applicationLogHeaderRE.ReplaceAllString(line, ""))
 }
 
 func isWrapperCause(line string) bool {
+	if genericApplicationExceptionRE.MatchString(line) {
+		return true
+	}
 	text := strings.ToLower(line)
 	for _, wrapper := range wrapperCauses {
 		if strings.Contains(text, wrapper) {

@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -236,14 +235,8 @@ func TestProxyRejectsOversizedBodyWith413BeforeUpstream(t *testing.T) {
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status=%d, want 413; body=%s", rec.Code, rec.Body.String())
 	}
-	var result struct {
-		Error struct {
-			Message string `json:"message"`
-			Type    string `json:"type"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || result.Error.Type != "gpuworks_proxy" || result.Error.Message == "" {
-		t.Fatalf("413 error shape = %+v, decode err=%v", result, err)
+	if want := `{"error":{"message":"request body exceeds 64 bytes","type":"invalid_request_error","code":"REQUEST_TOO_LARGE","param":null,"params":{"max_bytes":64}}}` + "\n"; rec.Body.String() != want {
+		t.Fatalf("413 body = %s, want %s", rec.Body.String(), want)
 	}
 	if upstreamHit {
 		t.Fatal("oversized request reached the upstream")

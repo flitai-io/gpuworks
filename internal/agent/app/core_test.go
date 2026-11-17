@@ -279,7 +279,7 @@ func TestNodeRuntimeStateSyncAndRPCValidation(t *testing.T) {
 	if n.ModelsRoot() != root+"-next" {
 		t.Fatalf("state update root = %q", n.ModelsRoot())
 	}
-	if _, err := n.OnRPC(context.Background(), "unknown.method", nil); err == nil || !strings.Contains(err.Error(), "unknown rpc method") {
+	if _, err := n.OnRPC(context.Background(), "unknown.method", nil); !errors.Is(err, proto.ErrRPCUnknownMethod) || err.Error() != "unknown rpc method: unknown.method" {
 		t.Fatalf("unknown RPC error = %v", err)
 	}
 	for _, raw := range []json.RawMessage{nil, []byte(`{}`), []byte(`{"url":""}`)} {

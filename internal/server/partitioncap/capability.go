@@ -1,5 +1,7 @@
 // Package partitioncap derives partition capabilities from backend policy and
-// node-observed facts. It is the only place that creates status/reason text.
+// node-observed facts. It is the only place that decides a capability's
+// status and reason code (messages.ErrorPartition*) with its parameters, and
+// writes the reason's English fallback.
 package partitioncap
 
 import (
@@ -10,6 +12,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -18,41 +21,48 @@ const (
 	StatusUnavailable = "unavailable"
 )
 
-type unavailableKind int
-
-const (
-	unavailableOldAgent unavailableKind = iota + 1
-	unavailableMissingAssets
-	unavailableRuntime
-	unavailableProbePending
-	unavailableProbeFailed
-)
-
-// reason is intentionally the single source of all unavailable wording.
-func reason(kind unavailableKind, detail string) string {
-	switch kind {
-	case unavailableOldAgent:
-		return "agent has not reported current dGPU safety capability; upgrade the agent"
-	case unavailableMissingAssets:
-		return "missing dGPU assets: " + detail
-	case unavailableRuntime:
-		if strings.TrimSpace(detail) == "" {
-			return "container inference unverified"
-		}
-		return "container inference unverified: " + detail
-	case unavailableProbePending:
-		if strings.TrimSpace(detail) == "" {
-			return "dGPU probe has not completed"
-		}
-		return "dGPU probe has not completed: " + detail
-	case unavailableProbeFailed:
-		if strings.TrimSpace(detail) == "" {
-			return "dGPU probe failed"
-		}
-		return "dGPU probe failed: " + detail
-	default:
-		return "dGPU unavailable"
+// unavailable marks capability unavailable for code with params, writing its
+// English fallback from the same two. It is the single source of every
+// unavailable reason.
+func unavailable(capability *proto.PartitionCapability, code string, params proto.PartitionReasonParams) {
+	capability.Status = StatusUnavailable
+	capability.ReasonCode = code
+	if params.Runtime != "" || len(params.SupportedRuntimes) > 0 || len(params.MissingAssets) > 0 || params.GPUIndex != nil || params.ProbeDetail != "" {
+		p := params
+		capability.ReasonParams = &p
 	}
+	capability.Reason = fallback(code, params)
+}
+
+// fallback is the English text of a reason code for scripts and older
+// clients; clients render the code.
+func fallback(code string, params proto.PartitionReasonParams) string {
+	withDetail := func(text string) string {
+		if detail := strings.TrimSpace(params.ProbeDetail); detail != "" {
+			return text + ": " + detail
+		}
+		return text
+	}
+	switch code {
+	case messages.ErrorPartitionRuntimeMissing:
+		return "container inference unverified: no usable docker/udocker runtime on the node"
+	case messages.ErrorPartitionRuntimeUnsupported:
+		return "container inference unverified: the backend requires the " + strings.Join(params.SupportedRuntimes, ", ") + " runtime, the node runs " + params.Runtime
+	case messages.ErrorPartitionAgentUpgradeRequired:
+		return "agent has not reported current dGPU safety capability; upgrade the agent"
+	case messages.ErrorPartitionAssetsMissing:
+		return "missing dGPU assets: " + strings.Join(params.MissingAssets, ", ")
+	case messages.ErrorPartitionProbePending:
+		if params.GPUIndex != nil {
+			return fmt.Sprintf("dGPU probe has not completed: no result received for GPU %d", *params.GPUIndex)
+		}
+		return withDetail("dGPU probe has not completed")
+	case messages.ErrorPartitionProbeSkipped:
+		return withDetail("container inference unverified")
+	case messages.ErrorPartitionProbeFailed:
+		return withDetail("dGPU probe failed")
+	}
+	return "dGPU unavailable"
 }
 
 // Reports is a node's partition asset and probe reports decoded once, so the
@@ -104,37 +114,37 @@ func (r Reports) ForGPU(gpu *store.GPU) []proto.PartitionCapability {
 			Compatibility: meta.Compatibility,
 		}
 		if strings.TrimSpace(node.RuntimeDriver) == "" {
-			capability.Reason = reason(unavailableRuntime, "no usable docker/udocker runtime on the node")
+			unavailable(&capability, messages.ErrorPartitionRuntimeMissing, proto.PartitionReasonParams{})
 			out = append(out, capability)
 			continue
 		}
-		if why := accelerator.RuntimeConstraint(backend, node.RuntimeDriver); why != "" {
-			capability.Reason = reason(unavailableRuntime, why)
+		if supported := accelerator.RuntimeConstraint(backend, node.RuntimeDriver); supported != nil {
+			unavailable(&capability, messages.ErrorPartitionRuntimeUnsupported, proto.PartitionReasonParams{Runtime: node.RuntimeDriver, SupportedRuntimes: supported})
 			out = append(out, capability)
 			continue
 		}
 		requiresProbe := !accelerator.SkipsBehaviorProbe(backend)
-		if !requiresProbe && node.PartitionSafetyProtocol < 1 {
-			capability.Reason = reason(unavailableOldAgent, "")
+		if !requiresProbe && node.PartitionSafetyProtocol < proto.PartitionSafetyOwnership {
+			unavailable(&capability, messages.ErrorPartitionAgentUpgradeRequired, proto.PartitionReasonParams{})
 			out = append(out, capability)
 			continue
 		}
 		if requiresProbe {
 			capability.CompatibilityNotes = compatibilityNotes(backend, node, gpu)
 			if !probesPresent {
-				capability.Reason = reason(unavailableOldAgent, "")
+				unavailable(&capability, messages.ErrorPartitionAgentUpgradeRequired, proto.PartitionReasonParams{})
 				out = append(out, capability)
 				continue
 			}
 		}
 		if !reportsPresent {
-			capability.Reason = reason(unavailableMissingAssets, strings.Join(backend.RequiredAssets(), ", "))
+			unavailable(&capability, messages.ErrorPartitionAssetsMissing, proto.PartitionReasonParams{MissingAssets: append([]string(nil), backend.RequiredAssets()...)})
 			out = append(out, capability)
 			continue
 		}
 		missing := missingAssets(backend.RequiredAssets(), reports[backend.ID()])
 		if len(missing) > 0 {
-			capability.Reason = reason(unavailableMissingAssets, strings.Join(missing, ", "))
+			unavailable(&capability, messages.ErrorPartitionAssetsMissing, proto.PartitionReasonParams{MissingAssets: missing})
 			out = append(out, capability)
 			continue
 		}
@@ -142,9 +152,10 @@ func (r Reports) ForGPU(gpu *store.GPU) []proto.PartitionCapability {
 			probe, ok := probes[probeKey{backend: backend.ID(), gpuIndex: gpu.Index}]
 			if !ok {
 				if legacyProbes[backend.ID()] {
-					capability.Reason = reason(unavailableOldAgent, "")
+					unavailable(&capability, messages.ErrorPartitionAgentUpgradeRequired, proto.PartitionReasonParams{})
 				} else {
-					capability.Reason = reason(unavailableProbePending, fmt.Sprintf("no result received for GPU %d", gpu.Index))
+					index := gpu.Index
+					unavailable(&capability, messages.ErrorPartitionProbePending, proto.PartitionReasonParams{GPUIndex: &index})
 				}
 				out = append(out, capability)
 				continue
@@ -158,15 +169,15 @@ func (r Reports) ForGPU(gpu *store.GPU) []proto.PartitionCapability {
 			case proto.PartitionProbePassed:
 				// Ready is assigned below after every factual gate has passed.
 			case proto.PartitionProbeSkipped:
-				capability.Reason = reason(unavailableRuntime, probe.Detail)
+				unavailable(&capability, messages.ErrorPartitionProbeSkipped, proto.PartitionReasonParams{ProbeDetail: strings.TrimSpace(probe.Detail)})
 				out = append(out, capability)
 				continue
 			case proto.PartitionProbeFailed:
-				capability.Reason = reason(unavailableProbeFailed, probe.Detail)
+				unavailable(&capability, messages.ErrorPartitionProbeFailed, proto.PartitionReasonParams{ProbeDetail: strings.TrimSpace(probe.Detail)})
 				out = append(out, capability)
 				continue
 			default:
-				capability.Reason = reason(unavailableProbePending, probe.Detail)
+				unavailable(&capability, messages.ErrorPartitionProbePending, proto.PartitionReasonParams{ProbeDetail: strings.TrimSpace(probe.Detail)})
 				out = append(out, capability)
 				continue
 			}
@@ -207,7 +218,7 @@ func ForNode(node *store.Node) []proto.PartitionCapability {
 	owned := node.OwnedGPUs()
 	for i := range owned {
 		for _, capability := range reports.ForGPU(&owned[i]) {
-			key := strings.Join([]string{capability.Backend, capability.Status, capability.Reason}, "\x00")
+			key := capabilityKey(capability)
 			byKey[key] = capability
 		}
 	}
@@ -368,18 +379,73 @@ func missingAssets(required []string, reports []proto.AssetReport) []string {
 	return missing
 }
 
+// ValidateReady refuses a deployment that asks node for backendID unless
+// the backend is ready there. The refusal is a ProductError whose code is
+// the capability's reason code.
 func ValidateReady(node *store.Node, backendID string) error {
 	backend, ok := accelerator.Lookup(backendID)
 	if !ok {
-		return fmt.Errorf("unknown partition backend %q", backendID)
+		return messages.NewProductError(messages.ErrorPartitionBackendUnknown, fmt.Sprintf("unknown partition backend %q", backendID),
+			map[string]any{"backend": backendID, "node": nodeName(node)})
 	}
 	for _, capability := range ForNode(node) {
 		if capability.Backend == backend.ID() {
 			if capability.Status == StatusReady {
 				return nil
 			}
-			return fmt.Errorf("partition backend %s is unavailable: %s", backend.ID(), capability.Reason)
+			return messages.NewProductError(capability.ReasonCode, fmt.Sprintf("partition backend %s is unavailable: %s", backend.ID(), capability.Reason),
+				ReasonParams(capability, nodeName(node)))
 		}
 	}
-	return fmt.Errorf("partition backend %s does not match the selected node", backend.ID())
+	return messages.NewProductError(messages.ErrorPartitionBackendNotOnNode, fmt.Sprintf("partition backend %s does not match the selected node", backend.ID()),
+		map[string]any{"backend": backend.Metadata().DisplayName, "node": nodeName(node)})
+}
+
+// ReasonParams flattens an unavailable capability's typed parameters into
+// the params of an error or schedule reason that carries its code: lists
+// are joined, and backend (display name) and node are added.
+func ReasonParams(capability proto.PartitionCapability, node string) map[string]any {
+	params := map[string]any{"backend": capability.DisplayName, "reason_code": capability.ReasonCode}
+	if node != "" {
+		params["node"] = node
+	}
+	if p := capability.ReasonParams; p != nil {
+		if p.Runtime != "" {
+			params["runtime"] = p.Runtime
+		}
+		if len(p.SupportedRuntimes) > 0 {
+			params["supported_runtimes"] = strings.Join(p.SupportedRuntimes, ", ")
+		}
+		if len(p.MissingAssets) > 0 {
+			params["missing_assets"] = strings.Join(p.MissingAssets, ", ")
+		}
+		if p.GPUIndex != nil {
+			params["gpu_index"] = *p.GPUIndex
+		}
+		if p.ProbeDetail != "" {
+			params["probe_detail"] = p.ProbeDetail
+		}
+	}
+	return params
+}
+
+func nodeName(node *store.Node) string {
+	if node == nil {
+		return ""
+	}
+	if name := strings.TrimSpace(node.Name); name != "" {
+		return name
+	}
+	return node.UUID
+}
+
+// capabilityKey identifies the capabilities ForNode folds together: the
+// same backend unavailable for the same reason on several cards is one.
+func capabilityKey(capability proto.PartitionCapability) string {
+	params := ""
+	if capability.ReasonParams != nil {
+		data, _ := json.Marshal(capability.ReasonParams)
+		params = string(data)
+	}
+	return strings.Join([]string{capability.Backend, capability.Status, capability.ReasonCode, params}, "\x00")
 }

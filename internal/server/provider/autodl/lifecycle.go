@@ -160,7 +160,7 @@ func (d *Driver) deleteInstance(ctx context.Context, creds provider.Credentials,
 	}
 	state, err := d.PowerState(ctx, creds, externalID)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+		if errors.Is(err, errAPINotFound) {
 			return nil
 		}
 		return err
@@ -230,14 +230,14 @@ func (d *Driver) call(ctx context.Context, creds provider.Credentials, method, p
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		response, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(response)))
+		return classifyAnswer(fmt.Errorf("unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(response))), resp.StatusCode, string(response))
 	}
 	var env apiEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	if env.Code != "" && env.Code != "Success" {
-		return fmt.Errorf("api error code=%s msg=%s", env.Code, env.Msg)
+		return classifyAnswer(fmt.Errorf("api error code=%s msg=%s", env.Code, env.Msg), resp.StatusCode, env.Code+" "+env.Msg)
 	}
 	if result != nil && len(env.Data) > 0 && string(env.Data) != "null" {
 		if err := json.Unmarshal(env.Data, result); err != nil {

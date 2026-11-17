@@ -85,6 +85,10 @@ func (b *builder) injectDictionary(key string, value any) {
 			return
 		}
 		number, _ := stated.(int64)
+		if isVLLMContextAuto(spec, float64(number)) {
+			b.injectKV(spec.Flag, "auto")
+			return
+		}
 		b.injectKV(spec.Flag, strconv.FormatInt(number, 10))
 	case "number":
 		number, ok := toFloat(value)
@@ -94,16 +98,15 @@ func (b *builder) injectDictionary(key string, value any) {
 		b.injectKV(spec.Flag, strconv.FormatFloat(number, 'g', -1, 64))
 	case "json":
 		b.injectKV(spec.Flag, jsonText(value))
-	case "enum":
+	default:
 		// A configuration stored before the dictionary changed an engine's
 		// spelling (SGLang's eagle3 -> EAGLE3) still reaches the engine in the
-		// spelling it accepts. A value the row does not know goes out as
-		// written, for the engine to judge.
+		// spelling it accepts, for an enum and for a free-text key's suggested
+		// values alike. A value the row does not know goes out as written, for
+		// the engine to judge.
 		if stated, ok := canonicalValue(spec, value); ok {
 			value = stated
 		}
-		b.injectKV(spec.Flag, fmt.Sprint(value))
-	default:
 		b.injectKV(spec.Flag, fmt.Sprint(value))
 	}
 }
@@ -208,7 +211,7 @@ func ParseArgsText(input string) ([]string, error) {
 	if strings.HasPrefix(input, "[") {
 		var args []string
 		if err := json.Unmarshal([]byte(input), &args); err != nil {
-			return nil, fmt.Errorf("parse argument JSON array: %w", err)
+			return nil, &ParamError{Key: ParamFieldExtraArgs, Err: fmt.Errorf("parse argument JSON array: %w", err)}
 		}
 		return args, nil
 	}
@@ -260,10 +263,10 @@ func ParseArgsText(input string) ([]string, error) {
 		hasToken = true
 	}
 	if escaped {
-		return nil, fmt.Errorf("argument text ends with an escape")
+		return nil, paramErrorf(ParamFieldExtraArgs, "argument text ends with an escape")
 	}
 	if quote != 0 {
-		return nil, fmt.Errorf("argument text has an unterminated quote")
+		return nil, paramErrorf(ParamFieldExtraArgs, "argument text has an unterminated quote")
 	}
 	flush()
 	return args, nil

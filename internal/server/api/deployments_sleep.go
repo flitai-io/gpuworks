@@ -30,7 +30,7 @@ import (
 // awake replicas rather than putting the deployment as a whole under the
 // order, which only a held sleep does.
 func (a *apiHandlers) sleepDeployment(w http.ResponseWriter, r *http.Request) {
-	defer planning.LockLifecycle()()
+	defer a.orders().Lock()()
 	level, mode, ok := sleepOrderParams(w, r)
 	if !ok {
 		return
@@ -156,7 +156,7 @@ func parseSleepOrder(rawLevel, rawMode string) (level int, mode string, code str
 // shortfall instead of refusing them all. Any wake withdraws a deployment-wide
 // sleep order.
 func (a *apiHandlers) wakeDeployment(w http.ResponseWriter, r *http.Request) {
-	defer planning.LockLifecycle()()
+	defer a.orders().Lock()()
 	partial := false
 	if raw := r.URL.Query().Get("partial"); raw != "" {
 		parsed, err := strconv.ParseBool(raw)
@@ -301,7 +301,7 @@ func (a *apiHandlers) hostMemory(nodeUUID string) (available, total int64, ok bo
 // becomes one a request ends, as the platform's own yields are. It answers the
 // instances released, none when none was held.
 func (a *apiHandlers) releaseSleepHold(w http.ResponseWriter, r *http.Request) {
-	defer planning.LockLifecycle()()
+	defer a.orders().Lock()()
 	dep, ok := a.sleepEligibleDeployment(w, r)
 	if !ok {
 		return

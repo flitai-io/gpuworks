@@ -15,7 +15,7 @@ func runMacCheck(t *testing.T, name, arch, version, chip string) (string, bool) 
 	t.Helper()
 	var command string
 	for _, c := range macPrecheckCommands() {
-		if c.name == name {
+		if c.id == name {
 			if !c.required {
 				t.Fatalf("%s must be required", name)
 			}
@@ -49,7 +49,7 @@ func TestMacPrecheckOSAndArch(t *testing.T) {
 		{"arm64", "14.7.2", false, "macOS 15 or later"},
 		{"x86_64", "15.4.1", false, "Intel Mac"},
 	} {
-		out, ok := runMacCheck(t, "OS/Arch", tc.arch, tc.version, "Apple M4 Max")
+		out, ok := runMacCheck(t, CheckIDOSArch, tc.arch, tc.version, "Apple M4 Max")
 		if ok != tc.ok || !strings.Contains(out, tc.says) {
 			t.Errorf("%s %s: ok=%v out=%q, want ok=%v and %q", tc.arch, tc.version, ok, out, tc.ok, tc.says)
 		}
@@ -57,10 +57,10 @@ func TestMacPrecheckOSAndArch(t *testing.T) {
 }
 
 func TestMacPrecheckGPU(t *testing.T) {
-	if out, ok := runMacCheck(t, "GPU", "arm64", "26.5", "Apple M4 Max"); !ok || strings.TrimSpace(out) != "Apple M4 Max" {
+	if out, ok := runMacCheck(t, CheckIDGPU, "arm64", "26.5", "Apple M4 Max"); !ok || strings.TrimSpace(out) != "Apple M4 Max" {
 		t.Fatalf("Apple silicon: ok=%v out=%q", ok, out)
 	}
-	if out, ok := runMacCheck(t, "GPU", "x86_64", "15.4.1", "Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz"); ok || !strings.Contains(out, "no Apple silicon GPU") {
+	if out, ok := runMacCheck(t, CheckIDGPU, "x86_64", "15.4.1", "Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz"); ok || !strings.Contains(out, "no Apple silicon GPU") {
 		t.Fatalf("Intel: ok=%v out=%q", ok, out)
 	}
 }

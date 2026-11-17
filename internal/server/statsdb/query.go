@@ -24,10 +24,12 @@ func (r Range) table(base string) (table, column string) {
 	return base + "_hourly", "hour_ms"
 }
 
-// QualityRow is one bucket of a deployment's quality.
+// QualityRow is one bucket of a deployment's quality, of the requests run at
+// one priority class ("" before classes).
 type QualityRow struct {
-	Bucket       int64
-	DeploymentID uint
+	Bucket        int64
+	DeploymentID  uint
+	PriorityClass string
 	rollup.Quality
 }
 
@@ -36,7 +38,7 @@ type QualityRow struct {
 // few dozen bytes; the histograms decode in Go.
 func (s *Store) Quality(ctx context.Context, r Range, deploymentID uint) ([]QualityRow, error) {
 	table, column := r.table("quality")
-	q := `SELECT ` + column + `, deployment_id, requests, completed, length, client_closed, interrupted, error,
+	q := `SELECT ` + column + `, deployment_id, priority_class, requests, completed, length, client_closed, interrupted, error,
 		ttft_hist, e2e_hist, output_tokens, decode_ms FROM ` + table + ` WHERE ` + column + ` >= ? AND ` + column + ` < ?`
 	args := []any{r.From, r.To}
 	if deploymentID != 0 {
@@ -52,7 +54,7 @@ func (s *Store) Quality(ctx context.Context, r Range, deploymentID uint) ([]Qual
 	for rows.Next() {
 		var row QualityRow
 		var ttft, e2e []byte
-		if err := rows.Scan(&row.Bucket, &row.DeploymentID, &row.Requests, &row.Completed, &row.Length, &row.ClientClosed,
+		if err := rows.Scan(&row.Bucket, &row.DeploymentID, &row.PriorityClass, &row.Requests, &row.Completed, &row.Length, &row.ClientClosed,
 			&row.Interrupted, &row.Error, &ttft, &e2e, &row.OutputTokens, &row.DecodeMS); err != nil {
 			return nil, err
 		}

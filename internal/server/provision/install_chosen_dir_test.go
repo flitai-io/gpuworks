@@ -66,7 +66,7 @@ func TestInstallSSHNeverSwapsAChosenDirectoryForTheFallback(t *testing.T) {
 	if report.InstallDir != "/data/gpuworks" {
 		t.Fatalf("report install dir = %q", report.InstallDir)
 	}
-	wantCheck(t, report.Checks, "Privilege", "error", "cannot write the chosen install directory /data/gpuworks", "Read-only file system")
+	wantCheck(t, report.Checks, "privilege", "fail", "cannot write the chosen install directory /data/gpuworks", "Read-only file system")
 	for _, cmd := range cmds {
 		if strings.Contains(cmd, "/tmp/gpuworks") || strings.Contains(cmd, "uname -m") {
 			t.Fatalf("install went on after the chosen directory failed: %q", cmd)
@@ -83,5 +83,5 @@ func TestInstallSSHFallsBackOnlyFromTheDefaultDirectory(t *testing.T) {
 	if report.InstallDir != "/tmp/gpuworks" {
 		t.Fatalf("report install dir = %q, want the fallback", report.InstallDir)
 	}
-	wantCheck(t, report.Checks, "Privilege", "warn", "sudo cannot claim /opt/gpuworks", "/tmp/gpuworks")
+	wantCheck(t, report.Checks, "privilege", "warn", "sudo cannot claim /opt/gpuworks", "/tmp/gpuworks")
 }

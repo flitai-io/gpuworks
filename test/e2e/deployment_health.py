@@ -71,7 +71,9 @@ def assert_health(document, entry, mode, status, after, expected_identity):
         replicas.strict(last["http_status"], expected_http, "health HTTP result from real upstream")
         replicas.strict(terminal["http_status"], expected_http, "external HTTP completion")
         elapsed = terminal["at_ms"] - probe["start"]["at_ms"]
-        check(abs(last["latency_ms"] - elapsed) <= 250, "published latency differs from independent engine audit")
+        observed = terminal["at_ms"] - last["at_ms"]
+        check(abs(last["latency_ms"] - observed) <= 250,
+              f"published round trip {last['latency_ms']}ms differs from observed {observed}ms")
         if mode == "slow":
             check(1900 <= elapsed < 3000 and 1900 <= last["latency_ms"] < 3000,
                   "two-second controlled engine response latency differs")
@@ -83,13 +85,8 @@ def assert_health(document, entry, mode, status, after, expected_identity):
 UNCHECKABLE_DETAIL = "the health check sends a chat or an embedding request; this model serves neither"
 
 
-def health_save_button(drawer, enable_label):
-    # The loading icon's aria-label is "loading", so the accessible name is no
-    # longer the save label while the write is held. The button beside the
-    # threshold is the save control in either locale.
-    editor = drawer.get_by_role("switch", name=enable_label, exact=True).locator(
-        'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " ant-space ")][1]')
-    return editor.locator("button").last
+def health_save_button(drawer, save_label):
+    return drawer.locator("tr").filter(has=drawer.page.locator(".deployment-health-threshold")).locator("button").filter(has_text=re.compile(r"^\s*" + r"\s*".join(re.escape(ch) for ch in save_label) + r"\s*$"))
 
 
 def prove_inflight_health_save(page, drawer, server, token, report, text, common, path, requests, expected_requests, target):
@@ -113,7 +110,7 @@ def prove_inflight_health_save(page, drawer, server, token, report, text, common
         threshold = drawer.get_by_role("spinbutton", name=text["threshold"], exact=True)
         threshold.fill("6")
         expect(threshold).to_have_value("6")
-        save = health_save_button(drawer, text["enable"])
+        save = health_save_button(drawer, text["save"])
         expect(save).to_have_text(re.compile(r"^\s*" + r"\s*".join(re.escape(ch) for ch in text["save"]) + r"\s*$"))
         expect(save).to_be_enabled()
         held = []
@@ -130,8 +127,8 @@ def prove_inflight_health_save(page, drawer, server, token, report, text, common
             save.click()
             report["step"] = "health-save-inflight"
             report["last_step"] = "health-save-inflight"
-            expect(save).to_have_class(re.compile(r"\bant-btn-loading\b"))
-            save.click()
+            expect(save).to_be_disabled()
+            save.evaluate("button => button.click()")
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline and not held:
                 page.wait_for_timeout(100)
@@ -305,7 +302,7 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
     delete_title = deployments["delete"]["title"].replace("{{name}}", target["name"])
     # The header Delete button includes the icon's accessible name, so the
     # exact button-text helper does not match it.
-    remove = drawer.locator(".ant-drawer-extra").get_by_role(
+    remove = drawer.locator(".deployment-detail-actions").get_by_role(
         "button", name=deployments["delete"]["button"])
 
     def open_delete():
@@ -361,7 +358,7 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
         # Bind the badge to the editor containing the exact health switch.
         editor = drawer.get_by_role("switch", name=text["enable"], exact=True).locator(
             'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " ant-space ")][1]')
-        expect(editor.locator(".ant-badge-status-text")).to_have_text(label)
+        expect(editor.locator("[data-slot=badge-label]")).to_have_text(label)
         return drawer
 
     def status_after(entry, mode, status, after):
@@ -386,24 +383,18 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
     threshold = drawer.get_by_role("spinbutton", name=text["threshold"], exact=True)
     expect(switch).to_be_checked()
     expect(threshold).to_have_value("5")
-    expect(threshold).to_have_attribute("aria-valuemin", "1")
-    expect(threshold).to_have_attribute("aria-valuemax", "600")
-    number_group = drawer.locator(".ant-input-number-group-wrapper").filter(
+    expect(threshold).to_have_attribute("min", "1")
+    expect(threshold).to_have_attribute("max", "600")
+    number_group = drawer.locator("label.deployment-health-threshold").filter(
         has=page.get_by_role("spinbutton", name=text["threshold"], exact=True))
-    unit = number_group.locator(".ant-input-number-group-addon").last
+    unit = number_group.locator(":scope > span").last
     expect(unit).to_have_text({"en": "s", "zh": "秒"}[locale])
     expect(unit).to_be_visible()
     # Two Save buttons now live in this drawer: this editor's own inline one beside the
     # threshold input, and the node-failure setting's further down. Anchor on the one that
     # shares a container with the threshold spinbutton instead of taking either by order.
     def health_save():
-        # Two Save buttons now live in this drawer: this editor's own inline one beside the
-        # threshold input, and the node-failure setting's further down. Anchor on the one in the
-        # space item that follows the threshold rather than taking either one by order.
-        return drawer.get_by_role("spinbutton", name=text["threshold"], exact=True).locator(
-            "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' ant-space-item ')][1]"
-            "/following-sibling::*[contains(concat(' ', normalize-space(@class), ' '), ' ant-space-item ')][1]"
-            "//button").first
+        return health_save_button(drawer, text["save"])
     save = health_save()
     expect(save).to_have_text(re.compile(r"^\s*" + re.escape(text["save"]) + r"\s*$"))
     expect(save).to_be_disabled()
@@ -453,7 +444,7 @@ def test_deployment_health(page, context, server, artifacts, report, locale, dat
     drawer = page.get_by_role("dialog", name=target["name"], exact=True)
     expect(drawer).to_be_visible()
     expect(drawer.get_by_role("switch", name=text["enable"], exact=True)).to_be_checked()
-    expect(drawer.get_by_role("spinbutton", name=text["threshold"], exact=True)).to_have_value("1")
+    expect(threshold).to_have_value("1")
     report["evidence"].append({"layer": "ui", "reloaded_threshold_sec": 1, "reloaded_enabled": True})
     fixture.write_control(target["directory"], "slow")
     timeout = status_after(target, "slow", "timeout", first["health"]["last"]["at_ms"])

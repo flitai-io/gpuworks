@@ -10,6 +10,8 @@ func TestTheHealthCheckAsksChatFirstThenEmbeddings(t *testing.T) {
 		"chat":                 {[]Operation{{Type: OperationEmbeddings, Endpoint: "/v1/embeddings"}, {Type: OperationChat, Endpoint: "/v1/chat/completions"}}, OperationChat},
 		"embeddings":           {[]Operation{{Type: OperationRerank, Endpoint: "/v1/rerank"}, {Type: OperationEmbeddings, Endpoint: "/v1/embeddings"}}, OperationEmbeddings},
 		"neither":              {[]Operation{{Type: OperationRerank, Endpoint: "/v1/rerank"}}, ""},
+		"decision only":        {[]Operation{{Type: OperationRerank, Endpoint: "/v1/rerank"}, {Type: OperationDecide, Endpoint: "/v1/systemone"}}, OperationDecide},
+		"chat before decision": {[]Operation{{Type: OperationDecide, Endpoint: "/v1/systemone"}, {Type: OperationChat, Endpoint: "/v1/chat/completions"}}, OperationChat},
 		"no operations at all": {nil, ""},
 	} {
 		op, ok := Contract{Operations: tc.ops}.CheckOperation()

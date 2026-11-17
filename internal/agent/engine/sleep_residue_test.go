@@ -210,7 +210,7 @@ func TestSleepStillSucceedsWhenMetricsFailOrLackTheCard(t *testing.T) {
 			if st.State != proto.InstRunning || st.SleepLevel != 1 || st.Phase != "" || st.SleepResidueBytes != 0 {
 				t.Fatalf("report = %+v, want a successful sleep with no residue", st)
 			}
-			if got := e.sleepLevel[spec.UUID]; got != 1 {
+			if got := e.processOfLocked(spec.UUID).sleepLevel; got != 1 {
 				t.Fatalf("level = %d, want 1", got)
 			}
 		})
@@ -223,7 +223,7 @@ func TestWakeNeverCarriesAResidue(t *testing.T) {
 	e, reported := newResidueEngine(t, prober)
 	spec := residueSpec(h, t, "res-9", 0)
 	e.desired[spec.UUID] = spec
-	e.sleepLevel[spec.UUID] = 1
+	e.setSleepLevelLocked(spec.UUID, 1)
 
 	spec.DesiredSleep = 0
 	e.reconcileSleep(context.Background(), spec)

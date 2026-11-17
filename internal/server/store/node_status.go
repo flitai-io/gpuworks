@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 	cordoned, uncordoned := false, false
 	cordonedFor := ""
+	placementChanged := false
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var n Node
 		if err := tx.Where("uuid = ?", uuid).First(&n).Error; err != nil {
@@ -66,6 +68,7 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 		updates["peer_memory"] = truncate(st.Sys.PeerMemory, 16)
 		updates["runtime_fallback_from"] = truncate(st.Sys.RuntimeFallbackFrom, 16)
 		updates["runtime_fallback_reason"] = truncate(st.Sys.RuntimeFallbackReason, 64)
+		runtimeFallbackSocketUpdates(updates, st.Sys)
 		updates["accelerator_vendors"] = encodeAcceleratorVendors(st.Sys.AcceleratorVendors)
 		updates["kube_unschedulable"] = st.Sys.KubeUnschedulable
 		// The platform's half of NodeScheduling: it cordons a schedulable
@@ -101,13 +104,16 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 				updates["network_inventory"] = string(b)
 			}
 		}
+		placementChanged = nodePlacementFactsChanged(n, updates)
 		if err := tx.Model(&Node{}).Where("id = ?", n.ID).Updates(updates).Error; err != nil {
 			return err
 		}
 		if adopt != adoptNothing {
-			if err := reconcileAcceleratorReport(tx, n.ID, st, adopt); err != nil {
+			cardsChanged, err := reconcileAcceleratorReport(tx, n.ID, st, adopt)
+			if err != nil {
 				return err
 			}
+			placementChanged = placementChanged || cardsChanged
 		}
 		return reconcileImagePresence(tx, n.ID, st.Images)
 	})
@@ -121,6 +127,13 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 		if node, nodeErr := s.NodeByUUID(uuid); nodeErr == nil {
 			_ = s.RecordLegacyModelsRoot(node.ID, root)
 		}
+	}
+	if placementChanged {
+		// What placement decides on changed: the node snapshot's next read
+		// sees it, not one after the report window (fleet_nodes.go). The
+		// event stays a routine report for its subscribers, which batch
+		// those on their own.
+		s.fleetNodes.changes.Add(1)
 	}
 	s.publishNode(uuid, NodeChangeStatus)
 	if cordoned {
@@ -142,6 +155,42 @@ func (s *Store) UpdateNodeStatus(uuid string, st proto.NodeStatus) error {
 // NodeChangeStatus is the change reason of a node's routine status report
 // (UpdateNodeStatus), which every agent sends once a minute.
 const NodeChangeStatus = "status"
+
+// nodePlacementColumns are the node columns a status report writes that
+// placement decides on: the runtime, partition and network facts and the
+// accelerator probe's verdict. Left out are what changes on most reports and
+// is only shown or read as a measurement (timestamps, the hostname and OS,
+// statfs path usage: a disk that fills is seen after the report window), and
+// the platform's cordon, which is announced on its own.
+var nodePlacementColumns = []string{
+	"gpu_count", "gpu_vendor", "gpu_driver", "framework", "framework_version",
+	"mem_total_kb", "partition_safety_protocol", "runtime_driver", "runtime_plugin",
+	"runtime_gpu_blocked", "peer_memory", "accelerator_vendors", "runtimes",
+	"partition_assets", "partition_probes", "network_inventory", "gpu_probe_error",
+}
+
+// nodePlacementFactsChanged reports whether writing updates over n changes a
+// column placement decides on (nodePlacementColumns). The row was read in the
+// same transaction, so this costs no read.
+func nodePlacementFactsChanged(n Node, updates map[string]any) bool {
+	stored := map[string]any{
+		"gpu_count": n.GPUCount, "gpu_vendor": n.GPUVendor, "gpu_driver": n.GPUDriver,
+		"framework": n.Framework, "framework_version": n.FrameworkVersion,
+		"mem_total_kb": n.MemTotalKB, "partition_safety_protocol": n.PartitionSafetyProtocol,
+		"runtime_driver": n.RuntimeDriver, "runtime_plugin": n.RuntimePlugin,
+		"runtime_gpu_blocked": n.RuntimeGPUBlocked, "peer_memory": n.PeerMemory,
+		"accelerator_vendors": n.AcceleratorVendors, "runtimes": n.Runtimes,
+		"partition_assets": n.PartitionAssets, "partition_probes": n.PartitionProbes,
+		"network_inventory": n.NetworkInventory, "gpu_probe_error": n.GPUProbeError,
+	}
+	for _, col := range nodePlacementColumns {
+		v, written := updates[col]
+		if written && fmt.Sprint(v) != fmt.Sprint(stored[col]) {
+			return true
+		}
+	}
+	return false
+}
 
 func nodeGPUVendor(st proto.NodeStatus) string {
 	if st.Sys.GPUVendor != "" {
@@ -175,6 +224,7 @@ func nodeGPUDriver(st proto.NodeStatus) string {
 
 // publishNode tells the bus this node changed, naming what changed it.
 func (s *Store) publishNode(uuid, reason string) {
+	s.noteNodeChange(reason)
 	if s.Bus == nil {
 		return
 	}

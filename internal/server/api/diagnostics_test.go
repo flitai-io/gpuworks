@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/debuglog"
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/diagnostics"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -229,7 +230,7 @@ func TestDiagnosticsBundleRoutes(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if !strings.Contains(rec.Body.String(), `"requested_by":"admin"`) || !strings.Contains(rec.Body.String(), `{"name":"server/gpuworks-server.log","state":"collected","bytes":`) {
+	if !strings.Contains(rec.Body.String(), `"requested_by":"admin"`) || !strings.Contains(rec.Body.String(), `{"id":"server_log","path":"server/gpuworks-server.log","status":"pass","bytes":`) {
 		t.Fatalf("bundle = %s", rec.Body.String())
 	}
 	rec = call(admin, http.MethodGet, "/api/v1/diagnostics/bundles/"+started.ID+"/download", "")
@@ -242,5 +243,40 @@ func TestDiagnosticsBundleRoutes(t *testing.T) {
 	}
 	if rec := call(admin, http.MethodGet, "/api/v1/diagnostics/bundles", ""); !strings.Contains(rec.Body.String(), `"id":"`+started.ID+`"`) {
 		t.Fatalf("list = %s", rec.Body.String())
+	}
+}
+
+// The bundle API lists each item as a check: exact keys, a code and params
+// for every status but pass, the failed read's text as evidence only.
+func TestDiagnosticsBundleItemWire(t *testing.T) {
+	var b diagnostics.Bundle
+	manifest := `{"id":"b1","items":[{"path":"server/gpuworks-server.log","status":"pass","bytes":7},` +
+		`{"path":"nodes/n2","status":"skip","code":"DIAGNOSTICS_NODE_OFFLINE","bytes":0},` +
+		`{"path":"db","status":"fail","code":"DIAGNOSTICS_ITEM_READ_FAILED","evidence":"database is locked","bytes":0},` +
+		// An item from a manifest written before items were checks.
+		`{"name":"nodes/n1/agent.log","state":"collected","bytes":9,"truncated":true}]}`
+	if err := json.Unmarshal([]byte(manifest), &b); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(bundleDTO(b).Items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `[{"id":"server_log","path":"server/gpuworks-server.log","status":"pass","bytes":7},` +
+		`{"id":"node","path":"nodes/n2","status":"skip","code":"DIAGNOSTICS_NODE_OFFLINE","params":{"path":"nodes/n2","node":"n2"},` +
+		`"message":"the node is offline; nodes/n2 was not collected","bytes":0},` +
+		`{"id":"records","path":"db","status":"fail","code":"DIAGNOSTICS_ITEM_READ_FAILED","params":{"path":"db"},` +
+		`"message":"db could not be read","evidence":"database is locked","bytes":0},` +
+		`{"id":"node_agent_log","path":"nodes/n1/agent.log","status":"warn","code":"DIAGNOSTICS_ITEM_TRUNCATED",` +
+		`"params":{"path":"nodes/n1/agent.log","node":"n1"},"message":"nodes/n1/agent.log reached its size limit; only part was kept","bytes":9}]`
+	if string(raw) != want {
+		t.Fatalf("items =\n%s\nwant\n%s", raw, want)
+	}
+	var back []dto.DiagnosticsBundleItem
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := json.Marshal(back); string(again) != want {
+		t.Fatalf("round trip = %s", again)
 	}
 }

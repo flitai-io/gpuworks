@@ -40,7 +40,6 @@ specs:
   image_sources:
   - swr.cn-southwest-2.myhuaweicloud.com/gpuworks/strata:0.1-gw6
   - quay.io/gpuworks/strata:0.1-gw6
-  - registry.zstack.ai/gpuworks/strata:0.1-gw6
   weights:
     quantization: GSQ-RCO IQ2_XS
     sources:
@@ -147,15 +146,16 @@ specs:
       timings.prompt_ms: {to: prefill_seconds, scale: 0.001}
       timings.predicted_ms: {to: decode_seconds, scale: 0.001}
 # r5 publishes the PLE adapter and model-link fixes with the same launch contract.
-# Only verified copies of this revision are listed; gw6 is not a fallback.
+# Only the public quay copy has been verified, so no mirror is listed; gw6 is
+# not a fallback.
 - &strata_runner
   <<: *strata_gw6
   name: iq2xs-strata-nvidia
   display_name_zh_cn: Turing 及以上 · IQ2_XS · Strata r5
   display_name_en: Turing+ · IQ2_XS · Strata r5
   image: quay.io/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5
-  image_sources:
-  - registry.zstack.ai/gpuworks/gpuworks-runner:cuda13.0-strata0.1.38-amd64-slot31-r5
+  # Empty on purpose: without it the merge key would inherit the gw6 mirrors.
+  image_sources: []
 # The image consumes --model PATH as the platform mount. The equals form
 # reaches setup.py and overrides its IQ2_XS default without changing that mount.
 # Each quantization is a separate weight artifact, not a mirror of IQ2_XS.

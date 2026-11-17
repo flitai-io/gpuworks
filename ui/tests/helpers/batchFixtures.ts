@@ -19,6 +19,7 @@ export function batch(overrides: Partial<Batch> = {}): Batch {
     cancellable: status === "validating" || status === "in_progress",
     input_file_id: "file-in1",
     completion_window: "24h",
+    priority_class: "batch",
     request_counts: { total: 10, completed: 4, failed: 1 },
     metadata: {},
     user_id: 3,
@@ -57,6 +58,7 @@ export function dictionary(models: BatchModel[] = [], overrides: Partial<BatchDi
     statuses: ["validating", "in_progress", "finalizing", "cancelling", "completed", "failed", "expired", "cancelled"],
     output_retention_days: 30,
     models,
+    priority_class: "batch",
     ...overrides,
   };
 }

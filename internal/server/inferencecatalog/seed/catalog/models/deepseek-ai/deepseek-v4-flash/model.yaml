@@ -98,7 +98,7 @@ specs:
   gpus:
     vendor: nvidia
     cc: '>=10.0'
-    name: (?:DGX[ _-]?Spark|GB10)
+    name: (?:DGX[ _-]?Spark|GB10|RTX[ _-]?Spark)
   args:
   - --trust-remote-code
   - --default-chat-template-kwargs.thinking=true

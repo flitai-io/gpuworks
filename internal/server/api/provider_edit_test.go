@@ -101,7 +101,7 @@ func TestProviderEditReadFailuresDoNotDiscloseCredentials(t *testing.T) {
 			t.Fatal(err)
 		}
 		rec := readProviderForEdit(&h, p.ID)
-		if rec.Code != 500 || strings.TrimSpace(rec.Body.String()) != `{"error":"provider configuration unavailable"}` {
+		if rec.Code != 500 || strings.TrimSpace(rec.Body.String()) != `{"code":"INTERNAL_ERROR","error":"provider configuration unavailable"}` {
 			t.Fatalf("unsafe read failure: %d %s", rec.Code, rec.Body)
 		}
 	}

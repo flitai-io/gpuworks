@@ -55,14 +55,14 @@ func TestNodeSSHCredentialEncryptedRoundTripAndRecoveryQueries(t *testing.T) {
 		t.Fatalf("needed=%+v err=%v", needed, err)
 	}
 
-	if err := st.SetNodeRecoveryPhase(node.UUID, RecoveryPhaseStopped, 7, timePtrStore(time.Now()), "destroyed"); err != nil {
+	if err := st.SetNodeRecoveryPhase(node.UUID, RecoveryPhaseStopped, 7, timePtrStore(time.Now()), RecoveryError{Message: "destroyed"}); err != nil {
 		t.Fatal(err)
 	}
 	needed, err = st.NodesNeedingRecovery()
 	if err != nil || len(needed) != 0 {
 		t.Fatalf("stopped needed=%+v err=%v", needed, err)
 	}
-	if err := st.SetNodeRecoveryPhase(node.UUID, RecoveryPhaseBlocked, 2, timePtrStore(time.Now()), "uploading: upload_stalled"); err != nil {
+	if err := st.SetNodeRecoveryPhase(node.UUID, RecoveryPhaseBlocked, 2, timePtrStore(time.Now()), RecoveryError{Message: "uploading: upload_stalled"}); err != nil {
 		t.Fatal(err)
 	}
 	needed, err = st.NodesNeedingRecovery()
@@ -117,7 +117,7 @@ func TestNodeRecoveryTransitionsPublishTimelineEvents(t *testing.T) {
 	probeAt := time.Now()
 	phases := []string{RecoveryPhaseProbing, RecoveryPhaseArtifactCheck, RecoveryPhaseUploading, RecoveryPhaseVerifying, RecoveryPhaseReplacing, RecoveryPhaseRestarting, RecoveryPhaseReconnecting, RecoveryPhaseBlocked}
 	for _, phase := range phases {
-		if err := st.SetNodeRecoveryPhase(node.UUID, phase, 2, &probeAt, "checking"); err != nil {
+		if err := st.SetNodeRecoveryPhase(node.UUID, phase, 2, &probeAt, RecoveryError{Message: "checking"}); err != nil {
 			t.Fatal(err)
 		}
 	}

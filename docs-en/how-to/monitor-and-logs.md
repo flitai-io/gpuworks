@@ -51,14 +51,17 @@ Choose an entry point based on the information you have:
 - **You have a request ID or trace id**: Paste the ID into the search box at the top right of Monitor Center. A trace id is a 32-character hexadecimal value that can list requests in the same trace across deployments.
   Gateway-generated trace ids directly identify the time. Other IDs are searched within the last 1 hour by default; you can expand this to the last 24 hours.
   When a request's deployment has been deleted, it is shown by the name it had when deleted and marked “deleted”.
-- **You do not yet know the specific request**: Open **History** on the service page and search in reverse chronological order. Select a time range, then filter by result (Completed, Hit the length limit, Client left, Connection cut, Error) and end-to-end time.
+- **You do not yet know the specific request**: Open **History** on the service page and search in reverse chronological order. Select a time range, then filter by result (Completed, Hit the length limit, Client left, Connection cut, Error), end-to-end time and TTFT. A TTFT filter keeps only streamed replies that produced a first token.
   Each page contains 50 rows. Use **Previous / Next** to continue searching. The total request count at the bottom is unaffected by filters or list sampling.
 
 Once you find a request, click its row or focus it and press Enter to check the caller, assigned replica, token counts, finish reason, and phase timeline.
 You can copy the request ID and trace id. If a [trace link](export-request-traces.md) is configured, click **Open in the tracing backend**.
 
-Both **History** and **In flight** can be filtered by API key and replica. Each row identifies the replica number and node. Its colored bar shows the proportion of each phase relative to that request's total duration;
-hover or use keyboard focus to view phase durations, Prefill / Decode speeds, token counts, and finish reasons.
+Both **History** and **In flight** can be filtered by API key and replica. Each row identifies the caller (the API key name, Playground, Batch or Evaluation), the replica number and node. Its colored bar shows the proportion of each phase relative to that request's total duration;
+the row ends with `TTFT · total`, or `TTFT · elapsed` for a request in flight; one still waiting for its first token, or a reply that does not stream, shows only its duration.
+Hovering, keyboard focus and the request detail list the time as a tree: the total, split into TTFT (gateway, engine preprocessing, queue, Prefill and so on) and Decode (thinking, answering), then the Prefill / Decode speeds, TPOT, the longest pause and the finish reason.
+Figures whose measurement needs explaining (such as engine preprocessing or an unsplit wait) carry an info icon. The chunk count on the output line counts the streamed chunks carrying generated text; one chunk may carry several tokens, so it can be below the output token count.
+Requests of an evaluation an administrator measures from the server are recorded as **Evaluation**, shown separately in the request list and in the sources of usage analytics.
 
 ### View In-Flight Requests and Stalls
 
@@ -183,10 +186,13 @@ After identifying a time range and instance ID in instance details, open **Logs*
 3. **Expand context**. Click **Context** on a hit to view several lines before and after it (up to 1000 per side). For agent and server logs, restrict the scope by node and source; do not reuse the instance filter.
 4. **View the histogram**. Above the search results, log volume is counted by time bucket × level using the current filters (red for error/fatal, blue for other levels, including lines without a level). Click a bar to narrow the time range to that bucket (switching to Custom); the new range is redrawn with finer buckets, so you can keep clicking to drill down.
 5. **Return to the original event**. Match the level, time, source, and instance UUID in a hit to the corresponding event in instance details.
+6. **Export CSV**. Export the currently loaded logs as UTF-8 with a BOM so Excel can identify Chinese text. Commas, quotes, and newlines in log content are preserved using CSV escaping.
 
 To search through the API, use `GET /api/v1/logs/search`. Add `with_total=1` to retrieve hit counts, and use `cursor_ts` / `cursor_id` for pagination.
 For context, use `GET /api/v1/logs/context?instance=..&ts=..&id=..&before=..&after=..`. For logs without an instance UUID, such as agent and server logs, use `node` to restrict the scope instead.
 For the histogram, use `GET /api/v1/logs/histogram` with the same filters as the search. See the [API Reference](../reference/api.md) for all parameters.
+
+While a node is disconnected from the server (a server restart or upgrade, a network outage), the agent holds instance, node, and agent logs in memory and sends them in their original order after it reconnects, so lines from that period are still searchable. The buffer holds up to 16 MiB. If a disconnection lasts long enough to fill it, the oldest logs are dropped, and a warn-level line beginning `gpuworks: N log lines from … to … were dropped` marks the place (search for `were dropped`). An agent process restart loses what was not yet sent. Metrics from the disconnection are not sent later.
 
 ### The server's and agent's own logs
 
@@ -223,3 +229,5 @@ Select the log level directly in the **Features** section of Quick Deploy:
 The deployment command preview shows `SGLANG_LOGGING_CONFIG_PATH` and the pre-start script that writes the configuration. You can also view the saved script and env in instance details. `/tmp/gpuworks-sglang-logging.json` is the configuration file, not the log output file.
 
 For startup methods without automatic injection, reasons multi-GPU logs may still lack levels, and how to take over the full script yourself, see [SGLang Logging Injection: Behavior and Boundaries](../explanation/sglang-logging.md).
+
+<!-- translation-source-sha256: b229159aec1fd52bcab9aebef2488366526dbfc328f98d4cc8c5e5c1d78635ec -->

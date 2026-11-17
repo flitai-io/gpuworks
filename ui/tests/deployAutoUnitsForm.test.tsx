@@ -278,7 +278,12 @@ test("a PD draft opens on automatic: no node or GPU pickers, units counted, payl
   await chooseTopology("pd");
   await screen.findByText(deployLocale.pd.mode);
   assert.ok(selected(node.auto), "the same control a single node has, on automatic");
-  assert.ok(screen.getByText(node.autoUnitsDescription));
+  // One line says how automatic placement works; that the list is only a
+  // preview sits behind the help mark on that line.
+  const unitsLine = screen.getByText(node.autoUnitsDescription);
+  assert.equal(screen.queryByText(node.autoUnitsHelp), null);
+  await userEvent.setup({ document: dom.window.document }).hover(within(unitsLine).getByRole("button", { name: commonLocale.helpTip.label }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, node.autoUnitsHelp);
   assert.equal(screen.queryAllByRole("combobox", { name: /instance 1 node$/ }).length, 0, "no unit node picker");
   assert.equal(screen.queryAllByRole("combobox", { name: /instance 1 GPU/ }).length, 0, "no unit GPU picker");
   assert.equal(screen.queryAllByText(deployLocale.pd.addNode.replace("{{role}}", deployLocale.pd.role.decode).replace("{{index}}", "1")).length, 0, "an automatic unit fits one node");

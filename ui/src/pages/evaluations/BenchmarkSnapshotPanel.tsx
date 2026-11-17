@@ -49,6 +49,7 @@ export function BenchmarkTargetCard({ run }: { run: BenchmarkRun }) {
 			<Descriptions.Item label={t("detail.target.endpoint")}><span data-report-endpoint>{snapshot?.base_url || run.base_url || "—"}</span></Descriptions.Item>
 			<Descriptions.Item label={t("detail.target.model")}>{snapshot?.served_name || snapshot?.model || run.model}</Descriptions.Item>
 			<Descriptions.Item label={t("detail.target.loadOrigin")}>{snapshot?.load_origin || run.load_origin}</Descriptions.Item>
+			{run.priority_class && <Descriptions.Item label={t("detail.target.priorityClass")}>{run.priority_class}</Descriptions.Item>}
 			<Descriptions.Item label={t("detail.target.gpu")}>{gpuSummary(snapshot) || (run.num_gpus ? String(run.num_gpus) : "—")}</Descriptions.Item>
 			{designPrefixReuseRate != null && <Descriptions.Item label={t("agentic.result.designReuse")}>{(designPrefixReuseRate * 100).toFixed(1)}%</Descriptions.Item>}
 		</Descriptions>

@@ -9,6 +9,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/pkg/localization"
@@ -39,15 +40,18 @@ func (d *keyTestDriver) ListInstances(context.Context, Credentials) ([]Instance,
 	}}}, nil
 }
 
-func (d *keyTestDriver) AuthorizePublicKey(_ context.Context, _ Credentials, externalID, publicKey string) (string, error) {
+func (d *keyTestDriver) AuthorizePublicKey(_ context.Context, _ Credentials, externalID, publicKey string) (provision.CheckResult, error) {
 	if !strings.HasPrefix(publicKey, "ssh-ed25519 ") {
-		return "", errors.New("not the platform public key: " + publicKey)
+		return provision.CheckResult{}, errors.New("not the platform public key: " + publicKey)
 	}
 	if externalID == "" && d.created {
-		return "", errors.New("authorized after the instance was created")
+		return provision.CheckResult{}, errors.New("authorized after the instance was created")
 	}
 	d.authorized = append(d.authorized, externalID)
-	return "registered with the provider", d.authorizeErr
+	if d.authorizeErr != nil {
+		return provision.CheckResult{}, d.authorizeErr
+	}
+	return PlatformKeyAccountCheck(d.name, true, "registered with the provider"), nil
 }
 
 func (d *keyTestDriver) InstancePassword(context.Context, Credentials, string) (string, error) {
@@ -98,9 +102,9 @@ func newKeyService(t *testing.T, d *keyTestDriver, withKey bool) (*Service, *sto
 	return svc, st, p.ID, key
 }
 
-func checkNamed(checks []InstallCheck, name string) *InstallCheck {
+func checkNamed(checks []provision.CheckResult, name string) *provision.CheckResult {
 	for i := range checks {
-		if checks[i].Name == name {
+		if checks[i].ID == name {
 			return &checks[i]
 		}
 	}
@@ -111,7 +115,7 @@ func checkNamed(checks []InstallCheck, name string) *InstallCheck {
 // instance password is fetched, and recovery keeps only the platform key.
 func TestCloudInstallNeedsNoCredentialFromTheOperator(t *testing.T) {
 	d := &keyTestDriver{name: "key-test-auto", host: "203.0.113.20", port: 22, password: "instance-pw",
-		report: InstallReport{AuthUsed: provision.AuthInstancePassword, PlatformKeyAuthorized: true, Checks: []InstallCheck{{Name: "SSH authentication", Status: "ok"}}}}
+		report: InstallReport{AuthUsed: provision.AuthInstancePassword, PlatformKeyAuthorized: true, Checks: []provision.CheckResult{{ID: "ssh_auth", Status: "pass"}}}}
 	svc, st, providerID, key := newKeyService(t, d, true)
 	result, err := svc.Install(t.Context(), providerID, "inst-1", "https://server.example", InstallOptions{})
 	if err != nil {
@@ -125,7 +129,7 @@ func TestCloudInstallNeedsNoCredentialFromTheOperator(t *testing.T) {
 	if strings.Join(d.authorized, ",") != ",inst-1" {
 		t.Fatalf("authorized = %v", d.authorized)
 	}
-	if got := result.InstallChecks; len(got) != 3 || got[0].Name != "Platform key (provider)" || got[0].Detail != "registered with the provider" || got[1].Name != "Instance password" || got[1].Detail != "fetched from the provider API" || got[2].Name != "SSH authentication" {
+	if got := result.InstallChecks; len(got) != 3 || got[0].ID != "platform_key_provider" || got[0].Code != messages.CheckPlatformKeyAccountAdded || checkText(got[0]) != "registered with the provider" || got[1].ID != "instance_password" || got[1].Code != messages.CheckInstancePasswordFetched || checkText(got[1]) != "fetched from the provider API" || got[2].ID != "ssh_auth" {
 		t.Fatalf("checks = %+v", got)
 	}
 	cred, secrets, err := st.GetNodeSSHCredential(result.NodeUUID)
@@ -151,10 +155,10 @@ func TestCloudInstallPreparationFailuresAreReportedNotFatal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := checkNamed(result.InstallChecks, "Platform key (provider)"); c == nil || c.Status != "warn" || !strings.Contains(c.Detail, "403") {
+	if c := checkNamed(result.InstallChecks, "platform_key_provider"); c == nil || c.Status != "warn" || c.Code != messages.CheckPlatformKeyProviderFailed || !strings.Contains(checkText(*c), "403") {
 		t.Fatalf("provider key check = %+v", c)
 	}
-	if c := checkNamed(result.InstallChecks, "Instance password"); c == nil || c.Status != "warn" || !strings.Contains(c.Detail, "timeout") {
+	if c := checkNamed(result.InstallChecks, "instance_password"); c == nil || c.Status != "warn" || c.Code != messages.CheckInstancePasswordFailed || !strings.Contains(checkText(*c), "timeout") {
 		t.Fatalf("password check = %+v", c)
 	}
 	if _, secrets, err := st.GetNodeSSHCredential(result.NodeUUID); err != nil || secrets.Password != "operator-pw" || secrets.PrivateKeyPEM != "" {
@@ -169,7 +173,7 @@ func TestCloudInstallWithoutAPlatformKeySaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := checkNamed(result.InstallChecks, "Platform key (provider)"); c == nil || c.Status != "warn" || !strings.Contains(c.Detail, "not available") {
+	if c := checkNamed(result.InstallChecks, "platform_key_provider"); c == nil || c.Status != "skip" || c.Code != messages.CheckPlatformKeyUnavailable || !strings.Contains(checkText(*c), "not available") {
 		t.Fatalf("check = %+v", c)
 	}
 	if len(d.authorized) != 0 || d.req.PlatformKey != nil {
@@ -217,13 +221,13 @@ func TestCloudPrecheckShowsPreparationRows(t *testing.T) {
 	}
 	names := make([]string, 0, len(report.Checks))
 	for _, c := range report.Checks {
-		names = append(names, c.Name+":"+c.Status)
+		names = append(names, c.ID+":"+c.Status)
 	}
-	if strings.Join(names, ",") != "Platform key (provider):ok,Instance password:ok,SSH:error" {
+	if strings.Join(names, ",") != "platform_key_provider:pass,instance_password:pass,ssh:fail" {
 		t.Fatalf("checks = %v (%+v)", names, report.Checks)
 	}
-	if !strings.Contains(report.Checks[2].Detail, "ssh dial") {
-		t.Fatalf("SSH detail = %q", report.Checks[2].Detail)
+	if report.Checks[2].Code != messages.CheckSSHConnectFailed || !strings.Contains(report.Checks[2].Evidence, "ssh dial") {
+		t.Fatalf("SSH detail = %q", checkText(report.Checks[2]))
 	}
 }
 

@@ -41,16 +41,18 @@ func TestCachedRouteRejectsKnownNonRunningInstance(t *testing.T) {
 			case "deleted":
 				err = st.DeleteInstance(inst.UUID)
 			case "port changed":
-				err = st.DB().Model(&store.Instance{}).Where("uuid = ?", inst.UUID).Update("api_port", 30002).Error
+				err = updateInstanceRow(st, inst.UUID, map[string]any{"api_port": 30002})
 			case "headless":
-				err = st.DB().Model(&store.Instance{}).Where("uuid = ?", inst.UUID).Update("headless", true).Error
+				err = updateInstanceRow(st, inst.UUID, map[string]any{"headless": true})
+			case proto.InstFailed:
+				err = st.SetInstanceFailed(inst.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "engine exited; recovery pending")
 			default:
 				err = st.SetInstanceState(inst.UUID, state, "engine exited; recovery pending")
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, tgt, status, message, _ := p.selectDeploymentInstance("model")
+			_, tgt, status, message, _ := p.selectStatus("model")
 			if state == "port changed" {
 				if status != 0 || tgt.port != 30002 {
 					t.Fatalf("changed port not refreshed: status=%d target=%+v", status, tgt)
@@ -71,16 +73,16 @@ func TestCachedRouteRejectsKnownNonRunningInstance(t *testing.T) {
 				inst.ID = 0
 				_, err = st.CreateInstance(inst)
 			case "port changed":
-				err = st.DB().Model(&store.Instance{}).Where("uuid = ?", inst.UUID).Update("api_port", 30001).Error
+				err = updateInstanceRow(st, inst.UUID, map[string]any{"api_port": 30001})
 			case "headless":
-				err = st.DB().Model(&store.Instance{}).Where("uuid = ?", inst.UUID).Update("headless", false).Error
+				err = updateInstanceRow(st, inst.UUID, map[string]any{"headless": false})
 			default:
 				err = st.SetInstanceState(inst.UUID, proto.InstRunning, "engine healthy")
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, tgt, status, message, _ = p.selectDeploymentInstance("model")
+			_, tgt, status, message, _ = p.selectStatus("model")
 			if status != 0 || tgt.instanceUUID != inst.UUID {
 				t.Fatalf("recovered instance not routed: status=%d message=%q", status, message)
 			}

@@ -112,7 +112,7 @@ func (s *Session) pushAgentUpgrade(ctx context.Context, name string, binary []by
 			if detail == "" {
 				detail = "agent rejected upgrade"
 			}
-			return &agentupgrade.RejectedError{Detail: detail, Busy: strings.Contains(strings.ToLower(detail), "already in progress")}
+			return &agentupgrade.RejectedError{Detail: detail, Busy: errors.Is(remoteRPCError(proto.RPCAgentUpgrade, status.Code, detail, nil), proto.ErrAgentUpgradeInProgress)}
 		}
 		return fmt.Errorf("unrecognized agent upgrade verdict (state %q)", status.State)
 	}

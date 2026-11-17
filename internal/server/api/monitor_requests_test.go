@@ -134,23 +134,23 @@ func TestMonitorRequestsWireJSON(t *testing.T) {
 			ID: "r1", TraceID: "4bf92f3577b34da6a3ce929d0e0e4736", DeploymentID: 7, ReceivedMS: 4000, Phase: "done", APIKeyID: 3, APIKeyName: "app", Source: "api",
 			Stream: true, BodyBytes: 120, EngineQueueMS: &queue, PromptTokens: &prompt, Status: &status,
 			Outcome: "ok", FinishReason: "stop", Result: "completed", Events: 4, Weight: 2,
-			Segments: []dto.MonitorRequestSegment{{Kind: "gateway", MS: 2.5}, {Kind: "queue", MS: 12}},
+			Segments: []dto.MonitorRequestSegment{{Kind: "gateway", MS: 2.5, Stage: "first_token"}, {Kind: "queue", MS: 12, Stage: "first_token"}},
 			PD:       &dto.MonitorRequestPD{PrefillInstanceUUID: "p-1", PrefillMS: &pdStage, PrefillQueueMS: &pdQueue},
 		}},
 		FromMS: 1000, ToMS: 5000, RangeTotal: &rangeTotal,
 	}}
 	rec := monitorGet(t, Deps{Store: st, AuthSigner: signer, Monitor: fake}, token,
-		"/api/v1/monitor/deployments/7/requests?view=history&range=6h&limit=20&key=3&cursor=c0&from=1000&to=5000&results=length,%20error&min_ms=200&max_ms=8000&instance=inst-a")
+		"/api/v1/monitor/deployments/7/requests?view=history&range=6h&limit=20&key=3&cursor=c0&from=1000&to=5000&results=length,%20error&min_ms=200&max_ms=8000&min_ttft_ms=50&max_ttft_ms=3000&instance=inst-a")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	want := `{"view":"history","as_of":5000,"counts":null,"requests":[{"id":"r1","trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","deployment_id":7,"received_ms":4000,"phase":"done",` +
-		`"age_ms":null,"instance_uuid":"","api_key_id":3,"api_key_name":"app","user_id":0,"source":"api","stream":true,` +
+		`"age_ms":null,"instance_uuid":"","api_key_id":3,"api_key_name":"app","priority_class":"","user_id":0,"source":"api","stream":true,` +
 		`"body_bytes":120,"images":0,"dispatch_ms":null,"first_byte_ms":null,"first_think_ms":null,"first_answer_ms":null,` +
 		`"last_chunk_ms":null,"end_ms":null,"events":4,"think_events":0,"max_gap_ms":null,"status":200,"outcome":"ok",` +
 		`"finish_reason":"stop","result":"completed","prompt_tokens":900,"cached_tokens":null,"completion_tokens":null,"reasoning_tokens":null,` +
-		`"engine_queue_ms":12,"engine_prefill_ms":null,"engine_decode_ms":null,"weight":2,` +
-		`"segments":[{"kind":"gateway","ms":2.5},{"kind":"queue","ms":12}],` +
+		`"engine_queue_ms":12,"engine_prefill_ms":null,"engine_decode_ms":null,"ttft_ms":null,"tpot_ms":null,"prefill_tok_s":null,"decode_tok_s":null,"weight":2,` +
+		`"segments":[{"kind":"gateway","ms":2.5,"stage":"first_token"},{"kind":"queue","ms":12,"stage":"first_token"}],` +
 		`"pd":{"prefill_instance_uuid":"p-1","prefill_ms":795,"prefill_queue_ms":2,"prefill_compute_ms":null,"fallback":""}}],"next_cursor":"c1",` +
 		`"from_ms":1000,"to_ms":5000,"range_total":4321}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
@@ -165,7 +165,7 @@ func TestMonitorRequestsWireJSON(t *testing.T) {
 	}
 	got := fake.requestsArgs[0]
 	wantQ := dto.MonitorRequestsQuery{View: "history", RangeMS: (6 * time.Hour).Milliseconds(), FromMS: 1000, ToMS: 5000, Limit: 20, Cursor: "c0", APIKeyID: 3,
-		InstanceUUID: "inst-a", Results: []string{"length", "error"}, MinEndMS: 200, MaxEndMS: 8000}
+		InstanceUUID: "inst-a", Results: []string{"length", "error"}, MinEndMS: 200, MaxEndMS: 8000, MinTTFTMS: 50, MaxTTFTMS: 3000}
 	if got.id != 7 || !reflect.DeepEqual(got.q, wantQ) {
 		t.Fatalf("called with %d %+v, want 7 %+v", got.id, got.q, wantQ)
 	}
@@ -186,23 +186,25 @@ func TestMonitorRequestsDefaultsToLive(t *testing.T) {
 func TestMonitorRequestsRejectsBadQueries(t *testing.T) {
 	st, signer, token := monitorTestToken(t)
 	cases := map[string]string{
-		"/api/v1/monitor/deployments/0/requests":                                    "DEPLOYMENT_ID_INVALID",
-		"/api/v1/monitor/deployments/x/requests":                                    "DEPLOYMENT_ID_INVALID",
-		"/api/v1/monitor/deployments/7/requests?view=all":                           "MONITOR_REQUESTS_VIEW_INVALID",
-		"/api/v1/monitor/deployments/7/requests?range=3h":                           "MONITOR_RANGE_INVALID",
-		"/api/v1/monitor/deployments/7/requests?limit=0":                            "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?limit=501":                          "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?limit=ten":                          "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?key=0":                              "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?key=-1":                             "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?view=history&from=1000":             "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?view=history&from=5000&to=1000":     "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?view=history&from=x&to=1000":        "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?view=history&min_ms=0":              "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?view=history&min_ms=900&max_ms=100": "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/deployments/7/requests?view=history&max_ms=99999999999":    "MONITOR_REQUESTS_QUERY_INVALID",
-		"/api/v1/monitor/distributions?range=2d":                                    "MONITOR_RANGE_INVALID",
-		"/api/v1/monitor/distributions?deployment=abc":                              "DEPLOYMENT_ID_INVALID",
+		"/api/v1/monitor/deployments/0/requests":                                              "DEPLOYMENT_ID_INVALID",
+		"/api/v1/monitor/deployments/x/requests":                                              "DEPLOYMENT_ID_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=all":                                     "MONITOR_REQUESTS_VIEW_INVALID",
+		"/api/v1/monitor/deployments/7/requests?range=3h":                                     "MONITOR_RANGE_INVALID",
+		"/api/v1/monitor/deployments/7/requests?limit=0":                                      "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?limit=501":                                    "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?limit=ten":                                    "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?key=0":                                        "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?key=-1":                                       "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&from=1000":                       "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&from=5000&to=1000":               "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&from=x&to=1000":                  "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&min_ms=0":                        "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&min_ms=900&max_ms=100":           "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&max_ms=99999999999":              "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&min_ttft_ms=0":                   "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/deployments/7/requests?view=history&min_ttft_ms=900&max_ttft_ms=100": "MONITOR_REQUESTS_QUERY_INVALID",
+		"/api/v1/monitor/distributions?range=2d":                                              "MONITOR_RANGE_INVALID",
+		"/api/v1/monitor/distributions?deployment=abc":                                        "DEPLOYMENT_ID_INVALID",
 	}
 	for path, code := range cases {
 		fake := &requestsMonitor{}
@@ -353,11 +355,11 @@ func TestMonitorRequestLookupWireJSON(t *testing.T) {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
 	want := `{"as_of":9000,"from_ms":1000,"to_ms":5000,"window":"requested","requests":[{"id":"r1","trace_id":"4bf92f3577b34da6a3ce929d0e0e4736",` +
-		`"deployment_id":7,"received_ms":4000,"phase":"done","age_ms":null,"instance_uuid":"","api_key_id":0,"api_key_name":"","user_id":0,` +
+		`"deployment_id":7,"received_ms":4000,"phase":"done","age_ms":null,"instance_uuid":"","api_key_id":0,"api_key_name":"","priority_class":"","user_id":0,` +
 		`"source":"api","stream":false,"body_bytes":0,"images":0,"dispatch_ms":null,"first_byte_ms":null,"first_think_ms":null,` +
 		`"first_answer_ms":null,"last_chunk_ms":null,"end_ms":null,"events":0,"think_events":0,"max_gap_ms":null,"status":200,` +
 		`"outcome":"ok","finish_reason":"","result":"completed","prompt_tokens":null,"cached_tokens":null,"completion_tokens":null,` +
-		`"reasoning_tokens":null,"engine_queue_ms":null,"engine_prefill_ms":null,"engine_decode_ms":null,"weight":1,"segments":[],"pd":null}],` +
+		`"reasoning_tokens":null,"engine_queue_ms":null,"engine_prefill_ms":null,"engine_decode_ms":null,"ttft_ms":null,"tpot_ms":null,"prefill_tok_s":null,"decode_tok_s":null,"weight":1,"segments":[],"pd":null}],` +
 		`"deployments":[{"id":7,"name":"qwen","deleted":false},{"id":8,"name":"org/old","deleted":true}]}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Fatalf("body =\n%s\nwant\n%s", got, want)

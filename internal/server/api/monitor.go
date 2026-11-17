@@ -266,9 +266,10 @@ func (a *apiHandlers) monitorMetrics(w http.ResponseWriter, _ *http.Request) {
 // empty rather than null, matching a real overview's zero-data shape.
 func emptyMonitorOverview() dto.MonitorOverview {
 	return dto.MonitorOverview{
-		Signals:    []dto.MonitorSignal{},
-		Services:   []dto.MonitorServiceRow{},
-		VRAMByNode: []dto.MonitorVRAMNode{},
+		Signals:     []dto.MonitorSignal{},
+		Services:    []dto.MonitorServiceRow{},
+		StateCounts: []dto.MonitorStateCount{},
+		VRAMByNode:  []dto.MonitorVRAMNode{},
 		ClusterTokens: dto.MonitorClusterTokens{
 			Prompt:     dto.MonitorSeries{Labels: map[string]string{}, Points: []dto.Point{}},
 			Generation: dto.MonitorSeries{Labels: map[string]string{}, Points: []dto.Point{}},

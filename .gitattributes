@@ -6,3 +6,5 @@ internal/server/proxy/testdata/*.sse whitespace=-blank-at-eof
 # Verbatim upstream engine sources a catalog patch pins by SHA-256: every byte
 # counts, including the trailing blanks they ship with, so no eol conversion.
 internal/server/inferencecatalog/seed/testdata/ascend-sleep-pool/vllm_ascend/** -text whitespace=-trailing-space,-blank-at-eol,-blank-at-eof,-space-before-tab
+# Zeron's installed Card hash covers the upstream trailing blanks.
+ui/src/components/ui/card.tsx -text whitespace=-blank-at-eol

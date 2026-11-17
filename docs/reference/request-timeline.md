@@ -91,7 +91,7 @@ PD 分离部署的请求另记一个 `pd` 对象（[第 6 节](#6-pd-分离部�
 | 首个 token | 取 `first_think_ms` 与 `first_answer_ms` 中较早者 | `gen_ai.response.time_to_first_chunk`（秒） |
 | 引擎自报排队、Prefill、Decode（原值） | `engine_queue_ms`、`engine_prefill_ms`、`engine_decode_ms` | `gen_ai.latency.time_in_queue`、`time_in_model_prefill`、`time_in_model_decode`（秒）；Prefill + Decode 为 `time_in_model_inference` |
 | 阶段（拆分后） | `segments[]`：`{kind, ms}` | 网关侧各段为 `gpuworks.phase.<kind>_ms`；`queue`、`prefill` 两段用上一行的引擎原值，只在第 3 节的按比例缩小发生时与 `segments` 不同 |
-| 流式块数、最长停顿 | `events`、`max_gap_ms` | `gpuworks.stream.events`、`gpuworks.stream.max_gap_ms` |
+| 流式 chunk 数、最长停顿 | `events`、`max_gap_ms` | `gpuworks.stream.events`、`gpuworks.stream.max_gap_ms` |
 | PD prefill 实例、降级原因 | `pd.prefill_instance_uuid`、`pd.fallback` | `gpuworks.pd.prefill_instance`、`gpuworks.pd.fallback`（父 span 与 `pd.prefill` 子 span 都有） |
 | PD prefill 阶段 | `pd.prefill_ms`；`segments[]` 的 `pd_prefill` | 子 span `pd.prefill` 的时长 |
 | prefill 实例自报排队、Prefill | `pd.prefill_queue_ms`、`pd.prefill_compute_ms` | `pd.prefill` 子 span 上的 `gen_ai.latency.time_in_queue`、`time_in_model_prefill`（秒） |

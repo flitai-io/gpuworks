@@ -20,6 +20,24 @@ func IsAutomaticPlacement(req *dto.DeployRequest) bool {
 	return req != nil && strings.EqualFold(strings.TrimSpace(req.PlacementMode), "auto")
 }
 
+// requestPlacement is the request's placement as every step that plans it
+// judges it - the evaluation, the create's preflight and its revalidation of
+// an automatic draft. Cards a manual request names under "gpus" are the
+// operator's choice, which consents to sharing them with processes outside
+// the platform (planning.Placement.OperatorPinned); an automatic request's
+// cards are the scheduler's, whatever the client sends back, as they are to
+// the controller, which stores none for it.
+func requestPlacement(req *dto.DeployRequest) (planning.Placement, error) {
+	placement, err := planning.ParsePlacement(req.Placement)
+	if err != nil {
+		return placement, err
+	}
+	if IsAutomaticPlacement(req) {
+		placement = placement.WithoutOperatorChoice()
+	}
+	return placement, nil
+}
+
 // requestRequirements is where the request says the deployment may run, as
 // the requirements the deployment stores: node_requirements as stated,
 // target_vendor as the vendor requirement, and a manually placed single-node

@@ -26,15 +26,18 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/testenv"
 	"gpuworks.ai/gpuworks/internal/testenv/cloudprovider"
+	"gpuworks.ai/gpuworks/internal/testenv/goldenimage"
 )
 
-const compshareDockerTestImage = "swr.cn-south-1.myhuaweicloud.com/gpustack/runner:cuda12.8-vllm0.17.1"
-
+// compshareTestImage is the vLLM runner the CompShare golden images carry
+// (prepare-compshare-golden's default): the CUDA 12.9 build, which unlike
+// the CUDA 13.0 ones still carries Turing kernels for the 2080 Ti.
+// COMPSHARE_TEST_IMAGE overrides it.
 func compshareTestImage() string {
 	if image := strings.TrimSpace(os.Getenv("COMPSHARE_TEST_IMAGE")); image != "" {
 		return image
 	}
-	return "gpustack/runner:cuda12.8-vllm0.17.1"
+	return goldenimage.TuringDockerImage
 }
 
 func compshareDistributedTestImage() string {
@@ -70,14 +73,6 @@ func runSingleVMTensorParallelAndDGPU(t *testing.T, b *vmBackend) {
 	env := setupCloudNode(t, testenv.NewWithModelEndpoint(t, b.ModelEndpoint), b.Provider, cloudprovider.GPUSpec{GPUModel: gpuModel, GPUCount: gpuCount, MinVRAMMB: 10240, DiskGB: b.DiskGB})
 	logRentedInstance(t, b, env.Instance)
 	requireOnlineNode(t, env)
-	// CompShare's UAAA route is optimized for the domestic SWR mirror. Prefer
-	// it for this live suite so a fresh VM does not spend the acceptance window
-	// waiting on a multi-gigabyte quay.io pull.
-	if len(b.PullMirror) > 0 {
-		if _, err := env.Control.Store().CreatePullSourceRule(store.PullSourceRuleSpec{Match: "gpustack/", Endpoints: b.PullMirror, AllowUpstream: true}); err != nil {
-			t.Fatal(err)
-		}
-	}
 	if !t.Run("ProvisionAndRuntime", func(t *testing.T) { testVMAndRuntime(t, env, gpuCount) }) {
 		return
 	}
@@ -554,13 +549,15 @@ func testCompsharePreflight(t *testing.T, first, second *cloudTestEnv) error {
 	var result struct {
 		OK    bool `json:"ok"`
 		Pairs []struct {
-			SourceUUID      string  `json:"source_uuid"`
-			TargetUUID      string  `json:"target_uuid"`
-			Reachable       bool    `json:"reachable"`
-			BandwidthTested bool    `json:"bandwidth_tested"`
-			Gbps            float64 `json:"gbps"`
-			Error           string  `json:"error"`
-			BandwidthError  string  `json:"bandwidth_error"`
+			SourceUUID        string  `json:"source_uuid"`
+			TargetUUID        string  `json:"target_uuid"`
+			Reachable         bool    `json:"reachable"`
+			BandwidthTested   bool    `json:"bandwidth_tested"`
+			Gbps              float64 `json:"gbps"`
+			Status            string  `json:"status"`
+			Code              string  `json:"code"`
+			Evidence          string  `json:"evidence"`
+			BandwidthEvidence string  `json:"bandwidth_evidence"`
 		} `json:"pairs"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -570,7 +567,7 @@ func testCompsharePreflight(t *testing.T, first, second *cloudTestEnv) error {
 		return fmt.Errorf("distributed preflight failed: %s", data)
 	}
 	for _, pair := range result.Pairs {
-		if !pair.Reachable || !pair.BandwidthTested || pair.Gbps <= 0 || pair.Error != "" || pair.BandwidthError != "" {
+		if !pair.Reachable || !pair.BandwidthTested || pair.Gbps <= 0 || pair.Status != "pass" || pair.Evidence != "" || pair.BandwidthEvidence != "" {
 			return fmt.Errorf("distributed preflight pair failed: %+v", pair)
 		}
 		t.Logf("CompShare private network %s -> %s: %.3f Gbps", pair.SourceUUID, pair.TargetUUID, pair.Gbps)

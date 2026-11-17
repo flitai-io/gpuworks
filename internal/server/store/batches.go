@@ -102,6 +102,9 @@ func (s *Store) CreateBatch(b *Batch, metadata map[string]string) error {
 		b.CreatedAt = time.Now().UTC()
 	}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := requirePriorityClass(tx, b.PriorityClass); err != nil {
+			return err
+		}
 		if err := tx.Create(b).Error; err != nil {
 			return err
 		}

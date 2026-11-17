@@ -14,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 type fakeSources struct {
@@ -153,10 +156,21 @@ func TestBundleCollectsTheWindowRedactedAndSaysWhatItSkipped(t *testing.T) {
 	}
 	items := map[string]BundleItem{}
 	for _, it := range done.Items {
-		items[it.Name] = it
+		items[it.Path] = it
 	}
-	if items["nodes/n-pick"].Reason != "offline" || items["nodes/n-old/agent.log"].Reason != "unsupported" || items["nodes/n-run/agent.log"].State != "collected" {
-		t.Fatalf("items = %+v", done.Items)
+	if got := items["nodes/n-pick"]; got.Status != proto.CheckSkip || got.Code != messages.CheckDiagnosticsNodeOffline || got.ID() != BundleItemNode {
+		t.Fatalf("offline node = %+v", got)
+	}
+	if got := items["nodes/n-old/agent.log"]; got.Status != proto.CheckSkip || got.Code != messages.CheckDiagnosticsAgentUnsupported || got.ID() != BundleItemNodeAgentLog {
+		t.Fatalf("old agent = %+v", got)
+	}
+	if got := items["nodes/n-run/agent.log"]; got.Status != proto.CheckPass || got.Code != "" || got.Bytes == 0 {
+		t.Fatalf("agent log = %+v", got)
+	}
+	for _, it := range done.Items {
+		if !proto.ValidCheckStatus(it.Status) || (it.Status != proto.CheckPass && it.Code == "") {
+			t.Errorf("item %s has status %q code %q", it.Path, it.Status, it.Code)
+		}
 	}
 
 	files := readArchive(t, m.bundleArchive(b.ID))

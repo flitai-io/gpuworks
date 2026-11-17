@@ -5,7 +5,9 @@ package dto
 // deployment_id for deployment.unscheduled, node_uuid for node.health - and
 // the server gathers its context itself. Task "ask" is a free question,
 // about at most one subject when one is named. A follow-up carries the
-// thread's earlier turns in history.
+// thread's earlier turns in history. images are data: URLs sent with the
+// question, and a user turn of history carries its own; the limits are those
+// GET /api/v1/ai/available answers.
 type AIAskRequest struct {
 	Task         string      `json:"task"`
 	InstanceUUID string      `json:"instance_uuid,omitempty"`
@@ -13,14 +15,35 @@ type AIAskRequest struct {
 	DeploymentID uint        `json:"deployment_id,omitempty"`
 	NodeUUID     string      `json:"node_uuid,omitempty"`
 	Question     string      `json:"question,omitempty"`
+	Images       []string    `json:"images,omitempty"`
 	History      []AIMessage `json:"history,omitempty"`
 	Locale       string      `json:"locale,omitempty"`
 }
 
 // AIMessage is one earlier turn of a thread.
 type AIMessage struct {
-	Role    string `json:"role"` // user | assistant
-	Content string `json:"content"`
+	Role    string   `json:"role"` // user | assistant
+	Content string   `json:"content"`
+	Images  []string `json:"images,omitempty"` // user turns only
+}
+
+// AIAvailability is GET /api/v1/ai/available: whether the assistant can
+// answer, and whether the service in use takes images - with the limits an
+// ask's images must keep - so the console offers pasting only then.
+type AIAvailability struct {
+	Available  bool          `json:"available"`
+	ImageInput bool          `json:"image_input"`
+	Images     *AIImageLimit `json:"images,omitempty"`
+}
+
+// AIImageLimit bounds the images of one ask: per message, per request (the
+// question and the thread together), the bytes of one image, and the longest
+// side the console shrinks an image to before sending it.
+type AIImageLimit struct {
+	PerMessage int `json:"per_message"`
+	PerRequest int `json:"per_request"`
+	MaxBytes   int `json:"max_bytes"`
+	MaxSide    int `json:"max_side"`
 }
 
 // AIAnswer is the answer and how the model reached it: every tool it called,
@@ -103,6 +126,14 @@ type AIStreamStep struct {
 // AIStreamDelta is a "text" or "reasoning" event.
 type AIStreamDelta struct {
 	Delta string `json:"delta"`
+}
+
+// AIStreamError is the "error" event. code is a stable product error code
+// when the failure has one - AI_IMAGE_REJECTED for a service that refused the
+// images - and empty otherwise.
+type AIStreamError struct {
+	Error string `json:"error"`
+	Code  string `json:"code,omitempty"`
 }
 
 // AIStreamDone is the "done" event.

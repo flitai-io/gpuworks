@@ -48,18 +48,19 @@ The agent initiates a connection to `wss://server/api/v1/agent/connect`, then us
 
 | Lane | Traffic | Characteristics |
 |---|---|---|
-| `ctrl` | Control messages, metrics, terminals | Latency-sensitive, with a fixed small window; unaffected by heavy traffic |
-| `data` | Request tunnels to instances, log tailing, model and image transfers | Adaptive window for high-bandwidth, high-latency links |
+| `ctrl` | Control messages, terminals | Latency-sensitive, with a fixed small window; unaffected by heavy traffic |
+| `data` | Request tunnels to instances, log tailing, metric and log shipping, model and image transfers | Adaptive window for high-bandwidth, high-latency links |
 
 Stream types include:
 
 - `ctrl`: bidirectional JSON Lines control messages, with an envelope of `{"t":"...","id":...,"d":{...}}`;
-- `metrics`, `logtail`, `tunnel`: metrics, logs, and the data plane;
+- `telemetry`: opened by the agent on the data lane to ship metric and log batches, in the same format as ctrl messages; against an older server that does not support it, or with `--data-lane=false`, these batches stay on ctrl; if the data lane has not attached within 30 s of the handshake, that connection's batches go on ctrl until it does. See [ADR 0064](../adr/0064-telemetry-stream-on-the-data-lane.md);
+- `logtail`, `tunnel`: live log tailing and the data plane;
 - `model.read`/`model.write`, `image.read`/`image.write`: model directories and docker save/load streams;
 - `terminal`: interactive pty on a host or in a container.
 
 The data lane is a subordinate resource of the control-lane session. If it disconnects, the server waits for it to reconnect. After a timeout, the gateway returns a retryable 503 instead of falling back to the control lane for heavy traffic.
-See [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md). Older agents, `--data-lane=false`, and `server_dial` use a single lane.
+See [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md). Older agents and `--data-lane=false` use a single lane; `server_dial` also sets up the second lane when the agent enables the data lane.
 
 After a disconnection, the agent reconnects and replays its state. The server drives long-lived lifecycles with desired state + watch, and uses RPC for short actions.
 `server_dial` is an exception that uses an HMAC challenge, allowing the server to initiate connections to managed nodes.
@@ -115,3 +116,7 @@ stores metrics.
 inferenceapi provides stable chat, embeddings, rerank, audio, image, video, and realtime contracts.
 The scheduler runs filters, the GPU planner, and scorers in sequence and produces schedule_explain. The accelerator registry is
 the sole entry point for adding dGPU backends. See the [ADR Index](../adr/README.md) for more long-term tradeoffs, and [ADR 0030](../adr/0030-network-objects.md) for the node networking design.
+
+<!-- translation-source-sha256: 4e165fe15830db18f44b6bcc62f75d2c1ba553c42fb23dea3db5a3f3dae4bed9 -->
+<!-- translation-localized-code-block: 167d5e87ca7539da09ef0cc542067ff5dc3b07a9363c7ef5e316f2f81306eda7 7e010cf647f284e2567ec28a53a48d9decd79b9b10d63ce726a08d16b3c3ea31 根据同站security-model修正管理API认证标签，原JWT遗漏HttpOnly会话和平台API token -->
+<!-- translation-localized-code-block: 77869ca31e30f73fa69b7b1e7bd294c127c4a5ab1e2d5c77635e8b6d93feaa38 067be51fbe0918ef224453d2ab0dafbf7f688af4b3fcf3ca81cc3717bd301bc8 Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->

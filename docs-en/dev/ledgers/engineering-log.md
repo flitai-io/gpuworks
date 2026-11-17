@@ -472,3 +472,5 @@ Another fix in the same batch: `Gitee.get()` previously had no retry mechanism, 
 in the ownership verification call inside `Destroy()` aborted the entire cleanup process, leaving a
 real billable instance running (encountered once during this session's validation runs and handled manually).
 `get()` now retries up to 3 times with linear backoff.
+
+<!-- translation-source-sha256: 7419f4b1b0366890c62e5a5a7335902959de7ec0253849039f5ee6ecb9816ada -->

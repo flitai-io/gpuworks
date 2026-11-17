@@ -27,6 +27,10 @@ type templateFixture struct {
 	deployment store.Deployment
 	instance   store.Instance
 	model      store.Model
+	// implicitServedName persists launches the way a server that predates
+	// naming alias-less launches, or a host agent without
+	// proto.CapLaunchNameVerbatim, left them: no --served-model-name.
+	implicitServedName bool
 }
 
 // newTemplateFixture stores a running single-node deployment of a model made
@@ -102,6 +106,7 @@ func (f *templateFixture) persistAllocatedRuntimeLaunch(t *testing.T, port int, 
 		t.Fatal(err)
 	}
 	request.Source.Image = f.instance.Image
+	request.ImplicitServedName = f.implicitServedName
 	plan, err := planning.ResolveAllocatedLaunch(request, indexes, len(indexes), parallel, port, nil, model.WeightBytes, false)
 	if err != nil {
 		t.Fatal(err)
@@ -292,7 +297,7 @@ func TestCatalogTemplatesExportsAStoredDeployment(t *testing.T) {
 	if !slices.Equal(out.ExcludedEnv, []string{"HF_TOKEN"}) || strings.Contains(out.YAML, "secret") {
 		t.Fatalf("excluded env = %q; yaml leaks the token: %v", out.ExcludedEnv, strings.Contains(out.YAML, "secret"))
 	}
-	if len(out.Checks) != 1 || !out.Checks[0].Passed || len(out.Notes) == 0 || out.Notes[0].Code != templateexport.NoteVerifiedOn {
+	if len(out.Checks) != 1 || out.Checks[0].Status != proto.CheckPass || out.Checks[0].Code != messages.CheckTemplateOperationAnswered || out.Checks[0].Params.HTTPStatus != 200 || len(out.Notes) == 0 || out.Notes[0].Code != templateexport.NoteVerifiedOn {
 		t.Fatalf("checks %+v notes %+v", out.Checks, out.Notes)
 	}
 	if _, err := inferencecatalog.ParseYAML([]byte(out.YAML)); err != nil {

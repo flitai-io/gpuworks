@@ -261,7 +261,7 @@ specs:
   gpus:
     vendor: nvidia
     cc: '>=10.0'
-    name: (?:DGX[ _-]?Spark|GB10)
+    name: (?:DGX[ _-]?Spark|GB10|RTX[ _-]?Spark)
   args:
   - --mamba-backend
   - flashinfer
@@ -307,7 +307,7 @@ specs:
   gpus:
     vendor: nvidia
     cc: '>=10.0'
-    name: (?:DGX[ _-]?Spark|GB10)
+    name: (?:DGX[ _-]?Spark|GB10|RTX[ _-]?Spark)
   args:
   - --mamba-backend
   - flashinfer
@@ -383,7 +383,7 @@ specs:
   gpus:
     vendor: nvidia
     cc: '>=10.0'
-    name: (?:DGX[ _-]?Spark|GB10)
+    name: (?:DGX[ _-]?Spark|GB10|RTX[ _-]?Spark)
   args:
   - --mamba-backend
   - flashinfer

@@ -20,13 +20,13 @@ func (c *yieldCards) held(t *testing.T, policy string, gpus int) *LaunchHeld {
 	if scheduler.Schedule(req, nodeSnapshot(c.st, c.node, true, "", view)).OK {
 		t.Fatal("the cards are free with the holders awake")
 	}
-	if y := launchYield(c.st, c.node, insts, 0, policy, req, true, "", false, view); y != nil {
+	if y := launchYield(c.st, c.node, insts, 0, policy, req, true, "", view); y != nil {
 		t.Fatalf("a %q launch waits for holders: %+v", policy, y)
 	}
-	if r := launchReserved(c.st, c.node, insts, req, true, "", false, view); r != nil {
+	if r := launchReserved(c.st, c.node, insts, req, true, "", view); r != nil {
 		t.Fatalf("a %q launch is kept off sleepers' cards: %+v", policy, r)
 	}
-	return launchHeld(c.st, c.node, insts, 0, policy, req, true, "", false, view)
+	return launchHeld(c.st, c.node, insts, 0, policy, req, true, "", view)
 }
 
 func (c *yieldCards) heldRefusal(t *testing.T, policy string, gpus int) scheduler.Reason {
@@ -106,7 +106,7 @@ func TestATwoCardLaunchOverMixedHoldersNamesEach(t *testing.T) {
 	// waits for it (launchYield) and is no held refusal.
 	req := scheduler.Request{WeightBytes: 4 << 30, HeadCount: 8, GPUMemUtil: 0.6, AllowedTPs: []int{1}}
 	view := ledgerView{reserved: reservedAgainst(c.st, yieldpolicy.Idle)}
-	if launchYield(c.st, c.node, nodeInstances(t, c.st, c.node), 0, yieldpolicy.Idle, req, true, "", false, view) == nil {
+	if launchYield(c.st, c.node, nodeInstances(t, c.st, c.node), 0, yieldpolicy.Idle, req, true, "", view) == nil {
 		t.Fatal("a one-card launch that shares does not wait for the sharer")
 	}
 }
@@ -120,16 +120,16 @@ func TestAHeldLaunchNamesOnlyTheHoldersInItsWay(t *testing.T) {
 	c.instance(t, batch, "batch-1", "[0]", 0)
 	// Too big for the card even when it is free.
 	req := scheduler.Request{WeightBytes: 32 << 30, HeadCount: 8, GPUMemUtil: 0.6, AllowedTPs: []int{1}}
-	if got := launchHeld(c.st, c.node, nodeInstances(t, c.st, c.node), 0, yieldpolicy.Idle, req, true, "", false, ledgerView{}); got != nil {
+	if got := launchHeld(c.st, c.node, nodeInstances(t, c.st, c.node), 0, yieldpolicy.Idle, req, true, "", ledgerView{}); got != nil {
 		t.Fatalf("a launch that never fits = %+v", got)
 	}
 	// The launching deployment's own replica is no holder.
 	req = scheduler.Request{WeightBytes: 4 << 30, HeadCount: 8, GPUMemUtil: 0.6, AllowedTPs: []int{1}}
-	if got := launchHeld(c.st, c.node, nodeInstances(t, c.st, c.node), batch.ID, yieldpolicy.Idle, req, true, "", false, ledgerView{}); got != nil {
+	if got := launchHeld(c.st, c.node, nodeInstances(t, c.st, c.node), batch.ID, yieldpolicy.Idle, req, true, "", ledgerView{}); got != nil {
 		t.Fatalf("a launch held by its own replica = %+v", got)
 	}
 	// Nor is an instance an edit preview leaves out.
-	if got := launchHeld(c.st, c.node, nodeInstances(t, c.st, c.node), 0, yieldpolicy.Idle, req, true, "", false, ledgerView{excludeDeployment: batch.ID}); got != nil {
+	if got := launchHeld(c.st, c.node, nodeInstances(t, c.st, c.node), 0, yieldpolicy.Idle, req, true, "", ledgerView{excludeDeployment: batch.ID}); got != nil {
 		t.Fatalf("a launch held by the deployment being edited = %+v", got)
 	}
 }

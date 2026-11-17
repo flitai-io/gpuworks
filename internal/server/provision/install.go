@@ -24,6 +24,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/agentconf"
 	"gpuworks.ai/gpuworks/internal/commandlog"
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/nodeaddr"
 )
 
@@ -205,7 +206,7 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 	report.PlatformKeyAuthorized = authorized
 	report.Checks = append(report.Checks, outcome.Check(), keyCheck)
 	if replaced != "" {
-		report.Checks = append(report.Checks, CheckResult{Name: checkExistingAgent, Status: "warn", Detail: "replaced on request: " + replaced})
+		report.Checks = append(report.Checks, WarnCheck(CheckIDExistingAgent, messages.CheckExistingAgentReplaced, "replaced on request: "+replaced, map[string]any{"replaced": replaced}))
 	}
 	if req.agentConfig().ServerDials() {
 		serverAddr := req.ServerDialAddress
@@ -225,8 +226,10 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 	}
 	if strings.EqualFold(strings.TrimSpace(req.InstanceKind), "vm") {
 		report.Checks = append(report.Checks,
-			checkCommandContext(ctx, client, "Docker", `command -v docker >/dev/null 2>&1 && docker --version`, true),
-			checkCommandContext(ctx, client, "NVIDIA Container Toolkit", `command -v nvidia-ctk >/dev/null 2>&1 || { echo "install nvidia-container-toolkit (see https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)"; exit 1; }`, true),
+			checkCommandContext(ctx, client, precheckCommand{id: CheckIDDocker, command: `command -v docker >/dev/null 2>&1 && docker --version`, required: true,
+				failCode: messages.CheckDockerMissing, failMessage: "docker not found"}),
+			checkCommandContext(ctx, client, precheckCommand{id: CheckIDNvidiaToolkit, command: `command -v nvidia-ctk >/dev/null 2>&1 || { echo "install nvidia-container-toolkit (see https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)"; exit 1; }`, required: true,
+				failCode: messages.CheckNvidiaToolkitMissing, failMessage: "install nvidia-container-toolkit"}),
 		)
 	}
 
@@ -239,21 +242,25 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 			// the agent can provide useful runtime diagnostics.
 			if _, directErr := run(ctx, client, "mkdir -p "+shellQuote(report.InstallDir)+" && test -w "+shellQuote(report.InstallDir)); directErr == nil {
 				useSudo = false
-				report.Checks = append(report.Checks, CheckResult{Name: "Privilege", Status: "warn", Detail: "sudo directory claim failed; using writable install directory without sudo: " + err.Error()})
+				report.Checks = append(report.Checks, WarnCheck(CheckIDPrivilege, messages.CheckPrivilegeDirectFallback, "sudo directory claim failed; using writable install directory without sudo",
+					map[string]any{"dir": report.InstallDir}).WithEvidence(err.Error()))
 			} else if chosenDir {
-				report.Checks = append(report.Checks, CheckResult{Name: "Privilege", Status: "error", Detail: fmt.Sprintf("cannot write the chosen install directory %s: %v", report.InstallDir, err)})
-				return report, fmt.Errorf("%w %s: %v", ErrInstallDirNotWritable, report.InstallDir, err)
+				report.Checks = append(report.Checks, FailCheck(CheckIDPrivilege, messages.CheckPrivilegeDirNotWritable, "cannot write the chosen install directory "+report.InstallDir,
+					map[string]any{"dir": report.InstallDir}).WithEvidence(err.Error()))
+				return report, failure(messages.ErrorAgentInstallDirNotWritable, fmt.Errorf("%w %s: %v", ErrInstallDirNotWritable, report.InstallDir, err))
 			} else if fallbackDir, fallbackErr := writableUserInstallDir(ctx, client); fallbackErr == nil {
 				requestedDir := report.InstallDir
 				report.InstallDir = fallbackDir
 				useSudo = false
-				report.Checks = append(report.Checks, CheckResult{Name: "Privilege", Status: "warn", Detail: fmt.Sprintf("sudo cannot claim %s; using writable user install directory %s: %v", requestedDir, fallbackDir, err)})
+				report.Checks = append(report.Checks, WarnCheck(CheckIDPrivilege, messages.CheckPrivilegeUserDirFallback, fmt.Sprintf("sudo cannot claim %s; using writable user install directory %s", requestedDir, fallbackDir),
+					map[string]any{"requested": requestedDir, "dir": fallbackDir}).WithEvidence(err.Error()))
 			} else {
-				report.Checks = append(report.Checks, CheckResult{Name: "Privilege", Status: "error", Detail: fmt.Sprintf("%v; rootless fallback unavailable: %v", err, fallbackErr)})
+				report.Checks = append(report.Checks, FailCheck(CheckIDPrivilege, messages.CheckPrivilegeNoFallback, "sudo cannot claim the install directory and no rootless fallback is writable",
+					map[string]any{"dir": report.InstallDir}).WithEvidence(fmt.Sprintf("%v; rootless fallback unavailable: %v", err, fallbackErr)))
 				return report, fmt.Errorf("%w; rootless fallback unavailable: %v", err, fallbackErr)
 			}
 		} else {
-			report.Checks = append(report.Checks, CheckResult{Name: "Privilege", Status: "ok", Detail: "non-root user; using passwordless sudo"})
+			report.Checks = append(report.Checks, PassCheck(CheckIDPrivilege, messages.CheckPrivilegeSudo, "non-root user; using passwordless sudo", nil))
 		}
 	}
 
@@ -272,22 +279,22 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 		return run(ctx, client, cmd)
 	})
 	if err != nil {
-		report.Checks = append(report.Checks, CheckResult{Name: "Arch", Status: "error", Detail: err.Error()})
+		report.Checks = append(report.Checks, FailCheck(CheckIDArch, messages.CheckArchUnsupported, "no supported architecture was detected", nil).WithEvidence(err.Error()))
 		return report, err
 	}
 	report.Arch = goarch
 	report.BinaryName = proto.AgentBinaryName("linux", goarch)
-	report.Checks = append(report.Checks, CheckResult{Name: "Arch", Status: "ok", Detail: strings.TrimSpace(archOut) + " -> " + goarch})
+	report.Checks = append(report.Checks, archCheck(strings.TrimSpace(archOut), goarch))
 
 	if err := notifyInstallPhase(req, "artifact_check"); err != nil {
 		return report, err
 	}
 	bin, err := i.ReadBin(report.BinaryName)
 	if err != nil {
-		report.Checks = append(report.Checks, CheckResult{Name: "Agent binary", Status: "error", Detail: err.Error()})
-		return report, fmt.Errorf("read agent binary %s: %w", report.BinaryName, err)
+		report.Checks = append(report.Checks, agentBinaryMissingCheck(report.BinaryName, err))
+		return report, failure(messages.ErrorAgentInstallBinaryUnavailable, fmt.Errorf("read agent binary %s: %w", report.BinaryName, err))
 	}
-	report.Checks = append(report.Checks, CheckResult{Name: "Agent binary", Status: "ok", Detail: fmt.Sprintf("%s (%d bytes)", report.BinaryName, len(bin))})
+	report.Checks = append(report.Checks, agentBinaryReadyCheck(report.BinaryName, len(bin)))
 
 	binPath := report.InstallDir + "/gpuworks-agent"
 	// Avoid reusing a stale root-owned .new file from an interrupted install.
@@ -301,7 +308,8 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 		// mount read-only by the time the upload starts. Retry in a writable
 		// user-owned directory before returning the remote upload error.
 		if fallbackDir, fallbackErr := writableUserInstallDir(ctx, client); !chosenDir && fallbackErr == nil && fallbackDir != report.InstallDir {
-			report.Checks = append(report.Checks, CheckResult{Name: "Privilege", Status: "warn", Detail: fmt.Sprintf("agent upload to %s failed; retrying in writable user directory %s: %v", report.InstallDir, fallbackDir, err)})
+			report.Checks = append(report.Checks, WarnCheck(CheckIDPrivilege, messages.CheckPrivilegeUploadFallback, fmt.Sprintf("agent upload to %s failed; retrying in writable user directory %s", report.InstallDir, fallbackDir),
+				map[string]any{"requested": report.InstallDir, "dir": fallbackDir}).WithEvidence(err.Error()))
 			report.InstallDir = fallbackDir
 			useSudo = false
 			// The fallback directory has its own filesystem; replace the
@@ -319,7 +327,7 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 			err = uploadDataContext(ctx, client, stagedBinPath, bin, true, i.uploadTimeout())
 		}
 		if err != nil {
-			report.Checks = append(report.Checks, CheckResult{Name: "Upload", Status: "error", Detail: err.Error()})
+			report.Checks = append(report.Checks, uploadFailedCheck(stagedBinPath, "", err))
 			return report, err
 		}
 	}
@@ -344,15 +352,10 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 	defer cancelInstall()
 	ctx = installCtx
 	if out, err := run(ctx, client, atomicReplaceCommand(stagedBinPath, binPath)); err != nil {
-		detail := strings.TrimSpace(out)
-		if detail != "" {
-			detail += ": "
-		}
-		detail += err.Error()
-		report.Checks = append(report.Checks, CheckResult{Name: "Upload", Status: "error", Detail: detail})
+		report.Checks = append(report.Checks, uploadFailedCheck(binPath, out, err))
 		return report, fmt.Errorf("replace agent binary: %w", err)
 	}
-	report.Checks = append(report.Checks, CheckResult{Name: "Upload", Status: "ok", Detail: binPath})
+	report.Checks = append(report.Checks, uploadedCheck(binPath))
 
 	if remoteBundle := strings.TrimSpace(req.UdockerBundle); remoteBundle != "" {
 		check, err := i.installUdockerBundle(ctx, client, remoteBundle, report.InstallDir)
@@ -374,14 +377,14 @@ func (i *SSHInstaller) InstallSSH(ctx context.Context, req SSHInstallRequest) (S
 		installDir: report.InstallDir, conf: req.agentConfig(), supervisor: req.supervisor(), noSudo: !useSudo,
 	})
 	if err != nil {
-		report.Checks = append(report.Checks, CheckResult{Name: "Start agent", Status: "error", Detail: strings.TrimSpace(out) + ": " + err.Error()})
-		return report, fmt.Errorf("start agent: %w: %s", err, lastLines(out, 3))
+		report.Checks = append(report.Checks, startFailedCheck(out, err))
+		return report, startFailure(out, fmt.Errorf("start agent: %w: %s", err, lastLines(out, 3)))
 	}
-	report.Checks = append(report.Checks, CheckResult{Name: "Start agent", Status: "ok", Detail: strings.TrimSpace(out)})
+	report.Checks = append(report.Checks, startedCheck(out))
 	verify := verifyAgentCommand(ctx, client, report.InstallDir)
 	report.Checks = append(report.Checks, verify)
-	if verify.Status == "error" {
-		return report, fmt.Errorf("agent process verification failed: %s", verify.Detail)
+	if verify.Failed() {
+		return report, fmt.Errorf("agent process verification failed: %s", verify.Message)
 	}
 
 	report.Checks = append(report.Checks, i.installUdockerDebugHelper(ctx, client, report.InstallDir, req.UdockerBundle, report.Arch))
@@ -438,18 +441,21 @@ func configureProviderDNS(ctx context.Context, client *ssh.Client, providerKind,
 		// feed it only to sudo's stdin and never include it in diagnostics.
 		out, err = runWithInput(ctx, client, "sudo -S -p '' sh -c "+shellQuote(command), password)
 	}
+	params := map[string]any{"provider": "compshare"}
+	notSet := func(evidence string) CheckResult {
+		return WarnCheck(CheckIDProviderDNS, messages.CheckProviderDNSNotSet, "the provider's accelerated DNS resolvers could not be set", params).WithEvidence(evidence)
+	}
 	if err != nil {
-		return CheckResult{Name: "Compshare accelerated DNS", Status: "warn", Detail: strings.TrimSpace(out) + ": " + err.Error()}, true
+		return notSet(outputEvidence(out, err)), true
 	}
 	resolv, verifyErr := run(ctx, client, "cat /etc/resolv.conf")
-	if verifyErr != nil || !strings.Contains(resolv, "100.90.90.90") {
-		detail := strings.TrimSpace(resolv)
-		if verifyErr != nil {
-			detail = strings.TrimSpace(out) + ": " + verifyErr.Error()
-		}
-		return CheckResult{Name: "Compshare accelerated DNS", Status: "warn", Detail: detail}, true
+	if verifyErr != nil {
+		return notSet(outputEvidence(out, verifyErr)), true
 	}
-	return CheckResult{Name: "Compshare accelerated DNS", Status: "ok", Detail: strings.TrimSpace(resolv)}, true
+	if !strings.Contains(resolv, "100.90.90.90") {
+		return notSet(resolv), true
+	}
+	return PassCheck(CheckIDProviderDNS, messages.CheckProviderDNSSet, "the provider's accelerated DNS resolvers are set", params).WithEvidence(resolv), true
 }
 
 func compshareAcceleratedRegion(region string) bool {
@@ -493,13 +499,10 @@ func (i *SSHInstaller) installUdockerDebugHelper(ctx context.Context, client *ss
 	debugPath := strings.TrimRight(debugDir, "/") + "/udocker-debug"
 	udockerDir, proot, entry := udockerDebugPaths(installDir, udockerBundle, goarch)
 	if err := uploadDataContext(ctx, client, debugPath, []byte(udockerDebugScript(installDir, udockerBundle, goarch)), true, i.uploadTimeout()); err != nil {
-		return CheckResult{Name: "runveil debug helper", Status: "warn", Detail: err.Error()}
+		return WarnCheck(CheckIDDebugHelper, messages.CheckDebugHelperFailed, "the runveil debug helper could not be installed", map[string]any{"path": debugPath}).WithEvidence(err.Error())
 	}
-	return CheckResult{
-		Name:   "runveil debug helper",
-		Status: "ok",
-		Detail: fmt.Sprintf("%s ready — UDOCKER_DIR=%s  proot=%s  binary=%s", debugPath, udockerDir, proot, entry),
-	}
+	return PassCheck(CheckIDDebugHelper, messages.CheckDebugHelperReady, debugPath+" ready", map[string]any{"path": debugPath}).
+		WithEvidence(fmt.Sprintf("UDOCKER_DIR=%s  proot=%s  binary=%s", udockerDir, proot, entry))
 }
 
 // resolveDebugDir picks the home directory when it was successfully
@@ -560,7 +563,7 @@ func connectOnce(ctx context.Context, user, host string, port int, methods []ssh
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	raw, err := dialTCP(ctx, addr, timeout)
 	if err != nil {
-		return nil, fmt.Errorf("ssh dial: %w", err)
+		return nil, dialFailure(fmt.Errorf("ssh dial: %w", err))
 	}
 	conn := &identCapturingConn{Conn: raw}
 	// ssh.NewClientConn does not honor ClientConfig.Timeout when it is given an
@@ -579,7 +582,7 @@ func connectOnce(ctx context.Context, user, host string, port int, methods []ssh
 	c, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
 	if err != nil {
 		conn.Close()
-		return nil, handshakeError(conn, err)
+		return nil, handshakeFailure(handshakeError(conn, err))
 	}
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		c.Close()
@@ -850,7 +853,7 @@ func uploadStream(ctx context.Context, client *ssh.Client, path string, data []b
 		cancelCleanup()
 		err := fmt.Errorf("upload %s timed out after %s", path, timeout)
 		execution.Finish(out.String(), err)
-		return err
+		return failure(messages.ErrorAgentInstallUploadStalled, err)
 	}
 	execution.Finish(out.String(), nil)
 	return nil
@@ -859,28 +862,28 @@ func uploadStream(ctx context.Context, client *ssh.Client, path string, data []b
 func (i *SSHInstaller) installUdockerBundle(ctx context.Context, client *ssh.Client, remoteBundle, installDir string) (CheckResult, error) {
 	source := strings.TrimSpace(i.UdockerBundleSource)
 	if source == "" {
-		return CheckResult{Name: "udocker offline bundle", Status: "warn", Detail: "udocker_bundle_source is not set in server.yaml; remote bundle path will be passed through only"}, nil
+		return WarnCheck(CheckIDUdockerBundle, messages.CheckUdockerBundleSourceUnset, "udocker_bundle_source is not set in server.yaml; remote bundle path will be passed through only",
+			map[string]any{"path": remoteBundle}), nil
+	}
+	params := map[string]any{"path": remoteBundle}
+	failed := func(evidence string) CheckResult {
+		return FailCheck(CheckIDUdockerBundle, messages.CheckUdockerBundleFailed, "the udocker offline bundle could not be installed", params).WithEvidence(evidence)
 	}
 	archive, err := udockerBundleArchive(source)
 	if err != nil {
-		return CheckResult{Name: "udocker offline bundle", Status: "error", Detail: err.Error()}, err
+		return failed(err.Error()), err
 	}
 	remoteArchive := strings.TrimRight(installDir, "/") + "/udocker-bundle.tar.gz"
 	if err := uploadStream(ctx, client, remoteArchive, archive, false, i.uploadTimeout(), false); err != nil {
-		return CheckResult{Name: "udocker offline bundle", Status: "error", Detail: err.Error()}, err
+		return failed(err.Error()), err
 	}
 	cmd := fmt.Sprintf("rm -rf %s && mkdir -p %s && gzip -dc %s | tar -xf - -C %s && rm -f %s",
 		shellQuote(remoteBundle), shellQuote(remoteBundle), shellQuote(remoteArchive), shellQuote(remoteBundle), shellQuote(remoteArchive))
 	if out, err := run(ctx, client, cmd); err != nil {
-		detail := strings.TrimSpace(out)
-		if detail == "" {
-			detail = err.Error()
-		} else {
-			detail += ": " + err.Error()
-		}
-		return CheckResult{Name: "udocker offline bundle", Status: "error", Detail: detail}, fmt.Errorf("extract udocker offline bundle: %w", err)
+		return failed(outputEvidence(out, err)), fmt.Errorf("extract udocker offline bundle: %w", err)
 	}
-	return CheckResult{Name: "udocker offline bundle", Status: "ok", Detail: fmt.Sprintf("uploaded %d bytes to %s", len(archive), remoteBundle)}, nil
+	return PassCheck(CheckIDUdockerBundle, messages.CheckUdockerBundleUploaded, fmt.Sprintf("uploaded %d bytes to %s", len(archive), remoteBundle),
+		map[string]any{"path": remoteBundle, "bytes": len(archive)}), nil
 }
 
 func udockerBundleArchive(source string) ([]byte, error) {

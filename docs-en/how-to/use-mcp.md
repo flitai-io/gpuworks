@@ -80,3 +80,8 @@ The MCP client sends the platform data it reads to its own configured model. The
 | 403 `MCP_DISABLED` | The MCP service is off. Ask an administrator to turn it on in the MCP service card under Settings → Security & access. |
 | 401 | The token is incorrect, revoked, or expired, or its owner's account has been deleted. |
 | 403 `PLATFORM_TOKEN_READ_ONLY` | A read-only token was used for a write operation when calling the management API directly. This does not occur in MCP itself. |
+
+<!-- translation-source-sha256: be5232f32da10ac3b92736b326a8fb03c7f465dd4c839e28d6701b99c12de9c6 -->
+<!-- translation-localized-code-block: 8a2b0addd4b234c1a3e1c263562caabd4ffa916daf5df56b1e4d955e2bd57e8d 3ba776d1fb4ba0682bc2b49859c7fae3017aed7443ce47b4903628cc977a5513 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: 9ea452f4923e0b27a59771db0cf2f7967b2d54d3f73516fd762513ed2dbe3c7a 38965e00633c7b57f1b9a7d7e299e67bd9b07a6264d4ac451f935e5bacbc8773 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: 1ae789a1be156c6e71ca0a7165a224c5f661be3a2949a075af86bddedb728f19 c9049a399aec23f86f72f4ca306d2adbfe55f155dbf0a90e4e5bd819a3632485 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

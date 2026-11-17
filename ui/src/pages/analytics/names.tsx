@@ -3,11 +3,12 @@ import { Tag, Typography } from "antd";
 import type { TFunction } from "i18next";
 import type { DeploymentInfo, KeyInfo } from "./usageModel";
 
-/** keyTitle names a token the way every analytics view does: a deleted one by its id, a keyless Playground or console batch request by its user. */
+/** keyTitle names a token the way every analytics view does: a deleted one by its id, a keyless Playground, console batch or evaluation request by its user. */
 export function keyTitle(t: TFunction, key: KeyInfo): { title: string; sub: string } {
   if (key.deleted) return { title: t("names.deletedKey", { id: key.id }), sub: "" };
   if (key.playground) return { title: key.userName ? t("names.playground", { user: key.userName }) : t("names.playgroundAnonymous"), sub: "" };
   if (key.batch) return { title: key.userName ? t("names.batch", { user: key.userName }) : t("names.batchAnonymous"), sub: "" };
+  if (key.evaluation) return { title: key.userName ? t("names.evaluation", { user: key.userName }) : t("names.evaluationAnonymous"), sub: "" };
   if (!key.id) return { title: t("names.noKey"), sub: "" };
   return { title: key.name || key.prefix, sub: key.name ? key.prefix : "" };
 }

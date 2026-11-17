@@ -23,7 +23,7 @@ func uninstallFixture(t *testing.T) (linuxUninstaller, string) {
 			t.Fatal(err)
 		}
 	}
-	for _, file := range []string{"identity.json", "model.bin", "agent.log", "gpuworks-agent.pid"} {
+	for _, file := range []string{"identity.json", "model.bin", "agent.log", "gpuworks-agent.pid", agentLockFile} {
 		if err := os.WriteFile(filepath.Join(state, file), []byte("keep-unless-uninstalled"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +70,7 @@ func TestUninstallStopsOnlyThisInstallationsRunProcesses(t *testing.T) {
 			t.Errorf("unrelated process %d was removed", pid)
 		}
 	}
-	for _, name := range []string{"identity.json", "gpuworks-agent.pid"} {
+	for _, name := range []string{"identity.json", "gpuworks-agent.pid", agentLockFile} {
 		if _, err := os.Stat(filepath.Join(state, name)); !os.IsNotExist(err) {
 			t.Errorf("%s was not removed", name)
 		}

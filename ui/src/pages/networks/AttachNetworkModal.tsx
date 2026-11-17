@@ -1,5 +1,13 @@
+import { Combobox, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem } from "../../components/ui/combobox";
+import { Segmented } from "../../ui-kit/Segmented";
+import { useForm } from "react-hook-form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../../components/ui/dialog";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { FormField } from "../../ui-kit/form/FormField";
+import { message } from "../../ui-kit/feedback";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, AutoComplete, Card, Form, Input, Modal, Radio, message } from "antd";
+
 import { useTranslation } from "react-i18next";
 import { api } from "../../api";
 import NodePicker from "../../nodes/NodePicker";
@@ -33,17 +41,16 @@ export default function AttachNetworkModal({
   onSaved: (detail: NetworkDetail) => void;
 }) {
   const { t } = useTranslation("networks");
-  const [form] = Form.useForm<FormValues>();
+  const form = useForm<FormValues>();
   const [inventory, setInventory] = useState<NodeNetworks | null>(null);
   const [saving, setSaving] = useState(false);
-  const mode = Form.useWatch("mode", form);
+  const mode = form.watch("mode");
   const editing = !!attachment;
   const rdma = usesRails(network.type);
 
   useEffect(() => {
     if (!open) return;
-    form.resetFields();
-    form.setFieldsValue(attachment
+    form.reset(attachment
       ? { mode: "node", node_uuids: attachment.node_uuid ? [attachment.node_uuid] : [], interface: attachment.interface, ip: attachment.ip }
       : { mode: "node", node_uuids: [] });
   }, [open, attachment, form]);
@@ -63,19 +70,13 @@ export default function AttachNetworkModal({
   const attached = new Set(network.attachments.filter((a) => a.target === "node").map((a) => a.node_uuid));
   // The picker searches nodes on the server; the ones picked are read back
   // to name them in the outcome.
-  const picked = useNodeLookup((Form.useWatch("node_uuids", form) as string[] | undefined) ?? []);
+  const picked = useNodeLookup((form.watch("node_uuids") as string[] | undefined) ?? []);
   const nodeName = (uuid: string) => {
     const n = picked.get(uuid);
     return n ? nodeDisplayName(n) : uuid;
   };
 
-  const submit = async () => {
-    let v: FormValues;
-    try {
-      v = await form.validateFields();
-    } catch {
-      return; // the form shows the field errors
-    }
+  const submit = form.handleSubmit(async (v) => {
     setSaving(true);
     try {
       if (attachment) {
@@ -102,67 +103,31 @@ export default function AttachNetworkModal({
     } finally {
       setSaving(false);
     }
-  };
+  });
 
-  return (
-    <Modal
-      title={editing ? t(rdma ? "attach.editBootstrapTitle" : "attach.editTitle") : t("attach.title", { name: network.name })}
-      open={open}
-      onCancel={onClose}
-      onOk={submit}
-      confirmLoading={saving}
-      okText={t("actions.save")}
-      cancelText={t("actions.cancel")}
-      destroyOnHidden
-      width={620}
-    >
-      <Form form={form} layout="vertical">
-        {!editing && (
-          <Form.Item label={t("attach.mode")} name="mode" extra={t("attach.modeHint")}>
-            <Radio.Group optionType="button" options={[
-              { value: "node", label: t("attach.modeNode") },
-              { value: "label", label: t("attach.modeLabel") },
-            ]} />
-          </Form.Item>
-        )}
-        {mode === "label" ? (
-          <>
-            <Form.Item label={t("attach.labelKey")} name="label_key" rules={[{ required: true, whitespace: true, message: t("attach.labelKeyRequired") }]}>
-              <Input placeholder="pool" />
-            </Form.Item>
-            <Form.Item label={t("attach.labelValue")} name="label_value">
-              <Input placeholder="h20-a" />
-            </Form.Item>
-          </>
-        ) : (
-          <>
-            <Form.Item
-              label={t("attach.nodes")}
-              name="node_uuids"
-              extra={!editing && rdma ? t("attach.rdmaInferred") : undefined}
-              rules={[{ required: true, type: "array", min: 1, message: t("attach.nodeRequired") }]}
-            >
-              <NodePicker
-                mode="multiple"
-                disabled={editing}
-                aria-label={t("attach.nodes")}
-                optionDisabled={(n) => !editing && attached.has(n.uuid)}
-              />
-            </Form.Item>
-            {editing && (
-              <Card size="small" title={t(rdma ? "attach.bootstrapOverride" : "attach.overrides")}>
-                <Form.Item label={rdma ? t("attach.interfaceIB") : t("attach.interface")} name="interface">
-                  <AutoComplete allowClear options={interfaceOptions} filterOption={(input, option) => String(option?.value ?? "").includes(input)} />
-                </Form.Item>
-                <Form.Item label={t("attach.ip")} name="ip" style={{ marginBottom: 0 }}>
-                  <Input placeholder={t("attach.ipPlaceholder")} />
-                </Form.Item>
-              </Card>
-            )}
-          </>
-        )}
-        {mode === "label" && <Alert style={{ marginTop: 8 }} type="info" showIcon message={t("attach.modeHint")} />}
-      </Form>
-    </Modal>
-  );
+  return <Dialog open={open} onOpenChange={(next) => { if (!next && !saving) onClose(); }}>
+    <DialogContent size="lg" className="max-h-[calc(100dvh-32px)] overflow-y-auto" closeButtonDisabled={saving} closeButtonLabel={t("actions.close", { ns: "common" })}>
+      <form onSubmit={submit}>
+        <DialogHeader><DialogTitle>{editing ? t(rdma ? "attach.editBootstrapTitle" : "attach.editTitle") : t("attach.title", { name: network.name })}</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
+          {!editing && <FormField control={form.control} name="mode" label={t("attach.mode")} description={t("attach.modeHint")}>{field => <Segmented label={t("attach.mode")} value={field.value} onChange={field.onChange} options={[{value:"node",label:t("attach.modeNode")},{value:"label",label:t("attach.modeLabel")}]} />}</FormField>}
+          {mode === "label" ? <>
+            <FormField control={form.control} name="label_key" label={t("attach.labelKey")} required rules={{ validate: value => form.getValues("mode") !== "label" || !!value?.trim() || t("attach.labelKeyRequired") }}>{field => <Input {...field} value={field.value ?? ""} placeholder="pool" />}</FormField>
+            <FormField control={form.control} name="label_value" label={t("attach.labelValue")}>{field => <Input {...field} value={field.value ?? ""} placeholder="h20-a" />}</FormField>
+          </> : <>
+            <FormField control={form.control} name="node_uuids" label={t("attach.nodes")} description={!editing && rdma ? t("attach.rdmaInferred") : undefined} required rules={{ validate: value => form.getValues("mode") === "label" || !!value?.length || t("attach.nodeRequired") }}>{field => <NodePicker id={field.id} value={field.value ?? []} onChange={field.onChange} mode="multiple" disabled={editing} aria-label={t("attach.nodes")} optionDisabled={node => !editing && attached.has(node.uuid)} />}</FormField>
+            {editing && <>
+              <h3 className="text-body font-semibold">{t(rdma ? "attach.bootstrapOverride" : "attach.overrides")}</h3>
+              <FormField control={form.control} name="interface" label={t(rdma ? "attach.interfaceIB" : "attach.interface")}>{field => <Combobox items={interfaceOptions.map(option => option.value)} value={field.value ?? ""} inputValue={field.value ?? ""} onInputValueChange={field.onChange} onValueChange={value => { if (value !== null) field.onChange(value); }}>
+                <ComboboxInput id={field.id} aria-label={t(rdma ? "attach.interfaceIB" : "attach.interface")} triggerAriaLabel={t(rdma ? "attach.interfaceIB" : "attach.interface")} />
+                <ComboboxContent><ComboboxList>{(value: string) => <ComboboxItem key={value} value={value}>{interfaceOptions.find(option => option.value === value)?.label ?? value}</ComboboxItem>}</ComboboxList></ComboboxContent>
+              </Combobox>}</FormField>
+              <FormField control={form.control} name="ip" label={t("attach.ip")}>{field => <Input {...field} value={field.value ?? ""} placeholder={t("attach.ipPlaceholder")} />}</FormField>
+            </>}
+          </>}
+        </div>
+        <DialogFooter><Button variant="ghost" disabled={saving} onClick={onClose}>{t("actions.cancel")}</Button><Button type="submit" loading={saving}>{t("actions.save")}</Button></DialogFooter>
+      </form>
+    </DialogContent>
+  </Dialog>;
 }

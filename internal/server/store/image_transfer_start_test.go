@@ -100,7 +100,7 @@ func TestImageTransferClaimRejectsChangedObservations(t *testing.T) {
 			case "completion":
 				err = s.ApplyImageNodeStatus(image.ID, node.ID, proto.ImageNodeStatus{State: ImageStatePresent, TransferID: "old"})
 			case "cancel":
-				_, err = s.CancelImageNodeTransferIfActive(image.ID, node.ID, "old", "cancelled")
+				_, err = s.CancelImageNodeTransferIfActive(image.ID, node.ID, "old", "cancelled", "")
 			case "another attempt completed":
 				// Even identical state and timestamp cannot erase a new attempt's history.
 				err = s.DB().Model(&ImageNode{}).Where("id = ?", observed.ID).UpdateColumn("last_transfer_id", "other").Error

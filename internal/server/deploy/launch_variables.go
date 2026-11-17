@@ -71,6 +71,22 @@ func launchVariables(engine Engine, params Params, modelMount string, placement 
 			variables[placementeval.VarMasterPort] = int64(params.MasterPort)
 		}
 	}
+	if params.PD != nil {
+		variables[placementeval.VarPDRole] = params.PD.Role
+		if params.PD.SideChannelHost != "" {
+			variables[placementeval.VarPDSideChannelHost] = params.PD.SideChannelHost
+		}
+		if params.PD.SideChannelPort > 0 {
+			variables[placementeval.VarPDSideChannelPort] = int64(params.PD.SideChannelPort)
+		}
+	}
+	if params.Symbolic {
+		// A template that places a rank-owned fact itself hands the draft
+		// the reference a manual command understands.
+		for _, name := range rankOwnedVariables {
+			variables[name] = variableReference(name)
+		}
+	}
 	return variables
 }
 
@@ -95,7 +111,7 @@ func expandValues(values []string, variables map[string]any, allowUnresolved boo
 func expandScript(script string, variables map[string]any, allowUnresolved bool) (string, error) {
 	if !allowUnresolved {
 		for _, name := range placementeval.References(script) {
-			if _, ok := variables[name]; !ok && placementeval.PlatformVariable(name) {
+			if _, ok := placementeval.Lookup(variables, name); !ok && placementeval.PlatformVariable(name) {
 				return "", fmt.Errorf("template variable %s is unresolved", name)
 			}
 		}
@@ -122,7 +138,7 @@ func requireTemplateVariables(engine Engine, templateFields ...[]string) error {
 	}
 	referenced := map[string]struct{}{}
 	for _, name := range placementeval.References(values...) {
-		referenced[name] = struct{}{}
+		referenced[placementeval.Canonical(name)] = struct{}{}
 	}
 	var missing []string
 	for _, name := range required {

@@ -26,7 +26,7 @@
     "ui/src/pages/logsPageRange.ts",
     "internal/server/api/logs_search.go",
     "internal/server/logstore/query.go",
-    "internal/server/app/observability.go"
+    "internal/server/obsingest/pipeline.go"
   ],
   "fixture": {
     "entry": "GET /api/v1/agent/connect with an invalid marker-bearing Sec-WebSocket-Version",
@@ -155,6 +155,7 @@
       "covered": [
         "disabled for empty filters",
         "real browser download",
+        "exactly one leading UTF-8 BOM (EF BB BF)",
         "UTF-8 Chinese",
         "CSV commas and quotes",
         "exact headers/order/fields/row count"
@@ -275,7 +276,7 @@
     "5.1": "PARTIAL: source/level/range defaults and full option labels/enabled state and Escape focus return are checked. Context drawer selectors are not exercised.",
     "9.2": "Exact fixed custom from/to seeded by supported deep link; not an invented custom picker",
     "9.4": "Covered: fixed real WARN timestamp is included at from and to separately; moving each bound one millisecond past that timestamp excludes it. Real browser search row IDs/timestamps/full content/total match the independently collected WARN and separate authenticated GET for every boundary.",
-    "16.8": "Read actual downloaded CSV bytes, UTF-8 and schema, compare every field to loaded rows",
+    "16.8": "Read actual downloaded CSV bytes, require exactly one leading UTF-8 BOM (EF BB BF), decode strict UTF-8 and independently parse the complete CSV schema; compare every field to current loaded rows",
     "18.1": "Real server warning collection and keyword/quick-chip/source/level/time intersection; agent/container facts remain missing",
     "18.4": "Browser chip and free-text OR queries match exact search/histogram expressions, known row identities and bucket counts; pagination remains missing",
     "18.6": "CSV content is verified; no live-follow or clipboard claim",
@@ -288,7 +289,7 @@
     "2.3": "covered: the page size is the field with a length contract on this surface, and the four values around its thresholds are sent rather than one comfortable middle value. Below the floor - 0 - is required to be clamped up to the default, which exceeds the match count and so returns every match; at the floor - 1 - exactly one row is required back and the page is required to mark itself truncated, because more matches wait behind it; at the ceiling - 5000 - everything is required back and the page is required not to claim truncation, since nothing is being hidden; above the ceiling - 5001 - is required to be clamped down and answered without an error. Counting is in whole rows, which is the unit the endpoint documents, and the credential and time fields are strings with no length contract of their own, which is recorded rather than invented. The truncation half is what makes the floor case meaningful: only a page that came back full while matches remain may carry the marker. Proven by mutation: removing the store's one-row lookahead makes the floor case return a full page without marking it truncated."
   },
   "time_semantics": "Both endpoints included: known real WARN tested at exact lower/upper timestamps and excluded one millisecond beyond each endpoint.",
-  "export_contract": "Current loaded entries, not all backend matches. BOM is optional because the product does not promise it.",
+  "export_contract": "Current loaded entries, not all backend matches. Exactly one leading UTF-8 BOM (EF BB BF) is mandatory; the remaining bytes must be valid UTF-8 CSV with exact headers and loaded entries.",
   "cleanup": "Stop only the owned LocalServer and release its port lock; preserve the private run database/logs for diagnosis, with seven-day scoped removal guidance. No shared server, GPU, agent or Docker dependency.",
   "missing": [
     "Agent/container/end-to-end node log collection, live SSE, reconnect, cancellation and resource filters",

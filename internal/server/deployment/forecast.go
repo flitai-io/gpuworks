@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
@@ -131,7 +132,7 @@ func (s *Service) forecastWeights(fact *dto.AcquisitionNode, node *store.Node, m
 	src, err := s.d.Store.ModelSourceOn(model.ID, node, rules)
 	if err != nil {
 		fact.WeightsPlan = forecastUnavailable
-		check := modelDiagnostic(model, node, src, "facts", "unknown", "facts_unavailable", "Model location facts could not be read")
+		check := modelDiagnostic(model, node, src, "facts", proto.CheckSkip, "facts_unavailable", "Model location facts could not be read")
 		fact.WeightsFetchError = &check.Message
 		return
 	}

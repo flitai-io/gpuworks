@@ -44,11 +44,11 @@ func newDoctorPPUProber() *doctorPPUProber {
 		FixedProber: &gpu.FixedProber{VendorName: "ppu", GPUs: []proto.GPUInfo{
 			{Index: 0, Name: "PPU-ZW810E", Vendor: "ppu", PCIeBDF: "0001:c8:00.0", Healthy: true, HealthStatus: "OK"},
 			{Index: 5, Name: "PPU-ZW810E", Vendor: "ppu", PCIeBDF: "0000:7e:00.0", NUMANode: 0, Healthy: true,
-				HealthStatus: "Warning", HealthCode: "memory_repair_pending", HealthMessage: pendingEvidence},
+				HealthStatus: "Warning", HealthCode: "MEMORY_REPAIR_PENDING", HealthMessage: pendingEvidence},
 			{Index: 6, Name: "PPU-ZW810E", Vendor: "ppu", PCIeBDF: "0001:0b:00.0", Healthy: true,
-				HealthStatus: "Warning", HealthCode: "memory_repair_pending", HealthMessage: pendingEvidence},
+				HealthStatus: "Warning", HealthCode: "MEMORY_REPAIR_PENDING", HealthMessage: pendingEvidence},
 			{Index: 7, Name: "PPU-ZW810E", Vendor: "ppu", PCIeBDF: "0000:c6:00.0", Healthy: false,
-				HealthStatus: "Error", HealthCode: "memory_remap_failed", HealthMessage: "remapped_rows.failure=Yes"},
+				HealthStatus: "Error", HealthCode: "MEMORY_REMAP_FAILED", HealthMessage: "remapped_rows.failure=Yes"},
 		}},
 		procs: []gpu.ComputeProcess{
 			{PID: 135707, Name: "sglang::scheduler", PCIeBDF: "00000000:7E:00.0"},
@@ -80,15 +80,15 @@ func TestDoctorReportGroupsAcceleratorFindingsWithEvidenceAndCommands(t *testing
 	if r.Accelerators == nil || r.Accelerators.Vendor != "ppu" || len(r.Accelerators.GPUs) != 4 {
 		t.Fatalf("accelerators = %+v", r.Accelerators)
 	}
-	if g := r.Accelerators.GPUs[1]; g.PCIeBDF != "0000:7e:00.0" || g.HealthStatus != "Warning" || g.HealthCode != "memory_repair_pending" {
+	if g := r.Accelerators.GPUs[1]; g.PCIeBDF != "0000:7e:00.0" || g.HealthStatus != "Warning" || g.HealthCode != "MEMORY_REPAIR_PENDING" {
 		t.Fatalf("gpu 5 = %+v", g)
 	}
 	var codes []string
 	for _, f := range r.Findings {
-		codes = append(codes, f.Level+"/"+f.Code)
+		codes = append(codes, f.Status+"/"+f.Code)
 	}
 	// Errors come first; cards sharing a finding are one finding.
-	if !reflect.DeepEqual(codes, []string{"error/memory_remap_failed", "warning/memory_repair_pending"}) {
+	if !reflect.DeepEqual(codes, []string{"fail/MEMORY_REMAP_FAILED", "warn/MEMORY_REPAIR_PENDING"}) {
 		t.Fatalf("findings = %v", codes)
 	}
 	failed, pending := r.Findings[0], r.Findings[1]
@@ -120,7 +120,7 @@ func TestDoctorReportGroupsAcceleratorFindingsWithEvidenceAndCommands(t *testing
 
 	for _, want := range []string{
 		"5 0000:7e:00.0", "1 OK, 2 Warning, 1 Error",
-		"[warning] memory_repair_pending: accelerator 5, 6",
+		"[warning] MEMORY_REPAIR_PENDING: accelerator 5, 6",
 		"recheck   ppu-smi -q -d ECC,PAGE_RETIREMENT,ROW_REMAPPER -i 0000:7e:00.0",
 		"action    ppu-smi -r -i 0000:7e:00.0",
 		"running   pid 135707 sglang::scheduler",
@@ -171,7 +171,7 @@ func TestDoctorReportProbeFailure(t *testing.T) {
 		t.Fatalf("findings = %+v", r.Findings)
 	}
 	f := r.Findings[0]
-	if f.Code != proto.DoctorAcceleratorProbeFailed || f.Level != proto.DoctorLevelError || f.Recheck != "ppu-smi" ||
+	if f.Code != proto.DoctorAcceleratorProbeFailed || f.Status != proto.CheckFail || f.Recheck != "ppu-smi" ||
 		!reflect.DeepEqual(f.Evidence, []proto.DoctorField{{Name: "error", Value: "ppu-smi: exit status 9"}}) {
 		t.Fatalf("finding = %+v", f)
 	}
@@ -190,7 +190,7 @@ func TestDoctorReportFlagsLowDisk(t *testing.T) {
 			disk = &r.Findings[i]
 		}
 	}
-	if disk == nil || disk.Level != proto.DoctorLevelWarning || disk.Recheck != "df -h /data/models" || disk.Probe != "statfs(/data/models)" {
+	if disk == nil || disk.Status != proto.CheckWarn || disk.Recheck != "df -h /data/models" || disk.Probe != "statfs(/data/models)" {
 		t.Fatalf("findings = %+v", r.Findings)
 	}
 	for _, f := range r.Findings {
@@ -224,7 +224,7 @@ func TestDoctorReportFlagsSelectedRuntimeThatDoesNotAnswer(t *testing.T) {
 		t.Fatalf("findings = %+v", r.Findings)
 	}
 	f := r.Findings[0]
-	if f.Code != proto.DoctorRuntimeUnavailable || f.Level != proto.DoctorLevelError || f.Recheck != "docker version" ||
+	if f.Code != proto.DoctorRuntimeUnavailable || f.Status != proto.CheckFail || f.Recheck != "docker version" ||
 		f.Probe != "docker version --format {{.Server.Version}}" || !strings.HasPrefix(f.Evidence[0].Value, "Cannot connect to the Docker daemon") {
 		t.Fatalf("finding = %+v", f)
 	}

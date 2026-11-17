@@ -203,7 +203,8 @@ func TestNamedRankWaitsOnACordonedNode(t *testing.T) {
 }
 
 // A replica waiting because its only node is cordoned starts as soon as the
-// node is schedulable again: the change reconciles every deployment at once.
+// node is schedulable again: the change reconciles, at the next routing tick,
+// every deployment it could unblock.
 func TestUncordonStartsWaitingReplicas(t *testing.T) {
 	st, hub, nodes, model := poolFixture(t, "uncordon", 1, 1)
 	if _, err := st.SetNodeScheduling(nodes[0].UUID, store.NodeCordoned); err != nil {
@@ -223,6 +224,7 @@ func TestUncordonStartsWaitingReplicas(t *testing.T) {
 	}
 	drainQueue(c)
 	c.onEvent(bus.Event{Topic: "node", Key: nodes[0].UUID, Reason: store.NodeChangeScheduling})
+	c.flushEventRoutes()
 	queued := false
 	for _, key := range pendingKeys(c) {
 		queued = queued || key == depKey(dep.ID)

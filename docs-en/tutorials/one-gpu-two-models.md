@@ -152,3 +152,8 @@ Only proceed to the sleep experiment after both requests succeed.
 3. In the original terminal, rerun A's and B's commands from section 4. Confirm that both return `HTTP 200` and a response, and still use the same GPU.
 
 **Final result**: A and B share one GPU and can be called separately. Once A finishes entering sleep, only A is rejected by the gateway, while B continues responding. After A finishes waking, both can be called again. For sleep levels, failure handling, and other deployment forms, see [Operate Sleep/Wake](../how-to/sleep-wake.md).
+
+<!-- translation-source-sha256: 8708c171588f121e3fab5750fc9fad1cdfc965c44fe09ca0a80cbd874019eb41 -->
+<!-- translation-localized-code-block: d4b632e922e42023709ff8e006cf6f0f4c3fe0edba53584b4f2aef32218c5331 943b0e690a15439afca5aa2fc702235dea8ce54b59602880e70ff9b85ce56170 Reviewed translation of user-visible prompt text only; shell syntax, endpoint, model name, and request settings are unchanged. -->
+<!-- translation-localized-code-block: 655656e1f1c87f2d4e57b1f650567f2933ba4e9864b121d56437af838cce929e 1ddaf398e17973142781e19075a5497d7324836e0380af7651dd77170aae03ad Reviewed translation of user-visible prompt text only; shell syntax, endpoint, model name, and request settings are unchanged. -->
+<!-- translation-localized-code-block: 0f36322fa79c3d7e4874c51906c3dffb961740075d0a88a8091a2d235df5bf28 63547763cb38880d84a015e487f72fdf3ae4aa8ee4fab1405061864214a90f7e Reviewed translation of user-visible prompt text only; shell syntax, endpoint, model name, and request settings are unchanged. -->

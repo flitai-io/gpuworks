@@ -12,7 +12,12 @@ import (
 
 // RuntimeState is the runtime_state the deployment DTO reports.
 func RuntimeState(rows Rows, d *store.Deployment, insts []store.Instance, progress []dto.ModelNodePresence) string {
-	state := DeriveRuntimeState(d.State, insts, progress, scheduleStalled(rows, d.ID, len(insts)))
+	return runtimeStateAt(rows, d, insts, progress, time.Now())
+}
+
+// runtimeStateAt is RuntimeState with the pending timeout measured at now.
+func runtimeStateAt(rows Rows, d *store.Deployment, insts []store.Instance, progress []dto.ModelNodePresence, now time.Time) string {
+	state := DeriveRuntimeState(d.State, insts, progress, scheduleStalled(rows, d.ID, len(insts), now))
 	if state != "running" {
 		return state
 	}
@@ -43,7 +48,7 @@ func RuntimeState(rows Rows, d *store.Deployment, insts []store.Instance, progre
 // legitimately takes tens of minutes, and counting from creation would call a
 // perfectly healthy download a stall - the same confusion this whole mechanism
 // exists to remove.
-func scheduleStalled(rows Rows, deploymentID uint, instanceCount int) bool {
+func scheduleStalled(rows Rows, deploymentID uint, instanceCount int, now time.Time) bool {
 	if instanceCount > 0 {
 		return false
 	}
@@ -51,7 +56,13 @@ func scheduleStalled(rows Rows, deploymentID uint, instanceCount int) bool {
 	if !found {
 		return false
 	}
-	return time.Since(ev.CreatedAt) >= rows.PendingTimeout()
+	return !now.Before(scheduleStallDeadline(rows, ev))
+}
+
+// scheduleStallDeadline is when a deployment first refused at ev reads as
+// stalled.
+func scheduleStallDeadline(rows Rows, ev store.InstanceEvent) time.Time {
+	return ev.CreatedAt.Add(rows.PendingTimeout())
 }
 
 // DeriveRuntimeState is planning.DeriveRuntimeState over the model progress
@@ -87,10 +98,12 @@ func TransferProgress(done, size int64) float64 {
 	return math.Min(float64(done)/float64(size), 1)
 }
 
-// RuntimeStates applies the deployment read policy to an already
-// loaded inventory. Deployments waiting for their first instance need model
-// preparation and scheduling facts; those facts are loaded once for the batch.
-func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []store.Deployment, instances []store.Instance) (map[uint]string, error) {
+// EffectiveStates is EffectiveState over an already loaded inventory: the
+// state the deployment list shows, for each deployment. Deployments waiting
+// for their first instance need model preparation and scheduling facts; those
+// facts are loaded once for the batch. Only a running deployment can read
+// asleep, so only those are judged against their replicas.
+func EffectiveStates(st *store.Store, preparation ModelPreparation, deployments []store.Deployment, instances []store.Instance) (map[uint]string, error) {
 	byDeployment := make(map[uint][]store.Instance)
 	for _, instance := range instances {
 		byDeployment[instance.DeploymentID] = append(byDeployment[instance.DeploymentID], instance)
@@ -101,7 +114,7 @@ func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []
 	for _, deployment := range deployments {
 		current := byDeployment[deployment.ID]
 		if len(current) != 0 || deployment.State == store.DeployStopped || deployment.State == store.DeployDeleting {
-			states[deployment.ID] = DeriveRuntimeState(deployment.State, current, nil, false)
+			states[deployment.ID] = EffectiveState(&deployment, DeriveRuntimeState(deployment.State, current, nil, false), Facts{})
 			if states[deployment.ID] == "running" {
 				running = append(running, deployment)
 			}
@@ -110,7 +123,7 @@ func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []
 		preparing = append(preparing, deployment)
 	}
 	if len(running) > 0 {
-		nodes, err := st.ListNodes()
+		nodes, err := st.NodeIdentities()
 		if err != nil {
 			return nil, err
 		}
@@ -124,7 +137,7 @@ func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []
 			d := &running[i]
 			current := byDeployment[d.ID]
 			// Runtime derivation cannot need scheduling facts when instances exist.
-			states[d.ID] = RuntimeState(rows, d, current, nil)
+			states[d.ID] = EffectiveState(d, RuntimeState(rows, d, current, nil), FactsFor(rows, d, current))
 		}
 	}
 	if len(preparing) == 0 {
@@ -136,7 +149,7 @@ func RuntimeStates(st *store.Store, preparation ModelPreparation, deployments []
 	}
 	for i := range preparing {
 		deployment := &preparing[i]
-		states[deployment.ID] = RuntimeState(rows, deployment, nil, RecordedModelProgress(rows, deployment))
+		states[deployment.ID] = EffectiveState(deployment, RuntimeState(rows, deployment, nil, RecordedModelProgress(rows, deployment)), Facts{})
 	}
 	return states, nil
 }

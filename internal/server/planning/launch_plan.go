@@ -16,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/netplan"
 	"gpuworks.ai/gpuworks/internal/server/network"
+	"gpuworks.ai/gpuworks/internal/server/nodepolicy"
 	"gpuworks.ai/gpuworks/internal/server/parallelism"
 	"gpuworks.ai/gpuworks/internal/server/placement"
 	"gpuworks.ai/gpuworks/internal/server/scheduler"
@@ -44,6 +45,9 @@ type LaunchRequest struct {
 	// ExcludeDeploymentID previews the node without that deployment's
 	// instances (Input.ExcludeDeploymentID).
 	ExcludeDeploymentID uint
+	// ExcludeInstanceUUID previews the node without that one instance
+	// (Input.ExcludeInstanceUUID).
+	ExcludeInstanceUUID string
 	// APIPort is the reserved host port of a real launch; a preview passes zero
 	// and gets PreviewAPIPort.
 	APIPort int
@@ -63,9 +67,18 @@ type LaunchRequest struct {
 	ModelMount      string
 	ModelHostPath   string
 	ComponentMounts []proto.MountSpec
+	// ModelPaths is where each model an extra mount row names is on the node
+	// (deploy.ResolveLaunchInput.ModelPaths); empty in a preview.
+	ModelPaths map[uint]string
 
 	ServedName string
-	Sleepable  bool
+	// ImplicitServedName is deploy.Params.ImplicitServedName: the node's
+	// host-process agent would translate an explicit model name to a path.
+	ImplicitServedName bool
+	Sleepable          bool
+	// PriorityScheduling is the deployment's ask for per-request priority
+	// scheduling (deploy.Params.PriorityScheduling).
+	PriorityScheduling bool
 	// YieldPolicy is the deployment's yield policy (package yieldpolicy):
 	// the cards of deployments it does not share with stay reserved against
 	// it even while they sleep. Empty reads as never.
@@ -102,6 +115,11 @@ type LaunchPlan struct {
 	Output   Output
 	Params   deploy.Params
 	Resolved deploy.ResolvedLaunch
+	// LaunchInput is the resolver input Resolved was built from, kept so a
+	// caller that derives another launch from this one (the manual command
+	// draft re-resolves it in engine mode) starts from what was planned, not
+	// from a copy it assembled itself. Read-only, like Input.
+	LaunchInput deploy.ResolveLaunchInput
 	// Warnings are what the platform cannot prove about the resolved launch.
 	// They are for the preview to show; a plan never fails on them.
 	Warnings  []messages.Warning
@@ -114,6 +132,21 @@ type LaunchPlan struct {
 	// metrics, shared memory).
 	Profile deploy.Profile
 }
+
+// LaunchResolveError is a launch the plan scheduled but could not resolve
+// into a command on its node: the stated parallelism does not match the
+// cards the node gives it, say. It is about that node, not the request as a
+// whole, so a pool check (EverFits) reads it as the node refusing.
+type LaunchResolveError struct {
+	DeploymentID uint
+	Err          error
+}
+
+func (e *LaunchResolveError) Error() string {
+	return fmt.Sprintf("deployment %d resolve launch: %v", e.DeploymentID, e.Err)
+}
+
+func (e *LaunchResolveError) Unwrap() error { return e.Err }
 
 // PlanLaunch estimates, schedules and assembles one launch on one node.
 //
@@ -175,9 +208,9 @@ func PlanLaunch(ctx context.Context, st *store.Store, networks Networks, req Lau
 			plan.Output.Result = scheduler.Result{OK: false, Message: *refusal, Explain: scheduler.Explain{Filters: []scheduler.Reason{*refusal}}}
 			return plan, nil
 		}
-		return plan, fmt.Errorf("deployment %d resolve launch: %w", req.Source.DeploymentID, err)
+		return plan, &LaunchResolveError{DeploymentID: req.Source.DeploymentID, Err: err}
 	}
-	plan.Params, plan.Profile = allocated.Params, allocated.Profile
+	plan.Params, plan.Profile, plan.LaunchInput = allocated.Params, allocated.Profile, allocated.LaunchInput
 	plan.Resolved, plan.Warnings = allocated.Resolved, allocated.Warnings
 	plan.Resolved.StartupEstimate = launchStartupEstimate(req, plan.Resolved)
 	return plan, nil
@@ -196,7 +229,7 @@ func launchParams(req LaunchRequest, gpu store.GPU, assigned int, parallel paral
 	params := deploy.Params{
 		ModelPath: req.ModelMount, ServedName: req.ServedName, APIPort: apiPort,
 		AssignedGPUs: assigned, TensorParallel: parallel.TP, PipelineParallel: parallel.PP, DataParallel: parallel.DP,
-		Sleepable: req.Sleepable, Quick: req.Quick,
+		Sleepable: req.Sleepable, PriorityScheduling: req.PriorityScheduling, Quick: req.Quick,
 		TemplateArgs: req.Selection.ExtraArgs, TemplateEnv: req.Selection.Env, ExtraArgs: req.ExtraArgs,
 		Arch: arch.Family, ArchID: arch.ID, ComputeCapability: gpu.ComputeCapability, Vendor: vendor,
 		ModelType: modelType,
@@ -204,10 +237,11 @@ func launchParams(req LaunchRequest, gpu store.GPU, assigned int, parallel paral
 		DistGroup: req.Topology.Group, DistRole: req.Topology.Role, DistAttempt: req.Topology.Attempt,
 		MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
 		Headless: req.Topology.Headless, NodeAddress: req.Topology.NodeAddress,
-		ComputeNetwork: req.Topology.Network,
-		PD:             req.PD,
-		Host:           deploy.RuntimeBindHost(req.Node.RuntimeDriver),
-		RuntimeDriver:  req.Node.RuntimeDriver, VRAMLimitBytes: req.VRAMLimitBytes, Partitioned: req.PartitionBackend != "", PartitionBackend: req.PartitionBackend,
+		ComputeNetwork:     req.Topology.Network,
+		PD:                 req.PD,
+		Host:               deploy.RuntimeBindHost(req.Node.RuntimeDriver),
+		ImplicitServedName: req.ImplicitServedName,
+		RuntimeDriver:      req.Node.RuntimeDriver, VRAMLimitBytes: req.VRAMLimitBytes, Partitioned: req.PartitionBackend != "", PartitionBackend: req.PartitionBackend,
 	}
 	if params.PD != nil && LoadConfig(req.Model).HasRecurrentLayers() {
 		// A copy: the PD launch is the rank's, shared with the request.
@@ -246,7 +280,7 @@ func previewRequestedFeatures(req LaunchRequest) (*proto.RequestedFeatures, erro
 		Engine: engine, Params: params, Image: req.Source.Image, ContainerOverrides: req.Source.Overrides,
 		ComponentModelMount: componentModelMount(req), Entrypoint: req.Selection.Entrypoint,
 		PreStartArgv: req.Selection.PreStartArgv, PreStartScript: req.Selection.PreStartScript,
-		RuntimeAssets: req.Selection.RuntimeAssets, ComponentMounts: req.ComponentMounts,
+		RuntimeAssets: req.Selection.RuntimeAssets, ComponentMounts: req.ComponentMounts, ModelPaths: req.ModelPaths,
 		TemplateShmBytes: req.Selection.ShmBytes, TemplateMemlockUnlimited: req.Selection.MemlockUnlimited,
 		APIContract: req.APIContract, AllowUnresolved: true, TargetValidation: deploy.CollectTargetCapabilities,
 	})
@@ -283,11 +317,13 @@ func launchInput(st *store.Store, req LaunchRequest) (Input, error) {
 		RuntimeImageCached:   runtimeImageCached(st, req),
 		Unloaded:             req.Unloaded,
 		ExcludeDeploymentID:  req.ExcludeDeploymentID,
+		ExcludeInstanceUUID:  req.ExcludeInstanceUUID,
 		DeploymentID:         req.Source.DeploymentID,
 		YieldPolicy:          req.YieldPolicy,
 		ExplainHolders:       req.ExplainHolders,
 		Parallel:             parallel,
 		GPUIndexes:           req.Placement.GPUIndexes,
+		Consent:              nodepolicy.Consent{CardsChosen: req.Placement.OperatorPinned()},
 		VRAMLimitBytes:       req.VRAMLimitBytes,
 		PartitionBackend:     req.PartitionBackend,
 		Sleepable:            req.Sleepable,

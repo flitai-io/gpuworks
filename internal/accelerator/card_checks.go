@@ -3,13 +3,15 @@ package accelerator
 import (
 	"strings"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
-// Card checks: each thing this platform checks on every card, the states a
-// check can be in and how often each one runs. The agent reports one state per
-// card and check; the server works out freshness from the period; the client
-// renders the names in its own locale. Both sides read the catalog from here so
-// neither keeps a second copy of the periods.
+// Card checks: each thing this platform checks on every card and how often
+// each one runs. The agent reports one result per card and check (a check
+// status and a code, proto.CardCheck); the server works out freshness from the
+// period; the client renders the names in its own locale. Both sides read the
+// catalog from here so neither keeps a second copy of the periods.
 
 // Check ids, in the order they are shown.
 const (
@@ -40,51 +42,6 @@ const (
 	// leaves the card schedulable.
 	CheckPeerMemory = "peer_memory"
 )
-
-// Check states.
-const (
-	CheckPass = "pass"
-	CheckWarn = "warn"
-	CheckFail = "fail"
-	// CheckSkip: the check did not run on the card this time, for the reason
-	// it carries (one of the CheckSkip* reasons).
-	CheckSkip = "skip"
-	// CheckPending: the check has not run on the card since the agent started.
-	CheckPending = "pending"
-	// CheckNotApplicable: the card has nothing for the check to look at (no
-	// NVLink), or this host cannot be asked (no AER reporting).
-	CheckNotApplicable = "na"
-)
-
-// Why a check was skipped.
-const (
-	// CheckSkipBusy: an instance is serving on the card; the check would
-	// disturb it, and serving is itself the answer.
-	CheckSkipBusy = "busy"
-	// CheckSkipForeign: somebody outside the platform uses the card.
-	CheckSkipForeign = "foreign"
-	// CheckSkipDeferred: what the node runs is not known yet.
-	CheckSkipDeferred = "deferred"
-	// CheckSkipNotHeld: the platform does not hold the card (a Kubernetes node
-	// whose kubelet may give it to another pod), so the check does not touch it.
-	CheckSkipNotHeld = "not_held"
-	// CheckSkipUnavailable: the host cannot run the check right now (the
-	// driver is not answering, the runtime is missing, an earlier check has
-	// not returned).
-	CheckSkipUnavailable = "unavailable"
-	// CheckSkipProbeFailed: the vendor tool did not answer this round, so
-	// nothing it would have said is known.
-	CheckSkipProbeFailed = "probe_failed"
-)
-
-// CheckReasonForeignProcesses is why the occupancy check warns: processes
-// outside the platform use the card.
-const CheckReasonForeignProcesses = "foreign_processes"
-
-// CheckReasonPeerMemoryMissing is why the peer-memory check warns: the
-// vendor's peer-memory module is not loaded, so the NIC cannot register the
-// card's memory.
-const CheckReasonPeerMemoryMissing = "peer_memory_missing"
 
 // PeerMemoryModule is the kernel module through which a vendor's driver lets
 // RDMA NICs register its cards' memory, or "" for a vendor without one this
@@ -186,20 +143,20 @@ func containsVendor(vendors []string, vendor string) bool {
 	return false
 }
 
-// CheckStateFor is the state a finding code puts a check in: a code that
-// leaves the card schedulable warns, any other fails, none passes.
-func CheckStateFor(code string) string {
+// CheckStatusFor is the check status a finding code puts a check in: a code
+// that leaves the card schedulable warns, any other fails, none passes.
+func CheckStatusFor(code string) string {
 	switch HealthLevel(code) {
 	case HealthOK:
-		return CheckPass
+		return proto.CheckPass
 	case HealthWarning:
-		return CheckWarn
+		return proto.CheckWarn
 	}
-	return CheckFail
+	return proto.CheckFail
 }
 
-// CheckProblem reports whether a state is one a person has to act on.
-func CheckProblem(state string) bool { return state == CheckWarn || state == CheckFail }
+// CheckProblem reports whether a check status is one a person has to act on.
+func CheckProblem(status string) bool { return status == proto.CheckWarn || status == proto.CheckFail }
 
 // CardCheckProbe is the command that shows what a check looks at on a card,
 // whatever it found: what a person runs to see it for themselves. It is ""

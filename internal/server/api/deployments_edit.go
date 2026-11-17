@@ -223,6 +223,9 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	if err := deployment.ValidateHealthCheckThreshold(req); err != nil {
 		return bad(err)
 	}
+	if err := a.deployments().ValidateMountModels(req); err != nil {
+		return bad(err)
+	}
 	model, err := a.d.Store.GetModel(dep.ModelID)
 	if err != nil {
 		return internal(err)
@@ -298,6 +301,9 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 	if err != nil {
 		return bad(err)
 	}
+	if err := deployment.ValidateChangedExtraArgs(engine.Name(), extra, command, &deploy.StoredLaunchConfig{Engine: dep.Engine, ExtraArgsText: dep.ExtraArgs}); err != nil {
+		return bad(err)
+	}
 	launch, err := deploy.Materialize(deploy.MaterializeInput{
 		Engine: engine.Name(), Command: &command, Raw: req.QuickParams, Unset: req.QuickParamsUnset,
 		TemplateArgs: snapshot.ExtraArgs, ExtraArgs: extra, Cards: deployment.DeployTargetCards(node, req.Placement), Base: &base,
@@ -346,6 +352,17 @@ func (a *apiHandlers) editedDeployment(ctx context.Context, dep *store.Deploymen
 		return bad(err)
 	}
 	next.TokenizeDisabled = req.TokenizeEnabled != nil && !*req.TokenizeEnabled
+	// An edit that says nothing keeps the deployment's switch, as far as the
+	// edited launch still allows it; turning it on is asked for explicitly.
+	priority := deployment.PrioritySchedulingOf(engine.Name(), req.TargetVendor, shape == deploymentShapePD, launch.TemplateResidual, launch.UserResidual)
+	requested := req.PriorityScheduling
+	if requested == nil {
+		kept := dep.PriorityScheduling && priority.OK
+		requested = &kept
+	}
+	if next.PriorityScheduling, err = deployment.ResolvePriorityScheduling(requested, priority); err != nil {
+		return bad(err)
+	}
 	next.StartTimeoutSec = req.StartTimeoutSec
 	next.RoutingPolicy = req.RoutingPolicy
 	launchChanged := next.QuickParams != dep.QuickParams || next.ExtraArgs != dep.ExtraArgs ||

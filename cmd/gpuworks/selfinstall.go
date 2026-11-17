@@ -288,7 +288,7 @@ func upgradeCommand(ctx context.Context, args []string) error {
 	fs.Var(&sources, "source", "distribution source base URL replacing the built-in ones (repeatable)")
 	fs.StringVar(&req.BaseURL, "base-url", "", "read a release site (data/release.json + downloads/) instead of the channel, such as the internal one")
 	fs.StringVar(&req.Archive, "archive", "", "upgrade from a local release archive (gpuworks-<release>-<os>-<arch>.tar.gz)")
-	fs.StringVar(&req.Version, "version", "", "expected release id (must match what the channel or site offers, or the archive holds)")
+	fs.StringVar(&req.Version, "version", "", "release id in the signed channel index (or the exact version from a site or local archive)")
 	fs.IntVar(&req.Keep, "keep", selfinstall.DefaultBackupKeep, "pre-upgrade backups to keep")
 	fs.BoolVar(&req.Force, "force", false, "replace a build without a release id (dev/dirty)")
 	fs.BoolVar(&req.Check, "check", false, "report whether an update is available and exit")

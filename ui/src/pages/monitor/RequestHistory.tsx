@@ -19,6 +19,10 @@ interface Filters {
   // End-to-end bounds in seconds; null is open.
   minSec: number | null;
   maxSec: number | null;
+  // Time-to-first-token bounds in milliseconds; null is open. Either keeps
+  // only streamed replies that had a first token (the server's filter).
+  minTtftMs: number | null;
+  maxTtftMs: number | null;
 }
 
 interface PageState {
@@ -60,7 +64,7 @@ export default function RequestHistory({
 }) {
   const { t } = useTranslation("monitoring");
   const { t: tCommon } = useTranslation("common");
-  const [filters, setFilters] = useState<Filters>({ window: null, results: [], minSec: null, maxSec: null });
+  const [filters, setFilters] = useState<Filters>({ window: null, results: [], minSec: null, maxSec: null, minTtftMs: null, maxTtftMs: null });
   const [state, setState] = useState<PageState>(EMPTY);
   // A generation counter drops answers to a query the user has since changed.
   const generation = useRef(0);
@@ -83,6 +87,8 @@ export default function RequestHistory({
           results: filters.results,
           minMs: filters.minSec != null ? filters.minSec * 1000 : undefined,
           maxMs: filters.maxSec != null ? filters.maxSec * 1000 : undefined,
+          minTtftMs: filters.minTtftMs ?? undefined,
+          maxTtftMs: filters.maxTtftMs ?? undefined,
           cursor,
         });
         if (mine !== generation.current) return;
@@ -112,7 +118,7 @@ export default function RequestHistory({
 
   const page = state.cursors.length - 1;
   const pinned = { fromMS: state.fromMS, toMS: state.toMS };
-  const filtered = filters.results.length > 0 || filters.minSec != null || filters.maxSec != null || apiKey !== 0 || instance !== "";
+  const filtered = filters.results.length > 0 || filters.minSec != null || filters.maxSec != null || filters.minTtftMs != null || filters.maxTtftMs != null || apiKey !== 0 || instance !== "";
   const sampled = state.requests.some((r) => r.weight > 1);
 
   return (
@@ -165,6 +171,31 @@ export default function RequestHistory({
             onChange={(v) => setFilters((f) => ({ ...f, maxSec: v != null && v > 0 ? v : null }))}
             style={{ width: 104 }}
             suffix="s"
+          />
+        </Space.Compact>
+        <Space.Compact size="small">
+          <InputNumber
+            size="small"
+            min={0}
+            step={100}
+            precision={0}
+            aria-label={t("requests.ttftMin")}
+            placeholder={t("requests.ttftMin")}
+            value={filters.minTtftMs}
+            onChange={(v) => setFilters((f) => ({ ...f, minTtftMs: v != null && v > 0 ? v : null }))}
+            style={{ width: 104 }}
+          />
+          <InputNumber
+            size="small"
+            min={0}
+            step={100}
+            precision={0}
+            aria-label={t("requests.ttftMax")}
+            placeholder={t("requests.ttftMax")}
+            value={filters.maxTtftMs}
+            onChange={(v) => setFilters((f) => ({ ...f, maxTtftMs: v != null && v > 0 ? v : null }))}
+            style={{ width: 112 }}
+            suffix="ms"
           />
         </Space.Compact>
         <Button size="small" onClick={reload} loading={state.loading && page === 0}>

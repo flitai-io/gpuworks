@@ -1,3 +1,4 @@
+import { installCanvas } from "./helpers/analyticsFixtures.ts";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { after, afterEach, test } from "node:test";
@@ -14,12 +15,13 @@ import type { Instance } from "../src/api.ts";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "NodeFilter", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "localStorage", { value: dom.window.localStorage, configurable: true });
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
+installCanvas(dom);
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
 class Events { addEventListener() {} removeEventListener() {} close() {} }
@@ -42,6 +44,7 @@ const locale = read("en", "deployments");
 
 const { MemoryRouter } = await import("react-router-dom");
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import("@testing-library/react");
+const { selectInstance } = await import("./helpers/selectInstance.ts");
 const { api } = await import("../src/api.ts");
 const { imageMismatch, shortImageID } = await import("../src/pages/instanceImage.ts");
 const { default: DeploymentInstances } = await import("../src/pages/DeploymentInstances.tsx");
@@ -148,26 +151,31 @@ function renderInstances(instances: Instance[]) {
 }
 
 const panelOf = (uuid: string) => document.getElementById(`instance-${uuid}`) as HTMLElement;
+const mismatchAlerts = () => [...document.querySelectorAll('[role="status"][data-status="warning"]')];
 const warning = (uuid: string) => within(panelOf(uuid)).queryByRole("button", { name: locale.instance.imageMismatch.label });
 
 test("each replica shows its short image ID with the full value in the title", () => {
   renderInstances([inst("r2", B), inst("r1", A)]);
   const title = (node: HTMLElement) => node.closest("[title]")?.getAttribute("title");
   assert.equal(title(within(panelOf("r1")).getByText("sha256:3f9a1c2e…")), A);
-  assert.equal(title(within(panelOf("r2")).getByText("sha256:8b72d04c…")), B);
   assert.ok(within(panelOf("r1")).getByText(locale.instance.field.imageId));
   // The short form is for reading; the full ID is one click away for pasting.
-  assert.ok(panelOf("r1").querySelector(".ant-typography-copy"), "the image ID can be copied");
+  assert.ok(within(panelOf("r1")).getByRole("button", { name: locale.instance.copyImageId }));
+  selectInstance("r2");
+  assert.equal(title(within(panelOf("r2")).getByText("sha256:8b72d04c…")), B);
 });
 
 test("the odd replica gets a warning icon and the list gets one alert", async () => {
   renderInstances([inst("r3", B), inst("r2", A), inst("r1", A)]);
-  const alert = screen.getByRole("status");
+  const [alert] = mismatchAlerts();
   assert.equal(alert.textContent, "Replica image versions differ: 1 replica(s) run a different image from the others.");
+  selectInstance("r3");
   assert.ok(warning("r3"), "the replica on the other image is flagged");
+  selectInstance("r1");
   assert.equal(warning("r1"), null);
+  selectInstance("r2");
   assert.equal(warning("r2"), null);
-  assert.equal(document.querySelectorAll('[role="status"]').length, 1);
+  assert.equal(mismatchAlerts().length, 1);
 });
 
 const shownTip = () => screen.queryAllByRole("tooltip").find((node) => !node.closest(".ant-tooltip-hidden"));
@@ -175,12 +183,14 @@ const shownTip = () => screen.queryAllByRole("tooltip").find((node) => !node.clo
 test("hovering the warning explains it", async () => {
   renderInstances([inst("r3", B), inst("r2", A), inst("r1", A)]);
   assert.equal(shownTip(), undefined, "no tooltip before the pointer arrives");
+  selectInstance("r3");
   fireEvent.mouseEnter(warning("r3")!);
   await waitFor(() => assert.equal(shownTip()?.textContent, locale.instance.imageMismatch.tooltip));
 });
 
 test("the warning is a button that takes keyboard focus, and focus explains it", async () => {
   renderInstances([inst("r3", B), inst("r2", A), inst("r1", A)]);
+  selectInstance("r3");
   const icon = warning("r3")!;
   assert.equal(icon.tagName, "BUTTON");
   assert.equal(icon.tabIndex >= 0, true);
@@ -192,13 +202,14 @@ test("the warning is a button that takes keyboard focus, and focus explains it",
 
 test("identical IDs raise no alert and no icon", () => {
   renderInstances([inst("r2", A), inst("r1", A)]);
-  assert.equal(screen.queryByRole("status"), null);
+  assert.equal(mismatchAlerts().length, 0);
   assert.equal(screen.queryAllByRole("button", { name: locale.instance.imageMismatch.label }).length, 0);
 });
 
 test("replicas without an ID show a dash, never a warning, and raise no alert", () => {
   renderInstances([inst("r2", undefined), inst("r1", A)]);
-  assert.equal(screen.queryByRole("status"), null);
+  assert.equal(mismatchAlerts().length, 0);
+  selectInstance("r2");
   assert.equal(warning("r2"), null);
   const row = within(panelOf("r2")).getByText(locale.instance.field.imageId).closest("tr") as HTMLElement;
   assert.equal(row.textContent, `${locale.instance.field.imageId}—`);
@@ -207,11 +218,14 @@ test("replicas without an ID show a dash, never a warning, and raise no alert", 
 test("the alert counts the flagged replicas", () => {
   renderInstances([inst("r4", C), inst("r3", B), inst("r2", A), inst("r1", A)]);
   assert.ok(screen.getByText("Replica image versions differ: 2 replica(s) run a different image from the others."));
-  assert.equal(screen.getAllByRole("button", { name: locale.instance.imageMismatch.label }).length, 2);
+  selectInstance("r4");
+  assert.ok(warning("r4"));
+  selectInstance("r3");
+  assert.ok(warning("r3"));
 });
 
 test("a deployment without instances shows the empty state and no alert", () => {
   renderInstances([]);
   assert.ok(screen.getByText(locale.detail.noInstances));
-  assert.equal(screen.queryByRole("status"), null);
+  assert.equal(mismatchAlerts().length, 0);
 });

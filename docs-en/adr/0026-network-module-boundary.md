@@ -32,3 +32,5 @@ The product is also considering making complex networking (custom networks, dedi
 - **Hide features by edition only in the API and UI**: this requires the fewest changes, but resolution remains scattered throughout store, core flows have no replaceable boundary, and the complexity cannot be isolated from the standard edition.
 - **Split into a separate repository or plugin**: Go's static single-binary model is unsuitable for plugins, splitting repositories is costly, and core flows still need a local management-network implementation.
 - **Move network HTTP handling into a separate package with its own routes**: this provides a more thorough edition switch, but DTO assembly for network pages currently shares the api layer with other pages. Keep that consistency for now, and split when routes need to be excluded by edition.
+
+<!-- translation-source-sha256: 6da0fdb80cccdb4aa84ce3ef343b5ec295effab2ad33f57549e8b4270e0bdf5a -->

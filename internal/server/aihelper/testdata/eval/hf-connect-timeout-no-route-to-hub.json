@@ -41,7 +41,7 @@
     "(APIServer pid=1) OSError: We couldn't connect to 'https://huggingface.co' to load the files, and couldn't find them in the cached files.",
     "(APIServer pid=1) Check your internet connection or see how to run the library in offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
   ],
-  "expect_signature": "hf_download_failed",
+  "expect_signature": "HF_DOWNLOAD_FAILED",
   "expect_keywords": [
     [
       "HF_ENDPOINT",

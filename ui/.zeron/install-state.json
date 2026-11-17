@@ -1146,6 +1146,124 @@
         "tailwind-merge@^3.4.0"
       ],
       "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "detail-list"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/components/ui/detail-list.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/components/ui/detail-list.tsx": {
+          "sourceHash": "06330506cce89cd8cb38aadf23b5ace3221d42a6ddbc023eb030c70a6c27273a",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "d67129a90bdde31a74ae58e6c258e0c3105a9ed8d326fd58881681a96012dbf7"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0"
+      ],
+      "devDependencies": []
+    },
+    {
+      "items": [
+        "surfaces",
+        "tailwind-merge-tokens",
+        "utils",
+        "springs",
+        "icon-context",
+        "use-proximity-hover",
+        "card"
+      ],
+      "registryBase": "http://127.0.0.1:5211/r",
+      "cliVersion": "0.2.0-beta.18",
+      "files": [
+        "src/lib/tailwind-merge-tokens.ts",
+        "src/lib/utils.ts",
+        "src/lib/springs.ts",
+        "src/lib/icon-context.tsx",
+        "src/lib/huge-icon.tsx",
+        "src/lib/icon-catalog.ts",
+        "src/lib/hugeicons.d.ts",
+        "src/hooks/use-proximity-hover.ts",
+        "src/components/ui/card.tsx"
+      ],
+      "fileHashes": {
+        "src/lib/tailwind-merge-tokens.ts": {
+          "sourceHash": "1277e5cfadb06fad8ce615472603bf5e75ae2270269ca42aa253459a74a7a317",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "79ed798cc175b8842548d59f0e7fd737b807af5817e2b7cea881190e9d642e8e"
+        },
+        "src/lib/utils.ts": {
+          "sourceHash": "cd8413121df9b741a6ae601589bfda72da030ea7f97e767365e058f414acb933",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "1831f143258d6933514dc37d1be90dbc5289489fb345e2eb7e8ea5f29b34a2b8"
+        },
+        "src/lib/springs.ts": {
+          "sourceHash": "ed42d0bca6bce0d36d79a70cb162e38be422a45ad70155c5d008946d8cf4823f",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "5453027c1a35a2bb8879cfb883fc24ddebc041c59524095f8052d035df62be58"
+        },
+        "src/lib/icon-context.tsx": {
+          "sourceHash": "07f0868e8fe45508ced8b0928eecd67655f5707c5ed3bd7725930802080fd655",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "c8f1da9d186866d68f25db9e3843644deee2256a44d952d6129fbf954a203484"
+        },
+        "src/lib/huge-icon.tsx": {
+          "sourceHash": "f9957071efd430d3e6f76a52966ee906d707e418b584270e6daa04ffd36c4b9b",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "584994e6218791a875d50ba24b0685a442c1f3cffd3a65258da705a4b13c458b"
+        },
+        "src/lib/icon-catalog.ts": {
+          "sourceHash": "3737b6e64010f1f798836e2f88f3bf617ad61a90961270dee77f6ff3e87ba305",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "50f7dbc34e3ea18201ee9d4d2286f8c66d69f86eb0d58cc3e5a87a88b2f84aec"
+        },
+        "src/lib/hugeicons.d.ts": {
+          "sourceHash": "956607cd138a8e94e7ce66dca087ef34f51295e466abbf488850134025b2903e",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "b964d3891cdd6e57638f0affc647ade61724aa668dce4f7606c63e32d010e70c"
+        },
+        "src/hooks/use-proximity-hover.ts": {
+          "sourceHash": "9b0d8f949290d3dcb2b6ad5cad38305007d41e9d7b8cfa6525b3713bee2ba657",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "67e0b976ccd96fef96f59cdbd568eb59264d8b3bd98ff5ba24ff314ff65e9e72"
+        },
+        "src/components/ui/card.tsx": {
+          "sourceHash": "97a142dba693857b50a26037c04bc6d23558cc820ecea048737921ad24539f36",
+          "configHash": "6b72dd83797f16783b4ab17b9bfb1eab2d773d8c45449a40c0dbce2bb700f87c",
+          "installedHash": "2a69d46946894002f9828e0d0337862d4d3d823fa4a50d592207f6bee804a063"
+        }
+      },
+      "dependencies": [
+        "tw-animate-css@^1.4.0",
+        "clsx@^2.1.1",
+        "tailwind-merge@^3.4.0",
+        "@hugeicons/core-free-icons@^4.1.1",
+        "@hugeicons/react@^1.1.6",
+        "framer-motion@^12.34.0"
+      ],
+      "devDependencies": []
     }
   ]
 }

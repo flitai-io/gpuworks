@@ -139,7 +139,7 @@ func validateTemplateVariables(where string, spec *InferenceSpec) error {
 	}
 	referenced := map[string]struct{}{}
 	for _, name := range placementeval.References(append(strict, spec.PreStartScript)...) {
-		referenced[name] = struct{}{}
+		referenced[placementeval.Canonical(name)] = struct{}{}
 	}
 	for _, name := range deploy.RequiredTemplateVariables(spec.Engine) {
 		if _, ok := referenced[name]; !ok {

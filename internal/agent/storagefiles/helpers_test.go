@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -125,8 +126,8 @@ func codeOf(t *testing.T, err error) string {
 	if !errors.As(err, &fe) {
 		t.Fatalf("error %v (%T) carries no storage-files code", err, err)
 	}
-	if parsed := proto.ParseStorageFilesError(err.Error()); parsed.Code != fe.Code {
-		t.Fatalf("code %q does not survive the wire: parsed %q from %q", fe.Code, parsed.Code, err.Error())
+	if fe.RPCCode() != "STORAGE_FILES_"+strings.ToUpper(fe.Code) || fe.RPCParams()["detail"] != fe.Detail {
+		t.Fatalf("code %q does not survive the wire: %q %v", fe.Code, fe.RPCCode(), fe.RPCParams())
 	}
 	return fe.Code
 }

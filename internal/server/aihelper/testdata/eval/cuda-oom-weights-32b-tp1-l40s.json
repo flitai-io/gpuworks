@@ -54,7 +54,7 @@
     "(APIServer pid=1)     sys.exit(main())",
     "(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}"
   ],
-  "expect_signature": "cuda_oom",
+  "expect_signature": "CUDA_OOM",
   "expect_keywords": [
     [
       "tensor-parallel-size",

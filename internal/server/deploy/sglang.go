@@ -107,17 +107,18 @@ func (sglangEngine) Build(p Params) ResolvedLaunch {
 		host = "0.0.0.0"
 	}
 	b.injectKV("--host", host)
-	b.injectKV("--port", strconv.Itoa(p.APIPort))
-	if servedName := p.EngineServedName(); servedName != "" && !p.Headless {
+	b.injectKV("--port", p.apiPortText())
+	if servedName := p.launchServedName(); servedName != "" {
 		b.injectKV("--served-model-name", servedName)
 	}
 	if p.NNodes > 1 {
 		b.injectKV("--nnodes", strconv.Itoa(p.NNodes))
-		b.injectKV("--node-rank", strconv.Itoa(p.NodeRank))
+		b.injectKV("--node-rank", p.nodeRankText())
 		if p.MasterAddr != "" && p.MasterPort > 0 {
-			b.injectKV("--dist-init-addr", net.JoinHostPort(p.MasterAddr, strconv.Itoa(p.MasterPort)))
+			b.injectKV("--dist-init-addr", net.JoinHostPort(p.MasterAddr, p.masterPortText()))
 		}
 	}
+	injectPriorityScheduling(b, p)
 	q := p.Quick
 	if q.LogLevel != "" {
 		b.injectDictionary("log_level", q.LogLevel)
@@ -212,7 +213,7 @@ func sglangPD(b *builder, p Params, env map[string]string) {
 	b.injectKV("--disaggregation-mode", mode.ConnectorRole(p.PD.Role))
 	b.injectKV("--disaggregation-transfer-backend", mode.Connector)
 	if p.PD.Role == pdmode.RolePrefill && p.PD.SideChannelPort > 0 {
-		b.injectKV("--disaggregation-bootstrap-port", strconv.Itoa(p.PD.SideChannelPort))
+		b.injectKV("--disaggregation-bootstrap-port", p.sideChannelPortText())
 	}
 	for _, flag := range mode.EngineArgs {
 		b.injectFlag(flag)

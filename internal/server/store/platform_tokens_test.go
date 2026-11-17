@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -168,4 +169,61 @@ func TestPlatformTokensMigration(t *testing.T) {
 	if err := migrateDB(rollback, []migration{m}); err != nil || !rollback.Migrator().HasTable(&PlatformToken{}) {
 		t.Fatalf("restart after rollback: err=%v", err)
 	}
+}
+
+// Revoking a token announces it after the delete commits, so open streams
+// re-check at once; a revoke that finds nothing or fails announces nothing.
+func TestPlatformTokenRevokePublishesOnlyOnSuccess(t *testing.T) {
+	s := newTestStore(t)
+	_, row, err := s.CreatePlatformToken(1, "stream", PlatformTokenRead, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := s.Bus.Subscribe(4, "management-session")
+	defer sub.Close()
+	noEvent := func(what string) {
+		t.Helper()
+		select {
+		case event := <-sub.C():
+			t.Fatalf("%s published %+v", what, event)
+		default:
+		}
+	}
+
+	if _, err := s.DeletePlatformToken(2, row.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("another user's revoke = %v", err)
+	}
+	if _, err := s.DeletePlatformToken(1, row.ID+100); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown token revoke = %v", err)
+	}
+	noEvent("a revoke of nothing")
+
+	want := errors.New("injected platform token delete failure")
+	if err := s.db.Callback().Delete().Before("gorm:delete").Register("fail_platform_token_delete", func(tx *gorm.DB) {
+		if tx.Statement.Table == "platform_tokens" {
+			tx.AddError(want)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DeletePlatformToken(1, row.ID); !errors.Is(err, want) {
+		t.Fatalf("failing revoke = %v", err)
+	}
+	noEvent("a failed revoke")
+	if err := s.db.Callback().Delete().Remove("fail_platform_token_delete"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.DeletePlatformToken(1, row.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-sub.C():
+		if event.Key != strconv.FormatUint(uint64(row.ID), 10) || event.Reason != "platform-token-revoked" {
+			t.Fatalf("event=%+v", event)
+		}
+	default:
+		t.Fatal("a successful revoke published nothing")
+	}
+	noEvent("one revoke")
 }

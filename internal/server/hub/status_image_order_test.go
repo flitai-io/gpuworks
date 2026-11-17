@@ -62,6 +62,7 @@ func TestQueuedImageSnapshotCannotOverwriteNewerOperation(t *testing.T) {
 				}
 				sess.handleImageStatus(event)
 				apply()
+				sess.drainReports() // the operation persists after the queued inventory
 				row, err := h.store.ImageNode(image.ID, node.ID)
 				if err != nil {
 					t.Fatal(err)

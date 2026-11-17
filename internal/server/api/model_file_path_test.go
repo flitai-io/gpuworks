@@ -48,9 +48,9 @@ func TestSharedModelPathConflict(t *testing.T) {
 				}
 				writeUseCaseErr(rec, err)
 			case "copy":
-				r.h.d.PeerSync.CopyModel = func(_ context.Context, modelID uint, _, dst store.FileRef, _ int) (*store.ModelFile, error) {
+				r.h.d.ModelTransfers = &fakeTransfers{copy: func(modelID uint, _, dst store.FileRef, _ int) (*store.ModelFile, error) {
 					return r.st.PrepareModelCopy(store.FileRef{ModelID: modelID, StorageID: dst.StorageID}, path)
-				}
+				}}
 				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(fmt.Sprintf(`{"source":{"storage_id":%d},"target":{"storage_id":%d}}`, r.st.DefaultLocalStorageID(), r.nfs.ID)))
 				ctx := chi.NewRouteContext()
 				ctx.URLParams.Add("id", fmt.Sprint(r.model.ID))

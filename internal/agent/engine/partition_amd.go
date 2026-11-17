@@ -23,6 +23,10 @@ import (
 // in the workload spec, and this only adds the memory quota on top. There is
 // no compute/SM counterpart: ROCm enforces compute quotas through
 // HSA_CU_MASK, read by ROCr below anything this preloaded library can see.
+//
+// On the kube driver the agent's own /dev/shm is its pod's private tmpfs,
+// not the host's, so --ipc=host buys it nothing: see e.hostRoot and
+// createHostShmLedger in partition.go.
 type amdPartitionInjector struct{}
 
 func (amdPartitionInjector) apply(e *Engine, _ context.Context, ws *agentruntime.WorkloadSpec, spec proto.InstanceDesiredState) (bool, string) {
@@ -47,7 +51,14 @@ func (amdPartitionInjector) apply(e *Engine, _ context.Context, ws *agentruntime
 	for i := range spec.GPUIndexes {
 		ws.Env[accelerator.AMDEnvMemoryLimitPrefix+strconv.Itoa(i)] = limitMiB
 	}
-	ws.Env[accelerator.AMDEnvLedgerPath] = amdLedgerPath(spec.UUID)
+	ledger := amdLedgerPath(spec.UUID)
+	ws.Env[accelerator.AMDEnvLedgerPath] = ledger
+	if e.hostRoot != "" {
+		if err := createHostShmLedger(e.hostRoot, ledger); err != nil {
+			return false, "AMD partition ledger: " + err.Error()
+		}
+		ws.Mounts = append(ws.Mounts, agentruntime.Mount{Source: ledger, Target: ledger})
+	}
 	return true, ""
 }
 
@@ -64,12 +75,16 @@ func (amdPartitionInjector) applyLimit(*Engine, proto.InstanceDesiredState) (boo
 
 func (amdPartitionInjector) cleanupInstance(e *Engine, uuid string) error {
 	err := os.RemoveAll(filepath.Join(e.stateDir, partitionStateRoot, "instances", sanitizeID(uuid)))
-	// The vrocm ledger lives in the host IPC namespace because inference
-	// workloads use --ipc=host. The shim unlinks a clean ledger on process
-	// exit, but a failed or killed startup can leave one behind; remove the
-	// exact per-instance path during teardown so retries do not accumulate
-	// stale accounting files (same rationale as ppuLedgerPath's cleanup).
-	if removeErr := os.Remove(amdLedgerPath(uuid)); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+	// The vrocm ledger lives in the host's /dev/shm: on every driver but
+	// kube, that is the agent's own /dev/shm too (the workload shares it via
+	// --ipc=host), and e.hostRoot is "", so this is exactly the path used
+	// before kube support existed. On kube, e.hostRoot prefixes the path
+	// with the agent's view of the host root (see createHostShmLedger). The
+	// shim unlinks a clean ledger on process exit, but a failed or killed
+	// startup can leave one behind; remove the exact per-instance path
+	// during teardown so retries do not accumulate stale accounting files
+	// (same rationale as ppuLedgerPath's cleanup).
+	if removeErr := os.Remove(e.hostRoot + amdLedgerPath(uuid)); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 		err = errors.Join(err, removeErr)
 	}
 	return err

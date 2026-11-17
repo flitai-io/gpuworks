@@ -15,7 +15,7 @@ type CardHealthChecks struct {
 	ReceivedAt *time.Time         `json:"received_at,omitempty"`
 	Checks     []CardHealthColumn `json:"checks"`
 	Cards      []CardHealthCard   `json:"cards"`
-	// Summary counts the cells in each state.
+	// Summary counts the cells in each check status.
 	Summary map[string]int `json:"summary"`
 }
 
@@ -32,7 +32,9 @@ type CardHealthCard struct {
 	PCIeBDF string `json:"pcie_bdf,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Index   int    `json:"index"`
-	// Worst is fail, warn or pass: the most serious of the cells.
+	// Worst is the most serious check status of the cells: fail, warn,
+	// skip, pass, na in that order, so a card whose checks did not all run
+	// never sums up as passed.
 	Worst string `json:"worst"`
 	// CanRecheck says the runtime check can be run on the card now.
 	CanRecheck bool             `json:"can_recheck"`
@@ -42,11 +44,11 @@ type CardHealthCard struct {
 // CardHealthCell is one check on one card.
 type CardHealthCell struct {
 	Check string `json:"check"`
-	// State is pass, warn, fail, skip, pending or na.
-	State string `json:"state"`
-	// Reason is the finding code of a warning or a failure, or why the
-	// check was skipped.
-	Reason     string     `json:"reason,omitempty"`
+	// Status is pass, warn, fail, skip or na.
+	Status string `json:"status"`
+	// Code is what a warning or failure found, or why a skipped check did
+	// not run (CARD_CHECK_NOT_RUN_YET before its first run).
+	Code       string     `json:"code,omitempty"`
 	CheckedAt  *time.Time `json:"checked_at,omitempty"`
 	DurationMS int32      `json:"duration_ms,omitempty"`
 	Stale      bool       `json:"stale"`
@@ -73,9 +75,9 @@ type CardHealthRecord struct {
 	PCIeBDF   string `json:"pcie_bdf,omitempty"`
 	Removed   bool   `json:"removed"`
 	Check     string `json:"check"`
-	// Level is warn or fail.
-	Level      string     `json:"level"`
-	Reason     string     `json:"reason,omitempty"`
+	// Status is warn or fail; Code what the check found.
+	Status     string     `json:"status"`
+	Code       string     `json:"code,omitempty"`
 	StartedAt  time.Time  `json:"started_at"`
 	EndedAt    *time.Time `json:"ended_at,omitempty"`
 	LastSeenAt time.Time  `json:"last_seen_at"`
@@ -105,8 +107,8 @@ type CardCheckDetail struct {
 
 // CardCheckRun is one run of a check.
 type CardCheckRun struct {
-	State      string           `json:"state"`
-	Reason     string           `json:"reason,omitempty"`
+	Status     string           `json:"status"`
+	Code       string           `json:"code,omitempty"`
 	At         time.Time        `json:"at"`
 	DurationMS int64            `json:"duration_ms,omitempty"`
 	Probe      string           `json:"probe,omitempty"`

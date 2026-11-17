@@ -10,9 +10,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // TestHygonUnavailableSurvivesAgentReconnect exercises the real server/agent
@@ -84,7 +87,8 @@ func testHygonUnavailableReconnect(t *testing.T, sku string) {
 		for _, cap := range node.GPUs[0].PartitionCapabilities {
 			if cap.Backend == "hygon-dgpu" {
 				found = true
-				if cap.DisplayName != "Hygon dGPU" || !strings.Contains(cap.Reason, "requires the Docker or udocker runtime") {
+				if cap.DisplayName != "Hygon dGPU" || cap.ReasonCode != messages.ErrorPartitionRuntimeUnsupported ||
+					cap.ReasonParams.Runtime != "recording" || !slices.Equal(cap.ReasonParams.SupportedRuntimes, []string{"docker", "udocker"}) {
 					t.Fatalf("Hygon capability = %+v, want runtime-unavailable with server display name", cap)
 				}
 			}

@@ -4,6 +4,7 @@
 /* Product overrides stay stable when a theme change reinserts antd styles.
    The app-content flex constraint is explicit in styles.css. */
 @import "./styles.css" layer(legacy);
+@import "./theme/tableDimensions.css" layer(utilities);
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -244,6 +245,14 @@
 }
 
 :root {
+  /* Saturated organization artwork shades, shared by light and dark themes.
+     Keep white initials readable without mixing gray into the palette. */
+  --organization-avatar-1: #0060D2;
+  --organization-avatar-2: #0E7490;
+  --organization-avatar-3: #B45309;
+  --organization-avatar-4: #047857;
+  --organization-avatar-5: #6D28D9;
+  --organization-avatar-fg: #FFFFFF;
   --font-family-sans: "Inter", system-ui, sans-serif;
   --fg-on-danger-strong: #FFFFFF;
   --fg-on-warning-strong: #00040D;

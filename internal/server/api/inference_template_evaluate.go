@@ -67,6 +67,17 @@ func (a *apiHandlers) evaluateCatalog(raw []byte, overwrite bool) (inferencecata
 	return catalog, nil
 }
 
+// catalogInvalid is err as the import answers it: a product error as
+// itself, anything else (the parser's or validator's text) as CATALOG_INVALID,
+// the code the evaluate endpoint gives the same document.
+func catalogInvalid(err error) error {
+	var product *messages.ProductError
+	if errors.As(err, &product) {
+		return err
+	}
+	return wrapProductError(messages.ErrorCatalogInvalid, err.Error(), map[string]any{"detail": err.Error()}, err)
+}
+
 // catalogIssue renders an error the way an error response does: the product
 // error's own code and params, or CATALOG_INVALID with the text as fallback
 // and as params.detail.

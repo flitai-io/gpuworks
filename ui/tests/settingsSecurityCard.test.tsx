@@ -45,6 +45,18 @@ const toggle = () => screen.getByRole("switch", { name: s.previewNetwork });
 const openAccessToggle = () => screen.getByRole("switch", { name: s.inferenceOpenAccess });
 const saveButton = () => screen.getByRole("button", { name: locale.settings.common.save });
 
+// antd's static message lives outside the rendered tree: cleanup() does not remove
+// it, message.destroy() leaves it stuck in its leave animation (jsdom never fires
+// the transition end), and an earlier test's "saved" toast would otherwise still
+// be in the DOM, for a time that depends on how long that test took. A save is
+// proven by one more toast than before the click, whatever is left over.
+const savedToasts = () => screen.queryAllByText(s.saved).length;
+async function saveAndExpectNewSavedToast(user: ReturnType<typeof userEvent.setup>) {
+  const before = savedToasts();
+  await user.click(saveButton());
+  await waitFor(() => assert.equal(savedToasts(), before + 1));
+}
+
 afterEach(() => {
   cleanup();
   Object.assign(apiModule.api, original);
@@ -77,9 +89,8 @@ test("an admin turns network access on and saves it", async () => {
   await user.click(toggle());
   assert.equal(toggle().getAttribute("aria-checked"), "true");
   assert.equal(api.updates.length, 0, "toggling alone does not save");
-  await user.click(saveButton());
+  await saveAndExpectNewSavedToast(user);
   await waitFor(() => assert.deepEqual(api.updates, [{ playground_preview_network: true }]));
-  assert.ok(await screen.findByText(s.saved));
 });
 
 test("turning keyless /v1 access on patches only that field", async () => {
@@ -90,11 +101,10 @@ test("turning keyless /v1 access on patches only that field", async () => {
   await user.click(openAccessToggle());
   assert.equal(openAccessToggle().getAttribute("aria-checked"), "true");
   assert.equal(api.updates.length, 0, "toggling alone does not save");
-  await user.click(saveButton());
+  await saveAndExpectNewSavedToast(user);
   // A PATCH that carried the unchanged preview policy would clobber a
   // concurrent change to it; only the field the admin moved goes out.
   await waitFor(() => assert.deepEqual(api.updates, [{ inference_open_access: true }]));
-  assert.ok(await screen.findByText(s.saved));
   assert.equal(openAccessToggle().getAttribute("aria-checked"), "true");
 });
 

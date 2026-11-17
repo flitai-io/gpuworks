@@ -46,7 +46,7 @@ func sanitizedSnapshot(raw json.RawMessage) json.RawMessage {
 		return nil
 	}
 	out := make(map[string]any, len(input))
-	for _, key := range []string{"target_kind", "entry", "role", "deployment_id", "deployment_name", "instance_uuid", "served_name", "model", "model_source_id", "base_url", "load_origin", "engine", "image", "command_mode", "entrypoint", "argv", "env", "docker_args", "gpu_indexes", "gpus", "num_gpus", "tensor_parallel", "node_id", "node_name"} {
+	for _, key := range []string{"target_kind", "entry", "role", "deployment_id", "deployment_name", "instance_uuid", "served_name", "model", "model_source_id", "base_url", "load_origin", "engine", "priority_scheduling", "image", "command_mode", "entrypoint", "argv", "env", "docker_args", "gpu_indexes", "gpus", "num_gpus", "tensor_parallel", "node_id", "node_name"} {
 		value, ok := input[key]
 		if !ok {
 			continue

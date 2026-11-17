@@ -1,14 +1,7 @@
-// lint_args.go asks of an argv the platform did not write - a catalog spec's
-// args - the one question the dictionary can answer on its own: does every flag
-// a dictionary key owns carry a value that key can hold?
-//
-// ReverseArgs answers by omission. It is a reader, so a value it cannot decode
-// stays in the residual and reaches the engine verbatim, which is the right
-// answer for a running deployment and the wrong one for an import: a spec that
-// writes --max-model-len abc has a typo the author should hear about, not a
-// passthrough token. Both answers come out of the same walk in reverse_args.go,
-// which is why the importer can never name a flag the reader would have read
-// successfully, or miss one the reader had to give up on.
+// lint_args.go reports dictionary decoding problems without changing the
+// lossless ReverseArgs reader. Catalog imports surface these as warnings;
+// newly authored user arguments are validated at the deployment boundary.
+// Both consume the same walk, so their dictionary facts cannot diverge.
 
 package deploy
 
@@ -18,6 +11,7 @@ import (
 	"strings"
 
 	enginenames "gpuworks.ai/gpuworks/internal/engines"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // ArgProblem is one argv token that names a dictionary parameter and states a
@@ -67,6 +61,73 @@ func LintArgs(engine string, args []string) []ArgProblem {
 		return nil
 	}
 	return problems
+}
+
+// ValidateExtraArgsForEngine judges only user arguments at a request boundary.
+// A dictionary flag whose value cannot be decoded is an error there, not an
+// advanced passthrough. Unknown flags remain the deployer's escape hatch;
+// catalog and stored argv retain ReverseArgs' lossless reading contract.
+func ValidateExtraArgsForEngine(engine string, args []string) error {
+	problems := LintArgs(engine, args)
+	if len(problems) > 0 {
+		return paramErrorf(ParamFieldExtraArgs, "invalid extra_args: %s", problems[0])
+	}
+	return nil
+}
+
+// ExtraArgsEngineWarnings names residual user flags that another engine's
+// dictionary documents. Absence from the target dictionary does not establish
+// that its CLI refuses a flag: aliases and additional flags stay passthrough.
+func ExtraArgsEngineWarnings(engine string, args []string) []messages.Warning {
+	selected, err := SelectEngine(engine)
+	if err != nil || !slices.Contains(enginenames.DialectNames(), selected.Name()) {
+		return nil
+	}
+	_, _, residual, _, err := reverseArgs(selected.Name(), args)
+	if err != nil {
+		return nil
+	}
+	var warnings []messages.Warning
+	seen := map[string]bool{}
+	add := func(flag, documentedEngine string) {
+		if seen[flag] {
+			return
+		}
+		seen[flag] = true
+		warnings = append(warnings, messages.NewWarning(messages.WarningExtraArgsEngineUnverified, map[string]any{
+			"flag": flag, "engine": selected.Name(), "documented_engine": documentedEngine,
+		}))
+	}
+	targetFlags := flagIndex(selected.Name())
+	for _, other := range enginenames.DialectNames() {
+		if other == selected.Name() {
+			continue
+		}
+		otherFlags := flagIndex(other)
+		for _, token := range residual {
+			flag, _, _ := splitInlineFlag(token)
+			if len(targetFlags[flag]) > 0 {
+				continue // a composite flag may belong to several target keys
+			}
+			if len(otherFlags[flag]) > 0 {
+				add(flag, other)
+				continue
+			}
+			// A composed short flag can glue its value into the token. The
+			// dictionary owns its prefix, as it owns -O for the -O3 spelling.
+			for name, entries := range otherFlags {
+				if !strings.HasPrefix(name, "-") || strings.HasPrefix(name, "--") || !strings.HasPrefix(token, name) {
+					continue
+				}
+				for _, entry := range entries {
+					if entry.spec.Composed {
+						add(name, other)
+					}
+				}
+			}
+		}
+	}
+	return warnings
 }
 
 // undecodableReason says what the key would have accepted. An enum names its

@@ -137,7 +137,7 @@ func TestZStackCloudInstallPreparesSSHAccess(t *testing.T) {
 					return provision.SSHInstallReport{}, fmt.Errorf("SSH used %s, want %s", outcome.Used, tc.wantAuth)
 				}
 				check, authorized := provision.AuthorizePlatformKey(ctx, client, req.SSHAuth, outcome)
-				if !authorized || check.Status != "ok" {
+				if !authorized || check.Status != "pass" {
 					return provision.SSHInstallReport{}, fmt.Errorf("unexpected authorization report: %+v", check)
 				}
 				return provision.SSHInstallReport{AuthUsed: outcome.Used, PlatformKeyAuthorized: authorized, Checks: []provision.CheckResult{outcome.Check(), check}}, nil
@@ -203,13 +203,13 @@ func TestZStackCloudInstallPreparesSSHAccess(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wantPrecheck := "ok"
+			wantPrecheck := "pass"
 			if tc.denyAuthorization {
 				wantPrecheck = "warn"
 			}
 			var passedPrecheck bool
 			for _, check := range result.Checks {
-				if check.Name == "precheck" && check.Status == wantPrecheck {
+				if check.ID == "precheck" && check.Status == wantPrecheck {
 					passedPrecheck = true
 				}
 			}

@@ -15,7 +15,7 @@ const original = api.evaluate;
 afterEach(() => { cleanup(); api.evaluate = original; });
 after(() => dom.window.close());
 
-const diagnostics = { checks: [{ id: "storage-access:7:3", status: "failed", message: {
+const diagnostics = { checks: [{ id: "storage-access:7:3", status: "fail", message: {
   code: "STORAGE_UNAVAILABLE_ON_NODE", params: { reason: "not_mounted", storage: "nfs", observer: "agent_report" }, message: "not mounted",
 } }] };
 
@@ -33,8 +33,9 @@ for (const transport of ["business-refusal", "http-error"] as const) {
     };
     render(<I18nextProvider i18n={i18n}><Harness /></I18nextProvider>);
     await screen.findByText(locale.deploy.diagnostics.reason.not_mounted);
+    assert.ok(screen.getByText(locale.common.checkStatus.fail));
     assert.ok(screen.getByText("Request ID: r-evaluate-215"));
     assert.ok(screen.getByText(locale.deploy.diagnostics.observer.agent_report));
-    assert.equal(screen.queryByText(locale.deploy.diagnostics.status.passed), null);
+    assert.equal(screen.queryByText(locale.common.checkStatus.pass), null);
   });
 }

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -30,7 +32,7 @@ func (a *apiHandlers) precheckNode(w http.ResponseWriter, r *http.Request) {
 		// a structured check so the user can still continue with installation.
 		failed := provision.SSHPrecheckReport{
 			Target: req.Target,
-			Checks: []provision.CheckResult{{Name: "SSH", Status: "error", Detail: err.Error()}},
+			Checks: []provision.CheckResult{provider.SSHConnectFailedCheck(req.Target, err)},
 		}
 		// A dial error used to leave these zero, and the form printed @:0.
 		// Keep the identity when the target parses; otherwise leave it blank.
@@ -42,18 +44,17 @@ func (a *apiHandlers) precheckNode(w http.ResponseWriter, r *http.Request) {
 	}
 	if a.d.Store != nil {
 		if nodes, err := a.d.Store.NodesWithSSHHost(report.Host); err != nil {
-			report.Checks = append(report.Checks, provision.CheckResult{Name: checkExistingNode, Status: "warn", Detail: "look up nodes with this SSH host: " + err.Error()})
+			report.Checks = append(report.Checks, provision.SkipCheck(provision.CheckIDExistingNode, messages.CheckExistingNodeUnknown, "the nodes with this SSH host could not be looked up", nil))
 		} else if len(nodes) > 0 {
-			report.Checks = append(report.Checks, provision.CheckResult{Name: checkExistingNode, Status: "warn",
-				Detail: "this host is already added here as " + nodeNames(nodes) + "; installing again replaces its agent and that node goes offline"})
+			report.Checks = append(report.Checks, provision.WarnCheck(provision.CheckIDExistingNode, messages.CheckExistingNodeFound,
+				"this host is already added here as "+nodeNames(nodes)+"; installing again replaces its agent and that node goes offline",
+				map[string]any{"node": nodeNames(nodes), "host": report.Host}))
 		} else {
-			report.Checks = append(report.Checks, provision.CheckResult{Name: checkExistingNode, Status: "ok", Detail: "no node here uses this SSH host"})
+			report.Checks = append(report.Checks, provision.PassCheck(provision.CheckIDExistingNode, messages.CheckExistingNodeNone, "no node here uses this SSH host", nil))
 		}
 	}
 	writeJSON(w, http.StatusOK, report)
 }
-
-const checkExistingNode = "Existing node"
 
 func nodeNames(nodes []store.Node) string {
 	names := make([]string, 0, len(nodes))
@@ -249,15 +250,16 @@ func installedSSHSecrets(auth provision.SSHAuth, report provision.SSHInstallRepo
 }
 
 func serverDialInstallCheck(ctx context.Context, addr, secret string, dial func(context.Context, string, string) error) provision.CheckResult {
-	check := provision.CheckResult{Name: "server_dial", Status: "warn"}
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
-		check.Detail = "server_dial address is empty"
-		return check
+		return provision.SkipCheck(provision.CheckIDServerDial, messages.CheckServerDialNoAddress, "server_dial address is empty", nil)
 	}
 	if dial == nil {
-		check.Detail = "server_dial is not configured"
-		return check
+		return provision.SkipCheck(provision.CheckIDServerDial, messages.CheckServerDialUnconfigured, "server_dial is not configured", nil)
+	}
+	params := map[string]any{"address": addr}
+	notConnected := func(evidence string) provision.CheckResult {
+		return provision.WarnCheck(provision.CheckIDServerDial, messages.CheckServerDialNotConnected, "queued for reconnection to "+addr, params).WithEvidence(evidence)
 	}
 	const attempts = 2
 	var lastErr error
@@ -266,7 +268,7 @@ func serverDialInstallCheck(ctx context.Context, addr, secret string, dial func(
 		err := dial(attemptCtx, addr, secret)
 		cancel()
 		if err == nil {
-			return provision.CheckResult{Name: "server_dial", Status: "ok", Detail: "connected to " + addr}
+			return provision.PassCheck(provision.CheckIDServerDial, messages.CheckServerDialConnected, "connected to "+addr, params)
 		}
 		lastErr = err
 		if attempt+1 >= attempts {
@@ -274,11 +276,9 @@ func serverDialInstallCheck(ctx context.Context, addr, secret string, dial func(
 		}
 		select {
 		case <-ctx.Done():
-			check.Detail = ctx.Err().Error()
-			return check
+			return notConnected(ctx.Err().Error())
 		case <-time.After(time.Second):
 		}
 	}
-	check.Detail = "queued for reconnection: " + lastErr.Error()
-	return check
+	return notConnected(lastErr.Error())
 }

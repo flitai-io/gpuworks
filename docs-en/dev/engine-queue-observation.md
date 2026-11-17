@@ -40,3 +40,5 @@ enabling `api_monitor` or retaining bodies for correlation.
 The adaptation runs only with the updated catalog configuration. Existing running instances are not modified live;
 update a deployment to this configuration and recreate its instances to emit the new field. This adds per-request
 observability but cannot recover the original request's missing 20.3-second evidence or fix a native-engine hang.
+
+<!-- translation-source-sha256: 178a2b29a515f01f6856c133aa0810b3b0be5d95b3a38ea07ccd7d3486474cd0 -->

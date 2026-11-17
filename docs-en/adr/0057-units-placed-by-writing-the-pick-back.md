@@ -42,3 +42,5 @@ Letting multi-node and PD place automatically runs into one structural fact: acr
 - When the network declaration is wrong (for example a switch that does not route), a group that cannot talk can still be chosen, and the engine or the PD handoff self-check reports the failure after launch.
 - The units of an automatically placed PD deployment cannot span nodes; such units are still written by hand.
 - What changes is only who writes the nodes: switching the placement mode neither restarts anything nor changes any node.
+
+<!-- translation-source-sha256: bc8bcaca43bdd7ae923fe1b394afb9cc8d89b1fe8a04c99a21a91d18532121bf -->

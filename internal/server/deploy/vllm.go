@@ -11,7 +11,6 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
-	"gpuworks.ai/gpuworks/internal/server/pdmode"
 )
 
 type vLLMEngine struct{ BaseEngine }
@@ -122,12 +121,12 @@ func BuildVLLM(p Params) ResolvedLaunch {
 	} else {
 		b.injectKV("--model", p.ModelPath)
 	}
-	if servedName := p.EngineServedName(); servedName != "" && !p.Headless {
+	if servedName := p.launchServedName(); servedName != "" {
 		b.injectKV("--served-model-name", servedName)
 	}
 	if !p.Headless {
 		b.injectKV("--host", p.Host)
-		b.injectKV("--port", strconv.Itoa(p.APIPort))
+		b.injectKV("--port", p.apiPortText())
 	}
 	if p.APIKey != "" {
 		b.injectKV("--api-key", p.APIKey)
@@ -146,12 +145,13 @@ func BuildVLLM(p Params) ResolvedLaunch {
 			env["VLLM_CUDART_SO_PATH"] = vllmHygonCUDARTPath
 		}
 	}
+	injectPriorityScheduling(b, p)
 	// Multi-machine: mp backend + node coordination (plan §5). vllm gathers the
 	// leader + followers into one engine; only the leader exposes the endpoint.
 	if p.NNodes > 1 {
 		b.injectKV("--distributed-executor-backend", "mp")
 		b.injectKV("--nnodes", strconv.Itoa(p.NNodes))
-		b.injectKV("--node-rank", strconv.Itoa(p.NodeRank))
+		b.injectKV("--node-rank", p.nodeRankText())
 		if p.Headless {
 			b.injectFlag("--headless")
 		}
@@ -159,7 +159,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 			b.injectKV("--master-addr", p.MasterAddr)
 		}
 		if p.MasterPort > 0 {
-			b.injectKV("--master-port", strconv.Itoa(p.MasterPort))
+			b.injectKV("--master-port", p.masterPortText())
 		}
 		if p.NodeAddress != "" {
 			env["VLLM_HOST_IP"] = p.NodeAddress
@@ -185,7 +185,7 @@ func BuildVLLM(p Params) ResolvedLaunch {
 	if q.PerformanceMode != "" && q.PerformanceMode != "balanced" {
 		b.injectDictionary("performance_mode", q.PerformanceMode)
 	}
-	if q.MaxModelLen > 0 {
+	if q.MaxModelLen == -1 || q.MaxModelLen > 0 {
 		b.injectDictionary("max_model_len", q.MaxModelLen)
 	}
 	if q.Dtype != "" && q.Dtype != "auto" {
@@ -206,10 +206,11 @@ func BuildVLLM(p Params) ResolvedLaunch {
 	if q.LongPrefillTokenThreshold > 0 {
 		b.injectDictionary("long_prefill_token_threshold", q.LongPrefillTokenThreshold)
 	}
-	if config, ok := vllmKVTransferConfig(p); ok {
+	kvTransfer, kvTransferOK, kvOffloadEnv := vllmKVTransfer(p)
+	if kvTransferOK {
 		// The disk tier and the PD connector are composite flags: one JSON
 		// object carries them, so the adapter composes it in one place.
-		b.injectKV("--kv-transfer-config", config)
+		b.injectKV("--kv-transfer-config", kvTransfer)
 		vllmHybridKVCacheManager(b, p)
 	} else if q.KVOffloadingSize > 0 {
 		b.injectDictionary("kv_offloading_size", q.KVOffloadingSize)
@@ -297,6 +298,9 @@ func BuildVLLM(p Params) ResolvedLaunch {
 	// --- quirks (data-driven corrections keyed by arch/model) ---
 	applyQuirks(b, p, env)
 	vllmPDEnv(p, env)
+	for key, value := range kvOffloadEnv {
+		env[key] = value
+	}
 
 	argv := append(append(b.args(), templateArgs...), p.ExtraArgs...)
 
@@ -336,113 +340,9 @@ func (vLLMEngine) PDConnectorFlags() []string {
 	return []string{"--kv-transfer-config", "--kv-offloading-size", "--kv-offloading-backend"}
 }
 
-// vllmKVTransferConfig is the single assembly point of --kv-transfer-config.
-// Without PD it is the disk tier alone. On a PD instance it is the mode's
-// connector in the role's connector role; when KV offload is also on (only
-// ever on the prefill role, see PDRoleLaunchConfig) the two become one
-// MultiConnector, because a second flag would replace the first: measured on
-// vLLM 0.25.1, --kv-offloading-size next to a NIXL config silently drops NIXL,
-// so the CPU tier joins the composition too. Settings the engine only reads at
-// the top level (the KV load failure policy) stay at the top level.
-func vllmKVTransferConfig(p Params) (string, bool) {
-	q := p.Quick
-	if p.PD == nil {
-		if q.KVDiskOffload {
-			return diskKVTransferConfig(q), true
-		}
-		return "", false
-	}
-	mode := p.PD.mode()
-	policy := mode.EffectiveKVLoadFailure(p.PD.KVLoadFailure)
-	role := mode.ConnectorRole(p.PD.Role)
-	pd := map[string]any{"kv_connector": mode.Connector, "kv_role": role}
-	if mode.ConnectorPortKey != "" && p.PD.SideChannelPort > 0 {
-		pd[mode.ConnectorPortKey] = strconv.Itoa(p.PD.SideChannelPort)
-	}
-	if mode.ConnectorParallelism {
-		sides := map[string]any{}
-		for _, r := range mode.Roles {
-			sides[r] = map[string]any{"tp_size": max(p.PD.RoleTP[r], 1), "dp_size": 1}
-		}
-		pd["kv_connector_extra_config"] = sides
-	}
-	if len(mode.ConnectorExtra) > 0 || mode.Transport.MooncakeBootstrap() {
-		extra, _ := pd["kv_connector_extra_config"].(map[string]any)
-		if extra == nil {
-			extra = map[string]any{}
-		}
-		for key, value := range mode.ConnectorExtra {
-			extra[key] = value
-		}
-		// TransportMooncake follows the network the group shares; the RDMA
-		// transport states its protocol in ConnectorExtra.
-		if mode.Transport == pdmode.TransportMooncake {
-			extra["mooncake_protocol"] = MooncakeProtocol(p.ComputeNetwork)
-		}
-		if hcas := hcaDevices(p.ComputeNetwork.HCAs); len(hcas) > 0 && extra["mooncake_protocol"] == "rdma" {
-			extra["device_name"] = strings.Join(hcas, ",")
-		}
-		pd["kv_connector_extra_config"] = extra
-	}
-	// No engine_id: vLLM gives each engine process a fresh one, and the
-	// gateway reads it from the prefill's bootstrap server
-	// (pdmode.Mode.SynthesizedHandoff).
-	var offload map[string]any
-	switch {
-	case q.KVDiskOffload:
-		offload = diskKVTransferObject(q)
-	case q.KVOffloadingSize > 0:
-		offload = map[string]any{
-			"kv_connector": "OffloadingConnector", "kv_role": "kv_both",
-			"kv_connector_extra_config": map[string]any{"cpu_bytes_to_use": KVCPUTierBytes(q)},
-		}
-	}
-	config := pd
-	if offload != nil {
-		config = map[string]any{
-			"kv_connector": "MultiConnector", "kv_role": role,
-			"kv_connector_extra_config": map[string]any{"connectors": []map[string]any{pd, offload}},
-		}
-	}
-	if policy != "" {
-		config["kv_load_failure_policy"] = policy
-	}
-	raw, _ := json.Marshal(config)
-	return string(raw), true
-}
-
-func diskKVTransferConfig(q LaunchConfig) string {
-	raw, _ := json.Marshal(diskKVTransferObject(q))
-	return string(raw)
-}
-
-func diskKVTransferObject(q LaunchConfig) map[string]any {
-	// The thread counts are folded into one composite flag, so an unset one has
-	// no "emit nothing" spelling of its own: the dictionary's default is what
-	// the connector is given.
-	readThreads, writeThreads := q.KVOffloadReadThreads, q.KVOffloadWriteThreads
-	if readThreads <= 0 {
-		readThreads = defaultInt(EngineVLLM, "kv_offload_read_threads")
-	}
-	if writeThreads <= 0 {
-		writeThreads = defaultInt(EngineVLLM, "kv_offload_write_threads")
-	}
-	extra := map[string]any{
-		"spec_name":        "TieringOffloadingSpec",
-		"cpu_bytes_to_use": KVCPUTierBytes(q),
-		"secondary_tiers": []map[string]any{{
-			"type": "fs", "root_dir": filepath.Clean(q.SharedKVDir),
-			"n_read_threads": readThreads, "n_write_threads": writeThreads,
-		}},
-	}
-	if q.KVOffloadBlockSize > 0 {
-		extra["block_size"] = q.KVOffloadBlockSize
-	}
-	return map[string]any{
-		"kv_connector": "OffloadingConnector", "kv_role": "kv_both",
-		"kv_connector_extra_config": extra,
-	}
-}
+// KVConflictFlags: a KV offload backend's connector is the same composed
+// flag, so the same flags would replace it.
+func (e vLLMEngine) KVConflictFlags() []string { return e.PDConnectorFlags() }
 
 func speculativeConfig(q LaunchConfig) string {
 	config := map[string]any{}

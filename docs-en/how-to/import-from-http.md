@@ -97,3 +97,5 @@ After import, the image is `present` on the node and is used directly during dep
 
 - Terminology: “Model Sources and Downloads” and “Images” in [`CONTEXT.md`](../../CONTEXT.md)
 - Other acquisition methods and cache semantics: [Download, Cache, and Sync Models Between Nodes](download-and-sync-models.md)
+
+<!-- translation-source-sha256: 853a3c25ee4f53c7453baadce55bcce7edbb6e068b80d1e44a7c965b110cbb22 -->

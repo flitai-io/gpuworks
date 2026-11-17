@@ -2,12 +2,15 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"testing"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/rollup"
 	"gpuworks.ai/gpuworks/internal/server/statsdb"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -23,7 +26,7 @@ func newTestOpsStats(t *testing.T, now *time.Time) (*opsStats, *store.Store, *ob
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(obs.close)
+	t.Cleanup(obs.Close)
 	ops, err := newOpsStats(dir, 72*time.Hour, st, obs, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +149,7 @@ func TestOpsStatsAccumulatesFlushesRollsUpAndRetains(t *testing.T) {
 	if err := ops.SetRetention(r); err != nil {
 		t.Fatal(err)
 	}
-	if age, bytes := obs.ux.Limits(); age != 3*24*time.Hour || bytes != 1024<<20 {
+	if age, bytes := obs.UX().Limits(); age != 3*24*time.Hour || bytes != 1024<<20 {
 		t.Fatalf("request log limits = %v %d", age, bytes)
 	}
 	// An invalid value is refused and changes nothing.
@@ -250,14 +253,14 @@ func TestOpsStatsBackfillsFromTheRequestLogOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(obs.close)
+	t.Cleanup(obs.Close)
 	// History the old release wrote: two days back and this morning.
 	for _, at := range []time.Time{now.Add(-50 * time.Hour), now.Add(-2 * time.Hour), now.Add(-time.Hour)} {
 		// ux.db weighs its own rows (1 unless it sampled); the weights
 		// themselves are rollup's test.
-		obs.ux.Observe(finished(17, 3, at, 1000, 500))
+		obs.UX().Observe(finished(17, 3, at, 1000, 500))
 	}
-	if err := obs.ux.Sync(); err != nil {
+	if err := obs.UX().Sync(); err != nil {
 		t.Fatal(err)
 	}
 	ops, err := newOpsStats(dir, 72*time.Hour, st, obs, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -268,8 +271,8 @@ func TestOpsStatsBackfillsFromTheRequestLogOnce(t *testing.T) {
 	ops.now = func() time.Time { return now }
 	// A request the new release counts live, already in the log too.
 	later := finished(17, 3, now.Add(time.Minute), 7, 0)
-	obs.ux.Observe(later)
-	_ = obs.ux.Sync()
+	obs.UX().Observe(later)
+	_ = obs.UX().Sync()
 	ctx := context.Background()
 	ops.liveSinceMS = now.UnixMilli()
 	ops.backfill(ctx)
@@ -300,5 +303,59 @@ func TestOpsStatsBackfillsFromTheRequestLogOnce(t *testing.T) {
 	}
 	if again != 3 {
 		t.Fatalf("a second fill added: %d", again)
+	}
+}
+
+// A card held outside the platform counts as schedulable capacity only when
+// the scheduler may place a partition on it by memory (ADR 0068): the
+// holders' memory known, the node's agent keeping them reported beside a
+// partition, a partition backend ready on the card, and a node whose
+// placement policy lets automatic placement share it. Counting any other
+// held card would report capacity the scheduler never uses.
+func TestOpsStatsCountsAHeldCardAsSchedulableOnlyWhenAPartitionMayShareIt(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		safety      int
+		ready       bool
+		allow       bool
+		schedulable float64
+	}{
+		{"current agent with a ready backend", proto.PartitionSafetyForeignTracked, true, true, 60},
+		{"node does not allow sharing", proto.PartitionSafetyForeignTracked, true, false, 0},
+		{"agent before foreign tracking", 1, true, true, 0},
+		{"no ready partition backend", proto.PartitionSafetyForeignTracked, false, true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Date(2026, 10, 22, 2, 0, 0, 0, time.UTC)
+			ops, st, _ := newTestOpsStats(t, &now)
+			node, err := st.RegisterNode("n1", store.HashToken("n1"), "n1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			updates := map[string]any{"state": store.NodeStateOnline, "gpu_vendor": "nvidia", "arch": "amd64", "os": "linux",
+				"runtime_driver": "docker", "partition_safety_protocol": tc.safety, "placement_share_with_foreign": tc.allow}
+			if tc.ready {
+				index := 0
+				probes, _ := json.Marshal([]proto.PartitionProbeResult{{Backend: accelerator.BackendNVIDIALogical, GPUIndex: &index, Status: proto.PartitionProbePassed}})
+				assets, _ := json.Marshal([]proto.AssetReport{{Backend: accelerator.BackendNVIDIALogical, Root: "/assets", Files: []string{"libvgpu.so"}}})
+				updates["partition_probes"], updates["partition_assets"] = string(probes), string(assets)
+			}
+			if err := st.DB().Model(&store.Node{}).Where("id = ?", node.ID).Updates(updates).Error; err != nil {
+				t.Fatal(err)
+			}
+			held, _ := json.Marshal([]proto.CardProcess{{PID: 41235, Name: "python3", MemoryBytes: 62 << 30}})
+			card := store.GPU{NodeID: node.ID, Index: 0, Ident: "GPU-h", UUID: "GPU-h", Name: "H20", Vendor: "nvidia", ArchID: "sm_90",
+				ComputeCapability: "9.0", MemoryTotal: 140 << 30, ForeignProcesses: string(held)}
+			if err := st.DB().Create(&card).Error; err != nil {
+				t.Fatal(err)
+			}
+			if err := ops.sampleGPUTime(now, time.Minute); err != nil {
+				t.Fatal(err)
+			}
+			_, capacity := ops.gpuTimes.Take()
+			if c := capacity[rollup.CapacityKey{HourMS: rollup.HourMS(now), GPUModel: "H20"}]; c.TotalGPUSeconds != 60 || c.SchedulableGPUSeconds != tc.schedulable {
+				t.Fatalf("capacity = %+v, want %v schedulable seconds", c, tc.schedulable)
+			}
+		})
 	}
 }

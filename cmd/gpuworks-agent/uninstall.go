@@ -82,7 +82,7 @@ func (u linuxUninstaller) uninstall(ctx context.Context, state string) error {
 			return err
 		}
 	}
-	for _, file := range []string{"identity.json", "gpuworks-agent.pid", agentconf.FileName} {
+	for _, file := range []string{"identity.json", "gpuworks-agent.pid", agentLockFile, agentconf.FileName} {
 		if err := removeIfPresent(filepath.Join(state, file)); err != nil {
 			return err
 		}

@@ -145,6 +145,8 @@ export function draftToFormValues(
     values.health_check_threshold_sec = request.health_check_threshold_sec;
   if (typeof request.tokenize_enabled === "boolean")
     values.tokenize_enabled = request.tokenize_enabled;
+  if (typeof request.priority_scheduling === "boolean")
+    values.priority_scheduling = request.priority_scheduling;
   if (Number(request.start_timeout_sec) > 0)
     values.start_timeout_sec = request.start_timeout_sec;
   if (request.placement_strategy) values.placement_strategy = request.placement_strategy;

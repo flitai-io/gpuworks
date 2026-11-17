@@ -175,13 +175,13 @@ func TestSchedulingActivityAtFleetScale(t *testing.T) {
 
 	retention := store.DefaultDataRetention(72*time.Hour, "UTC")
 	svc := &schedactivity.Service{Tracker: schedactivity.NewTracker(), Store: st, Stats: stats,
-		Retention: func() store.DataRetention { return retention }, Now: time.Now}
+		Retention: func() store.DataRetention { return retention }, Now: func() time.Time { return end }}
 	replayBudget, uncachedBudget, cachedBudget := 60*time.Second, 2*time.Second, 200*time.Millisecond
 	if raceEnabled {
 		replayBudget, uncachedBudget, cachedBudget = 10*time.Minute, 20*time.Second, 2*time.Second
 	}
 	started := time.Now()
-	read, _, err := svc.Replay(time.Now())
+	read, _, err := svc.Replay(end)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,8 +243,10 @@ func TestSchedulingActivityAtFleetScale(t *testing.T) {
 	if body := plainBody(t, fleet, paths[1]); json.Unmarshal(body, &week) != nil || week.BucketSeconds != 3600 || len(week.TopCards) != 20 {
 		t.Fatalf("7d = %d buckets of %ds, %d cards", len(week.Buckets), week.BucketSeconds, len(week.TopCards))
 	}
+	dayPath := fmt.Sprintf("/api/v1/scheduling/activity?since=%s&until=%s",
+		end.Add(-24*time.Hour).Format(time.RFC3339), end.Format(time.RFC3339))
 	var day dto.SchedulingActivity
-	if body := plainBody(t, fleet, paths[0]); json.Unmarshal(body, &day) != nil {
+	if body := plainBody(t, fleet, dayPath); json.Unmarshal(body, &day) != nil {
 		t.Fatal("24h")
 	}
 	var yields int64
@@ -272,7 +274,7 @@ func TestSchedulingActivityAtFleetScale(t *testing.T) {
 		}
 	}
 	var again dto.SchedulingActivity
-	if body := plainBody(t, fleet, paths[0]); json.Unmarshal(body, &again) != nil || fmt.Sprint(again.Reasons) != fmt.Sprint(day.Reasons) {
+	if body := plainBody(t, fleet, dayPath); json.Unmarshal(body, &again) != nil || fmt.Sprint(again.Reasons) != fmt.Sprint(day.Reasons) {
 		t.Fatalf("24h reasons with the log emptied = %v, before %v", again.Reasons, day.Reasons)
 	}
 }

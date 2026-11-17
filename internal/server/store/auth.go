@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
+	"gpuworks.ai/gpuworks/internal/server/priority"
 )
 
 // EnsureAdmin creates the admin user if none exists, returning (username,
@@ -141,6 +142,8 @@ type APIKeyIdentity struct {
 	UserID      uint
 	Restricted  bool
 	Deployments map[uint]struct{}
+	// Priority is the key's priority class binding (package priority).
+	Priority priority.Binding
 }
 
 // VerifyAPIKey validates a presented key (prefix lookup + argon2id verify) and
@@ -176,7 +179,7 @@ func (s *Store) ResolveAPIKey(presented string) (APIKeyIdentity, bool) {
 	if !verifyAPIKeyHash(presented, k.Hash) {
 		return APIKeyIdentity{}, false
 	}
-	identity := APIKeyIdentity{KeyID: k.ID, UserID: k.UserID, Restricted: k.Restricted}
+	identity := APIKeyIdentity{KeyID: k.ID, UserID: k.UserID, Restricted: k.Restricted, Priority: k.priorityBinding()}
 	if k.Restricted {
 		set, err := apiKeyDeploymentSet(s.db, k.ID)
 		if err != nil {

@@ -15,6 +15,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/logstore"
+	"gpuworks.ai/gpuworks/internal/server/obsingest"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -68,7 +69,7 @@ func TestLogsContextMissingAnchorWire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	o := &observability{logs: ls}
+	o := &observability{obsingest.New(obsingest.Stores{Logs: ls})}
 	// LogsContext is wired to the production callback, not a stub: a stub
 	// cannot catch the store handing the app layer an out-of-range index.
 	router := api.Router(api.Deps{Store: st, AuthSigner: signer, LogsContext: o.contextLogs})

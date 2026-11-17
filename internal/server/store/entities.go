@@ -8,6 +8,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/nodepolicy"
 )
 
 // Node states say whether the control plane has the node's agent on the
@@ -48,6 +49,11 @@ type Node struct {
 	// platform lifts only its own cordons (SchedulingSource). Empty on a
 	// schedulable node.
 	SchedulingBy SchedulingSource `gorm:"size:16;not null;default:''"`
+	// PlacementPolicy is the operator's per-node placement knobs
+	// (nodepolicy.Policy), one typed column each (placement_<key>), written
+	// only by SetNodePlacementPolicy. Unlike Scheduling it does not stop
+	// placement; it shapes where on the node work may go.
+	PlacementPolicy nodepolicy.Policy `gorm:"embedded;embeddedPrefix:placement_"`
 
 	// Hardware summary (denormalized for list views; full detail via GPUs).
 	OS               string `gorm:"size:32"`
@@ -113,14 +119,33 @@ type Node struct {
 	// place only on nodes where it is loaded.
 	PeerMemory string `gorm:"size:16"`
 	// RuntimeFallbackFrom is the runtime the agent's auto-detection passed
-	// over because it cannot give a container this node's accelerators
-	// (docker | nerdctl), and RuntimeFallbackReason the code saying why
-	// (accelerator.RuntimeGPUBlocked*, or accelerator.RuntimeGPUReady once
-	// it can and the agent has yet to switch back). Both empty when
+	// over (docker | nerdctl), and RuntimeFallbackReason the code saying why
+	// (accelerator.RuntimeGPUBlocked*, proto.RuntimeFallback*, or
+	// accelerator.RuntimeGPUReady once it can and the agent has yet to
+	// switch back). Both empty when
 	// nothing was passed over. The server cannot derive them: it does not
 	// know which runtimes a node has, only the one it runs.
 	RuntimeFallbackFrom   string `gorm:"size:16"`
 	RuntimeFallbackReason string `gorm:"size:64"`
+	// RuntimeFallbackSocket* is what the agent found about the daemon
+	// socket its account may not open (proto.RuntimeSocketDenial), set
+	// only with reason proto.RuntimeFallbackSocketPermissionDenied: the
+	// socket, its group and gid (proto.GIDUnknown when unread), whether the
+	// agent already holds that group, the agent's account, the gid of another
+	// group of that name the account is in (a directory service's, 0 for
+	// none), whether the account database already lists the account in the
+	// group, and what restarts the agent (proto.AgentSupervisor*) with its
+	// state directory. Only the agent can see them; they are what the
+	// node's notice builds the operator's command from.
+	RuntimeFallbackSocket               string `gorm:"size:512"`
+	RuntimeFallbackSocketGroup          string `gorm:"size:64"`
+	RuntimeFallbackSocketGID            int    `gorm:"column:runtime_fallback_socket_gid"`
+	RuntimeFallbackSocketGroupHeld      bool
+	RuntimeFallbackSocketAccount        string `gorm:"size:64"`
+	RuntimeFallbackSocketSameNameGID    int    `gorm:"column:runtime_fallback_socket_same_name_gid"`
+	RuntimeFallbackSocketRestartPending bool
+	RuntimeFallbackSocketSupervisor     string `gorm:"size:16"`
+	RuntimeFallbackSocketStateDir       string `gorm:"size:512"`
 	// AcceleratorPreference is the operator's choice of which vendor's
 	// cards the node manages on a host that has more than one: "" when
 	// never chosen, auto, or a vendor (accelerator.HasPCICards). The agent
@@ -149,6 +174,7 @@ type Node struct {
 	RecoveryAttempts  int
 	LastProbeAt       *time.Time
 	LastRecoveryError string `gorm:"type:text"` // free text: the last out-of-band recovery error
+	LastRecoveryCode  string `gorm:"size:64"`   // names LastRecoveryError (messages.ErrorSSH*, ErrorAgentInstall*, ErrorRecovery*); empty on rows recorded before codes
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 

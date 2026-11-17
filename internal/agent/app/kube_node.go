@@ -41,6 +41,16 @@ func (n *NodeRuntime) kubeRPC(ctx context.Context, method string, params json.Ra
 		return nil, fmt.Errorf("%s: this node does not run on Kubernetes", method)
 	}
 	switch method {
+	case proto.RPCKubeNodesSelected:
+		var req proto.KubeNodesSelectedParams
+		if err := json.Unmarshal(params, &req); err != nil {
+			return nil, fmt.Errorf("decode %s: %w", method, err)
+		}
+		selected, err := d.NodesSelected(ctx, req.NodeNames, req.Selector, req.PoolLabel, req.PoolIDs)
+		if err != nil {
+			return nil, err
+		}
+		return proto.KubeNodesSelectedResult{Selected: selected}, nil
 	default:
 		var req proto.KubeNodeExistsParams
 		if err := json.Unmarshal(params, &req); err != nil {
@@ -56,4 +66,27 @@ func (n *NodeRuntime) kubeRPC(ctx context.Context, method string, params json.Ra
 		}
 		return proto.KubeNodeExistsResult{Exists: true, Agent: &agent}, nil
 	}
+}
+
+// OnKubeSettings applies the cluster entry's settings the server pushed
+// (idle return of borrowed cards, the NVIDIA RuntimeClass of the instance
+// pods started from now on) without a restart. A node that does not run on
+// Kubernetes ignores them.
+func (n *NodeRuntime) OnKubeSettings(ctx context.Context, s proto.KubeSettings) {
+	d, ok := n.runtimeDriver().(*kube.Driver)
+	if !ok {
+		return
+	}
+	d.ApplySettings(ctx, kube.IdleReturnOf(s.IdleReturnSeconds), s.RuntimeClass)
+}
+
+// NVIDIAIsolation is how strictly this Kubernetes node keeps its NVIDIA
+// instance pods to their own card, reported with its status; nil while it is
+// strict, on any other runtime, and when the node has no NVIDIA card.
+func (n *NodeRuntime) NVIDIAIsolation(ctx context.Context) *proto.NVIDIAIsolation {
+	d, ok := n.runtimeDriver().(*kube.Driver)
+	if !ok {
+		return nil
+	}
+	return d.NVIDIAIsolation(ctx)
 }

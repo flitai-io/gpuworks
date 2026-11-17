@@ -1,0 +1,60 @@
+{
+  "materialize": {
+    "quick": {
+      "performance_mode": "balanced",
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "gpu_memory_utilization": 0.9
+    }
+  },
+  "launch": {
+    "command": [
+      "python3",
+      "-m",
+      "vllm.entrypoints.openai.api_server",
+      "--model",
+      "/model",
+      "--port",
+      "30000",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}"
+    ],
+    "env": {
+      "GLOO_SOCKET_IFNAME": "lo",
+      "HF_HUB_OFFLINE": "1",
+      "NCCL_SOCKET_IFNAME": "lo",
+      "TRANSFORMERS_OFFLINE": "1",
+      "VLLM_HOST_IP": "127.0.0.1"
+    },
+    "shm_bytes": 17179869184,
+    "requested_features": {
+      "command_known": true,
+      "prefill_decode_disaggregation": true
+    },
+    "reverse_residual": [
+      "--model",
+      "/model",
+      "--port",
+      "30000",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}"
+    ]
+  },
+  "export": {
+    "args": [
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9"
+    ]
+  },
+  "unsettable": [
+    {
+      "source": "argv",
+      "value": "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}",
+      "unsettable": false
+    }
+  ]
+}

@@ -109,6 +109,11 @@ type KindInfo struct {
 	// CanListClusters: the driver lists managed Kubernetes clusters
 	// (ClusterProvider).
 	CanListClusters bool `json:"can_list_clusters"`
+	// Resources are what the kind connects, in the order to list them.
+	Resources []KindResource `json:"resources"`
+	// Category is the platform type the kind's accounts are filed under,
+	// which a client groups the kinds by; empty for a kind that declares none.
+	Category Category `json:"category"`
 }
 
 // CreateInstanceRequest carries generic create/rent parameters for future
@@ -194,7 +199,7 @@ type InstallResult struct {
 	ConnectMode       string
 	ServerDialListen  string
 	ServerDialAddress string
-	InstallChecks     []InstallCheck
+	InstallChecks     []provision.CheckResult
 	SSHConnection     *SSHConnection
 	SSHAttempts       []SSHAttempt
 }
@@ -226,15 +231,6 @@ func IsRetryableSSHConnectionError(err error) bool {
 	return errors.As(err, &target)
 }
 
-// InstallCheck is a provider-install observation surfaced by the API. It is
-// intentionally provider-package-local so drivers can report SSH installer
-// details without coupling the driver interface to the provision package.
-type InstallCheck struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Detail string `json:"detail,omitempty"`
-}
-
 // ReportingDriver is an optional extension for drivers that can return
 // detailed installation checks. The base Driver interface remains unchanged
 // for provider-native transports and test drivers.
@@ -247,9 +243,9 @@ type ReportingDriver interface {
 // data in detail responses before their list endpoint catches up.
 // CommandPrechecker is an optional driver capability: run the install
 // precheck through a provider command channel (ConnectionCloudAssistant)
-// instead of SSH. The checks use the provision check names.
+// instead of SSH. The checks use the provision check ids.
 type CommandPrechecker interface {
-	PrecheckCommand(ctx context.Context, creds Credentials, inst Instance, connection SSHConnection, req CommandPrecheckRequest) ([]InstallCheck, error)
+	PrecheckCommand(ctx context.Context, creds Credentials, inst Instance, connection SSHConnection, req CommandPrecheckRequest) ([]provision.CheckResult, error)
 }
 
 // CommandPrecheckRequest is what a command-channel precheck needs to know.
@@ -263,7 +259,7 @@ type InstanceGetter interface {
 }
 
 type InstallReport struct {
-	Checks []InstallCheck `json:"checks"`
+	Checks []provision.CheckResult `json:"checks"`
 	// AuthUsed is the provision.Auth* credential the instance accepted, ""
 	// when the driver does not report it.
 	AuthUsed string `json:"auth_used,omitempty"`
@@ -407,6 +403,8 @@ func KindInfos() []KindInfo {
 			ServerDialSupported:     ServerDialSupported(kind),
 			ServerDialAutoPort:      isPortMapper(drv),
 			CanListClusters:         isClusterProvider(drv),
+			Resources:               ResourcesOf(kind),
+			Category:                CategoryOf(kind),
 		})
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Kind < infos[j].Kind })
@@ -419,7 +417,28 @@ type Category string
 const (
 	CategoryPublicCloud  Category = "public_cloud"
 	CategoryPrivateCloud Category = "private_cloud"
+	// CategoryKubernetes is a Kubernetes cluster connected on its own (with
+	// kubectl), not through a vendor's account: no kind belongs to it.
+	CategoryKubernetes Category = "kubernetes"
 )
+
+// CategoryInfo is a platform type as the console offers it: in this order,
+// what it connects, and whether it is added as a Kubernetes cluster entry
+// (the cluster form) rather than as a vendor's account.
+type CategoryInfo struct {
+	ID          Category       `json:"id"`
+	Resources   []KindResource `json:"resources,omitempty"`
+	KubeCluster bool           `json:"kube_cluster,omitempty"`
+}
+
+// Categories are every platform type, in the order the console lists them.
+func Categories() []CategoryInfo {
+	return []CategoryInfo{
+		{ID: CategoryPublicCloud},
+		{ID: CategoryPrivateCloud},
+		{ID: CategoryKubernetes, Resources: []KindResource{{Type: ResourceKubernetes}}, KubeCluster: true},
+	}
+}
 
 // CategoryOf reports the platform a kind connects. Each known kind declares
 // its category (kindCategories); a kind that declares none has no category.

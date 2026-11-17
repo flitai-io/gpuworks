@@ -1,7 +1,8 @@
 // Package healthcheck is the server's health check of deployments: once a
 // minute, each deployment that has it turned on gets one minimal request
-// through the gateway (a chat message "1" with max_tokens 1, or an embedding
-// of "1"), and the reply's time and outcome say whether the service answers.
+// through the gateway (a chat message "1" with max_tokens 1, an embedding of
+// "1", or a one-question decision about "1"), and the reply's time and
+// outcome say whether the service answers.
 // It only reports: nothing is restarted or taken out of routing because of
 // it. The gateway does not account a check as traffic (proxy.Proxy.Probe),
 // and the results live in memory: a restarted server checks again within a
@@ -42,6 +43,8 @@ const (
 	KindEmbeddings Kind = "embeddings"
 	// KindCompletions asks a deployment that serves text completion only.
 	KindCompletions Kind = "completions"
+	// KindDecision asks a deployment that serves System One decisions only.
+	KindDecision Kind = "decision"
 )
 
 // Payload is the request body a check of kind sends, without its model,
@@ -52,6 +55,14 @@ func Payload(kind Kind) map[string]any {
 	}
 	if kind == KindCompletions {
 		return map[string]any{"prompt": "1", "max_tokens": 1, "stream": false}
+	}
+	if kind == KindDecision {
+		// One yes/no question: the smallest request the System One wire
+		// format accepts (a state and one to sixteen questions).
+		return map[string]any{
+			"state":     "1",
+			"questions": map[string]any{"q": map[string]any{"type": "noul", "instructions": "Is the state a number?"}},
+		}
 	}
 	return map[string]any{
 		"messages":   []map[string]any{{"role": "user", "content": "1"}},

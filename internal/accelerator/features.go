@@ -10,9 +10,14 @@ const (
 	FeatureKVDiskTier       Feature = "kv_disk_tier"
 	FeaturePipelineParallel Feature = "pipeline_parallelism"
 	FeatureDataParallel     Feature = "data_parallelism"
+	// FeatureExternalKVCache: a component outside the engine keeps the
+	// instance's KV cache (a KV offload backend, ADR 0069). No vendor row
+	// denies it; which vendors a backend runs on is the backend's own
+	// allow-list, so this is only the requested-feature identity.
+	FeatureExternalKVCache Feature = "external_kv_cache"
 )
 
-var Features = []Feature{FeatureEngineSleep, FeatureMultiNode, FeaturePD, FeatureKVDiskTier, FeaturePipelineParallel, FeatureDataParallel}
+var Features = []Feature{FeatureEngineSleep, FeatureMultiNode, FeaturePD, FeatureKVDiskTier, FeaturePipelineParallel, FeatureDataParallel, FeatureExternalKVCache}
 
 // A missing entry imposes no additional platform restriction. It does not
 // promise engine or partition-backend support. Apple retains its existing

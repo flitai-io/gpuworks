@@ -39,7 +39,7 @@ func download(t *testing.T, e *testEnv, rel, format string) (proto.StorageDownlo
 		if len(rest) != 0 {
 			t.Fatalf("bytes after a refusal: %q", rest)
 		}
-		if err == nil || codeOf(t, err) != head.Code || proto.ParseStorageFilesError(head.Error).Code != head.Code {
+		if err == nil || codeOf(t, err) != head.Code || head.Error != err.Error() {
 			t.Fatalf("head %+v vs returned %v", head, err)
 		}
 	}

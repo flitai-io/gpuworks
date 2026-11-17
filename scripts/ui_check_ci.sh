@@ -2,7 +2,9 @@
 # The UI check the ui-check CI job runs, and anyone can run locally from the
 # repository root: build the server with the UI from internal/server/webui/dist,
 # start a disposable experience environment, and walk it with
-# ui/tests/browser/ui-check.mjs. On a merge request only the pages the change
+# ui/tests/browser/ui-check.mjs. A successful walk is followed by the resource
+# detail and network table geometry checks in tests/browser/detail-spacing.mjs.
+# On a merge request only the pages the change
 # touches are walked (scripts/ui_antd_inventory.mjs --affected); a change to a
 # shared file walks them all. With UI_CHECK_COMPARE=1 the target branch's UI is
 # built too and served against the same environment, so the report shows the
@@ -41,7 +43,12 @@ routes_arg=()
 if [ -n "${UI_CHECK_BASE_REF:-}" ]; then
   node scripts/ui_antd_inventory.mjs --base "$UI_CHECK_BASE_REF" --affected > "$work/affected.json"
   echo "ui-check: pages to walk: $(cat "$work/affected.json")"
-  if [ "$(cat "$work/affected.json")" = "[]" ]; then echo "ui-check: the change touches no page"; exit 0; fi
+  if [ "$(cat "$work/affected.json")" = "[]" ]; then
+    echo "ui-check: no affected pages; running the detail-spacing checks only"
+    (cd ui && node tests/browser/detail-spacing.mjs "$out/detail-spacing") || exit $?
+    test -s "$out/detail-spacing/measurements.json" || { echo "ui-check: the detail-spacing checker produced no measurements; failing" >&2; exit 2; }
+    exit 0
+  fi
   routes_arg=(--affected "$work/affected.json")
 fi
 
@@ -101,4 +108,9 @@ node tests/browser/ui-check.mjs --base "http://127.0.0.1:$port" --password-file 
   --out "$out" ${routes_arg[@]+"${routes_arg[@]}"} ${compare_arg[@]+"${compare_arg[@]}"} || status=$?
 git -C "$root" worktree remove --force "$work/base" 2>/dev/null || true
 if [ "$status" -eq 0 ] && [ ! -s "$out/results.json" ]; then echo "ui-check: the checker produced no results; failing" >&2; status=2; fi
+if [ "$status" -eq 0 ]; then
+  echo "ui-check: checking resource detail spacing and network tables"
+  node tests/browser/detail-spacing.mjs "$out/detail-spacing" > "$work/detail-spacing.log" 2>&1 || { status=$?; tail -30 "$work/detail-spacing.log" >&2; }
+fi
+if [ "$status" -eq 0 ] && [ ! -s "$out/detail-spacing/measurements.json" ]; then echo "ui-check: the detail-spacing checker produced no measurements; failing" >&2; status=2; fi
 exit "$status"

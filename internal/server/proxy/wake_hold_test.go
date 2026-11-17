@@ -21,11 +21,11 @@ func newSleepingProxy(t *testing.T, held bool) (*Proxy, *store.Store, string, ui
 	p, _, key, depID, closeUpstream := newAccountingProxyFor(t, upstream, &store.Deployment{Engine: "vllm", Sleepable: true})
 	t.Cleanup(closeUpstream)
 	st := p.store
-	if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 1).Error; err != nil {
+	if err := updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 1}); err != nil {
 		t.Fatal(err)
 	}
 	if held {
-		if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_held", true).Error; err != nil {
+		if err := updateInstanceRow(st, "omni-instance", map[string]any{"sleep_held": true}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -65,7 +65,7 @@ func TestARequestForAPlatformSleepWaitsForTheWake(t *testing.T) {
 			if n, _ := p.HeldRequests(depID); n != 1 {
 				t.Errorf("held while waking = %d, want 1", n)
 			}
-			if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 0).Error; err != nil {
+			if err := updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 0}); err != nil {
 				t.Error(err)
 			}
 		}()
@@ -225,7 +225,7 @@ func TestASleepHeldWhileWaitingEndsTheHold(t *testing.T) {
 	p.SetWakeDemand(func(uint) {
 		go func() {
 			time.Sleep(100 * time.Millisecond)
-			_ = st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_held", true).Error
+			_ = updateInstanceRow(st, "omni-instance", map[string]any{"sleep_held": true})
 		}()
 	})
 	start := time.Now()
@@ -240,7 +240,7 @@ func TestASleepHeldWhileWaitingEndsTheHold(t *testing.T) {
 func TestADrainingDeploymentHoldsNewRequestsUntilItResumes(t *testing.T) {
 	p, st, key, depID, front := newSleepingProxy(t, false)
 	// Awake, but draining: a new request waits rather than starting.
-	if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 0).Error; err != nil {
+	if err := updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 0}); err != nil {
 		t.Fatal(err)
 	}
 	p.SetDraining(depID, []string{"omni-instance"}, true)

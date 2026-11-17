@@ -1,11 +1,15 @@
 package controller
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"slices"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/planning"
+	"gpuworks.ai/gpuworks/internal/server/scheduler"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -21,6 +25,7 @@ func (c *Controller) rollRestart(dep *store.Deployment, insts []store.Instance, 
 	since := *dep.RestartRequestedAt
 	incomplete := planning.GroupsIncomplete(insts)
 	var oldest *store.Instance
+	var oldestUnit planning.Unit
 	var stalled *planning.UnitSlot
 	unavailable := 0
 	for i, slot := range match.Slots {
@@ -32,7 +37,7 @@ func (c *Controller) rollRestart(dep *store.Deployment, insts []store.Instance, 
 			}
 		}
 		if inst != nil && inst.CreatedAt.Before(since) && (oldest == nil || inst.CreatedAt.Before(oldest.CreatedAt)) {
-			oldest = inst
+			oldest, oldestUnit = inst, slot.Unit
 		}
 	}
 	if oldest == nil {
@@ -43,6 +48,13 @@ func (c *Controller) rollRestart(dep *store.Deployment, insts []store.Instance, 
 		if stalled != nil {
 			c.recordRollStalled(dep, since, *stalled, match.Failed[stalled.Key])
 		}
+		c.q.addAfter(depKey(dep.ID), c.retryBackoff)
+		return nil
+	}
+	if refusal := c.rollReplacementRefused(dep, oldestUnit, oldest); refusal != nil {
+		// Its replacement could not be placed: keep the replica rather than
+		// drop it, and say what would let the roll go on.
+		c.recordUnschedulable(dep, *refusal)
 		c.q.addAfter(depKey(dep.ID), c.retryBackoff)
 		return nil
 	}
@@ -75,4 +87,64 @@ func (c *Controller) recordRollStalled(dep *store.Deployment, since time.Time, s
 		params[store.EventParamNodeUUIDs] = nodes
 	}
 	c.store.AddDeploymentEventCode(dep.ID, store.EventKindSchedule, store.EventDeploymentRollingStalled, params)
+}
+
+// rollReplacementRefused checks, before a rolling restart drains a
+// partition that shares its card with processes outside the platform,
+// whether its replacement could be placed on its node without it. A node
+// whose placement policy stopped allowing such sharing after the replica was
+// placed would refuse it (ADR 0068): the refusal is returned and the replica
+// kept. Anything else - another reason, a check that cannot run - lets the
+// roll go on as before; only this case is one the roll itself would cause.
+// The check plans one node, and only for a replica on a held card that
+// cannot move: a pool replica whose requirements do not pin it to one node
+// is replaced by a pick across the pool (pickPoolNode), so its own node's
+// refusal says nothing about where the replacement goes.
+func (c *Controller) rollReplacementRefused(dep *store.Deployment, unit planning.Unit, inst *store.Instance) *scheduler.Reason {
+	if dep.VRAMLimitBytes <= 0 || dep.NNodes > 1 {
+		return nil
+	}
+	node, err := c.store.NodeByID(inst.NodeID)
+	if err != nil || !onHeldCard(node, inst) {
+		return nil
+	}
+	if unit.Pool() {
+		reqs, err := c.store.DeploymentRequirements(dep.ID)
+		if pinned, ok := planning.PinnedNode(reqs); err != nil || !ok || pinned != node.UUID {
+			return nil
+		}
+	}
+	model, err := c.store.GetModel(dep.ModelID)
+	if err != nil {
+		return nil
+	}
+	req, templateLayer, _, err := c.launchRequest(dep, node, model, nil)
+	if err != nil {
+		return nil
+	}
+	topology, err := planning.RankTopology(node, nil, planning.GroupRank{Ranks: 1})
+	if err != nil {
+		return nil
+	}
+	req.Preview, req.Topology, req.ExcludeInstanceUUID = true, topology, inst.UUID
+	_, refusal, err := c.planInstanceLaunch(context.Background(), dep, node, req, templateLayer)
+	if err != nil || refusal == nil || refusal.Code != scheduler.ReasonHeldOutsidePlatformNotAllowed {
+		return nil
+	}
+	return refusal
+}
+
+// onHeldCard is whether the instance runs on a card processes outside the
+// platform hold.
+func onHeldCard(node *store.Node, inst *store.Instance) bool {
+	var indexes []int
+	if json.Unmarshal([]byte(inst.GPUIndexes), &indexes) != nil {
+		return false
+	}
+	for _, g := range node.GPUs {
+		if g.HeldOutsidePlatform() && slices.Contains(indexes, g.Index) {
+			return true
+		}
+	}
+	return false
 }

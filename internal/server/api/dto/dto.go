@@ -136,11 +136,15 @@ type Node struct {
 	// gpu_runtime_unconfigured when it cannot give a container this node's
 	// cards, daemon_not_ready when its daemon did not answer while the agent
 	// started, or gpu_ready once it can serve and the agent switches back when
-	// the node is idle. RuntimeFallbackPlugin names the plugin that runtime needs
+	// the node is idle, socket_permission_denied when the agent's account may
+	// not open its daemon socket (RuntimeFallbackSocket says more).
+	// RuntimeFallbackPlugin names the plugin that runtime needs
 	// (accelerator.RuntimeGPUPlugin). All empty when nothing was passed over.
 	RuntimeFallbackFrom   string `json:"runtime_fallback_from,omitempty"`
 	RuntimeFallbackReason string `json:"runtime_fallback_reason,omitempty"`
 	RuntimeFallbackPlugin string `json:"runtime_fallback_plugin,omitempty"`
+	// RuntimeFallbackSocket is present only with socket_permission_denied.
+	RuntimeFallbackSocket *RuntimeSocketDenial `json:"runtime_fallback_socket,omitempty"`
 	// AcceleratorPreference is the operator's choice of which vendor's
 	// cards the node manages: auto, a vendor, or absent when never chosen
 	// (which is automatic). AcceleratorVendors is every vendor whose cards
@@ -156,6 +160,12 @@ type Node struct {
 	// facts (planning.SystemLabels). They are kept apart from Labels, which
 	// an operator writes, because only one of the two can be edited.
 	SystemLabels []SystemLabel `json:"system_labels,omitempty"`
+	// Source is the external platform the node joined through; absent for a
+	// node added by hand.
+	Source *NodeSource `json:"source,omitempty"`
+	// SourceUnknown: where the node came from could not be read, so Source
+	// is absent without the node having been added by hand.
+	SourceUnknown bool `json:"source_unknown,omitempty"`
 	// ManagementAddress is the address the node's agent reaches the server
 	// from: its address on the management network.
 	ManagementAddress string `json:"management_address,omitempty"`
@@ -180,10 +190,25 @@ type Node struct {
 	RecoveryAttempts   int           `json:"recovery_attempts,omitempty"`
 	LastProbeAt        *time.Time    `json:"last_probe_at,omitempty"`
 	LastRecoveryError  string        `json:"last_recovery_error,omitempty"`
+	LastRecoveryCode   string        `json:"last_recovery_code,omitempty"` // names LastRecoveryError; absent on errors recorded before codes
 	HasSSHCredential   bool          `json:"has_ssh_credential"`
 	CreatedAt          time.Time     `json:"created_at"`
 	GPUs               []GPU         `json:"gpus"`
 	Topology           *NodeTopology `json:"topology,omitempty"`
+	// PlacementPolicy is the operator's per-node placement knobs, keyed as
+	// GET /scheduling/node-placement-policies keys them (NodePlacementPolicyOf).
+	PlacementPolicy map[string]NodePlacementPolicyValue `json:"placement_policy"`
+	// PlacementPolicyAvailability says, per knob, whether it takes effect on
+	// this node.
+	PlacementPolicyAvailability []NodePlacementPolicyAvailability `json:"placement_policy_availability"`
+	// GPUIsolation is set while the node's NVIDIA instance pods are kept to
+	// their own card by CUDA alone (soft isolation); absent when strict, and
+	// while the node is offline.
+	GPUIsolation *NodeGPUIsolation `json:"gpu_isolation,omitempty"`
+	// UCXNetlinkHang is set while the node's kernel hangs UCX (NIXL), so PD
+	// over NIXL cannot start on it; absent otherwise, and while the node is
+	// offline.
+	UCXNetlinkHang *NodeUCXNetlinkHang `json:"ucx_netlink_hang,omitempty"`
 }
 
 // SystemLabel is one generated node label: a key in the reserved
@@ -251,6 +276,9 @@ type NodeReplica struct {
 	DrainReason   *ScheduleReason `json:"drain_reason,omitempty"`
 	DrainReasonAt *time.Time      `json:"drain_reason_at,omitempty"`
 	DrainMessage  string          `json:"drain_message,omitempty"`
+	// DrainFailure is the failed attempt's structured reason; absent for an
+	// attempt without one, whose DrainMessage is all there is.
+	DrainFailure *ProductMessage `json:"drain_failure,omitempty"`
 }
 
 // NodeEviction is what POST /nodes/{uuid}/evict took off the node: the
@@ -259,3 +287,68 @@ type NodeReplica struct {
 type NodeEviction struct {
 	Evicted []string `json:"evicted"`
 }
+
+// NodeSource is the external platform a node joined through
+// (store.NodeSource): an instance of a platform account an agent was
+// installed on, or a Kubernetes cluster whose DaemonSet runs the agent.
+type NodeSource struct {
+	// Resource is what the node is on the platform (a provider.Resource):
+	// vm | container | host for an instance, kubernetes for a cluster node;
+	// empty when the platform's kind does not say.
+	Resource string `json:"resource"`
+	// ProviderID, ProviderName and ProviderKind name the account; absent for
+	// a cluster connected on its own.
+	ProviderID   uint   `json:"provider_id,omitempty"`
+	ProviderName string `json:"provider_name,omitempty"`
+	ProviderKind string `json:"provider_kind,omitempty"`
+	// ClusterUUID and ClusterName name the cluster entry of a cluster node.
+	ClusterUUID string `json:"cluster_uuid,omitempty"`
+	ClusterName string `json:"cluster_name,omitempty"`
+}
+
+// RuntimeSocketDenial is a container daemon socket the node agent's account
+// may not open, as the agent found it, and the operator's way out.
+type RuntimeSocketDenial struct {
+	// Cause is the server's reading of the facts (RuntimeSocketCause*); a
+	// client words its notice by it.
+	Cause string `json:"cause"`
+	// Socket is the socket's path; Group the group that owns it, absent when
+	// its gid has no name on the host, and GID that group's id, absent when
+	// the agent could not read the socket.
+	Socket string `json:"socket"`
+	Group  string `json:"group,omitempty"`
+	GID    *int   `json:"gid,omitempty"`
+	// Account is the account the agent runs as, absent when it could not
+	// tell.
+	Account string `json:"account,omitempty"`
+	// SameNameGID is the id of another group of the socket group's name that
+	// the account is in, as a directory service (NIS, LDAP) may define;
+	// absent when there is none. Being in it does not open the socket.
+	SameNameGID int `json:"same_name_gid,omitempty"`
+	// Supervisor is what restarts the agent: systemd, nohup (the install's
+	// agent-restart.sh), or absent when the agent cannot tell.
+	Supervisor string `json:"supervisor,omitempty"`
+	// Command adds the account to the group (unless that is done) and
+	// restarts the agent the way it was installed; without a known
+	// supervisor it only adds the account. Absent when the cause is not
+	// group membership, or the account or the group's name is unknown.
+	Command string `json:"command,omitempty"`
+}
+
+// Why the agent's account may not open the socket (RuntimeSocketDenial.Cause).
+const (
+	// RuntimeSocketCauseNotInGroup: the account is not in the socket's
+	// group; adding it and restarting the agent lets it in.
+	RuntimeSocketCauseNotInGroup = "not_in_group"
+	// RuntimeSocketCauseRestartPending: the account database already lists
+	// the account in the group; only a restart of the agent is missing.
+	RuntimeSocketCauseRestartPending = "restart_pending"
+	// RuntimeSocketCauseGroupHeld: the agent already holds the group, so the
+	// socket's mode or a security module (SELinux, AppArmor) refuses it.
+	RuntimeSocketCauseGroupHeld = "group_held"
+	// RuntimeSocketCauseRootGroup: the socket belongs to the root group,
+	// which a service account should not join.
+	RuntimeSocketCauseRootGroup = "root_group"
+	// RuntimeSocketCauseUnknown: the agent could not read the socket's group.
+	RuntimeSocketCauseUnknown = "unknown"
+)

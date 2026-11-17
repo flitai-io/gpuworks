@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -22,10 +23,29 @@ func pruneCommand(args []string, stdin io.Reader, stdout io.Writer) error {
 	fs := flag.NewFlagSet("prune", flag.ContinueOnError)
 	var keep int
 	var protect stringList
+	var nightlyIndex string
+	fs.StringVar(&nightlyIndex, "nightly-index", "", "signed nightly index whose listed releases must be retained")
 	fs.IntVar(&keep, "keep", 30, "newest nightly (non-version) directories to keep; version tags are always kept")
 	fs.Var(&protect, "protect", "release id that must be kept (repeatable): what each channel's latest names")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if nightlyIndex != "" {
+		raw, err := os.ReadFile(nightlyIndex)
+		if err != nil {
+			return err
+		}
+		payload, _, err := distribution.Open(raw, distribution.TrustedKeys())
+		if err != nil {
+			return err
+		}
+		index, err := distribution.ParseIndex(payload, distribution.ChannelNightly)
+		if err != nil {
+			return err
+		}
+		for _, release := range index.Servers() {
+			protect = append(protect, release.ReleaseID)
+		}
 	}
 	var listing []lsjsonEntry
 	if err := json.NewDecoder(stdin).Decode(&listing); err != nil {

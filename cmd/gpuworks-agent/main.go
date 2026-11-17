@@ -230,6 +230,11 @@ func run(log *slog.Logger, args []string) error {
 		if stoodBy || err != nil {
 			return err
 		}
+	} else if _, err := acquireAgentLockWaiting(stateDir, agentLockHandoverWait); errors.Is(err, errAgentAlreadyRunning) {
+		recordLockRefusal(stateDir, err) // one agent per state directory; see acquireAgentLock
+		return err
+	} else if err != nil {
+		log.Warn("state directory lock unavailable; running without the single-agent guard", "err", err)
 	}
 	if err := conf.Validate(); err != nil {
 		return safeAgentConfigurationError(err)
@@ -316,6 +321,9 @@ func upgrade(log *slog.Logger, args []string) error {
 	}
 	if conf.Server == "" || conf.Token == "" {
 		return fmt.Errorf("--server and --token are required")
+	}
+	if err := lockForUpgrade(log, stateDir); err != nil {
+		return err
 	}
 	// The binary may be downloaded through a slow public tunnel; selfUpgrade
 	// applies the shared ten-minute operation budget.

@@ -27,3 +27,5 @@ The result has three states: verified / unverified / mismatch. A mismatch displa
 - (−) Image ID verification depends on the catalog generation tool producing correct baselines; the tool must produce them by building from the same source as the image or actually pulling the image.
 
 Rejected alternatives: immutable `@sha256:` references (overturn the tag system and suffer from digest drift across sources); recalculating before every deployment (repeated overhead with no new information).
+
+<!-- translation-source-sha256: a6510eb2e98dba9d784c1596acd0e17ed42dcd27d3b29a988238d275ee128c54 -->

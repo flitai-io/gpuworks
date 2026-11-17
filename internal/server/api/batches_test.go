@@ -105,13 +105,13 @@ func newBatchRig(t *testing.T) *batchRig {
 func sampleBatch() dto.Batch {
 	created := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
 	return dto.Batch{
-		ID: "batch_1", Endpoint: "/v1/chat/completions", Status: "validating", Cancellable: true, InputFileID: "file-in", CompletionWindow: "24h",
+		ID: "batch_1", Endpoint: "/v1/chat/completions", Status: "validating", Cancellable: true, InputFileID: "file-in", CompletionWindow: "24h", PriorityClass: "batch",
 		RequestCounts: dto.BatchRequestCount{Total: 3}, Metadata: map[string]string{}, UserID: 1,
 		CreatedAt: created, ExpiresAt: created.Add(24 * time.Hour),
 	}
 }
 
-const sampleBatchJSON = `{"id":"batch_1","endpoint":"/v1/chat/completions","status":"validating","cancellable":true,"input_file_id":"file-in","completion_window":"24h","request_counts":{"total":3,"completed":0,"failed":0},"metadata":{},"user_id":1,"created_at":"2026-10-28T09:00:00Z","expires_at":"2026-10-29T09:00:00Z"}`
+const sampleBatchJSON = `{"id":"batch_1","endpoint":"/v1/chat/completions","status":"validating","cancellable":true,"input_file_id":"file-in","completion_window":"24h","priority_class":"batch","request_counts":{"total":3,"completed":0,"failed":0},"metadata":{},"user_id":1,"created_at":"2026-10-28T09:00:00Z","expires_at":"2026-10-29T09:00:00Z"}`
 
 func (r *batchRig) upload(bearer string, fields map[string]string) *httptest.ResponseRecorder {
 	var buf bytes.Buffer
@@ -317,7 +317,7 @@ func TestBatchCreateWithAModelWireAndErrors(t *testing.T) {
 	r.fake.batch.Model = "held-model"
 	r.fake.batch.Warnings = []messages.Warning{{Code: WarningBatchModelSleepHeld, Params: map[string]any{"model": "held-model"}}}
 	rec := r.upload(r.session, map[string]string{"file": "x", "endpoint": "/v1/chat/completions", "model": "held-model"})
-	want := `{"id":"batch_1","endpoint":"/v1/chat/completions","status":"validating","cancellable":true,"input_file_id":"file-in","completion_window":"24h","model":"held-model","request_counts":{"total":3,"completed":0,"failed":0},"metadata":{},"warnings":[{"code":"BATCH_MODEL_SLEEP_HELD","params":{"model":"held-model"}}],"user_id":1,"created_at":"2026-10-28T09:00:00Z","expires_at":"2026-10-29T09:00:00Z"}`
+	want := `{"id":"batch_1","endpoint":"/v1/chat/completions","status":"validating","cancellable":true,"input_file_id":"file-in","completion_window":"24h","model":"held-model","priority_class":"batch","request_counts":{"total":3,"completed":0,"failed":0},"metadata":{},"warnings":[{"code":"BATCH_MODEL_SLEEP_HELD","params":{"model":"held-model"}}],"user_id":1,"created_at":"2026-10-28T09:00:00Z","expires_at":"2026-10-29T09:00:00Z"}`
 	if rec.Code != http.StatusCreated || strings.TrimSpace(rec.Body.String()) != want {
 		t.Fatalf("create = %d\n got %s\nwant %s", rec.Code, rec.Body, want)
 	}
@@ -353,7 +353,7 @@ func TestBatchFileModelsAndFinishedBatchWire(t *testing.T) {
 	r.fake.batch = sampleBatch()
 	r.fake.batch.Status, r.fake.batch.Cancellable, r.fake.batch.OutputFileID, r.fake.batch.CompletedAt, r.fake.batch.OutputExpiresAt = "completed", false, "file-out", &done, &kept
 	rec = r.do(r.session, "GET", "/api/v1/batches/batch_1", "")
-	want := `{"id":"batch_1","endpoint":"/v1/chat/completions","status":"completed","cancellable":false,"input_file_id":"file-in","output_file_id":"file-out","completion_window":"24h","request_counts":{"total":3,"completed":0,"failed":0},"metadata":{},"output_expires_at":"2026-11-27T10:00:00Z","user_id":1,"created_at":"2026-10-28T09:00:00Z","expires_at":"2026-10-29T09:00:00Z","completed_at":"2026-10-28T10:00:00Z"}`
+	want := `{"id":"batch_1","endpoint":"/v1/chat/completions","status":"completed","cancellable":false,"input_file_id":"file-in","output_file_id":"file-out","completion_window":"24h","priority_class":"batch","request_counts":{"total":3,"completed":0,"failed":0},"metadata":{},"output_expires_at":"2026-11-27T10:00:00Z","user_id":1,"created_at":"2026-10-28T09:00:00Z","expires_at":"2026-10-29T09:00:00Z","completed_at":"2026-10-28T10:00:00Z"}`
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {
 		t.Fatalf("finished batch = %d\n got %s\nwant %s", rec.Code, rec.Body, want)
 	}
@@ -418,7 +418,7 @@ func TestBatchDictionaryWire(t *testing.T) {
 		CompletionWindowHours: dto.BatchWindowHours{Min: 1, Max: 72, Default: 24},
 		MaxFileBytes:          200 << 20, MaxFileLines: 50000,
 		Statuses:            []string{"validating", "in_progress", "finalizing", "cancelling", "completed", "failed", "expired", "cancelled"},
-		OutputRetentionDays: 30,
+		OutputRetentionDays: 30, PriorityClass: "batch",
 		Models: []dto.BatchModel{
 			{Name: "qwen", State: dto.BatchModelRunning, Ready: true, Endpoints: []string{"/v1/chat/completions", "/v1/completions"}},
 			{Name: "napping", State: dto.BatchModelAsleep, Ready: true, Endpoints: []string{"/v1/chat/completions"}},
@@ -430,7 +430,7 @@ func TestBatchDictionaryWire(t *testing.T) {
 		`"max_file_bytes":209715200,"max_file_lines":50000,"statuses":["validating","in_progress","finalizing","cancelling","completed","failed","expired","cancelled"],` +
 		`"output_retention_days":30,"models":[{"name":"qwen","state":"running","ready":true,"endpoints":["/v1/chat/completions","/v1/completions"]},` +
 		`{"name":"napping","state":"asleep","ready":true,"endpoints":["/v1/chat/completions"]},{"name":"held","state":"asleep_held","ready":false,"endpoints":["/v1/chat/completions"]},` +
-		`{"name":"parked","state":"stopped","ready":false,"endpoints":["/v1/embeddings"]}]}`
+		`{"name":"parked","state":"stopped","ready":false,"endpoints":["/v1/embeddings"]}],"priority_class":"batch"}`
 	for _, bearer := range []string{r.session, r.user, r.mint("read")} {
 		rec := r.do(bearer, "GET", "/api/v1/batches/dictionary", "")
 		if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != want {

@@ -1,9 +1,9 @@
 package expose
 
 import (
+	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 )
 
@@ -56,21 +56,42 @@ func OriginFromListenAddr(addr string) (string, error) {
 }
 
 // nextNetwork decides whether a different edge setting could plausibly fix
-// this failure, and which one. The registration call to api.trycloudflare.com
-// is its own network path: no edge option changes it, so that error is
-// reported for what it is rather than retried with a knob that cannot help.
-
+// this failure, and which one. Only a connector that failed to register says
+// anything about the edge path, and what it said is classified where its
+// output is parsed (edgeTroubleOf). The registration call to
+// api.trycloudflare.com is its own network path: no edge option changes it, so
+// that error is reported for what it is rather than retried with a knob that
+// cannot help.
 func nextNetwork(current Network, err error) (Network, bool) {
-	msg := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(msg, "api.trycloudflare.com"):
+	var start *connectorStartError
+	if !errors.As(err, &start) {
 		return current, false
-	case strings.Contains(msg, "quic"), strings.Contains(msg, "no recent network activity"):
+	}
+	switch start.trouble {
+	case edgeTroubleQUIC:
 		return Network{EdgeIPVersion: "4", Protocol: "http2"}, true
-	case strings.Contains(msg, "network is unreachable"), strings.Contains(msg, "ipv6"):
+	case edgeTroubleIPv6:
 		return Network{EdgeIPVersion: "4", Protocol: current.Protocol}, true
 	}
 	return current, false
+}
+
+// connectorStartError is a connector that exited or timed out before it
+// registered, with what its last trouble line said about the edge path.
+type connectorStartError struct {
+	msg     string
+	trouble edgeTrouble
+}
+
+func (e *connectorStartError) Error() string { return e.msg }
+
+func newConnectorStartError(stream StreamState, format string, args ...any) error {
+	msg := fmt.Sprintf(format, args...) + troubleSuffix(stream)
+	trouble := edgeTroubleNone
+	if n := len(stream.Trouble); n > 0 {
+		trouble = edgeTroubleOf(stream.Trouble[n-1])
+	}
+	return &connectorStartError{msg: msg, trouble: trouble}
 }
 
 func describeNetwork(net Network) string {

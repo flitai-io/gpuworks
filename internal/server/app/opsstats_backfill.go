@@ -25,7 +25,7 @@ const backfillPause = 200 * time.Millisecond
 
 // backfill runs the fill until done or ctx ends.
 func (o *opsStats) backfill(ctx context.Context) {
-	if o.obs == nil || o.obs.ux == nil {
+	if o.obs == nil || o.obs.UX() == nil {
 		return
 	}
 	state, err := o.store.UsageRollupState(o.now())
@@ -46,7 +46,7 @@ func (o *opsStats) backfill(ctx context.Context) {
 	if usageDone && quality.Done {
 		return
 	}
-	days, err := o.obs.ux.RequestDays()
+	days, err := o.obs.UX().RequestDays()
 	if err != nil {
 		o.log.Warn("usage fill: list days", "err", err)
 		return
@@ -67,7 +67,7 @@ func (o *opsStats) backfill(ctx context.Context) {
 		}
 		acc := rollup.NewRequests()
 		before := max(usageThrough, quality.ThroughMS)
-		err := o.obs.ux.ScanDay(ctx, day.Name, before, func(r uxrecord.Request) error {
+		err := o.obs.UX().ScanDay(ctx, day.Name, before, func(r uxrecord.Request) error {
 			end := r.ReceivedMS + int64(max(r.EndMS, 0))
 			if end >= o.liveSinceMS {
 				return nil // counted live

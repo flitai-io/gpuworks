@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Badge } from "../components/ui/badge";
+import { Card as ZeronCard, CardHeader, CardAction, CardTitle, CardFooter } from "../components/ui/card";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Button,
   Card,
@@ -53,10 +55,14 @@ export const sourceLabel: Record<string, string> = {
   url: "source.url",
 };
 
-export function ModelSourceTag({ source }: { source: string }) {
+export function ModelSourceTag({ source, badge = false }: { source: string; badge?: boolean }) {
   const { t } = useTranslation("models");
   const color = source === "huggingface" ? "gold" : source === "modelscope" ? "blue" : source === "url" ? "geekblue" : "default";
   const short = source === "huggingface" ? "HF" : source === "modelscope" ? "MS" : source === "url" ? "URL" : sourceLabel[source] ? t(sourceLabel[source]) : source;
+  if (badge) {
+    const tone = source === "huggingface" ? "amber" : source === "modelscope" ? "blue" : source === "url" ? "indigo" : "gray";
+    return <Badge size="sm" color={tone}>{short}</Badge>;
+  }
   return <Tag color={color}>{short}</Tag>;
 }
 
@@ -68,14 +74,15 @@ export const modalityLabel: Record<string, { labelKey: string; color: string }> 
 };
 
 
-export function Modalities({ values }: { values?: string[] }) {
+export function Modalities({ values, badge = false }: { values?: string[]; badge?: boolean }) {
   const { t } = useTranslation("models");
   if (!values?.length) return <Typography.Text type="secondary">—</Typography.Text>;
   return (
     <Space size={[4, 4]} wrap>
       {values.map((value) => {
         const visual = modalityLabel[value];
-        return <Tag key={value} color={visual?.color ?? "default"}>{visual ? t(visual.labelKey) : value}</Tag>;
+        const label = visual ? t(visual.labelKey) : value;
+        return badge ? <Badge key={value} size="sm">{label}</Badge> : <Tag key={value} color={visual?.color ?? "default"}>{label}</Tag>;
       })}
     </Space>
   );
@@ -127,35 +134,39 @@ export function ModelTile({
 	onDelete: () => void;
 }) {
   const { t } = useTranslation("models");
-  const stop = (event: MouseEvent) => event.stopPropagation();
-  return (
-    <div className="model-tile" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onOpen(); }}>
-      <div className="model-tile-main">
-        <ModelLogo model={model} />
-        <div className="model-tile-copy">
-          <Typography.Text className="model-tile-name" ellipsis={{ tooltip: model.name || model.source_id }}>{model.name || model.source_id}</Typography.Text>
-          <div className="model-tile-tags">
-            {operationTypesOf(model.operations).slice(0, 2).map((value) => <Tag color="blue" key={value}>{t(operationLabelKey[value])}</Tag>)}
-            {inputModalitiesOf(model.input_modalities).slice(0, 2).map((value) => <Tag key={value}>{modalityLabel[value] ? t(modalityLabel[value].labelKey) : value}</Tag>)}
-          </div>
-        </div>
-        <div className="model-tile-actions" onClick={stop}>
-          <Tooltip title={t("action.deployInferenceTemplate")}><Button type="text" icon={<RocketOutlined />} onClick={() => location.assign(`/deploy?model=${model.id}`)} aria-label={t("action.deployInferenceTemplate")} /></Tooltip>
+  return <ModelTileFrame onOpen={onOpen} name={model.name || model.source_id} logo={<ModelLogo model={model} />}
+    tags={<>{operationTypesOf(model.operations).slice(0, 2).map((value) => <Badge size="sm" color="blue" key={value}>{t(operationLabelKey[value])}</Badge>)}
+            {inputModalitiesOf(model.input_modalities).slice(0, 2).map((value) => <Badge size="sm" key={value}>{modalityLabel[value] ? t(modalityLabel[value].labelKey) : value}</Badge>)}</>}
+    actions={<><Tooltip title={t("action.deployInferenceTemplate")}><Button type="text" icon={<RocketOutlined />} onClick={() => location.assign(`/deploy?model=${model.id}`)} aria-label={t("action.deployInferenceTemplate")} /></Tooltip>
           {model.source !== "local" && <Tooltip title={t("action.downloadToNode")}><Button type="text" icon={<CloudDownloadOutlined />} onClick={onDownload} aria-label={t("action.downloadToNode")} /></Tooltip>}
           <Tooltip title={t("action.copyTo")}><Button type="text" icon={<CopyOutlined />} onClick={onCopy} aria-label={t("action.copyTo")} /></Tooltip>
           <Tooltip title={t("action.registerExistingPath")}><Button type="text" icon={<FolderAddOutlined />} onClick={onRegisterPath} aria-label={t("action.registerNodePath")} /></Tooltip>
 		  <Popconfirm title={t("delete.confirm", { name: model.name || model.source_id })} description={t("delete.tileDescription")} okText={t("action.delete")} cancelText={t("action.cancel")} okButtonProps={{ danger: true }} onConfirm={onDelete}><Tooltip title={t("action.deleteModel")}><Button danger type="text" icon={<DeleteOutlined />} aria-label={t("action.deleteModel")} /></Tooltip></Popconfirm>
-          <AIAssistant task="model.fit" subject={{ kind: "model", id: model.id, label: model.name || model.source_id }} buttonText="" buttonType="link" buttonSize="small" />
-        </div>
-      </div>
-      <div className="model-tile-footer">
-		<ModelSourceTag source={model.source} />
+          <AIAssistant task="model.fit" subject={{ kind: "model", id: model.id, label: model.name || model.source_id }} buttonText="" buttonType="link" buttonSize="small" /></>}
+    footer={<><ModelSourceTag source={model.source} badge />
         <span className="model-tile-divider" />
         <span>{model.weight_gib ? `${model.weight_gib.toFixed(1)} GiB` : t("unknownSize")}</span>
         <span className="model-tile-divider" />
-        <span>{modelDate(model.created_at)}</span>
-      </div>
-    </div>
+        <span>{modelDate(model.created_at)}</span></>} />;
+}
+
+export function ModelTileFrame({name, logo, tags, actions, footer, onOpen}: {
+  name: string; logo: ReactNode; tags: ReactNode; actions: ReactNode; footer: ReactNode; onOpen?: () => void;
+}) {
+  return (
+    <ZeronCard className="repository-model-card h-full min-w-0 border border-border-subtle" label={name} onClick={onOpen}>
+      <CardHeader>
+        <div className="flex min-w-0 items-center gap-3">
+          {logo}
+          <div className="min-w-0">
+            <CardTitle title={name} className="max-w-full break-all">{name}</CardTitle>
+            <div className="flex flex-wrap gap-1 text-label text-fg-muted">{tags}</div>
+          </div>
+        </div>
+        <CardAction className="flex flex-wrap items-center justify-end">{actions}</CardAction>
+      </CardHeader>
+      <CardFooter className="pointer-events-none mt-auto gap-2 text-label text-fg-muted">{footer}</CardFooter>
+    </ZeronCard>
   );
 }
 

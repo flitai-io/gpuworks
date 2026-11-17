@@ -71,7 +71,7 @@ func TestARefusedPortIsRetriedWithoutTheBackoff(t *testing.T) {
 		refused, running = nil, nil
 		for i := range rows {
 			switch {
-			case rows[i].State == proto.InstFailed && proto.IsEnginePortRefusal(rows[i].Message):
+			case rows[i].State == proto.InstFailed && rows[i].RuntimeFailure != "" && rows[i].Failure().Code == proto.ErrorEnginePortRefused:
 				refused = &rows[i]
 			case rows[i].State == proto.InstRunning:
 				running = &rows[i]

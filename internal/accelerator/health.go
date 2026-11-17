@@ -20,31 +20,33 @@ const (
 	HealthError   = "Error"
 )
 
-// Finding codes. A card carries at most one code, the most severe finding;
-// the evidence carries every field that contributed.
+// Finding codes, UPPER_SNAKE (ADR 0067). A card carries at most one code, the
+// most severe finding; the evidence carries every field that contributed. An
+// older agent sent them in lower_snake; the server folds them as a report
+// arrives (proto.NormalizeGPUReport).
 const (
 	// HealthMemoryRepairPending: a memory row or page is marked for replacement
 	// and the replacement takes effect at the next reset of the card.
-	HealthMemoryRepairPending = "memory_repair_pending"
+	HealthMemoryRepairPending = "MEMORY_REPAIR_PENDING"
 	// HealthMemoryUncorrectable: uncorrectable memory errors since the driver
 	// last loaded or the card was last reset.
-	HealthMemoryUncorrectable = "memory_uncorrectable_errors"
+	HealthMemoryUncorrectable = "MEMORY_UNCORRECTABLE_ERRORS"
 	// HealthMemoryRemapFailed: a memory row could not be replaced.
-	HealthMemoryRemapFailed = "memory_remap_failed"
+	HealthMemoryRemapFailed = "MEMORY_REMAP_FAILED"
 	// HealthResetRequired, HealthRebootRequired and HealthPowerCycleRequired: the
 	// driver reported an event whose stated recovery is a card reset, an
 	// operating system reboot or a cold reboot respectively.
-	HealthResetRequired      = "reset_required"
-	HealthRebootRequired     = "reboot_required"
-	HealthPowerCycleRequired = "power_cycle_required"
+	HealthResetRequired      = "RESET_REQUIRED"
+	HealthRebootRequired     = "REBOOT_REQUIRED"
+	HealthPowerCycleRequired = "POWER_CYCLE_REQUIRED"
 	// HealthVendorWarning and HealthVendorFault: the vendor tool's own health
 	// verdict, used where the tool states a level rather than raw counters.
-	HealthVendorWarning = "vendor_health_warning"
-	HealthVendorFault   = "vendor_health_fault"
+	HealthVendorWarning = "VENDOR_HEALTH_WARNING"
+	HealthVendorFault   = "VENDOR_HEALTH_FAULT"
 	// HealthMemoryErrorHistory is informational: lifetime counters show errors
 	// that were already handled (pages retired, rows replaced). The card stays
 	// at HealthOK.
-	HealthMemoryErrorHistory = "memory_error_history"
+	HealthMemoryErrorHistory = "MEMORY_ERROR_HISTORY"
 	// HealthRuntimeUnusable: the card is listed and looks well, but the
 	// vendor runtime cannot use it: NVIDIA could not create a CUDA context,
 	// or Ascend could not create an ACL context. One card failing to
@@ -52,39 +54,39 @@ const (
 	// three bad cards, and cuInit returned 101 for all of them), so the
 	// finding is recorded per card from trying each one rather than inferred
 	// from any other.
-	HealthRuntimeUnusable = "runtime_unusable"
+	HealthRuntimeUnusable = "RUNTIME_UNUSABLE"
 	// HealthDriverInitFailed: the card is present and bound to its vendor
 	// driver, but the driver could not bring it up, so the vendor CLI does
 	// not list it and nothing can use it. The driver's log says why (for
 	// NVIDIA: "RmInitAdapter failed", often with "GPU may need to be
 	// reset"). Nothing about the card is known beyond its PCI identity.
-	HealthDriverInitFailed = "driver_init_failed"
+	HealthDriverInitFailed = "DRIVER_INIT_FAILED"
 	// HealthCLIUnanswered: the card is present and bound to its vendor
 	// driver, but the vendor CLI did not answer at all this round (it
 	// timed out, or it is not installed), so nothing is known about the
 	// card beyond its PCI identity. The driver may be perfectly well —
 	// this says only that we could not ask. The node carries the probe
 	// error that explains why.
-	HealthCLIUnanswered        = "vendor_cli_unanswered"
-	HealthInventoryIncomplete  = "inventory_incomplete"
-	HealthInventoryInvalid     = "inventory_identity_invalid"
-	HealthTelemetryUnavailable = "telemetry_unavailable"
+	HealthCLIUnanswered        = "VENDOR_CLI_UNANSWERED"
+	HealthInventoryIncomplete  = "INVENTORY_INCOMPLETE"
+	HealthInventoryInvalid     = "INVENTORY_IDENTITY_INVALID"
+	HealthTelemetryUnavailable = "TELEMETRY_UNAVAILABLE"
 	// HealthPCIeLinkDegraded: a PCIe link between the card and its root
 	// port runs at fewer lanes, or (while the card is busy) a lower speed,
 	// than both of its ends support. The card works, slower to load and to
 	// move data, so it stays schedulable after the healthy ones.
-	HealthPCIeLinkDegraded = "pcie_link_degraded"
+	HealthPCIeLinkDegraded = "PCIE_LINK_DEGRADED"
 	// HealthPCIeErrors: the PCIe devices between the card and its root port
 	// reported new non-fatal (recovered) errors.
-	HealthPCIeErrors = "pcie_errors"
+	HealthPCIeErrors = "PCIE_ERRORS"
 	// HealthPCIeFatal: they reported new fatal errors, after which the link
 	// has to be reset; the card cannot be relied on until it has been, and a
 	// runtime check has passed on it since.
-	HealthPCIeFatal = "pcie_fatal_errors"
+	HealthPCIeFatal = "PCIE_FATAL_ERRORS"
 	// HealthNVLinkDown: fewer of the card's NVLinks are active than it has
 	// had. The card works; work spread over it and its peers is slower, and
 	// the topology the scheduler reads no longer groups it with them.
-	HealthNVLinkDown = "nvlink_down"
+	HealthNVLinkDown = "NVLINK_DOWN"
 )
 
 // HealthLevel is the level a code puts a card at. An unknown code is treated as an

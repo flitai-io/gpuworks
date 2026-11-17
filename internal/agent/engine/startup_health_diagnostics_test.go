@@ -44,6 +44,10 @@ func TestStartupHealthDiagnosticKeepsLastHTTPObservation(t *testing.T) {
 		t.Fatalf("calls=%d reports=%+v", calls.Load(), log.snapshot())
 	}
 	message := failed[0].Message
+	if f := failed[0].RuntimeFailure; f == nil || f.Code != proto.ErrorEngineHealthTimeout || f.Phase != proto.PhaseHealthCheck ||
+		!strings.Contains(f.Detail, "HTTP 502") || strings.Contains(f.Detail, "observed_at") || strings.Contains(f.Detail, "secret-") {
+		t.Fatalf("runtime failure = %+v", f)
+	}
 	for _, want := range []string{"health check timed out", "from=node", fmt.Sprintf("http://127.0.0.1:%d/health", spec.APIPort), "HTTP 502", "observed_at="} {
 		if !strings.Contains(message, want) {
 			t.Errorf("message %q lacks %q", message, want)

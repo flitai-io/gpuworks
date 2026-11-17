@@ -105,6 +105,7 @@ DELETE /api/v1/networks/{id}/attachments/{attachmentID}
 DELETE /api/v1/nodes/{uuid}
 DELETE /api/v1/nodes/{uuid}/ssh
 DELETE /api/v1/platform-tokens/{id}
+DELETE /api/v1/priority-classes/{name}
 DELETE /api/v1/providers/{id}
 DELETE /api/v1/providers/{id}/instances/{externalID}
 DELETE /api/v1/pull/credentials/{id}
@@ -126,6 +127,7 @@ GET /api/v1/ai/available
 GET /api/v1/ai/configs
 GET /api/v1/ai/instances/{uuid}/findings
 GET /api/v1/ai/models/{id}/fit
+GET /api/v1/ai/presets
 GET /api/v1/analytics/gpu-time
 GET /api/v1/analytics/gpus
 GET /api/v1/analytics/key-usage
@@ -195,6 +197,7 @@ GET /api/v1/logs/search
 GET /api/v1/mcp/status
 GET /api/v1/metrics/query
 GET /api/v1/models
+GET /api/v1/models/catalog
 GET /api/v1/models/{id}
 GET /api/v1/models/{id}/logo
 GET /api/v1/monitor/deployments/{id}
@@ -226,6 +229,7 @@ GET /api/v1/peer-transfers
 GET /api/v1/platform-tokens
 GET /api/v1/playground/models
 GET /api/v1/playground/openapi.json
+GET /api/v1/priority-classes
 GET /api/v1/providers
 GET /api/v1/providers/kinds
 GET /api/v1/providers/{id}
@@ -241,6 +245,7 @@ GET /api/v1/routing-policies
 GET /api/v1/scheduling/activity
 GET /api/v1/scheduling/board
 GET /api/v1/scheduling/history
+GET /api/v1/scheduling/node-placement-policies
 GET /api/v1/scheduling/overview
 GET /api/v1/scheduling/timeline
 GET /api/v1/scheduling/yield-policies
@@ -260,6 +265,8 @@ GET /api/v1/storages/{id}/model-files
 GET /api/v1/telemetry/export
 GET /api/v1/terminal/sessions
 GET /api/v1/updates
+GET /api/v1/updates/server/result
+GET /api/v1/updates/server/versions
 GET /api/v1/usage-report
 GET /api/v1/usage-report/preview
 GET /healthz
@@ -273,6 +280,7 @@ PATCH /api/v1/models/{id}/inference-config
 PATCH /api/v1/nodes/management-roles
 PATCH /api/v1/nodes/{uuid}/accelerator
 PATCH /api/v1/nodes/{uuid}/name
+PATCH /api/v1/nodes/{uuid}/placement-policy
 PATCH /api/v1/nodes/{uuid}/runtime
 PATCH /api/v1/security/settings
 PATCH /api/v1/storages/settings
@@ -373,6 +381,7 @@ POST /api/v1/nodes/{uuid}/token/regenerate
 POST /api/v1/nodes/{uuid}/upgrade
 POST /api/v1/notices/read
 POST /api/v1/platform-tokens
+POST /api/v1/priority-classes
 POST /api/v1/providers
 POST /api/v1/providers/{id}/install
 POST /api/v1/providers/{id}/instances
@@ -401,6 +410,7 @@ POST /api/v1/telemetry/export/test
 POST /api/v1/updates/prefetch
 POST /api/v1/updates/server
 POST /api/v1/updates/server/upload
+PUT /api/v1/apikeys/{prefix}/priority
 PUT /api/v1/apikeys/{prefix}/scope
 PUT /api/v1/data-retention
 PUT /api/v1/deployments/{id}
@@ -427,6 +437,8 @@ PUT /api/v1/nodes/{uuid}/management-roles
 PUT /api/v1/nodes/{uuid}/network
 PUT /api/v1/nodes/{uuid}/scheduling
 PUT /api/v1/nodes/{uuid}/ssh
+PUT /api/v1/priority-classes/{name}
+PUT /api/v1/priority-classes/{name}/default
 PUT /api/v1/providers/{id}
 PUT /api/v1/pull/credentials/{id}
 PUT /api/v1/pull/proxies/order

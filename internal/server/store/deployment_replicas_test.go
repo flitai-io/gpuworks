@@ -79,7 +79,7 @@ func TestScaleDeploymentReplicasDrainsTheNamedInstancesAtomically(t *testing.T) 
 	}
 	// The instance the controller failed meanwhile is not drained back
 	// into the timeline of a live replica.
-	if err := st.SetInstanceState("keep", proto.InstFailed, "engine exited"); err != nil {
+	if err := st.SetInstanceFailed("keep", proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "engine exited"); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.ScaleDeploymentReplicas(dep.ID, 2, 1, []string{"keep"}); !errors.Is(err, ErrStateChanged) {

@@ -74,7 +74,7 @@ func (c *APIClient) requestOnce(ctx context.Context, policy clientPolicy, method
 		req.Header.Set("X-Job-UUID", jobID)
 	}
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	}
 	if method != http.MethodGet && policy.serverTimeout > 0 {
 		seconds := policy.serverTimeout / time.Second
@@ -115,6 +115,7 @@ func (c *APIClient) requestOnce(ctx context.Context, policy clientPolicy, method
 	trimmed := bytes.TrimSpace(raw)
 	valid := len(trimmed) > 0 && trimmed[0] == '{' && json.Unmarshal(raw, &reply) == nil
 	if err := reply.responseError(valid); err != nil {
+		err.ProtocolFailure = protocolFailure(method, path, reply, err)
 		err.OutcomeUnknown = method != http.MethodGet && !err.definitive
 		return reply, err
 	}

@@ -30,7 +30,6 @@ import EvaluationDetailPage from "./pages/evaluations/EvaluationDetailPage";
 import EvaluationComparePage from "./pages/evaluations/EvaluationComparePage";
 import APIKeysPage from "./pages/APIKeysPage";
 import CloudProvidersPage from "./pages/CloudProvidersPage";
-import KubernetesPage from "./pages/KubernetesPage";
 import SettingsPage from "./pages/SettingsPage";
 import LogsPage from "./pages/LogsPage";
 import SessionBoundary from "./components/SessionBoundary";
@@ -123,7 +122,8 @@ function AuthenticatedShell({ onLogout }: { onLogout: () => Promise<void> }) {
             <Route path="/providers" element={<CloudProvidersPage />} />
             {/* The private cloud page became the external platforms list, opened on private clouds. */}
             <Route path="/zstack" element={<Navigate to="/providers?category=private_cloud" replace />} />
-            <Route path="/kubernetes" element={<KubernetesPage />} />
+            {/* The Kubernetes page became part of the external platforms list, opened on what connects Kubernetes. */}
+            <Route path="/kubernetes" element={<Navigate to="/providers?resource=kubernetes" replace />} />
             <Route path="/models" element={<ModelsPage />} />
 			<Route path="/inference-templates" element={<InferenceTemplatesPage />} />
 			<Route path="/inference-templates/*" element={<InferenceTemplateDetailPage />} />

@@ -2,11 +2,14 @@ package partitioncap
 
 import (
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -38,7 +41,7 @@ func TestNVIDIADGPURequiresSafeTeardownProtocol(t *testing.T) {
 	node.GPUs[0].ArchID = "sm_80"
 	node.PartitionSafetyProtocol = 0
 	capabilities := ForGPU(node, &node.GPUs[0])
-	if len(capabilities) != 1 || capabilities[0].Status != StatusUnavailable || !strings.Contains(capabilities[0].Reason, "upgrade the agent") {
+	if len(capabilities) != 1 || capabilities[0].Status != StatusUnavailable || capabilities[0].ReasonCode != messages.ErrorPartitionAgentUpgradeRequired {
 		t.Fatalf("old agent capability = %+v", capabilities)
 	}
 	node.PartitionSafetyProtocol = 1
@@ -60,7 +63,7 @@ func TestCapabilityDerivationMatrix(t *testing.T) {
 		node := testNode(t, "ascend", []proto.AssetReport{{Backend: accelerator.BackendAscendLogical, Root: "/assets", Files: []string{"libvruntime.so"}}})
 		node.PartitionProbes = `[{"backend":"ascend-dgpu","gpu_index":0,"status":"failed","detail":"quota was 32768 MB"}]`
 		got := ForGPU(node, &node.GPUs[0])
-		if len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "quota was 32768 MB") || got[0].ProbeStatus != proto.PartitionProbeFailed {
+		if len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionProbeFailed, proto.PartitionReasonParams{ProbeDetail: "quota was 32768 MB"}) || got[0].ProbeStatus != proto.PartitionProbeFailed {
 			t.Fatalf("capabilities = %+v", got)
 		}
 	})
@@ -69,7 +72,7 @@ func TestCapabilityDerivationMatrix(t *testing.T) {
 		node.Framework, node.FrameworkVersion = "hggc", "13.0"
 		node.PartitionProbes = `[{"backend":"ppu-dgpu","gpu_index":0,"status":"passed"}]`
 		got := ForGPU(node, &node.GPUs[0])
-		if len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "hgml_dlsym_hook.so") {
+		if len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionAssetsMissing, proto.PartitionReasonParams{MissingAssets: []string{"hgml_dlsym_hook.so"}}) {
 			t.Fatalf("capabilities = %+v", got)
 		}
 	})
@@ -81,7 +84,7 @@ func TestCapabilityDerivationMatrix(t *testing.T) {
 		node.Framework, node.FrameworkVersion = "hggc", "13.0"
 		node.PartitionProbes = `[{"backend":"ppu-dgpu","gpu_index":0,"status":"passed"}]`
 		got := ForGPU(node, &node.GPUs[0])
-		if len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "hgml_dlsym_hook.so") {
+		if len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionAssetsMissing, proto.PartitionReasonParams{MissingAssets: []string{"hgml_dlsym_hook.so"}}) {
 			t.Fatalf("capabilities = %+v", got)
 		}
 	})
@@ -96,14 +99,14 @@ func TestCapabilityDerivationMatrix(t *testing.T) {
 	t.Run("new agent empty report is missing assets", func(t *testing.T) {
 		node := testNode(t, "ascend", []proto.AssetReport{})
 		got := ForGPU(node, &node.GPUs[0])
-		if len(got) != 1 || !strings.Contains(got[0].Reason, "libvruntime.so") || strings.Contains(got[0].Reason, "upgrade the agent") {
+		if len(got) != 1 || !hasReason(got[0], messages.ErrorPartitionAssetsMissing, proto.PartitionReasonParams{MissingAssets: []string{"libvruntime.so"}}) || got[0].ReasonCode == messages.ErrorPartitionAgentUpgradeRequired {
 			t.Fatalf("capabilities = %+v", got)
 		}
 	})
 	t.Run("old agent", func(t *testing.T) {
 		node := testNode(t, "ascend", nil)
 		got := ForGPU(node, &node.GPUs[0])
-		if len(got) != 1 || !strings.Contains(got[0].Reason, "upgrade the agent") {
+		if len(got) != 1 || got[0].ReasonCode != messages.ErrorPartitionAgentUpgradeRequired {
 			t.Fatalf("capabilities = %+v", got)
 		}
 	})
@@ -118,10 +121,106 @@ func TestCapabilityDerivationMatrix(t *testing.T) {
 	})
 }
 
-func TestReasonTextComesFromSingleSwitch(t *testing.T) {
-	if got := reason(unavailableMissingAssets, "lib.so"); got != "missing dGPU assets: lib.so" {
-		t.Fatalf("reason = %q", got)
+// The English fallback keeps the wording scripts and older clients read; the
+// code and its typed params are what clients render.
+func TestReasonFallbackKeepsTheEnglishWording(t *testing.T) {
+	gpu := 3
+	for _, tc := range []struct {
+		code   string
+		params proto.PartitionReasonParams
+		want   string
+	}{
+		{messages.ErrorPartitionRuntimeMissing, proto.PartitionReasonParams{}, "container inference unverified: no usable docker/udocker runtime on the node"},
+		{messages.ErrorPartitionRuntimeUnsupported, proto.PartitionReasonParams{Runtime: "udocker", SupportedRuntimes: []string{"docker", "kube"}}, "container inference unverified: the backend requires the docker, kube runtime, the node runs udocker"},
+		{messages.ErrorPartitionAgentUpgradeRequired, proto.PartitionReasonParams{}, "agent has not reported current dGPU safety capability; upgrade the agent"},
+		{messages.ErrorPartitionAssetsMissing, proto.PartitionReasonParams{MissingAssets: []string{"a.so", "b.so"}}, "missing dGPU assets: a.so, b.so"},
+		{messages.ErrorPartitionProbePending, proto.PartitionReasonParams{GPUIndex: &gpu}, "dGPU probe has not completed: no result received for GPU 3"},
+		{messages.ErrorPartitionProbePending, proto.PartitionReasonParams{}, "dGPU probe has not completed"},
+		{messages.ErrorPartitionProbeSkipped, proto.PartitionReasonParams{ProbeDetail: "no container runtime available on the node"}, "container inference unverified: no container runtime available on the node"},
+		{messages.ErrorPartitionProbeFailed, proto.PartitionReasonParams{ProbeDetail: "quota mismatch"}, "dGPU probe failed: quota mismatch"},
+		{messages.ErrorPartitionProbeFailed, proto.PartitionReasonParams{}, "dGPU probe failed"},
+	} {
+		var capability proto.PartitionCapability
+		unavailable(&capability, tc.code, tc.params)
+		if capability.Status != StatusUnavailable || capability.ReasonCode != tc.code || capability.Reason != tc.want {
+			t.Errorf("%s %+v = %+v, want reason %q", tc.code, tc.params, capability, tc.want)
+		}
 	}
+}
+
+// The capability's code and typed params go on the wire next to the
+// fallback, with exactly these keys.
+func TestUnavailableCapabilityWire(t *testing.T) {
+	node := testNode(t, "ascend", []proto.AssetReport{{Backend: accelerator.BackendAscendLogical, Root: "/assets", Files: []string{"libvruntime.so"}}})
+	node.PartitionProbes = `[{"backend":"ascend-dgpu","gpu_index":0,"status":"failed","detail":"quota was 32768 MB"}]`
+	got := ForGPU(node, &node.GPUs[0])
+	if len(got) != 1 {
+		t.Fatalf("capabilities = %+v", got)
+	}
+	got[0].CompatibilityNotes, got[0].Compatibility = nil, ""
+	wire, err := json.Marshal(got[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"backend":"ascend-dgpu","display_name":"` + got[0].DisplayName + `","vendor":"ascend","maturity":"` + got[0].Maturity + `","status":"unavailable",` +
+		`"reason":"dGPU probe failed: quota was 32768 MB","reason_code":"PARTITION_PROBE_FAILED","reason_params":{"probe_detail":"quota was 32768 MB"},"probe_status":"failed"}`
+	if string(wire) != want {
+		t.Fatalf("wire = %s\nwant  %s", wire, want)
+	}
+	var back proto.PartitionCapability
+	if err := json.Unmarshal(wire, &back); err != nil || !reflect.DeepEqual(back, got[0]) {
+		t.Fatalf("round trip = %+v (%v), want %+v", back, err, got[0])
+	}
+	pending := testNode(t, "ascend", []proto.AssetReport{{Backend: accelerator.BackendAscendLogical, Root: "/assets", Files: []string{"libvruntime.so"}}})
+	pending.PartitionProbes = `[]`
+	got = ForGPU(pending, &pending.GPUs[0])
+	if len(got) != 1 {
+		t.Fatalf("capabilities = %+v", got)
+	}
+	wire, _ = json.Marshal(got[0].ReasonParams)
+	if got[0].ReasonCode != messages.ErrorPartitionProbePending || string(wire) != `{"gpu_index":0}` {
+		t.Fatalf("pending reason = %s %s", got[0].ReasonCode, wire)
+	}
+	ready := testNode(t, "ascend", []proto.AssetReport{{Backend: accelerator.BackendAscendLogical, Root: "/assets", Files: []string{"libvruntime.so"}}})
+	got = ForGPU(ready, &ready.GPUs[0])
+	wire, _ = json.Marshal(got[0])
+	if strings.Contains(string(wire), "reason") {
+		t.Fatalf("ready wire = %s, want no reason keys", wire)
+	}
+}
+
+// A refused backend is a ProductError carrying the capability's own code and
+// params, plus the backend's display name and the node.
+func TestValidateReadyRefusesWithTheReasonCode(t *testing.T) {
+	node := testNode(t, "ascend", []proto.AssetReport{{Backend: accelerator.BackendAscendLogical, Root: "/assets", Files: []string{"libvruntime.so"}}})
+	node.Name = "npu-1"
+	if err := ValidateReady(node, accelerator.BackendAscendLogical); err != nil {
+		t.Fatalf("ready backend refused: %v", err)
+	}
+	node.PartitionProbes = `[{"backend":"ascend-dgpu","gpu_index":0,"status":"failed","detail":"quota mismatch"}]`
+	var product *messages.ProductError
+	err := ValidateReady(node, accelerator.BackendAscendLogical)
+	if !errors.As(err, &product) || product.Code() != messages.ErrorPartitionProbeFailed {
+		t.Fatalf("err = %v, want %s", err, messages.ErrorPartitionProbeFailed)
+	}
+	display := ForNode(node)[0].DisplayName
+	wantParams := map[string]any{"backend": display, "node": "npu-1", "reason_code": messages.ErrorPartitionProbeFailed, "probe_detail": "quota mismatch"}
+	if !reflect.DeepEqual(product.Params(), wantParams) || err.Error() != "partition backend ascend-dgpu is unavailable: dGPU probe failed: quota mismatch" {
+		t.Fatalf("params = %#v, message = %q", product.Params(), err.Error())
+	}
+	if err := ValidateReady(node, "no-such-dgpu"); !errors.As(err, &product) || product.Code() != messages.ErrorPartitionBackendUnknown || product.Params()["backend"] != "no-such-dgpu" {
+		t.Fatalf("unknown backend err = %v", err)
+	}
+	if err := ValidateReady(node, accelerator.BackendNVIDIALogical); !errors.As(err, &product) || product.Code() != messages.ErrorPartitionBackendNotOnNode || product.Params()["node"] != "npu-1" {
+		t.Fatalf("foreign backend err = %v", err)
+	}
+}
+
+func hasReason(capability proto.PartitionCapability, code string, params proto.PartitionReasonParams) bool {
+	if capability.ReasonCode != code || capability.ReasonParams == nil {
+		return false
+	}
+	return reflect.DeepEqual(*capability.ReasonParams, params)
 }
 
 func TestCapabilitiesAreDerivedFromMatchingGPUProbe(t *testing.T) {
@@ -129,25 +228,29 @@ func TestCapabilitiesAreDerivedFromMatchingGPUProbe(t *testing.T) {
 	node.GPUs = append(node.GPUs, store.GPU{Index: 3, Vendor: "ascend", ArchID: "910B4"})
 	node.PartitionProbes = `[{"backend":"ascend-dgpu","gpu_index":0,"status":"passed"},{"backend":"ascend-dgpu","gpu_index":3,"status":"failed","detail":"quota mismatch"}]`
 	first, second := ForGPU(node, &node.GPUs[0]), ForGPU(node, &node.GPUs[1])
-	if first[0].Status != StatusReady || second[0].Status != StatusUnavailable || !strings.Contains(second[0].Reason, "quota mismatch") {
+	if first[0].Status != StatusReady || second[0].Status != StatusUnavailable || !hasReason(second[0], messages.ErrorPartitionProbeFailed, proto.PartitionReasonParams{ProbeDetail: "quota mismatch"}) {
 		t.Fatalf("per-GPU capabilities = %+v / %+v", first, second)
 	}
 	node.PartitionProbes = `[{"backend":"ascend-dgpu","status":"passed"}]`
-	if got := ForGPU(node, &node.GPUs[0]); got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "upgrade the agent") {
+	if got := ForGPU(node, &node.GPUs[0]); got[0].Status != StatusUnavailable || got[0].ReasonCode != messages.ErrorPartitionAgentUpgradeRequired {
 		t.Fatalf("legacy backend-wide probe was accepted: %+v", got)
 	}
 }
 
 func TestPPUDockerDoesNotRequireHostHGGCRuntime(t *testing.T) {
-	node := &store.Node{
-		Arch: "amd64", Framework: "hggc", RuntimeDriver: "docker",
-		PartitionAssets: `[{"backend":"ppu-dgpu","root":"/assets","files":["hggc_quota.so","hgml_dlsym_hook.so"]}]`,
-		PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"passed"}]`,
-	}
-	gpu := &store.GPU{Vendor: "ppu", ArchID: "ZW810E"}
-	got := ForGPU(node, gpu)
-	if len(got) != 1 || got[0].Status != StatusReady || got[0].Reason != "" {
-		t.Fatalf("PPU capability = %+v, want ready Docker path", got)
+	for _, driver := range []string{"docker", "kube"} {
+		t.Run(driver, func(t *testing.T) {
+			node := &store.Node{
+				Arch: "amd64", Framework: "hggc", RuntimeDriver: driver,
+				PartitionAssets: `[{"backend":"ppu-dgpu","root":"/assets","files":["hggc_quota.so","hgml_dlsym_hook.so"]}]`,
+				PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"passed"}]`,
+			}
+			gpu := &store.GPU{Vendor: "ppu", ArchID: "ZW810E"}
+			got := ForGPU(node, gpu)
+			if len(got) != 1 || got[0].Status != StatusReady || got[0].Reason != "" {
+				t.Fatalf("PPU capability under %s = %+v, want ready", driver, got)
+			}
+		})
 	}
 }
 
@@ -155,12 +258,12 @@ func TestPPUUdockerRemainsUnavailableUntilValidated(t *testing.T) {
 	node := &store.Node{
 		Arch: "amd64", Framework: "hggc", RuntimeDriver: "udocker",
 		PartitionAssets: `[{"backend":"ppu-dgpu","root":"/assets","files":["hggc_quota.so","hgml_dlsym_hook.so"]}]`,
-		PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"skipped","detail":"PPU is currently verified on the Docker runtime only"}]`,
+		PartitionProbes: `[{"backend":"ppu-dgpu","gpu_index":0,"status":"skipped","detail":"PPU is currently verified on the Docker or Kubernetes runtime only"}]`,
 	}
 	gpu := &store.GPU{Vendor: "ppu", ArchID: "ZW810E"}
 	got := ForGPU(node, gpu)
-	if len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker runtime only") {
-		t.Fatalf("PPU capability = %+v, want Docker-only reason", got)
+	if len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionRuntimeUnsupported, proto.PartitionReasonParams{Runtime: "udocker", SupportedRuntimes: []string{"docker", "kube"}}) {
+		t.Fatalf("PPU capability = %+v, want Docker/Kubernetes-only reason", got)
 	}
 }
 
@@ -241,13 +344,18 @@ func testHygonCapabilityPrerequisites(t *testing.T, model string) {
 		t.Fatalf("udocker with a passed native quota probe = %+v", got)
 	}
 	node.PartitionProbes = `[{"backend":"hygon-dgpu","gpu_index":0,"status":"failed","detail":"permission denied"}]`
-	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "permission denied") {
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionProbeFailed, proto.PartitionReasonParams{ProbeDetail: "permission denied"}) {
 		t.Fatalf("udocker with a failed quota probe = %+v", got)
 	}
 	node.PartitionProbes = `[{"backend":"hygon-dgpu","gpu_index":0,"status":"passed"}]`
 	node.RuntimeDriver = "nerdctl"
-	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker") {
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionRuntimeUnsupported, proto.PartitionReasonParams{Runtime: "nerdctl", SupportedRuntimes: []string{"docker", "udocker"}}) {
 		t.Fatalf("nerdctl capability = %+v", got)
+	}
+	// Hygon native vdev stays unsupported on Kubernetes, unlike AMD and PPU.
+	node.RuntimeDriver = "kube"
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionRuntimeUnsupported, proto.PartitionReasonParams{Runtime: "kube", SupportedRuntimes: []string{"docker", "udocker"}}) {
+		t.Fatalf("kube capability = %+v, want unavailable", got)
 	}
 	node.RuntimeDriver = "docker"
 	node.PartitionProbes = `[]`
@@ -277,13 +385,17 @@ func TestAMDDGPUIsProbeExemptAndRuntimeConstrained(t *testing.T) {
 	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusReady {
 		t.Fatalf("AMD runveil capability = %+v", got)
 	}
+	node.RuntimeDriver = "kube"
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusReady {
+		t.Fatalf("AMD kube capability = %+v", got)
+	}
 	node.RuntimeDriver = "host"
-	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "Docker, nerdctl or udocker") {
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !hasReason(got[0], messages.ErrorPartitionRuntimeUnsupported, proto.PartitionReasonParams{Runtime: "host", SupportedRuntimes: []string{"docker", "nerdctl", "udocker", "kube"}}) {
 		t.Fatalf("AMD host-process capability = %+v", got)
 	}
 	node.RuntimeDriver = "docker"
 	node.PartitionSafetyProtocol = 0
-	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || !strings.Contains(got[0].Reason, "upgrade the agent") {
+	if got := ForGPU(node, &node.GPUs[0]); len(got) != 1 || got[0].Status != StatusUnavailable || got[0].ReasonCode != messages.ErrorPartitionAgentUpgradeRequired {
 		t.Fatalf("old agent AMD capability = %+v", got)
 	}
 }

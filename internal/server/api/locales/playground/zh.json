@@ -20,6 +20,6 @@
   },
   "stream_options": {
     "include_usage": { "label": "返回用量（include_usage）", "description": "在流的最后一个块返回 prompt / completion token 数，用于计算回答结束后的准确指标。" },
-    "continuous_usage_stats": { "label": "逐块返回用量（continuous_usage_stats）", "description": "每个块都带累计 token 数，速度指标随回答实时刷新（vLLM、SGLang 支持）。端点不认这个参数而报错时关闭，指标改按块数估算。" }
+    "continuous_usage_stats": { "label": "逐 chunk 返回用量（continuous_usage_stats）", "description": "每个 chunk 都带累计 token 数，速度指标随回答实时刷新（vLLM、SGLang 支持）。端点不认这个参数而报错时关闭，指标改按 chunk 数估算。" }
   }
 }

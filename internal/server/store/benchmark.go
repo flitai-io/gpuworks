@@ -14,6 +14,12 @@ import (
 
 const BenchmarkErrorServerRestarted = "BENCHMARK_SERVER_RESTARTED"
 
+// BenchmarkErrorDatasetLoadFailed is dataset.LoadErrorCode as the run's
+// failure code (proto.BenchmarkStatus.Code); declared here with the other run
+// failure codes the console translates, and held equal to its producer's
+// constant by TestBenchmarkErrorCodesMatchTheirProducers.
+const BenchmarkErrorDatasetLoadFailed = "BENCHMARK_DATASET_LOAD_FAILED"
+
 var ErrBenchmarkActive = errors.New("benchmark is active; cancel it before deleting")
 
 func (s *Store) CreateBenchmarkRun(run *BenchmarkRun) (*BenchmarkRun, error) {
@@ -26,7 +32,12 @@ func (s *Store) CreateBenchmarkRun(run *BenchmarkRun) (*BenchmarkRun, error) {
 	if run.DetailCapMB > benchmeta.MaxDetailCapMB {
 		run.DetailCapMB = benchmeta.MaxDetailCapMB
 	}
-	if err := s.db.Create(run).Error; err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := requirePriorityClass(tx, run.PriorityClass); err != nil {
+			return err
+		}
+		return tx.Create(run).Error
+	}); err != nil {
 		return nil, err
 	}
 	if s.Bus != nil {

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Space, Tag, Typography, message } from "antd";
+import { Space, Typography, message } from "antd";
+import { Alert, Tag } from "../pages/DeploymentControls";
+import { Button } from "../components/ui/button";
 import { useTranslation } from "react-i18next";
 import { api, type Deployment, type SleepHold, type WakeOptions, type WakeResult } from "../api";
 import { APIError, apiErrorText } from "../apiError";
@@ -144,52 +146,56 @@ export default function SleepControls({ dep, onDone }: { dep: Deployment; onDone
   };
 
   const all = summary.total > 0 && summary.asleep === summary.total;
+  const legacySummary = !dep.state && dep.asleep_replicas == null;
+  const held = dep.sleep_hold === "all" || dep.sleep_hold === "some";
   return (
-    <Space style={{ marginTop: 16 }} wrap>
+    <>
+      {legacySummary && all && <Tag color="orange">{t("sleep.sleeping", { level: summary.level, name: levelName(summary.level) })}</Tag>}
+      {legacySummary && summary.asleep > 0 && !all && <Tag color="orange">{t("sleep.partial", { asleep: summary.asleep, total: summary.total })}</Tag>}
+      {dep.sleep_hold && (
+        <Typography.Text type="secondary">
+          {t(holdHint[dep.sleep_hold])}
+        </Typography.Text>
+      )}
+      {(held || summary.asleep > 0) && (
+        <div className="deployment-sleep-buttons">
+          {held && (
+            <Button variant="tertiary" size="sm" loading={busy} onClick={() => void doReleaseHold()}>
+              {t("sleep.releaseHold")}
+            </Button>
+          )}
+          {summary.asleep > 0 && (
+            <Button variant="primary" size="sm" loading={busy} onClick={() => void doWake(false)}>
+              {all ? t("sleep.wake") : t("sleep.wakeAll")}
+            </Button>
+          )}
+          {wakeRefused && summary.asleep > 0 && (
+            <Button variant="tertiary" size="sm" loading={busy} onClick={() => void doWake(true)}>
+              {t("sleep.wakeWhatFits")}
+            </Button>
+          )}
+        </div>
+      )}
+      {!all && (
+        <div className="deployment-sleep-buttons">
+          <Button variant="tertiary" size="sm" loading={busy} onClick={() => setPendingLevel(1)}>
+            {t("sleep.quickAction")}
+          </Button>
+          <Button variant="tertiary" size="sm" loading={busy} onClick={() => setPendingLevel(2)}>
+            {t("sleep.deepAction")}
+          </Button>
+        </div>
+      )}
       {sleepFailure && (
         <Alert
           type="error"
           showIcon
           message={t("sleep.lastFailure")}
           description={sleepFailure}
-          style={{ flexBasis: "100%" }}
         />
       )}
       {dep.wake_waiting_since && <WakeWaitingBanner since={dep.wake_waiting_since} limitSec={dep.wake_wait_limit_sec} busy={cancelling.busy} onCancel={() => void cancelWaiting()} />}
       {refusal && <WakeRefusalAlert refusal={refusal} limitSec={dep.wake_wait_limit_sec} busy={busy} onWait={() => void doWaitWake({ wait: true })} onYield={() => void doWaitWake({ yield: true })} />}
-      {all && <Tag color="orange">{t("sleep.sleeping", { level: summary.level, name: levelName(summary.level) })}</Tag>}
-      {summary.asleep > 0 && !all && <Tag color="orange">{t("sleep.partial", { asleep: summary.asleep, total: summary.total })}</Tag>}
-      {dep.sleep_hold && (
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {t(holdHint[dep.sleep_hold])}
-        </Typography.Text>
-      )}
-      {(dep.sleep_hold === "all" || dep.sleep_hold === "some") && (
-        <Button size="small" loading={busy} onClick={() => void doReleaseHold()}>
-          {t("sleep.releaseHold")}
-        </Button>
-      )}
-      {summary.asleep > 0 && (
-        <Button size="small" type="primary" loading={busy} onClick={() => void doWake(false)}>
-          {all ? t("sleep.wake") : t("sleep.wakeAll")}
-        </Button>
-      )}
-      {wakeRefused && summary.asleep > 0 && (
-        <Button size="small" loading={busy} onClick={() => void doWake(true)}>
-          {t("sleep.wakeWhatFits")}
-        </Button>
-      )}
-      {!all && (
-        <>
-          <Button size="small" loading={busy} onClick={() => setPendingLevel(1)}>
-            {t("sleep.quickAction")}
-          </Button>
-          <Button size="small" loading={busy} onClick={() => setPendingLevel(2)}>
-            {t("sleep.deepAction")}
-          </Button>
-        </>
-      )}
-      {dep.pd && dep.schedule_capabilities?.sleep.ok && <RoleSleepActions dep={dep} onDone={onDone} />}
       <SleepModeDialog
         open={pendingLevel !== null}
         level={pendingLevel ?? 1}
@@ -198,7 +204,7 @@ export default function SleepControls({ dep, onDone }: { dep: Deployment; onDone
         onConfirm={(mode, wakeOnRequest) => pendingLevel && void doSleep(pendingLevel, mode, wakeOnRequest)}
         onCancel={() => setPendingLevel(null)}
       />
-    </Space>
+    </>
   );
 }
 
@@ -213,7 +219,7 @@ const holdHint: Record<SleepHold, "sleep.heldHint" | "sleep.someHeldHint" | "sle
 // RoleSleepActions sleep (memory / L1) or wake one role of a PD deployment:
 // the roles the server says its mode runs without (may_be_empty). With every
 // prefill instance asleep the decoders answer alone.
-function RoleSleepActions({ dep, onDone }: { dep: Deployment; onDone: () => void }) {
+export function RoleSleepActions({ dep, onDone }: { dep: Deployment; onDone: () => void }) {
   const { t } = useTranslation("deployments");
   const { run } = useOrder();
   const [busy, setBusy] = useState<string | null>(null);
@@ -241,11 +247,11 @@ function RoleSleepActions({ dep, onDone }: { dep: Deployment; onDone: () => void
           <Space key={role} size={4}>
             {summary.asleep > 0 && <Tag color="orange">{t("sleep.role.summary", { role: roleName, asleep: summary.asleep, total: summary.total })}</Tag>}
             {summary.asleep > 0 ? (
-              <Button size="small" loading={busy === role} onClick={() => void order(role, () => api.wakeDeployment(dep.id, { role }), t("sleep.wakeStarted"), "sleep.wakeFailed")}>
+              <Button variant="tertiary" size="sm" loading={busy === role} onClick={() => void order(role, () => api.wakeDeployment(dep.id, { role }), t("sleep.wakeStarted"), "sleep.wakeFailed")}>
                 {t("sleep.role.wake", { role: roleName })}
               </Button>
             ) : (
-              <Button size="small" loading={busy === role} onClick={() => setAsking(role)}>
+              <Button variant="tertiary" size="sm" loading={busy === role} onClick={() => setAsking(role)}>
                 {t("sleep.role.sleep", { role: roleName })}
               </Button>
             )}

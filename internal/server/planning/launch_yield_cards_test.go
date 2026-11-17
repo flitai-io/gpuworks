@@ -68,7 +68,7 @@ func (c *yieldCards) launch(t *testing.T, launching uint, policy string, gpus in
 	t.Helper()
 	req := scheduler.Request{WeightBytes: int64(gpus) * 4 << 30, HeadCount: 8, GPUMemUtil: 0.6, AllowedTPs: []int{gpus}}
 	view := ledgerView{reserved: reservedAgainst(c.st, policy)}
-	return launchYield(c.st, c.node, nodeInstances(t, c.st, c.node), launching, policy, req, true, "", false, view)
+	return launchYield(c.st, c.node, nodeInstances(t, c.st, c.node), launching, policy, req, true, "", view)
 }
 
 func holderNames(y *LaunchYield) []string {

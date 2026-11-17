@@ -7,6 +7,7 @@ import { isOperatorEvent, operatorEventText } from "./operatorEvents.ts";
 import { stateLabel } from "./state.ts";
 import { formatBytes as formatSize } from "../format";
 import { storageStateLabel } from "../storageDisplay";
+import { isProductMessage, runtimeFailureText } from "../runtimeFailure";
 
 export const instanceEventCodes = [
   "INSTANCE_CREATED",
@@ -105,12 +106,19 @@ function numberParam(event: InstanceEvent, name: string): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function formatDuration(ms: number, t: TFunction): string {
+export function phaseDurationText(event: InstanceEvent, t: TFunction): string {
+  const ms = numberParam(event, "prev_duration_ms");
+  if (ms == null) return "";
   if (ms < 1000) return t("instance.duration.ms", { value: Math.max(0, Math.round(ms)) });
   const seconds = ms / 1000;
   if (seconds < 90) return t("instance.duration.seconds", { value: seconds < 10 ? seconds.toFixed(1) : Math.round(seconds) });
   const minutes = Math.floor(seconds / 60);
   return t("instance.duration.minutes", { minutes, seconds: Math.round(seconds - minutes * 60) });
+}
+
+export function phaseTransferSize(event: InstanceEvent): string {
+  const bytes = numberParam(event, "prev_bytes_done");
+  return bytes && bytes > 0 ? formatSize(bytes, { compact: true }) : "";
 }
 
 /**
@@ -124,21 +132,16 @@ function formatDuration(ms: number, t: TFunction): string {
  */
 export function phaseSummaryText(event: InstanceEvent, t: TFunction): string {
   const phase = paramText(event, "prev_phase");
-  const duration = numberParam(event, "prev_duration_ms");
-  if (!phase && duration == null) return "";
-  const label = phase ? t(`instance.phase.${phase}`, { defaultValue: phase }) : "";
-  const parts: string[] = [];
-  if (label && duration != null) parts.push(t("instance.phaseSummary.done", { phase: label, duration: formatDuration(duration, t) }));
-  else if (label) parts.push(label);
-  else if (duration != null) parts.push(formatDuration(duration, t));
-  const bytes = numberParam(event, "prev_bytes_done");
-  if (bytes && bytes > 0) {
-    const rate = numberParam(event, "prev_rate_bps");
-    parts.push(rate && rate > 0
-      ? t("instance.phaseSummary.transfer", { bytes: formatSize(bytes, { compact: true }), rate: formatSize(rate, { compact: true }) })
-      : formatSize(bytes, { compact: true }));
-  }
-  return parts.join(" · ");
+  const duration = phaseDurationText(event, t);
+  if (!phase && !duration) return "";
+  const label = phase && t(`instance.phase.${phase}`, { defaultValue: phase });
+  const summary = label && duration ? t("instance.phaseSummary.done", { phase: label, duration }) : label || duration;
+  const size = phaseTransferSize(event);
+  const rate = numberParam(event, "prev_rate_bps");
+  const transfer = size && rate && rate > 0
+    ? t("instance.phaseSummary.transfer", { bytes: size, rate: formatSize(rate, { compact: true }) })
+    : size;
+  return [summary, transfer].filter(Boolean).join(" · ");
 }
 
 function translatedState(tCommon: TFunction<"common">, state: string): string {
@@ -191,7 +194,10 @@ function eventBodyText(
     const phase = translatedPhase(t, paramText(event, "phase"));
     if (phase) text += ` [${phase}]`;
   }
-  const detail = paramText(event, "detail");
+  // A failed transition carries its reason as a product message; older
+  // events and other transitions have only the English detail.
+  const failure = event.params?.failure;
+  const detail = isProductMessage(failure) ? runtimeFailureText(tCommon, failure) : paramText(event, "detail");
   if (detail) text += `: ${detail}`;
   return text;
 }

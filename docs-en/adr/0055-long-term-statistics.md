@@ -45,3 +45,5 @@ would produce billions of rows.
   such as every key using every deployment each hour, increase usage write volume. The status endpoint reports the row count and duration of each write, visible on the Settings page.
 - Each gateway request adds about 200 ns with no memory allocation; each GPU sample adds one map lookup during metrics ingestion.
 - Documentation: [View Usage Analytics](../how-to/analyze-operations.md), [Data Retention Settings](../reference/api.md#analytics用量分析), and [Configuration](../reference/configuration.md).
+
+<!-- translation-source-sha256: 93c7c3918efd24fdee0dbcc8d7fa4ca52e507f75a3d4469a732acab10c85288f -->

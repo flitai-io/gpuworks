@@ -112,7 +112,7 @@ func healthCodesDeclaredInSource(t *testing.T) []string {
 		t.Fatal(err)
 	}
 	// `HealthSomething = "some_code"`, which is how every code is written.
-	declared := regexp.MustCompile(`(?m)^\s*Health[A-Za-z]+\s*=\s*"([a-z_]+)"`)
+	declared := regexp.MustCompile(`(?m)^\s*Health[A-Za-z]+\s*=\s*"([A-Z_]+)"`)
 	var codes []string
 	for _, m := range declared.FindAllStringSubmatch(string(source), -1) {
 		// The three levels are not findings; they are what a finding

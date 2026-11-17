@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"gpuworks.ai/gpuworks/internal/agent/storagemount"
 )
@@ -13,6 +14,11 @@ import (
 // filesystem accounting overhead. This is deliberately a fixed, small guard;
 // downloads do not reserve capacity and concurrent transfers may still race.
 const modelDownloadSafetyMargin int64 = 1 << 30
+
+// errInsufficientDisk is the admission check refusing a model transfer the
+// target filesystem cannot hold; the status report reads it as
+// MFInsufficientDisk.
+var errInsufficientDisk = errors.New("insufficient disk space")
 
 // checkDownloadSpace is checkModelDownloadSpace for a path on a storage, which
 // may be a hung network mount: the check runs under the storage's guard and a
@@ -46,11 +52,18 @@ func checkModelDownloadSpace(target string, expectedBytes int64) error {
 	}
 	usage := statManagedPath("models", probe)
 	if usage.AvailableBytes <= 0 {
-		return fmt.Errorf("insufficient disk space at %s: available=%d required=%d", probe, usage.AvailableBytes, expectedBytes+modelDownloadSafetyMargin)
+		return fmt.Errorf("%w at %s: available=%d required=%d", errInsufficientDisk, probe, usage.AvailableBytes, expectedBytes+modelDownloadSafetyMargin)
 	}
 	required := expectedBytes + modelDownloadSafetyMargin
 	if required < expectedBytes || usage.AvailableBytes < required {
-		return fmt.Errorf("insufficient disk space at %s: available=%d required=%d (download=%d safety_margin=%d)", probe, usage.AvailableBytes, required, expectedBytes, modelDownloadSafetyMargin)
+		return fmt.Errorf("%w at %s: available=%d required=%d (download=%d safety_margin=%d)", errInsufficientDisk, probe, usage.AvailableBytes, required, expectedBytes, modelDownloadSafetyMargin)
 	}
 	return nil
+}
+
+// modelDiskFull reports a model transfer that failed for lack of disk: the
+// admission check refused it (errInsufficientDisk) or a write hit ENOSPC or
+// the quota.
+func modelDiskFull(err error) bool {
+	return errors.Is(err, errInsufficientDisk) || errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT)
 }

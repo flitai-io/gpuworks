@@ -30,3 +30,5 @@ The native pull of runveil (udocker) nodes (`runtime/udocker/native`) used a fix
 - A new agent flag `--image-pull-max-connections` (environment variable `GPUWORKS_IMAGE_PULL_MAX_CONNECTIONS`), automatic by default. The protocol, server, and UI are unchanged.
 - `native.Downloader` gains `Budget` (`*connbudget.Hosts`) and `Tune`. With a nil `Budget`, every `FetchAll` uses a private fixed budget of `Workers x RangeParts` (the old behavior), so existing test fixtures stay unchanged.
 - Tests use `internal/testenv/fakeregistry` (HTTP/1.1 plus TLS, 307 to a blob CDN, strict Range, per-connection and aggregate throttling, a per-source connection limit answered with 429 or a reset, mid-body resets, stalls, and ignored Range) to verify throughput behavior, the connection ceiling, `Retry-After`, return of all tokens, and no goroutine leaks.
+
+<!-- translation-source-sha256: ccaf291f99ca23252c8247cba90dca621ad8a22db0502035cbae2879423ada24 -->

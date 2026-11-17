@@ -1,11 +1,7 @@
 import { useEffect } from "react";
 import { Checkbox, Form, InputNumber, Space } from "antd";
 import { useTranslation } from "react-i18next";
-import type { Model } from "../../api";
-import {
-  HealthCheckHelp,
-  healthCheckable,
-} from "../../components/DeploymentHealth";
+import { HealthCheckHelp } from "../../components/DeploymentHealth";
 
 // The server's bounds for health_check_threshold_sec
 // (store.HealthCheckThresholdSec*) and the threshold it takes when none is
@@ -15,31 +11,31 @@ const thresholdMax = 600;
 const thresholdDefault = 60;
 
 // HealthCheckBox is health_check's control. Unstated, the server turns the
-// check on for a model that serves chat, text completion or embeddings, so the box shows
-// exactly that; a model that serves neither cannot be checked.
+// check on for a draft it can check, so the box shows exactly that; a draft
+// it cannot check offers no check. Whether it can is the evaluation's
+// health_checkable, which the box only displays.
 function HealthCheckBox({
   value,
   onChange,
   checkable,
-  modelKnown,
 }: {
   value?: boolean;
   onChange?: (value: boolean | undefined) => void;
-  checkable: boolean;
-  // The model has been read: until then "not checkable" only means unknown,
-  // and a choice already in the form (a deployment's own) must stay.
-  modelKnown: boolean;
+  // The server's answer; undefined until the evaluation has given one, which
+  // is not "cannot be checked": a choice already in the form (a deployment's
+  // own) must stay.
+  checkable: boolean | undefined;
 }) {
   const { t } = useTranslation("common");
   useEffect(() => {
     // A choice made for a model that could be checked does not carry over
     // to one that cannot.
-    if (modelKnown && !checkable && value === true) onChange?.(undefined);
-  }, [checkable, modelKnown, value, onChange]);
+    if (checkable === false && value === true) onChange?.(undefined);
+  }, [checkable, value, onChange]);
   return (
     <Checkbox
-      checked={checkable && (value ?? true)}
-      disabled={!checkable}
+      checked={checkable === true && (value ?? true)}
+      disabled={checkable !== true}
       onChange={(e) => onChange?.(e.target.checked)}
     >
       {t("healthCheck.enable")}
@@ -50,16 +46,16 @@ function HealthCheckBox({
 // HealthCheckFields are the deployment's health check settings: on or off,
 // and how long a check waits.
 export default function HealthCheckFields({
-  selectedModel,
+  healthCheckable,
 }: {
-  selectedModel?: Model;
+  // The evaluation's health_checkable for the draft; undefined until known.
+  healthCheckable?: boolean;
 }) {
   const { t } = useTranslation("common");
   const form = Form.useFormInstance();
   const stated = Form.useWatch("health_check", { form, preserve: true }) as
     boolean | undefined;
-  const checkable = healthCheckable(selectedModel?.operations);
-  const on = checkable && (stated ?? true);
+  const on = healthCheckable === true && (stated ?? true);
   return (
     <Form.Item
       label={
@@ -69,12 +65,12 @@ export default function HealthCheckFields({
         </Space>
       }
       extra={
-        selectedModel && !checkable ? t("healthCheck.unsupported") : undefined
+        healthCheckable === false ? t("healthCheck.unsupported") : undefined
       }
     >
       <Space wrap size={12}>
         <Form.Item name="health_check" noStyle>
-          <HealthCheckBox checkable={checkable} modelKnown={selectedModel !== undefined} />
+          <HealthCheckBox checkable={healthCheckable} />
         </Form.Item>
         <Form.Item name="health_check_threshold_sec" noStyle>
           <InputNumber

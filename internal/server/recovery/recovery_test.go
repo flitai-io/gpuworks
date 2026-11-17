@@ -3,6 +3,7 @@ package recovery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -11,8 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -153,7 +157,7 @@ func TestRecoveryGracePendingMissingCredentialAndServerDialLayering(t *testing.T
 	r, st, hub, fake := newRecoveryHarness(t)
 	node := newOfflineNode(t, st, true)
 	node.LastSeenAt = timePtr(r.now().Add(-time.Minute))
-	if outcome, err := r.recoverNode(context.Background(), node, false); err != nil || outcome.SkippedReason != "within reconnect grace period" {
+	if outcome, err := r.recoverNode(context.Background(), node, false); err != nil || outcome.SkippedCode != messages.RecoverySkippedGracePeriod {
 		t.Fatalf("grace outcome=%+v err=%v", outcome, err)
 	}
 	if fake.probes.Load() != 0 {
@@ -164,20 +168,20 @@ func TestRecoveryGracePendingMissingCredentialAndServerDialLayering(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome, err := r.recoverNode(context.Background(), pending, true); err != nil || outcome.SkippedReason != "node has never connected" {
+	if outcome, err := r.recoverNode(context.Background(), pending, true); err != nil || outcome.SkippedCode != messages.RecoverySkippedNeverConnected {
 		t.Fatalf("pending outcome=%+v err=%v", outcome, err)
 	}
 
 	withoutCredential := newOfflineNode(t, st, false)
 	withoutCredential.HasSSHCredential = false
-	if outcome, err := r.recoverNode(context.Background(), withoutCredential, true); err != nil || outcome.SkippedReason != "ssh credential is not configured" {
+	if outcome, err := r.recoverNode(context.Background(), withoutCredential, true); err != nil || outcome.SkippedCode != messages.RecoverySkippedNoSSHCredential {
 		t.Fatalf("credential outcome=%+v err=%v", outcome, err)
 	}
 
 	serverDial := newOfflineNode(t, st, true)
 	serverDial.ConnectMode = "server_dial"
 	hub.serverReady = false
-	if outcome, err := r.recoverNode(context.Background(), serverDial, false); err != nil || !strings.Contains(outcome.SkippedReason, "server_dial") {
+	if outcome, err := r.recoverNode(context.Background(), serverDial, false); err != nil || outcome.SkippedCode != messages.RecoverySkippedServerDialBackoff {
 		t.Fatalf("server_dial outcome=%+v err=%v", outcome, err)
 	}
 	if fake.probes.Load() != 0 {
@@ -197,10 +201,13 @@ func TestUnreachableErrorsBackoffForeverWithoutStopping(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		err  error
+		code string
 	}{
-		{name: "timeout", err: &provision.SSHConnectionError{Err: context.DeadlineExceeded}},
-		{name: "authentication", err: &provision.SSHConnectionError{Err: errors.New("ssh handshake: unable to authenticate")}},
-		{name: "host-key", err: &provision.SSHConnectionError{Err: errors.New("ssh host key mismatch for node.example:22")}},
+		{name: "timeout", err: &provision.SSHConnectionError{Err: context.DeadlineExceeded}, code: messages.ErrorSSHTimeout},
+		{name: "authentication", err: &provision.SSHConnectionError{Err: &provision.Failure{Code: messages.ErrorSSHAuthFailed, Err: errors.New("ssh handshake: unable to authenticate")}}, code: messages.ErrorSSHAuthFailed},
+		{name: "host-key", err: &provision.SSHConnectionError{Err: &provision.Failure{Code: messages.ErrorSSHHostKeyMismatch, Err: errors.New("ssh host key mismatch for node.example:22")}}, code: messages.ErrorSSHHostKeyMismatch},
+		// An error no step named: unreachable is what the phase says.
+		{name: "unnamed", err: errors.New("dial failed"), code: messages.ErrorSSHUnreachable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r, st, _, fake := newRecoveryHarness(t)
@@ -210,14 +217,14 @@ func TestUnreachableErrorsBackoffForeverWithoutStopping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if outcome.Phase != store.RecoveryPhaseUnreachable || !strings.Contains(outcome.Error, strings.Split(tc.err.Error(), ":")[0]) {
+			if outcome.Phase != store.RecoveryPhaseUnreachable || outcome.ErrorCode != tc.code || outcome.Error != tc.err.Error() {
 				t.Fatalf("outcome=%+v", outcome)
 			}
 			updated, _ := st.NodeByUUID(node.UUID)
-			if updated.RecoveryAttempts != 1 || updated.RecoveryPhase != store.RecoveryPhaseUnreachable {
+			if updated.RecoveryAttempts != 1 || updated.RecoveryPhase != store.RecoveryPhaseUnreachable || updated.LastRecoveryCode != tc.code || updated.LastRecoveryError != tc.err.Error() {
 				t.Fatalf("updated node=%+v", updated)
 			}
-			if outcome, err := r.recoverNode(context.Background(), updated, false); err != nil || outcome.SkippedReason != "recovery backoff has not elapsed" {
+			if outcome, err := r.recoverNode(context.Background(), updated, false); err != nil || outcome.SkippedCode != messages.RecoverySkippedBackoff {
 				t.Fatalf("backoff outcome=%+v err=%v", outcome, err)
 			}
 			if updated.RecoveryPhase == store.RecoveryPhaseStopped {
@@ -356,7 +363,7 @@ func TestRunningAgentIsObservedWithoutRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.restarts != 0 || fake.installs != 0 || !strings.Contains(outcome.Error, "control-plane") {
+	if fake.restarts != 0 || fake.installs != 0 || outcome.ErrorCode != messages.ErrorRecoveryAgentNotConnected || !strings.Contains(outcome.Error, "control-plane") {
 		t.Fatalf("outcome=%+v restart=%d install=%d", outcome, fake.restarts, fake.installs)
 	}
 }
@@ -369,12 +376,12 @@ func TestAnotherServersAgentUnitIsReportedWithoutTakingItOver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "foreign_agent: gpuworks-agent unit on the host is installed for another server (http://192.0.2.156:8800)"
-	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbeFailed || !strings.HasPrefix(outcome.Error, want) {
+	want := "gpuworks-agent unit on the host is installed for another server (http://192.0.2.156:8800)"
+	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbeFailed || outcome.ErrorCode != messages.ErrorAgentInstallForeignServer || !strings.HasPrefix(outcome.Error, want) {
 		t.Fatalf("outcome=%+v restart=%d install=%d", outcome, fake.restarts, fake.installs)
 	}
 	updated, _ := st.NodeByUUID(node.UUID)
-	if updated.RecoveryAttempts != 1 || !strings.HasPrefix(updated.LastRecoveryError, want) {
+	if updated.RecoveryAttempts != 1 || updated.LastRecoveryCode != messages.ErrorAgentInstallForeignServer || !strings.HasPrefix(updated.LastRecoveryError, want) {
 		t.Fatalf("foreign unit not recorded: %+v", updated)
 	}
 }
@@ -382,12 +389,12 @@ func TestAnotherServersAgentUnitIsReportedWithoutTakingItOver(t *testing.T) {
 func TestReachableProbeErrorIsRecordedWithoutMutatingAgent(t *testing.T) {
 	r, st, _, fake := newRecoveryHarness(t)
 	node := newOfflineNode(t, st, true)
-	fake.probeResult = provision.ProbeResult{Reachable: true, AgentInstalled: true, Detail: "remote command failed", Err: errors.New("probe agent process: exit status 1")}
+	fake.probeResult = provision.ProbeResult{Reachable: true, AgentInstalled: true, Detail: "remote command failed", Err: fmt.Errorf("probe agent process: %w", &ssh.ExitError{Waitmsg: ssh.Waitmsg{}})}
 	outcome, err := r.recoverNode(context.Background(), node, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbeFailed || !strings.Contains(outcome.Error, "probe agent process") {
+	if fake.restarts != 0 || fake.installs != 0 || outcome.Phase != store.RecoveryPhaseProbeFailed || outcome.ErrorCode != messages.ErrorSSHCommandFailed || !strings.Contains(outcome.Error, "probe agent process") {
 		t.Fatalf("outcome=%+v restart=%d install=%d", outcome, fake.restarts, fake.installs)
 	}
 	updated, _ := st.NodeByUUID(node.UUID)
@@ -406,8 +413,8 @@ func TestRestartAndReinstallFailuresAreCombinedAndBackedOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fake.restarts != 1 || fake.installs != 1 || outcome.Phase != store.RecoveryPhaseReinstalling ||
-		!strings.Contains(outcome.Error, "restart denied") || !strings.Contains(outcome.Error, "upload failed") {
+	if fake.restarts != 1 || fake.installs != 1 || outcome.Phase != store.RecoveryPhaseReinstalling || outcome.ErrorCode != messages.ErrorRecoveryStepFailed ||
+		outcome.Error != "restart failed: restart denied; reinstall: upload failed" {
 		t.Fatalf("outcome=%+v restart=%d install=%d", outcome, fake.restarts, fake.installs)
 	}
 	updated, _ := st.NodeByUUID(node.UUID)
@@ -421,11 +428,11 @@ func TestRecoveryPersistsInstallSubphasesAndBlocksRepeatedStage(t *testing.T) {
 	node := newOfflineNode(t, st, true)
 	fake.probeResult = provision.ProbeResult{Reachable: true, AgentInstalled: false, Detail: "not-running"}
 	fake.restartErr = errors.New("restart denied")
-	fake.installErr = errors.New("upload /opt/gpuworks/gpuworks-agent timed out after 10m")
+	fake.installErr = &provision.Failure{Code: messages.ErrorAgentInstallUploadStalled, Err: errors.New("upload /opt/gpuworks/gpuworks-agent timed out after 10m")}
 	fake.installPhases = []string{store.RecoveryPhaseArtifactCheck, store.RecoveryPhaseUploading}
 
 	first, err := r.recoverNode(context.Background(), node, false)
-	if err != nil || first.Phase != store.RecoveryPhaseUploading || !strings.Contains(first.Error, "upload_stalled:") {
+	if err != nil || first.Phase != store.RecoveryPhaseUploading || first.ErrorCode != messages.ErrorAgentInstallUploadStalled {
 		t.Fatalf("first outcome=%+v err=%v", first, err)
 	}
 	node, _ = st.NodeByUUID(node.UUID)
@@ -440,7 +447,7 @@ func TestRecoveryPersistsInstallSubphasesAndBlocksRepeatedStage(t *testing.T) {
 		t.Fatalf("second outcome=%+v err=%v", second, err)
 	}
 	blocked, _ := st.NodeByUUID(node.UUID)
-	if blocked.RecoveryPhase != store.RecoveryPhaseBlocked || !strings.Contains(blocked.LastRecoveryError, store.RecoveryPhaseUploading) {
+	if blocked.RecoveryPhase != store.RecoveryPhaseBlocked || blocked.LastRecoveryCode != messages.ErrorAgentInstallUploadStalled || !strings.HasPrefix(blocked.LastRecoveryError, store.RecoveryPhaseUploading+": ") {
 		t.Fatalf("blocked node=%+v", blocked)
 	}
 }
@@ -463,13 +470,13 @@ func TestTriggerBypassesSchedulesButPreservesSafetyAndExclusion(t *testing.T) {
 	}
 	outcome, err = r.Trigger(context.Background(), node.UUID)
 	r.end(node.UUID)
-	if err != nil || outcome.SkippedReason != "recovery already in progress" {
+	if err != nil || outcome.SkippedCode != messages.RecoverySkippedInProgress {
 		t.Fatalf("in-flight trigger outcome=%+v err=%v", outcome, err)
 	}
 
 	r.cfg.Enabled = false
 	outcome, err = r.Trigger(context.Background(), node.UUID)
-	if err != nil || outcome.SkippedReason != "recovery is disabled" {
+	if err != nil || outcome.SkippedCode != messages.RecoverySkippedDisabled {
 		t.Fatalf("disabled trigger outcome=%+v err=%v", outcome, err)
 	}
 	r.cfg.Enabled = true
@@ -516,7 +523,7 @@ func TestProviderInstanceDeletionStopsRecoveryAtMaximumBackoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	probeAt := r.now().Add(-11 * time.Minute)
-	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseUnreachable, 6, &probeAt, "offline"); err != nil {
+	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseUnreachable, 6, &probeAt, store.RecoveryError{Message: "offline"}); err != nil {
 		t.Fatal(err)
 	}
 	node, _ = st.NodeByUUID(node.UUID)
@@ -542,7 +549,7 @@ func TestStoppedProviderInstanceStillExistsUsesFailureBlockInsteadOfStopped(t *t
 		t.Fatal(err)
 	}
 	probeAt := r.now().Add(-11 * time.Minute)
-	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseUnreachable, 6, &probeAt, "offline"); err != nil {
+	if err := st.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseUnreachable, 6, &probeAt, store.RecoveryError{Message: "offline"}); err != nil {
 		t.Fatal(err)
 	}
 	fake.probeResult = provision.ProbeResult{Reachable: false, Detail: "offline", Err: context.DeadlineExceeded}

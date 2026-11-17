@@ -59,8 +59,8 @@ func TestNodeContextCarriesHealthTopologyAndInfraWarnings(t *testing.T) {
 	}
 	for _, g := range []store.GPU{
 		{NodeID: f.node.ID, Index: 0, Name: "H100"},
-		{NodeID: f.node.ID, Index: 1, Name: "H100", HealthStatus: "Warning", HealthCode: "temperature_high"},
-		{NodeID: f.node.ID, Index: 2, Name: "H100", HealthStatus: "Error", HealthCode: "xid_79", HealthMessage: "XID 79: GPU has fallen off the bus"},
+		{NodeID: f.node.ID, Index: 1, Name: "H100", HealthStatus: "Warning", HealthCode: "TEMPERATURE_HIGH"},
+		{NodeID: f.node.ID, Index: 2, Name: "H100", HealthStatus: "Error", HealthCode: "XID_79", HealthMessage: "XID 79: GPU has fallen off the bus"},
 		// Neither is faulty, and neither can serve: the seed has to say why.
 		{NodeID: f.node.ID, Index: 3, Name: "H100", ForeignProcesses: `[{"pid":4242,"name":"python3"}]`},
 		{NodeID: f.node.ID, Index: -1, Name: "H100", PCIeBDF: "0000:1b:00.0", Ownership: accelerator.CardPassedThrough},
@@ -94,7 +94,7 @@ func TestNodeContextCarriesHealthTopologyAndInfraWarnings(t *testing.T) {
 	for _, g := range c.GPUs {
 		levels = append(levels, g.Level)
 	}
-	if strings.Join(levels, ",") != "ok,warning,error,ok,ok" || c.GPUs[2].Code != "xid_79" {
+	if strings.Join(levels, ",") != "ok,warning,error,ok,ok" || c.GPUs[2].Code != "XID_79" {
 		t.Fatalf("gpus = %+v", c.GPUs)
 	}
 	if len(c.FastCliques) != 1 || len(c.Instances) != 1 || c.Scheduling != "schedulable" {
@@ -104,7 +104,7 @@ func TestNodeContextCarriesHealthTopologyAndInfraWarnings(t *testing.T) {
 		t.Fatalf("logs = %+v", c.Logs)
 	}
 	p := c.Prompt()
-	for _, want := range []string{"Check this node's health", "level=error code=xid_79", "fallen off the bus", "fast interconnect groups: [[0 1]]", ".items[].points[-1][1]", "Do not re-read this node",
+	for _, want := range []string{"Check this node's health", "level=error code=XID_79", "fallen off the bus", "fast interconnect groups: [[0 1]]", ".items[].points[-1][1]", "Do not re-read this node",
 		"pci 0000:1b:00.0 H100 level=ok code= can_serve=no (" + accelerator.CardPassedThrough + ")", "can_serve=no (in use outside the platform: python3 pid 4242)",
 		"container runtime cannot use the accelerators: " + accelerator.RuntimeGPUBlockedRuntimeUnconfigured,
 		"container runtime: udocker", "runtime passed over for runveil (udocker): docker (" + accelerator.RuntimeGPUBlockedPluginMissing + ")"} {

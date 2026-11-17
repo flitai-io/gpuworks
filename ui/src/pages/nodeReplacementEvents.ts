@@ -62,6 +62,7 @@ export function nodeReplacementEventText(t: TFunction<"deployments">, event: Ins
   if (code === "UNIT_PLACED") return placedText(t, event);
   const to = text(event, "to");
   const after = num(event, "after_sec");
+  const ucxNodes = list(event, "ucx_netlink_nodes").join(", ");
   const rendered = t(`instance.event.${code}`, {
     from: text(event, "from"),
     to,
@@ -71,5 +72,8 @@ export function nodeReplacementEventText(t: TFunction<"deployments">, event: Ins
     nodes: list(event, "nodes").join(", "),
     defaultValue: "",
   });
-  return rendered.trim() || event.message?.trim() || code;
+  // A PD node the replacement left out for its kernel (the hang the node page
+  // lists the fixes for) is named after the sentence, not folded into it.
+  const skipped = code === "NODE_REPLACE_NO_CANDIDATE" && ucxNodes ? t("nodeReplacement.ucxNetlinkSkipped", { nodes: ucxNodes }) : "";
+  return rendered.trim() ? `${rendered.trim()}${skipped}` : event.message?.trim() || code;
 }

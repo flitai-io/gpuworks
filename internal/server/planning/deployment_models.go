@@ -7,7 +7,9 @@ import (
 )
 
 // DeploymentModelIDs is the common dependency set for admission, launch and
-// preparation display. Component bindings are immutable model IDs.
+// preparation display: the deployment's own model, each template component's,
+// then each model an extra mount row names. Component bindings are immutable
+// model IDs.
 func DeploymentModelIDs(dep *store.Deployment) ([]uint, error) {
 	layer, err := DeploymentTemplate(dep)
 	if err != nil {
@@ -22,6 +24,12 @@ func DeploymentModelIDs(dep *store.Deployment) ([]uint, error) {
 		if !seen[component.StoreModelID] {
 			ids = append(ids, component.StoreModelID)
 			seen[component.StoreModelID] = true
+		}
+	}
+	for _, id := range LaunchSourceFromDeployment(dep).Overrides.ModelMountIDs() {
+		if !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
 		}
 	}
 	return ids, nil

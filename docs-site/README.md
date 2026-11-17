@@ -39,9 +39,10 @@ Hugo 将中文发布到 `/docs/`、英文发布到 `/docs/en/`，主题语言选
 英文稿分批补齐时，未翻译的引用明确标为 `(Chinese)` 并链接中文正文；不会复制中文内容充当英文页。
 英文首页显示实际覆盖率，空栏目说明待翻译。已核对的真实英文界面截图放在 `docs/assets/screenshots/en/`，仅英文正文引用；尚未复现的场景保留中文原图并说明图片语言。
 
-翻译后记录已复核的中文 SHA-256 到 `translations.json`，然后运行：
+翻译后把已复核的中文 SHA-256 记录到英文页末尾的标记注释，然后运行检查：
 
 ```bash
+python3 docs-site/check_translations.py --write docs/<路径>.md
 python3 docs-site/check_translations.py
 python3 docs-site/check_translations.py --require-complete
 ```
@@ -52,8 +53,12 @@ python3 docs-site/check_translations.py --require-complete
 
 保留命令语法、配置键、技术标识和真实输出；翻译说明性注释、交互提示、占位符与示例提问。
 Mermaid 图的可见文字、纯文本公式、写作模板和目录说明也可翻译；
-逐块复核结构、路径及技术标识后，将原块与英文块的 SHA-256 登记到 `localized-code-blocks.json`。
+逐块复核结构、路径及技术标识后，用 `--write docs/<路径>.md --approve-code-blocks` 把原块与英文块的 SHA-256 登记到该英文页末尾。
 检查只接受已复核的精确内容组合，后续修改任一块都需重新复核，不能用刷新哈希代替内容审阅。
+
+标记格式由 `translation_markers.py` 定义：英文页末尾连续的 `<!-- translation-source-sha256: ... -->` 与
+`<!-- translation-localized-code-block: <原块> <译块> [理由] -->` 注释行。每页的复核事实只放在该页，
+两个分支只有改到同一页才会冲突；`stage_docs.py` 暂存英文页时去掉这段标记，站点与 PDF 都不包含它。
 
 ## Read the Docs 私有托管
 

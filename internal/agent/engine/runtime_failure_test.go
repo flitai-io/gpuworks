@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
@@ -23,8 +24,10 @@ func TestInjectionFailureReportsFactsWithoutInventingRuntimeState(t *testing.T) 
 	if got.State != proto.InstFailed || got.DirectAddr != "" || got.ContainerID != "" || got.RuntimeFailure == nil || got.RuntimeFailure.Code != proto.ErrorAcceleratorDeviceSelectionRequired || got.Message != "launch: "+err.Error() {
 		t.Fatalf("status=%+v", got)
 	}
+	// A refusal without injection facts still carries a code, with its text
+	// as the detail.
 	e.reportInjectionFailure(proto.InstanceDesiredState{UUID: "legacy"}, errors.New("legacy backend diagnostic"))
-	if got.RuntimeFailure != nil || got.Message != "legacy backend diagnostic" {
+	if got.RuntimeFailure == nil || got.RuntimeFailure.Code != proto.ErrorAcceleratorInjectionUnavailable || got.RuntimeFailure.Detail != "legacy backend diagnostic" || got.Message != "legacy backend diagnostic" {
 		t.Fatalf("legacy=%+v", got)
 	}
 }
@@ -35,7 +38,7 @@ func TestDesiredAndFreshInjectionUseTheSameRuntimeDiagnostic(t *testing.T) {
 		got := e.validateTargetDesiredForDriver(proto.InstanceDesiredState{GPUIndexes: []int{0}}, actual.Driver)
 		want := gpu.RuntimeRequirementError("kunlunxin", actual)
 		var refusal *gpu.InjectionError
-		if !errors.As(got, &refusal) || refusal.Failure != want.Failure {
+		if !errors.As(got, &refusal) || !reflect.DeepEqual(refusal.Failure, want.Failure) {
 			t.Fatalf("got=%v want=%v", got, want)
 		}
 	}

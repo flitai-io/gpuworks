@@ -35,10 +35,21 @@ type Engine struct {
 	report           Reporter
 	log              *slog.Logger
 	stateDir         string // for extracted assets (libvgpu), the dGPU usage cache
-	runtimeMounts    *RuntimeMountManager
-	extractLibvgpu   func(string) (string, error)
+	// hostRoot is the host's root as the agent sees it (kube.HostRoot,
+	// "/proc/1/root"), set only for the kube driver, where the agent's own
+	// /dev/shm is its pod's private tmpfs rather than the host's. "" for
+	// every other driver, where the agent's own /dev/shm already is the
+	// host's (see createHostShmLedger, partition_amd.go, partition_ppu.go).
+	// A literal, not an import of the kube driver package: the engine stays
+	// driver-agnostic, the same reason device_injection.go compares
+	// driver.Name() against string literals rather than importing it.
+	hostRoot       string
+	runtimeMounts  *RuntimeMountManager
+	extractLibvgpu func(string) (string, error)
 	// checkPorts runs before a container is created (checkEnginePorts).
 	checkPorts func(proto.InstanceDesiredState) error
+	// owner is labelled on every launched container (workload_labels.go).
+	owner workloadOwnerSlot
 
 	mu          sync.Mutex
 	assetMu     sync.Mutex // serializes content-addressed cache publication
@@ -54,16 +65,9 @@ type Engine struct {
 	inFlightCancel  map[string]context.CancelFunc         // cancels startup work before removal waits for it
 	cleanupRequired map[string]proto.InstanceDesiredState // old generation must be reclaimed before a replacement starts
 	pending         map[string]pendingEnsure
-	sleepLevel      map[string]int  // uuid → actual sleep level
-	prewarmed       map[string]bool // uuid → sleep prewarm done
-	// l1HostHeld names the instances whose engine completed an L1 sleep since
-	// its container started (holdsL1HostBuffer).
-	l1HostHeld map[string]bool
-	// sleepPIDs is, per sleeping instance, the process its engine keeps on
-	// each of its cards (by card identity), learned when its residue was
-	// measured: the card then held that one process only. It lets the node
-	// report a process somebody else starts on a sleeper's card.
-	sleepPIDs map[string]map[string]int
+	// processes is, by instance UUID, what the agent learned about the
+	// instance's engine process (processFacts); it goes with the container.
+	processes map[string]*processFacts
 	// runtimeEpoch identifies the one serialized start/adopt attempt allowed to
 	// publish a runtime observation for an instance. Removal invalidates it
 	// before teardown, so a slow inspect cannot publish after replacement.
@@ -157,6 +161,7 @@ func NewWithProber(driver runtime.Driver, report Reporter, log *slog.Logger, sta
 		report:                report,
 		log:                   log,
 		stateDir:              stateDir,
+		hostRoot:              hostRootFor(driver),
 		runtimeMounts:         newRuntimeMountManager(stateDir, driver),
 		extractLibvgpu:        assets.ExtractLibvgpu,
 		checkPorts:            portCheckFor(driver),
@@ -165,10 +170,7 @@ func NewWithProber(driver runtime.Driver, report Reporter, log *slog.Logger, sta
 		inFlightCancel:        map[string]context.CancelFunc{},
 		cleanupRequired:       map[string]proto.InstanceDesiredState{},
 		pending:               map[string]pendingEnsure{},
-		sleepLevel:            map[string]int{},
-		prewarmed:             map[string]bool{},
-		l1HostHeld:            map[string]bool{},
-		sleepPIDs:             map[string]map[string]int{},
+		processes:             map[string]*processFacts{},
 		runtimeEpoch:          map[string]uint64{},
 		servingEpoch:          map[string]uint64{},
 		healthProbes:          map[string]*healthProbeTask{},
@@ -216,6 +218,9 @@ func (e *Engine) reclaimInstance(ctx context.Context, uuid string) error {
 	if err := e.removeContainer(ctx, uuid); err != nil {
 		return err
 	}
+	// The engine process went with its container: a container started
+	// later under this UUID is another process.
+	e.forgetProcess(uuid)
 	if err := e.cleanupPartitionState(uuid); err != nil {
 		return fmt.Errorf("remove partition state: %w", err)
 	}
@@ -225,17 +230,19 @@ func (e *Engine) reclaimInstance(ctx context.Context, uuid string) error {
 	return nil
 }
 
-func (e *Engine) failAfterContainer(ctx context.Context, spec proto.InstanceDesiredState, message string, measured ...json.RawMessage) {
+// failAfterContainer reclaims a container that failed to start and reports
+// the failure, or reports it removing while the reclaim is pending.
+func (e *Engine) failAfterContainer(ctx context.Context, spec proto.InstanceDesiredState, failure proto.RuntimeFailure, message string, measured ...json.RawMessage) {
 	var observation json.RawMessage
 	if len(measured) > 0 {
 		observation = measured[0]
 	}
 	if err := e.reclaimInstance(ctx, spec.UUID); err != nil {
 		e.log.Error("failed instance cleanup pending", "uuid", spec.UUID, "err", err)
-		e.report(proto.InstanceStatus{UUID: spec.UUID, State: proto.InstRemoving, Message: message + "; cleanup pending: " + err.Error(), Measured: observation})
+		e.reportCleanupPending(spec.UUID, failure, message+"; cleanup pending: "+err.Error(), observation)
 		return
 	}
-	e.report(proto.InstanceStatus{UUID: spec.UUID, State: proto.InstFailed, Message: message, Measured: observation})
+	e.reportFailed(spec.UUID, failure, message, failedStatus{Measured: observation})
 }
 
 // removeContainer stops and deletes the instance's container, reporting the
@@ -450,6 +457,15 @@ func (e *Engine) Driver() runtime.Driver {
 	return e.driver
 }
 
+// hostRootFor is "/proc/1/root" (kube.HostRoot) for the kube driver, else
+// "". See Engine.hostRoot.
+func hostRootFor(driver runtime.Driver) string {
+	if driver != nil && driver.Name() == "kube" {
+		return "/proc/1/root"
+	}
+	return ""
+}
+
 // RunningSpecs returns desired-running, awake instance specs for log shipping.
 // Headless workers are included because their startup logs are essential for
 // diagnosing distributed failures.
@@ -458,7 +474,7 @@ func (e *Engine) RunningSpecs() []proto.InstanceDesiredState {
 	defer e.mu.Unlock()
 	var out []proto.InstanceDesiredState
 	for _, s := range e.desired {
-		if s.DesiredState == "running" && e.sleepLevel[s.UUID] == 0 {
+		if s.DesiredState == "running" && e.processOfLocked(s.UUID).sleepLevel == 0 {
 			out = append(out, s)
 		}
 	}

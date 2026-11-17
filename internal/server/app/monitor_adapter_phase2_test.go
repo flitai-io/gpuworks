@@ -61,7 +61,7 @@ func buildPhase2Fixture(t *testing.T) monitorFixture {
 // not a platform gap" state ClusterSignals.ProxyNoRecent/TTFTNoRecent/
 // TPOTNoRecent exist for: proxy_requests_total's flush and the
 // quantile-at-ingest fold both only write a sample for a tick that actually
-// saw activity (proxy/accounting.go's flush, observability_quantile.go's
+// saw activity (proxy/accounting.go's flush, obsingest/quantile.go's
 // applyQuantiles "total <= 0" early return), so a deployment quiet for the
 // last five minutes has literally no sample in that window even though it
 // was busy minutes before.

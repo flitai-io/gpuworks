@@ -27,22 +27,24 @@ type benchmarkTimelineMetricsDTO struct {
 }
 
 type benchmarkTimelineRecordDTO struct {
-	Version      int                         `json:"version"`
-	RunID        uint                        `json:"run_id"`
-	PointSeq     int                         `json:"point_seq"`
-	SessionID    string                      `json:"session_id"`
-	Turn         int                         `json:"turn"`
-	PlannedTurns int                         `json:"planned_turns"`
-	Attempt      int                         `json:"attempt"`
-	FinishReason string                      `json:"finish_reason,omitempty"`
-	ErrorText    string                      `json:"error_text,omitempty"`
-	Canceled     bool                        `json:"canceled,omitempty"`
-	ErrorStage   string                      `json:"error_stage,omitempty"`
-	HTTPStatus   int                         `json:"http_status,omitempty"`
-	InputSource  string                      `json:"input_source"`
-	OutputSource string                      `json:"output_source"`
-	OutputBudget int                         `json:"output_budget"`
-	Metrics      benchmarkTimelineMetricsDTO `json:"metrics"`
+	Version      int    `json:"version"`
+	RunID        uint   `json:"run_id"`
+	PointSeq     int    `json:"point_seq"`
+	SessionID    string `json:"session_id"`
+	Turn         int    `json:"turn"`
+	PlannedTurns int    `json:"planned_turns"`
+	Attempt      int    `json:"attempt"`
+	FinishReason string `json:"finish_reason,omitempty"`
+	ErrorText    string `json:"error_text,omitempty"`
+	Canceled     bool   `json:"canceled,omitempty"`
+	ErrorStage   string `json:"error_stage,omitempty"`
+	HTTPStatus   int    `json:"http_status,omitempty"`
+	// PriorityClass is the class the gateway says the request ran at.
+	PriorityClass string                      `json:"priority_class,omitempty"`
+	InputSource   string                      `json:"input_source"`
+	OutputSource  string                      `json:"output_source"`
+	OutputBudget  int                         `json:"output_budget"`
+	Metrics       benchmarkTimelineMetricsDTO `json:"metrics"`
 }
 
 func (a *apiHandlers) getBenchmarkRequestTimeline(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +82,7 @@ func (a *apiHandlers) getBenchmarkRequestTimeline(w http.ResponseWriter, r *http
 		m := row.Metrics
 		records = append(records, benchmarkTimelineRecordDTO{
 			Version: row.Version, RunID: row.RunID, PointSeq: row.PointSeq, SessionID: row.SessionID, Turn: row.Turn, PlannedTurns: row.PlannedTurns, Attempt: row.Attempt,
-			FinishReason: row.FinishReason, ErrorText: loadgen.RedactErrorText(row.ErrorText), Canceled: row.Canceled, ErrorStage: row.ErrorStage, HTTPStatus: row.HTTPStatus,
+			FinishReason: row.FinishReason, ErrorText: loadgen.RedactErrorText(row.ErrorText), Canceled: row.Canceled, ErrorStage: row.ErrorStage, HTTPStatus: row.HTTPStatus, PriorityClass: row.PriorityClass,
 			InputSource: row.InputSource, OutputSource: row.OutputSource, OutputBudget: row.OutputBudget,
 			Metrics: benchmarkTimelineMetricsDTO{StartedAt: m.StartedAt, FirstOutputAt: m.FirstOutputAt, FirstContentAt: m.FirstContentAt, LastOutputAt: m.LastOutputAt, FinishedAt: m.FinishedAt, TTFTMs: m.TTFTMs, TPOTMs: m.TPOTMs, LatencyMs: m.LatencyMs, CompletionMs: m.CompletionMs, InputTokens: m.InputTokens, OutputTokens: m.OutputTokens},
 		})

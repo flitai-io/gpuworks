@@ -262,3 +262,23 @@ test("the revision detail marks an unpinned Hugging Face model that has a path-r
   assert.equal(hasUnpinnedLocalCopy({ source: "local", revision: "", nodes: [copy("registered")] }), false);
   assert.equal(hasUnpinnedLocalCopy({ source: "huggingface", revision: "" }), false);
 });
+
+test("a catalog pick is written only after confirmation and keeps its revision and custom name on retry", async () => {
+  const sent: Array<Record<string, unknown>> = [];
+  api.createModel = (async (body: Record<string, unknown>) => {
+    sent.push(body);
+    if (sent.length === 1) throw new Error("Temporary error");
+    return {id: 1};
+  }) as typeof api.createModel;
+  let done = false;
+  render(<I18nextProvider i18n={i18n}><RegisterModal open manualSeed={{source:"modelscope", id:"org/demo", offline:false, revision:"abc123"}} onClose={() => {}} onDone={() => {done=true;}} /></I18nextProvider>);
+  const name = await screen.findByRole("textbox", {name:models.column.name});
+  fireEvent.change(name, {target:{value:"My model"}});
+  assert.equal(sent.length, 0);
+  fireEvent.click(screen.getByRole("button", {name:models.register.confirm}));
+  await screen.findByText(/Temporary error/);
+  assert.equal((name as HTMLInputElement).value,"My model");
+  fireEvent.click(screen.getByRole("button", {name:models.register.confirm}));
+  await waitFor(() => assert.equal(done,true));
+  assert.deepEqual(sent.map(m => [m.source,m.source_id,m.revision,m.name]), Array(2).fill(["modelscope","org/demo","abc123","My model"]));
+});

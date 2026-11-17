@@ -109,6 +109,13 @@ func InferTasks(d Documents) TaskResult {
 	if hasTag("reranker") || hasTag("text-ranking") {
 		add([]string{"text-ranking"}, moduleTaskPriority, "README.md", "tags")
 	}
+	// A System One decision model scores the candidates of typed questions
+	// in one forward pass. Its backbone is often a vision-language model
+	// whose config reads as image-text-to-text, so the card's own tag has to
+	// outrank the architecture: such a model cannot chat.
+	if hasTag("decision-making") || hasTag("decision-model") {
+		add([]string{"decision"}, moduleTaskPriority, "README.md", "tags")
+	}
 	for _, tag := range card.Tags {
 		if knownTask(tag) {
 			add([]string{tag}, tagTaskPriority, "README.md", "tags")
@@ -208,7 +215,7 @@ func canonicalTask(task string) string {
 
 func knownTask(task string) bool {
 	switch canonicalTask(task) {
-	case "text-ranking", "feature-extraction", "text-generation", "text2text-generation", "image-text-to-text", "text-classification", "text-to-image", "image-to-image", "automatic-speech-recognition", "text-to-speech", "text-to-audio", "text-to-video", "image-to-video", "image-text-to-video":
+	case "text-ranking", "feature-extraction", "decision", "text-generation", "text2text-generation", "image-text-to-text", "text-classification", "text-to-image", "image-to-image", "automatic-speech-recognition", "text-to-speech", "text-to-audio", "text-to-video", "image-to-video", "image-text-to-video":
 		return true
 	}
 	return false

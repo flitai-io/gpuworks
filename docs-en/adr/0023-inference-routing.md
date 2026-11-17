@@ -7,3 +7,5 @@ Multiple running replicas of the same deployment use least-request selection by 
 The request body first enters an in-memory replay body with a global budget, spilling to disk only after the threshold is exceeded. `GetBody` creates an independent reader for each retry. Deployments can choose `least_request`, `prefix_affinity` with deterministic rendezvous hashing, or `failover` to retain the old semantics. The policy is routing configuration rather than an engine launch parameter, so changing it does not restart instances.
 
 This decision does not implement load sharing across servers, precise KV event awareness, sleep draining, or prefill/decode (PD) disaggregation. Periodic refreshes, event triggers, and the slow path for snapshot misses preserve eventual consistency for future HA. Affinity hashing uses FNV, which is stable across processes, rather than hashing with a process-random seed.
+
+<!-- translation-source-sha256: 4c89e0383134a62b3146082ad4464c22e0bfdb0ed368b40ffac805fe8991cf2a -->

@@ -453,13 +453,12 @@ func TestProxyDataLaneUnavailableReturns503WithRetryAfter(t *testing.T) {
 	if ra := rec.Header().Get("Retry-After"); ra == "" {
 		t.Fatal("503 for a detached data lane must carry a Retry-After header")
 	}
-	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("body is not JSON: %v (%s)", err, rec.Body.String())
+	detail := "open proxy tunnel: data lane unavailable: node data-lane-unavailable-node did not reattach within 5s"
+	if want := `{"error":{"message":"upstream error: ` + detail + `","type":"server_error","code":"DATA_LANE_UNAVAILABLE","param":null,"params":{"detail":"` + detail + `"}}}` + "\n"; rec.Body.String() != want {
+		t.Fatalf("body = %s, want %s", rec.Body.String(), want)
 	}
-	errObj, ok := body["error"].(map[string]any)
-	if !ok || errObj["type"] != "gpuworks_proxy" {
-		t.Fatalf("body = %s, want the standard gpuworks_proxy error shape", rec.Body.String())
+	if rec.Header().Get("X-Request-ID") == "" {
+		t.Fatal("the refusal names no request")
 	}
 
 	acct.mu.Lock()

@@ -57,6 +57,7 @@ func (e *ArchiveError) Unwrap() error { return e.Err }
 // PendingUpgrade is the marker an in-service upgrade leaves for the starts
 // that follow it.
 type PendingUpgrade struct {
+	Attempt   string `json:"attempt,omitempty"`
 	From      string `json:"from"`
 	To        string `json:"to"`
 	Backup    string `json:"backup"`
@@ -64,6 +65,13 @@ type PendingUpgrade struct {
 	StartedAt string `json:"started_at"`
 	// Starts counts the starts of the new binary so far.
 	Starts int `json:"starts"`
+}
+
+// ConfirmedRollback recognizes today's explicit result and the exact success
+// record emitted by older startup guards after they restored the snapshot.
+func (e HistoryEntry) ConfirmedRollback() bool {
+	return e.Action == ActionUpgrade && e.Result == "failed" && (e.RolledBack ||
+		e.Error == fmt.Sprintf("%s did not come up after %d starts", e.ReleaseID, maxUpgradeStarts))
 }
 
 // PendingUpgradePath is where the marker lives.
@@ -84,6 +92,10 @@ type InServiceUpgrade struct {
 // given), leaves the marker and swaps the binary. The caller restarts the
 // process afterwards. Nothing is changed when an error is returned.
 func (i *Installer) StageInService(ctx context.Context, from string, archive io.Reader, snapshotDB func(dest string) error, by string) (InServiceUpgrade, error) {
+	return i.StageSelectedInService(ctx, from, archive, snapshotDB, by, "", "")
+}
+
+func (i *Installer) StageSelectedInService(ctx context.Context, from string, archive io.Reader, snapshotDB func(dest string) error, by, expected, attempt string) (InServiceUpgrade, error) {
 	unlock, err := i.lockUpgrade(ctx)
 	if err != nil {
 		return InServiceUpgrade{}, err
@@ -105,6 +117,9 @@ func (i *Installer) StageInService(ctx context.Context, from string, archive io.
 	build, err := i.checkArchive(ctx, archivePath, staged)
 	if err != nil {
 		return InServiceUpgrade{}, err
+	}
+	if expected != "" && build.ReleaseID != expected {
+		return InServiceUpgrade{}, &ArchiveError{Err: fmt.Errorf("selected %s but the archive contains %s", expected, build.ReleaseID)}
 	}
 	if build.ReleaseID == from {
 		return InServiceUpgrade{}, ErrAlreadyAtRelease
@@ -133,7 +148,7 @@ func (i *Installer) StageInService(ctx context.Context, from string, archive io.
 		return InServiceUpgrade{}, fmt.Errorf("create the pre-upgrade backup: %w", err)
 	}
 
-	pending := PendingUpgrade{From: from, To: build.ReleaseID, Backup: backup, By: by, StartedAt: stampNow(at)}
+	pending := PendingUpgrade{Attempt: attempt, From: from, To: build.ReleaseID, Backup: backup, By: by, StartedAt: stampNow(at)}
 	if err := writePending(i.layout, pending); err != nil {
 		return InServiceUpgrade{}, err
 	}
@@ -250,7 +265,7 @@ func guardStart(layout Layout, running, mode string, now time.Time, lookupGroup 
 		cause += "; restoring " + pending.Backup + " failed: " + restoreErr.Error()
 	}
 	_ = AppendHistory(layout.HistoryPath(), HistoryEntry{
-		Action: ActionUpgrade, Result: "failed", ReleaseID: pending.To, PreviousReleaseID: pending.From,
+		Attempt: pending.Attempt, RolledBack: restoreErr == nil, Action: ActionUpgrade, Result: "failed", ReleaseID: pending.To, PreviousReleaseID: pending.From,
 		Backup: pending.Backup, Mode: mode, By: pending.By, At: stampNow(now), Error: cause,
 	}, 0o600)
 	if restoreErr != nil {
@@ -262,19 +277,28 @@ func guardStart(layout Layout, running, mode string, now time.Time, lookupGroup 
 	return StartGuard{Pending: pending, RolledBack: true}, nil
 }
 
+// ErrHistoryNotRecorded is returned, wrapped, by a confirmation that
+// succeeded but could not append its audit line. The upgrade stands: like
+// every other history write, a missing record must not undo working software.
+var ErrHistoryNotRecorded = errors.New("upgrade confirmed, but the install history could not be appended")
+
 // ConfirmStart records that the pending upgrade came up: the marker goes, the
 // install history gains the upgrade, and old snapshots beyond keep are pruned.
+// Only failing to remove the marker fails the confirmation; a history that
+// cannot be written (a log an older install left to root) is reported as
+// ErrHistoryNotRecorded after the upgrade is confirmed.
 func ConfirmStart(layout Layout, pending PendingUpgrade, mode string, now time.Time, keep int) error {
-	if err := AppendHistory(layout.HistoryPath(), HistoryEntry{
-		Action: ActionUpgrade, Result: "ok", ReleaseID: pending.To, PreviousReleaseID: pending.From,
+	historyErr := AppendHistory(layout.HistoryPath(), HistoryEntry{
+		Attempt: pending.Attempt, Action: ActionUpgrade, Result: "ok", ReleaseID: pending.To, PreviousReleaseID: pending.From,
 		Backup: pending.Backup, Mode: mode, By: pending.By, At: stampNow(now),
-	}, 0o600); err != nil {
-		return err
-	}
+	}, 0o600)
 	if err := os.Remove(layout.PendingUpgradePath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	(&Installer{layout: layout}).pruneBackups(keep, pending.Backup)
+	if historyErr != nil {
+		return fmt.Errorf("%w: %w", ErrHistoryNotRecorded, historyErr)
+	}
 	return nil
 }
 

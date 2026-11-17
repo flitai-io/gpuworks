@@ -17,14 +17,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
-// EnginePortInUse prefixes the failure of an engine whose API port another
-// engine answers on; EnginePortRefused that of a launch refused before
-// anything started because another process holds one of its host ports.
-const (
-	EnginePortInUse   = proto.EnginePortInUse
-	EnginePortRefused = proto.EnginePortRefused
-)
-
 // listenTCP is the bind checkEnginePorts tries; tests replace it through
 // checkEnginePortsWith.
 func listenTCP(port int) (io.Closer, error) {
@@ -73,7 +65,8 @@ func checkEnginePortsWith(spec proto.InstanceDesiredState, listen func(int) (io.
 			continue
 		}
 		if errors.Is(err, syscall.EADDRINUSE) {
-			return fmt.Errorf("%s: port %d is already in use on this node; nothing was started", EnginePortRefused, port)
+			return withFailure(proto.RuntimeFailure{Code: proto.ErrorEnginePortRefused, Port: port},
+				fmt.Errorf("%s: port %d is already in use on this node; nothing was started", proto.ErrorEnginePortRefused, port))
 		}
 		// Anything else (a port the agent may not bind as a user, for one)
 		// says nothing about another listener; the engine finds out itself.
@@ -154,5 +147,6 @@ func checkServesOwnModel(ctx context.Context, client *http.Client, spec proto.In
 		}
 		served = append(served, m.ID)
 	}
-	return fmt.Errorf("%s: %w (port %d serves %s, not %s)", EnginePortInUse, errForeignEngine, spec.APIPort, strings.Join(served, ", "), want)
+	return withFailure(proto.RuntimeFailure{Code: proto.ErrorEnginePortInUse, Port: spec.APIPort, Detail: strings.Join(served, ", ")},
+		fmt.Errorf("%s: %w (port %d serves %s, not %s)", proto.ErrorEnginePortInUse, errForeignEngine, spec.APIPort, strings.Join(served, ", "), want))
 }

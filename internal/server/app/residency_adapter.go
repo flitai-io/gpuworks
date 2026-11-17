@@ -5,6 +5,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/automation"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/proxy"
@@ -34,7 +35,9 @@ type residencyAdapter struct {
 	// others give up cards (the controller's); nil when there are none to
 	// read.
 	waits *placewait.Registry
-	now   func() time.Time
+	// orders is the server's sleep and wake order lock (the controller's).
+	orders *lifecycle.Orders
+	now    func() time.Time
 }
 
 // Waiters are the deployments with requests held for their wake whose sleep a
@@ -229,7 +232,7 @@ func (a *residencyAdapter) Activity(id uint) automation.Activity {
 // prefers L1 is refused when the host cannot hold the weights, as an
 // operator's L1 sleep is.
 func (a *residencyAdapter) Yield(id uint, instances []string, abort bool) (int, error) {
-	defer planning.LockLifecycle()()
+	defer a.orders.Lock()()
 	mode := proto.SleepModeWait
 	if abort {
 		mode = proto.SleepModeAbort

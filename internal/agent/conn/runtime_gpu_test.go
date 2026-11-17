@@ -65,9 +65,12 @@ func TestNodeStatusWireCarriesThePluginAndWhyItCannotBeUsed(t *testing.T) {
 type runtimeFallbackHandlers struct {
 	inboundHandlers
 	from, reason string
+	socket       *proto.RuntimeSocketDenial
 }
 
-func (h *runtimeFallbackHandlers) RuntimeFallback() (string, string) { return h.from, h.reason }
+func (h *runtimeFallbackHandlers) RuntimeFallback() (string, string, *proto.RuntimeSocketDenial) {
+	return h.from, h.reason, h.socket
+}
 
 // The runtime a node passed over travels with the reason, and neither key
 // is on the wire when nothing was passed over, so an older server reads
@@ -75,16 +78,22 @@ func (h *runtimeFallbackHandlers) RuntimeFallback() (string, string) { return h.
 func TestNodeStatusWireCarriesTheRuntimePassedOver(t *testing.T) {
 	h := &runtimeFallbackHandlers{}
 	c := New(Credentials{NodeUUID: "node-1"}, nil, h, &gpu.FixedProber{VendorName: "nvidia"}, slog.Default())
+	denied := &proto.RuntimeSocketDenial{Socket: "/var/run/docker.sock", Group: "docker", GID: 999, Account: "gpusvc",
+		SameNameGID: 1002, Supervisor: proto.AgentSupervisorNohup, StateDir: "/home/gpusvc/gpuworks"}
 	for _, tc := range []struct {
 		from, reason         string
+		socket               *proto.RuntimeSocketDenial
 		wantFrom, wantReason string
+		wantSocket           string
 	}{
-		{"", "", "", ""},
-		{"docker", accelerator.RuntimeGPUBlockedPluginMissing, `"docker"`, `"gpu_plugin_missing"`},
-		{"docker", accelerator.RuntimeGPUBlockedRuntimeUnconfigured, `"docker"`, `"gpu_runtime_unconfigured"`},
-		{"docker", accelerator.RuntimeGPUReady, `"docker"`, `"gpu_ready"`},
+		{"", "", nil, "", "", ""},
+		{"docker", accelerator.RuntimeGPUBlockedPluginMissing, nil, `"docker"`, `"gpu_plugin_missing"`, ""},
+		{"docker", accelerator.RuntimeGPUBlockedRuntimeUnconfigured, nil, `"docker"`, `"gpu_runtime_unconfigured"`, ""},
+		{"docker", accelerator.RuntimeGPUReady, nil, `"docker"`, `"gpu_ready"`, ""},
+		{"docker", proto.RuntimeFallbackSocketPermissionDenied, denied, `"docker"`, `"socket_permission_denied"`,
+			`{"socket":"/var/run/docker.sock","group":"docker","gid":999,"account":"gpusvc","same_name_gid":1002,"supervisor":"nohup","state_dir":"/home/gpusvc/gpuworks"}`},
 	} {
-		h.from, h.reason = tc.from, tc.reason
+		h.from, h.reason, h.socket = tc.from, tc.reason, tc.socket
 		ctrl := &nopRWC{}
 		c.ctrl = ctrl
 		c.reportStatus(context.Background())
@@ -103,6 +112,9 @@ func TestNodeStatusWireCarriesTheRuntimePassedOver(t *testing.T) {
 		}
 		if got := string(wire.Sys["runtime_fallback_reason"]); got != tc.wantReason {
 			t.Fatalf("runtime_fallback_reason=%q, want %q in %s", got, tc.wantReason, env.D)
+		}
+		if got := string(wire.Sys["runtime_fallback_socket"]); got != tc.wantSocket {
+			t.Fatalf("runtime_fallback_socket=%q, want %q in %s", got, tc.wantSocket, env.D)
 		}
 	}
 }

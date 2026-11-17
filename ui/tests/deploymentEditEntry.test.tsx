@@ -8,7 +8,7 @@ const { i18n, locale } = await createI18n(["deployments"], "en");
 const { cleanup, render, screen } = await import("@testing-library/react");
 const { default: userEvent } = await import("@testing-library/user-event");
 const { MemoryRouter, Route, Routes, useLocation } = await import("react-router-dom");
-const { default: DeploymentLifecycleActions, ReplicaRetryAlert } = await import("../src/pages/DeploymentLifecycleActions.tsx");
+const { ReplicaRetryAlert } = await import("../src/pages/DeploymentLifecycleActions.tsx");
 type Deployment = import("../src/api.ts").Deployment;
 
 afterEach(cleanup);
@@ -35,32 +35,6 @@ function mount(node: React.ReactNode) {
 }
 const dep = (over: Partial<Deployment> = {}) => ({ id: 7, name: "qwen", desired_state: "active", replicas: 1, ...over }) as Deployment;
 const route = () => screen.getByTestId("route").textContent;
-
-test("Edit opens the deploy page on the deployment, Clone and modify on a copy of it", async () => {
-  let user = mount(<DeploymentLifecycleActions dep={dep()} onChanged={() => {}} />);
-  await user.click(screen.getByRole("button", { name: d.edit }));
-  assert.equal(route(), "/deploy?edit=7");
-  cleanup();
-  user = mount(<DeploymentLifecycleActions dep={dep()} onChanged={() => {}} />);
-  await user.click(screen.getByRole("button", { name: d.cloneModify }));
-  assert.equal(route(), "/deploy?from=7");
-});
-
-test("a stopped deployment is edited too, next to its Start", () => {
-  mount(<DeploymentLifecycleActions dep={dep({ desired_state: "stopped" })} onChanged={() => {}} />);
-  assert.ok(screen.getByRole("button", { name: d.start }));
-  assert.equal((screen.getByRole("button", { name: d.edit }) as HTMLButtonElement).disabled, false);
-});
-
-test("a deployment being deleted cannot be edited, only cloned", async () => {
-  const user = mount(<DeploymentLifecycleActions dep={dep({ desired_state: "deleting" })} onChanged={() => {}} />);
-  const edit = screen.getByRole("button", { name: d.edit }) as HTMLButtonElement;
-  assert.equal(edit.disabled, true);
-  await user.click(edit);
-  assert.equal(screen.queryByTestId("route"), null, "the disabled button goes nowhere");
-  await user.click(screen.getByRole("button", { name: d.cloneModify }));
-  assert.equal(route(), "/deploy?from=7");
-});
 
 test("the give-up banner offers to fix the parameters, and the plain retry stays", async () => {
   const user = mount(

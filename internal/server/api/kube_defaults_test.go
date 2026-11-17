@@ -111,17 +111,31 @@ func TestKubeClusterStalledIsComputedByTheServer(t *testing.T) {
 		Items []struct {
 			Name    string `json:"name"`
 			Stalled bool   `json:"stalled"`
+			State   string `json:"state"`
 		} `json:"items"`
 	}](t, rec)
 	got := map[string]bool{}
+	states := map[string]string{}
 	for _, it := range list.Items {
 		got[it.Name] = it.Stalled
+		states[it.Name] = it.State
 	}
 	want := map[string]bool{"fresh": false, "waiting": true, "almost": false, "enrolled": false, "revoked": false}
 	for name, stalled := range want {
 		if has, ok := got[name]; !ok || has != stalled {
 			t.Errorf("%s: stalled = %v (listed %v), want %v; body %s", name, has, ok, stalled, rec.Body)
 		}
+	}
+	// Where each entry stands is one value the console shows and filters by.
+	wantStates := map[string]string{"fresh": "pending", "waiting": "stalled", "almost": "pending", "enrolled": "active", "revoked": "revoked"}
+	for name, state := range wantStates {
+		if states[name] != state {
+			t.Errorf("%s: state = %q, want %q; body %s", name, states[name], state, rec.Body)
+		}
+	}
+	// A cluster connected on its own is filed under the Kubernetes platform type and connects a cluster.
+	if !strings.Contains(rec.Body.String(), `"stalled":false,"state":"pending","category":"kubernetes","resources":[{"type":"kubernetes"}],`) {
+		t.Errorf("an entry lacks its state, category or resources: %s", rec.Body)
 	}
 	_ = fresh
 }

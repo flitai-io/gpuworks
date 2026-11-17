@@ -50,10 +50,10 @@ func TestEngineDecidesParameterKeysFollowEntrypointAndRelease(t *testing.T) {
 		{name: "serve detecting the model type on v0.5.21", engine: EngineSGLang, entrypoint: []string{"sglang", "serve"}, version: "0.5.21", want: sglangDiffusionUnstated},
 		{name: "unknown executable", engine: EngineSGLang, entrypoint: []string{"custom-server"}, want: []string{"enable_metrics"}},
 		{name: "vLLM release with per-request metrics", engine: EngineVLLM, entrypoint: []string{"vllm", "serve"}, version: "0.30.0"},
-		{name: "vLLM release nobody recorded", engine: EngineVLLM, entrypoint: []string{"vllm", "serve"}, want: []string{"enable_request_metrics"}},
+		{name: "vLLM release nobody recorded", engine: EngineVLLM, entrypoint: []string{"vllm", "serve"}, want: []string{"enable_request_metrics", "max_model_len"}},
 		{name: "vLLM release before per-request metrics", engine: EngineVLLM, version: "0.23.0", want: []string{"enable_request_metrics"}},
 		{name: "vLLM with stats disabled", engine: EngineVLLM, args: []string{"--disable-log-stats"}, version: "0.30.0", want: []string{"enable_request_metrics"}},
-		{name: "vLLM omni", engine: EngineVLLM, entrypoint: []string{"vllm", "serve"}, args: []string{"--omni"}, version: "0.30.0", want: []string{"gpu_memory_utilization"}},
+		{name: "vLLM omni", engine: EngineVLLM, entrypoint: []string{"vllm", "serve"}, args: []string{"--omni"}, version: "0.30.0", want: []string{"gpu_memory_utilization", "max_model_len"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

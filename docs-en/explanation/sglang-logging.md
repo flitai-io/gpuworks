@@ -61,3 +61,5 @@ A few boundaries apply:
 - Returning to the form from edit mode discards manual overrides and regenerates the command from the form. Automatic injection rules then apply again.
 
 If you only want to use your own logging configuration without taking over the entire script, set `SGLANG_LOGGING_CONFIG_PATH` in the environment variables and ensure the file exists. The platform skips injection when it sees this variable.
+
+<!-- translation-source-sha256: b3e962a8eb98a5f9352bd55244c5bc5755ab2b9528007ae0ea5ea39c9bd992f8 -->

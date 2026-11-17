@@ -51,8 +51,12 @@ type MonitorRequest struct {
 	APIKeyID     uint   `json:"api_key_id"`
 	// APIKeyName is the key's name; empty for none or a deleted key.
 	APIKeyName string `json:"api_key_name"`
-	UserID     uint   `json:"user_id"`
-	// Source is "api", "playground" or "batch".
+	// PriorityClass is the priority class the gateway ran the request at;
+	// empty for a request recorded before classes, or still in flight.
+	PriorityClass string `json:"priority_class"`
+	UserID        uint   `json:"user_id"`
+	// Source is "api", "playground", "batch" or "evaluation" (a
+	// server-origin evaluation's request).
 	Source    string `json:"source"`
 	Stream    bool   `json:"stream"`
 	BodyBytes int64  `json:"body_bytes"`
@@ -91,6 +95,20 @@ type MonitorRequest struct {
 	EnginePrefillMS *int32 `json:"engine_prefill_ms"`
 	EngineDecodeMS  *int32 `json:"engine_decode_ms"`
 
+	// TTFTMS is the time from receipt to the first generated output,
+	// reasoning included; null for a reply that does not stream, one still
+	// waiting for it, and a stream that ended without one.
+	TTFTMS *int32 `json:"ttft_ms"`
+	// TPOTMS is the decode time per output token, and PrefillTokS and
+	// DecodeTokS the prefill and decode speeds (uxrecord.SpeedsOf): decode is
+	// the engine's decode time over the output when the engine reports it,
+	// else the stream from the first token to the last over the tokens after
+	// the first; null when a figure they need is missing, and for
+	// a request still in flight.
+	TPOTMS      *float64 `json:"tpot_ms"`
+	PrefillTokS *float64 `json:"prefill_tok_s"`
+	DecodeTokS  *float64 `json:"decode_tok_s"`
+
 	// Weight is how many requests this one stands for in a sampled history.
 	Weight int32 `json:"weight"`
 
@@ -124,10 +142,14 @@ type MonitorRequestPD struct {
 }
 
 // MonitorRequestSegment is one phase of a request: gateway, queue, prefill,
-// waiting, thinking, answering or tail, in milliseconds.
+// waiting, thinking, answering or tail, in milliseconds. Stage is the part of
+// the request's time it belongs to: first_token (the segments up to the
+// first token, which add up to ttft_ms), decode or tail; empty for a reply
+// that does not stream and a stream that ended without a token.
 type MonitorRequestSegment struct {
-	Kind string  `json:"kind"`
-	MS   float64 `json:"ms"`
+	Kind  string  `json:"kind"`
+	MS    float64 `json:"ms"`
+	Stage string  `json:"stage"`
 }
 
 // MonitorDistributions is GET /monitor/distributions: the shape of the
@@ -181,10 +203,14 @@ type MonitorRequestsQuery struct {
 	APIKeyID     uint
 	// InstanceUUID narrows to one replica.
 	InstanceUUID string
+	// PriorityClass narrows history to the requests run at one class.
+	PriorityClass string
 	// Results, MinEndMS and MaxEndMS filter history by result and by
-	// end-to-end time.
-	Results            []string
-	MinEndMS, MaxEndMS int32
+	// end-to-end time; MinTTFTMS and MaxTTFTMS by the time to the first
+	// token, which keeps only streamed replies that had one.
+	Results              []string
+	MinEndMS, MaxEndMS   int32
+	MinTTFTMS, MaxTTFTMS int32
 }
 
 // MonitorRequestLookup is GET /monitor/requests/lookup: the finished

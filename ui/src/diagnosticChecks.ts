@@ -3,6 +3,7 @@ import type { ProductMessage } from "./apiError";
 /** A bounded explanation of the checks actually made for one request. */
 export interface DiagnosticCheck {
   id: string;
+  /** One of the five check statuses (ADR 0067); see checkStatus.tsx. */
   status: string;
   message: ProductMessage;
   blocked_by?: string[];

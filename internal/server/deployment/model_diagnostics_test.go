@@ -61,7 +61,7 @@ func TestModelAdmissionReportsIndependentStorageFailures(t *testing.T) {
 			t.Fatalf("duplicate check ID %q", check.ID)
 		}
 		ids[check.ID] = true
-		if check.Message.Code == messages.ErrorStorageUnavailableOnNode && check.Message.Params["reason"] == "not_mounted" && check.Status == "failed" {
+		if check.Message.Code == messages.ErrorStorageUnavailableOnNode && check.Message.Params["reason"] == "not_mounted" && check.Status == "fail" {
 			nodeID, ok := check.Message.Params["node_id"].(float64)
 			if !ok {
 				t.Fatalf("missing node identity in %+v", check)
@@ -74,7 +74,10 @@ func TestModelAdmissionReportsIndependentStorageFailures(t *testing.T) {
 	}
 	blocked := 0
 	for _, check := range report.Checks {
-		if check.Status != "blocked" {
+		// A skipped check not run because of another one names that check;
+		// a skipped check that was merely not observed (no copy recorded)
+		// has no prerequisite.
+		if check.Status != "skip" || check.Message.Params["reason"] != "storage_access_required" {
 			continue
 		}
 		blocked++
@@ -160,7 +163,7 @@ func TestCachedModelDiagnosticsDoNotRequireSharedMount(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, check := range report.Checks {
-		if check.Status != "passed" {
+		if check.Status != "pass" {
 			t.Fatalf("a usable local cache incorrectly depends on its shared mount: %+v", check)
 		}
 	}
@@ -183,7 +186,7 @@ func TestModelMetadataFailureIsSharedAndScoped(t *testing.T) {
 	for _, check := range report.Checks {
 		if check.Message.Params["observer"] == "management_node" {
 			metadata++
-			if check.Status != "failed" || check.Message.Params["reason"] != "source_timeout" {
+			if check.Status != "fail" || check.Message.Params["reason"] != "source_timeout" {
 				t.Fatalf("unexpected metadata check: %+v", check)
 			}
 		}
@@ -193,7 +196,7 @@ func TestModelMetadataFailureIsSharedAndScoped(t *testing.T) {
 	}
 	blocked := 0
 	for _, check := range report.Checks {
-		if check.Status == "blocked" {
+		if check.Status == "skip" && len(check.BlockedBy) == 1 {
 			blocked++
 		}
 	}
@@ -224,7 +227,7 @@ func TestModelFactsFailureIsNotAnEmptyCandidateList(t *testing.T) {
 		t.Fatal(err)
 	}
 	if response.Code != messages.ErrorModelSourceUnavailable || response.Diagnostics == nil ||
-		response.Diagnostics.Checks[0].Status != "unknown" || response.Diagnostics.Checks[0].Message.Params["reason"] != "facts_unavailable" {
+		response.Diagnostics.Checks[0].Status != "skip" || response.Diagnostics.Checks[0].Message.Params["reason"] != "facts_unavailable" {
 		t.Fatalf("unexpected facts failure response: %s", out.Body.String())
 	}
 	if strings.Contains(out.Body.String(), "sql:") || strings.Contains(out.Body.String(), "database is closed") {
@@ -292,13 +295,13 @@ func TestModelStorageDiagnosticsKeepPendingAndUnknownStates(t *testing.T) {
 		state  string
 		status string
 	}{
-		{proto.StorageStateReady, "passed"},
-		{proto.StorageStateMounting, "pending"},
-		{proto.StorageStateFailed, "failed"},
-		{proto.StorageStateUnresponsive, "failed"},
-		{proto.StorageStateUnsupported, "failed"},
-		{"future-state", "unknown"},
-		{"", "unknown"},
+		{proto.StorageStateReady, "pass"},
+		{proto.StorageStateMounting, "warn"},
+		{proto.StorageStateFailed, "fail"},
+		{proto.StorageStateUnresponsive, "fail"},
+		{proto.StorageStateUnsupported, "fail"},
+		{"future-state", "skip"},
+		{"", "skip"},
 	} {
 		name := test.state
 		if name == "" {
@@ -344,7 +347,7 @@ func TestDisabledStorageStillReportsReadableExistingModel(t *testing.T) {
 		t.Fatalf("read-only storage must still serve its existing model: %v", err)
 	}
 	for _, check := range report.Checks {
-		if check.Status != "passed" {
+		if check.Status != "pass" {
 			t.Fatalf("read-only was confused with inaccessible storage: %+v", check)
 		}
 	}
@@ -378,7 +381,7 @@ func TestPeerNetworkPolicyReasonSurvivesAdmissionResponse(t *testing.T) {
 			continue
 		}
 		policyID = check.ID
-		if check.Status != "failed" || check.Message.Params["source"] != peer.DisplayName()+" ("+peer.UUID+")" || check.Message.Params["source_node"] != peer.UUID || check.Message.Params["node_uuid"] != target.UUID {
+		if check.Status != "fail" || check.Message.Params["source"] != peer.DisplayName()+" ("+peer.UUID+")" || check.Message.Params["source_node"] != peer.UUID || check.Message.Params["node_uuid"] != target.UUID {
 			t.Fatalf("peer policy is not actionable: %+v", check)
 		}
 	}
@@ -387,7 +390,7 @@ func TestPeerNetworkPolicyReasonSurvivesAdmissionResponse(t *testing.T) {
 	}
 	blocked := false
 	for _, check := range response.Diagnostics.Checks {
-		if check.Status == "blocked" && len(check.BlockedBy) == 1 && check.BlockedBy[0] == policyID {
+		if check.Status == "skip" && len(check.BlockedBy) == 1 && check.BlockedBy[0] == policyID {
 			blocked = true
 		}
 	}
@@ -415,7 +418,7 @@ func TestPeerNetworkPolicyDoesNotBlockPublicAlternative(t *testing.T) {
 	for _, check := range report.Checks {
 		if check.Message.Code == messages.ErrorNoStoragePath {
 			found = true
-			if check.Status != "not_applicable" {
+			if check.Status != "na" {
 				t.Fatalf("unselected peer path became an operation failure: %+v", check)
 			}
 		}

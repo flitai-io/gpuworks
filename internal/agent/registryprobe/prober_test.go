@@ -2,6 +2,7 @@ package registryprobe
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -345,7 +346,9 @@ func TestCooldownSharedAcrossDockerHubSpellings(t *testing.T) {
 
 func TestPlainHTTPRegistryAnswersCountAsReachable(t *testing.T) {
 	_, p := newFakeNet(map[string]behavior{
-		"plain.example": {err: errors.New(`Get "https://plain.example/v2/": http: server gave HTTP response to HTTPS client`)},
+		// What crypto/tls returns when the server answers the handshake with
+		// "HTTP/1.1 400 ..."; net/http.Client turns it into ErrSchemeMismatch.
+		"plain.example": {err: tls.RecordHeaderError{Msg: "first record does not look like a TLS handshake", RecordHeader: [5]byte{'H', 'T', 'T', 'P', '/'}}},
 		"down.example":  {err: errors.New("refused")},
 	})
 	out, _ := p.Rank(context.Background(), ranked("down.example/x:1", "plain.example/x:1"), Route{})

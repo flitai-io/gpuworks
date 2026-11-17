@@ -20,6 +20,10 @@ export interface PlaygroundModel {
   template_spec_name?: string;
   external?: boolean;
   public_data_plane: boolean;
+  /** Requests take the priority class the page names; false for an external model. */
+  request_priority?: boolean;
+  /** The engine orders requests by their class; without it the class is only recorded. */
+  priority_scheduling?: boolean;
   /**
    * The extra-parameter buttons for this deployment. Which chat-template field
    * stops thinking depends on the model family and the engine, so the server
@@ -76,6 +80,9 @@ export interface ParameterState {
   // Absent in sessions saved before stream options were switchable; every
   // option then takes its default.
   streamOptions?: Record<string, boolean>;
+  // The request priority class to ask for; absent or empty asks for none,
+  // and the request runs at the default class.
+  priorityClass?: string;
 }
 
 export interface Attachment {
@@ -116,6 +123,8 @@ export interface ChatMessage {
   streaming?: boolean;
   // The model that answered (assistant messages).
   model?: string;
+  // The request priority class the gateway says the reply ran at.
+  priorityClass?: string;
   // The page instance generating a streaming reply; a reply left streaming by
   // a page that is gone was interrupted.
   owner?: string;

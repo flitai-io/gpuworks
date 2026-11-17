@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -53,6 +54,8 @@ func confirmConsoleUpgrade(ctx context.Context, log *slog.Logger, layout selfins
 	switch {
 	case err == nil:
 		log.Info("console upgrade confirmed", "from", pending.From, "to", pending.To)
+	case errors.Is(err, selfinstall.ErrHistoryNotRecorded):
+		log.Warn("console upgrade confirmed without an install history entry", "from", pending.From, "to", pending.To, "error", err)
 	case ctx.Err() != nil:
 	default:
 		log.Error("console upgrade did not become healthy; exiting so the next start rolls back", "to", pending.To, "error", err)

@@ -118,7 +118,7 @@ export const themeConfig: ThemeConfig = {
       bodyPadding: 16,
       bodyPaddingSM: 12,
     },
-    Drawer: { borderRadiusLG: radius.lg },
+    Drawer: { borderRadiusLG: 0 },
     Form: {
       itemMarginBottom: 16,
       labelColor: colors.text,

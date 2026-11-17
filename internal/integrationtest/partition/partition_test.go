@@ -14,6 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/agent/runtime"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/partitioncap"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/testenv"
@@ -456,7 +457,7 @@ func TestOldAgentWithoutPartitionProbesFallsBackToUpgradeReason(t *testing.T) {
 		return true
 	})
 	capabilities := partitioncap.ForGPU(updated, &updated.GPUs[0])
-	if len(capabilities) != 1 || capabilities[0].Status != partitioncap.StatusUnavailable || !strings.Contains(capabilities[0].Reason, "upgrade the agent") {
+	if len(capabilities) != 1 || capabilities[0].Status != partitioncap.StatusUnavailable || capabilities[0].ReasonCode != messages.ErrorPartitionAgentUpgradeRequired {
 		t.Fatalf("old-agent capabilities = %+v", capabilities)
 	}
 }

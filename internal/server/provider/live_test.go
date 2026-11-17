@@ -92,9 +92,9 @@ func TestAliyunLive(t *testing.T) {
 		t.Fatalf("precheck through Cloud Assistant: %v", err)
 	}
 	for _, check := range checks {
-		t.Logf("  precheck %s = %s: %s", check.Name, check.Status, check.Detail)
-		if check.Name == "Cloud Assistant" && check.Status != "ok" {
-			t.Fatalf("Cloud Assistant check failed: %s", check.Detail)
+		t.Logf("  precheck %s = %s %s: %s | %s", check.ID, check.Status, check.Code, check.Message, check.Evidence)
+		if check.ID == "cloud_assistant" && check.Status != "pass" {
+			t.Fatalf("Cloud Assistant check failed: %+v", check)
 		}
 	}
 }

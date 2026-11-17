@@ -2,15 +2,20 @@ package deploy
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 )
 
-// canUnsetTemplateFlag recognizes only the disk-tier transfer object emitted
-// by this vLLM adapter. --kv-transfer-config also carries PD and third-party
+// canUnsetTemplateFlag recognizes only the transfer objects this vLLM adapter
+// emits without PD: the disk tier, and a KV offload backend's own object
+// (RecognizeKVBackend). --kv-transfer-config also carries PD and third-party
 // connectors; those stay opaque and produce an explicit unset conflict.
-func (vLLMEngine) CanUnsetTemplateFlag(flag, raw string) bool {
+func (e vLLMEngine) CanUnsetTemplateFlag(flag, raw string) bool {
 	if flag != "--kv-transfer-config" {
 		return false
+	}
+	if _, ok := e.RecognizeKVBackend(flag, raw); ok {
+		return true
 	}
 	var config map[string]any
 	if err := json.Unmarshal([]byte(unquoteArgument(raw)), &config); err != nil {
@@ -51,4 +56,46 @@ func onlyVLLMKVKeys(values map[string]any, allowed ...string) bool {
 		}
 	}
 	return true
+}
+
+// RecognizeKVBackend reads a --kv-transfer-config value back into the
+// selectable backend it configures: through the backend's own reader, which
+// also answers its dictionary values, or, for a backend without one, when
+// the object is exactly what it renders selected with nothing else stated.
+// Only the non-PD object is recognized: a MultiConnector wrapping a PD
+// connector stays opaque, and ExportLaunchArgs builds without PD, so a
+// template only ever carries the non-PD shape.
+func (vLLMEngine) RecognizeKVBackend(flag, raw string) (KVBackendRecognition, bool) {
+	if flag != "--kv-transfer-config" {
+		return KVBackendRecognition{}, false
+	}
+	var stated any
+	if err := json.Unmarshal([]byte(unquoteArgument(raw)), &stated); err != nil {
+		return KVBackendRecognition{}, false
+	}
+	object, isObject := stated.(map[string]any)
+	for _, row := range selectableKVBackends(EngineVLLM) {
+		backend, ok := kvBackends.vllmBackend(row.ID)
+		if !row.External || !ok {
+			continue
+		}
+		if backend.recognize != nil {
+			if !isObject {
+				continue
+			}
+			if values, ok := backend.recognize(object); ok {
+				return KVBackendRecognition{ID: row.ID, Values: values}, true
+			}
+			continue
+		}
+		rendered, ok := vllmKVTransferConfig(Params{Quick: LaunchConfig{KVOffloadBackend: row.ID}})
+		if !ok {
+			continue
+		}
+		var own any
+		if json.Unmarshal([]byte(rendered), &own) == nil && reflect.DeepEqual(stated, own) {
+			return KVBackendRecognition{ID: row.ID}, true
+		}
+	}
+	return KVBackendRecognition{}, false
 }

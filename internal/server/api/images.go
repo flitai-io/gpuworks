@@ -193,7 +193,7 @@ func writeImageDeleteError(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, err)
 	case errors.Is(err, store.ErrReferenced):
 		writeProductError(w, http.StatusConflict, ErrorImageInUse, "The image is still referenced by a deployment, an unfinished instance, or a model. Delete those references first.", nil)
-	case strings.Contains(err.Error(), "official"):
+	case errors.Is(err, store.ErrCatalogManaged):
 		writeProductError(w, http.StatusBadRequest, ErrorOfficialImageDeleteForbidden, "System images are managed by the catalog and can only be deprecated, not deleted directly.", nil)
 	default:
 		writeErr(w, http.StatusInternalServerError, err)
@@ -244,7 +244,7 @@ func (a *apiHandlers) imageDTOs(images []store.Image, withNodes bool) []dto.Imag
 	var nodes []store.Node
 	totalNodes, _ := a.d.Store.CountNodes()
 	if withNodes {
-		nodes, _ = a.d.Store.ListNodes()
+		nodes, _ = a.d.Store.NodeIdentities()
 	}
 	seriesByID := map[uint]*store.ImageSeries{}
 	for i := range images {

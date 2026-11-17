@@ -116,36 +116,6 @@ export function requestPhases(r: MonitorRequest): Phases {
   return { segments, totalMS, firstTokenMS: firstToken ?? (r.phase === "done" ? totalMS : null) };
 }
 
-// Speeds the hover card quotes, in tokens per second; null when a figure it
-// needs is missing.
-export interface Speeds {
-  prefillTokS: number | null;
-  decodeTokS: number | null;
-  uncached: number | null;
-}
-
-export function requestSpeeds(r: MonitorRequest): Speeds {
-  const uncached = r.prompt_tokens != null ? Math.max(0, r.prompt_tokens - (r.cached_tokens ?? 0)) : null;
-  // A PD handoff's prompt is computed by the prefill instance; the decode
-  // instance only recomputes the last token (uxrecord.UncachedComputeMS).
-  const computeMS = r.pd && !r.pd.fallback ? r.pd.prefill_compute_ms : r.engine_prefill_ms;
-  const prefillTokS = uncached != null && known(computeMS) && computeMS > 0 ? (uncached * 1000) / computeMS : null;
-  let decodeTokS: number | null = null;
-  if (r.completion_tokens != null && r.completion_tokens > 1) {
-    if (known(r.engine_decode_ms) && r.engine_decode_ms > 0) {
-      decodeTokS = (r.completion_tokens * 1000) / r.engine_decode_ms;
-    } else {
-      const first = [r.first_think_ms, r.first_answer_ms].filter(known);
-      if (first.length > 0 && known(r.last_chunk_ms)) {
-        const span = r.last_chunk_ms - Math.min(...first);
-        // The first token arrived at first, so the rest took the span.
-        if (span > 0) decodeTokS = ((r.completion_tokens - 1) * 1000) / span;
-      }
-    }
-  }
-  return { prefillTokS, decodeTokS, uncached };
-}
-
 // liveEventRate is a live stream's events per second since its first token:
 // the speed the gateway can see before the engine reports tokens.
 export function liveEventRate(r: MonitorRequest): number | null {

@@ -1,4 +1,6 @@
 import type { PeerTransferSnapshot } from "./peerTransferTypes";
+import type { CheckStatus } from "./checkStatus";
+export type { CheckStatus } from "./checkStatus";
 export type * from "./peerTransferTypes";
 import type { ServerBuildInfo } from "./serverBuildInfo";
 import type { BenchmarkPointEvidence } from "./benchmarkEvidenceTypes";
@@ -86,13 +88,26 @@ export interface GPU {
   health_guide?: GPUHealthGuide;
 }
 
+/** The facts a capability's reason_code names; probe_detail is the agent's own probe output. */
+export interface PartitionReasonParams {
+  runtime?: string;
+  supported_runtimes?: string[];
+  missing_assets?: string[];
+  gpu_index?: number;
+  probe_detail?: string;
+}
+
 export interface PartitionCapability {
   backend: string;
   display_name: string;
   vendor: string;
   maturity: "release" | "experimental" | string;
   status: "ready" | "unavailable";
+  /** English fallback of reason_code; render reason_code instead. */
   reason?: string;
+  /** Why an unavailable capability is not ready (PARTITION_*). */
+  reason_code?: string;
+  reason_params?: PartitionReasonParams;
   compatibility_summary?: string;
   compatibility_notes?: string[];
   probe_status?: "passed" | "failed" | "skipped" | string;
@@ -152,6 +167,8 @@ export interface NodeReplica {
   drain_reason?: ScheduleMessage;
   drain_reason_at?: string;
   drain_message?: string;
+  /** The failed attempt's structured reason; absent for an older attempt. */
+  drain_failure?: ProductMessage;
 }
 
 export interface NodeReplicas {
@@ -167,6 +184,50 @@ export interface AcceleratorPresence {
   model?: string;
 }
 
+/** How strictly a node's NVIDIA instance pods are kept to their own card (Node.gpu_isolation). */
+export interface NodeGPUIsolation {
+  /** "soft". */
+  level: string;
+  /** Why: cdi_names_missing. */
+  reason: string;
+  /** gpu_operator or host when the agent could tell whose toolkit it is. */
+  toolkit?: string;
+  /** How many NVIDIA cards no CDI spec names. */
+  cards?: number;
+  /** Ways back to strict isolation; run each fix's commands in order, as written. */
+  fixes: Array<{ code: string; commands: string[] }>;
+}
+
+/** A node whose kernel hangs UCX, and so NIXL, the PD KV transport (Node.ucx_netlink_hang). */
+export interface NodeUCXNetlinkHang {
+  /** The node's kernel release. */
+  kernel?: string;
+  /** Ways to stop it (disable_ipv6_now, disable_ipv6_persist); run each fix's commands in order, as written. */
+  fixes: Array<{ code: string; commands: string[] }>;
+}
+
+/** A container daemon socket the node agent's account may not open (Node.runtime_fallback_socket). */
+export interface RuntimeSocketDenial {
+  /**
+   * The server's reading of the facts, which words the notice:
+   * not_in_group | restart_pending | group_held | root_group | unknown.
+   */
+  cause: string;
+  socket: string;
+  /** The group that owns the socket; absent when its gid has no name. */
+  group?: string;
+  /** Absent when the agent could not read the socket. */
+  gid?: number;
+  /** The account the agent runs as; absent when it could not tell. */
+  account?: string;
+  /** Another group of the same name the account is in (a directory service's). */
+  same_name_gid?: number;
+  /** systemd | nohup, absent when the agent cannot tell what restarts it. */
+  supervisor?: string;
+  /** Adds the account to the group and restarts the agent where the supervisor is known. */
+  command?: string;
+}
+
 export interface Node {
   uuid: string;
   // scheduling is whether the node takes new replicas: cordoned takes none,
@@ -178,6 +239,13 @@ export interface Node {
   // cordon_reason is why the platform holds the node now; absent unless
   // scheduling_by is platform.
   cordon_reason?: "runtime_gpu_blocked" | "card_needs_host_reboot" | "kube_unschedulable";
+  // placement_policy is the operator's per-node placement knobs, keyed as
+  // the dictionary (GET /scheduling/node-placement-policies) keys them; the
+  // UI renders them from the dictionary rather than naming any here.
+  placement_policy?: Record<string, NodePlacementPolicyValue>;
+  // placement_policy_availability says, per knob, whether it takes effect on
+  // this node; reason is a product code when it does not.
+  placement_policy_availability?: NodePlacementPolicyAvailability[];
   name?: string;
   token?: string;
   /** Installs this node's agent; returned with the token, and the way back
@@ -207,14 +275,29 @@ export interface Node {
    */
   runtime_gpu_plugin?: string;
   /**
-   * The runtime the agent passed over for runveil because it cannot give a
-   * container this node's accelerators ("docker" | "nerdctl"), why
-   * (gpu_plugin_missing | gpu_runtime_unconfigured | gpu_ready), and the
-   * plugin that runtime needs. Absent when nothing was passed over.
+   * The runtime the agent passed over for runveil ("docker" | "nerdctl"),
+   * why (gpu_plugin_missing | gpu_runtime_unconfigured | daemon_not_ready |
+   * socket_permission_denied | gpu_ready), and the plugin that runtime
+   * needs. Absent when nothing was passed over.
    */
   runtime_fallback_from?: string;
   runtime_fallback_reason?: string;
   runtime_fallback_plugin?: string;
+  /**
+   * With socket_permission_denied: the daemon socket the agent's account
+   * may not open, as the agent found it, and the server's command that adds
+   * the account to the group and restarts the agent.
+   */
+  runtime_fallback_socket?: RuntimeSocketDenial;
+  /**
+   * Set while a Kubernetes node's NVIDIA instance pods are kept to their own
+   * card by CUDA_VISIBLE_DEVICES alone (soft isolation), with the fixes the
+   * server offers and their literal commands. Absent when strict.
+   */
+  gpu_isolation?: NodeGPUIsolation;
+  // ucx_netlink_hang is set while the node's kernel hangs UCX (NIXL): PD
+  // disaggregation over NIXL cannot start on it.
+  ucx_netlink_hang?: NodeUCXNetlinkHang;
   /**
    * When the current streak of failed vendor-tool probes started; kept
    * across consecutive failures and absent once a probe succeeds.
@@ -250,6 +333,10 @@ export interface Node {
   // from the written ones because they cannot be edited. A key appears once
   // per value the node carries for it.
   system_labels?: SystemLabel[];
+  /** The external platform the node joined through; absent for a node added by hand. */
+  source?: NodeSource;
+  /** Where the node came from could not be read: no source without the node having been added by hand. */
+  source_unknown?: boolean;
   // The address the node's agent reaches the server from: its address on the
   // management network.
   management_address?: string;
@@ -281,6 +368,8 @@ export interface Node {
   recovery_attempts?: number;
   last_probe_at?: string;
   last_recovery_error?: string;
+  /** Names last_recovery_error (SSH_*, AGENT_INSTALL_*, RECOVERY_*); absent on errors recorded before codes. */
+  last_recovery_code?: string;
   has_ssh_credential: boolean;
   created_at: string;
   gpus: GPU[];
@@ -337,7 +426,11 @@ export interface RecoveryOutcome {
   action: string;
   probe: SSHProbeResult;
   recovered: boolean;
+  /** Why the round did nothing (RECOVERY_SKIPPED_*); skipped_reason is its English text. */
+  skipped_code?: string;
   skipped_reason?: string;
+  /** Names error, the same code recorded on the node. */
+  error_code?: string;
   error?: string;
 }
 
@@ -357,10 +450,17 @@ export interface SSHPrecheckRequest {
   host_address?: string;
 }
 
+/** One onboarding check (ADR 0067): which check (id), how it came out (one
+ * of the five check statuses), the outcome as a code with params (rendered
+ * from apiError.<code>, message being the English fallback), and what a
+ * command or provider answered (evidence). */
 export interface CheckResult {
-  name: string;
-  status: "ok" | "warn" | "error";
-  detail?: string;
+  id: string;
+  status: CheckStatus;
+  code?: string;
+  params?: Record<string, unknown>;
+  message?: string;
+  evidence?: string;
 }
 
 export interface SSHPrecheckReport {
@@ -415,17 +515,18 @@ export interface GPUHealthField {
 }
 
 // Card health checks: GET /nodes/{uuid}/health-checks lays a node's card
-// checks out as a table, the server deciding the columns, each cell's state
-// and staleness, the worst state per card and whether a recheck is offered.
-export type CardCheckState = "pass" | "warn" | "fail" | "skip" | "pending" | "na";
+// checks out as a table, the server deciding the columns, each cell's status,
+// code and staleness, the worst status per card and whether a recheck is
+// offered.
 export interface CardHealthColumn {
   id: string;
   period_seconds: number;
 }
 export interface CardHealthCell {
   check: string;
-  state: CardCheckState;
-  reason?: string;
+  status: CheckStatus;
+  /** What a warning or failure found, or why a skipped check did not run. */
+  code?: string;
   checked_at?: string;
   duration_ms?: number;
   stale: boolean;
@@ -436,7 +537,7 @@ export interface CardHealthCard {
   pcie_bdf?: string;
   name?: string;
   index: number;
-  worst: "pass" | "warn" | "fail";
+  worst: CheckStatus;
   can_recheck: boolean;
   cells: CardHealthCell[];
 }
@@ -459,8 +560,8 @@ export interface CardHealthRecord {
   pcie_bdf?: string;
   removed: boolean;
   check: string;
-  level: "warn" | "fail";
-  reason?: string;
+  status: "warn" | "fail";
+  code?: string;
   started_at: string;
   ended_at?: string;
   last_seen_at: string;
@@ -479,8 +580,8 @@ export interface CardHealthRecords {
   retention_days: number;
 }
 export interface CardCheckRun {
-  state: CardCheckState;
-  reason?: string;
+  status: CheckStatus;
+  code?: string;
   at: string;
   duration_ms?: number;
   probe?: string;
@@ -539,9 +640,11 @@ export interface DoctorTarget {
   processes?: { pid: number; name: string }[];
 }
 
+/** A doctor check that failed, warned or did not run (skip, with why in code). */
 export interface DoctorFinding {
+  id?: string;
+  status: "fail" | "warn" | "skip";
   code: string;
-  level: "warning" | "error";
   targets?: DoctorTarget[];
   disk?: DoctorDisk;
   probe?: string;
@@ -549,8 +652,22 @@ export interface DoctorFinding {
   recheck?: string;
 }
 
-/** The node.doctor result. Agents that predate the structured form send only `report`. */
+/** A check in the Server's unified node diagnosis. */
+export interface NodeDoctorCheck {
+  stage: string;
+  status: CheckStatus;
+  code: string;
+  vantage: string;
+  target?: string;
+  source?: string;
+  observed_at?: string;
+  finding?: DoctorFinding;
+}
+
 export interface NodeDoctorReport {
+  checked_at?: string;
+  summary?: CheckStatus;
+  checks?: NodeDoctorCheck[];
   report: string;
   host?: {
     hostname: string;
@@ -694,7 +811,21 @@ export interface EngineProfile {
   // form and the scale dialog read modes, policy options, defaults and
   // limits from here (pages/deploy/deployPd.ts) instead of restating them.
   pd_modes?: PdModeProfile[];
+  // The KV offload backends a deployment can select besides the engine's own
+  // tiers (ADR 0069); absent when there are none. The deploy form renders one
+  // card per entry from these fields alone and holds no backend of its own.
+  kv_backends?: KVBackendProfile[];
   multi_node_supported?: boolean;
+}
+
+// KVBackendProfile is one selectable KV offload backend: its id (the value of
+// the kv_offload_backend parameter), its product name, the native parameters
+// it replaces while selected, and the PD roles that keep it.
+export interface KVBackendProfile {
+  id: string;
+  label: string;
+  replaces: string[];
+  pd_roles: string[];
 }
 
 // WakeRefusal is one group of sleepers a wake could not put back: the cards
@@ -1064,6 +1195,11 @@ export interface KubeCluster {
   remove_commands?: string[];
   /** No node joined for longer than the dictionary's stalled_after_seconds: worth troubleshooting. */
   stalled: boolean;
+  /** Where the entry stands, the one value the console shows and filters by. */
+  state: KubeClusterState;
+  /** The platform type the entry is listed under when connected on its own, and what it connects. */
+  category: string;
+  resources: KindResource[];
   /** The cloud node pools a cloud entry holds, ascending; empty for an entry made by hand. */
   pool_ids: string[];
   /** Other entries that use this namespace and may be of the same cluster (server-computed). */
@@ -1180,6 +1316,37 @@ export interface KubeClusterUpdate {
   idle_return_seconds?: number;
   priority?: number;
   allow_preemption?: boolean;
+  /** Accepts that nodes a narrower node_selector leaves out still run instances (see KubeSelectionDrops); not a setting of the entry. */
+  confirm_drop_instances?: boolean;
+}
+
+/** A node a narrower node selection would leave out while it still runs instances (dto.KubeSelectionDrop). */
+export interface KubeSelectionDrop {
+  node_uuid: string;
+  node_name: string;
+  /** The node's name in the Kubernetes cluster. */
+  kube_node: string;
+  /** The deployments whose instances run there; empty when none is on record. */
+  deployments: string[];
+}
+
+/** The params of the 409 KUBE_SELECTION_DROPS_INSTANCES an edit or a pools change is refused with until confirmed. */
+export interface KubeSelectionDrops {
+  nodes: KubeSelectionDrop[];
+  /** False when no agent of the cluster could be asked: the nodes only may be affected. */
+  verified: boolean;
+}
+
+/** An instance a confirmed node selection change asked to stop because its node leaves the selection (dto.KubeStoppedInstance). */
+export interface KubeStoppedInstance {
+  instance_uuid: string;
+  deployment: string;
+  node_uuid: string;
+}
+
+/** The answer to a node pools change (dto.KubeClusterPools): the entry, and the instances asked to stop. */
+export interface KubeClusterPools extends KubeCluster {
+  stopped_instances?: KubeStoppedInstance[];
 }
 
 /** The answer to an edit (dto.KubeClusterEdit). */
@@ -1191,6 +1358,10 @@ export interface KubeClusterEdit {
   reapply: boolean;
   /** For an entry the server cannot apply: the kubectl commands, in order, that bring the cluster in line. */
   commands: string[];
+  /** The instances a confirmed narrower node selector asked to stop (always sent; an empty list when none). */
+  stopped_instances?: KubeStoppedInstance[];
+  /** What the edit allowed but the administrator should know, e.g. KUBE_ENGINE_PORTS_OUTSIDE (always sent; an empty list when none). */
+  warnings?: ProductWarning[];
 }
 
 // Every collection endpoint answers an envelope, never a bare array
@@ -1354,6 +1525,17 @@ export interface NodePage extends ListPage<Node> {
   all: number;
   /** Every user label key=value across all nodes, whatever the filters. */
   labels: Array<{ key: string; values: string[] }>;
+  /** Every source a node came from, whatever the filters: what the source filter offers. */
+  sources: NodeSourceOption[];
+}
+
+/** One value of the node list's source filter (dto.NodeSourceOption): an account ("provider:<id>"), a cluster ("cluster:<uuid>") or "manual". */
+export interface NodeSourceOption {
+  value: string;
+  provider_name?: string;
+  provider_kind?: string;
+  cluster_name?: string;
+  nodes: number;
 }
 
 /** What GET /nodes/facets says about the nodes its filters match. */
@@ -1716,6 +1898,15 @@ export interface NoticeList {
 }
 
 /** A console upgrade that has swapped the binary and is restarting into `to`. */
+export interface ServerVersionChoice {
+  latest?: boolean;
+  version: string;
+  commit?: string;
+  built_at: string;
+  sha256?: string;
+  reason?: "installed" | "arch" | "older" | "backup";
+}
+
 export interface ServerUpgradeStarted {
   from: string;
   to: string;
@@ -1727,6 +1918,15 @@ export interface OfficialInferenceCatalogResult {
   models: number;
   package_digest: string;
   version: string;
+  /** What the server left out because it cannot read it; absent when nothing was. */
+  skipped?: OfficialInferenceCatalogSkipped[];
+}
+
+/** A model, or one spec of it when `spec` is set, that needs a newer server. */
+export interface OfficialInferenceCatalogSkipped {
+  model_id: string;
+  spec?: string;
+  reason: string;
 }
 
 /** What "check for updates" and a manifest upload changed in the system catalog. */
@@ -1849,7 +2049,10 @@ export interface Instance {
   image: string;
   image_digest_id?: string;
   message: string;
-  runtime_failure?: { code: string; params?: Record<string, unknown>; message: string };
+  runtime_failure?: ProductMessage;
+  // notes are non-blocking facts the server derives about the instance
+  // (code + params), e.g. a card shared with processes outside the platform.
+  notes?: ProductWarning[];
   container_id?: string;
   phase?: string;
   progress?: number;
@@ -1906,6 +2109,10 @@ export interface Instance {
   model_files?: InstanceModelFile[];
   // role is the instance's PD role; absent outside PD deployments.
   role?: PdRoleName | string;
+  // kv_offload_backend is the KV offload backend the instance keeps, as the
+  // server scoped the deployment's selection to the instance's PD role:
+  // absent when it keeps the engine's own tiers or none.
+  kv_offload_backend?: { id: string; label: string };
 }
 
 export interface InstanceModelFile {
@@ -2116,6 +2323,9 @@ export interface Deployment {
   // tokenize_enabled says whether the gateway forwards /v1/tokenize and
   // /v1/detokenize to the deployment's engine.
   tokenize_enabled: boolean;
+  // priority_scheduling says whether the deployment asked for its engine's
+  // per-request priority scheduling (applied when the launch allows it).
+  priority_scheduling: boolean;
   created_at: string;
   // quick_params is the deployment's complete launch configuration, keyed by
   // the parameter dictionary's keys. Panels read the values the deployment was
@@ -2177,6 +2387,9 @@ export interface Deployment {
   // server's decisions, which the pages render and do not re-derive.
   yield_policy_eligible: Eligibility;
   schedule_capabilities: ScheduleCapabilities;
+  // Whether the health check can be turned on: the server's decision, shown
+  // as is.
+  health_checkable: boolean;
 }
 
 
@@ -2421,6 +2634,43 @@ export interface ApiKey {
   all_deployments: boolean;
   /** Empty when all_deployments, or when every granted deployment is gone. */
   deployments: ApiKeyDeployment[];
+  /** The key's request priority binding (PUT /apikeys/{prefix}/priority). */
+  priority: ApiKeyPriority;
+}
+
+/**
+ * An API key's request priority binding: the class its requests run at ("" is
+ * the default class), the highest class a request may ask for ("" is its own
+ * class), and how a request may choose (one of PriorityClasses.policies).
+ */
+export interface ApiKeyPriority {
+  class: string;
+  ceiling: string;
+  policy: string;
+}
+
+/** A request priority class (GET /priority-classes): larger value is more important. */
+export interface PriorityClass {
+  name: string;
+  display_name: string;
+  description: string;
+  value: number;
+  builtin: boolean;
+  default: boolean;
+  /** Whether DELETE would take it: decided by the server (built in, the default, or named by a live key). */
+  deletable: boolean;
+  created_at: string;
+}
+
+/** GET /priority-classes: the classes, the bounds of a value and the key policies. */
+export interface PriorityClasses {
+  items: PriorityClass[];
+  min_value: number;
+  max_value: number;
+  policies: string[];
+  default_policy: string;
+  /** The policies a ceiling applies to; a binding of another policy has none. */
+  ceiling_policies: string[];
 }
 
 /** A deployment a restricted API key may call. */
@@ -2489,6 +2739,28 @@ export interface DataRetentionStatus {
 
 export type ProviderCategory = "public_cloud" | "private_cloud";
 
+/** What an external platform hands over to become compute nodes (provider.Resource). */
+export type PlatformResource = "vm" | "container" | "host" | "kubernetes";
+
+/** A resource a provider kind connects, with the vendor's own product name for it when it has one (ECS, ACK). */
+export interface KindResource {
+  type: PlatformResource;
+  product?: string;
+}
+
+/** The external platform a node joined through (dto.NodeSource). */
+export interface NodeSource {
+  /** What the node is on the platform; empty when the platform's kind does not say. */
+  resource: PlatformResource | "";
+  /** The account; absent for a cluster connected on its own. */
+  provider_id?: number;
+  provider_name?: string;
+  provider_kind?: string;
+  /** The cluster entry of a cluster node. */
+  cluster_uuid?: string;
+  cluster_name?: string;
+}
+
 export interface CloudProvider {
   id: number;
   name: string;
@@ -2497,6 +2769,12 @@ export interface CloudProvider {
   category: ProviderCategory;
   state: string;
   instance_count: number;
+  /** What the account's kind connects, in the order to list it. */
+  resources: KindResource[];
+  /** Compute nodes that joined through the account, on its instances or through its clusters. */
+  node_count: number;
+  /** When the account's instances were last listed; absent before its first sync. */
+  synced_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -2545,14 +2823,42 @@ export interface ProviderKindInfo {
   server_dial_auto_port?: boolean;
   /** The account's managed Kubernetes clusters can be listed and connected (GET /providers/{id}/clusters). */
   can_list_clusters?: boolean;
+  /** What the kind connects, in the order to list it. */
+  resources: KindResource[];
+  /** The platform type the kind's accounts are filed under; the platform choice is grouped by it. Empty for a kind that declares none. */
+  category: ProviderCategory | "";
+}
+
+/** Where a cluster entry stands: revoked, stalled (no node joined for too long), pending (no node yet) or active. */
+export type KubeClusterState = "revoked" | "stalled" | "pending" | "active";
+
+/** A platform type as the platform choice offers it (GET /providers/kinds categories), in order. */
+export interface ProviderCategoryInfo {
+  id: string;
+  /** What the type connects, for a type that is no vendor's (Kubernetes). */
+  resources?: KindResource[];
+  /** Added as a Kubernetes cluster entry, with the cluster form, not as an account. */
+  kube_cluster?: boolean;
+  /** The kinds filed under the type, in the order of items. */
+  kinds: string[];
+}
+
+/** GET /providers/kinds: the kinds an account can be added for, and the platform types to offer them under. */
+export interface ProviderKindList extends List<ProviderKindInfo> {
+  categories: ProviderCategoryInfo[];
 }
 
 /** A managed Kubernetes cluster of a cloud account (dto.ProviderCluster), listed live. */
 export interface ProviderCluster {
   external_id: string;
   name: string;
+  /** The cluster runs, has GPU node pools and no entry yet, so an entry can be made from it. */
+  connectable: boolean;
   region: string;
   version: string;
+  /** The vendor's product the cluster is (ack_managed, doks…) and its name; absent when the driver cannot tell. */
+  type?: string;
+  type_label?: LocalizedText;
   /** The vendor's own word for the cluster's state. */
   state: string;
   running: boolean;
@@ -2592,9 +2898,7 @@ export interface ProviderInstance {
   ssh_connections: SSHConnection[];
   kind: string;
   node_id: number;
-  /** The instance is a node of this Kubernetes cluster of the account; it joins through the cluster. */
-  managed_cluster?: string;
-  /** What the instance allows now: power_on | power_off | install | delete. Empty for a cluster node. */
+  /** What the instance allows now: power_on | power_off | install | delete. */
   actions: string[];
 }
 
@@ -2652,8 +2956,13 @@ export interface SSHAttempt {
 }
 
 // --- AI helper -------------------------------------------------------------
-export type AIPreset =
-  "deepseek" | "bailian" | "siliconflow" | "openrouter" | "poe" | "custom";
+/** AIPreset is a preset's stable name; the server's dictionary lists them. */
+export type AIPreset = string;
+/**
+ * AIProxyMode is how calls to an AI service leave the server: the management
+ * node's outbound proxy, no proxy, or a proxy URL of the service's own.
+ */
+export type AIProxyMode = "management" | "direct" | "custom";
 export interface AIConfig {
   id: number;
   name: string;
@@ -2661,6 +2970,10 @@ export interface AIConfig {
   base_url: string;
   model: string;
   is_default: boolean;
+  proxy_mode: AIProxyMode;
+  /** The custom proxy with its login masked; present only for custom. */
+  proxy_url?: string;
+  image_input: boolean;
 }
 export interface AIConfigInput {
   name: string;
@@ -2669,11 +2982,15 @@ export interface AIConfigInput {
   api_key: string;
   model: string;
   is_default: boolean;
+  proxy_mode: AIProxyMode;
+  proxy_url?: string;
+  image_input: boolean;
 }
 /**
  * AIConfigPatch changes a stored service in place. Only the fields present
  * change; api_key is left out to keep the stored key, which the API never
- * sends back.
+ * sends back, and an empty proxy_url keeps the stored proxy while the mode
+ * stays custom.
  */
 export interface AIConfigPatch {
   name?: string;
@@ -2682,6 +2999,18 @@ export interface AIConfigPatch {
   api_key?: string;
   model?: string;
   is_default?: boolean;
+  proxy_mode?: AIProxyMode;
+  proxy_url?: string;
+  image_input?: boolean;
+}
+/**
+ * AIPresetDictionary is the server's preset table: each provider's address,
+ * starting model and image switch, in the order offered, ending with custom;
+ * and the proxy modes a service may use.
+ */
+export interface AIPresetDictionary {
+  presets: { name: AIPreset; base_url: string; model: string; image_input: boolean }[];
+  proxy_modes: AIProxyMode[];
 }
 /**
  * AIConfigDeleteResult answers a delete. promoted_id names the service that took
@@ -2703,6 +3032,10 @@ export interface AIConfigTest {
   base_url: string;
   api_key?: string;
   model: string;
+  proxy_mode?: AIProxyMode;
+  proxy_url?: string;
+  /** Also send a small image once text works, to tell whether the model accepts images. */
+  check_image?: boolean;
 }
 /**
  * AIConfigTestResult is what a connection test established. outcome is a
@@ -2718,6 +3051,10 @@ export interface AIConfigTestResult {
   detail?: string;
   base_url: string;
   latency_ms: number;
+  /** The image check, when asked for and the text call succeeded. */
+  image?: "accepted" | "ignored" | "rejected" | "unknown";
+  image_status?: number;
+  image_detail?: string;
 }
 /**
  * One assistant task about a subject named by reference (instance_uuid,
@@ -2732,7 +3069,9 @@ export interface AIAskRequest {
   deployment_id?: number;
   node_uuid?: string;
   question?: string;
-  history?: { role: "user" | "assistant"; content: string }[];
+  /** data: URLs sent with the question, within AIAvailability.images. */
+  images?: string[];
+  history?: AIHistoryMessage[];
   locale: string;
 }
 export interface AIStep {
@@ -2771,12 +3110,34 @@ export interface AIFitRow {
   usable_bytes: number;
   headroom_bytes: number;
 }
+/** One earlier turn of a thread; only a user turn carries images. */
+export interface AIHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+  images?: string[];
+}
+/** AIImageLimit bounds the images of one ask (GET /api/v1/ai/available). */
+export interface AIImageLimit {
+  per_message: number;
+  per_request: number;
+  max_bytes: number;
+  max_side: number;
+}
+/**
+ * AIAvailability says whether the assistant answers and whether the AI
+ * service in use takes images, with the limits to keep when it does.
+ */
+export interface AIAvailability {
+  available: boolean;
+  image_input: boolean;
+  images?: AIImageLimit;
+}
 /** One event of a streamed /ai/ask answer (Accept: text/event-stream). */
 export type AIStreamEvent =
   | { type: "step"; id: number; tool: string; args: string; status: "running" | "done" | "error"; ms: number; error?: string }
   | { type: "text" | "reasoning"; delta: string }
   | { type: "done"; calls: number; usage: { prompt_tokens: number; completion_tokens: number }; first_text_ms: number; total_ms: number }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string; code?: string };
 export interface AIModelFit {
   model_id: number;
   weight_bytes: number;
@@ -2856,6 +3217,8 @@ export interface BenchmarkRun {
   base_url?: string;
   model: string;
   load_origin: string;
+  /** The request priority class the run asked the gateway for; absent when it asked for none. */
+  priority_class?: string;
   num_gpus: number;
   dataset: {
     kind?: string;
@@ -2954,6 +3317,8 @@ export interface BenchmarkRun {
     };
   };
   error?: string;
+  /** The failed run's code; the console renders it from the code (benchmarkError.<code>). */
+  failure?: ProductMessage;
   best_point?: BenchmarkPointSummary;
   points?: BenchmarkPoint[];
   created_at: string;
@@ -3231,13 +3596,16 @@ export interface InferenceTemplateIssue {
 // flat catalog template (docs/how-to/save-deployment-as-template.md). The
 // server tests the cheap operations before it writes the YAML; notes are the
 // facts the YAML comments state, by stable code.
+/** One operation the export tested, or did not (status skip, code says why). */
 export interface CatalogTemplateCheck {
+  id: string;
   operation: string;
-  endpoint?: string;
-  tested: boolean;
-  passed: boolean;
-  http_status?: number;
-  message?: string;
+  status: string;
+  code: string;
+  params?: Record<string, unknown>;
+  message: string;
+  /** What the gateway answered instead of an answer; external text. */
+  evidence?: string;
 }
 
 export interface CatalogTemplateExport {
@@ -3535,10 +3903,17 @@ export interface WeightSourceOption {
   registered: boolean;
 }
 
+/** One inline preflight check (ADR 0067): id names the check (a per-node
+ * check repeats it with params.node), status is one of the five check
+ * statuses, code + params render the text, message is the fallback. */
 export interface PreflightCheck {
-  code?: string;
+  id: string;
+  status: string;
+  code: string;
   params?: Record<string, unknown>;
   message?: string;
+  evidence?: string;
+  blocked_by?: string[];
 }
 
 export interface PreflightSummary {
@@ -3644,14 +4019,56 @@ export interface EvaluateResponse {
   // PD previews a PD disaggregated draft instance by instance (ADR 0028); the
   // command fields above then describe the first decode instance.
   pd?: EvaluatePd;
+  // The shell script a multi-node or PD draft's manual command starts from,
+  // written with platform variables the server expands per rank. Absent for a
+  // single launch and when no faithful script exists (MANUAL_DRAFT_UNAVAILABLE).
+  manual_command_draft?: string;
+  // The prefixed platform variable names these launches state, sorted.
+  manual_command_variables?: string[];
   // Whether the draft may be created with a yield policy other than never,
   // the create's own check; absent until the draft's engine is known.
   yield_policy_eligible?: Eligibility;
+  // Whether a deployment created from this draft can have a health check, the
+  // create's own rule on the contract the deployment will get (a template
+  // draft's includes the template's operations); absent until the draft's
+  // model is resolved.
+  health_checkable?: boolean;
+  // Whether a deployment of this draft may run its engine with per-request
+  // priority scheduling, judged on the arguments the engine will receive;
+  // absent until the draft's engine is known.
+  priority_scheduling?: PrioritySchedulingEligibility;
+}
+
+// PrioritySchedulingEligibility is the server's answer for the priority
+// scheduling switch: a refusal carries its product code with params, and
+// fix_args when adding those arguments clears it.
+export interface PrioritySchedulingEligibility {
+  ok: boolean;
+  refusal?: ProductWarning;
+  fix_args?: string[];
 }
 
 export interface GPUCandidates {
   node_uuid: string;
-  items: { index: number; available: boolean; reason?: ScheduleReason }[];
+  // note is what choosing an available card entails (a schedule reason
+  // code), e.g. sharing it with processes outside the platform.
+  items: { index: number; available: boolean; reason?: ScheduleReason; note?: ScheduleReason }[];
+}
+
+// A node placement policy knob's value, shaped by its kind.
+export type NodePlacementPolicyValue = boolean | string;
+
+// One knob of GET /api/v1/scheduling/node-placement-policies.
+export interface NodePlacementPolicySetting {
+  key: string;
+  kind: "bool" | string;
+  default: NodePlacementPolicyValue;
+}
+
+export interface NodePlacementPolicyAvailability {
+  key: string;
+  applicable: boolean;
+  reason?: string;
 }
 
 // PdRoleName is the fixed pair every PD mode declares today (ADR 0028); the
@@ -3722,7 +4139,14 @@ export interface EvaluateRankCommand {
   };
 }
 
+/** One directed pair of the network preflight, as a check result: status is
+ * pass or fail; evidence is the agent's own text, never the message. */
 export interface DistributedPreflightPair {
+  id: string;
+  status: string;
+  code: string;
+  params?: Record<string, unknown>;
+  message?: string;
   source_uuid: string;
   target_uuid: string;
   target: string;
@@ -3734,14 +4158,13 @@ export interface DistributedPreflightPair {
   bytes_sent?: number;
   bytes_received?: number;
   duration_seconds?: number;
-  error?: string;
-  bandwidth_error?: string;
+  evidence?: string;
+  bandwidth_evidence?: string;
 }
 
 export interface DistributedPreflightResponse {
   ok: boolean;
   pairs: DistributedPreflightPair[];
-  warnings?: string[];
 }
 
 // --- Metrics & logs --------------------------------------------------------
@@ -4004,11 +4427,19 @@ export interface MonitorEvent {
   label: string;
 }
 
+export interface MonitorStateCount {
+  state: MonitorService["state"];
+  count: number;
+}
+
 export interface MonitorOverview {
   as_of: number;
   stale: boolean;
   signals: MonitorSignal[];
   services: MonitorService[];
+  // services[] counted by state: every state, in the order the state
+  // summary lists them, zero counts included (dto.MonitorStateCount).
+  state_counts: MonitorStateCount[];
   vram_by_node: MonitorVramNode[];
   cluster_tokens: { prompt: MonitorSeries; generation: MonitorSeries };
   events: MonitorEvent[];
@@ -4392,7 +4823,8 @@ export const api = {
   nodeFacets: (filter: NodeFilter = {}) => getJSON<NodeFacets>(`/api/v1/nodes/facets?${nodeFilterString(filter)}`),
   dashboardSummary: (labelKey?: string) =>
     getJSON<DashboardSummary>(`/api/v1/dashboard/summary${labelKey ? `?label_key=${encodeURIComponent(labelKey)}` : ""}`),
-  instances: () => getJSON<List<Instance>>("/api/v1/instances"),
+  /** One page of GET /instances, newest first, searched on the server. */
+  instancesPage: (query: ListQuery) => getJSON<ListPage<Instance>>(`/api/v1/instances?${listQueryString(query)}`),
   instanceLaunchFacts: (uuid: string) =>
     getJSON<InstanceLaunchFacts>(
       `/api/v1/instances/${encodeURIComponent(uuid)}/launch-facts`,
@@ -4452,6 +4884,10 @@ export const api = {
     ),
   setNodeScheduling: (uuid: string, scheduling: NodeScheduling) =>
     sendJSON<Node>("PUT", `/api/v1/nodes/${encodeURIComponent(uuid)}/scheduling`, { scheduling }),
+  setNodePlacementPolicy: (uuid: string, patch: Record<string, NodePlacementPolicyValue>) =>
+    sendJSON<Node>("PATCH", `/api/v1/nodes/${encodeURIComponent(uuid)}/placement-policy`, patch),
+  nodePlacementPolicyDictionary: () =>
+    getJSON<{ items: NodePlacementPolicySetting[] }>("/api/v1/scheduling/node-placement-policies").then((list) => list.items ?? []),
   nodeHealthChecks: (nodeUUID: string, card?: CardRef) => {
     const q = cardQuery(card);
     return getJSON<CardHealthChecks>(`/api/v1/nodes/${encodeURIComponent(nodeUUID)}/health-checks${q ? `?${q}` : ""}`);
@@ -4531,8 +4967,8 @@ export const api = {
   orderPullSourceRules: (ids: number[]) =>
     sendJSON<List<PullSourceRule>>("PUT", "/api/v1/pull/source-rules/order", { ids }),
   /** The management node's candidate bases for reading a source's metadata in the browser. */
-  metadataSources: (source: "huggingface" | "modelscope") =>
-    getJSON<MetadataSources>(`/api/v1/pull/metadata-sources?source=${encodeURIComponent(source)}`),
+  metadataSources: (source: "huggingface" | "modelscope", signal?: AbortSignal) =>
+    getJSON<MetadataSources>(`/api/v1/pull/metadata-sources?source=${encodeURIComponent(source)}`, signal),
   testPullSourceRule: (body: PullSourceRuleTestRequest) =>
     sendJSON<SourceRuleTestResult>("POST", "/api/v1/pull/source-rules/test", body),
   pullProxies: () => getJSON<List<PullProxy>>("/api/v1/pull/proxies"),
@@ -4667,7 +5103,14 @@ export const api = {
   notices: () => sendJSON<NoticeList>("GET", "/api/v1/notices"),
   readNotices: (ids: string[]) => sendJSON<void>("POST", "/api/v1/notices/read", { ids }),
   // The server downloads its release from the channel, swaps the binary and restarts.
-  upgradeServer: () => sendJSON<ServerUpgradeStarted>("POST", "/api/v1/updates/server"),
+  serverVersions: (channel: string, signal?: AbortSignal) =>
+    sendJSON<{ channel: string; platform: string; versions: ServerVersionChoice[] }>("GET",
+      "/api/v1/updates/server/versions?channel=" + encodeURIComponent(channel), undefined, signal),
+  serverUpgradeResult: (attempt: string, backup: string, signal: AbortSignal) =>
+    sendJSON<{ phase: "unknown" | "download" | "restart" | "failed" | "rollback"; from?: string; to?: string }>("GET",
+      "/api/v1/updates/server/result?" + new URLSearchParams({ attempt, backup }), undefined, signal),
+  upgradeServer: (target?: { channel: string; version: string; sha256?: string; attempt: string }) =>
+    sendJSON<ServerUpgradeStarted>("POST", "/api/v1/updates/server", target),
   // The same with a release archive uploaded for a server that cannot reach the channel.
   uploadServerArchive: (file: File) =>
     sendFile<ServerUpgradeStarted>("/api/v1/updates/server/upload", file),
@@ -5128,6 +5571,17 @@ export const api = {
     sendJSON<ApiKey>("PUT", `/api/v1/apikeys/${prefix}/scope`, scope),
   revokeApiKey: (prefix: string) =>
     sendJSON<void>("DELETE", `/api/v1/apikeys/${prefix}`),
+  setApiKeyPriority: (prefix: string, priority: ApiKeyPriority) =>
+    sendJSON<ApiKey>("PUT", `/api/v1/apikeys/${prefix}/priority`, priority),
+  priorityClasses: () => getJSON<PriorityClasses>("/api/v1/priority-classes"),
+  createPriorityClass: (body: { name: string; display_name: string; description: string; value: number }) =>
+    sendJSON<PriorityClass>("POST", "/api/v1/priority-classes", body),
+  updatePriorityClass: (name: string, body: { display_name?: string; description?: string; value?: number }) =>
+    sendJSON<PriorityClass>("PUT", `/api/v1/priority-classes/${encodeURIComponent(name)}`, body),
+  deletePriorityClass: (name: string) =>
+    sendJSON<void>("DELETE", `/api/v1/priority-classes/${encodeURIComponent(name)}`),
+  setDefaultPriorityClass: (name: string) =>
+    sendJSON<PriorityClasses>("PUT", `/api/v1/priority-classes/${encodeURIComponent(name)}/default`),
   platformTokens: () => getJSON<List<PlatformToken>>("/api/v1/platform-tokens"),
   createPlatformToken: (body: { name: string; scope: PlatformToken["scope"]; expires_in_days?: number }) =>
     sendJSON<{ token: string; item: PlatformToken }>("POST", "/api/v1/platform-tokens", body),
@@ -5138,8 +5592,9 @@ export const api = {
   kubeClusters: () => getJSON<List<KubeCluster>>("/api/v1/kube/clusters"),
   kubeDefaults: () => getJSON<KubeDefaults>("/api/v1/kube/defaults"),
   /** Replaces the node pools a cloud entry holds; the cluster follows when the manifest is applied again. */
-  setKubeClusterPools: (uuid: string, poolIds: string[]) =>
-    sendJSON<KubeCluster>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`, { provider_pool_ids: poolIds }),
+  setKubeClusterPools: (uuid: string, poolIds: string[], confirmDropInstances?: boolean) =>
+    sendJSON<KubeClusterPools>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}/pools`,
+      confirmDropInstances ? { provider_pool_ids: poolIds, confirm_drop_instances: true } : { provider_pool_ids: poolIds }),
   createKubeCluster: (body: KubeClusterRequest) => sendJSON<KubeCluster>("POST", "/api/v1/kube/clusters", body),
   updateKubeCluster: (uuid: string, body: KubeClusterUpdate) => sendJSON<KubeClusterEdit>("PUT", `/api/v1/kube/clusters/${encodeURIComponent(uuid)}`, body),
   kubeManifest: (uuid: string) => getText(`/api/v1/kube/clusters/${encodeURIComponent(uuid)}/manifest`),
@@ -5149,7 +5604,7 @@ export const api = {
   kubeClusterOperation: (uuid: string, op: "apply" | "remove", dryRun: boolean) => kubeClusterOperation(uuid, op, dryRun),
   providerClusters: (id: number) => getJSON<List<ProviderCluster>>(`/api/v1/providers/${id}/clusters`),
 
-  providerKinds: () => getJSON<List<ProviderKindInfo>>("/api/v1/providers/kinds"),
+  providerKinds: () => getJSON<ProviderKindList>("/api/v1/providers/kinds"),
   providers: () => getJSON<List<CloudProvider>>("/api/v1/providers"),
   provider: (id: number) => getJSON<ProviderEditConfig>(`/api/v1/providers/${id}`),
   addProvider: (body: {
@@ -5294,9 +5749,11 @@ export const api = {
   putSetting: (key: string, value: unknown) =>
     sendJSON<void>("PUT", `/api/v1/settings/${key}`, value),
 
-  aiAvailable: () => getJSON<{ available: boolean }>("/api/v1/ai/available"),
+  aiAvailable: () => getJSON<AIAvailability>("/api/v1/ai/available"),
   aiConfigs: () =>
     getJSON<List<AIConfig>>("/api/v1/ai/configs"),
+  aiPresets: () =>
+    getJSON<AIPresetDictionary>("/api/v1/ai/presets"),
   createAIConfig: (body: AIConfigInput) =>
     sendJSON<AIConfig>("POST", "/api/v1/ai/configs", body),
   updateAIConfig: (id: number, body: AIConfigPatch) =>

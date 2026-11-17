@@ -1,0 +1,88 @@
+{
+  "materialize": {
+    "quick": {
+      "performance_mode": "balanced",
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "dtype": "auto",
+      "kv_cache_dtype": "auto",
+      "gpu_memory_utilization": 0.9
+    },
+    "user_residual": [
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}"
+    ]
+  },
+  "launch": {
+    "command": [
+      "vllm",
+      "serve",
+      "/model",
+      "--served-model-name",
+      "qwen",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "30000",
+      "--tensor-parallel-size",
+      "1",
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}"
+    ],
+    "env": {
+      "GLOO_SOCKET_IFNAME": "lo",
+      "HF_HUB_OFFLINE": "1",
+      "NCCL_SOCKET_IFNAME": "lo",
+      "TRANSFORMERS_OFFLINE": "1",
+      "VLLM_HOST_IP": "127.0.0.1"
+    },
+    "shm_bytes": 17179869184,
+    "requested_features": {
+      "command_known": true,
+      "prefill_decode_disaggregation": true
+    },
+    "reverse_params": {
+      "enable_cache_report": true,
+      "enable_request_metrics": true,
+      "gpu_memory_utilization": 0.9
+    },
+    "reverse_residual": [
+      "--served-model-name",
+      "qwen",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "30000",
+      "--tensor-parallel-size",
+      "1",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}"
+    ]
+  },
+  "export": {
+    "args": [
+      "--enable-prompt-tokens-details",
+      "--enable-per-request-metrics",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--kv-transfer-config",
+      "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}"
+    ]
+  },
+  "unsettable": [
+    {
+      "source": "extra_args",
+      "value": "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}",
+      "unsettable": false
+    },
+    {
+      "source": "argv",
+      "value": "{\"kv_connector\":\"NixlConnector\",\"kv_role\":\"kv_both\"}",
+      "unsettable": false
+    }
+  ]
+}

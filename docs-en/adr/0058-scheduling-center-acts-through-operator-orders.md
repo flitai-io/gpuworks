@@ -84,3 +84,5 @@ Decision 3 says node replacement's undo record lives in memory only, and that af
 - The drain surge's progress and the first-placement hint stay in memory.
 
 **Consequences.** A restart no longer keeps a replacement that would have been undone; cases that cannot be told fall back to the original "keep the replacement".
+
+<!-- translation-source-sha256: cf74ca11e6b538ab3dccaf17af9eac55ccd576b8cb04c1367a9ed0c8cea3a3ba -->

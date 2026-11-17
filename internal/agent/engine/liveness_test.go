@@ -5,29 +5,41 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/pkg/enginelog"
 )
+
+func causeCodes(f *proto.RuntimeFailure) []string {
+	var out []string
+	for _, c := range f.Causes {
+		out = append(out, c.Code)
+	}
+	return out
+}
 
 func TestLivenessReportsAnExitedContainerOnceWithItsCode(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		code int
-		oom  bool
-		logs string
-		want string
+		name       string
+		code       int
+		oom        bool
+		logs       string
+		want       string
+		wantCode   string
+		wantCauses []string
 	}{
-		{name: "exit zero", code: 0, want: "container exited while running (code 0) with no output"},
-		{name: "error", code: 3, logs: "INFO serving\nRuntimeError: CUDA error: an illegal memory access was encountered\n", want: "container exited while running (code 3): RuntimeError: CUDA error: an illegal memory access was encountered"},
-		{name: "oom flag", code: 137, oom: true, want: "container OOM-killed while running (code 137)"},
-		{name: "oom from logs", code: 137, logs: "torch.OutOfMemoryError: CUDA out of memory", want: "container OOM-killed while running (code 137)"},
-		{name: "sigkill without oom", code: 137, logs: "INFO serving", want: "container exited while running (code 137)"},
+		{name: "exit zero", code: 0, want: "container exited while running (code 0) with no output", wantCode: proto.ErrorContainerExited, wantCauses: []string{enginelog.CodeNoOutput}},
+		{name: "error", code: 3, logs: "INFO serving\nRuntimeError: CUDA error: an illegal memory access was encountered\n", want: "container exited while running (code 3): RuntimeError: CUDA error: an illegal memory access was encountered", wantCode: proto.ErrorContainerExited},
+		{name: "oom flag", code: 137, oom: true, want: "container OOM-killed while running (code 137)", wantCode: proto.ErrorContainerOOMKilled, wantCauses: []string{enginelog.CodeNoOutput}},
+		{name: "oom from logs", code: 137, logs: "torch.OutOfMemoryError: CUDA out of memory", want: "container OOM-killed while running (code 137)", wantCode: proto.ErrorContainerOOMKilled, wantCauses: []string{enginelog.CodeCUDAOOM}},
+		{name: "sigkill without oom", code: 137, logs: "INFO serving", want: "container exited while running (code 137)", wantCode: proto.ErrorContainerExited},
 		// What gpu3 printed when a running slice's limit was cut below its
 		// holding: the engine's own last word is the 500 it served.
-		{name: "dgpu limit", code: 0, logs: "[HAMI-core ERROR (pid:192 thread=140279431087936 allocator.c:52)]: Device 0 OOM 5429658624 / 4294967296\n(EngineCore pid=192) ERROR 10-18 14:42:47 [dump_input.py:72] Dumping input data\n(APIServer pid=1) INFO:     127.0.0.1:39734 - \"POST /v1/chat/completions HTTP/1.1\" 500 Internal Server Error\n", want: "container exited while running (code 0): dGPU memory limit reached on GPU 0: the engine needed 5.1 GiB, its limit is 4.0 GiB"},
+		{name: "dgpu limit", code: 0, logs: "[HAMI-core ERROR (pid:192 thread=140279431087936 allocator.c:52)]: Device 0 OOM 5429658624 / 4294967296\n(EngineCore pid=192) ERROR 10-18 14:42:47 [dump_input.py:72] Dumping input data\n(APIServer pid=1) INFO:     127.0.0.1:39734 - \"POST /v1/chat/completions HTTP/1.1\" 500 Internal Server Error\n", want: "container exited while running (code 0): dGPU memory limit reached on GPU 0: the engine needed 5.1 GiB, its limit is 4.0 GiB", wantCode: proto.ErrorContainerExited, wantCauses: []string{enginelog.CodeDGPUMemoryLimit}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			driver := newLivenessDriver()
@@ -46,6 +58,16 @@ func TestLivenessReportsAnExitedContainerOnceWithItsCode(t *testing.T) {
 			failed := log.states(proto.InstFailed)
 			if len(failed) != 1 || failed[0].Message != tc.want || failed[0].UUID != spec.UUID {
 				t.Fatalf("failed reports = %+v, want one %q", failed, tc.want)
+			}
+			f := failed[0].RuntimeFailure
+			if f == nil || f.Code != tc.wantCode || f.Phase != proto.PhaseServing || f.ExitCode == nil || *f.ExitCode != tc.code || f.OOMKilled != (tc.wantCode == proto.ErrorContainerOOMKilled) {
+				t.Fatalf("runtime failure = %+v, want %s exit %d", f, tc.wantCode, tc.code)
+			}
+			if got := causeCodes(f); !slices.Equal(got, tc.wantCauses) {
+				t.Fatalf("causes = %v, want %v", got, tc.wantCauses)
+			}
+			if tc.wantCode == proto.ErrorContainerExited && strings.Contains(tc.want, "): ") && !strings.Contains(tc.want, "dGPU") && (len(f.Evidence) != 1 || !strings.HasSuffix(tc.want, f.Evidence[0])) {
+				t.Fatalf("evidence = %q, want the root-cause line", f.Evidence)
 			}
 			if driver.exists(name) {
 				t.Fatal("the dead container was not reclaimed before the failure was reported")
@@ -76,6 +98,9 @@ func TestLivenessReportsAContainerRemovedOutsideTheAgentOnce(t *testing.T) {
 	failed := log.states(proto.InstFailed)
 	if len(failed) != 1 || !strings.Contains(failed[0].Message, "disappeared while running") {
 		t.Fatalf("failed reports = %+v", failed)
+	}
+	if f := failed[0].RuntimeFailure; f == nil || f.Code != proto.ErrorContainerDisappeared || f.Phase != proto.PhaseServing || f.ExitCode != nil {
+		t.Fatalf("runtime failure = %+v", f)
 	}
 }
 
@@ -212,7 +237,7 @@ func TestLivenessSleepingInstance(t *testing.T) {
 			serve(t, e, log, spec)
 			waitIdle(t, e, spec.UUID)
 			e.mu.Lock()
-			asleep := e.sleepLevel[spec.UUID]
+			asleep := e.processOfLocked(spec.UUID).sleepLevel
 			e.mu.Unlock()
 			if asleep != level {
 				t.Fatalf("sleep level = %d, want %d", asleep, level)
@@ -231,10 +256,10 @@ func TestLivenessSleepingInstance(t *testing.T) {
 				t.Fatalf("failed reports = %+v, want one without the sleep phase", failed)
 			}
 			e.mu.Lock()
-			_, remembered := e.sleepLevel[spec.UUID]
+			remembered := e.processes[spec.UUID]
 			e.mu.Unlock()
-			if remembered {
-				t.Fatal("the dead sleeper's level was kept for a later container")
+			if remembered != nil {
+				t.Fatalf("the dead sleeper's process facts were kept for a later container: %+v", *remembered)
 			}
 		})
 	}
@@ -288,14 +313,17 @@ func TestStartupFailureCarriesTheEnginesLastErrorLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, tc := range map[string]struct{ logs, want string }{
-		"vllm root cause above": {string(vllmFailure),
-			"container exited (code 2): ValueError: max_num_seqs (1024) exceeds available Mamba cache blocks (839). Each decode sequence requires one Mamba cache block, so CUDA graph capture cannot proceed. Please lower max_num_seqs to at most 839 or increase gpu_memory_utilization."},
-		"argument error": {"usage: vllm [-h] [-v]\nvllm: error: unrecognized arguments: --definitely-not-a-flag\n",
-			"container exited (code 2): vllm: error: unrecognized arguments: --definitely-not-a-flag"},
-		"no device": {"Traceback (most recent call last):\n  File \"/usr/local/bin/vllm\", line 10\n\x1b[31mRuntimeError: Failed to infer device type\x1b[0m\n",
-			"container exited (code 2): RuntimeError: Failed to infer device type"},
-		"no output": {"", "container exited (code 2) with no output"},
+	for name, tc := range map[string]struct{ logs, want, cause string }{
+		"vllm root cause above": {logs: string(vllmFailure), want: "container exited (code 2): ValueError: max_num_seqs (1024) exceeds available Mamba cache blocks (839). Each decode sequence requires one Mamba cache block, so CUDA graph capture cannot proceed. Please lower max_num_seqs to at most 839 or increase gpu_memory_utilization."},
+		"argument error": {logs: "usage: vllm [-h] [-v]\nvllm: error: unrecognized arguments: --definitely-not-a-flag\n",
+			want: "container exited (code 2): vllm: error: unrecognized arguments: --definitely-not-a-flag"},
+		"no device": {logs: "Traceback (most recent call last):\n  File \"/usr/local/bin/vllm\", line 10\n\x1b[31mRuntimeError: Failed to infer device type\x1b[0m\n",
+			want: "container exited (code 2): RuntimeError: Failed to infer device type"},
+		"no output": {logs: "", want: "container exited (code 2) with no output", cause: enginelog.CodeNoOutput},
+		"kv cache": {logs: "ValueError: The model's max seq len (32768) is larger than the maximum number of tokens that can be stored in KV cache (12000).\n",
+			want: "container exited (code 2): ValueError: The model's max seq len (32768) is larger than the maximum number of tokens that can be stored in KV cache (12000).", cause: enginelog.CodeKVCacheInsufficient},
+		"glibc": {logs: "/usr/bin/python3: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.33' not found (required by /opt/gpuworks/libvruntime.so)\n",
+			want: "container glibc too old: missing GLIBC_2.33; Ascend dGPU images require glibc 2.33 or newer", cause: enginelog.CodeGLIBCTooOld},
 	} {
 		t.Run(name, func(t *testing.T) {
 			driver := newLivenessDriver()
@@ -309,8 +337,31 @@ func TestStartupFailureCarriesTheEnginesLastErrorLine(t *testing.T) {
 			}
 			driver.exit(containerName(spec.UUID), 2, false)
 			log.waitFor(t, proto.InstFailed, 1)
-			if failed := log.states(proto.InstFailed); len(failed) != 1 || failed[0].Message != tc.want {
+			failed := log.states(proto.InstFailed)
+			if len(failed) != 1 || failed[0].Message != tc.want {
 				t.Fatalf("failed reports = %+v, want %q", failed, tc.want)
+			}
+			f := failed[0].RuntimeFailure
+			if f == nil || f.Code != proto.ErrorContainerExited || f.Phase != proto.PhaseHealthCheck || f.ExitCode == nil || *f.ExitCode != 2 || f.OOMKilled {
+				t.Fatalf("runtime failure = %+v", f)
+			}
+			if tc.cause != "" && (len(f.Causes) == 0 || f.Causes[0].Code != tc.cause) {
+				t.Fatalf("causes = %+v, want %s first", f.Causes, tc.cause)
+			}
+			if tc.cause == enginelog.CodeGLIBCTooOld && f.Causes[0].GLIBC != "GLIBC_2.33" {
+				t.Fatalf("glibc cause = %+v", f.Causes[0])
+			}
+			if tc.cause == "" && len(f.Causes) != 0 {
+				t.Fatalf("unknown failure got causes %+v", f.Causes)
+			}
+			// A loader refusal names no error or exception: its line is the
+			// cause's evidence, not a root-cause line.
+			if tc.cause == enginelog.CodeGLIBCTooOld {
+				if len(f.Evidence) != 0 || len(f.Causes[0].Evidence) != 1 {
+					t.Fatalf("glibc evidence = %q / %q", f.Evidence, f.Causes[0].Evidence)
+				}
+			} else if tc.logs != "" && (len(f.Evidence) != 1 || len(f.Evidence[0]) > proto.MaxFailureEvidenceChars) {
+				t.Fatalf("evidence = %q, want the bounded root-cause line", f.Evidence)
 			}
 		})
 	}
@@ -464,6 +515,10 @@ func TestLivenessReportsAFailedCleanupOnce(t *testing.T) {
 	removing := log.states(proto.InstRemoving)
 	if len(removing) != 1 || !strings.Contains(removing[0].Message, "exited while running (code 1) with no output; cleanup pending") {
 		t.Fatalf("removing reports = %+v", removing)
+	}
+	// The pending cleanup keeps the failure's own reason.
+	if f := removing[0].RuntimeFailure; f == nil || f.Code != proto.ErrorContainerExited || f.ExitCode == nil || *f.ExitCode != 1 {
+		t.Fatalf("removing reason = %+v", f)
 	}
 	if failed := log.states(proto.InstFailed); len(failed) != 0 {
 		t.Fatalf("failed reports = %+v", failed)

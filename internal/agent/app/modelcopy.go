@@ -130,41 +130,41 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 			stopMonitor = nil
 		}
 	}
-	fail := func(message string, done, total int64) {
+	fail := func(err error, done, total int64) {
 		finishMonitor()
 		state := proto.MFFailed
-		if isModelDiskSpaceFailure(message) {
+		if modelDiskFull(err) {
 			state = proto.MFInsufficientDisk
 		}
 		report(proto.ModelFileStatus{Key: mf.Key, State: state, Path: finalTarget, BytesDone: done, BytesTotal: total,
-			Message: message, Acquisition: proto.ModelAcquireCopy})
+			Message: err.Error(), Acquisition: proto.ModelAcquireCopy})
 	}
 	source := filepath.Clean(strings.TrimSpace(mf.SourcePath))
 	if source == "." || !filepath.IsAbs(source) {
-		fail("copy has no absolute source directory", 0, 0)
+		fail(errors.New("copy has no absolute source directory"), 0, 0)
 		return
 	}
 	for _, path := range []*string{&source, &workDir, &finalTarget} {
 		resolved, err := copyCanonicalPath(*path)
 		if err != nil {
-			fail("resolve copy path: "+err.Error(), 0, 0)
+			fail(fmt.Errorf("resolve copy path: %w", err), 0, 0)
 			return
 		}
 		*path = resolved
 	}
 	reportedTarget.Store(finalTarget)
 	if pathWithin(source, workDir) || pathWithin(workDir, source) || pathWithin(source, finalTarget) || pathWithin(finalTarget, source) {
-		fail("copy source and target directories overlap", 0, 0)
+		fail(errors.New("copy source and target directories overlap"), 0, 0)
 		return
 	}
 	unlock, err := lockCopyTarget(finalTarget)
 	if err != nil {
-		fail(err.Error(), 0, 0)
+		fail(err, 0, 0)
 		return
 	}
 	defer unlock()
 	if _, err := validateModelDir(source); err != nil {
-		fail("source is not a complete model: "+err.Error(), 0, 0)
+		fail(fmt.Errorf("source is not a complete model: %w", err), 0, 0)
 		return
 	}
 	for attempt := 0; attempt < 3; attempt++ {
@@ -176,7 +176,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 		}
 		files, err := listCopySource(source)
 		if err != nil {
-			fail("list source: "+err.Error(), 0, 0)
+			fail(fmt.Errorf("list source: %w", err), 0, 0)
 			return
 		}
 		var total int64
@@ -184,7 +184,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 			total += f.size
 		}
 		if err := prepareCopyResume(source, workDir, files); err != nil {
-			fail(err.Error(), 0, total)
+			fail(err, 0, total)
 			return
 		}
 		remaining := total - modelRepoBytesDone(workDir)
@@ -192,7 +192,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 			remaining = 0
 		}
 		if err := n.checkDownloadSpace(mf.StorageID, workDir, remaining); err != nil {
-			fail(err.Error(), 0, total)
+			fail(err, 0, total)
 			return
 		}
 		p.phase(proto.ModelPhaseCopying, total)
@@ -200,7 +200,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 			if ctx.Err() != nil {
 				return
 			}
-			fail(err.Error(), p.done.Load(), total)
+			fail(err, p.done.Load(), total)
 			return
 		}
 		if ctx.Err() != nil {
@@ -209,7 +209,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 		p.phase(proto.ModelPhaseVerifying, total)
 		after, err := listCopySource(source)
 		if err != nil {
-			fail("list source: "+err.Error(), 0, total)
+			fail(fmt.Errorf("list source: %w", err), 0, total)
 			return
 		}
 		if !sameSource(files, after) {
@@ -221,7 +221,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 			manifest = append(manifest, modelrepo.File{Path: filepath.ToSlash(f.rel), Size: f.size})
 		}
 		if _, err := validateModelDir(workDir); err != nil {
-			fail("copied directory is not a model: "+err.Error(), total, total)
+			fail(fmt.Errorf("copied directory is not a model: %w", err), total, total)
 			return
 		}
 		if ctx.Err() != nil {
@@ -230,7 +230,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 		p.phase(proto.ModelPhaseInstalling, total)
 		measured, err := writeCompletionMarker(workDir, mf, manifest)
 		if err != nil {
-			fail("write completion marker: "+err.Error(), total, total)
+			fail(fmt.Errorf("write completion marker: %w", err), total, total)
 			return
 		}
 		if ctx.Err() != nil {
@@ -238,14 +238,14 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 			return
 		}
 		if err := installStagedModelContext(ctx, workDir, finalTarget, mf); err != nil {
-			fail(err.Error(), total, total)
+			fail(err, total, total)
 			return
 		}
 		finishMonitor()
 		report(proto.ModelFileStatus{Key: mf.Key, State: proto.MFPresent, Path: finalTarget, BytesTotal: measured, BytesDone: measured, Acquisition: proto.ModelAcquireCopy})
 		return
 	}
-	fail("the source kept changing while it was copied", 0, 0)
+	fail(errors.New("the source kept changing while it was copied"), 0, 0)
 }
 
 func (n *NodeRuntime) copyFiles(ctx context.Context, mf proto.ModelFileTask, source, workDir, finalTarget string, files []copyFile, total int64, p *copyProgress) error {

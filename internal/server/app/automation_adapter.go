@@ -9,6 +9,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/automation"
 	"gpuworks.ai/gpuworks/internal/server/deployment"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/planning"
@@ -31,8 +32,10 @@ type automationAdapter struct {
 	// waits are the replicas waiting to be placed (the controller's): a wake
 	// does not take the cards one that keeps them against it waits for.
 	waits *placewait.Registry
-	log   *slog.Logger
-	now   func() time.Time
+	// orders is the server's sleep and wake order lock (the controller's).
+	orders *lifecycle.Orders
+	log    *slog.Logger
+	now    func() time.Time
 }
 
 // runAutomation carries out schedules, auto sleep, waiting wakes and the
@@ -40,11 +43,11 @@ type automationAdapter struct {
 // nudges it, since a waiting wake may fit once another instance sleeps or
 // goes; a request the gateway holds for a sleeping deployment asks it to wake
 // that one.
-func runAutomation(ctx context.Context, st *store.Store, px *proxy.Proxy, acct *proxy.Accountant, host planning.HostMemory, scale func(deploymentID uint, role string, replicas int) error, waits *placewait.Registry, log *slog.Logger) {
-	adapter := &automationAdapter{store: st, acct: acct, host: host, scale: scale, waits: waits, log: log, now: time.Now}
+func runAutomation(ctx context.Context, st *store.Store, px *proxy.Proxy, acct *proxy.Accountant, host planning.HostMemory, scale func(deploymentID uint, role string, replicas int) error, waits *placewait.Registry, orders *lifecycle.Orders, log *slog.Logger) {
+	adapter := &automationAdapter{store: st, acct: acct, host: host, scale: scale, waits: waits, orders: orders, log: log, now: time.Now}
 	evaluator := automation.New(adapter, adapter, log)
 	if px != nil {
-		residency := &residencyAdapter{store: st, proxy: px, acct: acct, host: host, waits: waits, now: time.Now}
+		residency := &residencyAdapter{store: st, proxy: px, acct: acct, host: host, waits: waits, orders: orders, now: time.Now}
 		evaluator.WithResidency(residency, residency)
 		if waits != nil {
 			waits.OnWait(evaluator.Demand)
@@ -118,7 +121,7 @@ func (a *automationAdapter) WaitingWakes() ([]automation.WaitingWake, error) {
 // (automation.LevelAuto) it sleeps at L1, or at L2 where the host cannot hold
 // the weights. It returns the level ordered.
 func (a *automationAdapter) Sleep(deploymentID uint, level int, held bool) (int, error) {
-	defer planning.LockLifecycle()()
+	defer a.orders.Lock()()
 	dep, err := a.store.GetDeployment(deploymentID)
 	if err != nil {
 		return 0, err
@@ -138,7 +141,7 @@ func (a *automationAdapter) Sleep(deploymentID uint, level int, held bool) (int,
 // (store.Deployment.WakesOnRequest), so the sleepers an operator or a
 // schedule holds stay asleep and held.
 func (a *automationAdapter) Wake(deploymentID uint, held bool) (automation.WakeResult, error) {
-	defer planning.LockLifecycle()()
+	defer a.orders.Lock()()
 	dep, err := a.store.GetDeployment(deploymentID)
 	if err != nil {
 		return automation.WakeResult{}, err
@@ -195,7 +198,7 @@ func wakesOnRequest(dep *store.Deployment, sleepers []store.Instance) ([]store.I
 // now. An instance no longer waiting asleep (removed, rebuilt, woken or slept
 // again by an operator) drops out.
 func (a *automationAdapter) WakeWaiting(deploymentID uint, uuids []string) ([]string, error) {
-	defer planning.LockLifecycle()()
+	defer a.orders.Lock()()
 	dep, err := a.store.GetDeployment(deploymentID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

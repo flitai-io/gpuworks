@@ -40,7 +40,11 @@ test("loading becomes an observed relay with separate forwarding accounting", as
   api.peerTransfers = () => new Promise((done) => { resolve = done; });
   show(); assert.ok(screen.getByText(copy.loading));
   resolve(snapshot()); await screen.findByText(copy.relay);
-  for (const value of [copy.phases.transferring, copy.reasons.direct_dial_failed, "8.0 MiB/s", "1.0 MiB", "128 B", "32.0 MiB/s", copy.accounting, copy.history]) assert.ok(screen.getByText(value));
+  for (const value of [copy.phases.transferring, copy.reasons.direct_dial_failed, "8.0 MiB/s", "1.0 MiB", "128 B", "32.0 MiB/s", copy.history]) assert.ok(screen.getByText(value));
+  // What the server counters measure is behind the help mark beside the budget.
+  assert.equal(screen.queryByText(copy.accountingHelp), null);
+  await userEvent.setup().hover(screen.getByRole("button", { name: locale.common.helpTip.label }));
+  assert.equal((await screen.findByRole("tooltip")).textContent, copy.accountingHelp);
 });
 
 test("missing evidence remains unknown and does not invent zero progress", async () => {

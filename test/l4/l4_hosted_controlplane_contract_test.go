@@ -279,7 +279,7 @@ func TestCompshareDistributedImageStaysFrameworkCompatible(t *testing.T) {
 	t.Setenv("COMPSHARE_DISTRIBUTED_TEST_IMAGE", "")
 	t.Setenv("COMPSHARE_TEST_IMAGE", "")
 	image := compshareDistributedTestImage()
-	if image != "gpustack/runner:cuda12.8-vllm0.17.1" {
+	if image != "gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2" {
 		t.Fatalf("distributed image %q does not match the CompShare node framework", image)
 	}
 }
@@ -386,7 +386,7 @@ func TestCompshareDockerInstallGrantsHostedAgentDaemonAccess(t *testing.T) {
 }
 
 func TestCompshareDockerNCCLSetupIsOffline(t *testing.T) {
-	command := compshareDockerNCCLSetupCommand("docker", "gpuworks-test-network", "gpustack/runner:test")
+	command := compshareDockerNCCLSetupCommand("docker", "gpuworks-test-network", "gpuworks/gpuworks-runner:test")
 	if !strings.Contains(command, "docker image inspect") || !strings.Contains(command, "docker network create") {
 		t.Fatalf("setup command does not verify the local image and create the network: %s", command)
 	}
@@ -461,9 +461,9 @@ func TestHostedActiveInstancesIgnoreDeadAttempts(t *testing.T) {
 }
 
 func TestGPUWarmupCommandUsesTheAgentsLaunchShape(t *testing.T) {
-	command := gpuWarmupCommand("gpustack/runner:cuda12.8-vllm0.17.1")
+	command := gpuWarmupCommand("gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2")
 	for _, want := range []string{
-		`--gpus "\"device=$i\""`, "CUDA_VISIBLE_DEVICES=0", "--entrypoint python3", "'gpustack/runner:cuda12.8-vllm0.17.1'",
+		`--gpus "\"device=$i\""`, "CUDA_VISIBLE_DEVICES=0", "--entrypoint python3", "'gpuworks/gpuworks-runner:cuda12.9-vllm0.31.0-r2'",
 		"torch.cuda.is_available()", "GPUWORKS_GPU_READY", "GPUWORKS_GPUS_READY $n", "nvidia-smi -L",
 	} {
 		if !strings.Contains(command, want) {

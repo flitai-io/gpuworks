@@ -45,3 +45,5 @@ Deployment snapshots freeze launch configuration, whereas metric mappings determ
 - The gateway measures TTFT, duration, and engine-reported usage token counts for every forwarded response (`gpuworks_proxy_*`, with names also registered in this vocabulary). Monitoring selects sources by signal: TTFT, end-to-end duration, input/output tokens, and running requests use engine values when reported, otherwise gateway values. The single decision point is the signal source catalog in `monitor` (`window_sources.go`). The UI does not label sources; differences in measurement definitions are documented in the monitoring documentation.
 - Documentation: [Inference Metric Vocabulary](../reference/inference-metrics.md), [`api.metrics` Syntax](../reference/inference-catalog-spec.md#apimetrics引擎指标映射),
   [Declare Engine Metrics for an Inference Template](../how-to/declare-engine-metrics.md).
+
+<!-- translation-source-sha256: 0be33ce7528b2ad620f0e6a770d86e030d6a2440bfbf01959794935e20b6ab16 -->

@@ -8,7 +8,7 @@ import (
 // The model segment of a runner tag (910b, a3, 310p) names the chip family an
 // image is built for. Every cann9.2 image scored the same before, so which one
 // won was down to catalog insertion order: an A3 build was picked on a 910B4
-// node.
+// node. The family only orders the pick; no image is removed.
 func TestResolveImageCatalogChipFamily(t *testing.T) {
 	now := time.Now()
 	image := func(family, ref, fwVersion string, age time.Duration) ImageCandidate {
@@ -52,37 +52,40 @@ func TestResolveImageCatalogChipFamily(t *testing.T) {
 			}
 		}
 	})
-	t.Run("only a mismatched image left means no match", func(t *testing.T) {
-		got := ResolveImageCatalog(target("910b"), candidates[1:2])
-		if got.Image != "" || !got.Blocking {
-			t.Fatalf("resolution = %+v, want a blocking no-match", got)
+	t.Run("an image for another family is ranked last, not removed", func(t *testing.T) {
+		// Alone, it is still the pick.
+		if got := ResolveImageCatalog(target("910b"), candidates[1:2]); got.Image != candidates[1].ImageRef || got.Blocking {
+			t.Fatalf("only an A3 image left: %+v", got)
+		}
+		// A generic image comes before it, even an older one.
+		if got := ResolveImageCatalog(target("910b"), []ImageCandidate{candidates[1], candidates[4]}); got.Image != candidates[4].ImageRef {
+			t.Fatalf("A3 vs generic on a 910b node = %q", got.Image)
+		}
+		// So does an image of the node's family the driver may not support.
+		warned := candidates[0]
+		warned.FrameworkVersion = "99.0"
+		tgt := target("910b")
+		tgt.DriverVersion = "23.0.0"
+		if got := ResolveImageCatalog(tgt, []ImageCandidate{candidates[1], warned}); got.Image != warned.ImageRef {
+			t.Fatalf("A3 vs a driver-warned 910b image = %q", got.Image)
 		}
 	})
-	t.Run("selectable follows the same rule", func(t *testing.T) {
-		if ImageCandidateSelectable(target("910b"), candidates[1]) {
-			t.Fatal("A3 image was selectable on a 910b node")
-		}
-		if !ImageCandidateSelectable(target("910b"), candidates[0]) || !ImageCandidateSelectable(target("910b"), candidates[4]) {
-			t.Fatal("910b and generic images must stay selectable on a 910b node")
-		}
-		if !ImageCandidateSelectable(target(""), candidates[1]) {
-			t.Fatal("an unknown node family must not remove a choice")
+	t.Run("every image stays selectable", func(t *testing.T) {
+		for _, c := range candidates {
+			if !ImageCandidateSelectable(target("910b"), c) {
+				t.Fatalf("%s not selectable on a 910b node", c.ImageRef)
+			}
 		}
 	})
-	t.Run("a manual mismatched image is refused", func(t *testing.T) {
+	t.Run("a manual image for another family stands", func(t *testing.T) {
 		tgt := target("910b")
 		tgt.Override = "r/runner:cann9.2-a3-vllm0.30.0rc2-r1"
-		got := ResolveImageCatalog(tgt, candidates)
-		if got.Image != tgt.Override || !got.Blocking || len(got.Warnings) != 1 {
-			t.Fatalf("resolution = %+v, want the override blocked with a warning", got)
+		if got := ResolveImageCatalog(tgt, candidates); got.Image != tgt.Override || got.Blocking {
+			t.Fatalf("resolution = %+v, want the override as given", got)
 		}
 		tgt.TrustedOverride = true
-		if got := ResolveImageCatalog(tgt, candidates); !got.Blocking {
-			t.Fatalf("a trusted spec image for another chip family must be blocked: %+v", got)
-		}
-		tgt.ChipFamily = "910c"
 		if got := ResolveImageCatalog(tgt, candidates); got.Blocking {
-			t.Fatalf("the matching family must not be blocked: %+v", got)
+			t.Fatalf("a trusted spec image for another chip family was blocked: %+v", got)
 		}
 	})
 }

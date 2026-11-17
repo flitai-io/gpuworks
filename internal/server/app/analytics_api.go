@@ -43,6 +43,8 @@ func (a *analyticsAPI) Usage(ctx context.Context, q api.AnalyticsQuery) (dto.Usa
 		f.Source = 1 + uint8(uxrecord.SourcePlayground)
 	case "batch":
 		f.Source = 1 + uint8(uxrecord.SourceBatch)
+	case "evaluation":
+		f.Source = 1 + uint8(uxrecord.SourceEvaluation)
 	}
 	return a.queries.Usage(ctx, analyticsQuery(q), f)
 }
@@ -124,8 +126,8 @@ func (a *analyticsAPI) RetentionStatus(ctx context.Context) (dto.DataRetentionSt
 			EarliestMS: ptrTo(now.Add(-time.Duration(r.LogsHours) * time.Hour).UnixMilli())},
 	)
 	requests := dto.DataRetentionStore{Kind: "requests", File: "ux.db", FileBytes: fileSize(filepath.Join(a.dataDir, "ux.db"))}
-	if a.obs != nil && a.obs.ux != nil {
-		if start, ok, err := a.obs.ux.EarliestDayMS(); err != nil {
+	if a.obs != nil && a.obs.UX() != nil {
+		if start, ok, err := a.obs.UX().EarliestDayMS(); err != nil {
 			return out, err
 		} else if ok {
 			requests.EarliestMS = &start

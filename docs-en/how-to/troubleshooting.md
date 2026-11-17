@@ -126,9 +126,43 @@ After a storage download sends HTTP 200, an interruption can only abort the conn
 4. The protocol versions do not match, with reason `proto_mismatch` (a detail such as `server supports 1-1`); upgrade the agent.
 5. `stale_session`: occurs only during a **data channel** handshake and means its bound control session has expired. The agent only logs it at Debug level and retries
    with backoff; it recovers automatically after the control channel reconnects. See [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md). Take action only if it persists.
+6. Two agents use the same node identity: they take turns connecting and knock each other's connection off, yet the node page stays "Online" the whole time (the replaced connection does not mark the node offline).
+   What you see is terminals, log follows and model or image transfers breaking again and again; the agent log on both hosts repeatedly shows `connection ended` and `reconnecting` without any reject;
+   the server log has `AGENT_DUPLICATE_INSTANCE`, where `host`/`remote` and `other_host`/`other_remote` are the two agents replacing each other's connection.
+   A second `run` on the same state directory is already stopped by `<state>/agent.lock` (see [CLI Reference](../reference/cli.md)), so what remains is mostly
+   a state directory or token copied to another host (a cloned disk or image), another state directory holding the same token, or an agent older than this release
+   sharing an identity with a current one. Detection relies on the process instance ID the agent sends in its handshake, so it is reported only when at least one side is a current agent;
+   when both are older agents the server log has no such entry, and you can only go by the symptoms above and the processes on the two hosts.
+   Stop the extra agent; on a cloned host, delete the copied state directory and connect it again as a new node. It is logged at most once an hour per node.
 
 Clock skew is **not** a reason for rejection: the handshake does not validate timestamps, and the HMAC for `server_dial` signs only a one-time nonce, with no time component.
 If the key for a server_dial node does not match, the agent reports `invalid server_dial proof`.
+
+## Kubernetes Node Does Not Join or Does Not Come Online
+
+**Symptoms**: An entry connected from a Kubernetes cluster never gets a node on the Nodes page; on the External Platforms page the cluster's status is “Not connected yet”, which becomes “Not connected for long” after 5 minutes;
+or a node appears but is offline, refused, or its instances do not start. The connection steps and every setting are in [Connect a Kubernetes Cluster](connect-kubernetes.md); this section points from the symptom to the right place and does not repeat what is explained there.
+When the node has appeared and merely stays “Connecting” or goes offline repeatedly, start with the previous section.
+
+**How to confirm**: Run the commands below in the cluster; `<namespace>` is the namespace chosen when connecting (default `gpuworks-system`) and `<agent-pod>` is an agent Pod listed by `get pods`. “Troubleshoot”, beside the cluster's status on the External Platforms page, shows the same commands and the common causes (it is offered only once the status is “Not connected for long”):
+
+```bash
+kubectl -n <namespace> get daemonset,pods -o wide
+kubectl -n <namespace> describe pod <agent-pod>
+kubectl -n <namespace> logs ds/gpuworks-agent
+```
+
+| Symptom | What to look at | What to do |
+|---|---|---|
+| The agent Pod is `ImagePullBackOff` / `ErrImagePull`, or “Not connected for long” | The Events of `describe pod` name the image being pulled and why it failed; 401 / 403 means the pull credentials are missing or wrong | The node cannot pull from the chosen registry: choose a registry it can reach (Huawei Cloud SWR in mainland China), or use your own image and set image pull credentials; see the agent image registry, agent image, and image pull credentials under “Advanced” in [Connect](connect-kubernetes.md#接入); save, then apply again; step-by-step actions are in [Connect Managed Public-Cloud Kubernetes](connect-managed-kubernetes.md#没有节点出现时); the image archive for offline clusters is in [Offline Deployment](deploy-offline.md#kubernetes-集群的-agent-镜像) |
+| Instance Pod event `RuntimeClass "…" not found`, the instance does not start | `kubectl get runtimeclass` shows whether the cluster has the one the entry names; `kubectl -n <namespace> describe pod <instance Pod>` shows the events. The RuntimeClass affects only NVIDIA instance Pods, and the agent Pod does not use it | Edit the cluster entry and set the RuntimeClass to a name the cluster has, or leave it empty so the agent decides; it takes effect at once on the online agents without a reapply and affects only instance Pods started afterwards; see [Edit a Cluster Entry](connect-kubernetes.md#修改集群条目) |
+| `get daemonset` shows DESIRED 0 | The node selector selects no node: check the labels with `kubectl get nodes --show-labels` | Edit the entry to fix the node selector (empty means all nodes); the change reaches the cluster only after you apply again; see [Connect](connect-kubernetes.md#接入) and [Edit a Cluster Entry](connect-kubernetes.md#修改集群条目); for an entry connected from a cloud account you change the node pools instead |
+| The agent Pod runs but no node appears, and the agent log shows repeated connection failures | The connection errors in `kubectl -n <namespace> logs ds/gpuworks-agent`; whether the node can reach the “management node address” | The address must be one the cluster's nodes can resolve and reach (the agent uses the node's own DNS, so a Service name inside the cluster does not work; the agent dials out and needs no inbound port on the node). The address cannot be changed after the entry is created: delete the entry and create it again; see [Connect](connect-kubernetes.md#接入); for general connectivity checks see the previous section |
+| The agent Pod runs and has connected to the server, but no node appears, or it appears and then disappears | The Events of `describe pod <agent-pod>` hold a Warning `GpuworksEnrollRefused`: enrollment was refused, and the event states the reason (`node_taken`, `unknown_token`, `other_cluster`) and what to do; with neither that event nor a refusal in the log, the node most likely has no supported accelerator, and the agent stands by without enrolling | `node_taken`: another entry of the same cluster holds this node; wait until its agent on the node has been offline for more than 15 minutes, or adjust the two entries' node selectors. `unknown_token`: the connect token was revoked; create the entry again. `other_cluster`: the token belongs to another cluster. Details in [Accelerator Vendor: Detected Automatically](connect-kubernetes.md#加速卡厂商自动识别). The event needs `create` on `events` in the manifest's Role; an older manifest has it only after it is applied again, and without it the event is simply not visible |
+| The node is online and shows the tag “GPU devices are soft-isolated” | The tag on the node details' Overview tab, with the reason and commands below it | Not a fault: the cluster uses a device plugin such as HAMi in place of NVIDIA's, and NVIDIA's container toolkit runs in CDI mode, so instances run, but a Pod can see every GPU device of the node and only CUDA is restricted, by `CUDA_VISIBLE_DEVICES`. When strict isolation is needed, follow the commands in the tag; see [Accelerator Vendor: Detected Automatically](connect-kubernetes.md#加速卡厂商自动识别) |
+| Instances run, but requests through the gateway fail, ports seem to be “swallowed”, or the cluster has NodePort Services | Whether the entry's engine port range (default `40000-42767`) overlaps the cluster's NodePort range (default `30000-32767`, set by the API server's `--service-node-port-range`) | kube-proxy diverts NodePort traffic sent to the local address. Edit the entry and change the engine port range; it takes effect at once, instances already running keep their ports, ports allocated afterwards come from the new range, and the save response lists the running instances outside the new range (`KUBE_ENGINE_PORTS_OUTSIDE`); see [Connect](connect-kubernetes.md#接入) and [Edit a Cluster Entry](connect-kubernetes.md#修改集群条目) |
+
+After the fix, confirm the node appears on the Nodes page and is online. When none of this matches, keep the Events of `describe pod` and the agent log, and see “Still Unresolved?” at the end of this page.
 
 ## Automatic Recovery After a Node Disconnects
 
@@ -137,7 +171,8 @@ If the key for a server_dial node does not match, the agent reports `invalid ser
 ### Check Recovery Progress
 
 In the node details, check the phase, attempt count, last probe time, and last error under “Out-of-band recovery”, corresponding to
-`recovery_phase`, `recovery_attempts`, `last_probe_at`, and `last_recovery_error`.
+`recovery_phase`, `recovery_attempts`, `last_probe_at`, and `last_recovery_error`; `last_recovery_code` is the last error's code
+(`SSH_*`, `AGENT_INSTALL_*`, `RECOVERY_*`), from which the UI shows the cause, with the error text listed beneath it as evidence. Errors recorded by older versions have no code and are shown as written.
 This card appears only when `recovery_phase` is nonempty.
 
 The platform marks a node offline after receiving no heartbeat for `--stale-after` (90 seconds by default), then tries the following in order:
@@ -161,13 +196,13 @@ See [ADR 0006](../adr/0006-out-of-band-recovery-ssh-credentials.md) for the desi
 - SSH credentials saved: attempts recovery immediately, ignoring the waiting window; still skips nodes that are online, not yet connected, or have no credentials. You can save credentials with `PUT /api/v1/nodes/{uuid}/ssh`.
 - No SSH credentials saved: the UI displays an agent installation command and does not perform SSH recovery; run the command on the node to reconnect it.
 - Phase is `stopped`: the button is disabled; hover over it to see why the cloud instance was destroyed.
-- Server has `--recovery-enabled=false`: a manual trigger returns `recovery is disabled`. See [Configuration Reference](../reference/configuration.md) for parameters.
+- Server has `--recovery-enabled=false`: a manual trigger returns `skipped_code` `RECOVERY_SKIPPED_DISABLED`. See [Configuration Reference](../reference/configuration.md) for parameters.
 
 ### Resolve the Last Error
 
 **Missing SSH credentials or platform public key**
 
-Automatic recovery skips nodes without credentials; calling the recovery API directly returns `ssh credential is not configured`.
+Automatic recovery skips nodes without credentials; calling the recovery API directly returns `skipped_code` `RECOVERY_SKIPPED_NO_SSH_CREDENTIAL`.
 Add credentials, then reconnect. If the credentials contain only an address, the platform logs in using its platform key; if `has not authorized the platform key` appears, authorize the public key using the command provided in the error.
 
 **Still waiting, or automatic recovery has stopped**
@@ -178,7 +213,7 @@ Add credentials, then reconnect. If the credentials contain only an address, the
 
 **The agent is running but has no control session**
 
-For the error `agent is running but has not established a control-plane session`, recovery does not restart or reinstall the agent.
+For the error code `RECOVERY_AGENT_NOT_CONNECTED`, recovery does not restart or reinstall the agent.
 Check the agent logs and connection configuration as described in [Node Stays Connecting or Does Not Come Online](#节点一直连接中或不上线).
 
 The platform determines ownership from the server address of the agent referenced by the unit: it reads the configuration file, or the command-line `--server` for older installations.
@@ -186,7 +221,7 @@ It treats the agent as belonging to this node only if the address matches, the a
 
 **The unit belongs to another server**
 
-`foreign_agent:` is followed by the other server's address. All installations share the unit name `gpuworks-agent`, so a later installation overwrites an earlier one; recovery does not restart or reinstall another server's running unit.
+The error code is `AGENT_INSTALL_FOREIGN_SERVER`, and the error text names the other server's address. All installations share the unit name `gpuworks-agent`, so a later installation overwrites an earlier one; recovery does not restart or reinstall another server's running unit.
 
 After confirming that the other server no longer uses this host:
 
@@ -233,7 +268,7 @@ For the CLI, run `gpuworks-agent doctor` on the node; its exit code is always `0
 | **Passed through**, **No driver bound**, **Held by another driver** | First confirm the intended ownership of the cards; these cards do not participate in scheduling on this node, so do not immediately treat them as hardware failures |
 | Host sees the card but container does not | Check **Runtime** or **Runtime plugin** messages; fix the plugin or the workload user's device permissions, then check whether scheduling resumes |
 | **In use outside the platform** | Check the displayed processes and GPU memory usage, and release them only after confirming they can be stopped; do not directly terminate unknown service processes |
-| `accelerator_unrecognized` | Save the BDF, `vendor:device`, class, and driver information from the report so device recognition can be added |
+| `ACCELERATOR_UNRECOGNIZED` | Save the BDF, `vendor:device`, class, and driver information from the report so device recognition can be added |
 
 After taking action, run diagnosis again and confirm that card health and allocation status match the actual devices; a node being **Online** proves only that its connection is working.
 
@@ -309,9 +344,9 @@ Xid / NVRM errors.
 
 ### A Card Is Unusable by the Runtime or Fails Driver Initialization
 
-**`runtime_unusable`: accelerator runtime context creation failed**
+**`RUNTIME_UNUSABLE`: accelerator runtime context creation failed**
 
-A card's health is “Runtime cannot use it” (`runtime_unusable`): accelerator runtime smoke checks target each card every 15 minutes.
+A card's health is “Runtime cannot use it” (`RUNTIME_UNUSABLE`): accelerator runtime smoke checks target each card every 15 minutes.
 Cards running instances and cards in use by processes outside the platform are skipped, the whole round is skipped if the driver does not respond, and the check does not change the node's connection status.
 NVIDIA requires `python3` and `libcuda.so.1` and creates a CUDA context on the selected card. One card failing to initialize often makes `cuInit`
 fail for the entire host, so examine findings for the other cards as well. On an Ascend host with CANN installed, the check uses `python3` and
@@ -327,9 +362,9 @@ This is done only on docker / nerdctl nodes; on udocker a container means unpack
 so udocker nodes are not checked this way. A container that does not start, or an image without the runtime or python, is a host problem, not a card failure. Apple has no check.
 
 **Diagnose now runs the same per-card check (per die on Ascend) on NVIDIA, Ascend, Hygon and PPU, on demand.** Node details → Diagnose and `gpuworks-agent doctor` run the runtime check above once for each die this node owns
-(it is the same code as the periodic check, not a second implementation), so a die the periodic check has already marked `runtime_unusable` always shows up in the diagnosis.
-A failing die is shown as “Runtime cannot use it” in the accelerator table, and **Action required** lists a `runtime_unusable` item per die (level Error, with the same evidence the periodic check records).
-When the table already carries a more specific vendor verdict for the die (for example `reset_required`), the table keeps that one and `runtime_unusable` is still listed on its own.
+(it is the same code as the periodic check, not a second implementation), so a die the periodic check has already marked `RUNTIME_UNUSABLE` always shows up in the diagnosis.
+A failing die is shown as “Runtime cannot use it” in the accelerator table, and **Action required** lists a `RUNTIME_UNUSABLE` item per die (result Failed, with the same evidence the periodic check records).
+When the table already carries a more specific vendor verdict for the die (for example `RESET_REQUIRED`), the table keeps that one and `RUNTIME_UNUSABLE` is still listed on its own.
 The **Per-card runtime check** entry (`card_runtime`) under Information summarizes how many dies passed, failed and were not checked.
 NVIDIA also has whole-node CUDA, P2P and NCCL checks: the whole-node CUDA check sees every card at once and only says whether the driver initialises and the first visible card takes a context; each card's verdict comes from the per-card check.
 
@@ -357,7 +392,7 @@ A die that was “not checked” is never omitted and never implied healthy; it 
 
 A die passed through to a virtual machine is not this node's and is not part of this check; the table still shows it as passed through. Run standalone, `gpuworks-agent doctor` has no knowledge of the agent's instances and checks every die.
 
-A card is marked `runtime_unusable` only when the check explicitly attributes failure to that die. Failure to load the library, a non-CANN library,
+A card is marked `RUNTIME_UNUSABLE` only when the check explicitly attributes failure to that die. Failure to load the library, a non-CANN library,
 `aclInit` failure, a process crash, or unreadable output is a host-level conclusion (every die on the host would fail identically):
 the round stops without recording a fault on any card, and the “Per-card runtime check” entry in node diagnosis (or `gpuworks-agent doctor`) explains why. Failures while releasing resources after a successful allocation
 (`aclrtFree`, `aclrtResetDevice`, and so on) are logged but do not mark a fault, because the die has already answered whether it works.
@@ -369,17 +404,17 @@ When a check hangs (for example stuck in the driver and not returning after 30 s
 the agent will not start a second check to queue behind the same driver lock. The stuck card is recorded as failed meanwhile, while the other cards keep their last result
 (a card that was never checked has no conclusion and is not treated as faulty); `gpuworks-agent doctor` shows the reason too.
 
-**`driver_init_failed`: the driver did not bring up this card**
+**`DRIVER_INIT_FAILED`: the driver did not bring up this card**
 
-A card's health is “Driver init failed” (`driver_init_failed`, NVIDIA only): the card exists on PCI and is still bound to the nvidia driver,
+A card's health is “Driver init failed” (`DRIVER_INIT_FAILED`, NVIDIA only): the card exists on PCI and is still bound to the nvidia driver,
 but is missing from the cards listed by `nvidia-smi`, usually because the driver could not bring it up
 (`dmesg` contains `RmInitAdapter failed`, `Possible bad register read`, or `GPU may need to be reset`).
 These cards still appear in the accelerator list (their physical presence is a fact; the agent reads sysfs directly to enumerate PCI in milliseconds, independently of the driver),
 but cannot be scheduled; the model name comes from `pci.ids`. CUDA is often unusable across such a host. Check on the node before deploying, and reset these cards if necessary.
 
-**`vendor_cli_unanswered`: card information is temporarily unreadable**
+**`VENDOR_CLI_UNANSWERED`: card information is temporarily unreadable**
 
-A card's health is “Not readable” (`vendor_cli_unanswered`): the card is bound to its vendor driver, but the vendor CLI did not respond at all in this round
+A card's health is “Not readable” (`VENDOR_CLI_UNANSWERED`): the card is bound to its vendor driver, but the vendor CLI did not respond at all in this round
 (timed out or is not installed), so nothing is known beyond its PCI identity. This does not mean the card is faulty. Check the node's GPU probe error and run the CLI manually on the node.
 
 ### Host Sees the Card but Container Does Not
@@ -402,7 +437,30 @@ After a runtime switch (manual or automatic), instances are recreated in the new
 When the agent starts before dockerd at boot, or dockerd is busy pulling a large image and does not answer within 5 seconds, an agent that picks its own runtime waits up to 2 more minutes at startup;
 only if Docker still does not answer does it use runveil, and the orange notice on the node details gives the reason (`daemon_not_ready`). It then rechecks every minute and switches back automatically once Docker answers and the node has no instances;
 with instances present it likewise shows “Docker is ready and can be switched to”. The agent's systemd unit starts after `docker.service` and `containerd.service` (ordering only,
-so a host without Docker is unaffected). An agent user that may not use Docker (not in the docker group) is a different case and is not waited for.
+so a host without Docker is unaffected). An agent user that may not use Docker (not in the docker group) is a different case and is not waited for; see the next paragraph.
+
+**The agent's account cannot open the Docker socket**
+
+When an agent running as an ordinary account gets `permission denied while trying to connect to the Docker daemon socket` from `docker info`,
+an agent that picks its own runtime uses runveil, and the orange notice on the node details gives the reason (`socket_permission_denied`), lists the socket path, the group that owns it and its gid,
+and the agent's account, and offers a command to copy: `sudo gpasswd -a <account> <group>`, followed by a restart of the agent that fits the install (a systemd install uses
+`sudo systemctl restart gpuworks-agent`; an install without systemd stops, as that account, the process whose command line is `gpuworks-agent run --state <state directory>`
+(identified by its command line, not trusted from the pid file), and runs `agent-restart.sh` in the state directory only once it has exited; if it has not exited within 30 seconds the command reports an error and does not start a second agent).
+When the agent cannot tell what started it, the command holds only the line that adds the group, and the notice names both ways to restart.
+
+After the restart the agent uses Docker. Instances on runveil are not moved: runveil's instance processes keep running after the agent stops, and the restarted agent starts the same instances again in Docker,
+so stop the node's deployments before the restart. If the account is not meant to use Docker, set the node's runtime to runveil (udocker);
+the notice and the per-minute recheck then stop.
+
+When group membership is not the cause, the notice offers no command: the agent already holds the socket's group and is still refused (the socket's mode is 0600, or SELinux or AppArmor blocks it);
+the socket belongs to the root group (a service account should not join root; give the socket a group of its own); or the socket's group could not be read.
+
+The agent must be restarted: a process's supplementary groups are fixed when it starts, so after the group is added the running agent still cannot open the socket, and the minute-level recheck cannot switch back either.
+The recheck still runs (it switches back directly when the socket's mode or group is changed or an ACL is added), and once the account database lists the account in the group and only the restart is missing, the notice changes to "restart the agent";
+a recheck whose result has not changed is not logged again.
+
+When the account is in a group that has the name of the socket's group but another gid (typically a `docker` group that a directory service such as NIS or LDAP also defines), the notice points it out:
+the socket belongs to the host's own group (for example gid 999), the directory service's group of the same name (for example gid 1002) does not open it, and the account still has to be added to the host's group with `gpasswd`.
 
 **Nodes with an explicitly selected runtime, or Ascend nodes**
 
@@ -415,10 +473,10 @@ The platform records who stopped scheduling and lifts only its own stops: a node
 
 **When a card needs a host reboot to recover**
 
-When a card reports `reboot_required` or `power_cycle_required` (for example NVIDIA Xid 79, or the driver's recovery action is a reboot), the platform likewise stops scheduling on the whole node:
+When a card reports `REBOOT_REQUIRED` or `POWER_CYCLE_REQUIRED` (for example NVIDIA Xid 79, or the driver's recovery action is a reboot), the platform likewise stops scheduling on the whole node:
 nothing short of rebooting the host recovers the card, and the other cards behind the same driver may be affected. The rules are the same as above — hover over “Scheduling stopped” to see why;
 an administrator may resume scheduling by hand to try a deployment, and while the cause remains the next report (about a minute later) stops it again;
-once the host has rebooted and the card is healthy, the first report resumes scheduling automatically. A fault that only needs a card reset (`reset_required`) stops only that card, not the whole node.
+once the host has rebooted and the card is healthy, the first report resumes scheduling automatically. A fault that only needs a card reset (`RESET_REQUIRED`) stops only that card, not the whole node.
 
 ### Card Is Passed Through, Has No Driver Bound, or Is Held by Another Driver
 
@@ -445,8 +503,8 @@ the card stays schedulable, and only PD modes that move KV over RDMA stay off th
 | State | Meaning |
 |---|---|
 | Pass / Warning / Fail | What the check last found |
-| Skipped | It did not run last time, with the reason: the card is serving, used outside the platform, the platform does not yet know what the node runs, the host cannot be asked right now (the driver is not answering, the runtime is missing, an earlier check has not returned), or the vendor tool did not answer this round |
-| Pending | The check has not run since the agent started |
+| Not checked | It did not run last time, with the reason: the card is serving, used outside the platform, the platform does not yet know what the node runs, the host cannot be asked right now (the driver is not answering, the runtime is missing, an earlier check has not returned), the vendor tool did not answer this round, or it has not run since the agent started. Not checked is not a pass |
+| Not applicable | The card has nothing for the check to look at (no NVLink, no AER reporting on the host); the cell has a dashed outline |
 | Stale | No report for more than two report periods (about 2.5 minutes), or the node is offline: the last known result is shown, not what holds now |
 
 A check that applies to none of the node's cards (no NVLink, say) is not shown as a column.
@@ -472,12 +530,30 @@ A card passed through to a virtual machine or without a driver is not this node'
 ### Card Is in Use by Processes Outside the Platform
 
 A card marked “In use outside the platform” has compute processes that the platform did not start (such as a vLLM process started by a user).
-The card does not participate in scheduling until these processes exit; hover to see process names and GPU memory usage. After they exit, the card is released only once 3 readings in a row (about 3 minutes) find it free,
+The card takes no whole-card deployment until these processes exit; hover to see process names and GPU memory usage. After they exit, the card is released only once 3 readings in a row (about 3 minutes) find it free,
 and until then it still shows the processes last seen: a job somebody starts and stops every minute would otherwise move the card in and out of scheduling with every report. The agent does not make this determination just after restarting, before it receives
 which instances it should run—otherwise its own instances would be treated as external processes. It also skips this check if probing failed in the current round;
 if the vendor tool just failed to return the inventory, asking it for processes would only incur another timeout.
 The platform recognizes its own instances by each card's hardware identity. An instance started by an older version, whose desired state records only device indexes,
 gets its identities filled in by a migration when the server is upgraded, and the agent also maps those indexes to cards through the latest probe, so it still counts as the platform's own.
+
+**A dGPU deployment with a memory limit can share the card with those processes, with consent**: when "Allow partitions beside processes outside the platform" (`share_with_foreign`, off by default) is on in the node's placement policy, automatic placement may use the card,
+and always tries cards without such processes first (on the node and across nodes); with it off, only picking the card yourself (in the deploy form, or `placement.gpus` in the request) puts a deployment there.
+With the switch off, automatic placement is refused with `held_outside_platform_not_allowed`, and the UI names the switch. The switch is under "Placement policy" on the node detail's overview;
+when the node has no ready partition backend or its agent is older, the switch says it has no effect yet. Switching it off stops no running instance, but re-placement (a restart, a failure replacement, scaling) follows the new setting:
+a rolling restart waits rather than drop a replica, and a replacement after a crash goes pending. Sharing a card isolates memory only; compute and bandwidth are shared with those processes.
+A deployment is admitted by the memory left: the card's total, less what the processes hold,
+less the headroom kept beside them (5% of the card, at least 4 GiB), less what the platform's instances already claim, must cover the deployment's memory limit plus the partition overhead.
+When it does not fit, the refusal (`no_fit`) lists what the processes hold and the headroom, and in the deploy form the card can be picked only for such a deployment. The card is still not shared,
+and is refused as “In use outside the platform”, for: a whole-card deployment; a process the vendor tool gives no memory figure for, or a card Kubernetes gave to another pod
+(what such use may grow to is not known); and a node whose agent is older—sharing needs an agent that, once a platform instance is on the card, keeps reporting the outside processes that were already there
+(each of the platform's engines keeps one process on the card, so processes beyond the number of platform instances there are foreign, including a workload restarted under a new PID or a job started beside ours; a process that exits still has its memory held back until 3 free readings in a row) until every platform instance there sleeps or has left and the card is examined in full again, and keeps that record in its state directory across restarts; an older agent drops them once the first instance starts, and the card would read as free.
+A deployment that sleeps is not placed on such a card either (`held_outside_platform_sleep`): while those processes run, a sleeping instance could not be woken there.
+A card holding only partition instances is read by the same slot rule by a newer agent, so an outside process that starts there later is reported too; a card holding a whole-card instance that was never shared with outside processes is not read this way: a process that appears there is not reported as outside the platform, since the agent cannot tell it from its own instance's. On a held card whose outside use is unknown, raising a dGPU quota in place is refused, and the GPU list shows no available memory. The rationale is in [ADR 0068](../adr/0068-partitions-share-cards-with-foreign-processes-by-memory.md).
+
+**Slow inference: check the instance's shared-card note**. When an instance's cards are shared with processes outside the platform, the instance panel's "Notes" names the cards and how much memory the outside processes hold (`INSTANCE_CARD_SHARED_OUTSIDE`, or `..._UNKNOWN` when that is not known):
+memory is isolated, but compute and bandwidth are shared with them, which can slow inference. The note appears at the next refresh after the processes are reported, and goes once they leave and the card is released.
+Outside processes that start later on a card holding a whole-card instance, and older agents, show no such note.
 
 Such a card is also left out of the periodic runtime check and of the recheck after an instance fails to start: someone else's workload should not be disturbed,
 and memory held by someone else says nothing about whether the runtime can use the card. The card keeps its last check result, and checking resumes once the processes exit.
@@ -499,7 +575,7 @@ Where each vendor's card processes are read from:
 
 ### Diagnosis Finds an Unrecognized Accelerator
 
-Doctor reports “Unrecognized accelerator device” (`accelerator_unrecognized`): the host has
+Doctor reports “Unrecognized accelerator device” (`ACCELERATOR_UNRECOGNIZED`): the host has
 a PCI device from a supported vendor, but it matches none of that vendor's recognition rules—usually a new model we have not seen before. Send us the BDF,
 `vendor:device`, class, and bound driver from the report so recognition can be added. These devices do not appear in the accelerator list and do not participate in scheduling.
 
@@ -516,10 +592,16 @@ Each item in “Action required” provides **Evidence** (the command or call us
 An **Action** command, such as a reset command, is provided only when the vendor tool itself gives a recovery method.
 
 Checks include accelerator health (see the next section), disk space below 10% free (root partition, model directory, container data directory, and storage),
-an unresponsive selected container runtime, accelerator tool execution failures, NVIDIA CUDA initialization failures and multi-card communication check failures, and per-card (per-die on Ascend) runtime check failures (`runtime_unusable`). Cards in use by processes outside the platform are not checked and are listed as not checked.
+an unresponsive selected container runtime, accelerator tool execution failures, NVIDIA CUDA initialization failures and multi-card communication check failures, and per-card (per-die on Ascend) runtime check failures (`RUNTIME_UNUSABLE`). Cards in use by processes outside the platform are not checked and are listed as not checked.
+
+Each item is a failure, a warning or **not checked**. A check that should have run and did not is never left out: it is listed as not checked with a code saying why: the mount table could not be read (`MOUNT_TABLE_UNREADABLE`),
+the CUDA check did not pass so the multi-GPU checks were not run (`CUDA_CHECK_NOT_PASSED`), the host lacks something the check needs (`CHECK_PREREQUISITE_MISSING`, such as torch),
+the command it reads failed (`CHECK_TOOL_FAILED`), the diagnosis was cancelled or ran out of time (`CHECK_CANCELLED`, `CHECK_BUDGET_EXHAUSTED`), or a card has no device number (`CARD_UNADDRESSABLE`);
+the per-card check also uses the card health checks' skip reasons (the card is serving, used outside the platform, and so on). On a single-card host the multi-GPU checks do not apply and are not listed.
+The verdict at the top of a diagnosis and each stage take their most serious item: failed, warning, not checked, passed in that order, so a stage with a check that did not run never reads as passed.
 
 There are five additional runtime and filesystem checks (see [Runtime Provisioning Failures and Filesystems on Container Nodes](#运行时初始化失败与容器节点的文件系统)):
-`runtime_provision_failed` (runtime provisioning failed), `runtime_state_untraversable` (the dedicated runtime user cannot reach the agent directory), `path_noexec`, `path_read_only`, and `path_ephemeral`.
+`RUNTIME_PROVISION_FAILED` (runtime provisioning failed), `RUNTIME_STATE_UNTRAVERSABLE` (the dedicated runtime user cannot reach the agent directory), `PATH_NOEXEC`, `PATH_READ_ONLY`, and `PATH_EPHEMERAL`.
 
 **Other sections**
 
@@ -537,9 +619,9 @@ There are five additional runtime and filesystem checks (see [Runtime Provisioni
 
 | Level | Scheduling | Meaning |
 |---|---|---|
-| OK | As usual | No findings, or only resolved historical errors (`memory_error_history`) |
-| Warning | As usual, but used only when there are not enough healthy cards (evaluation results include `degraded_gpus_used`) | `memory_repair_pending` (reset pending), `vendor_health_warning` (vendor tool Warning), `pcie_link_degraded` (PCIe link degraded), `pcie_errors` (recovered PCIe errors), `nvlink_down` (NVLink down) |
-| Fault | Stopped | `memory_uncorrectable_errors`, `memory_remap_failed`, `reset_required`, `reboot_required`, `power_cycle_required`, `vendor_health_fault`, `runtime_unusable` (the runtime cannot use this card), `driver_init_failed` (the driver did not bring it up), `vendor_cli_unanswered` (the vendor CLI did not respond, so information is unreadable), `pcie_fatal_errors` (fatal PCIe errors) |
+| OK | As usual | No findings, or only resolved historical errors (`MEMORY_ERROR_HISTORY`) |
+| Warning | As usual, but used only when there are not enough healthy cards (evaluation results include `degraded_gpus_used`) | `MEMORY_REPAIR_PENDING` (reset pending), `VENDOR_HEALTH_WARNING` (vendor tool Warning), `PCIE_LINK_DEGRADED` (PCIe link degraded), `pcie_errors` (recovered PCIe errors), `NVLINK_DOWN` (NVLink down) |
+| Fault | Stopped | `MEMORY_UNCORRECTABLE_ERRORS`, `MEMORY_REMAP_FAILED`, `RESET_REQUIRED`, `REBOOT_REQUIRED`, `POWER_CYCLE_REQUIRED`, `VENDOR_HEALTH_FAULT`, `RUNTIME_UNUSABLE` (the runtime cannot use this card), `DRIVER_INIT_FAILED` (the driver did not bring it up), `VENDOR_CLI_UNANSWERED` (the vendor CLI did not respond, so information is unreadable), `PCIE_FATAL_ERRORS` (fatal PCIe errors) |
 
 Whether a card is usable is a conclusion the server determines once when saving the card (combining health level, card ownership, and usage outside the platform).
 The API exposes this as `schedulable`. Both the UI and scheduling read this field instead of deriving it independently. **Do not read `healthy`**:
@@ -583,8 +665,8 @@ replace `0000:7e:00.0` with your card's address.
 
 **Symptoms**: All deployments fail with `runveil runtime unavailable: <reason>`; earlier versions may show
 `udocker runtime unavailable` or `prepare udocker ownership`. Node diagnostics may also report
-`runtime_provision_failed`, `runtime_state_untraversable`, `path_noexec`, `path_read_only`, or `path_ephemeral`.
-If launch logs or instances report `fork/exec …/udocker/bin/proot-…: permission denied`, check `runtime_state_untraversable` first.
+`RUNTIME_PROVISION_FAILED`, `RUNTIME_STATE_UNTRAVERSABLE`, `PATH_NOEXEC`, `PATH_READ_ONLY`, or `PATH_EPHEMERAL`.
+If launch logs or instances report `fork/exec …/udocker/bin/proot-…: permission denied`, check `RUNTIME_STATE_UNTRAVERSABLE` first.
 
 ### Identify the Affected Path First
 
@@ -614,9 +696,9 @@ See [Why the udocker Node Installation Directory Cannot Be on a Network Volume](
 
 | Check result | Action |
 |---|---|
-| `path_noexec` (error) | The mount containing the udocker or agent directory has `noexec`; adjust the mount or use a directory that allows execution |
-| `path_read_only` (error) | The mount containing the model, udocker, or agent directory is read-only; adjust the mount or use a writable directory |
-| `path_ephemeral` (warning) | The model, udocker, or agent directory is in the container's own overlay layer and is lost on recreation; choose a directory according to the persistence requirements above |
+| `PATH_NOEXEC` (failed) | The mount containing the udocker or agent directory has `noexec`; adjust the mount or use a directory that allows execution |
+| `PATH_READ_ONLY` (failed) | The mount containing the model, udocker, or agent directory is read-only; adjust the mount or use a writable directory |
+| `PATH_EPHEMERAL` (warning) | The model, udocker, or agent directory is in the container's own overlay layer and is lost on recreation; choose a directory according to the persistence requirements above |
 
 Path checks read `/proc/self/mountinfo`; use `findmnt -T <path>` to verify.
 Container-layer checks apply to nodes with `/.dockerenv` or `/run/.containerenv`.
@@ -637,7 +719,7 @@ An agent running as root starts workloads as the dedicated `udocker` user. The a
 if one of them does not let `udocker` enter (typically an installation under `/root/…` or a private 0700 home), every launch fails with
 `fork/exec …/udocker/bin/proot-…: permission denied`, while everything else (image management, `runveil ps`) keeps working, so the cause is hard to see.
 
-`runtime_state_untraversable` (error) gives the first blocking directory, its permissions and owner, the runtime user it was judged for, and the fix. To resolve it:
+`RUNTIME_STATE_UNTRAVERSABLE` (failed) gives the first blocking directory, its permissions and owner, the runtime user it was judged for, and the fix. To resolve it:
 
 - Run the `chmod o+x <directory>` shown in the evidence: it grants search only, no listing or writing.
 - Or reinstall the agent with an installation directory outside that directory (for example `/opt/gpuworks`).
@@ -649,7 +731,7 @@ After the fix, run the diagnosis again; restarting the agent is unnecessary.
 
 **Other initialization failures**
 
-`runtime_provision_failed` preserves the full errors for directory creation, PRoot extraction, chown, filenames, and other operations; chown errors include the command's stderr.
+`RUNTIME_PROVISION_FAILED` preserves the full errors for directory creation, PRoot extraction, chown, filenames, and other operations; chown errors include the command's stderr.
 Follow the evidence and verification commands in the error. If image pulling encounters this error, it fails immediately with `udocker runtime unavailable: <reason>`, without trying image sources one by one or reporting `all image sources failed`. Fix the node environment first.
 
 ### Confirm Recovery
@@ -691,7 +773,7 @@ while Docker Desktop containers run in a VM without Metal). On NVIDIA nodes, doc
 runveil requires only Linux on amd64 / arm64;
 the default launcher does not require Python. If none of the three runtimes is usable, the log reports
 `no usable container runtime (docker/nerdctl/udocker); deployments disabled on this node`. The node can still come online
-and report GPUs, but scheduling rejects it with `runtime_unavailable`, and the dGPU reason is `no usable docker/udocker runtime on the node`.
+and report GPUs, but scheduling rejects it with `RUNTIME_UNAVAILABLE`, and the dGPU reason is `no usable docker/udocker runtime on the node`.
 Use `--driver` or `GPUWORKS_RUNTIME_DRIVER` to force a runtime (`docker|udocker|nerdctl|host|none`; `host` is only available on macOS and `udocker` only on Linux.
 If you force a driver unsupported by the local OS or supply an invalid value, the reason is recorded only in the agent log, and the node continues running without a runtime),
 or use `PATCH /api/v1/nodes/{uuid}/runtime` to change the preference (`auto/docker/nerdctl/udocker`).
@@ -711,6 +793,34 @@ or use `PATCH /api/v1/nodes/{uuid}/runtime` to change the preference (`auto/dock
 
 When a container exits after starting, the failure message includes the engine's last error line, for example, `container exited (code 2): vllm: error: unrecognized arguments: …`.
 If there is no output at all, it says `… with no output`. This usually means the disk is full and even logs cannot be written.
+
+## Containers from Several gpuworks Installations on One Machine
+
+**Symptom**: one compute node runs several agents (each with its own state directory, each connected to a different
+control plane), and `docker ps` lists many `gpuworks-…` containers without showing which control plane started which.
+
+**How to confirm**
+
+docker and nerdctl containers carry ownership labels (see the label table in [Deployment Launch Parameter Sources](../reference/deployment-launch-sources.md#运行时拼装)).
+Filter by control-plane address or by the agent's state directory:
+
+```bash
+docker ps -a --filter label=gpuworks.server=https://<管理节点地址>
+docker ps -a --filter label=gpuworks.state-dir=/opt/gpuworks
+docker inspect -f '{{json .Config.Labels}}' <容器名>
+```
+
+nerdctl takes the same `--filter label=…`, plus the agent's `-n <namespace>`. `gpuworks.instance` and `gpuworks.deployment`
+match the instance UUID and deployment ID shown in the management UI.
+
+**Notes**
+
+- A server_dial node does not know the control-plane address, so its containers have no `gpuworks.server`; tell them apart by `gpuworks.state-dir`.
+- Labels are written when a container is created: containers already running before the agent upgrade have none until the instance is recreated.
+- runveil containers already live under each agent's own state directory and cannot see each other; list them with `gpuworks-agent runveil --state <dir> ps -a`.
+- Orphan container cleanup (the server setting `orphan_cleanup`, off by default) matches the `gpuworks-` name prefix, not the labels:
+  turning it on while several agents share one docker or nerdctl removes the other agents' containers.
+- Each control plane schedules on its own and does not know which cards the others use, so they can fill the same card; keep the cards each one uses apart by hand.
 
 ## Model Downloads Stall, Fail, or Leave Incomplete Directories
 
@@ -767,8 +877,9 @@ Candidates consist of the alternative addresses in site rules and the site itsel
 
 | Failure type | Automatic handling |
 |---|---|
-| File list retrieval fails | If the address is unreachable, returns an HTTP error, or provides an unparseable list, the current address enters a 30-minute cooldown and the next candidate is tried immediately |
-| Non-retryable source error | If a download returns an HTTP error (including 404, 401/403, or 429), TLS certificate verification fails, or a similar error occurs, the original address is not retried. It enters a 30-minute cooldown and the next candidate is tried; the operation ends if there is no next candidate |
+| File list retrieval fails | If the address is unreachable, returns an HTTP error, or provides an unparseable list, the current address enters a 30-minute cooldown and the next candidate is tried immediately; rate limiting (429, 503) is handled as in "Source rate limiting" below |
+| Source rate limiting | If the file list or a download returns 429 or 503, wait for the reset time in the response's `Retry-After` or `RateLimit` header (at least the backoff interval, at most 5 minutes and 1 second) and retry the same address; progress shows "rate limited by the source". These count toward the attempts in the next row, and only after they are exhausted does the address enter cooldown and switch; in the worst case, one file can wait about 75 minutes at the last candidate |
+| Non-retryable source error | If a download returns another HTTP error (including 404 and 401/403), TLS certificate verification fails, or a similar error occurs, the original address is not retried. It enters a 30-minute cooldown and the next candidate is tried; the operation ends if there is no next candidate |
 | Retryable transfer error | For connection refusals or resets, TLS handshake timeouts, EOF, and similar download errors, retry the same address first: up to 6 attempts per file, or 16 for the last candidate, including the initial attempt. Backoff starts at 1 second and caps at 15 seconds. Only after all attempts fail does the address enter cooldown and switch |
 | Individual request times out | If one HTTP request lasts more than 15 minutes, disconnect and attempt to resume; this counts toward the address's total attempt limit |
 | No data for an extended period | If no response headers or new data arrive for 5 consecutive minutes, disconnect and attempt to resume. If this happens twice consecutively at the same address and another candidate is available, enter cooldown and switch. The last candidate does not switch again and remains subject to the 16-attempt total limit |
@@ -871,13 +982,16 @@ the `POST /api/v1/evaluate` response and in `DEPLOYMENT_UNSCHEDULABLE` deploymen
 | `LAUNCH_CONFIG_CONFLICT` | 400 | The same key has different values in a form field and custom arguments; keep only one (parameters are `key`, `field_value`, `flag`, and `extra_value`) |
 | `ACQUISITION_CANDIDATE_STALE` | 400 / 409 | The storage specified in the request no longer exists or no longer contains the model, or the selected weight source is no longer in the template; evaluate again. The server does not substitute another option |
 | `MODEL_SOURCE_UNAVAILABLE` | 409 | The local model has no available source on the target node, or source validation failed; check the error details rather than treating it as a public download timeout |
+| `TEMPLATE_MODEL_MISMATCH` | 400 | The model a template deployment selects (`params.model_id`) has a repository id that matches none of the template's weight sources (`params.repo_id` and `params.revision` are the source the template resolved); the platform does not switch to another model. Select a model of that repository; for a local model, change its source id to the template's repository id in the model details |
+| `MANUAL_COMMAND_RANK_BLIND` | 400 | The manual command of a multi-node or PD deployment is shared by every rank but references no variable that tells ranks apart (`params.missing` lists the missing variable names). A multi-node command must reference `${GPUWORKS_NODE_RANK}` or `${GPUWORKS_HEADLESS}`, and a PD command `${GPUWORKS_PD_ROLE}`; the script draft from **Edit Command Text** on the deployment page already does. Deployments already stored are not affected |
+| `COMMAND_OVERRIDE_RANK_BLIND` | 400 | A multi-node or PD deployment overrides Cmd in `engine` or `image-entry` mode: every rank would get these arguments as written, with no variable to tell them apart. Clear the Cmd override, or use a manual command. |
 | `DISTRIBUTED_*`, `REPLICAS_*`, `MASTER_PORT_INVALID` | 400 | Invalid multi-node / replica parameters |
 
 **Insufficient GPU memory** (`schedule` reason codes; see the evaluation response and `schedule.explain`):
 
 | Reason code | Meaning |
 |---|---|
-| `no_fit` | Fixed startup requirement per card > available GPU memory; parameters include `required_gib`, `available_gib`, `tp`, and `gpu_memory_utilization` |
+| `no_fit` | Fixed startup requirement per card > available GPU memory; parameters include `required_gib`, `available_gib`, `tp`, and `gpu_memory_utilization`, plus `foreign_gib` (what outside processes hold) and `foreign_headroom_gib` (the headroom kept beside them) on a card shared with processes outside the platform |
 | `insufficient_empty_gpus` / `insufficient_shared_gpus` | Not enough idle whole cards / shareable cards |
 | `pinned_gpus_unavailable` | The cards a manually placed PD instance is pinned to are held by other deployments; the parameters give `node`, `gpus` (the pinned card indexes), and `holders` (the deployments holding them). The instance does not switch to other free cards on the node but waits for the pinned cards: stop or move the deployments holding them, or switch this deployment to automatic placement (`PUT /deployments/{id}/placement-mode`) so the platform uses free cards. When a pinned card is held outside the platform, is not healthy, or is free but still does not fit, the corresponding reason code applies |
 | `waiting_for_yield` | The replica fits once deployments sharing its cards by yield policy give them up, and waits for them; the parameters give `node`, `holders` (each holding deployment with `at_once`, or `idle_sec` and for yield-on-a-turn `max_serve_sec`: the terms it gives way to this deployment on) and `instances`. It resolves by itself when the holders sleep; see [How a New Deployment Gets onto a Shared Card](scheduling-center.md#新部署怎样放到共用的卡上). A holder with never yield is never asked to give way |
@@ -887,12 +1001,15 @@ the `POST /api/v1/evaluate` response and in `DEPLOYMENT_UNSCHEDULABLE` deploymen
 | `no_free_gpu` | No idle GPUs |
 | `no_healthy_gpu` | None of the node's own cards has a health level that permits serving |
 | `no_owned_gpu` | The node has no cards available for its own use: it has none, or all are passed through to VMs, unbound from drivers, or held by other drivers |
-| `gpus_held_outside_platform` | The cards themselves are healthy, but all usable cards are occupied by processes outside the platform |
+| `gpus_held_outside_platform` | The cards themselves are healthy, but all usable cards (the named ones, when the request names cards) are occupied by processes outside the platform, and this deployment cannot share them: it takes whole cards, the outside processes' memory is unknown, or the node's agent is older |
+| `held_outside_platform_sleep` | Only cards shared with processes outside the platform could take this memory-limited deployment, but it sleeps: while those processes run, it could not be woken on that card once asleep. Fix: turn off sleep for this deployment, or pick another card |
+| `held_outside_platform_not_allowed` | Cards that could take this memory-limited deployment are used by processes outside the platform, and the node's placement policy does not allow partitions beside them; params `setting` (the switch's key), `gpus`, `count`, `node`. Also reported when the node has a clean card that is busy or too small. Fix: turn the switch on in the node's placement policy, or pick the card yourself |
+| `foreign_shared_gpus_used` | A plan note (not a refusal): `count` of the chosen cards are shared with processes outside the platform (up to `foreign_gib` GiB), because no clean card could take the deployment |
 | `tp_head_count_not_divisible` | The attention head count is not divisible by TP |
 | `sleep_residue_blocks_startup` | Residual GPU memory from sleeping instances blocks startup |
 | `engine_ports_exhausted` | The node's engine port range is exhausted |
 | `insufficient_disk` / `insufficient_runtime_disk` | Insufficient space on the weights disk / runtime disk |
-| `runtime_unavailable` / `serving_unavailable` | The node has no container runtime / no network capable of carrying serving traffic |
+| `RUNTIME_UNAVAILABLE` / `serving_unavailable` | The node has no container runtime / no network capable of carrying serving traffic |
 | `image_source_forbidden` | The pull source rules applicable to the node leave no source from which to pull the image (parameters `node` and `image`); see [Image Pull Failures](#镜像拉取失败) |
 | `partition_unavailable` | A dGPU backend is required, but none is ready on the node; see the dGPU section |
 
@@ -1030,49 +1147,52 @@ After retrying, check events and logs again and confirm that the new instance en
 
 ## Gateway Returns 401, 404, or 503
 
-The gateway error body differs from the management API: `{"error":{"message":"…","type":"gpuworks_proxy"}}`. There is no `code`; use `message` to identify the error.
+The gateway error body has the OpenAI shape: `{"error":{"message":"…","type":"…","code":"…","param":…}}`. Identify the error by `code`; `message` is an English description. Every response carries `X-Request-ID`, which you can look up in the request records. For the code table, see [OpenAI-Compatible Gateway](../reference/openai-gateway.md#errors).
 
-| Status | message | Cause and action |
+| Status | code | Cause and action |
 |---|---|---|
-| 401 | `invalid or missing API key` | `Authorization: Bearer <key>` is missing, or the key was deleted or is invalid. `/v1` requires a key by default and refuses every request even when the database contains **no keys at all**; for genuinely keyless access an administrator turns on "Accept /v1 inference requests without a token" (`inference_open_access`) under **Settings → Security** |
-| 400 | `request body must specify a model` | The request body has no `model` |
-| 404 | `no deployment serves model <name>` | The model name is not the deployment's served name (list names with `GET /v1/models`), or the deployment has stopped |
-| 404 | `deployment <name> does not expose <METHOD> <path>` | Only the playground (`/api/v1/playground/v1/*`) performs contract checks and returns this error: the deployment's API contract does not include this endpoint (for example, calling `/v1/embeddings` on a Chat model). Use `GET /api/v1/playground/openapi.json` to view its declared endpoints. The public `/v1` does not perform this check; it forwards the request unchanged to the engine, which returns its own 404 or other response |
-| 404 | (The entire `/v1` path returns 404) | The listener you accessed does not serve the inference API. Check `listen.gateway` |
-| 503 | `model is asleep; wake it first (console, or POST /api/v1/deployments/<id>/wake; a schedule or a waiting wake may also wake it)` | No awake replica is available to serve requests. Wake it in the console or call `POST /api/v1/deployments/{id}/wake`; a schedule or a waiting wake also wakes it, see the [Scheduling Analysis](scheduling-center.md). Once sleep intent is issued, selected instances stop accepting new requests |
-| 503 | `no running instance for <name> (still starting?)` | No running replica: it is still starting, has failed, has been stopped, or its node is offline. Check instance status |
-| 503 | `distributed model <name> is not ready: rank N is unavailable`, `distributed model leader is offline for <name>`, `distributed model leader is not ready for <name>`, `distributed deployment node set is incomplete for <name>` | A rank or the leader in a multi-node deployment is not ready |
-| 503 + `Retry-After: 2` | `upstream error: … data lane unavailable: … did not reattach within 5s` | The node data lane did not reconnect within 5 seconds of disconnecting. **Retryable**; there is no fallback to the control lane |
-| 503 + `Retry-After: 2` | `upstream error: … data lane unavailable: … data lane closed under an open stream: …` | The data lane disconnected after the request reached the node but before a response arrived. **Retryable**. If it disconnects after the response starts, the client receives a truncated response |
-| 503 + `Retry-After: 2` | `no prefill instance could take the request (…)` | The PD deployment has no available prefill instance |
-| 502 | `upstream error: …` | The tunnel or connection to the engine failed. Check node connectivity and engine logs |
-| 413 | `request body exceeds N bytes` | Exceeds `--proxy-max-body-bytes` (default: 256 MiB) |
+| 401 | `INVALID_API_KEY` | `Authorization: Bearer <key>` is missing, or the key was deleted or is invalid. `/v1` requires a key by default and refuses every request even when the database contains **no keys at all**; for genuinely keyless access an administrator turns on "Accept /v1 inference requests without a token" (`inference_open_access`) under **Settings → Security** |
+| 400 | `MODEL_REQUIRED` | The request body has no `model` |
+| 404 | `MODEL_NOT_FOUND` | The model name is not the deployment's served name (list names with `GET /v1/models`), or the deployment has stopped |
+| 404 | `MODEL_ROUTE_NOT_EXPOSED` | Only the playground (`/api/v1/playground/v1/*`) performs contract checks and returns this error: the deployment's API contract does not include this endpoint (for example, calling `/v1/embeddings` on a Chat model). Use `GET /api/v1/playground/openapi.json` to view its declared endpoints. The public `/v1` does not perform this check; it forwards the request unchanged to the engine, which returns its own 404 or other response |
+| 404 | `ROUTE_NOT_FOUND` | The listener you accessed does not serve the inference API. Check `listen.gateway` |
+| 503 | `MODEL_ASLEEP` | No awake replica is available to serve requests. Wake it in the console or call `POST /api/v1/deployments/{id}/wake`; a schedule or a waiting wake also wakes it, see the [Scheduling Analysis](scheduling-center.md). Once sleep intent is issued, selected instances stop accepting new requests |
+| 503 | `MODEL_NOT_READY`, `DEPLOYMENT_START_FAILED` | No running replica: it is still starting, has failed, has been stopped, or its node is offline. Check instance status |
+| 503 | `DISTRIBUTED_NOT_READY`, `DISTRIBUTED_LEADER_OFFLINE` | A rank or the leader in a multi-node deployment is not ready |
+| 503 + `Retry-After: 2` | `DATA_LANE_UNAVAILABLE` (`message` contains `did not reattach within 5s`) | The node data lane did not reconnect within 5 seconds of disconnecting. **Retryable**; there is no fallback to the control lane |
+| 503 + `Retry-After: 2` | `DATA_LANE_UNAVAILABLE` (`message` contains `data lane closed under an open stream`) | The data lane disconnected after the request reached the node but before a response arrived. **Retryable**. If it disconnects after the response starts, the client receives a truncated response |
+| 503 + `Retry-After: 2` | `PD_PREFILL_UNAVAILABLE` | The PD deployment has no available prefill instance |
+| 502 | `UPSTREAM_UNAVAILABLE` | The tunnel or connection to the engine failed. Check node connectivity and engine logs |
+| 413 | `REQUEST_TOO_LARGE` | Exceeds `--proxy-max-body-bytes` (default: 256 MiB) |
 
-Only the data-lane-unavailable and PD-no-prefill categories of 503 include `Retry-After`. For 503 responses caused by sleeping or starting instances, resolve the instance issue first instead of retrying.
+Only three kinds of 503 carry `Retry-After: 2`: data lane unavailable, an instance that stopped under the request (`INSTANCE_UNAVAILABLE`), and PD without a prefill instance; a stopping server (`SERVER_RESTARTING`) carries `Retry-After: 10`. For 503 responses caused by sleeping or starting instances, resolve the instance issue first instead of retrying.
 For the data lane mechanism, see [ADR 0024](../adr/0024-data-lane-no-ctrl-fallback.md). For other differences, see [OpenAI-Compatible Gateway](../reference/openai-gateway.md).
 
 ## dGPU Capability Unavailable
 
-**Symptoms**: Evaluating a deployment with a GPU memory limit returns `partition_unavailable`, or creation returns 400 `DISTRIBUTED_PARTITION_BACKEND_UNAVAILABLE`
-(message: `partition backend <id> is unavailable: <reason>`).
+**Symptoms**: Evaluating a deployment with a GPU memory limit returns `partition_unavailable`, or creation returns 400 with one of the reason codes below (when another member of a distributed deployment is unavailable, the code is
+`DISTRIBUTED_PARTITION_BACKEND_UNAVAILABLE` and `params.reason_code` is that member's reason code).
 
 **Read the status**: Check `partition_capabilities[]` in the `GET /api/v1/nodes` / `GET /api/v1/gpus` response. Each entry's `status` is only
-`ready` / `unavailable`, and `reason` is the sole source of the cause. Non-NVIDIA backends also have `probe_status` (`passed` / `skipped` / `failed`).
+`ready` / `unavailable`; when unavailable, `reason_code` gives the cause and `reason_params` its parameters, while `reason` is only the English fallback.
+Non-NVIDIA backends also have `probe_status` (`passed` / `skipped` / `failed`).
 
 **Confirm and resolve**: `nvidia-dgpu` needs no probe and checks only the runtime and assets. `ascend-dgpu` / `ppu-dgpu` require a passing probe.
 By default, the probe runs once per agent process and caches its result (it reruns when assets, GPUs, or the runtime change). After fixing the environment, restart the agent to probe again. Do not fall back to whole GPUs and treat that as success.
 For details, see [Enable and Troubleshoot dGPU](dgpu.md) and the [Support Matrix](../reference/support-matrix.md).
 
-**Possible causes (`reason` text, in evaluation order)**
+**Possible causes (`reason_code`, in evaluation order)**
 
-1. `container inference unverified: no usable docker/udocker runtime on the node`: the node has no usable runtime.
-2. `container inference unverified: <reason>`: the backend constrains the runtime (for example, PPU is verified only on Docker).
-3. `agent has not reported current dGPU safety capability; upgrade the agent`: the agent is too old.
-4. `missing dGPU assets: <file-list>`: dGPU assets are missing.
-5. `dGPU probe has not completed: …`: the probe has not returned a result yet. Wait or check the agent logs.
-6. `dGPU probe failed: <detail>`: the probe failed. If the probe is `skipped`, the message falls back to `container inference unverified: <probe-detail>` (for example, `no container runtime available on the node`). The detail comes from the probe container, such as
-   `the container runtime cannot load the embedded probe image`, `dGPU probe timed out` (15 seconds), or
-   `probe container exited with code N`.
+1. `PARTITION_RUNTIME_MISSING`: the node has no usable runtime.
+2. `PARTITION_RUNTIME_UNSUPPORTED`: the backend works only on the runtimes in `reason_params.supported_runtimes`, and the node uses `runtime` (for example, PPU is verified only on Docker and Kubernetes).
+3. `PARTITION_AGENT_UPGRADE_REQUIRED`: the agent is too old.
+4. `PARTITION_ASSETS_MISSING`: dGPU assets are missing; `missing_assets` lists the files.
+5. `PARTITION_PROBE_PENDING`: the probe has not returned a result yet (`gpu_index` is the card with no result). Wait or check the agent logs.
+6. `PARTITION_PROBE_FAILED` / `PARTITION_PROBE_SKIPPED`: the probe failed or was skipped; `probe_detail` is the probe's own output, such as
+   `the container runtime cannot load the embedded probe image`, `dGPU probe timed out` (15 seconds),
+   `probe container exited with code N`, or `no container runtime available on the node`.
+
+A request naming a backend that does not exist returns `PARTITION_BACKEND_UNKNOWN`; a backend no card on the node can use returns `PARTITION_BACKEND_NOT_ON_NODE`.
 
 When a GPU memory quota is set without specifying `partition_backend`, the platform selects a ready backend based on the candidate node. If none is available, it returns that node's capability reason;
 it does not always use the NVIDIA backend. Explicitly specifying a backend restricts selection to that backend. Specifying a backend without a positive `vram_limit_gib`
@@ -1237,7 +1357,7 @@ When you cannot log in to the customer's servers, have an administrator work in 
 
 | Path | Content |
 |---|---|
-| `manifest.json` | The collection's scope, the server version, and whether each part was collected, skipped (node offline, agent version without support) or failed |
+| `manifest.json` | The collection's scope, the server version, and each part's check result: `pass` collected whole, `warn` cut at its size limit, `skip` not read (node offline, agent version without support), `fail` the read failed (with its error text) |
 | `server/disk.json` | The server's data, log and backup directories and SQLite's temporary directory: their filesystems' size and free space, and the size of each entry in every directory (largest first) |
 | `server/gpuworks-server.log` | The server log in the time range (info included; the Logs page has warn and above only) |
 | `nodes/<uuid>/agent.log`, `doctor.json` | The chosen nodes' (without a choice, the nodes of the chosen deployments' instances) agent logs and diagnosis reports |
@@ -1268,3 +1388,8 @@ When filing an issue or asking for help, attach a [diagnostics archive](#无法�
 4. The complete output of `gpuworks-agent doctor` on the node.
 5. For connection issues, include the result of `GET /api/v1/agent/rejects`, the exit code of `gpuworks-agent smoke`, the deployment request body, and the network topology (whether a reverse proxy / NAT is involved).
    Remove API keys, node tokens, and other credentials before sharing.
+
+<!-- translation-source-sha256: 0c6cc6d9c371984f4bdc58c15281e664fa7c898cc103b60480ef7a6cfd38548e -->
+<!-- translation-localized-code-block: d383eda0730826d3b7660b307742a2629bc299ddf17052b3a12ca3f2358f47be fe0a439b8f0aa7b27bd972caa05b4ff538ca3852b599385b66339dd84b84cb6f Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: d7bedf2c39d1189b0b6bb93c618159d59d4e9db4f959892452d1c1dfdc925b9c 41cbdf89196804621a51df585f2a864cf675566f5c55b422bcfe55a4622cc6a1 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: ecd053199ed2d70bfd9cfa13dbb9bfda98198039c7d10b385f1bef0f8196c8b0 6a3d1a90332170571fd2968b9aeeb4d65a94fcdc3c5c3e21339d8d32a6107895 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

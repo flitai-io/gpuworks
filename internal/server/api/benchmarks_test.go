@@ -20,6 +20,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/pkg/bench/dataset"
+	"gpuworks.ai/gpuworks/pkg/bench/loadgen"
 )
 
 func TestBenchmarkTokenizerImport(t *testing.T) {
@@ -680,8 +681,31 @@ func TestBenchmarkModelsProbeHTTPError(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	if w.Code != http.StatusConflict {
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"code":"`+ErrorBenchmarkProbeFailed+`"`) {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// A probe the node ran: the endpoint answer arrives as the agent's coded
+// refusal (or, from an agent older than codes, its sentence), and anything
+// else - whatever its wording - is a probe failure.
+func TestBenchmarkProbeErrorReadsTheCodeNotTheText(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		code string
+	}{
+		{"agent 404", &proto.RPCError{Code: proto.ErrorBenchEndpointNotFound, Message: "models probe returned 404 Not Found"}, ErrorBenchmarkEndpointNotFound},
+		{"server 404 wrapped", fmt.Errorf("external endpoint probe failed: %w", fmt.Errorf("%w: models endpoint returned 404 Not Found: ", loadgen.ErrModelsEndpointNotFound)), ErrorBenchmarkEndpointNotFound},
+		{"text that says not found", errors.New("node not found: 404"), ErrorBenchmarkProbeFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			writeBenchmarkProbeError(w, tc.err, "http://10.0.0.1:8000")
+			if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"code":"`+tc.code+`"`) {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+		})
 	}
 }
 

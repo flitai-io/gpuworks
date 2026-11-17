@@ -8,7 +8,8 @@ export type OperationType =
   | "openai.image.generate"
   | "openai.image.edit"
   | "openai.video.generate"
-  | "openai.realtime";
+  | "openai.realtime"
+  | "systemone.decide";
 
 export interface AsyncLifecycle {
   id_field: string;
@@ -53,7 +54,7 @@ export interface InferenceAPIOperation {
   mode: "sync" | "stream" | "async" | "realtime";
 	request_encoding?: "json" | "multipart" | "websocket";
   request_encodings: Array<"json" | "multipart" | "websocket">;
-  renderer: "chat" | "completion" | "audio" | "vector" | "rerank" | "image" | "video" | "realtime";
+  renderer: "chat" | "completion" | "audio" | "vector" | "rerank" | "image" | "video" | "realtime" | "decision";
   response: "json" | "sse" | "audio" | "image" | "video" | "websocket";
   async?: AsyncLifecycle;
   example?: OperationExample;

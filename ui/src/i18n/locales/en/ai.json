@@ -17,57 +17,69 @@
     "ruleTag": "Rule match · AI verifies",
     "evidence": "Matching log lines",
     "verifyNote": "Rule matches are hypotheses: the AI analysis checks them against the logs and says whether they hold.",
-    "kv_cache_insufficient": {
+    "GLIBC_TOO_OLD": {
+      "title": "Container glibc too old",
+      "fix": "Use an image with glibc 2.33 or newer, or deploy without a dGPU limit."
+    },
+    "DGPU_MEMORY_LIMIT_EXCEEDED": {
+      "title": "dGPU memory limit reached",
+      "fix": "Raise the dGPU memory limit, or lower the GPU memory utilization or --max-model-len."
+    },
+    "KV_CACHE_INSUFFICIENT": {
       "title": "KV cache does not fit",
       "fix": "Lower --max-model-len, raise the GPU memory utilization, or use a larger tensor-parallel size."
     },
-    "cuda_oom": {
+    "CUDA_OOM": {
       "title": "Out of GPU memory",
       "fix": "Check that the weights fit each GPU's share, that no other process holds memory on the GPU, and lower --max-model-len or raise the tensor-parallel size."
     },
-    "shm_insufficient": {
+    "SHM_INSUFFICIENT": {
       "title": "Shared memory (/dev/shm) too small",
       "fix": "Give the container a larger shared memory size (or ipc=host)."
     },
-    "nccl_failure": {
+    "NCCL_FAILURE": {
       "title": "Collective communication failed (NCCL/HCCL)",
       "fix": "Check the network interface the collective library uses, P2P support, firewalls between nodes, and that every rank started."
     },
-    "disk_full": {
+    "DISK_FULL": {
       "title": "Disk full",
       "fix": "Free space on the node's model storage or container runtime directory."
     },
-    "port_in_use": {
+    "PORT_IN_USE": {
       "title": "Port already in use",
       "fix": "Another process or container on the node holds the serving port; stop it or use another port."
     },
-    "image_pull_denied": {
+    "IMAGE_PULL_DENIED": {
       "title": "Image pull failed",
       "fix": "Check the image name and tag, and the registry credentials on the node."
     },
-    "dtype_unsupported": {
+    "DTYPE_UNSUPPORTED": {
       "title": "GPU does not support this dtype",
       "fix": "Serve with --dtype float16, or use a GPU that supports the dtype."
     },
-    "gpu_arch_unsupported": {
+    "GPU_ARCH_UNSUPPORTED": {
       "title": "Image not built for this GPU architecture",
       "fix": "Use an image built for this GPU's compute capability, or another GPU."
     },
-    "trust_remote_code_required": {
+    "TRUST_REMOTE_CODE_REQUIRED": {
       "title": "Model needs --trust-remote-code",
       "fix": "Enable it only if you trust the model repository's code."
     },
-    "model_arch_unsupported": {
+    "MODEL_ARCH_UNSUPPORTED": {
       "title": "Engine does not support this model architecture",
       "fix": "Use a newer engine image or another engine."
     },
-    "model_files_missing": {
+    "MODEL_FILES_MISSING": {
       "title": "Model files missing or wrong path",
       "fix": "Check the model path in the launch command and whether the download completed."
     },
-    "hf_download_failed": {
+    "HF_DOWNLOAD_FAILED": {
       "title": "Model hub download failed",
       "fix": "Check the repository id, the access token for gated models, and the node's network or proxy."
+    },
+    "ENGINE_NO_OUTPUT": {
+      "title": "Engine exited without output",
+      "fix": "Check the node's free disk space and the image's entrypoint."
     }
   },
   "fit": {
@@ -124,7 +136,21 @@
     "onThisPage": "On this page",
     "emptyTitle": "Pick a task from a page, or ask below",
     "emptyHint": "Open a deployment, node or failed instance and its tasks appear here; models, failed instances, unplaced deployments and nodes also have AI buttons.",
-    "followUps": "Suggested follow-ups"
+    "followUps": "Suggested follow-ups",
+    "history": "Conversations",
+    "historyHint": "Conversations are kept in this browser; open one to continue it.",
+    "noThreads": "No saved conversations yet",
+    "untitled": "Untitled conversation",
+    "deleteThread": "Delete conversation “{{title}}”",
+    "attachImage": "Add images",
+    "attachHint": "Add images, or paste a screenshot or drop it here",
+    "attached": "Attached images",
+    "imageAlt": "Image {{n}}",
+    "removeImage": "Remove image {{n}}",
+    "imagesOff": "The AI service in use does not have “Accepts image input” on, so images cannot be sent. Check it and turn it on under Settings → Integrations → AI services.",
+    "imagesTooMany": "At most {{count}} images per message; the rest were not added.",
+    "image_format": "“{{name}}” is not a supported image (PNG, JPEG, WebP, GIF).",
+    "image_too_large": "“{{name}}” is still over {{mb}} MB after shrinking."
   },
   "subject": {
     "instance": "Instance",

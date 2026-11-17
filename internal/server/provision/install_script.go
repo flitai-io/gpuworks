@@ -131,8 +131,9 @@ echo "no agent runs with state directory $dir"; exit 1`, shellQuote(dir))
 // verifyAgentCommand checks that the agent install.sh started is running.
 func verifyAgentCommand(ctx context.Context, client *ssh.Client, installDir string) CheckResult {
 	out, err := run(ctx, client, agentStateProbeCommand(installDir))
+	dir := strings.TrimRight(installDir, "/")
 	if err != nil {
-		return CheckResult{Name: "Agent process", Status: "warn", Detail: strings.TrimSpace(out) + "; unit may need daemon-reload"}
+		return agentNotObservedCheck(dir, out)
 	}
-	return CheckResult{Name: "Agent process", Status: "ok", Detail: "running (" + strings.TrimSpace(out) + ") with state directory " + strings.TrimRight(installDir, "/")}
+	return agentRunningCheck(dir, out)
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -101,17 +102,26 @@ func TestHTTPClientForUsesExplicitProxyOnly(t *testing.T) {
 	}
 }
 
-func TestModelDiskSpaceFailureRecognizesPreflightAndWriteENOSPC(t *testing.T) {
-	for _, message := range []string{
-		"insufficient disk space at /models: available=1 required=2",
-		"write /models/model.safetensors.part: no space left on device",
-	} {
-		if !isModelDiskSpaceFailure(message) {
-			t.Fatalf("disk-space failure was not classified: %q", message)
+func TestModelDiskFullRecognizesPreflightAndWriteENOSPC(t *testing.T) {
+	preflight := checkModelDownloadSpace(t.TempDir(), 1<<62)
+	if preflight == nil {
+		t.Fatal("an impossible admission passed")
+	}
+	enospc := fmt.Errorf("download model.safetensors: %w", &os.PathError{Op: "write", Path: "/models/model.safetensors.part", Err: syscall.ENOSPC})
+	quota := &os.PathError{Op: "write", Path: "/models/a", Err: syscall.EDQUOT}
+	for _, err := range []error{preflight, fmt.Errorf("copy: %w", preflight), enospc, quota} {
+		if !modelDiskFull(err) {
+			t.Fatalf("disk-space failure was not classified: %v", err)
 		}
 	}
-	if isModelDiskSpaceFailure("download: unexpected probe status 403") {
-		t.Fatal("unrelated download failure was classified as disk exhaustion")
+	// Only the type counts: text that merely says so is not a disk failure.
+	for _, err := range []error{
+		errors.New("download: unexpected probe status 403"),
+		errors.New("write /models/a: no space left on device"),
+	} {
+		if modelDiskFull(err) {
+			t.Fatalf("classified by text: %v", err)
+		}
 	}
 }
 
@@ -912,4 +922,32 @@ func mustRaw(t *testing.T, v any) json.RawMessage {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// A missing path is a coded refusal the server reads without parsing; the
+// text stays the sentence os.Stat writes, which older servers matched.
+func TestRPCFSStatRefusesAMissingPathWithItsCode(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent")
+	_, err := (&NodeRuntime{}).OnRPC(context.Background(), proto.RPCFSStat, mustRaw(t, map[string]string{"path": missing}))
+	if !errors.Is(err, proto.ErrPathNotFound) || err.Error() != "stat "+missing+": no such file or directory" {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := (&NodeRuntime{}).OnRPC(context.Background(), proto.RPCFSStat, mustRaw(t, map[string]string{"path": ""})); err == nil || errors.Is(err, proto.ErrPathNotFound) {
+		t.Fatalf("empty path err = %v", err)
+	}
+}
+
+func TestBenchProbeReportsA404AsTheEndpointNotFound(t *testing.T) {
+	notFound := httptest.NewServer(http.NotFoundHandler())
+	defer notFound.Close()
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "offline", http.StatusServiceUnavailable) }))
+	defer failing.Close()
+	n := &NodeRuntime{}
+	_, err := n.OnRPC(context.Background(), proto.RPCBenchProbe, mustRaw(t, map[string]string{"url": notFound.URL}))
+	if !errors.Is(err, proto.ErrBenchEndpointNotFound) || err.Error() != "models probe returned 404 Not Found" {
+		t.Fatalf("404 err = %v", err)
+	}
+	if _, err := n.OnRPC(context.Background(), proto.RPCBenchProbe, mustRaw(t, map[string]string{"url": failing.URL})); err == nil || errors.Is(err, proto.ErrBenchEndpointNotFound) {
+		t.Fatalf("503 err = %v", err)
+	}
 }

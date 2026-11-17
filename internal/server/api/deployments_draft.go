@@ -111,8 +111,8 @@ func (a *apiHandlers) deploymentDraft(dep *store.Deployment, reqs map[string][]s
 		NNodes: max(dep.NNodes, 1), NodeRank: dep.NodeRank, DistGroup: dep.DistGroup, DistRole: dep.DistRole,
 		MasterAddr: dep.MasterAddr, MasterPort: dep.MasterPort,
 	}
-	healthCheck, tokenize := dep.HealthCheck, !dep.TokenizeDisabled
-	req.HealthCheck, req.TokenizeEnabled = &healthCheck, &tokenize
+	healthCheck, tokenize, priority := dep.HealthCheck, !dep.TokenizeDisabled, dep.PriorityScheduling
+	req.HealthCheck, req.TokenizeEnabled, req.PriorityScheduling = &healthCheck, &tokenize, &priority
 	if dep.VRAMLimitBytes > 0 {
 		req.VRAMLimitGiB = float64(dep.VRAMLimitBytes) / (1 << 30)
 	}

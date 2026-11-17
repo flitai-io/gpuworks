@@ -38,6 +38,8 @@ type APIError struct {
 	cause          error
 	retryable      bool
 	definitive     bool
+
+	ProtocolFailure ProtocolFailure
 }
 
 func (e *APIError) Error() string {

@@ -24,14 +24,17 @@ func (d *Driver) InspectWorkload(ctx context.Context, id string) (runtime.Worklo
 	var p kubeapi.Pod
 	if err := d.o.API.Get(ctx, kubeapi.PodPath(d.o.Namespace, id), &p); err != nil {
 		if kubeapi.IsNotFound(err) {
-			return runtime.WorkloadInspection{}, fmt.Errorf("no such container: pod %s not found", id)
+			return runtime.WorkloadInspection{}, fmt.Errorf("%w: pod %s not found", runtime.ErrContainerNotFound, id)
+		}
+		if kubeapi.IsForbidden(err) {
+			return runtime.WorkloadInspection{}, fmt.Errorf("%w: %v", runtime.ErrPermissionDenied, err)
 		}
 		return runtime.WorkloadInspection{}, err
 	}
 	cs := engineStatus(p)
 	containerID := containerdID(cs)
 	if containerID == "" {
-		return runtime.WorkloadInspection{}, fmt.Errorf("no such container: pod %s has no container yet", id)
+		return runtime.WorkloadInspection{}, fmt.Errorf("%w: pod %s has no container yet", runtime.ErrContainerNotFound, id)
 	}
 	spec := engineSpec(p)
 	out := runtime.WorkloadInspection{

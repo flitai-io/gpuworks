@@ -109,3 +109,5 @@ the UI warns you that a quick address is temporary if you enter one.
 - The service runs as the data directory owner (the server service account in an installed setup). Running `expose up` as root does not make
   cloudflared run as root.
 - After you close the endpoint (`expose down`), the service stops cloudflared and exits. In `--systemd` mode, `down` also removes the unit.
+
+<!-- translation-source-sha256: 28ae7c6a00d83533ef710aea253b401c61662ef50ce6e581cd751e540a0f6e5d -->

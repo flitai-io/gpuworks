@@ -140,7 +140,7 @@ function shmField() {
   }) as HTMLInputElement;
 }
 function helpFor(size: string) {
-  return deployLocale.containerOverrides.shmHelpDefault.replace(
+  return deployLocale.containerOverrides.shmEmptyDefault.replace(
     "{{size}}",
     size,
   );

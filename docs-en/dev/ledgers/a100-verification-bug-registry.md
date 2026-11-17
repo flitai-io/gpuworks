@@ -84,3 +84,5 @@ BUG-020, 027, 029, 032, 034, 042, 045, 052, 054, 055. These require cooperation 
 - To close a BUG, move its row to §1, fill in the commit hash, and update the original bugs.md entry with that hash and one of `platform fix / catalog fix / runner upgrade / upstream_blocked / semantic`.
 - Add newly discovered BUGs to §3 first, then move them to §2 once planned.
 - Every `partial` entry must state “done / not done”; the word partial alone is insufficient.
+
+<!-- translation-source-sha256: 94e3d3f09b94a8b75546862bb292d9ea1c432f043c9b2c882c96f2f712d215b6 -->

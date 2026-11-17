@@ -56,6 +56,8 @@ export interface Batch {
   completion_window: string;
   /** The served name every request is sent to, replacing its line's model; absent when each line names its own. */
   model?: string;
+  /** The request priority class the batch's requests run at: the one it was created with, else the batch class. */
+  priority_class: string;
   request_counts: BatchRequestCounts;
   metadata: Record<string, string>;
   failure?: BatchFailure;
@@ -84,6 +86,8 @@ export interface BatchCreateOptions {
   endpoint?: BatchEndpoint;
   model?: string;
   completionWindowHours?: number;
+  /** The request priority class the batch's requests run at; the dictionary's priority_class when absent. */
+  priorityClass?: string;
   signal?: AbortSignal;
 }
 
@@ -133,6 +137,8 @@ export interface BatchDictionary {
   output_retention_days: number;
   /** The served names of the deployments, in the order of their states and then by name. */
   models: BatchModel[];
+  /** The request priority class a batch created without one runs at; a create may name any class. */
+  priority_class: string;
 }
 
 /** Seconds-level cadence at which the server checkpoints a running batch's progress. */
@@ -161,11 +167,12 @@ export const batchApi = {
    * time the batch has (the dictionary's completion_window_hours bound it).
    */
   create: async (file: File, options: BatchCreateOptions = {}): Promise<Batch> => {
-    const { endpoint, model, completionWindowHours, signal } = options;
+    const { endpoint, model, completionWindowHours, priorityClass, signal } = options;
     const body = new FormData();
     body.append("file", file, file.name);
     if (endpoint) body.append("endpoint", endpoint);
     if (model) body.append("model", model);
+    if (priorityClass) body.append("priority_class", priorityClass);
     if (completionWindowHours !== undefined) body.append("completion_window", `${completionWindowHours}h`);
     const res = await fetch("/api/v1/batches", { method: "POST", credentials: "include", body, signal });
     if (!res.ok) throw await localizedResponseError(res, `/api/v1/batches: ${res.status}`);

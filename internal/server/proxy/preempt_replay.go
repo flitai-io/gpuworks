@@ -64,16 +64,15 @@ func (p *Proxy) serveReplayingPreemption(w http.ResponseWriter, r *http.Request,
 			return
 		}
 		r.Body = body
-		var status int
-		var msg string
+		var rejection *refusal
 		var asleep bool
-		dep, tgt, status, msg, asleep = p.selectForRequest(r.Context(), modelName, affinity)
-		if status != 0 && asleep {
-			dep, tgt, status, msg, asleep = p.holdForWake(r.Context(), w, modelName, affinity, dep)
+		dep, tgt, rejection, asleep = p.selectForRequest(r.Context(), modelName, affinity)
+		if rejection != nil && asleep {
+			dep, tgt, rejection, asleep = p.holdForWake(r.Context(), w, modelName, affinity, dep)
 		}
-		if status != 0 {
-			p.acct.RecordImmediate(deploymentIDOrZero(dep), status, asleep)
-			writeErr(w, status, msg)
+		if rejection != nil {
+			p.acct.RecordImmediate(deploymentIDOrZero(dep), rejection.status(), asleep)
+			writeRefusal(w, r, rejection)
 			return
 		}
 	}

@@ -6,8 +6,6 @@ package conn
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -141,6 +139,7 @@ type Conn struct {
 	statusMu            sync.Mutex
 	statusRunning       bool
 	statusTrailing      bool
+	statusCtx           context.Context // latest status request's; see requestStatus
 	// enginePorts is the server's engine port range from the last state sync.
 	enginePorts atomic.Pointer[proto.PortRange]
 
@@ -151,6 +150,7 @@ type Conn struct {
 	dataMu   sync.Mutex
 	dataSess *yamux.Session
 	dataEver bool // guarded by dataMu; true only after an actual setDataSess
+	tel      telemetry
 
 	// localMu guards the local end of the connection to the server and whether
 	// it goes through an HTTP proxy; they decide the management address.
@@ -231,14 +231,6 @@ func (c *Conn) serverDialAgentAuth(netConn net.Conn) error {
 	return nil
 }
 
-func randomNonce() (string, error) {
-	var b [32]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b[:]), nil
-}
-
 // helloCapabilities describes the actual accelerator backend selected by the
 // prober. The server uses this as a capability hint; hardware status remains
 // authoritative from the subsequent status.node report.
@@ -262,7 +254,7 @@ func helloCapabilitiesForRuntime(prober gpu.Prober, runtimeDriver string) []stri
 		// name; the handler must provide the concrete PTY implementation.
 	}
 	caps = append(caps, proto.CapNetworkUpdate, proto.CapBench, proto.CapBenchWarmup, proto.CapBenchArrival, proto.CapBenchInteractivity, proto.CapBenchEvidence, proto.CapBenchRequestTimeout, proto.CapImagePullCandidates,
-		proto.CapStorageFiles, proto.CapCardChecks)
+		proto.CapStorageFiles, proto.CapCardChecks, proto.CapLaunchNameVerbatim)
 	if upgradeSupported() {
 		caps = append(caps, proto.CapUpgradePush)
 		if kubeboot.Running() {
@@ -432,8 +424,10 @@ func (c *Conn) reportStatus(ctx context.Context) {
 		}); ok {
 			sys.KubeUnschedulable = h.KubeUnschedulable(ctx)
 		}
-		if h, ok := c.handlers.(interface{ RuntimeFallback() (string, string) }); ok {
-			sys.RuntimeFallbackFrom, sys.RuntimeFallbackReason = h.RuntimeFallback()
+		if h, ok := c.handlers.(interface {
+			RuntimeFallback() (string, string, *proto.RuntimeSocketDenial)
+		}); ok {
+			sys.RuntimeFallbackFrom, sys.RuntimeFallbackReason, sys.RuntimeFallbackSocket = h.RuntimeFallback()
 		}
 	}
 	if sys.RuntimeDriver != "" {
@@ -460,7 +454,7 @@ func (c *Conn) reportStatus(ctx context.Context) {
 	}); ok {
 		sys.PartitionProbes = h.PartitionProbes(ctx, sys.PartitionAssets, gpus)
 	}
-	sys.PartitionSafetyProtocol = 1
+	sys.PartitionSafetyProtocol = proto.PartitionSafetyCurrent
 	imageRevision := c.imageRevision()
 	var images []proto.ImagePresence
 	var pathUsage []proto.PathUsage
@@ -506,6 +500,7 @@ func (c *Conn) reportStatus(ctx context.Context) {
 	}); ok {
 		st.RuntimeProxy = h.RuntimeProxyStatus(ctx)
 	}
+	c.addHandlerFacts(ctx, &st)
 	if err := c.sendNodeStatus(st, imageRevision); err != nil {
 		c.log.Debug("status.node send failed", "err", safeConnectionError(err))
 	}
@@ -541,6 +536,8 @@ func (c *Conn) handleInbound(env proto.Envelope) {
 			// net, not the primary propagation path for image add/delete.
 			c.requestStatus(ctx)
 		}
+	case proto.TKubeSettings:
+		c.handleKubeSettings(ctx, env)
 	case proto.TRPCReq:
 		go c.handleRPC(ctx, env)
 	default:
@@ -554,12 +551,6 @@ type rpcReqBody struct {
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
-// rpcRespBody mirrors the server's rpcResponse.
-type rpcRespBody struct {
-	Result any    `json:"result,omitempty"`
-	Error  string `json:"error,omitempty"`
-}
-
 func (c *Conn) handleRPC(ctx context.Context, env proto.Envelope) {
 	var req rpcReqBody
 	if err := json.Unmarshal(env.D, &req); err != nil {
@@ -569,7 +560,7 @@ func (c *Conn) handleRPC(ctx context.Context, env proto.Envelope) {
 	// The one door every RPC passes: a simulated node refuses here what
 	// would reach the real host, before any handler runs.
 	if err := c.creds.Simulated.RPC(req.Method, req.Params); err != nil {
-		_ = c.send(proto.TRPCResp, env.ID, rpcRespBody{Error: err.Error()})
+		_ = c.send(proto.TRPCResp, env.ID, rpcErrorBody(err))
 		return
 	}
 	if req.Method == proto.RPCNodeConnectionDiagnostics {
@@ -583,7 +574,7 @@ func (c *Conn) handleRPC(ctx context.Context, env proto.Envelope) {
 	result, err := c.handlers.OnRPC(ctx, req.Method, req.Params)
 	resp := rpcRespBody{Result: result}
 	if err != nil {
-		resp = rpcRespBody{Error: err.Error()}
+		resp = rpcErrorBody(err)
 	}
 	_ = c.send(proto.TRPCResp, env.ID, resp)
 }
@@ -598,17 +589,4 @@ func (c *Conn) writeStreamHeader(h proto.StreamHeader) error {
 	defer c.writeMu.Unlock()
 	_, err = c.ctrl.Write(b)
 	return err
-}
-
-// toWSURL converts an http(s) base URL to ws(s).
-func toWSURL(u string) string {
-	u = strings.TrimRight(u, "/")
-	switch {
-	case strings.HasPrefix(u, "https://"):
-		return "wss://" + strings.TrimPrefix(u, "https://")
-	case strings.HasPrefix(u, "http://"):
-		return "ws://" + strings.TrimPrefix(u, "http://")
-	default:
-		return u
-	}
 }

@@ -3,6 +3,7 @@ import { message } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { api, type Node } from "../api";
+import { recoveryErrorText, recoverySkippedText } from "./recoveryError";
 
 /**
  * Asking the platform to bring a node's agent back over SSH, as one action.
@@ -20,8 +21,8 @@ export function useRecoveryProbe(node: Pick<Node, "uuid">, onUpdated: (node: Nod
       const outcome = await api.probeNodeRecovery(node.uuid);
       onUpdated(await api.node(node.uuid));
       if (outcome.recovered) message.success(t("recovery.message.recovered"));
-      else if (outcome.skipped_reason) message.info(outcome.skipped_reason);
-      else if (outcome.error) message.warning(outcome.error);
+      else if (outcome.skipped_code || outcome.skipped_reason) message.info(recoverySkippedText(t, outcome.skipped_code, outcome.skipped_reason));
+      else if (outcome.error) message.warning(recoveryErrorText(t, outcome.error_code, outcome.error));
       else message.success(t("recovery.message.probeComplete"));
     } catch (error) {
       message.error(t("recovery.message.probeFailed", { detail: (error as Error).message }));

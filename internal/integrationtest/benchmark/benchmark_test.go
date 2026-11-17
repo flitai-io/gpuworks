@@ -126,7 +126,7 @@ func TestAgentBenchmarkMultiPointRunPersistsMetrics(t *testing.T) {
 	var series []apiwire.MetricSeries
 	// Metrics ingest is decoupled from the hub's ctrl-stream read loop (a
 	// bounded queue plus a batched writer flushing every 200ms or
-	// metricsIngestFlushRows samples, see observability.metricsIngestLoop):
+	// metricsIngestFlushRows samples, see obsingest.Pipeline.RunMetrics):
 	// the last sample from this run's final point can still be sitting in
 	// that queue for up to one flush interval at the moment the run itself
 	// is observed as "done", so this polls instead of asserting on the

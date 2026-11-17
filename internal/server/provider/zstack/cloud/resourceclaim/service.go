@@ -22,7 +22,7 @@ type Service struct {
 
 // New binds an application-scoped lease service to its store and provider drivers.
 func New(st *store.Store, providers *provider.Service) *Service {
-	return &Service{store: st, cloudStore: cloudstore.New(st.DB()), providers: providers}
+	return &Service{store: st, cloudStore: st.CloudLedger(), providers: providers}
 }
 
 func (s *Service) driverCreds(providerID uint) (provider.Driver, provider.Credentials, error) {

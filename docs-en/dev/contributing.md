@@ -27,7 +27,7 @@ relative paths outside the repository. Do not add private artifacts references t
 
 English translations retain the original sections, steps, restrictions, and examples; do not replace full content with summaries. Prefer terminology from the GPUWorks English UI;
 translate descriptions and image alt text without changing commands, paths, parameters, or sample values. You may reuse existing Chinese screenshots, but the English text must state the screenshot language.
-After a source document changes, review its translation and update the SHA-256 of the reviewed source in `docs-site/translations.json`; do not refresh hashes without checking the translation.
+After a source document changes, review its translation, then run `python3 docs-site/check_translations.py --write docs/<path>.md` to record the SHA-256 of the reviewed source at the end of the English page; do not refresh hashes without checking the translation.
 Run `python3 docs-site/check_translations.py` to check for stale translations and code block changes; also use `--require-complete` for site-wide English acceptance checks.
 
 ## Writing Conventions
@@ -198,3 +198,6 @@ do not merely append a new rule at the end while retaining outdated conclusions 
 Before adding an ADR, confirm that the issue is a long-term architectural tradeoff. Use the current highest number in `docs/adr/` plus one, record the date,
 status, context, decision, consequences, and supersession relationships, and update `docs/adr/README.md`. Link implementation documentation to the ADR;
 do not copy the full decision into multiple guides.
+
+<!-- translation-source-sha256: de0b33f056507f9eee4f3f263ffda14b8b8eaa58b417f19048f1e60c0b933023 -->
+<!-- translation-localized-code-block: 6ac2188471df1d13d3f555100a0be8446e1e7e797f8484dd9a8478a88ab5e2ff b5c81a401976b96af4b52f6d68e1178451469f2e31988ec96e9ef86319c56f5b Reviewed English writing-template prose: present-tense wording only; heading levels, placeholders, prerequisites and executable examples are unchanged. -->

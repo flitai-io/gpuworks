@@ -123,7 +123,8 @@ func (s *Session) awaitDataLane(ctx context.Context) (*yamux.Session, error) {
 //   - "attached": a healthy data lane is currently bound to this ctrl session;
 //   - "detached": a data lane was attached at least once but is currently gone
 //     (dropped and not yet reconnected);
-//   - "none": no data lane was ever attached (legacy/single-lane or server_dial).
+//   - "none": no data lane was ever attached (a single-lane connection, or a
+//     dual-lane one whose data lane has not attached yet).
 func (s *Session) DataLaneState() string {
 	s.dataMu.Lock()
 	defer s.dataMu.Unlock()
@@ -153,6 +154,7 @@ func (s *Session) attachData(data *yamux.Session) {
 	}
 	s.hub.log.Info("data lane attached", "node", s.NodeUUID)
 	go s.watchData(data)
+	go s.acceptDataStreams(data)
 }
 
 // watchData clears the data pointer once the lane closes, but only if it is
@@ -278,10 +280,9 @@ func (h *Hub) serveDataLane(netConn net.Conn, c *websocket.Conn, remote string) 
 	}
 	sess.attachData(data)
 
-	// Serve inbound data-plane streams until the lane closes. The ctrl session
-	// owns node liveness; this goroutine only drains the data lane's accept loop
-	// (server-initiated streams flow the other way), so waiting on close is
-	// enough to keep the WebSocket net.Conn alive.
+	// The ctrl session owns node liveness, and attachData serves the streams
+	// the agent opens on the lane, so waiting on close is enough to keep the
+	// WebSocket net.Conn alive.
 	<-data.CloseChan()
 	_ = netConn.Close()
 	_ = c.Close(websocket.StatusNormalClosure, "data closed")

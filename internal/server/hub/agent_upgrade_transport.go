@@ -75,7 +75,7 @@ func (h *Hub) RequestAgentUpgrade(ctx context.Context, uuid, sessionID string) e
 	_, err = s.Call(ctx, proto.RPCAgentUpgrade, map[string]any{})
 	var refused *rpcRemoteError
 	if errors.As(err, &refused) {
-		return &agentupgrade.RejectedError{Detail: refused.Error(), Busy: strings.Contains(strings.ToLower(refused.Error()), "already in progress")}
+		return &agentupgrade.RejectedError{Detail: refused.Error(), Busy: errors.Is(refused, proto.ErrAgentUpgradeInProgress)}
 	}
 	return err
 }
@@ -99,20 +99,15 @@ func (s *Session) observeUpgradeControl(env proto.Envelope) {
 	}
 }
 
-func (s *Session) observeUpgradeFailure(detail string) {
+func (s *Session) observeUpgradeFailure(status proto.AgentUpgradeStatus) {
 	if !s.upgradeHandshakeComplete.Load() || s.upgradeSessionID == "" {
 		return
 	}
 	// Preserve the reporting session, including a superseded session. The
 	// service uses this identity to keep late failures off a newer attempt.
-	s.hub.observeAgentUpgrade(agentupgrade.Observation{NodeUUID: s.NodeUUID, SessionID: s.upgradeSessionID, Version: s.upgradeVersion, State: "failed", Error: detail, At: s.hub.now().UTC()})
+	s.hub.observeAgentUpgrade(agentupgrade.Observation{NodeUUID: s.NodeUUID, SessionID: s.upgradeSessionID, Version: s.upgradeVersion, State: "failed",
+		Error: status.Error, Code: upgradeStatusCode(status), At: s.hub.now().UTC()})
 }
-
-// rpcRemoteError separates a received refusal from a send/connection failure.
-// A refusal proves that the request was handled, unlike a lost RPC response.
-type rpcRemoteError struct{ detail string }
-
-func (e *rpcRemoteError) Error() string { return e.detail }
 
 func (s *Session) upgradeConnectionClosed() bool {
 	select {

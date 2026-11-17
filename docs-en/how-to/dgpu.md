@@ -9,8 +9,8 @@ This guide explains how to check a GPU's available dGPU capabilities, create a d
 - The node is connected and reports GPUs (see [Connect Nodes](connect-nodes.md)).
 - NVIDIA: x86_64, glibc ≥ 2.17, and shared libraries provided by the host driver (`libcuda.so.1`, `libnvidia-ml.so.1`).
 - Ascend: host device-share permissions meet vcann-rt requirements, and the selected inference image provides glibc ≥ 2.33. Being able to connect the node and run on a whole card does not mean the host permits dGPU device sharing.
-- PPU: quotas combine a GPU memory limit with weighted QoS under contention. A 20/80 configuration specifies relative throughput weights under contention, not hard SM partitions.
-- AMD: x86_64, Docker, nerdctl or runveil, rocm-slicing-shim (libvrocm.so) enforces a hard GPU memory limit; there is no compute (SM/CU) limit. Only MI300X (gfx942) has been tested so far.
+- PPU: quotas combine a GPU memory limit with weighted QoS under contention. A 20/80 configuration specifies relative throughput weights under contention, not hard SM partitions. Docker and Kubernetes nodes are both supported (tested on Kubernetes with PPU-ZW810E).
+- AMD: x86_64, Docker, nerdctl, runveil or Kubernetes, rocm-slicing-shim (libvrocm.so) enforces a hard GPU memory limit; there is no compute (SM/CU) limit. Tested on MI300X and MI325X (gfx942), the MI325X on Kubernetes.
 - Hygon Z100 / K100_AI / BW: experimental, with Docker or runveil/udocker on x86_64 and one GPU per instance. Install the native helper and host DTK/HYHAL/DCGM libraries, and pass the per-GPU probe. CUs follow the memory ratio; there is no independent compute quota. A report containing only the K100 family, or another unsupported model, remains full-GPU only. PRoot provides neither a separate cgroup nor kernel-enforced read-only mounts, so it does not establish security isolation against hostile programs. See [Hygon Z100 / K100_AI / BW dGPU](../reference/support-matrix.md#海光-z100--k100_ai--bw-dgpu).
 - For a complete walkthrough first, see [Run Two Models on One GPU](../tutorials/one-gpu-two-models.md); for semantics and boundaries, see [What dGPU Is and Is Not](../explanation/dgpu.md).
 
@@ -22,10 +22,10 @@ For each vendor's supported scope, see the [Support Matrix](../reference/support
 2. When [deploying a model](deploy-models.md), enter the **dGPU Memory (GiB)** limit, check the candidate nodes and GPU memory estimate, and submit. The platform selects a ready backend based on the node hardware: HAMi-core for NVIDIA, vcann-rt for Ascend, HGGC for PPU, libvrocm for AMD, and native vdev for Hygon Z100 / K100_AI / BW. You do not need to specify one manually.
 3. After the instance starts, return to **GPU Devices → dGPU** and confirm the slice's deployment, node, and GPU memory limit. To verify that two models share one card, follow the request checks in [Run Two Models on One GPU](../tutorials/one-gpu-two-models.md).
 
-The `status` and `reason` returned on the page determine capability:
+The `status` and the reason code `reason_code` returned on the page determine capability (see [Troubleshooting](troubleshooting.md#dgpu-capability-unavailable) for the codes and parameters):
 
 - `ready`: All runtime, dGPU asset, and per-GPU probe requirements for that backend are met, so instances with quotas can be created; NVIDIA and AMD are exempt from behavioral probes.
-- `unavailable`: At least one requirement is not met. `reason` explains why, such as an agent version too old to report a probe,
+- `unavailable`: At least one requirement is not met. `reason_code` explains why, such as an agent version too old to report a probe,
   missing dGPU assets, a runtime that has not verified container inference, or a pending or failed probe.
 
 | Unavailability Reason | Action |
@@ -39,6 +39,11 @@ Backends that run the behavioral probe (every backend except NVIDIA and AMD, who
 result. It is not equivalent to `status` above.
 
 Switching to a whole-card deployment when the status is `unavailable` is not evidence that dGPU verification passed.
+
+When a card also runs compute processes outside the platform, a memory-limited deployment can share it with them by the memory left, but by default only when you pick that card yourself;
+to let automatic placement use such cards too, turn on "Allow partitions beside processes outside the platform" under "Placement policy" on the node detail's overview. Even then,
+scheduling uses cards without such processes first. Sharing a card isolates memory only; compute and bandwidth are shared, and the instance panel shows a shared-card note. See
+[Card Is in Use by Processes Outside the Platform](troubleshooting.md#card-is-in-use-by-processes-outside-the-platform).
 
 ## Adjust dGPU Quotas
 
@@ -75,3 +80,5 @@ Rejections (the original quota remains unchanged):
 
 The deployment timeline records “dGPU memory limit A → B” with the counts of instances updated immediately and those awaiting restart. When an instance exits because usage reaches its limit, the failure reason is
 `dGPU memory limit reached on GPU N: the engine needed X GiB, its limit is Y GiB`.
+
+<!-- translation-source-sha256: bf141cc1b883c2a8bb6cc9508cf847e330ce3898a8a416277b6c05da2fcdb7c7 -->

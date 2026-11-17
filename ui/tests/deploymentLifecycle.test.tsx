@@ -1,3 +1,4 @@
+import { installCanvas } from "./helpers/analyticsFixtures.ts";
 import assert from "node:assert/strict";
 import { fakeFleet } from "./helpers/fakeFleet.ts";
 import { listPage, cursorPage, list } from "./helpers/listPage.ts";
@@ -12,17 +13,17 @@ import { I18nextProvider, initReactI18next } from "react-i18next";
 // The deployment drawer's lifecycle, for every shape: the header's Start
 // (stopped deployments), Restart (a confirm, not rolling) and Stop (keeps the
 // drawer open); an ordinary deployment's replica that gave up with its
-// Retry; the leader/follower rank tags of a multi-node replica with its ranks
-// kept together; and the monitor's instance link scrolling to its panel.
+// Retry; the leader/follower rank tags of a multi-node replica across pages; and the monitor's instance link scrolling to its panel.
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "File", "Blob", "HTMLBodyElement", "HTMLHtmlElement", "NodeFilter", "HTMLInputElement", "HTMLButtonElement"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "localStorage", { value: dom.window.localStorage, configurable: true });
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
+installCanvas(dom);
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
 const scrolled: string[] = [];
@@ -62,6 +63,7 @@ class Events {
 }
 Object.defineProperty(globalThis, "EventSource", { value: Events, configurable: true });
 
+const { selectInstance } = await import("./helpers/selectInstance.ts");
 const { api } = await import("../src/api.ts");
 const { APIError } = await import("../src/apiError.ts");
 const { default: DeploymentsPage } = await import("../src/pages/DeploymentsPage.tsx");
@@ -130,7 +132,7 @@ async function openDetail(search = "?deployment=1") {
 }
 
 function drawer(): HTMLElement {
-  return document.querySelector(".ant-drawer-content") as HTMLElement;
+  return screen.getByRole("dialog", { name: "lifecycle-deployment" });
 }
 
 test("an active deployment offers Restart and Stop, not Start; canceling the restart posts nothing", async () => {
@@ -191,7 +193,7 @@ test("stopping keeps the drawer open and refetches it", async () => {
   await openDetail();
   const before = loads;
   fireEvent.click(within(drawer()).getByRole("button", { name: locale.detail.stop }));
-  const confirm = (await screen.findByText(locale.detail.stopConfirm)).closest(".ant-popover") as HTMLElement;
+  const confirm = (await screen.findByText(locale.detail.stopConfirm)).closest(".ant-modal") as HTMLElement;
   fireEvent.click(within(confirm).getByRole("button", { name: locale.detail.stop }));
   await waitFor(() => assert.equal(stopped, 1));
   await waitFor(() => assert.ok(loads > before));
@@ -258,7 +260,10 @@ test("an ordinary replica that gave up is named with its failure, and Retry targ
     return deployment();
   });
   await openDetail();
-  const alert = (await screen.findByText("A replica stopped being rebuilt after 3 failed attempts: engine exited")).closest(".ant-alert") as HTMLElement;
+  const overview = screen.getByRole("heading", { name: locale.detail.serviceOverview }).closest("section")!;
+  const status = within(overview).getByText(locale.detail.state).closest("tr")! as HTMLElement;
+  const alert = within(status).getByRole("alert");
+  assert.ok(within(alert).getByText("A replica stopped being rebuilt after 3 failed attempts: engine exited"));
   fireEvent.click(within(alert).getByRole("button", { name: locale.detail.retry.action }));
   await within(alert).findByText(i18n.t("detail.retry.failed", { detail: i18n.t("common:apiError.UNIT_NOT_FAILED") }));
   fail = false;
@@ -276,7 +281,7 @@ test("a deployment without a give-up shows no retry notice", async () => {
   assert.equal(screen.queryByText(/stopped being rebuilt/), null);
 });
 
-test("a multi-node replica's ranks sit together, leader first, and the count names the followers", async () => {
+test("instance switching starts with the first-created instance and retains the leader and rank of each follower", async () => {
   const group = (uuid: string, rank: number, group: string, index: number) => instance(uuid, {
     nnodes: 2, node_rank: rank, headless: rank > 0, dist_role: rank > 0 ? "follower" : "leader", dist_group: group, dist_attempt: 1, replica: { index },
   });
@@ -290,13 +295,143 @@ test("a multi-node replica's ranks sit together, leader first, and the count nam
   stub("deploymentsPage", async () => listPage([multi]));
   stub("deployment", async () => multi);
   await openDetail();
-  await screen.findByText(locale.detail.instancesWithFollowers.replace("{{count}}", "5").replace("{{followers}}", "3"));
-  const order = Array.from(document.querySelectorAll("[id^='instance-']")).map((el) => el.id.slice("instance-".length));
-  assert.deepEqual(order, ["leader-a0", "follow-a1", "leader-b0", "follow-b1", "legacy-f1"]);
-  assert.equal(screen.getAllByText("leader · rank 0").length, 2);
-  assert.ok(screen.getByText("follower · rank 1 · leader leader-a"));
-  assert.ok(screen.getByText("follower · rank 1 · leader leader-b"));
-  assert.ok(screen.getByText("follower · rank 1"), "a follower with no generation still shows its rank");
+  selectInstance("legacy-f1");
+  for (const [uuid, rank] of [
+    ["legacy-f1", "follower · rank 1"],
+    ["leader-b0", "leader · rank 0"],
+    ["leader-a0", "leader · rank 0"],
+    ["follow-b1", "follower · rank 1 · leader leader-b"],
+    ["follow-a1", "follower · rank 1 · leader leader-a"],
+  ]) {
+    selectInstance(uuid);
+    assert.deepEqual([...document.querySelectorAll("[id^='instance-']")].map((el) => el.id), [`instance-${uuid}`]);
+    assert.ok(screen.getByText(rank));
+  }
+});
+
+test("status filters count the whole deployment and follow matching records across replicas and refreshes", async () => {
+  const generation = { nnodes: 2, dist_group: "multi-node", dist_attempt: 1 };
+  let rows = [instance("ready", { ...generation, replica: { index: 0 } }), instance("launch", { replica: { index: 1 }, state: "starting" }),
+    instance("retry", { ...generation, dist_role: "follower", node_rank: 1, state: "failed" }), instance("unassigned", { state: "failed" })];
+  stub("deployment", async () => deployment({ instances: rows }));
+  await openDetail();
+  selectInstance("ready");
+  const all = () => screen.getByRole("button", { name: "All 4" });
+  const replica = () => screen.getByRole("combobox", { name: locale.detailLayout.switchReplica });
+  fireEvent.click(screen.getByRole("button", { name: "Starting 1" }));
+  assert.ok(document.getElementById("instance-launch"));
+  assert.ok(all());
+  fireEvent.click(replica());
+  assert.equal(screen.getAllByRole("option").length, 1);
+  fireEvent.click(screen.getByRole("option"));
+
+  fireEvent.click(screen.getByRole("button", { name: "Failed attempt 2" }));
+  assert.ok(document.getElementById("instance-retry"));
+  fireEvent.click(replica());
+  const options = screen.getAllByRole("option");
+  assert.equal(options.length, 2);
+  fireEvent.click(options[1]);
+  assert.ok(document.getElementById("instance-unassigned"));
+  assert.ok(screen.getByRole("button", { name: "Failed attempt 2", pressed: true }));
+  fireEvent.click(all());
+  assert.ok(document.getElementById("instance-unassigned"));
+
+  fireEvent.click(screen.getByRole("button", { name: "Starting 1" }));
+  rows = rows.filter((_, i) => i !== 1);
+  for (const listener of Events.listeners.get("instance") ?? []) listener(new dom.window.Event("instance"));
+  await screen.findByRole("button", { name: "All 3", pressed: true });
+  assert.ok(document.getElementById("instance-ready"));
+});
+
+test("the cascade keeps the inspected attempt across refreshes and searches all 32 records by status and ID", async () => {
+  const record = (uuid: string, state: string) => instance(uuid, {
+    state, replica: state === "running" ? { index: 0 } : undefined, schedule: { unit: { key: "|[]" } },
+  });
+  let rows = [record("ready", "running"), record("first-failure", "failed")];
+  stub("deployment", async () => deployment({ instances: rows }));
+  stub("deploymentsPage", async () => listPage([deployment({ instances: rows })]));
+  const refresh = () => {
+    for (const listener of Events.listeners.get("instance") ?? []) listener(new dom.window.Event("instance"));
+  };
+  await openDetail();
+  selectInstance("first-failure");
+  rows = [...Array.from({ length: 30 }, (_, n) => record(`attempt-${n}`, "failed")), ...rows];
+  refresh();
+  const failures = await screen.findByRole("button", { name: "Failed attempt 31" });
+  assert.ok(document.getElementById("instance-first-failure"));
+  fireEvent.click(failures);
+  const switcher = within(screen.getByRole("group", { name: locale.detail.switchInstance }));
+  fireEvent.click(switcher.getByRole("combobox"));
+  fireEvent.change(screen.getByPlaceholderText(locale.detail.switchInstance), { target: { value: "ATTEMPT-29" } });
+  const options = within(screen.getByRole("listbox")).getAllByRole("option");
+  assert.deepEqual(options.map(el => el.getAttribute("aria-label")), ["attempt-29 Failed attempt"]);
+  fireEvent.click(options[0]);
+  assert.ok(document.getElementById("instance-attempt-29"));
+  fireEvent.click(switcher.getByRole("button", { name: locale.detail.previousInstance }));
+  assert.ok(document.getElementById("instance-attempt-28"));
+  fireEvent.click(switcher.getByRole("button", { name: locale.detail.nextInstance }));
+  assert.ok(document.getElementById("instance-attempt-29"));
+  rows = [];
+  refresh();
+  await within(document.getElementById("deployment-instances")!).findByText(locale.detail.noInstances);
+  assert.ok(screen.getByRole("tab", { name: locale.detail.instanceDetails, exact: true }));
+  assert.equal(drawer().querySelector(".replica-cascade"), null);
+  assert.equal(screen.queryByRole("group", { name: locale.detail.switchInstance }), null);
+});
+
+test("the overview copies the model, public name and configured image independently of the model link and instance image", async () => {
+  const image = "registry.example:5000/engines/runner:v2";
+  const dep = deployment({ model_name: "org/model", served_name: "public-model", image });
+  stub("deploymentsPage", async () => listPage([dep]));
+  stub("deployment", async () => dep);
+  await openDetail();
+  const model = within(within(drawer()).getByRole("heading", { name: locale.detail.serviceOverview }).closest("section")!);
+  const user = userEvent.setup();
+  for (const [label, value] of [
+    [locale.detail.copyModel, dep.model_name],
+    [locale.detail.copyServedName, dep.served_name],
+    [locale.detail.copyConfiguredImage, image],
+  ]) {
+    await user.click(model.getByRole("button", { name: label }));
+    assert.equal(await navigator.clipboard.readText(), value);
+  }
+  assert.equal(model.getByRole("link", { name: dep.model_name }).getAttribute("href"), `/models?detail=${dep.model_id}`);
+});
+
+test("an unplaced deployment shows its engine and automatic image selection before any instance exists", async () => {
+  const dep = deployment({ runtime_state: "pending", instances: [] });
+  stub("deploymentsPage", async () => listPage([dep]));
+  stub("deployment", async () => dep);
+  await openDetail();
+  const model = within(drawer()).getByRole("group", { name: locale.detail.modelAndEngine });
+  const field = within(model).getByText(locale.detail.configuredRuntime).closest("tr")! as HTMLElement;
+  assert.ok(within(field).getByText(dep.engine));
+  assert.ok(within(field).getByText(locale.page.autoImage));
+  assert.equal(within(field).queryByRole("button", { name: locale.detail.copyConfiguredImage }), null);
+  assert.equal(within(drawer()).queryByRole("heading", { name: locale.detail.instanceLaunch }), null);
+});
+
+test("instance metrics follow selection and the remaining record after removal", async () => {
+  const { installCanvas } = await import("./helpers/analyticsFixtures.ts");
+  installCanvas(dom);
+  let rows = [instance("third", { state: "failed" }), instance("second"), instance("first")];
+  const queried: string[] = [];
+  stub("metricsQuery", async (_metric: string, params: { instance?: string }) => {
+    if (params.instance) queried.push(params.instance);
+    return list([]);
+  });
+  stub("deploymentsPage", async () => listPage([deployment({ instances: rows })]));
+  stub("deployment", async () => deployment({ instances: rows }));
+  await openDetail();
+  selectInstance("first");
+  assert.ok(screen.getByRole("heading", { name: locale.instance.tab.metrics }));
+  selectInstance("second");
+  await waitFor(() => assert.ok(queried.includes("second")));
+  rows = [rows[0], rows[2]];
+  for (const listener of Events.listeners.get("instance") ?? []) listener(new dom.window.Event("instance"));
+  await waitFor(() => assert.ok(document.getElementById("instance-first")));
+  assert.equal(document.getElementById("instance-second"), null);
+  assert.ok(screen.getByRole("heading", { name: locale.instance.tab.metrics }));
 });
 
 test("single-rank replicas carry no rank tag and keep the plain count", async () => {
@@ -310,8 +445,14 @@ test("single-rank replicas carry no rank tag and keep the plain count", async ()
 test("the monitor's instance link scrolls the drawer to that instance", async () => {
   stub("deploymentsPage", async () => listPage([deployment()]));
   stub("deployment", async () => deployment());
-  await openDetail("?deployment=1&instance=inst-b");
-  await waitFor(() => assert.deepEqual(scrolled, ["instance-inst-b"]));
+  await openDetail("?deployment=1&instance=inst-a");
+  await waitFor(() => assert.deepEqual(scrolled, ["deployment-instances"]));
+  assert.ok(document.getElementById("instance-inst-a"));
+  selectInstance("inst-b");
+  assert.ok(document.getElementById("instance-inst-b"));
+  selectInstance("inst-a");
+  assert.ok(document.getElementById("instance-inst-a"));
+  assert.deepEqual(scrolled, ["deployment-instances"]);
 });
 
 test("a replica's instance offers Restart (draining by default) and Remove; restart posts drain unless unticked", async () => {
@@ -320,16 +461,17 @@ test("a replica's instance offers Restart (draining by default) and Remove; rest
   const restarts: Array<{ uuid: string; drain: boolean }> = [];
   stub("restartInstance", async (uuid: string, drain: boolean) => { restarts.push({ uuid, drain }); return deployment(); });
   await openDetail();
-  const panel = document.getElementById("instance-inst-b") as HTMLElement;
+  selectInstance("inst-b");
+  const panel = screen.getByRole("group", { name: locale.detailLayout.replicaControls });
   fireEvent.click(within(panel).getByRole("button", { name: locale.replica.restart }));
-  let modal = (await screen.findByText(locale.replica.restartTitle)).closest(".ant-modal") as HTMLElement;
+  let modal = (await screen.findByText(i18n.t("replica.restartNamed", {label: i18n.t("replica.unitLabel", {index: 2})}))).closest(".ant-modal") as HTMLElement;
   const drain = within(modal).getByRole("checkbox", { name: locale.replica.drain }) as HTMLInputElement;
-  assert.ok(drain.checked, "draining is the default");
+  assert.equal(drain.getAttribute("aria-checked"), "true", "draining is the default");
   fireEvent.click(within(modal).getByRole("button", { name: locale.replica.restart }));
   await waitFor(() => assert.deepEqual(restarts, [{ uuid: "inst-b", drain: true }]));
 
   fireEvent.click(within(panel).getByRole("button", { name: locale.replica.restart }));
-  modal = (await screen.findAllByText(locale.replica.restartTitle)).map((el) => el.closest(".ant-modal") as HTMLElement).find((el) => !el.closest(".ant-zoom-leave")) as HTMLElement;
+  modal = (await screen.findAllByText(i18n.t("replica.restartNamed", {label: i18n.t("replica.unitLabel", {index: 2})}))).map((el) => el.closest(".ant-modal") as HTMLElement).find((el) => !el.closest(".ant-zoom-leave")) as HTMLElement;
   await userEvent.click(within(modal).getByRole("checkbox", { name: locale.replica.drain }));
   // The reopened dialog's OK button keeps antd's loading-icon leave
   // animation in its name under JSDOM; find it by its text.
@@ -343,9 +485,10 @@ test("removing a replica scales down by one naming that instance", async () => {
   const scales: unknown[] = [];
   stub("scaleReplicas", async (id: number, body: unknown) => { scales.push({ id, body }); return deployment({ replicas: 1 }); });
   await openDetail();
-  const panel = document.getElementById("instance-inst-a") as HTMLElement;
+  selectInstance("inst-a");
+  const panel = screen.getByRole("group", { name: locale.detailLayout.replicaControls });
   fireEvent.click(within(panel).getByRole("button", { name: locale.replica.remove }));
-  const confirm = (await screen.findByText(locale.replica.removeConfirm)).closest(".ant-popover") as HTMLElement;
+  const confirm = (await screen.findByText(/^Remove replica .*\?/i)).closest(".ant-popover") as HTMLElement;
   fireEvent.click(within(confirm).getByRole("button", { name: locale.replica.remove }));
   await waitFor(() => assert.deepEqual(scales, [{ id: 1, body: { replicas: 1, remove: ["inst-a"] } }]));
 });
@@ -367,83 +510,18 @@ test("a single-replica deployment, a failed attempt and a follower carry no repl
   stub("deploymentsPage", async () => listPage([multi]));
   stub("deployment", async () => multi);
   await openDetail();
-  const lead = document.getElementById("instance-lead") as HTMLElement;
+  selectInstance("lead");
+  const lead = screen.getByRole("group", { name: locale.detailLayout.replicaControls });
   assert.ok(within(lead).getByRole("button", { name: locale.replica.restart }));
   // Without the replica list the response carries, there is nothing to
   // remove the replica from.
   assert.equal(within(lead).queryByRole("button", { name: locale.replica.remove }), null);
+  selectInstance("follow");
   const follower = document.getElementById("instance-follow") as HTMLElement;
   assert.equal(within(follower).queryByRole("button", { name: locale.replica.restart }), null);
   assert.ok(within(follower).getByText(locale.replica.followerHint));
+  selectInstance("failed-lead");
   assert.equal(within(document.getElementById("instance-failed-lead") as HTMLElement).queryByRole("button", { name: locale.replica.restart }), null);
-});
-
-test("the replica count is edited in place and applied once changed", async () => {
-  stub("deploymentsPage", async () => listPage([deployment()]));
-  stub("deployment", async () => deployment());
-  const scales: unknown[] = [];
-  let fail = true;
-  stub("scaleReplicas", async (id: number, body: unknown) => {
-    scales.push({ id, body });
-    if (fail) throw new APIError("REPLICAS_CHANGED", {}, "the replicas changed since the request was read; read them again", 409);
-    return deployment({ replicas: 3 });
-  });
-  await openDetail();
-  const input = screen.getByRole("spinbutton", { name: locale.detail.replicas }) as HTMLInputElement;
-  const apply = screen.getByRole("button", { name: locale.replica.apply }) as HTMLButtonElement;
-  // The bound is the server's.
-  assert.equal(input.getAttribute("aria-valuemax"), "32");
-  assert.ok(apply.disabled, "nothing to apply before an edit");
-  await userEvent.clear(input);
-  await userEvent.type(input, "3");
-  await waitFor(() => assert.equal(apply.disabled, false));
-  await userEvent.click(apply);
-  await screen.findByText(i18n.t("replica.scaleFailed", { detail: i18n.t("common:apiError.REPLICAS_CHANGED") }));
-  fail = false;
-  await userEvent.click(apply);
-  await waitFor(() => assert.equal(scales.length, 2));
-  assert.deepEqual(scales[1], { id: 1, body: { replicas: 3 } });
-});
-
-test("the node conditions sit on the row just above the replica count", async () => {
-  stub("deploymentsPage", async () => listPage([deployment()]));
-  stub("deployment", async () => deployment());
-  await openDetail();
-  const labels = [...document.querySelectorAll(".ant-drawer .ant-descriptions-item-label")].map((el) => el.textContent);
-  const conditions = labels.indexOf(locale.detail.placement.requirements);
-  assert.ok(conditions >= 0, `no node conditions among ${labels.join(", ")}`);
-  assert.equal(labels[conditions + 1], locale.detail.replicas);
-  assert.equal(labels[conditions - 1], locale.detail.sleepable);
-});
-
-test("a PD or multi-node deployment shows its replica count read-only", async () => {
-  const multi = deployment({ nnodes: 2, replicas: 1 });
-  stub("deploymentsPage", async () => listPage([multi]));
-  stub("deployment", async () => multi);
-  await openDetail();
-  assert.equal(screen.queryByRole("spinbutton", { name: locale.detail.replicas }), null);
-});
-
-test("choosing all at once posts that strategy and warns about the outage", async () => {
-  stub("deploymentsPage", async () => listPage([deployment()]));
-  stub("deployment", async () => deployment());
-  const calls: string[] = [];
-  stub("restartDeployment", async (_id: number, strategy: string) => { calls.push(strategy); return deployment(); });
-  await openDetail();
-  fireEvent.click(within(drawer()).getByRole("button", { name: locale.detail.restart.action }));
-  const modal = (await screen.findByText(locale.detail.restart.confirmTitle)).closest(".ant-modal") as HTMLElement;
-  await userEvent.click(within(modal).getByRole("radio", { name: locale.detail.restart.strategyAll }));
-  assert.ok(within(modal).getByText(locale.detail.restart.confirmDescription));
-  fireEvent.click(within(modal).getByRole("button", { name: locale.detail.restart.confirmOk }));
-  await waitFor(() => assert.deepEqual(calls, ["all"]));
-});
-
-test("a rolling restart in progress is shown in the drawer header", async () => {
-  const rolling = deployment({ restart_requested_at: "2026-09-30T08:00:00Z" });
-  stub("deploymentsPage", async () => listPage([rolling]));
-  stub("deployment", async () => rolling);
-  await openDetail();
-  assert.ok(within(drawer()).getByText(locale.detail.restart.rolling));
 });
 
 const replicaNodes = [
@@ -476,123 +554,3 @@ async function chooseOption(select: HTMLElement, label: string) {
   });
   fireEvent.click(option!);
 }
-
-test("a multi-node deployment's replicas are listed and a new one is added with its nodes", async () => {
-  stubFleet(replicaNodes);
-  stub("deploymentsPage", async () => listPage([multiNodeDeployment()]));
-  stub("deployment", async () => multiNodeDeployment());
-  const scales: unknown[] = [];
-  let fail = true;
-  stub("scaleReplicas", async (id: number, body: unknown) => {
-    scales.push({ id, body });
-    if (fail) throw new APIError("REPLICA_LEADER_SHARED", { node: "node-b", other: 0, other_replica: 1, index: 1, replica: 2 }, "two replicas are led from one node", 400);
-    return multiNodeDeployment({ replicas: 2 });
-  });
-  await openDetail();
-  fireEvent.click(screen.getByRole("button", { name: locale.replica.editUnits }));
-  const modal = (await screen.findByText(locale.replica.unitsTitle)).closest(".ant-modal") as HTMLElement;
-  assert.ok(within(modal).getByText("Replica 1"));
-  const save = () => within(modal).getByRole("button", { name: locale.replica.save }) as HTMLButtonElement;
-  fireEvent.click(within(modal).getByRole("button", { name: locale.replica.addUnit }));
-  // A new replica has no nodes yet: nothing to save until every rank has one.
-  assert.ok(save().disabled);
-  await chooseOption(within(modal).getByRole("combobox", { name: "Replica 2 leader node" }), "Node B");
-  assert.ok(save().disabled);
-  await chooseOption(within(modal).getByRole("combobox", { name: "Replica 2 rank 1 node" }), "Node A");
-  await waitFor(() => assert.equal(save().disabled, false));
-  fireEvent.click(save());
-  await within(modal).findByText(i18n.t("replica.scaleFailed", { detail: i18n.t("common:apiError.REPLICA_LEADER_SHARED", { node: "node-b", other_replica: 1, replica: 2 }) }));
-  fail = false;
-  fireEvent.click(within(modal).getByText(locale.replica.save).closest("button")!);
-  await waitFor(() => assert.equal(scales.length, 2));
-  assert.deepEqual(scales[1], { id: 1, body: { units: [
-    { node_uuid: "node-a", followers: [{ node_uuid: "node-b" }] },
-    { node_uuid: "node-b", followers: [{ node_uuid: "node-a" }] },
-  ] } });
-});
-
-test("the last listed replica cannot be removed in the dialog", async () => {
-  stubFleet(replicaNodes);
-  stub("deploymentsPage", async () => listPage([multiNodeDeployment()]));
-  stub("deployment", async () => multiNodeDeployment());
-  await openDetail();
-  fireEvent.click(screen.getByRole("button", { name: locale.replica.editUnits }));
-  const modal = (await screen.findByText(locale.replica.unitsTitle)).closest(".ant-modal") as HTMLElement;
-  assert.ok((within(modal).getByRole("button", { name: "Remove replica 1" }) as HTMLButtonElement).disabled);
-});
-
-test("removing a multi-node replica from its leader sends the list without it", async () => {
-  const two = multiNodeDeployment({
-    replicas: 2,
-    units: [
-      { node_uuid: "node-a", followers: [{ node_uuid: "node-b" }] },
-      { node_uuid: "node-b", followers: [{ node_uuid: "node-a" }] },
-    ],
-    instances: [
-      instance("lead-a", { node_uuid: "node-a", nnodes: 2, node_rank: 0, dist_role: "leader", dist_group: "g1", dist_attempt: 1, replica: { index: 0 } }),
-      instance("follow-b", { node_uuid: "node-b", nnodes: 2, node_rank: 1, headless: true, dist_role: "follower", dist_group: "g1", dist_attempt: 1, replica: { index: 0 } }),
-      instance("lead-b", { node_uuid: "node-b", nnodes: 2, node_rank: 0, dist_role: "leader", dist_group: "g2", dist_attempt: 1, replica: { index: 1 } }),
-      instance("follow-a", { node_uuid: "node-a", nnodes: 2, node_rank: 1, headless: true, dist_role: "follower", dist_group: "g2", dist_attempt: 1, replica: { index: 1 } }),
-    ],
-  });
-  stub("deploymentsPage", async () => listPage([two]));
-  stub("deployment", async () => two);
-  const scales: unknown[] = [];
-  stub("scaleReplicas", async (_id: number, body: unknown) => { scales.push(body); return multiNodeDeployment(); });
-  await openDetail();
-  const panel = document.getElementById("instance-lead-b") as HTMLElement;
-  fireEvent.click(within(panel).getByRole("button", { name: locale.replica.remove }));
-  const confirm = (await screen.findByText(locale.replica.removeConfirm)).closest(".ant-popover") as HTMLElement;
-  fireEvent.click(within(confirm).getByRole("button", { name: locale.replica.remove }));
-  await waitFor(() => assert.deepEqual(scales, [{ units: [{ node_uuid: "node-a", followers: [{ node_uuid: "node-b" }] }] }]));
-  assert.equal(within(document.getElementById("instance-follow-a") as HTMLElement).queryByRole("button", { name: locale.replica.remove }), null);
-});
-
-test("a suggested multi-node replica is appended for the operator to check, and a refusal says why", async () => {
-  const nodes = [...replicaNodes, { uuid: "node-c", name: "Node C", hostname: "c", state: "online", gpu_count: 2, gpus: [] }, { uuid: "node-d", name: "Node D", hostname: "d", state: "online", gpu_count: 2, gpus: [] }];
-  stubFleet(nodes);
-  stub("deployments", async () => list([multiNodeDeployment()]));
-  stub("deployment", async () => multiNodeDeployment());
-  const asked: unknown[] = [];
-  let answer: unknown = {
-    unit: { node_uuid: "node-c", followers: [{ node_uuid: "node-d" }] }, network: { id: 1, name: "ib" }, arch: "nvidia/ampere",
-    nodes: [{ uuid: "node-c", name: "Node C", free_gpus: 2, model: "absent" }, { uuid: "node-d", name: "Node D", free_gpus: 2, model: "absent" }],
-  };
-  stub("suggestUnit", async (id: number, units: unknown) => { asked.push({ id, units }); return answer; });
-  const scales: unknown[] = [];
-  stub("scaleReplicas", async (_id: number, body: unknown) => { scales.push(body); return multiNodeDeployment({ replicas: 2 }); });
-  await openDetail();
-  fireEvent.click(screen.getByRole("button", { name: locale.replica.editUnits }));
-  const modal = (await screen.findByText(locale.replica.unitsTitle)).closest(".ant-modal") as HTMLElement;
-  fireEvent.click(within(modal).getByRole("button", { name: locale.replica.suggestUnit }));
-  await within(modal).findByText(i18n.t("replica.suggest.added", { network: "ib", arch: "nvidia/ampere", nodes: "Node C, Node D" }));
-  // The rows listed so far go with the request, so their leaders and cards count.
-  assert.deepEqual(asked, [{ id: 1, units: [{ node_uuid: "node-a", followers: [{ node_uuid: "node-b" }] }] }]);
-  fireEvent.click(within(modal).getByText(locale.replica.save).closest("button")!);
-  await waitFor(() => assert.equal(scales.length, 1));
-  assert.deepEqual(scales[0], { units: [
-    { node_uuid: "node-a", followers: [{ node_uuid: "node-b" }] },
-    { node_uuid: "node-c", followers: [{ node_uuid: "node-d" }] },
-  ] });
-
-  cleanup();
-  answer = { unit: null, reason: { code: "unit_no_fit", params: { node: "Node C", first_reason: { code: "no_free_gpu" } } } };
-  await openDetail();
-  fireEvent.click(screen.getByRole("button", { name: locale.replica.editUnits }));
-  const again = (await screen.findByText(locale.replica.unitsTitle)).closest(".ant-modal") as HTMLElement;
-  fireEvent.click(within(again).getByRole("button", { name: locale.replica.suggestUnit }));
-  await within(again).findByText(i18n.t("replica.suggest.noFit", { node: "Node C", reason: i18n.t("deploy:schedule.no_free_gpu") }));
-  assert.equal(within(again).queryByText("Replica 2"), null, "nothing is appended when nothing fits");
-});
-
-
-test("an offline deployment shows no ready replicas and disables inference", async () => {
-  const offline = deployment({ runtime_state: "offline", ready_replicas: 0, replicas: 1 });
-  stub("deploymentsPage", async () => listPage([offline]));
-  stub("deployment", async () => offline);
-  await openDetail();
-  assert.ok(screen.getAllByText(i18n.t("common:states.offline")).length > 0);
-  assert.ok(screen.getAllByText("0/1").length > 0);
-  const playground = screen.getAllByRole("button", { name: locale.page.openPlayground });
-  assert.ok(playground.every((button) => (button as HTMLButtonElement).disabled));
-});

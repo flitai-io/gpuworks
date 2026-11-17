@@ -53,6 +53,17 @@ func pendingOf(t *testing.T, layout Layout) *PendingUpgrade {
 	return pending
 }
 
+func TestSelectedArchiveMustReportItsPinnedVersionBeforeSnapshot(t *testing.T) {
+	h := newHarness(t, t.TempDir())
+	h.writeExistingInstall("v1.0.0")
+	h.prepareInServiceDatabase()
+	archive := openArchive(t, h.writeArchive("v2.0.0", []byte("new binary")))
+	_, err := h.installer.StageSelectedInService(context.Background(), "v1.0.0", archive, func(string) error { t.Fatal("snapshot taken for the wrong binary"); return nil }, "admin", "v3.0.0", "attempt")
+	if err == nil || readFile(t, h.layout.Binary()) != "old binary" {
+		t.Fatalf("mismatched archive: %v", err)
+	}
+}
+
 func TestStageInServiceSwapsTheBinaryBehindASnapshot(t *testing.T) {
 	h := newHarness(t, t.TempDir())
 	h.writeExistingInstall("v1.0.0")

@@ -190,3 +190,6 @@ Resource attributes are `service.name=gpuworks`, `service.version`, `service.ins
 Only spans with platform-side failures (`error`, `interrupted`) have Error status. Client-initiated disconnections and length truncation do not count as errors.
 
 Prompts and replies are **not exported**, and the platform itself does not store them.
+
+<!-- translation-source-sha256: 26f9639692f41c35c41c82dc931f342e7b36cb6ab11c6f2ebe664c39e73703a9 -->
+<!-- translation-localized-code-block: c87cce8916d515a6b24467acbe5590291890c9618f42b2743c08fb0fe1d463cd 67d464e4acec589ac40309dd150cf2f2695cc935b7474316bc7bd9857ffdf160 Translate inference-token and served-name placeholders and generic sample user message to English; this is an uncaptured example, not tested transcript or screenshot evidence. -->

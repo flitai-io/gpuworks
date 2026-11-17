@@ -12,11 +12,11 @@ import (
 )
 
 // TestRunFlushesFinalProxyAccountingBeforeReturning is app.Run's shutdown
-// sequencing test for the metricsIngestLoop-vs-accountant race described on
+// sequencing test for the RunMetrics-vs-accountant race described on
 // Run's metricsCtx comment: proxy.Accountant.Run's ctx.Done handler only
 // enqueues its final flush into the metrics ingest queue partway through its
 // own shutdown sequence (flush, close(stop), wait for its writer to drain
-// and call the sink). If metricsIngestLoop reacted to the same shutdown
+// and call the sink). If RunMetrics reacted to the same shutdown
 // context, it could already have drained-and-exited before that enqueue,
 // silently dropping it — Run must not return until this final flush has
 // actually reached tsdb.
@@ -60,7 +60,7 @@ func TestRunFlushesFinalProxyAccountingBeforeReturning(t *testing.T) {
 		t.Fatal("server did not stop")
 	}
 
-	series, err := a.obs.tsdb.QueryRange("gpuworks_proxy_requests_total",
+	series, err := a.obs.TSDB().QueryRange("gpuworks_proxy_requests_total",
 		map[string]string{"deployment": strconv.FormatUint(uint64(deploymentID), 10)},
 		0, time.Now().UnixMilli()+1000, 1000)
 	if err != nil {

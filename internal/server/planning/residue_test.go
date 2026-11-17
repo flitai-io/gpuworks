@@ -7,6 +7,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/sleep"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
@@ -197,8 +198,9 @@ func TestAFailedSleepReleasesItsCardOnceTheEngineIsGone(t *testing.T) {
 }
 
 // Two wakes given at once - an operator's and the automation's - for two
-// sleepers on one card that only one of them fits: under the lifecycle lock
-// exactly one is admitted and the other is refused, never both.
+// sleepers on one card that only one of them fits: under the server's order
+// lock (lifecycle.Orders) exactly one is admitted and the other is refused,
+// never both.
 func TestConcurrentWakesUnderTheLifecycleLockAdmitOnlyOne(t *testing.T) {
 	st, node, dep := residueFixture(t, 16<<30, "bfloat16")
 	// A second sleepable deployment on the same card.
@@ -219,8 +221,9 @@ func TestConcurrentWakesUnderTheLifecycleLockAdmitOnlyOne(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	var orders lifecycle.Orders
 	wake := func(d *store.Deployment) (int, error) {
-		defer LockLifecycle()()
+		defer orders.Lock()()
 		insts, err := st.InstancesForDeployment(d.ID)
 		if err != nil {
 			return 0, err

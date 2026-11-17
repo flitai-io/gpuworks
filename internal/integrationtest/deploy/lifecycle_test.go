@@ -175,7 +175,7 @@ func TestOrdinaryReplicaRetryAfterTheBudgetIsSpent(t *testing.T) {
 			victim = inst
 		}
 	}
-	if err := env.Store().SetInstanceState(victim.UUID, proto.InstFailed, "engine exited"); err != nil {
+	if err := env.Store().SetInstanceFailed(victim.UUID, proto.RuntimeFailure{Code: proto.ErrorContainerExited}, "engine exited"); err != nil {
 		t.Fatal(err)
 	}
 	var exhausted struct {

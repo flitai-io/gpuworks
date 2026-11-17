@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Space, Switch, Tooltip, Typography, message } from "antd";
-import { ExclamationCircleOutlined } from "@ant-design/icons";
+import { Switch } from "../../components/ui/switch";
+import { HelpTip } from "../../ui-kit/HelpTip";
+import { message } from "../../ui-kit/feedback";
 import { useTranslation } from "react-i18next";
 import { api, type UsageReportStatus } from "../../api";
-
-const { Text } = Typography;
 
 // UsageReportSwitch is the user experience improvement program inside
 // Version and updates: a switch, its name and a hint on hover, styled like
@@ -35,13 +34,10 @@ export default function UsageReportSwitch() {
   };
   const hint = status.editable ? t("usageReport.hint") : `${t("usageReport.hint")} ${t("usageReport.readOnly")}`;
   return (
-    <Space align="center">
-      <Switch id="usage-report-enabled" checked={status.enabled} loading={saving}
-        disabled={!status.editable} onChange={(value) => void toggle(value)} />
-      <label htmlFor="usage-report-enabled"><Text>{t("usageReport.title")}</Text></label>
-      <Tooltip title={hint}>
-        <Text type="secondary"><ExclamationCircleOutlined aria-label={hint} tabIndex={0} style={{ cursor: "help" }} /></Text>
-      </Tooltip>
-    </Space>
+    <div className="inline-flex items-center gap-2">
+      <Switch id="usage-report-enabled" label={t("usageReport.title")} className="p-0" checked={status.enabled}
+        aria-busy={saving} disabled={saving || !status.editable} onCheckedChange={value => void toggle(value)} />
+      <HelpTip content={hint} />
+    </div>
   );
 }

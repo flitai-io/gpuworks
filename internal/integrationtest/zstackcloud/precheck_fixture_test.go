@@ -34,7 +34,7 @@ func (f *sshPrecheckFixture) PrecheckSSH(_ context.Context, req provision.SSHPre
 		return provision.SSHPrecheckReport{}, fmt.Errorf("dial tcp %s: connect: connection refused", req.Target)
 	}
 	return provision.SSHPrecheckReport{Target: req.Target, User: user, Host: host, Port: port, Checks: []provision.CheckResult{
-		{Name: "SSH authentication", Status: "ok", Detail: "password accepted"},
+		{ID: "ssh_auth", Status: "pass", Message: "password accepted"},
 	}}, nil
 }
 

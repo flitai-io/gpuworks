@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -416,10 +417,31 @@ func TestHandleRPCErrorsAndUpgradeContention(t *testing.T) {
 	c.handleRPC(context.Background(), proto.Envelope{T: proto.TRPCReq, ID: 3, D: json.RawMessage(`{"method":"agent.upgrade"}`)})
 	upgradeMu.Unlock()
 	got := string(ctrl.BytesCopy())
-	for _, want := range []string{"bad request", "injected RPC failure", "agent upgrade already in progress"} {
+	for _, want := range []string{"bad request", "injected RPC failure", `{"error":"agent upgrade already in progress","code":"AGENT_UPGRADE_IN_PROGRESS"}`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("RPC responses %q do not contain %q", got, want)
 		}
+	}
+	if strings.Contains(got, `"error":"injected RPC failure","code"`) {
+		t.Fatalf("an uncoded failure carries a code: %q", got)
+	}
+}
+
+type unknownRPCHandlers struct{ inboundHandlers }
+
+func (h *unknownRPCHandlers) OnRPC(_ context.Context, method string, _ json.RawMessage) (any, error) {
+	return nil, fmt.Errorf("dispatch: %w", proto.UnknownRPCMethod(method))
+}
+
+// The refusal keeps the sentence older servers read and adds the code newer
+// ones read, even when the handler wrapped it.
+func TestHandleRPCSendsTheCodeOfAWrappedRPCError(t *testing.T) {
+	ctrl := &nopRWC{}
+	c := &Conn{handlers: &unknownRPCHandlers{}, ctrl: ctrl, log: slog.Default()}
+	c.handleRPC(context.Background(), proto.Envelope{T: proto.TRPCReq, ID: 7, D: json.RawMessage(`{"method":"fs.stat"}`)})
+	want := `"d":{"error":"dispatch: unknown rpc method: fs.stat","code":"RPC_UNKNOWN_METHOD"}`
+	if got := string(ctrl.BytesCopy()); !strings.Contains(got, want) {
+		t.Fatalf("rpc.resp = %q, want %q", got, want)
 	}
 }
 

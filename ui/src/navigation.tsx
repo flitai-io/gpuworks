@@ -37,10 +37,9 @@ export const navGroups: NavGroup[] = [
   ] },
   { labelKey: "navigation.groups.compute", items: [
     // External platforms provide nodes, so they sit above them. Public and
-    // private clouds share one list; /zstack redirects to it.
-    // Kubernetes clusters provide nodes too.
+    // private clouds and Kubernetes clusters share one list; /zstack and
+    // /kubernetes redirect to it.
     { key: "/providers", icon: icon(ConsoleIcon.platforms), labelKey: "navigation.platforms" },
-    { key: "/kubernetes", icon: icon(ConsoleIcon.kubernetes), labelKey: "navigation.kubernetes" },
     { key: "/nodes", icon: icon(ConsoleIcon.nodes), labelKey: "navigation.nodes" },
     { key: "/gpus", icon: icon(ConsoleIcon.gpus), labelKey: "navigation.gpus" },
     { key: "/storage", icon: icon(ConsoleIcon.storage), labelKey: "navigation.storage" },

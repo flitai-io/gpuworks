@@ -4,24 +4,14 @@ import type { BadgeProps } from "antd";
 import { useTranslation } from "react-i18next";
 import type { DeploymentHealth, HealthProbe, HealthStatus } from "../api";
 import { agoText } from "../format";
-import type { InferenceAPIOperation } from "../inferenceApi";
 import { formatMS } from "../pages/monitor/requestShape";
 import { colors } from "../theme/tokens";
+import { detailBadgeTone } from "../pages/state";
+import { Badge as StatusBadge } from "./ui/badge";
 
 // The server's health check of a deployment (dto/deployment_health.go): a
 // minimal request through the gateway every minute. These pieces show it the
 // same way on the deployment list, its detail and the service monitor.
-
-// healthCheckable says whether a deployment serving operations can be
-// checked: the check asks chat, else text completion, else embeddings
-// (inferenceapi.CheckOperation).
-export function healthCheckable(
-  operations: Pick<InferenceAPIOperation, "type">[] | undefined,
-): boolean {
-  return (operations ?? []).some(
-    (op) => op.type === "openai.chat" || op.type === "openai.completions" || op.type === "openai.embeddings",
-  );
-}
 
 const BADGE: Record<HealthStatus, BadgeProps["status"]> = {
   ok: "success",
@@ -103,8 +93,10 @@ export function ProbeLines({
 // check's time when it answered; hover for the details.
 export function HealthTag({
   health,
+  detail = false,
 }: {
   health: DeploymentHealth | undefined;
+  detail?: boolean;
 }) {
   const { t } = useTranslation("common");
   if (!health) return <>—</>;
@@ -113,9 +105,10 @@ export function HealthTag({
     health.status === "ok" && health.last
       ? `${text} · ${formatMS(health.last.latency_ms)}`
       : text;
-  const badge = (
-    <Badge status={BADGE[health.status] ?? "default"} text={label} />
-  );
+  const status = BADGE[health.status] ?? "default";
+  const badge = detail
+    ? <StatusBadge variant="plain" size="sm" status={detailBadgeTone[status]}>{label}</StatusBadge>
+    : <Badge status={status} text={label} />;
   if (health.status === "off" || health.status === "pending") return badge;
   return (
     <Tooltip

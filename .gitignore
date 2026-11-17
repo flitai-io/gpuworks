@@ -53,3 +53,6 @@ base-mirrors.local
 
 # Claude Code user-local overrides; keep them out of shared branches.
 .claude/settings.local.json
+
+# pgregory.net/rapid writes a failing property's replay file next to the test.
+testdata/rapid/

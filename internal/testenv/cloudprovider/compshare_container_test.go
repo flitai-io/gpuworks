@@ -8,6 +8,7 @@ import (
 	"time"
 
 	serverprovider "gpuworks.ai/gpuworks/internal/server/provider"
+	compsharedriver "gpuworks.ai/gpuworks/internal/server/provider/compshare"
 )
 
 // podDriver behaves like the CompShare driver for a container: it looks for
@@ -39,7 +40,7 @@ func (d *podDriver) CreateInstance(_ context.Context, _ serverprovider.Credentia
 			region, zone = "cn-wlcb", "cn-wlcb-01"
 		}
 	}
-	unsupported := fmt.Errorf("compshare: create in %s/%s: compshare: API RetCode 226641: The current availability zone does not support this image.", region, zone)
+	unsupported := fmt.Errorf("compshare: create in %s/%s: %w", region, zone, &compsharedriver.APIError{Status: 200, RetCode: 226641, Message: "The current availability zone does not support this image."})
 	if wantPod != (zone == d.podZone.Zone) {
 		return serverprovider.Instance{}, unsupported
 	}

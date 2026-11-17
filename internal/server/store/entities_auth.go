@@ -30,6 +30,13 @@ type APIKey struct {
 	LastUsed   *time.Time
 	RevokedAt  *time.Time
 	Restricted bool
+	// PriorityClassID is the priority class the key's requests run at (nil:
+	// the default class), PriorityCeilingClassID the highest class a request
+	// may ask for (nil: the key's own class), and PriorityPolicy how a
+	// request may choose (package priority; empty is the default policy).
+	PriorityClassID        *uint  `gorm:"index"`
+	PriorityCeilingClassID *uint  `gorm:"index"`
+	PriorityPolicy         string `gorm:"size:16;not null;default:''"`
 }
 
 // APIKeyDeployment grants a restricted API key one deployment. Rows go with

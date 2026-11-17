@@ -36,3 +36,5 @@ Available data (verified on 2026-10-15):
 - The request view, latency breakdown, request details (the PD section), and exported traces can all distinguish the gateway's own work, the prefill phase, and the decode instance's KV wait.
 - API: the request's `pd` object, `pd_prefill` in `segments`, and service snapshot fields `pd.prefill_stage_p95_ms` and `pd.kv_transfer`; see the [API Reference](../reference/api.md).
 - Documentation: [Request Timeline and Phase Breakdown](../reference/request-timeline.md#6-pd-分离部署), [PD Disaggregated Deployment](../how-to/pd-disaggregation.md#运行中), [Export Request Traces](../how-to/export-request-traces.md#附录span-字段).
+
+<!-- translation-source-sha256: a80f00ecbff5fdf77b0d486602502b9605f55ba75262b23f8d9491ff2f21565b -->

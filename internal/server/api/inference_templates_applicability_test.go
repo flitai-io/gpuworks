@@ -26,7 +26,7 @@ func TestInferenceTemplateViewProjectsKeysLeftToTheEngine(t *testing.T) {
 	view := inferenceTemplateView(model)
 	// The spec's image tag names the release; without one a diffusion spec
 	// leaves the switches only newer diffusion servers take to the engine,
-	// and vLLM the per-request metrics switch.
+	// and vLLM native context fitting plus per-request metrics.
 	llmOnly := []string{"dtype", "enable_auto_tool_choice", "enforce_eager", "gpu_memory_utilization", "kv_cache_dtype", "lora"}
 	diffusionUnknown := append([]string{"enable_cache_report", "enable_metrics"}, llmOnly...)
 	sort.Strings(diffusionUnknown)
@@ -36,7 +36,7 @@ func TestInferenceTemplateViewProjectsKeysLeftToTheEngine(t *testing.T) {
 		"sglang-diffusion-catalog-silent": diffusionUnknown,
 		"sglang-diffusion-catalog-on":     diffusionUnknown,
 		"sglang-diffusion-v0.5.21":        llmOnly,
-		"vllm":                            {"enable_request_metrics"},
+		"vllm":                            {"enable_request_metrics", "max_model_len"},
 		"vllm-v0.30":                      nil,
 	}
 	if len(view.Specs) != len(want) {

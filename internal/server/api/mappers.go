@@ -74,6 +74,7 @@ func (a *apiHandlers) deploymentDTOFrom(rows deployment.Rows, d *store.Deploymen
 	out.ExtraArgs = d.ExtraArgs
 	out.Health = a.deploymentHealth(d)
 	out.TokenizeEnabled = !d.TokenizeDisabled
+	out.PriorityScheduling = d.PriorityScheduling
 	out.YieldPolicy = dto.YieldPolicyOf(d.Policy())
 	out.WakeWaitLimitSec = int(automation.DefaultWakeWaitLimit / time.Second)
 	out.YieldPolicyEligible = dto.EligibilityOf(planning.YieldPolicyRefusal(d))
@@ -114,9 +115,9 @@ func (a *apiHandlers) deploymentDTOFrom(rows deployment.Rows, d *store.Deploymen
 	// judged by the predicate the gateway routes on, so no field of a row can
 	// disagree with another or with what the gateway answers.
 	view, viewErr := newReplicaView(rows, d, insts)
-	var facts deploymentFacts
+	var facts deployment.Facts
 	if viewErr == nil {
-		facts = deploymentFactsOf(rows, view, insts)
+		facts = deployment.FactsOf(rows, view.ReplicaView, insts)
 		out.PD = deploymentPDDTO(rows, d, insts, view, facts)
 		// ready_replicas answers the same question for a PD deployment as for
 		// an ordinary one, and the drawer pairs it with asleep_replicas, so it
@@ -152,6 +153,7 @@ func (a *apiHandlers) deploymentDTOFrom(rows deployment.Rows, d *store.Deploymen
 	if model != nil && d.ModelID != 0 {
 		contract = inferenceapi.ModelContract(model)
 	}
+	out.HealthCheckable = d.ModelID != 0 && deployment.HealthCheckable(model)
 	for _, definition := range inferenceapi.Definitions() {
 		for _, operation := range contract.Operations {
 			if operation.Type == definition.Type {
@@ -191,13 +193,21 @@ func (a *apiHandlers) deploymentDTOFrom(rows deployment.Rows, d *store.Deploymen
 	out.SleepHold = facts.SleepHold()
 	out.SleepHeld = out.SleepHold == dto.SleepHoldAll
 	out.SleepWakesOnRequest = planning.OperatorSleepWakesOnRequest(d)
-	out.State = effectiveDeploymentState(d, out.RuntimeState, facts)
+	out.State = deployment.EffectiveState(d, out.RuntimeState, facts)
 	if withInstances {
 		out.NodeRequirementLabels = a.requirementLabels(out.NodeRequirements)
+		quick, quickErr := storedLaunchConfig(d)
+		notes := deployment.InstanceNotes(rows, insts)
 		for i := range insts {
 			item := a.instanceDTOFrom(rows, &insts[i])
+			item.Notes = notes[insts[i].UUID]
 			if viewErr == nil {
-				replicaFields(&item, d, view.match, &insts[i])
+				replicaFields(&item, d, view.Match, &insts[i])
+			}
+			if quickErr == nil {
+				if id, label, ok := deploy.KVOffloadBackendOn(d.Engine, quick, insts[i].Role); ok {
+					item.KVOffloadBackend = &dto.KVOffloadBackendRef{ID: id, Label: label}
+				}
 			}
 			out.Instances = append(out.Instances, item)
 		}
@@ -272,30 +282,8 @@ func deploymentRuntimeNodes(rows deployment.Rows, insts []store.Instance) ([]dto
 	return out, names
 }
 
-// effectiveDeploymentState is the one state a list shows for a deployment: a
-// delete in flight outranks whatever the runtime reports, as in the UI's
-// effectiveDeploymentState, and a deployment the gateway refuses every request
-// of because the replicas it needs sleep is asleep (or sleeping, while the
-// order is still being carried out) rather than the running state its engines
-// keep reporting.
-//
-// A partly slept deployment keeps the runtime state: its awake replicas serve,
-// and asleep_replicas says how many do not, so the row shows both instead of
-// passing itself off as entirely well or entirely asleep.
-func effectiveDeploymentState(d *store.Deployment, runtimeState string, facts deploymentFacts) string {
-	if d.State == store.DeployDeleting {
-		return deploymentStateDeleting
-	}
-	if runtimeState == "running" && facts.Asleep() {
-		return facts.State()
-	}
-	return runtimeState
-}
-
-const deploymentStateDeleting = "deleting"
-
 // deploymentListStates are the states a deployment list can be filtered by.
-var deploymentListStates = []string{"pending", "pulling", "starting", "running", "offline", "failed", "stopped", deploymentStateDeleting, deploymentStateSleeping, deploymentStateAsleep}
+var deploymentListStates = deployment.States
 
 // instanceDTO is one instance as GET /instances/{uuid} shows it, with the
 // replica it fills.
@@ -308,8 +296,10 @@ func (a *apiHandlers) instanceDTO(in *store.Instance) dto.Instance {
 func (a *apiHandlers) instanceDTOs(rows deployment.Rows, insts []store.Instance) []dto.Instance {
 	views := map[uint]*replicaView{}
 	out := make([]dto.Instance, 0, len(insts))
+	notes := deployment.InstanceNotes(rows, insts)
 	for i := range insts {
 		item := a.instanceDTOFrom(rows, &insts[i])
+		item.Notes = notes[insts[i].UUID]
 		if dep := rows.Deployment(insts[i].DeploymentID); dep != nil {
 			view, seen := views[dep.ID]
 			if !seen {
@@ -319,7 +309,7 @@ func (a *apiHandlers) instanceDTOs(rows deployment.Rows, insts []store.Instance)
 				views[dep.ID] = view
 			}
 			if view != nil {
-				replicaFields(&item, dep, view.match, &insts[i])
+				replicaFields(&item, dep, view.Match, &insts[i])
 			}
 		}
 		out = append(out, item)

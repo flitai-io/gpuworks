@@ -42,6 +42,14 @@ type PlaygroundModel struct {
 	TemplateSpecName   string `json:"template_spec_name,omitempty"`
 	External           bool   `json:"external,omitempty"`
 	PublicDataPlane    bool   `json:"public_data_plane"`
+	// RequestPriority: a request to the model runs at the priority class the
+	// page names (X-GPUWorks-Priority-Class), the default without one; the
+	// gateway answers the class it ran at. False for an external model.
+	RequestPriority bool `json:"request_priority"`
+	// PriorityScheduling: the deployment runs its engine with priority
+	// scheduling, so the class orders its requests; without it the class is
+	// only recorded.
+	PriorityScheduling bool `json:"priority_scheduling"`
 	// ExtraParameterPresets are the extra-parameter buttons for this
 	// deployment. Which chat-template field stops thinking depends on the
 	// model family and the engine, so the server resolves it here instead of

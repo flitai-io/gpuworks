@@ -14,8 +14,10 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	_ "gpuworks.ai/gpuworks/internal/server/provider/all"
+	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/pkg/localization"
 )
@@ -113,8 +115,8 @@ func (d *apiInstallProviderDriver) InstallAgent(ctx context.Context, creds provi
 
 func (d *apiInstallProviderDriver) InstallAgentWithReport(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) (provider.InstallReport, error) {
 	d.req = req
-	return provider.InstallReport{Checks: []provider.InstallCheck{{
-		Name: "Agent process", Status: "warn", Detail: "unit may need daemon-reload",
+	return provider.InstallReport{Checks: []provision.CheckResult{{
+		ID: "agent_process", Status: "warn", Code: messages.CheckAgentNotObserved, Message: "unit may need daemon-reload",
 	}}}, nil
 }
 
@@ -139,9 +141,27 @@ func TestProviderKindsEndpointReturnsSchema(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 	}
-	var infos []provider.KindInfo
-	if err := unmarshalList(rec.Body.Bytes(), &infos); err != nil {
+	var body struct {
+		Items      []provider.KindInfo `json:"items"`
+		Total      int                 `json:"total"`
+		Categories json.RawMessage     `json:"categories"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
+	}
+	infos := body.Items
+	if body.Total != len(infos) || len(infos) == 0 {
+		t.Fatalf("total = %d for %d kinds", body.Total, len(infos))
+	}
+	// The platform types to offer the kinds under travel with the kinds
+	// (providerCategories, tested on its own: other tests register kinds of
+	// no type, which come under "other").
+	var categories []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body.Categories, &categories); err != nil || len(categories) < 3 ||
+		categories[0].ID != "public_cloud" || categories[1].ID != "private_cloud" || categories[len(categories)-1].ID != "kubernetes" {
+		t.Fatalf("categories = %s", body.Categories)
 	}
 	var runpod *provider.KindInfo
 	for i := range infos {
@@ -158,6 +178,10 @@ func TestProviderKindsEndpointReturnsSchema(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"kind":"runpod","label":{"en":"RunPod","zh":"RunPod"},"homepage":"https://www.runpod.io",`) {
 		t.Fatalf("runpod homepage missing from wire JSON: %s", rec.Body.String())
+	}
+	// What the kind connects and the platform type it is filed under travel with the schema.
+	if !strings.Contains(rec.Body.String(), `"resources":[{"type":"container","product":"Pod"}],"category":"public_cloud"}`) {
+		t.Fatalf("runpod resources and category missing from wire JSON: %s", rec.Body.String())
 	}
 	// RunPod pods are dialed through a TCP port they expose; AutoDL Pro
 	// instances open HTTP ports only, so the server cannot dial them.
@@ -456,13 +480,10 @@ func TestInstallAgentOnInstanceServerDialUsesProviderToken(t *testing.T) {
 		t.Fatalf("server_dial secret should be the pending node token: nodes=%+v err=%v", nodes, err)
 	}
 	var body struct {
-		ServerURL         string `json:"server_url"`
-		ConnectMode       string `json:"connect_mode"`
-		ServerDialAddress string `json:"server_dial_address"`
-		Checks            []struct {
-			Name   string `json:"name"`
-			Status string `json:"status"`
-		} `json:"checks"`
+		ServerURL         string                  `json:"server_url"`
+		ConnectMode       string                  `json:"connect_mode"`
+		ServerDialAddress string                  `json:"server_dial_address"`
+		Checks            []provision.CheckResult `json:"checks"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
@@ -470,10 +491,10 @@ func TestInstallAgentOnInstanceServerDialUsesProviderToken(t *testing.T) {
 	if body.ConnectMode != "server_dial" || body.ServerDialAddress != "203.0.113.20:19092" {
 		t.Fatalf("response = %+v", body)
 	}
-	if len(body.Checks) < 3 || body.Checks[len(body.Checks)-1].Name != "server_dial" || body.Checks[len(body.Checks)-1].Status != "ok" {
+	if len(body.Checks) < 3 || body.Checks[len(body.Checks)-1].ID != "server_dial" || body.Checks[len(body.Checks)-1].Status != "pass" || body.Checks[len(body.Checks)-1].Code != messages.CheckServerDialConnected {
 		t.Fatalf("checks = %+v", body.Checks)
 	}
-	if body.Checks[1].Name != "install agent" || body.Checks[1].Status != "warn" {
+	if body.Checks[1].ID != "install_agent" || body.Checks[1].Status != "warn" || body.Checks[1].Code != messages.CheckAgentNotObserved {
 		t.Fatalf("install check = %+v", body.Checks[1])
 	}
 	if body.ServerURL != "" {
@@ -568,7 +589,7 @@ func (d *apiRestartProviderDriver) InstallAgentWithReport(ctx context.Context, c
 	if !req.AllowInstanceRestart {
 		return provider.InstallReport{}, &provider.InstanceRestartError{Reason: "the provider adds keys by restarting", Need: "ssh_key"}
 	}
-	return provider.InstallReport{Checks: []provider.InstallCheck{{Name: "Agent process", Status: "ok"}}}, nil
+	return provider.InstallReport{Checks: []provision.CheckResult{{ID: "agent_process", Status: "pass"}}}, nil
 }
 
 // Until the operator agrees to the restart the install answers 409 with a
@@ -618,5 +639,33 @@ func TestInstallAgentOnInstanceAsksBeforeRestartingTheInstance(t *testing.T) {
 	}
 	if len(drv.allowed) != 2 || drv.allowed[0] || !drv.allowed[1] {
 		t.Fatalf("driver saw AllowInstanceRestart %v", drv.allowed)
+	}
+}
+
+func TestProviderCategoriesOfferTheKindsInOrder(t *testing.T) {
+	kinds := []provider.KindInfo{
+		{Kind: "zstack", Category: provider.CategoryPrivateCloud},
+		{Kind: "custom"},
+		{Kind: "aliyun", Category: provider.CategoryPublicCloud},
+		{Kind: "runpod", Category: provider.CategoryPublicCloud},
+	}
+	got, err := json.Marshal(providerCategories(kinds))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// In provider.Categories order whatever order the kinds come in; the kinds
+	// of no type under "other"; the Kubernetes cluster type, added as a
+	// cluster entry and naming no kind, last.
+	want := `[{"id":"public_cloud","kinds":["aliyun","runpod"]},` +
+		`{"id":"private_cloud","kinds":["zstack"]},` +
+		`{"id":"other","kinds":["custom"]},` +
+		`{"id":"kubernetes","resources":[{"type":"kubernetes"}],"kube_cluster":true,"kinds":[]}]`
+	if string(got) != want {
+		t.Fatalf("categories = %s\nwant %s", got, want)
+	}
+	// A type no kind is filed under is not offered; Kubernetes always is.
+	got, _ = json.Marshal(providerCategories(nil))
+	if string(got) != `[{"id":"kubernetes","resources":[{"type":"kubernetes"}],"kube_cluster":true,"kinds":[]}]` {
+		t.Fatalf("categories of no kinds = %s", got)
 	}
 }

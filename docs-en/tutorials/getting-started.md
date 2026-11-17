@@ -171,3 +171,6 @@ Figure: The model name matches the public model name entered during deployment, 
 - Explore the entire console: [Console Page Tour](../reference/web-ui-tour.md)
 - Choose the right combination of features: [Choosing Features: dGPU, Sleep/Wake, Multiple Nodes, Replicas, and PD](../explanation/choosing-features.md)
 - Before going into production: [Production Deployment](../how-to/deploy-production.md)
+
+<!-- translation-source-sha256: 18377ed86c1d22e0ce572925b795ae29f88d6d3ba102ebb09833b32833b5f625 -->
+<!-- translation-localized-code-block: 92de4e9dc6768c428e4169ddf38a580c56c86fdccac17a2ce195663d84814fc3 5af048f45b826b7e5cd0307d6e4379c537072ab53d769faa741ecb002b326f38 Translate the interactive inference token prompt and illustrative request text; shell syntax, model, endpoint, JSON keys and limits remain unchanged. -->

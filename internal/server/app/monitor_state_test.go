@@ -139,6 +139,7 @@ func (monitorPreparationNodes) ModelCopyObservation(*store.ModelFile) (proto.Mod
 }
 func (monitorPreparationNodes) CachePhase(store.FileRef) string             { return "" }
 func (p monitorPreparationNodes) PreparationNodes(*store.Deployment) []uint { return p }
+func (monitorPreparationNodes) PreparationGeneration() uint64               { return 0 }
 func (monitorPreparationNodes) RetryCacheCopy(context.Context, store.FileRef) error {
 	panic("monitoring must not mutate preparation")
 }

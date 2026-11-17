@@ -31,6 +31,11 @@ func TestMetadataToOperations(t *testing.T) {
 		{"text to image", `{}`, "---\npipeline_tag: text-to-image\n---\n", OperationImageGenerate},
 		{"image to image edits a source image", `{}`, "---\npipeline_tag: image-to-image\n---\n", OperationImageEdit},
 		{"ordinary chat", `{"architectures":["Qwen2ForCausalLM"]}`, "# Chat", OperationChat},
+		// Intern-Decision: a Qwen3.5 vision backbone, so the config reads as
+		// image-text-to-text, but the card says it is a decision model.
+		{"decision model on a vision-language backbone", `{"architectures":["Qwen3_5ForConditionalGeneration"],"vision_config":{"patch_size":16}}`, "---\ntags: [decision-making, multimodal]\n---\n", OperationDecide},
+		{"decision-model tag", `{}`, "---\ntags: [decision-model]\n---\n", OperationDecide},
+		{"declared pipeline wins the decision tag", `{}`, "---\npipeline_tag: text-generation\ntags: [decision-making]\n---\n", OperationChat},
 		{"no metadata", "", "", ""},
 	}
 	for _, tt := range tests {

@@ -217,11 +217,11 @@ whose content changes with upstream updates:
 
 ## Automatic Image Selection, Pull Addresses, and Command Modes
 
-Series do not have a dedicated default field. After matching vendor, framework, engine, architecture, and chip family, automatic deployment selects the latest
+Series do not have a dedicated default field. After matching vendor, framework, engine, and architecture, automatic deployment selects the latest
 version among enabled, non-deprecated versions with non-rolling tags. The driver/framework compatibility matrix is used only for ranking and warnings; it cannot replace actual hardware facts and does not prevent you from explicitly selecting an image.
-The chip family is derived from the Ascend model segment of the tag (`910b` is the 910B series, `a3` is 910C, `310p` is 310P); on the node side it is the family detected for the selected (or first) card.
-An image whose family is known and differs from the node's (for example the `a3` build on a 910B4 node) is neither picked automatically nor listed among the selectable images; specifying such an image manually is rejected as an image incompatible with the node.
-Generic images without a model segment, and nodes whose chip family is not yet recognized (including `950` cards for now, whose family exists only once their chip identity is detected), never trigger this exclusion.
+The chip family likewise only orders the choice: it is derived from the Ascend model segment of the tag (`910b` is the 910B series, `a3` is 910C, `310p` is 310P); on the node side it is the family detected for the selected (or first) card.
+An image built for the node's family comes first, a generic image without a model segment next, and an image built for another family (for example the `a3` build on a 910B4 node) last, below an image with a driver compatibility warning;
+it stays among the selectable images, and specifying it manually works as usual. When either family is unknown (including `950` cards for now, whose family exists only once their chip identity is detected), the family does not affect the order.
 When the catalog has no candidates, non-NVIDIA nodes do not incorrectly fall back to the CUDA profile's default engine images (`vllm/vllm-openai:latest`,
 `lmsysorg/sglang:latest`). You can explicitly override the image.
 
@@ -243,3 +243,6 @@ runveil (the `udocker` driver) creates a canonical ROOT loopback for every conta
 Only NVIDIA containers additionally set TRITON_LIBCUDA_PATH, FLASHINFER_DISABLE_VERSION_CHECK, and
 SGLANG_SKIP_SGL_KERNEL_VERSION_CHECK. These variables address only library discovery and version checks; they do not bypass NCCL safety checks. See the architecture documentation for the full
 runtime explanation.
+
+<!-- translation-source-sha256: e9150af6061f5d480380685b9cda945e6b884d7f4016b4865c67ca8f41a7e78d -->
+<!-- translation-localized-code-block: 33dc668ac5b0d9b2a0cfa8da37a7788f4ecfcf62c3fc515c19751dd7eb192fa9 410f13f2684f9c121d60a95145d5030433a0f81edaec77f7421b35c3c4604973 Translate illustrative sha256 placeholder -->

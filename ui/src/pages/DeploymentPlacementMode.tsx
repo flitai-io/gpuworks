@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, Space, Tag, Typography, message } from "antd";
+import { Space, Tag, Typography, message } from "antd";
+import { Button } from "../components/ui/button";
 import { useTranslation } from "react-i18next";
 import { api, type Deployment, type UnitsPlacementMode } from "../api";
 import { ConfirmOrderModal } from "./OrderDialogs";
@@ -18,15 +19,17 @@ export default function PlacementModeControl({ dep, onChanged }: { dep: Deployme
   const next: UnitsPlacementMode = mode === "auto" ? "manual" : "auto";
   return (
     <>
-      <Space size={8} wrap>
-        <PlacementTag mode={mode} />
-        {mode === "auto" && dep.placement_strategy && (
-          <Tag>{t(`detail.placement.strategy.${dep.placement_strategy}`, { defaultValue: dep.placement_strategy })}</Tag>
-        )}
+      <Space direction="vertical" size={4}>
+        <Space size={4} wrap>
+          <PlacementTag mode={mode} />
+          {mode === "auto" && dep.placement_strategy && (
+            <Tag>{t(`detail.placement.strategy.${dep.placement_strategy}`, { defaultValue: dep.placement_strategy })}</Tag>
+          )}
+          <Button variant="tertiary" size="sm" onClick={() => setTarget(next)}>
+            {t(next === "auto" ? "unitsPlacement.toAuto" : "unitsPlacement.toManual")}
+          </Button>
+        </Space>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t(`unitsPlacement.${mode}Hint`)}</Typography.Text>
-        <Button size="small" onClick={() => setTarget(next)}>
-          {t(next === "auto" ? "unitsPlacement.toAuto" : "unitsPlacement.toManual")}
-        </Button>
       </Space>
       <ConfirmOrderModal
         open={target != null}

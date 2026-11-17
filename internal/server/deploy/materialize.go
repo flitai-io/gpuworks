@@ -122,11 +122,19 @@ func materialize(in MaterializeInput, legacy bool) (Materialized, error) {
 		return Materialized{}, err
 	}
 	params := capDefaultsToCards(engineParams(engine.Name()), in.Cards)
+	// A caller without a concrete engine command cannot establish that the
+	// image supports native context fitting. Stored rows and legacy callers
+	// must keep their original omission rather than gain a new launch flag.
+	if engine.Name() == EngineVLLM && (in.Command == nil || !in.Command.InterpretEngineDialect) {
+		spec := params["max_model_len"]
+		spec.Default = nil
+		params["max_model_len"] = spec
+	}
 	unset := make(map[string]struct{}, len(in.Unset))
 	for _, rawKey := range in.Unset {
 		key := strings.TrimSpace(rawKey)
 		if _, known := params[key]; !known {
-			return Materialized{}, fmt.Errorf("invalid quick_params_unset: unknown key %q", rawKey)
+			return Materialized{}, paramErrorf(ParamFieldQuickParamsUnset, "invalid quick_params_unset: unknown key %q", rawKey)
 		}
 		unset[key] = struct{}{}
 	}
@@ -148,6 +156,11 @@ func materialize(in MaterializeInput, legacy bool) (Materialized, error) {
 		}
 		spec, known := params[key]
 		if !known {
+			if key == paramKVOffloadBackend {
+				// The engine has no backend to select (kvBackendSelector), so
+				// the selection names nothing; it was always dropped here.
+				continue
+			}
 			// A key this engine has no flag for is still the caller's data: it
 			// may be an internal field (cpu_cores) or a parameter another
 			// engine owns, and validation is where that is judged.
@@ -479,14 +492,14 @@ func checkStatedBounds(spec engineParam, value any) error {
 	if !ok {
 		return nil
 	}
-	if number < 0 {
-		return fmt.Errorf("invalid quick_params: %s must not be negative", spec.Key)
+	if number < 0 && !isVLLMContextAuto(spec, number) {
+		return paramErrorf(spec.Key, "invalid quick_params: %s must not be negative", spec.Key)
 	}
 	if spec.Min != nil && number < *spec.Min {
-		return fmt.Errorf("invalid quick_params: %s must be at least %v", spec.Key, *spec.Min)
+		return paramErrorf(spec.Key, "invalid quick_params: %s must be at least %v", spec.Key, *spec.Min)
 	}
 	if spec.Max != nil && number > *spec.Max {
-		return fmt.Errorf("invalid quick_params: %s must be at most %v", spec.Key, *spec.Max)
+		return paramErrorf(spec.Key, "invalid quick_params: %s must be at most %v", spec.Key, *spec.Max)
 	}
 	return nil
 }

@@ -103,11 +103,30 @@ func reconcileImagePresence(tx *gorm.DB, nodeID uint, reports []proto.ImagePrese
 			continue
 		}
 		updates := map[string]any{"state": state, "runtime_size_bytes": runtimeSize}
-		if row.State == ImageStateFailed && state == ImageStatePresent {
-			// The failed transfer's source and reason describe an attempt that
-			// did not bring the image: it arrived another way, typically a
-			// replica pulling it itself after a copy from a peer failed.
+		// A failed row the node reports present holds the image either way, so
+		// it is present. What the failed attempt's evidence means depends on
+		// which image that is.
+		//   - A different one arrived another way, typically a replica pulling
+		//     it itself after a copy from a peer failed: the failure no longer
+		//     describes the row and goes.
+		//   - The same one (or one the report did not identify) is the image a
+		//     forced re-fetch failed to replace. It never left, and the failure
+		//     is the last thing that happened to it: the reason stays until the
+		//     next attempt, marked IMAGE_REFETCH_FAILED so a client tells it
+		//     from a success message. The attempt's source goes, because it is
+		//     not where the image the node holds came from.
+		arrivedAnotherWay := imageID != "" && imageID != row.ImageDigestID
+		if state == ImageStatePresent && arrivedAnotherWay && (row.State == ImageStateFailed || row.TransferErrorCode != "") {
 			updates["source"], updates["source_node_id"], updates["message"], updates["transferred_bytes"] = "", uint(0), "", int64(0)
+			updates["transfer_error_code"] = ""
+		} else if row.State == ImageStateFailed && state == ImageStatePresent {
+			updates["source"], updates["source_node_id"] = "", uint(0)
+			if row.TransferErrorCode == "" {
+				updates["transfer_error_code"] = "IMAGE_REFETCH_FAILED"
+			}
+		} else if state == ImageStateAbsent && row.TransferErrorCode == "IMAGE_REFETCH_FAILED" {
+			// The mark says the node kept its image; it no longer has one.
+			updates["transfer_error_code"], updates["message"] = "", ""
 		}
 		if report.SizeBytes > 0 {
 			updates["size_bytes"] = report.SizeBytes

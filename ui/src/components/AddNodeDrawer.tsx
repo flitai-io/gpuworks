@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CopyOutlined } from "@ant-design/icons";
-import { Alert, Button, Collapse, Drawer, Form, Input, Modal, Radio, Space, Switch, Table, Tag, Typography, message } from "antd";
-import type { ColumnsType } from "antd/es/table";
+import { Alert, Button, Collapse, Drawer, Form, Input, Modal, Radio, Space, Switch, Tag, Typography, message } from "antd";
 import { api, type CheckResult, type SSHInstallReport, type SSHPrecheckReport } from "../api";
 import { APIError, apiErrorText } from "../apiError";
 import { buildInstallCommand } from "../nodeInstallCommand";
@@ -9,6 +8,7 @@ import { DEFAULT_AGENT_LISTEN } from "../agentListen";
 import SSHCredentialFields, { type SSHAuthMode } from "./SSHCredentialFields";
 import TemporaryAddressHint from "./TemporaryAddressHint";
 import { useCopy } from "./CopyButton";
+import OnboardingChecks, { countOnboardingChecks, type OnboardingCheckCounts } from "./OnboardingChecks";
 import { useTranslation } from "react-i18next";
 
 const { Paragraph, Text } = Typography;
@@ -56,8 +56,8 @@ export default function AddNodeDrawer({
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
   const installInFlight = useRef(false);
-  const precheckSummary = summarizeChecks(report?.checks ?? []);
-  const installSummary = summarizeChecks(installReport?.checks ?? []);
+  const precheckSummary = countOnboardingChecks(report?.checks ?? []);
+  const installSummary = countOnboardingChecks(installReport?.checks ?? []);
 
   const cmd = pendingCommand || t("add.commandPlaceholder");
 
@@ -204,10 +204,10 @@ export default function AddNodeDrawer({
       if (version !== requestVersion.current) return;
       setReport(next);
       setInstallReport(null);
-      const summary = summarizeChecks(next.checks ?? []);
-      if (summary.errors > 0) {
+      const summary = countOnboardingChecks(next.checks ?? []);
+      if (summary.fail > 0) {
         message.error(t("add.message.precheckWithErrors"));
-      } else if (summary.warns > 0) {
+      } else if (summary.warn > 0 || summary.skip > 0) {
         message.warning(t("add.message.precheckWithIssues"));
       } else {
         message.success(t("add.message.precheckComplete"));
@@ -277,7 +277,7 @@ export default function AddNodeDrawer({
               <Form.Item label={t("add.installDir")} tooltip={t("add.installDirTooltip")} extra={t("add.installDirHelp")} style={{ marginBottom: 12 }}>
                 <Input value={installDir} onChange={(e) => { resetResults(); setInstallDir(e.target.value); }} placeholder={t("add.installDirPlaceholder")} />
               </Form.Item>
-              <Form.Item label={t("add.useSystemd")} tooltip={t("add.useSystemdTooltip")} extra={useSystemd ? undefined : t("add.useSystemdOffHelp")} style={{ marginBottom: 0 }}>
+              <Form.Item label={t("add.useSystemd")} tooltip={t("add.useSystemdHelp")} extra={useSystemd ? undefined : t("add.useSystemdOff")} style={{ marginBottom: 0 }}>
                 <Switch checked={useSystemd} onChange={(checked) => { resetResults(); setUseSystemd(checked); }} aria-label={t("add.useSystemd")} />
               </Form.Item>
             </>
@@ -386,7 +386,7 @@ export default function AddNodeDrawer({
                 <SummaryStrip
                   title={t("add.installSummary")}
                   summary={installSummary}
-                  tone={installSummary.errors > 0 ? "error" : installSummary.warns > 0 ? "warning" : "success"}
+                  tone={installSummary.fail > 0 ? "error" : installSummary.warn > 0 || installSummary.skip > 0 ? "warning" : "success"}
                 />
                 <ReportTable
                   title={t("add.installResults", { binary: installReport.binary_name, installDir: installReport.install_dir, address: installReport.server_dial_address ? ` · ${installReport.server_dial_address}` : "" })}
@@ -438,12 +438,10 @@ function SummaryStrip({
   tone,
 }: {
   title: string;
-  summary: { ok: number; warns: number; errors: number };
+  summary: OnboardingCheckCounts;
   tone: "info" | "success" | "warning" | "error";
 }) {
   const { t } = useTranslation("nodes");
-  const color =
-    tone === "success" ? "green" : tone === "warning" ? "gold" : tone === "error" ? "red" : "blue";
   return (
     <Alert
       type={tone}
@@ -452,9 +450,10 @@ function SummaryStrip({
       message={title}
       description={
         <Space wrap size={8}>
-          <Tag color="green">{t("add.check.okCount", { count: summary.ok })}</Tag>
-          <Tag color="gold">{t("add.check.warnCount", { count: summary.warns })}</Tag>
-          <Tag color={color}>{t("add.check.errorCount", { count: summary.errors })}</Tag>
+          <Tag color="green">{t("add.check.okCount", { count: summary.pass })}</Tag>
+          <Tag color="gold">{t("add.check.warnCount", { count: summary.warn })}</Tag>
+          <Tag color="red">{t("add.check.errorCount", { count: summary.fail })}</Tag>
+          {summary.skip > 0 && <Tag>{t("add.check.skipCount", { count: summary.skip })}</Tag>}
         </Space>
       }
     />
@@ -463,46 +462,12 @@ function SummaryStrip({
 
 function ReportTable({ title, checks }: { title: string; checks: CheckResult[] }) {
   const { t } = useTranslation("nodes");
-  const columns: ColumnsType<CheckResult> = [
-    { title: t("add.check.item"), dataIndex: "name", width: 150 },
-    {
-      title: t("add.check.status"),
-      dataIndex: "status",
-      width: 90,
-      render: (status: CheckResult["status"]) => <Tag color={statusColor[status]}>{t(`add.check.${status}`)}</Tag>,
-    },
-    { title: t("add.check.detail"), dataIndex: "detail", render: (detail: string | undefined) => detail || "—" },
-  ];
   return (
     <>
       <Typography.Title level={5} style={{ marginTop: 18 }}>
         {title}
       </Typography.Title>
-      <Table<CheckResult>
-        rowKey="name"
-        size="small"
-        pagination={false}
-        dataSource={checks}
-        columns={columns}
-      />
+      <OnboardingChecks checks={checks} labels={{ item: t("add.check.item"), status: t("add.check.status"), detail: t("add.check.detail") }} />
     </>
-  );
-}
-
-const statusColor: Record<CheckResult["status"], string> = {
-  ok: "green",
-  warn: "gold",
-  error: "red",
-};
-
-function summarizeChecks(checks: CheckResult[]) {
-  return checks.reduce(
-    (acc, check) => {
-      if (check.status === "ok") acc.ok += 1;
-      else if (check.status === "warn") acc.warns += 1;
-      else acc.errors += 1;
-      return acc;
-    },
-    { ok: 0, warns: 0, errors: 0 },
   );
 }

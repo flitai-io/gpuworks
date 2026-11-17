@@ -74,6 +74,11 @@ type Deployment struct {
 	// /v1/detokenize for the deployment. It is stored inverted so the zero
 	// value (and every row from before the column) means they are open.
 	TokenizeDisabled bool `gorm:"not null;default:false"`
+	// PriorityScheduling asks for the engine's per-request priority
+	// scheduling, so the gateway's request priorities take effect. A new
+	// deployment gets it when the launch allows it (deploy.PrioritySchedulingRefusal);
+	// a row from before the column keeps running as it did, without.
+	PriorityScheduling bool `gorm:"not null;default:false"`
 	// NodeReplaceAfterSec is how long a node that runs one of the
 	// deployment's replicas may stay offline before the replica is moved to
 	// another node; 0 never moves it.
@@ -165,8 +170,10 @@ type Instance struct {
 	// been read; false includes a document with an empty paths map.
 	TranscriptionServed *bool
 	Message             string `gorm:"size:512"`
-	// RuntimeFailure is JSON proto.RuntimeFailure, an opaque snapshot accompanying
-	// Message. The host facts cannot be reconstructed after the agent disconnects.
+	// RuntimeFailure is JSON proto.RuntimeFailure, the structured reason of a
+	// failure (read it with Failure), an opaque snapshot accompanying Message.
+	// What was observed (host facts, exit status, the engine's last output)
+	// cannot be reconstructed once the container and its logs are gone.
 	RuntimeFailure string `gorm:"type:text"`
 	Phase          string `gorm:"size:32"`
 	Progress       float64

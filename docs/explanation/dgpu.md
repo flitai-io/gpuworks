@@ -9,14 +9,19 @@ dGPU（dynamic GPU）把显存预算和必要的运行库注入容器，使同�
   对普通 kernel 是封顶，但 vLLM 默认的 CUDA graph 与 cuBLAS 不受它限制，多个推理实例同卡时不能靠它按比例分配算力，
   平台因此不开放算力上限。
 - PPU ppu-slicing-shim 在长上下文、高并发负载下能把 20/80 配置落实为接近目标的繁忙时吞吐权重；对端
-  空闲时会借用余量，因此不是固定 SM 分区。
+  空闲时会借用余量，因此不是固定 SM 分区。支持 Docker 与 Kubernetes；跨进程账本始终在宿主机
+  `/dev/shm`，路径不随运行时变化——Docker 等运行时靠 `--ipc=host` 让容器直接看到宿主机的
+  `/dev/shm`，Kubernetes 上 agent 自己的 `/dev/shm` 是该 Pod 私有的 tmpfs，agent 改经宿主
+  root 预先创建该文件，再把这同一个宿主路径以 hostPath 挂进实例 Pod。
 - 昇腾 vcann-rt/device-share 受宿主机权限和 runtime 组合影响。当前 Gitee 云环境只能证明节点
   探针或整卡对话，不能把云侧拒绝写成 dGPU 通过。
 - 海光 Z100 / K100_AI / BW 使用原生 vdev（实验性）：每实例一张卡，显存配额同时决定分配的 CU 数；不能独立调整算力，也不保证推理吞吐与显存配额成比例。支持 x86_64 上的 Docker 或 runveil/udocker，需原生 helper、宿主库并通过逐卡行为探针；仅报告 K100 或其他未适配型号时仍只支持整卡。
 - AMD 由 rocm-slicing-shim（libvrocm.so）实现（实验性，用户态，HIP 运行时层拦截）：配额是硬显存限制。ROCm 的算力配额由
   `HSA_CU_MASK` 在硬件层实施，低于任何预加载库能看到或校验的层面，平台因此不对 AMD 开放算力上限——
-  这与 NVIDIA 的「技术上开放不了」是同一类限制，但实现机制不同。支持 x86_64 上的 Docker、nerdctl 或 runveil；
-  dGPU 已在 MI300X（gfx942）的 Docker 和 runveil 下实测，其他型号与组合未验证。
+  这与 NVIDIA 的「技术上开放不了」是同一类限制，但实现机制不同。支持 x86_64 上的 Docker、nerdctl、Kubernetes 或 runveil；
+  dGPU 已在 MI300X（gfx942）的 Docker 和 runveil 下实测，其他型号与组合未验证。账本目录的
+  挂载机制同 PPU：跨进程账本始终在宿主机 `/dev/shm`，只在 Kubernetes 上改经宿主 root 预先创建、
+  再以 hostPath 挂进实例 Pod。
 
 server 从硬件事实、资产和行为探针推导 partition capability 的 status/reason；agent 不自行
 宣布 ready。能力不满足时仍可整卡部署，但带 dGPU 显存限额的请求必须明确失败（如调度器返回

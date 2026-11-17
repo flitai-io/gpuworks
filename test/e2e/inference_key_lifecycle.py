@@ -45,7 +45,7 @@ def revoked(rows):
 CASE = "推理令牌 / UI 创建复制并删除 / 刷新回读、真实网关鉴权与即时撤销生效"
 KEY_PATH = "/api/v1/apikeys"
 SECURITY_PATH = "/api/v1/security/settings"
-DENIED = {"error": {"message": "invalid or missing API key", "type": "gpuworks_proxy"}}
+DENIED = {"error": {"message": "invalid or missing API key", "type": "authentication_error", "code": "INVALID_API_KEY", "param": None}}
 MODELS = {"object": "list", "data": []}
 
 

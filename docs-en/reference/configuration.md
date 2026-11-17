@@ -299,6 +299,8 @@ The request body is merged into the current value, changing only the keys it con
 | `event_retention_days` | 180 | 1–3650 | Number of days to retain the event timeline |
 | `event_retention_bytes` | 50 GiB | 64 MiB–1 TiB | Event timeline retention in bytes; whichever limit is reached first, bytes or days, applies |
 
+At startup and every 6 hours after, the server trims events to these two limits, oldest first, in small batches, giving up the database write between batches so other writes are not held up for long; it deletes only as many as the limits require. When the server stops, a trim stops between batches and the next one picks up the rest. The byte count is estimated from the characters of an event's text (message, parameters, event code): a multi-byte character such as Chinese counts as one, so actual usage can exceed the set value.
+
 If values saved by older versions lack new keys, those keys use factory defaults when read. If the stored value cannot be parsed or is out of range, the entire value falls back to factory defaults.
 
 ## Environment Variables
@@ -376,3 +378,6 @@ The following names appear in the code but are not user-configurable settings. D
 - `GPUWORKS_EXPOSE_CONNECTOR_SPEC`: When the connector service (`gpuworks expose run`) starts the public ingress connector helper process (`gpuworks expose connector-host`), it passes the startup request through an environment variable to keep credentials off the command line.
 - `GPUWORKS_PARTITION_PROBE_BACKEND`, `GPUWORKS_PARTITION_PROBE_QUOTA_MIB`: Inputs injected into the probe program when the agent starts a dGPU probe container; they are not configuration settings read by the agent.
 - `__GPUWORKS_AGENT_PROCESS_OK__`, `__GPUWORKS_AGENT_PROCESS_WARN__`: Marker strings in the output of verification commands after SSH installation on a cloud provider; they are not environment variables.
+
+<!-- translation-source-sha256: 54d747b9ee678aa406b162c8f0044c7ad1e7688f0f8720b8c43fa25e8407a919 -->
+<!-- translation-localized-code-block: 86f9f71f25c2b857ad0011486eb8c57eb9996ec1a4417ab035e24d7b4b1f898d dc1d5c5bc85efcc1eb7d1d72bc584329c53e7d9c636c376ad8a7ce5dc1d901cb Reviewed configuration comments; usage_report=false suppresses the daily report and node/GPU counts, while automatic checks retain installation ID and versions. Keys and values unchanged. -->

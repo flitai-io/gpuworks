@@ -44,7 +44,8 @@ func (d *Driver) DeviceAccessDiagnostics(spec runtime.WorkloadSpec) string {
 	if err != nil {
 		return "device access: FAIL: " + err.Error()
 	}
-	groups, devices, err := requiredDeviceGroups(workloadDeviceMounts(spec), runUID, runGID, groupIDs, os.Stat, user.LookupGroupId)
+	willAdopt := canInjectGroups && os.Geteuid() == 0
+	groups, devices, err := requiredDeviceGroups(workloadDeviceMounts(spec), runUID, runGID, groupIDs, os.Stat, user.LookupGroupId, willAdopt)
 	if err != nil {
 		return "device access: FAIL: " + err.Error()
 	}
@@ -65,8 +66,11 @@ func (d *Driver) DeviceAccessDiagnostics(spec runtime.WorkloadSpec) string {
 }
 
 // GrantDeviceAccess adds username to the groups that own the selected
-// accelerator device nodes. The caller must run this method with root
-// privileges; the workload itself continues to run as username.
+// accelerator device nodes, first handing root-only nodes to
+// RuntimeDeviceGroup. The caller must run this method with root privileges;
+// the workload itself continues to run as username. Device nodes regain their
+// original modes on reboot: a root agent re-adopts them before every workload,
+// while a non-root agent needs this command again.
 func (d *Driver) GrantDeviceAccess(ctx context.Context, spec runtime.WorkloadSpec, username string) (string, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
@@ -84,11 +88,16 @@ func (d *Driver) GrantDeviceAccess(ctx context.Context, spec runtime.WorkloadSpe
 	if err != nil {
 		return "", fmt.Errorf("parse gid for %s: %w", username, err)
 	}
+	if os.Geteuid() == 0 {
+		if _, err := adoptRootOnlyDevices(ctx, workloadDeviceMounts(spec), hostDeviceGroupOps()); err != nil {
+			return "", err
+		}
+	}
 	groupIDs, err := identityGroupIDs(username, gid)
 	if err != nil {
 		return "", err
 	}
-	groups, devices, err := requiredDeviceGroups(workloadDeviceMounts(spec), uid, gid, groupIDs, os.Stat, user.LookupGroupId)
+	groups, devices, err := requiredDeviceGroups(workloadDeviceMounts(spec), uid, gid, groupIDs, os.Stat, user.LookupGroupId, false)
 	if err != nil {
 		return "", err
 	}
@@ -113,11 +122,14 @@ func (d *Driver) GrantDeviceAccess(ctx context.Context, spec runtime.WorkloadSpe
 // the host device inode unchanged, so a mount alone is insufficient when the
 // workload user is not a member of the device's group.
 func (d *Driver) workloadInvocation(args []string, spec runtime.WorkloadSpec) ([]string, error) {
+	if err := d.prepareDeviceAccess(context.Background(), spec); err != nil {
+		return nil, err
+	}
 	groupIDs, err := identityGroupIDs(d.runUser, d.runGID)
 	if err != nil {
 		return nil, err
 	}
-	groups, _, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, groupIDs, os.Stat, user.LookupGroupId)
+	groups, _, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, groupIDs, os.Stat, user.LookupGroupId, false)
 	if err != nil {
 		return nil, err
 	}
@@ -147,12 +159,18 @@ func (d *Driver) workloadInvocation(args []string, spec runtime.WorkloadSpec) ([
 	return append(invocation, "--", "bash", "-lc", d.shellInvocation(full)), nil
 }
 
+// requiredDeviceGroups returns the device groups runUID still needs for the
+// accelerator device nodes among mounts. willAdopt predicts that a root agent
+// will hand root-only nodes to RuntimeDeviceGroup before the workload starts
+// (see adoptRootOnlyDevices), so they count as needing that group instead of
+// being unreachable.
 func requiredDeviceGroups(
 	mounts []runtime.Mount,
 	runUID, runGID int,
 	supplementaryGroupIDs map[int]bool,
 	stat func(string) (os.FileInfo, error),
 	lookupGroup func(string) (*user.Group, error),
+	willAdopt bool,
 ) ([]string, int, error) {
 	seen := map[string]bool{}
 	groups := make([]string, 0, 1)
@@ -172,6 +190,16 @@ func requiredDeviceGroups(
 		groupAccess := (int(metadata.Gid) == runGID || supplementaryGroupIDs[int(metadata.Gid)]) && permissions&0o060 == 0o060
 		worldAccess := permissions&0o006 == 0o006
 		if ownerAccess || groupAccess || worldAccess {
+			continue
+		}
+		if rootOnlyDevice(info) {
+			if !willAdopt {
+				return nil, devices, fmt.Errorf("runtime user %s cannot read and write root-only accelerator device %s; run sudo gpuworks-agent grant-device-access --user <runtime user> to give it to group %s (repeat after a reboot)", strconv.Itoa(runUID), mount.Source, RuntimeDeviceGroup)
+			}
+			if !seen[RuntimeDeviceGroup] {
+				seen[RuntimeDeviceGroup] = true
+				groups = append(groups, RuntimeDeviceGroup)
+			}
 			continue
 		}
 		if permissions&0o060 != 0o060 {

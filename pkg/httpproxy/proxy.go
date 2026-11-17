@@ -129,6 +129,17 @@ func canonicalAddr(u *url.URL) string {
 	return net.JoinHostPort(u.Hostname(), port)
 }
 
+// Validate reports whether raw is a proxy URL Proxy accepts: http, https,
+// socks5 or socks5h with a host and no path. A bare host:port is read as
+// http. The error never contains raw, which may carry a login.
+func Validate(raw string) error {
+	u, err := parse(strings.TrimSpace(raw))
+	if err == nil && u == nil {
+		return fmt.Errorf("invalid outbound proxy URL")
+	}
+	return err
+}
+
 func parse(raw string) (*url.URL, error) {
 	if raw == "" {
 		return nil, nil

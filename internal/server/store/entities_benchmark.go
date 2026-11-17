@@ -3,15 +3,19 @@ package store
 import "time"
 
 type BenchmarkRun struct {
-	ID             uint   `gorm:"primaryKey"`
-	Name           string `gorm:"size:128"`
-	TargetKind     string `gorm:"size:16;index"`
-	DeploymentID   uint   `gorm:"index"`
-	InstanceUUID   string `gorm:"size:64;index"`
-	BaseURL        string `gorm:"size:512"`
-	APIKey         string `gorm:"type:text"` // ciphertext of the target's API key (EncryptAIKey)
-	Model          string `gorm:"size:255"`
-	LoadOrigin     string `gorm:"size:128;index"`
+	ID           uint   `gorm:"primaryKey"`
+	Name         string `gorm:"size:128"`
+	TargetKind   string `gorm:"size:16;index"`
+	DeploymentID uint   `gorm:"index"`
+	InstanceUUID string `gorm:"size:64;index"`
+	BaseURL      string `gorm:"size:512"`
+	APIKey       string `gorm:"type:text"` // ciphertext of the target's API key (EncryptAIKey)
+	Model        string `gorm:"size:255"`
+	LoadOrigin   string `gorm:"size:128;index"`
+	// PriorityClass is the request priority class the run asked the gateway
+	// for (a server-origin run of a managed deployment); empty asks for
+	// none. A name, so the report still says it once the class is deleted.
+	PriorityClass  string `gorm:"size:64;not null;default:''"`
 	NumGPUs        int
 	Dataset        string `gorm:"type:text"` // JSON dataset.Config (pkg/bench/dataset)
 	Mode           string `gorm:"size:16;index"`

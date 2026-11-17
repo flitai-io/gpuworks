@@ -1,6 +1,7 @@
 package templateexport
 
 import (
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
 	"gpuworks.ai/gpuworks/internal/server/messages"
@@ -120,16 +121,19 @@ func checkNotes(checks []Check) []Note {
 	notes := make([]Note, 0, len(checks))
 	for _, check := range checks {
 		params := map[string]any{"operation": check.Operation}
-		switch {
-		case !check.Tested:
-			notes = append(notes, Note{Code: NoteOperationNotTested, Params: params})
-		case check.Passed:
+		switch check.Status {
+		case proto.CheckPass:
 			params["http_status"] = check.HTTPStatus
 			notes = append(notes, Note{Code: NoteOperationPassed, Params: params})
-		default:
+		case proto.CheckFail:
 			params["http_status"] = check.HTTPStatus
-			params["message"] = check.Message
+			params["message"] = check.Message()
+			if check.Evidence != "" {
+				params["message"] = check.Evidence
+			}
 			notes = append(notes, Note{Code: NoteOperationFailed, Params: params})
+		default:
+			notes = append(notes, Note{Code: NoteOperationNotTested, Params: params})
 		}
 	}
 	return notes

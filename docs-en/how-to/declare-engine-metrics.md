@@ -182,3 +182,7 @@ metrics:
 | Values are off by a fixed factor (such as 100) | The engine uses different units from the vocabulary; add `scale` |
 | A gauge has the wrong value | The family has multiple lines, and only the first was used; select the required line with a selector |
 | The throughput chart stays at 0 and spikes when requests finish | The mapped counter increments only when requests finish (check whether `# HELP` says finished requests). Map a counter that includes in-flight requests instead. For example, use `tensorfold_health:completion_tokens_total` instead of `tensorfold:generation_tokens_total` for TensorFold |
+
+<!-- translation-source-sha256: be1fb8eef925f9a4b1fbc20d8dbf3bc4eef9ba3b4ddb4ebc98e0581ff0ca8a49 -->
+<!-- translation-localized-code-block: efcf48e7f67274b8efe441b319eef5025b39ede13d8a161e1aec2d1f830e9ef4 61583f8a3fb80812b8068e4e06e936197cd8e6cc8a5b79258c5faa89422224c7 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
+<!-- translation-localized-code-block: 9c2e5fe6142d1639ab7482aed29d76bdbf48a8066c12241135466638dc4111d2 ae6fd25a2a23dbeeecfc322e8af5ebf2d7fe7cedf6a2210f4dc9deaf5a495452 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->

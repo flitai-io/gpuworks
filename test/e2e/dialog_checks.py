@@ -57,10 +57,13 @@ def _regions(dialog):
             const box = node.getBoundingClientRect();
             return {top: box.top, left: box.left, right: box.right, bottom: box.bottom};
         };
+        const form = element.querySelector("form");
+        const body = element.querySelector(".ant-modal-body") ?? [...(form?.children ?? [])]
+            .find(child => !child.matches('[data-slot="dialog-header"], [data-slot="dialog-footer"]'));
         return {
-            title: rect(element.querySelector(".ant-modal-title")),
-            body: rect(element.querySelector(".ant-modal-body")),
-            footer: rect(element.querySelector(".ant-modal-footer")),
+            title: rect(element.querySelector(".ant-modal-title") ?? element.querySelector('[data-slot="dialog-header"]')),
+            body: rect(body),
+            footer: rect(element.querySelector(".ant-modal-footer") ?? element.querySelector('[data-slot="dialog-footer"]')),
             box: rect(element),
         };
     }""")
@@ -73,9 +76,27 @@ def assert_viewport(page):
 def _focus_index(dialog):
     return dialog.evaluate("""element => {
         const active = document.activeElement;
+        if (active?.hasAttribute('data-base-ui-focus-guard')
+            && (active.previousElementSibling === element || active.nextElementSibling === element)) return -2;
         if (!active || !element.contains(active)) return -1;
         const nodes = [...element.querySelectorAll("button, a[href], input, select, textarea, [tabindex]")];
         return nodes.indexOf(active);
+    }""")
+
+
+def _focus_description(dialog):
+    return dialog.evaluate("""element => {
+        const active = document.activeElement;
+        if (!active) return null;
+        return {
+            tag: active.tagName,
+            id: active.id,
+            className: String(active.className).slice(0, 240),
+            text: active.textContent?.slice(0, 120),
+            attributes: [...active.attributes].map(attr => [attr.name, attr.value]),
+            previous: active.previousElementSibling?.tagName,
+            next: active.nextElementSibling?.tagName,
+        };
     }""")
 
 
@@ -83,11 +104,13 @@ def _drawer_focus(dialog):
     # rc-drawer focuses the outer .ant-drawer panel, not the role=dialog node.
     # Its two aria-hidden sentinels sit in that panel, outside role=dialog.
     return dialog.evaluate("""element => {
-        const panel = element.closest('.ant-drawer');
+        const panel = element.closest('.ant-drawer, [data-placement=right]');
         const active = document.activeElement;
         const inside = !!(active && element.contains(active));
         const onPanel = !!(active && active === panel);
-        const sentinel = !!(active && panel && panel.contains(active) && !inside && !onPanel
+        const adjacentGuard = active?.hasAttribute('data-base-ui-focus-guard')
+            && (active.previousElementSibling === element || active.nextElementSibling === element);
+        const sentinel = adjacentGuard || !!(active && panel && panel.contains(active) && !inside && !onPanel
             && active.tagName === 'DIV' && active.getAttribute('aria-hidden') === 'true'
             && !active.getAttribute('role'));
         const nodes = [...element.querySelectorAll('button, a[href], input, select, textarea, [tabindex]')];
@@ -147,10 +170,10 @@ def drawer_regions(dialog):
         };
         return {
             box: rect(element),
-            header: rect(element.querySelector('.ant-drawer-header')),
-            title: rect(element.querySelector('.ant-drawer-title')),
-            body: rect(element.querySelector('.ant-drawer-body')),
-            extra: rect(element.querySelector('.ant-drawer-extra')),
+            header: rect(element.querySelector('.ant-drawer-header') ?? [...element.children].find(el => el.querySelector('h2'))),
+            title: rect(element.querySelector('.ant-drawer-title, h2')),
+            body: rect(element.querySelector('.ant-drawer-body, .detail-body')),
+            extra: rect(element.querySelector('.ant-drawer-extra, .deployment-detail-actions')),
         };
     }""")
 
@@ -190,16 +213,18 @@ def assert_drawer_identity(page, dialog, name, first_step, absent):
     kind = dialog.evaluate("""element => ({
         className: String(element.className),
         ariaModal: element.getAttribute('aria-modal'),
-        inDrawer: !!element.closest('.ant-drawer'),
+        backgroundHidden: document.querySelector('#root')?.getAttribute('aria-hidden') === 'true'
+            || !!document.querySelector('#root')?.inert,
+        inDrawer: !!element.closest('.ant-drawer') || element.matches('[data-placement=right]'),
         inModal: !!element.closest('.ant-modal')
     })""")
-    check(kind["inDrawer"] and not kind["inModal"] and "ant-drawer-content" in kind["className"],
+    check(kind["inDrawer"] and not kind["inModal"],
           f"opened component is not a drawer: {kind}")
-    check(kind["ariaModal"] == "true", f"drawer is not modal: {kind}")
-    title = dialog.locator(".ant-drawer-title")
+    check(kind["ariaModal"] == "true" or kind["backgroundHidden"], f"drawer is not modal: {kind}")
+    title = dialog.locator(".ant-drawer-title, h2").first
     expect(title).to_be_visible()
     check(title.inner_text() == name, f"drawer title {title.inner_text()!r} is not {name!r}")
-    expect(dialog.locator(".ant-drawer-close")).to_be_visible()
+    expect(dialog.locator('.ant-drawer-close, button[aria-label="Close"], button[aria-label="关闭"]').first).to_be_visible()
     expect(dialog.locator(".ant-modal-close")).to_have_count(0)
     expect(first_step).to_be_visible()
     expect(absent).to_have_count(0)
@@ -237,7 +262,7 @@ def assert_drawer_shell(page, dialog, name, first_step, absent):
     """Drawer identity and focus. Focus is a separate cycle from identity."""
     evidence = assert_drawer_identity(page, dialog, name, first_step, absent)
     page.wait_for_function("""element => {
-        const panel = element.closest('.ant-drawer');
+        const panel = element.closest('.ant-drawer, [data-placement=right]');
         const active = document.activeElement;
         return !!(active && panel && (active === panel || element.contains(active)));
     }""", arg=dialog.element_handle(), timeout=5000)
@@ -264,14 +289,22 @@ def assert_dialog_shell(page, dialog, marker, footer):
     page.wait_for_function("element => element.contains(document.activeElement)",
                            arg=dialog.element_handle(), timeout=5000)
     check(_focus_index(dialog) >= 0, "default focus is outside the dialog")
-    # The opening sentinel is focused once and is not part of the later Tab cycle.
     for key in ("Tab", "Shift+Tab"):
         seen = []
         cycled = False
+        guards = 0
         for _ in range(24):
             page.keyboard.press(key)
+            if page.evaluate("document.activeElement?.tagName === 'BODY'"):
+                page.wait_for_function("document.activeElement?.tagName !== 'BODY'", timeout=500)
             current = _focus_index(dialog)
-            check(current >= 0, f"{key} moved focus out of the dialog")
+            if current == -2:
+                guards += 1
+                check(guards <= 1, f"{key} left the dialog controls")
+                continue
+            if current < 0:
+                check(False, f"{key} moved focus out of the dialog: {_focus_description(dialog)}")
+            guards = 0
             if current in seen:
                 check(len(seen) >= 2, f"{key} did not move between dialog controls; visited {seen}")
                 cycled = True
@@ -301,17 +334,22 @@ def cancel_button(label):
     return lambda dialog: button(dialog, label).click()
 
 
+def _close_control(dialog):
+    return dialog.locator('.ant-modal-close, button[aria-label="Close"], button[aria-label="关闭"]').first
+
+
 def escape(dialog):
-    # The dialog panel is not focusable. Pressing Escape there keeps focus in
-    # the parent drawer, and the drawer handles that key by closing itself.
-    dialog.locator(".ant-modal-close").focus()
+    _close_control(dialog).focus()
     dialog.page.keyboard.press("Escape")
 
 
 def close_button(dialog):
-    dialog.locator(".ant-modal-close").click()
+    _close_control(dialog).click()
 
 
 def mask(dialog):
-    # rc-dialog closes when the click target is the wrap, which covers the mask.
-    dialog.locator("xpath=ancestor::div[contains(@class,'ant-modal-wrap')]").click(position={"x": 8, "y": 8})
+    wrap = dialog.locator("xpath=ancestor::div[contains(@class,'ant-modal-wrap')]")
+    if wrap.count() > 0:
+        wrap.click(position={"x": 8, "y": 8})
+    else:
+        dialog.page.locator('[data-slot="dialog-backdrop"]').click(position={"x": 8, "y": 8})

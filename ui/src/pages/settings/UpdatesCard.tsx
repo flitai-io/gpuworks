@@ -1,18 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
-import { Button, Card, Modal, Space, Switch, Table, Typography, Upload, message } from "antd";
-import { ReloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { VersionDrawer } from "./VersionDrawer";
+import { Button } from "../../components/ui/button";
+import { Switch } from "../../components/ui/switch";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import CopyButton from "../../components/CopyButton";
+import { ConsoleIcon } from "../../ui-kit/consoleIcons";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Card, Space, Table, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
-import { api, type CatalogUpdate, type ServerUpgradeStarted, type UpdateStatus } from "../../api";
-import { apiErrorText, productMessageText, type ProductMessage } from "../../apiError";
-import { formatTime } from "../../i18n/datetime";
-import { publishUpdateStatus } from "../../components/UpdateNotice";
+import { api, type ServerVersionChoice, type CatalogUpdate, type OfficialInferenceCatalogResult, type OfficialInferenceCatalogSkipped, type ServerUpgradeStarted, type UpdateStatus } from "../../api";
+import { APIError, apiErrorText, productMessageText, type ProductMessage } from "../../apiError";
+import { formatTime, formatTimeSec } from "../../i18n/datetime";
+import { publishUpdateStatus, serverUpdateState } from "../../components/UpdateNotice";
 import { Badge } from "../../components/ui/badge";
+import { HelpTip } from "../../ui-kit/HelpTip";
 import { Notice } from "../../ui-kit/Notice";
 import { OptionSelect } from "../../ui-kit/OptionSelect";
-import ServerBuildSummary from "../../components/ServerBuildSummary";
+import type { ServerBuildInfo } from "../../serverBuildInfo";
 import { useConsoleUpgrade } from "./useConsoleUpgrade";
 import ServerAgentNotice from "./ServerAgentNotice";
+import TemplatesSkippedNotice from "./TemplatesSkippedNotice";
 import UsageReportSwitch from "./UsageReportSwitch";
 
 const { Text } = Typography;
@@ -33,12 +40,12 @@ interface Row {
 // the system image catalog and the inference template catalog (ADR 0040).
 function rowsOf(status: UpdateStatus, names: Record<Row["key"], string>): Row[] {
   const catalog = (key: "images" | "templates", value: CatalogUpdate): Row => ({
-    key, name: names[key], current: value.current, latest: value.latest,
+    key, name: names[key], current: value.current, latest: status.available ? value.latest : undefined,
     updateAvailable: value.update_available, compatible: value.compatible,
     checkError: value.check_error,
   });
   return [
-    { key: "server", name: names.server, current: status.server.current, latest: status.server.latest, updateAvailable: status.server.update_available, compatible: true },
+    { key: "server", name: names.server, current: status.server.current, latest: status.available ? status.server.latest : undefined, updateAvailable: status.server.update_available, compatible: true },
     catalog("images", status.image_catalog),
     catalog("templates", status.template_catalog),
   ];
@@ -61,17 +68,20 @@ export default function UpdatesCard() {
 
   // Opening the page reuses the server's last check (at most an hour old);
   // the button and a channel switch ask the distribution channel again.
+  const checkGeneration = useRef(0);
   const check = useCallback(async (refresh = false) => {
+    const generation = ++checkGeneration.current;
     setLoading(true);
     try {
       const next = await api.updates(refresh);
+      if (generation !== checkGeneration.current) return;
       setStatus(next);
       publishUpdateStatus(next);
       setLoadError("");
     } catch (error) {
-      setLoadError(apiErrorText(tCommon, error));
+      if (generation === checkGeneration.current) setLoadError(apiErrorText(tCommon, error));
     } finally {
-      setLoading(false);
+      if (generation === checkGeneration.current) setLoading(false);
     }
   }, [tCommon]);
 
@@ -81,17 +91,21 @@ export default function UpdatesCard() {
 
   const onUpgradeResult = useCallback((version: string, recovered: boolean) => {
     if (recovered) message.success(t("updates.serverUpgraded", { version }));
-    else message.error(t("updates.serverNotBack", { version }));
     void check();
   }, [check, t]);
-  const { begin, upgrading, summary, dismiss } = useConsoleUpgrade(onUpgradeResult);
-  const busy = request || (upgrading ? "server" : "");
+  const { begin, trackDownload, attempt, summary, dismiss, checkingResult, probeVersion, lastCheck } = useConsoleUpgrade(onUpgradeResult);
+  const stage = attempt?.phase;
+  const waiting = stage === "download" || stage === "restarting" || stage === "unknown";
+  const busy = request || (waiting ? "server" : "");
 
   const switchChannel = async (channel: string) => {
+    checkGeneration.current++;
     setSwitchingTo(channel);
     setLoading(true);
     try {
       await api.setUpdateChannel(channel);
+      setStatus(current => current && { ...current, channel, available: false, checked_at: "",
+        source: undefined, unavailable_reason: undefined, sources: [] });
     } catch (error) {
       setSwitchingTo(null);
       setLoading(false);
@@ -137,14 +151,15 @@ export default function UpdatesCard() {
     const result = await api.importImageCatalogFile(file);
     return t("updates.imagesApplied", { version: result.catalog_version });
   });
-  const updateTemplates = () => apply("templates", async () => {
-    const result = await api.syncInferenceTemplates();
+  // What the last template update left out for a newer server stays on the
+  // page: a toast would be gone before it is read.
+  const [skippedTemplates, setSkippedTemplates] = useState<OfficialInferenceCatalogSkipped[]>([]);
+  const templatesApplied = (result: OfficialInferenceCatalogResult) => {
+    setSkippedTemplates(result.skipped ?? []);
     return t("updates.templatesApplied", { version: result.version, count: result.models });
-  });
-  const uploadTemplates = (file: File) => apply("templatesUpload", async () => {
-    const result = await api.uploadOfficialInferenceCatalog(file);
-    return t("updates.templatesApplied", { version: result.version, count: result.models });
-  });
+  };
+  const updateTemplates = () => apply("templates", async () => templatesApplied(await api.syncInferenceTemplates()));
+  const uploadTemplates = (file: File) => apply("templatesUpload", async () => templatesApplied(await api.uploadOfficialInferenceCatalog(file)));
 
   // A console upgrade answers once the binary is swapped; the server then
   // restarts, and the new version either answers or is rolled back.
@@ -159,19 +174,43 @@ export default function UpdatesCard() {
       setBusy("");
     }
   };
-  const confirmServerUpgrade = () => {
-    Modal.confirm({
-      title: t("updates.serverConfirmTitle", { version: status?.server.latest }),
-      content: t("updates.serverConfirm"),
-      okText: t("updates.upgrade"),
-      onOk: () => void upgradeServer("server", api.upgradeServer),
-    });
+  const [picker, setPicker] = useState(false);
+  const [choice, setChoice] = useState("");
+  const [problem, setProblem] = useState("");
+  const [confirmed, setConfirmed] = useState<{ channel: string; release: ServerVersionChoice } | null>(null);
+  const submitting = useRef(false);
+  const openVersions = () => { setProblem(""); setChoice(""); setPicker(true); };
+  const returnToPicker = () => { setConfirmed(null); setPicker(true); };
+  const startSelected = async () => {
+    if (!status || !confirmed || submitting.current) return;
+    submitting.current = true;
+    const { channel, release } = confirmed;
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");
+    setConfirmed(null);
+    trackDownload(id, status.server.current, release.version);
+    try {
+      const started = await api.upgradeServer({ channel, version: release.version, sha256: release.sha256, attempt: id });
+      begin(started, id);
+    } catch (error) {
+      if (error instanceof APIError && (error.status < 500 || ["UPDATE_DOWNLOAD_FAILED", "UPDATE_SOURCES_UNAVAILABLE"].includes(error.code))) {
+        dismiss();
+        setProblem(apiErrorText(tCommon, error));
+        setPicker(true);
+      } else {
+        message.warning(apiErrorText(tCommon, error));
+      }
+    } finally {
+      submitting.current = false;
+    }
   };
+
+  const serverState = status && serverUpdateState(status);
 
   const stateOf = (row: Row) => {
     if (!status?.available) return <Text type="secondary">{t("updates.unknown")}</Text>;
     if (row.checkError) return <Text type="danger">{productMessageText(tCommon, row.checkError)}</Text>;
     if (!row.latest) return <Text type="secondary">{t("updates.notPublished")}</Text>;
+    if (row.key === "server" && serverState === "differentChannelVersion") return <Badge size="sm" status="neutral">{t("updates.differentChannelVersion")}</Badge>;
     if (!row.updateAvailable) return <Badge size="sm" status="success">{t("updates.upToDate")}</Badge>;
     if (!row.compatible) return <Badge size="sm" status="danger">{t("updates.needsServer")}</Badge>;
     return <Badge size="sm" status="warning">{t("updates.available")}</Badge>;
@@ -181,6 +220,7 @@ export default function UpdatesCard() {
     const canApply = Boolean(status?.available && row.latest && row.updateAvailable && row.compatible);
     if (row.key === "server") {
       if (!status?.server.self_upgrade) {
+        const browseVersions = <Button variant="secondary" size="sm" onClick={openVersions}>{t("versionPicker.browse")}</Button>;
         const dir = status?.server.install_dir;
         // An installed server that nothing would start again: the fix is to
         // run it behind its supervisor, which restart does on a host and the
@@ -190,55 +230,59 @@ export default function UpdatesCard() {
           const entry = `${dir}/gpuworks serve --supervise --config ${dir}/server.yaml`;
           return (
             <Space direction="vertical" size={2}>
+              {browseVersions}
               <Text type="secondary">{t("updates.blocker.no_service_manager")}</Text>
               <Text type="secondary">{t("updates.superviseHost")}</Text>
-              <Text code copyable={{ text: restart }}>{restart}</Text>
+              <span className="inline-flex items-center gap-1"><Text code>{restart}</Text>
+                <CopyButton size="small" text={restart} label={tCommon("gpuHealth.copyCommand")} />
+              </span>
               <Text type="secondary">{t("updates.superviseContainer")}</Text>
-              <Text code copyable={{ text: entry }}>{entry}</Text>
+              <span className="inline-flex items-center gap-1"><Text code>{entry}</Text>
+                <CopyButton size="small" text={entry} label={tCommon("gpuHealth.copyCommand")} />
+              </span>
             </Space>
           );
         }
         return (
           <Space direction="vertical" size={2}>
-            <Text code copyable={{ text: "sudo gpuworks upgrade" }}>sudo gpuworks upgrade</Text>
+              {browseVersions}
+            <span className="inline-flex items-center gap-1"><Text code>sudo gpuworks upgrade</Text>
+              <CopyButton size="small" text="sudo gpuworks upgrade" label={tCommon("gpuHealth.copyCommand")} />
+            </span>
             {status?.server.self_upgrade_blocker && <Text type="secondary">{t(`updates.blocker.${status.server.self_upgrade_blocker}`, { defaultValue: status.server.self_upgrade_blocker })}</Text>}
           </Space>
         );
       }
-      const canUpgrade = canApply && status.server.installable;
       return (
         <Space wrap>
-          <Button size="small" type={canUpgrade ? "primary" : "default"} disabled={!canUpgrade || busy !== ""} loading={busy === "server"} onClick={confirmServerUpgrade}>
-            {t("updates.upgrade")}
+          <Button size="sm" onClick={openVersions} disabled={serverState === "upToDate" || Boolean(busy) || waiting || loading}>
+            {t("versionPicker.title")}
           </Button>
-          <Upload accept=".tgz,.gz,application/gzip" showUploadList={false}
-            beforeUpload={(file) => { void upgradeServer("serverUpload", () => api.uploadServerArchive(file)); return Upload.LIST_IGNORE; }}>
-            <Button size="small" icon={<UploadOutlined />} disabled={busy !== ""} loading={busy === "serverUpload"}>{t("updates.uploadServer")}</Button>
-          </Upload>
+          <UploadButton label={t("updates.uploadServer")} accept=".tgz,.gz,application/gzip"
+            disabled={busy !== "" || waiting} loading={busy === "serverUpload"}
+            onFile={file => upgradeServer("serverUpload", () => api.uploadServerArchive(file))} />
         </Space>
       );
     }
     const images = row.key === "images";
     return (
       <Space wrap>
-        <Button size="small" type={canApply ? "primary" : "default"} disabled={!canApply || busy !== ""}
+        <Button variant="secondary" size="sm" disabled={!canApply || busy !== ""}
           loading={busy === (images ? "images" : "templates")} onClick={() => void (images ? updateImages() : updateTemplates())}>
           {t("updates.apply")}
         </Button>
-        <Upload accept={images ? ".json,application/json" : ".tgz,.gz,application/gzip"} showUploadList={false}
-          beforeUpload={(file) => { void (images ? uploadImages(file) : uploadTemplates(file)); return Upload.LIST_IGNORE; }}>
-          <Button size="small" icon={<UploadOutlined />} disabled={busy !== ""} loading={busy === (images ? "imagesUpload" : "templatesUpload")}>
-            {images ? t("updates.uploadManifest") : t("updates.uploadPackage")}
-          </Button>
-        </Upload>
+        <UploadButton label={images ? t("updates.uploadManifest") : t("updates.uploadPackage")}
+          accept={images ? ".json,application/json" : ".tgz,.gz,application/gzip"}
+          disabled={busy !== ""} loading={busy === (images ? "imagesUpload" : "templatesUpload")}
+          onFile={images ? uploadImages : uploadTemplates} />
       </Space>
     );
   };
 
   const columns: ColumnsType<Row> = [
-    { title: t("updates.item"), dataIndex: "name", key: "name" },
-    { title: t("updates.current"), key: "current", render: (_, row) => row.current ? <Text>{row.current}</Text> : <Text type="secondary">—</Text> },
-    { title: t("updates.latest"), key: "latest", render: (_, row) => row.latest ? <Text>{row.latest}</Text> : <Text type="secondary">—</Text> },
+    { title: t("updates.updateItem"), dataIndex: "name", key: "name", render: (_, row) => <span className="gw-item-name">{row.name}</span> },
+    { title: t("updates.current"), key: "current", render: (_, row) => <><span className="gw-mini-label" aria-hidden="true">{t("updates.current")}</span>{row.current || "—"}</> },
+    { title: t("updates.channelLatest"), key: "latest", render: (_, row) => <><span className="gw-mini-label" aria-hidden="true">{t("updates.channelLatest")}</span>{row.latest ? <Text>{row.latest}</Text> : <Text type="secondary">—</Text>}</> },
     { title: t("updates.state"), key: "state", render: (_, row) => stateOf(row) },
     { title: t("updates.actions"), key: "actions", render: (_, row) => actionsOf(row) },
   ];
@@ -252,54 +296,147 @@ export default function UpdatesCard() {
   // Nobody has been asked yet: automatic checks are off and no one clicked.
   const notChecked = Boolean(status && !status.available && !status.unavailable_reason && status.sources.length === 0);
   const channelName = (value: string) => channelOptions.find((option) => option.value === value)?.label ?? value;
+  const showServerNotice = waiting || stage === "rollback" || stage === "failed" || Boolean(summary);
+  const serverNotice = <div className="gw-server-notices">
+    {stage === "download" && <Notice title={t("versionPicker.download",{version:attempt?.to})}>{t("versionPicker.downloadHelp")}</Notice>}
+    {stage === "restarting" && <Notice title={t("versionPicker.restarting",{version:attempt?.to})}>{t("updates.serverUpgradingHelp")}</Notice>}
+    {stage === "unknown" && <Notice tone="warning" title={t("versionPicker.unknown")} action={
+      <Button variant="secondary" size="sm" disabled={checkingResult} loading={checkingResult} onClick={probeVersion}>
+        {t("versionPicker.recheckRunning")}
+      </Button>
+    }>
+      <div>{t("versionPicker.unknownHelp", {version:attempt?.to})}</div>
+      {lastCheck && <div>{t(`versionPicker.probe.${lastCheck.reason}`, {time:formatTimeSec(lastCheck.at), version:lastCheck.version})}</div>}
+    </Notice>}
+    {stage === "rollback" && <Notice tone="warning" title={t("versionPicker.restored", {version:attempt?.from})}
+      action={<Button variant="secondary" size="sm" onClick={dismiss}>{t("versionPicker.acknowledge")}</Button>}>
+      {t("versionPicker.restoredHelp", {version:attempt?.to})}
+    </Notice>}
+    {stage === "failed" && <Notice tone="danger" title={t("versionPicker.failed", {version:attempt?.to})}
+      action={<Button variant="secondary" size="sm" onClick={dismiss}>{t("versionPicker.acknowledge")}</Button>} />}
+    {summary && <ServerAgentNotice summary={summary} dismiss={dismiss} />}
+  </div>;
   return (
-    <Card id="updates" title={t("updates.title")} extra={(
-      <Space align="center" size={16}>
-        <Button icon={<ReloadOutlined />} loading={loading} onClick={() => void check(true)}>{t("updates.check")}</Button>
+    <Card id="updates" classNames={{ header: "gw-card-head", body: "gw-card-body" }} title={<div className="gw-card-title">
+      <span>{t("updates.title")}</span>
+      <div className="gw-preferences">
         {status && (
           <Space align="center">
-            <Switch id="update-auto-check" checked={status.auto_check} loading={savingAutoCheck}
-              disabled={!status.channel_editable || busy !== "" || switchingTo !== null} onChange={(value) => void switchAutoCheck(value)} />
-            <label htmlFor="update-auto-check"><Text>{t("updates.autoCheck")}</Text></label>
+            <Switch id="update-auto-check" label={t("updates.autoCheck")} checked={status.auto_check}
+              className="p-0" aria-busy={savingAutoCheck}
+              disabled={savingAutoCheck || !status.channel_editable || busy !== "" || waiting || switchingTo !== null}
+              onCheckedChange={value => void switchAutoCheck(value)} />
+            <HelpTip content={status.auto_check ? t("updates.autoCheckOnHelp") : t("updates.autoCheckOffHelp")} />
           </Space>
         )}
         <UsageReportSwitch />
-      </Space>
-    )}>
-      <Space direction="vertical" size={12} style={{ width: "100%" }}>
-        <Text type="secondary">{t("updates.description")}</Text>
-        {status && (
-          <Space wrap align="center">
-            <OptionSelect
-              prefix={<span className="text-body">{t("updates.channel")}</span>}
-              aria-label={t("updates.channel")}
-              value={channel}
-              options={channelOptions}
-              disabled={!status.channel_editable || busy !== "" || switchingTo !== null}
-              onChange={value => void switchChannel(value)}
-            />
-            <Text type="secondary">{channel === "release" ? t("updates.channelReleaseHelp") : t("updates.channelNightlyHelp")}</Text>
-          </Space>
-        )}
-        {status && <Text type="secondary">{status.auto_check ? t("updates.autoCheckOnHelp") : t("updates.autoCheckOffHelp")}</Text>}
+      </div>
+    </div>}>
+      <div className="gw-updates">
+        <p className="gw-description">{t("updates.description")}</p>
+        {!status && showServerNotice && serverNotice}
         {loadError && <Notice tone="danger" title={loadError} />}
-        {upgrading && <Notice title={t("updates.serverUpgrading", { from: upgrading.from, to: upgrading.to })}>{t("updates.serverUpgradingHelp")}</Notice>}
-        {status && !notChecked && <Text type="secondary">{loading ? t("updates.checking") : t("updates.checkedAt", { time: formatTime(status.checked_at) })}</Text>}
-        {status && notChecked && !loading && <Notice tone="info" title={t("updates.notChecked")}>{t("updates.notCheckedHelp")}</Notice>}
+        {status && notChecked && !loading && !loadError && <Notice tone="info" title={t("updates.notChecked")}>{t("updates.notCheckedHelp")}</Notice>}
         {status && !notChecked && !status.available && !loading && <UnavailableAlert status={status} channelName={channelName(status.channel)} />}
-        {status && <section aria-label={t("updates.currentBuild")}><Text strong>{t("updates.currentBuild")}</Text><ServerBuildSummary version={status.server.current} build={status.server.current_build} /></section>}
-        <Table<Row> rowKey="key" size="small" pagination={false} loading={loading}
-          dataSource={status ? rowsOf(status, names) : []} columns={columns}
-          expandable={{
-            showExpandColumn: false,
-            expandedRowKeys: summary ? ["server"] : [],
-            rowExpandable: (row) => row.key === "server",
-            expandedRowRender: () => summary && <ServerAgentNotice summary={summary} dismiss={dismiss} />,
-          }} />
-        <Text type="secondary">{t("updates.serverHelp")}</Text>
-      </Space>
+        <div className="gw-toolbar">
+          {status && <div className="gw-channel">
+            <span className="gw-channel-label">{t("updates.channel")}</span>
+            <OptionSelect aria-label={t("updates.channel")} value={channel} options={channelOptions}
+              disabled={!status.channel_editable || busy !== "" || waiting || switchingTo !== null}
+              onChange={value => void switchChannel(value)} />
+            <p className="gw-channel-help">{channel === "release" ? t("updates.channelReleaseHelp") : t("updates.channelNightlyHelp")}</p>
+          </div>}
+          <div className="gw-check">
+            {status && (loading || !notChecked) && <span>{loading ? t("updates.checking") : t("updates.checkedAt", { time: formatTime(status.checked_at) })}</span>}
+            <Button variant="secondary" leadingIcon={ConsoleIcon.refresh} loading={loading} aria-busy={loading} onClick={() => void check(true)}>{t("updates.check")}</Button>
+          </div>
+        </div>
+        {status && <RunningBuild version={status.server.current} build={status.server.current_build} />}
+        {status && <div className="gw-items-table">
+          <Table<Row> rowKey="key" size="small" pagination={false} loading={loading}
+            dataSource={rowsOf(status, names)} columns={columns}
+            expandable={{
+              showExpandColumn: false,
+              expandedRowClassName: "gw-notice-row",
+              expandedRowKeys: showServerNotice ? ["server"] : [],
+              rowExpandable: row => row.key === "server",
+              expandedRowRender: () => serverNotice,
+            }} />
+        </div>}
+        <TemplatesSkippedNotice skipped={skippedTemplates} />
+
+      </div>
+      {status && <VersionDrawer open={picker} canInstall={status.server.self_upgrade}
+        blocker={status.server.self_upgrade_blocker ? t(`updates.blocker.${status.server.self_upgrade_blocker}`, { defaultValue: status.server.self_upgrade_blocker }) : undefined}
+        server={status.server} channel={status.channel} initial={choice} problem={problem} onRefresh={() => setProblem("")}
+        onClose={() => setPicker(false)} onChoose={release => { setChoice(release.version); setPicker(false); setConfirmed({channel:status.channel, release}); }} />}
+      <Dialog open={Boolean(confirmed)} onOpenChange={open => { if (!open) returnToPicker(); }}>
+        <DialogContent size="lg" closeButtonLabel={tCommon("actions.close")}>
+          <DialogHeader><DialogTitle>{t("versionPicker.confirmTitle",{version:confirmed?.release.version})}</DialogTitle></DialogHeader>
+          <p className="mb-3"><strong>{status?.server.current_build?.build_channel || "—"} · {status?.server.current}</strong> → <strong>{confirmed?.channel} · {confirmed?.release.version}</strong></p>
+          <p>{t("updates.serverConfirm")}</p>
+          <DialogFooter>
+            <Button variant="secondary" onClick={returnToPicker}>{t("versionPicker.back")}</Button>
+            <Button onClick={startSelected}>{t("versionPicker.confirm")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
+}
+
+function UploadButton({ label, accept, disabled, loading, onFile }: {
+  label: string; accept: string; disabled: boolean; loading: boolean; onFile: (file: File) => Promise<void>;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return <>
+    <Button variant="secondary" size="sm" leadingIcon={ConsoleIcon.upload} disabled={disabled}
+      loading={loading} aria-busy={loading} onClick={() => input.current?.click()}>{label}</Button>
+    <input ref={input} type="file" hidden accept={accept} aria-label={label} disabled={disabled || loading}
+      onChange={event => {
+        const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = "";
+        if (file) void onFile(file);
+      }} />
+  </>;
+}
+
+function RunningBuild({ version, build }: { version: string; build?: ServerBuildInfo }) {
+  const { t } = useTranslation("common");
+  const info = build?.version === version ? build : undefined;
+  const kind = info && ["stable", "prerelease", "development"].includes(info.kind) ? info.kind : "unknown";
+  const tone = { stable: "success", prerelease: "warning", development: "info", unknown: "neutral" } as const;
+  const { t: settings } = useTranslation("settings");
+  return <section className="gw-running-build" aria-label={settings("updates.currentBuild")}>
+    <div className="gw-build-identity">
+      <h3>{settings("updates.currentBuild")} <HelpTip content={settings("updates.serverHelp")} /></h3>
+      <div className="gw-build-id">
+        <strong>{version}</strong>
+        <Badge size="sm" status={tone[kind]}>{t(`buildInfo.kind.${kind}`)}</Badge>
+      </div>
+      <p>{t(`buildInfo.description.${kind}`)}</p>
+    </div>
+    <div className="gw-build-record">
+      <dl className="gw-build-meta">
+        {info?.build_channel && <>
+          <dt>{settings("updates.buildFields.channel")}</dt>
+          <dd>{info.build_channel}</dd>
+        </>}
+        {info?.built_at && <>
+          <dt>{settings("updates.buildFields.builtAt")}</dt>
+          <dd>{formatTime(info.built_at)}</dd>
+        </>}
+        <dt>{settings("updates.buildFields.matched")}</dt>
+        <dd>{info?.published_version || t("buildInfo.unmatched")}</dd>
+      </dl>
+      {info?.commit && <details className="gw-build-details">
+        <summary>{t("buildInfo.details")}</summary>
+        <div>
+          <code>{t("buildInfo.commit", { commit: info.commit })}</code>
+        </div>
+      </details>}
+    </div>
+  </section>;
 }
 
 // UnavailableAlert says why the channel could not be read, so an empty channel

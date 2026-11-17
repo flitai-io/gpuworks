@@ -57,7 +57,24 @@ const (
 	ErrorMountContainerPath = "MOUNT_CONTAINER_PATH"
 	ErrorMountHostPath      = "MOUNT_HOST_PATH"
 	ErrorMountTargetNested  = "MOUNT_TARGET_NESTED"
+	// ErrorMountModelNotFound answers an extra-mount row naming a model that
+	// is not registered (any more); model_id is the id the row states.
+	ErrorMountModelNotFound = "MOUNT_MODEL_NOT_FOUND"
 	// ErrorAutoPlacementTPRequired: an automatic multi-node request states no
 	// placement.tp, so how many free GPUs each node needs is unknown.
 	ErrorAutoPlacementTPRequired = "AUTO_PLACEMENT_TP_REQUIRED"
+	// ErrorTemplateModelMismatch: the request selects a model (model_id)
+	// whose repository id serves none of the template spec's weight sources
+	// (repo_id@revision is the source the spec resolved). The server refuses
+	// the choice rather than substituting another model.
+	ErrorTemplateModelMismatch = "TEMPLATE_MODEL_MISMATCH"
+	// ErrorManualCommandRankBlind: a multi-node or PD request's manual
+	// command references none of the variables that tell its launches apart,
+	// so every rank would start as the same rank in the same role. missing
+	// lists the prefixed variable names the command has to reference.
+	ErrorManualCommandRankBlind = "MANUAL_COMMAND_RANK_BLIND"
+	// ErrorCommandOverrideRankBlind: a multi-node or PD request overrides
+	// Cmd outside manual mode. Such an override is one argv every rank would
+	// run as written; only a manual command is expanded per rank.
+	ErrorCommandOverrideRankBlind = "COMMAND_OVERRIDE_RANK_BLIND"
 )

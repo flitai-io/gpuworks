@@ -51,7 +51,7 @@
     "(EngineCore_DP0 pid=212) ERROR 09-16 11:02:36 [core.py:1231] torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 150.00 MiB. GPU 0 has a total capacity of 11.63 GiB of which 37.50 MiB is free.",
     "(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}"
   ],
-  "expect_signature": "cuda_oom",
+  "expect_signature": "CUDA_OOM",
   "expect_keywords": [
     [
       "gpu-memory-utilization",

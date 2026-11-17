@@ -60,8 +60,10 @@ func assertFleetMatchesPerNode(t *testing.T, st *store.Store, nodes ...*store.No
 	}
 }
 
-// A card's state is the first that holds: offline, unhealthy, held outside,
-// awake, asleep, free.
+// A card's state is the first that holds: offline, unhealthy, held outside
+// with nothing of ours serving on it, awake, asleep, free. A card that
+// serves partitions beside processes outside the platform (ADR 0068) is
+// serving: reading it as held would hide that the platform works on it.
 func TestFleetCardStatePrecedence(t *testing.T) {
 	for _, tc := range []struct {
 		card   FleetCard
@@ -70,7 +72,8 @@ func TestFleetCardStatePrecedence(t *testing.T) {
 	}{
 		{FleetCard{Unhealthy: true, AwakeBytes: 1}, false, CardOffline},
 		{FleetCard{Unhealthy: true, HeldOutside: true, AwakeBytes: 1}, true, CardUnhealthy},
-		{FleetCard{HeldOutside: true, AwakeBytes: 1, SleepingBytes: 1}, true, CardHeldOutside},
+		{FleetCard{HeldOutside: true, SleepingBytes: 1}, true, CardHeldOutside},
+		{FleetCard{HeldOutside: true, AwakeBytes: 1, SleepingBytes: 1}, true, CardAwake},
 		{FleetCard{AwakeBytes: 1, SleepingBytes: 1}, true, CardAwake},
 		{FleetCard{SleepingBytes: 1}, true, CardAsleep},
 		{FleetCard{}, true, CardFree},

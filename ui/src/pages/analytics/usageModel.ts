@@ -45,6 +45,8 @@ export interface KeyInfo {
   playground: boolean;
   /** A batch created in the console: no key, told apart by user. */
   batch?: boolean;
+  /** A server-origin evaluation's requests: no key, told apart by user. */
+  evaluation?: boolean;
   userName: string;
 }
 
@@ -77,6 +79,7 @@ export function keyIdentity(r: UsageRow): string {
   if (r.api_key_id) return `k${r.api_key_id}`;
   if (r.source === "playground") return `pg${r.user_id}`;
   if (r.source === "batch") return `b${r.user_id}`;
+  if (r.source === "evaluation") return `ev${r.user_id}`;
   return "nokey";
 }
 
@@ -89,6 +92,7 @@ export function keyInfoOf(r: UsageRow): KeyInfo {
     deleted: r.api_key_deleted,
     playground: !r.api_key_id && r.source === "playground",
     batch: !r.api_key_id && r.source === "batch",
+    evaluation: !r.api_key_id && r.source === "evaluation",
     userName: r.user_name,
   };
 }

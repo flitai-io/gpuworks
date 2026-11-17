@@ -75,3 +75,5 @@ For inter-node transfers, the target agent provides a one-time TLS receiver. Bot
 The image dialog identifies the path used by its connection probe; actual sync selects the path again. For model transfers, check the server sync log's `transport=direct` or `transport=relay` field. TCP internal tests on network pages always measure real node-to-node direct connectivity. A successful relay does not mean the TCP test now passes. This feature transfers model and image files only; it does not provide NCCL/Gloo, RDMA, or distributed-inference network connectivity.
 
  After a model transfer completes, the file manifest is verified again. An image sync is complete only after the target runtime finishes importing it and confirms that the image exists.
+
+<!-- translation-source-sha256: 30b806dc7264c71c3a898f25db45602827530feec7e354efed2fa320379e8407 -->

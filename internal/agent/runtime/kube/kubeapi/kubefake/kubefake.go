@@ -50,6 +50,11 @@ type Server struct {
 	// DenyClusterPods makes the cluster-wide pod list answer 403 Forbidden, as
 	// it does for a service account without a ClusterRole that lists pods.
 	DenyClusterPods bool
+	// DenyEvents makes creating an event answer 403 Forbidden, as it does
+	// for a service account whose Role has no events rule (a manifest from
+	// before the agent wrote events).
+	DenyEvents bool
+	events     []kubeapi.Event
 	// Requests records "METHOD path?query" of every request.
 	Requests []string
 }
@@ -103,6 +108,16 @@ func (s *Server) UpdateNode(name string, fn func(*kubeapi.Node)) {
 	fn(s.nodes[name])
 }
 
+// AddNode adds another node of the cluster with the given labels.
+func (s *Server) AddNode(name string, labels map[string]string) {
+	n := &kubeapi.Node{Metadata: kubeapi.ObjectMeta{Name: name, UID: "node-uid-" + name, Labels: labels}}
+	n.Status.Allocatable = map[string]string{}
+	n.Status.Capacity = map[string]string{}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nodes[name] = n
+}
+
 // SetNodeLabel sets a node label.
 func (s *Server) SetNodeLabel(node, key, value string) {
 	s.UpdateNode(node, func(n *kubeapi.Node) {
@@ -149,6 +164,48 @@ func (s *Server) SetUnschedulable(node string, v bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nodes[node].Spec.Unschedulable = v
+}
+
+// SetDaemonSetSelection replaces the agent DaemonSet's pod template
+// selection — nodeSelector and, when poolLabel is non-empty, the single
+// pool nodeAffinity term kubemanifest.Render writes (one
+// requiredDuringSchedulingIgnoredDuringExecution term, one matchExpressions
+// entry, operator In) — the way reapplying a manifest with a narrowed node
+// selector or node pool would. An empty nodeSelector and poolLabel removes
+// both, as a DaemonSet with neither has.
+func (s *Server) SetDaemonSetSelection(nodeSelector map[string]string, poolLabel string, poolIDs []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	spec := s.daemonSet["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+	delete(spec, "nodeSelector")
+	delete(spec, "affinity")
+	if len(nodeSelector) > 0 {
+		sel := make(map[string]any, len(nodeSelector))
+		for k, v := range nodeSelector {
+			sel[k] = v
+		}
+		spec["nodeSelector"] = sel
+	}
+	if poolLabel == "" {
+		return
+	}
+	values := make([]any, len(poolIDs))
+	for i, id := range poolIDs {
+		values[i] = id
+	}
+	spec["affinity"] = map[string]any{
+		"nodeAffinity": map[string]any{
+			"requiredDuringSchedulingIgnoredDuringExecution": map[string]any{
+				"nodeSelectorTerms": []any{
+					map[string]any{
+						"matchExpressions": []any{
+							map[string]any{"key": poolLabel, "operator": "In", "values": values},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 // Pod returns a copy of a pod, or nil.
@@ -264,6 +321,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.listAllPods(w, r)
 	case len(parts) == 7 && parts[0] == "apis" && parts[5] == "daemonsets":
 		s.serveDaemonSet(w, r, parts[6])
+	case len(parts) == 5 && parts[0] == "api" && parts[2] == "namespaces" && parts[4] == "events":
+		s.serveEvents(w, r, parts[3])
 	case len(parts) >= 5 && parts[0] == "api" && parts[2] == "namespaces" && parts[4] == "pods":
 		s.servePods(w, r, parts[3], parts[5:])
 	default:

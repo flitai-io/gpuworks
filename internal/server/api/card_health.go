@@ -83,13 +83,13 @@ func (a *apiHandlers) nodeHealthChecks(w http.ResponseWriter, r *http.Request) {
 			Worst: cardhealth.Worst(card.Cells), CanRecheck: canRecheck, Cells: make([]dto.CardHealthCell, 0, len(card.Cells)),
 		}
 		for _, cell := range card.Cells {
-			dcell := dto.CardHealthCell{Check: cell.Check, State: cell.State, Reason: cell.Reason, DurationMS: cell.DurationMS, Stale: cell.Stale}
+			dcell := dto.CardHealthCell{Check: cell.Check, Status: cell.Status, Code: cell.Code, DurationMS: cell.DurationMS, Stale: cell.Stale}
 			if !cell.CheckedAt.IsZero() {
 				at := cell.CheckedAt
 				dcell.CheckedAt = &at
 			}
 			dc.Cells = append(dc.Cells, dcell)
-			out.Summary[cell.State]++
+			out.Summary[cell.Status]++
 		}
 		out.Cards = append(out.Cards, dc)
 	}
@@ -121,7 +121,7 @@ func (a *apiHandlers) nodeHealthRecords(w http.ResponseWriter, r *http.Request) 
 	}
 	query := store.CardHealthEpisodeQuery{
 		NodeID: node.ID, CardIdent: cardFromQuery(r), CheckID: check,
-		Offset: (q.page - 1) * q.pageSize, Limit: q.pageSize,
+		Offset: q.offset(), Limit: q.pageSize,
 		StartedAfter: time.Now().UTC().Add(-cardhealth.Retention),
 	}
 	rows, total, err := a.d.Store.CardHealthEpisodes(query)
@@ -145,7 +145,7 @@ func (a *apiHandlers) nodeHealthRecords(w http.ResponseWriter, r *http.Request) 
 		RetentionDays: int(cardhealth.Retention / (24 * time.Hour))}
 	for _, row := range rows {
 		if l, ok := live[row.ID]; ok {
-			row.Level, row.Reason, row.EndedAt, row.LastSeenAt = l.Level, l.Reason, l.EndedAt, l.LastSeenAt
+			row.Level, row.Reason, row.EndedAt, row.LastSeenAt = l.Status, l.Code, l.EndedAt, l.LastSeenAt
 			row.Count, row.Flapping, row.LatestEvidence = l.Count, l.Flapping, l.LatestEvidence
 		}
 		out.Records = append(out.Records, toCardHealthRecord(row, cards, now))
@@ -155,7 +155,7 @@ func (a *apiHandlers) nodeHealthRecords(w http.ResponseWriter, r *http.Request) 
 
 func toCardHealthRecord(row store.CardHealthEpisode, cards map[string]store.GPU, now time.Time) dto.CardHealthRecord {
 	rec := dto.CardHealthRecord{
-		ID: row.ID, CardIdent: row.CardIdent, Check: row.CheckID, Level: row.Level, Reason: row.Reason,
+		ID: row.ID, CardIdent: row.CardIdent, Check: row.CheckID, Status: row.Level, Code: row.Reason,
 		StartedAt: row.StartedAt.UTC(), LastSeenAt: row.LastSeenAt.UTC(), Count: row.Count, Flapping: row.Flapping,
 		Ongoing:        row.EndedAt == nil,
 		FirstEvidence:  healthFields(row.FirstEvidence),
@@ -211,6 +211,7 @@ func (a *apiHandlers) nodeHealthCheckDetail(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	detail, err := a.d.CardHealth.Detail(r.Context(), node.UUID, card, check)
+	proto.NormalizeCardCheckDetail(&detail)
 	switch {
 	case errors.Is(err, cardhealth.ErrBusy):
 		w.Header().Set("Retry-After", "1")
@@ -263,6 +264,7 @@ func (a *apiHandlers) recheckCard(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err)
 		return
 	}
+	proto.NormalizeCardCheckDetail(&detail)
 	writeJSON(w, http.StatusOK, toCardCheckDetail(detail))
 }
 
@@ -296,7 +298,7 @@ func toCardCheckRun(r *proto.CardCheckRun) *dto.CardCheckRun {
 	if r == nil {
 		return nil
 	}
-	out := &dto.CardCheckRun{State: r.State, Reason: r.Reason, DurationMS: r.DurationMS, Probe: r.Probe, Evidence: []dto.GPUHealthField{}}
+	out := &dto.CardCheckRun{Status: r.Status, Code: r.Code, DurationMS: r.DurationMS, Probe: r.Probe, Evidence: []dto.GPUHealthField{}}
 	if at, err := time.Parse(time.RFC3339, r.At); err == nil {
 		out.At = at.UTC()
 	}

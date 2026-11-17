@@ -21,7 +21,7 @@ type DiagnosticsBundleStart = import("../src/diagnosticsApi.ts").DiagnosticsBund
 const d = locale.settings.diagnostics as {
   adminOnly: string;
   debug: Record<string, string> & { nodeState: Record<string, string>; nodeReason: Record<string, string>; ended: Record<string, string> };
-  bundle: Record<string, string> & { bundleState: Record<string, string>; itemState: Record<string, string>; itemReason: Record<string, string> };
+  bundle: Record<string, string> & { bundleState: Record<string, string> };
 };
 const original = { ...apiModule.api };
 
@@ -127,7 +127,12 @@ test("collecting diagnostics sends the window and lists the archive to download"
     id: "20261102-1", requested_by: "admin", created_at: "2026-11-02T10:00:00Z", finished_at: "2026-11-02T10:01:00Z",
     from: "2026-11-02T09:00:00Z", to: "2026-11-02T10:00:00Z", deployment_ids: [], instance_uuids: [], node_uuids: ["n1"], doctor: true,
     state: "ready", size_bytes: 2048,
-    items: [{ name: "nodes/n2", state: "skipped", reason: "offline", bytes: 0 }, { name: "server/gpuworks-server.log", state: "collected", bytes: 100 }],
+    items: [
+      { id: "node", path: "nodes/n2", status: "skip", code: "DIAGNOSTICS_NODE_OFFLINE", params: { node: "n2", path: "nodes/n2" }, message: "the node is offline", bytes: 0 },
+      { id: "server_log", path: "server/gpuworks-server.log", status: "pass", bytes: 100 },
+      { id: "node_agent_log", path: "nodes/n1/agent.log", status: "warn", code: "DIAGNOSTICS_ITEM_TRUNCATED", params: { node: "n1", path: "nodes/n1/agent.log" }, bytes: 24 },
+      { id: "records", path: "db", status: "fail", code: "DIAGNOSTICS_ITEM_READ_FAILED", params: { path: "db" }, message: "db could not be read", evidence: "database is locked", bytes: 0 },
+    ],
   };
   let list: DiagnosticsBundles = { bundles: [], limits: bundleLimits };
   const api = stub({ bundles: () => list });
@@ -149,8 +154,38 @@ test("collecting diagnostics sends the window and lists the archive to download"
   assert.equal(download.getAttribute("href"), "/api/v1/diagnostics/bundles/20261102-1/download");
   assert.ok(screen.getByText(d.bundle.bundleState.ready));
   await user.click(screen.getByRole("button", { name: /expand row/i }));
-  const items = await screen.findByText("nodes/n2");
-  assert.ok(within(items.closest("tr")!).getByText(d.bundle.itemReason.offline));
+  const row = async (path: string) => (await screen.findByText(path)).closest("tr")!;
+  const c = locale.common as { checkStatus: Record<string, string>; apiError: Record<string, string> };
+  // Each status reads differently; a skipped part is never shown as passed.
+  const offline = await row("nodes/n2");
+  assert.ok(within(offline).getByText(c.checkStatus.skip));
+  assert.equal(within(offline).queryByText(c.checkStatus.pass), null);
+  assert.ok(within(offline).getByText(c.apiError.DIAGNOSTICS_NODE_OFFLINE));
+  assert.ok(within(await row("server/gpuworks-server.log")).getByText(c.checkStatus.pass));
+  const cut = await row("nodes/n1/agent.log");
+  assert.ok(within(cut).getByText(c.checkStatus.warn));
+  assert.ok(within(cut).getByText(c.apiError.DIAGNOSTICS_ITEM_TRUNCATED));
+  const failed = await row("db");
+  assert.ok(within(failed).getByText(c.checkStatus.fail));
+  assert.ok(within(failed).getByText(c.apiError.DIAGNOSTICS_ITEM_READ_FAILED));
+  // The read's own error is evidence beside the message.
+  assert.ok(within(failed).getByText("database is locked"));
+});
+
+test("the collection's items read in Chinese from their codes", async () => {
+  const zh = await createI18n(["settings", "common"], "zh");
+  const zc = zh.locale.common as { checkStatus: Record<string, string>; apiError: Record<string, string> };
+  stub({ bundles: () => ({ bundles: [{
+    id: "b9", requested_by: "admin", created_at: "2026-11-02T10:00:00Z", finished_at: "2026-11-02T10:01:00Z", from: "2026-11-02T09:00:00Z",
+    to: "2026-11-02T10:00:00Z", deployment_ids: [], instance_uuids: [], node_uuids: ["n2"], doctor: false, state: "ready", size_bytes: 1,
+    items: [{ id: "node", path: "nodes/n2", status: "skip", code: "DIAGNOSTICS_NODE_OFFLINE", params: { node: "n2", path: "nodes/n2" }, bytes: 0 }],
+  }], limits: bundleLimits }) });
+  const user = userEvent.setup();
+  render(<I18nextProvider i18n={zh.i18n}><DiagnosticsBundleCard /></I18nextProvider>);
+  await user.click(await screen.findByRole("button", { name: /expand row|展开行/i }));
+  const offline = (await screen.findByText("nodes/n2")).closest("tr")!;
+  assert.ok(within(offline).getByText(zc.checkStatus.skip));
+  assert.ok(within(offline).getByText(zc.apiError.DIAGNOSTICS_NODE_OFFLINE));
 });
 
 test("a running collection blocks another; a failed one says why", async () => {
@@ -163,4 +198,19 @@ test("a running collection blocks another; a failed one says why", async () => {
   assert.ok(await screen.findByText("disk full"));
   const busy = screen.getByRole("button", { name: new RegExp(d.bundle.running) }) as HTMLButtonElement;
   assert.ok(busy.className.includes("loading"));
+});
+
+test("each card states what it does in one line and keeps the details behind the help mark", async () => {
+  stub({});
+  for (const [card, description, help] of [
+    [<DebugSessionCard />, d.debug.description, d.debug.descriptionHelp],
+    [<DiagnosticsBundleCard />, d.bundle.description.replace("{{days}}", "7"), d.bundle.descriptionHelp],
+  ] as const) {
+    const user = renderWith(card);
+    assert.ok(await screen.findByText(description));
+    assert.equal(screen.queryByText(help), null);
+    await user.hover(screen.getByRole("button", { name: locale.common.helpTip.label }));
+    assert.equal((await screen.findByRole("tooltip")).textContent, help);
+    cleanup();
+  }
 });

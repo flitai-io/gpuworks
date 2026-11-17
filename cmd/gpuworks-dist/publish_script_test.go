@@ -63,6 +63,7 @@ func TestPublishScriptRequiresDocsOnlyForUnpublishedReleases(t *testing.T) {
 				}
 			}
 			writeExecutable(t, filepath.Join(bin, "go"), `#!/bin/sh
+if [ "$*" = "run ./cmd/gpuworks database-migration" ]; then echo 230; exit 0; fi
 [ "$1" = build ] && [ "$2" = -o ] || exit 97
 cp "$DIST_TEST_WRAPPER" "$3"
 chmod +x "$3"
@@ -80,6 +81,8 @@ case "$1" in
       */releases/*) exit 3 ;;
       *) exit 97 ;;
     esac ;;
+  copyto)
+    case "$2" in */release/index.json) exit 4 ;; *) exit 97 ;; esac ;;
   cat) exit 3 ;;
   *) exit 97 ;;
 esac

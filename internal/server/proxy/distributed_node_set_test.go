@@ -35,7 +35,7 @@ func TestDistributedSelectionDoesNotReadTheNodeSet(t *testing.T) {
 		{nodeIDs: "[1,2]", message: notReady},
 	} {
 		dep := &store.Deployment{ID: 1, NodeID: 1, NodeIDs: tc.nodeIDs, NNodes: 2}
-		tgt, status, message, asleep := p.selectDistributedInstance(dep, nil, "qwen-72b", "")
+		tgt, status, message, asleep := p.selectDistributedStatus(dep, nil, "qwen-72b", "")
 		if status != http.StatusServiceUnavailable || message != tc.message || asleep || tgt.nodeUUID != "" {
 			t.Errorf("node_ids %q: status=%d message=%q asleep=%v target=%+v; want 503 %q",
 				tc.nodeIDs, status, message, asleep, tgt, tc.message)

@@ -70,7 +70,9 @@ func TestIsGiteeNoHostRecognisesBothRefusalShapes(t *testing.T) {
 			t.Fatalf("httpErr=%v: refusal not classified as no-host: %v", httpErr, err)
 		}
 	}
-	for _, err := range []error{nil, errors.New("gitee: GPU model \"x\" is not available in zone \"gitee\""), errors.New("POST /compute/instances status=401 body=unauthorized")} {
+	for _, err := range []error{nil, errors.New("gitee: GPU model \"x\" is not available in zone \"gitee\""), errors.New("POST /compute/instances status=401 body=unauthorized"),
+		// Only the create's own classification counts, not text that says so.
+		errors.New("gitee create compute instance: 没有找到符合条件的可用主机")} {
 		if IsGiteeNoHost(err) {
 			t.Fatalf("%v wrongly classified as no-host", err)
 		}

@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/fs"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -246,8 +249,23 @@ func TestObservationReasonMapsCancellationAndTimeoutWithoutRawError(t *testing.T
 	if got := observationReason(context.DeadlineExceeded); got != "timeout" {
 		t.Fatalf("deadline reason=%q", got)
 	}
-	if got := observationReason(errors.New("permission denied: secret detail")); got != "permission_denied" {
-		t.Fatalf("permission reason=%q", got)
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"driver permission refusal", fmt.Errorf("docker container inspect: %w: secret detail", runtime.ErrPermissionDenied), "permission_denied"},
+		{"os permission error", &fs.PathError{Op: "open", Path: "/run/containerd/containerd.sock", Err: syscall.EACCES}, "permission_denied"},
+		{"container answered absent", fmt.Errorf("nerdctl container inspect: %w: abc", runtime.ErrContainerNotFound), "not_running"},
+		{"image answered absent", fmt.Errorf("docker image inspect: %w: org/m:v1", runtime.ErrImageNotFound), "not_running"},
+		// The repository's own words are no longer read: text alone classifies as nothing.
+		{"permission text only", errors.New("permission denied: secret detail"), "inspect_failed"},
+		{"not found text only", errors.New("exec: \"nerdctl\": executable file not found in $PATH"), "inspect_failed"},
+	}
+	for _, tc := range cases {
+		if got := observationReason(tc.err); got != tc.want {
+			t.Errorf("%s: reason=%q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
 

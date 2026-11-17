@@ -52,7 +52,7 @@ func TestLateImageStartFailureCannotFailRetry(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("first RPC not reached")
 	}
-	if _, err := h.store.CancelImageNodeTransferIfActive(h.image.ID, h.node.ID, firstID, "cancelled"); err != nil {
+	if _, err := h.store.CancelImageNodeTransferIfActive(h.image.ID, h.node.ID, firstID, "cancelled", ""); err != nil {
 		t.Fatal(err)
 	}
 	claimed := make(chan struct{}, 1)

@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import type { DoctorDisk, DoctorFact, DoctorFinding, DoctorMount, DoctorRunIdentity, DoctorTarget, NodeDoctorReport as Report } from "../api";
 import { GPUHealthDetail, GPUHealthSummary, HealthCommand, HealthEvidence, gpuHealthLabel } from "./GPUHealth";
+import NodeDoctorChecks from "./NodeDoctorChecks";
+import { Badge } from "./ui/badge";
 import { runtimeLabel } from "../nodeDisplay";
 
 const rawStyle = {
@@ -53,7 +55,7 @@ function FindingTarget({ finding, target, status }: { finding: DoctorFinding; ta
 function AcceleratorFinding({ finding }: { finding: DoctorFinding }) {
   const { t } = useTranslation("nodes");
   const { t: tc } = useTranslation("common");
-  const status = finding.level === "error" ? "Error" : "Warning";
+  const status = finding.status === "fail" ? "Error" : "Warning";
   const targets = finding.targets ?? [];
   return (
     <div className="node-doctor-finding">
@@ -70,10 +72,46 @@ function AcceleratorFinding({ finding }: { finding: DoctorFinding }) {
 }
 
 const nodeFindingCodes = new Set([
-  "disk_low", "runtime_unavailable", "runtime_provision_failed", "runtime_state_untraversable", "path_noexec", "path_read_only", "path_ephemeral",
-  "accelerator_probe_failed", "accelerator_unrecognized", "cuda_init_failed", "multi_gpu_check_failed", "macos_unsupported", "macos_idle_sleep",
-  "peer_memory_missing",
+  "DISK_LOW", "RUNTIME_UNAVAILABLE", "RUNTIME_PROVISION_FAILED", "RUNTIME_STATE_UNTRAVERSABLE", "PATH_NOEXEC", "PATH_READ_ONLY", "PATH_EPHEMERAL",
+  "ACCELERATOR_PROBE_FAILED", "ACCELERATOR_UNRECOGNIZED", "CUDA_INIT_FAILED", "MULTI_GPU_CHECK_FAILED", "MACOS_UNSUPPORTED", "MACOS_IDLE_SLEEP",
+  "PEER_MEMORY_MISSING", "UCX_NETLINK_HANG",
+  // Why a check did not run.
+  "MOUNT_TABLE_UNREADABLE", "CUDA_CHECK_NOT_PASSED", "CHECK_PREREQUISITE_MISSING", "CHECK_TOOL_FAILED", "CHECK_CANCELLED", "CHECK_BUDGET_EXHAUSTED",
+  "CARD_UNADDRESSABLE",
 ]);
+
+const findingColor: Record<DoctorFinding["status"], string> = { fail: "red", warn: "orange", skip: "default" };
+
+/** A finding's name in the reader's language: the node finding, a card check's skip reason, or an accelerator health code. */
+export function doctorFindingLabel(t: TFunction<"nodes">, tc: TFunction<"common">, finding: DoctorFinding): string {
+  if (nodeFindingCodes.has(finding.code)) return t(`doctor.finding.${finding.code}.label`);
+  if (finding.status === "skip") return t("doctor.notChecked", { reason: t(`cardHealth.skip.${finding.code}`, { defaultValue: finding.code }) });
+  return gpuHealthLabel(tc, finding.status === "fail" ? "Error" : "Warning", finding.code);
+}
+
+/** A check that did not run on some cards: why, and which cards, never a verdict about them. */
+function SkippedCardsFinding({ finding }: { finding: DoctorFinding }) {
+  const { t } = useTranslation("nodes");
+  const { t: tc } = useTranslation("common");
+  const targets = finding.targets ?? [];
+  return (
+    <div className="node-doctor-finding flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge status="neutral">{doctorFindingLabel(t, tc, finding)}</Badge>
+        <span>{t("doctor.cards", { count: targets.length, indexes: targets.map((target) => target.index).join(", ") })}</span>
+      </div>
+      {nodeFindingCodes.has(finding.code) && <p className="m-0">{t(`doctor.finding.${finding.code}.summary`)}</p>}
+      <HealthEvidence fields={finding.evidence} />
+    </div>
+  );
+}
+
+/** Renders a finding by what it is: a check that did not run, a card health finding, or a node finding. */
+export function DoctorFindingView({ finding }: { finding: DoctorFinding }) {
+  if (finding.status === "skip" && finding.targets?.length) return <SkippedCardsFinding finding={finding} />;
+  if (finding.targets?.length) return <AcceleratorFinding finding={finding} />;
+  return <NodeFinding finding={finding} />;
+}
 
 /** Filesystem type and the mount flags that matter to the reader. */
 function MountTags({ mount }: { mount?: DoctorMount }) {
@@ -109,11 +147,12 @@ function evidenceParams(finding: DoctorFinding) {
 function NodeFinding({ finding }: { finding: DoctorFinding }) {
   const { t } = useTranslation("nodes");
   const key = nodeFindingCodes.has(finding.code) ? `doctor.finding.${finding.code}` : "";
+  const impact = key ? t(`${key}.impact`, { ...evidenceParams(finding), defaultValue: "" }) : "";
   const disk = finding.disk;
   return (
     <div className="node-doctor-finding">
       <Space direction="vertical" size={8} style={{ display: "flex" }}>
-        <Tag color={finding.level === "error" ? "red" : "orange"} style={{ alignSelf: "flex-start" }}>
+        <Tag color={findingColor[finding.status] ?? "red"} style={{ alignSelf: "flex-start" }}>
           {key ? t(`${key}.label`) : finding.code}
         </Tag>
         {key && (
@@ -124,10 +163,10 @@ function NodeFinding({ finding }: { finding: DoctorFinding }) {
             } : evidenceParams(finding))}
           </Typography.Text>
         )}
-        {key && (
+        {impact && (
           <div className="gpu-health-section">
             <Typography.Text type="secondary" strong>{t("doctor.impact")}</Typography.Text>
-            <Typography.Text>{t(`${key}.impact`, evidenceParams(finding))}</Typography.Text>
+            <Typography.Text>{impact}</Typography.Text>
           </div>
         )}
         {(finding.probe || !!finding.evidence?.length) && (
@@ -171,14 +210,13 @@ function networkFilesystemText(t: TFunction<"nodes">, disks: DoctorDisk[]): stri
 }
 
 /**
- * NodeDoctorReport renders the agent's structured self-check in the reader's
- * locale. An agent that predates the structured form sends only the text
- * report, which is shown verbatim.
+ * NodeDoctorReport renders the unified check list and hardware details.
+ * Reports from older Servers still render their original findings or text.
  */
 export default function NodeDoctorReport({ report }: { report: Report }) {
   const { t } = useTranslation("nodes");
   const { t: tc } = useTranslation("common");
-  if (!report.host) {
+  if (!report.host && !report.checks) {
     return (
       <Space direction="vertical" style={{ display: "flex" }}>
         <Alert type="info" showIcon message={t("doctor.legacy")} />
@@ -193,7 +231,9 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
   for (const gpu of accel?.gpus ?? []) counts[gpu.health_status] = (counts[gpu.health_status] ?? 0) + 1;
   return (
     <Space direction="vertical" size={16} style={{ display: "flex" }}>
-      <section aria-label={t("doctor.overview")}>
+      {report.checks && <NodeDoctorChecks report={report} renderFinding={(finding) => <DoctorFindingView finding={finding} />}
+        findingLabel={(finding) => doctorFindingLabel(t, tc, finding)} />}
+      {host && <section aria-label={t("doctor.overview")}>
         <Typography.Title level={5}>{t("doctor.overview")}</Typography.Title>
         <Descriptions size="small" column={1} bordered>
           <Descriptions.Item label={t("doctor.host")}>{`${host.hostname} · ${host.os}/${host.arch} · kernel ${host.kernel}`}</Descriptions.Item>
@@ -212,9 +252,9 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
             </Space>
           </Descriptions.Item>
         </Descriptions>
-      </section>
+      </section>}
 
-      <section aria-label={t("doctor.runtimes")}>
+      {(host || report.runtimes?.length) && <section aria-label={t("doctor.runtimes")}>
         <Typography.Title level={5}>{t("doctor.runtimes")}</Typography.Title>
         <Descriptions size="small" column={1} bordered>
           {(report.runtimes ?? []).map((runtime) => (
@@ -228,9 +268,9 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
             </Descriptions.Item>
           ))}
         </Descriptions>
-      </section>
+      </section>}
 
-      <section aria-label={t("doctor.accelerators")}>
+      {(host || accel) && <section aria-label={t("doctor.accelerators")}>
         <Typography.Title level={5}>{t("doctor.accelerators")}</Typography.Title>
         {!accel ? (
           <Typography.Text type="secondary">{t("doctor.noAccelerator")}</Typography.Text>
@@ -261,20 +301,18 @@ export default function NodeDoctorReport({ report }: { report: Report }) {
             />
           </Space>
         )}
-      </section>
+      </section>}
 
-      <section aria-label={t("doctor.findings")}>
+      {!report.checks && <section aria-label={t("doctor.findings")}>
         <Typography.Title level={5}>{t("doctor.findings")}</Typography.Title>
         {findings.length === 0 ? (
           <Typography.Text type="secondary">{t("doctor.noFindings")}</Typography.Text>
         ) : (
           <Space direction="vertical" size={12} style={{ display: "flex" }}>
-            {findings.map((finding, i) => finding.targets?.length
-              ? <AcceleratorFinding key={`${finding.code}-${i}`} finding={finding} />
-              : <NodeFinding key={`${finding.code}-${i}`} finding={finding} />)}
+            {findings.map((finding, i) => <DoctorFindingView key={`${finding.code}-${i}`} finding={finding} />)}
           </Space>
         )}
-      </section>
+      </section>}
 
       {!!report.facts?.length && (
         <section aria-label={t("doctor.facts")}>

@@ -146,12 +146,29 @@ var findingSummary = map[string]string{
 	proto.DoctorMultiGPUCheckFailed:       "a multi-GPU check failed",
 	proto.DoctorMacOSUnsupported:          "this macOS is older than Mac nodes support",
 	proto.DoctorPeerMemoryMissing:         "the RDMA NICs cannot register the cards' memory because the peer-memory module is not loaded; PD over RDMA cannot run here until the fix command is run",
+	proto.DoctorUCXNetlinkHang:            "this kernel answers an IPv6 route dump in a way that hangs UCX (bundled with NIXL), so a PD engine using NIXL never finishes starting here; run the fix command (it turns IPv6 off on the host) or use a different kernel",
 	proto.DoctorMacOSIdleSleep:            "the Mac sleeps when idle on this power source and then drops off the cluster while no instance runs; to keep it awake on AC power: sudo pmset -c sleep 0",
+	// Why a check did not run.
+	proto.DoctorSkipMountTableUnreadable: "the mount table could not be read, so no path's mount was checked",
+	proto.DoctorSkipCUDANotPassed:        "not run: it needs the CUDA driver, and the CUDA check did not pass",
+	proto.DoctorSkipPrerequisiteMissing:  "not run: the host lacks what the check needs (see the evidence)",
+	proto.DoctorSkipToolFailed:           "not run: the command it reads did not answer",
+	proto.DoctorSkipCancelled:            "not run: the diagnosis was cancelled first",
+	proto.DoctorSkipBudgetExhausted:      "not run: the diagnosis ran out of time first",
+	proto.DoctorSkipCardUnaddressable:    "not run: the vendor tool gave the card no device number",
+	proto.CardCheckSkipBusy:              "not run: an instance is serving on the card",
+	proto.CardCheckSkipForeign:           "not run: a process outside the platform is using the card",
+	proto.CardCheckSkipDeferred:          "not run: which instances hold the cards is not known yet",
+	proto.CardCheckSkipNotHeld:           "not run: the platform does not hold the card",
+	proto.CardCheckSkipUnavailable:       "not run: the runtime cannot be used on this host",
 }
+
+// doctorStatusWord is how the CLI report heads a finding by its status.
+var doctorStatusWord = map[string]string{proto.CheckFail: "fail", proto.CheckWarn: "warning", proto.CheckSkip: "not checked"}
 
 func renderFinding(b *strings.Builder, f proto.DoctorFinding) {
 	line := func(format string, args ...any) { fmt.Fprintf(b, format+"\n", args...) }
-	head := "[" + f.Level + "] " + f.Code
+	head := "[" + doctorStatusWord[f.Status] + "] " + f.Code
 	if len(f.Targets) > 0 {
 		indexes := make([]string, len(f.Targets))
 		for i, t := range f.Targets {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -208,20 +209,63 @@ func CommandFeatures(engine string, argv []string, valueFlags ...string) ([]Feat
 	}
 	if engine == VLLM {
 		if raw, present := found["--kv-transfer-config"]; present {
-			var config struct {
-				Role string `json:"kv_role"`
-			}
-			if json.Unmarshal([]byte(raw), &config) != nil {
+			pd, ok := vllmKVTransferIsPD(raw)
+			if !ok {
 				valid = false
-			} else {
-				switch config.Role {
-				case "kv_producer", "kv_consumer", "kv_both":
-					out = append(out, PD)
-				default:
-					valid = false
-				}
+			} else if pd {
+				out = append(out, PD)
 			}
 		}
 	}
 	return out, valid
+}
+
+// vllmOffloadConnectors are the vLLM KV connectors that keep KV on the
+// instance (a CPU or disk tier) instead of moving it between instances. They
+// state a kv_role too (kv_both), so the role alone does not make a PD launch.
+var vllmOffloadConnectors = []string{"OffloadingConnector"}
+
+// vllmKVTransferIsPD classifies a --kv-transfer-config value. Any valid
+// kv_role is required, as before; the connector then decides: an offload
+// connector, or a MultiConnector whose children are all offload connectors,
+// is a KV tier on one instance, and every other connector (including one this
+// table does not know) is taken as PD. ok is false when the value is not a
+// JSON object with a valid role.
+func vllmKVTransferIsPD(raw string) (pd, ok bool) {
+	var head struct {
+		Role string `json:"kv_role"`
+	}
+	if json.Unmarshal([]byte(raw), &head) != nil {
+		return false, false
+	}
+	switch head.Role {
+	case "kv_producer", "kv_consumer", "kv_both":
+	default:
+		return false, false
+	}
+	// The connector is read separately so that a shape this classification
+	// does not expect keeps the command known, and stays PD, as before.
+	var config struct {
+		Connector string `json:"kv_connector"`
+		Extra     struct {
+			Connectors []struct {
+				Connector string `json:"kv_connector"`
+			} `json:"connectors"`
+		} `json:"kv_connector_extra_config"`
+	}
+	if json.Unmarshal([]byte(raw), &config) != nil {
+		return true, true
+	}
+	if slices.Contains(vllmOffloadConnectors, config.Connector) {
+		return false, true
+	}
+	if config.Connector != "MultiConnector" || len(config.Extra.Connectors) == 0 {
+		return true, true
+	}
+	for _, child := range config.Extra.Connectors {
+		if !slices.Contains(vllmOffloadConnectors, child.Connector) {
+			return true, true
+		}
+	}
+	return false, true
 }

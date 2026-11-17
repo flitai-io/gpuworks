@@ -216,3 +216,50 @@ func TestRequestsFilterByEndToEndTimeAndReplica(t *testing.T) {
 		}
 	}
 }
+
+// The TTFT range keeps streamed requests whose first token, reasoning or
+// answer, falls inside it; a reply that does not stream, or one that never
+// produced a token, has none and never matches.
+func TestRequestsFilterByTTFT(t *testing.T) {
+	c := newClock(day0)
+	opts := testOpts(c)
+	opts.RowsPerSecond = 1000
+	s, _ := openTest(t, opts)
+	for i, tc := range []struct {
+		id            string
+		stream        bool
+		think, answer int32
+	}{
+		{"fast", true, uxrecord.Unknown, 200},
+		{"thinks-first", true, 800, 3000},
+		{"answers-late", true, uxrecord.Unknown, 3000},
+		{"no-stream", false, uxrecord.Unknown, uxrecord.Unknown},
+		{"no-token", true, uxrecord.Unknown, uxrecord.Unknown},
+	} {
+		r := okReq(tc.id, 1, ms(day0)+int64(i))
+		r.Stream, r.FirstThinkMS, r.FirstAnswerMS, r.EndMS = tc.stream, tc.think, tc.answer, 5000
+		s.Observe(r)
+	}
+	mustSync(t, s, false)
+	ids := func(q RequestQuery) []string {
+		var out []string
+		for _, r := range allRequests(t, s, q) {
+			out = append(out, r.ID)
+		}
+		slices.Sort(out)
+		return out
+	}
+	for _, tc := range []struct {
+		q    RequestQuery
+		want []string
+	}{
+		{RequestQuery{DeploymentID: 1, MinTTFTMS: 500}, []string{"answers-late", "thinks-first"}},
+		{RequestQuery{DeploymentID: 1, MaxTTFTMS: 1000}, []string{"fast", "thinks-first"}},
+		{RequestQuery{DeploymentID: 1, MinTTFTMS: 500, MaxTTFTMS: 1000}, []string{"thinks-first"}},
+		{RequestQuery{DeploymentID: 1, MinTTFTMS: 100, MaxEndMS: 4000}, nil},
+	} {
+		if got := ids(tc.q); !slices.Equal(got, tc.want) {
+			t.Errorf("%+v: %v, want %v", tc.q, got, tc.want)
+		}
+	}
+}

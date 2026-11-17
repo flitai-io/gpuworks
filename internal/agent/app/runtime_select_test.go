@@ -168,7 +168,7 @@ func TestNodeOnItsFallbackReportsItAndIsNotBlocked(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q, want udocker", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedPluginMissing {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedPluginMissing {
 		t.Fatalf("fallback = %q/%q, want docker/%s", from, reason, accelerator.RuntimeGPUBlockedPluginMissing)
 	}
 	if _, blocked := n.RuntimeGPU(context.Background()); blocked != "" {
@@ -180,7 +180,7 @@ func TestNodeOnItsFallbackReportsItAndIsNotBlocked(t *testing.T) {
 	if got := forced.RuntimeDriverName(); got != "docker" {
 		t.Fatalf("forced runtime = %q, want docker", got)
 	}
-	if from, reason := forced.RuntimeFallback(); from != "" || reason != "" {
+	if from, reason, _ := forced.RuntimeFallback(); from != "" || reason != "" {
 		t.Fatalf("forced node reports fallback %q/%q", from, reason)
 	}
 	if _, blocked := forced.RuntimeGPU(context.Background()); blocked != accelerator.RuntimeGPUBlockedPluginMissing {
@@ -228,7 +228,7 @@ func TestIdleNodeSwitchesBackOnceDockerCanServeTheCards(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q while Docker still cannot serve the cards", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedPluginMissing {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedPluginMissing {
 		t.Fatalf("fallback = %q/%q", from, reason)
 	}
 
@@ -238,7 +238,7 @@ func TestIdleNodeSwitchesBackOnceDockerCanServeTheCards(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "docker" {
 		t.Fatalf("runtime = %q, want docker after the daemon gained the NVIDIA runtime", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "" || reason != "" {
+	if from, reason, _ := n.RuntimeFallback(); from != "" || reason != "" {
 		t.Fatalf("fallback = %q/%q after switching back", from, reason)
 	}
 }
@@ -258,14 +258,14 @@ func TestBusyNodeReportsDockerReadyAndSwitchesWhenIdle(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q: switched with an instance on the node", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUReady {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUReady {
 		t.Fatalf("fallback = %q/%q, want docker/%s", from, reason, accelerator.RuntimeGPUReady)
 	}
 
 	// The daemon lost the runtime again while the instance ran: ready no more.
 	host.daemon(daemonWithoutNVIDIA)
 	n.recheckRuntimeFallback(ctx)
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedRuntimeUnconfigured {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedRuntimeUnconfigured {
 		t.Fatalf("fallback = %q/%q after the daemon lost the runtime", from, reason)
 	}
 
@@ -290,7 +290,7 @@ func TestRecheckDoesNotLeaveRunveilForAnUnaskedDaemon(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q, want udocker", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedPluginMissing {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedPluginMissing {
 		t.Fatalf("fallback = %q/%q: an unasked daemon changed the last answer", from, reason)
 	}
 }
@@ -311,7 +311,7 @@ func TestRuntimePreferenceReplayOnlySwitchesAnIdleNode(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q: a replayed preference recreated a running instance", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUReady {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUReady {
 		t.Fatalf("fallback = %q/%q after the replay, want docker/%s", from, reason, accelerator.RuntimeGPUReady)
 	}
 
@@ -355,7 +355,7 @@ func TestIdleNodeOnABlockedDockerFallsBackToRunveil(t *testing.T) {
 	if got := n.RuntimeDriverName(); got != "udocker" {
 		t.Fatalf("runtime = %q, want udocker", got)
 	}
-	if from, reason := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedRuntimeUnconfigured {
+	if from, reason, _ := n.RuntimeFallback(); from != "docker" || reason != accelerator.RuntimeGPUBlockedRuntimeUnconfigured {
 		t.Fatalf("fallback = %q/%q", from, reason)
 	}
 	if _, blocked := n.RuntimeGPU(ctx); blocked != "" {

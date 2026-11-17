@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api, type Deployment, type Node } from "../api";
 import { APIError, apiErrorText } from "../apiError";
 import NodePicker from "../nodes/NodePicker";
+import { HelpTip } from "../ui-kit/HelpTip";
 import { scheduleText } from "./deploy/deploySchedule";
 import { useOrder } from "./useOrder";
 
@@ -79,8 +80,7 @@ export default function AutoReplicasDialog({ dep, ranks, onClose, onChanged }: {
         <InputNumber id="deployment-auto-replicas" min={1} max={dep.max_replicas} value={count} onChange={(next) => setCount(next)} aria-label={t("detail.replicas")} />
         {added > 0 && (
           <>
-            <Typography.Text type="secondary">{t("unitsPlacement.scale.autoNote")}</Typography.Text>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t("unitsPlacement.scale.prefixHint")}</Typography.Text>
+            <Typography.Text type="secondary" className="inline-flex items-center gap-1">{t("unitsPlacement.scale.autoNote")}<HelpTip content={t("unitsPlacement.scale.prefixHelp")} /></Typography.Text>
             {Array.from({ length: added }, (_, replica) => (
               <Space key={replica} wrap align="center">
                 <Typography.Text strong>{t("unitsPlacement.scale.newReplica", { index: replica + 1 })}</Typography.Text>

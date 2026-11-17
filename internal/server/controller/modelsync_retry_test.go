@@ -46,7 +46,7 @@ func TestPeerRelayBusyRetriesSameModelSourceWithFreshOwnership(t *testing.T) {
 	if current.TransferID != second.TransferID || current.State != proto.MFSyncing {
 		t.Fatalf("stale report changed retry: %+v", current)
 	}
-	if _, err := c.CancelModelSync(context.Background(), model.ID, dst.UUID); err != nil {
+	if _, err := c.Transfers().Cancel(context.Background(), model.ID, dst.UUID); err != nil {
 		t.Fatal(err)
 	}
 	waitForModelSyncIdle(t, c, store.ModelFileKey(file.ID))
@@ -71,7 +71,7 @@ func TestPeerRelayBusyModelWaitIsCancelableWithoutPublicFallback(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	row, err := c.CancelModelSync(context.Background(), model.ID, dst.UUID)
+	row, err := c.Transfers().Cancel(context.Background(), model.ID, dst.UUID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestPeerRelayBusyModelRestorationRetiresPreRestartAttempt(t *testing.T) {
 	if got.TransferID != req.TransferID || got.State != proto.MFSyncing {
 		t.Fatalf("old cleanup corrupted restored task: %+v", got)
 	}
-	_, _ = c.CancelModelSync(context.Background(), model.ID, dst.UUID)
+	_, _ = c.Transfers().Cancel(context.Background(), model.ID, dst.UUID)
 	waitForModelSyncIdle(t, c, store.ModelFileKey(file.ID))
 }
 
@@ -164,6 +164,6 @@ func TestPeerRelayBusyRestorationPreservesFirstAutomaticGroupRate(t *testing.T) 
 	if req.RateLimitKBs != 2048 || req.SourceNodeUUID != src.UUID || req.TransferID == file.TransferID {
 		t.Fatalf("restored cap/source/identity=%+v", req)
 	}
-	_, _ = nextController.CancelModelSync(context.Background(), model.ID, dst.UUID)
+	_, _ = nextController.Transfers().Cancel(context.Background(), model.ID, dst.UUID)
 	waitForModelSyncIdle(t, nextController, store.ModelFileKey(file.ID))
 }

@@ -103,20 +103,48 @@ func TestEvaluateInlinePreflightWire(t *testing.T) {
 	if ok, preflight := evaluate(single); !ok || preflight != nil {
 		t.Fatalf("a single-node draft answers no preflight: ok=%v preflight=%+v", ok, preflight)
 	}
+	statuses := func(summary *dto.PreflightSummary) string {
+		parts := make([]string, 0, len(summary.Checks))
+		for _, check := range summary.Checks {
+			part := check.ID + "=" + check.Status + ":" + check.Code
+			if node, ok := check.Params["node"].(string); ok {
+				part += "@" + node
+			}
+			parts = append(parts, part)
+		}
+		return strings.Join(parts, " ")
+	}
 	ok, preflight := evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["preflight-a","preflight-b"],"placement":{"tp":2}}`, model.ID))
-	if !ok || preflight == nil || !preflight.OK || len(preflight.Checks) != 0 {
-		t.Fatalf("two healthy nodes preflight clean: ok=%v %+v", ok, preflight)
+	// What was checked is listed, so a pass reads differently from a check
+	// that never ran.
+	if want := "node_count=pass:PREFLIGHT_NODE_COUNT_OK node_list=pass:PREFLIGHT_NODE_LIST_OK port_range=pass:PREFLIGHT_PORT_OK " +
+		"node_online=pass:PREFLIGHT_NODE_ONLINE@preflight-a node_online=pass:PREFLIGHT_NODE_ONLINE@preflight-b shared_network=pass:PREFLIGHT_SHARED_NETWORK_OK"; !ok || preflight == nil || !preflight.OK || statuses(preflight) != want {
+		t.Fatalf("two healthy nodes preflight clean: ok=%v\n got %s\nwant %s", ok, statuses(preflight), want)
 	}
 	ok, preflight = evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["preflight-a","preflight-a"],"placement":{"tp":2}}`, model.ID))
 	if ok || preflight == nil || preflight.OK {
 		t.Fatalf("a duplicate node must fail the summary: ok=%v %+v", ok, preflight)
 	}
-	if preflight.Checks[0].Code != ErrorPreflightDuplicateNode || preflight.Checks[0].Params["node"] != "preflight-a" {
-		t.Fatalf("duplicate check = %+v", preflight.Checks[0])
+	if want := "node_count=pass:PREFLIGHT_NODE_COUNT_OK node_list=fail:PREFLIGHT_DUPLICATE_NODE@preflight-a port_range=skip:PREFLIGHT_BLOCKED " +
+		"node_online=skip:PREFLIGHT_BLOCKED@preflight-a node_online=skip:PREFLIGHT_BLOCKED@preflight-a shared_network=skip:PREFLIGHT_BLOCKED"; statuses(preflight) != want {
+		t.Fatalf("duplicate checks:\n got %s\nwant %s", statuses(preflight), want)
+	}
+	if blocked := preflight.Checks[2]; len(blocked.BlockedBy) != 1 || blocked.BlockedBy[0] != "node_list" || blocked.Params["blocked_by"] != "node_list" {
+		t.Fatalf("a skipped check names what stopped it: %+v", blocked)
 	}
 	ok, preflight = evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["preflight-a","preflight-b"],"master_port":99,"placement":{"tp":2}}`, model.ID))
-	if ok || preflight == nil || preflight.OK || preflight.Checks[0].Code != ErrorPreflightPortInvalid {
+	if ok || preflight == nil || preflight.OK || preflight.Checks[2].ID != "port_range" || preflight.Checks[2].Status != "fail" || preflight.Checks[2].Code != ErrorPreflightPortInvalid {
 		t.Fatalf("an out-of-range master port must fail the summary: ok=%v %+v", ok, preflight)
+	}
+	ok, preflight = evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["preflight-a","preflight-gone"],"placement":{"tp":2}}`, model.ID))
+	if want := "node_count=pass:PREFLIGHT_NODE_COUNT_OK node_list=pass:PREFLIGHT_NODE_LIST_OK port_range=pass:PREFLIGHT_PORT_OK " +
+		"node_online=pass:PREFLIGHT_NODE_ONLINE@preflight-a node_online=fail:PREFLIGHT_NODE_NOT_FOUND@preflight-gone shared_network=skip:PREFLIGHT_BLOCKED"; ok || preflight == nil || preflight.OK || statuses(preflight) != want {
+		t.Fatalf("a missing node:\n got %s\nwant %s", statuses(preflight), want)
+	}
+	for _, check := range preflight.Checks {
+		if check.Evidence != "" || check.Params["detail"] != nil {
+			t.Fatalf("the server's own error text must not reach the check: %+v", check)
+		}
 	}
 }
 

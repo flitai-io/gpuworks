@@ -55,7 +55,16 @@
     "count": "{{filtered}}/{{total}} nodes",
     "search": "Search by name, hostname or ID"
   },
+  "source": {
+    "manual": "Added by hand",
+    "unknown": "Source could not be read",
+    "cluster": "Cluster {{name}}",
+    "clusterOf": "Cluster {{name}} ({{provider}})",
+    "standaloneCluster": "Kubernetes cluster",
+    "selected": "The chosen source"
+  },
   "column": {
+    "source": "Source",
     "status": "Status",
     "name": "Name",
     "createdAt": "Created",
@@ -131,8 +140,8 @@
     "installDirPlaceholder": "Leave empty for the default directory (/opt/gpuworks or ~/gpuworks)",
     "installDirTooltip": "On nodes without docker the runveil runtime keeps images and container root filesystems here too, so choose a local filesystem; a network volume that refuses ':' in file names (such as RunPod's /workspace) does not work.",
     "useSystemd": "Start via systemd",
-    "useSystemdTooltip": "On: the agent is registered as the gpuworks-agent systemd service, started at boot and restarted when it crashes. Off: the agent runs in the background under nohup, with agent-restart.sh in the install directory for restarting it by hand; the host's existing gpuworks-agent service and agents in other directories are left alone, so another install directory adds one more agent to the same host. Hosts without systemd, or without root or passwordless sudo, always use nohup; macOS nodes use launchd regardless.",
-    "useSystemdOffHelp": "The agent does not start at boot and is not restarted when it exits",
+    "useSystemdHelp": "On: the agent is registered as the gpuworks-agent systemd service, started at boot and restarted when it crashes. Off: it runs under nohup, with agent-restart.sh in the install directory for restarting it by hand; the host's existing agent service and agents in other directories are left alone (another install directory adds one more agent to the host). Without systemd, or without root or passwordless sudo, nohup is always used; macOS uses launchd.",
+    "useSystemdOff": "The agent does not start at boot and is not restarted when it exits",
     "agentListenAddress": "Agent listen address",
     "agentListenAddressHelp": "Where the agent listens on this host (or in its container): its --listen.",
     "offlineInstructions": "The node cannot reach the management node, so it installs from the offline package: download it, copy it to the node (scp, a web terminal or JupyterLab upload), and run the command below in the directory that holds it. The package holds no token and is the same for every node.",
@@ -165,12 +174,10 @@
       "item": "Check",
       "status": "Status",
       "detail": "Details",
-      "ok": "Passed",
-      "warn": "Warning",
-      "error": "Failed",
       "okCount": "Passed {{count}}",
       "warnCount": "Warnings {{count}}",
-      "errorCount": "Failed {{count}}"
+      "errorCount": "Failed {{count}}",
+      "skipCount": "Not checked {{count}}"
     }
   },
   "rejects": {
@@ -218,10 +225,26 @@
     "autoCurrent": "auto (now {{runtime}})",
     "copyConfigureCommand": "Copy configure command",
     "configureCopied": "Configure command copied",
+    "copySocketCommand": "Copy the command",
+    "socketCommandCopied": "Command copied",
+    "socketCommandTitle": "Copy the command",
     "fallback": {
-      "gpu_plugin_missing": "{{from}} is installed but {{plugin}} is not, so this node uses runveil. Install {{plugin}}; the node switches back to {{from}} once it is idle.", "daemon_not_ready": "{{from}} is installed but did not answer when the agent started (still starting or busy), so this node uses runveil for now. The agent retries every minute and switches back to {{from}} once it answers and the node is idle.",
+      "gpu_plugin_missing": "{{from}} is installed but {{plugin}} is not, so this node uses runveil. Install {{plugin}}; the node switches back to {{from}} once it is idle.",
+      "daemon_not_ready": "{{from}} is installed but did not answer when the agent started (still starting or busy), so this node uses runveil for now. The agent retries every minute and switches back to {{from}} once it answers and the node is idle.",
       "gpu_runtime_unconfigured": "{{from}} and {{plugin}} are installed but {{from}} is not configured for GPUs, so this node uses runveil. Configure it and restart {{from}}; the node switches back once it is idle.",
-      "gpu_ready": "{{from}} is ready and can be switched to; the node switches automatically once it is idle."
+      "gpu_ready": "{{from}} is ready and can be switched to; the node switches automatically once it is idle.",
+      "socket_permission_denied": "{{from}} is installed, but the agent's account {{account}} may not open its socket {{socket}}, which belongs to {{group}}, so this node uses runveil for now. Add {{account}} to that group, then restart the agent: it has only the groups it started with.",
+      "socket_restart_pending": "{{account}} is now in {{group}}, which owns the {{from}} socket {{socket}}, but the agent started before that and keeps the groups it started with, so this node uses runveil until the agent is restarted.",
+      "socketSameName": "{{account}} is in another group named {{name}} (gid {{sameGid}}), likely from a directory service such as NIS or LDAP. The socket belongs to the host's own {{name}} group (gid {{gid}}), and only that group opens it.",
+      "socketRestartHow": "To restart the agent: sudo systemctl restart gpuworks-agent, or, on an install without systemd, stop it and run agent-restart.sh in its state directory as {{account}}.",
+      "socketGroup": "group {{group}} (gid {{gid}})",
+      "socketGid": "the group with gid {{gid}}",
+      "socket_group_held": "{{from}} refuses the agent's account {{account}} its socket {{socket}} although the agent already has {{group}}, so this node uses runveil for now. The socket's mode or a security module (SELinux, AppArmor) refuses it; adding groups will not help.",
+      "socket_root_group": "{{from}}'s socket {{socket}} belongs to the root group, which the agent's account {{account}} should not join, so this node uses runveil for now. Give the socket a group of its own that {{account}} is in, then restart the agent.",
+      "socket_unknown": "The agent's account {{account}} may not open the {{from}} socket {{socket}}, and the agent could not read the socket's group, so this node uses runveil for now.",
+      "socketRestartEffect": "After the restart the agent uses {{from}}. Instances on runveil are not moved: their processes keep running after the agent stops, and the restarted agent starts them again in {{from}}, so stop this node's deployments first.",
+      "socketOptOut": "If {{account}} is not meant to use {{from}}, set this node's runtime to runveil (udocker); the notice and the per-minute check then stop.",
+      "socketAccountUnknown": "(unknown)"
     }
   },
   "accelerator": {
@@ -300,6 +323,37 @@
     "online": "Online",
     "offline": "Offline",
     "connecting": "Connecting"
+  },
+  "gpuIsolation": {
+    "tag": "GPU devices are soft-isolated",
+    "summary": "Instances on this node can see every GPU device of the node; CUDA_VISIBLE_DEVICES keeps each one to the card it was given. Software that ignores CUDA_VISIBLE_DEVICES, or opens /dev/nvidiaN directly, can reach the other cards.",
+    "reason": {
+      "cdi_names_missing": "No CDI spec on the node names its {{cards}} NVIDIA cards (usually because HAMi or another device plugin replaced NVIDIA's), so instances get every card and are held to theirs by CUDA only."
+    },
+    "fixesTitle": "Restore strict isolation (choose one)",
+    "fix": {
+      "gpu_operator_device_plugin": "The cluster uses the GPU Operator and no other GPU device plugin: keep the Operator's own device plugin enabled, which writes the per-card CDI names. Do not run it next to HAMi or another device plugin; both would advertise the same GPUs.",
+      "gpu_operator_toolkit_legacy_append": "Switch the Operator's toolkit to legacy mode, which isolates by card index. Use this when spec.toolkit.env already exists: it appends to the list and keeps its entries.",
+      "gpu_operator_toolkit_legacy_create": "Use this one instead when the command above fails because spec.toolkit.env does not exist yet: it creates the list (and would replace one that exists).",
+      "host_toolkit_legacy": "The toolkit is installed on the node without the GPU Operator: run the commands below to switch it to legacy mode, then restart the container runtime (containerd, or rke2-agent, k3s or your distribution's service)."
+    },
+    "copy": "Copy commands",
+    "copied": "Commands copied",
+    "manualCopyTitle": "Copy the commands"
+  },
+  "ucxNetlinkHang": {
+    "tag": "UCX/NIXL hangs on this node (PD disaggregation unavailable)",
+    "summary": "This node's kernel answers an IPv6 route dump in a way UCX 1.20-1.22 (bundled with NIXL) cannot read, so a PD engine that moves its KV with NIXL never finishes starting here, with one thread spinning at 100% CPU.",
+    "kernel": "Kernel: {{kernel}}",
+    "impact": "Ordinary deployments are not affected; PD deployments in the NIXL modes over Ethernet are refused on this node. Turning IPv6 off on the node ends it, and this disables IPv6 for the whole host (turning it off on single interfaces does not help). The check runs again every 15 minutes, so the notice goes away by itself.",
+    "fixesTitle": "End the hang (run on the node)",
+    "fix": {
+      "disable_ipv6_now": "Turn IPv6 off on the whole host until the next reboot:",
+      "disable_ipv6_persist": "Keep it off after a reboot as well:"
+    },
+    "copy": "Copy commands",
+    "copied": "Commands copied",
+    "manualCopyTitle": "Copy the commands"
   },
   "gpuProbeFailed": {
     "tag": "Vendor tool did not answer",
@@ -385,6 +439,18 @@
       "recovered": "Out-of-band recovery succeeded and the Agent is back online",
       "probeComplete": "Out-of-band probe completed",
       "probeFailed": "Out-of-band probe failed: {{detail}}"
+    },
+    "skipped": {
+      "RECOVERY_SKIPPED_DISABLED": "Out-of-band recovery is turned off on this server.",
+      "RECOVERY_SKIPPED_IN_PROGRESS": "Recovery is already running for this node.",
+      "RECOVERY_SKIPPED_ONLINE": "The node is online.",
+      "RECOVERY_SKIPPED_NEVER_CONNECTED": "The node has never connected, so there is nothing to recover.",
+      "RECOVERY_SKIPPED_STOPPED": "The node’s cloud instance no longer exists.",
+      "RECOVERY_SKIPPED_NO_SSH_CREDENTIAL": "The node has no SSH credentials.",
+      "RECOVERY_SKIPPED_GRACE_PERIOD": "The node went offline moments ago; waiting for it to reconnect.",
+      "RECOVERY_SKIPPED_BACKOFF": "Waiting before the next recovery attempt.",
+      "RECOVERY_SKIPPED_SERVER_DIAL_BACKOFF": "The server is still trying to dial the agent.",
+      "RECOVERY_SKIPPED_REDIAL": "The cloud provider moved the agent’s address; the server dials it there."
     }
   },
   "telemetry": {
@@ -464,7 +530,7 @@
       "description": "{{reason}}\n\nEvery deployment placed here would fail when its container starts. The platform cordoned the node for this reason and will do so again on its next report unless the cause is fixed.",
       "reason": {
         "gpu_plugin_missing": "The container runtime {{runtime}} needs the vendor GPU plugin {{plugin}}, which is not installed, so a container cannot be given this node's accelerators.",
-        "gpu_runtime_unconfigured": "{{runtime}} is running with no GPU support configured, so a container cannot be given this node's accelerators. Installing the vendor plugin is not enough; {{runtime}} has to be told to use it (NVIDIA: nvidia-ctk runtime configure --runtime=docker, then restart Docker)."
+        "gpu_runtime_unconfigured": "{{runtime}} has no GPU support configured, so a container cannot be given this node's accelerators. Point {{runtime}} at the vendor plugin (NVIDIA: nvidia-ctk runtime configure --runtime=docker, then restart Docker)."
       }
     },
     "state": {
@@ -604,76 +670,110 @@
     "card": "Accelerator {{index}} ({{bdf}})",
     "runningProcess": "Process {{pid}} {{name}} still runs on this card; stop it first.",
     "rerun": "No single command reproduces this check; run the diagnosis again.",
+    "notChecked": "Not checked: {{reason}}",
     "finding": {
-      "disk_low": {
+      "DISK_LOW": {
         "label": "Low disk space",
         "summary": "{{path}} has {{avail}} available, {{percent}}% of {{total}}.",
         "impact": "Image pulls and model downloads may fail."
       },
-      "runtime_unavailable": {
+      "RUNTIME_UNAVAILABLE": {
         "label": "Container runtime not responding",
         "summary": "The selected container runtime query failed.",
         "impact": "This node cannot start inference instances."
       },
-      "runtime_provision_failed": {
+      "RUNTIME_PROVISION_FAILED": {
         "label": "Runtime setup failed",
         "summary": "The container runtime could not be set up on this node. Its last attempt failed with the error below.",
         "impact": "Every deployment on this node fails until the cause is fixed. The agent tries again by itself, waiting 30 seconds after the first failure and up to 5 minutes later on."
       },
-      "runtime_state_untraversable": {
+      "RUNTIME_STATE_UNTRAVERSABLE": {
         "label": "Runtime user cannot reach the agent directory",
         "summary": "{{directory}} is not searchable by {{user}}, the user workloads run as, so it cannot reach the agent directory {{stateDir}}.",
         "impact": "Every workload launch on this node fails with permission denied on the runtime's own files. Open the directory with `{{fix}}`, which grants search only, no listing or writing, or reinstall the agent with an install directory outside it."
       },
-      "path_noexec": {
+      "PATH_NOEXEC": {
         "label": "Path mounted noexec",
         "summary": "{{path}} is on {{point}} ({{fstype}}), which is mounted noexec.",
         "impact": "Programs the runtime runs from this path cannot start. Install the agent into a directory on a filesystem that allows execution, or remount without noexec."
       },
-      "path_read_only": {
+      "PATH_READ_ONLY": {
         "label": "Path mounted read-only",
         "summary": "{{path}} is on {{point}} ({{fstype}}), which is mounted read-only.",
         "impact": "The agent cannot write models, images or runtime state there. Use a writable directory or remount read-write."
       },
-      "path_ephemeral": {
+      "PATH_EPHEMERAL": {
         "label": "Data on the container layer",
         "summary": "{{path}} is on this container's own filesystem layer ({{fstype}} at {{point}}), not on a volume.",
         "impact": "Models, images and runtime state are lost when the container is recreated. Install the agent into a persistent volume on a local filesystem if the instance has one; a network volume that refuses ':' in file names, such as RunPod's /workspace, cannot hold the runveil runtime's images."
       },
-      "accelerator_probe_failed": {
+      "ACCELERATOR_PROBE_FAILED": {
         "label": "Accelerator probe failed",
         "summary": "The vendor tool failed.",
         "impact": "The accelerators on this node cannot be scheduled."
       },
-      "accelerator_unrecognized": {
+      "ACCELERATOR_UNRECOGNIZED": {
         "label": "Unrecognized accelerator devices",
         "summary": "This host has PCI devices belonging to a supported vendor that match none of that vendor's rules, usually a model we have not seen.",
         "impact": "They are left out of the accelerator list and are unavailable for allocation. Send the PCI ids below so the rule can be added."
       },
-      "cuda_init_failed": {
+      "CUDA_INIT_FAILED": {
         "label": "CUDA initialization failed",
         "summary": "The CUDA driver failed to initialize. The recheck command prints 0 when initialization succeeds.",
         "impact": "This node cannot run CUDA inference."
       },
-      "multi_gpu_check_failed": {
+      "MULTI_GPU_CHECK_FAILED": {
         "label": "Multi-GPU check failed",
         "summary": "A multi-GPU communication check did not pass.",
         "impact": "Multi-GPU tensor parallelism may fail to start."
       },
-      "macos_unsupported": {
+      "MACOS_UNSUPPORTED": {
         "label": "macOS too old",
         "summary": "Mac nodes need macOS {{required}} or later; the evidence shows this Mac's version.",
         "impact": "Environment packages cannot run here, so no instance can be deployed on this node. Upgrade macOS and run the diagnosis again."
       },
-      "macos_idle_sleep": {
+      "MACOS_IDLE_SLEEP": {
         "label": "Sleeps when idle",
         "summary": "With the settings for its current power source, this Mac goes to sleep after being idle. The agent prevents idle sleep while an instance runs, not otherwise.",
         "impact": "A sleeping Mac is offline: new deployments cannot be scheduled here until it wakes. To keep it available, turn off idle sleep on AC power: sudo pmset -c sleep 0 (the platform does not change this setting)."
       },
-      "peer_memory_missing": {
+      "PEER_MEMORY_MISSING": {
         "label": "GPUDirect RDMA unavailable",
         "summary": "This host has RDMA NICs, but the peer-memory module {{module}} is not loaded, so the NICs cannot register the cards' memory.",
         "impact": "Instances still run, but PD modes that move KV over RDMA cannot be placed on this node. Run the fix command in the evidence on the node (it also loads the module at boot), then diagnose again."
+      },
+      "MOUNT_TABLE_UNREADABLE": {
+        "label": "Mounts not checked",
+        "summary": "The mount table could not be read, so no path was checked for noexec, read-only or container-layer mounts."
+      },
+      "CUDA_CHECK_NOT_PASSED": {
+        "label": "Not checked: CUDA did not pass",
+        "summary": "This check needs the CUDA driver, and the CUDA check did not pass. Fix that first, then diagnose again."
+      },
+      "CHECK_PREREQUISITE_MISSING": {
+        "label": "Not checked: prerequisite missing",
+        "summary": "The host lacks something this check needs; the evidence says what."
+      },
+      "CHECK_TOOL_FAILED": {
+        "label": "Not checked: command failed",
+        "summary": "The command this check reads failed or returned nothing usable; the evidence shows its result."
+      },
+      "CHECK_CANCELLED": {
+        "label": "Not checked: diagnosis cancelled",
+        "summary": "The diagnosis was cancelled before these cards were checked."
+      },
+      "CHECK_BUDGET_EXHAUSTED": {
+        "label": "Not checked: out of time",
+        "summary": "The diagnosis ran out of time before these cards were checked. They are not counted as passed."
+      },
+      "CARD_UNADDRESSABLE": {
+        "label": "Not checked: no device number",
+        "summary": "The vendor tool gave these cards no device number to check them by."
+      },
+      "UCX_NETLINK_HANG": {
+        "label": "UCX/NIXL hangs on this kernel",
+        "summary": "This kernel answers an IPv6 route dump in a way UCX 1.20-1.22 (bundled with NIXL) cannot read: it misses the end of the dump and blocks for good.",
+        "impact": "A PD engine that moves its KV with NIXL never finishes starting on this node. Run the fix command in the evidence (it turns IPv6 off for the whole host; the second one keeps it off after a reboot), then diagnose again."
       }
     },
     "facts": "Information",
@@ -779,7 +879,16 @@
     "historyItem": "Batch {{id}} · {{version}}",
     "runTitle": "Agent upgrade batch {{id}}",
     "processed": "Processed {{processed}} / {{total}} nodes",
-    "results": "Succeeded {{succeeded}} · Failed {{failed}} · Skipped {{skipped}} · Cancelled {{cancelled}} · Interrupted {{interrupted}} · Unconfirmed {{unconfirmed}} · Queued {{queued}} · Active {{active}}",
+    "result": {
+      "succeeded": "Succeeded {{value}}",
+      "failed": "Failed {{value}}",
+      "skipped": "Skipped {{value}}",
+      "cancelled": "Cancelled {{value}}",
+      "interrupted": "Interrupted {{value}}",
+      "unconfirmed": "Unconfirmed {{value}}",
+      "queued": "Queued {{value}}",
+      "active": "Active {{value}}"
+    },
     "processingNotSuccess": "Processing progress includes failures and skipped nodes; 100% does not mean all Agents upgraded successfully.",
     "blocked": "The earlier upgrade on {{name}} still requires verification. Further upgrades are blocked.",
     "unconfirmedHelp": "An unconfirmed attempt may still replace the Agent. Check the node and its logs before releasing the reservation. Starting another batch cannot bypass it.",
@@ -926,33 +1035,33 @@
       "pass": "Pass",
       "warn": "Warning",
       "fail": "Fail",
-      "skip": "Skipped",
-      "pending": "Pending",
+      "skip": "Not checked",
       "na": "Not applicable",
       "stale": "Stale"
     },
     "skip": {
-      "busy": "The card is serving",
-      "foreign": "Used outside the platform",
-      "deferred": "The platform does not yet know what the node runs",
-      "not_held": "Kubernetes has not lent this card to the platform",
-      "unavailable": "The host cannot be asked right now",
-      "probe_failed": "The vendor tool did not answer this round"
+      "CARD_CHECK_SKIPPED_BUSY": "The card is serving",
+      "CARD_CHECK_SKIPPED_FOREIGN": "Used outside the platform",
+      "CARD_CHECK_SKIPPED_DEFERRED": "The platform does not yet know what the node runs",
+      "CARD_CHECK_SKIPPED_NOT_HELD": "Kubernetes has not lent this card to the platform",
+      "CARD_CHECK_SKIPPED_UNAVAILABLE": "The host cannot be asked right now",
+      "CARD_CHECK_SKIPPED_PROBE_FAILED": "The vendor tool did not answer this round",
+      "CARD_CHECK_NOT_RUN_YET": "Not run since the agent started"
     },
     "reason": {
-      "foreign_processes": "Processes outside the platform",
-      "peer_memory_missing": "Peer-memory module not loaded"
+      "FOREIGN_PROCESSES": "Processes outside the platform",
+      "PEER_MEMORY_MISSING": "Peer-memory module not loaded"
     },
     "card": "Card {{index}}",
     "removed": "Removed",
     "lastChecked": "Checked {{ago}}",
     "banner": {
-      "offline": "The node is offline; below are the last known results, not what holds now.",
+      "offline": "The node is offline; below are the last known results.",
       "stale": "No report for more than two report periods; the results below may be out of date.",
       "noReports": "This node's agent is too old to report card health checks. Upgrade the agent to see them all.",
       "waiting": "No report from this node yet."
     },
-    "summary": "{{cards}} cards · {{fail}} failing · {{warn}} warnings",
+    "summary": "{{cards}} cards · {{fail}} failing · {{warn}} warnings · {{skip}} not checked",
     "recheck": "Recheck this card",
     "recheckDone": "The runtime check passed",
     "recheckFailed": "The runtime check failed: {{reason}}",
@@ -967,7 +1076,7 @@
       "evidence": "Evidence",
       "probe": "Recheck command",
       "noRuns": "This check has not run since the agent started.",
-      "agentSince": "The agent started at {{time}} and knows only what came after.",
+      "agentSinceHelp": "The agent started at {{time}}; only results since then are known.",
       "noEvidence": "No problem; no evidence recorded."
     },
     "records": {
@@ -1007,7 +1116,7 @@
     "attempts": "{{count}} recovery attempts",
     "recoveryError": "Last recovery error",
     "exposure": "Public entry: last observation",
-    "lastObserved": "Last observed at {{time}}; this is not a live availability check.",
+    "lastObserved": "Last observed at {{time}}",
     "result": "Observation",
     "vantage": "Check location",
     "target": "Checked address",
@@ -1056,7 +1165,7 @@
       "offline": "No live Agent control session; current node-side evidence could not be requested."
     },
     "guidance": {
-      "snapshot_scope": "A configuration snapshot does not prove the running process has adopted it. Check the selected state directory, startup flags and environment overrides; never share TOKEN or full process arguments.",
+      "snapshot_scope": "The running process may not use this configuration snapshot. Check the selected state directory, startup flags and environment overrides; never share TOKEN or full process arguments.",
       "http_scope": "An HTTP health response does not prove WebSocket, Agent authentication, inference streaming or a user’s network path is working. SSH curl uses the SSH session environment, which may differ from the running Agent’s proxy and NO_PROXY settings.",
       "test_from_node": "On the affected node, run gpuworks-agent smoke --state <actual-state-directory> and inspect agent.log from the same directory.",
       "manual_address_update": "This check does not repair addresses. A change requires an administrator to verify both the platform record and the Agent configuration. In-place address migration is not provided by this diagnostic. Use a stable address for long-term connections.",
@@ -1137,7 +1246,7 @@
           "unknown": "Data channel state not observed"
         },
         "outcome": {
-          "ok": "The listed observations completed; full-path health is not established",
+          "ok": "The listed observations completed",
           "failed": "The recorded connection attempt failed",
           "invalid_configuration": "Invalid connection configuration",
           "not_applicable": "Not applicable for this connection direction",
@@ -1190,6 +1299,96 @@
       },
       "elapsed": "Observed stage duration",
       "milliseconds": "{{count}} ms"
+    }
+  },
+  "doctorChecks": {
+    "rerun": "Run diagnosis again",
+    "checkedAt": "Diagnosis requested: {{time}}",
+    "result": "Result",
+    "evidence": "Evidence and next step",
+    "vantage": "Check location",
+    "target": "Target address",
+    "source": "Evidence source",
+    "observedAt": "Evidence observed at",
+    "unknown": "Observation time not provided",
+    "status": {
+      "pass": "Passed",
+      "warn": "Warning",
+      "fail": "Failed",
+      "skip": "Not checked",
+      "na": "Not applicable"
+    },
+    "stage": {
+      "ssh": "SSH inspection channel",
+      "installation": "Agent installation",
+      "process": "Agent process",
+      "connection": "Connection establishment",
+      "authentication": "Authentication",
+      "host": "Host and disk checks",
+      "runtimes": "Runtime checks",
+      "accelerators": "GPU and driver checks",
+      "finding": "Finding"
+    },
+    "vantageName": {
+      "node": "Compute node",
+      "control_plane": "Control plane (Server)"
+    },
+    "sourceName": {
+      "ssh": "Current SSH inspection",
+      "tcp_probe": "Current TCP probe",
+      "http_probe": "Current node-side HTTP probe",
+      "agent_rpc": "Agent self-check for this request"
+    },
+    "summary": {
+      "fail": "Diagnosis completed with failed checks. Review the evidence and suggested actions.",
+      "warn": "Diagnosis completed with checks that need attention.",
+      "skip": "Diagnosis completed, but some checks did not run. Review why.",
+      "pass": "Diagnosis completed. Review the checks and detailed information.",
+      "na": "Diagnosis completed. No check applies to this node."
+    },
+    "code": {
+      "CREDENTIALS_UNAVAILABLE": "No SSH credentials are available for node inspection. Independent Server-side checks still run.",
+      "CREDENTIAL_ERROR": "Saved SSH credentials could not be read. Check the node SSH configuration.",
+      "SSH_UNAVAILABLE": "SSH is unavailable. Check its address, credentials and network.",
+      "SSH_CONNECTED": "SSH connected during this inspection. This verifies only the inspection channel.",
+      "INSPECTION_UNAVAILABLE": "Node information could not be read. Check SSH account permissions and required tools.",
+      "NOT_INSTALLED": "No Agent binary exists in the target installation directory. Check the directory and installation result.",
+      "INSTALLED": "An Agent binary exists in the target installation directory.",
+      "NOT_RUNNING": "This check found no running Agent service or process for the target installation. Check its service state.",
+      "RUNNING": "This check found the Agent service or process for the target installation directory running.",
+      "ADMINISTRATOR_REQUIRED": "Node access inspection requires an administrator. Run diagnosis with an administrator account.",
+      "INVALID_ADDRESS": "No valid connection target is configured. Check the node connection settings.",
+      "TCP_CONNECTED": "The target TCP port is reachable.",
+      "DNS": "Target name resolution failed. Check DNS at the initiating endpoint.",
+      "CONNECT": "Target connection failed. Check the address, port and network path.",
+      "REFUSED": "The target TCP connection was refused. Check the listener, service and reject policies.",
+      "TLS": "TLS establishment failed. Check certificates, system time and target protocol.",
+      "TIMEOUT": "The connection timed out. The blocking location is unknown; check routing and access policies between endpoints.",
+      "CANCELLED": "The check was cancelled before a complete result was available.",
+      "TRANSPORT": "A transport error occurred. Check connection records at both endpoints.",
+      "IDENTITY_UNVERIFIED": "The installation could not be associated with this node. The node-side network probe was not run; check node identity and installation directory.",
+      "HTTP_CONNECTED": "The compute node can access the management node's health check endpoint.",
+      "HTTP_ERROR": "The Server health endpoint returned an unexpected HTTP status. Check the target, service and proxy configuration.",
+      "TOOL_MISSING": "curl is unavailable on the node; the HTTP probe could not run.",
+      "AUTHENTICATION_NOT_CHECKED": "This check tests reachability without performing Agent authentication, so its authentication result is unavailable.",
+      "REQUIRES_AGENT": "This check requires a connected Agent.",
+      "NOT_REPORTED": "The Agent did not return structured results for this item. Review the original report.",
+      "INFORMATION_COLLECTED": "Detailed information is available. Findings are listed separately among the checks."
+    }
+  },
+  "placementPolicy": {
+    "title": "Placement policy",
+    "loadFailed": "The placement policy settings could not be loaded.",
+    "saveFailed": "The setting was not saved: {{detail}}",
+    "empty": "This node has no placement settings.",
+    "notApplicable": "No effect on this node now: {{reason}}",
+    "share_with_foreign": {
+      "label": "Allow partitions beside processes outside the platform",
+      "help": "Memory-limited dGPU partitions may be placed on cards that processes outside the platform also use, when memory fits. Cards without such processes are always tried first. Memory is isolated; compute and bandwidth are not. Turning this off does not stop running instances, but replacing them (a restart, a crash, scaling) follows the new setting; a rolling restart waits rather than drop a replica."
+    },
+    "reason": {
+      "NODE_PLACEMENT_POLICY_NO_PARTITION_BACKEND": "This node has no ready dGPU partition backend; the setting has no effect until it has one.",
+      "NODE_PLACEMENT_POLICY_AGENT_TOO_OLD": "Upgrade this node's agent to track processes outside the platform on shared cards; the setting has no effect until then."
     }
   }
 }

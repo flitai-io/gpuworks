@@ -7,6 +7,8 @@ import {
   type Model,
   type URLModelPreview,
 } from "../../api";
+import { Notice } from "../../ui-kit/Notice";
+import { message as feedback } from "../../ui-kit/feedback";
 import { productMessageText } from "../../apiError";
 import MarkdownContent from "../../components/MarkdownContent";
 import { fetchHuggingFaceMetadata } from "../../modelmeta";
@@ -23,10 +25,19 @@ import { OutboundHostAccess, useOutboundHostAccess } from "../../components/Outb
 // written.
 const previewSources = new Set(["local", "url"]);
 
-export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+type RegisterModalProps = {
+  open: boolean;
+  onClose: () => void;
+  onDone: () => void;
+  manualSeed?: { source: string; id: string; offline: boolean; revision?: string };
+};
+
+export function RegisterModal({ open, onClose, onDone, manualSeed }: RegisterModalProps) {
   const { t, i18n } = useTranslation("models");
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
+  const fromCatalog = manualSeed?.revision !== undefined;
+  const [registrationError, setRegistrationError] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<LocalModelPreview | null>(null);
   const [urlPreview, setURLPreview] = useState<URLModelPreview | null>(null);
@@ -77,10 +88,12 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
   const submit = async () => {
     // A rejected validation leaves the dialog open on the fields it marked; it is not a failed
     // registration, so it returns without a message and without a request.
+    if (submitting || previewing) return;
     const v = await form.validateFields().catch(() => null);
     if (!v) return;
     if (v.source === "local" && !preview) { await previewLocal(); return; }
     if (v.source === "url" && !urlPreview) { await previewURL(); return; }
+    setRegistrationError("");
     setSubmitting(true);
     try {
       let registered: Model | undefined;
@@ -91,7 +104,7 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
       }
       else {
         let metadata: Awaited<ReturnType<typeof fetchHuggingFaceMetadata>> | undefined;
-        if (v.source === "huggingface") {
+        if (v.source === "huggingface" && !manualSeed?.offline && !fromCatalog) {
           // Only what the browser really read is sent as browser metadata; when
           // it reads nothing the server reads (and says so if it cannot).
           try {
@@ -104,8 +117,8 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
           source: v.source,
           source_id: v.source_id,
           // Pin the commit the browser saw when no revision was asked for.
-          revision: v.revision || metadata?.sha || "",
-          name: v.name,
+          revision: manualSeed?.revision ?? (v.revision || metadata?.sha || ""),
+          name: fromCatalog ? (v.name?.trim() || v.source_id) : v.name,
           readme: metadata?.readme,
           config_raw: metadata?.config_raw,
           weight_bytes: metadata?.weight_bytes,
@@ -113,27 +126,33 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
           ...(metadata ? { browser_metadata: true } : {}),
         });
       }
-      message.success(t("register.registered"));
+      if (fromCatalog) feedback.success(t("catalog.success", {id:v.source_id}));
+      else message.success(t("register.registered"));
       // Registered without metadata: say why (the management node's rules
       // or reach), so the operator knows where to look.
       if (registered?.metadata_notice) message.warning(productMessageText((key, options) => i18n.t(key, { ns: "common", ...options }), registered.metadata_notice), 8);
       reset();
       onDone();
     } catch (e) {
-      message.error(t("register.failed", { detail: v.source === "local" ? localRegistrationErrorText(t, e) : (e as Error).message }));
+      if (fromCatalog) setRegistrationError((e as Error).message || t("catalog.tryLater"));
+      else message.error(t("register.failed", { detail: v.source === "local" ? localRegistrationErrorText(t, e) : (e as Error).message }));
     } finally {
       setSubmitting(false);
     }
   };
   const okText = t(previewSources.has(source ?? "") && !parsed ? "register.parsePreview" : "register.confirm");
-  return <Modal title={t("action.register")} open={open} onCancel={() => { reset(); onClose(); }} onOk={submit} confirmLoading={submitting || previewing} okText={okText} cancelText={t("action.cancel")} destroyOnHidden width={previewSources.has(source ?? "") ? 720 : 520}>
-    <Form form={form} layout="vertical" initialValues={{ revision: "" }} onValuesChange={(changed) => {
+  return <Modal centered title={t("action.register")} open={open} onCancel={() => { if (!submitting) { reset(); onClose(); } }} onOk={submit} confirmLoading={submitting || previewing} okText={okText} cancelText={t("action.cancel")} destroyOnHidden width={previewSources.has(source ?? "") ? 720 : 520}>
+    <Form form={form} layout="vertical" initialValues={{ revision: manualSeed?.revision || "", name: fromCatalog ? manualSeed?.id : undefined, source: manualSeed?.source || undefined, source_id: manualSeed?.id }} onValuesChange={(changed) => {
       if ("node_uuid" in changed || "path" in changed) setPreview(null);
       if ("source_url" in changed) setURLPreview(null);
-      if ("source" in changed) { setPreview(null); setURLPreview(null); }
+      if ("source" in changed) {
+        form.setFieldsValue({ source_id: "", name: "", revision: "", source_url: "", node_uuid: undefined, path: "" });
+        setPreview(null);
+        setURLPreview(null);
+      }
     }}>
       <Form.Item label={t("column.source")} name="source" rules={[{ required: true, message: t("register.sourceRequired") }]}>
-        <Select placeholder={t("register.chooseSource")} options={[
+        <Select disabled={fromCatalog || previewing || submitting} placeholder={t("register.chooseSource")} options={[
           { value: "huggingface", label: "Hugging Face" },
           { value: "modelscope", label: "ModelScope" },
           { value: "url", label: t("source.url") },
@@ -153,8 +172,8 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
           <Button loading={previewing} onClick={() => { void previewURL(); }}>{t("register.parseDirectory")}</Button>
         </div>
       </> : <>
-        <Form.Item label={t("column.sourceID")} name="source_id" rules={[{ required: true, whitespace: true }]}><Input placeholder="Qwen/Qwen3-8B" /></Form.Item>
-        <Collapse size="small" ghost items={[{ key: "advanced", label: t("register.advanced"), children: <Form.Item label={t("detail.revision")} name="revision" extra={t("register.revisionHelp")}><Input placeholder={t("register.revisionPlaceholder")} /></Form.Item> }]} />
+        <Form.Item label={t("column.sourceID")} name="source_id" rules={[{ required: true, whitespace: true }]}><Input readOnly={fromCatalog} placeholder="Qwen/Qwen3-8B" /></Form.Item>
+        <Collapse size="small" ghost items={[{ key: "advanced", label: t("register.advanced"), children: <Form.Item label={t("detail.revision")} name="revision" extra={t("register.revisionHelp")}><Input readOnly={fromCatalog} placeholder={t("register.revisionPlaceholder")} /></Form.Item> }]} />
       </>}
       {source === "local" && preview && <Alert type="success" showIcon message={t("register.localParsed")} description={<Descriptions size="small" column={2}><Descriptions.Item label={t("register.path")} span={2}>{preview.path}</Descriptions.Item><Descriptions.Item label={t("detail.architecture")}>{preview.arch || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("detail.precision")}>{preview.precision || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.context")}>{preview.context_length?.toLocaleString() || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.directorySize")}>{formatBytes(preview.weight_bytes)}</Descriptions.Item><Descriptions.Item label={t("column.inputModalities")} span={2}><Modalities values={preview.input_modalities} /></Descriptions.Item></Descriptions>} style={{ marginBottom: 16 }} />}
       {source === "url" && urlPreview && <Alert type="success" showIcon message={t("register.urlParsed")} description={<Descriptions size="small" column={2}><Descriptions.Item label={t("register.directoryURLLabel")} span={2}>{urlPreview.source_url}</Descriptions.Item><Descriptions.Item label={t("detail.architecture")}>{urlPreview.arch || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("detail.precision")}>{urlPreview.precision || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.context")}>{urlPreview.context_length?.toLocaleString() || t("unrecognized")}</Descriptions.Item><Descriptions.Item label={t("register.directorySize")}>{formatBytes(urlPreview.weight_bytes)}</Descriptions.Item><Descriptions.Item label={t("register.fileCount")} span={2}>{urlPreview.files_count}</Descriptions.Item><Descriptions.Item label={t("column.inputModalities")} span={2}><Modalities values={urlPreview.input_modalities} /></Descriptions.Item></Descriptions>} style={{ marginBottom: 16 }} />}
@@ -163,7 +182,8 @@ export function RegisterModal({ open, onClose, onDone }: { open: boolean; onClos
         {source === "local" && preview?.readme && <Card size="small" title={t("register.readmePreview", { truncated: preview.readme_truncated ? t("register.truncatedSuffix") : "" })} style={{ maxHeight: 220, overflow: "auto", marginBottom: 16 }}><MarkdownContent content={preview.readme} allowHtml /></Card>}
       </>}
       <Form.Item label={t("column.name")} name="name"><Input placeholder={t("register.displayNamePlaceholder")} /></Form.Item>
-      {submitting && (source === "huggingface" || source === "modelscope") && (
+      {registrationError && <Notice tone="danger" title={t("catalog.registerFailed")}>{registrationError} {t("catalog.savedName")}</Notice>}
+      {submitting && !fromCatalog && !manualSeed?.offline && (source === "huggingface" || source === "modelscope") && (
         <Alert type="info" showIcon message={t("register.fetchingMetadata", { source: source === "huggingface" ? "Hugging Face" : "ModelScope" })} />
       )}
     </Form>

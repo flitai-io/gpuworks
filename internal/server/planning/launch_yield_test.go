@@ -49,7 +49,7 @@ func TestALaunchWaitsForTheDeploymentsThatShareItsCards(t *testing.T) {
 		if scheduler.Schedule(req, nodeSnapshot(st, node, true, "", view)).OK {
 			t.Fatal("the card is free with batch awake on it")
 		}
-		return launchYield(st, node, nodeInstances(t, st, node), 0, policy, req, true, "", false, view)
+		return launchYield(st, node, nodeInstances(t, st, node), 0, policy, req, true, "", view)
 	}
 
 	yield := plan(yieldpolicy.Idle)
@@ -75,7 +75,7 @@ func TestALaunchWaitsForTheDeploymentsThatShareItsCards(t *testing.T) {
 	}
 	// An edit preview of batch itself waits for nobody: its own instance is
 	// not a holder.
-	if got := launchYield(st, node, nodeInstances(t, st, node), 0, yieldpolicy.Idle, req, true, "", false, ledgerView{excludeDeployment: batch.ID}); got != nil {
+	if got := launchYield(st, node, nodeInstances(t, st, node), 0, yieldpolicy.Idle, req, true, "", ledgerView{excludeDeployment: batch.ID}); got != nil {
 		t.Fatalf("an edit preview of the holder = %+v", got)
 	}
 	// An equal waits for batch to go idle.
@@ -144,7 +144,7 @@ func TestALaunchWaitsForASleepAlreadyOrdered(t *testing.T) {
 	if scheduler.Schedule(req, nodeSnapshot(st, node, true, "", view)).OK {
 		t.Fatal("a sleep that has not landed already freed the card")
 	}
-	yield := launchYield(st, node, nodeInstances(t, st, node), 0, yieldpolicy.Idle, req, true, "", false, view)
+	yield := launchYield(st, node, nodeInstances(t, st, node), 0, yieldpolicy.Idle, req, true, "", view)
 	if yield == nil || len(yield.Holders) != 0 || yield.NodeID != node.ID || len(yield.GPUIndexes) != 1 || yield.GPUIndexes[0] != 0 {
 		t.Fatalf("yield = %+v, want a wait for card 0 with no holder to put to sleep", yield)
 	}

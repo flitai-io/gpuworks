@@ -32,9 +32,9 @@ func (s *Service) inspectDeploymentModel(ctx context.Context, model *store.Model
 	for _, node := range nodes {
 		src, err := s.d.Store.ModelSourceOn(model.ID, node, rules)
 		if err != nil {
-			check := modelDiagnostic(model, node, src, "facts", "unknown", "facts_unavailable", "Model location facts could not be read")
+			check := modelDiagnostic(model, node, src, "facts", proto.CheckSkip, "facts_unavailable", "Model location facts could not be read")
 			report.Checks = append(report.Checks, check)
-			blocked := modelDiagnostic(model, node, src, "source", "blocked", "facts_unavailable", "Model source selection was not completed")
+			blocked := modelDiagnostic(model, node, src, "source", proto.CheckSkip, "facts_unavailable", "Model source selection was not completed")
 			blocked.BlockedBy = []string{check.ID}
 			report.Checks = append(report.Checks, blocked)
 			if firstErr == nil {
@@ -43,23 +43,23 @@ func (s *Service) inspectDeploymentModel(ctx context.Context, model *store.Model
 			continue
 		}
 		appendModelLocationChecks(report, model, node, src)
-		status, reason, message := "unknown", "metadata_not_checked", "Public metadata has not been checked by the management node"
+		status, reason, message := proto.CheckSkip, "metadata_not_checked", "Public metadata has not been checked by the management node"
 		switch src.Action {
 		case store.SourceReady:
-			status, reason, message = "passed", "source_ready", "A complete model copy is recorded as readable on the node"
+			status, reason, message = proto.CheckPass, "source_ready", "A complete model copy is recorded as readable on the node"
 		case store.SourceFillCache:
-			status, reason, message = "pending", "cache_fill_required", "The shared model must be copied into the node cache at launch"
+			status, reason, message = proto.CheckWarn, "cache_fill_required", "The shared model must be copied into the node cache at launch"
 		case store.SourceWaitShared:
-			status, reason, message = "pending", "shared_transfer_pending", "A transfer into the shared storage is in progress"
+			status, reason, message = proto.CheckWarn, "shared_transfer_pending", "A transfer into the shared storage is in progress"
 		default:
 			if acceptedModelCopy(src) {
-				status, reason, message = "pending", "copy_in_progress", "An accepted copy is in progress; the model is not ready yet"
+				status, reason, message = proto.CheckWarn, "copy_in_progress", "An accepted copy is in progress; the model is not ready yet"
 				break
 			}
 			if src.Action == store.SourceAcquire {
 				peer, peerErr := s.modelCopyPeer(model.ID, node)
 				if errors.Is(peerErr, netplan.ErrNoStoragePath) {
-					policy := modelDiagnostic(model, node, src, "peer", "not_applicable", "no_storage_path", "The peer path is not permitted by the storage-sync network policy")
+					policy := modelDiagnostic(model, node, src, "peer", proto.CheckNA, "no_storage_path", "The peer path is not permitted by the storage-sync network policy")
 					policy.Message.Code = messages.ErrorNoStoragePath
 					var productErr *messages.ProductError
 					if errors.As(peerErr, &productErr) {
@@ -68,9 +68,9 @@ func (s *Service) inspectDeploymentModel(ctx context.Context, model *store.Model
 						}
 					}
 					if !modelHasPublicSource(model) {
-						policy.Status = "failed"
+						policy.Status = proto.CheckFail
 						report.Checks = append(report.Checks, policy)
-						blocked := modelDiagnostic(model, node, src, "source", "blocked", "peer_transport_required", "Model acquisition is blocked by the storage-sync network policy")
+						blocked := modelDiagnostic(model, node, src, "source", proto.CheckSkip, "peer_transport_required", "Model acquisition is blocked by the storage-sync network policy")
 						blocked.BlockedBy = []string{policy.ID}
 						blocked.Message.Params["source"], blocked.Message.Params["target"] = policy.Message.Params["source"], policy.Message.Params["target"]
 						report.Checks = append(report.Checks, blocked)
@@ -81,14 +81,14 @@ func (s *Service) inspectDeploymentModel(ctx context.Context, model *store.Model
 					}
 					report.Checks = append(report.Checks, policy)
 				} else if peerErr != nil {
-					status, reason, message = "unknown", "facts_unavailable", "Model peer facts could not be read"
+					status, reason, message = proto.CheckSkip, "facts_unavailable", "Model peer facts could not be read"
 					if firstErr == nil {
 						firstErr = wrapProductError(messages.ErrorModelSourceUnavailable, message, modelDiagnosticParams(model, node, src, reason), peerErr)
 					}
 					break
 				}
 				if peer != "" {
-					status, reason, message = "unknown", "peer_available", "A qualified peer has a complete copy; its data-plane connection has not been tested"
+					status, reason, message = proto.CheckSkip, "peer_available", "A qualified peer has a complete copy; its data-plane connection has not been tested"
 					check := modelDiagnostic(model, node, src, "peer", status, reason, message)
 					check.Message.Params["peer"] = peer
 					report.Checks = append(report.Checks, check)
@@ -103,7 +103,7 @@ func (s *Service) inspectDeploymentModel(ctx context.Context, model *store.Model
 				if reason == "" {
 					reason = "no_acquisition_path"
 				}
-				status, message = "failed", "No permitted model acquisition path is available for this node"
+				status, message = proto.CheckFail, "No permitted model acquisition path is available for this node"
 				if firstErr == nil {
 					firstErr = productError(messages.ErrorModelSourceUnavailable, message, modelDiagnosticParams(model, node, src, reason))
 				}
@@ -114,20 +114,20 @@ func (s *Service) inspectDeploymentModel(ctx context.Context, model *store.Model
 		report.Checks = append(report.Checks, modelDiagnostic(model, node, src, "source", status, reason, message))
 	}
 	if len(needsMetadata) > 0 {
-		check := modelDiagnostic(model, nil, store.ModelSource{}, "metadata", "unknown", "metadata_not_checked", "Public metadata has not been checked by the management node")
+		check := modelDiagnostic(model, nil, store.ModelSource{}, "metadata", proto.CheckSkip, "metadata_not_checked", "Public metadata has not been checked by the management node")
 		check.Message.Params["observer"] = "management_node"
 		if probeMetadata && s.d.FetchModelMeta != nil {
 			readCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			_, err := s.FetchModelMeta(readCtx, model.Source, model.SourceID, model.Revision, model.ArtifactSubfolder, model.SourceURL)
 			cancel()
 			if err != nil {
-				check.Status = "failed"
+				check.Status = proto.CheckFail
 				check.Message.Params["reason"] = metadataFailureReason(err)
 				check.Message.Message = "The management node could not read the model metadata"
 				for i := range report.Checks {
 					dependent := &report.Checks[i]
 					if dependent.Message.Params["reason"] == "metadata_not_checked" {
-						dependent.Status = "blocked"
+						dependent.Status = proto.CheckSkip
 						dependent.BlockedBy = []string{check.ID}
 					}
 				}
@@ -224,14 +224,14 @@ func appendModelLocationChecks(report *dto.DiagnosticReport, model *store.Model,
 	if loc.Storage.Type != proto.StorageLocal && !cachedReady {
 		file = loc.Shared
 	}
-	status, reason, message := "unknown", store.LocationNotOnNode, "No complete model copy is recorded on this node"
+	status, reason, message := proto.CheckSkip, store.LocationNotOnNode, "No complete model copy is recorded on this node"
 	if loc.Storage.Type != proto.StorageLocal {
 		reason, message = store.LocationModelMissingInStore, "No complete model copy is recorded in this shared storage"
 	}
 	if file.Ready() {
-		status, reason, message = "passed", "model_record_ready", "A complete model copy is recorded in this storage"
+		status, reason, message = proto.CheckPass, "model_record_ready", "A complete model copy is recorded in this storage"
 	} else if store.TransferUnderWay(file) {
-		status, reason, message = "pending", "model_transfer_pending", "A model transfer is in progress"
+		status, reason, message = proto.CheckWarn, "model_transfer_pending", "A model transfer is in progress"
 	}
 	check := modelDiagnostic(model, node, src, "record", status, reason, message)
 	if file != nil {
@@ -244,15 +244,15 @@ func appendModelLocationChecks(report *dto.DiagnosticReport, model *store.Model,
 	if loc.Storage.Type == proto.StorageLocal || cachedReady {
 		return
 	}
-	status, reason, message = "unknown", "storage_state_unknown", "No node storage-access report is available"
+	status, reason, message = proto.CheckSkip, "storage_state_unknown", "No node storage-access report is available"
 	if state := loc.NodeState; state != nil {
 		switch state.State {
 		case proto.StorageStateReady:
-			status, reason, message = "passed", "storage_ready", "The node reports that this storage is ready"
+			status, reason, message = proto.CheckPass, "storage_ready", "The node reports that this storage is ready"
 		case proto.StorageStateMounting:
-			status, reason, message = "pending", "storage_mounting", "The node is mounting this storage; model-path access must wait"
+			status, reason, message = proto.CheckWarn, "storage_mounting", "The node is mounting this storage; model-path access must wait"
 		case proto.StorageStateFailed, proto.StorageStateUnresponsive, proto.StorageStateUnsupported:
-			status, reason, message = "failed", state.Reason, "The node reports that this storage is not usable"
+			status, reason, message = proto.CheckFail, state.Reason, "The node reports that this storage is not usable"
 			if reason == "" {
 				switch state.State {
 				case proto.StorageStateUnresponsive:
@@ -274,8 +274,8 @@ func appendModelLocationChecks(report *dto.DiagnosticReport, model *store.Model,
 		access.Message.Params["state"] = loc.NodeState.State
 	}
 	report.Checks = append(report.Checks, access)
-	if status != "passed" {
-		blocked := modelDiagnostic(model, node, src, "path", "blocked", "storage_access_required", "Model-path readability has not been checked because storage access is unavailable")
+	if status != proto.CheckPass {
+		blocked := modelDiagnostic(model, node, src, "path", proto.CheckSkip, "storage_access_required", "Model-path readability has not been checked because storage access is unavailable")
 		blocked.BlockedBy = []string{access.ID}
 		report.Checks = append(report.Checks, blocked)
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
@@ -58,7 +59,8 @@ func TestCatalogTemplateExportWire(t *testing.T) {
 	exporter := &fakeCatalogTemplates{out: dto.CatalogTemplateExport{
 		ModelID: "allenai/olmo-2-0425-1b-instruct", SpecName: "vllm-1xnvidia-h20-d7", YAML: "models: []\n",
 		Verified: true, Saveable: true,
-		Checks:      []dto.CatalogTemplateCheck{{Operation: "openai.chat", Endpoint: "/v1/chat/completions", Tested: true, Passed: true, HTTPStatus: 200}},
+		Checks: []dto.CatalogTemplateCheck{{ID: "operation_reply", Operation: "openai.chat", Status: proto.CheckPass, Code: messages.CheckTemplateOperationAnswered,
+			Params: dto.CatalogTemplateCheckParams{Operation: "openai.chat", Endpoint: "/v1/chat/completions", HTTPStatus: 200}, Message: "openai.chat answered with HTTP 200"}},
 		Notes:       []messages.Warning{messages.NewWarning("verified_on", map[string]any{"gpu": "NVIDIA H20", "count": 1})},
 		ExcludedEnv: []string{"HF_TOKEN"}, Evidence: "record",
 	}}
@@ -72,7 +74,8 @@ func TestCatalogTemplateExportWire(t *testing.T) {
 		t.Fatalf("member export = %d %s", code, body)
 	}
 	want := `{"model_id":"allenai/olmo-2-0425-1b-instruct","spec_name":"vllm-1xnvidia-h20-d7","yaml":"models: []\n","verified":true,"saveable":true,` +
-		`"checks":[{"operation":"openai.chat","endpoint":"/v1/chat/completions","tested":true,"passed":true,"http_status":200}],` +
+		`"checks":[{"id":"operation_reply","operation":"openai.chat","status":"pass","code":"TEMPLATE_OPERATION_ANSWERED",` +
+		`"params":{"operation":"openai.chat","endpoint":"/v1/chat/completions","http_status":200},"message":"openai.chat answered with HTTP 200"}],` +
 		`"notes":[{"code":"verified_on","params":{"count":1,"gpu":"NVIDIA H20"}}],"excluded_env":["HF_TOKEN"],"evidence":"record"}`
 	if strings.TrimSpace(body) != want {
 		t.Fatalf("wire =\n%s\nwant\n%s", strings.TrimSpace(body), want)
@@ -87,7 +90,13 @@ func TestCatalogTemplateExportWire(t *testing.T) {
 }
 
 func TestCatalogTemplateExportWireKeysRoundTrip(t *testing.T) {
-	encoded, err := json.Marshal(dto.CatalogTemplateExport{Checks: []dto.CatalogTemplateCheck{{Operation: "openai.video.generate"}}})
+	encoded, err := json.Marshal(dto.CatalogTemplateExport{Checks: []dto.CatalogTemplateCheck{{
+		ID: "operation_reply", Operation: "openai.video.generate", Status: proto.CheckSkip, Code: messages.CheckTemplateOperationNotProbed,
+		Params: dto.CatalogTemplateCheckParams{Operation: "openai.video.generate"}, Message: "no test request is sent for openai.video.generate",
+	}, {
+		ID: "operation_reply", Operation: "openai.chat", Status: proto.CheckFail, Code: messages.CheckTemplateOperationHTTPError,
+		Params: dto.CatalogTemplateCheckParams{Operation: "openai.chat", HTTPStatus: 503}, Message: "openai.chat answered with HTTP 503", Evidence: "engine busy",
+	}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,13 +112,27 @@ func TestCatalogTemplateExportWireKeysRoundTrip(t *testing.T) {
 	if want := []string{"checks", "evidence", "excluded_env", "model_id", "notes", "saveable", "spec_name", "verified", "yaml"}; !slices.Equal(keys, want) {
 		t.Fatalf("keys = %q, want %q", keys, want)
 	}
-	// An untested operation carries no status or message.
-	if got := string(wire["checks"]); got != `[{"operation":"openai.video.generate","tested":false,"passed":false}]` {
-		t.Fatalf("checks = %s", got)
+	// An operation without a request is skipped with a code saying why; a
+	// failed one keeps what the gateway answered as evidence, not message.
+	want := `[{"id":"operation_reply","operation":"openai.video.generate","status":"skip","code":"TEMPLATE_OPERATION_NOT_PROBED",` +
+		`"params":{"operation":"openai.video.generate"},"message":"no test request is sent for openai.video.generate"},` +
+		`{"id":"operation_reply","operation":"openai.chat","status":"fail","code":"TEMPLATE_OPERATION_HTTP_ERROR",` +
+		`"params":{"operation":"openai.chat","http_status":503},"message":"openai.chat answered with HTTP 503","evidence":"engine busy"}]`
+	if got := string(wire["checks"]); got != want {
+		t.Fatalf("checks = %s\nwant     %s", got, want)
 	}
 	var back dto.CatalogTemplateExport
-	if err := json.Unmarshal(encoded, &back); err != nil || back.Checks[0].Operation != "openai.video.generate" {
-		t.Fatalf("round trip = %+v %v", back, err)
+	if err := json.Unmarshal(encoded, &back); err != nil {
+		t.Fatal(err)
+	}
+	again, err := json.Marshal(back.Checks)
+	if err != nil || string(again) != want {
+		t.Fatalf("round trip = %s %v", again, err)
+	}
+	for _, key := range []string{`"tested":`, `"passed":`} {
+		if strings.Contains(string(wire["checks"]), key) {
+			t.Fatalf("old key %s on the wire", key)
+		}
 	}
 }
 
@@ -120,10 +143,10 @@ func TestCatalogTemplateExportErrors(t *testing.T) {
 		status int
 		code   string
 	}{
-		{"unknown deployment", store.ErrNotFound, http.StatusNotFound, ""},
+		{"unknown deployment", store.ErrNotFound, http.StatusNotFound, messages.ErrorNotFound},
 		{"not exportable", messages.NewProductError(messages.ErrorTemplateExportUnavailable, "x", map[string]any{"reason": "not_running"}), http.StatusConflict, messages.ErrorTemplateExportUnavailable},
 		{"command not reproducible", messages.NewProductError(deploy.ErrorLaunchNotExportable, "x", map[string]any{"engine": "vllm"}), http.StatusConflict, deploy.ErrorLaunchNotExportable},
-		{"store failure", fmt.Errorf("disk I/O error"), http.StatusInternalServerError, ""},
+		{"store failure", fmt.Errorf("disk I/O error"), http.StatusInternalServerError, messages.ErrorInternal},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

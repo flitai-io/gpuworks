@@ -47,7 +47,7 @@ func TestPrecheckNamesTheNodeThatAlreadyUsesTheHost(t *testing.T) {
 		name, sshHost, status, detail string
 	}{
 		{name: "same-host", sshHost: "example.com", status: "warn", detail: "already added here as ppu-210"},
-		{name: "other-host", sshHost: "other.example.com", status: "ok", detail: "no node here uses this SSH host"},
+		{name: "other-host", sshHost: "other.example.com", status: "pass", detail: "no node here uses this SSH host"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := apiHandlers{d: Deps{NodePrecheck: &fakePrechecker{}, Store: existingNodeStore(t, "ppu-210", tc.sshHost)}}
@@ -61,7 +61,7 @@ func TestPrecheckNamesTheNodeThatAlreadyUsesTheHost(t *testing.T) {
 				t.Fatal(err)
 			}
 			last := report.Checks[len(report.Checks)-1]
-			if last.Name != "Existing node" || last.Status != tc.status || !strings.Contains(last.Detail, tc.detail) {
+			if last.ID != "existing_node" || last.Status != tc.status || !strings.Contains(last.Message, tc.detail) {
 				t.Fatalf("checks = %+v", report.Checks)
 			}
 		})

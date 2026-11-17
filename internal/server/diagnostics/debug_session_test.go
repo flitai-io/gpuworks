@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -75,7 +76,7 @@ func newManager(t *testing.T) (*Manager, *fakeNodes, *strings.Builder) {
 	tee := debuglog.New(slog.NewTextHandler(io.Discard, nil))
 	nodes := &fakeNodes{
 		online:  map[string]bool{"n-run": true, "n-old": true, "n-pick": true},
-		refuse:  map[string]error{"n-old": errors.New("rpc error: unknown rpc method: debug.start")},
+		refuse:  map[string]error{"n-old": fmt.Errorf("rpc error: %w", proto.UnknownRPCMethod(proto.RPCDebugStart))},
 		started: map[string]proto.DebugStartParams{},
 	}
 	return NewManager(t.TempDir(), tee, nodes, fakeScope{}, slog.New(slog.NewTextHandler(&log, nil))), nodes, &log

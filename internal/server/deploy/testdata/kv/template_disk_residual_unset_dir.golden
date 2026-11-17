@@ -1,0 +1,21 @@
+{
+  "materialize": {
+    "error": {
+      "code": "LAUNCH_CONFIG_UNSET_CONFLICT",
+      "params": {
+        "flag": "--kv-transfer-config",
+        "key": "shared_kv_dir",
+        "source": "template_args",
+        "value": "{\"kv_connector\":\"OffloadingConnector\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":17179869184,\"secondary_tiers\":[{\"n_read_threads\":8,\"n_write_threads\":4,\"root_dir\":\"/kv-cache\",\"type\":\"fs\"}],\"spec_name\":\"TieringOffloadingSpec\"},\"kv_role\":\"kv_both\"}"
+      },
+      "text": "shared_kv_dir is disabled by quick_params_unset and also set by template_args"
+    }
+  },
+  "unsettable": [
+    {
+      "source": "template_args",
+      "value": "{\"kv_connector\":\"OffloadingConnector\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":17179869184,\"secondary_tiers\":[{\"n_read_threads\":8,\"n_write_threads\":4,\"root_dir\":\"/kv-cache\",\"type\":\"fs\"}],\"spec_name\":\"TieringOffloadingSpec\"},\"kv_role\":\"kv_both\"}",
+      "unsettable": true
+    }
+  ]
+}

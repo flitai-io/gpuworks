@@ -111,9 +111,9 @@ func (h *harness) report(state string, override map[int]string) {
 		if o, ok := override[i]; ok {
 			s = o
 		}
-		c := proto.CardCheck{ID: accelerator.CheckVendorHealth, State: s}
+		c := proto.CardCheck{ID: accelerator.CheckVendorHealth, Status: s}
 		if accelerator.CheckProblem(s) {
-			c.Reason = accelerator.HealthMemoryUncorrectable
+			c.Code = accelerator.HealthMemoryUncorrectable
 			c.Evidence = []proto.DoctorField{{Name: "ecc", Value: "3"}}
 		}
 		gpus[i] = proto.GPUInfo{Index: i, UUID: cardUUID(i), Vendor: "nvidia", Checks: []proto.CardCheck{c}}
@@ -133,7 +133,7 @@ func (h *harness) flush(all bool) {
 func TestAHealthyFleetWritesNothing(t *testing.T) {
 	h := newHarness(t, 8)
 	for i := 0; i < 120; i++ {
-		h.report(accelerator.CheckPass, nil)
+		h.report(proto.CheckPass, nil)
 		h.flush(false)
 	}
 	h.flush(true)
@@ -146,22 +146,22 @@ func TestAHealthyFleetWritesNothing(t *testing.T) {
 // written once an hour, and closed after the quiet period.
 func TestAPersistentFailureIsOneRowWrittenHourly(t *testing.T) {
 	h := newHarness(t, 1)
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	h.flush(false)
 	rows := h.st.all()
-	if len(rows) != 1 || rows[0].Level != accelerator.CheckFail || rows[0].Reason != accelerator.HealthMemoryUncorrectable ||
+	if len(rows) != 1 || rows[0].Status != proto.CheckFail || rows[0].Code != accelerator.HealthMemoryUncorrectable ||
 		rows[0].FirstEvidence != "ecc=3" || rows[0].EndedAt != nil || rows[0].Count != 1 {
 		t.Fatalf("after the first failure = %+v", rows)
 	}
 	writes := h.st.writes
 	for i := 0; i < 58; i++ {
-		h.report(accelerator.CheckFail, nil)
+		h.report(proto.CheckFail, nil)
 		h.flush(false)
 	}
 	if h.st.writes != writes {
 		t.Fatalf("an hour of the same failure wrote %d rows before the hourly write", h.st.writes-writes)
 	}
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	h.flush(false)
 	rows = h.st.all()
 	if len(rows) != 1 || rows[0].Count != 60 || h.st.writes != writes+1 {
@@ -171,10 +171,10 @@ func TestAPersistentFailureIsOneRowWrittenHourly(t *testing.T) {
 	// Passing for less than the quiet period keeps it open; a failure in
 	// it continues the same row.
 	for i := 0; i < 10; i++ {
-		h.report(accelerator.CheckPass, nil)
+		h.report(proto.CheckPass, nil)
 		h.flush(false)
 	}
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	h.flush(true)
 	if rows = h.st.all(); len(rows) != 1 || rows[0].EndedAt != nil {
 		t.Fatalf("a recurrence within the quiet period = %+v", rows)
@@ -182,7 +182,7 @@ func TestAPersistentFailureIsOneRowWrittenHourly(t *testing.T) {
 
 	recovered := h.now
 	for i := 0; i <= int(QuietPeriod/time.Minute); i++ {
-		h.report(accelerator.CheckPass, nil)
+		h.report(proto.CheckPass, nil)
 		h.flush(false)
 	}
 	rows = h.st.all()
@@ -199,9 +199,9 @@ func TestAPersistentFailureIsOneRowWrittenHourly(t *testing.T) {
 func TestFlappingCardsDoNotWriteEveryFlip(t *testing.T) {
 	h := newHarness(t, 500)
 	for i := 0; i < 30; i++ {
-		state := accelerator.CheckFail
+		state := proto.CheckFail
 		if i%2 == 1 {
-			state = accelerator.CheckPass
+			state = proto.CheckPass
 		}
 		h.report(state, nil)
 		h.flush(false)
@@ -225,13 +225,13 @@ func TestFlappingCardsDoNotWriteEveryFlip(t *testing.T) {
 // its values waits for the hourly write.
 func TestAChangeOfReasonIsWrittenAtOnce(t *testing.T) {
 	h := newHarness(t, 1)
-	h.report(accelerator.CheckWarn, nil)
+	h.report(proto.CheckWarn, nil)
 	h.flush(false)
 	writes := h.st.writes
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	h.flush(false)
 	rows := h.st.all()
-	if h.st.writes != writes+1 || rows[0].Level != accelerator.CheckFail {
+	if h.st.writes != writes+1 || rows[0].Status != proto.CheckFail {
 		t.Fatalf("after the level changed = %+v (writes %d)", rows, h.st.writes-writes)
 	}
 }
@@ -240,7 +240,7 @@ func TestAChangeOfReasonIsWrittenAtOnce(t *testing.T) {
 // second ones for the same problems.
 func TestARestartContinuesOpenEpisodes(t *testing.T) {
 	h := newHarness(t, 1)
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	h.flush(true)
 
 	restarted := New(slog.New(slog.DiscardHandler), h.st)
@@ -249,7 +249,7 @@ func TestARestartContinuesOpenEpisodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.tr = restarted
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	h.flush(true)
 	if rows := h.st.all(); len(rows) != 1 || rows[0].Count != 2 {
 		t.Fatalf("rows after restart = %+v, want the same episode continued", rows)
@@ -260,9 +260,9 @@ func TestARestartContinuesOpenEpisodes(t *testing.T) {
 // episode.
 func TestASkippedCheckSaysNothing(t *testing.T) {
 	h := newHarness(t, 1)
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	for i := 0; i < 90; i++ {
-		h.report(accelerator.CheckSkip, nil)
+		h.report(proto.CheckSkip, nil)
 	}
 	h.flush(true)
 	rows := h.st.all()
@@ -275,11 +275,11 @@ func TestASkippedCheckSaysNothing(t *testing.T) {
 // reporting, is closed when it was last seen.
 func TestAVanishedCardsEpisodeCloses(t *testing.T) {
 	h := newHarness(t, 2)
-	h.report(accelerator.CheckPass, map[int]string{1: accelerator.CheckFail})
+	h.report(proto.CheckPass, map[int]string{1: proto.CheckFail})
 	lastSeen := h.now.Add(-time.Minute)
 	h.cards = 1
 	for i := 0; i < 61; i++ {
-		h.report(accelerator.CheckPass, nil)
+		h.report(proto.CheckPass, nil)
 	}
 	h.flush(false)
 	var closed *Episode
@@ -296,7 +296,7 @@ func TestAVanishedCardsEpisodeCloses(t *testing.T) {
 // A failed write loses nothing: the next one carries it.
 func TestAFailedWriteIsRetried(t *testing.T) {
 	h := newHarness(t, 1)
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	h.st.fail = errors.New("database is locked")
 	if err := h.tr.Flush(false); err == nil {
 		t.Fatal("a failed write reported success")
@@ -311,9 +311,9 @@ func TestAFailedWriteIsRetried(t *testing.T) {
 // Closed episodes older than the retention are deleted; open ones never are.
 func TestPruneKeepsOpenEpisodes(t *testing.T) {
 	h := newHarness(t, 2)
-	h.report(accelerator.CheckFail, nil)
+	h.report(proto.CheckFail, nil)
 	for i := 0; i <= int(QuietPeriod/time.Minute); i++ {
-		h.report(accelerator.CheckPass, map[int]string{1: accelerator.CheckFail})
+		h.report(proto.CheckPass, map[int]string{1: proto.CheckFail})
 	}
 	h.flush(true)
 	h.now = h.now.Add(Retention + time.Hour)
@@ -328,15 +328,15 @@ func TestPruneKeepsOpenEpisodes(t *testing.T) {
 // The generation moves when a state changes, not on every report.
 func TestTheGenerationMovesOnlyOnChange(t *testing.T) {
 	h := newHarness(t, 4)
-	h.report(accelerator.CheckPass, nil)
+	h.report(proto.CheckPass, nil)
 	g := h.tr.Generation()
 	for i := 0; i < 5; i++ {
-		h.report(accelerator.CheckPass, nil)
+		h.report(proto.CheckPass, nil)
 	}
 	if h.tr.Generation() != g {
 		t.Fatal("unchanged reports moved the generation")
 	}
-	h.report(accelerator.CheckPass, map[int]string{2: accelerator.CheckWarn})
+	h.report(proto.CheckPass, map[int]string{2: proto.CheckWarn})
 	if h.tr.Generation() == g {
 		t.Fatal("a changed state did not move the generation")
 	}

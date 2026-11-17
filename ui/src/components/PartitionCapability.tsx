@@ -2,11 +2,14 @@ import { Alert, Space, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import type { PartitionCapability as Capability } from "../api";
 import { formatTime } from "../i18n/datetime";
+import { partitionReasonText } from "./partitionCapabilities";
 
 export default function PartitionCapability({ capability, compact = false }: { capability?: Capability; compact?: boolean }) {
   const { t } = useTranslation("common");
   if (!capability) return <Typography.Text type="secondary">{t("partitionCapability.none")}</Typography.Text>;
   const ready = capability.status === "ready";
+  const reason = partitionReasonText(t, capability);
+  const probeDetail = capability.reason_params?.probe_detail;
   const probeStatusText = capability.probe_status
     ? t(`partitionCapability.probeStatus.${capability.probe_status}`, { defaultValue: capability.probe_status })
     : undefined;
@@ -31,7 +34,7 @@ export default function PartitionCapability({ capability, compact = false }: { c
       {capability.compatibility_summary && <Typography.Text>{capability.compatibility_summary}</Typography.Text>}
 	  {capability.probe_checked_at && <Typography.Text type="secondary">{t("partitionCapability.lastChecked", { time: formatTime(capability.probe_checked_at) })}</Typography.Text>}
 	  {!!capability.compatibility_notes?.length && <Alert type="warning" showIcon message={t("partitionCapability.compatibilityHint")} description={<Space direction="vertical" size={0}>{capability.compatibility_notes.map((note) => <Typography.Text key={note}>{note}</Typography.Text>)}</Space>} />}
-      {!ready && capability.reason && <Typography.Text type="secondary">{capability.reason}</Typography.Text>}
+      {reason && <Typography.Text>{reason}{probeDetail && <> <code>{probeDetail}</code></>}</Typography.Text>}
     </Space>}
   />;
 }

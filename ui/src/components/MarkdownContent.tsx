@@ -1,4 +1,4 @@
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -8,6 +8,7 @@ import CodeBlock, { type CodeBlockInfo } from "./CodeBlock";
 
 type MarkdownContentProps = {
   content: string;
+  assetBase?: string;
   /** Enable the safe HTML subset used by model README files. */
   allowHtml?: boolean;
   /** Extra header actions for fenced code blocks, next to the copy button. */
@@ -43,7 +44,7 @@ function MarkdownPre(props: ComponentProps<typeof CodeBlock>) {
 
 const components: Components = { a: MarkdownLink, pre: MarkdownPre };
 
-export default function MarkdownContent({ content, allowHtml = false, codeBlockActions }: MarkdownContentProps) {
+export default function MarkdownContent({ content, assetBase, allowHtml = false, codeBlockActions }: MarkdownContentProps) {
   // Block offsets refer to the string react-markdown parsed, so CodeBlock
   // reads its source from the same normalized text.
   const source = normalizeLooseStrong(content);
@@ -52,8 +53,13 @@ export default function MarkdownContent({ content, allowHtml = false, codeBlockA
     <div className={`markdown-content${allowHtml ? " markdown-content--allow-html" : ""}`}>
       <CodeBlockContext.Provider value={blockContext}>
         <ReactMarkdown
+          urlTransform={assetBase ? (raw) => {
+            const safe = defaultUrlTransform(raw);
+            if (!safe) return "";
+            try { return new URL(safe, assetBase).href; } catch { return ""; }
+          } : undefined}
           remarkPlugins={[remarkGfm]}
-          rehypePlugins={allowHtml ? [rehypeRaw, [rehypeSanitize, readmeSchema]] : undefined}
+          rehypePlugins={allowHtml ? [rehypeRaw, [rehypeSanitize, assetBase ? defaultSchema : readmeSchema]] : undefined}
           components={components}
         >
           {source}

@@ -70,7 +70,7 @@ func TestDoctorNerdctlCommand(t *testing.T) {
 				t.Fatalf("findings = %+v, want one runtime-unavailable finding", report.Findings)
 			}
 			f := report.Findings[0]
-			if f.Code != proto.DoctorRuntimeUnavailable || f.Level != proto.DoctorLevelError || f.Probe != "nerdctl --version" || f.Recheck != "nerdctl --version" || len(f.Evidence) != 1 || !strings.Contains(f.Evidence[0].Value, tt.evidence) {
+			if f.Code != proto.DoctorRuntimeUnavailable || f.Status != proto.CheckFail || f.Probe != "nerdctl --version" || f.Recheck != "nerdctl --version" || len(f.Evidence) != 1 || !strings.Contains(f.Evidence[0].Value, tt.evidence) {
 				t.Fatalf("finding = %+v, want nerdctl failure with evidence %q", f, tt.evidence)
 			}
 		})

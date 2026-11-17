@@ -13,9 +13,11 @@ const staleGrace = 30 * time.Second
 
 // Cell is one check on one card, as a person is shown it.
 type Cell struct {
-	Check  string
-	State  string
-	Reason string
+	Check string
+	// Status is the check status; Code what a warning or failure found, or
+	// why a skipped check did not run.
+	Status string
+	Code   string
 	// CheckedAt is when the check last ran, zero when it has not.
 	CheckedAt  time.Time
 	DurationMS int32
@@ -50,7 +52,7 @@ func BuildView(n NodeSnapshot, now time.Time) View {
 	used := map[string]bool{}
 	for _, card := range n.Cards {
 		for _, c := range card.Checks {
-			if c.State != accelerator.CheckNotApplicable {
+			if c.Status != proto.CheckNA {
 				used[c.ID] = true
 			}
 		}
@@ -69,10 +71,10 @@ func BuildView(n NodeSnapshot, now time.Time) View {
 		for _, id := range v.Checks {
 			c, ok := byID[id]
 			if !ok {
-				c = proto.CardCheck{ID: id, State: accelerator.CheckNotApplicable}
+				c = proto.CardCheck{ID: id, Status: proto.CheckNA}
 			}
-			cell := Cell{Check: id, State: c.State, Reason: c.Reason, DurationMS: c.MS, Stale: v.Stale}
-			if c.State != accelerator.CheckPending && c.State != accelerator.CheckNotApplicable {
+			cell := Cell{Check: id, Status: c.Status, Code: c.Code, DurationMS: c.MS, Stale: v.Stale}
+			if c.Status != proto.CheckNA && c.Code != proto.CardCheckNotRunYet {
 				cell.CheckedAt = n.ReceivedAt.Add(-time.Duration(c.AgeS) * time.Second).UTC()
 			}
 			cv.Cells = append(cv.Cells, cell)
@@ -82,17 +84,13 @@ func BuildView(n NodeSnapshot, now time.Time) View {
 	return v
 }
 
-// Worst is the most serious state among cells, for a summary: fail, then warn,
-// then everything else as it is.
+// Worst is the most serious check status among cells, for a summary
+// (proto.WorseCheckStatus): a card whose checks did not all run never sums up
+// as passed, and one where nothing applies is na.
 func Worst(cells []Cell) string {
-	worst := accelerator.CheckPass
+	worst := proto.CheckNA
 	for _, c := range cells {
-		switch {
-		case c.State == accelerator.CheckFail:
-			return accelerator.CheckFail
-		case c.State == accelerator.CheckWarn:
-			worst = accelerator.CheckWarn
-		}
+		worst = proto.WorseCheckStatus(worst, c.Status)
 	}
 	return worst
 }

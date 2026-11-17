@@ -3,6 +3,9 @@ package kube
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"slices"
 	"strings"
@@ -186,14 +189,14 @@ func TestInspectWorkloadKeepsThePodsFactsWhenContainerdCannotHelp(t *testing.T) 
 func TestInspectWorkloadWithoutAContainer(t *testing.T) {
 	r := newRig(t, 0)
 	ctx := context.Background()
-	if _, err := r.d.InspectWorkload(ctx, "gpuworks-eeeeeeeeeeee"); err == nil || !strings.Contains(err.Error(), "no such container") {
+	if _, err := r.d.InspectWorkload(ctx, "gpuworks-eeeeeeeeeeee"); !errors.Is(err, runtime.ErrContainerNotFound) {
 		t.Fatalf("missing pod = %v", err)
 	}
 	r.srv.Kubelet = func(p *kubeapi.Pod) {} // stays Pending, no container status
 	if err := r.srv.Client().Create(ctx, kubeapi.PodsPath(testNS), instancePodFor(t, "gpuworks-gggggggggggg"), nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.d.InspectWorkload(ctx, "gpuworks-gggggggggggg"); err == nil || !strings.Contains(err.Error(), "no such container") {
+	if _, err := r.d.InspectWorkload(ctx, "gpuworks-gggggggggggg"); !errors.Is(err, runtime.ErrContainerNotFound) {
 		t.Fatalf("pending pod = %v", err)
 	}
 }
@@ -221,5 +224,22 @@ func TestPodImageIdentity(t *testing.T) {
 		if id, lookup := podImageIdentity(tc.in); id != tc.id || lookup != tc.lookup {
 			t.Errorf("podImageIdentity(%q) = %q, %q; want %q, %q", tc.in, id, lookup, tc.id, tc.lookup)
 		}
+	}
+}
+
+// An API server that refuses the agent's service account answers 403 with a
+// Status body; the inspection reports runtime.ErrPermissionDenied, not a
+// missing pod.
+func TestInspectWorkloadReportsAForbiddenAnswerAsErrPermissionDenied(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Forbidden","code":403,"message":"pods \"gpuworks-abc\" is forbidden: User \"system:serviceaccount:gpuworks:agent\" cannot get resource \"pods\" in API group \"\" in the namespace \"gpuworks\""}`)
+	}))
+	defer srv.Close()
+	d := New(Options{API: kubeapi.New(srv.URL, func() (string, error) { return "tok", nil }, srv.Client()), Namespace: testNS, NodeName: testNode})
+	_, err := d.InspectWorkload(context.Background(), "gpuworks-abc")
+	if !runtime.IsPermissionDenied(err) || errors.Is(err, runtime.ErrContainerNotFound) {
+		t.Fatalf("err = %v, want ErrPermissionDenied only", err)
 	}
 }

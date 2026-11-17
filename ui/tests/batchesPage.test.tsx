@@ -207,7 +207,9 @@ test("a row opens the drawer with the counts, every timestamp, metadata and the 
     output_file_id: "file-out", error_file_id: "file-err",
   })]);
   const user = mount();
-  await user.click(await screen.findByRole("button", { name: b.action.open.replace("{{id}}", "batch_full") }));
+  const nameButton = await screen.findByRole("button", { name: b.action.open.replace("{{id}}", "batch_full") });
+  assert.ok(nameButton.classList.contains("text-fg-brand"));
+  await user.click(nameButton);
   const dialog = await screen.findByRole("dialog");
   assert.equal(screen.getByTestId("loc").textContent, "/batches?detail=batch_full");
   await within(dialog).findByText("reqs.jsonl");
@@ -229,6 +231,20 @@ test("a row opens the drawer with the counts, every timestamp, metadata and the 
   assert.ok(within(dialog).getByText("/v1/chat/completions"));
   assert.ok(within(dialog).getByText("24h"));
   assert.ok(!within(dialog).queryByRole("button", { name: b.action.cancel }), "an ended batch cannot be cancelled");
+});
+
+test("clicking elsewhere in a row also opens the drawer, and the name loads the batch once", async () => {
+  serve([batch({ id: "batch_row", status: "completed" })]);
+  const user = mount();
+  await screen.findByRole("button", { name: b.action.open.replace("{{id}}", "batch_row") });
+  await user.click(within(row("batch_row")).getByText(b.status.completed));
+  await screen.findByRole("dialog");
+  assert.equal(screen.getByTestId("loc").textContent, "/batches?detail=batch_row");
+  await closeDrawer(user);
+  getCalls.length = 0;
+  await user.click(screen.getByRole("button", { name: b.action.open.replace("{{id}}", "batch_row") }));
+  await screen.findByRole("dialog");
+  await waitFor(() => assert.deepEqual(getCalls, ["batch_row"]));
 });
 
 test("a batch without metadata says so, and a failed batch shows why", async () => {
@@ -277,10 +293,16 @@ test("a running batch whose requests wait says for which model, in what state, s
 
 test("a batch with no request waiting shows no waiting notice", async () => {
   serve([batch({ id: "batch_fine", status: "in_progress" })]);
-  mount("/batches?detail=batch_fine");
+  const user = mount("/batches?detail=batch_fine");
   const dialog = await screen.findByRole("dialog");
   await within(dialog).findByText("batch_fine", { selector: "code" });
   assert.ok(!(within(dialog).queryByText(b.detail.waiting.title)), "expected the element to be absent");
+  // What counts as not finished is behind the help mark beside the label.
+  const counts = within(dialog).getByRole("region", { name: b.detail.sections.counts });
+  assert.ok(within(counts).getByText(b.detail.pending));
+  assert.equal(screen.queryByText(b.detail.pendingHelp), null);
+  await user.hover(within(counts).getByRole("button", { name: c.helpTip.label }));
+  assert.ok(within(await screen.findByRole("tooltip")).getByText(b.detail.pendingHelp));
 });
 
 test("downloads are links for files that exist and disabled buttons for those that do not", async () => {

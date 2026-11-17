@@ -15,9 +15,18 @@ const DownloadIcon = fromAntd(CloudDownloadOutlined);
 const recheckMs = 60 * 60_000;
 const storageKey = "gpuworks.updates.checked";
 
+export function serverUpdateState(status: UpdateStatus) {
+  const server = status.server;
+  if (!status.available) return "unknown";
+  if (!server.latest) return "notPublished";
+  const installedChannel = server.current_build?.build_channel;
+  if (installedChannel && installedChannel !== status.channel && server.current !== server.latest) return "differentChannelVersion";
+  return server.update_available ? "available" : "upToDate";
+}
+
 export function hasUpdate(status: UpdateStatus): boolean {
   return status.available && (
-    status.server.update_available ||
+    serverUpdateState(status) === "available" ||
     status.image_catalog.update_available ||
     (status.template_catalog.update_available && status.template_catalog.compatible)
   );

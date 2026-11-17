@@ -46,6 +46,29 @@ type nodeFailover struct {
 	restored  map[uint]bool           // deployments whose moves were read back from the events (node_failover_restore.go)
 }
 
+// forgetStopped drops what node replacement keeps about a deployment's
+// running units: its drain surges, which are worked out again from its units,
+// and the times that space out its no-candidate events and re-picks, so a
+// deployment started again reports and re-picks at once.
+func (f *nodeFailover) forgetStopped(dep uint) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.noneSince, dep)
+	delete(f.drains, dep)
+	delete(f.repicked, dep)
+}
+
+// forgetMoves drops a deployment's moves. They are kept while it is stopped:
+// it starts again where they put its ranks, and reading them back from its
+// events (restoreFailovers) only goes so far back and misses a move whose
+// event was not written.
+func (f *nodeFailover) forgetMoves(dep uint) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.moves, dep)
+	delete(f.restored, dep)
+}
+
 func (f *nodeFailover) get(dep uint) []failoverMove {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -143,7 +166,7 @@ func (c *Controller) anotherNodeMayRun(deployment *unitDeployment, lost []store.
 	for _, inst := range lost {
 		gone[inst.NodeID] = true
 	}
-	nodes, err := c.store.ListNodes()
+	nodes, err := c.store.FleetNodes()
 	if err != nil {
 		return false
 	}
@@ -296,7 +319,7 @@ func sameUnit(a, b planning.PDUnit) bool {
 
 // recordNoCandidate says, at most every ten minutes, that a lost node's ranks
 // found no node to move to.
-func (c *Controller) recordNoCandidate(dep *store.Deployment, lost map[string]bool, deployment *unitDeployment) {
+func (c *Controller) recordNoCandidate(dep *store.Deployment, lost map[string]bool, deployment *unitDeployment, facts planning.UnitSuggestFacts) {
 	c.failover.mu.Lock()
 	if c.failover.noneSince == nil {
 		c.failover.noneSince = map[uint]time.Time{}
@@ -319,7 +342,16 @@ func (c *Controller) recordNoCandidate(dep *store.Deployment, lost map[string]bo
 	for _, uuid := range uuids {
 		names = append(names, c.nodeName(deployment, uuid))
 	}
-	c.store.AddDeploymentEventCode(dep.ID, nodeReplaceEventKind, EventNodeReplaceNoCandidate, map[string]any{"nodes": names, store.EventParamNodeUUIDs: uuids})
+	params := map[string]any{"nodes": names, store.EventParamNodeUUIDs: uuids}
+	// Nodes left out only because their kernel hangs UCX are the ones the
+	// operator can bring back: name them (planning.UCXNetlinkBlocks). Read
+	// here, after the throttle, so a deployment that keeps finding none does
+	// not walk the nodes again on every pass.
+	if _, counts := planning.SuggestUnitGroups(facts); counts.UCXNetlink > 0 {
+		params["ucx_netlink_hang"] = counts.UCXNetlink
+		params["ucx_netlink_nodes"] = counts.UCXNetlinkNodes
+	}
+	c.store.AddDeploymentEventCode(dep.ID, nodeReplaceEventKind, EventNodeReplaceNoCandidate, params)
 	c.q.addAfter(depKey(dep.ID), time.Minute)
 }
 

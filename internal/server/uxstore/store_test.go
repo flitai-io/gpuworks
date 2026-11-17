@@ -24,7 +24,7 @@ func TestRoundTripEveryField(t *testing.T) {
 		FirstAnswerMS: 1500, LastChunkMS: 4000, EndMS: 4001, Events: 321, ThinkEvents: 77, MaxGapMS: 420,
 		Status: 200, Outcome: uxrecord.OutcomeTruncated, FinishReason: "length", Usage: true,
 		PromptTokens: 9000, CompletionTokens: 2048, CachedTokens: 8192, ReasoningTokens: 600,
-		EngineQueueMS: 12, EnginePrefillMS: 340, EngineDecodeMS: 2500,
+		EngineQueueMS: 12, EnginePrefillMS: 340, EngineDecodeMS: 2500, PriorityClass: "high",
 	}
 	unknown := uxrecord.Request{
 		ID: "req-unknown", ReceivedMS: ms(day0) - 4000, DeploymentID: 7, Source: uxrecord.SourceAPI,
@@ -56,6 +56,12 @@ func TestRoundTripEveryField(t *testing.T) {
 	}
 	if typ != "integer" || cached != -1 {
 		t.Fatalf("cached_tokens stored as %s %d, want integer -1", typ, cached)
+	}
+
+	// The priority class narrows the log.
+	got, _, err = s.Requests(context.Background(), RequestQuery{DeploymentID: 7, PriorityClass: "high"})
+	if err != nil || len(got) != 1 || got[0].ID != "req-full" {
+		t.Fatalf("by class = %+v err=%v", got, err)
 	}
 }
 

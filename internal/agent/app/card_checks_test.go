@@ -72,20 +72,20 @@ func TestEveryCheckIsReportedInOrderAndNothingUnrunPasses(t *testing.T) {
 	}
 	got := checksOf(card)
 	for id, state := range map[string]string{
-		accelerator.CheckVendorHealth: accelerator.CheckPass,
-		accelerator.CheckVendorCLI:    accelerator.CheckPass,
-		accelerator.CheckOccupancy:    accelerator.CheckNotApplicable, // FixedProber lists no processes
-		accelerator.CheckPCIeLink:     accelerator.CheckPass,
-		accelerator.CheckPCIeErrors:   accelerator.CheckPass,
-		accelerator.CheckXid:          accelerator.CheckNotApplicable, // no kernel log here
-		accelerator.CheckNVLink:       accelerator.CheckNotApplicable,
-		accelerator.CheckRuntime:      accelerator.CheckSkip,
+		accelerator.CheckVendorHealth: proto.CheckPass,
+		accelerator.CheckVendorCLI:    proto.CheckPass,
+		accelerator.CheckOccupancy:    proto.CheckNA, // FixedProber lists no processes
+		accelerator.CheckPCIeLink:     proto.CheckPass,
+		accelerator.CheckPCIeErrors:   proto.CheckPass,
+		accelerator.CheckXid:          proto.CheckNA, // no kernel log here
+		accelerator.CheckNVLink:       proto.CheckNA,
+		accelerator.CheckRuntime:      proto.CheckSkip,
 	} {
-		if got[id].State != state {
+		if got[id].Status != state {
 			t.Errorf("%s = %+v, want %s", id, got[id], state)
 		}
 	}
-	if got[accelerator.CheckRuntime].Reason != accelerator.CheckSkipUnavailable {
+	if got[accelerator.CheckRuntime].Code != proto.CardCheckSkipUnavailable {
 		t.Errorf("runtime = %+v, want skipped as unavailable", got[accelerator.CheckRuntime])
 	}
 }
@@ -99,11 +99,11 @@ func TestASyntheticCardHasNoHardwareOrRuntimeChecks(t *testing.T) {
 	n.CardHealthFindings(context.Background(), cards, true)
 	got := checksOf(cards[0])
 	for _, id := range []string{accelerator.CheckPCIeLink, accelerator.CheckXid, accelerator.CheckRuntime} {
-		if got[id].State != accelerator.CheckNotApplicable {
+		if got[id].Status != proto.CheckNA {
 			t.Errorf("%s = %+v, want not applicable", id, got[id])
 		}
 	}
-	if got[accelerator.CheckVendorHealth].State != accelerator.CheckPass {
+	if got[accelerator.CheckVendorHealth].Status != proto.CheckPass {
 		t.Errorf("vendor health = %+v", got[accelerator.CheckVendorHealth])
 	}
 }
@@ -116,7 +116,7 @@ func TestAVendorProblemHoldsUntilThreeCleanReadings(t *testing.T) {
 		gpu.SetCardFinding(c, accelerator.HealthMemoryUncorrectable, []accelerator.HealthField{{Name: "ecc.errors.uncorrected.volatile.total", Value: "3"}})
 	}
 	card := reportChecks(n, bad, true)
-	if c := checksOf(card)[accelerator.CheckVendorHealth]; c.State != accelerator.CheckFail || c.Reason != accelerator.HealthMemoryUncorrectable ||
+	if c := checksOf(card)[accelerator.CheckVendorHealth]; c.Status != proto.CheckFail || c.Code != accelerator.HealthMemoryUncorrectable ||
 		len(c.Evidence) != 1 || c.Evidence[0].Value != "3" {
 		t.Fatalf("bad reading = %+v", c)
 	}
@@ -128,7 +128,7 @@ func TestAVendorProblemHoldsUntilThreeCleanReadings(t *testing.T) {
 		if card.HealthCode != accelerator.HealthMemoryUncorrectable || card.Healthy {
 			t.Fatalf("clean reading %d released the card: %+v", i, card)
 		}
-		if c := checksOf(card)[accelerator.CheckVendorHealth]; c.State != accelerator.CheckFail {
+		if c := checksOf(card)[accelerator.CheckVendorHealth]; c.Status != proto.CheckFail {
 			t.Fatalf("clean reading %d: check = %+v", i, c)
 		}
 		if !strings.Contains(card.HealthMessage, "Recovery") {
@@ -136,16 +136,16 @@ func TestAVendorProblemHoldsUntilThreeCleanReadings(t *testing.T) {
 		}
 	}
 	card = reportChecks(n, nil, true)
-	if card.HealthCode != "" || checksOf(card)[accelerator.CheckVendorHealth].State != accelerator.CheckPass {
+	if card.HealthCode != "" || checksOf(card)[accelerator.CheckVendorHealth].Status != proto.CheckPass {
 		t.Fatalf("after %d clean readings = %+v", vendorReleaseRounds, card)
 	}
 
 	// The problem is kept for whoever asks, after the card recovered.
 	detail := n.checkDetail(cardIdent, accelerator.CheckVendorHealth)
-	if detail.Last == nil || detail.Last.State != accelerator.CheckPass {
+	if detail.Last == nil || detail.Last.Status != proto.CheckPass {
 		t.Fatalf("last = %+v", detail.Last)
 	}
-	if detail.LastProblem == nil || detail.LastProblem.Reason != accelerator.HealthMemoryUncorrectable ||
+	if detail.LastProblem == nil || detail.LastProblem.Code != accelerator.HealthMemoryUncorrectable ||
 		len(detail.LastProblem.Evidence) == 0 || detail.LastProblem.Probe == "" {
 		t.Fatalf("last problem = %+v", detail.LastProblem)
 	}
@@ -157,10 +157,10 @@ func TestAnUnansweredVendorToolIsItsOwnFailure(t *testing.T) {
 	n, _, _ := checksNode(t)
 	card := reportChecks(n, func(c *proto.GPUInfo) { gpu.SetCardFinding(c, accelerator.HealthCLIUnanswered, nil) }, false)
 	got := checksOf(card)
-	if got[accelerator.CheckVendorCLI].State != accelerator.CheckFail || got[accelerator.CheckVendorCLI].Reason != accelerator.HealthCLIUnanswered {
+	if got[accelerator.CheckVendorCLI].Status != proto.CheckFail || got[accelerator.CheckVendorCLI].Code != accelerator.HealthCLIUnanswered {
 		t.Fatalf("vendor cli = %+v", got[accelerator.CheckVendorCLI])
 	}
-	if got[accelerator.CheckVendorHealth].State != accelerator.CheckSkip || got[accelerator.CheckVendorHealth].Reason != accelerator.CheckSkipProbeFailed {
+	if got[accelerator.CheckVendorHealth].Status != proto.CheckSkip || got[accelerator.CheckVendorHealth].Code != proto.CardCheckSkipProbeFailed {
 		t.Fatalf("vendor health = %+v", got[accelerator.CheckVendorHealth])
 	}
 }
@@ -175,10 +175,10 @@ func TestPCIeLinkAndErrorsAreReportedApart(t *testing.T) {
 		card = reportChecks(n, nil, true)
 	}
 	got := checksOf(card)
-	if got[accelerator.CheckPCIeLink].State != accelerator.CheckWarn || got[accelerator.CheckPCIeLink].Reason != accelerator.HealthPCIeLinkDegraded {
+	if got[accelerator.CheckPCIeLink].Status != proto.CheckWarn || got[accelerator.CheckPCIeLink].Code != accelerator.HealthPCIeLinkDegraded {
 		t.Fatalf("link = %+v", got[accelerator.CheckPCIeLink])
 	}
-	if got[accelerator.CheckPCIeErrors].State != accelerator.CheckPass {
+	if got[accelerator.CheckPCIeErrors].Status != proto.CheckPass {
 		t.Fatalf("errors = %+v", got[accelerator.CheckPCIeErrors])
 	}
 	detail := n.checkDetail(cardIdent, accelerator.CheckPCIeLink)
@@ -192,11 +192,11 @@ func TestOccupancyWarnsWithTheProcesses(t *testing.T) {
 	n := occupancyNode(t, twoOwnedCards(), []gpu.ComputeProcess{{PID: 4242, Name: "python3", PCIeBDF: "0000:40:00.0", MemoryBytes: 2 << 30}}, nil)
 	cards := twoOwnedCards()
 	n.CardHealthFindings(context.Background(), cards, true)
-	if c := checksOf(cards[0])[accelerator.CheckOccupancy]; c.State != accelerator.CheckPass {
+	if c := checksOf(cards[0])[accelerator.CheckOccupancy]; c.Status != proto.CheckPass {
 		t.Fatalf("free card = %+v", c)
 	}
 	c := checksOf(cards[1])[accelerator.CheckOccupancy]
-	if c.State != accelerator.CheckWarn || c.Reason != accelerator.CheckReasonForeignProcesses {
+	if c.Status != proto.CheckWarn || c.Code != proto.CardCheckForeignProcesses {
 		t.Fatalf("taken card = %+v", c)
 	}
 	detail := n.checkDetail(accelerator.CardIdent("GPU-40", "0000:40:00.0"), accelerator.CheckOccupancy)
@@ -219,25 +219,25 @@ func TestTheRuntimeCheckFollowsTheRunner(t *testing.T) {
 		Busy:  func(cardsmoke.Card) bool { return busy },
 		Now:   func() time.Time { return *now },
 	})
-	if c := checksOf(reportChecks(n, nil, true))[accelerator.CheckRuntime]; c.State != accelerator.CheckPending {
+	if c := checksOf(reportChecks(n, nil, true))[accelerator.CheckRuntime]; c.Status != proto.CheckSkip || c.Code != proto.CardCheckNotRunYet {
 		t.Fatalf("before any round = %+v", c)
 	}
 
 	n.cardSmoke.RunOnce(context.Background())
 	*now = now.Add(2 * time.Minute)
 	c := checksOf(reportChecks(n, nil, true))[accelerator.CheckRuntime]
-	if c.State != accelerator.CheckPass || c.AgeS != 120 {
+	if c.Status != proto.CheckPass || c.AgeS != 120 {
 		t.Fatalf("after a pass = %+v, want a pass two minutes old", c)
 	}
 
 	busy = true
 	*now = now.Add(15 * time.Minute)
 	n.cardSmoke.RunOnce(context.Background())
-	if c := checksOf(reportChecks(n, nil, true))[accelerator.CheckRuntime]; c.State != accelerator.CheckSkip || c.Reason != accelerator.CheckSkipBusy {
+	if c := checksOf(reportChecks(n, nil, true))[accelerator.CheckRuntime]; c.Status != proto.CheckSkip || c.Code != proto.CardCheckSkipBusy {
 		t.Fatalf("serving card = %+v", c)
 	}
 	detail := n.checkDetail(cardIdent, accelerator.CheckRuntime)
-	if detail.Last == nil || detail.Last.State != accelerator.CheckSkip || detail.LastRan == nil || detail.LastRan.State != accelerator.CheckPass {
+	if detail.Last == nil || detail.Last.Status != proto.CheckSkip || detail.LastRan == nil || detail.LastRan.Status != proto.CheckPass {
 		t.Fatalf("detail = %+v, want the skip and the pass before it", detail)
 	}
 	if !strings.Contains(detail.LastRan.Probe, "CUDA_VISIBLE_DEVICES='GPU-3f'") {
@@ -250,7 +250,7 @@ func TestTheRuntimeCheckFollowsTheRunner(t *testing.T) {
 	*now = now.Add(15 * time.Minute)
 	n.cardSmoke.RunOnce(context.Background()) // inside the backoff: not asked
 	card := reportChecks(n, nil, true)
-	if c := checksOf(card)[accelerator.CheckRuntime]; c.State != accelerator.CheckFail || c.Reason != accelerator.HealthRuntimeUnusable {
+	if c := checksOf(card)[accelerator.CheckRuntime]; c.Status != proto.CheckFail || c.Code != accelerator.HealthRuntimeUnusable {
 		t.Fatalf("failing card = %+v", c)
 	}
 	if card.HealthCode != accelerator.HealthRuntimeUnusable {
@@ -269,18 +269,18 @@ func TestRecheckingACardRecordsItsAnswer(t *testing.T) {
 		Now:   func() time.Time { return *now },
 	})
 	n.cardSmoke.RunOnce(context.Background())
-	if c := checksOf(reportChecks(n, nil, true))[accelerator.CheckRuntime]; c.State != accelerator.CheckFail {
+	if c := checksOf(reportChecks(n, nil, true))[accelerator.CheckRuntime]; c.Status != proto.CheckFail {
 		t.Fatalf("before the recheck = %+v", c)
 	}
 
 	fail = nil
 	*now = now.Add(time.Minute)
 	detail, err := n.recheckCard(context.Background(), cardIdent)
-	if err != nil || detail.Last == nil || detail.Last.State != accelerator.CheckPass || detail.LastProblem == nil {
+	if err != nil || detail.Last == nil || detail.Last.Status != proto.CheckPass || detail.LastProblem == nil {
 		t.Fatalf("recheck = %+v, %v", detail, err)
 	}
 	card := reportChecks(n, nil, true)
-	if c := checksOf(card)[accelerator.CheckRuntime]; c.State != accelerator.CheckPass || card.HealthCode != "" {
+	if c := checksOf(card)[accelerator.CheckRuntime]; c.Status != proto.CheckPass || card.HealthCode != "" {
 		t.Fatalf("after the recheck = %+v, card %+v", c, card)
 	}
 

@@ -113,6 +113,11 @@ func TestDeploymentPageSlicesTheListNewestFirst(t *testing.T) {
 	if past.Total != 10 || past.Items == nil || len(past.Items) != 0 {
 		t.Fatalf("a page past the end = %+v, want no rows and the total", past)
 	}
+	// A page whose offset overflows an int is past the end too.
+	huge := decodeDeploymentPage(t, f.get(t, f.handler.listDeployments, "/api/v1/deployments?page=9223372036854775807&page_size=200"))
+	if huge.Total != 10 || huge.Items == nil || len(huge.Items) != 0 || huge.Page != 1<<63-1 {
+		t.Fatalf("a huge page = %+v, want no rows and the total", huge)
+	}
 	defaults := decodeDeploymentPage(t, f.get(t, f.handler.listDeployments, "/api/v1/deployments?page=1"))
 	if defaults.PageSize != listDefaultPageSize || len(defaults.Items) != 10 {
 		t.Fatalf("page without a size = size %d, %d rows", defaults.PageSize, len(defaults.Items))

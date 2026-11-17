@@ -106,7 +106,7 @@ func TestAgentDialInstallWaitsForTheAttachedKey(t *testing.T) {
 	if logins.Load() < 3 {
 		t.Fatalf("logins = %d, want the refused ones retried", logins.Load())
 	}
-	if first := report.Checks[0]; first.Name != "SSH authentication" || first.Status != "ok" || !strings.Contains(first.Detail, "platform key") {
+	if first := report.Checks[0]; first.ID != "ssh_auth" || first.Status != "pass" || !strings.Contains(checkText(first), "platform key") {
 		t.Fatalf("checks = %+v", report.Checks)
 	}
 }

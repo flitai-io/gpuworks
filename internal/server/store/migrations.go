@@ -1342,6 +1342,15 @@ var migrations = []migration{
 	{Version: 208, Name: "peer_transfer_ownership", Apply: addPeerTransferOwnership},
 	{Version: 209, Name: "kube_cluster_priority", Apply: addKubeClusterPriority},
 	{Version: 210, Name: "kube_cluster_drop_vendor", Apply: dropKubeClusterVendor},
+	{Version: 211, Name: "ai_config_proxy_and_image_input", Apply: addAIConfigProxyAndImageInput},
+	{Version: 212, Name: "provider_synced_at", Apply: addProviderSyncedAt},
+	{Version: 213, Name: "deployment_priority_scheduling", Apply: addDeploymentPriorityScheduling},
+	{Version: 214, Name: "priority_classes", Apply: createPriorityClasses},
+	{Version: 215, Name: "batch_and_benchmark_priority_class", Apply: addBatchAndBenchmarkPriorityClass},
+	{Version: 216, Name: "node_last_recovery_code", Apply: addNodeLastRecoveryCode},
+	{Version: 217, Name: "check_codes_upper_snake", Apply: upperCaseCheckCodes},
+	{Version: 218, Name: "node_runtime_fallback_socket", Apply: addNodeRuntimeFallbackSocket},
+	{Version: 219, Name: "node_placement_policy", Apply: addNodePlacementPolicy},
 }
 
 // modelFileNetworkColumns are the columns migrations 76 and 77 added to
@@ -1654,6 +1663,9 @@ func (s *Store) AutoMigrateDev() error {
 		&UsageHourly{}, &UsageDaily{}, &UsageRolledDay{}, &UsageRollupState{}, &DeletedDeployment{}, &DeletedNode{},
 	)
 }
+
+// LatestMigration is the database schema shipped by this build.
+func LatestMigration() int { return migrations[len(migrations)-1].Version }
 
 // CurrentMigration returns the highest applied schema version.
 func (s *Store) CurrentMigration() (int, error) {

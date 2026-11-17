@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 func providerInstanceIDs(t *testing.T, s *Store, providerID uint) map[string]uint {
@@ -63,7 +64,7 @@ func TestSyncProviderInstancesRemovesUnlistedRowsAndKeepsLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	probedAt := time.Now().UTC().Truncate(time.Second)
-	if err := s.SetNodeRecoveryPhase("node-gone", RecoveryPhaseUnreachable, 3, &probedAt, "dial tcp: i/o timeout"); err != nil {
+	if err := s.SetNodeRecoveryPhase("node-gone", RecoveryPhaseUnreachable, 3, &probedAt, RecoveryError{Message: "dial tcp: i/o timeout"}); err != nil {
 		t.Fatal(err)
 	}
 	p := newProviderWithInstances(t, s, "inst-kept", "inst-gone", "inst-unlinked")
@@ -101,7 +102,7 @@ func TestSyncProviderInstancesRemovesUnlistedRowsAndKeepsLinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("linked node of a removed row must survive: %v", err)
 	}
-	if goneNode.RecoveryPhase != RecoveryPhaseStopped || goneNode.LastRecoveryError != RecoveryStoppedProviderInstanceGone {
+	if goneNode.RecoveryPhase != RecoveryPhaseStopped || goneNode.LastRecoveryError != RecoveryStoppedProviderInstanceGone || goneNode.LastRecoveryCode != messages.ErrorRecoveryProviderInstanceGone {
 		t.Fatalf("removed row's node recovery = %q/%q", goneNode.RecoveryPhase, goneNode.LastRecoveryError)
 	}
 	if goneNode.RecoveryAttempts != 3 || goneNode.LastProbeAt == nil || !goneNode.LastProbeAt.Equal(probedAt) {
@@ -206,7 +207,7 @@ func TestDeleteProviderInstanceRemovesOnlyThatRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("linked node must survive: %v", err)
 	}
-	if node.RecoveryPhase != RecoveryPhaseStopped || node.LastRecoveryError != RecoveryStoppedProviderInstanceGone {
+	if node.RecoveryPhase != RecoveryPhaseStopped || node.LastRecoveryError != RecoveryStoppedProviderInstanceGone || node.LastRecoveryCode != messages.ErrorRecoveryProviderInstanceGone {
 		t.Fatalf("node recovery = %q/%q", node.RecoveryPhase, node.LastRecoveryError)
 	}
 	if _, err := s.ProviderInstanceForNode(n.ID); !errors.Is(err, ErrNotFound) {

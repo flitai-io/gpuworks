@@ -17,57 +17,69 @@
     "ruleTag": "规则判断 · 由 AI 验证",
     "evidence": "命中的日志行",
     "verifyNote": "规则判断只是假设，AI 分析会对照日志验证并说明是否成立。",
-    "kv_cache_insufficient": {
+    "GLIBC_TOO_OLD": {
+      "title": "容器 glibc 版本过低",
+      "fix": "使用 glibc 2.33 及以上的镜像，或不设 dGPU 限额部署。"
+    },
+    "DGPU_MEMORY_LIMIT_EXCEEDED": {
+      "title": "达到 dGPU 显存上限",
+      "fix": "提高 dGPU 显存上限，或降低显存利用率或 --max-model-len。"
+    },
+    "KV_CACHE_INSUFFICIENT": {
       "title": "KV cache 放不下",
       "fix": "降低 --max-model-len、调高显存利用率，或增大张量并行。"
     },
-    "cuda_oom": {
+    "CUDA_OOM": {
       "title": "显存不足",
       "fix": "确认权重按每卡份额放得下、同卡没有其他进程占用显存，再降低 --max-model-len 或增大张量并行。"
     },
-    "shm_insufficient": {
+    "SHM_INSUFFICIENT": {
       "title": "共享内存（/dev/shm）不足",
       "fix": "给容器更大的共享内存（或 ipc=host）。"
     },
-    "nccl_failure": {
+    "NCCL_FAILURE": {
       "title": "集合通信失败（NCCL/HCCL）",
       "fix": "检查集合通信使用的网卡、P2P 支持、节点间防火墙，以及每个 rank 是否都已启动。"
     },
-    "disk_full": {
+    "DISK_FULL": {
       "title": "磁盘已满",
       "fix": "清理节点的模型存储或容器运行时目录。"
     },
-    "port_in_use": {
+    "PORT_IN_USE": {
       "title": "端口已被占用",
       "fix": "节点上有其他进程或容器占用了服务端口，停止它或换端口。"
     },
-    "image_pull_denied": {
+    "IMAGE_PULL_DENIED": {
       "title": "镜像拉取失败",
       "fix": "检查镜像名和标签，以及节点上的镜像仓库凭据。"
     },
-    "dtype_unsupported": {
+    "DTYPE_UNSUPPORTED": {
       "title": "GPU 不支持该数据类型",
       "fix": "改用 --dtype float16，或换支持该类型的 GPU。"
     },
-    "gpu_arch_unsupported": {
+    "GPU_ARCH_UNSUPPORTED": {
       "title": "镜像未针对该 GPU 架构编译",
       "fix": "换用针对该 GPU 计算能力编译的镜像，或换 GPU。"
     },
-    "trust_remote_code_required": {
+    "TRUST_REMOTE_CODE_REQUIRED": {
       "title": "模型需要 --trust-remote-code",
       "fix": "仅在信任该模型仓库代码时开启。"
     },
-    "model_arch_unsupported": {
+    "MODEL_ARCH_UNSUPPORTED": {
       "title": "引擎不支持该模型架构",
       "fix": "换更新的引擎镜像或其他引擎。"
     },
-    "model_files_missing": {
+    "MODEL_FILES_MISSING": {
       "title": "模型文件缺失或路径错误",
       "fix": "检查启动命令里的模型路径，以及下载是否完成。"
     },
-    "hf_download_failed": {
+    "HF_DOWNLOAD_FAILED": {
       "title": "模型仓库下载失败",
       "fix": "检查仓库 ID、受限模型的访问令牌，以及节点的网络或代理。"
+    },
+    "ENGINE_NO_OUTPUT": {
+      "title": "引擎无输出即退出",
+      "fix": "检查节点磁盘剩余空间和镜像入口命令。"
     }
   },
   "fit": {
@@ -124,7 +136,21 @@
     "onThisPage": "当前页面",
     "emptyTitle": "从页面上选一个任务，或在下面直接提问",
     "emptyHint": "打开某个部署、节点或失败实例的详情，这里就会出现对应的任务；模型、失败实例、调度不上的部署和节点旁也有 AI 按钮。",
-    "followUps": "推荐追问"
+    "followUps": "推荐追问",
+    "history": "历史会话",
+    "historyHint": "会话保存在当前浏览器，打开一个即可接着聊。",
+    "noThreads": "还没有保存的会话",
+    "untitled": "未命名会话",
+    "deleteThread": "删除会话“{{title}}”",
+    "attachImage": "添加图片",
+    "attachHint": "添加图片，也可以直接粘贴截图或拖进来",
+    "attached": "已附加的图片",
+    "imageAlt": "图片 {{n}}",
+    "removeImage": "移除图片 {{n}}",
+    "imagesOff": "当前 AI 服务未开启「支持图片输入」，不能发送图片。可在设置 → 集成 → AI 服务中检测并打开。",
+    "imagesTooMany": "每条消息最多 {{count}} 张图片，多出的未添加。",
+    "image_format": "“{{name}}”不是支持的图片格式（PNG、JPEG、WebP、GIF）。",
+    "image_too_large": "“{{name}}”压缩后仍超过 {{mb}} MB。"
   },
   "subject": {
     "instance": "实例",

@@ -22,3 +22,5 @@ The default `127.0.0.1/32, ::1/128` written by `install` covers only one case: t
 - **While public access is enabled, forwarded headers from any local process are accepted**, including `ssh -L` forwarding and other local reverse proxies. This is equivalent to install trusting loopback by default. Direct clients can already set their own Origin. Forged forwarded headers neither bypass the browser's same-origin protection nor grant additional privileges; at most, they affect the recorded source IP.
 - **Do not switch to a dedicated unix socket channel**: the forwarding target of a named tunnel is configured in the user's Cloudflare route, which we cannot change. We can only check the peer address.
 - **Do not make loopback trusted by default for `serve`**: that would change the security defaults of every deployment that does not use expose, and still would not cover `--origin` pointing to a local network interface address.
+
+<!-- translation-source-sha256: 41680f69576c6849e8a706715aec21aa1273e5c36b3a73d193771e4cfacd7614 -->

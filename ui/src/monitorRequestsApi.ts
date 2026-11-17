@@ -28,8 +28,10 @@ export interface MonitorRequest {
   api_key_id: number;
   // Empty for no key (playground) or a deleted key.
   api_key_name: string;
+  /** The priority class the gateway ran the request at; "" before classes or while in flight. */
+  priority_class: string;
   user_id: number;
-  source: "api" | "playground" | "batch";
+  source: "api" | "playground" | "batch" | "evaluation";
   stream: boolean;
   body_bytes: number;
   images: number;
@@ -56,6 +58,14 @@ export interface MonitorRequest {
   engine_queue_ms: number | null;
   engine_prefill_ms: number | null;
   engine_decode_ms: number | null;
+  // The time from receipt to the first generated output, reasoning
+  // included; null for a reply that does not stream, or one still waiting.
+  ttft_ms: number | null;
+  // The time per output token after the first, and the prefill and decode
+  // speeds, as the server works them out; null when unknown or in flight.
+  tpot_ms: number | null;
+  prefill_tok_s: number | null;
+  decode_tok_s: number | null;
   // How many requests this one stands for in a sampled history.
   weight: number;
   // The request's time split into the phases it went through, in order:
@@ -84,9 +94,15 @@ export interface MonitorRequestPD {
 
 export type SegmentKind = "gateway" | "pd_prefill" | "preprocess" | "queue" | "prefill" | "waiting" | "thinking" | "answering" | "tail";
 
+// The part of a request's time a segment belongs to: the wait for the first
+// token (adding up to ttft_ms), the decode after it, or the stream's end; ""
+// for a reply that does not stream.
+export type SegmentStage = "first_token" | "decode" | "tail" | "";
+
 export interface MonitorRequestSegment {
   kind: SegmentKind;
   ms: number;
+  stage: SegmentStage;
 }
 
 // GET /api/v1/monitor/deployments/{id}/latency: where the time of the
@@ -183,6 +199,10 @@ export interface MonitorRequestsQuery {
   results?: MonitorRequestResult[];
   minMs?: number;
   maxMs?: number;
+  // Time-to-first-token bounds in milliseconds; either keeps only streamed
+  // replies that had a first token.
+  minTtftMs?: number;
+  maxTtftMs?: number;
   cursor?: string;
 }
 
@@ -201,6 +221,8 @@ export function monitorRequestsURL(id: number, q: MonitorRequestsQuery): string 
   if (q.results?.length) params.set("results", q.results.join(","));
   if (q.minMs) params.set("min_ms", String(Math.round(q.minMs)));
   if (q.maxMs) params.set("max_ms", String(Math.round(q.maxMs)));
+  if (q.minTtftMs) params.set("min_ttft_ms", String(Math.round(q.minTtftMs)));
+  if (q.maxTtftMs) params.set("max_ttft_ms", String(Math.round(q.maxTtftMs)));
   if (q.cursor) params.set("cursor", q.cursor);
   return `/api/v1/monitor/deployments/${id}/requests?${params}`;
 }

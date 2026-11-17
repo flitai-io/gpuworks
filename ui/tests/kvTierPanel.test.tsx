@@ -59,7 +59,7 @@ test("a deployment without offload tiers shows both as not enabled", async () =>
   stubMetrics({});
   show({});
   await waitFor(() => assert.equal(screen.getAllByText("Not enabled").length, 2));
-  assert.ok(screen.getByText("See the GPU memory bar above"));
+  assert.ok(screen.getByText("See GPU Cache Usage for the engine cache trend."));
 });
 
 // An older image has the tiers but reports none of the tiering metrics. The

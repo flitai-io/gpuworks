@@ -17,23 +17,23 @@ import (
 const instanceHeader = "X-GPUWorks-Instance"
 
 // pinnedTarget resolves the pinned instance of a deployment serving model.
-// ok is false when the request pins nothing; status is nonzero when it pins
+// ok is false when the request pins nothing; rejection is non-nil when it pins
 // an instance that cannot take it, and asleep reports that the refusal was
 // the sleep the deployment is under, so the caller can account it the way the
 // load balancing path accounts the same refusal rather than as a plain 5xx.
-func (p *Proxy) pinnedTarget(r *http.Request, modelName string) (dep *store.Deployment, tgt target, ok bool, status int, message string, asleep bool) {
+func (p *Proxy) pinnedTarget(r *http.Request, modelName string) (dep *store.Deployment, tgt target, ok bool, rejection *refusal, asleep bool) {
 	uuid := strings.TrimSpace(r.Header.Get(instanceHeader))
 	r.Header.Del(instanceHeader)
 	if uuid == "" {
-		return nil, target{}, false, 0, "", false
+		return nil, target{}, false, nil, false
 	}
 	inst, err := p.store.InstanceByUUID(uuid)
 	if err != nil {
-		return nil, target{}, true, http.StatusNotFound, "instance " + uuid + " does not exist", false
+		return nil, target{}, true, refuse(ErrorInstanceNotFound, map[string]any{"instance": uuid}), false
 	}
 	dep, err = p.store.GetDeployment(inst.DeploymentID)
 	if err != nil || dep.ServedName != modelName {
-		return nil, target{}, true, http.StatusNotFound, "instance " + uuid + " does not serve " + modelName, false
+		return nil, target{}, true, refuse(ErrorInstanceModelMismatch, map[string]any{"instance": uuid, "model": modelName}), false
 	}
 	// Sleep is judged by planning.InstanceAsleep, the predicate the load
 	// balancing path and the deployment row use. Reading the reported level
@@ -50,14 +50,14 @@ func (p *Proxy) pinnedTarget(r *http.Request, modelName string) (dep *store.Depl
 	// the asleep counter and hide a real outage.
 	asleep = inst.State == proto.InstRunning && planning.InstanceAsleep(inst)
 	if asleep {
-		return dep, target{}, true, http.StatusServiceUnavailable, "instance " + uuid + " does not take requests while its deployment sleeps; wake it first", true
+		return dep, target{}, true, refuse(ErrorInstanceAsleep, map[string]any{"instance": uuid}), true
 	}
 	if inst.State != proto.InstRunning || inst.Headless || inst.APIPort <= 0 {
-		return dep, target{}, true, http.StatusServiceUnavailable, "instance " + uuid + " is not awake and running", false
+		return dep, target{}, true, refuse(ErrorInstanceNotRunning, map[string]any{"instance": uuid}), false
 	}
 	node, err := p.store.NodeByID(inst.NodeID)
 	if err != nil || !p.hub.Online(node.UUID) {
-		return dep, target{}, true, http.StatusServiceUnavailable, "instance " + uuid + " is offline", false
+		return dep, target{}, true, refuse(ErrorInstanceOffline, map[string]any{"instance": uuid}), false
 	}
-	return dep, target{nodeUUID: node.UUID, port: inst.APIPort, modelName: instanceModelName(dep, inst), instanceUUID: inst.UUID}, true, 0, "", false
+	return dep, target{nodeUUID: node.UUID, port: inst.APIPort, modelName: instanceModelName(dep, inst), instanceUUID: inst.UUID}, true, nil, false
 }

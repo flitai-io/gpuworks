@@ -33,9 +33,39 @@ type Message struct {
 type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage"`
 }
+
+// ErrModelsEndpointNotFound is a GET /v1/models answered 404: the base URL is
+// not the root of an OpenAI-compatible API.
+var ErrModelsEndpointNotFound = errors.New("models endpoint not found")
+
 type Client struct {
 	HTTP            *http.Client
 	BaseURL, APIKey string
+	// Header is sent with every request besides the content type and the
+	// key, such as the priority class a gpuworks gateway is asked for.
+	Header http.Header
+	// ObservePriorityClass keeps the class the endpoint says each request ran
+	// at; set only for a gpuworks gateway, whose answer the header is.
+	ObservePriorityClass bool
+}
+
+// PriorityClassHeader names the request priority class a gpuworks gateway
+// is asked for; its answer names the class the request ran at.
+const PriorityClassHeader = "X-GPUWorks-Priority-Class"
+
+// BenchmarkRunHeader marks a server-origin evaluation's request with its
+// run, so a gpuworks gateway records it as an evaluation's.
+const BenchmarkRunHeader = "X-GPUWorks-Benchmark-Run"
+
+func (c Client) setHeader(req *http.Request) {
+	for name, values := range c.Header {
+		for _, v := range values {
+			req.Header.Add(name, v)
+		}
+	}
+	if c.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	}
 }
 
 type Model struct {
@@ -64,9 +94,7 @@ func (c Client) Models(ctx context.Context) (models []Model, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
+	c.setHeader(req)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return nil, err
@@ -74,6 +102,9 @@ func (c Client) Models(ctx context.Context) (models []Model, err error) {
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: models endpoint returned %s: %s", ErrModelsEndpointNotFound, resp.Status, string(b))
+		}
 		return nil, fmt.Errorf("models endpoint returned %s: %s", resp.Status, string(b))
 	}
 	var body struct {
@@ -174,9 +205,7 @@ func (c Client) Do(ctx context.Context, req Request) (out Result, err error) {
 		return out, err
 	}
 	hreq.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		hreq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
+	c.setHeader(hreq)
 	out.Metrics.StartedAt = time.Now().UTC()
 	resp, err := c.HTTP.Do(hreq)
 	if err != nil {
@@ -185,6 +214,9 @@ func (c Client) Do(ctx context.Context, req Request) (out Result, err error) {
 	}
 	defer resp.Body.Close()
 	out.Metrics.HTTPStatus = resp.StatusCode
+	if c.ObservePriorityClass {
+		out.Metrics.PriorityClass = observedClass(resp.Header.Get(PriorityClassHeader))
+	}
 	if resp.StatusCode/100 != 2 {
 		out.Metrics.ErrorStage = "http"
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
@@ -193,6 +225,7 @@ func (c Client) Do(ctx context.Context, req Request) (out Result, err error) {
 	if req.Stream {
 		parsed, parseErr := parseSSE(resp.Body, out.Metrics.StartedAt)
 		parsed.OutputBudget, parsed.Stream, parsed.Metrics.HTTPStatus = req.MaxTokens, req.Stream, resp.StatusCode
+		parsed.Metrics.PriorityClass = out.Metrics.PriorityClass
 		out = parsed
 		if parseErr != nil {
 			out.Metrics.ErrorStage = "stream"
@@ -411,4 +444,13 @@ func (r Runner) sleep(ctx context.Context, d time.Duration) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// observedClass is a class name as the gateway writes it (lowercase, at most
+// 64 bytes); anything longer is cut there.
+func observedClass(name string) string {
+	if len(name) > 64 {
+		return name[:64]
+	}
+	return name
 }

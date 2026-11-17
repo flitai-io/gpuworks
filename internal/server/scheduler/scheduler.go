@@ -11,6 +11,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	serverestimate "gpuworks.ai/gpuworks/internal/server/estimate"
+	"gpuworks.ai/gpuworks/internal/server/nodepolicy"
 	"gpuworks.ai/gpuworks/internal/server/parallelism"
 	"gpuworks.ai/gpuworks/pkg/topoparse"
 )
@@ -47,10 +48,36 @@ type GPU struct {
 	// whole card to hand out, so a request is admitted against what is
 	// unclaimed, by the share it will take (Claim).
 	SharedByMemory bool
+	// ForeignBytes is what processes outside the platform hold on the card,
+	// when the card is held and every holder's memory is known
+	// (store.GPU.ForeignBytes); zero otherwise. Available keeps it, and a
+	// headroom beside it, out of what a partition may claim.
+	ForeignBytes int64
+	// ForeignShareable marks a held card that a memory-limited partition
+	// may still share by memory: healthy, not stopped by an operator, every
+	// holder's memory known, and an agent that keeps reporting the holders
+	// beside the platform's own instances (store.GPU.SharesMemoryWithForeign).
+	// It never makes the card take whole-card work (ADR 0068).
+	ForeignShareable bool
+
+	// withheld is 1 + the index of the card gate that withholds the card
+	// from the request being planned, 0 for none (resolveGates). It is the
+	// planner's working state, never a fact about the card.
+	withheld int
 }
 
-// Available returns the unclaimed memory on the GPU.
-func (g GPU) Available() int64 { return g.MemoryTotal - g.AllocatedBytes - g.SleepingBytes }
+// Available returns the memory a request that shares the GPU may claim: its
+// total less the platform's claims and what processes outside the platform
+// hold, with the headroom kept beside them (foreignHold).
+func (g GPU) Available() int64 { return g.unclaimed() - g.foreignHold() }
+
+// unclaimed is the GPU's total less the platform's own claims. The free-card
+// gates ask it rather than Available: whole-card work is admitted against
+// the engine's share of the card (CapacityFor), which an operator who allowed
+// work on a held card has accepted, and a partition that the foreign memory
+// leaves no room for is refused by the capacity check, whose verdict names
+// that memory (reasonMemoryShortfall).
+func (g GPU) unclaimed() int64 { return g.MemoryTotal - g.AllocatedBytes - g.SleepingBytes }
 
 // Empty reports whether the GPU has no claims (needed for whole-GPU placement).
 func (g GPU) Empty() bool { return g.AllocatedBytes <= 0 }
@@ -69,9 +96,10 @@ func (g GPU) CapacityFor(req Request) int64 {
 
 // QualifiesFor reports whether the GPU can host the request at all, before any
 // per-candidate memory requirement is applied: a shared request needs a healthy
-// GPU, a whole-GPU request needs one that is also free.
+// GPU (or one it may share with processes outside the platform, takesWorkFor),
+// a whole-GPU request needs one that is also free.
 func (g GPU) QualifiesFor(req Request) bool {
-	if !g.Schedulable {
+	if !g.takesWorkFor(req) {
 		return false
 	}
 	if req.PerGPULimitBytes > 0 {
@@ -130,7 +158,13 @@ type NodeSnapshot struct {
 	// ServingUnavailable marks a node with no network that may carry serving
 	// traffic: no serving network, and the management network may not.
 	ServingUnavailable bool
+	// Policy is the node's placement policy; the card gates ask it whether
+	// a card they would withhold may be used (cardGate.consented).
+	Policy NodePolicy
 }
+
+// NodePolicy is a node's placement policy (package nodepolicy).
+type NodePolicy = nodepolicy.Policy
 
 // Request describes what to place. Weight and multimodal bytes are the startup
 // requirements; KV cache is deliberately absent because engines allocate those
@@ -173,6 +207,11 @@ type Request struct {
 	// Features are the platform features the deployment needs beyond running
 	// its engine; a node whose vendor lacks one is filtered out.
 	Features []accelerator.Feature
+	// Consent is what the request itself says about the cards: an operator
+	// who chose them consents to sharing them (nodepolicy.Consent). The zero
+	// value is the scheduler choosing. AllowedGPUIndexes alone is not
+	// consent: the platform pins cards of its own.
+	Consent nodepolicy.Consent
 	// GPUMemUtil is the effective whole-GPU capacity fraction this deployment
 	// runs at. It is materialized from the launch configuration before the
 	// request is built, so there is no such thing as "not set": Validate
@@ -237,13 +276,29 @@ const (
 	ReasonMultiNodeUnsupportedOnNode = "multi_node_unsupported_on_node"
 	ReasonPDUnsupportedOnNode        = "pd_unsupported_on_node"
 	ReasonKVDiskUnsupportedOnNode    = "kv_disk_unsupported_on_node"
+	// ReasonKVBackendUnsupportedOnNode: the node's vendor cannot run the
+	// deployment's KV offload backend (ADR 0069).
+	ReasonKVBackendUnsupportedOnNode = "kv_backend_unsupported_on_node"
 	ReasonInsufficientRuntimeDisk    = "insufficient_runtime_disk"
 	// No card takes work, and why, from the operator's side: the node has
 	// no card of its own (none at all, or all lent to virtual machines or
 	// held by another driver), its cards are held by processes outside the
 	// platform, or none is at a health level that serves.
-	ReasonNoOwnedGPU                = "no_owned_gpu"
-	ReasonGPUsHeldOutsidePlatform   = "gpus_held_outside_platform"
+	ReasonNoOwnedGPU              = "no_owned_gpu"
+	ReasonGPUsHeldOutsidePlatform = "gpus_held_outside_platform"
+	// ReasonHeldOutsidePlatformSleep: the only cards that could take the
+	// partition are shared with processes outside the platform, and a
+	// deployment that sleeps could not be woken there while they run.
+	ReasonHeldOutsidePlatformSleep = "held_outside_platform_sleep"
+	// ReasonHeldOutsidePlatformNotAllowed: cards that could take the
+	// partition ({gpus}, {count} on {node}) are shared with processes
+	// outside the platform, and the node's placement policy does not allow
+	// partitions beside them; {setting} names the policy key that would.
+	ReasonHeldOutsidePlatformNotAllowed = "held_outside_platform_not_allowed"
+	// ReasonForeignSharedGPUsUsed: the chosen group includes cards shared
+	// with processes outside the platform ({gpus}, {count}, up to
+	// {foreign_gib}) because no card free of them could take the request.
+	ReasonForeignSharedGPUsUsed     = "foreign_shared_gpus_used"
 	ReasonNoHealthyGPU              = "no_healthy_gpu"
 	ReasonNoFreeGPU                 = "no_free_gpu"
 	ReasonFiltersPassed             = "filters_passed"
@@ -353,6 +408,9 @@ type Plan struct {
 	// and is deliberately not part of it.
 	Preference int64    `json:"preference,omitempty"`
 	Reasons    []Reason `json:"reasons"`
+	// Concessions are the card preferences this plan gave up, in table
+	// order (planPreferring); its Reasons state them for the reader.
+	Concessions []Concession `json:"-"`
 }
 
 // Rejected records a considered-but-discarded option.
@@ -396,6 +454,21 @@ func Schedule(req Request, node NodeSnapshot) Result {
 		return Result{OK: false, Message: reason, Explain: ex}
 	}
 
+	gated := resolveGates(req, node)
+	result := schedule(req, gated)
+	if !result.OK {
+		if reason, ok := consentRetry(req, node, gated, result.Message); ok {
+			result.Message = reason
+		}
+	}
+	return result
+}
+
+// schedule runs the filters, the planner and the scorers on a node whose
+// cards the gates have been resolved for.
+func schedule(req Request, node NodeSnapshot) Result {
+	var ex Explain
+
 	// --- Filters ---
 	if ok, reason := runFilters(req, node); !ok {
 		ex.Filters = append(ex.Filters, reason)
@@ -404,7 +477,7 @@ func Schedule(req Request, node NodeSnapshot) Result {
 	ex.Filters = append(ex.Filters, Reason{Code: ReasonFiltersPassed})
 
 	// --- GPU planner ---
-	plans, rejected := planPreferringHealthy(req, node)
+	plans, rejected := planPreferring(req, node)
 	ex.Rejected = rejected
 	if len(plans) == 0 {
 		return Result{OK: false, Message: blockingReason(rejected), Explain: ex}
@@ -416,43 +489,6 @@ func Schedule(req Request, node NodeSnapshot) Result {
 	ex.TopoHighlight = highlight(best, node)
 
 	return Result{Plan: best, Explain: ex, OK: true}
-}
-
-// planPreferringHealthy places on fully healthy GPUs whenever they can take
-// the request, and only otherwise lets degraded GPUs take part, so a degraded
-// GPU is used last. A plan that ends up on degraded GPUs says so.
-func planPreferringHealthy(req Request, node NodeSnapshot) ([]Plan, []Rejected) {
-	preferred := node
-	preferred.GPUs = nil
-	for _, g := range node.GPUs {
-		if !g.Degraded {
-			preferred.GPUs = append(preferred.GPUs, g)
-		}
-	}
-	if len(preferred.GPUs) == len(node.GPUs) {
-		return plan(req, node)
-	}
-	if plans, rejected := plan(req, preferred); len(plans) > 0 {
-		return plans, rejected
-	}
-	plans, rejected := plan(req, node)
-	degraded := map[int]bool{}
-	for _, g := range node.GPUs {
-		degraded[g.Index] = g.Degraded
-	}
-	for i := range plans {
-		var used []int
-		for _, index := range plans[i].GPUIndexes {
-			if degraded[index] {
-				used = append(used, index)
-			}
-		}
-		if len(used) > 0 {
-			plans[i].Reasons = append(plans[i].Reasons, Reason{Code: ReasonDegradedGPUsUsed,
-				Params: map[string]any{"gpus": used, "count": len(used)}})
-		}
-	}
-	return plans, rejected
 }
 
 // reserveFor is the reserve a request is charged. A caller that did not compute

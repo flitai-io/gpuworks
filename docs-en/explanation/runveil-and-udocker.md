@@ -86,6 +86,8 @@ and runs workloads under that account. In the following two cases, workloads run
 
 A non-root agent runs workloads as itself. Use `gpuworks-agent grant-device-access` to grant the required permissions on accelerator device nodes.
 
+An agent running as root gives the dedicated account access to device nodes through supplementary groups. Device nodes that only root can reach on the host (`root:root` with no group or other permission) have no usable owning group, so before every workload start the agent hands them to the system group `gpuworks-runtime` with group read/write, and the workload reaches them through that group; all other nodes keep the host's settings.
+
 ## Workloads with Many Threads
 
 PRoot is a single-threaded ptrace tracer: this one process handles every traced system call from every thread in the container. These are path-related system calls;
@@ -149,3 +151,6 @@ When a container fails, it can be shown as the failure reason, hiding the engine
 
 All PRoot and udocker processes started by the agent, as well as container terminals and
 `gpuworks-agent runveil exec`, now use `/` as their working directory. The working directory inside the container is determined by PRoot's `-w` and is unaffected.
+
+<!-- translation-source-sha256: 7889c630ce0bd74856e2dfedf67b84dd8664a1a922d7ee708012f9931ba5baec -->
+<!-- translation-localized-code-block: a1a0d94ec2610077388e3d35c9bf83e6dcf608f1d833e08ec095d550b15d1f1e b93b87cdbcce4133356e52d054b9d435a0f4bd46ec3689de61494cb7ff8e1877 Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->

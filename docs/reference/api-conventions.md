@@ -124,7 +124,7 @@ curl --fail-with-body -sS "$API_URL/api/v1/deployments/7" \
 
 ## 错误
 
-管理 API 的错误响应是 JSON 对象，包含 `error`；属于产品错误时另带稳定的 `code` 和可选的 `params`。
+管理 API 的每个错误响应都是 JSON 对象，包含 `error` 与稳定的 `code`，以及可选的 `params`。
 例如登录时用户名或密码错误，返回 HTTP `401`：
 
 ```json
@@ -134,8 +134,31 @@ curl --fail-with-body -sS "$API_URL/api/v1/deployments/7" \
 | 字段 | 用途 |
 |---|---|
 | `error` | 可直接查看的英文错误说明；不应靠匹配这段文字编写处理分支 |
-| `code` | 稳定的错误标识，供程序区分原因；并非每个错误都有 |
+| `code` | 稳定的错误标识，供程序区分原因；每个错误都有 |
 | `params` | 错误涉及的字段、取值等上下文；客户端可与 `code` 一起用于本地化提示，未提供时省略 |
+
+服务端没有为某个错误给出具体原因时，按 HTTP 状态填一个**通用码**：
+
+| HTTP 状态 | 通用 `code` | HTTP 状态 | 通用 `code` |
+|---|---|---|---|
+| `400` | `BAD_REQUEST` | `422` | `UNPROCESSABLE` |
+| `401` | `UNAUTHORIZED` | `424` | `FAILED_DEPENDENCY` |
+| `403` | `FORBIDDEN` | `429` | `TOO_MANY_REQUESTS` |
+| `404` | `NOT_FOUND` | `500` | `INTERNAL_ERROR` |
+| `405` | `METHOD_NOT_ALLOWED` | `501` | `NOT_IMPLEMENTED` |
+| `408` | `REQUEST_TIMEOUT` | `502` | `BAD_GATEWAY` |
+| `409` | `CONFLICT` | `503` | `SERVICE_UNAVAILABLE` |
+| `410` | `GONE` | `504` | `GATEWAY_TIMEOUT` |
+| `413` | `REQUEST_TOO_LARGE` | `507` | `INSUFFICIENT_STORAGE` |
+| `415` | `UNSUPPORTED_MEDIA_TYPE` | `416` | `RANGE_NOT_SATISFIABLE` |
+
+表外的 4xx 用 `BAD_REQUEST`，其余用 `INTERNAL_ERROR`。通用码只说明类别，具体情况在 `error` 里，例如：
+
+```json
+{"error": "deployment 7 not found", "code": "NOT_FOUND"}
+```
+
+控制台把通用码显示为本地化的类别加上 `error` 原文（如「未找到：deployment 7 not found」），具体码按各自的文案显示。
 
 ### 常见 HTTP 状态与错误码
 
@@ -150,15 +173,15 @@ curl --fail-with-body -sS "$API_URL/api/v1/deployments/7" \
 | `403` | `ADMINISTRATOR_REQUIRED` | 操作需要管理员角色，使用有权限的账户 |
 | `403` | `PLATFORM_TOKEN_READ_ONLY` / `PLATFORM_TOKEN_NOT_ALLOWED` | 只读平台令牌不能写入，或此接口只允许登录会话；按接口要求更换凭据 |
 | `403` | `MANAGEMENT_ORIGIN_REJECTED` | 管理请求的来源校验失败，检查浏览器入口与反向代理配置 |
-| `404` / `405` | 不保证有 `code` | 资源或路由不存在 / HTTP 方法不支持，核对地址、资源 ID 和方法 |
+| `404` / `405` | 具体码，或通用码 `NOT_FOUND` / `METHOD_NOT_ALLOWED` | 资源或路由不存在 / HTTP 方法不支持，核对地址、资源 ID 和方法 |
 | `409` | 由具体操作决定 | 资源当前状态或并发变化使操作不能执行，先读错误详情并重新查询资源状态 |
 | `413` | 使用通用 JSON 解码的接口返回 `FIELD_INVALID` | 请求体超过接口限制；通用管理 JSON 请求体上限为 1 MiB，上传等接口以各自约定为准 |
 | `429` | `LOGIN_THROTTLED` | 登录尝试过于频繁，按响应头 `Retry-After` 指定的秒数等待后重试 |
-| `500` / `503` | 由失败原因决定；可能没有 `code` | 服务内部出错 / 当前无法提供服务，保留错误内容并检查控制面日志；`AUTH_NOT_CONFIGURED` 表示管理鉴权未配置（`503`） |
+| `500` / `503` | 由失败原因决定，没有具体原因时为 `INTERNAL_ERROR` / `SERVICE_UNAVAILABLE` | 服务内部出错 / 当前无法提供服务，保留错误内容并检查控制面日志；`AUTH_NOT_CONFIGURED` 表示管理鉴权未配置（`503`） |
 
-客户端先检查 HTTP 状态，再读取 `code` 和 `params`；没有 `code` 时仍须保留并显示 `error`。
+客户端先检查 HTTP 状态，再读取 `code` 和 `params`；遇到通用码或不认识的码时，仍须保留并显示 `error`。
 上述约定针对管理 API，推理网关的错误格式见 [OpenAI 兼容网关](openai-gateway.md)。错误码定义见
-`internal/server/api/errors.go`，具体接口还可能返回业务错误码。
+`internal/server/api/errors.go` 与 `internal/server/messages`（通用码在 `messages/http.go`），具体接口还可能返回业务错误码。
 
 ## 检查
 

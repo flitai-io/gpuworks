@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
@@ -24,14 +25,14 @@ func untraversableError() error {
 
 func (b *blockedInstaller) InstallSSH(_ context.Context, req provision.SSHInstallRequest) (provision.SSHInstallReport, error) {
 	b.req = req
-	return provision.SSHInstallReport{Checks: []provision.CheckResult{{Name: "Install directory path access", Status: "error", Detail: untraversableDetail}}},
+	return provision.SSHInstallReport{Checks: []provision.CheckResult{{ID: "install_dir_traversal", Status: "fail", Message: untraversableDetail}}},
 		untraversableError()
 }
 
 // The literal wire answer of a blocked install: a stable code, the reason in
 // English, and the parameters the client localizes it with.
 const untraversableWire = `{"code":"NODE_INSTALL_DIR_UNTRAVERSABLE",` +
-	`"error":"the dedicated runtime user cannot reach the install directory: Install directory path access: ` +
+	`"error":"the dedicated runtime user cannot reach the install directory: install directory path access: ` +
 	"/root (mode 700, owner 0:0) cannot be searched by the dedicated runtime user (udocker, uid 1001); run `chmod o+x /root` or choose an install directory outside it, such as /opt/gpuworks" + `",` +
 	`"params":{"dir":"/root","fix":"chmod o+x /root","install_dir":"/root/gpuworks","mode":"700"}}` + "\n"
 
@@ -84,7 +85,9 @@ type runtimePrechecker struct{ req provision.SSHPrecheckRequest }
 func (p *runtimePrechecker) PrecheckSSH(_ context.Context, req provision.SSHPrecheckRequest) (provision.SSHPrecheckReport, error) {
 	p.req = req
 	return provision.SSHPrecheckReport{Target: req.Target, User: "root", Host: "203.0.113.7", Port: 22, Checks: []provision.CheckResult{
-		{Name: "Install directory path access", Status: "warn", Detail: "/root (mode 700, owner 0:0) cannot be searched; not stopping the install: this node has docker"},
+		{ID: "install_dir_traversal", Status: "warn", Code: messages.CheckInstallDirPathClosedUncertain,
+			Params:  map[string]string{"dir": "/root/gpuworks", "ancestor": "/root", "mode": "700", "reason": "docker"},
+			Message: "/root (mode 700, owner 0:0) cannot be searched; not stopping the install: this node has docker"},
 	}}, nil
 }
 
@@ -100,7 +103,9 @@ func TestPrecheckPassesTheRuntimeDriverAndReportsThePathAccessRow(t *testing.T) 
 		t.Fatalf("status %d, request %+v, body %s", rec.Code, fake.req, rec.Body.String())
 	}
 	want := `{"target":"root@203.0.113.7","user":"root","host":"203.0.113.7","port":22,"checks":[` +
-		`{"name":"Install directory path access","status":"warn","detail":"/root (mode 700, owner 0:0) cannot be searched; not stopping the install: this node has docker"}]}` + "\n"
+		`{"id":"install_dir_traversal","status":"warn","code":"CHECK_INSTALL_DIR_PATH_CLOSED_UNCERTAIN",` +
+		`"params":{"ancestor":"/root","dir":"/root/gpuworks","mode":"700","reason":"docker"},` +
+		`"message":"/root (mode 700, owner 0:0) cannot be searched; not stopping the install: this node has docker"}]}` + "\n"
 	if rec.Body.String() != want {
 		t.Fatalf("wire JSON =\n%s\nwant\n%s", rec.Body.String(), want)
 	}

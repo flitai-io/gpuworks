@@ -14,7 +14,7 @@
   "max_model_len": {
     "label": "Maximum Context Length",
     "placeholder": "Automatic",
-    "help": "Leave empty to use the model configuration"
+    "help": "Specify a fixed length, or choose automatic memory fitting on supported vLLM versions. The model limit is not the observed runtime limit."
   },
   "dtype": {
     "label": "Weight Precision",
@@ -246,18 +246,26 @@
     "placeholder": "Twice the model weights",
     "help": "Ceiling the platform enforces on the disk tier directory; the engine has no such limit. Leave empty to let the platform derive it from the model weights."
   },
+  "kv_offload_backend": {
+    "label": "KV Offload Backend",
+    "help": "Which component keeps the KV cache beyond the GPU. Leave empty to use the engine's own memory and disk tiers; a backend replaces them."
+  },
   "enforce_eager": {
     "label": "Enforce Eager Mode",
     "help": "Starts faster and uses less GPU memory, but reduces steady-state decoding performance"
   },
   "speculative_algorithm": {
     "label": "Speculative Decoding Algorithm",
+    "placeholder": "Choose an algorithm",
+    "help": "For vLLM the list is only suggestions: type any method name the engine supports and it is passed as written; whether the chosen image supports it is yours to check. For SGLang, choose from the list. For an algorithm that needs a draft, such as DFlash, mount a registered model under Extra Mounts and enter its container path as the draft model.",
     "options": {
       "eagle": "EAGLE",
       "eagle3": "EAGLE 3",
       "mtp": "MTP",
       "ngram": "N-gram",
       "draft_model": "Draft Model",
+      "dflash": "DFlash",
+      "dspark": "DSpark",
       "EAGLE": "EAGLE",
       "EAGLE3": "EAGLE 3",
       "NEXTN": "NextN (MTP)",
@@ -268,7 +276,7 @@
   },
   "speculative_draft_model": {
     "label": "Draft Model",
-    "placeholder": "Model ID or path inside the container"
+    "placeholder": "Container path, such as /draft for a model mounted under Extra Mounts; or a model ID"
   },
   "speculative_tokens": {
     "label": "Speculative Tokens per Step"

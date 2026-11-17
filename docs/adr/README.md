@@ -67,5 +67,11 @@
 | [0061](0061-spec-display-names-written-by-hand.md) | 推理档位的显示名由人写在目录里，不再由前端拼出 | 2026-11-02 | 已接受；修改 0009 |
 | [0062](0062-template-components-follow-the-primary-storage.md) | 模板组件跟随主模型落到它所在的共享存储 | 2026-11-11 | 已接受；补充 0034 |
 | [0063](0063-apply-to-cloud-clusters.md) | 从云账号接入的托管集群，经用户确认后由 server 用现发的短期 kubeconfig 应用接入 manifest，不保存凭据 | 2026-10-22 | 已接受 |
+| [0064](0064-telemetry-stream-on-the-data-lane.md) | 指标与日志批次走数据通道上的遥测流（server 宣告能力位才启用），日志在 agent 侧有界缓冲、重连后补发 | 2026-11-13 | 已接受；补充 0024 |
+| [0065](0065-official-catalog-read-tolerantly.md) | 官方推理目录包按模型和档位容错读取：读不懂的跳过并报告，已有的记录保持原样；用户自己的导入保持严格 | 2026-11-15 | 已接受；补充 0040、0010 |
+| [0066](0066-agent-state-by-owner-and-lifetime.md) | agent 的状态按所有者与生命周期成组，组合根只做接线 | 2026-11-15 | 已接受 |
+| [0067](0067-runtime-outcomes-as-codes.md) | 运行期失败与检查结果用码加参数表达（五个检查状态、UPPER_SNAKE 码、外部输出只在边界按文本识别），英文原文只作 fallback | 2026-11-14 | 已接受；推广 API 层的 ProductError |
+| [0068](0068-partitions-share-cards-with-foreign-processes-by-memory.md) | 带显存上限的分区按剩余显存与平台外进程共用一张卡（外部进程显存已知、留 5%/至少 4 GiB 余量；agent 在实例上卡后继续上报原有外部进程，按 `partition_safety_protocol` 2 级把关；整卡与会休眠的部署照旧拒绝） | 2026-11-16 | 已接受；补充 0060 |
+| [0069](0069-kv-offload-backends.md) | KV 卸载后端是编译进来、按 (引擎, id) 划分的描述行：调用方只选 id，`kv_offload_backend` 是选择键（只在有可选行时发布），vLLM 的 `--kv-transfer-config` 只在一个组装点合成，PD 按 connector 判定 | 2026-11-16 | 已接受；修订 0021 |
 
 说明：0012–0014 原分别与 0004、0004、0006 撞号，2026-09-03 整理时按创建顺序重新编号；历史提交信息与 MR 描述中的旧编号不再准确。原 0024（节点网络对象）同理，因与数据面 lane 的 0024 撞号，2026-09-30 改为 0030；此前引用「ADR 0024」指网络对象的文字已随之更新，`CLAUDE.md` 与 `todo.md` 中的「ADR 0024」指数据面 lane。

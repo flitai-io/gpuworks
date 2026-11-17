@@ -1,24 +1,24 @@
-import { Space, Tag, Tooltip, Typography } from "antd";
+import { Badge, type BadgeColor } from "../../components/ui/badge";
+import { Tooltip } from "../../components/ui/tooltip";
 import { ExclamationCircleFilled } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { Network, NetworkRail, NetworkRole, NetworkTestRun, NetworkType, NetworkWarning } from "../../networkTypes";
-import { colors } from "../../theme/tokens";
 
-const roleColors: Record<string, string> = { storage_sync: "blue", compute: "purple", serving: "cyan" };
+const roleColors: Record<string, BadgeColor> = { storage_sync: "blue", compute: "purple", serving: "cyan" };
 
 export function RoleTags({ roles }: { roles: NetworkRole[] }) {
   const { t } = useTranslation("networks");
   return (
-    <Space size={4} wrap>
-      {roles.map((role) => <Tag key={role} color={roleColors[role]}>{t(`role.${role}`, { defaultValue: role })}</Tag>)}
-    </Space>
+    <span className="inline-flex flex-wrap gap-1">
+      {roles.map((role) => <Badge size="sm" key={role} color={roleColors[role]}>{t(`role.${role}`, { defaultValue: role })}</Badge>)}
+    </span>
   );
 }
 
 export function TypeTag({ type }: { type: NetworkType }) {
   const { t } = useTranslation("networks");
-  const color = type === "host_ethernet" ? "default" : type === "host_rdma" ? "gold" : "volcano";
-  return <Tag color={color}>{t(`type.${type}`, { defaultValue: type })}</Tag>;
+  const color = type === "host_ethernet" ? "gray" : type === "host_rdma" ? "amber" : "orange";
+  return <Badge size="sm" color={color}>{t(`type.${type}`, { defaultValue: type })}</Badge>;
 }
 
 /** The host's RDMA ports carry the traffic. */
@@ -46,14 +46,14 @@ export function SelectorSummary({ network }: { network: Pick<Network, "cidr" | "
   const { t } = useTranslation("networks");
   // A network that uses rails infers them and its bootstrap; only a bootstrap CIDR narrows it.
   if (usesRails(network.type)) {
-    if (!network.cidr) return <Typography.Text type="secondary">{t("selector.inferred")}</Typography.Text>;
-    return <Typography.Text code style={{ whiteSpace: "normal" }}>{`${t("selector.bootstrapCidr")} ${network.cidr}`}</Typography.Text>;
+    if (!network.cidr) return <span className="text-fg-muted">{t("selector.inferred")}</span>;
+    return <code className="font-mono whitespace-normal">{`${t("selector.bootstrapCidr")} ${network.cidr}`}</code>;
   }
   const parts: string[] = [];
   if (network.cidr) parts.push(`${t("selector.cidr")} ${network.cidr}`);
   if (network.interface) parts.push(`${t("selector.interface")} ${network.interface}`);
-  if (parts.length === 0) return <Typography.Text type="secondary">{t("selector.none")}</Typography.Text>;
-  return <Typography.Text code style={{ whiteSpace: "normal" }}>{parts.join(" · ")}</Typography.Text>;
+  if (parts.length === 0) return <span className="text-fg-muted">{t("selector.none")}</span>;
+  return <code className="font-mono whitespace-normal">{parts.join(" · ")}</code>;
 }
 
 const knownWarnings = new Set(["conflict", "override_missing", "link_layer_mismatch", "rdma_no_hca", "bootstrap_missing", "hca_unusable", "hca_mismatch"]);
@@ -75,12 +75,12 @@ export function WarningMark({ warnings, summary }: { warnings?: NetworkWarning[]
   const text = summary ?? (warnings ?? []).map((w) => warningText(t, w)).join("\n");
   if (!text) return null;
   return (
-    <Tooltip trigger={["hover", "focus"]} title={<span style={{ whiteSpace: "pre-line" }}>{text}</span>}>
+    <Tooltip content={<span style={{ whiteSpace: "pre-line" }}>{text}</span>}>
       <ExclamationCircleFilled
         role="img"
         aria-label={text}
         tabIndex={0}
-        style={{ color: colors.warning, marginLeft: 6, cursor: "help" }}
+        className="ml-1.5 cursor-help text-fg-warning"
       />
     </Tooltip>
   );
@@ -97,7 +97,7 @@ export function formatBitRate(bytesPerSec: number): string {
 
 /** "rx / tx", or a dash when the agent reported no rate recently. */
 export function LinkRate({ rx, tx }: { rx?: number; tx?: number }) {
-  if (rx == null && tx == null) return <Typography.Text type="secondary">—</Typography.Text>;
+  if (rx == null && tx == null) return <span className="text-fg-muted">—</span>;
   return <span style={{ whiteSpace: "nowrap" }}>{rx == null ? "—" : formatBitRate(rx)} / {tx == null ? "—" : formatBitRate(tx)}</span>;
 }
 
@@ -113,17 +113,17 @@ export function sourceText(t: (key: string) => string, n: { source: string; labe
 }
 
 export function Endpoint({ iface, ip }: { iface: string; ip: string }) {
-  if (!iface && !ip) return <Typography.Text type="secondary">—</Typography.Text>;
-  return <Typography.Text code>{[iface, ip].filter(Boolean).join(" · ")}</Typography.Text>;
+  if (!iface && !ip) return <span className="text-fg-muted">—</span>;
+  return <code className="font-mono">{[iface, ip].filter(Boolean).join(" · ")}</code>;
 }
 
 /** A compact read-only list of rails ("mlx5_0:1, … mlx5_7:1 (8)") with each address in the tooltip. */
 export function HCAList({ hcas, linkLayer }: { hcas: NetworkRail[]; linkLayer?: string }) {
   const { t } = useTranslation("networks");
-  if (hcas.length === 0) return <Typography.Text type="secondary">—</Typography.Text>;
+  if (hcas.length === 0) return <span className="text-fg-muted">—</span>;
   const names = hcas.map((h) => h.name);
-  const layer = linkLayer ? <Tag style={{ marginLeft: 6 }}>{t(`linkLayer.${linkLayer}`, { defaultValue: linkLayer })}</Tag> : null;
+  const layer = linkLayer ? <Badge size="sm" className="ml-1.5">{t(`linkLayer.${linkLayer}`, { defaultValue: linkLayer })}</Badge> : null;
   const shown = names.length > 3 ? `${names.slice(0, 2).join(", ")} … ${names[names.length - 1]} (${names.length})` : names.join(", ");
   const detail = hcas.map((h) => `${h.name} ${h.ip || "—"}`).join("\n");
-  return <span><Tooltip title={<span style={{ whiteSpace: "pre-line" }}>{detail}</span>}><Typography.Text code>{shown}</Typography.Text></Tooltip>{layer}</span>;
+  return <span><Tooltip content={<span style={{ whiteSpace: "pre-line" }}>{detail}</span>}><code className="font-mono">{shown}</code></Tooltip>{layer}</span>;
 }

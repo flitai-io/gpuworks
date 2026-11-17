@@ -74,7 +74,7 @@ func (s *Service) evaluatePlan(env evaluatePlanEnv) (evaluatePlanResult, bool) {
 		request := evaluationLaunchRequest(env, node)
 		request.RuntimeImageCached = out.nodeImageCached
 		request.ModelRules.SaveTo = s.previewSaveToStorageID(req.ModelSource, env.model, node)
-		previewPlan, planErr := planning.PlanLaunch(env.ctx, s.d.Store, s.networks(), request)
+		previewPlan, planErr := s.planLaunch(env.ctx, request)
 
 		if items := previewPlan.Output.GPUCandidates; !IsAutomaticPlacement(req) && req.NNodes <= 1 && items != nil {
 			resp.GPUCandidates = &dto.GPUCandidates{NodeUUID: node.UUID, Items: make([]dto.GPUCandidate, 0, len(items))}
@@ -82,6 +82,9 @@ func (s *Service) evaluatePlan(env evaluatePlanEnv) (evaluatePlanResult, bool) {
 				card := dto.GPUCandidate{Index: item.Index, Available: item.Available}
 				if reason := item.Reason; reason != nil {
 					card.Reason = &dto.ScheduleReason{Code: reason.Code, Params: reason.Params, Message: reason.Message}
+				}
+				if note := item.Note; note != nil {
+					card.Note = &dto.ScheduleReason{Code: note.Code, Params: note.Params}
 				}
 				resp.GPUCandidates.Items = append(resp.GPUCandidates.Items, card)
 			}

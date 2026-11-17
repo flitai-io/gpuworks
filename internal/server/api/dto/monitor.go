@@ -20,7 +20,7 @@ type Point [2]float64
 // driven by metric families the agent/proxy only emit samples for when
 // something actually happens in that tick (a proxy request, a completed
 // engine request) - see internal/server/proxy/accounting.go's flush and
-// internal/server/app/observability_quantile.go's applyQuantiles. A
+// internal/server/obsingest/quantile.go's applyQuantiles. A
 // deployment that served heavy traffic ten minutes ago but nothing in the
 // last five minutes therefore has real data in a wider chart range but none
 // in the fixed diagnosis window monitor.BuildCluster reduces signals from.
@@ -137,12 +137,23 @@ type MonitorEvent struct {
 	Label        string `json:"label"`
 }
 
+// MonitorStateCount is how many services[] rows are in one state.
+type MonitorStateCount struct {
+	State string `json:"state"`
+	Count int    `json:"count"`
+}
+
 // MonitorOverview is the GET /api/v1/monitor/overview response.
 type MonitorOverview struct {
-	AsOf          int64                `json:"as_of"`
-	Stale         bool                 `json:"stale"`
-	Signals       []MonitorSignal      `json:"signals"`
-	Services      []MonitorServiceRow  `json:"services"`
+	AsOf     int64               `json:"as_of"`
+	Stale    bool                `json:"stale"`
+	Signals  []MonitorSignal     `json:"signals"`
+	Services []MonitorServiceRow `json:"services"`
+	// StateCounts counts services[] by state: every state of the
+	// services[].state vocabulary, in the order the state summary lists
+	// them (serving first, then the ones that need a look, then the
+	// stopped), zero counts included.
+	StateCounts   []MonitorStateCount  `json:"state_counts"`
 	VRAMByNode    []MonitorVRAMNode    `json:"vram_by_node"`
 	ClusterTokens MonitorClusterTokens `json:"cluster_tokens"`
 	Events        []MonitorEvent       `json:"events"`

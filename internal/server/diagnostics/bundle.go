@@ -93,15 +93,20 @@ type Bundle struct {
 	Items       []BundleItem `json:"items"`
 }
 
-// BundleItem is one part of a collection: collected, skipped (with why) or
-// failed.
+// BundleItem is one part of a collection, reported as a check (ADR 0067):
+// pass (collected whole), warn (collected up to its size bound), skip (not
+// read: the node is offline or its agent predates the read) or fail. Status
+// is one of proto.Check*; Code (package messages) says why for every status
+// but pass; Evidence is the error text of the read that failed, kept apart
+// from the message. The manifest on disk and in the archive is this shape;
+// manifests written before it are read by UnmarshalJSON.
 type BundleItem struct {
-	Name   string `json:"name"`
-	State  string `json:"state"`
-	Reason string `json:"reason,omitempty"`
-	Bytes  int64  `json:"bytes"`
-	// Truncated says the item stopped at its size bound.
-	Truncated bool `json:"truncated,omitempty"`
+	// Path is where the part is (or would be) in the archive.
+	Path     string `json:"path"`
+	Status   string `json:"status"`
+	Code     string `json:"code,omitempty"`
+	Evidence string `json:"evidence,omitempty"`
+	Bytes    int64  `json:"bytes"`
 }
 
 // BundleDir is where collections are kept.

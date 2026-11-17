@@ -3,6 +3,7 @@ import { api, usePolling } from "../../api";
 import { formatBytes } from "../../format";
 import { formatTime } from "../../i18n/datetime";
 import { Button } from "../ui/button";
+import { HelpTip } from "../../ui-kit/HelpTip";
 
 // Runtime observations supplement the existing target-side progress ledger.
 // Their absence never means that the transfer failed or that its bytes are zero.
@@ -42,8 +43,7 @@ export function PeerTransferDetails({ transferId, transferErrorCode }: { transfe
         <div><dt>{t("peerTransfer.rateWait")}</dt><dd>{(observation.rate_wait_ms / 1000).toFixed(1)} s</dd></div>
       </>}
     </dl> : <p role="status">{t(transferErrorCode === "PEER_RELAY_BUSY" ? "peerTransfer.phaseWaiting" : "peerTransfer.unknown")}</p>}
-    <p className="text-label text-fg-muted">{t("peerTransfer.serverBudget")}: {formatBytes(data.policy.rate_limit_bps)}/s · {t("peerTransfer.active", { active: data.active_relay_count, max: data.policy.max_active })}</p>
-    <p className="text-label text-fg-muted">{t("peerTransfer.accounting")}</p>
+    <p className="flex items-center gap-1 text-label text-fg-muted">{t("peerTransfer.serverBudget")}: {formatBytes(data.policy.rate_limit_bps)}/s · {t("peerTransfer.active", { active: data.active_relay_count, max: data.policy.max_active })}<HelpTip content={t("peerTransfer.accountingHelp")} /></p>
     <p className="text-label text-fg-muted">{t("peerTransfer.history")}</p>
   </section>;
 }

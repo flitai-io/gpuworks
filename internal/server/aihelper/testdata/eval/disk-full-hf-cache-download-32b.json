@@ -48,7 +48,7 @@
     "(EngineCore_DP0 pid=244) ERROR 10-09 10:21:49 [core.py:708] Exception: WorkerProc initialization failed due to an exception in a background process. See stack trace for root cause.",
     "(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}"
   ],
-  "expect_signature": "disk_full",
+  "expect_signature": "DISK_FULL",
   "expect_keywords": [
     [
       "df -h",

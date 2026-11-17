@@ -55,3 +55,5 @@ use text matching or `json_extract`, with results that depend on serialization d
   appears in the diff.
 - This rule applies to every new or modified column. Existing columns that predate the rule and do not meet decision 2 are listed in `todo.md` and remain unchanged until addressed there;
   the budget blocks additions and does not endorse existing columns.
+
+<!-- translation-source-sha256: 16653121ca8612b634913cfd885e4ebf86ab6f24947375866ad1ee9c067024d3 -->

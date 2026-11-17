@@ -154,6 +154,13 @@
       "contract": "one replica with default balanced/performance_mode/cache-report/kv-cache dtype, initial evaluation dtype=auto and request metrics=true preserved across spec selection, 0.9 memory; exhaustive parameter/type/boundary/version, sleep and dGPU MISSING"
     },
     {
+      "component": "DeployKvOffloadSection KV offload backend cards",
+      "fields": [
+        "kv_offload_backend"
+      ],
+      "contract": "MISSING: no KV offload backend besides the engine's own ships (ADR 0069), so /engines lists no kv_backends and the cards never render; backend selection, replaced-key tombstones and the instance panel label are covered by RTL only until a backend row and a node that runs it exist"
+    },
+    {
       "component": "ContainerOverridesEditor and advanced inputs",
       "fields": [
         "container_model_mount_path",

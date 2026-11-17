@@ -9,7 +9,7 @@ import (
 func TestRegistryProbeEvidenceDoesNotReplaceTheActualPull(t *testing.T) {
 	p, _ := newPuller(t, newClock(), nil, Config{})
 	d := newDriver("udocker", map[string]pullStep{
-		"a.example/x:1": fail("unauthorized: image access denied"),
+		"a.example/x:1": failCLI("unauthorized: image access denied"),
 		"b.example/x:1": ok,
 	})
 	var summary string

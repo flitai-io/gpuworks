@@ -144,10 +144,39 @@ type EvaluateResponse struct {
 	// PD previews a PD disaggregated draft instance by instance; the command
 	// fields above then describe the first decode instance.
 	PD *EvaluatePD `json:"pd,omitempty"`
+	// ManualCommandDraft is the script a multi-node or PD draft's manual
+	// command starts from: one shell script for every rank, written with the
+	// platform variables the server expands per rank. Absent for a single
+	// launch (the form starts from that launch's own command) and when no
+	// faithful script exists (a MANUAL_DRAFT_UNAVAILABLE warning says so).
+	ManualCommandDraft string `json:"manual_command_draft,omitempty"`
+	// ManualCommandVariables are the prefixed variable names this draft's
+	// launches state, sorted: what a manual command may reference.
+	ManualCommandVariables []string `json:"manual_command_variables,omitempty"`
 	// YieldPolicyEligible says whether the draft may be created with a yield
 	// policy other than never (planning.DraftYieldPolicyRefusal), the check
 	// the create makes; absent until the draft's engine is known.
 	YieldPolicyEligible *Eligibility `json:"yield_policy_eligible,omitempty"`
+	// HealthCheckable says whether a deployment created from this draft can
+	// have a health check: the create's own rule applied to the contract the
+	// deployment will get, which for a template draft includes the operations
+	// the template declares. Absent until the draft's model is resolved.
+	HealthCheckable *bool `json:"health_checkable,omitempty"`
+	// PriorityScheduling says whether a deployment of this draft may run its
+	// engine with per-request priority scheduling, judged on the arguments
+	// the engine will receive; absent until the draft's engine is known.
+	PriorityScheduling *PrioritySchedulingEligibility `json:"priority_scheduling,omitempty"`
+}
+
+// PrioritySchedulingEligibility is whether a draft may turn on priority
+// scheduling. A refused draft carries the refusal (a
+// messages.ErrorPriorityScheduling* code with its parameters), and FixArgs
+// when adding those user arguments clears it (they override a template flag
+// the engine cannot combine with priority scheduling).
+type PrioritySchedulingEligibility struct {
+	OK      bool              `json:"ok"`
+	Refusal *messages.Warning `json:"refusal,omitempty"`
+	FixArgs []string          `json:"fix_args,omitempty"`
 }
 
 type GPUCandidates struct {
@@ -159,6 +188,10 @@ type GPUCandidate struct {
 	Index     int             `json:"index"`
 	Available bool            `json:"available"`
 	Reason    *ScheduleReason `json:"reason,omitempty"`
+	// Note is what choosing an available card entails (a schedule reason
+	// code: foreign_shared_card, the card shared with processes outside the
+	// platform); absent for a card with nothing to note.
+	Note *ScheduleReason `json:"note,omitempty"`
 }
 
 // EvaluatePD is the preview of a PD draft (ADR 0028).
@@ -230,16 +263,30 @@ type WeightSourceOption struct {
 }
 
 // PreflightCheck is one structural preflight judgement an evaluation answers
-// inline: the request-level rules (node count, duplicates, port) and each
-// named node's presence, online state and routable address. Deep network
-// probing stays with the preflight RPC.
+// inline: the request-level rules (node count, node list, port) and each
+// named node's presence and online state, then whether the nodes share a
+// network. Deep network probing stays with the preflight RPC.
+//
+// The shape is the ADR 0067 check result: ID names the check (lower_snake; a
+// per-node check repeats its ID with params.node), Status is one of
+// proto.CheckPass/Warn/Fail/Skip/NA, Code (UPPER_SNAKE) and Params say what
+// was found, Message is the English fallback. A check not run because an
+// earlier one failed is skip, and BlockedBy names that check. Evidence is
+// text the platform does not own (none today on this path) and is never the
+// message.
 type PreflightCheck struct {
-	Code    string         `json:"code,omitempty"`
-	Params  map[string]any `json:"params,omitempty"`
-	Message string         `json:"message,omitempty"`
+	ID        string         `json:"id"`
+	Status    string         `json:"status"`
+	Code      string         `json:"code"`
+	Params    map[string]any `json:"params,omitempty"`
+	Message   string         `json:"message,omitempty"`
+	Evidence  string         `json:"evidence,omitempty"`
+	BlockedBy []string       `json:"blocked_by,omitempty"`
 }
 
 // PreflightSummary is the inline preflight answer for a multi-node draft.
+// Checks lists every check, passing ones included; OK is true when none of
+// them failed.
 type PreflightSummary struct {
 	OK     bool             `json:"ok"`
 	Checks []PreflightCheck `json:"checks,omitempty"`

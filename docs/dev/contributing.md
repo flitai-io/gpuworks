@@ -27,7 +27,7 @@
 
 英文翻译保留原文的章节、步骤、限制和示例，不用摘要替代全文。术语优先匹配 GPUWorks 英文界面；
 翻译说明与图片替代文本，不改命令、路径、参数或示例值。现有中文截图可复用，但英文正文必须说明截图语言。
-源文档改变后复核对应译文，并更新 `docs-site/translations.json` 中已复核原文的 SHA-256；不能只刷新哈希而不检查译文。
+源文档改变后复核对应译文，再运行 `python3 docs-site/check_translations.py --write docs/<路径>.md` 把已复核原文的 SHA-256 记录到英文页末尾；不能只刷新哈希而不检查译文。
 运行 `python3 docs-site/check_translations.py` 检查过期译文与代码块；全站英文验收额外使用 `--require-complete`。
 
 ## 写作约定

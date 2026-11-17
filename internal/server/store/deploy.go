@@ -182,7 +182,7 @@ func (s *Store) SetModelInferenceConfig(id uint, operations, inputModalities str
 
 // ListModels returns models newest-first, optionally limited to repository IDs.
 func (s *Store) ListModels(sourceIDs ...string) ([]Model, error) {
-	query := s.db
+	query := s.reader()
 	if len(sourceIDs) > 0 {
 		ids := make([]string, len(sourceIDs))
 		for i, id := range sourceIDs {
@@ -652,6 +652,17 @@ func (s *Store) InstancesForDeployment(depID uint) ([]Instance, error) {
 	return is, err
 }
 
+// InstancesForDeployments lists the deployments' instances in the order
+// ListInstances and InstancesForDeployment share, newest first.
+func (s *Store) InstancesForDeployments(ids []uint) ([]Instance, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var is []Instance
+	err := s.reader().Where("deployment_id IN ?", ids).Order("id desc").Find(&is).Error
+	return is, err
+}
+
 // ListInstances returns all instances.
 func (s *Store) ListInstances() ([]Instance, error) {
 	var is []Instance
@@ -696,10 +707,7 @@ func (s *Store) updateInstanceStatus(inst *Instance, st proto.InstanceStatus) er
 		updates["state"] = st.State
 		updates["container_id"] = st.ContainerID
 		updates["message"] = st.Message
-		updates["runtime_failure"] = ""
-		if st.RuntimeFailure != nil {
-			updates["runtime_failure"] = string(mustJSON(st.RuntimeFailure))
-		}
+		updates["runtime_failure"] = storedRuntimeFailure(st.RuntimeFailure)
 		updates["phase"] = st.Phase
 		updates["progress"] = st.Progress
 		updates["bytes_done"] = st.BytesDone
@@ -838,6 +846,11 @@ func (s *Store) updateInstanceStatus(inst *Instance, st proto.InstanceStatus) er
 	if rowsAffected == 0 {
 		return nil
 	}
+	// The change is announced below, after more writes; a reader that trusts
+	// the instance generation must stop trusting it now (Bus.Advance).
+	if rolledBack || (st.State != "" && (prev != st.State || prevPhase != st.Phase || st.SleepLevel != prevSleep)) {
+		s.Bus.Advance("instance")
+	}
 	if sleepLevelChanged {
 		s.AddInstanceEventCode(inst, "sleep", instanceEventSleepResult, map[string]any{"result": "applied", "level": st.SleepLevel})
 	}
@@ -851,10 +864,10 @@ func (s *Store) updateInstanceStatus(inst *Instance, st proto.InstanceStatus) er
 	// of the phase it ends, so the timeline says more with twenty rows than the
 	// old one said with seventy thousand.
 	if st.State != "" && (prev != st.State || prevPhase != st.Phase) {
-		params := map[string]any{
+		params := withEventFailure(map[string]any{
 			"state": st.State, "phase": st.Phase, "detail": st.Message,
 			"progress": st.Progress, "bytes_done": st.BytesDone, "bytes_total": st.BytesTotal, "rate_bps": st.RateBPS,
-		}
+		}, st.RuntimeFailure)
 		s.addPhaseSummary(params, inst, prev, prevPhase)
 		s.AddInstanceEventCode(inst, "state", instanceEventStatusUpdated, params)
 		if prev != st.State && (st.State == proto.InstRunning || st.State == proto.InstStopped) {
@@ -896,21 +909,6 @@ func (s *Store) addPhaseSummary(params map[string]any, inst *Instance, prevState
 	if seconds := elapsed.Seconds(); seconds > 0 && inst.BytesDone > 0 {
 		params["prev_rate_bps"] = int64(float64(inst.BytesDone) / seconds)
 	}
-}
-
-// SetInstanceState updates just the state (server-driven transitions).
-func (s *Store) SetInstanceState(uuid, state, message string) error {
-	inst, err := s.InstanceByUUID(uuid)
-	if err != nil {
-		return err
-	}
-	if err := s.db.Model(&Instance{}).Where("id = ?", inst.ID).
-		Updates(map[string]any{"state": state, "message": message, "runtime_failure": ""}).Error; err != nil {
-		return err
-	}
-	s.AddInstanceEventCode(inst, "state", instanceEventStateChanged, map[string]any{"state": state, "detail": message})
-	s.Bus.PublishChange("instance", uuid, state)
-	return nil
 }
 
 // DeleteInstance removes an instance (after the agent confirms teardown).
@@ -994,9 +992,18 @@ func (s *Store) AddDeploymentEventCode(deploymentID uint, kind, code string, par
 func (s *Store) addEvent(ev *InstanceEvent, kind, code string, params map[string]any) {
 	params, cards := s.schedulingPlacement(code, ev.InstanceUUID, params)
 	if addEventTo(s.db, ev, kind, code, params) == nil {
+		if kind == EventKindSchedule {
+			s.scheduleEvents.Add(1)
+		}
 		s.observe(*ev, cards)
 	}
 }
+
+// ScheduleEventCount counts the scheduling events (placement refusals,
+// retries given up) this store has written. They publish nothing on the bus,
+// but a deployment list shows them: deployment.Lists reads the count to know
+// its rows are stale.
+func (s *Store) ScheduleEventCount() uint64 { return s.scheduleEvents.Load() }
 
 func addEventTo(tx *gorm.DB, ev *InstanceEvent, kind, code string, params map[string]any) error {
 	data, err := json.Marshal(params)
@@ -1083,56 +1090,6 @@ func (s *Store) scheduleEvent(deploymentID uint, order string) (InstanceEvent, b
 		return InstanceEvent{}, false, nil
 	}
 	return ev, err == nil, err
-}
-
-// DeleteEventsBefore trims the event table. Time and byte thresholds both apply
-// and whichever trips first wins: a burst of failures can outgrow a byte budget
-// long before it is old, and an old backlog can outlive its usefulness long
-// before it is large.
-func (s *Store) DeleteEventsBefore(cutoff time.Time, maxBytes int64) (int64, error) {
-	var deleted int64
-	if !cutoff.IsZero() {
-		res := s.db.Where("created_at < ?", cutoff.UTC()).Delete(&InstanceEvent{})
-		if res.Error != nil {
-			return deleted, res.Error
-		}
-		deleted += res.RowsAffected
-	}
-	if maxBytes <= 0 {
-		return deleted, nil
-	}
-	// SQLite has no cheap per-table byte counter, so the byte budget is enforced
-	// by trimming oldest-first until the estimated size fits. SUM over the text
-	// columns is the estimate; it ignores row overhead, which is irrelevant at
-	// the granularity this budget is set at (tens of gigabytes).
-	var total int64
-	if err := s.db.Model(&InstanceEvent{}).
-		Select("COALESCE(SUM(LENGTH(message) + LENGTH(data) + LENGTH(code)), 0)").
-		Scan(&total).Error; err != nil {
-		return deleted, err
-	}
-	for total > maxBytes {
-		var batch []InstanceEvent
-		if err := s.db.Order("id asc").Limit(500).Find(&batch).Error; err != nil {
-			return deleted, err
-		}
-		if len(batch) == 0 {
-			break
-		}
-		ids := make([]uint, 0, len(batch))
-		var freed int64
-		for i := range batch {
-			ids = append(ids, batch[i].ID)
-			freed += int64(len(batch[i].Message) + len(batch[i].Data) + len(batch[i].Code))
-		}
-		res := s.db.Where("id IN ?", ids).Delete(&InstanceEvent{})
-		if res.Error != nil {
-			return deleted, res.Error
-		}
-		deleted += res.RowsAffected
-		total -= freed
-	}
-	return deleted, nil
 }
 
 // ---- desired-state derivation (per node) ----

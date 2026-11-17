@@ -13,6 +13,8 @@ import shutil
 import unicodedata
 from pathlib import Path
 
+import translation_markers
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs"
@@ -359,7 +361,7 @@ def stage_english(english_source: Path) -> None:
         if relative == Path("README.md"):
             body = home_page("en")
         else:
-            body = source.read_text(encoding="utf-8")
+            body = translation_markers.strip(source.read_text(encoding="utf-8"))
             body = preserve_heading_ids((SOURCE / relative).read_text(encoding="utf-8"), body)
             title = first_heading(body, stem)
             body = rewrite_asset_links(rewrite_images(body), relative, "en")

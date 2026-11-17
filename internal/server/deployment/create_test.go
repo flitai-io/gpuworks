@@ -121,6 +121,33 @@ func TestKindOf(t *testing.T) {
 	}
 }
 
+// A launch rule reaches the form on the field it names, carried by
+// deploy.ParamError rather than read back out of its sentence.
+func TestEvaluatePutsLaunchRuleErrorsOnTheFieldTheyName(t *testing.T) {
+	s, _, modelID := createFixture(t)
+	for _, tc := range []struct {
+		name  string
+		req   dto.DeployRequest
+		field string
+	}{
+		{"unknown unset key", dto.DeployRequest{QuickParamsUnset: []string{"no_such_key"}}, "quick_params_unset"},
+		{"negative key", dto.DeployRequest{QuickParams: map[string]any{"max_num_seqs": -1}}, "max_num_seqs"},
+		{"cross-key rule", dto.DeployRequest{QuickParams: map[string]any{"max_num_batched_tokens": 8, "max_num_seqs": 64}}, "max_num_batched_tokens"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := tc.req
+			req.ModelID, req.Engine, req.Image, req.NodeUUID = modelID, "vllm", "example/vllm:test", "uc-node"
+			resp, err := s.Evaluate(context.Background(), dto.EvaluateRequest{DeployRequest: req})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.OK || len(resp.Errors) == 0 || resp.Errors[0].Field != tc.field || resp.Errors[0].Code != messages.ErrorFieldInvalid {
+				t.Fatalf("errors = %+v, want %s on %q", resp.Errors, messages.ErrorFieldInvalid, tc.field)
+			}
+		})
+	}
+}
+
 // Evaluate answers a draft's field errors in the preview rather than refusing
 // it, and refuses only what cannot be previewed at all.
 func TestEvaluateAnswersFieldErrorsInThePreview(t *testing.T) {

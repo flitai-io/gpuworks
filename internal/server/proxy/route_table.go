@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,10 @@ type routeSnapshot struct {
 	// of them may take a candidate out of routing, so it rebuilds at once
 	// (urgentOn).
 	running map[string]bool
+	// prioritized holds the running instances launched with the engine's
+	// priority scheduling, of deployments that ask for it: the gateway
+	// writes request priorities only to these.
+	prioritized map[string]bool
 }
 
 type routeDeployment struct {
@@ -274,6 +279,9 @@ func (r *routeTable) setOnRebuild(fn func(map[string]bool)) {
 }
 
 func (r *routeTable) build() (*routeSnapshot, error) {
+	// Read before the rows: a change committed while they are read moves the
+	// generation past this, and the candidates read as possibly stale.
+	routedAt := routingGeneration(r.store) + 1
 	deps, err := r.store.RoutingDeployments()
 	if err != nil {
 		return nil, err
@@ -303,6 +311,7 @@ func (r *routeTable) build() (*routeSnapshot, error) {
 	}
 	pdRunning := map[uint][]store.Instance{}
 	running := map[string]bool{}
+	prioritized := map[string]bool{}
 	for i := range insts {
 		in := &insts[i]
 		rd := byDep[in.DeploymentID]
@@ -311,6 +320,9 @@ func (r *routeTable) build() (*routeSnapshot, error) {
 		}
 		if in.State == proto.InstRunning {
 			running[in.UUID] = true
+			if rd.dep.PriorityScheduling && deploy.SpecRunsPriority(in.DesiredStateJSON) {
+				prioritized[in.UUID] = true
+			}
 		}
 		// A multi-node replica sleeps with its leader's engine: only the
 		// leader's intent and level say whether the replica is asleep, and a
@@ -339,7 +351,7 @@ func (r *routeTable) build() (*routeSnapshot, error) {
 		if nodeUUID == "" {
 			continue
 		}
-		c := candidate{instanceID: in.ID, instanceUUID: in.UUID, nodeUUID: nodeUUID, port: in.APIPort, modelName: instanceModelName(rd.dep, in), uuidHash: fnv64([]byte(in.UUID))}
+		c := candidate{instanceID: in.ID, instanceUUID: in.UUID, nodeUUID: nodeUUID, port: in.APIPort, modelName: instanceModelName(rd.dep, in), uuidHash: fnv64([]byte(in.UUID)), routedAt: routedAt}
 		if rd.pd != nil {
 			var ok bool
 			if c, ok = rd.pd.admit(in, c); !ok {
@@ -360,7 +372,7 @@ func (r *routeTable) build() (*routeSnapshot, error) {
 		serving = nil
 	}
 	r.resolveRequestStats(byDep)
-	return &routeSnapshot{builtAt: time.Now(), byName: byName, byID: byDep, nodeUUID: nodes, serving: serving, running: running}, nil
+	return &routeSnapshot{builtAt: time.Now(), byName: byName, byID: byDep, nodeUUID: nodes, serving: serving, running: running, prioritized: prioritized}, nil
 }
 
 // resolveRequestStats gives each routed deployment its request-stat rules,
@@ -432,6 +444,34 @@ func (r *routeTable) deployment(id uint) *routeDeployment {
 		return nil
 	}
 	return s.byID[id]
+}
+
+// servedNames are the served names of the current snapshot that some
+// deployment allow accepts routes under, each once, in name order. A
+// deployment the snapshot does not route (stopped, unreadable PD placement)
+// has none.
+func (r *routeTable) servedNames(allow func(deploymentID uint) bool) []string {
+	if r == nil {
+		return nil
+	}
+	s := r.current.Load()
+	if s == nil {
+		return nil
+	}
+	names := make([]string, 0, len(s.byName))
+	for name, deps := range s.byName {
+		if name == "" {
+			continue
+		}
+		for _, d := range deps {
+			if allow(d.id) {
+				names = append(names, name)
+				break
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (r *routeTable) snapshot(name string) ([]*routeDeployment, bool) {

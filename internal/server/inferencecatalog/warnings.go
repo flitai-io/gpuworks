@@ -1,8 +1,6 @@
 package inferencecatalog
 
 import (
-	"strings"
-
 	"gpuworks.ai/gpuworks/internal/engines"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/messages"
@@ -75,9 +73,16 @@ func specWarnings(modelID string, spec InferenceSpec) []*messages.ProductError {
 // sent the deployment's served name as is. It stays a warning: an adapter may
 // ignore the model, or the author may mean to pin the name.
 func fixedServedModelName(spec InferenceSpec) (string, bool) {
-	reference := "${" + placementeval.VarServedModelName + "}"
+	references := func(value string) bool {
+		for _, name := range placementeval.References(value) {
+			if placementeval.Canonical(name) == placementeval.VarServedModelName {
+				return true
+			}
+		}
+		return false
+	}
 	for _, values := range [][]string{spec.Args, spec.Entrypoint} {
-		if name, ok := deploy.LaunchFlag(values, "--served-model-name"); ok && !strings.Contains(name, reference) {
+		if name, ok := deploy.LaunchFlag(values, "--served-model-name"); ok && !references(name) {
 			return name, true
 		}
 	}

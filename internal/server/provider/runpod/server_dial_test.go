@@ -105,7 +105,7 @@ func TestServerDialUsesASpareExposedPortWithoutTouchingThePod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if listen != "0.0.0.0:18801" || address != "203.0.113.158:15756" || inst.SSHPort != 15755 || !strings.Contains(check.Detail, "container port 18801") {
+	if listen != "0.0.0.0:18801" || address != "203.0.113.158:15756" || inst.SSHPort != 15755 || !strings.Contains(checkText(check), "container port 18801") {
 		t.Fatalf("got %s %s %d %+v", listen, address, inst.SSHPort, check)
 	}
 	if len(api.patches) != 0 {
@@ -156,7 +156,7 @@ func TestServerDialExposesAPortAndWaitsForTheRestartedPod(t *testing.T) {
 	if string(got) != `["8888/http","18800/http","22/tcp","22/udp","18801/tcp"]` {
 		t.Fatalf("patched ports = %s", got)
 	}
-	if listen != "0.0.0.0:18801" || address != "203.0.113.158:15756" || inst.SSHPort != 15755 || !strings.Contains(check.Detail, "the pod restarted") {
+	if listen != "0.0.0.0:18801" || address != "203.0.113.158:15756" || inst.SSHPort != 15755 || !strings.Contains(checkText(check), "the pod restarted") {
 		t.Fatalf("got %s %s %d %+v", listen, address, inst.SSHPort, check)
 	}
 	if len(probed) != 2 || probed[0] != 10033 || probed[1] != 15755 {
@@ -225,7 +225,7 @@ func TestPlatformKeyLeftAloneWhenThePodHasItOrLogsIn(t *testing.T) {
 			d := newTestDriver(t, api.handler(t))
 			d.loginHook = func(context.Context, provider.Instance, provision.SSHAuth) error { return tc.login }
 			_, check, err := d.ensurePlatformKey(context.Background(), provider.Credentials{APIKey: "k"}, keyRequest("agent_dial", false))
-			if err != nil || check.Name != "" || len(api.patches) != 0 {
+			if err != nil || check.ID != "" || len(api.patches) != 0 {
 				t.Fatalf("err=%v check=%+v patches=%v", err, check, api.patches)
 			}
 		})
@@ -285,7 +285,7 @@ func TestPlatformKeyAddedWithConsentInOneEdit(t *testing.T) {
 	if env["PUBLIC_KEY"] != "ssh-ed25519 AAAAC3other me\n"+platformPublic || env["JUPYTER_PASSWORD"] != "jp" || string(ports) != `["22/tcp","22/udp","18800/tcp"]` {
 		t.Fatalf("edit = env %v ports %s", env, ports)
 	}
-	if inst.SSHPort != 15755 || check.Name != "Platform key (pod)" || !strings.Contains(check.Detail, "exposed container port 18800") {
+	if inst.SSHPort != 15755 || check.ID != "platform_key_provider" || !strings.Contains(checkText(check), "exposed container port 18800") {
 		t.Fatalf("instance port %d, check %+v", inst.SSHPort, check)
 	}
 	if logins[0] != "10033" || logins[len(logins)-1] != "15755" {
@@ -310,7 +310,7 @@ func TestPlatformKeyAtInstallOnlyForAPodLackingTheKey(t *testing.T) {
 			if ok != tc.ok || len(api.patches) != 0 {
 				t.Fatalf("ok=%v patches=%v", ok, api.patches)
 			}
-			if ok && (check.Status != "warn" || !strings.Contains(check.Detail, "restarts the pod")) {
+			if ok && (check.Status != "warn" || !strings.Contains(checkText(check), "restarts the pod")) {
 				t.Fatalf("check = %+v", check)
 			}
 		})

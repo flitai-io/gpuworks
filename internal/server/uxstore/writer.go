@@ -201,8 +201,8 @@ const insertReqSQL = `INSERT INTO %s (id, ts, deployment_id, instance_uuid, api_
 	body_bytes, images, dispatch_ms, first_byte_ms, first_think_ms, first_answer_ms, last_chunk_ms, end_ms,
 	events, think_events, max_gap_ms, status, outcome, finish_reason, usage, prompt_tokens, completion_tokens,
 	cached_tokens, reasoning_tokens, engine_queue_ms, engine_prefill_ms, engine_decode_ms, weight, trace_id,
-	pd_prefill_ms, pd_prefill_queue_ms, pd_prefill_compute_ms, pd_prefill_instance, pd_fallback)
-	VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+	pd_prefill_ms, pd_prefill_queue_ms, pd_prefill_compute_ms, pd_prefill_instance, pd_fallback, priority_class)
+	VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
 const upsertGridSQL = `INSERT INTO %s (bucket_ms, deployment_id, kind, x, y, n) VALUES (?,?,?,?,?,?)
 	ON CONFLICT (bucket_ms, deployment_id, kind, x, y) DO UPDATE SET n = n + excluded.n`
@@ -279,7 +279,7 @@ func (s *Store) writeBatch() (created []string, err error) {
 			r.Status, int(r.Outcome), r.FinishReason, r.Usage, r.PromptTokens, r.CompletionTokens,
 			r.CachedTokens, r.ReasoningTokens, r.EngineQueueMS, r.EnginePrefillMS, r.EngineDecodeMS,
 			r.Weight, traceBlob(r.Trace.Trace), pd.PrefillMS, pd.PrefillQueueMS, pd.PrefillComputeMS,
-			pd.PrefillInstance, pd.Fallback); err != nil {
+			pd.PrefillInstance, pd.Fallback, r.PriorityClass); err != nil {
 			return nil, fmt.Errorf("insert request: %w", err)
 		}
 	}

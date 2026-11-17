@@ -16,7 +16,7 @@ import (
 
 func validTestAccessKey(r *http.Request) bool {
 	date := r.Header.Get("Date")
-	when, err := time.Parse(time.RFC1123Z, date)
+	when, err := time.Parse("Mon, 02 Jan 2006 15:04:05 -07:00", date)
 	if err != nil || time.Since(when).Abs() > 15*time.Minute {
 		return false
 	}
@@ -87,7 +87,7 @@ func TestAccessKeyRequestsPreserveLocalTimezone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	date, err := time.Parse(time.RFC1123Z, req.Header.Get("Date"))
+	date, err := time.Parse("Mon, 02 Jan 2006 15:04:05 -07:00", req.Header.Get("Date"))
 	if err != nil {
 		t.Fatal(err)
 	}

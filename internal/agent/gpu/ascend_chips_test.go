@@ -217,7 +217,7 @@ func TestAscendProbeAsksAboutTheUnhealthyChip(t *testing.T) {
 	}
 	for _, g := range gpus {
 		flagged := g.Index == 7 || g.Index == 8
-		if flagged != (g.HealthCode == "vendor_health_warning") {
+		if flagged != (g.HealthCode == "VENDOR_HEALTH_WARNING") {
 			t.Errorf("gpu %d health code = %q", g.Index, g.HealthCode)
 		}
 	}

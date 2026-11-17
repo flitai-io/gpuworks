@@ -54,20 +54,17 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 			return false
 		}
 		if err == nil && !st.Exists {
-			e.failAfterContainer(ctx, spec, "container disappeared during startup")
+			e.failAfterContainer(ctx, spec, proto.RuntimeFailure{Code: proto.ErrorContainerDisappeared, Phase: proto.PhaseHealthCheck}, "container disappeared during startup")
 			return false
 		}
 		if err == nil && st.Exists && !st.Running {
-			msg := "container OOM-killed"
-			if !e.detectOOM(ctx, id, st) {
-				msg = e.exitMessage(ctx, id, fmt.Sprintf("container exited (code %d)", st.ExitCode))
-			}
-			e.failAfterContainer(ctx, spec, msg)
+			failure, msg := e.exitedFailure(ctx, id, st, proto.PhaseHealthCheck, "container OOM-killed", fmt.Sprintf("container exited (code %d)", st.ExitCode))
+			e.failAfterContainer(ctx, spec, failure, msg)
 			return false
 		}
 		req, err := engineHealthRequest(ctx, spec)
 		if err != nil {
-			e.failAfterContainer(ctx, spec, "invalid engine health endpoint")
+			e.failAfterContainer(ctx, spec, proto.RuntimeFailure{Code: proto.ErrorEngineHealthEndpointInvalid, Phase: proto.PhaseHealthCheck}, "invalid engine health endpoint")
 			return false
 		}
 		lastTarget = healthDiagnosticTarget(req.URL)
@@ -78,9 +75,9 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 			lastResult = fmt.Sprintf("HTTP %d", resp.StatusCode)
 			readiness, decodeErr := readEngineReadiness(resp)
 			if spec.Engine == engines.Callable && decodeErr == nil {
-				if failure := callableStartupFailure(resp, readiness); failure != "" {
+				if failure, message := callableStartupFailure(resp, readiness); message != "" {
 					if ctx.Err() == nil {
-						e.failAfterContainer(ctx, spec, failure)
+						e.failAfterContainer(ctx, spec, failure, message)
 					}
 					return false
 				}
@@ -117,7 +114,7 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 				// A healthy answer on the port may come from someone else's
 				// engine while ours is still loading weights.
 				if err := checkServesOwnModel(ctx, client, spec); err != nil {
-					e.failAfterContainer(ctx, spec, err.Error())
+					e.failAfterContainer(ctx, spec, failureOf(err, proto.ErrorEnginePortInUse, proto.PhaseHealthCheck), err.Error())
 					return false
 				}
 				e.log.Info("instance healthy", "uuid", spec.UUID, "port", spec.APIPort)
@@ -127,20 +124,21 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 					startupSeconds = &elapsed
 				}
 				e.mu.Lock()
-				doPrewarm := spec.Sleepable && spec.DesiredSleep == 0 && !e.prewarmed[spec.UUID]
+				process := e.processLocked(spec.UUID)
+				doPrewarm := spec.Sleepable && spec.DesiredSleep == 0 && !process.prewarmed
 				if doPrewarm {
-					e.prewarmed[spec.UUID] = true
+					process.prewarmed = true
 				}
 				e.mu.Unlock()
 				if doPrewarm {
 					e.reportState(spec, proto.InstOptimizing, id, "", "prewarming sleep")
 					if err := e.prewarmSleep(ctx, spec); err != nil {
-						e.failAfterContainer(ctx, spec, "sleep prewarm failed: "+err.Error())
+						e.failAfterContainer(ctx, spec, proto.RuntimeFailure{Code: proto.ErrorSleepPrewarmFailed, Phase: proto.PhaseHealthCheck, Detail: err.Error()}, "sleep prewarm failed: "+err.Error())
 						return false
 					}
 				}
 				e.mu.Lock()
-				actualSleep := e.sleepLevel[spec.UUID]
+				actualSleep := e.processOfLocked(spec.UUID).sleepLevel
 				e.mu.Unlock()
 				var measured json.RawMessage
 				if readLogs {
@@ -185,8 +183,10 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 		}
 	}
 	message := "health check timed out"
+	failure := proto.RuntimeFailure{Code: proto.ErrorEngineHealthTimeout, Phase: proto.PhaseHealthCheck}
 	if !lastObservedAt.IsZero() {
-		message += ": " + healthDiagnosticDetail(lastTarget, lastResult) + " observed_at=" + lastObservedAt.UTC().Format(time.RFC3339Nano)
+		failure.Detail = healthDiagnosticDetail(lastTarget, lastResult)
+		message += ": " + failure.Detail + " observed_at=" + lastObservedAt.UTC().Format(time.RFC3339Nano)
 	}
 	if ctx.Err() != nil {
 		return false
@@ -196,7 +196,8 @@ func (e *Engine) probeAndReportStartup(ctx context.Context, spec proto.InstanceD
 		elapsed := time.Since(healthStarted).Seconds()
 		measured, _ = json.Marshal(enginelog.Measured{StartupTimeoutSeconds: &elapsed})
 	}
-	e.failAfterContainer(ctx, spec, message, measured)
+	e.attachOutput(ctx, id, &failure)
+	e.failAfterContainer(ctx, spec, failure, message, measured)
 	return false
 }
 
@@ -226,21 +227,20 @@ func (e *Engine) probeHeadlessAndReport(ctx context.Context, spec proto.Instance
 			return false
 		}
 		if err == nil && !st.Exists {
-			e.failAfterContainer(ctx, spec, "headless worker disappeared during startup")
+			e.failAfterContainer(ctx, spec, proto.RuntimeFailure{Code: proto.ErrorContainerDisappeared, Phase: proto.PhaseHealthCheck}, "headless worker disappeared during startup")
 			return false
 		}
 		if err == nil && st.Exists {
 			if !st.Running || st.Health == "unhealthy" {
+				var failure proto.RuntimeFailure
 				var msg string
-				switch {
-				case e.detectOOM(ctx, id, st):
-					msg = "headless worker OOM-killed"
-				case st.Running && st.Health == "unhealthy":
-					msg = "headless worker is unhealthy"
-				default:
-					msg = e.exitMessage(ctx, id, fmt.Sprintf("headless worker exited (code %d)", st.ExitCode))
+				if st.Running && st.Health == "unhealthy" && !e.detectOOM(ctx, id, st) {
+					failure, msg = proto.RuntimeFailure{Code: proto.ErrorContainerUnhealthy, Phase: proto.PhaseHealthCheck}, "headless worker is unhealthy"
+					e.attachOutput(ctx, id, &failure)
+				} else {
+					failure, msg = e.exitedFailure(ctx, id, st, proto.PhaseHealthCheck, "headless worker OOM-killed", fmt.Sprintf("headless worker exited (code %d)", st.ExitCode))
 				}
-				e.failAfterContainer(ctx, spec, msg)
+				e.failAfterContainer(ctx, spec, failure, msg)
 				return false
 			}
 			stable++
@@ -261,7 +261,9 @@ func (e *Engine) probeHeadlessAndReport(ctx context.Context, spec proto.Instance
 		case <-time.After(interval):
 		}
 	}
-	e.failAfterContainer(ctx, spec, "headless worker readiness timed out")
+	failure := proto.RuntimeFailure{Code: proto.ErrorWorkerReadinessTimeout, Phase: proto.PhaseHealthCheck}
+	e.attachOutput(ctx, id, &failure)
+	e.failAfterContainer(ctx, spec, failure, "headless worker readiness timed out")
 	return false
 }
 
@@ -279,45 +281,6 @@ func (e *Engine) detectOOM(ctx context.Context, id string, st runtime.Status) bo
 	defer rc.Close()
 	b, err := io.ReadAll(io.LimitReader(rc, 256*1024))
 	return err == nil && (strings.Contains(string(b), "OutOfMemoryError") || strings.Contains(string(b), "CUDA out of memory"))
-}
-
-// exitTailLines is how much of a stopped container's output exitMessage
-// reads. A tensor-parallel vLLM prints each worker's traceback before the
-// engine core's and the API server's wrappers, so the root cause can sit a
-// few hundred lines above the end.
-const exitTailLines = 1000
-
-// exitMessage says why a container exited: a cause the output names in words
-// (enginelog.HumanizeStartupFailure), else base with what stopped it: its
-// dGPU memory limit when the interposer refused an allocation, else the
-// error the engine's failure began with (enginelog.RootCause, which looks
-// past "See root cause above" wrappers) - or "with no output" when it printed
-// nothing, which a full disk also produces. Removal deletes the output, so this is what is left of
-// it on the failed instance.
-func (e *Engine) exitMessage(ctx context.Context, id, base string) string {
-	rc, err := e.Driver().Logs(ctx, id, false, exitTailLines)
-	if err != nil {
-		return base
-	}
-	defer rc.Close()
-	data, err := io.ReadAll(io.LimitReader(rc, 512*1024))
-	if err != nil {
-		return base
-	}
-	text := string(data)
-	if human := enginelog.HumanizeStartupFailure(text); human != "" {
-		return human
-	}
-	if limit := enginelog.DGPULimitExceeded(text); limit != "" {
-		return base + ": " + limit
-	}
-	if last := enginelog.RootCause(text); last != "" {
-		return base + ": " + last
-	}
-	if strings.TrimSpace(text) == "" {
-		return base + " with no output"
-	}
-	return base
 }
 
 // collectMeasured reads recent container logs and parses the engine's real

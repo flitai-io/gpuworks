@@ -75,3 +75,6 @@ In this example, **Thinking** falls between the first generated token and the fi
 The search covers the last hour by default. If it shows **Nothing found**, click **Widen to the last 24 hours**. If the request still does not appear, check the ID, request time, and whether the record was saved. Request history has retention and sampling limits; a missing record does not prove that a request never occurred. See [Data Sources and Limitations in the Monitoring Guide](../how-to/monitor-and-logs.md#2-看请求视图与请求分布).
 
 **Completion criteria**: You can find your request in the service history and find the same record again by request ID. You can explain the relationship between waiting for the first token, answer generation, and total duration, and identify where most of the time goes based on the actual stages.
+
+<!-- translation-source-sha256: 6e582ef2a8658da1057336f4ee79f5a41179dbae69773cd0b753431027acc065 -->
+<!-- translation-localized-code-block: ef092705e802a3c2b5efba757885a4728f51cf78a1626fcf6dafa0d330f42a71 51273292cd140c06a4abb1450496b25a9397b1f06030de564aa066a69f02cc7f Reviewed English translation of the visible natural-language Playground prompt; the fenced text format and six requested sections are unchanged. -->

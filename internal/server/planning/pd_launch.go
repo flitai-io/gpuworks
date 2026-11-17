@@ -66,10 +66,14 @@ func (p *PDPlacement) RankLaunch(mode pdmode.Mode, role string, unit PDUnit, ran
 // Apply writes the rank's part into a launch request built from the
 // deployment: the rank's topology, port, GPUs and parallelism, the role's
 // launch configuration, the collective meeting point and the PD launch.
+// A rank's cards come only from the "gpus" of its unit or follower in the
+// placement document - the platform's unit picks and node replacements name
+// nodes, never cards - so cards there are the operator's choice and consent
+// to sharing them as the top-level "gpus" does (Placement.OperatorPinned).
 func (l PDRankLaunch) Apply(req *LaunchRequest) {
 	req.Topology, req.APIPort = l.Topology, l.APIPort
-	req.Placement = Placement{GPUIndexes: l.GPUIndexes, TP: l.TP, PP: l.PP}
-	req.Quick = deploy.PDRoleLaunchConfig(req.Quick, l.Role)
+	req.Placement = Placement{GPUIndexes: l.GPUIndexes, TP: l.TP, PP: l.PP, operatorChose: len(l.GPUIndexes) > 0}
+	req.Quick = deploy.PDRoleLaunchConfig(req.Engine, req.Quick, l.Role)
 	req.MasterAddr, req.MasterPort = l.MasterAddr, l.MasterPort
 	req.PD = l.PD
 }

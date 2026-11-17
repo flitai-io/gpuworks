@@ -59,3 +59,5 @@ a rank's topology has just one constructor, `planning.RankTopology`.
 - Upgrade compatibility: existing multi-node leaders without unit records claim units by matching nodes and rank counts, so running deployments are not rebuilt;
   old deployments whose reset count was exhausted have their budget recalculated from failed leader rows after upgrade.
 - Deployment forms differ only in how units are produced and in PD-specific launch arguments; a new form only needs to provide its units.
+
+<!-- translation-source-sha256: d342f5253882f1a81846c43ec436cd9a7693bf4ec5a8013373640cc4f94c1ef2 -->

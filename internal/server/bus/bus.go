@@ -129,14 +129,22 @@ func (b *Bus) Generation(topic string) uint64 {
 	return 0
 }
 
+// Advance moves topic's generation without delivering anything: a writer
+// that has committed a change it will publish only after more work calls it
+// right after the commit, so a cache that trusts the generation stops
+// trusting itself at once rather than when the event goes out.
+func (b *Bus) Advance(topic string) {
+	counter, ok := b.generations.Load(topic)
+	if !ok {
+		counter, _ = b.generations.LoadOrStore(topic, new(atomic.Uint64))
+	}
+	counter.(*atomic.Uint64).Add(1)
+}
+
 // Publish delivers an event to all interested subscribers. Never blocks.
 func (b *Bus) Publish(e Event) {
 	if e.Reason != ReasonProgress {
-		counter, ok := b.generations.Load(e.Topic)
-		if !ok {
-			counter, _ = b.generations.LoadOrStore(e.Topic, new(atomic.Uint64))
-		}
-		counter.(*atomic.Uint64).Add(1)
+		b.Advance(e.Topic)
 	}
 	b.mu.RLock()
 	defer b.mu.RUnlock()

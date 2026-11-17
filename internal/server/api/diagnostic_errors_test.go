@@ -16,7 +16,7 @@ import (
 func TestWriteErrorPreservesAdmissionDiagnosticsAndCause(t *testing.T) {
 	cause := errors.New("source test cause")
 	report := &dto.DiagnosticReport{Checks: []dto.DiagnosticCheck{{
-		ID: "source:7", Status: "failed", Message: dto.ProductMessage{
+		ID: "source:7", Status: "fail", Message: dto.ProductMessage{
 			Code: "MODEL_SOURCE_UNAVAILABLE", Params: map[string]any{"node_id": 7, "reason": "model_not_on_node"}, Message: "No complete model record on node",
 		},
 	}}}

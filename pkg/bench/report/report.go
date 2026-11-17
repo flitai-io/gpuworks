@@ -20,15 +20,18 @@ import (
 )
 
 type Run struct {
-	Error          string
-	Warmup         []loadgen.DetailRecord
-	ID             uint
-	Name           string
-	EvaluationURL  string
-	State          string
-	Mode           string
-	Model          string
-	TokenizerRef   string
+	Error         string
+	Warmup        []loadgen.DetailRecord
+	ID            uint
+	Name          string
+	EvaluationURL string
+	State         string
+	Mode          string
+	Model         string
+	TokenizerRef  string
+	// PriorityClass is the request priority class the run asked the gateway
+	// for, the configuration; each request's detail says the class it ran at.
+	PriorityClass  string
 	Dataset        json.RawMessage
 	Search         json.RawMessage
 	TargetSnapshot json.RawMessage
@@ -404,6 +407,9 @@ func runProperties(run Run, dataset datasetConfig, target targetSnapshot) [][2]s
 	properties := [][2]string{
 		{"State", run.State}, {"Mode", run.Mode}, {"Model", first(target.ServedName, target.Model, run.Model)},
 		{"Created", run.CreatedAt.UTC().Format(time.RFC3339)}, {"Workload", dataset.Kind},
+	}
+	if run.PriorityClass != "" {
+		properties = append(properties, [2]string{"Requested priority class", run.PriorityClass})
 	}
 	if run.Error != "" {
 		properties = append(properties, [2]string{"Failure diagnostic", run.Error})

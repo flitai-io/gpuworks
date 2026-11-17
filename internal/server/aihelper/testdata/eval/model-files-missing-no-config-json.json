@@ -48,7 +48,7 @@
     "(APIServer pid=1)    - For Hugging Face models: ensure the presence of a 'config.json'.",
     "(APIServer pid=1)    - For Mistral models: ensure the presence of a 'params.json'."
   ],
-  "expect_signature": "model_files_missing",
+  "expect_signature": "MODEL_FILES_MISSING",
   "expect_keywords": [
     [
       "config.json"

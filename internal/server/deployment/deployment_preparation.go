@@ -18,6 +18,10 @@ type ModelPreparation interface {
 	ModelCopyObservation(file *store.ModelFile) (proto.ModelFileStatus, bool)
 	CachePhase(ref store.FileRef) string
 	PreparationNodes(dep *store.Deployment) []uint
+	// PreparationGeneration counts the changes of what PreparationNodes
+	// answers. The choice is in memory and no change of it is announced, so
+	// a snapshot that keeps states across reads (Lists) compares it.
+	PreparationGeneration() uint64
 	// RetryCacheCopy restarts a failed cache copy (controller.RetryCacheCopy).
 	RetryCacheCopy(ctx context.Context, ref store.FileRef) error
 }
@@ -154,11 +158,19 @@ func (l StoreRows) ModelSource(id uint, node *store.Node, rules store.SourceRule
 }
 
 func (l *ListRows) ModelSource(id uint, node *store.Node, rules store.SourceRules) store.ModelSource {
+	if l.fresh != nil {
+		return l.fresh.sources.Source(id, node.ID, rules)
+	}
 	return l.sources.Source(id, node.ID, rules)
 }
 
-func (l *ListRows) loadPreparationSources(deployments []store.Deployment, files []store.ModelFile) error {
+func (l *ListRows) loadPreparationSources(deployments []store.Deployment, files []store.ModelFile, everyNode bool) error {
 	nodeIDs := map[uint]bool{}
+	if everyNode {
+		for id := range l.nodes {
+			nodeIDs[id] = true
+		}
+	}
 	for i := range deployments {
 		for _, id := range l.PreparationNodes(&deployments[i]) {
 			nodeIDs[id] = true

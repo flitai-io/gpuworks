@@ -292,7 +292,7 @@ func TestAMDInventoryRejectsMultipleRenderNodes(t *testing.T) {
 		return original(pattern)
 	}
 	gs, err := p.Probe(context.Background())
-	if err != nil || len(gs) != 1 || gs[0].Healthy || gs[0].HealthCode != "driver_init_failed" || !strings.Contains(gs[0].HealthMessage, "requires exactly one render node") {
+	if err != nil || len(gs) != 1 || gs[0].Healthy || gs[0].HealthCode != "DRIVER_INIT_FAILED" || !strings.Contains(gs[0].HealthMessage, "requires exactly one render node") {
 		t.Fatalf("ambiguous render inventory = %+v, %v", gs, err)
 	}
 	if p.Available() {
@@ -308,7 +308,7 @@ func TestAMDDuplicateIdentityDegradesEveryMatchingCard(t *testing.T) {
 	f["/sys/class/drm/card4/device/mem_info_vram_total"] = "8589934592"
 	gs, err := testAMD(f).Probe(context.Background())
 	if err != nil || len(gs) != 2 || gs[0].Healthy || gs[1].Healthy ||
-		gs[0].HealthCode != "runtime_unusable" || gs[1].HealthCode != "runtime_unusable" {
+		gs[0].HealthCode != "RUNTIME_UNUSABLE" || gs[1].HealthCode != "RUNTIME_UNUSABLE" {
 		t.Fatalf("duplicate identity was not rejected for all rows: %v %v", gs, err)
 	}
 }
@@ -343,7 +343,7 @@ func TestAMDHostRootUsesRealFilesystemOperations(t *testing.T) {
 		t.Fatal("AMD compute backend must not be auto-selected without a usable KFD device")
 	}
 	gs, err := p.Probe(context.Background())
-	if err != nil || len(gs) != 1 || gs[0].UUID != "amd-1234" || gs[0].MemoryTotalBytes != 4294967296 || gs[0].Healthy || gs[0].HealthCode != "driver_init_failed" {
+	if err != nil || len(gs) != 1 || gs[0].UUID != "amd-1234" || gs[0].MemoryTotalBytes != 4294967296 || gs[0].Healthy || gs[0].HealthCode != "DRIVER_INIT_FAILED" {
 		t.Fatalf("real host-root probe = %v, %v", gs, err)
 	}
 }

@@ -165,6 +165,10 @@ func (n *NodeRuntime) rpcFSStat(params json.RawMessage) (any, error) {
 		return nil, fmt.Errorf("path is required")
 	}
 	info, err := os.Stat(p.Path)
+	if errors.Is(err, fs.ErrNotExist) {
+		// Same sentence os.Stat writes, plus the code the server reads.
+		return nil, &proto.RPCError{Code: proto.ErrorPathNotFound, Message: err.Error(), Params: map[string]any{"path": p.Path}}
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,19 @@
 package dto
 
-import "time"
+import (
+	"time"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/pkg/localization"
+)
+
+// PlatformResource is one kind of machine a platform hands over (vm,
+// container, host, kubernetes), with the vendor's product name for it when it
+// has one (ECS, ACK).
+type PlatformResource struct {
+	Type    string `json:"type"`
+	Product string `json:"product,omitempty"`
+}
 
 // KubeCluster is a Kubernetes cluster whose GPU nodes join through one
 // DaemonSet. ApplyCommand carries the enrollment token and is present for
@@ -45,6 +58,15 @@ type KubeCluster struct {
 	// stalled_after_seconds (GET /kube/defaults), so it is worth looking at
 	// why. Never for a revoked cluster or one a node joined.
 	Stalled bool `json:"stalled"`
+	// State is where the entry stands, the one value a client shows and
+	// filters by: revoked, stalled (no node joined for too long), pending (no
+	// node yet) or active (a node joined).
+	State string `json:"state"`
+	// Category is the platform type the entry is listed under when it was
+	// connected on its own, and Resources what it connects (the kubernetes
+	// entry of GET /providers/kinds categories).
+	Category  string             `json:"category"`
+	Resources []PlatformResource `json:"resources"`
 	// CanApply and CanRemove say whether the server can apply the manifest
 	// to the cluster, or take it out again (POST .../apply, .../remove).
 	// OperationBlocked is why not: no_source (made by hand, so the server has
@@ -144,6 +166,39 @@ type KubeClusterRequest struct {
 // cluster holds.
 type KubeClusterPoolsRequest struct {
 	ProviderPoolIDs []string `json:"provider_pool_ids"`
+	// ConfirmDropInstances accepts that nodes this change leaves out of the
+	// entry's selection still run instances, and that those instances are
+	// asked to stop first (see KubeSelectionDrop).
+	ConfirmDropInstances bool `json:"confirm_drop_instances,omitempty"`
+}
+
+// KubeClusterPools is the answer to a node pools change: the entry as stored
+// (the fields of KubeCluster, at the top level as before) and the instances
+// that were asked to stop because their nodes left the selection.
+type KubeClusterPools struct {
+	KubeCluster
+	StoppedInstances []KubeStoppedInstance `json:"stopped_instances"`
+}
+
+// KubeStoppedInstance is an instance a confirmed change of an entry's node
+// selection asked to stop, because its node leaves the selection. The stop is
+// requested, not finished: the agent keeps running until the manifest is
+// applied again.
+type KubeStoppedInstance struct {
+	InstanceUUID string `json:"instance_uuid"`
+	Deployment   string `json:"deployment"`
+	NodeUUID     string `json:"node_uuid"`
+}
+
+// KubeSelectionDrop is a node a narrower node selection would leave out while
+// it still runs instances, as the 409 KUBE_SELECTION_DROPS_INSTANCES lists
+// them: its agent is removed when the manifest is applied again, and the
+// instances keep running there unmanaged.
+type KubeSelectionDrop struct {
+	NodeUUID    string   `json:"node_uuid"`
+	NodeName    string   `json:"node_name"`
+	KubeNode    string   `json:"kube_node"`
+	Deployments []string `json:"deployments"`
 }
 
 // KubeEnrollRequest is what an agent of a cluster's DaemonSet sends to trade
@@ -172,15 +227,21 @@ type KubeClusterSource struct {
 // ProviderCluster is a managed Kubernetes cluster in a cloud account
 // (provider.Cluster) and the entry made from it, if any.
 type ProviderCluster struct {
-	ExternalID string                `json:"external_id"`
-	Name       string                `json:"name"`
-	Region     string                `json:"region"`
-	Version    string                `json:"version"`
-	State      string                `json:"state"`
-	Running    bool                  `json:"running"`
-	PublicAPI  bool                  `json:"public_api"`
-	GPUPools   []ProviderClusterPool `json:"gpu_pools"`
-	Entry      *KubeClusterRef       `json:"entry,omitempty"`
+	ExternalID string `json:"external_id"`
+	Name       string `json:"name"`
+	// Connectable: the cluster runs, has GPU node pools and no entry yet, so an entry can be made from it.
+	Connectable bool   `json:"connectable"`
+	Region      string `json:"region"`
+	Version     string `json:"version"`
+	// Type is the vendor's product the cluster is (provider.ClusterType…)
+	// and TypeLabel its name; both absent when the driver cannot tell.
+	Type      string                `json:"type,omitempty"`
+	TypeLabel localization.Text     `json:"type_label,omitempty"`
+	State     string                `json:"state"`
+	Running   bool                  `json:"running"`
+	PublicAPI bool                  `json:"public_api"`
+	GPUPools  []ProviderClusterPool `json:"gpu_pools"`
+	Entry     *KubeClusterRef       `json:"entry,omitempty"`
 	// AgentImageSource is the registry an entry made from the cluster pulls
 	// the published agent image from unless the request names another: the
 	// one its region reaches.
@@ -261,6 +322,10 @@ type KubeClusterUpdate struct {
 	IdleReturnSeconds *int    `json:"idle_return_seconds,omitempty"`
 	Priority          *int    `json:"priority,omitempty"`
 	AllowPreemption   *bool   `json:"allow_preemption,omitempty"`
+	// ConfirmDropInstances accepts that nodes a narrower node_selector leaves
+	// out still run instances (see KubeSelectionDrop), and that those
+	// instances are asked to stop first; it is not a setting of the entry.
+	ConfirmDropInstances bool `json:"confirm_drop_instances,omitempty"`
 }
 
 // KubeClusterEdit is the answer to an edit: the entry as stored, the fields
@@ -279,4 +344,11 @@ type KubeClusterEdit struct {
 	// administrators of an entry made by hand that is not revoked; empty
 	// when the manifest did not change.
 	Commands []string `json:"commands"`
+	// StoppedInstances are the instances a confirmed narrower node_selector
+	// asked to stop because their nodes leave the selection; empty when none.
+	StoppedInstances []KubeStoppedInstance `json:"stopped_instances"`
+	// Warnings are what the edit allowed but the administrator should know,
+	// such as engine_ports leaving the ports running instances hold outside
+	// the new range (KUBE_ENGINE_PORTS_OUTSIDE); empty when none.
+	Warnings []messages.Warning `json:"warnings"`
 }

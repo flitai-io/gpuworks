@@ -101,6 +101,7 @@ func TestCatalogWarningsFlagCallableFixedServedName(t *testing.T) {
 		{name: "literal in entrypoint", engine: "callable", args: []string{"--port", "${API_PORT}"},
 			entrypoint: []string{"vllm", "serve", "--served-model-name", "glm53"}, want: "glm53"},
 		{name: "platform variable", engine: "callable", args: []string{"--port", "${API_PORT}", "--served-model-name", "${SERVED_MODEL_NAME}"}},
+		{name: "prefixed platform variable", engine: "callable", args: []string{"--port", "${GPUWORKS_API_PORT}", "--served-model-name", "${GPUWORKS_SERVED_MODEL_NAME}"}},
 		{name: "no model name", engine: "callable", args: []string{"--port", "${API_PORT}"}},
 		{name: "vllm rewrites", engine: "vllm", args: []string{"--served-model-name", "glm53"}},
 	} {

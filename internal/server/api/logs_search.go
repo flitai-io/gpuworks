@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // Log severity levels accepted by the logs API; the filter is >= semantics
@@ -334,5 +335,5 @@ func (a *apiHandlers) writeLogQueryError(w http.ResponseWriter, err error) {
 	if a.d.Log != nil {
 		a.d.Log.Error("log query failed", "error", err)
 	}
-	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "log query failed"})
+	writeProductError(w, http.StatusInternalServerError, messages.ErrorInternal, "log query failed", nil)
 }

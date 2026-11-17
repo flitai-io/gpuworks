@@ -100,19 +100,23 @@ func (a *aiService) logAnswer(task string, res aihelper.Result, err error) {
 	a.log.Info("ai answer", attrs...)
 }
 
-// InstanceFindings runs the known-failure table over a failed instance's
-// logs. It needs no LLM, so it is what the UI shows first - and all it shows
-// when no endpoint is configured.
+// InstanceFindings is the known failures a failed instance shows: the causes
+// its agent reported with the failure, or, for an agent that predates them,
+// what the known-failure table finds in its logs. It needs no LLM, so it is
+// what the UI shows first - and all it shows when no endpoint is configured.
 func (a *aiService) InstanceFindings(instanceUUID string) ([]aihelper.Finding, error) {
 	in, err := a.store.InstanceByUUID(instanceUUID)
 	if err != nil {
 		return nil, err
 	}
+	if failure := in.Failure(); failure != nil {
+		return aihelper.Findings(failure, nil), nil
+	}
 	logs, err := a.seedLogs(instanceUUID)
 	if err != nil {
 		return nil, err
 	}
-	return aihelper.Match(findingLines(in.Message, logs)), nil
+	return aihelper.Findings(nil, findingLines(in.Message, logs)), nil
 }
 
 // ModelFit is the estimator's fit of a model on the online fleet.

@@ -71,6 +71,19 @@ func TestServerBuildInfoRequiresExactPublicationIdentity(t *testing.T) {
 	}
 }
 
+func TestViewingAnotherChannelPreservesTheVerifiedRunningIdentity(t *testing.T) {
+	setBuildInfoVersion(t, "v1.2.3", buildInfoCommit, buildInfoDate, "release")
+	a := &apiHandlers{}
+	stable := a.runningBuildInfo(version.Version, verifiedBuildInfoIndex(version.Version, "release"))
+	if stable.Kind != "stable" {
+		t.Fatal(stable)
+	}
+	other := a.runningBuildInfo(version.Version, verifiedBuildInfoIndex("b1234567", "nightly"))
+	if other != stable {
+		t.Fatalf("channel switch changed the running build: %+v", other)
+	}
+}
+
 func TestServerBuildInfoDoesNotInferPublicationFromBuildLabels(t *testing.T) {
 	for _, tt := range []struct{ version, commit, date, channel, kind string }{
 		{"v1.2.3", buildInfoCommit, buildInfoDate, "release", "unknown"},

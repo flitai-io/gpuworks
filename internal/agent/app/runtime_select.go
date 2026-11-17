@@ -39,10 +39,14 @@ import (
 // disturbed, and says it is ready until then.
 
 // runtimeFallback is a runtime auto-detection passed over, and why: a code
-// from accelerator.RuntimeGPUBlocked*, or accelerator.RuntimeGPUReady once
-// it can serve after all. The zero value is no fallback.
+// from accelerator.RuntimeGPUBlocked*, proto.RuntimeFallback*, or
+// accelerator.RuntimeGPUReady once it can serve after all. socket is what
+// the agent found about the socket it was refused, with
+// proto.RuntimeFallbackSocketPermissionDenied only. The zero value is no
+// fallback; a value, so a recheck that finds the same compares equal.
 type runtimeFallback struct {
 	from, reason string
+	socket       proto.RuntimeSocketDenial
 }
 
 // runtimeSelection is what detectDriver chose. unanswered is set when the
@@ -77,11 +81,17 @@ func (c *runtimeChoice) get() (bool, runtimeFallback) {
 }
 
 // RuntimeFallback is the runtime auto-detection passed over and the code
-// saying why, both "" when it passed over none. The status report carries
-// it; the minute-level watch (watchRuntimeFallback) keeps it current.
-func (n *NodeRuntime) RuntimeFallback() (from, reason string) {
+// saying why, both "" when it passed over none, and with
+// proto.RuntimeFallbackSocketPermissionDenied what the agent found about
+// the socket (nil otherwise). The status report carries it; the
+// minute-level watch (watchRuntimeFallback) keeps it current.
+func (n *NodeRuntime) RuntimeFallback() (from, reason string, socket *proto.RuntimeSocketDenial) {
 	_, fallback := n.runtimeChoice.get()
-	return fallback.from, fallback.reason
+	if fallback.reason == proto.RuntimeFallbackSocketPermissionDenied {
+		denial := fallback.socket
+		socket = &denial
+	}
+	return fallback.from, fallback.reason, socket
 }
 
 // driverUnavailableOn says why a forced driver cannot run on goos, or "".
@@ -179,6 +189,19 @@ func detectDriverWaiting(log *slog.Logger, baseDir, force string, prober gpu.Pro
 			ok, err = waitForDaemon(ctx, log, driver, err, wait)
 		}
 		if !ok {
+			var denied *runtime.SocketDeniedError
+			if errors.As(err, &denied) {
+				socket := runtime.DescribeSocketDenial(ctx, denied.Socket)
+				socket.Supervisor, socket.StateDir = agentSupervisor(baseDir), baseDir
+				log.Warn("runtime driver passed over: the agent's account may not open its daemon socket",
+					"driver", driver.Name(), "err", err, "socket", socket.Socket, "group", socket.Group, "gid", socket.GID,
+					"account", socket.Account, "same_name_gid", socket.SameNameGID, "group_held", socket.GroupHeld,
+					"restart_pending", socket.RestartPending)
+				if fallback.from == "" {
+					fallback = runtimeFallback{from: driver.Name(), reason: proto.RuntimeFallbackSocketPermissionDenied, socket: socket}
+				}
+				continue
+			}
 			if errors.Is(err, runtime.ErrDaemonNotReady) {
 				log.Warn("runtime driver passed over: its daemon is installed but not answering; rechecking every minute",
 					"driver", driver.Name(), "err", err)
@@ -201,6 +224,8 @@ func detectDriverWaiting(log *slog.Logger, baseDir, force string, prober gpu.Pro
 		switch {
 		case fallback.reason == proto.RuntimeFallbackDaemonNotReady:
 			label = fmt.Sprintf("%s (%s daemon not answering)", driver.Name(), fallback.from)
+		case fallback.reason == proto.RuntimeFallbackSocketPermissionDenied:
+			label = fmt.Sprintf("%s (%s socket %s: permission denied for %s)", driver.Name(), fallback.from, fallback.socket.Socket, fallback.socket.Account)
 		case fallback.from != "":
 			label = fmt.Sprintf("%s (%s cannot use the accelerators: %s)", driver.Name(), fallback.from, fallback.reason)
 		}
@@ -357,7 +382,7 @@ func (n *NodeRuntime) applyAutoRuntime(ctx context.Context, idleOnly bool) error
 		}
 		if idleOnly && n.engine != nil && !n.engine.Idle() {
 			if fallback.from != "" && strings.EqualFold(fallback.from, selection.driver.Name()) && fallback.reason != accelerator.RuntimeGPUReady {
-				n.log.Info("runtime driver can use the accelerators now; switching once no instance runs",
+				n.log.Info("passed-over runtime driver is usable now; switching once no instance runs",
 					"driver", selection.driver.Name(), "current", current.Name())
 				fallback.reason = accelerator.RuntimeGPUReady
 			}
@@ -374,7 +399,7 @@ func (n *NodeRuntime) applyAutoRuntime(ctx context.Context, idleOnly bool) error
 		n.log.Info("runtime driver switched by auto-detection", "from", current.Name(), "to", selection.driver.Name())
 	}
 	if selection.fallback != before && selection.fallback.from != "" {
-		n.log.Warn("runtime driver passed over: it cannot give containers this node's accelerators",
+		n.log.Warn("runtime driver passed over",
 			"driver", selection.fallback.from, "reason", selection.fallback.reason, "using", selection.driver.Name())
 	}
 	return nil
@@ -405,6 +430,15 @@ func (n *NodeRuntime) watchRuntimeFallback(ctx context.Context) {
 // runtime and either runs on a fallback or its runtime cannot use the cards
 // (it lost them after detection, or could not be asked then). A runtime
 // that serves the node needs no second look.
+//
+// A socket the agent's account was refused is rechecked as well, though
+// adding the account to the group cannot reach this process (its groups
+// were fixed when it started): the socket may be opened another way (its
+// mode or group changed, an ACL), and the round notices when the account
+// database lists the account in the group, which turns the notice into
+// "restart the agent" (RuntimeSocketDenial.RestartPending). The round costs
+// a `docker info` and two `id` calls, and an unchanged finding compares
+// equal, so it is neither logged nor reported as a change.
 func (n *NodeRuntime) recheckRuntimeFallback(ctx context.Context) {
 	auto, fallback := n.runtimeChoice.get()
 	if !auto || n.engine == nil {

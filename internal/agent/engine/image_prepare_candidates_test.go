@@ -323,7 +323,10 @@ func TestLegacyDesiredStateIsPulledAsListed(t *testing.T) {
 }
 
 func TestLocalDiskExhaustionDoesNotFallBackOrBlameImageSources(t *testing.T) {
-	driver := &imageToleranceDriver{present: map[string]bool{}, pullErrs: map[string]error{"a.example/r:1": errTest("write /var/lib/docker/tmp/blob: no space left on device")}}
+	driver := &imageToleranceDriver{present: map[string]bool{}, pullErrs: map[string]error{
+		// As the docker driver returns it: the CLI's output, marked where the CLI ran.
+		"a.example/r:1": runtime.MarkPullFailure(errTest("write /var/lib/docker/tmp/blob: no space left on device"), runtime.ErrNoSpace),
+	}}
 	statuses := startWith(t, driver, proto.InstanceDesiredState{
 		Image:               "a.example/r:1",
 		ImagePullCandidates: []proto.ImagePullCandidate{{Ref: "a.example/r:1"}, {Ref: "b.example/r:1"}},

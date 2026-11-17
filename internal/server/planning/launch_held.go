@@ -38,7 +38,7 @@ type HeldBy struct {
 // shares, and one that shares only when a holder does not yield to it (else
 // launchYield has it). Holders' policies come from the cached sharing
 // deployments; only the names of the ones that never yield are read, by id.
-func launchHeld(st *store.Store, node *store.Node, insts []store.Instance, launching uint, policy string, req scheduler.Request, dtypeOK bool, dtypeReason string, servingUnavailable bool, view ledgerView) *LaunchHeld {
+func launchHeld(st *store.Store, node *store.Node, insts []store.Instance, launching uint, policy string, req scheduler.Request, dtypeOK bool, dtypeReason string, view ledgerView) *LaunchHeld {
 	if st == nil {
 		return nil
 	}
@@ -62,7 +62,6 @@ func launchHeld(st *store.Store, node *store.Node, insts []store.Instance, launc
 	}
 	view.alsoAsleep = func(in *store.Instance) bool { return asleep[in.UUID] }
 	snap := nodeSnapshot(st, node, dtypeOK, dtypeReason, view)
-	snap.ServingUnavailable = servingUnavailable
 	result := scheduler.Schedule(req, snap)
 	if !result.OK || result.Plan == nil {
 		return nil

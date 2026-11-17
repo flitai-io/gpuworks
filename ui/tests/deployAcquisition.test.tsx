@@ -90,7 +90,7 @@ test("deployment evaluation renders startup fixed memory and the informational K
   assert.ok(screen.getByText("dGPU limit 16.0 GiB"));
   assert.ok(screen.getByText(/Startup fixed memory is about/));
   assert.ok(screen.getByText("Minimum startup requirement: 10.0 GiB"));
-  assert.equal(screen.queryByText(/Actual measured usage/), null);
+  assert.equal(screen.queryByText(/^Used [\d.]+ GiB/), null);
   assert.ok(screen.getByText(/KV pool 4\.0 GiB · estimated/));
   assert.equal(screen.queryByText(/Insufficient VRAM/), null);
 });
@@ -181,7 +181,10 @@ test("measured VRAM view reports actual measured usage instead of startup estima
     total_bytes: 10 * 1024 ** 3, actual_total_bytes: 99 * 1024 ** 3,
     grade: "exact", tensor_parallel: 1, max_model_len: 4096, source: "measured", fits: true,
   }} measured={{ ModelWeightsGiB: 8, KVCacheGiB: 2, KVCacheTokens: 1000, GraphCaptureGiB: 1, MaxConcurrency: 1, NumGPUBlocks: 1, Found: true }} /></I18nextProvider>);
-  assert.ok(screen.getByText("Actual measured usage: 11.0 GiB"));
+  assert.ok(screen.getByText(deployLocale.vram.actualTotal.replace("{{value}}", "11.0")));
+  assert.equal(screen.getAllByText(/11\.0 GiB/).length, 1, "the measured total belongs in the summary once");
+  assert.equal(screen.queryByText(deployLocale.vram.measured), null, "the calibration badge already identifies the measured bar");
+  assert.ok(screen.getByText(/KV pool 2\.0 GiB · 1,000 tokens/));
   assert.equal(screen.queryByText(/Minimum startup requirement/), null);
 });
 
@@ -254,3 +257,29 @@ test("before the first evaluation the image row explains that it is still checki
   assert.equal(screen.getAllByText(text("loading")).length, 1);
   assert.equal(screen.queryByText(text("weightTitle")), null);
 });
+
+for (const language of ["en", "zh"] as const) {
+  test(`an unverified engine argument is a localized non-blocking warning in ${language}`, async () => {
+    const locale = JSON.parse(fs.readFileSync(new URL(`../src/i18n/locales/${language}/deploy.json`, import.meta.url), "utf8"));
+    const localized = createInstance();
+    await localized.use(initReactI18next).init({
+      lng: language, fallbackLng: language,
+      resources: { [language]: { deploy: locale } }, defaultNS: "deploy",
+      interpolation: { escapeValue: false },
+    });
+    render(<I18nextProvider i18n={localized}><Form><DeployStepSummary result={{
+      ok: true,
+      warnings: [{ code: "EXTRA_ARGS_ENGINE_UNVERIFIED", params: {
+        flag: "--cpu-offload-gb", engine: "sglang", documented_engine: "vllm",
+      } }],
+    } as never} error={null} loading={false} /></Form></I18nextProvider>);
+    const warning = screen.getByRole("alert");
+    assert.ok(warning.classList.contains("ant-alert-warning"));
+    assert.match(warning.textContent ?? "", /--cpu-offload-gb/);
+    assert.match(warning.textContent ?? "", /sglang/);
+    assert.match(warning.textContent ?? "", /vllm/);
+    assert.doesNotMatch(warning.textContent ?? "", /EXTRA_ARGS_ENGINE_UNVERIFIED|\{\{/);
+    assert.match(warning.textContent ?? "", language === "en" ? /passed through unchanged/ : /原样传递/);
+    assert.equal(document.querySelector(".ant-alert-error"), null);
+  });
+}

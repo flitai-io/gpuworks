@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"gorm.io/gorm"
@@ -112,7 +113,7 @@ func TestInstanceRuntimeFailureLifecycleAndOldAgent(t *testing.T) {
 		}
 		if tc.want {
 			var got proto.RuntimeFailure
-			if json.Unmarshal([]byte(in.RuntimeFailure), &got) != nil || got != *failure {
+			if json.Unmarshal([]byte(in.RuntimeFailure), &got) != nil || !reflect.DeepEqual(got, *failure) {
 				t.Fatalf("snapshot=%s", in.RuntimeFailure)
 			}
 		}

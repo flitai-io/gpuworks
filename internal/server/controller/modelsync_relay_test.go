@@ -34,7 +34,7 @@ func TestModelSyncRelayPermissionAndTransportEvidence(t *testing.T) {
 			c := New(st, hub, slog.New(slog.NewJSONHandler(&logs, nil)))
 			key := store.ModelFileKey(mf.ID)
 			run := &modelSyncRun{transferID: transfer, cancel: func() {}}
-			c.modelSyncs[key] = run
+			c.syncs.register(key, run)
 			c.runModelSync(context.Background(), key, run, peerSource{node: source, path: "/models/Qwen3", sizeBytes: 12}, target, mf, netplan.StoragePath{})
 			c.clearModelSync(key, run)
 			if len(hub.requests) != 1 || hub.requests[0].AllowRelay == disabled {

@@ -57,7 +57,7 @@
     "(APIServer pid=1) Make sure to have access to it at https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct.",
     "(APIServer pid=1) 401 Client Error. (Request ID: Root=1-6706a1b2-0000000000000000000000)"
   ],
-  "expect_signature": "hf_download_failed",
+  "expect_signature": "HF_DOWNLOAD_FAILED",
   "expect_keywords": [
     [
       "HF_TOKEN",

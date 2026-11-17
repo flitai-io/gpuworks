@@ -10,6 +10,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/batch"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/priority"
 )
 
 // batchConsole is the console's side of the Batch API (api.BatchService) over
@@ -108,6 +109,7 @@ func (c batchConsole) Dictionary() (dto.BatchDictionary, error) {
 		MaxFileBytes:          d.MaxFileBytes, MaxFileLines: d.MaxFileLines, Statuses: d.Statuses,
 		OutputRetentionDays: int(d.OutputRetention / (24 * time.Hour)),
 		Models:              make([]dto.BatchModel, 0, len(d.Models)),
+		PriorityClass:       priority.Batch,
 	}
 	for _, m := range d.Models {
 		if state, ok := batchModelStates[m.State]; ok {
@@ -144,7 +146,7 @@ func (c batchConsole) batchDTO(b batch.Batch, inputName string) dto.Batch {
 		InputFileID: b.InputFileID, InputFilename: inputName, OutputExpiresAt: c.svc.OutputExpiresAt(b),
 		OutputFileID: b.OutputFileID, ErrorFileID: b.ErrorFileID, CompletionWindow: b.CompletionWindow,
 		RequestCounts: dto.BatchRequestCount{Total: b.Total, Completed: b.Completed, Failed: b.Failed},
-		Model:         b.Model, Metadata: map[string]string{}, UserID: b.UserID, APIKeyID: b.APIKeyID,
+		Model:         b.Model, PriorityClass: batchPriorityClass(b), Metadata: map[string]string{}, UserID: b.UserID, APIKeyID: b.APIKeyID,
 		CreatedAt: b.CreatedAt, ExpiresAt: b.ExpiresAt, InProgressAt: b.InProgressAt, FinalizingAt: b.FinalizingAt,
 		CompletedAt: b.CompletedAt, FailedAt: b.FailedAt, ExpiredAt: b.ExpiredAt, CancellingAt: b.CancellingAt, CancelledAt: b.CancelledAt,
 	}
@@ -174,6 +176,15 @@ func (c batchConsole) batchDTO(b batch.Batch, inputName string) dto.Batch {
 	return out
 }
 
+// batchPriorityClass is the class a batch's requests run at: its own, or the
+// batch class.
+func batchPriorityClass(b batch.Batch) string {
+	if b.PriorityClass != "" {
+		return b.PriorityClass
+	}
+	return priority.Batch
+}
+
 // consoleBatchError turns a batch refusal into the console's product error:
 // not found, not cancellable, a bad file (with its line), a file over the
 // limit, or a bad request field.
@@ -199,6 +210,8 @@ func consoleBatchError(err error) error {
 	case be.Code == batch.CodeModelEndpoint:
 		out.Code = api.ErrorBatchModelEndpoint
 		out.Params = map[string]any{"model": be.Model, "endpoint": be.Endpoint}
+	case be.Code == batch.CodePriorityClass:
+		out.Code = messages.ErrorPriorityClassNotFound
 	case be.Code == batch.CodeBatchNotCancellable:
 		out.Code = api.ErrorBatchNotCancellable
 	case be.Status == http.StatusRequestEntityTooLarge:

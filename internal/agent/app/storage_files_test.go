@@ -55,7 +55,7 @@ func TestStorageFilesRootFollowsTheStorageState(t *testing.T) {
 		t.Fatalf("read-only root = %+v", root)
 	}
 	_, err = r.OnRPC(context.Background(), proto.RPCStorageFilesMkdir, json.RawMessage(`{"storage_id":1,"path":"files/x"}`))
-	if proto.ParseStorageFilesError(errString(err)).Code != proto.StorageFilesErrNotWritable {
+	if storageFilesCode(err) != proto.StorageFilesErrNotWritable {
 		t.Fatalf("mkdir on a read-only storage: %v", err)
 	}
 }
@@ -113,11 +113,11 @@ func TestStorageFilesRPCsAndStreamsThroughTheNodeRuntime(t *testing.T) {
 	}
 	// Refusals cross the RPC boundary with their code.
 	_, err = call(proto.RPCStorageFilesDelete, `{"storage_id":1,"path":"files/b.txt"}`)
-	if proto.ParseStorageFilesError(errString(err)).Code != proto.StorageFilesErrNotFound {
+	if storageFilesCode(err) != proto.StorageFilesErrNotFound {
 		t.Fatalf("second delete: %v", err)
 	}
 	_, err = call(proto.RPCStorageFilesMkdir, `{"storage_id":1,"path":"models/x"}`)
-	if proto.ParseStorageFilesError(errString(err)).Code != proto.StorageFilesErrRegionReadonly {
+	if storageFilesCode(err) != proto.StorageFilesErrRegionReadonly {
 		t.Fatalf("mkdir outside the regions: %v", err)
 	}
 	for _, method := range []string{proto.RPCStorageFilesList, proto.RPCStorageFilesMkdir, proto.RPCStorageFilesRename, proto.RPCStorageFilesDelete} {
@@ -203,4 +203,13 @@ func waitGone(t *testing.T, p string) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+}
+
+// storageFilesCode is the storage-files code an RPC refusal carries.
+func storageFilesCode(err error) string {
+	var refusal *proto.StorageFilesError
+	if !errors.As(err, &refusal) {
+		return ""
+	}
+	return refusal.Code
 }

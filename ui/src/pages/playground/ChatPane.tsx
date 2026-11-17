@@ -7,8 +7,9 @@ import {
   PauseCircleOutlined,
 } from "@ant-design/icons";
 import { Button, Empty, Select, Space, Tooltip, message } from "antd";
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { api as platformAPI } from "../../api";
+import { knownClass, type PlaygroundPriorityClasses } from "./priorityClasses";
 import { useFollowScroll } from "../../hooks/useFollowScroll";
 import { buildChatBody } from "./api";
 import { historyMessages } from "./conversations/history";
@@ -38,6 +39,8 @@ interface ChatPaneProps {
   follow: boolean;
   /** The user scrolled away from the newest reply. */
   onScrollAway: () => void;
+  /** The request priority classes a reply may ask for. */
+  priorityClasses: PlaygroundPriorityClasses;
 }
 
 type Entry = { kind: "message"; message: ChatMessage } | { kind: "switch"; key: string; model: string };
@@ -71,10 +74,18 @@ const ChatPane = memo(function ChatPane({
   onCatalogChanged,
   follow,
   onScrollAway,
+  priorityClasses,
 }: ChatPaneProps) {
   const { t } = useTranslation("playground");
   const chatModels = useMemo(() => models.filter((model) => model.operations.some((operation) => operation.type === "openai.chat")), [models]);
   const [showParameters, setShowParameters] = useState(false);
+  // A class saved with the conversation that no longer exists falls back to
+  // the default, or every reply would be refused.
+  const chosenClass = column.parameters.priorityClass;
+  const keptClass = knownClass(chosenClass, priorityClasses);
+  useEffect(() => {
+    if (keptClass !== chosenClass) store.setParameters(column.id, { ...column.parameters, priorityClass: keptClass });
+  }, [keptClass, chosenClass, store, column.id, column.parameters]);
   const [codeOpen, setCodeOpen] = useState(false);
   const [waking, setWaking] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -140,7 +151,14 @@ const ChatPane = memo(function ChatPane({
         {showParameters && (
           <aside className="playground-parameter-aside">
             {number && <Button size="small" block onClick={() => { store.applyParameters(column.id); message.success(t("chat.appliedAll")); }}>{t("pane.applyAll")}</Button>}
-            <ParametersPanel definitions={definitions} presets={selectedModel?.extra_parameter_presets ?? []} streamOptions={streamOptions} value={column.parameters} onChange={(value) => store.setParameters(column.id, value)} />
+            <ParametersPanel
+              definitions={definitions}
+              presets={selectedModel?.extra_parameter_presets ?? []}
+              streamOptions={streamOptions}
+              value={column.parameters}
+              onChange={(value) => store.setParameters(column.id, value)}
+              priority={selectedModel?.request_priority ? { classes: priorityClasses.classes, scheduling: !!selectedModel.priority_scheduling } : undefined}
+            />
           </aside>
         )}
       </div>

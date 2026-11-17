@@ -1,6 +1,9 @@
 package deploy
 
 import (
+	"encoding/json"
+	"reflect"
+
 	"gpuworks.ai/gpuworks/internal/accelerator"
 	enginenames "gpuworks.ai/gpuworks/internal/engines"
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -35,6 +38,7 @@ func ProfileForTarget(engine, vendor string) (Profile, error) {
 		}
 		p.PDModes = modes
 	}
+	p.KVBackends = kvBackendProfiles(p.Name, vendor)
 	return p, nil
 }
 
@@ -50,7 +54,7 @@ func ResolveRequestedFeatures(engine string, launch ResolvedLaunch, p Params) *p
 		}
 	}
 	features, known := enginenames.CommandFeatures(engine, args, valueFlags...)
-	f := &proto.RequestedFeatures{CommandKnown: known, EngineSleep: p.Sleepable, MultiNode: p.NNodes > 1 || p.NodeRank != 0 || p.Headless || p.DistGroup != "" || p.DistAttempt != 0 || (p.DistRole != "" && p.DistRole != "leader" && p.DistRole != "standalone"), PD: p.PD != nil, KVDiskTier: p.Quick.KVDiskOffload, PipelineParallel: p.PipelineParallel > 1, DataParallel: p.Quick.DP > 1}
+	f := &proto.RequestedFeatures{CommandKnown: known, EngineSleep: p.Sleepable, MultiNode: p.NNodes > 1 || p.NodeRank != 0 || p.Headless || p.DistGroup != "" || p.DistAttempt != 0 || (p.DistRole != "" && p.DistRole != "leader" && p.DistRole != "standalone"), PD: p.PD != nil, KVDiskTier: p.Quick.KVDiskOffload, PipelineParallel: p.PipelineParallel > 1, DataParallel: p.Quick.DP > 1, ExternalKVCache: kvBackendRequestsExternalCache(engine, p.Quick)}
 	for _, feature := range features {
 		switch feature {
 		case enginenames.EngineSleep:
@@ -65,7 +69,33 @@ func ResolveRequestedFeatures(engine string, launch ResolvedLaunch, p Params) *p
 			f.DataParallel = true
 		}
 	}
+	if f.PD && p.PD == nil && platformKVOffloadConfig(engine, args, p) {
+		f.PD = false
+	}
 	return f
+}
+
+// platformKVOffloadConfig reports whether the launch's --kv-transfer-config is
+// exactly the one this adapter composes for a launch that is not PD: then it
+// carries only the selected KV offload backend (kv_compose.go), which keeps KV
+// on the instance whatever its connector is called. The connector table in
+// package engines classifies every other config, which is the one a user
+// wrote; a backend therefore never has to be listed there (ADR 0069).
+func platformKVOffloadConfig(engine string, args []string, p Params) bool {
+	if engine != EngineVLLM {
+		return false
+	}
+	stated, ok := lastFlagValue(args, "--kv-transfer-config")
+	if !ok {
+		return false
+	}
+	own, ok := vllmKVTransferConfig(p)
+	if !ok {
+		return false
+	}
+	var statedValue, ownValue any
+	return json.Unmarshal([]byte(unquoteArgument(stated)), &statedValue) == nil &&
+		json.Unmarshal([]byte(own), &ownValue) == nil && reflect.DeepEqual(statedValue, ownValue)
 }
 
 // RequestedLaunchFeatures is retained for callers inspecting an already
@@ -99,6 +129,13 @@ func ValidateTargetFeatures(engine string, launch ResolvedLaunch, p Params) erro
 	snapshot := launch.RequestedFeatures
 	if snapshot == nil {
 		snapshot = ResolveRequestedFeatures(engine, launch, p)
+	}
+	nodes := max(p.NNodes, 1)
+	if snapshot.MultiNode && nodes == 1 {
+		nodes = 2
+	}
+	if err := validateKVBackendTarget(engine, requestedTopology{nodes: nodes, pp: snapshot.PipelineParallel, dp: snapshot.DataParallel}, p); err != nil {
+		return err
 	}
 
 	for _, f := range RequestedLaunchFeatures(engine, launch, p) {

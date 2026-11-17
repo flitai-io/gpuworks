@@ -22,10 +22,10 @@ func TestModelSyncNonterminalEventKeepsAdmissionAlive(t *testing.T) {
 			run := &modelSyncRun{transferID: "starting", cancel: cancel}
 			// Admission installs this run before BeginModelSync changes pending to
 			// syncing. A queued preparation event may be handled in that window.
-			c.modelSyncs[key] = run
+			c.syncs.register(key, run)
 			c.releaseTerminalModelSync(key)
-			if ctx.Err() != nil || c.modelSyncs[key] != run {
-				t.Fatalf("%s event interrupted admission: context=%v registered=%v", state, ctx.Err(), c.modelSyncs[key] == run)
+			if ctx.Err() != nil || c.syncs.current(key) != run {
+				t.Fatalf("%s event interrupted admission: context=%v registered=%v", state, ctx.Err(), c.syncs.current(key) == run)
 			}
 		})
 	}
@@ -45,10 +45,10 @@ func TestModelSyncOldTerminalEventCannotCancelNewAdmission(t *testing.T) {
 			run := &modelSyncRun{transferID: "replacement", cancel: cancel}
 			// A new attempt owns the map while its BeginModelSync write is still
 			// pending. The old terminal row is not a result of this new attempt.
-			c.modelSyncs[key] = run
+			c.syncs.register(key, run)
 			c.releaseTerminalModelSync(key)
-			if ctx.Err() != nil || c.modelSyncs[key] != run {
-				t.Fatalf("old terminal row interrupted replacement: context=%v registered=%v", ctx.Err(), c.modelSyncs[key] == run)
+			if ctx.Err() != nil || c.syncs.current(key) != run {
+				t.Fatalf("old terminal row interrupted replacement: context=%v registered=%v", ctx.Err(), c.syncs.current(key) == run)
 			}
 		})
 	}
@@ -65,9 +65,9 @@ func TestModelSyncTerminalEventReleasesOnlyItsAttempt(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			key := store.ModelFileKey(mf.ID)
-			c.modelSyncs[key] = &modelSyncRun{transferID: "owned", cancel: cancel}
+			c.syncs.register(key, &modelSyncRun{transferID: "owned", cancel: cancel})
 			c.releaseTerminalModelSync(key)
-			if c.modelSyncs[key] != nil {
+			if c.syncs.current(key) != nil {
 				t.Fatal("terminal attempt retained its registration")
 			}
 			if ready := proto.ModelFileStateReady(state); ready && ctx.Err() != nil {

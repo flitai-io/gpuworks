@@ -20,11 +20,12 @@ import uuid
 
 from playwright.sync_api import expect, sync_playwright
 from local_browser_fixture import Artifacts, LocalServer, ROOT, digest
-from platform_token_read_revoke import button, check, modal_geometry, theme_color
+from platform_token_read_revoke import button, check, modal_geometry, theme_color, theme_shadow_color
 from storage_delete_blocks import (
     allow_http_status, clear_storage_deleting_file, clear_storage_reference, place_storage_deleting_file,
     place_storage_reference, refuse_storage_delete, storage_count)
 from storage_local import exercise_edit_conflict
+from dialog_checks import _focus_index
 
 
 def exercise_create_dialog(page, trigger, title, parent_name, field_label, save_label, cancel_label, events, evidence):
@@ -32,7 +33,7 @@ def exercise_create_dialog(page, trigger, title, parent_name, field_label, save_
     from dialog_checks import (
         assert_dialog_shell, assert_nested_dismissals, cancel_button, close_button, escape, mask)
 
-    parent = page.get_by_role('heading', name=parent_name, exact=True)
+    parent = page.locator('h1').filter(has_text=parent_name)
     baseline = len(events)
 
     def open_dialog():
@@ -42,7 +43,7 @@ def exercise_create_dialog(page, trigger, title, parent_name, field_label, save_
         return dialog
 
     dialog = open_dialog()
-    assert_dialog_shell(page, dialog, dialog.get_by_label(field_label, exact=True), button(dialog, save_label))
+    assert_dialog_shell(page, dialog, dialog.get_by_role('textbox', name=field_label, exact=True), button(dialog, save_label))
     dialog = assert_nested_dismissals(
         dialog, parent, open_dialog,
         [('cancel', cancel_button(cancel_label)), ('escape', escape),
@@ -90,14 +91,15 @@ def exercise_list_states(page, server, t, prefix, report, locale, bad_http, cons
     page.route(pattern, hold)
     page.reload()
     expect(page.get_by_role('heading', name=heading, exact=True)).to_be_visible()
-    expect(page.locator('.ant-spin-spinning')).to_have_count(1)
+    spinner = page.locator('.resource-table [role="status"]').filter(has_text=table['refresh'])
+    expect(spinner).to_have_count(1)
     states['loading'] = True
     check(len(loading) == 1, f'the list sent {len(loading)} requests while held')
     for route in loading:
         route.continue_()
     loading.clear()
     page.unroute(pattern, hold)
-    expect(page.locator('.ant-spin-spinning')).to_have_count(0)
+    expect(spinner).to_have_count(0)
 
     hits = []
     def refuse_logged(route):
@@ -224,22 +226,20 @@ def exercise_network_type_matrix(page, dialog, t, events):
     kinds = ['host_ethernet', 'host_rdma', 'accelerator_rdma', 'accelerator_hccs']
     rails = {'host_rdma', 'accelerator_rdma', 'accelerator_hccs'}
     accelerator = {'accelerator_rdma', 'accelerator_hccs'}
-    name = dialog.get_by_label(t['form']['name'], exact=True)
+    name = dialog.get_by_role('textbox', name=t['form']['name'], exact=True)
     # A value in interface must not survive a move to a rails type, and the
     # bootstrap CIDR must be the field that remains.
     name.fill('type-matrix-probe')
     report_rows = []
-    # antd wraps a hidden radio input inside a labelled button; click the label so
-    # the real control receives the gesture.
     def pick(kind):
-        dialog.locator('.ant-radio-button-wrapper').filter(has_text=t['type'][kind]).first.click()
+        dialog.get_by_role('tab', name=t['type'][kind], exact=True).click()
     for kind in kinds:
         pick(kind)
-        radio = dialog.get_by_role('radio', name=t['type'][kind], exact=True)
-        expect(radio).to_be_checked()
+        tab = dialog.get_by_role('tab', name=t['type'][kind], exact=True)
+        expect(tab).to_have_attribute('aria-selected', 'true')
         for other in kinds:
             if other != kind:
-                expect(dialog.get_by_role('radio', name=t['type'][other], exact=True)).not_to_be_checked()
+                expect(dialog.get_by_role('tab', name=t['type'][other], exact=True)).to_have_attribute('aria-selected', 'false')
         hint = t['form']['acceleratorInferred'] if kind in accelerator else (
             t['form']['rdmaInferred'] if kind in rails else t['form']['selectorNote'])
         expect(dialog.get_by_text(hint, exact=True)).to_be_visible()
@@ -300,9 +300,10 @@ def exercise_network_inflight(page, dialog, t, body, bad_http, console_errors, e
 
     page.route('**' + prefix, hold_create)
     button(dialog, t['actions']['save']).click()
-    inflight = dialog.locator('.ant-modal-footer button.ant-btn-primary')
-    expect(inflight).to_have_class(re.compile(r'\bant-btn-loading\b'))
-    inflight.click()
+    inflight = button(dialog, t['actions']['save'])
+    expect(inflight).to_be_disabled()
+    expect(inflight.locator('svg')).to_be_visible()
+    inflight.evaluate('element => element.click()')
     check(len(held) == 1, 'duplicate create while the first request is held')
     check(held[0].request.post_data_json == body, 'held create body differs')
     with page.expect_response(lambda r: urlsplit(r.url).path == prefix and r.request.method == 'POST') as failed:
@@ -311,7 +312,7 @@ def exercise_network_inflight(page, dialog, t, body, bad_http, console_errors, e
     check(failed.value.status == 502, 'forced create failure did not surface')
     expect(dialog).to_be_visible()
     for field in ['name', 'description', 'cidr', 'interface']:
-        expect(dialog.get_by_label(t['form'][field], exact=True)).to_have_value(body[field])
+        expect(dialog.get_by_role('textbox', name=t['form'][field], exact=True)).to_have_value(body[field])
     expect(dialog.get_by_role('checkbox', name=t['role']['serving'], exact=True)).to_be_checked()
     expect(page.get_by_text(reason)).to_be_visible()
     check(any(item['path'] == prefix and item['status'] == 502 for item in bad_http), '502 was not recorded')
@@ -352,23 +353,25 @@ def test_network_lifecycle(page, server, report, locale, bad_http, console_error
     evidence.append({'layer': 'ui', 'selector_note': report['selector_note'], 'create_inventory': report['create_inventory']})
     save = button(dialog, t['actions']['save'])
     modal_geometry(dialog, save)
-    name_input = dialog.get_by_label(t['form']['name'], exact=True)
+    name_input = dialog.get_by_role('textbox', name=t['form']['name'], exact=True)
     name_input.click()
     name_input.press('Tab')
     page.keyboard.press('Shift+Tab')
     expect(name_input).to_be_focused()
-    theme_color(name_input, 'borderColor', 'primary')
+    theme_shadow_color(name_input, 'boxShadow', 'focus-ring')
     for _ in range(14):
         page.keyboard.press('Tab')
-        check(dialog.evaluate('el => el.contains(document.activeElement)'), 'Tab escaped the modal')
-    expect(dialog.get_by_role('radio', name=t['type']['host_ethernet'], exact=True)).to_be_checked()
+        if page.evaluate("document.activeElement?.tagName === 'BODY'"):
+            page.wait_for_function("document.activeElement?.tagName !== 'BODY'", timeout=500)
+        check(_focus_index(dialog) != -1, 'Tab escaped the modal')
+    expect(dialog.get_by_role('tab', name=t['type']['host_ethernet'], exact=True)).to_have_attribute('aria-selected', 'true')
     for value in ['', '   ']:
-        dialog.get_by_label(t['form']['name'], exact=True).fill(value)
+        dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(value)
         save.click()
         expect(dialog.get_by_text(t['form']['nameRequired'], exact=True)).to_be_visible()
         expect(dialog.get_by_text(t['form']['rolesRequired'], exact=True)).to_be_visible()
         check(events == [], 'invalid network form sent mutation')
-    dialog.get_by_label(t['form']['name'], exact=True).fill(name)
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(name)
     button(dialog, t['actions']['cancel']).click()
     expect(dialog).not_to_be_visible()
     expect(trigger).to_be_focused()
@@ -376,7 +379,7 @@ def test_network_lifecycle(page, server, report, locale, bad_http, console_error
     trigger.click()
     report['type_matrix'] = exercise_network_type_matrix(page, dialog, t, events)
     for field in ['name', 'description', 'cidr', 'interface']:
-        dialog.get_by_label(t['form'][field], exact=True).fill(draft[field])
+        dialog.get_by_role('textbox', name=t['form'][field], exact=True).fill(draft[field])
     dialog.get_by_role('checkbox', name=t['role']['serving'], exact=True).check()
     exercise_network_inflight(page, dialog, t, draft, bad_http, console_errors, evidence)
     created = mutate(page, save.click, 'POST', prefix, draft, 201, evidence)
@@ -385,21 +388,21 @@ def test_network_lifecycle(page, server, report, locale, bad_http, console_error
     # Creation now opens the detail drawer over the list instead of navigating
     # to a per-network page; the row itself is the stable proof the record exists.
     expect(page.get_by_role('dialog')).to_be_visible()
-    expect(page.get_by_role('row').filter(has_text=name)).to_have_count(1)
+    expect(page.locator('tr').filter(has_text=name)).to_have_count(1)
     persisted(page, server.base, path, draft, evidence)
     page.reload()
     expect(page.get_by_text(draft['description'], exact=True)).to_be_visible()
     expect(page.get_by_text(draft['cidr'], exact=True)).to_be_visible()
     expect(page.get_by_text(t['detail']['noAttachments'], exact=True)).to_be_visible()
     # The list row and the detail drawer each offer Edit; take the drawer's.
-    header = page.locator('.ant-drawer-header').filter(has_text=name).first
+    header = page.get_by_role('dialog').filter(has=page.get_by_role('heading', name=name, exact=True)).first
     expect(header).to_be_visible()
     button(header, t['actions']['edit']).click()
     dialog = page.get_by_role('dialog', name=t['form']['editTitle'], exact=True)
     modal_geometry(dialog, button(dialog, t['actions']['save']))
     for field in ['name', 'description', 'cidr', 'interface']:
-        expect(dialog.get_by_label(t['form'][field], exact=True)).to_have_value(draft[field])
-    dialog.get_by_label(t['form']['name'], exact=True).fill(name + '-cancelled')
+        expect(dialog.get_by_role('textbox', name=t['form'][field], exact=True)).to_have_value(draft[field])
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(name + '-cancelled')
     button(dialog, t['actions']['cancel']).click()
     expect(dialog).not_to_be_visible()
     check(len(events) == 2, 'cancel edit sent mutation')
@@ -417,7 +420,7 @@ def test_network_lifecycle(page, server, report, locale, bad_http, console_error
     occupied_body = occupied.json()
     occupied_id = (occupied_body.get('network') or occupied_body).get('id')
     button(header, t['actions']['edit']).click()
-    name_field = dialog.get_by_label(t['form']['name'], exact=True)
+    name_field = dialog.get_by_role('textbox', name=t['form']['name'], exact=True)
     collision = occupied_name.upper()
     name_field.fill(collision)
     with page.expect_response(lambda r: urlsplit(r.url).path == path
@@ -435,27 +438,27 @@ def test_network_lifecycle(page, server, report, locale, bad_http, console_error
     allow_http_status(bad_http, console_errors, 409)
     if not dialog.is_visible():
         button(header, t['actions']['edit']).click()
-    name_field = dialog.get_by_label(t['form']['name'], exact=True)
+    name_field = dialog.get_by_role('textbox', name=t['form']['name'], exact=True)
     name_field.fill(name + '-edited')
     changed = {**draft, 'name': name + '-edited', 'description': '', 'cidr': '10.78.0.0/16', 'interface': ''}
     for field in ['name', 'description', 'cidr', 'interface']:
-        dialog.get_by_label(t['form'][field], exact=True).fill(changed[field])
+        dialog.get_by_role('textbox', name=t['form'][field], exact=True).fill(changed[field])
     mutate(page, button(dialog, t['actions']['save']).click, 'PUT', path, changed, 200, evidence)
     expect(dialog).not_to_be_visible()
     page.reload()
-    expect(page.get_by_role('row').filter(has_text=changed['name'])).to_have_count(1)
+    expect(page.locator('tr').filter(has_text=changed['name'])).to_have_count(1)
     persisted(page, server.base, path, changed, evidence)
-    header = page.locator('.ant-drawer-header').filter(has_text=changed['name']).first
+    header = page.get_by_role('dialog').filter(has=page.get_by_role('heading', name=changed['name'], exact=True)).first
     expect(header).to_be_visible()
     button(header, t['actions']['edit']).click()
     for field in ['name', 'description', 'cidr', 'interface']:
-        expect(dialog.get_by_label(t['form'][field], exact=True)).to_have_value(changed[field])
-    dialog.get_by_label(t['form']['name'], exact=True).press('Escape')
+        expect(dialog.get_by_role('textbox', name=t['form'][field], exact=True)).to_have_value(changed[field])
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).press('Escape')
     expect(dialog).not_to_be_visible()
     before_cancel = len(events)
     button(header, t['actions']['delete']).click()
     confirmation = t['actions']['confirmDelete'].replace('{{name}}', changed['name'])
-    popup = page.get_by_role('tooltip').filter(has_text=confirmation)
+    popup = page.get_by_role('dialog').filter(has_text=confirmation)
     expect(popup).to_be_in_viewport(ratio=1)
     button(popup, t['actions']['cancel']).click()
     expect(popup).not_to_be_visible()
@@ -657,7 +660,7 @@ def exercise_storage_inflight(page, dialog, t, typed_name, typed_path, body, bad
     page.unroute('**' + prefix, hold_create)
     check(failed.value.status == 502, 'forced create failure did not surface')
     expect(dialog).to_be_visible()
-    expect(dialog.get_by_label(t['form']['name'], exact=True)).to_have_value(typed_name)
+    expect(dialog.get_by_role('textbox', name=t['form']['name'], exact=True)).to_have_value(typed_name)
     expect(dialog.get_by_label(t['form']['path'], exact=True)).to_have_value(typed_path)
     expect(page.get_by_text(reason)).to_be_visible()
     expect(button(dialog, t['form']['save'])).to_be_enabled()
@@ -695,7 +698,7 @@ def test_storage_lifecycle(page, server, report, locale, bad_http, console_error
     evidence.append({'layer': 'ui', 'create_inventory': report['create_inventory']})
     save = button(dialog, t['form']['save'])
     modal_geometry(dialog, save)
-    name_input = dialog.get_by_label(t['form']['name'], exact=True)
+    name_input = dialog.get_by_role('textbox', name=t['form']['name'], exact=True)
     name_input.click()
     name_input.press('Tab')
     page.keyboard.press('Shift+Tab')
@@ -703,15 +706,17 @@ def test_storage_lifecycle(page, server, report, locale, bad_http, console_error
     theme_color(name_input, 'borderColor', 'primary')
     for _ in range(14):
         page.keyboard.press('Tab')
-        check(dialog.evaluate('el => el.contains(document.activeElement)'), 'Tab escaped the modal')
+        if page.evaluate("document.activeElement?.tagName === 'BODY'"):
+            page.wait_for_function("document.activeElement?.tagName !== 'BODY'", timeout=500)
+        check(_focus_index(dialog) != -1, 'Tab escaped the modal')
     expect(dialog.get_by_role('radio', name=locale_strings(locale, 'common')['storageType']['local'], exact=True)).to_be_checked()
     expect(dialog.get_by_role('radio', name=t['form']['scope']['all'], exact=True)).to_be_checked()
     for value in ['', '   ', 'INVALID_NAME']:
-        dialog.get_by_label(t['form']['name'], exact=True).fill(value)
+        dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(value)
         save.click()
         expect(dialog.get_by_text(t['form']['error']['name'], exact=True)).to_be_visible()
         check(events == [], 'invalid storage name sent mutation')
-    dialog.get_by_label(t['form']['name'], exact=True).fill(name)
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(name)
     dialog.get_by_label(t['form']['path'], exact=True).fill('relative/path')
     save.click()
     expect(dialog.get_by_text(t['form']['error']['pathAbsolute'], exact=True)).to_be_visible()
@@ -723,7 +728,7 @@ def test_storage_lifecycle(page, server, report, locale, bad_http, console_error
     trigger.click()
     typed_name = ' ' + name + ' '
     typed_path = ' ' + draft['path'] + ' '
-    dialog.get_by_label(t['form']['name'], exact=True).fill(typed_name)
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(typed_name)
     dialog.get_by_label(t['form']['path'], exact=True).fill(typed_path)
     exercise_storage_inflight(page, dialog, t, typed_name, typed_path, draft, bad_http, console_errors, evidence)
     created = mutate(page, save.click, 'POST', prefix, draft, 201, evidence)
@@ -733,13 +738,13 @@ def test_storage_lifecycle(page, server, report, locale, bad_http, console_error
     page.reload()
     # The path shows in the drawer and again in the list row; scope to the drawer
     # it was opened into and take Edit from that same header.
-    header = page.locator('.ant-drawer-header').filter(has_text=name).first
+    header = page.get_by_role('dialog').filter(has=page.get_by_role('heading', name=name, exact=True)).first
     expect(header).to_be_visible()
-    expect(page.locator('.ant-drawer-body').first.get_by_text(draft['path'], exact=True)).to_be_visible()
+    expect(header.locator('.detail-body').first.get_by_text(draft['path'], exact=True)).to_be_visible()
     button(header, t['actions']['edit']).click()
     dialog = page.get_by_role('dialog', name=t['form']['editTitle'].replace('{{name}}', name), exact=True)
     modal_geometry(dialog, button(dialog, t['form']['save']))
-    expect(dialog.get_by_label(t['form']['name'], exact=True)).to_have_value(name)
+    expect(dialog.get_by_role('textbox', name=t['form']['name'], exact=True)).to_have_value(name)
     expect(dialog.get_by_label(t['form']['path'], exact=True)).to_have_value(draft['path'])
     dialog.get_by_label(t['form']['path'], exact=True).fill(draft['path'] + '-cancelled')
     page.keyboard.press('Escape')
@@ -753,14 +758,14 @@ def test_storage_lifecycle(page, server, report, locale, bad_http, console_error
         bad_http, console_errors, evidence, report)
     button(header, t['actions']['edit']).click()
     changed = {'name': name + '-edited', 'path': draft['path'] + '-edited', 'all_nodes': True, 'targets': []}
-    dialog.get_by_label(t['form']['name'], exact=True).fill(changed['name'])
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(changed['name'])
     dialog.get_by_label(t['form']['path'], exact=True).fill(changed['path'])
     # The edit form sends only the fields that differ from what it loaded; scope is unchanged.
     mutate(page, button(dialog, t['form']['save']).click, 'PATCH', path,
            {'name': changed['name'], 'path': changed['path']}, 200, evidence)
     expect(dialog).not_to_be_visible()
     page.reload()
-    expect(page.locator('.ant-drawer-body').first.get_by_text(changed['path'], exact=True)).to_be_visible()
+    expect(page.locator('.detail-body').first.get_by_text(changed['path'], exact=True)).to_be_visible()
     persisted(page, server.base, path, {**changed, 'type': 'local'}, evidence)
     switch = page.get_by_role('switch', name=t['actions']['enabledSwitch'].replace('{{name}}', changed['name']), exact=True)
     for enabled in [False, True]:
@@ -814,7 +819,9 @@ def test_storage_lifecycle(page, server, report, locale, bad_http, console_error
     page.reload()
     expect(page.get_by_role('heading', name=t['page']['title'], exact=True)).to_be_visible()
     expect(row).to_have_count(0)
-    check(read(page, server.base, path, 404) == {'error': 'not found'}, 'deleted storage GET contract differs')
+    deleted = read(page, server.base, path, 404)
+    check(deleted.get('error') == 'not found' and deleted.get('code') == 'NOT_FOUND',
+          f'deleted storage GET contract differs: {deleted}')
     check(read(page, server.base, prefix) == baseline, 'storage deletion did not restore baseline')
     # Two creates (the create flow and the case's own draft attempt), six PATCHes
     # (the rename, enabled off/on, and the two the conflict case sends: the losing

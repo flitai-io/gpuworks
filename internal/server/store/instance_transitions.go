@@ -54,6 +54,9 @@ func transitionInstances(tx *gorm.DB, depID uint, uuids []string, from []string,
 
 // announceTransition records and publishes a committed transition.
 func (s *Store) announceTransition(rows []Instance, to, message string) {
+	if len(rows) > 0 {
+		s.Bus.Advance("instance") // announced after the event rows; see Bus.Advance
+	}
 	for i := range rows {
 		s.AddInstanceEventCode(&rows[i], "state", instanceEventStateChanged, map[string]any{"state": to, "detail": message})
 		s.Bus.PublishChange("instance", rows[i].UUID, to)

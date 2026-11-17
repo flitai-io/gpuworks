@@ -41,7 +41,7 @@ func (c *fakeStockClock) wait(limit, interval time.Duration) StockWait {
 	}
 }
 
-var autodlStockErr = errors.New("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试")
+var autodlStockErr = fmt.Errorf("api error code=InternalError msg=当前算力规格暂无库存, 请修改配置或稍等再试: %w", autodldriver.ErrOutOfStock)
 
 func allAutoDLSpecsOutOfStock() map[string]error {
 	errs := map[string]error{}

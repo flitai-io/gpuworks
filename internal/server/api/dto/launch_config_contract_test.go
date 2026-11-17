@@ -251,3 +251,23 @@ func TestLaunchPreparationWireRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// An instance names the KV offload backend it keeps only when it keeps one:
+// an instance of the engine's own tiers carries no key at all.
+func TestInstanceKVOffloadBackendWire(t *testing.T) {
+	raw, err := json.Marshal(Instance{UUID: "i", KVOffloadBackend: &KVOffloadBackendRef{ID: "lmcache", Label: "LMCache"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"kv_offload_backend":{"id":"lmcache","label":"LMCache"}`) {
+		t.Fatalf("wire = %s", raw)
+	}
+	var round Instance
+	if err := json.Unmarshal(raw, &round); err != nil || round.KVOffloadBackend == nil || *round.KVOffloadBackend != (KVOffloadBackendRef{ID: "lmcache", Label: "LMCache"}) {
+		t.Fatalf("round trip = %+v, %v", round.KVOffloadBackend, err)
+	}
+	raw, _ = json.Marshal(Instance{UUID: "i"})
+	if strings.Contains(string(raw), "kv_offload_backend") {
+		t.Fatalf("native instance wire = %s", raw)
+	}
+}

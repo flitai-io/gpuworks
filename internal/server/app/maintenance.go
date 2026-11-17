@@ -12,9 +12,14 @@ import (
 func (a *App) eventRetentionLoop(ctx context.Context) {
 	const interval = 6 * time.Hour
 	sweep := func() {
-		n, err := a.store.SweepEventRetention(time.Now())
+		n, err := a.store.SweepEventRetention(ctx, time.Now())
 		if err != nil {
-			a.log.Warn("event retention sweep failed", "err", err)
+			// What it removed before it stopped is kept; the next sweep goes on.
+			if ctx.Err() != nil {
+				a.log.Info("event retention sweep stopped with the server", "removed", n)
+			} else {
+				a.log.Warn("event retention sweep failed", "removed", n, "err", err)
+			}
 			return
 		}
 		if n > 0 {

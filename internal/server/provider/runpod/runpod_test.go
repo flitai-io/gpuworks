@@ -311,9 +311,9 @@ func TestAuthorizePublicKeyAppendsToTheAccountKeys(t *testing.T) {
 			t.Errorf("method %s", r.Method)
 		}
 	})
-	detail, err := d.AuthorizePublicKey(context.Background(), provider.Credentials{APIKey: "k"}, "ignored", platformPub)
-	if err != nil || !strings.Contains(detail, "added to the RunPod account") {
-		t.Fatalf("detail=%q err=%v", detail, err)
+	check, err := d.AuthorizePublicKey(context.Background(), provider.Credentials{APIKey: "k"}, "ignored", platformPub)
+	if err != nil || check.Status != "pass" || check.Code != "CHECK_PLATFORM_KEY_ACCOUNT_ADDED" || check.Params["provider"] != "runpod" || !strings.Contains(check.Message, "added to the RunPod account") {
+		t.Fatalf("check=%+v err=%v", check, err)
 	}
 	want := []string{"ssh-rsa AAAAB3NzaC1yc2EOperator laptop", platformPub}
 	if strings.Join(put, "|") != strings.Join(want, "|") {
@@ -329,9 +329,9 @@ func TestAuthorizePublicKeySkipsAKeyAlreadyThere(t *testing.T) {
 		// Same key, another comment.
 		_, _ = w.Write([]byte(`{"keys":["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlatformKeyBody renamed"]}`))
 	})
-	detail, err := d.AuthorizePublicKey(context.Background(), provider.Credentials{APIKey: "k"}, "", platformPub)
-	if err != nil || !strings.Contains(detail, "already in") {
-		t.Fatalf("detail=%q err=%v", detail, err)
+	check, err := d.AuthorizePublicKey(context.Background(), provider.Credentials{APIKey: "k"}, "", platformPub)
+	if err != nil || check.Code != "CHECK_PLATFORM_KEY_ACCOUNT_PRESENT" || !strings.Contains(check.Message, "already in") {
+		t.Fatalf("check=%+v err=%v", check, err)
 	}
 }
 

@@ -13,6 +13,7 @@ interface Stream {
   tracker: StreamTracker;
   content: string;
   reasoning: string;
+  priorityClass?: string;
 }
 
 /** StreamHost is the store side of the replies being generated. */
@@ -80,6 +81,7 @@ export class Streams {
         onReasoning: (delta) => { stream.reasoning += delta; this.scheduleFrame(); },
         onUsage: (usage) => recordUsage(stream.tracker, usage),
         onDelta: () => recordDelta(stream.tracker, this.host.clock()),
+        onPriorityClass: (name) => { stream.priorityClass = name; },
       }, stream.controller.signal);
       if (result.usage) recordUsage(stream.tracker, result.usage);
       this.finish(stream, undefined);
@@ -98,6 +100,7 @@ export class Streams {
       ...message,
       streaming: false,
       owner: undefined,
+      ...(stream.priorityClass ? { priorityClass: stream.priorityClass } : {}),
       ...(error ? { error, metrics: { ...metrics, durationMS: now - stream.tracker.startedAt } } : { usage: stream.tracker.usage, metrics }),
     }), "now");
     this.tick();

@@ -130,6 +130,32 @@ untested_shared_ui() {
   done
 }
 
+# decl_count looks in the non-test Go files of package directory $1 for the
+# top-level declaration matching extended regular expression $2 and counts the
+# lines from it to its closing brace that match $3 (every line when $3 is
+# empty; with $4 = body the declaration line itself is skipped, for a struct's
+# fields). It prints NOTFOUND when no file declares it, which the budget loop
+# fails: a declaration moved to another package must take its budget along.
+# When several files declare it (build-tag variants), the first by name wins.
+# Patterns go through the environment because awk -v strips their backslash
+# escapes, and use [[:blank:]] rather than \t, which busybox awk does not
+# expand in a dynamic pattern.
+decl_count() {
+  for f in "$1"/*.go; do
+    case "$f" in *_test.go) continue ;; esac
+    DECL="$2" LINE="$3" BODY="${4:-}" awk '
+      !inside && $0 ~ ENVIRON["DECL"] {inside=1; if (ENVIRON["BODY"] == "body") next}
+      inside && /^}/ {if (ENVIRON["LINE"] == "") n++; found=1; exit}
+      inside && (ENVIRON["LINE"] == "" || $0 ~ ENVIRON["LINE"]) {n++}
+      END {if (found) print n+0}' "$f" 2>/dev/null
+  done | head -n 1 | grep . || echo NOTFOUND
+}
+
+# controller_struct_count counts the Controller struct's lines matching $1.
+controller_struct_count() {
+  decl_count internal/server/controller '^type Controller struct' "$1" body
+}
+
 # --- measurements ----------------------------------------------------------
 measure() {
   key="$1"
@@ -175,6 +201,12 @@ measure() {
   ui_untested_shared_files)
     untested_shared_ui | grep -c . || true
     ;;
+  ui_copy_long_strings)
+    node scripts/ui_copy_audit.mjs long
+    ;;
+  ui_copy_caveat_strings)
+    node scripts/ui_copy_audit.mjs caveat
+    ;;
   ui_bundle_gzip_kb)
     # Needs a fresh UI build; measured by scripts/check_ui_bundle_size.sh.
     echo "EXTERNAL"
@@ -192,11 +224,70 @@ measure() {
     grep -rn 'deploy\.InferVendor(' internal pkg cmd --include='*.go' 2>/dev/null \
       | grep -v '_test\.go' | grep -c . || true
     ;;
+  store_list_nodes_callers)
+    grep -rnE '\.ListNodes\(\)' internal pkg cmd --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c . || true
+    ;;
+  store_list_deployments_callers)
+    grep -rnE '\.ListDeployments\(\)' internal pkg cmd --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c . || true
+    ;;
+  store_list_instances_callers)
+    grep -rnE '\.ListInstances\(\)' internal pkg cmd --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/testenv/' | grep -c . || true
+    ;;
   store_concrete_importers)
     go_imports \
       | grep -v '\.test$' \
       | awk -F'\t' '$2 ~ /gpuworks\/internal\/server\/store( |$)/ {print $1}' \
       | sort -u | grep -c . || true
+    ;;
+  store_db_accessor_callers)
+    grep -rnE '\.DB\(\)' internal cmd pkg scripts test --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -v '^internal/server/store/' | grep -c . || true
+    ;;
+  controller_struct_fields)
+    # One per field line (a, b int is one), embedded fields included.
+    controller_struct_count '^[[:blank:]][*A-Za-z_]'
+    ;;
+  controller_struct_mutexes)
+    controller_struct_count '^[[:blank:]](\*?sync\.(RW)?Mutex|[A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+sync\.(RW)?Mutex)'
+    ;;
+  controller_struct_maps)
+    controller_struct_count '^[[:blank:]][A-Za-z_][A-Za-z0-9_, ]*[[:blank:]]+map\['
+    ;;
+  agent_node_runtime_fields | agent_node_runtime_mutexes | agent_node_runtime_methods | agent_onrpc_cases)
+    m=${key#agent_node_runtime_}
+    [ "$key" = agent_onrpc_cases ] && m=rpcs
+    CGO_ENABLED=0 go run ./scripts/structcount -dir internal/agent/app -type NodeRuntime -measure "$m" 2>/dev/null || echo NOTFOUND
+    ;;
+  agent_engine_struct_maps)
+    CGO_ENABLED=0 go run ./scripts/structcount -dir internal/agent/engine -type Engine -measure maps 2>/dev/null || echo NOTFOUND
+    ;;
+  controller_exported_methods)
+    grep -rnE '^func \(c \*Controller\) [A-Z]' internal/server/controller --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -c . || true
+    ;;
+  planning_concrete_store_refs)
+    grep -rnE '\*store\.Store' internal/server/planning --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//' | grep -c . || true
+    ;;
+  planning_sync_files)
+    grep -rlE '^[[:space:]]*"sync(/atomic)?"|^import "sync(/atomic)?"' internal/server/planning --include='*.go' 2>/dev/null \
+      | grep -v '_test\.go' | grep -c . || true
+    ;;
+  app_new_lines)
+    decl_count internal/server/app '^func New\(' ''
+    ;;
+  app_run_lines)
+    decl_count internal/server/app '^func \(a \*App\) Run\(' ''
+    ;;
+  app_run_goroutines)
+    # goBG is Run's alias for bg.start; a bare go statement counts too.
+    decl_count internal/server/app '^func \(a \*App\) Run\(' '^[[:blank:]]+(goBG\(|bg\.start\(|go[[:blank:]])'
+    ;;
+  app_prod_lines)
+    find internal/server/app -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' -exec cat {} + | grep -c '' || true
     ;;
   api_fanout)
     go list -e -f '{{join .Imports "\n"}}' ./internal/server/api 2>/dev/null \
@@ -255,12 +346,85 @@ measure() {
   store_sql_json_lines)
     store_sql_json_hits | grep -c . || true
     ;;
+  error_text_classification)
+    error_text_classification_hits | grep -c . || true
+    ;;
+  instance_failed_without_reason)
+    instance_failed_without_reason_hits | grep -c . || true
+    ;;
+  gateway_error_bypass)
+    gateway_error_bypass_hits | grep -c . || true
+    ;;
+  legacy_check_vocabulary)
+    legacy_check_vocabulary_hits | grep -c . || true
+    ;;
+  console_unlinked_code_packages)
+    console_unlinked_code_package_links | grep -c . || true
+    ;;
+  kv_backend_id_literals)
+    # A KV offload backend id is a row of internal/server/kvbackend and is
+    # rendered only by the adapter's kv_render_* files (ADR 0069); anywhere
+    # else, server or UI, it is a hard-coded backend rule.
+    {
+      grep -rnE '"(lmcache|mooncake_store|hicache)"' internal pkg cmd --include='*.go' 2>/dev/null \
+        | grep -v '_test\.go' \
+        | grep -v '^internal/server/kvbackend/' \
+        | grep -v '^internal/server/deploy/kv_render_' || true
+      grep -rnE "['\"](lmcache|mooncake_store|hicache)['\"]" ui/src \
+        --include='*.ts' --include='*.tsx' 2>/dev/null \
+        | grep -v '\.test\.' || true
+    } | grep -c . || true
+    ;;
   *)
     # `measure` runs inside a command substitution, so exiting here would only
     # kill the subshell. Emit a sentinel the caller turns into a failure.
     echo "UNKNOWN"
     ;;
   esac
+}
+
+# ADR 0067 guards: failures and check results are codes, never prose that a
+# later reader has to parse. Each *_hits function prints one line per
+# violation; exclusions and the external system each allowlisted adapter wraps
+# are listed in scripts/arch-constraints.md.
+error_text_classification_hits() {
+  grep -rnE 'strings\.(Contains|HasPrefix|HasSuffix|EqualFold|Index|LastIndex|Cut|CutPrefix)\((strings\.(ToLower|TrimSpace)\()?[A-Za-z_.]*([Ee]rr[A-Za-z]*|[Mm]sg|[Mm]essage|[Dd]etail|[Rr]eason|[Ss]tderr|[Oo]utput)\b|strings\.ToLower\([A-Za-z_.]*\.Error\(\)\)|\.Error\(\) *(==|!=)|switch [A-Za-z_.]*\.Error\(\)|MatchString\([^)]*\.Error\(\)' \
+    internal pkg cmd --include='*.go' 2>/dev/null \
+    | grep -v '_test\.go:' \
+    | grep -vE '^(internal/agent/modelfetch/retry\.go|internal/agent/runtime/docker/cli_answers\.go|internal/server/logstore/query\.go|internal/server/uxstore/query\.go|internal/server/provider/compshare/api_error\.go|internal/server/provider/vast/vast\.go|internal/testenv/cloudprovider/aliyun_api\.go|internal/testenv/cloudprovider/aliyun_infra\.go|internal/integrationtest/fleet/gateway\.go|internal/server/hub/benchmark_failure_code\.go|internal/server/store/instance_runtime_failure\.go|internal/server/provision/ssh_failure\.go|internal/server/provision/install_command\.go|internal/server/provision/probe\.go|internal/server/inferencecatalog/package_tolerant\.go):' || true
+}
+instance_failed_without_reason_hits() {
+  grep -rnE 'State: *proto\.InstFailed|SetInstanceState\([^)]*proto\.InstFailed|reportState(Progress)?\([^)]*proto\.InstFailed|"state": *proto\.InstFailed|Update(Column)?\("state", *proto\.InstFailed|IsEnginePortRefusal|HasPrefix\([^)]*EnginePort|EnginePort(Refused|InUse)\+":"' \
+    internal cmd --include='*.go' 2>/dev/null \
+    | grep -v '_test\.go:' | grep -v '^internal/agent/engine/runtime_failure\.go:' || true
+}
+gateway_error_bypass_hits() {
+  grep -rn 'writeErr(' internal/server/proxy --include='*.go' 2>/dev/null | grep -v '_test\.go:' || true
+  grep -rn '"gpuworks_proxy"' internal test ui/src --include='*.go' --include='*.ts' --include='*.tsx' --include='*.py' 2>/dev/null || true
+  grep -rn 'http\.Error(' internal/server/api internal/server/proxy internal/server/hub internal/server/batch --include='*.go' 2>/dev/null \
+    | grep -v '_test\.go:' | grep -v '^internal/server/api/security_headers\.go:' || true
+  grep -rnE '`\{"error"|map\[string\](any|string)\{"error":' internal/server --include='*.go' 2>/dev/null \
+    | grep -v '_test\.go:' | grep -vE '^internal/server/(messages/http|api/responses|api/inference_templates_official)\.go:' || true
+}
+legacy_check_vocabulary_hits() {
+  grep -rnE '(DoctorFinding|CardCheck|CardCheckRun)\{[^}]*(Status|Code|ID): "' internal pkg cmd --include='*.go' 2>/dev/null | grep -v '_test\.go:' || true
+  grep -rnE 'DoctorLevel|accelerator\.Check(Pass|Warn|Fail|Skip|Pending|NotApplicable|Reason)|CheckStateFor|\.Level != proto' \
+    internal/agent internal/server/cardhealth internal/server/diagnostics internal/proto --include='*.go' 2>/dev/null \
+    | grep -v '_test\.go:' | grep -v '^internal/proto/check_compat\.go:' || true
+  grep -rn '"pending"' internal/server/cardhealth internal/agent/gpu internal/accelerator internal/proto/card_check.go internal/proto/doctor.go --include='*.go' 2>/dev/null \
+    | grep -v '_test\.go:' || true
+  grep -rnE 'Status: *"(ok|error|warn|passed|failed|skipped)"|\.Status *[!=]= *"(ok|error|warn)"|status *:?= *"(ok|error)"' \
+    internal/server/provision internal/server/provider internal/server/api/provision.go internal/server/api/provider_install.go --include='*.go' 2>/dev/null \
+    | grep -v '_test\.go:' || true
+  grep -rnE '\bInstallCheck\b|CheckResult\{Name|check\.Name ==' internal/server/provision internal/server/provider internal/server/api --include='*.go' 2>/dev/null | grep -v '_test\.go:' || true
+  grep -nE 'Status(:| =| ==| !=) *"(passed|failed|blocked|unknown|pending|not_applicable|ok|error)"|status(, reason)?(, message)? :?= "(passed|failed|blocked|unknown|pending|not_applicable)"' \
+    internal/server/deployment/*.go internal/server/api/diagnostic_projection.go internal/server/api/preflight.go 2>/dev/null | grep -v '_test\.go:' || true
+  grep -rnE '"(info|incomplete|completed|unavailable)"' internal/server/diagnostics/doctor_report.go internal/server/diagnostics/node_doctor.go internal/server/diagnostics/node_connection.go 2>/dev/null || true
+}
+console_unlinked_code_package_links() {
+  for main in ./cmd/gpuworks ./cmd/gpuworks-agent; do
+    CGO_ENABLED=0 go list -deps "$main" 2>/dev/null | grep -E '/internal/templateprobe$' || true
+  done
 }
 
 # process_name_hits prints "file:line:text" for every production source line
@@ -331,6 +495,7 @@ process_name_hits() {
 soft_budget_hint() {
   case "$1" in
   ui_antd_icon_import_files) printf '%s' ": use ui/src/ui-kit/consoleIcons.ts instead of @ant-design/icons" ;;
+  app_prod_lines) printf '%s' ": put a feature's logic in its own package; app keeps construction and adapters" ;;
   esac
 }
 
@@ -354,6 +519,11 @@ while IFS= read -r line || [ -n "$line" ]; do
   measured=$(measure "$key" | tr -d '[:space:]')
   if [ "$measured" = "UNKNOWN" ]; then
     echo "  FAIL: unknown budget key '$key'; add a measurement to check_architecture.sh" >&2
+    failures=$((failures + 1))
+    continue
+  fi
+  if [ "$measured" = "NOTFOUND" ]; then
+    echo "  FAIL: $key: the declaration it measures was not found; move the measurement with it" >&2
     failures=$((failures + 1))
     continue
   fi
@@ -552,7 +722,7 @@ leaf_is_waived() {
   return 1
 }
 
-for leaf in inferenceapi messages placement acquisition chipmatch partitioncap netplan pdmode nodelabel uxrecord uxstore tracecontext traceexport usagereport yieldpolicy; do
+for leaf in inferenceapi messages placement acquisition chipmatch partitioncap netplan pdmode kvbackend nodelabel uxrecord uxstore tracecontext traceexport usagereport yieldpolicy lifecycle nodepolicy; do
   if pkg_imports "./internal/server/$leaf" | grep -qF 'gpuworks/internal/server/store'; then
     if leaf_is_waived "$leaf"; then
       echo "  WAIVED: leaf package $leaf still imports store (planned removal)"
@@ -607,6 +777,21 @@ if [ -n "$netplan_deps" ]; then
   failures=$((failures + 1))
 else
   echo "  ok: netplan depends only on proto"
+fi
+# Metrics and log ingestion writes its own stores and knows nothing of the
+# server around it: no store, api, hub, planning or app (GWKS-307). The app
+# adapts the stores to those.
+obsingest_deps=$(pkg_imports ./internal/server/obsingest | grep 'gpuworks/' \
+  | grep -vxE 'gpuworks\.ai/gpuworks/internal/(proto|selflog|server/(logstore|tsdb|uxstore))' || true)
+if [ -z "$(pkg_imports ./internal/server/obsingest)" ]; then
+  echo "  FAIL: obsingest has no imports to check (package missing or broken)" >&2
+  failures=$((failures + 1))
+elif [ -n "$obsingest_deps" ]; then
+  echo "  FAIL: obsingest depends only on proto, selflog, logstore, tsdb and uxstore" >&2
+  echo "$obsingest_deps" | sed 's/^/    /' >&2
+  failures=$((failures + 1))
+else
+  echo "  ok: obsingest depends only on proto, selflog, logstore, tsdb and uxstore"
 fi
 # Site rule grammar is a pure leaf beside pullref: store and planning share it.
 sourceurl_deps=$(pkg_imports ./internal/server/sourceurl | grep 'gpuworks/' || true)
@@ -677,6 +862,20 @@ tree_forbids() {
 }
 
 tree_forbids ./pkg/... 'gpuworks/internal' 'pkg does not import internal'
+
+# kvbackend is a pure data table (ADR 0069): its only in-repo imports are the
+# vendor, engine and PD role vocabularies it names. Rendering and gating live
+# in the engine adapter (internal/server/deploy).
+kvbackend_extra=$(go list -e -f '{{join .Imports "\n"}}' ./internal/server/kvbackend 2>/dev/null \
+  | grep '^gpuworks\.ai/gpuworks/' \
+  | grep -vxE 'gpuworks\.ai/gpuworks/internal/(accelerator|engines|server/pdmode)' || true)
+if [ -n "$kvbackend_extra" ]; then
+  echo "  FAIL: kvbackend imports only accelerator, engines and pdmode" >&2
+  echo "$kvbackend_extra" | sed 's/^/    /' >&2
+  failures=$((failures + 1))
+else
+  echo "  ok: kvbackend imports only accelerator, engines and pdmode"
+fi
 tree_forbids ./internal/agent/... 'gpuworks/internal/server' 'agent does not import server'
 tree_forbids ./internal/proto 'gpuworks/' 'proto has no in-repo imports'
 tree_forbids ./internal/platformmetrics 'gpuworks/' 'platformmetrics has no in-repo imports (agent and server share it)'

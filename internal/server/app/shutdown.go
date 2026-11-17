@@ -7,7 +7,7 @@ import (
 )
 
 // backgroundGroup tracks the loops Run starts on its shared ctx (other than
-// proxyAcct and metricsIngestLoop, which have their own established stop
+// proxyAcct and RunMetrics, which have their own established stop
 // ordering - see stopProxyAccounting/stopMetricsIngest), so Run can wait for
 // every one of them to actually return, on every exit path, before its
 // deferred a.proxy.Close() runs (runPDVerifier uses a.proxy).
@@ -33,7 +33,7 @@ func (g *backgroundGroup) wait() {
 // return after ctx is done, so its final flush is fully enqueued into the
 // metrics ingest queue before this App's caller is free to close the metrics
 // store out from under it. It does NOT by itself guarantee that flush has
-// reached tsdb: metricsIngestLoop runs on its own context precisely so it
+// reached tsdb: RunMetrics runs on its own context precisely so it
 // can be stopped afterward (see stopMetricsIngest), once this enqueue is
 // known to have already happened. The wait here is bounded: a sink stuck
 // writing to tsdb must not hang server shutdown.
@@ -43,7 +43,7 @@ func (a *App) stopProxyAccounting(done <-chan struct{}) {
 	}
 }
 
-// stopMetricsIngest cancels metricsIngestLoop's own context and waits
+// stopMetricsIngest cancels RunMetrics's own context and waits
 // (briefly) for its final drain, so a proxy-accounting flush enqueued during
 // stopProxyAccounting's wait is not silently dropped by an ingest loop that
 // had already exited on the shared shutdown context. Must be called after

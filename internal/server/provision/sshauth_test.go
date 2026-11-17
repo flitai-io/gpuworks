@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // authServer is an sshd stand-in: it accepts the listed public keys and
@@ -114,11 +116,11 @@ func TestPlatformKeyLogsInWithoutAnythingElse(t *testing.T) {
 	if outcome.Used != AuthPlatformKey {
 		t.Fatalf("used = %q", outcome.Used)
 	}
-	if check := outcome.Check(); check.Status != "ok" || check.Detail != "platform key "+key.Fingerprint+" accepted" {
+	if check := outcome.Check(); check.Status != "pass" || check.Code != messages.CheckSSHLoggedIn || check.Params["method"] != AuthPlatformKey || check.Evidence != "platform key "+key.Fingerprint+" accepted" {
 		t.Fatalf("check = %+v", check)
 	}
 	check, authorized := AuthorizePlatformKey(context.Background(), client, SSHAuth{PlatformKey: key}, outcome)
-	if !authorized || check.Detail != "authorized (used to log in)" {
+	if !authorized || check.text() != "authorized (used to log in)" {
 		t.Fatalf("authorize = %+v %v", check, authorized)
 	}
 	if _, err := os.Stat(filepath.Join(srv.home, ".ssh")); err == nil {
@@ -140,7 +142,7 @@ func TestUnauthorizedPlatformKeyTellsTheOperatorWhatToRun(t *testing.T) {
 			t.Fatalf("error %q lacks %q", msg, want)
 		}
 	}
-	if outcome.Used != "" || outcome.Check().Status != "error" {
+	if outcome.Used != "" || outcome.Check().Status != "fail" {
 		t.Fatalf("outcome = %+v check=%+v", outcome, outcome.Check())
 	}
 }
@@ -160,19 +162,19 @@ func TestFallbackPasswordThenPlatformKeyIsAuthorizedOnce(t *testing.T) {
 		t.Fatalf("used = %q", outcome.Used)
 	}
 	want := "platform key " + key.Fingerprint + " rejected → instance password accepted"
-	if got := outcome.Check().Detail; got != want {
+	if got := outcome.Check().Evidence; got != want {
 		t.Fatalf("detail = %q, want %q", got, want)
 	}
 	check, authorized := AuthorizePlatformKey(context.Background(), client, auth, outcome)
 	file := filepath.Join(srv.home, ".ssh", "authorized_keys")
-	if !authorized || check.Status != "ok" || check.Detail != "added to "+file {
+	if !authorized || check.Status != "pass" || check.text() != "added to "+file {
 		t.Fatalf("authorize = %+v %v", check, authorized)
 	}
 	// Same key, any comment: not added twice.
 	again := *key
 	again.PublicKey = strings.Replace(key.PublicKey, "gpuworks@test", "gpuworks@renamed", 1)
 	check, authorized = AuthorizePlatformKey(context.Background(), client, SSHAuth{PlatformKey: &again}, outcome)
-	if !authorized || check.Detail != "already in "+file {
+	if !authorized || check.text() != "already in "+file {
 		t.Fatalf("second authorize = %+v %v", check, authorized)
 	}
 	raw, err := os.ReadFile(file)
@@ -229,11 +231,11 @@ func TestAuthorizeFailureKeepsTheCredentialThatWorked(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(srv.home, 0o700) })
 	check, authorized := AuthorizePlatformKey(context.Background(), client, SSHAuth{PlatformKey: key}, outcome)
-	if authorized || check.Status != "warn" || !strings.Contains(check.Detail, "could not add the platform key") {
+	if authorized || check.Status != "warn" || !strings.Contains(check.text(), "could not add the platform key") {
 		t.Fatalf("authorize = %+v %v", check, authorized)
 	}
 	check, authorized = AuthorizePlatformKey(context.Background(), client, SSHAuth{}, outcome)
-	if authorized || check.Status != "warn" || !strings.Contains(check.Detail, "not available") {
+	if authorized || check.Status != "skip" || check.Code != messages.CheckPlatformKeyUnavailable || !strings.Contains(check.text(), "not available") {
 		t.Fatalf("authorize without a platform key = %+v %v", check, authorized)
 	}
 }
@@ -311,7 +313,7 @@ func TestPrecheckReportsPlatformKeyPresenceWithoutWriting(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := filepath.Join(srv.home, ".ssh", "authorized_keys")
-	if c := PlatformKeyPresence(context.Background(), client, key.PublicKey); c.Status != "ok" || c.Detail != "not in "+file+" yet; the install adds it" {
+	if c := PlatformKeyPresence(context.Background(), client, key.PublicKey); c.Status != "pass" || c.text() != "not in "+file+" yet; the install adds it" {
 		t.Fatalf("absent = %+v", c)
 	}
 	if _, err := os.Stat(file); err == nil {
@@ -323,7 +325,7 @@ func TestPrecheckReportsPlatformKeyPresenceWithoutWriting(t *testing.T) {
 	if err := os.WriteFile(file, []byte(strings.Replace(key.PublicKey, "gpuworks@test", "other-comment", 1)+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if c := PlatformKeyPresence(context.Background(), client, key.PublicKey); c.Status != "ok" || c.Detail != "already in "+file {
+	if c := PlatformKeyPresence(context.Background(), client, key.PublicKey); c.Status != "pass" || c.text() != "already in "+file {
 		t.Fatalf("present = %+v", c)
 	}
 }
@@ -365,10 +367,10 @@ func TestRejectedPlatformKeyFallsBackToTheOperatorsKey(t *testing.T) {
 	if outcome.Used != AuthPrivateKey {
 		t.Fatalf("used = %q", outcome.Used)
 	}
-	if detail := outcome.Check().Detail; !strings.HasPrefix(detail, "platform key "+key.Fingerprint+" rejected → private key SHA256:") || !strings.HasSuffix(detail, " accepted") {
+	if detail := outcome.Check().Evidence; !strings.HasPrefix(detail, "platform key "+key.Fingerprint+" rejected → private key SHA256:") || !strings.HasSuffix(detail, " accepted") {
 		t.Fatalf("detail = %q", detail)
 	}
-	if check, ok := AuthorizePlatformKey(context.Background(), client, SSHAuth{PlatformKey: key}, outcome); !ok || !strings.HasPrefix(check.Detail, "added to ") {
+	if check, ok := AuthorizePlatformKey(context.Background(), client, SSHAuth{PlatformKey: key}, outcome); !ok || !strings.HasPrefix(check.text(), "added to ") {
 		t.Fatalf("authorize = %+v %v", check, ok)
 	}
 }

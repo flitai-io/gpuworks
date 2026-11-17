@@ -131,7 +131,7 @@ func (s *Service) storageFacts(model *store.Model, node *store.Node) ([]acquisit
 	}
 	locations, err := s.d.Store.ModelLocations(model.ID, node.ID)
 	if err != nil {
-		check := modelDiagnostic(model, node, store.ModelSource{}, "facts", "unknown", "facts_unavailable", "Model location facts could not be read")
+		check := modelDiagnostic(model, node, store.ModelSource{}, "facts", proto.CheckSkip, "facts_unavailable", "Model location facts could not be read")
 		return nil, nil, WithDiagnostics(wrapProductError(messages.ErrorModelSourceUnavailable, check.Message.Message, check.Message.Params, err), &dto.DiagnosticReport{Checks: []dto.DiagnosticCheck{check}})
 	}
 	var present []acquisition.StoragePresence

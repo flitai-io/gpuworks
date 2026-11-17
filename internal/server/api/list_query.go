@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -103,15 +104,18 @@ func pageOf[R, T any](rows []R, q listQuery, convert func([]R) []T) dto.ListPage
 // window is the [start, end) slice of total rows the requested page covers;
 // a page past the end is empty.
 func (q listQuery) window(total int) (int, int) {
-	start := (q.page - 1) * q.pageSize
-	if start > total {
-		start = total
+	start := min(q.offset(), total)
+	return start, start + min(q.pageSize, total-start)
+}
+
+// offset is the number of rows before the requested page. Any page number is
+// accepted, so the product saturates at math.MaxInt instead of overflowing
+// into a negative offset: a page no list can reach is simply past the end.
+func (q listQuery) offset() int {
+	if q.page-1 > math.MaxInt/q.pageSize {
+		return math.MaxInt
 	}
-	end := start + q.pageSize
-	if end > total {
-		end = total
-	}
-	return start, end
+	return (q.page - 1) * q.pageSize
 }
 
 func listPageError(name, value string) error {

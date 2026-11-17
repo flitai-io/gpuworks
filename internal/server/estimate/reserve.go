@@ -198,3 +198,13 @@ func onGrid(steps, step float64) float64 {
 	}
 	return math.Round(steps*step*perUnit) / perUnit
 }
+
+// ForeignHeadroomBytes is the memory left free beside processes outside the
+// platform on a card a memory-limited partition shares with them: 5% of the
+// card, at least 4 GiB. What they hold is a reading taken once a minute, not
+// a limit they keep to, and an out-of-memory failure there costs both their
+// workload and the partition; the same shape as the host-memory headroom an
+// L1 sleep keeps (sleep.HostMemoryHeadroom). See ADR 0068.
+func ForeignHeadroomBytes(totalBytes int64) int64 {
+	return max(totalBytes/20, 4<<30)
+}

@@ -15,6 +15,12 @@ import (
 // event at the window's end. Other node changes are never held back.
 var nodeStatusWindow = 5 * time.Second
 
+// streamAuthRecheck is how often an open stream re-checks its login for what
+// no bus event announces: a login that expires, and one revoked by another
+// process (reset-password). Revocations made through this server's store are
+// announced and cut the stream before its next event.
+var streamAuthRecheck = time.Second
+
 // events streams change notifications to the UI over Server-Sent Events.
 // The UI re-fetches affected resources on each event (events carry no payload),
 // which keeps the stream tiny and the client logic idempotent.
@@ -24,7 +30,7 @@ func (a *apiHandlers) events(w http.ResponseWriter, r *http.Request) {
 	}
 	fl, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		writeErr(w, http.StatusInternalServerError, errStreamingUnsupported)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -40,7 +46,7 @@ func (a *apiHandlers) events(w http.ResponseWriter, r *http.Request) {
 
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
-	authTicker := time.NewTicker(time.Second)
+	authTicker := time.NewTicker(streamAuthRecheck)
 	defer authTicker.Stop()
 	var lastStatus time.Time
 	var statusFlush <-chan time.Time
@@ -50,14 +56,19 @@ func (a *apiHandlers) events(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-authTicker.C:
+			// The clock catches what no event here announces: a login
+			// that expires, and one revoked by another process (reset-password).
 			if !a.managementStreamAllowed(r, false) {
 				return
 			}
 		case ev := <-sub.C():
-			if !a.managementStreamAllowed(r, false) {
-				return
-			}
+			// Only a change to a login can revoke this one: re-reading it
+			// for every other change made the session table's read rate the
+			// fleet's change rate times the open consoles.
 			if ev.Topic == "management-session" {
+				if !a.managementStreamAllowed(r, false) {
+					return
+				}
 				continue
 			}
 			if ev.Topic == "node" && ev.Reason == store.NodeChangeStatus {

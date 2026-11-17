@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"gpuworks.ai/gpuworks/internal/server/provider"
+	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
 func (d *Driver) ListSSHKeys(ctx context.Context, creds provider.Credentials) ([]string, error) {
@@ -53,26 +54,26 @@ var accountKeysMu sync.Mutex
 // AuthorizePublicKey adds publicKey to the account's SSH keys, keeping every
 // key already there. RunPod writes account keys into a pod when it starts, so
 // pods created afterwards accept the platform key; externalID is unused.
-func (d *Driver) AuthorizePublicKey(ctx context.Context, creds provider.Credentials, _ string, publicKey string) (string, error) {
+func (d *Driver) AuthorizePublicKey(ctx context.Context, creds provider.Credentials, _ string, publicKey string) (provision.CheckResult, error) {
 	fields := strings.Fields(publicKey)
 	if len(fields) < 2 {
-		return "", errors.New("runpod: invalid public key")
+		return provision.CheckResult{}, errors.New("runpod: invalid public key")
 	}
 	accountKeysMu.Lock()
 	defer accountKeysMu.Unlock()
 	keys, err := d.ListSSHKeys(ctx, creds)
 	if err != nil {
-		return "", err
+		return provision.CheckResult{}, err
 	}
 	for _, key := range keys {
 		if f := strings.Fields(key); len(f) >= 2 && f[0] == fields[0] && f[1] == fields[1] {
-			return "already in the RunPod account SSH keys", nil
+			return provider.PlatformKeyAccountCheck("runpod", false, "already in the RunPod account SSH keys"), nil
 		}
 	}
 	if err := d.ReplaceSSHKeys(ctx, creds, append(append([]string(nil), keys...), strings.TrimSpace(publicKey))); err != nil {
-		return "", err
+		return provision.CheckResult{}, err
 	}
-	return "added to the RunPod account SSH keys (pods started from now on accept it)", nil
+	return provider.PlatformKeyAccountCheck("runpod", true, "added to the RunPod account SSH keys (pods started from now on accept it)"), nil
 }
 
 func (d *Driver) ReplaceSSHKeys(ctx context.Context, creds provider.Credentials, keys []string) error {

@@ -70,7 +70,7 @@ test("required-field rejection stays in the form and a corrected draft can creat
 
 test("a rejected create retains its checks and request ID beside the unchanged draft", async () => {
   const harness = mount();
-  const checks = { checks: [{ id: "node:7", status: "failed", message: {
+  const checks = { checks: [{ id: "node:7", status: "fail", message: {
     code: "MODEL_SOURCE_UNAVAILABLE", params: { reason: "not_on_node", node: "gpu-a", model: "local-model", observer: "control_plane" }, message: "no complete model record",
   } }] };
   api.createDeployment = async () => { throw new APIError("MODEL_SOURCE_UNAVAILABLE", {}, "source unavailable", 400, checks, "r215"); };

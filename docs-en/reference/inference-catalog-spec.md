@@ -106,7 +106,7 @@ models:                       # FlatCatalog: a single top-level models list
 | `name` | Required; unique within the model | |
 | `display_name_zh_cn` / `display_name_en` | Optional; one line, at most 56 / 72 characters respectively; each unique within the model and engine (ignoring case and extra spaces) | The spec's Chinese and English display names. The UI shows the one for its language, falls back to the other, and shows `name` when there is neither. Built-in specs set both. See [Display Names](#显示名) |
 | `scenario` | `latency` \| `balanced` \| `throughput` | |
-| `engine` | Required; resolved through the registry at deployment time; valid values are `vllm` / `sglang` / `callable` (`internal/engines` is the sole source) | `callable` runs the Serve Adapter bundled with the catalog, with no log dialect or parameter dictionary; **the template controls the entire command line**. The engine appends no arguments. The template places platform facts such as model paths, ports, and multi-node ranks using [variables](#变量展开), and must reference `${API_PORT}` (ADR 0036) |
+| `engine` | Required; resolved through the registry at deployment time; valid values are `vllm` / `sglang` / `callable` (`internal/engines` is the sole source) | `callable` runs the Serve Adapter bundled with the catalog, with no log dialect or parameter dictionary; **the template controls the entire command line**. The engine appends no arguments. The template places platform facts such as model paths, ports, and multi-node ranks using [variables](#变量展开), and must reference `${GPUWORKS_API_PORT}` (or the older spelling `${API_PORT}`, ADR 0036) |
 | `image` | Required | For image reference syntax and drift, see [Image Families](image-families.md) and todo.md T2 |
 | `image_sources[]` | Optional; each item is nonempty after trimming, contains no whitespace or `://`, is ≤ 512 characters, and is unique; entries identical to `image` are dropped (see reference comparison below) | Image sources declared by the template itself, included among the image's own candidate copies when a node starts a replica; see [image_sources](#image_sources模板声明的镜像来源) |
 | `weights.quantization` | Required; lowercase | |
@@ -141,7 +141,9 @@ and the import raises a `CATALOG_ARG_PASSED_THROUGH` warning naming the model, s
 Case differences and aliases do not count as decoding failures: `--dtype half`
 and `--speculative-algorithm eagle3` are both accepted and normalized to the dictionary's spelling (`float16` and `EAGLE3`) before storage.
 The dictionary uses each engine's own spelling: SGLang's speculative algorithms are uppercase `EAGLE`/`EAGLE3`/`NEXTN`/`DSPARK`/
-`NGRAM`/`STANDALONE` (its model hook compares against uppercase values before normalization), while vLLM uses lowercase method names. For KV precision, each engine's list
+`NGRAM`/`STANDALONE` (its model hook compares against uppercase values before normalization) and form a closed list, while vLLM uses lowercase method names
+that, like the tool call parsers, are only suggestions (including `dflash` and `dspark`): a method outside the list reaches the engine verbatim, and whether
+the image's vLLM supports it is the deployer's to check. For KV precision, each engine's list
 includes all upstream values (vLLM's `CacheDType` and SGLang's `--kv-cache-dtype` choices).
 
 Similar names, different vocabularies: `--quantization` is the engine's quantization method (such as `modelslim`), while `weights.quantization`
@@ -321,28 +323,32 @@ A text spec that relies on tensor parallelism alone, with no expert, data or pip
 
 ### Variable Expansion
 
-`${NAME}` in `args` / `env` / `entrypoint` / `pre_start_*` is expanded on every deployment, regardless of whether placement
-is present. Available variables = resolver return values + platform facts for this launch (the sole sources are
-the vocabulary in `internal/server/placement/expand.go` and `internal/server/deploy/launch_variables.go`):
+Variable references in `args` / `env` / `entrypoint` / `pre_start_*` are expanded on every deployment, regardless of whether placement
+is present. The documented spelling carries the `GPUWORKS_` prefix, such as `${GPUWORKS_NODE_RANK}`; the older spelling without the prefix (`${NODE_RANK}`)
+remains an alias in these template fields and expands the same way. Available variables = resolver return values + platform facts for this launch (the sole sources are
+the vocabulary in `internal/server/placement/expand.go` and `internal/server/deploy/launch_variables.go`). The table lists the prefixed spelling:
 
 | Variable | Value | When Available |
 |---|---|---|
-| Any variable returned by the resolver | Placement result (such as `SP_DEGREE`) | When a resolver exists |
-| `GPU_COUNT` | Number of GPUs allocated on this node (overrides a resolver-returned value with the same name) | Placement is determined |
-| `TP_SIZE` | Tensor parallelism for the entire deployment; a resolver-returned value takes precedence | Placement is determined |
-| `PP_SIZE` | **Intentionally has no default**: multi-node pipeline parallelism already has a single owner (the engine injects it based on node count); it can only be returned by the resolver | Only when returned by the resolver |
-| `MODEL_PATH` | Mount path of the primary weights in the container (including a primary component or deployment override) | Always |
-| `SERVED_MODEL_NAME` | The deployment's served name, which the gateway and the health check send to the engine as `model` | Always |
-| `API_HOST` | Address the service binds to: `0.0.0.0` for callable, `127.0.0.1` for other engines | Always |
-| `API_PORT` | Port the platform reserves for this instance, accessed by the gateway and health checks; `0` for a headless rank | Always |
-| `NNODES` / `NODE_RANK` | Number of nodes and index of this rank; `1` / `0` for a single node | Always |
-| `HEADLESS` | `1` if this rank does not serve external requests; otherwise `0` | Always |
-| `NODE_ADDR` | Routable address of the node this rank runs on (not rank 0's) | Multi-node only |
-| `MASTER_ADDR` / `MASTER_PORT` | Address and rendezvous port of rank 0 in a multi-node deployment | Multi-node only |
+| Any variable returned by the resolver | Placement result (a resolver returns `SP_DEGREE`; reference it as `${GPUWORKS_SP_DEGREE}`) | When a resolver exists |
+| `GPUWORKS_GPU_COUNT` | Number of GPUs allocated on this node (overrides a resolver-returned value with the same name) | Placement is determined |
+| `GPUWORKS_TP_SIZE` | Tensor parallelism for the entire deployment; a resolver-returned value takes precedence | Placement is determined |
+| `GPUWORKS_PP_SIZE` | **Intentionally has no default**: multi-node pipeline parallelism already has a single owner (the engine injects it based on node count); it can only be returned by the resolver | Only when returned by the resolver |
+| `GPUWORKS_MODEL_PATH` | Mount path of the primary weights in the container (including a primary component or deployment override) | Always |
+| `GPUWORKS_SERVED_MODEL_NAME` | The deployment's served name, which the gateway and the health check send to the engine as `model` | Always |
+| `GPUWORKS_API_HOST` | Address the service binds to: `0.0.0.0` for callable, `127.0.0.1` for other engines | Always |
+| `GPUWORKS_API_PORT` | Port the platform reserves for this instance, accessed by the gateway and health checks; `0` for a headless rank | Always |
+| `GPUWORKS_NNODES` / `GPUWORKS_NODE_RANK` | Number of nodes and index of this rank; `1` / `0` for a single node | Always |
+| `GPUWORKS_HEADLESS` | `1` if this rank does not serve external requests; otherwise `0` | Always |
+| `GPUWORKS_NODE_ADDR` | Routable address of the node this rank runs on (not rank 0's) | Multi-node only |
+| `GPUWORKS_MASTER_ADDR` / `GPUWORKS_MASTER_PORT` | Address and rendezvous port of rank 0 in a multi-node deployment | Multi-node only |
+| `GPUWORKS_PD_ROLE` | This instance's PD role: `prefill` or `decode` | PD instances |
+| `GPUWORKS_PD_SIDE_CHANNEL_HOST` | Address this instance's KV side channel listens on | PD instances whose address is known |
+| `GPUWORKS_PD_SIDE_CHANNEL_PORT` | First port of this instance's extra port block, the KV side channel port | PD instances whose port is allocated |
 
 Rules:
 
-- **The resolver cannot return platform facts**: returning `MODEL_PATH`, `SERVED_MODEL_NAME`, `API_*`, `NNODES`, `NODE_RANK`, `HEADLESS`, `NODE_ADDR`, or `MASTER_*`
+- **The resolver cannot return platform facts**: returning `MODEL_PATH`, `SERVED_MODEL_NAME`, `API_*`, `NNODES`, `NODE_RANK`, `HEADLESS`, `NODE_ADDR`, `MASTER_*`, or `PD_*`
   in resolver results causes an immediate error—the node, port, and rank are not yet available when the resolver runs.
 - **Missing variables cause failure**: unresolved names in args / env / entrypoint / `pre_start_argv` cause deployment errors. A spec without a resolver
   that references a name outside the vocabulary (such as the typo `${NODE_RNAK}` or `${PP_SIZE}` without a resolver) is rejected during import. A single-node deployment
@@ -356,7 +362,9 @@ Rules:
   (the port is fixed at `30000` for preview).
 - Mount paths for additional components (such as a DFlash draft) are determined by the spec's own `components[].mount_path`. Write the literal path directly;
   no variable is needed. Validation requires the path to appear in the startup fields.
-- Arguments and command overrides entered by users in the deployment form are **never expanded**.
+- Arguments entered by users in the deployment form and command overrides in `engine` / `image-entry` mode are **never expanded**. A handwritten command in
+  `manual` mode expands prefixed names only; an unprefixed `${MODEL_PATH}` and a prefixed name this launch does not state are left unchanged for the shell. See
+  [Manual Commands for Multi-Node and PD Deployments](../explanation/launch-config.md#多机与-pd-的手工命令).
 
 Minimal callable spec:
 
@@ -416,7 +424,7 @@ api:
 Operation vocabulary (`internal/server/inferenceapi` is the single source): `openai.chat`,
 `openai.completions` (`/v1/completions`, continues the prompt as-is without applying a chat template), `openai.embeddings`, `openai.rerank`, `openai.audio.transcribe`,
 `openai.audio.speech`, `openai.image.generate`, `openai.image.edit`, `openai.video.generate`,
-and `openai.realtime`. Operation types must not repeat within a contract.
+`openai.realtime`, and `systemone.decide` (`/v1/systemone`, a System One decision: a shared `state` and typed questions in, a probability distribution per question out, nothing generated; the wire format is TypeSafe's System One API). Operation types must not repeat within a contract.
 
 Special cases:
 `openai.video.generate` must use `async` on `/v1/videos` and
@@ -557,3 +565,13 @@ Warnings do not block import. A successful import response includes the same `wa
   `fallback-sources.json`).
 - The image catalog (system image manifest) is a separate domain. For the format, see
   [Image Catalog and Inference Image Families](image-families.md#manifest-格式).
+
+<!-- translation-source-sha256: 37e82ac4ebd937f1453e29137d8cd5759ada058292802a2bdfad6cd53088d322 -->
+<!-- translation-localized-code-block: 87b9b0138ba4ec53acde102a7c6b84d62b6c2f8f0d3d75cab349af25de5c4c50 d678bb21d75ccc75960270f23e4263c515e921694b27de418282915199ae6923 Translate YAML comments and illustrative user-facing reason text. -->
+<!-- translation-localized-code-block: 9a54a7271e193f98f78581cbb5fb446f8d5d1aa46c942d8f4fb3536f5f81b115 22ec1397368cfc809b65ad278feb838b5690c611dd587bc022c6e151b5596d99 Translate YAML comments and illustrative user-facing reason text. -->
+<!-- translation-localized-code-block: 06db934de28e923689ee3d7a5291cfb9c5c39413ce9a4c3a87dfc3b0d6dc051d 213afdd99d9dc95fee88560f64a09e012578484b424f46c160ffd92f44b8bd72 Translate YAML comments and illustrative user-facing reason text. -->
+<!-- translation-localized-code-block: a611f2e8254725bdcf88ae19eb23c532ef8c679903131a8881bbd61f09aafdb2 33859cded67f664966175739bc36d429175e7fe4c8f3d71422f40719d24be6e6 Translate YAML comments and illustrative user-facing reason text. -->
+<!-- translation-localized-code-block: bee5e6aa5c268b0bca3195996e1394ed7ca27c6938ea75731026b323c425c162 50a7b72308d2093f9b328d73f1c889122beed6408c02fe79a803f0bd63b3246f Translate YAML comments and illustrative user-facing reason text. -->
+<!-- translation-localized-code-block: d0cf90e53d24fed8cc724f20d6eb7df85810710388a02b23e6ede399e6bb8294 9a3a3028b77be7c62002a4762ea29528a08dd641897608dcc4383e36d62744cb Translate YAML comments and illustrative user-facing reason text. -->
+<!-- translation-localized-code-block: a7d524edd753182838ebcc0b5d00da0acb23a4e6ceb9481fd31f031c520b6138 7454b07423d39cda5d3f4e571f923044557c02bd167ecf53284bb63e4e601388 Translate YAML comments and illustrative user-facing reason text. -->
+<!-- translation-localized-code-block: cb01e807364a6fa35f11fd6e177ffbbcbfe444a9860c0043a088d4693962c102 7c96acf3d55e07b7b1526005845a7f4eaae06818f9de255105ab3e2d2216985f Translate YAML comments and illustrative user-facing reason text. -->

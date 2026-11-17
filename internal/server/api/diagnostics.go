@@ -152,7 +152,11 @@ func bundleDTO(b diagnostics.Bundle) dto.DiagnosticsBundle {
 		out.NodeUUIDs = []string{}
 	}
 	for _, it := range b.Items {
-		out.Items = append(out.Items, dto.DiagnosticsBundleItem{Name: it.Name, State: it.State, Reason: it.Reason, Bytes: it.Bytes, Truncated: it.Truncated})
+		item := dto.DiagnosticsBundleItem{ID: it.ID(), Path: it.Path, Status: it.Status, Code: it.Code, Evidence: it.Evidence, Bytes: it.Bytes}
+		if it.Code != "" {
+			item.Params, item.Message = &dto.DiagnosticsBundleItemParams{Path: it.Path, Node: it.Node()}, it.Message()
+		}
+		out.Items = append(out.Items, item)
 	}
 	return out
 }

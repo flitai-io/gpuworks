@@ -197,3 +197,5 @@ Decision 6 of the original says held requests, each turn's start, the pending-re
 - A restart or an upgrade no longer costs a deployment waiting to resume its chance to take its cards back on its own, and taking turns does not hand out an extra turn because of the restart.
 - Clients retry on connection errors and on a 503 with `Retry-After`, with a total backoff that covers a restart.
 - The process-level case `TestProcessResidencyAcrossAServerStopAndKill` covers a graceful stop, SIGKILL and a resume.
+
+<!-- translation-source-sha256: 18c5f550d3cdf01af40c9542b849453b5f682d1d438892a8c25b666571273988 -->

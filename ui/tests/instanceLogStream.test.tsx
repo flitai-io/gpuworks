@@ -91,6 +91,10 @@ test("an instance event merges into the non-live log stream in time order, tagge
   assert.ok(/^\[\d\d-\d\d \d\d:\d\d:\d\d\] line a$/.test(lines[0]), `the earliest log line stays first: ${lines[0]}`);
   assert.ok(/^\[\d\d-\d\d \d\d:\d\d:\d\d\] line b$/.test(lines[2]), `the latest log line stays last: ${lines[2]}`);
   assert.ok(lines[1].includes("[System]"), "the event line carries the system tag");
+  const eventLine = [...container.querySelectorAll<HTMLSpanElement>("pre span")].find(el => el.textContent?.includes("State changed to running") && el.style.background);
+  assert.ok(eventLine);
+  assert.equal(eventLine.style.color, "rgb(161, 210, 254)", "platform events use readable information blue");
+  assert.equal(container.querySelector("pre")?.style.fontSize, "var(--font-size-body)");
   assert.ok(lines[1].includes("State changed to running"), "the event line renders the instance event's own text");
 });
 
@@ -120,6 +124,22 @@ test("a folded milestone's phase-cost summary is appended to its system line", a
     linesOf(container)[0].includes("Downloading Image took 42 s · 1.0 GiB at 25 MiB/s"),
     `expected the phase summary in: ${linesOf(container)[0]}`,
   );
+});
+
+test("startup output appears once in recent logs and never leaks into a selected historical window", async () => {
+  stubPersistedLogs([{ time_ms: 1000, line: "stored line" }]);
+  const renderLogs = (line: string, history: boolean) => (
+    <I18nextProvider i18n={i18n}><LogStream uuid="inst-1" live={false} follow={true}
+      runtimeLine={line} range={history ? { kind: "custom", startMS: 0, endMS: 2000 } : null} /></I18nextProvider>
+  );
+  const view = render(renderLogs("stored line", false));
+  await waitFor(() => assert.match(linesOf(view.container)[0], /^\[.+\] stored line$/));
+  assert.equal(linesOf(view.container).length, 1);
+  view.rerender(renderLogs("extracting layer", false));
+  assert.equal(linesOf(view.container).at(-1), "extracting layer");
+  view.rerender(renderLogs("extracting layer", true));
+  await waitFor(() => assert.match(linesOf(view.container)[0], /stored line/));
+  assert.equal(linesOf(view.container).length, 1);
 });
 
 test("an events-fetch error renders a muted retry line instead of silently dropping history", async () => {

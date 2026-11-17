@@ -40,3 +40,5 @@ For PD disaggregation deployment and troubleshooting, see [PD Disaggregation Dep
 
 - The NIC inventory and RDMA port table on the node details **Network** page show real-time receive/transmit rates from the last two minutes.
 - The **Monitoring** tab on a network details page (including the management network) charts, by node, the network's NIC receive/transmit rates, RDMA receive/transmit rates (for RDMA networks, summing multiple HCAs on the same node), errors and congestion, and node traffic for the storage sync and serving roles carried by that network. You can select a time range from 15 minutes to 24 hours.
+
+<!-- translation-source-sha256: c0738811e1db07438a70b886d25262bdf7029d77e123fb0ff4c4b5cc768d2370 -->

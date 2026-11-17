@@ -7,9 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -55,7 +57,7 @@ func (d *fakeDriver) PullImage(ctx context.Context, ref string, onLine func(stri
 	step := d.steps[ref]
 	d.mu.Unlock()
 	if step == nil {
-		return fmt.Errorf("manifest unknown: %s", ref)
+		return failCLI("Error response from daemon: manifest unknown: "+ref)(ctx, onLine)
 	}
 	return step(ctx, onLine)
 }
@@ -73,6 +75,15 @@ func ok(_ context.Context, onLine func(string)) error {
 
 func fail(msg string) pullStep {
 	return func(context.Context, func(string)) error { return errors.New(msg) }
+}
+
+// failCLI fails the way the docker and nerdctl drivers do: the CLI output in
+// the error text, marked with what runtime.PullOutputFailure reads from it.
+func failCLI(output string) pullStep {
+	return func(context.Context, func(string)) error {
+		err := fmt.Errorf("docker pull: exit status 1: %s", output)
+		return runtime.MarkPullFailure(err, runtime.PullOutputFailure(output))
+	}
 }
 
 // shortTimings makes the stall watch tick every few milliseconds of real time;
@@ -173,7 +184,7 @@ func TestWalkDoesNotCoolARegistryThatAnswered(t *testing.T) {
 	} {
 		c := newClock()
 		p, _ := newPuller(t, c, nil, Config{})
-		d := newDriver("udocker", map[string]pullStep{"a.example/x:1": fail(answer), "b.example/x:1": ok})
+		d := newDriver("udocker", map[string]pullStep{"a.example/x:1": failCLI(answer), "b.example/x:1": ok})
 		res, err := p.Walk(context.Background(), d, cands("a.example/x:1", "b.example/x:1"), Options{}, Hooks{})
 		if err != nil || res.Ref != "b.example/x:1" {
 			t.Fatalf("%q: res=%+v err=%v", answer, res, err)
@@ -181,6 +192,24 @@ func TestWalkDoesNotCoolARegistryThatAnswered(t *testing.T) {
 		if p.prober.Cooled("a.example") {
 			t.Fatalf("%q cooled a registry that answered", answer)
 		}
+	}
+}
+
+// The walk reads the driver's mark, never the error text: an unmarked
+// failure that merely says "denied" is a transport failure as far as the
+// walk knows, and a marked one still classifies after wrapping.
+func TestWalkReadsTheRegistryRefusalMarkNotTheText(t *testing.T) {
+	p, _ := newPuller(t, newClock(), nil, Config{})
+	d := newDriver("udocker", map[string]pullStep{"a.example/x:1": fail("denied"), "b.example/x:1": ok})
+	if _, err := p.Walk(context.Background(), d, cands("a.example/x:1", "b.example/x:1"), Options{}, Hooks{}); err != nil {
+		t.Fatal(err)
+	}
+	if !p.prober.Cooled("a.example") {
+		t.Fatal("an unmarked failure must cool the registry like any transport failure")
+	}
+	wrapped := fmt.Errorf("pull a.example/x:1: %w", runtime.MarkPullFailure(errors.New("401 Unauthorized"), runtime.ErrRegistryRefused))
+	if !registryAnswered(wrapped) {
+		t.Fatal("a wrapped refusal must still classify")
 	}
 }
 
@@ -635,7 +664,7 @@ func TestUnmaskedLeavesPlainValuesAlone(t *testing.T) {
 func TestWalkStopsWhenPullExhaustsLocalDisk(t *testing.T) {
 	p, _ := newPuller(t, newClock(), nil, Config{})
 	d := newDriver("docker", map[string]pullStep{
-		"a.example/x:1": fail("write /var/lib/docker/tmp/blob: no space left on device"),
+		"a.example/x:1": failCLI("write /var/lib/docker/tmp/blob: no space left on device"),
 		"b.example/x:1": ok,
 	})
 	failedCalls := 0
@@ -657,19 +686,28 @@ func TestWalkStopsWhenPullExhaustsLocalDisk(t *testing.T) {
 	}
 }
 
-func TestDiskSpaceFailureIsDetectedCaseInsensitively(t *testing.T) {
+// A native puller's write fails with the operating system's ENOSPC; the walk
+// knows it by type. Text that only says so is not a disk failure.
+func TestDiskSpaceFailureIsKnownByTypeNotText(t *testing.T) {
 	p, _ := newPuller(t, newClock(), nil, Config{})
-	d := newDriver("docker", map[string]pullStep{"a.example/x:1": fail("write failed: INSUFFICIENT DISK SPACE")})
+	enospc := &os.PathError{Op: "write", Path: "/var/lib/gpuworks/udocker/layers/sha256:1", Err: syscall.ENOSPC}
+	d := newDriver("udocker", map[string]pullStep{"a.example/x:1": func(context.Context, func(string)) error {
+		return fmt.Errorf("pull a.example/x:1: %w", enospc)
+	}})
 	_, err := p.Walk(context.Background(), d, cands("a.example/x:1", "b.example/x:1"), Options{}, Hooks{})
 	var diskErr *DiskSpaceError
 	if !errors.As(err, &diskErr) || len(d.order()) != 1 {
 		t.Fatalf("error=%v pulls=%v, want disk error and no fallback", err, d.order())
 	}
+	d = newDriver("docker", map[string]pullStep{"a.example/x:1": fail("write failed: INSUFFICIENT DISK SPACE"), "b.example/x:1": ok})
+	if _, err := p.Walk(context.Background(), d, cands("a.example/x:1", "b.example/x:1"), Options{}, Hooks{}); err != nil || len(d.order()) != 2 {
+		t.Fatalf("error=%v pulls=%v, want unmarked text treated as a source failure", err, d.order())
+	}
 }
 
 func TestWalkAcceptsAnImageRecoveredAfterDiskSpaceFailure(t *testing.T) {
 	p, _ := newPuller(t, newClock(), nil, Config{})
-	d := newDriver("docker", map[string]pullStep{"a.example/x:1": fail("write failed: no space left on device")})
+	d := newDriver("docker", map[string]pullStep{"a.example/x:1": failCLI("write failed: no space left on device")})
 	res, err := p.Walk(context.Background(), d, cands("a.example/x:1", "b.example/x:1"), Options{}, Hooks{
 		Recovered: func(context.Context) (string, bool) { return "a.example/x:1", true },
 	})

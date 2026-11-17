@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { PageHeader as ZeronPageHeader, PageHeaderContent, PageTitle, PageDescription, PageActions } from "./ui/page-layout";
-import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbSeparator } from "./ui/breadcrumb";
+import { Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbSeparator, BreadcrumbPage } from "./ui/breadcrumb";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
@@ -10,7 +10,7 @@ import { sectionLabelKey } from "../navigation";
  * PageHeader is the title block every page starts with. Pages reached from
  * the menu show no breadcrumb (the menu already says where you are); a page
  * below one of them passes `parents`, and the breadcrumb then names the menu
- * section plus those parents, so it can never disagree with the menu. The
+ * section plus those parents and the current title. The
  * description, the actions and a toolbar row are optional. Narrow, the parts
  * stack in reading order instead of drifting.
  */
@@ -20,6 +20,7 @@ export default function PageHeader({
   extra,
   toolbar,
   parents,
+  breadcrumbTitle,
   className,
 }: {
   title: ReactNode;
@@ -31,6 +32,8 @@ export default function PageHeader({
   toolbar?: ReactNode;
   /** Pages between the menu section and this one, e.g. a link back to the list. */
   parents?: ReactNode[];
+  /** Plain current-page label when the visual title includes badges or controls. */
+  breadcrumbTitle?: ReactNode;
   className?: string;
 }) {
   const { t } = useTranslation("common");
@@ -50,6 +53,8 @@ export default function PageHeader({
                 {index > 0 && <BreadcrumbSeparator />}
                 <BreadcrumbItem>{item}</BreadcrumbItem>
               </Fragment>)}
+              <BreadcrumbSeparator />
+              <BreadcrumbItem><BreadcrumbPage>{breadcrumbTitle ?? title}</BreadcrumbPage></BreadcrumbItem>
             </BreadcrumbList></Breadcrumb>}
             <PageTitle aria-level={2} className="page-header-title text-title font-semibold">{title}</PageTitle>
             {description && <PageDescription className="page-header-description" title={description}>{description}</PageDescription>}

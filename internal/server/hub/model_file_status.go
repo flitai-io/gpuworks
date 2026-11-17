@@ -9,15 +9,16 @@ import (
 // instance reports do. A delayed old connection cannot finish a new copy, nor
 // recreate the copy observations its replacement dropped.
 func (h *Hub) applyModelFileStatus(session *Session, status proto.ModelFileStatus) error {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	if session == nil || h.sessions[session.NodeUUID] != session {
+	if session == nil {
 		return nil
 	}
-	// Recorded before the store publishes the progress event, so a reader
-	// woken by that event sees this frame.
-	h.copies.Record(session.nodeID, status, h.now())
-	return h.store.UpdateModelFileStatus(session.nodeID, status)
+	_, err := session.applyCurrent(func(nodeID uint) error {
+		// Recorded before the store publishes the progress event, so a reader
+		// woken by that event sees this frame.
+		h.copies.Record(nodeID, status, h.now())
+		return h.store.UpdateModelFileStatus(nodeID, status)
+	})
+	return err
 }
 
 // ModelCopyObservation is the latest progress frame of the copy the row now

@@ -174,11 +174,31 @@ type Prober interface {
 // evidence, or reports that the host has no accelerator.
 func New() Prober {
 	probers := defaultProbers()
-	bus, managed := pciBusVendors("")
+	bus, managed := pciBusVendors(busScanRoot())
 	if p := firstAvailableWithBus(probers, managed); p != nil {
 		return p
 	}
 	return fallbackProber(probers, deviceExists, commandExists, bus)
+}
+
+// busScanRoot is the root pciBusVendors scans the PCI bus from. A container
+// cannot be trusted to list its own host's whole bus (pcicards.Scanner's
+// hostOwnsThisBus guards against a rented pod with one of eight GPUs
+// reporting the other seven as its own), so the zero value ("") makes
+// Scanner read its own, container-scoped view and come back empty inside
+// any container. That is wrong for this agent's own Kubernetes DaemonSet
+// pod: it owns the whole node (hostPID, every vendor CLI already runs on
+// the host once RunCLIsOnHost is called), so its PCI evidence should be the
+// host's, the same root every other host-or-container lookup in this
+// package already switches to (hostexec.go). Without this, a card whose
+// driver is not ready yet (no device file, no CLI) is invisible to New()
+// on Kubernetes and the node is reported as NoAccelerator instead of as its
+// real vendor with a driver that is still loading.
+func busScanRoot() string {
+	if CLIsOnHost() {
+		return hostRoot
+	}
+	return ""
 }
 
 // Prefer physical native evidence over an answering compatibility CLI.

@@ -25,6 +25,8 @@ func isVLLMOmniLaunch(arguments []string) bool {
 func (vLLMEngine) DefaultApplicable(key string, launch LaunchShape) bool {
 	arguments := append(append([]string(nil), launch.Entrypoint...), launch.Args...)
 	switch key {
+	case "max_model_len":
+		return vllmAcceptsContextAuto(launch.EngineVersion) && !isVLLMOmniLaunch(arguments)
 	case "gpu_memory_utilization":
 		return !isVLLMOmniLaunch(arguments)
 	case "enable_request_metrics":

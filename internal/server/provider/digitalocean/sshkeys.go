@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"gpuworks.ai/gpuworks/internal/server/provider"
+	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
 // platformKeyName is the name the platform key is registered under in the
@@ -87,35 +88,35 @@ var registerMu sync.Mutex
 // An account key reaches only droplets created after it was added; DigitalOcean
 // has no way to put one on an existing droplet. A droplet created elsewhere
 // therefore needs an SSH key or password from the operator at install.
-func (d *Driver) AuthorizePublicKey(ctx context.Context, creds provider.Credentials, externalID, publicKey string) (string, error) {
+func (d *Driver) AuthorizePublicKey(ctx context.Context, creds provider.Credentials, externalID, publicKey string) (provision.CheckResult, error) {
 	if len(strings.Fields(publicKey)) < 2 {
-		return "", errors.New("digitalocean: invalid public key")
+		return provision.CheckResult{}, errors.New("digitalocean: invalid public key")
 	}
 	registerMu.Lock()
 	defer registerMu.Unlock()
 	keys, err := d.accountKeys(ctx, creds)
 	if err != nil {
-		return "", err
+		return provision.CheckResult{}, err
 	}
 	const limit = "DigitalOcean puts account keys only on droplets created afterwards"
 	for _, k := range keys {
 		if samePublicKey(k.PublicKey, publicKey) {
 			d.platformKeys.set(creds, k.Fingerprint)
-			return "already in the DigitalOcean account SSH keys (" + k.Name + "); " + limit + ", so a droplet created elsewhere needs an SSH key or password", nil
+			return provider.PlatformKeyAccountCheck("digitalocean", false, "already in the DigitalOcean account SSH keys ("+k.Name+"); "+limit+", so a droplet created elsewhere needs an SSH key or password"), nil
 		}
 	}
 	raw, err := d.do(ctx, creds, http.MethodPost, "/v2/account/keys", nil, map[string]string{"name": platformKeyName, "public_key": strings.TrimSpace(publicKey)})
 	if err != nil {
-		return "", err
+		return provision.CheckResult{}, err
 	}
 	var resp struct {
 		SSHKey accountKey `json:"ssh_key"`
 	}
 	if err := json.Unmarshal(raw, &resp); err != nil || resp.SSHKey.Fingerprint == "" {
-		return "", errors.New("digitalocean: the registered SSH key came back without a fingerprint")
+		return provision.CheckResult{}, errors.New("digitalocean: the registered SSH key came back without a fingerprint")
 	}
 	d.platformKeys.set(creds, resp.SSHKey.Fingerprint)
-	return "added to the DigitalOcean account SSH keys as " + platformKeyName + "; " + limit + ", so a droplet created elsewhere needs an SSH key or password", nil
+	return provider.PlatformKeyAccountCheck("digitalocean", true, "added to the DigitalOcean account SSH keys as "+platformKeyName+"; "+limit+", so a droplet created elsewhere needs an SSH key or password"), nil
 }
 
 // platformKeyFingerprint is the fingerprint of the account key holding the

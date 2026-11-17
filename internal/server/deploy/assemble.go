@@ -61,7 +61,11 @@ type ResolveLaunchInput struct {
 	PreStartScript  string
 	RuntimeAssets   []proto.RuntimeAsset
 	ComponentMounts []proto.MountSpec
-	APIContract     any
+	// ModelPaths is where each model an extra mount row names is on the
+	// launch's node (ContainerMount.ModelID). A preview leaves it empty and
+	// the rows show ModelMountPlaceholder.
+	ModelPaths  map[uint]string
+	APIContract any
 	// PlacementVariables are the placement resolver's variables; the launch
 	// adds the facts it owns (launchVariables) before expanding the template.
 	PlacementVariables map[string]any
@@ -126,18 +130,26 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 		}
 	}
 	variables := launchVariables(input.Engine, params, modelMount, input.PlacementVariables, input.AllowUnresolved)
-	params.TemplateArgs, err = expandValues(params.TemplateArgs, variables, input.AllowUnresolved)
+	expand := func(values []string) ([]string, error) {
+		if params.Symbolic {
+			// The rank-owned names stay ${NAME}: the manual script they end
+			// up in is expanded again for each rank.
+			return placementeval.Expand(values, variables, true)
+		}
+		return expandValues(values, variables, input.AllowUnresolved)
+	}
+	params.TemplateArgs, err = expand(params.TemplateArgs)
 	if err == nil {
-		params.TemplateEnv, err = placementeval.ExpandMap(params.TemplateEnv, variables, input.AllowUnresolved)
+		params.TemplateEnv, err = placementeval.ExpandMap(params.TemplateEnv, variables, input.AllowUnresolved || params.Symbolic)
 	}
 	if err == nil {
-		entrypoint, err = expandValues(entrypoint, variables, input.AllowUnresolved)
+		entrypoint, err = expand(entrypoint)
 	}
 	if err == nil {
-		preStartArgv, err = expandValues(preStartArgv, variables, input.AllowUnresolved)
+		preStartArgv, err = expand(preStartArgv)
 	}
 	if err == nil && preStartScript != "" {
-		preStartScript, err = expandScript(preStartScript, variables, input.AllowUnresolved)
+		preStartScript, err = expandScript(preStartScript, variables, input.AllowUnresolved || params.Symbolic)
 	}
 	if err != nil {
 		return ResolvedLaunch{}, nil, fmt.Errorf("resolve launch variables: %w", err)
@@ -186,10 +198,20 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 	if command.templateEntrypoint {
 		finalEntrypoint = entrypoint
 	}
+	if mode == CommandManual {
+		// A manual command shares the template's variables: the names this
+		// launch states are replaced here, per rank, and every other ${NAME}
+		// is the shell's.
+		if manualScript != "" {
+			manualScript = expandManualCommand([]string{manualScript}, variables)[0]
+		}
+		commandArgv = expandManualCommand(commandArgv, variables)
+	}
 	launch := AssembleCommand(input.Engine, built, ImageCommand{
-		Mode:       mode,
-		Entrypoint: finalEntrypoint,
-		Cmd:        commandArgv,
+		Mode:          mode,
+		Entrypoint:    finalEntrypoint,
+		Cmd:           commandArgv,
+		KeepSystemEnv: params.multiRank(),
 	})
 	for key, value := range built.EnvLayers.Template {
 		launch.Env[key] = value
@@ -272,7 +294,7 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 	if err != nil {
 		return ResolvedLaunch{}, nil, fmt.Errorf("resolve launch: %w", err)
 	}
-	launch.Mounts = convertMounts(overrides.ExtraMounts)
+	launch.Mounts = convertMounts(overrides.ExtraMounts, input.ModelPaths)
 	launch.Mounts = append(launch.Mounts, input.ComponentMounts...)
 	// The disk KV tier writes into a container path that has to survive the
 	// container and stay measurable, so the launch asks the agent for a managed
@@ -323,6 +345,9 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 		if err := validateEngineTopology(input.Engine, launch, params); err != nil {
 			return ResolvedLaunch{}, nil, fmt.Errorf("resolve launch: %w", err)
 		}
+	}
+	if err := validateKVBackendLaunch(input.Engine, params); err != nil {
+		return ResolvedLaunch{}, nil, err
 	}
 	launch.RequestedFeatures = ResolveRequestedFeatures(input.Engine.Name(), launch, params)
 	var targetErr error

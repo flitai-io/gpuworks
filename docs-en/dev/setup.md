@@ -101,3 +101,8 @@ git diff --check
 ```
 
 For complete requirements on test layers, race detection, build tags, and physical hardware, see the [Testing Guide](testing.md).
+
+<!-- translation-source-sha256: 5761c2c8346c509732fd73ab88c96a0b614907f8a6c6dc723e40e3f8e08a2241 -->
+<!-- translation-localized-code-block: 67400283761805fbfcf4db14842c1da263db4f3ef35362a5753b5febab0f2efb a4b55e8544b32fa601de0ebe1b428945fa8d14dd8fe5458fcc29e77d61a6d687 Translate explanatory build-command comment -->
+<!-- translation-localized-code-block: dea59384e98e508bb4f51f4985b2c3004a0c5a99b547af917fdcdb8f80ee5071 86d28401690e54ddeee0277f5db30af00918a10d0787d35b866ba3e06760d9e2 E2E prerequisite commands; the comments are translated. -->
+<!-- translation-localized-code-block: 2b4cabed9b9f0472760573657d754e4bfb95b8bd581e0412999244c40beda9c8 2b54fc45d9d78a3cdbe1e1174ecbeedde8330da72118674f94c1d33f0ee45278 E2E prerequisite commands; the comments are translated. -->

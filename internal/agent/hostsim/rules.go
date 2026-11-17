@@ -79,7 +79,8 @@ var rpcRules = map[string]rule{
 	proto.RPCSourceProbe:         refuse,
 	// A simulated node is never a Kubernetes node: these reach the
 	// cluster's API server.
-	proto.RPCKubeNodeExists: refuse,
+	proto.RPCKubeNodeExists:    refuse,
+	proto.RPCKubeNodesSelected: refuse,
 }
 
 // streamRules classifies every stream kind (TestEveryStreamIsClassified): a
@@ -87,12 +88,13 @@ var rpcRules = map[string]rule{
 // other ports, images, model transfer, storage and its binary are refused.
 var streamRules = map[string]rule{
 	proto.StreamCtrl:          allow,
-	proto.StreamMetrics:       allow,
 	proto.StreamLogtail:       allow,
 	proto.StreamTunnel:        allowEngines,
 	proto.StreamLargeFileRead: allowInDir,
 	// The agent's own log and debug session files, nothing of the host.
 	proto.StreamDiagnosticsRead: allow,
+	// The agent opens telemetry streams itself and never serves one.
+	proto.StreamTelemetry: refuse,
 
 	proto.StreamPeerRelaySend:    refuse,
 	proto.StreamPeerRelayReceive: refuse,

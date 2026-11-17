@@ -32,9 +32,23 @@ type cloudRuntimeFixture struct {
 	releaseFailureStatus atomic.Int32
 	reserveFailureStatus atomic.Int32
 	reserveBeforeTimeout atomic.Bool
+
+	allocationFromPCI atomic.Bool
 }
 
 func newCloudRuntimeFixture(t *testing.T) (*store.Store, *provider.Service, *cloudRuntimeFixture) {
+	t.Helper()
+	return newCloudRuntimeFixtureWithProtocol(t, false)
+}
+
+func newCloudRuntimeFixtureForGPUProtocol(t *testing.T, protocol string) (*store.Store, *provider.Service, *cloudRuntimeFixture) {
+	t.Helper()
+	st, svc, fixture := newCloudRuntimeFixtureWithProtocol(t, protocol == "pci")
+	fixture.allocationFromPCI.Store(protocol == "gpu-pci-state")
+	return st, svc, fixture
+}
+
+func newCloudRuntimeFixtureWithProtocol(t *testing.T, legacy bool) (*store.Store, *provider.Service, *cloudRuntimeFixture) {
 	t.Helper()
 	fixture := &cloudRuntimeFixture{}
 	fixture.description.Store("")
@@ -54,7 +68,10 @@ func newCloudRuntimeFixture(t *testing.T) (*store.Store, *provider.Service, *clo
 			}
 			fixture.hostQueries.Add(1)
 			fmt.Fprint(w, `{"inventories":[{"uuid":"host-1","hypervisorType":"KVM","state":"Enabled","status":"Connected"}]}`)
-		case r.Method == http.MethodGet && r.URL.Path == "/v1/gpu-device/gpu-devices":
+		case r.Method == http.MethodGet && legacy && r.URL.Path == "/v1/gpu-device/gpu-devices":
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, "no api mapping to "+r.URL.Path)
+		case r.Method == http.MethodGet && ((!legacy && r.URL.Path == "/v1/gpu-device/gpu-devices") || (legacy && r.URL.Path == "/v1/pci-device/pci-devices")):
 			if query := r.URL.Query(); len(query) != 1 || len(query["q"]) != 1 || query.Get("q") != "uuid=gpu-1" {
 				t.Errorf("reservation must query only its GPU: %s", r.URL)
 				http.Error(w, "unexpected query", http.StatusBadRequest)
@@ -68,7 +85,15 @@ func newCloudRuntimeFixture(t *testing.T) (*store.Store, *provider.Service, *clo
 			if fixture.allocated.Load() {
 				allocation = "Allocated"
 			}
-			fmt.Fprintf(w, `{"inventories":[{"uuid":"gpu-1","hostUuid":"host-1","pciDeviceAddress":"0000:17:00.0","state":%q,"allocateStatus":%q,"description":%q}]}`, state, allocation, fixture.description.Load().(string))
+			if legacy || fixture.allocationFromPCI.Load() {
+				status := "Active"
+				if fixture.allocated.Load() {
+					status = "Reserved"
+				}
+				fmt.Fprintf(w, `{"inventories":[{"uuid":"gpu-1","hostUuid":"host-1","type":"GPU_3D_Controller","virtStatus":"UNVIRTUALIZABLE","pciDeviceAddress":"0000:17:00.0","state":%q,"status":%q,"description":%q}]}`, state, status, fixture.description.Load().(string))
+			} else {
+				fmt.Fprintf(w, `{"inventories":[{"uuid":"gpu-1","hostUuid":"host-1","pciDeviceAddress":"0000:17:00.0","state":%q,"allocateStatus":%q,"description":%q}]}`, state, allocation, fixture.description.Load().(string))
+			}
 		case r.Method == http.MethodPut && r.URL.Path == "/v1/pci-device/pci-devices/gpu-1/actions":
 			var body struct {
 				Update struct {
@@ -124,7 +149,7 @@ func newCloudRuntimeFixture(t *testing.T) (*store.Store, *provider.Service, *clo
 			if fixture.gpu.Load() {
 				state = "Disabled"
 			}
-			fmt.Fprintf(w, `{"inventory":{"state":%q,"description":%q}}`, state, fixture.description.Load().(string))
+			fmt.Fprintf(w, `{"inventories":[{"uuid":"gpu-1","state":%q,"description":%q}]}`, state, fixture.description.Load().(string))
 		default:
 			t.Errorf("unexpected Cloud request: %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -184,9 +209,14 @@ func newCloudRuntimeFixture(t *testing.T) (*store.Store, *provider.Service, *clo
 }
 
 func TestCloudRuntimeReservesAndReleasesOnlyAssignedGPUs(t *testing.T) {
-	for _, createFailed := range []bool{false, true} {
-		t.Run(fmt.Sprintf("createFailed=%v", createFailed), func(t *testing.T) {
-			st, svc, fixture := newCloudRuntimeFixture(t)
+	for _, tc := range []struct {
+		protocol     string
+		createFailed bool
+	}{
+		{"gpu-allocation", false}, {"gpu-allocation", true}, {"pci", false}, {"pci", true}, {"gpu-pci-state", false}, {"gpu-pci-state", true},
+	} {
+		t.Run(fmt.Sprintf("%s/createFailed=%v", tc.protocol, tc.createFailed), func(t *testing.T) {
+			st, svc, fixture := newCloudRuntimeFixtureForGPUProtocol(t, tc.protocol)
 			req := provider.InferenceNodeCreateRequest{NodeUUID: "cloud-node", InstanceUUID: "inference", GPUIndexes: []int{0}}
 			ordinary := req
 			ordinary.NodeUUID = "ordinary-node"
@@ -209,7 +239,7 @@ func TestCloudRuntimeReservesAndReleasesOnlyAssignedGPUs(t *testing.T) {
 				t.Fatalf("Cloud stop confirmation lost: %v, %v", wait, err)
 			}
 			for range 2 {
-				if createFailed {
+				if tc.createFailed {
 					err = svc.OnCreateFailed(t.Context(), req)
 				} else {
 					err = svc.AfterInstanceTerminal(t.Context(), provider.InferenceNodeStopRequest{

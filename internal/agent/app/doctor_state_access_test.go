@@ -71,7 +71,7 @@ func TestDoctorReportsAnAncestorOfTheStateDirectoryTheRuntimeUserCannotSearch(t 
 		t.Fatalf("findings = %+v", r.Findings)
 	}
 	f := found[0]
-	if f.Level != proto.DoctorLevelError {
+	if f.Status != proto.CheckFail {
 		t.Fatalf("level = %s, want error: workloads cannot launch", f.Level)
 	}
 	want := map[string]string{
@@ -92,7 +92,7 @@ func TestDoctorReportsAnAncestorOfTheStateDirectoryTheRuntimeUserCannotSearch(t 
 	}
 	// The text report (the CLI and agents without the structured form) says
 	// the same, with the blocking directory and the fix.
-	for _, w := range []string{"[error] runtime_state_untraversable", "directory = " + home, "fix = chmod o+x " + home, "namei -m " + stateDir, "every launch fails with permission denied"} {
+	for _, w := range []string{"[fail] RUNTIME_STATE_UNTRAVERSABLE", "directory = " + home, "fix = chmod o+x " + home, "namei -m " + stateDir, "every launch fails with permission denied"} {
 		if !strings.Contains(r.Report, w) {
 			t.Errorf("report lacks %q:\n%s", w, r.Report)
 		}
@@ -122,7 +122,7 @@ func TestDoctorStateAccessClearsOnceTheDirectoryIsOpened(t *testing.T) {
 	if got := findingsByCode(r, proto.DoctorRuntimeStateUntraversable); len(got) != 0 {
 		t.Fatalf("still reported after chmod o+x: %+v", got)
 	}
-	if strings.Contains(r.Report, "runtime_state_untraversable") {
+	if strings.Contains(r.Report, "RUNTIME_STATE_UNTRAVERSABLE") {
 		t.Fatalf("report still names it:\n%s", r.Report)
 	}
 	if driver.reads != 2 {
@@ -180,7 +180,7 @@ func TestCLIDoctorChecksTheStateDirectoryOfANodeThatUsesTheRuntime(t *testing.T)
 	if len(asked) != 1 || asked[0] != state || len(found) != 1 || found[0].Recheck != "namei -m "+state {
 		t.Fatalf("asked %v, findings %+v", asked, r.Findings)
 	}
-	if !strings.Contains(r.Report, "runtime_state_untraversable") || !strings.Contains(r.Report, "fix = chmod o+x /root") {
+	if !strings.Contains(r.Report, "RUNTIME_STATE_UNTRAVERSABLE") || !strings.Contains(r.Report, "fix = chmod o+x /root") {
 		t.Fatalf("report:\n%s", r.Report)
 	}
 }
@@ -209,7 +209,7 @@ func TestDoctorStateAccessWireForm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"code":"runtime_state_untraversable","level":"error",` +
+	want := `{"id":"runtime_state_access","status":"fail","code":"RUNTIME_STATE_UNTRAVERSABLE",` +
 		`"probe":"search permission on every directory above ` + stateDir + ` for udocker (uid ` + itoa(owner.UID) + `, gid ` + itoa(owner.GID) + `)",` +
 		`"evidence":[{"name":"directory","value":"` + home + `"},{"name":"mode","value":"0700"},{"name":"owner","value":"` + itoa(os.Geteuid()) + `:` + itoa(os.Getegid()) + `"},` +
 		`{"name":"user","value":"udocker"},{"name":"state_dir","value":"` + stateDir + `"},{"name":"fix","value":"chmod o+x ` + home + `"}],` +

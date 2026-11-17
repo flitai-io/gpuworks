@@ -14,9 +14,11 @@ import (
 	"sort"
 	"strings"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/pkg/modelconfig"
 )
 
@@ -84,14 +86,45 @@ type GPUFact struct {
 	DriverVersion string
 }
 
-// Check is one operation the export sent a request for, or decided not to.
+// CheckOperationReply is the id of every operation check: did the
+// deployment answer the smallest request of this operation. Operation names
+// which one.
+const CheckOperationReply = "operation_reply"
+
+// Check is one operation the export sent a request for, or decided not to
+// (ADR 0067): a status from proto.Check*, a code from package messages, and
+// what the gateway answered as evidence. A skipped check was not sent: Code
+// says why.
 type Check struct {
-	Operation  string `json:"operation"`
-	Endpoint   string `json:"endpoint,omitempty"`
-	Tested     bool   `json:"tested"`
-	Passed     bool   `json:"passed"`
-	HTTPStatus int    `json:"http_status,omitempty"`
-	Message    string `json:"message,omitempty"`
+	ID         string
+	Operation  string
+	Endpoint   string
+	Status     string
+	Code       string
+	HTTPStatus int
+	// Evidence is what the request returned instead of an answer: the
+	// gateway's or engine's error text, or the context error. It is external
+	// output, never the message.
+	Evidence string
+}
+
+// Message is the English fallback for Code.
+func (c Check) Message() string {
+	switch c.Code {
+	case messages.CheckTemplateOperationAnswered, messages.CheckTemplateOperationHTTPError:
+		return fmt.Sprintf("%s answered with HTTP %d", c.Operation, c.HTTPStatus)
+	case messages.CheckTemplateOperationNoReplica:
+		return fmt.Sprintf("no running replica answered %s", c.Operation)
+	case messages.CheckTemplateOperationTimedOut:
+		return fmt.Sprintf("the %s request did not finish in time", c.Operation)
+	case messages.CheckTemplateOperationReplyIncomplete:
+		return fmt.Sprintf("the %s request did not return a complete reply", c.Operation)
+	case messages.CheckTemplateOperationNotProbed:
+		return fmt.Sprintf("no test request is sent for %s", c.Operation)
+	case messages.CheckTemplateOperationNoEndpoint:
+		return fmt.Sprintf("%s has no endpoint to send a test request to", c.Operation)
+	}
+	return c.Code
 }
 
 // Export is a deployment written as a template.
@@ -182,7 +215,7 @@ func Build(in Input) (Export, error) {
 	notes = append(notes, checkNotes(in.Checks)...)
 	verified := true
 	for _, check := range in.Checks {
-		if check.Tested && !check.Passed {
+		if check.Status == proto.CheckFail {
 			verified = false
 		}
 	}

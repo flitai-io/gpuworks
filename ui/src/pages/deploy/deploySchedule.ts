@@ -35,10 +35,20 @@ export function scheduleText(
         : code === "does_not_wait_for_yield" || code === "held_by_non_yielding"
           ? heldParams(t, value.params)
           : value.params;
-    const translated = t(key, { ...params, defaultValue: "" });
+    const translated = t(key, { ...withSettingLabel(t, params), defaultValue: "" });
     if (translated && translated !== key) return translated + scheduleNote(t, value);
   }
   return value.message?.trim() || code;
+}
+
+// A reason that names a node placement policy setting (params.setting, its
+// key) reads it by the setting's own label (nodes:placementPolicy.<key>.label),
+// whichever reason and setting it is; one the client has no label for keeps
+// its key.
+function withSettingLabel(t: TFunction<"deploy">, params: Record<string, unknown> | undefined) {
+  const setting = params?.setting;
+  if (typeof setting !== "string" || !setting) return params;
+  return { ...params, settingLabel: t(`nodes:placementPolicy.${setting}.label`, { defaultValue: setting }) };
 }
 
 /**
@@ -78,10 +88,12 @@ function scheduleNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike
     case "insufficient_runtime_disk":
       return diskNote(t, value);
     // A card that hosts sleeping instances offers less than its utilization
-    // share; the reason names the residue so the figure can be reconciled with
-    // the card.
+    // share, and one shared with processes outside the platform less than its
+    // size; the reason names the residue and their use so the figure can be
+    // reconciled with the card.
     case "no_fit":
-      return note(t, "scheduleNote.sleeping_residue", "sleeping_gib", value.params?.sleeping_gib);
+      return note(t, "scheduleNote.sleeping_residue", "sleeping_gib", value.params?.sleeping_gib)
+        + foreignNote(t, value);
     // The image ledger's own failure text: what the pull, load or peer transfer
     // reported, which is the part that says whether to retry or pick another
     // source.
@@ -132,6 +144,14 @@ function diskNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike, st
   else if (available !== undefined) parts.push(t("scheduleNote.disk_available", { available }));
   if (diskRegistrationModelID(value) !== undefined) parts.push(t("scheduleNote.disk_register"));
   return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
+// What processes outside the platform hold on the card and the headroom kept
+// beside them, as the server measured them; empty when the card has none.
+function foreignNote(t: TFunction<"deploy">, value: Exclude<ScheduleMessageLike, string>): string {
+  const foreign = value.params?.foreign_gib;
+  if (foreign === undefined || foreign === null || foreign === "") return "";
+  return " " + t("scheduleNote.foreign_held", { foreign_gib: foreign, foreign_headroom_gib: value.params?.foreign_headroom_gib });
 }
 
 function note(t: TFunction<"deploy">, key: string, param: string, value: unknown): string {

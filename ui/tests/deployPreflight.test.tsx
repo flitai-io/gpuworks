@@ -6,6 +6,7 @@ import React from "react";
 import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
+import type { PreflightSummary } from "../src/api.ts";
 
 // The preflight RPC's orchestration is gone from the form: the multi-node
 // summary arrives on the evaluate response and renders read-only. These cases
@@ -95,29 +96,23 @@ const multiNodeFixture = JSON.parse(
     "utf8",
   ),
 ) as {
-  preflight?: {
-    ok: boolean;
-    checks?: Array<{ code?: string; message?: string }>;
-  };
+  preflight?: PreflightSummary;
 };
 assert.equal(
   multiNodeFixture.preflight?.ok,
   true,
   "the captured multi-node draft preflights clean",
 );
-assert.equal(
-  (multiNodeFixture.preflight?.checks ?? []).length,
-  0,
-  "the captured clean summary carries no checks",
+assert.ok(
+  (multiNodeFixture.preflight?.checks ?? []).length > 0 &&
+    (multiNodeFixture.preflight?.checks ?? []).every((check) => check.status === "pass"),
+  "the captured clean summary lists what it checked, every check passing",
 );
 
 function PreflightHost({
   preflight,
 }: {
-  preflight?: {
-    ok: boolean;
-    checks?: Array<{ code?: string; message?: string }>;
-  };
+  preflight?: PreflightSummary;
 }) {
   return (
     <I18nextProvider i18n={i18n}>
@@ -139,18 +134,21 @@ test("a clean multi-node draft renders the passing preflight tag", async () => {
   await waitFor(() =>
     assert.ok(screen.getByText(deployLocale.resource.preflightPassed)),
   );
+  // Passing checks stay in the summary tag; they are not listed one by one.
+  assert.equal(screen.queryByText(commonLocale.checkStatus.pass), null);
 });
 
-test("a failing summary names its checks", async () => {
+test("a failing summary names the failed check and the checks it kept from running", async () => {
   render(
     <PreflightHost
       preflight={{
         ok: false,
         checks: [
-          {
-            code: "PREFLIGHT_DUPLICATE_NODE",
-            message: "duplicate node node-a",
-          },
+          { id: "node_count", status: "pass", code: "PREFLIGHT_NODE_COUNT_OK", params: { count: 2 }, message: "2 nodes selected" },
+          { id: "node_list", status: "fail", code: "PREFLIGHT_DUPLICATE_NODE", params: { node: "node-a" }, message: "duplicate node node-a" },
+          { id: "port_range", status: "skip", code: "PREFLIGHT_BLOCKED", params: { blocked_by: "node_list" }, message: "not checked", blocked_by: ["node_list"] },
+          { id: "shared_network", status: "warn", code: "FUTURE_PREFLIGHT_CODE", message: "A future fallback" },
+          { id: "future", status: "na", code: "FUTURE_PREFLIGHT_CODE", message: "Does not apply" },
         ],
       }}
     />,
@@ -158,10 +156,16 @@ test("a failing summary names its checks", async () => {
   await waitFor(() =>
     assert.ok(screen.getByText(deployLocale.resource.preflightFailed)),
   );
-  assert.ok(
-    screen.getByText("duplicate node node-a"),
-    "the concrete rule that failed is visible",
-  );
+  // The text comes from the code, not the English fallback.
+  assert.ok(screen.getByText("Node “node-a” is selected more than once.", { exact: false }));
+  assert.equal(screen.queryByText("duplicate node node-a", { exact: false }), null);
+  assert.ok(screen.getByText(commonLocale.apiError.PREFLIGHT_BLOCKED, { exact: false }));
+  assert.ok(screen.getByText("A future fallback", { exact: false }), "an unknown code falls back to the message");
+  for (const status of ["fail", "skip", "warn", "na"] as const) {
+    assert.ok(screen.getByText(commonLocale.checkStatus[status]), status);
+  }
+  assert.equal(screen.queryByText(commonLocale.checkStatus.pass), null);
+  assert.equal(screen.queryByText("2 nodes are selected.", { exact: false }), null);
 });
 
 test("a draft without a preflight answer renders no verdict", async () => {

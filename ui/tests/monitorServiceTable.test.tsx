@@ -42,13 +42,14 @@ await i18n.use(initReactI18next).init({
 });
 
 const { MemoryRouter, Route, Routes, useLocation } = await import("react-router-dom");
-const { cleanup, render, screen, within } = await import("@testing-library/react");
+const { cleanup, render, screen, within, waitFor } = await import("@testing-library/react");
 const userEvent = (await import("@testing-library/user-event")).default;
 const { default: ServiceTable } = await import("../src/pages/monitor/ServiceTable.tsx");
-import type { MonitorService } from "../src/api";
+import type { MonitorService, MonitorStateCount } from "../src/api";
 
 const overview = JSON.parse(fs.readFileSync(new URL("./fixtures/monitor-overview.json", import.meta.url), "utf8"));
 const services = overview.services as MonitorService[];
+const stateCounts = overview.state_counts as MonitorStateCount[];
 
 afterEach(() => {
   cleanup();
@@ -67,7 +68,7 @@ function renderTable(props: Partial<React.ComponentProps<typeof ServiceTable>> =
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={["/monitor"]}>
         <Routes>
-          <Route path="/monitor" element={<ServiceTable services={services} {...props} />} />
+          <Route path="/monitor" element={<ServiceTable services={services} stateCounts={stateCounts} {...props} />} />
           <Route path="/monitor/d/:id" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>
@@ -103,9 +104,19 @@ test("running and waiting render independently: one side null does not fabricate
 });
 
 test("a filter narrows the visible rows to the given deployment ids", () => {
-  renderTable({ filterDeploymentIds: [104] });
+  renderTable({ signalFilter: { label: "Ready replicas", deploymentIds: [104] } });
   assert.ok(screen.getByText("DeepSeek-V2-Lite"));
   assert.equal(screen.queryByText("Qwen3-32B"), null);
+});
+
+test("a signal narrowing is a toolbar filter chip beside the column filters, and its clear goes to the owner", async () => {
+  let cleared = 0;
+  renderTable({ signalFilter: { label: "Ready replicas", deploymentIds: [103, 107] }, onClearSignalFilter: () => { cleared++; } });
+  const toolbar = screen.getByRole("heading", { name: "Inference Services" }).closest(".resource-table-toolbar") as HTMLElement;
+  const chip = within(within(toolbar).getByRole("group", { name: "Filtered" })).getByRole("button", { name: "Clear filter: Signal Ready replicas" });
+  assert.equal(chip.textContent, "Signal: Ready replicas");
+  await userEvent.setup().click(chip);
+  assert.equal(cleared, 1);
 });
 
 test("clicking a row navigates to the service monitor route (mouse-only row affordance)", async () => {
@@ -135,7 +146,7 @@ test("below the md breakpoint only service, state, health and TTFT show", () => 
   renderTable();
   const headerRow = screen.getAllByRole("row")[0];
   const headers = within(headerRow).getAllByRole("columnheader").map((h) => h.textContent);
-  assert.deepEqual(headers, ["Service", "State", "Health", "TTFT p95"]);
+  assert.deepEqual(headers, ["Service name", "State", "Health", "TTFT p95"]);
 });
 
 test("at or above the md breakpoint every column shows", () => {
@@ -192,4 +203,84 @@ test("the TTFT p95 column carries its unit and reads seconds from 1 s", () => {
   const cells = (name: string) => within(screen.getByText(name).closest("tr")!).getAllByRole("cell").map((cell) => cell.textContent);
   assert.ok(cells(slow[0].name).includes("39s"), String(cells(slow[0].name)));
   assert.ok(cells(services[1].name).includes(`${services[1].ttft_p95_ms} ms`), String(cells(services[1].name)));
+});
+
+const pressed = (name: string) => screen.getByRole("button", { name, exact: true }).getAttribute("aria-pressed");
+
+test("state count shortcuts and the column filter share one selection", async () => {
+  renderTable();
+  const user = userEvent.setup();
+  assert.equal(pressed("All 11"), "true", "nothing picked lights All");
+  await user.click(screen.getByRole("button", { name: "Starting 1" }));
+  await waitFor(() => assert.equal(pressed("Starting 1"), "true"));
+  assert.equal(pressed("All 11"), "false");
+  // The pressed shortcut says what is filtered: no second "State: Starting" chip.
+  assert.equal(screen.queryByRole("button", { name: /^Clear filter: State/ }), null);
+  assert.equal(screen.queryByRole("group", { name: "Filtered" }), null);
+  assert.ok(screen.getByText("Llama-3.1-70B"));
+  assert.equal(screen.queryByText("Qwen3-32B"), null);
+  await user.click(screen.getByRole("button", { name: "All 11" }));
+  await waitFor(() => assert.equal(pressed("Starting 1"), "false"));
+  assert.equal(pressed("All 11"), "true");
+  assert.ok(screen.getByText("Qwen3-32B"));
+  await user.click(screen.getByRole("button", { name: "Filter by State" }));
+  await user.click(await screen.findByRole("checkbox", { name: /Starting/ }));
+  await waitFor(() => assert.equal(pressed("Starting 1"), "true"));
+  assert.equal(screen.queryByRole("button", { name: /^Clear filter: State/ }), null);
+});
+
+test("a state picked from the shortcut shows checked in the column filter, and clicking the pressed shortcut again clears it", async () => {
+  renderTable();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Failed 1" }));
+  await user.click(screen.getByRole("button", { name: "Filter by State" }));
+  const failed = await screen.findByRole("checkbox", { name: /Failed/ });
+  assert.equal(failed.getAttribute("aria-checked") ?? String((failed as HTMLInputElement).checked), "true");
+  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("button", { name: "Failed 1" }));
+  await waitFor(() => assert.equal(pressed("All 11"), "true"));
+  assert.ok(screen.getByText("Qwen3-32B"));
+});
+
+test("several states picked in the column light no shortcut and keep the toolbar chip", async () => {
+  renderTable();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Filter by State" }));
+  await user.click(await screen.findByRole("checkbox", { name: /Starting/ }));
+  await user.click(await screen.findByRole("checkbox", { name: /Failed/ }));
+  await user.keyboard("{Escape}");
+  await waitFor(() => assert.ok(screen.getByRole("button", { name: "Clear filter: State Starting, Failed" })));
+  for (const name of ["All 11", "Running 8", "Starting 1", "Asleep 1", "Failed 1"]) assert.equal(pressed(name), "false", name);
+  assert.ok(screen.getByText("Llama-3.1-70B"));
+  assert.ok(screen.getByText("ChatGLM3-6B"));
+  assert.equal(screen.queryByText("Qwen3-32B"), null);
+});
+
+test("the summary shows the server's counts and order, not a count of the rows it was given", () => {
+  // Deliberately disagrees with services[]: the counts are the server's.
+  renderTable({ stateCounts: [
+    { state: "failed", count: 4 }, { state: "running", count: 30 }, { state: "starting", count: 0 },
+    { state: "asleep", count: 0 }, { state: "offline", count: 2 }, { state: "stopped", count: 0 },
+  ] });
+  const summary = screen.getByRole("group", { name: "Service state" });
+  assert.deepEqual(within(summary).getAllByRole("button").map((button) => button.textContent), ["All 36", "Failed 4", "Running 30", "Offline 2"]);
+});
+
+
+test("offline services use warning status in both the summary and table while failed services stay danger", () => {
+  renderTable({ services: [
+    { ...services[0], deployment_id: 9001, name: "Offline service", state: "offline" },
+    { ...services[0], deployment_id: 9002, name: "Failed service", state: "failed" },
+  ], stateCounts: [
+    { state: "running", count: 0 }, { state: "starting", count: 0 }, { state: "asleep", count: 0 },
+    { state: "offline", count: 1 }, { state: "failed", count: 1 }, { state: "stopped", count: 0 },
+  ] });
+  assert.ok(screen.getByRole("heading", { name: "Inference Services" }));
+  assert.equal(screen.getByRole("link", { name: "Offline service" }).getAttribute("href"), "/monitor/d/9001");
+  const offline = screen.getByText("Offline service").closest("tr")!;
+  const failed = screen.getByText("Failed service").closest("tr")!;
+  assert.equal(within(offline).getByText("Offline", { exact: true }).closest('[data-slot="badge"]')?.getAttribute("data-status"), "warning");
+  assert.equal(within(failed).getByText("Failed", { exact: true }).closest('[data-slot="badge"]')?.getAttribute("data-status"), "danger");
+  const summary = screen.getByRole("group", { name: "Service state" });
+  assert.equal(within(summary).getByRole("button", { name: "Offline 1" }).querySelector('[data-slot="badge"]')?.getAttribute("data-status"), "warning");
 });

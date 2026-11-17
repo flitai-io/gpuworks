@@ -26,3 +26,5 @@ Instance-level entrypoint/cmd overrides remain available and are independent of 
 - (−) In image-entry mode, compatibility between engine arguments and an unknown entrypoint cannot be guaranteed statically; preview and post-deployment logs provide the fallback for troubleshooting.
 
 Rejected alternatives: retain unconditional engine takeover (incorrect semantics for community images); automatically detect entrypoint structure (too varied to be reliable).
+
+<!-- translation-source-sha256: 638c04b4e137640c81bc2687b2067162c17d3bdb672dea1516f982a5eb567610 -->

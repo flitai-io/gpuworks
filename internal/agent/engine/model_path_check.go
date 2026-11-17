@@ -15,8 +15,8 @@ import (
 const modelPathCheckTimeout = 2 * time.Second
 
 // ModelPathUnavailable prefixes the failure message of a launch whose model
-// directory is missing, so the server and the UI can tell it apart.
-const ModelPathUnavailable = "MODEL_PATH_UNAVAILABLE"
+// directory is missing; the structured reason carries the same code.
+const ModelPathUnavailable = proto.ErrorModelPathUnavailable
 
 // checkModelPaths verifies, with a time limit, that the primary model
 // directory and every model component mount exist as directories.
@@ -38,7 +38,8 @@ func checkModelPathsWith(spec proto.InstanceDesiredState, stat func(string) (os.
 	}
 	for _, path := range paths {
 		if err := statDirWithin(stat, path, modelPathCheckTimeout); err != nil {
-			return fmt.Errorf("%s: model path %s is unavailable: %v", ModelPathUnavailable, path, err)
+			return withFailure(proto.RuntimeFailure{Code: proto.ErrorModelPathUnavailable, Resource: path, Detail: err.Error()},
+				fmt.Errorf("%s: model path %s is unavailable: %v", ModelPathUnavailable, path, err))
 		}
 	}
 	return nil

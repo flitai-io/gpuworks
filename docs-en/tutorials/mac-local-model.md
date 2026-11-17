@@ -152,3 +152,6 @@ When you do not need inference, you can stop the model to release runtime resour
 2. Wait for the deployment to show **Stopped**, the replica count to become `0/1`, and the instance count in the details to become `0`. To use it again later, return to the same deployment, click **Start**, and wait for it to become healthy before sending requests.
 
 Stopping the deployment retains its configuration, model files, and environment package; it does not uninstall GPUWorks. The console and agent continue running independently. The console installed in this tutorial is not registered to start at boot.
+
+<!-- translation-source-sha256: ae01c5cfedfe4b69dfbc263f634f3d7538f2fec97d29f27b595105287e6f78f0 -->
+<!-- translation-localized-code-block: 759bfa7d80675897fa4f7c934ed3cb1a7deec31455450a7b837290a482210328 4243c866d8c7087ea32206f24f47b3ff3e752683a35caa380488b526770725c9 Translate the natural-language prompt while retaining its request for a Chinese answer; the page explicitly distinguishes the original screenshot wording. -->

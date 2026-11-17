@@ -53,3 +53,5 @@ Source candidates retain the full list declared by the spec; local copies affect
 - The new `internal/server/imagecatalog/pullref` package consolidates pull candidate ordering, with store and imagecatalog sharing one implementation. The divergent `store.imagePullRefsForImage` implementation is removed. The two candidate chain implementations mentioned in ADR 0017's context now use the same code.
 - Pull candidates apply to any tagged ref, without requiring registration in the image catalog; prefix matching respects segment boundaries after Docker Hub normalization.
 - Node network overrides gain read/write APIs and a card on the node details page, giving evaluate's “This node's override” label a definitive source.
+
+<!-- translation-source-sha256: a54d0410c175d8bd5e6576cd72d40cdb576e678eebe9fdf2da5d913090653be6 -->

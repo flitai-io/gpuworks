@@ -50,6 +50,9 @@ func TestListClustersFindsNVIDIAPoolsOnly(t *testing.T) {
 	if !reflect.DeepEqual(gpu.GPUPools, wantPools) {
 		t.Errorf("pools =\n%+v\nwant\n%+v", gpu.GPUPools, wantPools)
 	}
+	if gpu.Type != provider.ClusterTypeDOKS || got[0].Type != provider.ClusterTypeDOKS {
+		t.Errorf("cluster types = %q, %q, want doks", gpu.Type, got[0].Type)
+	}
 	if gpu.Name != "ml" || gpu.Region != "nyc2" || gpu.Version != "1.34.1-do.0" || gpu.State != "running" || !gpu.Running || !gpu.PublicAPI {
 		t.Errorf("cluster = %+v", gpu)
 	}

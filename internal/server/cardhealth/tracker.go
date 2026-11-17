@@ -1,7 +1,7 @@
 // Package cardhealth keeps what each card's checks last said and records the
 // stretches in which one of them warned or failed.
 //
-// The states themselves are never stored: every status report brings them
+// The results themselves are never stored: every status report brings them
 // again, so they live in memory and a restarted server shows "waiting for a
 // report" for at most one report period. Only problems are written, one row per
 // stretch (an episode), so a healthy fleet writes nothing and the writes grow
@@ -56,9 +56,9 @@ type Episode struct {
 	NodeID    uint
 	CardIdent string
 	CheckID   string
-	// Level is the check state: warn or fail.
-	Level      string
-	Reason     string
+	// Status is the check status, warn or fail; Code what the check found.
+	Status     string
+	Code       string
 	StartedAt  time.Time
 	EndedAt    *time.Time
 	LastSeenAt time.Time
@@ -192,13 +192,13 @@ func (t *Tracker) observeCheck(key episodeKey, c proto.CardCheck, at time.Time) 
 	}
 	ranAt := at.Add(-time.Duration(c.AgeS) * time.Second)
 	switch {
-	case accelerator.CheckProblem(c.State):
+	case accelerator.CheckProblem(c.Status):
 		evidence := evidenceText(c.Evidence)
 		if ep == nil || ep.closed {
 			t.episodes[key] = &episode{
 				row: Episode{
 					NodeID: key.node, CardIdent: key.ident, CheckID: key.check,
-					Level: c.State, Reason: c.Reason, StartedAt: ranAt.UTC(), LastSeenAt: at.UTC(), Count: 1,
+					Status: c.Status, Code: c.Code, StartedAt: ranAt.UTC(), LastSeenAt: at.UTC(), Count: 1,
 					FirstEvidence: evidence, LatestEvidence: evidence,
 				},
 				lastRun: ranAt, seenAt: at, dirty: true, urgent: true,
@@ -217,14 +217,14 @@ func (t *Tracker) observeCheck(key episodeKey, c proto.CardCheck, at time.Time) 
 			ep.row.Count++
 			ep.lastRun = ranAt
 		}
-		if ep.row.Level != c.State || ep.row.Reason != c.Reason {
-			ep.row.Level, ep.row.Reason, ep.urgent = c.State, c.Reason, true
+		if ep.row.Status != c.Status || ep.row.Code != c.Code {
+			ep.row.Status, ep.row.Code, ep.urgent = c.Status, c.Code, true
 		}
 		ep.row.LatestEvidence = evidence
 		ep.row.LastSeenAt = at.UTC()
 		ep.dirty = true
 		ep.version++
-	case c.State == accelerator.CheckPass:
+	case c.Status == proto.CheckPass:
 		if ep == nil || ep.closed {
 			return
 		}
@@ -386,7 +386,7 @@ func statesChanged(prev, next *NodeSnapshot) bool {
 			return true
 		}
 		for j, c := range card.Checks {
-			if o := old.Checks[j]; o.ID != c.ID || o.State != c.State || o.Reason != c.Reason {
+			if o := old.Checks[j]; o.ID != c.ID || o.Status != c.Status || o.Code != c.Code {
 				return true
 			}
 		}

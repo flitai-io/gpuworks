@@ -66,18 +66,35 @@ func DeriveRuntimeState(desired store.DeploymentState, instances []store.Instanc
 	// active. Retries deliberately use a fresh instance UUID and keep terminal
 	// rows for diagnostics, so an old failure must not hide a currently pulling,
 	// starting, or running replacement.
+	//
+	// A headless rank is neither, whatever its state: it exposes no endpoint,
+	// and the gateway routes to a multi-node replica through its leader only,
+	// so a follower that outlives its failed leader keeps nothing serving. A
+	// running leader whose generation lost a follower to failure has failed
+	// with it: the generation serves as a whole.
+	incomplete := GroupsIncomplete(instances)
 	hasLive, hasFailed := false, false
 	for _, instance := range instances {
-		switch instance.State {
-		case proto.InstFailed:
+		switch {
+		case instance.State == proto.InstFailed:
 			hasFailed = true
-		case proto.InstStopped, proto.InstPendingRemoval:
+		case instance.Headless:
+		case instance.State == proto.InstStopped, instance.State == proto.InstPendingRemoval:
+		case instance.State == proto.InstRunning && !InstanceAsleep(&instance) && incomplete[instance.UUID] && generationFailed(instances, instance):
+			hasFailed = true
 		default:
 			hasLive = true
 		}
 	}
 	if !hasLive && hasFailed {
 		return "failed"
+	}
+	// A running replica keeps the runtime state running while a replacement
+	// warms up. Sleeping leaders retain that runtime state too: the gateway
+	// refuses them for sleep before checking their followers, and
+	// deployment.EffectiveState presents that refusal as sleeping/asleep.
+	if runningRoles(instances, incomplete) {
+		return "running"
 	}
 	for _, instance := range instances {
 		if instance.State == proto.InstPulling {
@@ -98,9 +115,48 @@ func DeriveRuntimeState(desired store.DeploymentState, instances []store.Instanc
 		}
 	}
 	for _, instance := range instances {
+		// A leader missing a running follower is not serving: its
+		// generation is coming up or going away.
+		if instance.Headless || incomplete[instance.UUID] {
+			continue
+		}
 		if instance.State == proto.InstRunning || instance.State == proto.InstDraining {
 			return "running"
 		}
 	}
 	return "starting"
+}
+
+// runningRoles reports whether every role has a running leader whose followers
+// all run, or a sleeping leader. The gateway checks sleep before completeness:
+// a sleeping leader keeps its running runtime state so EffectiveState can show
+// sleeping/asleep, even while a follower is down. This does not count it ready.
+// An ordinary deployment has one role, the empty one; a PD deployment with a
+// role still warming does not serve yet.
+func runningRoles(instances []store.Instance, incomplete map[string]bool) bool {
+	roles := map[string]bool{}
+	for _, instance := range instances {
+		if instance.Headless || !InstanceActive(instance.State) {
+			continue
+		}
+		running := instance.State == proto.InstRunning && (InstanceAsleep(&instance) || !incomplete[instance.UUID])
+		roles[instance.Role] = roles[instance.Role] || running
+	}
+	for _, running := range roles {
+		if !running {
+			return false
+		}
+	}
+	return len(roles) > 0
+}
+
+// generationFailed reports whether a follower of the leader's generation
+// failed, which leaves the generation unable to serve.
+func generationFailed(instances []store.Instance, leader store.Instance) bool {
+	for _, instance := range instances {
+		if instance.Headless && instance.State == proto.InstFailed && SameGeneration(instance, leader) {
+			return true
+		}
+	}
+	return false
 }

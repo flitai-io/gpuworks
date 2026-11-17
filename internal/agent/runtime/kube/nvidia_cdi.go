@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // NVIDIA's container toolkit in CDI mode (the GPU Operator's default) reads
@@ -20,6 +21,13 @@ import (
 // device plugin, run with CDI, writes a spec with one device per card UUID
 // when it starts; naming the card by that fully qualified name gives the pod
 // that card alone, with no device-plugin resource of its own.
+//
+// When no spec names the card (HAMi, or another device plugin, replaced
+// NVIDIA's, so nobody wrote the per-card names) the pod is given every card
+// through the management spec's "all" and CUDA_VISIBLE_DEVICES limits it to
+// the card it was assigned: every /dev/nvidiaN is visible in the container,
+// only CUDA is confined. The node reports that as soft isolation
+// (Driver.NVIDIAIsolation) so the operator can pick strict isolation back.
 
 // nvidiaCDIDirs are where CDI specs live on a node: containerd's default
 // cdi_spec_dirs, and /run/cdi for /var/run/cdi. On most distributions
@@ -41,12 +49,18 @@ var nvidiaRuntimeConfigs = []string{
 }
 
 // nvidiaRuntimeMode is the first toolkit configuration's runtime mode under
-// root ("cdi", "legacy", "auto", or "" when none says).
-func nvidiaRuntimeMode(root string) string {
-	for _, path := range nvidiaRuntimeConfigs {
+// root ("cdi", "legacy", "auto", or "" when none says) and whose toolkit that
+// configuration is (proto.NVIDIAToolkitGPUOperator or
+// proto.NVIDIAToolkitHost; "" when there is no configuration at all).
+func nvidiaRuntimeMode(root string) (mode, toolkit string) {
+	for i, path := range nvidiaRuntimeConfigs {
 		raw, err := os.ReadFile(filepath.Join(root, path))
 		if err != nil {
 			continue
+		}
+		toolkit = proto.NVIDIAToolkitGPUOperator
+		if i > 0 {
+			toolkit = proto.NVIDIAToolkitHost
 		}
 		section := ""
 		for _, line := range strings.Split(string(raw), "\n") {
@@ -57,12 +71,12 @@ func nvidiaRuntimeMode(root string) string {
 			}
 			k, v, ok := strings.Cut(line, "=")
 			if ok && section == "nvidia-container-runtime" && strings.TrimSpace(k) == "mode" {
-				return strings.Trim(strings.TrimSpace(v), `"'`)
+				return strings.Trim(strings.TrimSpace(v), `"'`), toolkit
 			}
 		}
-		return ""
+		return "", toolkit
 	}
-	return ""
+	return "", ""
 }
 
 // nvidiaCDIKinds are the spec kinds whose devices are single NVIDIA cards by
@@ -76,6 +90,9 @@ type nvidiaCDI struct {
 	// names: its management spec is there and its configuration does not
 	// say legacy mode.
 	Toolkit bool
+	// ToolkitKind is whose toolkit configuration was read
+	// (proto.NVIDIAToolkit*), empty when there was none.
+	ToolkitKind string
 	// Names maps a card UUID to its fully qualified CDI device name.
 	Names map[string]string
 }
@@ -133,47 +150,70 @@ func readNVIDIACDI(root string) nvidiaCDI {
 			}
 		}
 	}
-	if out.Toolkit && nvidiaRuntimeMode(root) == "legacy" {
+	mode, kind := nvidiaRuntimeMode(root)
+	out.ToolkitKind = kind
+	if out.Toolkit && mode == "legacy" {
 		out.Toolkit = false
 	}
 	return out
 }
 
+// nvidiaVisibility is what an instance pod is given to see of its cards.
+type nvidiaVisibility struct {
+	// Devices is the NVIDIA_VISIBLE_DEVICES value.
+	Devices string
+	// CUDAVisible, when set, is the CUDA_VISIBLE_DEVICES value: Devices is
+	// then every card, and CUDA is what keeps the pod to its own (soft
+	// isolation).
+	CUDAVisible string
+}
+
 // qualify rewrites an NVIDIA_VISIBLE_DEVICES value of card indexes or UUIDs
 // to CDI device names when the toolkit needs them; cards maps index to UUID.
-// "all", "none" and "void" stay: the management spec defines "all".
-func (c nvidiaCDI) qualify(value string, cards map[int]string) (string, error) {
+// "all", "none" and "void" stay: the management spec defines "all". When any
+// card is named by no spec, the pod is given every card through the
+// management spec and CUDA_VISIBLE_DEVICES is the host index of each card
+// asked for (with every card visible the container's CUDA order is the
+// host's).
+func (c nvidiaCDI) qualify(value string, cards map[int]string) (nvidiaVisibility, error) {
 	if !c.Toolkit || value == "" || value == "all" || value == "none" || value == "void" {
-		return value, nil
+		return nvidiaVisibility{Devices: value}, nil
 	}
 	parts := strings.Split(value, ",")
-	out := make([]string, 0, len(parts))
+	names := make([]string, 0, len(parts))
+	indexes := make([]string, 0, len(parts))
+	named := true
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
-		uuid := p
+		uuid, index := p, ""
 		if i, err := strconv.Atoi(p); err == nil {
-			uuid = cards[i]
+			uuid, index = cards[i], p
+		} else {
+			for i, u := range cards {
+				if u == p {
+					index = strconv.Itoa(i)
+				}
+			}
+		}
+		if index == "" {
+			return nvidiaVisibility{}, fmt.Errorf("NVIDIA's container toolkit runs in CDI mode and card %q is not one of the node's cards, so it can be neither named nor confined by CUDA_VISIBLE_DEVICES", p)
 		}
 		name, ok := c.Names[uuid]
-		if !ok {
-			known := make([]string, 0, len(c.Names))
-			for u := range c.Names {
-				known = append(known, u)
-			}
-			sort.Strings(known)
-			return "", fmt.Errorf("NVIDIA's container toolkit runs in CDI mode, and no CDI spec on the node names card %s (UUID %q; specs name %v): "+
-				"run NVIDIA's device plugin with CDI (the GPU Operator's default), or set the toolkit to legacy mode (NVIDIA_CONTAINER_RUNTIME_MODE=legacy)", p, uuid, known)
-		}
-		out = append(out, name)
+		named = named && ok
+		names = append(names, name)
+		indexes = append(indexes, index)
 	}
-	return strings.Join(out, ","), nil
+	if named {
+		return nvidiaVisibility{Devices: strings.Join(names, ",")}, nil
+	}
+	return nvidiaVisibility{Devices: nvidiaCDIManagementKind + "=all", CUDAVisible: strings.Join(indexes, ",")}, nil
 }
 
 // nvidiaVisible is the instance pods' NVIDIA_VISIBLE_DEVICES rewrite for
 // this node, read when a pod is made: the GPU Operator writes its specs
 // after the agent may have started. Nil when the toolkit takes plain
 // indexes (legacy mode, or no toolkit spec), or without the host's root.
-func (d *Driver) nvidiaVisible(ctx context.Context) func(string) (string, error) {
+func (d *Driver) nvidiaVisible(ctx context.Context) func(string) (nvidiaVisibility, error) {
 	if d.o.HostRoot == "" {
 		return nil
 	}
@@ -181,13 +221,48 @@ func (d *Driver) nvidiaVisible(ctx context.Context) func(string) (string, error)
 	if !cdi.Toolkit {
 		return nil
 	}
-	return func(v string) (string, error) {
-		cards := map[int]string{}
-		if d.o.Cards != nil {
-			if c, err := d.o.Cards(ctx); err == nil {
-				cards = c
-			}
-		}
-		return cdi.qualify(v, cards)
+	return func(v string) (nvidiaVisibility, error) {
+		return cdi.qualify(v, d.nvidiaCards(ctx))
 	}
+}
+
+// nvidiaCards is the node's cards by index and UUID; empty when the probe
+// cannot say.
+func (d *Driver) nvidiaCards(ctx context.Context) map[int]string {
+	if d.o.Cards == nil {
+		return map[int]string{}
+	}
+	cards, err := d.o.Cards(ctx)
+	if err != nil || cards == nil {
+		return map[int]string{}
+	}
+	return cards
+}
+
+// NVIDIAIsolation is what the node reports about how strictly an instance
+// pod is kept to its own NVIDIA card: nil while it is strict (the toolkit
+// takes plain indexes, or a CDI spec names every card) or the node has no
+// NVIDIA card; soft when the toolkit resolves CDI names, no spec names some
+// card, and pods therefore see every card and are held to theirs by CUDA only.
+func (d *Driver) NVIDIAIsolation(ctx context.Context) *proto.NVIDIAIsolation {
+	if d.o.HostRoot == "" {
+		return nil
+	}
+	cdi := readNVIDIACDI(d.o.HostRoot)
+	if !cdi.Toolkit {
+		return nil
+	}
+	unnamed := 0
+	for _, uuid := range d.nvidiaCards(ctx) {
+		if !strings.HasPrefix(uuid, "GPU-") {
+			continue // not an NVIDIA card by UUID (another vendor's, or a MIG device)
+		}
+		if _, ok := cdi.Names[uuid]; !ok {
+			unnamed++
+		}
+	}
+	if unnamed == 0 {
+		return nil
+	}
+	return &proto.NVIDIAIsolation{Level: proto.NVIDIAIsolationSoft, Reason: proto.NVIDIAIsolationCDINamesMissing, Toolkit: cdi.ToolkitKind, Cards: unnamed}
 }

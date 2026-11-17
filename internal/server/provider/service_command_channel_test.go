@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -15,7 +17,7 @@ type channelTestDriver struct {
 	fallbackTestDriver
 	connections   []string
 	assistantErr  error
-	precheckRows  []InstallCheck
+	precheckRows  []provision.CheckResult
 	precheckCalls int
 	last          InstallRequest
 }
@@ -39,12 +41,12 @@ func (d *channelTestDriver) InstallAgentWithReport(_ context.Context, _ Credenti
 		}
 		// Like the Aliyun driver: the script install reports the directory
 		// it was given.
-		return InstallReport{InstallDir: req.InstallDir, Checks: []InstallCheck{{Name: "Agent process", Status: "ok"}}}, d.assistantErr
+		return InstallReport{InstallDir: req.InstallDir, Checks: []provision.CheckResult{{ID: "agent_process", Status: "pass"}}}, d.assistantErr
 	}
-	return InstallReport{Checks: []InstallCheck{{Name: "Agent process", Status: "ok"}}}, nil
+	return InstallReport{Checks: []provision.CheckResult{{ID: "agent_process", Status: "pass"}}}, nil
 }
 
-func (d *channelTestDriver) PrecheckCommand(_ context.Context, _ Credentials, inst Instance, connection SSHConnection, req CommandPrecheckRequest) ([]InstallCheck, error) {
+func (d *channelTestDriver) PrecheckCommand(_ context.Context, _ Credentials, inst Instance, connection SSHConnection, req CommandPrecheckRequest) ([]provision.CheckResult, error) {
 	d.precheckCalls++
 	if inst.ExternalID != "i-1" || connection.Type != ConnectionCloudAssistant || req.ServerURL != "https://server.example" || req.ConnectMode != "agent_dial" {
 		return nil, errors.New("unexpected precheck request")
@@ -98,9 +100,9 @@ func TestOfflineCloudAssistantFallsBackToSSH(t *testing.T) {
 // instance itself, so a node that cannot reach the server is explained.
 func TestPrecheckThroughCloudAssistantAddsTheConnectivityVerdict(t *testing.T) {
 	svc, providerID, driver := newChannelService(t, "channel-precheck")
-	driver.precheckRows = []InstallCheck{
-		{Name: "OS/Arch", Status: "ok", Detail: "Linux x86_64"},
-		{Name: "Server reachability", Status: "error", Detail: "curl: (28) Connection timed out"},
+	driver.precheckRows = []provision.CheckResult{
+		{ID: "os_arch", Status: "pass", Message: "Linux x86_64"},
+		{ID: "server_reachability", Status: "fail", Message: "curl: (28) Connection timed out"},
 	}
 	report, err := svc.Precheck(t.Context(), providerID, "i-1", "https://server.example", InstallOptions{})
 	if err != nil {
@@ -108,14 +110,14 @@ func TestPrecheckThroughCloudAssistantAddsTheConnectivityVerdict(t *testing.T) {
 	}
 	names := []string{}
 	for _, check := range report.Checks {
-		names = append(names, check.Name+"="+check.Status)
+		names = append(names, check.ID+"="+check.Status)
 	}
 	// The private address 127.0.0.1 refuses on the listen port: reachable.
-	want := "OS/Arch=ok,Server reachability=error,Server to agent=ok,Connectivity=warn"
+	want := "os_arch=pass,server_reachability=fail,server_to_agent=pass,connectivity=warn"
 	if strings.Join(names, ",") != want || driver.precheckCalls != 1 {
 		t.Fatalf("checks = %s\nwant   %s", strings.Join(names, ","), want)
 	}
-	if verdict := report.Checks[3].Detail; !strings.Contains(verdict, "server_dial") {
+	if verdict := report.Checks[3]; verdict.Code != messages.CheckConnectivityUseServerDial || !strings.Contains(checkText(verdict), "server_dial") {
 		t.Fatalf("verdict = %s", verdict)
 	}
 }

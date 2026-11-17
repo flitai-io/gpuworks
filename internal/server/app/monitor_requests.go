@@ -47,8 +47,8 @@ func (s *requestSource) Live(deploymentID uint, limit int) uxrecord.LiveSnapshot
 func (s *requestSource) History(ctx context.Context, q monitorapi.HistoryQuery) ([]uxrecord.Request, string, error) {
 	records, next, err := s.ux.Requests(ctx, uxstore.RequestQuery{
 		DeploymentID: q.DeploymentID, FromMS: q.FromMS, ToMS: q.ToMS,
-		APIKeyID: q.APIKeyID, InstanceUUID: q.InstanceUUID, Results: q.Results,
-		MinEndMS: q.MinEndMS, MaxEndMS: q.MaxEndMS, Limit: q.Limit, Cursor: q.Cursor,
+		APIKeyID: q.APIKeyID, InstanceUUID: q.InstanceUUID, PriorityClass: q.PriorityClass, Results: q.Results,
+		MinEndMS: q.MinEndMS, MaxEndMS: q.MaxEndMS, MinTTFTMS: q.MinTTFTMS, MaxTTFTMS: q.MaxTTFTMS, Limit: q.Limit, Cursor: q.Cursor,
 	})
 	if errors.Is(err, uxstore.ErrBadQuery) {
 		return nil, "", fmt.Errorf("%w: %w", monitorapi.ErrBadHistoryQuery, err)
@@ -127,10 +127,10 @@ func (a *App) closeRequestSinks() {
 		a.telemetry.exporter.Close()
 	}
 	a.ops.close()
-	if a.obs == nil || a.obs.ux == nil {
+	if a.obs == nil || a.obs.UX() == nil {
 		return
 	}
-	if err := a.obs.ux.Close(); err != nil {
+	if err := a.obs.UX().Close(); err != nil {
 		a.log.Warn("request store close failed", "err", err)
 	}
 }

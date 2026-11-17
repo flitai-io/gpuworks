@@ -28,7 +28,7 @@ func TestGPUCandidatesResourceCombinations(t *testing.T) {
 						if shared {
 							want = available && occupied <= 32*gib
 						}
-						choices := GPUCandidates(req, []GPU{card})
+						choices := GPUCandidates(req, NodeSnapshot{GPUs: []GPU{card}})
 						if len(choices) != 1 || choices[0].Index != 7 || choices[0].Available != want || (choices[0].Reason == nil) != want {
 							t.Fatalf("shared=%v occupied=%d available=%v: %+v, want selectable=%v", shared, occupied, available, choices, want)
 						}
@@ -81,7 +81,7 @@ func TestGPUCandidatesBoundariesAndCapabilities(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			card := base
 			tc.change(&card)
-			indexes := GPUCandidates(tc.req, []GPU{card})
+			indexes := GPUCandidates(tc.req, NodeSnapshot{GPUs: []GPU{card}})
 			code := ""
 			if len(indexes) == 1 && indexes[0].Reason != nil {
 				code = indexes[0].Reason.Code
@@ -96,11 +96,11 @@ func TestGPUCandidatesBoundariesAndCapabilities(t *testing.T) {
 func TestGPUCandidatesIgnoreSelectionAndDoNotMutateRequest(t *testing.T) {
 	req := Request{GPUMemUtil: 0.9, AllowedGPUIndexes: []int{1}}
 	node := NodeSnapshot{GPUs: []GPU{{Index: 1, MemoryTotal: 64 << 30, Schedulable: true}, {Index: 5, MemoryTotal: 64 << 30, Schedulable: true}}}
-	choices := GPUCandidates(req, node.GPUs)
+	choices := GPUCandidates(req, node)
 	if len(choices) != 2 || choices[0].Index != 1 || choices[1].Index != 5 || !choices[0].Available || !choices[1].Available || !reflect.DeepEqual(req.AllowedGPUIndexes, []int{1}) {
 		t.Fatalf("choices=%+v request=%+v", choices, req)
 	}
-	if empty := GPUCandidates(req, nil); empty == nil || len(empty) != 0 {
+	if empty := GPUCandidates(req, NodeSnapshot{}); empty == nil || len(empty) != 0 {
 		t.Fatalf("empty=%+v", empty)
 	}
 }
@@ -110,7 +110,7 @@ func TestGPUCandidatesDoNotRequireTheModelToFitOnEachCard(t *testing.T) {
 	node := NodeSnapshot{UUID: "large-model", DtypeSupported: true, GPUs: []GPU{gpu(0, 64, true, 0), gpu(1, 64, true, 0)}}
 	for _, tp := range []int{1, 2} {
 		req.AllowedTPs = []int{tp}
-		candidates := GPUCandidates(req, node.GPUs)
+		candidates := GPUCandidates(req, node)
 		if len(candidates) != 2 || !candidates[0].Available || !candidates[1].Available {
 			t.Fatalf("model size removed resource candidates: %+v", candidates)
 		}

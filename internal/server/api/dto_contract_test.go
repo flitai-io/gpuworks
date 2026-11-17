@@ -188,6 +188,7 @@ func TestAPIKeyDTOContractCannotExposeSecret(t *testing.T) {
 		"created_at":      "2026-08-29T08:00:00Z",
 		"all_deployments": true,
 		"deployments":     []any{},
+		"priority":        map[string]any{"class": "", "ceiling": "", "policy": ""},
 	}
 	if !reflect.DeepEqual(object, want) {
 		t.Fatalf("API key response contract=%#v, want exactly %#v", object, want)

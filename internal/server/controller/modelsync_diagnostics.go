@@ -18,9 +18,9 @@ func modelSyncDiagnosticAttrs(key string, run *modelSyncRun, src peerSource, dst
 }
 
 func (c *Controller) expireModelSyncConfirmation(key string, run *modelSyncRun, dstMF *store.ModelFile, src peerSource, dst *store.Node, path netplan.StoragePath) {
-	c.syncMu.Lock()
-	active := c.modelSyncs[key] == run
-	c.syncMu.Unlock()
+	c.syncs.mu.Lock()
+	active := c.syncs.byKey[key] == run
+	c.syncs.mu.Unlock()
 	if !active {
 		return
 	}

@@ -78,12 +78,12 @@ test("the card view asks the server for one page and pages through the rest", as
   renderPage("grid");
   await screen.findByText("model-45");
   assert.deepEqual(queries[0], { q: "", extra: { source: [], operation: [] }, page: 1, page_size: 20 });
-  assert.equal(document.querySelectorAll(".model-tile").length, 20);
+  assert.equal(document.querySelectorAll(".repository-model-card").length, 20);
   assert.ok(screen.getByText("45"), "the summary counts every model, from the server");
   fireEvent.click(screen.getByTitle("3"));
   await screen.findByText("model-5");
   assert.equal(queries.at(-1)?.page, 3);
-  assert.equal(document.querySelectorAll(".model-tile").length, 5);
+  assert.equal(document.querySelectorAll(".repository-model-card").length, 5);
 });
 
 test("source, capability and search filters go to the server and start from page one", async () => {

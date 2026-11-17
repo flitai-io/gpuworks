@@ -26,6 +26,7 @@ var reportedGPUNames = []struct {
 	{"nvidia", "NVIDIA H100 80GB HBM3", "9.0"},
 	{"nvidia", "NVIDIA B200", "10.0"},
 	{"nvidia", "NVIDIA GB10", "12.1"},
+	{"nvidia", "NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU)", "12.1"},
 	{"nvidia", "NVIDIA A100-SXM4-80GB", "8.0"},
 	{"ascend", "Ascend 910B4", ""},
 	{"ascend", "Ascend 910B2C", ""},
@@ -118,5 +119,37 @@ func TestCatalogNamePredicatesMatchStoredNames(t *testing.T) {
 		if got := matchedBy(g.vendor, g.raw, g.cc) > 0; got != want {
 			t.Errorf("%s %q (stored %q) matched by a catalog name predicate = %v, want %v", g.vendor, g.raw, accelerator.NormalizeGPUName(g.raw), got, want)
 		}
+	}
+}
+
+// RTX Spark carries the same sm_121 GPU and unified memory pool as DGX Spark
+// (GB10), so every single-node spec written for GB10 serves it too. The
+// two-node GB10 profile is left out: it relies on the pair of Sparks being
+// linked to each other, which a single RTX Spark host is not.
+func TestRTXSparkMatchesEverySingleNodeGB10Spec(t *testing.T) {
+	catalog, err := Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gb10 := chipmatch.ReportedGPU(accelerator.NormalizeGPUName("NVIDIA GB10"), "nvidia", "", "12.1")
+	rtxSpark := chipmatch.ReportedGPU(accelerator.NormalizeGPUName("NVIDIA RTX Spark N1X (6144-core Blackwell RTX GPU)"), "nvidia", "", "12.1")
+	matched := 0
+	for _, model := range catalog.Models {
+		for _, spec := range model.Specs {
+			if spec.GPUs.Name == "" || spec.Name == tensorfoldGB10Spec {
+				continue
+			}
+			predicate := chipmatch.Predicate{Vendor: spec.GPUs.Vendor, Name: spec.GPUs.Name}
+			if !chipmatch.Evaluate(gb10, predicate).Matched {
+				continue
+			}
+			matched++
+			if !chipmatch.Evaluate(rtxSpark, predicate).Matched {
+				t.Errorf("%s spec %s matches GB10 but not RTX Spark: name %q", model.ModelID, spec.Name, spec.GPUs.Name)
+			}
+		}
+	}
+	if matched == 0 {
+		t.Fatal("no catalog spec names GB10")
 	}
 }

@@ -21,3 +21,5 @@ This is a concise glossary of user-facing terms. For complete definitions and co
 | Deviated | An informational state indicating that you have overridden template fields; not an error |
 | Quick/Expert mode | Two views of the same deployment page: Quick mode shows only preselected common fields (an allowlist-based form), while Expert mode provides full parameter editing |
 | Weighted QoS | Backends such as PPU allocate throughput according to quotas when busy; this does not mean hardware partitioning |
+
+<!-- translation-source-sha256: d5cc6029e2baa7ab7c33d87cb58817397dc1c5daa636c69eef10475e52ab13a2 -->

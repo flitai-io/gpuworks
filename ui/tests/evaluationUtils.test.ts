@@ -346,3 +346,19 @@ test("historical evaluation target labels distinguish deleted deployments and in
 	assert.deepEqual(deletedTargetLabelKeys({ instance_deleted: true } as BenchmarkRun), ["detail.target.instanceDeleted"]);
 	assert.deepEqual(deletedTargetLabelKeys({ deployment_deleted: true, instance_deleted: true } as BenchmarkRun), ["detail.target.deleted", "detail.target.instanceDeleted"]);
 });
+
+test("benchmark failures render from the code and fall back to the English message", async () => {
+	const { benchmarkErrorText, benchmarkErrorCodes } = await import("../src/pages/evaluations/evaluationUtils.ts");
+	const en = (await import("../src/i18n/locales/en/evaluations.json", { with: { type: "json" } })).default as { benchmarkError: Record<string, string> };
+	const zh = (await import("../src/i18n/locales/zh/evaluations.json", { with: { type: "json" } })).default as { benchmarkError: Record<string, string> };
+	for (const code of benchmarkErrorCodes) {
+		assert.ok(en.benchmarkError[code] && zh.benchmarkError[code], `${code} needs en and zh text`);
+	}
+	const failure = { code: "BENCHMARK_DATASET_LOAD_FAILED", params: { dataset: "multiturn" }, message: "load the built-in multiturn dataset: EOF" };
+	const t = ((key: string, options: Record<string, unknown>) => key === "benchmarkError.BENCHMARK_DATASET_LOAD_FAILED" ? en.benchmarkError.BENCHMARK_DATASET_LOAD_FAILED.replace("{{dataset}}", String(options.dataset)) : String(options.defaultValue)) as never;
+	assert.equal(benchmarkErrorText(t, failure.message, failure), "The built-in multiturn dataset could not be loaded, so the evaluation stopped before sending any request.");
+	assert.equal(benchmarkErrorText(undefined, failure.message, failure), failure.message);
+	// An unknown code and an uncoded run keep the server's text.
+	assert.equal(benchmarkErrorText(t, "boom", { code: "SOMETHING_NEW", message: "boom" }), "boom");
+	assert.equal(benchmarkErrorText(t, "all 3 warmup requests failed"), "all 3 warmup requests failed");
+});

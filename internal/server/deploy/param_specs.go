@@ -96,6 +96,12 @@ type paramDefinition struct {
 	// ReverseArgs (ADR 0021); the engines it applies to are listed in the
 	// embedded ParamDefinition.Engines instead of being read off a flag column.
 	Platform bool
+	// Selector marks the row that selects a KV offload backend (ADR 0069,
+	// amending ADR 0021). It has no flag and is not a platform parameter: the
+	// engine adapter renders the selected backend, and an engine publishes
+	// the row only while it has a selectable backend (kvBackendSelector),
+	// with the backends as its options.
+	Selector bool
 	// Flags is where each engine's spellings live, keyed by engine name. A row
 	// with no entry for an engine has no flag there, and the engine cannot
 	// express that parameter at all (ADR 0021) - which is exactly what makes
@@ -111,6 +117,10 @@ type paramDefinition struct {
 	Aliases map[string]string
 	// DefaultByEngine overrides Default for the named engines.
 	DefaultByEngine map[string]any
+	// ClosedFor names the engines where a free-text row with options is a
+	// closed list (an enum picked from a select) instead of a combobox: a
+	// value none of the options names is refused there rather than passed.
+	ClosedFor []string
 }
 
 func number(value float64) *float64 { return &value }
@@ -155,8 +165,19 @@ var (
 // spells it: its model hooks compare the raw --speculative-algorithm string
 // against upper-case names before normalizing it, so "dspark" fails an
 // assertion that "DSPARK" passes. MTP is NEXTN there and a separate draft
-// model is STANDALONE; vLLM's method names are not SGLang algorithms.
+// model is STANDALONE; vLLM's method names are not SGLang algorithms. The list
+// stays closed for SGLang (ClosedFor): a stored configuration renames vLLM's
+// names to these (storedValueRenames), which only holds while a value outside
+// the list is never read into the field.
 var sglangSpeculativeAlgorithms = options("EAGLE", "EAGLE3", "NEXTN", "DSPARK", "NGRAM", "STANDALONE")
+
+// vllmSpeculativeMethods are suggestions for the form's combobox, like the
+// parser lists above, not a gate: any other method, typed or in a template,
+// reaches --speculative-config as written, and whether the engine in the
+// chosen image knows it is the deployer's to check. dflash and dspark need a
+// draft the deployment mounts (an extra mount of a registered model) unless
+// the checkpoint fuses its own draft module.
+var vllmSpeculativeMethods = []string{"eagle", "eagle3", "mtp", "ngram", "draft_model", "dflash", "dspark"}
 
 func technicalOptions(values ...string) []ParamOption {
 	out := options(values...)
@@ -174,7 +195,7 @@ var parameterDefinitions = []paramDefinition{
 	// Defaults on where the server takes it: SGLang's diffusion server only
 	// from v0.5.21 (sglangDiffusionFlagsSince).
 	{ParamDefinition: ParamDefinition{Key: "enable_metrics", Type: "boolean", Control: "switch", Group: "performance", Default: true, Layout: "quick", Order: 37}, Flags: map[string]flagPair{EngineSGLang: {On: "--enable-metrics"}}},
-	{ParamDefinition: ParamDefinition{Key: "max_model_len", Type: "integer", Control: "number", Group: "model", Automatic: true, Layout: "quick", Order: 10}, Flags: map[string]flagPair{EngineVLLM: {On: "--max-model-len"}, EngineSGLang: {On: "--context-length"}}},
+	{ParamDefinition: ParamDefinition{Key: "max_model_len", Type: "integer", Control: "number", Group: "model", Automatic: true, Layout: "quick", Order: 10}, DefaultByEngine: map[string]any{EngineVLLM: -1}, Flags: map[string]flagPair{EngineVLLM: {On: "--max-model-len"}, EngineSGLang: {On: "--context-length"}}},
 	{ParamDefinition: ParamDefinition{Key: "dtype", Type: "enum", Control: "select", Group: "model", Default: "auto", Options: options("auto", "float16", "bfloat16", "float32")}, Flags: map[string]flagPair{EngineVLLM: {On: "--dtype"}, EngineSGLang: {On: "--dtype"}}, Aliases: map[string]string{"half": "float16", "float": "float32"}},
 	{ParamDefinition: ParamDefinition{Key: "quantization", Type: "string", Control: "text", Group: "model"}, Flags: map[string]flagPair{EngineVLLM: {On: "--quantization"}, EngineSGLang: {On: "--quantization"}}},
 	{ParamDefinition: ParamDefinition{Key: "rope_scaling", Type: "json", Control: "json", Group: "model"}, Flags: map[string]flagPair{EngineVLLM: {On: "--rope-scaling"}}},
@@ -234,11 +255,12 @@ var parameterDefinitions = []paramDefinition{
 	// only while the disk tier is enabled, so disabling that tier can preserve
 	// the draft without leaving an active sweeper ceiling behind.
 	{ParamDefinition: ParamDefinition{Key: "kv_disk_limit_gib", Type: "number", Control: "number", Group: "performance", Automatic: true, Min: number(1), Step: number(1), Engines: []string{EngineVLLM}, DependsOn: "kv_disk_offload", Layout: "quick", Order: 25}, Platform: true},
+	{ParamDefinition: ParamDefinition{Key: "kv_offload_backend", Type: "enum", Control: "select", Group: "performance"}, Selector: true},
 	// --disable-cuda-graph is SGLang's spelling of enforce_eager=true, not an off
 	// form: turning it off means emitting nothing.
 	{ParamDefinition: ParamDefinition{Key: "enforce_eager", Type: "boolean", Control: "switch", Group: "performance", Default: false, Layout: "quick", Order: 35}, Flags: map[string]flagPair{EngineVLLM: {On: "--enforce-eager"}, EngineSGLang: {On: "--disable-cuda-graph"}}},
 
-	{ParamDefinition: ParamDefinition{Key: "speculative_algorithm", Type: "enum", Control: "select", Group: "speculative", Options: options("eagle", "eagle3", "mtp", "ngram", "draft_model"), Layout: "quick", Order: 32}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-algorithm"}}, Options: map[string][]ParamOption{EngineSGLang: sglangSpeculativeAlgorithms}},
+	{ParamDefinition: ParamDefinition{Key: "speculative_algorithm", Type: "string", Control: "combobox", Group: "speculative", Options: options(vllmSpeculativeMethods...), Layout: "quick", Order: 32}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-algorithm"}}, Options: map[string][]ParamOption{EngineSGLang: sglangSpeculativeAlgorithms}, ClosedFor: []string{EngineSGLang}},
 	{ParamDefinition: ParamDefinition{Key: "speculative_draft_model", Type: "string", Control: "text", Group: "speculative"}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-draft-model-path"}}},
 	{ParamDefinition: ParamDefinition{Key: "speculative_tokens", Type: "integer", Control: "number", Group: "speculative", Min: number(1), Step: number(1)}, Flags: map[string]flagPair{EngineVLLM: {On: "--speculative-config", Composed: true}, EngineSGLang: {On: "--speculative-num-draft-tokens"}}},
 	{ParamDefinition: ParamDefinition{Key: "speculative_num_steps", Type: "integer", Control: "number", Group: "speculative", Min: number(1), Step: number(1)}, Flags: map[string]flagPair{EngineSGLang: {On: "--speculative-num-steps"}}},

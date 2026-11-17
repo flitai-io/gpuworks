@@ -60,37 +60,6 @@ func TestParseEmptyAndGarbage(t *testing.T) {
 	}
 }
 
-func TestHumanizeStartupFailureMapsDynamicLinkerGLIBC(t *testing.T) {
-	for _, logText := range []string{
-		"libc.so.6: version `GLIBC_2.33' not found (required by /opt/libvruntime.so)",
-		"/lib64/libc.so.6: GLIBC_2.34 not found",
-	} {
-		if got := HumanizeStartupFailure(logText); !strings.Contains(got, "glibc too old") || !strings.Contains(got, "GLIBC_2.3") {
-			t.Fatalf("HumanizeStartupFailure(%q) = %q", logText, got)
-		}
-	}
-	if got := HumanizeStartupFailure("ordinary engine error"); got != "" {
-		t.Fatalf("ordinary error mapped to %q", got)
-	}
-}
-
-// A refusal by the dGPU interposer is named as the limit it enforces, from the
-// last refusal (an engine retries smaller first); output without one says
-// nothing about the limit.
-func TestDGPULimitExceededNamesTheLastRefusal(t *testing.T) {
-	logs := "[HAMI-core ERROR (pid:9 thread=1 allocator.c:52)]: Device 1 OOM 9663676416 / 8589934592\n" +
-		"INFO retrying\n" +
-		"[HAMI-core ERROR (pid:9 thread=1 allocator.c:52)]: Device 1 OOM 9126805504 / 8589934592\n"
-	if got, want := DGPULimitExceeded(logs), "dGPU memory limit reached on GPU 1: the engine needed 8.5 GiB, its limit is 8.0 GiB"; got != want {
-		t.Fatalf("DGPULimitExceeded = %q, want %q", got, want)
-	}
-	for _, logs := range []string{"", "torch.OutOfMemoryError: CUDA out of memory", "[HAMI-core Info(9:1:allocator.c:50)]: _usage=1 limit=2 new_allocated=1"} {
-		if got := DGPULimitExceeded(logs); got != "" {
-			t.Errorf("DGPULimitExceeded(%q) = %q, want none", logs, got)
-		}
-	}
-}
-
 // The line a failed engine's output ends with is its last error, found among
 // the final lines and stripped of colour codes; an ordinary last line says
 // nothing about the failure and gives none.

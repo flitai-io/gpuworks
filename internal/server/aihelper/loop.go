@@ -125,10 +125,16 @@ func Conversation(system, seed string, history []Message, question string) []Mes
 		history = history[len(history)-maxHistory:]
 	}
 	for _, h := range history {
-		if (h.Role != "user" && h.Role != "assistant") || strings.TrimSpace(h.Content) == "" {
+		if (h.Role != "user" && h.Role != "assistant") || (strings.TrimSpace(h.Content) == "" && len(h.Images) == 0) {
 			continue
 		}
-		msgs = append(msgs, Message{Role: h.Role, Content: clip(h.Content, maxHistoryChars)})
+		m := Message{Role: h.Role, Content: clip(h.Content, maxHistoryChars)}
+		if h.Role == "user" {
+			// Only a user turn carries images: OpenAI-compatible endpoints refuse
+			// image parts in assistant messages.
+			m.Images = h.Images
+		}
+		msgs = append(msgs, m)
 	}
 	if q := strings.TrimSpace(question); q != "" {
 		msgs = append(msgs, Message{Role: "user", Content: q})

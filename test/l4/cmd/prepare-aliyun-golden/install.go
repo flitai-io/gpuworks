@@ -98,41 +98,12 @@ fi`
 // and tags it as image, the name the cases deploy: Docker Hub is not
 // dependable from mainland instances, so mirrors come first.
 func pullImageCommand(image string, sources []string) string {
-	var attempts strings.Builder
-	for _, source := range sources {
-		fmt.Fprintf(&attempts, "  for try in 1 2 3; do if docker pull %[1]s; then ok=%[1]s; break 2; fi; sleep 10; done\n", goldenimage.ShellQuote(source))
-	}
-	return fmt.Sprintf(`set -eu
-ok=""
-while :; do
-%s  break
-done
-[ -n "$ok" ] || { echo 'the runner image is unavailable from every source' >&2; exit 1; }
-if [ "$ok" != %[2]s ]; then docker tag "$ok" %[2]s; fi
-docker image inspect %[2]s --format 'GPUWORKS_RUNNER_IMAGE {{.Id}} {{.Size}}'`, attempts.String(), goldenimage.ShellQuote(image))
+	return goldenimage.PullImageCommand(image, sources, "")
 }
 
-// dockerCgroupfsCommand switches Docker to the cgroupfs cgroup driver. Under
-// the systemd driver every systemctl daemon-reload (cloud-init at boot, an
-// agent or package upgrade later) revokes the device access of running GPU
-// containers, which then fail with "Failed to initialize NVML: Unknown
-// Error"; cgroupfs containers keep their devices. Measured on Aliyun T4 and
-// A10 from the golden image, 2026-11-04.
-func dockerCgroupfsCommand() string {
-	return `set -eu
-python3 - <<'PY'
-import json, os
-p = '/etc/docker/daemon.json'
-d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) else {}
-opts = [o for o in d.get('exec-opts', []) if not o.startswith('native.cgroupdriver=')]
-d['exec-opts'] = opts + ['native.cgroupdriver=cgroupfs']
-json.dump(d, open(p, 'w'), indent=4)
-PY
-systemctl restart docker
-driver="$(docker info --format '{{.CgroupDriver}}')"
-[ "$driver" = cgroupfs ] || { echo "docker cgroup driver is $driver, want cgroupfs" >&2; exit 1; }
-echo GPUWORKS_DOCKER_CGROUP_DRIVER "$driver"`
-}
+// dockerCgroupfsCommand switches Docker to the cgroupfs cgroup driver
+// (goldenimage.DockerCgroupfsCommand).
+func dockerCgroupfsCommand() string { return goldenimage.DockerCgroupfsCommand() }
 
 // cgroupfsCheck fails unless Docker runs with the cgroupfs driver. It is
 // appended to the checks of the finished image, not to the check of an

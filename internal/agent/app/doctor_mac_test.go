@@ -89,7 +89,7 @@ func TestDoctorMacLaptopThatSleepsWarns(t *testing.T) {
 		t.Fatalf("findings = %+v", r.Findings)
 	}
 	f := r.Findings[0]
-	if f.Code != proto.DoctorMacOSIdleSleep || f.Level != proto.DoctorLevelWarning || f.Recheck != "pmset -g" {
+	if f.Code != proto.DoctorMacOSIdleSleep || f.Status != proto.CheckWarn || f.Recheck != "pmset -g" {
 		t.Fatalf("finding = %+v", f)
 	}
 	wantEvidence := []proto.DoctorField{{Name: "sleep", Value: "1 (sleep prevented by powerd, UURemote)"}, {Name: "power source", Value: "Battery Power"}}
@@ -136,7 +136,7 @@ func TestDoctorMacOlderMacOSIsAnError(t *testing.T) {
 			found = &r.Findings[i]
 		}
 	}
-	if found == nil || found.Level != proto.DoctorLevelError || found.Evidence[0].Value != "14.7.2" || found.Evidence[1].Value != "15" {
+	if found == nil || found.Status != proto.CheckFail || found.Evidence[0].Value != "14.7.2" || found.Evidence[1].Value != "15" {
 		t.Fatalf("findings = %+v", r.Findings)
 	}
 }
@@ -145,8 +145,15 @@ func TestDoctorMacFailingCommandsReportNothingInvented(t *testing.T) {
 	macFixture(t, "m1max", map[string]bool{"sysctl": true, "pmset -g batt": true, macFirewallTool: true}, nil)
 	var r proto.DoctorReport
 	doctorMacChecks(context.Background(), &r, appleGPU(48*gibBytes))
-	if len(r.Findings) != 0 || len(r.Facts) != 0 {
+	// Nothing is invented, and the two checks that could not read their
+	// command say so rather than read as passed.
+	if len(r.Facts) != 0 || len(r.Findings) != 2 {
 		t.Fatalf("without the commands' answers there is nothing to state: findings %+v facts %+v", r.Findings, r.Facts)
+	}
+	for i, id := range []string{proto.DoctorCheckMacOSVersion, proto.DoctorCheckMacOSSleep} {
+		if f := r.Findings[i]; f.ID != id || f.Status != proto.CheckSkip || f.Code != proto.DoctorSkipToolFailed || len(f.Evidence) != 1 {
+			t.Fatalf("finding %d = %+v, want %s skipped", i, f, id)
+		}
 	}
 	// No accelerator reported (the probe failed): the working set cannot be
 	// stated even though sysctl answers.
@@ -185,7 +192,7 @@ func TestDoctorReportRunsMacChecksOnlyOnMac(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"[warning] macos_idle_sleep",
+		"[warning] MACOS_IDLE_SLEEP",
 		"sudo pmset -c sleep 0",
 		"metal working set GPU may keep 48.0 GiB of 64.0 GiB memory resident",
 		"macos firewall    Firewall is disabled.",

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
@@ -136,28 +137,28 @@ func (d *Driver) editPod(ctx context.Context, creds provider.Credentials, p pod,
 // TCP port besides SSH's, a port too, so one restart does both. It returns
 // the instance to log in to (a restart renumbers SSH) and a check for the
 // install report ("" Name when nothing was done).
-func (d *Driver) ensurePlatformKey(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) (provider.Instance, provider.InstallCheck, error) {
+func (d *Driver) ensurePlatformKey(ctx context.Context, creds provider.Credentials, req provider.InstallRequest) (provider.Instance, provision.CheckResult, error) {
 	inst := req.Instance
 	if req.PlatformKey == nil || strings.TrimSpace(req.PlatformKey.PublicKey) == "" {
-		return inst, provider.InstallCheck{}, nil
+		return inst, provision.CheckResult{}, nil
 	}
 	p, err := d.getPod(ctx, creds, req.Instance.ExternalID)
 	if err != nil {
-		return inst, provider.InstallCheck{}, nil //nolint:nilerr // Key refresh is optional; installation reports endpoint reachability separately.
+		return inst, provision.CheckResult{}, nil //nolint:nilerr // Key refresh is optional; installation reports endpoint reachability separately.
 	}
 	if fresh := p.toInstance(); fresh.SSHPort != 0 {
 		inst = fresh
 	}
 	key := req.PlatformKey.PublicKey
 	if p.hasPublicKey(key) {
-		return inst, provider.InstallCheck{}, nil
+		return inst, provision.CheckResult{}, nil
 	}
 	auth := req.SSHAuth()
 	var authErr *provision.SSHAuthError
 	if err := d.login(ctx, inst, auth); err == nil || !errors.As(err, &authErr) {
 		// It logs in already, or cannot be reached at all: the install says
 		// which, and an edit would not help.
-		return inst, provider.InstallCheck{}, nil
+		return inst, provision.CheckResult{}, nil
 	}
 	_, mapped := p.tcpMappings()
 	addPort := req.ConnectMode == "server_dial" && strings.TrimSpace(req.ServerDialAddress) == "" && len(filterSSH(mapped)) == 0
@@ -166,7 +167,7 @@ func (d *Driver) ensurePlatformKey(ctx context.Context, creds provider.Credentia
 		need = needSSHKeyAnd
 	}
 	if !req.AllowInstanceRestart {
-		return inst, provider.InstallCheck{}, &provider.InstanceRestartError{Reason: restartReason(need), Need: need}
+		return inst, provision.CheckResult{}, &provider.InstanceRestartError{Reason: restartReason(need), Need: need}
 	}
 	changes := map[string]any{"env": p.withPublicKey(key)}
 	port := 0
@@ -184,25 +185,27 @@ func (d *Driver) ensurePlatformKey(ctx context.Context, creds provider.Credentia
 		return d.login(ctx, next.toInstance(), keyAuth)
 	})
 	if err != nil {
-		return inst, provider.InstallCheck{}, err
+		return inst, provision.CheckResult{}, err
 	}
 	inst = p.toInstance()
 	detail := "added the platform key to the pod's PUBLIC_KEY; the pod restarted"
 	if port != 0 {
 		detail = fmt.Sprintf("added the platform key to the pod's PUBLIC_KEY and exposed container port %d; the pod restarted", port)
 	}
-	return inst, provider.InstallCheck{Name: "Platform key (pod)", Status: "ok", Detail: detail + " (SSH now " + net.JoinHostPort(inst.PublicIP, strconv.Itoa(inst.SSHPort)) + ")"}, nil
+	sshAddr := net.JoinHostPort(inst.PublicIP, strconv.Itoa(inst.SSHPort))
+	return inst, provision.PassCheck(provision.CheckIDPlatformKeyProvider, messages.CheckPlatformKeyPodAdded, detail+" (SSH now "+sshAddr+")",
+		map[string]any{"port": port, "ssh": sshAddr}), nil
 }
 
 // PlatformKeyAtInstall implements provider.InstallKeyAdder: the install adds
 // the key to a pod whose PUBLIC_KEY lacks it, once the operator agrees to
 // the restart.
-func (d *Driver) PlatformKeyAtInstall(ctx context.Context, creds provider.Credentials, inst provider.Instance, publicKey string) (provider.InstallCheck, bool) {
+func (d *Driver) PlatformKeyAtInstall(ctx context.Context, creds provider.Credentials, inst provider.Instance, publicKey string) (provision.CheckResult, bool) {
 	p, err := d.getPod(ctx, creds, inst.ExternalID)
 	if err != nil || p.hasPublicKey(publicKey) {
-		return provider.InstallCheck{}, false
+		return provision.CheckResult{}, false
 	}
-	return provider.InstallCheck{Status: "warn", Detail: "the pod started before the platform key was in the RunPod account; the install adds it to the pod, which restarts the pod and clears its container disk, after asking (the remaining checks run once SSH logs in)"}, true
+	return provision.WarnCheck(provision.CheckIDSSH, messages.CheckPlatformKeyPodRestart, "the pod started before the platform key was in the RunPod account; the install adds it to the pod, which restarts the pod and clears its container disk, after asking (the remaining checks run once SSH logs in)", nil), true
 }
 
 // filterSSH is mapped without SSH's port.

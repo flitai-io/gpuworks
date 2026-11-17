@@ -1,3 +1,5 @@
+import { Skeleton } from "../components/ui/skeleton";
+import { Tabs, TabsList, TabItem, TabPanel } from "../components/ui/tabs";
 import { playgroundRoute } from "./playground/route";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -6,36 +8,28 @@ import {
   Button,
   Card,
   Checkbox,
-  Descriptions,
   Dropdown,
-  Drawer,
   Input,
   Modal,
   Space,
-  Select,
-  Tag,
   Tooltip,
   Typography,
   message,
 } from "antd";
 import { ApiOutlined, CodeOutlined, CopyOutlined, DeleteOutlined, EditOutlined, ExperimentOutlined, FileAddOutlined, MessageOutlined, MoreOutlined, PlusOutlined } from "@ant-design/icons";
 import { api, useEventPayload, useEvents, usePolling, type ChangeEvent, type Deployment, type DeploymentListItem, type DeploymentRuntimeNode, type Instance, type RoutingPolicyOption } from "../api";
-import { DeploymentPreparation, ListPreparationAction, PreparationLabel } from "./DeploymentPreparation";
+import { ListPreparationAction, PreparationLabel } from "./DeploymentPreparation";
+import DetailDrawer from "../components/detail/DetailDrawer";
+import DeploymentDetailOverview from "./DeploymentDetailOverview";
+import { MetricWindowProvider } from "../components/MetricWindow";
 import DeploymentMetricsPanel from "../components/DeploymentMetricsPanel";
-import RoutingPolicyHelp from "../components/RoutingPolicyHelp";
 import { effectiveDeploymentState, partlyAsleep, stateLabel } from "./state";
-import DeploymentPdPanel from "./DeploymentPdPanel";
 import DeploymentInstances from "./DeploymentInstances";
-import SleepControls from "./DeploymentSleepControls";
-import PlacementModeControl from "./DeploymentPlacementMode";
-import DeploymentSchedulingPolicy from "./DeploymentSchedulingPolicy";
+import { isModelFileReady } from "../storageTypes";
 import DeploymentCatalogTemplateModal from "./DeploymentCatalogTemplateModal";
-import DeploymentLifecycleActions, { ReplicaRetryAlert } from "./DeploymentLifecycleActions";
-import { ReplicasEditor } from "./DeploymentReplicaActions";
-import { PlacementStatusAlert, RequirementTags } from "./DeploymentPlacementStatus";
+import DeploymentDetailActions, { type DeploymentActions } from "./DeploymentLifecycleActions";
 import { useAssistantSubjects } from "../assistant/AssistantContext";
 import { deploymentSubjects } from "../assistant/pageSubjects";
-import { EditRequirementsButton } from "./DeploymentRequirementsModal";
 import ResourceTable, { storedPageSize, type ResourceColumn, type ServerSort } from "../components/resourceTable/ResourceTable";
 import { formatTime } from "../i18n/datetime";
 import { usePagedList } from "../pagedList";
@@ -47,10 +41,10 @@ import { localizedText } from "../i18n/localizedText";
 import { apiErrorText } from "../apiError";
 import { useCopy } from "../components/CopyButton";
 import { HealthCheckHelp, HealthTag } from "../components/DeploymentHealth";
-import { HealthCheckEditor } from "./DeploymentHealthEditor";
-import { TokenizeEditor } from "./DeploymentTokenizeEditor";
-import { TokenizeHelp } from "../components/DeploymentTokenize";
 
+export { actualNodesDiffer, DeploymentRuntimeNodeLinks } from "./DeploymentDetailOverview";
+
+const DETAIL_REFRESH_MS = 15_000;
 const DEPLOYMENT_PAGE_SIZE = 20;
 const DEPLOYMENT_TABLE_ID = "deployments";
 const DEPLOYMENT_LIST_STATES = ["running", "sleeping", "asleep", "offline", "starting", "pulling", "pending", "failed", "stopped", "deleting"];
@@ -103,7 +97,8 @@ export default function DeploymentsPage() {
   });
   const filtered = search.trim() !== "" || states.length > 0;
   const routingPolicies = usePolling(api.routingPolicies, 0);
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const requested = Number(searchParams.get("deployment"));
+  const detailId = Number.isInteger(requested) && requested > 0 ? requested : null;
   const routingOptions = useMemo(
     () => (routingPolicies.data?.items ?? []).map((policy) => ({ value: policy.value, label: localizedText(policy.label, i18n.language) })),
     [routingPolicies.data, i18n.language],
@@ -124,12 +119,8 @@ export default function DeploymentsPage() {
   useEventPayload("instance", refreshUnlessProgress);
   useEventPayload("modelfile", refreshUnlessProgress);
   useEventPayload("node", (event) => { if (event.reason?.startsWith("state:")) eventRefresh.trigger(); });
-  useEffect(() => {
-    const requested = Number(searchParams.get("deployment"));
-    if (Number.isInteger(requested) && requested > 0) setDetailId(requested);
-  }, [searchParams]);
-  const openDetail = (id: number) => { setDetailId(id); setSearchParams({ deployment: String(id) }); };
-  const closeDetail = () => { setDetailId(null); setSearchParams({}); };
+  const openDetail = (id: number) => setSearchParams({ deployment: String(id) });
+  const closeDetail = () => setSearchParams({});
   const clone = async (dep: DeploymentListItem) => { try { await api.cloneDeployment(dep.id); message.success(t("page.cloneCreated")); refetch(); } catch (e) { message.error(t("page.cloneFailed", { detail: apiErrorText(tCommon, e) })); } };
   const benchmark = (dep: DeploymentListItem) => navigate(`/evaluations?create=saturation&deployment_id=${dep.id}`);
   const openTerminal = async (deployment: DeploymentListItem) => {
@@ -150,6 +141,36 @@ export default function DeploymentsPage() {
   const [deleting, setDeleting] = useState<DeploymentListItem | null>(null);
   const [templating, setTemplating] = useState<number | null>(null);
   const copyCurl = async (dep: DeploymentListItem) => { await copy(deploymentCurl(window.location.origin, dep), { success: t("page.curlCopied") }); };
+
+  function actionsFor(d: DeploymentListItem): DeploymentActions {
+    const state = effectiveDeploymentState(d);
+    const running = state === "running";
+    const unavailable = asleepActionHint(d, t);
+    const playground = t("page.openPlayground");
+    const curl = t("page.copyCurl");
+    return {
+      primary: [
+        { key: "playground", label: playground, icon: <MessageOutlined />,
+          hint: running ? [playground, (d.operations ?? []).map(op => op.type).join(", ")].filter(Boolean).join(" · ") : unavailable,
+          disabled: !running || !d.operations?.length, onClick: () => {
+            const op = d.operations?.[0];
+            if (op) navigate(playgroundRoute(op, d.served_name || d.model_name));
+          } },
+        { key: "curl", label: curl, icon: <ApiOutlined />, hint: running ? curl : unavailable,
+          disabled: !running, onClick: () => void copyCurl(d) },
+      ],
+      terminal: { key: "terminal", label: t("instanceTerminal.open"), icon: <CodeOutlined />,
+        disabled: !["starting", "optimizing", "running", "sleeping", "asleep"].includes(state), onClick: () => void openTerminal(d) },
+      menu: [
+        { key: "edit", label: t("page.edit"), icon: <EditOutlined />, disabled: d.desired_state === "deleting", onClick: () => navigate(`/deploy?edit=${d.id}`) },
+        { key: "clone", label: t("page.clone"), icon: <CopyOutlined />, onClick: () => void clone(d) },
+        { key: "cloneModify", label: t("page.cloneModify"), icon: <CopyOutlined />, onClick: () => navigate(`/deploy?from=${d.id}`) },
+        { key: "benchmark", label: t("page.benchmark"), icon: <ExperimentOutlined />, disabled: !running, onClick: () => void benchmark(d) },
+        { key: "catalogTemplate", label: t("catalogTemplate.open"), icon: <FileAddOutlined />, disabled: !running, onClick: () => setTemplating(d.id) },
+      ],
+      remove: { key: "delete", label: t("delete.button"), icon: <DeleteOutlined />, danger: true, onClick: () => setDeleting(d) },
+    };
+  }
 
   const columns: ResourceColumn<DeploymentListItem>[] = [
     {
@@ -241,25 +262,16 @@ export default function DeploymentsPage() {
       role: "actions",
       width: 120,
       render: (_: unknown, d: DeploymentListItem) => {
-    return <Space size={4}>
-      <Tooltip title={effectiveDeploymentState(d) === "running" ? `${t("page.openPlayground")} · ${(d.operations || []).map((operation) => operation.type).join(", ")}` : asleepActionHint(d, t)}><Button disabled={effectiveDeploymentState(d) !== "running" || !d.operations?.length} type="text" size="small" icon={<MessageOutlined />} onClick={() => d.operations?.[0] && navigate(playgroundRoute(d.operations[0], d.served_name || d.model_name))} aria-label={t("page.openPlayground")} /></Tooltip>
-      <Tooltip title={effectiveDeploymentState(d) === "running" ? t("page.copyCurl") : asleepActionHint(d, t)}><Button disabled={effectiveDeploymentState(d) !== "running"} type="text" size="small" icon={<ApiOutlined />} onClick={() => void copyCurl(d)} aria-label={t("page.copyCurl")} /></Tooltip>
-      <Dropdown trigger={["click"]} menu={{ items: [
-      // A sleeping engine's container is still there to inspect; that is how
-      // an operator confirms the sleep state, so the terminal stays open.
-      { key: "terminal", icon: <CodeOutlined />, disabled: !["starting", "optimizing", "running", "sleeping", "asleep"].includes(effectiveDeploymentState(d)), label: t("instanceTerminal.open") },
-      { key: "edit", icon: <EditOutlined />, disabled: d.desired_state === "deleting", label: t("page.edit") },
-      { key: "clone", icon: <CopyOutlined />, label: t("page.clone") },
-      { key: "cloneModify", icon: <CopyOutlined />, label: t("page.cloneModify") },
-      { key: "benchmark", icon: <ExperimentOutlined />, disabled: effectiveDeploymentState(d) !== "running", label: t("page.benchmark") },
-      // The server decides whether the deployment can be written as a
-      // template and says why not; the menu only waits for it to run.
-      { key: "catalogTemplate", icon: <FileAddOutlined />, disabled: effectiveDeploymentState(d) !== "running", label: t("catalogTemplate.open") },
-      { type: "divider" },
-      { key: "delete", icon: <DeleteOutlined />, danger: true, label: t("delete.button") },
-      ], onClick: ({ key }) => { if (key === "terminal") void openTerminal(d); else if (key === "edit") navigate(`/deploy?edit=${d.id}`); else if (key === "clone") void clone(d); else if (key === "cloneModify") navigate(`/deploy?from=${d.id}`); else if (key === "benchmark") void benchmark(d); else if (key === "catalogTemplate") setTemplating(d.id); else if (key === "delete") setDeleting(d); } }}><Tooltip title={t("page.more")}><Button type="text" size="small" icon={<MoreOutlined />} aria-label={t("page.more")} /></Tooltip></Dropdown>
+        const { primary, terminal, menu, remove } = actionsFor(d);
+        return <Space size={4}>
+          {primary.map(action => <Tooltip key={action.key} title={action.hint}>
+            <Button type="text" size="small" aria-label={action.label} icon={action.icon} disabled={action.disabled} onClick={action.onClick} />
+          </Tooltip>)}
+          <Dropdown trigger={["click"]} menu={{ items: [{ ...terminal }, ...menu.map(item => ({ ...item })), { type: "divider" }, { ...remove }] }}>
+            <Tooltip title={t("page.more")}><Button type="text" size="small" icon={<MoreOutlined />} aria-label={t("page.more")} /></Tooltip>
+          </Dropdown>
         </Space>;
-    },
+      },
     },
   ];
 
@@ -304,7 +316,10 @@ export default function DeploymentsPage() {
           emptyAction={filtered ? undefined : <Button type="primary" onClick={() => navigate("/deploy")}>{t("page.create")}</Button>}
         />
       </Card>
-      <DeleteDeploymentModal dep={deleting} onClose={() => setDeleting(null)} onDeleted={refetch} />
+      <DeleteDeploymentModal dep={deleting} onClose={() => setDeleting(null)} onDeleted={() => {
+        if (deleting?.id === detailId) closeDetail();
+        refetch();
+      }} />
       {templating != null && <DeploymentCatalogTemplateModal deploymentID={templating} onClose={() => setTemplating(null)} />}
       <DeploymentDetail
         id={detailId}
@@ -312,26 +327,8 @@ export default function DeploymentsPage() {
         routingPolicies={routingPolicies.data?.items ?? []}
         routingOptions={routingOptions}
         onClose={closeDetail}
-        onStopped={() => {
-          closeDetail();
-          refetch();
-        }}
+        actionsFor={actionsFor}
       />
-    </>
-  );
-}
-
-// The detail drawer's delete button; the list offers the same modal from the
-// row's "more" menu.
-function DeleteDeploymentButton({ dep, onDeleted }: { dep: Pick<Deployment, "id" | "name">; onDeleted: () => void }) {
-  const { t } = useTranslation("deployments");
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button danger icon={<DeleteOutlined />} onClick={() => setOpen(true)}>
-        {t("delete.button")}
-      </Button>
-      <DeleteDeploymentModal dep={open ? dep : null} onClose={() => setOpen(false)} onDeleted={onDeleted} />
     </>
   );
 }
@@ -410,126 +407,137 @@ function DeploymentDetail({
   routingOptions,
   focusInstance,
   onClose,
-  onStopped,
+  actionsFor,
 }: {
   id: number | null;
   focusInstance?: string | null;
   routingPolicies: RoutingPolicyOption[];
   routingOptions: Array<{ value: RoutingPolicyOption["value"]; label: string }>;
   onClose: () => void;
-  onStopped: () => void;
+  actionsFor: (dep: DeploymentListItem) => DeploymentActions;
 }) {
   const { t } = useTranslation("deployments");
   const { t: tCommon } = useTranslation("common");
-  const [dep, setDep] = useState<Deployment | null>(null);
-  const [routingBusy, setRoutingBusy] = useState(false);
+  const [loaded, setLoaded] = useState<Deployment | null>(null);
+  const firstTab = !focusInstance ? "overview" : "instances";
+  const [detailTab, setDetailTab] = useState(firstTab);
+  const [visitedInstances, setVisitedInstances] = useState<number | null>(null);
+  useEffect(() => {
+    if (detailTab === "instances") setVisitedInstances(id);
+  }, [detailTab, id]);
+  const [drilldown, setDrilldown] = useState<{ uuid: string; visit: number; target: "metrics" | "startup" } | null>(null);
+  useEffect(() => {
+    setDetailTab(firstTab);
+    setDrilldown(null);
+  }, [id, focusInstance, firstTab]);
+  const inspectInstance = (uuid: string) => {
+    setDrilldown((last) => ({ uuid, visit: (last?.visit ?? 0) + 1, target: "metrics" }));
+    setDetailTab("instances");
+  };
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const { t: tAI } = useTranslation("ai");
-  useAssistantSubjects(dep && id != null ? deploymentSubjects(dep, tAI) : null);
+  const dep = loaded?.id === id ? loaded : null;
+  const seenLaunches = useRef(new Set<number>());
+  useEffect(() => {
+    if (!dep || seenLaunches.current.has(dep.id)) return;
+    const instances = dep.instances ?? [];
+    if (focusInstance || drilldown || instances.some(inst => ["running", "failed", "stopped", "removing"].includes(inst.state))) {
+      seenLaunches.current.add(dep.id);
+      return;
+    }
+    const first = [...instances].reverse().find(inst => inst.replica && inst.dist_role !== "follower");
+    if (!first || !["pulling", "starting", "optimizing"].includes(first.state)) return;
+    if (dep.model_progress?.some(row => row.node_uuid === first.node_uuid && !isModelFileReady(row.state))) return;
+    seenLaunches.current.add(dep.id);
+    setDrilldown(last => ({ uuid: first.uuid, visit: (last?.visit ?? 0) + 1, target: "startup" }));
+    setDetailTab("instances");
+  }, [dep, drilldown, focusInstance]);
+  useAssistantSubjects(dep ? deploymentSubjects(dep, tAI) : null);
+  const requestVersion = useRef(0);
   const currentIDRef = useRef(id);
   currentIDRef.current = id;
 
   const load = useCallback(async () => {
     if (id == null) return;
+    const version = ++requestVersion.current;
     try {
       const next = await api.deployment(id);
-      if (currentIDRef.current === id) setDep(next);
-    } catch {
-      // The next event or explicit action retries transient detail failures.
+      if (currentIDRef.current === id && version === requestVersion.current) {
+        setLoaded(next);
+        setLoadError(null);
+      }
+    } catch (error) {
+      if (currentIDRef.current === id && version === requestVersion.current) setLoadError(error instanceof Error ? error : new Error(String(error)));
     }
   }, [id]);
-  const eventRefresh = useMemo(() => createRefreshCoalescer(load, 1000), [load]);
-
+  const refreshRef = useRef<ReturnType<typeof createRefreshCoalescer> | null>(null);
+  const refresh = useCallback(() => refreshRef.current?.trigger(), []);
   useEffect(() => {
-    setDep(null);
-    eventRefresh.trigger();
-    return () => eventRefresh.dispose();
-  }, [eventRefresh]);
-  useEvents("instance", eventRefresh.trigger);
-  useEvents("deployment", eventRefresh.trigger);
-  useEvents("modelfile", eventRefresh.trigger);
-  useEventPayload("node", (event) => { if (event.reason?.startsWith("state:")) eventRefresh.trigger(); });
-
-  const changeRouting = async (routing_policy: string) => {
-    if (!dep || dep.replicas <= 1) return;
-    const policy = routingPolicies.find((item) => item.value === routing_policy);
-    if (!policy) return;
-    setRoutingBusy(true);
-    try { await api.setDeploymentRouting(dep.id, policy.value); await load(); message.success(t("detail.routingUpdated")); }
-    catch (e) { message.error(t("detail.routingFailed", { detail: apiErrorText(tCommon, e) })); }
-    finally { setRoutingBusy(false); }
-  };
-
-  const b = dep ? stateLabel(effectiveDeploymentState(dep), tCommon) : null;
+    setLoaded(null);
+    setLoadError(null);
+    if (id == null) return;
+    const coalescer = createRefreshCoalescer(load, 1000);
+    refreshRef.current = coalescer;
+    coalescer.trigger();
+    const refreshVisible = () => { if (!document.hidden) coalescer.trigger(); };
+    const interval = setInterval(refreshVisible, DETAIL_REFRESH_MS);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisible);
+      refreshRef.current = null;
+      coalescer.dispose();
+    };
+  }, [id, load]);
+  useEvents("instance", refresh);
+  useEvents("deployment", refresh);
+  useEvents("modelfile", refresh);
+  useEventPayload("node", (event) => { if (event.reason?.startsWith("state:")) refresh(); });
+  const instanceCount = dep?.instances?.length ?? 0;
+  const instanceDetailsLabel = instanceCount ? t("detail.instances", { count: instanceCount }) : t("detail.instanceDetails");
 
   return (
-    <Drawer
+    <DetailDrawer
+      width="min(832px, calc(100vw - 32px))"
       title={dep?.name || t("detail.title")}
+      className="deployment-detail-drawer"
+      deferEscapeToModal
       open={id != null}
       onClose={onClose}
-      width={720}
-      extra={
-        <Space>
-          {dep && <DeploymentLifecycleActions dep={dep} onChanged={load} />}
-          {dep && <DeleteDeploymentButton dep={dep} onDeleted={onStopped} />}
-        </Space>
-      }
-    >
-      {dep && (
-        <>
-          <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label={t("detail.model")}><Link to={`/models?detail=${dep.model_id}`}>{dep.model_name || dep.model_id}</Link></Descriptions.Item>
-            <Descriptions.Item label={t("detail.servedName")}>{dep.served_name || "—"}</Descriptions.Item>
-            <Descriptions.Item label={t("detail.node")}><DeploymentRuntimeNodeLinks dep={dep} /></Descriptions.Item>
-            <Descriptions.Item label={t("detail.targetNode")}><DeploymentNodeLinks dep={dep} /></Descriptions.Item>
-            {dep.placement_mode && <Descriptions.Item label={t("unitsPlacement.label")} span={2}><PlacementModeControl dep={dep} onChanged={() => void load()} /></Descriptions.Item>}
-            <Descriptions.Item label={t("detail.state")}>
-              {/* A partly slept deployment serves, so it stays running here too,
-                  with the sleep count beside it rather than a plain badge. */}
-              {b && <Space size={4}><Badge status={dep && partlyAsleep(dep) ? "processing" : b.status} text={b.text} />{dep && partlyAsleep(dep) && <Typography.Text type="secondary">{t("sleep.partial", { asleep: dep.asleep_replicas, total: dep.replicas })}</Typography.Text>}</Space>}
-            </Descriptions.Item>
-            <Descriptions.Item label={<Space size={0}>{t("detail.health")}<HealthCheckHelp /></Space>}><HealthCheckEditor key={`${dep.id}-${dep.health.threshold_sec}`} dep={dep} onChanged={load} /></Descriptions.Item>
-            <Descriptions.Item label={<Space size={0}>{t("detail.tokenize")}<TokenizeHelp /></Space>}><TokenizeEditor dep={dep} onChanged={load} /></Descriptions.Item>
-            <Descriptions.Item label={t("detail.sleepable")}>{dep.sleepable ? t("detail.yes") : t("detail.no")}</Descriptions.Item>
-            {!dep.pd && (dep.nnodes ?? 1) <= 1 && <Descriptions.Item label={t("detail.placement.requirements")} span={2}><Space size={4} wrap><RequirementTags dep={dep} />{dep.placement_strategy && <Tag color="blue">{t(`detail.placement.strategy.${dep.placement_strategy}`, { defaultValue: dep.placement_strategy })}</Tag>}<EditRequirementsButton dep={dep} onChanged={() => void load()} /></Space></Descriptions.Item>}
-              <Descriptions.Item label={t("detail.replicas")}><Space size={8}>{dep.ready_replicas != null && <Typography.Text type={dep.ready_replicas < dep.replicas ? "warning" : undefined}>{t("detail.readyReplicas", { ready: dep.ready_replicas, desired: dep.replicas })}</Typography.Text>}<ReplicasEditor key={`${dep.id}-${dep.replicas}`} dep={dep} onChanged={load} /></Space></Descriptions.Item>
-      {dep.replicas > 1 && <Descriptions.Item label={<Space size={4}>{t("detail.routingPolicy")}<RoutingPolicyHelp policies={routingPolicies} /></Space>}><Select size="small" loading={routingBusy || routingPolicies.length === 0} value={dep.routing_policy} onChange={changeRouting} options={routingOptions} /></Descriptions.Item>}
-      {dep.template_id && <Descriptions.Item label={t("detail.inferenceTemplate")}><Tag color={dep.template_deviated ? "orange" : "green"}>{dep.template_deviated ? t("detail.deviated") : t("detail.notDeviated")}</Tag>{dep.template_scenario && <Typography.Text type="secondary"> {dep.template_scenario}</Typography.Text>}</Descriptions.Item>}
-          </Descriptions>
-
-          {dep.pd && <DeploymentPdPanel dep={dep} onChanged={load} />}
-          <ReplicaRetryAlert dep={dep} onChanged={load} />
-          <PlacementStatusAlert dep={dep} />
-          {/* The two node fields above are only readable if the drawer says
-              outright that they differ, rather than leaving an operator to
-              notice it and wonder which one is true (GWKS-120). */}
-          {actualNodesDiffer(dep) && (
-            <Alert
-              type="info"
-              showIcon
-              role="status"
-              style={{ marginBottom: 12 }}
-              message={t("detail.scheduledElsewhere", {
-                nodes: (dep.runtime_nodes ?? []).map((node) => node.node_name || node.node_uuid.slice(0, 8)).join(", "),
-                target: deploymentTargetLabel(dep, dep.node_uuid),
-              })}
-            />
-          )}
-
-          <SleepControls dep={dep} onDone={load} />
-
-          <DeploymentSchedulingPolicy dep={dep} onChanged={load} />
-
-          <DeploymentPreparation rows={dep.model_progress} onChanged={load} />
-
-          <Typography.Title level={5} style={{ marginTop: 20 }}>
-            {t("detail.metrics")}
-          </Typography.Title>
-          <DeploymentMetricsPanel instances={dep.instances ?? []} deploymentId={dep.id} />
-
-          <DeploymentInstances dep={dep} focus={focusInstance} onChanged={load} />
-        </>
+      extra={dep && (
+        <DeploymentDetailActions key={dep.id} dep={dep} actions={actionsFor(dep)} onChanged={load} />
       )}
-    </Drawer>
+    >
+      {loadError && (
+        <Alert type="error" showIcon message={tCommon("dataTable.loadFailed")}
+          description={apiErrorText(tCommon, loadError)}
+          action={<Button size="small" onClick={refresh}>{tCommon("actions.retry")}</Button>} />
+      )}
+      {!dep && !loadError && <Skeleton className="h-20 w-full" />}
+      {dep && (
+        <div className="deployment-detail-content">
+          <MetricWindowProvider key={dep.id}>
+            <Tabs className="deployment-inspection-tabs deployment-detail-tabs" value={detailTab} onValueChange={setDetailTab} variant="underline">
+              <TabsList className="deployment-top-tabs m-0 max-w-full" aria-label={t("detail.title")}>
+                <TabItem value="overview" label={t("detail.title")} />
+                <TabItem value="instances" label={instanceDetailsLabel} />
+              </TabsList>
+              <TabPanel value="overview" className="pt-3">
+                <DeploymentDetailOverview dep={dep} onChanged={load} routingPolicies={routingPolicies} routingOptions={routingOptions} />
+                <section className="deployment-metrics-section" aria-label={t("detail.metrics")}>
+                  <h4 className="deployment-section-title">{t("detail.metrics")}</h4>
+                  <DeploymentMetricsPanel instances={dep.instances ?? []} deploymentId={dep.id} onSelectInstance={inspectInstance} />
+                </section>
+              </TabPanel>
+              <TabPanel value="instances" keepMounted={visitedInstances === dep.id}>
+                <DeploymentInstances key={`${dep.id}:${focusInstance ?? ""}:${drilldown?.visit ?? 0}`}
+                  dep={dep} focus={drilldown?.uuid ?? focusInstance} focusStartup={drilldown?.target === "startup"} initialView={drilldown?.target === "metrics" ? "metrics" : undefined} onChanged={load} />
+              </TabPanel>
+            </Tabs>
+          </MetricWindowProvider>
+        </div>
+      )}
+    </DetailDrawer>
   );
 }
 
@@ -600,50 +608,6 @@ function DeploymentRuntimeNodes({ dep }: { dep: Pick<Deployment, "runtime_nodes"
 // its replicas actually run on.
 function DeploymentTargetNodes({ dep }: { dep: Pick<Deployment, "node_uuid" | "node_name" | "node_names"> }) {
   return <>{deploymentTargetLabel(dep, dep.node_uuid)}</>;
-}
-
-// DeploymentRuntimeNodeLinks lists every node the deployment's replicas are on,
-// one link each, so a folded cell can always be expanded to the whole set. A
-// replica on a node that is not the placement target is what the drawer's
-// 「已调度到其它节点」 notice points at.
-export function DeploymentRuntimeNodeLinks({ dep }: { dep: Pick<Deployment, "runtime_nodes"> }) {
-  const { t } = useTranslation("deployments");
-  const nodes = dep.runtime_nodes ?? [];
-  if (!nodes.length) return <Typography.Text type="secondary">{t("page.runtimeNodes.none")}</Typography.Text>;
-  return (
-    <Space size={4} wrap>
-      {nodes.map((node) => (
-        <Link key={node.node_uuid} to="/nodes" state={{ nodeUUID: node.node_uuid }}>
-          {node.node_name || node.node_uuid.slice(0, 8)}
-          {nodes.length > 1 && <Typography.Text type="secondary"> ×{node.instances}</Typography.Text>}
-        </Link>
-      ))}
-    </Space>
-  );
-}
-
-// actualNodesDiffer reports whether any replica runs on a node the deployment
-// does not name as its target - the condition the drawer explains instead of
-// leaving the two node fields to contradict each other.
-export function actualNodesDiffer(dep: Pick<Deployment, "node_uuid" | "node_uuids" | "runtime_nodes">): boolean {
-  const nodes = dep.runtime_nodes ?? [];
-  if (!nodes.length) return false;
-  const targets = new Set<string>(dep.node_uuids?.length ? dep.node_uuids : dep.node_uuid ? [dep.node_uuid] : []);
-  if (!targets.size) return true;
-  return nodes.some((node) => !targets.has(node.node_uuid));
-}
-
-// Each node the deployment runs on, linked to its node detail; a multi-node
-// deployment lists its ranks in order.
-function DeploymentNodeLinks({ dep }: { dep: Pick<Deployment, "node_uuid" | "node_name" | "node_uuids" | "node_names"> }) {
-  const uuids = dep.node_uuids?.length ? dep.node_uuids : dep.node_uuid ? [dep.node_uuid] : [];
-  if (uuids.length === 0) return <>—</>;
-  const names = uuids.length > 1 ? dep.node_names ?? [] : [dep.node_name ?? dep.node_names?.[0]];
-  return (
-    <>
-      {uuids.map((uuid, i) => <span key={`${i}-${uuid}`}>{i > 0 && ", "}<Link to="/nodes" state={{ nodeUUID: uuid }}>{names[i] || uuid.slice(0, 8)}</Link></span>)}
-    </>
-  );
 }
 
 // The copied request names the gateway's key header: every /v1 route needs

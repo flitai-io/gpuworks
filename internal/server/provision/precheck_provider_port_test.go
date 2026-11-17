@@ -15,9 +15,9 @@ func TestPrecheckLeavesTheServerDialPortToTheInstallWhenTheProviderChoosesIt(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantCheck(t, report.Checks, checkServerToAgent, "ok", "checked during the install")
+	wantCheck(t, report.Checks, CheckIDServerToAgent, "skip", "checked during the install")
 	for _, c := range report.Checks {
-		if c.Name == "Agent listen port" || c.Name == checkConnectivity {
+		if c.ID == "agent_listen_port" || c.ID == CheckIDConnectivity {
 			t.Fatalf("unexpected row %+v in %+v", c, report.Checks)
 		}
 	}

@@ -36,6 +36,8 @@ func (n *NodeRuntime) Bind(send conn.SendFunc) {
 			return
 		}
 	}
+	// A backlog can be megabytes; the connection's loops must not wait for it.
+	go n.flushLogs()
 }
 
 // Unbind detaches on disconnect.
@@ -71,6 +73,11 @@ func (n *NodeRuntime) reportRuntimeObservation(epoch uint64, st proto.InstanceSt
 }
 
 func (n *NodeRuntime) emit(t string, d any) {
+	if batch, ok := d.(proto.LogBatch); ok && t == proto.TLogs {
+		n.logOutbox().enqueue(batch)
+		n.flushLogs()
+		return
+	}
 	n.sendMu.Lock()
 	send := n.send
 	n.sendMu.Unlock()
@@ -79,6 +86,11 @@ func (n *NodeRuntime) emit(t string, d any) {
 		return // offline; server will re-sync on reconnect
 	}
 	if err := send(t, d); err != nil {
+		if errors.Is(err, conn.ErrTelemetryUnavailable) {
+			// Metrics while the data lane is not attached: dropped by
+			// design (ADR 0064), on every collector tick of an outage.
+			return
+		}
 		n.log.Warn("emit failed", "t", t, "err", err)
 	}
 }
@@ -329,7 +341,7 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 		defer n.doctorRunning.Store(false)
 		ctx, cancel := context.WithTimeout(ctx, doctorBudget)
 		defer cancel()
-		ctx = withDoctorCardsInUse(ctx, n.cardsInUse)
+		ctx = withDoctorCardsInUse(ctx, func() (map[string]bool, bool) { return cardSet(n.cardsInUse()) })
 		ctx = withDoctorForeignCards(ctx, n.occupancy.foreign)
 		ctx = withDoctorRuntimeCheck(ctx, n.cardRuntimeCheck)
 		ctx = withDoctorAttempts(ctx, n.cardSmoke.Begin)
@@ -379,7 +391,7 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 		// report does not immediately execute the same probe a second time.
 		_ = n.partitionProbeNeedsRefresh(reports, gpus)
 		return n.partitionProbe.Refresh(ctx, reports, gpus), nil
-	case proto.RPCKubeNodeExists:
+	case proto.RPCKubeNodeExists, proto.RPCKubeNodesSelected:
 		return n.kubeRPC(ctx, method, params)
 	case proto.RPCFSList:
 		return n.rpcFSList(params)
@@ -448,6 +460,9 @@ func (n *NodeRuntime) OnRPC(ctx context.Context, method string, params json.RawM
 			return nil, err
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, &proto.RPCError{Code: proto.ErrorBenchEndpointNotFound, Message: "models probe returned " + resp.Status}
+		}
 		if resp.StatusCode/100 != 2 {
 			return nil, errors.New("models probe returned " + resp.Status)
 		}

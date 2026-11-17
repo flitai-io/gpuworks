@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // agentLogBytes bounds a node's agent log in a collection (agent.log and its
@@ -49,21 +50,21 @@ func (m *Manager) buildBundle(ctx context.Context, b Bundle) (Bundle, error) {
 	stage := func(name string, write func(io.Writer) (int64, bool, error)) {
 		local := filepath.Join(work, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(local), 0o700); err != nil {
-			add(BundleItem{Name: name, State: "failed", Reason: err.Error()}, nil)
+			add(failedItem(name, messages.CheckDiagnosticsItemStageFailed, err, 0), nil)
 			return
 		}
 		f, err := os.Create(local)
 		if err != nil {
-			add(BundleItem{Name: name, State: "failed", Reason: err.Error()}, nil)
+			add(failedItem(name, messages.CheckDiagnosticsItemStageFailed, err, 0), nil)
 			return
 		}
 		n, truncated, err := write(f)
 		_ = f.Close()
 		if err != nil {
-			add(BundleItem{Name: name, State: "failed", Reason: err.Error(), Bytes: n}, &stagedEntry{name: name, path: local})
+			add(failedItem(name, messages.CheckDiagnosticsItemReadFailed, err, n), &stagedEntry{name: name, path: local})
 			return
 		}
-		add(BundleItem{Name: name, State: "collected", Bytes: n, Truncated: truncated}, &stagedEntry{name: name, path: local})
+		add(collectedItem(name, n, truncated), &stagedEntry{name: name, path: local})
 	}
 
 	// The server's disks first: when one is full, nothing later may fit.
@@ -91,7 +92,7 @@ func (m *Manager) buildBundle(ctx context.Context, b Bundle) (Bundle, error) {
 			if info != nil {
 				size = info.Size()
 			}
-			add(BundleItem{Name: "debug/" + filepath.ToSlash(rel), State: "collected", Bytes: size}, &stagedEntry{name: "debug/" + filepath.ToSlash(rel), path: p})
+			add(collectedItem("debug/"+filepath.ToSlash(rel), size, false), &stagedEntry{name: "debug/" + filepath.ToSlash(rel), path: p})
 			return nil
 		})
 	}
@@ -101,7 +102,7 @@ func (m *Manager) buildBundle(ctx context.Context, b Bundle) (Bundle, error) {
 	sem := make(chan struct{}, 8)
 	for _, uuid := range b.Nodes {
 		if !m.nodes.Online(uuid) {
-			add(BundleItem{Name: "nodes/" + uuid, State: "skipped", Reason: "offline"}, nil)
+			add(skippedItem("nodes/"+uuid, messages.CheckDiagnosticsNodeOffline), nil)
 			continue
 		}
 		wg.Add(1)
@@ -138,7 +139,7 @@ func (m *Manager) buildBundle(ctx context.Context, b Bundle) (Bundle, error) {
 	// The related records, credentials cut to their prefix.
 	docs, err := m.sources.Snapshot(ctx, SnapshotScope{From: b.From, To: b.To, DeploymentIDs: b.Deployments, InstanceUUIDs: b.Instances, NodeUUIDs: b.Nodes})
 	if err != nil {
-		add(BundleItem{Name: "db", State: "failed", Reason: err.Error()}, nil)
+		add(failedItem("db", messages.CheckDiagnosticsItemReadFailed, err, 0), nil)
 	}
 	names := make([]string, 0, len(docs))
 	for name := range docs {
@@ -161,7 +162,7 @@ func (m *Manager) buildBundle(ctx context.Context, b Bundle) (Bundle, error) {
 		})
 	}
 
-	sort.Slice(b.Items, func(i, j int) bool { return b.Items[i].Name < b.Items[j].Name })
+	sort.Slice(b.Items, func(i, j int) bool { return b.Items[i].Path < b.Items[j].Path })
 	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
 	return b, m.pack(b, entries)
 }
@@ -285,7 +286,7 @@ func (m *Manager) collectNode(ctx context.Context, uuid string, sessions []strin
 	defer cancel()
 	rc, err := m.sources.OpenNodeFiles(callCtx, uuid, sessions)
 	if err != nil {
-		add(BundleItem{Name: name, State: "failed", Reason: err.Error()}, nil)
+		add(failedItem(name, messages.CheckDiagnosticsItemReadFailed, err, 0), nil)
 		return
 	}
 	defer rc.Close()
@@ -299,7 +300,7 @@ func (m *Manager) collectNode(ctx context.Context, uuid string, sessions []strin
 			break
 		}
 		if err != nil {
-			add(BundleItem{Name: name, State: "failed", Reason: "read: " + err.Error()}, nil)
+			add(failedItem(name, messages.CheckDiagnosticsItemReadFailed, err, 0), nil)
 			break
 		}
 		got = true
@@ -320,23 +321,23 @@ func (m *Manager) collectNode(ctx context.Context, uuid string, sessions []strin
 			}
 			n, err := io.Copy(f, io.LimitReader(tr, NodeDebugBytes))
 			_ = f.Close()
-			item := BundleItem{Name: name + "/" + clean, State: "collected", Bytes: n}
+			item := collectedItem(name+"/"+clean, n, false)
 			if err != nil {
-				item.State, item.Reason = "failed", err.Error()
+				item = failedItem(name+"/"+clean, messages.CheckDiagnosticsItemReadFailed, err, n)
 			}
 			add(item, &stagedEntry{name: name + "/" + clean, path: local})
 		}
 	}
 	if !got {
 		// An agent that predates the read closes the stream at once.
-		add(BundleItem{Name: name + "/agent.log", State: "skipped", Reason: "unsupported"}, nil)
+		add(skippedItem(name+"/agent.log", messages.CheckDiagnosticsAgentUnsupported), nil)
 		return
 	}
 	local := filepath.Join(work, "nodes", uuid, "agent.log")
 	_ = os.MkdirAll(filepath.Dir(local), 0o700)
 	f, err := os.Create(local)
 	if err != nil {
-		add(BundleItem{Name: name + "/agent.log", State: "failed", Reason: err.Error()}, nil)
+		add(failedItem(name+"/agent.log", messages.CheckDiagnosticsItemStageFailed, err, 0), nil)
 		return
 	}
 	var written int64
@@ -347,7 +348,7 @@ func (m *Manager) collectNode(ctx context.Context, uuid string, sessions []strin
 		truncated = truncated || cut
 	}
 	_ = f.Close()
-	add(BundleItem{Name: name + "/agent.log", State: "collected", Bytes: written, Truncated: truncated}, &stagedEntry{name: name + "/agent.log", path: local})
+	add(collectedItem(name+"/agent.log", written, truncated), &stagedEntry{name: name + "/agent.log", path: local})
 }
 
 type countingWriter struct {

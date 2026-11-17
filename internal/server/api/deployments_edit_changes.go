@@ -115,6 +115,9 @@ func deploymentChanges(st *store.Store, dep *store.Deployment, reqs map[string][
 	if dep.Sleepable != next.Sleepable {
 		add("sleepable", restart, dep.Sleepable, next.Sleepable)
 	}
+	if dep.PriorityScheduling != next.PriorityScheduling {
+		add("priority_scheduling", restart, dep.PriorityScheduling, next.PriorityScheduling)
+	}
 	if dep.VRAMLimitBytes != next.VRAMLimitBytes {
 		add("vram_limit_gib", restart, float64(dep.VRAMLimitBytes)/(1<<30), float64(next.VRAMLimitBytes)/(1<<30))
 	}

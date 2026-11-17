@@ -179,3 +179,5 @@ The node should be **online** with GPU count ≥ 1. Deploying a model and callin
 - [ ] Windows browser opens `http://localhost:8800`
 
 If all items pass, the WSL2 + Docker environment is ready.
+
+<!-- translation-source-sha256: 9da9306d2a5bbcf190f91f1481899ce34b0bdf48e73a6cd55ec2daa2501ec851 -->

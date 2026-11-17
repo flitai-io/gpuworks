@@ -268,7 +268,7 @@ func (p *Proxy) serveSequentialPrefill(w http.ResponseWriter, r *http.Request, t
 		p.releaseTarget(tgt)
 		p.acctFor(r.Context()).RecordImmediate(deploymentID, http.StatusServiceUnavailable, false)
 		w.Header().Set("Retry-After", strconv.Itoa(dataLaneUnavailableRetryAfterSeconds))
-		writeErr(w, http.StatusServiceUnavailable, "no prefill instance could take the request ("+outcome.fallback+")")
+		writeAPIError(w, r, ErrorPDPrefillUnavailable, map[string]any{"reason": outcome.fallback})
 		return false, noop
 	}
 	// Fall back: the decoder computes the prefill itself. The body already

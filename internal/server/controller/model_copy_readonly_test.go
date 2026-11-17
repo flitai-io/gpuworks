@@ -24,7 +24,7 @@ func TestCopyIntoDisabledStorageRefused(t *testing.T) {
 			if kind == proto.StorageLocal {
 				dst.NodeID = f.node.ID
 			}
-			if _, err := f.c.CopyModelFile(t.Context(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, dst, -1); !errors.Is(err, store.ErrStorageDisabled) {
+			if _, err := f.c.Transfers().Copy(t.Context(), f.model.ID, store.FileRef{StorageID: f.nfs.ID}, dst, -1); !errors.Is(err, store.ErrStorageDisabled) {
 				t.Fatalf("copy into disabled %s: %v", kind, err)
 			}
 			if len(f.hub.calls) > 0 || len(f.hub.updates) > 0 {

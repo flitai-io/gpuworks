@@ -37,11 +37,40 @@ var (
 // transaction. The caller supplies each model's specs through Specs; no
 // legacy template graph or evidence side tables are consulted.
 func (s *Store) ReconcileInferenceCatalog(models []InferenceModel) error {
+	return s.ReconcileInferenceCatalogKeeping(models, nil)
+}
+
+// InferenceCatalogKeep names an upstream model, or one upstream spec of it
+// when Spec is set, that a reconcile leaves as it is stored.
+type InferenceCatalogKeep struct {
+	ModelID string
+	Spec    string
+}
+
+// ReconcileInferenceCatalogKeeping is ReconcileInferenceCatalog for a catalog
+// the caller could read only in part: the upstream rows named in keep are
+// neither rewritten nor pruned, so a spec this server already has stays
+// usable when a newer catalog states it in a form the server cannot read.
+// Rows that do not exist are not created.
+func (s *Store) ReconcileInferenceCatalogKeeping(models []InferenceModel, keep []InferenceCatalogKeep) error {
 	if len(models) == 0 {
 		return errors.New("inference catalog is empty")
 	}
+	kept := catalogKeep{}
+	for _, item := range keep {
+		modelID := strings.ToLower(strings.TrimSpace(item.ModelID))
+		if modelID == "" {
+			continue
+		}
+		if kept[modelID] == nil {
+			kept[modelID] = map[string]struct{}{}
+		}
+		if spec := strings.TrimSpace(item.Spec); spec != "" {
+			kept[modelID][spec] = struct{}{}
+		}
+	}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		return reconcileInferenceCatalog(tx, models, true)
+		return reconcileInferenceCatalog(tx, models, true, kept)
 	})
 	if err == nil {
 		s.Bus.PublishChange(InferenceTemplateTopic, InferenceTemplatesAll, "")
@@ -117,7 +146,7 @@ func (s *Store) ImportUserInferenceCatalog(models []InferenceModel, overwrite bo
 				models[i].Source = "upstream"
 			}
 		}
-		return reconcileInferenceCatalog(tx, models, false)
+		return reconcileInferenceCatalog(tx, models, false, nil)
 	})
 	if err == nil {
 		for _, model := range models {
@@ -225,7 +254,11 @@ func refuseDanglingComponentReference(tx *gorm.DB, modelRowID uint, modelID stri
 	return nil
 }
 
-func reconcileInferenceCatalog(tx *gorm.DB, models []InferenceModel, pruneUpstream bool) error {
+// catalogKeep maps a model ID to the upstream spec names a reconcile leaves
+// alone. A model the catalog does not carry at all is left alone whole.
+type catalogKeep map[string]map[string]struct{}
+
+func reconcileInferenceCatalog(tx *gorm.DB, models []InferenceModel, pruneUpstream bool, keep catalogKeep) error {
 	seenModels := make(map[string]struct{}, len(models))
 	for i := range models {
 		model := &models[i]
@@ -320,6 +353,11 @@ func reconcileInferenceCatalog(tx *gorm.DB, models []InferenceModel, pruneUpstre
 		}
 		// A catalog import is authoritative for this model's specs. Removing
 		// omitted specs prevents old five-layer configurations resurfacing.
+		if pruneUpstream {
+			for name := range keep[model.ModelID] {
+				seenTargetSpecs[name] = struct{}{}
+			}
+		}
 		query := tx.Where("model_id = ? AND source = ?", model.ID, targetSource)
 		if len(seenTargetSpecs) > 0 {
 			query = query.Where("name NOT IN ?", mapKeys(seenTargetSpecs))
@@ -332,6 +370,9 @@ func reconcileInferenceCatalog(tx *gorm.DB, models []InferenceModel, pruneUpstre
 		// Upstream imports are authoritative, while user-owned rows are kept
 		// for the editor. Remove upstream models omitted by the latest import
 		// together with their specs so stale executable configs cannot resurface.
+		for modelID := range keep {
+			seenModels[modelID] = struct{}{}
+		}
 		modelKeys := mapKeys(seenModels)
 		var stale []InferenceModel
 		if err := tx.Where("source = ? AND model_id NOT IN ?", "upstream", modelKeys).Find(&stale).Error; err != nil {

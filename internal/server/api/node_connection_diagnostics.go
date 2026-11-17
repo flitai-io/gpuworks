@@ -45,6 +45,7 @@ func (a *apiHandlers) nodeConnectionDiagnostics(w http.ResponseWriter, r *http.R
 		RecoveryPhase: node.RecoveryPhase, RecoveryAttempts: node.RecoveryAttempts,
 		LastProbeAt:       node.LastProbeAt,
 		LastRecoveryError: provision.ConnectionDiagnosticDetail(node.LastRecoveryError, node.Token),
+		LastRecoveryCode:  node.LastRecoveryCode,
 		Guidance:          []string{"snapshot_scope", "http_scope", "test_from_node", "manual_address_update"},
 	}
 	if exposure, ok := a.d.NodeInstaller.(interface {

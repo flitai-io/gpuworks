@@ -36,6 +36,13 @@ type processNode struct {
 type processCapability struct {
 	Backend, Status, Reason string
 	DisplayName             string `json:"display_name"`
+	// ReasonCode and ReasonParams are what a test asserts on (ADR 0067);
+	// Reason is only the English fallback.
+	ReasonCode   string `json:"reason_code"`
+	ReasonParams struct {
+		Runtime           string   `json:"runtime"`
+		SupportedRuntimes []string `json:"supported_runtimes"`
+	} `json:"reason_params"`
 }
 
 var processHTTPClient = &http.Client{Timeout: 5 * time.Second}

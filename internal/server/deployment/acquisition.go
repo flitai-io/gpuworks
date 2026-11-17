@@ -69,7 +69,7 @@ func (s *Service) resolveSaveToStorage(source *dto.ModelSource, model *store.Mod
 		if code == messages.ErrorStorageNotWritable {
 			reason = "storage_not_writable"
 		}
-		check := modelDiagnostic(model, nil, store.ModelSource{Location: store.ModelLocation{Storage: *storage}}, "write", "failed", reason, "The requested storage does not accept new model files")
+		check := modelDiagnostic(model, nil, store.ModelSource{Location: store.ModelLocation{Storage: *storage}}, "write", proto.CheckFail, reason, "The requested storage does not accept new model files")
 		check.Message.Code = code
 		report.Checks = append(report.Checks, check)
 		return nil, WithDiagnostics(productError(code, "storage "+storage.Name+" does not accept new model files", map[string]any{"storage": storage.Name, "storage_id": storage.ID}), report)
@@ -100,7 +100,7 @@ func (s *Service) checkStorageServes(storage *store.Storage, model *store.Model,
 	for _, node := range uniqueNodes(nodes) {
 		loc, err := s.d.Store.ModelLocation(model.ID, storage.ID, node.ID)
 		if err != nil {
-			check := modelDiagnostic(model, node, store.ModelSource{Location: loc}, "facts", "unknown", "facts_unavailable", "Model location facts could not be read")
+			check := modelDiagnostic(model, node, store.ModelSource{Location: loc}, "facts", proto.CheckSkip, "facts_unavailable", "Model location facts could not be read")
 			report.Checks = append(report.Checks, check)
 			if firstErr == nil {
 				firstErr = wrapProductError(messages.ErrorModelSourceUnavailable, check.Message.Message, check.Message.Params, err)

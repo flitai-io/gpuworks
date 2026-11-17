@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-
-	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // validateChatInput checks the model's current editable declarations, like the
@@ -19,17 +17,13 @@ func (p *Proxy) validateChatInput(r *http.Request, deploymentID uint) error {
 	if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" || !isJSONRequest(r) {
 		return nil
 	}
-	dep, err := p.store.GetDeployment(deploymentID)
+	modelID, err := p.deploymentModel(deploymentID)
 	if err != nil {
 		return err
 	}
-	model, err := p.store.GetModel(dep.ModelID)
-	if err != nil {
+	supported, err := p.modalities.forModel(modelID)
+	if err != nil || len(supported) == 0 {
 		return err
-	}
-	var supported []string
-	if json.Unmarshal([]byte(model.InputModalities), &supported) != nil || len(supported) == 0 {
-		return nil
 	}
 	if r.GetBody == nil {
 		return nil
@@ -43,10 +37,21 @@ func (p *Proxy) validateChatInput(r *http.Request, deploymentID uint) error {
 		if slices.Contains(supported, modality) {
 			return nil
 		}
-		return messages.NewProductError(messages.ErrorModelInputModalityUnsupported,
-			fmt.Sprintf("This model does not support %s input (supported: %s). Remove the attachment or select a compatible model.", modality, strings.Join(supported, ", ")),
-			map[string]any{"modality": modality, "supported": strings.Join(supported, ", ")})
+		return refuse(ErrorModalityUnsupported, map[string]any{"modality": modality, "supported": strings.Join(supported, ", ")})
 	})
+}
+
+// deploymentModel is the model a deployment serves: from the route table
+// (a deployment's model never changes), else read.
+func (p *Proxy) deploymentModel(deploymentID uint) (uint, error) {
+	if rd := p.routes.deployment(deploymentID); rd != nil && rd.dep != nil {
+		return rd.dep.ModelID, nil
+	}
+	dep, err := p.store.GetDeployment(deploymentID)
+	if err != nil {
+		return 0, err
+	}
+	return dep.ModelID, nil
 }
 
 // Walk the JSON structure without retaining media strings. Only the bounded
@@ -206,15 +211,15 @@ func smallJSONString(reader *bufio.Reader) (string, error) {
 	}
 }
 
-func writeChatInputError(w http.ResponseWriter, err error) {
-	var product *messages.ProductError
-	if !errors.As(err, &product) {
-		writeErr(w, http.StatusBadRequest, "Unable to validate chat input")
-		return
+// writeChatInputError answers a chat body that names a modality the model
+// does not take with that refusal, and one the scan could not read with
+// CHAT_INPUT_UNREADABLE.
+func writeChatInputError(w http.ResponseWriter, r *http.Request, err error) {
+	var rejection *refusal
+	if !errors.As(err, &rejection) {
+		rejection = refuse(ErrorChatInputUnreadable, nil)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": product.Error(), "type": "gpuworks_proxy", "code": product.Code(), "params": product.Params()}})
+	writeRefusal(w, r, rejection)
 }
 
 // Unknown fields, tool schemas and media values cannot contain chat content
@@ -262,7 +267,7 @@ func (p *Proxy) rejectChatInput(w http.ResponseWriter, r *http.Request, tgt targ
 	if err := p.validateChatInput(r, deploymentID); err != nil {
 		p.releaseTarget(tgt)
 		p.acctFor(r.Context()).RecordImmediate(deploymentID, http.StatusBadRequest, false)
-		writeChatInputError(w, err)
+		writeChatInputError(w, r, err)
 		return true
 	}
 	return false

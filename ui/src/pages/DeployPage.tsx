@@ -50,6 +50,7 @@ import DeploySubmissionError from "./deploy/DeploySubmissionError";
 import useDeploymentIdentity from "./deploy/useDeploymentIdentity";
 import useDeployFormChanges from "./deploy/useDeployFormChanges";
 import HealthCheckFields from "./deploy/HealthCheckFields";
+import { PrioritySchedulingLabel, PrioritySchedulingSwitch, withFixArgs } from "./deploy/PrioritySchedulingField";
 import TokenizeField from "./deploy/TokenizeField";
 import DeployNoOperationsNotice from "./deploy/DeployNoOperationsNotice";
 import { localizedText } from "../i18n/localizedText";
@@ -246,6 +247,7 @@ function DeployForm({ opened }: { opened?: OpenedDeployment }) {
   const evaluation = useDeployEvaluation({
     form,
     signal: evaluationSignal,
+    profiles: engines.data?.items,
     // Without a target accelerator the scheduler would pick any vendor's
     // node, and that answer would linger on screen once one is chosen.
     buildPayload: () => {
@@ -304,6 +306,7 @@ function DeployForm({ opened }: { opened?: OpenedDeployment }) {
     selectedTemplateSpec?.spec.engine_decides_param_keys,
   );
   const weightSource = useTemplateWeightSource({
+    search: opened ? undefined : location.search,
     form,
     template: selectedTemplate ?? undefined,
     selection: selectedTemplateSpec,
@@ -378,6 +381,7 @@ function DeployForm({ opened }: { opened?: OpenedDeployment }) {
             t("page.title")
           )
         }
+        breadcrumbTitle={opened ? <DeployEditTitle opened={opened} compact /> : undefined}
         description={opened ? t(`edit.description.${opened.mode}`) : t("page.description")}
         parents={[<Link key="list" to="/deployments">{t("common:navigation.deployments")}</Link>]}
         extra={
@@ -430,12 +434,20 @@ function DeployForm({ opened }: { opened?: OpenedDeployment }) {
             />
             <Form.Item noStyle shouldUpdate={(prev, next) => prev.replicas !== next.replicas}>
               {({ getFieldValue }) => getFieldValue("replicas") > 1 ? (
-                <Form.Item name="routing_policy" label={<Space size={4}>{t("routing.policy")}<RoutingPolicyHelp policies={routingPolicies.data?.items ?? []} /></Space>} extra={t("routing.help")}>
+                <Form.Item name="routing_policy" label={<span className="inline-flex items-center gap-1">{t("routing.policy")}<RoutingPolicyHelp policies={routingPolicies.data?.items ?? []} /></span>} extra={t("routing.help")}>
                   <Select loading={routingPolicies.loading} options={routingOptions} />
                 </Form.Item>
               ) : null}
             </Form.Item>
-            <HealthCheckFields selectedModel={selectedModel} />
+            <HealthCheckFields healthCheckable={evalResult?.health_checkable} />
+            <Form.Item name="priority_scheduling" label={<PrioritySchedulingLabel />}>
+              <PrioritySchedulingSwitch
+                eligibility={evalResult?.priority_scheduling}
+                onApplyFix={(fixArgs) =>
+                  form.setFieldsValue({ extra_args: withFixArgs(form.getFieldValue("extra_args"), fixArgs), priority_scheduling: undefined })
+                }
+              />
+            </Form.Item>
             <TokenizeField />
           </section>
           <div className="deploy-config-layout">

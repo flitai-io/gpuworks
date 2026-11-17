@@ -55,7 +55,8 @@ func TestParsePlacementReadsBothShapes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParsePlacement(%#v) error = %v", tc.value, err)
 			}
-			if !reflect.DeepEqual(got, tc.want) {
+			// Whose choice the indexes are is OperatorPinned's to test.
+			if !reflect.DeepEqual(got.WithoutOperatorChoice(), tc.want) {
 				t.Fatalf("ParsePlacement(%#v) = %+v, want %+v", tc.value, got, tc.want)
 			}
 		})

@@ -76,7 +76,8 @@ func TestDoReportsTheGatewaysRefusalsAndTheContext(t *testing.T) {
 	defer closeUpstream()
 
 	unknown := p.Do(context.Background(), uxrecord.Caller{}, chatPath, []byte(`{"model":"nope"}`))
-	if unknown.Status != http.StatusNotFound || !strings.Contains(string(unknown.Body), "gpuworks_proxy") {
+	if unknown.Status != http.StatusNotFound || unknown.RequestID == "" ||
+		string(unknown.Body) != `{"error":{"message":"no deployment serves model nope","type":"not_found_error","code":"MODEL_NOT_FOUND","param":"model","params":{"model":"nope"}}}`+"\n" {
 		t.Fatalf("unknown model = %+v %s", unknown, unknown.Body)
 	}
 	noModel := p.Do(context.Background(), uxrecord.Caller{}, chatPath, []byte(`{}`))
@@ -117,7 +118,7 @@ func TestDoWaitsForASleepingDeploymentToWake(t *testing.T) {
 	p.SetWakeDemand(func(id uint) {
 		go func() {
 			time.Sleep(150 * time.Millisecond)
-			_ = st.DB().Model(&store.Instance{}).Where("uuid = ?", "omni-instance").Update("sleep_level", 0).Error
+			_ = updateInstanceRow(st, "omni-instance", map[string]any{"sleep_level": 0})
 		}()
 	})
 	start := time.Now()

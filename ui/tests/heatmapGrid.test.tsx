@@ -164,6 +164,7 @@ test("8000 cards render, are described by one hover card, move by keyboard and o
   assert.equal(cells().length, 8000);
   assert.equal(document.querySelectorAll(".hm-node").length, 1000);
   assert.equal(document.querySelectorAll("button.hm-node-name").length, 1000, "each group keeps its visible node name even at fleet scale");
+  assert.equal(document.querySelectorAll("button.hm-node-name.text-fg-brand").length, 1000, "every clickable node name uses the theme color");
   assert.equal(cells().filter((cell) => cell.tabIndex === 0).length, 1);
   assert.ok(rendered < 20_000, `rendering took ${Math.round(rendered)} ms of CPU`);
 

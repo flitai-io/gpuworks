@@ -23,6 +23,8 @@ type distributedTestHub struct {
 	pushErr error
 	// pushFails fails pushes to these nodes only.
 	pushFails map[string]error
+	// ucxHang is what each node's agent reports about its kernel hanging UCX.
+	ucxHang map[string]*proto.UCXNetlinkHang
 }
 
 // groupFixture is a two-node multi-node deployment and one generation of it
@@ -83,6 +85,9 @@ func TestMultiNodeStoppedRankFailsItsGeneration(t *testing.T) {
 	leader, _ := st.InstanceByUUID(rows[0].UUID)
 	if leader.State != proto.InstFailed || !strings.Contains(leader.Message, "rank 1") {
 		t.Fatalf("leader = %s %q", leader.State, leader.Message)
+	}
+	if f := leader.Failure(); f == nil || f.Code != proto.ErrorUnitRankGone || f.Rank == nil || *f.Rank != 1 || f.Node == "" {
+		t.Fatalf("gone rank reason = %+v", f)
 	}
 	if !removedByHub(hub, nodes[0].UUID, rows[0].UUID) {
 		t.Fatal("the running leader's container was not removed")
@@ -177,6 +182,29 @@ func TestDistributedLabelsRejectAllRanksBeforeFirstInstance(t *testing.T) {
 	instances, err := st.InstancesForDeployment(dep.ID)
 	if err != nil || len(instances) != 0 {
 		t.Fatalf("a partial collective was scheduled: instances=%+v err=%v", instances, err)
+	}
+}
+
+// A rank that failed with a structured reason passes its own code to the
+// leader, which records which rank and node it was.
+func TestMultiNodeFailedRankPassesItsReasonToTheLeader(t *testing.T) {
+	st, dep, nodes, rows := groupFixture(t, "reasoned_rank", store.Deployment{VRAMLimitBytes: 4 << 30}, [2]string{proto.InstRunning, proto.InstStarting})
+	hub := &distributedTestHub{online: map[string]bool{nodes[0].UUID: true, nodes[1].UUID: true}, updates: map[string][]proto.StateUpdate{}}
+	c := New(st, hub, nil)
+	c.SetRetryPolicy(0, 3)
+	exit := 1
+	if err := st.UpdateInstanceStatus(proto.InstanceStatus{UUID: rows[1].UUID, State: proto.InstFailed, Message: "headless worker exited (code 1)",
+		RuntimeFailure: &proto.RuntimeFailure{Code: proto.ErrorContainerExited, ExitCode: &exit, Phase: proto.PhaseHealthCheck, Causes: []proto.FailureCause{{Code: "NCCL_FAILURE"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.reconcileDeployment(context.Background(), dep.ID); err != nil {
+		t.Fatal(err)
+	}
+	leader, _ := st.InstanceByUUID(rows[0].UUID)
+	f := leader.Failure()
+	if leader.State != proto.InstFailed || f == nil || f.Code != proto.ErrorContainerExited || f.ExitCode == nil || *f.ExitCode != 1 ||
+		len(f.Causes) != 1 || f.Causes[0].Code != "NCCL_FAILURE" || f.Rank == nil || *f.Rank != 1 || f.Node != nodes[1].DisplayName() {
+		t.Fatalf("leader = %s %q reason %+v", leader.State, leader.Message, f)
 	}
 }
 
@@ -288,6 +316,9 @@ func TestMultiNodeOfflineRankGetsGraceThenFailsItsGeneration(t *testing.T) {
 		offline == nil || offline.State != proto.InstRemoving {
 		t.Fatalf("after grace = %+v", rows)
 	}
+	if f := leader.Failure(); f == nil || f.Code != proto.ErrorUnitRankNodeOffline || f.Rank == nil || *f.Rank != 1 || f.Node != nodes[1].DisplayName() {
+		t.Fatalf("offline rank reason = %+v", f)
+	}
 	for _, inst := range initial {
 		if inst.NodeID == nodes[0].ID && !removedByHub(hub, nodes[0].UUID, inst.UUID) {
 			t.Fatalf("online leader %s was not removed", inst.UUID)
@@ -318,6 +349,21 @@ func TestMultiNodeOfflineRankGetsGraceThenFailsItsGeneration(t *testing.T) {
 }
 
 func (h *distributedTestHub) Online(uuid string) bool { return h.online[uuid] }
+
+// UCXNetlinkHang is the reported fact of a connected node; the real hub keeps
+// it on the session, so an offline node has none.
+func (h *distributedTestHub) UCXNetlinkHang(uuid string) *proto.UCXNetlinkHang {
+	if !h.online[uuid] {
+		return nil
+	}
+	return h.ucxHang[uuid]
+}
+
+// RequestImageRefs records the refs as the push the hub would send.
+func (h *distributedTestHub) RequestImageRefs(uuid string, refs []string) {
+	_ = h.PushToNode(uuid, proto.StateUpdate{ImageRefs: refs})
+}
+
 func (h *distributedTestHub) PushToNode(uuid string, update proto.StateUpdate) error {
 	if h.pushErr != nil {
 		return h.pushErr
@@ -465,6 +511,11 @@ func TestDistributedReconcileSchedulesResetsAndRemovesEveryRank(t *testing.T) {
 	failedLeader, _ := st.InstanceByUUID(leader.UUID)
 	if failedLeader.State != proto.InstFailed || !strings.Contains(failedLeader.Message, "collective failed") {
 		t.Fatalf("leader after rank failure = %s %q", failedLeader.State, failedLeader.Message)
+	}
+	// The rank's report came without a reason (an older agent): the leader
+	// carries the rank's message as the detail of a generic rank failure.
+	if f := failedLeader.Failure(); f == nil || f.Code != proto.ErrorUnitRankFailed || f.Detail != "collective failed" || f.Rank == nil || *f.Rank != 1 {
+		t.Fatalf("failed rank reason = %+v", f)
 	}
 	retired, _ := st.InstanceByUUID(follower.UUID)
 	if retired.State != proto.InstRemoving {

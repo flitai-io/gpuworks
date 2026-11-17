@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/pkg/localization"
 )
 
@@ -155,6 +156,9 @@ type Deployment struct {
 	// TokenizeEnabled says whether the gateway forwards /v1/tokenize and
 	// /v1/detokenize to the deployment's engine.
 	TokenizeEnabled bool `json:"tokenize_enabled"`
+	// PriorityScheduling says whether the deployment asked for its engine's
+	// per-request priority scheduling (applied when the launch allows it).
+	PriorityScheduling bool `json:"priority_scheduling"`
 	// NodeReplacement is how long a node may stay offline before its
 	// replicas move (after_sec 0 never moves them).
 	NodeReplacement NodeReplacement `json:"node_replacement"`
@@ -185,6 +189,10 @@ type Deployment struct {
 	// ScheduleCapabilities what its schedule may order.
 	YieldPolicyEligible  Eligibility          `json:"yield_policy_eligible"`
 	ScheduleCapabilities ScheduleCapabilities `json:"schedule_capabilities"`
+	// HealthCheckable says whether the deployment's model serves an operation
+	// the health check can send (deployment.HealthCheckable); the check
+	// switch is only offered when it is true.
+	HealthCheckable bool `json:"health_checkable"`
 	// PlacementMode is "auto" when the platform picks a multi-node or PD
 	// deployment's nodes whenever a unit starts, "manual" when they are the
 	// operator's; absent for a single-node deployment, whose draft says it.
@@ -329,13 +337,17 @@ type Instance struct {
 	StartTimeoutConflict  bool             `json:"start_timeout_conflict,omitempty"`
 	EngineStartTimeoutSec int              `json:"engine_start_timeout_sec,omitempty"`
 	RuntimeFailure        *ProductMessage  `json:"runtime_failure,omitempty"`
-	PreStartArgv          []string         `json:"pre_start_argv,omitempty"`
-	PreStartScript        string           `json:"pre_start_script,omitempty"`
-	UUID                  string           `json:"uuid"`
-	DeploymentID          uint             `json:"deployment_id"`
-	NodeUUID              string           `json:"node_uuid"`
-	State                 string           `json:"state"`
-	GPUIndexes            []int            `json:"gpu_indexes"`
+	// Notes are non-blocking facts the server derives about the instance
+	// when it is read (deployment.InstanceNotes): code and params, e.g. a
+	// card shared with processes outside the platform. Absent when none.
+	Notes          []messages.Warning `json:"notes,omitempty"`
+	PreStartArgv   []string           `json:"pre_start_argv,omitempty"`
+	PreStartScript string             `json:"pre_start_script,omitempty"`
+	UUID           string             `json:"uuid"`
+	DeploymentID   uint               `json:"deployment_id"`
+	NodeUUID       string             `json:"node_uuid"`
+	State          string             `json:"state"`
+	GPUIndexes     []int              `json:"gpu_indexes"`
 	// VRAMLimitBytes is the dGPU memory limit the instance runs under on each
 	// of its GPUs; absent for an instance that holds its GPUs whole.
 	VRAMLimitBytes int64              `json:"vram_limit_bytes,omitempty"`
@@ -387,6 +399,8 @@ type Instance struct {
 	Mounts      []EvaluateMount   `json:"mounts,omitempty"`
 	CommandMode string            `json:"command_mode,omitempty"`
 	ModelMount  string            `json:"model_mount_path,omitempty"`
+	// KVOffloadBackend: see KVOffloadBackendRef.
+	KVOffloadBackend *KVOffloadBackendRef `json:"kv_offload_backend,omitempty"`
 	// ModelFiles are the model files the instance reads, as recorded when it
 	// launched; empty for an instance from before they were recorded.
 	ModelFiles []InstanceModelFile `json:"model_files,omitempty"`
@@ -415,28 +429,6 @@ type InstanceEvent struct {
 	Message   string         `json:"message,omitempty"`
 	Data      string         `json:"data,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
-}
-
-// APIKey is the API view of a key (never includes the secret).
-type APIKey struct {
-	Name     string     `json:"name"`
-	Prefix   string     `json:"prefix"`
-	LastUsed *time.Time `json:"last_used,omitempty"`
-	Created  time.Time  `json:"created_at"`
-	// Revoked is when the key was revoked; a revoked key never authenticates
-	// and is listed so its past usage keeps a name.
-	Revoked *time.Time `json:"revoked_at,omitempty"`
-	// AllDeployments: the key may call every deployment. Otherwise only
-	// Deployments, which may have become empty when they were all deleted.
-	AllDeployments bool               `json:"all_deployments"`
-	Deployments    []APIKeyDeployment `json:"deployments"`
-}
-
-// APIKeyDeployment is a deployment a restricted API key may call.
-type APIKeyDeployment struct {
-	ID         uint   `json:"id"`
-	Name       string `json:"name"`
-	ServedName string `json:"served_name"`
 }
 
 // DeployRequest is the create-deployment body.
@@ -491,14 +483,18 @@ type DeployRequest struct {
 	HealthCheckThresholdSec int `json:"health_check_threshold_sec,omitempty"`
 	// TokenizeEnabled opens or closes the gateway's /v1/tokenize and
 	// /v1/detokenize for the deployment; absent, they are open.
-	TokenizeEnabled  *bool  `json:"tokenize_enabled,omitempty"`
-	PartitionBackend string `json:"partition_backend,omitempty"`
-	DistGroup        string `json:"dist_group,omitempty"`
-	DistRole         string `json:"dist_role,omitempty"`
-	NNodes           int    `json:"nnodes,omitempty"`
-	NodeRank         int    `json:"node_rank,omitempty"`
-	MasterAddr       string `json:"master_addr,omitempty"`
-	MasterPort       int    `json:"master_port,omitempty"`
+	TokenizeEnabled *bool `json:"tokenize_enabled,omitempty"`
+	// PriorityScheduling turns the engine's per-request priority scheduling
+	// on or off; absent, it is on when the launch allows it
+	// (EvaluateResponse.PriorityScheduling).
+	PriorityScheduling *bool  `json:"priority_scheduling,omitempty"`
+	PartitionBackend   string `json:"partition_backend,omitempty"`
+	DistGroup          string `json:"dist_group,omitempty"`
+	DistRole           string `json:"dist_role,omitempty"`
+	NNodes             int    `json:"nnodes,omitempty"`
+	NodeRank           int    `json:"node_rank,omitempty"`
+	MasterAddr         string `json:"master_addr,omitempty"`
+	MasterPort         int    `json:"master_port,omitempty"`
 }
 
 // ModelSource is what a deploy request says about the model's files: the

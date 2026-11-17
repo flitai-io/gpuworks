@@ -17,9 +17,10 @@ type CardHealthEpisode struct {
 	CardIdent string `gorm:"size:128;not null"`
 	// CheckID is an accelerator card check id.
 	CheckID string `gorm:"size:32;not null"`
-	// Level is the check state: warn or fail.
+	// Level is the check status: warn or fail (proto.CheckWarn, CheckFail).
 	Level string `gorm:"size:8;not null"`
-	// Reason is the finding code the check gave.
+	// Reason is the code the check gave, UPPER_SNAKE (rows written before
+	// that were rewritten by migration 216).
 	Reason    string    `gorm:"size:64;not null;default:''"`
 	StartedAt time.Time `gorm:"not null;index:idx_card_health_node_started,priority:2"`
 	// EndedAt is when the check started passing for good; nil while open.

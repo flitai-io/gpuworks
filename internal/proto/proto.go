@@ -23,8 +23,7 @@ const (
 
 // Stream kinds (first-frame stream header).
 const (
-	StreamCtrl             = "ctrl"               // agent opens; connection-lifetime; bidirectional JSON Lines
-	StreamMetrics          = "metrics"            // agent opens; snappy+prompb batches
+	StreamCtrl             = "ctrl"               // agent opens; connection-lifetime; bidirectional JSON Lines, incl. metric/log batches
 	StreamLogtail          = "logtail"            // server opens on demand
 	StreamTunnel           = "tunnel"             // server opens per data-plane request
 	StreamPeerRelaySend    = "peer.relay.send"    // server opens; source RPC on data, result on ctrl
@@ -52,6 +51,13 @@ const (
 	// and of the debug session files header Ref names (comma-separated
 	// session ids). The agent chooses the files; the server names no path.
 	StreamDiagnosticsRead = "diagnostics.read"
+	// StreamTelemetry is opened by the agent on the data lane and carries its
+	// metric and log batches as JSON Lines envelopes, so the node's bulkiest
+	// traffic does not queue ahead of heartbeats and RPC responses on ctrl.
+	// Header Ref names the batch type, TMetrics or TLogs: one stream each,
+	// so the server holding logs back never holds metrics back. Only used
+	// against a server whose hello advertises CapTelemetryStream.
+	StreamTelemetry = "telemetry"
 )
 
 // LargeFileReadMaxBytes bounds one StreamLargeFileRead transfer. It matches the
@@ -65,10 +71,13 @@ const (
 	LaneData = "data"
 )
 
+// LaneFor maps a stream kind to the lane that carries it. Unknown kinds, such
+// as one from a newer peer, ride ctrl; every kind this build declares is
+// classified explicitly and lane_test.go fails on an unclassified one.
 func LaneFor(kind string) string {
 	switch kind {
 	case StreamPeerRelaySend, StreamPeerRelayReceive, StreamLogtail, StreamTunnel, StreamModelRead, StreamModelWrite, StreamImageRead, StreamImageWrite, StreamLargeFileRead, StreamAgentUpgrade,
-		StreamStorageUpload, StreamStorageDownload, StreamDiagnosticsRead:
+		StreamStorageUpload, StreamStorageDownload, StreamDiagnosticsRead, StreamTelemetry:
 		return LaneData
 	default:
 		return LaneCtrl
@@ -126,6 +135,19 @@ const (
 	CapConnectionDiagnostics = "node.connection_diagnostics"
 	// CapPeerRelayV1 accepts transfer-scoped peer TLS relay streams on data.
 	CapPeerRelayV1 = "peer.relay.v1"
+	// CapLaunchNameVerbatim: a host-process launch keeps the value of
+	// --served-model-name as written instead of translating it as a path.
+	// An older host-process agent turns "--served-model-name /model" into
+	// the model's host path, so the server names a launch with no alias
+	// only on an agent that advertises this.
+	CapLaunchNameVerbatim = "launch.name_verbatim"
+)
+
+// Server capabilities, advertised in the server's Hello.Caps.
+const (
+	// CapTelemetryStream: the server accepts agent-opened StreamTelemetry
+	// streams on the data lane.
+	CapTelemetryStream = "telemetry.stream"
 )
 
 // StreamHeader is the first line written on every yamux stream.
@@ -200,10 +222,12 @@ type Envelope struct {
 
 // Hello is exchanged first on the ctrl stream in both directions.
 type Hello struct {
-	ProtoMin int      `json:"proto_min"`
-	ProtoMax int      `json:"proto_max"`
-	Version  string   `json:"version"`
-	Caps     []string `json:"caps,omitempty"`
+	ProtoMin int    `json:"proto_min"`
+	ProtoMax int    `json:"proto_max"`
+	Version  string `json:"version"`
+	// Caps are the sender's capabilities: the agent's in its hello, the
+	// server's in its reply.
+	Caps []string `json:"caps,omitempty"`
 	// RuntimeAssetDigests are validated SHA-addressed catalog assets already
 	// present in the agent cache. The server omits their content from desired
 	// state while retaining the immutable identity and mount contract.
@@ -227,6 +251,11 @@ type Hello struct {
 	// the node's own directory for the default local storage when the node
 	// has none; a directory an operator set is never replaced.
 	OwnModelsDir string `json:"own_models_dir,omitempty"`
+	// InstanceID names the agent process that sent the hello: random per
+	// process image (an in-place exec starts a new one), the same for every
+	// connection the process makes. Two ids taking turns on one node are two
+	// agents sharing its token. Agents before it send none.
+	InstanceID string `json:"instance_id,omitempty"`
 }
 
 // Reject explains why a connection is being closed. It is sent before the
@@ -346,23 +375,6 @@ type PartitionProbeResult struct {
 	CheckedAt time.Time `json:"checked_at"`
 }
 
-// PartitionCapability is the server-derived, per-GPU partition fact exposed
-// through the API. Status has exactly two values: ready or unavailable.
-type PartitionCapability struct {
-	Backend            string   `json:"backend"`
-	DisplayName        string   `json:"display_name"`
-	Vendor             string   `json:"vendor"`
-	Maturity           string   `json:"maturity"`
-	Status             string   `json:"status"`
-	Reason             string   `json:"reason,omitempty"`
-	Compatibility      string   `json:"compatibility_summary,omitempty"`
-	CompatibilityNotes []string `json:"compatibility_notes,omitempty"`
-	ProbeStatus        string   `json:"probe_status,omitempty"`
-	// ProbeCheckedAt is absent until a probe result arrived: a zero time on
-	// the wire rendered as "checked 0001-01-01".
-	ProbeCheckedAt *time.Time `json:"probe_checked_at,omitempty"`
-}
-
 // Peer-memory states (SysInfo.PeerMemory).
 const (
 	PeerMemoryLoaded  = "loaded"
@@ -410,12 +422,18 @@ type SysInfo struct {
 	// RuntimeFallbackReason the code saying why: it cannot give a container
 	// this node's accelerators (accelerator.RuntimeGPUBlocked*), its daemon
 	// is installed but did not answer at startup
-	// (RuntimeFallbackDaemonNotReady), or accelerator.RuntimeGPUReady once it
+	// (RuntimeFallbackDaemonNotReady), its daemon refuses the agent's
+	// account the socket (RuntimeFallbackSocketPermissionDenied), or
+	// accelerator.RuntimeGPUReady once it
 	// can serve and the agent has yet to switch back. Both empty when nothing
 	// was passed over.
-	RuntimeFallbackFrom   string   `json:"runtime_fallback_from,omitempty"`
-	RuntimeFallbackReason string   `json:"runtime_fallback_reason,omitempty"`
-	Runtimes              []string `json:"runtimes,omitempty"`
+	RuntimeFallbackFrom   string `json:"runtime_fallback_from,omitempty"`
+	RuntimeFallbackReason string `json:"runtime_fallback_reason,omitempty"`
+	// RuntimeFallbackSocket is what the agent found about the daemon socket
+	// its account may not open, sent only with
+	// RuntimeFallbackSocketPermissionDenied.
+	RuntimeFallbackSocket *RuntimeSocketDenial `json:"runtime_fallback_socket,omitempty"`
+	Runtimes              []string             `json:"runtimes,omitempty"`
 	// AcceleratorVendors is every vendor whose cards are in the host, the
 	// one the node manages (GPUVendor) included, so the operator can choose
 	// another (AcceleratorPreference). Empty when the host's PCI bus cannot
@@ -428,8 +446,13 @@ type SysInfo struct {
 	PartitionAssets []AssetReport `json:"partition_assets"`
 	// Keep this field on the wire even when empty. nil after decoding therefore
 	// identifies an older agent that predates behavioral partition probes.
-	PartitionProbes         []PartitionProbeResult `json:"partition_probes"`
-	PartitionSafetyProtocol int                    `json:"partition_safety_protocol,omitempty"`
+	PartitionProbes []PartitionProbeResult `json:"partition_probes"`
+	// PartitionSafetyProtocol is the level of the partition safety contract
+	// this agent keeps (PartitionSafety*); zero for an agent that keeps none.
+	// Each level includes the ones below it, and the server reads it from
+	// every report, so rolling an agent back revokes what it no longer keeps
+	// for new placements (not for what was placed under the higher level).
+	PartitionSafetyProtocol int `json:"partition_safety_protocol,omitempty"`
 }
 
 // ImagePresence is the directory-driven image catalog report from an agent.
@@ -494,6 +517,15 @@ type NodeStatus struct {
 	// for a runtime whose pulls run in a daemon (dockerd). Nil when the
 	// runtime pulls in the agent's own process, or from an older agent.
 	RuntimeProxy *RuntimeProxyStatus `json:"runtime_proxy,omitempty"`
+	// NVIDIAIsolation is set while this Kubernetes node's NVIDIA instance
+	// pods are kept to their own card by CUDA_VISIBLE_DEVICES alone, and
+	// absent while they are kept to it strictly (or the node has no NVIDIA
+	// card, or does not run on Kubernetes). Every report states it afresh,
+	// so absent also clears an earlier one.
+	NVIDIAIsolation *NVIDIAIsolation `json:"nvidia_isolation,omitempty"`
+	// UCXNetlinkHang is set while the host's kernel hangs UCX (NIXL), absent
+	// otherwise; every report states it afresh, so absent clears it.
+	UCXNetlinkHang *UCXNetlinkHang `json:"ucx_netlink_hang,omitempty"`
 }
 
 // RuntimeProxyStatus is what an agent observes about the proxy its container
@@ -552,13 +584,6 @@ const (
 	RuntimePrivilegeSudo = "sudo"
 	RuntimePrivilegeNone = "none"
 )
-
-// RuntimeFallbackDaemonNotReady is the fallback reason for a runtime whose
-// CLI and local socket are present but whose daemon did not answer while the
-// agent started: dockerd still starting at boot, or too busy (pulling a
-// large image) to answer in time. The agent rechecks it every minute and
-// switches back once it answers and no instance would be disturbed.
-const RuntimeFallbackDaemonNotReady = "daemon_not_ready"
 
 // PeerRelayReady is consumed by the coordinator before forwarding TLS bytes.
 type PeerRelayReady struct {

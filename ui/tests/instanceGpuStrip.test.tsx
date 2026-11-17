@@ -115,7 +115,7 @@ test("the VRAM bar is hidden (not drawn at 0%) when the total is unknown", async
   await waitFor(() => assert.ok(screen.getByText("GPU0")));
   // Only the utilization bar remains; the VRAM row keeps its text but drops
   // its progress bar rather than drawing a misleading 0%.
-  assert.equal(container.querySelectorAll(".ant-progress").length, 1);
+  assert.equal(screen.getAllByRole("progressbar").length, 1);
 });
 
 test("rerendering with a same-content but new GPU index array does not restart the fetch fan-out", async () => {
@@ -170,4 +170,42 @@ test("a whole-card instance asks for no slice metrics", async () => {
   render(<I18nextProvider i18n={i18n}><InstanceGpuStrip nodeUuid="node-1" gpuIndexes={[0]} instanceUuid="inst-b" /></I18nextProvider>);
   await waitFor(() => assert.ok(screen.getByText("Waiting for GPU Telemetry")));
   assert.equal(asked.filter((metric) => metric.startsWith("gpuworks_dgpu_")).length, 0);
+});
+
+test("the latest sample for the selected GPU remains readable when a different sensor fails", async () => {
+  const selection = { kind: "custom" as const, startMS: 1000, endMS: 2000 };
+  const calls: Array<{ start?: number; end?: number }> = [];
+  api.metricsQuery = async (metric, params) => {
+    calls.push(params ?? {});
+    if (metric === "gpuworks_gpu_temperature_celsius") throw new Error("temperature unavailable");
+    const value = metric === "gpuworks_gpu_memory_used_bytes" ? 2 * 1024 ** 3
+      : metric === "gpuworks_gpu_memory_total_bytes" ? 24 * 1024 ** 3 : 42;
+    return list([
+      { labels: { node: "node-1", gpu: "2" }, points: [[1000, 0], [2000, value]] },
+      { labels: { node: "node-1", gpu: "3" }, points: [[2000, 99]] },
+      { labels: { node: "old-node", gpu: "2" }, points: [[2000, 99]] },
+    ]);
+  };
+  render(<I18nextProvider i18n={i18n}><InstanceGpuStrip nodeUuid="node-1" gpuIndexes={[2]} selection={selection} /></I18nextProvider>);
+  await screen.findByText("temperature unavailable");
+  assert.ok(screen.getByText("42%"));
+  assert.ok(screen.getByText("2.0 / 24 GiB"));
+  assert.equal(screen.queryByText("GPU3"), null);
+  assert.ok(calls.every(params => params.start === 1000 && params.end === 2000));
+});
+
+test("historical dGPU data is restricted to the selected slice after its physical card has been reassigned", async () => {
+  const calls: string[] = [];
+  api.metricsQuery = async (metric, params) => {
+    assert.equal(params?.instance, "retired");
+    calls.push(metric);
+    return list([
+      { labels: { gpu: "0", instance: "retired" }, points: [[1000, 0]] },
+      { labels: { gpu: "0", instance: "current" }, points: [[1000, 90]] },
+    ]);
+  };
+  render(<I18nextProvider i18n={i18n}><InstanceGpuStrip historical nodeUuid="node-1" gpuIndexes={[0]} instanceUuid="retired" vramLimitBytes={1024 ** 3} /></I18nextProvider>);
+  await screen.findByText("0.0 / 1.0 GiB");
+  assert.deepEqual(calls.sort(), ["gpuworks_dgpu_memory_used_bytes", "gpuworks_dgpu_sm_util"]);
+  assert.equal(screen.queryByText(/Whole card \(/), null);
 });

@@ -37,7 +37,7 @@ func (d *zoneImageDriver) CreateInstance(_ context.Context, _ serverprovider.Cre
 	where := req.Extra["region"] + "/" + req.Extra["zone"]
 	d.creates = append(d.creates, where)
 	if d.noImage[where] {
-		return serverprovider.Instance{}, fmt.Errorf("compshare: create in %s: compshare: API RetCode 226641: The current availability zone does not support this image.", where)
+		return serverprovider.Instance{}, fmt.Errorf("compshare: create in %s: %w", where, &compsharedriver.APIError{Status: 200, RetCode: 226641, Message: "The current availability zone does not support this image."})
 	}
 	inst := serverprovider.Instance{ExternalID: "uhost-" + req.Extra["zone"], GPUModel: req.GPUModel, GPUCount: req.GPUCount, Kind: "vm", Region: req.Extra["region"], PublicIP: "203.0.113.7", SSHPort: 22, SSHUser: "root"}
 	d.instances = append(d.instances, inst)
@@ -132,10 +132,10 @@ func (d *failingCreateDriver) CreateInstance(context.Context, serverprovider.Cre
 }
 
 func TestCompshareErrorKindsAndDisplayNames(t *testing.T) {
-	if !IsImageUnsupportedInZone(errors.New("compshare: API RetCode 226641: The current availability zone does not support this image.")) || IsImageUnsupportedInZone(nil) {
+	if !IsImageUnsupportedInZone(&compsharedriver.APIError{Status: 200, RetCode: 226641, Message: "The current availability zone does not support this image."}) || IsImageUnsupportedInZone(nil) {
 		t.Fatal("226641")
 	}
-	if !IsGPUTypeUnsupportedByImage(errors.New("compshare: check resource capacity: compshare: API RetCode 226603: gpu type is not support current image")) || IsGPUTypeUnsupportedByImage(errors.New("RetCode 8433")) {
+	if !IsGPUTypeUnsupportedByImage(fmt.Errorf("compshare: check resource capacity: %w", &compsharedriver.APIError{Status: 200, RetCode: 226603, Message: "gpu type is not support current image"})) || IsGPUTypeUnsupportedByImage(&compsharedriver.APIError{Status: 200, RetCode: 8433, Message: "service busy"}) {
 		t.Fatal("226603")
 	}
 	for gpuType, want := range map[string]string{"4090_48G": "4090", "4090": "4090", "3080Ti": "3080Ti", " A800 ": "A800"} {

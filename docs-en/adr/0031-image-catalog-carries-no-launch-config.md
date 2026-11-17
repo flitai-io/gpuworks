@@ -45,3 +45,5 @@ This leaves parallel semantics used only for existing deployments and continues 
 - Image details no longer show "Runtime Defaults". To inspect the image entrypoint before choosing `image-entry`, run an inspection from image details against a node holding the image:
   the result is the OCI configuration read at that moment, displayed without saving. For instances that have run, you can also view launch facts. Old catalog values could already differ from the artifact.
 - For layer sources and precedence, see [Deployment Launch Parameter Sources](../reference/deployment-launch-sources.md).
+
+<!-- translation-source-sha256: 061989069dc11f77358967ca6d44f2089521cf6bfc73d4164b7ce1774e2702bc -->

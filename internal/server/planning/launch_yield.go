@@ -103,7 +103,7 @@ func instancesOnCards(candidates []*store.Instance, plan *scheduler.Plan) []*sto
 // replica. The launching deployment's own instances (launching, zero for a
 // newcomer) give way to nothing of their own: a replica never waits for its
 // sibling, so they are neither holders nor counted asleep.
-func launchYield(st *store.Store, node *store.Node, insts []store.Instance, launching uint, policy string, req scheduler.Request, dtypeOK bool, dtypeReason string, servingUnavailable bool, view ledgerView) *LaunchYield {
+func launchYield(st *store.Store, node *store.Node, insts []store.Instance, launching uint, policy string, req scheduler.Request, dtypeOK bool, dtypeReason string, view ledgerView) *LaunchYield {
 	if policy == "" || policy == yieldpolicy.Never {
 		return nil
 	}
@@ -135,7 +135,6 @@ func launchYield(st *store.Store, node *store.Node, insts []store.Instance, laun
 	}
 	view.alsoAsleep = func(in *store.Instance) bool { return asleep[in.UUID] }
 	snap := nodeSnapshot(st, node, dtypeOK, dtypeReason, view)
-	snap.ServingUnavailable = servingUnavailable
 	result := scheduler.Schedule(req, snap)
 	if !result.OK || result.Plan == nil {
 		return nil

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/pkg/modelrepo"
 	"gpuworks.ai/gpuworks/pkg/safetensors"
 )
@@ -106,13 +107,36 @@ type L1Input struct {
 	Capabilities L1Capabilities `json:"capabilities,omitempty"`
 }
 
+// Finding is one L1 check result (ADR 0067): Status is proto.CheckFail for a
+// deterministic exclusion and proto.CheckWarn for an inconclusive or advisory
+// one; Code is UPPER_SNAKE; Message is the English fallback; Evidence is the
+// external error text (an HTTP fetch or a parser) behind it.
 type Finding struct {
 	Code          string `json:"code"`
-	Severity      string `json:"severity"`
+	Status        string `json:"status"`
 	Message       string `json:"message"`
+	Evidence      string `json:"evidence,omitempty"`
 	Deterministic bool   `json:"deterministic"`
 	Excludes      bool   `json:"excludes"`
 }
+
+// L1 finding codes. The exclusions share the launch failure family codes
+// (signatures.go) of the failure they predict.
+const (
+	FindingConfigUnavailable              = "CONFIG_UNAVAILABLE"
+	FindingConfigTooLarge                 = "CONFIG_TOO_LARGE"
+	FindingConfigInvalid                  = string(FailureConfig)
+	FindingWeightFileListUnavailable      = "WEIGHT_FILE_LIST_UNAVAILABLE"
+	FindingWeightFilesMissing             = "WEIGHT_FILES_MISSING"
+	FindingSafetensorsIndexInvalid        = "SAFETENSORS_INDEX_INVALID"
+	FindingSafetensorsHeadersIncomplete   = "SAFETENSORS_HEADERS_INCOMPLETE"
+	FindingSafetensorsMetadataUnavailable = "SAFETENSORS_METADATA_UNAVAILABLE"
+	FindingCapabilitySnapshotUnscoped     = "CAPABILITY_SNAPSHOT_UNSCOPED"
+	FindingArchitectureNotRegistered      = string(FailureArchitecture)
+	FindingQuantizationKernelUnavailable  = string(FailureQuantKernel)
+	FindingContextLengthExceeded          = string(FailureConfig)
+	FindingDtypeDeclarationMismatch       = "DTYPE_DECLARATION_MISMATCH"
+)
 
 type L1Metadata struct {
 	Architectures      []string `json:"architectures,omitempty"`
@@ -178,15 +202,15 @@ func (i Inspector) Inspect(ctx context.Context, input L1Input) (L1Report, error)
 	switch {
 	case err != nil:
 		report.Inconclusive = true
-		report.Findings = append(report.Findings, inconclusive("config_unavailable", err.Error()))
+		report.Findings = append(report.Findings, inconclusiveEvidence(FindingConfigUnavailable, "config.json could not be read", err))
 	case !configRange.Complete:
 		report.Inconclusive = true
-		report.Findings = append(report.Findings, inconclusive("config_too_large", "config.json exceeded the bounded range request"))
+		report.Findings = append(report.Findings, inconclusive(FindingConfigTooLarge, "config.json exceeded the bounded range request"))
 	default:
 		config, parseErr := ParseModelConfig(configRange.Body)
 		if parseErr != nil {
 			report.Inconclusive = true
-			report.Findings = append(report.Findings, deterministicExclusion("config_validation_failure", parseErr.Error()))
+			report.Findings = append(report.Findings, deterministicExclusionEvidence(FindingConfigInvalid, "config.json is not a valid model config", parseErr))
 			report.Excluded = true
 		} else {
 			report.Metadata = metadataFromConfig(config)
@@ -221,7 +245,7 @@ func (i Inspector) inspectWeightFileList(ctx context.Context, fetcher RangeFetch
 	}
 	files, err := modelrepo.ListFiles(ctx, input.Source, input.ModelID, input.Revision, input.Endpoint, httpFetcher.Headers, modelrepo.RequestOptions{Client: httpFetcher.Client})
 	if err != nil {
-		report.Findings = append(report.Findings, inconclusive("weight_file_list_unavailable", err.Error()))
+		report.Findings = append(report.Findings, inconclusiveEvidence(FindingWeightFileListUnavailable, "the repository file list could not be read", err))
 		report.Inconclusive = true
 		return
 	}
@@ -232,7 +256,7 @@ func (i Inspector) inspectWeightFileList(ctx context.Context, fetcher RangeFetch
 		}
 	}
 	if report.Metadata.WeightBytes == 0 {
-		report.Findings = append(report.Findings, inconclusive("weight_files_missing", "repository listing contains no safetensors or bin weight files"))
+		report.Findings = append(report.Findings, inconclusive(FindingWeightFilesMissing, "repository listing contains no safetensors or bin weight files"))
 		report.Inconclusive = true
 	}
 }
@@ -261,7 +285,7 @@ func (i Inspector) inspectIndexAndHeaders(ctx context.Context, fetcher RangeFetc
 	dec.UseNumber()
 	if err := dec.Decode(&index); err != nil {
 		report.Inconclusive = true
-		report.Findings = append(report.Findings, inconclusive("safetensors_index_invalid", err.Error()))
+		report.Findings = append(report.Findings, inconclusiveEvidence(FindingSafetensorsIndexInvalid, "model.safetensors.index.json is not valid", err))
 		return
 	}
 	if value, err := index.Metadata.TotalSize.Int64(); err == nil && value > 0 {
@@ -283,14 +307,14 @@ func (i Inspector) inspectIndexAndHeaders(ctx context.Context, fetcher RangeFetc
 	}
 	if !i.inspectHeaders(ctx, fetcher, input, names, report) {
 		report.Inconclusive = true
-		report.Findings = append(report.Findings, inconclusive("safetensors_headers_incomplete", "not every indexed safetensors shard header was available within the inspection limit"))
+		report.Findings = append(report.Findings, inconclusive(FindingSafetensorsHeadersIncomplete, "not every indexed safetensors shard header was available within the inspection limit"))
 	}
 }
 
 func (i Inspector) inspectSingleSafetensors(ctx context.Context, fetcher RangeFetcher, input L1Input, report *L1Report) {
 	if !i.inspectHeaders(ctx, fetcher, input, []string{"model.safetensors"}, report) {
 		report.Inconclusive = true
-		report.Findings = append(report.Findings, inconclusive("safetensors_metadata_unavailable", "neither a complete index nor model.safetensors header was available"))
+		report.Findings = append(report.Findings, inconclusive(FindingSafetensorsMetadataUnavailable, "neither a complete index nor model.safetensors header was available"))
 	}
 }
 
@@ -351,7 +375,7 @@ func (i Inspector) inspectHeaders(ctx context.Context, fetcher RangeFetcher, inp
 func (i Inspector) applyCapabilities(capabilities L1Capabilities, report *L1Report) {
 	if capabilities.ImageDigest == "" && (len(capabilities.Architectures) > 0 || len(capabilities.Quantizations) > 0 || capabilities.MaxContextLength > 0) {
 		report.Inconclusive = true
-		report.Findings = append(report.Findings, inconclusive("capability_snapshot_unscoped", "image_digest is required before capability misses can exclude a combination"))
+		report.Findings = append(report.Findings, inconclusive(FindingCapabilitySnapshotUnscoped, "image_digest is required before capability misses can exclude a combination"))
 		return
 	}
 	architecture := ""
@@ -359,28 +383,40 @@ func (i Inspector) applyCapabilities(capabilities L1Capabilities, report *L1Repo
 		architecture = report.Metadata.Architectures[0]
 	}
 	if len(capabilities.Architectures) > 0 && architecture != "" && !containsFold(capabilities.Architectures, architecture) {
-		report.Findings = append(report.Findings, deterministicExclusion("architecture_not_registered", fmt.Sprintf("architecture %s is absent from the image capability snapshot", architecture)))
+		report.Findings = append(report.Findings, deterministicExclusion(FindingArchitectureNotRegistered, fmt.Sprintf("architecture %s is absent from the image capability snapshot", architecture)))
 	}
 	if len(capabilities.Quantizations) > 0 && report.Metadata.Quantization != "" && !containsFold(capabilities.Quantizations, report.Metadata.Quantization) {
-		report.Findings = append(report.Findings, deterministicExclusion("quantization_kernel_unavailable", fmt.Sprintf("quantization %s is absent from the image capability snapshot", report.Metadata.Quantization)))
+		report.Findings = append(report.Findings, deterministicExclusion(FindingQuantizationKernelUnavailable, fmt.Sprintf("quantization %s is absent from the image capability snapshot", report.Metadata.Quantization)))
 	}
 	if capabilities.MaxContextLength > 0 && report.Metadata.ContextLength > capabilities.MaxContextLength {
-		report.Findings = append(report.Findings, deterministicExclusion("config_validation_failure", fmt.Sprintf("context length %d exceeds image limit %d", report.Metadata.ContextLength, capabilities.MaxContextLength)))
+		report.Findings = append(report.Findings, deterministicExclusion(FindingContextLengthExceeded, fmt.Sprintf("context length %d exceeds image limit %d", report.Metadata.ContextLength, capabilities.MaxContextLength)))
 	}
 	if report.Metadata.TorchDtype != "" && report.Metadata.DominantDtype != "" && report.Metadata.Quantization == "" {
 		expected := safetensorsDtype(report.Metadata.TorchDtype)
 		if expected != "" && expected != report.Metadata.DominantDtype {
-			report.Findings = append(report.Findings, Finding{Code: "dtype_declaration_mismatch", Severity: "warn", Message: fmt.Sprintf("config declares %s but dominant safetensors dtype is %s", expected, report.Metadata.DominantDtype)})
+			report.Findings = append(report.Findings, Finding{Code: FindingDtypeDeclarationMismatch, Status: proto.CheckWarn, Message: fmt.Sprintf("config declares %s but dominant safetensors dtype is %s", expected, report.Metadata.DominantDtype)})
 		}
 	}
 }
 
 func deterministicExclusion(code, message string) Finding {
-	return Finding{Code: code, Severity: "error", Message: message, Deterministic: true, Excludes: true}
+	return Finding{Code: code, Status: proto.CheckFail, Message: message, Deterministic: true, Excludes: true}
+}
+
+func deterministicExclusionEvidence(code, message string, err error) Finding {
+	finding := deterministicExclusion(code, message)
+	finding.Evidence = err.Error()
+	return finding
 }
 
 func inconclusive(code, message string) Finding {
-	return Finding{Code: code, Severity: "warn", Message: message}
+	return Finding{Code: code, Status: proto.CheckWarn, Message: message}
+}
+
+func inconclusiveEvidence(code, message string, err error) Finding {
+	finding := inconclusive(code, message)
+	finding.Evidence = err.Error()
+	return finding
 }
 
 func tensorElements(shape []int64) (int64, bool) {

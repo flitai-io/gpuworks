@@ -27,7 +27,7 @@ func (d *Driver) InstallAgentWithReport(ctx context.Context, creds provider.Cred
 		return provider.InstallReport{}, fmt.Errorf("compshare: install requires a server URL unless the server dials the agent")
 	}
 	listen, address := providerInstallListen(req.ServerDialListen), req.ServerDialAddress
-	var chosen provider.InstallCheck
+	var chosen provision.CheckResult
 	autoPort := req.ConnectMode == "server_dial" && strings.TrimSpace(address) == "" && d.MapsServerDialPorts(req.Instance)
 	if autoPort {
 		var err error
@@ -59,7 +59,7 @@ func (d *Driver) InstallAgentWithReport(ctx context.Context, creds provider.Cred
 	}
 	out := provider.ReportFromSSHInstall(report)
 	if autoPort {
-		out.Checks = append([]provider.InstallCheck{chosen}, out.Checks...)
+		out.Checks = append([]provision.CheckResult{chosen}, out.Checks...)
 		out.ServerDialListen, out.ServerDialAddress = listen, address
 	}
 	return out, nil

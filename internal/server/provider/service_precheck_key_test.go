@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"gpuworks.ai/gpuworks/internal/server/provision"
 )
 
 // keyAdderDriver says whether its install would add the platform key.
@@ -20,12 +22,12 @@ type keyAdderDriver struct {
 	asked []string // public keys PlatformKeyAtInstall was asked about
 }
 
-func (d *keyAdderDriver) PlatformKeyAtInstall(_ context.Context, _ Credentials, inst Instance, publicKey string) (InstallCheck, bool) {
+func (d *keyAdderDriver) PlatformKeyAtInstall(_ context.Context, _ Credentials, inst Instance, publicKey string) (provision.CheckResult, bool) {
 	d.asked = append(d.asked, inst.ExternalID+" "+publicKey)
 	if !d.adds {
-		return InstallCheck{}, false
+		return provision.CheckResult{}, false
 	}
-	return InstallCheck{Status: "warn", Detail: "the install adds the platform key"}, true
+	return provision.WarnCheck(provision.CheckIDSSH, "CHECK_PLATFORM_KEY_ASSISTANT_PENDING", "the install adds the platform key", nil), true
 }
 
 // rejectingSSHServer completes the SSH handshake and refuses every login.
@@ -78,7 +80,7 @@ func TestPrecheckSSHRowSaysTheInstallAddsThePlatformKey(t *testing.T) {
 		status string
 	}{
 		{name: "key-test-adder-adds", adds: true, status: "warn"},
-		{name: "key-test-adder-cannot", adds: false, status: "error"},
+		{name: "key-test-adder-cannot", adds: false, status: "fail"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			host, port := rejectingSSHServer(t)
@@ -90,14 +92,14 @@ func TestPrecheckSSHRowSaysTheInstallAddsThePlatformKey(t *testing.T) {
 				t.Fatal(err)
 			}
 			last := report.Checks[len(report.Checks)-1]
-			if last.Name != "SSH" || last.Status != tc.status {
+			if last.ID != "ssh" || last.Status != tc.status {
 				t.Fatalf("checks = %+v", report.Checks)
 			}
-			if tc.adds && last.Detail != "the install adds the platform key" {
-				t.Fatalf("SSH detail = %q", last.Detail)
+			if tc.adds && checkText(last) != "the install adds the platform key" {
+				t.Fatalf("SSH detail = %q", checkText(last))
 			}
-			if !tc.adds && !strings.Contains(last.Detail, "unable to authenticate") {
-				t.Fatalf("SSH detail = %q", last.Detail)
+			if !tc.adds && !strings.Contains(checkText(last), "unable to authenticate") {
+				t.Fatalf("SSH detail = %q", checkText(last))
 			}
 			if len(d.asked) != 1 || !strings.HasPrefix(d.asked[0], "inst-1 ssh-ed25519 ") {
 				t.Fatalf("asked = %v", d.asked)
@@ -122,7 +124,7 @@ func TestPrecheckDoesNotOfferTheKeyForAnUnreachableInstance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if last := report.Checks[len(report.Checks)-1]; last.Name != "SSH" || last.Status != "error" || len(d.asked) != 0 {
+	if last := report.Checks[len(report.Checks)-1]; last.ID != "ssh" || last.Status != "fail" || len(d.asked) != 0 {
 		t.Fatalf("checks = %+v asked = %v", report.Checks, d.asked)
 	}
 }
@@ -208,7 +210,7 @@ func TestInstallAndPrecheckSayAStoppedInstanceIsStopped(t *testing.T) {
 		t.Fatalf("install err = %v, gets = %d", err, d.gets)
 	}
 	report, err := svc.Precheck(t.Context(), providerID, "inst-1", "https://server.example", InstallOptions{})
-	if err != nil || len(report.Checks) != 1 || report.Checks[0].Status != "error" || !strings.Contains(report.Checks[0].Detail, "is stopped at the provider") {
+	if err != nil || len(report.Checks) != 1 || report.Checks[0].Status != "fail" || !strings.Contains(checkText(report.Checks[0]), "is stopped at the provider") {
 		t.Fatalf("precheck = %+v, %v", report.Checks, err)
 	}
 }

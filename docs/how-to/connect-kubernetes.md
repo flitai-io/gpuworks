@@ -6,7 +6,7 @@
 
 **前置条件**：
 
-- server 已经启动，集群节点能访问 server 地址（agent 主动外连，不需要节点入站端口）。
+- server 已经启动，集群节点能访问 server 地址（接入时填在「管理节点接入地址」里；agent 主动外连，不需要节点入站端口）。
 - 集群使用 containerd（kubeadm、k3s、RKE2、microk8s、GPU Operator 环境都是）。CRI-O（OpenShift）与 Docker 节点不支持，
   agent 启动时会拒绝并写明原因。
 - 节点上装好厂商驱动：Kubernetes 上支持 NVIDIA、昇腾、海光（DCU）、PPU、AMD 与昆仑芯，一个集群条目可以同时覆盖这几种厂商的节点，
@@ -49,7 +49,7 @@ gpuworks 不接管集群的 GPU，只借用要用的卡，集群里原有的业�
 集群条目没有厂商这一项。一个条目只有一个 DaemonSet，没有厂商专用的挂载，agent Pod 在默认运行时下运行（不给 agent 指定
 RuntimeClass）；每个 agent 自己探测所在节点的加速卡：
 
-- Kubernetes 上支持的厂商：NVIDIA、昇腾、海光（DCU）、PPU、AMD、昆仑芯（整卡；AMD 的 dGPU 切分在 Kubernetes 上不可用，见下文）。
+- Kubernetes 上支持的厂商：NVIDIA、昇腾、海光（DCU）、PPU、AMD、昆仑芯（整卡；AMD 与 PPU 的 dGPU 切分在 Kubernetes 上也可用，海光的 dGPU 切分在 Kubernetes 上不可用，见下文）。
 - 节点没有加速卡，或者是别家的卡（上述以外的厂商暂不支持 Kubernetes）时，节点处于待命状态：agent Pod 照常运行，但不向
   server 注册，这样的节点不会出现在平台的节点页。
 - 所以同一个条目可以覆盖含多个厂商节点的集群，不再需要一个厂商一个条目。节点选择器仍是可选项，用来只让平台使用其中一部分节点
@@ -66,8 +66,46 @@ UUID 这样不带种类的名字会落到 `management.nvidia.com/gpu`，而那�
 （`unresolvable CDI devices management.nvidia.com/gpu=0`）。agent 创建实例 Pod 时经宿主机根目录读节点的 CDI 规格
 （`/etc/cdi`、`/var/run/cdi`）：工具包处在 CDI 模式（有 `management.nvidia.com/gpu` 规格，且工具包配置不是 legacy 模式）时，
 把选中的卡写成 NVIDIA device plugin 规格里按 UUID 命名的完整设备名（如
-`k8s.device-plugin.nvidia.com/gpu=GPU-…`），Pod 只拿到这张卡；规格里找不到这张卡时，Pod 不创建，报错说明怎么处理
-（让 NVIDIA 的 device plugin 以 CDI 运行，或把工具包设为 legacy 模式：`NVIDIA_CONTAINER_RUNTIME_MODE=legacy`）。
+`k8s.device-plugin.nvidia.com/gpu=GPU-…`），Pod 只拿到这张卡。
+
+规格里找不到这张卡时（典型情况：集群用 HAMi 或别的 device plugin，NVIDIA 自己的 device plugin 没有运行，没人写逐卡的名字），
+agent 不再让 Pod 失败，而是退到**软隔离**：Pod 的 `NVIDIA_VISIBLE_DEVICES` 写成 `management.nvidia.com/gpu=all`
+（该规格里唯一的设备，带上节点全部的 `/dev/nvidiaN`），再用 `CUDA_VISIBLE_DEVICES`（宿主机上的卡号，如 `1` 或 `1,0`）把引擎限制在
+分到的卡上，同时设 `CUDA_DEVICE_ORDER=PCI_BUS_ID`（除非工作负载自己设了），让这个卡号与宿主机 `nvidia-smi` 的卡号一致。
+软隔离下 Pod 能看到节点上所有的 GPU 设备，只有 CUDA 被限制；不遵守 `CUDA_VISIBLE_DEVICES` 或直接打开设备节点的程序可以访问其他卡。
+agent 在每次状态上报里带上这件事，节点详情的「基础信息」里就出现「GPU 设备为软隔离」标签，下面给出原因和要执行的命令
+（命令由 server 生成；节点离线时不显示，重新上线并上报后恢复）。要回到严格隔离，二选一：
+
+- 集群用 GPU Operator、且没有用别的 GPU device plugin：保持启用 Operator 自带的 device plugin，它会写出逐卡的 CDI 名称。
+  不要在 HAMi 或别的 device plugin 旁边再装 NVIDIA 的 device plugin，两者会重复上报同一批 GPU。
+- 把工具包设为 legacy 模式，按卡号隔离。
+
+GPU Operator 启用自带的 device plugin（没有别的 GPU device plugin 时）：
+
+```bash
+kubectl patch clusterpolicy "$(kubectl get clusterpolicy -o jsonpath='{.items[0].metadata.name}')" --type=merge -p '{"spec":{"devicePlugin":{"enabled":true}}}'
+```
+
+GPU Operator 把 toolkit 改成 legacy 模式。`spec.toolkit.env` 已存在时，追加一项，不动原有条目：
+
+```bash
+kubectl patch clusterpolicy "$(kubectl get clusterpolicy -o jsonpath='{.items[0].metadata.name}')" --type=json -p '[{"op":"add","path":"/spec/toolkit/env/-","value":{"name":"NVIDIA_CONTAINER_RUNTIME_MODE","value":"legacy"}}]'
+```
+
+上一条因为 `spec.toolkit.env` 不存在而失败时，改用这条（创建这个列表；已存在的列表会被替换）：
+
+```bash
+kubectl patch clusterpolicy "$(kubectl get clusterpolicy -o jsonpath='{.items[0].metadata.name}')" --type=json -p '[{"op":"add","path":"/spec/toolkit/env","value":[{"name":"NVIDIA_CONTAINER_RUNTIME_MODE","value":"legacy"}]}]'
+```
+
+工具包装在节点上、没有用 GPU Operator：在该节点上执行（默认配置文件 `/etc/nvidia-container-runtime/config.toml`），再重启容器运行时：
+
+```bash
+sudo nvidia-ctk config --in-place --set nvidia-container-runtime.mode=legacy
+sudo systemctl restart containerd
+```
+
+agent 已知工具包属于 GPU Operator 还是装在节点上时，节点详情只列出适用的那几条。重启容器运行时的服务名因发行版而异（`containerd`、`rke2-agent`、`k3s`……）。
 
 **一个 Kubernetes 节点同一时间只属于一个条目。** 同一个集群的两个条目选中了同一个节点时，后来的那个条目的 agent 注册被拒绝
 （`KUBE_ENROLL_REFUSED`，原因 `node_taken`，并指出占着它的条目名），直到第一个条目在这个节点上的 agent 离线超过 15 分钟；
@@ -75,8 +113,14 @@ UUID 这样不带种类的名字会落到 `management.nvidia.com/gpu`，而那�
 不受影响）、`other_cluster`（令牌属于另一个 Kubernetes 集群）。保存的身份记着发给它的条目，agent 只用自己条目发的那份：
 几个条目共用默认的状态目录时，节点从一个条目转到另一个条目不会顶着前一个条目的身份连上来。
 
+注册被拒绝时，agent 除了写日志，还会在自己的 Pod 上记一条 Warning 事件（原因 `GpuworksEnrollRefused`），写明拒绝的原因和怎么处理，
+`kubectl describe pod -n <命名空间> <agent Pod>` 的 Events 一栏就能看到，不用去翻 agent 日志。同一个原因在拒绝持续期间每 10 分钟刷新一次，
+原因变了（例如占着节点的条目换了）立刻写一条新的。写事件需要 manifest 的 Role 里有 `events` 的 `create`（只在 agent 自己的命名空间）；
+用旧 manifest 接入的集群重新 `kubectl apply` 才有这条权限，没有时只是看不到事件，注册的重试不受影响。
+
 同一个 Kubernetes 集群接入两个条目时，**两个条目要用不同的命名空间**：manifest 里的对象按命名空间命名，同名命名空间下后应用的
-会覆盖先应用的，前一个条目的节点就悄悄转到了后一个条目。可能属于同一集群、又用了同一命名空间的条目，列表里名称旁会标「命名空间重复」
+会覆盖先应用的，前一个条目的节点就悄悄转到了后一个条目。可能属于同一集群、又用了同一命名空间的条目会标「命名空间重复」：独立接入的集群标在列表那一行的名称旁，
+从云账号接入的集群标在它分组的组头
 （还没有节点接入的条目不知道是哪个集群，也算在内；已知属于不同集群的不标）。命名空间创建后不能改，删掉其中一个换个命名空间重建。
 
 ## 集群用 HAMi、ACK 共享 GPU 或其他切分时
@@ -90,8 +134,11 @@ UUID 这样不带种类的名字会落到 `management.nvidia.com/gpu`，而那�
 | ACK 共享 GPU（节点有 `aliyun.com/gpu-mem` 资源，或 `ack.node.gpu.schedule` 标签为 `share` / `cgpu` / `core_mem`） | 占位 Pod 申请一整张卡的显存，借到哪张读调度器写在 Pod 上的分配注解 |
 | MIG、time-slicing / MPS、没有 HAMi 登记的昇腾 vNPU 模板等其他切分 | 不借卡：节点的卡全部显示为外部占用，原因（MIG、time-slicing、vNPU 模板……）写在卡的占用信息里，不会在上面放实例；集群改回整卡分配后自动恢复 |
 
-三种模式借到整卡以后，卡上的 dGPU 切分（NVIDIA HAMi-core、昇腾 vCANN）与普通节点完全一致：实例 Pod 不申请 HAMi
-或 ACK 的资源，由 gpuworks 自己的 dGPU 把一张卡切给多个实例。PPU、海光与 AMD 的 dGPU 切分目前只在 Docker 等运行时上验证（PPU 仅 Docker；海光 Docker 与 udocker；AMD Docker、nerdctl 与 udocker），在 Kubernetes 节点上不可用，这些卡只做整卡部署。
+三种模式借到整卡以后，卡上的 dGPU 切分（NVIDIA HAMi-core、昇腾 vCANN、PPU ppu-slicing-shim、AMD rocm-slicing-shim）与普通节点完全一致：实例 Pod 不申请 HAMi
+或 ACK 的资源，由 gpuworks 自己的 dGPU 把一张卡切给多个实例。PPU、AMD 的跨进程账本在其他运行时上靠容器
+`--ipc=host` 共享宿主机 `/dev/shm`；Kubernetes 上 agent 自己的 `/dev/shm` 是 agent Pod 私有的 tmpfs，
+agent 改经宿主 root（`/proc/1/root`）预先在宿主机 `/dev/shm` 建好账本文件，再把这个宿主路径以 hostPath
+挂进实例 Pod，账本路径本身不变。海光的 dGPU 切分目前只在 Docker 与 udocker 上验证，在 Kubernetes 节点上不可用，这张卡只做整卡部署。
 
 **HAMi**：占位 Pod 不绑定节点，而是写 `schedulerName: hami-scheduler`、`nodeSelector: kubernetes.io/hostname=<节点>`，
 申请 `nvidia.com/gpu: 1`、`nvidia.com/gpucores: 100`、`nvidia.com/gpumem-percentage: 100`，并用注解
@@ -137,8 +184,10 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
 
 ## 接入
 
-1. 在「Kubernetes」页点「接入集群」，填名称、server 地址（集群节点访问 server 用的地址），按需填节点选择器
-   （例如 `nvidia.com/gpu.present=true`，留空表示所有节点）。没有厂商这一项：每个节点上的 agent 自己识别加速卡，集群里
+1. 在「外部平台」页点右上角「添加外部平台」，在「外部平台」下选「Kubernetes 集群」（自建的集群，以及没有云账号可接入的
+   其他云上的集群，都从这里接入）；也可以点「快速接入」区的「Kubernetes 集群」卡片（只有管理员能看到），打开的是同一个弹窗，已经选好。弹窗里填名称、
+   「管理节点接入地址」（集群里的 agent 连接 GPUWorks 管理节点用的地址，须能从集群的 Pod 访问到，不是 Kubernetes API Server
+   的地址），按需填节点选择器（例如 `nvidia.com/gpu.present=true`，留空表示所有节点）。没有厂商这一项：每个节点上的 agent 自己识别加速卡，集群里
    有多个厂商的节点时一个条目就够了；没有加速卡或厂商暂不支持的节点保持待命，不会成为平台的节点。
 2. 「高级」里的选项：
    - 状态目录：agent 在节点上的目录，默认 `/opt/gpuworks`。节点上已经装着一个 gpuworks agent 时换一个目录（例如
@@ -154,53 +203,84 @@ agent 用节点自己的 DNS（`dnsPolicy: Default`），与直接装在主机�
    - 镜像拉取凭据：agent 镜像放在需要登录的仓库（企业 Harbor、云厂商的私有仓库）时，先在命名空间里建一个
      docker-registry 类型的 Secret（`kubectl -n gpuworks-system create secret docker-registry regcred …`，namespace 不存在时
      先建），再在这里填它的名称。agent Pod 用它拉镜像，agent 起的占位 Pod 也沿用它。
-   - RuntimeClass：只影响 NVIDIA 的实例 Pod，它们访问 GPU 用的 RuntimeClass；其他厂商的设备由 agent 自带的 device plugin
+   - RuntimeClass（保存后立即生效，见下文「修改集群条目」）：只影响 NVIDIA 的实例 Pod，它们访问 GPU 用的 RuntimeClass；其他厂商的设备由 agent 自带的 device plugin
      交给实例，不受它影响。留空（默认）时每个节点自己判断：集群里有 `nvidia` RuntimeClass 就用它，没有就用节点的默认运行时。
      只有 RuntimeClass 叫别的名字时才需要填写。
-   - 引擎端口段：默认 `40000-42767`。不要与集群的 NodePort 范围（默认 `30000-32767`）重叠：kube-proxy 会把发往本机
+   - 引擎端口段（保存后立即生效）：默认 `40000-42767`。不要与集群的 NodePort 范围（默认 `30000-32767`）重叠：kube-proxy 会把发往本机
      地址的 NodePort 流量转走。
-   - 空闲归还：借来的卡在最后一个实例停止后保留多久，默认 60 秒（每 30 秒检查一次，实际在 60 到 90 秒之间归还）；「常驻」表示一直不还，节点池整体交给 gpuworks。
+   - 空闲归还（保存后立即生效）：借来的卡在最后一个实例停止后保留多久，默认 60 秒（每 30 秒检查一次，实际在 60 到 90 秒之间归还）；「常驻」表示一直不还，节点池整体交给 gpuworks。
    - 优先级：gpuworks 的占位 Pod 与实例 Pod 所用 PriorityClass（`gpuworks-inference-<命名空间>`）的数值，默认 10000，范围 0 到 1000000000，越大越优先；普通 Pod 是 0。它也决定节点内存、磁盘紧张时的驱逐顺序：优先级低的先被驱逐。
    - 允许抢占：默认关闭（PriorityClass 写 `preemptionPolicy: Never`），借卡放不下时占位 Pod 只会等待，调度器不会为它驱逐你的其他 Pod。开启后，HAMi 与 ACK 共享 GPU 模式下（占位 Pod 经调度器）调度器可能驱逐优先级更低的 Pod；普通 device plugin 模式的占位 Pod 与所有实例 Pod 直接绑定节点，不经调度器，不受这个开关影响。
-3. 复制生成的命令在集群里执行：
+3. 点「接入」，弹窗里显示要在集群里执行的 `kubectl apply` 命令（按钮变为「关闭」），复制后在集群里执行：
 
    ```bash
    kubectl apply -f 'https://server.example/kube/manifest.yaml?token=…'
    ```
 
-   被选中的节点会自动出现在节点页，带系统标签 `gpuworks.ai/kubernetes-cluster`（值是集群的 UUID，显示集群名）和 `gpuworks.ai/kubernetes-node`（Kubernetes 里的节点名），节点页可据此筛选，部署的节点条件也可以用它们限定在某个集群上；扩容出来的节点同样自动加入。创建 5 分钟后仍没有
-   节点加入时，列表上的「排查」给出要执行的 `kubectl` 命令和常见原因（拉不到 agent 镜像、RuntimeClass 不存在、节点
+   被选中的节点会自动出现在节点页，带系统标签 `gpuworks.ai/kubernetes-cluster`（值是集群的 UUID，显示集群名）和 `gpuworks.ai/kubernetes-node`（Kubernetes 里的节点名），节点页可据此筛选，部署的节点条件也可以用它们限定在某个集群上；扩容出来的节点同样自动加入。
+   集群在「已接入的外部平台」列表里占一行，「厂商」列显示「—」，「平台类型」列显示 Kubernetes，「已接入节点」列的数字点开是只列这些节点的
+   「计算节点」页；展开这一行，是两列“标签 值”：接入方式、节点选择器、命名空间、卡归还、创建时间和已接入节点（节点数和按厂商的分布，
+   如“2 个节点 · NVIDIA ×2”，有节点时可点开「计算节点」页），还没有节点接入时下面是接入命令。集群名旁出现「命名空间重复」时，
+   表示另有条目用了同一命名空间（见上文[与集群里的其他业务共存](#与集群里的其他业务共存)）。管理员在「操作」列直接点「编辑」「复制接入命令」，
+   其余在「更多」菜单里：「查看 manifest」，分隔线下是「卸载」（见下文「卸载」）「吊销」「删除」；吊销、删除都先弹确认框。创建 5 分钟后仍没有
+   节点加入时，「状态」列改为「长时间未接入」，旁边的「排查」给出要执行的 `kubectl` 命令和常见原因（拉不到 agent 镜像、节点
    选择器没选中节点、agent 连不上 server）。
 
 命令里带着集群的接入令牌，只给管理员看。吊销接入令牌后新节点不能再加入，已加入的节点不受影响。
 
-列表里每个条目按厂商列出已加入的节点数（节点最多的厂商在前；没有上报加速卡的节点单独归为一类）。
+展开后的“已接入节点”一项按厂商列出已加入的节点数（节点最多的厂商在前；没有上报加速卡的节点单独归为一类）。
 
 ## 修改集群条目
 
-在「Kubernetes」页点条目的「编辑」（管理员，接口是 `PUT /api/v1/kube/clusters/{uuid}`）。可以改：名称、节点选择器、agent 镜像与镜像仓库、
+在「外部平台」页，独立接入的集群在它那一行的「操作」列点「编辑」，从云账号接入的集群在云账号展开后、该集群分组的组头操作里点「编辑」
+（管理员，接口是 `PUT /api/v1/kube/clusters/{uuid}`），打开的是接入时的同一个集群表单。可以改：名称、节点选择器、agent 镜像与镜像仓库、
 镜像拉取凭据、RuntimeClass、containerd socket、API server 地址、引擎端口段、空闲归还、优先级与允许抢占，校验规则与创建时一致。
-命名空间、server 地址与状态目录创建后固定，要改就删掉条目重建。从云账号接入的条目按节点池选节点，不能改节点选择器，
-改它的节点池（见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)）。
+命名空间、管理节点接入地址与状态目录创建后固定，要改就删掉条目重建。从云账号接入的条目按节点池选节点，不能改节点选择器，
+改它的节点池：集群分组里“GPU 节点池”一项下面的「修改」（见[接入公有云托管 Kubernetes](connect-managed-kubernetes.md)）。
 
-保存只改 gpuworks 里的记录，manifest 随即按新设置渲染，**集群里跑的仍是旧的，直到再应用一次**：
+**RuntimeClass、引擎端口段、空闲归还这三项不在 manifest 里，保存后立即对在线的 agent 生效**：不用重新应用、不重启 agent、网关不中断。
+server 把它们直接发给该条目的每个在线 agent（离线的在重新连上时拿到），agent 在原地更换：新起的 NVIDIA 实例 Pod 用新的 RuntimeClass
+（已经在跑的 Pod 不变）；之后的实例端口从新的端口段分配（已经在跑的实例端口不变）；借来的卡按新的空闲归还时间归还，
+改成「常驻」时 agent 马上把空闲的卡都借下来。只改这三项时，保存响应的 `reapply` 为 false、`commands` 为空。
+改引擎端口段允许在有实例运行时进行，哪怕运行中实例占用的端口落在新范围之外：保存照常成功，实例保留原端口、继续运行，只有之后分配的端口来自新范围；
+响应的 `warnings` 里带一条 `KUBE_ENGINE_PORTS_OUTSIDE`（`range`：新范围；`instances`：每项 `instance_uuid`、`deployment` 和落在范围外的 `ports`），
+页面保存后显示它。已经停止或失败的实例不算，正被请求停止的实例也不列入。
+更早的 manifest（还带着 `--engine-ports` 参数、`GPUWORKS_KUBE_RUNTIME_CLASS` 环境变量或 Pod 模板注解）仍能用，以 server 发来的值为准；
+下次因别的原因重新应用时这些旧内容就不再出现。
 
-- 手动接入的条目（没有吊销）：保存后页面给出一行 `kubectl` 命令，先删条目的 PriorityClass 再应用 manifest
+保存其余设置只改 gpuworks 里的记录，manifest 随即按新设置渲染，**集群里跑的仍是旧的，直到再应用一次**：
+
+- 手动接入的条目（没有吊销）：保存后弹窗给出一行 `kubectl` 命令，先删条目的 PriorityClass 再应用 manifest
   （`kubectl delete priorityclass gpuworks-inference-<命名空间> --ignore-not-found && kubectl apply -f ...`）：Kubernetes 不能原地修改
   PriorityClass 的数值与 `preemptionPolicy`，只能删了重建；之前改过优先级却没应用时，单独的 `kubectl apply` 会因此失败，
   所以每次都带上删除。写成一行是为了两步之间不留没有 PriorityClass 的空档。
 - 从云账号接入的条目：点「应用到集群」，server 自己应用；PriorityClass 变了时由 server 先删后建（应用结果里这一项的动作是 `replace`）。
-- 空闲归还时间也写在 manifest 里（DaemonSet 的 Pod 模板带注解 `gpuworks.ai/idle-return-seconds`），所以改了它同样要重新应用：
-  agent 随之重启，在启动注册时取到新值。agent 重启不会重启实例 Pod。
+- 重新应用会让 DaemonSet 滚动更新，agent 随之重启（agent 重启不会重启实例 Pod）。
 
-**改节点选择器（云条目是节点池）**：重新应用后，DaemonSet 不再在不被选中的节点上运行，这些节点的 agent 退出，节点离线；
+**改节点选择器（云条目是节点池）**：重新应用后，DaemonSet 不再在不被选中的节点上运行。这些节点上的 agent 在退出前读一次自己的
+DaemonSet，发现节点已经不在选中范围内，就把该节点借的卡还给 Kubernetes（删除占位 Pod）再退出，不留下占着卡、却没有 agent 管的占位 Pod；
+仍被选中时（普通重启、滚动更新或原地升级）不受影响。agent 退出后节点离线；
 离线 15 分钟后，平台请同一个条目里另一个在线的 agent 确认：该节点在 Kubernetes 里是否还在、是否还运行着本条目的 agent Pod。
 连续两次确认（约隔 5 分钟，避开滚动更新时 agent Pod 删了还没重建的空档）都不是、且节点上没有实例时，节点记录自动删除。条目里没有别的在线节点时没有谁可问，不自动删除，需要在节点页手动删除这个节点
 （删除 Kubernetes 节点不需要 SSH）。新选中的节点自己加入。
 
+**缩小选择范围要确认**：改节点选择器（云条目是改节点池）会让某些节点退出选择、而这些节点上还有实例在运行时，server 拒绝保存，回 409
+`KUBE_SELECTION_DROPS_INSTANCES`，页面弹出确认框，列出这些节点和它们上面的部署。再次应用 manifest 时这些节点上的 agent 会被移除；
+留着不管的话，实例会继续运行、占着卡，但不再受平台管理、不能经网关访问，也不会被归还。所以点「停止实例并保存」（请求带
+`confirm_drop_instances: true`）后，server **先请求停止这些节点上的实例，再保存**：只停退出节点上的实例（重新计算，以确认那一刻为准），
+同一个部署在其他节点上的副本不动；停实例、设停止调度与保存在同一个事务里，所有校验（含重名）都先过，保存失败时不会停任何实例；实例走平台自己的移除流程（状态变为 `removing`，由 agent 停掉容器、回收卡），请求不等它们停完，
+也不会因此回滚保存；只运行在这些节点上的部署会没有副本（确认框里已经列出了它的名字）。server 已经确认这些节点会退出时，还会把它们设为
+「停止调度」（cordon），免得控制器在即将被移除的节点上重建刚停掉的副本；已经是停止调度或排空的节点保持原状；这个停止调度按管理员的操作记录，节点之后重新被选中时仍保持停止调度，要在节点页恢复调度后才再接收新副本；无法核实时节点可能仍被选中，只停实例、不设停止调度。
+响应里的 `stopped_instances`（每项 `instance_uuid`、`deployment`、`node_uuid`）列出被请求停止的实例，页面保存后显示这份清单。
+server 不知道集群里节点的标签，所以请条目里一个在线的 agent 读取这些节点、按新的选择判断是否仍被选中；
+问不到任何 agent（条目里没有在线节点，或 agent 版本太旧）时，把所有还有实例的节点都列出来，确认框注明无法核实、这些节点可能受影响
+（参数 `verified` 为 false），确认后停的就是列出的这些节点上的实例。选择没变、只是放宽，或退出的节点上没有实例时不询问、也不停任何实例。
+除此之外，保存本身仍只改 gpuworks 的记录，集群要等再次应用 manifest 才变。
+
 ## 卸载
 
-条目的「卸载」给出把它的 agent 从集群里移走的 `kubectl` 命令（管理员可见，吊销过的条目也有），按顺序执行：
+gpuworks 不能替你卸载的条目（独立接入的集群，以及 API Server 只有内网地址的云集群），操作里有「卸载」（管理员可见，吊销过的条目也有），
+弹窗列出把它的 agent 从集群里移走的 `kubectl` 命令，按顺序执行：
 
 ```bash
 kubectl -n <namespace> delete daemonset gpuworks-agent --ignore-not-found --wait
@@ -212,7 +292,8 @@ kubectl delete namespace <namespace> --ignore-not-found
 
 删 DaemonSet 时实例 Pod 与占位 Pod 一起被删除，卡还给 Kubernetes。这些命令不需要接入令牌；`kubectl delete -f <manifest 地址>`
 则要用令牌取 manifest，吊销令牌后就不能用了。server 够得着集群的条目（从云账号接入）由 server 代为执行（「从集群卸载」，先检查、确认后删除）。
-节点都从节点页消失后才能删除条目（还有节点时拒绝，`KUBE_CLUSTER_HAS_NODES`）。
+节点都从节点页消失后才能删除条目（还有节点时拒绝，`KUBE_CLUSTER_HAS_NODES`）：仍有节点时点「删除」，确认框写明还有几个节点，
+并给出「从集群卸载」或「卸载」的入口。
 
 ## 日常运维
 
@@ -233,5 +314,5 @@ kubectl delete namespace <namespace> --ignore-not-found
 - 实例使用 host 网络，不创建 Service / Ingress，经 gpuworks 网关访问。
 - 厂商的命令行工具（`npu-smi`、`hy-smi`、`ppu-smi`、`xpu-smi`、`nvidia-smi`）在节点的挂载命名空间里运行，用节点自己的 C 库与驱动库，所以 agent
   镜像与节点的发行版无关；查找顺序见「加速卡厂商：自动识别」。
-- 只支持 NVIDIA、昇腾、海光、PPU、AMD 与昆仑芯的节点；其他厂商的节点保持待命，不成为平台节点。AMD 与昆仑芯只做整卡部署：AMD 的 dGPU 显存切分在 Kubernetes 上不可用，昆仑芯本来就没有 dGPU。
+- 只支持 NVIDIA、昇腾、海光、PPU、AMD 与昆仑芯的节点；其他厂商的节点保持待命，不成为平台节点。海光与昆仑芯只做整卡部署：海光的 dGPU 显存切分在 Kubernetes 上不可用，昆仑芯本来就没有 dGPU；AMD 与 PPU 的 dGPU 切分在 Kubernetes 上可用。
 - agent 以 privileged、hostNetwork、hostPID 运行（探测、经节点挂载命名空间运行 nerdctl 与 mount 需要）。

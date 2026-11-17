@@ -122,9 +122,27 @@ fi
 
 pointers="$channel/index.json $channel/latest $channel/manifest.json"
 
+# Read the previous signed pointer before assembling its successor. Only a
+# missing object is a first publication. A transport failure must stop here.
+previous_index=""
+for remote in $remotes; do
+  status=0
+  "$rclone" copyto "$remote/$channel/index.json" "$work/prior-index.json" || status=$?
+  case $status in
+    0) previous_index="$work/prior-index.json"; break ;;
+    3 | 4) ;;
+    *) exit "$status" ;;
+  esac
+done
+
+database_migration=0
+if [ "$adopted_release" = false ]; then
+  database_migration=$(go run ./cmd/gpuworks database-migration)
+fi
+
 tree="$work/tree"
 "$work/gpuworks-dist" assemble -channel "$channel" -dist "$dist" -out "$tree" -release-id "$release_id" \
-  -commit "$commit" -built-at "$built_at"
+  -commit "$commit" -built-at "$built_at" -database-migration "$database_migration" -adopted="$adopted_release" -keep "$keep" -previous-index "$previous_index"
 
 immutable='Cache-Control: public, max-age=31536000, immutable'
 pointer='Cache-Control: no-cache'
@@ -210,7 +228,15 @@ for remote in $remotes; do
   if ! "$rclone" lsjson -R --files-only "$remote/releases" >"$work/listing.json"; then
     echo "[]" >"$work/listing.json"
   fi
-  for old in $("$work/gpuworks-dist" prune -keep "$keep" "$@" <"$work/listing.json"); do
+  status=0
+  "$rclone" copyto "$remote/nightly/index.json" "$work/retain.json" || status=$?
+  case $status in
+    0) set -- "$@" -nightly-index "$work/retain.json" ;;
+    3 | 4) ;;
+    *) exit "$status" ;;
+  esac
+  obsolete=$("$work/gpuworks-dist" prune -keep "$keep" "$@" <"$work/listing.json")
+  for old in $obsolete; do
     echo "pruning $remote/releases/$old"
     "$rclone" purge "$remote/releases/$old"
   done

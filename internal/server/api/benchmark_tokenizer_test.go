@@ -200,7 +200,7 @@ func TestBenchmarkTokenizerAutoAdoptsWhenTheAgentCannotStat(t *testing.T) {
 	dir := t.TempDir()
 	f.markPresent(t, dir)
 	// An agent that predates fs.stat refuses the method by name.
-	f.statErr = errors.New("unknown rpc method: " + proto.RPCFSStat)
+	f.statErr = proto.UnknownRPCMethod(proto.RPCFSStat)
 
 	request := f.autoRequest(f.node.UUID)
 	if got, want := f.resolve(t, request), filepath.Join(dir, "tokenizer.json"); got != want {

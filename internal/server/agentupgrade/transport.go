@@ -19,7 +19,10 @@ type Observation struct {
 	Version   string
 	State     string
 	Error     string
-	At        time.Time
+	// Code classifies a failed State: proto.ErrorAgentUpgradeRolledBack,
+	// proto.ErrorAgentUpgradeInProgress, or empty.
+	Code string
+	At   time.Time
 }
 
 type Transport interface {

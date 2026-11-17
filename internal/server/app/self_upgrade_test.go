@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/api"
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/selfinstall"
 	"gpuworks.ai/gpuworks/internal/server/serverconfig"
 	"gpuworks.ai/gpuworks/internal/version"
@@ -120,7 +121,7 @@ func TestSelfUpgradeBlockers(t *testing.T) {
 
 func TestSelfUpgradeSwapsTheBinaryAndRestarts(t *testing.T) {
 	settings, dir, restarts := installedTree(t)
-	started, err := settings.Upgrade(context.Background(), bytes.NewReader(releaseArchive(t, "v2.0.0")), "admin")
+	started, err := settings.Upgrade(context.Background(), bytes.NewReader(releaseArchive(t, "v2.0.0")), "admin", dto.ServerUpgradeSelection{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +158,7 @@ func TestSelfUpgradeRefusals(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			settings, dir, restarts := installedTree(t)
-			_, err := settings.Upgrade(context.Background(), bytes.NewReader(tc.archive), "admin")
+			_, err := settings.Upgrade(context.Background(), bytes.NewReader(tc.archive), "admin", dto.ServerUpgradeSelection{})
 			var settingsErr *api.ServerSettingsError
 			if !errors.As(err, &settingsErr) || settingsErr.Code != tc.code {
 				t.Fatalf("err = %v, want %s", err, tc.code)
@@ -173,7 +174,7 @@ func TestSelfUpgradeRefusals(t *testing.T) {
 	}
 	settings, _, _ := installedTree(t)
 	settings.restart = nil
-	_, err := settings.Upgrade(context.Background(), bytes.NewReader(releaseArchive(t, "v2.0.0")), "admin")
+	_, err := settings.Upgrade(context.Background(), bytes.NewReader(releaseArchive(t, "v2.0.0")), "admin", dto.ServerUpgradeSelection{})
 	var settingsErr *api.ServerSettingsError
 	if !errors.As(err, &settingsErr) || settingsErr.Code != api.ErrorServerUpgradeUnavailable || settingsErr.Params["reason"] != "no_service_manager" {
 		t.Fatalf("err = %v", err)

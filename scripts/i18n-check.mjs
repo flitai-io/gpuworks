@@ -188,6 +188,23 @@ for (const dictionary of serverDictionaries) {
   }
 }
 
+// Engine failure codes (pkg/enginelog) reach the console as the causes of an
+// instance's runtime failure and as the assistant's findings; each needs a
+// title in every language, and no finding key may outlive its code.
+const engineFailureSource = fs.readFileSync(path.join(root, "pkg/enginelog/failure.go"), "utf8");
+const engineFailureCodes = new Set([...engineFailureSource.matchAll(/\bCode\w+\s*=\s*"([A-Z0-9_]+)"/g)].map((match) => match[1]));
+if (engineFailureCodes.size === 0) errors.push("no engine failure codes found in pkg/enginelog/failure.go");
+for (const language of languages) {
+  const aiLocale = localeMaps.get(`${language}/ai.json`) ?? new Map();
+  for (const code of engineFailureCodes) {
+    if (!aiLocale.has(`finding.${code}.title`)) errors.push(`${language}/ai.json:finding.${code}.title: missing engine failure translation`);
+  }
+  for (const key of aiLocale.keys()) {
+    const match = key.match(/^finding\.([A-Za-z0-9_]+)\.title$/);
+    if (match && !engineFailureCodes.has(match[1])) errors.push(`${language}/ai.json:${key}: no matching engine failure code`);
+  }
+}
+
 // Deployment warnings are a code-only wire contract. Keep their locale
 // resources in lockstep with both named backend constants and W1-W10 emitted
 // directly by the performance validator.
@@ -253,16 +270,20 @@ for (const [index, source] of schedulerSources.entries()) {
 // the UI resolves stable codes from the common namespace. Package messages
 // declares them, one file per area; api/errors.go adds its own and aliases
 // the rest. Agent runtime failures travel through the same ProductMessage API,
-// with their wire codes owned by proto.
+// with their wire codes owned by proto. Check outcome codes (ADR 0067) are
+// declared beside them as Check* constants and render the same way.
 const messagesDir = path.join(root, "internal/server/messages");
 const productErrorSourceFiles = [
   ...fs.readdirSync(messagesDir).filter((name) => name.endsWith(".go") && !name.endsWith("_test.go")).sort().map((name) => path.join(messagesDir, name)),
   path.join(root, "internal/server/api/errors.go"),
-  path.join(root, "internal/proto/runtime_failure.go"),
+  path.join(root, "internal/server/proxy/api_errors.go"),
+  // Every proto file: agent-produced codes (runtime failures, RPC refusals)
+  // reach the console through the same ProductMessage path.
+  ...fs.readdirSync(path.join(root, "internal/proto")).filter((name) => name.endsWith(".go") && !name.endsWith("_test.go")).sort().map((name) => path.join(root, "internal/proto", name)),
 ];
 const productErrorSources = productErrorSourceFiles.map((file) => fs.readFileSync(file, "utf8"));
 const productErrorCodes = new Set(
-  productErrorSources.flatMap((source) => [...source.matchAll(/\bError\w+\s*=\s*"([A-Z0-9_]+)"/g)].map((match) => match[1])),
+  productErrorSources.flatMap((source) => [...source.matchAll(/\b(?:Error|Check)\w+\s*=\s*"([A-Z0-9_]+)"/g)].map((match) => match[1])),
 );
 if (productErrorCodes.size === 0) errors.push("no product API error codes found");
 for (const language of languages) {
@@ -282,6 +303,53 @@ for (const code of translatedProductErrorCodes) {
 for (const [index, source] of productErrorSources.entries()) {
   if (/[㐀-鿿]/u.test(source)) {
     errors.push(`${path.relative(root, productErrorSourceFiles[index])} contains product CJK text outside locale JSON`);
+  }
+}
+
+// ADR 0067: every product code a client renders has en and zh text. A product
+// code is an UPPER_SNAKE string constant declared in internal/proto or
+// internal/server/messages, or anywhere else under internal/ and pkg/ under an
+// identifier that names it a code (Error..., Warning..., Failure..., Reason...,
+// Code..., or containing one of the first four as a word). The text may live in any namespace
+// (apiError, a feature's own reason table); plural forms count.
+const codeName = /^(?:[Ee]rror|[Ww]arning|[Ff]ailure|[Rr]eason|[Cc]ode)|(?:Error|Warning|Failure|Reason)(?:[A-Z]|$)/;
+const codePackageDirs = [path.join(root, "internal/proto"), messagesDir];
+const leafKeys = new Map();
+for (const [name, map] of localeMaps) {
+  const language = name.split("/")[0];
+  const keys = leafKeys.get(language) ?? new Set();
+  for (const key of map.keys()) {
+    // Every path segment counts: a code may name a leaf string or an object
+    // of texts (an assistant finding's title and fix).
+    for (const segment of key.split(".")) {
+      keys.add(segment);
+      keys.add(segment.replace(/_(?:zero|one|two|few|many|other)$/, ""));
+    }
+  }
+  leafKeys.set(language, keys);
+}
+// Packages that neither binary links: their codes are read by catalog
+// maintainers in a CLI's English output, never rendered by the console.
+// check_architecture.sh's console_unlinked_code_packages proves each one stays
+// out of cmd/gpuworks and cmd/gpuworks-agent.
+const consoleUnlinkedCodePackages = [path.join(root, "internal/templateprobe")];
+const runtimeCodes = new Map();
+for (const top of ["internal", "pkg"]) {
+  for (const file of filesUnder(path.join(root, top), ".go")) {
+    if (file.endsWith("_test.go") || file.includes(`${path.sep}testdata${path.sep}`)) continue;
+    if (consoleUnlinkedCodePackages.includes(path.dirname(file))) continue;
+    const inCodePackage = codePackageDirs.includes(path.dirname(file));
+    const source = fs.readFileSync(file, "utf8");
+    for (const match of source.matchAll(/^\s*(?:const\s+)?([A-Za-z]\w*)\s*(?:[A-Za-z.]+\s*)?=\s*"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/gm)) {
+      const [, name, code] = match;
+      if (!inCodePackage && !codeName.test(name)) continue;
+      if (!runtimeCodes.has(code)) runtimeCodes.set(code, `${path.relative(root, file)}:${source.slice(0, match.index).split("\n").length}`);
+    }
+  }
+}
+for (const [code, where] of runtimeCodes) {
+  for (const language of ["en", "zh"]) {
+    if (!leafKeys.get(language)?.has(code)) errors.push(`${where}: product code ${code} has no ${language} locale text (ADR 0067)`);
   }
 }
 

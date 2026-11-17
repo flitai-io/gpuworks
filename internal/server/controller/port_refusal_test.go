@@ -94,7 +94,7 @@ func (f *refusalFixture) fail(t *testing.T, message string) []int {
 }
 
 func refusal(port int) string {
-	return fmt.Sprintf("%s: port %d is already in use on this node; nothing was started", proto.EnginePortRefused, port)
+	return fmt.Sprintf("%s: port %d is already in use on this node; nothing was started", proto.ErrorEnginePortRefused, port)
 }
 
 // A launch the agent refused before starting anything is retried at once,
@@ -147,7 +147,7 @@ func TestPortRefusalsDoNotChargeTheRetryBudget(t *testing.T) {
 			t.Fatalf("refusal %d ended the unit: refusals must not charge the budget", i+1)
 		}
 	}
-	f.fail(t, proto.EnginePortInUse+": port 30050 is already in use on this node")
+	f.fail(t, proto.ErrorEnginePortInUse+": port 30050 is already in use on this node")
 	f.reconcile(t)
 	if f.active(t) == nil {
 		t.Fatal("two charged failures ended a unit with a budget of three")

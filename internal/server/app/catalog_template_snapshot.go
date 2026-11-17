@@ -102,6 +102,13 @@ func verifyTemplateLaunch(dep *store.Deployment, instance store.Instance, node *
 	request.ModelMount = desired.ModelMount
 	request.Topology.NNodes = 1
 	request.Selection = selection
+	// Rebuild with the naming the captured launch used. An alias-less launch
+	// carries no --served-model-name when it predates naming such launches
+	// after the model mount, or when its host agent would have translated
+	// that name (planning.LaunchRequest.ImplicitServedName); either way the
+	// executable is unchanged. With an alias the flag is always present and
+	// this is false, as it is for the controller.
+	request.ImplicitServedName = deploy.ServedModelName(desired.ResolvedLaunch) == ""
 	plan, err := planning.ResolveAllocatedLaunch(request, indexes, len(indexes), parallel, desired.APIPort, desired.PlacementVariables, planning.ReadScheduleRecord(instance.ScheduleExpl).Breakdown.WeightBytes, false)
 	if err != nil {
 		return templateexport.Unavailable(templateexport.ReasonLaunchChanged, nil)

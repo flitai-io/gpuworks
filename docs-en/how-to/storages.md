@@ -216,3 +216,5 @@ Images are not stored in storage; they reside in each node's container runtime. 
 - **Pre-start check**: before creating a container, the agent checks whether the model directory exists, with a 2-second time limit. If it does not exist, startup fails with `MODEL_PATH_UNAVAILABLE`;
   the engine is not started against an empty directory.
 - **The node model root directory** is now part of local storage. To switch disks, change the local storage path or add new local storage; it is no longer configured separately on the node.
+
+<!-- translation-source-sha256: e63c3268befa5c72eafecd1f7845faafc4511d8778f5c1fa7e372325fda0360c -->

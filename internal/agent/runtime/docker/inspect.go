@@ -12,6 +12,12 @@ import (
 
 func (d *Driver) InspectWorkload(ctx context.Context, id string) (runtime.WorkloadInspection, error) {
 	out, err := output(ctx, 10*time.Second, "container", "inspect", "--format", "{{json .}}", id)
+	if cliAnsweredNoSuchContainer(err, out) {
+		return runtime.WorkloadInspection{}, fmt.Errorf("docker container inspect: %w: %s", runtime.ErrContainerNotFound, strings.TrimSpace(out))
+	}
+	if cliPermissionDenied(err, out) {
+		return runtime.WorkloadInspection{}, fmt.Errorf("docker container inspect: %w: %s", runtime.ErrPermissionDenied, strings.TrimSpace(out))
+	}
 	if err != nil {
 		return runtime.WorkloadInspection{}, err
 	}

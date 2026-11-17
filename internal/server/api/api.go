@@ -109,6 +109,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.Post("/nodes/{uuid}/upgrade", a.upgradeNode)
 			r.Put("/nodes/{uuid}/labels", a.updateNodeLabels)
 			r.Put("/nodes/{uuid}/scheduling", a.setNodeScheduling)
+			r.Patch("/nodes/{uuid}/placement-policy", a.setNodePlacementPolicy)
 			r.Put("/nodes/{uuid}/gpus/scheduling", a.setCardScheduling)
 			r.Post("/nodes/{uuid}/gpus/recheck", a.recheckCard)
 			r.Get("/nodes/{uuid}/health-checks", a.nodeHealthChecks)
@@ -138,6 +139,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 
 			// Models.
 			r.Get("/models", a.listModels)
+			r.Get("/models/catalog", a.modelCatalog)
 			r.Post("/models", a.createModel)
 			r.Post("/models/quick-register", a.quickRegisterModel)
 			r.Post("/models/local/preview", a.previewLocalModel)
@@ -291,6 +293,14 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.Post("/apikeys", a.createAPIKey)
 			r.Delete("/apikeys/{prefix}", a.deleteAPIKey)
 			r.Put("/apikeys/{prefix}/scope", a.setAPIKeyScope)
+			r.With(a.managementAdmin).Put("/apikeys/{prefix}/priority", a.setAPIKeyPriority)
+
+			// Request priority classes.
+			r.Get("/priority-classes", a.listPriorityClasses)
+			r.With(a.managementAdmin).Post("/priority-classes", a.createPriorityClass)
+			r.With(a.managementAdmin).Put("/priority-classes/{name}", a.updatePriorityClass)
+			r.With(a.managementAdmin).Delete("/priority-classes/{name}", a.deletePriorityClass)
+			r.With(a.managementAdmin).Put("/priority-classes/{name}/default", a.setDefaultPriorityClass)
 			r.Get("/mcp/status", a.mcpStatus)
 			r.With(a.managementAdmin).Put("/mcp/settings", a.putMCPSettings)
 
@@ -379,6 +389,8 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.With(a.managementAdmin).Get("/updates", a.getUpdates)
 			r.With(a.managementAdmin).Put("/updates/channel", a.putUpdateChannel)
 			r.With(a.managementAdmin).Put("/updates/auto-check", a.putUpdateAutoCheck)
+			r.With(a.managementAdmin).Get("/updates/server/versions", a.serverVersionChoices)
+			r.With(a.managementAdmin).Get("/updates/server/result", a.serverUpgradeResult)
 			r.With(a.managementAdmin).Post("/updates/server", a.upgradeServerFromChannel)
 			r.With(a.managementAdmin).Post("/updates/server/upload", a.upgradeServerFromUpload)
 			r.With(a.managementAdmin).Get("/usage-report", a.getUsageReport)
@@ -416,6 +428,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 			r.Get("/scheduling/timeline", a.schedulingTimeline)
 			r.Get("/scheduling/activity", a.schedulingActivity)
 			r.Get("/scheduling/yield-policies", a.yieldPolicyDictionary)
+			r.Get("/scheduling/node-placement-policies", a.nodePlacementPolicyDictionary)
 			r.Get("/monitor/deployments/{id}", a.monitorDeployment)
 			r.Get("/monitor/deployments/{id}/requests", a.monitorRequests)
 			r.Get("/monitor/requests/lookup", a.monitorRequestLookup)
@@ -428,6 +441,7 @@ func Router(d Deps, policies ...auth.SessionPolicy) http.Handler {
 
 			// AI helper.
 			r.Get("/ai/configs", a.listAIConfigs)
+			r.Get("/ai/presets", a.aiPresets)
 			r.Post("/ai/configs", a.createAIConfig)
 			// The connection test changes nothing, so it is a POST to a verb
 			// path rather than a resource write under {id}.

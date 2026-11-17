@@ -13,8 +13,8 @@
 
 ### 连接架构
 
-agent 主动外连 `wss://server/api/v1/agent/connect` → WS upgrade → go-yamux 多路复用。默认走**双通道**（各一条 WS + 一条 yamux）：`?lane=ctrl` 控制通道（固定 256 KiB 窗口，承载 `ctrl`/`metrics`/`terminal`，延迟敏感）、`?lane=data` 数据通道（256 KiB→16 MiB 自适应窗口，承载 `tunnel`/`logtail`/`model.read`/`model.write`/`image.read`/`image.write`，适配高带宽高延迟链路）。数据通道用 `DataHello{node_token, session_id}` 认证并绑定当前 ctrl 会话（`session_id` 由 Registered 下发，不匹配回 `reject{reason:stale_session}`），是其子资源：独立退避重连，掉线（detached）期间新数据类流在调用方 context 内等重连（上限 5s，见 `hub.dataLaneReattachWait`），超时返回 `hub.ErrDataLaneUnavailable`（proxy 映射为可重试 503），永不回退到 ctrl（ADR 0024）。`proto.LaneFor(kind)` 是 kind→lane 唯一映射。老 agent、`--data-lane=false`、server_dial 走单通道（无 `lane` 参数，data profile，行为同早期单通道）。
-yamux 流：`ctrl`（双向 JSON Lines 控制面）、`metrics`、`logtail`、`tunnel`、`model.read`/`model.write`（模型目录 tar 收发）、`image.read`/`image.write`（docker save/load 流）、`terminal`（交互 pty，target=host/container）。
+agent 主动外连 `wss://server/api/v1/agent/connect` → WS upgrade → go-yamux 多路复用。默认走**双通道**（各一条 WS + 一条 yamux）：`?lane=ctrl` 控制通道（固定 256 KiB 窗口，承载 `ctrl`/`terminal`，延迟敏感）、`?lane=data` 数据通道（256 KiB→16 MiB 自适应窗口，承载 `tunnel`/`logtail`/`telemetry`/`model.read`/`model.write`/`image.read`/`image.write`，适配高带宽高延迟链路）。数据通道用 `DataHello{node_token, session_id}` 认证并绑定当前 ctrl 会话（`session_id` 由 Registered 下发，不匹配回 `reject{reason:stale_session}`），是其子资源：独立退避重连，掉线（detached）期间新数据类流在调用方 context 内等重连（上限 5s，见 `hub.dataLaneReattachWait`），超时返回 `hub.ErrDataLaneUnavailable`（proxy 映射为可重试 503），永不回退到 ctrl（ADR 0024）。`proto.LaneFor(kind)` 是 kind→lane 唯一映射。老 agent、`--data-lane=false` 走单通道（无 `lane` 参数，data profile，行为同早期单通道）；server_dial 在 agent 开启数据通道时同样由 server 拨第二条 lane（`serverdial_lanes.go`）。
+yamux 流：`ctrl`（双向 JSON Lines 控制面）、`telemetry`（agent 在数据通道上打开，上送指标/日志批次；server hello 宣告 `telemetry.stream` 且该连接会有数据通道才用，否则走 ctrl；指标与日志各一条流（流头 `ref`）；数据通道 30s 未连上则先走 ctrl、连上后切到数据通道（只切一次）；日志断线时在 agent 内存有界缓冲、重连补发，server 入库对遥测流反压不丢，ADR 0064）、`logtail`、`tunnel`、`model.read`/`model.write`（模型目录 tar 收发）、`image.read`/`image.write`（docker save/load 流）、`terminal`（交互 pty，target=host/container）。
 控制消息 envelope：`{"t":"...","id":...,"d":{...}}`（定义在 `internal/proto`，含 serverdial HMAC、终端帧协议、instance 状态枚举如 `optimizing`）。
 指令下发 = desired state + watch；短动作走 RPC。另有 server_dial（HMAC）：server 直连 agent 的 `--listen` 端口纳管出站受限的节点（SSH 只用于安装、预检查和带外恢复）。
 
@@ -25,7 +25,7 @@ yamux 流：`ctrl`（双向 JSON Lines 控制面）、`metrics`、`logtail`、`t
 - `recovery` 独立 SSH 旁路恢复离线 agent，刻意放在 controller 外（SSH 可阻塞几十秒）。
 - `imagecatalog/pullref` 是纯叶子包，拉取候选顺序的唯一实现，store 与 imagecatalog 共用。
 - `acquisition` 只产候选、不做选择、不做 I/O；服务端校验用户所选候选是否仍有效，不替换（ADR 0018）。
-- `partitioncap` 是 dGPU 能力推导 status/reason 文本的唯一产地。
+- `partitioncap` 是 dGPU 能力 status 与原因码（`messages.ErrorPartition*`）加参数的唯一产地；英文 reason 只是同处生成的 fallback。
 - `internal/server/deployment` 是部署创建/评估与部署读模型的唯一入口（纯状态推导在 `planning`），不依赖 `net/http` 与 `api`（`make check-architecture` 守护）；api 的 handler 只做解码、调用、按 `Kind` 映射 HTTP 状态，新的部署业务逻辑写进 `deployment`。
 - `messages` 产语言中立 ProductError（稳定 code + 插值参数 + 英文 fallback），人类可读文本归客户端 locale。
 - `selfinstall` / `installcred` 是叶子包，install 与 server 两端共用，不得反向依赖 server。
@@ -51,6 +51,11 @@ make demo       # 起 server + agent，验证接入/心跳/重连
 - **评测信息与报告契约**：修改评测负载、采集、聚合、存储、API、UI、CLI 或导出前，必须阅读并遵守 [评测信息与报告规范](docs/dev/benchmark-reporting-standard.md)。区分计划、观测与推导，保留会话/轮次/请求关联，明确来源、统计分母、有效样本和未知值；相关改动须验证受影响的口径，不得把尚未采集的信息写成已实现能力。
 - **规模目标 1000 节点 / 3000 实例**，fleet 用例（`make test-fleet-perf-processes`、`test-fleet-log-scale-processes`、`test-fleet-benchmark-processes`，以及 `TestFleetGatewayLoadAcrossProcesses`）是它的守门人；server 进程里跑的负载（server 发压评测等）与控制面共享 CPU 和内存，同样要有带 RSS/CPU 预算的规模用例。会被逐节点、逐实例、逐事件或逐请求触发的路径（controller reconcile、部署创建/详情 API、bus 事件订阅者、状态/心跳写入、路由表、日志/指标读、评测压测的逐请求回调与进度上报）不得每次全量读节点、实例或目录，不得每次对已累积的全部历史重新汇总或排序（进度、统计按时间节流或增量维护），也不得每条事件一个写事务：钉住节点就只读这些节点，高频事件做合并或批量，派生索引按版本缓存，SQL 先看 `EXPLAIN QUERY PLAN` 有没有全表排序。改动这些路径后，用 `GPUWORKS_FLEET_NODES=200` 跑 churn 用例，对比 server CPU-seconds 与改动前（2026-10 的累积退化就是这样漏进来的，见 `artifacts/archive/2026-10-04-l2-fleet-register-timeout/`）。
 - **单文件 > 600 行触发拆分**。controller/reconcile 每资源一个文件，严禁上帝文件。
+- **状态按所有者与生命周期成组**（[ADR 0066](docs/adr/0066-agent-state-by-owner-and-lifetime.md)）：同一个键、同一时刻失效的状态放一条记录，记录的边界就是它描述的东西的边界（引擎进程的记录在创建容器时从空开始、确认容器删除时整条丢弃），不为每个事实各开一张按 UUID 的并行 map；子系统自带状态与锁、依赖收窄，跨子系统共享的配置归组合根、只读下发，不同时持有两个子系统的锁。`Engine` 与 `Controller` 的新增字段要过字段分类测试（`TestEveryEngineFieldIsClassified`、`TestEveryControllerFieldIsClassified`），按实例/部署的还要过清理测试（`TestRemovingAnInstanceLeavesNothingUnderItsUUID`、`TestForgetDeploymentLeavesNoMemory`）；agent 组合根 `NodeRuntime` 由 `agent_node_runtime_{fields,mutexes,methods}`、`agent_onrpc_cases` 棘轮守护，`Engine` 由 `agent_engine_struct_maps` 守护。
+- **三个枢纽不再长胖**（`controller_struct_*`、`planning_*`、`app_*` 预算守护，总单 GWKS-313）：
+  - controller 里按部署、节点或实例记的内存状态，收进自带锁的具名类型并实现纯内存的 `Forget`，不在 `Controller` 上直接放 map 和锁；带 I/O、会失败的清理不算 `Forget`，留在 reconcile 里显式调用并重试。
+  - `planning` 是无状态的规则包：不放包级锁和可变变量；读库走本包声明的窄读接口（`*store.Store` 原样满足），不新增 `*store.Store` 形参；新规则先写不开库的测试。
+  - `app` 只做装配：新功能的业务实现放自己的包，app 只留构造与适配；不往 `Run` 里直接加协程。
 - **新增持久化事实必须谨慎，存储形式不是豁免**：只有确实必要、且无法从现有数据推断/推导/计算得到时才新增。新增 JSON/text 列、往已有 JSON 里加 key，与加列加表同等对待。
 - **持久化默认用带类型的列/表**。JSON 列只用于整体读写的不透明快照（数据库不按其内部字段查询、排序、关联或局部更新），且必须：对应唯一一个具名 Go 类型并在列注释写明；不重复其他列已有的事实；形状变更同样要迁移或读时兼容，并带旧数据测试。禁止 `map[string]any` / `Extra` / `Meta` 式通用口袋，禁止一列多形态。
 - server + agent 各为单静态二进制，`CGO_ENABLED=0`。
@@ -58,10 +63,12 @@ make demo       # 起 server + agent，验证接入/心跳/重连
 - **事件发布不用 ORM 钩子**：写操作收敛进 `store` 显式方法，事务提交后 publish。
 - 前端参数字典由 server 下发，不硬编码进前端。
 - **前端不做业务判断**：可用性与资格（能否共卡、能否休眠、可选的动作）、上下限与默认值、优先级与派生状态（卡片状态、是否可取消）都由 server 计算后随 DTO 或字典接口下发，前端只负责展示、交互和本地化；同一条规则不在 TS 里再写一份，确需即时校验时也以 server 下发的数据为准。
+- **失败与检查结果用码加参数，不用散文**（ADR 0067，词义见 `CONTEXT.md`「失败码与检查结果」）：码 UPPER_SNAKE，agent↔server 共用的定义在 `internal/proto`、server 内的在 `internal/server/messages`，调用点引用常量；检查 id lower_snake，状态只用 `proto.Check*` 五个值（`skip`/`na` 不是通过）；落库的参数用带类型字段（ADR 0032）；英文原文只作 fallback；新增码同一改动补 en/zh 文案。仓库自己的 error 文本永不解析（用 `errors.Is/As`），外部输出只在调用它的适配器里按文本识别并当场转码。
 - **测试夹具必须忠实还原真实外部 API 的行为**（含默认值、错误形态、参数校验），且后端测试必须覆盖前端/上层实际会传的默认值组合；宽松的 stub 视为测试缺陷。
 - **依赖方向由 `make check-architecture` 强制**：叶子包不依赖 `store`、`api` 与 `controller` 互不依赖、`pkg` 不依赖 `internal`、agent 不依赖 server、`proto` 无本仓库依赖；另有 `scripts/arch-constraints.txt` 棘轮预算（`max` 只降不升、`min` 只升不降，上调须带 `# raised: <原因>`，由脚本对比基线强制，误报修模式不调预算，规则说明见 `scripts/arch-constraints.md`）。
 - **过程/里程碑标签（`M1`、`S0`、`G2`、`P3` 之类）禁止出现在生产代码**的标识符、注释与文件名里，由 `process_name_refs` 预算守护；测试文件不受限。
 - **内置镜像命名**：推理模板要用的内置（主推）镜像一律发布为 `gpuworks/gpuworks-runner:<backend><框架版本>[-<型号>]-<engine><版本>-rN`（文法见 `cmd/gpuworks-image-manifest` 的 `tagPattern`，如 `cuda13.0-sglang0.5.21-r2`、`metal15.0-vllm0.31.0-r1`），不另起仓库名；只有非主推的内置镜像可以单独命名。
+- **内置推理模板的镜像必须能从公网直接拉取**：模板的 `image` 与 `image_sources` 只写 Docker Hub、quay.io、华为 SWR 这类普通用户无需内网即可拉取的地址，不写 `registry.zstack.ai` 等内网仓库（发布流程会推到那里，但不进模板；内网镜像由各站点自己配拉取源规则）。由 `seed` 的 `TestBuiltinTemplateImagesArePubliclyPullable` 守护。
 - 敏感信息（云厂商 key、测试机地址等）放本地 `secrets/`（.gitignore），绝不进仓库。
 
 ## 文档与计划
@@ -74,7 +81,7 @@ make demo       # 起 server + agent，验证接入/心跳/重连
 - 关闭一个主题：把 outcome 写进 frontmatter、改 `status`，整个目录从 `work/` 原名搬进 `archive/`；独立完成的调研放 `research/<YYYY-MM-DD>-<主题>/`。
 - **计划文档的状态只写在文件自身的 YAML frontmatter 里**（`title`/`status`/`created`/`updated`/`summary`/可选一句话 `outcome`，`status: superseded` 必须带 `superseded_by`，`status: dropped` 必须带 `outcome`）；`artifacts/README.md`（work/research/archive 三张表）、`artifacts/.ignore` 与 `artifacts/plan.md` 的生成区块都由此派生，不手改。新增计划或改动状态后跑 `go run ./scripts/artifactsindex -write` 重新生成；`make check-artifacts` 守护一致性、每个主题目录的入口文件与状态约束，以及 `artifacts/...` 路径引用不失效（artifacts 内的失效引用报错，主仓库指向 artifacts 的失效引用只告警）。
 - **`docs/` 内链由 `make check-doc-links` 守护**（`scripts/doclinks`）：相对 Markdown 链接及 `#锚点` 必须指向真实文件/标题，`docs/` 下不用 `[[wiki]]` 引用（`CONTEXT.md` 除外）；图片放 `docs/assets/`，用相对路径引用；指向私有 `artifacts/` 的链接不在检查范围内。
-- **改了 `docs/` 下已有英文译本的页面，同一提交里要同步 `docs-en/` 同路径的译文**，并把该中文页新的 SHA-256 写进 `docs-site/translations.json`（标题结构与代码块须与中文一致）；`make check-translations` 守护（`make test` 包含，CI 的 docs-build 同样检查）。译本是否存在看 `docs-en/` 里有没有同路径文件。
+- **改了 `docs/` 下已有英文译本的页面，同一提交里要同步 `docs-en/` 同路径的译文**，复核后用 `python3 docs-site/check_translations.py --write docs/<路径>.md` 把该中文页新的 SHA-256 写进英文页末尾的标记注释（标题结构与代码块须与中文一致；有意本地化的代码块复核后加 `--approve-code-blocks` 登记）；`make check-translations` 守护（`make test` 包含，CI 的 docs-build 同样检查）。译本是否存在看 `docs-en/` 里有没有同路径文件。
 - `artifacts/.ignore` 列出全部 superseded/dropped 文档，`rg` 默认跳过；需要搜到它们时用 `rg --no-ignore`。
 - `todo.md` 只记真实缺陷、风险与待决策项（T 编号）；计划自带的验收流程不进 todo，未做完的写进该计划的 `outcome`。已解决的 T 项按月归档到 `artifacts/archive/todo-resolved/<YYYY-MM>.md`；已确认但决定暂不修的 T 项迁入根目录 `known-issues.md`，保留原编号与原文并加一行搁置记录，条件变化时迁回 `todo.md`。
 - 代码注释里引用设计依据，指向 `docs/` 或 ADR；docs 还没覆盖到的细节先补进 docs，不指向 `artifacts/`。

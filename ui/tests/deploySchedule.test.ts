@@ -174,7 +174,7 @@ test("a replica kept off a sleeper's card names the sleeper, its policy and what
   const reason = { code: "reserved_for_sleepers", params: { node: "gpu3", gpus: [0], sleepers: [{ deployment: "qwen3-asr", policy: "idle" }] } };
   assert.equal(
     scheduleText(i18n.getFixedT("zh", "deploy") as never, reason),
-    "gpu3 的 GPU 0 为休眠中的 qwen3-asr（闲置自动出让）保留，供请求到达时唤醒；不自动出让的部署不会放到这些卡上。可以换一张卡，为本部署开启休眠并选择能共卡的出让策略，或手动休眠占卡的部署（手动休眠的部署不保留卡）。",
+    "gpu3 的 GPU 0 为休眠中的 qwen3-asr（闲置自动出让）保留，不自动出让的部署不会放到这些卡上；请换一张卡，为本部署开启休眠并选能共卡的出让策略，或手动休眠占卡的部署。",
   );
   assert.match(scheduleText(i18n.getFixedT("en", "deploy") as never, reason), /^GPU 0 on gpu3 is kept for qwen3-asr \(Yield when idle\), asleep there/);
 });

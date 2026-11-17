@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 )
@@ -67,7 +69,7 @@ func (a *apiHandlers) installAgentOnInstance(w http.ResponseWriter, r *http.Requ
 		// Prechecks remain advisory until their rules are stable enough to gate installs.
 		precheck = provision.SSHPrecheckReport{
 			Target: req.ExternalID,
-			Checks: []provision.CheckResult{{Name: "SSH", Status: "error", Detail: precheckErr.Error()}},
+			Checks: []provision.CheckResult{provider.SSHConnectFailedCheck(req.ExternalID, precheckErr)},
 		}
 	}
 	result, err := a.d.Providers.Install(r.Context(), parseUint(chi.URLParam(r, "id")), req.ExternalID, serverURL, provider.InstallOptions{
@@ -101,18 +103,15 @@ func (a *apiHandlers) installAgentOnInstance(w http.ResponseWriter, r *http.Requ
 		writeErr(w, statusProviderFailed, err)
 		return
 	}
-	installCheck := provision.CheckResult{Name: "install agent", Status: "warn", Detail: "provider driver did not return agent process verification"}
+	installCheck := provision.SkipCheck(provision.CheckIDInstallAgent, messages.CheckAgentUnverified, "provider driver did not return agent process verification", nil)
 	for _, check := range result.InstallChecks {
-		if check.Name == "Agent process" {
-			installCheck.Status = check.Status
-			installCheck.Detail = check.Detail
+		if check.ID == provision.CheckIDAgentProcess {
+			installCheck = check
+			installCheck.ID = provision.CheckIDInstallAgent
 			break
 		}
 	}
-	checks := []provision.CheckResult{
-		{Name: "precheck", Status: summarizePrecheckStatus(precheck.Checks), Detail: summarizePrecheck(precheck.Checks)},
-		installCheck,
-	}
+	checks := []provision.CheckResult{summarizePrecheck(precheck.Checks), installCheck}
 	if result.ConnectMode == "server_dial" {
 		checks = append(checks, serverDialInstallCheck(r.Context(), result.ServerDialAddress, result.Token, a.d.ServerDialAgent))
 	} else {
@@ -132,17 +131,13 @@ func (a *apiHandlers) installAgentOnInstance(w http.ResponseWriter, r *http.Requ
 }
 
 func agentDialInstallCheck(ctx context.Context, nodeUUID string, online func(string) bool) provision.CheckResult {
-	check := provision.CheckResult{Name: "agent_dial", Status: "warn"}
-	if strings.TrimSpace(nodeUUID) == "" {
-		check.Detail = "pending node UUID is empty; waiting for the agent session"
-		return check
-	}
-	if online == nil {
-		check.Detail = "hub session status is not configured; agent started and is waiting for its first session"
-		return check
+	waiting := provision.WarnCheck(provision.CheckIDAgentDial, messages.CheckAgentSessionWaiting, "agent started; waiting for its first session", nil)
+	established := provision.PassCheck(provision.CheckIDAgentDial, messages.CheckAgentSessionEstablished, "agent session established", nil)
+	if strings.TrimSpace(nodeUUID) == "" || online == nil {
+		return provision.SkipCheck(provision.CheckIDAgentDial, messages.CheckAgentSessionUnobserved, "the server cannot observe the agent's session here", nil)
 	}
 	if online(nodeUUID) {
-		return provision.CheckResult{Name: "agent_dial", Status: "ok", Detail: "agent session established"}
+		return established
 	}
 	timer := time.NewTimer(3 * time.Second)
 	defer timer.Stop()
@@ -151,52 +146,46 @@ func agentDialInstallCheck(ctx context.Context, nodeUUID string, online func(str
 	for {
 		select {
 		case <-ctx.Done():
-			check.Detail = "agent session not established: " + ctx.Err().Error()
-			return check
+			return waiting.WithEvidence(ctx.Err().Error())
 		case <-timer.C:
-			check.Detail = "agent started; waiting for its first session"
-			return check
+			return waiting
 		case <-ticker.C:
 			if online(nodeUUID) {
-				return provision.CheckResult{Name: "agent_dial", Status: "ok", Detail: "agent session established"}
+				return established
 			}
 		}
 	}
 }
 
-func summarizePrecheckStatus(checks []provision.CheckResult) string {
-	status := "ok"
-	for _, check := range checks {
-		if check.Status == "error" {
-			return "error"
-		}
-		if check.Status == "warn" {
-			status = "warn"
-		}
-	}
-	return status
-}
-
-// summarizePrecheck is the one-line detail of the "precheck" row. It names only
-// the items that are not ok, so a warning is not buried among a dozen passing
-// ones; every item, ok ones included, is in the response's precheck_details.
-func summarizePrecheck(checks []provision.CheckResult) string {
+// summarizePrecheck is the one "precheck" row of an install: the worst status
+// of its items, and the ids of those that need attention, so a warning is
+// not buried among a dozen passing ones; every item, passing ones included,
+// is in the response's precheck_details.
+func summarizePrecheck(checks []provision.CheckResult) provision.CheckResult {
 	if len(checks) == 0 {
-		return "provider precheck completed"
+		return provision.SkipCheck(provision.CheckIDPrecheck, messages.CheckPrecheckEmpty, "the provider precheck reported no items", nil)
 	}
-	var parts []string
+	var ids, parts, evidence []string
 	for _, check := range checks {
-		if check.Status == "ok" {
+		if check.Status == proto.CheckPass || check.Status == proto.CheckNA {
 			continue
 		}
-		if detail := strings.TrimSpace(check.Detail); detail != "" {
-			parts = append(parts, check.Name+": "+detail)
+		ids = append(ids, check.ID)
+		if message := strings.TrimSpace(check.Message); message != "" {
+			parts = append(parts, check.ID+": "+message)
 		} else {
-			parts = append(parts, check.Name)
+			parts = append(parts, check.ID)
+		}
+		if check.Evidence != "" {
+			evidence = append(evidence, check.ID+": "+check.Evidence)
 		}
 	}
-	if len(parts) == 0 {
-		return fmt.Sprintf("all %d checks passed", len(checks))
+	status := provision.WorstStatus(checks)
+	if len(ids) == 0 {
+		return provision.PassCheck(provision.CheckIDPrecheck, messages.CheckPrecheckPassed, fmt.Sprintf("all %d checks passed", len(checks)), map[string]any{"total": len(checks)})
 	}
-	return strings.Join(parts, "; ")
+	summary := provision.WarnCheck(provision.CheckIDPrecheck, messages.CheckPrecheckAttention, strings.Join(parts, "; "),
+		map[string]any{"count": len(ids), "total": len(checks), "checks": strings.Join(ids, ", ")})
+	summary.Status = status
+	return summary.WithEvidence(strings.Join(evidence, "\n"))
 }

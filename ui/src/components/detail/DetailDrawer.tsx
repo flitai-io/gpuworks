@@ -4,8 +4,6 @@ import { Tabs, TabsList, TabItem, TabPanel } from "../ui/tabs";
 import type { TableProps } from "antd";
 import { useEffect, useState, type ReactNode } from "react";
 
-// As wide as the deployment drawer: room for a detail's tables without
-// scrolling sideways, never wider than the window less a margin.
 export const DETAIL_DRAWER_WIDTH = "min(720px, calc(100vw - 32px))";
 
 export type DetailTab = {
@@ -28,6 +26,8 @@ export default function DetailDrawer({
   onClose,
   title,
   subtitle,
+  width = DETAIL_DRAWER_WIDTH,
+  deferEscapeToModal,
   extra,
   banner,
   tabs,
@@ -40,6 +40,8 @@ export default function DetailDrawer({
   onClose: () => void;
   title: ReactNode;
   subtitle?: ReactNode;
+  width?: string;
+  deferEscapeToModal?: boolean;
   extra?: ReactNode;
   banner?: ReactNode;
   tabs?: DetailTab[];
@@ -60,15 +62,15 @@ export default function DetailDrawer({
   };
   return (
     <SideDrawer title={title}
-      open={open} onClose={onClose} width={DETAIL_DRAWER_WIDTH} className={className}
-      subtitle={subtitle} extra={extra}>
+      open={open} onClose={onClose} width={width} className={className} deferEscapeToModal={deferEscapeToModal}
+      subtitle={subtitle} inlineSubtitle extra={extra}>
       {banner}
       {tabs && <Tabs className="detail-tabs" value={activeTab} defaultValue={tabs[0]?.key} onValueChange={changeTab} variant="underline">
-        <TabsList className="sticky top-0 z-10 bg-surface-overlay">
+        <TabsList className="sticky top-0 z-10 bg-surface-overlay my-0 mx-0 px-0 max-w-full">
           {tabs.map((tab) => <TabItem key={tab.key} value={tab.key} label={tab.label}
             badge={tab.count == null ? undefined : <span title={tab.countTitle}>{tab.count}</span>} />)}
         </TabsList>
-        {/* Zeron's tab list overhangs 4px below itself; the panel starts 16px under the tabs, as antd's did. */}
+        {/* Zeron's list overhangs 4px on every side; keep it inside the body (no sideways scroll) and start panels one block gap below. */}
         {tabs.map((tab) => <TabPanel key={tab.key} value={tab.key} keepMounted={visited.has(tab.key)} className="pt-4">{tab.children}</TabPanel>)}
       </Tabs>}
       {children}

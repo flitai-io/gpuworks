@@ -111,6 +111,7 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 - [Choosing Between dGPU, Sleep/Wake, Multi-Node Inference, Replicas, and PD](explanation/choosing-features.md)
 - [Scheduling and GPU Memory Estimation](explanation/scheduling-and-estimation.md)
 - [Yield Policy: How Deployments Share a Set of GPUs](explanation/service-levels.md)
+- [Request Priority](explanation/request-priority.md)
 - [Deployment Launch Configuration Semantics](explanation/launch-config.md)
 - [SGLang Log Injection: Behavior and Boundaries](explanation/sglang-logging.md)
 - [dGPU Semantics and Boundaries](explanation/dgpu.md)
@@ -146,3 +147,5 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
   `go run ./scripts/artifactsindex -write`; do not edit them manually.
 - Do not use M numbers or relative paths outside the repository in current documentation. External research repository paths in historical logs are retained only as source references.
 - `CLAUDE.md` is the sole authority for development conventions; `CONTEXT.md` is the complete glossary. Guides in this directory only expand on procedures and link to those files.
+
+<!-- translation-source-sha256: 39243e344d2c7f1def2012b7394eff3853657f3708a0775becc7de85dab23e33 -->

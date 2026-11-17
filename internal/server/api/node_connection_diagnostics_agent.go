@@ -50,7 +50,7 @@ func (a *apiHandlers) nodeConnectionAgentReport(ctx context.Context, node *store
 			check.Outcome = "cancelled"
 		case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
 			check.Outcome = "timeout"
-		case strings.TrimSpace(err.Error()) == "unknown rpc method: "+proto.RPCNodeConnectionDiagnostics:
+		case errors.Is(err, proto.ErrRPCUnknownMethod):
 			check.Outcome = "unsupported"
 		}
 		return check, true

@@ -48,7 +48,7 @@ func TestSelectInstanceRoutesAroundAnInstanceOrderedToSleep(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 6 {
-		_, tgt, status, msg, _ := p.selectDeploymentInstance("replicated")
+		_, tgt, status, msg, _ := p.selectStatus("replicated")
 		if status != 0 || tgt.instanceUUID != "replica-b" {
 			t.Fatalf("with replica-a ordered to sleep selection = %d %q -> %q, want replica-b", status, msg, tgt.instanceUUID)
 		}
@@ -57,7 +57,7 @@ func TestSelectInstanceRoutesAroundAnInstanceOrderedToSleep(t *testing.T) {
 	if err := st.OrderInstancesSleep(dep.ID, []string{"replica-b"}, 1, proto.SleepModeWait); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, status, msg, asleep := p.selectDeploymentInstance("replicated"); status != http.StatusServiceUnavailable || !asleep {
+	if _, _, status, msg, asleep := p.selectStatus("replicated"); status != http.StatusServiceUnavailable || !asleep {
 		t.Fatalf("every replica ordered to sleep = %d %q asleep=%v, want 503 asleep", status, msg, asleep)
 	}
 	// replica-a slept; waking it is routable once it reports awake.
@@ -67,13 +67,13 @@ func TestSelectInstanceRoutesAroundAnInstanceOrderedToSleep(t *testing.T) {
 	if err := st.OrderInstancesSleep(dep.ID, []string{"replica-a"}, 0, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, status, _, asleep := p.selectDeploymentInstance("replicated"); status != http.StatusServiceUnavailable || !asleep {
+	if _, _, status, _, asleep := p.selectStatus("replicated"); status != http.StatusServiceUnavailable || !asleep {
 		t.Fatalf("a wake not yet reported was routed: %d asleep=%v", status, asleep)
 	}
 	if err := st.UpdateInstanceStatus(proto.InstanceStatus{UUID: "replica-a", State: proto.InstRunning, SleepLevel: 0, Phase: proto.PhaseSleep}); err != nil {
 		t.Fatal(err)
 	}
-	_, tgt, status, msg, _ := p.selectDeploymentInstance("replicated")
+	_, tgt, status, msg, _ := p.selectStatus("replicated")
 	if status != 0 || tgt.instanceUUID != "replica-a" {
 		t.Fatalf("woken replica selection = %d %q -> %q, want replica-a", status, msg, tgt.instanceUUID)
 	}
@@ -177,7 +177,7 @@ func TestDistributedSelectionPicksAmongCompleteReplicas(t *testing.T) {
 	p := New(st, storeNetworks(st), readinessTestHub{online: online}, nil, 0)
 	t.Cleanup(p.Close)
 	for i := 0; i < 4; i++ {
-		_, tgt, status, message, _ := p.selectDeploymentInstance("qwen-replicas")
+		_, tgt, status, message, _ := p.selectStatus("qwen-replicas")
 		if status != 0 || tgt.instanceUUID != "g2-leader" {
 			t.Fatalf("with g1 incomplete: target=%+v status=%d message=%q", tgt, status, message)
 		}
@@ -189,7 +189,7 @@ func TestDistributedSelectionPicksAmongCompleteReplicas(t *testing.T) {
 	seen := map[string]bool{}
 	var held []*lease
 	for i := 0; i < 4; i++ {
-		_, tgt, status, message, _ := p.selectDeploymentInstance("qwen-replicas")
+		_, tgt, status, message, _ := p.selectStatus("qwen-replicas")
 		if status != 0 {
 			t.Fatalf("both complete: status=%d message=%q", status, message)
 		}
@@ -206,7 +206,7 @@ func TestDistributedSelectionPicksAmongCompleteReplicas(t *testing.T) {
 	// generation cannot answer, so everything goes to g1.
 	online["r-d"] = false
 	for i := 0; i < 4; i++ {
-		_, tgt, status, message, _ := p.selectDeploymentInstance("qwen-replicas")
+		_, tgt, status, message, _ := p.selectStatus("qwen-replicas")
 		if status != 0 || tgt.instanceUUID != "g1-leader" {
 			t.Fatalf("with g2's follower node offline: target=%+v status=%d message=%q", tgt, status, message)
 		}
@@ -250,7 +250,7 @@ func TestAMultiNodeReplicaIsAsleepOnlyWhenItsLeaderIs(t *testing.T) {
 	}
 	p := New(st, storeNetworks(st), readinessTestHub{online: map[string]bool{"leader-asleep-a": true, "leader-asleep-b": true}}, nil, 0)
 	t.Cleanup(p.Close)
-	_, tgt, status, msg, asleep := p.selectDeploymentInstance("leader-asleep")
+	_, tgt, status, msg, asleep := p.selectStatus("leader-asleep")
 	if status != 0 || tgt.instanceUUID != "la-leader" || asleep {
 		t.Fatalf("selection = %d %q -> %q asleep=%v, want the awake leader", status, msg, tgt.instanceUUID, asleep)
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -15,23 +16,100 @@ import (
 
 // ---- instances ----
 
+// instanceListStates are the states GET /instances can be filtered by: an
+// instance's own state.
+var instanceListStates = []string{
+	proto.InstPending, proto.InstPulling, proto.InstStarting, proto.InstOptimizing, proto.InstRunning,
+	proto.InstDraining, proto.InstRemoving, proto.InstStopped, proto.InstFailed, proto.InstPendingRemoval,
+}
+
+// listInstances answers GET /instances, newest first, filtered by q (a
+// substring of the instance UUID, its deployment's name or its node's name)
+// and state (the instance's own states, comma separated; an unknown one is
+// refused). With page or page_size it returns one dto.ListPage of the
+// matches; without them, every match. Either way only the rows returned are
+// turned into DTOs.
 func (a *apiHandlers) listInstances(w http.ResponseWriter, r *http.Request) {
-	insts, err := a.d.Store.ListInstances()
+	query, err := parseListQuery(r, instanceListStates)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	rows, _, insts, err := a.listRows()
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	deps, err := a.d.Store.ListDeployments()
+	matched := insts
+	if query.search != "" || len(query.states) > 0 {
+		matched = make([]store.Instance, 0, len(insts))
+		for i := range insts {
+			if instanceMatches(rows, &insts[i], query) {
+				matched = append(matched, insts[i])
+			}
+		}
+	}
+	shown := matched
+	if query.paged {
+		start, end := query.window(len(matched))
+		shown = matched[start:end]
+	}
+	pageRows, shown, err := freshInstances(rows, shown)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	rows, err := deployment.NewListRows(a.d.Store, a.d.Preparation, deps, insts)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
+	if !query.paged {
+		writeJSON(w, http.StatusOK, dto.NewList(a.instanceDTOs(pageRows, shown)))
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.NewList(a.instanceDTOs(rows, insts)))
+	page := pageOf(matched, query, func([]store.Instance) []dto.Instance { return a.instanceDTOs(pageRows, shown) })
+	writeJSON(w, http.StatusOK, page)
+}
+
+// freshInstances reads the shown instances and their deployments' other
+// instances again (ListRows.Fresh): which instances match, and their order,
+// come from the list as a whole, what they show is current. An instance gone
+// since keeps the row the list read.
+func freshInstances(rows *deployment.ListRows, shown []store.Instance) (*deployment.ListRows, []store.Instance, error) {
+	seen := map[uint]bool{}
+	var ids []uint
+	for i := range shown {
+		if id := shown[i].DeploymentID; !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	fresh, err := rows.Fresh(ids)
+	if err != nil || fresh == rows {
+		return fresh, shown, err
+	}
+	out := make([]store.Instance, len(shown))
+	for i := range shown {
+		out[i] = shown[i]
+		for _, inst := range fresh.Instances(shown[i].DeploymentID) {
+			if inst.ID == shown[i].ID {
+				out[i] = inst
+				break
+			}
+		}
+	}
+	return fresh, out, nil
+}
+
+// instanceMatches applies a list query's filters to one instance.
+func instanceMatches(rows deployment.Rows, in *store.Instance, query listQuery) bool {
+	if !query.matchesState(in.State) {
+		return false
+	}
+	deploymentName, nodeName := "", ""
+	if dep := rows.Deployment(in.DeploymentID); dep != nil {
+		deploymentName = dep.Name
+	}
+	if node := rows.Node(in.NodeID); node != nil {
+		nodeName = nodeDisplayName(node)
+	}
+	return query.matchesSearch(in.UUID, deploymentName, nodeName)
 }
 
 func (a *apiHandlers) getInstance(w http.ResponseWriter, r *http.Request) {
@@ -133,6 +211,7 @@ func instanceEventDTOs(evs []store.InstanceEvent) []dto.InstanceEvent {
 			// have no params, and their Data is the only thing that describes
 			// them, so it is still sent.
 			raw = ""
+			eventRuntimeFailure(params)
 		}
 		out = append(out, dto.InstanceEvent{
 			ID: e.ID, Kind: e.Kind, Code: e.Code, Params: params, Message: e.Message, Data: raw, CreatedAt: utcTime(e.CreatedAt),

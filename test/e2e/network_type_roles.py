@@ -45,13 +45,16 @@ def form(page, t, editing=False):
 
 
 def type_control(dialog, t, kind):
-    return dialog.get_by_role('radio', name=t['type'][kind], exact=True)
+    return dialog.get_by_role('tab', name=t['type'][kind], exact=True)
+
+
+def expect_type(control, selected=True):
+    expect(control).to_have_attribute('aria-selected', 'true' if selected else 'false')
 
 
 def choose_type(dialog, t, kind):
-    # AntD button radios visually expose their label; native input has no box.
-    dialog.get_by_text(t['type'][kind], exact=True).click()
-    expect(type_control(dialog, t, kind)).to_be_checked()
+    type_control(dialog, t, kind).click()
+    expect_type(type_control(dialog, t, kind))
 
 
 def role_control(dialog, t, role):
@@ -64,7 +67,7 @@ def exercise_create_dialog(page, create, t, evidence):
         assert_dialog_shell, assert_nested_dismissals, cancel_button, close_button, escape, mask)
 
     title = t['form']['createTitle']
-    parent = page.get_by_role('heading', name=t['title'], exact=True)
+    parent = page.locator('h1').filter(has_text=t['title'])
     writes = []
 
     def on_request(request):
@@ -79,7 +82,7 @@ def exercise_create_dialog(page, create, t, evidence):
 
     page.on('request', on_request)
     dialog = open_dialog()
-    assert_dialog_shell(page, dialog, dialog.get_by_label(t['form']['name'], exact=True),
+    assert_dialog_shell(page, dialog, dialog.get_by_role('textbox', name=t['form']['name'], exact=True),
                         button(dialog, t['actions']['save']))
     dialog = assert_nested_dismissals(
         dialog, parent, open_dialog,
@@ -102,7 +105,7 @@ def open_create(page, server, t, evidence):
 
 def delete_owned(page, server, t, path, name, baseline, evidence):
     button(page.get_by_role('dialog'), t['actions']['delete']).click()
-    popup = page.get_by_role('tooltip').filter(has_text=t['actions']['confirmDelete'].replace('{{name}}', name))
+    popup = page.get_by_role('dialog').filter(has_text=t['actions']['confirmDelete'].replace('{{name}}', name))
     expect(popup).to_be_in_viewport(ratio=1)
     result = mutate(page, button(popup, t['actions']['delete']).click, 'DELETE', path, None, 200, evidence)
     check(result == {'status': 'deleted'}, 'delete envelope differs')
@@ -144,9 +147,9 @@ def _overlaps(a, b):
 
 def exercise_create_keyboard(page, dialog, t):
     """Tab reaches the next field. Enter on an empty name shows the name error and does not create."""
-    name = dialog.get_by_label(t["form"]["name"], exact=True)
+    name = dialog.get_by_role("textbox", name=t["form"]["name"], exact=True)
     description = dialog.get_by_label(t["form"]["description"], exact=True)
-    footer = dialog.locator(".ant-modal-footer")
+    footer = dialog.locator('[data-slot="dialog-footer"]')
     save = button(footer, t["actions"]["save"])
     cancel = button(footer, t["actions"]["cancel"])
     expect(name).to_have_value("")
@@ -177,7 +180,7 @@ def exercise_create_keyboard(page, dialog, t):
 
 def exercise_network_required(page, dialog, t):
     """Name rejects empty and whitespace. Roles reject an empty selection. No create."""
-    name = dialog.get_by_label(t["form"]["name"], exact=True)
+    name = dialog.get_by_role("textbox", name=t["form"]["name"], exact=True)
     save = button(dialog, t["actions"]["save"])
 
     def save_posts():
@@ -221,9 +224,10 @@ def exercise_create_inflight(page, dialog, t, name, roles, body, bad_http, conso
 
     page.route("**" + PREFIX, hold_create)
     button(dialog, t["actions"]["save"]).click()
-    inflight = dialog.locator(".ant-modal-footer button.ant-btn-primary")
-    expect(inflight).to_have_class(re.compile(r"\bant-btn-loading\b"))
-    inflight.click()
+    inflight = button(dialog, t["actions"]["save"])
+    expect(inflight).to_be_disabled()
+    expect(inflight.locator("svg")).to_be_visible()
+    inflight.evaluate("element => element.click()")
     check(len(held) == 1, "duplicate create while the first request is held")
     check(held[0].request.post_data_json == body, "held create body differs")
     with page.expect_response(lambda r: urlsplit(r.url).path == PREFIX and r.request.method == "POST") as failed:
@@ -231,7 +235,7 @@ def exercise_create_inflight(page, dialog, t, name, roles, body, bad_http, conso
     page.unroute("**" + PREFIX, hold_create)
     check(failed.value.status == 502, "forced create failure did not surface")
     expect(dialog).to_be_visible()
-    expect(dialog.get_by_label(t["form"]["name"], exact=True)).to_have_value(name)
+    expect(dialog.get_by_role("textbox", name=t["form"]["name"], exact=True)).to_have_value(name)
     for role in roles:
         expect(role_control(dialog, t, role)).to_be_checked()
     expect(page.get_by_text(reason)).to_be_visible()
@@ -250,12 +254,14 @@ def exercise_minimum_network(page, server, t, name, network_id, result):
     resolved_title = t['detail']['resolved'].replace('{{count}}', '0')
     resolved = page.get_by_role('dialog')
     expect(resolved.get_by_role('heading', name=resolved_title, exact=True)).to_be_visible()
-    table = resolved.locator('.ant-table')
+    table = resolved.locator('.resource-table')
     expect(table).to_have_count(1)
-    expect(table).to_have_class(re.compile(r'\bant-table-small\b'))
+    expect(table.locator('table')).to_have_count(1)
+    expect(table.locator('thead')).to_have_css('height', '36px')
     attach = button(page, t['actions']['attach'])
     expect(attach).to_have_count(1)
-    expect(attach).to_have_class(re.compile(r'\bant-btn-sm\b'))
+    expect(attach).to_be_visible()
+    expect(attach).to_have_css('height', '28px')
     cidr = resolved.get_by_role('rowheader', name=t['selector']['cidr'], exact=True).locator('..')
     interface = resolved.get_by_role('rowheader', name=t['selector']['interface'], exact=True).locator('..')
     expect(cidr).to_have_count(1)
@@ -264,9 +270,6 @@ def exercise_minimum_network(page, server, t, name, network_id, result):
     expect(interface).to_contain_text('—')
     expect(page.get_by_text(t['detail']['noAttachments'], exact=True)).to_be_visible()
     result['last_step'] = 'selector-table'
-    descriptions = table
-    expect(descriptions).to_have_count(1)
-    expect(descriptions).to_have_class(re.compile(r'\bant-table-small\b'))
     page.goto(server.base + '/networks')
     expect(page.get_by_role('heading', name=t['title'], exact=True)).to_be_visible()
     row = page.get_by_role('row').filter(has_text=name)
@@ -278,11 +281,11 @@ def exercise_minimum_network(page, server, t, name, network_id, result):
     expect(edit).to_have_class(re.compile(r'\bant-btn-text\b'))
     edit.click()
     editing = form(page, t, True)
-    expect(editing.get_by_label(t['form']['name'], exact=True)).to_have_value(name)
+    expect(editing.get_by_role('textbox', name=t['form']['name'], exact=True)).to_have_value(name)
     expect(editing.get_by_label(t['form']['description'], exact=True)).to_have_value('')
     expect(editing.get_by_label(t['form']['cidr'], exact=True)).to_have_value('')
     expect(editing.get_by_label(t['form']['interface'], exact=True)).to_have_value('')
-    expect(type_control(editing, t, 'host_ethernet')).to_be_checked()
+    expect_type(type_control(editing, t, 'host_ethernet'))
     expect(role_control(editing, t, 'compute')).to_be_checked()
     expect(role_control(editing, t, 'storage_sync')).not_to_be_checked()
     expect(role_control(editing, t, 'serving')).not_to_be_checked()
@@ -301,8 +304,8 @@ def exercise_minimum_network(page, server, t, name, network_id, result):
         'edit_button_text': True,
         'edit_backfill': True,
         'edit_password_fields': 0,
-        'resolved_table_small': True,
-        'selector_table_small': True,
+        'resolved_table_header_36': True,
+        'selector_descriptions': True,
     }
 
 
@@ -322,8 +325,8 @@ def exercise_full_optional(page, server, t, name, evidence):
     button(page, t['actions']['create']).click()
     dialog = form(page, t)
     expect(dialog).to_be_visible()
-    expect(type_control(dialog, t, 'host_ethernet')).to_be_checked()
-    dialog.get_by_label(t['form']['name'], exact=True).fill(full_name)
+    expect_type(type_control(dialog, t, 'host_ethernet'))
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(full_name)
     dialog.get_by_label(t['form']['description'], exact=True).fill(body['description'])
     dialog.get_by_label(t['form']['cidr'], exact=True).fill(body['cidr'])
     dialog.get_by_label(t['form']['interface'], exact=True).fill(body['interface'])
@@ -338,7 +341,7 @@ def exercise_full_optional(page, server, t, name, evidence):
     expect(page.get_by_text(body['cidr'], exact=True).first).to_be_visible()
     expect(page.get_by_text(body['interface'], exact=True).first).to_be_visible()
     button(page.get_by_role('dialog'), t['actions']['delete']).click()
-    popup = page.get_by_role('tooltip').filter(has_text=t['actions']['confirmDelete'].replace('{{name}}', full_name))
+    popup = page.get_by_role('dialog').filter(has_text=t['actions']['confirmDelete'].replace('{{name}}', full_name))
     expect(popup).to_be_in_viewport(ratio=1)
     deleted = mutate(page, button(popup, t['actions']['delete']).click, 'DELETE', path, None, 200, evidence)
     check(deleted == {'status': 'deleted'}, 'full network delete envelope differs')
@@ -362,17 +365,17 @@ def exercise_role_tooltip(page, dialog, t):
     span = dialog.get_by_label(f'{label}: {reason}', exact=True)
     expect(span).to_be_visible()
     span.hover()
-    tip = page.locator('.ant-tooltip')
+    tip = page.get_by_role('tooltip')
     expect(tip).to_have_count(1, timeout=12000)
     expect(tip).to_be_visible()
     expect(tip).to_contain_text(reason)
     choose_type(dialog, t, 'host_ethernet')
-    dialog.get_by_label(t['form']['name'], exact=True).focus()
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).focus()
     for role in ROLES:
         box = role_control(dialog, t, role)
         expect(box).to_be_enabled()
         expect(box).not_to_be_checked()
-    expect(type_control(dialog, t, 'host_ethernet')).to_be_checked()
+    expect_type(type_control(dialog, t, 'host_ethernet'))
     return {'tooltips': 1, 'reason': True, 'restored_type': 'host_ethernet'}
 
 
@@ -384,12 +387,12 @@ def exercise_network_edit_conflict(page, dialog, server, t, path, body, events, 
     check(written.status == 200, f'the other network session was rejected: HTTP {written.status}')
     persisted(page, server.base, path, other, evidence)
     expect(dialog.get_by_label(t['form']['description'], exact=True)).to_have_value('')
-    expect(dialog.get_by_label(t['form']['name'], exact=True)).to_have_value(body['name'])
-    expect(type_control(dialog, t, body['type'])).to_be_checked()
+    expect(dialog.get_by_role('textbox', name=t['form']['name'], exact=True)).to_have_value(body['name'])
+    expect_type(type_control(dialog, t, body['type']))
     expect(role_control(dialog, t, 'storage_sync')).to_be_checked()
     expect(role_control(dialog, t, 'compute')).not_to_be_checked()
     expect(role_control(dialog, t, 'serving')).not_to_be_checked()
-    check(dialog.locator('.ant-alert-error').count() == 0, 'the edit dialog shows a conflict')
+    check(dialog.locator('[data-slot="alert"][data-status="danger"]').count() == 0, 'the edit dialog shows a conflict')
     check(events == [{'method': 'POST', 'path': PREFIX}] * posts, 'the other network session was counted as a page save')
     mutate(page, button(dialog, t['actions']['save']).click, 'PUT', path, body, 200, evidence)
     expect(dialog).not_to_be_visible()
@@ -415,8 +418,8 @@ def test_type_role_combination(page, server, result, locale, key, baseline, bad_
     from network_create_inventory import exercise_network_create_inventory
     result["create_inventory"] = exercise_network_create_inventory(dialog, t)
     evidence.append({"layer": "ui", "create_inventory": result["create_inventory"]})
-    expect(type_control(dialog, t, TYPES[0])).to_be_checked()
-    expect(dialog.get_by_role('radio')).to_have_count(4)
+    expect_type(type_control(dialog, t, TYPES[0]))
+    expect(dialog.get_by_role('tab')).to_have_count(4)
     expect(dialog.get_by_role('checkbox')).to_have_count(3)
     for role in ROLES:
         expect(role_control(dialog, t, role)).not_to_be_checked()
@@ -426,7 +429,7 @@ def test_type_role_combination(page, server, result, locale, key, baseline, bad_
         result["create_keyboard"] = exercise_create_keyboard(page, dialog, t)
         result["last_step"] = "create-keyboard"
     choose_type(dialog, t, kind)
-    expect(type_control(dialog, t, kind)).to_be_checked()
+    expect_type(type_control(dialog, t, kind))
     for role in ROLES:
         control = role_control(dialog, t, role)
         if role in TYPE_ROLES[kind]:
@@ -437,17 +440,17 @@ def test_type_role_combination(page, server, result, locale, key, baseline, bad_
             control.click()
             expect(control).to_be_checked()
     name = 'e2e-' + result['run_id'] + '-' + str(CASES.index(key))
-    dialog.get_by_label(t['form']['name'], exact=True).fill(name)
+    dialog.get_by_role('textbox', name=t['form']['name'], exact=True).fill(name)
     if kind != 'host_ethernet':
         expect(dialog.get_by_label(t['form']['interface'], exact=True)).to_have_count(0)
         expect(dialog.get_by_label(t['form']['bootstrapCidr'], exact=True)).not_to_be_visible()
         expect(dialog.get_by_role('button').filter(has_text=t['form']['advanced'])).to_have_attribute('aria-expanded', 'false')
     body = {'name': name, 'description': '', 'roles': roles, 'type': kind, 'cidr': '', 'interface': ''}
     if key == 'host_ethernet--compute':
-        check(not _posts(page, lambda: dialog.get_by_label(t['form']['name'], exact=True).press('Enter')),
+        check(not _posts(page, lambda: dialog.get_by_role('textbox', name=t['form']['name'], exact=True).press('Enter')),
               'Enter on the minimum form sent a network create')
         expect(dialog).to_be_visible()
-        expect(dialog.get_by_label(t['form']['name'], exact=True)).to_have_value(name)
+        expect(dialog.get_by_role('textbox', name=t['form']['name'], exact=True)).to_have_value(name)
         expect(role_control(dialog, t, 'compute')).to_be_checked()
         result['create_keyboard']['enter_on_minimum'] = False
     if key == 'host_ethernet--storage_sync':
@@ -464,7 +467,7 @@ def test_type_role_combination(page, server, result, locale, key, baseline, bad_
         result['last_step'] = 'minimum-create'
     button(page.get_by_role('dialog'), t['actions']['edit']).click()
     dialog = form(page, t, True)
-    expect(type_control(dialog, t, kind)).to_be_checked()
+    expect_type(type_control(dialog, t, kind))
     for role in ROLES:
         expect(role_control(dialog, t, role)).to_be_checked(checked=role in roles)
         if role in TYPE_ROLES[kind]:
@@ -643,7 +646,7 @@ def test_type_transition(page, server, result, locale, key, baseline):
     body = {'name': name, 'description': 'type transition', 'type': 'host_ethernet', 'roles': ROLES, 'cidr': '10.77.0.0/16', 'interface': 'ens*'}
     dialog = open_create(page, server, t, evidence)
     for field in ['name', 'description', 'cidr', 'interface']:
-        dialog.get_by_label(t['form'][field], exact=True).fill(body[field])
+        dialog.get_by_role('textbox', name=t['form'][field], exact=True).fill(body[field])
     for role in ROLES:
         role_control(dialog, t, role).click()
     created = mutate(page, button(dialog, t['actions']['save']).click, 'POST', PREFIX, body, 201, evidence)
@@ -683,7 +686,7 @@ def test_type_transition(page, server, result, locale, key, baseline):
     page.reload()
     button(page.get_by_role('dialog'), t['actions']['edit']).click()
     dialog = form(page, t, True)
-    expect(type_control(dialog, t, target)).to_be_checked()
+    expect_type(type_control(dialog, t, target))
     expect(dialog.get_by_role('button').filter(has_text=t['form']['advanced'])).to_have_attribute('aria-expanded', 'true')
     expect(dialog.get_by_label(t['form']['bootstrapCidr'], exact=True)).to_have_value(body['cidr'])
     for role in ROLES:
@@ -697,7 +700,7 @@ def test_type_transition(page, server, result, locale, key, baseline):
     page.reload()
     button(page.get_by_role('dialog'), t['actions']['edit']).click()
     dialog = form(page, t, True)
-    expect(type_control(dialog, t, 'host_ethernet')).to_be_checked()
+    expect_type(type_control(dialog, t, 'host_ethernet'))
     expect(dialog.get_by_label(t['form']['interface'], exact=True)).to_have_value('')
     expect(dialog.get_by_label(t['form']['cidr'], exact=True)).to_have_value(body['cidr'])
     for role in ROLES:

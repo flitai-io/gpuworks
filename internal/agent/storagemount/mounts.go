@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -171,13 +172,13 @@ func mountFailure(res mountResult, timeout time.Duration) (reason, message strin
 	if res.timedOut {
 		return ReasonUnreachable, fmt.Sprintf("mount did not finish within %s", timeout)
 	}
-	if res.err != nil {
-		reason = ClassifyMountError(text + "\n" + res.err.Error())
-		if strings.TrimSpace(text) == "" {
-			text = res.err.Error()
-		}
-	} else {
-		reason = ClassifyMountError(text)
+	reason = ClassifyMountError(text)
+	if errors.Is(res.err, exec.ErrNotFound) {
+		// No mount helper at all: exec could not find the program.
+		reason = ReasonMissingClient
+	}
+	if res.err != nil && strings.TrimSpace(text) == "" {
+		text = res.err.Error()
 	}
 	return reason, "mount failed: " + truncate(strings.TrimSpace(text), 400)
 }

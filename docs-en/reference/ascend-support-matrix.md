@@ -1,6 +1,6 @@
 # Ascend Support Matrix
 
-Updated: 2026-11-02. This document distinguishes three things that are easy to confuse:
+Updated: 2026-11-13. This document distinguishes three things that are easy to confuse:
 
 - **Outer CANN**: the toolkit provided by the node or rented cloud marketplace image. Self-owned bare-metal machines may have only a driver, recorded as `driver-only`; this does not mean that no container runtime is available.
 - **Inner CANN**: the CANN userspace application binary interface (userspace ABI) in the workload image launched by GPUWorks. It affects whether the workload image can run, but does not participate in `libvruntime.so` asset selection.
@@ -10,9 +10,9 @@ Updated: 2026-11-02. This document distinguishes three things that are easy to c
 
 | Environment | Architecture / NPU | Outer CANN | Inner CANN / Runtime | Highest Level Passed | Conclusion |
 |---|---|---:|---|---|---|
-| Gitee x86_64 | x86_64 / 910B2C | 9.0 | 9.0 / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported; test explicitly asserts `runtime_driver=udocker` |
+| Gitee x86_64 | x86_64 / 910B2C | 9.0 | 9.1 (`gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2`) / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported (2026-11-13); test explicitly asserts `runtime_driver=udocker`; passed earlier with inner 9.0 |
 | Gitee x86_64 | x86_64 / 910B2C | 8.5.1 | 8.5 / udocker | Platform deployment reaches healthy; dGPU capability probe correctly reports cloud-side denial | Outer 8.5 + inner 8.5 can start; successful chat evidence reproducible in CI is still missing |
-| Gitee ARM | arm64 / 910B1 | 9.0 | 9.0 / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported; actually prefetches arm64 manifest/layers |
+| Gitee ARM | arm64 / 910B2 | 9.0 | 9.1 (`gpuworks/gpuworks-runner:cann9.1-910b-vllm0.26.0rc1-r2`) / udocker | Platform full-GPU deployment + `/v1/chat/completions` | Supported (2026-11-13); actually prefetches arm64 manifest/layers. This host type ships its shared device nodes as `root:root 0600`; the agent hands them to the `gpuworks-runtime` group and runs the workload as non-root. It previously passed on the 910B1 with an inner 9.0 image; Gitee no longer offers the 910B1 |
 | Gitee ARM | arm64 / 910B1 | 9.0 | 8.5 / udocker | Container starts as far as CANN FE | Failed with the old PRoot because `platform_config` realpath resolution failed. ARM64 `faccessat2` is now fixed; this cloud combination has not yet been retested |
 | Gitee ARM catalog entry | arm64 / 910B1 | 8.5 | Inner environment not reached | Rental prerequisite validation | The cloud marketplace actually returns “image and host do not match,” so this cannot serve as a CI fixture; this does not establish incompatibility between outer 8.5 and inner 8.5 |
 | Self-owned pool Docker member | arm64 / 910B4 | 9.0/driver | 9.0 / Docker | Platform API dGPU with two replicas on one card, real inference/chat, overcommit rejection, full-GPU chat | Supported; complete primary acceptance for platform dGPU |
@@ -102,7 +102,7 @@ The GLM-5.3-Flash Docker result applies only to the pinned rc2 A3 image under na
 
 Shared Ascend container device nodes (`davinci_manager`, `devmm_svm`, `hisi_hdc`, `ummu` and `uburma`) are passed through only when present on the host; every selected `/dev/davinciN` must be passed to the container. Multi-node specs do not hardcode interface names. The agent discovers the interface from the node's advertised IP and fills the collective-communication variables, while explicit settings retain precedence.
 
-Nodes with host CANN check each die by creating an ACL context and allocating 4 KiB. Only failure explicitly attributable to that die marks it `runtime_unusable`. A driver-only node without `libascendcl.so` skips the check rather than treating a missing tool as a hardware fault. See [Runtime-Unusable Cards](../how-to/troubleshooting.md#某张卡运行时不可用或驱动初始化失败) for failure classification, backoff and diagnosis.
+Nodes with host CANN check each die by creating an ACL context and allocating 4 KiB. Only failure explicitly attributable to that die marks it `RUNTIME_UNUSABLE`. A driver-only node without `libascendcl.so` skips the check rather than treating a missing tool as a hardware fault. See [Runtime-Unusable Cards](../how-to/troubleshooting.md#某张卡运行时不可用或驱动初始化失败) for failure classification, backoff and diagnosis.
 
 ## Coverage Levels
 
@@ -199,3 +199,5 @@ The basis for using Phy-ID consistently as the device number is read-only verifi
 For 910C, Logic ID in `npu-smi info -m` equals Phy-ID and is not compacted when cards are missing (on a host missing NPUs 3–6, NPU 7's two chips remain 14 and 15).
 All `/dev/davinci0..15` devices exist and map one-to-one to Phy-ID (`Phy-ID = 2 × NPU ID + Chip ID`).
 For 910B, NPU ID equals Phy-ID, so single-chip cards continue to use NPU ID.
+
+<!-- translation-source-sha256: e8dc90c7cfe5b6bcb1272c36ae52cb34e53016bc2a89a1be1159b13d9d53ab19 -->

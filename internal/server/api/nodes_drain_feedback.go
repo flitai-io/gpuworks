@@ -25,6 +25,10 @@ func (a *apiHandlers) nodeDrainFeedback(deploymentID, nodeID uint, source store.
 			out.DrainReason, out.DrainReasonAt = data.Scheduler, &at
 		}
 	}
-	out.DrainMessage, err = a.d.Store.LatestDrainFailure(deploymentID, nodeID, source.ID)
-	return out, err
+	failed, err := a.d.Store.LatestDrainFailure(deploymentID, nodeID, source.ID)
+	if err != nil || failed == nil {
+		return out, err
+	}
+	out.DrainMessage, out.DrainFailure = failed.Message, instanceRuntimeFailure(failed)
+	return out, nil
 }

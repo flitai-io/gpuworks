@@ -87,7 +87,7 @@ export function chatCatalog(overrides: Partial<PlaygroundCatalog> = {}): Playgro
     // As GET /api/v1/playground/models serves them.
     stream_options: [
       { name: "include_usage", label: { en: "Report usage (include_usage)", zh: "返回用量（include_usage）" }, description: { en: "Return prompt and completion token counts in the last chunk.", zh: "在流的最后一个块返回 token 数。" }, default: true },
-      { name: "continuous_usage_stats", label: { en: "Usage on every chunk (continuous_usage_stats)", zh: "逐块返回用量（continuous_usage_stats）" }, description: { en: "Running token counts on every chunk.", zh: "每个块都带累计 token 数。" }, default: true, requires: "include_usage" },
+      { name: "continuous_usage_stats", label: { en: "Usage on every chunk (continuous_usage_stats)", zh: "逐 chunk 返回用量（continuous_usage_stats）" }, description: { en: "Running token counts on every chunk.", zh: "每个 chunk 都带累计 token 数。" }, default: true, requires: "include_usage" },
     ],
     html_preview: { allow_network: false },
     ...overrides,

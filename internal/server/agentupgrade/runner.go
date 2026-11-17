@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
@@ -249,10 +248,10 @@ func (s *Service) observeEvent(o Observation) error {
 		if o.SessionID == "" || !online || conn.SessionID != o.SessionID {
 			continue
 		}
-		if o.SessionID != i.BaselineSessionID && !strings.HasPrefix(o.Error, "rolled back:") {
+		if o.SessionID != i.BaselineSessionID && o.Code != proto.ErrorAgentUpgradeRolledBack {
 			continue
 		}
-		if strings.Contains(strings.ToLower(o.Error), "already in progress") {
+		if o.Code == proto.ErrorAgentUpgradeInProgress {
 			return nil
 		}
 		run, err := s.st.AgentUpgradeRun(i.RunID)
@@ -262,11 +261,17 @@ func (s *Service) observeEvent(o Observation) error {
 		if conn.Version == run.TargetVersion {
 			continue
 		}
+		// A rollback has its own reason, which the upgrade view already
+		// explains; any other agent failure is agent_failed with its detail.
+		reason := "agent_failed"
+		if o.Code == proto.ErrorAgentUpgradeRolledBack {
+			reason = "rolled_back"
+		}
 		if i.Phase == "unconfirmed" {
-			_, err = s.st.VerifyAgentUpgrade(i.ID, s.now(), "system", "agent_failed", o.Error)
+			_, err = s.st.VerifyAgentUpgrade(i.ID, s.now(), "system", reason, o.Error)
 			return err
 		}
-		return s.finish(i, "failed", "agent_failed", o.Error)
+		return s.finish(i, "failed", reason, o.Error)
 	}
 	return nil
 }

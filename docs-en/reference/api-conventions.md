@@ -124,7 +124,7 @@ Prefer named DTOs for new endpoints. The existing count is constrained by the `a
 
 ## Errors
 
-A management API error response is a JSON object containing `error`. Product errors also include a stable `code` and optional `params`.
+Every management API error response is a JSON object containing `error` and a stable `code`, with optional `params`.
 For example, an incorrect username or password during sign-in returns HTTP `401`:
 
 ```json
@@ -134,8 +134,31 @@ For example, an incorrect username or password during sign-in returns HTTP `401`
 | Field | Purpose |
 |---|---|
 | `error` | A human-readable error description in English. Do not build handling branches by matching this text. |
-| `code` | A stable error identifier that programs can use to distinguish causes. Not every error has one. |
+| `code` | A stable error identifier that programs can use to distinguish causes. Every error has one. |
 | `params` | Context such as the fields and values involved in the error. Clients can use it with `code` for localized messages. Omitted when not provided. |
+
+When the server gives no specific cause for an error, it fills in a **generic code** by HTTP status:
+
+| HTTP Status | Generic `code` | HTTP Status | Generic `code` |
+|---|---|---|---|
+| `400` | `BAD_REQUEST` | `422` | `UNPROCESSABLE` |
+| `401` | `UNAUTHORIZED` | `424` | `FAILED_DEPENDENCY` |
+| `403` | `FORBIDDEN` | `429` | `TOO_MANY_REQUESTS` |
+| `404` | `NOT_FOUND` | `500` | `INTERNAL_ERROR` |
+| `405` | `METHOD_NOT_ALLOWED` | `501` | `NOT_IMPLEMENTED` |
+| `408` | `REQUEST_TIMEOUT` | `502` | `BAD_GATEWAY` |
+| `409` | `CONFLICT` | `503` | `SERVICE_UNAVAILABLE` |
+| `410` | `GONE` | `504` | `GATEWAY_TIMEOUT` |
+| `413` | `REQUEST_TOO_LARGE` | `507` | `INSUFFICIENT_STORAGE` |
+| `415` | `UNSUPPORTED_MEDIA_TYPE` | `416` | `RANGE_NOT_SATISFIABLE` |
+
+Any other 4xx uses `BAD_REQUEST`, and anything else uses `INTERNAL_ERROR`. A generic code states only the category; the specifics are in `error`, for example:
+
+```json
+{"error": "deployment 7 not found", "code": "NOT_FOUND"}
+```
+
+The console shows a generic code as the localized category followed by the original `error` text (such as "Not found: deployment 7 not found"), and a specific code with its own text.
 
 ### Common HTTP Statuses and Error Codes
 
@@ -150,15 +173,15 @@ The following table lists common management API cases. The HTTP status indicates
 | `403` | `ADMINISTRATOR_REQUIRED` | The operation requires the administrator role. Use an account with the required permissions. |
 | `403` | `PLATFORM_TOKEN_READ_ONLY` / `PLATFORM_TOKEN_NOT_ALLOWED` | A read-only platform token cannot write, or this endpoint allows only signed-in sessions. Use credentials that meet the endpoint's requirements. |
 | `403` | `MANAGEMENT_ORIGIN_REJECTED` | Origin validation failed for the management request. Check the browser entry point and reverse proxy configuration. |
-| `404` / `405` | `code` is not guaranteed | The resource or route does not exist / the HTTP method is not supported. Check the address, resource ID, and method. |
+| `404` / `405` | A specific code, or the generic `NOT_FOUND` / `METHOD_NOT_ALLOWED` | The resource or route does not exist / the HTTP method is not supported. Check the address, resource ID, and method. |
 | `409` | Depends on the operation | The resource's current state or a concurrent change prevents the operation. Read the error details first and query the resource state again. |
 | `413` | Endpoints using generic JSON decoding return `FIELD_INVALID` | The request body exceeds the endpoint's limit. The generic management JSON request body limit is 1 MiB. Upload and similar endpoints follow their own limits. |
 | `429` | `LOGIN_THROTTLED` | Sign-in attempts are too frequent. Wait for the number of seconds specified by the `Retry-After` response header before retrying. |
-| `500` / `503` | Depends on the failure; `code` may be absent | An internal service error occurred / the service is currently unavailable. Retain the error content and check the control plane logs. `AUTH_NOT_CONFIGURED` means management authentication is not configured (`503`). |
+| `500` / `503` | Depends on the failure; `INTERNAL_ERROR` / `SERVICE_UNAVAILABLE` when there is no specific cause | An internal service error occurred / the service is currently unavailable. Retain the error content and check the control plane logs. `AUTH_NOT_CONFIGURED` means management authentication is not configured (`503`). |
 
-Clients first check the HTTP status, then read `code` and `params`. If `code` is absent, they must still retain and display `error`.
+Clients first check the HTTP status, then read `code` and `params`. For a generic or unrecognized code, they must still retain and display `error`.
 These conventions apply to the management API. For the inference gateway's error format, see [OpenAI-Compatible Gateway](openai-gateway.md). Error codes are defined in
-`internal/server/api/errors.go`. Individual endpoints may also return business-specific error codes.
+`internal/server/api/errors.go` and `internal/server/messages` (generic codes in `messages/http.go`). Individual endpoints may also return business-specific error codes.
 
 ## Checks
 
@@ -169,3 +192,6 @@ call, and reports:
 - `snake_case`: Reachable struct fields or keys in map literals written inline do not encode as snake_case.
 
 This check is included in `make test-unit`.
+
+<!-- translation-source-sha256: e2bda9af30c4ebf9224b33165c7eb2a3db50322778468b87776098bdb9ea2b9f -->
+<!-- translation-localized-code-block: bae0e4c7d262a34ee3ef790d5e20acb056000102304e33d31fffd72989b4b11c 575be17f25555cdcb9a913a995f63b3814eab0f2391908631ca49f5fa2d37787 Translate password input prompt -->

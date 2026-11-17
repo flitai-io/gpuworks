@@ -80,7 +80,7 @@ func agentRemovalChecklist(state string) []uninstallcheck.Item {
 	return []uninstallcheck.Item{
 		{ID: "agent.installation", Status: uninstallcheck.Warn, Summary: "Selected agent state directory", Details: []string{state}, Action: "Confirm this is the state directory of the agent being removed."},
 		{ID: "agent.service", Status: uninstallcheck.Warn, Summary: "Plan: stop only the matching agent service/processes and remove its autostart definition", Action: "Existing process and service ownership checks remain mandatory."},
-		{ID: "agent.identity", Status: uninstallcheck.Warn, Summary: "Plan: remove node identity, connection configuration and PID files after confirmed shutdown", Details: []string{filepath.Join(state, "identity.json"), agentconf.Path(state), filepath.Join(state, "gpuworks-agent.pid")}},
+		{ID: "agent.identity", Status: uninstallcheck.Warn, Summary: "Plan: remove node identity, connection configuration and PID files after confirmed shutdown", Details: []string{filepath.Join(state, "identity.json"), agentconf.Path(state), filepath.Join(state, "gpuworks-agent.pid"), filepath.Join(state, agentLockFile)}},
 		{ID: "agent.retained", Status: uninstallcheck.Warn, Summary: "Agent binary, models, logs, runtime state and workload resources are retained", Details: []string{state}, Action: "Stop or migrate deployments in the control plane before uninstall; remove the node's management record separately."},
 		{ID: "agent.ports", Status: uninstallcheck.Warn, Summary: "Workload listeners are not removed by stopping the agent", Action: "Verify the deployment ports and GPU resources after stopping or migrating the workloads; no global free-port claim is made."},
 	}

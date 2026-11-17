@@ -17,3 +17,5 @@ Authentication is restricted to the registry's exact HTTPS host and port. Custom
 Successful tag lists are cached for one hour. Changing or deleting login information invalidates private list caches associated with the previous credentials. Failed queries are not cached as successful lists. Newly uploaded tags may appear after the cache expires.
 
 Browsing, registering, pulling, and running inference are separate steps. Selecting and adding a tag registers the image in the community catalog. Deployment still requires compatible hardware, architecture, drivers, models, and startup templates.
+
+<!-- translation-source-sha256: fe2eae9d20409afcbae048b89f27d4c67f5d7ea5c551935ece337f6352369e4b -->

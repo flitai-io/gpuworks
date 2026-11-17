@@ -125,6 +125,9 @@ type StatusError struct {
 	Code int
 	// Detail is the whole message when the hub explained itself.
 	Detail string
+	// RetryAfter is the wait a throttled answer named (throttle.go); zero
+	// when it named none or the answer is not throttled.
+	RetryAfter time.Duration
 }
 
 func (e *StatusError) Error() string {
@@ -457,7 +460,7 @@ func getJSON(ctx context.Context, rawURL string, headers map[string]string, opti
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, &StatusError{URL: rawURL, Code: resp.StatusCode}
+		return nil, throttleError(resp, rawURL, "")
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 }

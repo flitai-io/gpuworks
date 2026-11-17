@@ -315,3 +315,5 @@ Likewise, point model [site rules](../how-to/configure-pull-settings.md#站点�
 | dGPU + PPU with a non-Docker runtime | Capability is `unavailable` | [Support Matrix](../reference/support-matrix.md) |
 
 For combinations not listed here, use the errors and warnings returned by evaluation on the deployment page. Evaluation does not reserve resources, so you can try repeatedly.
+
+<!-- translation-source-sha256: 9b1255d07d95a60ac3624505c5bfd23f24d089d59ed58f66f378a5ef7e5744c1 -->

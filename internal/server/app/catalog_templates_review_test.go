@@ -294,3 +294,34 @@ func TestTemplateExportRejectsChecksFromAnotherReplica(t *testing.T) {
 		t.Fatal("another replica verified the selected instance's hardware and weights")
 	}
 }
+
+// An alias-less instance keeps the executable it was launched with. One
+// launched before alias-less launches were named after the model mount, or on
+// a host agent without proto.CapLaunchNameVerbatim, carries no
+// --served-model-name; the export must re-plan with that naming instead of
+// reporting a launch change.
+func TestTemplateExportAcceptsAliasLessInstancesWhicheverWayTheyWereNamed(t *testing.T) {
+	for _, implicit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "named after the mount", true: "no served-model-name"}[implicit], func(t *testing.T) {
+			f := newTemplateFixture(t)
+			f.update(t, "quick_params", `{"served_model_name":"","max_model_len":4096,"gpu_memory_utilization":0.9}`)
+			f.implicitServedName = implicit
+			f.persistRuntimeLaunch(t)
+			instance, err := f.st.InstanceByUUID(f.instance.UUID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			desired, err := instance.DesiredState()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[bool]string{false: "/model", true: ""}[implicit]
+			if got := deploy.ServedModelName(desired.ResolvedLaunch); got != want {
+				t.Fatalf("fixture launch names the model %q, want %q: %v", got, want, desired.Argv)
+			}
+			if _, err := loadTemplateSource(f.st, f.deployment.ID, nil); err != nil {
+				t.Fatalf("export refused the instance's own launch: %v", err)
+			}
+		})
+	}
+}

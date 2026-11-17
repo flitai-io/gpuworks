@@ -15,6 +15,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/agentconf"
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/provider"
 	"gpuworks.ai/gpuworks/internal/server/provision"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -57,14 +58,25 @@ type ProviderSyncer interface {
 	InstanceDetail(ctx context.Context, providerID uint, externalID string) (provider.Instance, error)
 }
 
+// Outcome is one recovery round as the probe endpoint reports it. A round
+// that did nothing names why with SkippedCode (messages.RecoverySkipped*);
+// one that failed names the failure with ErrorCode, the same code recorded
+// on the node. SkippedReason and Error are their English text.
 type Outcome struct {
 	NodeUUID      string                `json:"node_uuid"`
 	Phase         string                `json:"phase,omitempty"`
 	Action        string                `json:"action"`
 	Probe         provision.ProbeResult `json:"probe"`
 	Recovered     bool                  `json:"recovered"`
+	SkippedCode   string                `json:"skipped_code,omitempty"`
 	SkippedReason string                `json:"skipped_reason,omitempty"`
+	ErrorCode     string                `json:"error_code,omitempty"`
 	Error         string                `json:"error,omitempty"`
+}
+
+// skip marks the round as skipped for code, with its English reason.
+func (o *Outcome) skip(code, reason string) {
+	o.Action, o.SkippedCode, o.SkippedReason = "skipped", code, reason
 }
 
 type Recoverer struct {
@@ -166,10 +178,14 @@ func (r *Recoverer) runDue(ctx context.Context) {
 // pending, stopped, or missing credentials.
 func (r *Recoverer) Trigger(ctx context.Context, uuid string) (Outcome, error) {
 	if r == nil || !r.cfg.Enabled {
-		return Outcome{NodeUUID: uuid, Action: "skipped", SkippedReason: "recovery is disabled"}, nil
+		out := Outcome{NodeUUID: uuid}
+		out.skip(messages.RecoverySkippedDisabled, "recovery is disabled")
+		return out, nil
 	}
 	if !r.begin(uuid) {
-		return Outcome{NodeUUID: uuid, Action: "skipped", SkippedReason: "recovery already in progress"}, nil
+		out := Outcome{NodeUUID: uuid}
+		out.skip(messages.RecoverySkippedInProgress, "recovery already in progress")
+		return out, nil
 	}
 	defer r.end(uuid)
 	node, err := r.store.NodeByUUID(uuid)
@@ -199,33 +215,34 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 	out := Outcome{NodeUUID: node.UUID}
 	if r.hub != nil && r.hub.Online(node.UUID) || node.State == store.NodeStateOnline {
 		_ = r.store.ClearNodeRecovery(node.UUID)
-		out.Action, out.Recovered, out.SkippedReason = "skipped", true, "node is online"
+		out.skip(messages.RecoverySkippedOnline, "node is online")
+		out.Recovered = true
 		return out, nil
 	}
 	if node.LastSeenAt == nil || node.State == store.NodeStateConnecting {
-		out.Action, out.SkippedReason = "skipped", "node has never connected"
+		out.skip(messages.RecoverySkippedNeverConnected, "node has never connected")
 		return out, nil
 	}
 	if node.RecoveryPhase == store.RecoveryPhaseStopped {
-		out.Action, out.SkippedReason = "skipped", store.RecoveryStoppedProviderInstanceGone
+		out.skip(messages.RecoverySkippedStopped, store.RecoveryStoppedProviderInstanceGone)
 		return out, nil
 	}
 	if !node.HasSSHCredential {
-		out.Action, out.SkippedReason = "skipped", "ssh credential is not configured"
+		out.skip(messages.RecoverySkippedNoSSHCredential, "ssh credential is not configured")
 		return out, nil
 	}
 	now := r.now()
 	if !force {
 		if r.cfg.GracePeriod > 0 && now.Sub(*node.LastSeenAt) < r.cfg.GracePeriod {
-			out.Action, out.SkippedReason = "skipped", "within reconnect grace period"
+			out.skip(messages.RecoverySkippedGracePeriod, "within reconnect grace period")
 			return out, nil
 		}
 		if node.LastProbeAt != nil && now.Before(node.LastProbeAt.Add(Backoff(node.RecoveryAttempts, r.cfg.InitialInterval, r.cfg.BackoffMultiplier, r.cfg.MaxInterval))) {
-			out.Action, out.SkippedReason = "skipped", "recovery backoff has not elapsed"
+			out.skip(messages.RecoverySkippedBackoff, "recovery backoff has not elapsed")
 			return out, nil
 		}
 		if node.ConnectMode == "server_dial" && r.hub != nil && !r.hub.ServerDialRecoveryReady(node.UUID) {
-			out.Action, out.SkippedReason = "skipped", "server_dial reconnect has not reached maximum backoff"
+			out.skip(messages.RecoverySkippedServerDialBackoff, "server_dial reconnect has not reached maximum backoff")
 			return out, nil
 		}
 	}
@@ -236,7 +253,7 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 	if moved, err := r.refreshProviderEndpoints(ctx, node); err != nil {
 		r.log.Warn("refresh provider endpoints failed", "node", node.UUID, "err", err)
 	} else if moved {
-		out.Action, out.SkippedReason = "redial", "the provider moved the agent's address; the server dials it there"
+		out.Action, out.SkippedCode, out.SkippedReason = "redial", messages.RecoverySkippedRedial, "the provider moved the agent's address; the server dials it there"
 		return out, nil
 	}
 
@@ -245,10 +262,11 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 		if err != nil {
 			r.log.Warn("provider instance recovery check failed", "node", node.UUID, "err", err)
 		} else if stopped {
-			if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseStopped, node.RecoveryAttempts, node.LastProbeAt, store.RecoveryStoppedProviderInstanceGone); err != nil {
+			gone := store.RecoveryError{Code: messages.ErrorRecoveryProviderInstanceGone, Message: store.RecoveryStoppedProviderInstanceGone}
+			if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseStopped, node.RecoveryAttempts, node.LastProbeAt, gone); err != nil {
 				return out, err
 			}
-			out.Action, out.Phase, out.SkippedReason = "stopped", store.RecoveryPhaseStopped, store.RecoveryStoppedProviderInstanceGone
+			out.Action, out.Phase, out.SkippedCode, out.SkippedReason = "stopped", store.RecoveryPhaseStopped, messages.RecoverySkippedStopped, store.RecoveryStoppedProviderInstanceGone
 			return out, nil
 		}
 	}
@@ -267,42 +285,25 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 		RuntimeDriver:    restartRuntimeDriver(node),
 		SSHAuth:          sshAuth,
 	}
-	if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseProbing, node.RecoveryAttempts, &now, ""); err != nil {
+	if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseProbing, node.RecoveryAttempts, &now, store.RecoveryError{}); err != nil {
 		return out, err
 	}
 	out.Action, out.Phase = "probe", store.RecoveryPhaseProbing
 	out.Probe = r.provisioner.Probe(ctx, probeReq)
 	if !out.Probe.Reachable {
-		message := classifyRecoveryFailure(store.RecoveryPhaseUnreachable, probeMessage(out.Probe, "SSH is unreachable"))
-		phase, err := r.recordFailure(node, store.RecoveryPhaseUnreachable, r.now(), message)
-		if err != nil {
-			return out, err
-		}
-		out.Phase, out.Error = phase, message
-		return out, nil
+		return r.fail(&out, node, store.RecoveryPhaseUnreachable, errorFailure(out.Probe.Err, messages.ErrorSSHUnreachable, probeMessage(out.Probe, "SSH is unreachable")))
 	}
 	if out.Probe.Err != nil {
-		message := classifyRecoveryFailure(store.RecoveryPhaseProbing, probeMessage(out.Probe, "SSH probe failed"))
-		phase, err := r.recordFailure(node, store.RecoveryPhaseProbing, r.now(), message)
-		if err != nil {
-			return out, err
-		}
-		out.Phase = phase
-		out.Error = message
-		return out, nil
+		return r.fail(&out, node, store.RecoveryPhaseProbing, errorFailure(out.Probe.Err, messages.ErrorRecoveryStepFailed, probeMessage(out.Probe, "SSH probe failed")))
 	}
 	if out.Probe.ForeignServerURL != "" {
 		// Another server's install replaced the shared unit. Restarting it
 		// cannot bring this node back and reinstalling would take the host
 		// away from that server, so leave the choice to an operator.
-		message := classifyRecoveryFailure(store.RecoveryPhaseProbing, "gpuworks-agent unit on the host is installed for another server ("+out.Probe.ForeignServerURL+"); stop that unit or reinstall the agent for this server")
-		phase, err := r.recordFailure(node, store.RecoveryPhaseProbing, r.now(), message)
-		if err != nil {
-			return out, err
-		}
-		out.Phase = phase
-		out.Error = message
-		return out, nil
+		return r.fail(&out, node, store.RecoveryPhaseProbing, store.RecoveryError{
+			Code:    messages.ErrorAgentInstallForeignServer,
+			Message: "gpuworks-agent unit on the host is installed for another server (" + out.Probe.ForeignServerURL + "); stop that unit or reinstall the agent for this server",
+		})
 	}
 	if out.Probe.AgentRunning {
 		message := "agent is running but has not established a control-plane session"
@@ -319,23 +320,16 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 			out.Recovered, out.Phase = true, ""
 			return out, r.store.ClearNodeRecovery(node.UUID)
 		}
-		message = classifyRecoveryFailure(store.RecoveryPhaseProbing, message)
-		phase, err := r.recordFailure(node, store.RecoveryPhaseProbing, r.now(), message)
-		if err != nil {
-			return out, err
-		}
-		out.Phase = phase
-		out.Error = message
-		return out, nil
+		return r.fail(&out, node, store.RecoveryPhaseProbing, store.RecoveryError{Code: messages.ErrorRecoveryAgentNotConnected, Message: message})
 	}
 
-	if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseRestarting, node.RecoveryAttempts, &now, ""); err != nil {
+	if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseRestarting, node.RecoveryAttempts, &now, store.RecoveryError{}); err != nil {
 		return out, err
 	}
 	out.Action, out.Phase = "restart", store.RecoveryPhaseRestarting
 	restartErr := r.provisioner.RestartAgent(ctx, probeReq)
 	if restartErr == nil {
-		if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseReconnecting, node.RecoveryAttempts, &now, ""); err != nil {
+		if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseReconnecting, node.RecoveryAttempts, &now, store.RecoveryError{}); err != nil {
 			return out, err
 		}
 		out.Phase = store.RecoveryPhaseReconnecting
@@ -346,7 +340,11 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 		}
 	}
 
-	if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseReinstalling, node.RecoveryAttempts, &now, errorString(restartErr)); err != nil {
+	var restartFailure store.RecoveryError
+	if restartErr != nil {
+		restartFailure = errorFailure(restartErr, messages.ErrorRecoveryStepFailed, restartErr.Error())
+	}
+	if err := r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseReinstalling, node.RecoveryAttempts, &now, restartFailure); err != nil {
 		return out, err
 	}
 	out.Action, out.Phase = "reinstall", store.RecoveryPhaseReinstalling
@@ -360,14 +358,14 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 		OnPhase: func(phase string) error {
 			installPhase = phase
 			out.Phase = phase
-			return r.store.SetNodeRecoveryPhase(node.UUID, phase, node.RecoveryAttempts, &now, "")
+			return r.store.SetNodeRecoveryPhase(node.UUID, phase, node.RecoveryAttempts, &now, store.RecoveryError{})
 		},
 		SSHAuth: sshAuth,
 	}
 	_, installErr := r.provisioner.InstallSSH(ctx, installReq)
 	if installErr == nil {
 		installPhase = store.RecoveryPhaseReconnecting
-		if err := r.store.SetNodeRecoveryPhase(node.UUID, installPhase, node.RecoveryAttempts, &now, ""); err != nil {
+		if err := r.store.SetNodeRecoveryPhase(node.UUID, installPhase, node.RecoveryAttempts, &now, store.RecoveryError{}); err != nil {
 			return out, err
 		}
 		out.Phase = installPhase
@@ -377,24 +375,27 @@ func (r *Recoverer) recoverNode(ctx context.Context, node *store.Node, force boo
 			return out, nil
 		}
 	}
-	message := errorString(installErr)
-	if message == "" {
-		message = "agent did not reconnect after reinstall"
+	failure := store.RecoveryError{Code: messages.ErrorRecoveryNoReconnect, Message: "agent did not reconnect after reinstall"}
+	if installErr != nil {
+		failure = errorFailure(installErr, messages.ErrorRecoveryStepFailed, installErr.Error())
 	}
 	if restartErr != nil {
-		message = "restart failed: " + restartErr.Error() + "; reinstall: " + message
+		failure.Message = "restart failed: " + restartErr.Error() + "; reinstall: " + failure.Message
 	}
-	message = classifyRecoveryFailure(installPhase, message)
-	recordedPhase, err := r.recordFailure(node, installPhase, r.now(), message)
-	if err != nil {
-		return out, err
-	}
-	out.Phase = recordedPhase
-	out.Error = message
-	return out, nil
+	return r.fail(&out, node, installPhase, failure)
 }
 
-func (r *Recoverer) recordFailure(node *store.Node, phase string, probeAt time.Time, message string) (string, error) {
+// fail records a failed round on the node and in out.
+func (r *Recoverer) fail(out *Outcome, node *store.Node, phase string, failure store.RecoveryError) (Outcome, error) {
+	recorded, err := r.recordFailure(node, phase, r.now(), failure)
+	if err != nil {
+		return *out, err
+	}
+	out.Phase, out.ErrorCode, out.Error = recorded, failure.Code, failure.Message
+	return *out, nil
+}
+
+func (r *Recoverer) recordFailure(node *store.Node, phase string, probeAt time.Time, failure store.RecoveryError) (string, error) {
 	previousPhase := node.RecoveryPhase
 	if phase == store.RecoveryPhaseProbing {
 		phase = store.RecoveryPhaseProbeFailed
@@ -403,27 +404,21 @@ func (r *Recoverer) recordFailure(node *store.Node, phase string, probeAt time.T
 		}
 	}
 	if previousPhase == phase && node.RecoveryAttempts >= 1 {
-		return store.RecoveryPhaseBlocked, r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseBlocked, node.RecoveryAttempts+1, &probeAt, phase+": "+message)
+		blocked := store.RecoveryError{Code: failure.Code, Message: phase + ": " + failure.Message}
+		return store.RecoveryPhaseBlocked, r.store.SetNodeRecoveryPhase(node.UUID, store.RecoveryPhaseBlocked, node.RecoveryAttempts+1, &probeAt, blocked)
 	}
-	return phase, r.store.SetNodeRecoveryPhase(node.UUID, phase, node.RecoveryAttempts+1, &probeAt, message)
+	return phase, r.store.SetNodeRecoveryPhase(node.UUID, phase, node.RecoveryAttempts+1, &probeAt, failure)
 }
 
-func classifyRecoveryFailure(phase, message string) string {
-	lower := strings.ToLower(message)
-	class := "stage_failed"
-	switch {
-	case phase == store.RecoveryPhaseUnreachable, strings.Contains(lower, "ssh"), strings.Contains(lower, "connection"):
-		class = "network"
-	case phase == store.RecoveryPhaseArtifactCheck, strings.Contains(lower, "read agent binary"), strings.Contains(lower, "file does not exist"), strings.Contains(lower, "no such file"):
-		class = "missing_artifact"
-	case phase == store.RecoveryPhaseUploading && (strings.Contains(lower, "timed out") || strings.Contains(lower, "timeout")):
-		class = "upload_stalled"
-	case strings.Contains(lower, "installed for another server"):
-		class = "foreign_agent"
-	case strings.Contains(lower, "203/exec"), strings.Contains(lower, "not executable"), strings.Contains(lower, "binary is not installed"):
-		class = "exec_missing"
+// errorFailure is the recorded failure for err: the code the SSH or install
+// step that failed named (provision.FailureCode), or fallback when none did,
+// with message as its text.
+func errorFailure(err error, fallback, message string) store.RecoveryError {
+	code, ok := provision.FailureCode(err)
+	if !ok {
+		code = fallback
 	}
-	return class + ": " + message
+	return store.RecoveryError{Code: code, Message: message}
 }
 
 func (r *Recoverer) waitOnline(ctx context.Context, uuid string) bool {
@@ -482,13 +477,6 @@ func probeMessage(result provision.ProbeResult, fallback string) string {
 		return strings.TrimSpace(result.Detail)
 	}
 	return fallback
-}
-
-func errorString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }
 
 // platformKey loads the server's SSH key, or nil when there is none.

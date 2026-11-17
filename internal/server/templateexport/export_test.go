@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/chipmatch"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
@@ -33,7 +34,7 @@ func customInput() Input {
 		},
 		GPUs:     []GPUFact{{Name: "NVIDIA H20", Vendor: "nvidia", MemoryMiB: 97871, ComputeCap: "9.0"}},
 		GPUCount: 1,
-		Checks:   []Check{{Operation: inferenceapi.OperationChat, Endpoint: "/v1/chat/completions", Tested: true, Passed: true, HTTPStatus: 200}},
+		Checks:   []Check{{ID: CheckOperationReply, Operation: inferenceapi.OperationChat, Endpoint: "/v1/chat/completions", Status: proto.CheckPass, Code: messages.CheckTemplateOperationAnswered, HTTPStatus: 200}},
 	}
 }
 
@@ -178,8 +179,8 @@ func TestBuildKeepsOnlyTheUserEnvAskedFor(t *testing.T) {
 func TestBuildRecordsChecksThatFailedOrWereNotSent(t *testing.T) {
 	in := customInput()
 	in.Checks = []Check{
-		{Operation: inferenceapi.OperationChat, Tested: true, HTTPStatus: 500, Message: "engine error"},
-		{Operation: "openai.audio.speech"},
+		{ID: CheckOperationReply, Operation: inferenceapi.OperationChat, Status: proto.CheckFail, Code: messages.CheckTemplateOperationHTTPError, HTTPStatus: 500, Evidence: "engine error"},
+		{ID: CheckOperationReply, Operation: "openai.audio.speech", Status: proto.CheckSkip, Code: messages.CheckTemplateOperationNotProbed},
 	}
 	out, err := Build(in)
 	if err != nil {
@@ -195,7 +196,7 @@ func TestBuildRecordsChecksThatFailedOrWereNotSent(t *testing.T) {
 		t.Fatalf("YAML:\n%s", out.YAML)
 	}
 
-	in.Checks = []Check{{Operation: "openai.audio.speech"}}
+	in.Checks = []Check{{ID: CheckOperationReply, Operation: "openai.audio.speech", Status: proto.CheckSkip, Code: messages.CheckTemplateOperationNotProbed}}
 	if out, err = Build(in); err != nil || !out.Saveable {
 		t.Fatalf("an untested operation alone blocks saving: %v saveable=%v", err, out.Saveable)
 	}

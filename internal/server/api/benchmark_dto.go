@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/benchrun"
+	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -13,34 +14,42 @@ import (
 
 // benchmarkDTO is deliberately separate from the GORM entity.
 type benchmarkDTO struct {
-	ID                uint                      `json:"id"`
-	Name              string                    `json:"name"`
-	TargetKind        string                    `json:"target_kind"`
-	DeploymentID      uint                      `json:"deployment_id,omitempty"`
-	InstanceUUID      string                    `json:"instance_uuid,omitempty"`
-	BaseURL           string                    `json:"base_url,omitempty"`
-	Model             string                    `json:"model"`
-	LoadOrigin        string                    `json:"load_origin"`
-	NumGPUs           int                       `json:"num_gpus"`
-	Dataset           json.RawMessage           `json:"dataset,omitempty"`
-	Mode              string                    `json:"mode"`
-	Search            json.RawMessage           `json:"search,omitempty"`
-	TokenizerRef      string                    `json:"tokenizer_ref,omitempty"`
-	TargetSnapshot    json.RawMessage           `json:"target_snapshot,omitempty"`
-	Warnings          []string                  `json:"warnings,omitempty"`
-	DeploymentDeleted bool                      `json:"deployment_deleted,omitempty"`
-	InstanceDeleted   bool                      `json:"instance_deleted,omitempty"`
-	KeepDetail        bool                      `json:"keep_detail"`
-	DetailCapMB       int                       `json:"detail_cap_mb"`
-	State             string                    `json:"state"`
-	Progress          json.RawMessage           `json:"progress,omitempty"`
-	Verdict           json.RawMessage           `json:"verdict,omitempty"`
-	Error             string                    `json:"error,omitempty"`
-	BestPoint         *benchmarkPointSummaryDTO `json:"best_point,omitempty"`
-	Points            []benchmarkPointDTO       `json:"points,omitempty"`
-	CreatedAt         time.Time                 `json:"created_at"`
-	StartedAt         *time.Time                `json:"started_at,omitempty"`
-	EndedAt           *time.Time                `json:"ended_at,omitempty"`
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	TargetKind   string `json:"target_kind"`
+	DeploymentID uint   `json:"deployment_id,omitempty"`
+	InstanceUUID string `json:"instance_uuid,omitempty"`
+	BaseURL      string `json:"base_url,omitempty"`
+	Model        string `json:"model"`
+	LoadOrigin   string `json:"load_origin"`
+	// PriorityClass is the request priority class the run asked the gateway
+	// for (the configuration); each request's detail says the class it ran
+	// at. Absent when it asked for none.
+	PriorityClass     string          `json:"priority_class,omitempty"`
+	NumGPUs           int             `json:"num_gpus"`
+	Dataset           json.RawMessage `json:"dataset,omitempty"`
+	Mode              string          `json:"mode"`
+	Search            json.RawMessage `json:"search,omitempty"`
+	TokenizerRef      string          `json:"tokenizer_ref,omitempty"`
+	TargetSnapshot    json.RawMessage `json:"target_snapshot,omitempty"`
+	Warnings          []string        `json:"warnings,omitempty"`
+	DeploymentDeleted bool            `json:"deployment_deleted,omitempty"`
+	InstanceDeleted   bool            `json:"instance_deleted,omitempty"`
+	KeepDetail        bool            `json:"keep_detail"`
+	DetailCapMB       int             `json:"detail_cap_mb"`
+	State             string          `json:"state"`
+	Progress          json.RawMessage `json:"progress,omitempty"`
+	Verdict           json.RawMessage `json:"verdict,omitempty"`
+	Error             string          `json:"error,omitempty"`
+	// Failure is the failed run's code, params and English fallback, which
+	// the console renders from the code; nil when the run did not fail with
+	// a code (Error then stays the only description).
+	Failure   *dto.ProductMessage       `json:"failure,omitempty"`
+	BestPoint *benchmarkPointSummaryDTO `json:"best_point,omitempty"`
+	Points    []benchmarkPointDTO       `json:"points,omitempty"`
+	CreatedAt time.Time                 `json:"created_at"`
+	StartedAt *time.Time                `json:"started_at,omitempty"`
+	EndedAt   *time.Time                `json:"ended_at,omitempty"`
 }
 
 type benchmarkModelsDTO struct {
@@ -108,7 +117,7 @@ func benchmarkPointDTOFromEntity(p store.BenchmarkPoint) benchmarkPointDTO {
 }
 
 func (a *apiHandlers) benchmarkDTO(rn *store.BenchmarkRun, points bool) benchmarkDTO {
-	d := benchmarkDTO{ID: rn.ID, Name: rn.Name, TargetKind: rn.TargetKind, DeploymentID: rn.DeploymentID, InstanceUUID: rn.InstanceUUID, BaseURL: rn.BaseURL, Model: rn.Model, LoadOrigin: rn.LoadOrigin, NumGPUs: rn.NumGPUs, Dataset: json.RawMessage(rn.Dataset), Mode: rn.Mode, Search: json.RawMessage(rn.Search), TokenizerRef: rn.TokenizerRef, TargetSnapshot: json.RawMessage(rn.TargetSnapshot), KeepDetail: rn.KeepDetail, DetailCapMB: rn.DetailCapMB, State: rn.State, Progress: json.RawMessage(rn.Progress), Verdict: json.RawMessage(rn.Verdict), Error: rn.Error, CreatedAt: utcTime(rn.CreatedAt), StartedAt: utcTimePtr(rn.StartedAt), EndedAt: utcTimePtr(rn.EndedAt)}
+	d := benchmarkDTO{ID: rn.ID, Name: rn.Name, TargetKind: rn.TargetKind, DeploymentID: rn.DeploymentID, InstanceUUID: rn.InstanceUUID, BaseURL: rn.BaseURL, Model: rn.Model, LoadOrigin: rn.LoadOrigin, PriorityClass: rn.PriorityClass, NumGPUs: rn.NumGPUs, Dataset: json.RawMessage(rn.Dataset), Mode: rn.Mode, Search: json.RawMessage(rn.Search), TokenizerRef: rn.TokenizerRef, TargetSnapshot: json.RawMessage(rn.TargetSnapshot), KeepDetail: rn.KeepDetail, DetailCapMB: rn.DetailCapMB, State: rn.State, Progress: json.RawMessage(rn.Progress), Verdict: json.RawMessage(rn.Verdict), Error: rn.Error, CreatedAt: utcTime(rn.CreatedAt), StartedAt: utcTimePtr(rn.StartedAt), EndedAt: utcTimePtr(rn.EndedAt)}
 	if rn.Warnings != "" {
 		_ = json.Unmarshal([]byte(rn.Warnings), &d.Warnings)
 	}
@@ -122,6 +131,7 @@ func (a *apiHandlers) benchmarkDTO(rn *store.BenchmarkRun, points bool) benchmar
 			}
 		}
 	}
+	d.Failure = benchmarkFailure(rn)
 	var verdict store.BenchmarkVerdict
 	if json.Unmarshal([]byte(rn.Verdict), &verdict) == nil && verdict.BestPointSeq > 0 {
 		if entity, err := a.d.Store.GetBenchmarkPoint(rn.ID, verdict.BestPointSeq); err == nil {
@@ -141,6 +151,23 @@ func (a *apiHandlers) benchmarkDTO(rn *store.BenchmarkRun, points bool) benchmar
 		d.Warnings = currentBenchmarkWarnings(d.Warnings, rn.Dataset, entities)
 	}
 	return d
+}
+
+// benchmarkFailure reads a failed run's code from what is already stored: the
+// server-restart code the store writes into Error, or the code the last
+// status report carried (Progress is the persisted proto.BenchmarkStatus).
+func benchmarkFailure(rn *store.BenchmarkRun) *dto.ProductMessage {
+	if rn.State != "failed" {
+		return nil
+	}
+	if rn.Error == store.BenchmarkErrorServerRestarted {
+		return &dto.ProductMessage{Code: store.BenchmarkErrorServerRestarted, Message: "The server restarted and interrupted the evaluation; completed points were retained."}
+	}
+	var progress proto.BenchmarkStatus
+	if json.Unmarshal([]byte(rn.Progress), &progress) != nil || progress.Code == "" {
+		return nil
+	}
+	return &dto.ProductMessage{Code: proto.NormalizeCode(progress.Code), Params: progress.Params, Message: rn.Error}
 }
 
 func currentBenchmarkWarnings(warnings []string, rawDataset string, points []store.BenchmarkPoint) []string {

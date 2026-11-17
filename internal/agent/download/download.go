@@ -74,6 +74,9 @@ func (o Options) stallTimeout() time.Duration {
 type StatusError struct {
 	Code   int
 	Detail string
+	// RetryAfter is the wait a throttled answer named (throttle.go); zero
+	// when it named none or the answer is not throttled.
+	RetryAfter time.Duration
 }
 
 func (e *StatusError) Error() string { return e.Detail }
@@ -163,7 +166,7 @@ func probe(ctx context.Context, opts Options) (probeResult, error) {
 		size := resp.ContentLength // -1 if unknown
 		return probeResult{size: size, acceptRange: false}, nil
 	default:
-		return probeResult{}, &StatusError{Code: resp.StatusCode, Detail: fmt.Sprintf("download: unexpected probe status %d", resp.StatusCode)}
+		return probeResult{}, statusError(resp, fmt.Sprintf("download: unexpected probe status %d", resp.StatusCode))
 	}
 }
 
@@ -202,7 +205,7 @@ func singleDownload(ctx context.Context, opts Options, pr probeResult, partPath 
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			return &StatusError{Code: resp.StatusCode, Detail: fmt.Sprintf("download: unexpected full response status %d", resp.StatusCode)}
+			return statusError(resp, fmt.Sprintf("download: unexpected full response status %d", resp.StatusCode))
 		}
 		if resp.Header.Get("Content-Range") != "" {
 			resp.Body.Close()
@@ -239,7 +242,7 @@ func singleDownload(ctx context.Context, opts Options, pr probeResult, partPath 
 			total = resp.ContentLength
 		}
 	default:
-		return &StatusError{Code: resp.StatusCode, Detail: fmt.Sprintf("download: unexpected status %d", resp.StatusCode)}
+		return statusError(resp, fmt.Sprintf("download: unexpected status %d", resp.StatusCode))
 	}
 	defer f.Close()
 

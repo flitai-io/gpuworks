@@ -38,7 +38,9 @@ func (c *templateUpdateCheck) check(ctx context.Context, client *distribution.Cl
 	raw, _, err := client.ReadFile(ctx, fetched, fetched.Index.TemplateCatalog.File)
 	compatible := false
 	if err == nil {
-		_, parseErr := inferencecatalog.ReadPackageArchive(bytes.NewReader(raw))
+		// Applying the package leaves out what this build cannot read, so
+		// only a package it cannot read at all is incompatible.
+		_, _, parseErr := inferencecatalog.ReadPackageArchiveTolerant(bytes.NewReader(raw))
 		compatible = parseErr == nil
 	}
 	if ctx.Err() != nil {

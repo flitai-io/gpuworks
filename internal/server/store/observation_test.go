@@ -214,6 +214,15 @@ func TestRewriteObservationsStoresOnlyChangedInstancesAtomically(t *testing.T) {
 	second := observedInstance(t, st, dep.ID, "o-2", launch)
 	observation := &proto.InstanceObservation{MetricPath: "/metrics", MetricRules: []proto.MetricRule{{Source: "x", Series: "gpuworks_infer_requests_running"}}}
 
+	// A pass that changes nothing leaves the instance generation alone; one
+	// that rewrites a row moves it, though it publishes no event.
+	gen := st.Bus.Generation("instance")
+	if _, err := st.RewriteObservations([]Instance{first, second}, func(*Instance, *proto.InstanceDesiredState) bool { return false }); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Bus.Generation("instance"); got != gen {
+		t.Fatalf("unchanged pass moved the generation %d -> %d", gen, got)
+	}
 	changed, err := st.RewriteObservations([]Instance{first, second}, func(instance *Instance, spec *proto.InstanceDesiredState) bool {
 		if instance.UUID != "o-1" {
 			return false
@@ -226,6 +235,9 @@ func TestRewriteObservationsStoresOnlyChangedInstancesAtomically(t *testing.T) {
 	}
 	if len(changed) != 1 || changed[0].UUID != "o-1" {
 		t.Fatalf("changed = %+v", changed)
+	}
+	if got := st.Bus.Generation("instance"); got != gen+1 {
+		t.Fatalf("rewriting pass: generation %d -> %d, want one step", gen, got)
 	}
 	if spec, _ := changed[0].DesiredState(); spec.Observation == nil || spec.Engine != "callable" {
 		t.Fatalf("returned state = %+v", spec)

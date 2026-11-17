@@ -136,10 +136,13 @@ func TestARefusedLaunchReportsTheNodeStatusAtOnce(t *testing.T) {
 		st         proto.InstanceStatus
 		wantStatus bool
 	}{
-		{"refused", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: proto.EnginePortRefused + ": port 30000 is already in use on this node; nothing was started"}, true},
-		{"foreign engine on the API port", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: proto.EnginePortInUse + ": another engine answers on this port"}, false},
+		{"refused", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: proto.ErrorEnginePortRefused + ": port 30000 is already in use on this node; nothing was started", RuntimeFailure: &proto.RuntimeFailure{Code: proto.ErrorEnginePortRefused, Port: 30000}}, true},
+		{"refusal text without its code", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: proto.ErrorEnginePortRefused + ": port 30000"}, false},
+		{"foreign engine on the API port", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: proto.ErrorEnginePortInUse + ": another engine answers on this port"}, false},
 		{"other failure", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: "image pull failed"}, false},
-		{"refusal text on a running report", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstRunning, Message: proto.EnginePortRefused + ": stale"}, false},
+		{"refused by code", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: "port 30000 taken", RuntimeFailure: &proto.RuntimeFailure{Code: proto.ErrorEnginePortRefused, Port: 30000}}, true},
+		{"other code with refusal text", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstFailed, Message: proto.ErrorEnginePortRefused + ": x", RuntimeFailure: &proto.RuntimeFailure{Code: proto.ErrorContainerExited}}, false},
+		{"refusal text on a running report", proto.TStatusInstance, proto.InstanceStatus{UUID: "u", State: proto.InstRunning, Message: proto.ErrorEnginePortRefused + ": stale"}, false},
 		{"another envelope", proto.TStatusModelFile, proto.InstanceStatus{}, false},
 	}
 	for _, tc := range cases {
@@ -150,7 +153,7 @@ func TestARefusedLaunchReportsTheNodeStatusAtOnce(t *testing.T) {
 			c.enginePorts.Store(&proto.PortRange{Start: 30000, End: 30010})
 			var d any = tc.st
 			if tc.t == proto.TStatusModelFile {
-				d = proto.ModelFileStatus{Key: "k", State: proto.MFFailed, Message: proto.EnginePortRefused + ": x"}
+				d = proto.ModelFileStatus{Key: "k", State: proto.MFFailed, Message: proto.ErrorEnginePortRefused + ": x"}
 			}
 			if err := c.handlerSend(context.Background())(tc.t, d); err != nil {
 				t.Fatal(err)

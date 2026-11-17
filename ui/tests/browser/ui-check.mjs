@@ -21,6 +21,8 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright-core";
+import { tableLinkFindings } from "./table-link-rules.mjs";
+import { states, settle } from "./page-states.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((pairs, arg, index, all) => {
   if (arg.startsWith("--")) pairs.push([arg.slice(2), all[index + 1]?.startsWith("--") || all[index + 1] == null ? "1" : all[index + 1]]);
@@ -167,7 +169,7 @@ const ruleScript = () => {
 // collapse onto their page's file.
 const safe = (value) => value.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 80) || "root";
 // States come in this order on both builds; a base state of a later kind waits for its turn.
-const kindOrder = { page: 0, drawer: 1, "drawer-tab": 2, dialog: 3 };
+const kindOrder = { page: 0, "detail-page": 1, drawer: 2, "drawer-tab": 3, dialog: 4 };
 
 async function login(page, origin) {
   await page.goto(`${origin}/login`);
@@ -178,47 +180,6 @@ async function login(page, origin) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20000 });
 }
 
-async function settle(page) {
-  await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
-  await page.waitForTimeout(500);
-}
-
-const openDialog = (page) => page.locator("[role=dialog]:visible, .ant-drawer-open .ant-drawer-content:visible, .ant-modal-wrap:visible .ant-modal-content");
-async function closeAll(page) {
-  for (let i = 0; i < 3 && await openDialog(page).count(); i++) { await page.keyboard.press("Escape"); await page.waitForTimeout(400); }
-}
-
-// Every state of one route: the page, its first detail drawer and tabs, header dialogs.
-async function* states(page, origin, route) {
-  await page.goto(origin + route); await settle(page);
-  yield { id: route, kind: "page" };
-  const back = async () => { if (new URL(page.url()).pathname !== route) { await page.goto(origin + route); await settle(page); } };
-  const link = page.locator("tbody tr:not(.ant-table-measure-row) td a, tbody tr:not(.ant-table-measure-row) td button.ant-btn-link").first();
-  if (await link.count()) {
-    await link.click().catch(() => {}); await settle(page);
-    if (await openDialog(page).count()) {
-      yield { id: `${route} · detail`, kind: "drawer" };
-      const tabs = openDialog(page).last().locator("[role=tab]");
-      for (let i = 1; i < Math.min(await tabs.count(), 8); i++) {
-        // Without its count badge ("GPUs 8"), which differs between builds and data.
-        const label = (await tabs.nth(i).innerText()).trim().split("\n")[0].replace(/\s*\d+$/, "");
-        await tabs.nth(i).click().catch(() => {}); await settle(page);
-        yield { id: `${route} · detail · ${label}`, kind: "drawer-tab" };
-      }
-      await closeAll(page);
-    }
-    await back();
-  }
-  const header = page.locator(".page-header [data-slot=page-actions] button, .page-header-extra button");
-  for (let i = 0; i < Math.min(await header.count(), 4); i++) {
-    const button = header.nth(i);
-    const label = ((await button.innerText().catch(() => "")) || (await button.getAttribute("aria-label")) || "").trim();
-    if (!label || await button.isDisabled() || /刷新|refresh|删除|delete|停止|stop|退出|log ?out/i.test(label)) continue;
-    await button.click().catch(() => {}); await settle(page);
-    if (await openDialog(page).count()) { yield { id: `${route} · ${label}`, kind: "dialog" }; await closeAll(page); }
-    await back();
-  }
-}
 
 async function run() {
   mkdirSync(join(out, "shots"), { recursive: true });
@@ -244,6 +205,7 @@ async function run() {
         head.errors.length = 0;
         await head.page.mouse.move(0, 0);
         const check = await head.page.evaluate(ruleScript);
+        check.findings.push(...await head.page.evaluate(tableLinkFindings));
         let file = `${locale}-${width}-${safe(state.id)}`;
         for (let n = 2; results.some((entry) => entry.file === file); n++) file = `${locale}-${width}-${safe(state.id)}-${n}`;
         await head.page.screenshot({ path: join(out, "shots", `${file}.png`) });

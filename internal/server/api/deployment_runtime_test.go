@@ -14,7 +14,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-func TestDeploymentRuntimeStatesMatchesListWithoutPerDeploymentQueries(t *testing.T) {
+func TestDeploymentEffectiveStatesMatchesListWithoutPerDeploymentQueries(t *testing.T) {
 	measure := func(extra int) int64 {
 		t.Helper()
 		fixture := newListFixture(t, 0)
@@ -35,7 +35,7 @@ func TestDeploymentRuntimeStatesMatchesListWithoutPerDeploymentQueries(t *testin
 		}
 		want := make(map[uint]string, len(listed))
 		for _, deployment := range listed {
-			want[deployment.ID] = deployment.RuntimeState
+			want[deployment.ID] = deployment.State
 		}
 		deployments, err = fixture.st.ListDeployments()
 		if err != nil {
@@ -53,7 +53,7 @@ func TestDeploymentRuntimeStatesMatchesListWithoutPerDeploymentQueries(t *testin
 		if err := fixture.st.DB().Callback().Row().Before("gorm:row").Register("test:runtime_rows", tally); err != nil {
 			t.Fatal(err)
 		}
-		got, err := deployment.RuntimeStates(fixture.st, nil, deployments, instances)
+		got, err := deployment.EffectiveStates(fixture.st, nil, deployments, instances)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,12 +64,12 @@ func TestDeploymentRuntimeStatesMatchesListWithoutPerDeploymentQueries(t *testin
 	}
 	small, large := measure(0), measure(40)
 	if small == 0 || large != small {
-		t.Fatalf("runtime state queries grew with deployments: small=%d large=%d", small, large)
+		t.Fatalf("effective state queries grew with deployments: small=%d large=%d", small, large)
 	}
 }
 
-func TestDeploymentRuntimeStatesNeedsNoReadsForStartingInstancesOrStoppedIntent(t *testing.T) {
-	states, err := deployment.RuntimeStates(nil, nil,
+func TestDeploymentEffectiveStatesNeedsNoReadsForStartingInstancesOrStoppedIntent(t *testing.T) {
+	states, err := deployment.EffectiveStates(nil, nil,
 		[]store.Deployment{{ID: 1, State: store.DeployActive}, {ID: 2, State: store.DeployStopped}},
 		[]store.Instance{{DeploymentID: 1, State: proto.InstStarting}, {DeploymentID: 2, State: proto.InstRunning}},
 	)

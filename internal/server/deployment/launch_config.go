@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -23,6 +24,13 @@ import (
 // request runs (requestEngineVersion): a flag that release may refuse gets no
 // default.
 func materializeDeployRequest(engine string, req *dto.DeployRequest, selection templateSelection, cards []deploy.CardFacts, engineVersion string) (deploy.Materialized, error) {
+	return materializeDeployRequestWithStoredArgs(engine, req, selection, cards, engineVersion, nil)
+}
+
+// An edit preview may keep the exact residual argv of a stored deployment.
+// The historical allowance belongs to that engine and those tokens only;
+// new creates and changed arguments still go through request validation.
+func materializeDeployRequestWithStoredArgs(engine string, req *dto.DeployRequest, selection templateSelection, cards []deploy.CardFacts, engineVersion string, stored *deploy.StoredLaunchConfig) (deploy.Materialized, error) {
 	extra, err := deploy.ParseArgsText(req.ExtraArgs)
 	if err != nil {
 		return deploy.Materialized{}, wrapProductError(messages.ErrorExtraArgsInvalid, "extra_args cannot be parsed", map[string]any{"detail": err.Error()}, err)
@@ -32,6 +40,9 @@ func materializeDeployRequest(engine string, req *dto.DeployRequest, selection t
 	}
 	command, err := effectiveRequestCommand(req, selection)
 	if err != nil {
+		return deploy.Materialized{}, err
+	}
+	if err := ValidateChangedExtraArgs(engine, extra, command, stored); err != nil {
 		return deploy.Materialized{}, err
 	}
 	templateArgs := selection.ExtraArgs
@@ -60,6 +71,27 @@ func materializeDeployRequest(engine string, req *dto.DeployRequest, selection t
 		return deploy.Materialized{}, err
 	}
 	return out, nil
+}
+
+// ValidateChangedExtraArgs applies the target dictionary to new user tokens.
+// Create, evaluate and edit share the same historical and manual allowances.
+func ValidateChangedExtraArgs(engine string, args []string, command deploy.EffectiveCommand, stored *deploy.StoredLaunchConfig) error {
+	if !command.InterpretEngineDialect || sameStoredExtraArgs(engine, args, stored) {
+		return nil
+	}
+	return deploy.ValidateExtraArgsForEngine(engine, args)
+}
+
+func sameStoredExtraArgs(engine string, args []string, stored *deploy.StoredLaunchConfig) bool {
+	if stored == nil {
+		return false
+	}
+	previousEngine, err := deploy.SelectEngine(stored.Engine)
+	if err != nil || previousEngine.Name() != engine {
+		return false
+	}
+	previous, err := deploy.ParseArgsText(stored.ExtraArgsText)
+	return err == nil && slices.Equal(previous, args)
 }
 
 func effectiveRequestCommand(req *dto.DeployRequest, selection templateSelection) (deploy.EffectiveCommand, error) {

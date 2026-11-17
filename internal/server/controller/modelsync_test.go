@@ -35,6 +35,14 @@ type modelSyncHub struct {
 }
 
 func (h *modelSyncHub) Online(uuid string) bool { return h.online[uuid] }
+
+func (h *modelSyncHub) UCXNetlinkHang(string) *proto.UCXNetlinkHang { return nil }
+
+// RequestImageRefs records the refs as the push the hub would send.
+func (h *modelSyncHub) RequestImageRefs(uuid string, refs []string) {
+	_ = h.PushToNode(uuid, proto.StateUpdate{ImageRefs: refs})
+}
+
 func (h *modelSyncHub) PushToNode(_ string, update proto.StateUpdate) error {
 	h.mu.Lock()
 	h.updates = append(h.updates, update)
@@ -232,7 +240,7 @@ func TestSyncModelToNodeDoesNotReuseAbsolutePathFromPreviousDownload(t *testing.
 	}
 	hub := &modelSyncHub{online: map[string]bool{"src": true, "dst": true}, called: make(chan struct{}), release: make(chan struct{})}
 	c := New(st, hub, nil)
-	if _, err := c.SyncModelToNodeWithOptions(context.Background(), model.ID, dst.UUID, src.UUID, -1); err != nil {
+	if _, err := c.Transfers().Sync(context.Background(), model.ID, dst.UUID, src.UUID, -1); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -248,6 +256,38 @@ func TestSyncModelToNodeDoesNotReuseAbsolutePathFromPreviousDownload(t *testing.
 		t.Fatalf("peer target path = %q, want target-relative %q", request.TargetPath, want)
 	}
 	close(hub.release)
+}
+
+// The source and rate an operator gives a sync are the ones its transfer
+// runs with.
+func TestAnOperatorsSyncRateReachesTheTransfer(t *testing.T) {
+	st, model, src, dst, dstMF := setupModelSyncController(t)
+	dstMF.State = proto.MFFailed
+	dstMF.Acquisition = proto.ModelAcquirePeer
+	if _, err := st.UpsertModelFile(dstMF); err != nil {
+		t.Fatal(err)
+	}
+	hub := &modelSyncHub{online: map[string]bool{"src": true, "dst": true}, called: make(chan struct{}), release: make(chan struct{})}
+	c := New(st, hub, nil)
+	if _, err := c.Transfers().Sync(context.Background(), model.ID, dst.UUID, src.UUID, 4096); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-hub.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("peer copy did not start")
+	}
+	defer close(hub.release)
+	got, err := st.ModelFileByModelNode(model.ID, dst.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub.mu.Lock()
+	request := hub.requests[0]
+	hub.mu.Unlock()
+	if got.RateLimit != 4096 || got.TransferSourceNodeID != src.ID || request.SourceNodeUUID != src.UUID {
+		t.Fatalf("row rate %d, source %d, request source %q; want 4096 from %d", got.RateLimit, got.TransferSourceNodeID, request.SourceNodeUUID, src.ID)
+	}
 }
 
 func TestTargetPresentBeforeSourceRPCResponseDoesNotCancelSuccessfulSync(t *testing.T) {
@@ -398,7 +438,7 @@ func TestTargetCompletionWinsRaceWithSourceRPCError(t *testing.T) {
 	c := New(st, hub, nil)
 	key := testModelFileKey(t, st, model.ID, dst.ID)
 	run := &modelSyncRun{transferID: transferID, cancel: func() {}}
-	c.modelSyncs[key] = run
+	c.syncs.register(key, run)
 	c.runModelSync(copyCtx, key, run, peerSource{node: src, path: "/models/Qwen3", sizeBytes: 12},
 		dst, dstMF, netplan.StoragePath{Network: netplan.ManagementName, SourceIP: "10.0.0.1", TargetIP: "10.0.0.2"})
 
@@ -467,7 +507,7 @@ func TestCancelModelSyncStopsCoordinatorAndTarget(t *testing.T) {
 	pushedBefore := len(hub.updates)
 	hub.onStop = func() { waitForModelSyncIdle(t, c, testModelFileKey(t, st, model.ID, dst.ID)) }
 	hub.mu.Unlock()
-	canceled, err := c.CancelModelSync(context.Background(), model.ID, dst.UUID)
+	canceled, err := c.Transfers().Cancel(context.Background(), model.ID, dst.UUID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -570,9 +610,7 @@ func waitForModelSyncIdle(t *testing.T, c *Controller, key string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		c.syncMu.Lock()
-		_, active := c.modelSyncs[key]
-		c.syncMu.Unlock()
+		active := c.syncs.current(key) != nil
 		if !active {
 			return
 		}
@@ -585,9 +623,7 @@ func waitForModelSyncIdle(t *testing.T, c *Controller, key string) {
 
 func assertModelSyncActive(t *testing.T, c *Controller, key string) {
 	t.Helper()
-	c.syncMu.Lock()
-	_, active := c.modelSyncs[key]
-	c.syncMu.Unlock()
+	active := c.syncs.current(key) != nil
 	if !active {
 		t.Fatal("model sync activity lock was released before target terminal status")
 	}
@@ -633,7 +669,7 @@ func TestPeerSyncSkipsAHolderWithoutAStoragePath(t *testing.T) {
 	}
 
 	// Asked to probe a copy between them, the controller explains why not.
-	err = c.ProbeModelSync(context.Background(), model.ID, "dst", "src")
+	err = c.Transfers().Probe(context.Background(), model.ID, "dst", "src")
 	var product interface{ Code() string }
 	if !errors.As(err, &product) || product.Code() != messages.ErrorNoStoragePath {
 		t.Fatalf("probe err = %v", err)
@@ -673,7 +709,7 @@ func TestProbeModelSyncAsksForTheCopysTargetPath(t *testing.T) {
 	}
 	hub := &probingHub{modelSyncHub: &modelSyncHub{online: map[string]bool{"src": true, "dst": true}}}
 	c := New(st, hub, nil)
-	if err := c.ProbeModelSync(context.Background(), model.ID, dst.UUID, "src"); err != nil {
+	if err := c.Transfers().Probe(context.Background(), model.ID, dst.UUID, "src"); err != nil {
 		t.Fatal(err)
 	}
 	if len(hub.probed) != 1 || hub.probed[0].TargetPath != relModelPath(model) || !hub.probed[0].AllowRelay {

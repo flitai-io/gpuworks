@@ -17,7 +17,7 @@ to create or delete instances, see [Create and Release Instances Through the API
 ## Add a Cloud Account
 
 1. Open **External Platforms** under **Compute** in the left menu (path: `/providers`).
-2. Click **Add External Platform**, or click a provider card under **Quick Connect** in the center of the page to preselect its type. Links to the providers' official websites appear below the cards.
+2. Click **Add External Platform**, or click a provider card under **Quick Connect** in the center of the page to preselect its type. The small mark beside a provider's name on its card opens the provider's official website.
 3. Select the vendor in the **External platform** field, enter a **Name** (required; choose your own) and the fields under **Credentials**, then click **Add**.
 
 Credential fields for each type (the UI is authoritative; optional fields can be left blank):
@@ -43,21 +43,22 @@ in the list: **fields left blank retain their existing values**. You cannot chan
 
 ## Sync Instances and Check Types, Regions, and Prices
 
-1. Click **Sync** for an account in the **Connected external platforms** list (or **Sync All** at the top of the page to sync all external platforms at once). The list's **External platform** column shows the provider (such as Alibaba Cloud or RunPod), and its **Platform type** column shows **Public cloud**. On completion, the message reads **Synchronization complete; N instances found**.
-2. Click the expand arrow on the left of the account row to view its instance table:
+1. Click **Sync** for an account in the **Connected external platforms** list (or **Sync All** at the left of the list's toolbar to sync every external platform that can be synced at once; the “Last synced: <time>” beside it is the latest sync of any account). The list's **Vendor** column shows the provider (such as Alibaba Cloud or RunPod), and its **Platform type** column shows **Public cloud**. On completion, the message reads **Synchronization complete; N instances found**.
+2. Click the expand arrow on the left of the account row to view its instance table. For a provider with managed Kubernetes (Alibaba Cloud, DigitalOcean), the row expands to one grouped table: the account's own instances are in the **Standalone instances** group, followed by one group per managed cluster (see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md)); for other providers it shows the instances alone, ungrouped. The first 10 instances are shown; click **Show N more** at the end of the table for the rest:
 
    | Column | Meaning |
    |---|---|
-   | Instance name / Instance ID | Name and ID at the cloud provider |
-   | GPU model / GPUs | Specifications returned by the provider; **Not returned** if unavailable |
-   | Connection | Endpoints offered by the provider: **Direct** or **External platform proxy** (SSH, with a copyable `ssh` command; endpoints marked **Terminal only** support connections but cannot install the agent). Alibaba Cloud also offers **Cloud Assistant** (no SSH needed) |
+   | Instance | Name at the cloud provider, with the instance ID on the line below |
+   | GPU | Model and GPU count returned by the provider (for example, `L20 ×1`); **Not returned** if the model is unavailable |
    | Status | Running / Stopped / Unknown |
-   | Price | Hourly price (for example, `¥1.98/hr`); if the provider returns no price, this may display `¥0.00/hr`, which does not mean it is free |
-   | Region, Type | Region; type is **Container** or **Virtual machine** |
+   | Price | Hourly price (for example, `¥1.98/hr`); if the provider returns no price, this may display `¥0.00/hr`, which does not mean it is free. The column appears only for providers that supply prices |
+   | Region, Type | Region (no such column for a private cloud); type is **Container** or **Virtual machine**, and the column appears only when the provider has more than one kind of instance |
+   | Connection | Endpoints offered by the provider: **Direct** or **External platform proxy** (SSH, with a copyable `ssh` command; endpoints marked **Terminal only** support connections but cannot install the agent). Alibaba Cloud also offers **Cloud Assistant** (no SSH needed) |
+   | Actions | **Power on** or **Power off** (where the provider supports power control) and **Install Agent**; an instance that has already joined shows **Onboarded** |
 
 3. Account status changes with sync results. A failed sync marks the account as **Error** and displays **Some external platforms have errors** at the top of the page. Follow the prompt to check credentials and provider API availability, then sync again.
 
-The list automatically refreshes account status every 15 seconds, but the instance inventory comes from the last sync. Click **Sync** again for the latest cloud state. Container instances usually have no usable Docker daemon; the agent uses the built-in runveil when Docker is unavailable. Being root inside a container does not mean you can run the host's Docker.
+The list automatically refreshes account status every 15 seconds, but the instance inventory comes from the last sync. Click **Sync** again for the latest cloud state. An expanded account starts with a line holding **Sync** and “Last synced: <time>” (“Instances not synced yet” for an account never synced): this **Sync** is the same as the row's own **Sync** in the actions column; it lists the instances from the cloud provider again, and the managed clusters are read again after it. A vendor that cannot list its instances has neither this **Sync** nor a sync time. Managed clusters are not kept in the sync result: gpuworks reads them from the cloud provider when the account is expanded. Container instances usually have no usable Docker daemon; the agent uses the built-in runveil when Docker is unavailable. Being root inside a container does not mean you can run the host's Docker.
 
 ## Install the Agent to Add the Instance to Compute Nodes
 
@@ -73,7 +74,7 @@ First confirm that the instance is running, then prepare addresses according to 
 1. Find an instance that is not yet onboarded in the instance table, then click **Install Agent**. Connected instances show **Onboarded**.
 2. In the page, select the **Connection** and **Connection direction**, and check the addresses against the table above. **Automatic** tries installation channels according to provider capabilities: Cloud Assistant is preferred for agent-initiated connections on Alibaba Cloud; otherwise, direct SSH is preferred, with other available endpoints tried after a failure. You can also select an endpoint explicitly; endpoints marked **Terminal only** cannot install the agent.
 3. Under **Advanced Settings**, check the installation directory and **Start via systemd**, then review the credentials, ports, and restart conditions below and click **Install**. You do not need to create a compute node or obtain a token first.
-4. Wait for the installation result and expand any failures or warnings. When **Agent installed and connected** appears, click **Done**. For **Agent installed, with notes**, inspect the report first. If **Agent started, not connected yet** appears, the agent is installed: fix connectivity first instead of reinstalling.
+4. Wait for the installation result and expand any failures, warnings or unchecked items. When **Agent installed and connected** appears, click **Done**. For **Agent installed, with notes**, inspect the report first. If **Agent started, not connected yet** appears, the agent is installed: fix connectivity first instead of reinstalling.
 5. Open **Compute Nodes**, confirm that the node for this instance is online, and check its accelerator model, count, and runtime. If installation fails, retain the reason from the report, fix it, and click **Try again** in the page. Pending nodes whose installation has not succeeded are cleaned up.
 
 An empty installation directory defaults to `/opt/gpuworks`. A custom directory must start with `/` and cannot be the root directory; `~` is not expanded. Installation fails if the specified directory is not writable, without falling back to `/tmp/gpuworks`.
@@ -94,7 +95,7 @@ SSH installation uses the platform key by default, so you usually do not need to
 
 Once the platform public key is written successfully, subsequent recovery uses the platform key. If writing fails, the credentials that worked for this attempt may be retained. See report items such as `SSH authentication` and `Platform key` for the actual result. If precheck indicates that the public key is added only during installation, other checks requiring a login continue during installation.
 
-**RunPod public key or port changes may require restart confirmation.** When `INSTANCE_RESTART_REQUIRED` appears, the pod has not yet been modified. Only after confirmation does the platform update the configuration, restart, and continue installation. **Restarting clears nonpersistent volumes, and port mappings (including SSH) may be reassigned**. Save data you need to keep first. If you cannot accept a restart, cancel and use working login credentials or another connection method. Use `Platform key (pod)` and `Server-dial port` in the report to check the results.
+**RunPod public key or port changes may require restart confirmation.** When `INSTANCE_RESTART_REQUIRED` appears, the pod has not yet been modified. Only after confirmation does the platform update the configuration, restart, and continue installation. **Restarting clears nonpersistent volumes, and port mappings (including SSH) may be reassigned**. Save data you need to keep first. If you cannot accept a restart, cancel and use working login credentials or another connection method. Use **Platform key (provider)** and **Server-dial port** in the report to check the results.
 
 ### Provider Differences for Server-Initiated Connections
 
@@ -115,7 +116,7 @@ In GPUWORKS, you can do the following:
 
 - **Power off**: click **Power off** in the instance row and confirm. Only types that support power control have this button (Alibaba Cloud, CompShare, and AutoDL); the same applies to **Power on**. After you click it, **Power-off request sent** appears. The subsequent sync result determines the status. Alibaba Cloud uses **normal stop**, which continues billing; powering off does not release the instance.
 - **Release (destroy)**: the UI has no button for releasing instances. RunPod and Vast.ai do not support power control, so they have no power-off button. Manage stopping or destroying these instances in the provider's console, or release them with a supported REST API. Check the bill to confirm whether charges have ended.
-- **Delete a cloud account** (**Delete** in the list) only deletes the account, credentials, and instance records in GPUWORKS. It **does not** stop or destroy instances in the cloud or delete onboarded nodes.
+- **Delete a cloud account** (**Delete** in the list) only deletes the account, credentials, and instance records in GPUWORKS. It **does not** stop or destroy instances or clusters in the cloud or delete onboarded nodes. Kubernetes cluster entries connected from the account remain as clusters connected on their own: their nodes keep working, but GPUWORKS can no longer apply the manifest to or uninstall from those clusters; use `kubectl` when needed. The confirmation dialog lists these consequences.
 - A successful API release immediately removes the instance from the list; a failed release leaves the list unchanged. Instances destroyed in the provider's console or reclaimed after expiration are removed on the next successful sync. A failed sync (account marked **Error**) does not change the list.
 - Nodes onboarded on these instances are not deleted: they remain and are marked `stopped` directly during out-of-band recovery (reason: `provider instance no longer exists`), with no further SSH recovery attempts. See [Troubleshooting](troubleshooting.md). Delete a node manually after confirming that you no longer need it.
 
@@ -184,7 +185,7 @@ To install the agent on a compatible persistent volume or data disk, enter the i
 
 - **SSH authentication fails after trying only the platform key**: the instance does not yet have the platform public key. For a RunPod pod started before the server registered its public key, installation from **External Platforms** asks whether to restart to add the key. You can also provide a private key or password once under **Advanced Settings**, or authorize it on the instance as instructed by the error.
 - **The provider returns no SSH endpoint**: the instance may still be starting. Click **Sync** again later.
-- **agent_dial warning**: the agent has started but is not connected to the server, usually because `server_url` is unreachable from the instance. Follow the next item.
+- **Agent connects to server warning**: the agent has started but is not connected to the server, usually because `server_url` is unreachable from the instance. Follow the next item.
 
 **Installation succeeds, but the node does not appear under Compute Nodes or remains offline**
 For an agent-initiated connection, check whether `server_url` is reachable from the instance and inspect the agent logs. If the address is wrong, correct the connection configuration while retaining this node's identity. For a server-initiated connection, check TCP connectivity from the server to the instance's connection address, port mappings, and security groups; do not enter `server_url`. For rejected connections or disconnections after onboarding, see [Troubleshooting](troubleshooting.md).
@@ -213,7 +214,7 @@ Leave **Regions** blank to sync all regions in the account. If you have instance
 | `ecs:DescribeCloudAssistantStatus` | Check whether the instance's Cloud Assistant is online |
 | `ecs:RunCommand`, `ecs:DescribeInvocationResults` | Run preinstallation checks and installation through Cloud Assistant, and read results |
 | `ecs:StartInstance`, `ecs:StopInstance` | Power on and power off; omit if not needed |
-| `cs:DescribeClustersV1`, `cs:DescribeClusterNodePools`, `ecs:DescribeInstanceTypes` | The “Kubernetes clusters” tab lists ACK clusters and their GPU node pools; omit if you do not connect ACK |
+| `cs:DescribeClustersV1`, `cs:DescribeClusterNodePools`, `ecs:DescribeInstanceTypes` | Lists ACK clusters and their GPU node pools under the expanded account; omit if you do not connect ACK |
 | `cs:DescribeClusterUserKubeconfig` | Issues a kubeconfig valid for 15 minutes when GPUWORKS applies the connect manifest to an ACK cluster; omit if you connect with kubectl only |
 | `ecs:DescribeSecurityGroupAttribute` | Read inbound security group rules for server-initiated connections; omit if you do not use this check |
 
@@ -289,7 +290,7 @@ The server calls `RunCommand` to have the instance execute, as root, the same on
 
 The platform tries to append its public key to the instance root user's `~/.ssh/authorized_keys` through Cloud Assistant, avoiding duplicate keys, then logs in with the platform key:
 
-- **Cloud Assistant is online**: the public key can be added directly without manually entered credentials. The report item is `Platform key (Cloud Assistant)`.
+- **Cloud Assistant is online**: the public key can be added directly without manually entered credentials. The report item is **Platform key (provider)**.
 - **Cloud Assistant is not yet online**: installation waits up to 2 minutes, then adds the key once it comes online. The report records the wait time. Just after startup, SSH may become reachable first, while Cloud Assistant sends its first heartbeat roughly a minute later.
 - **Still offline after waiting**: for example, if a custom image has no preinstalled Cloud Assistant and the instance lacks the platform key, provide a password or private key once under **Advanced Settings**. The Alibaba Cloud API does not return the root password. To install Cloud Assistant, choose the method for your operating system in the [Alibaba Cloud installation instructions](https://help.aliyun.com/zh/ecs/user-guide/install-the-cloud-assistant-agent), and check whether it requires a restart.
 
@@ -299,9 +300,9 @@ For an instance without the platform public key, the `SSH` row in precheck displ
 
 Cloud Assistant records executed commands; retention depends on Alibaba Cloud settings and documentation. The command contains the node connection token, which the agent continues using to connect to the server. Alibaba Cloud users authorized to view invocation records (`ecs:DescribeInvocations`) can read the token. Deleting the node invalidates its token.
 
-**ACK clusters**: the “Kubernetes clusters” tab of an expanded account lists, live, the account's ACK clusters (Serverless and ACS clusters run Pods on virtual nodes, which cannot run the agent DaemonSet, so they are not listed) and their GPU node pools. A node pool counts only when all its instance types carry GPUs of the same model; auto-mode node pools (no specified instance type) are not listed. Choose a node pool and click “Connect” to create a Kubernetes cluster entry whose node selector is `alibabacloud.com/nodepool-id=<node pool ID>`. After that, GPUWORKS can apply the manifest, or you can run kubectl yourself; see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md). The nodes of an ACK cluster are themselves GPU instances: they appear in the instance table marked “Cluster node” and cannot have the agent installed individually.
+**ACK clusters**: an expanded account lists, live, the account's ACK clusters below the “Standalone instances” group (Serverless and ACS clusters run Pods on virtual nodes, which cannot run the agent DaemonSet, so they are not listed), one group per cluster showing its GPU node pools among its facts. A node pool counts only when all its instance types carry GPUs of the same model; auto-mode node pools (no specified instance type) are not listed. Click “Connect” in the cluster's group header and settle the node pools in the drawer that opens (all are chosen by default; remove the ones you do not want, and add a removed one back from “Add a node pool”) to create a Kubernetes cluster entry; the agent runs only on the nodes of the chosen pools (selected by the node label `alibabacloud.com/nodepool-id`). After that, GPUWORKS can apply the manifest, or you can run kubectl yourself; see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md). The nodes of an ACK cluster are themselves GPU instances, but they do not appear in the “Standalone instances” group and are not listed one by one in the cluster's group either: they join through the cluster and cannot have the agent installed individually.
 
-For GPUWORKS to apply the manifest, the cluster's API Server needs a public address (select “Expose API Server with EIP” when creating the cluster; clusters without one show “Private API only” and can be connected only with kubectl). If you use a RAM sub-account, that sub-account must also be granted cluster administrator RBAC permissions (or permissions to create Namespaces, RBAC, DaemonSets, and PriorityClasses) on the cluster under “Authorizations” in the ACK console; otherwise the issued kubeconfig is rejected by the cluster, and GPUWORKS shows the cluster's rejection reason verbatim.
+For GPUWORKS to apply the manifest, the cluster's API Server needs a public address (select “Expose API Server with EIP” when creating the cluster; clusters without one show “Private network only” and can be connected only with kubectl). If you use a RAM sub-account, that sub-account must also be granted cluster administrator RBAC permissions (or permissions to create Namespaces, RBAC, DaemonSets, and PriorityClasses) on the cluster under “Authorizations” in the ACK console; otherwise the issued kubeconfig is rejected by the cluster, and GPUWORKS shows the cluster's rejection reason verbatim.
 
 **Power control**: power-off uses **normal stop** (billing continues), preserving resources such as the instance's GPUs and fixed public IP. **Economical mode** releases those resources, and capacity may be unavailable when restarting. GPUWORKS does not use that mode.
 
@@ -309,10 +310,13 @@ For GPUWORKS to apply the manifest, the cluster's API Server needs a public addr
 
 **Credentials**: in the DigitalOcean console, go to “API → Tokens”, generate a Personal Access Token, and enter it as the API Key. Full Access is simplest. With custom scopes, cover read access to account, droplet, size, ssh_key, and kubernetes; write access to droplet for powering on/off, creating, and deleting Droplets; write access to ssh_key for registering the platform public key; and the corresponding kubernetes permission for issuing a DOKS kubeconfig (custom scope combinations have not been tested one by one; when a permission is missing, the UI shows the reason DigitalOcean returns).
 
-**Sync**: the instance table lists only GPU Droplets (sizes that include GPUs); the model, GPU count, and hourly price come from the size. DigitalOcean GPU sizes must be enabled for the account; if a size does not appear in the console or API, request it in the console first. The nodes of a DOKS cluster are also GPU Droplets; they are marked “Cluster node” and cannot have the agent installed individually.
+**Sync**: the instance table lists only GPU Droplets (sizes that include GPUs); the model, GPU count, and hourly price come from the size. DigitalOcean GPU sizes must be enabled for the account; if a size does not appear in the console or API, request it in the console first. The nodes of a DOKS cluster are also GPU Droplets, but they do not appear in the “Standalone instances” group: they join through the cluster and cannot have the agent installed individually.
 
 **Installation**: over SSH (`root@<public IP>:22`). When the account is added, the platform public key is registered as an account SSH key, and Droplets subsequently created through GPUWORKS carry it, so no credentials are needed. DigitalOcean cannot add an account key to an existing Droplet; for Droplets created elsewhere, provide a private key or password once under “Advanced Settings” during installation. SSH keys already in the account are never modified or deleted; the `gpuworks-platform` key registered by the platform stays in DigitalOcean after you delete the account in GPUWORKS, so delete it under “Settings → Security” in the console when it is no longer needed.
 
 **Power control and release**: power on and power off map to the Droplet's power on / power off (billing continues after power-off); releasing deletes the Droplet together with its data.
 
-**DOKS clusters**: the “Kubernetes clusters” tab lists the account's DOKS clusters and NVIDIA GPU node pools (AMD node pools are not listed). After connecting, the node selector is `doks.digitalocean.com/node-pool-id=<node pool ID>`. GPUWORKS can apply the manifest with a kubeconfig valid for 15 minutes, or you can run kubectl yourself; see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md).
+**DOKS clusters**: an expanded account lists the account's DOKS clusters below the “Standalone instances” group, one group per cluster showing its NVIDIA GPU node pools (AMD node pools are not listed). Connect it with “Connect” in the group header, settling the node pools in the drawer (all are chosen by default); after that, the agent runs only on the nodes of the chosen pools (selected by the node label `doks.digitalocean.com/node-pool-id`). GPUWORKS can apply the manifest with a kubeconfig valid for 15 minutes, or you can run kubectl yourself; see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md).
+
+<!-- translation-source-sha256: 2d6bb04ca5510c9ea63d698a1a46a731f91b2611688855b1083b6cd01d599097 -->
+<!-- translation-localized-code-block: a6a0a8058e9146b7cd2f396be4bad9947574d42b7cd5f0b9919404ca23294d5e 2c9437c6fbea28b4dc5c7f8200bb9e8b0b7ef31cd2e89dfcf8055f3c69392472 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->

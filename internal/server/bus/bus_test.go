@@ -124,6 +124,31 @@ func TestGenerationCountsATopicsStateChanges(t *testing.T) {
 	}
 }
 
+// Advance moves a topic's generation and delivers nothing.
+func TestAdvanceMovesTheGenerationWithoutAnEvent(t *testing.T) {
+	b := New()
+	sub := b.Subscribe(4, "instance")
+	defer sub.Close()
+	b.Advance("instance")
+	b.PublishChange("instance", "i1", "running")
+	if got := b.Generation("instance"); got != 2 {
+		t.Fatalf("generation = %d, want 2", got)
+	}
+	select {
+	case e := <-sub.C():
+		if e.Key != "i1" {
+			t.Fatalf("first event = %+v, want the published one", e)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("published event not delivered")
+	}
+	select {
+	case e := <-sub.C():
+		t.Fatalf("Advance delivered %+v", e)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 // A burst larger than the buffer leaves events in pending. Once the consumer
 // drains the channel, those events must keep flowing with no further publish
 // and no test-side flush: the flusher owns moving them.

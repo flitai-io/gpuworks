@@ -23,7 +23,7 @@
     "checks": [
       {
         "id": "model-record:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -43,7 +43,7 @@
       },
       {
         "id": "model-source:1:1:1",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -63,7 +63,7 @@
       },
       {
         "id": "model-metadata:1:0:0",
-        "status": "unknown",
+        "status": "skip",
         "message": {
           "code": "MODEL_SOURCE_UNAVAILABLE",
           "params": {
@@ -378,5 +378,15 @@
   "yield_policy_eligible": {
     "ok": false,
     "reason": "SLEEP_NOT_ENABLED"
+  },
+  "health_checkable": false,
+  "priority_scheduling": {
+    "ok": false,
+    "refusal": {
+      "code": "PRIORITY_SCHEDULING_ENGINE_UNSUPPORTED",
+      "params": {
+        "engine": "callable"
+      }
+    }
   }
 }

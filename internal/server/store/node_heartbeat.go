@@ -19,7 +19,7 @@ func (s *Store) TouchNodesAt(seen map[string]time.Time) error {
 	if len(seen) == 0 {
 		return nil
 	}
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
 		for uuid, at := range seen {
 			if err := tx.Model(&Node{}).Where("uuid = ?", uuid).Update("last_seen_at", at).Error; err != nil {
 				return err
@@ -27,4 +27,9 @@ func (s *Store) TouchNodesAt(seen map[string]time.Time) error {
 		}
 		return nil
 	})
+	if err == nil {
+		// A heartbeat is routine: FleetNodes shows it after the report window.
+		s.noteNodeChange(NodeChangeStatus)
+	}
+	return err
 }

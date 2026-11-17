@@ -56,7 +56,7 @@ type monitorOverviewDTO struct {
 // gpuworks-agent scrapes a real fake-engine container's Prometheus
 // /metrics endpoint over several real 10s collector ticks, the real server
 // ingests those histogram buckets into quantile-at-ingest gauges
-// (internal/server/app/observability_quantile.go) and the real preemptions
+// (internal/server/obsingest/quantile.go) and the real preemptions
 // counter, and GET /api/v1/monitor/deployments/{id} and
 // /api/v1/monitor/series surface both back out over HTTP.
 //
@@ -110,9 +110,7 @@ func TestMonitorOverviewReportsQuantilesFromFakeEngineHistograms(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { stopProcess(agent) })
-	waitNode(t, base, adminToken, func(candidate processNode) bool {
-		return candidate.UUID == seed.UUID && candidate.State == "online"
-	})
+	waitNodeWithCards(t, base, adminToken, seed.UUID)
 
 	modelDir := filepath.Join(t.TempDir(), "model")
 	if err := os.MkdirAll(modelDir, 0o755); err != nil {
@@ -190,7 +188,7 @@ func TestMonitorOverviewReportsQuantilesFromFakeEngineHistograms(t *testing.T) {
 	// The collector ticks every 10s (internal/agent/collector/collector.go)
 	// and the quantile-at-ingest bucket-delta needs at least two ticks before
 	// it emits its first gauge (the very first scrape only establishes the
-	// baseline vector - see observability_quantile.go's doc comment), so wait
+	// baseline vector - see obsingest/quantile.go's doc comment), so wait
 	// for at least 3 ticks worth of real wall-clock time. The deadline below
 	// gives that generous headroom for a slow CI runner without letting a
 	// genuine regression hang the suite.

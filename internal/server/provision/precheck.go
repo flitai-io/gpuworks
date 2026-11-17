@@ -4,6 +4,7 @@ package provision
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"gpuworks.ai/gpuworks/internal/commandlog"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 )
 
 // SSHPrecheckRequest is the API input for a read-only SSH precheck.
@@ -46,13 +48,6 @@ type SSHPrecheckRequest struct {
 	// neither the listen port nor the address is known yet, so neither is
 	// probed.
 	ProviderChoosesPort bool `json:"-"`
-}
-
-// CheckResult is one precheck item.
-type CheckResult struct {
-	Name   string `json:"name"`
-	Status string `json:"status"` // ok | warn | error
-	Detail string `json:"detail,omitempty"`
 }
 
 // SSHPrecheckReport is the structured precheck result.
@@ -112,21 +107,24 @@ func (p *SSHPrechecker) PrecheckSSH(ctx context.Context, req SSHPrecheckRequest)
 		commands = macPrecheckCommands()
 	}
 	if strings.TrimSpace(req.ConnectMode) == "server_dial" && !req.ProviderChoosesPort {
-		commands = append(commands, precheckCommand{name: "Agent listen port", command: agentListenPortCheckCommand(req.ServerDialListen), required: true})
+		commands = append(commands, precheckCommand{id: CheckIDAgentListenPort, command: agentListenPortCheckCommand(req.ServerDialListen), required: true,
+			failCode: messages.CheckAgentPortUnavailable, failMessage: "the agent cannot listen on its port", params: map[string]any{"listen": req.ServerDialListen}})
 	}
 	if !mac {
 		commands = append(commands, precheckCommandsForKind(req.InstanceKind)...)
 	}
 	if strings.TrimSpace(req.ServerURL) != "" && shouldCheckServerReachability(req.ConnectMode) {
-		commands = append(commands, precheckCommand{name: checkServerReachability,
-			command: fmt.Sprintf(`curl -fsS --connect-timeout 3 %s/healthz`, shellQuote(strings.TrimRight(req.ServerURL, "/"))), required: true})
+		server := strings.TrimRight(req.ServerURL, "/")
+		commands = append(commands, precheckCommand{id: CheckIDServerReachability,
+			command: fmt.Sprintf(`curl -fsS --connect-timeout 3 %s/healthz`, shellQuote(server)), required: true,
+			failCode: messages.CheckServerUnreachableFromNode, failMessage: "the node cannot reach the server", params: map[string]any{"server": server}})
 	}
 	report.Checks = append(report.Checks, runPrecheckCommands(ctx, client, commands)...)
 	requested := expandRemoteHome(ctx, client, req.InstallDir)
 	if mac {
 		privilege := macPrivilegeCheck(ctx, client, req.SSHAuth)
 		report.Checks = append(report.Checks, privilege)
-		admin := privilege.Status == "ok"
+		admin := privilege.Passed()
 		dir := macInstallDir(ctx, client, requested)
 		report.Checks = append(report.Checks, ProbeMacInstallDir(ctx, client, dir, admin).Checks...)
 	} else {
@@ -134,8 +132,8 @@ func (p *SSHPrechecker) PrecheckSSH(ctx context.Context, req SSHPrecheckRequest)
 	}
 	report.Checks = append(report.Checks, existingAgentCheck(ctx, client, req.ServerURL))
 	if req.ProviderChoosesPort {
-		report.Checks = append(report.Checks, CheckResult{Name: checkServerToAgent, Status: "ok",
-			Detail: "checked during the install: it picks a free TCP port the provider maps to the instance, then the server connects to it"})
+		report.Checks = append(report.Checks, SkipCheck(CheckIDServerToAgent, messages.CheckServerToAgentAtInstall,
+			"checked during the install: it picks a free TCP port the provider maps to the instance, then the server connects to it", nil))
 	} else if !req.SkipServerToAgent {
 		dialHost := strings.TrimSpace(req.HostAddress)
 		if dialHost == "" {
@@ -148,21 +146,22 @@ func (p *SSHPrechecker) PrecheckSSH(ctx context.Context, req SSHPrecheckRequest)
 
 func basePrecheckCommands() []precheckCommand {
 	return []precheckCommand{
-		{name: "OS/Arch", command: `printf '%s %s %s\n' "$(uname -s)" "$(uname -m)" "$(uname -r)"`, required: true},
-		{name: "Sudo", command: sudoProbeCommand()},
+		{id: CheckIDOSArch, command: `printf '%s %s %s\n' "$(uname -s)" "$(uname -m)" "$(uname -r)"`, required: true,
+			failCode: messages.CheckCommandFailed, failMessage: "the OS and architecture could not be read"},
+		{id: CheckIDSudo, command: sudoProbeCommand(), failCode: messages.CheckNoRootOrSudo, failMessage: "no root and no passwordless sudo"},
 		// Advisory only: the default runveil launcher needs no Python; only the
 		// udocker CLI launcher (GPUWORKS_UDOCKER_LAUNCHER=udocker) does.
-		{name: "python3", command: pythonProbeCommand()},
-		{name: "GPU", command: gpuProbeCommand(), required: true},
-		{name: "FUSE", command: `if test -e /dev/fuse; then echo "/dev/fuse present"; else echo "/dev/fuse not present (optional unless udocker is selected)"; fi`, required: true},
+		{id: CheckIDPython, command: pythonProbeCommand(), failCode: messages.CheckPythonMissing, failMessage: "python3 not found (needed only for GPUWORKS_UDOCKER_LAUNCHER=udocker)"},
+		{id: CheckIDGPU, command: gpuProbeCommand(), required: true, failCode: messages.CheckGPUToolMissing, failMessage: "no supported GPU CLI found"},
+		{id: CheckIDFUSE, command: `if test -e /dev/fuse; then echo "/dev/fuse present"; else echo "/dev/fuse not present (optional unless udocker is selected)"; fi`, required: true,
+			failCode: messages.CheckCommandFailed, failMessage: "the FUSE device could not be checked"},
 		// Advisory only: Docker opens the devices as root whatever the SSH
 		// user can do; only runveil, which the agent takes when Docker
 		// cannot serve the cards, opens them as the agent's own user.
-		{name: checkDeviceAccess, command: deviceAccessCommand("/dev")},
+		{id: CheckIDDeviceAccess, command: deviceAccessCommand("/dev"), failCode: messages.CheckDeviceAccessDenied,
+			failMessage: "the SSH user cannot read and write every accelerator device node; the runveil runtime would fail to open them"},
 	}
 }
-
-const checkDeviceAccess = "Accelerator device access"
 
 // deviceAccessCommand checks that a non-root agent could open the accelerator
 // device nodes under devRoot, as runveil workloads do. A root agent — which
@@ -242,7 +241,7 @@ func runPrecheckCommands(ctx context.Context, client *ssh.Client, commands []pre
 	for i, command := range commands {
 		go func() {
 			defer wg.Done()
-			results[i] = checkCommandContext(ctx, client, command.name, command.command, command.required)
+			results[i] = checkCommandContext(ctx, client, command)
 		}()
 	}
 	wg.Wait()
@@ -290,10 +289,16 @@ func parseListenAddress(listen string) (string, int, error) {
 	return host, port, nil
 }
 
+// precheckCommand is one check run as a remote command: it passes when the
+// command exits 0, and otherwise fails (required) or warns with failCode.
+// Its output is the check's evidence either way.
 type precheckCommand struct {
-	name     string
-	command  string
-	required bool
+	id          string
+	command     string
+	required    bool
+	failCode    string
+	failMessage string
+	params      map[string]any
 }
 
 func vmPrecheckCommands() []precheckCommand {
@@ -302,8 +307,10 @@ func vmPrecheckCommands() []precheckCommand {
 		// runveil when Docker is absent or, on an NVIDIA node, cannot give
 		// containers the cards. Keep both observations visible as warnings so the install
 		// wizard explains the selected runtime without rejecting a usable VM.
-		{name: "Docker", command: `command -v docker >/dev/null 2>&1 && docker --version || { echo "docker not found; GPUWorks will use udocker"; exit 1; }`},
-		{name: "NVIDIA Container Toolkit", command: `command -v nvidia-ctk >/dev/null 2>&1 || { echo "nvidia-container-toolkit not found; required only for the Docker runtime, without it GPUWorks uses runveil (see https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)"; exit 1; }`},
+		{id: CheckIDDocker, command: `command -v docker >/dev/null 2>&1 && docker --version || { echo "docker not found; GPUWorks will use udocker"; exit 1; }`,
+			failCode: messages.CheckDockerMissing, failMessage: "docker not found; GPUWorks will use udocker"},
+		{id: CheckIDNvidiaToolkit, command: `command -v nvidia-ctk >/dev/null 2>&1 || { echo "nvidia-container-toolkit not found; required only for the Docker runtime, without it GPUWorks uses runveil (see https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)"; exit 1; }`,
+			failCode: messages.CheckNvidiaToolkitMissing, failMessage: "nvidia-container-toolkit not found; required only for the Docker runtime"},
 	}
 }
 
@@ -318,22 +325,23 @@ func shouldCheckServerReachability(connectMode string) bool {
 	return strings.TrimSpace(connectMode) != "server_dial"
 }
 
-func checkCommandContext(ctx context.Context, client *ssh.Client, name, cmd string, required bool) CheckResult {
-	out, err := runContext(ctx, client, cmd)
-	if err != nil {
-		status := "warn"
-		if required {
-			status = "error"
-		}
-		detail := strings.TrimSpace(out)
-		if detail == "" {
-			detail = err.Error()
-		} else {
-			detail += ": " + err.Error()
-		}
-		return CheckResult{Name: name, Status: status, Detail: detail}
+// checkCommandContext runs one command check. A command that exited non-zero
+// answered the check; one that never finished (the session failed, the
+// precheck timed out) did not, and is skipped rather than blamed on the node.
+func checkCommandContext(ctx context.Context, client *ssh.Client, command precheckCommand) CheckResult {
+	out, err := runContext(ctx, client, command.command)
+	if err == nil {
+		return PassCheck(command.id, "", "", nil).WithEvidence(out)
 	}
-	return CheckResult{Name: name, Status: "ok", Detail: strings.TrimSpace(out)}
+	var exit *ssh.ExitError
+	if !errors.As(err, &exit) {
+		return SkipCheck(command.id, messages.CheckCommandNotRun, "the check command did not complete", nil).WithEvidence(outputEvidence(out, err))
+	}
+	check := WarnCheck
+	if command.required {
+		check = FailCheck
+	}
+	return check(command.id, command.failCode, command.failMessage, command.params).WithEvidence(outputEvidence(out, err))
 }
 
 // run is runContext's non-batched convenience form: every caller already has

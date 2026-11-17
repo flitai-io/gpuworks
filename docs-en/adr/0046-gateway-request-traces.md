@@ -38,3 +38,5 @@ There are two possible data sources:
 - When an upstream gateway supplies `traceparent`, the platform gateway span is a child of the upstream span in the external tracing system; the trace ID links the two. The server still assigns its own request ID (`rN` in access logs; the client's `X-Request-ID` does not replace it). The span's `gpuworks.request.id` and the response header `X-Request-ID` contain the same value.
 - The settings page lets you configure the Collector address, headers, sampling ratio, and trace link template, and send a test span.
 - Documentation: [Export Request Traces to OpenTelemetry](../how-to/export-request-traces.md), [OpenAI-Compatible Gateway](../reference/openai-gateway.md#trace-context), [API Reference](../reference/api.md).
+
+<!-- translation-source-sha256: c445dab4b4afc365509569005f4f2aed36b6eea5dc09064a613b94b83c2a466f -->

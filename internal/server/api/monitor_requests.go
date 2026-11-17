@@ -42,7 +42,7 @@ func (a *apiHandlers) monitorRequests(w http.ResponseWriter, r *http.Request) {
 		writeProductError(w, http.StatusBadRequest, ErrorMonitorRangeInvalid, "invalid range", nil)
 		return
 	}
-	query := dto.MonitorRequestsQuery{View: view, RangeMS: rng.Milliseconds(), Cursor: q.Get("cursor"), InstanceUUID: q.Get("instance")}
+	query := dto.MonitorRequestsQuery{View: view, RangeMS: rng.Milliseconds(), Cursor: q.Get("cursor"), InstanceUUID: q.Get("instance"), PriorityClass: q.Get("priority_class")}
 	if msg := parseHistoryFilters(q, &query); msg != "" {
 		writeProductError(w, http.StatusBadRequest, ErrorMonitorRequestsQueryInvalid, msg, nil)
 		return
@@ -83,7 +83,8 @@ func (a *apiHandlers) monitorRequests(w http.ResponseWriter, r *http.Request) {
 // parseHistoryFilters reads the history filters into query, or says what is
 // wrong with them: from and to are Unix milliseconds and come together,
 // results is a comma list of result names (the monitor service knows them
-// and refuses an unknown one), min_ms and max_ms bound the end-to-end time.
+// and refuses an unknown one), min_ms and max_ms bound the end-to-end time,
+// min_ttft_ms and max_ttft_ms the time to the first token.
 func parseHistoryFilters(q url.Values, query *dto.MonitorRequestsQuery) string {
 	millis := func(name string) (int64, bool) {
 		raw := q.Get(name)
@@ -118,6 +119,12 @@ func parseHistoryFilters(q url.Values, query *dto.MonitorRequestsQuery) string {
 		return "min_ms and max_ms must be positive milliseconds, min not above max"
 	}
 	query.MinEndMS, query.MaxEndMS = minMS, maxMS
+	minTTFT, okMinTTFT := bound("min_ttft_ms")
+	maxTTFT, okMaxTTFT := bound("max_ttft_ms")
+	if !okMinTTFT || !okMaxTTFT || (minTTFT > 0 && maxTTFT > 0 && minTTFT > maxTTFT) {
+		return "min_ttft_ms and max_ttft_ms must be positive milliseconds, min not above max"
+	}
+	query.MinTTFTMS, query.MaxTTFTMS = minTTFT, maxTTFT
 	return ""
 }
 

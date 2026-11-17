@@ -131,6 +131,12 @@ func rewriteJSONField(source io.ReadSeeker, output io.Writer, key string, encode
 	if len(ranges) == 0 && insert {
 		return insertJSONField(source, output, key, encoded)
 	}
+	return spliceJSONRanges(source, output, ranges, encoded)
+}
+
+// spliceJSONRanges streams source, at its start, to output with each of
+// ranges (ascending, from jsonKeyRanges) replaced by encoded.
+func spliceJSONRanges(source io.ReadSeeker, output io.Writer, ranges [][2]int64, encoded []byte) error {
 	var offset int64
 	for _, span := range ranges {
 		if _, err := io.CopyN(output, source, span[0]-offset); err != nil {
@@ -144,7 +150,7 @@ func rewriteJSONField(source io.ReadSeeker, output io.Writer, key string, encode
 		}
 		offset = span[1]
 	}
-	_, err = io.Copy(output, source)
+	_, err := io.Copy(output, source)
 	return err
 }
 

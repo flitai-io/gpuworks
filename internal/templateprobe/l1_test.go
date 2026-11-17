@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 func TestInspectorUsesBoundedRangesAndExactTensorShapes(t *testing.T) {
@@ -167,7 +169,7 @@ func TestInspectorCapabilityMissIsScopedDeterministicExclusion(t *testing.T) {
 			codes[finding.Code] = true
 		}
 	}
-	if !codes["architecture_not_registered"] || !codes["quantization_kernel_unavailable"] {
+	if !codes[FindingArchitectureNotRegistered] || !codes[FindingQuantizationKernelUnavailable] {
 		t.Fatalf("deterministic finding codes = %v", codes)
 	}
 }
@@ -209,7 +211,7 @@ func TestInspectorDoesNotApplyUnscopedCapabilitySnapshot(t *testing.T) {
 		t.Fatalf("unscoped capabilities report = %+v", report)
 	}
 	for _, finding := range report.Findings {
-		if finding.Code == "architecture_not_registered" {
+		if finding.Code == FindingArchitectureNotRegistered {
 			t.Fatalf("unscoped capability miss excluded architecture: %+v", report)
 		}
 	}
@@ -303,6 +305,46 @@ func TestL1RefusesASourceTheCatalogNeverDeclares(t *testing.T) {
 		}
 		if report.Source != source {
 			t.Fatalf("refused report source = %q, want %q echoed back", report.Source, source)
+		}
+	}
+}
+
+// A finding uses the check vocabulary (ADR 0067): an UPPER_SNAKE code, a
+// status of fail or warn, and the parser's own text as evidence only.
+func TestInspectorFindingWire(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "config.json", time.Unix(0, 0), strings.NewReader("{not-json"))
+	}))
+	defer server.Close()
+	report, err := (Inspector{Fetcher: HTTPRangeFetcher{Client: server.Client()}}).Inspect(t.Context(), L1Input{
+		Source: "huggingface", ModelID: "org/model", Endpoint: server.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var invalid *Finding
+	for i := range report.Findings {
+		f := &report.Findings[i]
+		if f.Code != strings.ToUpper(f.Code) || (f.Status != proto.CheckFail && f.Status != proto.CheckWarn) {
+			t.Errorf("finding %+v is outside the check vocabulary", f)
+		}
+		if f.Code == FindingConfigInvalid {
+			invalid = f
+		}
+	}
+	if invalid == nil || invalid.Status != proto.CheckFail || invalid.Message != "config.json is not a valid model config" || invalid.Evidence == "" {
+		t.Fatalf("invalid config finding = %+v (findings %+v)", invalid, report.Findings)
+	}
+	raw, err := json.Marshal(Finding{Code: FindingWeightFilesMissing, Status: proto.CheckWarn, Message: "m", Evidence: "e"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"code":"WEIGHT_FILES_MISSING","status":"warn","message":"m","evidence":"e","deterministic":false,"excludes":false}`; string(raw) != want {
+		t.Fatalf("wire = %s, want %s", raw, want)
+	}
+	for _, family := range []FailureFamily{FailureArchitecture, FailureQuantKernel, FailureArgv, FailureConfig, FailureMissingOperator, FailureDependency, FailureCatalogAsset, FailureForwardKernel} {
+		if string(family) != strings.ToUpper(string(family)) {
+			t.Errorf("family %s is not UPPER_SNAKE", family)
 		}
 	}
 }

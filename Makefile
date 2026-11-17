@@ -44,7 +44,7 @@ GOLANGCI_LINT_VERSION := v1.64.8
 LINT_GO_VERSION := $(shell $(GO) env GOVERSION)
 LINT_BIN := $(CURDIR)/$(BIN)/tools/golangci-lint-$(GOLANGCI_LINT_VERSION)-$(LINT_GO_VERSION)/golangci-lint
 
-.PHONY: all build test-host-env-adapters server server-linux-amd64 server-linux-amd64-prebuilt-ui server-linux-arm64 server-linux-arm64-prebuilt-ui server-darwin-amd64-prebuilt-ui server-darwin-arm64-prebuilt-ui agent ui test test-unit test-ui test-integration test-fleet-perf-processes test-fleet-log-scale-processes test-fleet-benchmark-processes test-coverage-report test-l2 test-l3 test-l4 test-l4-runpod-server-dial-node-onboarding test-l4-runpod-huggingface-public-download test-l4-runpod-vllm-sglang-lifecycle test-l4-autodl-node-onboarding test-l4-vast-node-onboarding test-l4-vast-server-dial-node-onboarding test-l4-gitee-ascend-partition-capability test-l4-gitee-ascend-deploy-chat test-l4-ascend-pool-partition-inference test-l4-ascend-primary test-l4-ascend-preflight test-l4-ascend-nerdctl-devinject test-l4-compshare-modelscope-public-download test-l4-compshare-offline-contracts test-l4-compshare-single-vm-tp2-dgpu test-l4-compshare-provisioning-matrix test-l4-compshare-server-dial-node-onboarding-container test-l4-compshare-two-vm-udocker-distributed test-l4-compshare-two-vm-docker-distributed test-l4-compshare-one-vm-two-logical-nodes test-l4-compshare-pd-deploy-chat-two-vm-docker prepare-compshare-golden-image test-l4-runpod test-l4-compshare test-l4-cleanup-leaked vet check-assets check-libvgpu check-perftest check-time-policy check-architecture check-tagged-build check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations i18n-check i18n-translate i18n-review runtime-assets runtime-assets-probe runtime-assets-verify image-manifest image-manifest-verify fake-engine fake-engine-image fake-model clean demo run-server tidy cross release-packages dist-publish test-l4-runpod-node-onboarding test-l4-aliyun test-l4-aliyun-provisioning-matrix test-l4-aliyun-modelscope-public-download test-l4-aliyun-single-vm-tp2-dgpu test-l4-aliyun-one-vm-two-logical-nodes test-l4-aliyun-two-vm-docker-distributed test-l4-aliyun-two-vm-udocker-distributed test-l4-aliyun-pd-deploy-chat-two-vm-docker prepare-aliyun-golden-image agent-image agent-image-publish test-l3-kind
+.PHONY: all build test-host-env-adapters server server-linux-amd64 server-linux-amd64-prebuilt-ui server-linux-arm64 server-linux-arm64-prebuilt-ui server-darwin-amd64-prebuilt-ui server-darwin-arm64-prebuilt-ui agent ui test test-unit test-ui test-integration test-fleet-perf-processes test-fleet-log-scale-processes test-fleet-benchmark-processes test-fleet-gateway-load-processes test-coverage-report test-l2 test-l3 test-l4 test-l4-runpod-server-dial-node-onboarding test-l4-runpod-huggingface-public-download test-l4-runpod-vllm-sglang-lifecycle test-l4-autodl-node-onboarding test-l4-vast-node-onboarding test-l4-vast-server-dial-node-onboarding test-l4-gitee-ascend-partition-capability test-l4-gitee-ascend-deploy-chat test-l4-ascend-pool-partition-inference test-l4-ascend-primary test-l4-ascend-preflight test-l4-ascend-nerdctl-devinject test-l4-compshare-modelscope-public-download test-l4-compshare-offline-contracts test-l4-compshare-single-vm-tp2-dgpu test-l4-compshare-provisioning-matrix test-l4-compshare-server-dial-node-onboarding-container test-l4-compshare-two-vm-udocker-distributed test-l4-compshare-two-vm-docker-distributed test-l4-compshare-one-vm-two-logical-nodes test-l4-compshare-pd-deploy-chat-two-vm-docker prepare-compshare-golden-image test-l4-runpod test-l4-compshare test-l4-cleanup-leaked vet check-assets check-libvgpu check-perftest check-time-policy check-architecture check-tagged-build check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations i18n-check i18n-translate i18n-review runtime-assets runtime-assets-probe runtime-assets-verify image-manifest image-manifest-verify fake-engine fake-engine-image fake-model clean demo run-server tidy cross release-packages dist-publish test-l4-runpod-node-onboarding test-l4-aliyun test-l4-aliyun-provisioning-matrix test-l4-aliyun-modelscope-public-download test-l4-aliyun-single-vm-tp2-dgpu test-l4-aliyun-one-vm-two-logical-nodes test-l4-aliyun-two-vm-docker-distributed test-l4-aliyun-two-vm-udocker-distributed test-l4-aliyun-pd-deploy-chat-two-vm-docker prepare-aliyun-golden-image agent-image agent-image-publish test-l3-kind
 
 all: build
 
@@ -183,7 +183,7 @@ test-unit: check-change-record
 # A recursive boundary keeps even make -j from starting UI or tests before
 # the change-record gate succeeds.
 .PHONY: test-unit-checked
-test-unit-checked: ui check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets
+test-unit-checked: ui check-time-policy check-architecture check-api-conventions check-ci-yaml check-artifacts githooks check-doc-links check-translations test-host-env-adapters test-e2e-coverage-check test-inference-template-assets test-strata-queue-assets test-sglang-video-cancel-assets
 	CGO_ENABLED=0 $(GO) test -timeout $(UNIT_TIMEOUT) $(GO_TEST_FLAGS) ./...
 	cd build/runtime-assets/hygon-vdev-helper && CGO_ENABLED=0 $(GO) test $(GO_TEST_FLAGS) ./...
 	$(MAKE) check-tagged-build
@@ -202,6 +202,11 @@ test-inference-template-assets:
 test-strata-queue-assets:
 	python3 -B build/strata-queue/test_strata_queue.py
 	python3 -B build/strata-queue/build.py --check
+
+.PHONY: test-sglang-video-cancel-assets
+test-sglang-video-cancel-assets:
+	python3 -B build/sglang-video-cancel/test_install.py
+	python3 -B build/sglang-video-cancel/build.py --check
 
 ## check-tagged-build: compile every build-tag suite without running it, so a
 ## refactor cannot break an opt-in lane while the untagged suite stays green
@@ -238,6 +243,11 @@ test-ui-playground-layout:
 ## Real Chromium result-column geometry; requires no management server or GPU.
 test-ui-agent-upgrade-results-layout:
 	python3 -B ui/tests/browser/agent_upgrade_results_layout.py
+
+.PHONY: test-ui-template-catalog-layout
+## Real Chromium catalog geometry at 1280/1920, both themes; build UI first.
+test-ui-template-catalog-layout:
+	python3 -B ui/tests/browser/template_catalog_layout.py
 
 .PHONY: ensure-bins
 ## ensure-bins: the E2E entry points need bin/gpuworks and bin/gpuworks-agent,
@@ -344,6 +354,19 @@ test-fleet-log-scale-processes:
 test-fleet-benchmark-processes:
 	GPUWORKS_TEST_PERF=1 CGO_ENABLED=0 $(GO) test -count=1 -v -tags=multiproc -timeout 60m ./test/l2/ -run '^TestFleetServerOriginBenchmarkAcrossProcesses$$'
 
+## test-fleet-gateway-load-processes: the /v1 data plane under load - the
+## server, a fleet of real agents with streaming fake engines, and a client
+## population, each its own process - at the nightly shape (400 instances,
+## 1000 streaming clients for 30s unless GPUWORKS_GATEWAY_CONCURRENCY /
+## GPUWORKS_GATEWAY_SECONDS say otherwise). Asserts errors, TTFT overhead,
+## replica spread and, when GPUWORKS_GATEWAY_MAX_SERVER_CPU_US_PER_REQUEST is
+## set, the server's CPU per request. Other knobs: GPUWORKS_GATEWAY_* (see the
+## test's doc comment).
+GATEWAY_LOAD_CONCURRENCY ?= 1000
+GATEWAY_LOAD_SECONDS ?= 30
+test-fleet-gateway-load-processes:
+	GPUWORKS_TEST_PERF=1 GPUWORKS_GATEWAY_CONCURRENCY=$(GATEWAY_LOAD_CONCURRENCY) GPUWORKS_GATEWAY_SECONDS=$(GATEWAY_LOAD_SECONDS) CGO_ENABLED=0 $(GO) test -count=1 -v -tags=multiproc -timeout 40m ./test/l2/ -run '^TestFleetGatewayLoadAcrossProcesses$$'
+
 ## test-integration: fast product-level tests that use fake agents/runtimes.
 test-integration: ui
 	CGO_ENABLED=0 $(GO) test -timeout $(UNIT_TIMEOUT) $(GO_TEST_FLAGS) ./internal/integrationtest/... ./internal/testenv/...
@@ -409,7 +432,7 @@ check-doc-links:
 	CGO_ENABLED=0 $(GO) run ./scripts/doclinks
 
 ## check-translations: every docs-en/ page must match the reviewed SHA-256 of
-## its docs/ source in docs-site/translations.json, with the same headings and
+## its docs/ source recorded at the end of the page, with the same headings and
 ## code blocks (the same check the docs-build CI job runs, without Hugo)
 check-translations:
 	python3 -B docs-site/check_translations.py

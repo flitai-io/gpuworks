@@ -138,11 +138,11 @@
 .markdown-content blockquote > :last-child { margin-bottom: 0; }
 .markdown-content hr { margin: 16px 0; border: 0; border-top: 1px solid #dfe3e8; }
 .markdown-content a { color: #005bd4; text-decoration: underline; text-underline-offset: 2px; }
-.markdown-content code { padding: 2px 5px; border: 1px solid #d9dee5; border-radius: 3px; background: #f2f4f7; color: #b42318; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.markdown-content code { padding: 2px 5px; border: 1px solid #d9dee5; border-radius: 3px; background: #f2f4f7; color: #b42318; font: var(--font-size-body)/var(--line-height-code) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .markdown-content pre { max-width: 100%; margin: 10px 0; overflow-x: auto; padding: 12px 14px; border: 1px solid #2d333b; border-radius: 4px; background: #15181c; color: #e9edf2; }
-.markdown-content pre code { padding: 0; border: 0; background: transparent; color: inherit; font-size: 12px; white-space: pre; }
+.markdown-content pre code { padding: 0; border: 0; background: transparent; color: inherit; font-size: var(--font-size-body); white-space: pre; }
 .markdown-code-block { margin: 10px 0; }
-.markdown-code-header { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px 0 12px; border: 1px solid #2d333b; border-bottom: 0; border-radius: 4px 4px 0 0; background: #22272e; color: #9aa4af; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.markdown-code-header { display: flex; min-height: 30px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px 0 12px; border: 1px solid #2d333b; border-bottom: 0; border-radius: 4px 4px 0 0; background: #22272e; color: #9aa4af; font: var(--font-size-body)/var(--line-height-code) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .markdown-code-actions { display: inline-flex; align-items: center; gap: 2px; }
 .markdown-code-header .ant-btn.ant-btn-text { color: #c9d1d9; }
 .markdown-code-header .ant-btn.ant-btn-text:not(:disabled):hover { background: #373e47; color: #fff; }
@@ -181,7 +181,7 @@
   border-radius: 4px;
   background: #15181c;
   color: #e9edf2;
-  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: var(--font-size-body)/var(--line-height-code) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -265,7 +265,7 @@
 .playground-preview-body { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; gap: 8px; }
 .playground-preview-note { font-size: 12px; }
 .playground-preview-frame { width: 100%; min-height: 0; flex: 1; border: 1px solid #dfe3e8; border-radius: 4px; background: #fff; }
-.playground-preview-source { min-height: 0; flex: 1; margin: 0; overflow: auto; padding: 12px 14px; border: 1px solid #2d333b; border-radius: 4px; background: #15181c; color: #e9edf2; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre; }
+.playground-preview-source { min-height: 0; flex: 1; margin: 0; overflow: auto; padding: 12px 14px; border: 1px solid #2d333b; border-radius: 4px; background: #15181c; color: #e9edf2; font: var(--font-size-body)/var(--line-height-code) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; }
 /* The single column stays as wide as the section, so a long file name is cut
    with an ellipsis instead of pushing the buttons out of view. */
 .playground-reference-images { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 0; margin: 8px 0 0; list-style: none; }

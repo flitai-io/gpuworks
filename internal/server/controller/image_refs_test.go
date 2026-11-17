@@ -13,6 +13,7 @@ func TestPushImageRefsRefreshesCatalogAfterDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { st.Close() })
 	node, err := st.RegisterNode("image-ref-node", store.HashToken("token"), "image-ref-node")
 	if err != nil {
 		t.Fatal(err)
@@ -43,6 +44,7 @@ func TestImageNodeEventsDoNotRepushUnchangedRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { st.Close() })
 	node, err := st.RegisterNode("image-event-node", store.HashToken("token"), "image-event-node")
 	if err != nil {
 		t.Fatal(err)
@@ -53,15 +55,26 @@ func TestImageNodeEventsDoNotRepushUnchangedRefs(t *testing.T) {
 	hub := &distributedTestHub{online: map[string]bool{node.UUID: true}, updates: map[string][]proto.StateUpdate{}}
 	controller := New(st, hub, nil)
 
+	asked := func() bool {
+		select {
+		case <-controller.imageRefsNotify:
+			return true
+		default:
+			return false
+		}
+	}
 	for _, reason := range []string{"node", "syncing", bus.ReasonProgress} {
 		controller.onEvent(bus.Event{Topic: "image", Key: "1", Reason: reason})
-		if got := len(hub.updates[node.UUID]); got != 0 {
-			t.Fatalf("image-node %s repushed refs %d times", reason, got)
+		if asked() {
+			t.Fatalf("image-node %s asked for a refs push", reason)
 		}
 	}
 	controller.onEvent(bus.Event{Topic: "image", Key: "example.com/custom:v1", Reason: "created"})
-	if got := len(hub.updates[node.UUID]); got != 1 {
-		t.Fatalf("catalog ref mutation pushes = %d, want 1", got)
+	if !asked() {
+		t.Fatal("a catalog ref mutation did not ask for a refs push")
+	}
+	if got := len(hub.updates[node.UUID]); got != 0 {
+		t.Fatalf("the event pushed %d times itself; the push is the worker's", got)
 	}
 }
 

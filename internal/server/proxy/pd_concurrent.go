@@ -32,7 +32,7 @@ func (p *Proxy) serveConcurrentPrefill(w http.ResponseWriter, r *http.Request, t
 		p.releaseTarget(*tgtp)
 		p.acctFor(r.Context()).RecordImmediate(deploymentID, http.StatusServiceUnavailable, false)
 		w.Header().Set("Retry-After", strconv.Itoa(dataLaneUnavailableRetryAfterSeconds))
-		writeErr(w, http.StatusServiceUnavailable, "no prefill instance could take the request ("+reason+")")
+		writeAPIError(w, r, ErrorPDPrefillUnavailable, map[string]any{"reason": reason})
 		return false, noop
 	}
 	original, err := readRequestBody(r, p.maxBodyBytes)

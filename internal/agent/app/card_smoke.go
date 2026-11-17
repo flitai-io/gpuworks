@@ -38,8 +38,8 @@ func (n *NodeRuntime) startCardSmoke(ctx context.Context) {
 		Cards: func(ctx context.Context) []cardsmoke.Card { return n.smokeCards(ctx, check) },
 		Try:   cardSmokeAttempt(check),
 		Busy: func(card cardsmoke.Card) bool {
-			ours, _ := n.cardsInUse()
-			return ours[card.Ident]
+			ours, _, _ := n.cardsInUse()
+			return ours[card.Ident] > 0
 		},
 		Foreign: func(card cardsmoke.Card) bool { return n.occupancy.foreign(card.Ident) },
 		// Until the control plane says what this node runs, no card can be
@@ -49,7 +49,7 @@ func (n *NodeRuntime) startCardSmoke(ctx context.Context) {
 		// instead of leaving every card on the vendor tool's verdict for
 		// an interval.
 		Deferred: func() string {
-			if _, known := n.cardsInUse(); known {
+			if _, _, known := n.cardsInUse(); known {
 				return ""
 			}
 			return "what this node runs is not known yet; the runtime check waits for the control plane"
@@ -177,7 +177,7 @@ func (n *NodeRuntime) applyRuntimeFindings(gpus []proto.GPUInfo) {
 	}
 }
 
-// runtimeUnusableEvidence is what a runtime_unusable finding carries, however
+// runtimeUnusableEvidence is what a RUNTIME_UNUSABLE finding carries, however
 // the failed attempt came about (the periodic check or Doctor).
 func runtimeUnusableEvidence(at time.Time, detail string) []accelerator.HealthField {
 	return []accelerator.HealthField{

@@ -28,14 +28,13 @@ type ReservedSleeper struct {
 
 // launchReserved re-plans req without the reservation; nil when nothing is
 // reserved, or the launch does not fit even so. insts are the node's.
-func launchReserved(st *store.Store, node *store.Node, insts []store.Instance, req scheduler.Request, dtypeOK bool, dtypeReason string, servingUnavailable bool, view ledgerView) *LaunchReserved {
+func launchReserved(st *store.Store, node *store.Node, insts []store.Instance, req scheduler.Request, dtypeOK bool, dtypeReason string, view ledgerView) *LaunchReserved {
 	reserved := view.reserved
 	if reserved == nil {
 		return nil
 	}
 	view.reserved = nil
 	snap := nodeSnapshot(st, node, dtypeOK, dtypeReason, view)
-	snap.ServingUnavailable = servingUnavailable
 	result := scheduler.Schedule(req, snap)
 	if !result.OK || result.Plan == nil {
 		return nil

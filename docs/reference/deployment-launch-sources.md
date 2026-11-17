@@ -47,8 +47,8 @@ controller 都经 `planning.PlanLaunch` 调它，产物是 `proto.ResolvedLaunch
 
 | 引擎 | 命令 | 基线 env |
 |---|---|---|
-| vLLM | `vllm serve <模型路径>`，`--host 127.0.0.1`、`--port`、`--served-model-name`（headless 时不带）、`--tensor-parallel-size` 总是注入、`--pipeline-parallel-size` 大于 1 时注入 | `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`、`VLLM_HOST_IP=127.0.0.1`、`GLOO_SOCKET_IFNAME=lo`、`NCCL_SOCKET_IFNAME=lo` |
-| SGLang | `python -m sglang.launch_server --model-path … --tp-size --pp-size --host --port --served-model-name`（全部在 entrypoint 里） | `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` |
+| vLLM | `vllm serve <模型路径>`，`--host 127.0.0.1`、`--port`、`--served-model-name`（部署别名；未设别名时为模型路径 `/model`；headless 时不带）、`--tensor-parallel-size` 总是注入、`--pipeline-parallel-size` 大于 1 时注入 | `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`、`VLLM_HOST_IP=127.0.0.1`、`GLOO_SOCKET_IFNAME=lo`、`NCCL_SOCKET_IFNAME=lo` |
+| SGLang | `python -m sglang.launch_server --model-path … --tp-size --pp-size --host --port --served-model-name`（全部在 entrypoint 里；`--served-model-name` 同 vLLM） | `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` |
 | callable | `gpuworks-callable`（通常被模板 entrypoint 替换），argv 只有模板参数与用户参数，平台事实由模板以 `${MODEL_PATH}`、`${API_HOST}`、`${API_PORT}` 等变量摆放（ADR 0036） | 同上，另并入模板 env |
 
 三者的 `/dev/shm` 基线都是 16 GiB（引擎 Profile 的 `shm_bytes`，经 `GET /api/v1/engines` 下发）。
@@ -64,7 +64,9 @@ controller 都经 `planning.PlanLaunch` 调它，产物是 `proto.ResolvedLaunch
   - 会出 flag：vLLM `gpu_memory_utilization` 0.9、`enable_cache_report`；SGLang `log_level`、`--mem-fraction-static 0.88`、`--enable-cache-report`。
   - 看镜像版本：vLLM `enable_request_metrics`（`--enable-per-request-metrics`）只在镜像目录或镜像 tag 表明为 vLLM 0.25.0 及以上、且模板与 `extra_args` 都没有 `--disable-log-stats` 时套默认值；SGLang diffusion server 从 0.5.18 起套 `enable_cache_report`、从 0.5.21 起套 `enable_metrics`。版本未知或更旧的镜像上不写默认值、不出 flag（表单显示「自动」，用户仍可显式打开），以免引擎因不认识参数起不来。请求没指定镜像时，按目标节点（未选节点时按目标厂商）从镜像目录挑出的镜像判断。
   - 只写配置不出 flag：`dtype auto`、`kv_cache_dtype auto`、`performance_mode balanced`、值为 false 的布尔开关。
-  - 没有默认值：`max_model_len`、三态开关（`enable_prefix_caching` 等）与其他 `automatic` 行。
+  - 没有默认值：SGLang `max_model_len`、三态开关（`enable_prefix_caching` 等）与其他 `automatic` 行。
+- vLLM 上下文默认按内存适配：普通引擎命令的新请求，镜像目录记录或明确 tag 表明为 vLLM 0.14.0 及以上时，未指定的 `max_model_len` 物化为整数 `-1`，命令发出 `--max-model-len auto`。不按 GPU 厂商加额外门槛；版本未知、更旧、manual 命令或 Omni 多阶段不套这个默认值。模板固定长度、用户明确数值和 `quick_params_unset` 优先，存量部署重建及编辑不凭空添加默认值。
+- vLLM 的显式 `auto` 与 `-1`（字段、模板 args、`extra_args`）归一为同一个整数 `-1`，用于保存、编辑、估算及另存模板；它是自动适配意图，不是实际生效 token 数。显式配置沿用其他版本相关参数的策略，由用户负责所选镜像的兼容性。SGLang 不接受此哨兵。估算仍用模型窗口作上限，不声称已知道拟合结果；不再把自动模式当成必须容纳完整模型窗口的固定配置发出 KV 不足警告。auto 不能解决权重本身或多模态运行时内存不足。
 - 平台参数（如 `kv_disk_limit_gib`）永远不进 argv，只影响平台行为（ADR 0021）。
 - 当前 entrypoint 方言或镜像版本可能不接受的参数不写默认值，交给引擎决定（`engine_decides_param_keys`），但不隐藏、不拒绝：表单显示「自动」，用户仍可开或关，表单上看到的值与 argv 一一对应。
 - 镜像系列的「常用参数/环境变量候选」只是按钮：点了才写进用户的 `extra_args` 或环境变量行，不点不生效。
@@ -136,16 +138,18 @@ sleep、LoRA、投机解码、KV 卸载等特性只在对应字典字段被声�
 |---|---|---|---|
 | `engine`（默认） | 引擎生成；覆盖 entrypoint > 模板 entrypoint | 引擎参数 + 模板剩余 + 用户剩余 | 系统 → 模板 → 用户 |
 | `image-entry` | 空（使用镜像 ENTRYPOINT），可覆盖 | 覆盖命令（若有）+ 引擎参数向量 | 系统 → 模板 → 用户 |
-| `manual`（手写命令） | `/bin/sh -c`，整段脚本由用户写 | `--port`、`--served-model-name` 会被改写成平台分配值 | **不含系统层**，只有模板 → 用户 |
+| `manual`（手写命令） | `/bin/sh -c`，整段脚本由用户写 | 带 `GPUWORKS_` 前缀的平台变量按 rank 展开；`--port`、`--served-model-name` 会被改写成平台分配值 | 单机非 PD **不含系统层**，只有模板 → 用户；多机 rank 与 PD 实例为系统 → 模板 → 用户 |
 
-手写命令勾选「命令已包含准备脚本」后，模板的准备脚本不再执行，避免重复。
+手写命令勾选「命令已包含准备脚本」后，模板的准备脚本不再执行，避免重复。多机与 PD 的手写命令由所有 rank 共用，
+必须引用能区分 rank 的变量，否则评估与创建返回 `MANUAL_COMMAND_RANK_BLIND`，见
+[多机与 PD 的手工命令](../explanation/launch-config.md#多机与-pd-的手工命令)。
 
 ### 容器覆盖字段
 
 | 字段 | 作用 | 限制 |
 |---|---|---|
 | `env` / `env_unset` | 新增、覆盖环境变量；删除引擎或模板设置的变量 | 设备与 dGPU 的 env 由 agent 在节点上注入，不受影响 |
-| `extra_mounts` | 主机目录或命名卷 → 容器路径，可只读 | 路径须绝对、非根；不得与平台挂载重叠或嵌套 |
+| `extra_mounts` | 主机目录、命名卷或已注册模型（`model_id`）→ 容器路径，可只读；模型行总是只读，部署像依赖模板组件一样依赖该模型：节点上没有时按模型所在存储获取，启动时挂载节点上的实际目录，例如把投机解码的 draft 挂到 `/draft` | 每行只有一个来源；路径须绝对、非根；不得与平台挂载重叠或嵌套；`model_id` 须是已注册模型（`MOUNT_MODEL_NOT_FOUND`） |
 | `model_mount_path` | 模型挂载路径（默认 `/model`），同时改写命令里的模型路径 | 有模型组件时不得改主组件路径 |
 | `shm_bytes` | 容器 `/dev/shm` tmpfs 的大小上限，不是内存预留；不填为引擎基线 16 GiB 加上 CPU 内存层的大小（没开内存层就是 16 GiB），模板档位声明了 `shm_bytes` 且更大时取模板的值；docker 参数含 `--ipc=host` 时启动配置不带大小（也不下发 `--shm-size`），容器共用宿主机 `/dev/shm` | 与 `--ipc=host` 同时设置被拒（`SHM_SIZE_WITH_HOST_IPC`）；小于 CPU 内存层被拒（`SHM_BELOW_KV_CPU_TIER`） |
 | `docker_args` | 按顺序追加到 `docker run`；最终的参数里还有平台追加的 RDMA 选项，以及模板档位 `memlock_unlimited` 带来的 `--ulimit memlock=-1:-1` | 见下表 |
@@ -225,11 +229,13 @@ udocker 运行时（runveil 与 udocker CLI 两种启动器）在非国产卡上
 
 ## 变量展开
 
-每次启动都展开，作用于模板的 args、env、entrypoint 与准备脚本；用户输入**从不展开**。
-可用变量：解析器输出，加上平台给出的 `GPU_COUNT`、`TP_SIZE`、`MODEL_PATH`、`SERVED_MODEL_NAME`、`API_HOST`、`API_PORT`、
-`NNODES`、`NODE_RANK`、`HEADLESS`，多机时另有 `NODE_ADDR`、`MASTER_ADDR`、`MASTER_PORT`；`PP_SIZE` 没有默认值。
-写法 `${NAME}`，名称为大写字母、数字与下划线。完整词表、出现条件与报错规则见
-[推理目录语法](inference-catalog-spec.md#变量展开)。
+每次启动都展开，作用于模板的 args、env、entrypoint 与准备脚本，以及 `manual` 模式的手写命令；其余用户输入**从不展开**。
+写法 `${GPUWORKS_NAME}`，名称为大写字母、数字与下划线。可用变量：解析器输出，加上平台给出的 `GPUWORKS_GPU_COUNT`、
+`GPUWORKS_TP_SIZE`、`GPUWORKS_MODEL_PATH`、`GPUWORKS_SERVED_MODEL_NAME`、`GPUWORKS_API_HOST`、`GPUWORKS_API_PORT`、
+`GPUWORKS_NNODES`、`GPUWORKS_NODE_RANK`、`GPUWORKS_HEADLESS`，多机时另有 `GPUWORKS_NODE_ADDR`、`GPUWORKS_MASTER_ADDR`、
+`GPUWORKS_MASTER_PORT`，PD 实例另有 `GPUWORKS_PD_ROLE`、`GPUWORKS_PD_SIDE_CHANNEL_HOST`、`GPUWORKS_PD_SIDE_CHANNEL_PORT`；
+`PP_SIZE` 没有默认值。模板字段里不带前缀的旧写法（`${NODE_RANK}`）仍然展开；手写命令只展开带前缀的名字，其余 `${...}`
+留给 shell。完整词表、出现条件与报错规则见[推理目录语法](inference-catalog-spec.md#变量展开)。
 
 ## agent 注入
 
@@ -261,12 +267,25 @@ docker 的参数顺序：
 docker run -d --name gpuworks-<uuid前12位> --restart no
   --network host                 # Linux；其他系统改为 -p 127.0.0.1:<端口>:<端口>
   <docker_args>                  # 部署 docker 参数 + 平台 RDMA 参数 + 档位 memlock_unlimited + 设备注入
+  --label gpuworks.…=…           # 归属标签，见下
   --shm-size <shm_bytes>         # shm_bytes 为 0（--ipc=host）时省略
   -e …  -v …
   --entrypoint <entrypoint[0]> <镜像> <entrypoint[1:]> <argv>
 ```
 
 nerdctl 顺序相同但不带 `--restart`；udocker 不支持网络、shm 与大部分 docker 参数。
+
+docker 与 nerdctl 容器带归属标签，用于区分同一台机器上多个 agent（各自的状态目录、各自接入的管理节点）起的容器，只供排障查看，agent 不按标签选择或清理容器。值未知时不写该标签：
+
+| 标签 | 值 |
+| --- | --- |
+| `gpuworks.server` | agent 连接的管理节点地址（`--server`）；server_dial 节点不知道该地址，不写 |
+| `gpuworks.node` | 管理节点分配的节点 UUID |
+| `gpuworks.state-dir` | agent 状态目录的绝对路径 |
+| `gpuworks.instance` | 实例 UUID（仅实例容器） |
+| `gpuworks.deployment` | 部署 ID（仅实例容器） |
+
+例如 `docker ps -a --filter label=gpuworks.server=https://gpuworks.example:8800`，或 `docker inspect -f '{{json .Config.Labels}}' <容器>`。卡运行时检查与 dGPU 行为探针容器只带前三个标签。
 
 ## 相关文档
 

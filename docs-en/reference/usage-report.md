@@ -90,3 +90,5 @@ The bell in the page header lists notices the publisher sends to this installati
 - Read status is recorded per user. When the publisher withdraws a notice, its read records are deleted on the next fetch.
 
 For design tradeoffs, see [ADR 0054](../adr/0054-usage-report-and-notices.md).
+
+<!-- translation-source-sha256: ee3391351bad92ba79f30b8941f771de244963cb47d94765fdce32d677f3de12 -->

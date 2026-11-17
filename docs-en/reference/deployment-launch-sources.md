@@ -47,8 +47,8 @@ The layers are listed in merge order. Later layers generally override earlier on
 
 | Engine | Command | Baseline Env |
 |---|---|---|
-| vLLM | `vllm serve <model-path>`, `--host 127.0.0.1`, `--port`, `--served-model-name` (omitted when headless); `--tensor-parallel-size` is always injected, and `--pipeline-parallel-size` is injected when greater than 1 | `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `VLLM_HOST_IP=127.0.0.1`, `GLOO_SOCKET_IFNAME=lo`, `NCCL_SOCKET_IFNAME=lo` |
-| SGLang | `python -m sglang.launch_server --model-path … --tp-size --pp-size --host --port --served-model-name` (all in the entrypoint) | `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1` |
+| vLLM | `vllm serve <model-path>`, `--host 127.0.0.1`, `--port`, `--served-model-name` (the deployment alias; the model path `/model` when no alias is set; omitted when headless); `--tensor-parallel-size` is always injected, and `--pipeline-parallel-size` is injected when greater than 1 | `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`, `VLLM_HOST_IP=127.0.0.1`, `GLOO_SOCKET_IFNAME=lo`, `NCCL_SOCKET_IFNAME=lo` |
+| SGLang | `python -m sglang.launch_server --model-path … --tp-size --pp-size --host --port --served-model-name` (all in the entrypoint; `--served-model-name` as for vLLM) | `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1` |
 | callable | `gpuworks-callable` (usually replaced by the template entrypoint); argv contains only template and user arguments. The template places platform facts using variables such as `${MODEL_PATH}`, `${API_HOST}`, and `${API_PORT}` (ADR 0036) | Same as above, with template env merged in |
 
 All three have a `/dev/shm` baseline of 16 GiB (`shm_bytes` in the engine Profile, delivered through `GET /api/v1/engines`).
@@ -64,7 +64,9 @@ The parameter dictionary (`param_specs` in `GET /api/v1/engines`) lists the engi
   - Emits flags: vLLM `gpu_memory_utilization` 0.9 and `enable_cache_report`; SGLang `log_level`, `--mem-fraction-static 0.88`, and `--enable-cache-report`.
   - Depends on the image version: vLLM `enable_request_metrics` (`--enable-per-request-metrics`) receives a default only when the image catalog or image tag indicates vLLM 0.25.0 or later and neither the template nor `extra_args` contains `--disable-log-stats`. SGLang diffusion server receives a default for `enable_cache_report` starting with 0.5.18 and for `enable_metrics` starting with 0.5.21. For images with an unknown or older version, no default is written and no flag is emitted (the form shows "Auto", and you can still explicitly enable it), to prevent the engine from failing to start because it does not recognize a parameter. If the request does not specify an image, the version is determined from the image selected from the image catalog for the target node (or the target vendor if no node is selected).
   - Writes configuration only, without emitting flags: `dtype auto`, `kv_cache_dtype auto`, `performance_mode balanced`, and boolean switches set to false.
-  - No default: `max_model_len`, tri-state switches (such as `enable_prefix_caching`), and other `automatic` rows.
+  - No default: SGLang `max_model_len`, tri-state switches (such as `enable_prefix_caching`), and other `automatic` rows.
+- vLLM context defaults to memory fitting: for new requests using the ordinary engine command, an image-catalog version or unambiguous tag indicating vLLM 0.14.0 or later materializes an unspecified `max_model_len` as integer `-1` and emits `--max-model-len auto`. No additional GPU-vendor gate applies. Unknown or older versions, manual commands, and Omni multi-stage launches do not receive this default. Template limits, explicit user values, and `quick_params_unset` take precedence. Rebuilding or editing stored deployments does not introduce a default.
+- Explicit vLLM `auto` and `-1` values in fields, template args, or `extra_args` normalize to the same integer `-1` for storage, editing, estimation, and template export. This records memory-fit intent, not an observed token limit. As with other version-dependent parameters, users remain responsible for the compatibility of explicit overrides. SGLang does not accept this sentinel. Estimation still uses the model window as a ceiling without claiming to predict the fitted length; auto mode no longer receives the KV-shortfall warning intended for a fixed full-window requirement. Auto cannot fix oversized weights or multimodal runtime memory exhaustion.
 - Platform parameters (such as `kv_disk_limit_gib`) never enter argv; they affect only platform behavior (ADR 0021).
 - Parameters that the current entrypoint dialect or image version might not accept receive no default and are left to the engine to decide (`engine_decides_param_keys`). They are neither hidden nor rejected: the form shows "Auto", you can still enable or disable them, and the values shown in the form correspond one-to-one to argv.
 - An image family's "common parameter/environment variable suggestions" are just buttons: clicking one writes it to your `extra_args` or environment variable rows; otherwise it has no effect.
@@ -136,16 +138,18 @@ For dictionary fields and `extra_args`, see "Parameter Dictionary". `quick_param
 |---|---|---|---|
 | `engine` (default) | Generated by the engine; entrypoint override > template entrypoint | Engine arguments + remaining template arguments + remaining user arguments | System → template → user |
 | `image-entry` | Empty (uses the image ENTRYPOINT); can be overridden | Command override (if any) + engine argument vector | System → template → user |
-| `manual` (handwritten command) | `/bin/sh -c`; you write the entire script | `--port` and `--served-model-name` are rewritten to platform-allocated values | **No system layer**; template → user only |
+| `manual` (handwritten command) | `/bin/sh -c`; you write the entire script | Platform variables with the `GPUWORKS_` prefix expand per rank; `--port` and `--served-model-name` are rewritten to platform-allocated values | Single-node, non-PD: **no system layer**, template → user only; multi-node ranks and PD instances: system → template → user |
 
-When you select "Command already includes preparation" for a handwritten command, the template's preparation script no longer runs, avoiding duplicate execution.
+When you select "Command already includes preparation" for a handwritten command, the template's preparation script no longer runs, avoiding duplicate execution. A handwritten command for
+a multi-node or PD deployment is shared by every rank and must reference the variables that tell ranks apart; otherwise evaluation and creation return `MANUAL_COMMAND_RANK_BLIND`. See
+[Manual Commands for Multi-Node and PD Deployments](../explanation/launch-config.md#多机与-pd-的手工命令).
 
 ### Container Override Fields
 
 | Field | Effect | Restrictions |
 |---|---|---|
 | `env` / `env_unset` | Adds or overrides environment variables; removes variables set by the engine or template | Device and dGPU env are injected on the node by the agent and are unaffected |
-| `extra_mounts` | Host directory or named volume → container path; can be read-only | Paths must be absolute and non-root; they must not overlap or nest with platform mounts |
+| `extra_mounts` | Host directory, named volume or registered model (`model_id`) → container path; can be read-only. A model row is always read-only, and the deployment depends on that model as on a template component: a node without it acquires it from the model's storage, and the launch mounts the node's actual directory, e.g. a speculative-decoding draft at `/draft` | One source per row; paths must be absolute and non-root; they must not overlap or nest with platform mounts; `model_id` must be a registered model (`MOUNT_MODEL_NOT_FOUND`) |
 | `model_mount_path` | Model mount path (default `/model`); also rewrites the model path in the command | The primary component path cannot be changed when model components are present |
 | `shm_bytes` | Upper size limit of the container's `/dev/shm` tmpfs, not a memory reservation. When unspecified, it is the engine baseline of 16 GiB plus the CPU memory tier size (16 GiB if the memory tier is disabled). If the template spec declares a larger `shm_bytes`, that value is used. When docker arguments contain `--ipc=host`, the launch configuration carries no size (and no `--shm-size` is sent); the container shares the host's `/dev/shm` | Rejected when set together with `--ipc=host` (`SHM_SIZE_WITH_HOST_IPC`); rejected when smaller than the CPU memory tier (`SHM_BELOW_KV_CPU_TIER`) |
 | `docker_args` | Appended to `docker run` in order; the final arguments also include platform-appended RDMA options and `--ulimit memlock=-1:-1` from the template spec's `memlock_unlimited` | See the table below |
@@ -225,11 +229,13 @@ does not set this key, this value is merged before the image's value (deduplicat
 
 ## Variable Expansion
 
-Variables expand at every launch, in template args, env, entrypoint, and preparation scripts; user input is **never expanded**.
-Available variables are resolver outputs plus the platform-provided `GPU_COUNT`, `TP_SIZE`, `MODEL_PATH`, `SERVED_MODEL_NAME`, `API_HOST`, `API_PORT`,
-`NNODES`, `NODE_RANK`, and `HEADLESS`, with `NODE_ADDR`, `MASTER_ADDR`, and `MASTER_PORT` additionally available for multi-node deployments; `PP_SIZE` has no default.
-The syntax is `${NAME}`, where the name consists of uppercase letters, digits, and underscores. For the full vocabulary, availability conditions, and error rules, see
-[Inference Catalog Syntax](inference-catalog-spec.md#变量展开).
+Variables expand at every launch, in template args, env, entrypoint, and preparation scripts, and in the handwritten command of `manual` mode; other user input is **never expanded**.
+The syntax is `${GPUWORKS_NAME}`, where the name consists of uppercase letters, digits, and underscores. Available variables are resolver outputs plus the platform-provided `GPUWORKS_GPU_COUNT`,
+`GPUWORKS_TP_SIZE`, `GPUWORKS_MODEL_PATH`, `GPUWORKS_SERVED_MODEL_NAME`, `GPUWORKS_API_HOST`, `GPUWORKS_API_PORT`,
+`GPUWORKS_NNODES`, `GPUWORKS_NODE_RANK`, and `GPUWORKS_HEADLESS`, with `GPUWORKS_NODE_ADDR`, `GPUWORKS_MASTER_ADDR`, and
+`GPUWORKS_MASTER_PORT` additionally available for multi-node deployments, and `GPUWORKS_PD_ROLE`, `GPUWORKS_PD_SIDE_CHANNEL_HOST`, and `GPUWORKS_PD_SIDE_CHANNEL_PORT` for PD instances;
+`PP_SIZE` has no default. Template fields still expand the older unprefixed spelling (`${NODE_RANK}`); a handwritten command expands prefixed names only and leaves every other `${...}`
+to the shell. For the full vocabulary, availability conditions, and error rules, see [Inference Catalog Syntax](inference-catalog-spec.md#变量展开).
 
 ## Agent Injection
 
@@ -261,12 +267,25 @@ Docker argument order:
 docker run -d --name gpuworks-<first-12-UUID-characters> --restart no
   --network host                 # Linux; on other systems, use -p 127.0.0.1:<port>:<port>
   <docker_args>                  # deployment docker arguments + platform RDMA arguments + spec memlock_unlimited + device injection
+  --label gpuworks.…=…           # ownership labels, see below
   --shm-size <shm_bytes>         # omitted when shm_bytes is 0 (--ipc=host)
   -e …  -v …
   --entrypoint <entrypoint[0]> <image> <entrypoint[1:]> <argv>
 ```
 
 nerdctl uses the same order but omits `--restart`; udocker does not support network settings, shm settings, or most docker arguments.
+
+docker and nerdctl containers carry ownership labels that tell apart the containers started by several agents on one machine (each with its own state directory and its own control plane). They are for troubleshooting only: the agent never selects or cleans up containers by them. A label whose value is unknown is omitted:
+
+| Label | Value |
+| --- | --- |
+| `gpuworks.server` | the control-plane address the agent connects to (`--server`); omitted on server_dial nodes, which do not know it |
+| `gpuworks.node` | the node UUID the control plane issued |
+| `gpuworks.state-dir` | absolute path of the agent's state directory |
+| `gpuworks.instance` | instance UUID (instance containers only) |
+| `gpuworks.deployment` | deployment ID (instance containers only) |
+
+For example `docker ps -a --filter label=gpuworks.server=https://gpuworks.example:8800`, or `docker inspect -f '{{json .Config.Labels}}' <container>`. Card runtime check and dGPU behavior probe containers carry only the first three labels.
 
 ## Related Documentation
 
@@ -275,3 +294,6 @@ nerdctl uses the same order but omits `--restart`; udocker does not support netw
   [0022](../adr/0022-template-owned-deployment-launch.md) (template-owned launch), [0031](../adr/0031-image-catalog-carries-no-launch-config.md) (image catalog carries no launch configuration)
 - [Inference Catalog model.yaml Syntax Reference](inference-catalog-spec.md), [Image Catalog and Inference Image Families](image-families.md)
 - [Deploy Models](../how-to/deploy-models.md), [Multi-Node Inference](../how-to/multi-node-inference.md), [PD Disaggregation](../how-to/pd-disaggregation.md)
+
+<!-- translation-source-sha256: 07dbe3171f0bb1665df416f3c3adc3d83452cf1cf39f087557294c64c0f4f0bc -->
+<!-- translation-localized-code-block: bb1bf7727f072376c3c7e1ad0f8662c7b7d72d881f032a66b71f42ab5475a198 aa31ab60fc8387786ba75ad63414f7e99f82c785baeae8a33e9304231006194b Translate explanatory comments and placeholders in runtime assembly illustration. -->

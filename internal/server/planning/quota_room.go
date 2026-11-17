@@ -19,9 +19,11 @@ type QuotaShortfall struct {
 // of a deployment (live, the ones a quota change holds to limitBytes in
 // place) at the new limit, or nil when every card they hold can. A card is
 // asked whether it holds their new claims in place of their old ones: its
-// capacity, less what everyone else claims and what sleepers keep. Instances
-// left out keep their claims; they take the new limit at a restart, and are
-// placed by the scheduler then.
+// capacity, less what everyone else claims, what sleepers keep and what
+// processes outside the platform hold with its headroom; on a held card
+// whose holders' memory is not known, no more than they claim already (see
+// ForeignHold). Instances left out keep their claims; they take the new
+// limit at a restart, and are placed by the scheduler then.
 //
 // The claims are the GPU ledger's (instanceClaim and
 // estimate.PartitionClaimBytes), so the answer agrees with the admission
@@ -76,14 +78,24 @@ func QuotaRoom(st *store.Store, dep *store.Deployment, limitBytes int64, live []
 	}
 	for _, key := range order {
 		node := nodes[key.node]
-		var capacity int64
+		var capacity, foreign int64
+		foreignKnown := true
 		for _, gpu := range node.OwnedGPUs() {
 			if gpu.Index == key.index {
 				capacity = gpu.MemoryTotal
+				// A card shared with processes outside the platform keeps
+				// what they hold, and the headroom beside it, out of reach,
+				// as admission does (scheduler.GPU.Available).
+				foreign, foreignKnown = ForeignHold(node, &gpu)
 			}
 		}
 		allocation := ledgers[key.node][key.index]
-		room := capacity - allocation.AllocatedBytes - allocation.SleepingBytes + held[key]
+		room := capacity - allocation.AllocatedBytes - allocation.SleepingBytes - foreign + held[key]
+		if !foreignKnown {
+			// What the outside processes hold is not known: the instances
+			// keep what they claim and grow into nothing more.
+			room = min(room, held[key])
+		}
 		if next[key] > room {
 			return &QuotaShortfall{Node: node, GPUIndex: key.index, FreeBytes: room, NeedBytes: next[key]}, nil
 		}

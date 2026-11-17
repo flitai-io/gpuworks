@@ -5,12 +5,16 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	serverprovider "gpuworks.ai/gpuworks/internal/server/provider"
@@ -202,14 +206,14 @@ func zoneKey(zone serverprovider.Zone) string { return zone.Region + "/" + zone.
 // IsImageUnsupportedInZone reports CompShare's "The current availability zone
 // does not support this image" create error.
 func IsImageUnsupportedInZone(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "RetCode 226641")
+	return errors.Is(err, compsharedriver.RetCode(226641))
 }
 
 // IsGPUTypeUnsupportedByImage reports CompShare's "gpu type is not support
 // current image" capacity error: the card type exists, but not with the image
 // this run uses.
 func IsGPUTypeUnsupportedByImage(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "RetCode 226603")
+	return errors.Is(err, compsharedriver.RetCode(226603))
 }
 
 // CompshareGPUDisplayName is the part of a CompShare GpuType that nvidia-smi
@@ -374,17 +378,15 @@ func (p *Compshare) Destroy(ctx context.Context, instanceID string) error {
 	return removeCompshareLedger(instanceID)
 }
 
+// isTransientCompshareError reports a transport failure of a CompShare API
+// call (connection torn down, refused, timed out) that a retry may get past.
 func isTransientCompshareError(err error) bool {
-	if err == nil {
-		return false
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EAGAIN) {
+		return true
 	}
-	message := strings.ToLower(err.Error())
-	for _, marker := range []string{"eof", "connection reset", "connection refused", "temporarily unavailable", "timeout"} {
-		if strings.Contains(message, marker) {
-			return true
-		}
-	}
-	return false
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func (p *Compshare) ListLeaked(ctx context.Context) ([]string, error) {

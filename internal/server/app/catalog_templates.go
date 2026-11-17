@@ -75,8 +75,9 @@ func catalogTemplateDTO(out templateexport.Export) dto.CatalogTemplateExport {
 	}
 	for _, check := range out.Checks {
 		result.Checks = append(result.Checks, dto.CatalogTemplateCheck{
-			Operation: check.Operation, Endpoint: check.Endpoint, Tested: check.Tested, Passed: check.Passed,
-			HTTPStatus: check.HTTPStatus, Message: check.Message,
+			ID: check.ID, Operation: check.Operation, Status: check.Status, Code: check.Code,
+			Params:  dto.CatalogTemplateCheckParams{Operation: check.Operation, Endpoint: check.Endpoint, HTTPStatus: check.HTTPStatus},
+			Message: check.Message(), Evidence: check.Evidence,
 		})
 	}
 	result.ExcludedEnv = append(result.ExcludedEnv, out.ExcludedEnv...)

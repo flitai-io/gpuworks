@@ -103,3 +103,5 @@ If the task fails or only some points complete, check the errors and rerun it. I
 **Completion criteria**: All three points finish; you can explain from the report whether requests succeed, how long the first token takes, how fast output is once generation starts, and the throughput of the whole service; and you save a report that you can reopen.
 
 This small random workload teaches you how to run performance evaluations; it does not establish business capacity. To assess business capacity, first define acceptable success rates and response times. Then use representative business samples and input/output lengths, increase the request count, and repeat the tests.
+
+<!-- translation-source-sha256: c873e6bbcd8d978ed2dd190adeba66b06440f91b3f7886e81480a2d853cca309 -->

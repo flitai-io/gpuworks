@@ -191,7 +191,7 @@ func TestRunningHealthSkipsSleepAndHeadlessHTTP(t *testing.T) {
 			serve(t, e, reports, spec)
 			if kind == "actual sleep" {
 				e.mu.Lock()
-				e.sleepLevel[spec.UUID] = 1
+				e.setSleepLevelLocked(spec.UUID, 1)
 				e.mu.Unlock()
 			}
 			checking.Store(true)
@@ -228,6 +228,9 @@ func TestRunningHealthFailedCleanupIsReportedRemoving(t *testing.T) {
 	removing := reports.waitFor(t, proto.InstRemoving, 1)
 	if len(reports.states(proto.InstFailed)) != 0 || !driver.exists(containerName(spec.UUID)) || !strings.Contains(removing[0].Message, "HTTP 503; cleanup pending") {
 		t.Fatalf("cleanup failure=%+v", reports.snapshot())
+	}
+	if f := removing[0].RuntimeFailure; f == nil || f.Code != proto.ErrorEngineUnresponsive || f.Phase != proto.PhaseServing || !strings.Contains(f.Detail, "HTTP 503") {
+		t.Fatalf("removing reason = %+v", f)
 	}
 	waitHealthProbes(t, e)
 	spec.DesiredState = "stopped"

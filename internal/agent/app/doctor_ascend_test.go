@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -108,6 +109,20 @@ func rowFor(t *testing.T, r proto.DoctorReport, index int) proto.DoctorGPU {
 	return proto.DoctorGPU{}
 }
 
+// skippedDies are the dies the card runtime check's skip finding with code
+// names, in order, and whether any finding of the report failed.
+func skippedDies(r proto.DoctorReport, code string) (dies []int, failed bool) {
+	for _, f := range r.Findings {
+		failed = failed || f.Status == proto.CheckFail
+		if f.ID == proto.DoctorCheckCardRuntime && f.Status == proto.CheckSkip && f.Code == code {
+			for _, t := range f.Targets {
+				dies = append(dies, t.Index)
+			}
+		}
+	}
+	return dies, failed
+}
+
 func findingByCode(r proto.DoctorReport, code string) (proto.DoctorFinding, bool) {
 	for _, f := range r.Findings {
 		if f.Code == code {
@@ -130,7 +145,7 @@ func TestDoctorAscendReportsTheDieTheRuntimeCannotUse(t *testing.T) {
 	}
 	bad := rowFor(t, r, 0)
 	if bad.HealthCode != accelerator.HealthRuntimeUnusable || bad.HealthStatus != accelerator.HealthError {
-		t.Fatalf("die 0 row = %+v, want runtime_unusable / Error", bad)
+		t.Fatalf("die 0 row = %+v, want RUNTIME_UNUSABLE / Error", bad)
 	}
 	for i := 1; i < 14; i++ {
 		if row := rowFor(t, r, i); row.HealthStatus != accelerator.HealthOK || row.HealthCode != "" {
@@ -139,9 +154,9 @@ func TestDoctorAscendReportsTheDieTheRuntimeCannotUse(t *testing.T) {
 	}
 	finding, ok := findingByCode(r, accelerator.HealthRuntimeUnusable)
 	if !ok || len(r.Findings) != 1 {
-		t.Fatalf("findings = %+v, want exactly the runtime_unusable one", r.Findings)
+		t.Fatalf("findings = %+v, want exactly the RUNTIME_UNUSABLE one", r.Findings)
 	}
-	if finding.Level != proto.DoctorLevelError || len(finding.Targets) != 1 {
+	if finding.Status != proto.CheckFail || len(finding.Targets) != 1 {
 		t.Fatalf("finding = %+v", finding)
 	}
 	target := finding.Targets[0]
@@ -194,7 +209,7 @@ func TestDoctorReportOnAscendShowsTheBrokenDieEverywhere(t *testing.T) {
 	if _, ok := findingByCode(r, accelerator.HealthRuntimeUnusable); !ok {
 		t.Fatalf("findings = %+v", r.Findings)
 	}
-	for _, want := range []string{"Error (runtime_unusable)", "[error] runtime_unusable: accelerator 0", "Runtime Check = failed", "aclrtSetDevice=507033", "card runtime", "2 passed, 1 failed, 0 not checked"} {
+	for _, want := range []string{"Error (RUNTIME_UNUSABLE)", "[fail] RUNTIME_UNUSABLE: accelerator 0", "Runtime Check = failed", "aclrtSetDevice=507033", "card runtime", "2 passed, 1 failed, 0 not checked"} {
 		if !strings.Contains(r.Report, want) {
 			t.Fatalf("report text lacks %q:\n%s", want, r.Report)
 		}
@@ -249,8 +264,10 @@ func TestDoctorAscendDriverOnlyHostSaysSoOnceAndBlamesNoDie(t *testing.T) {
 	if len(h.asked) != 0 {
 		t.Fatalf("the runtime was asked about %v on a host that cannot run the check", h.asked)
 	}
-	if len(r.Findings) != 0 {
-		t.Fatalf("findings = %+v, want none", r.Findings)
+	// Not run, so every die is a skip with the reason, and none fails.
+	if dies, failed := skippedDies(r, proto.CardCheckSkipUnavailable); failed || len(dies) != 8 || len(r.Findings) != 1 ||
+		r.Findings[0].Evidence[0].Value != h.prereq {
+		t.Fatalf("findings = %+v, want one skip naming all eight dies and why", r.Findings)
 	}
 	for _, g := range r.Accelerators.GPUs {
 		if g.HealthStatus != accelerator.HealthOK || g.HealthCode != "" {
@@ -308,7 +325,7 @@ func TestDoctorAscendHostUnavailableOnTheFirstDieIsNotRunAndBlamesNoDie(t *testi
 	}}
 	h.install(t)
 	r := h.report(context.Background(), ascendDies(4))
-	if len(h.asked) != 1 || len(r.Findings) != 0 {
+	if dies, failed := skippedDies(r, proto.CardCheckSkipUnavailable); len(h.asked) != 1 || failed || !reflect.DeepEqual(dies, []int{0, 1, 2, 3}) {
 		t.Fatalf("asked %v, findings %+v", h.asked, r.Findings)
 	}
 	if fact := cardRuntimeFact(r); !strings.HasPrefix(fact, "not run: ") || !strings.Contains(fact, "None of the 4 dies was checked") {
@@ -343,8 +360,8 @@ func TestDoctorAscendBudgetExhaustionMarksTheRestNotChecked(t *testing.T) {
 			t.Fatalf("fact = %q, missing %q", fact, want)
 		}
 	}
-	if len(r.Findings) != 0 {
-		t.Fatalf("findings = %+v, want none for dies nobody asked", r.Findings)
+	if dies, failed := skippedDies(r, proto.DoctorSkipBudgetExhausted); failed || !reflect.DeepEqual(dies, []int{2, 3, 4, 5}) || len(r.Findings) != 1 {
+		t.Fatalf("findings = %+v, want the dies nobody asked skipped, none failed", r.Findings)
 	}
 }
 
@@ -362,7 +379,7 @@ func TestDoctorAscendDieCutOffByTheBudgetIsNotBlamed(t *testing.T) {
 
 	r := h.report(ctx, ascendDies(3))
 
-	if len(r.Findings) != 0 || rowFor(t, r, 0).HealthCode != "" {
+	if dies, failed := skippedDies(r, proto.DoctorSkipBudgetExhausted); failed || !reflect.DeepEqual(dies, []int{0, 1, 2}) || rowFor(t, r, 0).HealthCode != "" {
 		t.Fatalf("findings %+v, row %+v: a die the budget cut off was blamed", r.Findings, rowFor(t, r, 0))
 	}
 	fact := cardRuntimeFact(r)
@@ -527,7 +544,7 @@ func TestDoctorAsksEachNVIDIACardOnItsOwn(t *testing.T) {
 		t.Fatalf("fact = %q", fact)
 	}
 	if row := rowFor(t, r, 1); row.HealthCode != accelerator.HealthRuntimeUnusable {
-		t.Fatalf("card 1 row = %+v, want runtime_unusable", row)
+		t.Fatalf("card 1 row = %+v, want RUNTIME_UNUSABLE", row)
 	}
 	if row := rowFor(t, r, 0); row.HealthStatus != accelerator.HealthOK {
 		t.Fatalf("card 0 row = %+v", row)
@@ -610,8 +627,11 @@ func TestDoctorAsksEachHygonCardAndSkipsForeignOnes(t *testing.T) {
 	if row := rowFor(t, r, 1); row.HealthCode != accelerator.HealthRuntimeUnusable {
 		t.Fatalf("failed card row = %+v", row)
 	}
-	if len(r.Findings) != 1 || r.Findings[0].Targets[0].PCIeBDF != "0000:68:00.0" {
+	if len(r.Findings) != 2 || r.Findings[0].Status != proto.CheckFail || r.Findings[0].Targets[0].PCIeBDF != "0000:68:00.0" {
 		t.Fatalf("findings = %+v", r.Findings)
+	}
+	if dies, _ := skippedDies(r, proto.CardCheckSkipForeign); !reflect.DeepEqual(dies, []int{2}) {
+		t.Fatalf("the card used outside the platform is not a skip: %+v", r.Findings)
 	}
 }
 

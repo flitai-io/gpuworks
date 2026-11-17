@@ -268,3 +268,26 @@ func TestLegacyTargetDesiredSleepMetadataIsNotARequest(t *testing.T) {
 		})
 	}
 }
+
+// The agent re-checks an external KV cache like any other requested feature:
+// no vendor row denies it (the server's backend gate decides vendors), Apple
+// denies every feature, and a snapshot without it is the one older servers
+// send.
+func TestTargetDesiredReChecksExternalKVCache(t *testing.T) {
+	e := NewWithProber(&headlessTestDriver{name: "docker"}, nil, nil, t.TempDir(), &gpu.FixedProber{VendorName: "nvidia"})
+	external := proto.InstanceDesiredState{NNodes: 1, ResolvedLaunch: proto.ResolvedLaunch{RequestedFeatures: &proto.RequestedFeatures{CommandKnown: true, ExternalKVCache: true}}}
+	if err := e.validateTargetDesired(external); err != nil {
+		t.Fatalf("external KV cache refused on NVIDIA: %v", err)
+	}
+	e.prober = &gpu.FixedProber{VendorName: "apple"}
+	if err := e.validateTargetDesired(external); err == nil || !strings.Contains(err.Error(), "external_kv_cache") {
+		t.Fatalf("external KV cache accepted on Apple: %v", err)
+	}
+	if names := (&proto.RequestedFeatures{CommandKnown: true}).Names(); len(names) != 0 {
+		t.Fatalf("a snapshot without the field names %v", names)
+	}
+	raw, _ := json.Marshal(proto.RequestedFeatures{CommandKnown: true})
+	if string(raw) != `{"command_known":true}` {
+		t.Fatalf("wire = %s, want the field omitted", raw)
+	}
+}

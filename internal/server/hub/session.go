@@ -18,7 +18,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/store"
 	"gpuworks.ai/gpuworks/internal/version"
-	"gpuworks.ai/gpuworks/pkg/bench/metrics"
 )
 
 var (
@@ -42,11 +41,31 @@ type Session struct {
 	ctrl                io.ReadWriteCloser
 	dec                 *json.Decoder
 	writeMu             sync.Mutex
-	imageStatusMu       sync.Mutex // serializes image inventory and operation persistence
-	imageStatusRevision atomic.Uint64
-	// Network saves coalesce independently from resource reconciliation.
-	networkSyncOnce   sync.Once
-	networkSyncNotify chan struct{}
+	imageStatusMu       sync.Mutex    // serializes image inventory and operation persistence
+	imageStatusRevision atomic.Uint64 // image operation reports received
+	imageStatusApplied  uint64        // of those, persisted; guarded by imageStatusMu
+	// reportMu fences status writes against session replacement, submitMu
+	// does the same for coalesced submits without ever being held across
+	// store I/O, and reportQ is the ordered status worker's queue
+	// (session_report_queue.go).
+	reportMu sync.Mutex
+	submitMu sync.Mutex
+	reportQ  atomic.Pointer[reportQueue]
+	// Pushes a change asks for coalesce on the session's own workers
+	// (sync_worker.go): the network policy, independently from resource
+	// reconciliation (network_sync.go); the full desired state a fleet-wide
+	// change asks for (node_resync.go); and the catalog's image refs, latest
+	// list wins (image_refs.go).
+	networkSync   syncWorker
+	resync        syncWorker
+	imageRefsSync syncWorker
+	imageRefsMu   sync.Mutex
+	imageRefs     []string
+	// kubeSettingsMu orders the read and send of kube.settings (kube_settings.go).
+	kubeSettingsMu sync.Mutex
+	// kubeSettingsSent is set once the initial replay carried kube.settings:
+	// later full replays (SyncNode) leave them alone, edits push their own.
+	kubeSettingsSent atomic.Bool
 
 	// fullPushMu serializes full desired-state replays and network updates, and
 	// initialPushDone gates incremental updates behind the first replay
@@ -60,11 +79,21 @@ type Session struct {
 	remote          string
 	proto           int
 	lastSeen        atomic.Int64 // unix ms
+	// instanceID and hostname are the agent process's, from its hello;
+	// written before register publishes the session (duplicate_agents.go).
+	instanceID, hostname string
 	// runtimeProxy is the container runtime daemon's proxy as the agent last
 	// reported it (proto.NodeStatus.RuntimeProxy). It is not stored: the next
 	// report after a server restart brings it back.
 	runtimeProxy atomic.Pointer[proto.RuntimeProxyStatus]
-	rpcSeq       atomic.Uint64
+	// nvidiaIsolation is how strictly the node keeps its NVIDIA instance pods
+	// to their own card, as its last report said (nil: strictly, or not
+	// reported). Not stored either: each report states it afresh.
+	nvidiaIsolation atomic.Pointer[proto.NVIDIAIsolation]
+	// ucxNetlinkHang is the host's UCX hang as the last status stated it:
+	// non-nil while its IPv6 route dump hangs UCX (NIXL). Live, never stored.
+	ucxNetlinkHang atomic.Pointer[proto.UCXNetlinkHang]
+	rpcSeq         atomic.Uint64
 
 	// caps is what the agent advertised in its hello. Written during handshake,
 	// which completes before hub.register publishes the session; every reader
@@ -82,6 +111,10 @@ type Session struct {
 	pending   map[uint64]chan proto.Envelope // in-flight RPC responses
 	closed    chan struct{}
 	closeOnce sync.Once
+	// telTail holds, per batch type, the done channel of the telemetry
+	// stream accepted last (telemetry.go); guarded by telMu.
+	telMu   sync.Mutex
+	telTail map[string]chan struct{}
 
 	// sessionID is a per-ctrl-handshake random token returned in Registered for
 	// dual-lane connections. A data lane must present the current ctrl session's
@@ -97,7 +130,7 @@ type Session struct {
 
 	// data is the optional dedicated high-throughput lane (a second yamux session
 	// over its own WebSocket or reverse TCP connection). It carries the data-plane stream kinds
-	// (tunnel/logtail/model/image) while ctrl/metrics/terminal stay on s.ysess.
+	// (tunnel/logtail/telemetry/model/image) while ctrl/terminal stay on s.ysess.
 	// Guarded by dataMu; nil when detached. dataEver records whether a data lane
 	// was ever attached so DataLaneState can distinguish detached from none.
 	// dataChangeCh is closed and replaced (see notifyDataChangeLocked) on every
@@ -221,6 +254,10 @@ func (s *Session) handshake() error {
 	// Persist the handshake facts first so that the instant the node reads as
 	// online (register below) they are already on record.
 	s.recordHandshakeFacts(n, hello)
+	if id := strings.TrimSpace(hello.InstanceID); len(id) <= maxInstanceIDLen {
+		s.instanceID = id
+	}
+	s.hostname = hello.Hostname
 	s.hub.register(s)
 	if err := s.send(proto.TRegistered, 0, proto.Registered{NodeUUID: n.UUID, NodeToken: registeredToken, Proto: negotiated, SessionID: s.sessionID}); err != nil {
 		return err
@@ -238,6 +275,7 @@ func (s *Session) handshake() error {
 // ctrlLoop processes inbound ctrl envelopes until the stream closes.
 func (s *Session) ctrlLoop() {
 	defer s.markClosed()
+	defer s.drainReports()
 	for {
 		var env proto.Envelope
 		if err := s.dec.Decode(&env); err != nil {
@@ -260,89 +298,22 @@ func (s *Session) handle(env proto.Envelope) {
 	case proto.TStatusImageNode:
 		s.handleImageStatus(env.D)
 	case proto.TStatusInstance:
-		var st proto.InstanceStatus
-		if err := json.Unmarshal(env.D, &st); err != nil {
-			s.hub.log.Warn("bad status.instance", "node", s.NodeUUID, "err", err)
-			return
-		}
-		accepted, err := s.hub.applyInstanceStatus(s, st)
-		if err != nil {
-			s.hub.log.Debug("apply status.instance", "uuid", st.UUID, "err", err)
-		}
-		if accepted {
-			s.rememberAssetDigests(st.RuntimeAssetDigests)
-		}
+		s.handleInstanceStatus(env.D)
 	case proto.TPeerTransferPhase:
 		var phase proto.PeerTransferPhase
 		if json.Unmarshal(env.D, &phase) == nil && s.hub.recordPeerTransferPhase(s, phase) {
 			s.hub.peerTransferEvent(phase.TransferID, "source_phase", "")
 		}
 	case proto.TStatusModelFile:
-		var st proto.ModelFileStatus
-		if err := json.Unmarshal(env.D, &st); err != nil {
-			return
-		}
-		_ = s.hub.applyModelFileStatus(s, st)
+		s.handleModelFileStatus(env.D)
 	case proto.TStatusStorage:
-		var report proto.StorageStatusReport
-		if err := json.Unmarshal(env.D, &report); err != nil {
-			s.hub.log.Warn("bad status.storage", "node", s.NodeUUID, "err", err)
-			return
-		}
-		node, err := s.hub.store.NodeByUUID(s.NodeUUID)
-		if err == nil {
-			if err := s.hub.store.ApplyStorageStatus(node.ID, report); err != nil {
-				s.hub.log.Warn("apply status.storage failed", "node", s.NodeUUID, "err", err)
-			}
-		}
+		s.handleStorageStatus(env.D)
 	case proto.TStatusBenchmark:
-		var st proto.BenchmarkStatus
-		if err := json.Unmarshal(env.D, &st); err != nil {
-			s.hub.log.Warn("bad status.benchmark", "node", s.NodeUUID, "err", err)
-			return
-		}
-		node, err := s.hub.store.NodeByUUID(s.NodeUUID)
-		if err != nil {
-			return
-		}
-		if err := s.hub.store.ApplyBenchmarkStatus(node.ID, st); err != nil {
-			s.hub.log.Debug("apply status.benchmark", "id", st.ID, "err", err)
-			return
-		}
-		if len(st.Sample) > 0 && st.PointIndex > 0 {
-			var sample metrics.ProcessSample
-			if json.Unmarshal(st.Sample, &sample) == nil {
-				_ = s.hub.store.AppendBenchmarkCurveSample(st.ID, st.PointIndex, time.Now().UTC(), sample)
-			}
-		}
-		if (len(st.DetailChunk) > 0 || st.DetailFinal) && s.hub.onBenchmarkDetail != nil {
-			s.hub.onBenchmarkDetail(s.NodeUUID, st)
-		}
-		if len(st.Sample) > 0 && s.hub.onMetrics != nil {
-			var sample metrics.ProcessSample
-			if json.Unmarshal(st.Sample, &sample) == nil {
-				now := time.Now().UnixMilli()
-				labels := map[string]string{"benchmark": fmt.Sprint(st.ID), "point": fmt.Sprint(st.PointIndex), "node": s.NodeUUID}
-				s.hub.onMetrics(s.NodeUUID, []proto.MetricSample{{Metric: "gpuworks_bench_output_tput", Labels: labels, Value: sample.OutputTput, TimeMS: now}, {Metric: "gpuworks_bench_total_tput", Labels: labels, Value: sample.TotalTput, TimeMS: now}, {Metric: "gpuworks_bench_request_tput", Labels: labels, Value: sample.RequestTput, TimeMS: now}, {Metric: "gpuworks_bench_ttft_p50_ms", Labels: labels, Value: sample.TTFTP50, TimeMS: now}, {Metric: "gpuworks_bench_tpot_p50_ms", Labels: labels, Value: sample.TPOTP50, TimeMS: now}, {Metric: "gpuworks_bench_latency_p99_ms", Labels: labels, Value: sample.LatencyP99, TimeMS: now}})
-			}
-		}
-		if st.State == "done" || st.State == "failed" || st.State == "canceled" {
-			_ = s.PushUpdate(proto.StateUpdate{RemovedBenchmarks: []uint{st.ID}})
-		}
+		s.handleBenchmarkStatus(env.D)
 	case proto.TMetrics:
-		if s.hub.onMetrics != nil {
-			var b proto.MetricBatch
-			if json.Unmarshal(env.D, &b) == nil && len(b.Samples) > 0 {
-				s.hub.onMetrics(s.NodeUUID, b.Samples)
-			}
-		}
+		s.handleMetrics(env.D)
 	case proto.TLogs:
-		if s.hub.onLogs != nil {
-			var b proto.LogBatch
-			if json.Unmarshal(env.D, &b) == nil && len(b.Lines) > 0 {
-				s.hub.onLogs(s.NodeUUID, b.Lines)
-			}
-		}
+		s.handleLogs(env.D)
 	case proto.TAgentUpgradeStatus:
 		var status proto.AgentUpgradeStatus
 		if err := json.Unmarshal(env.D, &status); err != nil {
@@ -351,7 +322,7 @@ func (s *Session) handle(env proto.Envelope) {
 		}
 		if status.State == "failed" {
 			s.hub.setUpgradeError(s.NodeUUID, status.Error)
-			s.observeUpgradeFailure(status.Error)
+			s.observeUpgradeFailure(status)
 			s.hub.log.Error("agent self-upgrade failed", "node", s.NodeUUID, "err", status.Error)
 		} else {
 			s.hub.log.Warn("unknown agent upgrade status", "node", s.NodeUUID, "state", status.State, "err", status.Error)
@@ -538,6 +509,9 @@ func (s *Session) Close() {
 
 func (s *Session) markClosed() {
 	s.closeOnce.Do(func() { close(s.closed) })
+	if q := s.reportQ.Load(); q != nil {
+		q.wake() // a read loop waiting on a full queue gives up
+	}
 }
 
 // LastSeen returns the last activity time (unix ms).

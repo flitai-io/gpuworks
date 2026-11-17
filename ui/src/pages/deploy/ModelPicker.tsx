@@ -30,11 +30,14 @@ export default function ModelPicker({
   onChange,
   selected,
   id,
+  ariaLabel,
 }: {
   value?: number;
   onChange?: (value: number | undefined) => void;
   selected?: ModelCore;
   id?: string;
+  /** Names the control where no form label does (a mount row). */
+  ariaLabel?: string;
 }) {
   const { t } = useTranslation("deploy");
   const [search, setSearch] = useState("");
@@ -73,6 +76,7 @@ export default function ModelPicker({
   return (
     <Select
       id={id}
+      aria-label={ariaLabel}
       showSearch
       filterOption={false}
       onSearch={setSearch}

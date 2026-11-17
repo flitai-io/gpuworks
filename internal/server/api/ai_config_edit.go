@@ -84,19 +84,29 @@ func (a *apiHandlers) updateAIConfig(w http.ResponseWriter, r *http.Request) {
 			patch.APIKey = &encrypted
 		}
 	}
+	if !a.patchAIProxy(w, id, req, &patch) {
+		return
+	}
+	patch.ImageInput = req.ImageInput
 	if patch.Preset != nil {
 		// A preset names a provider, so it brings that provider's address and
 		// model along unless this patch names its own - the same fill a create
 		// applies.
 		patch.BaseURL, patch.Model = fillAIConfigPreset(*patch.Preset, patch.BaseURL, patch.Model)
+		if p, ok := aihelper.Presets[*patch.Preset]; ok && patch.ImageInput == nil && req.Model == nil {
+			// The preset's model is the one stored, so its image switch comes
+			// along; an explicit model keeps the stored switch.
+			image := p.ImageInput
+			patch.ImageInput = &image
+		}
 	}
 	patch.IsDefault = req.IsDefault
-	c, err := a.d.Store.UpdateAIConfig(parseUint(chi.URLParam(r, "id")), patch)
+	c, err := a.d.Store.UpdateAIConfig(id, patch)
 	if err != nil {
 		writeAIStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, aiConfigView(c))
+	writeJSON(w, http.StatusOK, a.aiConfigView(c))
 }
 
 // fillAIConfigPreset answers the address and model a patch should store for a
@@ -152,16 +162,100 @@ func (a *apiHandlers) testAIConfig(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	proxy, ok := a.aiConfigTestProxy(w, req)
+	if !ok {
+		return
+	}
+	client := aihelper.NewClientRouted(
+		aihelper.Endpoint{BaseURL: base, APIKey: key, Model: model},
+		a.outboundPrivateHosts, a.aiServiceRoute(proxy.mode, proxy.url),
+	)
 	ctx, cancel := context.WithTimeout(r.Context(), aiConfigTestTimeout)
 	defer cancel()
-	result := aihelper.NewClientWithPrivateHosts(
-		aihelper.Endpoint{BaseURL: base, APIKey: key, Model: model},
-		a.outboundPrivateHosts,
-	).Probe(ctx)
-	writeJSON(w, http.StatusOK, dto.AIConfigTestResult{
+	result := client.Probe(ctx)
+	out := dto.AIConfigTestResult{
 		Outcome: string(result.Outcome), Status: result.Status, Detail: result.Detail,
 		BaseURL: base, LatencyMS: result.LatencyMS,
-	})
+	}
+	if req.CheckImage && result.Outcome == aihelper.ProbeOK {
+		// Only a model that answers text can say anything about images: any
+		// other failure would be blamed on the image.
+		imageCtx, cancelImage := context.WithTimeout(r.Context(), aihelper.ImageProbeTimeout)
+		defer cancelImage()
+		image := client.ProbeImage(imageCtx)
+		out.Image, out.ImageStatus, out.ImageDetail = string(image.Check), image.Status, image.Detail
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// patchAIProxy turns a patch's proxy fields into the store patch. A URL with
+// no mode keeps the stored mode, which must then be custom; leaving custom
+// drops the stored proxy; an empty URL while custom keeps the stored one, and
+// is refused when there is none to keep.
+func (a *apiHandlers) patchAIProxy(w http.ResponseWriter, id uint, req dto.AIConfigPatch, patch *store.AIConfigPatch) bool {
+	if req.ProxyMode == nil && req.ProxyURL == nil {
+		return true
+	}
+	stored, err := a.d.Store.AIConfigByID(id)
+	if err != nil {
+		writeAIStoreErr(w, err)
+		return false
+	}
+	mode := stored.ProxyMode
+	if req.ProxyMode != nil {
+		mode = *req.ProxyMode
+	}
+	rawURL := ""
+	if req.ProxyURL != nil {
+		rawURL = *req.ProxyURL
+	}
+	keep := stored.ProxyMode == string(aihelper.ProxyCustom) && stored.ProxyURL != ""
+	choice, ok := validateAIProxy(w, mode, rawURL, keep)
+	if !ok {
+		return false
+	}
+	patch.ProxyMode = &choice.mode
+	switch {
+	case choice.mode != string(aihelper.ProxyCustom):
+		cleared := ""
+		patch.ProxyURL = &cleared
+	case choice.url != "":
+		sealed, ok := a.sealAIProxyURL(w, choice.url)
+		if !ok {
+			return false
+		}
+		patch.ProxyURL = &sealed
+	}
+	return true
+}
+
+// aiConfigTestProxy picks the proxy a test goes through. An empty URL with
+// custom on an edit dialog means the stored one, as for the key; there is no
+// address guard here because the stored proxy's login only ever goes to that
+// proxy, never to the address under test.
+func (a *apiHandlers) aiConfigTestProxy(w http.ResponseWriter, req dto.AIConfigTest) (aiProxyChoice, bool) {
+	var stored *store.AIConfig
+	if req.ID != 0 && strings.TrimSpace(req.ProxyURL) == "" {
+		row, err := a.d.Store.AIConfigByID(req.ID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			writeErr(w, http.StatusInternalServerError, err)
+			return aiProxyChoice{}, false
+		}
+		if err == nil && row.ProxyMode == string(aihelper.ProxyCustom) && row.ProxyURL != "" {
+			stored = row
+		}
+	}
+	choice, ok := validateAIProxy(w, req.ProxyMode, req.ProxyURL, stored != nil)
+	if !ok || choice.mode != string(aihelper.ProxyCustom) || choice.url != "" {
+		return choice, ok
+	}
+	plain, err := store.DecryptAIKey(a.d.AISecretbox, stored.ProxyURL)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return aiProxyChoice{}, false
+	}
+	choice.url = plain
+	return choice, true
 }
 
 // aiConfigTestKey picks the key a test uses. The edit dialog leaves the key
@@ -206,12 +300,6 @@ func (a *apiHandlers) aiConfigTestKey(w http.ResponseWriter, req dto.AIConfigTes
 		return "", false
 	}
 	return key, true
-}
-
-// aiConfigView is the public form of a stored service: what the console shows,
-// and never the key.
-func aiConfigView(c *store.AIConfig) dto.AIConfigView {
-	return dto.AIConfigView{ID: c.ID, Name: c.Name, Preset: c.Preset, BaseURL: c.BaseURL, Model: c.Model, IsDefault: c.IsDefault}
 }
 
 // aiConfigStoredName answers the name a stored service holds, or "" when the id

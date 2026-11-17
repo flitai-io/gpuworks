@@ -61,6 +61,7 @@
     "endpoint": "端点",
     "model": "指定模型",
     "completionWindow": "完成时限",
+    "priorityClass": "请求优先级",
     "inputFilename": "输入文件名",
     "owner": "所属用户（用户 ID）",
     "apiKey": "API 令牌 ID",
@@ -68,7 +69,7 @@
     "completed": "成功",
     "failed": "失败",
     "pending": "未结束（等待或重试中）",
-    "pendingHint": "平台正在重试的请求（例如部署正在唤醒、被更高优先级的部署抢占，或收到 429 / 5xx 应答）算作未结束。",
+    "pendingHelp": "平台正在重试的请求（例如部署正在唤醒、被更高优先级的部署抢占，或收到 429 / 5xx 应答）算作未结束。",
     "waiting": {
       "title": "有请求在等待重试",
       "line": "{{model}}（{{state}}）：{{count}} 个请求从 {{since}} 起等待重试",
@@ -112,6 +113,10 @@
       "label": "完成时限",
       "unit": "小时",
       "help": "{{min}}–{{max}} 的整数小时，默认 {{default}}。到期仍未结束的请求按过期处理。"
+    },
+    "priority": {
+      "label": "请求优先级",
+      "help": "批处理请求使用的优先级，默认 {{name}}；开启了请求优先级的部署按它排队。"
     },
     "model": {
       "label": "模型",

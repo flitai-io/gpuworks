@@ -2,6 +2,7 @@ package hub
 
 import (
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/libp2p/go-yamux/v5"
@@ -38,7 +39,7 @@ const (
 	dataLaneMaxWindow     = 16 * 1024 * 1024 // Auto-tuning ceiling.
 	laneKeepAliveInterval = 10 * time.Second // Independent ping channel in go-yamux.
 	laneConnWriteTimeout  = 30 * time.Second // "Safety valve" for a wedged write.
-	ctrlLaneMaxStreams    = 256              // ctrl/metrics/terminal only.
+	ctrlLaneMaxStreams    = 256              // ctrl/terminal only.
 	dataLaneMaxStreams    = 4096             // tunnel/logtail/model/image fan-out.
 )
 
@@ -66,4 +67,12 @@ func laneYamuxConfig(lane string, logOut io.Writer) *yamux.Config {
 		cfg.MaxIncomingStreams = dataLaneMaxStreams
 	}
 	return cfg
+}
+
+// slogWriter adapts yamux's io.Writer logging into slog at debug level.
+type slogWriter struct{ log *slog.Logger }
+
+func (w *slogWriter) Write(p []byte) (int, error) {
+	w.log.Debug("yamux", "msg", string(p))
+	return len(p), nil
 }

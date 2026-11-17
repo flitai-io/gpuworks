@@ -2,7 +2,10 @@ package storagemount
 
 import "strings"
 
-// ClassifyMountError maps the text printed by a failed mount command to a Reason code.
+// ClassifyMountError maps the text printed by a failed mount command to a
+// Reason code. External text: mount(8) and its mount.nfs/mount.cifs helpers
+// report failures only in words; mountFailure calls this on the output of the
+// command it ran.
 func ClassifyMountError(output string) string {
 	s := strings.ToLower(output)
 	has := func(subs ...string) bool {
@@ -24,7 +27,7 @@ func ClassifyMountError(output string) string {
 		"name or service not known", "network is unreachable", "operation timed out", "timed out"):
 		return ReasonUnreachable
 	case has("bad option; for several filesystems", "wrong fs type", "helper program", "unknown filesystem type",
-		"command not found", "executable file not found", "mount.nfs: not found"):
+		"command not found", "mount.nfs: not found"):
 		return ReasonMissingClient
 	}
 	return ReasonOther

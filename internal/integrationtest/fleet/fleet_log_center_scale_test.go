@@ -60,7 +60,7 @@ func TestFleetLogCenterScale(t *testing.T) {
 		names = append(names, name)
 	}
 
-	client, err := Login(env.URL(), "admin", "password")
+	client, err := Login(env.URL(), "admin", testenv.AdminPassword)
 	if err != nil {
 		t.Fatalf("log in: %v", err)
 	}

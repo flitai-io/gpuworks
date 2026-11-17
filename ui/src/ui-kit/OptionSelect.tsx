@@ -3,13 +3,13 @@ import { useTranslation } from "react-i18next";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "../components/ui/select";
 import { Button } from "../components/ui/button";
 /** A labeled single choice; clearing is an explicit keyboard-accessible action. */
-export function OptionSelect({ options, value, onChange, placeholder, disabled, clearable, ...trigger }: Omit<ComponentProps<typeof SelectTrigger>, "value" | "onChange" | "children"> & {
+export function OptionSelect({ options, value, onChange, placeholder, disabled, clearable, size, ...trigger }: Omit<ComponentProps<typeof SelectTrigger>, "value" | "onChange" | "children"> & {
   options: { value: string; label: ReactNode }[]; value?: string; onChange: (value: string) => void;
-  placeholder?: string; disabled?: boolean; clearable?: boolean;
+  placeholder?: string; disabled?: boolean; clearable?: boolean; size?: ComponentProps<typeof Select>["size"];
 }) {
   const { t } = useTranslation("common");
   return <div className="flex min-w-0 items-center gap-1">
-    <Select value={value ?? ""} onValueChange={onChange} disabled={disabled}>
+    <Select value={value ?? ""} onValueChange={onChange} disabled={disabled} size={size}>
       <SelectTrigger {...trigger} placeholder={placeholder} wrapperClassName="min-w-0 flex-1" className={`min-w-0 w-full ${trigger.className ?? ""}`} />
       <SelectContent>{options.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
     </Select>

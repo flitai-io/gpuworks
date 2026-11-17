@@ -23,3 +23,5 @@ When the primary model is already on a shared storage, the deployment form no lo
 - Component metadata checks join admission at create, so a create fails at once when a component's source cannot be read, instead of getting stuck at start.
 - Users see before deploying which component goes into which shared storage and how much space it takes; afterwards the write can be traced on the timeline.
 - Not done: applying the same rule to the primary model (it has no existing shared copy to follow); giving up the wait when a write makes no progress for a long time (handled separately); choosing a storage by its free capacity.
+
+<!-- translation-source-sha256: b22644c21e502e601f3625d75f7f4e177fcfbd0e1c558f1c4840b870723c4676 -->

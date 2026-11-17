@@ -27,7 +27,7 @@ func (f *fakePrechecker) PrecheckSSH(ctx context.Context, req provision.SSHPrech
 		User:   "root",
 		Host:   "example.com",
 		Port:   22,
-		Checks: []provision.CheckResult{{Name: "OS/Arch", Status: "ok", Detail: "Linux x86_64"}},
+		Checks: []provision.CheckResult{{ID: "os_arch", Status: "pass", Message: "Linux x86_64"}},
 	}, nil
 }
 
@@ -65,7 +65,7 @@ func (f *fakeInstaller) InstallSSH(ctx context.Context, req provision.SSHInstall
 		BinaryName:        "gpuworks-agent-linux-amd64",
 		InstallDir:        installDir,
 		ServerDialAddress: serverDialAddress,
-		Checks:            []provision.CheckResult{{Name: "Start agent", Status: "ok", Detail: "started"}},
+		Checks:            []provision.CheckResult{{ID: "start_agent", Status: "pass", Message: "started"}},
 	}, nil
 }
 
@@ -94,7 +94,7 @@ func TestPrecheckNodeEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.Host != "example.com" || len(report.Checks) != 1 || report.Checks[0].Status != "ok" {
+	if report.Host != "example.com" || len(report.Checks) != 1 || report.Checks[0].Status != "pass" {
 		t.Fatalf("report = %+v", report)
 	}
 }
@@ -244,7 +244,7 @@ func TestInstallNodeEndpointTriggersServerDial(t *testing.T) {
 	if report.ServerDialAddress != "example.com:19091" {
 		t.Fatalf("ServerDialAddress = %q", report.ServerDialAddress)
 	}
-	if got := report.Checks[len(report.Checks)-1]; got.Name != "server_dial" || got.Status != "ok" {
+	if got := report.Checks[len(report.Checks)-1]; got.ID != "server_dial" || got.Status != "pass" {
 		t.Fatalf("server_dial check = %+v", got)
 	}
 	nodes, err := st.ListNodes()
@@ -392,7 +392,7 @@ func TestPrecheckNodeEndpointReportsCallErrorAsAdvisoryCheck(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.Target != "root@example.com" || report.User != "root" || report.Host != "example.com" || report.Port != 22 || len(report.Checks) != 1 || report.Checks[0].Name != "SSH" || report.Checks[0].Status != "error" {
+	if report.Target != "root@example.com" || report.User != "root" || report.Host != "example.com" || report.Port != 22 || len(report.Checks) != 1 || report.Checks[0].ID != "ssh" || report.Checks[0].Status != "fail" {
 		t.Fatalf("advisory precheck report = %+v", report)
 	}
 
@@ -406,7 +406,7 @@ func TestPrecheckNodeEndpointReportsCallErrorAsAdvisoryCheck(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.User != "" || report.Host != "" || report.Port != 0 || len(report.Checks) != 1 || report.Checks[0].Status != "error" {
+	if report.User != "" || report.Host != "" || report.Port != 0 || len(report.Checks) != 1 || report.Checks[0].Status != "fail" {
 		t.Fatalf("unparsed advisory report = %+v", report)
 	}
 }

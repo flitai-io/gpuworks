@@ -1,8 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Badge } from "antd";
+import { Badge } from "../../components/ui/badge";
+import StateSummary from "./StateSummary";
+import { STATE_BADGE, offeredStates } from "./serviceStates";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
-import type { HealthStatus, MonitorService } from "../../api";
+import type { HealthStatus, MonitorService, MonitorStateCount } from "../../api";
 import { HealthCheckHelp, HealthTag } from "../../components/DeploymentHealth";
 import ResourceTable, { type ResourceColumn } from "../../components/resourceTable/ResourceTable";
 import { colors } from "../../theme/tokens";
@@ -46,19 +48,6 @@ function useNarrow(breakpointPx = NARROW_BREAKPOINT): boolean {
   return narrow;
 }
 
-export const STATE_BADGE: Record<MonitorService["state"], "success" | "processing" | "default" | "error" | "warning"> = {
-  running: "success",
-  offline: "warning",
-  starting: "processing",
-  stopped: "default",
-  failed: "error",
-  asleep: "warning",
-};
-
-// STATE_ORDER lists service states serving first, then the ones that
-// need a look, then the deliberately stopped.
-export const STATE_ORDER: MonitorService["state"][] = ["running", "starting", "asleep", "offline", "failed", "stopped"];
-
 function num(value: number | null, digits = 0): ReactNode {
   return value == null ? <Dash /> : value.toFixed(digits);
 }
@@ -84,26 +73,43 @@ export default function ServiceTable({
   loading,
   error,
   onRefresh,
-  filterDeploymentIds,
+  stateCounts,
+  stateFilter: stateFilterProp,
+  onStateFilterChange,
+  signalFilter,
+  onClearSignalFilter,
 }: {
   services: MonitorService[];
+  /** The overview's state_counts: the state summary and the state column's choices, in the server's order. */
+  stateCounts: MonitorStateCount[];
   loading?: boolean;
   error?: Error | null;
   onRefresh?: () => void;
-  filterDeploymentIds?: number[] | null;
+  /** The state filter, shared by the state summary and the state column; uncontrolled when absent. */
+  stateFilter?: string[];
+  onStateFilterChange?: (states: string[]) => void;
+  /** A signal tile's narrowing to some services, listed as a toolbar filter. */
+  signalFilter?: { label: string; deploymentIds: number[] } | null;
+  onClearSignalFilter?: () => void;
 }) {
   const { t } = useTranslation("monitoring");
   const { t: tCommon } = useTranslation("common");
   const navigate = useNavigate();
+  const [ownStateFilter, setOwnStateFilter] = useState<string[]>([]);
+  const stateFilter = stateFilterProp ?? ownStateFilter;
+  const setStateFilter = (next: string[]) => {
+    if (!stateFilterProp) setOwnStateFilter(next);
+    onStateFilterChange?.(next);
+  };
   const narrow = useNarrow();
 
-  const rows = filterDeploymentIds ? services.filter((s) => filterDeploymentIds.includes(s.deployment_id)) : services;
+  const rows = signalFilter ? services.filter((s) => signalFilter.deploymentIds.includes(s.deployment_id)) : services;
 
   const allColumns: ResourceColumn<MonitorService>[] = [
     {
       key: "service",
       role: "name",
-      title: t("table.service"),
+      title: t("table.serviceName"),
       width: SERVICE_COL_WIDTH,
       sortValue: (row) => row.name,
       render: (_: unknown, row: MonitorService) => (
@@ -117,13 +123,17 @@ export default function ServiceTable({
     },
     {
       key: "state",
+      filteredValue: stateFilter,
       title: t("table.state"),
       width: 110,
       sortValue: (row) => row.state,
-      filters: [...new Set(services.map((row) => row.state))].map((state) => ({ value: state, text: t(`states.${state}`, { defaultValue: state }) })),
+      // The summary shows the single picked state as its pressed chip; a
+      // multi-state pick from the funnel keeps the toolbar chip.
+      filterChip: stateFilter.length !== 1,
+      filters: offeredStates(stateCounts, stateFilter).map(({ state }) => ({ value: state, text: t(`states.${state}`, { defaultValue: state }) })),
       onFilter: (value, row) => row.state === value,
       render: (_: unknown, row: MonitorService) => (
-        <Badge status={STATE_BADGE[row.state] ?? "default"} text={t(`states.${row.state}`, { defaultValue: row.state })} />
+        <Badge variant="dot" status={STATE_BADGE[row.state] ?? "neutral"}>{t(`states.${row.state}`, { defaultValue: row.state })}</Badge>
       ),
     },
     {
@@ -168,10 +178,14 @@ export default function ServiceTable({
   const columns = narrow ? narrowOrder.map((key) => byKey.get(key)!) : allColumns;
 
   return (
+    <section className="min-w-0">
     <ResourceTable<MonitorService>
       tableId={narrow ? "monitor-services-narrow" : "monitor-services"}
       rowKey="deployment_id"
       columns={columns}
+      toolbar={<div className="flex flex-wrap items-center gap-4"><h2 className="m-0 text-body font-semibold">{t("table.service")}</h2><StateSummary counts={stateCounts} selected={stateFilter} narrowed={!!signalFilter} onSelect={state => setStateFilter(state === null || (stateFilter.length === 1 && stateFilter[0] === state) ? [] : [state])} /></div>}
+      onFilterStateChange={filters => { const next = filters.state ?? []; if (next.join("|") !== stateFilter.join("|")) setStateFilter(next); }}
+      extraFilters={signalFilter ? [{ key: "signal", name: t("table.signalFilter"), value: signalFilter.label, onClear: () => onClearSignalFilter?.() }] : undefined}
       data={rows}
       loading={loading}
       error={error}
@@ -183,5 +197,6 @@ export default function ServiceTable({
       // and stays in the accessibility tree as a row, not a link.
       onRow={(row) => ({ onClick: () => navigate(`/monitor/d/${row.deployment_id}`), className: "gpu-clickable-row" })}
     />
+    </section>
   );
 }

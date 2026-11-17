@@ -23,6 +23,11 @@ const (
 	MaxRequestLimit     = 500
 )
 
+// firstTokenSQL is a request's time to its first token in SQL, as
+// uxrecord.FirstTokenOf works it out: the earlier of the first reasoning and
+// the first answer, -1 when neither came.
+const firstTokenSQL = "(CASE WHEN r.first_think_ms >= 0 AND (r.first_answer_ms < 0 OR r.first_think_ms < r.first_answer_ms) THEN r.first_think_ms ELSE r.first_answer_ms END)"
+
 // RequestQuery selects a page of a deployment's request log, newest first.
 type RequestQuery struct {
 	// DeploymentID is required.
@@ -33,12 +38,18 @@ type RequestQuery struct {
 	APIKeyID uint
 	// InstanceUUID narrows to one replica; "" is any.
 	InstanceUUID string
+	// PriorityClass narrows to the requests run at one class; "" is any.
+	PriorityClass string
 	// Results keeps the requests of these results (uxrecord.ResultOf);
 	// empty is every result.
 	Results []uxrecord.Result
 	// MinEndMS and MaxEndMS bound the end-to-end time (EndMS), inclusive;
 	// <= 0 is open.
 	MinEndMS, MaxEndMS int32
+	// MinTTFTMS and MaxTTFTMS bound the time to the first token, the earlier
+	// of the first reasoning and the first answer, inclusive; <= 0 is open.
+	// Either keeps only streamed requests that had a first token.
+	MinTTFTMS, MaxTTFTMS int32
 	// Limit is the page size: <= 0 is DefaultRequestLimit, capped at
 	// MaxRequestLimit.
 	Limit int
@@ -82,7 +93,8 @@ const reqColumns = `r.seq, r.id, r.ts, r.deployment_id, r.instance_uuid, r.api_k
 	r.first_answer_ms, r.last_chunk_ms, r.end_ms, r.events, r.think_events, r.max_gap_ms, r.status,
 	r.outcome, r.finish_reason, r.usage, r.prompt_tokens, r.completion_tokens, r.cached_tokens,
 	r.reasoning_tokens, r.engine_queue_ms, r.engine_prefill_ms, r.engine_decode_ms, r.weight, r.trace_id,
-	r.pd_prefill_ms, r.pd_prefill_queue_ms, r.pd_prefill_compute_ms, r.pd_prefill_instance, r.pd_fallback`
+	r.pd_prefill_ms, r.pd_prefill_queue_ms, r.pd_prefill_compute_ms, r.pd_prefill_instance, r.pd_fallback,
+	r.priority_class`
 
 func scanRequest(rows *sql.Rows, seq *int64) (uxrecord.Request, error) {
 	var r uxrecord.Request
@@ -95,7 +107,8 @@ func scanRequest(rows *sql.Rows, seq *int64) (uxrecord.Request, error) {
 		&r.MaxGapMS, &r.Status, &outcome, &r.FinishReason, &r.Usage, &r.PromptTokens,
 		&r.CompletionTokens, &r.CachedTokens, &r.ReasoningTokens, &r.EngineQueueMS,
 		&r.EnginePrefillMS, &r.EngineDecodeMS, &r.Weight, &trace,
-		&pd.PrefillMS, &pd.PrefillQueueMS, &pd.PrefillComputeMS, &pd.PrefillInstance, &pd.Fallback)
+		&pd.PrefillMS, &pd.PrefillQueueMS, &pd.PrefillComputeMS, &pd.PrefillInstance, &pd.Fallback,
+		&r.PriorityClass)
 	r.Source, r.Outcome = uxrecord.Source(source), uxrecord.Outcome(outcome)
 	if len(trace) == len(r.Trace.Trace) {
 		copy(r.Trace.Trace[:], trace)
@@ -130,6 +143,10 @@ func requestSQL(day string, q RequestQuery, cur *cursor, limit int) (string, []a
 		where = append(where, "r.api_key_id = ?")
 		args = append(args, q.APIKeyID)
 	}
+	if q.PriorityClass != "" {
+		where = append(where, "r.priority_class = ?")
+		args = append(args, q.PriorityClass)
+	}
 	if q.FromMS > 0 {
 		where = append(where, "r.ts >= ?")
 		args = append(args, q.FromMS)
@@ -153,6 +170,14 @@ func requestSQL(day string, q RequestQuery, cur *cursor, limit int) (string, []a
 	if q.MaxEndMS > 0 {
 		where = append(where, "r.end_ms >= 0 AND r.end_ms <= ?")
 		args = append(args, q.MaxEndMS)
+	}
+	if q.MinTTFTMS > 0 || q.MaxTTFTMS > 0 {
+		where = append(where, "r.stream = 1 AND "+firstTokenSQL+" >= ?")
+		args = append(args, max(q.MinTTFTMS, 0))
+	}
+	if q.MaxTTFTMS > 0 {
+		where = append(where, firstTokenSQL+" <= ?")
+		args = append(args, q.MaxTTFTMS)
 	}
 	if len(q.Results) > 0 {
 		terms := make([]string, 0, len(q.Results))
@@ -432,6 +457,10 @@ func (s *Store) days(ctx context.Context, fromMS, toMS int64) ([]string, error) 
 	return daysInRange(all, fromMS, toMS), nil
 }
 
+// isNoSuchTable reports SQLite refusing a query on a day partition that
+// retention dropped after it was listed. The driver (glebarez/go-sqlite) has
+// only the generic SQLITE_ERROR code for it, so the text is read here, at the
+// query this package ran (external text: SQLite "no such table: <name>").
 func isNoSuchTable(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "no such table")
 }

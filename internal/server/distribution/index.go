@@ -46,10 +46,11 @@ const IndexSchema = 1
 
 // Index is one channel's signed payload: what the channel currently offers.
 type Index struct {
-	Schema      int           `json:"schema"`
-	Channel     string        `json:"channel"`
-	PublishedAt time.Time     `json:"published_at"`
-	Server      ServerRelease `json:"server"`
+	Schema          int             `json:"schema"`
+	Channel         string          `json:"channel"`
+	PublishedAt     time.Time       `json:"published_at"`
+	Server          ServerRelease   `json:"server"`
+	PreviousServers []ServerRelease `json:"previous_servers,omitempty"`
 	// ImageCatalog and TemplateCatalog are absent when a channel publishes no
 	// catalog of that kind.
 	ImageCatalog    *CatalogFile     `json:"image_catalog,omitempty"`
@@ -58,10 +59,11 @@ type Index struct {
 
 // ServerRelease is the server build a channel offers, one archive per platform.
 type ServerRelease struct {
-	ReleaseID string        `json:"release_id"`
-	Commit    string        `json:"commit"`
-	BuiltAt   string        `json:"built_at"`
-	Files     []ReleaseFile `json:"files"`
+	DatabaseMigration int           `json:"database_migration,omitempty"`
+	ReleaseID         string        `json:"release_id"`
+	Commit            string        `json:"commit"`
+	BuiltAt           string        `json:"built_at"`
+	Files             []ReleaseFile `json:"files"`
 }
 
 // File is one published file, addressed relative to a source's base URL.
@@ -120,6 +122,23 @@ func ParseIndex(payload []byte, channel string) (Index, error) {
 	return index, nil
 }
 
+// Servers returns the signed choices in publication order, newest first.
+func (x Index) Servers() []ServerRelease {
+	return append([]ServerRelease{x.Server}, x.PreviousServers...)
+}
+
+func (x Index) FindServer(id string) (ServerRelease, bool) {
+	if x.Server.ReleaseID == id {
+		return x.Server, true
+	}
+	for _, release := range x.PreviousServers {
+		if release.ReleaseID == id {
+			return release, true
+		}
+	}
+	return ServerRelease{}, false
+}
+
 // Validate checks the shape of an index: the schema, the channel, and that
 // every file it names is a safe relative path with a size and a digest.
 func (x Index) Validate() error {
@@ -129,8 +148,15 @@ func (x Index) Validate() error {
 	if !ValidChannel(x.Channel) {
 		return fmt.Errorf("index channel %q is invalid", x.Channel)
 	}
-	if err := x.Server.validate(); err != nil {
-		return err
+	seen := make(map[string]bool)
+	for _, release := range x.Servers() {
+		if seen[release.ReleaseID] {
+			return fmt.Errorf("duplicate server release %q", release.ReleaseID)
+		}
+		seen[release.ReleaseID] = true
+		if err := release.validate(); err != nil {
+			return err
+		}
 	}
 	if x.ImageCatalog != nil {
 		if err := x.ImageCatalog.validate("image catalog"); err != nil {

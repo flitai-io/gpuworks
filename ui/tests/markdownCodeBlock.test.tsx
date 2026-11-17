@@ -169,3 +169,9 @@ test("a block reports whether its closing fence has arrived", () => {
   assert.equal(closedOf("Lead **  loose  ** strong.\n\n```html\n<p>x</p>\n```\n"), true, "offsets match the normalized source");
   assert.equal(closedOf("    indented code\n"), true, "an indented block has no fence");
 });
+
+test("model README assets resolve against the repository and unsafe URLs stay blocked", () => {
+  renderMarkdown("![logo](img/logo.png) [unsafe](javascript:alert)", {allowHtml:true, assetBase:"https://models.example/org/repo/resolve/main/"});
+  assert.equal(screen.getByAltText("logo").getAttribute("src"), "https://models.example/org/repo/resolve/main/img/logo.png");
+  assert.ok(!screen.getByText("unsafe").getAttribute("href"));
+});

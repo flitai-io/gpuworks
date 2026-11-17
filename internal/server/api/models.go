@@ -202,7 +202,7 @@ func (a *apiHandlers) getModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiHandlers) syncModelToNode(w http.ResponseWriter, r *http.Request) {
-	if a.d.SyncModel == nil {
+	if a.d.ModelTransfers == nil {
 		writeProductError(w, http.StatusServiceUnavailable, ErrorModelSyncUnavailable, "model sync is not configured", nil)
 		return
 	}
@@ -213,35 +213,24 @@ func (a *apiHandlers) syncModelToNode(w http.ResponseWriter, r *http.Request) {
 		RateLimitKiB *int   `json:"rate_limit_kib_s"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req)
-	if a.d.PeerSync.SyncModelWithOptions != nil {
-		rate := -1
-		if req.RateLimitKiB != nil {
-			rate = *req.RateLimitKiB
-		}
-		if req.RateLimitKiB != nil && rate < 0 {
-			writeProductError(w, http.StatusBadRequest, ErrorModelSyncUnavailable, "rate_limit_kib_s must be non-negative", nil)
-			return
-		}
-		mf, err := a.d.PeerSync.SyncModelWithOptions(r.Context(), id, nodeUUID, req.SourceNode, rate)
-		if err != nil {
-			writeErr(w, http.StatusConflict, err)
-			return
-		}
-		writeJSON(w, http.StatusAccepted, map[string]any{"state": mf.State, "transfer_id": mf.TransferID, "message": mf.Message})
+	rate := -1
+	if req.RateLimitKiB != nil {
+		rate = *req.RateLimitKiB
+	}
+	if req.RateLimitKiB != nil && rate < 0 {
+		writeProductError(w, http.StatusBadRequest, ErrorModelSyncUnavailable, "rate_limit_kib_s must be non-negative", nil)
 		return
 	}
-	mf, err := a.d.SyncModel(r.Context(), id, nodeUUID)
+	mf, err := a.d.ModelTransfers.Sync(r.Context(), id, nodeUUID, req.SourceNode, rate)
 	if err != nil {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{
-		"state": mf.State, "transfer_id": mf.TransferID, "message": mf.Message,
-	})
+	writeJSON(w, http.StatusAccepted, map[string]any{"state": mf.State, "transfer_id": mf.TransferID, "message": mf.Message})
 }
 
 func (a *apiHandlers) probeModelToNode(w http.ResponseWriter, r *http.Request) {
-	if a.d.PeerSync.ProbeModel == nil {
+	if a.d.ModelTransfers == nil {
 		writeProductError(w, http.StatusServiceUnavailable, ErrorModelSyncUnavailable, "model direct probe is not configured", nil)
 		return
 	}
@@ -253,7 +242,7 @@ func (a *apiHandlers) probeModelToNode(w http.ResponseWriter, r *http.Request) {
 		writeProductError(w, http.StatusBadRequest, ErrorModelSyncUnavailable, "source_node is required for direct model probe", nil)
 		return
 	}
-	if err := a.d.PeerSync.ProbeModel(r.Context(), parseUint(chi.URLParam(r, "id")), chi.URLParam(r, "uuid"), req.SourceNode); err != nil {
+	if err := a.d.ModelTransfers.Probe(r.Context(), parseUint(chi.URLParam(r, "id")), chi.URLParam(r, "uuid"), req.SourceNode); err != nil {
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
@@ -261,13 +250,13 @@ func (a *apiHandlers) probeModelToNode(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiHandlers) cancelModelSync(w http.ResponseWriter, r *http.Request) {
-	if a.d.CancelModelSync == nil {
+	if a.d.ModelTransfers == nil {
 		writeProductError(w, http.StatusServiceUnavailable, ErrorModelSyncUnavailable, "model sync is not configured", nil)
 		return
 	}
 	id := parseUint(chi.URLParam(r, "id"))
 	nodeUUID := chi.URLParam(r, "uuid")
-	mf, err := a.d.CancelModelSync(r.Context(), id, nodeUUID)
+	mf, err := a.d.ModelTransfers.Cancel(r.Context(), id, nodeUUID)
 	if err != nil {
 		writeErr(w, http.StatusConflict, err)
 		return

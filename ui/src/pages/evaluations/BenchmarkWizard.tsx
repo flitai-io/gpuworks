@@ -15,6 +15,11 @@ import {
 } from "./agenticWorkload";
 import { hasOperation } from "../../modelInference";
 import { benchmarkOriginNodes } from "./benchmarkOrigins";
+import { usePriorityClasses } from "../apikeys/KeyPriority";
+import { classLabel } from "../settings/PrioritySettingsCard";
+
+// The select needs a non-empty value for "ask for no class" (the default).
+const DEFAULT_CLASS = "__default__";
 import AgenticLoadSummary from "./AgenticLoadSummary";
 import TokenizerSourceFields from "./TokenizerSourceFields";
 import { ENGINE_REF, type TokenizerSource } from "./tokenizerSource";
@@ -29,6 +34,7 @@ type Values = {
 	api_key?: string;
 	model?: string;
 	load_origin: string;
+	priority_class?: string;
 	num_gpus?: number;
 	dataset: string;
 	agentic_mean_input?: number;
@@ -108,6 +114,17 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 	const deploymentID = Form.useWatch("deployment_id", form);
 	const [loadOrigin, baseURL] = Form.useWatch((values: Values) => [values.load_origin, values.base_url], { form, preserve: true }) || [];
 	const access = useOutboundHostAccess([baseURL || ""], open && targetKind === "external" && loadOrigin === "server");
+	// A class applies only to requests that go through the gateway: a managed
+	// deployment measured from the server (the server refuses any other run
+	// naming one).
+	const priorityApplies = targetKind === "instance" && loadOrigin === "server";
+	const priorityClasses = usePriorityClasses();
+	const defaultClass = priorityClasses?.items.find((c) => c.default);
+	// A rerun of a run whose class was deleted since asks for the default.
+	const chosenClass = Form.useWatch("priority_class", form) as string | undefined;
+	useEffect(() => {
+		if (priorityClasses && chosenClass && chosenClass !== DEFAULT_CLASS && !priorityClasses.items.some((c) => c.name === chosenClass)) form.setFieldValue("priority_class", DEFAULT_CLASS);
+	}, [priorityClasses, chosenClass, form]);
 	const keepDetail = Form.useWatch("keep_detail", form);
 	const dataset = Form.useWatch("dataset", form) || "random";
 	const concurrencyRaw = Form.useWatch("concurrency", form) || "1";
@@ -164,6 +181,7 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 			// legacy row that does falls back to the server origin, the only
 			// behavior "auto" has there anyway.
 			load_origin: source?.load_origin && source.load_origin !== "auto" ? source.load_origin : "server",
+			priority_class: source?.priority_class || DEFAULT_CLASS,
 			num_gpus: source?.num_gpus || undefined,
 			dataset: initialDataset,
 			agentic_preset: source?.dataset?.preset || meta.agentic_defaults.preset,
@@ -388,6 +406,7 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 				name: values.name?.trim() || `${localizedText(meta.modes.find((item) => item.value === mode)?.label, language) || t("wizard.defaultName")} ${formatTime(new Date())}`,
 				target_kind: values.target_kind, deployment_id: values.deployment_id, base_url: endpoint || undefined,
 				api_key: values.api_key, model: values.model, load_origin: values.load_origin, num_gpus: values.num_gpus,
+				...(priorityApplies && values.priority_class && values.priority_class !== DEFAULT_CLASS ? { priority_class: values.priority_class } : {}),
 				dataset: importedDataset || (values.dataset === "agentic" ? { kind: "agentic", preset: values.agentic_preset, mean_input_tokens: agenticMeanInput, turns: agenticTurns, seed: meta.agentic_defaults.seed, ...ignoreEOS } : { kind: values.dataset, input_tokens: isl[0], output_tokens: osl[0], ...ignoreEOS }),
 				mode, search, keep_detail: values.keep_detail, detail_cap_mb: values.detail_cap_mb,
 				tokenizer_source: values.tokenizer_source,
@@ -439,6 +458,12 @@ export default function BenchmarkWizard({ open, meta, deployments, nodes, onSear
 					<Form.Item name="load_origin" label={t("wizard.loadOrigin")} extra={targetKind === "instance" && originError ? t("wizard.originLoadFailed") : undefined} rules={[{ required: true }, { validator: async (_, value) => {
 						if (targetKind === "instance" && value !== "server" && (originLoading || !originOptions.some((option) => option.value === value && !option.disabled))) throw new Error(t("wizard.originUnavailable"));
 					} }]}><Select loading={targetKind === "instance" && originLoading} showSearch {...(onSearchNodes ? { filterOption: false, onSearch: onSearchNodes } : { optionFilterProp: "label" })} options={originOptions} /></Form.Item>
+					{targetKind === "instance" && <Form.Item name="priority_class" label={t("wizard.priorityClass")} extra={!priorityApplies ? t("wizard.priorityClassGateway") : deploymentDetail?.id === deploymentID && deploymentDetail?.priority_scheduling === false ? t("wizard.priorityClassNotScheduled") : t("wizard.priorityClassHelp")}>
+						<Select disabled={!priorityApplies || !priorityClasses} loading={!priorityClasses} options={[
+							{ value: DEFAULT_CLASS, label: t("wizard.priorityClassDefault", { name: defaultClass ? classLabel(defaultClass) : "" }) },
+							...(priorityClasses?.items ?? []).map((c) => ({ value: c.name, label: `${classLabel(c)} (${c.value})` })),
+						]} />
+					</Form.Item>}
 					{targetKind === "external" && <Form.Item label={t("wizard.model")} required><Space.Compact style={{ width: "100%" }}><Form.Item name="model" noStyle rules={[{ required: true, message: t("wizard.modelProbeRequired") }]}><Select showSearch options={models.map((model) => ({ value: model, label: model }))} /></Form.Item><Button icon={<SearchOutlined />} loading={probing} onClick={probe}>{t("wizard.probe")}</Button></Space.Compact></Form.Item>}
 					{probeNotice && <Alert showIcon type="success" message={probeNotice} />}
 				</div>

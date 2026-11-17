@@ -3,8 +3,13 @@ package cloudprovider
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -441,7 +446,8 @@ func TestCompshareCleanupDoesNotRequireImage(t *testing.T) {
 
 func TestCompshareDestroyRetriesTransientAPIError(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
-	driver := &fakeProviderDriver{deleteErrs: []error{errors.New("compshare: request failed: EOF")}}
+	// The driver's error for a connection the API closed mid-response.
+	driver := &fakeProviderDriver{deleteErrs: []error{fmt.Errorf("compshare: request failed: %w", &url.Error{Op: "Post", URL: "https://api.compshare.cn", Err: io.EOF})}}
 	p, err := newCompshare(driver, serverprovider.Credentials{PublicKey: "public", PrivateKey: "private"}, "", nil, "cleanup")
 	if err != nil {
 		t.Fatal(err)
@@ -490,5 +496,19 @@ func assertScopedCleanup(t *testing.T, lister ScopedLeakLister) {
 	}
 	if _, err := lister.ListLeakedForRunID(t.Context(), ""); err == nil {
 		t.Fatal("empty cleanup run ID was accepted")
+	}
+}
+
+func TestIsTransientCompshareErrorReadsTypes(t *testing.T) {
+	reset := &url.Error{Op: "Post", URL: "https://api.compshare.cn", Err: &net.OpError{Op: "read", Net: "tcp", Err: &os.SyscallError{Syscall: "read", Err: syscall.ECONNRESET}}}
+	for _, err := range []error{fmt.Errorf("compshare: request failed: %w", reset), io.ErrUnexpectedEOF, &net.DNSError{Err: "i/o timeout", IsTimeout: true}} {
+		if !isTransientCompshareError(err) {
+			t.Errorf("%v should be transient", err)
+		}
+	}
+	for _, err := range []error{nil, errors.New("compshare: request failed: EOF"), errors.New("compshare: API RetCode 100: invalid signature")} {
+		if isTransientCompshareError(err) {
+			t.Errorf("%v must not be transient", err)
+		}
 	}
 }

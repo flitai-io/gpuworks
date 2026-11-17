@@ -80,7 +80,8 @@ type channelRelease struct {
 	// channel is where it is published; empty is nightly.
 	channel string
 	// builtAt overrides the release's build time.
-	builtAt string
+	builtAt  string
+	previous []distribution.ServerRelease
 }
 
 // publishChannel writes the release onto every mirror and returns the archive
@@ -102,7 +103,7 @@ func publishChannel(t *testing.T, release channelRelease, mirrors ...*channelMir
 		builtAt = "2026-10-11T00:00:00Z"
 	}
 	index := distribution.Index{
-		Schema: distribution.IndexSchema, Channel: channel, PublishedAt: time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC),
+		PreviousServers: release.previous, Schema: distribution.IndexSchema, Channel: channel, PublishedAt: time.Date(2026, 10, 11, 0, 0, 0, 0, time.UTC),
 		Server: distribution.ServerRelease{
 			ReleaseID: release.releaseID, Commit: "c0ffee12", BuiltAt: builtAt,
 			Files: []distribution.ReleaseFile{{OS: goos, Arch: goarch, File: distribution.File{Path: key, Size: int64(len(archive)), SHA256: sha256Hex(archive)}}},
@@ -242,6 +243,31 @@ func TestUpgradeFromTheChannelRefusesACorruptArchive(t *testing.T) {
 	}
 	if h.run.ran("sudo systemctl stop gpuworks") {
 		t.Fatalf("a failed download must not stop the service: %v", h.run.executed())
+	}
+}
+
+func TestPinnedCLIUpgradeInstallsHistoricalBinary(t *testing.T) {
+	h := newHarness(t, t.TempDir())
+	h.writeExistingInstall("v1.0.0")
+	m := newChannelMirror(t)
+	old := channelRelease{releaseID: "v2.0.0", binary: []byte("selected binary")}
+	publishChannel(t, old, m)
+	data, _, err := distribution.Open(m.objects["nightly/index.json"], distribution.Keys{"test": channelKeyPublic})
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous, err := distribution.ParseIndex(data, "nightly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	publishChannel(t, channelRelease{releaseID: "v3.0.0", binary: []byte("latest binary"), previous: previous.Servers()}, m)
+	h.useChannel(m)
+	h.stagedReports("gpuworks v2.0.0 (cafe1234, 2026-10-08T00:00:00Z)\n")
+	req := channelReq()
+	req.Version = "v2.0.0"
+	report, err := h.installer.Upgrade(context.Background(), req)
+	if err != nil || report.To != req.Version || readFile(t, h.layout.Binary()) != "selected binary" {
+		t.Fatalf("pin: %+v %v", report, err)
 	}
 }
 

@@ -38,7 +38,7 @@ var autodlLedgerMu sync.Mutex
 // isAutoDLOutOfStock reports the create refusal AutoDL answers with when a
 // spec has no free machine ("当前算力规格暂无库存, 请修改配置或稍等再试").
 func isAutoDLOutOfStock(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "暂无库存")
+	return errors.Is(err, autodldriver.ErrOutOfStock)
 }
 
 type autodlLifecycleDriver interface {

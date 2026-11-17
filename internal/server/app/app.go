@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/obsingest"
 	"gpuworks.ai/gpuworks/internal/server/offlinepkg"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/version"
@@ -28,6 +29,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/controller"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/deployment"
 	"gpuworks.ai/gpuworks/internal/server/expose"
 	"gpuworks.ai/gpuworks/internal/server/healthcheck"
 	"gpuworks.ai/gpuworks/internal/server/hub"
@@ -42,7 +44,6 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/proxy"
 	"gpuworks.ai/gpuworks/internal/server/recovery"
 	"gpuworks.ai/gpuworks/internal/server/store"
-	"gpuworks.ai/gpuworks/internal/server/tsdb"
 	"gpuworks.ai/gpuworks/internal/server/webterm"
 	"gpuworks.ai/gpuworks/internal/server/webui"
 )
@@ -92,20 +93,6 @@ type App struct {
 	scaleReplicas func(deploymentID uint, role string, replicas int) error
 }
 
-// proxyMetricsSink adapts an Accountant flush batch to observability's tsdb
-// ingest path, the same one every agent-reported metric batch already goes
-// through. It always runs on the Accountant's own single writer goroutine
-// (see proxy.Accountant), never on a request-handling goroutine.
-func proxyMetricsSink(obs *observability) func([]tsdb.Sample) {
-	return func(samples []tsdb.Sample) {
-		batch := make([]proto.MetricSample, 0, len(samples))
-		for _, s := range samples {
-			batch = append(batch, proto.MetricSample{Metric: s.Metric, Labels: s.Labels, Value: s.Value, TimeMS: s.TimeMS})
-		}
-		obs.ingestMetrics("server", batch)
-	}
-}
-
 // New builds the server from config.
 func New(cfg Config, log *slog.Logger) (*App, error) {
 	cfg = normalizeRuntimeConfig(cfg)
@@ -123,6 +110,9 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The node lists, the dashboard and the monitor share one snapshot of the
+	// fleet instead of each reading every node and card per request.
+	st.EnableFleetNodeSnapshot(nil)
 	embedded, err := startEmbeddedCatalogs(st, log)
 	if err != nil {
 		_ = st.Close()
@@ -236,17 +226,18 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		return nil, err
 	}
 	diag := newDiagnostics(cfg, st, h, obs, px, log)
-	obs.resolveDeployment = wrapDeploymentLookup(func(instanceUUID string) (uint, error) {
+	obs.SetDeploymentResolver(obsingest.WrapDeploymentLookup(func(instanceUUID string) (uint, error) {
 		inst, err := st.InstanceByUUID(instanceUUID)
 		if err != nil {
 			return 0, err
 		}
 		return inst.DeploymentID, nil
-	}, store.ErrNotFound)
+	}, store.ErrNotFound))
 	h.SetSinks(func(instanceUUID string, samples []proto.MetricSample) {
-		obs.ingestMetrics(instanceUUID, samples)
+		obs.IngestMetrics(instanceUUID, samples)
 		px.ObserveEngineMetrics(samples)
-	}, obs.ingestLogs)
+	}, obs.IngestLogs)
+	h.SetLogIngestWait(obs.IngestLogsWait)
 	h.SetBenchmarkDetailSink(newAgentBenchmarkDetailSink(filepath.Join(cfg.DataDir, "benchmark-artifacts"), st).Handle)
 
 	// Proxy request accounting (plan-9-18-monitor-center.md §4.3): counts
@@ -263,14 +254,17 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	px.SetRequestSink(requestSink(obs.ux.Observe, ops.observeRequest, telemetry.exporter))
+	px.SetRequestSink(requestSink(obs.UX().Observe, ops.observeRequest, telemetry.exporter))
 
 	ai := newAIService(st, obs, box)
 	ai.log = log
 	ai.readPrivateHosts = readPrivateHosts
 	health := healthcheck.New(healthSource{store: st}, healthSender{proxy: px})
-	batches := batch.New(batchRepo{st}, batchSender{px}, batch.Config{Dir: filepath.Join(cfg.DataDir, "batch-files"), Models: batchModels{st, modelPreparation{h, ctrl}}, Log: log})
-	monSvc := newMonitorAPIService(st, obs.tsdb, nil, newRequestSource(st, px.LiveRequests, obs.ux), health.Health, modelPreparation{h, ctrl})
+	// The deployment and instance lists, the dashboard, the monitor and the
+	// batches' model list share one snapshot of every deployment and instance.
+	lists := deployment.NewLists(st, modelPreparation{h, ctrl}, nil)
+	batches := batch.New(batchRepo{st}, batchSender{px}, batch.Config{Dir: filepath.Join(cfg.DataDir, "batch-files"), Models: batchModels{st, modelPreparation{h, ctrl}, lists}, PriorityClasses: priorityClassExists(st), Log: log})
+	monSvc := newMonitorAPIServiceOn(lists, st, obs.TSDB(), nil, newRequestSource(st, px.LiveRequests, obs.UX()), health.Health, modelPreparation{h, ctrl})
 
 	a := &App{cfg: cfg, log: log, store: st, bus: b, hub: h, ctrl: ctrl, obs: obs, ops: ops, selfLog: cfg.SelfLog, proxyAcct: acct, proxy: px, health: health, batches: batches, telemetry: telemetry}
 	var restart func()
@@ -281,7 +275,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 	a.settings.readPrivateHosts = readPrivateHosts
 	a.settings.installID = installIDOf(master)
 	outside := outsideSources(st, readPrivateHosts)
-	a.usage, a.notices = newImprovementProgram(st, obs.ux, a.settings, outside.Channel, log)
+	a.usage, a.notices = newImprovementProgram(st, obs.UX(), a.settings, outside.Channel, log)
 	h.SetUsageCounters(a.usage.Counters())
 	if a.cards, err = newCardHealth(log, st, h); err != nil {
 		return nil, err
@@ -317,33 +311,33 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 
 	metadataClient := &http.Client{Transport: outbound.TransportWithPrivateHosts(func() (proto.NetworkConfig, error) { return planning.ControlPlaneNetwork(st) }, readPrivateHosts)}
 	apiDeps := api.Deps{
-		Store:         st,
-		Bus:           b,
-		Log:           log,
-		SessionCount:  h.SessionCount,
-		AgentConnect:  h.ServeWS,
-		InstallSh:     a.installHandler(),
-		RecentRejects: func() []dto.AgentReject { return agentRejectDTOs(h.RecentRejects()) },
-		AgentUpgrades: api.AgentUpgradeHooks{Service: agentUpgradeAPI{service: a.agentUpgrades}, Errors: h.UpgradeErrors},
-		UIHandler:     withDL(dlDir, offlinepkg.NewServer(filepath.Join(cfg.DataDir, "offline"), version.String(), readAgent), webui.Handler(), a.agentUpgrades.DownloadBinary),
-		Online:        h.Online,
-		KickNode:      h.Kick,
-		NodeSync:      h,
-		CallNode:      h.CallNode,
-		SyncModel:     ctrl.SyncModelToNode,
+		NodeDoctor: newNodeDoctor(st, h, nodeInstaller),
+
+		Store:          st,
+		Bus:            b,
+		Log:            log,
+		SessionCount:   h.SessionCount,
+		AgentConnect:   h.ServeWS,
+		InstallSh:      a.installHandler(),
+		RecentRejects:  func() []dto.AgentReject { return agentRejectDTOs(h.RecentRejects()) },
+		AgentUpgrades:  api.AgentUpgradeHooks{Service: agentUpgradeAPI{service: a.agentUpgrades}, Errors: h.UpgradeErrors},
+		UIHandler:      withDL(dlDir, offlinepkg.NewServer(filepath.Join(cfg.DataDir, "offline"), version.String(), readAgent), webui.Handler(), a.agentUpgrades.DownloadBinary),
+		Online:         h.Online,
+		Orders:         ctrl.Orders(),
+		KickNode:       h.Kick,
+		NodeSync:       h,
+		CallNode:       h.CallNode,
+		ModelTransfers: ctrl.Transfers(),
 		PeerSync: api.PeerSyncHooks{
-			SyncModelWithOptions: ctrl.SyncModelToNodeWithOptions,
-			ProbeModel:           ctrl.ProbeModelSync,
-			SyncImageWithRate:    h.SyncImageFromRate,
-			ProbeImage:           h.ProbeImagePath,
-			ProbeImageResult:     h.ProbeImagePathResult,
-			RetryImage:           h.RetryImageSync,
-			CopyModel:            ctrl.CopyModelFile,
+			SyncImageWithRate: h.SyncImageFromRate,
+			ProbeImage:        h.ProbeImagePath,
+			ProbeImageResult:  h.ProbeImagePathResult,
+			RetryImage:        h.RetryImageSync,
 		},
-		CancelModelSync: ctrl.CancelModelSync,
-		Preparation:     modelPreparation{h, ctrl},
-		NodeRuntime:     h,
-		Outside:         outside,
+		Preparation: modelPreparation{h, ctrl},
+		Lists:       lists,
+		NodeRuntime: h,
+		Outside:     outside,
 		ImageFetch: api.ImageFetchHooks{
 			Pull:   h.PullImage,
 			Cancel: h.CancelImageTransfer,
@@ -373,7 +367,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		Server:               a.settings,
 		MetricsQuery:         obs.queryMetrics,
 		MetricsLatest:        obs.latestMetrics,
-		MetricsIngest:        obs.ingestMetrics,
+		MetricsIngest:        obs.IngestMetrics,
 		LogsSearch:           obs.searchLogs,
 		LogsContext:          obs.contextLogs,
 		LogsHistogram:        obs.histogramLogs,
@@ -396,7 +390,7 @@ func New(cfg Config, log *slog.Logger) (*App, error) {
 		apiDeps.Diagnostics = diag
 	}
 	handler := api.Router(apiDeps, auth.SessionPolicy{IdleTimeout: cfg.SessionIdleTimeout, MaxLifetime: cfg.SessionMaxLifetime, Proxies: proxies, Cookie: cfg.sessionCookie()})
-	a.scaleReplicas = planning.Scaling{Store: st, Resolve: networks.Resolve, Online: h.Online}.ScaleScheduled
+	a.scaleReplicas = planning.Scaling{Store: st, Resolve: networks.Resolve, Online: h.Online, UCXNetlinkHang: h.UCXNetlinkHang}.ScaleScheduled
 	handler = api.WithSecurityHeaders(proxies, accessLogHandlerFor(log, cfg.DataDir, a.routeByFunction(cfg.experienceGuard(handler))))
 
 	// No read/write timeouts: the agent WS and SSE are long-lived. The WS
@@ -449,7 +443,7 @@ func (a *App) Run(ctx context.Context) error {
 	}()
 
 	// bg tracks every loop started below that runs on the shared ctx; see
-	// backgroundGroup in shutdown.go (proxyAcct/metricsIngestLoop track their own).
+	// backgroundGroup in shutdown.go (proxyAcct/RunMetrics track their own).
 	var bg backgroundGroup
 	goBG := bg.start
 
@@ -471,11 +465,11 @@ func (a *App) Run(ctx context.Context) error {
 	goBG(func() { a.ctrl.Run(ctx) })
 	goBG(func() { a.agentUpgrades.Run(ctx) })
 	// Background: verify each PD prefill instance's KV handoff once.
-	goBG(func() { runPDVerifier(ctx, a.store, a.proxy, a.obs.tsdb) })
+	goBG(func() { runPDVerifier(ctx, a.store, a.proxy, a.obs.TSDB()) })
 	// Background: schedules, waiting wakes, residency.
-	waits := a.ctrl.PlacementWaits()
+	waits, orders := a.ctrl.PlacementWaits(), a.ctrl.Orders()
 	goBG(func() {
-		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, a.obs.hostMemory(), a.scaleReplicas, waits, a.log)
+		runAutomation(ctx, a.store, a.proxy, a.proxyAcct, a.obs.hostMemory(), a.scaleReplicas, waits, orders, a.log)
 	}) // Background: schedules, waiting wakes, residency.
 	goBG(func() { a.health.Run(ctx) }) // Background: the deployments' health checks.
 	goBG(func() { a.cards.run(ctx) })  // Background: the cards' failure records.
@@ -490,11 +484,11 @@ func (a *App) Run(ctx context.Context) error {
 	// Background: prune metrics/logs beyond the retention window
 	// (--metrics-retention, default 72h).
 	//
-	// metricsIngestLoop deliberately runs on its OWN context (metricsCtx),
+	// RunMetrics deliberately runs on its OWN context (metricsCtx),
 	// never the shared shutdown ctx: the proxy accountant's final flush (see
 	// acctDone below) is only enqueued into the metrics ingest queue partway
 	// through the accountant's OWN ctx.Done handling, which takes up to
-	// proxy.finalFlushWaitTimeout. If metricsIngestLoop reacted to the same
+	// proxy.finalFlushWaitTimeout. If RunMetrics reacted to the same
 	// ctx, it would very likely have already drained whatever was queued at
 	// that instant and returned - with nothing left running to ever pick up
 	// the accountant's later enqueue, silently dropping it. Keeping it on a
@@ -504,7 +498,7 @@ func (a *App) Run(ctx context.Context) error {
 	metricsCtx, metricsCancel := context.WithCancel(context.Background())
 	// Guarantees metricsCancel is called on every return path (including the
 	// unexpected-listen-error path below, which does not itself wait on
-	// metricsIngestLoop): the two ordinary shutdown paths already call it
+	// RunMetrics): the two ordinary shutdown paths already call it
 	// explicitly via stopMetricsIngest, and calling a context.CancelFunc more
 	// than once is a no-op, so this only matters for the path that doesn't.
 	defer metricsCancel()
@@ -513,15 +507,15 @@ func (a *App) Run(ctx context.Context) error {
 		goBG(func() { a.ops.run(ctx) })
 		goBG(func() { a.ops.backfill(ctx) })
 		goBG(func() { a.ops.replayScheduling(ctx) })
-		goBG(func() { a.obs.logIngestLoop(ctx) })
+		goBG(func() { a.obs.RunLogs(ctx) })
 		go func() {
 			defer close(metricsDone)
-			a.obs.metricsIngestLoop(metricsCtx)
+			a.obs.RunMetrics(metricsCtx)
 		}()
 		// Background: the server's own error-level slog records become
 		// searchable server-source logs instead of living only in the
 		// process's rotated file.
-		goBG(func() { a.obs.selfLogLoop(ctx, a.selfLog) })
+		goBG(func() { a.obs.RunSelfLogs(ctx, a.selfLog) })
 	} else {
 		close(metricsDone)
 	}

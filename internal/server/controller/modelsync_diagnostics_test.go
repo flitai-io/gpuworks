@@ -25,7 +25,7 @@ func TestModelSyncFailureDiagnosticNamesAttemptEndpoints(t *testing.T) {
 	c := New(st, &modelSyncHub{copyErr: errors.New("send peer model archive: target reset")}, slog.New(slog.NewJSONHandler(&logs, nil)))
 	key := store.ModelFileKey(mf.ID)
 	run := &modelSyncRun{transferID: transfer, cancel: func() {}}
-	c.modelSyncs[key] = run
+	c.syncs.register(key, run)
 	c.runModelSync(context.Background(), key, run, peerSource{node: src, path: "/models/Qwen3", sizeBytes: 12}, dst, mf, netplan.StoragePath{SourceIP: "192.0.2.10", TargetIP: "192.0.2.20"})
 	var record map[string]any
 	for _, line := range strings.Split(logs.String(), "\n") {
@@ -59,9 +59,9 @@ func TestModelSyncConfirmationTimeoutKeepsAttemptEndpoints(t *testing.T) {
 			c := New(st, &modelSyncHub{}, slog.New(slog.NewJSONHandler(&logs, nil)))
 			key := store.ModelFileKey(mf.ID)
 			run := &modelSyncRun{transferID: transfer, cancel: func() {}}
-			c.modelSyncs[key] = run
+			c.syncs.register(key, run)
 			if state == "replaced" {
-				c.modelSyncs[key] = &modelSyncRun{transferID: "new-owner", cancel: func() {}}
+				c.syncs.register(key, &modelSyncRun{transferID: "new-owner", cancel: func() {}})
 			}
 			if state == "completed" {
 				if err := st.UpdateModelFileStatus(dst.ID, proto.ModelFileStatus{Key: key, State: proto.MFPresent, Path: mf.Path, BytesTotal: 12, BytesDone: 12, TransferID: transfer, Acquisition: proto.ModelAcquirePeer}); err != nil {

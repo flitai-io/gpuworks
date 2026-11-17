@@ -129,7 +129,9 @@ It runs in a separate `publish` stage because GitLab 14.0 allows needs to refere
 5. Before switching, `gpuworks-dist verify -index` uses the new index to check the size of each file at all three public addresses, including the CDN. If any size differs, it stops and the channel continues to point to the previous version;
 6. It saves the current index, `latest`, and `manifest.json` from each source, switches to the new version, then reads them back from all three public addresses to verify them. If the switch or readback fails, it restores each source's previous pointers and exits;
 7. Upload `scripts/get.sh` to the root of every source as `get.sh` with `Cache-Control: no-cache`.
-8. Version tag (`vYY.M.PATCH`) directories are kept on every source permanently; each source keeps only the most recent 30 nightly directories (`GPUWORKS_DIST_KEEP`), plus the versions referenced by `latest` in the two channels.
+8. Version tag (`vYY.M.PATCH`) directories are kept on every source permanently; each source keeps only the most recent 30 nightly directories (`GPUWORKS_DIST_KEEP`), plus versions referenced by the channel pointers and signed nightly index.
+
+The `server` field still identifies the current channel head. Publishing verifies the previous signed index and carries retained builds forward in `previous_servers`. A legacy index contributes its single listed version. The client uses the platform archive path, size and SHA-256 from the same signed record. New builds advertise `database_migration` so the console can check the installed database before a cross-channel replacement.
 
 If a source's `releases/<id>/` does not match its own `SHA256SUMS` (for example, it was overwritten before this rule existed), publishing fails at step 4 without switching versions. To resolve this, determine which source
 has the correct copy, delete the incorrect copy or replace it with the correct one, clear the CDN cache for `releases/<id>/`, then rerun publishing.
@@ -245,3 +247,6 @@ embedded seed is generated from the gpuworks-runner build matrix by `make image-
   must not overwrite the current executable.
 - Record the release version, build commit, platform, embedded asset digests, and catalog package digest. Store one-time acceptance results in
   `artifacts/work/<YYYY-MM-DD>-<topic>/` (move them with the topic into `artifacts/archive/` after completion).
+
+<!-- translation-source-sha256: 3ed92909a9f8b87c5b455f45229601323014b6578deb8e72e94c51350178ffd7 -->
+<!-- translation-localized-code-block: 957acfe4b88a2bb0b730fab70c725bbbdaf2e1536f84f94d12918def820c5a7c cac397a0dea3afc07b0e87be5f17fd4204658d3b070919f828730dc6f0f4992d Translate release validation command comments -->

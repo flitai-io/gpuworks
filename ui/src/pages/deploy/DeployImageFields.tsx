@@ -66,7 +66,16 @@ export default function DeployImageFields({
   const { t, i18n } = useTranslation("deploy");
   const language = i18n.resolvedLanguage || i18n.language;
   const form = Form.useFormInstance();
-  const watchedEngine = Form.useWatch("engine", { form, preserve: true });
+  // One subscription for both: neither field need be mounted here.
+  const watched = Form.useWatch(
+    (values: { engine?: string; command_mode?: string }) => ({
+      engine: values.engine,
+      commandMode: values.command_mode,
+    }),
+    { form, preserve: true },
+  );
+  const watchedEngine = watched?.engine;
+  const commandMode = watched?.commandMode;
   const addCommonArg = (flag: string, value?: string) => {
     const token = [flag, value].filter(Boolean).join(" ");
     const current = String(form.getFieldValue("extra_args") || "").trim();
@@ -306,11 +315,33 @@ export default function DeployImageFields({
                           </Form.Item>
                         </Col>
                         <Col span={12}>
+                          {/* A manual command is a multi-line script; a
+                              single-line input bound to it would drop its
+                              newlines on the first keystroke, so in manual
+                              mode this control is unbound and read-only. */}
                           <Form.Item
+                            key={commandMode === "manual" ? "manual" : "argv"}
                             label={t("image.cmdOverride")}
-                            name="container_cmd"
+                            name={
+                              commandMode === "manual"
+                                ? undefined
+                                : "container_cmd"
+                            }
+                            extra={
+                              commandMode === "manual"
+                                ? t("image.cmdOverrideManualHelp")
+                                : undefined
+                            }
                           >
-                            <Input placeholder={t("image.inheritImage")} />
+                            <Input
+                              disabled={commandMode === "manual"}
+                              aria-label={t("image.cmdOverride")}
+                              placeholder={t(
+                                commandMode === "manual"
+                                  ? "image.cmdOverrideManual"
+                                  : "image.inheritImage",
+                              )}
+                            />
                           </Form.Item>
                         </Col>
                       </Row>

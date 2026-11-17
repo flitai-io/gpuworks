@@ -1,7 +1,5 @@
 package accelerator
 
-import "strings"
-
 // amdLogicalBackend is the AMD logical dGPU backend: a per-card VRAM quota
 // enforced in user space by libvrocm.so (the rocm-slicing
 // shim), interposed at the HIP runtime layer. ROCm enforces compute (CU)
@@ -28,7 +26,7 @@ func (amdLogicalBackend) Matches(vendor, _ string) bool {
 func (amdLogicalBackend) Maturity() Maturity       { return MaturityExperimental }
 func (amdLogicalBackend) RequiredAssets() []string { return []string{"libvrocm.so"} }
 func (amdLogicalBackend) Metadata() Metadata {
-	return Metadata{Vendor: VendorAMD, DisplayName: "AMD dGPU", Compatibility: "AMD ROCm GPU × x86_64 · Docker / nerdctl / runveil · memory quota only"}
+	return Metadata{Vendor: VendorAMD, DisplayName: "AMD dGPU", Compatibility: "AMD ROCm GPU × x86_64 · Docker / nerdctl / runveil / Kubernetes · memory quota only"}
 }
 func (amdLogicalBackend) NeedsInstanceTeardown() bool { return true }
 
@@ -37,15 +35,17 @@ func (amdLogicalBackend) NeedsInstanceTeardown() bool { return true }
 func (amdLogicalBackend) SkipsBehaviorProbe() bool { return true }
 
 // AMD's host runtime contract (internal/accelerator/features.go) admits
-// Docker, nerdctl and runveil (udocker); libvrocm.so is an LD_PRELOAD
-// interposer that PRoot carries like any other bind-mounted library.
-func (amdLogicalBackend) RuntimeConstraint(driver string) string {
-	switch strings.ToLower(strings.TrimSpace(driver)) {
-	case "docker", "nerdctl", "udocker":
-		return ""
-	default:
-		return "AMD dGPU currently requires the Docker, nerdctl or udocker runtime"
-	}
+// Docker, nerdctl, runveil (udocker) and kube; libvrocm.so is an LD_PRELOAD
+// interposer that PRoot carries like any other bind-mounted library. The
+// cross-process ledger stays a /dev/shm path on every driver; on Kubernetes
+// alone the agent's own /dev/shm is its pod's private tmpfs rather than the
+// host's, so the agent pre-creates the ledger on the host (through its
+// hostRoot) and the instance pod reaches it through an explicit hostPath
+// mount at that same path (see partition_amd.go).
+// SupportedRuntimes: AMD dGPU runs under Docker, nerdctl, udocker or
+// Kubernetes.
+func (amdLogicalBackend) SupportedRuntimes() []string {
+	return []string{"docker", "nerdctl", "udocker", "kube"}
 }
 
 // amdProfiles currently names the one combination proven on real hardware

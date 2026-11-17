@@ -288,7 +288,7 @@ def exercise_edit_conflict(page, server, storage, common, storage_id, name, path
     """The open edit dialog sends its previewed revision. Another writer advances it first."""
     page.goto(server.base + f"/storage?storage={storage_id}")
     # The row and the detail drawer both carry Edit; take the drawer's header.
-    header = page.locator(".ant-drawer-header").filter(has_text=name).first
+    header = page.get_by_role("dialog").filter(has=page.get_by_role("heading", name=name, exact=True)).first
     expect(header).to_be_visible()
     button(header, storage["actions"]["edit"]).click()
     scope = storage["form"]["scope"]
@@ -351,7 +351,7 @@ def exercise_edit_conflict(page, server, storage, common, storage_id, name, path
     expect(dialog).to_be_hidden()
     report["last_step"] = "conflict-reopen"
     page.reload()
-    header = page.locator(".ant-drawer-header").filter(has_text=name).first
+    header = page.get_by_role("dialog").filter(has=page.get_by_role("heading", name=name, exact=True)).first
     expect(header).to_be_visible()
     expect(button(header, storage["actions"]["edit"])).to_be_visible()
     reopened = page.get_by_role("dialog", name=storage["form"]["editTitle"].replace("{{name}}", name), exact=True)
@@ -383,7 +383,7 @@ def exercise_edit_conflict(page, server, storage, common, storage_id, name, path
           and recovered_labels == recovered_targets,
           f"reloaded edit GET differs: {recovered_doc}")
     report["last_step"] = "conflict-restored"
-    header = page.locator(".ant-drawer-header").filter(has_text=name).first
+    header = page.get_by_role("dialog").filter(has=page.get_by_role("heading", name=name, exact=True)).first
     button(header, storage["actions"]["edit"]).click()
     restoring = page.get_by_role("dialog", name=storage["form"]["editTitle"].replace("{{name}}", name), exact=True)
     expect(restoring).to_be_visible()

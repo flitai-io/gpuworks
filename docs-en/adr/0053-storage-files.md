@@ -22,3 +22,5 @@ Storage ([ADR 0034](0034-model-files-belong-to-storages.md)) previously held onl
 - Single-request uploads are simple to implement. The cost is that interrupted large uploads must restart, and transfers through Cloudflare are subject to request body limits.
 - Downloads use direct browser links with cookie authentication: the browser streams directly to disk without holding the content in memory. The trade-off is that when a transfer fails midway, the browser shows only a download failure, without the product error message.
 - Symbolic link checks resolve paths before operating, leaving a very short race window between validation and the operation. The threat model covers administrator actions and links that may already exist in storage, rather than an adversary concurrently writing malicious links there, so this is accepted.
+
+<!-- translation-source-sha256: e4f8686b5b2d2bff38ad5d4af11cf5756628070b60c7639009f81543b5b81f42 -->

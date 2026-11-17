@@ -4,18 +4,19 @@ import { useTranslation } from "react-i18next";
 import { api, type CardCheckDetail, type CardCheckRun, type CardRef } from "../../api";
 import { apiErrorText } from "../../apiError";
 import CopyButton from "../CopyButton";
-import { checkName, localTime, reasonText, stateName } from "./text";
+import { HelpTip } from "../../ui-kit/HelpTip";
+import { checkName, codeText, localTime, statusName } from "./text";
 
 const stateColor: Record<string, string> = { pass: "green", warn: "orange", fail: "red" };
 
 function Run({ title, run }: { title: string; run: CardCheckRun }) {
   const { t } = useTranslation("nodes");
-  const reason = reasonText(t, run.state, run.reason);
+  const reason = codeText(t, run.status, run.code);
   return (
     <Descriptions size="small" column={1} bordered title={title}>
       <Descriptions.Item label={t("cardHealth.detail.at")}>
         <Space size={8} wrap>
-          <Tag color={stateColor[run.state]}>{stateName(t, run.state)}</Tag>
+          <Tag color={stateColor[run.status]}>{statusName(t, run.status)}</Tag>
           {reason && <Typography.Text>{reason}</Typography.Text>}
           <Typography.Text type="secondary">{localTime(run.at)}</Typography.Text>
         </Space>
@@ -88,9 +89,9 @@ export default function CheckDetail({
       const d = await api.recheckCard(nodeUUID, card);
       setDetail(d);
       const last = d.last;
-      if (last?.state === "pass") message.success(t("cardHealth.recheckDone"));
-      else if (last?.state === "skip") message.warning(t("cardHealth.recheckSkipped", { reason: reasonText(t, "skip", last.reason) }));
-      else message.error(t("cardHealth.recheckFailed", { reason: last?.evidence[0]?.value ?? reasonText(t, "fail", last?.reason) }));
+      if (last?.status === "pass") message.success(t("cardHealth.recheckDone"));
+      else if (last?.status === "skip") message.warning(t("cardHealth.recheckSkipped", { reason: codeText(t, "skip", last.code) }));
+      else message.error(t("cardHealth.recheckFailed", { reason: last?.evidence[0]?.value ?? codeText(t, "fail", last?.code) }));
       onRechecked?.();
     } catch (err) {
       message.error(apiErrorText(tCommon, err));
@@ -102,7 +103,10 @@ export default function CheckDetail({
   return (
     <div className="card-check-detail">
       <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }} wrap>
-        <Typography.Text strong>{t("cardHealth.detail.title", { card: cardLabel, check: checkName(t, check) })}</Typography.Text>
+        <span className="inline-flex items-center gap-1">
+          <Typography.Text strong>{t("cardHealth.detail.title", { card: cardLabel, check: checkName(t, check) })}</Typography.Text>
+          {detail?.agent_started_at && <HelpTip content={t("cardHealth.detail.agentSinceHelp", { time: localTime(detail.agent_started_at) })} />}
+        </span>
         {check === "runtime" && canRecheck && (
           <Button size="small" loading={rechecking} onClick={recheck}>
             {t("cardHealth.recheck")}
@@ -116,9 +120,6 @@ export default function CheckDetail({
           {detail.last ? <Run title={t("cardHealth.detail.last")} run={detail.last} /> : <Typography.Text type="secondary">{t("cardHealth.detail.noRuns")}</Typography.Text>}
           {detail.last_ran && <Run title={t("cardHealth.detail.lastRan")} run={detail.last_ran} />}
           {detail.last_problem && <Run title={t("cardHealth.detail.lastProblem")} run={detail.last_problem} />}
-          {detail.agent_started_at && (
-            <Typography.Text type="secondary">{t("cardHealth.detail.agentSince", { time: localTime(detail.agent_started_at) })}</Typography.Text>
-          )}
         </Space>
       )}
     </div>

@@ -28,8 +28,8 @@ func TestInstanceStatusRequiresCurrentSessionAndOwningNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := New(st, slog.Default())
-	oldSession := &Session{hub: h, NodeUUID: node.UUID}
-	currentSession := &Session{hub: h, NodeUUID: node.UUID}
+	oldSession := &Session{hub: h, NodeUUID: node.UUID, nodeID: node.ID}
+	currentSession := &Session{hub: h, NodeUUID: node.UUID, nodeID: node.ID}
 	h.sessions[node.UUID] = currentSession
 	report := proto.InstanceStatus{UUID: instance.UUID, RuntimeObservation: &proto.InstanceRuntimeObservation{Runtime: "docker"}}
 	if accepted, err := h.applyInstanceStatus(oldSession, report); err != nil || accepted {
@@ -42,7 +42,7 @@ func TestInstanceStatusRequiresCurrentSessionAndOwningNode(t *testing.T) {
 		t.Fatalf("current session accepted=%v err=%v", accepted, err)
 	}
 
-	wrongNodeSession := &Session{hub: h, NodeUUID: other.UUID}
+	wrongNodeSession := &Session{hub: h, NodeUUID: other.UUID, nodeID: other.ID}
 	h.sessions[other.UUID] = wrongNodeSession
 	if accepted, err := h.applyInstanceStatus(wrongNodeSession, report); err == nil || accepted {
 		t.Fatalf("wrong-node session accepted=%v err=%v", accepted, err)

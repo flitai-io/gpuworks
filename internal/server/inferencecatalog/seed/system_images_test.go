@@ -122,10 +122,9 @@ func TestBuiltinTemplateSystemImagesResolveToImageCatalogRows(t *testing.T) {
 }
 
 // A gpuworks image outside the runner matrix has no image catalog row, so the
-// platform offers no mirrors for it; gpuworks publishes its images to quay, SWR
-// and registry.zstack.ai as well, and a built-in template running one lists
-// those copies in image_sources, or a mainland deployment could only try
-// Docker Hub.
+// platform offers no mirrors for it; gpuworks publishes its images to quay and
+// SWR as well, and a built-in template running one lists those copies in
+// image_sources, or a mainland deployment could only try Docker Hub.
 func TestBuiltinTemplateOtherGpuworksImagesDeclareSources(t *testing.T) {
 	catalog, err := Catalog()
 	if err != nil {
@@ -145,5 +144,30 @@ func TestBuiltinTemplateOtherGpuworksImagesDeclareSources(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Log("no built-in template runs a gpuworks image outside the runner matrix")
+	}
+}
+
+// privateRegistryHosts are registries an ordinary user cannot pull from over
+// the public internet. Built-in templates ship to every installation, so their
+// image and image_sources name only publicly pullable copies (Docker Hub,
+// quay.io, SWR); a site that runs a private mirror configures it as a pull
+// source rule instead.
+var privateRegistryHosts = []string{"registry.zstack.ai"}
+
+func TestBuiltinTemplateImagesArePubliclyPullable(t *testing.T) {
+	catalog, err := Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range catalog.Models {
+		for _, spec := range model.Specs {
+			for _, ref := range append([]string{spec.Image}, spec.ImageSources...) {
+				for _, host := range privateRegistryHosts {
+					if strings.HasPrefix(ref, host+"/") {
+						t.Errorf("%s/%s references %s on the private registry %s; list a public copy instead", model.ModelID, spec.Name, ref, host)
+					}
+				}
+			}
+		}
 	}
 }

@@ -12,8 +12,10 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/automation"
 	"gpuworks.ai/gpuworks/internal/server/bus"
+	"gpuworks.ai/gpuworks/internal/server/lifecycle"
 	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/network"
+	"gpuworks.ai/gpuworks/internal/server/obsingest"
 	"gpuworks.ai/gpuworks/internal/server/placewait"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -49,7 +51,7 @@ func automationFixture(t *testing.T) (*automationAdapter, *store.Store, *store.D
 	if _, err := st.CreateInstance(&store.Instance{UUID: "auto-1", DeploymentID: dep.ID, NodeID: node.ID, State: proto.InstRunning, GPUIndexes: "[0]", NNodes: 1, DesiredStateJSON: string(spec)}); err != nil {
 		t.Fatal(err)
 	}
-	adapter := &automationAdapter{store: st, now: time.Now, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	adapter := &automationAdapter{store: st, now: time.Now, log: slog.New(slog.NewTextHandler(io.Discard, nil)), orders: &lifecycle.Orders{}}
 	return adapter, st, dep
 }
 
@@ -109,7 +111,7 @@ func TestAutomationAdapterRefusesL1WhenTheHostCannotHoldTheWeights(t *testing.T)
 		t.Fatal(err)
 	}
 	// The reader the app wires: the metrics store through planning's host memory.
-	adapter.host = (&observability{tsdb: metrics}).hostMemory()
+	adapter.host = (&observability{obsingest.New(obsingest.Stores{TSDB: metrics})}).hostMemory()
 	_, err = adapter.Sleep(dep.ID, 1, true)
 	coded, ok := err.(interface{ Code() string })
 	if !ok || coded.Code() != "SLEEP_HOST_MEMORY_INSUFFICIENT" {

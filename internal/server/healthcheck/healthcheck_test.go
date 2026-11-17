@@ -104,6 +104,12 @@ func TestChecksAreTheSmallestRequestOfTheirKind(t *testing.T) {
 	if string(completion) != `{"max_tokens":1,"prompt":"1","stream":false}` {
 		t.Errorf("completions payload = %s", completion)
 	}
+	// One yes/no question: Intern-Decision's validate_request takes a state
+	// and 1-16 questions, and a noul question needs no criteria.
+	decision, _ := json.Marshal(Payload(KindDecision))
+	if string(decision) != `{"questions":{"q":{"instructions":"Is the state a number?","type":"noul"}},"state":"1"}` {
+		t.Errorf("decision payload = %s", decision)
+	}
 }
 
 func TestEachOutcomeIsRecordedWithItsTimeAndReplica(t *testing.T) {

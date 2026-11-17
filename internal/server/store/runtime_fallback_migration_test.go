@@ -66,3 +66,81 @@ func TestRuntimeFallbackMigrationRollsBackAndCanRetry(t *testing.T) {
 		t.Fatal("the retry did not add the columns")
 	}
 }
+
+var runtimeFallbackSocketColumns = []string{
+	"runtime_fallback_socket", "runtime_fallback_socket_group", "runtime_fallback_socket_gid",
+	"runtime_fallback_socket_group_held",
+	"runtime_fallback_socket_account", "runtime_fallback_socket_same_name_gid",
+	"runtime_fallback_socket_restart_pending", "runtime_fallback_socket_supervisor",
+	"runtime_fallback_socket_state_dir",
+}
+
+// The socket facts arrive as typed columns, empty for every existing node
+// (which reads back as no socket) until its next report. Applying the
+// change again changes nothing.
+func TestRuntimeFallbackSocketMigrationAddsItsColumns(t *testing.T) {
+	db := nodesOnlyDB(t, "runtime_fallback_from text, runtime_fallback_reason text")
+	if err := db.Exec(`INSERT INTO nodes (id, uuid, runtime_fallback_from, runtime_fallback_reason) VALUES (1, 'n-1', 'docker', 'daemon_not_ready')`).Error; err != nil {
+		t.Fatal(err)
+	}
+	m := migrationByName(t, "node_runtime_fallback_socket")
+	if err := migrateDB(db, []migration{m}); err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range runtimeFallbackSocketColumns {
+		if !db.Migrator().HasColumn("nodes", column) {
+			t.Fatalf("%s is missing after the migration", column)
+		}
+	}
+	var row struct {
+		RuntimeFallbackReason, Socket string
+		GID                           int
+		Pending                       bool
+	}
+	if err := db.Raw(`SELECT runtime_fallback_reason, COALESCE(runtime_fallback_socket, '') AS socket, COALESCE(runtime_fallback_socket_gid, 0) AS gid, COALESCE(runtime_fallback_socket_restart_pending, false) AS pending FROM nodes WHERE id = 1`).Scan(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if row.RuntimeFallbackReason != "daemon_not_ready" || row.Socket != "" || row.GID != 0 || row.Pending {
+		t.Fatalf("existing node after the migration: %+v", row)
+	}
+	if err := m.Apply(db); err != nil {
+		t.Fatalf("second application: %v", err)
+	}
+	var markers int64
+	if err := db.Model(&SchemaMigration{}).Where("version = ? AND name = ?", m.Version, m.Name).Count(&markers).Error; err != nil || markers != 1 {
+		t.Fatalf("markers=%d, error=%v", markers, err)
+	}
+}
+
+// Schema and marker are one transaction: a failure leaves no column, and
+// the retry completes.
+func TestRuntimeFallbackSocketMigrationRollsBackAndCanRetry(t *testing.T) {
+	db := nodesOnlyDB(t, "")
+	m := migrationByName(t, "node_runtime_fallback_socket")
+	if err := db.Exec(fmt.Sprintf(`CREATE TRIGGER fail_socket_marker BEFORE INSERT ON schema_migrations WHEN NEW.version=%d BEGIN SELECT RAISE(ABORT, 'injected marker failure'); END`, m.Version)).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDB(db, []migration{m}); err == nil {
+		t.Fatal("injected marker failure did not fail the migration")
+	}
+	for _, column := range runtimeFallbackSocketColumns {
+		if db.Migrator().HasColumn("nodes", column) {
+			t.Fatalf("%s survived a failed migration", column)
+		}
+	}
+	var markers int64
+	if err := db.Model(&SchemaMigration{}).Where("version = ?", m.Version).Count(&markers).Error; err != nil || markers != 0 {
+		t.Fatalf("failed migration markers=%d, error=%v", markers, err)
+	}
+	if err := db.Exec(`DROP TRIGGER fail_socket_marker`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDB(db, []migration{m}); err != nil {
+		t.Fatalf("retry after the injected failure: %v", err)
+	}
+	for _, column := range runtimeFallbackSocketColumns {
+		if !db.Migrator().HasColumn("nodes", column) {
+			t.Fatalf("the retry did not add %s", column)
+		}
+	}
+}

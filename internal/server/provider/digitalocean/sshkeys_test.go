@@ -15,12 +15,12 @@ func TestAuthorizePublicKeyRegistersTheKeyAndKeepsTheOthers(t *testing.T) {
 	userKey := f.keys[0]
 
 	platform, platformFP := newTestKey(t, "gpuworks")
-	detail, err := d.AuthorizePublicKey(t.Context(), testCreds, "", platform+"\n")
+	check, err := d.AuthorizePublicKey(t.Context(), testCreds, "", platform+"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(detail, "afterwards") || !strings.Contains(detail, "SSH key or password") {
-		t.Errorf("detail does not say that only later droplets get the key: %q", detail)
+	if check.Code != "CHECK_PLATFORM_KEY_ACCOUNT_ADDED" || check.Params["provider"] != "digitalocean" || !strings.Contains(check.Message, "afterwards") || !strings.Contains(check.Message, "SSH key or password") {
+		t.Errorf("check does not say that only later droplets get the key: %+v", check)
 	}
 	posts := f.calls(http.MethodPost, "/v2/account/keys")
 	if len(posts) != 1 || posts[0].Body["name"] != "gpuworks-platform" || posts[0].Body["public_key"] != platform || len(posts[0].Body) != 2 {
@@ -44,12 +44,12 @@ func TestAuthorizePublicKeyReusesAKeyAlreadyInTheAccount(t *testing.T) {
 	line, fingerprint := newTestKey(t, "uploaded by hand")
 	f.addKey(t, "my-laptop", line)
 	// The same key, as the server holds it: another comment.
-	detail, err := d.AuthorizePublicKey(t.Context(), testCreds, "401", strings.Fields(line)[0]+" "+strings.Fields(line)[1]+" gpuworks-platform")
+	check, err := d.AuthorizePublicKey(t.Context(), testCreds, "401", strings.Fields(line)[0]+" "+strings.Fields(line)[1]+" gpuworks-platform")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(detail, "already") || !strings.Contains(detail, "my-laptop") {
-		t.Errorf("detail = %q", detail)
+	if check.Code != "CHECK_PLATFORM_KEY_ACCOUNT_PRESENT" || !strings.Contains(check.Message, "already") || !strings.Contains(check.Message, "my-laptop") {
+		t.Errorf("check = %+v", check)
 	}
 	if n := len(f.calls(http.MethodPost, "/v2/account/keys")); n != 0 || len(f.keys) != 1 {
 		t.Errorf("the key was registered again: %d posts, %d keys", n, len(f.keys))

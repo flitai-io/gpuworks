@@ -50,9 +50,10 @@ func TestServeWS_LaneParamValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get bogus: %v", err)
 	}
+	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("bogus lane status = %d, want 400", resp.StatusCode)
+	if resp.StatusCode != http.StatusBadRequest || string(body) != `{"code":"BAD_REQUEST","error":"unknown lane"}`+"\n" {
+		t.Fatalf("bogus lane = %d %q, want 400 with the API's error shape", resp.StatusCode, body)
 	}
 
 	// Known lanes: a plain (non-upgrade) GET fails the WebSocket handshake, which

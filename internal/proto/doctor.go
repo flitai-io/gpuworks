@@ -9,7 +9,8 @@ type DoctorReport struct {
 	Host         *DoctorHost         `json:"host,omitempty"`
 	Runtimes     []DoctorRuntime     `json:"runtimes,omitempty"`
 	Accelerators *DoctorAccelerators `json:"accelerators,omitempty"`
-	// Findings are the items that need attention, most severe first. Every
+	// Findings are the check results that need attention: fail, then warn,
+	// then skip. Every
 	// finding names the command its evidence came from and, where one exists,
 	// the command a person runs to recheck it.
 	Findings []DoctorFinding `json:"findings,omitempty"`
@@ -104,62 +105,123 @@ type DoctorGPU struct {
 	HealthCode   string `json:"health_code,omitempty"`
 }
 
-// Doctor finding levels.
+// Doctor check ids (ADR 0067: which check this is, lower_snake). A finding's
+// Code says what the check found, or, for a skipped check, why it did not run.
 const (
-	DoctorLevelWarning = "warning"
-	DoctorLevelError   = "error"
+	DoctorCheckDiskFree              = "disk_free"
+	DoctorCheckMounts                = "mounts"
+	DoctorCheckPathExec              = "path_exec"
+	DoctorCheckPathWrite             = "path_write"
+	DoctorCheckPathPersist           = "path_persist"
+	DoctorCheckRuntimeAvailable      = "runtime_available"
+	DoctorCheckRuntimeProvision      = "runtime_provision"
+	DoctorCheckRuntimeStateAccess    = "runtime_state_access"
+	DoctorCheckAcceleratorInventory  = "accelerator_inventory"
+	DoctorCheckAcceleratorRecognized = "accelerator_recognized"
+	DoctorCheckAcceleratorHealth     = "accelerator_health"
+	DoctorCheckCardRuntime           = "card_runtime"
+	DoctorCheckCUDAInit              = "cuda_init"
+	DoctorCheckPeerAccess            = "peer_access"
+	DoctorCheckNCCL                  = "nccl"
+	DoctorCheckPeerMemory            = "peer_memory"
+	DoctorCheckMacOSVersion          = "macos_version"
+	DoctorCheckMacOSSleep            = "macos_sleep"
+	DoctorCheckUCXNetlink            = "ucx_netlink"
 )
 
 // Doctor finding codes that are not accelerator health codes (those use the
-// accelerator health vocabulary).
+// accelerator health vocabulary). UPPER_SNAKE (ADR 0067); an agent that
+// predates that sent them in lower_snake, which NormalizeDoctorReport folds.
 const (
-	DoctorDiskLow                = "disk_low"
-	DoctorRuntimeUnavailable     = "runtime_unavailable"
-	DoctorAcceleratorProbeFailed = "accelerator_probe_failed"
-	DoctorCUDAInitFailed         = "cuda_init_failed"
+	DoctorDiskLow                = "DISK_LOW"
+	DoctorRuntimeUnavailable     = "RUNTIME_UNAVAILABLE"
+	DoctorAcceleratorProbeFailed = "ACCELERATOR_PROBE_FAILED"
+	DoctorCUDAInitFailed         = "CUDA_INIT_FAILED"
 	// DoctorAcceleratorUnrecognized: this host has a PCI function of a
 	// vendor whose accelerators the platform supports, that none of that
 	// vendor's rules recognize — typically a new product line at a class
 	// nobody announced. The evidence carries the ids needed to add the
 	// rule, which is why this is reported rather than dropped: the
 	// alternative is a card that is simply missing from its node.
-	DoctorAcceleratorUnrecognized = "accelerator_unrecognized"
-	DoctorMultiGPUCheckFailed     = "multi_gpu_check_failed"
+	DoctorAcceleratorUnrecognized = "ACCELERATOR_UNRECOGNIZED"
+	DoctorMultiGPUCheckFailed     = "MULTI_GPU_CHECK_FAILED"
 	// DoctorRuntimeProvisionFailed: the selected runtime could not be set up
 	// on this node (evidence: the error of its last attempt).
-	DoctorRuntimeProvisionFailed = "runtime_provision_failed"
+	DoctorRuntimeProvisionFailed = "RUNTIME_PROVISION_FAILED"
 	// DoctorRuntimeStateUntraversable: a directory above the agent's state
 	// directory is closed to the dedicated user the runtime launches workloads
 	// as, so every launch fails with "permission denied". Evidence: the
 	// blocking directory, its mode and owner, the identity, and the fix.
-	DoctorRuntimeStateUntraversable = "runtime_state_untraversable"
+	DoctorRuntimeStateUntraversable = "RUNTIME_STATE_UNTRAVERSABLE"
 	// DoctorPathNoExec and DoctorPathReadOnly: a path the agent or runtime
 	// executes from, or writes to, is on a mount that forbids it.
-	DoctorPathNoExec   = "path_noexec"
-	DoctorPathReadOnly = "path_read_only"
+	DoctorPathNoExec   = "PATH_NOEXEC"
+	DoctorPathReadOnly = "PATH_READ_ONLY"
 	// DoctorPathEphemeral: a path that must persist is on a container's own
 	// layer.
-	DoctorPathEphemeral = "path_ephemeral"
+	DoctorPathEphemeral = "PATH_EPHEMERAL"
 	// DoctorMacOSUnsupported: the Mac runs a macOS older than nodes support.
 	// DoctorMacOSIdleSleep: the Mac sleeps when idle on its current power
 	// source; with no instance running it then drops off the cluster.
-	DoctorMacOSUnsupported = "macos_unsupported"
-	DoctorMacOSIdleSleep   = "macos_idle_sleep"
+	DoctorMacOSUnsupported = "MACOS_UNSUPPORTED"
+	DoctorMacOSIdleSleep   = "MACOS_IDLE_SLEEP"
 	// DoctorPeerMemoryMissing: the host has RDMA NICs but the vendor's
 	// peer-memory module is not loaded, so the NICs cannot register the
 	// cards' memory and PD over RDMA cannot move KV between nodes. Evidence:
-	// the module and the command that loads it.
-	DoctorPeerMemoryMissing = "peer_memory_missing"
+	// the module and the command that loads it. The peer-memory card check
+	// warns with the same code.
+	DoctorPeerMemoryMissing = "PEER_MEMORY_MISSING"
+	// DoctorUCXNetlinkHang: the host kernel answers an IPv6 route dump in a
+	// way that hangs UCX 1.20-1.22 (bundled with NIXL), so PD over NIXL cannot
+	// start here. Evidence: the kernel release and the commands that stop it.
+	DoctorUCXNetlinkHang = "UCX_NETLINK_HANG"
 )
 
-// DoctorFinding is one item that needs attention.
+// Why a doctor check was skipped (a finding with Status CheckSkip). The
+// card_runtime check also skips cards for the card checks' own reasons
+// (CardCheckSkip*): one finding per reason, naming its cards as targets.
+const (
+	// DoctorSkipMountTableUnreadable: /proc/self/mountinfo could not be
+	// read, so no path's mount was judged (evidence: the error).
+	DoctorSkipMountTableUnreadable = "MOUNT_TABLE_UNREADABLE"
+	// DoctorSkipCUDANotPassed: the check needs the CUDA driver, and the
+	// CUDA check did not pass.
+	DoctorSkipCUDANotPassed = "CUDA_CHECK_NOT_PASSED"
+	// DoctorSkipPrerequisiteMissing: the check needs something the host
+	// does not have (a library, a Python package, a working driver), as the
+	// check's own output states in its evidence.
+	DoctorSkipPrerequisiteMissing = "CHECK_PREREQUISITE_MISSING"
+	// DoctorSkipToolFailed: the command the check reads failed or returned
+	// nothing it could read (evidence: the command's error).
+	DoctorSkipToolFailed = "CHECK_TOOL_FAILED"
+	// DoctorSkipCancelled and DoctorSkipBudgetExhausted: the diagnosis was
+	// cancelled, or ran out of its time budget, before it reached the
+	// targets.
+	DoctorSkipCancelled       = "CHECK_CANCELLED"
+	DoctorSkipBudgetExhausted = "CHECK_BUDGET_EXHAUSTED"
+	// DoctorSkipCardUnaddressable: the vendor tool gave the card no device
+	// number to ask its runtime about.
+	DoctorSkipCardUnaddressable = "CARD_UNADDRESSABLE"
+)
+
+// DoctorFinding is one check result that needs attention: a check that
+// failed or warned, or one that should have run and did not (skip). A check
+// that passed or does not apply is not listed.
 type DoctorFinding struct {
-	Code  string `json:"code"`
-	Level string `json:"level"`
+	// ID is the check (DoctorCheck*); an agent that predates it sends none.
+	ID string `json:"id,omitempty"`
+	// Status is CheckFail, CheckWarn or CheckSkip.
+	Status string `json:"status"`
+	// Code is what the check found or, for a skip, why it did not run.
+	Code string `json:"code"`
+	// Level is what an agent that predates Status sent instead ("warning",
+	// "error"). NormalizeDoctorReport folds it into Status and clears it;
+	// nothing else reads it.
+	Level string `json:"level,omitempty"`
 	// Targets are the accelerators an accelerator health finding covers, one
 	// entry per card with that card's own evidence and commands.
 	Targets []DoctorTarget `json:"targets,omitempty"`
-	// Disk is the path a disk_low or path_* finding is about.
+	// Disk is the path a DISK_LOW or PATH_* finding is about.
 	Disk *DoctorDisk `json:"disk,omitempty"`
 	// Probe is the command (or call) the evidence came from; Evidence is what
 	// it returned; Recheck is the command a person runs to see the same state.
