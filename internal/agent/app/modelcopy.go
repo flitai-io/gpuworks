@@ -239,6 +239,7 @@ func (n *NodeRuntime) copyModelDir(ctx context.Context, mf proto.ModelFileTask, 
 		}
 		if err := installStagedModelContext(ctx, workDir, finalTarget, mf); err != nil {
 			fail(err, total, total)
+			logModelInstallPermission(n, mf, finalTarget, err)
 			return
 		}
 		finishMonitor()

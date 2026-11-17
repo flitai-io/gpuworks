@@ -323,6 +323,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 			}
 			if err := installStagedModel(absTarget, finalTarget, mf); err != nil {
 				fail(err, pinnedRevision, total)
+				logModelInstallPermission(n, mf, finalTarget, err)
 				return
 			}
 			report(proto.ModelFileStatus{
@@ -429,6 +430,7 @@ func (n *NodeRuntime) downloadRepo(ctx context.Context, mf proto.ModelFileTask, 
 	}
 	if err := installStagedModel(absTarget, finalTarget, mf); err != nil {
 		fail(err, pinnedRevision, estimate.Total())
+		logModelInstallPermission(n, mf, finalTarget, err)
 		return
 	}
 	report(proto.ModelFileStatus{
