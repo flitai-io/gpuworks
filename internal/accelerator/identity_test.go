@@ -174,6 +174,11 @@ func TestUnifiedMemoryMatchesTheWholeModelToken(t *testing.T) {
 		"RTX Spark N1X (6144-core Blackwell RTX GPU)":        true,
 		"RTX Spark":     true,
 		"rtx spark n1x": true,
+		// Jetson Thor: the probe reports the bare family name, one token
+		// (measured on a Thor host, driver 595.78, memory.total [N/A]).
+		"NVIDIA Thor": true,
+		"Thor":        true,
+		"thor":        true,
 		// Every other RTX card stays discrete: the second token is the guard.
 		"RTX 5090":        false,
 		"RTX 4090":        false,
