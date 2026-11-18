@@ -292,7 +292,7 @@ func ResolveLaunchWithWarnings(input ResolveLaunchInput) (ResolvedLaunch, []mess
 		// Export assignments from the readable environment section before the
 		// launch command runs. This also keeps command text created by older UIs
 		// executable without rewriting the persisted override.
-		launch.Argv = []string{"-c", "set -a\n" + manualScript}
+		launch.Argv = []string{"-c", manualEnvironmentPreamble + manualScript}
 	}
 
 	if modelMount != DefaultModelMount {

@@ -66,7 +66,8 @@ func unwrapEnvCommand(argv []string) []string {
 	return nil
 }
 
-func serverArguments(engine string, argv []string) ([]string, bool) {
+// ServerArguments returns the flags of a recognized engine server invocation.
+func ServerArguments(engine string, argv []string) ([]string, bool) {
 	if engine != VLLM && engine != SGLang || len(argv) == 0 {
 		return nil, false
 	}
@@ -102,7 +103,7 @@ func serverArguments(engine string, argv []string) ([]string, bool) {
 // feature values remain unknown. valueFlags comes from the caller's parameter
 // dictionary so a flag-looking model name or other value cannot become an option here.
 func CommandFeatures(engine string, argv []string, valueFlags ...string) ([]Feature, bool) {
-	args, known := serverArguments(engine, argv)
+	args, known := ServerArguments(engine, argv)
 	if !known {
 		return nil, false
 	}

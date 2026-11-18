@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
@@ -34,6 +35,8 @@ type parallelEvaluation struct {
 	} `json:"errors"`
 	Acquisition *struct {
 		Nodes []map[string]any `json:"nodes"`
+
+		Components []dto.AcquisitionComponent `json:"components"`
 	} `json:"acquisition"`
 	FormValues  map[string]any   `json:"form_values"`
 	Parallelism *parallelSummary `json:"parallelism"`
@@ -362,5 +365,52 @@ func TestDistributedTemplateRecommendationDoesNotRegisterWeights(t *testing.T) {
 	models, err := st.ListModels("Acme/Sources-FP8")
 	if err != nil || len(models) != 0 {
 		t.Fatalf("preview registered artifacts: %v, %v", models, err)
+	}
+}
+
+func TestDistributedRecommendationMatchesManualCommand(t *testing.T) {
+	evaluate, modelID, st := newParallelEvaluateWith(t, nil)
+	for _, tc := range []struct {
+		name, command string
+		tp, pp        int
+	}{
+		{"explicit PP conflicts with two ranks", "exec vllm serve /model --pipeline-parallel-size 1", 0, 0},
+		{"explicit PP and engine default TP", "exec vllm serve /model --pipeline-parallel-size 2", 1, 2},
+		{"explicit TP and engine default PP", "exec vllm serve /model --tensor-parallel-size 2", 2, 1},
+		{"opaque wrapper", "exec custom-launcher --pp-size 2", 0, 0},
+		{"external config", "exec vllm serve /model --config=/models/engine.yaml", 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"name":"verify-command","model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]%s}`, modelID, manualOverrides(t, tc.command+" --node-rank ${GPUWORKS_NODE_RANK}"))
+			out := evaluate(body)
+			if tc.tp == 0 {
+				if out.OK || out.Parallelism != nil || len(out.Errors) == 0 || out.Errors[0].Code != "DISTRIBUTED_PARALLELISM_UNAVAILABLE" {
+					t.Fatalf("unverified topology: ok=%v degrees=%+v errors=%+v", out.OK, out.Parallelism, out.Errors)
+				}
+				h := apiHandlers{d: Deps{Store: st}}
+				rec := httptest.NewRecorder()
+				h.createDeployment(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
+				if code, _ := errorBody(t, rec.Body.String()); rec.Code != http.StatusBadRequest || code != "DISTRIBUTED_PARALLELISM_UNAVAILABLE" {
+					t.Fatalf("direct create returned %d: %s", rec.Code, rec.Body.String())
+				}
+			} else if !out.OK || out.Parallelism == nil || out.Parallelism.TP != tc.tp || out.Parallelism.PP != tc.pp {
+				t.Fatalf("want TP%d PP%d, got %+v errors=%+v", tc.tp, tc.pp, out.Parallelism, out.Errors)
+			}
+		})
+	}
+}
+
+func TestDistributedRecommendationAttributesInvalidDegree(t *testing.T) {
+	evaluate, modelID := newParallelEvaluate(t)
+	for _, tc := range []struct{ placement, field string }{
+		{`{"tp":1,"pp":-1}`, "placement.pp"},
+		{`{"tp":0,"pp":2}`, "placement.tp"},
+		{`{"pp":1.5}`, "placement.pp"},
+	} {
+		body := fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"],"placement":%s}`, modelID, tc.placement)
+		out := evaluate(body)
+		if out.OK || len(out.Errors) != 1 || out.Errors[0].Field != tc.field || out.Errors[0].Code != "DISTRIBUTED_DEGREE_INVALID" {
+			t.Errorf("%s: want %s, got %+v", tc.placement, tc.field, out.Errors)
+		}
 	}
 }

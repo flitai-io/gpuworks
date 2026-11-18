@@ -22,6 +22,7 @@ After completing this guide, all ranks of a replica are ready, and you can compl
 2. Choose the placement mode (see [Automatic and Manual Placement](#自动放置与手动放置)). In manual mode, fix the node order by rank 0…N-1 on the deployments page; in automatic mode you may name only the first ranks' nodes and the platform picks the rest. Then configure parallelism. Tensor parallelism (TP) and pipeline parallelism (PP)
    apply to the entire deployment. Total cards = TP × PP; each node runs TP × PP ÷ node count cards (the division must be exact).
    With manually selected nodes, leave TP or PP blank to recommend a layout that fits the model on every node. The form displays the resulting degrees and confirms them on submission. Explicit degrees are preserved. Setting both uses fixed-placement validation.
+   For manual launch commands, GPUWorks checks the parallelism of each rank. If it cannot verify the command, enter both TP and PP explicitly.
    In the multi-node form, parallelism settings follow nodes and precede the image. TP / PP errors appear on the corresponding fields and do not prevent image and weight acquisition estimates from appearing.
    Automatic placement requires TP: the platform needs it to work out how many free cards each node must have. Without TP the request returns 400 `AUTO_PLACEMENT_TP_REQUIRED`.
 3. Select the image and weights, then expand the per-node acquisition estimates, such as “1 of 2 nodes needs to pull the image.”

@@ -14,12 +14,8 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
-// The forecast through the evaluate handler, for a manual placement of a
-// template with a draft component: first nowhere, then with the primary on
-// an NFS the node reads (the component follows it there), then with the
-// component already on the node.
-func TestEvaluateForecastsTemplateComponents(t *testing.T) {
-	st := newAcquisitionStore(t)
+func registerDraftComponentTemplate(t *testing.T, st *store.Store) uint {
+	t.Helper()
 	fixture := deploymentFlatFixture()
 	fixture.ModelID = "acme/target"
 	fixture.Specs[0].WeightSources = `[{"provider":"huggingface","repo_id":"Acme/Target","revision":"target-rev"}]`
@@ -38,6 +34,16 @@ func TestEvaluateForecastsTemplateComponents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return template.ID
+}
+
+// The forecast through the evaluate handler, for a manual placement of a
+// template with a draft component: first nowhere, then with the primary on
+// an NFS the node reads (the component follows it there), then with the
+// component already on the node.
+func TestEvaluateForecastsTemplateComponents(t *testing.T) {
+	st := newAcquisitionStore(t)
+	templateID := registerDraftComponentTemplate(t, st)
 	node, err := st.RegisterNode("gpu-h", store.HashToken("h"), "gpu-h")
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +55,7 @@ func TestEvaluateForecastsTemplateComponents(t *testing.T) {
 	h := &apiHandlers{d: Deps{Store: st, Online: func(string) bool { return true }}}
 	evaluate := func() []dto.AcquisitionComponent {
 		t.Helper()
-		body := fmt.Sprintf(`{"template_id":%d,"template_spec_source":"upstream","template_spec_name":"fp8-balanced","node_uuid":%q,"quick_params":{},"placement":{}}`, template.ID, node.UUID)
+		body := fmt.Sprintf(`{"template_id":%d,"template_spec_source":"upstream","template_spec_name":"fp8-balanced","node_uuid":%q,"quick_params":{},"placement":{}}`, templateID, node.UUID)
 		rec := httptest.NewRecorder()
 		h.evaluate(rec, httptest.NewRequest(http.MethodPost, "/api/v1/evaluate", strings.NewReader(body)))
 		if rec.Code != http.StatusOK {
@@ -110,5 +116,24 @@ func TestEvaluateForecastsTemplateComponents(t *testing.T) {
 	}
 	if got := evaluate(); len(got) != 1 || got[0].Plan != deployment.ComponentPlanReady || got[0].ReadyNodes != 1 {
 		t.Fatalf("component on the node: components = %+v", got)
+	}
+}
+
+func TestDistributedRecommendationForecastsUnregisteredComponent(t *testing.T) {
+	evaluate, _, st := newParallelEvaluateWith(t, nil)
+	id := registerDraftComponentTemplate(t, st)
+	body := fmt.Sprintf(`{"template_id":%d,"template_spec_source":"upstream","template_spec_name":"fp8-balanced","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]`, id)
+	want := dto.AcquisitionComponent{Name: "draft", Role: "speculative_draft", Model: "Acme/Draft", SizeBytes: 2 << 30, Plan: deployment.ComponentPlanNodeDownload, Nodes: 2}
+	for _, placement := range []string{"", `,"placement":{"tp":1,"pp":2}`} {
+		out := evaluate(body + placement + "}")
+		if !out.OK || out.Acquisition == nil || len(out.Acquisition.Components) != 1 || out.Acquisition.Components[0] != want {
+			t.Fatalf("placement %q: acquisition=%+v errors=%+v", placement, out.Acquisition, out.Errors)
+		}
+		if placement == "" {
+			rows, err := st.ListModels("Acme/Target", "Acme/Draft")
+			if err != nil || len(rows) != 0 {
+				t.Fatalf("read-only forecast registered weights: %+v, %v", rows, err)
+			}
+		}
 	}
 }

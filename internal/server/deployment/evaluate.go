@@ -303,7 +303,9 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 			return
 		}
 		var nodes []*store.Node
-		if recommend {
+		// An invalid rank command still needs the engine draft that corrects
+		// it. The command error is attached once those ranks are previewed.
+		if recommend && checkManualCommandRanks(req) == nil {
 			nodes, err = s.recommendDistributed(ctx, &normalized, dp, eng, launch, selection, model)
 		} else {
 			nodes, err = s.PrepareDistributedDeployRequest(&normalized, dp)
@@ -444,7 +446,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		return
 	}
 	if resp.Acquisition != nil {
-		resp.Acquisition.Components = s.evaluateComponentAcquisition(req.ModelSource, model, selection.Components, store.StoragePins(req.NodeRequirements), rankNodes)
+		resp.Acquisition.Components = s.evaluateComponentAcquisition(req.ModelSource, model, selection, store.StoragePins(req.NodeRequirements), rankNodes)
 	}
 	if parallelInvalid {
 		writeFieldErrors()
@@ -552,6 +554,11 @@ func distributedErrorField(err error) string {
 	var productErr *messages.ProductError
 	if errors.As(err, &productErr) {
 		switch productErr.Code() {
+		case messages.ErrorDistributedDegreeInvalid:
+			if productErr.Params()["degree"] == "pp" {
+				return "placement.pp"
+			}
+			return "placement.tp"
 		case messages.ErrorMasterPortInvalid:
 			return "master_port"
 		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount, messages.ErrorDistributedRecommendation:

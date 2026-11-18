@@ -10,6 +10,8 @@ import (
 	placementeval "gpuworks.ai/gpuworks/internal/server/placement"
 )
 
+const manualEnvironmentPreamble = "set -a\n"
+
 // rankOwnedVariables are the launch variables whose value belongs to one rank
 // of one instance rather than to the deployment: a manual command shared by
 // every rank has to reference them instead of stating a value.
@@ -170,13 +172,46 @@ func ManualCommandDraft(ranks []ResolveLaunchInput) (script string, ok bool, err
 	if pd {
 		key = variableReference(placementeval.VarPDRole) + "/" + key
 	}
+	return renderManualCommandDraft(key, pd, order, commands), true, nil
+}
+
+const manualRankExecPrefix = "    exec "
+
+func renderManualCommandDraft(key string, pd bool, order []manualLaunchClass, commands map[manualLaunchClass]string) string {
 	var b strings.Builder
 	b.WriteString("set -eu\ncase \"" + key + "\" in\n")
 	for _, class := range order {
-		b.WriteString("  " + class.pattern(pd) + ")\n    exec " + commands[class] + "\n    ;;\n")
+		b.WriteString("  " + class.pattern(pd) + ")\n" + manualRankExecPrefix + commands[class] + "\n    ;;\n")
 	}
 	b.WriteString("  *)\n    echo \"unexpected launch class " + key + "\" >&2\n    exit 1\n    ;;\nesac")
-	return b.String(), true, nil
+	return b.String()
+}
+
+// resolvedRankCommand reads the two-arm script produced by ManualCommandDraft
+// after rank variables have been expanded. Re-render the complete control
+// structure so an edited branch body is allowed but other shell logic is not.
+func resolvedRankCommand(script string) (string, bool) {
+	order := []manualLaunchClass{{}, {Headless: true}}
+	commands := make(map[manualLaunchClass]string, len(order))
+	for line := range strings.SplitSeq(script, "\n") {
+		if command, ok := strings.CutPrefix(line, manualRankExecPrefix); ok {
+			if len(commands) == len(order) || strings.ContainsAny(command, ";&|<>()#") {
+				return "", false
+			}
+			if _, err := staticShellWords(command); err != nil {
+				return "", false
+			}
+			commands[order[len(commands)]] = command
+		}
+	}
+	if len(commands) == len(order) {
+		for _, class := range order {
+			if script == renderManualCommandDraft(class.pattern(false), false, order, commands) {
+				return commands[class], true
+			}
+		}
+	}
+	return "", false
 }
 
 var shellSafeWord = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)

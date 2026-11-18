@@ -29,6 +29,10 @@ func recommendationError(detail string) error {
 	return productError(messages.ErrorDistributedRecommendation, detail, map[string]any{"detail": detail})
 }
 
+func invalidDistributedDegree(degree string) error {
+	return productError(messages.ErrorDistributedDegreeInvalid, degree+" must be a positive integer", map[string]any{"degree": degree})
+}
+
 // Only drafts with an unstated degree come here. Fixed placements and edits
 // keep their existing admission and may wait for cards at launch time.
 func (s *Service) recommendDistributed(ctx context.Context, req *dto.DeployRequest, dp int, eng deploy.Engine, launch deploy.Materialized, selection templateSelection, model *store.Model) ([]*store.Node, error) {
@@ -44,8 +48,11 @@ func (s *Service) recommendDistributed(ctx context.Context, req *dto.DeployReque
 	if err != nil {
 		return nil, err
 	}
-	if (req.Placement["tp"] != nil && p.TP <= 0) || (req.Placement["pp"] != nil && p.PP <= 0) {
-		return nodes, recommendationError("TP and PP must be positive integers when supplied")
+	if req.Placement["tp"] != nil && p.TP <= 0 {
+		return nodes, invalidDistributedDegree("tp")
+	}
+	if req.Placement["pp"] != nil && p.PP <= 0 {
+		return nodes, invalidDistributedDegree("pp")
 	}
 	if model.WeightBytes <= 0 && (selection.Spec == nil || max(selection.Spec.WeightBytes, selection.Spec.RuntimeWeightBytes) <= 0) {
 		return nodes, recommendationError("model weight size is unknown")
@@ -125,7 +132,11 @@ func (s *Service) trialDistributedRanks(ctx context.Context, ranks []planning.La
 		if refusal != nil {
 			return 0, fmt.Errorf("%s: %s", rank.Node.DisplayName(), refusal.Code)
 		}
-		if actual, err := deploy.LaunchParallelism(rank.Engine, plan.Resolved); err == nil && (actual.TP != candidate.TP || actual.PP != candidate.PP) {
+		actual, err := deploy.RecommendationLaunchParallelism(rank.Engine, plan.Resolved)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", rank.Node.DisplayName(), err)
+		}
+		if actual.TP != candidate.TP || actual.PP != candidate.PP {
 			return 0, fmt.Errorf("%s: command specifies TP%d PP%d", rank.Node.DisplayName(), actual.TP, actual.PP)
 		}
 		preference = min(preference, plan.Output.Result.Plan.Preference)

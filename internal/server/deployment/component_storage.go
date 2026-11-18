@@ -11,7 +11,7 @@ import (
 )
 
 // templateComponent is one of a template's non-primary components with its
-// model row.
+// resolved model, which may be unregistered in a preview.
 type templateComponent struct {
 	binding deploy.ComponentBinding
 	model   *store.Model
@@ -83,13 +83,16 @@ func (s *Service) planComponents(source *dto.ModelSource, primary *store.Model, 
 	out := make([]componentPlan, 0, len(components))
 	for _, component := range components {
 		plan := componentPlan{templateComponent: component, nodes: len(nodes)}
-		for _, node := range nodes {
-			src, err := s.d.Store.ModelSourceOn(component.model.ID, node, store.SourceRules{Pinned: pinned})
-			if err != nil {
-				return nil, err
-			}
-			if src.Action == store.SourceReady {
-				plan.readyNodes++
+		// A component with no model row cannot already be present on a node.
+		if component.model.ID != 0 {
+			for _, node := range nodes {
+				src, err := s.d.Store.ModelSourceOn(component.model.ID, node, store.SourceRules{Pinned: pinned})
+				if err != nil {
+					return nil, err
+				}
+				if src.Action == store.SourceReady {
+					plan.readyNodes++
+				}
 			}
 		}
 		switch {
@@ -126,7 +129,7 @@ func (s *Service) planComponents(source *dto.ModelSource, primary *store.Model, 
 // for every target, serve every target and accept new files: the default
 // storage first, then storage id order, as in ModelSourceOn.
 func (s *Service) primarySharedStorages(primary *store.Model, pinned []uint, nodes []*store.Node) ([]*store.Storage, error) {
-	if primary == nil {
+	if primary == nil || primary.ID == 0 {
 		return nil, nil
 	}
 	storages, err := s.d.Store.ListStorages()
@@ -171,6 +174,9 @@ func (s *Service) primarySharedStorages(primary *store.Model, pinned []uint, nod
 // sharedWriteUnderWay says a write of the model into the storage is under
 // way already, started by someone else.
 func (s *Service) sharedWriteUnderWay(model *store.Model, storage *store.Storage) (bool, error) {
+	if model.ID == 0 {
+		return false, nil
+	}
 	row, err := s.d.Store.ModelFileAt(store.FileRef{ModelID: model.ID, StorageID: storage.ID})
 	if errors.Is(err, store.ErrNotFound) {
 		return false, nil
@@ -230,13 +236,17 @@ func (s *Service) startComponentDownloads(plans []componentPlan, targets []*stor
 // the nodes the draft lands on; empty until they are known, and when the
 // request names a storage the create would refuse (the form reports that
 // storage on its own).
-func (s *Service) evaluateComponentAcquisition(source *dto.ModelSource, primary *store.Model, bindings []deploy.ComponentBinding, pinned []uint, targets []*store.Node) []dto.AcquisitionComponent {
-	if len(targets) == 0 {
+func (s *Service) evaluateComponentAcquisition(source *dto.ModelSource, primary *store.Model, selection templateSelection, pinned []uint, targets []*store.Node) []dto.AcquisitionComponent {
+	if len(targets) == 0 || len(selection.Components) == 0 {
 		return nil
 	}
-	components, err := s.templateComponents(bindings)
-	if err != nil || len(components) == 0 {
-		return nil
+	components := selection.previewComponents
+	if !selection.previewWeights {
+		var err error
+		components, err = s.templateComponents(selection.Components)
+		if err != nil {
+			return nil
+		}
 	}
 	saveTo, err := s.resolveSaveToStorage(source, primary, targets)
 	if err != nil {
