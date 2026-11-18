@@ -187,8 +187,8 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		resp.Image = profile.DefaultImage
 	}
 	recommend := evaluateReq.DeploymentID == 0 && needsDistributedRecommendation(req, autoPlaced)
-	selection.previewWeights = recommend
-	// The preflight validates the spec before binding its model and components.
+	// The selection as the create's launch preflight sees it: before the model
+	// binds the components and its API contract (evaluateLaunchPreflight).
 	preflightSelection := selection
 	preflightSelection.Components = append([]deploy.ComponentBinding(nil), selection.Components...)
 	model, err := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
@@ -446,7 +446,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		return
 	}
 	if resp.Acquisition != nil {
-		resp.Acquisition.Components = s.evaluateComponentAcquisition(req.ModelSource, model, selection, store.StoragePins(req.NodeRequirements), rankNodes)
+		resp.Acquisition.Components = s.evaluateComponentAcquisition(req.ModelSource, model, selection.Components, store.StoragePins(req.NodeRequirements), rankNodes)
 	}
 	if parallelInvalid {
 		writeFieldErrors()

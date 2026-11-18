@@ -7,11 +7,6 @@ import "gpuworks.ai/gpuworks/internal/proto"
 // storage checks they run. The API package aliases the ones its own handlers
 // answer with too.
 const (
-	ErrorDistributedDegreeInvalid  = "DISTRIBUTED_DEGREE_INVALID"
-	ErrorDistributedRecommendation = "DISTRIBUTED_PARALLELISM_UNAVAILABLE"
-)
-
-const (
 	// ErrorServedNameInUse: another deployment serves under the name.
 	ErrorServedNameInUse                        = "SERVED_NAME_IN_USE"
 	ErrorNodeOffline                            = "NODE_OFFLINE"
@@ -100,4 +95,17 @@ const (
 	// Cmd outside manual mode. Such an override is one argv every rank would
 	// run as written; only a manual command is expanded per rank.
 	ErrorCommandOverrideRankBlind = "COMMAND_OVERRIDE_RANK_BLIND"
+)
+
+// The parallelism recommendation for a manual multi-node draft: a stated
+// degree that is not a positive integer, and a draft no candidate layout fits.
+// The latter's params.reason is a scheduler refusal code or a
+// RecommendationReason below, for the rank params.node names.
+const (
+	ErrorDistributedDegreeInvalid  = "DISTRIBUTED_DEGREE_INVALID"
+	ErrorDistributedRecommendation = "DISTRIBUTED_PARALLELISM_UNAVAILABLE"
+
+	RecommendationReasonCommandUnverified = "command_parallelism_unverified"
+	RecommendationReasonCommandMismatch   = "command_parallelism_mismatch"
+	RecommendationReasonNoLayout          = "no_layout"
 )

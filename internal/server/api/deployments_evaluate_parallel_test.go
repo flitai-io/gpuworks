@@ -16,6 +16,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -348,23 +349,74 @@ func TestDistributedRecommendationAndFixedCreateUnderContention(t *testing.T) {
 	checkCreated(create(body("wait", `,"placement":{"tp":1,"pp":2}`)), 1, 2)
 }
 
-func TestDistributedTemplateRecommendationDoesNotRegisterWeights(t *testing.T) {
-	evaluate, _, st := newParallelEvaluateWith(t, nil)
-	template := imageSourcesFixture()
-	if err := st.ReconcileInferenceCatalog([]store.InferenceModel{template}); err != nil {
-		t.Fatal(err)
+// Evaluate recommends a template's layout as it previews any draft. Create
+// recommends before its preflight, so a create refused there registers no
+// artifact row.
+func TestDistributedTemplateRecommendationRegistersNothingOnRefusedCreate(t *testing.T) {
+	register := func(st *store.Store) uint {
+		t.Helper()
+		template := imageSourcesFixture()
+		if err := st.ReconcileInferenceCatalog([]store.InferenceModel{template}); err != nil {
+			t.Fatal(err)
+		}
+		row, err := st.InferenceModelByModelID(template.ModelID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return row.ID
 	}
-	row, err := st.InferenceModelByModelID(template.ModelID)
+	body := func(id uint) string {
+		return fmt.Sprintf(`{"template_id":%d,"name":"tmpl","served_name":"tmpl","template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, id)
+	}
+	t.Run("evaluate", func(t *testing.T) {
+		evaluate, _, st := newParallelEvaluateWith(t, nil)
+		if result := evaluate(body(register(st))); !result.OK || result.Parallelism == nil {
+			t.Fatalf("template preview: errors=%v plan=%s", result.Errors, result.Plan)
+		}
+	})
+	t.Run("refused create", func(t *testing.T) {
+		_, heldModel, st := newParallelEvaluateWith(t, nil)
+		id := register(st)
+		n, err := st.NodeByUUID("par-b")
+		if err != nil {
+			t.Fatal(err)
+		}
+		holder, err := st.CreateDeployment(&store.Deployment{Name: "holder", ModelID: heldModel, NodeID: n.ID, Engine: "vllm", State: store.DeployActive, Replicas: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.CreateInstance(&store.Instance{UUID: "held", DeploymentID: holder.ID, NodeID: n.ID, State: proto.InstRunning, GPUIndexes: "[0,1]", NNodes: 1}); err != nil {
+			t.Fatal(err)
+		}
+		h := apiHandlers{d: Deps{Store: st}}
+		w := httptest.NewRecorder()
+		h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body(id))))
+		if code, _ := errorBody(t, w.Body.String()); w.Code != http.StatusBadRequest || code != "DISTRIBUTED_PARALLELISM_UNAVAILABLE" {
+			t.Fatalf("create on a busy follower: %d %s", w.Code, w.Body.String())
+		}
+		if models, err := st.ListModels("Acme/Sources-FP8"); err != nil || len(models) != 0 {
+			t.Fatalf("refused create registered artifacts: %v, %v", models, err)
+		}
+	})
+}
+
+// Weights of unknown size cannot be planned: the draft keeps the node-derived
+// default and stays creatable, as it was before recommendations.
+func TestDistributedRecommendationKeepsNodeDefaultForUnsizedWeights(t *testing.T) {
+	evaluate, _, st := newParallelEvaluateWith(t, nil)
+	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/unsized", Revision: "main", Name: "unsized"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := evaluate(fmt.Sprintf(`{"template_id":%d,"template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, row.ID))
-	if !result.OK || result.Parallelism == nil {
-		t.Fatalf("template preview: errors=%v plan=%s", result.Errors, result.Plan)
+	body := fmt.Sprintf(`{"model_id":%d,"name":"unsized","served_name":"unsized","engine":"vllm","image":"example/vllm:test","nnodes":2,"node_uuids":["par-a","par-b"]}`, model.ID)
+	if out := evaluate(body); out.Parallelism == nil || out.Parallelism.TP != 2 || out.Parallelism.PP != 2 || out.FormValues["tp"] != nil || len(out.Errors) != 0 {
+		t.Fatalf("unsized weights: parallelism=%+v form=%v errors=%+v", out.Parallelism, out.FormValues, out.Errors)
 	}
-	models, err := st.ListModels("Acme/Sources-FP8")
-	if err != nil || len(models) != 0 {
-		t.Fatalf("preview registered artifacts: %v, %v", models, err)
+	h := apiHandlers{d: Deps{Store: st}}
+	w := httptest.NewRecorder()
+	h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -412,5 +464,49 @@ func TestDistributedRecommendationAttributesInvalidDegree(t *testing.T) {
 		if out.OK || len(out.Errors) != 1 || out.Errors[0].Field != tc.field || out.Errors[0].Code != "DISTRIBUTED_DEGREE_INVALID" {
 			t.Errorf("%s: want %s, got %+v", tc.placement, tc.field, out.Errors)
 		}
+	}
+}
+
+// An image a node cannot run is the image check's to report: the
+// recommendation keeps the node default instead of refusing on the TP field.
+func TestDistributedRecommendationLeavesIncompatibleImageToItsCheck(t *testing.T) {
+	const image = "catalog/platform:v1"
+	evaluate, _, st := newParallelEvaluateWith(t, nil)
+	template := imageSourcesFixture()
+	template.Specs[0].Image, template.Specs[0].ImageSources = image, ""
+	if err := st.ReconcileInferenceCatalog([]store.InferenceModel{template}); err != nil {
+		t.Fatal(err)
+	}
+	row, err := st.InferenceModelByModelID(template.ModelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, uuid := range []string{"par-a", "par-b"} {
+		node, err := st.NodeByUUID(uuid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.DB().Model(node).Updates(map[string]any{"arch": "amd64", "os": "linux"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.UpsertImage(&store.Image{Engine: "vllm", Framework: "cuda", Arch: "arm64", ImageRef: image, Source: "custom", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"template_id":%d,"name":"arm","served_name":"arm","template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, row.ID)
+	out := evaluate(body)
+	for _, e := range out.Errors {
+		if e.Code == messages.ErrorDistributedRecommendation {
+			t.Fatalf("image reported as a parallelism error: %+v", out.Errors)
+		}
+	}
+	if out.OK || out.Parallelism == nil {
+		t.Fatalf("incompatible image preview: ok=%v parallelism=%+v errors=%+v", out.OK, out.Parallelism, out.Errors)
+	}
+	h := apiHandlers{d: Deps{Store: st}}
+	w := httptest.NewRecorder()
+	h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
+	if code, _ := errorBody(t, w.Body.String()); w.Code != http.StatusBadRequest || code != messages.WarningImageOverrideIncompatible {
+		t.Fatalf("create %d: %s", w.Code, w.Body.String())
 	}
 }

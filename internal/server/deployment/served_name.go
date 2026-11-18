@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"gpuworks.ai/gpuworks/internal/server/planning"
+	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
 // planLaunch is planning.PlanLaunch for a preview of the command the
@@ -26,4 +27,12 @@ func (s *Service) planLaunch(ctx context.Context, req planning.LaunchRequest) (p
 		req.AgentCaps = caps
 	}
 	return planning.PlanLaunch(ctx, s.d.Store, s.networks(), req)
+}
+
+func (s *Service) implicitServedName(node *store.Node) bool {
+	var caps []string
+	if s.d.NodeCaps != nil {
+		caps = s.d.NodeCaps(node.UUID)
+	}
+	return planning.TranslatesServedName(node.RuntimeDriver, caps)
 }

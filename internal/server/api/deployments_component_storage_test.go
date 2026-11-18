@@ -119,7 +119,8 @@ func TestEvaluateForecastsTemplateComponents(t *testing.T) {
 	}
 }
 
-func TestDistributedRecommendationForecastsUnregisteredComponent(t *testing.T) {
+// A recommended layout forecasts a template's components as a fixed one does.
+func TestDistributedRecommendationForecastsTemplateComponent(t *testing.T) {
 	evaluate, _, st := newParallelEvaluateWith(t, nil)
 	id := registerDraftComponentTemplate(t, st)
 	body := fmt.Sprintf(`{"template_id":%d,"template_spec_source":"upstream","template_spec_name":"fp8-balanced","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]`, id)
@@ -128,12 +129,6 @@ func TestDistributedRecommendationForecastsUnregisteredComponent(t *testing.T) {
 		out := evaluate(body + placement + "}")
 		if !out.OK || out.Acquisition == nil || len(out.Acquisition.Components) != 1 || out.Acquisition.Components[0] != want {
 			t.Fatalf("placement %q: acquisition=%+v errors=%+v", placement, out.Acquisition, out.Errors)
-		}
-		if placement == "" {
-			rows, err := st.ListModels("Acme/Target", "Acme/Draft")
-			if err != nil || len(rows) != 0 {
-				t.Fatalf("read-only forecast registered weights: %+v, %v", rows, err)
-			}
 		}
 	}
 }

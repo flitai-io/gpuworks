@@ -64,9 +64,6 @@ type templateSelection struct {
 	// resolved to (resolveRankWeights).
 	WeightRanks int
 	RankWeights []deploy.RankWeight
-
-	// Acquisition forecasts also need models that a read-only preview has not registered.
-	previewComponents []templateComponent
 }
 
 // A recommendation uses the same artifact identity and metadata as creation,
@@ -239,7 +236,6 @@ func declaresOperations(raw json.RawMessage) bool {
 }
 
 func (s *Service) resolveTemplateComponentModels(selection *templateSelection, fallbackPrimary *store.Model) error {
-	selection.previewComponents = nil
 	for index := range selection.Components {
 		component := &selection.Components[index]
 		if component.Role == "primary" {
@@ -260,9 +256,6 @@ func (s *Service) resolveTemplateComponentModels(selection *templateSelection, f
 			return fmt.Errorf("component %s weights: %w", component.Name, err)
 		}
 		component.StoreModelID = model.ID
-		if selection.previewWeights {
-			selection.previewComponents = append(selection.previewComponents, templateComponent{binding: *component, model: model})
-		}
 	}
 	return nil
 }

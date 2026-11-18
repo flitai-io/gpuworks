@@ -146,8 +146,8 @@ GPU interconnect bandwidth depends on hardware (such as NVLink), which is the ma
 
 - All nodes must share one compute network, or all must allow the management network to handle parameter synchronization. Otherwise, the entire group falls back to the management network (evaluation returns
   `COMPUTE_NETWORK_FALLBACK`), or the deployment is rejected. Allow bidirectional TCP between node addresses on the selected network.
-- By default, TP is the smallest GPU count among the selected nodes, and PP is the node count. This keeps tensor parallelism within nodes where possible and pipeline parallelism
-  across nodes. TP can also span nodes.
+- With manually selected nodes and TP or PP left blank, the platform recommends the fewest cards that fit the model on the cards free on each node. At equal size it prefers one
+  pipeline stage per node, which keeps tensor parallelism within nodes and pipeline parallelism across nodes. TP can also span nodes.
 - A multi-node deployment starts with **1 replica** (`replicas > 1` returns `DISTRIBUTED_REPLICA_COUNT`). After creation, use "Edit replicas" in deployment details
   (`PUT /api/v1/deployments/{id}/replicas`), listing the nodes for each replica, to scale to multiple multi-node replicas. Sleep is supported.
 - RDMA compute networks enforce IB transport. If the container cannot see verbs devices, startup fails immediately instead of silently falling back to TCP (a TCP fallback
@@ -318,4 +318,4 @@ Likewise, point model [site rules](../how-to/configure-pull-settings.md#站点�
 
 For combinations not listed here, use the errors and warnings returned by evaluation on the deployment page. Evaluation does not reserve resources, so you can try repeatedly.
 
-<!-- translation-source-sha256: b52576ab04f1bb5cf8c9911e41962d5a4014194753c3d9c729de7cf1b4ecb2aa -->
+<!-- translation-source-sha256: 136b0dfc5212e3725ddb95ffb7ccacb968805e4e11dfadcc81afae3213136810 -->

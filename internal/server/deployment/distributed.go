@@ -24,18 +24,32 @@ func (s *Service) PrepareDistributedDeployRequest(req *dto.DeployRequest, dp int
 	if err != nil {
 		return nil, err
 	}
-	parallel, err := nodeParallelism(nodes, placement, dp)
-	if err != nil {
+	if err := setNodeParallelism(req, nodes, placement, dp); err != nil {
 		return nil, err
 	}
-	if req.Placement == nil {
-		req.Placement = map[string]any{}
-	}
-	req.Placement["tp"], req.Placement["pp"] = parallel.TP, parallel.PP
 	if _, err := s.prepareRankNetwork(req, nodes); err != nil {
 		return nil, err
 	}
 	return nodes, nil
+}
+
+// setNodeParallelism writes the node-derived default of an unstated TP or PP.
+func setNodeParallelism(req *dto.DeployRequest, nodes []*store.Node, placement planning.Placement, dp int) error {
+	parallel, err := nodeParallelism(nodes, placement, dp)
+	if err != nil {
+		return err
+	}
+	setDistributedDegrees(req, parallel.TP, parallel.PP)
+	return nil
+}
+
+// setDistributedDegrees writes back the parallelism that takes effect, so the
+// stored deployment always states it.
+func setDistributedDegrees(req *dto.DeployRequest, tp, pp int) {
+	if req.Placement == nil {
+		req.Placement = map[string]any{}
+	}
+	req.Placement["tp"], req.Placement["pp"] = tp, pp
 }
 
 func nodeParallelism(nodes []*store.Node, placement planning.Placement, dp int) (planning.ParallelismSpec, error) {

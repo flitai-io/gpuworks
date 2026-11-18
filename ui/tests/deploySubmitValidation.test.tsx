@@ -138,10 +138,17 @@ test("manual multi-node deployment can submit fixed degrees after a failed recom
   const originalEvaluate = api.evaluate;
   const created: Record<string, unknown>[] = [];
   let form: FormInstance;
+  const refusal = "apiError.DISTRIBUTED_PARALLELISM_UNAVAILABLE";
   api.createDeployment = (async (body: Record<string, unknown>) => { created.push(body); return { id: 1 }; }) as never;
+  // The server's own shapes: an unavailable recommendation is a 200 answer
+  // with the refusal on the TP field and no parallelism; a fixed layout
+  // reports its degrees.
   api.evaluate = (async (body: { placement?: { tp?: number; pp?: number } }) => {
-    if (!body.placement?.tp || !body.placement?.pp) throw new Error("recommendation unavailable");
-    return { ok: false, preflight: { ok: true }, image: "fixture:test", errors: [],
+    if (!body.placement?.tp || !body.placement?.pp) {
+      return { ok: false, preflight: { ok: true, checks: [] }, image: "fixture:test", parallelism: null,
+        errors: [{ field: "placement.tp", code: "DISTRIBUTED_PARALLELISM_UNAVAILABLE", params: { node: "b", reason: "insufficient_empty_gpus" } }] };
+    }
+    return { ok: false, preflight: { ok: true, checks: [] }, image: "fixture:test", errors: [],
       parallelism: { ...body.placement, gpus_per_node: 1, nodes: 2 } };
   }) as never;
   function Harness() {
@@ -154,14 +161,21 @@ test("manual multi-node deployment can submit fixed degrees after a failed recom
     return <Form form={form} initialValues={{ model_id: 3, name: "wait", nnodes: 2, units_placement: "manual",
       distributed_nodes: ["a", "b"], node_selection_mode: "multi" }}>
       <Form.Item name="tp"><Input /></Form.Item><Form.Item name="pp"><Input /></Form.Item>
-      <span>{evaluation.error}</span>
+      <span data-testid="page-error">{evaluation.error}</span>
       <button type="button" disabled={evaluation.evaluating || !!evaluation.error || !evaluation.result} onClick={submit}>submit fixed</button>
     </Form>;
   }
   try {
     render(<I18nextProvider i18n={i18n}><Harness /></I18nextProvider>);
-    await screen.findByText("recommendation unavailable", {}, { timeout: 5000 });
+    await screen.findByText(refusal, {}, { timeout: 5000 });
+    assert.equal(screen.getByTestId("page-error").textContent, "", "the refusal belongs beside TP, not on the page");
+    await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false), { timeout: 5000 });
+    // Nothing to confirm: the unavailable recommendation cannot be submitted.
+    await act(async () => screen.getByRole("button").click());
+    assert.deepEqual(created, []);
     await act(async () => form!.setFieldsValue({ tp: 1, pp: 2 }));
+    // The fixed layout's answer clears the TP refusal.
+    await waitFor(() => assert.ok(screen.queryByText(refusal) === null, "Expected the TP refusal to clear"), { timeout: 5000 });
     await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false), { timeout: 5000 });
     await act(async () => screen.getByRole("button").click());
     await waitFor(() => assert.deepEqual(created[0]?.placement, { tp: 1, pp: 2 }));
