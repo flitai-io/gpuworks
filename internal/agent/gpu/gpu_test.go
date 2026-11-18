@@ -637,6 +637,80 @@ func TestApplyUnifiedMemoryFallbackSkipsWhenHostUnknown(t *testing.T) {
 	}
 }
 
+// Metrics end to end on a unified-memory host: the driver answers [N/A] for
+// memory.used and memory.total in the metrics query the same way it does in
+// the inventory, so both figures come from host proc/meminfo — used as
+// MemTotal−MemAvailable, the pool's true occupancy, not a per-process sum.
+// A discrete card keeps its parsed values, and so does a unified card the
+// driver did answer for.
+func TestMetricsFillsUnifiedMemoryFromHost(t *testing.T) {
+	const memTotalKiB, memAvailableKiB = 131920838, 36700160
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meminfo := fmt.Sprintf("MemTotal:       %d kB\nMemFree:        1024 kB\nMemAvailable:   %d kB\n", memTotalKiB, memAvailableKiB)
+	if err := os.WriteFile(filepath.Join(root, "proc/meminfo"), []byte(meminfo), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := &SMIProber{hostRoot: root, runner: func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case args[0] == "-L":
+			return "", nil
+		case strings.HasPrefix(args[0], "--query-gpu=index,uuid,utilization.gpu"):
+			return "0, GPU-thor, 3, [N/A], [N/A], 38, 5\n" +
+				"1, GPU-5090, 7, 1024, 32768, 40, 100\n" +
+				"2, GPU-spark, 9, 119444, 122880, 41, 120\n", nil
+		default:
+			return "0, GPU-thor, NVIDIA Thor, [N/A], 12.1, 00000000:01:00.0, 595.78\n" +
+				"1, GPU-5090, NVIDIA GeForce RTX 5090, 32768, 12.0, 00000000:02:00.0, 580.95\n" +
+				"2, GPU-spark, NVIDIA RTX Spark N1X, 122880, 12.1, 00000000:03:00.0, 580.95\n", nil
+		}
+	}}
+	if _, err := p.Probe(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	metrics, err := p.Metrics(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	byUUID := map[string]Metric{}
+	for _, m := range metrics {
+		byUUID[m.UUID] = m
+	}
+	thor := byUUID["GPU-thor"]
+	if got := thor.Values[metricGPUMemoryTotal]; got != float64(memTotalKiB*1024) {
+		t.Fatalf("thor memory_total metric = %v, want host MemTotal", got)
+	}
+	if got := thor.Values[metricGPUMemoryUsed]; got != float64((memTotalKiB-memAvailableKiB)*1024) {
+		t.Fatalf("thor memory_used metric = %v, want MemTotal-MemAvailable", got)
+	}
+	if discrete := byUUID["GPU-5090"]; discrete.Values[metricGPUMemoryUsed] != 1024*1024*1024 ||
+		discrete.Values[metricGPUMemoryTotal] != 32768*1024*1024 {
+		t.Fatalf("discrete card's parsed memory was touched: %+v", discrete)
+	}
+	if answered := byUUID["GPU-spark"]; answered.Values[metricGPUMemoryUsed] != 119444*1024*1024 ||
+		answered.Values[metricGPUMemoryTotal] != 122880*1024*1024 {
+		t.Fatalf("unified card the driver answered for was overwritten: %+v", answered)
+	}
+}
+
+// hostMemoryUsedBytes needs both MemTotal and MemAvailable; a meminfo without
+// the available figure (ancient kernels) answers 0 rather than guessing.
+func TestHostMemoryUsedBytesWithoutMemAvailable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meminfo := "MemTotal:       131920838 kB\nMemFree:        1024 kB\n"
+	if err := os.WriteFile(filepath.Join(root, "proc/meminfo"), []byte(meminfo), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := hostMemoryUsedBytes(root); got != 0 {
+		t.Fatalf("hostMemoryUsedBytes without MemAvailable = %d, want 0", got)
+	}
+}
+
 // When nvidia-smi does not answer (on zstone-164 every call waits on the
 // driver lock behind a card that failed to initialize), the driver version
 // comes from the loaded kernel module, and is not remembered in place of

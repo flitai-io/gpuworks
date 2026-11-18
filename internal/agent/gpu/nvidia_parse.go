@@ -15,6 +15,11 @@ import (
 	"gpuworks.ai/gpuworks/internal/proto"
 )
 
+const (
+	metricGPUMemoryUsed  = "gpuworks_gpu_memory_used_bytes"
+	metricGPUMemoryTotal = "gpuworks_gpu_memory_total_bytes"
+)
+
 func parseNVIDIAMetrics(out string) []Metric {
 	var metrics []Metric
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
@@ -33,8 +38,8 @@ func parseNVIDIAMetrics(out string) []Metric {
 			}
 		}
 		add("gpuworks_gpu_utilization", 2, 1)
-		add("gpuworks_gpu_memory_used_bytes", 3, 1024*1024)
-		add("gpuworks_gpu_memory_total_bytes", 4, 1024*1024)
+		add(metricGPUMemoryUsed, 3, 1024*1024)
+		add(metricGPUMemoryTotal, 4, 1024*1024)
 		add("gpuworks_gpu_temperature_celsius", 5, 1)
 		add("gpuworks_gpu_power_watts", 6, 1)
 		if len(f) > 7 {
@@ -339,6 +344,90 @@ func applyUnifiedMemoryFallback(gpus []proto.GPUInfo, hostBytes func() int64) {
 			gpus[i].MemoryTotalBytes = total
 		}
 	}
+}
+
+// applyUnifiedMetricsFallback fills the memory metrics of unified-memory
+// cards from host RAM. Tegra-class drivers answer [N/A] for memory.used and
+// memory.total in the metrics query exactly as they do in the inventory, so
+// parseNVIDIAMetrics leaves both metrics absent and the console shows such a
+// card as an idle pool. The occupancy that matters on a unified part is the
+// host's: every CPU-side byte competes for the same ceiling the engine
+// allocates from, and the desktop and the CPU workloads hold no CUDA context
+// a per-process sum would see, so MemTotal−MemAvailable is the honest used
+// figure. unified answers for a card as the last Probe judged it, keyed by
+// UUID because that is all a metrics row carries; hostTotal/hostUsed are lazy
+// so a host with no unified card never reads proc/meminfo on the metrics
+// path. A metric the driver did answer keeps its parsed value.
+func applyUnifiedMetricsFallback(metrics []Metric, unified func(uuid string) bool, hostTotal, hostUsed func() int64) {
+	needTotal, needUsed := false, false
+	for _, m := range metrics {
+		if !unified(m.UUID) {
+			continue
+		}
+		if _, ok := m.Values[metricGPUMemoryTotal]; !ok {
+			needTotal = true
+		}
+		if _, ok := m.Values[metricGPUMemoryUsed]; !ok {
+			needUsed = true
+		}
+	}
+	if !needTotal && !needUsed {
+		return
+	}
+	total, used := int64(0), int64(0)
+	if needTotal {
+		total = hostTotal()
+	}
+	if needUsed {
+		used = hostUsed()
+		if total > 0 && used > total {
+			used = total
+		}
+	}
+	for i := range metrics {
+		if !unified(metrics[i].UUID) {
+			continue
+		}
+		if _, ok := metrics[i].Values[metricGPUMemoryTotal]; !ok && total > 0 {
+			metrics[i].Values[metricGPUMemoryTotal] = float64(total)
+		}
+		if _, ok := metrics[i].Values[metricGPUMemoryUsed]; !ok && used > 0 {
+			metrics[i].Values[metricGPUMemoryUsed] = float64(used)
+		}
+	}
+}
+
+// hostMemoryUsedBytes reports MemTotal−MemAvailable from proc/meminfo under
+// hostRoot (empty means "/"): on a unified-memory part that difference is the
+// pool's true occupancy, MemAvailable already netting out the reclaimable
+// caches. 0 when unavailable.
+func hostMemoryUsedBytes(hostRoot string) int64 {
+	total := hostMemoryBytes(hostRoot)
+	if total <= 0 {
+		return 0
+	}
+	data, err := os.ReadFile(filepath.Join("/", hostRoot, "proc/meminfo"))
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "MemAvailable:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return 0
+		}
+		kb, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil || kb <= 0 {
+			return 0
+		}
+		if used := total - kb*1024; used > 0 {
+			return used
+		}
+		return 0
+	}
+	return 0
 }
 
 // hostMemoryBytes reports MemTotal from proc/meminfo under hostRoot (empty

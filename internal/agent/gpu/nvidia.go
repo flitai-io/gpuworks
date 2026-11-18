@@ -63,6 +63,15 @@ type SMIProber struct {
 	metricsTier     int
 	lastFullProbeAt time.Time
 
+	// unifiedMu/unified remember which card UUIDs the last Probe judged
+	// unified-memory (accelerator.UnifiedMemory). A metrics row carries no
+	// card name, only the UUID, so the judgment Probe already made — the
+	// same one that sizes such a card from host MemTotal — is what tells
+	// the metrics path which rows may take their memory figures from host
+	// RAM too.
+	unifiedMu sync.RWMutex
+	unified   map[string]bool
+
 	// now is the clock metricsTierAt/lastFullProbeAt logic reads. Nil means
 	// time.Now; tests inject a fake clock to exercise metricsTierRecheckTTL
 	// without an actual 10-minute sleep.
@@ -155,6 +164,9 @@ func (p *SMIProber) Metrics(ctx context.Context) ([]Metric, error) {
 		return nil, err
 	}
 	metrics := parseNVIDIAMetrics(out)
+	applyUnifiedMetricsFallback(metrics, p.unifiedCard,
+		func() int64 { return hostMemoryBytes(p.hostRoot) },
+		func() int64 { return hostMemoryUsedBytes(p.hostRoot) })
 	if p.slow() || !p.pcieDue() {
 		return metrics, nil
 	}
@@ -327,6 +339,7 @@ func (p *SMIProber) Probe(ctx context.Context) ([]proto.GPUInfo, error) {
 	// plugged in: a card it could not bring up, or that belongs to a VM,
 	// is part of this node's hardware either way.
 	gpus = Roster(accelerator.VendorNVIDIA, p.hostRoot, gpus, true)
+	p.rememberUnified(gpus)
 	if len(gpus) == 0 {
 		slog.Debug("gpu probe returned no devices", "vendor", p.Vendor())
 	} else {
@@ -381,6 +394,28 @@ func (p *SMIProber) rememberDriver(version string) {
 	p.driverMu.Lock()
 	p.driver = strings.TrimSpace(version)
 	p.driverMu.Unlock()
+}
+
+// rememberUnified records which of the probed cards are unified-memory parts,
+// for the metrics path (see applyUnifiedMetricsFallback).
+func (p *SMIProber) rememberUnified(gpus []proto.GPUInfo) {
+	next := make(map[string]bool, len(gpus))
+	for _, gpu := range gpus {
+		if gpu.UUID != "" && accelerator.UnifiedMemory(gpu.Name) {
+			next[gpu.UUID] = true
+		}
+	}
+	p.unifiedMu.Lock()
+	p.unified = next
+	p.unifiedMu.Unlock()
+}
+
+// unifiedCard answers whether the last Probe judged this card a
+// unified-memory part.
+func (p *SMIProber) unifiedCard(uuid string) bool {
+	p.unifiedMu.RLock()
+	defer p.unifiedMu.RUnlock()
+	return p.unified[uuid]
 }
 
 // slow reports whether nvidia-smi answers slower than callers wait. The
