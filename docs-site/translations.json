@@ -133,9 +133,10 @@
   "adr/0060-card-health-from-hardware-facts.md": "8df92de8e08e009da35393c77eb14527a9dde33c27ba4efd48cd8bcca1afa48b",
   "adr/0061-spec-display-names-written-by-hand.md": "4a31f299b87d236fbd207f0ac03cdde11b4760f337acc286eaa6d1253f188805",
   "adr/0065-official-catalog-read-tolerantly.md": "f20cbac164962a35b9794540337b2856e576de7c7ac26fd57d84b53c4853e7c0",
-  "releases/README.md": "c8562b5389ce2818fe02f0867905ff7b13e09c85d5028b6f39a0b8a5d8d7402d",
+  "releases/README.md": "e3f3cdff21f1c95f12e5a75a9e67bef0a42cefb1861b960ee85edc4814c30432",
   "releases/v26.11.0.md": "1bc9a2f63ee5e00f3c4c8645eeea4745ceaaca376d2a4669bdbe0abf09cfce6d",
   "releases/v26.11.1.md": "f2ff9ffb558d9bfb5f4217791570cec53edc226f573b47ea5ab8083c68b05d80",
   "releases/v26.11.2.md": "d4a50471ba467a6d564dff6048da2cc010132b4fd93d942cde9b47c91b52fb7f",
-  "releases/v26.11.3.md": "9f617ed4328cbbc3ad44344e347bd1ee645f272b0d444a7c376be1ca36ac1e58"
+  "releases/v26.11.3.md": "9f617ed4328cbbc3ad44344e347bd1ee645f272b0d444a7c376be1ca36ac1e58",
+  "releases/v26.11.4.md": "24ed35a2ccb546c9ea7f427fc9eda2fdc010953970401602b4e0bc3aea140c86"
 }
