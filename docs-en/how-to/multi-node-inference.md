@@ -115,4 +115,4 @@ The platform evaluates placement rank by rank using the deployment configuration
 - The platform judges whether nodes can reach each other from the compute network **declaration**, not from network test results. When the declaration does not match reality (for example a switch that does not route), a group that cannot talk can still be chosen, and the engine reports the failure after launch. For network selection and verification see [Configure Node Networks](configure-networks.md).
 - Automatic placement does not start some ranks while it waits for the rest: the ranks of a replica are created together or wait together.
 
-<!-- translation-source-sha256: adc453164cad3d78f2ab67ed7272a35a5d7452fd16c64b71f94465d3d635b540 -->
+<!-- translation-source-sha256: 78264bf87392ddbabef9558d5eef9165b3144d9d353aad9a5642776abbe0df53 -->
