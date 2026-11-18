@@ -654,7 +654,6 @@
     "kv_cache_dtype": "auto",
     "max_model_len": -1,
     "performance_mode": "balanced",
-    "pp": 1,
     "served_model_name": "",
     "tp": 2
   },

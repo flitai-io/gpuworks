@@ -89,28 +89,42 @@ func newParallelEvaluateWith(t *testing.T, extend func(*Deps)) (func(string) par
 	}, model.ID, st
 }
 
-// A multi-node draft that states no parallelism gets the default from its
-// nodes: a pipeline stage per node, TP over the fewest GPUs. The form shows
-// it through form_values and the parallelism summary.
 func TestEvaluateDefaultsMultiNodeParallelism(t *testing.T) {
 	evaluate, modelID := newParallelEvaluate(t)
 	out := evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, modelID))
 	if !out.OK || len(out.Errors) != 0 || out.Acquisition == nil {
 		t.Fatalf("default parallelism = ok %v errors %+v", out.OK, out.Errors)
 	}
-	if out.FormValues["tp"] != float64(2) || out.FormValues["pp"] != float64(2) {
+	if out.FormValues["tp"] != nil || out.FormValues["pp"] != nil {
 		t.Fatalf("form_values = %v", out.FormValues)
 	}
-	if want := (parallelSummary{TP: 2, PP: 2, Nodes: 2, GPUsPerNode: 2}); out.Parallelism == nil || *out.Parallelism != want {
+	if want := (parallelSummary{TP: 1, PP: 2, Nodes: 2, GPUsPerNode: 1}); out.Parallelism == nil || *out.Parallelism != want {
 		t.Fatalf("parallelism = %+v, want %+v", out.Parallelism, want)
 	}
-	if !strings.Contains(strings.Join(out.Argv, " "), "--tensor-parallel-size 2 --pipeline-parallel-size 2") {
+	if !strings.Contains(strings.Join(out.Argv, " "), "--pipeline-parallel-size 2") {
 		t.Fatalf("argv = %v", out.Argv)
 	}
 	// A node-list error still stops the preview: acquisition needs the nodes.
 	out = evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-a"],"placement":{"tp":2}}`, modelID))
 	if out.OK || len(out.Errors) != 1 || out.Errors[0].Field != "node_uuids" || out.Errors[0].Code != ErrorDistributedDuplicateNode {
 		t.Fatalf("duplicate node errors = %+v", out.Errors)
+	}
+}
+
+func TestMultiNodeRecommendationChangesWithModelSize(t *testing.T) {
+	evaluate, smallID, st := newParallelEvaluateWith(t, nil)
+	large, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/large", Revision: "main", Name: "large", WeightBytes: 170 << 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id    uint
+		cards int
+	}{{smallID, 1}, {large.ID, 2}} {
+		out := evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, tc.id))
+		if !out.OK || out.Parallelism == nil || out.Parallelism.GPUsPerNode != tc.cards {
+			t.Fatalf("model %d: want %d GPUs per node, got %+v errors %v", tc.id, tc.cards, out.Parallelism, out.Errors)
+		}
 	}
 }
 
@@ -258,5 +272,95 @@ func TestRouterEvaluateTwoNodeDataParallel(t *testing.T) {
 				t.Fatalf("DP2 command = %q", out.Argv)
 			}
 		})
+	}
+}
+
+// A follower with three occupied GPUs is the limiting node. If its last free
+// cards disappear, fixed creation may still queue where a recommendation fails.
+func TestDistributedRecommendationAndFixedCreateUnderContention(t *testing.T) {
+	evaluate, modelID, st := newParallelEvaluateWith(t, nil)
+	for i, uuid := range []string{"par-a", "par-b"} {
+		status := nodeStatusTwoGPUs(uuid, i)
+		card := status.GPUs[0]
+		for index := 2; index < 8; index++ {
+			card.Index = index
+			status.GPUs = append(status.GPUs, card)
+		}
+		if err := st.UpdateNodeStatus(uuid, status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := st.NodeByUUID("par-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	holder, err := st.CreateDeployment(&store.Deployment{Name: "holder", ModelID: modelID, NodeID: n.ID, Engine: "vllm", State: store.DeployActive, Replicas: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	occupy := func(id, indexes string) {
+		_, err := st.CreateInstance(&store.Instance{UUID: id, DeploymentID: holder.ID, NodeID: n.ID, State: proto.InstRunning, GPUIndexes: indexes, NNodes: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	occupy("first", "[0,1,2]")
+	body := func(name, placement string) string {
+		return fmt.Sprintf(`{"model_id":%d,"name":%q,"served_name":%q,"engine":"vllm","image":"example/vllm:test","nnodes":2,"node_uuids":["par-a","par-b"]%s}`, modelID, name, name, placement)
+	}
+	auto := evaluate(body("automatic", ""))
+	if !auto.OK || auto.Parallelism == nil || auto.Parallelism.GPUsPerNode != 1 {
+		t.Fatalf("automatic: %+v", auto)
+	}
+	// Direct API creation may omit both fields, without a prior UI submit.
+	create := func(body string) *httptest.ResponseRecorder {
+		h := apiHandlers{d: Deps{Store: st}}
+		w := httptest.NewRecorder()
+		h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
+		return w
+	}
+	checkCreated := func(w *httptest.ResponseRecorder, tp, pp int) {
+		t.Helper()
+		var dep struct{ ID uint }
+		if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &dep) != nil {
+			t.Fatalf("create %d: %s", w.Code, w.Body.String())
+		}
+		row, err := st.GetDeployment(dep.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var degrees struct{ TP, PP int }
+		if err := json.Unmarshal([]byte(row.Placement), &degrees); err != nil || degrees.TP != tp || degrees.PP != pp {
+			t.Fatalf("stored placement %s: %v", row.Placement, err)
+		}
+	}
+	checkCreated(create(body("automatic", "")), auto.Parallelism.TP, auto.Parallelism.PP)
+	occupy("rest", "[3,4,5,6,7]")
+	if out := evaluate(body("no-room", "")); out.OK || out.Parallelism != nil || len(out.Errors) == 0 {
+		t.Fatalf("busy follower: %+v", out)
+	}
+	if w := create(body("no-room", "")); w.Code == http.StatusCreated {
+		t.Fatal("unavailable automatic placement created")
+	}
+	checkCreated(create(body("wait", `,"placement":{"tp":1,"pp":2}`)), 1, 2)
+}
+
+func TestDistributedTemplateRecommendationDoesNotRegisterWeights(t *testing.T) {
+	evaluate, _, st := newParallelEvaluateWith(t, nil)
+	template := imageSourcesFixture()
+	if err := st.ReconcileInferenceCatalog([]store.InferenceModel{template}); err != nil {
+		t.Fatal(err)
+	}
+	row, err := st.InferenceModelByModelID(template.ModelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := evaluate(fmt.Sprintf(`{"template_id":%d,"template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, row.ID))
+	if !result.OK || result.Parallelism == nil {
+		t.Fatalf("template preview: errors=%v plan=%s", result.Errors, result.Plan)
+	}
+	models, err := st.ListModels("Acme/Sources-FP8")
+	if err != nil || len(models) != 0 {
+		t.Fatalf("preview registered artifacts: %v, %v", models, err)
 	}
 }

@@ -23,7 +23,7 @@ const evaluated = {
   plan: { plan: { gpus: [0], tp: 1 } },
 } as EvaluateResponse;
 
-function mount() {
+function mount(result: EvaluateResponse = evaluated) {
   const requests: unknown[] = [];
   const rejections: unknown[] = [];
   let form: FormInstance;
@@ -32,7 +32,7 @@ function mount() {
   function Harness() {
     [form] = Form.useForm();
     const { submit, submitting, submitError } = useDeploySubmit({ form, nodes: [], evalErr: null,
-      evaluating: false, evalResult: evaluated, onCreated: () => {} });
+      evaluating: false, evalResult: result, onCreated: () => {} });
     return <Form form={form} initialValues={{ model_id: 3, node_selection_mode: "auto", nnodes: 1 }}>
       <Form.Item name="name" label="Deployment name" rules={[{ required: true, message: "Enter a deployment name" }]}>
         <Input />
@@ -131,3 +131,52 @@ for (const language of ["en", "zh"] as const) {
     assert.equal(submits, 1, "evaluation gating must still prevent submission");
   });
 }
+
+test("manual multi-node deployment can submit fixed degrees after a failed recommendation", async () => {
+  const { default: useDeployEvaluation } = await import("../src/pages/deploy/useDeployEvaluation.ts");
+  const { buildPayload } = await import("../src/pages/deploy/deployHelpers.ts");
+  const originalEvaluate = api.evaluate;
+  const created: Record<string, unknown>[] = [];
+  let form: FormInstance;
+  api.createDeployment = (async (body: Record<string, unknown>) => { created.push(body); return { id: 1 }; }) as never;
+  api.evaluate = (async (body: { placement?: { tp?: number; pp?: number } }) => {
+    if (!body.placement?.tp || !body.placement?.pp) throw new Error("recommendation unavailable");
+    return { ok: false, preflight: { ok: true }, image: "fixture:test", errors: [],
+      parallelism: { ...body.placement, gpus_per_node: 1, nodes: 2 } };
+  }) as never;
+  function Harness() {
+    [form] = Form.useForm();
+    const values = Form.useWatch([], { form, preserve: true });
+    const evaluation = useDeployEvaluation({ form, signal: values, translate: (key) => key,
+      buildPayload: () => buildPayload(form.getFieldsValue(true)).payload });
+    const { submit } = useDeploySubmit({ form, nodes: [], evalErr: evaluation.error, evaluating: evaluation.evaluating,
+      evalResult: evaluation.result, onCreated: () => {} });
+    return <Form form={form} initialValues={{ model_id: 3, name: "wait", nnodes: 2, units_placement: "manual",
+      distributed_nodes: ["a", "b"], node_selection_mode: "multi" }}>
+      <Form.Item name="tp"><Input /></Form.Item><Form.Item name="pp"><Input /></Form.Item>
+      <span>{evaluation.error}</span>
+      <button type="button" disabled={evaluation.evaluating || !!evaluation.error || !evaluation.result} onClick={submit}>submit fixed</button>
+    </Form>;
+  }
+  try {
+    render(<I18nextProvider i18n={i18n}><Harness /></I18nextProvider>);
+    await screen.findByText("recommendation unavailable", {}, { timeout: 5000 });
+    await act(async () => form!.setFieldsValue({ tp: 1, pp: 2 }));
+    await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false), { timeout: 5000 });
+    await act(async () => screen.getByRole("button").click());
+    await waitFor(() => assert.deepEqual(created[0]?.placement, { tp: 1, pp: 2 }));
+  } finally {
+    api.evaluate = originalEvaluate;
+  }
+});
+
+test("submitting a recommendation confirms the displayed degrees without turning the draft into overrides", async () => {
+  const harness = mount({ ...evaluated, preflight: { ok: true, checks: [] },
+    parallelism: { tp: 1, pp: 2, nodes: 2, gpus_per_node: 1 } });
+  await act(async () => harness.getForm().setFieldsValue({ name: "confirmed", node_selection_mode: "multi",
+    nnodes: 2, units_placement: "manual", distributed_nodes: ["a", "b"] }));
+  await harness.click();
+  assert.equal(harness.getForm().getFieldValue("tp"), undefined);
+  assert.equal(harness.getForm().getFieldValue("pp"), undefined);
+  assert.deepEqual((harness.requests[0] as Record<string, unknown>).placement, { tp: 1, pp: 2 });
+});

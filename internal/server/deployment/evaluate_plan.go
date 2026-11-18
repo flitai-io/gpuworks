@@ -70,7 +70,9 @@ func (s *Service) evaluatePlan(env evaluatePlanEnv) (evaluatePlanResult, bool) {
 		if env.selection.Spec != nil {
 			specWeightBytes = env.selection.Spec.WeightBytes
 		}
-		s.persistCatalogWeight(env.model, specWeightBytes)
+		if !env.selection.previewWeights {
+			s.persistCatalogWeight(env.model, specWeightBytes)
+		}
 		request := evaluationLaunchRequest(env, node)
 		request.RuntimeImageCached = out.nodeImageCached
 		request.ModelRules.SaveTo = s.previewSaveToStorageID(req.ModelSource, env.model, node)

@@ -6,6 +6,8 @@ import "gpuworks.ai/gpuworks/internal/proto"
 // creating and evaluating a deployment, and the placement, model, image and
 // storage checks they run. The API package aliases the ones its own handlers
 // answer with too.
+const ErrorDistributedRecommendation = "DISTRIBUTED_PARALLELISM_UNAVAILABLE"
+
 const (
 	// ErrorServedNameInUse: another deployment serves under the name.
 	ErrorServedNameInUse                        = "SERVED_NAME_IN_USE"

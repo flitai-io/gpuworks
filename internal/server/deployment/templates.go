@@ -21,6 +21,7 @@ import (
 type weightSource = inferencecatalog.WeightSource
 
 type templateSelection struct {
+	previewWeights   bool
 	NodeID           uint
 	StoragePins      []uint
 	Model            *store.InferenceModel
@@ -65,6 +66,15 @@ type templateSelection struct {
 	RankWeights []deploy.RankWeight
 }
 
+// A recommendation uses the same artifact identity and metadata as creation,
+// without registering a missing artifact while the operator is editing.
+func (s *Service) selectionWeightModel(selection *templateSelection, source weightSource, original *store.InferenceModel, engine, quant string, bytes int64, nodeID uint, pins []uint, exactRevision, explicit bool) (*store.Model, error) {
+	if selection.previewWeights {
+		return s.templateWeightForPlanning(source, original, engine, quant, bytes, nodeID, pins, exactRevision, explicit)
+	}
+	return s.resolveWeightArtifact(source, original, engine, quant, bytes, nodeID, pins, exactRevision, explicit)
+}
+
 func (s *Service) resolveDeploymentModelFromTemplate(ctx context.Context, modelID uint, selection *templateSelection, templateID uint) (*store.Model, error) {
 	var err error
 	_ = ctx
@@ -105,7 +115,7 @@ func (s *Service) resolveDeploymentModelFromTemplate(ctx context.Context, modelI
 		model = requested
 	}
 	if model == nil {
-		model, err = s.resolveWeightArtifact(lookupSource(selection.Weight), selection.Model, selection.Spec.Engine, selection.Spec.Quantization, selection.Spec.WeightBytes, selection.NodeID, selection.StoragePins, selection.rankScoped(), selection.ExplicitProvider)
+		model, err = s.selectionWeightModel(selection, lookupSource(selection.Weight), selection.Model, selection.Spec.Engine, selection.Spec.Quantization, selection.Spec.WeightBytes, selection.NodeID, selection.StoragePins, selection.rankScoped(), selection.ExplicitProvider)
 		if err != nil {
 			return nil, err
 		}
@@ -146,6 +156,9 @@ func (s *Service) applyCatalogEstimationConfig(selection *templateSelection, mod
 		return
 	}
 	model.Meta = selection.Model.ModelConfig
+	if selection.previewWeights {
+		return
+	}
 	if _, err := s.d.Store.UpsertModel(model); err != nil {
 		s.d.Log.Warn("catalog estimation config not persisted", "model", model.SourceID, "err", err)
 	}
@@ -235,9 +248,9 @@ func (s *Service) resolveTemplateComponentModels(selection *templateSelection, f
 		if err != nil {
 			return fmt.Errorf("component %s original model %s: %w", component.Name, component.OriginalModelID, err)
 		}
-		model, err := s.resolveTemplateWeightModelForNode(
+		model, err := s.selectionWeightModel(selection,
 			weightSource{Provider: component.Provider, RepoID: component.RepoID, Revision: component.Revision, Subfolder: component.Subfolder}, original,
-			selection.Spec.Engine, component.Quantization, component.WeightBytes, 0, selection.StoragePins, selection.ExplicitComponents[component.Name],
+			selection.Spec.Engine, component.Quantization, component.WeightBytes, 0, selection.StoragePins, false, selection.ExplicitComponents[component.Name],
 		)
 		if err != nil {
 			return fmt.Errorf("component %s weights: %w", component.Name, err)

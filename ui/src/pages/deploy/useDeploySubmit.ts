@@ -176,9 +176,14 @@ export default function useDeploySubmit({
         );
         return;
       }
-      if (!evalResult.preflight?.ok) {
-        message.error(t("action.preflightRequired"));
+      const needsSplit = !unitsAuto && (v.tp == null || v.pp == null);
+      const split = evalResult.parallelism;
+      if (!evalResult.preflight?.ok || (needsSplit && !split)) {
+        message.error(t(!evalResult.preflight?.ok ? "action.preflightRequired" : "action.evaluationFailed"));
         return;
+      }
+      if (needsSplit && split) {
+        body.placement = { ...(body.placement as Record<string, unknown>), tp: split.tp, pp: split.pp };
       }
     }
     setSubmitting(true);

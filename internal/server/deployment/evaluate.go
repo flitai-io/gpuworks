@@ -186,8 +186,9 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	if resp.Image == "" {
 		resp.Image = profile.DefaultImage
 	}
-	// The selection as the create's launch preflight sees it: before the model
-	// binds the components and its API contract (evaluateLaunchPreflight).
+	recommend := evaluateReq.DeploymentID == 0 && needsDistributedRecommendation(req, autoPlaced)
+	selection.previewWeights = recommend
+	// The preflight validates the spec before binding its model and components.
 	preflightSelection := selection
 	preflightSelection.Components = append([]deploy.ComponentBinding(nil), selection.Components...)
 	model, err := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
@@ -295,17 +296,18 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// the nodes and the model, and the form shows them above the parallelism.
 	parallelInvalid := false
 	if req.NNodes > 1 {
-		normalized := dto.DeployRequest{
-			NodeUUID: req.NodeUUID, NodeUUIDs: req.NodeUUIDs, NNodes: req.NNodes,
-			NodeRank: req.NodeRank, MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
-			Placement: req.Placement,
-		}
+		normalized := cloneRequest(*req)
 		dp, err := deploy.PlacementDataParallel(eng.Name(), quick.DP, launch.TemplateResidual, launch.UserResidual)
 		if errs.add("data_parallel_size", err) {
 			writeFieldErrors()
 			return
 		}
-		nodes, err := s.PrepareDistributedDeployRequest(&normalized, dp)
+		var nodes []*store.Node
+		if recommend {
+			nodes, err = s.recommendDistributed(ctx, &normalized, dp, eng, launch, selection, model)
+		} else {
+			nodes, err = s.PrepareDistributedDeployRequest(&normalized, dp)
+		}
 		if err != nil {
 			field := distributedErrorField(err)
 			errs.add(field, err)
@@ -331,12 +333,16 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 			req.NodeRank = normalized.NodeRank
 			req.MasterAddr = normalized.MasterAddr
 			req.MasterPort = normalized.MasterPort
-			// The parallelism that takes effect, defaulted from the nodes
-			// when the draft stated none, is what the form shows and what
-			// the plan below runs with.
+			// Keep suggested degrees in the summary. Echoing them as form inputs
+			// would pin them when a model or node changes.
 			req.Placement = normalized.Placement
+			if !recommend || placement.TP > 0 {
+				resp.FormValues["tp"] = normalized.Placement["tp"]
+			}
+			if !recommend || placement.PP > 0 {
+				resp.FormValues["pp"] = normalized.Placement["pp"]
+			}
 			placement = evaluationPlacement(req)
-			resp.FormValues["tp"], resp.FormValues["pp"] = placement.TP, placement.PP
 		}
 		for _, n := range nodes {
 			withGPUs, err := s.d.Store.NodeWithGPUs(n.UUID)
@@ -548,7 +554,7 @@ func distributedErrorField(err error) string {
 		switch productErr.Code() {
 		case messages.ErrorMasterPortInvalid:
 			return "master_port"
-		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount:
+		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount, messages.ErrorDistributedRecommendation:
 			return "placement.tp"
 		case messages.ErrorDistributedParallelIndivisible:
 			return "placement.pp"

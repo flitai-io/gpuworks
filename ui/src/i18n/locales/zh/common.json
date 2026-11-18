@@ -442,6 +442,7 @@
     "RECOVERY_NO_RECONNECT": "重新安装后 agent 未重新连接。",
     "RECOVERY_PROVIDER_INSTANCE_GONE": "节点的云实例已不存在。",
     "RECOVERY_STEP_FAILED": "恢复步骤失败。",
+    "DISTRIBUTED_PARALLELISM_UNAVAILABLE": "无法为所选节点推荐并行度（{{detail}}）。可填写 TP 和 PP 使用固定配置。",
     "DISTRIBUTED_GPU_COUNT": "节点“{{node}}”有 {{available}} 张 GPU，按当前 TP × PP 每个节点需要 {{required}} 张。",
     "DISTRIBUTED_PARALLEL_INDIVISIBLE": "TP {{tp}} × PP {{pp}} 不能平均分到 {{nodes}} 个节点，请调整使其为节点数的整数倍。",
     "MODEL_SOURCE_ID_REQUIRED": "请输入模型源 ID。",
