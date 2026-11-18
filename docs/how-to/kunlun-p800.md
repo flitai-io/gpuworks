@@ -100,4 +100,4 @@ DP 镜像必须正确处理每个 rank 已分片的设备映射：当 `assigned_
 
 硬件目录显示 `Kunlunxin P800 PCIe`，厂商存为 `kunlunxin`；spec 匹配前 `NormalizeGPUName` 去掉品牌前缀，因此已审核的 `^P800 PCIe$` 谓词仍可匹配。硬件身份随运行时与模型组合的验证进入能力选择。Partition 可用性由动态分区能力检查给出，不设静态 Partition 功能轴。引擎 PD 模式仍由引擎 Profile 定义；厂商限制只定义在 accelerator 能力表，`ProfileForTarget` 根据它派生该目标可用的 PD 模式。
 
-模型目录保留 Qwen3.8-27B 的多模态元数据；试验场根据正在服务的实例启动参数识别 `--language-model-only`，该部署只显示文本输入，同一权重的其他视觉部署不受影响。
+Qwen3.8-27B 的模型元数据仍声明 `input_modalities: [text, image]`。试验场按模型元数据显示图片上传入口，即使所选部署使用 `--language-model-only`。使用这个纯文本档位时，请只发送文本。
