@@ -115,6 +115,7 @@ var catalog = func() []GPU {
 	result = append(result,
 		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Instinct MI300X", Category: CategoryDataCenter, Architecture: "CDNA 3", ArchID: "gfx942"},
 		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Radeon 8060S (AMD395)", Category: CategoryWorkstation, Architecture: "RDNA 3.5", ArchID: "gfx1151"},
+		GPU{Vendor: accelerator.VendorAMD, Name: "AMD Radeon PRO W7900", Category: CategoryWorkstation, Architecture: "RDNA 3", ArchID: "gfx1100"},
 	)
 	result = append(result, apple("M5", "", "Pro", "Max")...)
 	result = append(result, apple("M4", "", "Pro", "Max")...)

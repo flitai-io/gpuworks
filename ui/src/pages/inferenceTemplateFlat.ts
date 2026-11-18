@@ -46,7 +46,10 @@ export function compactModelMetadata(model: InferenceTemplate) {
 }
 
 export function chipKey(chip: DetectedTemplateChip): string {
-  return [chip.vendor.trim().toLowerCase(), chip.name.trim(), chip.cc || "", chip.arch_id?.trim().toLowerCase() || ""].join("\u0000");
+  const vendor = chip.vendor.trim().toLowerCase();
+  const name = chip.name.trim();
+  const model = vendor === "amd" ? name.replace(/^AMD\s+/i, "") : name;
+  return [vendor, model, chip.cc || "", chip.arch_id?.trim().toLowerCase() || ""].join("\u0000");
 }
 
 export function chipDisplayLabel(chip: Pick<DetectedTemplateChip, "vendor" | "name" | "cc" | "arch_id">): string {

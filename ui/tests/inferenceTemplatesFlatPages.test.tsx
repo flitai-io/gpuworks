@@ -1034,6 +1034,22 @@ test("a hypothetical AMD chip retains its architecture selector", async () => {
 });
 
 
+test("an online W7900 replaces the matching static chip without hiding other gfx1100 models", async () => {
+  api.inferenceTemplates = (async () => ({ items: [], page: 1, page_size: 200, total: 0 })) as never;
+  api.detectedInferenceTemplateChips = (async () => list([{ vendor: "amd", name: "Radeon PRO W7900", arch_id: "gfx1100" }])) as never;
+  api.inferenceTemplateChips = (async () => list(["AMD Radeon PRO W7900", "AMD Radeon RX 7900 XTX"].map(name => ({
+    vendor: "amd", name, category: "workstation-consumer", architecture: "RDNA 3", arch_id: "gfx1100",
+  })))) as never;
+  renderList();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Edit chips" }));
+  const picker = within(await screen.findByRole("dialog", { name: "Edit chips" }));
+  const otherModel = await picker.findByRole("checkbox", { name: /RX 7900 XTX/ });
+  assert.equal(picker.getAllByRole("checkbox", { name: /W7900/ }).length, 1);
+  assert.equal(picker.getByRole("checkbox", { name: /W7900/ }).getAttribute("aria-disabled"), "true");
+  assert.equal(otherModel.getAttribute("aria-disabled") === "true", false);
+});
+
 test("chip filtering sends architecture to the server and accepts Go-only predicate syntax", async () => {
   let requested: Record<string, string[]> | undefined;
   const model = { ...upstreamModel, display_title: "Go regex model", specs: [{ ...h100Spec, gpus: { vendor: "amd", name: "(?i)radeon", arch_id: "gfx1151" } }] };

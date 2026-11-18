@@ -86,11 +86,14 @@ func TestCatalogVendorsAreKnownAcceleratorVendors(t *testing.T) {
 }
 
 func TestCatalogIncludesAMDWithoutNVIDIAComputeCapability(t *testing.T) {
-	want := map[string]string{"AMD Instinct MI300X": CategoryDataCenter, "AMD Radeon 8060S (AMD395)": CategoryWorkstation}
+	want := map[string]string{"AMD Instinct MI300X": CategoryDataCenter, "AMD Radeon 8060S (AMD395)": CategoryWorkstation, "AMD Radeon PRO W7900": CategoryWorkstation}
 	for _, gpu := range List() {
 		category, ok := want[gpu.Name]
 		if !ok {
 			continue
+		}
+		if gpu.Name == "AMD Radeon PRO W7900" && gpu.ArchID != "gfx1100" {
+			t.Fatalf("W7900 architecture ID = %q", gpu.ArchID)
 		}
 		if gpu.Vendor != accelerator.VendorAMD || gpu.CC != 0 || gpu.Category != category || gpu.Architecture == "" {
 			t.Fatalf("AMD choice = %+v", gpu)
