@@ -119,6 +119,37 @@ func TestANarrowLinkIsRaisedAndClearedAfterThreeReports(t *testing.T) {
 	}
 }
 
+// A unified-memory part's width is its platform's wiring, not a degradation:
+// the same narrow fabric link that warns on a discrete card is a fact on a
+// Thor (measured on raytone-thor: LnkCap x16, LnkSta x1, constant, the
+// parent port reporting no width of its own).
+func TestAnOnSoCCardsWidthIsFactNotFinding(t *testing.T) {
+	h := newPCIeHost(t)
+	now := time.Now()
+	n := pcieNode(h, &now)
+	h.link("2.5", "1")
+	cards := pcieCard()
+	cards[0].Name = "NVIDIA Thor"
+	for i := 0; i <= pcieRounds; i++ {
+		n.applyPCIeFindings(cards, nil, nil)
+	}
+	if cards[0].HealthCode != "" || !cards[0].Healthy {
+		t.Fatalf("an on-SoC card's width judged as degradation: %+v", cards[0])
+	}
+
+	h2 := newPCIeHost(t)
+	n2 := pcieNode(h2, &now)
+	h2.link("2.5", "1")
+	discrete := pcieCard()
+	discrete[0].Name = "NVIDIA GeForce RTX 5090"
+	for i := 0; i < pcieRounds; i++ {
+		n2.applyPCIeFindings(discrete, nil, nil)
+	}
+	if discrete[0].HealthCode != accelerator.HealthPCIeLinkDegraded {
+		t.Fatalf("a discrete card's narrow width no longer judged: %+v", discrete[0])
+	}
+}
+
 // Speed is judged only on a busy card: an idle one is allowed to slow down.
 func TestASlowLinkCountsOnlyWhileTheCardIsBusy(t *testing.T) {
 	h := newPCIeHost(t)

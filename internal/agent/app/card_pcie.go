@@ -95,7 +95,18 @@ func (n *NodeRuntime) applyPCIeFindings(gpus []proto.GPUInfo, busy map[string]bo
 			continue
 		}
 		bdf := accelerator.NormalizeBDF(card.PCIeBDF)
-		link := w.linkFinding(ident, bdf, busy[ident])
+		// An on-SoC unified-memory part (GB10, Thor) hangs off the SoC's
+		// internal PCIe fabric: the trained width is the platform's wiring
+		// while the endpoint's capability register declares the IP default
+		// (a Thor GPU reports LnkCap x16 against LnkSta x1, constant, its
+		// parent port reporting no width of its own), so the two-end
+		// minimum degenerates to that register and judging against it marks
+		// every unit of the platform as degraded forever. The link is not
+		// the GPU's data path either — unified memory needs no host
+		// transfers across it. Width stays a fact the check detail shows,
+		// never a finding, on such a part.
+		judgeWidth := !accelerator.UnifiedMemory(card.Name)
+		link := w.linkFinding(ident, bdf, busy[ident], judgeWidth)
 		aer := w.aerFinding(ident, bdf, now, passedSince)
 		found[ident] = pcieCardFindings{link: link, aer: aer}
 		code, evidence := link.code, link.evidence
@@ -110,8 +121,10 @@ func (n *NodeRuntime) applyPCIeFindings(gpus []proto.GPUInfo, busy map[string]bo
 	return found
 }
 
-// linkFinding debounces this round's link reading into a finding.
-func (w *pcieWatch) linkFinding(ident, bdf string, judgeSpeed bool) finding {
+// linkFinding debounces this round's link reading into a finding. judgeWidth
+// is false for an on-SoC unified-memory part, whose width is platform
+// wiring (see applyPCIeFindings); judgeSpeed keeps its busy-only gate.
+func (w *pcieWatch) linkFinding(ident, bdf string, judgeSpeed, judgeWidth bool) finding {
 	links, err := w.reader.Links(bdf, w.virtual)
 	if err != nil || len(links) == 0 {
 		// Unknown is not degraded, and does not move the count either way.
@@ -122,7 +135,7 @@ func (w *pcieWatch) linkFinding(ident, bdf string, judgeSpeed bool) finding {
 	}
 	var evidence []accelerator.HealthField
 	for _, l := range links {
-		if l.Narrow() || (judgeSpeed && l.Slow()) {
+		if (judgeWidth && l.Narrow()) || (judgeSpeed && l.Slow()) {
 			evidence = append(evidence, accelerator.HealthField{
 				Name:  accelerator.PCIeLinkField + l.BDF,
 				Value: fmt.Sprintf("x%d of x%d, %.1f of %.1f GT/s", l.Width, l.ExpectedWidth, l.Speed, l.ExpectedSpeed),
