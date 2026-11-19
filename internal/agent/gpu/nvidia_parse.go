@@ -357,7 +357,10 @@ func applyUnifiedMemoryFallback(gpus []proto.GPUInfo, hostBytes func() int64) {
 // figure. unified answers for a card as the last Probe judged it, keyed by
 // UUID because that is all a metrics row carries; hostTotal/hostUsed are lazy
 // so a host with no unified card never reads proc/meminfo on the metrics
-// path. A metric the driver did answer keeps its parsed value.
+// path. A metric the driver did answer keeps its parsed value, and a used
+// figure is clamped per card even against a total the driver did answer: a
+// carve-out driver that reports a device window smaller than host RAM must
+// not be shown a used figure above it.
 func applyUnifiedMetricsFallback(metrics []Metric, unified func(uuid string) bool, hostTotal, hostUsed func() int64) {
 	needTotal, needUsed := false, false
 	for _, m := range metrics {
@@ -380,9 +383,6 @@ func applyUnifiedMetricsFallback(metrics []Metric, unified func(uuid string) boo
 	}
 	if needUsed {
 		used = hostUsed()
-		if total > 0 && used > total {
-			used = total
-		}
 	}
 	for i := range metrics {
 		if !unified(metrics[i].UUID) {
@@ -392,7 +392,15 @@ func applyUnifiedMetricsFallback(metrics []Metric, unified func(uuid string) boo
 			metrics[i].Values[metricGPUMemoryTotal] = float64(total)
 		}
 		if _, ok := metrics[i].Values[metricGPUMemoryUsed]; !ok && used > 0 {
-			metrics[i].Values[metricGPUMemoryUsed] = float64(used)
+			filled := used
+			capacity := total
+			if dt, ok := metrics[i].Values[metricGPUMemoryTotal]; ok && dt > 0 && (capacity == 0 || int64(dt) < capacity) {
+				capacity = int64(dt)
+			}
+			if capacity > 0 && filled > capacity {
+				filled = capacity
+			}
+			metrics[i].Values[metricGPUMemoryUsed] = float64(filled)
 		}
 	}
 }
@@ -400,34 +408,45 @@ func applyUnifiedMetricsFallback(metrics []Metric, unified func(uuid string) boo
 // hostMemoryUsedBytes reports MemTotal−MemAvailable from proc/meminfo under
 // hostRoot (empty means "/"): on a unified-memory part that difference is the
 // pool's true occupancy, MemAvailable already netting out the reclaimable
-// caches. 0 when unavailable.
+// caches. Both figures come off one read of the file, so the subtraction can
+// not mix snapshots. 0 when unavailable — but MemAvailable: 0 kB is a real
+// reading (the host is out of reclaimable memory) and answers MemTotal, not
+// 0: that is the one moment the occupancy figure matters most.
 func hostMemoryUsedBytes(hostRoot string) int64 {
-	total := hostMemoryBytes(hostRoot)
-	if total <= 0 {
-		return 0
-	}
 	data, err := os.ReadFile(filepath.Join("/", hostRoot, "proc/meminfo"))
 	if err != nil {
 		return 0
 	}
+	var totalKB, availableKB int64 = -1, -1
 	for _, line := range strings.Split(string(data), "\n") {
-		if !strings.HasPrefix(line, "MemAvailable:") {
-			continue
+		switch {
+		case totalKB < 0 && strings.HasPrefix(line, "MemTotal:"):
+			totalKB = meminfoKB(line)
+		case availableKB < 0 && strings.HasPrefix(line, "MemAvailable:"):
+			availableKB = meminfoKB(line)
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			return 0
-		}
-		kb, err := strconv.ParseInt(fields[1], 10, 64)
-		if err != nil || kb <= 0 {
-			return 0
-		}
-		if used := total - kb*1024; used > 0 {
-			return used
-		}
+	}
+	if totalKB <= 0 || availableKB < 0 {
 		return 0
 	}
+	if used := (totalKB - availableKB) * 1024; used > 0 {
+		return used
+	}
 	return 0
+}
+
+// meminfoKB parses the kilobyte figure of a "MemTotal:  123 kB" line; -1 when
+// the line is not in that shape.
+func meminfoKB(line string) int64 {
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return -1
+	}
+	kb, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil || kb < 0 {
+		return -1
+	}
+	return kb
 }
 
 // hostMemoryBytes reports MemTotal from proc/meminfo under hostRoot (empty

@@ -397,8 +397,14 @@ func (p *SMIProber) rememberDriver(version string) {
 }
 
 // rememberUnified records which of the probed cards are unified-memory parts,
-// for the metrics path (see applyUnifiedMetricsFallback).
+// for the metrics path (see applyUnifiedMetricsFallback). An empty roster is
+// a driver stall, not an emptied slot list — the last judgments stand until a
+// real inventory answers, so a transient stall cannot silently switch the
+// metrics fallback off.
 func (p *SMIProber) rememberUnified(gpus []proto.GPUInfo) {
+	if len(gpus) == 0 {
+		return
+	}
 	next := make(map[string]bool, len(gpus))
 	for _, gpu := range gpus {
 		if gpu.UUID != "" && accelerator.UnifiedMemory(gpu.Name) {

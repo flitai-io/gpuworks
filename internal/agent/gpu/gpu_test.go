@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/accelerator"
+	"gpuworks.ai/gpuworks/internal/proto"
 )
 
 // TestDeviceExistsSeesTheLiveHostDev: a privileged container's own /dev is
@@ -708,6 +709,62 @@ func TestHostMemoryUsedBytesWithoutMemAvailable(t *testing.T) {
 	}
 	if got := hostMemoryUsedBytes(root); got != 0 {
 		t.Fatalf("hostMemoryUsedBytes without MemAvailable = %d, want 0", got)
+	}
+}
+
+// MemAvailable: 0 kB is a real reading - the host is out of reclaimable
+// memory - and is exactly when the occupancy figure matters most. It must
+// answer MemTotal, not disappear.
+func TestHostMemoryUsedBytesUnderFullPressure(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meminfo := "MemTotal:       131920838 kB\nMemFree:        1024 kB\nMemAvailable:   0 kB\n"
+	if err := os.WriteFile(filepath.Join(root, "proc/meminfo"), []byte(meminfo), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := hostMemoryUsedBytes(root); got != 131920838*1024 {
+		t.Fatalf("hostMemoryUsedBytes with MemAvailable 0 = %d, want the full MemTotal", got)
+	}
+}
+
+// A driver that reports a device window (carve-out) smaller than host RAM but
+// no used figure must not be shown a used figure above its own total: the
+// host-side reading is clamped to what the driver answered for the card.
+func TestMetricsClampUnifiedUsedToADriverAnsweredTotal(t *testing.T) {
+	const carveOut = int64(61440) * 1024 * 1024
+	metrics := []Metric{{UUID: "GPU-tegra", Values: map[string]float64{metricGPUMemoryTotal: float64(carveOut)}}}
+	applyUnifiedMetricsFallback(metrics, func(uuid string) bool { return uuid == "GPU-tegra" },
+		func() int64 { return 0 },
+		func() int64 { return 100 * 1024 * 1024 * 1024 })
+	if got := metrics[0].Values[metricGPUMemoryUsed]; got != float64(carveOut) {
+		t.Fatalf("used = %v, want clamped to the driver carve-out total", got)
+	}
+	if got := metrics[0].Values[metricGPUMemoryTotal]; got != float64(carveOut) {
+		t.Fatalf("the driver-answered total was overwritten: %v", got)
+	}
+}
+
+// A stalled inventory (no rows at all) is not an emptied slot list: the last
+// unified judgments stand, so the metrics fallback does not silently switch
+// off until the driver answers again.
+func TestRememberUnifiedKeepsJudgmentsThroughAnEmptyRoster(t *testing.T) {
+	p := &SMIProber{}
+	p.rememberUnified([]proto.GPUInfo{{UUID: "GPU-thor", Name: "NVIDIA Thor"}})
+	if !p.unifiedCard("GPU-thor") {
+		t.Fatal("a good roster did not record the judgment")
+	}
+	p.rememberUnified(nil)
+	if !p.unifiedCard("GPU-thor") {
+		t.Fatal("a stalled roster wiped the unified judgments")
+	}
+	p.rememberUnified([]proto.GPUInfo{{UUID: "GPU-5090", Name: "NVIDIA GeForce RTX 5090"}})
+	if p.unifiedCard("GPU-thor") {
+		t.Fatal("a real roster without the card kept a stale judgment")
+	}
+	if p.unifiedCard("GPU-5090") {
+		t.Fatal("a discrete card was judged unified")
 	}
 }
 

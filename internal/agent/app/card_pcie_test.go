@@ -150,6 +150,41 @@ func TestAnOnSoCCardsWidthIsFactNotFinding(t *testing.T) {
 	}
 }
 
+// The width exemption does not switch the speed judgment off: what an on-SoC
+// card is excused from is the width finding, whose LnkSta/LnkCap mismatch is
+// platform wiring. Speed is pinned to what these parts actually report — the
+// measured units sit at their link's cap (raytone-thor and an RTX Spark N1X
+// both: 2.5 of 2.5 GT/s, width x1 of x16) — so a busy unified card raises
+// nothing; a speed below its cap stays a finding even on an on-SoC card,
+// because a slowed link there is still evidence, not wiring.
+func TestAnOnSoCCardsSpeedStaysJudged(t *testing.T) {
+	h := newPCIeHost(t)
+	now := time.Now()
+	n := pcieNode(h, &now)
+	h.write(h.card, "max_link_speed", "2.5 GT/s PCIe")
+	h.link("2.5", "1")
+	cards := pcieCard()
+	cards[0].Name = "NVIDIA Thor"
+	for i := 0; i <= pcieRounds; i++ {
+		n.applyPCIeFindings(cards, map[string]bool{cardIdent: true}, nil)
+		if cards[0].HealthCode != "" {
+			t.Fatalf("a busy on-SoC card at its speed cap raised %q", cards[0].HealthCode)
+		}
+	}
+
+	h2 := newPCIeHost(t)
+	n2 := pcieNode(h2, &now)
+	h2.link("2.5", "1")
+	slow := pcieCard()
+	slow[0].Name = "NVIDIA Thor"
+	for i := 0; i <= pcieRounds; i++ {
+		n2.applyPCIeFindings(slow, map[string]bool{cardIdent: true}, nil)
+	}
+	if slow[0].HealthCode != accelerator.HealthPCIeLinkDegraded {
+		t.Fatalf("a busy on-SoC card below its speed cap = %q", slow[0].HealthCode)
+	}
+}
+
 // Speed is judged only on a busy card: an idle one is allowed to slow down.
 func TestASlowLinkCountsOnlyWhileTheCardIsBusy(t *testing.T) {
 	h := newPCIeHost(t)

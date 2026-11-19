@@ -40,7 +40,11 @@ func (p *residueProber) Metrics(context.Context) ([]gpu.Metric, error) {
 	}
 	var out []gpu.Metric
 	for index, used := range p.used {
-		out = append(out, gpu.Metric{Index: index, Vendor: "nvidia", Values: map[string]float64{
+		uuid := ""
+		if index < len(p.GPUs) {
+			uuid = p.GPUs[index].UUID
+		}
+		out = append(out, gpu.Metric{Index: index, UUID: uuid, Vendor: "nvidia", Values: map[string]float64{
 			"gpuworks_gpu_utilization":        0,
 			"gpuworks_gpu_memory_total_bytes": 80 << 30,
 			"gpuworks_gpu_memory_used_bytes":  used,
@@ -214,6 +218,27 @@ func TestSleepStillSucceedsWhenMetricsFailOrLackTheCard(t *testing.T) {
 				t.Fatalf("level = %d, want 1", got)
 			}
 		})
+	}
+}
+
+// On a unified-memory card the used metric is the host pool's occupancy
+// (desktop, OS, every CPU process), so a sleeping engine's residue cannot be
+// read off it. The answer is "unmeasured" (0) — the same as before the
+// metric was filled at all — and the server falls back to its estimate.
+func TestSleepResidueIsUnmeasuredOnAUnifiedCard(t *testing.T) {
+	h := newSleepHTTPServer(t)
+	prober := newResidueProber(map[int]float64{0: 90 << 30})
+	prober.GPUs = []proto.GPUInfo{{Index: 0, UUID: "GPU-thor", Name: "NVIDIA Thor", PCIeBDF: "0000:3f:00.0"}}
+	prober.procs = []gpu.ComputeProcess{{PID: 41, Name: "VLLM::Worker", PCIeBDF: "00000000:3F:00.0"}}
+	e, reported := newResidueEngine(t, prober)
+	spec := residueSpec(h, t, "res-uma", 0)
+	e.desired[spec.UUID] = spec
+
+	spec.DesiredSleep = 1
+	e.reconcileSleep(context.Background(), spec)
+	st := <-reported
+	if st.SleepLevel != 1 || st.SleepResidueBytes != 0 {
+		t.Fatalf("report = level %d residue %d, want level 1 and unmeasured", st.SleepLevel, st.SleepResidueBytes)
 	}
 }
 

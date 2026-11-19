@@ -51,6 +51,20 @@ func (e *Engine) measureSleepResidue(ctx context.Context, spec proto.InstanceDes
 	if !single {
 		return 0
 	}
+	// A unified-memory card's used metric is the host pool's occupancy, not
+	// what an instance on it holds (see applyUnifiedMetricsFallback): the
+	// desktop and every CPU process share that figure, and the single-process
+	// guard above cannot tell them apart. Such a card's residue is not
+	// measurable this way and must answer "unmeasured" (0), as it did before
+	// the metric was filled at all.
+	backfilled := map[string]bool{}
+	if gpus, err := e.prober.Probe(ctx); err == nil {
+		for _, g := range gpus {
+			if g.UUID != "" && accelerator.UnifiedMemory(g.Name) {
+				backfilled[g.UUID] = true
+			}
+		}
+	}
 	if e.residueSettle > 0 {
 		timer := time.NewTimer(e.residueSettle)
 		select {
@@ -67,6 +81,9 @@ func (e *Engine) measureSleepResidue(ctx context.Context, spec proto.InstanceDes
 	}
 	used := map[int]float64{}
 	for _, m := range metrics {
+		if backfilled[m.UUID] {
+			continue
+		}
 		if v, ok := m.Values[memoryUsedMetric]; ok {
 			used[m.Index] = v
 		}
