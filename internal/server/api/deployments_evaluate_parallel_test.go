@@ -365,17 +365,17 @@ func TestDistributedTemplateRecommendationRegistersNothingOnRefusedCreate(t *tes
 		}
 		return row.ID
 	}
-	body := func(id uint) string {
-		return fmt.Sprintf(`{"template_id":%d,"name":"tmpl","served_name":"tmpl","template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, id)
+	body := func(id uint, placement string) string {
+		return fmt.Sprintf(`{"template_id":%d,"name":"tmpl","served_name":"tmpl","template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"],"placement":{%s}}`, id, placement)
 	}
 	t.Run("evaluate", func(t *testing.T) {
 		evaluate, _, st := newParallelEvaluateWith(t, nil)
-		if result := evaluate(body(register(st))); !result.OK || result.Parallelism == nil {
+		if result := evaluate(body(register(st), "")); !result.OK || result.Parallelism == nil {
 			t.Fatalf("template preview: errors=%v plan=%s", result.Errors, result.Plan)
 		}
 	})
 	t.Run("refused create", func(t *testing.T) {
-		_, heldModel, st := newParallelEvaluateWith(t, nil)
+		evaluate, heldModel, st := newParallelEvaluateWith(t, nil)
 		id := register(st)
 		n, err := st.NodeByUUID("par-b")
 		if err != nil {
@@ -390,12 +390,33 @@ func TestDistributedTemplateRecommendationRegistersNothingOnRefusedCreate(t *tes
 		}
 		h := apiHandlers{d: Deps{Store: st}}
 		w := httptest.NewRecorder()
-		h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body(id))))
+		h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body(id, ""))))
 		if code, _ := errorBody(t, w.Body.String()); w.Code != http.StatusBadRequest || code != "DISTRIBUTED_PARALLELISM_UNAVAILABLE" {
 			t.Fatalf("create on a busy follower: %d %s", w.Code, w.Body.String())
 		}
 		if models, err := st.ListModels("Acme/Sources-FP8"); err != nil || len(models) != 0 {
 			t.Fatalf("refused create registered artifacts: %v, %v", models, err)
+		}
+		// The refusal names the rank and the scheduler's reason, beside the
+		// degree left blank.
+		for placement, field := range map[string]string{"": "placement.tp", `"tp":1`: "placement.pp"} {
+			out := evaluate(body(id, placement))
+			if len(out.Errors) != 1 || out.Errors[0].Field != field || out.Errors[0].Code != messages.ErrorDistributedParallelismUnavailable ||
+				out.Errors[0].Params["node"] != "par-b" || out.Errors[0].Params["reason"] != "no_free_gpu" {
+				t.Fatalf("placement {%s}: errors=%+v", placement, out.Errors)
+			}
+		}
+		// A reason with params of its own carries them apart from node and
+		// reason: one card left on par-b is short of a TP4 layout's two.
+		if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "held").Select("GPUIndexes").Updates(store.Instance{GPUIndexes: "[0]"}).Error; err != nil {
+			t.Fatal(err)
+		}
+		out := evaluate(body(id, `"tp":4`))
+		if len(out.Errors) != 1 || out.Errors[0].Field != "placement.pp" || out.Errors[0].Params["reason"] != "insufficient_empty_gpus" {
+			t.Fatalf("one free card: errors=%+v", out.Errors)
+		}
+		if shortfall, _ := out.Errors[0].Params["reason_params"].(map[string]any); shortfall["gpus"] != float64(2) || shortfall["available"] != float64(1) {
+			t.Fatalf("one free card: reason params %+v", out.Errors[0].Params)
 		}
 	})
 }
@@ -496,7 +517,7 @@ func TestDistributedRecommendationLeavesIncompatibleImageToItsCheck(t *testing.T
 	body := fmt.Sprintf(`{"template_id":%d,"name":"arm","served_name":"arm","template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, row.ID)
 	out := evaluate(body)
 	for _, e := range out.Errors {
-		if e.Code == messages.ErrorDistributedRecommendation {
+		if e.Code == messages.ErrorDistributedParallelismUnavailable {
 			t.Fatalf("image reported as a parallelism error: %+v", out.Errors)
 		}
 	}

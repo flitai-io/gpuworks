@@ -371,6 +371,24 @@ for (const [index, source] of productErrorSources.entries()) {
   }
 }
 
+// DISTRIBUTED_PARALLELISM_UNAVAILABLE's params.reason is a scheduler code
+// (schedule.*) or one of the recommendation's own reasons, which the console
+// words under common's distributedRecommendationReason.
+const recommendationReasons = new Set(
+  [...fs.readFileSync(path.join(messagesDir, "deployment.go"), "utf8").matchAll(/\bRecommendationReason\w+\s*=\s*"([a-z0-9_]+)"/g)].map((match) => match[1]),
+);
+if (recommendationReasons.size === 0) errors.push("no recommendation reasons found");
+for (const language of languages) {
+  const commonLocale = localeMaps.get(`${language}/common.json`) ?? new Map();
+  for (const reason of recommendationReasons) {
+    if (!commonLocale.has(`distributedRecommendationReason.${reason}`)) errors.push(`${language}/common.json:distributedRecommendationReason.${reason}: missing recommendation reason translation`);
+  }
+}
+for (const key of (localeMaps.get("en/common.json") ?? new Map()).keys()) {
+  const reason = key.match(/^distributedRecommendationReason\.(\w+)$/)?.[1];
+  if (reason && !recommendationReasons.has(reason)) errors.push(`en/common.json:${key}: no matching recommendation reason`);
+}
+
 // ADR 0067: every product code a client renders has en and zh text. A product
 // code is an UPPER_SNAKE string constant declared in internal/proto or
 // internal/server/messages, or anywhere else under internal/ and pkg/ under an

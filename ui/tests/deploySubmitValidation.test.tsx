@@ -138,7 +138,8 @@ test("manual multi-node deployment can submit fixed degrees after a failed recom
   const originalEvaluate = api.evaluate;
   const created: Record<string, unknown>[] = [];
   let form: FormInstance;
-  const refusal = "apiError.DISTRIBUTED_PARALLELISM_UNAVAILABLE";
+  // The rank's scheduler reason reads as the deploy form words a node's refusal.
+  const refusal = "Cannot recommend parallelism on b: This node needs 2 free GPU(s) (TP 2 × PP 2), but only 1 meet the requirements (40 GiB per GPU). Release GPUs or adjust the parallelism. Specify TP and PP to use a fixed configuration.";
   api.createDeployment = (async (body: Record<string, unknown>) => { created.push(body); return { id: 1 }; }) as never;
   // The server's own shapes: an unavailable recommendation is a 200 answer
   // with the refusal on the TP field and no parallelism; a fixed layout
@@ -146,15 +147,17 @@ test("manual multi-node deployment can submit fixed degrees after a failed recom
   api.evaluate = (async (body: { placement?: { tp?: number; pp?: number } }) => {
     if (!body.placement?.tp || !body.placement?.pp) {
       return { ok: false, preflight: { ok: true, checks: [] }, image: "fixture:test", parallelism: null,
-        errors: [{ field: "placement.tp", code: "DISTRIBUTED_PARALLELISM_UNAVAILABLE", params: { node: "b", reason: "insufficient_empty_gpus" } }] };
+        errors: [{ field: "placement.tp", code: "DISTRIBUTED_PARALLELISM_UNAVAILABLE", params: { node: "b", reason: "insufficient_empty_gpus",
+          reason_params: { gpus: 2, tp: 2, pp: 2, available: 1, required_gib: 40 } } }] };
     }
-    return { ok: false, preflight: { ok: true, checks: [] }, image: "fixture:test", errors: [],
+    return { ok: true, preflight: { ok: true, checks: [] }, image: "fixture:test", errors: [],
       parallelism: { ...body.placement, gpus_per_node: 1, nodes: 2 } };
   }) as never;
   function Harness() {
     [form] = Form.useForm();
     const values = Form.useWatch([], { form, preserve: true });
-    const evaluation = useDeployEvaluation({ form, signal: values, translate: (key) => key,
+    // As the deploy page translates: common by default.
+    const evaluation = useDeployEvaluation({ form, signal: values, translate: (key, options) => i18n.t(key, { ns: "common", ...options }),
       buildPayload: () => buildPayload(form.getFieldsValue(true)).payload });
     const { submit } = useDeploySubmit({ form, nodes: [], evalErr: evaluation.error, evaluating: evaluation.evaluating,
       evalResult: evaluation.result, onCreated: () => {} });
@@ -167,7 +170,8 @@ test("manual multi-node deployment can submit fixed degrees after a failed recom
   }
   try {
     render(<I18nextProvider i18n={i18n}><Harness /></I18nextProvider>);
-    await screen.findByText(refusal, {}, { timeout: 5000 });
+    const shown = await screen.findByText(refusal, {}, { timeout: 5000 });
+    assert.ok(shown.closest(".ant-form-item")?.querySelector("#tp"), "Expected the refusal beside the TP control");
     assert.equal(screen.getByTestId("page-error").textContent, "", "the refusal belongs beside TP, not on the page");
     await waitFor(() => assert.equal((screen.getByRole("button") as HTMLButtonElement).disabled, false), { timeout: 5000 });
     // Nothing to confirm: the unavailable recommendation cannot be submitted.

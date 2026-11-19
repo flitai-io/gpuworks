@@ -311,7 +311,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 			nodes, err = s.PrepareDistributedDeployRequest(&normalized, dp)
 		}
 		if err != nil {
-			field := distributedErrorField(err)
+			field := distributedErrorField(err, placement)
 			errs.add(field, err)
 			if !isParallelismField(field) {
 				writeFieldErrors()
@@ -549,8 +549,8 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 }
 
 // distributedErrorField maps the distributed request errors onto the form
-// fields that state them.
-func distributedErrorField(err error) string {
+// fields that state them; placement is the degrees the request stated.
+func distributedErrorField(err error, placement planning.Placement) string {
 	var productErr *messages.ProductError
 	if errors.As(err, &productErr) {
 		switch productErr.Code() {
@@ -561,7 +561,13 @@ func distributedErrorField(err error) string {
 			return "placement.tp"
 		case messages.ErrorMasterPortInvalid:
 			return "master_port"
-		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount, messages.ErrorDistributedRecommendation:
+		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount:
+			return "placement.tp"
+		case messages.ErrorDistributedParallelismUnavailable:
+			// Beside the degree left blank: filling it fixes the layout.
+			if placement.TP > 0 {
+				return "placement.pp"
+			}
 			return "placement.tp"
 		case messages.ErrorDistributedParallelIndivisible:
 			return "placement.pp"

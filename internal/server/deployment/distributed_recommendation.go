@@ -3,7 +3,6 @@ package deployment
 import (
 	"context"
 	"errors"
-	"maps"
 	"math"
 	"strings"
 
@@ -24,7 +23,7 @@ func needsDistributedRecommendation(req *dto.DeployRequest, autoPlaced bool) boo
 }
 
 // rankRefusal is why one rank cannot run a candidate layout: a scheduler
-// refusal code or a messages.RecommendationReason, with its params.
+// refusal code or a messages.RecommendationReason, with that reason's params.
 type rankRefusal struct {
 	node   string
 	reason string
@@ -39,10 +38,14 @@ func (r *rankRefusal) Error() string {
 	return r.node + ": " + r.reason
 }
 
+// The reason's params stay apart from node and reason: a scheduler reason
+// may carry a reason or node param of its own.
 func (r *rankRefusal) productError() error {
 	params := map[string]any{"node": r.node, "reason": r.reason}
-	maps.Copy(params, r.params)
-	return productError(messages.ErrorDistributedRecommendation, "cannot recommend parallelism: "+r.Error(), params)
+	if len(r.params) > 0 {
+		params["reason_params"] = r.params
+	}
+	return productError(messages.ErrorDistributedParallelismUnavailable, "cannot recommend parallelism: "+r.Error(), params)
 }
 
 func invalidDistributedDegree(degree string) error {
@@ -52,7 +55,9 @@ func invalidDistributedDegree(degree string) error {
 // Only drafts with an unstated degree come here. Fixed placements and edits
 // keep their existing admission and may wait for cards at launch time.
 func (s *Service) recommendDistributed(ctx context.Context, req *dto.DeployRequest, dp int, eng deploy.Engine, launch deploy.Materialized, selection templateSelection, model *store.Model) ([]*store.Node, error) {
-	nodes, err := s.distributedNodes(req)
+	// The trials judge the placement as planning does (requestPlacement below),
+	// not as parsed here.
+	nodes, _, err := s.distributedNodes(req)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +152,7 @@ func (s *Service) trialDistributedRanks(ctx context.Context, ranks []planning.La
 			return planning.DistributedTrial{}, err
 		}
 		if refusal != nil {
-			return planning.DistributedTrial{}, &rankRefusal{node: node, reason: refusal.Code}
+			return planning.DistributedTrial{}, &rankRefusal{node: node, reason: refusal.Code, params: refusal.Params}
 		}
 		// A catalog placement can still reject the GPU set the scheduler chose.
 		if plan.Output.PlacementError != nil {

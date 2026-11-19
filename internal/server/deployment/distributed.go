@@ -16,11 +16,7 @@ import (
 // per rank, distinct, online - and its parallelism and master port, and
 // points the request's leader fields at its first node.
 func (s *Service) PrepareDistributedDeployRequest(req *dto.DeployRequest, dp int) ([]*store.Node, error) {
-	placement, err := planning.ParsePlacement(req.Placement)
-	if err != nil {
-		return nil, err
-	}
-	nodes, err := s.distributedNodes(req)
+	nodes, placement, err := s.distributedNodes(req)
 	if err != nil {
 		return nil, err
 	}
@@ -77,33 +73,40 @@ func nodeParallelism(nodes []*store.Node, placement planning.Placement, dp int) 
 	return parallel, nil
 }
 
-func (s *Service) distributedNodes(req *dto.DeployRequest) ([]*store.Node, error) {
+// distributedNodes checks a multi-node request's node count, placement,
+// master port and nodes, in that order, and returns the nodes and the parsed
+// placement.
+func (s *Service) distributedNodes(req *dto.DeployRequest) ([]*store.Node, planning.Placement, error) {
 	if len(req.NodeUUIDs) != req.NNodes {
-		return nil, productError(messages.ErrorDistributedNodeCount, "node_uuids count must equal nnodes", map[string]any{"actual": len(req.NodeUUIDs), "required": req.NNodes})
+		return nil, planning.Placement{}, productError(messages.ErrorDistributedNodeCount, "node_uuids count must equal nnodes", map[string]any{"actual": len(req.NodeUUIDs), "required": req.NNodes})
+	}
+	placement, err := planning.ParsePlacement(req.Placement)
+	if err != nil {
+		return nil, placement, err
 	}
 	if req.MasterPort == 0 {
 		req.MasterPort = deploy.DefaultMasterPort
 	}
 	if req.MasterPort < 1024 || req.MasterPort > 65535 {
-		return nil, productError(messages.ErrorMasterPortInvalid, "master_port must be between 1024 and 65535", map[string]any{"minimum": 1024, "maximum": 65535})
+		return nil, placement, productError(messages.ErrorMasterPortInvalid, "master_port must be between 1024 and 65535", map[string]any{"minimum": 1024, "maximum": 65535})
 	}
 	seen := map[string]bool{}
 	nodes := make([]*store.Node, 0, len(req.NodeUUIDs))
 	for _, uuid := range req.NodeUUIDs {
 		if seen[uuid] {
-			return nil, productError(messages.ErrorDistributedDuplicateNode, "distributed node list contains duplicates", map[string]any{"node": uuid})
+			return nil, placement, productError(messages.ErrorDistributedDuplicateNode, "distributed node list contains duplicates", map[string]any{"node": uuid})
 		}
 		seen[uuid] = true
 		n, err := s.d.Store.NodeByUUID(uuid)
 		if err != nil {
-			return nil, fmt.Errorf("node %s: %w", uuid, err)
+			return nil, placement, fmt.Errorf("node %s: %w", uuid, err)
 		}
 		if n.State != store.NodeStateOnline {
-			return nil, productError(messages.ErrorDistributedNodeOffline, fmt.Sprintf("node %s is not online", uuid), map[string]any{"node": uuid})
+			return nil, placement, productError(messages.ErrorDistributedNodeOffline, fmt.Sprintf("node %s is not online", uuid), map[string]any{"node": uuid})
 		}
 		nodes = append(nodes, n)
 	}
-	return nodes, nil
+	return nodes, placement, nil
 }
 
 func (s *Service) prepareRankNetwork(req *dto.DeployRequest, nodes []*store.Node) (netplan.Group, error) {
