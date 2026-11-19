@@ -779,7 +779,7 @@
         "gpu_uuid",
         "vendor"
       ],
-      "description": "Device memory the GPU has."
+      "description": "Memory capacity of the GPU; on a unified-memory card (no device memory of its own) the host pool's total instead, so used and total describe the same pool."
     },
     {
       "series": "gpuworks_gpu_memory_used_bytes",
@@ -794,7 +794,7 @@
         "gpu_uuid",
         "vendor"
       ],
-      "description": "Device memory in use on the GPU, by every process."
+      "description": "Memory in use on the GPU, by every process; on a unified-memory card whose driver answers no memory figures, used and total both describe the host pool's occupancy instead, which no per-process sum would see."
     },
     {
       "series": "gpuworks_gpu_pcie_rx_bytes_per_sec",
