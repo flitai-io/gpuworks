@@ -132,6 +132,12 @@ func (s *Service) recommendDistributed(ctx context.Context, req *dto.DeployReque
 			return nodes, cause
 		}
 		return nodes, (&rankRefusal{node: nodeNames(nodes), reason: messages.RecommendationReasonNoLayout}).productError()
+	case err != nil && ctx.Err() == nil:
+		// Every candidate failed a launch check the platform runs for any
+		// layout - a hand-written command whose degrees match none of them,
+		// say. The draft keeps the node-derived default and that check reports
+		// it as it does for a fixed layout.
+		return nodes, setNodeParallelism(req, nodes, p, dp)
 	case err != nil:
 		return nodes, err
 	}
@@ -157,13 +163,6 @@ func (s *Service) trialDistributedRanks(ctx context.Context, ranks []planning.La
 		// A catalog placement can still reject the GPU set the scheduler chose.
 		if plan.Output.PlacementError != nil {
 			return planning.DistributedTrial{}, &rankRefusal{node: node, reason: scheduler.ReasonPlacementRejected, cause: plan.Output.PlacementError}
-		}
-		actual, err := deploy.RecommendationLaunchParallelism(rank.Engine, plan.Resolved)
-		if err != nil {
-			return planning.DistributedTrial{}, &rankRefusal{node: node, reason: messages.RecommendationReasonCommandUnverified, cause: err}
-		}
-		if actual.TP != candidate.TP || actual.PP != candidate.PP {
-			return planning.DistributedTrial{}, &rankRefusal{node: node, reason: messages.RecommendationReasonCommandMismatch, params: map[string]any{"tp": actual.TP, "pp": actual.PP}}
 		}
 		result.Preference = min(result.Preference, plan.Output.Result.Plan.Preference)
 		result.ContextShort = result.ContextShort || plan.Output.ContextShort()

@@ -1553,8 +1553,6 @@
     "checkFailed": "未能确认选中主机的访问权限，请检查地址后重试。"
   },
   "distributedRecommendationReason": {
-    "command_parallelism_unverified": "无法从启动命令读出 TP 和 PP，推荐的组合无法与命令核对。",
-    "command_parallelism_mismatch": "启动命令指定了 TP {{tp}}、PP {{pp}}，这组并行度在这些节点上放不下。",
     "no_layout": "没有符合已填并行度和这些节点 GPU 数量的 TP、PP 组合。"
   },
   "placementShortfall": {

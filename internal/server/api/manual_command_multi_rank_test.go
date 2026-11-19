@@ -110,23 +110,6 @@ func TestEvaluateMultiNodeManualCommandDraftExpandsPerRank(t *testing.T) {
 	}
 }
 
-// A generated draft may be edited per rank. The two arms must still agree
-// on global topology before the form can recommend a split.
-func TestDistributedRecommendationChecksBothManualDraftArms(t *testing.T) {
-	r := newAutoRig(t, 2)
-	body := func(extra string) string { return r.pinnedMultiBody("draft", extra) }
-	draft := r.evaluateBody(t, body("")).ManualCommandDraft
-	leader, follower, ok := strings.Cut(draft, "  1)\n")
-	if !ok || !strings.Contains(follower, "--tensor-parallel-size 2") {
-		t.Fatalf("expected a two-rank draft with TP2: %s", draft)
-	}
-	follower = strings.Replace(follower, "--tensor-parallel-size 2", "--tensor-parallel-size 2 --pipeline-parallel-size 2", 1)
-	out := r.evaluateBody(t, body(manualOverrides(t, leader+"  1)\n"+follower)))
-	if out.OK || out.Parallelism != nil || len(out.Errors) == 0 {
-		t.Fatalf("inconsistent manual rank commands were recommended: %+v", out.Parallelism)
-	}
-}
-
 // A manual command that cannot tell its ranks apart is refused by evaluation
 // and creation alike, for a multi-node and a PD deployment; the draft passes.
 func TestManualCommandRankBlindRefusedByEvaluateAndCreate(t *testing.T) {

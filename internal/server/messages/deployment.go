@@ -109,7 +109,5 @@ const (
 // The values of ErrorDistributedParallelismUnavailable's params.reason that
 // the recommendation itself decides; the UI words each one.
 const (
-	RecommendationReasonCommandUnverified = "command_parallelism_unverified"
-	RecommendationReasonCommandMismatch   = "command_parallelism_mismatch"
-	RecommendationReasonNoLayout          = "no_layout"
+	RecommendationReasonNoLayout = "no_layout"
 )

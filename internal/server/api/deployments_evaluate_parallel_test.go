@@ -441,35 +441,42 @@ func TestDistributedRecommendationKeepsNodeDefaultForUnsizedWeights(t *testing.T
 	}
 }
 
-func TestDistributedRecommendationMatchesManualCommand(t *testing.T) {
+// A hand-written command is held to a layout by the launch check every layout
+// gets, as on a single node: the recommendation is a layout that check
+// accepts, and when it accepts none the draft keeps the node default and is
+// refused as that layout stated in full is.
+func TestDistributedRecommendationFollowsManualCommandCheck(t *testing.T) {
 	evaluate, modelID, st := newParallelEvaluateWith(t, nil)
+	body := func(command, placement string) string {
+		return fmt.Sprintf(`{"name":"verify-command","model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]%s%s}`, modelID, placement, manualOverrides(t, command+" --node-rank ${GPUWORKS_NODE_RANK}"))
+	}
 	for _, tc := range []struct {
 		name, command string
 		tp, pp        int
 	}{
-		{"explicit PP conflicts with two ranks", "exec vllm serve /model --pipeline-parallel-size 1", 0, 0},
-		{"explicit PP and engine default TP", "exec vllm serve /model --pipeline-parallel-size 2", 1, 2},
-		{"explicit TP and engine default PP", "exec vllm serve /model --tensor-parallel-size 2", 2, 1},
-		{"opaque wrapper", "exec custom-launcher --pp-size 2", 0, 0},
-		{"external config", "exec vllm serve /model --config=/models/engine.yaml", 0, 0},
+		{"stated PP", "exec vllm serve /model --pipeline-parallel-size 2", 1, 2},
+		{"smaller layouts are short of the stated TP", "exec vllm serve /model --tensor-parallel-size 4", 2, 2},
+		{"opaque wrapper", "exec custom-launcher --pp-size 2", 1, 2},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			body := fmt.Sprintf(`{"name":"verify-command","model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]%s}`, modelID, manualOverrides(t, tc.command+" --node-rank ${GPUWORKS_NODE_RANK}"))
-			out := evaluate(body)
-			if tc.tp == 0 {
-				if out.OK || out.Parallelism != nil || len(out.Errors) == 0 || out.Errors[0].Code != "DISTRIBUTED_PARALLELISM_UNAVAILABLE" {
-					t.Fatalf("unverified topology: ok=%v degrees=%+v errors=%+v", out.OK, out.Parallelism, out.Errors)
-				}
-				h := apiHandlers{d: Deps{Store: st}}
-				rec := httptest.NewRecorder()
-				h.createDeployment(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
-				if code, _ := errorBody(t, rec.Body.String()); rec.Code != http.StatusBadRequest || code != "DISTRIBUTED_PARALLELISM_UNAVAILABLE" {
-					t.Fatalf("direct create returned %d: %s", rec.Code, rec.Body.String())
-				}
-			} else if !out.OK || out.Parallelism == nil || out.Parallelism.TP != tc.tp || out.Parallelism.PP != tc.pp {
-				t.Fatalf("want TP%d PP%d, got %+v errors=%+v", tc.tp, tc.pp, out.Parallelism, out.Errors)
-			}
-		})
+		if out := evaluate(body(tc.command, "")); !out.OK || out.Parallelism == nil || out.Parallelism.TP != tc.tp || out.Parallelism.PP != tc.pp {
+			t.Errorf("%s: want TP%d PP%d, got %+v errors=%+v", tc.name, tc.tp, tc.pp, out.Parallelism, out.Errors)
+		}
+	}
+	// No layout of two two-card nodes runs TP8.
+	const command = "exec vllm serve /model --tensor-parallel-size 8"
+	blank, fixed := evaluate(body(command, "")), evaluate(body(command, `,"placement":{"tp":2,"pp":2}`))
+	if blank.OK || fixed.OK || len(blank.Errors) == 0 || fmt.Sprint(blank.Errors) != fmt.Sprint(fixed.Errors) {
+		t.Fatalf("blank errors %+v, fixed errors %+v", blank.Errors, fixed.Errors)
+	}
+	h := apiHandlers{d: Deps{Store: st}}
+	created := func(placement string) string {
+		rec := httptest.NewRecorder()
+		h.createDeployment(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body(command, placement))))
+		code, _ := errorBody(t, rec.Body.String())
+		return fmt.Sprint(rec.Code, " ", code)
+	}
+	if blankCreate, fixedCreate := created(""), created(`,"placement":{"tp":2,"pp":2}`); blankCreate != fixedCreate || !strings.HasPrefix(blankCreate, "400") {
+		t.Fatalf("create blank %s, fixed %s", blankCreate, fixedCreate)
 	}
 }
 

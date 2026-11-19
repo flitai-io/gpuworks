@@ -1553,8 +1553,6 @@
     "checkFailed": "A selected host could not be checked. Check the address and try again."
   },
   "distributedRecommendationReason": {
-    "command_parallelism_unverified": "TP and PP cannot be read from the launch command, so no recommended layout can be checked against it.",
-    "command_parallelism_mismatch": "The launch command sets TP {{tp}} and PP {{pp}}, and no layout with those degrees fits these nodes.",
     "no_layout": "No TP and PP combination fits the stated degrees and these nodes' GPU counts."
   },
   "placementShortfall": {

@@ -13,6 +13,7 @@ func TestDistributedParallelismRecommendation(t *testing.T) {
 	}{
 		{"small model", 0, 0, 1, 1, 0, 1, 2},
 		{"larger model needs four GPUs", 0, 0, 1, 2, 0, 2, 2},
+		{"three cards per node round up to four", 0, 0, 1, 3, 0, 4, 2},
 		{"fixed pipeline across nodes", 0, 1, 1, 1, 0, 2, 1},
 		{"fixed tensor degree", 2, 0, 1, 1, 0, 2, 1},
 		{"data parallel replicas", 0, 0, 2, 1, 0, 1, 1},
