@@ -68,7 +68,13 @@ type SMIProber struct {
 	// card name, only the UUID, so the judgment Probe already made — the
 	// same one that sizes such a card from host MemTotal — is what tells
 	// the metrics path which rows may take their memory figures from host
-	// RAM too.
+	// RAM too. Until the first Probe completes, no card is judged unified
+	// and the metrics fallback is off: the first tick after a restart can
+	// report an unfilled row, and the next tick fills it — probing inside
+	// Metrics to close that window would put an inventory nvidia-smi on
+	// every poll. Which rows were actually filled travels on the returned
+	// Metric rows themselves (Metric.BackfilledUsed), so a consumer reading
+	// them later needs no prober state that a concurrent call could refresh.
 	unifiedMu sync.RWMutex
 	unified   map[string]bool
 
@@ -165,8 +171,7 @@ func (p *SMIProber) Metrics(ctx context.Context) ([]Metric, error) {
 	}
 	metrics := parseNVIDIAMetrics(out)
 	applyUnifiedMetricsFallback(metrics, p.unifiedCard,
-		func() int64 { return hostMemoryBytes(p.hostRoot) },
-		func() int64 { return hostMemoryUsedBytes(p.hostRoot) })
+		func() (int64, int64) { return hostMeminfo(p.hostRoot) })
 	if p.slow() || !p.pcieDue() {
 		return metrics, nil
 	}

@@ -680,24 +680,24 @@ func TestMetricsFillsUnifiedMemoryFromHost(t *testing.T) {
 		byUUID[m.UUID] = m
 	}
 	thor := byUUID["GPU-thor"]
-	if got := thor.Values[metricGPUMemoryTotal]; got != float64(memTotalKiB*1024) {
+	if got := thor.Values[MetricGPUMemoryTotal]; got != float64(memTotalKiB*1024) {
 		t.Fatalf("thor memory_total metric = %v, want host MemTotal", got)
 	}
-	if got := thor.Values[metricGPUMemoryUsed]; got != float64((memTotalKiB-memAvailableKiB)*1024) {
+	if got := thor.Values[MetricGPUMemoryUsed]; got != float64((memTotalKiB-memAvailableKiB)*1024) {
 		t.Fatalf("thor memory_used metric = %v, want MemTotal-MemAvailable", got)
 	}
-	if discrete := byUUID["GPU-5090"]; discrete.Values[metricGPUMemoryUsed] != 1024*1024*1024 ||
-		discrete.Values[metricGPUMemoryTotal] != 32768*1024*1024 {
+	if discrete := byUUID["GPU-5090"]; discrete.Values[MetricGPUMemoryUsed] != 1024*1024*1024 ||
+		discrete.Values[MetricGPUMemoryTotal] != 32768*1024*1024 {
 		t.Fatalf("discrete card's parsed memory was touched: %+v", discrete)
 	}
-	if answered := byUUID["GPU-spark"]; answered.Values[metricGPUMemoryUsed] != 119444*1024*1024 ||
-		answered.Values[metricGPUMemoryTotal] != 122880*1024*1024 {
+	if answered := byUUID["GPU-spark"]; answered.Values[MetricGPUMemoryUsed] != 119444*1024*1024 ||
+		answered.Values[MetricGPUMemoryTotal] != 122880*1024*1024 {
 		t.Fatalf("unified card the driver answered for was overwritten: %+v", answered)
 	}
 }
 
-// hostMemoryUsedBytes needs both MemTotal and MemAvailable; a meminfo without
-// the available figure (ancient kernels) answers 0 rather than guessing.
+// hostMeminfo needs both MemTotal and MemAvailable; a meminfo without the
+// available figure (ancient kernels) answers used 0 rather than guessing.
 func TestHostMemoryUsedBytesWithoutMemAvailable(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o755); err != nil {
@@ -707,14 +707,15 @@ func TestHostMemoryUsedBytesWithoutMemAvailable(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "proc/meminfo"), []byte(meminfo), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := hostMemoryUsedBytes(root); got != 0 {
-		t.Fatalf("hostMemoryUsedBytes without MemAvailable = %d, want 0", got)
+	total, used := hostMeminfo(root)
+	if total != 131920838*1024 || used != 0 {
+		t.Fatalf("hostMeminfo without MemAvailable = (%d, %d), want (MemTotal, 0)", total, used)
 	}
 }
 
 // MemAvailable: 0 kB is a real reading - the host is out of reclaimable
 // memory - and is exactly when the occupancy figure matters most. It must
-// answer MemTotal, not disappear.
+// answer used = MemTotal, not disappear.
 func TestHostMemoryUsedBytesUnderFullPressure(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o755); err != nil {
@@ -724,25 +725,104 @@ func TestHostMemoryUsedBytesUnderFullPressure(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "proc/meminfo"), []byte(meminfo), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := hostMemoryUsedBytes(root); got != 131920838*1024 {
-		t.Fatalf("hostMemoryUsedBytes with MemAvailable 0 = %d, want the full MemTotal", got)
+	total, used := hostMeminfo(root)
+	if total != 131920838*1024 || used != 131920838*1024 {
+		t.Fatalf("hostMeminfo with MemAvailable 0 = (%d, %d), want MemTotal for both", total, used)
 	}
 }
 
-// A driver that reports a device window (carve-out) smaller than host RAM but
-// no used figure must not be shown a used figure above its own total: the
-// host-side reading is clamped to what the driver answered for the card.
-func TestMetricsClampUnifiedUsedToADriverAnsweredTotal(t *testing.T) {
+// A driver that answers one memory figure but not the other keeps its answer,
+// and its missing partner stays absent: filling a host-pool used against a
+// device-window total (or the reverse) would print a ratio that means
+// nothing. Only a card the driver answered for neither figure takes both
+// from host RAM.
+func TestMetricsLeaveADriverAnsweredFigureAlone(t *testing.T) {
 	const carveOut = int64(61440) * 1024 * 1024
-	metrics := []Metric{{UUID: "GPU-tegra", Values: map[string]float64{metricGPUMemoryTotal: float64(carveOut)}}}
-	applyUnifiedMetricsFallback(metrics, func(uuid string) bool { return uuid == "GPU-tegra" },
-		func() int64 { return 0 },
-		func() int64 { return 100 * 1024 * 1024 * 1024 })
-	if got := metrics[0].Values[metricGPUMemoryUsed]; got != float64(carveOut) {
-		t.Fatalf("used = %v, want clamped to the driver carve-out total", got)
+	hostTotal := 100 * 1024 * 1024 * 1024.0
+	cases := map[string]struct {
+		values     map[string]float64
+		want       map[string]float64
+		wantFilled bool
+	}{
+		"total answered, used absent": {
+			values:     map[string]float64{MetricGPUMemoryTotal: float64(carveOut)},
+			want:       map[string]float64{MetricGPUMemoryTotal: float64(carveOut)},
+			wantFilled: false,
+		},
+		"used answered, total absent": {
+			values:     map[string]float64{MetricGPUMemoryUsed: 1 << 30},
+			want:       map[string]float64{MetricGPUMemoryUsed: 1 << 30},
+			wantFilled: false,
+		},
+		"neither answered": {
+			values: map[string]float64{},
+			want: map[string]float64{
+				MetricGPUMemoryTotal: hostTotal,
+				MetricGPUMemoryUsed:  hostTotal, // fixture meminfo reads as fully occupied
+			},
+			wantFilled: true,
+		},
 	}
-	if got := metrics[0].Values[metricGPUMemoryTotal]; got != float64(carveOut) {
-		t.Fatalf("the driver-answered total was overwritten: %v", got)
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			metrics := []Metric{{UUID: "GPU-tegra", Values: tc.values}}
+			applyUnifiedMetricsFallback(metrics, func(uuid string) bool { return uuid == "GPU-tegra" },
+				func() (int64, int64) { return int64(hostTotal), int64(hostTotal) })
+			for _, metric := range []string{MetricGPUMemoryTotal, MetricGPUMemoryUsed} {
+				want, has := tc.want[metric]
+				got, gotOK := metrics[0].Values[metric]
+				if gotOK != has || (has && got != want) {
+					t.Fatalf("%s = (%v, %v), want (%v, %v)", metric, got, gotOK, want, has)
+				}
+			}
+			if metrics[0].BackfilledUsed != tc.wantFilled {
+				t.Fatalf("BackfilledUsed = %v, want %v", metrics[0].BackfilledUsed, tc.wantFilled)
+			}
+		})
+	}
+}
+
+// The metrics the prober returns carry the backfill mark on the marked rows
+// themselves, so a consumer reading the metric as "what a process holds" can
+// tell a host-pool row from a device-answered one off the reply in its hand —
+// no prober state a concurrent Metrics call could refresh in between.
+func TestMetricsReportWhichUsedFiguresWereBackfilled(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "proc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meminfo := "MemTotal:       131920838 kB\nMemFree:        1024 kB\nMemAvailable:   36700160 kB\n"
+	if err := os.WriteFile(filepath.Join(root, "proc/meminfo"), []byte(meminfo), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := &SMIProber{hostRoot: root, runner: func(_ context.Context, args ...string) (string, error) {
+		switch {
+		case args[0] == "-L":
+			return "", nil
+		case strings.HasPrefix(args[0], "--query-gpu=index,uuid,utilization.gpu"):
+			return "0, GPU-thor, 3, [N/A], [N/A], 38, 5\n" +
+				"1, GPU-5090, 7, 1024, 32768, 40, 100\n", nil
+		default:
+			return "0, GPU-thor, NVIDIA Thor, [N/A], 12.1, 00000000:01:00.0, 595.78\n" +
+				"1, GPU-5090, NVIDIA GeForce RTX 5090, 32768, 12.0, 00000000:02:00.0, 580.95\n", nil
+		}
+	}}
+	if _, err := p.Probe(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	metrics, err := p.Metrics(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	byUUID := map[string]bool{}
+	for _, m := range metrics {
+		byUUID[m.UUID] = m.BackfilledUsed
+	}
+	if !byUUID["GPU-thor"] {
+		t.Fatal("the backfilled Thor used figure was not marked as backfilled")
+	}
+	if byUUID["GPU-5090"] {
+		t.Fatal("the device-answered 5090 used figure was marked as backfilled")
 	}
 }
 

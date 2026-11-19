@@ -15,8 +15,6 @@ import (
 // release, so an immediate read still includes memory that is about to be freed.
 const defaultResidueSettle = time.Second
 
-const memoryUsedMetric = "gpuworks_gpu_memory_used_bytes"
-
 // measureSleepResidue returns the GPU memory a sleeping instance still holds
 // per card (CUDA context, graph pools, allocator slack), which the server needs
 // to place other work on the same card. It returns the largest used-bytes value
@@ -52,19 +50,15 @@ func (e *Engine) measureSleepResidue(ctx context.Context, spec proto.InstanceDes
 		return 0
 	}
 	// A unified-memory card's used metric is the host pool's occupancy, not
-	// what an instance on it holds (see applyUnifiedMetricsFallback): the
-	// desktop and every CPU process share that figure, and the single-process
-	// guard above cannot tell them apart. Such a card's residue is not
-	// measurable this way and must answer "unmeasured" (0), as it did before
-	// the metric was filled at all.
-	backfilled := map[string]bool{}
-	if gpus, err := e.prober.Probe(ctx); err == nil {
-		for _, g := range gpus {
-			if g.UUID != "" && accelerator.UnifiedMemory(g.Name) {
-				backfilled[g.UUID] = true
-			}
-		}
-	}
+	// what an instance on it holds — but only when the metric was backfilled
+	// from host RAM (see applyUnifiedMetricsFallback, which marks such rows
+	// Metric.BackfilledUsed). A prober that answers the device's real
+	// per-process usage (Apple silicon, whose parts are unified too) leaves
+	// the mark unset, and its reading is taken as before. The mark travels
+	// on the same Metrics reply the reading comes from, so no second probe
+	// and no prober-side state can disagree with the figures being read. A
+	// backfilled row's residue is not measurable this way and must answer
+	// "unmeasured" (0), as it did before the metric was filled at all.
 	if e.residueSettle > 0 {
 		timer := time.NewTimer(e.residueSettle)
 		select {
@@ -81,10 +75,11 @@ func (e *Engine) measureSleepResidue(ctx context.Context, spec proto.InstanceDes
 	}
 	used := map[int]float64{}
 	for _, m := range metrics {
-		if backfilled[m.UUID] {
+		if m.BackfilledUsed {
+			e.log.Debug("sleep residue not measured: used figure is the host pool's backfill, not per-process", "uuid", spec.UUID, "gpu", m.Index)
 			continue
 		}
-		if v, ok := m.Values[memoryUsedMetric]; ok {
+		if v, ok := m.Values[gpu.MetricGPUMemoryUsed]; ok {
 			used[m.Index] = v
 		}
 	}

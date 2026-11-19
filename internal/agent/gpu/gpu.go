@@ -151,6 +151,13 @@ type Metric struct {
 	UUID   string
 	Vendor string
 	Values map[string]float64
+	// BackfilledUsed marks a memory-used figure the prober filled from host
+	// RAM rather than the device answering (unified-memory cards whose
+	// driver reports [N/A]): the whole pool's occupancy, which no per-process
+	// sum would see. Consumers that read the metric as "what a process holds"
+	// must skip marked rows. The mark travels with the row it describes, so
+	// concurrent Metrics calls cannot disagree about it.
+	BackfilledUsed bool
 }
 
 // Prober detects GPUs on the local host.

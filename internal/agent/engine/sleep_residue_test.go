@@ -13,14 +13,18 @@ import (
 
 // residueProber is a two-card NVIDIA-shaped host: Metrics reports the full
 // normalized metric set per card, as the real prober does, and the compute
-// process listing carries the card addresses.
+// process listing carries the card addresses. backfillUsed stamps every row
+// with Metric.BackfilledUsed, standing in for the SMI prober's host-pool
+// backfill; a prober that answers the device's own usage (Apple silicon,
+// whose parts are unified too) is shaped by leaving it false.
 type residueProber struct {
 	gpu.FixedProber
-	used       map[int]float64 // index → used bytes; a missing index has no row
-	metricsErr error
-	procs      []gpu.ComputeProcess
-	procsErr   error
-	reads      int
+	used         map[int]float64 // index → used bytes; a missing index has no row
+	backfillUsed bool            // stamp every row Metric.BackfilledUsed, as the SMI prober does for host-pool backfill
+	metricsErr   error
+	procs        []gpu.ComputeProcess
+	procsErr     error
+	reads        int
 }
 
 func newResidueProber(used map[int]float64) *residueProber {
@@ -44,10 +48,10 @@ func (p *residueProber) Metrics(context.Context) ([]gpu.Metric, error) {
 		if index < len(p.GPUs) {
 			uuid = p.GPUs[index].UUID
 		}
-		out = append(out, gpu.Metric{Index: index, UUID: uuid, Vendor: "nvidia", Values: map[string]float64{
-			"gpuworks_gpu_utilization":        0,
-			"gpuworks_gpu_memory_total_bytes": 80 << 30,
-			"gpuworks_gpu_memory_used_bytes":  used,
+		out = append(out, gpu.Metric{Index: index, UUID: uuid, Vendor: "nvidia", BackfilledUsed: p.backfillUsed, Values: map[string]float64{
+			"gpuworks_gpu_utilization": 0,
+			gpu.MetricGPUMemoryTotal:   80 << 30,
+			gpu.MetricGPUMemoryUsed:    used,
 		}})
 	}
 	return out, nil
@@ -221,14 +225,17 @@ func TestSleepStillSucceedsWhenMetricsFailOrLackTheCard(t *testing.T) {
 	}
 }
 
-// On a unified-memory card the used metric is the host pool's occupancy
-// (desktop, OS, every CPU process), so a sleeping engine's residue cannot be
-// read off it. The answer is "unmeasured" (0) — the same as before the
-// metric was filled at all — and the server falls back to its estimate.
+// On a unified-memory card whose used metric the prober backfilled from host
+// RAM (the row carries Metric.BackfilledUsed), that figure is the whole
+// pool's occupancy (desktop, OS, every CPU process), so a sleeping engine's
+// residue cannot be read off it. The answer is "unmeasured" (0) — the same as
+// before the metric was filled at all — and the server falls back to its
+// estimate.
 func TestSleepResidueIsUnmeasuredOnAUnifiedCard(t *testing.T) {
 	h := newSleepHTTPServer(t)
 	prober := newResidueProber(map[int]float64{0: 90 << 30})
 	prober.GPUs = []proto.GPUInfo{{Index: 0, UUID: "GPU-thor", Name: "NVIDIA Thor", PCIeBDF: "0000:3f:00.0"}}
+	prober.backfillUsed = true
 	prober.procs = []gpu.ComputeProcess{{PID: 41, Name: "VLLM::Worker", PCIeBDF: "00000000:3F:00.0"}}
 	e, reported := newResidueEngine(t, prober)
 	spec := residueSpec(h, t, "res-uma", 0)
@@ -239,6 +246,26 @@ func TestSleepResidueIsUnmeasuredOnAUnifiedCard(t *testing.T) {
 	st := <-reported
 	if st.SleepLevel != 1 || st.SleepResidueBytes != 0 {
 		t.Fatalf("report = level %d residue %d, want level 1 and unmeasured", st.SleepLevel, st.SleepResidueBytes)
+	}
+}
+
+// A unified-named card whose used figure the prober answered itself (Apple
+// silicon reports the device's own per-process accounting) keeps that
+// reading: the residue guard follows the backfill record, not the card name.
+func TestSleepResidueReadsADeviceAnsweredUsedOnAUnifiedCard(t *testing.T) {
+	h := newSleepHTTPServer(t)
+	prober := newResidueProber(map[int]float64{0: 2 << 30})
+	prober.GPUs = []proto.GPUInfo{{Index: 0, UUID: "GPU-mac", Name: "Apple M4 Pro", PCIeBDF: "0000:3f:00.0"}}
+	prober.procs = []gpu.ComputeProcess{{PID: 41, Name: "VLLM::Worker", PCIeBDF: "00000000:3F:00.0"}}
+	e, reported := newResidueEngine(t, prober)
+	spec := residueSpec(h, t, "res-uma-device", 0)
+	e.desired[spec.UUID] = spec
+
+	spec.DesiredSleep = 1
+	e.reconcileSleep(context.Background(), spec)
+	st := <-reported
+	if st.SleepLevel != 1 || st.SleepResidueBytes != 2<<30 {
+		t.Fatalf("report = level %d residue %d, want level 1 with the device-answered residue", st.SleepLevel, int64(2<<30))
 	}
 }
 

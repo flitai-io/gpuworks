@@ -16,8 +16,12 @@ import (
 )
 
 const (
-	metricGPUMemoryUsed  = "gpuworks_gpu_memory_used_bytes"
-	metricGPUMemoryTotal = "gpuworks_gpu_memory_total_bytes"
+	// MetricGPUMemoryUsed and MetricGPUMemoryTotal are the canonical memory
+	// metric keys. Exported because consumers read the values back by key —
+	// the engine's sleep-residue measurement must not re-spell the string a
+	// rename here would silently orphan.
+	MetricGPUMemoryUsed  = "gpuworks_gpu_memory_used_bytes"
+	MetricGPUMemoryTotal = "gpuworks_gpu_memory_total_bytes"
 )
 
 func parseNVIDIAMetrics(out string) []Metric {
@@ -38,8 +42,8 @@ func parseNVIDIAMetrics(out string) []Metric {
 			}
 		}
 		add("gpuworks_gpu_utilization", 2, 1)
-		add(metricGPUMemoryUsed, 3, 1024*1024)
-		add(metricGPUMemoryTotal, 4, 1024*1024)
+		add(MetricGPUMemoryUsed, 3, 1024*1024)
+		add(MetricGPUMemoryTotal, 4, 1024*1024)
 		add("gpuworks_gpu_temperature_celsius", 5, 1)
 		add("gpuworks_gpu_power_watts", 6, 1)
 		if len(f) > 7 {
@@ -355,67 +359,64 @@ func applyUnifiedMemoryFallback(gpus []proto.GPUInfo, hostBytes func() int64) {
 // allocates from, and the desktop and the CPU workloads hold no CUDA context
 // a per-process sum would see, so MemTotal−MemAvailable is the honest used
 // figure. unified answers for a card as the last Probe judged it, keyed by
-// UUID because that is all a metrics row carries; hostTotal/hostUsed are lazy
-// so a host with no unified card never reads proc/meminfo on the metrics
-// path. A metric the driver did answer keeps its parsed value, and a used
-// figure is clamped per card even against a total the driver did answer: a
-// carve-out driver that reports a device window smaller than host RAM must
-// not be shown a used figure above it.
-func applyUnifiedMetricsFallback(metrics []Metric, unified func(uuid string) bool, hostTotal, hostUsed func() int64) {
-	needTotal, needUsed := false, false
-	for _, m := range metrics {
+// UUID because that is all a metrics row carries; hostMem is lazy so a host
+// with no unified card never reads proc/meminfo on the metrics path, and one
+// read supplies both figures so total and used cannot straddle snapshots.
+// A metric the driver did answer keeps its parsed value, and its
+// missing partner is left absent rather than mixed across pools: a host-pool
+// used figure against a device-window total (or the reverse) would read as a
+// ratio that means nothing. The pair is filled from host RAM only when the
+// driver answered neither — the shape every unified-memory part known today
+// shows ([N/A] for both) — and used never exceeds total there, since both
+// come off one meminfo read.
+//
+// A row whose used figure was filled is marked Metric.BackfilledUsed, so a
+// consumer that reads the metric as "what a process holds" (the engine's
+// sleep-residue measurement) can tell backfilled host-pool rows from figures
+// the device itself answered — per row, on the same slice the caller reads,
+// with no state a concurrent Metrics call could overwrite.
+func applyUnifiedMetricsFallback(metrics []Metric, unified func(uuid string) bool, hostMem func() (total, used int64)) {
+	var candidates []int
+	for i, m := range metrics {
 		if !unified(m.UUID) {
 			continue
 		}
-		if _, ok := m.Values[metricGPUMemoryTotal]; !ok {
-			needTotal = true
-		}
-		if _, ok := m.Values[metricGPUMemoryUsed]; !ok {
-			needUsed = true
-		}
-	}
-	if !needTotal && !needUsed {
-		return
-	}
-	total, used := int64(0), int64(0)
-	if needTotal {
-		total = hostTotal()
-	}
-	if needUsed {
-		used = hostUsed()
-	}
-	for i := range metrics {
-		if !unified(metrics[i].UUID) {
+		if _, ok := m.Values[MetricGPUMemoryTotal]; ok {
 			continue
 		}
-		if _, ok := metrics[i].Values[metricGPUMemoryTotal]; !ok && total > 0 {
-			metrics[i].Values[metricGPUMemoryTotal] = float64(total)
+		if _, ok := m.Values[MetricGPUMemoryUsed]; ok {
+			continue
 		}
-		if _, ok := metrics[i].Values[metricGPUMemoryUsed]; !ok && used > 0 {
-			filled := used
-			capacity := total
-			if dt, ok := metrics[i].Values[metricGPUMemoryTotal]; ok && dt > 0 && (capacity == 0 || int64(dt) < capacity) {
-				capacity = int64(dt)
-			}
-			if capacity > 0 && filled > capacity {
-				filled = capacity
-			}
-			metrics[i].Values[metricGPUMemoryUsed] = float64(filled)
+		candidates = append(candidates, i)
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	total, used := hostMem()
+	if total <= 0 {
+		return
+	}
+	for _, i := range candidates {
+		metrics[i].Values[MetricGPUMemoryTotal] = float64(total)
+		if used > 0 {
+			metrics[i].BackfilledUsed = true
+			metrics[i].Values[MetricGPUMemoryUsed] = float64(used)
 		}
 	}
 }
 
-// hostMemoryUsedBytes reports MemTotal−MemAvailable from proc/meminfo under
-// hostRoot (empty means "/"): on a unified-memory part that difference is the
-// pool's true occupancy, MemAvailable already netting out the reclaimable
-// caches. Both figures come off one read of the file, so the subtraction can
-// not mix snapshots. 0 when unavailable — but MemAvailable: 0 kB is a real
-// reading (the host is out of reclaimable memory) and answers MemTotal, not
-// 0: that is the one moment the occupancy figure matters most.
-func hostMemoryUsedBytes(hostRoot string) int64 {
+// hostMeminfo reports MemTotal and MemTotal−MemAvailable from one read of
+// proc/meminfo under hostRoot (empty means "/"): on a unified-memory part
+// that difference is the pool's true occupancy, MemAvailable already netting
+// out the reclaimable caches. One read for both figures — a poll that needs
+// total and used must not straddle two snapshots of the file. (0, 0) when
+// unavailable — but MemAvailable: 0 kB is a real reading (the host is out of
+// reclaimable memory) and answers used = MemTotal, not 0: that is the one
+// moment the occupancy figure matters most.
+func hostMeminfo(hostRoot string) (total, used int64) {
 	data, err := os.ReadFile(filepath.Join("/", hostRoot, "proc/meminfo"))
 	if err != nil {
-		return 0
+		return 0, 0
 	}
 	var totalKB, availableKB int64 = -1, -1
 	for _, line := range strings.Split(string(data), "\n") {
@@ -426,13 +427,17 @@ func hostMemoryUsedBytes(hostRoot string) int64 {
 			availableKB = meminfoKB(line)
 		}
 	}
-	if totalKB <= 0 || availableKB < 0 {
-		return 0
+	if totalKB <= 0 {
+		return 0, 0
 	}
-	if used := (totalKB - availableKB) * 1024; used > 0 {
-		return used
+	total = totalKB * 1024
+	if availableKB < 0 {
+		return total, 0
 	}
-	return 0
+	if used = (totalKB - availableKB) * 1024; used < 0 {
+		used = 0
+	}
+	return total, used
 }
 
 // meminfoKB parses the kilobyte figure of a "MemTotal:  123 kB" line; -1 when
