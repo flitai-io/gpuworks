@@ -24,27 +24,40 @@ interface Props {
 export default function DeployParallelFields({ result, multi, tpLabel, ppLabel, wrap = (field) => field, disabled, autoPlaced }: Props) {
   const { t } = useTranslation("deploy");
   const form = Form.useFormInstance();
-  const tp = Form.useWatch("tp", { form, preserve: true });
+  const [tp, nodeCount] = Form.useWatch(
+    (values) => [values.tp, values.nnodes] as const,
+    { form, preserve: true },
+  ) ?? [];
   const split = result?.parallelism;
+  const tpRequired = multi && autoPlaced;
   const hint = split
     ? multi
       ? t("workbench.parallel.split", { tp: split.tp, pp: split.pp, perNode: split.gpus_per_node })
       : t("workbench.parallel.total", { gpus: split.gpus_per_node })
-    : autoPlaced && (tp == null || tp === "")
-      ? t("workbench.parallel.tpRequiredAuto")
+    : tpRequired
+      ? (tp == null || tp === "" ? t("workbench.parallel.tpRequiredAuto") : undefined)
       : multi
         ? t("workbench.parallel.fromNodes")
         : t("workbench.parallel.tpAutomatic");
   return (
     <>
       {wrap(
-        <Form.Item label={tpLabel} name="tp" extra={<Typography.Text type="secondary">{hint}</Typography.Text>}>
-          <InputNumber min={1} disabled={disabled} placeholder={t("workbench.automatic")} style={{ width: "100%" }} />
+        <Form.Item
+          label={tpLabel}
+          name="tp"
+          rules={tpRequired ? [{ required: true, message: t("workbench.node.autoGroupRequiresTP") }] : undefined}
+          extra={<Typography.Text type="secondary">{hint}</Typography.Text>}
+        >
+          <InputNumber min={1} disabled={disabled} placeholder={t(tpRequired ? "workbench.parallel.tpRequiredPlaceholder" : "workbench.automatic")} style={{ width: "100%" }} />
         </Form.Item>,
         "tp",
       )}
       {wrap(
-        <Form.Item label={ppLabel} name="pp">
+        <Form.Item
+          label={ppLabel}
+          name="pp"
+          extra={tpRequired && !split ? t("workbench.parallel.autoRankExample", { nodes: nodeCount || 2 }) : undefined}
+        >
           <InputNumber min={1} disabled={disabled} placeholder="1" style={{ width: "100%" }} />
         </Form.Item>,
         "pp",

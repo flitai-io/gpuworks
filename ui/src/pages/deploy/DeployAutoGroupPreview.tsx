@@ -20,6 +20,8 @@ export default function AutoGroupPreview({
 }) {
   const { t } = useTranslation("deploy");
   const ranks = result?.rank_commands ?? [];
+  const placementError = result?.errors?.find((error) => error.field === "placement_mode")?.code;
+  const placementBlocked = result?.preflight?.checks?.some((check) => check.id === "automatic_placement" && check.status === "fail");
   let body: ReactNode;
   if (loading) {
     body = <Typography.Text type="secondary">{t("workbench.node.evaluating")}</Typography.Text>;
@@ -41,19 +43,21 @@ export default function AutoGroupPreview({
       </div>
     );
   } else {
-    body = (
-      <Alert
-        type="info"
-        showIcon
-        message={ready ? t("workbench.node.autoGroupNoPreview") : t("workbench.node.chooseModelFirst")}
-      />
-    );
+    let message = t("workbench.node.autoGroupUnavailable");
+    if (!ready) {
+      message = t("workbench.node.chooseModelFirst");
+    } else if (placementError === "AUTO_PLACEMENT_TP_REQUIRED") {
+      message = t("workbench.node.autoGroupRequiresTP");
+    } else if (placementError === "UNIT_PLACEMENT_NONE") {
+      message = t("workbench.node.autoGroupNoPreview");
+    }
+    body = <Alert type="info" showIcon message={message} />;
   }
   return (
     <>
       <div className="deploy-node-card-head">
         <strong>{t("workbench.node.previewTitle")}</strong>
-        {result?.preflight && !loading && (
+        {result?.preflight && !loading && !placementBlocked && (
           <Tag color={result.preflight.ok ? "success" : "error"}>
             {result.preflight.ok ? t("workbench.node.preflightPassed") : t("workbench.node.preflightFailed")}
           </Tag>

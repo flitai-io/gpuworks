@@ -441,7 +441,7 @@
     "RECOVERY_PROVIDER_INSTANCE_GONE": "The node’s cloud instance no longer exists.",
     "RECOVERY_STEP_FAILED": "A recovery step failed.",
     "DISTRIBUTED_GPU_COUNT": "Node “{{node}}” has {{available}} GPUs; TP × PP needs {{required}} per node.",
-    "DISTRIBUTED_PARALLEL_INDIVISIBLE": "TP {{tp}} × PP {{pp}} cannot be shared equally by {{nodes}} nodes; make it a multiple of the node count.",
+    "DISTRIBUTED_PARALLEL_INDIVISIBLE": "Adjust TP {{tp}}, PP {{pp}}, or DP so their product is divisible by the node count ({{nodes}}).",
     "MODEL_SOURCE_ID_REQUIRED": "Enter a model source ID.",
     "QUICK_REGISTER_FIELDS_REQUIRED": "Enter both a model source and source ID.",
     "QUICK_REGISTER_SOURCE_UNSUPPORTED": "The selected model source is not supported.",

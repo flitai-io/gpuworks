@@ -1525,7 +1525,7 @@ PD 请求（`placement.pd`）：单元可以不写 `node_uuid`，写了的单元
 错误显示在对应控件旁；`POST /api/v1/deployments`（create）保持 400/409 不变。无法归因到字段的
 失败（鉴权、模板解析失败、服务端错误）仍按原状态码。
 
-请求层的独立校验会合并报告；请求层有字段错误时不继续启动试算，响应仍提供已经确定的模板、可选节点，以及能够解析的健康检查信息。模型 ID 在模型解析阶段找不到时，归到 `model_id` 字段；尚未解析到模型时，健康检查能力可以缺省。自动多机放置失败会先返回 `placement_mode` 错误，不继续后续校验。字段路径约定：
+请求层的独立校验会合并报告；请求层有字段错误时不继续启动试算，响应仍提供已经确定的模板、可选节点，以及能够解析的健康检查信息。模型 ID 在模型解析阶段找不到时，归到 `model_id` 字段；尚未解析到模型时，健康检查能力可以缺省。自动多机放置缺少 TP、并行度无法均分或找不到节点组时，仍返回可解析的模板匹配、节点资格和表单值。`preflight.checks` 报告失败的 `automatic_placement` 前置检查，未选出节点组时，被阻塞的检查返回 `skip`。自动匹配规格时，选组前的节点资格涵盖节点条件、运行时和符合请求筛选条件的候选规格。选组后确定最终规格并检查其启动命令。显式指定的规格无法解析时，响应保留模板字段错误和放置错误，省略节点资格。字段路径约定：
 
 - 快捷参数直接使用字典 key（即表单字段名），如 `max_model_len`、`gpu_memory_utilization`；
 - 请求级字段使用请求 JSON 中的名称：`replicas`、`nnodes`、`engine`、`target_vendor`、`extra_args`、
@@ -1559,7 +1559,7 @@ extra_args 解析（`EXTRA_ARGS_INVALID`）、挂载（`MOUNT_CONTAINER_PATH`/`M
 | `eligible_nodes` | 每个节点按本草稿的节点条件（含厂商；手动选的那台节点本身不算条件，下拉正是用来选它的）/模板 GPU 谓词/在线状态判定，`eligible=false` 时 `reasons[]` 给原因（`node_offline`、`node_requirements_unmet`、`vendor_mismatch`、`chip_mismatch`；节点条件本身无效时每个节点都是 `node_requirements_invalid`，不会全部显示为合格）；没有显存限制的单机草稿里，空载也放不下一个副本的节点同样 `eligible=false`：卡数或单卡显存放不下时原因是调度器的 `no_fit`（带需要与可用的显存），所给的卡上启动命令解析不出来时是 `placement_rejected`（`params.detail` 为创建选它时返回的错误文本），模型比该节点上存储的缓存上限还大时是 `model_exceeds_cache_limit`。这个判定与放置模式、草稿当前选了哪台节点无关，只看节点本身，不看当前占用（卡被占、离线、磁盘满都不会因此标为不合格）。同一硬件规格且适用存储与缓存上限相同的节点合并判定一次，每次评估最多判定 16 种，超出的种类不判定、保持合格；某一种判定出错时该种节点同样保持合格。带显存限制的草稿、多机与 PD 草稿不做这项判定，所以 `eligible=true` 不保证创建一定成功；节点下拉只渲染此列表 |
 | `gpu_candidates` | 仅手动单机评估返回 `{node_uuid, items}`；每张卡包含 `index`、`available`，不可用时含结构化 `reason`。表示当前资源可用性，不表示单卡能承载模型，也不禁止选择资源不可用的卡；UI 仍按节点卡片的 `schedulable` 控制新增选择。字段缺失表示未评估，模型/多卡/拓扑可行性继续由 `plan` 判断。 |
 | `weight_sources` | 模板 spec 声明的权重来源（`provider`/`repo_id`/`revision`/`subfolder`）+ `suggested`（服务端建议）与 `registered`（本集群已有登记行，按 repo id 身份判定）；选定后仍由客户端调注册 API |
-| `preflight` | 仅 `nnodes>1`：请求级预检 `{ok, checks}`。`checks` 列出查过的每一项（通过的也列出）：`id` 为 `node_count`、`node_list`、`port_range`、`node_online`（每个节点一项，`params.node` 为节点）或 `shared_network`；`status` 只取 `pass`/`warn`/`fail`/`skip`/`na`；`code` 与 `params` 给出结果，`message` 为英文 fallback；因前面的检查失败而未执行的项为 `skip`、`code` 为 `PREFLIGHT_BLOCKED`，`blocked_by` 给出挡住它的检查 id；`evidence` 只在没有码能说明原因时带原始错误。没有 `fail` 时 `ok` 为 true。深度网络探测仍在独立预检 RPC（CLI 保留），前端不再编排 |
+| `preflight` | 仅 `nnodes>1`：请求级预检 `{ok, checks}`。`checks` 列出查过的每一项（通过的也列出）：`id` 为 `automatic_placement`、`node_count`、`node_list`、`port_range`、`node_online`（每个节点一项，`params.node` 为节点）或 `shared_network`；`status` 只取 `pass`/`warn`/`fail`/`skip`/`na`；`code` 与 `params` 给出结果，`message` 为英文 fallback；因前面的检查失败而未执行的项为 `skip`、`code` 为 `PREFLIGHT_BLOCKED`，`blocked_by` 给出挡住它的检查 id；`evidence` 只在没有码能说明原因时带原始错误。没有 `fail` 时 `ok` 为 true。深度网络探测仍在独立预检 RPC（CLI 保留），前端不再编排 |
 | `diagnostics` | 模型获取的检查说明 `{checks, truncated?}`（创建被拒时也在错误体里）：每项 `id`、`status`（只取 `pass`/`warn`/`fail`/`skip`/`na`；`warn` 为副本或传输仍在进行、启动时要填缓存；`skip` 为没查或没观测到，被前面的检查挡住时带 `blocked_by`；`na` 为不适用）、`message`（`{code, params, message}`，`params.reason` 为具体原因，`params.observer` 为证据来源），最多 128 项、64 KiB，超出时 `truncated` 为 true |
 | `eviction` | 当前显存不足但可通过休眠醒着的部署腾出空间时返回候选；每项含 `instance_uuid`、`deployment_id`、`deployment`、`gpu_indexes` 和 `frees_gib` |
 

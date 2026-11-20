@@ -274,7 +274,7 @@ test("a PD draft opens on automatic: no node or GPU pickers, units counted, payl
   // One line says how automatic placement works; that the list is only a
   // preview sits behind the help mark on that line.
   const unitsLine = screen.getByText(node.autoUnitsDescription);
-  assert.equal(screen.queryByText(node.autoUnitsHelp), null);
+  assert.equal(screen.queryByText(node.autoUnitsHelp) === null, true);
   await userEvent.setup({ document: dom.window.document }).hover(within(unitsLine).getByRole("button", { name: commonLocale.helpTip.label }));
   assert.equal((await screen.findByRole("tooltip")).textContent, node.autoUnitsHelp);
   assert.equal(screen.queryAllByRole("combobox", { name: /instance 1 node$/ }).length, 0, "no unit node picker");
@@ -315,7 +315,7 @@ test("the automatic PD preview is the server's pick, titled as a preview; the fo
   await preview.findByText(deployLocale.pd.previewAutoTitle);
   await preview.findByText("GPU Node 2");
   assert.ok(preview.getByText("GPU Node 1"));
-  assert.equal(preview.queryByText(deployLocale.pd.previewTitle), null);
+  assert.equal(preview.queryByText(deployLocale.pd.previewTitle) === null, true);
 });
 
 test("nothing to place a PD draft on is the server's explanation beside the switch, and the draft stays editable", async () => {
@@ -363,7 +363,7 @@ test("a multi-node draft opens on automatic: only the node count and TP are stat
   await screen.findByText(node.multiAutoTitle);
   assert.ok(selected(node.auto));
   assert.ok(screen.getByText(node.autoUnitsDescription));
-  assert.equal(screen.queryByPlaceholderText(node.multiPlaceholder), null, "no per-rank node picker");
+  assert.equal(screen.queryByPlaceholderText(node.multiPlaceholder) === null, true, "no per-rank node picker");
   assert.ok(screen.getByText(deployLocale.workbench.parallel.tpRequiredAuto), "automatic placement asks for a TP");
   await userEvent.setup({ document: dom.window.document }).type(screen.getByLabelText(deployLocale.workbench.resource.tp), "4");
   await waitFor(() => {
@@ -375,7 +375,7 @@ test("a multi-node draft opens on automatic: only the node count and TP are stat
     assert.equal(body.node_uuid, undefined);
     assert.deepEqual(body.placement, { tp: 4 });
   });
-  assert.equal(screen.queryByText(deployLocale.workbench.parallel.tpRequiredAuto), null);
+  assert.equal(screen.queryByText(deployLocale.workbench.parallel.tpRequiredAuto) === null, true);
 });
 
 test("the automatic multi-node preview lists the server's ranks as a read-only preview", async () => {
@@ -397,7 +397,7 @@ test("the automatic multi-node preview lists the server's ranks as a read-only p
   assert.ok(preview.getByText("Master"));
   assert.ok(preview.getByText("Worker"));
   assert.ok(screen.getByText(node.previewTitle));
-  assert.equal(document.querySelector('[data-testid=auto-group-preview] [role="combobox"]'), null, "nothing to pick in a preview");
+  assert.equal(document.querySelector('[data-testid=auto-group-preview] [role="combobox"]') === null, true, "nothing to pick in a preview");
 });
 
 test("a multi-node draft that cannot be placed shows the server's reason, in the user's words", async () => {
@@ -408,7 +408,22 @@ test("a multi-node draft that cannot be placed shows the server's reason, in the
   await screen.findByText(node.autoGroupNoPreview);
 });
 
-test("a missing TP is the server's AUTO_PLACEMENT_TP_REQUIRED beside the switch", async () => {
+test("missing TP asks for input and does not claim the node group cannot fit", async () => {
+  const AutoGroupPreview = (await import("../src/pages/deploy/DeployAutoGroupPreview.tsx")).default;
+  const response = {
+    ...baseAnswer, ok: false, auto_placed: true,
+    errors: [{ field: "placement_mode", code: "AUTO_PLACEMENT_TP_REQUIRED" }],
+  };
+  render(
+    <I18nextProvider i18n={i18n}>
+      <AutoGroupPreview result={response as never} loading={false} ready />
+    </I18nextProvider>,
+  );
+  assert.equal(screen.queryByText(node.autoGroupNoPreview) === null, true);
+  assert.ok(screen.getByText(node.autoGroupRequiresTP));
+});
+
+test("multi-node automatic placement exposes TP as a required field", async () => {
   recordEvaluate(() => ({
     ...baseAnswer, ok: false, auto_placed: true,
     errors: [{ field: "placement_mode", code: "AUTO_PLACEMENT_TP_REQUIRED" }],
@@ -416,6 +431,11 @@ test("a missing TP is the server's AUTO_PLACEMENT_TP_REQUIRED beside the switch"
   await openDeployPage();
   await chooseTopology("multi");
   await waitFor(() => assert.ok(pool().getByText(errorText("AUTO_PLACEMENT_TP_REQUIRED"))), { timeout: 4000 });
+  const rankExample = deployLocale.workbench.parallel.autoRankExample.replaceAll("{{nodes}}", "2");
+  assert.equal(Boolean(screen.getByText(rankExample)), true);
+  const tp = screen.getByLabelText(deployLocale.workbench.resource.tp);
+  assert.equal(tp.getAttribute("aria-required"), "true");
+  assert.equal(tp.getAttribute("placeholder") === deployLocale.workbench.automatic, false);
 });
 
 test("switching a multi-node draft to manual shows the node picker and states the nodes", async () => {
@@ -505,7 +525,7 @@ test("a clone of a multi-node deployment the platform places opens on automatic 
   await openFrom(storedMulti, { ...storedDeployment, placement_mode: "auto" });
   await waitFor(() => assert.ok(selected(node.auto)));
   assert.ok(screen.getByText(node.autoUnitsDescription));
-  assert.equal(screen.queryByPlaceholderText(node.multiPlaceholder), null);
+  assert.equal(screen.queryByPlaceholderText(node.multiPlaceholder) === null, true);
 });
 
 test("a stored draft that does not say who places it reads as manual, with its nodes", async () => {

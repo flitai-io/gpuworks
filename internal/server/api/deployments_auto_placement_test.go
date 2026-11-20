@@ -201,6 +201,107 @@ func TestCreateAutoMultiNodeRefusals(t *testing.T) {
 	}
 }
 
+func TestEvaluateAutoMultiNodeTemplatePlacement(t *testing.T) {
+	r := newAutoRig(t, 2)
+	const spec = "bf16-vllm-nvidia-general"
+	model := store.InferenceModel{ModelID: "org/auto", Source: "upstream", Specs: []store.InferenceSpecRow{{
+		Name: spec, Engine: "vllm", Scenario: "balanced", Image: "vllm/vllm-openai:v0.25.1",
+		Quantization: "bf16", WeightBytes: 1 << 30, GPUs: `{"vendor":"nvidia","cc":">=8.0"}`,
+		WeightSources: `[{"provider":"huggingface","repo_id":"org/auto","revision":"main"}]`,
+	}}}
+	if err := r.st.ReconcileInferenceCatalog([]store.InferenceModel{model}); err != nil {
+		t.Fatal(err)
+	}
+	template, err := r.st.InferenceModelByModelID(model.ModelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, placement, code, field string
+		dynamic, unregistered        bool
+	}{
+		{name: "with TP", placement: `,"placement":{"tp":1,"pp":2}`},
+		{name: "missing TP", code: ErrorAutoPlacementTPRequired, field: "placement_mode"},
+		{name: "insufficient cards", placement: `,"placement":{"tp":8,"pp":2}`, code: ErrorUnitPlacementNone, field: "placement_mode"},
+		{name: "TP alone", placement: `,"placement":{"tp":1}`, code: ErrorDistributedParallelIndivisible, field: "placement.pp"},
+		{name: "hardware-selected spec succeeds", placement: `,"placement":{"tp":1,"pp":2}`, dynamic: true},
+		{name: "hardware-selected spec with TP alone", placement: `,"placement":{"tp":1}`, code: ErrorDistributedParallelIndivisible, field: "placement.pp", dynamic: true},
+		{name: "hardware-selected spec with no TP", code: ErrorAutoPlacementTPRequired, field: "placement_mode", dynamic: true},
+		{name: "hardware-selected spec with no capacity", placement: `,"placement":{"tp":8,"pp":2}`, code: ErrorUnitPlacementNone, field: "placement_mode", dynamic: true},
+		{name: "unregistered weights with no TP", code: ErrorAutoPlacementTPRequired, field: "placement_mode", unregistered: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var specFields string
+			if !tc.dynamic {
+				specFields = fmt.Sprintf(`,"template_spec_source":"upstream","template_spec_name":%q`, spec)
+			}
+			modelID, templateID := r.modelID, template.ID
+			const unregisteredRepo = "org/unregistered"
+			if tc.unregistered {
+				unregistered := model
+				unregistered.ModelID = unregisteredRepo
+				unregistered.Specs = append([]store.InferenceSpecRow(nil), model.Specs...)
+				unregistered.Specs[0].WeightSources = `[{"provider":"huggingface","repo_id":"org/unregistered","revision":"main"}]`
+				if err := r.st.ReconcileInferenceCatalog([]store.InferenceModel{unregistered}); err != nil {
+					t.Fatal(err)
+				}
+				target, err := r.st.InferenceModelByModelID(unregisteredRepo)
+				if err != nil {
+					t.Fatal(err)
+				}
+				modelID, templateID = 0, target.ID
+			}
+			body := fmt.Sprintf(`{"model_id":%d,"template_id":%d,"target_vendor":"nvidia","nnodes":2,"placement_mode":"auto","quick_params":{"max_model_len":4096}%s%s}`, modelID, templateID, specFields, tc.placement)
+			rec := r.do(r.session, http.MethodPost, "/api/v1/evaluate", body)
+			var out dto.EvaluateResponse
+			if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil {
+				t.Fatalf("evaluate = %d %s", rec.Code, rec.Body)
+			}
+			if tc.unregistered {
+				models, err := r.st.ListModels(unregisteredRepo)
+				if err != nil || len(models) != 0 {
+					t.Fatalf("refused evaluation registered a model: count=%d err=%v", len(models), err)
+				}
+			}
+			if tc.code == "" {
+				if !out.OK || !out.AutoPlaced || len(out.RankCommands) != 2 || out.Preflight == nil || !out.Preflight.OK || out.Parallelism == nil || out.Parallelism.GPUsPerNode != 1 {
+					t.Fatalf("TP=1 should place two ranks and pass preflight: %s", rec.Body)
+				}
+			} else {
+				if out.OK || len(out.Errors) != 1 || out.Errors[0].Code != tc.code || out.Errors[0].Field != tc.field || len(out.RankCommands) != 0 {
+					t.Fatalf("wanted a placement error %s and no rank preview: %s", tc.code, rec.Body)
+				}
+				if out.Preflight == nil || out.Preflight.OK || len(out.Preflight.Checks) != 5 ||
+					out.Preflight.Checks[0].ID != "automatic_placement" || out.Preflight.Checks[0].Code != tc.code || out.Preflight.Checks[0].Status != proto.CheckFail {
+					t.Fatalf("preflight should explain why the group was not selected: %s", rec.Body)
+				}
+				for i, id := range []string{"node_count", "node_list", "port_range", "shared_network"} {
+					check := out.Preflight.Checks[i+1]
+					if check.ID != id || check.Status != proto.CheckSkip ||
+						!slices.Equal(check.BlockedBy, []string{"automatic_placement"}) || check.Code != "PREFLIGHT_BLOCKED" {
+						t.Fatalf("expected %s to be blocked by automatic placement: %s", id, rec.Body)
+					}
+				}
+				if tc.code == ErrorUnitPlacementNone && !tc.dynamic && (out.FormValues["tp"] != float64(8) || out.FormValues["pp"] != float64(2)) {
+					t.Fatalf("a capacity refusal should keep the entered TP and PP: %s", rec.Body)
+				}
+			}
+			if len(out.EligibleNodes) != 2 {
+				t.Fatalf("evaluate lost node eligibility: %s", rec.Body)
+			}
+			if tc.dynamic && tc.code != "" {
+				if out.TemplateMatch != "" || out.TemplateSpecName != "" || out.FormValues != nil {
+					t.Fatalf("hardware-dependent defaults should wait for the leader: %s", rec.Body)
+				}
+				return
+			}
+			if out.TemplateMatch == "" || out.TemplateSpecName != spec || out.FormValues["max_model_len"] != float64(4096) {
+				t.Fatalf("evaluate lost node eligibility, template match or form values: %s", rec.Body)
+			}
+		})
+	}
+}
+
 // With nothing to place on the request is a conflict, not a bad request, and
 // the counts say how many nodes each check left out as JSON numbers.
 func TestCreateAutoMultiNodeWithNoRoomSaysWhy(t *testing.T) {
@@ -285,5 +386,92 @@ func TestCreateManualShapesKeepTheirMode(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &created)
 	if r.storedDeployment(t, created.ID).UnitsAuto {
 		t.Fatal("a single-node deployment is not placed by units")
+	}
+}
+
+func TestEvaluateRefusedPlacementKeepsNodeEligibility(t *testing.T) {
+	r := newAutoRig(t, 3)
+	const specName = "review-eligible"
+	for _, vendor := range []string{"nvidia", "kunlunxin"} {
+		t.Run(vendor, func(t *testing.T) {
+			status := nodeStatusTwoGPUs("au-3", 3)
+			predicate := `{"vendor":"nvidia","cc":">=8.0"}`
+			if vendor == "nvidia" {
+				for i := range status.GPUs {
+					gpu := &status.GPUs[i]
+					gpu.Name, gpu.ArchID, gpu.ComputeCapability = "Tesla V100", "sm_70", "7.0"
+				}
+			} else {
+				predicate = `{"vendor":"kunlunxin"}`
+				status.Sys.GPUVendor, status.Sys.Framework = "kunlunxin", "xpu"
+				status.Sys.OS, status.Sys.RuntimeDriver = "linux", "docker"
+				for i := range status.GPUs {
+					gpu := &status.GPUs[i]
+					gpu.Vendor, gpu.Name, gpu.ArchID, gpu.ComputeCapability = vendor, "P800 PCIe", "kl3", ""
+				}
+			}
+			if err := r.st.UpdateNodeStatus("au-3", status); err != nil {
+				t.Fatal(err)
+			}
+			spec := store.InferenceSpecRow{
+				Name: specName, Engine: "vllm", Scenario: "balanced", Image: "vllm/vllm-openai:v0.25.1",
+				Quantization: "bf16", WeightBytes: 1 << 30, GPUs: predicate,
+				WeightSources: `[{"provider":"huggingface","repo_id":"org/auto","revision":"main"}]`,
+			}
+			model := store.InferenceModel{ModelID: "org/auto", Source: "upstream", Specs: []store.InferenceSpecRow{spec}}
+			if vendor == "nvidia" {
+				other := spec
+				other.Name, other.Scenario, other.GPUs = "v100-spec", "throughput", `{"vendor":"nvidia","cc":"7.0"}`
+				model.Specs = append(model.Specs, other)
+			}
+			if err := r.st.ReconcileInferenceCatalog([]store.InferenceModel{model}); err != nil {
+				t.Fatal(err)
+			}
+			template, err := r.st.InferenceModelByModelID(model.ModelID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, tc := range []struct {
+				name, spec, pin string
+			}{
+				{name: "named", spec: specName},
+				{name: "hardware-selected"},
+				{name: "stale", spec: "retired"},
+				{name: "incompatible pin", spec: specName, pin: `,"node_uuids":["au-3"]`},
+			} {
+				if tc.pin != "" && vendor != "nvidia" {
+					continue
+				}
+				t.Run(tc.name, func(t *testing.T) {
+					body := fmt.Sprintf(`{"model_id":%d,"template_id":%d,"target_vendor":%q,"scenario":"balanced","nnodes":2,"placement_mode":"auto","template_spec_name":%q%s}`, r.modelID, template.ID, vendor, tc.spec, tc.pin)
+					rec := r.do(r.session, http.MethodPost, "/api/v1/evaluate", body)
+					var out dto.EvaluateResponse
+					if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil || out.OK ||
+						!slices.ContainsFunc(out.Errors, func(field dto.FieldError) bool { return field.Code == ErrorAutoPlacementTPRequired }) {
+						t.Fatalf("evaluate = %d %s", rec.Code, rec.Body)
+					}
+					if tc.spec == "retired" {
+						if len(out.EligibleNodes) != 0 || !slices.ContainsFunc(out.Errors, func(field dto.FieldError) bool {
+							return field.Field == "template_spec_name" && strings.Contains(fmt.Sprint(field.Params["detail"]), "does not exist")
+						}) {
+							t.Fatalf("stale spec must be reported with no eligibility result: %s", rec.Body)
+						}
+						return
+					}
+					index := slices.IndexFunc(out.EligibleNodes, func(node dto.EligibleNode) bool { return node.UUID == "au-3" })
+					if index == -1 {
+						t.Fatalf("missing candidate: %s", rec.Body)
+					}
+					node := out.EligibleNodes[index]
+					if vendor == "kunlunxin" {
+						if !node.Eligible {
+							t.Fatalf("P800 should be eligible: %+v", node)
+						}
+					} else if node.Eligible || !slices.ContainsFunc(node.Reasons, func(reason dto.ScheduleReason) bool { return reason.Code == "chip_mismatch" }) {
+						t.Fatalf("V100 should fail the requested scenario's template predicate: %+v", node)
+					}
+				})
+			}
+		})
 	}
 }

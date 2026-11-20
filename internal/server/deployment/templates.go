@@ -9,6 +9,7 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/chipmatch"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/inferenceapi"
 	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
@@ -25,6 +26,7 @@ type templateSelection struct {
 	StoragePins      []uint
 	Model            *store.InferenceModel
 	Spec             *store.InferenceSpecRow
+	CandidateSpecs   []chipmatch.Spec
 	Weight           weightSource
 	SuggestedWeight  weightSource
 	ExplicitProvider bool

@@ -1,6 +1,9 @@
 package deployment
 
 import (
+	"fmt"
+	"strings"
+
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
@@ -46,4 +49,48 @@ func evaluationLaunchRequest(env evaluatePlanEnv, node *store.Node) planning.Lau
 		RuntimeImageCached: env.nodeImageCached, APIContract: selection.APIContract,
 		ModelRules: store.SourceRules{Pinned: store.StoragePins(req.NodeRequirements)},
 	}
+}
+
+func (s *Service) evaluateTemplateSelection(req *dto.DeployRequest, hardware templateHardware, placementFailed bool) (templateSelection, error) {
+	// Keep the candidate predicates before the leader determines the final spec.
+	if placementFailed && req.TemplateID != 0 && strings.TrimSpace(req.TemplateSpecName) == "" {
+		model, err := s.d.Store.InferenceModelByID(req.TemplateID)
+		if err != nil {
+			return templateSelection{}, err
+		}
+		if _, err := decodeUnsupported(*model); err != nil {
+			return templateSelection{}, err
+		}
+		_, candidates, err := matchingSpecCandidates(*model, req.TemplateSpecSource, "", req.Engine, req.Scenario)
+		if err != nil {
+			return templateSelection{}, err
+		}
+		if len(candidates) == 0 {
+			return templateSelection{}, fmt.Errorf("no inference specs match the selected source, engine and scenario")
+		}
+		return templateSelection{Model: model, CandidateSpecs: candidates}, nil
+	}
+	if placementFailed && req.TemplateID != 0 {
+		// The named contract can be resolved independently of a partial pin.
+		hardware = templateHardware{}
+	}
+	selection, err := s.applyTemplateDefaults(req, hardware)
+	if err != nil {
+		return templateSelection{}, err
+	}
+	return selection, nil
+}
+
+// Feature extraction uses model architecture but does not need persistent
+// artifact identities. A failed placement must never register weights.
+func (s *Service) featurePreviewModel(id uint, selection templateSelection) *store.Model {
+	if id != 0 {
+		if model, err := s.d.Store.GetModel(id); err == nil {
+			return model
+		}
+	}
+	if selection.Model != nil {
+		return &store.Model{Arch: selection.Model.Architecture}
+	}
+	return nil
 }
