@@ -32,7 +32,8 @@ const i18n = require('i18next').createInstance();
 const h = React.createElement;
 const vendors = ['nvidia', 'ascend', 'amd', 'hygon', 'ppu', 'kunlunxin'];
 const chips = vendors.flatMap(vendor => Array.from({length:8}, (_,i) => ({vendor, name:`MOCK-${vendor}-${i}`})));
-const models = ['black-forest-labs', 'thinkingmachines', 'deepseek-ai', 'baseten', 'fishaudio', 'tinyllama'].flatMap(org => Array.from({length:12}, (_,i) => ({
+// Include organizations with no shipped artwork to exercise initials on both themes.
+const models = ['black-forest-labs', 'thinkingmachines', 'deepseek-ai', 'fixture-org-a', 'fixture-org-b', 'fixture-org-c'].flatMap(org => Array.from({length:12}, (_,i) => ({
  id:`${org}-${i}`, model_id:`${org}/MOCK-long-model-name-${i}`, source:'upstream',
  specs:vendors.map((vendor,j)=>({id:j,name:`MOCK-spec-${j}`,engine:'vllm',quantization:'fp8',
  gpus:{vendor,name:`MOCK-${vendor}-0`},weight_sources:[{provider:'huggingface',repo_id:`${org}/MOCK-weights-${i}`}],
@@ -87,8 +88,12 @@ class TemplateCatalogLayout(unittest.TestCase):
 
         page.route("**/*", route)
         page.goto("http://template-layout.test/?locale=" + locale + ("&drawer" if drawer else "&monitor" if monitor else ""))
-        if dark:
-            page.evaluate("document.documentElement.classList.add('dark')")
+        page.evaluate('''theme => {
+            const root = document.documentElement;
+            root.dataset.theme = theme;
+            root.classList.toggle('dark', theme === 'dark');
+            root.style.colorScheme = theme;
+        }''', "dark" if dark else "light")
         page.add_style_tag(content=self.css)
         page.add_script_tag(content=self.bundle)
         return page
@@ -99,6 +104,24 @@ class TemplateCatalogLayout(unittest.TestCase):
             target = Path(output)
             target.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(target / name), full_page=True)
+
+    def test_vendor_marks_follow_the_theme(self):
+        transparent = 'rgba(0, 0, 0, 0)'
+        for dark in (False, True):
+            with self.subTest(dark=dark):
+                page = self.render_page(1280, dark=dark)
+                groups = page.locator('.template-hardware-group')
+                kunlun = groups.locator('.vendor-logo-kunlunxin .vendor-mark')
+                nvidia = groups.locator('.vendor-logo-nvidia .vendor-mark')
+                expect(kunlun.locator('img')).to_be_visible()
+                expect(kunlun).to_have_css('background-color', transparent)
+                expect(kunlun.locator('img')).to_have_css('background-color', transparent)
+                if dark:
+                    expect(kunlun.locator('img')).to_have_css('filter', 'none')
+                else:
+                    expect(kunlun.locator('img')).not_to_have_css('filter', 'none')
+                expect(nvidia).to_have_css('background-color', 'rgb(255, 255, 255)' if dark else transparent)
+                expect(nvidia.locator('img')).to_have_css('filter', 'none')
 
     def test_dense_catalog_owns_scroll_and_keeps_names_and_logos(self):
         for width in (1280, 1920):
@@ -117,13 +140,19 @@ class TemplateCatalogLayout(unittest.TestCase):
                     self.assertGreater(first_brand['x'], chip_label['x'] + chip_label['width'])
                     expect(page.get_by_text('Model type', exact=True)).to_be_visible()
                     heading = page.locator('.template-filter-heading')
-                    surface = page.locator('.template-filter-panel [role="region"] .bg-surface-floating')
+                    surface = page.locator('.template-filter-panel [role="region"] > .bg-surface-floating')
                     self.assertNotEqual(heading.evaluate('el=>getComputedStyle(el).backgroundColor'), surface.evaluate('el=>getComputedStyle(el).backgroundColor'))
                     expect(page.get_by_text('Chip models', exact=True)).to_be_visible()
                     expect(page.get_by_text('Detected in this environment', exact=True)).to_have_count(0)
                     heights = page.locator('[data-slot="table-head"]').evaluate_all('els=>els.map(el=>el.getBoundingClientRect().height)')
-                    shortest_row = min(page.locator('[data-slot="table-body"] tr').evaluate_all('els=>els.map(el=>el.getBoundingClientRect().height)'))
-                    self.assertTrue(all(abs(height-shortest_row) <= 1 for height in heights), (heights, shortest_row))
+                    # Each catalog name includes a second line of metadata. The
+                    # header follows the density of a single line of body text.
+                    cell = page.locator('[data-slot="table-body"] td').first
+                    single_line = cell.evaluate('''el => {
+                        const s = getComputedStyle(el);
+                        return parseFloat(s.lineHeight) + parseFloat(s.paddingTop) + parseFloat(s.paddingBottom);
+                    }''')
+                    self.assertTrue(heights and all(abs(height - single_line) <= 1 for height in heights), (heights, single_line))
                     self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'))
                     container = page.locator('[data-slot="table-container"]')
                     if width == 1280:

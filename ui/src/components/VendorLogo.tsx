@@ -24,12 +24,9 @@ export function hasVendorMark(vendor: string) {
   return Boolean(VENDOR_ASSETS[vendorMarkKey(vendor)]);
 }
 
-// VendorMarkImage is the one way the console draws a vendor mark. The wrapper
-// carries the mark's ink class, and styles.css puts the plate that ink needs
-// behind it on each theme (VENDOR_LOGO_INK; internal/uiassets enforces that
-// no other file draws a mark). Sizing stays with the caller's img style; a
-// plated wrapper adds its padding outside it and exposes the padding as
-// --vendor-mark-pad-x/-y for callers that must fit a fixed box.
+// The shared wrapper selects the theme treatment from the artwork's ink tone.
+// Callers size the image. A wrapper that adds a plate exposes its extra
+// padding as --vendor-mark-pad-x/-y for callers with a fixed box.
 export function VendorMarkImage({ vendor, alt, style }: { vendor: string; alt: string; style?: CSSProperties }) {
   const key = vendorMarkKey(vendor);
   const src = VENDOR_ASSETS[key];

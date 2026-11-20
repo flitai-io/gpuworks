@@ -108,10 +108,10 @@
   align-items: center;
   gap: 9px;
   padding: 8px 14px;
-  border: 1px solid #edf0f4;
+  border: 1px solid var(--border-subtle);
   border-bottom: 0;
   border-radius: 9px 9px 0 0;
-  background: #fafbfc;
+  background: var(--surface-raised);
 }
 
 .template-spec-vendor-group > header img {

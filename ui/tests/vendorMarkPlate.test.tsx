@@ -4,8 +4,6 @@ import React from "react";
 import { createI18n } from "./helpers/dom.ts";
 import { I18nextProvider } from "react-i18next";
 
-// A mark's plate follows its declared ink (VENDOR_LOGO_INK): the ink class on
-// the image's wrapper is what styles.css plates on each theme.
 const { i18n } = await createI18n(["common"]);
 const { cleanup, render, screen } = await import("@testing-library/react");
 const { default: VendorLogo, VendorMarkImage, hasVendorMark } = await import("../src/components/VendorLogo.tsx");
@@ -15,7 +13,7 @@ afterEach(cleanup);
 
 const inkClass = (img: HTMLElement) => [...(img.parentElement?.classList ?? [])].filter((name) => name.startsWith("vendor-mark"));
 
-test("VendorLogo draws each mark inside the plate class of its declared ink", () => {
+test("VendorLogo draws each mark with the class for its declared ink tone", () => {
   render(<I18nextProvider i18n={i18n}><VendorLogo vendor="nvidia" /><VendorLogo vendor="kunlunxin" /><VendorLogo vendor="ppu" /></I18nextProvider>);
   assert.deepEqual(inkClass(screen.getByRole("img", { name: "NVIDIA" })), ["vendor-mark", "vendor-mark-ink-dark"]);
   assert.deepEqual(inkClass(screen.getByRole("img", { name: "Kunlunxin" })), ["vendor-mark", "vendor-mark-ink-light"]);

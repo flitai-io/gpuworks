@@ -12,8 +12,8 @@
 //   Sans Bold, in Apple's near-black, to sit with the other wordmarks.
 // Every mark is a horizontal wordmark on a transparent canvas: SVG (preferred)
 // or PNG with alpha, no padding box or background of its own. Draw a mark only
-// with VendorMarkImage (VendorLogo.tsx), which gives it the plate its ink tone
-// (VENDOR_LOGO_INK) needs on each theme. The Go tests in internal/uiassets
+// with VendorMarkImage (VendorLogo.tsx), which styles it by its ink tone
+// (VENDOR_LOGO_INK) for each theme. The Go tests in internal/uiassets
 // enforce the canvas, that this map and the directory match, that every mark
 // declares an ink tone its artwork measures up to, and that no other file
 // draws a mark (docs/dev/ui.md, "Vendor marks").
@@ -28,9 +28,8 @@ export const VENDOR_ASSETS: Record<string, string> = {
   apple: "/vendor-logos/apple.svg",
 };
 
-// The tone of each mark's ink, which decides its plate. Dark ink sits on the
-// light theme's page as is and on the --vendor-logo-light plate in the dark
-// theme; light ink sits on the --vendor-logo-dark plate in both themes.
+// Original ink tone. Light artwork gets a light-theme filter. Dark artwork
+// gets a light plate in the dark theme.
 // TestVendorLogoInkReadsOnItsSurfaces measures the artwork against the
 // declared tone, so a wrong entry fails the build.
 export const VENDOR_LOGO_INK: Record<string, "dark" | "light"> = {

@@ -3,7 +3,7 @@
 @import "./pages/images/imageSummary.css";
 
 :root {
-  /* Brand artwork keeps its original light/dark canvas, independent of the UI theme. */
+  /* Reference surfaces for vendor artwork contrast. */
   --vendor-logo-light: #fff;
   --vendor-logo-dark: #252d3c;
   --assistant-panel-width: 480px;
@@ -1553,13 +1553,12 @@ tbody tr[data-state="selected"]:hover > .resource-table-pinned { background-imag
 .deployment-detail-tabs #deployment-instances > section { flex: 1; }
 .deployment-detail-tabs #deployment-instances :is(.instance-startup-progress, [tabindex="-1"]) { scroll-margin-top: 8px; }
 
-/* A vendor mark's plate follows its declared ink tone (VENDOR_LOGO_INK in
-   components/vendorAssets.ts), never the vendor: dark ink needs the light
-   plate on the dark theme only, light ink the dark plate on both themes. The
-   padding is exposed as variables so a fixed box can leave room for it. */
+/* Keep pale wordmarks transparent: darken their ink on light surfaces and
+   use the original colours on dark surfaces. Dark-ink marks retain their
+   light plate in the dark theme. */
 .vendor-mark { display: inline-flex; flex: none; align-items: center; }
-.vendor-mark-ink-light, [data-theme="dark"] .vendor-mark-ink-dark { --vendor-mark-pad-x: 4px; --vendor-mark-pad-y: 2px; padding: var(--vendor-mark-pad-y) var(--vendor-mark-pad-x); border-radius: var(--radius-sm); }
-.vendor-mark-ink-light { background: var(--vendor-logo-dark); }
+[data-theme="dark"] .vendor-mark-ink-dark { --vendor-mark-pad-x: 4px; --vendor-mark-pad-y: 2px; padding: var(--vendor-mark-pad-y) var(--vendor-mark-pad-x); border-radius: var(--radius-sm); }
+:root:not([data-theme="dark"]) .vendor-mark-ink-light img { filter: invert(1) hue-rotate(180deg) brightness(0.8); }
 [data-theme="dark"] .vendor-mark-ink-dark { background: var(--vendor-logo-light); }
 
 /* The leading disclosure uses the entire 36px utility column in the network drawer. */

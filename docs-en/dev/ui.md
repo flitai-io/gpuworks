@@ -173,12 +173,10 @@ Accelerator vendor marks (NVIDIA, AMD, Ascend, ...) live in
 transparent canvas: SVG (preferred) or PNG with an alpha channel, with no
 padding box, plate or background colour of its own.
 
-Each mark declares the tone of its ink in `VENDOR_LOGO_INK` (`"dark"` or
-`"light"`), and the plate behind it follows from that, never from the vendor:
-dark ink sits on the light theme's page as is and on the `--vendor-logo-light`
-plate in the dark theme; light ink (Kunlunxin's white wordmark) sits on the
-`--vendor-logo-dark` plate in both themes. The two plate colours are tokens in
-`ui/src/styles.css`, and the `.vendor-mark-ink-*` rules there apply them. Draw
+The `VENDOR_LOGO_INK` entry records the original ink tone. Light artwork
+such as Kunlunxin's white wordmark is transparent on both themes. The
+light theme darkens the ink with a CSS filter. Dark artwork keeps its
+original colours and uses a light plate on the dark theme. Draw
 a mark only with `VendorMarkImage` from `ui/src/components/VendorLogo.tsx`
 (`VendorLogo` and the dashboard's hardware panel both do): it wraps the image
 in the ink class, and the caller keeps its own sizing on the image. A plated
@@ -201,16 +199,15 @@ mark to declare its ink and every declaration to name a mapped mark.
 under `ui/src` (tests aside) other than `vendorAssets.ts` and `VendorLogo.tsx`
 that names `VENDOR_ASSETS` or a `/vendor-logos/` path.
 
-`TestVendorLogoInkReadsOnItsSurfaces` measures each mark with WCAG 2
-relative luminance and contrast against the surface its tone puts it on: dark
-ink against `--vendor-logo-light`, which is both the dark theme's plate and
-the light theme's page (taken to be white; the light theme's surfaces run
-`#F0F3F8` to `#fff`, within about 10% of white's contrast), and light ink
-against `--vendor-logo-dark`. A PNG's ink is every pixel at alpha 128/255 or
+`TestVendorLogoInkReadsOnItsSurfaces` measures the original artwork with WCAG 2
+relative luminance and contrast. It checks dark ink against
+`--vendor-logo-light` and light ink against `--vendor-logo-dark`.
+`make test-ui-template-catalog-layout` checks the rendered Kunlunxin and
+NVIDIA marks on both themes in Chromium. A PNG's ink is every pixel at alpha 128/255 or
 more, weighted by alpha and composited over the surface; an SVG's ink is each
 drawn, filled shape's colour, weighted by the area of the shape's bounding
 box (for a path, the box around its command end points; curve control points
-are ignored). The measured tone is whichever plate most of the ink weight
+are ignored). The measured tone is whichever reference surface most of the ink weight
 reads better on, and it must match the declaration. At least half the ink
 weight must reach 3:1 (the colour accents keep Kunlunxin and NVIDIA near
 60%); no SVG fill may fall below 1.5:1, and at most 2% of a PNG's ink may.
@@ -399,7 +396,7 @@ Resource names that open a drawer use the native link button variant (`variant="
 <!-- translation-source-sha256: f8640be0d16881c18586a2f63af485c8f45eb71700b0843173a7a75bfb1b8943 ## Verification -->
 <!-- translation-source-sha256: c7b61b2ede38b04e51393df4490c765efbc0d8ea7a17d80b16538e355c3e829e ## Migration close-out checklist -->
 <!-- translation-source-sha256: 1318afa013ade9be7b3751ffcdccc06b442a512cef5b728790ea7adc728bd6d9 ## Page look -->
-<!-- translation-source-sha256: d4e7a7ff2a5bb481ec1c6799141497057f023040602ab90435cddd56cb6d9801 ## Vendor marks -->
+<!-- translation-source-sha256: 5b230a631131304ac216124761b67ea8c8bd36c14080539fc43294d3243e8d86 ## Vendor marks -->
 <!-- translation-source-sha256: fddaafffae7e564494407df1c976f2beec4c1c8827cc55a1fc620c0d00eafb0c ## Copy on the page -->
 <!-- translation-source-sha256: 4f94d2593a004f64b16607597a4142b04e86ca85affe710e12aabd04fffe4721 ### Problems and what to do -->
 <!-- translation-source-sha256: a212225b624adfa8421d2175bc828d4203339d58411493c706eeb3c8afd57cd2 ### Reviewing copy -->

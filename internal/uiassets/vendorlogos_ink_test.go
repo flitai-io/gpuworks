@@ -19,12 +19,10 @@ import (
 )
 
 // Every vendor mark declares its ink tone in VENDOR_LOGO_INK, and the console
-// draws marks only through VendorMarkImage, which puts a plate behind a mark
-// whose ink would not read on the page: dark ink gets the light plate on the
-// dark theme, light ink gets the dark plate on both themes. These tests hold
-// the declaration to the artwork and the drawing to the component, so a mark
-// stays legible on every surface it is shown on (docs/dev/ui.md, "Vendor
-// marks").
+// draws marks only through VendorMarkImage, which styles light artwork for
+// the current surface and gives dark ink a light plate on dark surfaces.
+// These tests check the source artwork and shared renderer. The template
+// catalog's browser regression checks the renderer's computed theme styles.
 
 var (
 	stylesCSS = filepath.Join(uiRoot, "src", "styles.css")
@@ -56,11 +54,11 @@ const (
 	inkMinAlpha = 128
 )
 
-const fixDrawer = "fix: draw the mark with VendorMarkImage from ui/src/components/VendorLogo.tsx, which gives it the plate its ink needs on each theme"
+const fixDrawer = "fix: draw the mark with VendorMarkImage from ui/src/components/VendorLogo.tsx, which styles the declared ink for the active theme"
 
 type rgb [3]float64 // sRGB channels, 0-1
 
-// vendorPlates are the two plate colours from ui/src/styles.css.
+// vendorPlates are the light and dark reference colours from ui/src/styles.css.
 type vendorPlates struct{ light, dark rgb }
 
 // TestVendorLogoInkIsDeclared: every mapped mark declares its ink tone, and
@@ -87,7 +85,7 @@ func vendorInkDeclarationProblems(refs, ink map[string]string) []string {
 	var problems []string
 	for _, k := range sortedKeys(refs) {
 		if _, ok := ink[k]; !ok {
-			problems = append(problems, fmt.Sprintf("ui/src/components/vendorAssets.ts: VENDOR_ASSETS.%s has no VENDOR_LOGO_INK entry, so the console cannot tell which plate it needs; fix: add %s: \"dark\" (dark artwork) or \"light\" (white or pale artwork) to VENDOR_LOGO_INK", k, k))
+			problems = append(problems, fmt.Sprintf("ui/src/components/vendorAssets.ts: VENDOR_ASSETS.%s has no VENDOR_LOGO_INK entry, so the console cannot select a theme treatment; fix: add %s: \"dark\" (dark artwork) or \"light\" (white or pale artwork) to VENDOR_LOGO_INK", k, k))
 		}
 	}
 	for _, k := range sortedKeys(ink) {
@@ -101,8 +99,8 @@ func vendorInkDeclarationProblems(refs, ink map[string]string) []string {
 }
 
 // TestVendorMarksAreDrawnThroughTheComponent: a mark drawn as a bare <img>
-// gets no plate, so dark ink vanishes on the dark theme and light ink on the
-// light one. Only the component files may name the map or the directory.
+// bypasses theme styling. Only the component files may name the map
+// or the directory.
 func TestVendorMarksAreDrawnThroughTheComponent(t *testing.T) {
 	files := map[string]string{}
 	err := filepath.WalkDir(uiSrcDir, func(p string, d fs.DirEntry, err error) error {
@@ -145,10 +143,10 @@ func vendorMarkDrawerProblems(files map[string]string) []string {
 		}
 		src := files[name]
 		if vendorAssetsRE.MatchString(src) {
-			problems = append(problems, fmt.Sprintf("ui/%s: uses VENDOR_ASSETS directly, so the mark is drawn without the plate its ink needs on one of the themes; %s", name, fixDrawer))
+			problems = append(problems, fmt.Sprintf("ui/%s: uses VENDOR_ASSETS directly, so the mark is drawn without theme styling; %s", name, fixDrawer))
 		}
 		if strings.Contains(src, "/vendor-logos/") {
-			problems = append(problems, fmt.Sprintf("ui/%s: names a /vendor-logos/ file directly, so the mark is drawn without the plate its ink needs on one of the themes; %s", name, fixDrawer))
+			problems = append(problems, fmt.Sprintf("ui/%s: names a /vendor-logos/ file directly, so the mark is drawn without theme styling; %s", name, fixDrawer))
 		}
 	}
 	return problems
@@ -158,7 +156,7 @@ func vendorMarkDrawerProblems(files map[string]string) []string {
 // surfaces it is shown on: dark ink against the light theme's page (taken to
 // be --vendor-logo-light; the light theme's surfaces run #F0F3F8 to #fff) and
 // the light plate it gets on the dark theme, which is the same colour; light
-// ink against --vendor-logo-dark, the plate it gets on both themes.
+// ink against --vendor-logo-dark, the reference dark surface for unfiltered ink.
 func TestVendorLogoInkReadsOnItsSurfaces(t *testing.T) {
 	css, err := os.ReadFile(stylesCSS)
 	if err != nil {
@@ -309,7 +307,7 @@ func checkVendorInk(name string, data []byte, declared string, plates vendorPlat
 		}
 	}
 	if got := m.tone(); got != declared {
-		problems = append(problems, fmt.Sprintf("%s: declared %q ink in VENDOR_LOGO_INK, but %.0f%% of its ink weight is %s, so it gets the wrong plate; fix: declare it %q in VENDOR_LOGO_INK in ui/src/components/vendorAssets.ts, or re-export the mark in %s ink", name, declared, 100*max(m.darkShare, 1-m.darkShare), got, got, declared))
+		problems = append(problems, fmt.Sprintf("%s: declared %q ink in VENDOR_LOGO_INK, but %.0f%% of its ink weight is %s, so it gets the wrong theme treatment; fix: declare it %q in VENDOR_LOGO_INK in ui/src/components/vendorAssets.ts, or re-export the mark in %s ink", name, declared, 100*max(m.darkShare, 1-m.darkShare), got, got, declared))
 	}
 	if m.shareAt3 < inkMinShareAt3 {
 		problems = append(problems, fmt.Sprintf("%s: only %.0f%% of its ink weight reaches 3:1 contrast on %s (weighted median %.2f:1), at least %.0f%% must; fix: re-export the mark in stronger ink, or declare it %s in VENDOR_LOGO_INK if it is pale artwork", name, 100*m.shareAt3, m.surface, m.median, 100*inkMinShareAt3, fixTone))
