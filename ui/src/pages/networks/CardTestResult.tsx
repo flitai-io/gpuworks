@@ -1,11 +1,9 @@
 import { useMemo, useState } from "react";
-import { Alert, Button, Card, Descriptions, Modal, Space, Table, Tag, Tooltip, Typography } from "antd";
+import { Alert, Button, Descriptions, Modal, Space, Table, Tag, Tooltip, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
 import type { CardShape, NetworkTestPair, NetworkTestRail, NetworkTestRun } from "../../networkTypes";
-import { formatTime } from "../../i18n/datetime";
 import { cardOK } from "./cardTest";
-import { testScopeText } from "./networkDisplay";
 import { failureText } from "./testFailure";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
@@ -41,24 +39,18 @@ export default function CardTestResult({ run }: { run: NetworkTestRun }) {
   const verdict = run.card_shape;
   const oddPairs = useMemo(() => (verdict ? run.pairs.filter((p) => shapeOf(p) !== verdict) : []), [run, verdict]);
   const matrix = run.kind === "card_matrix";
-  const summary = [
-    t("test.summary", { time: formatTime(run.started_at), scope: testScopeText(t, run) }),
-    t(`test.patternName.${run.pattern}`),
-    t("test.card.counts", { pairs: run.pairs.length, passed: run.rail_passed_count, total: run.rail_count }),
-    t("test.card.measuredAt"),
-  ].join(" · ");
   const odd = oddPairs.map((p) => `${p.source_name} ↔ ${p.target_name}`);
   const shown = odd.slice(0, 5).join(t("test.card.listSeparator"));
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Card title={`${t(`test.kindName.${run.kind}`)} · ${summary}`}>
+      <div>
         {verdict && (
           <Alert
             style={{ marginBottom: 16 }}
             type={odd.length > 0 && verdictType[verdict] === "success" ? "warning" : verdictType[verdict]}
             showIcon
             message={t(`test.card.verdict.${matrix ? "matrix" : "ping"}.${verdict}`)}
-            description={odd.length > 0 ? t("test.card.odd", { count: odd.length, pairs: shown + (odd.length > 5 ? t("test.card.more", { count: odd.length - 5 }) : "") }) : undefined}
+            description={odd.length > 0 ? <span className="text-fg-default">{t("test.card.odd", { count: odd.length, pairs: shown + (odd.length > 5 ? t("test.card.more", { count: odd.length - 5 }) : "") })}</span> : undefined}
           />
         )}
         {run.pairs.length === 1
@@ -67,7 +59,8 @@ export default function CardTestResult({ run }: { run: NetworkTestRun }) {
             ? <ShapeList run={run} onOpen={setOpen} />
             : <ShapeOverview run={run} onOpen={setOpen} />}
         {run.pairs.length > 1 && <ShapeLegend matrix={matrix} />}
-      </Card>
+        <p className="mt-2 text-label text-fg-muted">{t("test.card.measuredAt")}</p>
+      </div>
       {open && (
         <Modal open title={`${open.source_name} ↔ ${open.target_name}`} onCancel={() => setOpen(null)} footer={null} width={860} destroyOnHidden>
           <CardPairView run={run} pair={open} />
@@ -201,9 +194,9 @@ function CardGrid({ pair }: { pair: NetworkTestPair }) {
   const targets = [...new Set(probed.map((r) => r.target_rail as string))];
   const byKey = new Map(probed.map((r) => [`${r.rail}>${r.target_rail}`, r]));
   const columns: ColumnsType<{ card: string }> = [
-    { title: `${pair.source_name} \\ ${pair.target_name}`, dataIndex: "card", fixed: "left", render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+    { title: `${pair.source_name} \\ ${pair.target_name}`, dataIndex: "card", fixed: "left", render: (v: string) => <Typography.Text code className="whitespace-nowrap">{v}</Typography.Text> },
     ...targets.map((target) => ({
-      title: <Typography.Text code>{target}</Typography.Text>,
+      title: <Typography.Text code className="whitespace-nowrap">{target}</Typography.Text>,
       key: target,
       align: "center" as const,
       render: (_: unknown, row: { card: string }) => <CardCell pair={pair} rail={byKey.get(`${row.card}>${target}`)} />,
@@ -222,8 +215,8 @@ function CardList({ pair }: { pair: NetworkTestPair }) {
       dataSource={pair.rails ?? []}
       scroll={{ x: true }}
       columns={[
-        { title: pair.source_name, key: "source", render: (_, r) => (r.rail ? <Space size={6}><Typography.Text code>{r.rail}</Typography.Text><Typography.Text type="secondary">{r.source_ip || "—"}</Typography.Text></Space> : "—") },
-        { title: pair.target_name, key: "target", render: (_, r) => (r.target_rail ? <Space size={6}><Typography.Text code>{r.target_rail}</Typography.Text><Typography.Text type="secondary">{r.target_ip || "—"}</Typography.Text></Space> : "—") },
+        { title: pair.source_name, key: "source", render: (_, r) => (r.rail ? <Space size={6}><Typography.Text code className="whitespace-nowrap">{r.rail}</Typography.Text><Typography.Text type="secondary">{r.source_ip || "—"}</Typography.Text></Space> : "—") },
+        { title: pair.target_name, key: "target", render: (_, r) => (r.target_rail ? <Space size={6}><Typography.Text code className="whitespace-nowrap">{r.target_rail}</Typography.Text><Typography.Text type="secondary">{r.target_ip || "—"}</Typography.Text></Space> : "—") },
         {
           title: t("test.result"),
           key: "result",

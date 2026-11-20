@@ -205,6 +205,7 @@ GET /api/v1/monitor/requests/lookup
 GET /api/v1/monitor/series
 GET /api/v1/networks
 GET /api/v1/networks/{id}
+GET /api/v1/networks/{id}/search
 GET /api/v1/nodes
 GET /api/v1/nodes/facets
 GET /api/v1/nodes/{uuid}
@@ -453,6 +454,7 @@ PUT /api/v1/kube/clusters/{uuid}/pools
 PUT /api/v1/mcp/settings
 PUT /api/v1/networks/{id}
 PUT /api/v1/networks/{id}/attachments/{attachmentID}
+PUT /api/v1/networks/{id}/attachments/{attachmentID}/label
 PUT /api/v1/nodes/{uuid}/gpus/scheduling
 PUT /api/v1/nodes/{uuid}/labels
 PUT /api/v1/nodes/{uuid}/management-roles

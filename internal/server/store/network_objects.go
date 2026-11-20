@@ -155,6 +155,33 @@ func (s *Store) CreateNetworkAttachment(a *NetworkAttachment) (*NetworkAttachmen
 	return a, nil
 }
 
+// UpdateNetworkAttachmentLabel changes only the selector, preserving its original
+// creation time and ID (the tie-breaker for overlapping attachments).
+func (s *Store) UpdateNetworkAttachmentLabel(networkID, id uint, key, value string) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var att NetworkAttachment
+		if err := tx.Where("network_id = ? AND id = ? AND node_id = 0", networkID, id).First(&att).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrNotFound
+			}
+			return err
+		}
+		var count int64
+		err := tx.Model(&NetworkAttachment{}).Where("network_id = ? AND node_id = 0 AND id <> ? AND label_key = ? AND label_value = ?", networkID, id, key, value).Count(&count).Error
+		if err != nil {
+			return err
+		}
+		if count != 0 {
+			return ErrNetworkAttachmentExists
+		}
+		return tx.Model(&att).Updates(map[string]any{"label_key": key, "label_value": value}).Error
+	})
+	if err == nil {
+		s.Bus.PublishChange("network", uintKey(networkID), "attachment_updated")
+	}
+	return err
+}
+
 // UpdateNetworkAttachmentOverrides replaces a node attachment's overrides.
 func (s *Store) UpdateNetworkAttachmentOverrides(networkID, id uint, iface, ip string, hcas []string) (*NetworkAttachment, error) {
 	res := s.db.Model(&NetworkAttachment{}).Where("id = ? AND network_id = ?", id, networkID).

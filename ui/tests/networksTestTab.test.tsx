@@ -9,11 +9,15 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLHtmlElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLButtonElement", "HTMLBodyElement", "HTMLHtmlElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot", "AbortController", "AbortSignal"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
+Object.defineProperty(dom.window.Element.prototype, "getAnimations", { configurable: true, value: () => [] });
+for (const name of ["setPointerCapture", "releasePointerCapture", "hasPointerCapture"]) {
+  Object.defineProperty(dom.window.Element.prototype, name, { configurable: true, value: () => false });
+}
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
 // The list reads again on server events; this stands in for the shared
@@ -71,6 +75,19 @@ const typeRoles = {
   accelerator_rdma: ["compute"],
 };
 const n = networksLocale;
+
+async function choose(user: ReturnType<typeof userEvent.setup>, field: string, option: string) {
+  const trigger = await screen.findByRole("combobox", { name: field });
+  trigger.focus();
+  await user.keyboard("{Enter}");
+  await user.click(await screen.findByRole("option", { name: option }));
+}
+function metric(label: string, value: string) {
+  const card = [...document.querySelectorAll('[data-slot="metric-card"]')]
+    .find(el => el.querySelector('[data-slot="metric-card-label"]')?.textContent === label);
+  assert.ok(card, label);
+  assert.ok(within(card as HTMLElement).getByText(value));
+}
 
 type API = typeof apiModule.api;
 const originals: Partial<API> = {};
@@ -141,7 +158,9 @@ test("internal test tab shows the latest result as a pair matrix", async () => {
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
-  await waitFor(() => assert.ok(screen.getByText(/All pairs · pairs 1 passed \/ 0 partial \/ 1 failed/)));
+  metric(n.test.status.passed, "1");
+  metric(n.test.status.partial, "0");
+  metric(n.test.status.failed, "1");
   assert.ok(screen.getByText(/label pool=h20-a/));
   assert.ok(screen.getByText(n.test.rdmaNote), "IB networks say RDMA bandwidth is not measured");
   const pass = screen.getByLabelText("h20-05 → h20-07: 23.4 Gb/s");
@@ -149,11 +168,13 @@ test("internal test tab shows the latest result as a pair matrix", async () => {
   assert.ok(pass);
   // The reason is in the problem summary, not only behind a hover.
   const why = "Connection failed: dial tcp 10.20.1.15:41000: i/o timeout";
+  assert.equal(fail.title, why);
+  await user.click(screen.getByRole("tab", { name: /Issue summary.*1/ }));
   assert.ok(screen.getByRole("cell", { name: why }));
-  fail.focus();
-  await waitFor(() => assert.ok(screen.getAllByRole("tooltip").some((tip) => tip.textContent === why)));
+  await user.click(screen.getByRole("tab", { name: n.test.globalMatrix }));
+  screen.getByLabelText("h20-07 → h20-05: Failed").focus();
   // Enter opens the pair.
-  fireEvent.keyDown(fail, { key: "Enter" });
+  await user.keyboard("{Enter}");
   const dialog = await modalDialog();
   assert.ok(within(dialog).getByText("h20-07 → h20-05"));
   assert.ok(within(dialog).getByText("10.20.1.15:41000"));
@@ -169,14 +190,16 @@ test("starting a label-scoped test sends the scope and polls while it runs", asy
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
-  await user.click(await screen.findByText(n.test.scopeLabel));
-  await user.type(screen.getByLabelText(n.test.labelKey), "rack");
+  await choose(user, n.test.scope, n.test.scopeLabel);
+  await user.type(screen.getByRole("textbox", { name: /Label key/ }), "rack");
   await user.type(screen.getByLabelText(n.test.labelValue), "r3");
   await user.click(screen.getByRole("switch"));
   await user.click(screen.getAllByRole("button", { name: n.test.start })[0]);
   await waitFor(() => assert.equal(bodies.length, 1));
   assert.deepEqual(bodies[0], { kind: "tcp", pattern: "mesh", scope: "label", bandwidth: false, seconds: 3, label_key: "rack", label_value: "r3" });
-  await waitFor(() => assert.ok(screen.getByText("Testing 3 nodes, 6 pairs…")));
+  await screen.findByText(n.test.overview.state.running);
+  metric(n.test.overview.nodes, "3");
+  metric(n.test.overview.directedPairs, "6");
   const before = loads;
   await new Promise((r) => setTimeout(r, 2300));
   assert.ok(loads > before, "a running test is polled");
@@ -203,14 +226,14 @@ test("the test matrix sorts nodes by name and flags pairs far below the fastest 
   assert.deepEqual(headers.slice(1), ["alpha", "zeta"], "columns are sorted by node name");
   const slow = screen.getByLabelText("alpha → zeta: 0.9 Gb/s");
   slow.focus();
-  await waitFor(() => assert.ok(screen.getAllByRole("tooltip").some((tip) => tip.textContent?.includes(n.test.slow))));
+  assert.equal(slow.title, n.test.slow);
 });
 
 test("an RDMA bandwidth test names nodes without ib_write_bw and shows per-rail results", async () => {
   const bodies: unknown[] = [];
   const rdmaRun = {
     ...detailFixture.latest_test, kind: "rdma_tool", pair_count: 1, passed_count: 1, rail_count: 2, rail_passed_count: 2,
-    pairs: [{ source_uuid: "uuid-h5", source_name: "h20-05", target_uuid: "uuid-h7", target_name: "h20-07", target: "10.20.1.17", status: "passed", passed: true, reachable: true, rtt_ms_p50: 0, rtt_ms_p99: 0, gbps: 715.2,
+    pairs: [{ source_uuid: "uuid-h5", source_name: "h20-05", target_uuid: "uuid-h7", target_name: "h20-07", target: "10.20.1.17", status: "passed", passed: true, reachable: true, rtt_ms_p50: 0, rtt_ms_p99: 0, gbps: 715.2, avg_rail_gbps: 357.6,
       rails: [{ rail: "mlx5_0:1", target_rail: "mlx5_0:1", gbps: 358.7 }, { rail: "mlx5_1:1", target_rail: "mlx5_1:1", gbps: 356.5 }] }],
   };
   stub("network", async () => ({ ...detailFixture, latest_test: rdmaRun }));
@@ -218,14 +241,14 @@ test("an RDMA bandwidth test names nodes without ib_write_bw and shows per-rail 
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
-  await waitFor(() => assert.ok(screen.getByText(/RDMA bandwidth · .* HCAs 2\/2 passed/)));
-  await user.click(screen.getByText(n.test.kindRdmaTool));
+  metric(n.test.overview.passedRails, "2 / 2");
+  await choose(user, n.test.kind, n.test.kindRdmaTool);
   await waitFor(() => assert.ok(screen.getByText(/These nodes have no ib_write_bw, so their pairs will fail: h20-07/)));
   assert.equal(screen.queryByText(n.test.bandwidth), null, "rdma tests always measure bandwidth");
   await user.click(screen.getAllByRole("button", { name: n.test.start })[0]);
   await waitFor(() => assert.equal(bodies.length, 1));
   assert.deepEqual(bodies[0], { kind: "rdma_tool", pattern: "mesh", scope: "all", bandwidth: true, seconds: 3 });
-  await user.click(screen.getByLabelText("h20-05 → h20-07: 715.2 Gb/s"));
+  await user.click(screen.getByLabelText("h20-05 → h20-07: 357.6 Gb/s"));
   const dialog = await modalDialog();
   assert.ok(within(dialog).getByText("356.5 Gb/s"));
   assert.equal(within(dialog).getAllByText("mlx5_1:1").length, 2, "source and target rail");
@@ -238,7 +261,7 @@ test("a partially failing RDMA run names the failing HCA and removes it", async 
   const rail = (name: string, src: string, dst: string, gbps: number) => ({ rail: name, source_ip: src, target_rail: name, target_ip: dst, gbps });
   const gidless = { rail: "rocep189s0f0:1", target_rail: "rocep189s0f0:1", gbps: 0, code: "no_roce_v2_gid", side: "target", error: "RoCE port has no IPv4 RoCE v2 GID" };
   const pair = (s: string, sn: string, t2: string, tn: string) => ({
-    source_uuid: s, source_name: sn, target_uuid: t2, target_name: tn, target: "100.64.29.210", status: "partial", passed: false, reachable: true, rtt_ms_p50: 0, rtt_ms_p99: 0, gbps: 48.9,
+    source_uuid: s, source_name: sn, target_uuid: t2, target_name: tn, target: "100.64.29.210", status: "partial", passed: false, reachable: true, rtt_ms_p50: 0, rtt_ms_p99: 0, gbps: 48.9, avg_rail_gbps: 24.45,
     rails: [rail("rocep61s0f0:1", "100.64.29.209", "100.64.29.210", 24.4), rail("rocep61s0f2:1", "100.64.29.213", "100.64.29.214", 24.5), gidless],
   });
   const run = { ...detailFixture.latest_test, kind: "rdma_tool", pattern: "ring", pair_count: 2, passed_count: 0, partial_count: 2, rail_count: 6, rail_passed_count: 4,
@@ -248,14 +271,16 @@ test("a partially failing RDMA run names the failing HCA and removes it", async 
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
-  await waitFor(() => assert.ok(screen.getByText(/Ring · pairs 0 passed \/ 2 partial \/ 0 failed · HCAs 4\/6 passed/)));
+  metric(n.test.overview.passedRails, "4 / 6");
+  metric(n.test.status.partial, "2");
   // A ring is listed pair by pair, not as a matrix.
   assert.ok(screen.getByRole("columnheader", { name: n.test.source }));
-  assert.ok(screen.getByLabelText("ascend-31 → ascend-32: 48.9 Gb/s · 2/3"));
+  assert.ok(screen.getByLabelText("ascend-31 → ascend-32: 24.4 Gb/s · 2/3 rails passed"));
+  await user.click(screen.getByRole("tab", { name: /Issue summary.*2/ }));
   const why = "This RoCE port on ascend-32 has no IPv4 address on its interface, so no RoCE v2 connection";
   const row = screen.getByRole("cell", { name: why }).closest("tr") as HTMLElement;
   assert.ok(within(row).getByText("rocep189s0f0:1"));
-  assert.ok(within(row).getByText("1 pairs"));
+  assert.ok(within(row).getByText("1 pair"));
   await user.click(within(row).getByRole("button", { name: n.rail.removeShort }));
   await user.click(await screen.findByRole("button", { name: n.rail.confirm }));
   await waitFor(() => assert.equal(calls.length, 1));
@@ -270,7 +295,7 @@ test("more than 16 nodes default to a ring", async () => {
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
-  assert.ok(await screen.findByText(n.test.patternHint.ring));
+  assert.equal((await screen.findByRole("combobox", { name: n.test.pattern })).textContent, n.test.patternName.ring);
   await user.click(screen.getAllByRole("button", { name: n.test.start })[0]);
   await waitFor(() => assert.equal(bodies.length, 1));
   assert.equal((bodies[0] as { pattern: string }).pattern, "ring");
@@ -283,8 +308,48 @@ test("nodes without a bootstrap address or HCAs are named before a test", async 
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
   assert.ok(await screen.findByText("These nodes have no bootstrap address and their pairs will fail: h20-05."));
-  await user.click(screen.getByText(n.test.kindRdmaTool));
+  await choose(user, n.test.kind, n.test.kindRdmaTool);
   assert.ok(await screen.findByText("These nodes have no usable HCA and their pairs will fail: h20-07."));
+});
+
+test("a fleet-wide prerequisite warning can expand its full node list", async () => {
+  const nodes = Array.from({ length: 64 }, (_, i) => ({ ...detailFixture.nodes[0], node_uuid: `u-${i}`, node_name: `worker-${i}`, tools: [] }));
+  stub("network", async () => ({ ...detailFixture, nodes, latest_test: null }));
+  const user = userEvent.setup();
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
+  await choose(user, n.test.kind, n.test.kindRdmaTool);
+  const toggle = await screen.findByText("View affected nodes (64)");
+  const list = toggle.closest("details") as HTMLDetailsElement;
+  assert.equal(list.open, false);
+  await user.click(toggle);
+  assert.equal(list.open, true);
+  assert.equal(within(list).getAllByRole("listitem").length, 64);
+  assert.ok(within(list).getByText("worker-63"));
+});
+
+test("selecting nodes validates the minimum and submits the selected IDs", async () => {
+  const bodies: unknown[] = [];
+  stub("network", async () => ({ ...detailFixture, latest_test: null }));
+  stub("startNetworkTest", async (_id, body) => { bodies.push(body); return detailFixture.latest_test; });
+  const user = userEvent.setup();
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
+  await choose(user, n.test.scope, n.test.scopeNodes);
+  await user.click(screen.getByRole("button", { name: n.test.start }));
+  assert.ok(await screen.findByText(n.test.nodesRequired));
+  const input = screen.getByRole("combobox", { name: n.test.nodes });
+  for (const node of detailFixture.nodes.slice(0, 2)) {
+    await user.type(input, node.node_name);
+    await user.click(await screen.findByRole("option", { name: node.node_name }));
+  }
+  assert.equal(document.querySelectorAll('[data-slot="combobox-chip"]').length, 2, "both choices appear as chips");
+  if (input.getAttribute("aria-expanded") === "true") await user.keyboard("{Escape}");
+  const button = screen.getByRole("button", { name: n.test.start });
+  assert.equal(button.closest("form")?.checkValidity(), true, "form controls allow submission");
+  await user.click(button);
+  await waitFor(() => assert.equal(bodies.length, 1));
+  assert.deepEqual((bodies[0] as { node_uuids: string[] }).node_uuids, detailFixture.nodes.slice(0, 2).map((node: { node_uuid: string }) => node.node_uuid));
 });
 
 test("an ethernet network runs TCP tests and keeps the throughput switch", async () => {
@@ -309,9 +374,10 @@ test("a compute network offers only the TCP and RDMA tool tests", async () => {
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
   assert.deepEqual(detailFixture.roles, ["compute"], "the fixture is a compute network");
-  assert.ok(await screen.findByText(n.test.kindTcp));
-  assert.ok(screen.getByText(n.test.kindRdmaTool));
-  assert.equal(screen.getAllByRole("radio").filter((r) => (r as HTMLInputElement).name === "kind" || r.closest(".ant-form-item")?.textContent?.includes(n.test.kind)).length, 2, "only the TCP and RDMA tool kinds");
+  const trigger = await screen.findByRole("combobox", { name: n.test.kind });
+  trigger.focus();
+  await user.keyboard("{Enter}");
+  assert.deepEqual((await screen.findAllByRole("option")).map(el => el.textContent), [n.test.kindTcp, n.test.kindRdmaTool]);
 });
 
 // An accelerator RDMA network with `count` nodes of `cards` cards each.
@@ -369,7 +435,7 @@ test("an accelerator network offers card tests and shows the server's estimate",
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
   // Same-named cards are the default kind; more than 16 nodes default to a ring.
-  assert.ok(await screen.findByText(n.test.cardNote.card_ping));
+  assert.equal((await screen.findByRole("combobox", { name: n.test.kind })).textContent, n.test.kindCardPing);
   assert.equal(screen.queryByText(n.test.kindRdmaTool), null);
   assert.ok(await screen.findByText(/^24 nodes, 24 pairs: 192 probes in 1 rounds, at most 3 s\./));
   assert.deepEqual(asked.at(-1), { kind: "card_ping", pattern: "ring", scope: "all" });
@@ -377,11 +443,11 @@ test("an accelerator network offers card tests and shows the server's estimate",
   assert.equal(screen.queryByRole("switch"), null);
   assert.equal(screen.queryByLabelText(n.test.seconds), null);
 
-  await user.click(screen.getByText(n.test.kindCardMatrix));
+  await choose(user, n.test.kind, n.test.kindCardMatrix);
   assert.ok(await screen.findByText(/^24 nodes, 24 pairs: 1536 probes in 8 rounds, at most 24 s\./));
-  await user.click(screen.getByText(n.test.patternName.mesh));
+  await choose(user, n.test.pattern, n.test.patternName.mesh);
   assert.ok(await screen.findByText(/^24 nodes, 276 pairs: 17664 probes in 96 rounds, at most 4\.8 minutes\./));
-  assert.ok(screen.getByText(n.test.cardPatternHint.mesh));
+  assert.equal(screen.getByRole("combobox", { name: n.test.pattern }).textContent, n.test.patternName.mesh);
   assert.deepEqual(asked.at(-1), { kind: "card_matrix", pattern: "mesh", scope: "all" });
   assert.equal((screen.getAllByRole("button", { name: n.test.start })[0] as HTMLButtonElement).disabled, false);
   await user.click(screen.getAllByRole("button", { name: n.test.start })[0]);
@@ -391,7 +457,7 @@ test("an accelerator network offers card tests and shows the server's estimate",
 
   // The bootstrap TCP test is still there, with its own controls, and asks for no estimate.
   const before = asked.length;
-  await user.click(screen.getByText(n.test.kindTcp));
+  await choose(user, n.test.kind, n.test.kindTcp);
   assert.ok(await screen.findByText(n.test.acceleratorNote));
   assert.ok(screen.getByRole("switch"));
   await new Promise((r) => setTimeout(r, 300));
@@ -418,13 +484,13 @@ test("a card test the server refuses cannot be started and says why", async () =
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
   // Until the server has answered, the form says it is asking.
-  await user.click(await screen.findByText(n.test.kindCardMatrix));
+  await choose(user, n.test.kind, n.test.kindCardMatrix);
   assert.ok(screen.getByText(n.test.cardEstimating));
   await waitFor(() => assert.ok(ringRequested));
   resolveRing(estimateOf(60, 60, 8, 3840));
   assert.ok(await screen.findByText(/^60 nodes, 60 pairs: 3840 probes in 8 rounds, at most 24 s\./), "sixty nodes as a ring are eight rounds");
   const start = screen.getAllByRole("button", { name: n.test.start })[0] as HTMLButtonElement;
-  await user.click(screen.getByText(n.test.patternName.mesh));
+  await choose(user, n.test.pattern, n.test.patternName.mesh);
   assert.ok(screen.getByText(n.test.cardEstimating));
   await waitFor(() => assert.ok(meshRequested));
   rejectMesh(new Error("This test takes 240 rounds, up to 720 seconds, over the 600-second limit; narrow the scope, or use a ring or same-named cards."));
@@ -433,10 +499,10 @@ test("a card test the server refuses cannot be started and says why", async () =
   await user.click(start);
   assert.equal(starts, 0, "a server-refused test cannot be started");
   // A label's nodes are the server's to resolve: nothing is asked until a key is given.
-  await user.click(screen.getByText(n.test.patternName.ring));
-  await user.click(screen.getByText(n.test.scopeLabel));
+  await choose(user, n.test.pattern, n.test.patternName.ring);
+  await choose(user, n.test.scope, n.test.scopeLabel);
   assert.ok(await screen.findByText(n.test.cardEstimating));
-  await user.type(screen.getByLabelText(n.test.labelKey), "rack");
+  await user.type(screen.getByRole("textbox", { name: /Label key/ }), "rack");
   assert.ok(await screen.findByText(/^12 nodes, 12 pairs: 768 probes in 8 rounds, at most 24 s\./));
   assert.equal(start.disabled, false);
 });
@@ -448,7 +514,9 @@ test("a card matrix of two nodes says how to pick cards and shows the grid", asy
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
   assert.ok(await screen.findByText(n.test.card.verdict.matrix.diagonal));
-  assert.ok(screen.getByText(/1 node pairs · 2\/4 card pairs reachable/));
+  metric(n.test.overview.nodePairs, "1");
+  metric(n.test.overview.reachableCards, "2");
+  metric(n.test.overview.cardPairs, "4");
   // One node pair is shown as its grid at once: source cards down, target cards across.
   const grid = screen.getByRole("columnheader", { name: "node-00 \\ node-01" }).closest("table") as HTMLElement;
   assert.ok(within(grid).getByLabelText("npu3 → npu3: Reachable"));
@@ -497,7 +565,9 @@ test("a same-named card test lists each pair of cards and explains a pair that w
   // The server's verdict is the healthy shape; the pairs that differ from it are named.
   assert.ok(await screen.findByText(n.test.card.verdict.ping.full));
   // The card without a namesake was never pinged: four pairs were, three answered.
-  assert.ok(screen.getByText(/3 node pairs · 3\/4 card pairs reachable/));
+  metric(n.test.overview.nodePairs, "3");
+  metric(n.test.overview.reachableCards, "3");
+  metric(n.test.overview.cardPairs, "4");
   assert.ok(screen.getByText(/^Node pairs that differ from the rest \(2\): node-01 ↔ node-02, node-02 ↔ node-00\./));
   assert.ok(screen.getByLabelText("node-00 ↔ node-01: All same-named"));
   const notTested = screen.getByLabelText("node-02 ↔ node-00: Not tested");
@@ -521,6 +591,7 @@ test("a card test that is running or was never run says so", async () => {
   stub("network", async () => cardNetwork(3, 2, { ...cardRun("card_matrix", "mesh", "", []), status: "running", node_count: 3, pair_count: 3, card_shape: undefined }));
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
-  assert.ok(await screen.findByText("Testing 3 nodes, 3 pairs…"));
+  assert.ok(await screen.findByText(n.test.overview.state.running));
+  metric(n.test.overview.nodePairs, "3");
   assert.equal((screen.getAllByRole("button", { name: n.test.start })[0] as HTMLButtonElement).disabled, true);
 });

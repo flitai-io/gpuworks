@@ -11,6 +11,13 @@
   --layer-tooltip: 1080;
 }
 
+/* A closed drawer remains mounted for its exit animation. Once the list
+   is interactive again, the fading layer must not swallow its first click. */
+.side-drawer-backdrop[data-closed],
+.side-drawer[data-closed] {
+  pointer-events: none;
+}
+
 /* Right-side Zeron drawers open beside the resident AI assistant, as the antd
    ones do (styles.css, body.assistant-open): otherwise the assistant panel
    and a detail or column-settings drawer cover each other. Narrow windows

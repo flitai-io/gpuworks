@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { afterEach, test } from "node:test";
 import { JSDOM } from "jsdom";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 
@@ -34,7 +35,7 @@ const NetworkTopologyGuide = (await import("../src/pages/networks/topology/Netwo
 afterEach(() => cleanup());
 
 const tp = en.topology;
-const renderGuide = () => render(<I18nextProvider i18n={i18n}><NetworkTopologyGuide /></I18nextProvider>);
+const renderGuide = () => render(<I18nextProvider i18n={i18n}><MemoryRouter initialEntries={["/networks/guide"]}><NetworkTopologyGuide /></MemoryRouter></I18nextProvider>);
 const bodyRows = () => screen.getAllByRole("row").filter((row) => row.closest("tbody"));
 
 test("the simple topology lists the three settings it draws", () => {

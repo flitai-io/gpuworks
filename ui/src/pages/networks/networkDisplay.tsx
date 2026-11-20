@@ -1,7 +1,6 @@
 import { Badge, type BadgeColor } from "../../components/ui/badge";
 import { Tooltip } from "../../components/ui/tooltip";
 import { ExclamationCircleFilled } from "@ant-design/icons";
-import { colors } from "../../theme/tokens";
 import { useTranslation } from "react-i18next";
 import type { Network, NetworkRail, NetworkRole, NetworkTestRun, NetworkType, NetworkWarning } from "../../networkTypes";
 
@@ -32,6 +31,17 @@ export function isAcceleratorRDMA(type: NetworkType) {
   return type === "accelerator_rdma" || type === "accelerator_hccs";
 }
 
+/** Each accelerator network consumes only its own family of on-card addresses. */
+export function acceleratorFabric(type?: NetworkType) {
+  if (type === "accelerator_hccs") return "HCCS";
+  if (type === "accelerator_rdma") return "RoCE";
+}
+
+export function railAddressTitle(t: (key: string, params?: Record<string, unknown>) => string, type: NetworkType) {
+  const fabric = acceleratorFabric(type);
+  return fabric ? t("nodeTable.cardAddresses", { fabric }) : t("nodeTable.hcaIPs");
+}
+
 /** The network carries traffic on rails (RDMA ports or cards), apart from its bootstrap address. */
 export function usesRails(type: NetworkType) {
   return isHostRDMA(type) || isAcceleratorRDMA(type);
@@ -59,10 +69,17 @@ export function SelectorSummary({ network }: { network: Pick<Network, "cidr" | "
 
 const knownWarnings = new Set(["conflict", "override_missing", "link_layer_mismatch", "rdma_no_hca", "bootstrap_missing", "hca_unusable", "hca_mismatch"]);
 
-export function warningText(t: (key: string, options?: Record<string, unknown>) => string, warning: NetworkWarning) {
+export function warningText(t: (key: string, options?: Record<string, unknown>) => string, warning: NetworkWarning, type?: NetworkType) {
   const params: Record<string, unknown> = { ...(warning.params ?? {}) };
   if (warning.code === "conflict" && typeof params.role === "string") {
     params.role = t(`role.${params.role}`, { defaultValue: params.role });
+  }
+  const fabric = acceleratorFabric(type);
+  if (fabric) {
+    if (warning.code === "override_missing" && params.kind === "hca") params.kind = t("node.card.name");
+    if (warning.code === "rdma_no_hca" || warning.code === "hca_unusable" || warning.code === "hca_mismatch") {
+      return t(`cardWarning.${warning.code}`, { ...params, fabric });
+    }
   }
   if (!knownWarnings.has(warning.code)) {
     return t("warning.unknown", { code: warning.code });
@@ -71,9 +88,9 @@ export function warningText(t: (key: string, options?: Record<string, unknown>) 
 }
 
 /** Orange exclamation with the reasons in a tooltip; renders nothing without warnings. */
-export function WarningMark({ warnings, summary }: { warnings?: NetworkWarning[]; summary?: string }) {
+export function WarningMark({ warnings, summary, type }: { warnings?: NetworkWarning[]; summary?: string; type?: NetworkType }) {
   const { t } = useTranslation("networks");
-  const text = summary ?? (warnings ?? []).map((w) => warningText(t, w)).join("\n");
+  const text = summary ?? (warnings ?? []).map((w) => warningText(t, w, type)).join("\n");
   if (!text) return null;
   return (
     <Tooltip content={<span style={{ whiteSpace: "pre-line" }}>{text}</span>}>
@@ -82,7 +99,7 @@ export function WarningMark({ warnings, summary }: { warnings?: NetworkWarning[]
         aria-label={text}
         tabIndex={0}
         className="ml-1.5 cursor-help"
-        style={{ color: colors.warning }}
+        style={{ color: "var(--warning)" }}
       />
     </Tooltip>
   );

@@ -71,7 +71,7 @@ export default function DetailDrawer({
             badge={tab.count == null ? undefined : <span title={tab.countTitle}>{tab.count}</span>} />)}
         </TabsList>
         {/* Zeron's list overhangs 4px on every side; keep it inside the body (no sideways scroll) and start panels one block gap below. */}
-        {tabs.map((tab) => <TabPanel key={tab.key} value={tab.key} keepMounted={visited.has(tab.key)} className="pt-4">{tab.children}</TabPanel>)}
+        {tabs.map((tab) => <TabPanel key={tab.key} value={tab.key} keepMounted={visited.has(tab.key)} className="isolate pt-4">{tab.children}</TabPanel>)}
       </Tabs>}
       {children}
     </SideDrawer>

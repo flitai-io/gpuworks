@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
+import { useNetworkTargetSearch } from "./useNetworkTargetSearch";
 import { Switch } from "../../components/ui/switch";
 import { Combobox, ComboboxInput, ComboboxContent, ComboboxList, ComboboxItem } from "../../components/ui/combobox";
 import { OptionSelect } from "../../ui-kit/OptionSelect";
@@ -36,7 +36,7 @@ export default function ManagementNodesTable({ nodes, onChanged }: { nodes: Netw
   const { t: tCommon } = useTranslation("common");
   // Until the identity is known, or if the lookup fails, the table is read-only.
   const isAdmin = useIsAdmin();
-  const [search, setSearch] = useState("");
+  const search = useNetworkTargetSearch(0, "nodes", nodes, t("management.search"));
   const [labelFilter, setLabelFilter] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [bulk, setBulk] = useState<Record<NetworkRole, BulkChoice>>({ serving: "keep", storage_sync: "keep", compute: "keep" });
@@ -50,13 +50,12 @@ export default function ManagementNodesTable({ nodes, onChanged }: { nodes: Netw
   }, [nodes]);
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return nodes.filter((n) => {
-      if (q && !n.node_name.toLowerCase().includes(q) && !n.ip.includes(q) && !n.interface.toLowerCase().includes(q)) return false;
+    if (!labelFilter.length) return search.visible;
+    return search.visible.filter((n) => {
       const pairs = labelPairs(n.labels);
       return labelFilter.every((pair) => pairs.includes(pair));
     });
-  }, [nodes, search, labelFilter]);
+  }, [search.visible, labelFilter]);
 
   const apply = async (uuids: string[], allow: NetworkRole[], deny: NetworkRole[], key: string) => {
     setBusy(key);
@@ -83,7 +82,7 @@ export default function ManagementNodesTable({ nodes, onChanged }: { nodes: Netw
       const allowed = !(n.roles_off ?? []).includes(role);
       const key = `${n.node_uuid}/${role}`;
       return (
-        <div className="flex flex-col items-start gap-0.5" onClick={(event) => event.stopPropagation()}>
+        <div className="isolate flex flex-col items-start gap-0.5" onClick={(event) => event.stopPropagation()}>
           <Switch
             labelVisibility="sr-only"
             label={`${n.node_name} ${t(`management.roleSwitch.${role}`)}`}
@@ -109,10 +108,10 @@ export default function ManagementNodesTable({ nodes, onChanged }: { nodes: Netw
   // A node's labels sit one step down: the row keeps the node, its address
   // and the role switches, which is what fits the 720px detail drawer.
   const labelsOf = (n: NetworkNode) => (
-    <dl className="grid gap-2 text-body">
-      <div style={{ gridColumn: "1 / -1" }}>
+    <dl className="network-node-details text-body" data-selectable={isAdmin}>
+      <div className="min-w-0">
         <dt className="text-fg-muted">{t("management.labels")}</dt>
-        <dd className="break-words">{labelPairs(n.labels).join(", ") || "—"}</dd>
+        <dd>{labelPairs(n.labels).join(", ") || "—"}</dd>
       </div>
     </dl>
   );
@@ -122,10 +121,9 @@ export default function ManagementNodesTable({ nodes, onChanged }: { nodes: Netw
   const choiceOptions = (["keep", "allow", "deny"] as const).map((c) => ({ value: c, label: t(`management.bulk.${c}`) }));
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="network-management-nodes flex min-w-0 flex-col gap-3">
       <Notice title={t("management.switchIntro")}><span>{t("management.switchEffect")}</span></Notice>
       <div className="flex flex-wrap items-center gap-2">
-        <Input type="search" placeholder={t("management.search")} value={search} onChange={(e) => setSearch(e.target.value)} className="w-60" aria-label={t("management.search")} />
         <div className="min-w-0 w-60">
           <Combobox multiple items={labelOptions.map(option => option.value)} value={labelFilter} onValueChange={setLabelFilter}>
             <ComboboxInput showClear clearAriaLabel={tCommon("resourceTable.clearFilters")} triggerAriaLabel={t("management.labelFilter")} placeholder={t("management.labelFilter")} aria-label={t("management.labelFilter")} />
@@ -160,7 +158,8 @@ export default function ManagementNodesTable({ nodes, onChanged }: { nodes: Netw
         </div>
       )}
       <ResourceTable<NetworkNode> tableId="network-management-nodes" rowKey="node_uuid"
-        columns={columns} data={visible}
+        columns={columns} data={visible} toolbar={search.searchBox} pageResetKey={JSON.stringify([search.query, labelFilter])}
+        loading={search.loading} error={search.error} onRefresh={search.onRefresh}
         rowSelection={isAdmin ? { selectedRowKeys: selected, onChange: (keys) => setSelected(keys.map(String)), preserveSelectedRowKeys: true, getCheckboxProps: () => ({ disabled: busy !== null }) } : undefined}
         emptyDescription={nodes.length === 0 ? t("detail.noNodes") : t("management.noMatch")}
         expandable={{ expandedRowRender: labelsOf, expandRowByClick: true }} />

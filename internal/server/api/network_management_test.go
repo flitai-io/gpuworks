@@ -62,6 +62,11 @@ func TestManagementNetworkIsListedReadOnly(t *testing.T) {
 		t.Fatalf("management nodes = %v\nwant %v", got, want)
 	}
 
+	ids := n.expect(n.member, http.MethodGet, "/api/v1/networks/0/search?kind=nodes&q=mgmt-B", "", http.StatusOK)["ids"]
+	if !reflect.DeepEqual(ids, []any{"mgmt-b"}) {
+		t.Fatalf("management node search = %v", ids)
+	}
+
 	// It cannot be edited, deleted or attached.
 	n.expectCode(http.MethodPut, "/api/v1/networks/0", `{"name":"x","roles":["serving"],"type":"host_ethernet"}`, http.StatusNotFound, ErrorNetworkNotFound)
 	n.expectCode(http.MethodDelete, "/api/v1/networks/0", "", http.StatusNotFound, ErrorNetworkNotFound)

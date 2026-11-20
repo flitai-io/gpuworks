@@ -10,7 +10,7 @@ import type { Eligibility, ScheduleCapabilities } from "./deploymentCapabilities
 import type { YieldPolicy } from "./yieldPolicyApi";
 import { useEffect, useRef, useState } from "react";
 import type {
-  NetworkAttachBatchResult, NetworkAttachmentRequest, NetworkDetail, NetworkHCARequest, NetworkList,
+  NetworkAttachBatchResult, NetworkAttachmentRequest, NetworkNodeFilters, NetworkDetail, NetworkHCARequest, NetworkList,
   NetworkOverrideRequest, NetworkRequest, NetworkRole, NetworkTestEstimate, NetworkTestRequest, NetworkTestRun, NodeNetworks,
 } from "./networkTypes";
 export type * from "./networkTypes";
@@ -26,6 +26,7 @@ import i18n from "./i18n";
 import { APIError, apiErrorText, apiResponseError, ProxyErrorPage, type ProductMessage } from "./apiError";
 import type { DiagnosticReport } from "./diagnosticChecks";
 import { readSSE } from "./sse";
+import { openChangeStream } from "./events/changeStream";
 import { isSessionExpired, subscribeSessionChanges } from "./session";
 import type { LocalizedText } from "./i18n/localizedText";
 import type { InferenceAPIOperation } from "./inferenceApi";
@@ -5070,6 +5071,12 @@ export const api = {
   setManagementRoles: (uuid: string, rolesOff: NetworkRole[]) =>
     sendJSON<NodeNetworks>("PUT", `/api/v1/nodes/${uuid}/management-roles`, { roles_off: rolesOff }),
   networks: () => getJSON<NetworkList>("/api/v1/networks"),
+  searchNetworkTargets: (id: number, kind: "nodes" | "attachments", q: string, signal?: AbortSignal, filters?: NetworkNodeFilters) => {
+    const params = new URLSearchParams({ kind, q });
+    for (const role of filters?.roles ?? []) params.append("role", role);
+    for (const source of filters?.source ?? []) params.append("source", source);
+    return getJSON<{ ids: string[] }>(`/api/v1/networks/${id}/search?${params}`, signal);
+  },
   network: (id: number) => getJSON<NetworkDetail>(`/api/v1/networks/${id}`),
   createNetwork: (body: NetworkRequest) =>
     sendJSON<NetworkDetail>("POST", "/api/v1/networks", body),
@@ -5085,6 +5092,8 @@ export const api = {
     sendJSON<NetworkDetail>("POST", `/api/v1/networks/${id}/hcas`, body),
   updateNetworkAttachment: (id: number, attachmentID: number, body: NetworkOverrideRequest) =>
     sendJSON<NetworkDetail>("PUT", `/api/v1/networks/${id}/attachments/${attachmentID}`, body),
+  updateNetworkLabel: (id: number, attachmentID: number, body: { label_key: string; label_value: string }) =>
+    sendJSON<NetworkDetail>("PUT", `/api/v1/networks/${id}/attachments/${attachmentID}/label`, body),
   detachNetwork: (id: number, attachmentID: number) =>
     sendJSON<NetworkDetail>("DELETE", `/api/v1/networks/${id}/attachments/${attachmentID}`),
   startNetworkTest: (id: number, body: NetworkTestRequest) =>
@@ -5988,14 +5997,13 @@ export const api = {
 // All hooks share one EventSource. Opening one connection per hook exhausts the
 // browser's per-origin HTTP/1.1 connection pool and leaves ordinary API
 // refreshes pending behind the long-lived SSE streams.
-let sharedEventSource: EventSource | null = null;
+let sharedEventSource: ReturnType<typeof openChangeStream> | null = null;
 let sharedEventSubscribers = 0;
 let eventSessionCheck: Promise<void> | null = null;
 
-function acquireEventSource(): EventSource {
+function acquireEventSource(): ReturnType<typeof openChangeStream> {
   if (!sharedEventSource) {
-    sharedEventSource = new EventSource("/api/v1/events");
-    sharedEventSource.onerror = () => {
+    sharedEventSource = openChangeStream(() => {
       // EventSource hides HTTP statuses, so distinguish authentication expiry
       // from an ordinary connection failure through a management request.
       if (eventSessionCheck) return;
@@ -6003,13 +6011,13 @@ function acquireEventSource(): EventSource {
         .then(async (response) => { if (!response.ok) await apiResponseError(response, ""); })
         .catch(() => { /* A network failure does not establish session expiry. */ })
         .finally(() => { eventSessionCheck = null; });
-    };
+    });
   }
   sharedEventSubscribers += 1;
   return sharedEventSource;
 }
 
-function releaseEventSource(source: EventSource) {
+function releaseEventSource(source: ReturnType<typeof openChangeStream>) {
   sharedEventSubscribers = Math.max(0, sharedEventSubscribers - 1);
   if (sharedEventSubscribers === 0 && sharedEventSource === source) {
     source.close();
@@ -6054,7 +6062,7 @@ export function useEventPayload(
 }
 
 function subscribeEvents(topic: string, handler: EventListener, restored: () => void): () => void {
-  let source: EventSource | null = null;
+  let source: ReturnType<typeof openChangeStream> | null = null;
   const stop = () => {
     if (!source) return;
     source.removeEventListener(topic, handler);

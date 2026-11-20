@@ -191,14 +191,37 @@ func (s *Service) Attach(networkID uint, spec AttachmentSpec) (*store.NetworkAtt
 			return nil, &InvalidError{Kind: InvalidOverride, Field: "target", Value: "label"}
 		}
 		value := strings.TrimSpace(spec.LabelValue)
-		if err := nodelabel.ValidateWritten(map[string]string{labelKey: value}); err != nil {
-			return nil, &InvalidError{Kind: InvalidTarget, Detail: err.Error()}
+		if err := validateAttachmentLabel(labelKey, value); err != nil {
+			return nil, err
 		}
 		att.LabelKey, att.LabelValue = labelKey, value
 	default:
 		return nil, &InvalidError{Kind: InvalidTarget, Detail: "attach to exactly one of node_uuid or label_key"}
 	}
 	return s.store.CreateNetworkAttachment(att)
+}
+
+func validateAttachmentLabel(key, value string) error {
+	if err := nodelabel.ValidateWritten(map[string]string{key: value}); err != nil {
+		return &InvalidError{Kind: InvalidTarget, Detail: err.Error()}
+	}
+	return nil
+}
+
+// UpdateLabel changes a label selector in place so resolution keeps its precedence.
+func (s *Service) UpdateLabel(networkID, attachmentID uint, key, value string) error {
+	if !s.Dedicated() {
+		return ErrDedicatedUnavailable
+	}
+	key, value = strings.TrimSpace(key), strings.TrimSpace(value)
+	if err := validateAttachmentLabel(key, value); err != nil {
+		return err
+	}
+	err := s.store.UpdateNetworkAttachmentLabel(networkID, attachmentID, key, value)
+	if errors.Is(err, store.ErrNotFound) {
+		return ErrAttachmentNotFound
+	}
+	return err
 }
 
 // UpdateOverrides replaces a node attachment's overrides.

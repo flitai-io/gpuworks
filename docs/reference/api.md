@@ -1822,12 +1822,14 @@ RunPod 需要开放端口或补平台公钥时，先返回 409 `INSTANCE_RESTART
 | GET | `/api/v1/networks` | 网络列表（含加载关系、解析节点数、有提示的节点数）与角色/类型字典（`types`：`host_ethernet` / `host_rdma` / `accelerator_rdma` / `accelerator_hccs`；`type_roles`：每种类型可承担的角色）；第一项是管理网（`id` 0、`builtin: true`） | JWT |
 | POST | `/api/v1/networks` | 新建网络（名称、角色、类型、CIDR、网卡名通配）。加速器 RDMA 和加速器 HCCS 只能承担参数角色，否则返回 `NETWORK_TYPE_ROLE_INVALID` | JWT(admin) |
 | GET | `/api/v1/networks/{id}` | 网络详情：加载关系、解析到的节点（网卡/IP/HCA/提示，以及节点的用户标签 `labels`）、最近一次内部测试；`id` 0 是管理网，节点带 `roles_off`；不能修改、删除、加载（返回 404），可以发起内部测试 | JWT |
+| GET | `/api/v1/networks/{id}/search` | 搜索当前网络解析到的节点（`kind=nodes`）或配置的加载对象（`kind=attachments`）。可选的 `q` 按子串匹配，忽略大小写。查询节点时，可重复传入 `role` 和 `source`。同类条件匹配任一值，角色、来源和关键词同时生效。返回 `{"ids":[...]}`，元素分别为节点 UUID 或字符串形式的加载项 ID。未设置关键词和筛选条件时返回所选范围内全部 ID。 | JWT |
 | PATCH | `/api/v1/nodes/management-roles` | 批量修改管理网角色：`{"node_uuids":[...],"allow":[...],"deny":[...]}`，只改列出的角色，所有节点同一事务，返回 `{"updated":N}`（实际有变化的节点数）；节点不存在返回 404 `MANAGEMENT_ROLES_NODE_NOT_FOUND` | JWT(admin) |
 | PUT | `/api/v1/nodes/{uuid}/management-roles` | 设置该节点管理网不承担的角色（`{"roles_off":[...]}`），返回该节点的网络视图；只对新实例生效 | JWT(admin) |
 | PUT | `/api/v1/networks/{id}` | 修改网络 | JWT(admin) |
 | DELETE | `/api/v1/networks/{id}` | 删除网络及其加载关系与测试记录（运行中的实例不受影响） | JWT(admin) |
 | POST | `/api/v1/networks/{id}/attachments` | 加载到一个节点（可带网卡/IP/HCA 覆盖）或一个节点标签 | JWT(admin) |
 | PUT | `/api/v1/networks/{id}/attachments/{attachmentID}` | 修改节点加载的覆盖值 | JWT(admin) |
+| PUT | `/api/v1/networks/{id}/attachments/{attachmentID}/label` | 修改标签加载项的 `label_key` 与 `label_value`，保留加载项 ID 和加载时间 | JWT(admin) |
 | DELETE | `/api/v1/networks/{id}/attachments/{attachmentID}` | 移除加载 | JWT(admin) |
 | POST | `/api/v1/networks/{id}/tests/estimate` | 同一个请求体，不发起测试：返回解析出的节点数与节点对数；卡测试另返回 `card`（`rounds`、`probes`、最长耗时 `seconds`、上限 `max_seconds`）。发起会被拒绝的请求在这里以同样的错误被拒绝 | JWT(admin) |
 | POST | `/api/v1/networks/{id}/tests` | 发起内部测试（`kind`：tcp / rdma_tool / card_ping / card_matrix；rdma_tool 需主机 RDMA 网络，card_ping（同号加速卡互 ping）与 card_matrix（全卡矩阵）需加速器 RDMA 或加速器 HCCS 网络；HCCS 网络使用 `hccn_tool -hccs_ping`，RoCE 网络使用 `-ping`；轮数 × 3 秒超过 10 分钟时返回 `NETWORK_TEST_TOO_LONG`；`scope`：all / nodes / label；`id` 0 测管理网，只支持 tcp），返回 202 与运行记录（`node_uuids` 是被测节点，发起时固定，运行中尚无 `pairs` 时已给出）；由 controller 执行 | JWT(admin) |

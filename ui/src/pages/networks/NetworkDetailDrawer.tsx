@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Descriptions, Typography } from "antd";
-import { Badge } from "../../components/ui/badge";
+import NetworkLabelsDialog from "./NetworkLabelsDialog";
+import NetworkLoadTargets from "./NetworkLoadTargets";
 import { Button } from "../../components/ui/button";
 import { ConfirmPopover } from "../../ui-kit/ConfirmPopover";
 import { Notice } from "../../ui-kit/Notice";
 import { Spinner } from "../../ui-kit/Spinner";
 import { message } from "../../ui-kit/feedback";
-import ResourceTable, { type ResourceColumn } from "../../components/resourceTable/ResourceTable";
+import NetworkTargetTable from "./NetworkTargetTable";
+import type { ResourceColumn } from "../../components/resourceTable/ResourceTable";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api";
@@ -19,7 +21,7 @@ import NetworkFormModal from "./NetworkFormModal";
 import NetworkTestPanel from "./NetworkTestPanel";
 import NetworkMonitorPanel from "./NetworkMonitorPanel";
 import ManagementNodesTable from "./ManagementNodesTable";
-import { Endpoint, LinkLayerTag, RoleTags, TypeTag, WarningMark, isAcceleratorRDMA, usesRails, sourceText } from "./networkDisplay";
+import { Endpoint, acceleratorFabric, RoleTags, TypeTag, WarningMark, isAcceleratorRDMA, railAddressTitle, usesRails, sourceText } from "./networkDisplay";
 import { BootstrapCell, RailsCell } from "./RDMAEndpoints";
 import { HelpTip } from "../../ui-kit/HelpTip";
 
@@ -51,7 +53,7 @@ export default function NetworkDetailDrawer(props: Props) {
   }, [props.id]);
   const id = props.id ?? shown;
   if (id == null) return <DetailDrawer open={false} onClose={props.onClose} title="" />;
-  return <OpenNetworkDetail {...props} id={id} open={props.id != null} />;
+  return <OpenNetworkDetail key={id} {...props} id={id} open={props.id != null} />;
 }
 
 function OpenNetworkDetail({ id, open, tab: requested, onTab, onClose, onChanged }: Omit<Props, "id"> & { id: number; open: boolean }) {
@@ -63,15 +65,27 @@ function OpenNetworkDetail({ id, open, tab: requested, onTab, onClose, onChanged
   const [formOpen, setFormOpen] = useState(false);
   const tab = tabKeys.find((key) => key === requested) ?? "overview";
 
+  const pendingRead = useRef<Promise<NetworkDetail> | null>(null);
   const load = useCallback(() => {
-    api.network(id).then((d) => { setDetail(d); setError(null); }).catch((e: Error) => setError(e));
+    const request = api.network(id);
+    pendingRead.current = request;
+    request.then((next) => {
+      if (pendingRead.current !== request) return;
+      pendingRead.current = null;
+      setDetail(next);
+      setError(null);
+    }, (cause: Error) => {
+      if (pendingRead.current !== request) return;
+      pendingRead.current = null;
+      setError(cause);
+    });
   }, [id]);
   useEffect(load, [load]);
   // A running test finishes on the server; poll until its result arrives.
   const testRunning = detail?.latest_test?.status === "running";
   useEffect(() => {
     if (!testRunning) return;
-    const timer = setInterval(load, 2000);
+    const timer = setInterval(() => { if (!pendingRead.current) load(); }, 2000);
     return () => clearInterval(timer);
   }, [testRunning, load]);
 
@@ -86,8 +100,14 @@ function OpenNetworkDetail({ id, open, tab: requested, onTab, onClose, onChanged
   const name = current.builtin ? t("management.name") : current.name;
   // A change made in the drawer can change what the list shows (a network's
   // attachments, its resolved nodes): the list reads again with it.
-  const updated = (next: NetworkDetail) => { setDetail(next); onChanged(); };
-  const testTab = { key: "test", label: t("tabs.test"), children: <NetworkTestPanel network={current} onStarted={load} onChanged={current.builtin ? () => load() : setDetail} /> };
+  const applyChange = (next: NetworkDetail) => {
+    // A read started before this write may still contain the old attachment and its actions.
+    pendingRead.current = null;
+    setDetail(next);
+    setError(null);
+  };
+  const updated = (next: NetworkDetail) => { applyChange(next); onChanged(); };
+  const testTab = { key: "test", label: t("tabs.test"), children: <NetworkTestPanel network={current} onStarted={load} onChanged={current.builtin ? load : applyChange} /> };
   const monitorTab = { key: "monitor", label: t("tabs.monitor"), children: <NetworkMonitorPanel network={current} /> };
 
   const remove = async () => {
@@ -133,6 +153,7 @@ function OpenNetworkDetail({ id, open, tab: requested, onTab, onClose, onChanged
             </>
           ) : (
             <NetworkOverview
+              key={current.id}
               detail={current}
               description={current.description}
               onDetail={updated}
@@ -177,6 +198,9 @@ function NetworkOverview({ detail, description, onDetail, onAttach }: {
 }) {
   const { t } = useTranslation("networks");
   const rails = usesRails(detail.type);
+  const cards = isAcceleratorRDMA(detail.type);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const attachments = useMemo(() => new Map(detail.attachments.map(a => [a.id, a])), [detail.attachments]);
   const detach = async (attachment: NetworkAttachment) => {
     try {
       onDetail(await api.detachNetwork(detail.id, attachment.id));
@@ -184,33 +208,88 @@ function NetworkOverview({ detail, description, onDetail, onAttach }: {
       message.error(t("message.failed", { detail: (e as Error).message }));
     }
   };
-  const overrideText = (a: NetworkAttachment) => [a.interface, a.ip, a.hcas.join(",")].filter(Boolean).join(" · ");
-
-  // The row keeps the node, the roles it carries and the address it uses;
-  // where that came from, and an RDMA network's bootstrap and HCAs (still
-  // editable), sit one step down so the row fits the 720px detail drawer.
+  const ethernetEndpoint = (node: NetworkNode) => node.ip
+    ? <Endpoint iface={node.interface} ip={node.ip} />
+    : <span className="text-fg-muted">{node.interface && `${node.interface} · `}{t("nodeTable.noResolvedIP")}</span>;
   const nodeColumns: ResourceColumn<NetworkNode>[] = [
     {
       title: t("nodeTable.node"),
-      dataIndex: "node_name", key: "node", width: 180, role: "name",
-      render: (_, n) => <span><Link to="/nodes" state={{ nodeUUID: n.node_uuid }} className="detail-name-cap" title={n.node_name} onClick={(event) => event.stopPropagation()}>{n.node_name}</Link><WarningMark warnings={n.warnings} /></span>,
+      dataIndex: "node_name", key: "node", width: 140, role: "name",
+      render: (_, n) => <span><Link to="/nodes" state={{ nodeUUID: n.node_uuid }} className="detail-name-cap" title={n.node_name} onClick={(event) => event.stopPropagation()}>{n.node_name}</Link><WarningMark warnings={n.warnings} type={detail.type} /></span>,
     },
-    { title: t("nodeTable.roles"), dataIndex: "roles", key: "roles", width: 230, render: (_, n) => <RoleTags roles={n.roles} /> },
-    rails
-      ? { title: t("nodeTable.source"), dataIndex: "source", key: "source", width: 220, render: (_, n) => sourceText(t, n) }
-      : { title: t("nodeTable.endpoint"), key: "endpoint", width: 220, render: (_, n) => <Endpoint iface={n.interface} ip={n.ip} /> },
+    {
+      key: "endpointSummary", title: t(cards ? "nodeTable.bootstrapCards" : rails ? "nodeTable.bootstrapPorts" : "nodeTable.endpoint"), width: 220,
+      render: (_, n) => rails
+        ? <span>{n.ip || t("rail.noBootstrap")} · {t(cards ? "nodeTable.cardCount" : "nodeTable.portCount", { count: n.hcas.length })}</span>
+        : ethernetEndpoint(n),
+    },
+    {
+      title: t("nodeTable.roles"), dataIndex: "roles", key: "roles", width: 130,
+      filters: detail.roles.map(role => ({ value: role, text: t(`role.${role}`, { defaultValue: role }) })),
+      render: (_, n) => <RoleTags roles={n.roles} />,
+    },
+    {
+      title: t("nodeTable.source"), dataIndex: "source", key: "source", width: 150,
+      filters: [{ value: "node", text: t("detail.directNode") }, { value: "label", text: t("source.label") }],
+      render: (_, n) => n.source === "node" ? t("detail.directNode") : <span title={sourceText(t, n)}>{sourceText(t, n)}</span>,
+    },
+    {
+      key: "time", title: t("detail.attachedTime"), width: 160,
+      render: (_, node) => {
+        const time = attachments.get(node.attachment_id)?.created_at;
+        return time ? formatTime(time) : "—";
+      },
+    },
+    {
+      key: "actions", role: "actions", title: t("table.actions"), width: 124,
+      render: (_, node) => {
+        const attachment = attachments.get(node.attachment_id);
+        if (attachment?.target !== "node") return "—";
+        return <span className="inline-flex items-center gap-2">
+          <Button variant="link" size="sm" onClick={() => onAttach(attachment)}>{t("actions.edit")}</Button>
+          <ConfirmPopover title={t("actions.confirmDetach")} onConfirm={() => detach(attachment)} confirmText={t("actions.detach")} cancelText={t("actions.cancel")} destructive trigger={<Button variant="link" size="sm" className="text-fg-danger">{t("actions.detach")}</Button>} />
+        </span>;
+      },
+    },
   ];
-  const extraColumns = rails
-    ? [
-        { key: "bootstrap", title: t("nodeTable.bootstrap"), wide: true, render: (_: unknown, n: NetworkNode) => <BootstrapCell network={detail} node={n} onChanged={onDetail} /> },
-        {
-          key: "hcas",
-          wide: true,
-          title: <span>{t("nodeTable.hcaIPs")}<LinkLayerTag layer={detail.nodes[0]?.link_layer} /></span>,
-          render: (_: unknown, n: NetworkNode) => <RailsCell network={detail} node={n} onChanged={onDetail} />,
-        },
-      ]
-    : [{ key: "source", title: t("nodeTable.source"), render: (_: unknown, n: NetworkNode) => sourceText(t, n) }];
+  const expandedRowRender = (node: NetworkNode) => {
+    const attachment = attachments.get(node.attachment_id);
+    const layer = node.link_layer;
+    const showLayer = layer && layer !== acceleratorFabric(detail.type)?.toLowerCase();
+    return <dl className="network-node-details text-body">
+      {rails ? (
+        <>
+          <div>
+            <dt className="text-fg-muted">{t("nodeTable.bootstrap")}</dt>
+            <dd><BootstrapCell network={detail} node={node} onChanged={onDetail} /></dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">{railAddressTitle(t, detail.type)}</dt>
+            <dd><RailsCell network={detail} node={node} onChanged={onDetail} /></dd>
+          </div>
+          {showLayer && <div>
+            <dt className="text-fg-muted">{t("node.port.linkLayer")}</dt>
+            <dd>{t(`linkLayer.${layer}`, { defaultValue: layer })}</dd>
+          </div>}
+        </>
+      ) : (
+        <div>
+          <dt className="text-fg-muted">{t("nodeTable.endpoint")}</dt>
+          <dd>{ethernetEndpoint(node)}</dd>
+        </div>
+      )}
+      {attachment && (attachment.interface || attachment.ip || attachment.hcas.length > 0) && (
+        <div className="min-w-0 whitespace-normal">
+          <dt className="text-fg-muted">{t("nodeTable.configuredOverrides")}</dt>
+          <dd className="max-h-40 overflow-y-auto">
+            {attachment.interface && <div>{t("attach.interface")} · {attachment.interface}</div>}
+            {attachment.ip && <div>{rails ? t("nodeTable.bootstrap") : "IP"} · {attachment.ip}</div>}
+            {attachment.hcas.length > 0 && <div>{t(cards ? "node.card.name" : "nodeTable.hcas")} · {attachment.hcas.join(", ")}</div>}
+          </dd>
+        </div>
+      )}
+    </dl>;
+  };
 
   return (
     <>
@@ -222,8 +301,8 @@ function NetworkOverview({ detail, description, onDetail, onAttach }: {
               <Descriptions.Item label={t("selector.bootstrapCidr")}>{detail.cidr || t("selector.inferredShort")}</Descriptions.Item>
             </Descriptions>
             <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: "8px 0 0" }} className="flex items-center gap-1">
-              {t(isAcceleratorRDMA(detail.type) ? "detail.acceleratorEditHint" : "detail.rdmaEditHint")}
-              <HelpTip content={t(isAcceleratorRDMA(detail.type) ? "detail.acceleratorInferredHelp" : "detail.rdmaInferredHelp")} />
+              {t(cards ? "detail.acceleratorEditHint" : "detail.rdmaEditHint")}
+              <HelpTip content={t(cards ? "detail.acceleratorInferredHelp" : "detail.rdmaInferredHelp")} />
             </Typography.Paragraph>
           </>
         ) : (
@@ -233,52 +312,19 @@ function NetworkOverview({ detail, description, onDetail, onAttach }: {
           </Descriptions>
         )}
       </DetailSection>
-      <DetailSection title={t("detail.attachments")} extra={<Button variant="secondary" size="sm" onClick={() => onAttach(null)}>{t("actions.attach")}</Button>}>
-        {detail.attachments.length === 0 ? (
-          <span className="text-fg-muted">{t("detail.noAttachments")}</span>
-        ) : (
-          <ResourceTable<NetworkAttachment>
-            tableId="network-attachments" columnSettings={false}
-            rowKey="id"
-            pagination={false}
-            data={detail.attachments}
-            columns={[
-              {
-                key: "target", title: t("detail.attachTarget"), width: 240,
-                render: (_, a) => (
-                  <span className="flex flex-col gap-1">
-                    <span>
-                      <Badge size="sm">{t(`source.${a.target}`)}</Badge>
-                      {a.target === "node" ? (a.node_name || a.node_uuid) : <span className="font-mono">{`${a.label_key}=${a.label_value ?? ""}`}</span>}
-                    </span>
-                    {overrideText(a) && <span className="text-fg-muted">{t("detail.overrides", { value: overrideText(a) })}</span>}
-                  </span>
-                ),
-              },
-              { key: "time", title: t("detail.attachedTime"), width: 180, render: (_, a) => <span className="text-fg-muted">{formatTime(a.created_at)}</span> },
-              {
-                key: "actions", width: 150, role: "actions",
-                render: (_, a) => (
-                  <span className="inline-flex items-center gap-2">
-                    {a.target === "node" && <Button variant="link" size="sm" onClick={() => onAttach(a)}>{t("actions.edit")}</Button>}
-                    <ConfirmPopover title={t("actions.confirmDetach")} onConfirm={() => detach(a)} confirmText={t("actions.detach")} cancelText={t("actions.cancel")} destructive trigger={<Button variant="link" size="sm" className="text-fg-danger">{t("actions.detach")}</Button>} />
-                  </span>
-                ),
-              },
-            ]}
-          />
-        )}
-      </DetailSection>
-      <DetailSection title={t("detail.resolved", { count: detail.nodes.length })}>
-        <ResourceTable<NetworkNode>
+      <NetworkLoadTargets detail={detail} onAttach={onAttach} onDetach={detach} onManageLabels={() => setLabelsOpen(true)}>
+        <div className="network-overview-nodes"><NetworkTargetTable<NetworkNode> networkId={detail.id} kind="nodes"
+          searchLabel={t(!rails ? "detail.searchEthernetNodes" : cards ? "detail.searchCardNodes" : "detail.searchNodes")}
+          toolbarExtra={<Button variant="secondary" size="sm" onClick={() => onAttach(null)}>{t("detail.attachNodes")}</Button>}
           tableId="network-resolved-nodes"
           rowKey="node_uuid"
           columns={nodeColumns}
           data={detail.nodes}
           emptyDescription={t("detail.noNodes")}
-          expandable={{ expandedRowRender: (n) => <dl className="grid gap-3 text-body">{extraColumns.map(column => <div key={column.key}><dt className="mb-1 text-label text-fg-muted">{column.title}</dt><dd className="min-w-0 break-words">{column.render(undefined, n)}</dd></div>)}</dl>, expandRowByClick: true }}
-        />
-      </DetailSection>
+          expandable={{ expandedRowRender, expandRowByClick: true }}
+        /></div>
+      </NetworkLoadTargets>
+      {labelsOpen && <NetworkLabelsDialog open detail={detail} onClose={() => setLabelsOpen(false)} onDetail={onDetail} />}
     </>
   );
 }

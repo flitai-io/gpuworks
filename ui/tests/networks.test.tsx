@@ -5,16 +5,18 @@ import { JSDOM } from "jsdom";
 import React from "react";
 import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
+import type { NetworkNode } from "../src/networkTypes";
 import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 import { closeNodePicker, findNodeOption, unavailable } from "./helpers/nodePicker.ts";
 
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLHtmlElement", "SVGElement", "Element", "Node", "MutationObserver", "NodeFilter", "ShadowRoot"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLHtmlElement", "SVGElement", "Element", "Node", "MutationObserver", "NodeFilter", "ShadowRoot", "AbortController", "AbortSignal"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
+Object.defineProperty(dom.window.Element.prototype, "getAnimations", { configurable: true, value: () => [] });
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
 // The list reads again on server events; this stands in for the shared
@@ -47,12 +49,13 @@ await i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-const { cleanup, render, screen, waitFor, within, fireEvent } = await import("@testing-library/react");
+const { act, cleanup, render, screen, waitFor, within, fireEvent } = await import("@testing-library/react");
 const userEventModule = await import("@testing-library/user-event");
 const userEvent = userEventModule.default ?? userEventModule;
 const { MemoryRouter, Route, Routes } = await import("react-router-dom");
 const apiModule = await import("../src/api.ts");
 const NetworksPage = (await import("../src/pages/networks/NetworksPage.tsx")).default;
+const NetworkTopologyGuide = (await import("../src/pages/networks/topology/NetworkTopologyGuide.tsx")).default;
 const { NetworkDetailRedirect } = await import("../src/pages/networks/networkLinks.tsx");
 const { default: NetworkDetailDrawer } = await import("../src/pages/networks/NetworkDetailDrawer.tsx");
 const { useParams: useRouteParams } = await import("react-router-dom");
@@ -97,6 +100,7 @@ function renderAt(path: string, element: React.ReactElement, pattern = path) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path={pattern} element={<>{element}<Where /></>} />
+          <Route path="/networks/guide" element={<NetworkTopologyGuide />} />
           <Route path="/networks/:id" element={<div>detail route</div>} />
         </Routes>
       </MemoryRouter>
@@ -127,20 +131,47 @@ test("network list shows the empty state and the fallback note", async () => {
   renderAt("/networks", <NetworksPage />);
   await waitFor(() => assert.ok(screen.getByText(n.empty)));
   assert.ok(screen.getByText(n.fallbackNote));
-  assert.ok(screen.getByRole("group", { name: n.topology.diagram.simpleLabel }), "the page explains the topology");
+  assert.equal(screen.queryByRole("group", { name: n.topology.diagram.simpleLabel }), null);
+  await userEvent.click(screen.getByRole("link", { name: n.topology.guide }));
+  assert.ok(screen.getByRole("heading", { name: n.topology.guide }));
+  assert.ok(screen.getByRole("group", { name: n.topology.diagram.simpleLabel }));
+  await userEvent.click(screen.getByRole("link", { name: n.title }));
+  await waitFor(() => assert.ok(screen.getByText(n.empty)));
 });
 
-test("an empty ?network= opens no detail, while ?network=0 is the management network", async () => {
+test("invalid network IDs open no detail, while zero opens the management network", async () => {
   const asked: number[] = [];
   stub("networks", async () => ({ items: [], roles: ["storage_sync", "compute", "serving"], types: ["host_ethernet", "host_rdma", "accelerator_rdma"], type_roles: typeRoles }));
   stub("network", async (id: number) => { asked.push(id); return { ...detailFixture, id }; });
-  renderAt("/networks?network=", <NetworksPage />, "/networks");
-  await waitFor(() => assert.ok(screen.getByText(n.empty)));
-  assert.deepEqual(asked, [], "an empty value is no network");
-  assert.equal(document.querySelector('[role="dialog"]'), null);
-  cleanup();
+  for (const raw of ["", " ", "invalid", "-1", "0x0", "1.5", "3e2", "9007199254740993"]) {
+    renderAt(`/networks?network=${encodeURIComponent(raw)}`, <NetworksPage />, "/networks");
+    await waitFor(() => assert.ok(screen.getByText(n.empty)));
+    assert.deepEqual(asked, [], `invalid id "${raw}" must not request a resource`);
+    assert.equal(screen.queryByRole("dialog"), null);
+    cleanup();
+  }
   renderAt("/networks?network=0", <NetworksPage />, "/networks");
   await waitFor(() => assert.deepEqual(asked, [0]));
+});
+
+test("the resource name reopens its network after switching from Chinese to English", async () => {
+  const name = "inference-fabric";
+  stub("networks", async () => ({ items: [listItem({ name })], roles: detailFixture.role_options, types: detailFixture.type_options, type_roles: typeRoles }));
+  stub("network", async () => ({ ...detailFixture, name }));
+  await i18n.changeLanguage("zh");
+  const user = userEvent.setup();
+  renderAt("/networks", <NetworksPage />);
+  await user.click(await screen.findByRole("link", { name }));
+  const drawer = await screen.findByRole("dialog");
+  await within(drawer).findByRole("link", { name: "h20-07" });
+  await user.click(within(drawer).getByRole("button", { name: i18n.t("common:actions.close") }));
+  await waitFor(() => assert.equal(screen.queryAllByRole("dialog").length, 0));
+  await act(async () => { await i18n.changeLanguage("en"); });
+  await user.click(await screen.findByRole("link", { name }));
+  const reopened = await screen.findByRole("dialog");
+  assert.ok(await within(reopened).findByRole("tab", { name: n.tabs.test }));
+  assert.ok(within(reopened).getByRole("link", { name: "h20-07" }));
+  assert.equal(screen.getByTestId("where").textContent, `/networks?network=${detailFixture.id}`);
 });
 
 test("an old detail address opens the list's drawer on the tab it named", async () => {
@@ -161,13 +192,164 @@ test("an old detail address opens the list's drawer on the tab it named", async 
   await waitFor(() => assert.equal(tab.getAttribute("aria-selected"), "true"));
 });
 
+test("the overview shows attachment sources on Ethernet and keeps unmatched attachments in management", async () => {
+  const attachments = [...detailFixture.attachments, { id: 99, target: "label", label_key: "rack", label_value: "unassigned", hcas: [], created_at: detailFixture.created_at }];
+  const network = { ...detailFixture, type: "host_ethernet", attachments };
+  stub("network", async () => network);
+  const removed: number[] = [];
+  stub("detachNetwork", async (_id, attachmentID) => {
+    removed.push(attachmentID);
+    return { ...network, attachments: detailFixture.attachments };
+  });
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  const manage = await screen.findByRole("button", { name: n.detail.manageLabels });
+  assert.equal(screen.queryByRole("dialog", { name: n.detail.manageLabels }), null);
+  const section = screen.getByRole("heading", { name: "Loaded nodes (2)" }).closest("section")!;
+  assert.ok(within(section).getByText("2 labels"));
+  assert.ok(within(section).getByRole("table"));
+  const nodeToolbar = within(section).getByRole("searchbox", { name: n.detail.searchEthernetNodes }).closest(".resource-table-toolbar");
+  assert.ok(nodeToolbar);
+  assert.ok(within(nodeToolbar as HTMLElement).getByRole("button", { name: n.detail.attachNodes }));
+  assert.equal(screen.queryByText("rack=unassigned"), null);
+  assert.ok(screen.getByRole("columnheader", { name: n.nodeTable.source }));
+  const direct = screen.getByRole("link", { name: "h20-07" }).closest("tr") as HTMLElement;
+  assert.ok(within(direct).getByText(n.detail.directNode));
+  const actions = within(direct).getByRole("button", { name: n.actions.edit }).closest("td")!;
+  assert.equal(actions, direct.lastElementChild);
+  assert.equal(actions.style.position, "sticky");
+  const byLabel = screen.getByRole("link", { name: "h20-05" }).closest("tr") as HTMLElement;
+  assert.ok(within(byLabel).getByText("Label pool=h20-a"));
+  const toggle = within(byLabel).getByRole("button", { name: /Show details|Expand row/ });
+  assert.equal(toggle.closest("td"), byLabel.firstElementChild);
+  await userEvent.click(within(byLabel).getByText("Label pool=h20-a"));
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.ok(within(detailOf(byLabel)).getByText("bond0 · 10.20.1.15"));
+
+  await userEvent.click(manage);
+  const labels = await screen.findByRole("dialog", { name: n.detail.manageLabels });
+  const key = within(labels).getByRole("textbox", { name: n.attach.labelKey }) as HTMLInputElement;
+  const value = within(labels).getByRole("textbox", { name: n.attach.labelValue }) as HTMLInputElement;
+  assert.equal(key.value, "");
+  const unmatched = within(labels).getByText("rack=unassigned").closest("tr") as HTMLElement;
+  await userEvent.click(within(unmatched).getByRole("button", { name: n.actions.edit }));
+  assert.equal(key.value, "rack");
+  assert.equal(value.value, "unassigned");
+  assert.ok(within(labels).getByRole("button", { name: n.actions.save }));
+  await userEvent.click(within(unmatched).getByRole("button", { name: n.actions.detach }));
+  const popover = await waitFor(() => {
+    const element = document.querySelector<HTMLElement>('[data-slot="popover-content"]');
+    assert.ok(element);
+    return within(element);
+  });
+  await userEvent.click(popover.getByRole("button", { name: n.actions.detach }));
+  await waitFor(() => assert.deepEqual(removed, [99]));
+  assert.equal(within(labels).queryByText("rack=unassigned"), null);
+  assert.equal(key.value, "");
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => assert.equal(screen.queryByRole("dialog", { name: n.detail.manageLabels }), null));
+});
+
+test("an unresolved direct attachment keeps its overrides and can be detached without removing a resolved node", async () => {
+  const orphan = { ...detailFixture.attachments.find((a: { target: string }) => a.target === "node"),
+    id: 99, node_uuid: "unresolved-uuid", node_name: "", interface: "bond9", ip: "192.0.2.9", hcas: ["mlx5_9:1"] };
+  stub("network", async () => ({ ...detailFixture, attachments: [...detailFixture.attachments, orphan] }));
+  const removed: number[][] = [];
+  stub("detachNetwork", async (id, attachmentID) => {
+    removed.push([id, attachmentID]);
+    return detailFixture;
+  });
+  const user = userEvent.setup();
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  const label = i18n.t("networks:detail.unresolvedAttachments", { count: 1 });
+  const toggle = await screen.findByRole("button", { name: label });
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  await user.click(toggle);
+  const row = screen.getByText("unresolved-uuid").closest("tr")!;
+  assert.ok(within(row).getByText(/bond9 · 192\.0\.2\.9 · mlx5_9:1/));
+  assert.ok(within(row).getByRole("button", { name: n.actions.edit }));
+  await user.click(within(row).getByRole("button", { name: n.actions.detach }));
+  assert.deepEqual(removed, []);
+  const prompt = await screen.findByText(n.actions.confirmDetach);
+  const popover = prompt.closest<HTMLElement>('[data-slot="popover-content"]')!;
+  await user.click(within(popover).getByRole("button", { name: n.actions.detach }));
+  await waitFor(() => assert.equal(screen.queryByRole("button", { name: label }), null));
+  assert.deepEqual(removed, [[detailFixture.id, orphan.id]]);
+  assert.ok(screen.getByRole("heading", { name: "Loaded nodes (2)" }));
+  assert.ok(screen.getByRole("link", { name: "h20-07" }));
+});
+
+test("an older test poll cannot restore direct attachment actions after a label takes over", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const direct = detailFixture.attachments.find((a: { target: string }) => a.target === "node");
+  const label = detailFixture.attachments.find((a: { target: string }) => a.target === "label");
+  const running = { ...detailFixture, latest_test: { ...detailFixture.latest_test, status: "running" } };
+  const sourceByLabel = {
+    ...running,
+    attachments: [label],
+    nodes: running.nodes.map((node: NetworkNode) => node.node_uuid === direct.node_uuid
+      ? { ...node, source: "label", attachment_id: label.id, label_key: label.label_key, label_value: label.label_value }
+      : node),
+  };
+  const oldRead = Promise.withResolvers<typeof running>();
+  let reads = 0;
+  stub("network", async () => ++reads === 1 ? running : oldRead.promise);
+  const removed: number[][] = [];
+  stub("detachNetwork", async (id, attachmentID) => { removed.push([id, attachmentID]); return sourceByLabel; });
+
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  const nodeRow = () => screen.getByRole("link", { name: direct.node_name }).closest("tr")!;
+  await screen.findByRole("link", { name: direct.node_name });
+  assert.ok(within(nodeRow()).getByText(n.detail.directNode));
+  act(() => t.mock.timers.tick(2000));
+  assert.equal(reads, 2, "the poll is in flight before the user removes the direct attachment");
+  await userEvent.click(within(nodeRow()).getByRole("button", { name: n.actions.detach }));
+  const confirm = (await screen.findByText(n.actions.confirmDetach)).closest<HTMLElement>('[data-slot="popover-content"]')!;
+  await userEvent.click(within(confirm).getByRole("button", { name: n.actions.detach }));
+  await within(nodeRow()).findByText("Label pool=h20-a");
+  await act(async () => oldRead.resolve(running));
+
+  assert.deepEqual(removed, [[running.id, direct.id]]);
+  assert.ok(within(nodeRow()).getByText("Label pool=h20-a"));
+  assert.equal(within(nodeRow()).queryByRole("button", { name: n.actions.edit }), null);
+  assert.equal(within(nodeRow()).queryByRole("button", { name: n.actions.detach }), null);
+  assert.ok(screen.getByRole("heading", { name: "Loaded nodes (2)" }));
+  await userEvent.click(screen.getByRole("button", { name: n.detail.manageLabels }));
+  const manager = await screen.findByRole("dialog", { name: n.detail.manageLabels });
+  assert.ok(within(manager).getByText("pool=h20-a"));
+});
+
+test("a delayed detach result belongs to the network where the action started", async () => {
+  const response = Promise.withResolvers<typeof detailFixture>();
+  const requested: number[] = [];
+  stub("network", async (id) => ({ ...detailFixture, id, name: `network-${id}` }));
+  stub("detachNetwork", async (id) => { requested.push(id); return response.promise; });
+  const user = userEvent.setup();
+  const drawer = (id: number) => (
+    <I18nextProvider i18n={i18n}><MemoryRouter>
+      <NetworkDetailDrawer id={id} onClose={() => {}} onChanged={() => {}} onTab={() => {}} />
+    </MemoryRouter></I18nextProvider>
+  );
+  const view = render(drawer(1));
+  const direct = (await screen.findByRole("link", { name: "h20-07" })).closest("tr")!;
+  await user.click(within(direct).getByRole("button", { name: n.actions.detach }));
+  const confirm = (await screen.findByText(n.actions.confirmDetach)).closest<HTMLElement>('[data-slot="popover-content"]')!;
+  await user.click(within(confirm).getByRole("button", { name: n.actions.detach }));
+  assert.deepEqual(requested, [1]);
+  view.rerender(drawer(2));
+  await screen.findByText("network-2");
+  await act(async () => response.resolve(detailFixture));
+  assert.ok(screen.getByText("network-2"));
+  assert.ok(screen.getByRole("link", { name: "h20-07" }));
+});
+
 test("detaching in the drawer reads the list again, so its attachments column follows", async () => {
   let listReads = 0;
   stub("networks", async () => { listReads++; return { items: [listItem()], roles: ["storage_sync", "compute", "serving"], types: ["host_ethernet", "host_rdma", "accelerator_rdma"], type_roles: typeRoles }; });
   stub("network", async () => detailFixture);
   stub("detachNetwork", async () => ({ ...detailFixture, attachments: detailFixture.attachments.slice(1) }));
   renderAt(`/networks?network=${detailFixture.id}`, <NetworksPage />, "/networks");
-  const detach = (await screen.findAllByRole("button", { name: n.actions.detach }))[0];
+  const direct = (await screen.findByRole("link", { name: "h20-07" })).closest("tr")!;
+  const detach = within(direct).getByRole("button", { name: n.actions.detach });
   const before = listReads;
   fireEvent.click(detach);
   const ok = await waitFor(() => {
@@ -220,6 +402,20 @@ test("network list renders roles, type, selector, attachments and a warning summ
   const other = screen.getByRole("link", { name: "storage" }).closest("tr") as HTMLElement;
   assert.equal(within(other).queryByRole("img", { name: /warnings/ }), null, "no warning mark without warnings");
   assert.ok(within(other).getByText(n.selector.none));
+});
+
+test("large attachment lists show direct node and label counts separately", async () => {
+  const nodes = Array.from({ length: 64 }, (_, i) => ({ id: i + 1, target: "node", node_name: `worker-${i}` }));
+  const label = { id: 65, target: "label", label_key: "pool", label_value: "training" };
+  stub("networks", async () => ({
+    items: [listItem({ attachments: [...nodes, label], resolved_node_count: 100 })],
+    roles: ["compute"], types: ["host_rdma"], type_roles: typeRoles,
+  }));
+  renderAt("/networks", <NetworksPage />);
+  const summary = await screen.findByRole("link", { name: "64 nodes · 1 label" });
+  assert.equal(summary.getAttribute("href"), `/networks?network=${detailFixture.id}`);
+  assert.equal(screen.queryByText("worker-0"), null);
+  assert.ok(screen.getByText("100"));
 });
 
 test("creating a network sends the server dictionary values and opens the detail", async () => {
@@ -310,60 +506,84 @@ for (const networkType of ["accelerator_rdma", "accelerator_hccs"] as const) {
 
 }
 
-test("an accelerator network's rails are picked from the node's cards", async () => {
-  const calls: unknown[] = [];
-  const npu = {
-    ...detailFixture, type: "accelerator_rdma",
-    nodes: detailFixture.nodes.map((node: { node_name: string }, i: number) => ({
-      ...node, link_layer: "roce",
-      hcas: [{ name: "npu3", ip: i === 0 ? "203.0.113.59" : "203.0.113.82", netdev: "", link_layer: "roce", state: "UP", speed_gbps: 200 }],
-    })),
-  };
-  stub("network", async () => npu);
-  stub("nodeNetworks", async () => ({
-    networks: [], inventory_reported: true, interfaces: [], serving_forward: null, management: { interface: "", ip: "", roles_off: [], behind_nat: false },
-    rdma_ports: [{ device: "mlx5_0", port: 1, state: "ACTIVE", link_layer: "InfiniBand", rate_gbps: 400, netdev: "", ip: "" }],
-    accelerator_ports: [
-      { name: "npu3", index: 3, ip: "203.0.113.59", netmask: "255.255.0.0", state: "UP", speed_gbps: 200 },
-      { name: "npu4", index: 4, ip: "203.0.113.60", netmask: "255.255.0.0", state: "UP", speed_gbps: 200 },
-      { name: "npu6", index: 6, ip: "203.0.113.62", netmask: "255.255.0.0", state: "DOWN", speed_gbps: 0, gap: "inactive" },
-      { name: "npu7", index: 7, ip: "", netmask: "", state: "UP", speed_gbps: 200, gap: "no_ipv4" },
-    ],
-  }));
-  stub("editNetworkHCAs", async (id, body) => { calls.push([id, body]); return npu; });
-  const user = userEvent.setup();
-  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
-  assert.ok(screen.getByText(n.detail.acceleratorEditHint));
-  assert.equal(screen.queryByText(n.detail.acceleratorInferredHelp), null, "how rails are picked waits behind the help mark");
-  assert.ok(screen.getAllByText(n.type.accelerator_rdma).length > 0);
-  await expandNodeRows();
-  const row = screen.getByText("203.0.113.59").closest("tr") as HTMLElement;
-  await user.click(within(row).getByRole("button", { name: new RegExp(n.rail.add) }));
-  // Cards are offered, not the host's RDMA ports; the one in use is left out
-  // and a card that cannot work says why.
-  assert.ok(await screen.findByText("npu4 · 203.0.113.60"));
-  assert.ok(screen.getByText(`npu6 · 203.0.113.62 · ${n.rail.gap.inactive}`));
-  assert.ok(screen.getByText(`npu7 · — · ${n.rail.gap.no_ipv4}`));
-  assert.equal(screen.queryByText(/^npu3 ·/), null);
-  assert.equal(screen.queryByText(/^mlx5_0:1/), null);
-  await user.click(screen.getByText("npu4 · 203.0.113.60"));
-  await waitFor(() => assert.equal(calls.length, 1));
-  assert.deepEqual((calls[0] as [number, { op: string; hca: string }])[1].hca, "npu4");
-});
+for (const networkType of ["accelerator_rdma", "accelerator_hccs"] as const) {
+  test(`${networkType} shows the card IPs, diagnostics and actions for its fabric`, async () => {
+    const hccs = networkType === "accelerator_hccs";
+    const fabric = hccs ? "HCCS" : "RoCE";
+    const layer = hccs ? "hccs" : "roce";
+    const subnet = hccs ? "192.0.2" : "203.0.113";
+    const calls: unknown[] = [];
+    const npu = {
+      ...detailFixture, type: networkType,
+      attachments: detailFixture.attachments.map((a: { target: string }) => a.target === "node" ? { ...a, hcas: ["npu3"] } : a),
+      nodes: detailFixture.nodes.map((node: { node_name: string }, i: number) => ({
+        ...node, link_layer: layer,
+        warnings: [{ code: "hca_unusable", params: { value: "npu3" } }],
+        hcas: [{ name: "npu3", ip: `${subnet}.${i === 0 ? 59 : 82}`, netdev: "", link_layer: layer, state: "DOWN", gap: "inactive", speed_gbps: 0 }],
+      })),
+    };
+    stub("network", async () => npu);
+    stub("nodeNetworks", async () => ({
+      networks: [], inventory_reported: true, interfaces: [], serving_forward: null, management: { interface: "", ip: "", roles_off: [], behind_nat: false },
+      rdma_ports: [{ device: "mlx5_0", port: 1, state: "ACTIVE", link_layer: "InfiniBand", rate_gbps: 400, netdev: "", ip: "" }],
+      accelerator_ports: [
+        { name: "npu3", index: 3, ip: "203.0.113.59", netmask: "255.255.0.0", state: "UP", speed_gbps: 200 },
+        { name: "npu4", index: 4, hccs_ip: "192.0.2.60", ip: "203.0.113.60", netmask: "255.255.0.0", state: "UP", speed_gbps: 200 },
+        { name: "npu6", index: 6, hccs_ip: "192.0.2.62", hccs_gap: "inactive", ip: "203.0.113.62", netmask: "255.255.0.0", state: "DOWN", speed_gbps: 0, gap: "inactive" },
+        { name: "npu7", index: 7, hccs_gap: "no_ipv4", ip: hccs ? "203.0.113.63" : "", netmask: "", state: "UP", speed_gbps: 200, gap: "no_ipv4" },
+      ],
+    }));
+    stub("editNetworkHCAs", async (id, body) => { calls.push([id, body]); return npu; });
+    const user = userEvent.setup();
+    renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+    await waitFor(() => assert.ok(screen.getByText("Loaded nodes (2)")));
+    assert.ok(screen.getByText(n.detail.acceleratorEditHint));
+    assert.equal(screen.queryByText(n.detail.acceleratorInferredHelp), null, "how rails are picked waits behind the help mark");
+    assert.ok(screen.getAllByText(n.type[networkType]).length > 0);
+    assert.ok(screen.getByRole("columnheader", { name: n.nodeTable.bootstrapCards }));
+    assert.ok(screen.getByRole("searchbox", { name: n.detail.searchCardNodes }));
+    const warning = i18n.t("networks:cardWarning.hca_unusable", { value: "npu3", fabric });
+    const nodeWarnings = screen.getAllByRole("img", { name: warning });
+    for (const mark of nodeWarnings) assert.equal(mark.style.color, "var(--warning)");
+    await expandNodeRows();
+    const row = screen.getByText(`${subnet}.59`).closest("tr") as HTMLElement;
+    const cards = within(row).getByRole("list", { name: i18n.t("networks:nodeTable.cardAddresses", { fabric }) });
+    assert.equal(within(cards).getByRole("img", { name: n.rail.gap.inactive }).style.color, "var(--warning)");
+    assert.equal(within(row).queryByText(fabric, { exact: true }), null, "the field label already names the fabric");
+    assert.ok(screen.getByText(`${n.node.card.name} · npu3`));
+    await user.click(within(row).getByRole("button", { name: i18n.t("networks:rail.remove", { hca: "npu3" }) }));
+    assert.ok(await screen.findByText(i18n.t("networks:rail.removeCardTitle", { hca: "npu3" })));
+    await user.click(screen.getByRole("button", { name: n.actions.cancel }));
+    await user.click(within(row).getByRole("button", { name: new RegExp(n.rail.addCard) }));
+    // Cards are offered, not the host's RDMA ports; the one in use is left out
+    // and a card that cannot work says why.
+    assert.ok(await screen.findByText(`npu4 · ${subnet}.60`));
+    assert.ok(screen.getByText(`npu6 · ${subnet}.62 · ${n.rail.gap.inactive}`));
+    assert.ok(screen.getByText(`npu7 · — · ${i18n.t("networks:rail.cardMissingIP", { fabric })}`));
+    assert.equal(screen.queryByText(/^npu3 ·/), null);
+    assert.equal(screen.queryByText(/^mlx5_0:1/), null);
+    await user.click(screen.getByText(`npu4 · ${subnet}.60`));
+    await waitFor(() => assert.equal(calls.length, 1));
+    assert.deepEqual((calls[0] as [number, { op: string; hca: string }])[1].hca, "npu4");
+  });
+}
 
 test("network detail lists each node's bootstrap and HCAs with their IPs", async () => {
   stub("network", async () => detailFixture);
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
+  await waitFor(() => assert.ok(screen.getByText("Loaded nodes (2)")));
   assert.ok(screen.getByText(n.detail.rdmaEditHint));
   assert.equal(screen.queryByText(n.detail.rdmaInferredHelp), null, "how HCAs are picked is not on the page");
   await userEvent.setup().hover(screen.getByRole("button", { name: "More information" }));
   assert.equal((await screen.findByRole("tooltip")).textContent, n.detail.rdmaInferredHelp);
   assert.equal(screen.queryByRole("columnheader", { name: n.nodeTable.endpoint }), null, "RDMA shows bootstrap, not interface / IP");
+  const collapsed = screen.getByRole("link", { name: "h20-05" }).closest("tr")!;
+  assert.match(collapsed.textContent ?? "", /10\.20\.1\.15/);
+  assert.match(collapsed.textContent ?? "", /4 HCA ports/i);
+  assert.equal(screen.queryByText("mlx5_3:1"), null);
   await expandNodeRows();
   assert.ok(screen.getAllByText(n.nodeTable.bootstrap).length > 0, "each node's detail names its bootstrap");
-  const h5 = screen.getAllByText("h20-05")[0].closest("tr") as HTMLElement;
+  const h5 = screen.getByRole("link", { name: "h20-05" }).closest("tr")!;
   const h5Detail = detailOf(h5);
   assert.ok(within(h5).getByRole("img", { name: "Several Compute networks reach this node at the same rank. ib-a was attached first and is used; not used: legacy. Attach one of them to this node directly to choose explicitly." }));
   assert.ok(within(h5).getByText("Label pool=h20-a"));
@@ -378,7 +598,7 @@ test("network detail lists each node's bootstrap and HCAs with their IPs", async
   assert.ok(within(resolved.previousElementSibling as HTMLElement).getByRole("img", { name: "Override mlx5_9:1 (hca) is not in the node's last reported inventory." }));
   assert.ok(within(resolved).getByRole("img", { name: n.rail.gap.unknown }));
   assert.equal(within(resolved).getAllByText(n.rail.manual).length, 2);
-  assert.ok(screen.getByText("Overrides: bond0 · mlx5_0,mlx5_9:1"));
+  assert.match(resolved.textContent ?? "", /mlx5_0(?!:1)/, "the configured HCA remains visible alongside the resolved port");
 });
 
 test("removing an HCA asks whether it leaves every node or one", async () => {
@@ -387,9 +607,9 @@ test("removing an HCA asks whether it leaves every node or one", async () => {
   stub("editNetworkHCAs", async (id, body) => { calls.push([id, body]); return detailFixture; });
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
+  await waitFor(() => assert.ok(screen.getByText("Loaded nodes (2)")));
   await expandNodeRows();
-  const h5 = detailOf(screen.getAllByText("h20-05")[0].closest("tr") as HTMLElement);
+  const h5 = detailOf(screen.getByRole("link", { name: "h20-05" }).closest("tr")!);
   await user.click(within(h5).getByRole("button", { name: "Remove mlx5_2:1" }));
   await user.click(await screen.findByRole("button", { name: n.rail.confirm }));
   await waitFor(() => assert.equal(calls.length, 1));
@@ -415,7 +635,7 @@ test("adding an HCA offers the node's other ports and reset goes back to auto", 
   stub("editNetworkHCAs", async (id, body) => { calls.push([id, body]); return detailFixture; });
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
+  await waitFor(() => assert.ok(screen.getByText("Loaded nodes (2)")));
   await expandNodeRows();
   const h7 = screen.getByText("bond0 · 10.20.1.17").closest("tr") as HTMLElement;
   await user.click(within(h7).getByRole("button", { name: new RegExp(n.rail.add) }));
@@ -443,10 +663,10 @@ test("the bootstrap can be pinned to one of the node's interfaces", async () => 
   stub("attachNetwork", async (id, body) => { calls.push([id, body]); return detailFixture; });
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
+  await waitFor(() => assert.ok(screen.getByText("Loaded nodes (2)")));
   // h20-05 is on the network by label: pinning its bootstrap attaches the node.
   await expandNodeRows();
-  const h5 = detailOf(screen.getAllByText("h20-05")[0].closest("tr") as HTMLElement);
+  const h5 = detailOf(screen.getByRole("link", { name: "h20-05" }).closest("tr")!);
   await user.click(within(h5).getByRole("button", { name: n.rail.changeBootstrap }));
   const option = await screen.findByText("bond0 · 10.20.1.15/16");
   assert.equal(screen.queryByText(/^eth9/), null, "interfaces without an address are not offered");
@@ -459,7 +679,7 @@ test("warning reasons are reachable from the keyboard", async () => {
   stub("network", async () => detailFixture);
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
+  await waitFor(() => assert.ok(screen.getByText("Loaded nodes (2)")));
   const reason = "Override mlx5_9:1 (hca) is not in the node's last reported inventory.";
   const mark = screen.getByRole("img", { name: reason });
   for (let i = 0; i < 120 && document.activeElement !== mark; i++) await user.tab();
@@ -508,9 +728,10 @@ test("attaching several nodes at once reports the ones that failed", async () =>
   try {
     const user = userEvent.setup();
     renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-    await user.click(await screen.findByRole("button", { name: n.actions.attach }));
+    await user.click(await screen.findByRole("button", { name: n.detail.attachNodes }));
     const dialog = await modalDialog();
     assert.ok(within(dialog).getByText(n.attach.rdmaInferred));
+    assert.equal(within(dialog).queryByText(n.attach.modeLabel), null);
     const picker = within(dialog).getByRole("combobox");
     await user.click(picker);
     await user.click(await screen.findByText("ascend-31"));
@@ -528,21 +749,53 @@ test("attaching several nodes at once reports the ones that failed", async () =>
   }
 });
 
-test("attaching to a label sends only the label target", async () => {
+test("the label manager can add the first label without switching modes", async () => {
   const bodies: unknown[] = [];
-  stub("network", async () => detailFixture);
-  stubNodes([]);
-  stub("attachNetwork", async (_id, body) => { bodies.push(body); return detailFixture; });
+  const network = { ...detailFixture, attachments: [], nodes: [] };
+  stub("network", async () => network);
+  stub("attachNetwork", async (_id, body) => {
+    bodies.push(body);
+    return { ...network, attachments: [{ ...detailFixture.attachments[0], ...body }] };
+  });
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await user.click(await screen.findByRole("button", { name: n.actions.attach }));
-  const dialog = await modalDialog();
-  await user.click(within(dialog).getByText(n.attach.modeLabel));
+  await user.click(await screen.findByRole("button", { name: n.detail.manageLabels }));
+  const dialog = await screen.findByRole("dialog", { name: n.detail.manageLabels });
   await user.type(within(dialog).getByRole("textbox", { name: n.attach.labelKey }), "rack");
   await user.type(within(dialog).getByLabelText(n.attach.labelValue), "r3");
   await user.click(within(dialog).getByRole("button", { name: n.actions.save }));
   await waitFor(() => assert.equal(bodies.length, 1));
   assert.deepEqual(bodies[0], { label_key: "rack", label_value: "r3" });
+  assert.ok(await within(dialog).findByText("rack=r3"));
+  assert.equal((within(dialog).getByRole("textbox", { name: n.attach.labelKey }) as HTMLInputElement).value, "");
+});
+
+test("network label rules can only be edited from the label manager", async () => {
+  stub("network", async () => detailFixture);
+  const calls: unknown[] = [];
+  stub("updateNetworkLabel", async (id, attachmentID, body) => {
+    calls.push([id, attachmentID, body]);
+    return { ...detailFixture, nodes: detailFixture.nodes.slice(1) };
+  });
+  const user = userEvent.setup();
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  const row = (await screen.findByRole("link", { name: "h20-05" })).closest("tr")!;
+  assert.equal(row.lastElementChild?.textContent, "—");
+  await user.click(screen.getByRole("button", { name: n.detail.manageLabels }));
+  const dialog = await screen.findByRole("dialog", { name: n.detail.manageLabels });
+  const rule = within(dialog).getByText("pool=h20-a").closest("tr")!;
+  await user.click(within(rule).getByRole("button", { name: n.actions.edit }));
+  assert.equal((within(dialog).getByRole("textbox", { name: n.attach.labelKey }) as HTMLInputElement).value, "pool");
+  const value = within(dialog).getByLabelText(n.attach.labelValue) as HTMLInputElement;
+  assert.equal(value.value, "h20-a");
+  await user.clear(value);
+  await user.type(value, "h20-b");
+  await user.click(within(dialog).getByRole("button", { name: n.actions.save }));
+  await waitFor(() => assert.deepEqual(calls, [[detailFixture.id, 1, { label_key: "pool", label_value: "h20-b" }]]));
+  await user.keyboard("{Escape}");
+  await waitFor(() => assert.equal(screen.queryByRole("dialog", { name: n.detail.manageLabels }), null));
+  await screen.findByRole("link", { name: "h20-07" });
+  assert.equal(screen.queryByRole("link", { name: "h20-05" }), null);
 });
 
 test("editing a node attachment prefills and sends its overrides", async () => {
@@ -553,8 +806,8 @@ test("editing a node attachment prefills and sends its overrides", async () => {
   stub("updateNetworkAttachment", async (id, attachmentID, body) => { calls.push([id, attachmentID, body]); return detailFixture; });
   const user = userEvent.setup();
   renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
-  await waitFor(() => assert.ok(screen.getByText("Resolved nodes (2)")));
-  const attachmentRow = screen.getByText("Overrides: bond0 · mlx5_0,mlx5_9:1").closest("tr") as HTMLElement;
+  await waitFor(() => assert.ok(screen.getByText("Loaded nodes (2)")));
+  const attachmentRow = screen.getByRole("link", { name: "h20-07" }).closest("tr")!;
   await user.click(within(attachmentRow).getByRole("button", { name: n.actions.edit }));
   const dialog = await modalDialog();
   assert.ok(within(dialog).getByText(n.attach.editBootstrapTitle));
@@ -670,8 +923,121 @@ for (const language of ["en", "zh"]) {
       const dialog = await screen.findByRole("dialog", { name: title });
       const expand = i18n.t("networks:detail.expand");
       for (const button of await within(dialog).findAllByRole("button", { name: new RegExp(`${expand}|Expand row|展开行`) })) fireEvent.click(button);
-      await waitFor(() => assert.ok(within(dialog).queryAllByText(layer === "hccs" ? "HCCS" : layer).length > 0, "the HCA heading must name the actual link layer"));
+      const addressTitle = i18n.t("networks:nodeTable.cardAddresses", { fabric: "HCCS" });
+      assert.ok(within(dialog).getAllByText(addressTitle, { selector: "dt" }).length > 0);
+      if (layer === "hccs") assert.equal(within(dialog).queryByText("HCCS", { exact: true }), null);
+      else assert.ok(within(dialog).getAllByText(layer, { selector: "dd" }).length > 0);
       assert.doesNotMatch(dialog.textContent ?? "", /linkLayer\./, "a future protocol must retain its raw label instead of a translation key");
     });
   }
 }
+
+test("overview searches resolved nodes by server IDs, resets paging and cancels superseded searches", async () => {
+  const nodes = Array.from({ length: 64 }, (_, i) => ({
+    ...detailFixture.nodes[0], node_uuid: `u${i}`, node_name: `worker-${String(i + 1).padStart(2, "0")}`,
+  }));
+  let detailReads = 0;
+  const calls: string[] = [];
+  let staleSignal: AbortSignal | undefined;
+  let finishStale: (() => void) | undefined;
+  stub("network", async () => { detailReads++; return { ...detailFixture, nodes }; });
+  stub("searchNetworkTargets", async (id, kind, q, signal) => {
+    assert.equal(id, detailFixture.id);
+    assert.equal(kind, "nodes");
+    calls.push(q);
+    if (q === "old") {
+      staleSignal = signal;
+      return new Promise(resolve => { finishStale = () => resolve({ ids: ["u44"] }); });
+    }
+    return { ids: q === "mlx5" ? nodes.slice(0, 30).map(node => node.node_uuid) : [] };
+  });
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  const input = await screen.findByRole("searchbox", { name: n.detail.searchNodes });
+  assert.deepEqual(calls, []);
+  const table = screen.getByRole("link", { name: "worker-01" }).closest("table")!;
+  assert.equal(within(table).getAllByRole("link").length, 20, "the first page has 20 node rows");
+  for (let page = 1; page < 4; page++) await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+  assert.ok(within(table).getByRole("link", { name: "worker-64" }));
+  assert.equal(within(table).getAllByRole("link").length, 4);
+  assert.equal(screen.queryByRole("link", { name: "worker-01" }), null);
+  fireEvent.change(input, { target: { value: "s" } });
+  fireEvent.change(input, { target: { value: "old" } });
+  await waitFor(() => assert.equal(typeof finishStale, "function"));
+  fireEvent.change(input, { target: { value: "  mlx5  " } });
+  assert.equal(staleSignal?.aborted, true);
+  await screen.findByRole("link", { name: "worker-01" });
+  finishStale?.();
+  await waitFor(() => assert.ok(screen.getByText("30 items")));
+  assert.equal(screen.queryByRole("link", { name: "worker-45" }), null);
+  assert.deepEqual(calls, ["old", "mlx5"]);
+  fireEvent.change(input, { target: { value: "nothing" } });
+  await screen.findByText(n.detail.noMatchingNodes);
+  fireEvent.change(input, { target: { value: "mlx5" } });
+  await screen.findByRole("link", { name: "worker-01" });
+  assert.deepEqual(calls, ["old", "mlx5", "nothing"]);
+  fireEvent.change(input, { target: { value: "" } });
+  await screen.findByText("64 items");
+  assert.equal(detailReads, 1);
+});
+
+test("label target search retries errors and keeps returned labels editable", async () => {
+  let tries = 0;
+  stub("network", async () => detailFixture);
+  stub("searchNetworkTargets", async (_id, kind, q) => {
+    assert.equal(kind, "attachments");
+    if (q === "absent") return { ids: [] };
+    assert.equal(q, "pool");
+    if (++tries === 1) throw new Error("temporarily unavailable");
+    return { ids: ["1"] };
+  });
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  assert.equal(screen.queryByRole("searchbox", { name: n.detail.searchLabels }), null);
+  await userEvent.click(await screen.findByRole("button", { name: n.detail.manageLabels }));
+  const input = await screen.findByRole("searchbox", { name: n.detail.searchLabels });
+  fireEvent.change(input, { target: { value: "pool" } });
+  const error = await screen.findByRole("alert");
+  assert.match(error.textContent ?? "", /temporarily unavailable/);
+  assert.equal(screen.queryByText(n.detail.noMatchingAttachments), null);
+  await userEvent.click(within(error).getByRole("button", { name: "Retry" }));
+  const target = await screen.findByText("pool=h20-a", { selector: "td *" });
+  assert.ok(within(target.closest("tr")!).getByRole("button", { name: n.actions.edit }));
+  assert.equal(tries, 2);
+  fireEvent.change(input, { target: { value: "absent" } });
+  await screen.findByText(n.detail.noMatchingAttachments);
+  await userEvent.keyboard("{Escape}");
+  assert.ok(await screen.findByRole("link", { name: "h20-05" }));
+});
+
+test("role and attachment-source filters send multi-select values with the search across pages", async () => {
+  const nodes = Array.from({ length: 42 }, (_, index) => ({
+    ...detailFixture.nodes[0], node_uuid: `u-${index}`, node_name: `worker-${index}`,
+  }));
+  stub("network", async () => ({ ...detailFixture, roles: ["compute", "serving"], nodes }));
+  const requests: unknown[] = [];
+  stub("searchNetworkTargets", async (_id, kind, q, _signal, filters) => {
+    assert.equal(kind, "nodes");
+    requests.push([q, filters?.roles, filters?.source]);
+    return { ids: ["u-41"] };
+  });
+  const user = userEvent.setup();
+  renderAt("/networks/1", <NetworkDetailPage />, "/networks/:id");
+  const input = await screen.findByRole("searchbox", { name: n.detail.searchNodes });
+  await user.click(screen.getByRole("button", { name: "Next page" }));
+  const roleButton = screen.getByRole("button", { name: `Filter by ${n.nodeTable.roles}` });
+  await user.click(roleButton);
+  await user.click(await screen.findByRole("checkbox", { name: n.role.compute }));
+  await user.click(screen.getByRole("checkbox", { name: n.role.serving }));
+  await user.keyboard("{Escape}");
+  await screen.findByRole("link", { name: "worker-41" });
+  assert.deepEqual(requests.at(-1), ["", ["compute", "serving"], []]);
+  const sourceButton = screen.getByRole("button", { name: `Filter by ${n.nodeTable.source}` });
+  await user.click(sourceButton);
+  await user.click(await screen.findByRole("checkbox", { name: n.source.label }));
+  await user.keyboard("{Escape}");
+  fireEvent.change(input, { target: { value: "mlx5" } });
+  await waitFor(() => assert.deepEqual(requests.at(-1), ["mlx5", ["compute", "serving"], ["label"]]));
+  await user.click(screen.getByRole("button", { name: "Clear filters" }));
+  await waitFor(() => assert.deepEqual(requests.at(-1), ["mlx5", [], []]));
+  fireEvent.change(input, { target: { value: "" } });
+  assert.ok(await screen.findByRole("link", { name: "worker-0" }));
+});

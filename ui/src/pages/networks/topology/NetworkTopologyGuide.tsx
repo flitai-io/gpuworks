@@ -2,6 +2,8 @@ import { useState, type HTMLAttributes } from "react";
 import { Card, Segmented, Space, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
+import PageHeader from "../../../components/PageHeader";
 import { ComplexDiagram, SimpleDiagram } from "./TopologyDiagrams";
 
 type Layout = "simple" | "complex";
@@ -50,7 +52,7 @@ const refOf = (layout: Layout, n: number) => `${layout === "simple" ? "s" : "f"}
  * does not decide. Pointing at a number on the diagram or a table row
  * highlights the other.
  */
-export default function NetworkTopologyGuide() {
+function TopologyExamples() {
   const { t } = useTranslation("networks");
   const [layout, setLayout] = useState<Layout>("simple");
   const [lit, light] = useState<string | null>(null);
@@ -118,5 +120,15 @@ export default function NetworkTopologyGuide() {
         />
       </div>
     </Card>
+  );
+}
+
+export default function NetworkTopologyGuide() {
+  const { t } = useTranslation("networks");
+  return (
+    <>
+      <PageHeader title={t("topology.guide")} parents={[<Link to="/networks">{t("title")}</Link>]} />
+      <TopologyExamples />
+    </>
   );
 }

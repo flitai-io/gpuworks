@@ -308,7 +308,7 @@ test("a local storage whose directory is on a shared filesystem on some nodes ha
   const row = await rowOf("default");
   const text = s.sharedFS.someNodes_other.replace("{{count}}", "2");
   const mark = within(row).getByRole("img", { name: text });
-  assert.equal(mark.style.color, "rgb(250, 136, 1)", "the mark is the warning colour (colors.warning)");
+  assert.equal(mark.style.color, "var(--warning)", "the shared mark follows the current warning palette");
   await user.hover(mark);
   assert.ok((await screen.findAllByText(text)).length > 0);
   assert.equal(within(await rowOf("scratch")).queryAllByRole("img", { name: /shared filesystem/ }).length, 0);

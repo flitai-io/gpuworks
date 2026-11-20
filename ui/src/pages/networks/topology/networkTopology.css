@@ -1,38 +1,35 @@
-/* Network topology guide, in the product's antd look: neutrals from
-   theme/tokens.ts, and one colour per kind of traffic taken from the antd tag
-   presets the network role tags use, shared by the legend, the diagram and
-   the table's tags. */
+/* Share the traffic colours between links, labels and settings in either theme. */
 .net-topo {
-  --topo-primary: #005bd4;
-  --topo-primary-hover: #0043b1;
-  --topo-primary-soft: #e6f6ff;
-  --topo-ink: #181a1d;
-  --topo-text: #4a4c4f;
-  --topo-muted: #707275;
-  --topo-border: #dbdde0;
-  --topo-border-soft: #f0f2f5;
-  --topo-control: #c8cacd;
-  --topo-canvas: #f5f7fa;
-  --topo-panel: #ffffff;
-  --topo-edge: #96989b;
-  --topo-edge-bg: #f5f7fa;
-  --topo-edge-bd: #dbdde0;
-  --topo-mgmt: #595959;
-  --topo-mgmt-bg: #fafafa;
-  --topo-mgmt-bd: #d9d9d9;
-  --topo-serve: #08979c;
-  --topo-serve-bg: #e6fffb;
-  --topo-serve-bd: #87e8de;
-  --topo-store: #1677ff;
-  --topo-store-bg: #e6f4ff;
-  --topo-store-bd: #91caff;
-  --topo-compute: #722ed1;
-  --topo-compute-bg: #f9f0ff;
-  --topo-compute-bd: #d3adf7;
-  --topo-host: #d46b08;
-  --topo-host-bg: #fff7e6;
-  --topo-host-bd: #ffd591;
+  --topo-primary: var(--brand);
+  --topo-primary-hover: var(--brand-hover);
+  --topo-primary-soft: var(--info-surface);
+  --topo-ink: var(--fg-default);
+  --topo-text: var(--fg-muted);
+  --topo-muted: var(--fg-subtle);
+  --topo-border: var(--border);
+  --topo-control: var(--input-hover);
+  --topo-canvas: var(--surface-base);
+  --topo-panel: var(--surface-floating);
+  --topo-edge: var(--fg-subtle);
+  --topo-edge-bg: var(--surface-base);
+  --topo-edge-bd: var(--border);
+  --topo-mgmt: var(--fg-muted);
+  --topo-mgmt-bg: var(--surface-raised);
+  --topo-mgmt-bd: var(--input);
+  --topo-serve: var(--chart-2);
+  --topo-serve-bg: color-mix(in srgb, var(--topo-serve) 12%, var(--topo-panel));
+  --topo-serve-bd: color-mix(in srgb, var(--topo-serve) 45%, var(--topo-panel));
+  --topo-store: var(--chart-1);
+  --topo-store-bg: color-mix(in srgb, var(--topo-store) 12%, var(--topo-panel));
+  --topo-store-bd: color-mix(in srgb, var(--topo-store) 45%, var(--topo-panel));
+  --topo-compute: var(--chart-5);
+  --topo-compute-bg: color-mix(in srgb, var(--topo-compute) 12%, var(--topo-panel));
+  --topo-compute-bd: color-mix(in srgb, var(--topo-compute) 45%, var(--topo-panel));
+  --topo-host: var(--chart-3);
+  --topo-host-bg: color-mix(in srgb, var(--topo-host) 12%, var(--topo-panel));
+  --topo-host-bd: color-mix(in srgb, var(--topo-host) 45%, var(--topo-panel));
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -41,7 +38,7 @@
 .net-topo-swatch { width: 18px; height: 0; border-top: 2px solid var(--topo-lane); }
 .net-topo-swatch.dash { border-top-style: dashed; }
 
-.net-topo-diagram { border: 1px solid var(--topo-border); border-radius: 2px; overflow-x: auto; background: var(--topo-panel); }
+.net-topo-diagram { border: 1px solid var(--topo-border); border-radius: var(--radius-sm); overflow-x: auto; background: var(--topo-panel); }
 .net-topo-diagram svg { display: block; width: 100%; min-width: 860px; height: auto; }
 .net-topo-diagram text { fill: var(--topo-text); }
 .net-topo-diagram .title { fill: var(--topo-ink); font-weight: 600; }
@@ -72,18 +69,18 @@
 .net-topo-diagram .dimmed { opacity: 0.18; }
 .net-topo-marker { cursor: pointer; outline: none; }
 .net-topo-marker circle { fill: var(--topo-primary); stroke: var(--topo-panel); stroke-width: 2; }
-.net-topo-marker text { fill: #ffffff; font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+.net-topo-marker text { fill: var(--fg-on-brand); font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
 .net-topo-marker.on circle, .net-topo-marker:hover circle, .net-topo-marker:focus-visible circle { fill: var(--topo-primary-hover); }
 .net-topo-marker:focus-visible circle { stroke: var(--topo-primary-soft); stroke-width: 3; }
 
 .net-topo-num {
   display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--topo-primary); color: #ffffff; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--topo-primary); color: var(--fg-on-brand); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .net-topo-setting { min-width: 180px; white-space: nowrap; }
 .net-topo-tag {
   display: inline-block; margin-right: 6px; padding: 0 7px; font-size: 12px; line-height: 20px; white-space: nowrap;
-  border-radius: 2px; border: 1px solid var(--topo-lane-bd); color: var(--topo-lane); background: var(--topo-lane-bg);
+  border-radius: var(--radius-sm); border: 1px solid var(--topo-lane-bd); color: var(--topo-ink); background: var(--topo-lane-bg);
 }
 .net-topo-lit > td { background: var(--topo-primary-soft) !important; }
 .net-topo-not { color: var(--topo-muted); font-size: 13px; }

@@ -28,6 +28,10 @@
     "management": "管理网"
   },
   "table": {
+    "attachmentNodes_one": "{{count}} 个节点",
+    "attachmentNodes_other": "{{count}} 个节点",
+    "attachmentLabels_one": "{{count}} 个标签",
+    "attachmentLabels_other": "{{count}} 个标签",
     "name": "名称",
     "roles": "角色",
     "type": "类型",
@@ -84,8 +88,29 @@
     "typeHelp": "$t(networks:type.host_ethernet)：主机 TCP；$t(networks:type.host_rdma)：主机 IB/RoCE；$t(networks:type.accelerator_rdma)：卡载 RoCE；$t(networks:type.accelerator_hccs)：A3/910C HCCS/HIXL 及 vNIC。类型决定通信配置和设备注入。"
   },
   "detail": {
+    "searchEthernetNodes": "搜索节点名称、IP、网卡或标签",
+    "searchCardNodes": "搜索节点名称、IP、加速卡或标签",
+    "searchNodes": "搜索节点名称、IP、HCA 或标签",
+    "searchLabels": "搜索标签键或标签值",
+    "searchAttachments": "搜索节点、标签或覆盖配置",
+    "noMatchingNodes": "没有匹配的节点。",
+    "noMatchingAttachments": "没有匹配的加载对象。",
     "selector": "默认选择器",
-    "attachments": "加载到",
+    "attachments": "加载对象",
+    "loadedNodes": "加载的节点（{{count}}）",
+    "attachNodes": "加载节点",
+    "directAttachmentCount": "直接加载的节点：{{count}}",
+    "manageLabels": "管理标签",
+    "addLabel": "加载标签",
+    "editLabel": "编辑加载标签",
+    "labelRematchHint": "保存后，网络会按新的标签重新匹配节点。",
+    "labelChanged": "这个标签已更改或移除。请在列表中重新选择要编辑的标签。",
+    "noLabels": "尚未加载标签",
+    "unresolvedAttachments": "未解析的加载对象（{{count}}）",
+    "unnamedAttachment": "节点加载项 #{{id}}",
+    "manageAttachments": "管理加载对象",
+    "hideAttachments": "收起加载对象",
+    "directNode": "直接加载",
     "resolved": "解析到的节点（{{count}}）",
     "noAttachments": "尚未加载",
     "noNodes": "还没有节点解析到这个网络",
@@ -102,9 +127,18 @@
     "acceleratorEditHint": "可以在下表逐个节点增删加速卡或改 bootstrap。"
   },
   "nodeTable": {
+    "configuredOverrides": "覆盖配置",
+    "noResolvedIP": "未解析出 IP",
+    "bootstrapCards": "Bootstrap IP / 加速卡",
+    "cardAddresses": "加速卡与 {{fabric}} IP",
+    "bootstrapPorts": "Bootstrap IP / HCA",
+    "portCount_one": "{{count}} 个 HCA 端口",
+    "portCount_other": "{{count}} 个 HCA 端口",
+    "cardCount_one": "{{count}} 张加速卡",
+    "cardCount_other": "{{count}} 张加速卡",
     "node": "节点",
     "roles": "角色",
-    "source": "来源",
+    "source": "加载来源",
     "endpoint": "网卡 / IP",
     "hcas": "HCA",
     "bootstrap": "bootstrap IP",
@@ -130,8 +164,14 @@
     "rdmaInferred": "加载后自动推断每个节点的 bootstrap IP 和 HCA。",
     "partial": "已加载 {{ok}} 个节点；失败：{{failed}}",
     "done": "已加载 {{count}} 个节点",
+    "cardInferred": "加载后自动推断每个节点的 Bootstrap IP 和使用的加速卡。",
     "editBootstrapTitle": "指定 bootstrap",
     "bootstrapOverride": "bootstrap（留空则自动推断）"
+  },
+  "cardWarning": {
+    "rdma_no_hca": "没有可用的加速卡，请检查各卡的 {{fabric}} 链路状态和 IPv4 地址。",
+    "hca_unusable": "加速卡 {{value}} 不可用，请检查该卡的 {{fabric}} 链路状态和 IPv4 地址。",
+    "hca_mismatch": "该节点使用 {{count}} 张加速卡，其他节点使用 {{counts}} 张，多出的卡没有对端。"
   },
   "warning": {
     "conflict": "同一优先级有多个{{role}}网络命中这个节点。{{winner}} 加载得最早，正在使用；未生效：{{losers}}。把其中一个直接加载到本节点即可明确选择。",
@@ -197,6 +237,28 @@
     "monitor": "监控"
   },
   "test": {
+    "configuration": "测试配置",
+    "rdmaHow": "每对节点在配对的 RDMA 链路上并行运行 ib_write_bw。",
+    "toolMissingGroup": "{{count}} 个节点缺少 ib_write_bw。请先在这些节点安装 perftest，再等待节点上报后测试。",
+    "noBootstrapGroup": "{{count}} 个节点没有 bootstrap 地址，涉及这些节点的测试会失败。",
+    "noAddressGroup": "{{count}} 个节点在该网络上没有地址，涉及这些节点的测试会失败。",
+    "noRailsGroup": "{{count}} 个节点没有可用的 HCA，涉及这些节点的测试会失败。",
+    "viewNodes": "查看节点名单（{{count}}）",
+    "overview": {
+      "title": "最近一次测试结果",
+      "startedAt": "开始时间",
+      "state": {
+        "running": "进行中",
+        "done": "已完成",
+        "interrupted": "已中断"
+      },
+      "nodes": "参测节点",
+      "nodePairs": "节点对",
+      "directedPairs": "有向节点对",
+      "passedRails": "通过链路 / 总数",
+      "cardPairs": "卡对数",
+      "reachableCards": "可达卡对"
+    },
     "start": "开始测试",
     "scope": "测试范围",
     "scopeAll": "网络上的全部节点",
@@ -237,7 +299,7 @@
       "card_matrix": "卡连通性（全卡矩阵）"
     },
     "toolMissing": "以下节点没有 ib_write_bw，涉及它们的节点对会失败：{{nodes}}。请安装 perftest（例如 apt install perftest），等节点下次上报后再测。",
-    "toolReady": "所有节点都上报了 ib_write_bw。每对节点按 rail 并行各跑一个 ib_write_bw，带宽为各 rail 之和。",
+    "toolReady": "所有节点均已上报 ib_write_bw，可并行测试各条 RDMA 链路。",
     "pattern": "测试哪些节点对",
     "patternName": {
       "mesh": "全互测",
@@ -249,11 +311,27 @@
     },
     "pairCounts": "节点对 {{passed}} 通过 / {{partial}} 部分通过 / {{failed}} 失败",
     "railCounts": "HCA {{passed}}/{{total}} 通过",
-    "problems": "问题汇总",
+    "globalMatrix": "全局矩阵",
+    "nodePairs": "节点对",
+    "noProblems": "本次测试没有异常。",
+    "matrixMean": "带宽取通过链路的平均值。部分通表示仅部分链路通过，点击节点对可查看逐链路结果。",
+    "meanBandwidth": "通过链路平均带宽",
+    "railsPassed": "{{passed}}/{{total}} 条链路通过",
+    "filterSource": "筛选源节点名称",
+    "filterTarget": "筛选目标节点名称",
+    "filterStatus": {
+      "passed": "全通",
+      "partial": "部分通",
+      "failed": "失败"
+    },
+    "matchingPairs": "{{count}} 个匹配节点对",
+    "noMatchingPairs": "没有匹配的节点对，请调整名称或状态筛选。",
+    "problems": "异常汇总",
     "problemWhere": "节点 / HCA",
     "problemPairs": "影响",
     "problemWhy": "原因",
-    "pairsAffected": "{{count}} 对",
+    "pairsAffected_one": "{{count}} 对",
+    "pairsAffected_other": "{{count}} 对",
     "source": "源",
     "target": "目标",
     "result": "结果",
@@ -433,6 +511,7 @@
     "hccs": "HCCS"
   },
   "topology": {
+    "guide": "网络使用指南",
     "title": "网络拓扑与配置",
     "description": "两种典型部署下，各类流量走哪条网络、每项配置在哪里设置、起什么作用。图上的编号和下方表格一一对应，把鼠标移到编号或表格行上会高亮对应的线路。",
     "legend": {
@@ -489,7 +568,7 @@
       "hostAccess": "SSH 纳管 / server 拨号"
     },
     "simple": {
-      "tab": "简单拓扑",
+      "tab": "简单拓扑示例",
       "heading": "简单：管理网承载各类流量，参数网络独立",
       "summary": "server 只有一个监听地址，浏览器、推理客户端和节点都连它。服务和存储同步都由管理网自动承担，只需要为多机推理建一个参数网络。",
       "rows": {
@@ -514,7 +593,7 @@
       }
     },
     "complex": {
-      "tab": "复杂拓扑",
+      "tab": "复杂拓扑示例",
       "heading": "复杂：每类流量走专用网络",
       "summary": "控制台和管理 API 开在办公网上，推理 API 开在业务网上；server 与计算节点之间有专用管理网，推理请求走专用服务网络，计算节点之间有专用的存储同步网络和参数网络。",
       "rows": {
@@ -578,7 +657,16 @@
     "auto": "自动",
     "manual": "手动",
     "reset": "恢复自动",
-    "removed": "已移除，重新测试后生效",
+    "removed": "网络配置已更新。重新测试可查看新的测试结果。",
+    "inventoryReadFailed": "无法读取节点的网络清单。",
+    "inventoryPending": "节点尚未上报网络清单，上报后可重试。",
+    "inventoryLoading": "正在读取节点的网络清单…",
+    "noReportedPorts": "清单中没有该网络类型的端口。",
+    "allPortsUsed": "清单中该类型的端口均已加入此网络。",
+    "noAddressedInterface": "清单中没有带 IP 地址的网卡。",
+    "removeCardTitle": "移除加速卡 {{hca}}？",
+    "cardMissingIP": "加速卡没有 {{fabric}} IPv4 地址",
+    "addCard": "添加加速卡",
     "removeTitle": "移除 HCA {{hca}}？",
     "onlyNode": "只从 {{node}} 移除（默认从所有节点移除同名 HCA）",
     "remove": "移除 {{hca}}",

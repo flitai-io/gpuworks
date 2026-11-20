@@ -1558,3 +1558,67 @@ tbody tr[data-state="selected"]:hover > .resource-table-pinned { background-imag
 .vendor-mark-ink-light, [data-theme="dark"] .vendor-mark-ink-dark { --vendor-mark-pad-x: 4px; --vendor-mark-pad-y: 2px; padding: var(--vendor-mark-pad-y) var(--vendor-mark-pad-x); border-radius: var(--radius-sm); }
 .vendor-mark-ink-light { background: var(--vendor-logo-dark); }
 [data-theme="dark"] .vendor-mark-ink-dark { background: var(--vendor-logo-light); }
+
+/* The leading disclosure uses the entire 36px utility column in the network drawer. */
+.network-overview-nodes td:has(> button[aria-expanded]) { padding-inline: 0; }
+.network-overview-nodes td:first-child button[aria-expanded] { width: 36px; min-height: 36px; }
+
+/* Paint the full expanded cell, including the indentation and horizontal scroll area. */
+.network-node-details {
+  text-align: start;
+  display: grid;
+  gap: .75rem;
+  margin-inline-start: 2.5rem;
+  padding: .75rem 1rem;
+  border-inline-start: 2px solid var(--border);
+}
+.network-node-details > div {
+  display: grid;
+  grid-template-columns: clamp(6rem, 30%, 10rem) minmax(0, 1fr);
+  align-items: start;
+  column-gap: .75rem;
+}
+.network-node-details dt, .network-node-details dd {
+  min-width: 0;
+  margin: 0;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-body);
+}
+/* ResourceTable reserves a further 48px before the node name when selectable. */
+.network-node-details[data-selectable="true"] { margin-inline-start: calc(2.5rem + 48px); }
+.resource-table td[colspan]:has(.network-node-details) { background-color: var(--muted); }
+
+/* In compact drawers leave room to reach the scrollable column filters
+   between the disclosure control and the fixed row actions. */
+@container (max-width: 480px) {
+  .network-overview-nodes .resource-table-name,
+  .network-management-nodes .resource-table-name { position: static !important; }
+  .network-node-details {
+    grid-template-columns: fit-content(6rem) minmax(0, 1fr);
+    column-gap: .75rem;
+    padding-inline-end: 0;
+  }
+  .network-node-details > div {
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+}
+
+@container (max-width: 380px) {
+  /* The first view shows a complete node column and its fixed actions.
+     Other fields remain available by scrolling the table. */
+  .network-overview-nodes .resource-table-name {
+    width: max(7rem, calc(100cqw - 160px)) !important;
+    min-width: max(7rem, calc(100cqw - 160px)) !important;
+  }
+  .network-management-nodes .resource-table-name {
+    width: 8rem !important;
+    min-width: 8rem !important;
+  }
+  .network-node-details, .network-node-details[data-selectable="true"] {
+    margin-inline-start: 1rem;
+    padding-inline-start: .75rem;
+  }
+}

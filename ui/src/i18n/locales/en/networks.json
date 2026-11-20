@@ -28,6 +28,10 @@
     "management": "Management"
   },
   "table": {
+    "attachmentNodes_one": "{{count}} node",
+    "attachmentNodes_other": "{{count}} nodes",
+    "attachmentLabels_one": "{{count}} label",
+    "attachmentLabels_other": "{{count}} labels",
     "name": "Name",
     "roles": "Roles",
     "type": "Type",
@@ -84,8 +88,29 @@
     "typeHelp": "Sets transport and device injection. $t(type.host_ethernet): TCP. $t(type.host_rdma): IB/RoCE. $t(type.accelerator_rdma): on-card RoCE. $t(type.accelerator_hccs): A3/910C HCCS/HIXL with vNICs."
   },
   "detail": {
+    "searchEthernetNodes": "Search by node name, IP, interface or label",
+    "searchCardNodes": "Search by node name, IP, accelerator card or label",
+    "searchNodes": "Search by node name, IP, HCA or label",
+    "searchLabels": "Search by label key or value",
+    "searchAttachments": "Search by node, label or override",
+    "noMatchingNodes": "No nodes match this search.",
+    "noMatchingAttachments": "No attachment targets match this search.",
     "selector": "Default selector",
-    "attachments": "Attached to",
+    "attachments": "Attachments",
+    "loadedNodes": "Loaded nodes ({{count}})",
+    "attachNodes": "Attach nodes",
+    "directAttachmentCount": "Direct node attachments: {{count}}",
+    "manageLabels": "Manage labels",
+    "addLabel": "Attach label",
+    "editLabel": "Edit attached label",
+    "labelRematchHint": "Saving updates which nodes match this network label.",
+    "labelChanged": "This label was changed or removed. Select it again in the list to edit the current configuration.",
+    "noLabels": "No labels attached",
+    "unresolvedAttachments": "Unresolved attachments ({{count}})",
+    "unnamedAttachment": "Node attachment #{{id}}",
+    "manageAttachments": "Manage attachments",
+    "hideAttachments": "Hide attachments",
+    "directNode": "Direct attachment",
     "resolved": "Resolved nodes ({{count}})",
     "noAttachments": "Not attached yet",
     "noNodes": "No node resolves to this network yet",
@@ -102,9 +127,18 @@
     "acceleratorEditHint": "Add or remove cards, or change the bootstrap, per node in the table below."
   },
   "nodeTable": {
+    "configuredOverrides": "Overrides",
+    "noResolvedIP": "No IP resolved",
+    "bootstrapCards": "Bootstrap IP / accelerator cards",
+    "cardAddresses": "Accelerator cards and {{fabric}} IPs",
+    "bootstrapPorts": "Bootstrap IP / HCA",
+    "portCount_one": "{{count}} HCA port",
+    "portCount_other": "{{count}} HCA ports",
+    "cardCount_one": "{{count}} card",
+    "cardCount_other": "{{count}} cards",
     "node": "Node",
     "roles": "Roles",
-    "source": "Source",
+    "source": "Attachment source",
     "endpoint": "Interface / IP",
     "hcas": "HCA",
     "bootstrap": "Bootstrap IP",
@@ -130,8 +164,14 @@
     "rdmaInferred": "Each node's bootstrap IP and HCAs are inferred once attached.",
     "partial": "Attached {{ok}} nodes; failed: {{failed}}",
     "done": "Attached {{count}} nodes",
+    "cardInferred": "The bootstrap IP and accelerator cards are inferred for each attached node.",
     "editBootstrapTitle": "Set bootstrap",
     "bootstrapOverride": "Bootstrap (empty: inferred)"
+  },
+  "cardWarning": {
+    "rdma_no_hca": "No usable accelerator card. Check the {{fabric}} link state and IPv4 address on each card.",
+    "hca_unusable": "Card {{value}} is unavailable. Check its {{fabric}} link state and IPv4 address.",
+    "hca_mismatch": "This node uses {{count}} cards while other nodes use {{counts}}. Extra cards have no peer."
   },
   "warning": {
     "conflict": "Several {{role}} networks reach this node at the same rank. {{winner}} was attached first and is used; not used: {{losers}}. Attach one of them to this node directly to choose explicitly.",
@@ -197,8 +237,30 @@
     "monitor": "Monitoring"
   },
   "test": {
+    "configuration": "Test configuration",
+    "rdmaHow": "Each pair runs ib_write_bw on its matched RDMA rails in parallel.",
+    "toolMissingGroup": "{{count}} nodes are missing ib_write_bw. Install perftest on those nodes and wait for their next report before testing.",
+    "noBootstrapGroup": "{{count}} nodes have no bootstrap address. Pairs involving those nodes will fail.",
+    "noAddressGroup": "{{count}} nodes have no address on this network. Pairs involving those nodes will fail.",
+    "noRailsGroup": "{{count}} nodes have no usable HCA. Pairs involving those nodes will fail.",
+    "viewNodes": "View affected nodes ({{count}})",
+    "overview": {
+      "title": "Latest test result",
+      "startedAt": "Started at",
+      "state": {
+        "running": "Running",
+        "done": "Completed",
+        "interrupted": "Interrupted"
+      },
+      "nodes": "Nodes tested",
+      "nodePairs": "Node pairs",
+      "directedPairs": "Directed pairs",
+      "passedRails": "Rails passed / total",
+      "cardPairs": "Card pairs",
+      "reachableCards": "Reachable card pairs"
+    },
     "start": "Start test",
-    "scope": "Nodes",
+    "scope": "Test scope",
     "scopeAll": "All nodes on this network",
     "scopeNodes": "Selected nodes",
     "scopeLabel": "Filter by label",
@@ -237,7 +299,7 @@
       "card_matrix": "Card reachability (full card matrix)"
     },
     "toolMissing": "These nodes have no ib_write_bw, so their pairs will fail: {{nodes}}. Install perftest (for example apt install perftest) and wait for the next node report.",
-    "toolReady": "Every node reported ib_write_bw. Each pair runs one ib_write_bw per rail in parallel and sums the rails.",
+    "toolReady": "All nodes reported ib_write_bw and can test their RDMA rails in parallel.",
     "pattern": "Pairs",
     "patternName": {
       "mesh": "All pairs",
@@ -249,11 +311,27 @@
     },
     "pairCounts": "pairs {{passed}} passed / {{partial}} partial / {{failed}} failed",
     "railCounts": "HCAs {{passed}}/{{total}} passed",
-    "problems": "Problems",
+    "globalMatrix": "Global matrix",
+    "nodePairs": "Node pairs",
+    "noProblems": "No issues in this run.",
+    "matrixMean": "Bandwidth is the mean across passing rails. A partial result means some rails failed. Select a pair for its rail measurements.",
+    "meanBandwidth": "Mean bandwidth of passing rails",
+    "railsPassed": "{{passed}}/{{total}} rails passed",
+    "filterSource": "Filter source nodes",
+    "filterTarget": "Filter target nodes",
+    "filterStatus": {
+      "passed": "All passed",
+      "partial": "Partially passed",
+      "failed": "Failed"
+    },
+    "matchingPairs": "{{count}} matching pairs",
+    "noMatchingPairs": "No matching pairs. Adjust the node names or status filters.",
+    "problems": "Issue summary",
     "problemWhere": "Node / HCA",
     "problemPairs": "Affects",
     "problemWhy": "Reason",
-    "pairsAffected": "{{count}} pairs",
+    "pairsAffected_one": "{{count}} pair",
+    "pairsAffected_other": "{{count}} pairs",
     "source": "Source",
     "target": "Target",
     "result": "Result",
@@ -433,6 +511,7 @@
     "hccs": "HCCS"
   },
   "topology": {
+    "guide": "Network guide",
     "title": "Network topology and settings",
     "description": "Two typical deployments: which network each kind of traffic takes, and where each setting is made and what it does. The numbers on the diagram match the table below; point at a number or a table row to highlight its lines.",
     "legend": {
@@ -489,7 +568,7 @@
       "hostAccess": "SSH / server dial"
     },
     "simple": {
-      "tab": "Simple",
+      "tab": "Simple topology example",
       "heading": "Simple: the management network carries everything, compute has its own",
       "summary": "The server has one listen address that operators, inference clients and nodes all reach. The management network carries serving and storage sync on its own; only multi-node inference needs a compute network.",
       "rows": {
@@ -514,7 +593,7 @@
       }
     },
     "complex": {
-      "tab": "Complex",
+      "tab": "Complex topology example",
       "heading": "Complex: a dedicated network per kind of traffic",
       "summary": "The console and management API listen on the office network and the inference API on the business network; the server and compute nodes share a dedicated management network, inference requests take a dedicated serving network, and nodes have dedicated storage sync and compute networks.",
       "rows": {
@@ -578,7 +657,16 @@
     "auto": "Auto",
     "manual": "Manual",
     "reset": "Back to auto",
-    "removed": "Removed; run the test again to see the effect",
+    "removed": "Network configuration updated. Run the test again for new results.",
+    "inventoryReadFailed": "Could not load the node’s network inventory.",
+    "inventoryPending": "The node has not reported its network inventory yet. Retry after it reports.",
+    "inventoryLoading": "Loading network inventory…",
+    "noReportedPorts": "The inventory contains no ports for this network type.",
+    "allPortsUsed": "All reported ports of this type are already on this network.",
+    "noAddressedInterface": "The inventory contains no interfaces with an IP address.",
+    "removeCardTitle": "Remove card {{hca}}?",
+    "cardMissingIP": "The card has no {{fabric}} IPv4 address",
+    "addCard": "Add card",
     "removeTitle": "Remove HCA {{hca}}?",
     "onlyNode": "From {{node}} only (by default it is removed from every node)",
     "remove": "Remove {{hca}}",

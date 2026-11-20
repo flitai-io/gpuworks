@@ -10,11 +10,12 @@ import { trackMessageChannels } from "./helpers/trackedMessageChannels.ts";
 const closeChannels = trackMessageChannels();
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
 dom.window.HTMLElement.prototype.setPointerCapture = () => {};
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLHtmlElement", "HTMLTextAreaElement", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLBodyElement", "HTMLHtmlElement", "HTMLTextAreaElement", "HTMLInputElement", "HTMLButtonElement", "AbortController", "AbortSignal", "SVGElement", "Element", "Node", "MutationObserver", "ShadowRoot"] as const) {
   Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true });
 }
 Object.defineProperty(globalThis, "getComputedStyle", { value: (element: Element) => dom.window.getComputedStyle(element), configurable: true });
 Object.defineProperty(dom.window, "matchMedia", { configurable: true, value: () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }) });
+Object.defineProperty(dom.window.Element.prototype, "getAnimations", { configurable: true, value: () => [] });
 class ResizeObserverStub { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverStub, configurable: true });
 class EventSourceStub { addEventListener() {} removeEventListener() {} close() {} }
@@ -154,7 +155,7 @@ test("following a node's link does not also expand its row, in either node table
   cleanup();
   stub("network", async () => detailFixture);
   drawer(detailFixture.id);
-  await screen.findByText("Resolved nodes (2)");
+  await screen.findByRole("link", { name: "h20-05" });
   followDoesNotExpand("h20-05");
 });
 
@@ -195,10 +196,14 @@ test("the management network runs internal tests like any other network", async 
   await userEvent.click(await screen.findByRole("tab", { name: n.tabs.test }));
   assert.equal(screen.queryByText(n.test.unsupported), null);
   assert.equal(screen.queryByText(n.test.kindRdmaTool), null, "an Ethernet network has no ib_write_bw test");
-  await userEvent.click(screen.getByText(n.test.scopeNodes));
-  await userEvent.click(screen.getByRole("combobox", { name: n.test.nodes }));
-  await userEvent.click((await screen.findAllByTitle("gpu-a")).at(-1)!);
-  await userEvent.click((await screen.findAllByTitle("h200-c")).at(-1)!);
+  const user = userEvent.setup();
+  await chooseNodeScope(user);
+  const picker = screen.getByRole("combobox", { name: n.test.nodes });
+  for (const name of ["gpu-a", "h200-c"]) {
+    await user.type(picker, name);
+    await user.click(await screen.findByRole("option", { name }));
+  }
+  if (picker.getAttribute("aria-expanded") === "true") await user.keyboard("{Escape}");
   await userEvent.click(screen.getByRole("button", { name: n.test.start }));
   await waitFor(() => assert.equal(calls.length, 1));
   const [id, body] = calls[0] as [number, Record<string, unknown>];
@@ -207,12 +212,11 @@ test("the management network runs internal tests like any other network", async 
   assert.deepEqual(body.node_uuids, ["a", "c"]);
 });
 
-// An option of the open select: the node table's links carry the same names
-// as their title, so a page-wide title lookup is ambiguous.
-const dropdownOption = (name: string) => {
-  const dropdown = document.querySelector(".ant-select-dropdown:not(.ant-select-dropdown-hidden)") as HTMLElement;
-  return within(dropdown).getByTitle(name);
-};
+async function chooseNodeScope(user: ReturnType<typeof userEvent.setup>) {
+  screen.getByRole("combobox", { name: n.test.scope }).focus();
+  await user.keyboard("{Enter}");
+  await user.click(await screen.findByRole("option", { name: n.test.scopeNodes }));
+}
 
 test("internal test node search recovers from no results and submits only the selected network nodes", async () => {
   stubManagement("admin");
@@ -225,22 +229,18 @@ test("internal test node search recovers from no results and submits only the se
   const user = userEvent.setup();
   wrap(<NetworkDetailPage />, "/networks/0", "/networks/:id");
   await user.click(await screen.findByRole("tab", { name: n.tabs.test }));
-  await user.click(screen.getByText(n.test.scopeNodes));
+  await chooseNodeScope(user);
   const picker = screen.getByRole("combobox", { name: n.test.nodes }) as HTMLInputElement;
-  // Open the real control before typing: rc-select keeps a closed multi-select
-  // input read-only, even when its default search capability is enabled.
-  await user.click(picker);
-  await waitFor(() => assert.equal(picker.readOnly, false));
   await user.type(picker, "missing-node");
-  assert.ok(await screen.findByText("No data", { ignore: "script, style, title" }));
-  assert.equal(screen.queryByRole("option", { name: "gpu-a" }), null);
+  await waitFor(() => assert.equal(screen.queryAllByRole("option").length, 0));
   assert.deepEqual(calls, [], "searching alone must not start a test");
 
   await user.clear(picker);
   await user.type(picker, "gpu-a");
   assert.ok(await screen.findByRole("option", { name: "gpu-a" }));
   assert.equal(screen.queryByRole("option", { name: "gpu-b" }), null, "search filters the network candidates");
-  await user.click(dropdownOption("gpu-a"));
+  await user.click(await screen.findByRole("option", { name: "gpu-a" }));
+  if (picker.getAttribute("aria-expanded") === "true") await user.keyboard("{Escape}");
   await user.click(screen.getByRole("button", { name: n.test.start }));
   assert.ok(await screen.findByText(n.test.nodesRequired));
   assert.deepEqual(calls, [], "one real selection is insufficient");
@@ -248,7 +248,8 @@ test("internal test node search recovers from no results and submits only the se
   await user.click(picker);
   await user.type(picker, "h200");
   assert.ok(await screen.findByRole("option", { name: "h200-c" }));
-  await user.click(dropdownOption("h200-c"));
+  await user.click(await screen.findByRole("option", { name: "h200-c" }));
+  if (picker.getAttribute("aria-expanded") === "true") await user.keyboard("{Escape}");
   await user.click(screen.getByRole("button", { name: n.test.start }));
   await waitFor(() => assert.deepEqual(calls, [[0, {
     kind: "tcp", pattern: "mesh", scope: "nodes", bandwidth: true, seconds: 3, node_uuids: ["a", "c"],
@@ -301,6 +302,11 @@ test("an administrator flips one node's role in place", async () => {
 
 test("an administrator filters by search and label, selects the result and sets roles in bulk", async () => {
   stubManagement("admin");
+  const searches: unknown[][] = [];
+  stub("searchNetworkTargets", async (id, kind, query) => {
+    searches.push([id, kind, query]);
+    return { ids: ["a", "b"] };
+  });
   const calls: unknown[][] = [];
   stub("updateManagementRoles", async (uuids, allow, deny) => { calls.push([uuids, allow, deny]); return { updated: 2 }; });
   wrap(<NetworkDetailPage />, "/networks/0", "/networks/:id");
@@ -308,9 +314,12 @@ test("an administrator filters by search and label, selects the result and sets 
   const apply = await screen.findByRole("button", { name: n.management.bulk.apply });
   assert.ok(apply.hasAttribute("disabled"), "nothing selected yet");
 
-  await userEvent.type(screen.getByRole("searchbox", { name: n.management.search }), "gpu");
-  await waitFor(() => assert.equal(screen.queryByRole("link", { name: "h200-c" }), null));
-  assert.ok(screen.getByText("Showing 2 of 3 nodes"));
+  const search = screen.getByRole("searchbox", { name: n.management.search });
+  assert.ok(search.closest(".resource-table-toolbar"));
+  await userEvent.type(search, "site=lab");
+  assert.ok(await screen.findByText("Showing 2 of 3 nodes"));
+  assert.deepEqual(searches, [[0, "nodes", "site=lab"]]);
+  assert.equal(screen.queryByRole("link", { name: "h200-c" }), null);
   await userEvent.click(screen.getByRole("button", { name: "Select filtered (2)" }));
   assert.ok(screen.getByText("2 nodes selected"));
   assert.ok(apply.hasAttribute("disabled"), "no role chosen yet");

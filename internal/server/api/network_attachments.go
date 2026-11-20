@@ -49,6 +49,20 @@ func (a *apiHandlers) updateNetworkAttachment(w http.ResponseWriter, r *http.Req
 	a.writeNetworkDetail(w, http.StatusOK, networkID)
 }
 
+func (a *apiHandlers) updateNetworkLabel(w http.ResponseWriter, r *http.Request) {
+	var req dto.NetworkLabelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	networkID := parseUint(chi.URLParam(r, "id"))
+	if err := a.networks().UpdateLabel(networkID, parseUint(chi.URLParam(r, "attachmentID")), req.LabelKey, req.LabelValue); err != nil {
+		writeNetworkErr(w, err)
+		return
+	}
+	a.writeNetworkDetail(w, http.StatusOK, networkID)
+}
+
 func (a *apiHandlers) deleteNetworkAttachment(w http.ResponseWriter, r *http.Request) {
 	networkID := parseUint(chi.URLParam(r, "id"))
 	if err := a.networks().Detach(networkID, parseUint(chi.URLParam(r, "attachmentID"))); err != nil {

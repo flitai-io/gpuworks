@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -132,5 +133,45 @@ func TestNetworkTestRunNodeUUIDsOfUnreadableRows(t *testing.T) {
 	run := networkTestDTO(&store.NetworkTestRun{ID: 1, Status: "done", Scope: "nodes", Nodes: `["a","c"]`}, nil)
 	if !reflect.DeepEqual(run.NodeUUIDs, []string{"a", "c"}) {
 		t.Fatalf("node_uuids = %#v", run.NodeUUIDs)
+	}
+}
+
+func TestNetworkTestPairAverageRailBandwidth(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, rails, status string
+		passed                    int
+		storedTotal, wantMean     float64
+	}{
+		{"mixed rates, error and zero", "rdma_tool", `[{"gbps":80},{"gbps":100},{"gbps":5,"error":"tool failed"},{"gbps":0}]`, "partial", 2, 185, 90},
+		{"all failed", "rdma_tool", `[{"gbps":0},{"code":"no_peer_rail"}]`, "failed", 0, 0, 0},
+		{"historic aggregate only", "rdma_tool", `[]`, "passed", 0, 180, 0},
+		{"TCP aggregate", "tcp", `[]`, "passed", 0, 33, 0},
+		{"card connectivity", "card_ping", `[{"rail":"npu0","target_rail":"npu0","reachable":true}]`, "passed", 1, 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stored := &store.NetworkTestRun{Kind: tc.kind, Bandwidth: tc.kind != "card_ping", Pairs: fmt.Sprintf(`[{"reachable":true,"gbps":%g,"rails":%s}]`, tc.storedTotal, tc.rails)}
+			run := networkTestDTO(stored, nil)
+			pair := run.Pairs[0]
+			if pair.Status != tc.status || run.RailPassedCount != tc.passed || run.RailCount != len(pair.Rails) {
+				t.Fatalf("status %q, passing rails %d/%d: %+v", pair.Status, run.RailPassedCount, run.RailCount, pair.Rails)
+			}
+			wantPartial := 0
+			if tc.status == "partial" {
+				wantPartial = 1
+			}
+			if run.PartialCount != wantPartial || pair.Passed != (tc.status == "passed") {
+				t.Fatalf("partial_count %d, passed %t, status %q", run.PartialCount, pair.Passed, tc.status)
+			}
+			if pair.AvgRailGbps != tc.wantMean || pair.Gbps != tc.storedTotal {
+				t.Fatalf("mean %v and stored aggregate %v", pair.AvgRailGbps, pair.Gbps)
+			}
+			raw, err := json.Marshal(pair)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(raw), `"avg_rail_gbps":`) != (tc.wantMean > 0) {
+				t.Fatalf("unexpected average field in %s", raw)
+			}
+		})
 	}
 }

@@ -1,16 +1,18 @@
+import { Button as ActionButton } from "../../components/ui/button";
 import { useState } from "react";
 import { Button, Checkbox, Popconfirm, Select, Space, Tag, Tooltip, Typography, message } from "antd";
 import { CloseOutlined, ExclamationCircleFilled, PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api";
-import type { NetworkDetail, NetworkNode, NetworkRail, NodeNetworks, RailGap } from "../../networkTypes";
-import { colors } from "../../theme/tokens";
-import { isAcceleratorRDMA } from "./networkDisplay";
+import type { NetworkDetail, NetworkNode, NetworkRail, NetworkType, NodeNetworks, RailGap } from "../../networkTypes";
+import { acceleratorFabric, isAcceleratorRDMA, railAddressTitle } from "./networkDisplay";
 
 type T = (key: string, options?: Record<string, unknown>) => string;
 
 /** Why a port cannot carry RDMA traffic, in the viewer's language. */
-export function railGapText(t: T, gap?: RailGap | string) {
+export function railGapText(t: T, gap?: RailGap | string, type?: NetworkType) {
+  const fabric = acceleratorFabric(type);
+  if (gap === "no_ipv4" && fabric) return t("rail.cardMissingIP", { fabric });
   return gap ? t(`rail.gap.${gap}`, { defaultValue: gap }) : "";
 }
 
@@ -19,7 +21,7 @@ function SourceTag({ source, onReset, busy }: { source?: string; onReset?: () =>
   const { t } = useTranslation("networks");
   if (source !== "manual") return <Tag>{t("rail.auto")}</Tag>;
   return (
-    <Space size={0}>
+    <Space size={0} wrap>
       <Tag color="blue">{t("rail.manual")}</Tag>
       {onReset && <Button type="link" size="small" loading={busy} onClick={onReset}>{t("rail.reset")}</Button>}
     </Space>
@@ -51,7 +53,7 @@ export function RemoveHCAButton({ network, hca, nodeUUID, nodeName, onChanged, l
   };
   return (
     <Popconfirm
-      title={t("rail.removeTitle", { hca })}
+      title={t(isAcceleratorRDMA(network.type) ? "rail.removeCardTitle" : "rail.removeTitle", { hca })}
       description={<Checkbox checked={onlyThis} onChange={(e) => setOnlyThis(e.target.checked)}>{t("rail.onlyNode", { node: nodeName })}</Checkbox>}
       onConfirm={remove}
       onOpenChange={(open) => { if (open) setOnlyThis(false); }}
@@ -65,22 +67,55 @@ export function RemoveHCAButton({ network, hca, nodeUUID, nodeName, onChanged, l
   );
 }
 
-/** Loads a node's inventory on first use, for picking a port or an interface. */
+/** Fetch again on each open or retry so newly reported hardware is available. */
 function useInventory(nodeUUID: string) {
   const [inventory, setInventory] = useState<NodeNetworks | null>(null);
   const [loading, setLoading] = useState(false);
-  const load = () => {
-    if (inventory || loading) return;
+  const [failed, setFailed] = useState(false);
+  const load = async () => {
+    if (loading) return;
     setLoading(true);
-    api.nodeNetworks(nodeUUID).then(setInventory).catch(() => undefined).finally(() => setLoading(false));
+    setFailed(false);
+    setInventory(null);
+    try {
+      setInventory(await api.nodeNetworks(nodeUUID));
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
   };
-  return { inventory, loading, load };
+  return { inventory, loading, failed, load };
+}
+
+function InventoryPicker({ state, options, placeholder, emptyMessage, onClose, onSelect }: {
+  state: ReturnType<typeof useInventory>;
+  options: { label: string; value: string }[];
+  placeholder: string;
+  emptyMessage: string;
+  onClose: () => void;
+  onSelect: (value: string) => void;
+}) {
+  const { t } = useTranslation("networks");
+  const { inventory, loading, failed, load } = state;
+  if (!loading && (failed || !inventory?.inventory_reported || options.length === 0)) {
+    const message = failed ? t("rail.inventoryReadFailed") : !inventory?.inventory_reported ? t("rail.inventoryPending") : emptyMessage;
+    return <span className="inline-flex flex-wrap items-center gap-2">
+      <span role={failed ? "alert" : "status"}>{message}</span>
+      <Button size="small" onClick={load}>{t("detail.retry")}</Button>
+      <Button size="small" type="text" onClick={onClose}>{t("actions.cancel")}</Button>
+    </span>;
+  }
+  return <Select autoFocus size="small" className="w-64 max-w-full" open loading={loading}
+    aria-label={placeholder} placeholder={placeholder} options={options} notFoundContent={t("rail.inventoryLoading")}
+    onOpenChange={open => { if (!open) onClose(); }} onSelect={onSelect} />;
 }
 
 /** An RDMA network's rails on one node: each with its address, removable, and a way to add one. */
 export function RailsCell({ network, node, onChanged }: { network: NetworkDetail; node: NetworkNode; onChanged: (detail: NetworkDetail) => void }) {
   const { t } = useTranslation("networks");
-  const { inventory, loading, load } = useInventory(node.node_uuid);
+  const state = useInventory(node.node_uuid);
+  const { inventory, load } = state;
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const used = new Set(node.hcas.map((h) => h.name));
@@ -105,54 +140,50 @@ export function RailsCell({ network, node, onChanged }: { network: NetworkDetail
     .filter((p) => !used.has(p.name))
     .map((p) => ({
       value: p.name,
-      label: [p.name, p.ip || "—", p.gap ? railGapText(t, p.gap) : ""].filter(Boolean).join(" · "),
+      label: [p.name, p.ip || "—", p.gap ? railGapText(t, p.gap, network.type) : ""].filter(Boolean).join(" · "),
     }));
   return (
-    <Space direction="vertical" size={2}>
-      {node.hcas.length === 0 && <Typography.Text type="secondary">—</Typography.Text>}
-      {node.hcas.map((rail) => (
-        <RailLine key={rail.name} rail={rail}>
-          <RemoveHCAButton network={network} hca={rail.name} nodeUUID={node.node_uuid} nodeName={node.node_name} onChanged={onChanged} />
-        </RailLine>
-      ))}
-      <Space size={4} wrap>
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
         {adding ? (
-          <Select
-            autoFocus
-            size="small"
-            style={{ minWidth: 260 }}
-            open
-            loading={loading}
-            placeholder={t(accelerator ? "rail.pickCard" : "rail.pick")}
-            options={options}
-            notFoundContent={loading ? undefined : t("rail.noMore")}
-            onOpenChange={(open) => { if (!open) setAdding(false); }}
-            onSelect={(hca: string) => edit({ op: "add", hca, node_uuid: node.node_uuid })}
-          />
+          <InventoryPicker state={state} options={options} placeholder={t(accelerator ? "rail.pickCard" : "rail.pick")}
+            emptyMessage={t(ports.length ? "rail.allPortsUsed" : "rail.noReportedPorts")}
+            onClose={() => setAdding(false)} onSelect={hca => edit({ op: "add", hca, node_uuid: node.node_uuid })} />
         ) : (
-          <Button size="small" type="dashed" icon={<PlusOutlined />} disabled={busy} onClick={() => { load(); setAdding(true); }}>{t("rail.add")}</Button>
+          <Button size="small" type="dashed" icon={<PlusOutlined />} disabled={busy} onClick={() => { load(); setAdding(true); }}>{t(accelerator ? "rail.addCard" : "rail.add")}</Button>
         )}
         <SourceTag source={node.hca_source} busy={busy} onReset={() => edit({ op: "reset", node_uuid: node.node_uuid })} />
-      </Space>
-    </Space>
+      </div>
+      {node.hcas.length === 0 ? <Typography.Text type="secondary">—</Typography.Text> : (
+        <ul aria-label={railAddressTitle(t, network.type)} className="m-0 grid max-h-60 list-none gap-1 overflow-y-auto p-0">
+          {node.hcas.map((rail) => (
+            <li key={rail.name}>
+              <RailLine rail={rail} type={network.type}>
+                <RemoveHCAButton network={network} hca={rail.name} nodeUUID={node.node_uuid} nodeName={node.node_name} onChanged={onChanged} />
+              </RailLine>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
 /** One rail: its name, its address ("—" for InfiniBand without IPoIB) and why it is unusable. */
-export function RailLine({ rail, children }: { rail: NetworkRail; children?: React.ReactNode }) {
+export function RailLine({ rail, type, children }: { rail: NetworkRail; type?: NetworkType; children?: React.ReactNode }) {
   const { t } = useTranslation("networks");
-  const gap = railGapText(t, rail.gap);
+  const gap = railGapText(t, rail.gap, type);
   return (
-    <Space size={6}>
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5 [overflow-wrap:anywhere]">
       <Typography.Text code>{rail.name}</Typography.Text>
       <Typography.Text type="secondary">{rail.ip || "—"}</Typography.Text>
       {gap && (
         <Tooltip title={gap}>
-          <ExclamationCircleFilled role="img" aria-label={gap} tabIndex={0} style={{ color: colors.warning }} />
+          <ExclamationCircleFilled role="img" aria-label={gap} tabIndex={0} style={{ color: "var(--warning)" }} />
         </Tooltip>
       )}
       {children}
-    </Space>
+    </div>
   );
 }
 
@@ -163,7 +194,8 @@ export function RailLine({ rail, children }: { rail: NetworkRail; children?: Rea
  */
 export function BootstrapCell({ network, node, onChanged }: { network: NetworkDetail; node: NetworkNode; onChanged: (detail: NetworkDetail) => void }) {
   const { t } = useTranslation("networks");
-  const { inventory, loading, load } = useInventory(node.node_uuid);
+  const state = useInventory(node.node_uuid);
+  const { inventory, load } = state;
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const attachment = network.attachments.find((a) => a.target === "node" && a.node_uuid === node.node_uuid);
@@ -185,26 +217,17 @@ export function BootstrapCell({ network, node, onChanged }: { network: NetworkDe
     .filter((i) => i.addrs.length > 0)
     .map((i) => ({ value: i.name, label: [i.name, ...i.addrs].join(" · ") }));
   return (
-    <Space direction="vertical" size={2}>
-      {node.ip ? <Typography.Text code>{[node.interface, node.ip].filter(Boolean).join(" · ")}</Typography.Text> : <Typography.Text type="danger">{t("rail.noBootstrap")}</Typography.Text>}
-      <Space size={4} wrap>
-        {editing ? (
-          <Select
-            autoFocus
-            size="small"
-            style={{ minWidth: 240 }}
-            open
-            loading={loading}
-            placeholder={t("rail.pickInterface")}
-            options={options}
-            onOpenChange={(open) => { if (!open) setEditing(false); }}
-            onSelect={(iface: string) => save(iface)}
-          />
-        ) : (
-          <Button size="small" type="link" disabled={busy} onClick={() => { load(); setEditing(true); }}>{t("rail.changeBootstrap")}</Button>
-        )}
-        <SourceTag source={node.bootstrap_source} busy={busy} onReset={attachment ? () => save("") : undefined} />
-      </Space>
-    </Space>
+    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1 text-body">
+      {node.ip
+        ? <code className="min-w-0 font-mono text-body">{[node.interface, node.ip].filter(Boolean).join(" · ")}</code>
+        : <span className="text-fg-danger">{t("rail.noBootstrap")}</span>}
+      {editing ? (
+        <InventoryPicker state={state} options={options} placeholder={t("rail.pickInterface")} emptyMessage={t("rail.noAddressedInterface")}
+          onClose={() => setEditing(false)} onSelect={save} />
+      ) : (
+        <ActionButton size="sm" variant="link" className="text-body" disabled={busy} onClick={() => { load(); setEditing(true); }}>{t("rail.changeBootstrap")}</ActionButton>
+      )}
+      <SourceTag source={node.bootstrap_source} busy={busy} onReset={attachment ? () => save("") : undefined} />
+    </div>
   );
 }

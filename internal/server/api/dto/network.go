@@ -99,6 +99,11 @@ type NetworkRail struct {
 	Gap string `json:"gap,omitempty"`
 }
 
+// NetworkTargetMatches identifies matching rows of a network detail table.
+type NetworkTargetMatches struct {
+	IDs []string `json:"ids"`
+}
+
 // NetworkDetail is one network with the nodes it resolved to.
 type NetworkDetail struct {
 	Network
@@ -151,6 +156,12 @@ type NetworkAttachmentRequest struct {
 	Interface  string   `json:"interface"`
 	IP         string   `json:"ip"`
 	HCAs       []string `json:"hcas"`
+}
+
+// NetworkLabelRequest changes a label attachment's matching selector.
+type NetworkLabelRequest struct {
+	LabelKey   string `json:"label_key"`
+	LabelValue string `json:"label_value"`
 }
 
 // NetworkOverrideRequest replaces a node attachment's overrides.
@@ -306,6 +317,8 @@ type NetworkTestPair struct {
 	Code  string `json:"code,omitempty"`
 	Side  string `json:"side,omitempty"`
 	Error string `json:"error,omitempty"`
+	// AvgRailGbps is the mean of successful RDMA bandwidth readings.
+	AvgRailGbps float64 `json:"avg_rail_gbps,omitempty"`
 	// Rails are per-rail results of an rdma_tool test; Gbps is their sum.
 	Rails []NetworkTestRail `json:"rails,omitempty"`
 	// CardShape is how the two nodes' cards reach each other in a card run:

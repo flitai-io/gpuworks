@@ -166,12 +166,14 @@ export function compareSortValues(a: SortValue, b: SortValue): number {
 const EMPTY_ROWS: never[] = [];
 const EMPTY_FILTERS: ToolbarFilter[] = [];
 export default function ResourceTable<T extends object>({ tableId, columns, data, rowKey, loading, error, onRefresh, updatedAt,
-  toolbar, toolbarExtra, pagination, sort, onSortChange, onFiltersChange, onFilterStateChange, rowSelection, expandable, onRow,
+  toolbar, toolbarExtra, pagination, pageResetKey, sort, onSortChange, onFiltersChange, onFilterStateChange, rowSelection, expandable, onRow,
   emptyDescription, emptyKind = "data", emptyAction, filteredEmptyDescription, columnSettings = true, extraFilters = EMPTY_FILTERS,
 }: {
   tableId: string; columns: ResourceColumn<T>[]; data?: T[]; rowKey: ResourceRowKey<T>;
   loading?: boolean; error?: Error | null; onRefresh?: () => void; updatedAt?: Date | null;
   toolbar?: ReactNode; toolbarExtra?: ReactNode; pagination?: ResourcePagination | false;
+  /** A new external search starts the locally paginated result set at page one. */
+  pageResetKey?: string;
   sort?: ServerSort | null; onSortChange?: (sort: ServerSort | null) => void;
   onFiltersChange?: (filters: Record<string, string[]>) => void;
   /** Observe local filters without opting into server-side filtering. */
@@ -189,6 +191,9 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
   const [prefs, setPrefs] = useState<ColumnPrefs>(() => loadColumnPrefs(tableId, columns));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [localPage, setLocalPage] = useState({ pageIndex: 0, pageSize: prefs.pageSize ?? 20 });
+  useEffect(() => {
+    if (pageResetKey !== undefined) setLocalPage(page => page.pageIndex ? { ...page, pageIndex: 0 } : page);
+  }, [pageResetKey]);
   const [localSort, setLocalSort] = useState<SortingState>([]);
   // A column's defaultFilteredValue is where its filter starts; the user changes it from there.
   const [filters, setFilters] = useState<ColumnFiltersState>(() => columns.filter((column) => column.defaultFilteredValue?.length).map((column) => ({ id: column.key, value: column.defaultFilteredValue })));
@@ -337,7 +342,7 @@ export default function ResourceTable<T extends object>({ tableId, columns, data
           {expandable && <TableHead style={{ width: 36, position: "sticky", left: rowSelection ? 48 : 0, zIndex: 2, background: "var(--surface-raised)" }} />}
           {arranged.map((column, index) => {
             const control = table.getColumn(column.key)!;
-            return <TableHead key={column.key} style={{ ...pinnedStyle(column, index), ...(column.role === "name" || column.role === "actions" ? { backgroundColor: "var(--surface-raised)" } : {}) }} aria-label={labelOf(column)} aria-sort={control.getIsSorted() === "asc" ? "ascending" : control.getIsSorted() === "desc" ? "descending" : undefined}>
+            return <TableHead key={column.key} className={column.role === "name" ? "resource-table-name" : undefined} style={{ ...pinnedStyle(column, index), ...(column.role === "name" || column.role === "actions" ? { backgroundColor: "var(--surface-raised)" } : {}) }} aria-label={labelOf(column)} aria-sort={control.getIsSorted() === "asc" ? "ascending" : control.getIsSorted() === "desc" ? "descending" : undefined}>
               {/* A title longer than its column is cut with an ellipsis (full text on hover), never drawn over the next one. */}
               <div className="relative flex min-w-0 items-center gap-1">
                 {/* Sortable titles carry Zeron's up/down mark and its sort menu, so they read as controls (ui-guidelines 3). */}

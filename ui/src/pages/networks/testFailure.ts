@@ -8,5 +8,7 @@ type T = (key: string, options?: Record<string, unknown>) => string;
  */
 export function failureText(t: T, keyPrefix: string, known: Set<string>, f: { code?: string; side?: string; error?: string }, node?: string) {
   if (!f.code || !known.has(f.code)) return f.error ?? "";
-  return t(`${keyPrefix}.${f.code}`, { node: node ?? t(`test.side.${f.side ?? "node"}`), detail: f.error ?? "" });
+  const detail = f.error?.trim() ?? "";
+  const message = t(`${keyPrefix}.${f.code}`, { node: node ?? t(`test.side.${f.side ?? "node"}`), detail });
+  return detail ? message : message.replace(/[:：]\s*$/, "");
 }

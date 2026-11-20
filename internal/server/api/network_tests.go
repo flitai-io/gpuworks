@@ -295,11 +295,17 @@ func networkTestDTO(run *store.NetworkTestRun, nodes map[uint]store.Node) *dto.N
 		if status == network.TestPartial {
 			out.PartialCount++
 		}
+		var measuredRails int
+		var railBandwidth float64
 		rails := []dto.NetworkTestRail{}
 		for _, r := range p.Rails {
 			out.RailCount++
 			if r.OK() {
 				out.RailPassedCount++
+				if kind == networkTestRDMATool && r.Gbps > 0 {
+					measuredRails++
+					railBandwidth += r.Gbps
+				}
 			}
 			rails = append(rails, dto.NetworkTestRail{Rail: r.Rail, SourceIP: r.SourceIP, TargetRail: r.TargetRail, TargetIP: r.TargetIP, Gbps: r.Gbps, Reachable: r.Reachable, RTTMS: r.RTTMS, Code: r.Code, Side: r.Side, Error: r.Error})
 		}
@@ -311,6 +317,9 @@ func networkTestDTO(run *store.NetworkTestRun, nodes map[uint]store.Node) *dto.N
 			TargetUUID: p.TargetUUID, TargetName: firstNonEmpty(names[p.TargetUUID], p.TargetUUID),
 			Target: p.Target, Status: status, Passed: status == network.TestPassed, Reachable: p.Reachable,
 			RTTP50MS: p.RTTP50MS, RTTP99MS: p.RTTP99MS, Gbps: p.Gbps, Code: p.Code, Side: p.Side, Error: p.Error, Rails: rails,
+		}
+		if measuredRails > 0 {
+			pair.AvgRailGbps = railBandwidth / float64(measuredRails)
 		}
 		if card {
 			pair.CardShape = network.CardPairShape(p)

@@ -10,6 +10,8 @@ const out = resolve(process.argv[2] ?? '/tmp/gpuworks-detail-spacing');
 await mkdir(out, { recursive: true });
 const fixture = resolve(root, '.__detail-spacing.html');
 const network = JSON.parse(await readFile(resolve(root, 'tests/fixtures/network-detail.json'), 'utf8'));
+// Exercise a resolved Bootstrap address and a missing one in the same drawer.
+network.nodes[1].ip = '';
 const html = `<!doctype html><html><head><meta charset="utf-8"><script>
 const p=new URLSearchParams(location.search);document.documentElement.dataset.theme=p.get('theme');document.documentElement.classList.toggle('dark',p.get('theme')==='dark');
 </script></head><body><div id="root"></div><script type="module">
@@ -25,6 +27,43 @@ api.me=async()=>({username:'layout-admin',role:'admin'});api.network=async(id)=>
 const node={uuid:'layout-node',recovery_phase:'recovered',recovery_attempts:1,last_probe_at:'2026-11-14T10:00:00Z'};
 window.renderCase=(kind)=>{const child=kind.startsWith('node')?e(DetailDrawer,{key:kind,open:true,onClose:()=>{},title:'GPU server',subtitle:'gpu-server-01',banner:e(NodeRecoveryStatus,{node:kind==='node-empty'?{...node,recovery_phase:''}:node,onUpdated:()=>{}}),tabs:[{key:'basic',label:i18n.t('detail.tab.basic',{ns:'nodes'}),children:e('div',{className:'text-body'},'Node details')}]}):e(NetworkDetailDrawer,{key:kind,id:kind==='management'?0:detail.id,onTab:()=>{},onClose:()=>{},onChanged:()=>{}});view.render(e(StyleProvider,{layer:true},e(I18nextProvider,{i18n},e(ConfigProvider,{theme:{algorithm:darkPreview?antdTheme.darkAlgorithm:antdTheme.defaultAlgorithm,...themeConfig}},e(MemoryRouter,null,child)))));};window.ready=true;
 </script></body></html>`;
+async function checkExpandedNodes(page, locale) {
+  const strings = JSON.parse(await readFile(resolve(root, `src/i18n/locales/${locale}/networks.json`), 'utf8'));
+  const results = [];
+  for (const node of network.nodes) {
+    const row = page.getByRole('row').filter({has: page.getByRole('link', {name: node.node_name, exact: true})});
+    await row.locator('td:first-child button[aria-expanded="false"]').click();
+    const panel = row.locator('xpath=following-sibling::tr[1]').locator('dl');
+    const value = panel.getByText(node.ip ? [node.interface, node.ip].filter(Boolean).join(' · ') : strings.rail.noBootstrap, {exact: true});
+    const change = panel.getByRole('button', {name: strings.rail.changeBootstrap, exact: true});
+    await value.waitFor();
+    await change.waitFor();
+    const fields = await panel.locator('dt').evaluateAll(labels => labels.map(label => {
+      const value = label.nextElementSibling;
+      const a = label.getBoundingClientRect(), b = value.getBoundingClientRect();
+      return {label: label.textContent, tag: value.tagName, left: b.left - a.right, top: b.top - a.top};
+    }));
+    assert.ok(fields.length >= 2, 'Bootstrap and HCA details must both render');
+    for (const field of fields) {
+      assert.equal(field.tag, 'DD');
+      assert.ok(field.left >= 0 && Math.abs(field.top) < 2, 'label and value must share a row: '+JSON.stringify(field));
+    }
+    const bodySize = await panel.evaluate(el => {
+      const probe = document.createElement('span');
+      probe.style.fontSize = 'var(--font-size-body)';
+      el.append(probe);
+      const size = getComputedStyle(probe).fontSize;
+      const token = getComputedStyle(probe).getPropertyValue('--font-size-body').trim();
+      probe.remove();
+      return {size, token};
+    });
+    assert.ok(bodySize.token, 'the body font token must be loaded');
+    for (const target of [value, change]) assert.equal(await target.evaluate(el => getComputedStyle(el).fontSize), bodySize.size);
+    results.push({node: node.node_name, fields, bodySize});
+    await row.locator('td:first-child button[aria-expanded="true"]').click();
+  }
+  return results;
+}
 let server, browser;
 try {
   await writeFile(fixture, html);
@@ -33,6 +72,9 @@ try {
   const results=[];
   for(const theme of ['light','dark']) for(const locale of ['zh','en']) for(const width of [1440,1024,768]) {
     const page=await browser.newPage({viewport:{width,height:1000}});
+    // The overview subscribes to server events and checks the session if that stream closes.
+    await page.route('**/api/v1/events', route => route.fulfill({status: 204}));
+    await page.route('**/api/v1/auth/me', route => route.fulfill({json: {username: 'layout-admin', role: 'admin'}}));
     await page.goto(server.resolvedUrls.local[0]+'.__detail-spacing.html?theme='+theme+'&locale='+locale);
     await page.waitForFunction(()=>window.ready);
     for(const kind of ['node','node-empty','network','management']) {
@@ -55,6 +97,7 @@ try {
       if(kind==='node'){assert.equal(metrics.bannerGap,16);assert.equal(metrics.headingOffset,0);}
       if(kind==='node-empty') assert.equal(metrics.bannerGap,null);
       if(kind==='management') assert.ok(metrics.tableOverflow<=1,'management role switches must fit: '+JSON.stringify(metrics));
+      if (kind === 'network') metrics.expandedNodes = await checkExpandedNodes(page, locale);
       results.push({theme,locale,width,kind,...metrics});
       await page.screenshot({path:resolve(out,`${kind}-${theme}-${locale}-${width}.png`)});
     }

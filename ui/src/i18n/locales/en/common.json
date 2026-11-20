@@ -1120,6 +1120,7 @@
     "hideColumn": "Hide {{name}}",
     "resizeColumn": "Resize {{name}}",
     "total": "{{count}} items",
+    "total_one": "{{count}} item",
     "selectPage": "Select this page",
     "selectRow": "Select {{name}}",
     "expandRow": "Expand row",

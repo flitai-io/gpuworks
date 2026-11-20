@@ -64,9 +64,12 @@ const headerTexts = () => screen.getAllByRole("columnheader", { hidden: true }).
 const firstCells = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
 
 test("the name column leads frozen left and the actions column trails frozen right under its own header", () => {
-  renderTable();
+  renderTable({ data: rows.slice(0, 1) });
+  assert.ok(screen.getByText("1 item"));
   const headers = screen.getAllByRole("columnheader");
   assert.deepEqual(headerTexts(), ["Name", "GPUs", "State", "Actions"]);
+  assert.ok(headers[0].matches(".resource-table-name"));
+  assert.ok(screen.getByRole("cell", { name: rows[0].name }).matches(".resource-table-name"));
   assert.ok(headers[0].style.position === "sticky" && headers[0].style.left === "0px");
   assert.ok(headers.at(-1)!.style.position === "sticky" && headers.at(-1)!.style.right === "0px");
   const table = screen.getByRole("table") as HTMLTableElement;

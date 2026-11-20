@@ -1120,6 +1120,7 @@
     "hideColumn": "隐藏「{{name}}」",
     "resizeColumn": "调整「{{name}}」列宽",
     "total": "共 {{count}} 项",
+    "total_one": "共 {{count}} 项",
     "selectPage": "选择当前页",
     "selectRow": "选择 {{name}}",
     "expandRow": "展开行",

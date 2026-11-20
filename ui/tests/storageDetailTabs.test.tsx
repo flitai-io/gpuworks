@@ -321,7 +321,7 @@ test("a node on which the local directory is on a shared filesystem has an orang
   const row = async (name: string) => (await screen.findByText(name, { selector: "tbody a" })).closest("tr") as HTMLElement;
   const text = s.sharedFS.node.replace("{{type}}", "nfs4");
   const mark = within(await row("compute001")).getByRole("img", { name: text });
-  assert.equal(mark.style.color, "rgb(250, 136, 1)", "the mark is the warning colour (colors.warning)");
+  assert.equal(mark.style.color, "var(--warning)", "the shared mark follows the current warning palette");
   fireEvent.mouseEnter(mark);
   assert.equal(within(await row("gpu-02")).queryAllByRole("img", { name: /shared filesystem/ }).length, 0);
 });

@@ -47,7 +47,7 @@ export function useDetailParam(param: string) {
 // or non-numeric value opens nothing, while "0" stays 0 (the management
 // network's id).
 export function numericDetailID(id: string | null): number | null {
-  if (id == null || id === "") return null;
+  if (id == null || !/^\d+$/.test(id)) return null;
   const value = Number(id);
-  return Number.isFinite(value) ? value : null;
+  return Number.isSafeInteger(value) ? value : null;
 }

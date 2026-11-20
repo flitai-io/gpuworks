@@ -5,6 +5,11 @@ export type NetworkRole = "storage_sync" | "compute" | "serving";
 export type NetworkType = "host_ethernet" | "host_rdma" | "accelerator_rdma" | "accelerator_hccs";
 export type LinkLayer = "infiniband" | "roce" | "hccs";
 
+export interface NetworkNodeFilters {
+  roles?: string[];
+  source?: string[];
+}
+
 export interface NetworkWarning {
   code: "conflict" | "override_missing" | "link_layer_mismatch" | "rdma_no_hca" | "bootstrap_missing" | "hca_unusable" | "hca_mismatch" | string;
   params?: Record<string, string>;
@@ -121,6 +126,8 @@ export interface NetworkTestPair {
   rtt_ms_p50: number;
   rtt_ms_p99: number;
   gbps: number;
+  /** Mean of measured passing rails for RDMA bandwidth tests. */
+  avg_rail_gbps?: number;
   /** Why the pair failed and which node it is about; runs stored before codes carry only error. */
   code?: string;
   side?: NetworkTestSide;

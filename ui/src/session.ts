@@ -12,12 +12,12 @@ function receive(change: SessionChange) {
 
 function publish(change: SessionChange) {
   if (change === "expired" && expired) return;
-  receive(change);
   try {
     window.localStorage.setItem(storageKey, JSON.stringify({ type: change, nonce: crypto.randomUUID() }));
   } catch {
     // Cookie authentication remains available when browser storage is disabled.
   }
+  receive(change);
 }
 
 function onStorage(event: StorageEvent) {
