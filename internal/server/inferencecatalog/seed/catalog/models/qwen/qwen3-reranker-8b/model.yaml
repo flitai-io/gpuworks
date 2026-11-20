@@ -48,9 +48,6 @@ specs:
   api:
     health_endpoint: /health
     operations:
-    - type: openai.chat
-      endpoint: /v1/chat/completions
-      mode: stream
     - type: openai.rerank
       endpoint: /v1/rerank
       mode: sync
@@ -92,9 +89,6 @@ specs:
   api:
     health_endpoint: /health
     operations:
-    - type: openai.chat
-      endpoint: /v1/chat/completions
-      mode: stream
     - type: openai.rerank
       endpoint: /v1/rerank
       mode: sync
@@ -106,6 +100,9 @@ specs:
   image: gpuworks/gpuworks-runner:cuda13.0-sglang0.5.21-r2
   args:
   - --enable-metrics
+  # SGLang renders the query and document as positional user messages.
+  - --chat-template
+  - /sgl-workspace/sglang/examples/chat_template/qwen3_reranker.jinja
   weights:
     quantization: bf16
     sources:
@@ -122,9 +119,6 @@ specs:
   api:
     health_endpoint: /health
     operations:
-    - type: openai.chat
-      endpoint: /v1/chat/completions
-      mode: stream
     - type: openai.rerank
       endpoint: /v1/rerank
       mode: sync
