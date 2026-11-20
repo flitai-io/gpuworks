@@ -30,10 +30,41 @@ H20 reuses these profiles without changing their spec names. Under the default p
 
 ## Ascend A3 prerequisites and measurements
 
-The A3 profile uses a complete immutable snapshot of
-`Eco-Tech/DeepSeek-V4.1-Flash-1017-w8a8` and the pinned vLLM-Ascend v0.30.0rc2
-A3 image. It declares 512 GiB of `/dev/shm` and `memlock_unlimited` so both
-shared Engram tables can be registered and pinned; the host needs enough free RAM.
+GPUworks selects `int8-vllm-ascend-a3-tp4-dp4` by default on 910C. This
+profile needs 16 logical 910C NPUs on one node, each with at least 64 GiB.
+It declares 512 GiB of `/dev/shm` and `memlock_unlimited`. Keep enough host
+RAM free to register and pin both shared Engram tables.
+
+For offline deployment, import
+`gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1` for the target
+node's CPU architecture. When exporting from the Quay mirror, preserve this
+canonical reference in the archive. If the node already has that tag, compare
+its image ID with the published runner for the same architecture. If the IDs
+differ, replace the cached image. For native Docker, use `docker load -i <verified-runner.tar>` against the
+same daemon the GPUworks agent uses. To replace the image through GPUworks
+using an archive URL already configured for this image, send
+`{"source":"url","archive_url":"<verified archive URL>","force":true}` to
+`POST /api/v1/images/{id}/nodes/{uuid}/sync` and wait for the transfer to
+finish. Ordinary archive sync skips a node that already reports the image
+as present. After either method, inspect the canonical tag again and verify
+that its image ID matches the runner for the node's architecture.
+Existing deployments retain the image sources saved at creation. Create a deployment
+from the updated template to use its corrected sources for future pulls.
+
+Prepare the complete ModelScope snapshot of `Eco-Tech/DeepSeek-V4.1-Flash-1017-w8a8`
+at revision `12b85455a58c7df345c1abc43934624a76bac576`. Attach the target node's
+snapshot directory to an existing ModelScope record only if its repository ID
+and revision both match. If no record matches, register a ModelScope model at
+that revision and attach the directory, or register the verified directory as a
+local model and set its source ID to the full repository name above.
+Select the registered model and the W8A8 profile. Check that deployment
+evaluation shows the weights are available on the target node, then send a
+chat request once the instance is ready.
+
+The GPUworks Ascend catalog covers this 910C W8A8 profile. Eco-Tech W4A8
+requires a separately validated image and profile. The latest upstream 910C
+example uses model runner V2 and INT8 Engram.
+[vLLM-Ascend deployment guide](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/models/DeepSeek-V4.1-Flash.html#51-single-node-colocated-deployment)
 
 On 2026-10-23 the profile passed platform health, `/v1/models` and a real chat
 request on 16× 910C with native Docker. That result does not extend to runveil.

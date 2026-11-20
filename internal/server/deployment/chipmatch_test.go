@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"gpuworks.ai/gpuworks/internal/server/chipmatch"
+	"gpuworks.ai/gpuworks/internal/server/inferencecatalog"
+	"gpuworks.ai/gpuworks/internal/server/inferencecatalog/seed"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -88,4 +90,35 @@ func TestFlatSelectionDistinguishesSameNameByCatalogSource(t *testing.T) {
 	if err != nil || spec == nil || spec.Source != "user" || spec.Image != "user:image" || selection.Ambiguous {
 		t.Fatalf("explicit user selection spec=%+v selection=%+v err=%v", spec, selection, err)
 	}
+}
+
+func TestSelectInferenceSpecDeepSeekV411017Ascend(t *testing.T) {
+	const modelID = "deepseek-ai/deepseek-v4.1-flash-1017"
+	const specName = "int8-vllm-ascend-a3-tp4-dp4"
+	catalog, err := seed.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := inferencecatalog.ToFlatStoreModels(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range models {
+		if model.ModelID != modelID {
+			continue
+		}
+		gpu := chipmatch.ReportedGPU("Ascend 910C", "ascend", "910C", "")
+		spec, _, err := selectInferenceSpec(model, "", "", gpu, "", "")
+		if err != nil || spec == nil || spec.Name != specName {
+			t.Fatalf("910C default spec = %+v, err = %v, want %s", spec, err, specName)
+		}
+
+		gpu = chipmatch.ReportedGPU("Ascend 910B4", "ascend", "910B4", "")
+		spec, selection, err := selectInferenceSpec(model, "", "", gpu, "", "")
+		if err == nil || spec != nil || selection.Matched {
+			t.Fatalf("910B unexpectedly matched: spec = %+v, selection = %+v, err = %v", spec, selection, err)
+		}
+		return
+	}
+	t.Fatalf("catalog is missing %s", modelID)
 }

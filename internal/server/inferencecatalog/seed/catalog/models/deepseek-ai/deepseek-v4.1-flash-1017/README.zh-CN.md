@@ -30,9 +30,32 @@ H20 共用这些配方，保留原 spec 名称。默认参数下，96 GB 版本�
 
 ## Ascend A3 的部署前提与实测
 
-A3 档使用 `Eco-Tech/DeepSeek-V4.1-Flash-1017-w8a8` 的完整不可变快照和固定的
-vLLM-Ascend v0.30.0rc2 A3 镜像。模板声明 512 GiB `/dev/shm` 和
-`memlock_unlimited`，供两张 Engram 共享表注册与锁页使用；主机需要相应空闲内存。
+910C 默认选择 `int8-vllm-ascend-a3-tp4-dp4`。该配方需要单机 16 个 910C 逻辑
+NPU，每个至少 64 GiB。模板声明 512 GiB `/dev/shm` 和 `memlock_unlimited`，
+主机需留足空闲内存供两张 Engram 共享表注册与锁页。
+
+离线部署先在目标节点导入与 CPU 架构匹配的
+`gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1`。从 Quay 副本导出时，
+归档中应保留这一规范引用。若节点已缓存同名镜像，将其镜像 ID 与相同架构的发布镜像 ID
+比较。有差异时，在目标节点重新导入已核实的 runner 归档。
+原生 Docker 环境应连接 GPUWorks agent 实际使用的 Docker daemon，并执行
+`docker load -i <已核实的镜像归档.tar>`。如果通过 GPUWorks 从已登记的归档 URL
+替换镜像，向 `POST /api/v1/images/{id}/nodes/{uuid}/sync` 提交
+`{"source":"url","archive_url":"<已核实的归档 URL>","force":true}`，等待传输完成。
+普通归档同步会跳过已标记镜像存在的节点。完成后重新检查规范标签对应的镜像 ID，
+确认它与该架构的发布镜像 ID 一致。
+已有部署再次拉取时仍会使用创建时保存的镜像来源；使用更新后的模板创建部署即可采用新的来源。
+
+准备 ModelScope 仓库 `Eco-Tech/DeepSeek-V4.1-Flash-1017-w8a8` 的完整快照
+`12b85455a58c7df345c1abc43934624a76bac576`。只有仓库 ID 和 revision 均匹配时，
+才在已有 ModelScope 模型的操作中选择“登记计算节点已有路径”，关联目标节点上的快照目录。
+若无匹配记录，可以按该 revision 登记 ModelScope 模型后关联目录，也可以将已核实的快照目录
+登记为本地模型，并将“来源 ID”设为上述完整仓库名。部署时选择已登记的模型和 W8A8 配方，
+确认评估结果显示目标节点已有权重。实例就绪后发送一条聊天请求。
+
+当前 GPUworks 昇腾目录覆盖此 910C W8A8 配方。Eco-Tech W4A8 需要单独验证的
+镜像和配方。上游最新的 910C 示例使用 V2 模型运行器和 INT8 Engram。
+[vLLM-Ascend 部署指南](https://docs.vllm.ai/projects/ascend/en/latest/tutorials/models/DeepSeek-V4.1-Flash.html#51-single-node-colocated-deployment)
 
 2026-10-23，该档在 910C × 16 的原生 Docker 环境通过平台 health、`/v1/models`
 和真实 chat；该结果不外推到 runveil。
