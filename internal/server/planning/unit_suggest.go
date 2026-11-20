@@ -8,6 +8,7 @@ package planning
 
 import (
 	"sort"
+	"strings"
 
 	"gpuworks.ai/gpuworks/internal/proto"
 
@@ -231,7 +232,13 @@ func nodeArch(node *store.Node) string {
 	families := map[string]bool{}
 	for _, gpu := range node.OwnedGPUs() {
 		if gpu.CanTakeWork() {
-			families[node.ArchOf(gpu).Family] = true
+			arch := node.ArchOf(gpu)
+			family := arch.Family
+			if vendor == accelerator.VendorAMD && family == "" {
+				// ROCm cards report an ISA but have no coarser family for replica placement.
+				family = strings.ToLower(arch.ID)
+			}
+			families[family] = true
 		}
 	}
 	if len(families) == 1 {

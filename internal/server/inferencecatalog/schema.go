@@ -291,8 +291,9 @@ func specSchema(operationTypes, engineNames []any) map[string]any {
 				"additionalProperties": false,
 				"required":             []string{"language", "resolver"},
 				"properties": map[string]any{
-					"language": map[string]any{"type": "string", "enum": []any{"starlark"}, "description": "Resolver language; starlark is the only supported one."},
-					"resolver": map[string]any{"type": "string", "minLength": 1, "description": "Starlark: def resolve(gpu) -> accept(...) or reject(reason)."},
+					"language":  map[string]any{"type": "string", "enum": []any{"starlark"}, "description": "Resolver language; starlark is the only supported one."},
+					"max_nodes": map[string]any{"type": "integer", "minimum": 0, "description": "Maximum nodes per engine launch; zero or omitted means no template limit."},
+					"resolver":  map[string]any{"type": "string", "minLength": 1, "description": "Starlark: def resolve(gpu) -> accept(...) or reject(reason)."},
 				},
 			},
 			"api": map[string]any{

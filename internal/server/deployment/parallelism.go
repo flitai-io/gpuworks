@@ -22,9 +22,9 @@ func requestPlacementDP(req *dto.DeployRequest, templateArgs []string) (int, err
 }
 
 // automaticReplicaDP reads a template before choosing a multi-node group's
-// capacity. A named spec resolves without a node; an automatic spec is read
-// against the proposed leader. The draft owns any materialized fields, so a
-// rejected candidate cannot change the caller's request.
+// capacity and validates its node limit. A named spec resolves without a node.
+// An automatic spec uses the proposed leader. The draft owns its materialized
+// fields so a rejected candidate cannot change the caller's request.
 func (s *Service) automaticReplicaDP(req *dto.DeployRequest, node *store.Node) (int, error) {
 	if req.TemplateID == 0 {
 		return requestPlacementDP(req, nil)
@@ -32,6 +32,9 @@ func (s *Service) automaticReplicaDP(req *dto.DeployRequest, node *store.Node) (
 	draft := *req
 	selection, err := s.applyTemplateDefaults(&draft, nodeTemplateHardware(node))
 	if err != nil {
+		return 0, err
+	}
+	if err := (deploy.CatalogSelection{Placement: selection.Placement}).ValidatePlacementNodes(draft.NNodes); err != nil {
 		return 0, err
 	}
 	launch, err := s.materializeCreateLaunch(draft.Engine, &draft, selection, nil, s.imageEngineVersion(draft.Engine, draft.Image))

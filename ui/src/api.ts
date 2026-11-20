@@ -1764,7 +1764,7 @@ export interface InferenceSpec {
   entrypoint?: string[];
   // Keys whose default this spec's launch leaves to the engine.
   engine_decides_param_keys?: string[];
-  placement?: { language: string; resolver: string };
+  placement?: { language: string; resolver: string; max_nodes?: number };
   api?: import("./inferenceApi").InferenceAPIContract;
   components?: Array<{
     name: string;

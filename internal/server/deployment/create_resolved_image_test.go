@@ -22,11 +22,11 @@ func TestCreatePreflightWithoutANodeSkipsRuntimeRules(t *testing.T) {
 		AllowUnresolved: true,
 	}
 	imageFor := func(*store.Node) string { return base.Image }
-	if err := preflightCreateRuntimes(base, nil, nil, "/model", nil, nil, nil, imageFor); err != nil {
+	if err := preflightCreateRuntimes(base, nil, nil, "/model", nil, nil, nil, imageFor, deploy.CatalogSelection{}); err != nil {
 		t.Fatalf("unpinned create was refused: %v", err)
 	}
 	pinned := &store.Node{UUID: "tpl-node", RuntimeDriver: "udocker"}
-	err = preflightCreateRuntimes(base, nil, nil, "/model", pinned, nil, nil, imageFor)
+	err = preflightCreateRuntimes(base, nil, nil, "/model", pinned, nil, nil, imageFor, deploy.CatalogSelection{})
 	var product *messages.ProductError
 	if !errors.As(err, &product) || product.Code() != messages.ErrorAscendV1CompatPreStart {
 		t.Fatalf("pinned udocker create = %v, want %s", err, messages.ErrorAscendV1CompatPreStart)
@@ -36,7 +36,7 @@ func TestCreatePreflightWithoutANodeSkipsRuntimeRules(t *testing.T) {
 	base.Image = ""
 	err = preflightCreateRuntimes(base, nil, nil, "/model", pinned, nil, nil, func(*store.Node) string {
 		return "quay.io/ascend/vllm-ascend:v0.30.0rc2-a3"
-	})
+	}, deploy.CatalogSelection{})
 	if !errors.As(err, &product) || product.Code() != messages.ErrorAscendV1CompatPreStart {
 		t.Fatalf("create with a resolved compat image = %v, want %s", err, messages.ErrorAscendV1CompatPreStart)
 	}

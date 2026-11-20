@@ -13,6 +13,7 @@ const (
 	ErrorReplicasNegative                       = "REPLICAS_NEGATIVE"
 	ErrorRoutingPolicyInvalid                   = "ROUTING_POLICY_INVALID"
 	ErrorDistributedReplicaCount                = "DISTRIBUTED_REPLICA_COUNT"
+	ErrorTemplatePlacementNodeLimit             = "TEMPLATE_PLACEMENT_NODE_LIMIT"
 	ErrorDistributedNodeCount                   = "DISTRIBUTED_NODE_COUNT"
 	ErrorDistributedTPRequired                  = "DISTRIBUTED_TP_REQUIRED"
 	ErrorMasterPortInvalid                      = "MASTER_PORT_INVALID"

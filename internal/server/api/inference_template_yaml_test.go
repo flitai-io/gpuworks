@@ -96,7 +96,7 @@ func fullTemplateCatalog(asset []byte) inferencecatalog.FlatCatalog {
 		PreStartArgv: []string{"/opt/gpuworks/serve.py", "--prepare"},
 		Assets:       []inferencecatalog.Asset{{File: fullAssetPath, SHA256: hex.EncodeToString(digest[:]), SizeBytes: int64(len(asset)), UnpackTo: "/opt/gpuworks/serve.py"}},
 		Entrypoint:   []string{"python3", "-m", "vllm.entrypoints.openai.api_server"},
-		Placement:    &inferencecatalog.Placement{Language: "starlark", Resolver: fullPlacementFn},
+		Placement:    &inferencecatalog.Placement{Language: "starlark", Resolver: fullPlacementFn, MaxNodes: 2},
 		API:          &inferencecatalog.APIContract{HealthEndpoint: "/health", TokenizerRef: "ms://Acme/Tokenizer@0123456789abcdef0123456789abcdef01234567", Operations: []inferenceapi.Operation{chat, completion}, Metrics: prometheus},
 		Components:   []inferencecatalog.Component{primary, draft},
 		PDMode:       "vllm-nixl",
@@ -305,7 +305,7 @@ func TestInferenceTemplateYAMLRoundTripsEveryFieldThroughImport(t *testing.T) {
 	for _, want := range []string{
 		"tokenizer_ref: ms://Acme/Tokenizer@0123456789abcdef0123456789abcdef01234567",
 		"runtime_weight_bytes: 70000000000", "pd_mode: vllm-nixl", "shm_bytes: 429496729600", "memlock_unlimited: true", "start_timeout_sec: 5400", "docker_args:", "--cap-add=SYS_PTRACE", "kv_bytes_per_token:", "model_config:", "unsupported:",
-		"arch_id: sm_90", "readme_zh_cn: README.zh-CN.md", "resolver: |", "pre_start_script: |", "request_defaults:", "format: json",
+		"arch_id: sm_90", "readme_zh_cn: README.zh-CN.md", "resolver: |", "max_nodes: 2", "pre_start_script: |", "request_defaults:", "format: json",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("editor YAML lacks %q:\n%s", want, text)

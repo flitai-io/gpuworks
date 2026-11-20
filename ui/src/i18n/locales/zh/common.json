@@ -407,6 +407,7 @@
     "SLEEP_INVALID_MODE": "休眠方式只能是 wait（等待完成）或 abort（立即中止）；{{mode}} 无效。",
     "SLEEP_INVALID_WAKE_ON_REQUEST": "wake_on_request 只能是 true 或 false（收到 {{wake_on_request}}）。",
     "WAKE_INSUFFICIENT_GPU_MEMORY": "节点 {{node}} 的 GPU {{gpu_indexes}} 无法容纳休眠实例唤醒，缺少 {{shortfall_gib}} GiB。请先停止或休眠 {{occupants}}。",
+    "TEMPLATE_PLACEMENT_NODE_LIMIT": "该推理档位每次启动最多支持 {{maximum}} 个节点，当前请求 {{actual}} 个。",
     "DISTRIBUTED_NODE_COUNT": "分布式部署需要 {{required}} 个节点，当前选择了 {{actual}} 个。",
     "DISTRIBUTED_TP_REQUIRED": "多机部署必须设置张量并行（TP）。",
     "MASTER_PORT_INVALID": "Master 端口必须在 {{minimum}} 到 {{maximum}} 之间。",

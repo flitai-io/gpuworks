@@ -48,6 +48,14 @@ const (
 
 var placementVariableName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 
+// Contract is the topology policy carried by an inference spec. MaxNodes
+// limits the nodes in one engine launch. The resolver sees each node's GPUs.
+type Contract struct {
+	Language string    `yaml:"language" json:"language"`
+	Resolver string    `yaml:"resolver" json:"resolver"`
+	MaxNodes NodeLimit `yaml:"max_nodes,omitempty" json:"max_nodes,omitempty"`
+}
+
 type GPU struct {
 	Count        int
 	Vendor       string
