@@ -258,3 +258,27 @@ func TestHasPermissionUsesExactlyOneClass(t *testing.T) {
 		t.Fatal("owner denied its own bits")
 	}
 }
+
+// RealAccess asks the kernel, so it must answer through the same
+// identity the kernel sees for this process: reachable when the bits
+// allow it, unreachable for a missing path, and -- without
+// capabilities -- denied when the bits deny it.
+func TestRealAccessFollowsTheCallingIdentity(t *testing.T) {
+	dir := t.TempDir()
+	if !RealAccess(dir, 0o5) {
+		t.Fatal("kernel denied search+read on a 0700 temp dir the process owns")
+	}
+	missing := filepath.Join(dir, "does-not-exist")
+	if RealAccess(missing, 0o4) {
+		t.Fatal("kernel answered for a missing path")
+	}
+	if os.Geteuid() != 0 {
+		denied := filepath.Join(dir, "denied")
+		if err := os.WriteFile(denied, []byte("x"), 0o200); err != nil {
+			t.Fatal(err)
+		}
+		if RealAccess(denied, 0o4) {
+			t.Fatal("kernel allowed read on a 0200 file without capabilities")
+		}
+	}
+}

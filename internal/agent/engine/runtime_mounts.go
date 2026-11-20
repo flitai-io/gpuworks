@@ -459,7 +459,7 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 			if isTarget {
 				need = 0o5
 			}
-			if !agentruntime.HasPermission(info, owner, need) {
+			if !agentruntime.HasPermission(info, owner, need) && !kernelAccessAsSelf(current, owner, need) {
 				return permissionError(current, info, owner, "traverse/read")
 			}
 			if m.accessAsOwner != nil {
@@ -472,7 +472,7 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("runtime mount preflight target %s is not a regular file", current)
 		}
-		if !agentruntime.HasPermission(info, owner, 0o4) {
+		if !agentruntime.HasPermission(info, owner, 0o4) && !kernelAccessAsSelf(current, owner, 0o4) {
 			return permissionError(current, info, owner, "read")
 		}
 		if m.accessAsOwner != nil {
@@ -482,6 +482,22 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 		}
 	}
 	return nil
+}
+
+// kernelAccessAsSelf asks the kernel whether the calling process can really
+// access path with need, and answers only when the mount owner is that same
+// calling identity -- the case checkAccessAsOwner also treats as "the process
+// itself will do the access". HasPermission simulates mode bits, which cannot
+// see capabilities: a root agent was denied traverse on a 0711 state
+// directory owned by uid 1000, though CAP_DAC_OVERRIDE carries the read and
+// the search bit is set. When the owner is another identity the kernel answer
+// for the calling process says nothing about that owner, so the mode-bit
+// simulation stays the verdict.
+func kernelAccessAsSelf(path string, owner agentruntime.MountOwner, need os.FileMode) bool {
+	if owner.UID != os.Geteuid() || owner.GID != os.Getegid() {
+		return false
+	}
+	return agentruntime.RealAccess(path, need)
 }
 
 func permissionError(name string, info os.FileInfo, owner agentruntime.MountOwner, operation string) error {
