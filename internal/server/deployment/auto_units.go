@@ -30,9 +30,20 @@ func (s *Service) autoPlaceRequest(req *dto.DeployRequest) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	var named []planning.ListedRank
+	var (
+		named     []planning.ListedRank
+		placement planning.Placement
+	)
 	if pd != nil {
 		named = planning.ListedPDRanks(pd, namedPDUnits(pd))
+	} else {
+		placement, err = planning.ParsePlacement(req.Placement)
+		if err != nil {
+			return false, err
+		}
+		if placement.TP <= 0 {
+			return false, productError(messages.ErrorAutoPlacementTPRequired, "automatic placement of a multi-node deployment needs placement.tp: how many GPUs each node gives a rank", nil)
+		}
 	}
 	facts, err := planning.LoadUnitSuggestFacts(s.d.Store, s.networks().Resolve, &store.Deployment{ModelID: req.ModelID}, reqs, named, s.d.Online, s.d.UCXNetlinkHang, 1, 1)
 	if err != nil {
@@ -42,7 +53,7 @@ func (s *Service) autoPlaceRequest(req *dto.DeployRequest) (bool, error) {
 		if err := autoPlacePD(req, pd, facts, strategy); err != nil {
 			return false, err
 		}
-	} else if err := s.autoPlaceReplica(req, facts, strategy); err != nil {
+	} else if err := s.autoPlaceReplica(req, placement, facts, strategy); err != nil {
 		return false, err
 	}
 	// The request now names every node: from here it is checked and stored
@@ -53,25 +64,19 @@ func (s *Service) autoPlaceRequest(req *dto.DeployRequest) (bool, error) {
 
 // autoPlaceReplica picks the ranks of a multi-node request it does not name;
 // the nodes it names take the first ranks.
-func (s *Service) autoPlaceReplica(req *dto.DeployRequest, facts planning.UnitSuggestFacts, strategy store.PlacementStrategy) error {
-	placement, err := planning.ParsePlacement(req.Placement)
-	if err != nil {
-		return err
-	}
-	if placement.TP <= 0 {
-		return productError(messages.ErrorAutoPlacementTPRequired, "automatic placement of a multi-node deployment needs placement.tp: how many GPUs each node gives a rank", nil)
-	}
+func (s *Service) autoPlaceReplica(req *dto.DeployRequest, placement planning.Placement, facts planning.UnitSuggestFacts, strategy store.PlacementStrategy) error {
 	parallel := placement.Parallelism(req.NNodes)
 	// Named specs have a known launch contract before a node is chosen.
 	// Unnamed specs depend on the proposed hardware and are checked below.
 	dynamicSpec := req.TemplateID != 0 && req.TemplateSpecName == ""
 	perRank := 1 // a lower bound until a hardware-dependent spec is resolved
 	if !dynamicSpec {
+		var err error
 		parallel.DP, err = s.automaticReplicaDP(req, nil)
 		if err != nil {
 			return err
 		}
-		perRank, err = parallel.GPUsPerNode()
+		perRank, err = parallelGPUsPerNode(parallel)
 		if err != nil {
 			return err
 		}
@@ -91,7 +96,7 @@ func (s *Service) autoPlaceReplica(req *dto.DeployRequest, facts planning.UnitSu
 		if candidateErr != nil {
 			return 0
 		}
-		need, err := candidate.GPUsPerNode()
+		need, err := parallelGPUsPerNode(candidate)
 		if err != nil {
 			candidateErr = err
 			return 0

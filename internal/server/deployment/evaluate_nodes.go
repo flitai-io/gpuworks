@@ -3,8 +3,10 @@ package deployment
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 
+	"gpuworks.ai/gpuworks/internal/accelerator"
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/chipmatch"
@@ -51,6 +53,9 @@ func (s *Service) evaluateEligibleNodes(selection templateSelection, reqs map[st
 	}
 	var predicate *chipmatch.Predicate
 	var unsupported []chipmatch.Unsupported
+	if selection.Model != nil {
+		unsupported, _ = decodeUnsupported(*selection.Model)
+	}
 	if selection.Spec != nil {
 		decoded, err := DecodeSpecPredicate(*selection.Spec)
 		if err != nil {
@@ -58,10 +63,20 @@ func (s *Service) evaluateEligibleNodes(selection templateSelection, reqs map[st
 		} else {
 			predicate = &decoded
 		}
-		if selection.Model != nil {
-			unsupported, _ = decodeUnsupported(*selection.Model)
-		}
 	}
+	matchesTemplate := func(gpu store.GPU) bool {
+		if selection.CandidateSpecs != nil {
+			reported := chipmatch.ReportedGPU(gpu.Name, gpu.Vendor, gpu.ArchID, gpu.ComputeCapability)
+			return chipmatch.Select(reported, selection.CandidateSpecs, unsupported).Matched
+		}
+		return predicate == nil || gpuMatchesChipPredicate(gpu, *predicate, unsupported)
+	}
+	var candidatePredicates []string
+	for _, candidate := range selection.CandidateSpecs {
+		raw, _ := json.Marshal(candidate.GPUs)
+		candidatePredicates = append(candidatePredicates, string(raw))
+	}
+	candidateDescription := strings.Join(candidatePredicates, " / ")
 	all := make([]*store.Node, 0, len(nodes))
 	for index := range nodes {
 		all = append(all, &nodes[index])
@@ -109,7 +124,9 @@ func (s *Service) evaluateEligibleNodes(selection templateSelection, reqs map[st
 				reason(ReasonRequirementsUnmet, map[string]any{"detail": err.Error()})
 			}
 		}
-		if predicate != nil && !nodeMatchesChipPredicate(node, *predicate, unsupported) {
+		if selection.CandidateSpecs != nil && !slices.ContainsFunc(node.OwnedGPUs(), matchesTemplate) {
+			reason(ReasonChipMismatch, map[string]any{"predicate": candidateDescription, "actual_gpus": reportedGPUFacts(node)})
+		} else if predicate != nil && !slices.ContainsFunc(node.OwnedGPUs(), matchesTemplate) {
 			var required struct {
 				ArchID string `json:"arch_id"`
 			}
@@ -124,14 +141,18 @@ func (s *Service) evaluateEligibleNodes(selection templateSelection, reqs map[st
 		// resolved launch capability preflight. Mixed nodes are checked by physical
 		// card below; offline, cordoned, mismatched and template-ineligible nodes
 		// do not trigger request parsing.
-		if entry.Eligible && planning.NeedsTargetPreflight(node) {
+		if entry.Eligible && selection.CandidateSpecs != nil {
+			// Hardware matching is known now. Command-dependent checks wait
+			// until a leader determines which spec provides the launch.
+			for _, refusal := range planning.TargetRefusals(node, []accelerator.Feature{accelerator.FeatureMultiNode}, matchesTemplate) {
+				reason(refusal.Code, refusal.Params)
+			}
+		} else if entry.Eligible && planning.NeedsTargetPreflight(node) {
 			requests := map[int]planning.TargetCardRequest{}
 			if loadTargetRequests != nil {
 				requests = loadTargetRequests(node)
 			}
-			for _, refusal := range planning.TargetRefusalsByCard(node, func(gpu store.GPU) bool {
-				return predicate == nil || gpuMatchesChipPredicate(gpu, *predicate, unsupported)
-			}, func(gpu store.GPU) planning.TargetCardRequest { return requests[gpu.Index] }) {
+			for _, refusal := range planning.TargetRefusalsByCard(node, matchesTemplate, func(gpu store.GPU) planning.TargetCardRequest { return requests[gpu.Index] }) {
 				reason(refusal.Code, refusal.Params)
 			}
 		}
@@ -143,17 +164,6 @@ func (s *Service) evaluateEligibleNodes(selection templateSelection, reqs map[st
 		out = append(out, entry)
 	}
 	return out, poolPartition, all
-}
-
-// nodeMatchesChipPredicate answers whether any reported GPU satisfies the
-// template's GPU predicate under the model's unsupported rules.
-func nodeMatchesChipPredicate(node *store.Node, predicate chipmatch.Predicate, unsupported []chipmatch.Unsupported) bool {
-	for _, gpu := range node.OwnedGPUs() {
-		if gpuMatchesChipPredicate(gpu, predicate, unsupported) {
-			return true
-		}
-	}
-	return false
 }
 
 // Report facts, not a second predicate implementation. Empty CC stays unknown;

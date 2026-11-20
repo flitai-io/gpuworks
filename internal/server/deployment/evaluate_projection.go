@@ -7,7 +7,9 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/api/dto"
+	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/planning"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -45,12 +47,53 @@ func (s *Service) evaluateWeightSourceOptions(selection templateSelection) []dto
 // Inline preflight check IDs (ADR 0067: lower_snake). A per-node check
 // repeats its ID once per node, with params.node naming it.
 const (
-	PreflightCheckNodeCount     = "node_count"
-	PreflightCheckNodeList      = "node_list"
-	PreflightCheckPort          = "port_range"
-	PreflightCheckNodeOnline    = "node_online"
-	PreflightCheckSharedNetwork = "shared_network"
+	PreflightCheckAutomaticPlacement = "automatic_placement"
+	PreflightCheckNodeCount          = "node_count"
+	PreflightCheckNodeList           = "node_list"
+	PreflightCheckPort               = "port_range"
+	PreflightCheckNodeOnline         = "node_online"
+	PreflightCheckSharedNetwork      = "shared_network"
 )
+
+// Placement refusals can still allow template and form previews. Report
+// the prerequisite that kept group preflight from running.
+// Other placement errors retain the first-refusal validation order.
+func autoPlacementPreflight(req *dto.DeployRequest, err error) *dto.PreflightSummary {
+	var failure *messages.ProductError
+	if !errors.As(err, &failure) {
+		return nil
+	}
+	switch failure.Code() {
+	case messages.ErrorAutoPlacementTPRequired, messages.ErrorUnitPlacementNone, messages.ErrorDistributedParallelIndivisible:
+	default:
+		return nil
+	}
+	checks := []dto.PreflightCheck{{
+		ID: PreflightCheckAutomaticPlacement, Status: proto.CheckFail, Code: failure.Code(), Params: failure.Params(), Message: failure.Error(),
+	}}
+	for _, id := range []string{PreflightCheckNodeCount, PreflightCheckNodeList, PreflightCheckPort} {
+		checks = append(checks, blockedPreflightCheck(id, PreflightCheckAutomaticPlacement, nil))
+	}
+	for _, uuid := range req.NodeUUIDs {
+		checks = append(checks, blockedPreflightCheck(PreflightCheckNodeOnline, PreflightCheckAutomaticPlacement, map[string]any{"node": uuid}))
+	}
+	checks = append(checks, blockedPreflightCheck(PreflightCheckSharedNetwork, PreflightCheckAutomaticPlacement, nil))
+	return &dto.PreflightSummary{Checks: checks}
+}
+
+// A failed placement has no effective degrees. Echo the ones the deployer
+// entered, since the form clears fields missing from form_values.
+func keepEvaluationParallelism(formValues map[string]any, placement planning.Placement) {
+	if formValues == nil {
+		return
+	}
+	if placement.TP > 0 {
+		formValues["tp"] = placement.TP
+	}
+	if placement.PP > 0 {
+		formValues["pp"] = placement.PP
+	}
+}
 
 // preflightRequestCheck is the request-level check a validator refusal
 // belongs to, in the order the validator runs them.
@@ -63,6 +106,15 @@ func preflightRequestCheck(code string) string {
 	default:
 		return PreflightCheckPort
 	}
+}
+
+func blockedPreflightCheck(id, by string, params map[string]any) dto.PreflightCheck {
+	if params == nil {
+		params = map[string]any{}
+	}
+	params["blocked_by"] = by
+	return dto.PreflightCheck{ID: id, Status: proto.CheckSkip, Code: messages.CheckPreflightBlocked, Params: params,
+		Message: "not checked: check " + by + " failed first", BlockedBy: []string{by}}
 }
 
 // evaluateInlinePreflight answers the structural preflight judgements a
@@ -81,14 +133,6 @@ func (s *Service) evaluateInlinePreflight(req *dto.DeployRequest) *dto.Preflight
 			summary.OK = false
 		}
 		summary.Checks = append(summary.Checks, check)
-	}
-	blocked := func(id, by string, params map[string]any) dto.PreflightCheck {
-		if params == nil {
-			params = map[string]any{}
-		}
-		params["blocked_by"] = by
-		return dto.PreflightCheck{ID: id, Status: proto.CheckSkip, Code: messages.CheckPreflightBlocked, Params: params,
-			Message: "not checked: check " + by + " failed first", BlockedBy: []string{by}}
 	}
 	preflightReq := DistributedPreflightRequest{NodeUUIDs: req.NodeUUIDs, MasterAddr: req.MasterAddr}
 	if preflightReq.NodeUUIDs == nil && req.NodeUUID != "" {
@@ -113,15 +157,15 @@ func (s *Service) evaluateInlinePreflight(req *dto.DeployRequest) *dto.Preflight
 				add(failed)
 				reached = true
 			case reached:
-				add(blocked(id, failed.ID, nil))
+				add(blockedPreflightCheck(id, failed.ID, nil))
 			default:
 				add(passedRequestCheck(id, preflightReq))
 			}
 		}
 		for _, uuid := range preflightReq.NodeUUIDs {
-			add(blocked(PreflightCheckNodeOnline, failed.ID, map[string]any{"node": uuid}))
+			add(blockedPreflightCheck(PreflightCheckNodeOnline, failed.ID, map[string]any{"node": uuid}))
 		}
-		add(blocked(PreflightCheckSharedNetwork, failed.ID, nil))
+		add(blockedPreflightCheck(PreflightCheckSharedNetwork, failed.ID, nil))
 		return summary
 	}
 	for _, id := range requestChecks {
@@ -149,7 +193,7 @@ func (s *Service) evaluateInlinePreflight(req *dto.DeployRequest) *dto.Preflight
 		}
 	}
 	if len(nodes) != len(preflightReq.NodeUUIDs) {
-		add(blocked(PreflightCheckSharedNetwork, PreflightCheckNodeOnline, nil))
+		add(blockedPreflightCheck(PreflightCheckSharedNetwork, PreflightCheckNodeOnline, nil))
 		return summary
 	}
 	// The ranks must share a network before they can be probed on it.
@@ -181,4 +225,57 @@ func passedRequestCheck(id string, req DistributedPreflightRequest) dto.Prefligh
 		return dto.PreflightCheck{ID: id, Status: proto.CheckPass, Code: messages.CheckPreflightPortOK,
 			Params: map[string]any{"port": req.Port}, Message: fmt.Sprintf("port %d is in range", req.Port)}
 	}
+}
+
+// distributedErrorField maps the distributed request errors onto the form
+// fields that state them.
+func distributedErrorField(err error) string {
+	var productErr *messages.ProductError
+	if errors.As(err, &productErr) {
+		switch productErr.Code() {
+		case messages.ErrorMasterPortInvalid:
+			return "master_port"
+		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount:
+			return "placement.tp"
+		case messages.ErrorDistributedParallelIndivisible:
+			return "placement.pp"
+		}
+	}
+	return "node_uuids"
+}
+
+// isParallelismField reports whether an evaluate error is about the
+// parallelism rather than the node list; those leave acquisition resolvable.
+func isParallelismField(field string) bool {
+	return field == "placement.tp" || field == "placement.pp"
+}
+
+// evaluateParallelism is the split the draft launches with: the stated
+// degrees, or the TP a single-node schedule settled on. Nil while neither
+// is known.
+func evaluateParallelism(placement planning.Placement, nnodes, scheduledTP int, scheduled bool, quick deploy.LaunchConfig, templateArgs, userArgs []string, engine string) (*dto.EvaluateParallelism, error) {
+	spec := placement.Parallelism(nnodes)
+	dp, err := deploy.PlacementDataParallel(engine, quick.DP, templateArgs, userArgs)
+	if err != nil {
+		return nil, err
+	}
+	spec.DP = dp
+	if !spec.Stated() {
+		if !scheduled {
+			return nil, nil
+		}
+		spec.TP = scheduledTP
+	}
+	perNode, err := spec.GPUsPerNode()
+	if err != nil {
+		return nil, err
+	}
+	return &dto.EvaluateParallelism{TP: spec.TP, PP: spec.PP, Nodes: spec.NNodes, GPUsPerNode: perNode}, nil
+}
+
+// evaluationPlacement is the draft's placement as the evaluation plans it
+// (requestPlacement), a malformed one read as empty.
+func evaluationPlacement(req *dto.DeployRequest) planning.Placement {
+	placement, _ := requestPlacement(req)
+	return placement
 }

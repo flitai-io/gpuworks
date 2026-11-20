@@ -443,7 +443,7 @@
     "RECOVERY_PROVIDER_INSTANCE_GONE": "节点的云实例已不存在。",
     "RECOVERY_STEP_FAILED": "恢复步骤失败。",
     "DISTRIBUTED_GPU_COUNT": "节点“{{node}}”有 {{available}} 张 GPU，按当前 TP × PP 每个节点需要 {{required}} 张。",
-    "DISTRIBUTED_PARALLEL_INDIVISIBLE": "TP {{tp}} × PP {{pp}} 不能平均分到 {{nodes}} 个节点，请调整使其为节点数的整数倍。",
+    "DISTRIBUTED_PARALLEL_INDIVISIBLE": "请调整 TP（{{tp}}）、PP（{{pp}}）或 DP，使三者乘积能被节点数（{{nodes}}）整除。",
     "MODEL_SOURCE_ID_REQUIRED": "请输入模型源 ID。",
     "QUICK_REGISTER_FIELDS_REQUIRED": "请填写模型来源和源 ID。",
     "QUICK_REGISTER_SOURCE_UNSUPPORTED": "所选模型来源不受支持。",

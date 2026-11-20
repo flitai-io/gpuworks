@@ -2,7 +2,6 @@ package deployment
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -77,7 +76,8 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// An automatic multi-node or PD request is previewed on the nodes the
 	// server would pick now; the create picks again.
 	autoPlaced, autoErr := s.autoPlaceRequest(req)
-	if autoErr != nil {
+	placementPreflight := autoPlacementPreflight(req, autoErr)
+	if autoErr != nil && (placementPreflight == nil || placementPD(req) != nil) {
 		errs.add("placement_mode", autoErr)
 		out.fieldErrors(&dto.EvaluateResponse{SchemaVersion: evaluateSchemaVersion, Replicas: req.Replicas, AutoPlaced: true}, errs)
 		return
@@ -100,11 +100,12 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	if hardware.GPU.Vendor == "" && req.TemplateSpecName == "" {
 		hardware.GPU.Vendor = targetVendor
 	}
-	selection, err := s.applyTemplateDefaults(req, hardware)
-	if err != nil {
-		out.fail(err)
+	selection, selectionErr := s.evaluateTemplateSelection(req, hardware, autoErr != nil)
+	if selectionErr != nil && autoErr == nil {
+		out.fail(selectionErr)
 		return
 	}
+	errs.add("template_spec_name", selectionErr)
 	errs.add(fieldPDPlacement, checkPDSpec(selection, placementPD(req)))
 	preserveEngineModelName(req)
 	// The mounts the request states are judged against the assembled launch's
@@ -119,7 +120,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// multi-replica group, so the scope is always per-replica. The response
 	// exists from here on so every field-error exit carries the template facts
 	// it already resolved.
-	resp := dto.EvaluateResponse{SchemaVersion: evaluateSchemaVersion, OK: true, Replicas: req.Replicas, AutoPlaced: autoPlaced, PlanScope: "per_replica", TemplateMatch: selection.Match, MatchedBy: selection.MatchedBy, TemplateDeviated: selection.Deviated}
+	resp := dto.EvaluateResponse{SchemaVersion: evaluateSchemaVersion, OK: true, Replicas: req.Replicas, AutoPlaced: autoPlaced || autoErr != nil, PlanScope: "per_replica", TemplateMatch: selection.Match, MatchedBy: selection.MatchedBy, TemplateDeviated: selection.Deviated}
 	if selection.ManualCommandDefault {
 		// The spec owns its command: the editor starts from that script.
 		resp.ManualCommandDraft = selection.Spec.ManualCommand
@@ -138,7 +139,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	eligibleLoaded := false
 	var fleet []*store.Node // the nodes the eligibility was read from
 	loadEligible := func(requests func(*store.Node) map[int]planning.TargetCardRequest) {
-		if eligibleLoaded {
+		if eligibleLoaded || selectionErr != nil {
 			return
 		}
 		resp.EligibleNodes, resp.PoolPartitionCapability, fleet = s.evaluateEligibleNodes(selection, pool, poolErr, IsAutomaticPlacement(req) && req.NNodes <= 1, requests)
@@ -146,12 +147,26 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	}
 	writeFieldErrors := func() {
 		loadEligible(nil)
+		if autoErr != nil {
+			field := "placement_mode"
+			if containsProductCode(autoErr, messages.ErrorDistributedParallelIndivisible) {
+				field = distributedErrorField(autoErr)
+			}
+			errs.add(field, autoErr)
+			resp.Preflight = placementPreflight
+			keepEvaluationParallelism(resp.FormValues, placement)
+		}
 		// A draft with a field error still answers whether it can be checked,
 		// so the switch does not flicker while the deployer fixes the field.
-		if resp.HealthCheckable == nil {
+		if resp.HealthCheckable == nil && autoErr == nil {
 			s.noteHealthCheckable(ctx, &resp, req, selection)
 		}
 		out.fieldErrors(&resp, errs)
+	}
+
+	if selection.CandidateSpecs != nil || selectionErr != nil {
+		writeFieldErrors()
+		return
 	}
 
 	// A placement read failure was collected above; the zero placement keeps
@@ -179,6 +194,10 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	}
 	profile, err := deploy.ProfileForTarget(eng.Name(), targetVendor)
 	if err != nil {
+		if autoErr != nil {
+			writeFieldErrors()
+			return
+		}
 		out.fail(err)
 		return
 	}
@@ -190,17 +209,24 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// binds the components and its API contract (evaluateLaunchPreflight).
 	preflightSelection := selection
 	preflightSelection.Components = append([]deploy.ComponentBinding(nil), selection.Components...)
-	model, err := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
-	if errs.add("model_id", err) {
-		writeFieldErrors()
-		return
-	}
-	s.noteHealthCheckableOf(&resp, &selection, model)
-	// A quick registration may not have metadata yet. Keep evaluation and
-	// scheduling usable, but tell clients that the VRAM estimate is incomplete.
-	if model.WeightBytes <= 0 && (selection.Spec == nil || (selection.Spec.WeightBytes <= 0 && selection.Spec.RuntimeWeightBytes <= 0)) {
-		resp.Skipped = true
-		resp.SkipReason = "model weight size is unknown"
+	var model *store.Model
+	// Resolving template models can register artifacts. A refused placement
+	// only needs the form and eligibility projections.
+	if autoErr == nil {
+		model, err = s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &selection, req.TemplateID)
+		if errs.add("model_id", err) {
+			writeFieldErrors()
+			return
+		}
+		s.noteHealthCheckableOf(&resp, &selection, model)
+		// A quick registration may not have metadata yet. Keep evaluation and
+		// scheduling usable, but tell clients that the VRAM estimate is incomplete.
+		if model.WeightBytes <= 0 && (selection.Spec == nil || (selection.Spec.WeightBytes <= 0 && selection.Spec.RuntimeWeightBytes <= 0)) {
+			resp.Skipped = true
+			resp.SkipReason = "model weight size is unknown"
+		}
+	} else {
+		model = s.featurePreviewModel(req.ModelID, selection)
 	}
 	servedName := strings.TrimSpace(req.ServedName)
 	if strings.Contains(strings.ToLower(strings.TrimSpace(req.Image)), "@sha256:") {
@@ -254,7 +280,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// The form values are already answered, so the deployer sees the share
 	// the refusal is about and can lower it. An edit is not asked: the
 	// deployment's own engine already holds the host memory in question.
-	if base == nil && errs.add("sleepable", s.sleepHostBacking(eng.Name(), req, quick, profileNode)) {
+	if autoErr == nil && base == nil && errs.add("sleepable", s.sleepHostBacking(eng.Name(), req, quick, profileNode)) {
 		writeFieldErrors()
 		return
 	}
@@ -267,6 +293,10 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 		if requests, requestErr := planning.TargetRequestsForLaunch(draft); requestErr == nil {
 			loadEligible(requests)
 		}
+	}
+	if autoErr != nil {
+		writeFieldErrors()
+		return
 	}
 	loadEligible(nil)
 	if placement.PD != nil {
@@ -314,14 +344,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 				return
 			}
 			parallelInvalid = true
-			// The form keeps what the deployer typed: form_values echoes the
-			// stated degrees, since a key missing from it clears the field.
-			if placement.TP > 0 {
-				resp.FormValues["tp"] = placement.TP
-			}
-			if placement.PP > 0 {
-				resp.FormValues["pp"] = placement.PP
-			}
+			keepEvaluationParallelism(resp.FormValues, placement)
 			// Rank zero is the node the acquisition facts describe.
 			if len(req.NodeUUIDs) > 0 {
 				req.NodeUUID = req.NodeUUIDs[0]
@@ -538,57 +561,4 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	}
 	resp.Warnings = uniqueWarnings(resp.Warnings)
 	out.answer(resp)
-}
-
-// distributedErrorField maps the distributed request errors onto the form
-// fields that state them.
-func distributedErrorField(err error) string {
-	var productErr *messages.ProductError
-	if errors.As(err, &productErr) {
-		switch productErr.Code() {
-		case messages.ErrorMasterPortInvalid:
-			return "master_port"
-		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount:
-			return "placement.tp"
-		case messages.ErrorDistributedParallelIndivisible:
-			return "placement.pp"
-		}
-	}
-	return "node_uuids"
-}
-
-// isParallelismField reports whether an evaluate error is about the
-// parallelism rather than the node list; those leave acquisition resolvable.
-func isParallelismField(field string) bool {
-	return field == "placement.tp" || field == "placement.pp"
-}
-
-// evaluateParallelism is the split the draft launches with: the stated
-// degrees, or the TP a single-node schedule settled on. Nil while neither
-// is known.
-func evaluateParallelism(placement planning.Placement, nnodes, scheduledTP int, scheduled bool, quick deploy.LaunchConfig, templateArgs, userArgs []string, engine string) (*dto.EvaluateParallelism, error) {
-	spec := placement.Parallelism(nnodes)
-	dp, err := deploy.PlacementDataParallel(engine, quick.DP, templateArgs, userArgs)
-	if err != nil {
-		return nil, err
-	}
-	spec.DP = dp
-	if !spec.Stated() {
-		if !scheduled {
-			return nil, nil
-		}
-		spec.TP = scheduledTP
-	}
-	perNode, err := spec.GPUsPerNode()
-	if err != nil {
-		return nil, err
-	}
-	return &dto.EvaluateParallelism{TP: spec.TP, PP: spec.PP, Nodes: spec.NNodes, GPUsPerNode: perNode}, nil
-}
-
-// evaluationPlacement is the draft's placement as the evaluation plans it
-// (requestPlacement), a malformed one read as empty.
-func evaluationPlacement(req *dto.DeployRequest) planning.Placement {
-	placement, _ := requestPlacement(req)
-	return placement
 }
