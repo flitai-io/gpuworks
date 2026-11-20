@@ -423,6 +423,8 @@ placement:
 
 - You must define `resolve(gpu)`. `gpu` is a struct with `count`, `vendor`, `names`,
   `memories_gib`, `min_memory_gib`, `indexes`, and `automatic`.
+- `placement.max_nodes` limits the number of nodes in one engine launch. Omit it or set it to 0 to leave the node count to the deployment.
+  The resolver’s `gpu.count` counts selected cards on the current node.
 - There are only two predeclared built-ins: `accept(gpu_memory_mib_per_device, variables?, prefer?)` and
   `reject(reason)`. `gpu_memory_mib_per_device` is an **admission requirement** (1..16777216 MiB;
   the upper limit only prevents int64 overflow), not an allocation request.
@@ -768,7 +770,7 @@ Warnings do not block import. A successful import response includes the same `wa
 - The image catalog (system image manifest) is a separate domain. For the format, see
   [Image Catalog and Inference Image Families](image-families.md#manifest-格式).
 
-<!-- translation-source-sha256: 5bd8cd63dc62f673122248b8c1200ce3073c2412a1711dcef50e17f00f2e6c14 -->
+<!-- translation-source-sha256: 060aa982f6cb5c3e3471be473583c84568491256aadfed8eec734dad666459eb -->
 <!-- translation-localized-code-block: a580200df2b28bc011bb736a64288086932955375e5ae8897762ee97bd667e26 8e0792250b6c0eb3ec0dad5bfca28308dc0b1afeb27e9c33bb24ddb21e20ba07 -->
 <!-- translation-localized-code-block: 9a54a7271e193f98f78581cbb5fb446f8d5d1aa46c942d8f4fb3536f5f81b115 22ec1397368cfc809b65ad278feb838b5690c611dd587bc022c6e151b5596d99 Translate YAML comments and illustrative user-facing reason text. -->
 <!-- translation-localized-code-block: 4cf9267c119973bda779b8e29a9ad818c097c803df34a09ac14492502ab9dce2 e78acb98a7a082fdad6d2080ea7754cc18152f1bec68f60c312e46e33f3bfd59 -->
