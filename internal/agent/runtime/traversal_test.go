@@ -280,5 +280,11 @@ func TestRealAccessFollowsTheCallingIdentity(t *testing.T) {
 		if RealAccess(denied, 0o4) {
 			t.Fatal("kernel allowed read on a 0200 file without capabilities")
 		}
+		if !RealAccess(denied, 0o2) {
+			t.Fatal("kernel denied write on a 0200 file the process owns")
+		}
+		if RealAccess(denied, 0o6) {
+			t.Fatal("kernel allowed read+write on a 0200 file without read")
+		}
 	}
 }

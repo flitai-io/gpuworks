@@ -183,6 +183,9 @@ func RealAccess(path string, need os.FileMode) bool {
 	if need&0o4 != 0 {
 		flags |= unix.R_OK
 	}
+	if need&0o2 != 0 {
+		flags |= unix.W_OK
+	}
 	if need&0o1 != 0 {
 		flags |= unix.X_OK
 	}
