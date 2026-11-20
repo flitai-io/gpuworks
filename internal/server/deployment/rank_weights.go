@@ -68,7 +68,7 @@ func (s *Service) resolveRankWeights(selection *templateSelection, rank0 *store.
 	selection.RankWeights = append(selection.RankWeights, deploy.RankWeight{Rank: 0, Subfolder: rank0.ArtifactSubfolder, StoreModelID: rank0.ID})
 	for rank := 1; rank < ranks; rank++ {
 		source := weightSource{Provider: rank0.Source, RepoID: rank0.SourceID, Revision: rank0.Revision, Subfolder: deploy.ExpandRankSubfolder(template, rank)}
-		model, err := s.resolveWeightArtifact(source, selection.Model, selection.Spec.Engine, selection.Spec.Quantization, selection.Spec.WeightBytes, 0, selection.StoragePins, true, true)
+		model, err := s.selectionWeightModel(selection, source, selection.Model, selection.Spec.Engine, selection.Spec.Quantization, selection.Spec.WeightBytes, 0, selection.StoragePins, true, true)
 		if err != nil {
 			return fmt.Errorf("rank %d weights %s: %w", rank, source.Subfolder, err)
 		}
