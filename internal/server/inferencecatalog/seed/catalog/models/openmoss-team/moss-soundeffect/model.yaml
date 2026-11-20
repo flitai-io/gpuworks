@@ -78,6 +78,16 @@ specs:
   - --gpu-memory-utilization
   - '0.75'
   - --enforce-eager
+  # Stage 0 of the bundled deploy config declares one device, so a launch with
+  # --tensor-parallel-size 2 exits before the engine is up. A card too small
+  # for the weights is answered by a larger card, never by a second one.
+  placement:
+    language: starlark
+    resolver: |-
+      def resolve(gpu):
+          if gpu.count != 1:
+              return reject("MOSS-SoundEffect runs on one GPU")
+          return {"GPU_COUNT": 1, "TP_SIZE": 1}
   api:
     health_endpoint: /health
     operations:

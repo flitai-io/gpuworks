@@ -473,4 +473,49 @@ in the ownership verification call inside `Destroy()` aborted the entire cleanup
 real billable instance running (encountered once during this session's validation runs and handled manually).
 `get()` now retries up to 3 times with linear backoff.
 
-<!-- translation-source-sha256: 7419f4b1b0366890c62e5a5a7335902959de7ec0253849039f5ee6ecb9816ada -->
+## Optimize NVIDIA Inference Template Profiles That Still Force CUDA Graph Off
+
+- Status: Partially complete (PARTIAL; the templates of the 5 models in the table below have been handled; the remaining
+  NVIDIA profiles that still carry `--enforce-eager` have not been changed)
+- Date: 2026-11-18 to 2026-11-20
+- Scope: issue #35; the templates of `tencent-hunyuan/hy-mt2-1.8b`, `tencent/hunyuanocr`, `inclusionai/llada2.1-flash`,
+  `inclusionai/llada2.1-mini`, and `poolside/laguna-s-2.1` under
+  `internal/server/inferencecatalog/seed/catalog/models/`, plus the corresponding contract tests; in addition,
+  `openmoss-team/moss-tts`, `openmoss-team/moss-soundeffect`, and `openmoss-team/moss-voicegenerator` gained a
+  single-GPU placement constraint (their graph switches are unchanged). The conclusions hold only for the GPU models
+  and engine versions listed in the table.
+
+| Model / profile | Machine and GPUs | Engine | Conclusion | Final change |
+|---|---|---|---|---|
+| `tencent-hunyuan/hy-mt2-1.8b` / `bf16-vllm-nvidia-general` | 8-GPU H20-3e test node, single GPU, TP1 | `cuda13.0-vllm0.30.0-r4` (vLLM 0.30.0, torch 2.13.0+cu130) | Graphs cannot be enabled: 2/2 launches failed without `--enforce-eager` | Keep `--enforce-eager`; the template now documents the failure condition, engine version, and how to re-check |
+| `tencent/hunyuanocr` / `bf16-vllm-nvidia-general` | Same node, one H20-3e, TP1 | `cuda13.0-vllm0.30.0-r4` (vLLM 0.30.0, transformers 5.17.0) | Graphs cannot be enabled: 2/2 launches failed with the same error | Keep `--enforce-eager` with the same kind of comment; remove the ModelScope weight source |
+| `inclusionai/llada2.1-flash` / `bf16-sglang-nvidia-general` | 2x H20, TP2 | `cuda13.0-sglang0.5.21-r2` (SGLang 0.5.21) | Graphs can be enabled if the decode capture batch size is capped | Replace `--disable-cuda-graph` with `--cuda-graph-max-bs-decode 16` |
+| `inclusionai/llada2.1-mini` / `bf16-sglang-nvidia-general` | A different machine, 2x RTX 3090, TP2 | `cuda13.0-sglang0.5.21-r2` (SGLang 0.5.21) | Decode graphs can be enabled (with a batch cap); prefill graphs must stay off | Replace `--disable-cuda-graph` with `--cuda-graph-backend-prefill disabled --cuda-graph-max-bs-decode 8` |
+| `poolside/laguna-s-2.1` / `int4-sglang-nvidia-general` | H20 (GPU count not recorded) | `cuda13.0-sglang0.5.21-r2` (SGLang 0.5.21) | Graphs can be enabled | Remove `--disable-cuda-graph`; `--mem-fraction-static 0.75` unchanged |
+
+Additional notes:
+
+- Both Hunyuan models fail for the same reason: vLLM runs them through the generic Transformers backend, and RoPE's
+  `dynamic_frequency_update` raises `CUDA error: operation not permitted when stream is capturing` during graph capture,
+  so the engine exits at startup. After the runner upgrades vLLM or transformers, launching once without
+  `--enforce-eager` is enough to re-check.
+- HunyuanOCR drops its ModelScope weight source because that repository still holds the first-release files, whose
+  `tokenizer_config.json` lacks the `image_token` mapping; vLLM fails at startup with
+  `Tokenizer is missing required attribute 'image_token'`. Both profiles now keep only the Hugging Face source,
+  guarded by `TestHunyuanOCRDoesNotOfferTheStaleModelScopeSnapshot`.
+- The two LLaDA profiles used to disable graphs because uncapped capture was too large; re-verify before raising the
+  batch cap or enabling prefill graphs for mini. `TestLLaDAA100UsesTheCompatibleMoERouter` and
+  `TestLagunaSLeavesHeadroomForA100KernelWarmup` now assert the new arguments.
+- The other Laguna-S profiles were not verified and are unchanged.
+- The reason the two Hunyuan models keep `--enforce-eager` is now also stated in each profile's
+  `performance_tradeoffs` (`model_architecture_requires`), and `perf_tradeoff_budget.txt` loses the matching 3 lines.
+  The former `--disable-cuda-graph` reasons of the two LLaDA profiles and Laguna-S are removed together with the flag.
+- The three MOSS profiles (`bf16-vllm-nvidia-general`) gained a `placement.resolver` that allows one GPU only. Stage 0
+  of their deploy configs declares one device, while the scheduler answers a card that is too small with 2 cards and
+  `--tensor-parallel-size 2`, so the engine exits at startup (reproduced once each by platform deployments of MOSS-TTS
+  and MOSS-SoundEffect on 2026-11-19). With the constraint, a card that is too small is answered by a larger card or
+  node, or by a refusal at scheduling time, guarded by `TestMossDelaySpecsAreScheduledOnOneGPU`; the constraint was
+  only exercised through trial scheduling, not by redeploying on a node with 24 GiB cards. These three profiles
+  capture graphs on H20-3e in measurement, but their templates are not changed yet.
+
+<!-- translation-source-sha256: f83145ad8ce0e374c0db3b86b4bed4447f35ab080549f58cfca32ac56be47eb0 -->

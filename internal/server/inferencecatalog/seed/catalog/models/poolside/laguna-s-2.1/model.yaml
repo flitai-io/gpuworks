@@ -319,12 +319,6 @@ specs:
   - '262144'
   - --mem-fraction-static
   - '0.75'
-  - --disable-cuda-graph
-  performance_tradeoffs:
-  - param: --disable-cuda-graph
-    reason: memory_fit
-    detail_en: "Together with --mem-fraction-static 0.75, it leaves A100 memory headroom for kernel warmup at the 256K context."
-    detail_zh: "与 --mem-fraction-static 0.75 一起，为 256K 上下文下的 A100 内核预热留出显存余量。"
   api:
     health_endpoint: /health
     operations:

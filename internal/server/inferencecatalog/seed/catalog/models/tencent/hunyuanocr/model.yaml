@@ -22,9 +22,6 @@ specs:
     - huggingface:
         repo_id: tencent/HunyuanOCR
         revision: 47644ecc4fc854efa4f505155158831f36773ee4
-    - modelscope:
-        repo_id: Tencent-Hunyuan/HunyuanOCR
-        revision: 9d8082d87e0f38a1d9c8d417124e3bd354828ee4
   weight_bytes: 4622600430
   gpus:
     vendor: nvidia
@@ -33,7 +30,21 @@ specs:
   - --limit-mm-per-prompt
   - '{"image":1,"video":0}'
   - --trust-remote-code
+  # Keep --enforce-eager: CUDA graph capture fails for this model.
+  # Engine: vLLM 0.30.0, transformers 5.17.0 (runner cuda13.0-vllm0.30.0-r4).
+  # Failure condition: any launch without --enforce-eager (2/2 on one H20-3e,
+  # 2026-11-19, HF rev 47644ecc). vLLM runs the model through the Transformers
+  # backend (hunyuan_vl), falls back to cudagraph_mode FULL_DECODE_ONLY, and
+  # the engine exits at startup while capturing the first graph: RoPE
+  # dynamic_frequency_update raises
+  # "CUDA error: operation not permitted when stream is capturing".
+  # Re-check after a vLLM/transformers bump: launch once without this flag.
   - --enforce-eager
+  performance_tradeoffs:
+  - param: --enforce-eager
+    reason: model_architecture_requires
+    detail_en: "vLLM 0.30.0 runs this model through the Transformers backend, whose dynamic RoPE update fails during CUDA graph capture; without this flag 2 of 2 launches on H20-3e exited at startup."
+    detail_zh: "vLLM 0.30.0 经 Transformers 通用后端运行该模型，其动态 RoPE 更新在 CUDA 图捕获期间报错；去掉该参数后在 H20-3e 上 2/2 启动失败。"
   api:
     health_endpoint: /health
     operations:
@@ -52,9 +63,6 @@ specs:
     - huggingface:
         repo_id: tencent/HunyuanOCR
         revision: 47644ecc4fc854efa4f505155158831f36773ee4
-    - modelscope:
-        repo_id: Tencent-Hunyuan/HunyuanOCR
-        revision: 9d8082d87e0f38a1d9c8d417124e3bd354828ee4
   weight_bytes: 4622600430
   gpus:
     vendor: nvidia
@@ -66,6 +74,11 @@ specs:
   - '{"image":1,"video":0}'
   - --trust-remote-code
   - --enforce-eager
+  performance_tradeoffs:
+  - param: --enforce-eager
+    reason: model_architecture_requires
+    detail_en: "Same dynamic RoPE failure during CUDA graph capture as the general profile: with this profile's arguments on vLLM 0.31.0, 2 of 2 launches without this flag failed on H20-3e. Not measured on a Turing card."
+    detail_zh: "与通用档相同，动态 RoPE 在 CUDA 图捕获期间报错：按本档参数在 vLLM 0.31.0 上去掉该参数后，H20-3e 上 2/2 启动失败。未在 Turing 实卡上测试。"
   api:
     health_endpoint: /health
     operations:

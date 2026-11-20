@@ -468,3 +468,46 @@ job：`l4-gitee-ascend-partition-capability` 与 `l4-gitee-ascend-deploy-chat`�
 所有权校验调用只要出现一次瞬时 GET 失败，整个清理流程就会中止，留下一个
 真实计费中的实例继续运行（在本次会话的验证运行中命中过一次，已手动处理）。
 `get()` 现在会以线性退避最多重试 3 次。
+
+## 优化 NVIDIA 推理模板中仍强制关闭 CUDA Graph 的档位
+
+- 状态：部分完成（PARTIAL；下表 5 个模型的模板已处理，其余仍带 `--enforce-eager`
+  的 NVIDIA 档位尚未改动）
+- 日期：2026-11-18 至 2026-11-20
+- 范围：issue #35；`internal/server/inferencecatalog/seed/catalog/models/` 下
+  `tencent-hunyuan/hy-mt2-1.8b`、`tencent/hunyuanocr`、`inclusionai/llada2.1-flash`、
+  `inclusionai/llada2.1-mini`、`poolside/laguna-s-2.1` 的模板及对应契约测试；另给
+  `openmoss-team/moss-tts`、`openmoss-team/moss-soundeffect`、`openmoss-team/moss-voicegenerator`
+  加了单卡放置约束（图开关未改）。结论只对下表列出的卡型和引擎版本成立。
+
+| 模型 / 档位 | 机器与卡 | 引擎 | 结论 | 最终改动 |
+|---|---|---|---|---|
+| `tencent-hunyuan/hy-mt2-1.8b` / `bf16-vllm-nvidia-general` | 8 卡 H20-3e 测试节点，单卡，TP1 | `cuda13.0-vllm0.30.0-r4`（vLLM 0.30.0，torch 2.13.0+cu130） | 不能开图：去掉 `--enforce-eager` 后 2/2 启动失败 | 保留 `--enforce-eager`，在模板里注明失败条件、引擎版本和复验方法 |
+| `tencent/hunyuanocr` / `bf16-vllm-nvidia-general` | 同一节点，单张 H20-3e，TP1 | `cuda13.0-vllm0.30.0-r4`（vLLM 0.30.0，transformers 5.17.0） | 不能开图：2/2 启动失败，报错同上 | 保留 `--enforce-eager` 并加同样的注释；删除 ModelScope 权重源 |
+| `inclusionai/llada2.1-flash` / `bf16-sglang-nvidia-general` | 2 张 H20，TP2 | `cuda13.0-sglang0.5.21-r2`（SGLang 0.5.21） | 可以开图，需限制 decode 图的捕获批大小 | `--disable-cuda-graph` 换成 `--cuda-graph-max-bs-decode 16` |
+| `inclusionai/llada2.1-mini` / `bf16-sglang-nvidia-general` | 另一台机器，2 张 RTX 3090，TP2 | `cuda13.0-sglang0.5.21-r2`（SGLang 0.5.21） | decode 图可以开（限批大小），prefill 图仍须关闭 | `--disable-cuda-graph` 换成 `--cuda-graph-backend-prefill disabled --cuda-graph-max-bs-decode 8` |
+| `poolside/laguna-s-2.1` / `int4-sglang-nvidia-general` | H20（卡数未记录） | `cuda13.0-sglang0.5.21-r2`（SGLang 0.5.21） | 可以开图 | 删除 `--disable-cuda-graph`，`--mem-fraction-static 0.75` 不变 |
+
+补充说明：
+
+- 两个混元模型失败的原因相同：vLLM 对它们走 Transformers 通用后端，RoPE 的
+  `dynamic_frequency_update` 在图捕获期间触发
+  `CUDA error: operation not permitted when stream is capturing`，引擎在启动阶段退出。
+  runner 升级 vLLM 或 transformers 后，去掉 `--enforce-eager` 启动一次即可复验。
+- HunyuanOCR 删除 ModelScope 权重源，是因为该仓库仍是首发版文件，
+  `tokenizer_config.json` 缺少 `image_token` 映射，vLLM 启动时报
+  `Tokenizer is missing required attribute 'image_token'`；现在两个档位只保留 Hugging Face 源，
+  由 `TestHunyuanOCRDoesNotOfferTheStaleModelScopeSnapshot` 守护。
+- LLaDA 两个档位原先关图是因为不限批大小时捕获规模过大；调大批大小上限或打开 mini 的
+  prefill 图之前需要重新验证。`TestLLaDAA100UsesTheCompatibleMoERouter` 与
+  `TestLagunaSLeavesHeadroomForA100KernelWarmup` 已改为断言新参数。
+- Laguna-S 的其他档位没有验证，未改动。
+- 两个混元模型保留 `--enforce-eager` 的原因同时写进了各档位的 `performance_tradeoffs`
+  （`model_architecture_requires`），`perf_tradeoff_budget.txt` 相应删去 3 行。LLaDA 两个档位和
+  Laguna-S 原有的 `--disable-cuda-graph` 说明随参数一起删除。
+- 三个 MOSS 档位（`bf16-vllm-nvidia-general`）加了限定单卡的 `placement.resolver`。它们的
+  部署配置里 Stage 0 只声明 1 个设备，而调度器在单卡显存不够时会改用 2 张卡并下发
+  `--tensor-parallel-size 2`，引擎在启动阶段退出（2026-11-19 平台部署 MOSS-TTS、MOSS-SoundEffect
+  各复现 1 次）。加约束后单卡放不下时改选显存更大的卡或节点，没有则在调度阶段拒绝，由
+  `TestMossDelaySpecsAreScheduledOnOneGPU` 守护；该约束只做了调度试算，没有在 24 GiB 实卡节点上
+  重新部署。这三个档位在 H20-3e 上实测可以开图，模板尚未改。

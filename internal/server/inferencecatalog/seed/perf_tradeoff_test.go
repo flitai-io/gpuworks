@@ -17,7 +17,7 @@ const perfTradeoffBudget = "testdata/perf_tradeoff_budget.txt"
 // fails when the file lists more, so a change that adds a gap must also raise
 // this number, where review sees it; and when it lists fewer, so the number
 // follows every gap closed and cannot keep room for a new one.
-const perfTradeoffBudgetLines = 75
+const perfTradeoffBudgetLines = 72
 
 // Every guarded performance cost a built-in spec sets (the engine registry,
 // engines.ScanPerformanceCosts) must say why in the spec's

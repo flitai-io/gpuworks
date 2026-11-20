@@ -37,12 +37,13 @@ specs:
   - --trust-remote-code
   - --attention-backend
   - flashinfer
-  - --disable-cuda-graph
-  performance_tradeoffs:
-  - param: --disable-cuda-graph
-    reason: memory_fit
-    detail_en: "SGLang's CUDA graph capture is oversized for this model on A100; the profile runs without it."
-    detail_zh: "该模型在 A100 上的 SGLang CUDA 图捕获占用过大，此规格不做图捕获。"
+  # CUDA graph stays on with decode capture capped at batch 16 (issue #35).
+  # Verified on SGLang 0.5.21 (runner cuda13.0-sglang0.5.21-r2), H20, TP2, with
+  # the JIT grouped-top-k router above. This profile used --disable-cuda-graph
+  # before because uncapped capture was too large; keep the cap, and re-check
+  # before raising it.
+  - --cuda-graph-max-bs-decode
+  - '16'
   api:
     health_endpoint: /health
     operations:

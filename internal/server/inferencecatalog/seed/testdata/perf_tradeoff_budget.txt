@@ -77,9 +77,6 @@ qwen/qwen3-vl-8b-instruct	bf16-vllm-ascend-4eac0a8b	--no-enable-prefix-caching
 qwen/qwen3-vl-8b-instruct	bf16-vllm-ascend-a3-4eac0a8b	--no-enable-prefix-caching
 qwen/qwen3-vl-reranker-2b	bf16-vllm-ppu-4bd860ac	--enforce-eager
 qwen/qwq-32b	int8-vllm-ascend-a3-qwq32b	--enforce-eager
-tencent-hunyuan/hy-mt2-1.8b	bf16-vllm-nvidia-general	--enforce-eager
-tencent/hunyuanocr	bf16-vllm-nvidia-general	--enforce-eager
-tencent/hunyuanocr	bf16-vllm-nvidia-turing	--enforce-eager
 zai-org/glm-4-9b-hf	bf16-vllm-ppu-b44e98fc	--enforce-eager
 zai-org/glm-5.2	mxfp4-vllm-ascend-950dt-1e0da06c	--enforce-eager
 zai-org/glm-5.3-flash	w8a8-vllm-910c-dflash5-16npu	--max-num-seqs

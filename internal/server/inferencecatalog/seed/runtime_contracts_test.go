@@ -71,7 +71,14 @@ func TestLLaDAA100UsesTheCompatibleMoERouter(t *testing.T) {
 			}
 			if spec.Name == "bf16-sglang-nvidia-general" {
 				args := strings.Join(spec.Args, " ")
-				if !strings.Contains(args, "--disable-cuda-graph") {
+				// Both capture decode graphs with a capped batch (issue #35);
+				// mini also keeps prefill capture off.
+				want := map[string]string{
+					"inclusionai/llada2.1-flash": "--cuda-graph-max-bs-decode 16",
+					"inclusionai/llada2.1-mini":  "--cuda-graph-backend-prefill disabled --cuda-graph-max-bs-decode 8",
+				}[model.ModelID]
+				bounded := !strings.Contains(args, "--disable-cuda-graph") && strings.Contains(args, want)
+				if !bounded {
 					t.Errorf("%s A100 profile must avoid oversized CUDA graph capture", model.ModelID)
 				}
 			}
