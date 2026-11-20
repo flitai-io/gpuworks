@@ -9,6 +9,7 @@ import (
 	"gpuworks.ai/gpuworks/internal/server/chipmatch"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog"
+	"gpuworks.ai/gpuworks/internal/server/imagecatalog/pullref"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -52,6 +53,30 @@ func TestBuiltinAscendSpecsRunReviewedImages(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Fatal("no built-in Ascend spec runs a reviewed upstream image; the check would pass vacuously")
+	}
+}
+
+// All specs using the canonical tag share one node-local image cache.
+func TestA3RunnerSourcesExcludeUpstreamBase(t *testing.T) {
+	catalog, err := Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range catalog.Models {
+		for _, spec := range model.Specs {
+			if !pullref.SameRef(spec.Image, "gpuworks/gpuworks-runner:cann9.2-a3-vllm0.30.0rc2-r1") {
+				continue
+			}
+			for _, source := range spec.ImageSources {
+				// A tag or digest can name the upstream image without the runner overlays.
+				_, path, _ := strings.Cut(pullref.RefKey(source), "/")
+				path, _, _ = strings.Cut(path, "@")
+				repo, _, _ := strings.Cut(path, ":")
+				if repo == "ascend/vllm-ascend" {
+					t.Errorf("%s/%s can cache upstream base %s as %s", model.ModelID, spec.Name, source, spec.Image)
+				}
+			}
+		}
 	}
 }
 
