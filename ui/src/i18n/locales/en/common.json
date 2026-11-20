@@ -442,6 +442,8 @@
     "RECOVERY_NO_RECONNECT": "The agent did not reconnect after it was reinstalled.",
     "RECOVERY_PROVIDER_INSTANCE_GONE": "The node’s cloud instance no longer exists.",
     "RECOVERY_STEP_FAILED": "A recovery step failed.",
+    "DISTRIBUTED_DEGREE_INVALID": "{{degree}} must be a positive integer.",
+    "DISTRIBUTED_PARALLELISM_UNAVAILABLE": "Cannot recommend parallelism on {{node}}: {{reason}} Specify TP and PP to use a fixed configuration.",
     "DISTRIBUTED_GPU_COUNT": "Node “{{node}}” has {{available}} GPUs; TP × PP needs {{required}} per node.",
     "DISTRIBUTED_PARALLEL_INDIVISIBLE": "TP {{tp}} × PP {{pp}} cannot be shared equally by {{nodes}} nodes; make it a multiple of the node count.",
     "MODEL_SOURCE_ID_REQUIRED": "Enter a model source ID.",
@@ -1549,6 +1551,9 @@
     "changed": "The host or its selection changed. Review the address and select it again.",
     "cannotAllow": "A selected host cannot be allowed by the outbound policy.",
     "checkFailed": "A selected host could not be checked. Check the address and try again."
+  },
+  "distributedRecommendationReason": {
+    "no_layout": "No TP and PP combination fits the stated degrees and these nodes' GPU counts."
   },
   "placementShortfall": {
     "unmet": "{{n}} do not satisfy the requirements",

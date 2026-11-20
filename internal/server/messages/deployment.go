@@ -95,4 +95,19 @@ const (
 	// Cmd outside manual mode. Such an override is one argv every rank would
 	// run as written; only a manual command is expanded per rank.
 	ErrorCommandOverrideRankBlind = "COMMAND_OVERRIDE_RANK_BLIND"
+	// ErrorDistributedDegreeInvalid: a manual multi-node draft states TP or
+	// PP (params.degree) as something other than a positive integer.
+	ErrorDistributedDegreeInvalid = "DISTRIBUTED_DEGREE_INVALID"
+	// ErrorDistributedParallelismUnavailable: no TP × PP layout fits a manual
+	// multi-node draft that left a degree blank. params.node names the rank
+	// that refused (every node, for no_layout); params.reason is a scheduler
+	// refusal code or a RecommendationReason, and params.reason_params, when
+	// present, that reason's own params.
+	ErrorDistributedParallelismUnavailable = "DISTRIBUTED_PARALLELISM_UNAVAILABLE"
+)
+
+// The values of ErrorDistributedParallelismUnavailable's params.reason that
+// the recommendation itself decides; the UI words each one.
+const (
+	RecommendationReasonNoLayout = "no_layout"
 )

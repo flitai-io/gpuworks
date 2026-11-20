@@ -442,6 +442,8 @@
     "RECOVERY_NO_RECONNECT": "重新安装后 agent 未重新连接。",
     "RECOVERY_PROVIDER_INSTANCE_GONE": "节点的云实例已不存在。",
     "RECOVERY_STEP_FAILED": "恢复步骤失败。",
+    "DISTRIBUTED_DEGREE_INVALID": "{{degree}} 必须是正整数。",
+    "DISTRIBUTED_PARALLELISM_UNAVAILABLE": "无法在 {{node}} 上推荐并行度：{{reason}}可填写 TP 和 PP 使用固定配置。",
     "DISTRIBUTED_GPU_COUNT": "节点“{{node}}”有 {{available}} 张 GPU，按当前 TP × PP 每个节点需要 {{required}} 张。",
     "DISTRIBUTED_PARALLEL_INDIVISIBLE": "TP {{tp}} × PP {{pp}} 不能平均分到 {{nodes}} 个节点，请调整使其为节点数的整数倍。",
     "MODEL_SOURCE_ID_REQUIRED": "请输入模型源 ID。",
@@ -1549,6 +1551,9 @@
     "changed": "主机或勾选项已改变，请核对地址并重新勾选。",
     "cannotAllow": "选中的主机不能通过出站白名单放行。",
     "checkFailed": "未能确认选中主机的访问权限，请检查地址后重试。"
+  },
+  "distributedRecommendationReason": {
+    "no_layout": "没有符合已填并行度和这些节点 GPU 数量的 TP、PP 组合。"
   },
   "placementShortfall": {
     "unmet": "{{n}} 个不满足条件",

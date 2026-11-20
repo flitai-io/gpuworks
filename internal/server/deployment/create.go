@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -173,7 +174,9 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 	if targetVendor == "" {
 		targetVendor = planning.RequirementVendor(reqs)
 	}
-	launch, err := s.materializeCreateLaunch(eng.Name(), &req, selection, requestTargetCards(profileNode, &req), s.requestEngineVersion(eng.Name(), &req, selection, targetVendor, profileNode))
+	cards := requestTargetCards(profileNode, &req)
+	version := s.requestEngineVersion(eng.Name(), &req, selection, targetVendor, profileNode)
+	launch, err := s.materializeCreateLaunch(eng.Name(), &req, selection, cards, version)
 	if err != nil {
 		return nil, invalid(err)
 	}
@@ -182,16 +185,29 @@ func (s *Service) createOnce(ctx context.Context, req dto.DeployRequest) (*store
 			return nil, invalid(err)
 		}
 	}
-	// A multi-node group settles its nodes and parallelism first: an
-	// unstated TP and PP default from the nodes, and the launch preflight
-	// below measures the result. Nothing is persisted by this step.
+	// Settle distributed parallelism before preflight and persistence.
 	dp, err := deploy.PlacementDataParallel(eng.Name(), launch.Quick.DP, launch.TemplateResidual, launch.UserResidual)
 	if err != nil {
 		return nil, invalid(err)
 	}
 	var distNodes []*store.Node
 	if req.NNodes > 1 {
-		distNodes, err = s.PrepareDistributedDeployRequest(&req, dp)
+		if needsDistributedRecommendation(&req, unitsAuto) {
+			preview := selection
+			preview.previewWeights = true
+			preview.Components = slices.Clone(selection.Components)
+			model, resolveErr := s.resolveDeploymentModelFromTemplate(ctx, req.ModelID, &preview, req.TemplateID)
+			if resolveErr != nil {
+				return nil, invalid(resolveErr)
+			}
+			candidateLaunch, launchErr := materializeDeployRequest(eng.Name(), &req, preview, cards, version)
+			if launchErr != nil {
+				return nil, invalid(launchErr)
+			}
+			distNodes, err = s.recommendDistributed(ctx, &req, dp, eng, candidateLaunch, preview, model)
+		} else {
+			distNodes, err = s.PrepareDistributedDeployRequest(&req, dp)
+		}
 		if err != nil {
 			return nil, invalid(err)
 		}

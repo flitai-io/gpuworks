@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"gpuworks.ai/gpuworks/internal/proto"
+	"gpuworks.ai/gpuworks/internal/server/api/dto"
 	"gpuworks.ai/gpuworks/internal/server/auth"
 	"gpuworks.ai/gpuworks/internal/server/bus"
 	"gpuworks.ai/gpuworks/internal/server/deploy"
+	"gpuworks.ai/gpuworks/internal/server/messages"
 	"gpuworks.ai/gpuworks/internal/server/store"
 )
 
@@ -34,6 +36,8 @@ type parallelEvaluation struct {
 	} `json:"errors"`
 	Acquisition *struct {
 		Nodes []map[string]any `json:"nodes"`
+
+		Components []dto.AcquisitionComponent `json:"components"`
 	} `json:"acquisition"`
 	FormValues  map[string]any   `json:"form_values"`
 	Parallelism *parallelSummary `json:"parallelism"`
@@ -89,28 +93,42 @@ func newParallelEvaluateWith(t *testing.T, extend func(*Deps)) (func(string) par
 	}, model.ID, st
 }
 
-// A multi-node draft that states no parallelism gets the default from its
-// nodes: a pipeline stage per node, TP over the fewest GPUs. The form shows
-// it through form_values and the parallelism summary.
 func TestEvaluateDefaultsMultiNodeParallelism(t *testing.T) {
 	evaluate, modelID := newParallelEvaluate(t)
 	out := evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, modelID))
 	if !out.OK || len(out.Errors) != 0 || out.Acquisition == nil {
 		t.Fatalf("default parallelism = ok %v errors %+v", out.OK, out.Errors)
 	}
-	if out.FormValues["tp"] != float64(2) || out.FormValues["pp"] != float64(2) {
+	if out.FormValues["tp"] != nil || out.FormValues["pp"] != nil {
 		t.Fatalf("form_values = %v", out.FormValues)
 	}
-	if want := (parallelSummary{TP: 2, PP: 2, Nodes: 2, GPUsPerNode: 2}); out.Parallelism == nil || *out.Parallelism != want {
+	if want := (parallelSummary{TP: 1, PP: 2, Nodes: 2, GPUsPerNode: 1}); out.Parallelism == nil || *out.Parallelism != want {
 		t.Fatalf("parallelism = %+v, want %+v", out.Parallelism, want)
 	}
-	if !strings.Contains(strings.Join(out.Argv, " "), "--tensor-parallel-size 2 --pipeline-parallel-size 2") {
+	if !strings.Contains(strings.Join(out.Argv, " "), "--pipeline-parallel-size 2") {
 		t.Fatalf("argv = %v", out.Argv)
 	}
 	// A node-list error still stops the preview: acquisition needs the nodes.
 	out = evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-a"],"placement":{"tp":2}}`, modelID))
 	if out.OK || len(out.Errors) != 1 || out.Errors[0].Field != "node_uuids" || out.Errors[0].Code != ErrorDistributedDuplicateNode {
 		t.Fatalf("duplicate node errors = %+v", out.Errors)
+	}
+}
+
+func TestMultiNodeRecommendationChangesWithModelSize(t *testing.T) {
+	evaluate, smallID, st := newParallelEvaluateWith(t, nil)
+	large, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/large", Revision: "main", Name: "large", WeightBytes: 170 << 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id    uint
+		cards int
+	}{{smallID, 1}, {large.ID, 2}} {
+		out := evaluate(fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, tc.id))
+		if !out.OK || out.Parallelism == nil || out.Parallelism.GPUsPerNode != tc.cards {
+			t.Fatalf("model %d: want %d GPUs per node, got %+v errors %v", tc.id, tc.cards, out.Parallelism, out.Errors)
+		}
 	}
 }
 
@@ -258,5 +276,265 @@ func TestRouterEvaluateTwoNodeDataParallel(t *testing.T) {
 				t.Fatalf("DP2 command = %q", out.Argv)
 			}
 		})
+	}
+}
+
+// A follower with three occupied GPUs is the limiting node. If its last free
+// cards disappear, fixed creation may still queue where a recommendation fails.
+func TestDistributedRecommendationAndFixedCreateUnderContention(t *testing.T) {
+	evaluate, modelID, st := newParallelEvaluateWith(t, nil)
+	for i, uuid := range []string{"par-a", "par-b"} {
+		status := nodeStatusTwoGPUs(uuid, i)
+		card := status.GPUs[0]
+		for index := 2; index < 8; index++ {
+			card.Index = index
+			status.GPUs = append(status.GPUs, card)
+		}
+		if err := st.UpdateNodeStatus(uuid, status); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := st.NodeByUUID("par-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	holder, err := st.CreateDeployment(&store.Deployment{Name: "holder", ModelID: modelID, NodeID: n.ID, Engine: "vllm", State: store.DeployActive, Replicas: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	occupy := func(id, indexes string) {
+		_, err := st.CreateInstance(&store.Instance{UUID: id, DeploymentID: holder.ID, NodeID: n.ID, State: proto.InstRunning, GPUIndexes: indexes, NNodes: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	occupy("first", "[0,1,2]")
+	body := func(name, placement string) string {
+		return fmt.Sprintf(`{"model_id":%d,"name":%q,"served_name":%q,"engine":"vllm","image":"example/vllm:test","nnodes":2,"node_uuids":["par-a","par-b"]%s}`, modelID, name, name, placement)
+	}
+	auto := evaluate(body("automatic", ""))
+	if !auto.OK || auto.Parallelism == nil || auto.Parallelism.GPUsPerNode != 1 {
+		t.Fatalf("automatic: %+v", auto)
+	}
+	// Direct API creation may omit both fields, without a prior UI submit.
+	create := func(body string) *httptest.ResponseRecorder {
+		h := apiHandlers{d: Deps{Store: st}}
+		w := httptest.NewRecorder()
+		h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
+		return w
+	}
+	checkCreated := func(w *httptest.ResponseRecorder, tp, pp int) {
+		t.Helper()
+		var dep struct{ ID uint }
+		if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &dep) != nil {
+			t.Fatalf("create %d: %s", w.Code, w.Body.String())
+		}
+		row, err := st.GetDeployment(dep.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var degrees struct{ TP, PP int }
+		if err := json.Unmarshal([]byte(row.Placement), &degrees); err != nil || degrees.TP != tp || degrees.PP != pp {
+			t.Fatalf("stored placement %s: %v", row.Placement, err)
+		}
+	}
+	checkCreated(create(body("automatic", "")), auto.Parallelism.TP, auto.Parallelism.PP)
+	occupy("rest", "[3,4,5,6,7]")
+	if out := evaluate(body("no-room", "")); out.OK || out.Parallelism != nil || len(out.Errors) == 0 {
+		t.Fatalf("busy follower: %+v", out)
+	}
+	if w := create(body("no-room", "")); w.Code == http.StatusCreated {
+		t.Fatal("unavailable automatic placement created")
+	}
+	checkCreated(create(body("wait", `,"placement":{"tp":1,"pp":2}`)), 1, 2)
+}
+
+// Evaluate recommends a template's layout as it previews any draft. Create
+// recommends before its preflight, so a create refused there registers no
+// artifact row.
+func TestDistributedTemplateRecommendationRegistersNothingOnRefusedCreate(t *testing.T) {
+	register := func(st *store.Store) uint {
+		t.Helper()
+		template := imageSourcesFixture()
+		if err := st.ReconcileInferenceCatalog([]store.InferenceModel{template}); err != nil {
+			t.Fatal(err)
+		}
+		row, err := st.InferenceModelByModelID(template.ModelID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return row.ID
+	}
+	body := func(id uint, placement string) string {
+		return fmt.Sprintf(`{"template_id":%d,"name":"tmpl","served_name":"tmpl","template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"],"placement":{%s}}`, id, placement)
+	}
+	t.Run("evaluate", func(t *testing.T) {
+		evaluate, _, st := newParallelEvaluateWith(t, nil)
+		if result := evaluate(body(register(st), "")); !result.OK || result.Parallelism == nil {
+			t.Fatalf("template preview: errors=%v plan=%s", result.Errors, result.Plan)
+		}
+	})
+	t.Run("refused create", func(t *testing.T) {
+		evaluate, heldModel, st := newParallelEvaluateWith(t, nil)
+		id := register(st)
+		n, err := st.NodeByUUID("par-b")
+		if err != nil {
+			t.Fatal(err)
+		}
+		holder, err := st.CreateDeployment(&store.Deployment{Name: "holder", ModelID: heldModel, NodeID: n.ID, Engine: "vllm", State: store.DeployActive, Replicas: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.CreateInstance(&store.Instance{UUID: "held", DeploymentID: holder.ID, NodeID: n.ID, State: proto.InstRunning, GPUIndexes: "[0,1]", NNodes: 1}); err != nil {
+			t.Fatal(err)
+		}
+		h := apiHandlers{d: Deps{Store: st}}
+		w := httptest.NewRecorder()
+		h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body(id, ""))))
+		if code, _ := errorBody(t, w.Body.String()); w.Code != http.StatusBadRequest || code != "DISTRIBUTED_PARALLELISM_UNAVAILABLE" {
+			t.Fatalf("create on a busy follower: %d %s", w.Code, w.Body.String())
+		}
+		if models, err := st.ListModels("Acme/Sources-FP8"); err != nil || len(models) != 0 {
+			t.Fatalf("refused create registered artifacts: %v, %v", models, err)
+		}
+		// The refusal names the rank and the scheduler's reason, beside the
+		// degree left blank.
+		for placement, field := range map[string]string{"": "placement.tp", `"tp":1`: "placement.pp"} {
+			out := evaluate(body(id, placement))
+			if len(out.Errors) != 1 || out.Errors[0].Field != field || out.Errors[0].Code != messages.ErrorDistributedParallelismUnavailable ||
+				out.Errors[0].Params["node"] != "par-b" || out.Errors[0].Params["reason"] != "no_free_gpu" {
+				t.Fatalf("placement {%s}: errors=%+v", placement, out.Errors)
+			}
+		}
+		// A reason with params of its own carries them apart from node and
+		// reason: one card left on par-b is short of a TP4 layout's two.
+		if err := st.DB().Model(&store.Instance{}).Where("uuid = ?", "held").Select("GPUIndexes").Updates(store.Instance{GPUIndexes: "[0]"}).Error; err != nil {
+			t.Fatal(err)
+		}
+		out := evaluate(body(id, `"tp":4`))
+		if len(out.Errors) != 1 || out.Errors[0].Field != "placement.pp" || out.Errors[0].Params["reason"] != "insufficient_empty_gpus" {
+			t.Fatalf("one free card: errors=%+v", out.Errors)
+		}
+		if shortfall, _ := out.Errors[0].Params["reason_params"].(map[string]any); shortfall["gpus"] != float64(2) || shortfall["available"] != float64(1) {
+			t.Fatalf("one free card: reason params %+v", out.Errors[0].Params)
+		}
+	})
+}
+
+// Weights of unknown size cannot be planned: the draft keeps the node-derived
+// default and stays creatable, as it was before recommendations.
+func TestDistributedRecommendationKeepsNodeDefaultForUnsizedWeights(t *testing.T) {
+	evaluate, _, st := newParallelEvaluateWith(t, nil)
+	model, err := st.UpsertModel(&store.Model{Source: "huggingface", SourceID: "org/unsized", Revision: "main", Name: "unsized"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"model_id":%d,"name":"unsized","served_name":"unsized","engine":"vllm","image":"example/vllm:test","nnodes":2,"node_uuids":["par-a","par-b"]}`, model.ID)
+	if out := evaluate(body); out.Parallelism == nil || out.Parallelism.TP != 2 || out.Parallelism.PP != 2 || out.FormValues["tp"] != nil || len(out.Errors) != 0 {
+		t.Fatalf("unsized weights: parallelism=%+v form=%v errors=%+v", out.Parallelism, out.FormValues, out.Errors)
+	}
+	h := apiHandlers{d: Deps{Store: st}}
+	w := httptest.NewRecorder()
+	h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// A hand-written command is held to a layout by the launch check every layout
+// gets, as on a single node: the recommendation is a layout that check
+// accepts, and when it accepts none the draft keeps the node default and is
+// refused as that layout stated in full is.
+func TestDistributedRecommendationFollowsManualCommandCheck(t *testing.T) {
+	evaluate, modelID, st := newParallelEvaluateWith(t, nil)
+	body := func(command, placement string) string {
+		return fmt.Sprintf(`{"name":"verify-command","model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]%s%s}`, modelID, placement, manualOverrides(t, command+" --node-rank ${GPUWORKS_NODE_RANK}"))
+	}
+	for _, tc := range []struct {
+		name, command string
+		tp, pp        int
+	}{
+		{"stated PP", "exec vllm serve /model --pipeline-parallel-size 2", 1, 2},
+		{"smaller layouts are short of the stated TP", "exec vllm serve /model --tensor-parallel-size 4", 2, 2},
+		{"opaque wrapper", "exec custom-launcher --pp-size 2", 1, 2},
+	} {
+		if out := evaluate(body(tc.command, "")); !out.OK || out.Parallelism == nil || out.Parallelism.TP != tc.tp || out.Parallelism.PP != tc.pp {
+			t.Errorf("%s: want TP%d PP%d, got %+v errors=%+v", tc.name, tc.tp, tc.pp, out.Parallelism, out.Errors)
+		}
+	}
+	// No layout of two two-card nodes runs TP8.
+	const command = "exec vllm serve /model --tensor-parallel-size 8"
+	blank, fixed := evaluate(body(command, "")), evaluate(body(command, `,"placement":{"tp":2,"pp":2}`))
+	if blank.OK || fixed.OK || len(blank.Errors) == 0 || fmt.Sprint(blank.Errors) != fmt.Sprint(fixed.Errors) {
+		t.Fatalf("blank errors %+v, fixed errors %+v", blank.Errors, fixed.Errors)
+	}
+	h := apiHandlers{d: Deps{Store: st}}
+	created := func(placement string) string {
+		rec := httptest.NewRecorder()
+		h.createDeployment(rec, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body(command, placement))))
+		code, _ := errorBody(t, rec.Body.String())
+		return fmt.Sprint(rec.Code, " ", code)
+	}
+	if blankCreate, fixedCreate := created(""), created(`,"placement":{"tp":2,"pp":2}`); blankCreate != fixedCreate || !strings.HasPrefix(blankCreate, "400") {
+		t.Fatalf("create blank %s, fixed %s", blankCreate, fixedCreate)
+	}
+}
+
+func TestDistributedRecommendationAttributesInvalidDegree(t *testing.T) {
+	evaluate, modelID := newParallelEvaluate(t)
+	for _, tc := range []struct{ placement, field string }{
+		{`{"tp":1,"pp":-1}`, "placement.pp"},
+		{`{"tp":0,"pp":2}`, "placement.tp"},
+		{`{"pp":1.5}`, "placement.pp"},
+	} {
+		body := fmt.Sprintf(`{"model_id":%d,"engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"],"placement":%s}`, modelID, tc.placement)
+		out := evaluate(body)
+		if out.OK || len(out.Errors) != 1 || out.Errors[0].Field != tc.field || out.Errors[0].Code != "DISTRIBUTED_DEGREE_INVALID" {
+			t.Errorf("%s: want %s, got %+v", tc.placement, tc.field, out.Errors)
+		}
+	}
+}
+
+// An image a node cannot run is the image check's to report: the
+// recommendation keeps the node default instead of refusing on the TP field.
+func TestDistributedRecommendationLeavesIncompatibleImageToItsCheck(t *testing.T) {
+	const image = "catalog/platform:v1"
+	evaluate, _, st := newParallelEvaluateWith(t, nil)
+	template := imageSourcesFixture()
+	template.Specs[0].Image, template.Specs[0].ImageSources = image, ""
+	if err := st.ReconcileInferenceCatalog([]store.InferenceModel{template}); err != nil {
+		t.Fatal(err)
+	}
+	row, err := st.InferenceModelByModelID(template.ModelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, uuid := range []string{"par-a", "par-b"} {
+		node, err := st.NodeByUUID(uuid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.DB().Model(node).Updates(map[string]any{"arch": "amd64", "os": "linux"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.UpsertImage(&store.Image{Engine: "vllm", Framework: "cuda", Arch: "arm64", ImageRef: image, Source: "custom", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"template_id":%d,"name":"arm","served_name":"arm","template_spec_name":"fp8-balanced","template_spec_source":"upstream","engine":"vllm","nnodes":2,"node_uuids":["par-a","par-b"]}`, row.ID)
+	out := evaluate(body)
+	for _, e := range out.Errors {
+		if e.Code == messages.ErrorDistributedParallelismUnavailable {
+			t.Fatalf("image reported as a parallelism error: %+v", out.Errors)
+		}
+	}
+	if out.OK || out.Parallelism == nil {
+		t.Fatalf("incompatible image preview: ok=%v parallelism=%+v errors=%+v", out.OK, out.Parallelism, out.Errors)
+	}
+	h := apiHandlers{d: Deps{Store: st}}
+	w := httptest.NewRecorder()
+	h.createDeployment(w, httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(body)))
+	if code, _ := errorBody(t, w.Body.String()); w.Code != http.StatusBadRequest || code != messages.WarningImageOverrideIncompatible {
+		t.Fatalf("create %d: %s", w.Code, w.Body.String())
 	}
 }

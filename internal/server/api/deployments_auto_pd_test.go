@@ -173,6 +173,10 @@ func TestEvaluateAutoMultiNodePreviewsThePickedNodes(t *testing.T) {
 	if status != http.StatusOK || !resp.OK || !resp.AutoPlaced || string(raw["auto_placed"]) != "true" {
 		t.Fatalf("evaluate = %d ok %v auto_placed %s", status, resp.OK, raw["auto_placed"])
 	}
+	// Automatic node placement keeps its own default PP when only TP was sent.
+	if resp.FormValues["pp"] != float64(1) {
+		t.Fatalf("automatic node placement lost its PP default: %v", resp.FormValues)
+	}
 	if len(resp.RankCommands) != 2 || resp.RankCommands[0].NodeUUID != "au-3" || resp.RankCommands[1].NodeUUID != "au-1" || resp.RankCommands[0].Role != "leader" {
 		t.Fatalf("rank commands = %+v, want au-3 leading and au-1 following", resp.RankCommands)
 	}

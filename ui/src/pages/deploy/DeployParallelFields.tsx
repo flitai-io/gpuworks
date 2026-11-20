@@ -45,7 +45,7 @@ export default function DeployParallelFields({ result, multi, tpLabel, ppLabel, 
       )}
       {wrap(
         <Form.Item label={ppLabel} name="pp">
-          <InputNumber min={1} disabled={disabled} placeholder="1" style={{ width: "100%" }} />
+          <InputNumber min={1} disabled={disabled} placeholder={multi && !autoPlaced ? t("workbench.automatic") : "1"} style={{ width: "100%" }} />
         </Form.Item>,
         "pp",
       )}

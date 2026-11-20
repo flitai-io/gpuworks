@@ -19,6 +19,14 @@ func (s *Service) resolveTemplateWeightModelForNode(source weightSource, origina
 // a substitute for the revision the source names, however ready it is
 // (TemplateWeightMatchesModel), so a changed revision creates its own artifact.
 func (s *Service) resolveWeightArtifact(source weightSource, original *store.InferenceModel, engine, quantization string, weightBytes int64, nodeID uint, pinned []uint, exactRevision, explicit bool) (*store.Model, error) {
+	model, err := s.templateWeightForPlanning(source, original, engine, quantization, weightBytes, nodeID, pinned, exactRevision, explicit)
+	if err != nil || model.ID != 0 {
+		return model, err
+	}
+	return s.d.Store.UpsertModel(model)
+}
+
+func (s *Service) templateWeightForPlanning(source weightSource, original *store.InferenceModel, engine, quantization string, weightBytes int64, nodeID uint, pinned []uint, exactRevision, explicit bool) (*store.Model, error) {
 	if source.RepoID == "" || original == nil {
 		return nil, store.ErrNotFound
 	}
@@ -73,7 +81,7 @@ func (s *Service) resolveWeightArtifact(source weightSource, original *store.Inf
 			"provider": "local", "repo_id": source.RepoID, "reason": "local_model_not_registered",
 		})
 	}
-	return s.createTemplateWeightModel(source, original, engine, quantization, weightBytes)
+	return templateWeightModel(source, original, engine, quantization, weightBytes), nil
 }
 
 func selectExplicitTemplateArtifact(providerCandidates []store.Model, revision string, weightBytes int64, availability map[uint]templateArtifactState) *store.Model {

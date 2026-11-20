@@ -137,6 +137,7 @@ export default function DeployResourceStep({
         <DeployParallelFields
           result={result}
           multi={nnodes > 1}
+          autoPlaced={nnodes > 1 && groupAuto}
           tpLabel={t("resource.tensorParallel")}
           ppLabel={t("resource.pipelineParallel")}
           wrap={(field, key) => (

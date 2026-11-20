@@ -896,7 +896,7 @@
       "degrees": "Parallelism",
       "split": "TP {{tp}} × PP {{pp}}, {{perNode}} GPUs per node",
       "total": "{{gpus}} GPUs in all",
-      "fromNodes": "Once nodes are picked: one pipeline stage per node, TP over the fewest GPUs a node has",
+      "fromNodes": "Leave a degree empty to recommend a layout that fits all selected nodes.",
       "tpAutomatic": "Leave empty to size from the memory estimate and topology",
       "tpRequiredAuto": "Automatic placement needs a TP: the platform has to know how many GPUs each node gives a rank",
       "tensor": "Tensor Parallel",

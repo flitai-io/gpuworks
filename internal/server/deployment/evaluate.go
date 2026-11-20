@@ -2,7 +2,6 @@ package deployment
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -186,6 +185,7 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	if resp.Image == "" {
 		resp.Image = profile.DefaultImage
 	}
+	recommend := evaluateReq.DeploymentID == 0 && needsDistributedRecommendation(req, autoPlaced)
 	// The selection as the create's launch preflight sees it: before the model
 	// binds the components and its API contract (evaluateLaunchPreflight).
 	preflightSelection := selection
@@ -295,19 +295,22 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	// the nodes and the model, and the form shows them above the parallelism.
 	parallelInvalid := false
 	if req.NNodes > 1 {
-		normalized := dto.DeployRequest{
-			NodeUUID: req.NodeUUID, NodeUUIDs: req.NodeUUIDs, NNodes: req.NNodes,
-			NodeRank: req.NodeRank, MasterAddr: req.MasterAddr, MasterPort: req.MasterPort,
-			Placement: req.Placement,
-		}
+		normalized := cloneRequest(*req)
 		dp, err := deploy.PlacementDataParallel(eng.Name(), quick.DP, launch.TemplateResidual, launch.UserResidual)
 		if errs.add("data_parallel_size", err) {
 			writeFieldErrors()
 			return
 		}
-		nodes, err := s.PrepareDistributedDeployRequest(&normalized, dp)
+		var nodes []*store.Node
+		// An invalid rank command still needs the engine draft that corrects
+		// it. The command error is attached once those ranks are previewed.
+		if recommend && checkManualCommandRanks(req) == nil {
+			nodes, err = s.recommendDistributed(ctx, &normalized, dp, eng, launch, selection, model)
+		} else {
+			nodes, err = s.PrepareDistributedDeployRequest(&normalized, dp)
+		}
 		if err != nil {
-			field := distributedErrorField(err)
+			field := distributedErrorField(err, placement)
 			errs.add(field, err)
 			if !isParallelismField(field) {
 				writeFieldErrors()
@@ -331,12 +334,16 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 			req.NodeRank = normalized.NodeRank
 			req.MasterAddr = normalized.MasterAddr
 			req.MasterPort = normalized.MasterPort
-			// The parallelism that takes effect, defaulted from the nodes
-			// when the draft stated none, is what the form shows and what
-			// the plan below runs with.
+			// Keep suggested degrees in the summary. Echoing them as form inputs
+			// would pin them when a model or node changes.
 			req.Placement = normalized.Placement
+			if !recommend || placement.TP > 0 {
+				resp.FormValues["tp"] = normalized.Placement["tp"]
+			}
+			if !recommend || placement.PP > 0 {
+				resp.FormValues["pp"] = normalized.Placement["pp"]
+			}
 			placement = evaluationPlacement(req)
-			resp.FormValues["tp"], resp.FormValues["pp"] = placement.TP, placement.PP
 		}
 		for _, n := range nodes {
 			withGPUs, err := s.d.Store.NodeWithGPUs(n.UUID)
@@ -538,29 +545,6 @@ func (s *Service) evaluate(ctx context.Context, out *evaluation, evaluateReq dto
 	}
 	resp.Warnings = uniqueWarnings(resp.Warnings)
 	out.answer(resp)
-}
-
-// distributedErrorField maps the distributed request errors onto the form
-// fields that state them.
-func distributedErrorField(err error) string {
-	var productErr *messages.ProductError
-	if errors.As(err, &productErr) {
-		switch productErr.Code() {
-		case messages.ErrorMasterPortInvalid:
-			return "master_port"
-		case messages.ErrorDistributedTPRequired, messages.ErrorDistributedGPUCount:
-			return "placement.tp"
-		case messages.ErrorDistributedParallelIndivisible:
-			return "placement.pp"
-		}
-	}
-	return "node_uuids"
-}
-
-// isParallelismField reports whether an evaluate error is about the
-// parallelism rather than the node list; those leave acquisition resolvable.
-func isParallelismField(field string) bool {
-	return field == "placement.tp" || field == "placement.pp"
 }
 
 // evaluateParallelism is the split the draft launches with: the stated

@@ -294,3 +294,26 @@ func TestWholeRepositoryTemplateRevisionKeepsItsPreferenceRule(t *testing.T) {
 		}
 	}
 }
+
+// The create's recommendation previews a rank-scoped spec before its
+// preflight; the preview binds every rank but registers no artifact, so a
+// create the preflight then refuses leaves the model list as it was.
+func TestRankScopedPreviewRegistersNoArtifact(t *testing.T) {
+	st, h, templateID := rankScopedTemplate(t, "rank_scoped_preview_registers_none")
+	req := dto.DeployRequest{TemplateID: templateID, TemplateSpecName: "fp8-balanced", NNodes: 3}
+	selection, err := h.applyTemplateDefaults(&req, templateHardware{GPU: chipmatch.GPU{Name: "H100", Vendor: "nvidia", CC: 9.0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection.previewWeights = true
+	if _, err := h.resolveDeploymentModelFromTemplate(context.Background(), 0, &selection, templateID); err != nil {
+		t.Fatal(err)
+	}
+	if len(selection.RankWeights) != 3 {
+		t.Fatalf("rank weights = %+v, want one per rank", selection.RankWeights)
+	}
+	models, err := st.ListModels()
+	if err != nil || len(models) != 0 {
+		t.Fatalf("preview registered %d models (%v), want none", len(models), err)
+	}
+}

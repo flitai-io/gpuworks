@@ -127,12 +127,12 @@ func modelArtifactSatisfiesSubfolder(actual, requested string) bool {
 	return actual == requested || (actual == "" && requested != "")
 }
 
-func (s *Service) createTemplateWeightModel(source weightSource, original *store.InferenceModel, engine, quantization string, weightBytes int64) (*store.Model, error) {
-	return s.d.Store.UpsertModel(&store.Model{
+func templateWeightModel(source weightSource, original *store.InferenceModel, engine, quantization string, weightBytes int64) *store.Model {
+	return &store.Model{
 		Source: source.Provider, SourceID: source.RepoID, Revision: source.Revision, ArtifactSubfolder: source.Subfolder, Name: source.RepoID,
 		Arch: original.Architecture, QuantLabel: quantization, WeightBytes: weightBytes,
 		ContextLength: original.ContextLength,
-	})
+	}
 }
 
 func (s *Service) resolveWeightRevision(source weightSource, nodeID uint) (weightSource, error) {
