@@ -11,6 +11,9 @@ import (
 // allocation. Only Params/Profile/LaunchInput/Resolved/Warnings of the returned
 // plan are set.
 func ResolveAllocatedLaunch(req LaunchRequest, indexes []int, assigned int, parallel parallelism.Spec, apiPort int, variables map[string]any, weightBytes int64, unresolved bool) (LaunchPlan, error) {
+	if err := req.Selection.ValidatePlacementNodes(req.Topology.NNodes); err != nil {
+		return LaunchPlan{}, err
+	}
 	plan := LaunchPlan{}
 	gpu, err := launchGPU(req.Node, indexes)
 	if err != nil {

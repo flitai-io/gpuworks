@@ -407,6 +407,7 @@
     "SLEEP_INVALID_MODE": "The sleep mode must be wait or abort; {{mode}} is not a mode.",
     "SLEEP_INVALID_WAKE_ON_REQUEST": "wake_on_request must be true or false (got {{wake_on_request}}).",
     "WAKE_INSUFFICIENT_GPU_MEMORY": "GPU {{gpu_indexes}} on {{node}} cannot take the sleeping instance back: {{shortfall_gib}} GiB short. Stop or sleep {{occupants}} first.",
+    "TEMPLATE_PLACEMENT_NODE_LIMIT": "This inference spec supports at most {{maximum}} nodes per launch, but {{actual}} were requested.",
     "DISTRIBUTED_NODE_COUNT": "The distributed deployment requires {{required}} nodes, but {{actual}} were selected.",
     "DISTRIBUTED_TP_REQUIRED": "Multi-node deployments need a tensor parallel (TP) degree.",
     "MASTER_PORT_INVALID": "The master port must be between {{minimum}} and {{maximum}}.",

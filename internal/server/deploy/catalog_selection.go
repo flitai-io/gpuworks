@@ -13,6 +13,8 @@ import (
 
 	"gpuworks.ai/gpuworks/internal/proto"
 	"gpuworks.ai/gpuworks/internal/server/imagecatalog/pullref"
+	"gpuworks.ai/gpuworks/internal/server/messages"
+	"gpuworks.ai/gpuworks/internal/server/placement"
 )
 
 // CatalogSelection is what a deployment selected from the inference catalog:
@@ -297,13 +299,27 @@ func (s CatalogSelection) ImageSourcesFor(image string) []string {
 // PlacementResolver returns the placement resolver language the selection
 // declares, or an empty string when the row carries none.
 func (s CatalogSelection) PlacementResolver() string {
-	var placement struct {
-		Resolver string `json:"resolver"`
+	return strings.TrimSpace(s.placementContract().Resolver)
+}
+
+func (s CatalogSelection) placementContract() placement.Contract {
+	var contract placement.Contract
+	if json.Unmarshal(s.Placement, &contract) != nil {
+		return placement.Contract{}
 	}
-	if len(s.Placement) == 0 || json.Unmarshal(s.Placement, &placement) != nil {
-		return ""
+	return contract
+}
+
+// ValidatePlacementNodes applies the spec's launch-wide limit before the
+// per-node resolver sees the selected cards.
+func (s CatalogSelection) ValidatePlacementNodes(nodes int) error {
+	limit := int(s.placementContract().MaxNodes)
+	if limit > 0 && nodes > limit {
+		return messages.NewProductError(messages.ErrorTemplatePlacementNodeLimit,
+			fmt.Sprintf("the inference spec supports at most %d nodes per launch, but %d were requested", limit, nodes),
+			map[string]any{"maximum": limit, "actual": nodes})
 	}
-	return strings.TrimSpace(placement.Resolver)
+	return nil
 }
 
 // AcquisitionField returns one field of the acquisition record as it was

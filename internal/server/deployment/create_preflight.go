@@ -74,7 +74,7 @@ func (s *Service) prepareLaunchPreflight(eng deploy.Engine, req *dto.DeployReque
 // run resolves the preflight on profileNode and every distributed or PD rank
 // node, each with the image imageFor resolves for it.
 func (p launchPreflight) run(req *dto.DeployRequest, selection templateSelection, profileNode *store.Node, distNodes []*store.Node, pdReq *pdRequest, imageFor rankImageResolver) error {
-	return preflightCreateRuntimes(p.input, req.ContainerOverrides, selection.Components, p.modelMount, profileNode, distNodes, pdReq, imageFor)
+	return preflightCreateRuntimes(p.input, req.ContainerOverrides, selection.Components, p.modelMount, profileNode, distNodes, pdReq, imageFor, deploy.CatalogSelection{Placement: selection.Placement})
 }
 
 // evaluateLaunchPreflight runs the create's launch preflight on an evaluated

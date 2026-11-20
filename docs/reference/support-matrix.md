@@ -44,6 +44,8 @@ Slurm 节点（线下 Slurm 集群，或阿里云 E-HPC 集群，见[接入 Slur
 
 内置镜像目录提供 `gpuworks/gpuworks-runner:rocm7.2.3-vllm0.30.0-r1`（基于上游 `vllm/vllm-openai-rocm`，ROCm 7.2.3、vLLM 0.30.0），内置推理目录为 Qwen3 0.6B–32B 与 30B-A3B 提供 `arch_id: gfx942`（MI300X/MI325X）的 BF16 vLLM 规格，为 0.6B–8B 提供 `arch_id: gfx1151`（Ryzen AI Max+ 395）的规格；选模型即可部署，无需导入镜像或模板。实测覆盖：MI325X 单卡与两台 MI325X 的 PP=2、跨机 TP=2，AMD395 单卡；只证明短文本推理与部署/停止流程，不代表回答质量、持续性能、长上下文或图片输入已验证。SGLang ROCm 档仍是 `catalog: false` 的未发布候选。UMA 容量按实际 KFD/GTT 事实读取，不可推广为其他 APU 或主机的可用 GPU 内存。`gpus.arch_id` 是精确、大小写不敏感匹配；缺失或不一致的架构事实不会通过。验收步骤见 [AMD 硬件验收指南](../dev/amd-hardware-validation.md)与 [ROCm 镜像配方](../../build/runner-images/rocm/README.md)。
 
+用**推理模板 → 导入模板**上传 [gfx1100 候选 YAML](../../build/inference-templates/amd-gfx1100/qwen3.yaml)。它为 Qwen3-0.6B 和 Qwen3-8B 各添加一个待真机验证的 vLLM 规格，每个引擎只使用一个节点和一张卡。首个验收目标是 48 GB Radeon PRO W7900，其他上报 gfx1100 的 AMD 卡也能匹配。
+
 ## AMD dGPU 显存配额
 
 `amd-dgpu` 后端用 libvrocm.so（rocm-slicing-shim，`build/runtime-assets/amd/`）在 HIP 运行时层拦截分配与容量查询接口，只链接 libc，一份构建适配任意 ROCm 版本。注入在 AMD 整卡设备选择（render 节点 + `/dev/kfd`）之上叠加：`LD_PRELOAD` 指向挂载的 `/opt/gpuworks/partition/libvrocm.so`，`VROCM_DEVICE_MEMORY_LIMIT_<N>`（MiB，`N` 为容器自身可见设备列表里的位次，不是物理序号）按所选每张卡写入，`VROCM_LEDGER_PATH` 指向宿主机 `/dev/shm` 下的实例专属账本（`/dev/shm/gpuworks-amd-<实例 UUID>`），该路径在 Docker、nerdctl 与 runveil 上不变，容器靠 `--ipc=host` 共享宿主机的 `/dev/shm`。Kubernetes 上 agent 自己的 `/dev/shm` 是 agent Pod 私有的 tmpfs，不是宿主机的：agent 经宿主 root（`/proc/1/root`）在宿主机 `/dev/shm` 预先创建这同一个账本路径（空文件，0666，不是 0777：容器可能以宿主机未知的 UID 运行，需要能写但不需要可执行），再把该宿主路径以 hostPath 原样挂进实例 Pod（可写），`VROCM_LEDGER_PATH` 的值不因此改变；libvrocm.so 仍按普通方式打开并在干净退出时 unlink 该文件，agent 的清理步骤兜底经宿主 root 删除同一路径。限额只在 HIP 运行时初始化时读取一次，调小配额需重启实例才生效。

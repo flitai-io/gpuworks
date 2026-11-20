@@ -19,10 +19,7 @@ type Asset struct {
 	UnpackTo  string `yaml:"unpack_to,omitempty" json:"unpack_to,omitempty"`
 }
 
-type Placement struct {
-	Language string `yaml:"language" json:"language"`
-	Resolver string `yaml:"resolver" json:"resolver"`
-}
+type Placement = placementeval.Contract
 
 type APIContract = inferenceapi.Contract
 type APIOperation = inferenceapi.Operation
@@ -104,6 +101,9 @@ func validateExecutableContract(modelID string, spec *InferenceSpec) error {
 		}
 	}
 	if spec.Placement != nil {
+		if spec.Placement.MaxNodes < 0 {
+			return fmt.Errorf("%s placement.max_nodes must be nonnegative", where)
+		}
 		spec.Placement.Language = strings.ToLower(strings.TrimSpace(spec.Placement.Language))
 		if spec.Placement.Language != "starlark" || strings.TrimSpace(spec.Placement.Resolver) == "" {
 			return fmt.Errorf("%s placement requires a Starlark resolver", where)

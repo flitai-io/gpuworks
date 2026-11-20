@@ -19,8 +19,11 @@ type rankImageResolver func(*store.Node) string
 // avoid fail the create atomically. Warnings are for evaluate and are dropped
 // here. An unpinned node (automatic placement) has no runtime yet, so the
 // checks that depend on one wait for the controller.
-func preflightCreateRuntimes(base deploy.ResolveLaunchInput, rawOverrides map[string]any, components []deploy.ComponentBinding, modelMount string, pinned *store.Node, distNodes []*store.Node, pdReq *pdRequest, imageFor rankImageResolver) error {
+func preflightCreateRuntimes(base deploy.ResolveLaunchInput, rawOverrides map[string]any, components []deploy.ComponentBinding, modelMount string, pinned *store.Node, distNodes []*store.Node, pdReq *pdRequest, imageFor rankImageResolver, selection deploy.CatalogSelection) error {
 	resolve := func(input deploy.ResolveLaunchInput, node *store.Node, context string) error {
+		if err := selection.ValidatePlacementNodes(input.Params.NNodes); err != nil {
+			return err
+		}
 		if node != nil {
 			input.Params.RuntimeDriver = node.RuntimeDriver
 			input.Params.Host = deploy.RuntimeBindHost(node.RuntimeDriver)

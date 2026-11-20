@@ -43,10 +43,19 @@ Start only one engine at a time, retain logs, and set resource limits on the tes
 
 The built-in AMD specs declare an exact `gpus.arch_id` (`gfx942` or `gfx1151`). Missing or mismatched architecture facts must fail template matching even if the name contains `gfx1151`. This narrows candidate selection; it does not prove GPU kernel execution or the exact product SKU. Real-hardware acceptance is still required.
 
+## W7900 single-card candidate
+
+Upload the [gfx1100 candidate YAML](../../build/inference-templates/amd-gfx1100/qwen3.yaml) through **Inference Templates → Import Template**. It adds a vLLM profile awaiting hardware validation to each of Qwen3-0.6B and Qwen3-8B, with one node and one GPU per engine launch. The first validation target is the 48 GB Radeon PRO W7900. Other AMD cards reporting gfx1100 can also match.
+
+1. Use Linux amd64 and an existing Docker runtime. Compare the node details with rocminfo for gfx1100, the PCI address and dedicated memory. Record the kernel, amdgpu version, runner image digest and actual weights revision.
+2. From the Qwen3-0.6B model page, select the RDNA 3 gfx1100 candidate and allocate one whole W7900. Keep the throughput mode and automatic context settings. vLLM selects batching, prefix caching, and graph execution for the model and hardware. Wait for one ready replica. Using the authorized Docker endpoint, inspect the instance for /dev/kfd and the selected render node. Confirm HIP sees only the selected card inside the container; if a second card is present, check that its PCI address is absent.
+3. Use the gateway URL and served model name from the deployment page. Send a short text question to /v1/chat/completions with stream=false and stream=true. Check for a nonempty, sensible answer and a completed stream. Record time to first readiness, GPU memory and engine errors. After short text requests pass, record aggregate generation throughput, time to first token, and peak GPU memory under concurrent requests.
+4. Stop the deployment and check for zero replicas, an exited container and released memory. Redeploy and repeat the chat. Repeat these steps with Qwen3-8B. On failure, retain the resolved arguments, dtype, attention backend and first engine error. Each result applies to the tested model, image and device.
+
 ## Evidence to retain
 
 For each engine, retain image ID/archive digest, host and driver facts, model revision, actual command and device mapping, GPU/host-memory observations, health and request results, and every skipped or failed item. A check that cannot run in a CPU-only environment because no HIP device is available remains unverified.
 
 Software fixtures cover damaged fields, partial inventories, duplicate identities, and mismatched device numbers. Do not modify real sysfs or device nodes to manufacture a failure. Injection checks apply the assigned devices; they are not a security sandbox for administrator-supplied container configuration.
 
-<!-- translation-source-sha256: 3220b213c1296422816f73ca65d5d998c527b63af1677d3de3df4c2804e2a053 -->
+<!-- translation-source-sha256: 2e29ccb44bbfe34fe56f65f00b86663bd848dd163efd4ae1bc4297664bde6fbc -->

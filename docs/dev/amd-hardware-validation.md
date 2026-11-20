@@ -43,6 +43,15 @@ ROCm 镜像配方见 [build/runner-images/rocm](../../build/runner-images/rocm/R
 
 内置 AMD 规格使用精确的 `gpus.arch_id`（`gfx942` 或 `gfx1151`）。架构 ID 缺失或与规格不符时，模板匹配必须拒绝，即使名称包含 `gfx1151`；名称匹配不能替代可信的探测事实。该 selector 缩小候选范围，但不能证明实际 GPU 内核执行或型号 SKU，仍须完成真机验收。
 
+## W7900 单卡候选档
+
+用**推理模板 → 导入模板**上传 [gfx1100 候选 YAML](../../build/inference-templates/amd-gfx1100/qwen3.yaml)。它为 Qwen3-0.6B 和 Qwen3-8B 各添加一个待真机验证的 vLLM 规格，每个引擎只使用一个节点和一张卡。首个验收目标是 48 GB Radeon PRO W7900，其他上报 gfx1100 的 AMD 卡也能匹配。
+
+1. 使用 Linux amd64 和已有的 Docker 运行时。在节点详情对照 rocminfo 的 gfx1100、PCI 地址和独立显存。记录内核、amdgpu 版本、runner 镜像 digest 与实际权重 revision。
+2. 从 Web 的 Qwen3-0.6B 详情选择 RDNA 3 gfx1100 候选档，分配整张 W7900，保留默认的吞吐优先与自动上下文设置。批处理、前缀缓存和图执行由 vLLM 按模型和硬件选定。等待一个就绪副本。通过已授权的 Docker endpoint 检查该实例的设备列表包含 /dev/kfd 和被选卡的 render 节点。确认容器内 HIP 只枚举所选卡；有第二张卡时核对其 PCI 地址未出现。
+3. 使用部署页面显示的网关地址和服务模型名，向 /v1/chat/completions 发送简短文本问题，分别以 stream=false 和 stream=true 检查非空、合理的回答和流式结束。记录首次就绪耗时、GPU 显存与错误日志。短文本通过后，用并发请求记录总生成吞吐、首 token 延迟与显存峰值。
+4. 停止部署，确认副本清零、容器退出、已用显存回落；重新部署并再次聊天。再用 Qwen3-8B 重复上述步骤。发生错误时保留实际启动参数、dtype、attention 后端与第一条引擎错误；单项结果只覆盖该模型、镜像和设备。
+
 ## 记录证据
 
 每个引擎保留 image ID/归档摘要、宿主与驱动事实、模型版本、实际命令和设备映射、GPU/主机内存观测、健康检查及请求结果，以及所有跳过或失败项。CPU 环境中因缺少 HIP 设备而不能完成的检查，仍是待验项。

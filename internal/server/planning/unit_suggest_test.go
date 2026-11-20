@@ -83,3 +83,13 @@ func TestSuggestUnitGroups(t *testing.T) {
 		}
 	}
 }
+
+func TestAMDUnitGroupsUseReportedArchitecture(t *testing.T) {
+	for _, arch := range []string{"gfx1100", "gfx942", ""} {
+		node := suggestNode(1, "amd", "", 1)
+		node.GPUs[0].ArchID = arch
+		if got := nodeArch(&node); got != "amd/"+arch {
+			t.Errorf("nodeArch with %q = %q, want amd/%s", arch, got, arch)
+		}
+	}
+}

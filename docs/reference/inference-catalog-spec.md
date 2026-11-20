@@ -425,6 +425,8 @@ placement:
 
 - 必须定义 `resolve(gpu)`。`gpu` 是结构体：`count`、`vendor`、`names`、
   `memories_gib`、`min_memory_gib`、`indexes`、`automatic`。
+- `placement.max_nodes` 是单次引擎启动允许使用的最大节点数。省略或设为 0 时由部署决定。
+  resolver 的 `gpu.count` 只统计当前节点选中的卡。
 - 预声明内建只有两个：`accept(gpu_memory_mib_per_device, variables?, prefer?)` 与
   `reject(reason)`。`gpu_memory_mib_per_device` 是**准入要求**（1..16777216 MiB，
   上限只为防 int64 溢出），不是分配请求。
