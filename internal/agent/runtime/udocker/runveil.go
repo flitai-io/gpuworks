@@ -147,7 +147,7 @@ func (d *Driver) runveilIdentity(spec runtime.WorkloadSpec) (runveil.Identity, e
 	if err != nil {
 		return runveil.Identity{}, err
 	}
-	missing, _, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, owned, os.Stat, user.LookupGroupId, false)
+	missing, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, owned, os.Stat, lookupGroupID, false)
 	if err != nil {
 		return runveil.Identity{}, err
 	}
@@ -157,18 +157,29 @@ func (d *Driver) runveilIdentity(spec runtime.WorkloadSpec) (runveil.Identity, e
 		if current, err := user.Current(); err == nil && current.Username != "" {
 			name = current.Username
 		}
-		if len(missing) != 0 {
-			return runveil.Identity{}, fmt.Errorf("runtime user %s lacks accelerator device group(s) %s; run sudo usermod -aG %s %s, then restart the agent", name, strings.Join(missing, ","), strings.Join(missing, ","), name)
+		if !missing.empty() {
+			// This agent runs the workload as itself and cannot grant itself
+			// a group, so the operator does it by name.
+			groups, nameErr := missing.names(name)
+			if nameErr != nil {
+				return runveil.Identity{}, nameErr
+			}
+			return runveil.Identity{}, fmt.Errorf("runtime user %s lacks accelerator device group(s) %s; run sudo usermod -aG %s %s, then restart the agent", name, strings.Join(groups, ","), strings.Join(groups, ","), name)
 		}
 	}
-	for _, group := range missing {
-		resolved, err := user.LookupGroup(group)
-		if err != nil {
-			return runveil.Identity{}, fmt.Errorf("resolve device group %s: %w", group, err)
-		}
-		gid, err := strconv.Atoi(resolved.Gid)
-		if err != nil {
-			return runveil.Identity{}, fmt.Errorf("parse device group %s id %q: %w", group, resolved.Gid, err)
+	// PRoot is started with these groups set numerically, so a device group
+	// the host cannot name is reached as readily as a named one. Only the
+	// group adoption predicted by diagnostics arrives without an id.
+	for _, group := range missing.groups {
+		gid := group.gid
+		if gid == adoptedDeviceGroupID {
+			resolved, err := user.LookupGroup(group.name)
+			if err != nil {
+				return runveil.Identity{}, fmt.Errorf("resolve device group %s: %w", group.name, err)
+			}
+			if gid, err = strconv.Atoi(resolved.Gid); err != nil {
+				return runveil.Identity{}, fmt.Errorf("parse device group %s id %q: %w", group.name, resolved.Gid, err)
+			}
 		}
 		owned[gid] = true
 	}

@@ -2,6 +2,7 @@ package udocker
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/user"
@@ -505,15 +506,70 @@ func TestRequiredDeviceGroupsUsesDeviceOwnershipWithoutVendorNames(t *testing.T)
 		}
 		return &user.Group{Gid: gid, Name: "accelerator-access"}, nil
 	}
-	groups, devices, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true}, stat, lookup, false)
+	needs, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true}, stat, lookup, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if devices != 2 {
-		t.Fatalf("device count = %d, want 2", devices)
+	if needs.devices != 2 {
+		t.Fatalf("device count = %d, want 2", needs.devices)
 	}
-	if !slices.Equal(groups, []string{"accelerator-access"}) {
-		t.Fatalf("device groups = %v", groups)
+	if !slices.Equal(needs.labels(), []string{"accelerator-access"}) {
+		t.Fatalf("device groups = %v", needs.labels())
+	}
+	names, err := needs.names("runner")
+	if err != nil || !slices.Equal(names, []string{"accelerator-access"}) {
+		t.Fatalf("names = %v, err = %v", names, err)
+	}
+	if len(needs.groups) != 1 || needs.groups[0].gid != 1234 {
+		t.Fatalf("groups = %+v, want the numeric device gid carried through", needs.groups)
+	}
+}
+
+// A host may hand its accelerator device nodes to a numeric owner that has no
+// entry in the group database at all, which is what an Ascend node running
+// inside a container does with /dev/davinci*. The group is still usable as a
+// numeric supplementary group, so the launcher that sets it that way must not
+// be stopped; the launchers that can only be given names must say which
+// command creates one.
+func TestRequiredDeviceGroupsCarriesADeviceGroupTheHostCannotName(t *testing.T) {
+	mounts := []runtime.Mount{{Source: "/dev/accelerator0"}, {Source: "/dev/accelerator1"}}
+	stat := func(path string) (os.FileInfo, error) {
+		return deviceInfo{name: filepath.Base(path), mode: os.ModeDevice | 0o660, stat: &syscall.Stat_t{Uid: 1001, Gid: 1001}}, nil
+	}
+	lookup := func(gid string) (*user.Group, error) { return nil, user.UnknownGroupIdError(gid) }
+
+	needs, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true}, stat, lookup, false)
+	if err != nil {
+		t.Fatalf("a nameless device group must not fail the launch: %v", err)
+	}
+	if needs.devices != 2 || len(needs.groups) != 1 {
+		t.Fatalf("devices=%d groups=%+v, want both devices and their single gid", needs.devices, needs.groups)
+	}
+	if needs.groups[0] != (deviceGroup{gid: 1001}) {
+		t.Fatalf("group = %+v, want gid 1001 with no name", needs.groups[0])
+	}
+	if !slices.Equal(needs.labels(), []string{"1001"}) {
+		t.Fatalf("labels = %v, want the numeric id", needs.labels())
+	}
+	if _, err := needs.names("udocker"); err == nil ||
+		!strings.Contains(err.Error(), "groupadd --system --gid 1001 gpuworks-device-1001") ||
+		!strings.Contains(err.Error(), "usermod -aG gpuworks-device-1001 udocker") {
+		t.Fatalf("names error = %v, want the groupadd and usermod commands", err)
+	}
+}
+
+// Only an unknown gid is tolerated: a group database that is broken rather
+// than silent must stop the launch instead of running the workload without
+// device access.
+func TestRequiredDeviceGroupsFailsWhenTheGroupDatabaseItselfFails(t *testing.T) {
+	mounts := []runtime.Mount{{Source: "/dev/accelerator0"}}
+	stat := func(path string) (os.FileInfo, error) {
+		return deviceInfo{name: "accelerator0", mode: os.ModeDevice | 0o660, stat: &syscall.Stat_t{Uid: 1001, Gid: 1001}}, nil
+	}
+	lookup := func(string) (*user.Group, error) { return nil, errors.New("nss down") }
+	if _, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true}, stat, lookup, false); err == nil ||
+		!strings.Contains(err.Error(), "resolve accelerator device group 1001 for /dev/accelerator0") {
+		t.Fatalf("err = %v, want the lookup failure reported", err)
 	}
 }
 
@@ -522,12 +578,12 @@ func TestRequiredDeviceGroupsHonorsExistingSupplementaryMembership(t *testing.T)
 	stat := func(string) (os.FileInfo, error) {
 		return deviceInfo{name: "accelerator0", mode: os.ModeDevice | 0o660, stat: &syscall.Stat_t{Uid: 0, Gid: 1234}}, nil
 	}
-	groups, devices, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true, 1234: true}, stat, user.LookupGroupId, false)
+	needs, err := requiredDeviceGroups(mounts, 9001, 9001, map[int]bool{9001: true, 1234: true}, stat, user.LookupGroupId, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if devices != 1 || len(groups) != 0 {
-		t.Fatalf("devices=%d missing groups=%v, want 1 and none", devices, groups)
+	if needs.devices != 1 || !needs.empty() {
+		t.Fatalf("devices=%d missing groups=%v, want 1 and none", needs.devices, needs.labels())
 	}
 }
 

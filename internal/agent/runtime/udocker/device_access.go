@@ -2,6 +2,7 @@ package udocker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -45,24 +46,33 @@ func (d *Driver) DeviceAccessDiagnostics(spec runtime.WorkloadSpec) string {
 		return "device access: FAIL: " + err.Error()
 	}
 	willAdopt := canInjectGroups && os.Geteuid() == 0
-	groups, devices, err := requiredDeviceGroups(workloadDeviceMounts(spec), runUID, runGID, groupIDs, os.Stat, user.LookupGroupId, willAdopt)
+	needs, err := requiredDeviceGroups(workloadDeviceMounts(spec), runUID, runGID, groupIDs, os.Stat, lookupGroupID, willAdopt)
 	if err != nil {
 		return "device access: FAIL: " + err.Error()
 	}
-	if devices == 0 {
+	if needs.devices == 0 {
 		return "device access: no accelerator device nodes found for the selected workload"
 	}
 	identity := runUser
 	if identity == "" {
 		identity = strconv.Itoa(runUID)
 	}
-	if len(groups) == 0 {
-		return fmt.Sprintf("device access: PASS (%s can read and write %d required device nodes)", identity, devices)
+	if needs.empty() {
+		return fmt.Sprintf("device access: PASS (%s can read and write %d required device nodes)", identity, needs.devices)
 	}
-	if canInjectGroups {
-		return fmt.Sprintf("device access: PASS (%s will receive device group(s) %s for %d required device nodes)", identity, strings.Join(groups, ","), devices)
+	labels := needs.labels()
+	if !canInjectGroups {
+		return fmt.Sprintf("device access: FAIL (%s lacks group(s) %s; run %s, then restart the agent)", identity, strings.Join(labels, ","), needs.membershipAdvice(identity))
 	}
-	return fmt.Sprintf("device access: FAIL (%s lacks group(s) %s; run sudo usermod -aG %s %s, then restart the agent)", identity, strings.Join(groups, ","), strings.Join(groups, ","), identity)
+	// The runveil launcher sets supplementary groups numerically, so a group
+	// the host cannot name is no obstacle there. The udocker CLI launcher
+	// goes through runuser and needs every name.
+	if !d.runveil {
+		if _, err := needs.names(identity); err != nil {
+			return "device access: FAIL: " + err.Error()
+		}
+	}
+	return fmt.Sprintf("device access: PASS (%s will receive device group(s) %s for %d required device nodes)", identity, strings.Join(labels, ","), needs.devices)
 }
 
 // GrantDeviceAccess adds username to the groups that own the selected
@@ -97,15 +107,19 @@ func (d *Driver) GrantDeviceAccess(ctx context.Context, spec runtime.WorkloadSpe
 	if err != nil {
 		return "", err
 	}
-	groups, devices, err := requiredDeviceGroups(workloadDeviceMounts(spec), uid, gid, groupIDs, os.Stat, user.LookupGroupId, false)
+	needs, err := requiredDeviceGroups(workloadDeviceMounts(spec), uid, gid, groupIDs, os.Stat, lookupGroupID, false)
 	if err != nil {
 		return "", err
 	}
-	if devices == 0 {
+	if needs.devices == 0 {
 		return "no accelerator device nodes require group access", nil
 	}
-	if len(groups) == 0 {
-		return fmt.Sprintf("%s already has read/write access to %d accelerator device nodes", username, devices), nil
+	if needs.empty() {
+		return fmt.Sprintf("%s already has read/write access to %d accelerator device nodes", username, needs.devices), nil
+	}
+	groups, err := needs.names(username)
+	if err != nil {
+		return "", err
 	}
 	if os.Geteuid() != 0 {
 		return "", fmt.Errorf("root is required to add %s to accelerator device group(s) %s", username, strings.Join(groups, ","))
@@ -129,23 +143,31 @@ func (d *Driver) workloadInvocation(args []string, spec runtime.WorkloadSpec) ([
 	if err != nil {
 		return nil, err
 	}
-	groups, _, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, groupIDs, os.Stat, user.LookupGroupId, false)
+	needs, err := requiredDeviceGroups(workloadDeviceMounts(spec), d.runUID, d.runGID, groupIDs, os.Stat, lookupGroupID, false)
 	if err != nil {
 		return nil, err
 	}
 	if d.runUser == "" {
-		if len(groups) != 0 {
+		if !needs.empty() {
 			current, _ := user.Current()
 			name := strconv.Itoa(d.runUID)
 			if current != nil && current.Username != "" {
 				name = current.Username
 			}
+			groups, nameErr := needs.names(name)
+			if nameErr != nil {
+				return nil, nameErr
+			}
 			return nil, fmt.Errorf("runtime user %s lacks accelerator device group(s) %s; run sudo usermod -aG %s %s, then restart the agent", name, strings.Join(groups, ","), strings.Join(groups, ","), name)
 		}
 		return d.udockerInvocation(args), nil
 	}
-	if len(groups) == 0 {
+	if needs.empty() {
 		return d.udockerInvocation(args), nil
+	}
+	groups, err := needs.names(d.runUser)
+	if err != nil {
+		return nil, err
 	}
 	primary, err := user.LookupGroupId(strconv.Itoa(d.runGID))
 	if err != nil {
@@ -157,6 +179,76 @@ func (d *Driver) workloadInvocation(args []string, spec runtime.WorkloadSpec) ([
 	}
 	full := d.udockerArgs(args...)
 	return append(invocation, "--", "bash", "-lc", d.shellInvocation(full)), nil
+}
+
+// deviceGroup is one group that owns an accelerator device node the runtime
+// identity cannot reach on its own. gid is negative for a group a root agent
+// is predicted to create (RuntimeDeviceGroup, whose id is not known until
+// adoption runs). name is empty when the host's group database has no entry
+// for gid at all: a node that receives its device nodes with a numeric owner
+// only -- an Ascend host passing /dev/davinci* into a container, say -- has
+// group-writable devices whose gid nothing can name.
+type deviceGroup struct {
+	gid  int
+	name string
+}
+
+// deviceGroupNeeds is the groups one workload needs, in mount order, plus the
+// number of device nodes inspected.
+type deviceGroupNeeds struct {
+	groups  []deviceGroup
+	devices int
+}
+
+func (n deviceGroupNeeds) empty() bool { return len(n.groups) == 0 }
+
+// labels describes the groups for a human: a name where the host has one, the
+// numeric id where it does not.
+func (n deviceGroupNeeds) labels() []string {
+	out := make([]string, 0, len(n.groups))
+	for _, group := range n.groups {
+		if group.name != "" {
+			out = append(out, group.name)
+			continue
+		}
+		out = append(out, strconv.Itoa(group.gid))
+	}
+	return out
+}
+
+// names returns every group name for a launcher that can only be given names
+// (`runuser -G`, `usermod -aG`). A nameless group stops those paths, so the
+// error names the one command that gives the gid a name; the runveil launcher
+// needs no name and never calls this.
+// membershipAdvice reports the commands that make identity a member of every
+// group it is missing, for the launcher that cannot inject supplementary
+// groups and therefore needs the membership to exist beforehand. A group the
+// host cannot name has to be given one first: usermod only takes names.
+func (n deviceGroupNeeds) membershipAdvice(identity string) string {
+	commands := make([]string, 0, len(n.groups)+1)
+	names := make([]string, 0, len(n.groups))
+	for _, group := range n.groups {
+		name := group.name
+		if name == "" {
+			name = suggestedDeviceGroupName(group.gid)
+			commands = append(commands, fmt.Sprintf("sudo groupadd --system --gid %d %s", group.gid, name))
+		}
+		names = append(names, name)
+	}
+	commands = append(commands, fmt.Sprintf("sudo usermod -aG %s %s", strings.Join(names, ","), identity))
+	return strings.Join(commands, " && ")
+}
+
+func (n deviceGroupNeeds) names(identity string) ([]string, error) {
+	out := make([]string, 0, len(n.groups))
+	for _, group := range n.groups {
+		if group.name == "" {
+			suggested := suggestedDeviceGroupName(group.gid)
+			return nil, fmt.Errorf("accelerator device group %d has no name on this host and this runtime can only be given named groups; run sudo groupadd --system --gid %d %s && sudo usermod -aG %s %s, then restart the agent", group.gid, group.gid, suggested, suggested, identity)
+		}
+		out = append(out, group.name)
+	}
+	return out, nil
 }
 
 // requiredDeviceGroups returns the device groups runUID still needs for the
@@ -171,19 +263,18 @@ func requiredDeviceGroups(
 	stat func(string) (os.FileInfo, error),
 	lookupGroup func(string) (*user.Group, error),
 	willAdopt bool,
-) ([]string, int, error) {
-	seen := map[string]bool{}
-	groups := make([]string, 0, 1)
-	devices := 0
+) (deviceGroupNeeds, error) {
+	seen := map[int]bool{}
+	needs := deviceGroupNeeds{}
 	for _, mount := range mounts {
 		info, err := stat(mount.Source)
 		if err != nil || info.Mode()&os.ModeDevice == 0 {
 			continue
 		}
-		devices++
+		needs.devices++
 		metadata, ok := info.Sys().(*syscall.Stat_t)
 		if !ok {
-			return nil, devices, fmt.Errorf("inspect accelerator device ownership %s", mount.Source)
+			return needs, fmt.Errorf("inspect accelerator device ownership %s", mount.Source)
 		}
 		permissions := info.Mode().Perm()
 		ownerAccess := int(metadata.Uid) == runUID && permissions&0o600 == 0o600
@@ -194,28 +285,38 @@ func requiredDeviceGroups(
 		}
 		if rootOnlyDevice(info) {
 			if !willAdopt {
-				return nil, devices, fmt.Errorf("runtime user %s cannot read and write root-only accelerator device %s; run sudo gpuworks-agent grant-device-access --user <runtime user> to give it to group %s (repeat after a reboot)", strconv.Itoa(runUID), mount.Source, RuntimeDeviceGroup)
+				return needs, fmt.Errorf("runtime user %s cannot read and write root-only accelerator device %s; run sudo gpuworks-agent grant-device-access --user <runtime user> to give it to group %s (repeat after a reboot)", strconv.Itoa(runUID), mount.Source, RuntimeDeviceGroup)
 			}
-			if !seen[RuntimeDeviceGroup] {
-				seen[RuntimeDeviceGroup] = true
-				groups = append(groups, RuntimeDeviceGroup)
+			if !seen[adoptedDeviceGroupID] {
+				seen[adoptedDeviceGroupID] = true
+				needs.groups = append(needs.groups, deviceGroup{gid: adoptedDeviceGroupID, name: RuntimeDeviceGroup})
 			}
 			continue
 		}
 		if permissions&0o060 != 0o060 {
-			return nil, devices, fmt.Errorf("runtime user %s cannot read and write accelerator device %s", strconv.Itoa(runUID), mount.Source)
+			return needs, fmt.Errorf("runtime user %s cannot read and write accelerator device %s", strconv.Itoa(runUID), mount.Source)
 		}
-		gid := strconv.FormatUint(uint64(metadata.Gid), 10)
-		group, err := lookupGroup(gid)
+		gid := int(metadata.Gid)
+		if seen[gid] {
+			continue
+		}
+		seen[gid] = true
+		group, err := lookupGroup(strconv.Itoa(gid))
 		if err != nil {
-			return nil, devices, fmt.Errorf("resolve accelerator device group %s for %s: %w", gid, mount.Source, err)
+			// A gid the group database cannot name is still a usable
+			// supplementary group: the launcher that sets it numerically
+			// reaches the device, and only a name-taking launcher has to
+			// stop. Any other lookup failure is the host misbehaving.
+			var unknown user.UnknownGroupIdError
+			if !errors.As(err, &unknown) {
+				return needs, fmt.Errorf("resolve accelerator device group %d for %s: %w", gid, mount.Source, err)
+			}
+			needs.groups = append(needs.groups, deviceGroup{gid: gid})
+			continue
 		}
-		if !seen[group.Name] {
-			seen[group.Name] = true
-			groups = append(groups, group.Name)
-		}
+		needs.groups = append(needs.groups, deviceGroup{gid: gid, name: group.Name})
 	}
-	return groups, devices, nil
+	return needs, nil
 }
 
 func identityGroupIDs(username string, primaryGID int) (map[int]bool, error) {

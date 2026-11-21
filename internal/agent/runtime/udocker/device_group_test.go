@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -231,15 +232,18 @@ func TestRequiredDeviceGroupsPredictsAdoptionOrNamesTheFix(t *testing.T) {
 	}
 	mounts := mountsOf("/dev/davinci4", "/dev/davinci_manager", "/dev/devmm_svm")
 
-	groups, devices, err := requiredDeviceGroups(mounts, 1000, 1000, map[int]bool{1000: true}, stat, lookup, true)
+	needs, err := requiredDeviceGroups(mounts, 1000, 1000, map[int]bool{1000: true}, stat, lookup, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if devices != 3 || !slices.Equal(groups, []string{"HwHiAiUser", RuntimeDeviceGroup}) {
-		t.Fatalf("devices=%d groups=%v, want 3 and HwHiAiUser+%s", devices, groups, RuntimeDeviceGroup)
+	if needs.devices != 3 || !slices.Equal(needs.labels(), []string{"HwHiAiUser", RuntimeDeviceGroup}) {
+		t.Fatalf("devices=%d groups=%v, want 3 and HwHiAiUser+%s", needs.devices, needs.labels(), RuntimeDeviceGroup)
+	}
+	if needs.groups[0].gid != 1234 || needs.groups[1].gid != adoptedDeviceGroupID {
+		t.Fatalf("groups = %+v, want the real gid and the predicted adoption", needs.groups)
 	}
 
-	_, _, err = requiredDeviceGroups(mounts, 1000, 1000, map[int]bool{1000: true}, stat, lookup, false)
+	_, err = requiredDeviceGroups(mounts, 1000, 1000, map[int]bool{1000: true}, stat, lookup, false)
 	if err == nil || !strings.Contains(err.Error(), "root-only accelerator device /dev/davinci_manager") || !strings.Contains(err.Error(), "grant-device-access") {
 		t.Fatalf("err = %v, want the root-only node and the grant-device-access fix named", err)
 	}
@@ -259,5 +263,80 @@ func TestPrepareDeviceAccessLeavesHostsAloneWithoutARootRunUser(t *testing.T) {
 	info, err := os.Stat(dev)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("file changed: mode=%v err=%v", info.Mode().Perm(), err)
+	}
+}
+
+// A launcher that cannot inject supplementary groups needs the membership to
+// exist before the workload starts, so the advice has to be runnable as
+// printed: usermod takes names, and a group the host cannot name has to be
+// given one first.
+func TestMembershipAdviceNamesEveryGroupItTellsTheOperatorToJoin(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		needs deviceGroupNeeds
+		want  string
+	}{
+		{
+			name:  "named group",
+			needs: deviceGroupNeeds{groups: []deviceGroup{{gid: 1001, name: "davinci"}}},
+			want:  "sudo usermod -aG davinci gpuworks",
+		},
+		{
+			name:  "group the host cannot name",
+			needs: deviceGroupNeeds{groups: []deviceGroup{{gid: 1001}}},
+			want:  "sudo groupadd --system --gid 1001 gpuworks-device-1001 && sudo usermod -aG gpuworks-device-1001 gpuworks",
+		},
+		{
+			name:  "named and nameless together",
+			needs: deviceGroupNeeds{groups: []deviceGroup{{gid: 990, name: "hisi"}, {gid: 1001}}},
+			want:  "sudo groupadd --system --gid 1001 gpuworks-device-1001 && sudo usermod -aG hisi,gpuworks-device-1001 gpuworks",
+		},
+	} {
+		got := tc.needs.membershipAdvice("gpuworks")
+		if got != tc.want {
+			t.Errorf("%s: membershipAdvice = %q, want %q", tc.name, got, tc.want)
+		}
+		if strings.Contains(got, "usermod -aG 1001") {
+			t.Errorf("%s: advice passes a numeric id to usermod, which only takes names: %q", tc.name, got)
+		}
+	}
+}
+
+// os/user without cgo reports a missing or unreadable /etc/group as a path
+// error rather than an unknown id, and such a host can still answer through
+// NSS, so the getent fallback must not be reserved for the unknown-id case.
+func TestLookupGroupIDAsksNSSWhateverTheLocalFailureWas(t *testing.T) {
+	absent := func() []string {
+		var out []string
+		for gid := 64000; gid < 64100 && len(out) < 2; gid++ {
+			id := strconv.Itoa(gid)
+			if _, err := user.LookupGroupId(id); err != nil {
+				out = append(out, id)
+			}
+		}
+		return out
+	}()
+	if len(absent) < 2 {
+		t.Fatalf("need two group ids this host does not know, found %v", absent)
+	}
+	known, unknown := absent[0], absent[1]
+
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "getent")
+	script := "#!/bin/sh\nif [ \"$1\" = group ] && [ \"$2\" = " + known + " ]; then echo 'ldap-davinci:x:" + known + ":someone'; exit 0; fi\nexit 2\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	group, err := lookupGroupID(known)
+	if err != nil {
+		t.Fatalf("lookupGroupID(%s): %v", known, err)
+	}
+	if group.Name != "ldap-davinci" || group.Gid != known {
+		t.Fatalf("lookupGroupID(%s) = %+v, want name ldap-davinci", known, group)
+	}
+	if _, err := lookupGroupID(unknown); err == nil {
+		t.Fatalf("lookupGroupID(%s) of a gid NSS does not know either: want an error", unknown)
 	}
 }
