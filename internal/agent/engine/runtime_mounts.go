@@ -130,13 +130,18 @@ func createDirectoryAsOwner(owner agentruntime.MountOwner, name string, mode os.
 }
 
 func checkAccessAsOwner(owner agentruntime.MountOwner, name string, directory bool) error {
-	// The uid alone decides here: this process itself performs the access,
-	// so its kernel view -- capabilities included -- is the answer, and a
-	// gid that differs from the owner's changes nothing about it. The mode
-	// bits beside this call cover what the process cannot reach. (OwnerCanAccess
-	// compares uid and gid: there the probe runs as this process for a
-	// directory the owner reads through the container's own groups, where a
-	// gid-only mismatch must not take the kernel's word for the owner.)
+	// The uid alone decides here, on purpose -- a different rule from
+	// agentruntime.isCallingIdentity (uid and gid), and the two must not
+	// be unified blindly. This check answers "can this process itself
+	// reach the path": when the uid matches, this process performs the
+	// access and its kernel view -- capabilities included -- is the
+	// answer; a gid-only mismatch does not change what THIS process can
+	// reach. OwnerCanAccess answers a different question, "can the OWNER
+	// identity reach the path", where a gid-only mismatch means the
+	// process's group view is not the owner's and the mode bits must
+	// speak instead. Flipping this gate to uid+gid would turn a working
+	// gid-mismatch-without-username configuration (accepted by mountOwner,
+	// repaired by the mkdir-then-chown flow) into a hard error.
 	if owner.UID == os.Geteuid() {
 		return nil
 	}

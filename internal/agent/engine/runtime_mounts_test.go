@@ -162,10 +162,15 @@ func TestRuntimeMountPreflightFallsBackToKernelAccess(t *testing.T) {
 		}
 		// The same false denial is reachable on an ancestor: a 0700
 		// directory owned by another uid must not block a root agent's
-		// ancestor walk, and a foreign owner must keep the denial.
+		// ancestor walk, and a foreign owner must keep the denial. The
+		// 0700 mode is what makes this pin the kernel probe: the mode
+		// bits deny every class, so only the probe can pass the walk.
 		nested := filepath.Join(state, "nested")
-		if err := os.Mkdir(nested, 0o755); err != nil {
+		if err := os.Mkdir(nested, 0o700); err != nil {
 			t.Fatal(err)
+		}
+		if err := os.Chown(nested, 1000, 1000); err != nil {
+			t.Skipf("this user namespace does not map uid 1000: %v", err)
 		}
 		if err := agentruntime.CheckAncestorTraversal(nested, owner); err != nil {
 			t.Fatalf("root agent must traverse a 0700 foreign-owned ancestor: %v", err)

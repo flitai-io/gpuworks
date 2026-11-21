@@ -295,6 +295,25 @@ func TestOwnerCanAccessFollowsTheCallingIdentity(t *testing.T) {
 	if os.Geteuid() != 0 && OwnerCanAccess(xonly, xinfo, self, 0o5) {
 		t.Fatal("kernel granted read on an 0111 directory without the read bit")
 	}
+	// The "."-entry probe is what denies search on a readable directory:
+	// open plus readdir succeeds on a 0400 directory the process owns, so
+	// without the Lstat(path+"/.") step this case would wrongly grant 0o1.
+	if os.Geteuid() != 0 {
+		ronly := filepath.Join(dir, "ronly")
+		if err := os.Mkdir(ronly, 0o400); err != nil {
+			t.Fatal(err)
+		}
+		rinfo, err := os.Stat(ronly)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if OwnerCanAccess(ronly, rinfo, self, 0o1) {
+			t.Fatal("granted search on a 0400 directory the process owns")
+		}
+		if !OwnerCanAccess(ronly, rinfo, self, 0o4) {
+			t.Fatal("kernel denied read on a 0400 directory the process owns")
+		}
+	}
 	if os.Geteuid() != 0 {
 		denied := filepath.Join(dir, "denied")
 		if err := os.WriteFile(denied, []byte("x"), 0o200); err != nil {

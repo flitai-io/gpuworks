@@ -146,10 +146,10 @@ func CheckAncestorTraversal(name string, owner MountOwner) error {
 	}
 }
 
-// IsCallingIdentity reports whether owner is the identity this
+// isCallingIdentity reports whether owner is the identity this
 // process runs as: the only case where this process's access
 // answers for the owner's.
-func IsCallingIdentity(owner MountOwner) bool {
+func isCallingIdentity(owner MountOwner) bool {
 	return owner.UID == os.Geteuid() && owner.GID == os.Getegid()
 }
 
@@ -160,13 +160,23 @@ func IsCallingIdentity(owner MountOwner) bool {
 // userspace fallback answers "root can read and write anything"
 // from stat alone on kernels before 5.8 and under seccomp profiles
 // that block faccessat2, so a root-squashed NFS mount would pass
-// here and fail at container start. For any other owner the mode
-// bits through the owner's user, primary group or other class are
-// the only answer this process can give; a switched identity is
-// probed for real by checkAccessAsOwner's runuser calls.
+// here and fail at container start. Two needs have no honest probe
+// and fall back to the mode bits even for the calling identity:
+// write on a directory (create and delete inside it) and execute on
+// a file (decided by running it) -- no caller asks either today.
+// For any other owner the mode bits through the owner's user,
+// primary group or other class are the only answer this process can
+// give; a switched identity is probed for real by
+// checkAccessAsOwner's runuser calls.
 func OwnerCanAccess(path string, info os.FileInfo, owner MountOwner, need os.FileMode) bool {
-	if !IsCallingIdentity(owner) {
+	if !isCallingIdentity(owner) {
 		return hasPermission(info, owner, need)
+	}
+	// Mode bits that allow the calling identity are conclusive -- the
+	// kernel grants what the matching class grants -- so the probe only
+	// runs where the bits deny and capabilities could still carry it.
+	if info != nil && hasPermission(info, owner, need) {
+		return true
 	}
 	if info != nil && info.IsDir() && need&0o2 != 0 {
 		// Write on a directory is create and delete inside it: no
@@ -180,10 +190,20 @@ func OwnerCanAccess(path string, info os.FileInfo, owner MountOwner, need os.Fil
 // kernelCanAccess opens path the way need asks: resolving its "."
 // entry for search (reaching path only proved search on its
 // ancestors), reading one entry of a directory for read, opening a
-// file O_RDONLY -- or O_RDWR when need asks write. An error answers
-// false; there is no fallback to simulate.
+// file O_WRONLY when need asks only write or O_RDWR when it asks
+// read and write, always O_NONBLOCK so a FIFO cannot hang the probe.
+// An error answers false; there is no fallback to simulate. A nil
+// info is stat'd here so a missing path answers false instead of
+// panicking on the file branch.
 func kernelCanAccess(path string, info os.FileInfo, need os.FileMode) bool {
-	if info != nil && info.IsDir() {
+	if info == nil {
+		var err error
+		info, err = os.Lstat(path)
+		if err != nil {
+			return false
+		}
+	}
+	if info.IsDir() {
 		if need&0o1 != 0 {
 			if _, err := os.Lstat(path + "/."); err != nil {
 				return false
@@ -212,6 +232,7 @@ func kernelCanAccess(path string, info os.FileInfo, need os.FileMode) bool {
 			flags = os.O_RDWR
 		}
 	}
+	flags |= syscall.O_NONBLOCK
 	f, err := os.OpenFile(path, flags, 0)
 	if err != nil {
 		return false
