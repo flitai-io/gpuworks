@@ -152,4 +152,14 @@ see the index in [`artifacts/README.md`](../artifacts/README.md)). Chinese origi
 - Do not use M numbers or relative paths outside the repository in current documentation. External research repository paths in historical logs are retained only as source references.
 - `CLAUDE.md` is the sole authority for development conventions; `CONTEXT.md` is the complete glossary. Guides in this directory only expand on procedures and link to those files.
 
-<!-- translation-source-sha256: 94c0b8f5d812aee6370ae333076fcbd03f4a006ce1fa7f1787c1f45505f754fc -->
+<!-- translation-source-sha256: e330e9ff3fcef1a328de2c6788c87c03a0bbf153f4fe67d18a00383cce17871c # GPUWorks Documentation -->
+<!-- translation-source-sha256: e3e65ed71dd9ac3bb9e8387740c4125fba5132bbac7bc1a1b3683c727c2ee5fd ## Where to Start -->
+<!-- translation-source-sha256: 4a56da8048b441a66e760e7c6ea5c1ceb14d9ef5ffe32c1eac1237842f811878 ## User Documentation -->
+<!-- translation-source-sha256: 3551889ee6ad8f44f8530b34744e3c8b94abf0c771993cbbde92d466f5f3887b ### Tutorials -->
+<!-- translation-source-sha256: b451976f9ceeb704a02e089929bbd396547ec3818945b58d3442ba358dfe6346 ### How-To Guides -->
+<!-- translation-source-sha256: 8d3c224c2ec4f00a7edbbdad803facd684252fecf0567782d348880c2844fe4c ## Lookup Documentation -->
+<!-- translation-source-sha256: 37a93fcc0763f871e216200ec1fd2f2ee2302d961fd043c647b750848c105844 ### Reference -->
+<!-- translation-source-sha256: f82bd928b3e7493fdc76f8e101c3d5f32b5f94cfb5b2566960cb6edf529e78f8 ## Why It Is Designed This Way -->
+<!-- translation-source-sha256: 51ca17b50a9e4d6b765cd07edb97987efbb50065558fac90c490198271464fcc ## Release Notes -->
+<!-- translation-source-sha256: 0f2d93be9d69e07f04ea8dd47208fb22fb65033d8d9a0ac2c74ba521e3e9ac4f ## Developer Documentation -->
+<!-- translation-source-sha256: 69e1dc41f912694773f9570f06e6e98f87d7af73495f7851d6cbd62a14e97720 ## Document Placement Rules -->

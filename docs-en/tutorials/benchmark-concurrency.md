@@ -104,4 +104,9 @@ If the task fails or only some points complete, check the errors and rerun it. I
 
 This small random workload teaches you how to run performance evaluations; it does not establish business capacity. To assess business capacity, first define acceptable success rates and response times. Then use representative business samples and input/output lengths, increase the request count, and repeat the tests.
 
-<!-- translation-source-sha256: c873e6bbcd8d978ed2dd190adeba66b06440f91b3f7886e81480a2d853cca309 -->
+<!-- translation-source-sha256: 55111fa29a428003fceee91df2adaad7f8309283f9d79053c8f5736662da3603 # Run a Performance Evaluation and Read the Report -->
+<!-- translation-source-sha256: 74958de3bfa74ce454686d9d1cb7b845f139f77a8ed6b855da55286fd1ac78e5 ## Before You Begin -->
+<!-- translation-source-sha256: 826f273e909923da1f8d36f6b055deda3bc93c4320a8dfe7c6faf7acc07cadf6 ## 1. Select the Service Under Test -->
+<!-- translation-source-sha256: 2c10a79121cbac94d6f6ce7ec7c643f4fdbf2670c7e841cf1fc92ae6c51b765e ## 2. Configure and Start the Built-In Random Workload -->
+<!-- translation-source-sha256: 89c1f8c536e452d0dfea344f68f6e1342575696ee5f866a0d0380ae98db62e6a ## 3. Read the Report From Four Perspectives -->
+<!-- translation-source-sha256: 9396ea6609ef74d192d68c2fb81a245777c736b684b352615a5075e3d0ea2a7e ## 4. Save the Report -->

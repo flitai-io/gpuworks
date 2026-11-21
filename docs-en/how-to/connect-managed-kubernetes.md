@@ -412,7 +412,33 @@ When you finish, clean up in this order:
 3. Delete these nodes on the gpuworks Compute Nodes page, then delete the cluster entry (for a cluster connected from a cloud account, in the header of its group under the cloud account; for other clusters, on its row on the “External Platforms” page);
 4. In the cloud console, delete the cluster (together with node pools, load balancers, and EIPs) to avoid further charges.
 
-<!-- translation-source-sha256: a53f4c4d9ea6dbac4bf792509fd36458c950cfba001013fdcb8d4e8e26175a60 -->
+<!-- translation-source-sha256: 4bf349f0026deae8e7a2927366cef5257d26e2811f15402d0e1f1bd5eb262532 # Connect Managed Kubernetes from a Public Cloud: Alibaba Cloud ACK, DigitalOcean DOKS, Nebius mk8s -->
+<!-- translation-source-sha256: 7f1e5787526d72090b8f671c117d534da1871a2ccc9ba74cdbbc713bfa2b6da3 ## Overview: What You Need to Do -->
+<!-- translation-source-sha256: e595e6aaeefe2e57319ad51987e42d84ccf08fd48532af113821d6c4da978b1b ## Shortcut: Connect from a Cloud Account (Alibaba Cloud ACK, DigitalOcean DOKS) -->
+<!-- translation-source-sha256: 58851dad82f28d8d5ecf9e0de00408d22570cb12aa1f48617b281db2370c09b4 ## Facts Common to All Three -->
+<!-- translation-source-sha256: f49efa44cfcea4f9eb2e75a89fe94b112453bba249d222458ca8879331cd67d0 ## Step 0: Prepare (Same for All Three) -->
+<!-- translation-source-sha256: 8a944b902bc55615fe6afd40c08ce9ad68c287295bae0759c385940f5f36d3d3 ## Alibaba Cloud ACK -->
+<!-- translation-source-sha256: aa7970bd26114129870589b47f325ec7c211412e5a564ad5e0ee492570dea466 ### 1. Create the Cluster and GPU Node Pool -->
+<!-- translation-source-sha256: 4080769724475d4575afb982f11aa02ef8228bdcabbaed5820866b10f4233b1f ### 2. Connect in gpuworks -->
+<!-- translation-source-sha256: 6c9e6a09ed37dd255782158d415ec9980f601070d0b03e77bfbef04096224c41 ### Things to Note on Alibaba Cloud -->
+<!-- translation-source-sha256: e558345741a8ac711a5c1446565e9d3521c2a721b1f5b53b74de7b953513774a ## DigitalOcean DOKS -->
+<!-- translation-source-sha256: f233e4324123e40529e11c9382de40fd2e2aea6c06cce750b2579004159b514e ### 1. Create the Cluster -->
+<!-- translation-source-sha256: 561612d8aa81e0f4c3fbd96988164895b9daa651179a6407f14b751380c68425 ### 2. Connect in gpuworks -->
+<!-- translation-source-sha256: 2b647e4dad50ad61870e79ba872ff46341c56b1a69cad9b09121033e13604a76 ## Nebius mk8s -->
+<!-- translation-source-sha256: 29dab6e56c660432c58315e896273fd894e58c5577e9b04965a73ef095040d9d ### 1. Create the Cluster and GPU Node Group -->
+<!-- translation-source-sha256: 9f523ce1b887d961a529b898c670b1570be08b8aef2455dd40c2ea4fa6e74495 ### 2. Connect in gpuworks -->
+<!-- translation-source-sha256: d0d408518609bf875913a187075a3ec3ea0dd5df6379e158d44ae3d280e4e114 ### Things to Note on Nebius -->
+<!-- translation-source-sha256: 7250c991f0a1ebe3aff8333f15f7d00381fd5d299a9a12fac4cc8bb8fbb8844c ## When the Nodes Cannot Reach a Public Registry: Use Your Own -->
+<!-- translation-source-sha256: 42b9273c78542ab9ad8df783a84e11ff4969ba967e254ef5e08492c80dce256c ### Alibaba Cloud ACR -->
+<!-- translation-source-sha256: 6aa550e4a7d0f9009a18a0d3b51733f99d89407f026672fa46f41b349fcb8ca7 ### DigitalOcean DOCR -->
+<!-- translation-source-sha256: 9c63a2be74432cd77916fc1a8266f98ad8b72a194a8bdb2e641aaf1d9ca21ee0 ### Nebius Container Registry -->
+<!-- translation-source-sha256: 99f06310f8f0b82e43d5ec69478b86ed8a152be3e8e5078dfad7de5213ba9f84 ### Enter Your Own Image in gpuworks -->
+<!-- translation-source-sha256: ffcf048cf4b6f6e4ff5ce46192918daf4be7423f5bcd7de76892279fe243aa6f ## Create the Cluster in gpuworks and Apply -->
+<!-- translation-source-sha256: c6fd8cabd5eaa24881703f94d603c25acc0e4a62ad5c11d17370b6648cb5cb1c ### Step 2: Create the Cluster Entry and Copy the Command -->
+<!-- translation-source-sha256: 5bded225e9861af934332d97d35ba29e660ea246d4a630128c8930b8de161063 ### Step 3: Run the Command in the Cluster -->
+<!-- translation-source-sha256: 4736c3e75fefd67c7ad8cdc603494bb757a7d3ae26380951915b1ae20462cb65 ### Step 4: Confirm the Node Appears and Deploy a Small Model -->
+<!-- translation-source-sha256: f3fc3ae7e752195166898643698eb76d6a5bb9f4ec2c56baf0cba30f55b14aa9 ## When No Node Appears -->
+<!-- translation-source-sha256: 42b29102c6e0ad63b8c0777f35597fcb4fd413d0dff3dcb22d01af277cd4d451 ## Clean Up When Done -->
 <!-- translation-localized-code-block: b7a73eb10fc136f938785809b639e7ec679d51075eacb6dfcb35379772600676 81fc1cee646b858a48fd5d1d4f83625ff0e776959c2448cc61597e2c8c4c115a Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->
 <!-- translation-localized-code-block: b60643ded580c41606bf4b1e2e2c785e8c3458104c6fd48caf7b4f349c590c2c 471063cbb2243b40082b9c42839c25ace1c2c2b25ee1ee3e4115d7cb76fc03ea Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->
 <!-- translation-localized-code-block: b3c4b3275907ae69c543bc8146a4d41f50f996a8f48c18c3bcab757038e88420 feb6991c41df94bf4e4b3d704f53b5ff63a8b72f6c175e0536fb55af342974b1 Reviewed localization of visible diagram labels, prose formulas, writing template, or directory annotations; executable examples remain unchanged. -->

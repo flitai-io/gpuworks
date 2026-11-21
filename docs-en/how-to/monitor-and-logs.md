@@ -230,4 +230,17 @@ The deployment command preview shows `SGLANG_LOGGING_CONFIG_PATH` and the pre-st
 
 For startup methods without automatic injection, reasons multi-GPU logs may still lack levels, and how to take over the full script yourself, see [SGLang Logging Injection: Behavior and Boundaries](../explanation/sglang-logging.md).
 
-<!-- translation-source-sha256: 08b006e43201e67a14a8405ce4f903a9250f679a24752cac32f9d98f04b17fd6 -->
+<!-- translation-source-sha256: e41e34fb33ab5bf1dc6201328ecbdbaf543043d7059757911bb12faf77d6c12b # View Metrics and Search Logs -->
+<!-- translation-source-sha256: fdb8cd51a1157c6e61b6daa239e5fe598d10da979aead4bd6dc6212d7fe58951 ## 1. View the Overview and Metrics -->
+<!-- translation-source-sha256: 68ada8e41a9583db8cf5ca36b92d9ffb38d5181ab01e7a4e9b176f34280050a7 ## 2. View Requests and Request Distributions -->
+<!-- translation-source-sha256: f81f06798659b6ddc07e1bd57e002c9a74e829f176d90ea2b1e1753d2e9d43c9 ### Find Completed Requests -->
+<!-- translation-source-sha256: a7dfd502d5105ecc8fa8ab432225f733aab5a89aa92c68e293b3c8d42cdf1c53 ### View In-Flight Requests and Stalls -->
+<!-- translation-source-sha256: 494c269d86367c9997d0dca57af84d82b13de9137f944f36bd8f20a9796c91e2 ### View Service Trends and Distributions -->
+<!-- translation-source-sha256: a672d30bb49f4a704a92dca075db9bbc3c7adf3cf2940b67d67419e78858aaea ### View Health and Replica Status -->
+<!-- translation-source-sha256: 33a3c7dd188221bed245d0194248d41d23456d933711d32a1094c6c8d96ed3f7 ### Interpret End-to-End Latency -->
+<!-- translation-source-sha256: 7d5e2242c0ef91ec54ea427f20d7ba12e20e07cfaa81e7b560b10e8211a2476e ### Missing Requests or Data -->
+<!-- translation-source-sha256: 20f57df85784d9abef676e890be3828bbb9ee6110699342e44023e5a6e88dcca ## 3. View Instance Events and Live Logs -->
+<!-- translation-source-sha256: d2ffb34ff581b92d76de436caf9b1a862e414904a40536cf5996749228dfaf92 ## 4. Search on the Logs Page -->
+<!-- translation-source-sha256: 0f7502c9232e1679e490c2d8f3e5937a9bfedb258bda5e794df677355392beb0 ### The server's and agent's own logs -->
+<!-- translation-source-sha256: aa0cdc123b41ddb80450484244a5565973f8a15732a2c95c0869c586e42c61d6 ### Temporarily Capture Debug Logs and Raw Requests -->
+<!-- translation-source-sha256: df7a1348374cbacf29af3e4695ef25df770b7074163d166ea8a5c53d5cdc65db ## Set the Engine Log Level -->

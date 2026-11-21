@@ -26,4 +26,6 @@ All SSH logins construct their authentication order in one place, `provision.Dia
 - Generate an independent key for each node: authorization and rotation must be performed node by node, while the resulting isolation does not hold if the server is compromised (all private keys are in the same database).
 - Continue storing passwords: passwords expire or change, and a database leak exposes reusable passwords.
 
-<!-- translation-source-sha256: 33cb5e62d408f7f76ec5d34b95515790223767fac6ed5fa03ae937334fdf4af0 -->
+<!-- translation-source-sha256: 9fdabf9340daa2fa444ad9b0c6b6efc43a9a35d510b29b3a9912bdfacddb7538 # ADR 0035: The Server Holds a Platform SSH Key Pair and Prefers It for Out-of-Band Recovery -->
+<!-- translation-source-sha256: 7d0bfe4194008e2d2214b2ed7163db72d881e048a5654858536d68c9c3eba444 ## Tradeoffs and Consequences -->
+<!-- translation-source-sha256: 1383d3840b3c08579f626e20fba9a79694dbaa9094a1a7b73ea202efb01c06b0 ## Rejected Alternatives -->

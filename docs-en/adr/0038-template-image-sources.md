@@ -55,4 +55,8 @@ digest, the node rejects it before pulling.
   with `reason` set to `image source declared by the inference template`.
 - Sources are retained with the spec when exporting or cloning a template; the deployment page requires no new controls.
 
-<!-- translation-source-sha256: bea43beeede04311d23205053818813993a7f1777a1a06b61af954edb196acee -->
+<!-- translation-source-sha256: 8e21c096c0b0fa3de5562bb56809c858f9de1c5d80e8c92673a36b22e42758fa # ADR 0038: Inference Templates Declare Image Sources; System Rewrite Rules Apply Only to System Images -->
+<!-- translation-source-sha256: 80a8dd3072c1ededbf4059cf0ef535637c4796cb03883fb9908332f41e243255 ## Context -->
+<!-- translation-source-sha256: 86c0ba88784203f4243b16e8e2b97436db30c586cb31e62e5346e7708cdcd80a ## Decision -->
+<!-- translation-source-sha256: ff8fdddd5143147dac28651077dca2c49f660ea3653a09f1aa0af133a21182cb ## Tradeoffs -->
+<!-- translation-source-sha256: 6aceb07b775c27f0e57848dfa992e10d41ba52670b5ca72b5bff2f5da675dab2 ## Consequences -->

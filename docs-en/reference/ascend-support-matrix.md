@@ -201,4 +201,17 @@ For 910C, Logic ID in `npu-smi info -m` equals Phy-ID and is not compacted when 
 All `/dev/davinci0..15` devices exist and map one-to-one to Phy-ID (`Phy-ID = 2 × NPU ID + Chip ID`).
 For 910B, NPU ID equals Phy-ID, so single-chip cards continue to use NPU ID.
 
-<!-- translation-source-sha256: 5c2401c3f77e598504cad447b580bd8f8d321ed4925546bffc8075f144199b44 -->
+<!-- translation-source-sha256: cc5f8a23e276bde71455b1efc96d341b916254f7e901a2e12c40ead2872c0fd1 # Ascend Support Matrix -->
+<!-- translation-source-sha256: 71844888282348cd1ac3cc7e5a5eea094dfd2a8a2fe7c061ce9882439f62e938 ## Current Tested Matrix -->
+<!-- translation-source-sha256: 83d1e244e13fbb288f180fc28f61a423e705e2fa051561081e6133ef42e938e2 ## 910C Catalog Contracts and Tested Boundaries -->
+<!-- translation-source-sha256: a6eec493830998b2bac7278ce2f091cbdf17f36b6da1c6f6e7cd8cdca4e175aa ### Frontier Model Catalog and Real-Hardware Status -->
+<!-- translation-source-sha256: 553ad7485e78b1e5be8fde774452fbe914f1e001a7fd9eda4e8b53a4b3c21fb4 ### Startup and Runtime Boundaries -->
+<!-- translation-source-sha256: 80af016178533396533c80c1b86f6b843bd8223c2b71de645111efe1e8fb2f8c ## Coverage Levels -->
+<!-- translation-source-sha256: 736581e05c3d2e8d8b32ba928722169b9d545530cdfeaf74fee0e8067e2fb180 ## Corrected Misdiagnoses -->
+<!-- translation-source-sha256: 17533d7d452bde92f7051bdc2a6c7a147a2b6d1d7bafc5903d0189aa2f68e6ce ### Behavioral Probe Always Queried Logical Device 0 -->
+<!-- translation-source-sha256: f7fe706da547afc65b978950999625a62421b41878230023b2a4727f270e4730 ### runveil Inference Device Selection and ARM64 Path Resolution -->
+<!-- translation-source-sha256: d2e5750443bfb4da3ba3d43445e235a4008da7a96ba1a56acaed8eb7d7327b6c ### CANN 8.5.1 DCMI detection and TSD device translation -->
+<!-- translation-source-sha256: 92d5e993e80f2413963be811fd53a6839c084c608b212759a32a57176b32f449 ### “No Runtime” -->
+<!-- translation-source-sha256: f103b2b35128a56370424727e085e07f492c64c50b2d7f4380b6ac02d2740039 ### `libvruntime.so` Is Distinguished Only by CPU Architecture -->
+<!-- translation-source-sha256: 26b0ba9bd986b2e593b1e28cfde7f4c90437b07b6a51eaa5c2080c6c17da77a0 ## CI Ownership -->
+<!-- translation-source-sha256: 901b3e502aa4599a7553190bab14138227a95f50045751c355885dcedcbb3bc0 ## Cards and Chips: Identification and Numbering -->

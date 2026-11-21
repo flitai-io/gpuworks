@@ -1453,7 +1453,67 @@ When filing an issue or asking for help, attach a [diagnostics archive](#无法�
 5. For connection issues, include the result of `GET /api/v1/agent/rejects`, the exit code of `gpuworks-agent smoke`, the deployment request body, and the network topology (whether a reverse proxy / NAT is involved).
    Remove API keys, node tokens, and other credentials before sharing.
 
-<!-- translation-source-sha256: c762334657b51a12e0c58d3d5bcf33464d92ea7f3b5d54e3b0960bc9daf929b1 -->
+<!-- translation-source-sha256: 2895f1673de6940c226c5e3e97f1bd1bffeae4dc49ccbda79318e190fe52bfc4 # Troubleshooting Guide: Find the Cause by Symptom -->
+<!-- translation-source-sha256: 18d34156511d2cdb705c314007cf3675d2a9a9f41845a19c690c03f9028710c6 ## Where to Look First -->
+<!-- translation-source-sha256: 347b155035030c722ba005d39115f2ff028b24180aa06ebfa0b27f17976dcf65 ## Scope and Evidence of Connectivity Checks -->
+<!-- translation-source-sha256: 9114e24eb31580f67f9cf94305e5bbe6ac5d71322a090b3819a9e9ad46ebbc7e ### Node Address and Session -->
+<!-- translation-source-sha256: 184fb2451dd13860d1b0ea1e0cee5a962890feac02f6b68f290dde06f1d8f8d9 ### Streaming Requests and File Transfers -->
+<!-- translation-source-sha256: 3bc7c7048ed30ac57def9759bfcf0451f1fe02b8303d0cee71be65c485381d42 ## Node Stays Connecting or Does Not Come Online -->
+<!-- translation-source-sha256: 9bbfc75c9e814806ed623222d9fe20491062362cc3754a3a6db0bf2016ccde0e ## Kubernetes Node Does Not Join or Does Not Come Online -->
+<!-- translation-source-sha256: 5063b7bd23f4b8a1300866f0a58f968b44a51dc23d1a3535012132ec037571e2 ## Slurm Node Does Not Join or Does Not Come Online -->
+<!-- translation-source-sha256: fc8263c67b6c2225a36d30fbd133f1a560cc7ba87dbb0da987cb34f48aef0e05 ## Automatic Recovery After a Node Disconnects -->
+<!-- translation-source-sha256: f5d0d9e846c70e500b3966eb47977458ce0749b0d0b7373d0f73edb28941459f ### Check Recovery Progress -->
+<!-- translation-source-sha256: eff0f8cdc1fc6886c10dc53cd6c1f66d5c3447d6318015a3a7fa450ff2a50ed1 ### Reconnect Manually -->
+<!-- translation-source-sha256: 64e3842de1709fe48ffaf23670317d1da0b979ce090588bb8acef71a5e0de5b2 ### Resolve the Last Error -->
+<!-- translation-source-sha256: 108381a2d432f34b03b95ee5b8f83943512a95ae31ab0880187e387eee3f2e4e ### The Cloud Platform Changed the Connection Address -->
+<!-- translation-source-sha256: 4cb2a31ae8190359d18ee9d2c1bc63060937865e41802aa7e28d3140166e74cc ## GPU Not Detected or Vendor Tool Did Not Answer -->
+<!-- translation-source-sha256: 01d3dc422ad78b78fae551b18c06a077ef09938261b3e75bac1bc11c05e22052 ### GPU Count Is 0: Check Tools and Drivers First -->
+<!-- translation-source-sha256: a53303c45629885919cc151f74fd4bb036c0e159c65ca4ef4d3aadff3c10def4 ### Vendor Tool Did Not Answer or Readings Are Stale -->
+<!-- translation-source-sha256: c40739d95375b5423c001d772cdeb5770f2f8c11f507b388a3810a77b6d18f98 ### A Card Is Unusable by the Runtime or Fails Driver Initialization -->
+<!-- translation-source-sha256: 7ebf5c9174ef8583f382fdc9479446b523c3851af93fa26195569e89ad2a8a6c ### Host Sees the Card but Container Does Not -->
+<!-- translation-source-sha256: c82ecdd35a71817d12d7d211f000826eb7579542a79020dc17542ddaf09e7e33 ### Card Is Passed Through, Has an Unavailable Vendor Driver, or Is Held by Another Driver -->
+<!-- translation-source-sha256: 2488452434871c842f2ca3751373431a71deb21ec374a782d5ee32a22526ec05 ### Card Health Checks -->
+<!-- translation-source-sha256: f21b0e1066763e69c4b7a21b31d457963df4ad672a72d602f692c25d3260ec54 ### Enabling or Disabling Scheduling on a Card by Hand -->
+<!-- translation-source-sha256: 09a9f4d2337f1235959e69e9e3eb08b730adfb008a870375c0cd1734bbd84228 ### Card Is in Use by Processes Outside the Platform -->
+<!-- translation-source-sha256: 13f5bcd92b822ca98eee304c3b8abb770dc00adaaf99922bfd175f416305b74f ### Diagnosis Finds an Unrecognized Accelerator -->
+<!-- translation-source-sha256: 4e4fcee6f19649faadd27b574a6029b4853563184f3943b86666f69048c0c995 ### Read the Diagnostic Report -->
+<!-- translation-source-sha256: 13b97b8ae33ac755d846e903ddc47768528d2a56aff80d40105d56844145d8a0 ## Accelerator Health States Such as “Reset Pending” and “Memory Fault” -->
+<!-- translation-source-sha256: ae1e7ae65061f59b3ccd96ad07ff82746825c0323d39a19b7259a60f1bb9a0dd ## Runtime Initialization Failures and Filesystems on Container Nodes -->
+<!-- translation-source-sha256: c39f990bfae3446ae07db51c1aa7e253e2cc65d35133caafa6bb63b3626f571a ### Identify the Affected Path First -->
+<!-- translation-source-sha256: 0ccb8c8d028b71eee54152777e38affca320afe31e9df7f88a7295123f3d6d28 ### Resolve the Specific Error -->
+<!-- translation-source-sha256: e48c7898544c0d6ac9049c3e73987c9e14f0830c6fd56ca8c96357d7acfe396e ### Confirm Recovery -->
+<!-- translation-source-sha256: 2d45fe0afab90ede98ea397e1ac953c12d4089f2481863616597cb05278e1d8c ## Nodes Without Docker (runveil) -->
+<!-- translation-source-sha256: 00fc38d618e1a69522bbd7408e10c3b46e5e7a4b20bcf5fbe9918a4eb0fd0efb ## Containers from Several gpuworks Installations on One Machine -->
+<!-- translation-source-sha256: 42fed8d49a7803ff38e5219e59e18fbd01e2d979874ce46b0f29cd76d6b78913 ## Model Downloads Stall, Fail, or Leave Incomplete Directories -->
+<!-- translation-source-sha256: 178536686b1efd8668c7e8d46049e9e86b9e70f96c29fb441228f7b2442ca5ff ### Check Completeness First -->
+<!-- translation-source-sha256: 5e36b7ae1509b4a6f2cc93a9978750fa40997e3697950a227a86cab9991b750b ### Choose a Resolution Based on the Error -->
+<!-- translation-source-sha256: b97e97ab10808d30ba4bc280f167cd9bb320a6be2a37f6b73e16e14d34e70152 ### Long Downloads: Check Source Switching and Resume Progress -->
+<!-- translation-source-sha256: 15199cdc0f07486d121b220a634cb7cbd7198b8935c85f1396a0eca8440eb136 ### Retry After the Fix and Confirm the Result -->
+<!-- translation-source-sha256: e0dfe8a8bfbb8a0f359c56d406e3618b4b7ea94111dbc7526470cc3e9f9a6848 ## Image Pull Failures -->
+<!-- translation-source-sha256: 99d6b5bf92e4ecb66476e5edc57763af51fdd33cdc42dca43de41335436208ad ### Identify the Failed Source First -->
+<!-- translation-source-sha256: 245924bb2ff899d48beaaf702668354fb4f077efeb4f3b231a540766744fb44f ### Sources Are Forbidden, or Retry After Changing Settings -->
+<!-- translation-source-sha256: 2e761edaeef85606c46762d1dc9680a3b996f61c30b4ae0b42ecf5b838256459 ### Why Candidates Switch and When Pulls Are Considered Stalled -->
+<!-- translation-source-sha256: 1032ac3a3086dc0bdfab0834acfa339935693f6e5b97faef8234bf02748ec5f1 ### Registry Rate Limits or Refused Connections -->
+<!-- translation-source-sha256: 28cfb7773daaae60e9e0285d967cb43b45bf53b7839887598260df0fb59f32ed ### Additional Checks for Digest References -->
+<!-- translation-source-sha256: 107eb8bd7a87ca6066e9dc2a12a821ae308760d8f2c1b69edc65068bcf00926f ## Deployment Rejected, Insufficient Estimated GPU Memory, or No Suitable Node -->
+<!-- translation-source-sha256: b6d85798c7347370b799710bd36ca3bd36fc4830973089961d74d506bc75980b ## Instance Startup Failure, Repeated Restarts, or OOM -->
+<!-- translation-source-sha256: 71da95ca5ab9db8518ad2524787a82835f8ca14f9d5ce4d4724e240444103463 ### Find the Cause of This Failure -->
+<!-- translation-source-sha256: 2767b9a17fd44ed4e114c17cf95320e87486bc057a517077bf2be5a2b2a58bfc ### Insufficient GPU Memory or an Incorrect Startup Command -->
+<!-- translation-source-sha256: 997e7d37727b8d96961e5e818c735cfe06381a710658b695f0630ae6ebee3dab ### Distinguish the Two Startup Timeouts -->
+<!-- translation-source-sha256: 9fc0546899e8801217945461926cdfddbf92aeaebba15b22768f0392951830e5 ### Container Exits After Reaching Running -->
+<!-- translation-source-sha256: 9b440725e326934e1723979abbdb7feca7f9a96cf5fac88ee19b1482db1500e2 ### Engine Stops Responding After Reaching Running -->
+<!-- translation-source-sha256: add832ec4ab268d576c36b2fc99eba23a41a9ba25040cceb7b68ff0583f0f8ab ### Retry After Fixing the Cause -->
+<!-- translation-source-sha256: b3621e999c44b86976534c6f5899fa03638f2c06386f8221e5a7d60e2d360e79 ## Gateway Returns 401, 404, or 503 -->
+<!-- translation-source-sha256: 2c0e5a7c9e97b4735744c0fee373cf39d0326a987466dd32c03c0357bb55abe1 ## dGPU Capability Unavailable -->
+<!-- translation-source-sha256: 0e3041f49383f6df9bdad9e0f779abe9dad3c8fc082a5d108e8da5e178c515bc ## Sleep / Wake Failure -->
+<!-- translation-source-sha256: 6bed70deff3f0668d6c10fbbf64777d85d384d8c080f53cef873e0f3e0a97a34 ### Schedules, Yielding, or Waiting Did Not Run as Expected -->
+<!-- translation-source-sha256: add49c67dae68931ae57bba9b5c1b16e6d910d82dcbbdc4895b3eecf865f3738 ### Replicas Were Not Moved to Another Node After a Node Went Offline -->
+<!-- translation-source-sha256: b644afbe4321ae8504f06b77eb0b2273d535abb9bbc789682d32390b91efa3bb ## Multi-Node, NCCL, or RDMA Network Connectivity Failure -->
+<!-- translation-source-sha256: 3b9bd45c354e3073dc0f5409212c860a80f62f127a30e9819da2c6a8338d6430 ## Reverse Proxy Batches Streaming Output or Truncates Long Requests -->
+<!-- translation-source-sha256: 81e18958b5bcfae45dda667e516faaf018d2cb221db969636794a3ff6ac384e8 ## An Operation Reports "The Server Host's Disk Is Full" -->
+<!-- translation-source-sha256: b0834e1bb1b00d344ab133dd87553f7399555d48589d4f1005833f1b338f7d74 ## Forgotten Admin Password -->
+<!-- translation-source-sha256: f4b47ea39818df555b3ee04f7a85d5e309192d2eecfa178b7ad752825562c00e ## When You Cannot Log In On Site: Debug Collection and Collecting Diagnostics -->
+<!-- translation-source-sha256: 702e2f608eecf6ecf6d04476d009d11a8cce41793fea5d7fcf3d4f71c14ee034 ## Still Unresolved? -->
 <!-- translation-localized-code-block: 5a54acf993d1267a588edaed6adb42fabe4eaa22a37d698098643916823bb39b 63b848b372a289196a7de991833e1e2e7e410a903f69538cc9e20e3119d7859f -->
 <!-- translation-localized-code-block: d383eda0730826d3b7660b307742a2629bc299ddf17052b3a12ca3f2358f47be fe0a439b8f0aa7b27bd972caa05b4ff538ca3852b599385b66339dd84b84cb6f Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: d7bedf2c39d1189b0b6bb93c618159d59d4e9db4f959892452d1c1dfdc925b9c 41cbdf89196804621a51df585f2a864cf675566f5c55b422bcfe55a4622cc6a1 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

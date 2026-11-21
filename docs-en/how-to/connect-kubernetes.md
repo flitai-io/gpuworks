@@ -189,4 +189,13 @@ Deleting the DaemonSet deletes the instance Pods and placeholder Pods with it, a
 - Only NVIDIA, Ascend, Hygon, PPU, AMD, and Kunlunxin nodes are supported; nodes of other vendors stay in stand-by and do not become platform nodes. Hygon and Kunlunxin are deployed as whole cards only: Hygon dGPU memory slicing is not available on Kubernetes, and Kunlunxin has no dGPU; AMD and PPU dGPU slicing is available on Kubernetes.
 - The agent runs privileged with hostNetwork and hostPID (required for probing and for running nerdctl and mount through the node's mount namespace).
 
-<!-- translation-source-sha256: aec4ca6e2f013e1e97445d5e10d00c30195e5caa810b0418dd0b4984bdd3f8fc -->
+<!-- translation-source-sha256: 2c25159695a3cbd5475f14aaf25d673fff267dfae898d65c16915dcba83bd106 # Connect a Kubernetes Cluster -->
+<!-- translation-source-sha256: 11e9890c7d7304cdf9f689086fd1be86f5a1001add2d4d1821c457ee33afd050 ## How It Works -->
+<!-- translation-source-sha256: c3dac868c063bf015effc769d973ca3fbe8a0315b8bdb143f4f466dbc88891c2 ## Coexisting with Other Workloads in the Cluster -->
+<!-- translation-source-sha256: d1c772d60d54cab145763c6464f7e7666a10676b3be6d75c241e5244c9f5f255 ## Accelerator Vendor: Detected Automatically -->
+<!-- translation-source-sha256: bda6fdf2a285e9a4b0ab89a544aad2de7c07510747045516beb17ec965eb2359 ## When the Cluster Uses HAMi, ACK GPU Sharing, or Other Splits -->
+<!-- translation-source-sha256: 80c327105f0d97fc1b418592f465a86eb815433a12710e77cd139830efadfbdf ## Connect -->
+<!-- translation-source-sha256: 2a8a0f7547c21e6e0a32290f428c9d8ecceed1b73c9e126e35316e62215d7393 ## Edit a Cluster Entry -->
+<!-- translation-source-sha256: 59a9c21dc813c1598734993676ca61a02fba23151864bf705b6c1b4b2c08927d ## Uninstall -->
+<!-- translation-source-sha256: 6e00804f78349c113c506d99399a3838bad265471f22631949066547abe9e127 ## Day-to-Day Operations -->
+<!-- translation-source-sha256: 1f4eb435d659b31009373d29f14146f7923ad4aadb2e8102b102933db8df9e77 ## Limitations -->

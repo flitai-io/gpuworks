@@ -139,4 +139,10 @@ Decided but not implemented yet: dynamic route mounting, on-demand starts of on-
 - The existing way of building a separate server (`cli.Options`, extension migrations, the build-time console overlay) stays valid for forks and tests, but it is not a distribution path for official or third-party extensions.
 - Contract and operating details are in [Extension Points](../dev/extensions.md); the wire formats are in [Plugin Protocol and Wire Formats](../reference/plugin-protocol.md).
 
-<!-- translation-source-sha256: d6b6113b5f438925abb5fa6b8842bb4242cf18953bdea90ff7344cff4d1d19c8 -->
+<!-- translation-source-sha256: 70b18278151e00b5e674aa0d1248ee8de24ace2dab0a97fc9d2b460fc2183e6d # ADR 0071: Installable Extensions: A General Core Plus Signed Plugin Packages -->
+<!-- translation-source-sha256: 905493fb4b58077f2c6a5434f6667c7d2aeab3edc690ff709131e7234332df02 ## Context -->
+<!-- translation-source-sha256: c325bcf20bc84e03489d471879acde804ae154d085da7b219db31f5c6af867f3 ## Decision -->
+<!-- translation-source-sha256: 2d8dba33fa5f08caaa79f42d4155f3429e2c87f62e6b5717dc30c3211187a71e ## Where each ADR 0070 decision goes -->
+<!-- translation-source-sha256: ba15051ade23ecb31ab1140cf7d182ccd3b16bf8125a1d30dfea7f5228b4acd1 ## Implementation status -->
+<!-- translation-source-sha256: 0e5930e6fe9a66ea6d976b621ceb579d3f70bc2fae31720564c3bd9b5696c6af ## Trade-offs -->
+<!-- translation-source-sha256: c670029635e6bf13a75c98f5cac32f338f749a827f74c59d65542dac4a3625ef ## Consequences -->

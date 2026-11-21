@@ -24,4 +24,7 @@ When the primary model is already on a shared storage, the deployment form no lo
 - Users see before deploying which component goes into which shared storage and how much space it takes; afterwards the write can be traced on the timeline.
 - Not done: applying the same rule to the primary model (it has no existing shared copy to follow); giving up the wait when a write makes no progress for a long time (handled separately); choosing a storage by its free capacity.
 
-<!-- translation-source-sha256: b22644c21e502e601f3625d75f7f4e177fcfbd0e1c558f1c4840b870723c4676 -->
+<!-- translation-source-sha256: 6974a1b9ce53aeb2c388ce0208ecfb913fad542b5577336335c6d2eafe751231 # ADR 0062: Template components follow the primary model into its shared storage -->
+<!-- translation-source-sha256: 7aae22398619b64bc5cb44f1c2087d4747dc2b8ecb657429d37dd0616e6b5b10 ## Background -->
+<!-- translation-source-sha256: 4b7f47d05260b628892f7e5c9aa340ae467ae9eb7f60db637c66208887dde1bc ## Decision -->
+<!-- translation-source-sha256: 017f9b4e8122029146adb8bdfa1b8860f22c5f2a50a04b02a19a8ff8985148b0 ## Consequences -->

@@ -113,4 +113,18 @@ resolution order itself remains unchanged.
 - Commit `51777f2`: the original commit introducing `inferLocalPublicURL` prefilling
 - Incident evidence: see the symptoms section of the plan for the mirror1 live test record
 
-<!-- translation-source-sha256: f2e2741e66ccc3d73654e1733fcc5b5ac6f7d0bbfcc1a24c13d39c4158b344ed -->
+<!-- translation-source-sha256: 57d0b8291bd5ff51ba0ba5fe8abda51cdeaef97a3d06332cba383ccc319c6a7a # ADR 0012: PublicURL Resolution Order -->
+<!-- translation-source-sha256: 6b0f4139b490e9ec4836135805ceda23e8db80e18abd46faa0c5301e1a62ccd2 ## Context -->
+<!-- translation-source-sha256: 44669a396239d6f33e9470bc18f7f2e9435dbcc775f708d4e974fab19717e5aa ## Decision -->
+<!-- translation-source-sha256: 5a8eb3d3a549bb23e12acaea29779c8f088c52ee888712b2cecaa8478923a227 ## Consequences -->
+<!-- translation-source-sha256: f71bea9e4a0cbb0bf0cb1bfa60ccb2f503f128bc0f8d76ceb2f6efebc70a310f ### Positive -->
+<!-- translation-source-sha256: 192d1e2567c85cfbccbf8eea0c7b75b85c32ab6cbbb5e6e10cc4976f9d5cbc10 ### Negative -->
+<!-- translation-source-sha256: 66b49545ba73fd1af3dca5fb00b0bc48a19e9178ccc7376c4f9ed56050d15a28 ### Neutral -->
+<!-- translation-source-sha256: 491082969e3a44712996912fffbb1d1bfb5712755f6cd73328fc5b44e79dea66 ## Alternatives Considered -->
+<!-- translation-source-sha256: 16ad5881f585c8802321f64917828c93471d80b8e3f0d8949ac99bf3bbd4daaa ### A. Remove the Local IP Fallback -->
+<!-- translation-source-sha256: 0c8af5b5219bafc2fa8bccfd7d3adcea5478eaba44c54ea876b2e441d0d3fe08 ### B. Always Prefer the Request Host, With No Fallback -->
+<!-- translation-source-sha256: 6c918d5df0422fb58720fffd5251fce735fb55125ff1b3a46190e635b1945604 ### C. Replace Prefilling With Lazy Population on the First Request -->
+<!-- translation-source-sha256: 2eb98bfdb8365b4fc640a59a2a5755c76de5366f8324efea080a11346f6fdc1e ## Update (2026-09-10): Control Plane Self-Installation Does Not Set PublicURL by Default -->
+<!-- translation-source-sha256: e9829ae2b0340372163d62ea746332f31202239e4588cfea95f6d3360cfa8917 ## Update (2026-09-25): Access Endpoints on the Settings Page Belong to the Explicit Configuration Level -->
+<!-- translation-source-sha256: 2b9c63d1cc3d16a49894e6d12798795da89fcbdcf47d3779f872dd2e4455f86a ## Update (2026-09-26): Explicit Configuration Moves to server.yaml -->
+<!-- translation-source-sha256: 009f09a75becdb25729f030eb66a88897c2c20d0d95cbc5dea0ba473f95b346a ## Related -->

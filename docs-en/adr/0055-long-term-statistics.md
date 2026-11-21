@@ -46,4 +46,8 @@ would produce billions of rows.
 - Each gateway request adds about 200 ns with no memory allocation; each GPU sample adds one map lookup during metrics ingestion.
 - Documentation: [View Usage Analytics](../how-to/analyze-operations.md), [Data Retention Settings](../reference/api.md#analytics用量分析), and [Configuration](../reference/configuration.md).
 
-<!-- translation-source-sha256: 93c7c3918efd24fdee0dbcc8d7fa4ca52e507f75a3d4469a732acab10c85288f -->
+<!-- translation-source-sha256: 0d620e6f98c1905c034e988cff8ccae84a950594a4d83d17a5035bb4bc96b9e4 # ADR 0055: Store Long-Term Statistics Separately from Raw Observations: One Row per Object, Accumulation During Ingestion, and Incremental Writes -->
+<!-- translation-source-sha256: 1e24b1932ae6a8073b9207970275ab4aecf3e4f13bd6ac1620c58ff68660a987 ## Background -->
+<!-- translation-source-sha256: ab901e7f80ffeccfca96be77881002c03b9f23345034df6f66f13de0cf5c73b3 ## Decisions -->
+<!-- translation-source-sha256: d0366338bf6ee637d7c8918a2c0540c3c6dee05c53b24f2dc3fff23859939cf6 ## Trade-offs -->
+<!-- translation-source-sha256: b693add89c3bb489fa94636ac4b243f3028be9714124ba850af87b270f4c2743 ## Consequences -->

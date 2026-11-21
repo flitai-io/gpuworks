@@ -214,6 +214,17 @@ UDOCKER_BUNDLE=
 - `gpuworks-agent uninstall` also deletes this file.
 - When the installation script, SSH wizard preflight checks, or out-of-band recovery need to identify the server or token associated with an agent on a host, they read this file (and read the older agent's command line only if the file is missing). For the design rationale, see [ADR 0051](../adr/0051-agent-launch-configuration-file.md).
 
-<!-- translation-source-sha256: 14f5dd6ba5fece839da2e650f2bf785d75434f8fc2bd7f55a4189fbf854f28d4 -->
+<!-- translation-source-sha256: 79c5127eb69f9f1057bb34d2ed7802355cab37fbe8b5d7b1bc5cd02aa4bce0d4 # Control Plane Installation Layout -->
+<!-- translation-source-sha256: 81aa1d8e680d1990ee0b0ac22653cff0d49bf6d712aa6ed313dd2025b4e5755b ## Defaults -->
+<!-- translation-source-sha256: 6c15e754e6324c24d4ef29895e47c2a969ee462b8c645ca90c5d6f6a5e9ad6d7 ## Directory Layout -->
+<!-- translation-source-sha256: e76b4ecd2d7749abab3b9cc29338ba4de71d0fcc6c06c0da1bf9b083129a2328 ### Control Plane Installed in the Agent's Shared Root -->
+<!-- translation-source-sha256: ac9d8e4cdb7a8e91c0afd9328ddbdacacd2efc87baa439b47f7b203237e3508c ## Permission Model -->
+<!-- translation-source-sha256: ff1629e8a3e17cea2e51b5ceb22a0be0ed6d987294e7b9a381e653b892ce2a42 ## Credential Files -->
+<!-- translation-source-sha256: 5bec77008dd27bc084c4d4d6c054df69acb034965d65899ae0cad17e979e11cc ## Interactive install Prompts -->
+<!-- translation-source-sha256: 469cc8ba96bd861797016a638e7ca401baf6da8d02a864abf90b43cae380acac ## systemd Unit -->
+<!-- translation-source-sha256: 9e299898626f679ce3525b0c8b233af42dc19771fbd9992fa6e108fa99ed92e2 ## launchd plist (macOS) -->
+<!-- translation-source-sha256: f3336f511d707715008ca8ccb84c36e230415d238ee17e2864c7860656289ea4 ## Health Checks and Backups -->
+<!-- translation-source-sha256: c669e1bc87948b3799b28d392546a6c210eb15272e40220e1eed4fa4613c1bf8 ## Logs and Rotation -->
+<!-- translation-source-sha256: d8bd9f7b2259ad221d5a309b17db9227de9804409a8f53e4acbe5f514aa5c258 ## Agent Configuration File -->
 <!-- translation-localized-code-block: cf0228b7f6dd01a33d1c0533f369be665aca051a5cd6897ffbf9ee07afc42ce0 63316e0dc2128d8d692b7aa4ea5e28a81d5c9405afd4799c5c37297248c76b5a Reviewed localization of the directory annotations, including the plugins/ and server.lock lines; paths unchanged. -->
 <!-- translation-localized-code-block: 0a0c78856b3bcc2f70519eaf27daec112ac8a20c1388e0ac5809fef7c3958d06 5126a8bc98f3780a7a6b25daeaa58a61a8cacb4075ece9e6bf89f05f91ec4fd7 Translate explanatory node-token placeholder -->

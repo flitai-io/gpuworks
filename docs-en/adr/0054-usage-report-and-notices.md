@@ -47,4 +47,8 @@ The publisher also needs a way to deliver security advisories, important release
   add the `notice_reads` table (migration 166).
 - The publisher signs and uploads `build/notices/notices.json` using `scripts/publish_notices.sh`; distribution source cache rules must disable caching for `/notices.json`, just as for `*/index.json`.
 
-<!-- translation-source-sha256: e9c75c3e7e1ea8c2f1333ca0ed44af787a9abf8b424e762754d44be39311b7d5 -->
+<!-- translation-source-sha256: 70223bdfd9aeb3853d586d390cb30ded68c66b3d6f8420d7650a193deb097894 # ADR 0054: The User Experience Improvement Program Is Enabled by Default, Daily Reports Go to a Managed Log Service, and Publisher Notices Use the Signed Distribution Channel -->
+<!-- translation-source-sha256: daad0cf47432f18499ca64531f53fed795b7d31bd1644ad1e27f4f76b779a585 ## Background -->
+<!-- translation-source-sha256: 46eba7383a0710784c4e792ac4b0e9921441f18339dcb6a4d5525cf97bc16785 ## Decisions -->
+<!-- translation-source-sha256: cb05c63ccd323d7bc04ff39b1ea6d29675c0c3b9c8a3e32a650fbcacda8296ea ## Trade-offs -->
+<!-- translation-source-sha256: 5b4adeb10ee86099561e7546bc7d3fcb811a5cec4ca717843c6d04e11edcf37a ## Consequences -->

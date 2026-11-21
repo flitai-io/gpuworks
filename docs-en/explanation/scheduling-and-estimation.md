@@ -107,4 +107,5 @@ When a template declares managed writable directories (`dirs`), the disk holding
 Parallelism is a runtime fact: ordinary specs derive tp from the number of allocated GPUs; multi-node or special topologies express it explicitly through args. This
 avoids duplicating tp/nodes in the catalog, where they could conflict with the actual GPU set, and lets the preview and actual controller share ResolveLaunch.
 
-<!-- translation-source-sha256: 0f75d55cd9ff025cb53fcfb6262cd59d4050ec46d668ac616a6ef76d6310d8b1 -->
+<!-- translation-source-sha256: b85436aa827ce6f0a9fb89a47bbf49ed50011645add01224bc0dc3cc8afd8a52 # Scheduling and GPU Memory Estimation -->
+<!-- translation-source-sha256: e1a6b7e6079fb0b9e7c5d87fd7af907fbb6a8132e4cd1380e1ec230603c8b2c2 ## Node Placement for Single-Node Replicas -->

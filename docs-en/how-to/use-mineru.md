@@ -99,4 +99,8 @@ runtime logs and client-side PDF parsing logs remain in their respective environ
 See the [MinerU model card](https://huggingface.co/opendatalab/MinerU2.5-2509-1.2B)
 and [GPUStack remote backend integration](https://github.com/gpustack/community-inference-backends/tree/main/mineru).
 
-<!-- translation-source-sha256: d15ff3f71b23cc9eb22ae3c970eb5cbfcb743fdd644d5dd10e8a0f179d03228c -->
+<!-- translation-source-sha256: 643d0ad0e2555e4a066ce2c869cd14ac7ae8c807db140f08793e2a82965e33e9 # Connect MinerU to a remote vision model -->
+<!-- translation-source-sha256: fc1a2e97a8723546a93893b9616f89eb0274153eea195dcdabeb70b5119d5548 ## Deploy the vision model -->
+<!-- translation-source-sha256: 730d62948baecd12de4e994d974edf01655566f7910511de84b300f6de1d7358 ## Configure the parsing client -->
+<!-- translation-source-sha256: 3655c6b99ad7bcceb825e86a2cb84bd6a7bb8ed94c28c58624ba060451f4a768 ## Inspect status and diagnose errors -->
+<!-- translation-source-sha256: af584c84c26cf227a722e7cfe3d5863d3bc47df288405a21fd1c6ad6714d4aa1 ## Interface and scope -->

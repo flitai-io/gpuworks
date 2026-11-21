@@ -2362,4 +2362,102 @@ Node GPU and `/api/v1/gpus` physical-card DTOs both return the boolean `memory_c
 
 An unknown `target_vendor` on `/api/v1/engines` returns 400. If custom-command features cannot be determined and the target declares launch-feature restrictions, evaluation/creation returns `LAUNCH_FEATURES_UNKNOWN` with parameter `vendor`; the scheduler uses `launch_features_unknown`. Re-evaluate with a recognized engine entrypoint and structured parameters.
 
-<!-- translation-source-sha256: 76a89d61db3785024090c59321f1c205b78db8c61e2bc2c839cda1b082cd9467 -->
+<!-- translation-source-sha256: 6afe2639959adce6d0cd8a2ac72970e0be68444f550c7aed620d08806b5021cd # Complete REST API Routes -->
+<!-- translation-source-sha256: e051ec0ecf8fc5027d13fd4f167a593d9a49317c02dccee13f4f188d483ff72e ## Authentication Model -->
+<!-- translation-source-sha256: 27715e542090e35f7a58c1ac958b5f745de687a01d3406ed5c1d61e4b48f8e3d ### Distinguish Credential Purposes First -->
+<!-- translation-source-sha256: 7eb19ad3323f85d0523f1507c21a8ca570766dab14058e8641d141e78dec6779 ### The Authentication Column in Route Tables -->
+<!-- translation-source-sha256: 923ecd23932b58ea7adf21ee0a734d50b5bed8433191059e5840e1f611a737d6 ### Additional Restrictions on Platform API Tokens -->
+<!-- translation-source-sha256: 4de591bd514d5217e84278a38396f09c4b265fa40e4dafc8ee48c380d4294284 ### Public Installation and Health Check Endpoints -->
+<!-- translation-source-sha256: 941e8b0121ee9545d578500b430d51dede7c87a5c885722a1d588102d1d5a8bb ## Error and Response Conventions -->
+<!-- translation-source-sha256: b800a03ab8d388ff374983e970c96499cbd1d6ba26bfd5a3a1f34890aed3d738 ### JSON Fields and List Structure -->
+<!-- translation-source-sha256: a5858d91e1c4eba669657ee25d54358c070f8aff5f6e7048230e5a553564cfca ### Reading Error Responses -->
+<!-- translation-source-sha256: bc212faa17263c00dd1605040cb5996ea0de5e568f58382b760188718e50c374 ### Nodes and Deployments: Pages, Filters, and Sorting -->
+<!-- translation-source-sha256: 07bbb1333fa351e29a815227a6849f59fad7ef2bedb4deeba1dfd62b5a75ac5d ### Real-Time Event Streams and Response Compression -->
+<!-- translation-source-sha256: e84017100ea5bd395dd6f4ddc000ef7b85d4ce62c29e008d613c0bf11ff9495b ### How Setting Changes Reach Nodes -->
+<!-- translation-source-sha256: dd05cb84569536c26f5469fce1e4dbc875e0c445cd676077ae3a32fc2320ee29 ## Auth -->
+<!-- translation-source-sha256: 16f64df1cf4b0d600ddac8d1033036cc031016cfca0375951216effed4a9a00e ### Login Request and Response -->
+<!-- translation-source-sha256: 0c5e5b2fbfc149bc9864e31a84b6c0bcf78d7b74a8bfeb0e3924ff0b27a78a43 ### Change Password -->
+<!-- translation-source-sha256: 78c7acae52d8a56aa6a026d187b7898535ed349c3236bcfaa5ee2d989a580c46 ### When Sessions Expire -->
+<!-- translation-source-sha256: 60f52e5578eaeb214401ce94f2639e999f5f048d60dfef2ae192cdc06720c4af ### Login Endpoint Errors and Origin Checks -->
+<!-- translation-source-sha256: 0745433c82e413d6d7b1d935510802eb1cdbeabfa57566039a3c600c5a009e7b ## Nodes (Node Connection) -->
+<!-- translation-source-sha256: 35cc145ca4fd18815571610c10cab2c36e52df6b8f6dbc6ba25f1805d78e47b4 ### Bulk Agent Upgrades -->
+<!-- translation-source-sha256: 98c4940bec9d9b4daed0cf57ea7d5af70d4156588fdda2c82782b5fcf39f43ce ### Node List Filters and Response Fields -->
+<!-- translation-source-sha256: 0a68e7fac638afa42ac575a6cebd0ec317977c52eaca8dcbebf9022482a36c64 ### Dashboard Summary Response Fields -->
+<!-- translation-source-sha256: 91c4e30202699e8b96b74000ae5a84ba54ccfead4c98283a0e6f5cfa7cc011b1 ### Node Connection Diagnostics -->
+<!-- translation-source-sha256: b2acdbad56e735676404d11fd5addf570cffa4211837548dc9dd38ffe8ff4d56 ### Connection Parameters for Node Creation -->
+<!-- translation-source-sha256: fce169a4cb7bee2f56727bb980cfdae24b94c38dfa145e356f59cd220e7c594a ### SSH Checks and Installation -->
+<!-- translation-source-sha256: 4b4f4a4b25a2e98642ab57b1602561eb8a651333475aad10ef69e3ce4ecc9969 ### Node Scheduling and Accelerator Switching -->
+<!-- translation-source-sha256: b4e11dbe33d4099c767c7382b562dcb10ba534decc2f13323aff9b76eaaa6000 ### Node Labels: Written and Generated -->
+<!-- translation-source-sha256: eb70c381f0fe7b561688238a4a64e06ef8207d19abd2527daf8b05f526511238 ## Kubernetes (Cluster Connection) -->
+<!-- translation-source-sha256: 956317776d3c3532f447ed22fb8b3518d036cd74a41bd930b6c1f0d9f5d69ac4 ## Slurm (Cluster Connection) -->
+<!-- translation-source-sha256: eb0d2ff341e8c1ae82bcc18e67d0720a647009973d4a5c9b9394f4b3c57c737d ## Models -->
+<!-- translation-source-sha256: 2818637fc41db824cf8851d4bd0bc2cb1e90e978da76ce1c2cb5098d8aeece25 ### List Filtering and Presence Summary -->
+<!-- translation-source-sha256: 536c79e56bf4d787dec94eef14773f9e978accf7d42427e195db79e5fa0ac045 ### Register an Existing Node Path -->
+<!-- translation-source-sha256: 9ad8fea588b695f0057ced8bc6486ddd42c3fcd961cd4a57e0782fcaab5f5d46 ## Images / Storages (Image Catalog and Storage Policies) -->
+<!-- translation-source-sha256: 04f403145369bea2e0886af6fd3a84add59d07299152c9a53cc09ef3d598fdf0 ### Storage Configuration and Cache Status -->
+<!-- translation-source-sha256: 76495aa0a302fbe279f354b4207253de032639c11e8498c2041f1b8a373a248c ### Storage File Operation Scope and Errors -->
+<!-- translation-source-sha256: 28ab68c5e446f16a186a6ea1ad5e2fe940b67e51a2098b9d556108ede3a22d09 ### Catalog Import Results -->
+<!-- translation-source-sha256: c162aaa85f62dfb49b9c18ed8540144b49d74ede563ca77a776b437d0b8a1125 ## Inference Templates (Inference Catalog/Templates) -->
+<!-- translation-source-sha256: 4b7e28c06adfbce76189556587fc94653baf4749acae30f34cec3772bf431f37 ### Pre-Import Checks -->
+<!-- translation-source-sha256: a1af3b52f14018a41cffdfc181f9d5aa236cd0c05626b9e30e97cb98eb349db4 ## Deployments / Instances (Deployments and Instances) -->
+<!-- translation-source-sha256: 853ce95b08ddeb141bb84fdd808c7961cb81e7ed7b2e3b66ca8f26a3729eb149 ### Save as an Inference Template -->
+<!-- translation-source-sha256: 3338bc9ecd8619b8b4794888aa8b6581e080e20b0aa4ed8e06bfddf20796d893 ### Deployment List Filters and Response Fields -->
+<!-- translation-source-sha256: d98ba052a1e0fbbb930db8d81eeba6a64d25345932a8f6be879383c529b268c9 ### Query Deployment Details -->
+<!-- translation-source-sha256: e3ce46f0914b9b3c2d279244d804da397e2cb12f7ac1d7b06ef98ff210c47f52 ### Deployment Sleep State (`state`, `asleep_replicas`, `sleep_level`) -->
+<!-- translation-source-sha256: df36dcd2a36134ffcf559784263272ca22672ba639f387be636a64fd8aaff8bf ### Query the Candidate Pool -->
+<!-- translation-source-sha256: 1319b5d1601a10582fc3abacd3801c3c7bbb51d610511c40bbef7778e24a8d98 ### Edit a Deployment -->
+<!-- translation-source-sha256: 87fa2929e5a7c7cf0fddcafe8c7b6e1f686f8af22a1f28b88c1241cf9781386f ### Modify Node Requirements -->
+<!-- translation-source-sha256: 4d84620768f7334d6cfd9a5bdc9ed1360dff841208da5342b4162bdd5424339e ### Adjust the GPU Memory Limit -->
+<!-- translation-source-sha256: 7b3f7296ca76c39ca77a286b7fcaa02b91d889acf33dd181f7a0d3b6d664487b ### Suggest Nodes for a Multi-Node Replica -->
+<!-- translation-source-sha256: 96aee6f77e4fb26d3190164eb2988180be2d354154ca6bd5931d5600c2f817b7 ### Restart Strategies -->
+<!-- translation-source-sha256: 3af911c6258a244e7c506c21b0d5a3105fa0351aa312ad925f69aacc34147cc7 ### Waiting Wakes and Yielding Wakes -->
+<!-- translation-source-sha256: 0e907540cc6d8cde88f1086843caf8fbdfff962fe0c7a9b5464eaec83cf1aa9f ### Yield Policy -->
+<!-- translation-source-sha256: c4ccfcdf9aba569f30fef80195fedf6bfea949ac0e85c172a65179834a222914 ### Schedules -->
+<!-- translation-source-sha256: c4a7172711a0b5be1e0554d9f7cebcdbf63b233978824fec033008301170d4f9 ### Scheduling Board -->
+<!-- translation-source-sha256: f41bc12a0e1a8256a187bf5ea66d0701060de0861a75853414ca52bd6a0ea72b ### Scheduling Overview -->
+<!-- translation-source-sha256: dec82318d3cf41109b6e82f1baf610b359c234220e96bc4180de314cd5c464b2 ### Residency Timeline -->
+<!-- translation-source-sha256: 04729495d747796f472236e8964dd72e448a89c00a2e32c948412b87b4516e63 ### Scheduling Activity -->
+<!-- translation-source-sha256: 8904b35f67e5b13cc1a29b2bafeb6871cd88e1c7b72122e119b43ce71671d46a ### 调度记录 -->
+<!-- translation-source-sha256: 1ae2b3bd9ab2cf28d28865c3107f97bd5e05203f266761927f774ce49d3960a1 ### Adjust Replicas for Regular Deployments -->
+<!-- translation-source-sha256: f7a4bff49e279b0a8635a20962c363103301b7662415f7c2836c8fb2cadbba87 ### Configuration Fields for Evaluation and Creation -->
+<!-- translation-source-sha256: 6ddc68a02f5cb22b8e620e368c46524ef8c9626138d69e78a25e2a7a68fab526 ### Health Checks -->
+<!-- translation-source-sha256: e7d8e9be1155b1cfb96a1b2f3ce361296581c5a25ffcd642194d34d4e6790bf0 ### Automatically Placed Multi-Node and PD Deployments -->
+<!-- translation-source-sha256: 42d2614a5ddf9143c7f9872842403db29553e091bd5b4279675696e2e1b99419 ### Evaluation Requests and Acquisition Estimates -->
+<!-- translation-source-sha256: 7dc71e6b90d4dbf5934073cc9e8db4e6604b8b5068d599dc3056ebb243c4e1c9 ### Evaluation Field Errors (`errors[]`) and `ok=false` Semantics -->
+<!-- translation-source-sha256: 88cb849dfd035df08ee25bd8d0c73481757feb4d58dfb56df3c289608515e1b7 ### PD Disaggregation Deployments (`placement.pd`) -->
+<!-- translation-source-sha256: 12626c939c377f3d9b6d4039f0c8e5e179d8e8daecfc32db0218d7b5dcb4a510 ## Benchmarks -->
+<!-- translation-source-sha256: ecb6a1c6841684be7b5314d1fce4a0d700ecba4806a10f86a4bdc041fac42253 ## Profiles / GPUs (Estimation Calibration and GPU Inventory) -->
+<!-- translation-source-sha256: f64b0945c7a41da5639092164c9933bb46171c3336e7bf210f48113b385f8bf1 ### GPU Filters and Allocation States -->
+<!-- translation-source-sha256: b4dc52b015553f925e0f7f1675b1373ebdad131f022a17361e56f2bc72978e9b ## API Keys (Gateway Keys) -->
+<!-- translation-source-sha256: 76e34784e2bc78ac53f7cfec6138ae0da78f55035ac27592c8a6ab471b8e30e7 ## Priority Classes (Request Priority) -->
+<!-- translation-source-sha256: df002fa7f5282fe8c271ae6d7bcdf6698cf6b9d9cb5844c03c0807d98649ef7f ## Platform Tokens (Platform API Tokens) -->
+<!-- translation-source-sha256: b5db8cf5bc957f862713388e0b3b5a447a3a6ef992dfd4526f4ac73e2176f851 ## Plugins -->
+<!-- translation-source-sha256: cff4f13adc91c5f3febc46da2c41fb701161946eb72af8bbebfd6a5b1c182622 ## Providers (Cloud Instance Rental) -->
+<!-- translation-source-sha256: 4a41e54a2a7691fc464f2c3bff6c62ff401cee25b2e8ede1d1511164ab86791e ### Cloud Instance Installation and Restart Confirmation -->
+<!-- translation-source-sha256: dff84f5e2e143ca7701c66cd40683e1ca6428f5d803325e20c3a4e6b759a19ae ## Web Terminal -->
+<!-- translation-source-sha256: cf36c85bb356ed97c04ff3d7f2a72e283033383a2ee5f5e8c6dc9a7bfd9b976e ## Networks -->
+<!-- translation-source-sha256: 23278f685c8092e9eda5b2df89185ce71d0b220772a857e5a313072115e7fed2 ## Settings / Network Presets -->
+<!-- translation-source-sha256: 0d6096536d010c9fb3e99a7c9823f000f224ee23f15072817338937928739331 ### Update Check Results -->
+<!-- translation-source-sha256: 301cac75796a6fa4f1478b01ec8c2c6d471a182d5ff6069d4d9a48a2e9b2a115 ### Server Upgrade Restrictions -->
+<!-- translation-source-sha256: 407e22173bef80c6affe537b15efce4491e1e75938bc45fc92a2c73d4679d528 ### Trace Export Settings and Status -->
+<!-- translation-source-sha256: 63ec2229bea726b68dd009f914f6f8e306163df675d1f05e3c10b6615073a778 ### Source Rule Connectivity Test -->
+<!-- translation-source-sha256: 56f04dff8dd311893b721ecd43218c92e9c3c7678bd8f1200d8507f7a051c5ec ### Removed Settings Endpoints -->
+<!-- translation-source-sha256: d8f9488df6a35ad975dcfc452f0f163de4cc794f6dc8a9c618024a5cb892edcc ## Metrics / Logs -->
+<!-- translation-source-sha256: 158a9ddb434b6aa850af1555591056753a2f3638de60fcb17287a63972096f40 ### Logs, Metrics, and Event Timelines -->
+<!-- translation-source-sha256: 6619b8e2688e4b0d50d64dfbbb54b3ebf0dc95800adc2ed316f59f1d5146e0ad ### Service Monitoring Response -->
+<!-- translation-source-sha256: d53f3fa5bcd7abaf2ac6df9efa27cf061e9e5d9f49abf349ed222cd7baa035fa ### Find Requests Across Deployments -->
+<!-- translation-source-sha256: 909217ceee4a6d4598149501677e551fbd3af0eb6decb1dec4de54d97aabda4e ### Per-Request Queries -->
+<!-- translation-source-sha256: 9f324281249cb8d28d339dc165940ef0bcf0f1c535ce67068975be3f128d50b4 ### Latency Aggregation Rules -->
+<!-- translation-source-sha256: e6e2d82b3e4cb53280f5f986eac09c5331e7c75c92855104a7dfa83f410ad5d9 ## Analytics (Usage Analysis) -->
+<!-- translation-source-sha256: c338ca0460689aa4d9d3859cf4365d9406db09e55bc28d7972d39ea9c7aa3790 ## AI Helper (AI Assistant) -->
+<!-- translation-source-sha256: cc96478af8cba8876b10d8d992d3b2a84827297cbc405f43f3c1a2305033c425 ### Model Fit Results -->
+<!-- translation-source-sha256: fdb516621c011d9d860afe6dc48066899257527b959718b65b620955afe8632c ### AI Ask Request and Response -->
+<!-- translation-source-sha256: 31955e4d7f2f472ef37b1ed0e8f2c2856a88ec37f7689e2b718ad566ec8beba5 ### MCP -->
+<!-- translation-source-sha256: 8c9f7cff863992af234e27888ecb43b46f4a1937ccfc8bedc8d44ddca11d8aad ## Playground -->
+<!-- translation-source-sha256: 792b7c7e84d325c8be066e460eeb7dc836b7fcc46a1a22fdc8c308f227b40b16 ## Batches -->
+<!-- translation-source-sha256: fab893a3efb3fa86d45b0a6e875f1cebad71738dc6424310e5af4b801fa794f4 ### Console Endpoints `/api/v1/batches` -->
+<!-- translation-source-sha256: d90c2a891f76775aec3f7b48248481bd52e0751724b4a75648d8f62318cd8799 ### OpenAI-Compatible Files and Batches Endpoints -->
+<!-- translation-source-sha256: a896a5dab1c99b94dd8ffc62b82650f6309812d3ef0bf90b28daeb38d7cc2c25 ## Out of Scope -->
+<!-- translation-source-sha256: a065b875b11936222db3d33c7671feb5120f5ed464965d91d9278a81bb51ecb0 ## Route and Contract Maintenance -->
+<!-- translation-source-sha256: 80b54349c7eba5eae5d68c6d10b866b4e8ce09eedd085a88f2c6f680421b9697 ### Console manifest and extension routes -->
+<!-- translation-source-sha256: 3b39ae121cdbd7a4964c45d1deacffa4a4772f5ddd32c4530ca202ffcd247aef ### Whether GPU capacity is known -->

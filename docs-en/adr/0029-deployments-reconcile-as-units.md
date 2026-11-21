@@ -60,4 +60,7 @@ a rank's topology has just one constructor, `planning.RankTopology`.
   old deployments whose reset count was exhausted have their budget recalculated from failed leader rows after upgrade.
 - Deployment forms differ only in how units are produced and in PD-specific launch arguments; a new form only needs to provide its units.
 
-<!-- translation-source-sha256: d342f5253882f1a81846c43ec436cd9a7693bf4ec5a8013373640cc4f94c1ef2 -->
+<!-- translation-source-sha256: 33c0721354d9dda80c6e9771e7bec1df5b75cb2443167cb0e3c5d2cda76509b6 # ADR 0029: Every Deployment Reconciles by Unit: Role → Unit → Rank, With Shared Retry, Group Failure, and Draining Logic -->
+<!-- translation-source-sha256: 96f2d104b6c406aa069352d77782cdf242423f7eba23d6ce02988cd340f1daa0 ## Context -->
+<!-- translation-source-sha256: c210388285b164a62b2f9b8971cc5c761d6b32c4c8ac8ea25cc4cdf7522fb9bb ## Decision -->
+<!-- translation-source-sha256: eee2d40c7aa67fd63b751c5ff06cf6c343556d6a7b68bcceb2bfd6427e80a018 ## Consequences -->

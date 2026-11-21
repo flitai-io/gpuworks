@@ -168,15 +168,18 @@ the pair drifts — `make check-doc-links` verifies links, not that a pair match
 fields and CLI output stay verbatim in both editions.
 
 `make check-translations` (also part of `make test-unit`) checks more than the pairing: every
-`docs-en/` page must match the *reviewed* SHA-256 of its `docs/` source, recorded in a
-`<!-- translation-source-sha256: ... -->` comment at the end of the English page itself, and
-must carry the same headings and code blocks. The marker block never reaches the published
-site. Editing a paired page therefore takes three steps, not two:
+section of a `docs-en/` page (the text from a level 1–3 heading to the next one) must match the
+*reviewed* SHA-256 of the same section of its `docs/` source, recorded at the end of the English
+page itself, one `<!-- translation-source-sha256: <hash> <heading> -->` comment per section in
+page order, and the page must carry the same headings and code blocks. Merge requests that edit
+different sections of a page rewrite different lines of that block, so they only conflict over it
+when they edit the same or neighbouring sections. The marker block never reaches the published
+site or the release notes. Editing a paired page therefore takes three steps, not two:
 
 1. edit the Chinese page under `docs/`;
 2. edit the English page under `docs-en/`, and review that translation against the change —
    a hash that says "reviewed" when nobody read the English text defeats the check;
-3. record that review by writing the current source hash into the English page, then run the
+3. record that review by writing the current section hashes into the English page, then run the
    check:
 
 ```bash

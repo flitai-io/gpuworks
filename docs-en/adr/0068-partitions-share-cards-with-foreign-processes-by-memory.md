@@ -42,4 +42,7 @@ Amended 2026-11-17 (items 8–12): a partition isolates memory only; compute and
 - The placement policy PATCH is not refused by applicability: applicability changes with the partition backend's readiness and the agent version, and refusing writes would keep an operator from switching it off while a backend is briefly not ready or an agent is rolled back, or from setting it before an upgrade.
 - The consent retry costs one more in-memory plan only for a schedule that failed; the preference tiers are at most 2^n plans (at most 4 entries), and a tier is tried only when the one before it is empty.
 
-<!-- translation-source-sha256: 60bffe6c50fcd34cb8465f2c23812379ee9acd40d37b101b543e412367ed301a -->
+<!-- translation-source-sha256: 66365c279f029b32dbb644727ebfcdd7a5545d2e8a2598a76513de34fd5641d6 # ADR 0068: Memory-limited partitions share a card with processes outside the platform by the memory left -->
+<!-- translation-source-sha256: df0a74ddaa4837841880afd49b08dca3f024c88697d97bb0a8ce027f61d126cd ## Context -->
+<!-- translation-source-sha256: 6e38db11d827d05aba2fc64c150d4f186950a3f2c8a941a0a44562b8998f8ea9 ## Decision -->
+<!-- translation-source-sha256: e943c713814982829960339771728b14519afc60d28ba36a56d70a4255e655e4 ## Trade-offs -->

@@ -181,4 +181,16 @@ waiting as `timings.queue_ms` in the same response. It excludes model loading an
 monitoring. Update the deployment and recreate old instances to emit the field. For pinned source evidence and integration
 constraints, see [Observability Limits of Per-Request Engine Queue Time](../dev/engine-queue-observation.md).
 
-<!-- translation-source-sha256: 91895116c3e37a710f286e0b34dc7fa814f7e4ec742277ce96054da55490c703 -->
+<!-- translation-source-sha256: 7fadd3cf73941c05c92b3fa3c4864fd25dee5e43bbcc01c75cbc1447ed0d4634 # Inference Metric Vocabulary -->
+<!-- translation-source-sha256: 3031eccf90cc23e08b9fa11031f6f4f6a6145abf8fbf19056409423ca6015c18 ## Types -->
+<!-- translation-source-sha256: 563ce5377c850cf3fdb563585b05b5a2c6a20ad6871ccf8639e47e01c632c824 ## Metrics -->
+<!-- translation-source-sha256: 5e28113490cac7cd8c98a87dcf66ab36fa61539fdb8b275a54d0c59b635715bb ## Gateway Metrics -->
+<!-- translation-source-sha256: dbec721fce9f31af554ff970ea4bab151f26f27192f81cef78096c0cbbcbee3a ### Reading and Counting Token Usage -->
+<!-- translation-source-sha256: c153f3db5c80e36ff3b165fe87481b8faa81822e224bf41053e7788a16f92fea ### When a Response Counts as Complete -->
+<!-- translation-source-sha256: 636178d40d678ec316b47f6780b70db3138510799bb23030785d2960568ee53a ### Cache Hit Counts -->
+<!-- translation-source-sha256: daac19e9bb421aa66715733987898b6f53a33e42c656fedc7a36150b5ef746af ### Gateway Cache Hit Rate -->
+<!-- translation-source-sha256: bcb357781edac31e9ae9afebf52be11ded914efbdf8d919fa374c26b1e867c62 ### How Gateway TTFT Is Measured -->
+<!-- translation-source-sha256: fc108ae84f61072563893cd95004a451bc6e9e6cc50c31cb8ce6e19ceba92056 ### Fallback Statistics for Missing Engine Metrics -->
+<!-- translation-source-sha256: b07099a79db4e7e21c6269a0dd08a61f2c7ba7409db5e1e232bf49644e62f8ad ## Per-Request Statistics -->
+<!-- translation-source-sha256: 12aa9261efac05022b5132e126caeea3fd620f8baed5ee72b958a2e9f2561182 ## Derived Metrics -->
+<!-- translation-source-sha256: b489b96b9cb069342edb24a7bee7f8299e5e443dc7d2d7e480ba1340fd8a89b0 ### Queued Request Counts and Per-Request Queue Duration -->

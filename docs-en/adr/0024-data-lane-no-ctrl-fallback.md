@@ -16,4 +16,4 @@ Out of scope: no new persistent data structures or wire protocol changes (the `D
 
 Later: the metric and log batches the agent ships are routed by the same rule; see [ADR 0064](0064-telemetry-stream-on-the-data-lane.md). Also, a `server_dial` node gets a second lane dialed by the server when the agent enables the data lane, so it is not permanently in the `none` state.
 
-<!-- translation-source-sha256: a5f1a7ea2d20b5aeaf7c0b2498a7ec9f94cdc7ad42b02744d4a0d92e5519cc9e -->
+<!-- translation-source-sha256: a5f1a7ea2d20b5aeaf7c0b2498a7ec9f94cdc7ad42b02744d4a0d92e5519cc9e # ADR 0024: Do Not Fall Back to the Control Plane When the Data Lane Disconnects -->

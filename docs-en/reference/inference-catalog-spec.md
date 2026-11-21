@@ -777,7 +777,31 @@ Warnings do not block import. A successful import response includes the same `wa
 - The image catalog (system image manifest) is a separate domain. For the format, see
   [Image Catalog and Inference Image Families](image-families.md#manifest-格式).
 
-<!-- translation-source-sha256: b4bcf33abab34ab9137582e0b8f73ce9bc0d2ce52f3213648cdeb0ccf649eb2c -->
+<!-- translation-source-sha256: 987d33a952651d5b137a2c3a48aacfbf40b3efecfc00a4738e536304577ec69c # Inference Catalog model.yaml Syntax Reference -->
+<!-- translation-source-sha256: 11f2dc6a5c907ebac9e360954770fd0c505b7ac3cf3ff9722b83b7d87dbf411a ## Overview -->
+<!-- translation-source-sha256: d1cab9aa487c9a1159b67fd447e19bf5893c615e86468538eb50068dd1c9d3b7 ## Model-Level Fields -->
+<!-- translation-source-sha256: e8af1451051c90ef785a9c06e676817f0f56b5a02da71615ee57d1ac83735f95 ## Spec-Level Fields -->
+<!-- translation-source-sha256: 5514abf483ab7da4e47e650340bc5fa104c07f131905307d15db4b9eceb665bc ### args: Decode Known Parameters Into Fields and Pass Unknown Tokens Through Verbatim -->
+<!-- translation-source-sha256: 8e5e8b20bd4d4c8cc7a64d9993eaebfb6a9139b8d8f7471a62c84c07e140bfec ### weights.sources: Compact Single-Key Form -->
+<!-- translation-source-sha256: bee9f386d67fd025872be87fc0d6417ca7ea768faa95f1e839f32af63e0822f4 ### image_sources: Image Sources Declared by the Template -->
+<!-- translation-source-sha256: ad7eaab32f35f7cd46870557a94a23d13cc8e4863699c8207732d7291eac22d4 ### GPU Selectors (gpus / unsupported[].gpus) -->
+<!-- translation-source-sha256: 10f8e878fe47c8726cfd234b9ccbd6beffa018e6242632cb689e45ea41bff5fe ### Display Names -->
+<!-- translation-source-sha256: e3430d7e59546f9f0e233c4f700ce07ec690a95a04bb7273d626354f5d919d1f ### assets[] -->
+<!-- translation-source-sha256: 83b305081ab8f015fcc842b0f7d0a0d03a0c7e75846702aff54692db07c1894d ### PD Layout and Manual Command -->
+<!-- translation-source-sha256: 976fe75b4bf21fd820f6239ae639396f075b0966d7b988fe601b905a08885f96 ## What the Template Declares and What the Platform Provides -->
+<!-- translation-source-sha256: ca8ad9d228ec55ff4037230581f5a1230b2b5fed81b4a0103dfa73df72cd835d ## entrypoint: The Sole Declaration Point for Entrypoint Overrides -->
+<!-- translation-source-sha256: a755bee59689f833778747841eb293a47a2b0d0dddafec599365a40a05ee5286 ## placement: Starlark Topology Derivation -->
+<!-- translation-source-sha256: 8730a225b2be22fb1a6ce28a3795c8c6ef8697f0af90adfad1c78236c1eb3dd1 ### Variable Expansion -->
+<!-- translation-source-sha256: 326983de77aaf4bb52b0516a7cb8fe35122d37bffd501bf241bd514297f95ad7 ### How Thresholds Relate to Scheduling Admission -->
+<!-- translation-source-sha256: b01668b34d029e72fa32f03c01631d123be2ab05c7fb5ad8edfcad66faef7c82 ## api: External HTTP Contract -->
+<!-- translation-source-sha256: 4070ee0770711185358f42c24fdc671a935929a1849ef47543173cae553e89a3 ### api.tokenizer_ref: Independent Tokenizer Source -->
+<!-- translation-source-sha256: 7a250e5a02165b91282a0bc517187d409ca0a3991ff66ccde34262b5bda86067 ### api.metrics: Engine Metric Mapping -->
+<!-- translation-source-sha256: c43a7f1c915e00849d832b88aa1423056a03dc492634a4d24793ca3c94807e8d ### api.request_stats: Per-Request Statistics in Responses -->
+<!-- translation-source-sha256: f2dcc459ab368caf6601fff2c116fb06cdf6f4c7e4b03395844423906e1a87c6 ## components: Multiple Weight Sets -->
+<!-- translation-source-sha256: 5ffa7b32ad221104b1942267515674a5d244169f2e115e30796d882f6ccf52d0 ## dirs: Managed Writable Directories -->
+<!-- translation-source-sha256: d8159910bf55c76c4d66346dec46c313fadab1bd4cc0c20d7d069416a37908d4 ## performance_tradeoffs: Reasons for Performance-Costing Settings -->
+<!-- translation-source-sha256: 2ebe9bf5d43fdc1e745261f42679fd5503d1e94c1c37aaa7ffffdc4a46edbf40 ## Pre-Import Checks and Warnings -->
+<!-- translation-source-sha256: 439b1bcae33f36e507bd1217f4552947335ee6d22d0072b928a34e3ba1fbd9ac ## Validation Entry Points and Tools -->
 <!-- translation-localized-code-block: a580200df2b28bc011bb736a64288086932955375e5ae8897762ee97bd667e26 8e0792250b6c0eb3ec0dad5bfca28308dc0b1afeb27e9c33bb24ddb21e20ba07 -->
 <!-- translation-localized-code-block: 9a54a7271e193f98f78581cbb5fb446f8d5d1aa46c942d8f4fb3536f5f81b115 22ec1397368cfc809b65ad278feb838b5690c611dd587bc022c6e151b5596d99 Translate YAML comments and illustrative user-facing reason text. -->
 <!-- translation-localized-code-block: 4cf9267c119973bda779b8e29a9ad818c097c803df34a09ac14492502ab9dce2 e78acb98a7a082fdad6d2080ea7754cc18152f1bec68f60c312e46e33f3bfd59 -->

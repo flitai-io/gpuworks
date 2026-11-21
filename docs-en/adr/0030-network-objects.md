@@ -84,4 +84,14 @@ parameters.
 - **Launch protocol is explicit**: PD and multi-node launches inject `ASCEND_GLOBAL_RESOURCE_CONFIG`, `ACL_OP_INIT_MODE`, and `ASCEND_ENABLE_USE_FABRIC_MEM` for HCCS, and retain a read-only `/etc/hccn.conf` mount for CANN.
 - **Old networks remain compatible**: `accelerator_rdma` keeps its API, card tests, and RoCE command; an older agent treats an omitted protocol as the original `-ping` behavior.
 
-<!-- translation-source-sha256: a1b5693b86a689d692fcfb46bbacff4cf1cdc26c49d1f45057d51966593f2155 -->
+<!-- translation-source-sha256: 739080a8f9857c26d874de5008739739118df69dbec603bc582e38f49ba5ee09 # ADR 0030: Node Networks Are Attachable Objects, With Per-Node, Per-Role Resolution Computed on Demand -->
+<!-- translation-source-sha256: 0afdcc81fc368289806218cb1d8cc9c0612af3c9ca3a2c454c0200b565e448f3 ## Context -->
+<!-- translation-source-sha256: 69af62d1028b35e665b0ba701d9547ed256c067f38f42fdee945ec90b4ffeeac ## Decision -->
+<!-- translation-source-sha256: 8feb1a18e30fa37837f7f17c890debba1950115d5ea08d009927880d15507097 ## Consequences -->
+<!-- translation-source-sha256: 90f52d0fe58ae5035797c6daae2b841b7e7efeadc32524f0c337b3215a570a66 ## Alternatives Considered -->
+<!-- translation-source-sha256: 1a849673439947e0bc0eb84d01f282ad2e90dc1428ee888dde989fa5d206194b ## Update (2026-09-26) -->
+<!-- translation-source-sha256: fbcc2edc41e4855385db00fbb406eeb16741c8644b15e348ebbd9fe8dd4a5deb ## Update (2026-09-27) -->
+<!-- translation-source-sha256: 183accc08027f7e66f539bee0fea0950c3832f34f9b150576d821b6bc0c61bfa ## Update (2026-09-30): Accelerator RDMA Is the Third Type -->
+<!-- translation-source-sha256: c6a03c9fbaa196c350fa2af6fc9642cb5c3b5bf8cd9fda4b54808d9cb81992d9 ### Card-Level Connectivity Tests -->
+<!-- translation-source-sha256: 66d7d8e453bb73834fcd6c457a169715cd63f882dbc1bea5da7ac9bd337d5a90 ### Source of Vendor Knowledge -->
+<!-- translation-source-sha256: 6249f735f3673bf77b1e5dabcb466ec18dfc31cf5bc4b052a69c710416ee11dd ## Update (2026-10-28): Accelerator HCCS is a fourth type -->

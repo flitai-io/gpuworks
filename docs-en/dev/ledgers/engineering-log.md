@@ -473,4 +473,17 @@ in the ownership verification call inside `Destroy()` aborted the entire cleanup
 real billable instance running (encountered once during this session's validation runs and handled manually).
 `get()` now retries up to 3 times with linear backoff.
 
-<!-- translation-source-sha256: 7419f4b1b0366890c62e5a5a7335902959de7ec0253849039f5ee6ecb9816ada -->
+<!-- translation-source-sha256: 5d3609fb6232ea442f338882e295a3efb540435abdcda9b9f76c8a8f870736d8 # GPUWorks Engineering Log -->
+<!-- translation-source-sha256: f3e6041b34ce2558d18720b82d1f17a164c73b9f35fe93173fc39210ef42aac2 ## Playground, Gateway, and GPUWorks `/v1` Data Plane Acceptance -->
+<!-- translation-source-sha256: e4bd59cb3483c066bcf56a4188963cb9436cc1b0f02fab0aabd0feebc51bc340 ## Fix udocker Host-Path Loopback Mapping for CUDA Consumers -->
+<!-- translation-source-sha256: a127ed503ea5e1a627389295c9fd7f560a617ac5cee4e95423cf1ca9c50ef3ba ### Symptoms -->
+<!-- translation-source-sha256: 98e284eb068d59e3809ff343416fb408b47f1693f297da6dd4ad622b54fad486 ### Root Cause -->
+<!-- translation-source-sha256: 2b18d9bde1afeba2faa93bab8dfffe2102d6e8671a61b42b2e5a72aa9532190d ### Impact -->
+<!-- translation-source-sha256: 7231afb08df0012646d53a43e759df72659467844561fcde34affd726a77307f ### Implemented Design -->
+<!-- translation-source-sha256: 8a916e4614d6171a26430f815d5b78c3bb577c6e3b1f4aa0b6956188cd2884d7 ### Automated Validation -->
+<!-- translation-source-sha256: 0fc5a5edf9adac98d3ed2c8d4a286cda2ab9af88cabc024a4a13107a47abd68c ### Remote Acceptance Procedure -->
+<!-- translation-source-sha256: 09ffe25e871b7efb84ea67949dc3731c3a281d711bd38b57ed985f76a433a282 ### Final Four-Image Acceptance -->
+<!-- translation-source-sha256: 8e149c86db95d5b9e44583aed918736529d9a342eea8b894e3a6403c386d2149 ### Evidence From the Initial Reproduction -->
+<!-- translation-source-sha256: 4375595a52ada29030e8026bfdde0557ea9a03be8fdcf1d7814fdb23ec56ebc0 ## Ascend Device Injection for the nerdctl Runtime Driver -->
+<!-- translation-source-sha256: 09a93961764b58c9716a603ed90c6fa6544288e706a038479c2268151e6e1c12 ## Platform-API Partitioned Inference on the Owned Ascend Resource Pool -->
+<!-- translation-source-sha256: a2b1785cf0f52cf574e17665a96afce23170d90182df25411e15af3053512f73 ## Extend Gitee CI to Cover Full Server+Agent Deployment and Chat (Whole-GPU, Unpartitioned) -->

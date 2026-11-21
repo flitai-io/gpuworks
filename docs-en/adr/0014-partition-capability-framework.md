@@ -39,4 +39,8 @@ Choose D:
 - Put health and resource admission in the backend: the backend would depend on live scheduling state and could not serve as a stable, reusable execution contract.
 - Replace the explicit registry with plugin self-registration: this hides initialization order and the supported scope, making exhaustive contract testing and security audits harder.
 
-<!-- translation-source-sha256: 2a4f3fa4a27e9cc1e8d62ba29540c56bdda9fa971193925a7a2f1885a2852134 -->
+<!-- translation-source-sha256: c039cc5d79528f7bc982ff891518240918b5486a0a7fd68c640570120b581eb8 # ADR 0014: dGPU Capability Is Ready Only After a Container-Level Probe Passes -->
+<!-- translation-source-sha256: 1b15d1132a2a1804fd27519ff125bdc05b53bea304c5717e8ffa29bd29602423 ## Context -->
+<!-- translation-source-sha256: 67c3752b8c4803fc5aa6a392e00c047181d1a4d0952d6dd99152caad616a65dd ## Decision -->
+<!-- translation-source-sha256: 1c41f1d562e21de78a4314533283f845f474439eed6bb9983b774627a0fe647b ## Consequences -->
+<!-- translation-source-sha256: 3af9642853e0d47589338a8f1851c84edd47183ff00253d6d28aeafb95a9600a ## Rejected Alternatives -->

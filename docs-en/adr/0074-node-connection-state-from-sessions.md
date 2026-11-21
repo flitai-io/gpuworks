@@ -24,4 +24,8 @@ A persisted online node survives a control-plane process restart even when the n
 
 Real HTTP read models show a persisted-online node with no session in a new Hub as connecting, with consistent filters and counts. Authentication changes it to online; disconnect follows offline/recovery semantics. Cover invalid tokens, forged UUIDs, GPU/image/diagnostic views and bounded batch reads. Retain short disconnect, long downtime, startup and reconnect controller regressions proving no replacement or duplicate container during grace and normal loss handling afterward.
 
-<!-- translation-source-sha256: 194762b5bead13f422e0e5053f107abf00b8ef8ca8fa13d4b894a6bfb452910d -->
+<!-- translation-source-sha256: a565587a7a9a1eb5251844721d13a62b524e68ff77cd27e4dbc843295d799770 # ADR 0074: Authenticated sessions determine displayed connection state; display does not drive recovery grace -->
+<!-- translation-source-sha256: d5fca545d832dce19d9775a32e9e78758a1a1ce03cee10ce219648fbf9cd0c1f ## Background -->
+<!-- translation-source-sha256: d7c789e9bd666af0010836fda02dac36d1e4bae595afee33526187d542ec5007 ## Decision -->
+<!-- translation-source-sha256: 61296fa38fea0612f717ee7a843e716de7e20f6053e8a178d0ce9d475a6e35fc ## Trade-offs -->
+<!-- translation-source-sha256: fd0baa481093e90d40f30fdca335ef6439195f6b081253cb66ecedfcb65bf43b ## Verification -->

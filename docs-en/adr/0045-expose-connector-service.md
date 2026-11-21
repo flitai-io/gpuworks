@@ -23,4 +23,7 @@ In practice, this cost is too high: quick tunnel addresses are assigned per conn
 - The default background process does not recover after a machine reboot, so you must run `up` again manually. Explicitly choose `--systemd` for automatic startup. This avoids changing the server unit or adding a boot service that the user did not request.
 - Each data directory can have only one connector service (using the existing supervisor lock). Restarting the connector service itself recreates the connector and changes the quick address.
 
-<!-- translation-source-sha256: a34b1e2ac1272ec825132353c4d695a4981f833e49368b534e53b4df00dd3173 -->
+<!-- translation-source-sha256: 563fd4579a705861f0b4049890ccbbce7d2c78e9fd5d888f8ac31b7319bad850 # ADR 0045: The Exposure Connector Runs in a Separate Connector Service, Independent of Server Starts and Stops -->
+<!-- translation-source-sha256: c59ebcea0e5f9efe28d106b3606cb7070ac229e61aa6177b241da824389b5817 ## Context -->
+<!-- translation-source-sha256: 710944f540b931ca78760269f0163012bc9e87d47c96ee54c22cbd24a4d4a3b0 ## Decision -->
+<!-- translation-source-sha256: 49aa112b11ec6ba1ebf13e1f4dd4cc4ea5c06b8d6127db92e391106ee6dbd5ad ## Tradeoffs -->

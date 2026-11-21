@@ -41,4 +41,5 @@ The adaptation runs only with the updated catalog configuration. Existing runnin
 update a deployment to this configuration and recreate its instances to emit the new field. This adds per-request
 observability but cannot recover the original request's missing 20.3-second evidence or fix a native-engine hang.
 
-<!-- translation-source-sha256: 178a2b29a515f01f6856c133aa0810b3b0be5d95b3a38ea07ccd7d3486474cd0 -->
+<!-- translation-source-sha256: 37bc6ce78b2b4af7b28bae63a8e2f706d8bee3426032e63d8267e61a0b563ee6 # Observability Limits of Per-Request Engine Queue Time -->
+<!-- translation-source-sha256: ae5adeab7c8eda89769c9921374114f13616c79723b0c34526f1985092b9b061 ## Built-in Strata Adaptation -->

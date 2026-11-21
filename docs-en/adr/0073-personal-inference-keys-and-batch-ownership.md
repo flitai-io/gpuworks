@@ -24,4 +24,8 @@ Console batches record the current JWT user, while management-created inference 
 
 Create keys through real HTTP and read console batches and input/output files. Same-user keys, including restricted keys, retain documented read access while execution scope remains enforced. Other users, anonymous callers and other legacy keys cannot list, read, cancel or delete unrelated resources. Verify normal-user management isolation, administrator management, authentication after revocation and legacy inference validity. Fixtures must not bypass HTTP creation by supplying an ideal nonzero user directly.
 
-<!-- translation-source-sha256: b7ecaf32925bb59a4f3bb56db84c4365290bf5d603a5b2973709e50857688cba -->
+<!-- translation-source-sha256: 73dc5728b56c2927a1f4ac55befbf6ce4023136bc6d0c26150ddd538896a3b0f # ADR 0073: Inference keys belong to users; legacy zero-user batches stay scoped to their key -->
+<!-- translation-source-sha256: 0af51490dc86025ff65bd6ed82ec4bf80b4414736e0feb2ce1140a8d6d2f9a5a ## Background -->
+<!-- translation-source-sha256: fb7c79d88a644f96e8afbe5da58ffd7e38ea4a75a36b263591f33fc8d65afac0 ## Decision -->
+<!-- translation-source-sha256: cd73da45476fc89bc00ba22ceccbe4ec22593b29c314dd29cda6b0a0f87e2bae ## Trade-offs -->
+<!-- translation-source-sha256: 9c038c518a356f55495a9796a3c59421c03ca05bf63723f7a8138edd01129b3d ## Verification -->

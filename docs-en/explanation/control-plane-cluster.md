@@ -45,4 +45,9 @@ The recovery targets come from a small measured sample and are no guarantee for 
 
 When the server starts the helper it reads the helper's one-line ready announcement, in which `protocol` is the protocol version the helper implements. The server accepts only the version it supports; with a different version, or with no version in the announcement, it refuses to start the database and the error names both versions. Install the helper and the server as a pair.
 
-<!-- translation-source-sha256: 7e2fc92ac1b551eaea2a9f717471f71b37c82b89160ea2426b96e708f30f4c05 -->
+<!-- translation-source-sha256: d893a7614f922930a0120a0577e4098bee4fbdbc0a805c47575855a11736c20c # Control-Plane Cluster Behaviour and Limits -->
+<!-- translation-source-sha256: 759f9f888c6cdaa0e610709be4e93ac8423ae04edf6c39dc34a64a1eae8fa022 ## Composition -->
+<!-- translation-source-sha256: 570d26da42924b1909f5b6a417fae2540af6c56a9602f152aa7b130115abf675 ## Behaviour on Failure -->
+<!-- translation-source-sha256: 286ca172e9b2ca6dac661f634233b0eb4d42d7121578412aca512733c3b38cec ## Limits -->
+<!-- translation-source-sha256: c56a989bc2555e6ad4a6cf5dd7ffe407203e6a9f32497c41ea4ce8ca3322cf66 ## Storage Tiers -->
+<!-- translation-source-sha256: 3c0b2e92d943d98eaae4127364727bccbb8baf975b335065b603810272de86cf ## Protocol Version of the Database Helper -->

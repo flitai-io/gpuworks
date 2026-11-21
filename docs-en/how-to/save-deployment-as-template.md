@@ -116,4 +116,11 @@ For 409 `TEMPLATE_EXPORT_UNAVAILABLE`, read `params.reason`:
 
 409 `LAUNCH_NOT_EXPORTABLE` means the exported arguments cannot rebuild the deployment's original command line, and the platform refuses to give an approximation; report the deployment's launch arguments and engine version to the maintainers.
 
-<!-- translation-source-sha256: 3b100cf74fb9a1d2980a58faeeadd44263959bb6255553812aaff2cbe8908147 -->
+<!-- translation-source-sha256: 0e44e702027a05a1582569d5e3578ed96fea66f155e3336e4984c3970da73ff3 # Save a Deployment as an Inference Template -->
+<!-- translation-source-sha256: 401ec64e2c90a2b39cc673547d845ae05ee0faff5a1ae38c0154004fbae39471 ## Where the data comes from -->
+<!-- translation-source-sha256: 9a41243f6cda7fd1f57a383dccad2e6f40338f4ff05e148998194122b345b4c5 ## In the console -->
+<!-- translation-source-sha256: 92725c5493d0e62885a78363ba06a3fe5ba0cdd1f7c1ac4da129b84d8db62c5e ## Reuse registered local weights -->
+<!-- translation-source-sha256: 9271969b16e8636594df83814c66fc82cfad6ac18147d830e93b1ad82f4feea3 ## 1. Export -->
+<!-- translation-source-sha256: 59399b7e6c36fe6be686081ff9449862e2ce26b0509b25787cd5d367df815008 ## 2. Decide which environment variables to keep -->
+<!-- translation-source-sha256: a08513f6674d90361f65c4ad7efb755869b865aa696c542932af88f6e7b3322d ## 3. Save into the catalog or propose it upstream -->
+<!-- translation-source-sha256: 38520fea4db6e838ab090737ca02afa1cc07ee55d7a5d192ef4f3e25a264fcb7 ## When the export is refused -->

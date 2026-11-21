@@ -330,7 +330,24 @@ The page waits only 5 minutes, less than the server's confirmation window. You m
 
 </details>
 
-<!-- translation-source-sha256: 3c4e7cf63e09dcc1ae9b4c3ab268f927686d9116ac9b10ec281a5c714172102e -->
+<!-- translation-source-sha256: a89c83a8453bfba3b21cd04a5227d8245022112493522ce7bb5f9fe3975812dd # Install and Upgrade the Control Plane -->
+<!-- translation-source-sha256: 05e6df413e476f7eef22390d1dd9420652a0d70d9e69c9ed33db87ee0687d79b ## Prerequisites -->
+<!-- translation-source-sha256: 11939a84f84a3ba2459a11deede92420a868ba9a1423f80aadede6834a8c2b8b ## Replace an Existing Inference Platform -->
+<!-- translation-source-sha256: 283dc47b83caaed2e53e1f59eaa05167b5d26010ef41dc7efa0ccff61adb6b52 ## Installation -->
+<!-- translation-source-sha256: bccd6cfaebef411b4086c30319a486f133b56268a0c7f49d6baa58b37ce10bf0 ### One-Line Install -->
+<!-- translation-source-sha256: 41f79ec2b33e0d0f2fa6eeb2fb550c54ad397b10582ce1b60fe780426a701bf4 ### Manual Install -->
+<!-- translation-source-sha256: d2cda12b1d76135579588852433052bfce4bdac24532d83f0d1c2943cb66868e ## Verification and First Login -->
+<!-- translation-source-sha256: 6393b5a804719e75a13b7443adf9b3fbf4f3e0bd2b98ad9ca3c67134cdec8d43 ## Systemd and Nohup -->
+<!-- translation-source-sha256: eafeba993adcf7701cedad19ca2abcb9dada22292e0eed53e1db67973bf6c1b6 ### macOS -->
+<!-- translation-source-sha256: c97682124ab89acbddb710b0448f1c03814183a7741105ec77bdf4820253aa96 ### Run in a Container -->
+<!-- translation-source-sha256: 2360d32dd8f521ff766e4d927a35da1f77f2af59ade49dbad497994e6454a428 ## Run Install Again -->
+<!-- translation-source-sha256: 4aaa59286e4f9c6e414bc95811809390476d8017c486979892599b99f2d13a05 ## Upgrade -->
+<!-- translation-source-sha256: a7de64a2b3279a0b066ac3ea4f27f02788e4b6a047804607371f157e745ed392 ### Upgrade in the Console -->
+<!-- translation-source-sha256: 32e951f48cb69dce2b52d344d6baa4cf5152d343b4ff1331abfaaabf50c64483 ### Upgrade from the Command Line -->
+<!-- translation-source-sha256: 69e5b33511d86c750d9263b1f02898b2b1fd8aec17d0c17e732b720d9ca800b4 ### Offline Upgrade -->
+<!-- translation-source-sha256: e8fc994ce278f3448289dcbadecc2bb3150f01003a8db3cd734225ec4b03d906 ## Uninstall -->
+<!-- translation-source-sha256: 72793c5ddfa604d466bc8ac89835403022d0f3a9720601170b73a9402c13bcd4 ## Troubleshooting -->
+<!-- translation-source-sha256: b6e9847e8d2812c82ef360f61834a9ba68b38412111a02250f61219795f8bb6c ## Additional Details -->
 <!-- translation-localized-code-block: 5846ca9eedd24f71306cab5c0c641ac91d93017a204a10590d0da44869aca60c d30b290861df40db339879702ea834f9a0133c1811b5c3e1b4315db3810ae76b Translate the editorial arrow annotation for the password prompt; actual CLI prompt text unchanged. -->
 <!-- translation-localized-code-block: 5e39ad4e967ab522280dcf50bf738ec0bda0ead57e8cc62bfb507186fc142032 3b97e82a02b8ad42b870dad3ff601553828968e7146d828efc110fde90a6eea5 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: a2a7d849742d4bc1b49eee629e9d586337d74603ea8592f6d24f2d3add8c1044 a51c2a29d1d5cfacb1af2136ca8e39aa3fcad8ea6674d3de2abc2c7c8f624e7b Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

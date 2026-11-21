@@ -134,4 +134,10 @@ During scale-down, the platform chooses which replica to remove and lets it fini
 3. Find `tutorial-replicas-distribution-en` in **Evaluations**. Export its report first if needed, then click **Delete**. Deletion removes the run's point results and per-request details.
 4. If you stopped other experimental deployments before starting, click **Start** in their deployment details. Wait for their original replicas to return and verify inference.
 
-<!-- translation-source-sha256: 93dc9c25f11625af4fb6157da7404538ca0b62699408fa5649f0de063cec15e9 -->
+<!-- translation-source-sha256: 18064d51379310e5e089405ff10f4d8427e01a86d32717782b005a3235a3b28d # Scale a Model Service from One Replica to Two -->
+<!-- translation-source-sha256: ab5e7f3db33c733ce83bb5c1f1f778d11e483d7dddd68e4d807dd48335646cb9 ## Before You Begin -->
+<!-- translation-source-sha256: 0c3ffc4742e146b010f75d323755005682bd1ec9a343b3624e2bb273e09c5124 ## 1. Create a Service with One Replica -->
+<!-- translation-source-sha256: 8edfb542105f8317558a408ef76ea97d7d8e39f9f14d2975adcf475ea9cc8d6c ## 2. Scale to Two Replicas -->
+<!-- translation-source-sha256: a75db13032ee92c31af1515b2e5f0bb16f4015606b318c4147802f4d16cabf3e ## 3. Send Concurrent Requests and Check Both Replicas -->
+<!-- translation-source-sha256: 4c2cff8891d32e6d0950e0b1ccdfc17d0577ad59d7769d2a5f780a9cff7445df ## 4. Scale Back to One Replica and Call It Again -->
+<!-- translation-source-sha256: 0d9b7fbf1d90ccb1b49130dfbb356a7033643afaed742d37cf2bb2e89b3bae0b ## 5. Clean Up Experimental Resources -->

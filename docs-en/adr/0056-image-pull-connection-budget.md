@@ -31,4 +31,8 @@ The native pull of runveil (udocker) nodes (`runtime/udocker/native`) used a fix
 - `native.Downloader` gains `Budget` (`*connbudget.Hosts`) and `Tune`. With a nil `Budget`, every `FetchAll` uses a private fixed budget of `Workers x RangeParts` (the old behavior), so existing test fixtures stay unchanged.
 - Tests use `internal/testenv/fakeregistry` (HTTP/1.1 plus TLS, 307 to a blob CDN, strict Range, per-connection and aggregate throttling, a per-source connection limit answered with 429 or a reset, mid-body resets, stalls, and ignored Range) to verify throughput behavior, the connection ceiling, `Retry-After`, return of all tokens, and no goroutine leaks.
 
-<!-- translation-source-sha256: ccaf291f99ca23252c8247cba90dca621ad8a22db0502035cbae2879423ada24 -->
+<!-- translation-source-sha256: 94723c3fb16790b26ed986822fc523d157e8938bf16cf6ff1ce281b04535968c # ADR 0056: Connections for runveil Image Pulls Adapt Through a Per-Registry-Host Budget, and Slow Connections Are Judged Relative to Their Siblings -->
+<!-- translation-source-sha256: 5d5028c4caa84977c2ba49dc2a21f580e0f1f902e6c66a959ac4d56948c92e1d ## Background -->
+<!-- translation-source-sha256: 6f10abc757d484a828d66e95d321f69cb95f70d00dff52b15941f36c76d5eaed ## Decisions -->
+<!-- translation-source-sha256: 4338551d353d7f34f994a3f1e04c1eec09cba23133154bac9fa2e62cf11cd5c4 ## Trade-offs -->
+<!-- translation-source-sha256: 429cf1066e9b9bb9bc5d442618294a198da1e62d9b2d5370587b68508ed3a7d2 ## Consequences -->

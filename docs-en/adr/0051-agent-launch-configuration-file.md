@@ -41,4 +41,9 @@ For an extended period, readers that identify agents on a host must handle both 
 - **Keep configuration in argv and the environment, merely centralizing its spelling in one function**: this removes duplication but does not solve token exposure or the need to read another process's command line. Parsers would still need to handle three formats: units, plists, and scripts.
 - **Place a sidecar file beside each binary (`<install-dir>/gpuworks-agent.conf`)**: multiple agents can run on one host (one per installation directory in nohup mode), so one configuration per installation directory is semantically reasonable. However, the agent already uses its state directory as its identity (`identity.json`, logs, models, and PID all live there, and `uninstall` and `runveil` also locate agents by state). Tying configuration to the binary creates ambiguity when two binaries use the same state directory with two configurations, and upgrades that replace the binary must also consider whether to move the file. Tying it to state matches the existing identity and cleanup boundaries.
 
-<!-- translation-source-sha256: 8afb37ef2be3a4cccd1bd6ad64dbf5bc3b4f65dece1e7d84767a445e24c42795 -->
+<!-- translation-source-sha256: 6e62d5dbe0f86db47ea22df2305857d58fd71d2a0e5dbfc5c8a442f7ae491de1 # ADR 0051: Agent Launch Configuration Lives in `<state>/gpuworks-agent.conf`; Every Launch Method Uses `run --state` -->
+<!-- translation-source-sha256: 46c867ae9f7afb6156c371af9a535cb48422f4c12c317f8cdb256833bfb2e194 ## Background -->
+<!-- translation-source-sha256: 15adbbfbde1be95c924817c8787d86d732776a154f57ff567e61d527b429ed1f ## Decisions -->
+<!-- translation-source-sha256: 41dc0e33bea71ae83b68df95f3db5d5373b7e59428df4b0ed64d0aefcdd7e88b ## Compatibility Rules -->
+<!-- translation-source-sha256: 39bf7308c8bf24d8fab87b45a9cb6b07dcc8bf4dec3cc032eb48f7fe5eafc452 ## Trade-offs and Consequences -->
+<!-- translation-source-sha256: dde802156e023b620277a3dc94aa9e4e9c0185f7c1db167e2b69c4b0cf044f4d ## Rejected Alternatives -->

@@ -326,5 +326,16 @@ For GPUWORKS to apply the manifest, the cluster's API Server needs a public addr
 
 **DOKS clusters**: an expanded account lists the account's DOKS clusters below the “Standalone instances” group, one group per cluster showing its NVIDIA GPU node pools (AMD node pools are not listed). Connect it with “Connect” in the group header, settling the node pools in the drawer (all are chosen by default); after that, the agent runs only on the nodes of the chosen pools (selected by the node label `doks.digitalocean.com/node-pool-id`). GPUWORKS can apply the manifest with a kubeconfig valid for 15 minutes, or you can run kubectl yourself; see [Connect Managed Kubernetes from a Public Cloud](connect-managed-kubernetes.md).
 
-<!-- translation-source-sha256: 6af376f487f356883795d7217dcbbe2209ee7f567b5624ea4d3d599df429bbfc -->
+<!-- translation-source-sha256: 3dd8ce915dc76c2fe902e474524dc82141d712f5375d0d0588f18d417d7d5b3a # Rent Cloud GPUs -->
+<!-- translation-source-sha256: ac9008c6f305007e033792428b164f795abf0574cdcabd468dd20b567dab5982 ## Add a Cloud Account -->
+<!-- translation-source-sha256: 1f588c5aad3b7b6e89a3765584fc5cf0da8d16532e42bed4f18389c5fbd85a47 ## Sync Instances and Check Types, Regions, and Prices -->
+<!-- translation-source-sha256: 43e0cce09166291c6a4e7ecf3aee6f07c62b6ff5e80c5f045aacb9653bbfc82a ## Install the Agent to Add the Instance to Compute Nodes -->
+<!-- translation-source-sha256: 6f4db04e26c9b78bcea1762993c5c579d50c3296de3bf6bf807a4f6ce574a9ae ### Credentials and Possible Restart Confirmation -->
+<!-- translation-source-sha256: 2591a04758642a4de483b5251210e44e0dcff24f40f045804aae3600bf1574da ### Provider Differences for Server-Initiated Connections -->
+<!-- translation-source-sha256: 430af03bea1d10f9d86b3c872cd7c5e2b12d06f34fae8e9bc56b30e67c448062 ## Stop and Release Instances to Avoid Further Charges -->
+<!-- translation-source-sha256: 0a4e73fd79bb372bfa67d943a5fc98d1a46504a9982abd2206e9d3ac8c389ab5 ## Create and Release Instances Through the API -->
+<!-- translation-source-sha256: c4455e0b6606a913399937f55da02ed097d48b0d7201310c24910de14c357256 ## Frequently Asked Questions -->
+<!-- translation-source-sha256: 18a80284e64e53762e1626decb4a47a6aa8772b8edf25696480cd9ccbb6bffbc ## Related Documentation -->
+<!-- translation-source-sha256: 917952ef969835cccedfa4bf756130b1b82d6c0b5ab95697cea48bea33247457 ## Alibaba Cloud -->
+<!-- translation-source-sha256: 79e9a03ab0d203c798d34ec2f432fce9dca053646bec7168e46c72b8341da6e6 ## DigitalOcean -->
 <!-- translation-localized-code-block: 675cedb48fb1b362779834db30153097fcf32f7c5f9318873f06457c6c403f15 1baa9c3c2dfe0f872ddb2db8ddc99d366787581ddae4535f41ac3467f3e20e68 -->

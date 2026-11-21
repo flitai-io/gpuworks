@@ -180,7 +180,7 @@ Cloudflare 区域 `gpuworks.ai` 上为 `dl.gpuworks.ai` 配了两条缓存规则
 3. 四个构建 job 按 OS 与架构各打一个包，直接嵌入门禁构建的 UI；
 4. 版本 tag 另外调用 `docs.yml` 构建文档站，再打印两种语言的 PDF 手册；
 5. `publish` job 合并四份产物（tag 时加上 PDF）运行 `scripts/publish_dist.sh`；
-6. 版本 tag 再建一个 GitHub release，附四个压缩包、覆盖全部压缩包的 `SHA256SUMS` 与 PDF，说明取 `docs-en/releases/<tag>.md`。
+6. 版本 tag 再建一个 GitHub release，附四个压缩包、覆盖全部压缩包的 `SHA256SUMS` 与 PDF，说明取 `docs-en/releases/<tag>.md` 去掉翻译复核标记后的正文。
 
 GitLab 仍是发布源的唯一发布者。`publish` job 只在仓库变量 `GPUWORKS_DIST_PUBLISH` 为 `true` 时运行，切换时先关掉 GitLab
 的 `release-publish`，再打开这个变量，两边不会同时往同一渠道发布。发布凭据与签名私钥是 `distribution` environment 的

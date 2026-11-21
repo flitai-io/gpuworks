@@ -121,4 +121,10 @@ When the prefill instance is unavailable and decode handles the request alone (`
 
 Engines do not export per-request KV transfer durations (vLLM's NIXL connector provides only aggregate metrics, and vllm-ascend's Mooncake connector writes only a line in the decode log), so there is no separate phase. Aggregate transfer statistics appear in the PD card on the service monitoring page (see [PD Disaggregated Deployments](../how-to/pd-disaggregation.md#运行中)).
 
-<!-- translation-source-sha256: e6c56fcceb2f70376df63ca022161268ea7b8b8c9752f9a5729af37f9eea4c9a -->
+<!-- translation-source-sha256: 40020ba54b4f546dd23ce708b7137fdbff7b4b17d58a18610523620b6c057cfd # Request Timeline and Phase Breakdown -->
+<!-- translation-source-sha256: a3e77f190d03c6a88a37b09f3b830d7428c5bf690aae40f70062e591c87ab41e ## 1. Recorded Timestamps -->
+<!-- translation-source-sha256: 928a729d82c88fecab2c273fc357a9b873282bb9169e364666fab05e18d256eb ## 2. Phases -->
+<!-- translation-source-sha256: 4ceabe1a67c1afbfad6fc3a0b0cd97c1c057df9ec8de7ba1e52fcc4c22685672 ## 3. Breakdown Algorithm -->
+<!-- translation-source-sha256: ff2923560609eae95c673f325d2bb0c3408950d8b43f8b83b09d659391a2a52a ## 4. Aggregation: End-to-End Latency Breakdown and Speed -->
+<!-- translation-source-sha256: 6994ea5aa6552278bc09b2a907afe8058d0ee525a84d03a8c7e991dd59529efc ## 5. Field Name Mapping -->
+<!-- translation-source-sha256: 06329c71c15b46bab8f585f158fa318f473681d347f93dcd38441f53d6fd181d ## 6. PD Disaggregated Deployments -->

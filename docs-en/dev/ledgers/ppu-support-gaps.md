@@ -182,4 +182,8 @@ This matches the current NVIDIA specs. Tightening this requires only a card-coun
 - `zai-org/GLM-ASR-Nano-2512`: The research ledger records `transformers-native`; the callable/native entrypoint, runtime assets, API contract, and image digest must be added from the original run records before it can become an official GPUWorks spec.
 - `zai-org/GLM-TTS`: The research ledger records `asllm-2.0.0-vllm-omni`; the callable/native entrypoint, runtime assets, API contract, and image digest must be added from the original run records before it can become an official GPUWorks spec.
 
-<!-- translation-source-sha256: dd334db53ca533a4c76381995a3a97741ce847aed0731c5ab8e6b2f781b83fb3 -->
+<!-- translation-source-sha256: eccbcc55f0702dc72fe4398904722c03526a18098d2522f90e8f696babd6be8f # PPU Support Gaps and Evidence Ledger -->
+<!-- translation-source-sha256: f920d7bd91adf997d1da4592fd49e4c2fc19b4f646d254082577f4e18d724e6b ## Image Source Definitions -->
+<!-- translation-source-sha256: c72f44e13bb12e374b35fd8dccc4dbd92a9d09e030ceae8a9e79428255ae71d2 ## Passing Evidence for Each PPU Profile in the Catalog -->
+<!-- translation-source-sha256: a5fef3dd8f59cf42d435d12a0b351324a6f7c0a8bb7ec464f7f4c4054c3b1602 ## Card-Count Constraints Express Topology, Not Evidence Levels -->
+<!-- translation-source-sha256: 6ed4d280ec2fe25b06ec0900fcb7fda56f0da868b46431ab659149be13fdf4c3 ## Deployment Information Still Required -->

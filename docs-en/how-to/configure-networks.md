@@ -273,4 +273,20 @@ If most node pairs have the same shape, the results give the corresponding concl
 
 Click or press Enter to open a node pair: the full card matrix shows a source-card × target-card grid, while same-named cards shows a list of individual pairs. Hover to see both addresses, RTT, or the failure reason. When testing only one node pair, this grid is shown directly.
 
-<!-- translation-source-sha256: ed61e217de95f33c0888d0aec91c80fc9049c520667e854be40051178b0f5d05 -->
+<!-- translation-source-sha256: 51bfbaa0eaf8df0684e8466c9fe4f5b46218c11fcba5b700eacd9ddf07af8e52 # Configure Node Networks -->
+<!-- translation-source-sha256: 21b1b5c19438b943597d3bcccd8aba22e7b29574c42b15b52683f408920811fc ## Listen Addresses and How Others Connect -->
+<!-- translation-source-sha256: 122f3ee7f865413c75fa818965a19469e6408d3d5f56954de59fd76e43d9453c ## Networks -->
+<!-- translation-source-sha256: 4f525482177fab50c69fd8a3abef52e78cc5382caf74e0729962592d8791915e ### RDMA Networks: Automatic Bootstrap and HCA Inference -->
+<!-- translation-source-sha256: 6935e75bb6d73ecb608f2481c66a507cd625cd31b7dedc0bc184b2f8214b2e01 ### Accelerator RDMA Networks: Ports Built Into Accelerator Cards -->
+<!-- translation-source-sha256: 0fb560905054db1c05783b855f3deccc5bbc6f01dde86d695b7f4cb8d682a258 ### Accelerator HCCS Networks: A3/910C LingQu Fabric -->
+<!-- translation-source-sha256: 9a841d3882e5ecfdf15a779eb95c9d0635b93fa25a7d5a3aa34ca0d995d0082d ### Attach to Nodes or Labels -->
+<!-- translation-source-sha256: f6bfe43f4ce1306cc5cb73d27db28f6000e49479849dd2190e9ad508617bc3dd ### Management Network -->
+<!-- translation-source-sha256: 9894ba3099a8fa0448bcef68e8ea1c90f3b25fe775a3b5d7d3a346116c678050 ### How Each Role Takes Effect -->
+<!-- translation-source-sha256: 5fbaa5d7f8afa3598722cfde78023df76f941e7c3728fcf3f0b96d9cd9b8adfe ## Node Proxies and Download Addresses -->
+<!-- translation-source-sha256: a5c5abd191d70bdb36cbf7f045ffdaf9fbffe1630fb73a230dabe788485b6c7f ## Internal Tests -->
+<!-- translation-source-sha256: 983faa02172551ad56ac40f9510358512a0c1ab9b2481994f00589059405b0c5 ### Select the Test Method and Scope -->
+<!-- translation-source-sha256: c1336a24414c64ea569176bebc14f2191770d7d641f559f428e7193973ff6d46 ### Prepare TCP or Host RDMA Tests -->
+<!-- translation-source-sha256: 32a81b1ea984a99ce5e64583cb669bb526668b1b03d3ad4aaf0385913293f164 ### Prepare Accelerator RDMA Tests -->
+<!-- translation-source-sha256: 0de94f8a0c280b5747e4aa9605ffa3095208810db37f29024e283f078dd9b6a4 ### Start a Test -->
+<!-- translation-source-sha256: d8ef6a2c2a080d56e9d4f6425ce92d34ef30770aa7193adbd1f02c4ee2b987dd ### View TCP and RDMA Bandwidth Results -->
+<!-- translation-source-sha256: afcd2fda5c505c0e13a02d0e06059aa97cf7e801f8a1a2033e0e31635766d6a4 ### View Accelerator Card Reachability Results -->

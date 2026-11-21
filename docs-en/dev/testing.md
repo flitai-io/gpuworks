@@ -475,4 +475,19 @@ This guide documents testing methods. Put one-off run logs, screenshots, image d
 `artifacts/work/<YYYY-MM-DD>-<topic>/<topic>-<YYYY-MM-DD>.md` (move them with the topic into
 `artifacts/archive/` when the work is closed out). Current documentation only links to this evidence.
 
-<!-- translation-source-sha256: 175baf4cd47206c3f93cbfae0b4872ba5f23704b19fa18a9589b44c1902c59e7 -->
+<!-- translation-source-sha256: cf050f579f9e11e63a486c32979a02668bea0ac21fb42e608532ae0ac54cee5b # Testing Guide -->
+<!-- translation-source-sha256: d36f98ad07ab7667a2c11d0c783e088482c87fbca9e924a84390acaf7f677283 ## L1–L4 -->
+<!-- translation-source-sha256: 3ba7708a8ba2ce5ae01ae06e412b83f612d7b50a50e05845477e247314880811 ## Fake Engine Generation Protocol -->
+<!-- translation-source-sha256: 782c3d1b8c729bbd9121868e4807b20bd105e0d998b8fc0fedc574be44091028 ## Load Tests (Outside the Default Suite) -->
+<!-- translation-source-sha256: 75dbb418d6d64b859056bb64b19e97afa1cee418363f5e271bb13a45693be965 ### Two Configurations, One Shared Driver -->
+<!-- translation-source-sha256: c79d7d79f17001e4b3619e346b8d86284cd5eaef6a1f150cb33a50890d0b4bda ### Disconnects and Reconnects -->
+<!-- translation-source-sha256: 2d40e123b208041b994b40e1cee382787be77291c0ab8c8f14c38eb24f432e15 ### Single-Process Teardown -->
+<!-- translation-source-sha256: 5c3e60a90cab0e3fbfb98c31b738915fd326f9056c1c12c2f97956fef4febd32 ### List Responses During Onboarding -->
+<!-- translation-source-sha256: 86a7d492ecd7cba3c0d779343b3d51cdcd2187b7075ea9457ac6ddb1578ec2c3 ### Scaling and Prerequisites -->
+<!-- translation-source-sha256: 79d788f9b325de50911bbacf523a0afcf302fb0dc53149802e23a6235b44e64b ## Public Access (expose) -->
+<!-- translation-source-sha256: 17ba151a060cd27a72e3617f168a737818d07bb23a0f2baa00546e99f1f086f9 ## Architecture Gates -->
+<!-- translation-source-sha256: 7f453deca452b26014227f08ffdbd3c26237f7024b30a904a4c19e151c4c7278 ## GitLab MR Pipeline Splitting -->
+<!-- translation-source-sha256: 1644fce8cc809697c63fc6bb838d83ce1359a86babf0169b8cd2d8daee93f632 ## GitHub Actions Mirror Gates -->
+<!-- translation-source-sha256: 28e38a75599bd1817d3814cfe51fe861536e28931c10233529dd45a328e07e95 ## Cost and Caching -->
+<!-- translation-source-sha256: 7c1af2ddf010d809320c9632f09535598f2492152eee78f5d37742a4f8619b59 ### Alibaba Cloud ECS -->
+<!-- translation-source-sha256: c25b0c9497a51fad3f04b547935b0ff2f420a925369f0e3d35e0623f1e8a3568 ## Evidence -->

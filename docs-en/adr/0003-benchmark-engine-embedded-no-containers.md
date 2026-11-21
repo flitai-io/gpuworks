@@ -4,4 +4,4 @@ This replaces the original EvalScope container approach: the load generator is e
 
 The old container-based jobs pipeline (`store.Job`, the agent jobEngine, and the evalscope plugin) is removed in full. Retrieve it from Git history if container-based tasks are needed.
 
-<!-- translation-source-sha256: 22f9a7a4ae72120a531c94f745d1153d159a4dfe8c3ed41e03c12b64d1bfffe8 -->
+<!-- translation-source-sha256: 22f9a7a4ae72120a531c94f745d1153d159a4dfe8c3ed41e03c12b64d1bfffe8 # ADR 0003: Embed the Benchmark Engine in the Binaries Without External Tools or Containers -->

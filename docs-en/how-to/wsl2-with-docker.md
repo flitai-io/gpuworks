@@ -180,4 +180,13 @@ The node should be **online** with GPU count ≥ 1. Deploying a model and callin
 
 If all items pass, the WSL2 + Docker environment is ready.
 
-<!-- translation-source-sha256: 9da9306d2a5bbcf190f91f1481899ce34b0bdf48e73a6cd55ec2daa2501ec851 -->
+<!-- translation-source-sha256: d7d3d84375f38b244eccfdee077a30979ca8a3e28caf22212b93e81e91f5a6e8 # Run GPUWorks on Windows WSL2 with Docker -->
+<!-- translation-source-sha256: b8c7c3f6b31590a3e7b24d7be6afe49fdb43b3faf3091752b7e31782e5938d14 ## Why Docker is required -->
+<!-- translation-source-sha256: 2fa77b58b20c2fc8ed19762a99e14b969777b57e66400133f51bd8704de4520f ## 1. Keep WSL running (so the browser does not lose the console) -->
+<!-- translation-source-sha256: d9b8ae31040b464c908d0310d89e52c9515953c18530508a20c0dd31375a979f ## 2. Install Docker and the NVIDIA Container Toolkit in WSL -->
+<!-- translation-source-sha256: b0a712280434994e206941169ab9987fc0ee4ac76906dee35a414550e47a116c ## 3. Install the control plane -->
+<!-- translation-source-sha256: 8c3856166e4e339d2ef7965e0d96e6109dcc002dcbf2d655387a92b361ef8635 ## 4. Connect the local node -->
+<!-- translation-source-sha256: 9a9ec81d4173761dc8d1473dcddd767c4757aabb6229c57b323996ffd256dc9a ### WSL agent drop-in -->
+<!-- translation-source-sha256: 9761a3c1d5cc0728ac8fe43d04b9a79026a1743f607bf4d63c19b1c0dbff3ba6 ## 5. Day-to-day checks -->
+<!-- translation-source-sha256: dda92e9e0bcc4b01fe6e2382a2b5f9772305d9aa2d795f348b709b0f278b5d0e ## 6. Common issues -->
+<!-- translation-source-sha256: 59dbc25d154347dccfe8a23b01c80a4082ecaf028b2333d3c7342cb6f60b7e45 ## 7. Acceptance checklist -->

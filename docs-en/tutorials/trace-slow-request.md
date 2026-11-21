@@ -76,5 +76,10 @@ The search covers the last hour by default. If it shows **Nothing found**, click
 
 **Completion criteria**: You can find your request in the service history and find the same record again by request ID. You can explain the relationship between waiting for the first token, answer generation, and total duration, and identify where most of the time goes based on the actual stages.
 
-<!-- translation-source-sha256: 6e582ef2a8658da1057336f4ee79f5a41179dbae69773cd0b753431027acc065 -->
+<!-- translation-source-sha256: 131b98049849213fd6a59ae4a536ddb3f94c394fee2cc73466a0f75491a1a2e1 # Investigate a Slow Response -->
+<!-- translation-source-sha256: f16f850e1fcd57d573bff55a9848c888ae4d42d8c2b95bfcf8ae04fa7be94103 ## Before You Begin -->
+<!-- translation-source-sha256: 031d5cf8fbb58a4c5f536c5f0f213ad1334c988fe41f718b9b2830dc5a2d51ce ## 1. Send an Easily Identifiable Request -->
+<!-- translation-source-sha256: bad89ecccfff66f33794655e0dbe381efd99303e191bf59a79c8b80560b1dcae ## 2. Find the Request in the Service History -->
+<!-- translation-source-sha256: 5c912e4c6a039c64a244ed1a60aa89acbeeacb914bac687ee2b4973ddf85969a ## 3. Identify Where Most of the Time Goes -->
+<!-- translation-source-sha256: 6064f2dec52c0ec39fea4a00358ddb6e786d12b80dbc4c470f603870b50552d9 ## 4. Find the Same Record by Request ID -->
 <!-- translation-localized-code-block: ef092705e802a3c2b5efba757885a4728f51cf78a1626fcf6dafa0d330f42a71 51273292cd140c06a4abb1450496b25a9397b1f06030de564aa066a69f02cc7f Reviewed English translation of the visible natural-language Playground prompt; the fenced text format and six requested sections are unchanged. -->

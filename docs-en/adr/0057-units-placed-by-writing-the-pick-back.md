@@ -43,4 +43,8 @@ Letting multi-node and PD place automatically runs into one structural fact: acr
 - The units of an automatically placed PD deployment cannot span nodes; such units are still written by hand.
 - What changes is only who writes the nodes: switching the placement mode neither restarts anything nor changes any node.
 
-<!-- translation-source-sha256: bc8bcaca43bdd7ae923fe1b394afb9cc8d89b1fe8a04c99a21a91d18532121bf -->
+<!-- translation-source-sha256: 9eeaf0ed98d52088fe1466e886ca3b8b119bf1e52a302d97833b6e46edf685de # ADR 0057: The Platform Places Multi-Node and PD Units by Writing the Pick Back into the Units -->
+<!-- translation-source-sha256: 97e3efa9411a520b82d6d4e5b81156d734444be26145f68674607a95893529cf ## Background -->
+<!-- translation-source-sha256: 9158fdbf8248f7fdc4c0bcf8e08992bb45b0c582cda834c9f5a693ecc82acd0e ## Decisions -->
+<!-- translation-source-sha256: ab7763d05a6a8f5fd8c336fd5fd23f3ddb223c615c87d016452d92619c8ddcc6 ## Trade-offs -->
+<!-- translation-source-sha256: 1e4867ecbb66aa4d964e60e806d7b9a27f786c6c4a1f261a84915cfc085f6074 ## Consequences -->

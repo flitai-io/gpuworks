@@ -39,4 +39,8 @@ Image sources were previously determined in five places: the acquisition method 
 - Add the agent capability `image.pull.candidates`: `image.pull` receives the entire candidate list at once and handles fallback itself; for older agents, the server still dispatches candidates one at a time.
 - Source rules for model downloads (replacing Hugging Face mirrors in node URL rewrites) and “Disable Xet” are a subsequent step. This ADR covers only images and the sync groups shared by images and models.
 
-<!-- translation-source-sha256: 6912c4e63c81e1c562ebff15172cdbaaed563ff4c00438198fb747b134776f9c -->
+<!-- translation-source-sha256: b50d4798711f32ed7702bcf7ed8eba06c022496db7dcffd05f12ac5b7089d4c2 # ADR 0048: Node Pull Settings Determine Where Images Are Pulled From; Deployments No Longer Select a Source -->
+<!-- translation-source-sha256: 493e54e27ef35c529be828a5d78d47be16fe8b94c3883a47e60baf25c6e0fae8 ## Background -->
+<!-- translation-source-sha256: 43c75f61ec581f0c9806e12a5860795b7bc09b5285c6ba6dee2dfefd9f32f017 ## Decisions -->
+<!-- translation-source-sha256: 7edc3aae9489f6a74b2ee7b811e37fdc6af3a85caba9f26a5ae8392337487811 ## Trade-offs -->
+<!-- translation-source-sha256: f6702817960bf7828ee90b549c8ab73d6459382c46ca3d982c2d088d1c44b075 ## Consequences -->

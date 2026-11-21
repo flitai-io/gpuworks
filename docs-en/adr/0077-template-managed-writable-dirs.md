@@ -53,4 +53,9 @@ Some recipes need a writable host directory at start: the session store and spil
 - An older agent's node takes no launch that declares `dirs`; it fits there once the node's agent is upgraded.
 - Syntax and behavior: [Inference Catalog model.yaml Syntax Reference](../reference/inference-catalog-spec.md#dirs-managed-writable-directories).
 
-<!-- translation-source-sha256: 8377238523dfc31adee19c67324f17c291a7e6cb5ed3131c2297e8988cdcdfc4 -->
+<!-- translation-source-sha256: 12c202b0daac2bec7c82f6d21e948cbfb31434ce76a32dc77354284f237d149f # ADR 0077: Managed Writable Directories: Templates Declare `dirs`, One Mechanism with the KV Disk Tier -->
+<!-- translation-source-sha256: b797f4dfb83ef6f6d5166c87602ebb216c20a73e097b132b727382b203fbf7cd ## Background -->
+<!-- translation-source-sha256: 774a0c72605812b95a32734c6a654901236509d2515ebc2bce799271f83c6cf5 ## Decision -->
+<!-- translation-source-sha256: 3b56d96a64b725f33c7a461ab9bfb434fdbe8e7dfda9f91281ac2e137ef33b3a ## Division of Responsibility -->
+<!-- translation-source-sha256: 9b4a8d297978bd211c80f2ace60a5e4307df41ad70f41ff937875c82a0f46524 ## Trade-offs -->
+<!-- translation-source-sha256: bf5e1644f0b47a6b15fe783b8a1413adf6413df3d046699e2300666dbfd80c60 ## Consequences -->

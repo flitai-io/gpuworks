@@ -153,7 +153,15 @@ Only proceed to the sleep experiment after both requests succeed.
 
 **Final result**: A and B share one GPU and can be called separately. Once A finishes entering sleep, only A is rejected by the gateway, while B continues responding. After A finishes waking, both can be called again. For sleep levels, failure handling, and other deployment forms, see [Operate Sleep/Wake](../how-to/sleep-wake.md).
 
-<!-- translation-source-sha256: 8708c171588f121e3fab5750fc9fad1cdfc965c44fe09ca0a80cbd874019eb41 -->
+<!-- translation-source-sha256: a3f3a2b386df039b52f8dc0c9289874a48e90d5d57233bc184423ecaa2ac381d # Run Two Models on One GPU -->
+<!-- translation-source-sha256: 2eb66fc4c6754d2d6884c83039d27991a2cee6a44876dbc73064854fe0dc76f1 ## Before You Begin -->
+<!-- translation-source-sha256: 5513200abaefd5474f27d3307f525be021c37db9ec3cd9eb6f8e7db3dab0a455 ## 1. Confirm the Target GPU and Prepare the Models -->
+<!-- translation-source-sha256: 88129ed0baaeee5fe68cc7dabd75292b473c7aec7cf3ea2d8525da58b7219ab3 ### Register and Download Both Models -->
+<!-- translation-source-sha256: 33133c58248a3489aae37d81656d19f662bf7ce7da2f9cfd578ea8eef51ec889 ## 2. Configure and Start Model A -->
+<!-- translation-source-sha256: 8968ffc95b423fdbfc837e4986c4e66d5e8ba034f0147b166b1d7cafcbdb9428 ## 3. Start Model B on the Same GPU -->
+<!-- translation-source-sha256: 1a26f66db00a2dec96007db58700623cb79a2ead02aebbb50f151e25371720a5 ## 4. Call Each Model -->
+<!-- translation-source-sha256: ecd211b738e20a176d563ca6d34fb7182d7036e351e404101f266d6d742a47f9 ## 5. Put A to Sleep and Confirm That B Still Responds -->
+<!-- translation-source-sha256: 15b6b6912a951119f8e548c8edf2446951d573ccb40c522485985c059e4b479e ## 6. Wake A and Verify Both Models Again -->
 <!-- translation-localized-code-block: d4b632e922e42023709ff8e006cf6f0f4c3fe0edba53584b4f2aef32218c5331 943b0e690a15439afca5aa2fc702235dea8ce54b59602880e70ff9b85ce56170 Reviewed translation of user-visible prompt text only; shell syntax, endpoint, model name, and request settings are unchanged. -->
 <!-- translation-localized-code-block: 655656e1f1c87f2d4e57b1f650567f2933ba4e9864b121d56437af838cce929e 1ddaf398e17973142781e19075a5497d7324836e0380af7651dd77170aae03ad Reviewed translation of user-visible prompt text only; shell syntax, endpoint, model name, and request settings are unchanged. -->
 <!-- translation-localized-code-block: 0f36322fa79c3d7e4874c51906c3dffb961740075d0a88a8091a2d235df5bf28 63547763cb38880d84a015e487f72fdf3ae4aa8ee4fab1405061864214a90f7e Reviewed translation of user-visible prompt text only; shell syntax, endpoint, model name, and request settings are unchanged. -->

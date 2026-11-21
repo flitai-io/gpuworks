@@ -33,4 +33,8 @@ The AI assistant's tools now read platform APIs as the user asking the question 
 - A new table and migration 137; setting key `mcp.enabled`; one more package dependency for `api` (`mcp`, architecture budget `api_fanout` 39→40).
 - Documentation: [Connect Through MCP](../how-to/use-mcp.md), [API Reference: Platform Tokens](../reference/api.md#platform-tokens平台-api-令牌).
 
-<!-- translation-source-sha256: fc516ab56a8bacb71371ef21b34d652cec6ed89e2347a136417fb2cca42c14aa -->
+<!-- translation-source-sha256: dddffec5ac5fea2108e8931f38247c8f2f7d9842dff30bf72f0fa1d8ef5d6bbf # ADR 0041: Platform API Tokens and the MCP Service Share One Credential -->
+<!-- translation-source-sha256: 03af6a1ba6b43e69dc872d66159dbd8f23aa89e160202fab97c287eb2e2f6739 ## Context -->
+<!-- translation-source-sha256: 522884db17ffaa5569c6d029226ffe92fcd1865b2e7f6a3f6d32e08fb1670b98 ## Decision -->
+<!-- translation-source-sha256: 13755bf68d76cffa8a863ee31d0500b7542520511ef03aca5e3471206bcfd8eb ## Tradeoffs -->
+<!-- translation-source-sha256: e2b2c461e7db50bc6f4830ed1bad9955b716ce9da40a29e710c098507ad5978f ## Consequences -->

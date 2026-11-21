@@ -33,4 +33,8 @@ Template weight sources already support `subfolder`, and the model artifact iden
 
 2026-11-20 addendum: for a rank-scoped source the revision is part of the artifact's identity, not a preference. The ranks are one pre-split set of files of one commit, so a registered artifact of a known revision different from the one the template states now does not match (re-importing the template at a new revision makes a deployment create and download new artifacts for every rank; an empty revision still means unknown, not different). A whole-repository source keeps treating the revision as a preference under ADR 0018. By the same rule the deploy form's "use a registered model" lists only rank 0's artifact at that revision: the other ranks' artifacts are created by the platform, and picking one is refused with `RANK_WEIGHTS_MODEL_NOT_RANK_ZERO`; naming an artifact of another revision returns `TEMPLATE_MODEL_MISMATCH`. No new table, column or failure code.
 
-<!-- translation-source-sha256: 6d4d0c6daeb38a49bf977f7ec6a35fdbae413ac0e66f312905d8c566b334e0f2 -->
+<!-- translation-source-sha256: f447c915d4667ab5b0b3c9fba95b883182ea2e8271db74f184f85a815745effe # ADR 0076: Rank-scoped weights: the rank variable in a subfolder, resolved at create into one model artifact per rank -->
+<!-- translation-source-sha256: 33db0ca7b27da14b872ec59bb55dc04c648d655c8d4604acdb86fabe4abfcf88 ## Context -->
+<!-- translation-source-sha256: d7faac9ab1e443e0280c6f9120f55c78f99b86de5df9848c1fb82edc46a802c4 ## Decision -->
+<!-- translation-source-sha256: c6f695fe62fd325a8c3ed9f99873a72c733389f8741bfb535ce7d68b899fc49a ## Trade-offs -->
+<!-- translation-source-sha256: ee6c4f61c64d3f58516152c2ce331eb13401d545719435bca3c70687c487dd2c ## Consequences -->

@@ -115,4 +115,10 @@ The platform evaluates placement rank by rank using the deployment configuration
 - The platform judges whether nodes can reach each other from the compute network **declaration**, not from network test results. When the declaration does not match reality (for example a switch that does not route), a group that cannot talk can still be chosen, and the engine reports the failure after launch. For network selection and verification see [Configure Node Networks](configure-networks.md).
 - Automatic placement does not start some ranks while it waits for the rest: the ranks of a replica are created together or wait together.
 
-<!-- translation-source-sha256: 45a3772fa6718e651775afd2137d1846cb578fd4b5fc9933bbdbed854d690be2 -->
+<!-- translation-source-sha256: 394fff9ffd2c8ec282986af25c4be5641d62af3f50d7b5c1cf2bc6dedd14fc26 # Multi-Node Inference -->
+<!-- translation-source-sha256: e1e0bde47ed9bbecd133904bf8f5c14ede8b6434f6a2a5fc4a1740fdb2afa53e ## Deploy a Multi-Node Replica -->
+<!-- translation-source-sha256: 2a0da34f13ef888e615d2253fc103bb1d8274dd46aef4108f2ba3030247880be ## Automatic and Manual Placement -->
+<!-- translation-source-sha256: e769f3df8aca9125650c9f869fa18aa84e6761aae7b8ad485cfc5dedb34e4841 ### How Nodes Are Chosen at Creation -->
+<!-- translation-source-sha256: 1190b04e9f68bc3368fe3c396bf8462ced3580f74f12555f461c67d9ed89978f ### Choosing Again When a Replica Starts -->
+<!-- translation-source-sha256: 17fb6fff7afc95b9de555925f58dad9ac46d50cf7d8b22bc0d26ae7e348dcf5a ## Add Replicas to an Existing Deployment -->
+<!-- translation-source-sha256: fb8061980c0ff4de1b07ae78da3ce80c63a086cd4bc721f94d5a581c866cfb81 ## Limits -->

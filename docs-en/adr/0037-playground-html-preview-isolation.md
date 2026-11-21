@@ -29,4 +29,6 @@ In Playground conversations, code blocks with the language `html` / `htm` / `xht
 - Provide separate HTTP/HTTPS network levels: administrators need two clear states, "blocked" or "allowed." An intermediate level (HTTPS only) still reaches HTTPS intranet services and only adds complexity.
 - Debounce and rerender every chunk: this reruns scripts, replays animations, and can execute a partially written `<script>`.
 
-<!-- translation-source-sha256: 8f4d313eca586d740f43e8fde04bd339a13d00e6ddf9c69c85d74d6cfe0a15d0 -->
+<!-- translation-source-sha256: 4937783aee9fdcb55fd1767bcff8f1ab5c525704e0f7dff917a73327a9da984a # ADR 0037: Playground HTML Previews Run in an Opaque-Origin Sandbox With Network Access Disabled by Default -->
+<!-- translation-source-sha256: d3936060d79b5ea85941a5af176b1f1de15baca5e1fb4627a53bc14fdc04fc0a ## Tradeoffs and Consequences -->
+<!-- translation-source-sha256: f77f08368534f0de6c5b99158c9b8d42ef3a6f7f8a37521c0c2c5cabb6613ea8 ## Rejected Alternatives -->

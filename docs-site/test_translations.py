@@ -23,7 +23,7 @@ class TranslationTest(unittest.TestCase):
             source.write_text("# 指南\n\n```bash\ncurl --fail /healthz\n```\n")
             translated.write_text(translation_markers.render(
                 "# Guide\n\n```bash\ncurl --fail /healthz\n```\n",
-                hashlib.sha256(source.read_bytes()).hexdigest(), {}))
+                translation_markers.section_digests(source.read_text()), {}))
             self.assertEqual(check_translations.inspect(root)["errors"], [])
             source.write_text(source.read_text() + "\n新增的前提条件。\n")
             self.assertIn("source changed", check_translations.inspect(root)["errors"][0])
@@ -41,7 +41,7 @@ class TranslationTest(unittest.TestCase):
             result = check_translations.inspect(root)
             self.assertEqual(result["missing"], ["extra.md"])
             self.assertEqual(result["errors"], [
-                "how-to/install.md: translation source changed or review hash missing",
+                'how-to/install.md: section "# Install": translation source changed or review hash missing',
                 "how-to/install.md: code blocks differ",
             ])
             with redirect_stderr(io.StringIO()):
@@ -53,6 +53,9 @@ class TranslationTest(unittest.TestCase):
             page = (root / "docs-en/how-to/install.md").read_text()
             self.assertTrue(page.startswith(
                 "# Install\n\n```bash\n# Install the server\nmake build\n```\n\n<!-- translation-source-sha256: "))
+            self.assertIn(" # Install -->\n<!-- translation-localized-code-block: ", page)
+            # A comment line in a code block is not a heading, so it opens no section.
+            self.assertEqual(page.count("translation-source-sha256"), 1)
             self.assertEqual(page.count("translation-localized-code-block"), 1)
             # Rewriting keeps one marker block and leaves the body unchanged.
             with redirect_stderr(io.StringIO()):
@@ -63,10 +66,12 @@ class TranslationTest(unittest.TestCase):
 
     def test_markers_are_validated_and_only_the_trailing_block_counts(self):
         digest = "a" * 64
-        body = "# Guide\n\n<!-- translation-source-sha256: " + "b" * 64 + " -->\n\nProse.\n"
-        text = body + "\n<!-- translation-source-sha256: " + digest + " -->\n\n"
+        body = "# Guide\n\n<!-- translation-source-sha256: " + "b" * 64 + " # Guide -->\n\nProse.\n"
+        text = translation_markers.render(body, [digest], {}) + "\n"
+        self.assertTrue(text.endswith("\n\n<!-- translation-source-sha256: " + digest + " # Guide -->\n\n"))
         self.assertEqual(translation_markers.strip(text), body)
-        self.assertEqual(translation_markers.parse(text).source_sha256, digest)
+        self.assertEqual(translation_markers.parse(text).section_sha256, [digest])
+        self.assertEqual(translation_markers.parse(body).section_sha256, [])
         self.assertEqual(translation_markers.parse(body).problems, [])
         broken = translation_markers.parse(
             "# Guide\n<!-- translation-source-sha256: xyz -->\n"
@@ -77,6 +82,66 @@ class TranslationTest(unittest.TestCase):
             "malformed translation-localized-code-block marker",
             "unknown translation-reviewer marker",
         ])
+
+    def test_each_section_records_its_own_review_so_edits_elsewhere_do_not_touch_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in ("docs", "docs-en"):
+                (root / name).mkdir()
+            source, translated = root / "docs/guide.md", root / "docs-en/guide.md"
+            source.write_text("# 指南\n\n简介。\n\n## 安装\n\n步骤。\n\n### 验证\n\n检查。\n\n#### 细节\n\n细节。\n")
+            translated.write_text("# Guide\n\nIntro.\n\n## Install\n\nSteps.\n\n### Verify\n\nCheck.\n\n#### Details\n\nDetails.\n")
+            with redirect_stderr(io.StringIO()):
+                check_translations.write(root, ["guide.md"])
+            reviewed = translated.read_text().splitlines()
+            # The page body is untouched; level 4 headings stay inside their level 3 section.
+            self.assertEqual(translation_markers.strip(translated.read_text()),
+                             "# Guide\n\nIntro.\n\n## Install\n\nSteps.\n\n### Verify\n\nCheck.\n\n#### Details\n\nDetails.\n")
+            self.assertEqual(sum("translation-source-sha256" in line for line in reviewed), 3)
+            source.write_text(source.read_text().replace("细节。", "更多细节。"))
+            self.assertEqual(check_translations.inspect(root)["errors"], [
+                'guide.md: section "### Verify": translation source changed or review hash missing',
+            ])
+            with redirect_stderr(io.StringIO()):
+                check_translations.write(root, ["guide.md"])
+            rewritten = translated.read_text().splitlines()
+            # Only the edited section's line in the block changes, so a merge request editing
+            # a section further away changes a different line and merges without conflict.
+            changed = [new for old, new in zip(reviewed, rewritten) if old != new]
+            self.assertEqual(len(reviewed), len(rewritten))
+            self.assertEqual(len(changed), 1)
+            self.assertTrue(changed[0].endswith(" ### Verify -->"))
+        self.assertNotEqual(translation_markers.section_digests("前言。\n# 指南\n"),
+                            translation_markers.section_digests("# 指南\n"))
+
+    def test_pages_whose_sections_cannot_be_matched_are_not_recorded_as_reviewed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in ("docs", "docs-en"):
+                (root / name).mkdir()
+            (root / "docs/note.md").write_text("没有标题的页面。\n")
+            (root / "docs-en/note.md").write_text("A page without headings.\n")
+            (root / "docs/guide.md").write_text("# 指南\n\n## 安装\n")
+            (root / "docs-en/guide.md").write_text("# Guide\n")
+            self.assertEqual(check_translations.inspect(root)["errors"], [
+                "guide.md: heading structure changed",
+                "note.md: no heading of level 1-3 to record the review under",
+            ])
+            with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+                check_translations.write(root, ["guide.md"])
+            self.assertEqual((root / "docs-en/guide.md").read_text(), "# Guide\n")
+            # Dropping the last section from both pages leaves every remaining hash
+            # valid; the leftover line in the block must still be reported.
+            (root / "docs-en/guide.md").write_text("# Guide\n\n## Install\n")
+            with redirect_stderr(io.StringIO()):
+                check_translations.write(root, ["guide.md"])
+            (root / "docs/guide.md").write_text("# 指南\n\n")
+            text = (root / "docs-en/guide.md").read_text()
+            (root / "docs-en/guide.md").write_text(text.replace("## Install\n", "", 1))
+            self.assertEqual(check_translations.inspect(root)["errors"], [
+                "guide.md: 2 section review hashes for 1 sections",
+                "note.md: no heading of level 1-3 to record the review under",
+            ])
 
     def test_staged_english_pages_drop_the_review_markers(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -89,7 +154,7 @@ class TranslationTest(unittest.TestCase):
                 (directory / "how-to/install.md").write_text(f"# {title}\n\nGPUWorks.\n")
             page = english / "how-to/install.md"
             page.write_text(translation_markers.render(
-                page.read_text(), "c" * 64, {("d" * 64, "e" * 64): "Reviewed."}))
+                page.read_text(), ["c" * 64], {("d" * 64, "e" * 64): "Reviewed."}))
             with patch.multiple(stage_docs, SOURCE=source, DEST=output, STATIC_ASSETS=root / "assets"), \
                     redirect_stdout(io.StringIO()):
                 stage_docs.main()

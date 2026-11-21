@@ -244,5 +244,14 @@ Only NVIDIA containers additionally set TRITON_LIBCUDA_PATH, FLASHINFER_DISABLE_
 SGLANG_SKIP_SGL_KERNEL_VERSION_CHECK. These variables address only library discovery and version checks; they do not bypass NCCL safety checks. See the architecture documentation for the full
 runtime explanation.
 
-<!-- translation-source-sha256: e9150af6061f5d480380685b9cda945e6b884d7f4016b4865c67ca8f41a7e78d -->
+<!-- translation-source-sha256: 944e270e98865b1047cbbcb276aff7ed438c1f9b2d6d26eaf18ccf34920e3fb9 # Image Catalog and Inference Image Families -->
+<!-- translation-source-sha256: 883ab9f8b2d790c67dcf7570053662a81dc49f9ffb70f511ff169cbee4275bd2 ## Node Image Identity and Periodic Inventory -->
+<!-- translation-source-sha256: 368d6f6b973e7dd51a72b19f45f807daebcf1923d65cd9b650ff0b956d038b2b ## System Images -->
+<!-- translation-source-sha256: 39168c329fca1b60b4dac45940c92fb95a7eac8dab8b30e86e9ea76fcc060e2a ### Startup Sync -->
+<!-- translation-source-sha256: 9c257d0e90fb08b1d44411cbd6b9f9ea179b57560836ea3c1cd6ae87603a805d ### Updating the Catalog -->
+<!-- translation-source-sha256: 08cbd3a68161bac743ed7d8cb6f162c396865921af93b019a514f113f24a1a3a ### Manifest Format -->
+<!-- translation-source-sha256: da92f9dfca846e8a1b55ab4708a4b1f01f97ccd6dd44145d4619b20fd54ee18e ## Community Images -->
+<!-- translation-source-sha256: 26595477683414f63cfb79903168ed7bce9132bd31bf25bbbd2aedf15ff74cc2 ## Custom Images -->
+<!-- translation-source-sha256: 805025bcb72e52bd5d6cb9496e9072b968df6e5021ac6078fd9fad2a474dd203 ## Rolling Tags -->
+<!-- translation-source-sha256: 742e7f615036b822e5ef95a1f1bd9050876ecbf7c9cbc7bd221682d7a78b7748 ## Automatic Image Selection, Pull Addresses, and Command Modes -->
 <!-- translation-localized-code-block: 33dc668ac5b0d9b2a0cfa8da37a7788f4ecfcf62c3fc515c19751dd7eb192fa9 410f13f2684f9c121d60a95145d5030433a0f81edaec77f7421b35c3c4604973 Translate illustrative sha256 placeholder -->

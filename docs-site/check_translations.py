@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import translation_markers
-from stage_docs import headings
+from markdown_headings import headings
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +48,16 @@ def code_blocks_match(original, translated, approved=()):
     return all(pair in approved for pair in code_block_pairs(original, translated))
 
 
+def stale_sections(original, translated, reviewed):
+    """Yield the English heading of each section whose Chinese source is not the reviewed one."""
+    titles = [title for _, title in translation_markers.section_headings(translated)]
+    digests = translation_markers.section_digests(original)
+    recorded = list(reviewed[:len(digests)]) + [""] * (len(digests) - len(reviewed))
+    for title, digest, review in zip(titles, digests, recorded):
+        if digest != review:
+            yield title
+
+
 def inspect(root):
     source = root / "docs"
     english = root / "docs-en"
@@ -62,12 +72,17 @@ def inspect(root):
         text = target.read_text()
         markers = translation_markers.parse(text)
         errors.extend(f"{name}: {problem}" for problem in markers.problems)
-        digest = hashlib.sha256(original.read_bytes()).hexdigest()
-        if markers.source_sha256 != digest:
-            errors.append(f"{name}: translation source changed or review hash missing")
         old, new = original.read_text(), translation_markers.strip(text)
+        sections = len(translation_markers.section_starts(old))
         if [h[1] for h in headings(old)] != [h[1] for h in headings(new)]:
             errors.append(f"{name}: heading structure changed")
+        elif not sections:
+            errors.append(f"{name}: no heading of level 1-{translation_markers.SECTION_LEVEL} to record the review under")
+        else:
+            if len(markers.section_sha256) > sections:
+                errors.append(f"{name}: {len(markers.section_sha256)} section review hashes for {sections} sections")
+            errors.extend(f'{name}: section "{section}": translation source changed or review hash missing'
+                          for section in stale_sections(old, new, markers.section_sha256))
         if not code_blocks_match(old, new, markers.code_blocks):
             errors.append(f"{name}: code blocks differ")
     return {"source_pages": len(originals), "translated_pages": len(translations),
@@ -85,7 +100,7 @@ def page_name(argument, root):
 
 
 def write(root, names, approve_code_blocks=False):
-    """Record the current Chinese source hash in each matching docs-en page."""
+    """Record the current Chinese section hashes in each matching docs-en page."""
     for name in names:
         original, target = root / "docs" / name, root / "docs-en" / name
         if not original.is_file():
@@ -95,20 +110,24 @@ def write(root, names, approve_code_blocks=False):
         text = target.read_text()
         markers = translation_markers.parse(text)
         body = translation_markers.strip(text)
+        source = original.read_text()
         approved = markers.code_blocks
         if approve_code_blocks:
             approved = {pair: markers.code_blocks.get(pair, "")
-                        for pair in code_block_pairs(original.read_text(), body)}
-        digest = hashlib.sha256(original.read_bytes()).hexdigest()
-        target.write_text(translation_markers.render(body, digest, approved))
-        print(f"recorded docs-en/{name}: source sha256 {digest}", file=sys.stderr)
+                        for pair in code_block_pairs(source, body)}
+        digests = translation_markers.section_digests(source)
+        if len(translation_markers.section_starts(body)) != len(digests):
+            raise SystemExit(f"{name}: docs-en/{name} needs the same level 1-{translation_markers.SECTION_LEVEL} "
+                             f"headings as docs/{name}")
+        target.write_text(translation_markers.render(body, digests, approved))
+        print(f"recorded docs-en/{name}: {len(digests)} section source hashes", file=sys.stderr)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--require-complete", action="store_true")
     parser.add_argument("--write", nargs="+", metavar="PAGE",
-                        help="record the current docs/ source hash in the matching docs-en/ page "
+                        help="record the current docs/ section hashes in the matching docs-en/ page "
                              "(docs/<path>, docs-en/<path> or <path>), after reviewing the translation")
     parser.add_argument("--approve-code-blocks", action="store_true",
                         help="with --write, also approve every code block the translation currently "

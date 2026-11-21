@@ -51,4 +51,6 @@ If one is specified, only that backend can be used. Automatic placement does not
 With automatic placement, the deployment form determines whether dGPU can be enabled from the backends available on candidate nodes, not from the node chosen by the scheduler:
 when every GPU already has an instance, full GPU deployment cannot find a node, which is exactly when partitioning is needed most.
 
-<!-- translation-source-sha256: 40554aecae87ccd58e0f0dd20f43f93f7959195247e41e9d8509739680ac6917 -->
+<!-- translation-source-sha256: 538d13b8bcb21474919545e065a806e222075986c41351e56f8b6f332de4884c # What dGPU Is and Is Not -->
+<!-- translation-source-sha256: 543be05d41f0c90eb1a9a4a2f57ddeac69a700a145fdaccd7a69bb56a34eac9d ## Quota Changes: Immediate on the Platform, Engine-Dependent in Use -->
+<!-- translation-source-sha256: fa2d2249f99fe8dd74fc8b773f0e8ae1e2a6d4019745919d6c24d8899aa67b26 ## How Scheduling Accounts for a dGPU Instance -->

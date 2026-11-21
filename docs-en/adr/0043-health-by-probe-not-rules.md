@@ -32,4 +32,8 @@ The monitoring center previously used 16 diagnostic rules (KV saturation, prefil
 - Remove `GET /monitor/rules`, validation for `PUT /settings/monitor.rules`, and `MONITOR_RULES_INVALID` together.
 - Documentation: [Health Checks for Model Deployments](../how-to/deploy-models.md), [Health Checks in the API](../reference/api.md), [View Metrics and Search Logs](../how-to/monitor-and-logs.md).
 
-<!-- translation-source-sha256: 59b7ed7d311312c8398d2a3060a2120841117916d17da1a846ed76bcb380b98f -->
+<!-- translation-source-sha256: c995e46f5820cc29c7619a8d23815ab361f8b75b84f9ad1f7eb593ddf818f988 # ADR 0043: Probes Determine Service Health; Monitoring No Longer Draws Conclusions from Rules and Thresholds -->
+<!-- translation-source-sha256: a2b85c5b9cbfb8e96cab4611fc94d8e4b1fa6671ea5d24a95935a9c0f0bc51f4 ## Context -->
+<!-- translation-source-sha256: 9422a064e1074e92273c2f4a38aaf35adf6faa6a823492f7782b66789f2555a9 ## Decision -->
+<!-- translation-source-sha256: 511c6566b59f8d2069f5354c7d4b465bd6abd87f277a4a839f92c1877fb68dd4 ## Tradeoffs -->
+<!-- translation-source-sha256: e8d7e25c0f118dedf25b82c3bdb19ccdd9431c7213c3a3bc7e00c0fc452b58ce ## Consequences -->

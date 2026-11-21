@@ -85,4 +85,8 @@ Decision 3 says node replacement's undo record lives in memory only, and that af
 
 **Consequences.** A restart no longer keeps a replacement that would have been undone; cases that cannot be told fall back to the original "keep the replacement".
 
-<!-- translation-source-sha256: cf74ca11e6b538ab3dccaf17af9eac55ccd576b8cb04c1367a9ed0c8cea3a3ba -->
+<!-- translation-source-sha256: 73beb343f1a5fa1f7e06d612c812e932edc8d5cf2b0a58bed9a1fe4a6435e93e # ADR 0058: The Scheduling Center Only Carries Out Orders Operators Gave in Advance, Sleep Releases Capacity Down to a Per-Instance Residue, and Node-Loss Rescheduling Rewrites the Placement the Way an Operator's Edit Would -->
+<!-- translation-source-sha256: fcd139283332bf4fcba6b18bc4cb89aad5d2ddc5175344d9a8660f638641ca7a ## Background -->
+<!-- translation-source-sha256: bc4daccea1e2ccae7453a47b88d17b60ecad45c5ffb66131369071c6140da4df ## Decision -->
+<!-- translation-source-sha256: a59a0f8cfaf9e6888f46b07ef08f5655335c4fac6f336df5328c662af6f06214 ## Consequences -->
+<!-- translation-source-sha256: 9a15314ec9f2c6f41345c63d57a241c5a0172aefa02fd6eb449dfd9afdfb1f37 ## Amendment (2026-11-13): The Undo Record Is Read Back from the Events After a Restart -->

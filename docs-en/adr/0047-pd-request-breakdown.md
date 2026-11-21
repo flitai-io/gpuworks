@@ -37,4 +37,8 @@ Available data (verified on 2026-10-15):
 - API: the request's `pd` object, `pd_prefill` in `segments`, and service snapshot fields `pd.prefill_stage_p95_ms` and `pd.kv_transfer`; see the [API Reference](../reference/api.md).
 - Documentation: [Request Timeline and Phase Breakdown](../reference/request-timeline.md#6-pd-分离部署), [PD Disaggregated Deployment](../how-to/pd-disaggregation.md#运行中), [Export Request Traces](../how-to/export-request-traces.md#附录span-字段).
 
-<!-- translation-source-sha256: a80f00ecbff5fdf77b0d486602502b9605f55ba75262b23f8d9491ff2f21565b -->
+<!-- translation-source-sha256: ba0bf1c0ea65790563453bda30d683e200c9c7b4ed5cc641fc046e43014cf62c # ADR 0047: The Gateway Measures and Separately Reports the Prefill Phase of PD Requests; KV Transfer Has Aggregate Statistics Only -->
+<!-- translation-source-sha256: a9d7f5006371b137f4e8936621929bf423182c973c5eefda26505ece56e72859 ## Context -->
+<!-- translation-source-sha256: e1ade254ddec4e27b5ccb925f6a311bc92b9ff54470c18982b310624c849f029 ## Decision -->
+<!-- translation-source-sha256: 9c5743b8913af89a1493828b20939373804bc512640d8ef0f43f2f841e40645a ## Tradeoffs -->
+<!-- translation-source-sha256: 9873a01996fe10cc0d89ef182ce8c0118ed2389b8ee513fdf0cd5a1855035683 ## Consequences -->

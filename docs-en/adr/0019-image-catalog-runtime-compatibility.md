@@ -23,4 +23,7 @@ Public compatibility information for drivers and CUDA, CANN, DTK, and HGGC also 
 Node detection and `chipmatch` are the sources of truth for GPU models, architectures, and capabilities; inference templates own model family and model capability constraints.
 Catalog import, API, UI, and seed no longer generate or propagate redundant labels. Non-NVIDIA nodes do not incorrectly use the CUDA profile's default image when the catalog has no candidates.
 
-<!-- translation-source-sha256: 4106a86942802b683a8dd6d515ce19790e530884970167c6e9c4f0540bd55aa7 -->
+<!-- translation-source-sha256: 5b2aacc036255ee422e83bdb8a6e7bdddfc7538399a6bca096f09b1618eabb92 # ADR 0019: Keep Only Runtime Facts in the Image Catalog and Use Compatibility for Ranking and Warnings -->
+<!-- translation-source-sha256: 90cf1e4fdbcc6c728a7469cfd04b9e7c8a2bd6b9ac2c557e9d9364855d6a5811 ## Context -->
+<!-- translation-source-sha256: 6aec01687b2506998b8a0a373e29da45e1bd1ba84667f366372f09b00ab74a72 ## Decision -->
+<!-- translation-source-sha256: 7b9c86e6d0f5349df5b449e4d8442ea8b7d58bb3bac3c37c7cc595dde012de84 ## Impact -->

@@ -98,4 +98,10 @@ After import, the image is `present` on the node and is used directly during dep
 - Terminology: “Model Sources and Downloads” and “Images” in [`CONTEXT.md`](../../CONTEXT.md)
 - Other acquisition methods and cache semantics: [Download, Cache, and Sync Models Between Nodes](download-and-sync-models.md)
 
-<!-- translation-source-sha256: 853a3c25ee4f53c7453baadce55bcce7edbb6e068b80d1e44a7c965b110cbb22 -->
+<!-- translation-source-sha256: af899cf664eb886631a58be2b9a68b545eae46de51406229183d04e5e45d9f42 # Import Models and Images from an HTTP File Server -->
+<!-- translation-source-sha256: 03ec11990a46bf07ce45927d99f99928f64c54edb41118028d8d8a6debc17037 ## Register a Model from an HTTP Directory -->
+<!-- translation-source-sha256: eb5b2d5cfd7710952d0f44b539d626ed197f613cff8552f66dfb2f3b74f974c8 ### Parsing Results and Directory Limits -->
+<!-- translation-source-sha256: 883ad9acb69de122f3303791dbf6ebe88879cdc6f8b8f31fa9a9ddc40a12a168 ## Import an Image Archive from a URL -->
+<!-- translation-source-sha256: c12eb5d79bf7b9919ed0fdf595558cbdf788ca9c2f8436571561cf0bf27ca9f2 ## Node Acquisition Methods: Direct Connection or Management Relay -->
+<!-- translation-source-sha256: e72e94ecbb1f9cb3218e9c21b7d48f6140bd6189e35c26875d7cd857035f39a8 ## Common Errors -->
+<!-- translation-source-sha256: a7645b52988a03209f457b7d54f17af4a48d9723bb348af3395736d5a5d718e6 ## Related Information -->

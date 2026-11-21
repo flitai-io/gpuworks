@@ -29,4 +29,8 @@ A template written for a newer server affects only itself: an older server still
 - Released servers without this decision (v26.11.0–v26.11.3) do not benefit: a version-3 catalog tells them to upgrade the server first. No downgraded compatibility package is published for them.
 - The reason of a skip is the parser's or validator's own error text and is not translated.
 
-<!-- translation-source-sha256: f20cbac164962a35b9794540337b2856e576de7c7ac26fd57d84b53c4853e7c0 -->
+<!-- translation-source-sha256: c6e1d14d55bd15bfb8d66e7c13073a4fb56cad5bf071c916d67038fd016fa083 # ADR 0065: Official Inference Catalog Packages Are Read Tolerantly per Model and Spec, and What Cannot Be Read Stays as It Is -->
+<!-- translation-source-sha256: 63e15eae1cef7f7f2ab3431a08a91d66f571ca2c43579f3b84f8b31877fb3237 ## Background -->
+<!-- translation-source-sha256: 6f246d0868f13d958b973a1059fb4af4ed604ea0f0ae85143da5149c5df548dc ## Decision -->
+<!-- translation-source-sha256: dc1b119b785f452c7e55f8d467f73b17f35e2702d77a7eb10397cd396d3aeb96 ## Result -->
+<!-- translation-source-sha256: f35571f15dec542c23378fa4dc6fb721f2e4d43b63b75c831c7c7a5ea878fa75 ## Costs and What Is Not Done -->

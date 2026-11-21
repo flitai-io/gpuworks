@@ -172,5 +172,15 @@ Figure: The model name matches the public model name entered during deployment, 
 - Choose the right combination of features: [Choosing Features: dGPU, Sleep/Wake, Multiple Nodes, Replicas, and PD](../explanation/choosing-features.md)
 - Before going into production: [Production Deployment](../how-to/deploy-production.md)
 
-<!-- translation-source-sha256: 18377ed86c1d22e0ce572925b795ae29f88d6d3ba102ebb09833b32833b5f625 -->
+<!-- translation-source-sha256: 36a9b2e33e70134844b67aca88a40d796fe7274b8b53f8baea87efd40e7600ee # Install GPUWorks and Deploy Your First Model -->
+<!-- translation-source-sha256: 2fc1438f63119b2a5e897abcc522ebd97704d7bb03ba6d6e89e3ef582bd959f8 ## Before You Begin -->
+<!-- translation-source-sha256: d112febb0614b9998c6664c9db90c0a65ed93e53e7b65f8e2f9805d3ae1dd4d1 ## 1. Start the Server -->
+<!-- translation-source-sha256: c28b173dafab9b83847d1b2b3b9dd263a4c82643f34212ee1a24f88e853f7869 ## 2. Connect a Node -->
+<!-- translation-source-sha256: b087f45ca6074d57f64685dbdc7f299d40cb2c1185393bb80c807c943bd13711 ## 3. Register and Download a Model -->
+<!-- translation-source-sha256: 883b48ca84fc3533ce5ddf8e6f7df3fdf68d79ac9bab87f107e4b8d337c64e4a ### Register the Model -->
+<!-- translation-source-sha256: 5b113bb77054fcf5c0fe7697207604810e0f946ebdf93aca9f371c15b811a267 ### Download to the Node -->
+<!-- translation-source-sha256: 0e9b8e43ddcf6eb029a082a22e66b88356dc361f95f9a2f147a9722a6ec49ff2 ## 4. Create an Inference Token -->
+<!-- translation-source-sha256: 481a689060b21382ad63259425df5cbbb43edaf67c2600d2ff2cf06898a973be ## 5. Deploy the Model -->
+<!-- translation-source-sha256: 46e4c3014b794d764bba72063b8b13add840501b0bd89362d6fc96d1d2726dfa ## 6. Call the Model and Verify the Response -->
+<!-- translation-source-sha256: b91e4a2f03ec21487cfaa1e9610b1a52e4df922fb1be928ed11d29f3c340de06 ## Next Steps -->
 <!-- translation-localized-code-block: 92de4e9dc6768c428e4169ddf38a580c56c86fdccac17a2ce195663d84814fc3 5af048f45b826b7e5cd0307d6e4379c537072ab53d769faa741ecb002b326f38 Translate the interactive inference token prompt and illustrative request text; shell syntax, model, endpoint, JSON keys and limits remain unchanged. -->

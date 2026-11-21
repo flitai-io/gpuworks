@@ -54,4 +54,8 @@ Source candidates retain the full list declared by the spec; local copies affect
 - Pull candidates apply to any tagged ref, without requiring registration in the image catalog; prefix matching respects segment boundaries after Docker Hub normalization.
 - Node network overrides gain read/write APIs and a card on the node details page, giving evaluate's “This node's override” label a definitive source.
 
-<!-- translation-source-sha256: a54d0410c175d8bd5e6576cd72d40cdb576e678eebe9fdf2da5d913090653be6 -->
+<!-- translation-source-sha256: da975bfd7f70414928d985b8f08c0fb74344f018e9d830569d027ef0625a323e # ADR 0018: Make Deployment Sources Explicit and Stop the Server From Replacing User Selections -->
+<!-- translation-source-sha256: f11359ae6bbc870888cff1af7f7d3762815fc331b852a6c56f400971db07493a ## Context -->
+<!-- translation-source-sha256: 953ab162e72ec84a9d6e6701c856b661121860be982b05723d545778e588cc44 ## Decision -->
+<!-- translation-source-sha256: ae380195f59a5e7e9aa52af52b3583308c3a948b9bd71b914035aba3e99a0204 ## Trade-Offs -->
+<!-- translation-source-sha256: 1151fe0839832e0458b086f0b78f37dd4291813d9f2fa0e60acc3f12d1d9f04d ## Impact -->

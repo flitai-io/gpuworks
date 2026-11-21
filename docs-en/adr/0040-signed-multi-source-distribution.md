@@ -71,4 +71,11 @@ A separately built server (another edition, with the same release IDs) that read
 
 Tradeoff: the same release ID names different binaries in different editions, and the version number itself does not tell editions apart; only the index field and the `edition` subcommand do. The output of `gpuworks version` stays unchanged, because install and upgrade parse the release ID from it. When a switch is allowed, the new edition's own install steps belong to the new binary, which the binary running the upgrade cannot perform, so the upgrade ends with a reminder to run the new binary's `install` once more.
 
-<!-- translation-source-sha256: 2004d605d56bf27f24af442179baec39ffb9af1c75ea2527f857af37272a5d3b -->
+<!-- translation-source-sha256: 5605f8c28ea5595b3d98cedfda1e49c76b36bc3b692a93067f1d715de9839a8f # ADR 0040: Server Upgrades and Official Catalogs Use a Signed-Index, Multi-Source Distribution Channel; the Last Official Catalog Import Takes Effect -->
+<!-- translation-source-sha256: 4c311a14c6fc75216b276b75d161202938f8b6d5fc2244f1d8d200f272d6c489 ## Context -->
+<!-- translation-source-sha256: e5fdb1e3f43031c942bc4789077ba7d425d1b39c467d2b8f6177e3fa01282ae3 ## Decision -->
+<!-- translation-source-sha256: dd2e3386a69bb799385fbeb2366f7d37ae20266755ee6c09209865916b099ba4 ## Tradeoffs -->
+<!-- translation-source-sha256: 109c4c50595cb2c42fb23a77e7d94859ae7e7a17abcec73ae125ff5e7216f80f ## Consequences -->
+<!-- translation-source-sha256: 72fd7194e6f8d2f8848da6e3eacf8c46c97afc9d18141e1800fe80fc33ed2e78 ## Addendum (2026-10-17): Update Checks Report Installation Scale With the Request -->
+<!-- translation-source-sha256: 651d60d8d41636ef266d4e573fb83654e84770a66170a435f922137da492ef1b ## Supplement (2026-10-28): Version Tags Order by Version Number, and the Image Catalog's Fixed Address Moves into the Channel -->
+<!-- translation-source-sha256: a143ad4e56fa2d7f342e30776b510792724f665e0feaa5ab1c4ba815613156fb ## Supplement (2026-11-16): Indexes Are Scoped to an Edition -->

@@ -48,4 +48,9 @@ Image sources are already unified under pull settings (ADR 0048), but model down
 - ModelScope model logos use arbitrary CDN addresses outside the rules; an unreachable logo is silently omitted (see `todo.md`).
 - Credentials for ModelScope private repositories have not yet been confirmed; only Hugging Face is confirmed so far.
 
-<!-- translation-source-sha256: acc6b3181a0772c4d2f1348f9f609e8af2b8ec4b43765faa7ce1de51aa3d6dc7 -->
+<!-- translation-source-sha256: db8628cfc9c30b7670e8e85ebc9a7a7d1c0f0ef62f409ef0fa7e9f8174d76ecc # ADR 0050: Source Rules Also Cover Model Sites, Proxies Use Label-Based Configuration, and Credentials Are Unified by Host -->
+<!-- translation-source-sha256: 8aadb215ff260dd4643eb735f606673e87118b3ad034a61b810d30ef20600867 ## Background -->
+<!-- translation-source-sha256: 3aec9555e5c4a8d90263601031894c91d125edfb14659689e804aeb994d64b69 ## Decisions -->
+<!-- translation-source-sha256: 1d834b5e20ba76987a8984db02e1fff913bb232cb6b45f646e41f811de2e5e63 ## Trade-offs -->
+<!-- translation-source-sha256: b6ec2c4ce9079664216eb7784ab00f6d9611791bb7dc483b4023e6158d2dbe92 ## Consequences -->
+<!-- translation-source-sha256: 2506d03daab00a111ffd515b799c0c56e06b25bb6f273439798d0388b22ec1a1 ## Known Limitations -->

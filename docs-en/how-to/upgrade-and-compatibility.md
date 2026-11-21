@@ -178,6 +178,20 @@ Run the following commands in the actual installation directory on the control p
 
 For options and backup layout, see the [CLI Reference](../reference/cli.md#gpuworks-upgrade) and [Installation Layout](../reference/install-layout.md). For the connection mechanism, see [Architecture](../explanation/architecture.md#连接与流).
 
-<!-- translation-source-sha256: c91635e935f882d3ff9f90aed04c09433160b2959d22c40b12c5814ac20c2a43 -->
+<!-- translation-source-sha256: 89c419a9ac6a7b9d970a508e77a41bddf5bea8ad70c02b004a0cfa2736c800b3 # Upgrades and Version Compatibility -->
+<!-- translation-source-sha256: 8cd0f224807fa6819be174b85d72455d526c1394a3c2701f29e2107922d2b2d7 ## Pre-Upgrade Checks -->
+<!-- translation-source-sha256: d3c9334b1193b33f73d15d643c0fc0a84dbfe407dc60d6509f306a1ec080600a ## Upgrade the Server -->
+<!-- translation-source-sha256: 21cba7bcb764e82261eb76fe4d35a73d7535a71723d0699f2e9e7f7591e8eead ### Upgrade Through the Console -->
+<!-- translation-source-sha256: 006279c75b0c7cea32c9c904f4ecd0d9626b2ce2978f50c9a381b625703ef5cb ### Upgrade Through the Command Line -->
+<!-- translation-source-sha256: e90327acb77fca6e3aa7955d4195c7cbd27106f7e0781aa5b0275184eb93df22 ### Upgrade With an Offline Package -->
+<!-- translation-source-sha256: 8f070582853b5303f26d38723ed582351984b74bb030e70937f7bb55edf3c3f8 ## Upgrade the Agent -->
+<!-- translation-source-sha256: 562bdc98def6e1f2a42ff35927f6871432c661e0d6c0fd6d145feb74dedbffdf ### Upgrade Through the Console -->
+<!-- translation-source-sha256: 568d3ff0ac17a9ed890209d30fdc8e9f9f32eeb426f71fc62a24fbf71f9c94da ### Nodes of a Kubernetes Cluster -->
+<!-- translation-source-sha256: 0edcca9f1f69dc90201e8fe0fd9766b1cfe3ebfabd1411daac65883c83463959 ### Nodes of a Slurm Cluster -->
+<!-- translation-source-sha256: 055276d2e625869088ff0f0825c15cbdbb8030295aabe009de531bd40f76917e ### Rerun the Installation Script on the Node -->
+<!-- translation-source-sha256: b5ab0107e2535151e567e4efbd1b31c757bffd26351231b62c5b96cf27896339 ## Verify the Results -->
+<!-- translation-source-sha256: e3b0ea027c33179fc29f3ff994eada780688103f058a7ced90fdd06f9c8c4757 ## What Happens When Versions Differ -->
+<!-- translation-source-sha256: b5bf0baf964ad8a740e62097092e0ba85ee333d9f20d0cedc4456b7da107c32a ## If Problems Occur -->
+<!-- translation-source-sha256: 7343d8a548dd3084c71900691138ba245c3461ee5a94df8b7c1b62694f86fe42 ### Rollback -->
 <!-- translation-localized-code-block: 3922c94b253dd971ff8ee6ae0ddcc7cfd4f7c28127fe2cdc7a322efe51808c1c 4afd6537a965876c65d49343fb5e1f684063bc8ac4f4c50eda0eac4ed077140b Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->
 <!-- translation-localized-code-block: a55f0c19bcc94075a6148de522ad5e9559f13d4ecac8b070a5d0483f303608ab 853eb242efd6c57c33a48c52b2dee9bb32684441a0c5dd7ebbe8746ce3a92f39 Translate descriptive Chinese placeholders, preserving quotes, command flags, API fields, and actual paths. -->

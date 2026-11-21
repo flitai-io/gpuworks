@@ -95,4 +95,8 @@ A connector name, `kv_connector_module_path`, extra config and environment varia
 - In a mixed-vendor cluster the scheduler does not filter nodes by a backend's vendor allow-list. An unsupported vendor is refused at assigned-target validation.
 - Terms: the domain glossary (`CONTEXT.md`).
 
-<!-- translation-source-sha256: 6a528095c9fecb5423972044e8e99aef2e98d3da8a90376eb0bd123a911098a5 -->
+<!-- translation-source-sha256: f4b857e4c7ab16190393c8eb8265d70659da41952decd1441f0dedcad4ceeb02 # ADR 0069: KV offload backends are compiled-in, engine-scoped descriptor rows assembled at one point -->
+<!-- translation-source-sha256: 78a2a1e5f0d58f217c4eaf98157e00b72ca9950d0f440835fd25c3e66aa5a7fb ## Context -->
+<!-- translation-source-sha256: d2cb975daff3474530739fccb929057478f92e1f8bf1f1398e8dfcd0ad70ce02 ## Decision -->
+<!-- translation-source-sha256: 4f4eaabd2192e4514055d1a998b3172d39f4501e16bd2eeae6b8cd82a6c77c46 ## Trade-offs -->
+<!-- translation-source-sha256: 7e99d0dd8bcefc8a747a9186e8fba4106906f2ec35ec23553142e2fd42407e1d ## Consequences -->

@@ -120,4 +120,13 @@ curl --fail-with-body -sS -X PUT \
 - Replacement does not change the model, image, or configuration; the models and images the new node needs are obtained as described in [Download, Cache, and Sync Models Between Nodes](download-and-sync-models.md).
 - The first-placement hint lives only in server memory and does not survive a restart; the undo record is read back from the events after one (see above).
 
-<!-- translation-source-sha256: fc465d2f59f0ee9eba8d6d0e2f570eae87dd842695b31e64c07156eedfa2462d -->
+<!-- translation-source-sha256: 066b7ea627859de5cc10efcb310f618a79ea2f821103705b72b5dbe70049f0e0 # Reschedule Replicas on Node Loss -->
+<!-- translation-source-sha256: 8255b9d3cc2499d3ef5e29b6cd6e82827f9faa73cbe38022ab5331b72edc2812 ## When a Replica Is Rescheduled -->
+<!-- translation-source-sha256: db032b3242eb2203ae43422bafc547bec3f86ddea213c0a797608f37353a4b33 ## How Each Kind of Replica Is Rescheduled -->
+<!-- translation-source-sha256: 7ef6830af265d60a81ef4a029e17804137632221c3df8a102aa23ce41ddf3ef9 ## How a Replacement Node Is Chosen -->
+<!-- translation-source-sha256: a6c5810a6defbcd556a5c02dd241e3d8664e2869611c6153d4c101d3c546a882 ## Node Online but Cannot Take the Replica: Automatic Placement Chooses Again -->
+<!-- translation-source-sha256: 932bbf78b967874961146d4206b144b6bd74b4db15f646c35391613d02335046 ## When the Original Node Returns -->
+<!-- translation-source-sha256: 07052bee2b475123f3d0a1f2bab1080cce56d832ab62170896e46506168e9c0b ## Drain for Multi-Node and PD Replicas -->
+<!-- translation-source-sha256: fd21b4997b4753691384aad16f9e9b7c0fbc5312f8845b012625859b8048557a ## First Placement Nodes When Scaling Up a Single-Node Deployment -->
+<!-- translation-source-sha256: d0f2e17588ece18831b6555d7b1e29f04f9707f93ce5de1d3285a50471c60f1e ## Timeline Events -->
+<!-- translation-source-sha256: 7d74326590dc54b628b509fe6d89b4b547db28262cab019a6b457af6e5445416 ## Limitations -->

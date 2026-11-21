@@ -110,4 +110,11 @@ the UI warns you that a quick address is temporary if you enter one.
   cloudflared run as root.
 - After you close the endpoint (`expose down`), the service stops cloudflared and exits. In `--systemd` mode, `down` also removes the unit.
 
-<!-- translation-source-sha256: 64faa95269b0e1736f17a46e7c3d12cae7e0b29adee3e6b329354d562155f2cb -->
+<!-- translation-source-sha256: fccd4531c7348f10448cdb28db6083837b9013a6f2c3df51d9791afc20b27b01 # Give the Console a Public Address -->
+<!-- translation-source-sha256: b7c897e7ed1604981da47e4810e5a68d8df1a57b2908d1341b1c26a71f0df9b2 ## Quickest Path: Quick -->
+<!-- translation-source-sha256: 70654d42d5852245ddaa3590583f632e1f075ce30936aacce85e5c551c6f874c ## Not Yet Available: Named -->
+<!-- translation-source-sha256: b96bd477ead3df7613978e2b15cf02dd8f3aec66fee0853a18ab08b33672d185 ## Common Commands -->
+<!-- translation-source-sha256: beac428517b3a19a37f763b0d4b41fe4fdd203877fdc0d25a7b0135967196078 ## Data-dir and Origin -->
+<!-- translation-source-sha256: a62a1c710fec65a6a73eaaca02cadfcc7ef4831718cc7bfdba0d4a2c49de99c0 ## Network and Package Sources -->
+<!-- translation-source-sha256: ed42b3421697d67d37cb0b01706bb88981e45589166a638d74353be9ac5c6862 ## Security Boundaries -->
+<!-- translation-source-sha256: 8832c8cf65117513bef923ba177d074b75f987046cd391b31bdc76e2c1938755 ## The Connector Service Is Separate from the Server -->

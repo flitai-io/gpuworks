@@ -49,4 +49,8 @@ For each engine, retain image ID/archive digest, host and driver facts, model re
 
 Software fixtures cover damaged fields, partial inventories, duplicate identities, and mismatched device numbers. Do not modify real sysfs or device nodes to manufacture a failure. Injection checks apply the assigned devices; they are not a security sandbox for administrator-supplied container configuration.
 
-<!-- translation-source-sha256: 3220b213c1296422816f73ca65d5d998c527b63af1677d3de3df4c2804e2a053 -->
+<!-- translation-source-sha256: da6d180f2f6b57758a611b4e34b93c2a2f437129fbd32255bce5e3d014fc2116 # AMD Integration Structure and Hardware Validation -->
+<!-- translation-source-sha256: 45d7a9d5088ce858e4b9bf57559e7d88e0872873b315aedb9b24120f6c9af3d8 ## Responsibilities and support boundary -->
+<!-- translation-source-sha256: 52a0ae86c1c65e7a73af1e1623bea73c6f1466c271376c713afd5c625311d123 ## Host preparation and import -->
+<!-- translation-source-sha256: 12713fd0db987e1eefb4f0b7e1050423e57c89d0f316a09d1491bb6c9e722adc ## Runtime and model validation -->
+<!-- translation-source-sha256: 4aae3eab05c741aae8abb7c70f3673b641ef639326232e67fdf3e065c7497504 ## Evidence to retain -->

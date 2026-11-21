@@ -223,7 +223,18 @@ After the configuration takes effect, check from a client that uses the actual e
 
 If verification fails, first check the server and reverse proxy logs. Check trusted proxy addresses, forwarded headers, upstream listeners, and timeout settings separately, then repeat the corresponding checks after correcting the configuration.
 
-<!-- translation-source-sha256: 691ff3f61f6d9be6f7bc10b9546535dad35fa1aedc700c4692bcf95437d43330 -->
+<!-- translation-source-sha256: b5efd595f4e6db32a000756c62c9efd4e4c58c3c2db52b387e33938f8b7054ab # Deploy in Production -->
+<!-- translation-source-sha256: f83675d1797d796e99bff14fe666a5488559e93a8ba516ddd8bcf7265dc330fd ## Reverse Proxy and TLS -->
+<!-- translation-source-sha256: 49d448e1b11f585bd14259753dfa3117298c110a5b483fe2d51f6cb9b1141645 ### Native HTTPS -->
+<!-- translation-source-sha256: 52c3d90bcf19135dd81c9ab7bd2f85a8c2476ea4abd47d7abdf8b6ad495f22bc ### Reverse Proxy Configuration Essentials (Console) -->
+<!-- translation-source-sha256: 014cc43e38831fc511bbc43b79ca1f735a916664bd9f0332a4c1f5bcadd9d849 ### Reverse Proxy Configuration Essentials (/v1 Gateway) -->
+<!-- translation-source-sha256: 0a60dc338ef02b0fafac6d0e24ec2489ee2c6c8f95d465c76469798668e9284a ## Gateway Capacity and Host Tuning -->
+<!-- translation-source-sha256: 4d69d1d973719f6d91cb02314f3d91590793c01de843ca82b35fdd1feb0497b8 ### Read the Current Configuration -->
+<!-- translation-source-sha256: 434ca176ac1bd3ffdbf0ef18ec39e36857610ce725594c333537996a529711b2 ### Select Changes Based on Load -->
+<!-- translation-source-sha256: f0166ad7d9650f244a7abe21b74d3c2ccb839530c3f7abec87caf8411dcc68e7 ### Apply Changes and Retest -->
+<!-- translation-source-sha256: 408608807f3943735d745698f7891db5eb2de06cba6b88349cef76bfd1dccb83 ## Credentials and Backups -->
+<!-- translation-source-sha256: bf25e6ef25bb8383db7f6e9c1718903ff2da37a5e181cbee3758371cdb6f05de ## Operation and Upgrades -->
+<!-- translation-source-sha256: 11e71812cfb7e4cda4dfffa9d2b6ba55ea172b68153d80db49d53ae76f82ce4c ## Verify the Entry Points -->
 <!-- translation-localized-code-block: b9f0ff7e24801b61361f174f58cb4bf4e0289d4ac22ee08fe498f0700e7e3332 ebf9b53f86336622e196e80e77241ebedc8e44b4c9b7d406d7458163d1d55406 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
 <!-- translation-localized-code-block: fd7ea10d8cc1f307458fbadfea50f2e737556c5911abe820ea3bea73c5bea8e7 79eb89d2bfd4c89f0cb2c677658b50d4e0ab41fddb57f1547a31530c06570133 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->
 <!-- translation-localized-code-block: 0175e6cb54fd74da958ba053ae4fda8a38db6cab82cf94c2f859f4a443dbfd63 9cf026a019796cac04e148e868f41bf926be178c46cda3e8335d0ea1d77732e1 Translate Chinese code comments, preserving executable statements, parameter values, and paths. -->

@@ -297,4 +297,14 @@ Resource names that open a drawer use the native link button variant (`variant="
 
 `tests/tableNameAffordance.test.ts` runs in the normal UI test gate and scans name-column renderers across product pages. `ui-check` also runs `tests/browser/table-link-rules.mjs` against every visited page/drawer, including full-page details reached from a list: visible table text links and clickable resource names must resolve to the theme color, including nested text. Its unit tests exercise failures and exclusions; real computed colors require the browser job. When changing shared navigation, test breadcrumbs through the current page and click the parent link; use heading roles when the resource name also appears in the breadcrumb.
 
-<!-- translation-source-sha256: 5c622769ae23e565de33939ee42b790b15eb12bcc34bab53e82326dc95a25b88 -->
+<!-- translation-source-sha256: 2f7226da7b426ecd3d1ea5fc1e020126bc9b0c877c2822777495277663eb857b # UI development -->
+<!-- translation-source-sha256: 13c5c07cffc3a9231089d41ecf45a179558c616141e1c57672f4acf10a11c2c6 ## Directories and public APIs -->
+<!-- translation-source-sha256: e1a59e9f1ae0e2db365d11425279f53bad0d4520718a02e31139ee920be91443 ## Pinned source and synchronization -->
+<!-- translation-source-sha256: f8640be0d16881c18586a2f63af485c8f45eb71700b0843173a7a75bfb1b8943 ## Verification -->
+<!-- translation-source-sha256: c7b61b2ede38b04e51393df4490c765efbc0d8ea7a17d80b16538e355c3e829e ## Migration close-out checklist -->
+<!-- translation-source-sha256: 1318afa013ade9be7b3751ffcdccc06b442a512cef5b728790ea7adc728bd6d9 ## Page look -->
+<!-- translation-source-sha256: d4e7a7ff2a5bb481ec1c6799141497057f023040602ab90435cddd56cb6d9801 ## Vendor marks -->
+<!-- translation-source-sha256: 9f79940ef6fc57e0fd9d612b4f7214f94e7ac8f00477ab8ec50df8365f42af1f ## Copy on the page -->
+<!-- translation-source-sha256: af116f9d28a2e9db00b4cb72e4bafbe953ab909047dcc0b330bdea227c632e95 ## Choosing a component -->
+<!-- translation-source-sha256: 8093bb1dc2312ac300409380b97205019cb94c8e41e2a04c4a6037a91ba0eb58 ## Product typography defaults -->
+<!-- translation-source-sha256: aa7be0b3ecb8d403615075408c31dedc3c018b9e001abc389b09f655fed2429a ### Resource navigation checks -->

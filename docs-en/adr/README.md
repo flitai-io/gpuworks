@@ -94,4 +94,4 @@ Note: 0012–0014 originally collided with 0004, 0004, and 0006, respectively, a
 
 Note: 0012–0014 originally collided with 0004, 0004, and 0006, respectively, and were renumbered by creation order during cleanup on 2026-09-03. Old numbers in historical commit messages and MR descriptions are no longer accurate. Similarly, the original 0024 (node network objects) was renumbered to 0030 on 2026-09-30 because it collided with the data-plane lane's 0024. Earlier references to “ADR 0024” meaning network objects were updated accordingly; “ADR 0024” in `CLAUDE.md` and `todo.md` refers to the data-plane lane.
 
-<!-- translation-source-sha256: c3427ed6db5181e4f24a2565d4f61bd19c64c48f224e5f2208a735006b2dab65 -->
+<!-- translation-source-sha256: c3427ed6db5181e4f24a2565d4f61bd19c64c48f224e5f2208a735006b2dab65 # Architecture Decision Records (ADRs) -->

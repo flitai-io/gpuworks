@@ -31,4 +31,7 @@ The API tokens list includes **Tokens today** and **Tokens, last 7 days** column
 
 Under **Settings → Data retention**, configure hourly and daily retention separately for token usage and the other statistics (defaults: 31 days and 400 days). The three other statistics categories can each be disabled independently. When retention is shortened, excess data is deleted in batches in the background. The page also shows current space usage for each category. For the API, see the [API Reference](../reference/api.md#analytics用量分析).
 
-<!-- translation-source-sha256: 0480d5e1cfb4647306d17407a60a36631fb8fa757e8da83804de2ca04559a9cb -->
+<!-- translation-source-sha256: d4a2cc2f3aa2b764d12baeb1a01e1402aa4ec08b45e3b713b2cfa3e1545cb4e2 # View Usage Analytics -->
+<!-- translation-source-sha256: b2e27906d2b2699ab62572a9ff60254f472a5a1dd7caa95cb8597e60a87fdf86 ## 1. Open the Page -->
+<!-- translation-source-sha256: 7aca1a287c098397c0bf1999a944114ac3f68dd00aa9b4ad439218d9d7c057f0 ## 2. View Each Key's Usage on the API Tokens Page -->
+<!-- translation-source-sha256: 3b4d65af9e3906fc6b60bde0d5d1c0dcba42aa767422035c5b6880137d4308e2 ## 3. Adjust Retention -->
