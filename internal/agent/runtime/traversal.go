@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // PrepareTraversal lets a dedicated runtime identity traverse dir, the
@@ -168,6 +170,26 @@ func FileOwner(info os.FileInfo) (int, int, bool) {
 		return 0, 0, false
 	}
 	return int(stat.Uid), int(stat.Gid), true
+}
+
+// RealAccess asks the kernel whether the calling process can actually
+// access path with the given need, capabilities included. HasPermission
+// reads mode bits alone, which cannot see CAP_DAC_OVERRIDE: a root agent
+// on a local filesystem traverses and reads a directory whose bits deny
+// it, while a filesystem that squashes root (NFS) answers with the mapped
+// identity and fails here honestly.
+func RealAccess(path string, need os.FileMode) bool {
+	var flags uint32
+	if need&0o4 != 0 {
+		flags |= unix.R_OK
+	}
+	if need&0o2 != 0 {
+		flags |= unix.W_OK
+	}
+	if need&0o1 != 0 {
+		flags |= unix.X_OK
+	}
+	return unix.Faccessat(unix.AT_FDCWD, path, flags, unix.AT_EACCESS) == nil
 }
 
 func traversalError(name string, info os.FileInfo, owner MountOwner, reason string) error {
