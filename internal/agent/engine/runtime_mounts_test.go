@@ -3,7 +3,6 @@ package engine
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	agentruntime "gpuworks.ai/gpuworks/internal/agent/runtime"
@@ -132,24 +131,21 @@ func TestRuntimeMountManagerPreStartPublicationIsAtomicAndIdempotent(t *testing.
 }
 
 // A root agent on a local filesystem can traverse and read through
-// CAP_DAC_OVERRIDE where the mode bits deny it: the spark-d preflight
-// failed on a 0711 state directory owned by uid 1000 while running as
-// root. The preflight must fall back to the kernel's answer when the
-// mount owner is the calling identity itself, and must keep the
-// mode-bit verdict when the owner is someone else (the kernel cannot
-// speak for a switched identity). Without capabilities the kernel
-// answer matches the bits, which pins both directions.
+// CAP_DAC_OVERRIDE where the mode bits deny it: a preflight failed on a
+// 0711 state directory owned by the sudo caller's uid while the agent ran
+// as root. The preflight must ask the kernel when the mount owner is the
+// calling identity itself, and must keep the mode-bit verdict when the
+// owner is someone else (the kernel cannot speak for a switched identity).
+// Without capabilities the kernel answer matches the bits, which pins both
+// directions.
 func TestRuntimeMountPreflightFallsBackToKernelAccess(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("faccessat and permission bits are POSIX-only")
-	}
 	state := t.TempDir()
 	manager := &RuntimeMountManager{stateDir: state, root: state, legacy: true}
 	owner := agentruntime.MountOwner{UID: os.Geteuid(), GID: os.Getegid()}
 
 	if os.Geteuid() == 0 {
 		if err := os.Chown(state, 1000, 1000); err != nil {
-			t.Fatal(err)
+			t.Skipf("this user namespace does not map uid 1000: %v", err)
 		}
 		if err := os.Chmod(state, 0o711); err != nil {
 			t.Fatal(err)
@@ -163,6 +159,19 @@ func TestRuntimeMountPreflightFallsBackToKernelAccess(t *testing.T) {
 		}
 		if info.Mode().Perm() != 0o711 {
 			t.Fatalf("preflight fell back to a chmod: mode=%o, want 0711 kept", info.Mode().Perm())
+		}
+		// The same false denial is reachable on an ancestor: a 0700
+		// directory owned by another uid must not block a root agent's
+		// ancestor walk, and a foreign owner must keep the denial.
+		nested := filepath.Join(state, "nested")
+		if err := os.Mkdir(nested, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := agentruntime.CheckAncestorTraversal(nested, owner); err != nil {
+			t.Fatalf("root agent must traverse a 0700 foreign-owned ancestor: %v", err)
+		}
+		if err := agentruntime.CheckAncestorTraversal(nested, agentruntime.MountOwner{UID: 4242, GID: 4242}); err == nil {
+			t.Fatal("a foreign owner must keep the mode-bit denial on the ancestor")
 		}
 		return
 	}

@@ -1,14 +1,14 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 // PrepareTraversal lets a dedicated runtime identity traverse dir, the
@@ -54,7 +54,11 @@ func grantTraversal(dir string, owner MountOwner) error {
 	if err != nil {
 		return fmt.Errorf("stat runtime state directory %s: %w", dir, err)
 	}
-	if HasPermission(info, owner, 0o1) {
+	// The mode-bit rule decides the repair here, not the kernel: the branch
+	// below must stay reachable to hold the ownership contract (a capable
+	// agent passes any directory, and granting traversal on a directory it
+	// does not own would skip that contract silently).
+	if hasPermission(info, owner, 0o1) {
 		return nil
 	}
 	uid, gid, ok := FileOwner(info)
@@ -133,7 +137,7 @@ func CheckAncestorTraversal(name string, owner MountOwner) error {
 		if !info.IsDir() {
 			return fmt.Errorf("parent %s is not a directory", current)
 		}
-		if !HasPermission(info, owner, 0o1) {
+		if !OwnerCanAccess(current, info, owner, 0o1) {
 			return traversalError(current, info, owner, "is not traversable")
 		}
 		if next := filepath.Dir(current); next == current {
@@ -142,10 +146,85 @@ func CheckAncestorTraversal(name string, owner MountOwner) error {
 	}
 }
 
-// HasPermission reports whether owner holds every bit of need (0o4 read,
+// IsCallingIdentity reports whether owner is the identity this
+// process runs as: the only case where this process's access
+// answers for the owner's.
+func IsCallingIdentity(owner MountOwner) bool {
+	return owner.UID == os.Geteuid() && owner.GID == os.Getegid()
+}
+
+// OwnerCanAccess reports whether owner can reach path with need (0o4
+// read, 0o2 write, 0o1 search/execute). When owner is the calling
+// identity the kernel answers by opening the path, capabilities
+// included -- the mode bits alone cannot see them, and faccessat's
+// userspace fallback answers "root can read and write anything"
+// from stat alone on kernels before 5.8 and under seccomp profiles
+// that block faccessat2, so a root-squashed NFS mount would pass
+// here and fail at container start. For any other owner the mode
+// bits through the owner's user, primary group or other class are
+// the only answer this process can give; a switched identity is
+// probed for real by checkAccessAsOwner's runuser calls.
+func OwnerCanAccess(path string, info os.FileInfo, owner MountOwner, need os.FileMode) bool {
+	if !IsCallingIdentity(owner) {
+		return hasPermission(info, owner, need)
+	}
+	if info != nil && info.IsDir() && need&0o2 != 0 {
+		// Write on a directory is create and delete inside it: no
+		// honest probe without mutating the directory. No caller
+		// asks it today; until one does, the mode bits answer.
+		return hasPermission(info, owner, need)
+	}
+	return kernelCanAccess(path, info, need)
+}
+
+// kernelCanAccess opens path the way need asks: resolving its "."
+// entry for search (reaching path only proved search on its
+// ancestors), reading one entry of a directory for read, opening a
+// file O_RDONLY -- or O_RDWR when need asks write. An error answers
+// false; there is no fallback to simulate.
+func kernelCanAccess(path string, info os.FileInfo, need os.FileMode) bool {
+	if info != nil && info.IsDir() {
+		if need&0o1 != 0 {
+			if _, err := os.Lstat(path + "/."); err != nil {
+				return false
+			}
+		}
+		if need&0o4 == 0 {
+			return true
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return false
+		}
+		_, err = f.Readdirnames(1)
+		f.Close()
+		return err == nil || errors.Is(err, io.EOF)
+	}
+	if need&0o1 != 0 {
+		// Execute on a file is decided by running it; no caller
+		// asks it here. The mode bits answer until one does.
+		return hasPermission(info, MountOwner{UID: os.Geteuid(), GID: os.Getegid()}, need)
+	}
+	flags := os.O_RDONLY
+	if need&0o2 != 0 {
+		flags = os.O_WRONLY
+		if need&0o4 != 0 {
+			flags = os.O_RDWR
+		}
+	}
+	f, err := os.OpenFile(path, flags, 0)
+	if err != nil {
+		return false
+	}
+	f.Close()
+	return true
+}
+
+// hasPermission reports whether owner holds every bit of need (0o4 read,
 // 0o2 write, 0o1 search/execute) on info through its user, primary group or
-// other class, the way the kernel picks exactly one class.
-func HasPermission(info os.FileInfo, owner MountOwner, need os.FileMode) bool {
+// other class, the way the kernel picks exactly one class. The repair
+// sites decide on these bits; verdict sites ask OwnerCanAccess instead.
+func hasPermission(info os.FileInfo, owner MountOwner, need os.FileMode) bool {
 	uid, gid, ok := FileOwner(info)
 	if !ok {
 		return false
@@ -170,26 +249,6 @@ func FileOwner(info os.FileInfo) (int, int, bool) {
 		return 0, 0, false
 	}
 	return int(stat.Uid), int(stat.Gid), true
-}
-
-// RealAccess asks the kernel whether the calling process can actually
-// access path with the given need, capabilities included. HasPermission
-// reads mode bits alone, which cannot see CAP_DAC_OVERRIDE: a root agent
-// on a local filesystem traverses and reads a directory whose bits deny
-// it, while a filesystem that squashes root (NFS) answers with the mapped
-// identity and fails here honestly.
-func RealAccess(path string, need os.FileMode) bool {
-	var flags uint32
-	if need&0o4 != 0 {
-		flags |= unix.R_OK
-	}
-	if need&0o2 != 0 {
-		flags |= unix.W_OK
-	}
-	if need&0o1 != 0 {
-		flags |= unix.X_OK
-	}
-	return unix.Faccessat(unix.AT_FDCWD, path, flags, unix.AT_EACCESS) == nil
 }
 
 func traversalError(name string, info os.FileInfo, owner MountOwner, reason string) error {

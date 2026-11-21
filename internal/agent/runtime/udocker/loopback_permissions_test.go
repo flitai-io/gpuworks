@@ -89,7 +89,7 @@ func TestHostRootLoopbackRestrictiveUmask(t *testing.T) {
 		}
 		for path := filepath.Dir(loopback); path != root; path = filepath.Dir(path) {
 			info, err := os.Stat(path)
-			if err != nil || info.Mode().Perm() != 0o711 || !runtime.HasPermission(info, runtime.MountOwner{UID: 54321, GID: 54322}, 0o1) {
+			if err != nil || info.Mode().Perm() != 0o711 || !runtime.OwnerCanAccess(path, info, runtime.MountOwner{UID: 54321, GID: 54322}, 0o1) {
 				t.Fatalf("mirror parent is not searchable without listing/writes: %s/%v/%v", path, info, err)
 			}
 		}

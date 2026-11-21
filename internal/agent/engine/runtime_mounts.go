@@ -106,6 +106,10 @@ func (m *RuntimeMountManager) mountOwner() (agentruntime.MountOwner, error) {
 }
 
 func createDirectoryAsOwner(owner agentruntime.MountOwner, name string, mode os.FileMode) error {
+	// The uid match is deliberate where a full identity match is not: the
+	// mkdir runs as this process and ensureManagedDirectory chowns the group
+	// afterwards, so a gid-only mismatch repairs itself and must not demand
+	// a username the configuration does not carry.
 	if owner.UID == os.Geteuid() {
 		if err := os.Mkdir(name, mode); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
@@ -126,6 +130,13 @@ func createDirectoryAsOwner(owner agentruntime.MountOwner, name string, mode os.
 }
 
 func checkAccessAsOwner(owner agentruntime.MountOwner, name string, directory bool) error {
+	// The uid alone decides here: this process itself performs the access,
+	// so its kernel view -- capabilities included -- is the answer, and a
+	// gid that differs from the owner's changes nothing about it. The mode
+	// bits beside this call cover what the process cannot reach. (OwnerCanAccess
+	// compares uid and gid: there the probe runs as this process for a
+	// directory the owner reads through the container's own groups, where a
+	// gid-only mismatch must not take the kernel's word for the owner.)
 	if owner.UID == os.Geteuid() {
 		return nil
 	}
@@ -459,7 +470,7 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 			if isTarget {
 				need = 0o5
 			}
-			if !agentruntime.HasPermission(info, owner, need) && !kernelAccessAsSelf(current, owner, need) {
+			if !agentruntime.OwnerCanAccess(current, info, owner, need) {
 				return permissionError(current, info, owner, "traverse/read")
 			}
 			if m.accessAsOwner != nil {
@@ -472,7 +483,7 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("runtime mount preflight target %s is not a regular file", current)
 		}
-		if !agentruntime.HasPermission(info, owner, 0o4) && !kernelAccessAsSelf(current, owner, 0o4) {
+		if !agentruntime.OwnerCanAccess(current, info, owner, 0o4) {
 			return permissionError(current, info, owner, "read")
 		}
 		if m.accessAsOwner != nil {
@@ -482,22 +493,6 @@ func (m *RuntimeMountManager) preflight(name string, owner agentruntime.MountOwn
 		}
 	}
 	return nil
-}
-
-// kernelAccessAsSelf asks the kernel whether the calling process can really
-// access path with need, and answers only when the mount owner is that same
-// calling identity -- the case checkAccessAsOwner also treats as "the process
-// itself will do the access". HasPermission simulates mode bits, which cannot
-// see capabilities: a root agent was denied traverse on a 0711 state
-// directory owned by uid 1000, though CAP_DAC_OVERRIDE carries the read and
-// the search bit is set. When the owner is another identity the kernel answer
-// for the calling process says nothing about that owner, so the mode-bit
-// simulation stays the verdict.
-func kernelAccessAsSelf(path string, owner agentruntime.MountOwner, need os.FileMode) bool {
-	if owner.UID != os.Geteuid() || owner.GID != os.Getegid() {
-		return false
-	}
-	return agentruntime.RealAccess(path, need)
 }
 
 func permissionError(name string, info os.FileInfo, owner agentruntime.MountOwner, operation string) error {

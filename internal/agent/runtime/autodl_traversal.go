@@ -50,7 +50,9 @@ func prepareAutoDLRootTraversal(name string, owner MountOwner, hostname, rootDir
 	if err != nil {
 		return err
 	}
-	if HasPermission(info, owner, 0o1) {
+	// Mode bits decide the repair, not the kernel: this branch must stay
+	// reachable to grant search when the owner's class lacks it.
+	if hasPermission(info, owner, 0o1) {
 		return nil
 	}
 	uid, gid, ok := FileOwner(info)
@@ -69,7 +71,7 @@ func prepareAutoDLRootTraversal(name string, owner MountOwner, hostname, rootDir
 	if err != nil {
 		return err
 	}
-	if !HasPermission(updated, owner, 0o1) {
+	if !hasPermission(updated, owner, 0o1) {
 		return traversalError(rootDir, updated, owner, "is still not traversable after AutoDL repair")
 	}
 	slog.Warn("granted AutoDL root directory traversal for runtime user", "dir", rootDir,
