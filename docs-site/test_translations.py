@@ -66,13 +66,16 @@ class TranslationTest(unittest.TestCase):
 
     def test_markers_are_validated_and_only_the_trailing_block_counts(self):
         digest = "a" * 64
-        body = "# Guide\n\n<!-- translation-source-sha256: " + "b" * 64 + " # Guide -->\n\nProse.\n"
+        stray = "<!-- translation-source-sha256: " + "b" * 64 + " # Guide -->"
+        body = f"# Guide\n\n{stray}\n\nProse.\n\n```markdown\n{stray}\n```\n"
         text = translation_markers.render(body, [digest], {}) + "\n"
         self.assertTrue(text.endswith("\n\n<!-- translation-source-sha256: " + digest + " # Guide -->\n\n"))
         self.assertEqual(translation_markers.strip(text), body)
         self.assertEqual(translation_markers.parse(text).section_sha256, [digest])
-        self.assertEqual(translation_markers.parse(body).section_sha256, [])
-        self.assertEqual(translation_markers.parse(body).problems, [])
+        # A marker line left in the body, typically by resolving a merge conflict on the
+        # block, is reported; the same line inside a code block is page content.
+        self.assertEqual(translation_markers.parse(text).problems,
+                         ["translation marker on line 3 is outside the trailing block"])
         broken = translation_markers.parse(
             "# Guide\n<!-- translation-source-sha256: xyz -->\n"
             "<!-- translation-localized-code-block: " + digest + " -->\n"

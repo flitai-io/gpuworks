@@ -58,7 +58,7 @@ Mermaid 图的可见文字、纯文本公式、写作模板和目录说明也可
 
 标记格式由 `translation_markers.py` 定义：英文页末尾连续的注释行，先按页面顺序每个一至三级小节一行
 `<!-- translation-source-sha256: <中文小节哈希> <英文标题> -->`，再是 `<!-- translation-localized-code-block: <原块> <译块> [理由] -->`。
-每页的复核事实只放在该页，两个分支只有改到同一页的同一小节或相邻小节才会在标记上冲突；`stage_docs.py` 暂存英文页时去掉这段标记，
+页末标记块以外（代码块除外）出现的标记行会被报错，它们多半是解决合并冲突时留下的。每页的复核事实只放在该页，两个分支只有改到同一页的同一小节或相邻小节才会在标记上冲突；`stage_docs.py` 暂存英文页时去掉这段标记，
 站点与 PDF 都不包含它；GitHub Release 的说明经 `python3 docs-site/translation_markers.py docs-en/releases/<tag>.md` 去掉标记后发布。
 
 ## Read the Docs 私有托管

@@ -13,6 +13,8 @@ Changes to different sections rewrite different lines of the block, so merge
 requests that edit the same page only conflict over it when they edit the same
 or neighbouring sections.
 Only the trailing run of marker lines (blank lines allowed in between) counts.
+A marker line anywhere else outside code blocks is reported: it is usually left
+over from resolving a merge conflict on the block.
 The site staging strips the block, so it never reaches the HTML or the PDF, and
 the GitHub release takes its notes from this module run as a script:
 
@@ -24,7 +26,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 
-from markdown_headings import headings
+from markdown_headings import headings, outside_fences
 
 
 MARKER_RE = re.compile(r"^<!-- translation-([a-z0-9-]+): (.*?) -->$")
@@ -81,7 +83,11 @@ def strip(text: str) -> str:
 
 def parse(text: str) -> Markers:
     result = Markers()
-    for line in split(text)[1]:
+    body, trailing = split(text)
+    for index, line in outside_fences(body):
+        if MARKER_RE.match(line):
+            result.problems.append(f"translation marker on line {index + 1} is outside the trailing block")
+    for line in trailing:
         kind, value = MARKER_RE.match(line).groups()
         if kind == SOURCE:
             digest = value.split(" ", 1)[0]
